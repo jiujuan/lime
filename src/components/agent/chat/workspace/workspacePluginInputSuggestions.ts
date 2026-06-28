@@ -10,19 +10,42 @@ export function buildWorkspacePluginInputSuggestions(
     );
     const blockerCodes =
       item.activationState === "activatable" ? [] : item.blockerCodes;
+    const defaultPrompts = contract?.interface?.defaultPrompt ?? [];
     return {
       pluginId: item.pluginId,
       displayName: item.displayName,
-      description: item.pluginId,
+      description: defaultPrompts[0] ?? item.pluginId,
+      ...(defaultPrompts.length > 0 ? { defaultPrompts } : {}),
       disabled: item.activationState !== "activatable",
       blockerCodes,
-      skills: (contract?.skills ?? []).map((skill) => ({
-        skillId: skill.id,
-        title: skill.title,
-        description: skill.description,
-        disabled: item.activationState !== "activatable",
-        blockerCodes,
-      })),
+      skills: (contract?.skills ?? [])
+        .map((skill) => ({
+          skillId: skill.id,
+          title: skill.title,
+          description: skill.description,
+          disabled: item.activationState !== "activatable",
+          blockerCodes,
+        }))
+        .concat(
+          (contract?.activationEntries ?? [])
+            .filter((entry) => entry.intent === "at_command")
+            .flatMap((entry) => {
+              const aliases = entry.aliases?.length
+                ? entry.aliases
+                : [undefined];
+              return aliases.map((alias) => ({
+                skillId: entry.key,
+                title: entry.title,
+                description: undefined,
+                ...(alias ? { trigger: alias } : {}),
+                ...(defaultPrompts.length > 0
+                  ? { defaultPrompt: defaultPrompts[0] }
+                  : {}),
+                disabled: item.activationState !== "activatable",
+                blockerCodes,
+              }));
+            }),
+        ),
     };
   });
 }

@@ -17,6 +17,7 @@ import type {
   AgentInitialKnowledgePackSelectionParams,
 } from "@/types/page";
 import { Inputbar } from "../components/Inputbar";
+import { CONVERSATION_CONTENT_MAX_WIDTH } from "../styles/conversationLayoutTokens";
 import { useWorkspaceNavigationActions } from "./useWorkspaceNavigationActions";
 import type { Message } from "../types";
 import type { TaskFile } from "../components/TaskFiles";
@@ -64,7 +65,7 @@ const InputbarOverlayAccessoryStack = styled.div`
 `;
 
 const PlanDecisionInputbarReplacement = styled.div`
-  width: min(100%, 900px);
+  width: min(100%, ${CONVERSATION_CONTENT_MAX_WIDTH});
   max-width: 100%;
 `;
 

@@ -55,6 +55,7 @@ describe("contentPartTimeline", () => {
           name: "WebSearch",
           arguments: '{"query":"Lime WebSearch rendering"}',
           status: "completed" as const,
+          startTime: new Date("2026-06-24T10:00:02.000Z"),
         },
         metadata: {
           sequence: 3,

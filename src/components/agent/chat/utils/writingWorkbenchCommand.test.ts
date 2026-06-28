@@ -2,13 +2,20 @@ import { describe, expect, it } from "vitest";
 import { parseWritingWorkbenchCommand } from "./writingWorkbenchCommand";
 
 describe("parseWritingWorkbenchCommand", () => {
-  it("应解析带平台的 @写作 命令", () => {
-    const result = parseWritingWorkbenchCommand(
-      "@写作 平台:微信公众号后台 帮我把这份活动素材整理成一版主稿",
-    );
+  it("@写作 应交给内容工厂 Agent App manifest，不再走旧写作命令", () => {
+    expect(
+      parseWritingWorkbenchCommand(
+        "@写作 平台:微信公众号后台 帮我把这份活动素材整理成一版主稿",
+      ),
+    ).toBeNull();
+  });
 
+  it("应解析带平台的 @文案 命令", () => {
+    const result = parseWritingWorkbenchCommand(
+      "@文案 平台:微信公众号后台 帮我把这份活动素材整理成一版主稿",
+    );
     expect(result).toMatchObject({
-      trigger: "@写作",
+      trigger: "@文案",
       platformType: "wechat_official_account",
       platformLabel: "微信公众号后台",
       draftKind: "general",

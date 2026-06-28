@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  buildThreadReliabilitySummary,
   buildThreadReliabilityView,
   type ThreadReliabilityViewTranslation,
 } from "./threadReliabilityView";
@@ -34,6 +35,70 @@ describe("buildThreadReliabilityView", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-03-23T10:00:00Z"));
+  });
+
+  it("轻量摘要不读取 threadItems，避免 Harness 折叠态扫描完整时间线", () => {
+    const summary = buildThreadReliabilitySummary({
+      threadRead: {
+        thread_id: "thread-light-summary",
+        status: "completed",
+        pending_requests: [],
+      },
+      turns: [
+        {
+          id: "turn-light-summary",
+          thread_id: "thread-light-summary",
+          prompt_text: "整理今天的国际新闻",
+          status: "completed",
+          created_at: "2026-03-23T09:58:00Z",
+          started_at: "2026-03-23T09:58:00Z",
+          updated_at: "2026-03-23T09:59:00Z",
+          completed_at: "2026-03-23T09:59:00Z",
+        },
+      ],
+      currentTurnId: "turn-light-summary",
+      t: translateView,
+      locale: "zh-CN",
+    });
+
+    const fullView = buildZhThreadReliabilityView({
+      threadRead: {
+        thread_id: "thread-light-summary",
+        status: "completed",
+        pending_requests: [],
+      },
+      turns: [
+        {
+          id: "turn-light-summary",
+          thread_id: "thread-light-summary",
+          prompt_text: "整理今天的国际新闻",
+          status: "completed",
+          created_at: "2026-03-23T09:58:00Z",
+          started_at: "2026-03-23T09:58:00Z",
+          updated_at: "2026-03-23T09:59:00Z",
+          completed_at: "2026-03-23T09:59:00Z",
+        },
+      ],
+      currentTurnId: "turn-light-summary",
+      threadItems: [
+        {
+          id: "item-hidden-error",
+          thread_id: "thread-light-summary",
+          turn_id: "turn-light-summary",
+          sequence: 2453,
+          status: "failed",
+          started_at: "2026-03-23T09:59:30Z",
+          completed_at: "2026-03-23T09:59:30Z",
+          updated_at: "2026-03-23T09:59:30Z",
+          type: "error",
+          message: "详情态才需要扫描的历史错误",
+        },
+      ],
+    });
+
+    expect(summary.statusLabel).toBe("已完成");
+    expect(summary.summary).toBe("最近一次回合已稳定完成");
+    expect(fullView.summary).toContain("详情态才需要扫描的历史错误");
   });
 
   it("应按 incident 严重级别排序，并优先使用最高优先级事故生成摘要", () => {

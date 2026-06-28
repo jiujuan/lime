@@ -1,4 +1,14 @@
-import { Power, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  Bot,
+  CheckCircle2,
+  KeyRound,
+  Power,
+  Terminal,
+  Trash2,
+  UsersRound,
+  Workflow,
+} from "lucide-react";
 import { resolvePluginMarketplaceItemLabel } from "./marketplace/pluginMarketplaceActions";
 import {
   pluginMarketplaceCategoryText,
@@ -147,14 +157,14 @@ export function PluginMarketplaceDetailPanel({
         <h3 className="m-0 text-sm font-semibold text-amber-800">
           {t("plugin.marketplace.detail.blockers")}
         </h3>
-        {item.blockerCodes.length > 0 ? (
+        {item.visibleBlockers.length > 0 ? (
           <div className="mt-3 flex flex-wrap gap-2">
-            {item.blockerCodes.map((code) => (
+            {item.visibleBlockers.map((blocker) => (
               <span
-                key={code}
+                key={blocker.code}
                 className="rounded-md border border-amber-200 bg-white px-2 py-0.5 text-xs font-semibold text-amber-700"
               >
-                {code}
+                {t(blocker.labelKey)}
               </span>
             ))}
           </div>
@@ -173,6 +183,8 @@ export function PluginMarketplaceDetailPanel({
           {t(detailNextStepKey(item))}
         </p>
       </section>
+
+      <PluginMarketplaceCapabilityPanel item={item} t={t} />
 
       <PluginMarketplaceSkillPanel
         item={item}
@@ -215,6 +227,146 @@ export function PluginMarketplaceDetailPanel({
         />
       ) : null}
     </aside>
+  );
+}
+
+function PluginMarketplaceCapabilityPanel({
+  item,
+  t,
+}: {
+  item: PluginMarketplaceViewItem;
+  t: (key: string, options?: Record<string, string | number>) => string;
+}) {
+  if (item.capabilityProfile.sections.length === 0) {
+    return null;
+  }
+  return (
+    <section
+      className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4"
+      data-testid="plugin-marketplace-capability-panel"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="m-0 text-sm font-semibold text-slate-800">
+            {t("plugin.marketplace.capability.title")}
+          </h3>
+          <p className="mt-1 text-sm leading-6 text-slate-600">
+            {t("plugin.marketplace.capability.description")}
+          </p>
+        </div>
+        <span className="shrink-0 rounded-md border border-slate-200 bg-white px-2 py-0.5 text-xs font-semibold text-slate-600">
+          {t("plugin.marketplace.capability.summary", {
+            count: item.capabilityProfile.sections.length,
+          })}
+        </span>
+      </div>
+      <div className="mt-3 grid gap-3">
+        {item.capabilityProfile.sections.map((section) => (
+          <div
+            key={section.kind}
+            className="rounded-lg border border-slate-200 bg-white p-3"
+          >
+            <div className="flex items-start gap-2">
+              <span className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-500">
+                <CapabilitySectionIcon kind={section.kind} />
+              </span>
+              <div className="min-w-0">
+                <h4 className="m-0 text-sm font-semibold text-slate-800">
+                  {t(section.titleKey)}
+                </h4>
+                <p className="mt-0.5 text-xs leading-5 text-slate-500">
+                  {t(section.descriptionKey)}
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 grid gap-2">
+              {section.items.slice(0, 6).map((capability) => (
+                <div
+                  key={`${section.kind}:${capability.id}`}
+                  className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-xs font-semibold text-slate-800">
+                        {capability.title}
+                      </div>
+                      {capability.description ? (
+                        <div className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-slate-500">
+                          {capability.description}
+                        </div>
+                      ) : null}
+                    </div>
+                    <CapabilityStatusBadge status={capability.status} t={t} />
+                  </div>
+                  {capability.meta.length > 0 ? (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {capability.meta.slice(0, 4).map((meta) => (
+                        <span
+                          key={meta}
+                          className="rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-500"
+                        >
+                          {meta}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function CapabilitySectionIcon({
+  kind,
+}: {
+  kind: PluginMarketplaceViewItem["capabilityProfile"]["sections"][number]["kind"];
+}) {
+  switch (kind) {
+    case "applied_agent":
+      return <Bot className="size-4" aria-hidden="true" />;
+    case "subagents":
+      return <UsersRound className="size-4" aria-hidden="true" />;
+    case "cli_tools":
+      return <Terminal className="size-4" aria-hidden="true" />;
+    case "app_authorization":
+      return <KeyRound className="size-4" aria-hidden="true" />;
+    case "skills":
+      return <Workflow className="size-4" aria-hidden="true" />;
+    default:
+      return <Workflow className="size-4" aria-hidden="true" />;
+  }
+}
+
+function CapabilityStatusBadge({
+  status,
+  t,
+}: {
+  status: PluginMarketplaceViewItem["capabilityProfile"]["sections"][number]["items"][number]["status"];
+  t: (key: string, options?: Record<string, string | number>) => string;
+}) {
+  const ready = status === "ready";
+  const blocked = status === "blocked";
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold ${
+        ready
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : blocked
+            ? "border-rose-200 bg-rose-50 text-rose-700"
+            : "border-amber-200 bg-amber-50 text-amber-700"
+      }`}
+    >
+      {ready ? (
+        <CheckCircle2 className="size-3" aria-hidden="true" />
+      ) : (
+        <AlertTriangle className="size-3" aria-hidden="true" />
+      )}
+      {t(`plugin.marketplace.capability.status.${status}`)}
+    </span>
   );
 }
 

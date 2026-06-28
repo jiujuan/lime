@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { AgentThreadItem, AgentThreadTurn } from "../types";
 import {
+  clearAgentSessionCachedSnapshot,
+  getAgentSessionCachedSnapshotAvailability,
   loadAgentSessionCachedSnapshot,
   saveAgentSessionCachedMessagesSnapshot,
   saveAgentSessionCachedSnapshot,
@@ -416,6 +418,81 @@ describe("agentSessionScopedStorage", () => {
     expect(restored?.threadItems).toHaveLength(8);
     expect(restored?.threadItems[0]?.id).toBe("item-8");
     expect(restored?.currentTurnId).toBe("turn-15");
+  });
+
+  it("保存快照时应同步维护轻量索引，供会话点击路径跳过无缓存重解析", () => {
+    const workspaceId = "ws-session-snapshot-index";
+    const sessionId = "topic-indexed";
+    const nowMs = Date.parse("2026-04-24T00:00:00.000Z");
+
+    expect(
+      getAgentSessionCachedSnapshotAvailability(workspaceId, sessionId),
+    ).toEqual({
+      hasSnapshot: true,
+      hasIndex: false,
+    });
+
+    saveAgentSessionCachedSnapshot(
+      workspaceId,
+      sessionId,
+      {
+        messages: [createMessage(1)],
+        threadTurns: [],
+        threadItems: [],
+        currentTurnId: null,
+      },
+      {
+        nowMs,
+        sessionUpdatedAt: nowMs,
+        messagesCount: 1,
+      },
+    );
+
+    expect(
+      getAgentSessionCachedSnapshotAvailability(workspaceId, sessionId),
+    ).toMatchObject({
+      hasSnapshot: true,
+      hasIndex: true,
+      transient: {
+        updatedAt: nowMs,
+        sessionUpdatedAt: nowMs,
+        messagesCount: 1,
+        historyTruncated: false,
+      },
+      persisted: {
+        updatedAt: nowMs,
+        sessionUpdatedAt: nowMs,
+        messagesCount: 1,
+        historyTruncated: false,
+      },
+    });
+    expect(
+      getAgentSessionCachedSnapshotAvailability(workspaceId, "topic-missing"),
+    ).toEqual({
+      hasSnapshot: false,
+      hasIndex: true,
+    });
+  });
+
+  it("清理快照时应同步移除索引项，避免后续点击误解析空缓存", () => {
+    const workspaceId = "ws-session-snapshot-index-clear";
+    const sessionId = "topic-index-clear";
+
+    saveAgentSessionCachedSnapshot(workspaceId, sessionId, {
+      messages: [createMessage(1)],
+      threadTurns: [],
+      threadItems: [],
+      currentTurnId: null,
+    });
+
+    clearAgentSessionCachedSnapshot(workspaceId, sessionId);
+
+    expect(
+      getAgentSessionCachedSnapshotAvailability(workspaceId, sessionId),
+    ).toEqual({
+      hasSnapshot: false,
+      hasIndex: true,
+    });
   });
 
   it("持久化 tail 超过热缓存窗口后仍应作为 stale 回放，避免隔天恢复只能等待后端详情", () => {

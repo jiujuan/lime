@@ -104,6 +104,15 @@ describe("workspaceProductProfilePreviewArtifact", () => {
         artifactVersionId:
           "artifact-document:content-factory-app:artifact-article-1:v2",
         artifactVersionNo: 2,
+        productProfileCardPreview: {
+          layout: "document",
+          summary: null,
+          counts: expect.objectContaining({
+            artifacts: 1,
+            outlineSections: 0,
+            researchRounds: 0,
+          }),
+        },
         artifactDocument: expect.objectContaining({
           schemaVersion: "artifact_document.v1",
           artifactId: "artifact-document:content-factory-app:artifact-article-1",
@@ -177,6 +186,14 @@ describe("workspaceProductProfilePreviewArtifact", () => {
       meta: expect.objectContaining({
         surfaceKind: "imageGrid",
         layout: "imageGrid",
+        productProfileCardPreview: expect.objectContaining({
+          layout: "imageGrid",
+          summary: null,
+          counts: expect.objectContaining({
+            artifacts: 0,
+            images: 2,
+          }),
+        }),
         productProfile: expect.objectContaining({
           surfaceKind: "imageGrid",
           layout: "imageGrid",
@@ -326,6 +343,14 @@ describe("workspaceProductProfilePreviewArtifact", () => {
         renderMode: "canvas",
         surfaceKind: "storyboard",
         layout: "storyboard",
+        productProfileCardPreview: expect.objectContaining({
+          layout: "storyboard",
+          summary: "3 镜头短视频分镜",
+          counts: expect.objectContaining({
+            artifacts: 1,
+            storyboardScenes: 1,
+          }),
+        }),
         productProfile: expect.objectContaining({
           surfaceKind: "storyboard",
           layout: "storyboard",
@@ -413,6 +438,14 @@ describe("workspaceProductProfilePreviewArtifact", () => {
         renderMode: "canvas",
         surfaceKind: "checklist",
         layout: "checklist",
+        productProfileCardPreview: expect.objectContaining({
+          layout: "checklist",
+          summary: "发布前检查项",
+          counts: expect.objectContaining({
+            artifacts: 1,
+            checklistItems: 2,
+          }),
+        }),
         productProfile: expect.objectContaining({
           surfaceKind: "checklist",
           layout: "checklist",

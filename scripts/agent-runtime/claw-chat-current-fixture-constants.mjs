@@ -287,6 +287,7 @@ export const CONTENT_FACTORY_PRODUCT_PROFILE_ASSERTION_KEYS = [
   "contentFactoryProductProfileArtifactsProjected",
   "contentFactoryProductProfileRendererArtifactsProjected",
   "contentFactoryProductProfileArtifactReadContent",
+  "contentFactoryProductProfileArticleWritingStructureVisible",
   "contentFactoryProductProfileWorkerFailureEvidence",
   "contentFactoryProductProfileWorkerTurnExecuted",
   "contentFactoryProductProfileActionResultPatchProjected",

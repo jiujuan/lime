@@ -57,6 +57,7 @@ export const ELECTRON_HOST_COMMANDS = [
   "open_external_url",
   "open_file_preview_window",
   "open_system_settings_url",
+  "show_desktop_notification",
   "open_with_default_app",
   "read_layered_design_project_export",
   "recognize_layered_design_text",

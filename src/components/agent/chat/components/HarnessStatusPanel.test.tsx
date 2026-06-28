@@ -168,6 +168,54 @@ describe("HarnessStatusPanel", () => {
     expect(document.body.textContent).not.toContain("other session marker");
   });
 
+  it("非弹窗折叠态不应订阅并展示 AgentUI 投影详情，展开后再显示", () => {
+    act(() => {
+      conversationProjectionStore.recordAgentUiProjectionEvents([
+        {
+          type: "evidence.changed",
+          sourceType: "evidence_projection",
+          sequence: 101,
+          sessionId: "session-agentui-collapsed",
+          threadId: "thread-agentui-collapsed",
+          evidenceId: "evidence-collapsed",
+          owner: "evidence",
+          scope: "evidence",
+          phase: "completed",
+          surface: "timeline_evidence",
+          persistence: "evidence_pack",
+          payload: { verdict: "gaps_present" },
+        },
+      ]);
+    });
+
+    renderPanel({
+      diagnosticRuntimeContext: {
+        sessionId: "session-agentui-collapsed",
+        workspaceId: "workspace-agentui-collapsed",
+        providerType: "openai",
+        model: "gpt-5.4",
+        executionStrategy: "react",
+        activeTheme: "default",
+        selectedTeamLabel: null,
+      },
+    });
+
+    expect(document.body.textContent).toContain("展开详情");
+    expect(document.body.textContent).not.toContain("AgentUI 标准投影");
+    expect(document.body.textContent).not.toContain("gaps_present");
+
+    const toggle = document.body.querySelector(
+      'button[aria-label="展开详情"]',
+    ) as HTMLButtonElement | null;
+
+    act(() => {
+      toggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(document.body.textContent).toContain("AgentUI 标准投影");
+    expect(document.body.textContent).toContain("gaps_present");
+  });
+
   it("弹窗模式应让前置概览跟随滚动区，而不是固定在顶部", () => {
     const { container } = renderPanel({
       layout: "dialog",
@@ -195,7 +243,56 @@ describe("HarnessStatusPanel", () => {
     expect(document.body.textContent).toContain("处理工作台");
     expect(document.body.textContent).toContain("集中查看代理运行轨迹。");
     expect(document.body.textContent).toContain("通用 Agent 运行概览");
-    expect(document.body.textContent).toContain("收起工作台详情");
+    expect(document.body.textContent).toContain("展开工作台详情");
+  });
+
+  it("非弹窗模式默认折叠详情，避免 Harness 详情扫描阻塞对话首屏", () => {
+    renderPanel({
+      turns: [
+        {
+          id: "turn-light-panel",
+          thread_id: "thread-1",
+          prompt_text: "整理今天的国际新闻",
+          status: "completed",
+          started_at: "2026-03-24T09:00:00Z",
+          created_at: "2026-03-24T09:00:00Z",
+          updated_at: "2026-03-24T09:00:12Z",
+          completed_at: "2026-03-24T09:00:12Z",
+        },
+      ],
+      currentTurnId: "turn-light-panel",
+      threadItems: [
+        {
+          id: "item-detail-only-error",
+          thread_id: "thread-1",
+          turn_id: "turn-light-panel",
+          sequence: 2453,
+          status: "failed",
+          started_at: "2026-03-24T09:00:10Z",
+          completed_at: "2026-03-24T09:00:10Z",
+          updated_at: "2026-03-24T09:00:10Z",
+          type: "error",
+          message: "详情态才展示的历史错误",
+        },
+      ],
+    });
+
+    expect(document.body.textContent).toContain("展开详情");
+    expect(document.body.textContent).not.toContain("线程可靠性");
+    expect(document.body.textContent).not.toContain("详情态才展示的历史错误");
+
+    const toggle = document.body.querySelector(
+      'button[aria-label="展开详情"]',
+    ) as HTMLButtonElement | null;
+    expect(toggle).not.toBeNull();
+
+    act(() => {
+      toggle!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(document.body.textContent).toContain("收起详情");
+    expect(document.body.textContent).toContain("线程可靠性");
+    expect(document.body.textContent).toContain("详情态才展示的历史错误");
   });
 
   it("未激活 skill 时不应渲染技能区块与导航入口", () => {
@@ -219,6 +316,7 @@ describe("HarnessStatusPanel", () => {
 
   it("存在 runtimeStatus 时应在工作台中展示当前执行阶段", () => {
     renderPanel({
+      layout: "dialog",
       harnessState: createHarnessState({
         runtimeStatus: {
           phase: "routing",
@@ -271,6 +369,7 @@ describe("HarnessStatusPanel", () => {
 
   it("存在 thread_read runtime facts 时应展示运行时事实区块", () => {
     renderPanel({
+      layout: "dialog",
       threadRead: {
         thread_id: "thread-1",
         status: "running",

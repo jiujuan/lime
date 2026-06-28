@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 import { CONTENT_FACTORY_PRODUCT_PROFILE_ASSERTION_KEYS } from "./claw-chat-current-fixture-constants.mjs";
+import { isRightSurfaceSnapshotReady } from "./claw-chat-current-fixture-right-surface-visual.mjs";
 import {
   createExpertSkillsRuntimeFixtureScenario,
   createManualEnableSkillsRuntimeFixtureScenario,
@@ -690,6 +691,9 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("iframe: false");
     expect(content).toContain("browserView: false");
     expect(content).toContain("rightSurfaceVisualMatrixHostsFillRightSide");
+    expect(content).toContain(
+      "rightSurfaceVisualMatrixProductProfileRailVisible",
+    );
     expect(content).toContain("rightSurfaceVisualMatrixBrowserSurfaceVisible");
     expect(content).toContain("rightSurfaceVisualMatrixAppSurfaceVisible");
     expect(content).toContain(
@@ -700,6 +704,40 @@ describe("claw chat current Electron fixture smoke guard", () => {
     );
     expect(content).toContain("rightSurfaceVisualMatrixDoesNotUseModelTurn");
     expect(content).not.toContain("agent_runtime_");
+  });
+
+  it("accepts Product Profile right rail snapshots without canvas-panel fill", () => {
+    expect(
+      isRightSurfaceSnapshotReady(
+        {
+          activeSurface: "productProfile",
+          hostVisible: true,
+          rootVisible: true,
+          visibleRootKinds: ["productProfile"],
+          geometry: {
+            hostFillsCanvasPanel: false,
+            rootFillsSurfaceViewport: true,
+          },
+        },
+        "productProfile",
+      ),
+    ).toBe(true);
+
+    expect(
+      isRightSurfaceSnapshotReady(
+        {
+          activeSurface: "files",
+          hostVisible: true,
+          rootVisible: true,
+          visibleRootKinds: ["files"],
+          geometry: {
+            hostFillsCanvasPanel: false,
+            rootFillsSurfaceViewport: true,
+          },
+        },
+        "files",
+      ),
+    ).toBe(false);
   });
 
   it("covers content factory Product Profile through runtime event append and artifact read", () => {
@@ -743,14 +781,34 @@ describe("claw chat current Electron fixture smoke guard", () => {
       "contentFactoryProductProfileStoryboardObjectSelection",
     );
     expect(content).toContain(
+      "contentFactoryProductProfileArticleObjectSelection",
+    );
+    expect(content).toContain(
+      "contentFactoryProductProfileArticleWritingStructure",
+    );
+    expect(content).toContain(
+      "contentFactoryProductProfileArticleWritingStructureVisible",
+    );
+    expect(content).toContain("workspace-product-profile-object-articleDraft");
+    expect(content).toContain(
       "workspace-product-profile-object-videoStoryboard",
     );
+    expect(content).toContain("workspace-product-profile-writing-structure");
+    expect(content).toContain("workspace-product-profile-writing-research");
+    expect(content).toContain("workspace-product-profile-writing-outline");
+    expect(content).toContain("workspace-product-profile-writing-citations");
+    expect(content).toContain("workspace-product-profile-writing-image-slots");
+    expect(content).toContain("检索行业背景");
+    expect(content).toContain("内容工厂不是聊天框");
+    expect(content).toContain("桌面端内容工厂写作流程图，中文标签");
+    expect(content).toContain("snapshot.hasWorkerEvidenceTitle");
     expect(content).toContain(
       "workspace-product-profile-app-declared-renderer",
     );
     expect(content).toContain("app_declared");
     expect(content).toContain("host_placeholder");
     expect(content).toContain("host_placeholder_only");
+    expect(content).toContain("rendererContract");
     expect(content).toContain("not_loaded");
     expect(content).toContain("rendererExecutionModelVisible");
     expect(content).toContain("entryLoadPolicyVisible");

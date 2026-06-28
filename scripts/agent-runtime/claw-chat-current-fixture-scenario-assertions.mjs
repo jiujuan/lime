@@ -171,6 +171,11 @@ export function buildScenarioAssertions(context) {
               capture?.geometry?.hostFillsCanvasPanel === true &&
               capture?.geometry?.rootFillsSurfaceViewport === true,
           ),
+          rightSurfaceVisualMatrixProductProfileRailVisible:
+            rightSurfaceVisualCaptures.objectCanvas?.stable?.activeSurface ===
+              "productProfile" &&
+            rightSurfaceVisualCaptures.objectCanvas?.stable?.geometry
+              ?.rootFillsSurfaceViewport === true,
           rightSurfaceVisualMatrixPendingConsumeKeepsSurfaceOpen:
             rightSurfaceVisualCaptures.files?.opened?.rootVisible === true &&
             rightSurfaceVisualCaptures.files?.stable?.rootVisible === true &&

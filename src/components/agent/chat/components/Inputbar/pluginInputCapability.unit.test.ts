@@ -40,6 +40,32 @@ describe("pluginInputCapability", () => {
     ).toBe("@内容工厂:文章写作");
   });
 
+  it("插件技能声明显式触发词时应优先使用技能触发词", () => {
+    expect(
+      normalizeInputbarPluginTrigger(
+        {
+          pluginId: "content-factory-app",
+          displayName: "内容工厂",
+        },
+        {
+          skillId: "content_article_generate",
+          title: "写文章",
+          trigger: "@写文章",
+        },
+      ),
+    ).toBe("@写文章");
+  });
+
+  it("插件声明显式触发词时应优先使用该触发词", () => {
+    expect(
+      normalizeInputbarPluginTrigger({
+        pluginId: "content-factory-app",
+        displayName: "写文章",
+        trigger: "@写文章",
+      }),
+    ).toBe("@写文章");
+  });
+
   it("展示名称为空时应回退到插件 id", () => {
     expect(
       normalizeInputbarPluginTrigger({
@@ -59,6 +85,36 @@ describe("pluginInputCapability", () => {
         },
       }).text,
     ).toBe("@内容工厂 整理选题");
+  });
+
+  it("选择显式触发词插件时应把该触发词写到输入开头", () => {
+    expect(
+      applyInputbarPluginSelection({
+        input: "写一篇公众号文章",
+        plugin: {
+          pluginId: "content-factory-app",
+          displayName: "写文章",
+          trigger: "@写文章",
+        },
+      }).text,
+    ).toBe("@写文章 写一篇公众号文章");
+  });
+
+  it("选择显式触发词插件技能时应把该触发词写到输入开头", () => {
+    expect(
+      applyInputbarPluginSelection({
+        input: "写一篇公众号文章",
+        plugin: {
+          pluginId: "content-factory-app",
+          displayName: "内容工厂",
+        },
+        skill: {
+          skillId: "content_article_generate",
+          title: "写文章",
+          trigger: "@写文章",
+        },
+      }).text,
+    ).toBe("@写文章 写一篇公众号文章");
   });
 
   it("选择插件技能时应把显式技能触发前缀写到输入开头", () => {

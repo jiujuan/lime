@@ -201,6 +201,18 @@ export function isTaskCenterDraftSendPendingForLayout({
   return !hasDisplayMessages || isSending || queuedTurnCount > 0;
 }
 
+export function shouldBuildFullThreadTimeline({
+  harnessPanelVisible,
+  isSending,
+  layoutMode,
+}: {
+  harnessPanelVisible: boolean;
+  isSending: boolean;
+  layoutMode: string;
+}): boolean {
+  return layoutMode !== "chat" || harnessPanelVisible || !isSending;
+}
+
 export function shouldSuppressTaskCenterDraftContentForLayout({
   draftSurfaceActive,
   draftSendInFlight,
@@ -239,6 +251,13 @@ export function resolveTaskCenterHomeSurfaceState({
     !hasCurrentSessionActivity &&
     (draftSurfaceActive || hasEmbeddedHomeSession),
   );
+  const isSessionRestorePending =
+    isAutoRestoringSession || isSessionHydrating || sessionSwitchPending;
+  const shouldKeepDraftHomeShell =
+    shouldSuppressDraftContent &&
+    !sessionSwitchPending &&
+    !shouldProtectInitialSessionRoute &&
+    !hasCurrentSessionActivity;
   const shouldHideCurrentSessionContent =
     sessionSwitchPending ||
     (shouldSuppressDraftContent &&
@@ -248,9 +267,7 @@ export function resolveTaskCenterHomeSurfaceState({
   return {
     shouldRenderEmbeddedHome,
     shouldHideCurrentSessionContent,
-    isRestoringSession:
-      !shouldSuppressDraftContent &&
-      (isAutoRestoringSession || isSessionHydrating || sessionSwitchPending),
+    isRestoringSession: isSessionRestorePending && !shouldKeepDraftHomeShell,
     sceneSessionId: shouldHideCurrentSessionContent
       ? null
       : (sessionId ?? null),

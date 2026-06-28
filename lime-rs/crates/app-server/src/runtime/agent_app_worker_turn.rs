@@ -22,6 +22,7 @@ const WORKER_REMOTE_RUNTIME_DISABLED: &str = "AGENT_APP_WORKER_REMOTE_RUNTIME_DI
 const WORKER_OUTPUT_UNAUTHORIZED: &str = "AGENT_APP_WORKER_OUTPUT_UNAUTHORIZED";
 const WORKER_REQUEST_INVALID: &str = "AGENT_APP_WORKER_REQUEST_INVALID";
 const PANE_ACTION_SOURCE: &str = "right_surface_pane_action";
+const PLUGIN_ACTIVATION_SOURCE: &str = "plugin_activation_context";
 
 #[derive(Debug, Clone)]
 struct PaneActionWorkerTurn {
@@ -223,22 +224,19 @@ fn validate_worker_cloud_release_signature(
     };
 
     let mut issues = Vec::new();
-    if json_string(evidence, &["signaturePolicy", "signature_policy"]).as_deref()
-        != Some("required")
-    {
-        issues.push("signature policy is not required");
-    }
-    if json_string(
+    let signature_policy = json_string(evidence, &["signaturePolicy", "signature_policy"])
+        .unwrap_or_else(|| "required".to_string());
+    let signature_status = json_string(
         evidence,
         &[
             "signatureVerificationStatus",
             "signature_verification_status",
         ],
     )
-    .as_deref()
-        != Some("verified")
-    {
-        issues.push("signature is not verified");
+    .unwrap_or_else(|| "not_configured".to_string());
+    let signature_required = signature_policy == "required";
+    if signature_required && signature_status != "verified" {
+        issues.push("required signature is not verified");
     }
     if evidence
         .get("packageHashMatched")
@@ -265,8 +263,11 @@ fn validate_worker_cloud_release_signature(
     {
         issues.push("package verification is not verified");
     }
-    if json_string(evidence, &["status"]).as_deref() != Some("ready") {
-        issues.push("release evidence is not ready");
+    let evidence_status = json_string(evidence, &["status"]).unwrap_or_else(|| "blocked".into());
+    if evidence_status == "blocked" {
+        issues.push("release evidence is blocked");
+    } else if signature_required && evidence_status != "ready" {
+        issues.push("required-signature release evidence is not ready");
     }
 
     if issues.is_empty() {
@@ -481,12 +482,104 @@ impl PaneActionWorkerTurn {
     fn resolve_from_execution_request(
         request: &ExecutionRequest,
     ) -> PaneActionWorkerTurnResolution {
-        match Self::resolve_pane_action_request(request) {
+        match Self::resolve_plugin_activation_request(request) {
             PaneActionWorkerTurnResolution::Ignore => {
-                Self::resolve_product_profile_action_request(request)
+                match Self::resolve_pane_action_request(request) {
+                    PaneActionWorkerTurnResolution::Ignore => {
+                        Self::resolve_product_profile_action_request(request)
+                    }
+                    resolution => resolution,
+                }
             }
             resolution => resolution,
         }
+    }
+
+    fn resolve_plugin_activation_request(
+        request: &ExecutionRequest,
+    ) -> PaneActionWorkerTurnResolution {
+        let Some(metadata) = request.metadata.as_ref() else {
+            return PaneActionWorkerTurnResolution::Ignore;
+        };
+        let Some(activation) = plugin_activation_value(metadata) else {
+            return PaneActionWorkerTurnResolution::Ignore;
+        };
+        let Some(plugin_id) = json_string(activation, &["plugin_id", "pluginId"]) else {
+            return PaneActionWorkerTurnResolution::Ignore;
+        };
+        if plugin_id != CONTENT_FACTORY_APP_ID {
+            return PaneActionWorkerTurnResolution::Ignore;
+        }
+        let app_id = json_string(activation, &["active_agent_app_id", "activeAgentAppId"])
+            .unwrap_or(plugin_id);
+        if app_id != CONTENT_FACTORY_APP_ID {
+            return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
+                request,
+                activation,
+                None,
+                WORKER_REMOTE_RUNTIME_DISABLED,
+                format!("Remote Agent App runtime is disabled for app: {app_id}"),
+            ));
+        }
+        let prompt =
+            json_string(activation, &["body"]).unwrap_or_else(|| request.input.text.clone());
+        if prompt.trim().is_empty() {
+            return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
+                request,
+                activation,
+                None,
+                WORKER_REQUEST_INVALID,
+                "Plugin activation prompt is missing.",
+            ));
+        }
+        let requested_output_artifact_kind =
+            json_string(activation, &["output_artifact_kind", "outputArtifactKind"]);
+        let Some(output_artifact_kind) =
+            content_factory_output_artifact_kind(requested_output_artifact_kind.clone())
+        else {
+            return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
+                request,
+                activation,
+                None,
+                WORKER_OUTPUT_UNAUTHORIZED,
+                format!(
+                    "Agent App worker output artifact kind is not authorized: {}",
+                    requested_output_artifact_kind
+                        .as_deref()
+                        .unwrap_or("<missing>")
+                ),
+            ));
+        };
+        let selected_object_ref = activation
+            .get("selected_object_ref")
+            .or_else(|| activation.get("selectedObjectRef"))
+            .filter(|value| value.is_object())
+            .cloned();
+        let selected_object_kind = selected_object_ref
+            .as_ref()
+            .and_then(|object| json_string(object, &["object_kind", "objectKind"]));
+        let source_artifact_ids = selected_object_ref
+            .as_ref()
+            .map(|object| json_string_array(object, &["artifact_ids", "artifactIds"]))
+            .unwrap_or_default();
+        PaneActionWorkerTurnResolution::Run(Self {
+            app_id,
+            action_key: json_string(activation, &["intent_key", "intentKey"])
+                .or_else(|| Some("plugin-activation".to_string())),
+            action_intent: Some("plugin_activation".to_string()),
+            action_risk: Some("write".to_string()),
+            prompt,
+            source_object_ref: selected_object_ref,
+            source_artifact_ids,
+            source: PLUGIN_ACTIVATION_SOURCE.to_string(),
+            surface_kind: json_string(activation, &["right_surface", "rightSurface"])
+                .or_else(|| Some("productProfile".to_string())),
+            pane_kind: selected_object_kind.or_else(|| Some("articleDraft".to_string())),
+            output_artifact_kind,
+            task_kind: json_string(activation, &["task_kind", "taskKind"])
+                .unwrap_or_else(|| DEFAULT_PRODUCT_PROFILE_TASK_KIND.to_string()),
+            workspace_id: request.session.workspace_id.clone(),
+        })
     }
 
     fn resolve_pane_action_request(request: &ExecutionRequest) -> PaneActionWorkerTurnResolution {
@@ -899,6 +992,14 @@ fn right_surface_string(metadata: &Value, path: &[&str]) -> Option<String> {
         .and_then(|right_surface| json_string(right_surface, path))
 }
 
+fn plugin_activation_value(metadata: &Value) -> Option<&Value> {
+    metadata
+        .pointer("/harness/plugin_activation")
+        .or_else(|| metadata.pointer("/harness/pluginActivation"))
+        .or_else(|| metadata.get("plugin_activation"))
+        .or_else(|| metadata.get("pluginActivation"))
+}
+
 fn content_factory_output_artifact_kind(
     output_artifact_kind: Option<String>,
 ) -> Option<Option<String>> {
@@ -1027,6 +1128,75 @@ mod tests {
             worker_turn.source_object_ref.unwrap()["kind"].as_str(),
             Some("imageGenerationSet")
         );
+    }
+
+    #[test]
+    fn extracts_content_factory_plugin_activation_worker_turn() {
+        let request = execution_request(json!({
+            "harness": {
+                "plugin_activation": {
+                    "source": "plugin_explicit_mention",
+                    "trigger": "@内容工厂",
+                    "body": "写一篇公众号文章",
+                    "session_id": "session-content-factory",
+                    "plugin_id": CONTENT_FACTORY_APP_ID,
+                    "active_agent_app_id": CONTENT_FACTORY_APP_ID,
+                    "active_entry_key": "content_factory",
+                    "intent_key": "content_article_generate",
+                    "task_kind": "content.article.generate",
+                    "output_artifact_kind": CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
+                    "right_surface": "productProfile",
+                    "expected_objects": ["articleDraft"],
+                    "selected_object_ref": {
+                        "plugin_id": CONTENT_FACTORY_APP_ID,
+                        "object_kind": "articleDraft",
+                        "object_id": "pending"
+                    },
+                    "opened_tabs": ["productProfile"],
+                    "context_source": "user"
+                }
+            }
+        }));
+
+        let worker_turn =
+            PaneActionWorkerTurn::from_execution_request(&request).expect("worker turn");
+
+        assert_eq!(worker_turn.app_id, CONTENT_FACTORY_APP_ID);
+        assert_eq!(
+            worker_turn.action_key.as_deref(),
+            Some("content_article_generate")
+        );
+        assert_eq!(
+            worker_turn.action_intent.as_deref(),
+            Some("plugin_activation")
+        );
+        assert_eq!(worker_turn.source, PLUGIN_ACTIVATION_SOURCE);
+        assert_eq!(worker_turn.task_kind, "content.article.generate");
+        assert_eq!(worker_turn.prompt, "写一篇公众号文章");
+        assert_eq!(worker_turn.surface_kind.as_deref(), Some("productProfile"));
+        assert_eq!(worker_turn.pane_kind.as_deref(), Some("articleDraft"));
+        assert_eq!(
+            worker_turn.output_artifact_kind.as_deref(),
+            Some(CONTENT_FACTORY_WORKSPACE_PATCH_KIND)
+        );
+    }
+
+    #[test]
+    fn ignores_non_content_factory_plugin_activation_worker_turn() {
+        let request = execution_request(json!({
+            "harness": {
+                "plugin_activation": {
+                    "source": "plugin_explicit_mention",
+                    "trigger": "@其他插件",
+                    "body": "写文章",
+                    "session_id": "session-other",
+                    "plugin_id": "other-plugin",
+                    "active_entry_key": "other"
+                }
+            }
+        }));
+
+        assert!(PaneActionWorkerTurn::from_execution_request(&request).is_none());
     }
 
     #[test]
@@ -1238,6 +1408,54 @@ mod tests {
 
         validate_worker_cloud_release_signature(&installed_state)
             .expect("verified evidence should pass");
+    }
+
+    #[test]
+    fn accepts_optional_seeded_cloud_release_signature_warning_for_worker() {
+        let installed_state = json!({
+            "schemaVersion": "agent-app.installed-state.v1",
+            "appId": "content-factory-app",
+            "identity": {
+                "appId": "content-factory-app",
+                "sourceKind": "cloud_release",
+                "sourceUri": "https://seeded.local/agent-apps/content-factory-app/2.0.0.lapp",
+                "packageHash": "sha256:test-package",
+                "manifestHash": "sha256:test-manifest"
+            },
+            "setup": {
+                "cloudReleaseEvidence": {
+                    "status": "warning",
+                    "signaturePolicy": "optional",
+                    "signatureVerificationStatus": "not_configured",
+                    "packageHashMatched": true,
+                    "manifestHashMatched": true,
+                    "packageVerificationStatus": "verified"
+                }
+            }
+        });
+
+        validate_worker_cloud_release_signature(&installed_state)
+            .expect("optional seeded signature warning should not block worker");
+    }
+
+    #[test]
+    fn rejects_cloud_release_worker_without_release_evidence() {
+        let installed_state = json!({
+            "schemaVersion": "agent-app.installed-state.v1",
+            "appId": "content-factory-app",
+            "identity": {
+                "appId": "content-factory-app",
+                "sourceKind": "cloud_release",
+                "sourceUri": "https://seeded.local/agent-apps/content-factory-app/2.0.0.lapp",
+                "packageHash": "sha256:test-package",
+                "manifestHash": "sha256:test-manifest"
+            },
+            "setup": {}
+        });
+
+        let error = validate_worker_cloud_release_signature(&installed_state)
+            .expect_err("missing evidence should fail closed");
+        assert!(error.to_string().contains("missing cloud release evidence"));
     }
 
     #[test]

@@ -231,6 +231,7 @@ describe("oemCloudLoginLauncher", () => {
         desktopClientId: "desktop-client",
         desktopOauthRedirectUrl: "lime://oauth/callback",
         desktopOauthNextPath: "/welcome",
+        agentAppSignatureTrustRoots: [],
       },
       { waitForCompletion: false },
     );
@@ -279,6 +280,7 @@ describe("oemCloudLoginLauncher", () => {
         desktopClientId: "desktop-client",
         desktopOauthRedirectUrl: "lime://oauth/callback",
         desktopOauthNextPath: "/welcome",
+        agentAppSignatureTrustRoots: [],
       },
       { waitForCompletion: false },
     );
@@ -367,6 +369,7 @@ describe("oemCloudLoginLauncher", () => {
       desktopClientId: "desktop-client",
       desktopOauthRedirectUrl: "lime://oauth/callback",
       desktopOauthNextPath: "/welcome",
+      agentAppSignatureTrustRoots: [],
     });
 
     await vi.waitFor(() => {
@@ -433,6 +436,7 @@ describe("oemCloudLoginLauncher", () => {
           desktopClientId: "desktop-client",
           desktopOauthRedirectUrl: "lime://oauth/callback",
           desktopOauthNextPath: "/welcome",
+        agentAppSignatureTrustRoots: [],
         },
         { waitForCompletion: false },
       ),
@@ -483,6 +487,7 @@ describe("oemCloudLoginLauncher", () => {
         desktopClientId: "desktop-client",
         desktopOauthRedirectUrl: "lime://oauth/callback",
         desktopOauthNextPath: "/welcome",
+        agentAppSignatureTrustRoots: [],
       },
       { waitForCompletion: true },
     );

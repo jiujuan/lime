@@ -1,18 +1,13 @@
 import type { ProjectedEntry } from "../types";
 import type { AgentAppRightSurfaceLaunchTarget } from "../ui/agentAppRightSurfaceLaunch";
+import type { AgentAppHostBridgeCapabilityRequest } from "./hostBridge";
 import {
   requestAgentAppBrowserRightSurfaceIntent,
   type AgentAppBrowserIntentLaunchResult,
 } from "../ui/agentAppBrowserIntentLaunch";
 
-export interface AgentAppCapabilityDispatchRequest {
-  capability: string;
-  method: string;
-  [key: string]: unknown;
-}
-
 export type AgentAppCapabilityDispatch = (
-  request: AgentAppCapabilityDispatchRequest,
+  request: AgentAppHostBridgeCapabilityRequest,
 ) => Promise<unknown>;
 
 export interface AgentAppBrowserIntentLaunchContext {

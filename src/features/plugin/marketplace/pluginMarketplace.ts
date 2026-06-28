@@ -6,9 +6,12 @@ import type {
   PluginArtifactRendererDeclaration,
   PluginHistoryRestoreDeclaration,
   PluginManifest,
+  PluginManifestInterface,
   PluginRegistryItem,
   PluginRegistryProjectionInput,
   PluginSkillDeclaration,
+  PluginSubagentDeclaration,
+  PluginWorkflowDeclaration,
 } from "../manifest/types";
 import type {
   PluginMarketplaceItem,
@@ -32,6 +35,7 @@ export interface PluginMarketplaceInstalledKeyProjection {
   installedPluginKeys: string[];
   enabledPluginKeys: string[];
   disabledPluginKeys: string[];
+  refreshablePluginKeys: string[];
   blockerCodesByPluginKey: Record<string, string[]>;
 }
 
@@ -43,6 +47,13 @@ function uniqueStrings(values: Array<string | undefined>): string[] {
         .filter((value): value is string => Boolean(value)),
     ),
   );
+}
+
+function readStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return uniqueStrings(value.map(readString));
 }
 
 function marketplaceCategories(item: PluginMarketplaceItem): string[] {
@@ -107,9 +118,115 @@ function projectPluginMarketplaceItemHistoryRestore(
   return historyRestore as PluginHistoryRestoreDeclaration | undefined;
 }
 
+function projectPluginMarketplaceItemSubagents(
+  item: Pick<PluginMarketplaceItem, "manifestSummary">,
+): PluginSubagentDeclaration[] {
+  const summary = readRecord(item.manifestSummary);
+  const rawSubagents = Array.isArray(summary?.subagents)
+    ? summary.subagents
+    : [];
+  return rawSubagents.flatMap((entry): PluginSubagentDeclaration[] => {
+    const record = readRecord(entry);
+    const id = readString(record?.id);
+    if (!record || !id) {
+      return [];
+    }
+    return [
+      {
+        id,
+        title: readString(record.title) ?? id,
+        description: readString(record.description),
+        activation: readString(record.activation),
+        required: record.required === true,
+        skills: readStringArray(record.skills),
+      },
+    ];
+  });
+}
+
+function projectPluginMarketplaceItemWorkflows(
+  item: Pick<PluginMarketplaceItem, "manifestSummary">,
+): PluginWorkflowDeclaration[] {
+  const summary = readRecord(item.manifestSummary);
+  const rawWorkflows = Array.isArray(summary?.workflows)
+    ? summary.workflows
+    : [];
+  return rawWorkflows.flatMap((entry): PluginWorkflowDeclaration[] => {
+    const record = readRecord(entry);
+    const key = readString(record?.key);
+    if (!record || !key) {
+      return [];
+    }
+    return [
+      {
+        key,
+        title: readString(record.title),
+        path: readString(record.path),
+        taskKind: readString(record.taskKind),
+        triggerIntents: readStringArray(record.triggerIntents),
+        outputArtifactKind: readString(record.outputArtifactKind),
+        steps: Array.isArray(record.steps)
+          ? record.steps.flatMap((step) => {
+              const stepRecord = readRecord(step);
+              const id = readString(stepRecord?.id);
+              return stepRecord && id
+                ? [
+                    {
+                      id,
+                      title: readString(stepRecord.title),
+                      subagent: readString(stepRecord.subagent),
+                      skillRefs: readStringArray(stepRecord.skillRefs),
+                      expectedOutput: readString(stepRecord.expectedOutput),
+                    },
+                  ]
+                : [];
+            })
+          : [],
+        humanReview: record.humanReview === true,
+        required: record.required === true,
+      },
+    ];
+  });
+}
+
+function projectPluginMarketplaceItemInterface(
+  item: PluginMarketplaceItem,
+): PluginManifestInterface {
+  const summary = readRecord(item.manifestSummary);
+  const rawInterface = readRecord(summary?.interface);
+  const defaultPrompt = readStringArray(rawInterface?.defaultPrompt);
+  return {
+    displayName: readString(rawInterface?.displayName) ?? item.displayName,
+    shortDescription:
+      readString(rawInterface?.shortDescription) ?? item.description,
+    longDescription: readString(rawInterface?.longDescription),
+    developerName: readString(rawInterface?.developerName),
+    category: readString(rawInterface?.category) ?? item.category,
+    capabilities: Array.isArray(rawInterface?.capabilities)
+      ? readStringArray(rawInterface.capabilities)
+      : item.capabilities ?? [],
+    websiteUrl:
+      readString(rawInterface?.websiteUrl) ??
+      readString(rawInterface?.websiteURL),
+    privacyPolicyUrl:
+      readString(rawInterface?.privacyPolicyUrl) ??
+      readString(rawInterface?.privacyPolicyURL),
+    termsOfServiceUrl:
+      readString(rawInterface?.termsOfServiceUrl) ??
+      readString(rawInterface?.termsOfServiceURL),
+    defaultPrompt,
+    brandColor: readString(rawInterface?.brandColor),
+    composerIcon: readString(rawInterface?.composerIcon),
+    logo: readString(rawInterface?.logo),
+    logoDark: readString(rawInterface?.logoDark),
+    screenshots: readStringArray(rawInterface?.screenshots),
+  };
+}
+
 function marketplaceManifest(item: PluginMarketplaceItem): PluginManifest {
   const artifactRenderers = projectPluginMarketplaceItemArtifactRenderers(item);
   const historyRestore = projectPluginMarketplaceItemHistoryRestore(item);
+  const manifestInterface = projectPluginMarketplaceItemInterface(item);
   return {
     id: item.pluginKey,
     name: item.pluginName,
@@ -119,13 +236,9 @@ function marketplaceManifest(item: PluginMarketplaceItem): PluginManifest {
     categories: marketplaceCategories(item),
     capabilities: item.capabilities ?? [],
     skills: projectPluginMarketplaceItemSkills(item),
-    interface: {
-      displayName: item.displayName,
-      shortDescription: item.description,
-      category: item.category,
-      capabilities: item.capabilities ?? [],
-      screenshots: [],
-    },
+    subagents: projectPluginMarketplaceItemSubagents(item),
+    workflows: projectPluginMarketplaceItemWorkflows(item),
+    interface: manifestInterface,
     artifactRenderers,
     ...(historyRestore ? { historyRestore } : {}),
     agentApps: item.appId
@@ -169,17 +282,38 @@ function normalizeToken(value: string | undefined): string | undefined {
   return token ? token : undefined;
 }
 
-function matchPackageHash(
+export function marketplaceItemMatchesInstalledAgentAppPackage(
   item: PluginMarketplaceItem,
   state: InstalledAgentAppState,
 ): boolean {
   const expectedPackageHash = normalizeToken(item.package?.packageHash);
   const expectedManifestHash = normalizeToken(item.package?.manifestHash);
+  if (!expectedPackageHash && !expectedManifestHash) {
+    return true;
+  }
+  if (
+    expectedPackageHash &&
+    state.identity.packageHash !== expectedPackageHash
+  ) {
+    return false;
+  }
+  if (
+    expectedManifestHash &&
+    state.identity.manifestHash !== expectedManifestHash
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function installedCloudReleaseEvidenceMissing(
+  state: InstalledAgentAppState,
+): boolean {
+  const setup = readRecord(state.setup);
   return (
-    Boolean(expectedPackageHash) &&
-    Boolean(expectedManifestHash) &&
-    state.identity.packageHash === expectedPackageHash &&
-    state.identity.manifestHash === expectedManifestHash
+    state.identity.sourceKind === "cloud_release" &&
+    state.identity.sourceUri.startsWith("https://seeded.local/") &&
+    !setup?.cloudReleaseEvidence
   );
 }
 
@@ -204,6 +338,7 @@ export function projectPluginMarketplaceInstalledKeysFromAgentApps(
   const installedPluginKeys: string[] = [];
   const enabledPluginKeys: string[] = [];
   const disabledPluginKeys: string[] = [];
+  const refreshablePluginKeys: string[] = [];
   const blockerCodesByPluginKey: Record<string, string[]> = {};
 
   marketplace.items.forEach((item) => {
@@ -211,7 +346,15 @@ export function projectPluginMarketplaceInstalledKeysFromAgentApps(
     if (!state) {
       return;
     }
-    if (!matchPackageHash(item, state)) {
+    if (installedCloudReleaseEvidenceMissing(state)) {
+      refreshablePluginKeys.push(item.pluginKey);
+      blockerCodesByPluginKey[item.pluginKey] = [
+        "PLUGIN_CLOUD_RELEASE_EVIDENCE_MISSING",
+      ];
+      return;
+    }
+    if (!marketplaceItemMatchesInstalledAgentAppPackage(item, state)) {
+      refreshablePluginKeys.push(item.pluginKey);
       blockerCodesByPluginKey[item.pluginKey] = [
         "PLUGIN_INSTALLED_PACKAGE_MISMATCH",
       ];
@@ -229,6 +372,7 @@ export function projectPluginMarketplaceInstalledKeysFromAgentApps(
     installedPluginKeys,
     enabledPluginKeys,
     disabledPluginKeys,
+    refreshablePluginKeys,
     blockerCodesByPluginKey,
   };
 }
@@ -267,6 +411,7 @@ export function projectPluginMarketplaceRegistryInputs(
       item.policy.installation === "INSTALLED_BY_DEFAULT";
     const isInstalled = installed.has(item.pluginKey) || installedByDefault;
     const hasExplicitEnabledSet = enabled.size > 0;
+    const marketplaceBlocked = !available && !isInstalled;
     return {
       contract: buildPluginContractFromMarketplaceItem(item),
       installed: isInstalled,
@@ -274,15 +419,15 @@ export function projectPluginMarketplaceRegistryInputs(
       enabled: hasExplicitEnabledSet
         ? enabled.has(item.pluginKey)
         : isInstalled,
-      readinessStatus: available ? "ready" : "blocked",
+      readinessStatus: available || isInstalled ? "ready" : "blocked",
       hasHistoryWorkspace: historyWorkspace.has(item.pluginKey),
-      blockerCodes: available
-        ? []
-        : [
+      blockerCodes: marketplaceBlocked
+        ? [
             item.blockedReason
               ? `PLUGIN_MARKETPLACE_BLOCKED:${item.blockedReason}`
               : "PLUGIN_MARKETPLACE_BLOCKED",
-          ],
+          ]
+        : [],
     };
   });
 }
@@ -302,9 +447,11 @@ export function projectPluginMarketplaceRegistryInputsFromInstalledAgentApps(
     historyWorkspacePluginKeys: options.historyWorkspacePluginKeys,
   });
   const disabled = setFrom(installedProjection.disabledPluginKeys);
+  const refreshable = setFrom(installedProjection.refreshablePluginKeys);
 
   return baseInputs.map((input) => ({
     ...input,
+    installable: input.installable || refreshable.has(input.contract.id),
     enabled: input.enabled && !disabled.has(input.contract.id),
     blockerCodes: [
       ...(input.blockerCodes ?? []),

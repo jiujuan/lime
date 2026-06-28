@@ -66,7 +66,9 @@ describe("agent runtime current fixture regression smoke guard", () => {
   it("runs the real Electron Plan history hydrate Claw fixture", () => {
     const content = readSmokeScript();
 
-    expect(content).toContain("Claw Plan revisioned history hydrate Electron fixture");
+    expect(content).toContain(
+      "Claw Plan revisioned history hydrate Electron fixture",
+    );
     expect(content).toContain(
       "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
     );
@@ -97,6 +99,25 @@ describe("agent runtime current fixture regression smoke guard", () => {
     );
   });
 
+  it("runs the Content Factory article Product Profile Electron fixture", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain(
+      "Content Factory article Product Profile Electron fixture",
+    );
+    expect(content).toContain(
+      "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
+    );
+    expect(content).toContain("--scenario");
+    expect(content).toContain("content-factory-product-profile");
+    expect(content).toContain(
+      "claw-chat-current-fixture-content-factory-product-profile-regression",
+    );
+    expect(content).toContain(
+      "内容工厂文章 Product Profile / articleDraft 右侧产物闭环 Electron fixture",
+    );
+  });
+
   it("keeps the aggregate fixture smoke diagnosable and app-url aware", () => {
     const content = readSmokeScript();
 
@@ -112,7 +133,9 @@ describe("agent runtime current fixture regression smoke guard", () => {
     const content = readSmokeScript();
 
     expect(content).toContain("function ensureElectronFixtureBuild(options)");
-    expect(content).toContain("function runElectronFixtureSmoke(label, args, options)");
+    expect(content).toContain(
+      "function runElectronFixtureSmoke(label, args, options)",
+    );
     expect(content).toContain('path.join(rootDir, "dist", "index.html")');
     expect(content).toContain(
       'path.join(rootDir, "dist-electron", "main", "main.js")',
@@ -123,10 +146,10 @@ describe("agent runtime current fixture regression smoke guard", () => {
     expect(content).toContain('"electron:build:smoke"');
     expect(content).toContain("ensureElectronFixtureBuild(options)");
     expect(content.indexOf("ensureElectronFixtureBuild(options)")).toBeLessThan(
-      content.indexOf('runElectronFixtureSmoke("Coding Workbench Electron fixture"'),
+      content.indexOf("Coding Workbench Electron fixture"),
     );
     expect(content).toContain(
-      'runElectronFixtureSmoke("Claw Expert Plaza Skills Runtime click-through Electron fixture"',
+      "Claw Expert Plaza Skills Runtime click-through Electron fixture",
     );
   });
 

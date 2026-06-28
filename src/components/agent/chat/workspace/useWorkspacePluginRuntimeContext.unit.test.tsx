@@ -186,7 +186,7 @@ describe("useWorkspacePluginRuntimeContext", () => {
     return latestValue as UseWorkspacePluginRuntimeContextResult;
   }
 
-  it("没有显式插件激活 metadata 时不读取已安装状态", async () => {
+  it("没有显式插件激活 metadata 时也应读取已安装状态用于插件菜单候选", async () => {
     const listInstalled = vi.fn(async () => ({
       states: [createInstalledPluginBackedApp()],
     }));
@@ -201,48 +201,13 @@ describe("useWorkspacePluginRuntimeContext", () => {
     );
     await flushEffects(4);
 
-    expect(listInstalled).not.toHaveBeenCalled();
+    expect(listInstalled).toHaveBeenCalledTimes(1);
     expect(getLatestValue().context).toMatchObject({
       status: "inactive",
       activationContext: null,
-      contracts: [],
-      registry: [],
+      contracts: [expect.objectContaining({ id: "creator-workbench" })],
+      registry: [expect.objectContaining({ pluginId: "creator-workbench" })],
       blockerCodes: [],
-    });
-  });
-
-  it("preloadInstalled=true 时无激活 metadata 也应读取已安装应用候选", async () => {
-    const listInstalled = vi.fn(async () => ({
-      states: [createInstalledPluginBackedApp()],
-    }));
-
-    renderHook(
-      {
-        preloadInstalled: true,
-        listInstalled,
-      },
-      (value) => {
-        latestValue = value;
-      },
-    );
-    await flushEffects(8);
-
-    expect(listInstalled).toHaveBeenCalledTimes(1);
-    expect(getLatestValue()).toMatchObject({
-      loading: false,
-      error: null,
-      context: {
-        status: "inactive",
-        activationContext: null,
-        contracts: [expect.objectContaining({ id: "creator-workbench" })],
-        registry: [
-          expect.objectContaining({
-            pluginId: "creator-workbench",
-            activationState: "activatable",
-          }),
-        ],
-        blockerCodes: [],
-      },
     });
   });
 

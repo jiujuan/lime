@@ -16,6 +16,10 @@ export interface BuildArtifactDocumentSaveEvidenceWriteContextParams {
   updatedAt?: number;
 }
 
+type OmitUndefined<T extends Record<string, unknown>> = {
+  [K in keyof T]: Exclude<T[K], undefined>;
+};
+
 export function buildArtifactDocumentSaveEvidenceWriteContext({
   artifact,
   document,
@@ -34,12 +38,13 @@ export function buildArtifactDocumentSaveEvidenceWriteContext({
       : filePath;
   const persistenceScope =
     agentRuntimeArtifactDocumentScopeFromSaveEvidence(evidence);
-  const persistenceManifest =
-    buildWorkspaceArtifactDocumentPersistenceManifest({
+  const persistenceManifest = buildWorkspaceArtifactDocumentPersistenceManifest(
+    {
       artifact,
       document,
       scope: persistenceScope,
-    });
+    },
+  );
 
   return {
     artifactId: artifact.id,
@@ -90,8 +95,10 @@ export function buildArtifactDocumentSaveEvidenceWriteContext({
   };
 }
 
-function omitUndefined<T extends Record<string, unknown>>(value: T): T {
+function omitUndefined<T extends Record<string, unknown>>(
+  value: T,
+): OmitUndefined<T> {
   return Object.fromEntries(
     Object.entries(value).filter(([, entry]) => entry !== undefined),
-  ) as T;
+  ) as OmitUndefined<T>;
 }

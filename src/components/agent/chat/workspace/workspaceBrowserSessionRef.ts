@@ -150,13 +150,7 @@ export function buildBrowserSessionRefFromBrowserAssistMetadata(
     ),
   );
 
-  if (
-    !browserSessionId &&
-    !profileKey &&
-    !launchUrl &&
-    !title &&
-    !targetId
-  ) {
+  if (!browserSessionId && !profileKey && !launchUrl && !title && !targetId) {
     return null;
   }
 
@@ -199,7 +193,9 @@ export function buildBrowserSessionRefFromBrowserAssistSessionState(
   return buildBrowserSessionRef({
     browserSessionId,
     profileKey,
-    adapterKind: resolveBrowserAssistAdapterKind(sessionState.transportKind),
+    adapterKind: resolveBrowserAssistAdapterKind(
+      sessionState.transportKind ?? null,
+    ),
     launchUrl,
     title,
     sourceRequestId: options.sourceRequestId,

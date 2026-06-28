@@ -1043,14 +1043,14 @@ fn session_extension_data_provider_routing_is_used_as_session_default() {
 }
 
 #[test]
-fn natural_language_news_turn_does_not_enable_search_without_explicit_request() {
+fn natural_language_news_turn_exposes_search_tool_surface_by_default() {
     let request = request_for_test("整理今天的国际新闻", None, None);
     let host_request = aster_chat_request_from_request(&request);
 
     let policy = request_tool_policy_from_request(host_request.as_ref());
 
-    assert!(!policy.effective_web_search);
-    assert_eq!(policy.search_mode, RequestToolPolicyMode::Disabled);
+    assert!(policy.effective_web_search);
+    assert_eq!(policy.search_mode, RequestToolPolicyMode::Auto);
     assert!(!policy.requires_web_search());
 }
 
@@ -2218,12 +2218,12 @@ fn explicit_web_search_false_keeps_search_disabled() {
 }
 
 #[test]
-fn explicit_allowed_search_mode_enables_model_tool_choice() {
+fn explicit_auto_search_mode_uses_model_tool_choice() {
     let request = request_for_test(
         "整理今天的国际新闻",
         Some(json!({
             "asterChatRequest": {
-                "search_mode": "allowed"
+                "search_mode": "auto"
             }
         })),
         None,
@@ -2233,8 +2233,23 @@ fn explicit_allowed_search_mode_enables_model_tool_choice() {
     let policy = request_tool_policy_from_request(host_request.as_ref());
 
     assert!(policy.effective_web_search);
-    assert_eq!(policy.search_mode, RequestToolPolicyMode::Allowed);
+    assert_eq!(policy.search_mode, RequestToolPolicyMode::Auto);
     assert!(!policy.requires_web_search());
+}
+
+#[test]
+fn legacy_allowed_search_mode_is_rejected() {
+    let request = request_for_test(
+        "整理今天的国际新闻",
+        Some(json!({
+            "asterChatRequest": {
+                "search_mode": "allowed"
+            }
+        })),
+        None,
+    );
+
+    assert!(aster_chat_request_from_request(&request).is_none());
 }
 
 #[test]

@@ -2,6 +2,8 @@ export interface InputbarPluginCapability {
   pluginId: string;
   displayName: string;
   description?: string;
+  trigger?: string;
+  defaultPrompts?: string[];
   disabled?: boolean;
   blockerCodes?: string[];
   skills?: InputbarPluginSkillCapability[];
@@ -11,6 +13,8 @@ export interface InputbarPluginSkillCapability {
   skillId: string;
   title: string;
   description?: string;
+  trigger?: string;
+  defaultPrompt?: string;
   disabled?: boolean;
   blockerCodes?: string[];
 }
@@ -29,9 +33,19 @@ export function resolveInputbarPluginDisplayName(
 }
 
 export function normalizeInputbarPluginTrigger(
-  plugin: Pick<InputbarPluginCapability, "displayName" | "pluginId">,
-  skill?: Pick<InputbarPluginSkillCapability, "skillId" | "title">,
+  plugin: Pick<InputbarPluginCapability, "displayName" | "pluginId" | "trigger">,
+  skill?: Pick<InputbarPluginSkillCapability, "skillId" | "title" | "trigger">,
 ): string {
+  const explicitSkillTrigger = skill?.trigger?.trim();
+  if (explicitSkillTrigger) {
+    return explicitSkillTrigger.startsWith("@")
+      ? explicitSkillTrigger
+      : `@${explicitSkillTrigger}`;
+  }
+  const explicitTrigger = plugin.trigger?.trim();
+  if (explicitTrigger && !skill) {
+    return explicitTrigger.startsWith("@") ? explicitTrigger : `@${explicitTrigger}`;
+  }
   const displayName = resolveInputbarPluginDisplayName(plugin);
   const pluginTrigger = displayName ? `@${displayName}` : "@";
   const skillName = skill?.title.trim() || skill?.skillId.trim();

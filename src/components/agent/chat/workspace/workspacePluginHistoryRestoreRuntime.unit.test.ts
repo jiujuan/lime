@@ -18,6 +18,8 @@ const contract: PluginContract = {
   componentPaths: {},
   skills: [],
   agentApps: [],
+  subagents: [],
+  workflows: [],
   connectors: [],
   mcpServers: [],
   artifactRenderers: [],
@@ -166,4 +168,5 @@ describe("workspacePluginHistoryRestoreRuntime", () => {
       }),
     ).toBeNull();
   });
+
 });

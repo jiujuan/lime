@@ -132,7 +132,7 @@ describe("useWorkspaceInitialSessionNavigation", () => {
     });
   });
 
-  it("初始导航进入同一会话恢复壳后应继续强制 hydrate", async () => {
+  it("初始导航进入同一会话恢复壳后不应立即重复 hydrate", async () => {
     const switchTopic = vi.fn(async () => undefined);
     const mounted = renderHook({
       initialSessionId: "session-42",
@@ -157,12 +157,9 @@ describe("useWorkspaceInitialSessionNavigation", () => {
     });
     await flushEffects();
 
-    expect(switchTopic).toHaveBeenNthCalledWith(1, "session-42", {
+    expect(switchTopic).toHaveBeenCalledTimes(1);
+    expect(switchTopic).toHaveBeenCalledWith("session-42", {
       allowDetachedSession: true,
-    });
-    expect(switchTopic).toHaveBeenNthCalledWith(2, "session-42", {
-      allowDetachedSession: true,
-      forceRefresh: true,
     });
   });
 

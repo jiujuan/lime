@@ -163,11 +163,29 @@ describe("agentStreamUserInputSendPreparation", () => {
       providerType: "openai",
       model: "gpt-5.4",
     });
+    expect(result.webSearch).toBe(true);
+    expect(result.searchMode).toBeUndefined();
     expect(result.expectingQueue).toBe(false);
     expect(result.assistantMsgId).toBe("00000000-0000-0000-0000-000000000001");
     expect(result.userMsgId).toBe("00000000-0000-0000-0000-000000000002");
     expect(messages).toHaveLength(2);
     expect(isSending).toBe(true);
+  });
+
+  it("普通自然语言发送不应在前端注入搜索模式", () => {
+    vi.spyOn(crypto, "randomUUID")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000301")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000302");
+
+    const result = prepareAgentStreamUserInputSend({
+      content: "整理今天的国际新闻",
+      images: [],
+      skipUserMessage: false,
+      env: createEnv(),
+    });
+
+    expect(result.webSearch).toBeUndefined();
+    expect(result.searchMode).toBeUndefined();
   });
 
   it("开启 Claw Trace 时应在发送准备阶段补齐 trace metadata", () => {

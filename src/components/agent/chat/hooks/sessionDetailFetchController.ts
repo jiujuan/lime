@@ -32,6 +32,7 @@ function buildSessionDetailFetchMetricContext<
   topicId: string;
   workspaceId?: string | null;
   now: () => number;
+  source?: string | null;
 }): Record<string, unknown> {
   return {
     itemsCount: params.detail.items?.length ?? 0,
@@ -43,6 +44,7 @@ function buildSessionDetailFetchMetricContext<
       ? { resumeSessionStartHooks: params.resumeSessionStartHooks }
       : {}),
     sessionId: params.topicId,
+    source: params.source,
     topicId: params.topicId,
     totalElapsedMs: params.now() - params.startedAt,
     turnsCount: params.detail.turns?.length ?? 0,
@@ -61,6 +63,7 @@ export async function loadSessionDetailWithPrefetch<
   now?: () => number;
   onEvent?: (event: SessionDetailFetchEvent) => void;
   resumeSessionStartHooks?: boolean;
+  source?: string | null;
   startedAt: number;
   topicId: string;
   workspaceId?: string | null;
@@ -73,6 +76,7 @@ export async function loadSessionDetailWithPrefetch<
     mode: params.mode,
     resumeSessionStartHooks,
     sessionId: params.topicId,
+    source: params.source ?? null,
     topicId: params.topicId,
     workspaceId: params.workspaceId,
   };
@@ -86,7 +90,10 @@ export async function loadSessionDetailWithPrefetch<
   try {
     const detail = await params.getSession(
       params.topicId,
-      buildSessionDetailHydrationOptions({ resumeSessionStartHooks }),
+      buildSessionDetailHydrationOptions({
+        resumeSessionStartHooks,
+        source: params.source,
+      }),
     );
     const context = buildSessionDetailFetchMetricContext({
       detail,
@@ -97,6 +104,7 @@ export async function loadSessionDetailWithPrefetch<
       topicId: params.topicId,
       workspaceId: params.workspaceId,
       now,
+      source: params.source ?? null,
     });
     params.onEvent?.({
       logEvent: "switchTopic.fetchDetail.success",
@@ -112,6 +120,7 @@ export async function loadSessionDetailWithPrefetch<
       requestDurationMs: now() - requestStartedAt,
       resumeSessionStartHooks,
       sessionId: params.topicId,
+      source: params.source ?? null,
       topicId: params.topicId,
       totalElapsedMs: now() - params.startedAt,
       workspaceId: params.workspaceId,

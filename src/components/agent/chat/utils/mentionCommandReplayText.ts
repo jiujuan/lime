@@ -50,7 +50,11 @@ import type {
   WebpageType,
 } from "./webpageWorkbenchCommand";
 import type { ServiceSkillSlotValues } from "../service-skills/types";
-import { normalizeContentPostPlatform } from "./contentPostPlatform";
+import {
+  normalizeContentPostPlatform,
+  resolveContentPostPlatformLabel,
+  type ContentPostPlatformType,
+} from "./contentPostPlatform";
 
 type ReplayParsedCommand = {
   body: string;
@@ -891,20 +895,8 @@ function resolveGrowthPlatformReplayLabel(input: {
     return undefined;
   }
 
-  const platformLabelMap: Record<string, string> = {
-    wechat_official_account: "微信公众号后台",
-    xiaohongshu: "小红书",
-    zhihu: "知乎",
-    douyin: "抖音",
-    bilibili: "B站",
-    instagram: "Instagram",
-    youtube: "YouTube",
-    tiktok: "TikTok",
-    x: "X / Twitter",
-  };
-
   return (
-    platformLabelMap[normalizedType] ||
+    resolveContentPostPlatformLabel(normalizedType as ContentPostPlatformType) ||
     normalizeContentPostPlatform(normalizedType).platformLabel ||
     normalizedType
   );

@@ -562,7 +562,10 @@ mod tests {
             .iter()
             .find(|object| object["ref"]["kind"] == "imageGenerationSet")
             .expect("image generation object");
-        assert_eq!(image_object["summary"], "Regenerated 2 image candidates.");
+        assert_eq!(
+            image_object["summary"],
+            "根据文章结构生成的首批配图提示词，等待模型执行或人工确认。"
+        );
         assert_eq!(
             detail["product_workspace"]["workerEvidence"][0]["artifactKind"],
             CONTENT_FACTORY_WORKSPACE_PATCH_KIND
@@ -671,7 +674,7 @@ mod tests {
             .as_deref()
             .expect("worker artifact content");
         assert!(content.contains("product-workspace.v1"));
-        assert!(content.contains("Regenerated 2 image candidates."));
+        assert!(content.contains("根据文章结构生成的首批配图提示词，等待模型执行或人工确认。"));
         assert!(artifact_read.artifacts[0]
             .metadata
             .as_ref()

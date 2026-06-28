@@ -4,7 +4,6 @@ import {
   AGENT_APPS_CHANGED_EVENT,
   listInstalledAgentApps,
 } from "@/lib/api/agentApps";
-import { extractWorkspacePluginActivationFromRequestMetadata } from "./workspacePluginActivation";
 import {
   buildWorkspacePluginRuntimeContext,
   type WorkspacePluginRuntimeContext,
@@ -13,7 +12,6 @@ import {
 const EMPTY_INSTALLED_AGENT_APPS: readonly InstalledAgentAppState[] = [];
 
 export interface UseWorkspacePluginRuntimeContextOptions {
-  preloadInstalled?: boolean;
   requestMetadata?: Record<string, unknown>;
   listInstalled?: () => Promise<{ states: InstalledAgentAppState[] }>;
 }
@@ -25,14 +23,9 @@ export interface UseWorkspacePluginRuntimeContextResult {
 }
 
 export function useWorkspacePluginRuntimeContext({
-  preloadInstalled = false,
   requestMetadata,
   listInstalled = listInstalledAgentApps,
 }: UseWorkspacePluginRuntimeContextOptions): UseWorkspacePluginRuntimeContextResult {
-  const hasPluginActivation = useMemo(
-    () => Boolean(extractWorkspacePluginActivationFromRequestMetadata(requestMetadata)),
-    [requestMetadata],
-  );
   const [installedAgentApps, setInstalledAgentApps] = useState<
     readonly InstalledAgentAppState[]
   >(EMPTY_INSTALLED_AGENT_APPS);
@@ -40,13 +33,6 @@ export function useWorkspacePluginRuntimeContext({
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    if (!hasPluginActivation && !preloadInstalled) {
-      setInstalledAgentApps(EMPTY_INSTALLED_AGENT_APPS);
-      setLoading(false);
-      setError(null);
-      return;
-    }
-
     let disposed = false;
     let refreshSeq = 0;
 
@@ -86,7 +72,7 @@ export function useWorkspacePluginRuntimeContext({
       disposed = true;
       window.removeEventListener(AGENT_APPS_CHANGED_EVENT, refresh);
     };
-  }, [hasPluginActivation, listInstalled, preloadInstalled]);
+  }, [listInstalled]);
 
   const context = useMemo(
     () =>

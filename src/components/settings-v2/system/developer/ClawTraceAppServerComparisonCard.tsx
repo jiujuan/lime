@@ -10,6 +10,8 @@ interface ClawTraceAppServerComparisonCardProps {
   comparison: ClawTraceAppServerComparison;
 }
 
+type SettingsTranslate = (key: string) => string;
+
 function formatMs(value: number): string {
   return String(Math.max(0, Math.round(value)));
 }
@@ -68,6 +70,10 @@ export function ClawTraceAppServerComparisonCard({
   comparison,
 }: ClawTraceAppServerComparisonCardProps) {
   const { t } = useTranslation("settings");
+  const translate = ((key) =>
+    String(
+      (t as unknown as SettingsTranslate)(key),
+    )) satisfies SettingsTranslate;
   const hasBothTraces = Boolean(
     comparison.current_trace_id && comparison.baseline_trace_id,
   );
@@ -82,7 +88,7 @@ export function ClawTraceAppServerComparisonCard({
           {t("settings.developer.debugSwitch.clawTrace.appServerCompare.title")}
         </p>
         <p className="text-xs font-semibold text-slate-700">
-          {t(verdictKey(comparison.verdict))}
+          {translate(verdictKey(comparison.verdict))}
         </p>
       </div>
       {hasBothTraces ? (
@@ -112,7 +118,7 @@ export function ClawTraceAppServerComparisonCard({
         <div className="mt-2 flex flex-wrap gap-1">
           {comparison.metrics.map((metric) => (
             <span key={metric.key} className={metricDeltaClassName(metric)}>
-              {t(metricLabelKey(metric.key))}
+              {translate(metricLabelKey(metric.key))}
               {": "}
               {formatMs(metric.current_ms)}
               {" ms"}

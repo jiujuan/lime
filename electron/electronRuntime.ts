@@ -15,6 +15,7 @@ export const {
   ipcMain,
   Menu,
   nativeImage,
+  Notification,
   screen,
   session,
   shell,
@@ -31,6 +32,7 @@ export type WebContentsView = Electron.WebContentsView;
 export type {
   IpcMainInvokeEvent,
   MenuItemConstructorOptions,
+  NotificationConstructorOptions,
   OpenDialogOptions,
   SaveDialogOptions,
 } from "electron";

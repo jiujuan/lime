@@ -78,7 +78,7 @@ interface BuildHarnessStatusPanelSectionModelsInput {
   t: TranslationFunction;
   threadItems: NonNullable<HarnessStatusPanelProps["threadItems"]>;
   threadRead: HarnessStatusPanelProps["threadRead"];
-  threadReliabilityView: ThreadReliabilityView;
+  threadReliabilityView: ThreadReliabilityView | null;
   toolInventory: HarnessStatusPanelProps["toolInventory"];
   toolInventoryError: string | null;
   toolInventoryLoading: boolean;
@@ -245,8 +245,8 @@ export function buildHarnessStatusPanelSectionModels({
         }
       : null,
     reliabilitySection: {
-      shouldRender: threadReliabilityView.shouldRender,
-      statusLabel: threadReliabilityView.statusLabel,
+      shouldRender: Boolean(threadReliabilityView?.shouldRender),
+      statusLabel: threadReliabilityView?.statusLabel ?? "",
       panelProps: {
         threadRead,
         turns,

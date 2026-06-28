@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { AgentThreadItem, Message } from "../types";
-import { deriveHarnessSessionState } from "./harnessState";
+import type { ActionRequired, AgentThreadItem, Message } from "../types";
+import {
+  deriveHarnessSessionShellState,
+  deriveHarnessSessionState,
+} from "./harnessState";
 
 function createMessage(overrides: Partial<Message> = {}): Message {
   return {
@@ -13,6 +16,66 @@ function createMessage(overrides: Partial<Message> = {}): Message {
 }
 
 describe("deriveHarnessSessionState", () => {
+  it("轻量 shell state 不构建工具输出和文件活动详情", () => {
+    const messages = [
+      createMessage({
+        runtimeStatus: {
+          phase: "routing",
+          title: "正在处理",
+          detail: "工具调用进行中",
+          checkpoints: ["已进入运行时"],
+        },
+        contextTrace: [{ stage: "routing", detail: "命中 coding slot" }],
+      }),
+    ];
+    const pendingApprovals: ActionRequired[] = [
+      {
+        requestId: "approval-shell",
+        actionType: "tool_confirmation",
+        prompt: "确认执行",
+        status: "pending",
+      },
+    ];
+
+    const shellState = deriveHarnessSessionShellState(
+      messages,
+      pendingApprovals,
+      [{ id: "todo-1", content: "保留计划摘要", status: "in_progress" }],
+    );
+
+    expect(shellState.runtimeStatus?.title).toBe("正在处理");
+    expect(shellState.pendingApprovals).toBe(pendingApprovals);
+    expect(shellState.latestContextTrace).toHaveLength(1);
+    expect(shellState.plan.items).toEqual([
+      {
+        id: "todo-1",
+        content: "保留计划摘要",
+        status: "in_progress",
+      },
+    ]);
+    expect(shellState.hasSignals).toBe(true);
+    expect("outputSignals" in shellState).toBe(false);
+    expect("recentFileEvents" in shellState).toBe(false);
+    expect("activity" in shellState).toBe(false);
+  });
+
+  it("轻量 shell state 不从普通 assistant 正文推断 Harness 信号", () => {
+    const shellState = deriveHarnessSessionShellState(
+      [
+        createMessage({
+          content: "这是一段普通回答，不应让 Harness 面板进入活动态。",
+        }),
+      ],
+      [],
+    );
+
+    expect(shellState.plan).toEqual({
+      phase: "idle",
+      items: [],
+    });
+    expect(shellState.hasSignals).toBe(false);
+  });
+
   it("无 revision 的历史 plan 不应再驱动运行时计划", () => {
     const messages = [
       createMessage({

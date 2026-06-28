@@ -16,6 +16,7 @@ const MANUAL_CANVAS_OPEN_REASONS = new Set<CanvasOpenReason>([
   "user_open_artifact",
   "user_open_file",
   "user_open_message_preview",
+  "runtime_write",
 ]);
 
 export function shouldOpenCanvasForReason(reason: CanvasOpenReason): boolean {

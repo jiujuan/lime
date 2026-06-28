@@ -10,7 +10,6 @@ import {
 } from "../install/installReview";
 import { buildInstalledAppPreview } from "../install/installedAppPreview";
 import { normalizeManifest } from "../manifest/normalizeManifest";
-import { mergeLayeredManifest } from "../manifest/parseManifest";
 import { checkReadiness } from "../readiness/checkReadiness";
 import { p0HostCapabilityProfile } from "../readiness/hostCapabilityProfile";
 import { projectApp } from "../projection/projectApp";
@@ -30,20 +29,9 @@ const STANDARD_CONTENT_FACTORY_APP = join(
   STANDARD_ROOT,
   "docs/examples/content-factory-app",
 );
+const STANDARD_PLUGIN_MANIFEST = join(STANDARD_CONTENT_FACTORY_APP, "plugin.json");
 const PUBLIC_SCHEMAS = join(STANDARD_ROOT, "docs/public/schemas");
 const LOADED_AT = "2026-05-15T00:00:00.000Z";
-const LAYERED_MANIFEST_FILES = [
-  "app.capabilities.yaml",
-  "app.entries.yaml",
-  "app.permissions.yaml",
-  "app.errors.yaml",
-  "app.i18n.yaml",
-  "app.signature.yaml",
-  "app.runtime.yaml",
-  "app.install.yaml",
-  "evals/readiness.yaml",
-  "evals/health.yaml",
-] as const;
 
 const SETUP_KINDS = new Set([
   "skill",
@@ -134,7 +122,7 @@ type PublicJsonSchema = {
 };
 
 const describeIfReferenceAvailable =
-  existsSync(REFERENCE_CLI) && existsSync(STANDARD_CONTENT_FACTORY_APP)
+  existsSync(REFERENCE_CLI) && existsSync(STANDARD_PLUGIN_MANIFEST)
     ? describe
     : describe.skip;
 
@@ -156,23 +144,212 @@ function readPublicSchema(name: string): PublicJsonSchema {
   ) as PublicJsonSchema;
 }
 
-function readStandardManifest(): AppManifest {
-  const appMarkdown = readFileSync(
-    join(STANDARD_CONTENT_FACTORY_APP, "APP.md"),
-    "utf8",
-  );
-  const frontmatter = appMarkdown.match(/^---\n([\s\S]*?)\n---/);
-  if (!frontmatter) {
-    throw new Error(
-      "Standard content-factory-app APP.md is missing YAML frontmatter.",
-    );
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function readStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    : [];
+}
+
+function readContributionYaml(
+  pluginManifest: Record<string, unknown>,
+  field: string,
+): Record<string, unknown> | undefined {
+  const contributions = isRecord(pluginManifest.contributions)
+    ? pluginManifest.contributions
+    : {};
+  const relativePath = readString(contributions[field]);
+  if (!relativePath) {
+    return undefined;
   }
-  const layers = LAYERED_MANIFEST_FILES.map((relativePath) =>
-    join(STANDARD_CONTENT_FACTORY_APP, relativePath),
-  )
-    .filter(existsSync)
-    .map((path) => parseYaml(readFileSync(path, "utf8")));
-  return mergeLayeredManifest(parseYaml(frontmatter[1]), layers);
+  const path = join(STANDARD_CONTENT_FACTORY_APP, relativePath);
+  if (!existsSync(path)) {
+    return undefined;
+  }
+  const parsed = parseYaml(readFileSync(path, "utf8"));
+  return isRecord(parsed) ? parsed : undefined;
+}
+
+function unwrapNamedObject(
+  value: Record<string, unknown> | undefined,
+  field: string,
+): Record<string, unknown> | undefined {
+  if (!value) {
+    return undefined;
+  }
+  return isRecord(value[field]) ? value[field] : value;
+}
+
+function buildRequires(
+  runtime: Record<string, unknown> | undefined,
+  workbench: Record<string, unknown> | undefined,
+) {
+  const capabilities = new Set([
+    "lime.agent",
+    "lime.artifacts",
+    "lime.evidence",
+    "lime.workflow",
+  ]);
+  if (runtime?.connectors) {
+    capabilities.add("lime.knowledge");
+  }
+  if (workbench) {
+    capabilities.add("lime.storage");
+  }
+  return {
+    sdk: "@lime/app-sdk@^0.11.0",
+    capabilities: Array.from(capabilities).sort(),
+  };
+}
+
+function buildEntries(
+  runtime: Record<string, unknown> | undefined,
+  displayName: string,
+) {
+  const activationEntries = Array.isArray(runtime?.activationEntries)
+    ? runtime.activationEntries
+    : [];
+  if (activationEntries.length === 0) {
+    return [
+      {
+        key: "default",
+        kind: "workflow",
+        title: displayName,
+      },
+    ];
+  }
+  return activationEntries.flatMap((entry) => {
+    if (!isRecord(entry)) {
+      return [];
+    }
+    const key = readString(entry.key);
+    if (!key) {
+      return [];
+    }
+    return [
+      {
+        key,
+        kind: "workflow",
+        title: readString(entry.title) ?? displayName,
+        description: readString(entry.description),
+        workflow: readString(entry.workflow),
+        requiredCapabilities: [
+          "lime.agent",
+          "lime.artifacts",
+          "lime.workflow",
+        ],
+      },
+    ];
+  });
+}
+
+function buildActivationEntries(runtime: Record<string, unknown> | undefined) {
+  return Array.isArray(runtime?.activationEntries)
+    ? runtime.activationEntries.flatMap((entry) => {
+        if (!isRecord(entry)) {
+          return [];
+        }
+        const key = readString(entry.key);
+        if (!key) {
+          return [];
+        }
+        return [
+          {
+            key,
+            title: readString(entry.title) ?? key,
+            aliases: readStringArray(entry.aliases),
+            kind: readString(entry.kind) ?? "plugin",
+            intent: readString(entry.intent) ?? "at_command",
+            defaultObjectKind: readString(entry.defaultObjectKind),
+          },
+        ];
+      })
+    : [];
+}
+
+function buildArtifacts(runtime: Record<string, unknown> | undefined) {
+  const artifactKinds = new Set<string>();
+  const worker = isRecord(runtime?.worker) ? runtime.worker : undefined;
+  const workerArtifactKind = readString(worker?.outputArtifactKind);
+  if (workerArtifactKind) {
+    artifactKinds.add(workerArtifactKind);
+  }
+  const tasks = Array.isArray(runtime?.tasks) ? runtime.tasks : [];
+  tasks.forEach((task) => {
+    if (!isRecord(task) || !isRecord(task.output)) {
+      return;
+    }
+    readStringArray(task.output.artifactKinds).forEach((kind) =>
+      artifactKinds.add(kind),
+    );
+  });
+  return Array.from(artifactKinds)
+    .sort()
+    .map((kind) => ({
+      key: kind.replace(/[^a-zA-Z0-9]+/g, "_"),
+      type: kind,
+    }));
+}
+
+function readStandardManifest(): AppManifest {
+  const pluginManifest = JSON.parse(
+    readFileSync(STANDARD_PLUGIN_MANIFEST, "utf8"),
+  ) as Record<string, unknown>;
+  const runtime = unwrapNamedObject(
+    readContributionYaml(pluginManifest, "runtime"),
+    "agentRuntime",
+  );
+  const workbench = unwrapNamedObject(
+    readContributionYaml(pluginManifest, "workbench"),
+    "workbench",
+  );
+  const appId = readString(pluginManifest.id) ?? readString(pluginManifest.name) ?? "content-factory-app";
+  const displayName = readString(pluginManifest.displayName) ?? appId;
+  const worker = isRecord(runtime?.worker) ? runtime.worker : undefined;
+
+  return {
+    manifestVersion: "0.11.0",
+    name: appId,
+    displayName,
+    version: readString(pluginManifest.version) ?? "0.0.0",
+    status: "ready",
+    appType: "domain-app",
+    profiles: ["workbench"],
+    description: readString(pluginManifest.description) ?? "",
+    runtimeTargets: ["local"],
+    requires: buildRequires(runtime, workbench),
+    distribution: {
+      primaryInstallSurface: "lime-app-center",
+      channel: "local",
+      visibility: "local",
+    },
+    presentation: isRecord(pluginManifest.presentation)
+      ? pluginManifest.presentation
+      : undefined,
+    interface: isRecord(pluginManifest.interface)
+      ? pluginManifest.interface
+      : undefined,
+    componentPaths: isRecord(pluginManifest.contributions)
+      ? pluginManifest.contributions
+      : undefined,
+    agentRuntime: runtime,
+    runtimePackage: worker ? { worker } : undefined,
+    entries: buildEntries(runtime, displayName),
+    activationEntries: buildActivationEntries(runtime),
+    artifacts: buildArtifacts(runtime),
+    workbench,
+    storage: {
+      namespace: appId,
+      retention: "ask",
+    },
+  } as AppManifest;
 }
 
 function buildReferenceAlignedProfile(

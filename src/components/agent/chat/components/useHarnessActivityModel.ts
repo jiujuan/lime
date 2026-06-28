@@ -13,6 +13,7 @@ import {
 
 export function useHarnessActivityModel(
   harnessState: HarnessSessionState,
+  enabled = true,
 ) {
   const [fileFilter, setFileFilter] = useState<FileFilterValue>("all");
   const [outputFilter, setOutputFilter] = useState<OutputFilterValue>("all");
@@ -20,20 +21,27 @@ export function useHarnessActivityModel(
     useState<FileDisplayMode>("timeline");
 
   const fileFilterOptions = useMemo(
-    () => buildFileFilterOptions(harnessState.recentFileEvents),
-    [harnessState.recentFileEvents],
+    () =>
+      enabled ? buildFileFilterOptions(harnessState.recentFileEvents) : [],
+    [enabled, harnessState.recentFileEvents],
   );
   const outputFilterOptions = useMemo(
-    () => buildOutputFilterOptions(harnessState.outputSignals),
-    [harnessState.outputSignals],
+    () => (enabled ? buildOutputFilterOptions(harnessState.outputSignals) : []),
+    [enabled, harnessState.outputSignals],
   );
   const filteredFileEvents = useMemo(
-    () => buildFilteredFileEvents(harnessState.recentFileEvents, fileFilter),
-    [fileFilter, harnessState.recentFileEvents],
+    () =>
+      enabled
+        ? buildFilteredFileEvents(harnessState.recentFileEvents, fileFilter)
+        : [],
+    [enabled, fileFilter, harnessState.recentFileEvents],
   );
   const filteredOutputSignals = useMemo(
-    () => buildFilteredOutputSignals(harnessState.outputSignals, outputFilter),
-    [harnessState.outputSignals, outputFilter],
+    () =>
+      enabled
+        ? buildFilteredOutputSignals(harnessState.outputSignals, outputFilter)
+        : [],
+    [enabled, harnessState.outputSignals, outputFilter],
   );
   const groupedOutputEntries = useMemo(
     () => groupHarnessOutputSignals(filteredOutputSignals),

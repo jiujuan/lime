@@ -36,6 +36,7 @@ import {
 } from "./agentProjectStorage";
 import { normalizeHistoryMessages } from "./agentChatHistory";
 import {
+  getAgentSessionCachedSnapshotAvailability,
   getAgentSessionScopedKeys,
   loadAgentSessionCachedSnapshot,
   saveAgentSessionCachedSnapshot,
@@ -515,10 +516,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     threadItemsRef.current = nextThreadItems;
     setThreadItems(nextThreadItems);
   }, []);
-  const getThreadItems = useCallback(
-    () => threadItemsRef.current,
-    [],
-  );
+  const getThreadItems = useCallback(() => threadItemsRef.current, []);
 
   const persistSessionRestoreCandidate = useCallback(
     (nextSessionId: string | null) => {
@@ -545,7 +543,9 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   const listWorkspaceTopics = useCallback(async () => {
     const startedAt = Date.now();
     const sessions = await runtime.listSessions({
-      ...(normalizedWorkingDir ? { cwd: normalizedWorkingDir } : { workspaceId }),
+      ...(normalizedWorkingDir
+        ? { cwd: normalizedWorkingDir }
+        : { workspaceId }),
       limit: INITIAL_TOPICS_SESSION_REQUEST_LIMIT,
     });
     const listDurationMs = Date.now() - startedAt;
@@ -1425,6 +1425,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         mode: params.mode,
         onEvent: emitSessionDetailFetchEvent,
         resumeSessionStartHooks: params.resumeSessionStartHooks,
+        source: `switchTopic.${params.mode}`,
         startedAt: params.startedAt,
         topicId: params.topicId,
         workspaceId,
@@ -1881,8 +1882,13 @@ export function useAgentSession(options: UseAgentSessionOptions) {
           topicId,
           topicStatus: selectedTopic?.status,
         });
+        const cachedSnapshotAvailability =
+          cachedSnapshotLoadPlan.shouldLoadCachedSnapshot
+            ? getAgentSessionCachedSnapshotAvailability(workspaceId, topicId)
+            : null;
         const cachedTargetSnapshot =
-          !cachedSnapshotLoadPlan.shouldLoadCachedSnapshot
+          !cachedSnapshotLoadPlan.shouldLoadCachedSnapshot ||
+          cachedSnapshotAvailability?.hasSnapshot === false
             ? null
             : loadAgentSessionCachedSnapshot(workspaceId, topicId, {
                 topicUpdatedAt: selectedTopic?.updatedAt ?? null,
@@ -1899,6 +1905,9 @@ export function useAgentSession(options: UseAgentSessionOptions) {
           cachedSnapshot: cachedTargetSnapshot,
           currentSessionId,
           messagesCount: messages.length,
+          snapshotIndexHit: cachedSnapshotAvailability?.hasIndex ?? false,
+          snapshotIndexHadTarget:
+            cachedSnapshotAvailability?.hasSnapshot ?? null,
           refreshCachedSnapshotImmediately:
             cachedSnapshotPlan.shouldRefreshCachedSnapshotImmediately,
           topicId,
@@ -2188,10 +2197,10 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     });
 
     try {
-      const detail = await runtime.getSession(
-        targetSessionId,
-        requestPlan.requestOptions,
-      );
+      const detail = await runtime.getSession(targetSessionId, {
+        ...requestPlan.requestOptions,
+        source: "loadFullHistory",
+      });
       if (
         !isCurrentSessionHydrationRequest({
           currentRequestVersion: sessionSwitchRequestVersionRef.current,
@@ -2321,7 +2330,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         try {
           const detail = await runtime.getSession(
             existingSessionId,
-            buildSessionDetailHydrationOptions(),
+            buildSessionDetailHydrationOptions({ source: "ensureSession" }),
           );
           const runtimeWorkspaceId = normalizeProjectId(detail.workspace_id);
           const currentWorkspaceId = normalizeProjectId(workspaceId);
@@ -2440,11 +2449,12 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   );
 
   const refreshSessionDetail = useCallback(
-    async (targetSessionId?: string) => {
+    async (targetSessionId?: string, source = "runtimeSync.refreshDetail") => {
       return refreshAgentSessionDetailState({
         runtime,
         sessionIdRef,
         targetSessionId,
+        source,
         applySessionDetail,
         markSessionExecutionStrategySynced,
         persistSessionAccessMode,
@@ -2497,7 +2507,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       try {
         const detail = await runtime.getSession(
           resolvedSessionId,
-          buildSessionDetailHydrationOptions(),
+          buildSessionDetailHydrationOptions({ source: "silentTurnRecovery" }),
         );
         if (
           !isCurrentSessionHydrationRequest({
@@ -2698,7 +2708,12 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       );
 
       runtime
-        .getSession(sessionId, buildSessionDetailHydrationOptions())
+        .getSession(
+          sessionId,
+          buildSessionDetailHydrationOptions({
+            source: "missingSessionVerify",
+          }),
+        )
         .then((detail) => {
           if (
             !isCurrentSessionHydrationRequest({

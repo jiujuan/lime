@@ -23,7 +23,7 @@ const WEB_SEARCH_DISALLOWED_TOOLS_ENV_KEYS: &[&str] = &[
 pub enum RequestToolPolicyMode {
     #[default]
     Disabled,
-    Allowed,
+    Auto,
     Required,
 }
 
@@ -39,7 +39,7 @@ impl RequestToolPolicyMode {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Disabled => "disabled",
-            Self::Allowed => "allowed",
+            Self::Auto => "auto",
             Self::Required => "required",
         }
     }
@@ -112,7 +112,9 @@ pub fn request_tool_policy_with_additional_required_tools(
 /// 解析请求级工具策略
 ///
 /// 规则：
-/// - 只有显式 `web_search=true` 或 `search_mode=allowed|required` 才开启联网工具面
+/// - 未显式配置时默认开放联网工具面，由模型按需决定是否调用
+/// - 显式 `web_search=false` 或 `search_mode=disabled` 才关闭联网工具面
+/// - 显式 `search_mode=required` 要求本回合至少完成一次联网搜索
 /// - 白/黑名单支持环境变量覆盖：
 ///   - `LIME_WEB_SEARCH_REQUIRED_TOOLS`（兼容 `PROXYCAST_WEB_SEARCH_REQUIRED_TOOLS`）
 ///   - `LIME_WEB_SEARCH_ALLOWED_TOOLS`（兼容 `PROXYCAST_WEB_SEARCH_ALLOWED_TOOLS`）
@@ -128,8 +130,8 @@ pub fn resolve_request_tool_policy_with_mode(
     let search_mode = match (request_web_search, request_search_mode) {
         (Some(false), _) => RequestToolPolicyMode::Disabled,
         (_, Some(mode)) => mode,
-        (Some(true), None) => RequestToolPolicyMode::Allowed,
-        _ => RequestToolPolicyMode::Disabled,
+        (Some(true), None) => RequestToolPolicyMode::Auto,
+        _ => RequestToolPolicyMode::Auto,
     };
     let effective_web_search = search_mode.enables_web_search();
     let disallowed_tools = parse_tool_list_env(WEB_SEARCH_DISALLOWED_TOOLS_ENV_KEYS, &[]);
@@ -182,9 +184,9 @@ pub fn merge_system_prompt_with_request_tool_policy(
 
     let policy_prompt = match policy.search_mode {
         RequestToolPolicyMode::Disabled => return base_prompt,
-        RequestToolPolicyMode::Allowed => format!(
+        RequestToolPolicyMode::Auto => format!(
             "{REQUEST_TOOL_POLICY_MARKER}\n\
-- 用户在本次请求中允许你使用联网搜索，但这不代表本回合必须联网。\n\
+- 本次请求的工具选择模式为 auto；联网搜索工具面可用，但不代表本回合必须联网。\n\
 - 你必须先理解用户意图，优先判断应该直接回答、深度思考、规划、后台任务、多代理，还是联网核实。\n\
 - 只有在用户明确要求搜索，或问题涉及最新、实时、价格、政策、规则、版本、新闻、日期敏感信息，或高风险信息需要核实时，才调用 {}（必要时再调用 WebFetch）。\n\
 - 若无需联网即可可靠完成，就直接回答，不要为了展示工具能力而搜索。\n\
@@ -287,22 +289,23 @@ mod tests {
 
         let policy = resolve_request_tool_policy(Some(true));
         assert!(policy.effective_web_search);
-        assert_eq!(policy.search_mode, RequestToolPolicyMode::Allowed);
+        assert_eq!(policy.search_mode, RequestToolPolicyMode::Auto);
     }
 
     #[test]
-    fn disables_web_search_without_explicit_request() {
+    fn allows_web_search_without_explicit_request() {
         let policy = resolve_request_tool_policy(None);
-        assert!(!policy.effective_web_search);
-        assert_eq!(policy.search_mode, RequestToolPolicyMode::Disabled);
+        assert!(policy.effective_web_search);
+        assert_eq!(policy.search_mode, RequestToolPolicyMode::Auto);
+        assert!(!policy.requires_web_search());
+        assert!(policy.matches_any_allowed_tool("WebSearch"));
     }
 
     #[test]
-    fn enables_allowed_mode_when_explicitly_requested() {
-        let policy =
-            resolve_request_tool_policy_with_mode(None, Some(RequestToolPolicyMode::Allowed));
+    fn enables_auto_mode_when_explicitly_requested() {
+        let policy = resolve_request_tool_policy_with_mode(None, Some(RequestToolPolicyMode::Auto));
         assert!(policy.effective_web_search);
-        assert_eq!(policy.search_mode, RequestToolPolicyMode::Allowed);
+        assert_eq!(policy.search_mode, RequestToolPolicyMode::Auto);
         assert!(!policy.requires_web_search());
     }
 
@@ -348,7 +351,7 @@ mod tests {
             merge_system_prompt_with_request_tool_policy(Some("base".to_string()), &policy)
                 .expect("merged prompt should exist");
         assert!(merged.contains(REQUEST_TOOL_POLICY_MARKER));
-        assert!(merged.contains("不代表本回合必须联网"));
+        assert!(merged.contains("工具选择模式为 auto"));
         assert!(merged.contains("先理解用户意图"));
         assert!(merged.contains("WebSearch"));
     }

@@ -26,6 +26,7 @@ import {
 } from "./useMessageListScrollController";
 import { useMessageListTelemetry } from "./useMessageListTelemetry";
 import { useMessageListTimelineState } from "./useMessageListTimelineState";
+import { CONVERSATION_CONTENT_MAX_WIDTH } from "../styles/conversationLayoutTokens";
 
 const MessageListInner: React.FC<MessageListProps> = ({
   sessionId = null,
@@ -363,8 +364,9 @@ const MessageListInner: React.FC<MessageListProps> = ({
       >
         <div
           data-testid="message-list-column"
+          style={{ maxWidth: CONVERSATION_CONTENT_MAX_WIDTH }}
           className={[
-            "mx-auto flex min-h-full w-full max-w-[1040px] flex-col gap-4 py-4",
+            "mx-auto flex min-h-full w-full flex-col gap-4 py-4",
             compactLeadingSpacing ? "pl-2.5 pr-3" : "pl-4 pr-4",
             "justify-start",
           ].join(" ")}

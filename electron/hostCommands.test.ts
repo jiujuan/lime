@@ -5,44 +5,66 @@ import {
   readFile,
   rm,
   stat,
-  writeFile,
 } from "node:fs/promises";
-import { execFile } from "node:child_process";
 import { createServer } from "node:http";
-import { promisify } from "node:util";
 import os from "node:os";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import {
-  AppServerRequestError,
-  METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS,
-  METHOD_PROJECT_SHELL_SESSION_KILL,
-  METHOD_PROJECT_SHELL_SESSION_RESIZE,
-  METHOD_PROJECT_SHELL_SESSION_START,
-  METHOD_PROJECT_SHELL_SESSION_WRITE,
-} from "@limecloud/app-server-client";
 import { ElectronHostCommands } from "./hostCommands";
 import type { ElectronAppServerHost } from "./appServerHost";
 
-const execFileAsync = promisify(execFile);
-
 const {
+  agentAppShellHostGetUiRuntimeStatusMock,
+  agentAppShellHostLaunchShellMock,
+  agentAppShellHostSelectDirectoryMock,
+  agentAppShellHostStartUiRuntimeMock,
+  agentAppShellHostStopUiRuntimeMock,
+  agentAppRuntimeTaskHostCancelTaskMock,
+  agentAppRuntimeTaskHostGetTaskMock,
+  agentAppRuntimeTaskHostStartTaskMock,
+  agentAppRuntimeTaskHostSubmitHostResponseMock,
   browserWindowCtorMock,
   browserWindowGetAllWindowsMock,
+  fileShellHostGetFileIconDataUrlMock,
+  fileShellHostGetFileManagerLocationsMock,
+  fileShellHostGetHomeDirMock,
+  fileShellHostOpenFilePreviewWindowMock,
+  fileShellHostOpenWithDefaultAppMock,
+  fileShellHostRevealInFinderMock,
   getFileIconMock,
   getPathMock,
-  loadUrlMock,
   openExternalMock,
   openPathMock,
-  showWindowMock,
-  focusWindowMock,
   globalShortcutIsRegisteredMock,
+  showDesktopNotificationMock,
   showOpenDialogMock,
   showItemInFolderMock,
   openProjectPathWithLocalToolMock,
-  runProjectShellCommandMock,
+  projectShellHostDisposeForShutdownMock,
+  projectShellHostKillSessionMock,
+  projectShellHostResizeSessionMock,
+  projectShellHostRunCommandMock,
+  projectShellHostStartSessionMock,
+  projectShellHostWriteSessionMock,
+  systemUtilityHostGetBrowserBackendPolicyMock,
+  systemUtilityHostGetBrowserBackendsStatusMock,
+  systemUtilityHostGetBrowserConnectorInstallStatusMock,
+  systemUtilityHostGetBrowserConnectorSettingsMock,
+  systemUtilityHostGetChromeBridgeEndpointInfoMock,
+  systemUtilityHostGetChromeBridgeStatusMock,
+  systemUtilityHostGetChromeProfileSessionsMock,
+  systemUtilityHostGetEnvironmentPreviewMock,
+  systemUtilityHostGetSkillPackageFileAssociationStatusMock,
+  systemUtilityHostGetVoiceShortcutRuntimeStatusMock,
+  systemUtilityHostOpenExternalUrlMock,
+  systemUtilityHostOpenSystemSettingsUrlMock,
+  systemUtilityHostSetSkillPackageFileAssociationDefaultMock,
+  systemUtilityHostValidateShortcutMock,
+  voiceModelHostDeleteMock,
+  voiceModelHostDownloadMock,
+  voiceModelHostGetInstallStateMock,
+  voiceModelHostListCatalogMock,
   webContentsViewCtorMock,
 } = vi.hoisted(() => {
   const loadUrlMock = vi.fn();
@@ -99,20 +121,56 @@ const {
   return {
     browserWindowCtorMock,
     browserWindowGetAllWindowsMock,
+    agentAppRuntimeTaskHostCancelTaskMock: vi.fn(),
+    agentAppRuntimeTaskHostGetTaskMock: vi.fn(),
+    agentAppRuntimeTaskHostStartTaskMock: vi.fn(),
+    agentAppRuntimeTaskHostSubmitHostResponseMock: vi.fn(),
+    agentAppShellHostGetUiRuntimeStatusMock: vi.fn(),
+    agentAppShellHostLaunchShellMock: vi.fn(),
+    agentAppShellHostSelectDirectoryMock: vi.fn(),
+    agentAppShellHostStartUiRuntimeMock: vi.fn(),
+    agentAppShellHostStopUiRuntimeMock: vi.fn(),
     contentViewAddChildViewMock,
     contentViewRemoveChildViewMock,
+    fileShellHostGetFileIconDataUrlMock: vi.fn(),
+    fileShellHostGetFileManagerLocationsMock: vi.fn(),
+    fileShellHostGetHomeDirMock: vi.fn(),
+    fileShellHostOpenFilePreviewWindowMock: vi.fn(),
+    fileShellHostOpenWithDefaultAppMock: vi.fn(),
+    fileShellHostRevealInFinderMock: vi.fn(),
     getFileIconMock: vi.fn(),
     getPathMock: vi.fn((_name: string) => os.tmpdir()),
     globalShortcutIsRegisteredMock: vi.fn((_shortcut: string) => false),
-    loadUrlMock,
     openExternalMock: vi.fn(),
     openPathMock: vi.fn(),
-    showWindowMock,
-    focusWindowMock,
+    showDesktopNotificationMock: vi.fn(() => ({ status: "sent" })),
     showOpenDialogMock: vi.fn(),
     showItemInFolderMock: vi.fn(),
     openProjectPathWithLocalToolMock: vi.fn(),
-    runProjectShellCommandMock: vi.fn(),
+    projectShellHostDisposeForShutdownMock: vi.fn(),
+    projectShellHostKillSessionMock: vi.fn(),
+    projectShellHostResizeSessionMock: vi.fn(),
+    projectShellHostRunCommandMock: vi.fn(),
+    projectShellHostStartSessionMock: vi.fn(),
+    projectShellHostWriteSessionMock: vi.fn(),
+    systemUtilityHostGetBrowserBackendPolicyMock: vi.fn(),
+    systemUtilityHostGetBrowserBackendsStatusMock: vi.fn(),
+    systemUtilityHostGetBrowserConnectorInstallStatusMock: vi.fn(),
+    systemUtilityHostGetBrowserConnectorSettingsMock: vi.fn(),
+    systemUtilityHostGetChromeBridgeEndpointInfoMock: vi.fn(),
+    systemUtilityHostGetChromeBridgeStatusMock: vi.fn(),
+    systemUtilityHostGetChromeProfileSessionsMock: vi.fn(),
+    systemUtilityHostGetEnvironmentPreviewMock: vi.fn(),
+    systemUtilityHostGetSkillPackageFileAssociationStatusMock: vi.fn(),
+    systemUtilityHostGetVoiceShortcutRuntimeStatusMock: vi.fn(),
+    systemUtilityHostOpenExternalUrlMock: vi.fn(),
+    systemUtilityHostOpenSystemSettingsUrlMock: vi.fn(),
+    systemUtilityHostSetSkillPackageFileAssociationDefaultMock: vi.fn(),
+    systemUtilityHostValidateShortcutMock: vi.fn(),
+    voiceModelHostDeleteMock: vi.fn(),
+    voiceModelHostDownloadMock: vi.fn(),
+    voiceModelHostGetInstallStateMock: vi.fn(),
+    voiceModelHostListCatalogMock: vi.fn(),
     webContentsDestroyMock,
     webContentsLoadUrlMock,
     webContentsReloadMock,
@@ -158,12 +216,90 @@ vi.mock("./electronRuntime", () => ({
   WebContentsView: webContentsViewCtorMock,
 }));
 
+vi.mock("./desktopNotificationHost", () => ({
+  showDesktopNotification: showDesktopNotificationMock,
+}));
+
+vi.mock("./agentAppShellHost", () => ({
+  AgentAppShellHost: vi.fn(() => ({
+    getUiRuntimeStatus: agentAppShellHostGetUiRuntimeStatusMock,
+    launchShell: agentAppShellHostLaunchShellMock,
+    selectDirectory: agentAppShellHostSelectDirectoryMock,
+    startUiRuntime: agentAppShellHostStartUiRuntimeMock,
+    stopUiRuntime: agentAppShellHostStopUiRuntimeMock,
+  })),
+}));
+
+vi.mock("./agentAppRuntimeTaskHost", () => ({
+  AgentAppRuntimeTaskHost: vi.fn(() => ({
+    cancelTask: agentAppRuntimeTaskHostCancelTaskMock,
+    getTask: agentAppRuntimeTaskHostGetTaskMock,
+    startTask: agentAppRuntimeTaskHostStartTaskMock,
+    submitHostResponse: agentAppRuntimeTaskHostSubmitHostResponseMock,
+  })),
+}));
+
+vi.mock("./fileShellHost", () => ({
+  FileShellHost: vi.fn(() => ({
+    getFileIconDataUrl: fileShellHostGetFileIconDataUrlMock,
+    getFileManagerLocations: fileShellHostGetFileManagerLocationsMock,
+    getHomeDir: fileShellHostGetHomeDirMock,
+    openFilePreviewWindow: fileShellHostOpenFilePreviewWindowMock,
+    openWithDefaultApp: fileShellHostOpenWithDefaultAppMock,
+    revealInFinder: fileShellHostRevealInFinderMock,
+  })),
+}));
+
+vi.mock("./projectShellHost", () => ({
+  ProjectShellHost: vi.fn(() => ({
+    disposeForShutdown: projectShellHostDisposeForShutdownMock,
+    killSession: projectShellHostKillSessionMock,
+    resizeSession: projectShellHostResizeSessionMock,
+    runCommand: projectShellHostRunCommandMock,
+    startSession: projectShellHostStartSessionMock,
+    writeSession: projectShellHostWriteSessionMock,
+  })),
+}));
+
+vi.mock("./systemUtilityHost", () => ({
+  SystemUtilityHost: vi.fn(() => ({
+    getBrowserBackendPolicy: systemUtilityHostGetBrowserBackendPolicyMock,
+    getBrowserBackendsStatus: systemUtilityHostGetBrowserBackendsStatusMock,
+    getBrowserConnectorInstallStatus:
+      systemUtilityHostGetBrowserConnectorInstallStatusMock,
+    getBrowserConnectorSettings:
+      systemUtilityHostGetBrowserConnectorSettingsMock,
+    getChromeBridgeEndpointInfo:
+      systemUtilityHostGetChromeBridgeEndpointInfoMock,
+    getChromeBridgeStatus: systemUtilityHostGetChromeBridgeStatusMock,
+    getChromeProfileSessions: systemUtilityHostGetChromeProfileSessionsMock,
+    getEnvironmentPreview: systemUtilityHostGetEnvironmentPreviewMock,
+    getSkillPackageFileAssociationStatus:
+      systemUtilityHostGetSkillPackageFileAssociationStatusMock,
+    getVoiceShortcutRuntimeStatus:
+      systemUtilityHostGetVoiceShortcutRuntimeStatusMock,
+    openExternalUrl: systemUtilityHostOpenExternalUrlMock,
+    openSystemSettingsUrl: systemUtilityHostOpenSystemSettingsUrlMock,
+    setSkillPackageFileAssociationDefault:
+      systemUtilityHostSetSkillPackageFileAssociationDefaultMock,
+    validateShortcut: systemUtilityHostValidateShortcutMock,
+  })),
+}));
+
+vi.mock("./voiceModelHost", () => ({
+  VoiceModelHost: vi.fn(() => ({
+    delete: voiceModelHostDeleteMock,
+    download: voiceModelHostDownloadMock,
+    getInstallState: voiceModelHostGetInstallStateMock,
+    listCatalog: voiceModelHostListCatalogMock,
+  })),
+}));
+
 vi.mock("./projectToolsHost", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./projectToolsHost")>();
   return {
     ...actual,
     openProjectPathWithLocalTool: openProjectPathWithLocalToolMock,
-    runProjectShellCommand: runProjectShellCommandMock,
   };
 });
 
@@ -216,69 +352,6 @@ async function withRemotePngServer<T>(
   }
 }
 
-async function withBinaryServer<T>(
-  assets: Record<string, Buffer>,
-  run: (baseUrl: string) => Promise<T>,
-): Promise<T> {
-  const server = createServer((request, response) => {
-    const asset = assets[request.url ?? ""];
-    if (asset) {
-      response.writeHead(200, {
-        "content-type": "application/octet-stream",
-        "content-length": asset.byteLength,
-      });
-      response.end(asset);
-      return;
-    }
-    response.writeHead(404);
-    response.end();
-  });
-  await new Promise<void>((resolve) => {
-    server.listen(0, "127.0.0.1", resolve);
-  });
-  const address = server.address();
-  if (!address || typeof address === "string") {
-    server.close();
-    throw new Error("无法启动二进制测试服务");
-  }
-  try {
-    return await run(`http://127.0.0.1:${address.port}`);
-  } finally {
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
-    });
-  }
-}
-
-async function createVoiceModelArchiveFixture(
-  userDataDir: string,
-): Promise<Buffer> {
-  const sourceDir = path.join(userDataDir, "fixture-voice-model-source");
-  const archivePath = path.join(userDataDir, "fixture-voice-model.tar.bz2");
-  await mkdir(sourceDir, { recursive: true });
-  await Promise.all([
-    writeFile(path.join(sourceDir, "model.int8.onnx"), "model"),
-    writeFile(path.join(sourceDir, "tokens.txt"), "tokens"),
-  ]);
-  await execFileAsync("tar", ["-cjf", archivePath, "-C", sourceDir, "."]);
-  return await readFile(archivePath);
-}
-
-function sessionAlreadyExistsError(sessionId: string) {
-  return new AppServerRequestError(
-    "agentSession/start",
-    {
-      id: "test-session-start",
-      error: {
-        code: -32013,
-        message: `session already exists: ${sessionId}`,
-      },
-    },
-    [],
-    [],
-  );
-}
-
 function buildAgentAppShellDescriptor(): Record<string, unknown> {
   return {
     descriptorVersion: 1,
@@ -312,6 +385,7 @@ afterEach(async () => {
   browserWindowGetAllWindowsMock.mockReturnValue([]);
   globalShortcutIsRegisteredMock.mockReturnValue(false);
   getPathMock.mockImplementation(() => os.tmpdir());
+  showDesktopNotificationMock.mockReturnValue({ status: "sent" });
   showOpenDialogMock.mockResolvedValue({ canceled: true, filePaths: [] });
   while (tempDirs.length > 0) {
     const dir = tempDirs.pop();
@@ -791,229 +865,81 @@ describe("ElectronHostCommands local file shell facade", () => {
     });
   });
 
-  it("agent_app_select_directory 通过 Electron dialog 选择目录", async () => {
+  it("Agent App shell 命令应只分发到 AgentAppShellHost", async () => {
+    agentAppShellHostSelectDirectoryMock.mockResolvedValueOnce({
+      path: "/tmp/agent-app",
+      cancelled: false,
+    });
+    agentAppShellHostLaunchShellMock.mockResolvedValueOnce({
+      status: "launched",
+      devShell: true,
+      blockerCodes: [],
+      launchedAt: "2026-05-15T00:00:00.000Z",
+    });
+    agentAppShellHostStartUiRuntimeMock.mockResolvedValueOnce({
+      appId: "content-factory-app",
+      status: "running",
+    });
+    agentAppShellHostGetUiRuntimeStatusMock.mockResolvedValueOnce({
+      appId: "content-factory-app",
+      status: "running",
+    });
+    agentAppShellHostStopUiRuntimeMock.mockResolvedValueOnce({
+      appId: "content-factory-app",
+      status: "stopped",
+    });
     const userDataDir = await createTempUserDataDir();
     const host = createHost(userDataDir);
-    showOpenDialogMock.mockResolvedValueOnce({
-      canceled: false,
-      filePaths: ["/tmp/agent-app"],
-    });
 
+    const selectArgs = { request: { title: "选择应用目录" } };
     await expect(
-      host.invoke("agent_app_select_directory", {
-        request: { title: "选择应用目录" },
-      }),
+      host.invoke("agent_app_select_directory", selectArgs),
     ).resolves.toEqual({
       path: "/tmp/agent-app",
       cancelled: false,
     });
 
-    expect(showOpenDialogMock).toHaveBeenCalledWith({
-      title: "选择应用目录",
-      properties: ["openDirectory"],
-    });
-  });
-
-  it("agent_app_select_directory 取消时返回空路径", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const host = createHost(userDataDir);
-    showOpenDialogMock.mockResolvedValueOnce({
-      canceled: true,
-      filePaths: [],
-    });
-
+    const launchArgs = {
+      request: {
+        descriptor: buildAgentAppShellDescriptor(),
+      },
+    };
     await expect(
-      host.invoke("agent_app_select_directory", {}),
-    ).resolves.toEqual({
-      path: null,
-      cancelled: true,
-    });
-  });
-
-  it("agent_app_launch_shell 应经 App Server prepare 后启动 UI runtime 并打开 Electron 窗口", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const request = vi.fn(async (method: string, params?: unknown) => {
-      if (method === "agentAppShell/prepare") {
-        expect(params).toEqual({
-          descriptor: buildAgentAppShellDescriptor(),
-        });
-        return {
-          appId: "content-factory-app",
-          status: "ready",
-          installMode: "standalone",
-          shellKind: "app_shell",
-          descriptorVersion: 1,
-          devShell: true,
-          blockerCodes: [],
-          preparedAt: "2026-05-15T00:00:00.000Z",
-          entryKey: "dashboard",
-          windowTitle: "Content Factory",
-          packageMount: {
-            kind: "local_dir",
-            path: "/tmp/content-factory-app",
-            readOnly: true,
-            packageHash: "package-fnv1a-current",
-            manifestHash: "manifest-fnv1a-current",
-          },
-        };
-      }
-      if (method === "agentAppUiRuntime/start") {
-        expect(params).toEqual({
-          appId: "content-factory-app",
-          entryKey: "dashboard",
-        });
-        return {
-          appId: "content-factory-app",
-          status: "running",
-          entryUrl: "http://127.0.0.1:4199/dashboard",
-          baseUrl: "http://127.0.0.1:4199",
-          port: 4199,
-          pid: 41990,
-          entryKey: "dashboard",
-          route: "/dashboard",
-        };
-      }
-      throw new Error(`unexpected App Server method: ${method}`);
-    });
-    const host = createHost(userDataDir, undefined, request);
-
-    await expect(
-      host.invoke("agent_app_launch_shell", {
-        request: {
-          descriptor: buildAgentAppShellDescriptor(),
-        },
-      }),
+      host.invoke("agent_app_launch_shell", launchArgs),
     ).resolves.toMatchObject({
-      appId: "content-factory-app",
       status: "launched",
       devShell: true,
-      blockerCodes: [],
-      packageMount: {
-        kind: "local_dir",
-        path: "/tmp/content-factory-app",
-        readOnly: true,
-        packageHash: "package-fnv1a-current",
-        manifestHash: "manifest-fnv1a-current",
-      },
-      runtimeStatus: {
-        status: "running",
-        entryUrl: "http://127.0.0.1:4199/dashboard",
-      },
-      surface: {
-        activeStrategy: "controlledBrowserWindow",
-        supportedStrategies: ["controlledBrowserWindow", "webContentsView"],
-        entryUrl: "http://127.0.0.1:4199/dashboard",
-        containerId: "agent-app-shell-content-factory-app-standalone",
-        embedding: {
-          standaloneWindow: true,
-          rightSurfaceDock: true,
-          iframe: false,
-          browserView: false,
-        },
-        isolation: {
-          contextIsolation: true,
-          sandbox: true,
-          nodeIntegration: false,
-        },
-      },
-      shellWindow: {
-        label: "agent-app-shell-content-factory-app-standalone",
-        url: "http://127.0.0.1:4199/dashboard",
-        reused: false,
-        chrome: {
-          deepLinkScheme: "lime-agent-content-factory-app",
-          openEntryKey: "dashboard",
-          trayEnabled: true,
-          closePolicy: "hide_to_tray",
-          multiAppManagement: false,
-          runtimeBypass: false,
-        },
-      },
     });
 
-    expect(request).toHaveBeenCalledWith("agentAppShell/prepare", {
-      descriptor: buildAgentAppShellDescriptor(),
-    });
-    expect(request).toHaveBeenCalledWith("agentAppUiRuntime/start", {
-      appId: "content-factory-app",
-      entryKey: "dashboard",
-    });
-    expect(browserWindowCtorMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: "Content Factory",
-        width: 1280,
-        height: 860,
-      }),
+    const runtimeArgs = {
+      request: {
+        appId: "content-factory-app",
+        entryKey: "dashboard",
+      },
+    };
+    await expect(
+      host.invoke("agent_app_start_ui_runtime", runtimeArgs),
+    ).resolves.toMatchObject({ status: "running" });
+    await expect(
+      host.invoke("agent_app_get_ui_runtime_status", runtimeArgs),
+    ).resolves.toMatchObject({ status: "running" });
+    await expect(
+      host.invoke("agent_app_stop_ui_runtime", runtimeArgs),
+    ).resolves.toMatchObject({ status: "stopped" });
+
+    expect(agentAppShellHostSelectDirectoryMock).toHaveBeenCalledWith(
+      selectArgs,
     );
-    expect(loadUrlMock).toHaveBeenCalledWith("http://127.0.0.1:4199/dashboard");
-    expect(showWindowMock).toHaveBeenCalled();
-    expect(focusWindowMock).toHaveBeenCalled();
-  });
-
-  it("agent_app_launch_shell prepare blocked 时应 fail closed 且不启动 runtime", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const request = vi.fn(async (method: string) => {
-      if (method === "agentAppShell/prepare") {
-        return {
-          appId: "content-factory-app",
-          status: "blocked",
-          devShell: true,
-          blockerCodes: ["INSTALLED_STATE_MISSING"],
-          message: "Agent App 未安装。",
-          preparedAt: "2026-05-15T00:00:00.000Z",
-        };
-      }
-      throw new Error(`unexpected App Server method: ${method}`);
-    });
-    const host = createHost(userDataDir, undefined, request);
-
-    await expect(
-      host.invoke("agent_app_launch_shell", {
-        request: {
-          descriptor: buildAgentAppShellDescriptor(),
-        },
-      }),
-    ).resolves.toMatchObject({
-      status: "blocked",
-      blockerCodes: ["INSTALLED_STATE_MISSING"],
-    });
-
-    expect(request).toHaveBeenCalledTimes(1);
-    expect(browserWindowCtorMock).not.toHaveBeenCalled();
-  });
-
-  it("agent_app_launch_shell descriptor 无效时由 App Server prepare fail closed", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const request = vi.fn(async (method: string) => {
-      if (method === "agentAppShell/prepare") {
-        return {
-          status: "blocked",
-          devShell: true,
-          blockerCodes: ["PACKAGE_IDENTITY_MISSING"],
-          message: "Agent App shell descriptor 未通过启动前校验。",
-          preparedAt: "2026-05-15T00:00:00.000Z",
-        };
-      }
-      throw new Error(`unexpected App Server method: ${method}`);
-    });
-    const host = createHost(userDataDir, undefined, request);
-
-    await expect(
-      host.invoke("agent_app_launch_shell", {
-        request: {
-          descriptor: {
-            ...buildAgentAppShellDescriptor(),
-            packageHash: "",
-          },
-        },
-      }),
-    ).resolves.toMatchObject({
-      status: "blocked",
-      blockerCodes: ["PACKAGE_IDENTITY_MISSING"],
-    });
-
-    expect(request).toHaveBeenCalledTimes(1);
-    expect(browserWindowCtorMock).not.toHaveBeenCalled();
+    expect(agentAppShellHostLaunchShellMock).toHaveBeenCalledWith(launchArgs);
+    expect(agentAppShellHostStartUiRuntimeMock).toHaveBeenCalledWith(
+      runtimeArgs,
+    );
+    expect(agentAppShellHostGetUiRuntimeStatusMock).toHaveBeenCalledWith(
+      runtimeArgs,
+    );
+    expect(agentAppShellHostStopUiRuntimeMock).toHaveBeenCalledWith(
+      runtimeArgs,
+    );
   });
 
   it("get_local_skills_for_app 应透传 App Server skill/list 的本地目录路径", async () => {
@@ -1048,117 +974,77 @@ describe("ElectronHostCommands local file shell facade", () => {
     expect(request).toHaveBeenCalledWith("skill/list", {});
   });
 
-  it("reveal_in_finder 通过 Electron shell 定位本地路径", async () => {
+  it("File Shell 命令应只分发到 FileShellHost", async () => {
+    fileShellHostRevealInFinderMock.mockReturnValueOnce({});
+    fileShellHostOpenWithDefaultAppMock.mockResolvedValueOnce({});
+    fileShellHostOpenFilePreviewWindowMock.mockResolvedValueOnce({
+      opened: true,
+      reused: false,
+      url: "file:///tmp/demo.html",
+      title: "Demo",
+    });
+    fileShellHostGetFileIconDataUrlMock.mockResolvedValueOnce(
+      "data:image/png;base64,abc",
+    );
+    fileShellHostGetHomeDirMock.mockReturnValueOnce("/Users/demo");
+    fileShellHostGetFileManagerLocationsMock.mockResolvedValueOnce([
+      {
+        id: "home",
+        label: "个人",
+        path: "/Users/demo",
+        kind: "home",
+      },
+    ]);
     const userDataDir = await createTempUserDataDir();
     const host = createHost(userDataDir);
 
+    const revealArgs = { path: "/tmp/demo.txt" };
+    await expect(host.invoke("reveal_in_finder", revealArgs)).resolves.toEqual(
+      {},
+    );
+
+    const openArgs = { path: "/tmp/demo.txt" };
     await expect(
-      host.invoke("reveal_in_finder", { path: "/tmp/demo.txt" }),
+      host.invoke("open_with_default_app", openArgs),
     ).resolves.toEqual({});
 
-    expect(showItemInFolderMock).toHaveBeenCalledWith("/tmp/demo.txt");
-  });
-
-  it("open_with_default_app 通过 Electron shell 打开本地路径", async () => {
-    openPathMock.mockResolvedValueOnce("");
-    const userDataDir = await createTempUserDataDir();
-    const host = createHost(userDataDir);
-
+    const previewArgs = {
+      path: "/tmp/demo.html",
+      title: "Demo",
+    };
     await expect(
-      host.invoke("open_with_default_app", { path: "/tmp/demo.txt" }),
-    ).resolves.toEqual({});
-
-    expect(openPathMock).toHaveBeenCalledWith("/tmp/demo.txt");
-  });
-
-  it("open_with_default_app 应暴露 Electron openPath 失败", async () => {
-    openPathMock.mockResolvedValueOnce("Cannot open file");
-    const userDataDir = await createTempUserDataDir();
-    const host = createHost(userDataDir);
-
-    await expect(
-      host.invoke("open_with_default_app", { path: "/tmp/missing.txt" }),
-    ).rejects.toThrow("Cannot open file");
-  });
-
-  it("open_file_preview_window 通过 Electron BrowserWindow 打开本地文件 URL", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const host = createHost(userDataDir);
-    const targetPath = path.join(userDataDir, "prototype.html");
-
-    await expect(
-      host.invoke("open_file_preview_window", {
-        path: targetPath,
-        title: "Prototype",
-      }),
+      host.invoke("open_file_preview_window", previewArgs),
     ).resolves.toEqual({
       opened: true,
       reused: false,
-      url: expect.stringMatching(/^file:\/\//),
-      title: "Prototype",
+      url: "file:///tmp/demo.html",
+      title: "Demo",
     });
 
-    const expectedUrl = pathToFileURL(targetPath).toString();
-    expect(loadUrlMock).toHaveBeenCalledWith(expectedUrl);
-    expect(browserWindowCtorMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        width: 1280,
-        minWidth: 860,
-        title: "Prototype",
-        show: false,
-      }),
+    await expect(
+      host.invoke("get_file_icon_data_url", { path: "/Applications/Lime.app" }),
+    ).resolves.toBe("data:image/png;base64,abc");
+
+    await expect(host.invoke("get_home_dir")).resolves.toBe("/Users/demo");
+    await expect(host.invoke("get_file_manager_locations")).resolves.toEqual([
+      {
+        id: "home",
+        label: "个人",
+        path: "/Users/demo",
+        kind: "home",
+      },
+    ]);
+
+    expect(fileShellHostRevealInFinderMock).toHaveBeenCalledWith(revealArgs);
+    expect(fileShellHostOpenWithDefaultAppMock).toHaveBeenCalledWith(openArgs);
+    expect(fileShellHostOpenFilePreviewWindowMock).toHaveBeenCalledWith(
+      previewArgs,
     );
-    expect(showWindowMock).toHaveBeenCalledTimes(1);
-    expect(focusWindowMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("open_file_preview_window 已存在同 URL 窗口时复用并聚焦", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const host = createHost(userDataDir);
-    const targetPath = path.join(userDataDir, "prototype.html");
-    const expectedUrl = pathToFileURL(targetPath).toString();
-    const existingWindow = {
-      contentView: {
-        addChildView: vi.fn(),
-        removeChildView: vi.fn(),
-      },
-      focus: focusWindowMock,
-      isDestroyed: () => false,
-      loadURL: loadUrlMock,
-      off: vi.fn(),
-      on: vi.fn(),
-      once: vi.fn(),
-      show: showWindowMock,
-      webContents: {
-        getURL: () => expectedUrl,
-      },
-    };
-    browserWindowGetAllWindowsMock.mockReturnValueOnce([existingWindow]);
-
-    await expect(
-      host.invoke("open_file_preview_window", { path: targetPath }),
-    ).resolves.toEqual({
-      opened: true,
-      reused: true,
-      url: expectedUrl,
-      title: "prototype.html",
+    expect(fileShellHostGetFileIconDataUrlMock).toHaveBeenCalledWith({
+      path: "/Applications/Lime.app",
     });
-
-    expect(browserWindowCtorMock).not.toHaveBeenCalled();
-    expect(loadUrlMock).not.toHaveBeenCalled();
-    expect(showWindowMock).toHaveBeenCalledTimes(1);
-    expect(focusWindowMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("open_file_preview_window 拒绝相对路径", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const host = createHost(userDataDir);
-
-    await expect(
-      host.invoke("open_file_preview_window", {
-        path: "relative/prototype.html",
-      }),
-    ).rejects.toThrow("path 必须是绝对路径");
+    expect(fileShellHostGetHomeDirMock).toHaveBeenCalledOnce();
+    expect(fileShellHostGetFileManagerLocationsMock).toHaveBeenCalledOnce();
   });
 
   it("open_project_path_with_tool 应按工具类型走 Electron shell 或本地工具封装", async () => {
@@ -1187,360 +1073,77 @@ describe("ElectronHostCommands local file shell facade", () => {
     );
   });
 
-  it("run_project_shell_command 应走项目 Shell current 封装并归一化 timeout", async () => {
-    runProjectShellCommandMock.mockResolvedValueOnce({
+  it("项目 Shell 命令应只分发到 ProjectShellHost", async () => {
+    projectShellHostRunCommandMock.mockResolvedValueOnce({
       command: "pwd",
-      cwd: "/tmp/project",
       exitCode: 0,
-      stdout: "/tmp/project\n",
-      stderr: "",
-      durationMs: 10,
-      timedOut: false,
     });
+    projectShellHostStartSessionMock.mockResolvedValueOnce({
+      sessionId: "project-shell-1",
+      tty: true,
+    });
+    projectShellHostWriteSessionMock.mockResolvedValueOnce({});
+    projectShellHostResizeSessionMock.mockResolvedValueOnce({});
+    projectShellHostKillSessionMock.mockResolvedValueOnce({});
     const userDataDir = await createTempUserDataDir();
     const host = createHost(userDataDir);
 
+    const runArgs = {
+      rootPath: "/tmp/project",
+      command: " pwd ",
+      timeoutMs: 10,
+    };
     await expect(
-      host.invoke("run_project_shell_command", {
-        rootPath: "/tmp/project",
-        command: " pwd ",
-        timeoutMs: 10,
-      }),
+      host.invoke("run_project_shell_command", runArgs),
     ).resolves.toMatchObject({ command: "pwd", exitCode: 0 });
 
-    expect(runProjectShellCommandMock).toHaveBeenCalledWith({
-      cwd: "/tmp/project",
-      command: "pwd",
-      timeoutMs: 1000,
-    });
-  });
-
-  it("project_shell_session_* 应委托 App Server PTY current 通道", async () => {
-    const emit = vi.fn();
-    const request = vi.fn(async (method: string) => {
-      if (method === METHOD_PROJECT_SHELL_SESSION_START) {
-        return {
-          sessionId: "project-shell-1",
-          cwd: "/tmp/project",
-          shell: "/bin/zsh",
-          title: "Shell: project",
-          localEcho: false,
-          tty: true,
-          pid: 123,
-        };
-      }
-      return {};
-    });
-    const userDataDir = await createTempUserDataDir();
-    const host = createHost(userDataDir, emit, request);
-
+    const startArgs = {
+      rootPath: "/tmp/project",
+      cols: 120,
+      rows: 14,
+    };
     await expect(
-      host.invoke("project_shell_session_start", {
-        rootPath: "/tmp/project",
-        cols: 120,
-        rows: 14,
-      }),
+      host.invoke("project_shell_session_start", startArgs),
     ).resolves.toMatchObject({
       sessionId: "project-shell-1",
       tty: true,
     });
-    await expect(
-      host.invoke("project_shell_session_write", {
-        sessionId: "project-shell-1",
-        data: "ls\r",
-      }),
-    ).resolves.toEqual({});
-    await expect(
-      host.invoke("project_shell_session_resize", {
-        sessionId: "project-shell-1",
-        cols: 100,
-        rows: 20,
-      }),
-    ).resolves.toEqual({});
-    await expect(
-      host.invoke("project_shell_session_kill", {
-        sessionId: "project-shell-1",
-      }),
-    ).resolves.toEqual({});
-
-    expect(request).toHaveBeenCalledWith(METHOD_PROJECT_SHELL_SESSION_START, {
-      rootPath: "/tmp/project",
-      cols: 120,
-      rows: 14,
-    });
-    expect(request).toHaveBeenCalledWith(METHOD_PROJECT_SHELL_SESSION_WRITE, {
+    const writeArgs = {
       sessionId: "project-shell-1",
       data: "ls\r",
-    });
-    expect(request).toHaveBeenCalledWith(METHOD_PROJECT_SHELL_SESSION_RESIZE, {
+    };
+    await expect(
+      host.invoke("project_shell_session_write", writeArgs),
+    ).resolves.toEqual({});
+    const resizeArgs = {
       sessionId: "project-shell-1",
       cols: 100,
       rows: 20,
-    });
-    expect(request).toHaveBeenCalledWith(METHOD_PROJECT_SHELL_SESSION_KILL, {
+    };
+    await expect(
+      host.invoke("project_shell_session_resize", resizeArgs),
+    ).resolves.toEqual({});
+    const killArgs = {
       sessionId: "project-shell-1",
-    });
+    };
+    await expect(
+      host.invoke("project_shell_session_kill", killArgs),
+    ).resolves.toEqual({});
+
+    expect(projectShellHostRunCommandMock).toHaveBeenCalledWith(runArgs);
+    expect(projectShellHostStartSessionMock).toHaveBeenCalledWith(startArgs);
+    expect(projectShellHostWriteSessionMock).toHaveBeenCalledWith(writeArgs);
+    expect(projectShellHostResizeSessionMock).toHaveBeenCalledWith(resizeArgs);
+    expect(projectShellHostKillSessionMock).toHaveBeenCalledWith(killArgs);
   });
 
-  it("project shell event drain 应转发到前端事件通道", async () => {
-    vi.useFakeTimers();
-    const emit = vi.fn();
-    const request = vi.fn(async (method: string) => {
-      if (method === METHOD_PROJECT_SHELL_SESSION_START) {
-        return {
-          sessionId: "project-shell-1",
-          cwd: "/tmp/project",
-          shell: "/bin/zsh",
-          title: "Shell: project",
-          localEcho: false,
-          tty: true,
-          pid: 123,
-        };
-      }
-      if (method === METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS) {
-        return {
-          events: [
-            {
-              type: "data",
-              sessionId: "project-shell-1",
-              stream: "stdout",
-              data: "hello",
-            },
-            {
-              type: "exit",
-              sessionId: "project-shell-1",
-              exitCode: 0,
-              signal: null,
-            },
-          ],
-        };
-      }
-      return {};
-    });
+  it("disposeProjectShellSessionsForShutdown 应委托 ProjectShellHost", async () => {
     const userDataDir = await createTempUserDataDir();
-    const host = createHost(userDataDir, emit, request);
+    const host = createHost(userDataDir);
 
-    await host.invoke("project_shell_session_start", {
-      rootPath: "/tmp/project",
-      cols: 120,
-      rows: 14,
-    });
-    await vi.advanceTimersByTimeAsync(100);
-    vi.useRealTimers();
-
-    expect(request).toHaveBeenCalledWith(
-      METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS,
-      { sessionId: "project-shell-1", limit: 200 },
-    );
-    expect(emit).toHaveBeenCalledWith("project-shell-session-event", {
-      type: "data",
-      sessionId: "project-shell-1",
-      stream: "stdout",
-      data: "hello",
-    });
-  });
-
-  it("project shell 写入后应主动 drain 并转发输出", async () => {
-    const emit = vi.fn();
-    const request = vi.fn(async (method: string) => {
-      if (method === METHOD_PROJECT_SHELL_SESSION_START) {
-        return {
-          sessionId: "project-shell-1",
-          cwd: "/tmp/project",
-          shell: "/bin/zsh",
-          title: "coso@host: project",
-          localEcho: false,
-          tty: true,
-          pid: 123,
-        };
-      }
-      if (method === METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS) {
-        return {
-          events: [
-            {
-              type: "data",
-              sessionId: "project-shell-1",
-              stream: "stdout",
-              data: "__lime_shell_e2e__\n",
-            },
-          ],
-        };
-      }
-      return {};
-    });
-    const userDataDir = await createTempUserDataDir();
-    const host = createHost(userDataDir, emit, request);
-
-    await host.invoke("project_shell_session_start", {
-      rootPath: "/tmp/project",
-      cols: 120,
-      rows: 14,
-    });
-    await host.invoke("project_shell_session_write", {
-      sessionId: "project-shell-1",
-      data: "printf '__lime_shell_e2e__\\n'\r",
-    });
-
-    expect(request).toHaveBeenCalledWith(
-      METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS,
-      { sessionId: "project-shell-1", limit: 200 },
-    );
-    expect(emit).toHaveBeenCalledWith("project-shell-session-event", {
-      type: "data",
-      sessionId: "project-shell-1",
-      stream: "stdout",
-      data: "__lime_shell_e2e__\n",
-    });
-  });
-
-  it("disposeProjectShellSessionsForShutdown 应结束 App Server PTY 会话", async () => {
-    const request = vi.fn(async (method: string) => {
-      if (method === METHOD_PROJECT_SHELL_SESSION_START) {
-        return {
-          sessionId: "project-shell-1",
-          cwd: "/tmp/project",
-          shell: "/bin/zsh",
-          title: "Shell: project",
-          localEcho: false,
-          tty: true,
-          pid: 123,
-        };
-      }
-      return {};
-    });
-    const userDataDir = await createTempUserDataDir();
-    const host = createHost(userDataDir, vi.fn(), request);
-
-    await host.invoke("project_shell_session_start", {
-      rootPath: "/tmp/project",
-      cols: 120,
-      rows: 14,
-    });
     host.disposeProjectShellSessionsForShutdown();
 
-    expect(request).toHaveBeenCalledWith(METHOD_PROJECT_SHELL_SESSION_KILL, {
-      sessionId: "project-shell-1",
-    });
-  });
-
-  it("get_file_icon_data_url 应通过 Electron 读取系统文件图标", async () => {
-    getFileIconMock.mockResolvedValueOnce({
-      isEmpty: () => false,
-      toDataURL: () => "data:image/png;base64,abc",
-    });
-    const userDataDir = await createTempUserDataDir();
-    const host = createHost(userDataDir);
-
-    await expect(
-      host.invoke("get_file_icon_data_url", { path: "/Applications/Lime.app" }),
-    ).resolves.toBe("data:image/png;base64,abc");
-
-    expect(getFileIconMock).toHaveBeenCalledWith("/Applications/Lime.app", {
-      size: "normal",
-    });
-  });
-
-  it("get_file_icon_data_url 在系统图标不可用时返回 null", async () => {
-    getFileIconMock.mockResolvedValueOnce({
-      isEmpty: () => true,
-      toDataURL: () => "data:image/png;base64,unused",
-    });
-    const userDataDir = await createTempUserDataDir();
-    const host = createHost(userDataDir);
-
-    await expect(
-      host.invoke("get_file_icon_data_url", { path: "/tmp/missing.txt" }),
-    ).resolves.toBeNull();
-  });
-
-  it("get_file_icon_data_url 应隔离 Electron 图标读取失败", async () => {
-    getFileIconMock.mockRejectedValueOnce(new Error("icon unavailable"));
-    const userDataDir = await createTempUserDataDir();
-    const host = createHost(userDataDir);
-
-    await expect(
-      host.invoke("get_file_icon_data_url", { path: "/tmp/missing.txt" }),
-    ).resolves.toBeNull();
-  });
-
-  it("get_home_dir 应返回 Electron 系统主目录", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const homeDir = path.join(userDataDir, "home");
-    getPathMock.mockImplementation((name: string) => {
-      return name === "home" ? homeDir : os.tmpdir();
-    });
-    const host = createHost(userDataDir);
-
-    await expect(host.invoke("get_home_dir")).resolves.toBe(homeDir);
-  });
-
-  it("get_home_dir 在系统主目录不可用时应 fail closed", async () => {
-    const userDataDir = await createTempUserDataDir();
-    getPathMock.mockImplementation((name: string) => {
-      return name === "home" ? "" : os.tmpdir();
-    });
-    const host = createHost(userDataDir);
-
-    await expect(host.invoke("get_home_dir")).rejects.toThrow("无法获取主目录");
-  });
-
-  it("get_file_manager_locations 应返回存在的系统快捷入口并去重", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const homeDir = path.join(userDataDir, "home");
-    const missingDesktopDir = path.join(userDataDir, "missing-desktop");
-    const documentsDir = path.join(userDataDir, "Documents");
-    const downloadsDir = path.join(userDataDir, "Downloads");
-    await mkdir(homeDir, { recursive: true });
-    await mkdir(documentsDir, { recursive: true });
-    await mkdir(downloadsDir, { recursive: true });
-    getPathMock.mockImplementation((name: string) => {
-      if (name === "home") {
-        return homeDir;
-      }
-      if (name === "desktop") {
-        return missingDesktopDir;
-      }
-      if (name === "documents") {
-        return documentsDir;
-      }
-      if (name === "downloads") {
-        return downloadsDir;
-      }
-      return os.tmpdir();
-    });
-    const host = createHost(userDataDir);
-
-    const locations = await host.invoke("get_file_manager_locations");
-
-    expect(locations).toEqual(
-      expect.arrayContaining([
-        {
-          id: "home",
-          label: "个人",
-          path: homeDir,
-          kind: "home",
-        },
-        {
-          id: "documents",
-          label: "文档",
-          path: documentsDir,
-          kind: "documents",
-        },
-        {
-          id: "downloads",
-          label: "下载",
-          path: downloadsDir,
-          kind: "downloads",
-        },
-      ]),
-    );
-    const returnedPaths = (locations as Array<{ path: string }>).map(
-      (location) => location.path,
-    );
-    expect(
-      returnedPaths.filter((nextPath) => nextPath === homeDir),
-    ).toHaveLength(1);
-    expect(returnedPaths).not.toContain(missingDesktopDir);
+    expect(projectShellHostDisposeForShutdownMock).toHaveBeenCalledOnce();
   });
 });
 
@@ -1721,1109 +1324,236 @@ describe("ElectronHostCommands model provider current source", () => {
   });
 });
 
-describe("ElectronHostCommands Agent App runtime current bridge", () => {
-  it("agent_app_runtime_start_task 通过 App Server session start 与 turn start 投影", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const request = vi.fn(async (method: string) => {
-      if (method === "agentAppUiRuntime/status") {
-        return {
-          appId: "content-factory-app",
-          status: "stopped",
-          taskRuntime: {
-            enabled: false,
-            blockers: [],
-            followUps: [],
-            taskKinds: [],
-            directProviderAccess: false,
-            directFilesystemAccess: false,
-          },
-        };
-      }
-      if (method === "agentSession/start") {
-        return {
-          session: {
-            sessionId: "session-1",
-            threadId: "thread-1",
-            appId: "content-factory-app",
-            workspaceId: "workspace-1",
-            status: "idle",
-            createdAt: "2026-06-07T00:00:00.000Z",
-            updatedAt: "2026-06-07T00:00:00.000Z",
-          },
-        };
-      }
-      if (method === "agentSession/turn/start") {
-        return {
-          turn: {
-            turnId: "turn-1",
-            sessionId: "session-1",
-            threadId: "thread-1",
-            status: "accepted",
-          },
-        };
-      }
-      throw new Error(`unexpected App Server method: ${method}`);
-    });
-    const host = createHost(userDataDir, () => undefined, request);
-
-    await expect(
-      host.invoke("agent_app_runtime_start_task", {
-        request: {
-          appId: "content-factory-app",
-          entryKey: "writer",
-          workspaceId: "workspace-1",
-          sessionId: "session-1",
-          taskId: "task-1",
-          taskKind: "content_factory.write",
-          title: "写一组发布文案",
-          prompt: "生成 3 条可发布文案",
-          input: { topic: "Electron current" },
-          expectedOutput: { contentFactoryWorkspacePatch: true },
-          eventName: "agent_app_runtime:content-factory-app:task-1",
-          turnId: "turn-1",
-          providerPreference: "anthropic",
-          modelPreference: "claude-sonnet-4",
-          queueIfBusy: true,
-          skipPreSubmitResume: false,
-          metadata: { source: "host-test" },
-          turnConfig: {
-            provider_config: { provider_name: "anthropic" },
-            reasoning_effort: "medium",
-            sandbox_policy: "workspace-write",
-            metadata: { turn_source: "agent-app" },
-          },
-        },
-      }),
-    ).resolves.toMatchObject({
-      appId: "content-factory-app",
-      entryKey: "writer",
-      taskId: "task-1",
-      taskKind: "content_factory.write",
-      sessionId: "session-1",
-      turnId: "turn-1",
-      eventName: "agent_app_runtime:content-factory-app:task-1",
+describe("ElectronHostCommands Agent App runtime dispatcher", () => {
+  it("agent_app_runtime_* 命令应只分发到 AgentAppRuntimeTaskHost", async () => {
+    agentAppRuntimeTaskHostStartTaskMock.mockResolvedValueOnce({
       status: "accepted",
     });
-
-    expect(request).toHaveBeenNthCalledWith(1, "agentAppUiRuntime/status", {
-      appId: "content-factory-app",
-    });
-    expect(request).toHaveBeenNthCalledWith(2, "agentSession/start", {
-      sessionId: "session-1",
-      appId: "content-factory-app",
-      workspaceId: "workspace-1",
-    });
-    expect(request).toHaveBeenNthCalledWith(
-      3,
-      "agentSession/turn/start",
-      expect.objectContaining({
-        sessionId: "session-1",
-        turnId: "turn-1",
-        input: {
-          text: expect.stringContaining("Business Prompt:"),
-          attachments: [],
-        },
-        queueIfBusy: true,
-        skipPreSubmitResume: false,
-        runtimeOptions: expect.objectContaining({
-          stream: true,
-          eventName: "agent_app_runtime:content-factory-app:task-1",
-          providerPreference: "anthropic",
-          modelPreference: "claude-sonnet-4",
-          queuedTurnId: "agent-app-queued-task-1",
-          metadata: {
-            source: "host-test",
-            turn_source: "agent-app",
-          },
-          hostOptions: {
-            asterChatRequest: expect.objectContaining({
-              session_id: "session-1",
-              turn_id: "turn-1",
-              workspace_id: "workspace-1",
-              provider_preference: "anthropic",
-              model_preference: "claude-sonnet-4",
-              provider_config: { provider_name: "anthropic" },
-              queued_turn_id: "agent-app-queued-task-1",
-              turn_config: expect.objectContaining({
-                provider_config: { provider_name: "anthropic" },
-              }),
-            }),
-          },
-        }),
-      }),
-    );
-  });
-
-  it("agent_app_runtime_start_task 执行 task worker 并写回 App Server runtime event", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const packageRoot = await createTempUserDataDir();
-    await mkdir(path.join(packageRoot, "runtime"), { recursive: true });
-    await writeFile(
-      path.join(packageRoot, "runtime", "worker.mjs"),
-      [
-        "let input = '';",
-        "for await (const chunk of process.stdin) input += chunk;",
-        "const request = JSON.parse(input);",
-        "process.stdout.write(JSON.stringify({",
-        "  artifactKind: 'content_factory.workspace_patch',",
-        "  appId: request.appId,",
-        "  taskKind: request.taskKind,",
-        "  patch: {",
-        "    appId: request.appId,",
-        "    sessionId: request.sessionId,",
-        "    objects: [{",
-        "      ref: { appId: request.appId, kind: 'articleDraft', id: 'draft-1', sessionId: request.sessionId },",
-        "      title: '文章草稿',",
-        "      source: { markdown: '# 草稿' }",
-        "    }]",
-        "  }",
-        "}));",
-      ].join("\n"),
-      "utf8",
-    );
-    const request = vi.fn(async (method: string, params?: unknown) => {
-      if (method === "agentAppUiRuntime/status") {
-        return {
-          appId: "content-factory-app",
-          status: "ready",
-          taskRuntime: {
-            enabled: true,
-            packageRootPath: packageRoot,
-            workerEntrypoint: "./runtime/worker.mjs",
-            outputArtifactKind: "content_factory.workspace_patch",
-            taskKinds: ["content.article.generate"],
-            blockers: [],
-            followUps: [],
-            directProviderAccess: false,
-            directFilesystemAccess: false,
-          },
-        };
-      }
-      if (method === "agentSession/start") {
-        return {
-          session: {
-            sessionId: "session-1",
-            threadId: "thread-1",
-            appId: "content-factory-app",
-            workspaceId: "workspace-1",
-            status: "idle",
-            createdAt: "2026-06-07T00:00:00.000Z",
-            updatedAt: "2026-06-07T00:00:00.000Z",
-          },
-        };
-      }
-      if (method === "agentSession/turn/start") {
-        return {
-          turn: {
-            turnId: "turn-1",
-            sessionId: "session-1",
-            threadId: "thread-1",
-            status: "accepted",
-          },
-        };
-      }
-      if (method === "agentSession/runtimeEvents/append") {
-        const appendParams = params as {
-          sessionId: string;
-          turnId: string;
-          runtimeEvents: Array<{ type: string; payload: Record<string, unknown> }>;
-        };
-        expect(appendParams.sessionId).toBe("session-1");
-        expect(appendParams.turnId).toBe("turn-1");
-        expect(appendParams.runtimeEvents[0].type).toBe("artifact.snapshot");
-        expect(appendParams.runtimeEvents[0].payload.kind).toBe(
-          "content_factory.workspace_patch",
-        );
-        expect(
-          (appendParams.runtimeEvents[0].payload.metadata as Record<string, unknown>)
-            .contentFactoryWorkspacePatch,
-        ).toBeTruthy();
-        expect(
-          (appendParams.runtimeEvents[0].payload.metadata as Record<string, Record<string, unknown>>)
-            .agentAppWorker,
-        ).toEqual(
-          expect.objectContaining({
-            workerEntrypoint: "./runtime/worker.mjs",
-            status: "completed",
-            inputSummary: "prompt=生成文章; inputKeys=topic",
-            outputSummary: "1 objects: 文章草稿",
-            outputObjectCount: 1,
-          }),
-        );
-        return {
-          events: [
-            {
-              eventId: "evt-worker",
-              sequence: 1,
-              sessionId: "session-1",
-              threadId: "thread-1",
-              turnId: "turn-1",
-              type: "artifact.snapshot",
-              timestamp: "2026-06-07T00:00:00.000Z",
-              payload: appendParams.runtimeEvents[0].payload,
-            },
-          ],
-        };
-      }
-      throw new Error(`unexpected App Server method: ${method}`);
-    });
-    const host = createHost(userDataDir, () => undefined, request);
-
-    await expect(
-      host.invoke("agent_app_runtime_start_task", {
-        request: {
-          appId: "content-factory-app",
-          workspaceId: "workspace-1",
-          sessionId: "session-1",
-          taskId: "task-1",
-          taskKind: "content.article.generate",
-          prompt: "生成文章",
-          input: { topic: "Agent App Host v3" },
-          eventName: "agent_app_runtime:content-factory-app:task-1",
-          turnId: "turn-1",
-        },
-      }),
-    ).resolves.toMatchObject({
-      appId: "content-factory-app",
-      taskId: "task-1",
-      status: "accepted",
-      worker: {
-        status: "completed",
-        artifactKind: "content_factory.workspace_patch",
-        runtimeEventCount: 1,
-        appendedEventCount: 1,
-      },
-    });
-
-    expect(request).toHaveBeenNthCalledWith(1, "agentAppUiRuntime/status", {
-      appId: "content-factory-app",
-    });
-    expect(request).toHaveBeenNthCalledWith(
-      4,
-      "agentSession/runtimeEvents/append",
-      expect.objectContaining({
-        sessionId: "session-1",
-        turnId: "turn-1",
-      }),
-    );
-  });
-
-  it("agent_app_runtime_start_task 在 worker 失败时写回 runtime.error evidence", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const packageRoot = await createTempUserDataDir();
-    await mkdir(path.join(packageRoot, "runtime"), { recursive: true });
-    await writeFile(
-      path.join(packageRoot, "runtime", "worker.mjs"),
-      "process.stdout.write('{');\n",
-      "utf8",
-    );
-    const request = vi.fn(async (method: string, params?: unknown) => {
-      if (method === "agentAppUiRuntime/status") {
-        return {
-          appId: "content-factory-app",
-          status: "ready",
-          taskRuntime: {
-            enabled: true,
-            packageRootPath: packageRoot,
-            workerEntrypoint: "./runtime/worker.mjs",
-            outputArtifactKind: "content_factory.workspace_patch",
-            taskKinds: ["content.article.generate"],
-            blockers: [],
-            followUps: [],
-            directProviderAccess: false,
-            directFilesystemAccess: false,
-          },
-        };
-      }
-      if (method === "agentSession/start") {
-        return {
-          session: {
-            sessionId: "session-1",
-            threadId: "thread-1",
-            appId: "content-factory-app",
-            workspaceId: "workspace-1",
-            status: "idle",
-            createdAt: "2026-06-07T00:00:00.000Z",
-            updatedAt: "2026-06-07T00:00:00.000Z",
-          },
-        };
-      }
-      if (method === "agentSession/turn/start") {
-        return {
-          turn: {
-            turnId: "turn-1",
-            sessionId: "session-1",
-            threadId: "thread-1",
-            status: "accepted",
-          },
-        };
-      }
-      if (method === "agentSession/runtimeEvents/append") {
-        const appendParams = params as {
-          sessionId: string;
-          turnId: string;
-          runtimeEvents: Array<{ type: string; payload: Record<string, unknown> }>;
-        };
-        expect(appendParams.sessionId).toBe("session-1");
-        expect(appendParams.turnId).toBe("turn-1");
-        expect(appendParams.runtimeEvents[0].type).toBe("runtime.error");
-        expect(appendParams.runtimeEvents[0].payload).toEqual(
-          expect.objectContaining({
-            source: "agent_app_task_worker",
-            appId: "content-factory-app",
-            taskId: "task-1",
-            taskKind: "content.article.generate",
-            errorCode: "worker_invalid_json_output",
-            status: "failed",
-          }),
-        );
-        expect(appendParams.runtimeEvents[0].payload.message).toEqual(
-          expect.stringContaining("Agent App task worker failed:"),
-        );
-        expect(
-          (
-            (appendParams.runtimeEvents[0].payload.metadata as Record<
-              string,
-              Record<string, unknown>
-            >).agentAppWorker
-          ).inputSummary,
-        ).toBe("prompt=生成文章; inputKeys=topic");
-        return {
-          events: [
-            {
-              eventId: "evt-worker-failed",
-              sequence: 1,
-              sessionId: "session-1",
-              threadId: "thread-1",
-              turnId: "turn-1",
-              type: "runtime.error",
-              timestamp: "2026-06-07T00:00:00.000Z",
-              payload: appendParams.runtimeEvents[0].payload,
-            },
-          ],
-        };
-      }
-      throw new Error(`unexpected App Server method: ${method}`);
-    });
-    const host = createHost(userDataDir, () => undefined, request);
-
-    await expect(
-      host.invoke("agent_app_runtime_start_task", {
-        request: {
-          appId: "content-factory-app",
-          workspaceId: "workspace-1",
-          sessionId: "session-1",
-          taskId: "task-1",
-          taskKind: "content.article.generate",
-          prompt: "生成文章",
-          input: { topic: "Agent App Host v3" },
-          eventName: "agent_app_runtime:content-factory-app:task-1",
-          turnId: "turn-1",
-        },
-      }),
-    ).resolves.toMatchObject({
-      appId: "content-factory-app",
-      taskId: "task-1",
-      status: "accepted",
-      worker: {
-        status: "failed",
-        errorCode: "worker_invalid_json_output",
-        runtimeEventCount: 1,
-        appendedEventCount: 1,
-      },
-    });
-  });
-
-  it("agent_app_runtime_start_task 对已存在 session 做幂等投影并继续提交 turn", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const request = vi.fn(async (method: string) => {
-      if (method === "agentAppUiRuntime/status") {
-        return {
-          appId: "content-factory-app",
-          status: "stopped",
-          taskRuntime: {
-            enabled: false,
-            blockers: [],
-            followUps: [],
-            taskKinds: [],
-            directProviderAccess: false,
-            directFilesystemAccess: false,
-          },
-        };
-      }
-      if (method === "agentSession/start") {
-        throw sessionAlreadyExistsError("session-1");
-      }
-      if (method === "agentSession/turn/start") {
-        return {
-          turn: {
-            turnId: "turn-1",
-            sessionId: "session-1",
-            threadId: "thread-1",
-            status: "accepted",
-          },
-        };
-      }
-      throw new Error(`unexpected App Server method: ${method}`);
-    });
-    const host = createHost(userDataDir, () => undefined, request);
-
-    await expect(
-      host.invoke("agent_app_runtime_start_task", {
-        request: {
-          appId: "content-factory-app",
-          workspaceId: "workspace-1",
-          sessionId: "session-1",
-          taskId: "task-1",
-          taskKind: "content_factory.write",
-          prompt: "继续同一个 App task",
-          turnId: "turn-1",
-        },
-      }),
-    ).resolves.toMatchObject({
-      appId: "content-factory-app",
-      taskId: "task-1",
-      sessionId: "session-1",
-      turnId: "turn-1",
-      status: "accepted",
-    });
-    expect(request.mock.calls.map(([method]) => method)).toEqual([
-      "agentAppUiRuntime/status",
-      "agentSession/start",
-      "agentSession/turn/start",
-    ]);
-  });
-
-  it("agent_app_runtime_get_task 从 agentSession/read 投影 task snapshot 状态", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const detail = { thread_id: "thread-1", pending_requests: [] };
-    const request = vi.fn(async (method: string) => {
-      if (method === "agentSession/read") {
-        return {
-          session: {
-            sessionId: "session-1",
-            threadId: "thread-1",
-            appId: "content-factory-app",
-            workspaceId: "workspace-1",
-            status: "waitingAction",
-            createdAt: "2026-06-07T00:00:00.000Z",
-            updatedAt: "2026-06-07T00:00:00.000Z",
-          },
-          turns: [],
-          detail,
-        };
-      }
-      throw new Error(`unexpected App Server method: ${method}`);
-    });
-    const host = createHost(userDataDir, () => undefined, request);
-
-    await expect(
-      host.invoke("agent_app_runtime_get_task", {
-        request: {
-          appId: "content-factory-app",
-          taskId: "task-1",
-          sessionId: "session-1",
-        },
-      }),
-    ).resolves.toEqual({
-      appId: "content-factory-app",
-      taskId: "task-1",
-      sessionId: "session-1",
+    agentAppRuntimeTaskHostGetTaskMock.mockResolvedValueOnce({
       status: "thread_read_available",
-      taskStatus: "blocked",
-      taskEvents: [],
-      threadRead: detail,
     });
-    expect(request).toHaveBeenCalledWith("agentSession/read", {
-      sessionId: "session-1",
-    });
-  });
-
-  it("agent_app_runtime_cancel_task 缺少 turnId 时先从 agentSession/read 查找活动 turn", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const request = vi.fn(async (method: string, params?: unknown) => {
-      if (method === "agentSession/read") {
-        return {
-          session: {
-            sessionId: "session-1",
-            threadId: "thread-1",
-            appId: "content-factory-app",
-            workspaceId: "workspace-1",
-            status: "running",
-            createdAt: "2026-06-07T00:00:00.000Z",
-            updatedAt: "2026-06-07T00:00:00.000Z",
-          },
-          turns:
-            (params as { sessionId?: string }).sessionId ===
-            "session-without-active-turn"
-              ? [
-                  {
-                    turnId: "turn-completed",
-                    sessionId: "session-without-active-turn",
-                    threadId: "thread-1",
-                    status: "completed",
-                  },
-                ]
-              : [
-                  {
-                    turnId: "turn-completed",
-                    sessionId: "session-1",
-                    threadId: "thread-1",
-                    status: "completed",
-                  },
-                  {
-                    turnId: "turn-running",
-                    sessionId: "session-1",
-                    threadId: "thread-1",
-                    status: "running",
-                  },
-                ],
-        };
-      }
-      if (method === "agentSession/turn/cancel") {
-        return {};
-      }
-      throw new Error(`unexpected App Server method: ${method}`);
-    });
-    const host = createHost(userDataDir, () => undefined, request);
-
-    await expect(
-      host.invoke("agent_app_runtime_cancel_task", {
-        request: {
-          appId: "content-factory-app",
-          taskId: "task-1",
-          sessionId: "session-without-active-turn",
-        },
-      }),
-    ).resolves.toEqual({
-      appId: "content-factory-app",
-      taskId: "task-1",
-      sessionId: "session-without-active-turn",
-      cancelled: false,
-      status: "not_running",
-    });
-    expect(request).toHaveBeenCalledWith("agentSession/read", {
-      sessionId: "session-without-active-turn",
-    });
-
-    await expect(
-      host.invoke("agent_app_runtime_cancel_task", {
-        request: {
-          appId: "content-factory-app",
-          taskId: "task-1",
-          sessionId: "session-1",
-        },
-      }),
-    ).resolves.toEqual({
-      appId: "content-factory-app",
-      taskId: "task-1",
-      sessionId: "session-1",
-      cancelled: true,
+    agentAppRuntimeTaskHostCancelTaskMock.mockResolvedValueOnce({
       status: "cancelled",
     });
-    expect(request).toHaveBeenCalledWith("agentSession/read", {
-      sessionId: "session-1",
-    });
-    expect(request).toHaveBeenCalledWith("agentSession/turn/cancel", {
-      sessionId: "session-1",
-      turnId: "turn-running",
-    });
-  });
-
-  it("agent_app_runtime_submit_host_response 投影 snake_case runtime request 到 action/respond", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const request = vi.fn(async (method: string) => {
-      if (method === "agentSession/action/respond") {
-        return {};
-      }
-      throw new Error(`unexpected App Server method: ${method}`);
-    });
-    const host = createHost(userDataDir, () => undefined, request);
-
-    await expect(
-      host.invoke("agent_app_runtime_submit_host_response", {
-        request: {
-          appId: "content-factory-app",
-          taskId: "task-1",
-          runtimeRequest: {
-            session_id: "session-1",
-            request_id: "request-1",
-            action_type: "ask_user",
-            confirmed: true,
-            response: "继续",
-            user_data: { note: "ok" },
-            metadata: { source: "host-test" },
-            event_name: "agent_app_runtime:host_response",
-            action_scope: {
-              session_id: "session-1",
-              thread_id: "thread-1",
-              turn_id: "turn-1",
-            },
-          },
-        },
-      }),
-    ).resolves.toEqual({
-      appId: "content-factory-app",
-      taskId: "task-1",
+    agentAppRuntimeTaskHostSubmitHostResponseMock.mockResolvedValueOnce({
       status: "submitted",
     });
-    expect(request).toHaveBeenCalledWith("agentSession/action/respond", {
-      sessionId: "session-1",
-      requestId: "request-1",
-      actionType: "ask_user",
-      confirmed: true,
-      response: "继续",
-      userData: { note: "ok" },
-      metadata: { source: "host-test" },
-      eventName: "agent_app_runtime:host_response",
-      actionScope: {
-        sessionId: "session-1",
-        threadId: "thread-1",
-        turnId: "turn-1",
-      },
-    });
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir);
+
+    const startArgs = { request: { taskId: "task-start" } };
+    const getArgs = { request: { taskId: "task-get" } };
+    const cancelArgs = { request: { taskId: "task-cancel" } };
+    const responseArgs = { request: { taskId: "task-response" } };
+
+    await expect(
+      host.invoke("agent_app_runtime_start_task", startArgs),
+    ).resolves.toEqual({ status: "accepted" });
+    await expect(
+      host.invoke("agent_app_runtime_get_task", getArgs),
+    ).resolves.toEqual({ status: "thread_read_available" });
+    await expect(
+      host.invoke("agent_app_runtime_cancel_task", cancelArgs),
+    ).resolves.toEqual({ status: "cancelled" });
+    await expect(
+      host.invoke("agent_app_runtime_submit_host_response", responseArgs),
+    ).resolves.toEqual({ status: "submitted" });
+
+    expect(agentAppRuntimeTaskHostStartTaskMock).toHaveBeenCalledWith(
+      startArgs,
+    );
+    expect(agentAppRuntimeTaskHostGetTaskMock).toHaveBeenCalledWith(getArgs);
+    expect(agentAppRuntimeTaskHostCancelTaskMock).toHaveBeenCalledWith(
+      cancelArgs,
+    );
+    expect(agentAppRuntimeTaskHostSubmitHostResponseMock).toHaveBeenCalledWith(
+      responseArgs,
+    );
   });
 });
 
 describe("ElectronHostCommands system utilities", () => {
-  it("get_voice_shortcut_runtime_status 读取当前语音快捷键注册状态", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const host = createHost(userDataDir);
-    await host.invoke("save_config", {
-      config: {
-        experimental: {
-          voice_input: {
-            shortcut: "Alt+F8",
-          },
-        },
-      },
-    });
-    globalShortcutIsRegisteredMock.mockImplementation(
-      (shortcut: string) => shortcut === "Alt+F8",
-    );
-
-    await expect(
-      host.invoke("get_voice_shortcut_runtime_status"),
-    ).resolves.toEqual({
-      shortcut_registered: true,
-      registered_shortcut: "Alt+F8",
-      fn_supported: process.platform === "darwin",
-      fn_registered: false,
-      fn_fallback_shortcut: "Alt+F8",
-      fn_note: "Fn 按住录音尚未接入；当前使用普通语音快捷键回退。",
-    });
-
-    expect(globalShortcutIsRegisteredMock).toHaveBeenCalledWith("Alt+F8");
-  });
-
-  it("get_voice_shortcut_runtime_status 对无效配置回退默认快捷键", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const host = createHost(userDataDir);
-    await host.invoke("save_config", {
-      config: {
-        experimental: {
-          voice_input: {
-            shortcut: "InvalidKey",
-          },
-        },
-      },
-    });
-    globalShortcutIsRegisteredMock.mockReturnValue(false);
-
-    await expect(
-      host.invoke("get_voice_shortcut_runtime_status"),
-    ).resolves.toEqual({
+  it("系统工具命令应只分发到 SystemUtilityHost", async () => {
+    systemUtilityHostOpenExternalUrlMock.mockResolvedValueOnce({});
+    systemUtilityHostOpenSystemSettingsUrlMock.mockResolvedValueOnce({});
+    systemUtilityHostGetVoiceShortcutRuntimeStatusMock.mockResolvedValueOnce({
       shortcut_registered: false,
-      registered_shortcut: null,
-      fn_supported: process.platform === "darwin",
-      fn_registered: false,
-      fn_fallback_shortcut: "CommandOrControl+Shift+V",
-      fn_note:
-        "语音快捷键配置不可解析，已使用默认普通语音快捷键回退；Fn 按住录音尚未接入。",
+    });
+    systemUtilityHostValidateShortcutMock.mockReturnValueOnce(true);
+    systemUtilityHostGetEnvironmentPreviewMock.mockResolvedValueOnce({
+      entries: [],
+    });
+    systemUtilityHostGetSkillPackageFileAssociationStatusMock.mockReturnValueOnce(
+      { extension: "skill" },
+    );
+    systemUtilityHostSetSkillPackageFileAssociationDefaultMock.mockReturnValueOnce(
+      { changed: false },
+    );
+    systemUtilityHostGetBrowserConnectorSettingsMock.mockReturnValueOnce({
+      enabled: true,
+    });
+    systemUtilityHostGetBrowserConnectorInstallStatusMock.mockReturnValueOnce({
+      status: "not_installed",
+    });
+    systemUtilityHostGetChromeProfileSessionsMock.mockReturnValueOnce([]);
+    systemUtilityHostGetChromeBridgeEndpointInfoMock.mockReturnValueOnce({
+      server_running: false,
+    });
+    systemUtilityHostGetChromeBridgeStatusMock.mockReturnValueOnce({
+      observer_count: 0,
+    });
+    systemUtilityHostGetBrowserBackendPolicyMock.mockReturnValueOnce({
+      priority: ["lime_extension_bridge", "cdp_direct"],
+    });
+    systemUtilityHostGetBrowserBackendsStatusMock.mockReturnValueOnce({
+      backends: [],
+    });
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir);
+
+    const externalArgs = { url: "https://user.limeai.run/login" };
+    await expect(
+      host.invoke("open_external_url", externalArgs),
+    ).resolves.toEqual({});
+
+    const settingsArgs = { url: "ms-settings:clipboard" };
+    await expect(
+      host.invoke("open_system_settings_url", settingsArgs),
+    ).resolves.toEqual({});
+
+    await expect(
+      host.invoke("get_voice_shortcut_runtime_status"),
+    ).resolves.toEqual({ shortcut_registered: false });
+
+    const shortcutArgs = { shortcutStr: "CommandOrControl+Shift+V" };
+    await expect(host.invoke("validate_shortcut", shortcutArgs)).resolves.toBe(
+      true,
+    );
+
+    await expect(host.invoke("get_environment_preview")).resolves.toEqual({
+      entries: [],
+    });
+    await expect(
+      host.invoke("get_skill_package_file_association_status"),
+    ).resolves.toEqual({ extension: "skill" });
+    await expect(
+      host.invoke("set_skill_package_file_association_default"),
+    ).resolves.toEqual({ changed: false });
+    await expect(
+      host.invoke("get_browser_connector_settings_cmd"),
+    ).resolves.toEqual({ enabled: true });
+    await expect(
+      host.invoke("get_browser_connector_install_status_cmd"),
+    ).resolves.toEqual({ status: "not_installed" });
+    await expect(host.invoke("get_chrome_profile_sessions")).resolves.toEqual(
+      [],
+    );
+    await expect(
+      host.invoke("get_chrome_bridge_endpoint_info"),
+    ).resolves.toEqual({ server_running: false });
+    await expect(host.invoke("get_chrome_bridge_status")).resolves.toEqual({
+      observer_count: 0,
+    });
+    await expect(host.invoke("get_browser_backend_policy")).resolves.toEqual({
+      priority: ["lime_extension_bridge", "cdp_direct"],
+    });
+    await expect(host.invoke("get_browser_backends_status")).resolves.toEqual({
+      backends: [],
     });
 
-    expect(globalShortcutIsRegisteredMock).toHaveBeenCalledWith(
-      "CommandOrControl+Shift+V",
+    expect(systemUtilityHostOpenExternalUrlMock).toHaveBeenCalledWith(
+      externalArgs,
     );
-  });
-
-  it("validate_shortcut 在 Electron Host 侧校验常见全局快捷键", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const host = createHost(userDataDir);
-
-    await expect(
-      host.invoke("validate_shortcut", {
-        shortcutStr: "CommandOrControl+Shift+V",
-      }),
-    ).resolves.toBe(true);
-    await expect(
-      host.invoke("validate_shortcut", {
-        request: { shortcut_str: "Alt+F4" },
-      }),
-    ).resolves.toBe(true);
-    await expect(
-      host.invoke("validate_shortcut", {
-        request: { shortcut: "Ctrl+C" },
-      }),
-    ).resolves.toBe(true);
-  });
-
-  it("validate_shortcut 拒绝空值和无法解析的快捷键", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const host = createHost(userDataDir);
-
-    await expect(
-      host.invoke("validate_shortcut", { shortcutStr: "" }),
-    ).rejects.toThrow("快捷键不能为空");
-    await expect(
-      host.invoke("validate_shortcut", {
-        shortcutStr: "InvalidKey",
-      }),
-    ).rejects.toThrow("无法解析快捷键 'InvalidKey'");
-  });
-
-  it("validate_shortcut 拒绝系统输入法保留快捷键", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const host = createHost(userDataDir);
-
-    await expect(
-      host.invoke("validate_shortcut", {
-        shortcutStr: "CommandOrControl+Space",
-      }),
-    ).rejects.toThrow("输入法切换");
-  });
-
-  it("get_environment_preview 返回 current 环境预览且不暴露 diagnostic facade", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const host = createHost(userDataDir);
-    await host.invoke("save_config", {
-      config: {
-        server: {
-          host: "127.0.0.1",
-          port: 8910,
-          api_key: "secret-key",
-        },
-      },
-    });
-
-    const result = (await host.invoke("get_environment_preview")) as Record<
-      string,
-      unknown
-    >;
-    const shellImport = result.shellImport as Record<string, unknown>;
-
-    expect(result).not.toHaveProperty("diagnostic");
-    expect(shellImport).not.toHaveProperty("diagnostic");
-    expect(shellImport).toEqual(
-      expect.objectContaining({
-        enabled: false,
-        status: "disabled",
-        importedCount: 0,
-        durationMs: null,
-      }),
-    );
-    expect(result.entries).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          key: "LIME_API_BASE",
-          value: "http://127.0.0.1:8910",
-          maskedValue: "http://127.0.0.1:8910",
-          sensitive: false,
-        }),
-        expect.objectContaining({
-          key: "LIME_API_KEY",
-          value: "secret-key",
-          maskedValue: "********",
-          sensitive: true,
-        }),
-      ]),
-    );
-  });
-
-  it("voice_models_list_catalog 返回 Electron Host current 目录形态", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const host = createHost(userDataDir);
-
-    await expect(host.invoke("voice_models_list_catalog")).resolves.toEqual([
-      expect.objectContaining({
-        id: "sensevoice-small-int8-2024-07-17",
-        name: "SenseVoice Small INT8",
-        provider: "FunAudioLLM / sherpa-onnx",
-        download_url: expect.stringContaining(
-          "/voice/sensevoice-small-int8-2024-07-17/",
-        ),
-        vad_download_url: expect.stringContaining(
-          "/voice/silero-vad-onnx/silero_vad.onnx",
-        ),
-        runtime: "sherpa-onnx",
-        bundled: false,
-      }),
-    ]);
-  });
-
-  it("voice_models_get_install_state 读取用户数据目录中的本地模型文件", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const host = createHost(userDataDir);
-    const installDir = path.join(
-      userDataDir,
-      "models",
-      "voice",
-      "sensevoice-small-int8-2024-07-17",
-    );
-    await mkdir(installDir, { recursive: true });
-    await Promise.all([
-      writeFile(path.join(installDir, "model.int8.onnx"), "model"),
-      writeFile(path.join(installDir, "tokens.txt"), "tokens"),
-      writeFile(path.join(installDir, "silero_vad.onnx"), "vad"),
-      writeFile(
-        path.join(installDir, "lime-model.json"),
-        JSON.stringify({ installed_at: 1_700_000_000 }),
-      ),
-    ]);
-
-    await expect(
-      host.invoke("voice_models_get_install_state", {
-        modelId: "sensevoice-small-int8-2024-07-17",
-      }),
-    ).resolves.toEqual({
-      model_id: "sensevoice-small-int8-2024-07-17",
-      installed: true,
-      installing: false,
-      install_dir: installDir,
-      model_file: path.join(installDir, "model.int8.onnx"),
-      tokens_file: path.join(installDir, "tokens.txt"),
-      vad_file: path.join(installDir, "silero_vad.onnx"),
-      installed_bytes: 41,
-      last_verified_at: 1_700_000_000,
-      missing_files: [],
-      default_credential_id: null,
-    });
-  });
-
-  it("voice_models_get_install_state 对未安装模型返回缺失文件但不返回 diagnostic facade", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const host = createHost(userDataDir);
-
-    await expect(
-      host.invoke("voice_models_get_install_state", {
-        modelId: "sensevoice-small-int8-2024-07-17",
-      }),
-    ).resolves.toEqual({
-      model_id: "sensevoice-small-int8-2024-07-17",
-      installed: false,
-      installing: false,
-      install_dir: path.join(
-        userDataDir,
-        "models",
-        "voice",
-        "sensevoice-small-int8-2024-07-17",
-      ),
-      model_file: null,
-      tokens_file: null,
-      vad_file: null,
-      installed_bytes: 0,
-      last_verified_at: null,
-      missing_files: ["model.int8.onnx", "tokens.txt", "silero_vad.onnx"],
-      default_credential_id: null,
-    });
-  });
-
-  it("voice_models_download 下载并安装本地模型文件", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const emitted: Array<{ event: string; payload?: unknown }> = [];
-    const host = createHost(userDataDir, (event, payload) => {
-      emitted.push({ event, payload });
-    });
-    const archive = await createVoiceModelArchiveFixture(userDataDir);
-    const vad = Buffer.from("vad");
-
-    await withBinaryServer(
-      {
-        "/voice-model.tar.bz2": archive,
-        "/silero_vad.onnx": vad,
-      },
-      async (baseUrl) => {
-        await expect(
-          host.invoke("voice_models_download", {
-            modelId: "sensevoice-small-int8-2024-07-17",
-            catalogEntry: {
-              id: "sensevoice-small-int8-2024-07-17",
-              download_url: `${baseUrl}/voice-model.tar.bz2`,
-              vad_download_url: `${baseUrl}/silero_vad.onnx`,
-              size_bytes: archive.byteLength,
-            },
-          }),
-        ).resolves.toEqual({
-          state: expect.objectContaining({
-            model_id: "sensevoice-small-int8-2024-07-17",
-            installed: true,
-            installing: false,
-            missing_files: [],
-            installed_bytes: expect.any(Number),
-            model_file: path.join(
-              userDataDir,
-              "models",
-              "voice",
-              "sensevoice-small-int8-2024-07-17",
-              "model.int8.onnx",
-            ),
-            tokens_file: path.join(
-              userDataDir,
-              "models",
-              "voice",
-              "sensevoice-small-int8-2024-07-17",
-              "tokens.txt",
-            ),
-            vad_file: path.join(
-              userDataDir,
-              "models",
-              "voice",
-              "sensevoice-small-int8-2024-07-17",
-              "silero_vad.onnx",
-            ),
-          }),
-        });
-      },
-    );
-
-    const installDir = path.join(
-      userDataDir,
-      "models",
-      "voice",
-      "sensevoice-small-int8-2024-07-17",
-    );
-    await expect(
-      readFile(path.join(installDir, "model.int8.onnx"), "utf8"),
-    ).resolves.toBe("model");
-    await expect(
-      readFile(path.join(installDir, "tokens.txt"), "utf8"),
-    ).resolves.toBe("tokens");
-    await expect(
-      readFile(path.join(installDir, "silero_vad.onnx"), "utf8"),
-    ).resolves.toBe("vad");
-    const manifest = JSON.parse(
-      await readFile(path.join(installDir, "lime-model.json"), "utf8"),
-    ) as Record<string, unknown>;
-    expect(manifest.model_id).toBe("sensevoice-small-int8-2024-07-17");
-    expect(manifest.archive_sha256).toMatch(/^[a-f0-9]{64}$/);
-    expect(emitted.map((entry) => entry.event)).toContain(
-      "voice-model-download-progress",
+    expect(systemUtilityHostOpenSystemSettingsUrlMock).toHaveBeenCalledWith(
+      settingsArgs,
     );
     expect(
-      emitted.some(
-        (entry) =>
-          entry.event === "voice-model-download-progress" &&
-          (entry.payload as Record<string, unknown>)?.phase === "done",
-      ),
-    ).toBe(true);
+      systemUtilityHostGetVoiceShortcutRuntimeStatusMock,
+    ).toHaveBeenCalledOnce();
+    expect(systemUtilityHostValidateShortcutMock).toHaveBeenCalledWith(
+      shortcutArgs,
+    );
+    expect(systemUtilityHostGetEnvironmentPreviewMock).toHaveBeenCalledOnce();
+    expect(
+      systemUtilityHostGetSkillPackageFileAssociationStatusMock,
+    ).toHaveBeenCalledOnce();
+    expect(
+      systemUtilityHostSetSkillPackageFileAssociationDefaultMock,
+    ).toHaveBeenCalledOnce();
+    expect(
+      systemUtilityHostGetBrowserConnectorSettingsMock,
+    ).toHaveBeenCalledOnce();
+    expect(
+      systemUtilityHostGetBrowserConnectorInstallStatusMock,
+    ).toHaveBeenCalledOnce();
+    expect(
+      systemUtilityHostGetChromeProfileSessionsMock,
+    ).toHaveBeenCalledOnce();
+    expect(
+      systemUtilityHostGetChromeBridgeEndpointInfoMock,
+    ).toHaveBeenCalledOnce();
+    expect(systemUtilityHostGetChromeBridgeStatusMock).toHaveBeenCalledOnce();
+    expect(systemUtilityHostGetBrowserBackendPolicyMock).toHaveBeenCalledOnce();
+    expect(
+      systemUtilityHostGetBrowserBackendsStatusMock,
+    ).toHaveBeenCalledOnce();
   });
 
-  it("voice_models_delete 删除本地模型目录并返回未安装状态", async () => {
+  it("voice_models_* 命令应只分发到 VoiceModelHost", async () => {
     const userDataDir = await createTempUserDataDir();
     const host = createHost(userDataDir);
-    const installDir = path.join(
-      userDataDir,
-      "models",
-      "voice",
-      "sensevoice-small-int8-2024-07-17",
-    );
-    await mkdir(installDir, { recursive: true });
-    await Promise.all([
-      writeFile(path.join(installDir, "model.int8.onnx"), "model"),
-      writeFile(path.join(installDir, "tokens.txt"), "tokens"),
-      writeFile(path.join(installDir, "silero_vad.onnx"), "vad"),
-      writeFile(
-        path.join(installDir, "lime-model.json"),
-        JSON.stringify({ installed_at: 1_700_000_000 }),
-      ),
-    ]);
-
-    await expect(
-      host.invoke("voice_models_delete", {
-        modelId: "sensevoice-small-int8-2024-07-17",
-      }),
-    ).resolves.toEqual({
+    const state = {
       model_id: "sensevoice-small-int8-2024-07-17",
       installed: false,
-      installing: false,
-      install_dir: installDir,
-      model_file: null,
-      tokens_file: null,
-      vad_file: null,
-      installed_bytes: 0,
-      last_verified_at: null,
-      missing_files: ["model.int8.onnx", "tokens.txt", "silero_vad.onnx"],
-      default_credential_id: null,
-    });
-    await expect(stat(installDir)).rejects.toThrow();
+    };
+    const stateArgs = { modelId: "sensevoice-small-int8-2024-07-17" };
+    const downloadArgs = {
+      modelId: "sensevoice-small-int8-2024-07-17",
+      catalogEntry: { id: "sensevoice-small-int8-2024-07-17" },
+    };
+    const deleteArgs = { modelId: "sensevoice-small-int8-2024-07-17" };
+    voiceModelHostListCatalogMock.mockReturnValue([{ id: "voice-model" }]);
+    voiceModelHostGetInstallStateMock.mockResolvedValue(state);
+    voiceModelHostDownloadMock.mockResolvedValue({ state });
+    voiceModelHostDeleteMock.mockResolvedValue(state);
+
+    await expect(host.invoke("voice_models_list_catalog")).resolves.toEqual([
+      { id: "voice-model" },
+    ]);
+    await expect(
+      host.invoke("voice_models_get_install_state", stateArgs),
+    ).resolves.toBe(state);
+    await expect(
+      host.invoke("voice_models_download", downloadArgs),
+    ).resolves.toEqual({ state });
+    await expect(host.invoke("voice_models_delete", deleteArgs)).resolves.toBe(
+      state,
+    );
+
+    expect(voiceModelHostListCatalogMock).toHaveBeenCalledOnce();
+    expect(voiceModelHostGetInstallStateMock).toHaveBeenCalledWith(stateArgs);
+    expect(voiceModelHostDownloadMock).toHaveBeenCalledWith(downloadArgs);
+    expect(voiceModelHostDeleteMock).toHaveBeenCalledWith(deleteArgs);
   });
 
-  it("通过系统浏览器打开 http/https 外部链接", async () => {
+  it("通过 Electron Host dispatcher 分发 summary-only 桌面通知", async () => {
     const userDataDir = await createTempUserDataDir();
     const host = createHost(userDataDir);
-    openExternalMock.mockResolvedValueOnce(undefined);
+    const args = {
+      request: {
+        body: " Lime local output · +520 ms ",
+        silent: true,
+        tag: "claw-trace-regression-alert-123",
+        title: " Regression alert: Critical ",
+      },
+    };
 
     await expect(
-      host.invoke("open_external_url", {
-        url: " https://user.limeai.run/login ",
-      }),
-    ).resolves.toEqual({});
+      host.invoke("show_desktop_notification", args),
+    ).resolves.toEqual({ status: "sent" });
 
-    expect(openExternalMock).toHaveBeenCalledWith(
-      "https://user.limeai.run/login",
-    );
-  });
-
-  it("拒绝非 http/https 外部链接", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const host = createHost(userDataDir);
-
-    await expect(
-      host.invoke("open_external_url", { url: "file:///tmp/token" }),
-    ).rejects.toThrow("外部链接只支持 http/https 地址");
-
-    expect(openExternalMock).not.toHaveBeenCalled();
-  });
-
-  it("打开系统设置 scheme 并拒绝普通外链或本地文件", async () => {
-    const userDataDir = await createTempUserDataDir();
-    const host = createHost(userDataDir);
-    openExternalMock.mockResolvedValue(undefined);
-
-    await expect(
-      host.invoke("open_system_settings_url", {
-        url: " x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility ",
-      }),
-    ).resolves.toEqual({});
-    await expect(
-      host.invoke("open_system_settings_url", {
-        url: "ms-settings:clipboard",
-      }),
-    ).resolves.toEqual({});
-    await expect(
-      host.invoke("open_system_settings_url", {
-        url: "https://example.com/settings",
-      }),
-    ).rejects.toThrow(
-      "系统设置链接只支持 x-apple.systempreferences 或 ms-settings scheme",
-    );
-    await expect(
-      host.invoke("open_system_settings_url", {
-        url: "file:///tmp/settings",
-      }),
-    ).rejects.toThrow(
-      "系统设置链接只支持 x-apple.systempreferences 或 ms-settings scheme",
-    );
-
-    expect(openExternalMock).toHaveBeenCalledTimes(2);
-    expect(openExternalMock).toHaveBeenNthCalledWith(
-      1,
-      "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
-    );
-    expect(openExternalMock).toHaveBeenNthCalledWith(
-      2,
-      "ms-settings:clipboard",
-    );
+    expect(showDesktopNotificationMock).toHaveBeenCalledOnce();
+    expect(showDesktopNotificationMock).toHaveBeenCalledWith(args);
   });
 
   it("启动真实 OAuth 本机回调桥并把回调事件广播到 renderer", async () => {

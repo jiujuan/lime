@@ -69,9 +69,12 @@ describe("buildWorkspaceConversationCodingViews", () => {
       turns: [
         {
           id: "turn-1",
+          thread_id: "thread-1",
+          prompt_text: "运行测试",
           status: "running",
-          created_at: 0,
-          updated_at: 0,
+          started_at: "2026-06-24T10:00:00.000Z",
+          created_at: "2026-06-24T10:00:00.000Z",
+          updated_at: "2026-06-24T10:00:00.000Z",
         },
       ],
       currentTurnId: "turn-1",
@@ -82,7 +85,7 @@ describe("buildWorkspaceConversationCodingViews", () => {
           {
             command_id: "command-1",
             status: "running",
-            command_summary: "npm test",
+            command: "npm test",
             process_id: "process-1",
             execution_process_status: "running",
             execution_process_control_status: "registered",
@@ -130,9 +133,12 @@ describe("buildWorkspaceConversationCodingViews", () => {
       turns: [
         {
           id: "turn-1",
+          thread_id: "thread-1",
+          prompt_text: "打开 shell",
           status: "running",
-          created_at: 0,
-          updated_at: 0,
+          started_at: "2026-06-24T10:00:00.000Z",
+          created_at: "2026-06-24T10:00:00.000Z",
+          updated_at: "2026-06-24T10:00:00.000Z",
         },
       ],
       currentTurnId: "turn-1",
@@ -143,7 +149,7 @@ describe("buildWorkspaceConversationCodingViews", () => {
           {
             command_id: "command-1",
             status: "running",
-            command_summary: "python manage.py shell",
+            command: "python manage.py shell",
             process_id: "process-1",
             execution_process_status: "running",
             execution_process_control_status: "registered",

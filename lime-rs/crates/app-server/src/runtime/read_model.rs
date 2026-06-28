@@ -20,12 +20,33 @@ use app_server_protocol::AgentInput;
 use app_server_protocol::AgentSession;
 use app_server_protocol::AgentSessionActionScope;
 use app_server_protocol::AgentSessionActionType;
+use app_server_protocol::AgentSessionReadParams;
 use app_server_protocol::AgentSessionReplayedActionRequired;
 use app_server_protocol::AgentTurn;
 use app_server_protocol::AgentTurnStatus;
 use serde_json::json;
 
-pub(super) fn runtime_session_read_detail(stored: &StoredSession) -> serde_json::Value {
+#[derive(Debug, Clone, Copy, Default)]
+pub(super) struct ReadDetailOptions {
+    history_limit: Option<usize>,
+    history_offset: usize,
+    history_before_message_id: Option<i64>,
+}
+
+impl ReadDetailOptions {
+    pub(super) fn from_params(params: &AgentSessionReadParams) -> Self {
+        Self {
+            history_limit: params.history_limit.map(|value| value as usize),
+            history_offset: params.history_offset.unwrap_or_default() as usize,
+            history_before_message_id: params.history_before_message_id.filter(|value| *value > 0),
+        }
+    }
+}
+
+pub(super) fn runtime_session_read_detail_with_options(
+    stored: &StoredSession,
+    options: ReadDetailOptions,
+) -> serde_json::Value {
     let product_workspace = product_workspace_projection::product_workspace_from_events(
         &stored.session,
         &stored.events,
@@ -47,7 +68,9 @@ pub(super) fn runtime_session_read_detail(stored: &StoredSession) -> serde_json:
         product_profile_actions.clone(),
     );
     let queued_turns = queued_turn_snapshots(stored);
-    let messages = runtime_session_messages(stored);
+    let all_messages = runtime_session_messages(stored);
+    let messages_count = all_messages.len();
+    let (messages, cursor_start_index) = apply_history_window(all_messages, options);
     let mut items = thread_item_projection::thread_items_from_events(stored);
     items.extend(tool_item_projection::tool_items_from_events(stored));
     items.extend(file_checkpoint_projection::file_artifact_items_from_events(
@@ -55,7 +78,10 @@ pub(super) fn runtime_session_read_detail(stored: &StoredSession) -> serde_json:
     ));
     items.extend(runtime_error_items_from_events(stored));
     sort_read_detail_items(&mut items);
-    let messages_count = messages.len();
+    let loaded_count = messages.len();
+    let oldest_message_id = messages.first().and_then(message_numeric_id);
+    let history_limit = options.history_limit.unwrap_or(messages_count);
+    let history_truncated = loaded_count < messages_count;
     let mut detail = json!({
         "id": stored.session.session_id,
         "session_id": stored.session.session_id,
@@ -67,14 +93,14 @@ pub(super) fn runtime_session_read_detail(stored: &StoredSession) -> serde_json:
         "execution_strategy": session_execution_strategy(&stored.session),
         "execution_runtime": session_execution_runtime(&stored.session),
         "messages_count": messages_count,
-        "history_limit": messages_count,
-        "history_offset": 0,
+        "history_limit": history_limit,
+        "history_offset": options.history_offset,
         "history_cursor": {
-            "oldest_message_id": null,
-            "start_index": 0,
-            "loaded_count": messages_count,
+            "oldest_message_id": oldest_message_id,
+            "start_index": cursor_start_index,
+            "loaded_count": loaded_count,
         },
-        "history_truncated": false,
+        "history_truncated": history_truncated,
         "messages": messages,
         "turns": stored.turns,
         "items": items,
@@ -90,6 +116,39 @@ pub(super) fn runtime_session_read_detail(stored: &StoredSession) -> serde_json:
         }
     }
     detail
+}
+
+fn apply_history_window(
+    messages: Vec<serde_json::Value>,
+    options: ReadDetailOptions,
+) -> (Vec<serde_json::Value>, usize) {
+    let mut messages = if let Some(before_message_id) = options.history_before_message_id {
+        messages
+            .into_iter()
+            .filter(|message| {
+                message_numeric_id(message)
+                    .map(|id| id < before_message_id)
+                    .unwrap_or(true)
+            })
+            .collect::<Vec<_>>()
+    } else {
+        messages
+    };
+    let available = messages.len();
+    let Some(limit) = options.history_limit else {
+        return (messages, 0);
+    };
+    let end = available.saturating_sub(options.history_offset.min(available));
+    let start = end.saturating_sub(limit);
+    (messages.drain(start..end).collect(), start)
+}
+
+fn message_numeric_id(message: &serde_json::Value) -> Option<i64> {
+    message.get("id").and_then(|value| match value {
+        serde_json::Value::Number(number) => number.as_i64(),
+        serde_json::Value::String(value) => value.parse::<i64>().ok(),
+        _ => None,
+    })
 }
 
 fn session_archived_at(session: &AgentSession) -> Option<String> {

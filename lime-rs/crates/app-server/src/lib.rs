@@ -1,3 +1,4 @@
+mod agent_app_packages;
 mod agent_ui_event_schema;
 mod agent_ui_sequence_verifier;
 #[cfg(feature = "aster-backend")]

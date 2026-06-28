@@ -58,9 +58,17 @@ describe("EmptyStateComposerPanel", () => {
     ).toBeTruthy();
   });
 
-  it("首页空态输入区加号菜单应显示插件入口并打开空态面板", () => {
+  it("首页空态输入区加号菜单应显示写文章插件入口", () => {
     const container = renderPanel({
       isGeneralTheme: true,
+      pluginSuggestions: [
+        {
+          pluginId: "content-factory-app",
+          displayName: "写文章",
+          trigger: "@写文章",
+          description: "生成文章草稿",
+        },
+      ],
     });
 
     openPlusMenuPanel(container, "plugins");
@@ -74,7 +82,47 @@ describe("EmptyStateComposerPanel", () => {
     expect(
       document.body.querySelector('[data-testid="inputbar-plus-panel-plugins"]')
         ?.textContent,
-    ).toContain("当前没有可选插件");
+    ).toContain("写文章");
+    expect(
+      document.body.querySelector('[data-testid="inputbar-plus-panel-plugins"]')
+        ?.textContent,
+    ).not.toContain("当前没有可选插件");
+  });
+
+  it("首页空态输入区选择写文章插件时应写回 @写文章 触发前缀", async () => {
+    const container = renderPanel({
+      input: "写一篇公众号文章",
+      isGeneralTheme: true,
+      pluginSuggestions: [
+        {
+          pluginId: "content-factory-app",
+          displayName: "写文章",
+          trigger: "@写文章",
+          description: "生成文章草稿",
+        },
+      ],
+    });
+
+    openPlusMenuPanel(container, "plugins");
+
+    const option = document.body.querySelector(
+      '[data-testid="inputbar-plugin-option"]',
+    ) as HTMLButtonElement | null;
+    expect(option).toBeTruthy();
+
+    await act(async () => {
+      option?.click();
+      await Promise.resolve();
+    });
+
+    expect(
+      container.querySelector('[data-testid="inputbar-plugin-badge"]')
+        ?.textContent,
+    ).toContain("写文章");
+    expect(
+      (container.querySelector("textarea") as HTMLTextAreaElement | null)
+        ?.value,
+    ).toBe("@写文章 写一篇公众号文章");
   });
 
   it("首页空态输入区选择插件时应写回显式触发前缀并显示插件标记", async () => {

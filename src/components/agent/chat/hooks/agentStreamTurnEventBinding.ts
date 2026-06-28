@@ -112,6 +112,31 @@ function buildAgentEventPerformanceTrace(params: {
   };
 }
 
+function readRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function readRuntimeErrorMessage(payload: unknown): string {
+  const root = readRecord(payload);
+  const params = readRecord(root?.params);
+  const event = readRecord(params?.event);
+  const eventPayload = readRecord(event?.payload);
+  const directPayload = readRecord(root?.payload);
+  const source = eventPayload ?? directPayload ?? params ?? root;
+  const message =
+    source?.message ??
+    source?.errorMessage ??
+    source?.error_message ??
+    source?.error ??
+    event?.event_type ??
+    root?.type;
+  return typeof message === "string" && message.trim()
+    ? message.trim()
+    : "Runtime error";
+}
+
 interface StreamObserver {
   onTextDelta?: (delta: string, accumulated: string) => void;
   onComplete?: (content: string) => void;
@@ -610,6 +635,10 @@ export async function registerAgentStreamTurnEventBinding(
         );
       }
       if (!data) {
+        if (eventType === "runtime_error" || eventType === "runtime.error") {
+          dispatchSyntheticError(readRuntimeErrorMessage(event.payload));
+          return;
+        }
         if (!terminalRecoveryPollStarted) {
           clearDeferredRecoveryPoll();
         }

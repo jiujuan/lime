@@ -3,8 +3,15 @@ import { webcrypto } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { safeInvoke } from "@/lib/dev-bridge";
 import contentFactoryFixture from "@/features/agent-app/fixtures/content-factory-app.json";
+import {
+  buildAgentAppManifestHash,
+  buildAgentAppPackageHash,
+} from "@/features/agent-app/install/packageIdentity";
 import { buildCloudReleasePackageIdentity } from "@/features/agent-app/install/cloudBootstrap";
-import { buildCloudReleaseSignaturePayload } from "@/features/agent-app/install/cloudReleaseSignature";
+import {
+  buildCloudReleaseSignaturePayload,
+  verifyCloudReleaseSignature,
+} from "@/features/agent-app/install/cloudReleaseSignature";
 import { buildAgentAppPackageCacheEntry } from "@/features/agent-app/install/packageCache";
 import { buildWorkflowRuntimeCapabilityProfile } from "@/features/agent-app/runtime/workflowRuntimeCapabilityProfile";
 import type { ShellDescriptor } from "@/features/agent-app/shell";
@@ -55,6 +62,14 @@ const PACKAGE_HASH =
   "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const MANIFEST_HASH =
   "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+const LOCAL_PLUGIN_MANIFEST = {
+  schemaVersion: "lime.plugin.package.v1",
+  id: "content-factory-app",
+  version: "2.0.0",
+  contributions: {
+    runtime: "./app.runtime.yaml",
+  },
+};
 
 function buildCloudApp(
   overrides: Partial<CloudBootstrapApp> = {},
@@ -171,13 +186,13 @@ async function buildSignedCloudApp(): Promise<{
       ...app,
       signatureProof: {
         ...proofDraft,
-        signature: Buffer.from(signature).toString("base64"),
+        signature: Buffer.from(new Uint8Array(signature)).toString("base64"),
       },
     },
     trustRoot: {
       publicKeyId: "agent-app-root-2026",
       algorithm: "RSASSA-PKCS1-v1_5-SHA256",
-      publicKey: Buffer.from(publicKey).toString("base64"),
+      publicKey: Buffer.from(new Uint8Array(publicKey)).toString("base64"),
       appIds: [app.appId],
     },
   };
@@ -367,7 +382,8 @@ describe("agentApps API", () => {
             sourceKind: "local_folder",
             sourceUri: LOCAL_APP_DIR,
             appDir: LOCAL_APP_DIR,
-            appMarkdown: "",
+            manifestSource: "plugin_json",
+            pluginManifest: LOCAL_PLUGIN_MANIFEST,
             manifest,
             manifestHash: "manifest-local-1",
             packageHash: "package-local-1",
@@ -451,7 +467,8 @@ describe("agentApps API", () => {
             sourceKind: "local_folder",
             sourceUri: LOCAL_APP_DIR,
             appDir: LOCAL_APP_DIR,
-            appMarkdown: "",
+            manifestSource: "plugin_json",
+            pluginManifest: LOCAL_PLUGIN_MANIFEST,
             manifest,
             manifestHash: "manifest-local-1",
             packageHash: "package-local-1",
@@ -499,14 +516,16 @@ describe("agentApps API", () => {
   });
 
   it("本地企业定制 Agent App 未激活注册码时应阻断 sideload", async () => {
-    const manifest = {
+    const manifest: AppManifest & {
+      metadata: { distribution: "enterprise_custom" };
+    } = {
       ...(contentFactoryFixture as AppManifest),
       name: "enterprise-custom-app",
       displayName: "企业定制 App",
       metadata: {
         distribution: "enterprise_custom",
       },
-    } satisfies AppManifest;
+    };
     const inspectedAt = "2026-05-15T00:00:00.000Z";
     appServerRequestMock.mockImplementation(async (method) => {
       if (method === "agentAppLocalPackage/inspect") {
@@ -515,7 +534,8 @@ describe("agentApps API", () => {
             sourceKind: "local_folder",
             sourceUri: LOCAL_APP_DIR,
             appDir: LOCAL_APP_DIR,
-            appMarkdown: "",
+            manifestSource: "plugin_json",
+            pluginManifest: LOCAL_PLUGIN_MANIFEST,
             manifest,
             manifestHash: "manifest-local-1",
             packageHash: "package-local-1",
@@ -555,7 +575,8 @@ describe("agentApps API", () => {
             sourceKind: "local_folder",
             sourceUri: LOCAL_APP_DIR,
             appDir: LOCAL_APP_DIR,
-            appMarkdown: "",
+            manifestSource: "plugin_json",
+            pluginManifest: LOCAL_PLUGIN_MANIFEST,
             manifest,
             manifestHash: "manifest-local-review",
             packageHash: "package-local-review",
@@ -874,6 +895,13 @@ describe("agentApps API", () => {
 
   it("审查 remote Cloud release 时应由可信根验证 signatureProof", async () => {
     const { app, trustRoot } = await buildSignedCloudApp();
+    await expect(
+      verifyCloudReleaseSignature({
+        app,
+        trustRoots: [trustRoot],
+        crypto: webcrypto as unknown as Crypto,
+      }),
+    ).resolves.toBe("verified");
 
     const result = await reviewCloudAgentAppRelease({
       app,
@@ -1036,6 +1064,117 @@ describe("agentApps API", () => {
       "agentAppInstalled/save",
       expect.anything(),
     );
+  });
+
+  it("直接安装 seeded content-factory-app 应使用本地 fixture 包并写入 installed state", async () => {
+    const catalog = await getAgentAppCloudCatalog();
+    const app = catalog.payload.apps[0]!;
+    appServerRequestMock.mockImplementation(async (method, args) => {
+      if (method === "agentAppInstalled/save") {
+        return { result: (args as { state: unknown }).state };
+      }
+      throw new Error(`unexpected method ${method}`);
+    });
+
+    const state = await installCloudAgentAppRelease({
+      app,
+      catalogSource: catalog.source,
+    });
+
+    expect(state).toMatchObject({
+      appId: "content-factory-app",
+      manifest: {
+        version: (contentFactoryFixture as AppManifest).version,
+        agentRuntime: {
+          intents: expect.arrayContaining([
+            expect.objectContaining({
+              key: "content_article_generate",
+              aliases: ["@写文章"],
+            }),
+          ]),
+        },
+      },
+      identity: {
+        sourceKind: "cloud_release",
+        sourceUri: app.packageUrl,
+        appVersion: app.version,
+        packageHash: app.packageHash,
+        manifestHash: app.manifestHash,
+      },
+      setup: {
+        cloudReleaseEvidence: {
+          status: "warning",
+          signaturePolicy: "optional",
+          signatureVerificationStatus: "not_configured",
+          packageHashMatched: true,
+          manifestHashMatched: true,
+          packageVerificationStatus: "verified",
+        },
+      },
+    });
+    expect(appServerRequestMock).toHaveBeenCalledTimes(1);
+    expect(appServerRequestMock).toHaveBeenCalledWith(
+      "agentAppInstalled/save",
+      {
+        state: expect.objectContaining({
+          appId: "content-factory-app",
+          setup: expect.objectContaining({
+            cloudReleaseEvidence: expect.objectContaining({
+              signaturePolicy: "optional",
+              packageVerificationStatus: "verified",
+            }),
+          }),
+        }),
+      },
+    );
+    expect(appServerRequestMock).not.toHaveBeenCalledWith(
+      "agentAppPackage/fetchCloud",
+      expect.anything(),
+    );
+  });
+
+  it("审查 seeded content-factory-app 应使用本地 fixture 包且不拉远端", async () => {
+    const catalog = await getAgentAppCloudCatalog();
+    const app = catalog.payload.apps[0]!;
+
+    const result = await reviewCloudAgentAppRelease({
+      app,
+      catalogSource: catalog.source,
+    });
+
+    expect(result.review.releaseEvidence).toMatchObject({
+      status: "warning",
+      sourceKind: "explicit_manifest",
+      packageVerificationStatus: "verified",
+      signaturePolicy: "optional",
+      signatureVerificationStatus: "not_configured",
+      packageHashMatched: true,
+      manifestHashMatched: true,
+      blockerCodes: [],
+    });
+    expect(result.state).toMatchObject({
+      appId: "content-factory-app",
+      setup: {
+        cloudReleaseEvidence: expect.objectContaining({
+          status: "warning",
+          signaturePolicy: "optional",
+          signatureVerificationStatus: "not_configured",
+          packageVerificationStatus: "verified",
+        }),
+      },
+      manifest: {
+        version: (contentFactoryFixture as AppManifest).version,
+        agentRuntime: {
+          intents: expect.arrayContaining([
+            expect.objectContaining({
+              key: "content_article_generate",
+              aliases: ["@写文章"],
+            }),
+          ]),
+        },
+      },
+    });
+    expect(appServerRequestMock).not.toHaveBeenCalled();
   });
 
   it("审查 Cloud release 时 verified cache hash mismatch 必须阻断", async () => {
@@ -1203,18 +1342,24 @@ describe("agentApps API", () => {
     });
   });
 
-  it("无云端上下文时 seeded content-factory-app 也必须先注册码激活", async () => {
+  it("无云端上下文时 seeded content-factory-app 不应要求注册码", async () => {
     const result = await getAgentAppCloudCatalog();
+    const manifest = contentFactoryFixture as AppManifest;
 
     expect(result.source).toBe("seeded");
     expect(result.payload.apps[0]).toMatchObject({
       appId: "content-factory-app",
-      registrationRequired: true,
-      registrationState: "required",
-      enabled: false,
-      packageUrl: "",
-      packageHash: "",
-      manifestHash: "",
+      version: manifest.version,
+      releaseId: `seeded-content-factory-app-${manifest.version}`,
+      registrationRequired: false,
+      registrationState: "not_required",
+      enabled: true,
+      packageUrl: `https://seeded.local/agent-apps/content-factory-app/${manifest.version}.lapp`,
+      packageHash: buildAgentAppPackageHash({
+        manifest,
+        sourceUri: `seeded:content-factory-app@${manifest.version}`,
+      }),
+      manifestHash: buildAgentAppManifestHash(manifest),
     });
   });
 

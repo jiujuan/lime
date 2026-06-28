@@ -2634,7 +2634,7 @@ export function useWorkspaceSendActions({
         }
       }
 
-      const hasMatchedWorkspaceMentionCommand = Boolean(
+      const hasMatchedWorkspaceMentionCommandWithoutAgentTurnRoute = Boolean(
         parsedImageWorkbenchCommand ||
           parsedPosterWorkbenchCommand ||
           parsedCoverWorkbenchCommand ||
@@ -2659,7 +2659,6 @@ export function useWorkspaceSendActions({
           parsedPresentationWorkbenchCommand ||
           parsedFormWorkbenchCommand ||
           parsedWebpageWorkbenchCommand ||
-          agentTurnMentionRoute ||
           parsedWritingWorkbenchCommand ||
           parsedChannelPreviewWorkbenchCommand ||
           parsedUploadWorkbenchCommand ||
@@ -2671,7 +2670,7 @@ export function useWorkspaceSendActions({
       const shouldResolvePluginActivation =
         !sendOptions?.purpose &&
         !hasBoundSkillLaunch &&
-        !hasMatchedWorkspaceMentionCommand &&
+        !hasMatchedWorkspaceMentionCommandWithoutAgentTurnRoute &&
         sourceText.trim().startsWith("@");
       if (shouldResolvePluginActivation) {
         const pluginSessionId = await ensureCommandSessionId();
@@ -2697,6 +2696,8 @@ export function useWorkspaceSendActions({
             sendOptions,
             resolution: pluginActivationResolution,
           });
+          completedMentionCommandUsage = null;
+          completedMentionUsage = null;
           hasBoundSkillLaunch = true;
         }
       }

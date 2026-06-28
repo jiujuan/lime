@@ -8,9 +8,7 @@ import {
   shouldUseConversationProgressiveRender,
 } from "../projection/messageRenderWindowProjection";
 import type { Message } from "../types";
-import {
-  MESSAGE_LIST_RENDER_WINDOW_SETTINGS,
-} from "./messageListConstants";
+import { MESSAGE_LIST_RENDER_WINDOW_SETTINGS } from "./messageListConstants";
 
 interface UseMessageListRenderWindowOptions {
   isSending: boolean;
@@ -80,6 +78,7 @@ export function useMessageListRenderWindow({
     messageRenderWindowSettings.minimumDelayMs;
   const shouldUseProgressiveRender = shouldUseConversationProgressiveRender({
     isSending,
+    isRestoredHistoryWindow,
     visibleMessageCount: visibleMessages.length,
     settings: messageRenderWindowSettings,
   });
@@ -91,6 +90,7 @@ export function useMessageListRenderWindow({
   const [renderedMessageCount, setRenderedMessageCount] = useState(() =>
     resolveInitialConversationRenderedMessageCount({
       isSending,
+      isRestoredHistoryWindow,
       visibleMessageCount: visibleMessages.length,
       settings: messageRenderWindowSettings,
     }),

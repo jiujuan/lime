@@ -322,9 +322,7 @@ describe("TaskCenterUtilityToolbar", () => {
     expect(toggle?.textContent?.trim()).toBe("");
     expect(toggle?.getAttribute("aria-expanded")).toBe("false");
     expect(toggle?.getAttribute("aria-label")).toBe("打开专家信息");
-    expect(toggle?.className).not.toContain(
-      "lime-chrome-tab-active-surface",
-    );
+    expect(toggle?.className).not.toContain("lime-chrome-tab-active-surface");
 
     act(() => {
       toggle?.click();
@@ -380,9 +378,7 @@ describe("TaskCenterUtilityToolbar", () => {
 
     expect(expertToggle?.getAttribute("aria-expanded")).toBe("true");
     expect(expertToggle?.getAttribute("aria-label")).toBe("关闭专家信息");
-    expect(expertToggle?.className).toContain(
-      "lime-chrome-tab-active-surface",
-    );
+    expect(expertToggle?.className).toContain("lime-chrome-tab-active-surface");
     expect(expertToggle?.textContent).toContain("3");
 
     expect(workbenchToggle?.disabled).toBe(true);
@@ -452,6 +448,76 @@ describe("TaskCenterUtilityToolbar", () => {
     expect(disabledToggle?.disabled).toBe(true);
     expect(disabledToggle?.getAttribute("aria-expanded")).toBe("false");
     expect(disabledToggle?.textContent).toContain("4");
+  });
+
+  it("Trace 入口应作为独立右侧 surface 图标态展开和收起", () => {
+    const onToggleTracePanel = vi.fn();
+    const container = renderToolbar({
+      showTraceToggle: true,
+      tracePanelVisible: false,
+      onToggleTracePanel,
+    });
+
+    const toggle = container.querySelector<HTMLButtonElement>(
+      '[data-testid="task-center-trace-toggle"]',
+    );
+
+    expect(toggle).not.toBeNull();
+    expect(toggle?.textContent?.trim()).toBe("");
+    expect(toggle?.getAttribute("aria-expanded")).toBe("false");
+    expect(toggle?.getAttribute("aria-label")).toBe("打开 Trace");
+    expect(toggle?.getAttribute("title")).toBe("Trace");
+    expect(toggle?.className).not.toContain("lime-chrome-tab-active-surface");
+
+    act(() => {
+      toggle?.click();
+    });
+
+    expect(onToggleTracePanel).toHaveBeenCalledTimes(1);
+
+    const activeContainer = renderToolbar({
+      showTraceToggle: true,
+      tracePanelVisible: false,
+      onToggleTracePanel,
+      rightSurfaceLaunchers: [
+        {
+          kind: "trace",
+          active: true,
+          disabled: false,
+          pendingCount: 2,
+          collapseTarget: "topToolbar",
+        },
+      ],
+    });
+    const activeToggle = activeContainer.querySelector<HTMLButtonElement>(
+      '[data-testid="task-center-trace-toggle"]',
+    );
+
+    expect(activeToggle?.getAttribute("aria-expanded")).toBe("true");
+    expect(activeToggle?.getAttribute("aria-label")).toBe("关闭 Trace");
+    expect(activeToggle?.className).toContain("lime-chrome-tab-active-surface");
+    expect(activeToggle?.textContent).toContain("2");
+
+    const disabledContainer = renderToolbar({
+      showTraceToggle: true,
+      tracePanelVisible: false,
+      rightSurfaceLaunchers: [
+        {
+          kind: "trace",
+          active: false,
+          disabled: true,
+          pendingCount: 1,
+          collapseTarget: "topToolbar",
+        },
+      ],
+    });
+    const disabledToggle = disabledContainer.querySelector<HTMLButtonElement>(
+      '[data-testid="task-center-trace-toggle"]',
+    );
+
+    expect(disabledToggle?.disabled).toBe(true);
+    expect(disabledToggle?.getAttribute("aria-expanded")).toBe("false");
+    expect(disabledToggle?.textContent).toContain("1");
   });
 
   it("右侧 surface projection 应能驱动文件入口展开态、badge 和点击回调", () => {
@@ -1645,9 +1711,7 @@ describe("TaskCenterUtilityToolbar", () => {
     expect(planRevision?.getAttribute("data-plan-revision-id")).toBe(
       "proposed_plan:task-rail-2",
     );
-    expect(planRevision?.getAttribute("data-plan-source")).toBe(
-      "thread_item",
-    );
+    expect(planRevision?.getAttribute("data-plan-source")).toBe("thread_item");
     expect(planRevision?.getAttribute("data-plan-turn-id")).toBe("turn-1");
     expect(planSection?.textContent).toContain("读取任务区域");
     expect(planSection?.textContent).toContain("恢复运行计划");

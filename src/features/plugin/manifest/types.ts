@@ -25,6 +25,7 @@ export type PluginHistoryFallback = "artifactPreview" | "chatOnly";
 export type PluginWorkspaceSelectionPolicy = "last" | "primary" | "manual";
 
 export interface PluginManifest {
+  schemaVersion?: string;
   id?: string;
   name?: string;
   displayName?: string;
@@ -34,13 +35,17 @@ export interface PluginManifest {
   categories?: string[];
   capabilities?: string[];
   author?: PluginManifestAuthor;
+  publisher?: PluginManifestAuthor;
   homepage?: string;
   repository?: string;
   license?: string;
   interface?: PluginManifestInterface;
+  contributions?: PluginManifestContributions;
   componentPaths?: PluginManifestComponentPaths;
   skills?: PluginSkillDeclaration[];
   agentApps?: PluginAgentAppDeclaration[];
+  subagents?: PluginSubagentDeclaration[];
+  workflows?: PluginWorkflowDeclaration[];
   connectors?: PluginConnectorDeclaration[];
   mcpServers?: PluginMcpServerDeclaration[];
   artifactRenderers?: PluginArtifactRendererDeclaration[];
@@ -55,10 +60,38 @@ export interface PluginManifestAuthor {
 }
 
 export interface PluginManifestComponentPaths {
+  agents?: string;
+  subagents?: string;
   skills?: string;
+  cli?: string;
+  clis?: string;
+  connectors?: string;
+  resources?: string;
+  workflows?: string;
+  artifacts?: string;
+  locales?: string;
+  examples?: string;
   mcpServers?: string | Record<string, unknown>;
   apps?: string;
   hooks?: string;
+  runtime?: string;
+  workbench?: string;
+}
+
+export interface PluginManifestContributions {
+  runtime?: string;
+  workbench?: string;
+  skills?: string;
+  subagents?: string;
+  clis?: string;
+  connectors?: string;
+  hooks?: string;
+  resources?: string;
+  workflows?: string;
+  artifacts?: string;
+  locales?: string;
+  examples?: string;
+  mcpServers?: string | Record<string, unknown>;
 }
 
 export interface PluginManifestInterface {
@@ -96,6 +129,35 @@ export interface PluginAgentAppDeclaration {
   entryKey?: string;
 }
 
+export interface PluginSubagentDeclaration {
+  id: string;
+  title: string;
+  description?: string;
+  activation?: string;
+  required?: boolean;
+  skills?: string[];
+}
+
+export interface PluginWorkflowStepDeclaration {
+  id: string;
+  title?: string;
+  subagent?: string;
+  skillRefs?: string[];
+  expectedOutput?: string;
+}
+
+export interface PluginWorkflowDeclaration {
+  key: string;
+  title?: string;
+  path?: string;
+  taskKind?: string;
+  triggerIntents?: string[];
+  outputArtifactKind?: string;
+  steps?: PluginWorkflowStepDeclaration[];
+  humanReview?: boolean;
+  required?: boolean;
+}
+
 export interface PluginConnectorDeclaration {
   id: string;
   title: string;
@@ -113,6 +175,7 @@ export interface PluginMcpServerDeclaration {
 export interface PluginActivationEntryDeclaration {
   key: string;
   title: string;
+  aliases?: string[];
   kind: PluginActivationEntryKind;
   intent?: PluginActivationIntent;
   defaultObjectKind?: string;
@@ -178,6 +241,7 @@ export interface PluginContractProvenance {
 export interface PluginContract {
   schemaVersion: 1;
   id: string;
+  packageSchemaVersion?: string;
   name?: string;
   displayName: string;
   version: string;
@@ -186,9 +250,12 @@ export interface PluginContract {
   categories: string[];
   capabilities: string[];
   interface?: PluginManifestInterface;
+  contributions?: PluginManifestContributions;
   componentPaths: PluginManifestComponentPaths;
   skills: PluginSkillDeclaration[];
   agentApps: PluginAgentAppDeclaration[];
+  subagents: PluginSubagentDeclaration[];
+  workflows: PluginWorkflowDeclaration[];
   connectors: PluginConnectorDeclaration[];
   mcpServers: PluginMcpServerDeclaration[];
   artifactRenderers: PluginArtifactRendererDeclaration[];

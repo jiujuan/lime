@@ -99,12 +99,71 @@ export interface WorkspaceProductProfilePreviewField {
   value: string;
 }
 
+export interface WorkspaceProductProfileResearchRound {
+  id: string;
+  title: string;
+  query?: string | null;
+  status?: string | null;
+  summary?: string | null;
+  citations: string[];
+}
+
+export interface WorkspaceProductProfileTitleCandidate {
+  id: string;
+  title: string;
+  angle?: string | null;
+  score?: number | null;
+}
+
+export interface WorkspaceProductProfileOutlineSection {
+  id: string;
+  title: string;
+  purpose?: string | null;
+  points: string[];
+  evidenceIds: string[];
+}
+
+export interface WorkspaceProductProfileImageSlot {
+  id: string;
+  title: string;
+  sectionId?: string | null;
+  purpose?: string | null;
+  prompt?: string | null;
+  status?: string | null;
+}
+
+export interface WorkspaceProductProfileCitation {
+  id: string;
+  title: string;
+  sourceType?: string | null;
+  summary?: string | null;
+  status?: string | null;
+}
+
+export interface WorkspaceProductProfileWritingPlanStep {
+  id: string;
+  title: string;
+  owner?: string | null;
+  skillRef?: string | null;
+  output?: string | null;
+  goal?: string | null;
+  done?: boolean | null;
+}
+
 export interface WorkspaceProductProfileStructuredPreview {
   documentText: string | null;
   images: WorkspaceProductProfilePreviewImage[];
   storyboard: WorkspaceProductProfilePreviewStoryboardRow[];
   checklist: WorkspaceProductProfilePreviewChecklistItem[];
   briefFields: WorkspaceProductProfilePreviewField[];
+  researchRounds: WorkspaceProductProfileResearchRound[];
+  titleCandidates: WorkspaceProductProfileTitleCandidate[];
+  outline: WorkspaceProductProfileOutlineSection[];
+  keyTakeaways: string[];
+  imageSlots: WorkspaceProductProfileImageSlot[];
+  citations: WorkspaceProductProfileCitation[];
+  writingPlan: WorkspaceProductProfileWritingPlanStep[];
+  reviewNotes: string[];
 }
 
 export interface WorkspaceProductObject {
@@ -678,6 +737,222 @@ export function buildWorkspaceProductObjectStructuredPreview(
         Boolean(item),
       ),
     briefFields: readPreviewFields(source),
+    researchRounds: readArray(
+      source.researchRounds,
+      source.research_rounds,
+    )
+      .map(readResearchRound)
+      .filter((item): item is WorkspaceProductProfileResearchRound =>
+        Boolean(item),
+      ),
+    titleCandidates: readArray(
+      source.titleCandidates,
+      source.title_candidates,
+    )
+      .map(readTitleCandidate)
+      .filter((item): item is WorkspaceProductProfileTitleCandidate =>
+        Boolean(item),
+      ),
+    outline: readArray(source.outline, source.sections)
+      .map(readOutlineSection)
+      .filter((item): item is WorkspaceProductProfileOutlineSection =>
+        Boolean(item),
+      ),
+    keyTakeaways: readStringItems(
+      source.keyTakeaways,
+      source.key_takeaways,
+      source.takeaways,
+    ),
+    imageSlots: readArray(source.imageSlots, source.image_slots)
+      .map(readImageSlot)
+      .filter((item): item is WorkspaceProductProfileImageSlot =>
+        Boolean(item),
+      ),
+    citations: readArray(source.citations, source.references)
+      .map(readCitation)
+      .filter((item): item is WorkspaceProductProfileCitation =>
+        Boolean(item),
+      ),
+    writingPlan: readArray(source.writingPlan, source.writing_plan)
+      .map(readWritingPlanStep)
+      .filter((item): item is WorkspaceProductProfileWritingPlanStep =>
+        Boolean(item),
+      ),
+    reviewNotes: readStringItems(
+      source.reviewNotes,
+      source.review_notes,
+      source.risks,
+    ),
+  };
+}
+
+function readStringItems(...values: unknown[]): string[] {
+  return readArray(...values).filter(
+    (item): item is string =>
+      typeof item === "string" && item.trim().length > 0,
+  );
+}
+
+function readNumberValue(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function readResearchRound(
+  value: unknown,
+  index: number,
+): WorkspaceProductProfileResearchRound | null {
+  const fallbackId = `research-${index + 1}`;
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    return normalized
+      ? { id: fallbackId, title: normalized, summary: normalized, citations: [] }
+      : null;
+  }
+  const record = asRecord(value);
+  if (!record) {
+    return null;
+  }
+  const title = readString(record.title, record.name, record.query);
+  if (!title) {
+    return null;
+  }
+  return {
+    id: readString(record.id, record.key) || fallbackId,
+    title,
+    query: readString(record.query, record.keyword) || null,
+    status: readString(record.status, record.state) || null,
+    summary: readString(record.summary, record.description, record.result) || null,
+    citations: readStringItems(record.citations, record.references),
+  };
+}
+
+function readTitleCandidate(
+  value: unknown,
+  index: number,
+): WorkspaceProductProfileTitleCandidate | null {
+  const fallbackId = `title-${index + 1}`;
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    return normalized ? { id: fallbackId, title: normalized } : null;
+  }
+  const record = asRecord(value);
+  if (!record) {
+    return null;
+  }
+  const title = readString(record.title, record.name, record.text);
+  if (!title) {
+    return null;
+  }
+  return {
+    id: readString(record.id, record.key) || fallbackId,
+    title,
+    angle: readString(record.angle, record.reason, record.description) || null,
+    score: readNumberValue(record.score),
+  };
+}
+
+function readOutlineSection(
+  value: unknown,
+  index: number,
+): WorkspaceProductProfileOutlineSection | null {
+  const fallbackId = `section-${index + 1}`;
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    return normalized
+      ? { id: fallbackId, title: normalized, points: [], evidenceIds: [] }
+      : null;
+  }
+  const record = asRecord(value);
+  if (!record) {
+    return null;
+  }
+  const title = readString(record.title, record.name, record.heading);
+  if (!title) {
+    return null;
+  }
+  return {
+    id: readString(record.id, record.key) || fallbackId,
+    title,
+    purpose: readString(record.purpose, record.summary, record.description) || null,
+    points: readStringItems(record.points, record.bullets),
+    evidenceIds: readStringItems(record.evidenceIds, record.evidence_ids),
+  };
+}
+
+function readImageSlot(
+  value: unknown,
+  index: number,
+): WorkspaceProductProfileImageSlot | null {
+  const fallbackId = `image-slot-${index + 1}`;
+  const record = asRecord(value);
+  if (!record) {
+    return typeof value === "string" && value.trim()
+      ? { id: fallbackId, title: value.trim() }
+      : null;
+  }
+  const title = readString(record.title, record.name, record.id);
+  if (!title) {
+    return null;
+  }
+  return {
+    id: readString(record.id, record.key) || fallbackId,
+    title,
+    sectionId: readString(record.sectionId, record.section_id) || null,
+    purpose: readString(record.purpose, record.description) || null,
+    prompt: readString(record.prompt, record.imagePrompt, record.image_prompt) || null,
+    status: readString(record.status, record.state) || null,
+  };
+}
+
+function readCitation(
+  value: unknown,
+  index: number,
+): WorkspaceProductProfileCitation | null {
+  const fallbackId = `citation-${index + 1}`;
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    return normalized ? { id: fallbackId, title: normalized } : null;
+  }
+  const record = asRecord(value);
+  if (!record) {
+    return null;
+  }
+  const title = readString(record.title, record.name, record.url, record.id);
+  if (!title) {
+    return null;
+  }
+  return {
+    id: readString(record.id, record.key) || fallbackId,
+    title,
+    sourceType: readString(record.sourceType, record.source_type, record.type) || null,
+    summary: readString(record.summary, record.description, record.notes) || null,
+    status: readString(record.status, record.state) || null,
+  };
+}
+
+function readWritingPlanStep(
+  value: unknown,
+  index: number,
+): WorkspaceProductProfileWritingPlanStep | null {
+  const fallbackId = `plan-${index + 1}`;
+  const record = asRecord(value);
+  if (!record) {
+    return typeof value === "string" && value.trim()
+      ? { id: fallbackId, title: value.trim() }
+      : null;
+  }
+  const title = readString(record.title, record.name, record.id);
+  if (!title) {
+    return null;
+  }
+  return {
+    id: readString(record.id, record.key) || fallbackId,
+    title,
+    owner: readString(record.owner, record.subagent) || null,
+    skillRef: readString(record.skillRef, record.skill_ref) || null,
+    output: readString(record.output, record.expectedOutput, record.expected_output) || null,
+    goal: readString(record.goal) || null,
+    done: typeof record.done === "boolean" ? record.done : null,
   };
 }
 

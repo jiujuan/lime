@@ -592,6 +592,26 @@ async fn read_session_materializes_content_factory_workspace_patch_into_product_
                                             "taskId": "task-article-1",
                                             "turnId": "turn_product_workspace",
                                             "artifactIds": ["artifact-article-1"],
+                                            "markdown": "# 公众号文章草稿\n\n这是正文。",
+                                            "researchRounds": [
+                                                {
+                                                    "id": "research-1",
+                                                    "title": "检索行业背景"
+                                                }
+                                            ],
+                                            "outline": [
+                                                {
+                                                    "id": "intro",
+                                                    "title": "开场：为什么要把写作变成工作流"
+                                                }
+                                            ],
+                                            "imageSlots": [
+                                                {
+                                                    "id": "hero",
+                                                    "title": "首图",
+                                                    "prompt": "桌面端内容工厂写作流程图，中文标签"
+                                                }
+                                            ],
                                             "evidenceIds": ["evidence-1"]
                                         }
                                     },
@@ -1030,5 +1050,23 @@ async fn read_session_materializes_content_factory_workspace_patch_into_product_
     assert_eq!(
         action_detail["product_workspace"]["workerEvidence"][2]["status"],
         "completed"
+    );
+    let article_object = action_detail["product_workspace"]["objects"]
+        .as_array()
+        .expect("product workspace objects")
+        .iter()
+        .find(|object| object["ref"]["id"] == "article-1")
+        .expect("article object");
+    assert_eq!(
+        article_object["source"]["researchRounds"][0]["title"],
+        "检索行业背景"
+    );
+    assert_eq!(
+        article_object["source"]["outline"][0]["title"],
+        "开场：为什么要把写作变成工作流"
+    );
+    assert_eq!(
+        article_object["source"]["imageSlots"][0]["prompt"],
+        "桌面端内容工厂写作流程图，中文标签"
     );
 }

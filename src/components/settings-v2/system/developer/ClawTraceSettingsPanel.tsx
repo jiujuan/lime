@@ -31,7 +31,10 @@ import {
 } from "@/lib/api/serverRuntime";
 import { copyTextToClipboard } from "@/lib/crashDiagnostic";
 import { buildAgentUiPerformanceDiagnosticSummary } from "@/lib/crashDiagnosticAgentUiPerformance";
-import { normalizeDeveloperConfig } from "@/lib/developerFeatures";
+import {
+  normalizeClawTraceConfig,
+  normalizeDeveloperConfig,
+} from "@/lib/developerFeatures";
 import {
   ClipboardCopy,
   Download,
@@ -103,7 +106,9 @@ export function ClawTraceSettingsPanel({
     useState<ClawTraceTimelineProjection | null>(null);
   const [appServerComparison, setAppServerComparison] =
     useState<ClawTraceAppServerComparison | null>(null);
-  const traceConfig = normalizeDeveloperConfig(appConfig?.developer).claw_trace;
+  const traceConfig = normalizeClawTraceConfig(
+    appConfig?.developer?.claw_trace,
+  );
   const refreshHistoryOverview = useCallback(() => {
     setHistoryOverview(getAgentUiPerformanceTraceHistoryOverview());
   }, []);
@@ -128,7 +133,7 @@ export function ClawTraceSettingsPanel({
           developer: {
             ...developerConfig,
             claw_trace: {
-              ...developerConfig.claw_trace,
+              ...normalizeClawTraceConfig(developerConfig.claw_trace),
               ...patch,
             },
           },
@@ -201,6 +206,16 @@ export function ClawTraceSettingsPanel({
     (nextEnabled: boolean) => {
       void saveTraceConfig(
         { alert_enabled: nextEnabled },
+        t("settings.developer.message.clawTraceSettingsSaved"),
+      );
+    },
+    [saveTraceConfig, t],
+  );
+
+  const handleAlertNotificationEnabledChange = useCallback(
+    (nextEnabled: boolean) => {
+      void saveTraceConfig(
+        { alert_notification_enabled: nextEnabled },
         t("settings.developer.message.clawTraceSettingsSaved"),
       );
     },
@@ -561,6 +576,7 @@ export function ClawTraceSettingsPanel({
         saving={saving}
         traceConfig={traceConfig}
         onAlertEnabledChange={handleAlertEnabledChange}
+        onAlertNotificationEnabledChange={handleAlertNotificationEnabledChange}
         onEnabledChange={handleEnabledChange}
         onLevelChange={handleLevelChange}
         onSampleRateChange={handleSampleRateChange}
@@ -620,6 +636,9 @@ export function ClawTraceSettingsPanel({
         <ClawTraceBaselineComparisonCard comparison={baselineComparison} />
         <ClawTraceRegressionReportCard
           alertEnabled={traceConfig.alert_enabled === true}
+          alertNotificationEnabled={
+            traceConfig.alert_notification_enabled === true
+          }
           onMessage={onMessage}
           report={regressionReport}
         />

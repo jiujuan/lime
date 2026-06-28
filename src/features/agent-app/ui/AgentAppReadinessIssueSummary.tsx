@@ -8,6 +8,8 @@ interface AgentAppReadinessIssueSummaryProps {
   appId: string;
 }
 
+type AgentTranslate = (key: string) => string;
+
 const CATEGORY_LABEL_KEYS: Record<AgentAppReadinessIssueCategory, string> = {
   legacy: "agentApp.apps.center.host.issueCategory.legacy",
   package: "agentApp.apps.center.host.issueCategory.package",
@@ -26,6 +28,8 @@ export function AgentAppReadinessIssueSummary({
   appId,
 }: AgentAppReadinessIssueSummaryProps) {
   const { t } = useTranslation("agent");
+  const translate: AgentTranslate = (key) =>
+    String((t as unknown as AgentTranslate)(key));
   if (summary.issueCategories.length === 0) {
     return null;
   }
@@ -46,7 +50,7 @@ export function AgentAppReadinessIssueSummary({
             className="inline-flex rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800"
             data-testid={`agent-apps-host-readiness-category-${item.category}`}
           >
-            {t(CATEGORY_LABEL_KEYS[item.category])}
+            {translate(CATEGORY_LABEL_KEYS[item.category])}
             <span className="ml-1 text-amber-700">{item.count}</span>
           </span>
         ))}

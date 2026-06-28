@@ -32,6 +32,7 @@ function buildResearchPlugin() {
       {
         key: "research-pack",
         title: "研究助手",
+        aliases: ["@研究"],
         kind: "plugin",
         intent: "at_command",
         defaultObjectKind: "articleDraft",
@@ -111,6 +112,39 @@ describe("Plugin explicit activation", () => {
       context: {
         pluginId: "research-pack",
         selectedSkillKeys: ["article-writer"],
+      },
+    });
+  });
+
+  it("应支持 activation entry aliases 作为显式 @ 入口", () => {
+    const contract = buildResearchPlugin();
+    const catalog = buildPluginActivationMentionCatalog({
+      contracts: [contract],
+      registryItems: [
+        projectPluginRegistryItem({
+          contract,
+          installed: true,
+          enabled: true,
+          readinessStatus: "ready",
+        }),
+      ],
+    });
+
+    const result = parsePluginActivationMention({
+      text: "@研究 生成公众号草稿",
+      catalog,
+      sessionId: "session-alias",
+    });
+
+    expect(result).toMatchObject({
+      status: "matched",
+      match: {
+        trigger: "@研究",
+        body: "生成公众号草稿",
+      },
+      context: {
+        pluginId: "research-pack",
+        activeEntryKey: "research-pack",
       },
     });
   });

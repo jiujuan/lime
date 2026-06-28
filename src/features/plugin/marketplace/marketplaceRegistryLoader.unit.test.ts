@@ -80,6 +80,7 @@ function installedState(
     appId?: string;
     packageHash?: string;
     manifestHash?: string;
+    sourceUri?: string;
     disabled?: boolean;
   } = {},
 ): InstalledAgentAppState {
@@ -89,6 +90,7 @@ function installedState(
     identity: {
       sourceKind: "cloud_release",
       sourceUri:
+        overrides.sourceUri ??
         "https://packages.limecloud.example/plugins/research-kit-1.2.3.lpkg",
       appId,
       appVersion: "1.2.3",
@@ -311,6 +313,107 @@ describe("plugin marketplace registry loader", () => {
     });
   });
 
+  it("远端 marketplace 条目应复用已安装 Agent App manifest 补齐说明与 renderer", async () => {
+    const localState = readyInstalledState();
+    const getMarketplace = vi.fn(
+      async (): Promise<PluginMarketplaceListResponse> => ({
+        schemaVersion: "plugin-marketplace/v1",
+        tenantId: "tenant-0001",
+        generatedAt: "2026-06-25T00:00:00.000Z",
+        marketplaceName: "limecloud",
+        items: [
+          {
+            pluginKey: localState.appId,
+            pluginName: "content_factory",
+            marketplaceName: "limecloud",
+            displayName: "内容工厂",
+            description: "",
+            version: localState.manifest.version,
+            sourceKind: "agent_app_release",
+            enabled: true,
+            installState: "available",
+            activationState: "activatable",
+            policy: {
+              installation: "AVAILABLE",
+              authentication: "ON_USE",
+            },
+            package: {
+              packageHash: localState.identity.packageHash,
+              manifestHash: localState.identity.manifestHash,
+            },
+          },
+        ],
+      }),
+    );
+    const listInstalled = vi.fn(
+      async (): Promise<InstalledAgentAppStateListResult> => ({
+        states: [localState],
+        issues: [],
+      }),
+    );
+
+    const snapshot = await loadPluginMarketplaceRegistry("tenant-0001", {}, {
+      getMarketplace,
+      listInstalled,
+    });
+
+    expect(snapshot.marketplace.items[0]).toMatchObject({
+      pluginKey: localState.appId,
+      appId: localState.appId,
+      description: localState.manifest.description,
+      manifestSummary: {
+        agentRuntime: expect.objectContaining({
+          intents: expect.arrayContaining([
+            expect.objectContaining({
+              key: "content_article_generate",
+              taskKind: "content.article.generate",
+            }),
+          ]),
+        }),
+        workbench: expect.objectContaining({
+          workbenchTasks: expect.arrayContaining([
+            expect.objectContaining({
+              kind: "content.article.generate",
+              expectedObjects: ["articleDraft"],
+            }),
+          ]),
+        }),
+        artifactRenderers: expect.arrayContaining([
+          expect.objectContaining({
+            rendererKind: "host_builtin",
+            outputArtifactKind: "content_factory.workspace_patch",
+          }),
+        ]),
+        historyRestore: expect.objectContaining({
+          fallback: "artifactPreview",
+        }),
+        skillRefs: expect.arrayContaining([
+          expect.objectContaining({
+            id: "gongzonghao-article-writer",
+            activation: "content.article.generate",
+          }),
+        ]),
+        toolRefs: expect.arrayContaining([
+          expect.objectContaining({
+            key: "content-factory-worker",
+            provider: "local-worker",
+          }),
+        ]),
+      },
+    });
+    expect(snapshot.registry[0]).toMatchObject({
+      pluginId: localState.appId,
+      installed: true,
+      enabled: true,
+      activationState: "activatable",
+      rendererState: "renderable",
+      capabilityStates: expect.arrayContaining(["activatable", "renderable"]),
+      blockerCodes: expect.not.arrayContaining([
+        "PLUGIN_RENDERER_UNAVAILABLE",
+      ]),
+    });
+  });
+
   it("Agent App 目录缺包哈希但本地已安装同 appId 时不应误报包不匹配", async () => {
     const localState = installedState();
     const listInstalled = vi.fn(
@@ -356,6 +459,62 @@ describe("plugin marketplace registry loader", () => {
         ]),
       }),
     ]);
+  });
+
+  it("本地 seeded 目录应保留可安装包信息以刷新缺 evidence 的旧安装态", async () => {
+    const localState = installedState({
+      appId: "content-factory-app",
+      packageHash: "package-fnv1a-a4d0e86f",
+      manifestHash: "manifest-fnv1a-b840e5c9",
+      sourceUri: "https://seeded.local/agent-apps/content-factory-app/2.0.0.lapp",
+    });
+    const listInstalled = vi.fn(
+      async (): Promise<InstalledAgentAppStateListResult> => ({
+        states: [localState],
+        issues: [],
+      }),
+    );
+    const getAgentAppCatalog = vi.fn(async () =>
+      agentAppCatalog([
+        cloudApp({
+          appId: "content-factory-app",
+          displayName: "内容工厂",
+          version: "2.0.0",
+          releaseId: "seeded-content-factory-app-2.0.0",
+          packageUrl:
+            "https://seeded.local/agent-apps/content-factory-app/2.0.0.lapp",
+          packageHash: "package-fnv1a-a4d0e86f",
+          manifestHash: "manifest-fnv1a-b840e5c9",
+          defaultEntries: ["content_factory"],
+        }),
+      ]),
+    );
+
+    const snapshot = await loadPluginMarketplaceRegistry(
+      "",
+      {},
+      {
+        getMarketplace: vi.fn(async () => marketplace()),
+        listInstalled,
+        getAgentAppCatalog,
+      },
+    );
+
+    expect(snapshot.marketplace.items[0]).toMatchObject({
+      pluginKey: "content-factory-app",
+      package: expect.objectContaining({
+        packageUrl:
+          "https://seeded.local/agent-apps/content-factory-app/2.0.0.lapp",
+      }),
+    });
+    expect(snapshot.registry[0]).toMatchObject({
+      pluginId: "content-factory-app",
+      installed: false,
+      capabilityStates: expect.arrayContaining(["installable"]),
+      blockerCodes: expect.arrayContaining([
+        "PLUGIN_CLOUD_RELEASE_EVIDENCE_MISSING",
+      ]),
+    });
   });
 
   it("云端认证失败时应回退到本地已安装插件目录", async () => {

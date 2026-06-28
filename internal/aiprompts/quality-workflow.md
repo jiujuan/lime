@@ -266,7 +266,8 @@ npm run governance:scripts
 - 默认先跑受影响 crate、模块或定向测试
 - 再根据边界扩散决定是否执行全量 `cargo test`
 - 目标是尽快暴露问题，而不是一上来把所有测试都跑满
-- 后端 TDD / 发布续测默认优先使用仓库分层入口和 Cargo 过滤：`npm run test:rust:unit -- -p <crate> <filter>`、`npm run test:rust:integration -- -p <crate> --test <target>`；只有跨 crate 协议、workspace 版本 / schema、发布最终门禁或定向覆盖不足时，才扩大到 `--workspace` 或 `npm run test:rust`
+- 后端 TDD / 发布续测默认优先使用仓库分层入口和 Cargo 过滤：`npm run test:rust:changed`、`npm run test:rust:related -- <paths...>`、`npm run test:rust:unit -- -p <crate> <filter>`、`npm run test:rust:integration -- -p <crate> --test <target>`；只有跨 crate 协议、workspace 版本 / schema、发布最终门禁或定向覆盖不足时，才扩大到 `--workspace` 或 `npm run test:rust`
+- `test:rust:changed` / `test:rust:related` 是 Rust 后端压缩测试的默认执行入口：它们按 Git diff 或显式路径映射 `lime-rs/crates/**` workspace package，再用 `cargo metadata` 扩展反向依赖；触碰根 `Cargo.toml`、`Cargo.lock`、workspace 配置等边界时自动扩大到 `--workspace`；Rust 路径无法映射到 current workspace crate 时必须 fail closed，不允许静默通过 0 个测试
 - 冷编译慢时不要靠反复全量重跑解决。优先复用统一 `lime-rs/target`、保留增量缓存，并在本机 / CI 工具链具备时使用 `RUSTC_WRAPPER=sccache` 或 `cargo nextest run` 作为环境级加速；仓库脚本只有在依赖和 CI 均已配置后才能把它们设为默认
 - 在仓库根运行 Rust 校验必须显式带 `--manifest-path "lime-rs/Cargo.toml"`，或先 `cd lime-rs`；不要直接 `rustc lime-rs/src/*.rs` 编译主 crate，否则会绕过 workspace 依赖并产生 `can't find crate for lime_*` 误报
 - 如果定向测试来自 `lime-rs/crates/aster-rust` 这类被 legacy host watch 覆盖的子工作区，先确认其 Cargo `target-dir` 已统一回 `lime-rs/target`，避免 watch 风暴导致 dev 无法启动
@@ -313,7 +314,11 @@ npm run test:resume
 npm run test:related -- <files>
 npm run test:changed -- <ref>
 npm run test:rust:unit
+npm run test:rust:changed
+npm run test:rust:related -- <paths...>
 npm run test:rust:integration
+npm run test:rust:integration:changed
+npm run test:rust:integration:related -- <paths...>
 npm run test:rust:e2e
 npm run test:rust:layers:stats
 ```
@@ -330,8 +335,9 @@ npm run test:rust:layers:stats
 - `npm test` / `test:frontend:all` 由 `scripts/run-vitest-smart.mjs` 执行分批全量，状态写入 `.lime/test/vitest-smart-last-run.json`；失败或中断后默认先用 `npm run test:resume` 续跑，或用 `npm test -- --from-batch <N>` / `npm test -- --only-batch <N>` 精确补批次，不要直接从头重跑全量
 - `test:related` 使用 Vitest `related --run`，适合修改少量源码后只跑静态依赖相关测试；`test:changed` 使用 Vitest `--changed [ref]`，适合按 Git diff 收缩本地回归范围。二者是缩小反馈环，不替代发布前必要的全量或 GUI 证据
 - CI 需要横向压缩前端全量时优先用 Vitest `--shard=<index>/<count>` 做稳定分片，并合并报告；本地中断续跑仍使用 `.lime/test/` 状态，不把 shard 当成失败续跑机制
-- `test:rust:unit` 默认覆盖 Cargo default package 的 lib / module 单元测试，是后端 TDD 默认第一轮信号；改 workspace crate 时用 `npm run test:rust:unit -- -p <crate> <filter>` 定向运行，避免无差别编译所有 crate
+- `test:rust:unit` 默认覆盖 Cargo default package 的 lib / module 单元测试，是后端 TDD 默认第一轮信号；改 workspace crate 时优先用 `npm run test:rust:changed` 或 `npm run test:rust:related -- <paths...>` 自动推导受影响 package，也可用 `npm run test:rust:unit -- -p <crate> <filter>` 精确过滤，避免无差别编译所有 crate
 - `test:rust:integration` 默认覆盖 Cargo default package 的 integration test targets；需要扩大到全后端时显式传 `--workspace`，需要单个 integration target 时优先透传 `--test <target>`
+- `test:rust:unit:changed` / `test:rust:integration:changed` 默认比较 `HEAD`，可传 `--changed=<ref>` 覆盖；`test:rust:unit:related` / `test:rust:integration:related` 接受一个或多个路径。二者都先映射 owning crate，再通过 Cargo metadata 扩展反向依赖；如果没有命中 `lime-rs` 路径会跳过 Rust 层，如果命中了 Rust 路径但无法映射 workspace crate 会失败
 - `test:rust:e2e` 只在 `LIME_REAL_API_TEST=1` 或 `PROXYCAST_REAL_API_TEST=1` 显式打开时运行 ignored/live Rust E2E；默认不消耗真实 Provider / ASR 凭证
 - `test:rust:layers:stats` 输出 Rust 测试文件分层统计，区分 workspace 默认可运行、live-gated 和 excluded subcrate 治理项
 - Rust 分层命令的 `--list` 遵循同一 Cargo package scope：默认只列 root `lime` package，传 `--workspace` 才列全 workspace，传 `-p <crate>` 只列目标 crate；全树治理统计只看 `test:rust:layers:stats`
@@ -362,6 +368,7 @@ npm run verify:local:full
 
 - 根据改动范围自动选择前端、Rust、Bridge、GUI smoke 等检查
 - 让开发者在发起 PR 前有一个统一入口
+- smart 模式下 Rust 路径改动走 `npm run test:rust:changed`；`--staged` 模式走 `npm run test:rust:related -- <staged-rust-paths>`；`--full`、无改动兜底和 workflow 全局风险仍保留 workspace 全量 `cargo test`
 
 适用建议：
 
@@ -888,6 +895,8 @@ npm run test:resume
 npm run test:related -- <files>
 npm run test:changed -- <ref>
 npm run test:rust:unit
+npm run test:rust:changed
+npm run test:rust:related -- <paths...>
 npm run test:rust:integration
 npm run test:rust:e2e
 npm run test:rust:layers:stats

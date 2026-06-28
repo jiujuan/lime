@@ -42,6 +42,7 @@ interface RefreshAgentSessionDetailOptions {
   ) => void;
   setAccessModeState?: (accessMode: AgentAccessMode) => void;
   onWarn?: (error: unknown) => void;
+  source?: string;
 }
 
 export async function refreshAgentSessionDetailState(
@@ -63,6 +64,7 @@ export async function refreshAgentSessionDetailState(
   try {
     const detail = await runtime.getSession(resolvedSessionId, {
       historyLimit: 40,
+      ...(options.source?.trim() ? { source: options.source.trim() } : {}),
     });
     if (sessionIdRef.current !== resolvedSessionId) {
       return false;

@@ -11,6 +11,12 @@ struct PluginActivationContext {
     plugin_id: String,
     active_agent_app_id: Option<String>,
     active_entry_key: Option<String>,
+    intent_key: Option<String>,
+    task_kind: Option<String>,
+    output_artifact_kind: Option<String>,
+    right_surface: Option<String>,
+    expected_objects: Vec<String>,
+    matched_phrase: Option<String>,
     selected_skill_keys: Vec<String>,
     selected_object_ref: Option<PluginObjectRef>,
     opened_tabs: Vec<String>,
@@ -71,6 +77,16 @@ fn parse_plugin_activation(value: &Value) -> Option<PluginActivationContext> {
         plugin_id,
         active_agent_app_id: read_string(value, &["active_agent_app_id", "activeAgentAppId"]),
         active_entry_key: read_string(value, &["active_entry_key", "activeEntryKey"]),
+        intent_key: read_string(value, &["intent_key", "intentKey"]),
+        task_kind: read_string(value, &["task_kind", "taskKind"]),
+        output_artifact_kind: read_string(value, &["output_artifact_kind", "outputArtifactKind"]),
+        right_surface: read_string(value, &["right_surface", "rightSurface"]),
+        expected_objects: read_string_array(
+            object
+                .get("expected_objects")
+                .or_else(|| object.get("expectedObjects")),
+        ),
+        matched_phrase: read_string(value, &["matched_phrase", "matchedPhrase"]),
         selected_skill_keys: read_string_array(
             object
                 .get("selected_skill_keys")
@@ -125,6 +141,21 @@ fn render_plugin_activation_context(context: &PluginActivationContext) -> String
         &context.active_agent_app_id,
     );
     push_optional_line(&mut lines, "active_entry_key", &context.active_entry_key);
+    push_optional_line(&mut lines, "intent_key", &context.intent_key);
+    push_optional_line(&mut lines, "task_kind", &context.task_kind);
+    push_optional_line(
+        &mut lines,
+        "output_artifact_kind",
+        &context.output_artifact_kind,
+    );
+    push_optional_line(&mut lines, "right_surface", &context.right_surface);
+    if !context.expected_objects.is_empty() {
+        lines.push(format!(
+            "- expected_objects: {}",
+            context.expected_objects.join(", ")
+        ));
+    }
+    push_optional_line(&mut lines, "matched_phrase", &context.matched_phrase);
     if !context.selected_skill_keys.is_empty() {
         lines.push(format!(
             "- selected_skill_keys: {}",
@@ -216,6 +247,12 @@ mod tests {
                     "session_id": "session-1",
                     "plugin_id": "creator-workbench",
                     "active_entry_key": "creator",
+                    "intent_key": "content_article_generate",
+                    "task_kind": "content.article.generate",
+                    "output_artifact_kind": "content_factory.workspace_patch",
+                    "right_surface": "productProfile",
+                    "expected_objects": ["articleDraft"],
+                    "matched_phrase": "写一篇公众号文章",
                     "selected_skill_keys": ["article-draft"],
                     "selected_object_ref": {
                         "plugin_id": "creator-workbench",
@@ -240,6 +277,10 @@ mod tests {
         assert!(prompt.contains("plugin_id: creator-workbench"));
         assert!(prompt.contains("trigger: @创作工作台"));
         assert!(prompt.contains("body_after_trigger: 写一篇公众号文章"));
+        assert!(prompt.contains("intent_key: content_article_generate"));
+        assert!(prompt.contains("task_kind: content.article.generate"));
+        assert!(prompt.contains("output_artifact_kind: content_factory.workspace_patch"));
+        assert!(prompt.contains("expected_objects: articleDraft"));
         assert!(prompt.contains("object_kind: articleDraft"));
         assert!(prompt.contains("Do not infer or switch plugins from natural language"));
     }

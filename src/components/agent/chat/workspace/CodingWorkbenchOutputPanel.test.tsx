@@ -254,6 +254,7 @@ describe("CodingWorkbenchOutputPanel", () => {
       onTerminateProcess: vi.fn(),
       onRefreshProcessStatus: vi.fn(),
       onDrainProcessOutput: vi.fn(),
+      onWriteProcessStdin: vi.fn(),
     };
     const container = renderPanelWithProps({ processControls });
 
@@ -359,6 +360,7 @@ describe("CodingWorkbenchOutputPanel", () => {
       onTerminateProcess: vi.fn(),
       onRefreshProcessStatus: vi.fn(),
       onDrainProcessOutput: vi.fn(),
+      onWriteProcessStdin: vi.fn(),
     };
     const terminalCommand = {
       ...createCodingView().commands[0],

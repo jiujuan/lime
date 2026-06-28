@@ -3,13 +3,17 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { openExternalUrlWithSystemBrowser } from "@/lib/api/externalUrl";
 import {
+  EMPTY_AGENT_UI_PROJECTION_SUMMARY,
   summarizeAgentUiProjectionEvents,
   type AgentUiProjectionTranslation,
 } from "../projection/agentUiProjectionSummary";
 import type { AgentUiProjectionScopeFilter } from "../projection/conversationProjectionStore";
 import { useAgentUiProjectionEvents } from "../projection/useConversationProjectionStore";
 import type { ActionRequired } from "../types";
-import { buildThreadReliabilityView } from "../utils/threadReliabilityView";
+import {
+  buildThreadReliabilitySummary,
+  buildThreadReliabilityView,
+} from "../utils/threadReliabilityView";
 import { HarnessPreviewDialog } from "./HarnessPreviewDialog";
 import { HarnessStatusPanelSections } from "./HarnessStatusPanelSections";
 import { HarnessStatusPanelShell } from "./HarnessStatusPanelShell";
@@ -90,16 +94,22 @@ export function HarnessStatusPanel({
     [t],
   );
   const locale = i18n.resolvedLanguage || i18n.language;
-  const [expanded, setExpanded] = useState(true);
   const isDialogLayout = layout === "dialog";
+  const [expanded, setExpanded] = useState(isDialogLayout);
   const isDetailsExpanded = isDialogLayout ? true : expanded;
-  const activityModel = useHarnessActivityModel(harnessState);
+  const activityModel = useHarnessActivityModel(
+    harnessState,
+    isDetailsExpanded,
+  );
   const toolInventoryModel = useHarnessToolInventoryModel({
     toolInventory,
     toolInventoryError,
     toolInventoryLoading,
   });
-  const fileReviewState = useHarnessFileReviewState(harnessState);
+  const fileReviewState = useHarnessFileReviewState(
+    harnessState,
+    isDetailsExpanded,
+  );
   const { hasToolInventorySection, runtimeToolTotal, runtimeToolVisibleTotal } =
     toolInventoryModel;
   const {
@@ -135,13 +145,14 @@ export function HarnessStatusPanel({
   );
   const agentUiProjectionEvents = useAgentUiProjectionEvents(
     agentUiProjectionFilter,
+    { enabled: isDetailsExpanded },
   );
   const agentUiProjectionSummary = useMemo(
     () =>
-      currentSessionId
+      isDetailsExpanded && currentSessionId
         ? summarizeAgentUiProjectionEvents(agentUiProjectionEvents)
-        : summarizeAgentUiProjectionEvents([]),
-    [agentUiProjectionEvents, currentSessionId],
+        : EMPTY_AGENT_UI_PROJECTION_SUMMARY,
+    [agentUiProjectionEvents, currentSessionId, isDetailsExpanded],
   );
   const hasAgentUiProjectionSection = agentUiProjectionSummary.total > 0;
 
@@ -176,12 +187,11 @@ export function HarnessStatusPanel({
     Boolean(selectedTeamLabel?.trim()) ||
     Boolean(selectedTeamSummary?.trim()) ||
     (selectedTeamRoles?.length ?? 0) > 0;
-  const threadReliabilityView = useMemo(
+  const threadReliabilitySummary = useMemo(
     () =>
-      buildThreadReliabilityView({
+      buildThreadReliabilitySummary({
         threadRead,
         turns,
-        threadItems,
         currentTurnId,
         pendingActions,
         submittedActionsInFlight,
@@ -191,6 +201,33 @@ export function HarnessStatusPanel({
       }),
     [
       currentTurnId,
+      locale,
+      pendingActions,
+      queuedTurns,
+      submittedActionsInFlight,
+      threadRead,
+      translateProjection,
+      turns,
+    ],
+  );
+  const threadReliabilityView = useMemo(
+    () =>
+      isDetailsExpanded
+        ? buildThreadReliabilityView({
+            threadRead,
+            turns,
+            threadItems,
+            currentTurnId,
+            pendingActions,
+            submittedActionsInFlight,
+            queuedTurns,
+            t: translateProjection,
+            locale,
+          })
+        : null,
+    [
+      currentTurnId,
+      isDetailsExpanded,
       locale,
       pendingActions,
       queuedTurns,
@@ -259,9 +296,9 @@ export function HarnessStatusPanel({
         realTeamSummary,
         runtimeTaskPresentation,
         threadReliability: {
-          shouldRender: threadReliabilityView.shouldRender,
-          statusLabel: threadReliabilityView.statusLabel,
-          summary: threadReliabilityView.summary,
+          shouldRender: threadReliabilitySummary.shouldRender,
+          statusLabel: threadReliabilitySummary.statusLabel,
+          summary: threadReliabilitySummary.summary,
         },
         fileReviewTitle,
       }),
@@ -276,9 +313,9 @@ export function HarnessStatusPanel({
       harnessState,
       realTeamSummary,
       runtimeTaskPresentation,
-      threadReliabilityView.shouldRender,
-      threadReliabilityView.statusLabel,
-      threadReliabilityView.summary,
+      threadReliabilitySummary.shouldRender,
+      threadReliabilitySummary.statusLabel,
+      threadReliabilitySummary.summary,
     ],
   );
 
@@ -307,9 +344,9 @@ export function HarnessStatusPanel({
         selectedTeamRolesCount,
         selectedTeamSummary,
         threadReliability: {
-          shouldRender: threadReliabilityView.shouldRender,
-          statusLabel: threadReliabilityView.statusLabel,
-          summary: threadReliabilityView.summary,
+          shouldRender: threadReliabilitySummary.shouldRender,
+          statusLabel: threadReliabilitySummary.statusLabel,
+          summary: threadReliabilitySummary.summary,
         },
         toolInventory: toolInventory ?? null,
         toolInventoryError,
@@ -336,9 +373,9 @@ export function HarnessStatusPanel({
       selectedTeamLabel,
       selectedTeamRolesCount,
       selectedTeamSummary,
-      threadReliabilityView.shouldRender,
-      threadReliabilityView.statusLabel,
-      threadReliabilityView.summary,
+      threadReliabilitySummary.shouldRender,
+      threadReliabilitySummary.statusLabel,
+      threadReliabilitySummary.summary,
       toolInventory,
       toolInventoryError,
       toolInventoryLoading,
@@ -359,60 +396,118 @@ export function HarnessStatusPanel({
       toast.error(error instanceof Error ? error.message : "打开链接失败");
     }
   }, []);
-
-  const sectionModels = buildHarnessStatusPanelSectionModels({
-    activityModel,
-    agentUiProjectionSummary,
-    canInterrupt,
-    childSubagentSessions,
-    currentSessionId,
-    currentTurnId,
-    diagnosticRuntimeContext,
-    environment,
-    fileReviewState,
-    handleApprovalResponse,
-    handleOpenExternalLink,
-    handoffExports,
-    hasAgentUiProjectionSection,
-    hasHandoffSection,
-    hasSelectedTeamConfig,
-    harnessState,
-    messages,
-    onInterruptCurrentTurn,
-    onObjectiveChanged,
-    onOpenFileCheckpoints,
-    onManageProviders,
-    onOpenExecutionPolicySettings,
-    onOpenSubagentSession,
-    onPromoteQueuedTurn,
-    onRefreshToolInventory,
-    onReplayPendingRequest,
-    onRespondToAction,
-    onResumeThread,
-    pendingActions,
-    previewModel,
-    queuedTurns,
-    realTeamSummary,
-    registerSectionRef,
-    runtimeFactSummary,
-    runtimeTaskPresentation,
-    selectedTeamLabel,
-    selectedTeamRoles,
-    selectedTeamSummary,
-    submittedActionIds,
-    submittedActionsInFlight,
-    t,
-    threadItems,
-    threadRead,
-    threadReliabilityView,
-    toolInventory,
-    toolInventoryError,
-    toolInventoryLoading,
-    toolInventoryModel,
-    translateAgent,
-    translateProjection,
-    turns,
-  });
+  const sectionModels = useMemo(
+    () =>
+      isDetailsExpanded
+        ? buildHarnessStatusPanelSectionModels({
+            activityModel,
+            agentUiProjectionSummary,
+            canInterrupt,
+            childSubagentSessions,
+            currentSessionId,
+            currentTurnId,
+            diagnosticRuntimeContext,
+            environment,
+            fileReviewState,
+            handleApprovalResponse,
+            handleOpenExternalLink,
+            handoffExports,
+            hasAgentUiProjectionSection,
+            hasHandoffSection,
+            hasSelectedTeamConfig,
+            harnessState,
+            messages,
+            onInterruptCurrentTurn,
+            onObjectiveChanged,
+            onOpenFileCheckpoints,
+            onManageProviders,
+            onOpenExecutionPolicySettings,
+            onOpenSubagentSession,
+            onPromoteQueuedTurn,
+            onRefreshToolInventory,
+            onReplayPendingRequest,
+            onRespondToAction,
+            onResumeThread,
+            pendingActions,
+            previewModel,
+            queuedTurns,
+            realTeamSummary,
+            registerSectionRef,
+            runtimeFactSummary,
+            runtimeTaskPresentation,
+            selectedTeamLabel,
+            selectedTeamRoles,
+            selectedTeamSummary,
+            submittedActionIds,
+            submittedActionsInFlight,
+            t,
+            threadItems,
+            threadRead,
+            threadReliabilityView,
+            toolInventory,
+            toolInventoryError,
+            toolInventoryLoading,
+            toolInventoryModel,
+            translateAgent,
+            translateProjection,
+            turns,
+          })
+        : null,
+    [
+      activityModel,
+      agentUiProjectionSummary,
+      canInterrupt,
+      childSubagentSessions,
+      currentSessionId,
+      currentTurnId,
+      diagnosticRuntimeContext,
+      environment,
+      fileReviewState,
+      handleApprovalResponse,
+      handleOpenExternalLink,
+      handoffExports,
+      hasAgentUiProjectionSection,
+      hasHandoffSection,
+      hasSelectedTeamConfig,
+      harnessState,
+      isDetailsExpanded,
+      messages,
+      onInterruptCurrentTurn,
+      onManageProviders,
+      onObjectiveChanged,
+      onOpenExecutionPolicySettings,
+      onOpenFileCheckpoints,
+      onOpenSubagentSession,
+      onPromoteQueuedTurn,
+      onRefreshToolInventory,
+      onReplayPendingRequest,
+      onRespondToAction,
+      onResumeThread,
+      pendingActions,
+      previewModel,
+      queuedTurns,
+      realTeamSummary,
+      registerSectionRef,
+      runtimeFactSummary,
+      runtimeTaskPresentation,
+      selectedTeamLabel,
+      selectedTeamRoles,
+      selectedTeamSummary,
+      submittedActionIds,
+      submittedActionsInFlight,
+      t,
+      threadItems,
+      threadRead,
+      threadReliabilityView,
+      toolInventory,
+      toolInventoryError,
+      toolInventoryLoading,
+      toolInventoryModel,
+      translateAgent,
+      translateProjection,
+      turns,
+    ],
+  );
 
   return (
     <>
@@ -429,7 +524,9 @@ export function HarnessStatusPanel({
         onToggleExpanded={handleToggleExpanded}
         onScrollToSection={scrollToSection}
       >
-        <HarnessStatusPanelSections {...sectionModels} />
+        {sectionModels ? (
+          <HarnessStatusPanelSections {...sectionModels} />
+        ) : null}
       </HarnessStatusPanelShell>
 
       <HarnessPreviewDialog

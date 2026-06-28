@@ -947,9 +947,9 @@ function projectTraceSummary(value: {
   path: string;
   sizeBytes: number;
   eventCount: number;
-  firstWallTimeUnixMs?: number;
-  lastWallTimeUnixMs?: number;
-  modifiedAt?: string;
+  firstWallTimeUnixMs?: number | null;
+  lastWallTimeUnixMs?: number | null;
+  modifiedAt?: string | null;
 }): DiagnosticsTraceSummary {
   return {
     session_id: value.sessionId,

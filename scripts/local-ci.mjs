@@ -3,7 +3,7 @@
 import { spawnSync } from "node:child_process";
 import process from "node:process";
 
-import { planQualityTasks } from "./quality-task-planner.mjs";
+import { planQualityTasks, resolveDiffBase } from "./quality-task-planner.mjs";
 
 const options = parseArgs(process.argv.slice(2));
 const rootDir = process.cwd();
@@ -151,7 +151,11 @@ function printSummary(changedFiles, tasks) {
     console.log("[local-ci] - GUI 冒烟");
   }
   if (tasks.rust) {
-    console.log("[local-ci] - Rust 校验");
+    console.log(
+      shouldUseRustChangedScope(changedFiles, tasks)
+        ? "[local-ci] - Rust 校验（changed scope）"
+        : "[local-ci] - Rust 校验（workspace/full）",
+    );
   }
   if (tasks.fallback) {
     console.log("[local-ci] - 未检测到改动，执行全量兜底校验");
@@ -209,11 +213,30 @@ function runSelectedTasks(changedFiles, tasks) {
   }
 
   if (tasks.rust) {
-    runCommand(cargoCommand, [
-      "test",
-      "--manifest-path",
-      "lime-rs/Cargo.toml",
-    ]);
+    runRustValidation(changedFiles, tasks);
+  }
+
+  if (tasks.guiSmoke) {
+    runCommand(npmCommand, ["run", "verify:gui-smoke"]);
+  }
+}
+
+function isRustPath(file) {
+  return String(file || "").startsWith("lime-rs");
+}
+
+function shouldUseRustChangedScope(changedFiles, tasks) {
+  return (
+    !options.full &&
+    !tasks.fallback &&
+    !tasks.workflow &&
+    changedFiles.some(isRustPath)
+  );
+}
+
+function runRustValidation(changedFiles, tasks) {
+  if (!shouldUseRustChangedScope(changedFiles, tasks)) {
+    runCommand(cargoCommand, ["test", "--manifest-path", "lime-rs/Cargo.toml"]);
     if (options.full) {
       runCommand(cargoCommand, [
         "clippy",
@@ -221,11 +244,21 @@ function runSelectedTasks(changedFiles, tasks) {
         "lime-rs/Cargo.toml",
       ]);
     }
+    return;
   }
 
-  if (tasks.guiSmoke) {
-    runCommand(npmCommand, ["run", "verify:gui-smoke"]);
+  const rustPaths = Array.from(new Set(changedFiles.filter(isRustPath)));
+  if (options.staged) {
+    runCommand(npmCommand, ["run", "test:rust:related", "--", ...rustPaths]);
+    return;
   }
+
+  const diffBase = resolveDiffBase({ base: options.base, cwd: rootDir });
+  const args = ["run", "test:rust:changed"];
+  if (diffBase) {
+    args.push("--", `--changed=${diffBase}`);
+  }
+  runCommand(npmCommand, args);
 }
 
 function main() {
@@ -256,7 +289,9 @@ function collectI18nHardcodedScanFiles(changedFiles) {
       if (I18N_HARDCODED_SCAN_FILES.has(file)) {
         return true;
       }
-      if (I18N_HARDCODED_SCAN_FILE_PATTERNS.some((pattern) => pattern.test(file))) {
+      if (
+        I18N_HARDCODED_SCAN_FILE_PATTERNS.some((pattern) => pattern.test(file))
+      ) {
         return false;
       }
       return I18N_HARDCODED_SCAN_PREFIXES.some((prefix) =>

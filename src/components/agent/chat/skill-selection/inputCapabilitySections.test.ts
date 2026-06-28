@@ -167,7 +167,7 @@ describe("buildInputCapabilitySections", () => {
         createBuiltinCommand({
           key: "writing_runtime",
           label: "写作",
-          commandPrefix: "@写作",
+          commandPrefix: "@文案",
         }),
         createBuiltinCommand({
           key: "publish_runtime",
@@ -186,7 +186,7 @@ describe("buildInputCapabilitySections", () => {
       sections
         .find((section) => section.heading === "生成 / 表达")
         ?.items.map((item) => item.title),
-    ).toEqual(expect.arrayContaining(["@Nanobanana Pro", "@写作"]));
+    ).toEqual(expect.arrayContaining(["@Nanobanana Pro", "@文案"]));
   });
 
   it("slash 空查询应先收成先拿结果与工作台操作，不默认展开提示命令和状态帮助", () => {

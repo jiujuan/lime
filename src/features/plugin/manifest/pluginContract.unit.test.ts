@@ -16,6 +16,81 @@ import {
 } from "./pluginRegistry";
 
 describe("Plugin P1 manifest contract", () => {
+  it("应接受 Lime Plugin Package v1 的 plugin.json 入口和 contributions", () => {
+    const contract = normalizePluginManifest({
+      schemaVersion: "lime.plugin.package.v1",
+      id: "content-factory-app",
+      name: "content-factory-app",
+      version: "2.0.1",
+      displayName: "内容工厂",
+      description: "内容生产插件包",
+      interface: {
+        displayName: "内容工厂",
+        shortDescription: "生成文章、配图规划和交付检查清单",
+        capabilities: ["写作工作流", "资料检索"],
+        defaultPrompt: ["@写文章 帮我写一篇文章"],
+      },
+      contributions: {
+        runtime: "./app.runtime.yaml",
+        workbench: "./app.workbench.yaml",
+        skills: "./skills",
+        subagents: "./subagents",
+        clis: "./clis/clis.json",
+        connectors: "./connectors/connectors.json",
+        hooks: "./hooks",
+        resources: "./resources",
+        workflows: "./workflows",
+        artifacts: "./artifacts",
+      },
+      activationEntries: [
+        {
+          key: "content_article_generate",
+          title: "写文章",
+          aliases: ["@写文章", "@写作"],
+          kind: "plugin",
+          intent: "at_command",
+          defaultObjectKind: "articleDraft",
+        },
+      ],
+    });
+
+    expect(contract).toMatchObject({
+      id: "content-factory-app",
+      packageSchemaVersion: "lime.plugin.package.v1",
+      displayName: "内容工厂",
+      contributions: {
+        runtime: "./app.runtime.yaml",
+        workbench: "./app.workbench.yaml",
+        subagents: "./subagents",
+        clis: "./clis/clis.json",
+        connectors: "./connectors/connectors.json",
+        hooks: "./hooks",
+      },
+      componentPaths: {
+        runtime: "./app.runtime.yaml",
+        workbench: "./app.workbench.yaml",
+        skills: "./skills",
+        subagents: "./subagents",
+        clis: "./clis/clis.json",
+        connectors: "./connectors/connectors.json",
+        hooks: "./hooks",
+        resources: "./resources",
+        workflows: "./workflows",
+        artifacts: "./artifacts",
+      },
+      activationEntries: [
+        {
+          key: "content_article_generate",
+          title: "写文章",
+          aliases: ["@写文章", "@写作"],
+          kind: "plugin",
+          intent: "at_command",
+          defaultObjectKind: "articleDraft",
+        },
+      ],
+    });
+  });
+
   it("应接受插件包 manifest 的 name / interface / componentPaths 形状", () => {
     const contract = normalizePluginManifest({
       name: "research-pack",
@@ -129,8 +204,16 @@ describe("Plugin P1 manifest contract", () => {
     expect(contract.activationEntries).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          key: "content_factory",
+          key: "content_article_generate",
+          title: "写文章",
+          aliases: ["@写文章", "@写作"],
           kind: "plugin",
+          intent: "at_command",
+          defaultObjectKind: "articleDraft",
+        }),
+        expect.objectContaining({
+          key: "content_factory",
+          kind: "agentApp",
           intent: "manual",
           defaultObjectKind: "articleDraft",
         }),
@@ -139,6 +222,35 @@ describe("Plugin P1 manifest contract", () => {
           kind: "plugin",
           intent: "at_command",
           defaultObjectKind: "articleDraft",
+        }),
+      ]),
+    );
+    expect(contract.interface?.defaultPrompt).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("@写文章"),
+        expect.stringContaining("@写作"),
+      ]),
+    );
+    expect(contract.subagents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "content-researcher",
+          title: "资料检索",
+          activation: "content.article.generate",
+        }),
+        expect.objectContaining({
+          id: "article-writer",
+          title: "正文写作",
+          activation: "content.article.generate",
+        }),
+      ]),
+    );
+    expect(contract.workflows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: "content_article_workflow",
+          taskKind: "content.article.generate",
+          triggerIntents: ["content_article_generate"],
         }),
       ]),
     );

@@ -170,6 +170,8 @@ export function buildSessionSwitchStartMetricContext(params: {
   currentSessionId?: string | null;
   messagesCount: number;
   refreshCachedSnapshotImmediately: boolean;
+  snapshotIndexHadTarget?: boolean | null;
+  snapshotIndexHit?: boolean;
   topicId: string;
   workspaceId?: string | null;
 }): Record<string, unknown> {
@@ -182,6 +184,8 @@ export function buildSessionSwitchStartMetricContext(params: {
     messagesCount: params.messagesCount,
     refreshCachedSnapshotImmediately: params.refreshCachedSnapshotImmediately,
     sessionId: params.topicId,
+    snapshotIndexHadTarget: params.snapshotIndexHadTarget ?? null,
+    snapshotIndexHit: params.snapshotIndexHit === true,
     topicId: params.topicId,
     workspaceId: params.workspaceId,
   };

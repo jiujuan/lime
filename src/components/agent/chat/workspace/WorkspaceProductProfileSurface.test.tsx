@@ -66,6 +66,21 @@ vi.mock("react-i18next", () => ({
         "workspace.productProfile.preview.storyboardEmpty": "等待分镜内容",
         "workspace.productProfile.preview.checklist": "交付复核",
         "workspace.productProfile.preview.checklistEmpty": "等待复核结果",
+        "workspace.productProfile.writingStructure.title": "写作结构",
+        "workspace.productProfile.writingStructure.detail": `${options?.count ?? 0} 个结构区块`,
+        "workspace.productProfile.writingStructure.itemCount": `${options?.count ?? 0} 项`,
+        "workspace.productProfile.writingStructure.research": "资料检索",
+        "workspace.productProfile.writingStructure.outline": "文章提纲",
+        "workspace.productProfile.writingStructure.titleCandidates": "标题候选",
+        "workspace.productProfile.writingStructure.keyTakeaways": "关键观点",
+        "workspace.productProfile.writingStructure.citations": "引用来源",
+        "workspace.productProfile.writingStructure.imageSlots": "配图规划",
+        "workspace.productProfile.writingStructure.writingPlan": "写作计划",
+        "workspace.productProfile.writingStructure.reviewNotes": "复核备注",
+        "workspace.productProfile.writingStructure.citationCount": `${options?.count ?? 0} 条引用`,
+        "workspace.productProfile.writingStructure.score": `评分 ${options?.score ?? ""}`,
+        "workspace.productProfile.writingStructure.done": "已完成",
+        "workspace.productProfile.writingStructure.pending": "待处理",
         "workspace.productProfile.rendererHost.title": "插件渲染器",
         "workspace.productProfile.rendererHost.detail": `${options?.count ?? 0} 个来源产物 · 宿主托管`,
         "workspace.productProfile.rendererHost.plugin": "插件",
@@ -224,6 +239,64 @@ const profile: WorkspaceProductProfile = {
       summary: "已生成首版文章",
       source: {
         markdown: "# 公众号文章草稿\n\n这是可预览的文章正文。",
+        researchRounds: [
+          {
+            id: "research-1",
+            title: "检索行业背景",
+            query: "AI Agent 写作工作流",
+            status: "completed",
+            summary: "整理内容工厂和子流程编排的行业背景。",
+            citations: ["citation-1", "citation-2"],
+          },
+        ],
+        titleCandidates: [
+          {
+            id: "title-1",
+            title: "内容工厂不是聊天框",
+            angle: "产品设计复盘",
+            score: 0.92,
+          },
+        ],
+        outline: [
+          {
+            id: "intro",
+            title: "开场：为什么要把写作变成工作流",
+            purpose: "解释用户目标",
+            points: ["从搜索开始", "通过内容框沉淀产物"],
+            evidenceIds: ["citation-1"],
+          },
+        ],
+        keyTakeaways: ["写作应该经过检索、提纲、正文、配图和复核"],
+        citations: [
+          {
+            id: "citation-1",
+            title: "产品规划文档",
+            sourceType: "internal",
+            summary: "Writing 路线图要求内容框输出和右侧展开。",
+            status: "selected",
+          },
+        ],
+        imageSlots: [
+          {
+            id: "hero",
+            title: "首图",
+            sectionId: "intro",
+            purpose: "解释内容工厂工作流",
+            prompt: "桌面端内容工厂写作流程图，中文标签",
+            status: "planned",
+          },
+        ],
+        writingPlan: [
+          {
+            id: "plan-1",
+            title: "先做资料检索",
+            owner: "research-writer",
+            skillRef: "article-research",
+            output: "结构化资料卡",
+            done: true,
+          },
+        ],
+        reviewNotes: ["正文需要保留真实引用来源。"],
       },
     },
     {
@@ -518,6 +591,40 @@ describe("WorkspaceProductProfileSurface", () => {
 
     expect(container.textContent).toContain("文章画布");
     expect(container.textContent).toContain("这是可预览的文章正文");
+    expect(container.textContent).toContain("写作结构");
+    expect(container.textContent).toContain("检索行业背景");
+    expect(container.textContent).toContain("开场：为什么要把写作变成工作流");
+    expect(container.textContent).toContain("内容工厂不是聊天框");
+    expect(container.textContent).toContain("写作应该经过检索、提纲、正文、配图和复核");
+    expect(container.textContent).toContain("产品规划文档");
+    expect(container.textContent).toContain("桌面端内容工厂写作流程图，中文标签");
+    expect(container.textContent).toContain("先做资料检索");
+    expect(container.textContent).toContain("正文需要保留真实引用来源。");
+    expect(
+      container.querySelector(
+        '[data-testid="workspace-product-profile-writing-structure"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid="workspace-product-profile-writing-research"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid="workspace-product-profile-writing-outline"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid="workspace-product-profile-writing-citations"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid="workspace-product-profile-writing-image-slots"]',
+      ),
+    ).not.toBeNull();
     expect(
       container.querySelector(
         '[data-testid="workspace-product-profile-document-preview"]',

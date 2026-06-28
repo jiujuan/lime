@@ -68,9 +68,9 @@ impl Tool for TurnContextGatedWebSearchTool {
 }
 
 #[test]
-fn allowed_web_search_should_not_run_preflight_from_message_keywords() {
+fn auto_web_search_should_not_run_preflight_from_message_keywords() {
     let policy =
-        resolve_request_tool_policy_with_mode(Some(true), Some(RequestToolPolicyMode::Allowed));
+        resolve_request_tool_policy_with_mode(Some(true), Some(RequestToolPolicyMode::Auto));
 
     assert!(!should_run_web_search_preflight(
         &policy,

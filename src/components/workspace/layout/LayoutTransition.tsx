@@ -309,6 +309,8 @@ export const LayoutTransition: React.FC<LayoutTransitionProps> = memo(
 
     const chatStyles = getTransitionStyles("chat");
     const canvasStyles = getTransitionStyles("canvas");
+    const resolvedChatPanelMinWidth =
+      effectiveMode === "chat-canvas" ? chatPanelMinWidth || "360px" : "0px";
     const shouldRenderCanvas = hasCanvasContent && isCanvasVisible;
     const shouldRenderCompactChatTrigger =
       compactChatCanvasOverlay &&
@@ -330,7 +332,10 @@ export const LayoutTransition: React.FC<LayoutTransitionProps> = memo(
         containerRect.width - CHAT_CANVAS_RESIZE_MIN_CANVAS_WIDTH,
       );
       return Math.min(
-        Math.max(clientX - containerRect.left, CHAT_CANVAS_RESIZE_MIN_CHAT_WIDTH),
+        Math.max(
+          clientX - containerRect.left,
+          CHAT_CANVAS_RESIZE_MIN_CHAT_WIDTH,
+        ),
         maxWidth,
       );
     }, []);
@@ -489,14 +494,8 @@ export const LayoutTransition: React.FC<LayoutTransitionProps> = memo(
     const chatPanelNode = (
       <ChatPanel
         $width={chatStyles.width as string}
-        $duration={parseInt(
-          chatStyles.transition?.match(/\d+/)?.[0] || "300",
-        )}
-        $minWidth={
-          effectiveMode === "chat-canvas"
-            ? chatPanelMinWidth || "360px"
-            : "0px"
-        }
+        $duration={parseInt(chatStyles.transition?.match(/\d+/)?.[0] || "300")}
+        $minWidth={resolvedChatPanelMinWidth}
         $compactOverlay={
           compactChatCanvasOverlay && effectiveMode === "chat-canvas"
         }
@@ -505,6 +504,7 @@ export const LayoutTransition: React.FC<LayoutTransitionProps> = memo(
         $chrome={chatPanelChrome}
         data-testid="layout-chat-panel"
         data-chat-panel-width={chatStyles.width as string}
+        data-chat-panel-min-width={resolvedChatPanelMinWidth}
         data-overlay-state={
           compactChatCanvasOverlay && effectiveMode === "chat-canvas"
             ? compactChatPanelOpen

@@ -18,6 +18,8 @@ type EvidenceCheckStatus =
   | "missing"
   | "declared";
 
+type AgentTranslate = (key: string) => string;
+
 const STATUS_CLASS: Record<AgentAppCloudReleaseEvidenceStatus, string> = {
   ready: "border-emerald-200 bg-emerald-50 text-emerald-700",
   warning: "border-amber-200 bg-amber-50 text-amber-700",
@@ -87,6 +89,8 @@ export function AgentAppReleaseEvidenceSummary({
   evidence?: AgentAppCloudReleaseEvidence;
 }) {
   const { t } = useTranslation("agent");
+  const translate: AgentTranslate = (key) =>
+    String((t as unknown as AgentTranslate)(key));
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
     "idle",
   );
@@ -187,7 +191,7 @@ export function AgentAppReleaseEvidenceSummary({
           >
             <dt className="min-w-0">
               <span className="block text-xs font-medium text-[color:var(--lime-text-muted)]">
-                {t(row.labelKey)}
+                {translate(row.labelKey)}
               </span>
               <span
                 className="mt-0.5 block break-all text-xs text-[color:var(--lime-text)]"

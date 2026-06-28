@@ -118,6 +118,7 @@ export type ClawTraceLevelConfig = "summary" | "debug";
 
 export interface ClawTraceConfig {
   alert_enabled?: boolean;
+  alert_notification_enabled?: boolean;
   enabled?: boolean;
   level?: ClawTraceLevelConfig;
   sample_rate?: number;

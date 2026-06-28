@@ -65,7 +65,7 @@ export async function createFixtureSession(page, workspace, requestLog) {
       executionStrategy: "react",
       recentAccessMode: "full-access",
       recentPreferences: {
-        searchMode: "allowed",
+        searchMode: "auto",
       },
     },
     requestLog,
@@ -133,7 +133,7 @@ export async function createExpertSkillsRuntimeSession(page, workspace, requestL
       executionStrategy: "react",
       recentAccessMode: "full-access",
       recentPreferences: {
-        searchMode: "allowed",
+        searchMode: "auto",
       },
     },
     requestLog,

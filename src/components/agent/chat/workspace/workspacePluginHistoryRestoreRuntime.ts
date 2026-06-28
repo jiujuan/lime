@@ -5,6 +5,7 @@ import type {
   PluginHistoryRestoreSnapshot,
   PluginObjectRef,
   PluginRegistryItem,
+  PluginSessionWorkspaceObject,
 } from "@/features/plugin";
 import { buildPluginHistoryRestoreProjection } from "@/features/plugin";
 
@@ -53,9 +54,7 @@ function readObjectRef(value: unknown): PluginObjectRef | undefined {
     objectKind,
     objectId,
     version: readString(record, ["version"]),
-    artifactIds: readStringArray(
-      record?.artifact_ids ?? record?.artifactIds,
-    ),
+    artifactIds: readStringArray(record?.artifact_ids ?? record?.artifactIds),
     sourceTurnId: readString(record, ["source_turn_id", "sourceTurnId"]),
     sourceTaskId: readString(record, ["source_task_id", "sourceTaskId"]),
   };
@@ -71,7 +70,7 @@ function readPluginWorkspace(
   }
   const objects = Array.isArray(record.objects)
     ? record.objects
-        .map((item) => {
+        .map((item): PluginSessionWorkspaceObject | null => {
           const objectRecord = asRecord(item);
           const ref = readObjectRef(objectRecord?.ref);
           if (!ref) {
@@ -92,13 +91,7 @@ function readPluginWorkspace(
                   : undefined,
           };
         })
-        .filter(
-          (
-            item,
-          ): item is NonNullable<
-            PluginHistoryRestoreSnapshot["pluginWorkspace"]
-          >["objects"][number] => Boolean(item),
-        )
+        .filter((item): item is PluginSessionWorkspaceObject => Boolean(item))
     : [];
 
   return {
@@ -163,10 +156,7 @@ export function extractWorkspacePluginHistoryRestoreSnapshot(
       "active_agent_app_id",
       "activeAgentAppId",
     ]),
-    activeEntryKey: readString(restore, [
-      "active_entry_key",
-      "activeEntryKey",
-    ]),
+    activeEntryKey: readString(restore, ["active_entry_key", "activeEntryKey"]),
     selectedSkillKeys: readStringArray(
       restore.selected_skill_keys ?? restore.selectedSkillKeys,
     ),
@@ -179,7 +169,9 @@ export function extractWorkspacePluginHistoryRestoreSnapshot(
     selectedObjectRef: readObjectRef(
       restore.selected_object_ref ?? restore.selectedObjectRef,
     ),
-    artifactRefs: readStringArray(restore.artifact_refs ?? restore.artifactRefs),
+    artifactRefs: readStringArray(
+      restore.artifact_refs ?? restore.artifactRefs,
+    ),
     openedTabs: readStringArray(restore.opened_tabs ?? restore.openedTabs),
     pinnedTabs: readStringArray(restore.pinned_tabs ?? restore.pinnedTabs),
     layoutState: readLayoutState(restore.layout_state ?? restore.layoutState),

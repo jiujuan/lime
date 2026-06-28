@@ -30,6 +30,7 @@ import { useAppNavigation } from "./hooks/useAppNavigation";
 import { useAppShellLayout } from "./hooks/useAppShellLayout";
 import { useAppStartupEffects } from "./hooks/useAppStartupEffects";
 import { useGlobalTrayModelSync } from "./hooks/useGlobalTrayModelSync";
+import { useClawTraceRegressionAlertMonitor } from "./hooks/useClawTraceRegressionAlertMonitor";
 import { useOemLimeHubProviderSync } from "./hooks/useOemLimeHubProviderSync";
 import { useSkillPackageOpenRequests } from "./hooks/useSkillPackageOpenRequests";
 import { ComponentDebugProvider } from "./contexts/ComponentDebugContext";
@@ -62,9 +63,7 @@ import {
   persistVoiceModelSettingsFocusRequest,
 } from "./lib/voiceModelSettingsNavigation";
 import type { AgentAppRightSurfaceLaunchTarget } from "./features/agent-app/ui/agentAppRightSurfaceLaunch";
-import {
-  normalizeAgentAppRightSurfaceLaunchTarget,
-} from "./features/agent-app/ui/agentAppLaunchTargetPolicy";
+import { normalizeAgentAppRightSurfaceLaunchTarget } from "./features/agent-app/ui/agentAppLaunchTargetPolicy";
 import {
   DEFAULT_AGENT_APP_RIGHT_SURFACE_TARGET_LIMIT,
   loadAgentAppRightSurfaceLaunchTargetsFromStorage,
@@ -72,6 +71,7 @@ import {
   upsertAgentAppRightSurfaceLaunchTarget,
   type AgentAppLaunchTargetStorage,
 } from "./features/agent-app/ui/agentAppLaunchTargetPersistence";
+import type { AgentPageParams } from "./types/page";
 
 const AppContainer = styled.div`
   display: flex;
@@ -164,10 +164,9 @@ function getAgentSessionTargetStorage(): AgentAppLaunchTargetStorage | null {
 }
 
 function loadInitialAgentSessionTargetState(): AgentSessionTargetState {
-  const recent =
-    loadAgentAppRightSurfaceLaunchTargetsFromStorage(
-      getAgentSessionTargetStorage(),
-    );
+  const recent = loadAgentAppRightSurfaceLaunchTargetsFromStorage(
+    getAgentSessionTargetStorage(),
+  );
   return {
     active: recent[0] ?? null,
     recent,
@@ -191,8 +190,18 @@ function AppContent() {
     handleNavigate,
   } = useAppNavigation();
   const [agentHasMessages, setAgentHasMessages] = useState(false);
+  const [activeAgentSessionId, setActiveAgentSessionId] = useState<
+    string | null
+  >(null);
   const [agentSessionTargetState, setAgentSessionTargetState] =
     useState<AgentSessionTargetState>(loadInitialAgentSessionTargetState);
+  const activeAgentPage = requestedPage ?? currentPage;
+  const activeAgentPageParams = requestedPageParams ?? pageParams;
+  const activeAgentRouteSessionId =
+    activeAgentPage === "agent"
+      ? ((activeAgentPageParams as AgentPageParams | undefined)
+          ?.initialSessionId?.trim() ?? null)
+      : null;
 
   const [projectDialogOpen, setProjectDialogOpen] = useState(false);
   const [pendingRecommendation, setPendingRecommendation] = useState<{
@@ -206,6 +215,7 @@ function AppContent() {
   useServiceSkillCatalogBootstrap();
   useSiteAdapterCatalogBootstrap();
   useOemLimeHubProviderSync();
+  useClawTraceRegressionAlertMonitor();
   const handleResourceManagerNavigationHandled = useCallback(
     ({
       destination,
@@ -459,6 +469,14 @@ function AppContent() {
       agentSessionTargetState.recent,
     );
   }, [agentSessionTargetState.recent]);
+  useEffect(() => {
+    if (activeAgentPage !== "agent") {
+      setActiveAgentSessionId(null);
+      return;
+    }
+
+    setActiveAgentSessionId(activeAgentRouteSessionId);
+  }, [activeAgentPage, activeAgentRouteSessionId]);
 
   const handleAgentSessionTargetChange = useCallback(
     (target: AgentAppRightSurfaceLaunchTarget | null) => {
@@ -519,6 +537,7 @@ function AppContent() {
             <AppSidebar
               currentPage={currentPage}
               currentPageParams={pageParams}
+              activeAgentSessionId={activeAgentSessionId}
               requestedPage={requestedPage}
               requestedPageParams={requestedPageParams}
               onNavigate={handleNavigate}
@@ -544,6 +563,7 @@ function AppContent() {
                 navigationRequestId={navigationRequestId}
                 onNavigate={handleNavigate}
                 onAgentHasMessagesChange={setAgentHasMessages}
+                onAgentSessionChange={setActiveAgentSessionId}
                 activeAgentSessionTarget={agentSessionTargetState.active}
                 agentSessionTargets={agentSessionTargetState.recent}
                 onAgentSessionTargetChange={handleAgentSessionTargetChange}

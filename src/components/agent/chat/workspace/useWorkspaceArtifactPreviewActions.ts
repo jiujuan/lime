@@ -18,6 +18,7 @@ import type { SessionFile } from "@/lib/api/session-files";
 import { createPreviewArtifactFromFile } from "@/lib/artifact/previewArtifact";
 import type { Artifact } from "@/lib/artifact/types";
 import { resolveArtifactProtocolFilePath } from "@/lib/artifact-protocol";
+import { isWorkspaceProductProfilePreviewArtifact } from "./workspaceProductProfilePreviewArtifact";
 import {
   createLayeredDesignArtifact,
   type LayeredDesignDocumentInput,
@@ -183,6 +184,7 @@ interface UseWorkspaceArtifactPreviewActionsParams {
   readSessionFile: (fileName: string) => Promise<string | null>;
   suppressBrowserAssistCanvasAutoOpen: () => void;
   onOpenBrowserRuntimeForArtifact?: (artifact: Artifact) => void;
+  onOpenProductProfilePreviewArtifact?: (artifact: Artifact) => void;
   onRequestCanvasPreviewOpen?: (request: {
     filePath?: string | null;
     selectionKey?: string | null;
@@ -202,6 +204,7 @@ interface WorkspaceArtifactPreviewActionsResult {
     path: string,
     artifact?: Artifact,
   ) => Promise<HarnessFilePreviewResult>;
+  openArtifactInWorkbench: (artifact: Artifact) => Promise<void>;
   handleArtifactClick: (artifact: Artifact) => void;
   handleFileClick: (fileName: string, content: string) => void;
   handleCodeBlockClick: (language: string, code: string) => void;
@@ -223,6 +226,7 @@ export function useWorkspaceArtifactPreviewActions({
   readSessionFile,
   suppressBrowserAssistCanvasAutoOpen,
   onOpenBrowserRuntimeForArtifact,
+  onOpenProductProfilePreviewArtifact,
   onRequestCanvasPreviewOpen,
   upsertGeneralArtifact,
   setSelectedArtifactId,
@@ -443,9 +447,14 @@ export function useWorkspaceArtifactPreviewActions({
 
   const handleArtifactClick = useCallback(
     (artifact: Artifact) => {
+      if (isWorkspaceProductProfilePreviewArtifact(artifact)) {
+        onOpenProductProfilePreviewArtifact?.(artifact);
+        return;
+      }
+
       void openArtifactInWorkbench(artifact);
     },
-    [openArtifactInWorkbench],
+    [onOpenProductProfilePreviewArtifact, openArtifactInWorkbench],
   );
 
   const findArtifactForCodeBlock = useCallback(
@@ -755,6 +764,7 @@ export function useWorkspaceArtifactPreviewActions({
 
   return {
     handleHarnessLoadFilePreview,
+    openArtifactInWorkbench,
     handleArtifactClick,
     handleFileClick,
     handleCodeBlockClick,

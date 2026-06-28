@@ -68,6 +68,33 @@ describe("installed Agent App plugin projection", () => {
     });
   });
 
+  it("应兼容 App Server 返回的 raw Agent App manifest", () => {
+    const projection = projectPluginRegistryFromInstalledAgentApps([
+      {
+        ...installedContentFactory(),
+        manifest: contentFactoryFixture,
+      } as unknown as InstalledAgentAppState,
+    ]);
+
+    expect(projection.skippedAppIds).toEqual([]);
+    expect(projection.contracts[0]).toMatchObject({
+      id: "content-factory-app",
+      version: "2.0.0",
+      activationEntries: expect.arrayContaining([
+        expect.objectContaining({
+          key: "content_article_generate",
+          title: "写文章",
+          aliases: ["@写文章", "@写作"],
+          intent: "at_command",
+        }),
+      ]),
+    });
+    expect(projection.registry[0]).toMatchObject({
+      pluginId: "content-factory-app",
+      activationState: "activatable",
+    });
+  });
+
   it("禁用的 Agent App 应投影成只读历史状态", () => {
     const projection = projectPluginRegistryFromInstalledAgentApps([
       installedContentFactory({ disabled: true }),

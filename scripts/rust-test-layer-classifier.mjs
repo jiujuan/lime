@@ -30,7 +30,7 @@ function walkFiles(dir, files = []) {
   return files;
 }
 
-function parseWorkspaceMemberRoots(repoRoot) {
+export function parseWorkspaceMemberRoots(repoRoot) {
   const cargoTomlPath = path.join(repoRoot, "lime-rs", "Cargo.toml");
   const content = fs.readFileSync(cargoTomlPath, "utf8");
   const excludeBlock = content.match(/exclude\s*=\s*\[([\s\S]*?)\]/)?.[1] || "";

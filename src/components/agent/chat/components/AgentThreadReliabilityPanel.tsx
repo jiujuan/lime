@@ -1,17 +1,6 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  AlertTriangle,
-  Bot,
-  Clock3,
-  Copy,
-  FileText,
-  ListTodo,
-  Loader2,
-  PauseCircle,
-  PlayCircle,
-  Waves,
-} from "lucide-react";
+import { Clock3, FileText, Loader2, PauseCircle, PlayCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -38,9 +27,6 @@ import {
   type AgentThreadReliabilityDiagnosticContext,
 } from "../utils/threadReliabilityDiagnosticText";
 import {
-  formatAgentUiProjectionEventDetail,
-  formatAgentUiProjectionEventType,
-  formatAgentUiProjectionPhase,
   type AgentUiProjectionTranslation,
 } from "../projection/agentUiProjectionSummary";
 import { useAgentUiProjectionSummary } from "../projection/useConversationProjectionStore";
@@ -49,11 +35,13 @@ import { AgentThreadFileCheckpointDialog } from "./AgentThreadFileCheckpointDial
 import { AgentThreadOutcomeSummary } from "./AgentThreadOutcomeSummary";
 import { AgentThreadRoutingEvidenceCard } from "./AgentThreadRoutingEvidenceCard";
 import { AgentThreadPolicyEvidenceCard } from "./AgentThreadPolicyEvidenceCard";
+import { AgentThreadReliabilityPanelHeader } from "./AgentThreadReliabilityPanelHeader";
+import { AgentThreadReliabilityProjectionSummary } from "./AgentThreadReliabilityProjectionSummary";
+import { AgentThreadReliabilityStats } from "./AgentThreadReliabilityStats";
 import {
+  resolveToneClassName,
   resolveRuntimeDecisionReason,
   resolveRuntimeFallbackChain,
-  resolveStatShellClassName,
-  resolveToneClassName,
   serializeReliabilityClipboardPayload,
 } from "./AgentThreadReliabilityPanelViewModel";
 import type {
@@ -497,212 +485,54 @@ export const AgentThreadReliabilityPanel: React.FC<
       )}
       data-testid="agent-thread-reliability-panel"
     >
-      <div className="flex flex-wrap items-start gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="text-xs font-medium tracking-wide text-muted-foreground">
-            {text("title")}
-          </div>
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            <Badge
-              variant="outline"
-              className="border-amber-200 bg-amber-50 text-amber-700"
-            >
-              {text("badge.quickDiagnostic")}
-            </Badge>
-            <Badge
-              variant="outline"
-              className={resolveToneClassName(statusTone)}
-            >
-              {statusLabel}
-            </Badge>
-            {view.activeTurnLabel ? (
-              <span className="text-sm font-medium text-foreground">
-                {view.activeTurnLabel}
-              </span>
-            ) : null}
-          </div>
-          <div className="mt-2 text-sm leading-6 text-muted-foreground">
-            {summary}
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-end gap-2 text-xs text-muted-foreground">
-          {view.updatedAtLabel ? (
-            <span>{text("lastUpdated", { value: view.updatedAtLabel })}</span>
-          ) : null}
-          {view.interruptStateLabel ? (
-            <Badge
-              variant="outline"
-              className="border-slate-200 bg-slate-50 text-slate-700"
-            >
-              {view.interruptStateLabel}
-            </Badge>
-          ) : null}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => void handleCopyDiagnostic()}
-            className="h-8 rounded-full"
-            data-testid="agent-thread-reliability-copy"
-          >
-            <Copy className="mr-2 h-3.5 w-3.5" />
-            {text("copyDiagnostic")}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => void handleCopyRawJson()}
-            className="h-8 rounded-full"
-            data-testid="agent-thread-reliability-copy-json"
-          >
-            <Copy className="mr-2 h-3.5 w-3.5" />
-            {text("copyJsonDebug")}
-          </Button>
-        </div>
-      </div>
+      <AgentThreadReliabilityPanelHeader
+        activeTurnLabel={view.activeTurnLabel}
+        copyDiagnosticLabel={text("copyDiagnostic")}
+        copyJsonDebugLabel={text("copyJsonDebug")}
+        interruptStateLabel={view.interruptStateLabel}
+        lastUpdatedLabel={
+          view.updatedAtLabel
+            ? text("lastUpdated", { value: view.updatedAtLabel })
+            : null
+        }
+        quickDiagnosticLabel={text("badge.quickDiagnostic")}
+        statusLabel={statusLabel}
+        statusTone={statusTone}
+        summary={summary}
+        title={text("title")}
+        onCopyDiagnostic={() => void handleCopyDiagnostic()}
+        onCopyRawJson={() => void handleCopyRawJson()}
+      />
       <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-[11px] leading-5 text-amber-900">
         {text("handoffNotice")}
       </div>
 
-      <div className="mt-4 grid gap-2 md:grid-cols-3">
-        <div
-          className={cn(
-            "rounded-2xl border px-3 py-3",
-            resolveStatShellClassName(
-              view.pendingRequestCount > 0 ? "waiting" : "neutral",
-            ),
-          )}
-        >
-          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-            <ListTodo className="h-4 w-4" />
-            <span>{text("stats.pendingRequests")}</span>
-          </div>
-          <div className="mt-2 text-2xl font-semibold text-foreground">
-            {view.pendingRequestCount}
-          </div>
-        </div>
+      <AgentThreadReliabilityStats
+        activeIncidentCount={view.activeIncidentCount}
+        activeIncidentsLabel={text("stats.activeIncidents")}
+        pendingRequestCount={view.pendingRequestCount}
+        pendingRequestsLabel={text("stats.pendingRequests")}
+        queuedTurnCount={view.queuedTurnCount}
+        queuedTurnsLabel={text("stats.queuedTurns")}
+      />
 
-        <div
-          className={cn(
-            "rounded-2xl border px-3 py-3",
-            resolveStatShellClassName(
-              view.activeIncidentCount > 0 ? "failed" : "neutral",
-            ),
-          )}
-        >
-          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-            <AlertTriangle className="h-4 w-4" />
-            <span>{text("stats.activeIncidents")}</span>
-          </div>
-          <div className="mt-2 text-2xl font-semibold text-foreground">
-            {view.activeIncidentCount}
-          </div>
-        </div>
-
-        <div
-          className={cn(
-            "rounded-2xl border px-3 py-3",
-            resolveStatShellClassName(
-              view.queuedTurnCount > 0 ? "waiting" : "neutral",
-            ),
-          )}
-        >
-          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-            <Waves className="h-4 w-4" />
-            <span>{text("stats.queuedTurns")}</span>
-          </div>
-          <div className="mt-2 text-2xl font-semibold text-foreground">
-            {view.queuedTurnCount}
-          </div>
-        </div>
-      </div>
-
-      {agentUiProjectionSummary.total > 0 ? (
-        <div
-          className="mt-4 rounded-2xl border border-sky-200 bg-sky-50/70 px-4 py-3"
-          data-testid="agent-thread-reliability-agentui-projection"
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-2 text-sm font-medium text-sky-900">
-              <Bot className="h-4 w-4" />
-              <span>{text("projection.title")}</span>
-            </div>
-            <Badge
-              variant="outline"
-              className="border-sky-300 bg-white text-sky-700"
-            >
-              {text("projection.count", {
-                count: agentUiProjectionSummary.total,
-              })}
-            </Badge>
-            <span className="text-xs text-sky-800">
-              {text("projection.source")}
-            </span>
-          </div>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-            <div className="rounded-xl border border-sky-100 bg-white px-3 py-2">
-              <div className="text-[11px] text-sky-700">
-                {text("projection.metric.action")}
-              </div>
-              <div className="mt-1 text-lg font-semibold text-sky-950">
-                {agentUiProjectionSummary.actionCount}
-              </div>
-            </div>
-            <div className="rounded-xl border border-sky-100 bg-white px-3 py-2">
-              <div className="text-[11px] text-sky-700">
-                {text("projection.metric.task")}
-              </div>
-              <div className="mt-1 text-lg font-semibold text-sky-950">
-                {agentUiProjectionSummary.taskCount}
-              </div>
-            </div>
-            <div className="rounded-xl border border-sky-100 bg-white px-3 py-2">
-              <div className="text-[11px] text-sky-700">
-                {text("projection.metric.artifact")}
-              </div>
-              <div className="mt-1 text-lg font-semibold text-sky-950">
-                {agentUiProjectionSummary.artifactCount}
-              </div>
-            </div>
-            <div className="rounded-xl border border-sky-100 bg-white px-3 py-2">
-              <div className="text-[11px] text-sky-700">
-                {text("projection.metric.evidence")}
-              </div>
-              <div className="mt-1 text-lg font-semibold text-sky-950">
-                {agentUiProjectionSummary.evidenceCount}
-              </div>
-            </div>
-            <div className="rounded-xl border border-sky-100 bg-white px-3 py-2">
-              <div className="text-[11px] text-sky-700">
-                {text("projection.metric.diagnostics")}
-              </div>
-              <div className="mt-1 text-lg font-semibold text-sky-950">
-                {agentUiProjectionSummary.diagnosticsCount}
-              </div>
-            </div>
-          </div>
-          {agentUiProjectionSummary.latestEvent ? (
-            <div className="mt-3 text-xs leading-5 text-sky-900">
-              {text("projection.latestEventPrefix")}
-              {formatAgentUiProjectionEventType(
-                agentUiProjectionSummary.latestEvent.type,
-                translateProjection,
-              )}
-              {" · "}
-              {formatAgentUiProjectionPhase(
-                agentUiProjectionSummary.latestEvent.phase,
-                translateProjection,
-              )}
-              {" · "}
-              {formatAgentUiProjectionEventDetail(
-                agentUiProjectionSummary.latestEvent,
-              )}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
+      <AgentThreadReliabilityProjectionSummary
+        labels={{
+          action: text("projection.metric.action"),
+          artifact: text("projection.metric.artifact"),
+          count: text("projection.count", {
+            count: agentUiProjectionSummary.total,
+          }),
+          diagnostics: text("projection.metric.diagnostics"),
+          evidence: text("projection.metric.evidence"),
+          latestEventPrefix: text("projection.latestEventPrefix"),
+          source: text("projection.source"),
+          task: text("projection.metric.task"),
+          title: text("projection.title"),
+        }}
+        summary={agentUiProjectionSummary}
+        translateProjection={translateProjection}
+      />
 
       <AgentThreadRoutingEvidenceCard
         evidence={runtimeRoutingEvidence}

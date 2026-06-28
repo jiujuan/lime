@@ -152,6 +152,7 @@ import {
 interface AppSidebarProps {
   currentPage: Page;
   currentPageParams?: PageParams;
+  activeAgentSessionId?: string | null;
   requestedPage?: Page;
   requestedPageParams?: PageParams;
   onNavigate: (page: Page, params?: PageParams) => void;
@@ -163,6 +164,7 @@ type SidebarNavItem = SidebarNavItemDefinition;
 export function AppSidebar({
   currentPage,
   currentPageParams,
+  activeAgentSessionId,
   requestedPage,
   requestedPageParams,
   onNavigate,
@@ -309,8 +311,18 @@ export function AppSidebar({
   );
   const requireConversationProjectCwd =
     Boolean(activeAgentProjectId) && conversationProjectCwds.length > 0;
-  const currentSessionId =
+  const requestedAgentSessionId =
+    requestedPage === "agent"
+      ? ((requestedPageParams as AgentPageParams | undefined)?.initialSessionId
+          ?.trim() ?? null)
+      : null;
+  const liveAgentSessionId = isAgentWorkspace
+    ? activeAgentSessionId?.trim() || null
+    : null;
+  const routeAgentSessionId =
     activeAgentPageParams?.initialSessionId?.trim() || null;
+  const currentSessionId =
+    requestedAgentSessionId || liveAgentSessionId || routeAgentSessionId;
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     if (typeof window === "undefined") {
       return false;

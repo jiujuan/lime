@@ -42,6 +42,13 @@ describe("contentFactoryPlugin", () => {
           intent: "at_command",
           defaultObjectKind: "articleDraft",
         }),
+        expect.objectContaining({
+          key: "content_article_generate",
+          title: "写文章",
+          aliases: ["@写文章", "@写作"],
+          intent: "at_command",
+          defaultObjectKind: "articleDraft",
+        }),
       ]),
     );
   });
@@ -97,6 +104,29 @@ describe("contentFactoryPlugin", () => {
           prefix: "@内容工厂",
           pluginId: CONTENT_FACTORY_PLUGIN_ID,
           activeEntryKey: CONTENT_FACTORY_PLUGIN_ENTRY_KEY,
+          defaultObjectKind: "articleDraft",
+          activationState: "activatable",
+        }),
+      ]),
+    );
+  });
+
+  it("dogfood catalog 应从 manifest aliases 提供写文章入口", () => {
+    const { activationCatalog: catalog } = buildContentFactoryPluginDogfoodContract();
+
+    expect(catalog.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          prefix: "@写文章",
+          pluginId: CONTENT_FACTORY_PLUGIN_ID,
+          activeEntryKey: "content_article_generate",
+          defaultObjectKind: "articleDraft",
+          activationState: "activatable",
+        }),
+        expect.objectContaining({
+          prefix: "@写作",
+          pluginId: CONTENT_FACTORY_PLUGIN_ID,
+          activeEntryKey: "content_article_generate",
           defaultObjectKind: "articleDraft",
           activationState: "activatable",
         }),

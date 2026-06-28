@@ -76,7 +76,10 @@ import {
   type ThemeType,
 } from "@/lib/workspace/workbenchContract";
 import { normalizeProjectId } from "./utils/topicProjectResolution";
-import { deriveHarnessSessionState } from "./utils/harnessState";
+import {
+  deriveHarnessSessionShellState,
+  deriveHarnessSessionState,
+} from "./utils/harnessState";
 import { shouldUseCompactGeneralPromptForPreferences } from "./utils/chatToolPreferences";
 import { buildRealSubagentTimelineItems } from "./utils/subagentTimeline";
 import {
@@ -194,6 +197,7 @@ import { useWorkspaceHealthRuntime } from "./workspace/useWorkspaceHealthRuntime
 import { useWorkspaceDefaultProjectAliasRuntime } from "./workspace/useWorkspaceDefaultProjectAliasRuntime";
 import { WorkspaceGeneralWorkbenchSidebar } from "./workspace/WorkspaceGeneralWorkbenchSidebar";
 import { GeneralWorkbenchHarnessSurfaceSection } from "./workspace/WorkspaceHarnessDialogs";
+import { WorkspaceTraceTab } from "./workspace/WorkspaceTraceTab";
 import {
   WorkspaceFilesSurface,
   type WorkspaceFilesSurfaceTarget,
@@ -215,6 +219,11 @@ import {
   type WorkspaceProductProfileActionIntent,
   type WorkspaceProductProfile,
 } from "./workspace/workspaceProductProfileModel";
+import {
+  attachWorkspaceProductProfilePreviewArtifactToMessages,
+  buildWorkspaceProductProfileFromMessageArtifacts,
+} from "./workspace/workspaceProductProfileMessageArtifacts";
+import { isWorkspaceProductProfilePreviewArtifact } from "./workspace/workspaceProductProfilePreviewArtifact";
 import {
   buildWorkspaceProductProfileSelectionUpdateRequest,
   type WorkspaceProductProfileSelectionChange,
@@ -343,6 +352,7 @@ import {
   resolveRuntimeWorkspaceId,
   resolveTaskPreviewArtifact,
   resolveVideoCanvasStatusFromPreview,
+  shouldBuildFullThreadTimeline,
   type TaskCenterDraftTab,
 } from "./workspace/agentChatWorkspaceHelpers";
 import { SCENEAPP_QUICK_REVIEW_ACTIONS } from "@/lib/agent/legacySceneAppExecutionSummary";
@@ -1124,8 +1134,7 @@ export function AgentChatWorkspace({
     ],
   );
   const workspacePluginRuntimeContext = useWorkspacePluginRuntimeContext({
-    requestMetadata: workspaceRequestMetadataWithExpertSkills,
-    preloadInstalled: true,
+    requestMetadata: workspaceRequestMetadataWithExpertSkills ?? undefined,
   });
   const workspacePluginInputSuggestions = useMemo(
     () =>
@@ -1437,28 +1446,9 @@ export function AgentChatWorkspace({
     projectId,
     siteSkillExecutionState,
   ]);
-  const realSubagentTimelineItems = useMemo(
-    () =>
-      buildRealSubagentTimelineItems({
-        threadId: sessionId,
-        turns,
-        childSessions: childSubagentSessions,
-      }),
-    [childSubagentSessions, sessionId, turns],
-  );
-  const effectiveThreadItems = useMemo(
-    () => mergeThreadItems(threadItems, realSubagentTimelineItems),
-    [realSubagentTimelineItems, threadItems],
-  );
-  const harnessState = useMemo(
-    () =>
-      deriveHarnessSessionState(
-        messages,
-        pendingActions,
-        effectiveThreadItems,
-        todoItems,
-      ),
-    [effectiveThreadItems, messages, pendingActions, todoItems],
+  const harnessShellState = useMemo(
+    () => deriveHarnessSessionShellState(messages, pendingActions, todoItems),
+    [messages, pendingActions, todoItems],
   );
   useEffect(() => {
     onSessionChange?.(sessionId ?? null);
@@ -1474,7 +1464,7 @@ export function AgentChatWorkspace({
     mappedTheme,
     isSending,
     projectMemory,
-    harnessState,
+    harnessState: harnessShellState,
   });
   const {
     contextWorkspace,
@@ -1486,6 +1476,29 @@ export function AgentChatWorkspace({
     harnessAttentionLevel,
     harnessToggleLabel,
   } = contextHarnessRuntime;
+  const needsFullThreadTimeline = shouldBuildFullThreadTimeline({
+    harnessPanelVisible,
+    isSending,
+    layoutMode,
+  });
+  const realSubagentTimelineItems = useMemo(
+    () =>
+      needsFullThreadTimeline
+        ? buildRealSubagentTimelineItems({
+            threadId: sessionId,
+            turns,
+            childSessions: childSubagentSessions,
+          })
+        : [],
+    [childSubagentSessions, needsFullThreadTimeline, sessionId, turns],
+  );
+  const effectiveThreadItems = useMemo(
+    () =>
+      needsFullThreadTimeline
+        ? mergeThreadItems(threadItems, realSubagentTimelineItems)
+        : threadItems,
+    [needsFullThreadTimeline, realSubagentTimelineItems, threadItems],
+  );
   const generalWorkbenchScaffoldRuntime =
     useWorkspaceGeneralWorkbenchScaffoldRuntime({
       isGeneralWorkbench: isThemeWorkbench,
@@ -2539,6 +2552,9 @@ export function AgentChatWorkspace({
     },
     [handleWriteFile],
   );
+  const handleProductProfilePreviewArtifactOpenRef = useRef<
+    (artifact: Artifact) => void
+  >(() => {});
   const { renderToolbarActions: renderArtifactWorkbenchToolbarActions } =
     useWorkspaceArtifactWorkbenchActions({
       activeTheme,
@@ -2549,6 +2565,7 @@ export function AgentChatWorkspace({
 
   const {
     handleHarnessLoadFilePreview,
+    openArtifactInWorkbench: openWorkspaceArtifactInWorkbench,
     handleArtifactClick,
     handleFileClick,
     handleCodeBlockClick,
@@ -2578,6 +2595,8 @@ export function AgentChatWorkspace({
     setSelectedFileId,
     setGeneralCanvasState,
     setCanvasState,
+    onOpenProductProfilePreviewArtifact: (artifact) =>
+      handleProductProfilePreviewArtifactOpenRef.current(artifact),
   });
   const handleWorkspaceFileClick = useCallback(
     (fileName: string, content: string) => {
@@ -3570,6 +3589,43 @@ export function AgentChatWorkspace({
       ) ?? [],
     [pendingActions, planComposerDecision],
   );
+  const needsPlanImplementationTimeline = !planComposerDecision && !isSending;
+  const needsHarnessDetailState = harnessPanelVisible;
+  const harnessState = useMemo(
+    () =>
+      needsHarnessDetailState || needsPlanImplementationTimeline
+        ? deriveHarnessSessionState(
+            messages,
+            pendingActions,
+            effectiveThreadItems,
+            todoItems,
+          )
+        : {
+            ...harnessShellState,
+            reasoning: undefined,
+            activity: {
+              planning: 0,
+              filesystem: 0,
+              execution: 0,
+              web: 0,
+              skills: 0,
+              delegation: 0,
+            },
+            delegatedTasks: [],
+            outputSignals: [],
+            activeFileWrites: [],
+            recentFileEvents: [],
+          },
+    [
+      effectiveThreadItems,
+      harnessShellState,
+      messages,
+      needsHarnessDetailState,
+      needsPlanImplementationTimeline,
+      pendingActions,
+      todoItems,
+    ],
+  );
   const [dismissedLocalPlanRequestIds, setDismissedLocalPlanRequestIds] =
     useState<Set<string>>(() => new Set());
   const [submittedLocalPlanRequestIds, setSubmittedLocalPlanRequestIds] =
@@ -3724,8 +3780,7 @@ export function AgentChatWorkspace({
       onDismiss={handleDismissLocalPlanImplementationDecision}
     />
   ) : undefined;
-  const generalWorkbenchHarnessPanelProps = {
-    harnessState,
+  const generalWorkbenchHarnessPanelBaseProps = {
     environment: contextHarnessRuntime.harnessEnvironment,
     childSubagentSessions,
     selectedTeamLabel,
@@ -3776,7 +3831,7 @@ export function AgentChatWorkspace({
     onSubmitCodeFixPrompt: handleSubmitCodeFixPrompt,
   } satisfies Omit<
     ComponentProps<typeof GeneralWorkbenchHarnessSurfaceSection>,
-    "enabled"
+    "enabled" | "harnessState"
   >;
   useWorkspaceWorkflowProgressRuntime({
     currentStepIndex,
@@ -4221,6 +4276,11 @@ export function AgentChatWorkspace({
     () => buildWorkspaceProductProfileFromThreadRead(sceneThreadRead),
     [sceneThreadRead],
   );
+  const productProfileFromMessageArtifacts = useMemo(
+    () =>
+      buildWorkspaceProductProfileFromMessageArtifacts(sceneDisplayMessages),
+    [sceneDisplayMessages],
+  );
   const productProfileFromPluginActivation = useMemo(
     () =>
       buildWorkspacePluginProductProfileFromActivation({
@@ -4316,9 +4376,24 @@ export function AgentChatWorkspace({
     activeProductProfile ??
     rightSurfaceAppServerPendingRuntime.pendingProductProfile ??
     productProfileFromThreadRead ??
+    productProfileFromMessageArtifacts ??
     productProfileFromPluginActivation;
   const productProfileRightSurfaceAvailable = Boolean(
     productProfileRightSurface || objectCanvasRightSurfaceAvailable,
+  );
+  const sceneDisplayMessagesWithProductProfileArtifact = useMemo(
+    () =>
+      attachWorkspaceProductProfilePreviewArtifactToMessages({
+        messages: sceneDisplayMessages,
+        profile: shouldHideCurrentSessionContent
+          ? null
+          : productProfileRightSurface,
+      }),
+    [
+      productProfileRightSurface,
+      sceneDisplayMessages,
+      shouldHideCurrentSessionContent,
+    ],
   );
   useEffect(() => {
     const pendingAgentAppSurfaces =
@@ -4361,6 +4436,8 @@ export function AgentChatWorkspace({
   ]);
   const rightSurfaceHarnessEnabled =
     !suppressHomeNavbarUtilityActions && showHarnessToggle;
+  const rightSurfaceTraceEnabled =
+    !suppressHomeNavbarUtilityActions && clawTraceEnabled;
   useEffect(() => {
     if (
       !pendingBrowserRightSurfaceIntent ||
@@ -4552,8 +4629,34 @@ export function AgentChatWorkspace({
     rightSurfaceHarnessEnabled,
     setHarnessPanelVisible,
   ]);
+  const handleToggleRightSurfaceTrace = useCallback(() => {
+    if (!rightSurfaceTraceEnabled) {
+      return;
+    }
+    const shouldOpenTrace = manualRightSurface !== "trace";
+    setHarnessPanelVisible(false);
+    setExpertInfoPanelCollapsed(true);
+    setActiveFilesRightSurfaceTarget(null);
+    setActiveObjectCanvasRightSurfaceCandidate(null);
+    setActiveProductProfile(null);
+    setManualRightSurface(shouldOpenTrace ? "trace" : null);
+    if (shouldOpenTrace) {
+      void consumePendingRequestsForSurface("trace");
+    } else {
+      void dismissPendingRequestsForSurface("trace", "user_closed_surface");
+    }
+  }, [
+    consumePendingRequestsForSurface,
+    dismissPendingRequestsForSurface,
+    manualRightSurface,
+    rightSurfaceTraceEnabled,
+    setHarnessPanelVisible,
+  ]);
   useEffect(() => {
     if (manualRightSurface === "harness" && !rightSurfaceHarnessEnabled) {
+      setManualRightSurface(null);
+    }
+    if (manualRightSurface === "trace" && !rightSurfaceTraceEnabled) {
       setManualRightSurface(null);
     }
     if (manualRightSurface === "files" && !filesRightSurfaceAvailable) {
@@ -4594,6 +4697,7 @@ export function AgentChatWorkspace({
     objectCanvasRightSurfaceAvailable,
     productProfileRightSurfaceAvailable,
     rightSurfaceHarnessEnabled,
+    rightSurfaceTraceEnabled,
   ]);
   const handleToggleCanvasFromRightSurface = useCallback(() => {
     if (manualRightSurface && sceneLayoutMode !== "chat") {
@@ -4646,11 +4750,13 @@ export function AgentChatWorkspace({
     add("files", filesRightSurfaceAvailable);
     add("shell", shellRightSurfaceAvailable);
     add("harness", rightSurfaceHarnessEnabled);
+    add("trace", rightSurfaceTraceEnabled);
     add("objectCanvas", manualRightSurface === "objectCanvas");
     add("productProfile", manualRightSurface === "productProfile");
     add("files", manualRightSurface === "files");
     add("shell", manualRightSurface === "shell");
     add("harness", manualRightSurface === "harness");
+    add("trace", manualRightSurface === "trace");
     add("appSurface", manualRightSurface === "appSurface");
     add("expertInfo", manualRightSurface === "expertInfo");
     add("browser", manualRightSurface === "browser");
@@ -4663,6 +4769,7 @@ export function AgentChatWorkspace({
     objectCanvasRightSurfaceAvailable,
     productProfileRightSurfaceAvailable,
     rightSurfaceHarnessEnabled,
+    rightSurfaceTraceEnabled,
     sceneLayoutMode,
     shellRightSurfaceAvailable,
   ]);
@@ -4674,6 +4781,25 @@ export function AgentChatWorkspace({
     requestedSurface: manualRightSurface ?? undefined,
     source: manualRightSurface ? "user" : undefined,
   });
+  const rightSurfaceHarnessState = useMemo(
+    () =>
+      rightSurfaceState.activeSurface === "harness"
+        ? deriveHarnessSessionState(
+            messages,
+            pendingActions,
+            effectiveThreadItems,
+            todoItems,
+          )
+        : harnessState,
+    [
+      effectiveThreadItems,
+      harnessState,
+      messages,
+      pendingActions,
+      rightSurfaceState.activeSurface,
+      todoItems,
+    ],
+  );
   const handleSelectRightSurfaceTab = useCallback(
     (kind: WorkspaceRightSurfaceKind) => {
       if (kind === rightSurfaceState.activeSurface) {
@@ -4799,10 +4925,28 @@ export function AgentChatWorkspace({
   );
   const handleProductProfilePreviewArtifactOpen = useCallback(
     (artifact: Artifact) => {
-      handleWorkspaceArtifactClick(artifact);
+      if (!isWorkspaceProductProfilePreviewArtifact(artifact)) {
+        void openWorkspaceArtifactInWorkbench(artifact);
+        return;
+      }
+
+      setHarnessPanelVisible(false);
+      setExpertInfoPanelCollapsed(true);
+      setManualRightSurface("productProfile");
+      void consumePendingRequestsForSurface("productProfile");
     },
-    [handleWorkspaceArtifactClick],
+    [
+      consumePendingRequestsForSurface,
+      setExpertInfoPanelCollapsed,
+      setHarnessPanelVisible,
+      setManualRightSurface,
+      openWorkspaceArtifactInWorkbench,
+    ],
   );
+  useEffect(() => {
+    handleProductProfilePreviewArtifactOpenRef.current =
+      handleProductProfilePreviewArtifactOpen;
+  }, [handleProductProfilePreviewArtifactOpen]);
   const expertInfoPanelNode = (
     <ExpertInfoPanel
       requestMetadata={expertPanelRequestMetadata}
@@ -4915,7 +5059,19 @@ export function AgentChatWorkspace({
           harness: () => (
             <GeneralWorkbenchHarnessSurfaceSection
               enabled={rightSurfaceHarnessEnabled}
-              {...generalWorkbenchHarnessPanelProps}
+              harnessState={rightSurfaceHarnessState}
+              {...generalWorkbenchHarnessPanelBaseProps}
+            />
+          ),
+        }
+      : {}),
+    ...(rightSurfaceTraceEnabled
+      ? {
+          trace: () => (
+            <WorkspaceTraceTab
+              enabled={rightSurfaceTraceEnabled}
+              sessionId={sceneSessionId}
+              workspaceId={runtimeWorkspaceId}
             />
           ),
         }
@@ -4931,7 +5087,7 @@ export function AgentChatWorkspace({
   const hasActiveRightSurfaceDefinition = rightSurfaceDefinitions.some(
     (definition) => definition.kind === rightSurfaceState.activeSurface,
   );
-  const rightSurfaceContent =
+  const rightSurfaceHostNode =
     rightSurfaceState.activeSurface && hasActiveRightSurfaceDefinition ? (
       <RightSurfaceHost
         activeSurface={rightSurfaceState.activeSurface}
@@ -4939,6 +5095,22 @@ export function AgentChatWorkspace({
         openSurfaces={rightSurfaceState.openSurfaces}
         onSelectSurface={handleSelectRightSurfaceTab}
       />
+    ) : null;
+  const rightSurfaceContent =
+    rightSurfaceState.activeSurface &&
+    rightSurfaceState.activeSurface !== "productProfile"
+      ? rightSurfaceHostNode
+      : null;
+  const rightRailNode =
+    rightSurfaceState.activeSurface === "productProfile" &&
+    hasActiveRightSurfaceDefinition ? (
+      <div
+        className="flex h-full min-h-0 shrink-0 overflow-hidden border-l border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)]"
+        data-testid="workspace-right-rail"
+        style={{ width: "min(100%, 392px)" }}
+      >
+        {rightSurfaceHostNode}
+      </div>
     ) : null;
   const generalWorkbenchSidebarNode = (
     <WorkspaceGeneralWorkbenchSidebar
@@ -5027,6 +5199,7 @@ export function AgentChatWorkspace({
     productProfileAvailable: productProfileRightSurfaceAvailable,
     shellAvailable: shellRightSurfaceAvailable,
     showHarnessToggle,
+    traceAvailable: rightSurfaceTraceEnabled,
     suppressHomeNavbarUtilityActions,
   });
   const conversationSceneRuntime = useWorkspaceConversationSceneRuntime({
@@ -5136,8 +5309,7 @@ export function AgentChatWorkspace({
     rightSurfaceContent,
     rightSurfaceLaunchers,
     rightSurfaceObjectCanvasOpen:
-      rightSurfaceState.activeSurface === "objectCanvas" ||
-      rightSurfaceState.activeSurface === "productProfile",
+      rightSurfaceState.activeSurface === "objectCanvas",
     onToggleRightSurfaceObjectCanvas: handleToggleRightSurfaceObjectCanvas,
     rightSurfaceBrowserOpen: rightSurfaceState.activeSurface === "browser",
     onToggleRightSurfaceBrowser: handleToggleRightSurfaceBrowser,
@@ -5149,6 +5321,9 @@ export function AgentChatWorkspace({
     navbarHarnessPanelVisible:
       !suppressHomeNavbarUtilityActions &&
       rightSurfaceState.activeSurface === "harness",
+    showTraceToggle: rightSurfaceTraceEnabled,
+    tracePanelVisible: rightSurfaceState.activeSurface === "trace",
+    handleToggleTracePanel: handleToggleRightSurfaceTrace,
     showExpertInfoToggle: hasExpertInfoPanel,
     expertInfoPanelVisible,
     handleToggleExpertInfoPanel,
@@ -5178,7 +5353,7 @@ export function AgentChatWorkspace({
       generalWorkbenchScaffoldRuntime.generalWorkbenchCreationTaskEvents,
     currentStepIndex,
     goToStep,
-    displayMessages: sceneDisplayMessages,
+    displayMessages: sceneDisplayMessagesWithProductProfileArtifact,
     turns: sceneTurns,
     effectiveThreadItems: sceneThreadItems,
     todoItems,
@@ -5259,7 +5434,7 @@ export function AgentChatWorkspace({
         onExpandGeneralWorkbenchSidebar={handleExpandGeneralWorkbenchSidebar}
         fileManagerNode={fileManagerNode}
         mainAreaNode={conversationSceneRuntime.mainAreaNode}
-        rightRailNode={null}
+        rightRailNode={rightRailNode}
       />
       <AutomationJobDialog
         open={workspaceServiceSkillEntryActions.automationDialogOpen}

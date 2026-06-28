@@ -1,7 +1,7 @@
 # Claw Trace 实施计划
 
-> 状态：implementation plan active / P5 regression alert projection wired
-> 更新时间：2026-06-27
+> 状态：implementation plan active / Workspace Trace Tab non-send UX completed
+> 更新时间：2026-06-28
 
 ## 1. 阶段总览
 
@@ -189,50 +189,77 @@ npm run smoke:agent-runtime-current-fixture
     - `clawTraceRegressionAlert.ts` 只消费当前 regression report 和手动 retained trend records，输出 `none / watch / warning / critical`。
     - repeated owner 和 delta threshold 判断集中在纯 projector；React 只展示状态，不保存新数据、不后台采集、不新增 App Server method。
     - alert 继续沿用 summary-only report，不读取 raw entries / raw trace JSONL / prompt / provider payload / assistant delta text。
-21. Developer UI 已完成组件拆分：
-    - `ClawTraceSettingsPanel.tsx` 保留配置、动作和数据装配，从 1300+ 行降到 780 行。
+21. Developer UI 已接入 regression alert channel 显式开关：
+    - `developer.claw_trace.alert_enabled` 默认关闭，只控制本面板是否评估 alert，不影响 Trace 采集开关。
+    - `ClawTraceConfigControls.tsx` 承接 trace enabled / level / sample_rate / alert channel 配置 UI，避免 `ClawTraceSettingsPanel.tsx` 继续膨胀。
+    - alert channel 关闭时，card 只展示关闭态，不计算 watch / warning / critical；开启后才消费当前 report 与手动 retained trend。
+22. Developer UI 已接入本地 summary-only regression alert channel inbox：
+    - `clawTraceRegressionAlertChannel.ts` 只在 `alert_enabled=true` 且当前 panel 已有 watch / warning / critical 投影时写入 localStorage retained inbox。
+    - retained window 固定为最近 20 条 / 7 天，相同 alert/report fingerprint 去重，`none` alert 不写入。
+    - channel export 显式标记 `mode=summary_only_alert`，不保存 raw entries / raw trace JSONL / prompt / provider payload / assistant delta text。
+    - `ClawTraceRegressionReportCard` 展示 channel count、latest severity、retention policy，并提供 Copy alert channel / Clear alert channel 显式动作；不自动查询 App Server、不上传。
+    - S32 在本地 channel 之上增加 local notification dispatcher：`alert_notification_enabled` 默认关闭，只对新写入的 summary-only alert record 尝试本地通知，相同 fingerprint 不重复通知；不自动请求系统通知权限。
+    - S33 将通知尝试接入 Electron Desktop Host 原生 Notification：`show_desktop_notification` 属于系统壳命令，不新增 App Server method；Host 只接受 summary-only title/body/tag/silent，拒绝 raw trace 旁路。
+    - S34 在主窗口接入 foreground global alert monitor：监听本地 Agent UI performance summary-only metric 事件并 debounce 评估 compact summary/history；离开 Developer 设置页后仍可写入 summary-only alert channel 并触发通知；不调用 App Server trace list/read，不做 OS daemon。
+23. Developer UI 已完成组件拆分：
+    - `ClawTraceSettingsPanel.tsx` 保留配置、动作和数据装配，从 1300+ 行降到 734 行。
     - `ClawTraceTimelineView.tsx` 承接 timeline filter、span drilldown 和 selected event detail。
     - `ClawTraceBaselineComparisonCard.tsx` 承接 baseline compare 展示。
     - `ClawTraceAppServerComparisonCard.tsx` 承接 App Server trace compare 展示。
     - `ClawTraceRegressionReportCard.tsx` 承接 regression evidence 与 trend history 展示 / 动作。
+    - `ClawTraceConfigControls.tsx` 承接 Claw Trace 顶部配置控件。
     - `clawTraceRegressionAlert.ts` 承接 regression alert severity / reason / repeated owner projector。
-22. 定向验证通过：`npx vitest run "src/components/settings-v2/system/developer/index.test.tsx" "src/lib/crashDiagnostic.test.ts" "src/components/agent/chat/hooks/agentStreamPerformanceMetrics.test.ts"`，3 个文件、43 个用例通过。
-23. Rust writer 验证通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server trace_writer -- --nocapture`，2 个 writer 用例通过。
-24. Trace read/list 网关验证通过：`npx vitest run "src/lib/api/serverRuntime.test.ts" "src/lib/api/appServer.test.ts" "src/lib/api/logs.current-boundary.test.ts" "src/components/settings-v2/system/developer/index.test.tsx"`，4 个文件、57 个用例通过。
-25. Trace read/list redaction hardening 验证通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server trace`、`npm run test:contracts`、`git diff --check`。
-26. Timeline projector / UI 验证通过：`npx vitest run "src/lib/trace/clawTraceTimeline.test.ts" "src/components/settings-v2/system/developer/index.test.tsx"`，2 个文件、21 个用例通过。
-27. Timeline filter / selected event detail 验证通过：`npx vitest run "src/lib/trace/clawTraceTimeline.test.ts" "src/components/settings-v2/system/developer/index.test.tsx"`，2 个文件、24 个用例通过。
-28. Timeline span drilldown 验证通过：`npx vitest run "src/lib/trace/clawTraceTimeline.test.ts" "src/components/settings-v2/system/developer/index.test.tsx"`，2 个文件、24 个用例通过；`npx eslint` 覆盖 timeline 与 Developer UI 写集通过。
-29. Baseline compare 验证通过：`npx vitest run "src/lib/trace/clawTraceBaseline.test.ts" "src/lib/trace/clawTraceTimeline.test.ts" "src/components/settings-v2/system/developer/index.test.tsx"`，3 个文件、27 个用例通过；`npx eslint` 覆盖 baseline projector 与拆分组件通过。
-30. Compact long-term baseline 验证通过：`npx vitest run "src/lib/trace/clawTraceBaseline.test.ts" "src/components/settings-v2/system/developer/index.test.tsx"`，2 个文件、26 个用例通过；`npx eslint` 覆盖 baseline projector 与 Developer UI card 通过。
-31. App Server Trace compare 验证通过：`npx vitest run "src/lib/trace/clawTraceAppServerComparison.test.ts" "src/lib/trace/clawTraceBaseline.test.ts" "src/lib/trace/clawTraceTimeline.test.ts" "src/components/settings-v2/system/developer/index.test.tsx"`，4 个文件、30 个用例通过。
-32. Timeline / contract 收口验证通过：`npx eslint` 覆盖 timeline 与 Developer UI 写集、`npx vitest run` 覆盖 5 个相关测试文件、`npm run test:contracts`、`git diff --check`。`npm run typecheck` 运行约 3 分钟无输出后中断，退出码 `130`，后续全量收口前仍需重跑。
-33. App Server retained-window baseline 验证通过：`npx vitest run "src/lib/trace/clawTraceAppServerComparison.test.ts" "src/lib/trace/clawTraceBaseline.test.ts" "src/lib/trace/clawTraceTimeline.test.ts" "src/components/settings-v2/system/developer/index.test.tsx"`，4 个文件、32 个用例通过；`npx eslint` 覆盖 App Server compare projector 与 Developer UI 写集通过。
-34. Regression evidence 验证通过：`npx vitest run "src/lib/trace/clawTraceRegressionReport.test.ts" "src/lib/trace/clawTraceAppServerComparison.test.ts" "src/lib/trace/clawTraceBaseline.test.ts" "src/lib/trace/clawTraceTimeline.test.ts" "src/components/settings-v2/system/developer/index.test.tsx"`，5 个文件、34 个用例通过；`npx eslint` 覆盖 regression projector、App Server compare projector 与 Developer UI 写集通过。
-35. Regression trend history 验证通过：`npx vitest run "src/lib/trace/clawTraceRegressionTrend.test.ts" "src/lib/trace/clawTraceRegressionReport.test.ts" "src/lib/trace/clawTraceAppServerComparison.test.ts" "src/lib/trace/clawTraceBaseline.test.ts" "src/lib/trace/clawTraceTimeline.test.ts" "src/components/settings-v2/system/developer/index.test.tsx"`，6 个文件、37 个用例通过；`npx eslint` 覆盖 trend history、regression card 与 Developer UI 写集通过。
-36. Regression alert projection 验证通过：`npx vitest run "src/lib/trace/clawTraceRegressionAlert.test.ts" "src/lib/trace/clawTraceRegressionTrend.test.ts" "src/lib/trace/clawTraceRegressionReport.test.ts" "src/lib/trace/clawTraceAppServerComparison.test.ts" "src/lib/trace/clawTraceBaseline.test.ts" "src/lib/trace/clawTraceTimeline.test.ts" "src/components/settings-v2/system/developer/index.test.tsx"`，7 个文件、42 个用例通过；`npx eslint` 覆盖 alert projector、regression card 与 Developer UI 写集通过；`npm run test:contracts` 通过。
-37. Support bundle 已默认包含 summary-only trace store 摘要：
+
+补充进度：
+
+- 工作台 Trace Tab 已区分发送链路与非发送链路：
+  - `claw_turn` 会话继续展示首字分段、baseline compare、regression attribution、client health 和 phase coverage。
+  - history restore / unknown 非发送链路不再渲染首字、baseline、regression 空面板，只展示可用恢复耗时、session 摘要和 recorded phases。
+  - 该视图不新增协议、不查询 App Server、不读取 raw entries / prompt / provider payload / assistant delta text。
+
+24. 定向验证通过：`npx vitest run "src/components/settings-v2/system/developer/index.test.tsx" "src/lib/crashDiagnostic.test.ts" "src/components/agent/chat/hooks/agentStreamPerformanceMetrics.test.ts"`，3 个文件、43 个用例通过。
+25. Rust writer 验证通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server trace_writer -- --nocapture`，2 个 writer 用例通过。
+26. Trace read/list 网关验证通过：`npx vitest run "src/lib/api/serverRuntime.test.ts" "src/lib/api/appServer.test.ts" "src/lib/api/logs.current-boundary.test.ts" "src/components/settings-v2/system/developer/index.test.tsx"`，4 个文件、57 个用例通过。
+27. Trace read/list redaction hardening 验证通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server trace`、`npm run test:contracts`、`git diff --check`。
+28. Timeline projector / UI 验证通过：`npx vitest run "src/lib/trace/clawTraceTimeline.test.ts" "src/components/settings-v2/system/developer/index.test.tsx"`，2 个文件、21 个用例通过。
+29. Timeline filter / selected event detail 验证通过：`npx vitest run "src/lib/trace/clawTraceTimeline.test.ts" "src/components/settings-v2/system/developer/index.test.tsx"`，2 个文件、24 个用例通过。
+30. Timeline span drilldown 验证通过：`npx vitest run "src/lib/trace/clawTraceTimeline.test.ts" "src/components/settings-v2/system/developer/index.test.tsx"`，2 个文件、24 个用例通过；`npx eslint` 覆盖 timeline 与 Developer UI 写集通过。
+31. Baseline compare 验证通过：`npx vitest run "src/lib/trace/clawTraceBaseline.test.ts" "src/lib/trace/clawTraceTimeline.test.ts" "src/components/settings-v2/system/developer/index.test.tsx"`，3 个文件、27 个用例通过；`npx eslint` 覆盖 baseline projector 与拆分组件通过。
+32. Compact long-term baseline 验证通过：`npx vitest run "src/lib/trace/clawTraceBaseline.test.ts" "src/components/settings-v2/system/developer/index.test.tsx"`，2 个文件、26 个用例通过；`npx eslint` 覆盖 baseline projector 与 Developer UI card 通过。
+33. App Server Trace compare 验证通过：`npx vitest run "src/lib/trace/clawTraceAppServerComparison.test.ts" "src/lib/trace/clawTraceBaseline.test.ts" "src/lib/trace/clawTraceTimeline.test.ts" "src/components/settings-v2/system/developer/index.test.tsx"`，4 个文件、30 个用例通过。
+34. Timeline / contract 收口验证通过：`npx eslint` 覆盖 timeline 与 Developer UI 写集、`npx vitest run` 覆盖 5 个相关测试文件、`npm run test:contracts`、`git diff --check`。`npm run typecheck` 运行约 3 分钟无输出后中断，退出码 `130`，后续全量收口前仍需重跑。
+35. App Server retained-window baseline 验证通过：`npx vitest run "src/lib/trace/clawTraceAppServerComparison.test.ts" "src/lib/trace/clawTraceBaseline.test.ts" "src/lib/trace/clawTraceTimeline.test.ts" "src/components/settings-v2/system/developer/index.test.tsx"`，4 个文件、32 个用例通过；`npx eslint` 覆盖 App Server compare projector 与 Developer UI 写集通过。
+36. Regression evidence 验证通过：`npx vitest run "src/lib/trace/clawTraceRegressionReport.test.ts" "src/lib/trace/clawTraceAppServerComparison.test.ts" "src/lib/trace/clawTraceBaseline.test.ts" "src/lib/trace/clawTraceTimeline.test.ts" "src/components/settings-v2/system/developer/index.test.tsx"`，5 个文件、34 个用例通过；`npx eslint` 覆盖 regression projector、App Server compare projector 与 Developer UI 写集通过。
+37. Regression trend history 验证通过：`npx vitest run "src/lib/trace/clawTraceRegressionTrend.test.ts" "src/lib/trace/clawTraceRegressionReport.test.ts" "src/lib/trace/clawTraceAppServerComparison.test.ts" "src/lib/trace/clawTraceBaseline.test.ts" "src/lib/trace/clawTraceTimeline.test.ts" "src/components/settings-v2/system/developer/index.test.tsx"`，6 个文件、37 个用例通过；`npx eslint` 覆盖 trend history、regression card 与 Developer UI 写集通过。
+38. Regression alert projection 验证通过：`npx vitest run "src/lib/trace/clawTraceRegressionAlert.test.ts" "src/lib/trace/clawTraceRegressionTrend.test.ts" "src/lib/trace/clawTraceRegressionReport.test.ts" "src/lib/trace/clawTraceAppServerComparison.test.ts" "src/lib/trace/clawTraceBaseline.test.ts" "src/lib/trace/clawTraceTimeline.test.ts" "src/components/settings-v2/system/developer/index.test.tsx"`，7 个文件、42 个用例通过；`npx eslint` 覆盖 alert projector、regression card 与 Developer UI 写集通过；`npm run test:contracts` 通过。
+39. Regression alert channel control 验证通过：`npx vitest run "src/lib/developerFeatures.test.ts" "src/components/settings-v2/system/developer/index.test.tsx" "src/lib/trace/clawTraceRegressionAlert.test.ts"`，3 个文件、36 个用例通过；`npx eslint` 覆盖配置、拆分组件、regression card 与 Developer UI 测试通过；`npm run test:contracts` 通过；`ClawTraceSettingsPanel.tsx` 当前 734 行，低于 800 行预警线。
+40. Local alert channel inbox 验证通过：`npx vitest run "src/lib/trace/clawTraceRegressionAlertChannel.test.ts" "src/lib/trace/clawTraceRegressionAlert.test.ts" "src/components/settings-v2/system/developer/index.test.tsx"`，3 个文件、33 个用例通过；`npx eslint` 覆盖 alert channel、alert projector、regression card 与 Developer UI 测试通过；`npx prettier --check` 覆盖 S31 TS/TSX 与五语言 settings 写集通过。
+41. Local notification dispatcher 验证通过：`npx vitest run "src/lib/developerFeatures.test.ts" "src/lib/trace/clawTraceRegressionAlertNotifier.test.ts" "src/lib/trace/clawTraceRegressionAlertDispatcher.test.ts" "src/lib/trace/clawTraceRegressionAlertChannel.test.ts" "src/lib/trace/clawTraceRegressionAlert.test.ts" "src/components/settings-v2/system/developer/index.test.tsx"`，6 个文件、51 个用例通过。
+42. Electron desktop notification bridge 验证通过：`npx tsc --noEmit --project "tsconfig.electron.json" --pretty false`；`npx vitest run "electron/ipcChannels.test.ts" "electron/hostCommands.test.ts" "src/lib/api/desktopNotification.test.ts" "src/lib/trace/clawTraceRegressionAlertNotifier.test.ts" "src/lib/trace/clawTraceRegressionAlertDispatcher.test.ts" "src/components/settings-v2/system/developer/index.test.tsx"`，6 个文件、134 个用例通过；`npx eslint` 覆盖 Electron Host、API 网关、trace notifier 与 Developer regression card 写集通过。
+43. Foreground global alert monitor 验证通过：`npx vitest run "src/lib/agentUiPerformanceMetrics.test.ts" "src/lib/trace/clawTraceRegressionAlertPresentation.test.ts" "src/lib/trace/clawTraceRegressionAlertMonitor.test.ts" "src/hooks/useClawTraceRegressionAlertMonitor.test.tsx" "src/components/settings-v2/system/developer/index.test.tsx"`，5 个文件、36 个用例通过；`npx eslint` 覆盖 App 主窗口 hook、monitor service、presentation helper、metrics event 与 regression card 写集通过；monitor 静态断言防止导入 `listDiagnosticsTraces` / `readDiagnosticsTrace`。
+44. Support bundle 已默认包含 summary-only trace store 摘要：
     - `meta/trace-store-summary.json` 进入支持包、manifest、README 和 `included_sections`。
     - raw trace event JSONL 正文默认进入 `omitted_sections`，不随支持包导出。
     - `runtime/trace_store.rs` 是 JSONL schema / parser owner，support bundle 只消费 `summarize_trace_event_store` 投影，避免维护第二套 raw event parser。
     - `StorageRoots::from_data_root` 提供只读路径派生，support bundle 不再 hard code `runtime/traces`，也不会导出时创建 runtime 目录。
     - `runtime/trace_store.rs` 内联测试迁到 `runtime/tests/trace_store.rs`，生产文件降到 800 行预警线以下。
-38. Support bundle 定向验证通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server support_bundle -- --nocapture`，2 个用例通过；Trace 主链验证通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server trace -- --nocapture`，11 个用例通过。
-39. App Server 已接入显式 summary-only trace export current API：
+45. Support bundle 定向验证通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server support_bundle -- --nocapture`，2 个用例通过；Trace 主链验证通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server trace -- --nocapture`，11 个用例通过。
+46. App Server 已接入显式 summary-only trace export current API：
     - JSON-RPC method：`diagnostics/trace/export`。
     - Rust protocol / schema / processor / runtime diagnostics / trace store 已同步。
     - `packages/app-server-client`、`src/lib/api/appServer*`、`src/lib/api/serverRuntime.ts` 已同步 frontend gateway。
     - 导出 zip 包含 `meta/manifest.json`、`meta/trace-summary.json`、`trace/events.jsonl`、`README.txt`。
     - `trace/events.jsonl` 由 `RawTraceEvent` 重新序列化生成，不复制原始 JSONL 字节；manifest 显式声明 `summaryOnlyTraceEventsIncluded=true`。
     - export helper 已拆到 `runtime/trace_store/export.rs`，support bundle summary projector 已拆到 `runtime/trace_store/summary.rs`；`runtime/trace_store.rs` 保持在 698 行。
-40. Developer UI 已增加“Export latest Trace”显式动作：点击时才读取最新 trace 并调用 `diagnostics/trace/export`；打开设置页本身不自动查询 App Server。
-41. Trace export 验证通过：`npx vitest run "src/lib/api/serverRuntime.test.ts" "src/lib/api/appServer.test.ts" "src/lib/api/logs.current-boundary.test.ts" "src/components/settings-v2/system/developer/index.test.tsx"`，4 个文件、60 个用例通过。
-42. Protocol / Rust / contract 验证通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server-protocol catalog -- --nocapture`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server-protocol schema_fixtures -- --nocapture`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server trace -- --nocapture`、`npm run test:contracts`。
-43. 全量 `npm run typecheck` 运行超过 3 分钟仍无输出，已中断，退出码 `130`；本阶段以定向 Vitest、ESLint、Rust test 与 contract 覆盖新增写集。
+47. Developer UI 已增加“Export latest Trace”显式动作：点击时才读取最新 trace 并调用 `diagnostics/trace/export`；打开设置页本身不自动查询 App Server。
+48. Trace export 验证通过：`npx vitest run "src/lib/api/serverRuntime.test.ts" "src/lib/api/appServer.test.ts" "src/lib/api/logs.current-boundary.test.ts" "src/components/settings-v2/system/developer/index.test.tsx"`，4 个文件、60 个用例通过。
+49. Protocol / Rust / contract 验证通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server-protocol catalog -- --nocapture`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server-protocol schema_fixtures -- --nocapture`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server trace -- --nocapture`、`npm run test:contracts`。
+50. 全量 `npm run typecheck` 曾运行超过 3 分钟无输出后中断，退出码 `130`；S34 本轮再次运行 `npx tsc --noEmit --pretty false` 时触发 TypeScript 编译器内部错误 `Debug Failure. No error for last overload signature`，无源码位置；本阶段以定向 Vitest、ESLint、Electron/Node typecheck、Rust test 与 contract 覆盖新增写集。
+51. Notification host test split 验证通过：`npx vitest run "electron/desktopNotificationHost.test.ts" "electron/hostCommands.test.ts" "src/lib/api/desktopNotification.test.ts"`，3 个文件、94 个用例通过；`npx eslint` 覆盖 Electron notification Host、dispatcher smoke 与前端 API 网关通过；`npx prettier --check` 与 `git diff --check` 覆盖 S35 文档 / 测试写集通过；`npm run test:contracts` 通过。S35 未新增 App Server method 或生产 mock，`hostCommands.test.ts` 只保留 dispatcher smoke，Host 细节回归落在 `desktopNotificationHost.test.ts`。
 
 剩余：
 
-1. 后台告警通道尚未落地；当前已完成 Developer UI 的 compact retained-window baseline、App Server retained-window summary-only trace compare、regression evidence 归因报告、手动 retained trend history、summary-only regression alert 投影、summary-only timeline、phase span、slow/gap diagnostics、filter、selected event detail 和 span drilldown。
+1. 离开 Developer 设置页后的主窗口 foreground 持续告警评估已落地；系统级后台 daemon / 应用完全关闭后的告警尚未落地。当前已完成 Developer UI 的 compact retained-window baseline、App Server retained-window summary-only trace compare、regression evidence 归因报告、手动 retained trend history、summary-only regression alert 投影、alert channel 显式开关、本地 summary-only alert channel inbox、本地通知 dispatcher、Electron Desktop Host 原生通知桥、foreground global alert monitor、通知 Host 模块级测试拆分、summary-only timeline、phase span、slow/gap diagnostics、filter、selected event detail 和 span drilldown。
 2. support bundle 已默认包含 compact Agent UI performance summary 与 trace-store summary；默认仍不包含 history 或 raw trace JSONL 正文，避免无界扩大诊断包。
 
 ## 6. P4：W3C Trace Context / OTEL
@@ -313,4 +340,4 @@ npm run smoke:agent-runtime-current-fixture
 2. 如果继续做 support bundle 选择性附带 raw trace export，必须复用 `diagnostics/trace/export` 的 summary-only zip 语义，默认支持包仍只保留 `trace-store-summary.json`。
 3. 如果先做 timeline projector，则只消费当前 summary-only raw JSONL，不新增第二套 runtime event。
 4. Developer compact history 继续作为客户端排查入口；任何自动落盘都必须避开流式热路径。
-5. 下一刀优先做后台告警通道设计或大文件拆分；不要再把 provider request id、timeline filter、App Server retained-window baseline、regression evidence 归因报告、手动 trend history 或 summary-only alert 投影当未完成项重复实现。
+5. 下一刀只剩系统级后台 daemon / 应用完全关闭后的告警设计，或大文件拆分；不要再把 provider request id、timeline filter、App Server retained-window baseline、regression evidence 归因报告、手动 trend history、summary-only alert 投影、本地 alert channel inbox、local notification dispatcher、Electron desktop notification bridge、foreground global alert monitor 或 notification host test split 当未完成项重复实现。

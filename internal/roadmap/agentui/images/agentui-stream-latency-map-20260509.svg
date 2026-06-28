@@ -43,11 +43,11 @@
   <circle cx="165" cy="948" r="260" fill="#bbf7d0" opacity="0.28"/>
   <circle cx="1480" cy="965" r="185" fill="#fed7aa" opacity="0.26"/>
 
-  <text x="86" y="78" class="title">Lime AgentUI 流式延迟分段图 v35</text>
-  <text x="88" y="118" class="subtitle">2026-06-27 Trace S6：Developer 开关、level/sample_rate、summary 复制/清理与 support bundle 已接入。</text>
+  <text x="86" y="78" class="title">Lime AgentUI 流式延迟分段图 v38</text>
+  <text x="88" y="118" class="subtitle">2026-06-28 Trace S44：Trace Tab 区分发送链路与历史恢复链路；非发送链路只展示恢复耗时。</text>
 
-  <rect x="1148" y="67" width="335" height="52" rx="26" fill="#ecfdf5" stroke="#86efac"/>
-  <text x="1178" y="100" class="pill" fill="#166534">已完成：Developer Trace 控制接入</text>
+  <rect x="1010" y="67" width="500" height="52" rx="26" fill="#ecfdf5" stroke="#86efac"/>
+  <text x="1038" y="100" class="pill" fill="#166534">已完成：Trace Tab 独立 + Claw turn 优先 + 非发送链路专属视图</text>
 
   <rect x="86" y="156" width="1428" height="318" class="card"/>
   <text x="122" y="207" class="section">首字延迟归因边界：Provider/API 等待 ≠ Lime 本地输出慢</text>
@@ -103,25 +103,25 @@
   <text x="150" y="820" class="small">Developer 面板可复制裁剪摘要，并只清 Agent UI perf 内存。</text>
 
   <rect x="824" y="510" width="690" height="360" class="card"/>
-  <text x="860" y="561" class="section">分段指标定义</text>
+  <text x="860" y="561" class="section">Trace Tab 诊断口径</text>
 
   <rect x="860" y="594" width="610" height="68" class="mini amber"/>
-  <text x="888" y="624" class="label">providerWaitMs</text>
-  <text x="888" y="648" class="small">provider.first_text_delta.received.elapsed_ms，归服务端/API。</text>
+  <text x="888" y="624" class="label">Claw send path</text>
+  <text x="888" y="648" class="small">只在真实发送链路展示首字分段、baseline 和 regression。</text>
 
   <rect x="860" y="680" width="610" height="68" class="mini amber"/>
-  <text x="888" y="710" class="label">bridge_delivery_ms</text>
-  <text x="888" y="734" class="small">server_event_emitted_at → renderer_event_received_at。</text>
+  <text x="888" y="710" class="label">history restore path</text>
+  <text x="888" y="734" class="small">只展示 click → fetch → runtime get → message list paint。</text>
 
   <rect x="860" y="766" width="610" height="68" class="mini amber"/>
-  <text x="888" y="796" class="label">clientLocalOutputMs</text>
-  <text x="888" y="820" class="small">server_event_emitted_at → renderer first text paint。</text>
+  <text x="888" y="796" class="label">unknown / non-send</text>
+  <text x="888" y="820" class="small">不再展开全空首字卡片，只保留 session 摘要与 phases。</text>
 
 
   <rect x="86" y="908" width="452" height="122" class="card"/>
   <text x="122" y="954" class="section">当前证据</text>
-  <text x="122" y="986" class="small">S1-S6：Trace 控制、provider projector、diagnostic summary 已接入。</text>
-  <text x="122" y="1012" class="small">定向测试：Developer settings / crash diagnostic / metrics 43 例通过。</text>
+  <text x="122" y="986" class="small">S41/S42：Trace Tab 独立，并默认优先同 workspace 的 Claw turn。</text>
+  <text x="122" y="1012" class="small">S44：history restore 不再渲染首字空卡片，只展示恢复链路耗时。</text>
 
   <rect x="574" y="908" width="452" height="122" class="card"/>
   <text x="610" y="954" class="section">治理口径</text>
@@ -130,10 +130,10 @@
 
   <rect x="1062" y="908" width="452" height="122" class="card"/>
   <text x="1098" y="954" class="section">下一缺口</text>
-  <text x="1098" y="986" class="small">S6：持久化 trace history、raw trace 导出、保留策略。</text>
-  <text x="1098" y="1012" class="small">S7：fixture evidence 导出 providerWait / clientLocal summary。</text>
+  <text x="1098" y="986" class="small">系统级后台 daemon / 应用完全关闭后的告警。</text>
+  <text x="1098" y="1012" class="small">hostCommands.ts / agentProtocol.ts 等大文件继续拆分。</text>
 
   <rect x="86" y="1050" width="1428" height="42" rx="21" fill="#f8fafc" stroke="#dbe5ee"/>
   <text x="122" y="1068" class="tiny">更新口径：首字高不能只看总耗时；必须先看 provider_wait_ms 是否占主导，再看 Lime local output 的 bridge / apply / flush / paint。</text>
-  <text x="122" y="1087" class="tiny">完成判定：客户端本地优化只针对 App Server 已发出 delta 之后的 span；provider/API 慢由服务端 provider.* trace 继续优化。</text>
+  <text x="122" y="1087" class="tiny">完成判定：发送链路看首字分段；历史恢复链路看恢复耗时，不能把非发送路径的空首字段当成客户端慢。</text>
 </svg>

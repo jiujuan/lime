@@ -138,6 +138,7 @@ interface RenderContentOptions {
   requestedPage?: Page;
   requestedPageParams?: PageParams;
   navigationRequestId?: number;
+  onAgentSessionChange?: (sessionId: string | null) => void;
 }
 
 function renderContentWithNavigationState(options: RenderContentOptions) {
@@ -157,6 +158,7 @@ function renderContentWithNavigationState(options: RenderContentOptions) {
             navigationRequestId={nextOptions.navigationRequestId}
             onNavigate={vi.fn() as (page: Page) => void}
             onAgentHasMessagesChange={vi.fn()}
+            onAgentSessionChange={nextOptions.onAgentSessionChange}
           />
         </Suspense>,
       );
@@ -304,6 +306,34 @@ describe("AppPageContent", () => {
         requestKey: 20260408,
       },
     });
+  });
+
+  it("AgentChatPage 的 onSessionChange 应回调到上层 onAgentSessionChange", async () => {
+    const onAgentSessionChange = vi.fn();
+
+    renderContentWithNavigationState({
+      currentPage: "agent",
+      pageParams: {
+        agentEntry: "claw",
+        projectId: "project-1",
+        initialSessionId: "session-route",
+      } satisfies AgentPageParams,
+      onAgentSessionChange,
+    });
+    await flushEffects();
+
+    const onSessionChange = latestAgentChatProps.value?.onSessionChange;
+    expect(typeof onSessionChange).toBe("function");
+
+    await act(async () => {
+      (onSessionChange as (sessionId: string | null) => void)(
+        " session-live ",
+      );
+      await Promise.resolve();
+    });
+
+    expect(onAgentSessionChange).toHaveBeenCalledWith("session-live");
+    expect(onAgentSessionChange).toHaveBeenCalledTimes(1);
   });
 
   it("agent 页面应透传专家 Agent 身份，重复恢复同一专家不触发新 key", async () => {

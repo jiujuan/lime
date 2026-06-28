@@ -785,8 +785,293 @@ function ProductProfileObjectPreview({
           {preview.documentText}
         </div>
       ) : null}
+      <ProductProfileWritingStructure preview={preview} />
     </div>
   );
+}
+
+function ProductProfileWritingStructure({
+  preview,
+}: {
+  preview: WorkspaceProductProfileStructuredPreview;
+}) {
+  const { t } = useTranslation("workspace");
+  const dynamicT = t as WorkspaceDynamicTranslation;
+  const sectionCount = [
+    preview.researchRounds.length,
+    preview.titleCandidates.length,
+    preview.outline.length,
+    preview.keyTakeaways.length,
+    preview.citations.length,
+    preview.imageSlots.length,
+    preview.writingPlan.length,
+    preview.reviewNotes.length,
+  ].filter((count) => count > 0).length;
+
+  if (sectionCount === 0) {
+    return null;
+  }
+
+  return (
+    <div
+      className="mt-3 border-t border-[color:var(--lime-surface-border)] pt-3"
+      data-testid="workspace-product-profile-writing-structure"
+    >
+      <ProductProfilePreviewHeader
+        icon={<ListChecks className="h-4 w-4" />}
+        title={dynamicT("workspace.productProfile.writingStructure.title")}
+        detail={dynamicT("workspace.productProfile.writingStructure.detail", {
+          count: sectionCount,
+        })}
+      />
+      <div className="mt-3 grid gap-2">
+        {preview.researchRounds.length > 0 ? (
+          <WritingPreviewSection
+            title={dynamicT(
+              "workspace.productProfile.writingStructure.research",
+            )}
+            count={preview.researchRounds.length}
+            testId="workspace-product-profile-writing-research"
+          >
+            {preview.researchRounds.slice(0, 3).map((round) => (
+              <WritingPreviewItem
+                key={round.id}
+                title={round.title}
+                meta={joinMetaParts([
+                  round.query,
+                  round.status,
+                  round.citations.length > 0
+                    ? dynamicT(
+                        "workspace.productProfile.writingStructure.citationCount",
+                        { count: round.citations.length },
+                      )
+                    : null,
+                ])}
+                detail={round.summary}
+              />
+            ))}
+          </WritingPreviewSection>
+        ) : null}
+
+        {preview.outline.length > 0 ? (
+          <WritingPreviewSection
+            title={dynamicT(
+              "workspace.productProfile.writingStructure.outline",
+            )}
+            count={preview.outline.length}
+            testId="workspace-product-profile-writing-outline"
+          >
+            {preview.outline.slice(0, 4).map((section) => (
+              <WritingPreviewItem
+                key={section.id}
+                title={section.title}
+                meta={section.purpose}
+                detail={section.points.slice(0, 2).join(" · ")}
+              />
+            ))}
+          </WritingPreviewSection>
+        ) : null}
+
+        {preview.titleCandidates.length > 0 ? (
+          <WritingPreviewSection
+            title={dynamicT(
+              "workspace.productProfile.writingStructure.titleCandidates",
+            )}
+            count={preview.titleCandidates.length}
+            testId="workspace-product-profile-writing-title-candidates"
+          >
+            {preview.titleCandidates.slice(0, 3).map((candidate) => (
+              <WritingPreviewItem
+                key={candidate.id}
+                title={candidate.title}
+                meta={joinMetaParts([
+                  candidate.angle,
+                  typeof candidate.score === "number"
+                    ? dynamicT(
+                        "workspace.productProfile.writingStructure.score",
+                        { score: candidate.score },
+                      )
+                    : null,
+                ])}
+              />
+            ))}
+          </WritingPreviewSection>
+        ) : null}
+
+        {preview.keyTakeaways.length > 0 ? (
+          <WritingPreviewSection
+            title={dynamicT(
+              "workspace.productProfile.writingStructure.keyTakeaways",
+            )}
+            count={preview.keyTakeaways.length}
+            testId="workspace-product-profile-writing-key-takeaways"
+          >
+            {preview.keyTakeaways.slice(0, 3).map((takeaway, index) => (
+              <WritingPreviewItem
+                key={`${takeaway}:${index}`}
+                title={takeaway}
+              />
+            ))}
+          </WritingPreviewSection>
+        ) : null}
+
+        {preview.citations.length > 0 ? (
+          <WritingPreviewSection
+            title={dynamicT(
+              "workspace.productProfile.writingStructure.citations",
+            )}
+            count={preview.citations.length}
+            testId="workspace-product-profile-writing-citations"
+          >
+            {preview.citations.slice(0, 4).map((citation) => (
+              <WritingPreviewItem
+                key={citation.id}
+                title={citation.title}
+                meta={joinMetaParts([
+                  citation.sourceType,
+                  citation.status,
+                ])}
+                detail={citation.summary}
+              />
+            ))}
+          </WritingPreviewSection>
+        ) : null}
+
+        {preview.imageSlots.length > 0 ? (
+          <WritingPreviewSection
+            title={dynamicT(
+              "workspace.productProfile.writingStructure.imageSlots",
+            )}
+            count={preview.imageSlots.length}
+            testId="workspace-product-profile-writing-image-slots"
+          >
+            {preview.imageSlots.slice(0, 4).map((slot) => (
+              <WritingPreviewItem
+                key={slot.id}
+                title={slot.title}
+                meta={joinMetaParts([
+                  slot.sectionId,
+                  slot.status,
+                  slot.purpose,
+                ])}
+                detail={slot.prompt}
+              />
+            ))}
+          </WritingPreviewSection>
+        ) : null}
+
+        {preview.writingPlan.length > 0 ? (
+          <WritingPreviewSection
+            title={dynamicT(
+              "workspace.productProfile.writingStructure.writingPlan",
+            )}
+            count={preview.writingPlan.length}
+            testId="workspace-product-profile-writing-plan"
+          >
+            {preview.writingPlan.slice(0, 4).map((step) => (
+              <WritingPreviewItem
+                key={step.id}
+                title={step.title}
+                meta={joinMetaParts([
+                  step.owner,
+                  step.skillRef,
+                  step.done === null || step.done === undefined
+                    ? null
+                    : dynamicT(
+                        step.done
+                          ? "workspace.productProfile.writingStructure.done"
+                          : "workspace.productProfile.writingStructure.pending",
+                      ),
+                ])}
+                detail={step.output ?? step.goal}
+              />
+            ))}
+          </WritingPreviewSection>
+        ) : null}
+
+        {preview.reviewNotes.length > 0 ? (
+          <WritingPreviewSection
+            title={dynamicT(
+              "workspace.productProfile.writingStructure.reviewNotes",
+            )}
+            count={preview.reviewNotes.length}
+            testId="workspace-product-profile-writing-review-notes"
+          >
+            {preview.reviewNotes.slice(0, 3).map((note, index) => (
+              <WritingPreviewItem key={`${note}:${index}`} title={note} />
+            ))}
+          </WritingPreviewSection>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function WritingPreviewSection({
+  children,
+  count,
+  testId,
+  title,
+}: {
+  children: ReactNode;
+  count: number;
+  testId: string;
+  title: string;
+}) {
+  const { t } = useTranslation("workspace");
+  return (
+    <section
+      className="rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-subtle)] px-2.5 py-2"
+      data-testid={testId}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="min-w-0 truncate text-xs font-medium text-[color:var(--lime-text-strong)]">
+          {title}
+        </h3>
+        <span className="shrink-0 rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-2 py-0.5 text-[10px] text-[color:var(--lime-text-muted)]">
+          {t("workspace.productProfile.writingStructure.itemCount", {
+            count,
+          })}
+        </span>
+      </div>
+      <div className="mt-2 grid gap-1.5">{children}</div>
+    </section>
+  );
+}
+
+function WritingPreviewItem({
+  detail,
+  meta,
+  title,
+}: {
+  detail?: string | null;
+  meta?: string | null;
+  title: string;
+}) {
+  return (
+    <div className="min-w-0 rounded-md bg-[color:var(--lime-surface)] px-2 py-1.5">
+      <div className="truncate text-xs font-medium text-[color:var(--lime-text-strong)]">
+        {title}
+      </div>
+      {meta ? (
+        <div className="mt-0.5 truncate text-[11px] text-[color:var(--lime-text-muted)]">
+          {meta}
+        </div>
+      ) : null}
+      {detail ? (
+        <div className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-[color:var(--lime-text-muted)]">
+          {detail}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function joinMetaParts(parts: Array<string | null | undefined>): string {
+  return parts
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part))
+    .join(" · ");
 }
 
 function ProductProfilePreviewHeader({

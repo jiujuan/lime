@@ -115,6 +115,22 @@ App Server release manifest 与 sidecar smoke 脚本已迁到 `scripts/app-serve
 
 新增 App Server 脚本继续进入 `scripts/app-server/` 或复用现有 App Server npm scripts；涉及 Electron packaged sidecar / release asset 的脚本仍按 Electron / release 批次单独迁移。
 
+### Rust 测试脚本
+
+Rust 测试分层入口仍复用已登记的根脚本 `scripts/run-rust-layer.mjs` 与 `scripts/rust-test-layer-classifier.mjs`，变更范围推导共享实现位于 `scripts/lib/rust-test-scope-core.mjs`，不新增根脚本。对外优先使用 `package.json` 中的稳定入口：
+
+```bash
+npm run test:rust:changed
+npm run test:rust:related -- <paths...>
+npm run test:rust:unit
+npm run test:rust:integration
+npm run test:rust:layers:stats
+```
+
+`test:rust:changed` 默认比较 `HEAD`，也可通过 `npm run test:rust:unit -- --changed=<ref>` 指定 ref；`test:rust:related -- <paths...>` 按显式路径推导受影响 crate。二者都会把 `lime-rs/crates/**` 路径映射到 workspace package，再通过 `cargo metadata` 扩展反向依赖；触碰根 `Cargo.toml`、`Cargo.lock` 或 workspace 配置时自动扩大到 `--workspace`；命中 Rust 路径但无法映射 current workspace crate 时失败，避免静默通过 0 个测试。
+
+新增 Rust 测试治理脚本优先进入 `scripts/lib/` 或未来已登记的 `scripts/governance/` / Rust 领域目录；不要继续向 `scripts/` 根目录添加平级 runner。
+
 ### Browser Runtime 脚本
 
 `npm run smoke:browser-runtime` 是既有根 smoke 入口，当前只保留为稳定 npm script。它已迁到 `app_server_handle_json_lines -> browserSession/*` App Server current 主链，不再调用 `launch_browser_session`、`close_chrome_profile_session` 或旧 Tauri / Electron browser runtime facade。真实运行前必须先启动 Electron DevBridge 和带 CDP 端口的 Chrome / Chromium，例如：

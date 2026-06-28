@@ -451,4 +451,36 @@ describe("Plugin marketplace projection", () => {
       ]),
     });
   });
+
+  it("已安装 Agent App 即使 marketplace 缺包引用也应保持可激活", () => {
+    const registry = projectPluginMarketplaceRegistryFromInstalledAgentApps(
+      marketplace([
+        marketplaceItem({
+          package: undefined,
+          manifestSummary: {
+            artifactRenderers: [
+              {
+                artifactType: "creator.article_draft",
+                surfaceKind: "documentCanvas",
+                rendererKind: "host_builtin",
+              },
+            ],
+          },
+        }),
+      ]),
+      {
+        installedAgentApps: [installedState()],
+      },
+    );
+
+    expect(registry[0]).toMatchObject({
+      pluginId: "research-kit@limecloud",
+      installed: true,
+      enabled: true,
+      activationState: "activatable",
+      rendererState: "renderable",
+      capabilityStates: expect.arrayContaining(["activatable", "renderable"]),
+      blockerCodes: [],
+    });
+  });
 });

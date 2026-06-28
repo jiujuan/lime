@@ -102,7 +102,12 @@ impl<'a> ProductWorkspaceBuilder<'a> {
             if !self.objects.contains_key(&key) {
                 self.object_order.push(key.clone());
             }
-            self.objects.insert(key, object.clone());
+            let next_object = self
+                .objects
+                .get(&key)
+                .map(|current| merge_product_object(current, object))
+                .unwrap_or_else(|| object.clone());
+            self.objects.insert(key, next_object);
         }
 
         if let Some(source_artifact) = source_artifact_from_event(event) {
@@ -219,6 +224,46 @@ fn artifact_content_patch(artifact: Option<&Value>) -> Option<Value> {
 fn product_object_key(object: &Value) -> Option<String> {
     let reference = object.get("ref").or_else(|| object.get("objectRef"))?;
     product_object_ref_key(reference)
+}
+
+fn merge_product_object(current: &Value, next: &Value) -> Value {
+    let (Some(current_object), Some(next_object)) = (current.as_object(), next.as_object()) else {
+        return next.clone();
+    };
+    let mut merged = current_object.clone();
+    for (key, value) in next_object {
+        if key == "source" {
+            let source = merge_json_object(current_object.get("source"), value);
+            merged.insert(key.clone(), source);
+            continue;
+        }
+        if key == "ref" || key == "objectRef" {
+            let reference = merge_json_object(
+                current_object
+                    .get(key)
+                    .or_else(|| current_object.get("ref"))
+                    .or_else(|| current_object.get("objectRef")),
+                value,
+            );
+            merged.insert(key.clone(), reference);
+            continue;
+        }
+        merged.insert(key.clone(), value.clone());
+    }
+    Value::Object(merged)
+}
+
+fn merge_json_object(current: Option<&Value>, next: &Value) -> Value {
+    let (Some(current_object), Some(next_object)) =
+        (current.and_then(Value::as_object), next.as_object())
+    else {
+        return next.clone();
+    };
+    let mut merged = current_object.clone();
+    for (key, value) in next_object {
+        merged.insert(key.clone(), value.clone());
+    }
+    Value::Object(merged)
 }
 
 fn product_object_ref_key(reference: &Value) -> Option<String> {

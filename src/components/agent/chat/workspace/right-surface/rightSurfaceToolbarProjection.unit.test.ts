@@ -48,6 +48,13 @@ describe("rightSurfaceToolbarProjection", () => {
           priority: "background",
           createdAt: 120,
         }),
+        createWorkspaceRightSurfaceOpenIntent({
+          id: "runtime:trace",
+          kind: "trace",
+          origin: "runtime",
+          priority: "background",
+          createdAt: 130,
+        }),
       ],
     });
 
@@ -56,6 +63,9 @@ describe("rightSurfaceToolbarProjection", () => {
     ).toMatchObject({ pendingCount: 2 });
     expect(
       projections.find((projection) => projection.kind === "harness"),
+    ).toMatchObject({ pendingCount: 1 });
+    expect(
+      projections.find((projection) => projection.kind === "trace"),
     ).toMatchObject({ pendingCount: 1 });
   });
 
@@ -71,6 +81,9 @@ describe("rightSurfaceToolbarProjection", () => {
     ).toMatchObject({ disabled: false });
     expect(
       projections.find((projection) => projection.kind === "shell"),
+    ).toMatchObject({ disabled: true });
+    expect(
+      projections.find((projection) => projection.kind === "trace"),
     ).toMatchObject({ disabled: true });
   });
 });

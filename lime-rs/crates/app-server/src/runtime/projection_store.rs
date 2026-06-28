@@ -11,6 +11,7 @@ use rusqlite::params;
 use rusqlite::Connection;
 use rusqlite::OptionalExtension;
 use serde_json::Value;
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -24,6 +25,9 @@ use super::projection_status::{session_status_from_event, turn_status_from_event
 use super::session_list_scope::SessionListScope;
 use super::session_title;
 
+const PROJECTION_SUMMARY_MESSAGE_TEXT_MAX_CHARS: usize = 2_000;
+const PROJECTION_SUMMARY_MESSAGE_ROW_LIMIT: i64 = 20_000;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectionStore {
     path: PathBuf,
@@ -34,7 +38,38 @@ pub struct ProjectionReadSession {
     pub session: AgentSession,
     pub turns: Vec<AgentTurn>,
     pub item_count: usize,
+    pub messages_count: usize,
+    pub messages_start_index: usize,
+    pub messages: Vec<Value>,
     pub last_event_sequence: u64,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ProjectionReadWindow {
+    pub history_limit: Option<usize>,
+    pub history_offset: usize,
+    pub history_before_message_id: Option<i64>,
+}
+
+impl ProjectionReadWindow {
+    pub fn from_read_params(params: &app_server_protocol::AgentSessionReadParams) -> Self {
+        Self {
+            history_limit: params.history_limit.map(|value| value as usize),
+            history_offset: params.history_offset.unwrap_or_default() as usize,
+            history_before_message_id: params.history_before_message_id,
+        }
+    }
+
+    pub fn tail(history_limit: Option<usize>) -> Self {
+        Self {
+            history_limit,
+            ..Self::default()
+        }
+    }
+
+    fn cursor_before(self) -> Option<i64> {
+        self.history_before_message_id.filter(|value| *value > 0)
+    }
 }
 
 #[cfg(test)]
@@ -130,6 +165,7 @@ impl ProjectionStore {
     pub fn read_session_projection(
         &self,
         session_id: &str,
+        window: ProjectionReadWindow,
     ) -> Result<Option<ProjectionReadSession>, String> {
         let conn = Connection::open(&self.path)
             .map_err(|error| format!("无法打开 Projection DB {}: {error}", self.path.display()))?;
@@ -138,11 +174,17 @@ impl ProjectionStore {
         };
         let turns = query_projected_turns(&conn, session_id)?;
         let item_count = query_projected_item_count(&conn, session_id)?;
+        let messages_count = query_projected_message_count(&conn, session_id)?;
+        let (messages, messages_start_index) =
+            query_projected_window_messages(&conn, session_id, window, messages_count)?;
         let first_user_message = query_projected_first_user_message(&conn, session_id)?;
         Ok(Some(ProjectionReadSession {
             session: projected_session_to_protocol(&session_row, first_user_message),
             turns: turns.into_iter().map(projected_turn_to_protocol).collect(),
             item_count,
+            messages_count,
+            messages_start_index,
+            messages,
             last_event_sequence: session_row.last_event_sequence,
         }))
     }
@@ -608,6 +650,326 @@ fn query_projected_item_count(conn: &Connection, session_id: &str) -> Result<usi
     )
     .map(|value| value.max(0) as usize)
     .map_err(|error| format!("无法统计 projected_items: {error}"))
+}
+
+fn query_projected_message_count(conn: &Connection, session_id: &str) -> Result<usize, String> {
+    let user_count = conn
+        .query_row(
+            "SELECT COUNT(1)
+             FROM projected_items
+             WHERE session_id = ?1
+               AND item_type = 'message.created'",
+            params![session_id],
+            |row| row.get::<_, i64>(0),
+        )
+        .map(|value| value.max(0) as usize)
+        .map_err(|error| format!("无法统计 projected_items 用户消息: {error}"))?;
+    let assistant_count = conn
+        .query_row(
+            "SELECT COUNT(DISTINCT COALESCE(turn_id, event_id))
+             FROM projected_items
+             WHERE session_id = ?1
+               AND item_type = 'message.delta'",
+            params![session_id],
+            |row| row.get::<_, i64>(0),
+        )
+        .map(|value| value.max(0) as usize)
+        .map_err(|error| format!("无法统计 projected_items assistant 消息: {error}"))?;
+    Ok(user_count + assistant_count)
+}
+
+fn query_projected_message_count_before(
+    conn: &Connection,
+    session_id: &str,
+    before_sequence: i64,
+) -> Result<usize, String> {
+    let user_count = conn
+        .query_row(
+            "SELECT COUNT(1)
+             FROM projected_items
+             WHERE session_id = ?1
+               AND sequence < ?2
+               AND item_type = 'message.created'",
+            params![session_id, before_sequence],
+            |row| row.get::<_, i64>(0),
+        )
+        .map(|value| value.max(0) as usize)
+        .map_err(|error| format!("无法统计 projected_items cursor 前用户消息: {error}"))?;
+    let assistant_count = conn
+        .query_row(
+            "SELECT COUNT(DISTINCT COALESCE(turn_id, event_id))
+             FROM projected_items
+             WHERE session_id = ?1
+               AND sequence < ?2
+               AND item_type = 'message.delta'",
+            params![session_id, before_sequence],
+            |row| row.get::<_, i64>(0),
+        )
+        .map(|value| value.max(0) as usize)
+        .map_err(|error| format!("无法统计 projected_items cursor 前 assistant 消息: {error}"))?;
+    Ok(user_count + assistant_count)
+}
+
+fn query_projected_window_messages(
+    conn: &Connection,
+    session_id: &str,
+    window: ProjectionReadWindow,
+    messages_count: usize,
+) -> Result<(Vec<Value>, usize), String> {
+    let limit = window.history_limit.unwrap_or(40).max(1);
+    let before_sequence = window.cursor_before();
+    let rows = if let Some(before_sequence) = before_sequence {
+        let mut stmt = conn
+            .prepare(
+                "SELECT event_id, turn_id, sequence, item_type, payload_summary_json, created_at
+                 FROM projected_items
+                 WHERE session_id = ?1
+                   AND sequence < ?2
+                   AND item_type IN ('message.created', 'message.delta')
+                 ORDER BY sequence DESC, event_id DESC
+                 LIMIT ?3",
+            )
+            .map_err(|error| format!("无法准备 projected_items cursor 消息查询: {error}"))?;
+        let rows = stmt
+            .query_map(
+                params![
+                    session_id,
+                    before_sequence,
+                    PROJECTION_SUMMARY_MESSAGE_ROW_LIMIT
+                ],
+                projected_message_row,
+            )
+            .map_err(|error| format!("无法查询 projected_items cursor 消息: {error}"))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("无法读取 projected_items cursor 消息: {error}"))?
+    } else {
+        let mut stmt = conn
+            .prepare(
+                "SELECT event_id, turn_id, sequence, item_type, payload_summary_json, created_at
+                 FROM projected_items
+                 WHERE session_id = ?1
+                   AND item_type IN ('message.created', 'message.delta')
+                 ORDER BY sequence DESC, event_id DESC
+                 LIMIT ?2",
+            )
+            .map_err(|error| format!("无法准备 projected_items tail 消息查询: {error}"))?;
+        let rows = stmt
+            .query_map(
+                params![session_id, PROJECTION_SUMMARY_MESSAGE_ROW_LIMIT],
+                projected_message_row,
+            )
+            .map_err(|error| format!("无法查询 projected_items tail 消息: {error}"))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("无法读取 projected_items tail 消息: {error}"))?
+    };
+    let mut rows = rows;
+    rows.reverse();
+    let messages = projected_messages_from_rows(rows);
+    let available = messages.len();
+    let end = available.saturating_sub(window.history_offset.min(available));
+    let start = end.saturating_sub(limit);
+    let messages = messages.into_iter().skip(start).take(end - start).collect();
+    let prefix_count = if let Some(before_sequence) = before_sequence {
+        query_projected_message_count_before(conn, session_id, before_sequence)?
+    } else {
+        messages_count
+    };
+    let absolute_start = prefix_count.saturating_sub(available).saturating_add(start);
+    Ok((messages, absolute_start))
+}
+
+#[derive(Debug, Clone)]
+struct ProjectedMessageRow {
+    event_id: String,
+    turn_id: Option<String>,
+    sequence: i64,
+    item_type: String,
+    payload: Value,
+    created_at: String,
+}
+
+fn projected_message_row(row: &rusqlite::Row<'_>) -> Result<ProjectedMessageRow, rusqlite::Error> {
+    let payload_summary_json: String = row.get(4)?;
+    Ok(ProjectedMessageRow {
+        event_id: row.get(0)?,
+        turn_id: row.get(1)?,
+        sequence: row.get::<_, i64>(2)?.max(0),
+        item_type: row.get(3)?,
+        payload: serde_json::from_str::<Value>(&payload_summary_json).unwrap_or(Value::Null),
+        created_at: row.get(5)?,
+    })
+}
+
+fn projected_messages_from_rows(rows: Vec<ProjectedMessageRow>) -> Vec<Value> {
+    let mut assistant_by_turn: BTreeMap<String, ProjectedAssistantSummary> = BTreeMap::new();
+    let mut messages = Vec::new();
+    for row in rows {
+        if row.item_type == "message.delta" {
+            let key = row
+                .turn_id
+                .clone()
+                .unwrap_or_else(|| format!("sequence:{}", row.sequence));
+            assistant_by_turn
+                .entry(key)
+                .or_insert_with(|| ProjectedAssistantSummary::new(&row))
+                .push(&row);
+            continue;
+        }
+        flush_assistant_summaries_before(&mut messages, &mut assistant_by_turn, row.sequence);
+        messages.push(projected_message_value(
+            row.sequence,
+            "user",
+            row.turn_id,
+            projected_message_text(&row.payload),
+            row.created_at,
+            vec![row.event_id],
+        ));
+    }
+    flush_all_assistant_summaries(&mut messages, &mut assistant_by_turn);
+    messages.sort_by_key(|message| {
+        message
+            .get("id")
+            .and_then(Value::as_i64)
+            .unwrap_or(i64::MAX)
+    });
+    messages
+}
+
+fn flush_assistant_summaries_before(
+    messages: &mut Vec<Value>,
+    assistant_by_turn: &mut BTreeMap<String, ProjectedAssistantSummary>,
+    sequence: i64,
+) {
+    let ready_keys = assistant_by_turn
+        .iter()
+        .filter_map(|(key, summary)| (summary.last_sequence < sequence).then_some(key.clone()))
+        .collect::<Vec<_>>();
+    for key in ready_keys {
+        if let Some(summary) = assistant_by_turn.remove(&key) {
+            messages.push(summary.into_message());
+        }
+    }
+}
+
+fn flush_all_assistant_summaries(
+    messages: &mut Vec<Value>,
+    assistant_by_turn: &mut BTreeMap<String, ProjectedAssistantSummary>,
+) {
+    let summaries = std::mem::take(assistant_by_turn);
+    messages.extend(
+        summaries
+            .into_values()
+            .map(ProjectedAssistantSummary::into_message),
+    );
+}
+
+#[derive(Debug, Clone)]
+struct ProjectedAssistantSummary {
+    first_sequence: i64,
+    last_sequence: i64,
+    turn_id: Option<String>,
+    text: String,
+    created_at: String,
+    event_ids: Vec<String>,
+}
+
+impl ProjectedAssistantSummary {
+    fn new(row: &ProjectedMessageRow) -> Self {
+        Self {
+            first_sequence: row.sequence,
+            last_sequence: row.sequence,
+            turn_id: row.turn_id.clone(),
+            text: String::new(),
+            created_at: row.created_at.clone(),
+            event_ids: Vec::new(),
+        }
+    }
+
+    fn push(&mut self, row: &ProjectedMessageRow) {
+        self.last_sequence = row.sequence;
+        self.created_at = row.created_at.clone();
+        self.text
+            .push_str(projected_message_text(&row.payload).as_str());
+        self.event_ids.push(row.event_id.clone());
+    }
+
+    fn into_message(self) -> Value {
+        projected_message_value(
+            self.first_sequence,
+            "assistant",
+            self.turn_id,
+            self.text,
+            self.created_at,
+            self.event_ids,
+        )
+    }
+}
+
+fn projected_message_value(
+    sequence: i64,
+    role: &str,
+    turn_id: Option<String>,
+    text: String,
+    created_at: String,
+    event_ids: Vec<String>,
+) -> Value {
+    let text = truncate_projection_summary_text(text);
+    let source_event_id = event_ids.first().cloned();
+    let source_event_count = event_ids.len();
+    serde_json::json!({
+        "id": sequence,
+        "role": role,
+        "runtimeTurnId": turn_id,
+        "runtime_turn_id": turn_id,
+        "content": [
+            {
+                "type": "text",
+                "text": text,
+            }
+        ],
+        "timestamp": super::timestamp_seconds(Some(created_at.as_str())),
+        "metadata": {
+            "source": "projection_summary",
+            "source_event_id": source_event_id,
+            "source_event_count": source_event_count,
+            "truncated": true,
+        },
+    })
+}
+
+fn truncate_projection_summary_text(text: String) -> String {
+    if text.chars().count() <= PROJECTION_SUMMARY_MESSAGE_TEXT_MAX_CHARS {
+        return text;
+    }
+    let mut truncated = text
+        .chars()
+        .take(PROJECTION_SUMMARY_MESSAGE_TEXT_MAX_CHARS)
+        .collect::<String>();
+    truncated.push('…');
+    truncated
+}
+
+fn projected_message_text(payload: &Value) -> String {
+    payload
+        .get("input")
+        .and_then(|value| {
+            serde_json::from_value::<app_server_protocol::AgentInput>(value.clone()).ok()
+        })
+        .map(|input| input.text)
+        .or_else(|| {
+            payload
+                .get("text")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .or_else(|| {
+            payload
+                .get("content")
+                .and_then(|content| content.get("text").or_else(|| content.get("message")))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .unwrap_or_default()
 }
 
 fn query_projected_first_user_message(

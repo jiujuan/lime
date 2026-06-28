@@ -4,6 +4,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { WorkspaceMainArea } from "./WorkspaceMainArea";
 import {
+  RIGHT_SURFACE_CHAT_PANEL_MIN_WIDTH,
+  RIGHT_SURFACE_CHAT_PANEL_WIDTH,
+} from "./WorkspaceStyles";
+import {
   cleanupMountedRoots,
   mountHarness,
   setupReactActEnvironment,
@@ -199,6 +203,36 @@ describe("WorkspaceMainArea", () => {
     expect(
       container.querySelector('[data-testid="workspace-canvas-content"]'),
     ).toBeNull();
+    expect(
+      container.querySelector<HTMLElement>('[data-testid="layout-chat-panel"]')
+        ?.dataset.chatPanelWidth,
+    ).toBe(RIGHT_SURFACE_CHAT_PANEL_WIDTH);
+    expect(
+      container.querySelector<HTMLElement>('[data-testid="layout-chat-panel"]')
+        ?.dataset.chatPanelMinWidth,
+    ).toBe(RIGHT_SURFACE_CHAT_PANEL_MIN_WIDTH);
+  });
+
+  it("Right Surface 打开时应保留显式对话宽度配置", () => {
+    const { container } = mountHarness(
+      WorkspaceMainAreaHarness,
+      {
+        layoutMode: "chat",
+        rightSurfaceContent: (
+          <div data-testid="workspace-right-surface">trace</div>
+        ),
+        chatPanelWidth: "min(100%, 720px)",
+        chatPanelMinWidth: "480px",
+      },
+      mountedRoots,
+    );
+
+    const chatPanel = container.querySelector<HTMLElement>(
+      '[data-testid="layout-chat-panel"]',
+    );
+
+    expect(chatPanel?.dataset.chatPanelWidth).toBe("min(100%, 720px)");
+    expect(chatPanel?.dataset.chatPanelMinWidth).toBe("480px");
   });
 
   it("待处理 A2UI 存在时应屏蔽主题工作台的强制画布态", () => {

@@ -588,11 +588,16 @@ async function captureRightSurfaceSnapshot(
   );
 }
 
-function isRightSurfaceSnapshotReady(
+export function isRightSurfaceSnapshotReady(
   snapshot,
   surfaceKind,
   activeSurfaceKind = surfaceKind,
 ) {
+  const surfaceViewportReady =
+    snapshot?.geometry?.rootFillsSurfaceViewport === true &&
+    (surfaceKind === "productProfile" ||
+      snapshot?.geometry?.hostFillsCanvasPanel === true);
+
   return (
     snapshot?.activeSurface === activeSurfaceKind &&
     snapshot?.hostVisible === true &&
@@ -600,8 +605,7 @@ function isRightSurfaceSnapshotReady(
     Array.isArray(snapshot?.visibleRootKinds) &&
     snapshot.visibleRootKinds.length === 1 &&
     snapshot.visibleRootKinds[0] === surfaceKind &&
-    snapshot?.geometry?.hostFillsCanvasPanel === true &&
-    snapshot?.geometry?.rootFillsSurfaceViewport === true
+    surfaceViewportReady
   );
 }
 

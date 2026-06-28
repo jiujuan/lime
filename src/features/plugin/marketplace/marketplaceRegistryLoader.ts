@@ -18,6 +18,7 @@ import type {
 } from "../manifest/types";
 import { projectPluginRegistryFromInstalledAgentApps } from "../installed/installedAgentApps";
 import {
+  marketplaceItemMatchesInstalledAgentAppPackage,
   projectPluginMarketplaceRegistryFromInstalledAgentApps,
   projectPluginMarketplaceRegistryInputsFromInstalledAgentApps,
 } from "./pluginMarketplace";
@@ -106,9 +107,16 @@ function marketplaceItemFromInstalledInput(
           }
         : undefined,
     manifestSummary: {
+      interface: contract.interface,
       skills: contract.skills,
+      agentApps: contract.agentApps,
+      subagents: contract.subagents,
+      workflows: contract.workflows,
+      activationEntries: contract.activationEntries,
       artifactRenderers: contract.artifactRenderers,
       historyRestore: contract.historyRestore,
+      capabilities: contract.capabilities,
+      componentPaths: contract.componentPaths,
     },
   };
 }
@@ -116,6 +124,117 @@ function marketplaceItemFromInstalledInput(
 function readOptionalText(value: string | undefined): string | undefined {
   const normalized = value?.trim();
   return normalized || undefined;
+}
+
+function uniqueText(values: Array<string | undefined>): string[] {
+  return Array.from(
+    new Set(
+      values
+        .map((value) => readOptionalText(value))
+        .filter((value): value is string => Boolean(value)),
+    ),
+  );
+}
+
+function readRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function installedAgentAppManifestSummary(
+  state: InstalledAgentAppState,
+): PluginMarketplaceItem["manifestSummary"] {
+  const manifest = state.manifest;
+  return {
+    agentRuntime: manifest.agentRuntime,
+    runtimePackage: manifest.runtimePackage,
+    workbench: manifest.workbench,
+    interface: manifest.interface,
+    componentPaths: manifest.componentPaths,
+    activationEntries: manifest.activationEntries,
+    subagents: manifest.subagents,
+    workflows: manifest.workflows,
+    requires: manifest.requires,
+    skillRefs: manifest.skillRefs,
+    toolRefs: manifest.toolRefs,
+    secrets: manifest.secrets,
+    operations: manifest.operations,
+  };
+}
+
+function mergeSummaryRecord(
+  target: Record<string, unknown>,
+  source: PluginMarketplaceItem["manifestSummary"],
+  keys: readonly string[],
+) {
+  const sourceRecord = readRecord(source);
+  if (!sourceRecord) {
+    return;
+  }
+  for (const key of keys) {
+    const value = sourceRecord[key];
+    if (Array.isArray(value) ? value.length > 0 : value !== undefined) {
+      target[key] = value;
+    }
+  }
+}
+
+function mergeManifestSummary(
+  marketplaceSummary: PluginMarketplaceItem["manifestSummary"],
+  installedSummary: PluginMarketplaceItem["manifestSummary"],
+): PluginMarketplaceItem["manifestSummary"] {
+  const marketplaceRecord = readRecord(marketplaceSummary);
+  const installedRecord = readRecord(installedSummary);
+  const next: Record<string, unknown> = marketplaceRecord
+    ? { ...marketplaceRecord }
+    : {};
+  mergeSummaryRecord(next, installedRecord, [
+    "skills",
+    "agentApps",
+    "subagents",
+    "workflows",
+    "activationEntries",
+    "artifactRenderers",
+    "historyRestore",
+    "capabilities",
+    "interface",
+    "componentPaths",
+    "agentRuntime",
+    "runtimePackage",
+    "workbench",
+    "requires",
+    "skillRefs",
+    "toolRefs",
+    "secrets",
+    "operations",
+  ]);
+  return Object.keys(next).length > 0 ? next : undefined;
+}
+
+function enrichMarketplaceItemWithInstalledStateSummary(params: {
+  item: PluginMarketplaceItem;
+  state?: InstalledAgentAppState;
+}): PluginMarketplaceItem {
+  if (!params.state) {
+    return params.item;
+  }
+  return {
+    ...params.item,
+    manifestSummary: mergeManifestSummary(
+      params.item.manifestSummary,
+      installedAgentAppManifestSummary(params.state),
+    ),
+  };
+}
+
+function hasCloudReleaseEvidence(state: InstalledAgentAppState | undefined): boolean {
+  const setup = readRecord(state?.setup);
+  return Boolean(
+    state?.identity.sourceKind !== "cloud_release" ||
+      !state.identity.sourceUri.startsWith("https://seeded.local/") ||
+      setup?.cloudReleaseEvidence,
+  );
 }
 
 function agentAppCatalogMarketplaceName(
@@ -149,11 +268,16 @@ function marketplaceItemFromCloudAgentApp(
     app.registrationRequired === true &&
     app.registrationState !== "active";
   const packageReady = Boolean(packageUrl && packageHash && manifestHash);
+  const installedEvidenceMissing =
+    installed && !hasCloudReleaseEvidence(installedState);
   const enabled = installed ? installedState?.disabled !== true : app.enabled;
   const installable =
-    installed || (enabled && packageReady && !registrationBlocked);
+    (installed && !installedEvidenceMissing) ||
+    (enabled && packageReady && !registrationBlocked);
   const blockedReason = installed
-    ? undefined
+    ? installedEvidenceMissing
+      ? "cloud release evidence missing"
+      : undefined
     : (readOptionalText(app.disabledReason) ??
       (registrationBlocked
         ? "registration required"
@@ -187,7 +311,7 @@ function marketplaceItemFromCloudAgentApp(
     activationState: enabled && installable ? "activatable" : "blocked",
     ...(blockedReason ? { blockedReason } : {}),
     policy: {
-      installation: installed
+      installation: installed && !installedEvidenceMissing
         ? "INSTALLED_BY_DEFAULT"
         : enabled
           ? "AVAILABLE"
@@ -216,15 +340,138 @@ function mergeLocalMarketplaceItems(params: {
   catalogItems: PluginMarketplaceItem[];
 }): PluginMarketplaceItem[] {
   const itemsByPluginKey = new Map<string, PluginMarketplaceItem>();
-  for (const item of params.catalogItems) {
-    itemsByPluginKey.set(item.pluginKey, item);
-  }
   for (const item of params.installedItems) {
     itemsByPluginKey.set(item.pluginKey, item);
+  }
+  for (const item of params.catalogItems) {
+    const installedItem = itemsByPluginKey.get(item.pluginKey);
+    itemsByPluginKey.set(
+      item.pluginKey,
+      installedItem
+        ? enrichMarketplaceItemWithInstalledManifest({
+            marketplaceItem: item,
+            installedItem,
+          })
+        : item,
+    );
   }
   return Array.from(itemsByPluginKey.values()).sort((left, right) =>
     left.displayName.localeCompare(right.displayName, "zh-Hans-CN"),
   );
+}
+
+function enrichMarketplaceItemWithInstalledManifest(params: {
+  marketplaceItem: PluginMarketplaceItem;
+  installedItem: PluginMarketplaceItem;
+}): PluginMarketplaceItem {
+  const { marketplaceItem, installedItem } = params;
+  const categories = uniqueText([
+    marketplaceItem.category,
+    ...(marketplaceItem.categories ?? []),
+    installedItem.category,
+    ...(installedItem.categories ?? []),
+  ]);
+  const keywords = uniqueText([
+    ...(marketplaceItem.keywords ?? []),
+    ...(installedItem.keywords ?? []),
+  ]);
+  const capabilities = uniqueText([
+    ...(marketplaceItem.capabilities ?? []),
+    ...(installedItem.capabilities ?? []),
+  ]);
+  return {
+    ...marketplaceItem,
+    pluginName:
+      readOptionalText(marketplaceItem.pluginName) ?? installedItem.pluginName,
+    displayName:
+      readOptionalText(marketplaceItem.displayName) ?? installedItem.displayName,
+    description:
+      readOptionalText(marketplaceItem.description) ??
+      readOptionalText(installedItem.description),
+    version: readOptionalText(marketplaceItem.version) ?? installedItem.version,
+    category: readOptionalText(marketplaceItem.category) ?? installedItem.category,
+    categories: categories.length > 0 ? categories : undefined,
+    keywords: keywords.length > 0 ? keywords : undefined,
+    capabilities: capabilities.length > 0 ? capabilities : undefined,
+    appId: readOptionalText(marketplaceItem.appId) ?? installedItem.appId,
+    manifestSummary: mergeManifestSummary(
+      marketplaceItem.manifestSummary,
+      installedItem.manifestSummary,
+    ),
+  };
+}
+
+function mergeInstalledManifestFieldsIntoMarketplace(params: {
+  marketplace: PluginMarketplaceListResponse;
+  installedAgentApps: readonly InstalledAgentAppState[];
+}): PluginMarketplaceListResponse {
+  const projection = projectPluginRegistryFromInstalledAgentApps(
+    params.installedAgentApps,
+  );
+  const installedItems = projection.projectionInputs.map(
+    (input) => {
+      const item = marketplaceItemFromInstalledInput(input);
+      return enrichMarketplaceItemWithInstalledStateSummary({
+        item,
+        state: params.installedAgentApps.find(
+          (state) => state.appId === item.appId,
+        ),
+      });
+    },
+  );
+  const installedItemsByAppId = new Map(
+    installedItems
+      .map((item) => (item.appId ? ([item.appId, item] as const) : null))
+      .filter(
+        (entry): entry is readonly [string, PluginMarketplaceItem] =>
+          entry !== null,
+      ),
+  );
+  const installedStatesByAppId = new Map(
+    params.installedAgentApps.map((state) => [state.appId, state] as const),
+  );
+  const representedAppIds = new Set<string>();
+  const representedPluginKeys = new Set<string>();
+  const items = params.marketplace.items.map((item) => {
+    const explicitAppId = readOptionalText(item.appId);
+    const pluginKey = readOptionalText(item.pluginKey);
+    const appId =
+      explicitAppId ??
+      (pluginKey && installedStatesByAppId.has(pluginKey)
+        ? pluginKey
+        : undefined);
+    if (appId) {
+      representedAppIds.add(appId);
+    }
+    representedPluginKeys.add(item.pluginKey);
+    if (!appId) {
+      return item;
+    }
+    const installedState = installedStatesByAppId.get(appId);
+    const installedItem = installedItemsByAppId.get(appId);
+    if (
+      !installedState ||
+      !installedItem ||
+      !marketplaceItemMatchesInstalledAgentAppPackage(item, installedState)
+    ) {
+      return item;
+    }
+    return enrichMarketplaceItemWithInstalledManifest({
+      marketplaceItem: item,
+      installedItem,
+    });
+  });
+  const missingInstalledItems = installedItems.filter((item) => {
+    const appId = readOptionalText(item.appId);
+    return (
+      !representedPluginKeys.has(item.pluginKey) &&
+      (!appId || !representedAppIds.has(appId))
+    );
+  });
+  return {
+    ...params.marketplace,
+    items: [...items, ...missingInstalledItems],
+  };
 }
 
 function buildLocalMarketplaceRegistrySnapshot(
@@ -235,11 +482,17 @@ function buildLocalMarketplaceRegistrySnapshot(
     installed.states;
   const projection =
     projectPluginRegistryFromInstalledAgentApps(installedAgentApps);
-  const installedItems = projection.projectionInputs.map(
-    marketplaceItemFromInstalledInput,
-  );
   const installedByAppId = new Map(
     installedAgentApps.map((state) => [state.appId, state] as const),
+  );
+  const installedItems = projection.projectionInputs.map(
+    (input) => {
+      const item = marketplaceItemFromInstalledInput(input);
+      return enrichMarketplaceItemWithInstalledStateSummary({
+        item,
+        state: installedByAppId.get(item.appId ?? ""),
+      });
+    },
   );
   const catalogItems =
     agentAppCatalog?.payload.apps.map((app) =>
@@ -315,19 +568,23 @@ export async function loadPluginMarketplaceRegistry(
 
   const installedAgentApps: readonly InstalledAgentAppState[] =
     installed.states;
+  const enrichedMarketplace = mergeInstalledManifestFieldsIntoMarketplace({
+    marketplace,
+    installedAgentApps,
+  });
 
   return {
-    marketplace,
+    marketplace: enrichedMarketplace,
     installed,
     projectionInputs:
       projectPluginMarketplaceRegistryInputsFromInstalledAgentApps(
-        marketplace,
+        enrichedMarketplace,
         {
           installedAgentApps,
         },
       ),
     registry: projectPluginMarketplaceRegistryFromInstalledAgentApps(
-      marketplace,
+      enrichedMarketplace,
       {
         installedAgentApps,
       },

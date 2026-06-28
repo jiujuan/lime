@@ -1,5 +1,6 @@
 use super::event_log::EventLogWriter;
 use super::projection_store::ProjectionReadSession;
+use super::projection_store::ProjectionReadWindow;
 use super::projection_store::ProjectionStore;
 
 #[derive(Debug, Clone)]
@@ -28,7 +29,16 @@ impl ProjectionRepair {
     pub fn read_repaired_session(
         &self,
         session_id: &str,
+        existing_projection_window: Option<ProjectionReadWindow>,
     ) -> Result<Option<(ProjectionReadSession, Vec<app_server_protocol::AgentEvent>)>, String> {
+        if let Some(window) = existing_projection_window {
+            if let Some(session) = self
+                .projection_store
+                .read_session_projection(session_id, window)?
+            {
+                return Ok(Some((session, Vec::new())));
+            }
+        }
         let records = self.event_log_writer.read_session_events(session_id)?;
         if records.is_empty() {
             self.projection_store.repair_session(session_id, &[])?;
@@ -46,7 +56,10 @@ impl ProjectionRepair {
         if needs_repair {
             self.projection_store.repair_session(session_id, &events)?;
         }
-        let Some(session) = self.projection_store.read_session_projection(session_id)? else {
+        let Some(session) = self
+            .projection_store
+            .read_session_projection(session_id, ProjectionReadWindow::default())?
+        else {
             return Ok(None);
         };
         Ok(Some((session, events)))
@@ -112,7 +125,7 @@ mod tests {
 
         let repair = ProjectionRepair::new(event_log_writer, projection_store);
         let (session, events) = repair
-            .read_repaired_session("sess_repair")
+            .read_repaired_session("sess_repair", None)
             .expect("read repaired")
             .expect("session");
 

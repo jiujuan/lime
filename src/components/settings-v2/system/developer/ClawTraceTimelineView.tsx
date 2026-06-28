@@ -15,6 +15,8 @@ interface ClawTraceTimelineViewProps {
   projection: ClawTraceTimelineProjection;
 }
 
+type SettingsTranslate = (key: string) => string;
+
 const TRACE_TIMELINE_FILTERS: ClawTraceTimelineFilter[] = [
   "all",
   "provider_api",
@@ -61,6 +63,10 @@ export function ClawTraceTimelineView({
   projection,
 }: ClawTraceTimelineViewProps) {
   const { t } = useTranslation("settings");
+  const translate = ((key) =>
+    String(
+      (t as unknown as SettingsTranslate)(key),
+    )) satisfies SettingsTranslate;
   const [timelineFilter, setTimelineFilter] =
     useState<ClawTraceTimelineFilter>("all");
   const [selectedSpanKey, setSelectedSpanKey] = useState<string | null>(null);
@@ -139,7 +145,7 @@ export function ClawTraceTimelineView({
               }}
             >
               <p className="text-xs font-semibold text-slate-800">
-                {t(phaseKey(span.phase))}
+                {translate(phaseKey(span.phase))}
               </p>
               <p className="text-xs text-slate-500">
                 {t(
@@ -176,7 +182,7 @@ export function ClawTraceTimelineView({
                     {
                       durationMs: formatMs(segment.duration_ms),
                       endMs: formatMs(segment.end_offset_ms),
-                      phase: t(phaseKey(segment.phase)),
+                      phase: translate(phaseKey(segment.phase)),
                       startMs: formatMs(segment.start_offset_ms),
                     },
                   )}
@@ -197,7 +203,7 @@ export function ClawTraceTimelineView({
                   {t(
                     "settings.developer.debugSwitch.clawTrace.timeline.phaseGapMissing",
                     {
-                      phase: t(phaseKey(gap.phase)),
+                      phase: translate(phaseKey(gap.phase)),
                     },
                   )}
                 </p>
@@ -240,7 +246,7 @@ export function ClawTraceTimelineView({
                   );
                 }}
               >
-                {t(filterLabelKey(filter))}
+                {translate(filterLabelKey(filter))}
                 <span className="ml-1 text-[11px] opacity-75">
                   {t(
                     "settings.developer.debugSwitch.clawTrace.timeline.filter.count",
@@ -295,7 +301,7 @@ export function ClawTraceTimelineView({
                       </p>
                     </div>
                     <p className="mt-1 text-xs text-slate-500">
-                      {t(phaseKey(row.phase))}
+                      {translate(phaseKey(row.phase))}
                       {" · "}
                       {row.event_type}
                     </p>
@@ -344,7 +350,7 @@ export function ClawTraceTimelineView({
                       )}
                     </p>
                     <p className="mt-1 font-semibold text-slate-900">
-                      {t(phaseKey(selectedSpan.phase))}
+                      {translate(phaseKey(selectedSpan.phase))}
                       {" · "}
                       {formatMs(selectedSpan.duration_ms)}
                       {" ms"}
@@ -371,7 +377,7 @@ export function ClawTraceTimelineView({
                     )}
                   </dt>
                   <dd className="font-medium text-slate-800">
-                    {t(phaseKey(selectedRow.phase))}
+                    {translate(phaseKey(selectedRow.phase))}
                   </dd>
                   <dt>
                     {t(

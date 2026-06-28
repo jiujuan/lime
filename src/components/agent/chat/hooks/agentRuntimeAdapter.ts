@@ -131,10 +131,25 @@ export interface AgentRuntimeAdapterDeps {
   listenRuntimeEvent?: AgentRuntimeEventListener;
 }
 
+function buildGetSessionRequestKey(
+  sessionId: string,
+  options?: AgentRuntimeGetSessionOptions,
+): string {
+  return JSON.stringify({
+    sessionId,
+    historyBeforeMessageId: options?.historyBeforeMessageId ?? null,
+    historyLimit: options?.historyLimit ?? null,
+    historyOffset: options?.historyOffset ?? null,
+    resumeSessionStartHooks: options?.resumeSessionStartHooks === true,
+  });
+}
+
 export function createAgentRuntimeAdapter({
   client = createAgentRuntimeClient(),
   listenRuntimeEvent = listenAgentRuntimeEvent,
 }: AgentRuntimeAdapterDeps = {}): AgentRuntimeAdapter {
+  const getSessionInFlight = new Map<string, Promise<AsterSessionDetail>>();
+
   return {
     async init() {
       return client.initAsterAgent();
@@ -151,7 +166,21 @@ export function createAgentRuntimeAdapter({
       return client.listAgentRuntimeSessions(options);
     },
     async getSession(sessionId, options) {
-      return client.getAgentRuntimeSession(sessionId, options);
+      const key = buildGetSessionRequestKey(sessionId, options);
+      const existing = getSessionInFlight.get(key);
+      if (existing) {
+        return existing;
+      }
+
+      const request = client
+        .getAgentRuntimeSession(sessionId, options)
+        .finally(() => {
+          if (getSessionInFlight.get(key) === request) {
+            getSessionInFlight.delete(key);
+          }
+        });
+      getSessionInFlight.set(key, request);
+      return request;
     },
     async getSessionReadModel(sessionId) {
       return client.getAgentRuntimeThreadRead(sessionId);

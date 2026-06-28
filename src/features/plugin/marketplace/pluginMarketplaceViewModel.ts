@@ -4,6 +4,10 @@ import type {
   PluginSkillDeclaration,
 } from "../manifest/types";
 import { projectPluginMarketplaceItemSkills } from "./pluginMarketplace";
+import {
+  buildPluginMarketplaceCapabilityProfile,
+  type PluginMarketplaceCapabilityProfile,
+} from "./pluginMarketplaceCapabilityProfile";
 import type { PluginMarketplaceRegistrySnapshot } from "./marketplaceRegistryLoader";
 import type {
   PluginMarketplaceItem,
@@ -33,6 +37,15 @@ export type PluginMarketplacePrimaryActionLabelKey =
   | "plugin.marketplace.action.viewHistory"
   | "plugin.marketplace.action.blocked";
 
+export type PluginMarketplaceVisibleBlockerLabelKey =
+  | "plugin.marketplace.blocker.disabled"
+  | "plugin.marketplace.blocker.installUnavailable"
+  | "plugin.marketplace.blocker.installedPackageMismatch"
+  | "plugin.marketplace.blocker.marketplaceBlocked"
+  | "plugin.marketplace.blocker.activationBlocked"
+  | "plugin.marketplace.blocker.activationEntryMissing"
+  | "plugin.marketplace.blocker.generic";
+
 export interface PluginMarketplaceViewOptions {
   query?: string;
   category?: string;
@@ -45,6 +58,11 @@ export interface PluginMarketplacePrimaryAction {
   labelKey: PluginMarketplacePrimaryActionLabelKey;
   disabled: boolean;
   blockerCodes: string[];
+}
+
+export interface PluginMarketplaceVisibleBlocker {
+  code: string;
+  labelKey: PluginMarketplaceVisibleBlockerLabelKey;
 }
 
 export interface PluginMarketplaceViewItem {
@@ -69,8 +87,10 @@ export interface PluginMarketplaceViewItem {
   renderable: boolean;
   readOnlyHistory: boolean;
   skills: PluginSkillDeclaration[];
+  capabilityProfile: PluginMarketplaceCapabilityProfile;
   needsAttention: boolean;
   blockerCodes: string[];
+  visibleBlockers: PluginMarketplaceVisibleBlocker[];
   primaryAction: PluginMarketplacePrimaryAction;
 }
 
@@ -92,6 +112,7 @@ export interface PluginMarketplaceViewModel {
 const ATTENTION_BLOCKERS = new Set([
   "PLUGIN_INSTALL_UNAVAILABLE",
   "PLUGIN_INSTALLED_PACKAGE_MISMATCH",
+  "PLUGIN_CLOUD_RELEASE_EVIDENCE_MISSING",
   "PLUGIN_DISABLED",
 ]);
 
@@ -136,12 +157,61 @@ function hasAttention(registryItem: PluginRegistryItem): boolean {
   return registryItem.blockerCodes.some(isAttentionBlocker);
 }
 
+function visibleBlockerLabelKey(
+  code: string,
+): PluginMarketplaceVisibleBlockerLabelKey | null {
+  if (code === "PLUGIN_RENDERER_UNAVAILABLE") {
+    return null;
+  }
+  if (code === "PLUGIN_WORKSPACE_MISSING") {
+    return null;
+  }
+  if (code.startsWith("PLUGIN_MARKETPLACE_BLOCKED")) {
+    return "plugin.marketplace.blocker.marketplaceBlocked";
+  }
+  switch (code) {
+    case "PLUGIN_DISABLED":
+      return "plugin.marketplace.blocker.disabled";
+    case "PLUGIN_INSTALL_UNAVAILABLE":
+      return "plugin.marketplace.blocker.installUnavailable";
+    case "PLUGIN_INSTALLED_PACKAGE_MISMATCH":
+      return "plugin.marketplace.blocker.installedPackageMismatch";
+    case "PLUGIN_ACTIVATION_BLOCKED":
+      return "plugin.marketplace.blocker.activationBlocked";
+    case "PLUGIN_ACTIVATION_ENTRY_MISSING":
+      return "plugin.marketplace.blocker.activationEntryMissing";
+    default:
+      return "plugin.marketplace.blocker.generic";
+  }
+}
+
+function visibleBlockers(
+  registryItem: PluginRegistryItem,
+  action: PluginMarketplacePrimaryAction,
+): PluginMarketplaceVisibleBlocker[] {
+  return registryItem.blockerCodes.flatMap((code) => {
+    if (action.kind !== "blocked" && !isAttentionBlocker(code)) {
+      return [];
+    }
+    const labelKey = visibleBlockerLabelKey(code);
+    return labelKey ? [{ code, labelKey }] : [];
+  });
+}
+
 function primaryAction(
   registryItem: PluginRegistryItem,
   installable: boolean,
   activatable: boolean,
   readOnlyHistory: boolean,
 ): PluginMarketplacePrimaryAction {
+  if (registryItem.installed && installable) {
+    return {
+      kind: "install",
+      labelKey: "plugin.marketplace.action.install",
+      disabled: false,
+      blockerCodes: [],
+    };
+  }
   if (registryItem.installed && activatable) {
     return {
       kind: "open",
@@ -192,6 +262,13 @@ function viewItem(
   const renderable = states.has("renderable");
   const readOnlyHistory = states.has("read_only_history");
   const displayName = resolveDisplayName(item, registryItem);
+  const action = primaryAction(
+    registryItem,
+    installable,
+    activatable,
+    readOnlyHistory,
+  );
+  const skills = projectPluginMarketplaceItemSkills(item);
 
   return {
     pluginId: item.pluginKey,
@@ -214,15 +291,16 @@ function viewItem(
     activatable,
     renderable,
     readOnlyHistory,
-    skills: projectPluginMarketplaceItemSkills(item),
+    skills,
+    capabilityProfile: buildPluginMarketplaceCapabilityProfile({
+      item,
+      registryItem,
+      skills,
+    }),
     needsAttention: hasAttention(registryItem),
     blockerCodes: registryItem.blockerCodes,
-    primaryAction: primaryAction(
-      registryItem,
-      installable,
-      activatable,
-      readOnlyHistory,
-    ),
+    visibleBlockers: visibleBlockers(registryItem, action),
+    primaryAction: action,
   };
 }
 

@@ -15,6 +15,7 @@ export interface HarnessFileChangeReviewSummary {
 
 export function useHarnessFileReviewState(
   harnessState: HarnessSessionState,
+  enabled = true,
 ) {
   const [fileChangeDecisions, setFileChangeDecisions] = useState<
     Record<string, FileChangeDecisionStatus>
@@ -25,12 +26,15 @@ export function useHarnessFileReviewState(
 
   const fileChangeReviewEntries = useMemo(
     () =>
-      buildFileChangeReviewEntries({
-        activeFileWrites: harnessState.activeFileWrites,
-        recentFileEvents: harnessState.recentFileEvents,
-        decisions: fileChangeDecisions,
-      }),
+      enabled
+        ? buildFileChangeReviewEntries({
+            activeFileWrites: harnessState.activeFileWrites,
+            recentFileEvents: harnessState.recentFileEvents,
+            decisions: fileChangeDecisions,
+          })
+        : [],
     [
+      enabled,
       fileChangeDecisions,
       harnessState.activeFileWrites,
       harnessState.recentFileEvents,

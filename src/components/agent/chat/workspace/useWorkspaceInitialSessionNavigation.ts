@@ -92,6 +92,28 @@ export function useWorkspaceInitialSessionNavigation({
       return;
     }
 
+    const appliedNavigateKey = normalizedInitialSessionId
+      ? `${normalizedInitialSessionId}:navigate`
+      : null;
+    if (
+      shouldRunMatchedHydration &&
+      appliedInitialSessionIdRef.current === appliedNavigateKey
+    ) {
+      logAgentDebug(
+        "AgentChatPage",
+        "initialSessionNavigation.dedupedMatchedHydrate",
+        {
+          currentSessionId: normalizedCurrentSessionId,
+          initialSessionId: normalizedInitialSessionId,
+        },
+        {
+          dedupeKey: `initialSessionNavigation.dedupedMatchedHydrate:${normalizedInitialSessionId}`,
+          throttleMs: INITIAL_SESSION_NAVIGATION_DEDUPE_MS,
+        },
+      );
+      return;
+    }
+
     const resolvedSwitchOptions =
       resolveInitialSessionSwitch?.(normalizedInitialSessionId) ?? null;
     if (resolvedSwitchOptions?.waitForResolution) {
@@ -111,6 +133,7 @@ export function useWorkspaceInitialSessionNavigation({
     }
 
     const dedupeKey = `${normalizedCurrentSessionId ?? ""}->${normalizedInitialSessionId}`;
+    const sessionDedupeKey = `*->${normalizedInitialSessionId}`;
     let switchTopicStarts = switchTopicScopedNavigationStarts.get(switchTopic);
     if (!switchTopicStarts) {
       switchTopicStarts = new Map();
@@ -119,9 +142,15 @@ export function useWorkspaceInitialSessionNavigation({
 
     const startedAt = Date.now();
     const scopedLastStartedAt = switchTopicStarts.get(dedupeKey) ?? 0;
+    const scopedSessionLastStartedAt =
+      switchTopicStarts.get(sessionDedupeKey) ?? 0;
     const externalLastStartedAt =
       externalNavigationStartsBySessionId.get(normalizedInitialSessionId) ?? 0;
-    const lastStartedAt = Math.max(scopedLastStartedAt, externalLastStartedAt);
+    const lastStartedAt = Math.max(
+      scopedLastStartedAt,
+      scopedSessionLastStartedAt,
+      externalLastStartedAt,
+    );
     if (startedAt - lastStartedAt < INITIAL_SESSION_NAVIGATION_DEDUPE_MS) {
       logAgentDebug(
         "AgentChatPage",
@@ -141,6 +170,7 @@ export function useWorkspaceInitialSessionNavigation({
 
     appliedInitialSessionIdRef.current = appliedNavigationKey;
     switchTopicStarts.set(dedupeKey, startedAt);
+    switchTopicStarts.set(sessionDedupeKey, startedAt);
     logAgentDebug("AgentChatPage", "initialSessionNavigation.start", {
       currentSessionId: normalizedCurrentSessionId,
       forceRefresh:

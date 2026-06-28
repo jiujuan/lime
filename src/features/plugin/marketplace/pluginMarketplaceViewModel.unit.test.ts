@@ -38,11 +38,58 @@ function snapshot(): PluginMarketplaceRegistrySnapshot {
               "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           },
           manifestSummary: {
+            agentApps: [
+              {
+                id: "research-kit",
+                title: "Research Agent",
+                entryKey: "research",
+                uiKind: "pane",
+              },
+            ],
+            workbench: {
+              workbenchTasks: [
+                {
+                  kind: "research.article.generate",
+                  title: "Generate article",
+                  expectedObjects: ["articleDraft"],
+                  defaultSurface: "documentCanvas",
+                },
+              ],
+            },
+            subagents: [
+              {
+                id: "researcher",
+                title: "资料检索",
+                description: "整理资料和引用依据",
+                activation: "research.article.generate",
+                skills: ["article-writer"],
+              },
+              {
+                id: "writer",
+                title: "正文写作",
+                description: "生成文章草稿",
+                activation: "research.article.generate",
+                skills: ["article-writer"],
+              },
+            ],
+            toolRefs: [
+              {
+                key: "research-worker",
+                provider: "local-worker",
+                capabilities: ["research.article.generate"],
+              },
+            ],
             skills: [
               {
                 id: "article-writer",
                 title: "Article Writer",
                 description: "Draft articles",
+              },
+            ],
+            skillRefs: [
+              {
+                id: "article-image-cheatsheet",
+                activation: "content.image.generate",
               },
             ],
           },
@@ -170,6 +217,8 @@ describe("plugin marketplace view model", () => {
       enabled: true,
       activatable: true,
       needsAttention: false,
+      blockerCodes: ["PLUGIN_RENDERER_UNAVAILABLE"],
+      visibleBlockers: [],
       primaryAction: {
         kind: "open",
         labelKey: "plugin.marketplace.action.open",
@@ -189,13 +238,44 @@ describe("plugin marketplace view model", () => {
           description: "Draft articles",
         },
       ],
+      capabilityProfile: expect.objectContaining({
+        summary: {
+          agentCount: 1,
+          subagentCount: 2,
+          toolCount: 1,
+          skillCount: 2,
+        },
+      }),
     });
+    const researchProfile = model.items.find(
+      (item) => item.pluginId === "research-kit@limecloud",
+    )?.capabilityProfile;
+    expect(
+      researchProfile?.sections.flatMap((section) =>
+        section.items.map((item) => item.id),
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        "research-kit",
+        "researcher",
+        "writer",
+        "research-worker",
+        "article-writer",
+        "article-image-cheatsheet",
+      ]),
+    );
     expect(
       model.items.find((item) => item.pluginId === "notes-kit@limecloud"),
     ).toMatchObject({
       installed: true,
       enabled: false,
       needsAttention: true,
+      visibleBlockers: [
+        {
+          code: "PLUGIN_DISABLED",
+          labelKey: "plugin.marketplace.blocker.disabled",
+        },
+      ],
       primaryAction: {
         kind: "enable",
         labelKey: "plugin.marketplace.action.enable",
@@ -216,6 +296,12 @@ describe("plugin marketplace view model", () => {
           "PLUGIN_MARKETPLACE_BLOCKED:registration required",
         ]),
       },
+      visibleBlockers: expect.arrayContaining([
+        {
+          code: "PLUGIN_MARKETPLACE_BLOCKED:registration required",
+          labelKey: "plugin.marketplace.blocker.marketplaceBlocked",
+        },
+      ]),
     });
   });
 
@@ -260,5 +346,37 @@ describe("plugin marketplace view model", () => {
         (item) => item.pluginId === "research-kit@limecloud",
       )?.displayName,
     ).toBe("research-kit@limecloud");
+  });
+
+  it("已安装但需要刷新包证据时应展示安装动作", () => {
+    const base = snapshot();
+    base.registry[0] = {
+      ...base.registry[0]!,
+      installed: true,
+      enabled: true,
+      capabilityStates: ["installable"],
+      activationState: "blocked",
+      blockerCodes: ["PLUGIN_CLOUD_RELEASE_EVIDENCE_MISSING"],
+    };
+
+    expect(
+      buildPluginMarketplaceViewModel(base).items.find(
+        (item) => item.pluginId === "research-kit@limecloud",
+      ),
+    ).toMatchObject({
+      installed: true,
+      installable: true,
+      primaryAction: {
+        kind: "install",
+        labelKey: "plugin.marketplace.action.install",
+        disabled: false,
+      },
+      visibleBlockers: [
+        {
+          code: "PLUGIN_CLOUD_RELEASE_EVIDENCE_MISSING",
+          labelKey: "plugin.marketplace.blocker.generic",
+        },
+      ],
+    });
   });
 });

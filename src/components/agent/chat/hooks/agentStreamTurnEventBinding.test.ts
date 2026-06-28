@@ -760,6 +760,135 @@ describe("agentStreamTurnEventBinding", () => {
     expect(disposeListener).toHaveBeenCalled();
   });
 
+  it("收到 App Server runtime.error 时应立即收口失败而不是等待 inactivity watchdog", async () => {
+    vi.useFakeTimers();
+
+    let messages: Message[] = [
+      {
+        id: "assistant-runtime-error",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-06-28T07:45:00.000Z"),
+        isThinking: true,
+      },
+    ];
+    let streamHandler: ((event: { payload: unknown }) => void) | null = null;
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const clearActiveStreamIfMatch = vi.fn(() => true);
+    const disposeListener = vi.fn();
+    const setIsSending = vi.fn();
+    const runtime = {
+      listenToTurnEvents: vi.fn(async (_eventName, handler) => {
+        streamHandler = handler;
+        return vi.fn();
+      }),
+    } as unknown as AgentRuntimeAdapter;
+    const requestState: StreamRequestState = {
+      accumulatedContent: "",
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+      queuedTurnId: null,
+    };
+
+    await registerAgentStreamTurnEventBinding({
+      runtime,
+      eventName: "aster_stream_runtime-error",
+      requestState,
+      skipUserMessage: false,
+      effectiveProviderType: "openai",
+      effectiveModel: "gpt-5.5",
+      effectiveExecutionStrategy: "react",
+      content: "@写文章 写一篇公众号文章",
+      expectingQueue: false,
+      activeSessionId: "session-runtime-error",
+      resolvedWorkspaceId: "workspace-runtime-error",
+      assistantMsgId: "assistant-runtime-error",
+      pendingTurnKey: "pending-turn-runtime-error",
+      pendingItemKey: "pending-item-runtime-error",
+      effectiveWaitingRuntimeStatus: {
+        phase: "preparing",
+        title: "处理中",
+        detail: "正在准备执行上下文",
+      },
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      callbacks: {
+        activateStream: () => {},
+        isStreamActivated: () => true,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener,
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch,
+        upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
+        removeQueuedTurnState: () => {},
+      },
+      sounds: {
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+      },
+      appendThinkingToParts: (parts) => parts,
+      setMessages: setMessages as never,
+      setPendingActions: noopDispatch<ActionRequired[]>(),
+      setThreadItems: noopDispatch<AgentThreadItem[]>(),
+      setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
+      setCurrentTurnId: noopDispatch<string | null>(),
+      setExecutionRuntime: noopDispatch<AsterSessionExecutionRuntime | null>(),
+      setIsSending,
+    });
+
+    if (!streamHandler) {
+      throw new Error("expected stream handler to be registered");
+    }
+
+    const payload = projectAppServerAgentEventPayload({
+      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "evt-runtime-error",
+          sequence: 1,
+          sessionId: "session-runtime-error",
+          threadId: "thread-runtime-error",
+          turnId: "turn-runtime-error",
+          type: "runtime.error",
+          timestamp: "2026-06-28T07:45:02.000Z",
+          payload: {
+            message: "Agent App worker failed",
+            errorCode: "AGENT_APP_WORKER_PACKAGE_SIGNATURE_UNVERIFIED",
+          },
+        },
+      },
+    });
+
+    if (!payload) {
+      throw new Error("expected App Server notification to project");
+    }
+    (streamHandler as (event: { payload: unknown }) => void)({ payload });
+
+    expect(messages[0]?.content).toContain("执行失败");
+    expect(messages[0]?.content).toContain("Agent App worker failed");
+    expect(messages[0]?.runtimeStatus).toMatchObject({
+      phase: "failed",
+      title: "当前处理失败",
+    });
+    expect(clearActiveStreamIfMatch).toHaveBeenCalledWith(
+      "aster_stream_runtime-error",
+    );
+    expect(disposeListener).toHaveBeenCalled();
+    expect(setIsSending).toHaveBeenCalledWith(false);
+
+    await vi.advanceTimersByTimeAsync(120_100);
+    expect(clearActiveStreamIfMatch).toHaveBeenCalledTimes(1);
+  });
+
   it("首包后长时间没有新事件时，应把助手消息收口为失败态", async () => {
     vi.useFakeTimers();
 

@@ -5,7 +5,6 @@ import {
 } from "./contentPostPlatform";
 
 export type WritingWorkbenchCommandTrigger =
-  | "@写作"
   | "@文案"
   | "@write"
   | "@Writing Partner"
@@ -28,7 +27,7 @@ export interface ParsedWritingWorkbenchCommand {
 }
 
 const WRITING_COMMAND_PREFIX_REGEX =
-  /^\s*(@Newsletters Pro|@Writing Partner|@Writers 1|@Blog 1|@Web Copy|@写作|@文案|@write)(?:\s+|$)([\s\S]*)$/i;
+  /^\s*(@Newsletters Pro|@Writing Partner|@Writers 1|@Blog 1|@Web Copy|@文案|@write)(?:\s+|$)([\s\S]*)$/i;
 
 function normalizeTrigger(value: string): WritingWorkbenchCommandTrigger {
   const normalized = value.trim().toLowerCase();
@@ -53,7 +52,7 @@ function normalizeTrigger(value: string): WritingWorkbenchCommandTrigger {
   if (normalized === "@write") {
     return "@write";
   }
-  return "@写作";
+  return "@文案";
 }
 
 function resolveDraftKind(

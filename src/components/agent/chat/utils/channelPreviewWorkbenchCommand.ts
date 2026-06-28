@@ -9,6 +9,7 @@ export type ChannelPreviewWorkbenchCommandTrigger =
 
 import {
   parseContentPostPlatform,
+  resolveContentPostPlatformLabel,
   stripContentPostPromptDecorations,
   type ContentPostPlatformType,
 } from "./contentPostPlatform";
@@ -62,22 +63,22 @@ function resolveDefaultPlatformFromTrigger(
     case "@Instagram Preview":
       return {
         platformType: "instagram",
-        platformLabel: "Instagram",
+        platformLabel: resolveContentPostPlatformLabel("instagram"),
       };
     case "@TikTok Preview":
       return {
         platformType: "tiktok",
-        platformLabel: "TikTok",
+        platformLabel: resolveContentPostPlatformLabel("tiktok"),
       };
     case "@Twitter Preview":
       return {
         platformType: "x",
-        platformLabel: "X / Twitter",
+        platformLabel: resolveContentPostPlatformLabel("x"),
       };
     case "@YouTube Preview":
       return {
         platformType: "youtube",
-        platformLabel: "YouTube",
+        platformLabel: resolveContentPostPlatformLabel("youtube"),
       };
     default:
       return {};

@@ -31,7 +31,7 @@ export function useWorkspaceHarnessInventoryRuntime({
   enabled,
   chatMode,
   mappedTheme,
-  harnessPanelVisible: _harnessPanelVisible,
+  harnessPanelVisible,
   harnessRequestMetadata,
   isThemeWorkbench,
   themeWorkbenchRunState,
@@ -49,7 +49,7 @@ export function useWorkspaceHarnessInventoryRuntime({
   const toolInventoryRequestIdRef = useRef(0);
 
   const refreshToolInventory = useCallback(async () => {
-    if (!enabled) {
+    if (!enabled || !harnessPanelVisible) {
       setToolInventory(null);
       setToolInventoryLoading(false);
       setToolInventoryError(null);
@@ -89,10 +89,16 @@ export function useWorkspaceHarnessInventoryRuntime({
         setToolInventoryLoading(false);
       }
     }
-  }, [chatMode, enabled, harnessRequestMetadata, mappedTheme]);
+  }, [
+    chatMode,
+    enabled,
+    harnessPanelVisible,
+    harnessRequestMetadata,
+    mappedTheme,
+  ]);
 
   useEffect(() => {
-    if (enabled) {
+    if (enabled && harnessPanelVisible) {
       return;
     }
 
@@ -100,15 +106,15 @@ export function useWorkspaceHarnessInventoryRuntime({
     setToolInventory(null);
     setToolInventoryLoading(false);
     setToolInventoryError(null);
-  }, [enabled]);
+  }, [enabled, harnessPanelVisible]);
 
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || !harnessPanelVisible) {
       return;
     }
 
     void refreshToolInventory();
-  }, [enabled, refreshToolInventory]);
+  }, [enabled, harnessPanelVisible, refreshToolInventory]);
 
   const generalWorkbenchHarnessSummary = useMemo(() => {
     if (!enabled || !isThemeWorkbench) {

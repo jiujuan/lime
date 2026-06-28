@@ -103,4 +103,21 @@ describe("resolveWorkspaceShellChromeRuntime", () => {
     expect(runtime.showGeneralWorkbenchSidebar).toBe(false);
     expect(runtime.showGeneralWorkbenchLeftExpandButton).toBe(true);
   });
+
+  it("Compact General Workbench 恢复已有会话时保留浮层输入区", () => {
+    const runtime = resolveWorkspaceShellChromeRuntime(
+      baseInput({
+        contextWorkspaceEnabled: true,
+        hasDisplayMessages: true,
+        isThemeWorkbench: true,
+        sessionId: "session-expert-panel",
+        shouldUseCompactGeneralWorkbench: true,
+        topBarChrome: "workspace-compact",
+      }),
+    );
+
+    expect(runtime.showChatLayout).toBe(true);
+    expect(runtime.shouldHideGeneralWorkbenchInputForTheme).toBe(true);
+    expect(runtime.shouldShowGeneralWorkbenchFloatingInputOverlay).toBe(true);
+  });
 });

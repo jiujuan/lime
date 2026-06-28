@@ -5,7 +5,7 @@
   "workspaces": [
     "packages/*"
   ],
-  "version": "1.81.0",
+  "version": "1.82.0",
   "description": "AI content workspace for Chinese creators: desktop writing, research, prompt management, knowledge base, and multi-model workflows.",
   "keywords": [
     "ai",
@@ -95,7 +95,13 @@
     "test:contracts": "npm run check:protocol-types && node scripts/check-app-server-client-contract.mjs && node scripts/check-command-contracts.mjs && node scripts/check-harness-contracts.mjs && npm run governance:modality-contracts && npm run governance:scripts && npm run governance:electron-release-workflow && npm run harness:cleanup-report:check && npm run docs:boundary",
     "test:rust": "cargo test --manifest-path \"lime-rs/Cargo.toml\"",
     "test:rust:unit": "node scripts/run-rust-layer.mjs unit",
+    "test:rust:changed": "node scripts/run-rust-layer.mjs unit --changed",
+    "test:rust:related": "node scripts/run-rust-layer.mjs unit --related",
+    "test:rust:unit:changed": "node scripts/run-rust-layer.mjs unit --changed",
+    "test:rust:unit:related": "node scripts/run-rust-layer.mjs unit --related",
     "test:rust:integration": "node scripts/run-rust-layer.mjs integration",
+    "test:rust:integration:changed": "node scripts/run-rust-layer.mjs integration --changed",
+    "test:rust:integration:related": "node scripts/run-rust-layer.mjs integration --related",
     "test:rust:e2e": "node scripts/run-rust-layer.mjs e2e",
     "test:rust:layers:stats": "node scripts/report-rust-test-layers.mjs",
     "harness:analysis": "node scripts/harness/analysis-brief.mjs",

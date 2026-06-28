@@ -1,5 +1,6 @@
 use super::projection_repair::ProjectionRepair;
 use super::projection_store::ProjectionReadSession;
+use super::projection_store::ProjectionReadWindow;
 use super::read_model;
 use super::turn_input_events;
 use super::RuntimeCore;
@@ -43,7 +44,10 @@ impl RuntimeCore {
             .lock()
             .expect("runtime core state mutex poisoned");
         let stored = state.sessions.get(&params.session_id)?.clone();
-        let detail = read_model::runtime_session_read_detail(&stored);
+        let detail = read_model::runtime_session_read_detail_with_options(
+            &stored,
+            read_model::ReadDetailOptions::from_params(params),
+        );
         let response = AgentSessionReadResponse {
             session: stored.session.clone(),
             turns: stored.turns.clone(),
@@ -65,12 +69,17 @@ impl RuntimeCore {
         let repair =
             ProjectionRepair::new((**event_log_writer).clone(), (**projection_store).clone());
         let Some((projection, events)) = repair
-            .read_repaired_session(&params.session_id)
+            .read_repaired_session(
+                &params.session_id,
+                params
+                    .history_limit
+                    .map(|_| ProjectionReadWindow::from_read_params(params)),
+            )
             .map_err(RuntimeCoreError::Backend)?
         else {
             return Ok(None);
         };
-        Ok(Some(projection_load_context(projection, events)))
+        Ok(Some(projection_load_context(projection, events, params)))
     }
 
     async fn load_app_data_session(
@@ -89,16 +98,24 @@ impl RuntimeCore {
 pub(in crate::runtime) fn projection_load_context(
     projection: ProjectionReadSession,
     events: Vec<AgentEvent>,
+    params: &AgentSessionReadParams,
 ) -> SessionLoadContext {
     let stored = StoredSession {
-        session: projection.session,
-        turns: projection.turns,
+        session: projection.session.clone(),
+        turns: projection.turns.clone(),
         turn_inputs: turn_input_events::turn_inputs_from_events(&events),
         turn_runtime_options: HashMap::new(),
         events,
         output_blobs: HashMap::new(),
     };
-    let mut detail = read_model::runtime_session_read_detail(&stored);
+    let mut detail = if stored.events.is_empty() && params.history_limit.is_some() {
+        projection_summary_detail(&stored, &projection, params)
+    } else {
+        read_model::runtime_session_read_detail_with_options(
+            &stored,
+            read_model::ReadDetailOptions::from_params(params),
+        )
+    };
     if let Some(detail_object) = detail.as_object_mut() {
         detail_object.insert(
             "projection_source".to_string(),
@@ -119,4 +136,77 @@ pub(in crate::runtime) fn projection_load_context(
         detail: Some(detail),
     };
     SessionLoadContext { response, stored }
+}
+
+fn projection_summary_detail(
+    stored: &StoredSession,
+    projection: &ProjectionReadSession,
+    params: &AgentSessionReadParams,
+) -> serde_json::Value {
+    let messages = projection.messages.clone();
+    let loaded_count = messages.len();
+    let messages_count = projection.messages_count;
+    let history_limit = params
+        .history_limit
+        .map(|value| value as usize)
+        .unwrap_or(messages_count);
+    let history_offset = params.history_offset.unwrap_or_default() as usize;
+    let start_index = projection.messages_start_index;
+    let oldest_message_id = messages.first().and_then(|message| {
+        message.get("id").and_then(|value| match value {
+            serde_json::Value::Number(number) => number.as_i64(),
+            serde_json::Value::String(value) => value.parse::<i64>().ok(),
+            _ => None,
+        })
+    });
+    let status = super::status::agent_session_status_label(stored.session.status);
+    serde_json::json!({
+        "id": stored.session.session_id,
+        "session_id": stored.session.session_id,
+        "thread_id": stored.session.thread_id,
+        "workspace_id": stored.session.workspace_id,
+        "status": status,
+        "working_dir": null,
+        "archived_at": null,
+        "execution_strategy": null,
+        "execution_runtime": null,
+        "messages_count": messages_count,
+        "history_limit": history_limit,
+        "history_offset": history_offset,
+        "history_cursor": {
+            "oldest_message_id": oldest_message_id,
+            "start_index": start_index,
+            "loaded_count": loaded_count,
+        },
+        "history_truncated": loaded_count < messages_count,
+        "messages": messages,
+        "turns": stored.turns,
+        "items": [],
+        "queued_turns": [],
+        "artifacts": [],
+        "outputs": [],
+        "thread_read": {
+            "session_id": stored.session.session_id,
+            "thread_id": stored.session.thread_id,
+            "status": status,
+            "turns": stored.turns,
+            "pending_requests": [],
+            "queued_turns": [],
+            "tool_calls": [],
+            "commands": [],
+            "tests": [],
+            "artifacts": [],
+            "outputs": [],
+            "diagnostics": {
+                "latest_turn_status": stored.turns.last().map(|turn| super::status::agent_turn_status_label(turn.status)),
+                "latest_turn_error_message": null,
+                "pending_request_count": 0,
+                "command_count": 0,
+                "test_count": 0,
+                "changed_file_count": 0,
+                "patch_count": 0,
+            },
+            "runtime_summary": {},
+        },
+    })
 }

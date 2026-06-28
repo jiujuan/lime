@@ -52,17 +52,19 @@ export function resolveConversationMessageRenderWindowSettings(
 
 export function shouldUseConversationProgressiveRender(params: {
   isSending: boolean;
+  isRestoredHistoryWindow: boolean;
   visibleMessageCount: number;
   settings: ConversationMessageRenderWindowSettings;
 }): boolean {
   return (
-    !params.isSending &&
+    (!params.isSending || params.isRestoredHistoryWindow) &&
     params.visibleMessageCount > params.settings.progressiveRenderThreshold
   );
 }
 
 export function resolveInitialConversationRenderedMessageCount(params: {
   isSending: boolean;
+  isRestoredHistoryWindow: boolean;
   visibleMessageCount: number;
   settings: ConversationMessageRenderWindowSettings;
 }): number {
@@ -83,6 +85,7 @@ export function buildConversationMessageRenderWindowProjection<
   const visibleMessages = [...params.visibleMessages];
   const shouldUseProgressiveRender = shouldUseConversationProgressiveRender({
     isSending: params.isSending,
+    isRestoredHistoryWindow: params.isRestoredHistoryWindow,
     visibleMessageCount: visibleMessages.length,
     settings: params.settings,
   });

@@ -4,6 +4,7 @@ const DEFAULT_DEVELOPER_CONFIG: DeveloperConfig = {
   workspace_harness_enabled: false,
   claw_trace: {
     alert_enabled: false,
+    alert_notification_enabled: false,
     enabled: false,
     level: "summary",
     sample_rate: 1,
@@ -66,6 +67,7 @@ export function normalizeClawTraceConfig(
 ): NonNullable<DeveloperConfig["claw_trace"]> {
   return {
     alert_enabled: config?.alert_enabled === true,
+    alert_notification_enabled: config?.alert_notification_enabled === true,
     enabled: config?.enabled === true,
     level: config?.level === "debug" ? "debug" : "summary",
     sample_rate: normalizeSampleRate(config?.sample_rate),

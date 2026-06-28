@@ -1,50 +1,48 @@
-## Lime v1.81.0
+## Lime v1.82.0
 
 ### 新功能
 
-- Claw Trace 进入 current 主链：新增 renderer / App Server / provider checkpoint、W3C trace context carrier、summary-only raw trace JSONL store、Trace list / read / export diagnostics API，以及 Developer & Labs 中的 Trace 开关、列表复制、最近 Trace 读取与导出入口。
-- 支持包可显式附带单条 summary-only Trace export；默认支持包仍只包含裁剪后的摘要，避免写入 prompt、provider payload、assistant delta 或原始敏感正文。
-- App Server JSON-RPC 协议与 `@limecloud/app-server-client` 同步新增 `diagnostics/trace/list`、`diagnostics/trace/read`、`diagnostics/trace/export`、support bundle trace 选择参数和对应 schema / generated types / client methods。
-- 插件 Marketplace 产品化继续推进：详情页支持历史会话候选选择、刷新与精确打开，插件 runtime authorization、renderer output、历史恢复和安装态 view model 进一步收敛。
-- 内容工厂 / 产品 Profile Right Surface worker 从单一 product-profile 请求扩展为 pane action worker turn，支持 action intent、风险、source artifact、output artifact kind 与授权 fail-closed。
-- Claw / Agent UI 性能指标可把 provider wait、App Server emit、renderer receive、text apply、flush 和 first paint 串到同一个 trace summary，用于定位首字延迟来源。
-- execution process 与 MCP tool log metadata 进入 current 事件投影，工具过程可携带 process id、输出序号、stdin 可写状态和生命周期阶段。
+- 新增内容工厂 Writing 闭环：`@写文章` / `@写作` 可命中 seeded Content Factory，生成文章草稿小产物卡，并点击展开右侧 Product Profile。
+- Agent App fixture 升级为 v4 生产型内容工厂，补齐 interface、activation entries、workflow、subagents、skill refs、tool refs、runtime package 和 seeded release descriptor。
+- Workspace 右侧 surface 新增 Trace 面板入口，Claw Trace 可在会话侧栏内直接查看；Product Profile 右侧栏从对象画布中独立出来。
+- Claw Trace Developer 面板新增回归告警通道、桌面通知开关、告警导出 / 清空和五语言文案。
+- Electron Desktop Host 新增桌面通知、文件 / 项目 shell、Agent App shell、Agent App runtime task、系统诊断、语音模型和图层设计工程 host 分层能力。
 
 ### 修复
 
-- 修复首字耗时容易被误归因到 renderer 的问题，provider/API 等待和 Lime 本地输出段现在分开投影。
-- 修复 metadata-only MCP process lifecycle log 被渲染成 JSON 工具输出的问题；这类事件现在保留结构化 metadata，但不会污染可见输出。
-- 修复插件历史入口只能跳到泛化 Agent 页面的问题，详情面板现在基于历史候选打开对应 session。
-- 修复 pane action worker 缺少授权约束时可能被当成普通 worker 执行的问题；不满足 runtime contract 时直接输出配置类失败并停止。
-- 修复无效 W3C `traceparent` 可能被当作远端 parent 传播的风险；非法 carrier 只保留 Lime 内部 trace identity，不参与 OTEL parent 继承。
+- 修复 seeded Content Factory 已安装状态缺少 cloud release evidence 时无法稳定激活的问题，并在保存 / 读取 installed state 时迁移 release evidence。
+- 修复已安装 Agent App 在 marketplace 包引用缺失或 hash 需要刷新时被误判为不可激活的问题，改为展示可刷新安装动作和可见 blocker。
+- 修复 App Server read model 历史读取无法分页的问题，支持 `history_limit`、`history_offset` 和 `history_before_message_id`。
+- 修复 Agent App worker 对可选签名 release evidence 过度 fail closed 的问题，仅在 required signature 未验证时阻断。
+- 修复 Claw Trace 多处 i18n 动态 key 在 TypeScript `5.9.3` 下触发复杂 overload 推导的问题。
 
 ### 优化与重构
 
-- Trace store 拆分为 append-only event、summary projection、export zip 与 support bundle attachment 模块，诊断读面复用 App Server current processor / local data source。
-- App Server request span 接入 OTEL 初始化与远端 parent 处理，`agentSession/turn/start` 可记录安全的 session / turn / trace 属性。
-- `packages/app-server-client` 的 request / connection method 表扩展到完整 current protocol surface，减少手写 client 方法遗漏。
-- Agent Chat streaming 继续按 trace metadata、text delta、render flush、runtime metrics controller 分层，避免把状态机、性能统计和渲染副作用塞进同一个 hook。
-- Product Profile / plugin Right Surface 渲染拆出 image cell、renderer host model、pane action 和 renderer output projection，保持 UI 与 worker contract 解耦。
+- `electron/hostCommands.ts` 拆分出多个单一职责 host 模块，减少巨型分发文件中的文件系统、shell、通知、Agent App 和语音模型逻辑混杂。
+- App Server projection store 增加 projected message window 查询，减少历史恢复时对完整事件流的依赖。
+- 请求级联网工具策略从 `allowed` 调整为 `auto`：默认暴露 WebSearch 工具面，由模型按需选择；显式 `disabled` 才关闭，`required` 才强制联网。
+- Workspace Product Profile 支持从消息 artifact 恢复预览对象，并将内容工厂产物、右侧 Product Profile 和历史恢复串到同一投影模型。
+- Plugin Marketplace 增加 capability profile、visible blockers、manifest interface projection、subagents / workflows 投影和 registry loader 状态模型。
+- `verify:local` / Rust 分层 runner 支持 changed / related scope，按 Git diff 或显式路径推导 workspace crate 并扩展反向依赖。
 
 ### 测试与质量
 
-- 新增 / 扩展 Trace 相关 Rust 与前端回归：trace store list/read/export、request trace span、W3C carrier、Developer Claw Trace panel、trace timeline、serverRuntime diagnostics API。
-- 新增 / 扩展 App Server protocol / client contract 测试，覆盖 diagnostics trace methods、support bundle trace export selection、execution process drain output 和 generated protocol types。
-- 新增 / 扩展 Claw streaming 回归，覆盖 agent message content sync、runtime metrics controller、text delta controller、render flush controller、prepared send env、performance metrics 与 history merge。
-- 新增 / 扩展插件 Marketplace 与产品化回归，覆盖 manifest contract、runtime authorization、renderer output、history session selection、marketplace actions / loader / registry hook 和 Plugin Marketplace 页面。
-- 新增插件跨仓端到端证据包，记录 `plugin-productization-e2e` 真实 Electron fixture 摘要：current bridge、App Server JSON-RPC、本地安装态、worker dogfood、Right Surface、artifact read、远端运行 fail closed 均有证据。
-- 五语言 i18n 资源同步覆盖 Trace、Developer 设置、插件、Workspace 和 Agent 新增可见文案。
-- 本版发布事实源更新到 `1.81.0`：根应用、CLI npm package、App Server client package、Rust workspace、主 Cargo lock 与 Aster 子工作区 lock。当前仓库没有 `package-lock.json` / `pnpm-lock.yaml`，本次不新增 npm lockfile。
+- 新增 Electron Host 分层模块回归：Agent App runtime task、Agent App shell、desktop notification、file shell、project shell、system utility、voice model 等。
+- 新增 Content Factory worker、seeded Agent App、Agent App API、Marketplace registry / view model / visible blocker、plugin activation 和 browser intent 回归。
+- 新增 Workspace Product Profile、右侧 surface、Trace tab、message artifact、history restore、send actions 和 scoped storage 回归。
+- 新增 Claw Trace regression alert channel、dispatcher、monitor、notifier、presentation 和 Developer 面板回归。
+- 新增 Rust projection store、session history window、Agent App worker turn、seeded installed state 和 request tool policy 回归。
+- 版本事实源更新到 `1.82.0`：根应用、CLI npm package、App Server client package、Rust workspace、主 Cargo lock 与 Aster 子工作区 lock。仓库使用 `pnpm-lock.yaml`，本次未改 npm lockfile。
 
 ### 文档
 
-- 新增 `internal/roadmap/trace/` 文档集，覆盖 PRD、架构、图、代码地图和分阶段实施计划。
-- 新增 `internal/exec-plans/claw-trace-system-implementation-plan.md`，记录 Claw Trace 从骨架、provider phase、Developer UI、raw trace store 到 OTEL exporter 的阶段状态。
-- 新增插件跨仓端到端证据包与插件使用 / 运营指南，明确 Marketplace、安装态上报、显式激活、Right Surface、历史恢复和 fail-closed 边界。
-- 更新 coding / plugin 路线图与执行计划，记录本轮 Trace、插件产品化、内容工厂 dogfood 和 App Server current 链路证据。
+- 新增 `internal/roadmap/Writing/` 文档集，覆盖产品需求、架构、workflow、时序图和实施计划。
+- 更新 Claw Trace 执行计划、trace roadmap / code map 和 Agent UI latency 图，记录回归告警、Developer UI、Trace 右侧面板与验证状态。
+- 更新 `AGENTS.md`、质量工作流 skill、`internal/aiprompts/quality-workflow.md` 和 `scripts/README.md`，沉淀 Rust changed / related、前端续跑和发版压缩验证入口。
 
 ### 其他
 
-- 本版继续把 Claw Trace、插件 Marketplace、内容工厂 pane action、产品 Profile Right Surface、execution process 过程输出和诊断支持包收敛到 App Server JSON-RPC / RuntimeCore / Electron Desktop Host current 主链；不恢复旧插件命令族、mock fallback 或 parallel runtime 入口。
+- `right-sidebar-buttons.json` 是本地 UI 探测临时文件，不属于本次 release candidate。
+- 本版继续把 Writing、Agent App、Plugin Marketplace、Claw Trace 与 Electron Desktop Host 收敛到 current App Server JSON-RPC / RuntimeCore / Electron Host 主链，不恢复旧 Tauri wrapper 或 mock fallback。
 
-**完整变更**: `v1.80.0` -> `v1.81.0`
+**完整变更**: `v1.81.0` -> `v1.82.0`

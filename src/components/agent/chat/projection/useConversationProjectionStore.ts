@@ -28,11 +28,14 @@ export function useConversationProjectionSnapshot(): ConversationProjectionState
 
 export function useAgentUiProjectionEvents(
   filter?: AgentUiProjectionScopeFilter | null,
+  options?: { enabled?: boolean },
 ): AgentUiProjectionEvent[] {
   const snapshot = useConversationProjectionSnapshot();
+  const enabled = options?.enabled ?? true;
   return useMemo(
-    () => selectAgentUiProjectionEventsForScope(snapshot, filter),
-    [filter, snapshot],
+    () =>
+      enabled ? selectAgentUiProjectionEventsForScope(snapshot, filter) : [],
+    [enabled, filter, snapshot],
   );
 }
 
@@ -52,8 +55,8 @@ export function useAgentUiProjectionSummary(
   filter?: AgentUiProjectionScopeFilter | null,
   options?: { enabled?: boolean },
 ): AgentUiProjectionSummary {
-  const events = useAgentUiProjectionEvents(filter);
   const enabled = options?.enabled ?? true;
+  const events = useAgentUiProjectionEvents(filter, { enabled });
   return useMemo(
     () =>
       enabled

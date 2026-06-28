@@ -170,7 +170,7 @@ pub struct AgentRunParams {
     /// 是否开启联网搜索策略（可选）
     #[serde(default, alias = "webSearch")]
     pub web_search: Option<bool>,
-    /// 联网搜索模式（disabled/allowed/required）
+    /// 联网搜索模式（disabled/auto/required）
     #[serde(default, alias = "searchMode", skip_serializing_if = "Option::is_none")]
     pub search_mode: Option<String>,
     /// 工作目录（可选，必须由执行器校验为绝对路径后使用）

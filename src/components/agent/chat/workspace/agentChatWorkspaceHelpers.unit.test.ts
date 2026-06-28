@@ -5,6 +5,7 @@ import {
   resolveDefaultSelectedArtifact,
   resolveRuntimeWorkspaceId,
   resolveTaskCenterHomeSurfaceState,
+  shouldBuildFullThreadTimeline,
   shouldSuppressTaskCenterDraftContentForLayout,
   shouldAutoRecoverWorkspacePathMissing,
 } from "./agentChatWorkspaceHelpers";
@@ -104,7 +105,7 @@ describe("resolveTaskCenterHomeSurfaceState", () => {
     expect(state.sceneSessionId).toBe("session-from-sidebar");
   });
 
-  it("路由携带 standalone initialSessionId 时不应被首页草稿 surface 覆盖", () => {
+  it("路由携带 standalone initialSessionId 时应优先展示恢复壳而不是首页空态", () => {
     const state = resolveTaskCenterHomeSurfaceState({
       agentEntry: "claw",
       draftSurfaceActive: false,
@@ -120,7 +121,28 @@ describe("resolveTaskCenterHomeSurfaceState", () => {
 
     expect(state.shouldRenderEmbeddedHome).toBe(false);
     expect(state.shouldHideCurrentSessionContent).toBe(false);
-    expect(state.isRestoringSession).toBe(false);
+    expect(state.isRestoringSession).toBe(true);
+    expect(state.sceneSessionId).toBeNull();
+  });
+
+  it("旧会话切换中即使草稿 suppression 滞留也应展示恢复壳", () => {
+    const state = resolveTaskCenterHomeSurfaceState({
+      agentEntry: "claw",
+      draftSurfaceActive: true,
+      shouldSuppressDraftContent: true,
+      sessionSwitchPending: true,
+      hasInitialSessionRoute: false,
+      hasConversationActivity: false,
+      hasCurrentSessionActivity: false,
+      sessionId: "history-session",
+      embeddedHomeSessionIds: new Set(),
+      isAutoRestoringSession: false,
+      isSessionHydrating: false,
+    });
+
+    expect(state.shouldRenderEmbeddedHome).toBe(false);
+    expect(state.shouldHideCurrentSessionContent).toBe(true);
+    expect(state.isRestoringSession).toBe(true);
     expect(state.sceneSessionId).toBeNull();
   });
 
@@ -171,6 +193,45 @@ describe("isTaskCenterDraftSendPendingForLayout", () => {
         hasDisplayMessages: true,
         isSending: true,
         queuedTurnCount: 0,
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("shouldBuildFullThreadTimeline", () => {
+  it("普通聊天发送中不应构建完整 timeline", () => {
+    expect(
+      shouldBuildFullThreadTimeline({
+        harnessPanelVisible: false,
+        isSending: true,
+        layoutMode: "chat",
+      }),
+    ).toBe(false);
+  });
+
+  it("打开 Harness 或工作台时应构建完整 timeline", () => {
+    expect(
+      shouldBuildFullThreadTimeline({
+        harnessPanelVisible: true,
+        isSending: true,
+        layoutMode: "chat",
+      }),
+    ).toBe(true);
+    expect(
+      shouldBuildFullThreadTimeline({
+        harnessPanelVisible: false,
+        isSending: true,
+        layoutMode: "canvas",
+      }),
+    ).toBe(true);
+  });
+
+  it("非发送态应构建完整 timeline 以保留计划和历史详情", () => {
+    expect(
+      shouldBuildFullThreadTimeline({
+        harnessPanelVisible: false,
+        isSending: false,
+        layoutMode: "chat",
       }),
     ).toBe(true);
   });
@@ -291,7 +352,7 @@ describe("resolveDefaultSelectedArtifact", () => {
     ).toBeNull();
   });
 
-  it("通用工作区默认回退不应自动选中后台生成的文档 artifact", () => {
+  it("通用工作区应把用户可消费的文章文档 artifact 作为默认右侧画布", () => {
     const generatedDocument = createArtifact({
       id: "artifact-generated-doc-1",
       title: "导出结果",
@@ -302,7 +363,23 @@ describe("resolveDefaultSelectedArtifact", () => {
       },
     });
 
-    expect(resolveDefaultSelectedArtifact("general", [generatedDocument])).toBe(
+    expect(
+      resolveDefaultSelectedArtifact("general", [generatedDocument])?.id,
+    ).toBe("artifact-generated-doc-1");
+  });
+
+  it("通用工作区默认回退不应自动选中内部 ArtifactDocument 快照", () => {
+    const internalDocument = createArtifact({
+      id: "artifact-internal-doc-1",
+      title: "report.artifact.json",
+      content: '{"schemaVersion":"artifact_document.v1"}',
+      meta: {
+        filePath: ".lime/artifacts/thread-1/report.artifact.json",
+        source: "artifact_snapshot",
+      },
+    });
+
+    expect(resolveDefaultSelectedArtifact("general", [internalDocument])).toBe(
       null,
     );
   });

@@ -74,6 +74,7 @@ describe("resolveAgentFastResponseRouting", () => {
         resolver: "debug_resolver",
         routingChanged: true,
         routingSlot: "debug_routing_slot",
+        plainFirstTurnMaxChars: 1200,
         runtimeStatusPresentation: "timeline",
         serviceModelSlot: "debug_service_slot",
       },
@@ -104,6 +105,25 @@ describe("resolveAgentFastResponseRouting", () => {
     });
   });
 
+  it("应允许通过 routing profile 覆盖首轮轻量文本长度阈值", () => {
+    expect(
+      resolveAgentFastResponseRouting({
+        ...baseOptions,
+        sourceText: "x".repeat(900),
+      }).reason,
+    ).toBe("not-plain-first-turn-text");
+
+    expect(
+      resolveAgentFastResponseRouting({
+        ...baseOptions,
+        sourceText: "x".repeat(900),
+        routingProfile: {
+          plainFirstTurnMaxChars: 1000,
+        },
+      }).enabled,
+    ).toBe(true);
+  });
+
   it("只以 mappedTheme 判断通用对话，兼容 Claw/Harness 的现役入口命名", () => {
     const decision = resolveAgentFastResponseRouting({
       ...baseOptions,
@@ -129,7 +149,7 @@ describe("resolveAgentFastResponseRouting", () => {
     ).toBe("explicit-model-override");
   });
 
-  it("联网搜索 allowed 只提供候选能力，不应靠文本关键词禁用快速响应", () => {
+  it("联网搜索 auto 只提供候选能力，不应靠文本关键词禁用快速响应", () => {
     const decision = resolveAgentFastResponseRouting({
       ...baseOptions,
       effectiveWebSearch: true,
@@ -137,7 +157,7 @@ describe("resolveAgentFastResponseRouting", () => {
     });
 
     expect(decision.enabled).toBe(true);
-    expect(decision.searchMode).toBe("allowed");
+    expect(decision.searchMode).toBeUndefined();
   });
 
   it("普通时效新闻整理不应靠前端文本黑名单退出快速响应候选", () => {

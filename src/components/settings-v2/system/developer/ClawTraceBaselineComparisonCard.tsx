@@ -10,6 +10,8 @@ interface ClawTraceBaselineComparisonCardProps {
   comparison: ClawTraceBaselineComparison;
 }
 
+type SettingsTranslate = (key: string) => string;
+
 function formatSavedAt(value: string | null): string | null {
   if (!value) {
     return null;
@@ -75,6 +77,10 @@ export function ClawTraceBaselineComparisonCard({
   comparison,
 }: ClawTraceBaselineComparisonCardProps) {
   const { t } = useTranslation("settings");
+  const translate = ((key) =>
+    String(
+      (t as unknown as SettingsTranslate)(key),
+    )) satisfies SettingsTranslate;
 
   return (
     <div
@@ -86,7 +92,7 @@ export function ClawTraceBaselineComparisonCard({
           {t("settings.developer.debugSwitch.clawTrace.baseline.title")}
         </p>
         <p className="text-xs font-semibold text-slate-700">
-          {t(verdictKey(comparison.verdict))}
+          {translate(verdictKey(comparison.verdict))}
         </p>
       </div>
       {comparison.baseline_label ? (
@@ -120,7 +126,7 @@ export function ClawTraceBaselineComparisonCard({
         <div className="mt-2 flex flex-wrap gap-1">
           {comparison.metrics.map((metric) => (
             <span key={metric.key} className={metricDeltaClassName(metric)}>
-              {t(metricLabelKey(metric.key))}
+              {translate(metricLabelKey(metric.key))}
               {": "}
               {formatMs(metric.current_ms)}
               {" ms"}

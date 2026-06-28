@@ -7,9 +7,8 @@ import {
   MessageList,
   mountedRoots,
 } from "./MessageList.testHarness";
-import type {
-  Message,
-} from "./MessageList.testHarness";
+import type { Message } from "./MessageList.testHarness";
+import { CONVERSATION_CONTENT_MAX_WIDTH } from "../styles/conversationLayoutTokens";
 
 describe("MessageList message actions", () => {
   it("应按回合分组展示同一轮用户与后续助手回复", () => {
@@ -249,7 +248,7 @@ describe("MessageList message actions", () => {
     });
   });
 
-  it("聊天主列与助手消息气泡应保持更宽的桌面阅读宽度", () => {
+  it("聊天主列与助手消息气泡应和输入区使用同一阅读宽度", () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -266,11 +265,13 @@ describe("MessageList message actions", () => {
     );
     const assistantBubble = container.querySelector('[aria-label="Lime"]');
 
-    expect(messageColumn?.className).toContain("max-w-[1040px]");
+    expect((messageColumn as HTMLElement | null)?.style.maxWidth).toBe(
+      CONVERSATION_CONTENT_MAX_WIDTH,
+    );
     expect(assistantBubble).not.toBeNull();
     expect(
       window.getComputedStyle(assistantBubble as Element).maxWidth,
-    ).toContain("1040px");
+    ).toContain(CONVERSATION_CONTENT_MAX_WIDTH);
   });
 
   it("助手消息不应再渲染旧的继续处理标签或品牌头像", () => {
@@ -456,4 +457,84 @@ describe("MessageList message actions", () => {
     );
   });
 
+  it("内容工厂文章产物卡应只显示轻量摘要，不在聊天区摊开正文", () => {
+    const now = new Date();
+    const onArtifactClick = vi.fn();
+    const fullArticle =
+      "# 公众号文章草稿\n\n这是第一段正文，应该只在右侧 Product Profile 中查看。\n\n这是第二段正文，也不应该直接摊在聊天区。";
+    const messages: Message[] = [
+      {
+        id: "msg-assistant-product-profile",
+        role: "assistant",
+        content: "",
+        timestamp: now,
+        artifacts: [
+          {
+            id: "preview-product-profile-article",
+            type: "document",
+            title: "公众号文章草稿",
+            content: fullArticle,
+            status: "complete",
+            meta: {
+              openedFrom: "right_surface_product_profile",
+              filePath: "公众号文章草稿.md",
+              filename: "公众号文章草稿.md",
+              productProfileCardPreview: {
+                layout: "document",
+                summary: null,
+                counts: {
+                  artifacts: 1,
+                  imageSlots: 2,
+                  outlineSections: 5,
+                  researchRounds: 3,
+                },
+              },
+              productProfile: {
+                appId: "content-factory-app",
+                sessionId: "session-main",
+                objectKind: "articleDraft",
+                objectId: "article-1",
+                surfaceKind: "document",
+              },
+            },
+            position: { start: 0, end: fullArticle.length },
+            createdAt: now.getTime(),
+            updatedAt: now.getTime(),
+          },
+        ],
+      },
+    ];
+
+    const container = render(messages, { onArtifactClick });
+    const artifactCard = container.querySelector(
+      '[data-testid="message-artifact-card"] button',
+    ) as HTMLButtonElement | null;
+
+    expect(artifactCard?.textContent).toContain("公众号文章草稿");
+    expect(artifactCard?.textContent).toContain("3 research rounds");
+    expect(artifactCard?.textContent).toContain("5 article sections");
+    expect(artifactCard?.textContent).toContain("2 image slots");
+    expect(container.textContent).not.toContain(
+      "这是第一段正文，应该只在右侧 Product Profile 中查看。",
+    );
+    expect(container.textContent).not.toContain(
+      "这是第二段正文，也不应该直接摊在聊天区。",
+    );
+
+    act(() => {
+      artifactCard?.click();
+    });
+
+    expect(onArtifactClick).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "preview-product-profile-article",
+        meta: expect.objectContaining({
+          openedFrom: "right_surface_product_profile",
+          productProfile: expect.objectContaining({
+            objectKind: "articleDraft",
+          }),
+        }),
+      }),
+    );
+  });
 });

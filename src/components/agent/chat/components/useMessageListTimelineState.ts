@@ -123,13 +123,27 @@ export function useMessageListTimelineState({
       threadItems[threadItems.length - 1]?.id ?? "no-item"
     }`,
   ].join("|");
-  const shouldDeferHistoricalTimeline =
-    !isSending &&
+  const hasLargeHistoricalThreadItems =
+    threadItems.length >= MESSAGE_LIST_TIMELINE_DEFER_ITEM_THRESHOLD;
+  const hasHistoricalWindow =
+    isRestoredHistoryWindow ||
+    hiddenHistoryCount > 0 ||
+    persistedHiddenHistoryCount > 0;
+  const shouldProtectHistoricalWindowDuringSending =
+    isSending &&
+    hasHistoricalWindow &&
     !activeCurrentTurnId &&
     !focusedTimelineItemId &&
-    threadItems.length >= MESSAGE_LIST_TIMELINE_DEFER_ITEM_THRESHOLD &&
-    (isRestoredHistoryWindow ||
-      renderedMessages.length >= MESSAGE_LIST_TIMELINE_DEFER_MESSAGE_THRESHOLD);
+    hasLargeHistoricalThreadItems;
+  const shouldDeferHistoricalTimeline =
+    !activeCurrentTurnId &&
+    !focusedTimelineItemId &&
+    hasLargeHistoricalThreadItems &&
+    (shouldProtectHistoricalWindowDuringSending ||
+      (!isSending &&
+        (isRestoredHistoryWindow ||
+          renderedMessages.length >=
+            MESSAGE_LIST_TIMELINE_DEFER_MESSAGE_THRESHOLD)));
   const shouldDeferHistoricalTimelineDetails =
     !focusedTimelineItemId &&
     (shouldDeferHistoricalTimeline ||
@@ -177,13 +191,13 @@ export function useMessageListTimelineState({
   const shouldDeferRestoredThreadItemsUntilExpand =
     isRestoredHistoryWindow &&
     !focusedTimelineItemId &&
-    !isSending &&
     !activeCurrentTurnId &&
+    (!isSending || shouldProtectHistoricalWindowDuringSending) &&
     canBuildHistoricalTimeline &&
     !renderedTurns.some((turn) =>
       expandedHistoricalTimelineKeys.has(`leading:${turn.id}`),
     ) &&
-    threadItems.length >= MESSAGE_LIST_TIMELINE_DEFER_ITEM_THRESHOLD;
+    hasLargeHistoricalThreadItems;
   const shouldDeferThreadItemsScan =
     !activeCurrentTurnId &&
     ((shouldDeferHistoricalTimeline && !isHistoricalTimelineReady) ||

@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
+import contentFactoryFixture from "@/features/agent-app/fixtures/content-factory-app.json";
+import { normalizeManifest } from "@/features/agent-app/manifest/normalizeManifest";
+import { parseManifest } from "@/features/agent-app/manifest/parseManifest";
 import type { InstalledAgentAppState } from "@/features/agent-app/types";
 import {
   buildAgentAppIntentRequestMetadata,
   buildAgentAppIntentSystemPrompt,
   resolveWorkspaceAgentAppIntent,
 } from "./workspaceAgentAppIntentRouting";
+
+const contentFactoryManifest = normalizeManifest(
+  parseManifest(contentFactoryFixture),
+);
 
 function createInstalledApp(
   overrides: Partial<InstalledAgentAppState> = {},
@@ -118,6 +125,140 @@ describe("workspaceAgentAppIntentRouting", () => {
     });
   });
 
+  it("内容工厂写文章应优先命中文章任务 intent，而不是泛化生成任务", () => {
+    const match = resolveWorkspaceAgentAppIntent(
+      "用内容工厂写一篇公众号文章",
+      [
+        {
+          appId: contentFactoryManifest.appId,
+          appName: contentFactoryManifest.displayName,
+          manifest: contentFactoryManifest,
+        },
+      ],
+    );
+
+    expect(match).toMatchObject({
+      appId: "content-factory-app",
+      appName: "内容工厂",
+      intentKey: "content_article_generate",
+      taskKind: "content.article.generate",
+      outputArtifactKind: "content_factory.workspace_patch",
+      rightSurface: "productProfile",
+      expectedObjects: ["articleDraft"],
+      source: "agent_app_manifest_intent",
+    });
+  });
+
+  it("内容工厂 intent 应来自调用方提供的 manifest source", () => {
+    const match = resolveWorkspaceAgentAppIntent("@内容工厂 写一篇公众号文章", [
+      {
+        appId: contentFactoryManifest.appId,
+        appName: contentFactoryManifest.displayName,
+        manifest: contentFactoryManifest,
+      },
+    ]);
+
+    expect(match).toMatchObject({
+      appId: "content-factory-app",
+      appName: "内容工厂",
+      intentKey: "content_article_generate",
+      source: "agent_app_manifest_intent",
+    });
+  });
+
+  it("@写文章 应命中内容工厂文章任务 intent", () => {
+    const match = resolveWorkspaceAgentAppIntent("@写文章 写一篇公众号文章", [
+      {
+        appId: contentFactoryManifest.appId,
+        appName: contentFactoryManifest.displayName,
+        manifest: contentFactoryManifest,
+      },
+    ]);
+
+    expect(match).toMatchObject({
+      appId: "content-factory-app",
+      appName: "内容工厂",
+      intentKey: "content_article_generate",
+      taskKind: "content.article.generate",
+      outputArtifactKind: "content_factory.workspace_patch",
+      rightSurface: "productProfile",
+      expectedObjects: ["articleDraft"],
+      matchedPhrase: "写一篇公众号文章",
+      source: "agent_app_manifest_intent",
+    });
+  });
+
+  it("应从插件包 runtime activationEntries 投影 @写文章 intent", () => {
+    const app = createInstalledApp({
+      appId: "content-factory-app",
+      manifest: {
+        ...createInstalledApp().manifest,
+        appId: "content-factory-app",
+        displayName: "内容工厂",
+        runtimePackage: {
+          worker: {
+            outputArtifactKind: "content_factory.workspace_patch",
+          },
+        },
+        agentRuntime: {
+          activationEntries: [
+            {
+              key: "content_article_generate",
+              title: "写文章",
+              aliases: ["@写文章", "@写作"],
+              taskKind: "content.article.generate",
+              workflow: "content_article_workflow",
+              defaultObjectKind: "articleDraft",
+              rightSurface: "productProfile",
+            },
+          ],
+        },
+        workflows: [
+          {
+            key: "content_article_workflow",
+            taskKind: "content.article.generate",
+            triggerIntents: ["content_article_generate"],
+            outputArtifactKind: "content_factory.workspace_patch",
+            steps: [
+              {
+                id: "draft",
+                subagent: "article-writer",
+                skillRefs: ["article-writing"],
+                expectedOutput: "articleDraft",
+              },
+            ],
+          },
+        ],
+        workbench: {
+          profile: "production",
+          productWorkspace: {
+            primaryObjectKinds: ["articleDraft"],
+          },
+        },
+      },
+    });
+
+    const match = resolveWorkspaceAgentAppIntent("@写文章 写一篇公众号文章", [
+      {
+        appId: app.appId,
+        appName: app.manifest.displayName,
+        manifest: app.manifest,
+      },
+    ]);
+
+    expect(match).toMatchObject({
+      appId: "content-factory-app",
+      appName: "内容工厂",
+      intentKey: "content_article_generate",
+      taskKind: "content.article.generate",
+      outputArtifactKind: "content_factory.workspace_patch",
+      rightSurface: "productProfile",
+      expectedObjects: ["articleDraft"],
+      matchedPhrase: "@写文章",
+      source: "agent_app_manifest_intent",
+    });
+  });
+
   it("禁用的 Agent App 不应命中 intent", () => {
     expect(
       resolveWorkspaceAgentAppIntent("用创作工作台生成文章", [
@@ -177,6 +318,10 @@ describe("workspaceAgentAppIntentRouting", () => {
         target: "productProfile",
       },
     });
+    expect(buildAgentAppIntentSystemPrompt(match!)).toContain(
+      "本轮请求已命中 Agent App manifest intent。",
+    );
+    expect(buildAgentAppIntentSystemPrompt(match!)).not.toContain("已安装");
     expect(buildAgentAppIntentSystemPrompt(match!)).toContain("skill_search");
   });
 
@@ -184,6 +329,12 @@ describe("workspaceAgentAppIntentRouting", () => {
     const metadata = buildAgentAppIntentRequestMetadata({
       appId: "minimal-app",
       appName: "Minimal App",
+      manifest: {
+        ...contentFactoryManifest,
+        appId: "minimal-app",
+        displayName: "Minimal App",
+        workbench: undefined,
+      },
       intentKey: "default",
       expectedObjects: [],
       matchedPhrase: "Minimal App",

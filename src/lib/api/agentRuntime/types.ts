@@ -471,8 +471,22 @@ export interface AgentRuntimeThreadCommandView {
   turn_id?: string;
   status: "running" | "completed" | "failed" | "canceled" | string;
   command?: string;
+  canonical_command?: string;
+  command_summary?: string;
+  command_argv?: string[];
+  command_argv_source?: string;
   cwd?: string;
   exit_code?: number;
+  process_id?: string;
+  execution_process_status?: string;
+  execution_process_control_status?: string;
+  execution_surface?: string;
+  stdin_writable?: boolean;
+  output_bytes?: number;
+  output_omitted_bytes?: number;
+  output_truncated?: boolean;
+  stdout_bytes?: number;
+  stderr_bytes?: number;
   output_refs?: string[];
   output_preview?: string | null;
   started_at?: string | number | null;
@@ -1283,7 +1297,7 @@ export interface AgentRuntimeReviewDecisionTemplate {
   artifacts: AgentRuntimeReviewDecisionArtifact[];
 }
 
-export type AgentRuntimeWebSearchMode = "disabled" | "allowed" | "required";
+export type AgentRuntimeWebSearchMode = "disabled" | "auto" | "required";
 
 export interface AgentTurnConfigSnapshot {
   provider_config?: AsterProviderConfig;
@@ -1354,6 +1368,10 @@ export interface AgentRuntimeCapabilityManifestRequest {
 
 export interface AgentRuntimeGetSessionOptions {
   resumeSessionStartHooks?: boolean;
+  /**
+   * 前端诊断来源，只进入客户端日志和性能指标，不透传到 App Server。
+   */
+  source?: string;
   /**
    * 限制返回的历史窗口数量；传 0 表示请求完整历史。
    */

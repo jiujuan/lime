@@ -1,4 +1,9 @@
-import type { InstalledAgentAppState } from "@/features/agent-app/types";
+import type {
+  InstalledAgentAppState,
+  NormalizedAppManifest,
+} from "@/features/agent-app/types";
+import { normalizeManifest } from "@/features/agent-app/manifest/normalizeManifest";
+import { parseManifest } from "@/features/agent-app/manifest/parseManifest";
 import { buildPluginContractFromAgentAppManifest } from "../manifest/pluginContract";
 import { projectPluginRegistry } from "../manifest/pluginRegistry";
 import type {
@@ -32,9 +37,10 @@ function projectPluginRegistryInputFromInstalledAgentApp(
   state: InstalledAgentAppState,
 ): PluginRegistryProjectionInput | null {
   try {
+    const manifest = normalizeInstalledAgentAppManifest(state.manifest);
     return {
       contract: buildPluginContractFromAgentAppManifest({
-        manifest: state.manifest,
+        manifest,
         identity: state.identity,
       }),
       installed: true,
@@ -44,6 +50,19 @@ function projectPluginRegistryInputFromInstalledAgentApp(
   } catch {
     return null;
   }
+}
+
+function normalizeInstalledAgentAppManifest(
+  manifest: InstalledAgentAppState["manifest"],
+): NormalizedAppManifest {
+  if (
+    "appId" in manifest &&
+    typeof manifest.appId === "string" &&
+    !("name" in manifest)
+  ) {
+    return manifest as NormalizedAppManifest;
+  }
+  return normalizeManifest(parseManifest(manifest));
 }
 
 export function projectPluginRegistryInputsFromInstalledAgentApps(

@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  Activity,
   ChevronDown,
   CircleDot,
   Code2,
@@ -95,6 +96,9 @@ interface TaskCenterUtilityToolbarProps {
   showHarnessToggle: boolean;
   harnessPanelVisible: boolean;
   onToggleHarnessPanel?: () => void;
+  showTraceToggle?: boolean;
+  tracePanelVisible?: boolean;
+  onToggleTracePanel?: () => void;
   showExpertInfoToggle?: boolean;
   expertInfoPanelVisible?: boolean;
   onToggleExpertInfoPanel?: () => void;
@@ -187,6 +191,9 @@ export function TaskCenterUtilityToolbar({
   showHarnessToggle,
   harnessPanelVisible,
   onToggleHarnessPanel,
+  showTraceToggle = false,
+  tracePanelVisible = false,
+  onToggleTracePanel,
   showExpertInfoToggle = false,
   expertInfoPanelVisible = false,
   onToggleExpertInfoPanel,
@@ -208,6 +215,8 @@ export function TaskCenterUtilityToolbar({
   );
   const shouldRenderHarnessToggle =
     showHarnessToggle || Boolean(onToggleHarnessPanel);
+  const shouldRenderTraceToggle =
+    showTraceToggle || Boolean(onToggleTracePanel);
   const isWorkbenchHeaderPlacement = placement === "workbench-header";
   const rightSurfaceLauncherByKind = React.useMemo(
     () =>
@@ -223,6 +232,7 @@ export function TaskCenterUtilityToolbar({
   const expertInfoLauncher = rightSurfaceLauncherByKind.get("expertInfo");
   const shellLauncher = rightSurfaceLauncherByKind.get("shell");
   const harnessLauncher = rightSurfaceLauncherByKind.get("harness");
+  const traceLauncher = rightSurfaceLauncherByKind.get("trace");
   const filesLauncher = rightSurfaceLauncherByKind.get("files");
   const browserLauncher = rightSurfaceLauncherByKind.get("browser");
   const productProfileLauncher =
@@ -277,6 +287,7 @@ export function TaskCenterUtilityToolbar({
     shouldRenderHarnessToggle ||
     showExpertInfoToggle ||
     showCanvasToggle ||
+    shouldRenderTraceToggle ||
     shouldRenderObjectCanvasToggle ||
     shouldRenderBrowserToggle ||
     shouldRenderFilesToggle;
@@ -299,6 +310,12 @@ export function TaskCenterUtilityToolbar({
     harnessPendingCount,
     harnessLauncher?.pendingCount ?? 0,
   );
+  const effectiveTracePanelVisible =
+    tracePanelVisible || Boolean(traceLauncher?.active);
+  const tracePendingCount = traceLauncher?.pendingCount ?? 0;
+  const traceToggleLabel = effectiveTracePanelVisible
+    ? agentText("agentChat.navbar.closeTrace", "关闭 Trace")
+    : agentText("agentChat.navbar.openTrace", "打开 Trace");
   const expertInfoToggleLabel = agentText(
     effectiveExpertInfoPanelVisible
       ? "agentChat.navbar.closeExpertInfo"
@@ -680,6 +697,33 @@ export function TaskCenterUtilityToolbar({
                   {effectiveHarnessPendingCount > 99
                     ? "99+"
                     : effectiveHarnessPendingCount}
+                </span>
+              ) : null}
+            </Button>
+          ) : null}
+
+          {shouldRenderTraceToggle ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={cn(
+                taskCenterIconOnlyButtonClassName,
+                "relative",
+                effectiveTracePanelVisible &&
+                  "bg-[color:var(--lime-chrome-tab-active-surface)] text-[color:var(--lime-text)]",
+              )}
+              disabled={traceLauncher?.disabled}
+              onClick={onToggleTracePanel}
+              aria-label={traceToggleLabel}
+              aria-expanded={effectiveTracePanelVisible}
+              title={agentText("agentChat.navbar.trace", "Trace")}
+              data-testid="task-center-trace-toggle"
+            >
+              <Activity className="h-4 w-4" />
+              {tracePendingCount > 0 ? (
+                <span className="absolute -right-1 -top-1 rounded-full border border-[color:var(--lime-surface-border-strong)] bg-[color:var(--lime-surface)] px-1 text-[9px] font-medium leading-4 text-[color:var(--lime-brand-strong)]">
+                  {tracePendingCount > 99 ? "99+" : tracePendingCount}
                 </span>
               ) : null}
             </Button>

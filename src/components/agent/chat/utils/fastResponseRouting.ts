@@ -27,9 +27,12 @@ export interface AgentFastResponseRoutingProfile {
   resolver: string;
   routingChanged: boolean;
   routingSlot: string;
+  plainFirstTurnMaxChars: number;
   runtimeStatusPresentation: AgentRuntimeStatusPresentation;
   serviceModelSlot: string;
 }
+
+const DEFAULT_PLAIN_FIRST_TURN_MAX_CHARS = 800;
 
 export const DEFAULT_AGENT_FAST_RESPONSE_ROUTING_PROFILE: AgentFastResponseRoutingProfile =
   {
@@ -40,6 +43,7 @@ export const DEFAULT_AGENT_FAST_RESPONSE_ROUTING_PROFILE: AgentFastResponseRouti
     resolver: "backend_service_model",
     routingChanged: false,
     routingSlot: "responsive_chat_model",
+    plainFirstTurnMaxChars: DEFAULT_PLAIN_FIRST_TURN_MAX_CHARS,
     runtimeStatusPresentation: "transient",
     serviceModelSlot: "responsive_chat",
   };
@@ -85,8 +89,6 @@ interface ResolveAgentFastResponseRoutingOptions {
   hasAutoContinue?: boolean;
 }
 
-const PLAIN_FIRST_TURN_MAX_CHARS = 800;
-
 function disabled(
   reason: AgentFastResponseRoutingReason,
 ): AgentFastResponseRoutingDecision {
@@ -101,12 +103,15 @@ function normalizeMode(mode?: AgentFastResponseMode): AgentFastResponseMode {
   return mode === "off" ? "off" : "auto";
 }
 
-function isPlainFirstTurnTextCandidate(text: string): boolean {
+function isPlainFirstTurnTextCandidate(
+  text: string,
+  maxChars: number,
+): boolean {
   const normalized = text.trim();
   if (!normalized) {
     return false;
   }
-  if (normalized.length > PLAIN_FIRST_TURN_MAX_CHARS) {
+  if (normalized.length > maxChars) {
     return false;
   }
   if (normalized.startsWith("@") || normalized.startsWith("/")) {
@@ -121,7 +126,7 @@ function isPlainFirstTurnTextCandidate(text: string): boolean {
 function normalizeSearchMode(
   mode?: AgentRuntimeWebSearchMode | null,
 ): AgentRuntimeWebSearchMode | null {
-  return mode === "disabled" || mode === "allowed" || mode === "required"
+  return mode === "disabled" || mode === "auto" || mode === "required"
     ? mode
     : null;
 }
@@ -136,6 +141,13 @@ function normalizeRuntimeStatusPresentation(
   value: unknown,
 ): AgentRuntimeStatusPresentation {
   return value === "transient" ? "transient" : "timeline";
+}
+
+function normalizePlainFirstTurnMaxChars(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+  return Math.max(0, Math.floor(value));
 }
 
 function normalizeRoutingProfile(
@@ -155,6 +167,9 @@ function normalizeRoutingProfile(
         ? profile.routingChanged
         : fallback.routingChanged,
     routingSlot: normalizeString(profile?.routingSlot) ?? fallback.routingSlot,
+    plainFirstTurnMaxChars:
+      normalizePlainFirstTurnMaxChars(profile?.plainFirstTurnMaxChars) ??
+      fallback.plainFirstTurnMaxChars,
     runtimeStatusPresentation: normalizeRuntimeStatusPresentation(
       profile?.runtimeStatusPresentation ?? fallback.runtimeStatusPresentation,
     ),
@@ -170,17 +185,12 @@ function normalizeString(value: unknown): string | null {
 export function resolveAgentFastResponseSearchMode(params: {
   searchMode?: AgentRuntimeWebSearchMode | null;
   effectiveWebSearch?: boolean;
-}): AgentRuntimeWebSearchMode {
-  const explicitMode = normalizeSearchMode(params.searchMode);
-  if (explicitMode) {
-    return explicitMode;
-  }
-
-  return params.effectiveWebSearch ? "allowed" : "disabled";
+}): AgentRuntimeWebSearchMode | null {
+  return normalizeSearchMode(params.searchMode);
 }
 
 function hasHeavyToolPreference(params: {
-  searchMode: AgentRuntimeWebSearchMode;
+  searchMode?: AgentRuntimeWebSearchMode | null;
   toolPreferences: ChatToolPreferences;
 }): boolean {
   return Boolean(
@@ -214,7 +224,12 @@ export function resolveAgentFastResponseRouting(
   if (options.imagesCount > 0) {
     return disabled("image-input");
   }
-  if (!isPlainFirstTurnTextCandidate(options.sourceText)) {
+  if (
+    !isPlainFirstTurnTextCandidate(
+      options.sourceText,
+      profile.plainFirstTurnMaxChars,
+    )
+  ) {
     return disabled("not-plain-first-turn-text");
   }
   if (
@@ -256,7 +271,7 @@ export function resolveAgentFastResponseRouting(
     reasoningEffort: profile.reasoningEffort,
     resolver: profile.resolver,
     routingChanged: profile.routingChanged,
-    searchMode,
+    ...(searchMode ? { searchMode } : {}),
     serviceModelSlot: profile.serviceModelSlot,
     routingSlot: profile.routingSlot,
     runtimeStatusPresentation: profile.runtimeStatusPresentation,

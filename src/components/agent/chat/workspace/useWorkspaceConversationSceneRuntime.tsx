@@ -282,6 +282,9 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   showHarnessToggle: ConversationScenePresentationParams["scene"]["showHarnessToggle"];
   navbarHarnessPanelVisible: ConversationScenePresentationParams["scene"]["harnessPanelVisible"];
   handleToggleHarnessPanel: ConversationScenePresentationParams["scene"]["onToggleHarnessPanel"];
+  showTraceToggle?: ConversationScenePresentationParams["scene"]["showTraceToggle"];
+  tracePanelVisible?: ConversationScenePresentationParams["scene"]["tracePanelVisible"];
+  handleToggleTracePanel?: ConversationScenePresentationParams["scene"]["onToggleTracePanel"];
   showExpertInfoToggle?: ConversationScenePresentationParams["scene"]["showExpertInfoToggle"];
   expertInfoPanelVisible?: ConversationScenePresentationParams["scene"]["expertInfoPanelVisible"];
   handleToggleExpertInfoPanel?: ConversationScenePresentationParams["scene"]["onToggleExpertInfoPanel"];
@@ -461,6 +464,9 @@ export function useWorkspaceConversationSceneRuntime({
   showHarnessToggle,
   navbarHarnessPanelVisible,
   handleToggleHarnessPanel,
+  showTraceToggle,
+  tracePanelVisible,
+  handleToggleTracePanel,
   showExpertInfoToggle,
   expertInfoPanelVisible,
   handleToggleExpertInfoPanel,
@@ -871,6 +877,13 @@ export function useWorkspaceConversationSceneRuntime({
         taskCenterUtilityActionsVisible && navbarHarnessPanelVisible,
       onToggleHarnessPanel: taskCenterUtilityActionsVisible
         ? handleToggleHarnessPanel
+        : undefined,
+      showTraceToggle:
+        taskCenterUtilityActionsVisible && Boolean(showTraceToggle),
+      tracePanelVisible:
+        taskCenterUtilityActionsVisible && Boolean(tracePanelVisible),
+      onToggleTracePanel: taskCenterUtilityActionsVisible
+        ? handleToggleTracePanel
         : undefined,
       showExpertInfoToggle:
         taskCenterUtilityActionsVisible && Boolean(showExpertInfoToggle),

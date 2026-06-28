@@ -379,6 +379,160 @@ describe("MessageList history window", () => {
     );
   });
 
+  it("旧历史窗口发送中但 active turn 尚未出现时不应扫描旧 threadItems", async () => {
+    vi.useFakeTimers();
+    const turns: AgentThreadTurn[] = Array.from({ length: 8 }, (_, index) => {
+      const minute = String(index + 1).padStart(2, "0");
+      return {
+        id: `turn-sending-window-${index + 1}`,
+        thread_id: "thread-sending-windowed-history",
+        prompt_text: `历史提问 ${index + 1}`,
+        status: "completed",
+        started_at: `2026-04-25T11:${minute}:00.000Z`,
+        completed_at: `2026-04-25T11:${minute}:30.000Z`,
+        created_at: `2026-04-25T11:${minute}:00.000Z`,
+        updated_at: `2026-04-25T11:${minute}:30.000Z`,
+      };
+    });
+    const threadItems: AgentThreadItem[] = turns.flatMap((turn, turnIndex) =>
+      Array.from(
+        { length: 5 },
+        (_, itemIndex): AgentThreadItem => ({
+          id: `turn-sending-window-${turnIndex + 1}-item-${itemIndex + 1}`,
+          thread_id: turn.thread_id,
+          turn_id: turn.id,
+          sequence: itemIndex + 1,
+          status: "completed",
+          started_at: turn.started_at,
+          completed_at: turn.completed_at,
+          updated_at: turn.updated_at,
+          type: "tool_call",
+          tool_name: "Read",
+          arguments: { file_path: `/repo/sending-${itemIndex + 1}.ts` },
+        }),
+      ),
+    );
+
+    const container = render(
+      [
+        {
+          id: "msg-user-sending-windowed-history",
+          role: "user",
+          content: "打开旧会话继续追问",
+          timestamp: new Date("2026-04-25T11:08:00.000Z"),
+        } as Message,
+        {
+          id: "msg-assistant-sending-windowed-history",
+          role: "assistant",
+          content: "这是旧会话尾部结果",
+          timestamp: new Date("2026-04-25T11:08:30.000Z"),
+        } as Message,
+        {
+          id: "msg-user-sending-follow-up",
+          role: "user",
+          content: "继续整理重点",
+          timestamp: new Date("2026-04-25T11:09:00.000Z"),
+        } as Message,
+      ],
+      {
+        sessionId: "session-sending-windowed-history",
+        currentTurnId: "turn-follow-up-not-yet-visible",
+        isSending: true,
+        sessionHistoryWindow: {
+          loadedMessages: 3,
+          totalMessages: 220,
+          isLoadingFull: false,
+          error: null,
+        },
+        threadItems,
+        turns,
+      },
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("继续整理重点");
+    expect(mockAgentThreadTimeline).not.toHaveBeenCalled();
+    const commit = getAgentUiPerformanceMetrics().find(
+      (entry) => entry.phase === "messageList.commit",
+    );
+
+    expect(commit?.metrics).toEqual(
+      expect.objectContaining({
+        renderedTurnsCount: 2,
+        shouldDeferHistoricalTimeline: true,
+        threadItemsCount: 0,
+        threadItemsScanDeferred: true,
+        turnsCount: 8,
+      }),
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(940);
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const idleCommit = getAgentUiPerformanceMetrics()
+      .filter((entry) => entry.phase === "messageList.commit")
+      .find(
+        (entry) =>
+          entry.metrics.threadItemsScanDeferred === true &&
+          entry.metrics.canBuildHistoricalTimeline === true,
+      );
+
+    expect(idleCommit?.metrics).toEqual(
+      expect.objectContaining({
+        renderedTurnsCount: 2,
+        threadItemsCount: 0,
+        turnsCount: 8,
+      }),
+    );
+  });
+
+  it("旧历史窗口发送中仍应保持尾部消息窗口，避免一次挂载完整历史", async () => {
+    vi.useFakeTimers();
+    const messages = createConversationMessages(40);
+    const container = render(messages, {
+      isSending: true,
+      sessionId: "session-sending-history-window",
+      sessionHistoryWindow: {
+        loadedMessages: 40,
+        totalMessages: 188,
+        isLoadingFull: false,
+        error: null,
+      },
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("latest 40 / 188 messages");
+    expect(container.textContent).toContain("消息 40");
+    expect(container.textContent).toContain("消息 31");
+    expect(container.textContent).not.toContain("消息 30");
+    expect(container.textContent).toContain(
+      "30 earlier messages can be expanded",
+    );
+
+    const commit = getAgentUiPerformanceMetrics().find(
+      (entry) => entry.phase === "messageList.commit",
+    );
+
+    expect(commit?.metrics).toEqual(
+      expect.objectContaining({
+        hiddenHistoryCount: 30,
+        renderedMessagesCount: 10,
+        visibleMessagesCount: 40,
+      }),
+    );
+  });
+
   it("旧会话首帧应延后历史助手 contentParts 与 Markdown 细节扫描", async () => {
     vi.useFakeTimers();
     const turn: AgentThreadTurn = {
@@ -814,5 +968,4 @@ describe("MessageList history window", () => {
       }),
     );
   });
-
 });

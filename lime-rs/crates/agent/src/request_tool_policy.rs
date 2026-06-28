@@ -1698,7 +1698,7 @@ mod tests {
     }
 
     #[test]
-    fn tracker_does_not_require_websearch_when_only_allowed() {
+    fn tracker_does_not_require_websearch_in_auto_mode() {
         let policy = resolve_request_tool_policy(Some(true));
         let mut tracker = WebSearchExecutionTracker::default();
         tracker.record_tool_start(&policy, "tool-1", "WebFetch");

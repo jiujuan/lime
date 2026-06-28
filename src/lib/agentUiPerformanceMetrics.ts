@@ -100,6 +100,17 @@ export interface AgentUiPerformanceApi {
   saveSnapshot: (label?: string) => AgentUiPerformanceTraceHistoryRecord | null;
 }
 
+export const AGENT_UI_PERFORMANCE_METRIC_RECORDED_EVENT =
+  "lime:agent-ui-performance-metric-recorded";
+
+export interface AgentUiPerformanceMetricRecordedDetail {
+  id: number;
+  phase: string;
+  sessionId?: string | null;
+  source?: string | null;
+  workspaceId?: string | null;
+}
+
 type MetricValue = string | number | boolean | null;
 
 const MAX_AGENT_UI_PERFORMANCE_ENTRIES = 500;
@@ -199,6 +210,39 @@ function pushEntry(entry: AgentUiPerformanceEntry): void {
   entries.push(entry);
   if (entries.length > MAX_AGENT_UI_PERFORMANCE_ENTRIES) {
     entries.splice(0, entries.length - MAX_AGENT_UI_PERFORMANCE_ENTRIES);
+  }
+}
+
+function metricRecordedDetail(
+  entry: AgentUiPerformanceEntry,
+): AgentUiPerformanceMetricRecordedDetail {
+  return {
+    id: entry.id,
+    phase: entry.phase,
+    sessionId: entry.sessionId ?? null,
+    source: entry.source ?? null,
+    workspaceId: entry.workspaceId ?? null,
+  };
+}
+
+function notifyAgentUiPerformanceMetricRecorded(
+  entry: AgentUiPerformanceEntry,
+): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.dispatchEvent(
+      new CustomEvent<AgentUiPerformanceMetricRecordedDetail>(
+        AGENT_UI_PERFORMANCE_METRIC_RECORDED_EVENT,
+        {
+          detail: metricRecordedDetail(entry),
+        },
+      ),
+    );
+  } catch {
+    // 诊断事件不应影响主路径写入。
   }
 }
 
@@ -701,7 +745,33 @@ export function recordAgentUiPerformanceMetric(
   nextEntryId += 1;
   pushEntry(entry);
   installAgentUiPerformanceApi();
+  notifyAgentUiPerformanceMetricRecorded(entry);
   return entry;
+}
+
+export function subscribeAgentUiPerformanceMetricRecorded(
+  listener: (detail: AgentUiPerformanceMetricRecordedDetail) => void,
+): () => void {
+  if (typeof window === "undefined") {
+    return () => undefined;
+  }
+
+  const handleEvent = (event: Event) => {
+    listener(
+      (event as CustomEvent<AgentUiPerformanceMetricRecordedDetail>).detail,
+    );
+  };
+
+  window.addEventListener(
+    AGENT_UI_PERFORMANCE_METRIC_RECORDED_EVENT,
+    handleEvent,
+  );
+  return () => {
+    window.removeEventListener(
+      AGENT_UI_PERFORMANCE_METRIC_RECORDED_EVENT,
+      handleEvent,
+    );
+  };
 }
 
 export function installAgentUiPerformanceApi(): AgentUiPerformanceApi | null {

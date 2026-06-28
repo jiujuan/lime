@@ -10,12 +10,19 @@ import {
 } from "@/features/plugin";
 import type { HandleSendOptions } from "../hooks/handleSendTypes";
 import { asRecord } from "./commands/skillSlotUtils";
+import {
+  buildAgentAppIntentSystemPrompt,
+  resolveWorkspaceAgentAppIntent,
+  type WorkspaceAgentAppIntentMatch,
+  type WorkspaceAgentAppIntentSource,
+} from "./workspaceAgentAppIntentRouting";
 
 export interface WorkspacePluginActivationResolution {
   status: "matched" | "blocked";
   trigger: string;
   body: string;
   context?: PluginActivationContext;
+  intentMatch?: WorkspaceAgentAppIntentMatch;
   blockerCodes?: string[];
 }
 
@@ -26,27 +33,38 @@ export interface WorkspacePluginActivationRequestMetadata {
   context: PluginActivationContext;
 }
 
+interface WorkspacePluginActivationParseResolution {
+  parseResult: PluginActivationMentionParseResult;
+  intentSources: readonly WorkspaceAgentAppIntentSource[];
+}
+
 function resolvePluginActivationParseResult(params: {
   text: string;
   sessionId: string;
   installedAgentApps: readonly InstalledAgentAppState[];
-}): PluginActivationMentionParseResult | null {
+}): WorkspacePluginActivationParseResolution | null {
   const projection = projectPluginRegistryFromInstalledAgentApps(
     params.installedAgentApps,
   );
   const contracts = projection.contracts;
-  if (contracts.length === 0) {
-    return null;
+  if (contracts.length > 0) {
+    const parseResult = parsePluginActivationMention({
+      text: params.text,
+      catalog: buildPluginActivationMentionCatalog({
+        contracts,
+        registryItems: projection.registry,
+      }),
+      sessionId: params.sessionId,
+      source: "user",
+    });
+    if (parseResult) {
+      return {
+        parseResult,
+        intentSources: params.installedAgentApps,
+      };
+    }
   }
-  return parsePluginActivationMention({
-    text: params.text,
-    catalog: buildPluginActivationMentionCatalog({
-      contracts,
-      registryItems: projection.registry,
-    }),
-    sessionId: params.sessionId,
-    source: "user",
-  });
+  return null;
 }
 
 export function resolveWorkspacePluginActivation(params: {
@@ -58,14 +76,15 @@ export function resolveWorkspacePluginActivation(params: {
   if (!sessionId) {
     return null;
   }
-  const parseResult = resolvePluginActivationParseResult({
+  const parseResolution = resolvePluginActivationParseResult({
     text: params.text,
     sessionId,
     installedAgentApps: params.installedAgentApps,
   });
-  if (!parseResult) {
+  if (!parseResolution) {
     return null;
   }
+  const { parseResult } = parseResolution;
   const base = {
     trigger: parseResult.match.trigger,
     body: parseResult.match.body,
@@ -77,10 +96,24 @@ export function resolveWorkspacePluginActivation(params: {
       blockerCodes: parseResult.blockerCodes,
     };
   }
+  const activeAppId =
+    parseResult.context.activeAgentAppId ?? parseResult.context.pluginId;
+  const activeSources = parseResolution.intentSources.filter(
+    (source) => source.appId === activeAppId,
+  );
+  const intentMatch =
+    resolveWorkspaceAgentAppIntent(
+      parseResult.context.activeEntryKey ?? "",
+      activeSources,
+    ) ??
+    resolveWorkspaceAgentAppIntent(parseResult.match.body, activeSources) ??
+    resolveWorkspaceAgentAppIntent(params.text, activeSources) ??
+    undefined;
   return {
     status: "matched",
     ...base,
     context: parseResult.context,
+    intentMatch,
   };
 }
 
@@ -91,6 +124,17 @@ function pluginActivationMetadata(
     return {};
   }
   const { context } = resolution;
+  const intent = resolution.intentMatch;
+  const manifest = intent?.manifest;
+  const workflow = resolveActivationWorkflow(
+    manifest,
+    intent?.intentKey,
+    intent?.taskKind,
+  );
+  const subagents = resolveActivationSubagents(manifest, intent?.taskKind);
+  const skillRefs = resolveActivationSkillRefs(manifest, intent?.taskKind);
+  const workflowRecord = asRecord(workflow);
+  const runtimeRecord = asRecord(manifest?.agentRuntime);
   return {
     plugin_activation: {
       source: "plugin_explicit_mention",
@@ -115,8 +159,141 @@ function pluginActivationMetadata(
       opened_tabs: context.openedTabs,
       pinned_tabs: context.pinnedTabs,
       context_source: context.source,
+      intent_key: intent?.intentKey,
+      task_kind: intent?.taskKind,
+      output_artifact_kind: intent?.outputArtifactKind,
+      right_surface: intent?.rightSurface,
+      expected_objects: intent?.expectedObjects,
+      matched_phrase: intent?.matchedPhrase,
+      workflow_key: workflow?.key,
+      workflow,
+      subagents,
+      skill_refs: skillRefs,
+      cli_refs: readStringArray(workflowRecord ?? {}, ["cliRefs", "cli_refs"]),
+      connector_refs: readStringArray(workflowRecord ?? {}, [
+        "connectorRefs",
+        "connector_refs",
+      ]),
+      hook_policy:
+        asRecord(workflowRecord?.hookPolicy) ??
+        asRecord(workflowRecord?.hook_policy),
+      runtime_registries: buildActivationRuntimeRegistries(runtimeRecord),
+      default_prompts: readInterfaceDefaultPrompts(manifest?.interface),
     },
+    ...(intent
+      ? {
+          plugin_activation_intent: {
+            source: intent.source,
+            app_id: intent.appId,
+            app_name: intent.appName,
+            intent_key: intent.intentKey,
+            task_kind: intent.taskKind,
+            output_artifact_kind: intent.outputArtifactKind,
+            right_surface: intent.rightSurface,
+            expected_objects: intent.expectedObjects,
+            matched_phrase: intent.matchedPhrase,
+          },
+        }
+      : {}),
   };
+}
+
+function buildActivationRuntimeRegistries(
+  runtime: Record<string, unknown> | undefined,
+) {
+  if (!runtime) {
+    return undefined;
+  }
+  const cli = asRecord(runtime.cli);
+  const connectors = asRecord(runtime.connectors);
+  const hooks = asRecord(runtime.hooks);
+  if (!cli && !connectors && !hooks) {
+    return undefined;
+  }
+  return {
+    cli: cli
+      ? {
+          entrypoint: readString(cli, ["entrypoint"]),
+          registry: readString(cli, ["registry"]),
+          commands: readStringArray(cli, ["commands"]),
+        }
+      : undefined,
+    connectors: connectors
+      ? {
+          registry: readString(connectors, ["registry"]),
+        }
+      : undefined,
+    hooks: hooks
+      ? {
+          directory: readString(hooks, ["directory"]),
+          handlers: Array.isArray(hooks.handlers) ? hooks.handlers : undefined,
+        }
+      : undefined,
+  };
+}
+
+function resolveActivationWorkflow(
+  manifest: WorkspaceAgentAppIntentMatch["manifest"] | undefined,
+  intentKey: string | undefined,
+  taskKind: string | undefined,
+) {
+  if (!manifest || (!intentKey && !taskKind)) {
+    return undefined;
+  }
+  return manifest.workflows.find(
+    (workflow) =>
+      (intentKey
+        ? workflow.triggerIntents?.includes(intentKey) ||
+          workflow.key === intentKey
+        : false) ||
+      (taskKind ? workflow.taskKind === taskKind : false),
+  );
+}
+
+function resolveActivationSubagents(
+  manifest: WorkspaceAgentAppIntentMatch["manifest"] | undefined,
+  taskKind: string | undefined,
+) {
+  if (!manifest) {
+    return undefined;
+  }
+  const subagents = manifest.subagents ?? [];
+  const matched = subagents.filter(
+    (subagent) => !taskKind || subagent.activation === taskKind,
+  );
+  return (matched.length > 0 ? matched : subagents).map((subagent) => ({
+    id: subagent.id,
+    title: subagent.title ?? subagent.id,
+    description: subagent.description,
+    activation: subagent.activation,
+    required: subagent.required,
+    skills: subagent.skills,
+  }));
+}
+
+function resolveActivationSkillRefs(
+  manifest: WorkspaceAgentAppIntentMatch["manifest"] | undefined,
+  taskKind: string | undefined,
+) {
+  if (!manifest) {
+    return undefined;
+  }
+  const matched = (manifest.skillRefs ?? []).filter(
+    (skill) => !taskKind || skill.activation === taskKind || !skill.activation,
+  );
+  return matched.map((skill) => ({
+    id: skill.id,
+    title: skill.title ?? skill.id,
+    description: skill.description,
+    required: skill.required,
+    activation: skill.activation,
+  }));
+}
+
+function readInterfaceDefaultPrompts(value: unknown): string[] | undefined {
+  const record = asRecord(value);
+  const prompts = readStringArray(record ?? {}, ["defaultPrompt"]);
+  return prompts?.length ? prompts : undefined;
 }
 
 function readString(
@@ -244,8 +421,16 @@ export function mergePluginActivationSendOptions(params: {
   }
   const previousRequestMetadata = params.sendOptions?.requestMetadata || {};
   const previousHarness = asRecord(previousRequestMetadata.harness) || {};
+  const intentSystemPrompt = params.resolution.intentMatch
+    ? buildAgentAppIntentSystemPrompt(params.resolution.intentMatch)
+    : undefined;
+  const previousSystemPrompt = params.sendOptions?.systemPromptOverride?.trim();
   return {
     ...(params.sendOptions || {}),
+    systemPromptOverride:
+      intentSystemPrompt && previousSystemPrompt
+        ? `${previousSystemPrompt}\n\n${intentSystemPrompt}`
+        : intentSystemPrompt || params.sendOptions?.systemPromptOverride,
     requestMetadata: {
       ...previousRequestMetadata,
       harness: {

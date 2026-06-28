@@ -16,6 +16,7 @@ const EXPECTED_SURFACE_KINDS: WorkspaceRightSurfaceKind[] = [
   "files",
   "shell",
   "harness",
+  "trace",
 ];
 
 describe("rightSurfaceRegistry", () => {

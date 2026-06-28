@@ -82,13 +82,10 @@ export function PluginMarketplacePage({
   onNavigate,
 }: PluginMarketplacePageProps) {
   const { t } = useTranslation("agent");
-  const translate = useMemo<PluginMarketplaceTranslate>(
-    () => {
-      const baseTranslate = t as unknown as PluginMarketplaceTranslate;
-      return (key, options) => String(baseTranslate(key, options));
-    },
-    [t],
-  );
+  const translate = useMemo<PluginMarketplaceTranslate>(() => {
+    const baseTranslate = t as unknown as PluginMarketplaceTranslate;
+    return (key, options) => String(baseTranslate(key, options));
+  }, [t]);
   const resolvedRuntime = useMemo(
     () =>
       runtimeContext === undefined
@@ -337,224 +334,222 @@ export function PluginMarketplacePage({
         </header>
 
         <>
-            <section className="grid gap-3 md:grid-cols-5">
-              <SummaryCard
-                label={t("plugin.marketplace.count.all")}
-                value={model?.filterCounts.all ?? 0}
-              />
-              <SummaryCard
-                label={t("plugin.marketplace.count.installed")}
-                value={model?.filterCounts.installed ?? 0}
-              />
-              <SummaryCard
-                label={t("plugin.marketplace.count.installable")}
-                value={model?.filterCounts.installable ?? 0}
-              />
-              <SummaryCard
-                label={t("plugin.marketplace.count.activatable")}
-                value={model?.filterCounts.activatable ?? 0}
-              />
-              <SummaryCard
-                label={t("plugin.marketplace.count.attention")}
-                value={model?.filterCounts.attention ?? 0}
-              />
-            </section>
+          <section className="grid gap-3 md:grid-cols-5">
+            <SummaryCard
+              label={t("plugin.marketplace.count.all")}
+              value={model?.filterCounts.all ?? 0}
+            />
+            <SummaryCard
+              label={t("plugin.marketplace.count.installed")}
+              value={model?.filterCounts.installed ?? 0}
+            />
+            <SummaryCard
+              label={t("plugin.marketplace.count.installable")}
+              value={model?.filterCounts.installable ?? 0}
+            />
+            <SummaryCard
+              label={t("plugin.marketplace.count.activatable")}
+              value={model?.filterCounts.activatable ?? 0}
+            />
+            <SummaryCard
+              label={t("plugin.marketplace.count.attention")}
+              value={model?.filterCounts.attention ?? 0}
+            />
+          </section>
 
-            <section className="flex flex-col gap-3 rounded-2xl border border-[color:var(--lime-surface-border,#e2e8f0)] bg-[color:var(--lime-surface,#fff)] p-4 shadow-sm shadow-slate-950/5">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <label className="relative min-w-0 flex-1">
-                  <span className="sr-only">
-                    {t("plugin.marketplace.search.label")}
-                  </span>
-                  <Search
-                    className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400"
-                    aria-hidden="true"
-                  />
-                  <input
-                    className="h-10 w-full rounded-full border border-[color:var(--lime-surface-border,#e2e8f0)] bg-[color:var(--lime-surface,#fff)] pl-10 pr-4 text-sm font-medium text-[color:var(--lime-text-strong,#0f172a)] outline-none transition placeholder:text-[color:var(--lime-text-muted,#94a3b8)] focus:border-[color:var(--lime-surface-border-strong,#94a3b8)]"
-                    data-testid="plugin-marketplace-search"
-                    value={query}
-                    placeholder={t("plugin.marketplace.search.placeholder")}
-                    onChange={(event) => setQuery(event.target.value)}
-                  />
-                </label>
-                <select
-                  className="h-10 rounded-full border border-[color:var(--lime-surface-border,#e2e8f0)] bg-[color:var(--lime-surface,#fff)] px-3 text-sm font-semibold text-[color:var(--lime-text-strong,#0f172a)] outline-none"
-                  data-testid="plugin-marketplace-category"
-                  value={category}
-                  onChange={(event) => setCategory(event.target.value)}
-                  aria-label={t("plugin.marketplace.category.label")}
-                >
-                  <option value="">
-                    {t("plugin.marketplace.category.all")}
+          <section className="flex flex-col gap-3 rounded-2xl border border-[color:var(--lime-surface-border,#e2e8f0)] bg-[color:var(--lime-surface,#fff)] p-4 shadow-sm shadow-slate-950/5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <label className="relative min-w-0 flex-1">
+                <span className="sr-only">
+                  {t("plugin.marketplace.search.label")}
+                </span>
+                <Search
+                  className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400"
+                  aria-hidden="true"
+                />
+                <input
+                  className="h-10 w-full rounded-full border border-[color:var(--lime-surface-border,#e2e8f0)] bg-[color:var(--lime-surface,#fff)] pl-10 pr-4 text-sm font-medium text-[color:var(--lime-text-strong,#0f172a)] outline-none transition placeholder:text-[color:var(--lime-text-muted,#94a3b8)] focus:border-[color:var(--lime-surface-border-strong,#94a3b8)]"
+                  data-testid="plugin-marketplace-search"
+                  value={query}
+                  placeholder={t("plugin.marketplace.search.placeholder")}
+                  onChange={(event) => setQuery(event.target.value)}
+                />
+              </label>
+              <select
+                className="h-10 rounded-full border border-[color:var(--lime-surface-border,#e2e8f0)] bg-[color:var(--lime-surface,#fff)] px-3 text-sm font-semibold text-[color:var(--lime-text-strong,#0f172a)] outline-none"
+                data-testid="plugin-marketplace-category"
+                value={category}
+                onChange={(event) => setCategory(event.target.value)}
+                aria-label={t("plugin.marketplace.category.label")}
+              >
+                <option value="">{t("plugin.marketplace.category.all")}</option>
+                {categories.map((entry) => (
+                  <option key={entry} value={entry}>
+                    {entry}
                   </option>
-                  {categories.map((entry) => (
-                    <option key={entry} value={entry}>
-                      {entry}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {STATUS_FILTERS.map((filter) => (
-                  <button
-                    key={filter}
-                    type="button"
-                    data-testid={`plugin-marketplace-filter-${filter}`}
-                    className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                      statusFilter === filter
-                        ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                        : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
-                    }`}
-                    onClick={() => setStatusFilter(filter)}
-                  >
-                    {t(`plugin.marketplace.filter.${filter}`)}
-                  </button>
                 ))}
-              </div>
-            </section>
-
-            {registry.error || actionError ? (
-              <section className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-sm text-rose-700">
-                <h2 className="m-0 text-base font-semibold">
-                  {registry.error
-                    ? t("plugin.marketplace.error.title")
-                    : t("plugin.marketplace.actionError.title")}
-                </h2>
-                <p className="mt-1">{registry.error ?? actionError}</p>
-              </section>
-            ) : null}
-
-            <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-              <section className="min-h-0 overflow-auto rounded-2xl border border-[color:var(--lime-surface-border,#e2e8f0)] bg-[color:var(--lime-surface,#fff)] shadow-sm shadow-slate-950/5">
-                {registry.loading && !model ? (
-                  <div className="flex min-h-[260px] items-center justify-center text-sm font-medium text-[color:var(--lime-text-muted,#64748b)]">
-                    {t("plugin.marketplace.loading")}
-                  </div>
-                ) : model && model.items.length > 0 ? (
-                  <div
-                    className="grid gap-0 divide-y divide-[color:var(--lime-surface-border,#e2e8f0)]"
-                    data-testid="plugin-marketplace-list"
-                  >
-                    {model.items.map((item) => (
-                      <article
-                        key={item.pluginId}
-                        className={`grid gap-4 p-4 transition lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center ${
-                          selectedDetailItem?.pluginId === item.pluginId
-                            ? "bg-emerald-50/60"
-                            : ""
-                        }`}
-                        data-testid={`plugin-marketplace-row-${item.pluginId}`}
-                      >
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h2 className="m-0 text-base font-semibold text-[color:var(--lime-text-strong,#0f172a)]">
-                              {resolvePluginMarketplaceItemLabel(item)}
-                            </h2>
-                            <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-600">
-                              {item.version}
-                            </span>
-                            <span
-                              className={`rounded-md border px-2 py-0.5 text-xs font-semibold ${pluginMarketplaceStatusTone(
-                                item,
-                              )}`}
-                            >
-                              {translate(pluginMarketplaceStatusLabelKey(item))}
-                            </span>
-                          </div>
-                          <p className="mt-2 line-clamp-2 text-sm leading-6 text-[color:var(--lime-text-muted,#64748b)]">
-                            {item.description ||
-                              t("plugin.marketplace.descriptionFallback")}
-                          </p>
-                          <div className="mt-3 flex flex-wrap gap-2 text-xs text-[color:var(--lime-text-muted,#64748b)]">
-                            <span>{item.pluginId}</span>
-                            <span>{pluginMarketplaceCategoryText(item)}</span>
-                            {item.blockerCodes.slice(0, 2).map((code) => (
-                              <span
-                                key={code}
-                                className="rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-amber-700"
-                              >
-                                {code}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap items-center justify-start gap-2 lg:justify-end">
-                          <button
-                            type="button"
-                            className="inline-flex h-9 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                            data-testid={`plugin-marketplace-detail-${item.pluginId}`}
-                            onClick={() => setSelectedPluginId(item.pluginId)}
-                            title={t("plugin.marketplace.detailActionTitle")}
-                          >
-                            <Info className="size-4" aria-hidden="true" />
-                            {t("plugin.marketplace.action.detail")}
-                          </button>
-                          <MarketplaceActionButton
-                            item={item}
-                            pending={pendingActionId === item.pluginId}
-                            onClick={() => void handlePrimaryAction(item)}
-                            t={translate}
-                          />
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="flex min-h-[260px] items-center justify-center px-4 text-center">
-                    <div>
-                      <h2 className="m-0 text-base font-semibold text-[color:var(--lime-text-strong,#0f172a)]">
-                        {t("plugin.marketplace.empty.title")}
-                      </h2>
-                      <p className="mt-2 text-sm text-[color:var(--lime-text-muted,#64748b)]">
-                        {t("plugin.marketplace.empty.description")}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </section>
-              <PluginMarketplaceDetailPanel
-                item={selectedDetailItem}
-                pendingPluginId={pendingActionId}
-                registrationCode={
-                  selectedDetailItem
-                    ? (registrationCodes[selectedDetailItem.pluginId] ?? "")
-                    : ""
-                }
-                onRegistrationCodeChange={(pluginId, code) =>
-                  setRegistrationCodes((current) => ({
-                    ...current,
-                    [pluginId]: code,
-                  }))
-                }
-                onSubmitRegistration={(item) =>
-                  void handleSubmitRegistration(item)
-                }
-                onOpenSkill={handleOpenSkill}
-                historySelectionModel={
-                  selectedDetailItem?.pluginId === historySelectionPluginId
-                    ? historySelectionModel
-                    : null
-                }
-                historySelectionLoading={
-                  selectedDetailItem?.pluginId === historySelectionPluginId &&
-                  historySelectionLoading
-                }
-                historySelectionError={
-                  selectedDetailItem?.pluginId === historySelectionPluginId
-                    ? historySelectionError
-                    : null
-                }
-                onOpenHistorySession={handleOpenHistorySession}
-                onRefreshHistorySessions={(item) =>
-                  void loadHistorySessions(item)
-                }
-                onManage={(item, action) =>
-                  void handleManagementAction(item, action)
-                }
-                t={translate}
-              />
+              </select>
             </div>
+            <div className="flex flex-wrap gap-2">
+              {STATUS_FILTERS.map((filter) => (
+                <button
+                  key={filter}
+                  type="button"
+                  data-testid={`plugin-marketplace-filter-${filter}`}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                    statusFilter === filter
+                      ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                      : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
+                  }`}
+                  onClick={() => setStatusFilter(filter)}
+                >
+                  {translate(`plugin.marketplace.filter.${filter}`)}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          {registry.error || actionError ? (
+            <section className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-sm text-rose-700">
+              <h2 className="m-0 text-base font-semibold">
+                {registry.error
+                  ? t("plugin.marketplace.error.title")
+                  : t("plugin.marketplace.actionError.title")}
+              </h2>
+              <p className="mt-1">{registry.error ?? actionError}</p>
+            </section>
+          ) : null}
+
+          <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+            <section className="min-h-0 overflow-auto rounded-2xl border border-[color:var(--lime-surface-border,#e2e8f0)] bg-[color:var(--lime-surface,#fff)] shadow-sm shadow-slate-950/5">
+              {registry.loading && !model ? (
+                <div className="flex min-h-[260px] items-center justify-center text-sm font-medium text-[color:var(--lime-text-muted,#64748b)]">
+                  {t("plugin.marketplace.loading")}
+                </div>
+              ) : model && model.items.length > 0 ? (
+                <div
+                  className="grid gap-0 divide-y divide-[color:var(--lime-surface-border,#e2e8f0)]"
+                  data-testid="plugin-marketplace-list"
+                >
+                  {model.items.map((item) => (
+                    <article
+                      key={item.pluginId}
+                      className={`grid gap-4 p-4 transition lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center ${
+                        selectedDetailItem?.pluginId === item.pluginId
+                          ? "bg-emerald-50/60"
+                          : ""
+                      }`}
+                      data-testid={`plugin-marketplace-row-${item.pluginId}`}
+                    >
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h2 className="m-0 text-base font-semibold text-[color:var(--lime-text-strong,#0f172a)]">
+                            {resolvePluginMarketplaceItemLabel(item)}
+                          </h2>
+                          <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-600">
+                            {item.version}
+                          </span>
+                          <span
+                            className={`rounded-md border px-2 py-0.5 text-xs font-semibold ${pluginMarketplaceStatusTone(
+                              item,
+                            )}`}
+                          >
+                            {translate(pluginMarketplaceStatusLabelKey(item))}
+                          </span>
+                        </div>
+                        <p className="mt-2 line-clamp-2 text-sm leading-6 text-[color:var(--lime-text-muted,#64748b)]">
+                          {item.description ||
+                            t("plugin.marketplace.descriptionFallback")}
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-2 text-xs text-[color:var(--lime-text-muted,#64748b)]">
+                          <span>{item.pluginId}</span>
+                          <span>{pluginMarketplaceCategoryText(item)}</span>
+                          {item.visibleBlockers.slice(0, 2).map((blocker) => (
+                            <span
+                              key={blocker.code}
+                              className="rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-amber-700"
+                            >
+                              {translate(blocker.labelKey)}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-start gap-2 lg:justify-end">
+                        <button
+                          type="button"
+                          className="inline-flex h-9 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                          data-testid={`plugin-marketplace-detail-${item.pluginId}`}
+                          onClick={() => setSelectedPluginId(item.pluginId)}
+                          title={t("plugin.marketplace.detailActionTitle")}
+                        >
+                          <Info className="size-4" aria-hidden="true" />
+                          {t("plugin.marketplace.action.detail")}
+                        </button>
+                        <MarketplaceActionButton
+                          item={item}
+                          pending={pendingActionId === item.pluginId}
+                          onClick={() => void handlePrimaryAction(item)}
+                          t={translate}
+                        />
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex min-h-[260px] items-center justify-center px-4 text-center">
+                  <div>
+                    <h2 className="m-0 text-base font-semibold text-[color:var(--lime-text-strong,#0f172a)]">
+                      {t("plugin.marketplace.empty.title")}
+                    </h2>
+                    <p className="mt-2 text-sm text-[color:var(--lime-text-muted,#64748b)]">
+                      {t("plugin.marketplace.empty.description")}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </section>
+            <PluginMarketplaceDetailPanel
+              item={selectedDetailItem}
+              pendingPluginId={pendingActionId}
+              registrationCode={
+                selectedDetailItem
+                  ? (registrationCodes[selectedDetailItem.pluginId] ?? "")
+                  : ""
+              }
+              onRegistrationCodeChange={(pluginId, code) =>
+                setRegistrationCodes((current) => ({
+                  ...current,
+                  [pluginId]: code,
+                }))
+              }
+              onSubmitRegistration={(item) =>
+                void handleSubmitRegistration(item)
+              }
+              onOpenSkill={handleOpenSkill}
+              historySelectionModel={
+                selectedDetailItem?.pluginId === historySelectionPluginId
+                  ? historySelectionModel
+                  : null
+              }
+              historySelectionLoading={
+                selectedDetailItem?.pluginId === historySelectionPluginId &&
+                historySelectionLoading
+              }
+              historySelectionError={
+                selectedDetailItem?.pluginId === historySelectionPluginId
+                  ? historySelectionError
+                  : null
+              }
+              onOpenHistorySession={handleOpenHistorySession}
+              onRefreshHistorySessions={(item) =>
+                void loadHistorySessions(item)
+              }
+              onManage={(item, action) =>
+                void handleManagementAction(item, action)
+              }
+              t={translate}
+            />
+          </div>
         </>
       </div>
     </main>
@@ -594,10 +589,10 @@ function MarketplaceActionButton({
       ? t("plugin.marketplace.openActionTitle")
       : item.primaryAction.kind === "view_history"
         ? t("plugin.marketplace.historyActionTitle")
-      : item.primaryAction.kind === "install" ||
-          item.primaryAction.kind === "enable"
-        ? t("plugin.marketplace.writeActionTitle")
-        : t("plugin.marketplace.readOnlyAction");
+        : item.primaryAction.kind === "install" ||
+            item.primaryAction.kind === "enable"
+          ? t("plugin.marketplace.writeActionTitle")
+          : t("plugin.marketplace.readOnlyAction");
 
   return (
     <button

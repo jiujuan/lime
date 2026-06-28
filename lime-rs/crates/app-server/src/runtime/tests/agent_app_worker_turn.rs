@@ -84,6 +84,17 @@ async fn product_profile_turn_runs_installed_worker_and_materializes_workspace_p
         detail["product_workspace"]["workerEvidence"][0]["artifactKind"],
         "content_factory.workspace_patch"
     );
+    let article = detail["product_workspace"]["objects"]
+        .as_array()
+        .expect("product objects")
+        .iter()
+        .find(|object| object["ref"]["kind"] == "articleDraft")
+        .expect("article object");
+    assert_eq!(article["title"], "公众号文章草稿");
+    assert!(article["source"]["markdown"]
+        .as_str()
+        .expect("article markdown")
+        .contains("点击小框后展开右侧 Product Profile"));
 }
 
 #[tokio::test]

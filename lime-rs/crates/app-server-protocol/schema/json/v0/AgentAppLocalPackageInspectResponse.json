@@ -4,9 +4,6 @@
     "appDir": {
       "type": "string"
     },
-    "appMarkdown": {
-      "type": "string"
-    },
     "inspectedAt": {
       "type": "string"
     },
@@ -14,9 +11,13 @@
     "manifestHash": {
       "type": "string"
     },
+    "manifestSource": {
+      "type": "string"
+    },
     "packageHash": {
       "type": "string"
     },
+    "pluginManifest": true,
     "sourceKind": {
       "type": "string"
     },
@@ -26,11 +27,12 @@
   },
   "required": [
     "appDir",
-    "appMarkdown",
     "inspectedAt",
     "manifest",
     "manifestHash",
+    "manifestSource",
     "packageHash",
+    "pluginManifest",
     "sourceKind",
     "sourceUri"
   ],

@@ -483,6 +483,9 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
   onToggleHarnessPanel?: ComponentProps<
     typeof ChatNavbar
   >["onToggleHarnessPanel"];
+  showTraceToggle?: boolean;
+  tracePanelVisible?: boolean;
+  onToggleTracePanel?: () => void;
   showExpertInfoToggle?: boolean;
   expertInfoPanelVisible?: boolean;
   onToggleExpertInfoPanel?: () => void;
@@ -636,6 +639,9 @@ export function WorkspaceConversationScene({
   showHarnessToggle,
   harnessPanelVisible,
   onToggleHarnessPanel,
+  showTraceToggle,
+  tracePanelVisible,
+  onToggleTracePanel,
   showExpertInfoToggle,
   expertInfoPanelVisible,
   onToggleExpertInfoPanel,
@@ -822,6 +828,9 @@ export function WorkspaceConversationScene({
       showHarnessToggle={showHarnessToggle}
       harnessPanelVisible={harnessPanelVisible}
       onToggleHarnessPanel={onToggleHarnessPanel}
+      showTraceToggle={showTraceToggle}
+      tracePanelVisible={tracePanelVisible}
+      onToggleTracePanel={onToggleTracePanel}
       showExpertInfoToggle={showExpertInfoToggle}
       expertInfoPanelVisible={expertInfoPanelVisible}
       onToggleExpertInfoPanel={onToggleExpertInfoPanel}

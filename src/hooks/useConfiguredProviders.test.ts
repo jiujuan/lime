@@ -44,6 +44,7 @@ function createOemRuntime(
     desktopClientId: "desktop-client",
     desktopOauthRedirectUrl: "lime://oauth/callback",
     desktopOauthNextPath: "/welcome",
+    agentAppSignatureTrustRoots: [],
     ...overrides,
   };
 }

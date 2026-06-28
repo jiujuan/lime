@@ -61,7 +61,7 @@ mod tests {
             "auto",
             "react",
             TurnRequestToolPolicySnapshot {
-                search_mode: "allowed".to_string(),
+                search_mode: "auto".to_string(),
                 effective_web_search: true,
                 required_tools: vec!["WebSearch".to_string()],
                 allowed_tools: vec!["WebSearch".to_string(), "WebFetch".to_string()],

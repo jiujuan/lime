@@ -1,4 +1,4 @@
-import { useEffect, useRef, type MutableRefObject } from "react";
+import { useCallback, useEffect, useRef, type MutableRefObject } from "react";
 import { isRuntimeSettledStatusValue } from "@limecloud/agent-ui-contracts";
 import { isAppServerBridgeAvailable } from "@/lib/api/appServerBridgeAvailability";
 import { hasDevBridgeEventListenerCapability } from "@/lib/api/bridgeEvents";
@@ -13,6 +13,7 @@ import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
 
 const APP_SERVER_BRIDGE_RUNTIME_POLL_MS = 1000;
 const RECOVERED_RUNTIME_POLL_ACTIVE_WINDOW_MS = 30 * 60 * 1000;
+const RUNTIME_DETAIL_REFRESH_COALESCE_MS = 120;
 
 function parseTimestampMs(value: string | null | undefined): number | null {
   if (!value) {
@@ -121,7 +122,10 @@ interface UseAgentRuntimeSyncEffectsOptions {
   threadReadStatus?: string | null;
   queuedTurnCount: number;
   threadTurns: AgentThreadTurn[];
-  refreshSessionDetail: (targetSessionId?: string) => Promise<unknown>;
+  refreshSessionDetail: (
+    targetSessionId?: string,
+    source?: string,
+  ) => Promise<unknown>;
   settleActiveRuntimeStream?: (targetSessionId: string) => void;
 }
 
@@ -143,6 +147,8 @@ export function useAgentRuntimeSyncEffects(
   } = options;
   const lastIsSendingRef = useRef(isSending);
   const observedActiveRuntimeWorkRef = useRef(false);
+  const refreshInFlightSessionRef = useRef<string | null>(null);
+  const refreshTimerRef = useRef<number | null>(null);
   const normalizedParentSessionId = parentSessionId?.trim() || null;
   const normalizedCurrentTurnEventName = currentTurnEventName?.trim() || null;
   const hasDesktopRuntimeEventListenerCapability =
@@ -167,6 +173,50 @@ export function useAgentRuntimeSyncEffects(
       hasActiveRuntimeWork ||
       Boolean(normalizedParentSessionId));
 
+  const refreshSessionDetailOnce = useCallback(
+    (targetSessionId: string, source: string) => {
+      if (refreshInFlightSessionRef.current === targetSessionId) {
+        return;
+      }
+
+      refreshInFlightSessionRef.current = targetSessionId;
+      void refreshSessionDetail(targetSessionId, source).finally(() => {
+        if (refreshInFlightSessionRef.current === targetSessionId) {
+          refreshInFlightSessionRef.current = null;
+        }
+      });
+    },
+    [refreshSessionDetail],
+  );
+
+  const scheduleRefreshSessionDetail = useCallback(
+    (targetSessionId: string, source: string) => {
+      if (refreshInFlightSessionRef.current === targetSessionId) {
+        return;
+      }
+
+      if (refreshTimerRef.current !== null) {
+        window.clearTimeout(refreshTimerRef.current);
+      }
+
+      refreshTimerRef.current = window.setTimeout(() => {
+        refreshTimerRef.current = null;
+        refreshSessionDetailOnce(targetSessionId, source);
+      }, RUNTIME_DETAIL_REFRESH_COALESCE_MS);
+    },
+    [refreshSessionDetailOnce],
+  );
+
+  useEffect(
+    () => () => {
+      if (refreshTimerRef.current !== null) {
+        window.clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
+    },
+    [],
+  );
+
   useEffect(() => {
     const wasSending = lastIsSendingRef.current;
     lastIsSendingRef.current = isSending;
@@ -175,8 +225,8 @@ export function useAgentRuntimeSyncEffects(
       return;
     }
 
-    void refreshSessionDetail(sessionId);
-  }, [isSending, refreshSessionDetail, sessionId]);
+    scheduleRefreshSessionDetail(sessionId, "runtimeSync.sendSettled");
+  }, [isSending, scheduleRefreshSessionDetail, sessionId]);
 
   useEffect(() => {
     if (!isSending) {
@@ -237,7 +287,7 @@ export function useAgentRuntimeSyncEffects(
     }
 
     const timer = window.setInterval(() => {
-      void refreshSessionDetail(sessionId);
+      refreshSessionDetailOnce(sessionId, "runtimeSync.recoveredPoll");
     }, 1500);
 
     return () => {
@@ -247,7 +297,7 @@ export function useAgentRuntimeSyncEffects(
     isSending,
     threadReadStatus,
     queuedTurnCount,
-    refreshSessionDetail,
+    refreshSessionDetailOnce,
     sessionId,
     threadTurns,
   ]);
@@ -257,16 +307,20 @@ export function useAgentRuntimeSyncEffects(
       return;
     }
 
-    void refreshSessionDetail(sessionId);
+    refreshSessionDetailOnce(sessionId, "runtimeSync.poll");
 
     const timer = window.setInterval(() => {
-      void refreshSessionDetail(sessionId);
+      refreshSessionDetailOnce(sessionId, "runtimeSync.poll");
     }, APP_SERVER_BRIDGE_RUNTIME_POLL_MS);
 
     return () => {
       window.clearInterval(timer);
     };
-  }, [refreshSessionDetail, sessionId, shouldUseAppServerBridgeRuntimePolling]);
+  }, [
+    refreshSessionDetailOnce,
+    sessionId,
+    shouldUseAppServerBridgeRuntimePolling,
+  ]);
 
   useEffect(() => {
     if (!sessionId || !normalizedCurrentTurnEventName) {
@@ -287,7 +341,7 @@ export function useAgentRuntimeSyncEffects(
           ) {
             return;
           }
-          void refreshSessionDetail(sessionId);
+          scheduleRefreshSessionDetail(sessionId, "runtimeSync.event");
         },
       );
 
@@ -307,7 +361,7 @@ export function useAgentRuntimeSyncEffects(
     };
   }, [
     normalizedCurrentTurnEventName,
-    refreshSessionDetail,
+    scheduleRefreshSessionDetail,
     runtime,
     sessionId,
     sessionIdRef,
@@ -340,7 +394,7 @@ export function useAgentRuntimeSyncEffects(
             if (sessionIdRef.current !== sessionId) {
               return;
             }
-            void refreshSessionDetail(sessionId);
+            scheduleRefreshSessionDetail(sessionId, "runtimeSync.event");
           },
         );
 
@@ -363,7 +417,7 @@ export function useAgentRuntimeSyncEffects(
     };
   }, [
     normalizedParentSessionId,
-    refreshSessionDetail,
+    scheduleRefreshSessionDetail,
     runtime,
     sessionId,
     sessionIdRef,

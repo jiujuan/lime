@@ -49,8 +49,18 @@ function viewItem(
     renderable: false,
     readOnlyHistory: false,
     skills: [],
+    capabilityProfile: {
+      sections: [],
+      summary: {
+        agentCount: 0,
+        subagentCount: 0,
+        toolCount: 0,
+        skillCount: 0,
+      },
+    },
     needsAttention: false,
     blockerCodes: [],
+    visibleBlockers: [],
     primaryAction: {
       kind: "install",
       labelKey: "plugin.marketplace.action.install",

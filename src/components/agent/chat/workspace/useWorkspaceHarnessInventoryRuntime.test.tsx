@@ -190,7 +190,7 @@ describe("useWorkspaceHarnessInventoryRuntime", () => {
     }
   });
 
-  it("主界面启用后即使详情面板未展开，也应预取工具库存", async () => {
+  it("详情面板未展开时不应预取工具库存", async () => {
     mockGetAgentRuntimeToolInventory.mockResolvedValueOnce({
       agent_initialized: true,
       runtime_tools: [
@@ -213,6 +213,30 @@ describe("useWorkspaceHarnessInventoryRuntime", () => {
     const harness = mountHook({
       enabled: true,
       harnessPanelVisible: false,
+    });
+
+    try {
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(mockGetAgentRuntimeToolInventory).not.toHaveBeenCalled();
+      expect(harness.getValue().toolInventory).toBeNull();
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("详情面板展开时应读取工具库存", async () => {
+    mockGetAgentRuntimeToolInventory.mockResolvedValueOnce({
+      agent_initialized: true,
+      runtime_tools: [{ name: "WebSearch" }],
+      registry_tools: [],
+    });
+
+    const harness = mountHook({
+      enabled: true,
+      harnessPanelVisible: true,
     });
 
     try {

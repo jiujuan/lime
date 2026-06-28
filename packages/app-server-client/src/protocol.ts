@@ -2808,7 +2808,8 @@ export type AgentAppLocalPackageInspectResponse = {
   sourceKind: "local_folder" | string;
   sourceUri: string;
   appDir: string;
-  appMarkdown: string;
+  manifestSource: "plugin_json" | string;
+  pluginManifest: unknown;
   manifest: unknown;
   manifestHash: string;
   packageHash: string;

@@ -9,7 +9,8 @@ export type WorkspaceRightSurfaceKind =
   | "browser"
   | "files"
   | "shell"
-  | "harness";
+  | "harness"
+  | "trace";
 
 export type WorkspaceRightSurfaceSource = "user" | "route" | "runtime";
 

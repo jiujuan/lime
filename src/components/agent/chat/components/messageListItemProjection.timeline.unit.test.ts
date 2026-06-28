@@ -87,7 +87,6 @@ describe("messageListItemProjection timeline", () => {
           started_at: "2026-06-24T10:00:02.000Z",
           completed_at: "2026-06-24T10:00:03.000Z",
           updated_at: "2026-06-24T10:00:03.000Z",
-          results: [],
         },
       ],
       {

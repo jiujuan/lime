@@ -5,6 +5,7 @@ import type { ClawTraceConfig } from "@/lib/api/appConfig";
 
 interface ClawTraceConfigControlsProps {
   onAlertEnabledChange: (enabled: boolean) => void;
+  onAlertNotificationEnabledChange: (enabled: boolean) => void;
   onEnabledChange: (enabled: boolean) => void;
   onLevelChange: (event: ChangeEvent<HTMLSelectElement>) => void;
   onSampleRateChange: (event: ChangeEvent<HTMLInputElement>) => void;
@@ -14,6 +15,7 @@ interface ClawTraceConfigControlsProps {
 
 export function ClawTraceConfigControls({
   onAlertEnabledChange,
+  onAlertNotificationEnabledChange,
   onEnabledChange,
   onLevelChange,
   onSampleRateChange,
@@ -90,9 +92,7 @@ export function ClawTraceConfigControls({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
             <p className="text-sm font-medium text-slate-800">
-              {t(
-                "settings.developer.debugSwitch.clawTrace.alertChannel.title",
-              )}
+              {t("settings.developer.debugSwitch.clawTrace.alertChannel.title")}
             </p>
             <p className="text-xs leading-5 text-slate-500">
               {t(
@@ -108,6 +108,32 @@ export function ClawTraceConfigControls({
             disabled={saving}
             onCheckedChange={(value) => onAlertEnabledChange(Boolean(value))}
           />
+        </div>
+        <div className="mt-3 border-t border-slate-200/80 pt-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-slate-800">
+                {t(
+                  "settings.developer.debugSwitch.clawTrace.alertNotification.title",
+                )}
+              </p>
+              <p className="text-xs leading-5 text-slate-500">
+                {t(
+                  "settings.developer.debugSwitch.clawTrace.alertNotification.description",
+                )}
+              </p>
+            </div>
+            <Switch
+              aria-label={t(
+                "settings.developer.debugSwitch.clawTrace.alertNotification.aria",
+              )}
+              checked={traceConfig.alert_notification_enabled === true}
+              disabled={saving}
+              onCheckedChange={(value) =>
+                onAlertNotificationEnabledChange(Boolean(value))
+              }
+            />
+          </div>
         </div>
       </div>
 

@@ -1,5 +1,6 @@
 import React from "react";
 import { ExternalLink, FileText, Loader2 } from "lucide-react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import type { Artifact } from "@/lib/artifact/types";
 import { resolveArtifactProtocolFilePath } from "@/lib/artifact-protocol";
@@ -56,7 +57,9 @@ export function MessageArtifactCards({
         });
         const writePhase = resolveArtifactWritePhase(artifact);
         const statusLabel = formatArtifactWritePhaseLabel(writePhase);
-        const previewText = resolveArtifactPreviewText(artifact, 180);
+        const previewText =
+          resolveProductProfileCardPreviewText(artifact, t) ??
+          resolveArtifactPreviewText(artifact, 180);
         const knowledgeSource = resolveKnowledgeSourceFromArtifacts([artifact]);
         const canSaveArtifactAsKnowledge = Boolean(
           onSaveMessageAsKnowledge && knowledgeSource,
@@ -135,4 +138,128 @@ export function MessageArtifactCards({
       })}
     </div>
   );
+}
+
+interface ProductProfileCardPreviewFacts {
+  layout?: string | null;
+  summary?: string | null;
+  counts?: Record<string, unknown> | null;
+}
+
+type ProductProfileGeneratedLayoutKey =
+  | "briefForm"
+  | "document"
+  | "imageGrid"
+  | "storyboard"
+  | "checklist"
+  | "generic";
+
+type ProductProfileMetricKey =
+  | "researchRounds"
+  | "outlineSections"
+  | "citations"
+  | "imageSlots"
+  | "reviewNotes"
+  | "storyboardScenes"
+  | "checklistItems"
+  | "images"
+  | "briefFields"
+  | "artifacts";
+
+function resolveProductProfileCardPreviewText(
+  artifact: Artifact,
+  t: TFunction<"agent">,
+): string | undefined {
+  if (artifact.meta.openedFrom !== "right_surface_product_profile") {
+    return undefined;
+  }
+  const facts = readProductProfileCardPreviewFacts(
+    artifact.meta.productProfileCardPreview,
+  );
+  if (!facts) {
+    return undefined;
+  }
+  const parts: string[] = [];
+  if (facts.summary) {
+    parts.push(facts.summary);
+  }
+  const counts = facts.counts ?? {};
+
+  const metricParts = [
+    countMetricText(t, "researchRounds", counts.researchRounds),
+    countMetricText(t, "outlineSections", counts.outlineSections),
+    countMetricText(t, "citations", counts.citations),
+    countMetricText(t, "imageSlots", counts.imageSlots),
+    countMetricText(t, "reviewNotes", counts.reviewNotes),
+    countMetricText(t, "storyboardScenes", counts.storyboardScenes),
+    countMetricText(t, "checklistItems", counts.checklistItems),
+    countMetricText(t, "images", counts.images),
+    countMetricText(t, "briefFields", counts.briefFields),
+  ].filter((part): part is string => Boolean(part));
+
+  if (parts.length === 0 && metricParts.length === 0) {
+    parts.push(productProfileGeneratedText(t, layoutKey(facts.layout)));
+  }
+  parts.push(...metricParts);
+  const artifactsText = countMetricText(t, "artifacts", counts.artifacts);
+  if (artifactsText) {
+    parts.push(artifactsText);
+  }
+  return parts.slice(0, 4).join(" · ") || undefined;
+}
+
+function readProductProfileCardPreviewFacts(
+  value: unknown,
+): ProductProfileCardPreviewFacts | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  const counts =
+    record.counts && typeof record.counts === "object"
+      ? (record.counts as Record<string, unknown>)
+      : {};
+  const summary =
+    typeof record.summary === "string" && record.summary.trim()
+      ? record.summary.trim()
+      : null;
+  return {
+    layout: typeof record.layout === "string" ? record.layout : null,
+    summary,
+    counts,
+  };
+}
+
+function countMetricText(
+  t: TFunction<"agent">,
+  key: ProductProfileMetricKey,
+  value: unknown,
+): string | null {
+  const count = typeof value === "number" && Number.isFinite(value) ? value : 0;
+  if (count <= 0) {
+    return null;
+  }
+  return t(`agentChat.messageList.artifact.productProfile.metric.${key}`, {
+    count,
+  });
+}
+
+function productProfileGeneratedText(
+  t: TFunction<"agent">,
+  key: ProductProfileGeneratedLayoutKey,
+): string {
+  return t(`agentChat.messageList.artifact.productProfile.generated.${key}`);
+}
+
+function layoutKey(layout: unknown): ProductProfileGeneratedLayoutKey {
+  switch (layout) {
+    case "briefForm":
+    case "document":
+    case "imageGrid":
+    case "storyboard":
+    case "checklist":
+      return layout;
+    default:
+      return "generic";
+  }
 }

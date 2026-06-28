@@ -70,6 +70,7 @@ describe("agentStreamPreparedSendDispatch", () => {
       attemptSilentTurnRecovery: async () => false,
       executionStrategy: "react",
       accessMode: "current",
+      clawTraceEnabled: false,
       providerTypeRef: { current: "openai" } as MutableRefObject<string>,
       modelRef: { current: "gpt-5.4" } as MutableRefObject<string>,
       reasoningEffortRef: { current: "" } as MutableRefObject<string>,

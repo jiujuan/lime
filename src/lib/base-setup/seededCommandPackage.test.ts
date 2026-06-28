@@ -26,9 +26,11 @@ describe("seededCommandPackage", () => {
     );
 
     expect(entries).toHaveLength(41);
-    expect(entries.every((entry) => entry.binding?.skillLocator?.source === "catalog")).toBe(
-      true,
-    );
+    expect(
+      entries.every(
+        (entry) => entry.binding?.skillLocator?.source === "catalog",
+      ),
+    ).toBe(true);
     expect(entries).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -40,8 +42,7 @@ describe("seededCommandPackage", () => {
             intentConfirmation: {
               id: "plain_image_generation",
               ruleKey: "agentChat.inputIntent.imageGeneration.rules",
-              confirmationKey:
-                "agentChat.inputIntent.imageGeneration.confirm",
+              confirmationKey: "agentChat.inputIntent.imageGeneration.confirm",
               systemPromptKey:
                 "agentChat.inputIntent.imageGeneration.systemPrompt",
             },
@@ -163,7 +164,7 @@ describe("seededCommandPackage", () => {
             detailKind: "artifact_detail",
           }),
           triggers: expect.arrayContaining([
-            { mode: "mention", prefix: "@写作" },
+            { mode: "mention", prefix: "@文案" },
             { mode: "mention", prefix: "@Writing Partner" },
             { mode: "mention", prefix: "@Writers 1" },
             { mode: "mention", prefix: "@Blog 1" },

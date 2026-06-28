@@ -3,6 +3,7 @@ export const SESSION_DETAIL_HISTORY_LIMIT = 40;
 export interface SessionDetailHydrationOptions {
   historyLimit: number;
   resumeSessionStartHooks?: true;
+  source?: string;
 }
 
 export function normalizeSessionDetailHistoryLimit(
@@ -17,12 +18,17 @@ export function normalizeSessionDetailHistoryLimit(
 export function buildSessionDetailHydrationOptions(params?: {
   resumeSessionStartHooks?: boolean;
   historyLimit?: number | null;
+  source?: string | null;
 }): SessionDetailHydrationOptions {
   const options: SessionDetailHydrationOptions = {
     historyLimit: normalizeSessionDetailHistoryLimit(params?.historyLimit),
   };
   if (params?.resumeSessionStartHooks) {
     options.resumeSessionStartHooks = true;
+  }
+  const source = params?.source?.trim();
+  if (source) {
+    options.source = source;
   }
   return options;
 }

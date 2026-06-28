@@ -1,12 +1,19 @@
 import type {
-  InstalledAgentAppState,
   NormalizedAppEntry,
   NormalizedAppManifest,
 } from "@/features/agent-app/types";
 
+export interface WorkspaceAgentAppIntentSource {
+  appId: string;
+  appName?: string;
+  manifest: NormalizedAppManifest;
+  disabled?: boolean;
+}
+
 export interface WorkspaceAgentAppIntentMatch {
   appId: string;
   appName: string;
+  manifest: NormalizedAppManifest;
   intentKey: string;
   taskKind?: string;
   outputArtifactKind?: string;
@@ -21,6 +28,7 @@ interface AgentRuntimeIntentDeclaration {
   source: WorkspaceAgentAppIntentMatch["source"];
   mode?: string;
   taskKind?: string;
+  workflowKey?: string;
   outputArtifactKind?: string;
   rightSurface?: string;
   triggerPhrases: string[];
@@ -93,11 +101,64 @@ function readFirstRuntimeTaskKind(
   return undefined;
 }
 
+function findRuntimeWorkflow(
+  manifest: NormalizedAppManifest,
+  params: {
+    intentKey?: string;
+    taskKind?: string;
+    workflowKey?: string;
+  },
+) {
+  return manifest.workflows.find((workflow) => {
+    if (params.workflowKey && workflow.key === params.workflowKey) {
+      return true;
+    }
+    if (
+      params.intentKey &&
+      (workflow.key === params.intentKey ||
+        workflow.triggerIntents?.includes(params.intentKey))
+    ) {
+      return true;
+    }
+    return Boolean(params.taskKind && workflow.taskKind === params.taskKind);
+  });
+}
+
 function readPrimaryObjectKinds(manifest: NormalizedAppManifest): string[] {
   const productWorkspace = isRecord(manifest.workbench?.productWorkspace)
     ? manifest.workbench.productWorkspace
     : undefined;
   return readStringArray(productWorkspace?.primaryObjectKinds);
+}
+
+function expectedObjectsForIntent(
+  manifest: NormalizedAppManifest,
+  params: {
+    explicitExpectedObjects?: string[];
+    defaultObjectKind?: string;
+    intentKey?: string;
+    taskKind?: string;
+    workflowKey?: string;
+  },
+): string[] {
+  const explicit = params.explicitExpectedObjects ?? [];
+  if (explicit.length > 0) {
+    return explicit;
+  }
+  if (params.defaultObjectKind) {
+    return [params.defaultObjectKind];
+  }
+  const workflow = findRuntimeWorkflow(manifest, params);
+  const fromWorkflow = workflow?.steps
+    ?.map((step) =>
+      isRecord(step) ? readTrimmedString(step.expectedOutput) : undefined,
+    )
+    .filter((value): value is string => Boolean(value))
+    .filter((value) => readPrimaryObjectKinds(manifest).includes(value));
+  if (fromWorkflow?.length) {
+    return Array.from(new Set(fromWorkflow));
+  }
+  return readPrimaryObjectKinds(manifest);
 }
 
 function inferDefaultRightSurface(
@@ -130,7 +191,10 @@ function buildFallbackIntentDeclaration(
     manifest.displayName,
     manifest.appId,
     ...entryPhrases(manifest.entries),
-  ].filter((phrase) => phrase.trim().length > 0);
+  ].flatMap((phrase) => {
+    const normalized = readTrimmedString(phrase);
+    return normalized ? [normalized] : [];
+  });
   if (triggerPhrases.length === 0) {
     return null;
   }
@@ -155,9 +219,69 @@ function readIntentDeclarations(
   const rawIntents = Array.isArray(agentRuntime?.intents)
     ? agentRuntime.intents
     : [];
+  const rawActivationEntries = Array.isArray(agentRuntime?.activationEntries)
+    ? agentRuntime.activationEntries
+    : [];
   const fallbackOutputArtifactKind =
     readRuntimeWorkerOutputArtifactKind(manifest);
   const fallbackTaskKind = readFirstRuntimeTaskKind(manifest);
+
+  const activationEntryIntents = rawActivationEntries
+    .map((item): AgentRuntimeIntentDeclaration | null => {
+      const entry = isRecord(item) ? item : undefined;
+      const key = readTrimmedString(entry?.key);
+      if (!key) {
+        return null;
+      }
+      const aliases = readStringArray(entry?.aliases);
+      const title = readTrimmedString(entry?.title);
+      const taskKind =
+        readTrimmedString(entry?.taskKind) ??
+        readTrimmedString(entry?.task_kind) ??
+        fallbackTaskKind;
+      const workflowKey =
+        readTrimmedString(entry?.workflow) ??
+        readTrimmedString(entry?.workflowKey) ??
+        readTrimmedString(entry?.workflow_key);
+      const workflow = findRuntimeWorkflow(manifest, {
+        intentKey: key,
+        taskKind,
+        workflowKey,
+      });
+      const triggerPhrases = [
+        key,
+        title,
+        ...aliases,
+        ...readLocalizedStringArray(entry?.triggerPhrases),
+        ...readLocalizedStringArray(entry?.trigger_phrases),
+      ].filter((value): value is string => Boolean(value));
+      return {
+        key,
+        source: "agent_app_manifest_intent",
+        mode: readTrimmedString(entry?.mode) ?? "at_command",
+        taskKind,
+        workflowKey,
+        outputArtifactKind:
+          readTrimmedString(entry?.outputArtifactKind) ??
+          readTrimmedString(entry?.output_artifact_kind) ??
+          workflow?.outputArtifactKind ??
+          fallbackOutputArtifactKind,
+        rightSurface:
+          readTrimmedString(entry?.rightSurface) ??
+          readTrimmedString(entry?.right_surface) ??
+          inferDefaultRightSurface(manifest),
+        triggerPhrases,
+        expectedObjects: expectedObjectsForIntent(manifest, {
+          defaultObjectKind: readTrimmedString(entry?.defaultObjectKind),
+          intentKey: key,
+          taskKind,
+          workflowKey,
+        }),
+      };
+    })
+    .filter((intent): intent is AgentRuntimeIntentDeclaration =>
+      Boolean(intent && intent.triggerPhrases.length > 0),
+    );
 
   const explicitIntents = rawIntents
     .map((item): AgentRuntimeIntentDeclaration | null => {
@@ -167,34 +291,50 @@ function readIntentDeclarations(
         return null;
       }
       const triggerPhrases = readLocalizedStringArray(intent?.triggerPhrases);
-      const expectedObjects = [
-        ...readStringArray(intent?.expectedObjects),
-        ...readStringArray(intent?.expected_objects),
-      ];
+      const taskKind =
+        readTrimmedString(intent?.taskKind) ??
+        readTrimmedString(intent?.task_kind) ??
+        fallbackTaskKind;
+      const workflowKey =
+        readTrimmedString(intent?.workflow) ??
+        readTrimmedString(intent?.workflowKey) ??
+        readTrimmedString(intent?.workflow_key);
+      const workflow = findRuntimeWorkflow(manifest, {
+        intentKey: key,
+        taskKind,
+        workflowKey,
+      });
       return {
         key,
         source: "agent_app_manifest_intent",
         mode: readTrimmedString(intent?.mode),
-        taskKind:
-          readTrimmedString(intent?.taskKind) ??
-          readTrimmedString(intent?.task_kind) ??
-          fallbackTaskKind,
+        taskKind,
+        workflowKey,
         outputArtifactKind:
           readTrimmedString(intent?.outputArtifactKind) ??
           readTrimmedString(intent?.output_artifact_kind) ??
+          workflow?.outputArtifactKind ??
           fallbackOutputArtifactKind,
         rightSurface:
           readTrimmedString(intent?.rightSurface) ??
           readTrimmedString(intent?.right_surface),
         triggerPhrases,
-        expectedObjects,
+        expectedObjects: expectedObjectsForIntent(manifest, {
+          explicitExpectedObjects: [
+            ...readStringArray(intent?.expectedObjects),
+            ...readStringArray(intent?.expected_objects),
+          ],
+          intentKey: key,
+          taskKind,
+          workflowKey,
+        }),
       };
     })
     .filter((intent): intent is AgentRuntimeIntentDeclaration =>
       Boolean(intent && intent.triggerPhrases.length > 0),
     );
-  if (explicitIntents.length > 0) {
-    return explicitIntents;
+  if (activationEntryIntents.length > 0 || explicitIntents.length > 0) {
+    return [...activationEntryIntents, ...explicitIntents];
   }
   const fallbackIntent = buildFallbackIntentDeclaration(manifest);
   return fallbackIntent ? [fallbackIntent] : [];
@@ -212,19 +352,25 @@ function buildCandidatePhrases(
   intent: AgentRuntimeIntentDeclaration,
 ): string[] {
   return [
+    intent.key,
     ...intent.triggerPhrases,
     manifest.displayName,
     manifest.appId,
     ...entryPhrases(manifest.entries),
-  ].filter((phrase, index, phrases) => {
-    const normalized = normalizeMatchText(phrase);
-    return (
-      normalized.length >= 2 &&
-      phrases.findIndex(
-        (candidate) => normalizeMatchText(candidate) === normalized,
-      ) === index
-    );
-  });
+  ]
+    .flatMap((phrase) => {
+      const normalized = readTrimmedString(phrase);
+      return normalized ? [normalized] : [];
+    })
+    .filter((phrase, index, phrases) => {
+      const normalized = normalizeMatchText(phrase);
+      return (
+        normalized.length >= 2 &&
+        phrases.findIndex(
+          (candidate) => normalizeMatchText(candidate) === normalized,
+        ) === index
+      );
+    });
 }
 
 function scorePhraseMatch(sourceText: string, phrase: string): number {
@@ -244,7 +390,7 @@ function scorePhraseMatch(sourceText: string, phrase: string): number {
 
 export function resolveWorkspaceAgentAppIntent(
   sourceText: string,
-  installedApps: readonly InstalledAgentAppState[],
+  sources: readonly WorkspaceAgentAppIntentSource[],
 ): WorkspaceAgentAppIntentMatch | null {
   const normalizedSourceText = sourceText.trim();
   if (!normalizedSourceText) {
@@ -253,11 +399,11 @@ export function resolveWorkspaceAgentAppIntent(
 
   let bestMatch: (WorkspaceAgentAppIntentMatch & { score: number }) | null =
     null;
-  for (const app of installedApps) {
-    if (app.disabled) {
+  for (const source of sources) {
+    if (source.disabled) {
       continue;
     }
-    const manifest = app.manifest;
+    const manifest = source.manifest;
     for (const intent of readIntentDeclarations(manifest)) {
       for (const phrase of buildCandidatePhrases(manifest, intent)) {
         const score = scorePhraseMatch(normalizedSourceText, phrase);
@@ -265,8 +411,9 @@ export function resolveWorkspaceAgentAppIntent(
           continue;
         }
         bestMatch = {
-          appId: app.appId || manifest.appId,
-          appName: manifest.displayName || manifest.appId,
+          appId: source.appId || manifest.appId,
+          appName: source.appName || manifest.displayName || manifest.appId,
+          manifest,
           intentKey: intent.key,
           taskKind: intent.taskKind,
           outputArtifactKind: intent.outputArtifactKind,
@@ -331,7 +478,7 @@ export function buildAgentAppIntentSystemPrompt(
     ? match.expectedObjects.join(", ")
     : "manifest 声明的业务对象";
   return [
-    "本轮请求已命中已安装 Agent App 的 manifest intent。",
+    "本轮请求已命中 Agent App manifest intent。",
     `Agent App: ${match.appName} (${match.appId})`,
     `Intent: ${match.intentKey}`,
     match.taskKind ? `Task kind: ${match.taskKind}` : null,

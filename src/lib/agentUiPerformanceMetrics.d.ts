@@ -97,6 +97,15 @@ declare global {
     __LIME_AGENTUI_PERF__?: AgentUiPerformanceApi;
   }
 }
+export declare const AGENT_UI_PERFORMANCE_METRIC_RECORDED_EVENT =
+  "lime:agent-ui-performance-metric-recorded";
+export interface AgentUiPerformanceMetricRecordedDetail {
+  id: number;
+  phase: string;
+  sessionId?: string | null;
+  source?: string | null;
+  workspaceId?: string | null;
+}
 export declare function summarizeAgentUiPerformanceMetrics(): AgentUiPerformanceSnapshot;
 export declare function clearAgentUiPerformanceMetrics(): void;
 export declare function getAgentUiPerformanceMetrics(): AgentUiPerformanceEntry[];
@@ -104,4 +113,7 @@ export declare function recordAgentUiPerformanceMetric(
   phase: string,
   context?: Record<string, unknown>,
 ): AgentUiPerformanceEntry;
+export declare function subscribeAgentUiPerformanceMetricRecorded(
+  listener: (detail: AgentUiPerformanceMetricRecordedDetail) => void,
+): () => void;
 export declare function installAgentUiPerformanceApi(): AgentUiPerformanceApi | null;

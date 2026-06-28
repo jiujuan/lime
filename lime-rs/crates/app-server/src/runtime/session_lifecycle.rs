@@ -376,7 +376,10 @@ impl RuntimeCore {
             .sessions
             .get(&params.session_id)
             .ok_or_else(|| RuntimeCoreError::SessionNotFound(params.session_id.clone()))?;
-        let detail = read_model::runtime_session_read_detail(stored);
+        let detail = read_model::runtime_session_read_detail_with_options(
+            stored,
+            read_model::ReadDetailOptions::from_params(&params),
+        );
 
         Ok(AgentSessionReadResponse {
             session: stored.session.clone(),
@@ -510,7 +513,10 @@ impl RuntimeCore {
 
         if let Some(projection_store) = self.projection_store.as_ref() {
             if projection_store
-                .read_session_projection(&session_id)
+                .read_session_projection(
+                    &session_id,
+                    super::projection_store::ProjectionReadWindow::default(),
+                )
                 .map_err(RuntimeCoreError::Backend)?
                 .is_some()
             {

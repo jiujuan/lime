@@ -23,7 +23,11 @@ import {
   buildArtifactFromWrite,
   resolveDefaultArtifactViewMode,
 } from "../utils/messageArtifacts";
-import { shouldKeepGeneralArtifactInBackground } from "./generalArtifactAutoSelection";
+import {
+  shouldKeepGeneralArtifactInBackground,
+  shouldOpenGeneralArtifactCanvas,
+} from "./generalArtifactAutoSelection";
+import { openCanvasForReason } from "./canvasOpenPolicy";
 import {
   MAX_PERSISTED_DOCUMENT_VERSIONS,
   isGeneralWorkbenchPrimaryDocumentArtifact,
@@ -172,6 +176,8 @@ export function useWorkspaceWriteFileAction({
   upsertGeneralArtifact,
   setSelectedArtifactId,
   setArtifactViewMode,
+  setLayoutMode,
+  suppressCanvasAutoOpen,
   completeStep,
   setTaskFiles,
   setSelectedFileId,
@@ -281,6 +287,12 @@ export function useWorkspaceWriteFileAction({
             }),
             { artifactId: nextArtifact.id },
           );
+          if (
+            !suppressCanvasAutoOpen &&
+            shouldOpenGeneralArtifactCanvas(nextArtifact, context)
+          ) {
+            openCanvasForReason("runtime_write", setLayoutMode);
+          }
         }
         return;
       }
@@ -610,10 +622,12 @@ export function useWorkspaceWriteFileAction({
       setArtifactViewMode,
       setCanvasState,
       setDocumentVersionStatusMap,
+      setLayoutMode,
       setSelectedArtifactId,
       setSelectedFileId,
       setTaskFiles,
       socialStageLogRef,
+      suppressCanvasAutoOpen,
       syncGeneralArtifactToResource,
       taskFilesRef,
       themeWorkbenchActiveQueueItem,

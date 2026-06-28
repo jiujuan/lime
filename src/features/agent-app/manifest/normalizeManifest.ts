@@ -6,6 +6,7 @@ import type {
   NormalizedAppManifest,
   NormalizedRequires,
   RuntimeTarget,
+  WorkflowDeclaration,
 } from "../types";
 import { normalizeInstallContract } from "../install-mode";
 
@@ -123,6 +124,30 @@ function normalizeProfiles(manifest: AppManifest): AgentAppProfile[] {
   return Array.from(profiles);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function readRuntimeWorkflows(agentRuntime: unknown): WorkflowDeclaration[] {
+  const runtime = isRecord(agentRuntime) ? agentRuntime : undefined;
+  return Array.isArray(runtime?.workflows)
+    ? (runtime.workflows as WorkflowDeclaration[])
+    : [];
+}
+
+function normalizeWorkflows(manifest: AppManifest): WorkflowDeclaration[] {
+  const seen = new Set<string>();
+  return [...(manifest.workflows ?? []), ...readRuntimeWorkflows(manifest.agentRuntime)]
+    .filter((workflow) => {
+      const key = typeof workflow.key === "string" ? workflow.key.trim() : "";
+      if (!key || seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+}
+
 export function normalizeManifest(
   manifest: AppManifest,
 ): NormalizedAppManifest {
@@ -173,7 +198,8 @@ export function normalizeManifest(
     artifacts: manifest.artifactTypes ?? manifest.artifacts ?? [],
     policies: manifest.policies ?? [],
     services: manifest.services ?? [],
-    workflows: manifest.workflows ?? [],
+    workflows: normalizeWorkflows(manifest),
+    subagents: manifest.subagents ?? [],
     skillRefs: manifest.skillRefs ?? [],
     toolRefs: manifest.toolRefs ?? [],
     evals: manifest.evals ?? [],
@@ -190,6 +216,9 @@ export function normalizeManifest(
     workbench: manifest.workbench,
     distribution: manifest.distribution,
     presentation: manifest.presentation,
+    componentPaths: manifest.componentPaths,
+    interface: manifest.interface,
+    activationEntries: manifest.activationEntries,
     agentRuntime: manifest.agentRuntime,
     requirements: manifest.requirements,
     boundary: manifest.boundary,

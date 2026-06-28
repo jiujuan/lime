@@ -81,20 +81,48 @@ export interface ServiceDeclaration {
 export interface WorkflowDeclaration {
     key: string;
     path?: string;
+    title?: string;
+    taskKind?: string;
+    triggerIntents?: string[];
+    outputArtifactKind?: string;
+    steps?: unknown[];
     humanReview?: boolean;
     required?: boolean;
 }
 export interface SkillRefDeclaration {
     id: string;
+    title?: string;
+    description?: string;
+    path?: string;
     standard?: string;
     activation?: string;
     required?: boolean;
 }
 export interface ToolRefDeclaration {
     key: string;
+    title?: string;
+    description?: string;
     provider?: string;
+    path?: string;
     capabilities?: string[];
     required?: boolean;
+}
+export interface ComponentPathsDeclaration {
+    agents?: string;
+    skills?: string;
+    cli?: string;
+    hooks?: string;
+    apps?: string;
+    mcpServers?: string | Record<string, unknown>;
+    [key: string]: unknown;
+}
+export interface SubagentDeclaration {
+    id: string;
+    title?: string;
+    description?: string;
+    activation?: string;
+    required?: boolean;
+    skills?: string[];
 }
 export interface EvalDeclaration {
     key: string;
@@ -164,6 +192,7 @@ export interface AppManifest {
     policies?: PolicyDeclaration[];
     services?: ServiceDeclaration[];
     workflows?: WorkflowDeclaration[];
+    subagents?: SubagentDeclaration[];
     skillRefs?: SkillRefDeclaration[];
     toolRefs?: ToolRefDeclaration[];
     evals?: EvalDeclaration[];
@@ -173,7 +202,13 @@ export interface AppManifest {
     ui?: UiDeclaration;
     lifecycle?: LifecycleDeclaration;
     install?: unknown;
+    profiles?: AgentAppProfile[] | string[];
+    workbench?: WorkbenchDeclaration;
+    distribution?: AgentAppDistributionDeclaration;
     presentation?: AgentAppPresentation;
+    componentPaths?: ComponentPathsDeclaration;
+    interface?: unknown;
+    activationEntries?: unknown[];
     agentRuntime?: unknown;
     requirements?: unknown;
     boundary?: unknown;
@@ -241,6 +276,7 @@ export interface NormalizedAppManifest {
     policies: PolicyDeclaration[];
     services: ServiceDeclaration[];
     workflows: WorkflowDeclaration[];
+    subagents: SubagentDeclaration[];
     skillRefs: SkillRefDeclaration[];
     toolRefs: ToolRefDeclaration[];
     evals: EvalDeclaration[];
@@ -250,7 +286,13 @@ export interface NormalizedAppManifest {
     ui?: UiDeclaration;
     lifecycle: LifecycleDeclaration;
     install: NormalizedAgentAppInstallContract;
+    profiles: AgentAppProfile[];
+    workbench?: WorkbenchDeclaration;
+    distribution?: AgentAppDistributionDeclaration;
     presentation?: AgentAppPresentation;
+    componentPaths?: ComponentPathsDeclaration;
+    interface?: unknown;
+    activationEntries?: unknown[];
     agentRuntime?: unknown;
     requirements?: unknown;
     boundary?: unknown;
@@ -802,7 +844,7 @@ export interface AgentAppTaskKnowledgeBinding {
 export type AgentAppApprovalPolicy = "never" | "on-request" | "on-failure" | "untrusted";
 export type AgentAppSandboxPolicy = "read-only" | "workspace-write" | "danger-full-access";
 export type AgentAppExecutionStrategy = "react";
-export type AgentAppWebSearchMode = "disabled" | "allowed" | "required";
+export type AgentAppWebSearchMode = "disabled" | "auto" | "required";
 export interface AgentAppProviderConfig {
     provider_id?: string;
     provider_name: string;

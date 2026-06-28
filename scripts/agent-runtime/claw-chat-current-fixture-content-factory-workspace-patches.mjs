@@ -58,6 +58,64 @@ export function buildContentFactoryWorkspacePatch(workspace) {
           artifactIds: [CONTENT_FACTORY_PRODUCT_PROFILE_ARTICLE_ARTIFACT_ID],
           markdown:
             "# 内容工厂首版文章\n\n这是由 Agent App worker 写回的公众号文章草稿。",
+          researchRounds: [
+            {
+              id: "research-1",
+              title: "检索行业背景",
+              query: "AI Agent 写作工作流",
+              status: "completed",
+              summary: "整理内容工厂和子流程编排的行业背景。",
+              citations: ["citation-1", "citation-2"],
+            },
+          ],
+          titleCandidates: [
+            {
+              id: "title-1",
+              title: "内容工厂不是聊天框",
+              angle: "产品设计复盘",
+              score: 0.92,
+            },
+          ],
+          outline: [
+            {
+              id: "intro",
+              title: "开场：为什么要把写作变成工作流",
+              purpose: "解释用户目标",
+              points: ["从搜索开始", "通过内容框沉淀产物"],
+              evidenceIds: ["citation-1"],
+            },
+          ],
+          keyTakeaways: ["写作应该经过检索、提纲、正文、配图和复核"],
+          citations: [
+            {
+              id: "citation-1",
+              title: "产品规划文档",
+              sourceType: "internal",
+              summary: "Writing 路线图要求内容框输出和右侧展开。",
+              status: "selected",
+            },
+          ],
+          imageSlots: [
+            {
+              id: "hero",
+              title: "首图",
+              sectionId: "intro",
+              purpose: "解释内容工厂工作流",
+              prompt: "桌面端内容工厂写作流程图，中文标签",
+              status: "planned",
+            },
+          ],
+          writingPlan: [
+            {
+              id: "plan-1",
+              title: "先做资料检索",
+              owner: "research-writer",
+              skillRef: "article-research",
+              output: "结构化资料卡",
+              done: true,
+            },
+          ],
+          reviewNotes: ["正文需要保留真实引用来源。"],
           evidenceIds: ["evidence-article-1"],
         },
       },

@@ -1,8 +1,8 @@
 # Claw Trace 系统实施全过程计划
 
-> 状态：active / S30 alert channel control in progress
+> 状态：active / S43 remains in_progress; S46 Workspace Trace adaptive layout completed
 > 创建时间：2026-06-27
-> 更新时间：2026-06-27
+> 更新时间：2026-06-28
 > 关联路线图：`internal/roadmap/trace/README.md`
 > 关联图：`internal/roadmap/agentui/images/agentui-stream-latency-map-20260509.svg`
 
@@ -20,6 +20,11 @@
 2. 再补 provider phase、Developer UI、support bundle、OTEL / W3C 传播等细节。
 3. 每一刀只做能推进体系闭环的改动，不把局部首字优化、临时日志、UI polish 当成阶段完成。
 4. 每次修改实现前先更新本计划的状态、写集和下一刀；实现后回写进度、验证结果和剩余缺口。
+
+Trace 诊断必须同时满足两类消费者：
+
+- JSON / JSONL evidence 给 AI、自动化校验、support bundle 和离线分析消费，保持 summary-only、可解析、可复制。
+- Developer UI / 工作台 Trace Tab 给人消费，必须提供分段、timeline、慢段、缺失 phase、baseline 对比和归因摘要；不能把 raw JSON dump 当作人类调试体验。
 
 允许并鼓励按 Codex 的实现方式重构 Lime 当前不合理的局部结构：
 
@@ -40,39 +45,66 @@
 
 ## 4. 当前阶段总览
 
-| 阶段                                | 状态      | 目标                                                                                                               | 退出条件                                                                                                                                                           |
-| ----------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| S0 计划与边界冻结                   | completed | 建立全过程计划、冻结 Harness 边界、确定骨架优先顺序                                                                | 本文件创建并纳入 README 导航                                                                                                                                       |
-| S1 Trace 合同骨架                   | completed | 定义 trace config、trace id、span/event envelope、Noop recorder                                                    | 默认关闭时无运行开销；开关与 metadata 可单测                                                                                                                       |
-| S2 Renderer 最小 checkpoint         | completed | submit / received / applied / flush / first paint 分段                                                             | 本地输出链路能生成 summary，不依赖 provider                                                                                                                        |
-| S3 App Server 最小 checkpoint       | completed | request received / message.delta emitted / terminal checkpoint                                                     | 可计算 App Server emit 到 renderer receive 的桥接段                                                                                                                |
-| S4 Latency Map 与 evidence          | completed | 更新 SVG，把 provider/API 与 Lime 本地输出拆开                                                                     | 图与 trace summary 口径一致                                                                                                                                        |
-| S5 Provider phase 细节              | completed | Aster provider first event / first text delta / failed / canceled                                                  | provider_wait_ms 与 client_local_ms 分开                                                                                                                           |
-| S6 Developer 调试闭环               | completed | 前端 summary projector、Developer & Labs 开关、compact 导出、support bundle、保留策略                              | summary 可区分 provider/API 与客户端本地输出；开启后可导出 compact history；默认关闭；清理不影响 session                                                           |
-| S7 回归闭环                         | completed | fixture / GUI smoke / contract guard                                                                               | current fixture 生成 trace evidence 并通过                                                                                                                         |
-| S8 App Server raw trace store       | completed | 内部 append-only JSONL、summary-only redaction、session retention、writer 热路径收敛                               | 不新增 JSON-RPC；不写 prompt / provider payload / assistant text；同一 trace seq 由 writer 状态递增                                                                |
-| S9 raw trace read/list API          | completed | 通过 current App Server diagnostics API 读取 summary-only trace 列表和事件                                         | 同步 protocol / client / frontend gateway / Developer UI；不引入 mock fallback；不导出敏感 payload                                                                 |
-| S10 support bundle summary          | completed | 支持包默认包含 trace-store summary，不默认导出 raw JSONL 正文                                                      | trace store 作为 JSONL schema / parser owner；support bundle 只导出 summary-only 文件清单和计数                                                                    |
-| S11 selective trace export          | completed | 通过显式开发者动作导出单条 summary-only trace zip                                                                  | 默认 support bundle 仍只带 summary；zip 重序列化 safe event，不复制原始 JSONL 字节；同步 protocol/client                                                           |
-| S12 fixture export evidence         | completed | 真实 Electron fixture 验证 diagnostics trace list/read/export 闭环                                                 | summary 证明 provider/app_server checkpoint、summary-only export 和 current method 均成立                                                                          |
-| S13 support bundle trace opt-in     | completed | 支持包可由开发者显式附带单条 summary-only trace export zip                                                         | 默认支持包行为不变；显式参数复用 trace export 语义；manifest/README 清楚声明不包含 raw payload                                                                     |
-| S14 span diagnostics                | completed | 从 summary-only trace events 投影慢段和缺失 phase，帮助开发者定位客户端/服务端慢点                                 | 不新增协议；不读取 raw payload；Developer UI 能展示 slow segments / phase gaps                                                                                     |
-| S15 support bundle fixture          | completed | 真实 Electron fixture 验证 support bundle trace opt-in 使用 current App Server trace root                          | `diagnostics/supportBundle/export` 出现在 method list；support bundle 附带 summary-only trace zip 且不含 raw JSONL                                                 |
-| S16 W3C trace context carrier       | completed | 参考 Codex carrier 边界，让 renderer -> App Server -> trace evidence 保留合法 W3C `traceparent`                    | 不替代 Lime 内部 trace id；非法 carrier 不传播；summary-only trace metrics 可关联 W3C trace id；后续 OTEL exporter 另起阶段                                        |
-| S17 App Server request span         | completed | 参考 Codex `app_server_tracing::request_span`，在 JSON-RPC request 边界建立可关联 span                             | `agentSession/turn/start` 进入 `app_server.request` span；span 记录安全 trace/session/turn/W3C 字段；不新增命令面、不引入 mock                                     |
-| S18 OTEL exporter / remote parent   | completed | 接入真实 OpenTelemetry exporter 与 W3C remote parent                                                               | App Server 一等 OTEL 依赖、subscriber/exporter 配置、测试 exporter 证明 trace id / parent span id 继承                                                             |
-| S19 provider W3C header propagation | completed | 参考 Codex HTTP trace header 注入，把合法 W3C carrier 从 App Server turn context 传到 provider HTTP 请求           | `traceparent/tracestate` 只在合法 carrier 下进入 provider HTTP header；非法 carrier 不注入；不依赖 OTEL exporter 开启；不记录 prompt/provider payload              |
-| S20 provider request id correlation | completed | 参考 Codex `upstream_request_id` / response debug context，将 provider response header request id 关联到本地 trace | 只提取 header-safe request id；经 `ProviderTraceEvent` 进入 RuntimeEvent 与 summary-only trace metrics；不记录 provider body、prompt、assistant delta 或 raw JSONL |
-| S21 Developer trace drilldown       | completed | 在 Developer UI 中提供 summary-only timeline filter 与 selected event detail，帮助定位慢段和缺失 phase             | 不新增 App Server method；只消费 `diagnostics/trace/read` summary-only events；五语言文案与 UI 回归同步                                                            |
-| S22 Developer span drilldown        | completed | 让 Developer UI 的 phase span 成为可点击诊断对象，可直接定位该 span 内的 summary-only events                       | 不新增 App Server method；span key / rows helper 落在 `clawTraceTimeline.ts`；React 只维护选择状态；不读取 raw payload；五语言文案与 UI 回归同步                   |
-| S23 Trace compare baseline          | completed | 基于 compact Trace history 建立当前 summary 与最近 baseline 的轻量回归对比                                         | 不新增 App Server method；只消费 compact summary/history；compare projector 落在 `src/lib/trace`；不读取 raw entries / prompt / provider payload                   |
-| S24 App Server Trace compare        | completed | 基于 `diagnostics/trace/read` summary-only events 比较最近 Trace 与上一条 Trace 的 provider/App Server 分段        | 不新增 App Server method；显式加载 timeline 时才读取最多两条 trace；compare projector 落在 `src/lib/trace`；不读取 raw payload / prompt / assistant delta text     |
-| S25 compact long-term baseline      | completed | 从 compact Trace history 选择 retained window 的长期 baseline，避免 baseline 随最近慢样本漂移                      | 不新增 App Server method；只消费 `agentUiPerformanceTraceHistory` compact summary；UI 展示 baseline window；不读取 raw entries / prompt / provider payload         |
-| S26 App Server retained baseline    | completed | 从 App Server retained trace window 选择长期 baseline，避免最近慢 trace 成为 compare baseline                      | 显式加载 timeline 时只读取最新 / 最早两条 summary-only trace 详情；不读取中间 trace、raw payload、prompt、assistant delta text 或 `tracestate`                     |
-| S27 regression evidence attribution | completed | 合并 compact client 分段与 App Server provider/API 分段，输出首字回退归因报告                                      | projector 落在 `src/lib/trace`；`rootDurationMs` 不进入归因 totals；打开 Developer 设置页本身不查询 App Server                                                     |
-| S28 manual regression trend history | completed | 手动保存 / 复制 / 清空 retained regression report，用于跨运行追踪归因变化                                          | localStorage retained window 只保存 summary-only report、verdict、owner totals、segment delta 和 window 计数；不做后台自动采集                                     |
-| S29 regression alert projection     | completed | 基于当前 regression report 与手动 retained trend 投影开发者告警状态                                                | 不新增 App Server method；不后台采集；不保存新数据；告警阈值与 repeated owner 判断落在纯 projector；Developer UI 只展示 summary-only alert                         |
-| S30 alert channel control           | in_progress | 为 regression alert 增加 Developer 显式开关，并把 Claw Trace 顶部配置控件从中心面板拆出                             | 不新增 App Server method；不后台采集；`alert_enabled` 默认关闭；中心面板不继续膨胀，抽出的控件只负责配置 UI                                                         |
+| 阶段                                     | 状态        | 目标                                                                                                                                                | 退出条件                                                                                                                                                                |
+| ---------------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S0 计划与边界冻结                        | completed   | 建立全过程计划、冻结 Harness 边界、确定骨架优先顺序                                                                                                 | 本文件创建并纳入 README 导航                                                                                                                                            |
+| S1 Trace 合同骨架                        | completed   | 定义 trace config、trace id、span/event envelope、Noop recorder                                                                                     | 默认关闭时无运行开销；开关与 metadata 可单测                                                                                                                            |
+| S2 Renderer 最小 checkpoint              | completed   | submit / received / applied / flush / first paint 分段                                                                                              | 本地输出链路能生成 summary，不依赖 provider                                                                                                                             |
+| S3 App Server 最小 checkpoint            | completed   | request received / message.delta emitted / terminal checkpoint                                                                                      | 可计算 App Server emit 到 renderer receive 的桥接段                                                                                                                     |
+| S4 Latency Map 与 evidence               | completed   | 更新 SVG，把 provider/API 与 Lime 本地输出拆开                                                                                                      | 图与 trace summary 口径一致                                                                                                                                             |
+| S5 Provider phase 细节                   | completed   | Aster provider first event / first text delta / failed / canceled                                                                                   | provider_wait_ms 与 client_local_ms 分开                                                                                                                                |
+| S6 Developer 调试闭环                    | completed   | 前端 summary projector、Developer & Labs 开关、compact 导出、support bundle、保留策略                                                               | summary 可区分 provider/API 与客户端本地输出；开启后可导出 compact history；默认关闭；清理不影响 session                                                                |
+| S7 回归闭环                              | completed   | fixture / GUI smoke / contract guard                                                                                                                | current fixture 生成 trace evidence 并通过                                                                                                                              |
+| S8 App Server raw trace store            | completed   | 内部 append-only JSONL、summary-only redaction、session retention、writer 热路径收敛                                                                | 不新增 JSON-RPC；不写 prompt / provider payload / assistant text；同一 trace seq 由 writer 状态递增                                                                     |
+| S9 raw trace read/list API               | completed   | 通过 current App Server diagnostics API 读取 summary-only trace 列表和事件                                                                          | 同步 protocol / client / frontend gateway / Developer UI；不引入 mock fallback；不导出敏感 payload                                                                      |
+| S10 support bundle summary               | completed   | 支持包默认包含 trace-store summary，不默认导出 raw JSONL 正文                                                                                       | trace store 作为 JSONL schema / parser owner；support bundle 只导出 summary-only 文件清单和计数                                                                         |
+| S11 selective trace export               | completed   | 通过显式开发者动作导出单条 summary-only trace zip                                                                                                   | 默认 support bundle 仍只带 summary；zip 重序列化 safe event，不复制原始 JSONL 字节；同步 protocol/client                                                                |
+| S12 fixture export evidence              | completed   | 真实 Electron fixture 验证 diagnostics trace list/read/export 闭环                                                                                  | summary 证明 provider/app_server checkpoint、summary-only export 和 current method 均成立                                                                               |
+| S13 support bundle trace opt-in          | completed   | 支持包可由开发者显式附带单条 summary-only trace export zip                                                                                          | 默认支持包行为不变；显式参数复用 trace export 语义；manifest/README 清楚声明不包含 raw payload                                                                          |
+| S14 span diagnostics                     | completed   | 从 summary-only trace events 投影慢段和缺失 phase，帮助开发者定位客户端/服务端慢点                                                                  | 不新增协议；不读取 raw payload；Developer UI 能展示 slow segments / phase gaps                                                                                          |
+| S15 support bundle fixture               | completed   | 真实 Electron fixture 验证 support bundle trace opt-in 使用 current App Server trace root                                                           | `diagnostics/supportBundle/export` 出现在 method list；support bundle 附带 summary-only trace zip 且不含 raw JSONL                                                      |
+| S16 W3C trace context carrier            | completed   | 参考 Codex carrier 边界，让 renderer -> App Server -> trace evidence 保留合法 W3C `traceparent`                                                     | 不替代 Lime 内部 trace id；非法 carrier 不传播；summary-only trace metrics 可关联 W3C trace id；后续 OTEL exporter 另起阶段                                             |
+| S17 App Server request span              | completed   | 参考 Codex `app_server_tracing::request_span`，在 JSON-RPC request 边界建立可关联 span                                                              | `agentSession/turn/start` 进入 `app_server.request` span；span 记录安全 trace/session/turn/W3C 字段；不新增命令面、不引入 mock                                          |
+| S18 OTEL exporter / remote parent        | completed   | 接入真实 OpenTelemetry exporter 与 W3C remote parent                                                                                                | App Server 一等 OTEL 依赖、subscriber/exporter 配置、测试 exporter 证明 trace id / parent span id 继承                                                                  |
+| S19 provider W3C header propagation      | completed   | 参考 Codex HTTP trace header 注入，把合法 W3C carrier 从 App Server turn context 传到 provider HTTP 请求                                            | `traceparent/tracestate` 只在合法 carrier 下进入 provider HTTP header；非法 carrier 不注入；不依赖 OTEL exporter 开启；不记录 prompt/provider payload                   |
+| S20 provider request id correlation      | completed   | 参考 Codex `upstream_request_id` / response debug context，将 provider response header request id 关联到本地 trace                                  | 只提取 header-safe request id；经 `ProviderTraceEvent` 进入 RuntimeEvent 与 summary-only trace metrics；不记录 provider body、prompt、assistant delta 或 raw JSONL      |
+| S21 Developer trace drilldown            | completed   | 在 Developer UI 中提供 summary-only timeline filter 与 selected event detail，帮助定位慢段和缺失 phase                                              | 不新增 App Server method；只消费 `diagnostics/trace/read` summary-only events；五语言文案与 UI 回归同步                                                                 |
+| S22 Developer span drilldown             | completed   | 让 Developer UI 的 phase span 成为可点击诊断对象，可直接定位该 span 内的 summary-only events                                                        | 不新增 App Server method；span key / rows helper 落在 `clawTraceTimeline.ts`；React 只维护选择状态；不读取 raw payload；五语言文案与 UI 回归同步                        |
+| S23 Trace compare baseline               | completed   | 基于 compact Trace history 建立当前 summary 与最近 baseline 的轻量回归对比                                                                          | 不新增 App Server method；只消费 compact summary/history；compare projector 落在 `src/lib/trace`；不读取 raw entries / prompt / provider payload                        |
+| S24 App Server Trace compare             | completed   | 基于 `diagnostics/trace/read` summary-only events 比较最近 Trace 与上一条 Trace 的 provider/App Server 分段                                         | 不新增 App Server method；显式加载 timeline 时才读取最多两条 trace；compare projector 落在 `src/lib/trace`；不读取 raw payload / prompt / assistant delta text          |
+| S25 compact long-term baseline           | completed   | 从 compact Trace history 选择 retained window 的长期 baseline，避免 baseline 随最近慢样本漂移                                                       | 不新增 App Server method；只消费 `agentUiPerformanceTraceHistory` compact summary；UI 展示 baseline window；不读取 raw entries / prompt / provider payload              |
+| S26 App Server retained baseline         | completed   | 从 App Server retained trace window 选择长期 baseline，避免最近慢 trace 成为 compare baseline                                                       | 显式加载 timeline 时只读取最新 / 最早两条 summary-only trace 详情；不读取中间 trace、raw payload、prompt、assistant delta text 或 `tracestate`                          |
+| S27 regression evidence attribution      | completed   | 合并 compact client 分段与 App Server provider/API 分段，输出首字回退归因报告                                                                       | projector 落在 `src/lib/trace`；`rootDurationMs` 不进入归因 totals；打开 Developer 设置页本身不查询 App Server                                                          |
+| S28 manual regression trend history      | completed   | 手动保存 / 复制 / 清空 retained regression report，用于跨运行追踪归因变化                                                                           | localStorage retained window 只保存 summary-only report、verdict、owner totals、segment delta 和 window 计数；不做后台自动采集                                          |
+| S29 regression alert projection          | completed   | 基于当前 regression report 与手动 retained trend 投影开发者告警状态                                                                                 | 不新增 App Server method；不后台采集；不保存新数据；告警阈值与 repeated owner 判断落在纯 projector；Developer UI 只展示 summary-only alert                              |
+| S30 alert channel control                | completed   | 为 regression alert 增加 Developer 显式开关，并把 Claw Trace 顶部配置控件从中心面板拆出                                                             | 不新增 App Server method；不后台采集；`alert_enabled` 默认关闭；中心面板不继续膨胀，抽出的控件只负责配置 UI                                                             |
+| S31 local alert channel inbox            | completed   | 为 enabled regression alert 增加本地 summary-only retained channel，可复制和清空                                                                    | 不新增 App Server method；不自动查询 App Server；不上传；不保存 raw entries / raw trace JSONL / prompt / provider payload / assistant delta text                        |
+| S32 local notification dispatcher        | completed   | 为本地 alert channel 增加可选桌面通知 dispatcher 骨架                                                                                               | 不新增 App Server / Electron method；`alert_notification_enabled` 默认关闭；只在新写入 summary-only alert 且通知权限已授予时尝试；不自动请求权限；不是最终后台通知      |
+| S33 Electron desktop notification bridge | completed   | 将 trace alert 通知接入 Electron Desktop Host 原生 Notification current 命令                                                                        | 不新增 App Server method；新增 `show_desktop_notification` 壳命令与前端 API 网关；Host 只接受 summary-only title/body/tag/silent；仍不是后台常驻轮询                    |
+| S34 foreground global alert monitor      | completed   | 离开 Developer 设置页后，主应用窗口仍可基于本地 compact summary 持续评估 alert 并触发通知                                                           | 不新增 App Server method；不调用 `diagnostics/trace/list/read`；不做 OS daemon；只监听本地 Agent UI performance summary-only 事件并 debounce 评估                       |
+| S35 notification host test split         | completed   | 参考 Codex 中心文件只做 dispatch 的方式，将 trace alert 桌面通知 Host 逻辑的细节回归从超大 `hostCommands.test.ts` 拆到模块级测试                    | 不新增命令、不改变通知 payload 合同；`hostCommands` 只保留 dispatcher 级 smoke，summary-only 校验与 failure path 落在 `desktopNotificationHost` 模块测试                |
+| S36 project shell host split             | completed   | 参考 Codex 中心文件只做 dispatch 的方式，将 `project_shell_session_*` 状态、poller、drain 和 shutdown dispose 下沉到 Project Shell Host 模块        | 不新增命令、不改前端 API 网关、不新增 App Server method；`hostCommands` 只保留 dispatcher，App Server PTY current 细节由 `projectShellHost` 模块测试守住                |
+| S37 file shell host split                | completed   | 参考 Codex 中心文件只做 dispatch 的方式，将文件预览、Finder/默认应用打开、文件图标和文件管理器位置下沉到 File Shell Host 模块                       | 不新增命令、不改前端 API 网关、不新增 App Server method；`hostCommands` 只保留 dispatcher，文件壳能力细节由 `fileShellHost` 模块测试守住                                |
+| S38 system utility host split            | completed   | 参考 Codex 中心文件只做 dispatch 的方式，将外链、系统设置、快捷键、环境预览、文件关联和浏览器诊断占位下沉到 System Utility Host 模块                | 不新增命令、不改前端 API 网关、不新增 App Server method；`hostCommands` 只保留 dispatcher，系统工具壳能力细节由 `systemUtilityHost` 模块测试守住                        |
+| S39 agent app shell host split           | completed   | 参考 Codex 中心文件只做 dispatch 的方式，将 Agent App 目录选择、shell launch 与 UI runtime lifecycle 下沉到 Agent App Shell Host 模块               | 不新增命令、不改前端 API 网关、不新增 App Server method；`hostCommands` 只保留 dispatcher，Agent App shell / UI runtime current 细节由 `agentAppShellHost` 模块测试守住 |
+| S40 agent app runtime task host split    | completed   | 参考 Codex 中心文件只做 dispatch 的方式，将 Agent App runtime task start/read/cancel/host response 下沉到 Agent App Runtime Task Host 模块          | 不新增命令、不改前端 API 网关、不新增 App Server method；`hostCommands` 只保留 dispatcher；`runWorker=false` 不查询 UI runtime status；模块级测试守住 current 投影      |
+| S41 independent Trace workspace tab      | completed   | 将 Trace 作为与 Harness 并列的一等工作台 Tab，首版展示人类可读的 summary、首字分段、慢段归因、客户端健康和阶段缺口，而不是 Harness 子页或 JSON dump | 不新增协议；只消费现有 compact summary 与 summary-only trace evidence；Harness 不成为 trace schema/采集/开关 owner；Trace Tab 有五语言文案与 UI 回归                    |
+| S42 Trace Tab session selection 收口     | completed   | 让 Trace Tab 默认优先选中同 workspace 的真实 Claw turn session，并在只有历史恢复链路时明确提示“当前不是发送链路”                                    | 不新增协议；只消费现有 compact summary 与 summary-only trace evidence；默认选择不再把 history restore 当成主链；五语言文案与定向测试必须同步完成                        |
+| S43 electron host voice model split      | in_progress | 继续参考 Codex 中心 dispatcher 只做接线的方式，把 `voice_models_*` 本地模型下载/安装/删除/目录读取下沉到独立 `VoiceModelHost`                       | 不新增命令、不改前端 API 网关、不新增 App Server method；`hostCommands` 只保留 dispatcher，voice model 细节回归由 `voiceModelHost` 模块测试守住                         |
+| S44 Trace Tab non-send path UX           | completed   | 将 history restore / unknown 非发送链路从首字发送诊断视图中拆出，只展示可用恢复耗时、session 摘要和 recorded phases，避免整页 `--` 空卡片           | 不新增协议；只消费现有 Agent UI performance compact summary；非发送链路不渲染 first-token split / baseline / regression / coverage 空面板；五语言文案与 UI 回归同步     |
+| S45 Trace Tab recorded phase layout      | completed   | 将 recorded phases 从 raw checkpoint chip 墙改成人类可读的阶段组列表，避免界面直接暴露重复 checkpoint 名称                                          | 不新增协议；raw phase 仍保留在 summary / 复制摘要中；UI 按动作归类展示记录次数；五语言文案与 UI 回归同步                                                                |
+| S46 Workspace Trace adaptive layout      | completed   | 收口 Workspace 右侧 Trace / Right Surface 打开后的自适应宽度，让 Trace 作为辅助诊断栏，不再压缩主对话；同时统一消息列、助手气泡和输入框阅读宽度    | 不新增协议或文案；Right Surface 默认聊天宽度有稳定回归；显式 chatPanelWidth 不被覆盖；消息正文与输入框使用同一宽度 token；定向 UI 回归与 lint 通过                    |
+
+补充收口：
+
+- 工作区默认挂载不再以 `workspacePluginHistoryRestoreProjection` 作为 installed agent apps 预拉条件，改为仅在 `threadRead` 存在 history restore snapshot 时预拉。
+- 普通对话不再默认查询 installed agent apps；保留的查询仅来自显式 `@` 插件激活和历史恢复场景。
+- 工作台 Trace Tab 已区分发送链路与非发送链路：只有 `claw_turn` 展开首字分段、baseline 和 regression；history restore 只展示恢复链路耗时，避免把“非发送路径无首字数据”误呈现为不完整 Trace。
+- S44 验证：`./node_modules/.bin/vitest run "src/components/agent/chat/workspace/WorkspaceTraceTab.test.tsx"` 通过，覆盖 history restore 不渲染 first-token / baseline / regression 空面板；`./node_modules/.bin/eslint` 覆盖 Trace Tab 写集通过；`git diff --check` 覆盖本轮写集通过。
+- S45 收口：Trace Tab 的 recorded phases 不再直接渲染 `messageList.paint` / `agentRuntime.getSession.success` 等 raw checkpoint chip，改为 View Model 投影出的阶段组和记录次数；raw checkpoint 继续保留在 compact summary / 复制摘要中，供 AI 和自动化排查使用。
+- S45 验证：`./node_modules/.bin/vitest run "src/components/agent/chat/workspace/WorkspaceTraceTab.test.tsx"` 通过，覆盖阶段组计数与 UI 不泄露 raw checkpoint；`./node_modules/.bin/eslint "src/components/agent/chat/workspace/workspaceTracePanelModel.ts" "src/components/agent/chat/workspace/WorkspaceTraceTab.tsx" "src/components/agent/chat/workspace/WorkspaceTraceTab.test.tsx"` 通过。
+- S46 收口：Trace / Harness 这类 Right Surface 属于辅助诊断面板，打开后保留主对话作为工作台主任务画布；消息列、助手气泡、inline 输入框和 floating 输入框使用同一自适应阅读宽度事实源 `clamp(900px, 76%, 1280px)`，避免宽屏下正文与输入框错位，或 Trace 打开后主对话被挤成窄列。
+- S46 验证：`./node_modules/.bin/vitest run "src/components/agent/chat/workspace/WorkspaceMainArea.test.tsx" "src/components/agent/chat/components/MessageList.test.tsx" "src/components/agent/chat/components/MessageList.messageActions.test.tsx"` 通过，3 个文件、39 个用例，覆盖 Right Surface 默认聊天宽度、显式宽度不被覆盖、消息列与助手气泡阅读宽度；`./node_modules/.bin/eslint` 覆盖 S46 TS/TSX 写集通过；`git diff --check` 覆盖 S46 写集通过；`npm run verify:gui-smoke` 通过，覆盖 renderer smoke build、Electron host build、App Server sidecar、renderer loaded、app-server initialized、claw workbench shell ready 和 memory settings ready。
 
 ## 5. 事实源与拟写集
 
@@ -93,6 +125,7 @@
 - `src/lib/api/appConfigTypes.ts`
 - `src/lib/developerFeatures.ts`
 - `src/lib/trace/clawTrace.ts`
+- `src/lib/api/desktopNotification.ts`
 - `src/lib/api/agentRuntime/appServerEventStream.ts`
 - `src/lib/api/agentProtocol.ts`
 - `src/hooks/useDeveloperFeatureFlags.ts`
@@ -136,6 +169,17 @@ Aster / agent provider phase：
 - `src/components/settings-v2/system/developer/index.tsx`
 - `src/components/settings-v2/system/developer/ClawTraceSettingsPanel.tsx`
 - `src/components/settings-v2/system/developer/index.test.tsx`
+- `src/components/agent/chat/workspace/WorkspaceTraceTab.tsx`
+- `src/components/agent/chat/workspace/WorkspaceTraceTab.test.tsx`
+- `src/components/agent/chat/workspace/workspaceTracePanelModel.ts`
+- `src/components/agent/chat/components/TaskCenterUtilityToolbar.tsx`
+- `src/components/agent/chat/components/TaskCenterUtilityToolbar.integration.test.tsx`
+- `src/components/agent/chat/workspace/WorkspaceConversationScene.tsx`
+- `src/components/agent/chat/workspace/WorkspaceConversationScene.test.tsx`
+- `src/components/agent/chat/workspace/right-surface/*`
+- `src/components/agent/chat/workspace/workspaceRightSurfaceRuntimeProjection.ts`
+- `src/components/agent/chat/workspace/workspaceRightSurfaceRuntimeProjection.unit.test.ts`
+- `src/i18n/resources/{zh-CN,zh-TW,en-US,ja-JP,ko-KR}/agent.json`
 - `src/lib/crashDiagnosticAgentUiPerformance.ts`
 - `src/lib/agentUiPerformanceTraceHistory.ts`
 - `src/lib/crashDiagnostic.ts`
@@ -148,6 +192,32 @@ Aster / agent provider phase：
 - `src/lib/trace/clawTraceTimeline.test.ts`
 - `src/lib/trace/clawTraceRegressionAlert.ts`
 - `src/lib/trace/clawTraceRegressionAlert.test.ts`
+- `src/lib/trace/clawTraceRegressionAlertChannel.ts`
+- `src/lib/trace/clawTraceRegressionAlertChannel.test.ts`
+- `src/lib/trace/clawTraceRegressionAlertDispatcher.ts`
+- `src/lib/trace/clawTraceRegressionAlertDispatcher.test.ts`
+- `src/lib/trace/clawTraceRegressionAlertNotifier.ts`
+- `src/lib/trace/clawTraceRegressionAlertNotifier.test.ts`
+- `src/lib/trace/clawTraceRegressionAlertMonitor.ts`
+- `src/lib/trace/clawTraceRegressionAlertMonitor.test.ts`
+- `src/lib/trace/clawTraceRegressionAlertPresentation.ts`
+- `src/hooks/useClawTraceRegressionAlertMonitor.ts`
+- `src/hooks/useClawTraceRegressionAlertMonitor.test.tsx`
+- `src/App.tsx`
+- `src/lib/api/desktopNotification.test.ts`
+- `electron/desktopNotificationHost.ts`
+- `electron/desktopNotificationHost.test.ts`
+- `electron/agentAppRuntimeTaskHost.ts`
+- `electron/agentAppRuntimeTaskHost.test.ts`
+- `electron/fileShellHost.ts`
+- `electron/fileShellHost.test.ts`
+- `electron/projectShellHost.ts`
+- `electron/projectShellHost.test.ts`
+- `electron/electronRuntime.ts`
+- `electron/hostCommands.ts`
+- `electron/hostCommands.test.ts`
+- `electron/ipcChannels.ts`
+- `electron/ipcChannels.test.ts`
 - `src/lib/api/agentProtocol.test.ts`
 - `src/lib/api/agentRuntime/threadClient.test.ts`
 - `src/components/agent/chat/hooks/agentStreamUserInputSendPreparation.test.ts`
@@ -170,6 +240,10 @@ Aster / agent provider phase：
 - `src/lib/api/agentProtocol.ts` 当前约 `2180` 行，已超过仓库体量边界。本轮 S20 只同步 provider trace request id 字段，没有做协议 parser 拆分。
 - 风险：AgentEvent parser、envelope normalization、provider trace projection 与多类事件 normalization 混在同一文件，后续每次新增诊断字段都要触碰超大网关。
 - 下一次拆分入口：把 provider trace parser / runtime envelope helpers 拆到 `src/lib/api/agentProtocolProviderTrace.ts` 或同目录子模块；退出条件是 `agentProtocol.ts` 降到 `1000` 行以下，现有 `agentProtocol.test.ts` 继续覆盖导出 API。
+- `electron/hostCommands.ts` 当前约 `2221` 行，仍超过仓库体量边界。S33 已把通知 payload 校验、限长与发送逻辑拆到 `electron/desktopNotificationHost.ts`；S36 已把 Project Shell PTY 会话状态、poller、drain 和 shutdown dispose 拆到 `electron/projectShellHost.ts`；S37 已把文件预览、Finder/默认应用打开、文件图标和文件管理器位置拆到 `electron/fileShellHost.ts`；S38 已把系统工具能力拆到 `electron/systemUtilityHost.ts`；S39 已把 Agent App shell / UI runtime lifecycle 拆到 `electron/agentAppShellHost.ts`；S40 已把 Agent App runtime task start/read/cancel/host response 拆到 `electron/agentAppRuntimeTaskHost.ts`；S43 正在把 voice model 本地文件壳能力拆到 `electron/voiceModelHost.ts`。
+- 风险：Electron Host 本地壳能力仍混在单个大 dispatcher；继续追加壳能力会放大命令边界回归面。
+- S35 已先把通知 Host 细节回归拆到 `electron/desktopNotificationHost.test.ts`，`hostCommands.test.ts` 只保留 dispatcher smoke，避免超大 host command 测试继续承接 summary-only payload 校验。
+- 下一次拆分入口：继续按本地壳能力领域把 layered design export 等剩余大块分拆到独立 Host 模块，中心文件只保留命令 dispatch；退出条件是新增 Desktop Host 壳能力不再直接增长 `hostCommands.ts`。
 
 ## 6. 骨架完成定义
 
@@ -621,7 +695,7 @@ npm run smoke:agent-runtime-current-fixture
 - 完成 S28 manual regression trend history：
   - 新增 `clawTraceRegressionTrend.ts`，提供 save/list/overview/export/clear；损坏历史数据 fail closed。
   - `ClawTraceRegressionReportCard` 增加 Save regression evidence / Copy regression trend / Clear regression trend 显式动作，并展示已保存 report 数量和最近 verdict。
-  - `ClawTraceSettingsPanel.tsx` 当前 780 行，仍低于 800 行预警线；trend 逻辑没有塞回中心文件。
+  - `ClawTraceSettingsPanel.tsx` 在 S28 时为 780 行，仍低于 800 行预警线；trend 逻辑没有塞回中心文件。
   - 五语言 `settings.json` 补齐 trend action / toast 文案；UI 回归覆盖保存、复制、清空 trend，并断言导出不包含 raw provider payload。
 - 验证通过：`npx vitest run "src/lib/trace/clawTraceRegressionTrend.test.ts" "src/lib/trace/clawTraceRegressionReport.test.ts" "src/lib/trace/clawTraceAppServerComparison.test.ts" "src/lib/trace/clawTraceBaseline.test.ts" "src/lib/trace/clawTraceTimeline.test.ts" "src/components/settings-v2/system/developer/index.test.tsx"`，6 个文件、37 个用例通过。
 - 验证通过：`npx eslint "src/lib/trace/clawTraceRegressionTrend.ts" "src/lib/trace/clawTraceRegressionTrend.test.ts" "src/components/settings-v2/system/developer/ClawTraceRegressionReportCard.tsx" "src/components/settings-v2/system/developer/ClawTraceSettingsPanel.tsx" "src/components/settings-v2/system/developer/index.test.tsx" --max-warnings 0`。
@@ -641,6 +715,207 @@ npm run smoke:agent-runtime-current-fixture
 - 验证通过：`npx eslint "src/lib/trace/clawTraceRegressionAlert.ts" "src/lib/trace/clawTraceRegressionAlert.test.ts" "src/components/settings-v2/system/developer/ClawTraceRegressionReportCard.tsx" "src/components/settings-v2/system/developer/ClawTraceSettingsPanel.tsx" "src/components/settings-v2/system/developer/index.test.tsx" --max-warnings 0`。
 - 验证通过：`npx prettier --check` 覆盖 S29 trace projector / Developer UI / 五语言 settings / trace 文档 / 执行计划写集；`git diff --check` 覆盖本轮 trace 写集；`rg -n "[ \t]+$"` 覆盖未跟踪 alert 新文件和文档，未发现尾随空白。
 - 验证通过：`npm run test:contracts`。命令输出仍提示本地 ignored `scripts/__pycache__` / `.pyc` 存在但不会提交，退出码为 `0`；本轮未新增 App Server method，contract guard 用于确认 current diagnostics trace / docs boundary 未漂移。
+- 开始 S30 alert channel control：
+  - 决策：S29 的 alert 仍只是 Developer 侧 summary-only projector；S30 增加显式 `developer.claw_trace.alert_enabled`，默认关闭，避免打开 Developer 设置页就评估 watch / warning / critical。
+  - 决策：alert channel 只控制当前面板是否计算 alert，不影响 Claw Trace 采集开关、不触发后台采集、不自动保存 trend、不新增 App Server method。
+  - 决策：`ClawTraceSettingsPanel.tsx` 已接近 800 行预警线，先把 trace enabled / level / sample_rate / alert channel 配置 UI 拆到独立组件，中心面板继续只做保存接线和数据装配。
+- 完成 S30 alert channel control：
+  - `ClawTraceConfig` 与 `normalizeDeveloperConfig` 支持 `alert_enabled`，默认值为 `false`，显式开启才允许 regression card 评估 alert。
+  - 新增 `ClawTraceConfigControls.tsx`，承接 trace enabled / level / sample_rate / alert channel 配置 UI；保存逻辑仍由 `ClawTraceSettingsPanel` 注入。
+  - `ClawTraceRegressionReportCard` 增加 `alertEnabled` 输入；关闭时只展示关闭态，不调用 `projectClawTraceRegressionAlert`。
+  - 五语言 `settings.json` 补齐 alert channel 和关闭态文案；Developer UI 回归覆盖 alert channel 保存 `developer.claw_trace.alert_enabled=true`。
+  - `ClawTraceSettingsPanel.tsx` 当前 734 行，低于 800 行预警线；`ClawTraceConfigControls.tsx` 117 行，`ClawTraceRegressionReportCard.tsx` 405 行。
+- 验证通过：`npx vitest run "src/lib/developerFeatures.test.ts" "src/components/settings-v2/system/developer/index.test.tsx" "src/lib/trace/clawTraceRegressionAlert.test.ts"`，3 个文件、36 个用例通过。
+- 验证通过：`npx eslint "src/lib/api/appConfigTypes.ts" "src/lib/developerFeatures.ts" "src/lib/developerFeatures.test.ts" "src/components/settings-v2/system/developer/ClawTraceConfigControls.tsx" "src/components/settings-v2/system/developer/ClawTraceSettingsPanel.tsx" "src/components/settings-v2/system/developer/ClawTraceRegressionReportCard.tsx" "src/components/settings-v2/system/developer/index.test.tsx" --max-warnings 0`。
+- 验证通过：`npm run test:contracts`。命令输出仍提示本地 ignored `scripts/__pycache__` / `.pyc` 存在但不会提交，退出码为 `0`；本轮未新增 App Server method，contract guard 用于确认 current diagnostics trace / docs boundary 未漂移。
+- 验证通过：`npx prettier --check` 覆盖 S30 TS/TSX、五语言 settings、trace 文档与执行计划写集；`git diff --check` 覆盖 S30 写集。
+- 验证未执行：`npm run verify:gui-smoke`。S30 只改 Developer 设置页显式配置、前端纯投影开关和文档，不改 Claw streaming 热路径、Electron bridge 或 App Server runtime 行为；本轮以定向 Vitest、ESLint、Prettier、diff 与 contract 作为最低门槛，后续触达主聊天 GUI 或 bridge 时再补 GUI smoke。
+- 开始 S31 local alert channel inbox：
+  - 决策：S30 只有显式开关，缺少真正可复制 / 可清理的告警通道记录；S31 先补 Developer 本地 retained inbox，不进入 App Server 后台查询或系统通知。
+  - 决策：告警通道只在 `developer.claw_trace.alert_enabled=true` 且当前 panel 已有 watch / warning / critical 投影时写入；不保存 `none`，相同 alert/report fingerprint 去重。
+  - 决策：通道只保存 alert、report verdict、owner totals、evidence sources 和窗口计数等 summary-only 字段；不保存 segments 以外 raw evidence、不保存 raw trace JSONL、prompt、provider payload、assistant delta text 或 `tracestate`。
+- 完成 S31 local alert channel inbox：
+  - 新增 `clawTraceRegressionAlertChannel.ts`，提供 list / overview / record / export / clear；retention 固定为最近 20 条 / 7 天。
+  - `ClawTraceRegressionReportCard` 在 alert channel 开启且有 actionable alert 时写入本地 channel，并展示 channel count / latest severity / retention policy。
+  - Developer UI 增加 Copy alert channel / Clear alert channel 显式动作；复制内容标记 `mode=summary_only_alert`，清空只删除本地 alert channel，不影响 trend/history/session。
+  - 五语言 `settings.json` 补齐 alert channel 状态、retention、动作和成功 / 失败反馈文案。
+- 验证通过：`npx vitest run "src/lib/trace/clawTraceRegressionAlertChannel.test.ts" "src/lib/trace/clawTraceRegressionAlert.test.ts" "src/components/settings-v2/system/developer/index.test.tsx"`，3 个文件、33 个用例通过。
+- 验证通过：`npx eslint "src/lib/trace/clawTraceRegressionAlertChannel.ts" "src/lib/trace/clawTraceRegressionAlertChannel.test.ts" "src/lib/trace/clawTraceRegressionAlert.ts" "src/components/settings-v2/system/developer/ClawTraceRegressionReportCard.tsx" "src/components/settings-v2/system/developer/index.test.tsx" --max-warnings 0`。
+- 验证通过：`npx prettier --check` 覆盖 S31 TS/TSX、五语言 settings、trace roadmap 与执行计划写集；`git diff --check` 覆盖 S31 写集；`rg -n "[ \t]+$"` 覆盖 S31 写集，未发现尾随空白。
+- 验证通过：`npm run test:contracts`。命令输出仍提示本地 ignored `scripts/__pycache__` / `.pyc` 存在但不会提交，退出码为 `0`；本轮未新增 App Server method，contract guard 用于确认 current diagnostics trace / docs boundary 未漂移。
+- 行数复核：`ClawTraceSettingsPanel.tsx` 734 行，`ClawTraceConfigControls.tsx` 117 行，`ClawTraceRegressionReportCard.tsx` 536 行，`clawTraceRegressionAlertChannel.ts` 522 行，均低于 800 行预警线。
+- 验证未执行：`npm run verify:gui-smoke`。S31 只改 Developer 设置页诊断卡、本地 summary-only retained channel 和文案，不改 Claw streaming 热路径、Electron bridge 或 App Server runtime 行为；本轮以定向 Vitest、ESLint、Prettier、diff 与 contract 作为最低门槛，后续触达主聊天 GUI 或 bridge 时再补 GUI smoke。
+- 开始 S32 local notification dispatcher：
+  - 决策：S32 先补本地 notification dispatcher 骨架，不直接接 Electron 原生通知、不新增 App Server method、不做常驻后台轮询。
+  - 决策：新增 `developer.claw_trace.alert_notification_enabled`，默认关闭；`alert_enabled` 仍是 alert channel 总闸门，通知开关不能让关闭态告警后台采集或写入。
+  - 决策：通知只在新写入 summary-only alert channel record 时尝试；相同 fingerprint 命中 existing record 时不重复通知。
+  - 决策：浏览器 Notification adapter 不调用 `requestPermission`；只有既有权限为 `granted` 时才发送，`default / denied / unsupported` 都只返回状态，不弹权限请求。
+- 完成 S32 local notification dispatcher：
+  - 新增 `clawTraceRegressionAlertDispatcher.ts`，统一处理 alert gate、channel 写入、duplicate 判断、通知尝试和失败兜底，React 组件只负责输入与 overview 刷新。
+  - 新增 `clawTraceRegressionAlertNotifier.ts`，提供浏览器 Notification adapter；不接 Electron bridge、不上传、不读取 App Server、不保存 raw trace。
+  - `ClawTraceConfig` 与 `normalizeDeveloperConfig` 支持 `alert_notification_enabled=false` 默认值；`ClawTraceConfigControls` 增加桌面告警通知开关，五语言 settings 文案同步。
+  - `ClawTraceRegressionReportCard` 改为通过 dispatcher 写入本地 channel，并只对新 record 尝试通知；alert channel export 仍是 `summary_only_alert`。
+- 验证通过：`npx vitest run "src/lib/developerFeatures.test.ts" "src/lib/trace/clawTraceRegressionAlertNotifier.test.ts" "src/lib/trace/clawTraceRegressionAlertDispatcher.test.ts" "src/lib/trace/clawTraceRegressionAlertChannel.test.ts" "src/lib/trace/clawTraceRegressionAlert.test.ts" "src/components/settings-v2/system/developer/index.test.tsx"`，6 个文件、51 个用例通过。
+- 验证通过：`npx eslint` 覆盖 app config type、developer config normalizer、dispatcher / notifier、alert channel、Developer 设置页组件与测试写集。
+- 验证通过：`npx prettier --check` 覆盖 S32 TS/TSX、五语言 settings、trace roadmap 与执行计划写集；`git diff --check` 覆盖 S32 写集；`rg -n "[ \t]+$"` 覆盖 S32 写集，未发现尾随空白。
+- 验证通过：`npm run test:contracts`。命令输出仍提示本地 ignored `scripts/__pycache__` / `.pyc` 存在但不会提交，退出码为 `0`；本轮未新增 App Server / Electron method，contract guard 用于确认 current diagnostics trace / docs boundary 未漂移。
+- 行数复核：`ClawTraceSettingsPanel.tsx` 748 行，`ClawTraceConfigControls.tsx` 145 行，`ClawTraceRegressionReportCard.tsx` 582 行，`clawTraceRegressionAlertChannel.ts` 522 行，`clawTraceRegressionAlertDispatcher.ts` 140 行，`clawTraceRegressionAlertNotifier.ts` 75 行，均低于 800 行预警线。
+- 验证未执行：`npm run verify:gui-smoke`。S32 只改 Developer 设置页配置 UI、本地 summary-only dispatcher / notifier 和文档，不改 Claw streaming 热路径、Electron bridge 或 App Server runtime 行为；本轮以定向 Vitest、ESLint、Prettier、diff 与 contract 作为最低门槛，后续触达主聊天 GUI、Electron bridge 或后台 OS 原生通知时再补 GUI smoke。
+- 开始 S33 Electron desktop notification bridge：
+  - 决策：桌面系统通知属于 Electron Desktop Host 壳能力，不进入 App Server JSON-RPC，也不恢复 legacy facade。
+  - 决策：前端通过 `src/lib/api/desktopNotification.ts -> safeInvoke("show_desktop_notification")` 进入 Host；组件和 trace dispatcher 不直接裸调 IPC。
+  - 决策：Host 只接受 `title / body / tag / silent`，并在 Host 侧裁剪 title/body/tag；拒绝 `raw_trace_jsonl` 等未声明字段，避免 notification payload 变成 raw trace 旁路。
+  - 决策：S33 只把已有 Developer alert 的通知尝试切到 Electron 原生 Notification；仍不实现后台常驻轮询，不在打开设置页时自动查询 App Server。
+- 完成 S33 Electron desktop notification bridge：
+  - 新增 `electron/desktopNotificationHost.ts`，封装 Electron `Notification.isSupported()`、summary-only payload 校验、限长、tag -> id 映射和 `sent / unsupported / failed` 结果。
+  - `electron/electronRuntime.ts` 导出 `Notification`；`electron/ipcChannels.ts` 白名单增加 `show_desktop_notification`；`ElectronHostCommands` 只做 dispatch 接线。
+  - 新增 `src/lib/api/desktopNotification.ts` 作为 renderer API 网关，收到 diagnostic facade 或非预期返回时 fail closed。
+  - `clawTraceRegressionAlertNotifier.ts` 增加 `desktopHostClawTraceRegressionAlertNotifier`，`ClawTraceRegressionReportCard` 改用 Desktop Host adapter；browser Notification adapter 仅保留为非 Electron / 单测边界。
+  - `agentCommandCatalog.json` 将 `show_desktop_notification` 登记为 `systemUtilityCommands`，不新增 App Server method、不新增生产 mock。
+- 验证通过：`npx tsc --noEmit --project "tsconfig.electron.json" --pretty false`。
+- 验证通过：`npx vitest run "electron/ipcChannels.test.ts" "electron/hostCommands.test.ts" "src/lib/api/desktopNotification.test.ts" "src/lib/trace/clawTraceRegressionAlertNotifier.test.ts" "src/lib/trace/clawTraceRegressionAlertDispatcher.test.ts" "src/components/settings-v2/system/developer/index.test.tsx"`，6 个文件、134 个用例通过。
+- 验证通过：`npx eslint "electron/electronRuntime.ts" "electron/desktopNotificationHost.ts" "electron/hostCommands.ts" "electron/hostCommands.test.ts" "electron/ipcChannels.ts" "electron/ipcChannels.test.ts" "src/lib/api/desktopNotification.ts" "src/lib/api/desktopNotification.test.ts" "src/lib/trace/clawTraceRegressionAlertNotifier.ts" "src/lib/trace/clawTraceRegressionAlertNotifier.test.ts" "src/components/settings-v2/system/developer/ClawTraceRegressionReportCard.tsx" --max-warnings 0`。
+- 验证通过：`npm run test:contracts`。命令输出仍提示本地 ignored `scripts/__pycache__` / `.pyc` 存在但不会提交，退出码为 `0`；新增 `show_desktop_notification` 已进入 Electron host command 契约，未新增 App Server method 或生产 mock。
+- 验证通过：`npx prettier --check` 覆盖 S33 新增 Host / API / notifier / Developer card、治理目录册、trace roadmap 与执行计划写集；为避免格式化 `electron/hostCommands.ts` / `electron/hostCommands.test.ts` 中既有旧行，本轮这两个巨型文件由 ESLint、Vitest 和 `git diff --check` 覆盖。
+- 验证未完成：前端全量 `npx tsc --noEmit --pretty false` 运行数分钟无输出后中断，退出码 `130`；本轮已有 Electron typecheck、定向 Vitest、ESLint、Prettier、diff 与 contracts 覆盖实际命令边界风险。
+- 开始 S34 foreground global alert monitor：
+  - 决策：S33 只解决“怎么发 Electron 原生通知”，没有解决离开 Developer 设置页后谁持续评估 alert；S34 补主窗口 foreground monitor，而不是 OS daemon 或 App Server 后台轮询。
+  - 决策：monitor 只消费本地 Agent UI performance compact summary、compact history 和 regression trend；不调用 `diagnostics/trace/list`、`diagnostics/trace/read` 或其它 App Server trace API，避免每个对话/每次打开页面自动查 App Server。
+  - 决策：`alert_enabled` 仍是总闸门，`alert_notification_enabled` 只控制新写入 alert record 后是否通过 Desktop Host notifier 尝试系统通知；Trace 关闭或 alert 关闭时不写 channel、不通知。
+  - 决策：按 Codex rollout-trace 的分层原则，把触发源、projection、dispatcher 和 UI 接线拆开：metric recorded 事件只广播 summary-only 元信息，monitor service 做 projection，React hook 只做 App 主窗口挂载与 debounce。
+- 完成 S34 foreground global alert monitor：
+  - `agentUiPerformanceMetrics.ts` 新增 `lime:agent-ui-performance-metric-recorded` 本地事件和订阅 API；事件 detail 只有 `id / phase / sessionId / workspaceId / source`，不携带 raw metrics、prompt、provider payload 或 assistant delta。
+  - 新增 `clawTraceRegressionAlertMonitor.ts`，从当前 compact summary 与 retained compact history 投影 baseline comparison、regression report 和 alert，然后复用 dispatcher 写入 summary-only alert channel；显式返回 `app_server_trace_requested=false`。
+  - 新增 `clawTraceRegressionAlertPresentation.ts`，统一告警通知 title/body 文案投影，Developer card 和 global monitor 共用，避免通知文案拼装散落到组件。
+  - 新增 `useClawTraceRegressionAlertMonitor.ts`，在主应用窗口加载 developer config、监听 app-config 变更和本地 metric recorded 事件，并 debounce 触发 monitor；`App.tsx` 挂载该 hook，独立 RootRouter 子窗口不挂载。
+  - `ClawTraceRegressionReportCard` 改用 presentation helper 生成通知文案，保留 Developer 设置页的手动 trend / alert channel 操作。
+- 验证通过：`npx vitest run "src/lib/agentUiPerformanceMetrics.test.ts" "src/lib/trace/clawTraceRegressionAlertPresentation.test.ts" "src/lib/trace/clawTraceRegressionAlertMonitor.test.ts" "src/hooks/useClawTraceRegressionAlertMonitor.test.tsx" "src/components/settings-v2/system/developer/index.test.tsx"`，5 个文件、36 个用例通过。
+- 验证通过：`npx vitest run "src/lib/trace/clawTraceRegressionAlertNotifier.test.ts" "src/lib/api/desktopNotification.test.ts" "src/lib/trace/clawTraceRegressionAlertDispatcher.test.ts"`，3 个文件、15 个用例通过。
+- 验证通过：`npx eslint "src/App.tsx" "src/hooks/useClawTraceRegressionAlertMonitor.ts" "src/hooks/useClawTraceRegressionAlertMonitor.test.tsx" "src/lib/agentUiPerformanceMetrics.ts" "src/lib/agentUiPerformanceMetrics.test.ts" "src/lib/trace/clawTraceRegressionAlertMonitor.ts" "src/lib/trace/clawTraceRegressionAlertMonitor.test.ts" "src/lib/trace/clawTraceRegressionAlertPresentation.ts" "src/lib/trace/clawTraceRegressionAlertPresentation.test.ts" "src/components/settings-v2/system/developer/ClawTraceRegressionReportCard.tsx" --max-warnings 0`。
+- 验证通过：`npx tsc --noEmit --project "tsconfig.electron.json" --pretty false`；`npx tsc --noEmit --project "tsconfig.node.json" --pretty false`。
+- 验证未完成：前端全量 `npx tsc --noEmit --pretty false` 运行约数分钟后触发 TypeScript 编译器内部错误 `Debug Failure. No error for last overload signature`，没有给出源码文件；这不是普通 TS 类型错误。S34 已用定向 Vitest / ESLint / Electron+Node typecheck 覆盖新增写集，后续全量收口需单独定位 TS 23.4.0 + 当前 workspace 的 compiler crash。
+- 开始 S35 notification host test split：
+  - 决策：参考 Codex 中心文件只做 dispatch 的方式，继续把 Electron Desktop Host 通知细节留在 `desktopNotificationHost.ts`，`hostCommands.ts` / `hostCommands.test.ts` 只保留命令分发级别的 smoke。
+  - 决策：S35 不新增命令、不改变 `show_desktop_notification` payload 合同、不新增 App Server method；目标只是把 summary-only 校验、unsupported 和 failure path 回归从超大 `hostCommands.test.ts` 拆到模块级测试。
+- 完成 S35 notification host test split：
+  - 新增 `electron/desktopNotificationHost.test.ts`，覆盖 title/body/tag/silent summary-only 校验、unsupported 返回、Notification 构造失败和 show 失败等 Host 细节。
+  - `electron/hostCommands.test.ts` 只保留 `show_desktop_notification` dispatcher smoke，避免超大 Host command 测试继续承接 payload 校验细节；dispatcher 测试改为只断言调用 `desktopNotificationHost`，不再直接关注 Electron Notification 构造器。
+  - `electron/hostCommands.ts` 仍只做 `show_desktop_notification` dispatch 接线；实际通知 payload 校验、限长和发送结果仍在 `desktopNotificationHost.ts`。
+- 进一步收紧：`hostCommands.test.ts` 不再直接 mock Electron `Notification`，只验证 dispatcher 到 `desktopNotificationHost` 的调用链。
+- 验证通过：`npx vitest run "electron/desktopNotificationHost.test.ts" "electron/hostCommands.test.ts" "src/lib/api/desktopNotification.test.ts"`，3 个文件、94 个用例通过。
+- 验证通过：`npx eslint "electron/desktopNotificationHost.ts" "electron/desktopNotificationHost.test.ts" "electron/hostCommands.ts" "electron/hostCommands.test.ts" "src/lib/api/desktopNotification.ts" "src/lib/api/desktopNotification.test.ts" --max-warnings 0`。
+- 验证通过：`npx prettier --check "electron/desktopNotificationHost.test.ts" "electron/hostCommands.test.ts" "internal/exec-plans/claw-trace-system-implementation-plan.md"`。
+- 验证通过：`git diff --check -- "electron/desktopNotificationHost.test.ts" "electron/hostCommands.test.ts" "internal/exec-plans/claw-trace-system-implementation-plan.md"`。
+- 验证通过：`npm run test:contracts`。命令输出仍提示本地 ignored `scripts/__pycache__` / `.pyc` 存在但不会提交，退出码为 `0`；S35 未新增 App Server method 或生产 mock，只验证 Electron Desktop Host 命令契约未漂移。
+- 开始 S36 project shell host split：
+  - 决策：继续参考 Codex dispatcher-only 方式，把 Project Shell PTY 会话状态、event poller、drain、write 后主动 drain 和 shutdown dispose 从超大 `hostCommands.ts` 下沉到独立 `electron/projectShellHost.ts`。
+  - 决策：S36 不新增命令、不改变 `project_shell_session_*` payload 合同、不新增 App Server method、不改前端 `src/lib/api/projectShell.ts` 网关；只重排 Electron Desktop Host 内部职责。
+  - 决策：`hostCommands.test.ts` 只保留 `run_project_shell_command` 与 `project_shell_session_*` dispatcher smoke；App Server PTY method 参数、event drain、写入后 drain 和 shutdown kill 细节由 `projectShellHost.test.ts` 覆盖。
+- 完成 S36 project shell host split：
+  - 新增 `electron/projectShellHost.ts`，承接 `runCommand / startSession / writeSession / resizeSession / killSession / disposeForShutdown`。
+  - 新增 `electron/projectShellHost.test.ts`，覆盖 Project Shell current 封装、App Server PTY methods、event drain 转发、写入后主动 drain、shutdown dispose。
+  - `electron/hostCommands.ts` 只保留 Project Shell command dispatch，`hostCommands.test.ts` 只验证分发到 `ProjectShellHost`。
+  - `electron/hostCommands.ts` 从约 `3914` 行降到约 `3735` 行，但仍超过体量边界；下一刀继续拆 system utility / file shell / agent app shell。
+- 验证通过：`npx vitest run "electron/projectShellHost.test.ts" "electron/hostCommands.test.ts"`，2 个文件、89 个用例通过。
+- 验证通过：`npx eslint "electron/projectShellHost.ts" "electron/projectShellHost.test.ts" "electron/hostCommands.ts" "electron/hostCommands.test.ts" --max-warnings 0`。
+- 验证通过：`npx tsc --noEmit --project "tsconfig.electron.json" --pretty false`。
+- 验证通过：`npx prettier --check "electron/projectShellHost.ts" "electron/projectShellHost.test.ts" "electron/hostCommands.test.ts" "internal/exec-plans/claw-trace-system-implementation-plan.md"`。
+- 验证通过：`git diff --check -- "electron/projectShellHost.ts" "electron/projectShellHost.test.ts" "electron/hostCommands.ts" "electron/hostCommands.test.ts" "internal/exec-plans/claw-trace-system-implementation-plan.md"`。
+- 验证通过：`npm run test:contracts`。命令输出仍提示本地 ignored `scripts/__pycache__` / `.pyc` 存在但不会提交，退出码为 `0`；S36 未新增 App Server method、Electron command 或生产 mock，只验证 Electron Desktop Host 命令契约未漂移。
+- 验证未通过：`npm run verify:local` 在全仓库 smart 模式的 `npm run i18n:unused -- --check` 失败，报告 `agent: plugin.marketplace.cloudRequired.*` 与 `agent: plugin.marketplace.filter.*` 共 7 个未引用 key；这些文件不在 S36 Project Shell Host 写集内，本轮不顺手修改无关 i18n 脏改。
+- 开始 S37 file shell host split：
+  - 决策：继续参考 Codex dispatcher-only 方式，把 `open_file_preview_window / reveal_in_finder / open_with_default_app / get_file_icon_data_url / get_home_dir / get_file_manager_locations` 从超大 `hostCommands.ts` 下沉到独立 `electron/fileShellHost.ts`。
+  - 决策：S37 不新增命令、不改变 payload 合同、不新增 App Server method、不改前端 API 网关；只重排 Electron Desktop Host 内部职责。
+  - 决策：`hostCommands.test.ts` 只保留 File Shell dispatcher smoke；BrowserWindow 预览复用、相对路径拒绝、Electron shell 错误和文件管理器位置去重由 `fileShellHost.test.ts` 覆盖。
+- 完成 S37 file shell host split：
+  - 新增 `electron/fileShellHost.ts`，承接 `openFilePreviewWindow / revealInFinder / openWithDefaultApp / getFileIconDataUrl / getHomeDir / getFileManagerLocations`。
+  - 新增 `electron/fileShellHost.test.ts`，覆盖 BrowserWindow 预览窗口新建与复用、相对路径拒绝、Finder/默认应用打开、文件图标失败隔离、系统主目录 fail closed、文件管理器位置去重。
+  - `electron/hostCommands.ts` 只保留 File Shell command dispatch，`hostCommands.test.ts` 只验证分发到 `FileShellHost`。
+  - `electron/hostCommands.ts` 从约 `3735` 行降到约 `3506` 行，但仍超过体量边界；下一刀继续拆 system utility / agent app shell。
+- 验证通过：`npx vitest run "electron/fileShellHost.test.ts" "electron/hostCommands.test.ts"`，2 个文件、85 个用例通过。
+- 验证通过：`npx eslint "electron/fileShellHost.ts" "electron/fileShellHost.test.ts" "electron/hostCommands.ts" "electron/hostCommands.test.ts" --max-warnings 0`。
+- 验证通过：`npx tsc --noEmit --project "tsconfig.electron.json" --pretty false`。
+- 验证通过：`npx prettier --check "electron/fileShellHost.ts" "electron/fileShellHost.test.ts" "electron/hostCommands.test.ts" "internal/exec-plans/claw-trace-system-implementation-plan.md"`。
+- 验证通过：`git diff --check -- "electron/fileShellHost.ts" "electron/fileShellHost.test.ts" "electron/hostCommands.ts" "electron/hostCommands.test.ts" "internal/exec-plans/claw-trace-system-implementation-plan.md"`。
+- 验证通过：`npm run test:contracts`。命令输出仍提示本地 ignored `scripts/__pycache__` / `.pyc` 存在但不会提交，退出码为 `0`；S37 未新增 App Server method、Electron command 或生产 mock，只验证 Electron Desktop Host 命令契约未漂移。
+- 验证未通过：`npm run verify:local` 仍在全仓库 smart 模式的 `npm run i18n:unused -- --check` 失败，报告 `agent: plugin.marketplace.cloudRequired.*` 与 `agent: plugin.marketplace.filter.*` 共 7 个未引用 key；这些文件不在 S37 File Shell Host 写集内，本轮不顺手修改无关 i18n 脏改。
+- 开始 S38 system utility host split：
+  - 决策：继续参考 Codex dispatcher-only 方式，把 `open_external_url / open_system_settings_url / get_voice_shortcut_runtime_status / validate_shortcut / get_environment_preview` 以及文件关联、浏览器连接器、Chrome bridge degraded diagnostic 占位从超大 `hostCommands.ts` 下沉到独立 `electron/systemUtilityHost.ts`。
+  - 决策：S38 不新增命令、不改变 payload 合同、不新增 App Server method、不改前端 API 网关；只重排 Electron Desktop Host 内部职责。
+  - 决策：`hostCommands.test.ts` 只保留 System Utility dispatcher smoke；URL scheme 校验、语音快捷键 fallback、环境预览脱敏、文件关联和浏览器 diagnostic 占位由 `systemUtilityHost.test.ts` 覆盖。
+- 完成 S38 system utility host split：
+  - 新增 `electron/systemUtilityHost.ts`，承接外链/系统设置打开、语音快捷键状态与校验、环境预览、`.skill/.skills` 文件关联 degraded 状态、浏览器连接器/Chrome bridge/backend degraded 状态。
+  - 新增 `electron/systemUtilityHost.test.ts`，覆盖 URL scheme fail closed、快捷键解析与保留组合拒绝、无效语音快捷键回退默认值、环境变量预览 API key 脱敏、diagnostic 占位形态和 `get_chrome_profile_sessions` 非枚举 diagnostic metadata。
+  - `electron/hostCommands.ts` 只保留 System Utility command dispatch，`hostCommands.test.ts` 只验证分发到 `SystemUtilityHost`。
+  - 同步 `scripts/check-command-contracts.mjs`，让契约守卫继续检查 `hostCommands.ts` 的 dispatcher case，同时在 `systemUtilityHost.ts` 中确认浏览器 degraded diagnostic 投影，避免重构后守卫误要求逻辑回流中心文件。
+  - `electron/hostCommands.ts` 从约 `3506` 行降到约 `3117` 行，但仍超过体量边界；下一刀继续拆 agent app shell / voice model / layered design export 等剩余大块。
+- 验证通过：`npx vitest run "electron/systemUtilityHost.test.ts" "electron/hostCommands.test.ts"`，2 个文件、72 个用例通过。
+- 验证通过：`npx eslint "scripts/check-command-contracts.mjs" "electron/systemUtilityHost.ts" "electron/systemUtilityHost.test.ts" "electron/hostCommands.ts" "electron/hostCommands.test.ts" --max-warnings 0`。
+- 验证通过：`npx tsc --noEmit --project "tsconfig.electron.json" --pretty false`。
+- 验证通过：`npx prettier --check "scripts/check-command-contracts.mjs" "electron/systemUtilityHost.ts" "electron/systemUtilityHost.test.ts" "electron/hostCommands.test.ts" "internal/exec-plans/claw-trace-system-implementation-plan.md"`。
+- 验证通过：`git diff --check -- "scripts/check-command-contracts.mjs" "electron/systemUtilityHost.ts" "electron/systemUtilityHost.test.ts" "electron/hostCommands.ts" "electron/hostCommands.test.ts" "internal/exec-plans/claw-trace-system-implementation-plan.md"`。
+- 验证通过：`npm run test:contracts`。命令输出仍提示本地 ignored `scripts/__pycache__` / `.pyc` 存在但不会提交，退出码为 `0`；S38 未新增 App Server method、Electron command 或生产 mock，只同步 Electron Desktop Host 内部 owner 与命令契约守卫。
+- 验证未通过：`npm run verify:local` 仍在全仓库 smart 模式的 `npm run i18n:unused -- --check` 失败，报告 `agent: plugin.marketplace.cloudRequired.*` 与 `agent: plugin.marketplace.filter.*` 共 7 个未引用 key；这些文件不在 S38 System Utility Host 写集内，本轮不顺手修改无关 i18n 脏改。
+- 开始 S39 agent app shell host split：
+  - 决策：继续参考 Codex dispatcher-only 方式，把 `agent_app_select_directory / agent_app_launch_shell / agent_app_start_ui_runtime / agent_app_get_ui_runtime_status / agent_app_stop_ui_runtime` 从超大 `hostCommands.ts` 下沉到独立 `electron/agentAppShellHost.ts`。
+  - 决策：S39 不新增命令、不改变 payload 合同、不新增 App Server method、不改前端 `src/lib/api/agentApps.ts` 网关；只重排 Electron Desktop Host 内部职责。
+  - 决策：`hostCommands.test.ts` 只保留 Agent App shell dispatcher smoke；Electron directory picker、App Server `agentAppShell/prepare`、UI runtime `start/status/stop`、BrowserWindow 复用与 fail closed 细节由 `agentAppShellHost.test.ts` 覆盖。
+- 完成 S39 agent app shell host split：
+  - 新增 `electron/agentAppShellHost.ts`，承接 Agent App 目录选择、shell prepare、UI runtime 启停/状态、BrowserWindow 打开与复用、surface projection。
+  - 新增 `electron/agentAppShellHost.test.ts`，覆盖 directory picker、launch success、窗口复用、prepare blocked、descriptor invalid 和 UI runtime lifecycle method 透传。
+  - `electron/hostCommands.ts` 只保留 Agent App shell command dispatch，`hostCommands.test.ts` 只验证分发到 `AgentAppShellHost`。
+  - 同步 `scripts/check-app-server-client-contract.mjs`，让 App Server client contract 继续检查 `hostCommands.ts` 的 dispatcher case，同时把 `agentAppUiRuntime/*` lifecycle 实现 owner 更新为 `agentAppShellHost.ts`。
+  - `electron/hostCommands.ts` 从约 `3117` 行降到约 `2772` 行，但仍超过体量边界；下一刀继续拆 Agent App runtime task / voice model / layered design export 等剩余大块。
+- 验证通过：`npx vitest run "electron/agentAppShellHost.test.ts" "electron/hostCommands.test.ts"`，2 个文件、68 个用例通过。
+- 验证通过：`npx eslint "scripts/check-app-server-client-contract.mjs" "electron/agentAppShellHost.ts" "electron/agentAppShellHost.test.ts" "electron/hostCommands.ts" "electron/hostCommands.test.ts" --max-warnings 0`。
+- 验证通过：`npx tsc --noEmit --project "tsconfig.electron.json" --pretty false`。
+- 验证通过：`npx prettier --check "scripts/check-app-server-client-contract.mjs" "electron/agentAppShellHost.ts" "electron/agentAppShellHost.test.ts" "electron/hostCommands.test.ts" "internal/exec-plans/claw-trace-system-implementation-plan.md"`。
+- 验证通过：`git diff --check -- "scripts/check-app-server-client-contract.mjs" "electron/agentAppShellHost.ts" "electron/agentAppShellHost.test.ts" "electron/hostCommands.ts" "electron/hostCommands.test.ts" "internal/exec-plans/claw-trace-system-implementation-plan.md"`。
+- 验证通过：`npm run test:contracts`。命令输出仍提示本地 ignored `scripts/__pycache__` / `.pyc` 存在但不会提交，退出码为 `0`；S39 未新增 App Server method、Electron command 或生产 mock，只同步 Electron Desktop Host 内部 owner 与 App Server client / command 契约守卫。
+- 验证未通过：`npm run verify:local` 仍在全仓库 smart 模式的 `npm run i18n:unused -- --check` 失败，报告 `agent: plugin.marketplace.cloudRequired.*` 与 `agent: plugin.marketplace.filter.*` 共 7 个未引用 key；这些文件不在 S39 Agent App Shell Host 写集内，本轮不顺手修改无关 i18n 脏改。
+- 开始 S40 agent app runtime task host split：
+  - 决策：继续参考 Codex 中心文件只做 dispatch 的方式，把 `agent_app_runtime_start_task / get_task / cancel_task / submit_host_response` 从超大 `hostCommands.ts` 下沉到独立 `electron/agentAppRuntimeTaskHost.ts`。
+  - 决策：S40 不新增命令、不改前端 API 网关、不新增 App Server method；`agent_app_runtime_*` 仍是 Agent App 进入 App Server / AgentRuntime current 主链的 Desktop facade。
+  - 决策：`hostCommands.test.ts` 只保留 Agent App runtime task dispatcher smoke；`runWorker=false` 不查询 UI runtime status、`turnConfig` 透传、host response / cancel / read 细节由 `agentAppRuntimeTaskHost.test.ts` 覆盖。
+- 完成 S40 agent app runtime task host split：
+  - 新增 `electron/agentAppRuntimeTaskHost.ts`，承接 Agent App runtime task start/read/cancel/host response，并通过 App Server current `agentSession/turn/start` 等方法收敛。
+  - 新增 `electron/agentAppRuntimeTaskHost.test.ts`，覆盖 `turnConfig` -> `RuntimeOptions.hostOptions.asterChatRequest` 透传、`runWorker=false` 不查询 UI runtime status、start/read/cancel/host response current 投影。
+  - `electron/hostCommands.ts` 只保留 `agent_app_runtime_*` command dispatch，`hostCommands.test.ts` 只验证分发到 `AgentAppRuntimeTaskHost`。
+  - 同步 `scripts/check-app-server-client-contract.mjs`，让 App Server client contract 继续检查 `agent_app_runtime_*` dispatcher case 与新 Host owner。
+  - `electron/hostCommands.ts` 从约 `2772` 行降到约 `2221` 行，但仍超过体量边界；下一刀继续拆 voice model / layered design export 等剩余大块。
+- 验证通过：`npx vitest run "electron/agentAppRuntimeTaskHost.test.ts" "electron/hostCommands.test.ts"`，2 个文件、63 个用例通过。
+- 开始 S41 independent Trace workspace tab：
+  - 决策：Trace 是 Workspace 右侧 surface 中与 Harness 同级的一等 tab，不是 Harness 子页；Harness 只消费 evidence，不拥有 trace schema、采集、开关或 UI 主入口。
+  - 决策：Trace Tab 首版只消费已有 `summarizeAgentUiPerformanceMetrics()` compact summary 与本地 metric event，不在 mount 时主动查询 App Server trace list/read，不新增协议或生产 mock。
+  - 决策：JSON / JSONL evidence 只作为复制 compact diagnostic summary 的 secondary action；主视图面向人展示首字分段、客户端可优化段、慢段归因、客户端健康和阶段覆盖，不展示 raw entries / prompt / provider payload / assistant delta。
+- 完成 S41 independent Trace workspace tab：
+  - 新增 `src/components/agent/chat/workspace/WorkspaceTraceTab.tsx` 和纯 ViewModel `workspaceTracePanelModel.ts`；组件只渲染人读 summary，ViewModel 负责 client/server/bridge 分段、client actionable 汇总、慢段排序、missing phase 与 health metrics。
+  - Trace 接入 `right-surface` registry / type / runtime projection / `RightSurfaceHost` tab label，并由 `AgentChatWorkspace` 作为 `rightSurfaceDefinitions.trace` 渲染；关闭 developer Trace 或隐藏 navbar utility actions 时会清理/禁用 Trace surface。
+  - `TaskCenterUtilityToolbar` 增加 icon-only Trace toggle，与 Harness 同级；`WorkspaceConversationScene` / `useWorkspaceConversationSceneRuntime` 透传 Trace toggle 状态与点击回调。
+  - 五语言 `agent.json` 补齐 `navbar.trace/openTrace/closeTrace`、`rightSurface.tabs.trace` 和 `tracePanel.*` 文案；本轮补齐此前遗漏的 `ko-KR`。
+  - 新增 `WorkspaceTraceTab.test.tsx`，覆盖分段归因、client actionable 只计 client 段、空态、主面板不泄露 raw entries，以及复制 evidence 只输出 compact diagnostic summary。
+  - 更新 toolbar / scene / right-surface projection / registry 单测，守住 Trace 作为 Harness 同级 surface、available/disabled/pending 和工具栏入口状态。
+  - 修复 `AgentChatWorkspace.tsx` 中 Trace 透传重复 key，消除 smoke build 阶段的 duplicate key warning。
+- 验证通过：`npx eslint "src/components/agent/chat/workspace/WorkspaceTraceTab.tsx" "src/components/agent/chat/workspace/workspaceTracePanelModel.ts" "src/components/agent/chat/workspace/WorkspaceTraceTab.test.tsx" "src/components/agent/chat/components/TaskCenterUtilityToolbar.tsx" "src/components/agent/chat/components/TaskCenterUtilityToolbar.integration.test.tsx" "src/components/agent/chat/workspace/WorkspaceConversationScene.tsx" "src/components/agent/chat/workspace/WorkspaceConversationScene.test.tsx" "src/components/agent/chat/workspace/right-surface/rightSurfaceRegistry.unit.test.ts" "src/components/agent/chat/workspace/right-surface/rightSurfaceToolbarProjection.unit.test.ts" "src/components/agent/chat/workspace/workspaceRightSurfaceRuntimeProjection.ts" "src/components/agent/chat/workspace/workspaceRightSurfaceRuntimeProjection.unit.test.ts" --max-warnings 0`。
+- 验证通过：`npx eslint "src/components/agent/chat/AgentChatWorkspace.tsx" --max-warnings 0`。
+- 验证通过：`npx vitest run "src/components/agent/chat/workspace/WorkspaceTraceTab.test.tsx" "src/components/agent/chat/components/TaskCenterUtilityToolbar.integration.test.tsx" "src/components/agent/chat/workspace/WorkspaceConversationScene.test.tsx" "src/components/agent/chat/workspace/right-surface/rightSurfaceRegistry.unit.test.ts" "src/components/agent/chat/workspace/right-surface/rightSurfaceToolbarProjection.unit.test.ts" "src/components/agent/chat/workspace/workspaceRightSurfaceRuntimeProjection.unit.test.ts"`，6 个文件、73 个用例通过；`WorkspaceConversationScene.test.tsx` 仍输出既有 i18next test-env warning，但退出码为 `0`。
+- 验证通过：`npx prettier --check` 覆盖 S41 Trace Tab / right-surface / toolbar / scene 测试、`ko-KR` agent 文案与执行计划写集。
+- 验证通过：`git diff --check -- ...` 覆盖 S41 Trace Tab / right-surface / toolbar / scene 测试、`ko-KR` agent 文案与执行计划写集。
+- 验证通过：`npm run test:contracts`。命令输出仍提示本地 ignored `scripts/__pycache__` / `.pyc` 存在但不会提交，退出码为 `0`；S40/S41 未新增 App Server method 或生产 mock，只同步 Electron Desktop Host 内部 owner 与 right-surface 前端 UI。
+- 验证通过：`npm run verify:gui-smoke`。首次运行通过但 Vite 报告 Trace 透传重复 key warning；修复后第二次重跑通过，未再出现 duplicate key warning。该 smoke 覆盖 renderer smoke build、`packages/app-server-client` build、`typecheck:electron`、Electron host build、App Server sidecar build、renderer loaded、app-server initialized、claw workbench shell ready、memory settings ready。
+- 验证未完成：前端全量 `npx tsc --noEmit --project "tsconfig.json" --pretty false` 运行超过 5 分钟无输出后手动中断，退出码 `130`。本轮已有定向 ESLint、Vitest、Electron typecheck（经 `verify:gui-smoke`）、App Server client build、contract guard 和 GUI smoke 覆盖新增写集；全量前端 typecheck 仍需后续单独窗口重跑或定位仓库级耗时问题。
+- 开始 S46 Workspace Trace adaptive layout：
+  - 决策：Trace / Harness / expert info 等 Right Surface 是辅助诊断或辅助信息面板，打开后不能按普通代码画布比例压缩主对话；没有显式 `chatPanelWidth` 时使用 Right Surface 专用默认聊天宽度。
+  - 决策：普通对话态不能把消息正文、助手气泡和输入框分别写死成不同宽度；统一走自适应对话内容轨道 `clamp(900px, 76%, 1280px)`，宽屏跟随主区域增长，中窄屏继续按容器可用宽度自适应。
+  - 决策：不新增协议、不新增文案、不改变 Trace 数据采集；本轮只修 Workspace 可见布局。
+- 完成 S46 Workspace Trace adaptive layout：
+  - 新增 `conversationLayoutTokens.ts`，集中定义对话内容轨道宽度；`MessageList`、assistant bubble、inline input、floating input 和 plan decision inputbar replacement 统一消费该 token。
+  - `WorkspaceMainArea` 在 `rightSurfaceContent` 存在且未显式传入 `chatPanelWidth` 时使用 `RIGHT_SURFACE_CHAT_PANEL_WIDTH / MIN_WIDTH`，避免 Trace 打开后主对话被旧 `chat-canvas` 默认值挤窄；显式 code workbench / subagents 宽度不被覆盖。
+  - `LayoutTransition` 暴露 `data-chat-panel-min-width`，让右侧辅助栏分栏规则可被稳定断言。
+- 验证通过：`./node_modules/.bin/vitest run "src/components/agent/chat/workspace/WorkspaceMainArea.test.tsx" "src/components/agent/chat/components/MessageList.test.tsx" "src/components/agent/chat/components/MessageList.messageActions.test.tsx"`，3 个文件、39 个用例通过。
+- 验证通过：`./node_modules/.bin/eslint "src/components/agent/chat/styles/conversationLayoutTokens.ts" "src/components/agent/chat/workspace/WorkspaceMainArea.tsx" "src/components/agent/chat/workspace/WorkspaceStyles.tsx" "src/components/agent/chat/workspace/useWorkspaceInputbarSceneRuntime.tsx" "src/components/workspace/layout/LayoutTransition.tsx" "src/components/agent/chat/styles/index.ts" "src/components/agent/chat/components/MessageList.tsx" "src/components/agent/chat/workspace/WorkspaceMainArea.test.tsx" "src/components/agent/chat/components/MessageList.messageActions.test.tsx" --max-warnings 0`。
+- 验证通过：`git diff --check` 覆盖 S46 写集。
+- 验证通过：`npm run verify:gui-smoke` 覆盖 renderer smoke build、Electron host build、App Server sidecar、renderer loaded、app-server initialized、claw workbench shell ready 和 memory settings ready。
 
 ## 10. 当前下一刀
 
@@ -651,7 +926,7 @@ npm run smoke:agent-runtime-current-fixture
    - support bundle 默认包含 `meta/trace-store-summary.json`，但不包含 raw trace JSONL 正文。
    - Developer UI 可显式导出最近单条 summary-only trace zip，默认支持包仍不含 raw JSONL 正文。
    - Developer UI 可显式导出“带最近 Trace 的支持包”，默认支持包和普通对话仍不会查询或附带 trace zip。
-   - Developer UI 可显式加载 Trace timeline，并从 summary-only events 展示 phase spans、slow segments、缺失 phase、App Server retained-window trace compare、regression evidence 归因报告、手动 regression trend history 和 summary-only regression alert。
+   - Developer UI 可显式加载 Trace timeline，并从 summary-only events 展示 phase spans、slow segments、缺失 phase、App Server retained-window trace compare、regression evidence 归因报告、手动 regression trend history 和 summary-only regression alert；alert channel 默认关闭，只有 `developer.claw_trace.alert_enabled=true` 时才评估 watch / warning / critical，并把 actionable alert 写入本地 summary-only channel；`alert_notification_enabled` 默认关闭，只在新写入 alert 时通过 Electron Desktop Host 原生 Notification 尝试桌面通知；主窗口 foreground monitor 已能在离开 Developer 设置页后监听本地 compact metric 事件并 debounce 评估 alert，但不查询 App Server trace list/read。
    - support bundle trace opt-in 已通过真实 Electron fixture 证明走 current App Server method，并使用 RuntimeCore 当前 trace root，不再由 support bundle 自己推断 trace store。
 2. 已完成 S18：真实 OTEL exporter / W3C remote parent 接入。App Server request span 已能通过 exporter 继承 renderer carrier 的 trace id / parent span id，生产 OTLP 导出默认关闭、显式环境变量开启。
 3. 已完成 S19：合法 W3C carrier 已从 App Server turn context 透传到 Aster provider HTTP request headers；非法 carrier 不注入，`tracestate` 不单独传播。
@@ -666,4 +941,17 @@ npm run smoke:agent-runtime-current-fixture
 12. 已完成 S27：regression evidence 归因报告，合并 compact client 分段与 App Server provider/API 分段，明确回退焦点是 Provider / API、App Server 还是 Lime 本地输出。
 13. 已完成 S28：手动 regression trend history，开发者可保存、复制、清空 retained regression report，用于跨运行追踪归因变化。
 14. 已完成 S29：summary-only regression alert 投影，开发者可在当前 report 与 retained trend 基础上看到 watch / warning / critical 状态。
-15. 仍未完成：真正的后台告警通道、以及 `agentProtocol.ts` / `agent.rs` 等超大文件的后续拆分；这些属于后续增强，不阻塞 S29 alert projection 闭环。
+15. 已完成 S30：alert channel 显式开关与配置控件拆分，`alert_enabled` 默认关闭，中心面板降到 800 行预警线以下。
+16. 已完成 S31：本地 summary-only alert channel inbox，支持 retained channel 写入、复制与清空。
+17. 已完成 S32：本地通知 dispatcher 骨架，支持 `alert_notification_enabled` 显式开关、重复 fingerprint 不重复通知。
+18. 已完成 S33：Electron Desktop Host 原生通知桥，`show_desktop_notification` 只接受 summary-only title/body/tag/silent，经前端 API 网关接入 trace notifier。
+19. 已完成 S34：主应用窗口 foreground global alert monitor，离开 Developer 设置页后仍可基于本地 compact summary/history 持续评估 alert；不做 OS daemon、不新增 App Server method、不自动读取 App Server trace list/read。
+20. 已完成 S35：通知 Host 细节回归已拆到 `electron/desktopNotificationHost.test.ts`，`hostCommands.test.ts` 只保留 `show_desktop_notification` dispatcher smoke；不新增命令、不改变 summary-only payload 合同。
+21. 已完成 S36：Project Shell PTY 会话状态、poller、drain 和 shutdown dispose 已拆入 `electron/projectShellHost.ts`；`hostCommands.test.ts` 只保留分发 smoke，不再承接 PTY current 细节。
+22. 已完成 S37：File Shell 本地壳能力已拆入 `electron/fileShellHost.ts`；`hostCommands.test.ts` 只保留分发 smoke，不再承接 BrowserWindow / Electron shell / 文件管理器位置细节。
+23. 已完成 S38：System Utility 本地壳能力已拆入 `electron/systemUtilityHost.ts`；`hostCommands.test.ts` 只保留分发 smoke，不再承接 URL scheme、快捷键、环境预览、文件关联和浏览器 degraded diagnostic 细节。
+24. 已完成 S39：Agent App shell 本地壳能力已拆入 `electron/agentAppShellHost.ts`；`hostCommands.test.ts` 只保留分发 smoke，不再承接 directory picker、shell prepare、UI runtime lifecycle 与 BrowserWindow 细节。
+25. 已完成 S40：Agent App runtime task start/read/cancel/host response 已拆入 `electron/agentAppRuntimeTaskHost.ts`；`hostCommands.test.ts` 只保留分发 smoke，不再承接 `turnConfig` 透传、`runWorker=false` 或 task lifecycle current 细节。
+26. 已完成 S41：Workspace 右侧 surface 已增加与 Harness 同级的 Trace Tab；主视图展示人读首字分段、慢段归因、客户端健康和阶段缺口，compact JSON evidence 只作为复制摘要动作，不作为主界面。
+27. 已完成 S46：Workspace 对话内容轨道已统一到自适应宽度 `clamp(900px, 76%, 1280px)`，消息正文 / 助手气泡 / 输入框统一口径；Right Surface 打开时使用辅助栏专用聊天宽度，不再沿用旧 `chat-canvas` 默认比例挤压主对话。
+28. 仍未完成：系统级后台 daemon / 应用完全关闭后的告警、Trace Tab retained baseline / App Server timeline drilldown 的进一步人读化、以及 `agentProtocol.ts` / `agent.rs` / `electron/hostCommands.ts` 等超大文件的后续拆分；`hostCommands.ts` 当前约 `2221` 行，下一刀优先继续拆 voice model / layered design export 等剩余大块。

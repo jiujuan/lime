@@ -211,6 +211,7 @@ export interface AgentAppPageParams {
   appId?: string;
   entryKey?: string;
   launchRequestKey?: number;
+  rightSurfaceTarget?: import("@/features/agent-app/ui/agentAppRightSurfaceLaunch").AgentAppRightSurfaceLaunchTarget | null;
 }
 
 export interface KnowledgePageParams {

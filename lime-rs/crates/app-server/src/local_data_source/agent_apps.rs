@@ -1,3 +1,8 @@
+use crate::agent_app_packages;
+use crate::agent_app_packages::agent_app_data_dir;
+use crate::agent_app_packages::read_json_string;
+use crate::agent_app_packages::safe_hash_path_segment;
+use crate::agent_app_packages::validate_agent_app_id_for_storage;
 use app_server_protocol::AgentAppInstalledDisabledSetParams;
 use app_server_protocol::AgentAppInstalledListResponse;
 use app_server_protocol::AgentAppInstalledSaveParams;
@@ -6,18 +11,15 @@ use app_server_protocol::AgentAppUninstallRehearsalResponse;
 use app_server_protocol::AgentAppUninstallRehearsalTarget;
 use app_server_protocol::AgentAppUninstallResponse;
 
-mod package;
+pub(crate) use agent_app_packages::fetch_agent_app_cloud_package;
+pub(crate) use agent_app_packages::inspect_agent_app_local_package;
 use chrono::Utc;
-use lime_core::app_paths;
-pub(crate) use package::fetch_agent_app_cloud_package;
-pub(crate) use package::inspect_agent_app_local_package;
 use serde_json::json;
 use serde_json::Value;
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
 
-const AGENT_APP_DATA_DIR: &str = "agent-apps";
 const INSTALLED_AGENT_APP_STATE_SCHEMA_VERSION: u64 = 1;
 
 fn now_iso() -> String {
@@ -58,7 +60,9 @@ fn list_agent_app_installed_state_from_data_root(
             continue;
         }
         match read_agent_app_installed_state_path(&path) {
-            Ok(Some(state)) => states.push(state),
+            Ok(Some(state)) => {
+                states.push(agent_app_packages::migrate_seeded_agent_app_installed_state(state))
+            }
             Ok(None) => {}
             Err(error) => issues.push(agent_app_persistence_issue(
                 "PARSE_FAILED",
@@ -69,13 +73,17 @@ fn list_agent_app_installed_state_from_data_root(
         }
     }
 
+    sort_agent_app_states_by_id(&mut states);
+
+    Ok(AgentAppInstalledListResponse { states, issues })
+}
+
+fn sort_agent_app_states_by_id(states: &mut [Value]) {
     states.sort_by(|left, right| {
         read_json_string(left, &["appId"])
             .unwrap_or_default()
             .cmp(&read_json_string(right, &["appId"]).unwrap_or_default())
     });
-
-    Ok(AgentAppInstalledListResponse { states, issues })
 }
 
 fn read_agent_app_installed_state_path(path: &Path) -> Result<Option<Value>, String> {
@@ -115,11 +123,13 @@ fn agent_app_persistence_issue(
 pub(crate) fn save_agent_app_installed_state(
     params: AgentAppInstalledSaveParams,
 ) -> Result<Value, String> {
-    let app_id = read_state_app_id(&params.state)?;
+    let state = agent_app_packages::migrate_seeded_agent_app_installed_state(params.state);
+    let app_id = read_state_app_id(&state)?;
     validate_agent_app_id_for_storage(&app_id)?;
+    agent_app_packages::materialize_seeded_agent_app_runtime_package(&state)?;
     let saved_at = now_iso();
-    write_installed_agent_app_state(&app_id, &params.state, &saved_at)?;
-    Ok(params.state)
+    write_installed_agent_app_state(&app_id, &state, &saved_at)?;
+    Ok(state)
 }
 
 pub(crate) fn set_agent_app_installed_disabled(
@@ -376,14 +386,6 @@ fn agent_app_uninstall_target(
     }
 }
 
-fn safe_hash_path_segment(hash: &str) -> String {
-    hash.replace(':', "_")
-}
-
-fn agent_app_data_dir() -> Result<PathBuf, String> {
-    Ok(app_paths::preferred_data_dir()?.join(AGENT_APP_DATA_DIR))
-}
-
 fn installed_agent_app_dir() -> Result<PathBuf, String> {
     Ok(installed_agent_app_dir_from_data_root(
         &agent_app_data_dir()?
@@ -426,17 +428,6 @@ fn setup_agent_app_state_path_from_data_root(
 ) -> Result<PathBuf, String> {
     validate_agent_app_id_for_storage(app_id)?;
     Ok(setup_agent_app_dir_from_data_root(data_root).join(format!("{app_id}.json")))
-}
-
-fn validate_agent_app_id_for_storage(app_id: &str) -> Result<(), String> {
-    if app_id
-        .chars()
-        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-'))
-        && !app_id.is_empty()
-    {
-        return Ok(());
-    }
-    Err(format!("Agent App id 不安全: {app_id}"))
 }
 
 fn read_state_app_id(state: &Value) -> Result<String, String> {
@@ -487,14 +478,6 @@ fn set_object_field(value: &mut Value, key: &str, next: Value) -> Result<(), Str
     };
     object.insert(key.to_string(), next);
     Ok(())
-}
-
-pub(super) fn read_json_string(value: &Value, path: &[&str]) -> Option<String> {
-    let mut current = value;
-    for key in path {
-        current = current.get(*key)?;
-    }
-    current.as_str().map(str::to_string)
 }
 
 #[cfg(test)]
@@ -562,7 +545,7 @@ mod tests {
     fn uninstall_agent_app_keep_data_removes_install_state_from_current_list() {
         let temp = TempDir::new().expect("temp dir");
         let data_root = temp.path();
-        let app_id = "content-factory-app";
+        let app_id = "custom-agent-app";
         let installed = installed_agent_app_state_path_from_data_root(data_root, app_id)
             .expect("installed path");
         let setup =
@@ -616,9 +599,236 @@ mod tests {
         assert_eq!(response.removed_target_count, 2);
         assert_eq!(response.missing_target_count, 0);
         assert!(response.blocker_codes.is_empty());
-        assert!(response.list.states.is_empty());
+        assert!(response
+            .list
+            .states
+            .iter()
+            .all(|state| read_json_string(state, &["appId"]).as_deref() != Some(app_id)));
         assert!(!installed.exists());
         assert!(!setup.exists());
         assert!(user_data.exists());
+    }
+
+    #[test]
+    fn list_agent_app_installed_state_does_not_inject_content_factory() {
+        let temp = TempDir::new().expect("temp dir");
+        let data_root = temp.path();
+
+        let response =
+            list_agent_app_installed_state_from_data_root(data_root).expect("list installed");
+
+        assert!(response.states.is_empty());
+        assert!(response.issues.is_empty());
+    }
+
+    #[test]
+    fn list_agent_app_installed_state_migrates_seeded_content_factory_release_evidence() {
+        let temp = TempDir::new().expect("temp dir");
+        let data_root = temp.path();
+        let installed =
+            installed_agent_app_state_path_from_data_root(data_root, "content-factory-app")
+                .expect("installed path");
+        fs::create_dir_all(installed.parent().expect("installed parent")).expect("installed dir");
+        fs::write(
+            &installed,
+            serde_json::to_string_pretty(&json!({
+                "schemaVersion": INSTALLED_AGENT_APP_STATE_SCHEMA_VERSION,
+                "savedAt": NOW,
+                "state": seeded_content_factory_state_without_release_evidence()
+            }))
+            .expect("serialize installed state"),
+        )
+        .expect("write installed state");
+
+        let response =
+            list_agent_app_installed_state_from_data_root(data_root).expect("list installed");
+
+        assert_eq!(response.states.len(), 1);
+        assert_eq!(
+            read_json_string(
+                &response.states[0],
+                &["setup", "cloudReleaseEvidence", "signaturePolicy"]
+            )
+            .as_deref(),
+            Some("optional")
+        );
+        assert_eq!(
+            read_json_string(
+                &response.states[0],
+                &["setup", "cloudReleaseEvidence", "packageVerificationStatus"]
+            )
+            .as_deref(),
+            Some("verified")
+        );
+    }
+
+    #[test]
+    fn save_agent_app_installed_state_migrates_seeded_content_factory_release_evidence() {
+        let state = agent_app_packages::migrate_seeded_agent_app_installed_state(
+            seeded_content_factory_state_without_release_evidence(),
+        );
+
+        assert_eq!(
+            read_json_string(
+                &state,
+                &[
+                    "setup",
+                    "cloudReleaseEvidence",
+                    "signatureVerificationStatus"
+                ]
+            )
+            .as_deref(),
+            Some("not_configured")
+        );
+        assert_eq!(
+            read_json_string(&state, &["setup", "cloudReleaseEvidence", "status"]).as_deref(),
+            Some("warning")
+        );
+        assert_eq!(
+            state
+                .get("setup")
+                .and_then(|setup| setup.get("cloudReleaseEvidence"))
+                .and_then(|evidence| evidence.get("packageHashMatched"))
+                .and_then(Value::as_bool),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn saving_seeded_content_factory_materializes_runtime_package_cache() {
+        let temp = TempDir::new().expect("temp dir");
+        let data_root = temp.path();
+        let state = json!({
+            "appId": "content-factory-app",
+            "identity": {
+                "sourceKind": "cloud_release",
+                "sourceUri": "https://seeded.local/agent-apps/content-factory-app/2.0.0.lapp",
+                "appId": "content-factory-app",
+                "appVersion": "2.0.0",
+                "packageHash": "package-fnv1a-a4d0e86f",
+                "manifestHash": "manifest-fnv1a-b840e5c9"
+            },
+            "manifest": {
+                "runtimePackage": {
+                    "worker": {
+                        "entrypoint": "./src/runtime/content-factory-worker.mjs"
+                    }
+                }
+            },
+            "setup": {
+                "cloudReleaseEvidence": {
+                    "status": "warning",
+                    "signaturePolicy": "optional",
+                    "signatureVerificationStatus": "not_configured",
+                    "packageHashMatched": true,
+                    "manifestHashMatched": true,
+                    "packageVerificationStatus": "verified"
+                }
+            }
+        });
+
+        agent_app_packages::materialize_seeded_agent_app_runtime_package_from_data_root(
+            &state, data_root,
+        )
+        .expect("materialize seeded package");
+
+        let cache_dir = data_root.join("packages").join("package-fnv1a-a4d0e86f");
+        assert!(cache_dir.join("package.json").is_file());
+        assert!(cache_dir.join("plugin.json").is_file());
+        assert!(cache_dir
+            .join("src/runtime/content-factory-worker.mjs")
+            .is_file());
+    }
+
+    #[test]
+    fn saving_non_seeded_cloud_release_does_not_materialize_runtime_package_cache() {
+        let temp = TempDir::new().expect("temp dir");
+        let data_root = temp.path();
+        let state = json!({
+            "appId": "content-factory-app",
+            "identity": {
+                "sourceKind": "cloud_release",
+                "sourceUri": "https://packages.limecloud.example/content-factory-app.lapp",
+                "packageHash": "package-fnv1a-a4d0e86f"
+            },
+            "manifest": {
+                "runtimePackage": {
+                    "worker": {
+                        "entrypoint": "./src/runtime/content-factory-worker.mjs"
+                    }
+                }
+            },
+            "setup": {}
+        });
+
+        agent_app_packages::materialize_seeded_agent_app_runtime_package_from_data_root(
+            &state, data_root,
+        )
+        .expect("skip non-seeded package");
+
+        assert!(!data_root.join("packages").exists());
+    }
+
+    #[test]
+    fn seeded_local_app_not_registered_does_not_migrate_or_materialize() {
+        let temp = TempDir::new().expect("temp dir");
+        let data_root = temp.path();
+        let state = json!({
+            "appId": "unknown-seeded-app",
+            "identity": {
+                "sourceKind": "cloud_release",
+                "sourceUri": "https://seeded.local/agent-apps/unknown-seeded-app/1.0.0.lapp",
+                "appId": "unknown-seeded-app",
+                "appVersion": "1.0.0",
+                "packageHash": "package-fnv1a-unknown",
+                "manifestHash": "manifest-fnv1a-unknown"
+            },
+            "manifest": {
+                "version": "1.0.0",
+                "runtimePackage": {
+                    "worker": {
+                        "entrypoint": "./src/runtime/unknown-worker.mjs"
+                    }
+                }
+            },
+            "setup": {}
+        });
+
+        let migrated = agent_app_packages::migrate_seeded_agent_app_installed_state(state.clone());
+        agent_app_packages::materialize_seeded_agent_app_runtime_package_from_data_root(
+            &state, data_root,
+        )
+        .expect("skip unregistered seeded package");
+
+        assert!(migrated
+            .get("setup")
+            .and_then(|setup| setup.get("cloudReleaseEvidence"))
+            .is_none());
+        assert!(!data_root.join("packages").exists());
+    }
+
+    fn seeded_content_factory_state_without_release_evidence() -> Value {
+        json!({
+            "appId": "content-factory-app",
+            "identity": {
+                "sourceKind": "cloud_release",
+                "sourceUri": "https://seeded.local/agent-apps/content-factory-app/2.0.0.lapp",
+                "appId": "content-factory-app",
+                "appVersion": "2.0.0",
+                "packageHash": "package-fnv1a-a4d0e86f",
+                "manifestHash": "manifest-fnv1a-b840e5c9"
+            },
+            "manifest": {
+                "version": "2.0.0",
+                "runtimePackage": {
+                    "worker": {
+                        "entrypoint": "./src/runtime/content-factory-worker.mjs"
+                    }
+                }
+            },
+            "setup": {
+                "skills": []
+            }
+        })
     }
 }

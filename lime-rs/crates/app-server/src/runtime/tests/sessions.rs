@@ -578,6 +578,233 @@ async fn read_session_current_repairs_and_reads_jsonl_projection() {
 }
 
 #[tokio::test]
+async fn read_session_respects_history_limit_for_runtime_core_session() {
+    let core = RuntimeCore::with_backend(Arc::new(CompletedBackend));
+    core.start_session(AgentSessionStartParams {
+        session_id: Some("sess_runtime_history_limit".to_string()),
+        thread_id: Some("thread_runtime_history_limit".to_string()),
+        app_id: "agent-chat".to_string(),
+        workspace_id: Some("workspace-current".to_string()),
+        business_object_ref: None,
+        locale: None,
+    })
+    .expect("session");
+
+    for index in 0..3 {
+        core.start_turn(
+            AgentSessionTurnStartParams {
+                session_id: "sess_runtime_history_limit".to_string(),
+                turn_id: Some(format!("turn_runtime_history_limit_{index}")),
+                input: AgentInput {
+                    text: format!("hello {index}"),
+                    attachments: Vec::new(),
+                },
+                runtime_options: None,
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("turn");
+    }
+
+    let read = core
+        .read_session(AgentSessionReadParams {
+            session_id: "sess_runtime_history_limit".to_string(),
+            history_limit: Some(2),
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .expect("read");
+    let detail = read.detail.expect("detail");
+
+    assert_eq!(detail["messages_count"].as_u64(), Some(6));
+    assert_eq!(detail["history_limit"].as_u64(), Some(2));
+    assert_eq!(detail["history_cursor"]["loaded_count"].as_u64(), Some(2));
+    assert_eq!(detail["history_truncated"].as_bool(), Some(true));
+    assert_eq!(detail["messages"].as_array().expect("messages").len(), 2);
+}
+
+#[tokio::test]
+async fn read_session_current_uses_projection_summary_for_limited_history() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
+    let event_log_writer = Arc::new(EventLogWriter::new(&roots.event_log_root).expect("writer"));
+    let projection_store =
+        Arc::new(ProjectionStore::initialize(&roots.projection_db_path).expect("projection"));
+    let core = RuntimeCore::with_backend(Arc::new(CompletedBackend))
+        .with_event_log_writer(event_log_writer.clone())
+        .with_projection_store(projection_store.clone());
+    core.start_session(AgentSessionStartParams {
+        session_id: Some("sess_projection_fast_read".to_string()),
+        thread_id: Some("thread_projection_fast_read".to_string()),
+        app_id: "agent-chat".to_string(),
+        workspace_id: Some("workspace-current".to_string()),
+        business_object_ref: None,
+        locale: None,
+    })
+    .expect("session");
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: "sess_projection_fast_read".to_string(),
+            turn_id: Some("turn_projection_fast_read_1".to_string()),
+            input: AgentInput {
+                text: "first".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: None,
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("first turn");
+    let watermark_before = projection_store
+        .read_watermark("sess_projection_fast_read")
+        .expect("watermark")
+        .expect("watermark")
+        .last_sequence;
+    event_log_writer
+        .append(&AgentEvent {
+            event_id: "evt_projection_fast_read_stale_extra".to_string(),
+            sequence: watermark_before + 100,
+            session_id: "sess_projection_fast_read".to_string(),
+            thread_id: Some("thread_projection_fast_read".to_string()),
+            turn_id: Some("turn_projection_fast_read_stale".to_string()),
+            event_type: "message.created".to_string(),
+            timestamp: timestamp(),
+            payload: json!({
+                "input": {
+                    "text": "stale event should not block limited read",
+                    "attachments": []
+                }
+            }),
+        })
+        .expect("append stale event");
+
+    let restarted_core = RuntimeCore::default()
+        .with_event_log_writer(event_log_writer)
+        .with_projection_store(projection_store.clone());
+    let read = restarted_core
+        .read_session_current(AgentSessionReadParams {
+            session_id: "sess_projection_fast_read".to_string(),
+            history_limit: Some(1),
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .await
+        .expect("read from projection summary");
+    let detail = read.detail.expect("detail");
+    let watermark_after = projection_store
+        .read_watermark("sess_projection_fast_read")
+        .expect("watermark after")
+        .expect("watermark after")
+        .last_sequence;
+
+    assert_eq!(watermark_after, watermark_before);
+    assert_eq!(detail["projection_source"], "runtime.projection_1");
+    assert_eq!(detail["messages_count"].as_u64(), Some(2));
+    assert_eq!(detail["history_cursor"]["loaded_count"].as_u64(), Some(1));
+    assert_eq!(
+        detail["messages"][0]["metadata"]["source"].as_str(),
+        Some("projection_summary")
+    );
+    assert!(detail["messages"][0]["timestamp"].as_f64().is_some());
+}
+
+#[tokio::test]
+async fn read_session_current_pages_projection_summary_with_cursor() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
+    let event_log_writer = Arc::new(EventLogWriter::new(&roots.event_log_root).expect("writer"));
+    let projection_store =
+        Arc::new(ProjectionStore::initialize(&roots.projection_db_path).expect("projection"));
+    let core = RuntimeCore::with_backend(Arc::new(CompletedBackend))
+        .with_event_log_writer(event_log_writer.clone())
+        .with_projection_store(projection_store.clone());
+    core.start_session(AgentSessionStartParams {
+        session_id: Some("sess_projection_cursor_read".to_string()),
+        thread_id: Some("thread_projection_cursor_read".to_string()),
+        app_id: "agent-chat".to_string(),
+        workspace_id: Some("workspace-current".to_string()),
+        business_object_ref: None,
+        locale: None,
+    })
+    .expect("session");
+
+    for index in 0..3 {
+        core.start_turn(
+            AgentSessionTurnStartParams {
+                session_id: "sess_projection_cursor_read".to_string(),
+                turn_id: Some(format!("turn_projection_cursor_read_{index}")),
+                input: AgentInput {
+                    text: format!("user {index}"),
+                    attachments: Vec::new(),
+                },
+                runtime_options: None,
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("turn");
+    }
+
+    let restarted_core = RuntimeCore::default()
+        .with_event_log_writer(event_log_writer)
+        .with_projection_store(projection_store);
+    let tail = restarted_core
+        .read_session_current(AgentSessionReadParams {
+            session_id: "sess_projection_cursor_read".to_string(),
+            history_limit: Some(2),
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .await
+        .expect("read tail");
+    let tail_detail = tail.detail.expect("tail detail");
+    let oldest_message_id = tail_detail["history_cursor"]["oldest_message_id"]
+        .as_i64()
+        .expect("oldest message id");
+    assert_eq!(tail_detail["messages_count"].as_u64(), Some(6));
+    assert_eq!(
+        tail_detail["history_cursor"]["start_index"].as_u64(),
+        Some(4)
+    );
+    assert_eq!(
+        tail_detail["messages"][0]["content"][0]["text"].as_str(),
+        Some("user 2")
+    );
+
+    let page = restarted_core
+        .read_session_current(AgentSessionReadParams {
+            session_id: "sess_projection_cursor_read".to_string(),
+            history_limit: Some(2),
+            history_offset: None,
+            history_before_message_id: Some(oldest_message_id),
+        })
+        .await
+        .expect("read cursor page");
+    let page_detail = page.detail.expect("page detail");
+
+    assert_eq!(
+        page_detail["history_cursor"]["start_index"].as_u64(),
+        Some(2)
+    );
+    assert_eq!(
+        page_detail["messages"][0]["content"][0]["text"].as_str(),
+        Some("user 1")
+    );
+    assert_eq!(
+        page_detail["messages"][1]["content"][0]["text"].as_str(),
+        Some("你好！有什么可以帮你的吗？")
+    );
+}
+
+#[tokio::test]
 async fn list_agent_sessions_derives_projection_title_from_first_user_message() {
     let temp = tempfile::tempdir().expect("tempdir");
     let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");

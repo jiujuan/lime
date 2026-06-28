@@ -53,6 +53,7 @@ describe("developerFeatures", () => {
   it("应默认关闭 Claw Trace，并规范化采样率和级别", () => {
     expect(normalizeDeveloperConfig(null).claw_trace).toEqual({
       alert_enabled: false,
+      alert_notification_enabled: false,
       enabled: false,
       level: "summary",
       sample_rate: 1,
@@ -61,12 +62,14 @@ describe("developerFeatures", () => {
     expect(
       normalizeClawTraceConfig({
         alert_enabled: true,
+        alert_notification_enabled: true,
         enabled: true,
         level: "debug",
         sample_rate: 2,
       }),
     ).toEqual({
       alert_enabled: true,
+      alert_notification_enabled: true,
       enabled: true,
       level: "debug",
       sample_rate: 1,
@@ -75,12 +78,14 @@ describe("developerFeatures", () => {
     expect(
       normalizeClawTraceConfig({
         alert_enabled: false,
+        alert_notification_enabled: false,
         enabled: true,
         level: "summary",
         sample_rate: -1,
       }),
     ).toEqual({
       alert_enabled: false,
+      alert_notification_enabled: false,
       enabled: true,
       level: "summary",
       sample_rate: 0,

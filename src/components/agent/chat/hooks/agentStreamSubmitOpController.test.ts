@@ -194,7 +194,7 @@ describe("agentStreamSubmitOpController", () => {
     expect(op.preferences?.reasoningEffort).toBe("high");
   });
 
-  it("显式搜索命令应把 web search 偏好写入 user_input preferences", () => {
+  it("显式强制搜索命令应把 web search 偏好写入 user_input preferences", () => {
     const op = buildAgentStreamSubmitOp({
       activeSessionId: "session-search-1",
       content: "@搜索 关键词:AI 行业新闻",
@@ -208,12 +208,12 @@ describe("agentStreamSubmitOpController", () => {
       effectiveProviderType: "openai",
       effectiveModel: "gpt-5.5",
       webSearch: true,
-      searchMode: "allowed",
+      searchMode: "required",
       explicitToolPreferences: true,
     });
 
     expect(op.preferences?.webSearch).toBe(true);
-    expect(op.preferences?.searchMode).toBe("allowed");
+    expect(op.preferences?.searchMode).toBe("required");
   });
 
   it("应在最终 submit 边界把 thread goal 绑定到真实 session id", () => {

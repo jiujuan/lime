@@ -1,5 +1,67 @@
 import { describe, expect, it, vi } from "vitest";
+import { buildLimeCapabilityInvokeRequest } from "../sdk/capabilityContract";
 import { wrapAgentAppCapabilityDispatchWithBrowserIntentLaunch } from "./browserIntentLaunch";
+import type { AgentAppHostBridgeCapabilityRequest } from "./hostBridge";
+
+function createBrowserOpenRequest(): AgentAppHostBridgeCapabilityRequest {
+  const invokeRequest = buildLimeCapabilityInvokeRequest<
+    "lime.browser",
+    "open"
+  >({
+    capability: "lime.browser",
+    method: "open",
+    provenance: {
+      appId: "content-factory-app",
+      entryKey: "dashboard",
+      packageHash: "sha256:package",
+      manifestHash: "sha256:manifest",
+    },
+  });
+  return {
+    appId: "content-factory-app",
+    entryKey: "dashboard",
+    capability: "lime.browser",
+    method: "open",
+    invokeRequest,
+    rawPayload: {
+      capability: "lime.browser",
+      method: "open",
+    },
+  };
+}
+
+function createSearchQueryRequest(): AgentAppHostBridgeCapabilityRequest {
+  const invokeRequest = buildLimeCapabilityInvokeRequest<
+    "lime.search",
+    "query"
+  >({
+    capability: "lime.search",
+    method: "query",
+    args: {
+      query: "content-factory-app browser intent guard",
+    },
+    provenance: {
+      appId: "content-factory-app",
+      entryKey: "dashboard",
+      packageHash: "sha256:package",
+      manifestHash: "sha256:manifest",
+    },
+  });
+  return {
+    appId: "content-factory-app",
+    entryKey: "dashboard",
+    capability: "lime.search",
+    method: "query",
+    invokeRequest,
+    rawPayload: {
+      capability: "lime.search",
+      method: "query",
+      args: {
+        query: "content-factory-app browser intent guard",
+      },
+    },
+  };
+}
 
 describe("browserIntentLaunch", () => {
   it("应在 browser open intent 后请求 Right Surface browser", async () => {
@@ -55,10 +117,7 @@ describe("browserIntentLaunch", () => {
       },
     );
 
-    const result = await wrapped({
-      capability: "lime.browser",
-      method: "open",
-    });
+    const result = await wrapped(createBrowserOpenRequest());
 
     expect(result).toEqual({
       capability: "lime.browser",
@@ -106,10 +165,7 @@ describe("browserIntentLaunch", () => {
       },
     );
 
-    await wrapped({
-      capability: "lime.search",
-      method: "open",
-    });
+    await wrapped(createSearchQueryRequest());
 
     expect(requestBrowserIntent).not.toHaveBeenCalled();
   });

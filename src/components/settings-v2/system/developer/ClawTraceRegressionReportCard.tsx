@@ -4,9 +4,16 @@ import { AlertTriangle, ClipboardCopy, Save, Trash2 } from "lucide-react";
 import { copyTextToClipboard } from "@/lib/crashDiagnostic";
 import {
   projectClawTraceRegressionAlert,
-  type ClawTraceRegressionAlertReason,
   type ClawTraceRegressionAlertSeverity,
 } from "@/lib/trace/clawTraceRegressionAlert";
+import {
+  clearClawTraceRegressionAlertChannel,
+  exportClawTraceRegressionAlertChannel,
+  getClawTraceRegressionAlertChannelOverview,
+  type ClawTraceRegressionAlertChannelOverview,
+} from "@/lib/trace/clawTraceRegressionAlertChannel";
+import { dispatchClawTraceRegressionAlert } from "@/lib/trace/clawTraceRegressionAlertDispatcher";
+import { desktopHostClawTraceRegressionAlertNotifier } from "@/lib/trace/clawTraceRegressionAlertNotifier";
 import {
   clearClawTraceRegressionTrend,
   exportClawTraceRegressionTrend,
@@ -18,11 +25,16 @@ import {
 } from "@/lib/trace/clawTraceRegressionTrend";
 import type {
   ClawTraceRegressionMetricKey,
-  ClawTraceRegressionOwner,
   ClawTraceRegressionReport,
   ClawTraceRegressionSegment,
   ClawTraceRegressionVerdict,
 } from "@/lib/trace/clawTraceRegressionReport";
+import {
+  buildClawTraceRegressionAlertNotificationCopy,
+  clawTraceRegressionAlertReasonLabelKey,
+  clawTraceRegressionAlertSeverityLabelKey,
+  clawTraceRegressionOwnerLabelKey,
+} from "@/lib/trace/clawTraceRegressionAlertPresentation";
 import { SECONDARY_BUTTON_CLASS_NAME } from "./shared";
 
 type DeveloperSettingsMessage = {
@@ -30,8 +42,14 @@ type DeveloperSettingsMessage = {
   text: string;
 };
 
+type SettingsTranslate = (
+  key: string,
+  options?: Record<string, string | number>,
+) => string;
+
 interface ClawTraceRegressionReportCardProps {
   alertEnabled: boolean;
+  alertNotificationEnabled: boolean;
   onMessage: (message: DeveloperSettingsMessage) => void;
   report: ClawTraceRegressionReport;
 }
@@ -58,17 +76,6 @@ function verdictKey(verdict: ClawTraceRegressionVerdict): string {
   }
 }
 
-function ownerKey(owner: ClawTraceRegressionOwner): string {
-  switch (owner) {
-    case "provider_api":
-      return "settings.developer.debugSwitch.clawTrace.regression.owner.providerApi";
-    case "app_server":
-      return "settings.developer.debugSwitch.clawTrace.regression.owner.appServer";
-    case "lime_client":
-      return "settings.developer.debugSwitch.clawTrace.regression.owner.limeClient";
-  }
-}
-
 function metricLabelKey(metric: ClawTraceRegressionMetricKey): string {
   switch (metric) {
     case "providerWaitMs":
@@ -87,34 +94,6 @@ function metricLabelKey(metric: ClawTraceRegressionMetricKey): string {
       return "settings.developer.debugSwitch.clawTrace.appServerCompare.metric.providerToAppServer";
     case "appServerFirstDeltaToTerminalMs":
       return "settings.developer.debugSwitch.clawTrace.appServerCompare.metric.appServerTerminal";
-  }
-}
-
-function alertSeverityKey(severity: ClawTraceRegressionAlertSeverity): string {
-  switch (severity) {
-    case "none":
-      return "settings.developer.debugSwitch.clawTrace.regression.alert.severity.none";
-    case "watch":
-      return "settings.developer.debugSwitch.clawTrace.regression.alert.severity.watch";
-    case "warning":
-      return "settings.developer.debugSwitch.clawTrace.regression.alert.severity.warning";
-    case "critical":
-      return "settings.developer.debugSwitch.clawTrace.regression.alert.severity.critical";
-  }
-}
-
-function alertReasonKey(reason: ClawTraceRegressionAlertReason): string {
-  switch (reason) {
-    case "no_evidence":
-      return "settings.developer.debugSwitch.clawTrace.regression.alert.reason.noEvidence";
-    case "current_stable":
-      return "settings.developer.debugSwitch.clawTrace.regression.alert.reason.currentStable";
-    case "current_regression":
-      return "settings.developer.debugSwitch.clawTrace.regression.alert.reason.currentRegression";
-    case "large_current_regression":
-      return "settings.developer.debugSwitch.clawTrace.regression.alert.reason.largeCurrentRegression";
-    case "repeated_owner_regression":
-      return "settings.developer.debugSwitch.clawTrace.regression.alert.reason.repeatedOwnerRegression";
   }
 }
 
@@ -144,10 +123,15 @@ function segmentClassName(segment: ClawTraceRegressionSegment): string {
 
 export function ClawTraceRegressionReportCard({
   alertEnabled,
+  alertNotificationEnabled,
   onMessage,
   report,
 }: ClawTraceRegressionReportCardProps) {
   const { t } = useTranslation("settings");
+  const translate = useMemo<SettingsTranslate>(() => {
+    const baseTranslate = t as unknown as SettingsTranslate;
+    return (key, options) => String(baseTranslate(key, options));
+  }, [t]);
   const [saving, setSaving] = useState(false);
   const [overview, setOverview] = useState<ClawTraceRegressionTrendOverview>(
     () => getClawTraceRegressionTrendOverview(),
@@ -155,9 +139,16 @@ export function ClawTraceRegressionReportCard({
   const [trendRecords, setTrendRecords] = useState<
     ClawTraceRegressionTrendRecord[]
   >(() => listClawTraceRegressionTrend());
+  const [alertChannelOverview, setAlertChannelOverview] =
+    useState<ClawTraceRegressionAlertChannelOverview>(() =>
+      getClawTraceRegressionAlertChannelOverview(),
+    );
   const refreshOverview = useCallback(() => {
     setTrendRecords(listClawTraceRegressionTrend());
     setOverview(getClawTraceRegressionTrendOverview());
+  }, []);
+  const refreshAlertChannelOverview = useCallback(() => {
+    setAlertChannelOverview(getClawTraceRegressionAlertChannelOverview());
   }, []);
   useEffect(() => {
     refreshOverview();
@@ -174,13 +165,53 @@ export function ClawTraceRegressionReportCard({
     [alertEnabled, report, trendRecords],
   );
 
+  useEffect(() => {
+    if (!alertEnabled || !alert) {
+      return;
+    }
+    let cancelled = false;
+    const notificationCopy = buildClawTraceRegressionAlertNotificationCopy(
+      alert,
+      translate,
+    );
+
+    const dispatchPromise = dispatchClawTraceRegressionAlert({
+      alert,
+      alertEnabled,
+      notification: {
+        body: notificationCopy.body,
+        notifier: desktopHostClawTraceRegressionAlertNotifier,
+        title: notificationCopy.title,
+      },
+      notificationEnabled: alertNotificationEnabled,
+      report,
+    });
+    refreshAlertChannelOverview();
+    void dispatchPromise.then((result) => {
+      if (!cancelled && result.notification_attempted) {
+        refreshAlertChannelOverview();
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    alert,
+    alertEnabled,
+    alertNotificationEnabled,
+    refreshAlertChannelOverview,
+    report,
+    translate,
+  ]);
+
   const handleSaveTrend = useCallback(() => {
     try {
       const record = saveClawTraceRegressionTrendRecord(report);
       if (!record) {
         onMessage({
           type: "error",
-          text: t(
+          text: translate(
             "settings.developer.message.clawTraceRegressionNoEvidenceToSave",
           ),
         });
@@ -189,7 +220,9 @@ export function ClawTraceRegressionReportCard({
       refreshOverview();
       onMessage({
         type: "success",
-        text: t("settings.developer.message.clawTraceRegressionTrendSaved"),
+        text: translate(
+          "settings.developer.message.clawTraceRegressionTrendSaved",
+        ),
       });
     } catch (error) {
       console.error("保存 Claw Trace regression trend 失败:", error);
@@ -198,12 +231,12 @@ export function ClawTraceRegressionReportCard({
         text:
           error instanceof Error
             ? error.message
-            : t(
+            : translate(
                 "settings.developer.message.saveClawTraceRegressionTrendFailed",
               ),
       });
     }
-  }, [onMessage, refreshOverview, report, t]);
+  }, [onMessage, refreshOverview, report, translate]);
 
   const handleCopyTrend = useCallback(async () => {
     setSaving(true);
@@ -213,7 +246,9 @@ export function ClawTraceRegressionReportCard({
       );
       onMessage({
         type: "success",
-        text: t("settings.developer.message.clawTraceRegressionTrendCopied"),
+        text: translate(
+          "settings.developer.message.clawTraceRegressionTrendCopied",
+        ),
       });
     } catch (error) {
       console.error("复制 Claw Trace regression trend 失败:", error);
@@ -222,14 +257,66 @@ export function ClawTraceRegressionReportCard({
         text:
           error instanceof Error
             ? error.message
-            : t(
+            : translate(
                 "settings.developer.message.copyClawTraceRegressionTrendFailed",
               ),
       });
     } finally {
       setSaving(false);
     }
-  }, [onMessage, t]);
+  }, [onMessage, translate]);
+
+  const handleCopyAlertChannel = useCallback(async () => {
+    setSaving(true);
+    try {
+      await copyTextToClipboard(
+        JSON.stringify(exportClawTraceRegressionAlertChannel(), null, 2),
+      );
+      onMessage({
+        type: "success",
+        text: translate(
+          "settings.developer.message.clawTraceRegressionAlertChannelCopied",
+        ),
+      });
+    } catch (error) {
+      console.error("复制 Claw Trace regression alert channel 失败:", error);
+      onMessage({
+        type: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : translate(
+                "settings.developer.message.copyClawTraceRegressionAlertChannelFailed",
+              ),
+      });
+    } finally {
+      setSaving(false);
+    }
+  }, [onMessage, translate]);
+
+  const handleClearAlertChannel = useCallback(() => {
+    try {
+      clearClawTraceRegressionAlertChannel();
+      refreshAlertChannelOverview();
+      onMessage({
+        type: "success",
+        text: translate(
+          "settings.developer.message.clawTraceRegressionAlertChannelCleared",
+        ),
+      });
+    } catch (error) {
+      console.error("清空 Claw Trace regression alert channel 失败:", error);
+      onMessage({
+        type: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : translate(
+                "settings.developer.message.clearClawTraceRegressionAlertChannelFailed",
+              ),
+      });
+    }
+  }, [onMessage, refreshAlertChannelOverview, translate]);
 
   const handleClearTrend = useCallback(() => {
     try {
@@ -237,7 +324,9 @@ export function ClawTraceRegressionReportCard({
       refreshOverview();
       onMessage({
         type: "success",
-        text: t("settings.developer.message.clawTraceRegressionTrendCleared"),
+        text: translate(
+          "settings.developer.message.clawTraceRegressionTrendCleared",
+        ),
       });
     } catch (error) {
       console.error("清空 Claw Trace regression trend 失败:", error);
@@ -246,12 +335,12 @@ export function ClawTraceRegressionReportCard({
         text:
           error instanceof Error
             ? error.message
-            : t(
+            : translate(
                 "settings.developer.message.clearClawTraceRegressionTrendFailed",
               ),
       });
     }
-  }, [onMessage, refreshOverview, t]);
+  }, [onMessage, refreshOverview, translate]);
 
   return (
     <div
@@ -260,37 +349,52 @@ export function ClawTraceRegressionReportCard({
     >
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs font-semibold uppercase text-slate-500">
-          {t("settings.developer.debugSwitch.clawTrace.regression.title")}
+          {translate(
+            "settings.developer.debugSwitch.clawTrace.regression.title",
+          )}
         </p>
         <p className="text-xs font-semibold text-slate-700">
-          {t(verdictKey(report.verdict))}
+          {translate(verdictKey(report.verdict))}
         </p>
       </div>
       <p className="mt-1 text-xs text-slate-500">
         {report.primary_owner
-          ? t("settings.developer.debugSwitch.clawTrace.regression.focus", {
-              owner: t(ownerKey(report.primary_owner)),
-            })
-          : t("settings.developer.debugSwitch.clawTrace.regression.empty")}
+          ? translate(
+              "settings.developer.debugSwitch.clawTrace.regression.focus",
+              {
+                owner: translate(
+                  clawTraceRegressionOwnerLabelKey(report.primary_owner),
+                ),
+              },
+            )
+          : translate(
+              "settings.developer.debugSwitch.clawTrace.regression.empty",
+            )}
       </p>
       <p className="mt-1 text-xs text-slate-500">
-        {t("settings.developer.debugSwitch.clawTrace.regression.window", {
-          compactCount: report.window.compact_history_record_count,
-          traceCount: report.window.app_server_trace_window_count,
-        })}
+        {translate(
+          "settings.developer.debugSwitch.clawTrace.regression.window",
+          {
+            compactCount: report.window.compact_history_record_count,
+            traceCount: report.window.app_server_trace_window_count,
+          },
+        )}
       </p>
       <p
         className="mt-1 text-xs text-slate-500"
         data-testid="claw-trace-regression-trend-overview"
       >
-        {t("settings.developer.debugSwitch.clawTrace.regression.trend", {
-          count: overview.count,
-          latestVerdict: overview.latest_verdict
-            ? t(verdictKey(overview.latest_verdict))
-            : t(
-                "settings.developer.debugSwitch.clawTrace.regression.verdict.noEvidence",
-              ),
-        })}
+        {translate(
+          "settings.developer.debugSwitch.clawTrace.regression.trend",
+          {
+            count: overview.count,
+            latestVerdict: overview.latest_verdict
+              ? translate(verdictKey(overview.latest_verdict))
+              : translate(
+                  "settings.developer.debugSwitch.clawTrace.regression.verdict.noEvidence",
+                ),
+          },
+        )}
       </p>
       <div
         className="mt-2 flex flex-wrap items-center gap-2 text-xs"
@@ -304,39 +408,81 @@ export function ClawTraceRegressionReportCard({
           }`}
         >
           <AlertTriangle className="h-3.5 w-3.5" />
-          {t("settings.developer.debugSwitch.clawTrace.regression.alert.title")}
+          {translate(
+            "settings.developer.debugSwitch.clawTrace.regression.alert.title",
+          )}
           {": "}
           {alert
-            ? t(alertSeverityKey(alert.severity))
-            : t(
+            ? translate(
+                clawTraceRegressionAlertSeverityLabelKey(alert.severity),
+              )
+            : translate(
                 "settings.developer.debugSwitch.clawTrace.regression.alert.disabled",
               )}
         </span>
         <span className="text-slate-500">
           {!alert
-            ? t(
+            ? translate(
                 "settings.developer.debugSwitch.clawTrace.regression.alert.summary.disabled",
               )
             : alert.primary_owner
-              ? t(
+              ? translate(
                   "settings.developer.debugSwitch.clawTrace.regression.alert.summary.withOwner",
                   {
-                  deltaMs: formatMs(alert.current_regressed_delta_ms),
-                  owner: t(ownerKey(alert.primary_owner)),
-                  reason: t(alertReasonKey(alert.reason)),
-                  repeatCount: alert.repeated_owner_regression_count,
-                  windowCount: alert.recent_report_count,
-                },
-              )
-            : t(
-                "settings.developer.debugSwitch.clawTrace.regression.alert.summary.noOwner",
-                {
-                  reason: t(alertReasonKey(alert.reason)),
-                  windowCount: alert.recent_report_count,
-                },
-              )}
+                    deltaMs: formatMs(alert.current_regressed_delta_ms),
+                    owner: translate(
+                      clawTraceRegressionOwnerLabelKey(alert.primary_owner),
+                    ),
+                    reason: translate(
+                      clawTraceRegressionAlertReasonLabelKey(alert.reason),
+                    ),
+                    repeatCount: alert.repeated_owner_regression_count,
+                    windowCount: alert.recent_report_count,
+                  },
+                )
+              : translate(
+                  "settings.developer.debugSwitch.clawTrace.regression.alert.summary.noOwner",
+                  {
+                    reason: translate(
+                      clawTraceRegressionAlertReasonLabelKey(alert.reason),
+                    ),
+                    windowCount: alert.recent_report_count,
+                  },
+                )}
         </span>
       </div>
+      <p
+        className="mt-1 text-xs text-slate-500"
+        data-testid="claw-trace-regression-alert-channel-overview"
+      >
+        {alertChannelOverview.latest_severity
+          ? translate(
+              "settings.developer.debugSwitch.clawTrace.regression.alertChannel.status.withLatest",
+              {
+                count: alertChannelOverview.count,
+                latestSeverity: translate(
+                  clawTraceRegressionAlertSeverityLabelKey(
+                    alertChannelOverview.latest_severity,
+                  ),
+                ),
+              },
+            )
+          : translate(
+              "settings.developer.debugSwitch.clawTrace.regression.alertChannel.status.empty",
+              {
+                count: alertChannelOverview.count,
+              },
+            )}
+      </p>
+      <p className="mt-1 text-xs leading-5 text-slate-500">
+        {translate(
+          "settings.developer.debugSwitch.clawTrace.regression.alertChannel.retention",
+          {
+            maxAgeDays: alertChannelOverview.retention.max_age_days,
+            maxRecords: alertChannelOverview.retention.max_records,
+          },
+        )}
+      </p>
       {report.owner_totals.length > 0 ? (
         <div className="mt-2 flex flex-wrap gap-1">
           {report.owner_totals.map((total) => (
@@ -344,7 +490,7 @@ export function ClawTraceRegressionReportCard({
               key={total.owner}
               className="rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700"
             >
-              {t(ownerKey(total.owner))}
+              {translate(clawTraceRegressionOwnerLabelKey(total.owner))}
               {": +"}
               {formatMs(total.regressed_delta_ms)}
               {" ms"}
@@ -359,7 +505,7 @@ export function ClawTraceRegressionReportCard({
               key={`${segment.source}:${segment.key}`}
               className={segmentClassName(segment)}
             >
-              {t(metricLabelKey(segment.key))}
+              {translate(metricLabelKey(segment.key))}
               {": "}
               {formatMs(segment.current_ms)}
               {" ms / "}
@@ -377,7 +523,9 @@ export function ClawTraceRegressionReportCard({
           onClick={handleSaveTrend}
         >
           <Save className="h-4 w-4" />
-          {t("settings.developer.debugSwitch.clawTrace.regression.action.save")}
+          {translate(
+            "settings.developer.debugSwitch.clawTrace.regression.action.save",
+          )}
         </button>
         <button
           type="button"
@@ -386,7 +534,20 @@ export function ClawTraceRegressionReportCard({
           onClick={() => void handleCopyTrend()}
         >
           <ClipboardCopy className="h-4 w-4" />
-          {t("settings.developer.debugSwitch.clawTrace.regression.action.copy")}
+          {translate(
+            "settings.developer.debugSwitch.clawTrace.regression.action.copy",
+          )}
+        </button>
+        <button
+          type="button"
+          className={SECONDARY_BUTTON_CLASS_NAME}
+          disabled={saving}
+          onClick={() => void handleCopyAlertChannel()}
+        >
+          <ClipboardCopy className="h-4 w-4" />
+          {translate(
+            "settings.developer.debugSwitch.clawTrace.regression.alertChannel.action.copy",
+          )}
         </button>
         <button
           type="button"
@@ -395,8 +556,19 @@ export function ClawTraceRegressionReportCard({
           onClick={handleClearTrend}
         >
           <Trash2 className="h-4 w-4" />
-          {t(
+          {translate(
             "settings.developer.debugSwitch.clawTrace.regression.action.clear",
+          )}
+        </button>
+        <button
+          type="button"
+          className={SECONDARY_BUTTON_CLASS_NAME}
+          disabled={saving}
+          onClick={handleClearAlertChannel}
+        >
+          <Trash2 className="h-4 w-4" />
+          {translate(
+            "settings.developer.debugSwitch.clawTrace.regression.alertChannel.action.clear",
           )}
         </button>
       </div>

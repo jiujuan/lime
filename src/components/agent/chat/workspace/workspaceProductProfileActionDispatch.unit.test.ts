@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildWorkspaceProductProfileActionSystemPrompt,
   submitWorkspaceProductProfileActionIntent,
+  type SubmitWorkspaceProductProfileAction,
 } from "./workspaceProductProfileActionDispatch";
 import type { WorkspaceProductProfileActionIntent } from "./workspaceProductProfileModel";
 
@@ -44,7 +45,7 @@ const intent: WorkspaceProductProfileActionIntent = {
 
 describe("workspaceProductProfileActionDispatch", () => {
   it("应通过 Claw turn submit 发送 Product Profile action metadata", async () => {
-    const submit = vi.fn(async () => true);
+    const submit = vi.fn<SubmitWorkspaceProductProfileAction>(async () => true);
     const restoreInput = vi.fn();
 
     await expect(
@@ -108,7 +109,9 @@ describe("workspaceProductProfileActionDispatch", () => {
   });
 
   it("发送失败时应把 prompt 恢复到 Claw 输入框", async () => {
-    const submit = vi.fn(async () => false);
+    const submit = vi.fn<SubmitWorkspaceProductProfileAction>(
+      async () => false,
+    );
     const restoreInput = vi.fn();
 
     await expect(
@@ -123,7 +126,7 @@ describe("workspaceProductProfileActionDispatch", () => {
   });
 
   it("空 prompt 不应发送 action", async () => {
-    const submit = vi.fn(async () => true);
+    const submit = vi.fn<SubmitWorkspaceProductProfileAction>(async () => true);
     const restoreInput = vi.fn();
 
     await expect(

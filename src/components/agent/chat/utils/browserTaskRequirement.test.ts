@@ -21,6 +21,13 @@ describe("browserTaskRequirement", () => {
     });
   });
 
+  it("写公众号文章不应误判为微信公众号后台操作", () => {
+    expect(
+      detectBrowserTaskRequirement("@内容工厂 写一篇公众号文章"),
+    ).toBeNull();
+    expect(detectBrowserTaskRequirement("写一篇公众号文章")).toBeNull();
+  });
+
   it("普通网页浏览与阅读不应误判为必须浏览器任务", () => {
     expect(
       detectBrowserTaskRequirement("打开京东商品页看看今天的价格"),

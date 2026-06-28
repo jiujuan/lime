@@ -14,9 +14,9 @@ export interface VerifyCloudReleaseSignatureParams {
 
 type ImportKeyAlgorithm = Parameters<SubtleCrypto["importKey"]>[2];
 type VerifyAlgorithm = Parameters<SubtleCrypto["verify"]>[0];
+type WebCryptoBufferSource = Parameters<SubtleCrypto["verify"]>[2];
 
-const SIGNATURE_PAYLOAD_SCHEMA =
-  "agent-app-cloud-release-signature-payload/v2";
+const SIGNATURE_PAYLOAD_SCHEMA = "agent-app-cloud-release-signature-payload/v2";
 
 export function buildCloudReleaseSignaturePayload(
   app: CloudBootstrapApp,
@@ -91,8 +91,8 @@ export async function verifyCloudReleaseSignature({
     const verified = await subtle.verify(
       buildVerifyAlgorithm(proof.algorithm),
       publicKey,
-      decodeBase64(proof.signature),
-      new TextEncoder().encode(payload),
+      bufferSourceFromBytes(decodeBase64(proof.signature)),
+      bufferSourceFromBytes(new TextEncoder().encode(payload)),
     );
     return verified ? "verified" : "failed";
   } catch {
@@ -167,7 +167,7 @@ async function importPublicKey(params: {
 }): Promise<CryptoKey> {
   return params.subtle.importKey(
     "spki",
-    decodeBase64(stripPem(params.publicKey)),
+    bufferSourceFromBytes(decodeBase64(stripPem(params.publicKey))),
     buildImportAlgorithm(params.algorithm),
     false,
     ["verify"],
@@ -193,7 +193,7 @@ function buildVerifyAlgorithm(
   algorithm: AgentAppCloudReleaseSignatureAlgorithm,
 ): VerifyAlgorithm {
   if (algorithm === "RSASSA-PKCS1-v1_5-SHA256") {
-    return { name: "RSASSA-PKCS1-v1_5" };
+    return "RSASSA-PKCS1-v1_5";
   }
   if (algorithm === "RSA-PSS-SHA256") {
     return { name: "RSA-PSS", saltLength: 32 };
@@ -204,11 +204,11 @@ function buildVerifyAlgorithm(
   return { name: "Ed25519" } as unknown as VerifyAlgorithm;
 }
 
-async function sha256Hex(
-  value: string,
-  subtle: SubtleCrypto,
-): Promise<string> {
-  const digest = await subtle.digest("SHA-256", new TextEncoder().encode(value));
+async function sha256Hex(value: string, subtle: SubtleCrypto): Promise<string> {
+  const digest = await subtle.digest(
+    "SHA-256",
+    bufferSourceFromBytes(new TextEncoder().encode(value)),
+  );
   return `sha256:${[...new Uint8Array(digest)]
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("")}`;
@@ -239,8 +239,34 @@ function decodeBase64(value: string): Uint8Array {
     normalized.length + ((4 - (normalized.length % 4)) % 4),
     "=",
   );
+  const bufferCtor = (
+    globalThis as typeof globalThis & {
+      Buffer?: {
+        from: (value: string, encoding: "base64") => Uint8Array;
+      };
+    }
+  ).Buffer;
+  if (bufferCtor) {
+    return Uint8Array.from(bufferCtor.from(padded, "base64"));
+  }
   const binary = globalThis.atob(padded);
   return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+}
+
+function bufferSourceFromBytes(bytes: Uint8Array): WebCryptoBufferSource {
+  const bufferCtor = (
+    globalThis as typeof globalThis & {
+      Buffer?: {
+        from: (value: Uint8Array) => Uint8Array;
+      };
+    }
+  ).Buffer;
+  if (bufferCtor) {
+    return bufferCtor.from(bytes) as unknown as WebCryptoBufferSource;
+  }
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
 }
 
 export function encodeCloudReleaseSignatureBase64(bytes: ArrayBuffer): string {

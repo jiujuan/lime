@@ -348,9 +348,9 @@ fn resolve_project_root(params: &Value) -> Option<PathBuf> {
 fn search_mode_at(params: &Value) -> Option<RequestToolPolicyMode> {
     let raw = string_at(params, SEARCH_MODE_POINTERS)?;
     match raw.trim().to_ascii_lowercase().as_str() {
-        "required" | "require" | "must" => Some(RequestToolPolicyMode::Required),
-        "allowed" | "allow" | "enabled" | "true" | "1" => Some(RequestToolPolicyMode::Allowed),
-        "disabled" | "disable" | "none" | "false" | "0" => Some(RequestToolPolicyMode::Disabled),
+        "required" => Some(RequestToolPolicyMode::Required),
+        "auto" => Some(RequestToolPolicyMode::Auto),
+        "disabled" => Some(RequestToolPolicyMode::Disabled),
         _ => None,
     }
 }
@@ -546,6 +546,28 @@ mod tests {
     }
 
     #[test]
+    fn search_mode_parser_accepts_current_values_only() {
+        assert_eq!(
+            search_mode_at(&json!({"searchMode": "auto"})),
+            Some(RequestToolPolicyMode::Auto)
+        );
+        assert_eq!(
+            search_mode_at(&json!({"searchMode": "required"})),
+            Some(RequestToolPolicyMode::Required)
+        );
+        assert_eq!(
+            search_mode_at(&json!({"searchMode": "disabled"})),
+            Some(RequestToolPolicyMode::Disabled)
+        );
+
+        for legacy_value in [
+            "allowed", "allow", "enabled", "true", "1", "require", "must",
+        ] {
+            assert_eq!(search_mode_at(&json!({"searchMode": legacy_value})), None);
+        }
+    }
+
+    #[test]
     fn merges_runtime_agents_with_explicit_project_root_boundary() {
         let workspace = TempDir::new().expect("workspace");
         let parent = workspace.path().join("parent");
@@ -566,7 +588,7 @@ mod tests {
             "systemPrompt": "调度请求提示",
             "projectRoot": repo.to_string_lossy(),
             "workingDir": nested.to_string_lossy(),
-            "searchMode": "allowed"
+            "searchMode": "auto"
         }));
 
         let context = AgentTaskRuntimeContext::from_task(&task, Some("需要检索"));
@@ -603,7 +625,7 @@ mod tests {
                     "summary": {"type": "string"}
                 }
             },
-            "searchMode": "allowed"
+            "searchMode": "auto"
         }));
 
         let context = AgentTaskRuntimeContext::from_task(&task, Some("生成总结"));
@@ -637,7 +659,7 @@ mod tests {
                 .get("request_tool_policy")
                 .and_then(|value| value.get("searchMode"))
                 .and_then(Value::as_str),
-            Some("allowed")
+            Some("auto")
         );
     }
 

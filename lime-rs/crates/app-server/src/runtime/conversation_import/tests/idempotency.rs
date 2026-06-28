@@ -1,4 +1,5 @@
 use super::*;
+use crate::runtime::projection_store::ProjectionReadWindow;
 use crate::{EventLogWriter, ProjectionStore, SidecarStore, StorageRoots};
 use app_server_protocol::ConversationImportThreadStatus;
 
@@ -99,7 +100,7 @@ async fn committing_same_codex_thread_with_replace_existing_reimports_source() {
     )
     .expect("first commit");
     assert!(projection_store
-        .read_session_projection(&first.session.session_id)
+        .read_session_projection(&first.session.session_id, ProjectionReadWindow::default())
         .expect("old projection read")
         .is_some());
     assert!(!event_log_writer
@@ -139,7 +140,7 @@ async fn committing_same_codex_thread_with_replace_existing_reimports_source() {
         1
     );
     assert!(projection_store
-        .read_session_projection(&first.session.session_id)
+        .read_session_projection(&first.session.session_id, ProjectionReadWindow::default())
         .expect("old projection after replace")
         .is_none());
     assert!(event_log_writer
@@ -148,7 +149,7 @@ async fn committing_same_codex_thread_with_replace_existing_reimports_source() {
         .is_empty());
     assert!(sidecar_store.read_text(&first_sidecar_path).is_none());
     assert!(projection_store
-        .read_session_projection(&second.session.session_id)
+        .read_session_projection(&second.session.session_id, ProjectionReadWindow::default())
         .expect("new projection after replace")
         .is_some());
     let second_sidecar_path =
@@ -267,7 +268,7 @@ async fn committing_same_codex_thread_after_restart_reuses_projected_session() {
     )
     .expect("first commit");
     assert!(projection_store
-        .read_session_projection(&first.session.session_id)
+        .read_session_projection(&first.session.session_id, ProjectionReadWindow::default())
         .expect("projection read")
         .is_some());
 

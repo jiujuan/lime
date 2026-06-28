@@ -4,7 +4,7 @@ use app_server_protocol::AgentAppLocalPackageInspectParams;
 use app_server_protocol::AgentAppLocalPackageInspectResponse;
 use app_server_protocol::AgentAppPackageCacheEntry;
 use app_server_protocol::AgentAppPackageIdentity;
-use serde_json::Map;
+use chrono::Utc;
 use serde_json::Value;
 use sha2::Digest;
 use sha2::Sha256;
@@ -16,45 +16,32 @@ use std::path::PathBuf;
 use url::Url;
 use zip::ZipArchive;
 
-use super::agent_app_data_dir;
-use super::now_iso;
-use super::read_json_string;
-use super::safe_hash_path_segment;
-use super::validate_agent_app_id_for_storage;
+use super::plugin_manifest::resolve_plugin_package_manifest;
+use crate::agent_app_packages::agent_app_data_dir;
+use crate::agent_app_packages::read_json_string;
+use crate::agent_app_packages::safe_hash_path_segment;
+use crate::agent_app_packages::validate_agent_app_id_for_storage;
 
-const AGENT_APP_ARRAY_LAYER_FILES: &[(&str, &str)] = &[
-    ("app.entries.yaml", "entries"),
-    ("app.permissions.yaml", "permissions"),
-];
-const AGENT_APP_VALUE_LAYER_FILES: &[(&str, &str, &str)] = &[
-    ("app.capabilities.yaml", "capabilities", "capabilityConfig"),
-    ("app.errors.yaml", "errors", "errors"),
-    ("app.i18n.yaml", "i18n", "i18n"),
-    ("app.signature.yaml", "signature", "signature"),
-    ("app.runtime.yaml", "agentRuntime", "agentRuntime"),
-    ("app.install.yaml", "install", "install"),
-    ("evals/readiness.yaml", "readiness", "readiness"),
-    ("evals/health.yaml", "health", "health"),
-];
+fn now_iso() -> String {
+    Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+}
 
 pub(crate) fn inspect_agent_app_local_package(
     params: AgentAppLocalPackageInspectParams,
 ) -> Result<AgentAppLocalPackageInspectResponse, String> {
     let app_dir_path = canonicalize_existing_agent_app_dir_path(&params.app_dir)?;
-    let app_markdown_path = app_dir_path.join("APP.md");
-    let app_markdown = fs::read_to_string(&app_markdown_path)
-        .map_err(|error| format!("读取 Agent App APP.md 失败: {error}"))?;
-    let manifest = resolve_agent_app_manifest(&app_dir_path, &app_markdown)?;
+    let plugin_projection = resolve_plugin_package_manifest(&app_dir_path)?;
     let inspected_at = now_iso();
-    let manifest_hash = sha256_json_value(&manifest)?;
-    let package_hash = sha256_package(&app_dir_path, &manifest)?;
+    let manifest_hash = sha256_json_value(&plugin_projection.agent_app_manifest)?;
+    let package_hash = sha256_package(&app_dir_path, &plugin_projection.agent_app_manifest)?;
 
     Ok(AgentAppLocalPackageInspectResponse {
         source_kind: "local_folder".to_string(),
         source_uri: app_dir_path.to_string_lossy().to_string(),
         app_dir: app_dir_path.to_string_lossy().to_string(),
-        app_markdown,
-        manifest,
+        manifest_source: "plugin_json".to_string(),
+        plugin_manifest: plugin_projection.plugin_manifest,
+        manifest: plugin_projection.agent_app_manifest,
         manifest_hash,
         package_hash,
         inspected_at,
@@ -101,23 +88,15 @@ pub(crate) async fn fetch_agent_app_cloud_package(
 
     extract_agent_app_package_archive(&bytes, &staging_dir)?;
     let extracted_root = find_agent_app_package_root(&staging_dir)?;
-    let app_markdown_path = extracted_root.join("APP.md");
-    let app_markdown_bytes = fs::read(&app_markdown_path).map_err(|error| {
-        format!(
-            "读取 Agent App package APP.md 失败 {}: {error}",
-            app_markdown_path.display()
-        )
-    })?;
-    let actual_manifest_hash = sha256_prefixed(&app_markdown_bytes);
+    let plugin_projection = resolve_plugin_package_manifest(&extracted_root)?;
+    let actual_manifest_hash = sha256_json_value(&plugin_projection.agent_app_manifest)?;
     if actual_manifest_hash != descriptor.manifest_hash {
         return Err(format!(
             "Agent App manifest hash mismatch for {}@{}: expected {}, got {}",
             descriptor.app_id, descriptor.version, descriptor.manifest_hash, actual_manifest_hash
         ));
     }
-    let app_markdown = String::from_utf8(app_markdown_bytes)
-        .map_err(|error| format!("Agent App APP.md 必须是 UTF-8: {error}"))?;
-    let manifest = resolve_agent_app_manifest(&extracted_root, &app_markdown)?;
+    let manifest = plugin_projection.agent_app_manifest;
     ensure_manifest_matches_cloud_release(&manifest, &descriptor)?;
 
     if cache_dir.exists() {
@@ -177,145 +156,6 @@ fn canonicalize_existing_agent_app_dir_path(value: &str) -> Result<PathBuf, Stri
         return Err(format!("Agent App 路径不是目录: {}", canonical.display()));
     }
     Ok(canonical)
-}
-
-fn parse_app_markdown_frontmatter(markdown: &str) -> Result<Value, String> {
-    let normalized = markdown.strip_prefix('\u{feff}').unwrap_or(markdown);
-    let Some(rest) = normalized.strip_prefix("---") else {
-        return Err("Agent App APP.md 缺少 YAML frontmatter。".to_string());
-    };
-    let rest = rest
-        .strip_prefix('\n')
-        .or_else(|| rest.strip_prefix("\r\n"))
-        .unwrap_or(rest);
-    let Some(end_index) = rest.find("\n---") else {
-        return Err("Agent App APP.md frontmatter 未正确结束。".to_string());
-    };
-    let frontmatter = &rest[..end_index];
-    let yaml_value: serde_yaml::Value = serde_yaml::from_str(frontmatter)
-        .map_err(|error| format!("解析 Agent App frontmatter 失败: {error}"))?;
-    serde_json::to_value(yaml_value)
-        .map_err(|error| format!("转换 Agent App manifest 失败: {error}"))
-}
-
-fn resolve_agent_app_manifest(app_dir: &Path, markdown: &str) -> Result<Value, String> {
-    let mut manifest = parse_app_markdown_frontmatter(markdown)?;
-    apply_layered_manifest_files(app_dir, &mut manifest)?;
-    Ok(manifest)
-}
-
-fn apply_layered_manifest_files(app_dir: &Path, manifest: &mut Value) -> Result<(), String> {
-    for (relative_path, field) in AGENT_APP_ARRAY_LAYER_FILES {
-        apply_named_array_layer(app_dir, manifest, relative_path, field)?;
-    }
-    for (relative_path, source_field, target_field) in AGENT_APP_VALUE_LAYER_FILES {
-        apply_value_layer(app_dir, manifest, relative_path, source_field, target_field)?;
-    }
-    Ok(())
-}
-
-fn read_layered_yaml(app_dir: &Path, relative_path: &str) -> Result<Option<Value>, String> {
-    let path = app_dir.join(relative_path);
-    if !path.is_file() {
-        return Ok(None);
-    }
-    let content = fs::read_to_string(&path).map_err(|error| {
-        format!(
-            "读取 Agent App 分层 manifest 文件失败 {}: {error}",
-            path.display()
-        )
-    })?;
-    let yaml_value: serde_yaml::Value = serde_yaml::from_str(&content).map_err(|error| {
-        format!(
-            "解析 Agent App 分层 manifest 文件失败 {}: {error}",
-            path.display()
-        )
-    })?;
-    serde_json::to_value(yaml_value)
-        .map(Some)
-        .map_err(|error| format!("转换 Agent App 分层 manifest 文件失败: {error}"))
-}
-
-fn apply_value_layer(
-    app_dir: &Path,
-    manifest: &mut Value,
-    relative_path: &str,
-    source_field: &str,
-    target_field: &str,
-) -> Result<(), String> {
-    let Some(layer) = read_layered_yaml(app_dir, relative_path)? else {
-        return Ok(());
-    };
-    let Some(value) = layer.get(source_field).cloned() else {
-        return Ok(());
-    };
-    manifest_object_mut(manifest)?.insert(target_field.to_string(), value);
-    Ok(())
-}
-
-fn apply_named_array_layer(
-    app_dir: &Path,
-    manifest: &mut Value,
-    relative_path: &str,
-    field: &str,
-) -> Result<(), String> {
-    let Some(layer) = read_layered_yaml(app_dir, relative_path)? else {
-        return Ok(());
-    };
-    let Some(layer_items) = layer.get(field).and_then(Value::as_array) else {
-        return Ok(());
-    };
-    let mut merged = manifest
-        .get(field)
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-
-    for layer_item in layer_items {
-        let Some(layer_key) = layered_item_key(layer_item) else {
-            merged.push(layer_item.clone());
-            continue;
-        };
-        if let Some(existing) = merged
-            .iter_mut()
-            .find(|item| layered_item_key(item).as_deref() == Some(layer_key.as_str()))
-        {
-            merge_json_object(existing, layer_item.clone())?;
-        } else {
-            merged.push(layer_item.clone());
-        }
-    }
-
-    manifest_object_mut(manifest)?.insert(field.to_string(), Value::Array(merged));
-    Ok(())
-}
-
-fn layered_item_key(value: &Value) -> Option<String> {
-    value
-        .get("key")
-        .or_else(|| value.get("id"))
-        .and_then(Value::as_str)
-        .map(ToString::to_string)
-}
-
-fn merge_json_object(target: &mut Value, overlay: Value) -> Result<(), String> {
-    match (target.as_object_mut(), overlay) {
-        (Some(target_object), Value::Object(overlay_object)) => {
-            for (key, value) in overlay_object {
-                target_object.insert(key, value);
-            }
-        }
-        (_, value) => {
-            *target = value;
-        }
-    }
-    Ok(())
-}
-
-fn manifest_object_mut(manifest: &mut Value) -> Result<&mut Map<String, Value>, String> {
-    manifest
-        .as_object_mut()
-        .ok_or_else(|| "Agent App manifest 必须是对象。".to_string())
 }
 
 fn validate_cloud_release_descriptor(
@@ -409,7 +249,7 @@ fn extract_agent_app_package_archive(bytes: &[u8], staging_dir: &Path) -> Result
 }
 
 fn find_agent_app_package_root(staging_dir: &Path) -> Result<PathBuf, String> {
-    if staging_dir.join("APP.md").is_file() {
+    if staging_dir.join("plugin.json").is_file() {
         return Ok(staging_dir.to_path_buf());
     }
     let mut matches = Vec::new();
@@ -417,9 +257,9 @@ fn find_agent_app_package_root(staging_dir: &Path) -> Result<PathBuf, String> {
     matches.sort();
     matches.dedup();
     match matches.len() {
-        0 => Err("Agent App package 缺少 APP.md。".to_string()),
+        0 => Err("Agent App package 缺少 plugin.json。".to_string()),
         1 => Ok(matches.remove(0)),
-        _ => Err("Agent App package 包含多个 APP.md，无法确定 package root。".to_string()),
+        _ => Err("Agent App package 包含多个 plugin.json，无法确定 package root。".to_string()),
     }
 }
 
@@ -430,7 +270,7 @@ fn collect_agent_app_roots(dir: &Path, matches: &mut Vec<PathBuf>) -> Result<(),
         let entry = entry.map_err(|error| format!("读取 Agent App package 条目失败: {error}"))?;
         let path = entry.path();
         if path.is_dir() {
-            if path.join("APP.md").is_file() {
+            if path.join("plugin.json").is_file() {
                 matches.push(path.clone());
             }
             collect_agent_app_roots(&path, matches)?;
@@ -540,4 +380,219 @@ fn agent_app_package_cache_dir(package_hash: &str) -> Result<PathBuf, String> {
     Ok(agent_app_data_dir()?
         .join("packages")
         .join(safe_hash_path_segment(package_hash)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use app_server_protocol::AgentAppLocalPackageInspectParams;
+    use std::fs;
+
+    fn read_test_json_string(value: &Value, path: &[&str]) -> Option<String> {
+        let mut current = value;
+        for key in path {
+            current = key
+                .parse::<usize>()
+                .ok()
+                .and_then(|index| current.get(index))
+                .or_else(|| current.get(*key))?;
+        }
+        current.as_str().map(str::to_string)
+    }
+
+    fn write_minimal_plugin_package(
+        app_dir: &Path,
+        contributions: &str,
+    ) -> Result<(), std::io::Error> {
+        fs::write(
+            app_dir.join("plugin.json"),
+            format!(
+                r#"{{
+  "schemaVersion": "lime.plugin.package.v1",
+  "id": "content-factory-app",
+  "version": "2.0.0",
+  "displayName": "内容工厂",
+  "contributions": {contributions}
+}}"#
+            ),
+        )?;
+        fs::write(
+            app_dir.join("app.runtime.yaml"),
+            r#"agentRuntime:
+  worker:
+    entrypoint: ./worker.mjs
+    outputArtifactKind: content_factory.workspace_patch
+  activationEntries:
+    - key: content_article_generate
+      title: 写文章
+      aliases:
+        - "@写文章"
+      kind: plugin
+      intent: at_command
+      taskKind: content.article.generate
+      workflow: content_article_workflow
+      defaultObjectKind: articleDraft
+      rightSurface: productProfile
+  workflows:
+    - key: content_article_workflow
+      taskKind: content.article.generate
+      triggerIntents:
+        - content_article_generate
+      outputArtifactKind: content_factory.workspace_patch
+      steps:
+        - id: draft
+          subagent: article-writer
+          skillRefs:
+            - article-writing
+          expectedOutput: articleDraft
+  tasks:
+    - kind: content.article.generate
+"#,
+        )?;
+        fs::write(
+            app_dir.join("worker.mjs"),
+            "export default async function run() {}\n",
+        )?;
+        fs::write(
+            app_dir.join("app.workbench.yaml"),
+            r#"workbench:
+  profile: production
+  productWorkspace:
+    scope: session
+    primaryObjectKinds:
+      - articleDraft
+  productionObjects:
+    - kind: articleDraft
+      title: 文章草稿
+      artifactKind: markdown_document
+      primary: true
+  objectSurfaces:
+    - objectKind: articleDraft
+      surfaceKind: documentCanvas
+      renderer: host_builtin
+  historyRestore:
+    defaultSurface: selectedObject
+    restoreSelection: true
+    restoreLayout: true
+    fallback: artifactPreview
+"#,
+        )?;
+        Ok(())
+    }
+
+    #[test]
+    fn inspect_local_package_accepts_plugin_json() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        write_minimal_plugin_package(temp.path(), r#"{ "runtime": "./app.runtime.yaml" }"#)
+            .expect("write plugin package");
+
+        let inspected = inspect_agent_app_local_package(AgentAppLocalPackageInspectParams {
+            app_dir: temp.path().to_string_lossy().to_string(),
+        })
+        .expect("inspect plugin package");
+
+        assert_eq!(inspected.manifest_source, "plugin_json");
+        assert_eq!(
+            inspected
+                .plugin_manifest
+                .get("schemaVersion")
+                .and_then(Value::as_str),
+            Some("lime.plugin.package.v1")
+        );
+        assert_eq!(
+            read_json_string(&inspected.manifest, &["name"]).as_deref(),
+            Some("content-factory-app")
+        );
+        assert_eq!(
+            read_json_string(
+                &inspected.manifest,
+                &["runtimePackage", "worker", "entrypoint"]
+            )
+            .as_deref(),
+            Some("./worker.mjs")
+        );
+    }
+
+    #[test]
+    fn inspect_local_package_projects_runtime_and_workbench_contracts() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        write_minimal_plugin_package(
+            temp.path(),
+            r#"{ "runtime": "./app.runtime.yaml", "workbench": "./app.workbench.yaml" }"#,
+        )
+        .expect("write plugin package");
+
+        let inspected = inspect_agent_app_local_package(AgentAppLocalPackageInspectParams {
+            app_dir: temp.path().to_string_lossy().to_string(),
+        })
+        .expect("inspect plugin package");
+
+        assert_eq!(
+            read_test_json_string(
+                &inspected.manifest,
+                &["agentRuntime", "activationEntries", "0", "key"]
+            )
+            .as_deref(),
+            Some("content_article_generate")
+        );
+        assert_eq!(
+            read_test_json_string(
+                &inspected.manifest,
+                &["agentRuntime", "activationEntries", "0", "aliases", "0"]
+            )
+            .as_deref(),
+            Some("@写文章")
+        );
+        assert_eq!(
+            read_test_json_string(&inspected.manifest, &["entries", "0", "workflow"]).as_deref(),
+            Some("content_article_workflow")
+        );
+        assert_eq!(
+            read_test_json_string(
+                &inspected.manifest,
+                &["workbench", "productWorkspace", "primaryObjectKinds", "0"]
+            )
+            .as_deref(),
+            Some("articleDraft")
+        );
+        assert_eq!(
+            read_json_string(
+                &inspected.manifest,
+                &["workbench", "historyRestore", "defaultSurface"]
+            )
+            .as_deref(),
+            Some("selectedObject")
+        );
+    }
+
+    #[test]
+    fn inspect_local_package_rejects_app_markdown_only_package() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        fs::write(
+            temp.path().join("APP.md"),
+            "---\nname: legacy-app\nversion: 1.0.0\n---\n",
+        )
+        .expect("write legacy manifest");
+
+        let error = inspect_agent_app_local_package(AgentAppLocalPackageInspectParams {
+            app_dir: temp.path().to_string_lossy().to_string(),
+        })
+        .expect_err("APP.md must not be accepted");
+
+        assert!(error.contains("缺少 plugin.json"), "{error}");
+    }
+
+    #[test]
+    fn inspect_local_package_rejects_contribution_path_escape() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        write_minimal_plugin_package(temp.path(), r#"{ "runtime": "../app.runtime.yaml" }"#)
+            .expect("write plugin package");
+
+        let error = inspect_agent_app_local_package(AgentAppLocalPackageInspectParams {
+            app_dir: temp.path().to_string_lossy().to_string(),
+        })
+        .expect_err("escaped contribution path must be rejected");
+
+        assert!(error.contains("不能越过包根目录"), "{error}");
+    }
 }

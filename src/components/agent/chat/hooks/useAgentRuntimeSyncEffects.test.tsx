@@ -47,6 +47,13 @@ const mountedRoots: Array<{
   root: ReturnType<typeof createRoot>;
 }> = [];
 
+async function flushCoalescedRefresh(): Promise<void> {
+  await act(async () => {
+    vi.advanceTimersByTime(120);
+    await Promise.resolve();
+  });
+}
+
 function createThreadTurn(
   overrides?: Partial<AgentThreadTurn>,
 ): AgentThreadTurn {
@@ -403,8 +410,14 @@ describe("useAgentRuntimeSyncEffects", () => {
 
       await harness.render({ isSending: false });
 
+      expect(refreshSessionDetail).not.toHaveBeenCalled();
+      await flushCoalescedRefresh();
+
       expect(refreshSessionDetail).toHaveBeenCalledTimes(1);
-      expect(refreshSessionDetail).toHaveBeenCalledWith("session-1");
+      expect(refreshSessionDetail).toHaveBeenCalledWith(
+        "session-1",
+        "runtimeSync.sendSettled",
+      );
     } finally {
       harness.unmount();
     }
@@ -426,7 +439,10 @@ describe("useAgentRuntimeSyncEffects", () => {
       });
 
       expect(refreshSessionDetail).toHaveBeenCalledTimes(1);
-      expect(refreshSessionDetail).toHaveBeenCalledWith("session-1");
+      expect(refreshSessionDetail).toHaveBeenCalledWith(
+        "session-1",
+        "runtimeSync.recoveredPoll",
+      );
 
       await harness.render({
         queuedTurnCount: 0,
@@ -459,7 +475,10 @@ describe("useAgentRuntimeSyncEffects", () => {
       });
 
       expect(refreshSessionDetail).toHaveBeenCalledTimes(1);
-      expect(refreshSessionDetail).toHaveBeenCalledWith("session-1");
+      expect(refreshSessionDetail).toHaveBeenCalledWith(
+        "session-1",
+        "runtimeSync.recoveredPoll",
+      );
     } finally {
       harness.unmount();
     }
@@ -530,8 +549,14 @@ describe("useAgentRuntimeSyncEffects", () => {
         await Promise.resolve();
       });
 
+      expect(refreshSessionDetail).not.toHaveBeenCalled();
+      await flushCoalescedRefresh();
+
       expect(refreshSessionDetail).toHaveBeenCalledTimes(1);
-      expect(refreshSessionDetail).toHaveBeenCalledWith("session-1");
+      expect(refreshSessionDetail).toHaveBeenCalledWith(
+        "session-1",
+        "runtimeSync.event",
+      );
     } finally {
       harness.unmount();
     }
@@ -578,8 +603,14 @@ describe("useAgentRuntimeSyncEffects", () => {
         await Promise.resolve();
       });
 
+      expect(refreshSessionDetail).not.toHaveBeenCalled();
+      await flushCoalescedRefresh();
+
       expect(refreshSessionDetail).toHaveBeenCalledTimes(1);
-      expect(refreshSessionDetail).toHaveBeenCalledWith("session-1");
+      expect(refreshSessionDetail).toHaveBeenCalledWith(
+        "session-1",
+        "runtimeSync.event",
+      );
 
       await act(async () => {
         listeners.get("aster_stream_assistant-1")?.({
@@ -600,8 +631,13 @@ describe("useAgentRuntimeSyncEffects", () => {
         await Promise.resolve();
       });
 
+      await flushCoalescedRefresh();
+
       expect(refreshSessionDetail).toHaveBeenCalledTimes(2);
-      expect(refreshSessionDetail).toHaveBeenLastCalledWith("session-1");
+      expect(refreshSessionDetail).toHaveBeenLastCalledWith(
+        "session-1",
+        "runtimeSync.event",
+      );
 
       await act(async () => {
         listeners.get("aster_stream_assistant-1")?.({
@@ -623,8 +659,13 @@ describe("useAgentRuntimeSyncEffects", () => {
         await Promise.resolve();
       });
 
+      await flushCoalescedRefresh();
+
       expect(refreshSessionDetail).toHaveBeenCalledTimes(3);
-      expect(refreshSessionDetail).toHaveBeenLastCalledWith("session-1");
+      expect(refreshSessionDetail).toHaveBeenLastCalledWith(
+        "session-1",
+        "runtimeSync.event",
+      );
 
       await act(async () => {
         listeners.get("aster_stream_assistant-1")?.({
@@ -646,8 +687,13 @@ describe("useAgentRuntimeSyncEffects", () => {
         await Promise.resolve();
       });
 
+      await flushCoalescedRefresh();
+
       expect(refreshSessionDetail).toHaveBeenCalledTimes(4);
-      expect(refreshSessionDetail).toHaveBeenLastCalledWith("session-1");
+      expect(refreshSessionDetail).toHaveBeenLastCalledWith(
+        "session-1",
+        "runtimeSync.event",
+      );
     } finally {
       harness.unmount();
     }
@@ -807,6 +853,73 @@ describe("useAgentRuntimeSyncEffects", () => {
     }
   });
 
+  it("当前 turn 的连续状态事件应合并为一次会话详情刷新", async () => {
+    const refreshSessionDetail = vi.fn(async () => true);
+    const listeners = new Map<string, (event: { payload: unknown }) => void>();
+    const runtime = {
+      listenToTeamEvents: vi.fn(async () => () => {}),
+      listenToTurnEvents: vi.fn(async (eventName, handler) => {
+        listeners.set(
+          eventName,
+          handler as (event: { payload: unknown }) => void,
+        );
+        return () => {
+          listeners.delete(eventName);
+        };
+      }),
+    };
+    const harness = await mountHook({
+      runtime,
+      currentTurnEventName: "aster_stream_assistant-coalesced",
+      isSending: true,
+      refreshSessionDetail,
+    });
+
+    try {
+      await act(async () => {
+        const listener = listeners.get("aster_stream_assistant-coalesced");
+        listener?.({
+          payload: {
+            type: "runtime_status",
+            status: { phase: "running" },
+          },
+        });
+        listener?.({
+          payload: {
+            type: "queue_started",
+          },
+        });
+        listener?.({
+          payload: {
+            type: "turn.completed",
+            turn: {
+              id: "turn-completed",
+              thread_id: "thread-1",
+              prompt_text: "完成",
+              status: "completed",
+              started_at: "2026-03-29T00:05:00.000Z",
+              completed_at: "2026-03-29T00:05:01.000Z",
+              created_at: "2026-03-29T00:05:00.000Z",
+              updated_at: "2026-03-29T00:05:01.000Z",
+            },
+          },
+        });
+        await Promise.resolve();
+      });
+
+      expect(refreshSessionDetail).not.toHaveBeenCalled();
+      await flushCoalescedRefresh();
+
+      expect(refreshSessionDetail).toHaveBeenCalledTimes(1);
+      expect(refreshSessionDetail).toHaveBeenCalledWith(
+        "session-1",
+        "runtimeSync.event",
+      );
+    } finally {
+      harness.unmount();
+    }
+  });
+
   it("App Server turn notification 应通过当前 stream event 触发 read model 刷新", async () => {
     const eventName = "aster_stream_app-server-p3-126";
     const refreshSessionDetail = vi.fn(async () => true);
@@ -896,8 +1009,14 @@ describe("useAgentRuntimeSyncEffects", () => {
           }),
         }),
       );
+      expect(refreshSessionDetail).not.toHaveBeenCalled();
+      await flushCoalescedRefresh();
+
       expect(refreshSessionDetail).toHaveBeenCalledTimes(1);
-      expect(refreshSessionDetail).toHaveBeenCalledWith("session-1");
+      expect(refreshSessionDetail).toHaveBeenCalledWith(
+        "session-1",
+        "runtimeSync.event",
+      );
     } finally {
       harness.unmount();
     }
@@ -945,8 +1064,14 @@ describe("useAgentRuntimeSyncEffects", () => {
         await Promise.resolve();
       });
 
+      expect(refreshSessionDetail).not.toHaveBeenCalled();
+      await flushCoalescedRefresh();
+
       expect(refreshSessionDetail).toHaveBeenCalledTimes(1);
-      expect(refreshSessionDetail).toHaveBeenCalledWith("session-1");
+      expect(refreshSessionDetail).toHaveBeenCalledWith(
+        "session-1",
+        "runtimeSync.event",
+      );
     } finally {
       harness.unmount();
     }
@@ -965,7 +1090,10 @@ describe("useAgentRuntimeSyncEffects", () => {
 
     try {
       expect(refreshSessionDetail).toHaveBeenCalledTimes(1);
-      expect(refreshSessionDetail).toHaveBeenLastCalledWith("session-1");
+      expect(refreshSessionDetail).toHaveBeenLastCalledWith(
+        "session-1",
+        "runtimeSync.poll",
+      );
 
       await act(async () => {
         vi.advanceTimersByTime(1000);
@@ -1009,8 +1137,14 @@ describe("useAgentRuntimeSyncEffects", () => {
 
       await harness.render({ isSending: false });
 
+      expect(refreshSessionDetail).not.toHaveBeenCalled();
+      await flushCoalescedRefresh();
+
       expect(refreshSessionDetail).toHaveBeenCalledTimes(1);
-      expect(refreshSessionDetail).toHaveBeenCalledWith("session-1");
+      expect(refreshSessionDetail).toHaveBeenCalledWith(
+        "session-1",
+        "runtimeSync.sendSettled",
+      );
     } finally {
       harness.unmount();
     }

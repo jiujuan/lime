@@ -188,6 +188,7 @@ import {
   clearAgentUiPerformanceTraceHistory,
   listAgentUiPerformanceTraceHistory,
 } from "@/lib/agentUiPerformanceTraceHistory";
+import { clearClawTraceRegressionAlertChannel } from "@/lib/trace/clawTraceRegressionAlertChannel";
 import { clearClawTraceRegressionTrend } from "@/lib/trace/clawTraceRegressionTrend";
 
 interface Mounted {
@@ -423,6 +424,7 @@ beforeEach(async () => {
 
   vi.clearAllMocks();
   clearAgentUiPerformanceTraceHistory();
+  clearClawTraceRegressionAlertChannel();
   clearClawTraceRegressionTrend();
   await changeLimeLocale("en-US");
 
@@ -622,6 +624,7 @@ afterEach(async () => {
   vi.clearAllMocks();
   clearAgentUiPerformanceMetrics();
   clearAgentUiPerformanceTraceHistory();
+  clearClawTraceRegressionAlertChannel();
   clearClawTraceRegressionTrend();
   await changeLimeLocale("zh-CN");
 });
@@ -641,6 +644,8 @@ describe("DeveloperSettings", () => {
     expect(text).toContain("Claw stream trace");
     expect(text).toContain("Trace level");
     expect(text).toContain("Sample rate");
+    expect(text).toContain("Regression alert channel");
+    expect(text).toContain("Desktop alert notification");
     expect(text).toContain("Copy Trace summary");
     expect(text).toContain("Clear in-memory summary");
     expect(text).toContain("Trace history");
@@ -649,9 +654,12 @@ describe("DeveloperSettings", () => {
     expect(text).toContain("Clear Trace history");
     expect(text).toContain("Regression evidence");
     expect(text).toContain("Regression alert");
+    expect(text).toContain("Alert channel: 0 saved alerts");
     expect(text).toContain("Save regression evidence");
     expect(text).toContain("Copy regression trend");
     expect(text).toContain("Clear regression trend");
+    expect(text).toContain("Copy alert channel");
+    expect(text).toContain("Clear alert channel");
     expect(text).toContain("App Server Trace");
     expect(text).toContain("Copy App Server Trace list");
     expect(text).toContain("Copy latest App Server Trace");
@@ -752,6 +760,57 @@ describe("DeveloperSettings", () => {
     expect(container.textContent).toContain(
       "Claw trace is on. New turns record stream checkpoints; diagnostic exports include only latency summaries.",
     );
+  });
+
+  it("切换 Claw Trace 回归告警通道后应保存独立 developer.claw_trace.alert_enabled", async () => {
+    const container = renderComponent();
+    await flushEffects();
+
+    await clickButton(
+      findSwitch(container, "Toggle Claw trace regression alert channel"),
+    );
+
+    expect(mockSaveConfig).toHaveBeenCalledTimes(1);
+    expect(mockSaveConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        developer: expect.objectContaining({
+          workspace_harness_enabled: false,
+          claw_trace: expect.objectContaining({
+            alert_enabled: true,
+            enabled: false,
+            level: "summary",
+            sample_rate: 1,
+          }),
+        }),
+      }),
+    );
+    expect(container.textContent).toContain("Claw trace settings saved");
+  });
+
+  it("切换 Claw Trace 桌面告警通知后应保存独立 developer.claw_trace.alert_notification_enabled", async () => {
+    const container = renderComponent();
+    await flushEffects();
+
+    await clickButton(
+      findSwitch(container, "Toggle Claw trace desktop alert notification"),
+    );
+
+    expect(mockSaveConfig).toHaveBeenCalledTimes(1);
+    expect(mockSaveConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        developer: expect.objectContaining({
+          workspace_harness_enabled: false,
+          claw_trace: expect.objectContaining({
+            alert_enabled: false,
+            alert_notification_enabled: true,
+            enabled: false,
+            level: "summary",
+            sample_rate: 1,
+          }),
+        }),
+      }),
+    );
+    expect(container.textContent).toContain("Claw trace settings saved");
   });
 
   it("修改 Claw Trace 级别和采样率后应保存到独立配置", async () => {
@@ -909,7 +968,7 @@ describe("DeveloperSettings", () => {
     );
     expect(initialRegression.textContent).toContain("Regression evidence");
     expect(initialRegression.textContent).toContain("No evidence");
-    expect(initialRegression.textContent).toContain("Regression alert: None");
+    expect(initialRegression.textContent).toContain("Regression alert: Off");
 
     await clickButton(findButton(container, "Save Trace snapshot"));
 
@@ -938,8 +997,10 @@ describe("DeveloperSettings", () => {
     expect(regression.textContent).toContain(
       "Trend: 0 saved reports · latest No evidence",
     );
-    expect(regression.textContent).toContain("Regression alert: None");
-    expect(regression.textContent).toContain("Current report is stable");
+    expect(regression.textContent).toContain("Regression alert: Off");
+    expect(regression.textContent).toContain(
+      "Enable the regression alert channel",
+    );
     expect(regression.textContent).toContain("Provider: 900 ms / 0 ms");
 
     await clickButton(findButton(container, "Save regression evidence"));
@@ -950,7 +1011,7 @@ describe("DeveloperSettings", () => {
     expect(regression.textContent).toContain(
       "Trend: 1 saved reports · latest Stable",
     );
-    expect(regression.textContent).toContain("Regression alert: None");
+    expect(regression.textContent).toContain("Regression alert: Off");
 
     await clickButton(findButton(container, "Copy regression trend"));
 
@@ -1046,6 +1107,24 @@ describe("DeveloperSettings", () => {
   });
 
   it("加载 App Server Claw Trace timeline 时应展示 phase span 和事件顺序", async () => {
+    mockGetConfig.mockResolvedValueOnce({
+      developer: {
+        workspace_harness_enabled: false,
+        claw_trace: {
+          alert_enabled: true,
+          enabled: true,
+          level: "summary",
+          sample_rate: 1,
+        },
+      },
+      crash_reporting: {
+        enabled: true,
+        dsn: null,
+        environment: "production",
+        sample_rate: 1,
+        send_pii: false,
+      },
+    });
     mockListDiagnosticsTraces.mockResolvedValueOnce({
       available: true,
       trace_root: null,
@@ -1331,6 +1410,7 @@ describe("DeveloperSettings", () => {
     expect(text).toContain("Window: 0 compact snapshots · 3 App Server traces");
     expect(text).toContain("Regressed");
     expect(text).toContain("Regression alert: Watch");
+    expect(text).toContain("Alert channel: 1 saved alerts · latest Watch");
     expect(text).toContain(
       "Provider / API · +50 ms · 1/1 recent reports · Current report regressed",
     );
@@ -1356,6 +1436,23 @@ describe("DeveloperSettings", () => {
     expect(text).not.toContain("raw_provider_payload");
     expect(text).not.toContain("should");
     expect(text).not.toContain("drop-baseline");
+
+    await clickButton(findButton(container, "Copy alert channel"));
+
+    expect(mockCopyTextToClipboard).toHaveBeenCalledWith(
+      expect.stringContaining('"mode": "summary_only_alert"'),
+    );
+    expect(mockCopyTextToClipboard).toHaveBeenCalledWith(
+      expect.not.stringContaining("raw_provider_payload"),
+    );
+    expect(container.textContent).toContain("Claw trace alert channel copied");
+
+    await clickButton(findButton(container, "Clear alert channel"));
+
+    expect(container.textContent).toContain("Claw trace alert channel cleared");
+    expect(container.textContent).toContain(
+      "Alert channel: 0 saved alerts · no alert recorded",
+    );
 
     await clickButton(
       findByTestId<HTMLButtonElement>(container, "claw-trace-span-app_server"),

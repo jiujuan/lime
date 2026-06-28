@@ -12,10 +12,7 @@ const repoRoot = process.cwd();
 function normalizeContractSnippet(value) {
   return value
     .replace(/\b(?:protocol|appServer|constants)\./gu, "")
-    .replace(
-      /(\w+)\s*:\s*([A-Za-z0-9_<>,\[\]\s|&]+)\s*=\s*\{\}/gu,
-      "$1?: $2",
-    )
+    .replace(/(\w+)\s*:\s*([A-Za-z0-9_<>,\[\]\s|&]+)\s*=\s*\{\}/gu, "$1?: $2")
     .replace(/\basync\s+(?=[A-Za-z_$][\w$]*\()/gu, "")
     .replace(/,\s*\)/gu, ")")
     .replace(/\s+/gu, "");
@@ -1585,7 +1582,7 @@ const checks = [
     ],
     snippets: [
       'export const METHOD_AGENT_APP_INSTALLED_LIST = "agentAppInstalled/list"',
-      'export const METHOD_AGENT_APP_HOST_LIFECYCLE_LIST =',
+      "export const METHOD_AGENT_APP_HOST_LIFECYCLE_LIST =",
       'export const METHOD_AGENT_APP_SHELL_PREPARE = "agentAppShell/prepare"',
       'export const METHOD_AGENT_APP_UI_RUNTIME_START = "agentAppUiRuntime/start"',
       'export const METHOD_AGENT_APP_UI_RUNTIME_STATUS = "agentAppUiRuntime/status"',
@@ -1837,7 +1834,7 @@ const checks = [
       "pub use app_server_protocol::METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CONSUME",
       "pub use app_server_protocol::METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS",
       "pub use app_server_protocol::METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED",
-      'export const METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST =',
+      "export const METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST =",
       "METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CONSUME",
       "METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS",
       "METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED",
@@ -2591,20 +2588,24 @@ const checks = [
   },
   {
     name: "Electron Desktop Host implementation keeps Knowledge legacy facade retired and project memory direct",
-    files: ["electron/hostCommands.ts", "electron/ipcChannels.ts"],
+    files: [
+      "electron/hostCommands.ts",
+      "electron/agentAppShellHost.ts",
+      "electron/ipcChannels.ts",
+    ],
     snippets: [
       "METHOD_AGENT_APP_UI_RUNTIME_START",
       "METHOD_AGENT_APP_UI_RUNTIME_STATUS",
       "METHOD_AGENT_APP_UI_RUNTIME_STOP",
       'case "agent_app_start_ui_runtime":',
-      "return await this.#startAgentAppUiRuntime(args)",
+      "return await this.#agentAppShellHost.startUiRuntime(args)",
       'case "agent_app_get_ui_runtime_status":',
-      "return await this.#getAgentAppUiRuntimeStatus(args)",
+      "return await this.#agentAppShellHost.getUiRuntimeStatus(args)",
       'case "agent_app_stop_ui_runtime":',
-      "return await this.#stopAgentAppUiRuntime(args)",
-      "async #startAgentAppUiRuntime(",
-      "async #getAgentAppUiRuntimeStatus(",
-      "async #stopAgentAppUiRuntime(",
+      "return await this.#agentAppShellHost.stopUiRuntime(args)",
+      "async startUiRuntime(",
+      "async getUiRuntimeStatus(",
+      "async stopUiRuntime(",
       "ELECTRON_APP_SERVER_TRUTH_BRIDGE_COMMANDS",
       '"agent_app_start_ui_runtime"',
       '"agent_app_get_ui_runtime_status"',
@@ -2741,6 +2742,8 @@ const checks = [
   {
     name: "Electron Desktop Host projects Agent App runtime facade into App Server JSON-RPC",
     files: [
+      "electron/agentAppRuntimeTaskHost.ts",
+      "electron/agentAppRuntimeTaskHost.test.ts",
       "electron/hostCommands.ts",
       "electron/hostCommands.test.ts",
       "electron/ipcChannels.ts",
@@ -2758,11 +2761,12 @@ const checks = [
       'case "agent_app_runtime_get_task":',
       'case "agent_app_runtime_cancel_task":',
       'case "agent_app_runtime_submit_host_response":',
-      "async #startAgentAppRuntimeTask(",
-      "async #getAgentAppRuntimeTask(",
-      "async #cancelAgentAppRuntimeTask(",
-      "async #submitAgentAppRuntimeHostResponse(",
-      "async #ensureAgentAppRuntimeSession(",
+      "new AgentAppRuntimeTaskHost(",
+      "async startTask(",
+      "async getTask(",
+      "async cancelTask(",
+      "async submitHostResponse(",
+      "async #ensureSession(",
       "isAppServerSessionAlreadyExistsError(",
       "buildAgentAppRuntimeTaskMessage(",
       "sessionStatusToAgentAppTaskStatus(",
@@ -2778,8 +2782,8 @@ const checks = [
       '"agentSession/action/respond"',
       "hostOptions: {",
       "asterChatRequest: expect.objectContaining",
-      "agent_app_runtime_start_task 对已存在 session 做幂等投影并继续提交 turn",
-      "agent_app_runtime_submit_host_response 投影 snake_case runtime request 到 action/respond",
+      "startTask 对已存在 session 做幂等投影并继续提交 turn",
+      "submitHostResponse 投影 snake_case runtime request 到 action/respond",
       "ELECTRON_APP_SERVER_TRUTH_BRIDGE_COMMANDS",
     ],
     absentSnippets: [
@@ -2825,9 +2829,10 @@ const checks = [
     name: "App Server session read projects runtime events into thread_read",
     files: appServerRuntimeFiles,
     snippets: [
-      "let detail = read_model::runtime_session_read_detail(stored);",
+      "let detail = read_model::runtime_session_read_detail_with_options(",
       "detail: Some(detail)",
-      "pub(super) fn runtime_session_read_detail(stored: &StoredSession) -> serde_json::Value",
+      "pub(super) fn runtime_session_read_detail_with_options(",
+      "pub(super) fn from_params(params: &AgentSessionReadParams) -> Self",
       "fn runtime_thread_read_from_stored_session(",
       "product_workspace: Option<serde_json::Value>",
       '"thread_read": thread_read',
@@ -3597,10 +3602,10 @@ const checks = [
       "runtime_agent_failed_tool_end_emits_tool_failed",
       "runtime_agent_failed_shell_tool_is_mirrored_to_coding_facts",
       "request_tool_policy_from_request",
-      "RequestToolPolicyMode::Allowed",
+      "RequestToolPolicyMode::Auto",
       "resolve_request_tool_policy_with_mode(web_search, search_mode)",
-      "natural_language_news_turn_does_not_enable_search_without_explicit_request",
-      "explicit_allowed_search_mode_enables_model_tool_choice",
+      "natural_language_news_turn_exposes_search_tool_surface_by_default",
+      "explicit_auto_search_mode_uses_model_tool_choice",
       "direct_host_provider_config_allows_localhost_fixture_without_database_provider",
       "if request.api_key.is_none() && request.base_url.is_none() {",
       '"message.delta"',
@@ -3638,10 +3643,7 @@ const checks = [
   },
   {
     name: "Request tool policy avoids freshness keyword hard-code for preflight",
-    files: [
-      "lime-rs/crates/agent/src/lib.rs",
-      ...agentRequestToolPolicyFiles,
-    ],
+    files: ["lime-rs/crates/agent/src/lib.rs", ...agentRequestToolPolicyFiles],
     snippets: [
       "pub fn resolve_request_tool_policy_with_mode(",
       "record_tool_item",
@@ -3651,7 +3653,7 @@ const checks = [
       "tracker_accepts_required_websearch_from_item_lifecycle",
       "tracker_keeps_item_terminal_when_late_legacy_tool_end_conflicts",
       "web_search_synthesis_boundary_accepts_item_lifecycle_counts",
-      "allowed_web_search_should_not_run_preflight_from_message_keywords",
+      "auto_web_search_should_not_run_preflight_from_message_keywords",
       "required_web_search_should_not_preflight_by_default",
       "required_web_search_preflight_can_be_enabled_for_diagnostics",
       "required_web_search_should_expand_generic_parallel_preflight_queries",
@@ -7172,7 +7174,9 @@ const checks = [
       "runtime.listenToTurnEvents(",
       "normalizedCurrentTurnEventName",
       "!shouldRefreshReadModelForTurnEvent(event.payload)",
-      "void refreshSessionDetail(sessionId)",
+      'refreshSessionDetail(targetSessionId, source)',
+      'scheduleRefreshSessionDetail(sessionId, "runtimeSync.sendSettled")',
+      'scheduleRefreshSessionDetail(sessionId, "runtimeSync.event")',
     ],
   },
   {
@@ -7207,7 +7211,8 @@ const checks = [
       'type: "turn.completed"',
       'type: "turn.failed"',
       'type: "turn.canceled"',
-      'expect(refreshSessionDetail).toHaveBeenCalledWith("session-1")',
+      'expect(refreshSessionDetail).toHaveBeenCalledWith(\n        "session-1",\n        "runtimeSync.event"',
+      '"runtimeSync.sendSettled"',
       "expect(refreshSessionDetail).not.toHaveBeenCalled()",
     ],
   },

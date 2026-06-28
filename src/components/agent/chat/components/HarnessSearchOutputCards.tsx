@@ -4,7 +4,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { HarnessOutputSignal } from "../utils/harnessState";
-import { resolveSearchResultPreviewItemsFromText } from "../utils/searchResultPreview";
 import {
   classifySearchQuerySemantic,
   summarizeSearchQuerySemantics,
@@ -12,6 +11,7 @@ import {
 import { SearchResultPreviewList } from "./SearchResultPreviewList";
 import { InteractiveText } from "./HarnessStatusPanelPrimitives";
 import { agentText } from "./harnessPanelText";
+import { buildHarnessSearchOutputProjection } from "./harnessSearchOutputProjection";
 
 export function SearchOutputCard({
   signal,
@@ -23,15 +23,16 @@ export function SearchOutputCard({
   onOpenDetail: () => void;
 }) {
   const [resultsExpanded, setResultsExpanded] = useState(true);
-  const results = useMemo(
+  const projection = useMemo(
     () =>
-      resolveSearchResultPreviewItemsFromText(
-        signal.content?.trim() ||
-          signal.preview?.trim() ||
-          signal.summary.trim(),
-      ),
+      buildHarnessSearchOutputProjection({
+        content: signal.content,
+        preview: signal.preview,
+        summary: signal.summary,
+      }),
     [signal.content, signal.preview, signal.summary],
   );
+  const { items: results, resultCount } = projection;
 
   useEffect(() => {
     setResultsExpanded(true);
@@ -53,11 +54,11 @@ export function SearchOutputCard({
             </span>
           </div>
           <div className="mt-2 truncate text-sm font-semibold text-foreground">
-            {signal.summary}
+            {projection.query}
           </div>
           <div className="mt-1 text-xs text-muted-foreground">
             {signal.title}
-            {results.length > 0 ? ` · ${results.length} 条结果` : ""}
+            {resultCount > 0 ? ` · ${resultCount} 条结果` : ""}
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
             <Badge variant="secondary">{semantic.label}</Badge>
@@ -72,8 +73,8 @@ export function SearchOutputCard({
               className="h-8 w-8 rounded-full"
               aria-label={
                 resultsExpanded
-                  ? `收起搜索结果：${signal.summary}`
-                  : `展开搜索结果：${signal.summary}`
+                  ? `收起搜索结果：${projection.query}`
+                  : `展开搜索结果：${projection.query}`
               }
               onClick={() => setResultsExpanded((prev) => !prev)}
             >
@@ -106,9 +107,12 @@ export function SearchOutputCard({
           popoverAlign="start"
           className="mt-3"
         />
-      ) : !results.length && signal.preview ? (
+      ) : !results.length && projection.previewText ? (
         <div className="mt-3 rounded-xl bg-muted/50 px-3 py-3 text-xs text-muted-foreground">
-          <InteractiveText text={signal.preview} onOpenUrl={onOpenUrl} />
+          <InteractiveText
+            text={projection.previewText}
+            onOpenUrl={onOpenUrl}
+          />
         </div>
       ) : null}
     </div>

@@ -51,6 +51,12 @@ export function buildWorkspaceProductProfilePreviewArtifact({
     artifactDocumentId: artifactDocument.artifactId,
     artifactVersionId: artifactDocument.metadata.currentVersionId,
     artifactVersionNo: artifactDocument.metadata.currentVersionNo,
+    productProfileCardPreview: buildProductProfileCardPreviewFacts({
+      artifactIds,
+      layout,
+      object,
+      preview,
+    }),
     productProfile: {
       appId: profile.appId,
       sessionId: profile.sessionId,
@@ -120,6 +126,39 @@ export function buildWorkspaceProductProfilePreviewArtifact({
     meta,
     now,
   }).artifact;
+}
+
+export function isWorkspaceProductProfilePreviewArtifact(
+  artifact: Artifact,
+): boolean {
+  return artifact.meta.openedFrom === "right_surface_product_profile";
+}
+
+function buildProductProfileCardPreviewFacts({
+  artifactIds,
+  layout,
+  object,
+  preview,
+}: Pick<
+  WorkspaceProductProfilePreviewArtifactInput,
+  "artifactIds" | "layout" | "object" | "preview"
+>) {
+  return {
+    layout,
+    summary: object.summary?.trim() || null,
+    counts: {
+      artifacts: artifactIds.length,
+      briefFields: preview.briefFields.length,
+      citations: preview.citations.length,
+      images: preview.images.length,
+      imageSlots: preview.imageSlots.length,
+      outlineSections: preview.outline.length,
+      researchRounds: preview.researchRounds.length,
+      reviewNotes: preview.reviewNotes.length,
+      storyboardScenes: preview.storyboard.length,
+      checklistItems: preview.checklist.length,
+    },
+  };
 }
 
 function buildPreviewMarkdown({

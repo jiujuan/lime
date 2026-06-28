@@ -151,6 +151,43 @@ describe("useWorkspaceWriteFileAction", () => {
     expect(setLayoutMode).not.toHaveBeenCalled();
   });
 
+  it("完成态文章文档应自动打开右侧画布", async () => {
+    const setSelectedArtifactId = vi.fn();
+    const setArtifactViewMode = vi.fn();
+    const setLayoutMode = vi.fn();
+    const { render, getValue } = renderHook({
+      setSelectedArtifactId,
+      setArtifactViewMode,
+      setLayoutMode,
+      suppressCanvasAutoOpen: false,
+    });
+
+    await render();
+
+    act(() => {
+      getValue()(
+        "# AI 大模型观察\n\n这是一篇完整草稿。",
+        "exports/x-article-export/latest/index.md",
+        {
+          source: "artifact_snapshot",
+          status: "complete",
+          metadata: {
+            writePhase: "completed",
+          },
+        },
+      );
+    });
+
+    expect(setSelectedArtifactId).toHaveBeenCalledWith(expect.any(String));
+    expect(setArtifactViewMode).toHaveBeenCalledWith(
+      "preview",
+      expect.objectContaining({
+        artifactId: expect.any(String),
+      }),
+    );
+    expect(setLayoutMode).toHaveBeenCalledWith("chat-canvas");
+  });
+
   it("tool_result 来源的通用产物不应自动选中或展开工作台", async () => {
     const setSelectedArtifactId = vi.fn();
     const setArtifactViewMode = vi.fn();

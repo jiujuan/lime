@@ -1579,19 +1579,31 @@ function collectProductionBridgeGuardFailures() {
 
   const electronHostCommandsPath = "electron/hostCommands.ts";
   const electronHostCommandsSource = readSource(electronHostCommandsPath);
-  if (electronHostCommandsSource.includes('"aster_compat"')) {
-    failures.push({
-      file: electronHostCommandsPath,
-      message: "Electron 设置页诊断 facade 不能恢复 legacy Aster 浏览器后端",
-      token: '"aster_compat"',
-    });
-  }
-  if (electronHostCommandsSource.includes("auto_fallback: true")) {
-    failures.push({
-      file: electronHostCommandsPath,
-      message: "Electron 设置页诊断 facade 不能默认启用浏览器后端自动回退",
-      token: "auto_fallback: true",
-    });
+  const electronSystemUtilityHostPath = "electron/systemUtilityHost.ts";
+  const electronSystemUtilityHostSource = readSource(
+    electronSystemUtilityHostPath,
+  );
+  for (const { path: sourcePath, source } of [
+    { path: electronHostCommandsPath, source: electronHostCommandsSource },
+    {
+      path: electronSystemUtilityHostPath,
+      source: electronSystemUtilityHostSource,
+    },
+  ]) {
+    if (source.includes('"aster_compat"')) {
+      failures.push({
+        file: sourcePath,
+        message: "Electron 设置页诊断 facade 不能恢复 legacy Aster 浏览器后端",
+        token: '"aster_compat"',
+      });
+    }
+    if (source.includes("auto_fallback: true")) {
+      failures.push({
+        file: sourcePath,
+        message: "Electron 设置页诊断 facade 不能默认启用浏览器后端自动回退",
+        token: "auto_fallback: true",
+      });
+    }
   }
   for (const command of electronDiagnosticFacadeCommands) {
     if (!electronHostCommandsSource.includes(`"${command}"`)) {
@@ -1602,17 +1614,19 @@ function collectProductionBridgeGuardFailures() {
       });
     }
     const diagnosticMetaPattern = new RegExp(
-      `#diagnosticMeta\\([\\s\\S]*?["'\`]${escapeRegExp(command)}["'\`][\\s\\S]*?\\)`,
+      `diagnosticMeta\\([\\s\\S]*?["'\`]${escapeRegExp(command)}["'\`][\\s\\S]*?\\)`,
     );
     const emptyDiagnosticListPattern = new RegExp(
-      `#emptyDiagnosticList\\([\\s\\S]*?["'\`]${escapeRegExp(command)}["'\`][\\s\\S]*?\\)`,
+      `emptyDiagnosticList\\([\\s\\S]*?["'\`]${escapeRegExp(command)}["'\`][\\s\\S]*?\\)`,
     );
     const hasDiagnosticProjection =
+      diagnosticMetaPattern.test(electronSystemUtilityHostSource) ||
+      emptyDiagnosticListPattern.test(electronSystemUtilityHostSource) ||
       diagnosticMetaPattern.test(electronHostCommandsSource) ||
       emptyDiagnosticListPattern.test(electronHostCommandsSource);
     if (!hasDiagnosticProjection) {
       failures.push({
-        file: electronHostCommandsPath,
+        file: electronSystemUtilityHostPath,
         message:
           "设置页 Electron 诊断命令必须显式标注 electron-host-diagnostic degraded",
         token: command,

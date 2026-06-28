@@ -1,6 +1,7 @@
 import styled from "styled-components";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { LIME_STAGE_SURFACE } from "../workspace/taskCenterChromeTokens";
+import { CONVERSATION_CONTENT_MAX_WIDTH } from "./conversationLayoutTokens";
 
 export const Navbar = styled.div<{
   $compact?: boolean;
@@ -160,7 +161,7 @@ export const MessageBubble = styled.div<{
       ? "min(100%, 800px)"
       : $isUser
         ? "min(72%, 560px)"
-        : "min(100%, 1040px)"};
+        : CONVERSATION_CONTENT_MAX_WIDTH};
   padding: ${({ $isUser, $bareMedia }) =>
     $isUser ? "6px 12px" : $bareMedia ? "0" : "0 4px"};
   display: flex;

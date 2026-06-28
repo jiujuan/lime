@@ -177,6 +177,7 @@ interface AppPageContentProps {
   navigationRequestId?: number;
   onNavigate: (page: Page, params?: PageParams) => void;
   onAgentHasMessagesChange: (hasMessages: boolean) => void;
+  onAgentSessionChange?: (sessionId: string | null) => void;
   activeAgentSessionTarget?: AgentAppRightSurfaceLaunchTarget | null;
   agentSessionTargets?: AgentAppRightSurfaceLaunchTarget[] | null;
   onAgentSessionTargetChange?: (
@@ -191,6 +192,7 @@ export function AppPageContent({
   requestedPageParams,
   onNavigate,
   onAgentHasMessagesChange,
+  onAgentSessionChange,
   activeAgentSessionTarget,
   agentSessionTargets,
   onAgentSessionTargetChange,
@@ -204,6 +206,7 @@ export function AppPageContent({
   const handleAgentSessionChange = useCallback(
     (sessionId: string | null) => {
       const normalizedSessionId = sessionId?.trim();
+      onAgentSessionChange?.(normalizedSessionId || null);
       onAgentSessionTargetChange?.(
         normalizedSessionId
           ? {
@@ -213,7 +216,7 @@ export function AppPageContent({
           : null,
       );
     },
-    [agentSessionWorkspaceId, onAgentSessionTargetChange],
+    [agentSessionWorkspaceId, onAgentSessionChange, onAgentSessionTargetChange],
   );
 
   if (activePage === "automation") {

@@ -354,6 +354,51 @@ describe("AppSidebar conversations", () => {
     );
   });
 
+  it("当前会话切换到新 session 时应高亮真实 active 会话而不是入口会话", async () => {
+    mockListAgentRuntimeSessions.mockResolvedValue([
+      {
+        id: "session-old",
+        name: "旧会话",
+        created_at: 1713000000,
+        updated_at: 1713000600,
+        archived_at: null,
+        workspace_id: "project-1",
+        working_dir: "/repo/project-1",
+        messages_count: 3,
+      },
+      {
+        id: "session-new",
+        name: "新会话",
+        created_at: 1713001000,
+        updated_at: 1713001600,
+        archived_at: null,
+        workspace_id: "project-1",
+        working_dir: "/repo/project-1",
+        messages_count: 1,
+      },
+    ]);
+
+    const container = mountSidebarContainer({
+      currentPage: "agent",
+      currentPageParams: {
+        agentEntry: "claw",
+        projectId: "project-1",
+        initialSessionId: "session-old",
+      } as AgentPageParams,
+      activeAgentSessionId: "session-new",
+    });
+    await flushEffects(2);
+
+    const activeButtons = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(
+        'button[aria-current="page"]',
+      ),
+    ).map((button) => button.getAttribute("title"));
+
+    expect(activeButtons).toContain("新会话");
+    expect(activeButtons).not.toContain("旧会话");
+  });
+
   it("导入本地历史对话应先预览，取消时不提交 commit", async () => {
     const container = mountSidebarContainer({
       currentPage: "agent",

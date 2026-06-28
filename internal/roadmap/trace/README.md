@@ -1,6 +1,6 @@
 # Claw Trace 路线图
 
-> 状态：system design draft
+> 状态：system design active / Trace Tab non-send UX completed
 > 更新时间：2026-06-27
 > 范围：Claw / Agent Chat 的端到端 Trace 体系，包括开发者开关、run/span 模型、事件采集、存储、投影、导出、诊断 UI 与实施顺序。
 
@@ -50,7 +50,7 @@ existing Claw runtime events + timing checkpoints
   -> developer diagnostics UI / support bundle / local export
 ```
 
-Trace 只服务开发者诊断和工程回归。普通用户默认不感知，默认关闭高粒度采集。当前 Developer & Labs 已接入独立 `developer.claw_trace` 开关、level、sample_rate、复制 summary、清空内存 summary、保存 compact Trace 快照、复制 compact Trace history、清空 history、复制/导出 App Server Trace、显式加载 summary-only timeline、compact retained-window baseline compare、App Server retained-window trace compare、regression evidence 归因报告、手动保存的 regression trend history 与 summary-only regression alert 投影。support bundle 已默认包含裁剪后的 Agent UI performance summary 和 trace-store summary；客户端 history、regression trend 和 alert 都只消费 compact/summary-only 结构化数值，不保存 raw entries / raw trace JSONL / prompt / provider payload。App Server 已有 summary-only raw trace JSONL store，并通过 `diagnostics/trace/list`、`diagnostics/trace/read`、`diagnostics/trace/export` 提供开发者读面。
+Trace 只服务开发者诊断和工程回归。普通用户默认不感知，默认关闭高粒度采集。当前 Developer & Labs 已接入独立 `developer.claw_trace` 开关、level、sample_rate、`alert_enabled`、`alert_notification_enabled`、复制 summary、清空内存 summary、保存 compact Trace 快照、复制 compact Trace history、清空 history、复制/导出 App Server Trace、显式加载 summary-only timeline、compact retained-window baseline compare、App Server retained-window trace compare、regression evidence 归因报告、手动保存的 regression trend history、summary-only regression alert 投影、本地 summary-only alert channel inbox、本地通知 dispatcher、Electron Desktop Host 原生通知桥，以及主窗口 foreground global alert monitor。工作台 Trace Tab 已作为与 Harness 并列的一等 Tab，并区分 `claw_turn` 与 history restore / unknown 非发送链路：只有发送链路展示首字分段、baseline 和 regression，非发送链路只展示可用恢复耗时与 recorded phases。alert channel 默认关闭，只在开发者显式开启且有 watch / warning / critical 投影时写入本地 retained inbox；桌面通知默认关闭，只在新写入 summary-only alert 时通过 `show_desktop_notification` 壳命令尝试。离开 Developer 设置页后，主窗口 monitor 只监听本地 Agent UI performance summary-only 事件并 debounce 评估 compact summary/history，不自动查询 App Server trace list/read、不上传、不保存 raw entries / raw trace JSONL / prompt / provider payload / assistant delta text。Host 通知 payload 只接受 title/body/tag/silent，拒绝 raw trace 旁路；Host 细节回归已拆到 `desktopNotificationHost.test.ts`，`hostCommands.test.ts` 只保留 dispatcher smoke。support bundle 已默认包含裁剪后的 Agent UI performance summary 和 trace-store summary；客户端 history、regression trend 与 alert channel 都只消费 compact/summary-only 结构化数值。App Server 已有 summary-only raw trace JSONL store，并通过 `diagnostics/trace/list`、`diagnostics/trace/read`、`diagnostics/trace/export` 提供开发者显式读面。
 
 ## 当前优先级
 
@@ -70,5 +70,5 @@ user submit
 
 ## 当前实现状态
 
-- 已完成：Renderer/App Server/provider trace checkpoint、前端 provider projector、`providerWaitMs / clientLocalOutputMs` summary、Developer Claw Trace 开关与 level / sample_rate、诊断包 summary、复制/清空内存 summary、compact trace history / export / retention、fixture compact evidence、App Server summary-only raw trace JSONL store、trace read/list/export diagnostics API、support bundle trace opt-in、W3C trace context / OTEL、provider request id correlation、Developer UI timeline / span drilldown / compact retained-window baseline compare / App Server retained-window trace compare / regression evidence 归因报告 / 手动 regression trend history / regression alert 投影。
-- 未完成：真正的后台告警通道、以及 `agentProtocol.ts` / `agent.rs` 等超大文件的后续拆分。
+- 已完成：Renderer/App Server/provider trace checkpoint、前端 provider projector、`providerWaitMs / clientLocalOutputMs` summary、Developer Claw Trace 开关与 level / sample_rate / alert channel / notification dispatcher、Electron Desktop Host 原生通知桥、主窗口 foreground global alert monitor、通知 Host 模块级测试拆分、诊断包 summary、复制/清空内存 summary、compact trace history / export / retention、fixture compact evidence、App Server summary-only raw trace JSONL store、trace read/list/export diagnostics API、support bundle trace opt-in、W3C trace context / OTEL、provider request id correlation、Developer UI timeline / span drilldown / compact retained-window baseline compare / App Server retained-window trace compare / regression evidence 归因报告 / 手动 regression trend history / regression alert 投影 / 本地 summary-only alert channel inbox、工作台 Trace Tab 独立展示与非发送链路专属视图。
+- 未完成：系统级后台 daemon / 应用完全关闭后的告警、以及 `agentProtocol.ts` / `agent.rs` / `electron/hostCommands.ts` 等超大文件的后续拆分。

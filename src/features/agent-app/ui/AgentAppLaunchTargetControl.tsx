@@ -13,14 +13,19 @@ interface AgentAppLaunchTargetControlProps {
   onSelectedTargetIdChange: (targetId: string | null) => void;
 }
 
+type AgentAppLaunchTargetTranslate = (
+  key: string,
+  params?: Record<string, string | number>,
+) => string;
+
 function resolveTargetLabel(
   option: AgentAppRightSurfaceLaunchTargetOption,
   index: number,
-  t: (key: string, params?: Record<string, unknown>) => string,
+  translate: AgentAppLaunchTargetTranslate,
 ): string {
   return (
     option.label ??
-    t("agentApp.apps.launchTarget.targetFallback", { index: index + 1 })
+    translate("agentApp.apps.launchTarget.targetFallback", { index: index + 1 })
   );
 }
 
@@ -31,14 +36,18 @@ export function AgentAppLaunchTargetControl({
   onSelectedTargetIdChange,
 }: AgentAppLaunchTargetControlProps) {
   const { t } = useTranslation("agent");
+  const translate = useMemo<AgentAppLaunchTargetTranslate>(() => {
+    const baseTranslate = t as unknown as AgentAppLaunchTargetTranslate;
+    return (key, params) => String(baseTranslate(key, params));
+  }, [t]);
   const targetLabels = useMemo(
     () =>
       policy.rightSurfaceTargets.map((option, index) => ({
         id: option.id,
-        label: resolveTargetLabel(option, index, t),
+        label: resolveTargetLabel(option, index, translate),
         description: option.description,
       })),
-    [policy.rightSurfaceTargets, t],
+    [policy.rightSurfaceTargets, translate],
   );
   const currentTarget =
     targetLabels.find((option) => option.id === policy.rightSurfaceTargetId) ??
@@ -48,7 +57,7 @@ export function AgentAppLaunchTargetControl({
     selectedTargetId &&
     targetLabels.some((option) => option.id === selectedTargetId)
       ? selectedTargetId
-      : policy.rightSurfaceTargetId ?? "";
+      : (policy.rightSurfaceTargetId ?? "");
 
   return (
     <div
@@ -57,14 +66,14 @@ export function AgentAppLaunchTargetControl({
     >
       <div className="min-w-0">
         <p className="text-xs font-semibold text-[color:var(--lime-text-strong)]">
-          {t("agentApp.apps.launchTarget.label")}
+          {translate("agentApp.apps.launchTarget.label")}
         </p>
         {!policy.rightSurfaceAvailable ? (
           <p
             className="mt-0.5 text-xs text-[color:var(--lime-text-muted)]"
             data-testid="agent-apps-launch-target-unavailable"
           >
-            {t("agentApp.apps.launchTarget.rightSurfaceUnavailable")}
+            {translate("agentApp.apps.launchTarget.rightSurfaceUnavailable")}
           </p>
         ) : currentTarget ? (
           <p
@@ -72,7 +81,7 @@ export function AgentAppLaunchTargetControl({
             data-testid="agent-apps-launch-target-current"
             title={currentTarget.description ?? currentTarget.label}
           >
-            {t("agentApp.apps.launchTarget.targetHint", {
+            {translate("agentApp.apps.launchTarget.targetHint", {
               target: currentTarget.label,
             })}
           </p>
@@ -84,7 +93,7 @@ export function AgentAppLaunchTargetControl({
         targetLabels.length > 1 ? (
           <select
             className="h-9 min-w-[160px] rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 text-xs font-semibold text-[color:var(--lime-text-strong)] outline-none transition focus:border-[color:var(--lime-surface-border-strong)]"
-            aria-label={t("agentApp.apps.launchTarget.targetSelect")}
+            aria-label={translate("agentApp.apps.launchTarget.targetSelect")}
             value={selectValue}
             onChange={(event) =>
               onSelectedTargetIdChange(event.currentTarget.value || null)
@@ -110,7 +119,7 @@ export function AgentAppLaunchTargetControl({
             onClick={() => onModeChange("standalone")}
             data-testid="agent-apps-launch-target-standalone"
           >
-            {t("agentApp.apps.launchTarget.standalone")}
+            {translate("agentApp.apps.launchTarget.standalone")}
           </button>
           <button
             type="button"
@@ -124,7 +133,7 @@ export function AgentAppLaunchTargetControl({
             onClick={() => onModeChange("rightSurface")}
             data-testid="agent-apps-launch-target-right-surface"
           >
-            {t("agentApp.apps.launchTarget.rightSurface")}
+            {translate("agentApp.apps.launchTarget.rightSurface")}
           </button>
         </div>
       </div>

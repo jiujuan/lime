@@ -6,6 +6,11 @@ import type {
 } from "./workspacePluginHistoryRestoreLanding";
 import type { WorkspacePluginHistoryRestoreArtifactPreviewItem } from "./workspacePluginHistoryRestoreArtifacts";
 
+type AgentTranslate = (
+  key: string,
+  options?: Record<string, string | number>,
+) => string;
+
 interface WorkspacePluginHistoryRestoreLandingCardProps {
   model: WorkspacePluginHistoryRestoreLandingModel;
   artifactPreviewItems?: readonly WorkspacePluginHistoryRestoreArtifactPreviewItem[];
@@ -58,6 +63,8 @@ export function WorkspacePluginHistoryRestoreLandingCard({
   onOpenArtifactPreview,
 }: WorkspacePluginHistoryRestoreLandingCardProps) {
   const { t } = useTranslation("agent");
+  const translate: AgentTranslate = (key, options) =>
+    String((t as unknown as AgentTranslate)(key, options));
   const tone = toneClasses(model.tone);
   const Icon = tone.Icon;
   const canOpenArtifactPreview = Boolean(onOpenArtifactPreview);
@@ -108,20 +115,22 @@ export function WorkspacePluginHistoryRestoreLandingCard({
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-sm font-semibold">
               {String(
-                t(`agentChat.workspaceConversation.${model.titleKey}`),
+                translate(`agentChat.workspaceConversation.${model.titleKey}`),
               )}
             </h3>
             <span
               className={`rounded-full border px-2 py-0.5 text-xs font-medium ${tone.badge}`}
             >
               {String(
-                t(`agentChat.workspaceConversation.${model.statusKey}`),
+                translate(`agentChat.workspaceConversation.${model.statusKey}`),
               )}
             </span>
           </div>
           <p className="text-sm leading-6 opacity-85">
             {String(
-              t(`agentChat.workspaceConversation.${model.descriptionKey}`),
+              translate(
+                `agentChat.workspaceConversation.${model.descriptionKey}`,
+              ),
             )}
           </p>
           {detailItems.length > 0 ? (

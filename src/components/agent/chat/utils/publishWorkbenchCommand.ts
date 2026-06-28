@@ -1,5 +1,6 @@
 import {
   parseContentPostPlatform,
+  resolveContentPostPlatformLabel,
   stripContentPostPromptDecorations,
   type ContentPostPlatformType,
 } from "./contentPostPlatform";
@@ -59,17 +60,17 @@ function resolveDefaultPlatformFromTrigger(
     case "@TikTok Publish":
       return {
         platformType: "tiktok",
-        platformLabel: "TikTok",
+        platformLabel: resolveContentPostPlatformLabel("tiktok"),
       };
     case "@Twitter Publish":
       return {
         platformType: "x",
-        platformLabel: "X / Twitter",
+        platformLabel: resolveContentPostPlatformLabel("x"),
       };
     case "@YouTube Publish":
       return {
         platformType: "youtube",
-        platformLabel: "YouTube",
+        platformLabel: resolveContentPostPlatformLabel("youtube"),
       };
     default:
       return {};

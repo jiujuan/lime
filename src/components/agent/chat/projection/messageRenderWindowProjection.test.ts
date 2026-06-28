@@ -54,6 +54,7 @@ describe("messageRenderWindowProjection", () => {
     const renderedMessageCount = resolveInitialConversationRenderedMessageCount(
       {
         isSending: false,
+        isRestoredHistoryWindow: false,
         visibleMessageCount: visibleMessages.length,
         settings,
       },
@@ -90,6 +91,7 @@ describe("messageRenderWindowProjection", () => {
       visibleMessages,
       renderedMessageCount: resolveInitialConversationRenderedMessageCount({
         isSending: false,
+        isRestoredHistoryWindow: true,
         visibleMessageCount: visibleMessages.length,
         settings,
       }),
@@ -107,7 +109,7 @@ describe("messageRenderWindowProjection", () => {
     expect(projection.progressiveRenderMinimumDelayMs).toBe(600);
   });
 
-  it("发送中不应开启历史窗口裁剪", () => {
+  it("普通会话发送中不应开启消息窗口裁剪", () => {
     const settings = resolveConversationMessageRenderWindowSettings(
       settingsSet,
       false,
@@ -127,5 +129,31 @@ describe("messageRenderWindowProjection", () => {
     expect(projection.shouldUseProgressiveRender).toBe(false);
     expect(projection.hiddenHistoryCount).toBe(0);
     expect(projection.renderedMessages).toHaveLength(8);
+  });
+
+  it("旧历史窗口发送中仍应只投影尾部窗口", () => {
+    const settings = resolveConversationMessageRenderWindowSettings(
+      settingsSet,
+      true,
+    );
+    const visibleMessages = Array.from({ length: 8 }, (_, index) =>
+      message(index, "assistant"),
+    );
+
+    const projection = buildConversationMessageRenderWindowProjection({
+      visibleMessages,
+      renderedMessageCount: 1,
+      isSending: true,
+      isRestoredHistoryWindow: true,
+      settings,
+    });
+
+    expect(projection.shouldUseProgressiveRender).toBe(true);
+    expect(projection.renderedMessageCount).toBe(1);
+    expect(projection.hiddenHistoryCount).toBe(7);
+    expect(projection.renderedMessages.map((entry) => entry.id)).toEqual([
+      "message-7",
+    ]);
+    expect(projection.shouldAutoHydrateHiddenHistory).toBe(false);
   });
 });

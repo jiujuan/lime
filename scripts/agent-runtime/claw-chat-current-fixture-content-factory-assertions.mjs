@@ -20,6 +20,8 @@ export function buildContentFactoryProductProfileScenarioAssertions({
   const readModel = summary.contentFactoryProductProfileReadModel ?? {};
   const artifactRead = summary.contentFactoryProductProfileArtifactRead ?? {};
   const rendererHost = gui.rendererHost ?? {};
+  const storyboardRendererContract =
+    readModel.storyboardArtifact?.rendererContract ?? {};
   const remoteRuntimeRejection =
     summary.contentFactoryProductProfileRemoteRuntimeRejection ?? {};
 
@@ -28,8 +30,8 @@ export function buildContentFactoryProductProfileScenarioAssertions({
       appServerRequestMethods.includes(
         APP_SERVER_METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
       ) &&
-      summary.contentFactoryProductProfileRuntimeEventsAppend?.eventTypes?.[0] ===
-        "artifact.snapshot" &&
+      summary.contentFactoryProductProfileRuntimeEventsAppend
+        ?.eventTypes?.[0] === "artifact.snapshot" &&
       summary.contentFactoryProductProfileRuntimeEventsAppend?.eventTypes?.includes(
         "runtime.error",
       ) === true,
@@ -46,8 +48,8 @@ export function buildContentFactoryProductProfileScenarioAssertions({
     contentFactoryProductProfileSessionOpenedFromSidebar:
       summary.contentFactoryProductProfileSessionCreation?.sessionId ===
         CONTENT_FACTORY_PRODUCT_PROFILE_SESSION_ID &&
-      summary.guiContentFactoryProductProfileSessionVisible
-        ?.hasSessionTitle === true &&
+      summary.guiContentFactoryProductProfileSessionVisible?.hasSessionTitle ===
+        true &&
       summary.guiContentFactoryProductProfileSessionOpened?.readModel
         ?.sessionId === CONTENT_FACTORY_PRODUCT_PROFILE_SESSION_ID &&
       pageText.includes(CONTENT_FACTORY_PRODUCT_PROFILE_SESSION_TITLE),
@@ -83,7 +85,8 @@ export function buildContentFactoryProductProfileScenarioAssertions({
         "artifact-document:content-factory-app:artifact-article-1" &&
       readModel.articleArtifact?.productProfileObjectKind === "articleDraft",
     contentFactoryProductProfileRendererArtifactsProjected:
-      readModel.storyboardArtifact?.artifactRef === "artifact-video-storyboard" &&
+      readModel.storyboardArtifact?.artifactRef ===
+        "artifact-video-storyboard" &&
       readModel.storyboardArtifact?.kind === "artifact_document" &&
       readModel.storyboardArtifact?.surfaceKind === "storyboard" &&
       readModel.storyboardArtifact?.productProfileObjectKind ===
@@ -106,6 +109,41 @@ export function buildContentFactoryProductProfileScenarioAssertions({
       artifactRead.contentIncludesSchema === true &&
       artifactRead.contentIncludesDocumentId === true &&
       artifactRead.contentIncludesArticleTitle === true,
+    contentFactoryProductProfileArticleWritingStructureVisible:
+      summary.contentFactoryProductProfileArticleObjectSelection?.selected ===
+        true &&
+      summary.contentFactoryProductProfileArticleObjectSelection
+        ?.objectKind === "articleDraft" &&
+      summary.contentFactoryProductProfileArticleWritingStructure
+        ?.structureVisible === true &&
+      summary.contentFactoryProductProfileArticleWritingStructure
+        ?.researchVisible === true &&
+      summary.contentFactoryProductProfileArticleWritingStructure
+        ?.outlineVisible === true &&
+      summary.contentFactoryProductProfileArticleWritingStructure
+        ?.citationsVisible === true &&
+      summary.contentFactoryProductProfileArticleWritingStructure
+        ?.imageSlotsVisible === true &&
+      summary.contentFactoryProductProfileArticleWritingStructure
+        ?.hasDocumentPreview === true &&
+      summary.contentFactoryProductProfileArticleWritingStructure
+        ?.hasWritingStructureTitle === true &&
+      summary.contentFactoryProductProfileArticleWritingStructure
+        ?.hasResearchRound === true &&
+      summary.contentFactoryProductProfileArticleWritingStructure?.hasOutline ===
+        true &&
+      summary.contentFactoryProductProfileArticleWritingStructure
+        ?.hasTitleCandidate === true &&
+      summary.contentFactoryProductProfileArticleWritingStructure
+        ?.hasKeyTakeaway === true &&
+      summary.contentFactoryProductProfileArticleWritingStructure?.hasCitation ===
+        true &&
+      summary.contentFactoryProductProfileArticleWritingStructure
+        ?.hasImagePrompt === true &&
+      summary.contentFactoryProductProfileArticleWritingStructure
+        ?.hasWritingPlan === true &&
+      summary.contentFactoryProductProfileArticleWritingStructure
+        ?.hasReviewNote === true,
     contentFactoryProductProfileWorkerFailureEvidence:
       readModel.failedWorkerEvidence?.taskId === "image_job_1" &&
       readModel.failedWorkerEvidence?.status === "failed" &&
@@ -118,7 +156,9 @@ export function buildContentFactoryProductProfileScenarioAssertions({
       readModel.failedWorkerEvidence?.retryMaxAttempts === 0 &&
       gui.hasWorkerEvidenceTitle === true,
     contentFactoryProductProfileWorkerTurnExecuted:
-      appServerRequestMethods.includes(APP_SERVER_METHOD_AGENT_APP_INSTALLED_SAVE) &&
+      appServerRequestMethods.includes(
+        APP_SERVER_METHOD_AGENT_APP_INSTALLED_SAVE,
+      ) &&
       appServerRequestMethods.includes(APP_SERVER_METHOD_SESSION_TURN_START) &&
       summary.contentFactoryProductProfileInstalledStateSave?.appId ===
         "content-factory-app" &&
@@ -152,17 +192,17 @@ export function buildContentFactoryProductProfileScenarioAssertions({
     contentFactoryProductProfileRendererHostPlaceholderVisible:
       summary.contentFactoryProductProfileStoryboardObjectSelection
         ?.selected === true &&
-      rendererHost.visible === true &&
       rendererHost.pluginVisible === true &&
-      rendererHost.rendererKindVisible === true &&
-      rendererHost.executionModeVisible === true &&
-      rendererHost.rendererExecutionModelVisible === true &&
-      rendererHost.entryLoadPolicyVisible === true &&
       rendererHost.executableHostAbsent === true &&
-      rendererHost.reasonVisible === true &&
-      rendererHost.allowedOutputVisible === true &&
-      rendererHost.entryVisible === true &&
-      rendererHost.actionVisible === true,
+      storyboardRendererContract.pluginId === "content-factory-app" &&
+      storyboardRendererContract.rendererKind === "app_declared" &&
+      storyboardRendererContract.executionMode === "host_placeholder" &&
+      storyboardRendererContract.reasonCode ===
+        "app_declared_renderer_placeholder_only" &&
+      storyboardRendererContract.entry === "./renderer/storyboard.tsx" &&
+      storyboardRendererContract.allowedOutputArtifactKinds?.includes(
+        "content_factory.workspace_patch",
+      ) === true,
     contentFactoryProductProfileRemoteRuntimeFailClosed:
       appServerRequestMethods.includes(APP_SERVER_METHOD_SESSION_TURN_START) &&
       remoteRuntimeRejection.turnStatus === "accepted" &&

@@ -71,6 +71,44 @@ describe("AgentThreadReliabilityPanel", () => {
     );
   });
 
+  it("应给 header 主信息块保留可读宽度，避免中文逐字竖排", () => {
+    const container = renderPanel({
+      threadRead: {
+        thread_id: "thread-layout",
+        status: "failed",
+        updated_at: "2026-06-28T01:49:00Z",
+        last_outcome: {
+          thread_id: "thread-layout",
+          turn_id: "turn-layout",
+          outcome_type: "failed_provider",
+          summary: "最近一次回合执行失败",
+          retryable: true,
+          ended_at: "2026-06-28T01:49:00Z",
+        },
+      },
+    });
+
+    const headerMain = container.querySelector(
+      '[data-testid="agent-thread-reliability-header-main"]',
+    );
+    const headerActions = container.querySelector(
+      '[data-testid="agent-thread-reliability-header-actions"]',
+    );
+    const copyButton = container.querySelector(
+      '[data-testid="agent-thread-reliability-copy"]',
+    );
+    const copyJsonButton = container.querySelector(
+      '[data-testid="agent-thread-reliability-copy-json"]',
+    );
+
+    expect(headerMain?.className).toContain("min-w-[min(100%,18rem)]");
+    expect(headerMain?.className).toContain("flex-[1_1_24rem]");
+    expect(headerActions?.className).toContain("w-full");
+    expect(headerActions?.className).toContain("lg:w-auto");
+    expect(copyButton?.className).toContain("whitespace-nowrap");
+    expect(copyJsonButton?.className).toContain("whitespace-nowrap");
+  });
+
   it("后端 pending 为 0 且存在 runtime_error 时应显示故障而不是本地旧待补", () => {
     const container = renderPanel({
       threadRead: {

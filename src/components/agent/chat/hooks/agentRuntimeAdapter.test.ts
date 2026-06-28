@@ -126,6 +126,78 @@ describe("defaultAgentRuntimeAdapter", () => {
     });
   });
 
+  it("getSession 应合并同一会话同一请求形状的并发读取", async () => {
+    let resolveSession!: (value: { id: string; messages: unknown[] }) => void;
+    const sessionPromise = new Promise<{ id: string; messages: unknown[] }>(
+      (resolve) => {
+        resolveSession = resolve;
+      },
+    );
+    const client = {
+      ...mockRuntimeClient,
+      getAgentRuntimeSession: vi.fn().mockReturnValue(sessionPromise),
+    };
+    const adapter = createAgentRuntimeAdapter({
+      client,
+    });
+
+    const first = adapter.getSession("session-9", {
+      historyLimit: 40,
+      source: "runtimeSync.poll",
+    });
+    const second = adapter.getSession("session-9", {
+      historyLimit: 40,
+      source: "switchTopic.direct",
+    });
+
+    expect(client.getAgentRuntimeSession).toHaveBeenCalledTimes(1);
+
+    resolveSession({ id: "session-9", messages: [] });
+
+    await expect(first).resolves.toMatchObject({ id: "session-9" });
+    await expect(second).resolves.toMatchObject({ id: "session-9" });
+  });
+
+  it("getSession 不应合并不同历史窗口请求，完成后下一次应重新读取", async () => {
+    const client = {
+      ...mockRuntimeClient,
+      getAgentRuntimeSession: vi
+        .fn()
+        .mockResolvedValueOnce({ id: "session-9", messages: ["latest"] })
+        .mockResolvedValueOnce({ id: "session-9", messages: ["older"] })
+        .mockResolvedValueOnce({ id: "session-9", messages: ["fresh"] }),
+    };
+    const adapter = createAgentRuntimeAdapter({
+      client,
+    });
+
+    await Promise.all([
+      adapter.getSession("session-9", { historyLimit: 40 }),
+      adapter.getSession("session-9", {
+        historyLimit: 50,
+        historyBeforeMessageId: 123,
+      }),
+    ]);
+    await adapter.getSession("session-9", { historyLimit: 40 });
+
+    expect(client.getAgentRuntimeSession).toHaveBeenCalledTimes(3);
+    expect(client.getAgentRuntimeSession).toHaveBeenNthCalledWith(
+      1,
+      "session-9",
+      { historyLimit: 40 },
+    );
+    expect(client.getAgentRuntimeSession).toHaveBeenNthCalledWith(
+      2,
+      "session-9",
+      { historyLimit: 50, historyBeforeMessageId: 123 },
+    );
+    expect(client.getAgentRuntimeSession).toHaveBeenNthCalledWith(
+      3,
+      "session-9",
+      { historyLimit: 40 },
+    );
+  });
+
   it("generateSessionTitle 应透传标题预览文本", async () => {
     const client = {
       ...mockRuntimeClient,

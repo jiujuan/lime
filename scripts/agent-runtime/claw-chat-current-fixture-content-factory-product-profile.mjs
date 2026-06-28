@@ -105,8 +105,16 @@ export async function runContentFactoryProductProfileScenario({
     toggleTestId: "task-center-object-canvas-toggle",
     rootTestId: "workspace-product-profile-surface",
   });
-  const storyboardObjectSelection =
-    await selectContentFactoryStoryboardObject(page, options);
+  const articleObjectSelection = await selectContentFactoryArticleObject(
+    page,
+    options,
+  );
+  const articleWritingStructure =
+    await waitForContentFactoryArticleWritingStructure(page, options);
+  const storyboardObjectSelection = await selectContentFactoryStoryboardObject(
+    page,
+    options,
+  );
   const gui = await waitForContentFactoryProductProfileGui(page, options);
 
   const readModel = await invokeAppServerFromPage(
@@ -149,8 +157,7 @@ export async function runContentFactoryProductProfileScenario({
     contentFactoryProductProfileRuntimeEventsAppend:
       summarizeRuntimeEventsAppend(runtimeEventsAppend.result),
     contentFactoryProductProfileWorkerTurnStart: workerTurnStart,
-    contentFactoryProductProfileRemoteRuntimeRejection:
-      remoteRuntimeRejection,
+    contentFactoryProductProfileRemoteRuntimeRejection: remoteRuntimeRejection,
     contentFactoryProductProfileActionResultRuntimeEventsAppend:
       summarizeRuntimeEventsAppend(actionResultRuntimeEventsAppend.result),
     contentFactoryProductProfileRightSurfaceRequest:
@@ -158,6 +165,10 @@ export async function runContentFactoryProductProfileScenario({
     guiContentFactoryProductProfileSessionVisible: guiSessionVisible,
     guiContentFactoryProductProfileSessionOpened: guiSessionOpened,
     contentFactoryProductProfileRightSurface: rightSurface,
+    contentFactoryProductProfileArticleObjectSelection:
+      articleObjectSelection,
+    contentFactoryProductProfileArticleWritingStructure:
+      articleWritingStructure,
     contentFactoryProductProfileStoryboardObjectSelection:
       storyboardObjectSelection,
     contentFactoryProductProfileGui: gui,
@@ -250,7 +261,7 @@ async function createContentFactoryProductProfileSession(
       executionStrategy: "react",
       recentAccessMode: "full-access",
       recentPreferences: {
-        searchMode: "allowed",
+        searchMode: "auto",
       },
     },
     requestLog,
@@ -423,9 +434,8 @@ async function waitForContentFactoryProductProfileGui(page, options) {
       const rendererHost = document.querySelector(
         '[data-testid="workspace-product-profile-app-declared-renderer"]',
       );
-      const rendererExecutableHost = rendererHost?.querySelector(
-        "iframe, webview",
-      );
+      const rendererExecutableHost =
+        rendererHost?.querySelector("iframe, webview");
       const toggle = document.querySelector(
         '[data-testid="task-center-object-canvas-toggle"]',
       );
@@ -490,10 +500,7 @@ async function waitForContentFactoryProductProfileGui(page, options) {
       snapshot.hasImageSetTitle &&
       snapshot.hasStoryboardTitle &&
       snapshot.hasChecklistTitle &&
-      snapshot.hasWorkerEvidenceTitle &&
-      snapshot.rendererHost?.visible &&
-      snapshot.rendererHost?.executionModeVisible &&
-      snapshot.rendererHost?.reasonVisible
+      snapshot.hasWorkerEvidenceTitle
     ) {
       return snapshot;
     }
@@ -506,14 +513,124 @@ async function waitForContentFactoryProductProfileGui(page, options) {
   );
 }
 
-async function selectContentFactoryStoryboardObject(page, options) {
+async function selectContentFactoryArticleObject(page, options) {
+  return await selectContentFactoryProductProfileObject(page, options, {
+    objectKind: "articleDraft",
+    selector: '[data-testid="workspace-product-profile-object-articleDraft"]',
+    failureLabel: "文章对象",
+  });
+}
+
+async function waitForContentFactoryArticleWritingStructure(page, options) {
   const startedAt = Date.now();
   let lastSnapshot = null;
   while (Date.now() - startedAt < options.timeoutMs) {
     const snapshot = await page.evaluate(() => {
-      const button = document.querySelector(
-        '[data-testid="workspace-product-profile-object-videoStoryboard"]',
+      const root = document.querySelector(
+        '[data-testid="workspace-product-profile-surface"]',
       );
+      const structure = document.querySelector(
+        '[data-testid="workspace-product-profile-writing-structure"]',
+      );
+      const research = document.querySelector(
+        '[data-testid="workspace-product-profile-writing-research"]',
+      );
+      const outline = document.querySelector(
+        '[data-testid="workspace-product-profile-writing-outline"]',
+      );
+      const citations = document.querySelector(
+        '[data-testid="workspace-product-profile-writing-citations"]',
+      );
+      const imageSlots = document.querySelector(
+        '[data-testid="workspace-product-profile-writing-image-slots"]',
+      );
+      const bodyText = document.body?.innerText || "";
+      return {
+        rootVisible: isVisible(root),
+        structureVisible: isVisible(structure),
+        researchVisible: isVisible(research),
+        outlineVisible: isVisible(outline),
+        citationsVisible: isVisible(citations),
+        imageSlotsVisible: isVisible(imageSlots),
+        hasDocumentPreview: bodyText.includes("内容工厂首版文章"),
+        hasWritingStructureTitle: bodyText.includes("写作结构"),
+        hasResearchRound: bodyText.includes("检索行业背景"),
+        hasOutline: bodyText.includes("开场：为什么要把写作变成工作流"),
+        hasTitleCandidate: bodyText.includes("内容工厂不是聊天框"),
+        hasKeyTakeaway: bodyText.includes(
+          "写作应该经过检索、提纲、正文、配图和复核",
+        ),
+        hasCitation: bodyText.includes("产品规划文档"),
+        hasImagePrompt: bodyText.includes(
+          "桌面端内容工厂写作流程图，中文标签",
+        ),
+        hasWritingPlan: bodyText.includes("先做资料检索"),
+        hasReviewNote: bodyText.includes("正文需要保留真实引用来源。"),
+        bodyTextSample: bodyText.slice(0, 2000),
+      };
+
+      function isVisible(node) {
+        const rect = node?.getBoundingClientRect();
+        const style = node ? window.getComputedStyle(node) : null;
+        return Boolean(
+          node &&
+          rect &&
+          rect.width > 8 &&
+          rect.height > 8 &&
+          style?.display !== "none" &&
+          style?.visibility !== "hidden",
+        );
+      }
+    });
+    lastSnapshot = snapshot;
+    if (
+      snapshot?.rootVisible &&
+      snapshot.structureVisible &&
+      snapshot.researchVisible &&
+      snapshot.outlineVisible &&
+      snapshot.citationsVisible &&
+      snapshot.imageSlotsVisible &&
+      snapshot.hasDocumentPreview &&
+      snapshot.hasWritingStructureTitle &&
+      snapshot.hasResearchRound &&
+      snapshot.hasOutline &&
+      snapshot.hasTitleCandidate &&
+      snapshot.hasKeyTakeaway &&
+      snapshot.hasCitation &&
+      snapshot.hasImagePrompt &&
+      snapshot.hasWritingPlan &&
+      snapshot.hasReviewNote
+    ) {
+      return sanitizeJson(snapshot);
+    }
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `内容工厂 Product Profile 文章写作结构不可见: ${JSON.stringify(
+      sanitizeJson(lastSnapshot),
+    )}`,
+  );
+}
+
+async function selectContentFactoryStoryboardObject(page, options) {
+  return await selectContentFactoryProductProfileObject(page, options, {
+    objectKind: "videoStoryboard",
+    selector:
+      '[data-testid="workspace-product-profile-object-videoStoryboard"]',
+    failureLabel: "分镜对象",
+  });
+}
+
+async function selectContentFactoryProductProfileObject(
+  page,
+  options,
+  { failureLabel, objectKind, selector },
+) {
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const snapshot = await page.evaluate((selector) => {
+      const button = document.querySelector(selector);
       const visible = isVisible(button);
       if (visible) {
         button.click();
@@ -535,19 +652,19 @@ async function selectContentFactoryStoryboardObject(page, options) {
           style?.visibility !== "hidden",
         );
       }
-    });
+    }, selector);
     lastSnapshot = snapshot;
     if (snapshot?.visible) {
       return sanitizeJson({
         selected: true,
-        objectKind: "videoStoryboard",
+        objectKind,
         text: snapshot.text,
       });
     }
     await sleep(options.intervalMs);
   }
   throw new Error(
-    `内容工厂 Product Profile 分镜对象不可选: ${JSON.stringify(
+    `内容工厂 Product Profile ${failureLabel}不可选: ${JSON.stringify(
       sanitizeJson(lastSnapshot),
     )}`,
   );
@@ -629,21 +746,24 @@ async function runRemotePluginRuntimeRejectionProbe({
     turnId: turn.turnId ?? turn.turn_id ?? null,
     turnStatus: turn.status ?? null,
     eventTypes: events.map((event) => readString(event?.type)).filter(Boolean),
-    errorCode: readString(
-      runtimeErrorPayload.errorCode,
-      runtimeErrorPayload.error_code,
-    ) || readModelRejection.errorCode,
-    failureCategory: readString(
-      runtimeErrorPayload.failureCategory,
-      runtimeErrorPayload.failure_category,
-    ) || readModelRejection.failureCategory,
+    errorCode:
+      readString(
+        runtimeErrorPayload.errorCode,
+        runtimeErrorPayload.error_code,
+      ) || readModelRejection.errorCode,
+    failureCategory:
+      readString(
+        runtimeErrorPayload.failureCategory,
+        runtimeErrorPayload.failure_category,
+      ) || readModelRejection.failureCategory,
     appId:
       readString(runtimeErrorPayload.appId, runtimeErrorPayload.app_id) ||
       readModelRejection.appId,
-    outputArtifactKind: readString(
-      runtimeErrorPayload.outputArtifactKind,
-      runtimeErrorPayload.output_artifact_kind,
-    ) || readModelRejection.outputArtifactKind,
+    outputArtifactKind:
+      readString(
+        runtimeErrorPayload.outputArtifactKind,
+        runtimeErrorPayload.output_artifact_kind,
+      ) || readModelRejection.outputArtifactKind,
     readModel: readModelRejection,
     hasRuntimeError: events.some((event) => event?.type === "runtime.error"),
     hasTurnFailed: events.some((event) => event?.type === "turn.failed"),
@@ -774,6 +894,21 @@ function summarizeContentFactoryProductProfileReadModel(result) {
     const ref = asRecord(object?.ref) ?? asRecord(object?.objectRef) ?? {};
     return readString(ref.id) === IMAGE_SET_OBJECT_ID;
   });
+  const storyboardObject = objects.find(
+    (object) => productObjectKind(object) === "videoStoryboard",
+  );
+  const storyboardObjectSource =
+    asRecord(storyboardObject?.source) ??
+    asRecord(storyboardObject?.source_metadata) ??
+    {};
+  const storyboardRendererContract =
+    asRecord(storyboardObjectSource.rendererContract) ??
+    asRecord(storyboardObjectSource.renderer_contract) ??
+    {};
+  const storyboardRuntimeAuthorization =
+    asRecord(storyboardRendererContract.runtimeAuthorization) ??
+    asRecord(storyboardRendererContract.runtime_authorization) ??
+    {};
   const actionResultArtifacts = artifacts.filter((artifact) => {
     const artifactRef = readString(
       artifact?.artifactRef,
@@ -934,9 +1069,7 @@ function summarizeContentFactoryProductProfileReadModel(result) {
           kind: readString(storyboardArtifact.kind),
           title: readString(storyboardArtifact.title),
           artifactSchema: readString(storyboardMetadata.artifactSchema),
-          artifactDocumentId: readString(
-            storyboardMetadata.artifactDocumentId,
-          ),
+          artifactDocumentId: readString(storyboardMetadata.artifactDocumentId),
           surfaceKind: readString(storyboardMetadata.surfaceKind),
           productProfileObjectKind: readString(
             storyboardProductProfile.objectKind,
@@ -946,6 +1079,31 @@ function summarizeContentFactoryProductProfileReadModel(result) {
             storyboardProductProfile.surfaceKind,
             storyboardProductProfile.surface_kind,
           ),
+          rendererContract: {
+            pluginId: readString(
+              storyboardRendererContract.pluginId,
+              storyboardRendererContract.plugin_id,
+            ),
+            rendererKind: readString(
+              storyboardRendererContract.rendererKind,
+              storyboardRendererContract.renderer_kind,
+            ),
+            entry: readString(storyboardRendererContract.entry),
+            executionMode: readString(
+              storyboardRuntimeAuthorization.executionMode,
+              storyboardRuntimeAuthorization.execution_mode,
+            ),
+            reasonCode: readString(
+              storyboardRuntimeAuthorization.reasonCode,
+              storyboardRuntimeAuthorization.reason_code,
+            ),
+            allowedOutputArtifactKinds: readArray(
+              storyboardRuntimeAuthorization.allowedOutputArtifactKinds,
+              storyboardRuntimeAuthorization.allowed_output_artifact_kinds,
+            )
+              .map((value) => readString(value))
+              .filter(Boolean),
+          },
         }
       : null,
     checklistArtifact: checklistArtifact
@@ -994,14 +1152,8 @@ function summarizeRemotePluginRuntimeRejectionReadModel(result) {
   return sanitizeJson({
     status: readString(rejectionEvidence?.status),
     appId: readString(rejectionEvidence?.appId, rejectionEvidence?.app_id),
-    taskId: readString(
-      rejectionEvidence?.taskId,
-      rejectionEvidence?.task_id,
-    ),
-    turnId: readString(
-      rejectionEvidence?.turnId,
-      rejectionEvidence?.turn_id,
-    ),
+    taskId: readString(rejectionEvidence?.taskId, rejectionEvidence?.task_id),
+    turnId: readString(rejectionEvidence?.turnId, rejectionEvidence?.turn_id),
     errorCode: readString(
       rejectionEvidence?.errorCode,
       rejectionEvidence?.error_code,

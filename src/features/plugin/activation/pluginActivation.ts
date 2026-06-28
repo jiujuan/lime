@@ -131,10 +131,17 @@ function prefixVariantsForEntry(params: {
   entry: PluginActivationEntryDeclaration;
 }): string[] {
   const { contract, entry } = params;
+  const includePluginPrefixes =
+    entry.key === contract.id ||
+    entry.title === contract.displayName ||
+    entry.kind === "agentApp";
   return uniqueStrings([
-    `@${contract.displayName}`,
-    `@${contract.id}`,
+    includePluginPrefixes ? `@${contract.displayName}` : undefined,
+    includePluginPrefixes ? `@${contract.id}` : undefined,
     entry.title !== contract.displayName ? `@${entry.title}` : undefined,
+    ...(entry.aliases ?? []).map((alias) =>
+      alias.trim().startsWith("@") ? alias : `@${alias}`,
+    ),
   ]);
 }
 
@@ -231,26 +238,29 @@ export function buildPluginActivationMentionCatalog(
   const registryItems = params.registryItems;
   const entries = params.contracts.flatMap((contract) => {
     const state = activationStateForPlugin(contract.id, registryItems);
-    const activationEntry = contract.activationEntries[0];
-    if (!activationEntry) {
+    const activationEntries = contract.activationEntries;
+    const defaultActivationEntry = activationEntries[0];
+    if (!defaultActivationEntry) {
       return [];
     }
-    const baseEntries = prefixVariantsForEntry({
-      contract,
-      entry: activationEntry,
-    }).map((prefix) =>
-      catalogEntryForPrefix({
+    const baseEntries = activationEntries.flatMap((entry) =>
+      prefixVariantsForEntry({
         contract,
-        entry: activationEntry,
-        prefix,
-        ...state,
-      }),
+        entry,
+      }).map((prefix) =>
+        catalogEntryForPrefix({
+          contract,
+          entry,
+          prefix,
+          ...state,
+        }),
+      ),
     );
     return [
       ...baseEntries,
       ...buildSkillCatalogEntries({
         contract,
-        entry: activationEntry,
+        entry: defaultActivationEntry,
         ...state,
       }),
     ];

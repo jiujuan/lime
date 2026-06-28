@@ -4,6 +4,7 @@ import {
   getAgentUiPerformanceMetrics,
   recordAgentUiPerformanceMetric,
   summarizeAgentUiPerformanceMetrics,
+  subscribeAgentUiPerformanceMetricRecorded,
 } from "./agentUiPerformanceMetrics";
 import { clearAgentUiPerformanceTraceHistory } from "./agentUiPerformanceTraceHistory";
 
@@ -154,6 +155,33 @@ describe("agentUiPerformanceMetrics", () => {
 
     window.__LIME_AGENTUI_PERF__?.clear();
     expect(getAgentUiPerformanceMetrics()).toHaveLength(0);
+  });
+
+  it("应发布 summary-only 的本地 metric recorded 事件", () => {
+    const details: unknown[] = [];
+    const unsubscribe = subscribeAgentUiPerformanceMetricRecorded((detail) => {
+      details.push(detail);
+    });
+
+    recordAgentUiPerformanceMetric("agentStream.firstTextDelta", {
+      providerPayload: "secret-provider-payload",
+      serverToRendererDeltaMs: 120,
+      sessionId: "session-event",
+      workspaceId: "workspace-event",
+    });
+    unsubscribe();
+
+    expect(details).toEqual([
+      {
+        id: 1,
+        phase: "agentStream.firstTextDelta",
+        sessionId: "session-event",
+        source: null,
+        workspaceId: "workspace-event",
+      },
+    ]);
+    expect(JSON.stringify(details)).not.toContain("secret-provider-payload");
+    expect(JSON.stringify(details)).not.toContain("serverToRendererDeltaMs");
   });
 
   it("应汇总首页输入提交到会话壳和发送派发的耗时", () => {

@@ -279,6 +279,9 @@ export const APP_SIDEBAR_ENABLED_ITEMS_STORAGE_KEY =
 export function mountSidebar(options?: {
   currentPage?: Page;
   currentPageParams?: PageParams;
+  activeAgentSessionId?: string | null;
+  requestedPage?: Page;
+  requestedPageParams?: PageParams;
   onNavigate?: (page: Page, params?: PageParams) => void;
 }): MountedSidebar {
   const container = document.createElement("div");
@@ -290,6 +293,9 @@ export function mountSidebar(options?: {
       <AppSidebar
         currentPage={options?.currentPage ?? "agent"}
         currentPageParams={options?.currentPageParams}
+        activeAgentSessionId={options?.activeAgentSessionId}
+        requestedPage={options?.requestedPage}
+        requestedPageParams={options?.requestedPageParams}
         onNavigate={options?.onNavigate ?? vi.fn()}
       />,
     );
@@ -303,6 +309,9 @@ export function mountSidebar(options?: {
 export function mountSidebarContainer(options?: {
   currentPage?: Page;
   currentPageParams?: PageParams;
+  activeAgentSessionId?: string | null;
+  requestedPage?: Page;
+  requestedPageParams?: PageParams;
   onNavigate?: (page: Page, params?: PageParams) => void;
 }) {
   return mountSidebar(options).container;

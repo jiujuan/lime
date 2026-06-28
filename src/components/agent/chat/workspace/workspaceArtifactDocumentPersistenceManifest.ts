@@ -44,47 +44,65 @@ export function buildWorkspaceArtifactDocumentPersistenceManifest({
   document: ArtifactDocumentV1;
   scope: AgentRuntimeArtifactDocumentScope;
 }): ArtifactDocumentPersistenceManifest {
-  return omitUndefined({
+  const files: ArtifactDocumentPersistenceFileEntry[] = [
+    {
+      contentType: "application/json",
+      filename: resolveArtifactWorkbenchJsonFilename(artifact, document),
+      format: "artifact_json",
+      role: "source",
+    },
+    {
+      contentType: "text/markdown",
+      filename: resolveArtifactWorkbenchMarkdownFilename(artifact, document),
+      format: "markdown",
+      role: "readable",
+    },
+    {
+      contentType: "text/html",
+      filename: resolveArtifactWorkbenchHtmlFilename(artifact, document),
+      format: "html",
+      role: "preview",
+    },
+  ];
+  const manifest: ArtifactDocumentPersistenceManifest = {
     artifactDocumentId: document.artifactId,
-    artifactRef: scope.artifactRef,
-    currentVersionId:
-      normalizeText(document.metadata.currentVersionId) || scope.versionId,
-    currentVersionNo:
-      document.metadata.currentVersionNo ?? scope.versionNo ?? undefined,
-    files: [
-      {
-        contentType: "application/json",
-        filename: resolveArtifactWorkbenchJsonFilename(artifact, document),
-        format: "artifact_json",
-        role: "source",
-      },
-      {
-        contentType: "text/markdown",
-        filename: resolveArtifactWorkbenchMarkdownFilename(artifact, document),
-        format: "markdown",
-        role: "readable",
-      },
-      {
-        contentType: "text/html",
-        filename: resolveArtifactWorkbenchHtmlFilename(artifact, document),
-        format: "html",
-        role: "preview",
-      },
-    ],
-    lastPersistedAt: scope.lastPersistedAt,
+    files,
     schemaVersion: ARTIFACT_DOCUMENT_PERSISTENCE_MANIFEST_SCHEMA_VERSION,
-    sessionId: scope.sessionId,
-    sidecarRelativePath: scope.sidecarRelativePath,
-    turnId: scope.turnId,
-  });
+  };
+  const artifactRef = normalizeText(scope.artifactRef);
+  const currentVersionId =
+    normalizeText(document.metadata.currentVersionId) ||
+    normalizeText(scope.versionId);
+  const currentVersionNo =
+    document.metadata.currentVersionNo ?? scope.versionNo ?? undefined;
+  const lastPersistedAt = normalizeText(scope.lastPersistedAt);
+  const sessionId = normalizeText(scope.sessionId);
+  const sidecarRelativePath = normalizeText(scope.sidecarRelativePath);
+  const turnId = normalizeText(scope.turnId);
+  if (artifactRef) {
+    manifest.artifactRef = artifactRef;
+  }
+  if (currentVersionId) {
+    manifest.currentVersionId = currentVersionId;
+  }
+  if (typeof currentVersionNo === "number") {
+    manifest.currentVersionNo = currentVersionNo;
+  }
+  if (lastPersistedAt) {
+    manifest.lastPersistedAt = lastPersistedAt;
+  }
+  if (sessionId) {
+    manifest.sessionId = sessionId;
+  }
+  if (sidecarRelativePath) {
+    manifest.sidecarRelativePath = sidecarRelativePath;
+  }
+  if (turnId) {
+    manifest.turnId = turnId;
+  }
+  return manifest;
 }
 
 function normalizeText(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
-
-function omitUndefined<T extends Record<string, unknown>>(value: T): T {
-  return Object.fromEntries(
-    Object.entries(value).filter(([, entry]) => entry !== undefined),
-  ) as T;
 }

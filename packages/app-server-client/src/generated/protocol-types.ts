@@ -113,11 +113,12 @@ export interface AgentAppLocalPackageInspectParams {
 
 export interface AgentAppLocalPackageInspectResponse {
   appDir: string;
-  appMarkdown: string;
   inspectedAt: string;
   manifest: unknown;
   manifestHash: string;
+  manifestSource: string;
   packageHash: string;
+  pluginManifest: unknown;
   sourceKind: string;
   sourceUri: string;
 }

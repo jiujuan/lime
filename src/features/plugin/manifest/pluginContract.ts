@@ -23,11 +23,15 @@ import type {
   PluginHistoryRestoreDeclaration,
   PluginManifest,
   PluginManifestComponentPaths,
+  PluginManifestContributions,
   PluginManifestInterface,
   PluginMcpServerDeclaration,
   PluginRendererKind,
   PluginRightSurfaceContract,
   PluginSkillDeclaration,
+  PluginSubagentDeclaration,
+  PluginWorkflowDeclaration,
+  PluginWorkflowStepDeclaration,
 } from "./types";
 
 export class PluginManifestError extends Error {
@@ -45,6 +49,7 @@ interface NormalizePluginManifestOptions {
 interface AgentRuntimeIntent {
   key: string;
   title?: string;
+  aliases: string[];
   defaultObjectKind?: string;
 }
 
@@ -70,9 +75,13 @@ function normalizeManifestInterface(
     developerName: readString(value.developerName),
     category: readString(value.category),
     capabilities,
-    websiteUrl: readString(value.websiteURL),
-    privacyPolicyUrl: readString(value.privacyPolicyURL),
-    termsOfServiceUrl: readString(value.termsOfServiceURL),
+    websiteUrl: readString(value.websiteUrl) ?? readString(value.websiteURL),
+    privacyPolicyUrl:
+      readString(value.privacyPolicyUrl) ??
+      readString(value.privacyPolicyURL),
+    termsOfServiceUrl:
+      readString(value.termsOfServiceUrl) ??
+      readString(value.termsOfServiceURL),
     defaultPrompt,
     brandColor: readString(value.brandColor),
     composerIcon: readString(value.composerIcon),
@@ -86,26 +95,109 @@ function normalizeComponentPaths(
   raw: Record<string, unknown>,
 ): PluginManifestComponentPaths {
   const componentPaths = isRecord(raw.componentPaths) ? raw.componentPaths : {};
+  const contributions = isRecord(raw.contributions) ? raw.contributions : {};
+  const agents =
+    readString(componentPaths.agents) ??
+    (typeof raw.agents === "string" ? readString(raw.agents) : undefined);
+  const subagents =
+    readString(componentPaths.subagents) ??
+    readString(contributions.subagents);
   const skills =
     readString(componentPaths.skills) ??
+    readString(contributions.skills) ??
     (typeof raw.skills === "string" ? readString(raw.skills) : undefined);
+  const cli =
+    readString(componentPaths.cli) ??
+    (typeof raw.cli === "string" ? readString(raw.cli) : undefined);
+  const clis = readString(componentPaths.clis) ?? readString(contributions.clis);
+  const connectors =
+    readString(componentPaths.connectors) ?? readString(contributions.connectors);
+  const resources =
+    readString(componentPaths.resources) ?? readString(contributions.resources);
+  const workflows =
+    readString(componentPaths.workflows) ?? readString(contributions.workflows);
+  const artifacts =
+    readString(componentPaths.artifacts) ?? readString(contributions.artifacts);
+  const locales =
+    readString(componentPaths.locales) ?? readString(contributions.locales);
+  const examples =
+    readString(componentPaths.examples) ?? readString(contributions.examples);
   const hooks =
     readString(componentPaths.hooks) ??
+    readString(contributions.hooks) ??
     (typeof raw.hooks === "string" ? readString(raw.hooks) : undefined);
   const apps =
     readString(componentPaths.apps) ??
     (typeof raw.apps === "string" ? readString(raw.apps) : undefined);
-  const rawMcpServers = componentPaths.mcpServers ?? raw.mcpServers;
+  const runtime =
+    readString(componentPaths.runtime) ?? readString(contributions.runtime);
+  const workbench =
+    readString(componentPaths.workbench) ?? readString(contributions.workbench);
+  const rawMcpServers =
+    componentPaths.mcpServers ?? contributions.mcpServers ?? raw.mcpServers;
   const mcpServers =
     isRecord(rawMcpServers) || typeof rawMcpServers === "string"
       ? rawMcpServers
       : undefined;
   return {
+    ...(agents ? { agents } : {}),
+    ...(subagents ? { subagents } : {}),
     ...(skills ? { skills } : {}),
+    ...(cli ? { cli } : {}),
+    ...(clis ? { clis } : {}),
+    ...(connectors ? { connectors } : {}),
+    ...(resources ? { resources } : {}),
+    ...(workflows ? { workflows } : {}),
+    ...(artifacts ? { artifacts } : {}),
+    ...(locales ? { locales } : {}),
+    ...(examples ? { examples } : {}),
     ...(mcpServers !== undefined ? { mcpServers } : {}),
     ...(apps ? { apps } : {}),
     ...(hooks ? { hooks } : {}),
+    ...(runtime ? { runtime } : {}),
+    ...(workbench ? { workbench } : {}),
   };
+}
+
+function normalizeContributions(
+  value: unknown,
+): PluginManifestContributions | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const mcpServers = value.mcpServers;
+  const contributions: PluginManifestContributions = {
+    ...(readString(value.runtime) ? { runtime: readString(value.runtime) } : {}),
+    ...(readString(value.workbench)
+      ? { workbench: readString(value.workbench) }
+      : {}),
+    ...(readString(value.skills) ? { skills: readString(value.skills) } : {}),
+    ...(readString(value.subagents)
+      ? { subagents: readString(value.subagents) }
+      : {}),
+    ...(readString(value.clis) ? { clis: readString(value.clis) } : {}),
+    ...(readString(value.connectors)
+      ? { connectors: readString(value.connectors) }
+      : {}),
+    ...(readString(value.hooks) ? { hooks: readString(value.hooks) } : {}),
+    ...(readString(value.resources)
+      ? { resources: readString(value.resources) }
+      : {}),
+    ...(readString(value.workflows)
+      ? { workflows: readString(value.workflows) }
+      : {}),
+    ...(readString(value.artifacts)
+      ? { artifacts: readString(value.artifacts) }
+      : {}),
+    ...(readString(value.locales) ? { locales: readString(value.locales) } : {}),
+    ...(readString(value.examples)
+      ? { examples: readString(value.examples) }
+      : {}),
+    ...(isRecord(mcpServers) || typeof mcpServers === "string"
+      ? { mcpServers }
+      : {}),
+  };
+  return Object.keys(contributions).length > 0 ? contributions : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -194,6 +286,51 @@ function normalizeAgentApp(
   };
 }
 
+function normalizeSubagent(
+  record: Record<string, unknown>,
+): PluginSubagentDeclaration {
+  return {
+    id: requireString(record, "id"),
+    title: readString(record.title) ?? requireString(record, "id"),
+    description: readString(record.description),
+    activation: readString(record.activation),
+    required: readBoolean(record.required, false),
+    skills: readStringArray(record.skills),
+  };
+}
+
+function normalizeWorkflowStep(
+  record: Record<string, unknown>,
+): PluginWorkflowStepDeclaration {
+  return {
+    id: requireString(record, "id"),
+    title: readString(record.title),
+    subagent: readString(record.subagent),
+    skillRefs: readStringArray(record.skillRefs),
+    expectedOutput: readString(record.expectedOutput),
+  };
+}
+
+function normalizeWorkflow(
+  record: Record<string, unknown>,
+): PluginWorkflowDeclaration {
+  return {
+    key: requireString(record, "key"),
+    title: readString(record.title),
+    path: readString(record.path),
+    taskKind: readString(record.taskKind) ?? readString(record.task_kind),
+    triggerIntents: readStringArray(record.triggerIntents),
+    outputArtifactKind:
+      readString(record.outputArtifactKind) ??
+      readString(record.output_artifact_kind),
+    steps: Array.isArray(record.steps)
+      ? readRecords(record.steps, "workflows.steps").map(normalizeWorkflowStep)
+      : [],
+    humanReview: readBoolean(record.humanReview, false),
+    required: readBoolean(record.required, false),
+  };
+}
+
 function normalizeConnector(
   record: Record<string, unknown>,
 ): PluginConnectorDeclaration {
@@ -248,6 +385,7 @@ function normalizeActivationEntry(
   return {
     key: requireString(record, "key"),
     title: requireString(record, "title"),
+    aliases: readStringArray(record.aliases),
     kind: normalizeActivationKind(record.kind),
     intent: intent as PluginActivationEntryDeclaration["intent"] | undefined,
     defaultObjectKind: readString(record.defaultObjectKind),
@@ -454,6 +592,12 @@ export function normalizePluginManifest(
   const agentApps = Array.isArray(raw.agentApps)
     ? readRecords(raw.agentApps, "agentApps").map(normalizeAgentApp)
     : [];
+  const subagents = Array.isArray(raw.subagents)
+    ? readRecords(raw.subagents, "subagents").map(normalizeSubagent)
+    : [];
+  const workflows = Array.isArray(raw.workflows)
+    ? readRecords(raw.workflows, "workflows").map(normalizeWorkflow)
+    : [];
   const connectors = Array.isArray(raw.connectors)
     ? readRecords(raw.connectors, "connectors").map(normalizeConnector)
     : [];
@@ -486,10 +630,12 @@ export function normalizePluginManifest(
       ? defaultHistoryRestore(artifactRenderers)
       : normalizeHistoryRestore(raw.historyRestore);
   const componentPaths = normalizeComponentPaths(raw);
+  const contributions = normalizeContributions(raw.contributions);
 
   return {
     schemaVersion: 1,
     id,
+    packageSchemaVersion: readString(raw.schemaVersion),
     name: readString(raw.name) ?? undefined,
     displayName,
     version,
@@ -508,9 +654,12 @@ export function normalizePluginManifest(
       ...(interfaceContract?.capabilities ?? []),
     ]),
     ...(interfaceContract ? { interface: interfaceContract } : {}),
+    ...(contributions ? { contributions } : {}),
     componentPaths,
     skills,
     agentApps,
+    subagents,
+    workflows,
     connectors,
     mcpServers,
     artifactRenderers,
@@ -626,6 +775,7 @@ function readAgentRuntimeIntents(agentRuntime: unknown): AgentRuntimeIntent[] {
       {
         key,
         title: readString(intent.title),
+        aliases: readStringArray(intent.aliases),
         defaultObjectKind: expectedObjects.find(Boolean),
       },
     ];
@@ -636,6 +786,11 @@ function activationEntriesFromAgentApp(
   manifest: NormalizedAppManifest,
 ): PluginActivationEntryDeclaration[] {
   const defaultObjectKind = primaryObjectKind(manifest);
+  const declared = Array.isArray(manifest.activationEntries)
+    ? readRecords(manifest.activationEntries, "activationEntries").map(
+        normalizeActivationEntry,
+      )
+    : [];
   const entries = manifest.entries.map((entry) => ({
     key: entry.key,
     title: entry.title,
@@ -647,12 +802,13 @@ function activationEntriesFromAgentApp(
     (intent) => ({
       key: intent.key,
       title: intent.title ?? manifest.displayName,
+      aliases: intent.aliases,
       kind: "plugin" as const,
       intent: "at_command" as const,
       defaultObjectKind: intent.defaultObjectKind ?? defaultObjectKind,
     }),
   );
-  return dedupeByKey([...entries, ...intents]);
+  return dedupeByKey([...declared, ...entries, ...intents]);
 }
 
 function historyRestoreFromAgentApp(
@@ -739,15 +895,57 @@ export function buildPluginManifestFromAgentAppManifest(
     description: manifest.description,
     categories,
     capabilities: Object.keys(manifest.requires.capabilities).sort(),
-    skills: manifest.skillRefs.map((skill) => ({
+    interface: normalizeManifestInterface(manifest.interface),
+    skills: (manifest.skillRefs ?? []).map((skill) => ({
       id: skill.id,
-      title: skill.id,
+      title: skill.title ?? skill.id,
+      description: skill.description,
+      path: skill.path,
       required: skill.required ?? false,
     })),
     agentApps: [pluginAgentAppDeclarationFromAgentApp(manifest)],
+    subagents: (manifest.subagents ?? []).map((subagent) => ({
+      id: subagent.id,
+      title: subagent.title ?? subagent.id,
+      description: subagent.description,
+      activation: subagent.activation,
+      required: subagent.required ?? false,
+      skills: subagent.skills ?? [],
+    })),
+    workflows: (manifest.workflows ?? []).map((workflow) => ({
+      key: workflow.key,
+      title: workflow.title,
+      path: workflow.path,
+      taskKind: workflow.taskKind,
+      triggerIntents: workflow.triggerIntents,
+      outputArtifactKind: workflow.outputArtifactKind,
+      steps: Array.isArray(workflow.steps)
+        ? workflow.steps.flatMap((step) => {
+            if (!isRecord(step)) {
+              return [];
+            }
+            const id = readString(step.id);
+            if (!id) {
+              return [];
+            }
+            return [
+              {
+                id,
+                title: readString(step.title),
+                subagent: readString(step.subagent),
+                skillRefs: readStringArray(step.skillRefs),
+                expectedOutput: readString(step.expectedOutput),
+              },
+            ];
+          })
+        : [],
+      humanReview: workflow.humanReview ?? false,
+      required: workflow.required ?? false,
+    })),
     artifactRenderers: artifactRenderersFromAgentApp(manifest),
     activationEntries: activationEntriesFromAgentApp(manifest),
     historyRestore: historyRestoreFromAgentApp(manifest),
+    componentPaths: manifest.componentPaths,
   };
 }
 

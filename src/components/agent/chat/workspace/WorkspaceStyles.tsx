@@ -4,6 +4,10 @@ import { LayoutTransition } from "@/components/workspace/layout/LayoutTransition
 import type { LayoutMode } from "@/lib/workspace/workbenchContract";
 import type { SyncStatus } from "../hooks/useContentSync";
 import {
+  FLOATING_CONVERSATION_CONTENT_WIDTH,
+  INLINE_CONVERSATION_CONTENT_WIDTH,
+} from "../styles/conversationLayoutTokens";
+import {
   LIME_STAGE_SURFACE,
   LIME_STAGE_SURFACE_SOFT,
 } from "./taskCenterChromeTokens";
@@ -261,12 +265,14 @@ export const MessageViewport = styled.div<{ $bottomPadding?: string }>`
 
 export const ChatInputSlot = styled.div`
   flex: 0 0 auto;
-  width: min(calc(100% - 20px), 900px);
+  width: ${INLINE_CONVERSATION_CONTENT_WIDTH};
   max-width: 100%;
   margin: 0 auto;
 `;
 
-export const GeneralWorkbenchInputOverlay = styled.div<{ $bottomInset: string }>`
+export const GeneralWorkbenchInputOverlay = styled.div<{
+  $bottomInset: string;
+}>`
   position: absolute;
   left: 24px;
   right: 24px;
@@ -279,7 +285,7 @@ export const GeneralWorkbenchInputOverlay = styled.div<{ $bottomInset: string }>
 
   > * {
     pointer-events: auto;
-    width: min(calc(100% - 16px), 900px);
+    width: ${FLOATING_CONVERSATION_CONTENT_WIDTH};
     max-width: 100%;
   }
 `;
@@ -388,3 +394,6 @@ export const TEAM_PRIMARY_CHAT_PANEL_MIN_WIDTH = "400px";
 export const CODE_WORKBENCH_CHAT_PANEL_WIDTH =
   "min(100%, clamp(640px, 54%, 1180px))";
 export const CODE_WORKBENCH_CHAT_PANEL_MIN_WIDTH = "560px";
+export const RIGHT_SURFACE_CHAT_PANEL_WIDTH =
+  "min(100%, clamp(680px, 60%, 1040px))";
+export const RIGHT_SURFACE_CHAT_PANEL_MIN_WIDTH = "560px";

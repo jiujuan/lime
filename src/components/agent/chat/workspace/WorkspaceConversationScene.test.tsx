@@ -41,6 +41,9 @@ vi.mock("../components/TaskCenterUtilityToolbar", () => ({
     showHarnessToggle,
     harnessPanelVisible,
     onToggleHarnessPanel,
+    showTraceToggle,
+    tracePanelVisible,
+    onToggleTracePanel,
     showExpertInfoToggle,
     expertInfoPanelVisible,
     onToggleExpertInfoPanel,
@@ -52,6 +55,9 @@ vi.mock("../components/TaskCenterUtilityToolbar", () => ({
     showHarnessToggle?: boolean;
     harnessPanelVisible?: boolean;
     onToggleHarnessPanel?: () => void;
+    showTraceToggle?: boolean;
+    tracePanelVisible?: boolean;
+    onToggleTracePanel?: () => void;
     showExpertInfoToggle?: boolean;
     expertInfoPanelVisible?: boolean;
     onToggleExpertInfoPanel?: () => void;
@@ -70,6 +76,9 @@ vi.mock("../components/TaskCenterUtilityToolbar", () => ({
       showHarnessToggle,
       harnessPanelVisible,
       onToggleHarnessPanel,
+      showTraceToggle,
+      tracePanelVisible,
+      onToggleTracePanel,
       showExpertInfoToggle,
       expertInfoPanelVisible,
       onToggleExpertInfoPanel,
@@ -78,6 +87,9 @@ vi.mock("../components/TaskCenterUtilityToolbar", () => ({
     mockTaskCenterUtilityToolbar(props);
     const harnessLauncher = rightSurfaceLaunchers?.find(
       (launcher) => launcher.kind === "harness",
+    );
+    const traceLauncher = rightSurfaceLaunchers?.find(
+      (launcher) => launcher.kind === "trace",
     );
     const filesLauncher = rightSurfaceLaunchers?.find(
       (launcher) => launcher.kind === "files",
@@ -100,9 +112,7 @@ vi.mock("../components/TaskCenterUtilityToolbar", () => ({
             data-testid="task-center-object-canvas-toggle-stub"
             data-expanded={objectCanvasLauncher?.active ? "true" : "false"}
             data-disabled={objectCanvasLauncher?.disabled ? "true" : "false"}
-            data-pending-count={String(
-              objectCanvasLauncher?.pendingCount ?? 0,
-            )}
+            data-pending-count={String(objectCanvasLauncher?.pendingCount ?? 0)}
             onClick={onToggleObjectCanvasPanel}
           >
             object canvas
@@ -132,6 +142,20 @@ vi.mock("../components/TaskCenterUtilityToolbar", () => ({
             onClick={onToggleHarnessPanel}
           >
             harness
+          </button>
+        ) : null}
+        {showTraceToggle ? (
+          <button
+            type="button"
+            data-testid="task-center-trace-toggle-stub"
+            data-expanded={
+              traceLauncher?.active || tracePanelVisible ? "true" : "false"
+            }
+            data-disabled={traceLauncher?.disabled ? "true" : "false"}
+            data-pending-count={String(traceLauncher?.pendingCount ?? 0)}
+            onClick={onToggleTracePanel}
+          >
+            trace
           </button>
         ) : null}
         {showExpertInfoToggle ? (
@@ -522,7 +546,9 @@ describe("WorkspaceConversationScene", () => {
       '[data-testid="imported-source-banner"]',
     );
     expect(
-      mockMessageList.mock.calls.some((call) => Boolean(call[0]?.leadingContent)),
+      mockMessageList.mock.calls.some((call) =>
+        Boolean(call[0]?.leadingContent),
+      ),
     ).toBe(false);
     expect(banner).toBeNull();
     expect(container.textContent).not.toContain("本地历史导入");
@@ -543,9 +569,7 @@ describe("WorkspaceConversationScene", () => {
       container.querySelector('[data-testid="plugin-history-landing-probe"]')
         ?.textContent,
     ).toBe("已恢复应用工作区");
-    expect(
-      mockMessageList.mock.calls.at(-1)?.[0]?.leadingContent,
-    ).toBeTruthy();
+    expect(mockMessageList.mock.calls.at(-1)?.[0]?.leadingContent).toBeTruthy();
   });
 
   it("生成应显示当前带入的灵感横条", () => {
@@ -700,6 +724,51 @@ describe("WorkspaceConversationScene", () => {
     });
 
     expect(onToggleHarnessPanel).toHaveBeenCalledTimes(1);
+  });
+
+  it("任务中心场景应把 Trace 作为 Harness 同级 surface 透传给统一工具栏", () => {
+    const onToggleTracePanel = vi.fn();
+    const rightSurfaceLaunchers: WorkspaceRightSurfaceLauncherProjection[] = [
+      {
+        kind: "trace",
+        active: true,
+        disabled: false,
+        pendingCount: 1,
+        collapseTarget: "topToolbar",
+      },
+    ];
+    const container = renderScene({
+      navbarVisible: true,
+      navbarChrome: "workspace-compact",
+      navbarContextVariant: "task-center",
+      taskCenterTabsNode: <div data-testid="task-center-tabs-stub">tabs</div>,
+      showTraceToggle: true,
+      tracePanelVisible: false,
+      onToggleTracePanel,
+      rightSurfaceLaunchers,
+    });
+
+    expect(mockTaskCenterUtilityToolbar).toHaveBeenCalledWith(
+      expect.objectContaining({
+        showTraceToggle: true,
+        tracePanelVisible: false,
+        onToggleTracePanel,
+        rightSurfaceLaunchers,
+      }),
+    );
+
+    const traceToggle = container.querySelector<HTMLButtonElement>(
+      '[data-testid="task-center-trace-toggle-stub"]',
+    );
+    expect(traceToggle?.getAttribute("data-expanded")).toBe("true");
+    expect(traceToggle?.getAttribute("data-disabled")).toBe("false");
+    expect(traceToggle?.getAttribute("data-pending-count")).toBe("1");
+
+    act(() => {
+      traceToggle?.click();
+    });
+
+    expect(onToggleTracePanel).toHaveBeenCalledTimes(1);
   });
 
   it("任务中心场景应把文件 surface 入口透传给统一工具栏", () => {

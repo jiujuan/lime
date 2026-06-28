@@ -312,7 +312,10 @@ describe("PluginMarketplacePage", () => {
       '[data-testid="plugin-marketplace-detail-panel"]',
     );
     expect(detailPanel?.textContent).toContain("Notes Kit");
-    expect(detailPanel?.textContent).toContain("PLUGIN_DISABLED");
+    expect(detailPanel?.textContent).toContain(
+      "plugin.marketplace.blocker.disabled",
+    );
+    expect(detailPanel?.textContent).not.toContain("PLUGIN_DISABLED");
     expect(detailPanel?.textContent).toContain(
       "plugin.marketplace.detail.nextStepEnable",
     );
@@ -1019,8 +1022,18 @@ describe("PluginMarketplacePage", () => {
       renderable: true,
       readOnlyHistory: false,
       skills: [],
+      capabilityProfile: {
+        sections: [],
+        summary: {
+          agentCount: 0,
+          subagentCount: 0,
+          toolCount: 0,
+          skillCount: 0,
+        },
+      },
       needsAttention: false,
       blockerCodes: [],
+      visibleBlockers: [],
       primaryAction: {
         kind: "open",
         labelKey: "plugin.marketplace.action.open",
@@ -1068,8 +1081,18 @@ describe("PluginMarketplacePage", () => {
       renderable: false,
       readOnlyHistory: true,
       skills: [],
+      capabilityProfile: {
+        sections: [],
+        summary: {
+          agentCount: 0,
+          subagentCount: 0,
+          toolCount: 0,
+          skillCount: 0,
+        },
+      },
       needsAttention: true,
       blockerCodes: ["PLUGIN_DISABLED"],
+      visibleBlockers: [],
       primaryAction: {
         kind: "view_history",
         labelKey: "plugin.marketplace.action.viewHistory",

@@ -16,10 +16,7 @@ import {
   resolveArtifactPreviewText,
   resolveArtifactWritePhase,
 } from "./messageArtifacts";
-import {
-  hydrateAgentPlanState,
-  type AgentPlanState,
-} from "./planState";
+import { hydrateAgentPlanState, type AgentPlanState } from "./planState";
 import {
   hydrateAgentReasoningState,
   type AgentModelReasoningState,
@@ -147,6 +144,15 @@ export interface HarnessSessionState {
   recentFileEvents: HarnessFileEvent[];
   hasSignals: boolean;
 }
+
+export type HarnessSessionShellState = Pick<
+  HarnessSessionState,
+  | "runtimeStatus"
+  | "pendingApprovals"
+  | "latestContextTrace"
+  | "plan"
+  | "hasSignals"
+>;
 
 interface ToolCallEntry {
   toolCall: ToolCallState;
@@ -1202,6 +1208,45 @@ function summarizePlanDecisionText(text?: string): string | undefined {
   });
 }
 
+export function deriveHarnessSessionShellState(
+  messages: Message[],
+  pendingApprovals: ActionRequired[],
+  persistedTodoItems?: readonly PersistedHarnessTodoLike[],
+): HarnessSessionShellState {
+  const safePendingApprovals = Array.isArray(pendingApprovals)
+    ? pendingApprovals
+    : [];
+  const latestContextTrace =
+    [...messages]
+      .reverse()
+      .find(
+        (message) =>
+          Array.isArray(message.contextTrace) &&
+          message.contextTrace.length > 0,
+      )?.contextTrace || [];
+  const runtimeStatus = extractLatestRuntimeStatus(messages);
+  const planItems = normalizePersistedTodoItems(persistedTodoItems);
+
+  const planPhase: HarnessPlanPhase =
+    planItems.length > 0 ? "planning" : "idle";
+  const hasSignals =
+    runtimeStatus !== null ||
+    safePendingApprovals.length > 0 ||
+    latestContextTrace.length > 0 ||
+    planItems.length > 0;
+
+  return {
+    runtimeStatus,
+    pendingApprovals: safePendingApprovals,
+    latestContextTrace,
+    plan: {
+      phase: planPhase,
+      items: planItems,
+    },
+    hasSignals,
+  };
+}
+
 function deriveHarnessSessionStateFromItems(
   messages: Message[],
   pendingApprovals: ActionRequired[],
@@ -1407,9 +1452,7 @@ function deriveHarnessSessionStateFromItems(
   }
   const planStateTodoItems = planStateToTodoItems(standardPlanState);
   const planItems =
-    planStateTodoItems.length > 0
-      ? planStateTodoItems
-      : persistedTodoItems;
+    planStateTodoItems.length > 0 ? planStateTodoItems : persistedTodoItems;
   const planSummaryText =
     planItems.length > 0
       ? undefined
@@ -1453,7 +1496,9 @@ function deriveHarnessSessionStateFromItems(
           ? standardPlanState.itemId || standardPlanState.revisionId
           : undefined) || latestTurnSummaryItem?.id,
       summaryText: planSummaryText,
-      revisionId: useStandardPlanState ? standardPlanState.revisionId : undefined,
+      revisionId: useStandardPlanState
+        ? standardPlanState.revisionId
+        : undefined,
       turnId: useStandardPlanState ? standardPlanState.turnId : undefined,
       source: useStandardPlanState ? standardPlanState.source : undefined,
     },

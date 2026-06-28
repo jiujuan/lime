@@ -29,6 +29,7 @@
   ],
   "systemUtilityCommands": [
     "open_external_url",
+    "show_desktop_notification",
     "start_oem_cloud_oauth_callback_bridge"
   ],
   "fileBrowserCommands": [

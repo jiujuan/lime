@@ -207,6 +207,7 @@ export function createSessionClient({
     const startedAt = Date.now();
     let settled = false;
     const resumeSessionStartHooks = options?.resumeSessionStartHooks === true;
+    const source = options?.source?.trim() || null;
     const historyLimit =
       typeof options?.historyLimit === "number" &&
       Number.isFinite(options.historyLimit) &&
@@ -242,6 +243,7 @@ export function createSessionClient({
                 historyBeforeMessageId: historyBeforeMessageId ?? null,
                 resumeSessionStartHooks,
                 sessionId,
+                source,
               },
               {
                 dedupeKey: `runtimeGetSession.slow:${sessionId}`,
@@ -258,6 +260,7 @@ export function createSessionClient({
       historyBeforeMessageId: historyBeforeMessageId ?? null,
       resumeSessionStartHooks,
       sessionId,
+      source,
     };
     recordAgentUiPerformanceMetric(
       "agentRuntime.getSession.start",
@@ -337,6 +340,7 @@ export function createSessionClient({
         queuedTurnsCount: normalizedSessionDetail.queued_turns?.length ?? 0,
         resumeSessionStartHooks,
         sessionId,
+        source,
         turnsCount: normalizedSessionDetail.turns?.length ?? 0,
       });
       return normalizedSessionDetail;
@@ -357,6 +361,7 @@ export function createSessionClient({
           historyBeforeMessageId: historyBeforeMessageId ?? null,
           resumeSessionStartHooks,
           sessionId,
+          source,
         },
         { level: isTransientSessionReadError(error) ? "warn" : "error" },
       );
