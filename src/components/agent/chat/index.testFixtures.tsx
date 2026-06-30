@@ -154,9 +154,31 @@ const {
       </div>
     ),
   ),
-  mockExpertInfoPanel: vi.fn((_props?: Record<string, unknown>) => (
-    <div data-testid="expert-info-panel" />
-  )),
+  mockExpertInfoPanel: vi.fn((props?: Record<string, unknown>) => {
+    const requestMetadata =
+      props?.requestMetadata && typeof props.requestMetadata === "object"
+        ? (props.requestMetadata as {
+            expert?: { expertId?: string };
+            harness?: { expert?: { expert_id?: string } };
+          })
+        : null;
+    const expertId =
+      requestMetadata?.expert?.expertId ||
+      requestMetadata?.harness?.expert?.expert_id ||
+      "";
+    const expertTitle =
+      expertId === "marketing-strategist" ? "营销策略专家" : "专家信息";
+
+    return (
+      <div data-testid="expert-info-panel" data-layout="right-surface-full">
+        <span>专家信息</span>
+        <span>{expertTitle}</span>
+        <div data-testid="expert-info-section-memory" />
+        <div data-testid="expert-info-skills" />
+        <div data-testid="expert-info-workflow" />
+      </div>
+    );
+  }),
   mockWorkspacePendingA2UIPanel: vi.fn((_props?: Record<string, unknown>) => (
     <div data-testid="workspace-pending-a2ui-panel" />
   )),
@@ -346,6 +368,7 @@ vi.mock("@/components/image-gen/useImageGen", () => ({
 }));
 
 vi.mock("./workspace/useWorkspaceImageTaskPreviewRuntime", () => ({
+  shouldEnableWorkspaceImageTaskPreviewRuntime: vi.fn(() => true),
   useWorkspaceImageTaskPreviewRuntime: vi.fn(),
 }));
 

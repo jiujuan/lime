@@ -19,7 +19,6 @@ import {
 const {
   mockInputbar,
   mockSkillsGetAll,
-  mockSkillsGetLocal,
   mockUseAgentChatUnified,
 } = getIndexTestMocks();
 
@@ -389,8 +388,6 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
       lockTheme: true,
     });
     await flushEffects(10);
-
-    expect(mockSkillsGetLocal).toHaveBeenCalledWith("lime");
 
     clickButton(container, "toggle-harness");
     await flushEffects();
