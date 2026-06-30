@@ -520,7 +520,7 @@ describe("plugin marketplace registry loader", () => {
       pluginKey: "content-factory-app",
       install: {
         local: true,
-        cloud: true,
+        cloud: false,
       },
     });
   });

@@ -318,7 +318,7 @@ function marketplaceItemFromCloudAgentApp(
     install: (app.runtimeTargets ?? ([] as RuntimeTarget[])).includes("local")
       ? {
           local: true,
-          cloud: true,
+          cloud: source === "seeded" ? false : true,
           authentication: app.registrationRequired ? "on_install" : "on_use",
         }
       : {
