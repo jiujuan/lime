@@ -660,17 +660,22 @@ export function useWorkspaceSendActions({
           ? "disabled"
           : sendOptions?.searchMode;
 
+      const {
+        activeContextPrompt,
+        enabled: contextWorkspaceEnabled,
+        prepareActiveContextPrompt,
+      } = contextWorkspace;
       const shouldAttachContextWorkspace =
-        Boolean(contextWorkspace.activeContextPrompt.trim()) ||
-        (contextWorkspace.enabled && isThemeWorkbench);
+        Boolean(activeContextPrompt.trim()) ||
+        (contextWorkspaceEnabled && isThemeWorkbench);
       const effectiveContextWorkspace = {
         ...contextWorkspace,
         enabled: shouldAttachContextWorkspace,
       };
       const preparedActiveContextPrompt =
         effectiveContextWorkspace.enabled &&
-        !effectiveContextWorkspace.activeContextPrompt.trim()
-          ? effectiveContextWorkspace.prepareActiveContextPrompt().then(
+        !activeContextPrompt.trim()
+          ? prepareActiveContextPrompt().then(
               (value) => ({
                 ok: true as const,
                 value,
@@ -3176,8 +3181,6 @@ export function useWorkspaceSendActions({
       browserAssistPreferredBackend,
       browserAssistProfileKey,
       contentId,
-      contextWorkspace.activeContextPrompt,
-      contextWorkspace.enabled,
       currentGateKey,
       finalizeAfterSendSuccess,
       isThemeWorkbench,

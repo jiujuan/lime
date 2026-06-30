@@ -308,6 +308,7 @@ export function TaskCenterUtilityToolbar({
   const filesPendingCount = filesLauncher?.pendingCount ?? 0;
   const effectiveBrowserPanelOpen = Boolean(browserLauncher?.active);
   const browserPendingCount = browserLauncher?.pendingCount ?? 0;
+  const effectiveTracePanelOpen = traceLauncher?.active ?? false;
   const tracePendingCount = traceLauncher?.pendingCount ?? 0;
   const effectiveExpertInfoPanelVisible =
     expertInfoLauncher?.active ?? expertInfoPanelVisible;
@@ -832,18 +833,18 @@ export function TaskCenterUtilityToolbar({
               className={cn(
                 taskCenterIconOnlyButtonClassName,
                 "relative",
-                Boolean(traceLauncher?.active) &&
+                effectiveTracePanelOpen &&
                   "bg-[color:var(--lime-chrome-tab-active-surface)] text-[color:var(--lime-text)]",
               )}
               disabled={traceLauncher?.disabled}
               onClick={onToggleTracePanel}
               aria-label={agentText(
-                Boolean(traceLauncher?.active)
+                effectiveTracePanelOpen
                   ? "agentChat.navbar.closeTrace"
                   : "agentChat.navbar.openTrace",
-                Boolean(traceLauncher?.active) ? "关闭 Trace" : "打开 Trace",
+                effectiveTracePanelOpen ? "关闭 Trace" : "打开 Trace",
               )}
-              aria-expanded={Boolean(traceLauncher?.active)}
+              aria-expanded={effectiveTracePanelOpen}
               title={agentText("agentChat.navbar.trace", "Trace")}
               data-testid="task-center-trace-toggle"
             >

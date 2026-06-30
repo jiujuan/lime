@@ -1,5 +1,5 @@
 import type { Artifact } from "@/lib/artifact/types";
-import { registerArticleArtifactFrameRenderer } from "./ArticleArtifactFrame";
+import { registerArticleArtifactFrameRenderer } from "./articleArtifactFrameRenderer";
 import {
   artifactFrameRegistry,
   resolveArtifactFrameRenderer as resolveArtifactFrameRendererFromRegistry,

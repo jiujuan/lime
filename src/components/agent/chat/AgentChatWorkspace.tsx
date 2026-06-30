@@ -784,6 +784,8 @@ export function AgentChatWorkspace({
     selectedSize: imageWorkbenchSelectedSize,
     setSelectedSize: setImageWorkbenchSelectedSize,
     preferredProviderUnavailable: imageWorkbenchPreferredProviderUnavailable,
+    ensureProvidersLoaded: ensureImageWorkbenchProvidersLoaded,
+    providersLoading: imageWorkbenchProvidersLoading,
     saveImagesToResource: saveImageWorkbenchImagesToResource,
   } = imageWorkbenchGenerationRuntime;
   const imageWorkbenchPreferenceViewModel = useMemo(
@@ -797,11 +799,11 @@ export function AgentChatWorkspace({
         preferredProviderUnavailable:
           imageWorkbenchPreferredProviderUnavailable,
         mediaDefaultsLoading,
-        providersLoading: imageWorkbenchGenerationRuntime.providersLoading,
+        providersLoading: imageWorkbenchProvidersLoading,
       }),
     [
       effectiveImageWorkbenchPreference,
-      imageWorkbenchGenerationRuntime.providersLoading,
+      imageWorkbenchProvidersLoading,
       imageWorkbenchPreferredProviderUnavailable,
       imageWorkbenchSelectedModel,
       imageWorkbenchSelectedModelId,
@@ -1417,11 +1419,11 @@ export function AgentChatWorkspace({
       return;
     }
 
-    imageWorkbenchGenerationRuntime.ensureProvidersLoaded();
+    ensureImageWorkbenchProvidersLoaded();
   }, [
     currentImageWorkbenchState.active,
     currentImageWorkbenchState.tasks.length,
-    imageWorkbenchGenerationRuntime.ensureProvidersLoaded,
+    ensureImageWorkbenchProvidersLoaded,
     shouldDeferWorkspaceAuxiliaryLoads,
   ]);
   const teamSessionRuntime = useWorkspaceTeamSessionRuntime({
@@ -5453,7 +5455,6 @@ export function AgentChatWorkspace({
       rightSurfacePendingIntents,
       rightSurfaceState,
       rightSurfaceTraceAvailable,
-      rightSurfaceTraceEnabled,
       shellRightSurfaceAvailable,
       showHarnessToggle,
       suppressHomeNavbarUtilityActions,

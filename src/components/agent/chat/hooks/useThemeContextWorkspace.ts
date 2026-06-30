@@ -775,6 +775,7 @@ export function useThemeContextWorkspace({
   }, [
     activeContextTokenUsage,
     contextBodyById,
+    contextProjectId,
     enabled,
     manualContextIds,
     orderedActiveContextItems,

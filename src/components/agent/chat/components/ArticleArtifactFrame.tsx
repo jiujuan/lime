@@ -10,11 +10,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { MarkdownRenderer } from "./MarkdownRenderer";
-import {
-  registerArtifactFrameRenderer,
-  type ArtifactFrameRendererEntry,
-  type ArtifactFrameRendererProps,
-} from "./artifactFrameRegistry";
+import type { ArtifactFrameRendererProps } from "./artifactFrameRegistry";
 import { resolveArticleArtifactFrameModel } from "./articleArtifactProjection";
 
 type AgentDynamicTranslation = (
@@ -22,7 +18,7 @@ type AgentDynamicTranslation = (
   options?: Record<string, unknown>,
 ) => string;
 
-function ArticleArtifactFrame({
+export function ArticleArtifactFrame({
   artifact,
   onArtifactClick,
 }: ArtifactFrameRendererProps) {
@@ -244,15 +240,4 @@ function ArticleArtifactFrame({
       </div>
     </section>
   );
-}
-
-export const articleArtifactFrameRenderer: ArtifactFrameRendererEntry = {
-  id: "articleArtifacts",
-  priority: 100,
-  supports: (artifact) => Boolean(resolveArticleArtifactFrameModel(artifact)),
-  component: ArticleArtifactFrame,
-};
-
-export function registerArticleArtifactFrameRenderer(): void {
-  registerArtifactFrameRenderer(articleArtifactFrameRenderer);
 }

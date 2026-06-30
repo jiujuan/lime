@@ -75,7 +75,6 @@ export function HarnessStatusPanelShell({
 
       {!isDialogLayout ? (
         <HarnessSummaryCardsGrid
-          layout={layout}
           summaryCards={summaryCards}
           compact={false}
           onScrollToSection={onScrollToSection}
@@ -100,7 +99,6 @@ export function HarnessStatusPanelShell({
 
             {isDialogLayout ? (
               <HarnessSummaryCardsGrid
-                layout={layout}
                 summaryCards={summaryCards}
                 compact={true}
                 onScrollToSection={onScrollToSection}
@@ -191,12 +189,10 @@ function HarnessPanelHeader({
 }
 
 function HarnessSummaryCardsGrid({
-  layout,
   summaryCards,
   compact,
   onScrollToSection,
 }: {
-  layout: HarnessStatusPanelLayout;
   summaryCards: HarnessSummaryCard[];
   compact: boolean;
   onScrollToSection: (key: HarnessSectionKey) => void;
