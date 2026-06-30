@@ -85,7 +85,7 @@ export function HarnessStatusPanelShell({
       {isDetailsExpanded ? (
         <ScrollArea
           className={cn(
-            "border-t border-border px-4 py-4",
+            "min-w-0 border-t border-border px-4 py-4",
             layout === "sidebar"
               ? "max-h-[24rem]"
               : layout === "dialog"
@@ -141,15 +141,17 @@ function HarnessPanelHeader({
     <div
       data-harness-drag-handle={isDialogLayout ? "true" : undefined}
       className={cn(
-        "flex items-center justify-between gap-3 border-b border-border px-4 py-3",
+        "flex min-w-0 flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-3",
         isDialogLayout &&
           "shrink-0 cursor-grab select-none px-5 py-4 active:cursor-grabbing",
       )}
     >
-      <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <Wrench className="h-4 w-4 text-muted-foreground" />
-          <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+      <div className="min-w-[min(100%,14rem)] flex-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+          <Wrench className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <h2 className="min-w-0 text-sm font-semibold text-foreground">
+            {title}
+          </h2>
           {realTeamActive ? (
             <Badge variant="secondary" className="gap-1">
               <Loader2 className="h-3 w-3 animate-spin" />
@@ -160,7 +162,9 @@ function HarnessPanelHeader({
             </Badge>
           ) : null}
         </div>
-        <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+        <p className="mt-1 max-w-full text-xs leading-5 text-muted-foreground">
+          {description}
+        </p>
       </div>
       {!isDialogLayout ? (
         <Button
@@ -200,13 +204,10 @@ function HarnessSummaryCardsGrid({
   return (
     <div
       className={cn(
-        "grid gap-2",
-        compact ? "pt-1 sm:grid-cols-2 xl:grid-cols-5" : "px-4 py-4",
-        !compact &&
-          (layout === "sidebar"
-            ? "grid-cols-1"
-            : "md:grid-cols-2 xl:grid-cols-4"),
+        "grid min-w-0 gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr))]",
+        compact ? "pt-1" : "px-4 py-4",
       )}
+      data-testid="harness-summary-cards-grid"
     >
       {summaryCards.map((card) => (
         <SummaryCard

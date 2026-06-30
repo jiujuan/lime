@@ -13,9 +13,9 @@ use serde_json::Value;
 
 const CONTENT_FACTORY_APP_ID: &str = "content-factory-app";
 const CONTENT_FACTORY_WORKSPACE_PATCH_KIND: &str = "content_factory.workspace_patch";
-const PRODUCT_WORKSPACE_SCHEMA: &str = "product-workspace.v1";
+const ARTICLE_WORKSPACE_SCHEMA: &str = "article-workspace.v1";
 const WORKER_REQUEST_SCHEMA: &str = "content-factory.worker-request.v1";
-const DEFAULT_PRODUCT_PROFILE_TASK_KIND: &str = "content.factory.generate";
+const DEFAULT_ARTICLE_WORKSPACE_TASK_KIND: &str = "content.factory.generate";
 const CLOUD_RELEASE_SOURCE_KIND: &str = "cloud_release";
 const WORKER_PACKAGE_SIGNATURE_UNVERIFIED: &str = "AGENT_APP_WORKER_PACKAGE_SIGNATURE_UNVERIFIED";
 const WORKER_REMOTE_RUNTIME_DISABLED: &str = "AGENT_APP_WORKER_REMOTE_RUNTIME_DISABLED";
@@ -181,11 +181,15 @@ impl RuntimeCore {
             task_runtime.worker_entrypoint.as_deref(),
         );
 
-        self.run_agent_app_worker(AgentAppWorkerRunRequest::new(
+        let mut events = self.run_agent_app_worker(AgentAppWorkerRunRequest::new(
             package_root,
             task_runtime,
             worker_request,
-        ))
+        ))?;
+        self.backend
+            .prepare_runtime_worker_artifact_events(request, &mut events)
+            .await?;
+        Ok(events)
     }
 
     async fn find_agent_app_installed_state_for_worker(
@@ -486,7 +490,7 @@ impl PaneActionWorkerTurn {
             PaneActionWorkerTurnResolution::Ignore => {
                 match Self::resolve_pane_action_request(request) {
                     PaneActionWorkerTurnResolution::Ignore => {
-                        Self::resolve_product_profile_action_request(request)
+                        Self::resolve_article_workspace_action_request(request)
                     }
                     resolution => resolution,
                 }
@@ -573,11 +577,11 @@ impl PaneActionWorkerTurn {
             source_artifact_ids,
             source: PLUGIN_ACTIVATION_SOURCE.to_string(),
             surface_kind: json_string(activation, &["right_surface", "rightSurface"])
-                .or_else(|| Some("productProfile".to_string())),
+                .or_else(|| Some("articleWorkspace".to_string())),
             pane_kind: selected_object_kind.or_else(|| Some("articleDraft".to_string())),
             output_artifact_kind,
             task_kind: json_string(activation, &["task_kind", "taskKind"])
-                .unwrap_or_else(|| DEFAULT_PRODUCT_PROFILE_TASK_KIND.to_string()),
+                .unwrap_or_else(|| DEFAULT_ARTICLE_WORKSPACE_TASK_KIND.to_string()),
             workspace_id: request.session.workspace_id.clone(),
         })
     }
@@ -626,7 +630,7 @@ impl PaneActionWorkerTurn {
             ));
         }
         let task_kind = json_string(action, &["task_kind", "taskKind"])
-            .unwrap_or_else(|| DEFAULT_PRODUCT_PROFILE_TASK_KIND.to_string());
+            .unwrap_or_else(|| DEFAULT_ARTICLE_WORKSPACE_TASK_KIND.to_string());
         let prompt = json_string(action, &["prompt"]).unwrap_or_else(|| request.input.text.clone());
         if prompt.trim().is_empty() {
             return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
@@ -702,13 +706,13 @@ impl PaneActionWorkerTurn {
         })
     }
 
-    fn resolve_product_profile_action_request(
+    fn resolve_article_workspace_action_request(
         request: &ExecutionRequest,
     ) -> PaneActionWorkerTurnResolution {
         let Some(metadata) = request.metadata.as_ref() else {
             return PaneActionWorkerTurnResolution::Ignore;
         };
-        if !is_product_profile_surface(metadata) {
+        if !is_article_workspace_surface(metadata) {
             return PaneActionWorkerTurnResolution::Ignore;
         }
         let Some(agent_app) = metadata
@@ -717,7 +721,10 @@ impl PaneActionWorkerTurn {
         else {
             return PaneActionWorkerTurnResolution::Ignore;
         };
-        if json_string(agent_app, &["source"]).as_deref() != Some("right_surface_product_profile") {
+        if !matches!(
+            json_string(agent_app, &["source"]).as_deref(),
+            Some("right_surface_article_workspace")
+        ) {
             return PaneActionWorkerTurnResolution::Ignore;
         }
         let Some(app_id) = json_string(agent_app, &["app_id", "appId"]) else {
@@ -726,7 +733,7 @@ impl PaneActionWorkerTurn {
                 agent_app,
                 None,
                 WORKER_REQUEST_INVALID,
-                "Product Profile action app id is missing.",
+                "Article Workspace action app id is missing.",
             ));
         };
         if app_id != CONTENT_FACTORY_APP_ID {
@@ -739,15 +746,15 @@ impl PaneActionWorkerTurn {
             ));
         }
         let Some(action) = agent_app
-            .get("product_profile_action")
-            .or_else(|| agent_app.get("productProfileAction"))
+            .get("article_workspace_action")
+            .or_else(|| agent_app.get("articleWorkspaceAction"))
         else {
             return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
                 request,
                 agent_app,
                 None,
                 WORKER_REQUEST_INVALID,
-                "Product Profile action metadata is missing.",
+                "Article Workspace action metadata is missing.",
             ));
         };
         if !action.is_object() {
@@ -756,11 +763,11 @@ impl PaneActionWorkerTurn {
                 agent_app,
                 Some(action),
                 WORKER_REQUEST_INVALID,
-                "Product Profile action metadata must be an object.",
+                "Article Workspace action metadata must be an object.",
             ));
         }
         let task_kind = json_string(action, &["task_kind", "taskKind"])
-            .unwrap_or_else(|| DEFAULT_PRODUCT_PROFILE_TASK_KIND.to_string());
+            .unwrap_or_else(|| DEFAULT_ARTICLE_WORKSPACE_TASK_KIND.to_string());
         let prompt = json_string(action, &["prompt"]).unwrap_or_else(|| request.input.text.clone());
         if prompt.trim().is_empty() {
             return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
@@ -768,7 +775,7 @@ impl PaneActionWorkerTurn {
                 agent_app,
                 Some(action),
                 WORKER_REQUEST_INVALID,
-                "Product Profile action prompt is missing.",
+                "Article Workspace action prompt is missing.",
             ));
         }
         let requested_output_artifact_kind =
@@ -808,8 +815,8 @@ impl PaneActionWorkerTurn {
                 .filter(|value| value.is_object())
                 .cloned(),
             source_artifact_ids,
-            source: "right_surface_product_profile".to_string(),
-            surface_kind: Some("productProfile".to_string()),
+            source: "right_surface_article_workspace".to_string(),
+            surface_kind: Some("articleWorkspace".to_string()),
             pane_kind: right_surface_string(metadata, &["pane_kind", "paneKind"]).or_else(|| {
                 action
                     .get("object")
@@ -848,7 +855,7 @@ impl PaneActionWorkerTurn {
             "sourceObjectRef": self.source_object_ref,
             "expectedOutput": {
                 "artifactKind": self.output_artifact_kind(),
-                "productWorkspaceSchema": PRODUCT_WORKSPACE_SCHEMA,
+                "articleWorkspaceSchema": ARTICLE_WORKSPACE_SCHEMA,
                 "objectKinds": [
                     "contentBrief",
                     "articleDraft",
@@ -879,7 +886,7 @@ impl PaneActionWorkerTurn {
             "{turn_id}:{}",
             self.action_key
                 .as_deref()
-                .unwrap_or("product-profile-action")
+                .unwrap_or("article-workspace-action")
         )
     }
 
@@ -939,13 +946,15 @@ impl PaneActionWorkerTurn {
     }
 }
 
-fn is_product_profile_surface(metadata: &Value) -> bool {
-    metadata
-        .get("right_surface")
-        .or_else(|| metadata.get("rightSurface"))
-        .and_then(|right_surface| json_string(right_surface, &["surface_kind", "surfaceKind"]))
-        .as_deref()
-        == Some("productProfile")
+fn is_article_workspace_surface(metadata: &Value) -> bool {
+    matches!(
+        metadata
+            .get("right_surface")
+            .or_else(|| metadata.get("rightSurface"))
+            .and_then(|right_surface| json_string(right_surface, &["surface_kind", "surfaceKind"]))
+            .as_deref(),
+        Some("articleWorkspace")
+    )
 }
 
 fn worker_rejection_from_values(
@@ -1056,9 +1065,9 @@ mod tests {
     async fn skips_worker_turn_when_content_factory_is_not_installed() {
         let request = execution_request(json!({
             "agent_app": {
-                "source": "right_surface_product_profile",
+                "source": "right_surface_article_workspace",
                 "app_id": CONTENT_FACTORY_APP_ID,
-                "product_profile_action": {
+                "article_workspace_action": {
                     "key": "regenerate",
                     "task_kind": "content.image.generate",
                     "output_artifact_kind": CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
@@ -1066,7 +1075,7 @@ mod tests {
                 }
             },
             "right_surface": {
-                "surface_kind": "productProfile"
+                "surface_kind": "articleWorkspace"
             }
         }));
         let mut sink = TestRuntimeEventSink::default();
@@ -1081,14 +1090,14 @@ mod tests {
     }
 
     #[test]
-    fn extracts_content_factory_product_profile_worker_turn() {
+    fn extracts_content_factory_article_workspace_worker_turn() {
         let request = execution_request(json!({
             "agent_app": {
-                "source": "right_surface_product_profile",
+                "source": "right_surface_article_workspace",
                 "app_id": CONTENT_FACTORY_APP_ID,
                 "session_id": "session-content-factory",
                 "workspace_id": "workspace-main",
-                "product_profile_action": {
+                "article_workspace_action": {
                     "key": "regenerate",
                     "task_kind": "content.image.generate",
                     "output_artifact_kind": CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
@@ -1103,7 +1112,7 @@ mod tests {
                 }
             },
             "right_surface": {
-                "surface_kind": "productProfile"
+                "surface_kind": "articleWorkspace"
             }
         }));
 
@@ -1114,7 +1123,10 @@ mod tests {
         assert_eq!(worker_turn.action_key.as_deref(), Some("regenerate"));
         assert_eq!(worker_turn.task_kind, "content.image.generate");
         assert_eq!(worker_turn.workspace_id.as_deref(), Some("workspace-main"));
-        assert_eq!(worker_turn.surface_kind.as_deref(), Some("productProfile"));
+        assert_eq!(
+            worker_turn.surface_kind.as_deref(),
+            Some("articleWorkspace")
+        );
         assert_eq!(worker_turn.pane_kind.as_deref(), Some("imageGenerationSet"));
         assert_eq!(
             worker_turn.output_artifact_kind.as_deref(),
@@ -1145,14 +1157,14 @@ mod tests {
                     "intent_key": "content_article_generate",
                     "task_kind": "content.article.generate",
                     "output_artifact_kind": CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
-                    "right_surface": "productProfile",
+                    "right_surface": "articleWorkspace",
                     "expected_objects": ["articleDraft"],
                     "selected_object_ref": {
                         "plugin_id": CONTENT_FACTORY_APP_ID,
                         "object_kind": "articleDraft",
                         "object_id": "pending"
                     },
-                    "opened_tabs": ["productProfile"],
+                    "opened_tabs": ["articleWorkspace"],
                     "context_source": "user"
                 }
             }
@@ -1173,7 +1185,10 @@ mod tests {
         assert_eq!(worker_turn.source, PLUGIN_ACTIVATION_SOURCE);
         assert_eq!(worker_turn.task_kind, "content.article.generate");
         assert_eq!(worker_turn.prompt, "写一篇公众号文章");
-        assert_eq!(worker_turn.surface_kind.as_deref(), Some("productProfile"));
+        assert_eq!(
+            worker_turn.surface_kind.as_deref(),
+            Some("articleWorkspace")
+        );
         assert_eq!(worker_turn.pane_kind.as_deref(), Some("articleDraft"));
         assert_eq!(
             worker_turn.output_artifact_kind.as_deref(),

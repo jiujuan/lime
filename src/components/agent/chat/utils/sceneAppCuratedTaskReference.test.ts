@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildDefaultCuratedTaskReferenceSelection,
   buildSceneAppExecutionCuratedTaskFollowUpAction,
   buildCuratedTaskReferenceEntryFromSceneAppExecution,
   buildSceneAppExecutionReviewPrefillHighlights,
@@ -8,6 +9,59 @@ import {
 } from "./sceneAppCuratedTaskReference";
 
 describe("sceneAppCuratedTaskReference", () => {
+  it("普通 Claw 默认态没有 replay 或 sceneapp 信号时，应复用稳定空 reference selection", () => {
+    const first = buildDefaultCuratedTaskReferenceSelection({});
+    const second = buildDefaultCuratedTaskReferenceSelection({
+      replayReferenceEntries: [],
+      replayReferenceMemoryIds: [],
+      sceneAppReferenceEntry: null,
+    });
+
+    expect(first).toBe(second);
+    expect(first).toEqual({
+      referenceMemoryIds: [],
+      referenceEntries: [],
+    });
+  });
+
+  it("应只在 replay 或 sceneapp 信号存在时归并默认 reference selection", () => {
+    const selection = buildDefaultCuratedTaskReferenceSelection({
+      replayReferenceMemoryIds: ["memory-1", "memory-1", " "],
+      replayReferenceEntries: [
+        {
+          id: "memory-1",
+          sourceKind: "memory",
+          title: "项目复盘",
+          summary: "上一轮结果可继续复用。",
+          category: "experience",
+          categoryLabel: "成果",
+          tags: ["复盘"],
+        },
+      ],
+      sceneAppReferenceEntry: {
+        id: "sceneapp:content:run:1",
+        sourceKind: "sceneapp_execution_summary",
+        title: "内容生产",
+        summary: "这轮项目结果已经回流。",
+        category: "experience",
+        categoryLabel: "成果",
+        tags: ["项目结果"],
+        taskPrefillByTaskId: {
+          "account-project-review": {
+            project_goal: "内容生产",
+            existing_results: "这轮项目结果已经回流。",
+          },
+        },
+      },
+    });
+
+    expect(selection.referenceMemoryIds).toEqual(["memory-1"]);
+    expect(selection.referenceEntries.map((entry) => entry.id)).toEqual([
+      "memory-1",
+      "sceneapp:content:run:1",
+    ]);
+  });
+
   it("应把 sceneapp 执行摘要编译成复盘可用的 reference entry", () => {
     const entry = buildCuratedTaskReferenceEntryFromSceneAppExecution({
       summary: {

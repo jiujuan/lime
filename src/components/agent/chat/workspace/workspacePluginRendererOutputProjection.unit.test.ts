@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { normalizePluginManifest } from "@/features/plugin";
 import type { WorkspaceRightSurfacePendingRequest } from "@/lib/api/workspaceRightSurface";
-import { buildWorkspaceProductProfileFromPendingRequests } from "./workspaceProductProfileModel";
-import { enrichWorkspaceProductProfileRendererOutput } from "./workspacePluginRendererOutputProjection";
+import { buildWorkspaceArticleWorkspaceFromPendingRequests } from "./workspaceArticleWorkspaceModel";
+import { enrichWorkspaceArticleWorkspaceRendererOutput } from "./workspacePluginRendererOutputProjection";
 
 const pendingRequest: WorkspaceRightSurfacePendingRequest = {
   requestId: "right_surface_creator_profile_1",
   workspaceId: "workspace-main",
   workspaceRoot: "/workspace/project",
   sessionId: "session-main",
-  surfaceKind: "productProfile",
+  surfaceKind: "articleWorkspace",
   origin: "runtime",
   priority: "foreground",
   status: "pending",
@@ -22,7 +22,7 @@ const pendingRequest: WorkspaceRightSurfacePendingRequest = {
       title: "创作工作台输出",
     },
     workspacePatch: {
-      schemaVersion: "product-workspace.v1",
+      schemaVersion: "article-workspace.v1",
       appId: "creator-workbench",
       sessionId: "session-main",
       workspaceId: "workspace-main",
@@ -72,14 +72,14 @@ describe("workspacePluginRendererOutputProjection", () => {
         },
       ],
     });
-    const profile = buildWorkspaceProductProfileFromPendingRequests([
+    const profile = buildWorkspaceArticleWorkspaceFromPendingRequests([
       pendingRequest,
     ]);
 
-    const enriched = enrichWorkspaceProductProfileRendererOutput({
+    const enriched = enrichWorkspaceArticleWorkspaceRendererOutput({
       contracts: [plugin],
       pendingRequests: [pendingRequest],
-      profile,
+      articleWorkspace: profile,
     });
 
     expect(enriched?.objects[0]?.source).toMatchObject({
@@ -110,14 +110,14 @@ describe("workspacePluginRendererOutputProjection", () => {
   });
 
   it("没有匹配插件 contract 时应保持 profile 原样", () => {
-    const profile = buildWorkspaceProductProfileFromPendingRequests([
+    const profile = buildWorkspaceArticleWorkspaceFromPendingRequests([
       pendingRequest,
     ]);
 
-    const enriched = enrichWorkspaceProductProfileRendererOutput({
+    const enriched = enrichWorkspaceArticleWorkspaceRendererOutput({
       contracts: [],
       pendingRequests: [pendingRequest],
-      profile,
+      articleWorkspace: profile,
     });
 
     expect(enriched).toEqual(profile);

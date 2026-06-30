@@ -69,6 +69,19 @@ interface WorkspaceConversationCodingViews {
   changeView: CanvasWorkbenchChangeView | null;
 }
 
+function createEmptySessionRuntimeCounters(): SessionRuntimeCounters {
+  return {
+    outputItemCount: 0,
+    failedOutputItemCount: 0,
+    shouldUseRuntimeWorkbench: false,
+    inProgressItemCount: 0,
+    generatedFileCount: 0,
+    hasRuntimeFileChanges: false,
+    hasRuntimeOutputs: false,
+    shouldExposeSessionProgress: false,
+  };
+}
+
 export function buildWorkspaceConversationCodingViews({
   t,
   locale,
@@ -87,6 +100,23 @@ export function buildWorkspaceConversationCodingViews({
 }: WorkspaceConversationCodingViewsParams): WorkspaceConversationCodingViews {
   const currentSessionTurn =
     turns.find((turn) => turn.id === currentTurnId) || turns.at(-1) || null;
+  const hasCodingWorkbenchEvidence =
+    Boolean(threadRead) ||
+    pendingActions.length > 0 ||
+    submittedActionsInFlight.length > 0 ||
+    queuedTurns.length > 0;
+  if (!hasCodingWorkbenchEvidence) {
+    return {
+      currentSessionTurn,
+      counters: createEmptySessionRuntimeCounters(),
+      fileCheckpointSummary: null,
+      sessionView: null,
+      outputView: null,
+      logView: null,
+      changeView: null,
+    };
+  }
+
   const currentSessionStatus = resolveSessionStatusBadge(
     isSending ? "running" : currentSessionTurn?.status,
     t,

@@ -362,6 +362,75 @@ pub struct MediaTaskArtifactVideoCreateParams {
 }
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct MediaTaskArtifactCompletedImageInput {
+    pub url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "revised_prompt"
+    )]
+    pub revised_prompt: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "provider_id"
+    )]
+    pub provider_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "slot_id")]
+    pub slot_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "slot_index")]
+    pub slot_index: Option<u32>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "slot_prompt"
+    )]
+    pub slot_prompt: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaTaskArtifactImageCompleteParams {
+    pub project_root_path: String,
+    pub task_ref: String,
+    #[serde(default, alias = "images")]
+    pub images: Vec<MediaTaskArtifactCompletedImageInput>,
+    #[serde(default, alias = "responses")]
+    pub responses: Vec<serde_json::Value>,
+    #[serde(default, alias = "failures")]
+    pub failures: Vec<serde_json::Value>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "provider_id"
+    )]
+    pub provider_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "executor_mode"
+    )]
+    pub executor_mode: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "response_id"
+    )]
+    pub response_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct MediaTaskArtifactAudioCompleteParams {
     pub project_root_path: String,
     pub task_ref: String,

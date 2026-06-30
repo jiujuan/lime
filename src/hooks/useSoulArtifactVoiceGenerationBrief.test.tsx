@@ -38,13 +38,16 @@ interface Mounted {
 
 const mounted: Mounted[] = [];
 
-function renderHookProbe(onValue: (value: HookValue) => void) {
+function renderHookProbe(
+  onValue: (value: HookValue) => void,
+  options?: Parameters<typeof useSoulArtifactVoiceGenerationBrief>[0],
+) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
 
   function Probe() {
-    const value = useSoulArtifactVoiceGenerationBrief();
+    const value = useSoulArtifactVoiceGenerationBrief(options);
     useEffect(() => {
       onValue(value);
     }, [value]);
@@ -126,6 +129,25 @@ describe("useSoulArtifactVoiceGenerationBrief", () => {
         evidence_pack_id: "voice-pack-1",
         evidence_refs: ["memory:voice-note-1"],
       },
+    });
+  });
+
+  it("禁用时不应读取配置或订阅变更", async () => {
+    let latest: HookValue = { loading: true, generationBrief: undefined };
+
+    renderHookProbe(
+      (value) => {
+        latest = value;
+      },
+      { enabled: false },
+    );
+    await flushEffects();
+
+    expect(mockGetConfig).not.toHaveBeenCalled();
+    expect(mockSubscribeAppConfigChanged).not.toHaveBeenCalled();
+    expect(latest).toEqual({
+      loading: false,
+      generationBrief: undefined,
     });
   });
 

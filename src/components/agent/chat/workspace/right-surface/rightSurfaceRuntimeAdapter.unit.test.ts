@@ -66,12 +66,12 @@ describe("rightSurfaceRuntimeAdapter", () => {
         ttlMs: 30_000,
       },
       {
-        requestId: "right_surface_product_profile",
-        surfaceKind: "productProfile",
+        requestId: "right_surface_article_workspace",
+        surfaceKind: "articleWorkspace",
         origin: "runtime",
         priority: "foreground",
         status: "pending",
-        reason: "agent_app_product_profile_ready",
+        reason: "agent_app_article_workspace_ready",
         requestedAt: "2026-06-23T00:00:01.000Z",
       },
       {
@@ -112,14 +112,14 @@ describe("rightSurfaceRuntimeAdapter", () => {
         }),
       }),
       expect.objectContaining({
-        id: "app-server:right_surface_product_profile",
+        id: "app-server:right_surface_article_workspace",
         priority: "foreground",
         createdAt: Date.parse("2026-06-23T00:00:01.000Z"),
         command: expect.objectContaining({
           action: "open",
-          kind: "productProfile",
+          kind: "articleWorkspace",
           origin: "runtime",
-          reason: "agent_app_product_profile_ready",
+          reason: "agent_app_article_workspace_ready",
         }),
       }),
       expect.objectContaining({

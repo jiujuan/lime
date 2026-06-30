@@ -83,6 +83,7 @@ export type {
   WorkspaceRightSurfaceSource,
   WorkspaceRightSurfaceState,
 } from "./rightSurfaceTypes";
+export { normalizeWorkspaceRightSurfaceKind } from "./rightSurfaceTypes";
 export type {
   WorkspaceRightSurfaceLauncherProjection,
   WorkspaceRightSurfaceToolbarProjectionInput,

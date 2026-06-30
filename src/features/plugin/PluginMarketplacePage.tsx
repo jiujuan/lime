@@ -210,6 +210,9 @@ export function PluginMarketplacePage({
         setActionError(result.blockerCodes.join(", "));
         return;
       }
+      if (result.status === "noop") {
+        return;
+      }
       await registry.refresh();
     } catch (error) {
       setActionError(error instanceof Error ? error.message : String(error));
@@ -264,6 +267,9 @@ export function PluginMarketplacePage({
       );
       if (result.status === "blocked") {
         setActionError(result.blockerCodes.join(", "));
+        return;
+      }
+      if (result.status === "noop") {
         return;
       }
       await registry.refresh();

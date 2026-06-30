@@ -1,4 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
+import { listInstalledAgentApps } from "@/lib/api/agentApps";
+import * as harnessStateModule from "./utils/harnessState";
+import * as crashDiagnosticModule from "@/lib/crashDiagnosticAgentUiPerformance";
+import * as traceHistoryModule from "@/lib/agentUiPerformanceTraceHistory";
+import * as subagentTimelineModule from "./utils/subagentTimeline";
+import * as agentTaskRuntimeModule from "./utils/agentTaskRuntime";
 import {
   clickButton,
   createMockAgentChatUnifiedState,
@@ -17,11 +23,53 @@ import { requestTaskCenterDraftTask } from "./taskCenterDraftTaskEvents";
 
 const {
   mockEmptyState,
+  mockExpertInfoPanel,
+  mockExecutionRunListGeneralWorkbenchHistory,
   mockGetProjectMemory,
   mockMessageList,
+  mockSkillExecutionGetDetail,
   mockSkillsGetLocal,
   mockUseAgentChatUnified,
+  mockUseTrayModelShortcuts,
 } = getIndexTestMocks();
+
+vi.mock("@/lib/api/agentApps", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api/agentApps")>();
+  return {
+    ...actual,
+    listInstalledAgentApps: vi.fn(async () => ({ states: [] })),
+  };
+});
+
+vi.mock("./utils/harnessState", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./utils/harnessState")>();
+  return {
+    ...actual,
+    deriveHarnessSessionState: vi.fn(actual.deriveHarnessSessionState),
+  };
+});
+
+vi.mock("./utils/subagentTimeline", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("./utils/subagentTimeline")>();
+  return {
+    ...actual,
+    buildRealSubagentTimelineItems: vi.fn(
+      actual.buildRealSubagentTimelineItems,
+    ),
+  };
+});
+
+vi.mock("./utils/agentTaskRuntime", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("./utils/agentTaskRuntime")>();
+  return {
+    ...actual,
+    buildAgentTaskRuntimeCardModel: vi.fn(
+      actual.buildAgentTaskRuntimeCardModel,
+    ),
+  };
+});
 
 describe("AgentChatPage 任务中心顶部工具区", () => {
   it("任务中心不应再渲染顶部项目栏和会话标签", async () => {
@@ -61,6 +109,266 @@ describe("AgentChatPage 任务中心顶部工具区", () => {
     expect(
       container.querySelector('[data-testid="task-center-utility-toolbar"]'),
     ).not.toBeNull();
+  });
+
+  it("默认 Claw 对话不应提前触发完整 Harness 派生", async () => {
+    installMockAgentChatUnifiedState(
+      createMockAgentChatUnifiedState({
+        sessionId: "topic-current",
+        topics: [
+          {
+            id: "topic-current",
+            title: "当前会话",
+            updatedAt: new Date(FIXED_TOPIC_UPDATED_AT),
+            workspaceId: "workspace-test",
+          },
+        ],
+      }),
+    );
+
+    renderPage({
+      agentEntry: "claw",
+      initialSessionId: "topic-current",
+      projectId: "workspace-test",
+    });
+    await flushEffects();
+
+    expect(harnessStateModule.deriveHarnessSessionState).not.toHaveBeenCalled();
+  });
+
+  it("默认 Claw 对话不应提前读取 Trace 历史和诊断摘要", async () => {
+    const historySpy = vi.spyOn(
+      traceHistoryModule,
+      "listAgentUiPerformanceTraceHistory",
+    );
+    const overviewSpy = vi.spyOn(
+      traceHistoryModule,
+      "getAgentUiPerformanceTraceHistoryOverview",
+    );
+    const summarySpy = vi.spyOn(
+      crashDiagnosticModule,
+      "buildAgentUiPerformanceDiagnosticSummary",
+    );
+
+    installMockAgentChatUnifiedState(
+      createMockAgentChatUnifiedState({
+        sessionId: "topic-current",
+        topics: [
+          {
+            id: "topic-current",
+            title: "当前会话",
+            updatedAt: new Date(FIXED_TOPIC_UPDATED_AT),
+            workspaceId: "workspace-test",
+          },
+        ],
+      }),
+    );
+
+    renderPage({
+      agentEntry: "claw",
+      initialSessionId: "topic-current",
+      projectId: "workspace-test",
+    });
+    await flushEffects();
+
+    expect(historySpy).not.toHaveBeenCalled();
+    expect(overviewSpy).not.toHaveBeenCalled();
+    expect(summarySpy).not.toHaveBeenCalled();
+  });
+
+  it("默认 Claw 对话不应首帧读取已安装 Agent App 插件列表", async () => {
+    vi.mocked(listInstalledAgentApps).mockClear();
+    installMockAgentChatUnifiedState(
+      createMockAgentChatUnifiedState({
+        sessionId: "topic-current",
+        topics: [
+          {
+            id: "topic-current",
+            title: "当前会话",
+            updatedAt: new Date(FIXED_TOPIC_UPDATED_AT),
+            workspaceId: "workspace-test",
+          },
+        ],
+      }),
+    );
+
+    renderPage({
+      agentEntry: "claw",
+      initialSessionId: "topic-current",
+      projectId: "workspace-test",
+    });
+    await flushEffects();
+
+    expect(listInstalledAgentApps).not.toHaveBeenCalled();
+  });
+
+  it("默认 Claw 对话不应首帧读取本地 Skills 候选", async () => {
+    mockSkillsGetLocal.mockClear();
+    installMockAgentChatUnifiedState(
+      createMockAgentChatUnifiedState({
+        sessionId: "topic-current",
+        topics: [
+          {
+            id: "topic-current",
+            title: "当前会话",
+            updatedAt: new Date(FIXED_TOPIC_UPDATED_AT),
+            workspaceId: "workspace-test",
+          },
+        ],
+      }),
+    );
+
+    renderPage({
+      agentEntry: "claw",
+      initialSessionId: "topic-current",
+      projectId: "workspace-test",
+    });
+    await flushEffects();
+
+    expect(mockSkillsGetLocal).not.toHaveBeenCalled();
+  });
+
+  it("默认 Claw 对话不应预取通用工作台历史和 Skill 详情", async () => {
+    mockExecutionRunListGeneralWorkbenchHistory.mockClear();
+    mockSkillExecutionGetDetail.mockClear();
+    installMockAgentChatUnifiedState(
+      createMockAgentChatUnifiedState({
+        sessionId: "topic-current",
+        topics: [
+          {
+            id: "topic-current",
+            title: "当前会话",
+            updatedAt: new Date(FIXED_TOPIC_UPDATED_AT),
+            workspaceId: "workspace-test",
+          },
+        ],
+      }),
+    );
+
+    renderPage({
+      agentEntry: "claw",
+      initialSessionId: "topic-current",
+      projectId: "workspace-test",
+    });
+    await flushEffects();
+
+    expect(mockExecutionRunListGeneralWorkbenchHistory).not.toHaveBeenCalled();
+    expect(mockSkillExecutionGetDetail).not.toHaveBeenCalled();
+  });
+
+  it("默认 Claw 对话不应首帧同步托盘模型候选", async () => {
+    mockUseTrayModelShortcuts.mockClear();
+    installMockAgentChatUnifiedState(
+      createMockAgentChatUnifiedState({
+        sessionId: "topic-current",
+        topics: [
+          {
+            id: "topic-current",
+            title: "当前会话",
+            updatedAt: new Date(FIXED_TOPIC_UPDATED_AT),
+            workspaceId: "workspace-test",
+          },
+        ],
+      }),
+    );
+
+    renderPage({
+      agentEntry: "claw",
+      initialSessionId: "topic-current",
+      projectId: "workspace-test",
+    });
+    await flushEffects();
+
+    expect(mockUseTrayModelShortcuts).toHaveBeenCalledWith(
+      expect.objectContaining({
+        autoSyncEnabled: false,
+        deferInitialSync: true,
+      }),
+    );
+  });
+
+  it("默认 Claw 对话不应提前渲染专家信息面板", async () => {
+    mockExpertInfoPanel.mockClear();
+    installMockAgentChatUnifiedState(
+      createMockAgentChatUnifiedState({
+        sessionId: "topic-current",
+        topics: [
+          {
+            id: "topic-current",
+            title: "当前会话",
+            updatedAt: new Date(FIXED_TOPIC_UPDATED_AT),
+            workspaceId: "workspace-test",
+          },
+        ],
+      }),
+    );
+
+    renderPage({
+      agentEntry: "claw",
+      initialSessionId: "topic-current",
+      projectId: "workspace-test",
+    });
+    await flushEffects();
+
+    expect(mockExpertInfoPanel).not.toHaveBeenCalled();
+  });
+
+  it("默认 Claw 对话完成态不应合并完整子任务 timeline", async () => {
+    vi.mocked(subagentTimelineModule.buildRealSubagentTimelineItems).mockClear();
+    installMockAgentChatUnifiedState(
+      createMockAgentChatUnifiedState({
+        isSending: false,
+        sessionId: "topic-current",
+        topics: [
+          {
+            id: "topic-current",
+            title: "当前会话",
+            updatedAt: new Date(FIXED_TOPIC_UPDATED_AT),
+            workspaceId: "workspace-test",
+          },
+        ],
+      }),
+    );
+
+    renderPage({
+      agentEntry: "claw",
+      initialSessionId: "topic-current",
+      projectId: "workspace-test",
+    });
+    await flushEffects();
+
+    expect(
+      subagentTimelineModule.buildRealSubagentTimelineItems,
+    ).not.toHaveBeenCalled();
+  });
+
+  it("默认 Claw 对话有消息时不应构建空态 runtime task card", async () => {
+    vi.mocked(agentTaskRuntimeModule.buildAgentTaskRuntimeCardModel).mockClear();
+    installMockAgentChatUnifiedState(
+      createMockAgentChatUnifiedState({
+        isSending: false,
+        sessionId: "topic-current",
+        topics: [
+          {
+            id: "topic-current",
+            title: "当前会话",
+            updatedAt: new Date(FIXED_TOPIC_UPDATED_AT),
+            workspaceId: "workspace-test",
+          },
+        ],
+      }),
+    );
+
+    renderPage({
+      agentEntry: "claw",
+      initialSessionId: "topic-current",
+      projectId: "workspace-test",
+    });
+    await flushEffects();
+
+    expect(
+      agentTaskRuntimeModule.buildAgentTaskRuntimeCardModel,
+    ).not.toHaveBeenCalled();
   });
 
   it("侧边栏新建任务事件应在任务中心内嵌首页起手页，不恢复顶部标签", async () => {

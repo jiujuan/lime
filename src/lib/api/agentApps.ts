@@ -786,6 +786,7 @@ function buildSeededCloudPayload(): CloudBootstrapPayload {
       appId: seededApp.appId,
       displayName: manifest.displayName ?? manifest.title ?? manifest.name,
       version: seededApp.version,
+      runtimeTargets: manifest.runtimeTargets,
       releaseId: seededApp.releaseId,
       channel: seededApp.channel,
       licenseState: "unknown",

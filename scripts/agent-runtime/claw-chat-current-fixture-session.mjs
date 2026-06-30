@@ -15,6 +15,7 @@ import {
   buildExpertSkillsRuntimeMetadata,
 } from "./claw-chat-current-fixture-constants.mjs";
 import { sendPromptFromGui } from "./claw-chat-current-fixture-gui-actions.mjs";
+import { EXPERT_SKILLS_RUNTIME_TENANT_ID } from "./skills-runtime-fixture-scenario.mjs";
 import {
   evaluatePageSnapshot,
   invokeAppServerFromPage,
@@ -165,9 +166,18 @@ export async function createExpertSkillsRuntimeSession(page, workspace, requestL
 }
 
 export async function injectExpertSkillsRuntimeCatalog(page, options = {}) {
-  const catalog = buildExpertSkillsRuntimeCatalog(options);
+  const runtimeTenantId = await page
+    .evaluate(
+      () => window.__LIME_OEM_CLOUD__?.tenantId || window.__LIME_OEM_CLOUD__?.tenant?.id || null,
+    )
+    .catch(() => null);
+  const tenantId =
+    typeof runtimeTenantId === "string" && runtimeTenantId.trim()
+      ? runtimeTenantId.trim()
+      : EXPERT_SKILLS_RUNTIME_TENANT_ID;
+  const catalog = buildExpertSkillsRuntimeCatalog({ ...options, tenantId });
   const workspaceSkillCatalog = options.workspaceSkill
-    ? buildExpertPanelWorkspaceSkillCatalog(options.workspaceSkill)
+    ? buildExpertPanelWorkspaceSkillCatalog(options.workspaceSkill, { tenantId })
     : null;
   return await page.evaluate(
     ({ catalog, workspaceSkillCatalog }) => {
@@ -178,6 +188,14 @@ export async function injectExpertSkillsRuntimeCatalog(page, options = {}) {
         window.localStorage.setItem(
           skillCatalogStorageKey,
           JSON.stringify(workspaceSkillCatalog),
+        );
+        window.dispatchEvent(
+          new CustomEvent("lime:skill-catalog-changed", {
+            detail: {
+              source: "manual_override",
+              timestamp: Date.now(),
+            },
+          }),
         );
       }
       return {
@@ -209,7 +227,7 @@ export async function injectExpertSkillsRuntimeCatalog(page, options = {}) {
     { catalog, workspaceSkillCatalog },
   );
 }
-export function buildExpertPanelWorkspaceSkillCatalog(workspaceSkill) {
+export function buildExpertPanelWorkspaceSkillCatalog(workspaceSkill, options = {}) {
   const skillFilePath = workspaceSkill?.skillFilePath;
   assert(
     skillFilePath,
@@ -221,7 +239,7 @@ export function buildExpertPanelWorkspaceSkillCatalog(workspaceSkill) {
     "Fixture skill for ExpertInfoPanel Skills runtime override evidence.";
   return {
     version: "fixture-skill-catalog-2026-06-21",
-    tenantId: "fixture-skills-runtime",
+    tenantId: options.tenantId ?? EXPERT_SKILLS_RUNTIME_TENANT_ID,
     syncedAt,
     groups: [
       {

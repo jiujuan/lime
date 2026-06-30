@@ -481,6 +481,7 @@ describe("plugin marketplace registry loader", () => {
           displayName: "内容工厂",
           version: "2.0.0",
           releaseId: "seeded-content-factory-app-2.0.0",
+          runtimeTargets: ["local"],
           packageUrl:
             "https://seeded.local/agent-apps/content-factory-app/2.0.0.lapp",
           packageHash: "package-fnv1a-a4d0e86f",
@@ -514,6 +515,13 @@ describe("plugin marketplace registry loader", () => {
       blockerCodes: expect.arrayContaining([
         "PLUGIN_CLOUD_RELEASE_EVIDENCE_MISSING",
       ]),
+    });
+    expect(snapshot.marketplace.items[0]).toMatchObject({
+      pluginKey: "content-factory-app",
+      install: {
+        local: true,
+        cloud: true,
+      },
     });
   });
 

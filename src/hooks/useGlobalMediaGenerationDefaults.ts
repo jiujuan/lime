@@ -7,25 +7,46 @@ interface UseGlobalMediaGenerationDefaultsResult {
   loading: boolean;
 }
 
-export function useGlobalMediaGenerationDefaults(): UseGlobalMediaGenerationDefaultsResult {
+interface UseGlobalMediaGenerationDefaultsOptions {
+  enabled?: boolean;
+}
+
+export async function readGlobalMediaGenerationDefaults({
+  forceRefresh = false,
+}: { forceRefresh?: boolean } = {}): Promise<MediaGenerationDefaults> {
+  const config = await getConfig(
+    forceRefresh ? { forceRefresh: true } : undefined,
+  );
+  return config.workspace_preferences?.media_defaults ?? {};
+}
+
+export function useGlobalMediaGenerationDefaults({
+  enabled = true,
+}: UseGlobalMediaGenerationDefaultsOptions = {}): UseGlobalMediaGenerationDefaultsResult {
   const [mediaDefaults, setMediaDefaults] = useState<MediaGenerationDefaults>(
     {},
   );
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
 
   useEffect(() => {
+    if (!enabled) {
+      setLoading(false);
+      setMediaDefaults({});
+      return;
+    }
+
     let active = true;
 
     const load = async (forceRefresh = false) => {
       setLoading(true);
       try {
-        const config = await getConfig(
-          forceRefresh ? { forceRefresh: true } : undefined,
-        );
+        const nextMediaDefaults = await readGlobalMediaGenerationDefaults({
+          forceRefresh,
+        });
         if (!active) {
           return;
         }
-        setMediaDefaults(config.workspace_preferences?.media_defaults ?? {});
+        setMediaDefaults(nextMediaDefaults);
       } catch (error) {
         console.error("加载全局媒体默认设置失败:", error);
         if (active) {
@@ -48,7 +69,7 @@ export function useGlobalMediaGenerationDefaults(): UseGlobalMediaGenerationDefa
       active = false;
       unsubscribe();
     };
-  }, []);
+  }, [enabled]);
 
   return { mediaDefaults, loading };
 }

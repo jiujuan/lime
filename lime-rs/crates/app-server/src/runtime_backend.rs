@@ -28,7 +28,12 @@ use crate::RuntimeCoreError;
 use crate::RuntimeEvent;
 use crate::RuntimeEventSink;
 use app_server_protocol::{AgentSessionActionType, McpServerStartParams, ProtocolKind};
+use aster::session::TurnContextOverride;
 use async_trait::async_trait;
+use lime_agent::agent_tools::tool_orchestrator::{
+    execute_planned_tool_batch, PlannedToolExecution, ToolExecutionBatchInput,
+    ToolExecutionOutcome,
+};
 use lime_agent::AsterProviderProtocol;
 use lime_agent::{
     initialize_aster_runtime, stream_reply_with_policy, AgentActionRequiredScope,
@@ -39,6 +44,8 @@ use lime_core::database::{self, DbConnection};
 use lime_services::api_key_provider_service::ApiKeyProviderService;
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::RwLock;
 
@@ -46,8 +53,9 @@ mod request_context;
 
 use request_context::{
     aster_chat_request_from_request, direct_provider_config_from_request,
-    request_tool_policy_from_request, resolve_runtime_model_selection, session_config_from_request,
-    session_scope_from_request, should_defer_tool_surface_for_fast_response, RuntimeModelSelection,
+    request_tool_policy_from_request, resolve_runtime_model_selection,
+    selection_with_effective_reasoning, session_config_from_request, session_scope_from_request,
+    should_defer_tool_surface_for_fast_response, RuntimeModelSelection,
 };
 
 #[derive(Default)]
@@ -57,6 +65,266 @@ pub struct RuntimeBackend {
     db: Option<DbConnection>,
     app_data_source: Arc<RwLock<Option<Arc<dyn AppDataSource>>>>,
     live_execution_process: Option<ExecutionProcessServer>,
+}
+
+#[derive(Debug, Clone)]
+struct ContentFactorySearchPlan {
+    requests: Vec<ContentFactorySearchRequest>,
+}
+
+#[derive(Debug, Clone)]
+struct ContentFactorySearchRequest {
+    id: String,
+    round_id: Option<String>,
+    connector_ref: Option<String>,
+    purpose: Option<String>,
+    query: String,
+    tool_id: String,
+}
+
+impl ContentFactorySearchPlan {
+    fn from_events(events: &[RuntimeEvent]) -> Option<Self> {
+        let patch = content_factory_workspace_patch_from_events(events)?;
+        let requests = content_factory_article_search_requests(&patch)
+            .into_iter()
+            .enumerate()
+            .filter_map(|(index, value)| ContentFactorySearchRequest::from_value(index, value))
+            .collect::<Vec<_>>();
+        (!requests.is_empty()).then_some(Self { requests })
+    }
+}
+
+impl ContentFactorySearchRequest {
+    fn from_value(index: usize, value: Value) -> Option<Self> {
+        let query = value_string(&value, &["query"])?.to_string();
+        let id = value_string(&value, &["id"])
+            .map(ToString::to_string)
+            .unwrap_or_else(|| format!("search-request-{}", index + 1));
+        let round_id = value_string(&value, &["roundId", "round_id"]).map(ToString::to_string);
+        let connector_ref =
+            value_string(&value, &["connectorRef", "connector_ref"]).map(ToString::to_string);
+        let purpose = value_string(&value, &["purpose"]).map(ToString::to_string);
+        Some(Self {
+            tool_id: format!("content-factory-web-search-{}", sanitize_tool_id(&id)),
+            id,
+            round_id,
+            connector_ref,
+            purpose,
+            query,
+        })
+    }
+}
+
+fn content_factory_search_turn_context(
+    request: &ExecutionRequest,
+    host_request: Option<&request_context::AsterChatRequestSnapshot>,
+    scope: &request_context::RuntimeSessionScope,
+    selection: &RuntimeModelSelection,
+) -> TurnContextOverride {
+    let mut context = request_context::turn_context_from_request(
+        request,
+        host_request,
+        scope,
+        selection,
+        current_agent_runtime_config_metadata(),
+    )
+    .unwrap_or_default();
+    context
+        .metadata
+        .insert("web_search_enabled".to_string(), json!(true));
+    context
+        .metadata
+        .insert("webSearchEnabled".to_string(), json!(true));
+    context.user_visible_input_text = Some(request.input.text.clone());
+    context
+}
+
+fn content_factory_workspace_patch_from_events(events: &[RuntimeEvent]) -> Option<Value> {
+    events.iter().find_map(|event| {
+        if event.event_type != "artifact.snapshot" {
+            return None;
+        }
+        let artifact = event.payload.get("artifact")?;
+        artifact
+            .get("metadata")
+            .and_then(|metadata| metadata.get("contentFactoryWorkspacePatch"))
+            .cloned()
+            .or_else(|| artifact.get("contentFactoryWorkspacePatch").cloned())
+            .or_else(|| {
+                artifact
+                    .get("metadata")
+                    .and_then(|metadata| metadata.get("workspace_patch"))
+                    .cloned()
+            })
+    })
+}
+
+fn content_factory_article_search_requests(patch: &Value) -> Vec<Value> {
+    patch
+        .get("objects")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|object| value_string(object, &["kind"]).is_none_or(|kind| kind == "articleDraft"))
+        .filter(|object| article_object_kind(object).as_deref() == Some("articleDraft"))
+        .filter_map(|object| object.get("source"))
+        .filter_map(|source| source.get("searchRequests").and_then(Value::as_array))
+        .flat_map(|requests| requests.iter().cloned())
+        .collect()
+}
+
+fn build_content_factory_search_evidence(
+    requests: &[ContentFactorySearchRequest],
+    outcomes: &[ToolExecutionOutcome],
+) -> Vec<Value> {
+    let outcomes_by_tool_id = outcomes
+        .iter()
+        .map(|outcome| (outcome.tool_id.as_str(), outcome))
+        .collect::<HashMap<_, _>>();
+    requests
+        .iter()
+        .filter_map(|request| {
+            let outcome = outcomes_by_tool_id.get(request.tool_id.as_str())?;
+            Some(json!({
+                "id": format!("host-search-evidence-{}", sanitize_tool_id(&request.id)),
+                "requestId": request.id,
+                "roundId": request.round_id,
+                "connectorRef": request.connector_ref,
+                "tool": "WebSearch",
+                "toolCallId": outcome.tool_id,
+                "status": if outcome.success { "completed" } else { "failed" },
+                "query": request.query,
+                "purpose": request.purpose,
+                "summary": content_factory_search_output_summary(&outcome.output),
+                "output": outcome.output,
+                "error": outcome.error,
+                "metadata": outcome.metadata,
+                "confidence": if outcome.success { "host_verified" } else { "needs_review" },
+            }))
+        })
+        .collect()
+}
+
+fn update_content_factory_artifact_events(events: &mut [RuntimeEvent], search_evidence: &[Value]) {
+    for event in events {
+        if event.event_type != "artifact.snapshot" {
+            continue;
+        }
+        let Some(artifact) = event.payload.get_mut("artifact") else {
+            continue;
+        };
+        let Some(metadata) = artifact.get_mut("metadata").and_then(Value::as_object_mut) else {
+            continue;
+        };
+        let patch = if let Some(patch) = metadata.get_mut("contentFactoryWorkspacePatch") {
+            patch
+        } else if let Some(patch) = metadata.get_mut("workspace_patch") {
+            patch
+        } else {
+            continue;
+        };
+        update_content_factory_workspace_patch_search_evidence(patch, search_evidence);
+        if let Some(content) = serde_json::to_string(patch).ok() {
+            artifact
+                .as_object_mut()
+                .map(|object| object.insert("content".to_string(), Value::String(content)));
+        }
+    }
+}
+
+fn update_content_factory_workspace_patch_search_evidence(
+    patch: &mut Value,
+    search_evidence: &[Value],
+) {
+    let evidence = Value::Array(search_evidence.to_vec());
+    let host_search_status = if search_evidence
+        .iter()
+        .all(|evidence| evidence.get("status").and_then(Value::as_str) == Some("completed"))
+    {
+        "completed"
+    } else if search_evidence
+        .iter()
+        .all(|evidence| evidence.get("status").and_then(Value::as_str) == Some("failed"))
+    {
+        "failed"
+    } else {
+        "partial"
+    };
+    let Some(objects) = patch.get_mut("objects").and_then(Value::as_array_mut) else {
+        return;
+    };
+    for object in objects {
+        let Some(kind) = article_object_kind(object) else {
+            continue;
+        };
+        if kind != "articleDraft" && kind != "imageGenerationSet" {
+            continue;
+        }
+        {
+            let Some(source) = object.get_mut("source").and_then(Value::as_object_mut) else {
+                continue;
+            };
+            source.insert("searchEvidence".to_string(), evidence.clone());
+            source.insert("hostSearchEvidence".to_string(), evidence.clone());
+            source.insert("hostSearchStatus".to_string(), json!(host_search_status));
+        }
+        if kind == "articleDraft" && host_search_status == "failed" {
+            if let Some(object_map) = object.as_object_mut() {
+                object_map.insert("status".to_string(), json!("failed"));
+                object_map.insert(
+                    "summary".to_string(),
+                    json!("检索失败，文章草稿未达到可交付状态"),
+                );
+            }
+        }
+    }
+}
+
+fn content_factory_search_output_summary(output: &str) -> String {
+    let normalized = output
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .take(8)
+        .collect::<Vec<_>>()
+        .join("\n");
+    if normalized.chars().count() <= 1_200 {
+        normalized
+    } else {
+        normalized.chars().take(1_200).collect::<String>()
+    }
+}
+
+fn article_object_kind(object: &Value) -> Option<String> {
+    value_string(object, &["kind"]).map(ToString::to_string).or_else(|| {
+        object
+            .get("ref")
+            .or_else(|| object.get("objectRef"))
+            .and_then(|reference| value_string(reference, &["kind"]))
+            .map(ToString::to_string)
+    })
+}
+
+fn value_string<'a>(value: &'a Value, keys: &[&str]) -> Option<&'a str> {
+    keys.iter()
+        .find_map(|key| value.get(*key))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+}
+
+fn sanitize_tool_id(value: &str) -> String {
+    let sanitized = value
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || character == '-' || character == '_' {
+                character
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>();
+    sanitized.trim_matches('-').to_string()
 }
 
 impl RuntimeBackend {
@@ -216,21 +484,23 @@ impl RuntimeBackend {
         }
         let db = initialize_runtime_database(self.db.as_ref())?;
         let requested_selection = resolve_runtime_model_selection(&request)?;
+        let effective_requested_selection =
+            selection_with_effective_reasoning(&requested_selection);
         let direct_provider_config = direct_provider_config_from_request(
             host_request.as_ref(),
-            &requested_selection,
-            requested_selection.reasoning_effort.clone(),
+            &effective_requested_selection,
+            effective_requested_selection.reasoning_effort.clone(),
         );
         let route_resolution = model_route_resolver::resolve_chat_model_route(
             &db,
             &self.api_key_provider_service,
             &request,
-            &requested_selection,
+            &effective_requested_selection,
             direct_provider_config.as_ref(),
         )
         .await
         .map_err(backend_error)?;
-        let selection = route_resolution.selection.clone();
+        let selection = selection_with_effective_reasoning(&route_resolution.selection);
 
         sink.emit(RuntimeEvent::new(
             "routing.decision.made",
@@ -286,6 +556,7 @@ impl RuntimeBackend {
             .map_err(backend_error)?
         };
         sink.emit(model_effective_event_from_runtime(
+            &requested_selection,
             &selection,
             &provider_config,
             route_resolution.service_model_slot(),
@@ -472,6 +743,101 @@ impl ExecutionBackend for RuntimeBackend {
         )
         .await
     }
+
+    async fn prepare_runtime_worker_artifact_events(
+        &self,
+        request: &ExecutionRequest,
+        events: &mut Vec<RuntimeEvent>,
+    ) -> Result<(), RuntimeCoreError> {
+        let Some(search_plan) = ContentFactorySearchPlan::from_events(events.as_slice()) else {
+            return Ok(());
+        };
+        if search_plan.requests.is_empty() {
+            return Ok(());
+        }
+
+        let db = initialize_runtime_database(self.db.as_ref())?;
+        self.agent_state
+            .init_agent_with_db(&db)
+            .await
+            .map_err(backend_error)?;
+        self.install_live_execution_process_hook_if_available()
+            .await?;
+        self.register_memory_tools_if_available().await?;
+        self.sync_mcp_bridges_if_available().await?;
+
+        let host_request = aster_chat_request_from_request(request);
+        let scope = session_scope_from_request(request)?;
+        let selection = resolve_runtime_model_selection(request)
+            .map(|selection| selection_with_effective_reasoning(&selection))
+            .unwrap_or(RuntimeModelSelection {
+                provider: "host-web-search".to_string(),
+                model: "host-web-search".to_string(),
+                source: "content_factory_search_requests",
+                reasoning_effort: None,
+            });
+        let turn_context =
+            content_factory_search_turn_context(request, host_request.as_ref(), &scope, &selection);
+        let registry = {
+            let agent_arc = self.agent_state.get_agent_arc();
+            let agent_guard = agent_arc.read().await;
+            let agent = agent_guard.as_ref().ok_or_else(|| {
+                RuntimeCoreError::Backend(
+                    "App Server runtime backend failed to initialize Aster agent for content factory search".to_string(),
+                )
+            })?;
+            agent.tool_registry().clone()
+        };
+        let working_directory = turn_context
+            .cwd
+            .clone()
+            .or_else(|| std::env::current_dir().ok())
+            .unwrap_or_else(|| PathBuf::from("."));
+        let planned_tools = search_plan
+            .requests
+            .iter()
+            .map(|request| PlannedToolExecution {
+                tool_name: "WebSearch".to_string(),
+                tool_id: request.tool_id.clone(),
+                arguments: Some(json!({ "query": request.query }).to_string()),
+                params: json!({ "query": request.query }),
+            })
+            .collect::<Vec<_>>();
+        let batch = execute_planned_tool_batch(
+            ToolExecutionBatchInput {
+                registry,
+                session_id: request.session.session_id.clone(),
+                working_directory,
+                cancel_token: None,
+                turn_context: Some(turn_context),
+                persisted_execution_policy: None,
+                parallelism: 2,
+                auto_mode: true,
+                bypass_restrictions: false,
+                live_process_registry: None,
+            },
+            planned_tools,
+        )
+        .await;
+        let search_evidence = build_content_factory_search_evidence(
+            &search_plan.requests,
+            batch.outcomes.as_slice(),
+        );
+        if search_evidence.is_empty() {
+            return Ok(());
+        }
+        update_content_factory_artifact_events(events, &search_evidence);
+        let mut tool_runtime_events = Vec::new();
+        for event in &batch.events {
+            tool_runtime_events.extend(tool_events::runtime_events_from_agent_event(event)?);
+        }
+        let insert_at = events
+            .iter()
+            .position(|event| event.event_type == "artifact.snapshot")
+            .unwrap_or(events.len());
+        events.splice(insert_at..insert_at, tool_runtime_events);
+        Ok(())
+    }
 }
 
 impl RuntimeBackend {
@@ -616,6 +982,7 @@ fn value_string_field<'a>(value: &'a Value, keys: &[&str]) -> Option<&'a str> {
 }
 
 fn model_effective_event_from_runtime(
+    requested_selection: &RuntimeModelSelection,
     selection: &RuntimeModelSelection,
     provider_config: &ProviderConfig,
     service_model_slot: &str,
@@ -628,7 +995,8 @@ fn model_effective_event_from_runtime(
     let model_ref =
         model_capability::ModelRef::new(provider_id.clone(), provider_config.model_name.clone());
     let capability = model_capability::resolve_basic_model_capability(model_ref);
-    let requested_reasoning_effort = provider_config
+    let requested_reasoning_effort = requested_selection.reasoning_effort.as_deref();
+    let effective_reasoning_effort = provider_config
         .reasoning_effort
         .as_deref()
         .or(selection.reasoning_effort.as_deref());
@@ -657,6 +1025,16 @@ fn model_effective_event_from_runtime(
             );
             payload_object.insert(
                 "requested_reasoning_effort".to_string(),
+                json!(reasoning_effort),
+            );
+        }
+        if let Some(reasoning_effort) = effective_reasoning_effort {
+            payload_object.insert(
+                "effectiveReasoningEffort".to_string(),
+                json!(reasoning_effort),
+            );
+            payload_object.insert(
+                "effective_reasoning_effort".to_string(),
                 json!(reasoning_effort),
             );
         }

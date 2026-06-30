@@ -3,12 +3,12 @@ use super::json_string;
 use super::timestamp;
 use super::RuntimeCore;
 use super::RuntimeCoreError;
+use app_server_protocol::AgentAppArticleWorkspaceContract;
+use app_server_protocol::AgentAppArticleWorkspaceObject;
 use app_server_protocol::AgentAppHistoryRestoreContract;
 use app_server_protocol::AgentAppHostFunctionState;
 use app_server_protocol::AgentAppHostLifecycleListResponse;
 use app_server_protocol::AgentAppHostLifecycleSnapshot;
-use app_server_protocol::AgentAppProductProfileContract;
-use app_server_protocol::AgentAppProductProfileObject;
 use app_server_protocol::AgentAppReadinessIssueCategorySummary;
 use app_server_protocol::AgentAppRightSurfaceContract;
 use serde_json::Value;
@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 
 const RIGHT_SURFACE_TABS: &[&str] = &[
-    "productProfile",
+    "articleWorkspace",
     "file",
     "evidence",
     "terminal",
@@ -24,7 +24,7 @@ const RIGHT_SURFACE_TABS: &[&str] = &[
     "sideChat",
 ];
 
-const PRODUCT_PROFILE_PANES: &[&str] = &[
+const ARTICLE_WORKSPACE_PANES: &[&str] = &[
     "artifact",
     "inspector",
     "runtime",
@@ -191,7 +191,11 @@ fn build_right_surface_contract(
         .filter_map(|surface| json_string(surface, &["surfaceKind"]))
         .collect::<Vec<_>>();
     panes.extend(objects.iter().map(|object| object.default_pane.clone()));
-    panes.extend(PRODUCT_PROFILE_PANES.iter().map(|pane| (*pane).to_string()));
+    panes.extend(
+        ARTICLE_WORKSPACE_PANES
+            .iter()
+            .map(|pane| (*pane).to_string()),
+    );
     let panes = unique_strings(panes);
     let renderer_kinds = unique_strings(
         list_object_surfaces(workbench)
@@ -203,12 +207,12 @@ fn build_right_surface_contract(
     AgentAppRightSurfaceContract {
         dock: "right".to_string(),
         physical_dock_count: 1,
-        default_active_tab: enabled.then(|| "productProfile".to_string()),
+        default_active_tab: enabled.then(|| "articleWorkspace".to_string()),
         supported_tabs: RIGHT_SURFACE_TABS
             .iter()
             .map(|tab| (*tab).to_string())
             .collect(),
-        product_profile: AgentAppProductProfileContract {
+        article_workspace: AgentAppArticleWorkspaceContract {
             enabled,
             objects,
             panes,
@@ -221,7 +225,7 @@ fn build_right_surface_contract(
 fn build_history_restore_contract(
     workbench: &Value,
     workbench_enabled: bool,
-    objects: &[AgentAppProductProfileObject],
+    objects: &[AgentAppArticleWorkspaceObject],
 ) -> AgentAppHistoryRestoreContract {
     let restore = workbench.get("historyRestore").unwrap_or(&Value::Null);
     let enabled = workbench_enabled && restore.is_object();
@@ -230,7 +234,7 @@ fn build_history_restore_contract(
 
     AgentAppHistoryRestoreContract {
         enabled,
-        default_tab: workbench_enabled.then(|| "productProfile".to_string()),
+        default_tab: workbench_enabled.then(|| "articleWorkspace".to_string()),
         default_pane: Some(default_pane),
         restore_selection: json_bool(restore, &["restoreSelection"]).unwrap_or(true),
         restore_layout: json_bool(restore, &["restoreLayout"]).unwrap_or(true),
@@ -240,7 +244,7 @@ fn build_history_restore_contract(
 
 fn resolve_history_default_pane(
     default_surface: Option<&str>,
-    objects: &[AgentAppProductProfileObject],
+    objects: &[AgentAppArticleWorkspaceObject],
 ) -> String {
     match default_surface {
         None | Some("selectedObject" | "primaryObject") => objects
@@ -254,7 +258,7 @@ fn resolve_history_default_pane(
     }
 }
 
-fn list_product_objects(workbench: &Value) -> Vec<AgentAppProductProfileObject> {
+fn list_product_objects(workbench: &Value) -> Vec<AgentAppArticleWorkspaceObject> {
     workbench
         .get("productionObjects")
         .and_then(Value::as_array)
@@ -265,7 +269,7 @@ fn list_product_objects(workbench: &Value) -> Vec<AgentAppProductProfileObject> 
             if kind.trim().is_empty() {
                 return None;
             }
-            Some(AgentAppProductProfileObject {
+            Some(AgentAppArticleWorkspaceObject {
                 title: json_string(object, &["title"]).unwrap_or_else(|| kind.clone()),
                 default_pane: json_string(object, &["defaultSurface"])
                     .filter(|value| !value.trim().is_empty())
@@ -296,9 +300,9 @@ fn build_function_states(
 ) -> Vec<AgentAppHostFunctionState> {
     let readiness_blockers = readiness_issue_codes(readiness.get("blockers"));
     let missing_capabilities = readiness_missing_capabilities(readiness);
-    let workbench_enabled = right_surface.product_profile.enabled;
+    let workbench_enabled = right_surface.article_workspace.enabled;
     let product_objects_missing =
-        workbench_enabled && right_surface.product_profile.objects.is_empty();
+        workbench_enabled && right_surface.article_workspace.objects.is_empty();
     let history_restore_missing = !right_surface.history_restore.enabled;
 
     vec![
@@ -392,7 +396,7 @@ fn build_function_states(
             vec!["接入 WorkspaceConversationScene 的右侧 tab strip。".to_string()],
         ),
         function_state(
-            "productProfile",
+            "articleWorkspace",
             if product_objects_missing {
                 "needs-setup"
             } else if workbench_enabled {

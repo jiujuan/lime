@@ -72,7 +72,7 @@ import { syncAssistantAgentMessageContentPartFromThreadItem } from "./agentStrea
 import { isPersistedReasoningContentPart } from "./agentStreamReasoningContentSync";
 import { isRuntimePermissionConfirmationWaitMessage } from "../utils/runtimeActionConfirmation";
 import { buildAgentUiProjectionEvents } from "../projection/agentUiEventProjection";
-import { recordAgentUiProjectionEvents } from "../projection/conversationProjectionStore";
+import { enqueueAgentUiProjectionEvents } from "../projection/conversationProjectionStore";
 import { isRetainedSkillProcessMessage } from "../utils/skillInlineProcessRetention";
 import {
   applyAcknowledgedActionRequests,
@@ -176,7 +176,7 @@ export function handleTurnStreamEvent({
   if (projectionEvents.length > 0) {
     requestState.agentUiEventSequence =
       (requestState.agentUiEventSequence ?? 0) + projectionEvents.length;
-    recordAgentUiProjectionEvents(projectionEvents);
+    enqueueAgentUiProjectionEvents(projectionEvents);
   }
 
   const {

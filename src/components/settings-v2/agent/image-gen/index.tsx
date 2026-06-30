@@ -14,9 +14,9 @@ import {
   type MediaGenerationPreference,
 } from "@/lib/mediaGeneration";
 import {
-  getImageModelIdsForProvider,
-  isImageProvider,
-} from "@/lib/imageGeneration";
+  resolveImageCapabilityModelIds,
+  isImageCapabilityProvider,
+} from "@/lib/imageGen/catalog";
 import { buildProviderModelsFromBackendModelIds } from "@/lib/model/providerModelsCatalog";
 import { MediaPreferenceSection } from "../shared/MediaPreferenceSection";
 
@@ -55,11 +55,12 @@ export function ImageGenSettings() {
       providers.filter(
         (provider) =>
           provider.authStatus === "login_required" ||
-          isImageProvider(
-            provider.providerId ?? provider.key,
-            provider.type,
-            provider.customModels,
-          ),
+          isImageCapabilityProvider({
+            id: provider.providerId ?? provider.key,
+            type: provider.type,
+            custom_models: provider.customModels,
+            api_host: provider.apiHost,
+          }),
       ),
     [providers],
   );
@@ -78,12 +79,12 @@ export function ImageGenSettings() {
       return [];
     }
 
-    return getImageModelIdsForProvider(
-      selectedProvider.providerId ?? selectedProvider.key,
-      selectedProvider.type,
-      selectedProvider.customModels,
-      selectedProvider.apiHost,
-    );
+    return resolveImageCapabilityModelIds({
+      id: selectedProvider.providerId ?? selectedProvider.key,
+      type: selectedProvider.type,
+      custom_models: selectedProvider.customModels,
+      api_host: selectedProvider.apiHost,
+    });
   }, [selectedProvider]);
 
   const providerUnavailableLabel =
@@ -141,12 +142,12 @@ export function ImageGenSettings() {
       preferredProviderId,
     );
     const nextModelIds = nextProvider
-      ? getImageModelIdsForProvider(
-          nextProvider.providerId ?? nextProvider.key,
-          nextProvider.type,
-          nextProvider.customModels,
-          nextProvider.apiHost,
-        )
+      ? resolveImageCapabilityModelIds({
+          id: nextProvider.providerId ?? nextProvider.key,
+          type: nextProvider.type,
+          custom_models: nextProvider.customModels,
+          api_host: nextProvider.apiHost,
+        })
       : [];
     const preferredModelId = preferredProviderId
       ? nextModelIds.includes(globalImagePreference.preferredModelId || "")
@@ -185,12 +186,12 @@ export function ImageGenSettings() {
       buildProviderModelsFromBackendModelIds(
         provider,
         [],
-        getImageModelIdsForProvider(
-          provider.providerId ?? provider.key,
-          provider.type,
-          provider.customModels,
-          provider.apiHost,
-        ),
+        resolveImageCapabilityModelIds({
+          id: provider.providerId ?? provider.key,
+          type: provider.type,
+          custom_models: provider.customModels,
+          api_host: provider.apiHost,
+        }),
       ),
     [],
   );
@@ -215,19 +216,20 @@ export function ImageGenSettings() {
         setModel={handleModelChange}
         providerFilter={(provider) =>
           provider.authStatus === "login_required" ||
-          isImageProvider(
-            provider.providerId ?? provider.key,
-            provider.type,
-            provider.customModels,
-          )
+          isImageCapabilityProvider({
+            id: provider.providerId ?? provider.key,
+            type: provider.type,
+            custom_models: provider.customModels,
+            api_host: provider.apiHost,
+          })
         }
         modelFilter={(model, provider) =>
-          getImageModelIdsForProvider(
-            provider.providerId ?? provider.key,
-            provider.type,
-            provider.customModels,
-            provider.apiHost,
-          ).includes(model.id)
+          resolveImageCapabilityModelIds({
+            id: provider.providerId ?? provider.key,
+            type: provider.type,
+            custom_models: provider.customModels,
+            api_host: provider.apiHost,
+          }).includes(model.id)
         }
         getFallbackModels={getImageFallbackModels}
         allowFallback={globalImagePreference.allowFallback ?? true}

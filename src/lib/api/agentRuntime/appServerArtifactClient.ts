@@ -25,7 +25,10 @@ export type AgentRuntimeTimelineArtifactContent = {
   title?: string;
 };
 
-export type AppServerArtifactRpcClient = Pick<AppServerClient, "readArtifacts"> &
+export type AppServerArtifactRpcClient = Pick<
+  AppServerClient,
+  "readArtifacts"
+> &
   Partial<Pick<AppServerClient, "appendAgentSessionRuntimeEvents">>;
 
 export interface AppServerArtifactClientDeps {
@@ -388,9 +391,11 @@ export function appServerArtifactSnapshotAppendParamsFromArtifactDocument(
     artifactVersionNo: document.metadata.currentVersionNo,
     artifactRef: scope.artifactRef,
     filePath,
-    productProfile:
-      asRecord(document.metadata.productProfile) ||
-      asRecord(metadata?.productProfile),
+    articleWorkspace:
+      asRecord(document.metadata.articleWorkspace) ||
+      asRecord(document.metadata.article_workspace) ||
+      asRecord(metadata?.articleWorkspace) ||
+      asRecord(metadata?.article_workspace),
   };
 
   return omitUndefined({
@@ -710,8 +715,10 @@ function resolveArtifactSessionId(
       "appServerArtifactSessionId",
       "app_server_artifact_session_id",
     ]) ||
-    readNestedText(metadata, ["productProfile", "sessionId"]) ||
-    readNestedText(metadata, ["productProfile", "session_id"]) ||
+    readNestedText(metadata, ["articleWorkspace", "sessionId"]) ||
+    readNestedText(metadata, ["articleWorkspace", "session_id"]) ||
+    readNestedText(metadata, ["article_workspace", "sessionId"]) ||
+    readNestedText(metadata, ["article_workspace", "session_id"]) ||
     readNestedText(metadata, ["sourceRunBinding", "sessionId"]) ||
     readNestedText(metadata, ["sourceRunBinding", "session_id"])
   );
@@ -744,8 +751,10 @@ function resolveArtifactRef(
       "appServerArtifactRef",
       "app_server_artifact_ref",
     ]) ||
-    readStringArrayFirst(metadata, ["productProfile", "artifactIds"]) ||
-    readStringArrayFirst(metadata, ["productProfile", "artifact_ids"]) ||
+    readStringArrayFirst(metadata, ["articleWorkspace", "artifactIds"]) ||
+    readStringArrayFirst(metadata, ["articleWorkspace", "artifact_ids"]) ||
+    readStringArrayFirst(metadata, ["article_workspace", "artifactIds"]) ||
+    readStringArrayFirst(metadata, ["article_workspace", "artifact_ids"]) ||
     readText(metadata, [
       "sourceRef",
       "artifactId",

@@ -431,6 +431,22 @@ describe("commandPolicy", () => {
         request: {
           lines: [
             JSON.stringify({
+              id: "local-package-inspect",
+              method: "agentAppLocalPackage/inspect",
+              params: {
+                appDir:
+                  "/Users/coso/Documents/dev/ai/limecloud/content-factory-app",
+              },
+            }),
+          ],
+        },
+      }),
+    ).toBe("agent-app-package-inspect");
+    expect(
+      resolveDevBridgeCommandTimeoutProfile("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
               id: "session-files",
               method: "sessionFile/list",
               params: { sessionId: "session-1" },

@@ -578,7 +578,7 @@ describe("AgentThreadReliabilityPanel", () => {
     expect(container.textContent).toContain("First text");
   });
 
-  it("应从 AgentUI projection store 展示并导出标准投影诊断", async () => {
+  it("应按需从 AgentUI projection store 导出标准投影诊断，不常驻渲染摘要", async () => {
     conversationProjectionStore.recordAgentUiProjectionEvents([
       {
         type: "task.changed",
@@ -670,15 +670,11 @@ describe("AgentThreadReliabilityPanel", () => {
       container.querySelector(
         '[data-testid="agent-thread-reliability-agentui-projection"]',
       ),
-    ).not.toBeNull();
-    expect(container.textContent).toContain("AgentUI 标准投影");
-    expect(container.textContent).toContain("3 条");
-    expect(container.textContent).toContain(
+    ).toBeNull();
+    expect(container.textContent).not.toContain(
       "来源：conversationProjectionStore.agentUi",
     );
-    expect(container.textContent).toContain("任务 / Agent");
-    expect(container.textContent).toContain("制品");
-    expect(container.textContent).toContain("Diagnostics");
+    expect(container.textContent).not.toContain("3 条");
 
     const copyButton = container.querySelector(
       '[data-testid="agent-thread-reliability-copy"]',

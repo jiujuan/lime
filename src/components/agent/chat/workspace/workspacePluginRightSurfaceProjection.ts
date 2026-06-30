@@ -4,6 +4,7 @@ import type {
 } from "@/features/plugin";
 import {
   createWorkspaceRightSurfaceOpenIntent,
+  normalizeWorkspaceRightSurfaceKind,
   type WorkspaceRightSurfaceIntent,
   type WorkspaceRightSurfaceKind,
 } from "./right-surface";
@@ -18,10 +19,10 @@ export interface WorkspacePluginRightSurfaceProjectionInput {
 function normalizeSurfaceKind(
   value: string | undefined,
 ): WorkspaceRightSurfaceKind | null {
-  if (value === "productProfile" || value === "appSurface") {
-    return value;
-  }
-  return null;
+  const normalized = normalizeWorkspaceRightSurfaceKind(value);
+  return normalized === "articleWorkspace" || normalized === "appSurface"
+    ? normalized
+    : null;
 }
 
 function preferredSurfaceForPlugin(
@@ -61,7 +62,7 @@ export function buildWorkspacePluginRightSurfaceIntents({
   const contract = contracts.find(
     (candidate) => candidate.id === activationContext.pluginId,
   );
-  if (!contract || !contract.rightSurface.productWorkspace.enabled) {
+  if (!contract || !contract.rightSurface.articleWorkspace.enabled) {
     return [];
   }
   const surfaceKind = preferredSurfaceForPlugin(contract, activationContext);

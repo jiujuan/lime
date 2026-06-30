@@ -101,6 +101,9 @@ interface InputbarProps extends SkillSelectionSourceProps {
   knowledgePackSelection?: InputbarKnowledgePackSelection | null;
   knowledgePackOptions?: InputbarKnowledgePackOption[];
   pluginSuggestions?: InputbarPluginCapability[];
+  onSkillSuggestionsNeeded?: () => void;
+  onPluginSuggestionsNeeded?: () => void;
+  onKnowledgePacksNeeded?: () => void;
   onToggleKnowledgePack?: (enabled: boolean) => void;
   onSelectKnowledgePack?: (packName: string) => void;
   onToggleKnowledgeCompanionPack?: (packName: string, enabled: boolean) => void;
@@ -172,6 +175,9 @@ export const Inputbar: React.FC<InputbarProps> = ({
   knowledgePackSelection = null,
   knowledgePackOptions = [],
   pluginSuggestions = [],
+  onSkillSuggestionsNeeded,
+  onPluginSuggestionsNeeded,
+  onKnowledgePacksNeeded,
   onToggleKnowledgePack,
   onSelectKnowledgePack,
   onToggleKnowledgeCompanionPack,
@@ -281,6 +287,7 @@ export const Inputbar: React.FC<InputbarProps> = ({
     workflowRunState,
     knowledgePackSelection,
     pluginSuggestions,
+    onKnowledgePacksNeeded,
     onStartKnowledgeOrganize,
     onManageKnowledgePacks,
     projectId,
@@ -346,6 +353,7 @@ export const Inputbar: React.FC<InputbarProps> = ({
         inputAdapter={inputAdapter}
         characters={characters}
         skillSelection={skillSelection}
+        onSkillSuggestionsNeeded={onSkillSuggestionsNeeded}
         textareaRef={textareaRef}
         input={input}
         onSelectCharacter={onSelectCharacter}
@@ -353,6 +361,7 @@ export const Inputbar: React.FC<InputbarProps> = ({
         activeCapability={activeCapability}
         activePluginSelection={activePluginSelection}
         pluginSuggestions={resolvedPluginSuggestions}
+        onPluginSuggestionsNeeded={onPluginSuggestionsNeeded}
         onSelectPlugin={handleSelectPlugin}
         projectId={projectId}
         sessionId={sessionId}
@@ -363,6 +372,7 @@ export const Inputbar: React.FC<InputbarProps> = ({
         knowledgePackSelection={knowledgePackSelection}
         knowledgePackOptions={knowledgePackOptions}
         knowledgeHubOpenRequestKey={knowledgeHubOpenRequestKey}
+        onKnowledgePacksNeeded={onKnowledgePacksNeeded}
         onToggleKnowledgePack={onToggleKnowledgePack}
         onSelectKnowledgePack={onSelectKnowledgePack}
         onToggleKnowledgeCompanionPack={onToggleKnowledgeCompanionPack}

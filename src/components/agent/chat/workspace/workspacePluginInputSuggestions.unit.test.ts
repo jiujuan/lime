@@ -50,7 +50,7 @@ function createContract(
         restoreSelection: false,
         restoreLayout: false,
       },
-      productWorkspace: {
+      articleWorkspace: {
         enabled: false,
         selectionPolicy: "primary",
       },

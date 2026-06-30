@@ -2,8 +2,10 @@ import { useMemo, useSyncExternalStore } from "react";
 
 import {
   conversationProjectionStore,
-  selectAgentUiProjectionEventsBySurfaceForScope,
-  selectAgentUiProjectionEventsForScope,
+  EMPTY_CONVERSATION_AGENT_UI_PROJECTION_SLICE,
+  selectAgentUiProjectionEventsBySurfaceForScopeFromSlice,
+  selectAgentUiProjectionEventsForScopeFromSlice,
+  type ConversationAgentUiProjectionSlice,
   type AgentUiProjectionScopeFilter,
   type ConversationProjectionState,
 } from "./conversationProjectionStore";
@@ -18,6 +20,12 @@ import {
   type AgentUiProjectionSummary,
 } from "./agentUiProjectionSummary";
 
+const subscribeToDisabledProjectionSlice = () => () => undefined;
+
+function getDisabledAgentUiProjectionSnapshot(): ConversationAgentUiProjectionSlice {
+  return EMPTY_CONVERSATION_AGENT_UI_PROJECTION_SLICE;
+}
+
 export function useConversationProjectionSnapshot(): ConversationProjectionState {
   return useSyncExternalStore(
     conversationProjectionStore.subscribe,
@@ -26,16 +34,36 @@ export function useConversationProjectionSnapshot(): ConversationProjectionState
   );
 }
 
+export function useConversationAgentUiProjectionSnapshot(options?: {
+  enabled?: boolean;
+}): ConversationAgentUiProjectionSlice {
+  const enabled = options?.enabled ?? true;
+  return useSyncExternalStore(
+    enabled
+      ? (listener) =>
+          conversationProjectionStore.subscribeToSlice("agentUi", listener)
+      : subscribeToDisabledProjectionSlice,
+    enabled
+      ? () => conversationProjectionStore.getSnapshot().agentUi
+      : getDisabledAgentUiProjectionSnapshot,
+    enabled
+      ? () => conversationProjectionStore.getSnapshot().agentUi
+      : getDisabledAgentUiProjectionSnapshot,
+  );
+}
+
 export function useAgentUiProjectionEvents(
   filter?: AgentUiProjectionScopeFilter | null,
   options?: { enabled?: boolean },
 ): AgentUiProjectionEvent[] {
-  const snapshot = useConversationProjectionSnapshot();
   const enabled = options?.enabled ?? true;
+  const agentUi = useConversationAgentUiProjectionSnapshot({ enabled });
   return useMemo(
     () =>
-      enabled ? selectAgentUiProjectionEventsForScope(snapshot, filter) : [],
-    [enabled, filter, snapshot],
+      enabled
+        ? selectAgentUiProjectionEventsForScopeFromSlice(agentUi, filter)
+        : [],
+    [agentUi, enabled, filter],
   );
 }
 
@@ -43,11 +71,15 @@ export function useAgentUiProjectionEventsBySurface(
   surface: AgentUiSurface,
   filter?: AgentUiProjectionScopeFilter | null,
 ): AgentUiProjectionEvent[] {
-  const snapshot = useConversationProjectionSnapshot();
+  const agentUi = useConversationAgentUiProjectionSnapshot();
   return useMemo(
     () =>
-      selectAgentUiProjectionEventsBySurfaceForScope(snapshot, surface, filter),
-    [filter, snapshot, surface],
+      selectAgentUiProjectionEventsBySurfaceForScopeFromSlice(
+        agentUi,
+        surface,
+        filter,
+      ),
+    [agentUi, filter, surface],
   );
 }
 

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildWorkspaceProductProfileViewModel } from "@/components/agent/chat/workspace/workspaceProductProfileModel";
+import { buildWorkspaceArticleWorkspaceViewModel } from "@/components/agent/chat/workspace/workspaceArticleWorkspaceModel";
 import {
   buildContentFactoryDeliveryParts,
-  buildContentFactoryDeliveryProfile,
+  buildContentFactoryDeliveryArticleWorkspace,
 } from "./contentFactoryDeliveryPlan";
 import {
   buildContentFactoryPluginContract,
@@ -79,8 +79,8 @@ describe("contentFactoryDeliveryPlan", () => {
     ]);
   });
 
-  it("应生成可被 Product Profile 右栏消费的交付包 profile", () => {
-    const profile = buildContentFactoryDeliveryProfile({
+  it("应生成可被 Article Editor 右栏消费的交付包 workspace", () => {
+    const profile = buildContentFactoryDeliveryArticleWorkspace({
       contract: buildContentFactoryPluginContract(),
       sessionId: "session-content-factory",
       workspaceId: "workspace-main",
@@ -88,7 +88,7 @@ describe("contentFactoryDeliveryPlan", () => {
     });
 
     expect(profile).toMatchObject({
-      schemaVersion: "product-workspace.v1",
+      schemaVersion: "article-workspace.v1",
       appId: CONTENT_FACTORY_PLUGIN_ID,
       sessionId: "session-content-factory",
       workspaceId: "workspace-main",
@@ -102,9 +102,9 @@ describe("contentFactoryDeliveryPlan", () => {
         artifactIds: ["session-content-factory:articleDraft"],
       },
       layoutState: {
-        activeTabKind: "productProfile",
+        activeTabKind: "articleWorkspace",
         activePaneKind: "documentCanvas",
-        openTabKinds: ["productProfile"],
+        openTabKinds: ["articleWorkspace"],
       },
       updatedAt: "2026-06-26T00:00:00.000Z",
     });
@@ -132,18 +132,18 @@ describe("contentFactoryDeliveryPlan", () => {
   });
 
   it("生成的 profile 应能投影出当前对象预览和动作", () => {
-    const profile = buildContentFactoryDeliveryProfile({
+    const profile = buildContentFactoryDeliveryArticleWorkspace({
       contract: buildContentFactoryPluginContract(),
       sessionId: "session-content-factory",
     });
     expect(profile).not.toBeNull();
 
-    const viewModel = buildWorkspaceProductProfileViewModel(profile!);
+    const viewModel = buildWorkspaceArticleWorkspaceViewModel(profile!);
 
     expect(viewModel.selectedObject.ref.kind).toBe("articleDraft");
     expect(viewModel.selectedSurface).toMatchObject({
       layout: "document",
-      titleKey: "workspace.productProfile.surface.document",
+      titleKey: "workspace.articleWorkspace.surface.document",
     });
     expect(viewModel.selectedArtifactIds).toEqual([
       "session-content-factory:articleDraft",
@@ -164,13 +164,13 @@ describe("contentFactoryDeliveryPlan", () => {
 
     expect(buildContentFactoryDeliveryParts(contract)).toEqual([]);
     expect(
-      buildContentFactoryDeliveryProfile({
+      buildContentFactoryDeliveryArticleWorkspace({
         contract: buildContentFactoryPluginContract(),
         sessionId: " ",
       }),
     ).toBeNull();
     expect(
-      buildContentFactoryDeliveryProfile({
+      buildContentFactoryDeliveryArticleWorkspace({
         contract,
         sessionId: "session-content-factory",
       }),

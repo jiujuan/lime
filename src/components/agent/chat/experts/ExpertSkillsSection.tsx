@@ -11,7 +11,10 @@ import {
   X,
 } from "lucide-react";
 import { buildExpertSkillRuntimeCandidates } from "@/features/experts";
-import { getCurrentSkillCatalogSnapshot } from "@/lib/api/skillCatalog";
+import {
+  getCurrentSkillCatalogSnapshot,
+  subscribeSkillCatalogChanged,
+} from "@/lib/api/skillCatalog";
 import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/types";
 import type { ServiceSkillItem } from "@/lib/api/serviceSkills";
 import type { Skill } from "@/lib/api/skills";
@@ -155,9 +158,16 @@ export function ExpertSkillsSection({
   >(null);
   const [skillPickerRecoveryKind, setSkillPickerRecoveryKind] =
     useState<ExpertSkillRuntimeRecoveryKind | null>(null);
+  const [skillCatalog, setSkillCatalog] = useState(() => {
+    try {
+      return getCurrentSkillCatalogSnapshot();
+    } catch {
+      return null;
+    }
+  });
   const candidates = useMemo(
-    () => buildSkillCandidates({ localSkills, serviceSkills }),
-    [localSkills, serviceSkills],
+    () => buildSkillCandidates({ localSkills, serviceSkills, catalog: skillCatalog }),
+    [localSkills, serviceSkills, skillCatalog],
   );
   const filteredCandidates = useMemo(
     () => filterSkillCandidates(candidates, skillQuery),
@@ -176,13 +186,17 @@ export function ExpertSkillsSection({
     () => new Set(effectiveSkillRefs.map(normalizeExpertSkillRefKey)),
     [effectiveSkillRefs],
   );
-  const skillCatalog = useMemo(() => {
-    try {
-      return getCurrentSkillCatalogSnapshot();
-    } catch {
-      return null;
-    }
-  }, []);
+  useEffect(
+    () =>
+      subscribeSkillCatalogChanged(() => {
+        try {
+          setSkillCatalog(getCurrentSkillCatalogSnapshot());
+        } catch {
+          setSkillCatalog(null);
+        }
+      }),
+    [],
+  );
   const runtimeCandidates = useMemo(
     () =>
       buildExpertSkillRuntimeCandidates(effectiveSkillRefs, {

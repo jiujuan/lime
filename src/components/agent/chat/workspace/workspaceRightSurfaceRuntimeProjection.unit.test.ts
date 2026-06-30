@@ -4,11 +4,33 @@ import {
   buildWorkspaceRightSurfaceRuntimeAvailableSurfaces,
   buildWorkspaceRightSurfaceRuntimeLaunchers,
   buildWorkspaceRightSurfaceRuntimePendingIntents,
+  hasWorkspaceRightSurfaceRuntimePendingSignals,
 } from "./workspaceRightSurfaceRuntimeProjection";
 import { normalizePluginManifest } from "@/features/plugin";
 
 describe("workspaceRightSurfaceRuntimeProjection", () => {
+  it("普通 Claw 默认态没有右侧 surface runtime pending 信号", () => {
+    expect(
+      hasWorkspaceRightSurfaceRuntimePendingSignals({
+        harnessPendingCount: 0,
+        objectCanvasCandidateId: null,
+        preferredServiceSkillResultFileTargetRelativePath: null,
+        showHarnessToggle: false,
+        suppressHomeNavbarUtilityActions: false,
+      }),
+    ).toBe(false);
+  });
+
   it("应按 harness pending 与文件预览生成 runtime pending intents", () => {
+    expect(
+      hasWorkspaceRightSurfaceRuntimePendingSignals({
+        harnessPendingCount: 2,
+        objectCanvasCandidateId: "browser assist",
+        preferredServiceSkillResultFileTargetRelativePath: "result.md",
+        showHarnessToggle: true,
+        suppressHomeNavbarUtilityActions: false,
+      }),
+    ).toBe(true);
     const intents = buildWorkspaceRightSurfaceRuntimePendingIntents({
       createdAt: 100,
       harnessPendingCount: 2,
@@ -55,7 +77,7 @@ describe("workspaceRightSurfaceRuntimeProjection", () => {
     ).toEqual([
       "workbench",
       "appSurface",
-      "productProfile",
+      "articleWorkspace",
       "expertInfo",
       "objectCanvas",
       "browser",
@@ -126,7 +148,7 @@ describe("workspaceRightSurfaceRuntimeProjection", () => {
       launchers.find((launcher) => launcher.kind === "files"),
     ).toMatchObject({ pendingCount: 1, disabled: true });
     expect(
-      launchers.find((launcher) => launcher.kind === "productProfile"),
+      launchers.find((launcher) => launcher.kind === "articleWorkspace"),
     ).toMatchObject({ pendingCount: 0, disabled: true });
     expect(
       launchers.find((launcher) => launcher.kind === "objectCanvas"),
@@ -186,7 +208,7 @@ describe("workspaceRightSurfaceRuntimeProjection", () => {
     });
 
     expect(
-      launchers.find((launcher) => launcher.kind === "productProfile"),
+      launchers.find((launcher) => launcher.kind === "articleWorkspace"),
     ).toMatchObject({
       active: false,
       disabled: false,
@@ -201,21 +223,21 @@ describe("workspaceRightSurfaceRuntimeProjection", () => {
     });
   });
 
-  it("productProfile 独立可用时不应误开放 objectCanvas", () => {
+  it("articleWorkspace 独立可用时不应误开放 objectCanvas", () => {
     const launchers = buildWorkspaceRightSurfaceRuntimeLaunchers({
-      surfaceState: buildRightSurfaceState("productProfile", "runtime"),
+      surfaceState: buildRightSurfaceState("articleWorkspace", "runtime"),
       pendingIntents: [],
       filesAvailable: false,
       hasExpertInfoPanel: false,
       objectCanvasAvailable: false,
-      productProfileAvailable: true,
+      articleWorkspaceAvailable: true,
       shellAvailable: false,
       showHarnessToggle: false,
       suppressHomeNavbarUtilityActions: false,
     });
 
     expect(
-      launchers.find((launcher) => launcher.kind === "productProfile"),
+      launchers.find((launcher) => launcher.kind === "articleWorkspace"),
     ).toMatchObject({
       active: true,
       disabled: false,
@@ -228,7 +250,7 @@ describe("workspaceRightSurfaceRuntimeProjection", () => {
     });
   });
 
-  it("显式插件激活应投影为 productProfile runtime pending intent", () => {
+  it("显式插件激活应投影为 articleWorkspace runtime pending intent", () => {
     const plugin = normalizePluginManifest({
       id: "creator-workbench",
       displayName: "创作工作台",
@@ -255,7 +277,7 @@ describe("workspaceRightSurfaceRuntimeProjection", () => {
           objectKind: "articleDraft",
           objectId: "pending",
         },
-        openedTabs: ["productProfile"],
+        openedTabs: ["articleWorkspace"],
         source: "user",
       },
       pluginContracts: [plugin],
@@ -270,7 +292,7 @@ describe("workspaceRightSurfaceRuntimeProjection", () => {
       priority: "background",
       command: {
         action: "open",
-        kind: "productProfile",
+        kind: "articleWorkspace",
         origin: "runtime",
         reason: "plugin_activation_context",
       },

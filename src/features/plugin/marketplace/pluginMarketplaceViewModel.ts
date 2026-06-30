@@ -77,6 +77,7 @@ export interface PluginMarketplaceViewItem {
   marketplaceDisplayName?: string;
   marketplaceItemDisplayName: string;
   appId?: string;
+  install?: PluginMarketplaceItem["install"];
   package?: PluginMarketplacePackageRef;
   policy: PluginMarketplaceItem["policy"];
   releaseId?: string;
@@ -283,6 +284,7 @@ function viewItem(
     marketplaceItemDisplayName: item.displayName,
     appId: item.appId,
     package: item.package,
+    install: item.install,
     policy: item.policy,
     releaseId: item.sourceRef ?? item.package?.releaseId,
     installed: registryItem.installed,

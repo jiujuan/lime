@@ -261,6 +261,7 @@ const {
   METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE,
   METHOD_MEDIA_TASK_ARTIFACT_CANCEL,
   METHOD_MEDIA_TASK_ARTIFACT_GET,
+  METHOD_MEDIA_TASK_ARTIFACT_IMAGE_COMPLETE,
   METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE,
   METHOD_MEDIA_TASK_ARTIFACT_LIST,
   METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE,
@@ -1250,6 +1251,16 @@ test("builds app data surface requests with current methods", () => {
     taskRef: "task-audio-1",
     audioPath: ".lime/runtime/audio/task-audio-1.mp3",
   });
+  const completedImageMediaTask = client.completeImageMediaTaskArtifact({
+    projectRootPath: "/workspace",
+    taskRef: "task-image-1",
+    images: [
+      {
+        url: "file:///workspace/.lime/runtime/images/task-image-1.png",
+        revisedPrompt: "未来感青柠实验室",
+      },
+    ],
+  });
   const mediaTask = client.getMediaTaskArtifact({
     projectRootPath: "/workspace",
     taskRef: "task-image-1",
@@ -1748,6 +1759,20 @@ test("builds app data surface requests with current methods", () => {
     projectRootPath: "/workspace",
     taskRef: "task-audio-1",
     audioPath: ".lime/runtime/audio/task-audio-1.mp3",
+  });
+  assert.equal(
+    completedImageMediaTask.method,
+    METHOD_MEDIA_TASK_ARTIFACT_IMAGE_COMPLETE,
+  );
+  assert.deepEqual(completedImageMediaTask.params, {
+    projectRootPath: "/workspace",
+    taskRef: "task-image-1",
+    images: [
+      {
+        url: "file:///workspace/.lime/runtime/images/task-image-1.png",
+        revisedPrompt: "未来感青柠实验室",
+      },
+    ],
   });
   assert.equal(mediaTask.method, METHOD_MEDIA_TASK_ARTIFACT_GET);
   assert.deepEqual(mediaTask.params, {
@@ -2567,6 +2592,7 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE, kind: "request" },
     { method: METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE, kind: "request" },
     { method: METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE, kind: "request" },
+    { method: METHOD_MEDIA_TASK_ARTIFACT_IMAGE_COMPLETE, kind: "request" },
     { method: METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE, kind: "request" },
     { method: METHOD_MEDIA_TASK_ARTIFACT_GET, kind: "request" },
     { method: METHOD_MEDIA_TASK_ARTIFACT_LIST, kind: "request" },

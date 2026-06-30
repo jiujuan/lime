@@ -8,6 +8,8 @@ use crate::media_task_payload::{
 use crate::model_task_contract::MediaRouteAssessment;
 use app_server_protocol::MediaTaskArtifactAudioCompleteParams;
 use app_server_protocol::MediaTaskArtifactAudioCreateParams;
+use app_server_protocol::MediaTaskArtifactCompletedImageInput;
+use app_server_protocol::MediaTaskArtifactImageCompleteParams;
 use app_server_protocol::MediaTaskArtifactImageCreateParams;
 use app_server_protocol::MediaTaskArtifactListFilters;
 use app_server_protocol::MediaTaskArtifactListParams;
@@ -32,6 +34,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 const AUDIO_TASK_COMPLETION_WORKER_ID: &str = "app-server-audio-output-writer";
+const IMAGE_TASK_COMPLETION_WORKER_ID: &str = "app-server-image-output-writer";
 
 fn data_error(error: impl std::fmt::Display) -> String {
     error.to_string()
@@ -187,6 +190,164 @@ fn build_audio_generation_result_value(audio_output: &Value) -> Value {
         "mime_type": audio_output.get("mime_type").cloned().unwrap_or(Value::Null),
         "duration_ms": audio_output.get("duration_ms").cloned().unwrap_or(Value::Null),
     })
+}
+
+fn normalize_completed_image(
+    image: MediaTaskArtifactCompletedImageInput,
+    fallback_prompt: Option<&str>,
+    fallback_provider_id: Option<&str>,
+    fallback_model: Option<&str>,
+    fallback_size: Option<&str>,
+    index: usize,
+) -> Result<Value, String> {
+    let url = normalize_required_string(&image.url, "images[].url")?;
+    let prompt = normalize_optional_string(image.prompt)
+        .or_else(|| normalize_optional_string(image.slot_prompt.clone()))
+        .or_else(|| fallback_prompt.map(str::to_string));
+    let slot_prompt = normalize_optional_string(image.slot_prompt).or_else(|| prompt.clone());
+    let provider_id = normalize_optional_string(image.provider_id)
+        .or_else(|| fallback_provider_id.map(str::to_string));
+    let model =
+        normalize_optional_string(image.model).or_else(|| fallback_model.map(str::to_string));
+    let size = normalize_optional_string(image.size).or_else(|| fallback_size.map(str::to_string));
+    let slot_index = image.slot_index.unwrap_or((index + 1) as u32);
+
+    Ok(json!({
+        "url": url,
+        "prompt": prompt,
+        "revised_prompt": normalize_optional_string(image.revised_prompt),
+        "size": size,
+        "provider_id": provider_id,
+        "model": model,
+        "slot_index": slot_index,
+        "slot_id": normalize_optional_string(image.slot_id),
+        "slot_prompt": slot_prompt,
+    }))
+}
+
+fn build_image_task_result_value(
+    payload: &Value,
+    params: MediaTaskArtifactImageCompleteParams,
+) -> Result<(Value, Value, String, usize, usize), String> {
+    if params.images.is_empty() {
+        return Err("images 不能为空".to_string());
+    }
+
+    let payload_prompt = maybe_json_string(payload, &["prompt"]);
+    let payload_size = maybe_json_string(payload, &["size"]);
+    let provider_id = normalize_optional_string(params.provider_id)
+        .or_else(|| maybe_json_string(payload, &["provider_id", "providerId"]));
+    let model =
+        normalize_optional_string(params.model).or_else(|| maybe_json_string(payload, &["model"]));
+    let executor_mode = normalize_optional_string(params.executor_mode)
+        .or_else(|| maybe_json_string(payload, &["executor_mode", "executorMode"]))
+        .unwrap_or_else(|| "images_api".to_string());
+
+    let images: Vec<Value> = params
+        .images
+        .into_iter()
+        .enumerate()
+        .map(|(index, image)| {
+            normalize_completed_image(
+                image,
+                payload_prompt.as_deref(),
+                provider_id.as_deref(),
+                model.as_deref(),
+                payload_size.as_deref(),
+                index,
+            )
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let image_count = images.len();
+    let failure_count = params.failures.len();
+    let requested_count = maybe_json_u64(payload, &["count", "requested_count", "requestedCount"])
+        .unwrap_or(image_count as u64 + failure_count as u64)
+        .max(image_count as u64 + failure_count as u64);
+    let requested_status = normalize_optional_string(params.status).unwrap_or_else(|| {
+        if failure_count > 0 && image_count < requested_count as usize {
+            "partial".to_string()
+        } else {
+            "succeeded".to_string()
+        }
+    });
+    let normalized_status = if requested_status == "partial" {
+        "partial".to_string()
+    } else {
+        "succeeded".to_string()
+    };
+    let response_status = normalized_status.clone();
+    let response_id = normalize_optional_string(params.response_id)
+        .unwrap_or_else(|| format!("app-server-image-complete-{image_count}"));
+    let response = json!({
+        "id": response_id,
+        "status": response_status,
+        "model": model,
+        "provider_id": provider_id,
+    });
+    let responses = if params.responses.is_empty() {
+        vec![response.clone()]
+    } else {
+        params.responses
+    };
+    let storyboard_slots = images
+        .iter()
+        .map(|image| {
+            json!({
+                "slot_index": image.get("slot_index").cloned().unwrap_or(Value::Null),
+                "slot_id": image.get("slot_id").cloned().unwrap_or(Value::Null),
+                "label": Value::Null,
+                "prompt": image
+                    .get("slot_prompt")
+                    .cloned()
+                    .or_else(|| image.get("prompt").cloned())
+                    .unwrap_or(Value::Null),
+                "shot_type": Value::Null,
+            })
+        })
+        .collect::<Vec<_>>();
+    let result = json!({
+        "prompt": payload_prompt,
+        "provider_id": provider_id,
+        "executor_mode": executor_mode,
+        "outer_model": maybe_json_string(payload, &["outer_model", "outerModel"]),
+        "model": model,
+        "size": payload_size,
+        "count": image_count,
+        "layout_hint": maybe_json_string(payload, &["layout_hint", "layoutHint"]),
+        "requested_count": requested_count,
+        "received_count": image_count,
+        "images": images,
+        "response": response,
+        "responses": responses,
+        "failures": params.failures,
+        "postprocess": Value::Null,
+        "storyboard_slots": storyboard_slots,
+    });
+    let payload_patch = json!({
+        "provider_id": result.get("provider_id").cloned().unwrap_or(Value::Null),
+        "model": result.get("model").cloned().unwrap_or(Value::Null),
+        "executor_mode": result.get("executor_mode").cloned().unwrap_or(Value::Null),
+        "received_count": image_count,
+        "failure_count": failure_count,
+        "image_output": {
+            "kind": "image_output",
+            "status": normalized_status,
+            "image_count": image_count,
+            "failure_count": failure_count,
+            "provider_id": result.get("provider_id").cloned().unwrap_or(Value::Null),
+            "model": result.get("model").cloned().unwrap_or(Value::Null),
+            "modality_contract_key": "image_generation",
+            "modality": "image",
+            "routing_slot": "image_generation_model",
+        },
+    });
+    Ok((
+        result,
+        payload_patch,
+        normalized_status,
+        image_count,
+        failure_count,
+    ))
 }
 
 fn task_payload(output: &MediaTaskOutput) -> &Value {
@@ -577,6 +738,77 @@ pub fn complete_audio_generation_task_artifact(
             result: Some(Some(result)),
             last_error: Some(None),
             current_attempt_worker_id: Some(Some(AUDIO_TASK_COMPLETION_WORKER_ID.to_string())),
+            ..TaskArtifactPatch::default()
+        },
+    )
+    .map_err(data_error)?;
+    response_from_output(output)
+}
+
+pub fn complete_image_generation_task_artifact(
+    params: MediaTaskArtifactImageCompleteParams,
+) -> Result<MediaTaskArtifactResponse, String> {
+    let workspace_root = normalize_required_string(&params.project_root_path, "projectRootPath")?;
+    let task_ref = normalize_required_string(&params.task_ref, "taskRef")?;
+    let workspace_root_path = Path::new(&workspace_root);
+    let current = load_task_output(workspace_root_path, &task_ref, None).map_err(data_error)?;
+
+    if current.task_type != MediaTaskType::ImageGenerate.as_str() {
+        return Err(format!(
+            "只能完成 image_generate 任务，当前任务类型为 {}",
+            current.task_type
+        ));
+    }
+    if matches!(current.normalized_status.as_str(), "cancelled" | "failed") {
+        return Err(format!(
+            "当前图片任务状态为 {}，不能直接写回完成态",
+            current.normalized_status
+        ));
+    }
+
+    let payload = task_payload(&current);
+    let (result, payload_patch, status, image_count, failure_count) =
+        build_image_task_result_value(payload, params)?;
+    let success_message = if status == "partial" {
+        format!("图片任务已返回 {image_count} 张，另有 {failure_count} 张失败。")
+    } else {
+        format!("图片任务已完成，共生成 {image_count} 张。")
+    };
+    let preview_slots = result
+        .get("storyboard_slots")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|slot| {
+            json!({
+                "slot_id": slot.get("slot_id").cloned().unwrap_or(Value::Null),
+                "slot_index": slot.get("slot_index").cloned().unwrap_or(Value::Null),
+                "label": slot.get("label").cloned().unwrap_or(Value::Null),
+                "prompt": slot.get("prompt").cloned().unwrap_or(Value::Null),
+                "shot_type": slot.get("shot_type").cloned().unwrap_or(Value::Null),
+                "status": "complete",
+            })
+        })
+        .collect::<Vec<_>>();
+    let progress = serde_json::from_value(json!({
+        "phase": status,
+        "percent": 100,
+        "message": success_message,
+        "preview_slots": preview_slots,
+    }))
+    .map_err(data_error)?;
+    let output = patch_task_artifact(
+        workspace_root_path,
+        &task_ref,
+        None,
+        TaskArtifactPatch {
+            status: Some(status),
+            payload_patch: Some(payload_patch),
+            result: Some(Some(result)),
+            last_error: Some(None),
+            progress: Some(progress),
+            current_attempt_worker_id: Some(Some(IMAGE_TASK_COMPLETION_WORKER_ID.to_string())),
             ..TaskArtifactPatch::default()
         },
     )

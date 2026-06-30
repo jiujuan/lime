@@ -119,6 +119,7 @@ pub const METHOD_GATEWAY_TUNNEL_SYNC_WEBHOOK_URL: &str = "gatewayTunnel/syncWebh
 pub const METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE: &str = "mediaTaskArtifact/image/create";
 pub const METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE: &str = "mediaTaskArtifact/audio/create";
 pub const METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE: &str = "mediaTaskArtifact/video/create";
+pub const METHOD_MEDIA_TASK_ARTIFACT_IMAGE_COMPLETE: &str = "mediaTaskArtifact/image/complete";
 pub const METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE: &str = "mediaTaskArtifact/audio/complete";
 pub const METHOD_MEDIA_TASK_ARTIFACT_GET: &str = "mediaTaskArtifact/get";
 pub const METHOD_MEDIA_TASK_ARTIFACT_LIST: &str = "mediaTaskArtifact/list";

@@ -6,7 +6,7 @@
   "status": "ready",
   "appType": "domain-app",
   "profiles": ["workbench"],
-  "description": "内容工厂是 Agent App v4 生产型应用。Claw 保持中间对话和运行主链，右侧 Product Profile 恢复和操作当前业务产物。",
+  "description": "内容工厂是 Agent App v4 生产型应用。Claw 保持中间对话和运行主链，右侧 Article Workspace 恢复和操作当前业务产物。",
   "runtimeTargets": ["local"],
   "requires": {
     "sdk": "@lime/app-sdk@^0.11.0",
@@ -34,7 +34,7 @@
   "interface": {
     "displayName": "内容工厂",
     "shortDescription": "在 Claw 中生成文章、图片组、视频分镜和交付清单",
-    "longDescription": "内容工厂把写作、资料检索、配图规划和交付审核声明为同一个插件工作流。用户从 @写作 或 @写文章 启动，Claw 展示运行过程，右侧 Product Profile 承载最终文章和后续产物。",
+    "longDescription": "内容工厂把写作、资料检索、配图规划和交付审核声明为同一个插件工作流。用户从 @写作 或 @写文章 启动，Claw 展示运行过程，右侧 Article Workspace 承载最终文章和后续产物。",
     "category": "content",
     "brandColor": "#10B981",
     "logo": "./assets/icon.svg",
@@ -49,7 +49,7 @@
     "defaultPrompt": [
       "@写文章 要求: 帮我写一篇适合公众号发布的文章，先检索和整理依据，最终把正文放到文章草稿小框中。",
       "@写作 要求: 根据我的主题生成一篇文章，展示写作过程，完成后打开右侧文章草稿。",
-      "@内容工厂 生成文章、配图规划和交付检查清单，并在右侧 Product Profile 中管理。"
+      "@内容工厂 生成文章、配图规划和交付检查清单，并在右侧 Article Workspace 中管理。"
     ],
     "screenshots": []
   },
@@ -74,7 +74,7 @@
         "mode": "natural_language",
         "taskKind": "content.article.generate",
         "outputArtifactKind": "content_factory.workspace_patch",
-        "rightSurface": "productProfile",
+        "rightSurface": "articleWorkspace",
         "triggerPhrases": {
           "zh-CN": [
             "内容工厂写文章",
@@ -103,7 +103,7 @@
         "mode": "natural_language",
         "taskKind": "content.factory.generate",
         "outputArtifactKind": "content_factory.workspace_patch",
-        "rightSurface": "productProfile",
+        "rightSurface": "articleWorkspace",
         "triggerPhrases": {
           "zh-CN": ["内容工厂", "用内容工厂生成", "生成文章配图视频分镜"],
           "zh-TW": ["內容工廠", "用內容工廠生成"],
@@ -224,7 +224,7 @@
     "session": {
       "modes": ["new", "resume", "continue", "fork"],
       "historyRestore": {
-        "productWorkspace": "required",
+        "articleWorkspace": "required",
         "fallback": "artifactPreview"
       }
     }
@@ -258,7 +258,7 @@
       "taskKind": "content.article.generate",
       "workflow": "content_article_workflow",
       "defaultObjectKind": "articleDraft",
-      "rightSurface": "productProfile"
+      "rightSurface": "articleWorkspace"
     },
     {
       "key": "content_factory_generate",
@@ -269,7 +269,7 @@
       "taskKind": "content.factory.generate",
       "workflow": "content_article_workflow",
       "defaultObjectKind": "articleDraft",
-      "rightSurface": "productProfile"
+      "rightSurface": "articleWorkspace"
     },
     {
       "key": "content_factory",
@@ -288,7 +288,7 @@
   ],
   "workbench": {
     "profile": "production",
-    "productWorkspace": {
+    "articleWorkspace": {
       "scope": "session",
       "primaryObjectKinds": [
         "articleDraft",
@@ -462,7 +462,7 @@
     {
       "id": "article-writer",
       "title": "正文写作",
-      "description": "根据简报和资料生成文章草稿，正文只写入 Product Profile 的文章对象。",
+      "description": "根据简报和资料生成文章草稿，正文只写入 Article Workspace 的文章对象。",
       "activation": "content.article.generate",
       "required": true,
       "skills": ["gongzonghao-article-writer"]
@@ -505,7 +505,7 @@
       "key": "content-factory-worker",
       "provider": "local-worker",
       "title": "内容工厂本地 Worker",
-      "description": "执行内容工厂受控任务，输出 Product Workspace Patch。",
+      "description": "执行内容工厂受控任务，输出 Article Workspace Patch。",
       "capabilities": [
         "content.article.generate",
         "content.image.generate",

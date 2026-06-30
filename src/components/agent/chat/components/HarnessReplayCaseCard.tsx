@@ -126,7 +126,7 @@ export function HarnessReplayCaseCard({
     >
       {replayCase ? (
         <>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid min-w-0 gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr))]">
             <InventoryStatCard
               title={agentText(
                 "agentChat.harness.generated.2a36de35aa",
@@ -252,7 +252,7 @@ function ReplayPromotionCard({
           "这一步直接复用仓库已有的 `harness:eval:promote` 与 `harness:eval` 主命令，把当前 replay case 提升为仓库 current 样本，并立即跑一次统一摘要验证； 点击“复制回归命令”后不需要你再手写参数。",
         )}
       </div>
-      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+      <div className="mt-3 grid min-w-0 gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),1fr))]">
         <InventoryStatCard
           title={agentText(
             "agentChat.harness.generated.b14686a384",

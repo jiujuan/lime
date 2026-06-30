@@ -1063,6 +1063,12 @@ const REQUEST_CLIENT_METHODS: readonly RequestClientMethodSpec[] = [
     params: "required",
   },
   {
+    name: "completeImageMediaTaskArtifact",
+    method: protocol.METHOD_MEDIA_TASK_ARTIFACT_IMAGE_COMPLETE,
+    kind: "request",
+    params: "required",
+  },
+  {
     name: "completeAudioMediaTaskArtifact",
     method: protocol.METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE,
     kind: "request",

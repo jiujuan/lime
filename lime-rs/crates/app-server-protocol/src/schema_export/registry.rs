@@ -295,6 +295,12 @@ pub(super) fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<MediaTaskArtifactImageCreateParams>("MediaTaskArtifactImageCreateParams"),
         typed_schema::<MediaTaskArtifactAudioCreateParams>("MediaTaskArtifactAudioCreateParams"),
         typed_schema::<MediaTaskArtifactVideoCreateParams>("MediaTaskArtifactVideoCreateParams"),
+        typed_schema::<MediaTaskArtifactCompletedImageInput>(
+            "MediaTaskArtifactCompletedImageInput",
+        ),
+        typed_schema::<MediaTaskArtifactImageCompleteParams>(
+            "MediaTaskArtifactImageCompleteParams",
+        ),
         typed_schema::<MediaTaskArtifactAudioCompleteParams>(
             "MediaTaskArtifactAudioCompleteParams",
         ),
@@ -417,8 +423,8 @@ pub(super) fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<AgentAppHostLifecycleSnapshot>("AgentAppHostLifecycleSnapshot"),
         typed_schema::<AgentAppHostFunctionState>("AgentAppHostFunctionState"),
         typed_schema::<AgentAppRightSurfaceContract>("AgentAppRightSurfaceContract"),
-        typed_schema::<AgentAppProductProfileContract>("AgentAppProductProfileContract"),
-        typed_schema::<AgentAppProductProfileObject>("AgentAppProductProfileObject"),
+        typed_schema::<AgentAppArticleWorkspaceContract>("AgentAppArticleWorkspaceContract"),
+        typed_schema::<AgentAppArticleWorkspaceObject>("AgentAppArticleWorkspaceObject"),
         typed_schema::<AgentAppHistoryRestoreContract>("AgentAppHistoryRestoreContract"),
         typed_schema::<AgentAppTaskRuntimeContract>("AgentAppTaskRuntimeContract"),
         typed_schema::<AgentAppDeleteDataExecutionEvidence>("AgentAppDeleteDataExecutionEvidence"),

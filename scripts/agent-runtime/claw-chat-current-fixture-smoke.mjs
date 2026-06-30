@@ -9,10 +9,11 @@ import { resolveElectronAppServerRuntimeEnv } from "../lib/electron-app-server-a
 import { resolveDevAppServerBinary } from "../lib/electron-dev-sidecar.mjs";
 import {
   APP_SERVER_METHOD_SESSION_LIST,
-  CONTENT_FACTORY_PRODUCT_PROFILE_SCENARIO,
+  CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO,
   DEFAULTS,
   FIXTURE_MODEL,
   FIXTURE_PROVIDER,
+  IMAGE_COMMAND_SCENARIO,
   LOG_PREFIX,
   NEWS_PROMPT,
   RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO,
@@ -78,7 +79,7 @@ Claw Chat Current Electron Fixture Smoke
   --app-url <url>        可选 renderer dev server，例如 http://127.0.0.1:1420/
   --evidence-dir <path>  证据目录
   --prefix <name>        证据文件前缀
-  --scenario <name>      complete | cancel | cancel-then-continue | plan | goal | web-tools-rendering | mcp-structured-content | skills-runtime | expert-skills-runtime | expert-plaza-skills-runtime | expert-panel-skills-runtime | right-surface-visual-matrix | content-factory-product-profile，默认 complete
+  --scenario <name>      complete | cancel | cancel-then-continue | plan | goal | image-command | web-tools-rendering | mcp-structured-content | skills-runtime | expert-skills-runtime | expert-plaza-skills-runtime | expert-panel-skills-runtime | right-surface-visual-matrix | content-factory-article-workspace，默认 complete
   --timeout-ms <ms>      总超时，默认 180000
   --interval-ms <ms>     轮询间隔，默认 500
   --keep-temp            保留临时目录便于调试
@@ -147,6 +148,7 @@ function parseArgs(argv) {
     "cancel-then-continue",
     "plan",
     "goal",
+    IMAGE_COMMAND_SCENARIO,
     "web-tools-rendering",
     "mcp-structured-content",
     "skills-runtime",
@@ -154,7 +156,7 @@ function parseArgs(argv) {
     "expert-plaza-skills-runtime",
     "expert-panel-skills-runtime",
     RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO,
-    CONTENT_FACTORY_PRODUCT_PROFILE_SCENARIO,
+    CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO,
   ];
   if (!allowedScenarios.includes(options.scenario)) {
     throw new Error(`--scenario 只能是 ${allowedScenarios.join("、")}`);
@@ -272,6 +274,18 @@ async function run() {
     readModelPlanCompleted: null,
     readModelGoalCompleted: null,
     readModelWebToolsRenderingCompleted: null,
+    imageCommandInputSend: null,
+    imageCommandBackendTurnStart: null,
+    imageCommandTaskCreateRequest: null,
+    imageCommandTaskArtifact: null,
+    imageCommandTaskArtifactTerminalPatch: null,
+    imageCommandTaskArtifactTerminal: null,
+    guiImageCommandCompleted: null,
+    guiImageCommandTerminal: null,
+    guiImageCommandReload: null,
+    guiImageCommandRestoredAfterReload: null,
+    imageCommandTaskArtifactAfterReload: null,
+    readModelImageCommandCompleted: null,
     readModelSkillsRuntimeCompleted: null,
     readModelExplicitSkillsRuntimeCompleted: null,
     readModelManualEnableSkillsRuntimeCompleted: null,
@@ -280,17 +294,22 @@ async function run() {
     guiRightSurfaceVisualMatrixSessionVisible: null,
     guiRightSurfaceVisualMatrixSessionOpened: null,
     rightSurfaceVisualMatrix: null,
-    contentFactoryProductProfileSessionCreation: null,
-    contentFactoryProductProfileInstalledStateSave: null,
-    contentFactoryProductProfileRuntimeEventsAppend: null,
-    contentFactoryProductProfileWorkerTurnStart: null,
-    contentFactoryProductProfileRightSurfaceRequest: null,
-    guiContentFactoryProductProfileSessionVisible: null,
-    guiContentFactoryProductProfileSessionOpened: null,
-    contentFactoryProductProfileRightSurface: null,
-    contentFactoryProductProfileGui: null,
-    contentFactoryProductProfileReadModel: null,
-    contentFactoryProductProfileArtifactRead: null,
+    contentFactoryArticleWorkspaceSessionCreation: null,
+    contentFactoryArticleWorkspaceInstalledStateSave: null,
+    contentFactoryArticleWorkspaceRuntimeEventsAppend: null,
+    contentFactoryArticleWorkspaceWorkerTurnStart: null,
+    contentFactoryArticleWorkspaceRightSurfaceRequest: null,
+    guiContentFactoryArticleWorkspaceSessionVisible: null,
+    guiContentFactoryArticleWorkspaceSessionOpened: null,
+    contentFactoryArticleWorkspaceRightSurface: null,
+    contentFactoryArticleWorkspaceGui: null,
+    contentFactoryArticleWorkspaceEditedDraftUpdate: null,
+    contentFactoryArticleWorkspaceEditedDraftReload: null,
+    contentFactoryArticleWorkspaceEditedDraftSessionReopened: null,
+    contentFactoryArticleWorkspaceEditedDraftArtifactFrame: null,
+    contentFactoryArticleWorkspaceEditedDraftRestored: null,
+    contentFactoryArticleWorkspaceReadModel: null,
+    contentFactoryArticleWorkspaceArtifactRead: null,
     expertSkillsRuntimeSkill: null,
     expertSkillsRuntimeTurnStart: null,
     expertPlazaSkillsRuntimeCatalog: null,
@@ -353,6 +372,7 @@ async function run() {
           runtimeEnv.backendPath,
           runtimeEnv.backendLedgerPath,
           runtimeEnv.cancelSignalPath,
+          runtimeEnv.imageTaskFixturePath,
         ]),
         APP_SERVER_BACKEND_TIMEOUT_MS: "10000",
         CLAW_CHAT_FIXTURE_SCENARIO: options.scenario,

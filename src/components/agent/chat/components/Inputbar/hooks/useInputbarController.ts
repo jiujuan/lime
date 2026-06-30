@@ -88,6 +88,7 @@ interface UseInputbarControllerParams {
   workflowSteps?: WorkflowStep[];
   workflowRunState?: "idle" | "auto_running" | "await_user_decision";
   knowledgePackSelection?: InputbarKnowledgePackSelection | null;
+  onKnowledgePacksNeeded?: () => void;
   onStartKnowledgeOrganize?: () => void;
   onManageKnowledgePacks?: () => void;
   pluginSuggestions?: InputbarPluginCapability[];
@@ -119,6 +120,7 @@ export function useInputbarController({
   workflowSteps = [],
   workflowRunState,
   knowledgePackSelection,
+  onKnowledgePacksNeeded,
   onStartKnowledgeOrganize,
   onManageKnowledgePacks,
   pluginSuggestions = [],
@@ -237,10 +239,12 @@ export function useInputbarController({
       onManageKnowledgePacks?.();
       return;
     }
+    onKnowledgePacksNeeded?.();
     setKnowledgeHubOpenRequestKey((current) => current + 1);
   }, [
     activeBuiltinCommand?.key,
     knowledgePackSelection,
+    onKnowledgePacksNeeded,
     onManageKnowledgePacks,
     onStartKnowledgeOrganize,
   ]);
@@ -612,6 +616,7 @@ export function useInputbarController({
         if (!knowledgePackSelection && !onStartKnowledgeOrganize) {
           onManageKnowledgePacks?.();
         } else {
+          onKnowledgePacksNeeded?.();
           setKnowledgeHubOpenRequestKey((current) => current + 1);
         }
         setActiveCapability(null);

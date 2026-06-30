@@ -23,6 +23,39 @@ const LIME_RUNTIME_TOOL_SURFACE_KEY: &str = "tool_surface";
 const LIME_RUNTIME_DIRECT_ANSWER_TOOL_SURFACE: &str = "direct_answer";
 const TRACE_METADATA_KEYS: &[&str] = &["agentUiPerformanceTrace", "agent_ui_performance_trace"];
 
+pub(super) fn selection_with_effective_reasoning(
+    selection: &RuntimeModelSelection,
+) -> RuntimeModelSelection {
+    let Some(requested_reasoning_effort) = selection.reasoning_effort.as_deref() else {
+        return RuntimeModelSelection {
+            provider: selection.provider.clone(),
+            model: selection.model.clone(),
+            source: selection.source,
+            reasoning_effort: None,
+        };
+    };
+    let capability = super::model_capability::resolve_basic_model_capability(
+        super::model_capability::ModelRef::new(selection.provider.clone(), selection.model.clone()),
+    );
+    let requested_level =
+        super::model_capability::reasoning_level_from_str(requested_reasoning_effort);
+    let policy = super::model_capability::resolve_reasoning_policy(&capability, requested_level);
+    RuntimeModelSelection {
+        provider: selection.provider.clone(),
+        model: selection.model.clone(),
+        source: selection.source,
+        reasoning_effort: policy.effective_level.and_then(|level| match level {
+            super::model_capability::ReasoningLevel::None => None,
+            super::model_capability::ReasoningLevel::Minimal => Some("low".to_string()),
+            super::model_capability::ReasoningLevel::Low => Some("low".to_string()),
+            super::model_capability::ReasoningLevel::Medium => Some("medium".to_string()),
+            super::model_capability::ReasoningLevel::High => Some("high".to_string()),
+            super::model_capability::ReasoningLevel::Max => Some("max".to_string()),
+            super::model_capability::ReasoningLevel::XHigh => Some("xhigh".to_string()),
+        }),
+    }
+}
+
 pub(super) fn resolve_runtime_model_selection(
     request: &ExecutionRequest,
 ) -> Result<RuntimeModelSelection, RuntimeCoreError> {
@@ -407,6 +440,14 @@ fn host_search_mode(host: &AsterChatRequestSnapshot) -> Option<RequestToolPolicy
         .or(host.search_mode)
 }
 
+fn host_explicitly_configures_search(host: &AsterChatRequestSnapshot) -> bool {
+    host.web_search.is_some()
+        || host.search_mode.is_some()
+        || host_turn_config(host).is_some_and(|turn_config| {
+            turn_config.web_search.is_some() || turn_config.search_mode.is_some()
+        })
+}
+
 pub(super) fn request_tool_policy_from_request(
     host_request: Option<&AsterChatRequestSnapshot>,
 ) -> RequestToolPolicy {
@@ -424,7 +465,12 @@ pub(super) fn should_defer_tool_surface_for_fast_response(
     request: &ExecutionRequest,
     request_tool_policy: &RequestToolPolicy,
 ) -> bool {
-    if request_tool_policy.allows_web_search() {
+    let host_request = aster_chat_request_from_request(request);
+    if request_tool_policy.allows_web_search()
+        && host_request
+            .as_ref()
+            .is_some_and(host_explicitly_configures_search)
+    {
         return false;
     }
     let metadata_values = super::skill_runtime_enable::request_metadata_values(request);

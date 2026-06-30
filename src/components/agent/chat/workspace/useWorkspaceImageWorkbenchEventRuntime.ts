@@ -7,13 +7,6 @@ import {
   type CoverImageWorkbenchRequestDetail,
 } from "@/components/workspace/document/platforms/CoverImagePlaceholder";
 import type { CanvasStateUnion } from "@/components/workspace/canvas/canvasUtils";
-import type { LayoutMode } from "@/lib/workspace/workbenchContract";
-import {
-  findImageProviderForSelection,
-  getImageModelIdsForProvider,
-  pickImageModelBySelection,
-  type ImageModelPreset,
-} from "@/lib/imageGeneration";
 import {
   onImageWorkbenchFocus,
   onImageWorkbenchRequest,
@@ -30,28 +23,18 @@ import {
   type SessionImageWorkbenchState,
 } from "./imageWorkbenchHelpers";
 
-interface ImageWorkbenchProviderSummary {
-  id: string;
-  type: string;
-  custom_models?: string[];
-  api_host?: string;
-}
-
 interface UseWorkspaceImageWorkbenchEventRuntimeParams {
   canvasState: CanvasStateUnion | null;
-  projectId?: string;
+  projectId?: string | null;
   contentId?: string | null;
-  imageWorkbenchProviders: ImageWorkbenchProviderSummary[];
-  setImageWorkbenchSelectedProviderId: (providerId: string) => void;
-  setImageWorkbenchSelectedModelId: (modelId: string) => void;
   setImageWorkbenchSelectedSize: (size: string) => void;
-  setLayoutMode: Dispatch<SetStateAction<LayoutMode>>;
   setCanvasState: Dispatch<SetStateAction<CanvasStateUnion | null>>;
   updateCurrentImageWorkbenchState: (
     updater: (
       current: SessionImageWorkbenchState,
     ) => SessionImageWorkbenchState,
   ) => void;
+  onImageWorkbenchRequested?: () => void;
   handleImageWorkbenchCommand: (params: {
     rawText: string;
     parsedCommand: NonNullable<ReturnType<typeof parseImageWorkbenchCommand>>;
@@ -64,12 +47,10 @@ export function useWorkspaceImageWorkbenchEventRuntime({
   canvasState,
   projectId,
   contentId,
-  imageWorkbenchProviders,
-  setImageWorkbenchSelectedProviderId,
-  setImageWorkbenchSelectedModelId,
   setImageWorkbenchSelectedSize,
   setCanvasState,
   updateCurrentImageWorkbenchState,
+  onImageWorkbenchRequested,
   handleImageWorkbenchCommand,
 }: UseWorkspaceImageWorkbenchEventRuntimeParams) {
   useEffect(() => {
@@ -79,6 +60,7 @@ export function useWorkspaceImageWorkbenchEventRuntime({
       if (!detail?.prompt?.trim()) {
         return;
       }
+      onImageWorkbenchRequested?.();
 
       const rawText = buildImageWorkbenchCommandText(detail.prompt, {
         aspectRatio:
@@ -108,7 +90,7 @@ export function useWorkspaceImageWorkbenchEventRuntime({
     window.addEventListener(COVER_IMAGE_WORKBENCH_REQUEST_EVENT, handler);
     return () =>
       window.removeEventListener(COVER_IMAGE_WORKBENCH_REQUEST_EVENT, handler);
-  }, [canvasState, handleImageWorkbenchCommand]);
+  }, [canvasState, handleImageWorkbenchCommand, onImageWorkbenchRequested]);
 
   useEffect(() => {
     return onImageWorkbenchRequest(
@@ -122,28 +104,7 @@ export function useWorkspaceImageWorkbenchEventRuntime({
         if (!detail.prompt.trim()) {
           return;
         }
-
-        if (detail.modelPreset) {
-          const preferredProvider = findImageProviderForSelection(
-            imageWorkbenchProviders,
-            detail.modelPreset as ImageModelPreset,
-          );
-          if (preferredProvider) {
-            setImageWorkbenchSelectedProviderId(preferredProvider.id);
-            const nextModel = pickImageModelBySelection(
-              getImageModelIdsForProvider(
-                preferredProvider.id,
-                preferredProvider.type,
-                preferredProvider.custom_models,
-                preferredProvider.api_host,
-              ),
-              detail.modelPreset as ImageModelPreset,
-            );
-            if (nextModel) {
-              setImageWorkbenchSelectedModelId(nextModel);
-            }
-          }
-        }
+        onImageWorkbenchRequested?.();
 
         const rawText = buildImageWorkbenchCommandText(detail.prompt, {
           aspectRatio: detail.aspectRatio,
@@ -175,10 +136,8 @@ export function useWorkspaceImageWorkbenchEventRuntime({
     canvasState,
     contentId,
     handleImageWorkbenchCommand,
-    imageWorkbenchProviders,
+    onImageWorkbenchRequested,
     projectId,
-    setImageWorkbenchSelectedModelId,
-    setImageWorkbenchSelectedProviderId,
     setImageWorkbenchSelectedSize,
   ]);
 
@@ -190,6 +149,7 @@ export function useWorkspaceImageWorkbenchEventRuntime({
       if (detail.contentId && detail.contentId !== (contentId ?? null)) {
         return;
       }
+      onImageWorkbenchRequested?.();
 
       updateCurrentImageWorkbenchState((current) => {
         if (current.tasks.length === 0 && current.outputs.length === 0) {
@@ -202,7 +162,12 @@ export function useWorkspaceImageWorkbenchEventRuntime({
         };
       });
     });
-  }, [contentId, projectId, updateCurrentImageWorkbenchState]);
+  }, [
+    contentId,
+    onImageWorkbenchRequested,
+    projectId,
+    updateCurrentImageWorkbenchState,
+  ]);
 
   useEffect(() => {
     const handler = (event: Event) => {

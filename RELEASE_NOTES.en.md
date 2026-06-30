@@ -1,50 +1,41 @@
-## Lime v1.82.0
+## Lime v1.83.0
 
 <sub>The Simplified Chinese release notes are the primary version. This English page is a companion for international readers.</sub>
 
 ### New Features
 
-- Added the Content Factory Writing loop: `@写文章` / `@写作` can route into the seeded Content Factory, create an article-draft artifact card, and open the right-side Product Profile.
-- Upgraded the Agent App fixture into a v4 production-style Content Factory with interface metadata, activation entries, workflow, subagents, skill refs, tool refs, runtime package metadata, and a seeded release descriptor.
-- Added a Workspace right-surface Trace panel and separated the Product Profile right rail from the object canvas surface.
-- Added a Claw Trace regression alert channel, desktop notification toggle, alert export / clear actions, and five-locale copy in Developer settings.
-- Split Electron Desktop Host capabilities into current host modules for desktop notifications, file / project shell, Agent App shell, Agent App runtime tasks, system diagnostics, voice models, and layered design exports.
+- Moved the Writing mainline to Article Workspace / Article Editor: `@写文章` artifacts now render as a standalone `ArtifactFrame`, and the right rail hosts the editable article canvas. The old Product Profile path has left the main path.
+- Expanded plugin-package projection so the host can read skills, subagents, CLI tools, connectors, and hooks from plugin manifests and merge them into the agent app manifest and history restore flow.
+- Completed the current `@配图` chain with `mediaTaskArtifact/image/complete`, forming one end-to-end path from task creation to completion, GUI terminal card, and reload restore.
+- Narrowed image workbench event handling so the frontend no longer depends on the old model-preset split and instead follows the current image task and runtime trigger path.
 
 ### Fixes
 
-- Fixed seeded Content Factory activation when installed state lacked cloud release evidence; installed state is now migrated on save / read.
-- Fixed installed Agent Apps being treated as non-activatable when marketplace package references were absent or hashes needed refresh; they now expose refresh install actions and visible blockers.
-- Fixed App Server read-model history loading by supporting `history_limit`, `history_offset`, and `history_before_message_id`.
-- Fixed Agent App workers failing closed too aggressively for optional-signature release evidence; only required signature failures now block execution.
-- Fixed several Claw Trace dynamic i18n-key paths that could hit fragile TypeScript `5.9.3` overload inference.
+- Fixed history restore drift for Writing objects, artifact references, and right-rail tab projection so restored sessions no longer fall back to old Profile semantics.
+- Fixed the lack of a standard JSON-RPC completion entry point for image tasks by adding task-type validation, terminal-state rejection, and result writeback coverage.
+- Fixed plugin history restore normalization for blank surface kinds, artifact refs, and selection state.
 
 ### Improvements and Refactors
 
-- Split `electron/hostCommands.ts` into smaller single-responsibility host modules so filesystem, shell, notification, Agent App, and voice-model logic no longer live in one large dispatcher.
-- Added projected message window queries to App Server projection store, reducing history-restore dependence on replaying the full event stream.
-- Changed request-level web-search policy from `allowed` to `auto`: WebSearch is available by default for model choice, `disabled` closes it, and `required` enforces at least one search.
-- Workspace Product Profile can now recover preview objects from message artifacts and connect Content Factory output, the right-side Product Profile, and history restore through one projection model.
-- Plugin Marketplace now includes capability profiles, visible blockers, manifest interface projection, subagents / workflows projection, and stronger registry-loader state modeling.
-- `verify:local` and the Rust layered runner now support changed / related scope, deriving workspace crates from Git diffs or explicit paths and expanding reverse dependents.
+- Split Article Workspace projection, editing, preview, and right-surface code into focused modules to reduce single-file responsibility overload.
+- Migrated the Content Factory fixture narrative from Product Profile to Article Workspace and added restore, reload, and terminal-state assertions.
+- Synchronized the App Server, Rust protocol, and frontend client image-task interfaces, including generated types and contract checks.
 
 ### Tests and Quality
 
-- Added Electron Host module regressions for Agent App runtime task, Agent App shell, desktop notification, file shell, project shell, system utility, voice model, and related surfaces.
-- Added regressions for the Content Factory worker, seeded Agent Apps, Agent App APIs, Marketplace registry / view model / visible blockers, plugin activation, and browser intent routing.
-- Added Workspace regressions for Product Profile, right surfaces, Trace tab, message artifacts, history restore, send actions, and scoped storage.
-- Added Claw Trace regression alert channel, dispatcher, monitor, notifier, presentation, and Developer-panel regressions.
-- Added Rust regressions for projection store, session history windows, Agent App worker turns, seeded installed state, and request tool policy.
-- Updated version facts to `1.82.0` across the root app, CLI npm package, App Server client package, Rust workspace, main Cargo lock, and the Aster sub-workspace lock. The repository uses `pnpm-lock.yaml`; no npm lockfile was changed.
+- Added Rust JSON-RPC tests for image-task completion, covering the happy path, wrong task type, and cancelled terminal rejection.
+- Added a current `@配图` fixture and regression assertions that verify GUI state, App Server read model, task file state, and reload restore together.
+- Updated regression coverage for the plugin contract, history restore, image workbench, workspace article path, and locale resources.
 
 ### Documentation
 
-- Added the `internal/roadmap/Writing/` documentation set for product requirements, architecture, workflow, sequence diagrams, and implementation plan.
-- Updated the Claw Trace execution plan, trace roadmap / code map, and Agent UI latency map with regression alerts, Developer UI, the Trace right panel, and validation state.
-- Updated `AGENTS.md`, the quality-workflow skill, `internal/aiprompts/quality-workflow.md`, and `scripts/README.md` with Rust changed / related scope, frontend resume testing, and compressed release-validation defaults.
+- Added `internal/roadmap/images/README.md` to document the image-capability roadmap.
+- Updated the `internal/roadmap/Writing/` docs to use Article Workspace / Article Editor as the current source of truth.
+- Updated the related execution plan with the current `@配图` chain closure and verification notes.
 
 ### Other
 
-- `right-sidebar-buttons.json` is a local UI-inspection temporary file and is excluded from this release candidate.
-- This release continues moving Writing, Agent App, Plugin Marketplace, Claw Trace, and Electron Desktop Host onto the current App Server JSON-RPC / RuntimeCore / Electron Host path without restoring old Tauri wrappers or mock fallback.
+- Updated version facts to `1.83.0` across the root app, CLI npm package, App Server client package, Rust workspace, main Cargo lock, and the Aster sub-workspace lock.
+- This release excludes the local temporary file `internal/roadmap/Writing/.DS_Store` and the unreferenced `lime-home.png`.
 
-**Full changes**: `v1.81.0` -> `v1.82.0`
+**Full changes**: `v1.82.0` -> `v1.83.0`

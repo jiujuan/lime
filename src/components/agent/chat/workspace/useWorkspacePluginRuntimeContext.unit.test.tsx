@@ -105,7 +105,7 @@ function createInstalledPluginBackedApp(
       },
       workbench: {
         profile: "production",
-        productWorkspace: {
+        articleWorkspace: {
           primaryObjectKinds: ["articleDraft"],
         },
         productionObjects: [
@@ -186,13 +186,39 @@ describe("useWorkspacePluginRuntimeContext", () => {
     return latestValue as UseWorkspacePluginRuntimeContextResult;
   }
 
-  it("没有显式插件激活 metadata 时也应读取已安装状态用于插件菜单候选", async () => {
+  it("没有显式插件激活 metadata 时默认不读取已安装状态", async () => {
     const listInstalled = vi.fn(async () => ({
       states: [createInstalledPluginBackedApp()],
     }));
 
     renderHook(
       {
+        listInstalled,
+      },
+      (value) => {
+        latestValue = value;
+      },
+    );
+    await flushEffects(4);
+
+    expect(listInstalled).not.toHaveBeenCalled();
+    expect(getLatestValue().context).toMatchObject({
+      status: "inactive",
+      activationContext: null,
+      contracts: [],
+      registry: [],
+      blockerCodes: [],
+    });
+  });
+
+  it("插件候选被显式请求后才读取已安装状态", async () => {
+    const listInstalled = vi.fn(async () => ({
+      states: [createInstalledPluginBackedApp()],
+    }));
+
+    renderHook(
+      {
+        enabled: true,
         listInstalled,
       },
       (value) => {

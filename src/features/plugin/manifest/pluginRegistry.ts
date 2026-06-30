@@ -44,7 +44,7 @@ function resolveRendererState(
   input: PluginRegistryProjectionInput,
 ): PluginRegistryRendererState {
   return input.contract.artifactRenderers.length > 0 &&
-    input.contract.rightSurface.productWorkspace.enabled
+    input.contract.rightSurface.articleWorkspace.enabled
     ? "renderable"
     : "missing_renderer";
 }

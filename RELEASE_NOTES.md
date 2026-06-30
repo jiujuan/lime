@@ -1,48 +1,39 @@
-## Lime v1.82.0
+## Lime v1.83.0
 
 ### 新功能
 
-- 新增内容工厂 Writing 闭环：`@写文章` / `@写作` 可命中 seeded Content Factory，生成文章草稿小产物卡，并点击展开右侧 Product Profile。
-- Agent App fixture 升级为 v4 生产型内容工厂，补齐 interface、activation entries、workflow、subagents、skill refs、tool refs、runtime package 和 seeded release descriptor。
-- Workspace 右侧 surface 新增 Trace 面板入口，Claw Trace 可在会话侧栏内直接查看；Product Profile 右侧栏从对象画布中独立出来。
-- Claw Trace Developer 面板新增回归告警通道、桌面通知开关、告警导出 / 清空和五语言文案。
-- Electron Desktop Host 新增桌面通知、文件 / 项目 shell、Agent App shell、Agent App runtime task、系统诊断、语音模型和图层设计工程 host 分层能力。
+- Writing 主线切到 Article Workspace / Article Editor：`@写文章` 产物以独立 `ArtifactFrame` 展示，右侧栏承接可编辑文章画布，旧 Product Profile 路径已退出主路径。
+- 内容工厂插件包投影增强，宿主现在能从 plugin manifest 读取 skills、subagents、CLI、connectors 和 hooks，并汇总进 agent app manifest 与历史恢复。
+- `@配图` current 链路补齐 `mediaTaskArtifact/image/complete`，图片任务从创建、完成、回填到 GUI 终态卡片和刷新恢复形成同一条 current 闭环。
+- 图片工作台事件流收敛，前端不再依赖旧的模型预设分流逻辑，而是统一走当前图片任务与 runtime 触发链。
 
 ### 修复
 
-- 修复 seeded Content Factory 已安装状态缺少 cloud release evidence 时无法稳定激活的问题，并在保存 / 读取 installed state 时迁移 release evidence。
-- 修复已安装 Agent App 在 marketplace 包引用缺失或 hash 需要刷新时被误判为不可激活的问题，改为展示可刷新安装动作和可见 blocker。
-- 修复 App Server read model 历史读取无法分页的问题，支持 `history_limit`、`history_offset` 和 `history_before_message_id`。
-- 修复 Agent App worker 对可选签名 release evidence 过度 fail closed 的问题，仅在 required signature 未验证时阻断。
-- 修复 Claw Trace 多处 i18n 动态 key 在 TypeScript `5.9.3` 下触发复杂 overload 推导的问题。
+- 修复写文章历史恢复中对象、artifact 引用和右侧栏标签的投影偏差，避免恢复后落回旧 Profile 语义。
+- 修复图片任务完成态缺少标准 JSON-RPC 入口的问题，新增任务类型校验、终态拒绝和结果回填测试。
+- 修复 plugin history restore 对空白 surface kind、artifact refs 和选择状态的归一化不足。
 
 ### 优化与重构
 
-- `electron/hostCommands.ts` 拆分出多个单一职责 host 模块，减少巨型分发文件中的文件系统、shell、通知、Agent App 和语音模型逻辑混杂。
-- App Server projection store 增加 projected message window 查询，减少历史恢复时对完整事件流的依赖。
-- 请求级联网工具策略从 `allowed` 调整为 `auto`：默认暴露 WebSearch 工具面，由模型按需选择；显式 `disabled` 才关闭，`required` 才强制联网。
-- Workspace Product Profile 支持从消息 artifact 恢复预览对象，并将内容工厂产物、右侧 Product Profile 和历史恢复串到同一投影模型。
-- Plugin Marketplace 增加 capability profile、visible blockers、manifest interface projection、subagents / workflows 投影和 registry loader 状态模型。
-- `verify:local` / Rust 分层 runner 支持 changed / related scope，按 Git diff 或显式路径推导 workspace crate 并扩展反向依赖。
+- 将 Article Workspace 的投影、编辑、预览和右侧 surface 拆成独立模块，减少单文件职责混杂。
+- Content Factory fixture 从旧 Product Profile 叙事迁移到 Article Workspace 叙事，补齐恢复、重载和终态断言。
+- App Server、Rust 协议和前端 client 的图片任务接口同步扩展，补齐 generated types 与 contract 校验。
 
 ### 测试与质量
 
-- 新增 Electron Host 分层模块回归：Agent App runtime task、Agent App shell、desktop notification、file shell、project shell、system utility、voice model 等。
-- 新增 Content Factory worker、seeded Agent App、Agent App API、Marketplace registry / view model / visible blocker、plugin activation 和 browser intent 回归。
-- 新增 Workspace Product Profile、右侧 surface、Trace tab、message artifact、history restore、send actions 和 scoped storage 回归。
-- 新增 Claw Trace regression alert channel、dispatcher、monitor、notifier、presentation 和 Developer 面板回归。
-- 新增 Rust projection store、session history window、Agent App worker turn、seeded installed state 和 request tool policy 回归。
-- 版本事实源更新到 `1.82.0`：根应用、CLI npm package、App Server client package、Rust workspace、主 Cargo lock 与 Aster 子工作区 lock。仓库使用 `pnpm-lock.yaml`，本次未改 npm lockfile。
+- 新增图片任务 JSON-RPC 定向测试，覆盖正向完成、错误任务类型和取消态拒绝。
+- 新增 `@配图` current fixture 及回归断言，验证 GUI、App Server read model、task file 和刷新恢复一致。
+- 更新 plugin contract、history restore、image workbench、workspace article 路径和多语言资源的回归覆盖。
 
 ### 文档
 
-- 新增 `internal/roadmap/Writing/` 文档集，覆盖产品需求、架构、workflow、时序图和实施计划。
-- 更新 Claw Trace 执行计划、trace roadmap / code map 和 Agent UI latency 图，记录回归告警、Developer UI、Trace 右侧面板与验证状态。
-- 更新 `AGENTS.md`、质量工作流 skill、`internal/aiprompts/quality-workflow.md` 和 `scripts/README.md`，沉淀 Rust changed / related、前端续跑和发版压缩验证入口。
+- 新增 `internal/roadmap/images/README.md`，记录图片能力系统路线图。
+- 更新 `internal/roadmap/Writing/` 文档，切换到 Article Workspace / Article Editor 事实源。
+- 更新相关执行计划，记录 `@配图` current chain 的收口与验证结果。
 
 ### 其他
 
-- `right-sidebar-buttons.json` 是本地 UI 探测临时文件，不属于本次 release candidate。
-- 本版继续把 Writing、Agent App、Plugin Marketplace、Claw Trace 与 Electron Desktop Host 收敛到 current App Server JSON-RPC / RuntimeCore / Electron Host 主链，不恢复旧 Tauri wrapper 或 mock fallback。
+- 版本事实源更新到 `1.83.0`：根应用、CLI npm package、App Server client package、Rust workspace、主 Cargo lock 与 Aster 子工作区 lock。
+- 本版未纳入本地临时文件 `internal/roadmap/Writing/.DS_Store` 和未引用的 `lime-home.png`。
 
-**完整变更**: `v1.81.0` -> `v1.82.0`
+**完整变更**: `v1.82.0` -> `v1.83.0`

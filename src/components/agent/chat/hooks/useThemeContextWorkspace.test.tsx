@@ -74,6 +74,8 @@ afterEach(() => {
 });
 
 interface ProbeProps {
+  workspaceEnabled?: boolean;
+  prefetchEnabled?: boolean;
   projectId?: string;
   activeTheme: string;
   messages: Message[];
@@ -83,6 +85,8 @@ interface ProbeProps {
 }
 
 function Probe({
+  workspaceEnabled = true,
+  prefetchEnabled = true,
   projectId,
   activeTheme,
   messages,
@@ -91,6 +95,8 @@ function Probe({
   onSnapshot,
 }: ProbeProps) {
   const state = useThemeContextWorkspace({
+    enabled: workspaceEnabled,
+    prefetchEnabled,
     projectId,
     activeTheme,
     messages,
@@ -138,6 +144,31 @@ describe("useThemeContextWorkspace", () => {
     expect(snapshot!.enabled).toBe(false);
     expect(snapshot!.sidebarContextItems).toEqual([]);
     expect(snapshot!.activeContextPrompt).toBe("");
+  });
+
+  it("关闭预热时不应主动加载素材和内容", async () => {
+    mockIsSpecializedWorkbenchTheme.mockReturnValue(true);
+
+    let snapshot: ThemeContextWorkspaceState | null = null;
+    mountProbe({
+      workspaceEnabled: true,
+      prefetchEnabled: false,
+      projectId: "project-deferred",
+      activeTheme: "general",
+      messages: [],
+      onSnapshot: (value) => {
+        snapshot = value;
+      },
+    });
+    await flushEffects();
+
+    expect(mockListContents).not.toHaveBeenCalled();
+    expect(mockUseMaterials).toHaveBeenCalledWith("project-deferred", {
+      enabled: false,
+    });
+    expect(snapshot!.enabled).toBe(true);
+    expect(snapshot!.generalWorkbenchEnabled).toBe(true);
+    expect(snapshot!.sidebarContextItems).toEqual([]);
   });
 
   it("主题模式应自动加载 Top3 上下文并生成日志快照", async () => {

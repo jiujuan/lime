@@ -1,6 +1,6 @@
+use super::article_workspace_artifact_document_projection;
 use super::artifact_document_versions;
 use super::output_refs;
-use super::product_profile_artifact_document_projection;
 use super::string_array_field;
 use super::string_field;
 use super::StoredSession;
@@ -107,7 +107,7 @@ pub(super) fn stored_artifact_summaries_for_turn(
 
 pub(super) fn artifact_summaries_from_event(event: &AgentEvent) -> Vec<ArtifactSummary> {
     let mut summaries =
-        product_profile_artifact_document_projection::artifact_summaries_from_event(event);
+        article_workspace_artifact_document_projection::artifact_summaries_from_event(event);
     if let Some(summary) = artifact_summary_from_event(event) {
         summaries.push(summary);
     }

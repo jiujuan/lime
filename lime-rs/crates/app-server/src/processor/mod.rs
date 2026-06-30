@@ -214,6 +214,7 @@ use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE;
 use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE;
 use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_CANCEL;
 use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_GET;
+use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_IMAGE_COMPLETE;
 use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE;
 use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_LIST;
 use app_server_protocol::METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE;
@@ -672,6 +673,10 @@ impl RequestProcessor {
             }
             METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE => {
                 self.handle_media_task_artifact_audio_complete_impl(params)
+                    .await
+            }
+            METHOD_MEDIA_TASK_ARTIFACT_IMAGE_COMPLETE => {
+                self.handle_media_task_artifact_image_complete_impl(params)
                     .await
             }
             METHOD_MEDIA_TASK_ARTIFACT_GET => {

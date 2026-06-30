@@ -78,7 +78,7 @@ function ExtensionSurfaceSection({
           <div className="mt-1 text-xs text-muted-foreground">
             {entry.description}
           </div>
-          <div className="mt-2 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-2 grid min-w-0 gap-2 text-xs text-muted-foreground [grid-template-columns:repeat(auto-fit,minmax(min(100%,10rem),1fr))]">
             <div>
               {agentText(
                 "agentChat.harness.generated.9f11b02c89",

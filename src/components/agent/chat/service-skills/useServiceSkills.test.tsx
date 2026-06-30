@@ -274,6 +274,56 @@ describe("useServiceSkills", () => {
     vi.useRealTimers();
   });
 
+  it("autoLoad 关闭时默认不读取服务技能目录", async () => {
+    window.__LIME_OEM_CLOUD__ = {
+      baseUrl: "https://oem.example.com",
+      tenantId: "tenant-demo",
+    };
+    window.__LIME_SESSION_TOKEN__ = "session-token-demo";
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const harness = mountHook({ autoLoad: false });
+
+    try {
+      await flushEffects(4);
+
+      expect(harness.getValue().isLoading).toBe(false);
+      expect(harness.getValue().skills).toEqual([]);
+      expect(harness.getValue().groups).toEqual([]);
+      expect(harness.getValue().catalogMeta).toBeNull();
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(getAutomationJobs).not.toHaveBeenCalled();
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("autoLoad 关闭后应由显式 refresh 按需加载服务技能目录", async () => {
+    const harness = mountHook({ autoLoad: false });
+
+    try {
+      await flushEffects();
+      expect(harness.getValue().skills).toEqual([]);
+
+      await act(async () => {
+        await harness.getValue().refresh();
+      });
+      await flushEffects();
+
+      expect(harness.getValue().skills.length).toBeGreaterThan(0);
+      expect(harness.getValue().catalogMeta).toEqual(
+        expect.objectContaining({
+          tenantId: "local-seeded",
+          sourceLabel: "起步做法",
+          isSeeded: true,
+        }),
+      );
+    } finally {
+      harness.unmount();
+    }
+  });
+
   it("目录更新事件后应刷新技能列表并保留分组元数据", async () => {
     vi.mocked(getAutomationJobs).mockResolvedValue([buildAutomationJob()]);
 

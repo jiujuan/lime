@@ -56,7 +56,7 @@ describe("rightSurfaceController", () => {
 
   it("打开多个 surface 时应保留已打开 tab 集合", () => {
     const first = openWorkspaceRightSurface(buildRightSurfaceState(null, "user"), {
-      kind: "productProfile",
+      kind: "articleWorkspace",
       source: "user",
     });
 
@@ -65,6 +65,6 @@ describe("rightSurfaceController", () => {
       source: "runtime",
     });
 
-    expect(second.openSurfaces).toEqual(["productProfile", "files"]);
+    expect(second.openSurfaces).toEqual(["articleWorkspace", "files"]);
   });
 });

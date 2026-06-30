@@ -94,6 +94,32 @@ afterEach(() => {
 });
 
 describe("useWorkspaceVideoTaskPreviewRuntime", () => {
+  it("普通文本对话没有视频任务时不应启动视频任务轮询", async () => {
+    const setChatMessages: HookProps["setChatMessages"] = vi.fn();
+    const setIntervalSpy = vi.spyOn(window, "setInterval");
+    const harness = renderHook({
+      messages: [
+        {
+          id: "msg-news-1",
+          role: "assistant",
+          content: "今天国际新闻主要集中在能源、气候和地区安全。",
+          timestamp: new Date(),
+        },
+      ],
+      setChatMessages,
+    });
+
+    await harness.render();
+    await act(async () => {
+      await Promise.resolve();
+      vi.advanceTimersByTime(3000);
+      await Promise.resolve();
+    });
+
+    expect(mockGetTask).not.toHaveBeenCalled();
+    expect(setIntervalSpy).not.toHaveBeenCalled();
+  });
+
   it("应轮询运行中的视频任务，并把结果回写到消息预览卡", async () => {
     let messages: Message[] = [buildVideoMessage()];
     const setChatMessages: HookProps["setChatMessages"] = (value) => {

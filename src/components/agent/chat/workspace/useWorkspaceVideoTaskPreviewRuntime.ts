@@ -46,6 +46,10 @@ function collectTrackedTaskIds(messages: Message[]): string[] {
   return Array.from(taskIds);
 }
 
+function hasTrackedVideoTasks(messages: Message[]): boolean {
+  return collectTrackedTaskIds(messages).length > 0;
+}
+
 export function useWorkspaceVideoTaskPreviewRuntime({
   projectRootPath,
   messages,
@@ -53,6 +57,7 @@ export function useWorkspaceVideoTaskPreviewRuntime({
 }: UseWorkspaceVideoTaskPreviewRuntimeParams) {
   const messagesRef = useRef(messages);
   const projectRootPathRef = useRef(projectRootPath);
+  const shouldRunPreviewRuntime = hasTrackedVideoTasks(messages);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -60,6 +65,10 @@ export function useWorkspaceVideoTaskPreviewRuntime({
   }, [messages, projectRootPath]);
 
   useEffect(() => {
+    if (!shouldRunPreviewRuntime) {
+      return;
+    }
+
     let disposed = false;
     let polling = false;
 
@@ -137,5 +146,5 @@ export function useWorkspaceVideoTaskPreviewRuntime({
       disposed = true;
       window.clearInterval(timerId);
     };
-  }, [setChatMessages]);
+  }, [setChatMessages, shouldRunPreviewRuntime]);
 }

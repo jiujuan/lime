@@ -80,7 +80,7 @@ function buildContentFactoryManifest(overrides: Partial<AppManifest> = {}) {
     },
     workbench: {
       profile: "production",
-      productWorkspace: {
+      articleWorkspace: {
         scope: "session",
         primaryObjectKinds: ["articleDraft", "imageGenerationSet"],
       },
@@ -123,21 +123,21 @@ function buildContentFactoryManifest(overrides: Partial<AppManifest> = {}) {
 }
 
 describe("Agent App Host v3 lifecycle skeleton", () => {
-  it("把 Workbench App 投影到唯一右侧 dock 和 productProfile tab", () => {
+  it("把 Workbench App 投影到唯一右侧 dock 和 articleWorkspace tab", () => {
     const manifest = buildContentFactoryManifest();
     const contract = buildAgentAppRightSurfaceContract(manifest);
 
     expect(contract.physicalDockCount).toBe(1);
-    expect(contract.defaultActiveTab).toBe("productProfile");
+    expect(contract.defaultActiveTab).toBe("articleWorkspace");
     expect(contract.supportedTabs).toEqual([
-      "productProfile",
+      "articleWorkspace",
       "file",
       "evidence",
       "terminal",
       "browser",
       "sideChat",
     ]);
-    expect(contract.productProfile.objects).toEqual([
+    expect(contract.articleWorkspace.objects).toEqual([
       expect.objectContaining({
         kind: "articleDraft",
         defaultPane: "documentCanvas",
@@ -148,13 +148,13 @@ describe("Agent App Host v3 lifecycle skeleton", () => {
         defaultPane: "imageGrid",
       }),
     ]);
-    expect(contract.productProfile.panes).toEqual(
+    expect(contract.articleWorkspace.panes).toEqual(
       expect.arrayContaining(["documentCanvas", "imageGrid", "expertInfo"]),
     );
     expect(contract.historyRestore).toEqual(
       expect.objectContaining({
         enabled: true,
-        defaultTab: "productProfile",
+        defaultTab: "articleWorkspace",
         defaultPane: "documentCanvas",
         restoreSelection: true,
         restoreLayout: true,
@@ -195,7 +195,7 @@ describe("Agent App Host v3 lifecycle skeleton", () => {
       "uiRuntime",
       "agentRuntime",
       "rightSurfaceDock",
-      "productProfile",
+      "articleWorkspace",
       "historyRestore",
       "uninstall",
     ]);
@@ -207,7 +207,7 @@ describe("Agent App Host v3 lifecycle skeleton", () => {
           currentOwner: "claw",
         }),
         expect.objectContaining({
-          key: "productProfile",
+          key: "articleWorkspace",
           status: "ready",
           currentOwner: "claw",
         }),

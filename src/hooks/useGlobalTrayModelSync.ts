@@ -116,6 +116,10 @@ function resolveTrayProjectId(
   );
 }
 
+function shouldAutoSyncTrayModelShortcuts(page: Page): boolean {
+  return page !== "agent";
+}
+
 interface UseGlobalTrayModelSyncOptions {
   currentPage: Page;
   pageParams?: PageParams;
@@ -208,11 +212,13 @@ export function useGlobalTrayModelSync({
       }
     };
 
-    scheduleInitialSync(() => {
-      void sync();
-    });
-    retryTimerIds.push(window.setTimeout(() => void sync(), 900));
-    retryTimerIds.push(window.setTimeout(() => void sync(), 2600));
+    if (shouldAutoSyncTrayModelShortcuts(currentPage)) {
+      scheduleInitialSync(() => {
+        void sync();
+      });
+      retryTimerIds.push(window.setTimeout(() => void sync(), 900));
+      retryTimerIds.push(window.setTimeout(() => void sync(), 2600));
+    }
 
     const unsubscribe = subscribeProviderDataChanged(() => {
       invalidateTrayPayloadCache();
@@ -220,6 +226,9 @@ export function useGlobalTrayModelSync({
     });
 
     const handleFocus = () => {
+      if (!shouldAutoSyncTrayModelShortcuts(currentPageRef.current)) {
+        return;
+      }
       invalidateTrayPayloadCache();
       void sync(undefined, { forceRefresh: true });
     };

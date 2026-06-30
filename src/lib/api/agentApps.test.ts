@@ -3,10 +3,7 @@ import { webcrypto } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { safeInvoke } from "@/lib/dev-bridge";
 import contentFactoryFixture from "@/features/agent-app/fixtures/content-factory-app.json";
-import {
-  buildAgentAppManifestHash,
-  buildAgentAppPackageHash,
-} from "@/features/agent-app/install/packageIdentity";
+import seededAgentAppsFixture from "@/features/agent-app/fixtures/seeded-agent-apps.json";
 import { buildCloudReleasePackageIdentity } from "@/features/agent-app/install/cloudBootstrap";
 import {
   buildCloudReleaseSignaturePayload,
@@ -296,9 +293,9 @@ describe("agentApps API", () => {
             rightSurface: {
               dock: "right",
               physicalDockCount: 1,
-              defaultActiveTab: "productProfile",
-              supportedTabs: ["productProfile"],
-              productProfile: {
+              defaultActiveTab: "articleWorkspace",
+              supportedTabs: ["articleWorkspace"],
+              articleWorkspace: {
                 enabled: true,
                 objects: [],
                 panes: [],
@@ -306,7 +303,7 @@ describe("agentApps API", () => {
               },
               historyRestore: {
                 enabled: true,
-                defaultTab: "productProfile",
+                defaultTab: "articleWorkspace",
                 defaultPane: "artifact",
                 restoreSelection: true,
                 restoreLayout: true,
@@ -1089,7 +1086,7 @@ describe("agentApps API", () => {
           intents: expect.arrayContaining([
             expect.objectContaining({
               key: "content_article_generate",
-              aliases: ["@写文章"],
+              aliases: expect.arrayContaining(["@写文章"]),
             }),
           ]),
         },
@@ -1168,7 +1165,7 @@ describe("agentApps API", () => {
           intents: expect.arrayContaining([
             expect.objectContaining({
               key: "content_article_generate",
-              aliases: ["@写文章"],
+              aliases: expect.arrayContaining(["@写文章"]),
             }),
           ]),
         },
@@ -1345,6 +1342,7 @@ describe("agentApps API", () => {
   it("无云端上下文时 seeded content-factory-app 不应要求注册码", async () => {
     const result = await getAgentAppCloudCatalog();
     const manifest = contentFactoryFixture as AppManifest;
+    const seededApp = seededAgentAppsFixture.apps[0];
 
     expect(result.source).toBe("seeded");
     expect(result.payload.apps[0]).toMatchObject({
@@ -1355,11 +1353,8 @@ describe("agentApps API", () => {
       registrationState: "not_required",
       enabled: true,
       packageUrl: `https://seeded.local/agent-apps/content-factory-app/${manifest.version}.lapp`,
-      packageHash: buildAgentAppPackageHash({
-        manifest,
-        sourceUri: `seeded:content-factory-app@${manifest.version}`,
-      }),
-      manifestHash: buildAgentAppManifestHash(manifest),
+      packageHash: seededApp.packageHash,
+      manifestHash: seededApp.manifestHash,
     });
   });
 

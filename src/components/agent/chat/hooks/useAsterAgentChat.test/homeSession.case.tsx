@@ -35,6 +35,97 @@ describe("useAsterAgentChat 首页新会话", () => {
     }
   });
 
+  it("无工作区显式发送时应预热全局模型但不写入 workspace_id", async () => {
+    mockInitAsterAgent.mockResolvedValue({
+      initialized: true,
+      provider_configured: false,
+    });
+    mockGetDefaultProvider.mockResolvedValue("deepseek");
+    mockResolveClawWorkspaceProviderSelection.mockResolvedValue({
+      providerType: "deepseek",
+      model: "deepseek-v4-flash",
+    });
+
+    const harness = mountHook("");
+
+    try {
+      await flushEffects();
+
+      expect(mockInitAsterAgent).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await harness
+          .getValue()
+          .sendMessage("参考图生成一张小红书封面", [], false, false, false);
+      });
+
+      expect(mockInitAsterAgent).toHaveBeenCalledTimes(1);
+      expect(mockResolveClawWorkspaceProviderSelection).toHaveBeenCalledWith({
+        currentProviderType: "deepseek",
+        currentModel: null,
+        theme: "general",
+      });
+      expect(mockCreateAgentRuntimeSession).toHaveBeenCalledWith(
+        undefined,
+        undefined,
+        "react",
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            modelName: "deepseek-v4-flash",
+            providerSelector: "deepseek",
+          }),
+        }),
+      );
+      expect(mockSubmitAgentRuntimeTurn).toHaveBeenCalledTimes(1);
+      const request = mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0];
+      expect(request?.workspace_id).toBeUndefined();
+      expect(request?.turn_config?.provider_preference).toBe("deepseek");
+      expect(request?.turn_config?.model_preference).toBe(
+        "deepseek-v4-flash",
+      );
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("无工作区显式发送读取默认 Provider 失败时仍应从已配置 Provider 解析模型", async () => {
+    mockInitAsterAgent.mockResolvedValue({
+      initialized: true,
+      provider_configured: false,
+    });
+    mockGetDefaultProvider.mockRejectedValue(
+      new Error("get_default_provider 未返回有效默认 Provider"),
+    );
+    mockResolveClawWorkspaceProviderSelection.mockResolvedValue({
+      providerType: "openai",
+      model: "gpt-5.4-mini",
+    });
+
+    const harness = mountHook("");
+
+    try {
+      await flushEffects();
+
+      await act(async () => {
+        await harness
+          .getValue()
+          .sendMessage("参考图生成一张小红书封面", [], false, false, false);
+      });
+
+      expect(mockResolveClawWorkspaceProviderSelection).toHaveBeenCalledWith({
+        currentProviderType: undefined,
+        currentModel: null,
+        theme: "general",
+      });
+      const request = mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0];
+      expect(request?.workspace_id).toBeUndefined();
+      expect(request?.turn_config?.provider_preference).toBe("openai");
+      expect(request?.turn_config?.model_preference).toBe("gpt-5.4-mini");
+    } finally {
+      harness.unmount();
+    }
+  });
+
   it("clearMessages 后重新进入同工作区不应恢复旧话题", async () => {
     const workspaceId = "ws-home-clear";
     const sessionId = "session-home-clear";

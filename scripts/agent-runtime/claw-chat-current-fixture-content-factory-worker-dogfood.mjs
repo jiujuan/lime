@@ -2,23 +2,21 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   APP_SERVER_METHOD_AGENT_APP_INSTALLED_SAVE,
+  APP_SERVER_METHOD_SESSION_READ,
   APP_SERVER_METHOD_SESSION_TURN_START,
-  CONTENT_FACTORY_PRODUCT_PROFILE_IMAGE_ARTIFACT_ID,
-  CONTENT_FACTORY_PRODUCT_PROFILE_SESSION_ID,
-  CONTENT_FACTORY_PRODUCT_PROFILE_WORKER_ACTION_KEY,
-  CONTENT_FACTORY_PRODUCT_PROFILE_WORKER_TASK_ID,
-  CONTENT_FACTORY_PRODUCT_PROFILE_WORKER_TURN_ID,
+  CONTENT_FACTORY_ARTICLE_WORKSPACE_ARTICLE_ARTIFACT_ID,
+  CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+  CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_ACTION_KEY,
+  CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TASK_ID,
+  CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TURN_ID,
 } from "./claw-chat-current-fixture-constants.mjs";
 import { invokeAppServerFromPage } from "./claw-chat-current-fixture-rpc.mjs";
 import { sanitizeJson } from "./claw-chat-current-fixture-utils.mjs";
 
 const CONTENT_FACTORY_APP_ID = "content-factory-app";
-const IMAGE_SET_OBJECT_ID = "image-set-1";
+const ARTICLE_OBJECT_ID = "article-1";
 
-export async function saveContentFactoryWorkerInstalledState(
-  page,
-  requestLog,
-) {
+export async function saveContentFactoryWorkerInstalledState(page, requestLog) {
   const state = buildContentFactoryInstalledState();
   const response = await invokeAppServerFromPage(
     page,
@@ -47,6 +45,7 @@ export async function saveContentFactoryWorkerInstalledState(
 
 export async function runContentFactoryWorkerDogfoodTurn({
   page,
+  options,
   workspace,
   requestLog,
 }) {
@@ -54,13 +53,13 @@ export async function runContentFactoryWorkerDogfoodTurn({
     page,
     APP_SERVER_METHOD_SESSION_TURN_START,
     {
-      sessionId: CONTENT_FACTORY_PRODUCT_PROFILE_SESSION_ID,
-      turnId: CONTENT_FACTORY_PRODUCT_PROFILE_WORKER_TURN_ID,
+      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+      turnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TURN_ID,
       input: {
-        text: "通过已安装内容工厂 worker 重新生成配图组。",
+        text: "通过已安装内容工厂 worker 写一篇完整公众号文章。",
       },
       runtimeOptions: {
-        metadata: buildProductProfileWorkerMetadata(workspace),
+        metadata: buildArticleWorkspaceWorkerMetadata(workspace),
       },
       queueIfBusy: false,
       skipPreSubmitResume: true,
@@ -76,16 +75,79 @@ export async function runContentFactoryWorkerDogfoodTurn({
     response.result?.turn && typeof response.result.turn === "object"
       ? response.result.turn
       : {};
+  const readModel = options
+    ? await waitForContentFactoryWorkerTurnCompleted(page, options, requestLog)
+    : null;
 
   return sanitizeJson({
     method: APP_SERVER_METHOD_SESSION_TURN_START,
     turnId: turn.turnId ?? turn.turn_id ?? null,
     turnStatus: turn.status ?? null,
-    taskId: CONTENT_FACTORY_PRODUCT_PROFILE_WORKER_TASK_ID,
+    taskId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TASK_ID,
     eventTypes,
     completed: eventTypes.includes("turn.completed"),
     artifactSnapshotEmitted: eventTypes.includes("artifact.snapshot"),
     runtimeErrorEmitted: eventTypes.includes("runtime.error"),
+    readModel,
+  });
+}
+
+async function waitForContentFactoryWorkerTurnCompleted(
+  page,
+  options,
+  requestLog,
+) {
+  const startedAt = Date.now();
+  let lastSummary = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const readModel = await invokeAppServerFromPage(
+      page,
+      APP_SERVER_METHOD_SESSION_READ,
+      {
+        sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+        historyLimit: 20,
+      },
+      requestLog,
+    );
+    const summary = summarizeContentFactoryWorkerTurnReadModel(
+      readModel.result,
+    );
+    lastSummary = summary;
+    if (
+      ["completed", "failed", "canceled"].includes(summary.workerTurnStatus) &&
+      !summary.hasActiveTurn
+    ) {
+      return summary;
+    }
+    await new Promise((resolve) => setTimeout(resolve, options.intervalMs));
+  }
+  throw new Error(
+    `内容工厂 worker turn 未完成: ${JSON.stringify(sanitizeJson(lastSummary))}`,
+  );
+}
+
+function summarizeContentFactoryWorkerTurnReadModel(result) {
+  const detail =
+    result?.detail && typeof result.detail === "object" ? result.detail : {};
+  const threadRead =
+    detail.threadRead && typeof detail.threadRead === "object"
+      ? detail.threadRead
+      : detail.thread_read && typeof detail.thread_read === "object"
+        ? detail.thread_read
+        : {};
+  const turns = Array.isArray(threadRead.turns) ? threadRead.turns : [];
+  const workerTurn = turns.find(
+    (turn) =>
+      (turn?.turnId ?? turn?.turn_id ?? turn?.id) ===
+      CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TURN_ID,
+  );
+  return sanitizeJson({
+    hasActiveTurn: Boolean(
+      threadRead.active_turn_id ?? threadRead.activeTurnId,
+    ),
+    workerTurnStatus: workerTurn?.status ?? null,
+    workerTurnId:
+      workerTurn?.turnId ?? workerTurn?.turn_id ?? workerTurn?.id ?? null,
   });
 }
 
@@ -116,34 +178,36 @@ function buildContentFactoryInstalledState() {
   };
 }
 
-function buildProductProfileWorkerMetadata(workspace) {
+function buildArticleWorkspaceWorkerMetadata(workspace) {
   return {
     agent_app: {
-      source: "right_surface_product_profile",
+      source: "right_surface_article_workspace",
       app_id: CONTENT_FACTORY_APP_ID,
-      session_id: CONTENT_FACTORY_PRODUCT_PROFILE_SESSION_ID,
+      session_id: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
       workspace_id: workspace.workspaceId,
-      product_profile_action: {
-        key: CONTENT_FACTORY_PRODUCT_PROFILE_WORKER_ACTION_KEY,
-        intent: "regenerate",
+      article_workspace_action: {
+        key: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_ACTION_KEY,
+        intent: "write_article",
         risk: "write",
-        task_kind: "content.image.generate",
+        task_kind: "content.article.generate",
         output_artifact_kind: "content_factory.workspace_patch",
-        prompt: "Regenerate the image set with two worker-generated candidates.",
+        prompt:
+          "写一篇关于内容工厂插件化写文章的公众号文章。要求先完成资料检索、标题候选、文章大纲、正文草稿、配图占位、引用来源和交付检查，并把完整正文写入右侧文章框。",
         object: {
           app_id: CONTENT_FACTORY_APP_ID,
-          kind: "imageGenerationSet",
-          id: IMAGE_SET_OBJECT_ID,
-          session_id: CONTENT_FACTORY_PRODUCT_PROFILE_SESSION_ID,
-          artifact_ids: [CONTENT_FACTORY_PRODUCT_PROFILE_IMAGE_ARTIFACT_ID],
-          preview_artifact_id: CONTENT_FACTORY_PRODUCT_PROFILE_IMAGE_ARTIFACT_ID,
+          kind: "articleDraft",
+          id: ARTICLE_OBJECT_ID,
+          session_id: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+          artifact_ids: [CONTENT_FACTORY_ARTICLE_WORKSPACE_ARTICLE_ARTIFACT_ID],
+          preview_artifact_id:
+            CONTENT_FACTORY_ARTICLE_WORKSPACE_ARTICLE_ARTIFACT_ID,
         },
       },
     },
     right_surface: {
-      surface_kind: "productProfile",
-      source: "product_workspace",
-      action_key: CONTENT_FACTORY_PRODUCT_PROFILE_WORKER_ACTION_KEY,
+      surface_kind: "articleWorkspace",
+      source: "article_workspace",
+      action_key: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_ACTION_KEY,
     },
   };
 }

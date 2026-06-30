@@ -527,9 +527,11 @@ interface UseWorkspaceInputbarSceneRuntimeParams {
   serviceSkillGroups: InputbarParams["serviceSkillGroups"];
   skillsLoading: InputbarParams["isSkillsLoading"];
   onSelectServiceSkill: InputbarParams["onSelectServiceSkill"];
+  onSkillSuggestionsNeeded?: InputbarParams["onSkillSuggestionsNeeded"];
   initialInputCapability?: AgentInitialInputCapabilityParams;
   initialKnowledgePackSelection?: AgentInitialKnowledgePackSelectionParams;
   pluginSuggestions?: InputbarParams["pluginSuggestions"];
+  onPluginSuggestionsNeeded?: InputbarParams["onPluginSuggestionsNeeded"];
   setChatToolPreferences: Dispatch<SetStateAction<ChatToolPreferences>>;
   objectiveEnabled?: boolean;
   onObjectiveEnabledChange?: (enabled: boolean) => void;
@@ -635,9 +637,11 @@ export function useWorkspaceInputbarSceneRuntime({
   serviceSkillGroups,
   skillsLoading,
   onSelectServiceSkill,
+  onSkillSuggestionsNeeded,
   initialInputCapability,
   initialKnowledgePackSelection,
   pluginSuggestions,
+  onPluginSuggestionsNeeded,
   setChatToolPreferences,
   objectiveEnabled = false,
   onObjectiveEnabledChange,
@@ -799,6 +803,7 @@ export function useWorkspaceInputbarSceneRuntime({
         isLoading: isSending || resolvedQueuedTurns.length > 0,
         knowledgePackSelection: knowledgeRuntime.knowledgePackSelection,
         knowledgePackOptions: knowledgeRuntime.knowledgePackOptions,
+        onKnowledgePacksNeeded: knowledgeRuntime.onKnowledgePacksNeeded,
         onToggleKnowledgePack: knowledgeRuntime.onToggleKnowledgePack,
         onSelectKnowledgePack: knowledgeRuntime.onSelectKnowledgePack,
         onToggleKnowledgeCompanionPack:
@@ -827,8 +832,10 @@ export function useWorkspaceInputbarSceneRuntime({
         serviceSkillGroups,
         isSkillsLoading: skillsLoading,
         onSelectServiceSkill,
+        onSkillSuggestionsNeeded,
         initialInputCapability,
         pluginSuggestions,
+        onPluginSuggestionsNeeded,
         toolStates: {
           objective: objectiveEnabled,
           plan: resolvedChatToolPreferences.task,
@@ -946,6 +953,7 @@ export function useWorkspaceInputbarSceneRuntime({
     onSelectKnowledgePack: knowledgeRuntime.onSelectKnowledgePack,
     onToggleKnowledgeCompanionPack:
       knowledgeRuntime.onToggleKnowledgeCompanionPack,
+    onKnowledgePacksNeeded: knowledgeRuntime.onKnowledgePacksNeeded,
     onStartKnowledgeOrganize: knowledgeRuntime.onStartKnowledgeOrganize,
     onManageKnowledgePacks: knowledgeRuntime.onManageKnowledgePacks,
     onImportPathReferenceAsKnowledge:

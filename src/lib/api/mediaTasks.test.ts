@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  type CompleteImageGenerationTaskArtifactRequest,
   type CreateAudioGenerationTaskArtifactRequest,
   type CreateImageGenerationTaskArtifactRequest,
   type CreateVideoGenerationTaskArtifactRequest,
@@ -9,11 +10,13 @@ import {
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE,
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_CANCEL,
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_GET,
+  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_COMPLETE,
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE,
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_LIST,
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE,
   cancelMediaTaskArtifact,
   completeAudioGenerationTaskArtifact,
+  completeImageGenerationTaskArtifact,
   createAudioGenerationTaskArtifact,
   createImageGenerationTaskArtifact,
   createVideoGenerationTaskArtifact,
@@ -30,6 +33,8 @@ vi.mock("@/lib/api/appServer", () => ({
     "mediaTaskArtifact/audio/create",
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE:
     "mediaTaskArtifact/video/create",
+  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_COMPLETE:
+    "mediaTaskArtifact/image/complete",
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE:
     "mediaTaskArtifact/audio/complete",
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_GET: "mediaTaskArtifact/get",
@@ -39,6 +44,7 @@ vi.mock("@/lib/api/appServer", () => ({
     createImageMediaTaskArtifact: appServerRequestMock,
     createAudioMediaTaskArtifact: appServerRequestMock,
     createVideoMediaTaskArtifact: appServerRequestMock,
+    completeImageMediaTaskArtifact: appServerRequestMock,
     completeAudioMediaTaskArtifact: appServerRequestMock,
     getMediaTaskArtifact: appServerRequestMock,
     listMediaTaskArtifacts: appServerRequestMock,
@@ -221,6 +227,45 @@ describe("mediaTasks API", () => {
     );
     expect(APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE).toBe(
       "mediaTaskArtifact/audio/complete",
+    );
+    expect(appServerRequestMock).toHaveBeenCalledWith(request);
+  });
+
+  it("应通过 App Server current 完成图片任务并回写 image result", async () => {
+    appServerRequestMock.mockResolvedValueOnce({
+      result: buildTaskResult({
+        task_id: "task-image-3",
+        task_type: "image_generate",
+        task_family: "image",
+        status: "succeeded",
+        normalized_status: "succeeded",
+      }),
+    });
+    const request = {
+      projectRootPath: "/workspace",
+      taskRef: "task-image-3",
+      providerId: "limecore",
+      model: "gpt-image-1",
+      responseId: "response-image-3",
+      images: [
+        {
+          url: "file:///workspace/.lime/runtime/images/task-image-3.png",
+          revisedPrompt: "春日咖啡活动插画",
+          slotId: "hero",
+          slotIndex: 0,
+          slotPrompt: "主视觉配图",
+        },
+      ],
+    } satisfies CompleteImageGenerationTaskArtifactRequest;
+
+    await expect(completeImageGenerationTaskArtifact(request)).resolves.toEqual(
+      expect.objectContaining({
+        task_id: "task-image-3",
+        normalized_status: "succeeded",
+      }),
+    );
+    expect(APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_COMPLETE).toBe(
+      "mediaTaskArtifact/image/complete",
     );
     expect(appServerRequestMock).toHaveBeenCalledWith(request);
   });

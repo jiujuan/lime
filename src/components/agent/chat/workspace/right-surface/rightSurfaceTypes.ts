@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 export type WorkspaceRightSurfaceKind =
   | "workbench"
   | "appSurface"
-  | "productProfile"
+  | "articleWorkspace"
   | "expertInfo"
   | "objectCanvas"
   | "browser"
@@ -35,4 +35,25 @@ export interface RightSurfaceDefinition {
   kind: WorkspaceRightSurfaceKind;
   label?: string | null;
   render(input: RightSurfaceRenderInput): ReactNode;
+}
+
+export function normalizeWorkspaceRightSurfaceKind(
+  value?: string | null,
+): WorkspaceRightSurfaceKind | null {
+  const normalized = value?.trim();
+  switch (normalized) {
+    case "workbench":
+    case "appSurface":
+    case "articleWorkspace":
+    case "expertInfo":
+    case "objectCanvas":
+    case "browser":
+    case "files":
+    case "shell":
+    case "harness":
+    case "trace":
+      return normalized;
+    default:
+      return null;
+  }
 }

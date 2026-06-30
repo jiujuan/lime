@@ -125,10 +125,10 @@ function findRuntimeWorkflow(
 }
 
 function readPrimaryObjectKinds(manifest: NormalizedAppManifest): string[] {
-  const productWorkspace = isRecord(manifest.workbench?.productWorkspace)
-    ? manifest.workbench.productWorkspace
+  const articleWorkspace = isRecord(manifest.workbench?.articleWorkspace)
+    ? manifest.workbench.articleWorkspace
     : undefined;
-  return readStringArray(productWorkspace?.primaryObjectKinds);
+  return readStringArray(articleWorkspace?.primaryObjectKinds);
 }
 
 function expectedObjectsForIntent(
@@ -172,9 +172,9 @@ function inferDefaultRightSurface(
   }
   if (
     manifest.workbench?.profile === "production" ||
-    manifest.workbench?.productWorkspace
+    manifest.workbench?.articleWorkspace
   ) {
-    return "productProfile";
+    return "articleWorkspace";
   }
   return undefined;
 }
@@ -488,7 +488,7 @@ export function buildAgentAppIntentSystemPrompt(
     match.rightSurface ? `Right surface: ${match.rightSurface}` : null,
     `Expected objects: ${expectedObjects}`,
     "必须按该 Agent App intent 执行业务，不要调用 skill_search、SkillTool 或其他 Skill 搜索/执行链路来替代这个 App。",
-    "中间对话继续说明过程与关键决策；结构化产物必须进入 artifact.snapshot，payload 或 metadata 中包含可投影到 Product Workspace / right surface 的 workspace patch。",
+    "中间对话继续说明过程与关键决策；结构化产物必须进入 artifact.snapshot，payload 或 metadata 中包含可投影到 Article Workspace / right surface 的 workspace patch。",
   ]
     .filter((line): line is string => Boolean(line))
     .join("\n");

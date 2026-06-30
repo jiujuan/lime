@@ -1,10 +1,12 @@
 import {
   CONTINUE_PROMPT,
-  CONTENT_FACTORY_PRODUCT_PROFILE_SCENARIO,
+  CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO,
   EXPERT_SKILLS_RUNTIME_PANEL_PROMPT,
   EXPERT_SKILLS_RUNTIME_PROMPT,
   EXPERT_SKILLS_RUNTIME_SKILL_REF,
   GOAL_PROMPT,
+  IMAGE_COMMAND_PROMPT,
+  IMAGE_COMMAND_SCENARIO,
   MCP_STRUCTURED_CONTENT_PROMPT,
   NEWS_PROMPT,
   PLAN_PROMPT,
@@ -58,6 +60,10 @@ export function buildAssertionContext({
     const goalTurnStart = backendLedger.find(
       (entry) => entry.kind === "turnStart" && entry.inputText === GOAL_PROMPT,
     );
+    const imageCommandTurnStart = backendLedger.find(
+      (entry) =>
+        entry.kind === "turnStart" && entry.inputText === IMAGE_COMMAND_PROMPT,
+    );
     const webToolsRenderingTurnStart = backendLedger.find(
       (entry) =>
         entry.kind === "turnStart" &&
@@ -104,6 +110,8 @@ export function buildAssertionContext({
       options.scenario === "cancel-then-continue";
     const isPlanScenario = options.scenario === "plan";
     const isGoalScenario = options.scenario === "goal";
+    const isImageCommandScenario =
+      options.scenario === IMAGE_COMMAND_SCENARIO;
     const isWebToolsRenderingScenario =
       options.scenario === "web-tools-rendering";
     const isMcpStructuredContentScenario =
@@ -117,8 +125,8 @@ export function buildAssertionContext({
       options.scenario === "expert-panel-skills-runtime";
     const isRightSurfaceVisualMatrixScenario =
       options.scenario === RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO;
-    const isContentFactoryProductProfileScenario =
-      options.scenario === CONTENT_FACTORY_PRODUCT_PROFILE_SCENARIO;
+    const isContentFactoryArticleWorkspaceScenario =
+      options.scenario === CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO;
     const isAnyExpertSkillsRuntimeScenario =
       isExpertSkillsRuntimeScenario ||
       isExpertPlazaSkillsRuntimeScenario ||
@@ -132,7 +140,9 @@ export function buildAssertionContext({
         ? planTurnStart?.asterChatRequest
         : isGoalScenario
           ? goalTurnStart?.asterChatRequest
-          : isWebToolsRenderingScenario
+          : isImageCommandScenario
+            ? imageCommandTurnStart?.asterChatRequest
+            : isWebToolsRenderingScenario
             ? webToolsRenderingTurnStart?.asterChatRequest
             : isMcpStructuredContentScenario
               ? mcpStructuredContentTurnStart?.asterChatRequest
@@ -140,12 +150,14 @@ export function buildAssertionContext({
                 ? skillsRuntimeTurnStart?.asterChatRequest
                 : isAnyExpertSkillsRuntimeScenario
                   ? expertRuntimeTurnStartForAssertions?.asterChatRequest
-                  : isContentFactoryProductProfileScenario
+                  : isContentFactoryArticleWorkspaceScenario
                     ? {}
                     : newsTurnStart?.asterChatRequest) ?? {};
     const hasCancelPhase = isCancelOnlyScenario || isCancelThenContinueScenario;
     const goalHarness = readHarnessMetadataFromTurnStart(goalTurnStart);
     const goalObjectiveText = readObjectiveTextFromHarness(goalHarness);
+    const imageCommandHarness =
+      readHarnessMetadataFromTurnStart(imageCommandTurnStart);
     const manualEnableRuntimeMetadata =
       readWorkspaceSkillRuntimeEnableFromTurnStart(
         manualEnableSkillsRuntimeTurnStart,
@@ -194,7 +206,9 @@ export function buildAssertionContext({
         ? planTurnStart?.inputText === PLAN_PROMPT
         : isGoalScenario
           ? goalTurnStart?.inputText === GOAL_PROMPT
-          : isWebToolsRenderingScenario
+          : isImageCommandScenario
+            ? imageCommandTurnStart?.inputText === IMAGE_COMMAND_PROMPT
+            : isWebToolsRenderingScenario
             ? webToolsRenderingTurnStart?.inputText === WEB_TOOLS_RENDERING_PROMPT
             : isMcpStructuredContentScenario
               ? mcpStructuredContentTurnStart?.inputText ===
@@ -212,7 +226,7 @@ export function buildAssertionContext({
                     : expertSkillsRuntimeTurnStart?.inputText?.includes(
                       EXPERT_SKILLS_RUNTIME_PROMPT,
                     ) === true
-                  : isContentFactoryProductProfileScenario
+                  : isContentFactoryArticleWorkspaceScenario
                     ? true
                     : newsTurnStart?.inputText === NEWS_PROMPT;
   return {
@@ -232,6 +246,7 @@ export function buildAssertionContext({
     newsTurnStart,
     planTurnStart,
     goalTurnStart,
+    imageCommandTurnStart,
     webToolsRenderingTurnStart,
     mcpStructuredContentTurnStart,
     skillsRuntimeTurnStart,
@@ -245,6 +260,7 @@ export function buildAssertionContext({
     isCancelThenContinueScenario,
     isPlanScenario,
     isGoalScenario,
+    isImageCommandScenario,
     isWebToolsRenderingScenario,
     isMcpStructuredContentScenario,
     isSkillsRuntimeScenario,
@@ -252,13 +268,14 @@ export function buildAssertionContext({
     isExpertPlazaSkillsRuntimeScenario,
     isExpertPanelSkillsRuntimeScenario,
     isRightSurfaceVisualMatrixScenario,
-    isContentFactoryProductProfileScenario,
+    isContentFactoryArticleWorkspaceScenario,
     isAnyExpertSkillsRuntimeScenario,
     expertRuntimeTurnStartForAssertions,
     asterChatRequest,
     hasCancelPhase,
     goalHarness,
     goalObjectiveText,
+    imageCommandHarness,
     manualEnableRuntimeMetadata,
     manualEnableRuntimeBinding,
     expertRuntimeMetadata,

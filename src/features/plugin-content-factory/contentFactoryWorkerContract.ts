@@ -13,7 +13,7 @@ export const CONTENT_FACTORY_WORKER_REQUEST_SCHEMA =
   "content-factory.worker-request.v1";
 export const CONTENT_FACTORY_WORKER_RUNTIME_SCHEMA =
   "content-factory.worker-runtime.v1";
-export const CONTENT_FACTORY_PRODUCT_WORKSPACE_SCHEMA = "product-workspace.v1";
+export const CONTENT_FACTORY_ARTICLE_WORKSPACE_SCHEMA = "article-workspace.v1";
 
 export interface ContentFactoryWorkerRuntimeContract {
   schemaVersion: typeof CONTENT_FACTORY_WORKER_RUNTIME_SCHEMA;
@@ -28,7 +28,7 @@ export interface ContentFactoryWorkerRuntimeContract {
   directFilesystemAccess: boolean;
   expectedOutput: {
     artifactKind: typeof CONTENT_FACTORY_WORKSPACE_PATCH_KIND;
-    productWorkspaceSchema: typeof CONTENT_FACTORY_PRODUCT_WORKSPACE_SCHEMA;
+    articleWorkspaceSchema: typeof CONTENT_FACTORY_ARTICLE_WORKSPACE_SCHEMA;
     objectKinds: string[];
     requiredObjectKinds: string[];
   };
@@ -114,7 +114,7 @@ function buildExpectedOutput(
 ): ContentFactoryWorkerRuntimeContract["expectedOutput"] {
   return {
     artifactKind: CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
-    productWorkspaceSchema: CONTENT_FACTORY_PRODUCT_WORKSPACE_SCHEMA,
+    articleWorkspaceSchema: CONTENT_FACTORY_ARTICLE_WORKSPACE_SCHEMA,
     objectKinds: parts.map((part) => part.objectKind),
     requiredObjectKinds: requiredObjectKinds(parts),
   };

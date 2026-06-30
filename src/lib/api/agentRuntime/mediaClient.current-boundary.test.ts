@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 const MEDIA_TASK_SYMBOLS = [
   "cancelMediaTaskArtifact",
   "completeAudioGenerationTaskArtifact",
+  "completeImageGenerationTaskArtifact",
   "createAudioGenerationTaskArtifact",
   "createImageGenerationTaskArtifact",
   "getMediaTaskArtifact",

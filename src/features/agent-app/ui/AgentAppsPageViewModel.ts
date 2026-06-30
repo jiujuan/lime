@@ -81,7 +81,7 @@ export interface AppCenterHostLifecycleSummary {
   primaryIssueCategory: AgentAppReadinessIssueCategory | null;
   issueCategories: AgentAppReadinessIssueCategorySummary[];
   productObjectCount: number;
-  productProfileEnabled: boolean;
+  articleWorkspaceEnabled: boolean;
   supportedTabCount: number;
   defaultTab: string | null;
 }
@@ -771,8 +771,8 @@ export function buildAppCenterHostLifecycleSummary(
       serverPrimaryIssueCategory ??
       getPrimaryAgentAppReadinessIssueCategory(issueCategories),
     issueCategories,
-    productObjectCount: lifecycle.rightSurface.productProfile.objects.length,
-    productProfileEnabled: lifecycle.rightSurface.productProfile.enabled,
+    productObjectCount: lifecycle.rightSurface.articleWorkspace.objects.length,
+    articleWorkspaceEnabled: lifecycle.rightSurface.articleWorkspace.enabled,
     supportedTabCount: lifecycle.rightSurface.supportedTabs.length,
     defaultTab: lifecycle.rightSurface.defaultActiveTab,
   };

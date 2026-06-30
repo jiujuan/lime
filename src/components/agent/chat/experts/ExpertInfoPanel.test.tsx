@@ -63,6 +63,64 @@ const LOCAL_SKILL: Skill = {
   catalogSource: "user",
 };
 
+function buildCapabilityReportSkillCatalog(skillFilePath = "/tmp/capability-report/SKILL.md") {
+  const title = "Capability Report";
+  const summary = "Generate a capability report from repository facts.";
+  return {
+    version: "fixture-skill-catalog-2026-06-21",
+    tenantId: "fixture-skills-runtime",
+    syncedAt: "2026-06-21T00:00:00.000Z",
+    groups: [
+      {
+        key: "engineering",
+        title: "工程技能",
+        summary: "用于专家面板技能选择 fixture 的工程技能。",
+        entryHint: "从专家信息面板加入后，在下一轮请求中继承 skillRefs。",
+        themeTarget: "general",
+        sort: 30,
+        itemCount: 1,
+      },
+    ],
+    items: [
+      {
+        id: "capability-report",
+        skillKey: "project:capability-report",
+        skillType: "service",
+        title,
+        summary,
+        category: "engineering",
+        outputHint: "输出专家技能继承证据摘要。",
+        source: "local_custom",
+        runnerType: "instant",
+        defaultExecutorBinding: "native_skill",
+        executionLocation: "client_default",
+        defaultArtifactKind: "report",
+        slotSchema: [],
+        version: "1.0.0",
+        groupKey: "engineering",
+        execution: { kind: "native_skill" },
+      },
+    ],
+    entries: [
+      {
+        id: "skill:capability-report",
+        kind: "skill",
+        title,
+        summary,
+        skillId: "capability-report",
+        groupKey: "engineering",
+        skillLocator: {
+          source: "project",
+          name: "project:capability-report",
+          directory: "capability-report",
+          skillFilePath,
+        },
+        execution: { kind: "native_skill" },
+      },
+    ],
+  };
+}
+
 const SKILL_SEARCH_THREAD_ITEM: AgentThreadItem = {
   id: "skill-search",
   thread_id: "thread-expert",
@@ -491,6 +549,101 @@ describe("ExpertInfoPanel", () => {
         ?.textContent,
     ).toContain("下一条消息会使用当前技能设置");
     expect(onSkillRefsChange).toHaveBeenLastCalledWith(["skill:docx"]);
+  });
+
+  it("应从当前技能目录读取可映射技能候选", async () => {
+    window.localStorage.setItem(
+      "lime:skill-catalog:v1",
+      JSON.stringify(buildCapabilityReportSkillCatalog()),
+    );
+    const { container, onSkillRefsChange } = renderPanel({
+      requestMetadata: createRequestMetadata(["skill:code-review"]),
+      localSkills: [],
+    });
+    await flushEffects();
+
+    const actionButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="expert-info-skills-runtime-action-skill-code-review"]',
+    );
+    expect(actionButton).not.toBeNull();
+
+    act(() => {
+      actionButton?.click();
+    });
+    await flushEffects();
+
+    expect(
+      container.querySelector('[data-testid="expert-skill-picker-dialog"]'),
+    ).not.toBeNull();
+    expect(container.querySelector<HTMLInputElement>("input")?.value).toBe(
+      "code-review",
+    );
+
+    const input = container.querySelector<HTMLInputElement>("input");
+    expect(input).not.toBeNull();
+    setTextInputValue(input as HTMLInputElement, "capability-report");
+    await flushEffects();
+
+    const candidate = container.querySelector(
+      '[data-testid="expert-skill-candidate-skill-capability-report"]',
+    );
+    expect(candidate?.textContent).toContain("Capability Report");
+    expect(candidate?.textContent).toContain("skill:capability-report");
+
+    const replacementButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="expert-skill-add-skill-capability-report"]',
+    );
+    expect(replacementButton).not.toBeNull();
+
+    act(() => {
+      replacementButton?.click();
+    });
+    await flushEffects();
+
+    expect(onSkillRefsChange).toHaveBeenLastCalledWith([
+      "skill:capability-report",
+    ]);
+  });
+
+  it("技能目录更新后应刷新已打开的补映射候选", async () => {
+    const { container } = renderPanel({
+      requestMetadata: createRequestMetadata(["skill:code-review"]),
+      localSkills: [],
+    });
+    await flushEffects();
+
+    const actionButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="expert-info-skills-runtime-action-skill-code-review"]',
+    );
+    act(() => {
+      actionButton?.click();
+    });
+    await flushEffects();
+
+    const input = container.querySelector<HTMLInputElement>("input");
+    expect(input).not.toBeNull();
+    setTextInputValue(input as HTMLInputElement, "capability-report");
+    await flushEffects();
+    expect(container.textContent).toContain("没有找到可添加的技能");
+
+    act(() => {
+      window.localStorage.setItem(
+        "lime:skill-catalog:v1",
+        JSON.stringify(buildCapabilityReportSkillCatalog()),
+      );
+      window.dispatchEvent(
+        new CustomEvent("lime:skill-catalog-changed", {
+          detail: { source: "manual_override", timestamp: Date.now() },
+        }),
+      );
+    });
+    await flushEffects();
+
+    expect(
+      container.querySelector(
+        '[data-testid="expert-skill-candidate-skill-capability-report"]',
+      )?.textContent,
+    ).toContain("Capability Report");
   });
 
   it("应从不可用运行准备动作打开技能选择器并替换问题引用", async () => {

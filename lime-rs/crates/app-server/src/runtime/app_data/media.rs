@@ -34,6 +34,13 @@ pub trait MediaAppDataSource: Send + Sync {
         Err(unavailable("mediaTaskArtifact/audio/complete"))
     }
 
+    async fn complete_image_media_task_artifact(
+        &self,
+        _params: MediaTaskArtifactImageCompleteParams,
+    ) -> Result<MediaTaskArtifactResponse, RuntimeCoreError> {
+        Err(unavailable("mediaTaskArtifact/image/complete"))
+    }
+
     async fn get_media_task_artifact(
         &self,
         _params: MediaTaskArtifactLookupParams,

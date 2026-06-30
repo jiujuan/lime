@@ -140,6 +140,7 @@ interface UseServiceSkillsResult {
 
 interface UseServiceSkillsOptions {
   enabled?: boolean;
+  autoLoad?: boolean;
   loadMode?: "immediate" | "deferred";
   deferredDelayMs?: number;
 }
@@ -151,6 +152,7 @@ export function useServiceSkills(
   const normalizedOptions =
     typeof options === "boolean" ? { enabled: options } : options;
   const enabled = normalizedOptions.enabled ?? true;
+  const autoLoad = normalizedOptions.autoLoad ?? true;
   const loadMode = normalizedOptions.loadMode ?? "immediate";
   const deferredDelayMs =
     normalizedOptions.deferredDelayMs ?? SERVICE_SKILLS_IDLE_TIMEOUT_MS;
@@ -161,10 +163,11 @@ export function useServiceSkills(
   >({});
   const [catalogMeta, setCatalogMeta] =
     useState<ServiceSkillCatalogMeta | null>(null);
-  const [isLoading, setIsLoading] = useState(enabled);
+  const [isLoading, setIsLoading] = useState(enabled && autoLoad);
   const [error, setError] = useState<string | null>(null);
   const [usageVersion, setUsageVersion] = useState(0);
   const [automationLinkCount, setAutomationLinkCount] = useState(0);
+  const [catalogLoaded, setCatalogLoaded] = useState(false);
   const serviceSkillHomeCopy = useMemo(
     () => buildServiceSkillHomeCopy((key) => t(key as AgentI18nKey, {})),
     [t],
@@ -232,6 +235,7 @@ export function useServiceSkills(
       setAutomationStatusMap({});
       setAutomationLinkCount(0);
       setCatalogMeta(null);
+      setCatalogLoaded(false);
       setError(null);
       setIsLoading(false);
       return;
@@ -242,6 +246,7 @@ export function useServiceSkills(
 
     try {
       currentCatalog = await loadCurrentCatalog();
+      setCatalogLoaded(true);
       setError(null);
       setIsLoading(false);
 
@@ -261,6 +266,7 @@ export function useServiceSkills(
       setAutomationStatusMap({});
       setAutomationLinkCount(0);
       setCatalogMeta(null);
+      setCatalogLoaded(false);
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
       setIsLoading(false);
@@ -268,6 +274,10 @@ export function useServiceSkills(
   }, [applyCatalogSnapshot, enabled, loadCurrentCatalog]);
 
   useEffect(() => {
+    if (!autoLoad) {
+      return;
+    }
+
     if (loadMode === "deferred") {
       return scheduleMinimumDelayIdleTask(
         () => {
@@ -282,10 +292,10 @@ export function useServiceSkills(
 
     void refresh();
     return;
-  }, [deferredDelayMs, loadMode, refresh]);
+  }, [autoLoad, deferredDelayMs, loadMode, refresh]);
 
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || !catalogLoaded) {
       return;
     }
 
@@ -301,10 +311,10 @@ export function useServiceSkills(
       unsubscribeCatalog();
       unsubscribeAutomationLinks();
     };
-  }, [enabled, loadCurrentCatalog]);
+  }, [catalogLoaded, enabled, loadCurrentCatalog]);
 
   useEffect(() => {
-    if (!enabled || automationLinkCount === 0) {
+    if (!enabled || !catalogLoaded || automationLinkCount === 0) {
       return;
     }
 
@@ -315,7 +325,7 @@ export function useServiceSkills(
     return () => {
       window.clearInterval(timer);
     };
-  }, [automationLinkCount, enabled, refresh]);
+  }, [automationLinkCount, catalogLoaded, enabled, refresh]);
 
   useEffect(() => {
     if (!enabled) {

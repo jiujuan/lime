@@ -134,7 +134,7 @@ export function DiffReviewMiniPanel({
               onOpenPath={onOpenPath}
             />
           </div>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid min-w-0 gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr))]">
             <div className="text-[11px] font-medium text-rose-700">
               {translate("agentChat.harness.diff.before")}
             </div>
@@ -144,7 +144,10 @@ export function DiffReviewMiniPanel({
           </div>
           <div className="space-y-1">
             {sideBySideRows.map((row) => (
-              <div key={row.id} className="grid gap-1 sm:grid-cols-2">
+              <div
+                key={row.id}
+                className="grid min-w-0 gap-1 [grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr))]"
+              >
                 <div
                   className={cn(
                     "min-h-6 whitespace-pre-wrap break-words rounded-md border px-2 py-1 font-mono text-[11px] leading-5",
@@ -344,20 +347,24 @@ export function SummaryCard({
   compact?: boolean;
 }) {
   const cardContent = (
-    <div className="flex items-start justify-between gap-3">
-      <div>
-        <div className="text-xs font-medium text-muted-foreground">{title}</div>
+    <div className="flex min-w-0 items-start justify-between gap-3">
+      <div className="min-w-0">
+        <div className="text-xs font-medium leading-5 text-muted-foreground">
+          {title}
+        </div>
         <div
           className={cn(
-            "mt-1 font-semibold text-foreground",
+            "mt-1 break-words font-semibold leading-5 text-foreground",
             compact ? "text-sm" : "text-base",
           )}
         >
           {value}
         </div>
-        <div className="mt-1 text-xs text-muted-foreground">{hint}</div>
+        <div className="mt-1 break-words text-xs leading-5 text-muted-foreground">
+          {hint}
+        </div>
       </div>
-      <div className="rounded-lg bg-muted p-2 text-muted-foreground">
+      <div className="shrink-0 rounded-lg bg-muted p-2 text-muted-foreground">
         <Icon className="h-4 w-4" />
       </div>
     </div>
@@ -368,7 +375,7 @@ export function SummaryCard({
       <button
         type="button"
         className={cn(
-          "rounded-xl border border-border bg-background/80 text-left transition-colors hover:bg-muted/60",
+          "min-w-0 rounded-xl border border-border bg-background/80 text-left transition-colors hover:bg-muted/60",
           compact ? "p-2.5" : "p-3",
         )}
         onClick={onClick}
@@ -382,7 +389,7 @@ export function SummaryCard({
   return (
     <div
       className={cn(
-        "rounded-xl border border-border bg-background/80",
+        "min-w-0 rounded-xl border border-border bg-background/80",
         compact ? "p-2.5" : "p-3",
       )}
     >

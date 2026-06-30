@@ -10,6 +10,7 @@ import {
 import type {
   CloudBootstrapApp,
   InstalledAgentAppState,
+  RuntimeTarget,
 } from "@/features/agent-app/types";
 import type { InstalledAgentAppStateListResult } from "@/features/agent-app/install/installedAppState";
 import type {
@@ -92,6 +93,13 @@ function marketplaceItemFromInstalledInput(
     sourceKind: "agent_app_release",
     sourceRef: contract.provenance.sourceId,
     appId: firstAgentApp?.id ?? contract.id,
+    install: contract.install
+      ? {
+          local: contract.install.local,
+          cloud: contract.install.cloud,
+          authentication: contract.install.authentication,
+        }
+      : undefined,
     enabled: input.enabled !== false,
     installState: "available",
     activationState: input.enabled === false ? "blocked" : "activatable",
@@ -108,6 +116,7 @@ function marketplaceItemFromInstalledInput(
         : undefined,
     manifestSummary: {
       interface: contract.interface,
+      install: contract.install,
       skills: contract.skills,
       agentApps: contract.agentApps,
       subagents: contract.subagents,
@@ -306,6 +315,17 @@ function marketplaceItemFromCloudAgentApp(
     sourceKind: "agent_app_release",
     sourceRef: readOptionalText(app.releaseId) ?? app.appId,
     appId: app.appId,
+    install: (app.runtimeTargets ?? ([] as RuntimeTarget[])).includes("local")
+      ? {
+          local: true,
+          cloud: true,
+          authentication: app.registrationRequired ? "on_install" : "on_use",
+        }
+      : {
+          local: false,
+          cloud: true,
+          authentication: app.registrationRequired ? "on_install" : "on_use",
+        },
     enabled,
     installState: installable ? "available" : "blocked",
     activationState: enabled && installable ? "activatable" : "blocked",
@@ -332,6 +352,13 @@ function marketplaceItemFromCloudAgentApp(
             signatureRef: readOptionalText(app.signatureRef),
           }
         : undefined,
+    manifestSummary: {
+      install: {
+        local: (app.runtimeTargets ?? ([] as RuntimeTarget[])).includes("local"),
+        cloud: true,
+        authentication: app.registrationRequired ? "on_install" : "on_use",
+      },
+    },
   };
 }
 
@@ -394,6 +421,18 @@ function enrichMarketplaceItemWithInstalledManifest(params: {
     keywords: keywords.length > 0 ? keywords : undefined,
     capabilities: capabilities.length > 0 ? capabilities : undefined,
     appId: readOptionalText(marketplaceItem.appId) ?? installedItem.appId,
+    install:
+      marketplaceItem.install ?? installedItem.install
+        ? {
+            local:
+              marketplaceItem.install?.local ?? installedItem.install?.local,
+            cloud:
+              marketplaceItem.install?.cloud ?? installedItem.install?.cloud,
+            authentication:
+              marketplaceItem.install?.authentication ??
+              installedItem.install?.authentication,
+          }
+        : undefined,
     manifestSummary: mergeManifestSummary(
       marketplaceItem.manifestSummary,
       installedItem.manifestSummary,

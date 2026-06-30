@@ -92,7 +92,7 @@ function createInstalledApp(
             mode: "natural_language",
             taskKind: "creator.generate",
             outputArtifactKind: "creator.workspace_patch",
-            rightSurface: "productProfile",
+            rightSurface: "articleWorkspace",
             triggerPhrases: {
               "zh-CN": ["创作工作台", "用创作工作台生成"],
               "en-US": ["creator workbench"],
@@ -119,7 +119,7 @@ describe("workspaceAgentAppIntentRouting", () => {
       intentKey: "creator_generate",
       taskKind: "creator.generate",
       outputArtifactKind: "creator.workspace_patch",
-      rightSurface: "productProfile",
+      rightSurface: "articleWorkspace",
       expectedObjects: ["articleDraft", "imageSet"],
       source: "agent_app_manifest_intent",
     });
@@ -143,7 +143,7 @@ describe("workspaceAgentAppIntentRouting", () => {
       intentKey: "content_article_generate",
       taskKind: "content.article.generate",
       outputArtifactKind: "content_factory.workspace_patch",
-      rightSurface: "productProfile",
+      rightSurface: "articleWorkspace",
       expectedObjects: ["articleDraft"],
       source: "agent_app_manifest_intent",
     });
@@ -181,7 +181,7 @@ describe("workspaceAgentAppIntentRouting", () => {
       intentKey: "content_article_generate",
       taskKind: "content.article.generate",
       outputArtifactKind: "content_factory.workspace_patch",
-      rightSurface: "productProfile",
+      rightSurface: "articleWorkspace",
       expectedObjects: ["articleDraft"],
       matchedPhrase: "写一篇公众号文章",
       source: "agent_app_manifest_intent",
@@ -209,7 +209,7 @@ describe("workspaceAgentAppIntentRouting", () => {
               taskKind: "content.article.generate",
               workflow: "content_article_workflow",
               defaultObjectKind: "articleDraft",
-              rightSurface: "productProfile",
+              rightSurface: "articleWorkspace",
             },
           ],
         },
@@ -231,7 +231,7 @@ describe("workspaceAgentAppIntentRouting", () => {
         ],
         workbench: {
           profile: "production",
-          productWorkspace: {
+          articleWorkspace: {
             primaryObjectKinds: ["articleDraft"],
           },
         },
@@ -252,7 +252,7 @@ describe("workspaceAgentAppIntentRouting", () => {
       intentKey: "content_article_generate",
       taskKind: "content.article.generate",
       outputArtifactKind: "content_factory.workspace_patch",
-      rightSurface: "productProfile",
+      rightSurface: "articleWorkspace",
       expectedObjects: ["articleDraft"],
       matchedPhrase: "@写文章",
       source: "agent_app_manifest_intent",
@@ -277,7 +277,7 @@ describe("workspaceAgentAppIntentRouting", () => {
     };
     app.manifest.workbench = {
       profile: "production",
-      productWorkspace: {
+      articleWorkspace: {
         primaryObjectKinds: ["articleDraft", "imageSet"],
       },
     };
@@ -292,7 +292,7 @@ describe("workspaceAgentAppIntentRouting", () => {
       intentKey: "default",
       taskKind: "creator.generate",
       outputArtifactKind: "creator.workspace_patch",
-      rightSurface: "productProfile",
+      rightSurface: "articleWorkspace",
       expectedObjects: ["articleDraft", "imageSet"],
       source: "agent_app_manifest_default",
     });
@@ -311,11 +311,11 @@ describe("workspaceAgentAppIntentRouting", () => {
         intent_key: "creator_generate",
         task_kind: "creator.generate",
         output_artifact_kind: "creator.workspace_patch",
-        right_surface: "productProfile",
+        right_surface: "articleWorkspace",
       },
       right_surface: {
-        surface_kind: "productProfile",
-        target: "productProfile",
+        surface_kind: "articleWorkspace",
+        target: "articleWorkspace",
       },
     });
     expect(buildAgentAppIntentSystemPrompt(match!)).toContain(

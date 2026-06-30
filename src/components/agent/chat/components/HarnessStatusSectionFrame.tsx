@@ -44,11 +44,17 @@ export function HarnessStatusSection({
         sectionKey && registerRef ? registerRef(sectionKey, node) : undefined
       }
       data-harness-section={sectionKey}
-      className="rounded-xl border border-border bg-background/80 p-4"
+      className="min-w-0 rounded-xl border border-border bg-background/80 p-4"
     >
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-        {badge ? <Badge variant="secondary">{badge}</Badge> : null}
+      <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-2">
+        <h3 className="min-w-0 text-sm font-semibold text-foreground">
+          {title}
+        </h3>
+        {badge ? (
+          <Badge variant="secondary" className="max-w-full whitespace-normal">
+            {badge}
+          </Badge>
+        ) : null}
       </div>
       {children}
     </section>

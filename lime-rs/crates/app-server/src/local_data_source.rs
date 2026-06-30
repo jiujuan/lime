@@ -160,6 +160,7 @@ use app_server_protocol::McpToolListResponse;
 use app_server_protocol::McpToolSearchParams;
 use app_server_protocol::MediaTaskArtifactAudioCompleteParams;
 use app_server_protocol::MediaTaskArtifactAudioCreateParams;
+use app_server_protocol::MediaTaskArtifactImageCompleteParams;
 use app_server_protocol::MediaTaskArtifactImageCreateParams;
 use app_server_protocol::MediaTaskArtifactListParams;
 use app_server_protocol::MediaTaskArtifactListResponse;

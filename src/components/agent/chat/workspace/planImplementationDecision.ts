@@ -1,6 +1,8 @@
 import type { ActionRequired, AgentThreadItem, Message } from "../types";
 import { splitProposedPlanSegments } from "../utils/proposedPlan";
 
+const PROPOSED_PLAN_OPEN_TAG = "<proposed_plan>";
+
 export interface PlanImplementationStateItem {
   id?: string;
   content: string;
@@ -39,6 +41,12 @@ interface SelectProposedPlanImplementationDecisionOptions {
   messages?: readonly Message[];
   planState?: PlanImplementationState | null;
   submittedRequestIds?: ReadonlySet<string>;
+  threadItems?: readonly AgentThreadItem[];
+}
+
+interface HasProposedPlanImplementationSignalsOptions {
+  messages?: readonly Message[];
+  planState?: PlanImplementationState | null;
   threadItems?: readonly AgentThreadItem[];
 }
 
@@ -150,6 +158,26 @@ function collectMessagePlanCandidates(
   return candidates;
 }
 
+function messageContainsProposedPlanTag(message: Message): boolean {
+  if (message.role !== "assistant") {
+    return false;
+  }
+
+  if (
+    typeof message.content === "string" &&
+    message.content.includes(PROPOSED_PLAN_OPEN_TAG)
+  ) {
+    return true;
+  }
+
+  return (message.contentParts || []).some(
+    (part) =>
+      part.type === "text" &&
+      typeof part.text === "string" &&
+      part.text.includes(PROPOSED_PLAN_OPEN_TAG),
+  );
+}
+
 function collectThreadItemPlanCandidates(
   threadItems: readonly AgentThreadItem[] | undefined,
 ): LatestProposedPlanCandidate[] {
@@ -222,6 +250,32 @@ function collectPlanStateCandidates(
       planSource: planState.source,
     },
   ];
+}
+
+export function hasProposedPlanImplementationSignals({
+  messages,
+  planState,
+  threadItems,
+}: HasProposedPlanImplementationSignalsOptions): boolean {
+  if (
+    planState?.phase === "ready" &&
+    planState.items.some((item) => normalizePlanText(item.content).length > 0)
+  ) {
+    return true;
+  }
+
+  if (
+    threadItems?.some(
+      (item) =>
+        item.type === "plan" &&
+        item.status === "completed" &&
+        normalizePlanText(item.text).length > 0,
+    )
+  ) {
+    return true;
+  }
+
+  return messages?.some(messageContainsProposedPlanTag) ?? false;
 }
 
 function selectLatestCandidate(

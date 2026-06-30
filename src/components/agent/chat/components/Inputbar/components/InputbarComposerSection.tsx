@@ -68,6 +68,7 @@ interface InputbarComposerSectionProps {
   inputAdapter: ChatInputAdapter;
   characters: Character[];
   skillSelection: SkillSelectionProps;
+  onSkillSuggestionsNeeded?: () => void;
   textareaRef: React.RefObject<HTMLTextAreaElement>;
   input: string;
   onSelectCharacter?: (character: Character) => void;
@@ -75,6 +76,7 @@ interface InputbarComposerSectionProps {
   activeCapability?: InputCapabilitySelection | null;
   activePluginSelection?: InputbarPluginSelection | null;
   pluginSuggestions?: readonly InputbarPluginCapability[];
+  onPluginSuggestionsNeeded?: () => void;
   onSelectPlugin?: (
     plugin: InputbarPluginCapability,
     skill?: InputbarPluginSkillCapability,
@@ -85,6 +87,7 @@ interface InputbarComposerSectionProps {
   knowledgePackSelection?: InputbarKnowledgePackSelection | null;
   knowledgePackOptions?: InputbarKnowledgePackOption[];
   knowledgeHubOpenRequestKey?: number;
+  onKnowledgePacksNeeded?: () => void;
   onToggleKnowledgePack?: (enabled: boolean) => void;
   onSelectKnowledgePack?: (packName: string) => void;
   onToggleKnowledgeCompanionPack?: (packName: string, enabled: boolean) => void;
@@ -140,6 +143,7 @@ export const InputbarComposerSection: React.FC<
   inputAdapter,
   characters,
   skillSelection,
+  onSkillSuggestionsNeeded,
   textareaRef,
   input,
   onSelectCharacter,
@@ -147,12 +151,14 @@ export const InputbarComposerSection: React.FC<
   activeCapability,
   activePluginSelection = null,
   pluginSuggestions = [],
+  onPluginSuggestionsNeeded,
   onSelectPlugin,
   defaultCuratedTaskReferenceMemoryIds = [],
   defaultCuratedTaskReferenceEntries = [],
   knowledgePackSelection,
   knowledgePackOptions = [],
   knowledgeHubOpenRequestKey,
+  onKnowledgePacksNeeded,
   onToggleKnowledgePack,
   onSelectKnowledgePack,
   onToggleKnowledgeCompanionPack,
@@ -323,6 +329,15 @@ export const InputbarComposerSection: React.FC<
     knowledgePanel: plusMenuKnowledgePanel,
     pluginsPanel: plusMenuPluginsPanel,
     skillsPanel: plusMenuSkillsPanel,
+    onPanelOpen: (panelId: "knowledge" | "plugins" | "skills") => {
+      if (panelId === "knowledge") {
+        onKnowledgePacksNeeded?.();
+      } else if (panelId === "plugins") {
+        onPluginSuggestionsNeeded?.();
+      } else if (panelId === "skills") {
+        onSkillSuggestionsNeeded?.();
+      }
+    },
     onAddFiles: () => handleToolAction("attach"),
     onToggleTask: () => handleToolAction("task_mode"),
     onToggleObjective: () => handleToolAction("objective_mode"),
@@ -446,7 +461,9 @@ export const InputbarComposerSection: React.FC<
         onChange={inputAdapter.actions.setText}
         onSelectCharacter={onSelectCharacter}
         onSelectInputCapability={onSelectInputCapability}
+        onSkillSuggestionsNeeded={onSkillSuggestionsNeeded}
         pluginSuggestions={pluginSuggestions}
+        onPluginSuggestionsNeeded={onPluginSuggestionsNeeded}
         onSelectPlugin={onSelectPlugin}
         projectId={projectId}
         sessionId={sessionId}

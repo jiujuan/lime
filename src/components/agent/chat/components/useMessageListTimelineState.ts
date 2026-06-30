@@ -36,24 +36,24 @@ import { measureMessageListComputation } from "./messageListPerformance";
 
 interface UseMessageListTimelineStateOptions {
   activePendingA2UISource: PendingA2UISource | null;
-  childSubagentSessions: AsterSubagentSessionInfo[];
+  childSubagentSessions: readonly AsterSubagentSessionInfo[];
   currentTurnId: string | null;
   expandedHistoricalTimelineKeys: Set<string>;
   focusedTimelineItemId: string | null;
   hiddenHistoryCount: number;
   isRestoredHistoryWindow: boolean;
   isSending: boolean;
-  pendingActions: ActionRequired[];
+  pendingActions: readonly ActionRequired[];
   persistedHiddenHistoryCount: number;
   progressiveInitialRenderCount: number;
-  queuedTurns: QueuedTurnSnapshot[];
+  queuedTurns: readonly QueuedTurnSnapshot[];
   renderedAssistantMessageCount: number;
   renderedMessageCount: number;
   renderedMessages: Message[];
-  submittedActionsInFlight: ActionRequired[];
-  threadItems: AgentThreadItem[];
+  submittedActionsInFlight: readonly ActionRequired[];
+  threadItems: readonly AgentThreadItem[];
   threadRead: AgentRuntimeThreadReadModel | null;
-  turns: AgentThreadTurn[];
+  turns: readonly AgentThreadTurn[];
 }
 
 export function useMessageListTimelineState({
@@ -250,9 +250,18 @@ export function useMessageListTimelineState({
     queuedTurns.length > 0 ||
     (threadRead?.pending_requests?.length ?? 0) > 0 ||
     Boolean(activePendingA2UISource);
+  const hasRuntimeStatusLineEvidence =
+    hasActiveInteractiveRuntime ||
+    turns.length > 0 ||
+    threadItems.length > 0 ||
+    childSubagentSessions.length > 0;
   const activeConversationRuntimeStatusLine = useMemo(
-    () =>
-      buildInputbarRuntimeStatusLineModel({
+    () => {
+      if (!hasRuntimeStatusLineEvidence) {
+        return null;
+      }
+
+      return buildInputbarRuntimeStatusLineModel({
         messages: renderedMessages,
         turns: renderedTurns,
         threadItems: renderedThreadItems,
@@ -263,10 +272,12 @@ export function useMessageListTimelineState({
         queuedTurns,
         childSubagentSessions,
         isSending,
-      }),
+      });
+    },
     [
       activeCurrentTurnId,
       childSubagentSessions,
+      hasRuntimeStatusLineEvidence,
       isSending,
       pendingActions,
       queuedTurns,

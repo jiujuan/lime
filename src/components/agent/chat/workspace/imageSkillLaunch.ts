@@ -38,6 +38,7 @@ interface ResolveImageWorkbenchSkillRequestParams {
   contentId?: string | null;
   applyTarget?: ImageWorkbenchApplyTarget | null;
   entrySource?: string;
+  requireProjectContext?: boolean;
 }
 
 function createSkillInputImageRef(index: number): string {
@@ -81,11 +82,11 @@ function createDocumentImageTaskSlotId(): string {
 export function resolveImageWorkbenchSkillRequest(
   params: ResolveImageWorkbenchSkillRequestParams,
 ): ImageWorkbenchSkillRequest | null {
-  if (!params.projectId) {
+  if (params.requireProjectContext && !params.projectId) {
     toast.error("请先选择项目后再开始配图");
     return null;
   }
-  if (!params.projectRootPath?.trim()) {
+  if (params.requireProjectContext && !params.projectRootPath?.trim()) {
     toast.error("当前项目目录未就绪，暂时无法创建图片任务");
     return null;
   }
@@ -176,73 +177,76 @@ export function resolveImageWorkbenchSkillRequest(
         : "claw-image-workbench";
   const runtimeContract = resolveImageGenerationRuntimeContractBinding();
 
+  const imageTask: Record<string, unknown> = {
+    title: collapseWhitespace(params.title) || undefined,
+    title_generation_result: params.titleGenerationResult ?? undefined,
+    mode: parsedCommand.mode,
+    prompt: effectivePrompt,
+    raw_text: rawText,
+    count: parsedCommand.count,
+    layout_hint: parsedCommand.layoutHint,
+    size: parsedCommand.size || params.imageWorkbenchSelectedSize,
+    aspect_ratio: parsedCommand.aspectRatio,
+    usage,
+    persona_context: buildImageTaskPersonaContext(),
+    presentation: buildImageTaskPresentationContext({
+      prompt: effectivePrompt,
+      mode: parsedCommand.mode,
+      modelId: parsedCommand.modelId || params.imageWorkbenchSelectedModelId,
+    }),
+    taste_context: buildImageTaskTasteContext({
+      prompt: effectivePrompt,
+      referenceImageCount: referenceImages.length,
+      entrySource: params.entrySource,
+      targetOutputPrompt: targetOutput?.prompt || null,
+      targetOutputModelName: targetOutput?.modelName || null,
+      applyTargetKind: effectiveApplyTarget?.kind || null,
+    }),
+    provider_id:
+      parsedCommand.providerId || params.imageWorkbenchSelectedProviderId,
+    model: parsedCommand.modelId || params.imageWorkbenchSelectedModelId,
+    executor_mode: parsedCommand.executorMode,
+    session_id: resolvedSessionId || undefined,
+    content_id: params.contentId?.trim() || undefined,
+    entry_source: params.entrySource || "at_image_command",
+    modality_contract_key: runtimeContract.contractKey,
+    modality: runtimeContract.modality,
+    required_capabilities: runtimeContract.requiredCapabilities,
+    routing_slot: runtimeContract.routingSlot,
+    runtime_contract: runtimeContract.runtimeContract,
+    requested_target: requestedTarget,
+    slot_id: documentInlineSlotId,
+    anchor_hint: documentInlineAnchorHint,
+    anchor_section_title: documentInlineAnchorSectionTitle ?? undefined,
+    anchor_text: documentInlineAnchorText ?? undefined,
+    target_output_id: targetOutput?.id,
+    target_output_ref_id: targetOutput?.refId,
+    reference_images: referenceImages,
+    target_output_summary: targetOutput
+      ? {
+          prompt: collapseWhitespace(targetOutput.prompt) || undefined,
+          provider_name: targetOutput.providerName,
+          model_name: targetOutput.modelName,
+          size: targetOutput.size,
+          url:
+            targetOutputImage || !targetOutput.url.trim()
+              ? undefined
+              : targetOutput.url.trim(),
+        }
+      : undefined,
+    skill_input_images: skillImages.map((image, index) => ({
+      ref: createSkillInputImageRef(index),
+      media_type: image.mediaType,
+      source: index === 0 && targetOutputImage ? "target_output" : "attachment",
+    })),
+  };
+  const projectId = params.projectId?.trim();
+  if (projectId) {
+    imageTask.project_id = projectId;
+  }
   const requestContext = {
     kind: "image_task",
-    image_task: {
-      title: collapseWhitespace(params.title) || undefined,
-      title_generation_result: params.titleGenerationResult ?? undefined,
-      mode: parsedCommand.mode,
-      prompt: effectivePrompt,
-      raw_text: rawText,
-      count: parsedCommand.count,
-      layout_hint: parsedCommand.layoutHint,
-      size: parsedCommand.size || params.imageWorkbenchSelectedSize,
-      aspect_ratio: parsedCommand.aspectRatio,
-      usage,
-      persona_context: buildImageTaskPersonaContext(),
-      presentation: buildImageTaskPresentationContext({
-        prompt: effectivePrompt,
-        mode: parsedCommand.mode,
-        modelId: parsedCommand.modelId || params.imageWorkbenchSelectedModelId,
-      }),
-      taste_context: buildImageTaskTasteContext({
-        prompt: effectivePrompt,
-        referenceImageCount: referenceImages.length,
-        entrySource: params.entrySource,
-        targetOutputPrompt: targetOutput?.prompt || null,
-        targetOutputModelName: targetOutput?.modelName || null,
-        applyTargetKind: effectiveApplyTarget?.kind || null,
-      }),
-      provider_id:
-        parsedCommand.providerId || params.imageWorkbenchSelectedProviderId,
-      model: parsedCommand.modelId || params.imageWorkbenchSelectedModelId,
-      executor_mode: parsedCommand.executorMode,
-      session_id: resolvedSessionId || undefined,
-      project_id: params.projectId,
-      content_id: params.contentId || undefined,
-      entry_source: params.entrySource || "at_image_command",
-      modality_contract_key: runtimeContract.contractKey,
-      modality: runtimeContract.modality,
-      required_capabilities: runtimeContract.requiredCapabilities,
-      routing_slot: runtimeContract.routingSlot,
-      runtime_contract: runtimeContract.runtimeContract,
-      requested_target: requestedTarget,
-      slot_id: documentInlineSlotId,
-      anchor_hint: documentInlineAnchorHint,
-      anchor_section_title: documentInlineAnchorSectionTitle ?? undefined,
-      anchor_text: documentInlineAnchorText ?? undefined,
-      target_output_id: targetOutput?.id,
-      target_output_ref_id: targetOutput?.refId,
-      reference_images: referenceImages,
-      target_output_summary: targetOutput
-        ? {
-            prompt: collapseWhitespace(targetOutput.prompt) || undefined,
-            provider_name: targetOutput.providerName,
-            model_name: targetOutput.modelName,
-            size: targetOutput.size,
-            url:
-              targetOutputImage || !targetOutput.url.trim()
-                ? undefined
-                : targetOutput.url.trim(),
-          }
-        : undefined,
-      skill_input_images: skillImages.map((image, index) => ({
-        ref: createSkillInputImageRef(index),
-        media_type: image.mediaType,
-        source:
-          index === 0 && targetOutputImage ? "target_output" : "attachment",
-      })),
-    },
+    image_task: imageTask,
   } satisfies Record<string, unknown>;
 
   return {

@@ -53,6 +53,7 @@ import {
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE,
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_CANCEL,
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_GET,
+  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_COMPLETE,
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE,
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_LIST,
   APP_SERVER_METHOD_WECHAT_CHANNEL_RUNTIME_MODEL_SET,
@@ -2186,8 +2187,8 @@ describe("App Server API", () => {
               task_id: "task-image-1",
               task_type: "image_generate",
               task_family: "image",
-              status: "pending_submit",
-              normalized_status: "pending",
+              status: "succeeded",
+              normalized_status: "succeeded",
               path: ".lime/tasks/image_generate/task-image-1.json",
               absolute_path:
                 "/workspace/.lime/tasks/image_generate/task-image-1.json",
@@ -2206,6 +2207,29 @@ describe("App Server API", () => {
             id: 17,
             result: {
               success: true,
+              task_id: "task-image-1",
+              task_type: "image_generate",
+              task_family: "image",
+              status: "pending_submit",
+              normalized_status: "pending",
+              path: ".lime/tasks/image_generate/task-image-1.json",
+              absolute_path:
+                "/workspace/.lime/tasks/image_generate/task-image-1.json",
+              artifact_path: ".lime/tasks/image_generate/task-image-1.json",
+              absolute_artifact_path:
+                "/workspace/.lime/tasks/image_generate/task-image-1.json",
+              reused_existing: false,
+              record: {},
+            },
+          }),
+        ],
+      })
+      .mockResolvedValueOnce({
+        lines: [
+          line({
+            id: 18,
+            result: {
+              success: true,
               workspace_root: "/workspace",
               artifact_root: "/workspace/.lime/tasks",
               filters: { task_family: "image", limit: 10 },
@@ -2219,7 +2243,7 @@ describe("App Server API", () => {
       .mockResolvedValueOnce({
         lines: [
           line({
-            id: 18,
+            id: 19,
             result: {
               success: true,
               task_id: "task-image-1",
@@ -2255,6 +2279,16 @@ describe("App Server API", () => {
       taskRef: "task-audio-1",
       audioPath: ".lime/runtime/audio/task-audio-1.mp3",
     };
+    const imageCompleteRequest = {
+      projectRootPath: "/workspace",
+      taskRef: "task-image-1",
+      images: [
+        {
+          url: "file:///workspace/.lime/runtime/images/task-image-1.png",
+          revisedPrompt: "未来感青柠实验室",
+        },
+      ],
+    };
     const lookupRequest = {
       projectRootPath: "/workspace",
       taskRef: "task-image-1",
@@ -2277,6 +2311,11 @@ describe("App Server API", () => {
     });
     await expect(
       client.completeAudioMediaTaskArtifact(audioCompleteRequest),
+    ).resolves.toMatchObject({
+      result: { normalized_status: "succeeded" },
+    });
+    await expect(
+      client.completeImageMediaTaskArtifact(imageCompleteRequest),
     ).resolves.toMatchObject({
       result: { normalized_status: "succeeded" },
     });
@@ -2308,9 +2347,14 @@ describe("App Server API", () => {
         APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE,
         audioCompleteRequest,
       ],
-      [16, APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_GET, lookupRequest],
-      [17, APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_LIST, listRequest],
-      [18, APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_CANCEL, lookupRequest],
+      [
+        16,
+        APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_COMPLETE,
+        imageCompleteRequest,
+      ],
+      [17, APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_GET, lookupRequest],
+      [18, APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_LIST, listRequest],
+      [19, APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_CANCEL, lookupRequest],
     ] as const;
 
     expectedCalls.forEach(([id, method, params], index) => {

@@ -18,8 +18,8 @@ describe("contentFactoryPlugin", () => {
         sourceId: CONTENT_FACTORY_PLUGIN_ID,
       },
       rightSurface: {
-        defaultActiveTab: "productProfile",
-        productWorkspace: {
+        defaultActiveTab: "articleWorkspace",
+        articleWorkspace: {
           enabled: true,
           primaryObjectKind: "articleDraft",
         },

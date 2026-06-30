@@ -1,15 +1,29 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
+  hasDesktopHostInvokeCapability,
   loadConfiguredProviders,
   getModelRegistry,
   getAllAliasConfigs,
   syncTrayModelShortcuts,
+  safeListen,
 } = vi.hoisted(() => ({
+  hasDesktopHostInvokeCapability: vi.fn(),
   loadConfiguredProviders: vi.fn(),
   getModelRegistry: vi.fn(),
   getAllAliasConfigs: vi.fn(),
   syncTrayModelShortcuts: vi.fn(),
+  safeListen: vi.fn(),
+}));
+
+vi.mock("@/lib/desktop-runtime", () => ({
+  hasDesktopHostInvokeCapability,
+}));
+
+vi.mock("@/lib/api/bridgeEvents", () => ({
+  safeListen,
 }));
 
 vi.mock("@/hooks/useConfiguredProviders", () => ({
@@ -75,12 +89,70 @@ import {
   buildTrayPayload,
   invalidateTrayPayloadCache,
   syncTrayModelShortcutsState,
+  useTrayModelShortcuts,
 } from "./useTrayModelShortcuts";
+
+interface MountedHook {
+  container: HTMLDivElement;
+  root: Root;
+}
+
+const mountedHooks: MountedHook[] = [];
+
+async function flushEffects(rounds = 8) {
+  for (let index = 0; index < rounds; index += 1) {
+    await act(async () => {
+      await Promise.resolve();
+    });
+  }
+}
+
+async function renderTrayModelShortcutsHook(
+  options: Parameters<typeof useTrayModelShortcuts>[0],
+) {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+
+  function Probe(props: Parameters<typeof useTrayModelShortcuts>[0]) {
+    useTrayModelShortcuts(props);
+    return null;
+  }
+
+  await act(async () => {
+    root.render(createElement(Probe, options));
+    await Promise.resolve();
+  });
+  await flushEffects();
+
+  mountedHooks.push({ container, root });
+}
+
+afterEach(() => {
+  while (mountedHooks.length > 0) {
+    const mounted = mountedHooks.pop();
+    if (!mounted) {
+      continue;
+    }
+
+    act(() => {
+      mounted.root.unmount();
+    });
+    mounted.container.remove();
+  }
+});
 
 describe("buildTrayPayload", () => {
   beforeEach(() => {
+    (
+      globalThis as typeof globalThis & {
+        IS_REACT_ACT_ENVIRONMENT?: boolean;
+      }
+    ).IS_REACT_ACT_ENVIRONMENT = true;
     vi.clearAllMocks();
     invalidateTrayPayloadCache();
+    hasDesktopHostInvokeCapability.mockReturnValue(true);
+    safeListen.mockResolvedValue(vi.fn());
 
     loadConfiguredProviders.mockResolvedValue([
       {
@@ -196,5 +268,68 @@ describe("buildTrayPayload", () => {
     ).resolves.toBeUndefined();
 
     expect(syncTrayModelShortcuts).toHaveBeenCalledTimes(2);
+  });
+
+  it("hook 默认开启托盘候选同步", async () => {
+    await renderTrayModelShortcutsHook({
+      providerType: "deepseek",
+      setProviderType: vi.fn(),
+      model: "deepseek-chat",
+      setModel: vi.fn(),
+      activeTheme: "general",
+    });
+
+    expect(loadConfiguredProviders).toHaveBeenCalledTimes(1);
+    expect(getModelRegistry).toHaveBeenCalledTimes(1);
+    expect(getAllAliasConfigs).toHaveBeenCalledTimes(1);
+    expect(syncTrayModelShortcuts).toHaveBeenCalledTimes(1);
+  });
+
+  it("关闭自动同步时不拉取托盘候选数据，但仍监听托盘模型选择", async () => {
+    const setProviderType = vi.fn();
+    const setModel = vi.fn();
+
+    await renderTrayModelShortcutsHook({
+      providerType: "deepseek",
+      setProviderType,
+      model: "deepseek-chat",
+      setModel,
+      activeTheme: "general",
+      autoSyncEnabled: false,
+    });
+
+    expect(loadConfiguredProviders).not.toHaveBeenCalled();
+    expect(getModelRegistry).not.toHaveBeenCalled();
+    expect(getAllAliasConfigs).not.toHaveBeenCalled();
+    expect(syncTrayModelShortcuts).not.toHaveBeenCalled();
+    expect(safeListen).toHaveBeenCalledWith(
+      "tray-model-selected",
+      expect.any(Function),
+    );
+
+    const listener = safeListen.mock.calls[0]?.[1] as
+      | ((event: {
+          payload: {
+            providerType?: string;
+            model?: string;
+          };
+        }) => void)
+      | undefined;
+    expect(listener).toEqual(expect.any(Function));
+    if (!listener) {
+      throw new Error("托盘模型选择监听未注册");
+    }
+
+    act(() => {
+      listener({
+        payload: {
+          providerType: "openai",
+          model: "gpt-4.1",
+        },
+      });
+    });
+
+    expect(setProviderType).toHaveBeenCalledWith("openai");
+    expect(setModel).toHaveBeenCalledWith("gpt-4.1");
   });
 });

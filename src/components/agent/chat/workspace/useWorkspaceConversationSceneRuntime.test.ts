@@ -355,7 +355,7 @@ describe("useWorkspaceConversationSceneRuntime", () => {
     expect(sceneProps.navbarContextVariant).toBe("task-center");
   });
 
-  it("应把运行摘要事实透传给 Task Center 任务轨道", () => {
+  it("应把运行摘要轻量事实透传给 Task Center 任务轨道", () => {
     const params = createBaseParams({
       providerType: "cloud",
       model: "reasoner-pro",
@@ -366,13 +366,12 @@ describe("useWorkspaceConversationSceneRuntime", () => {
     });
 
     const sceneProps = getRenderedSceneProps(params);
-    expect(sceneProps.taskRail?.context).toEqual({
-      providerType: "cloud",
-      model: "reasoner-pro",
-      accessMode: "current",
-      reasoningEffort: "medium",
-      workspacePath: "/tmp/project-1",
-    });
+    expect(sceneProps.taskRail?.providerType).toBe("cloud");
+    expect(sceneProps.taskRail?.model).toBe("reasoner-pro");
+    expect(sceneProps.taskRail?.accessMode).toBe("current");
+    expect(sceneProps.taskRail?.reasoningEffort).toBe("medium");
+    expect(sceneProps.taskRail?.workspaceRootPath).toBe("/tmp/project-1");
+    expect(sceneProps.taskRail?.context).toBeUndefined();
   });
 
   it("应把待确认状态与响应入口透传给 Task Center 任务轨道", () => {
@@ -513,26 +512,7 @@ describe("useWorkspaceConversationSceneRuntime", () => {
     expect(sceneProps.taskRail?.childSubagentSessions).toBe(
       childSubagentSessions,
     );
-    expect(sceneProps.taskRail?.context).toEqual(
-      expect.objectContaining({
-        objectiveText: "完成任务区域摘要",
-        changedFileCount: 2,
-        changedFiles: ["src/App.tsx", "src/index.ts"],
-        patchCount: 2,
-        appliedPatchCount: 1,
-        sourceCount: 3,
-        sourceLabels: [
-          "docs.example.com",
-          "run-observability.md",
-          "run-control.json",
-        ],
-        sourceEvidenceCount: 1,
-        sourceConsistencyStatus: "linked",
-        subtaskTotalCount: 2,
-        subtaskActiveCount: 1,
-        subtaskCompletedCount: 1,
-      }),
-    );
+    expect(sceneProps.taskRail?.context).toBeUndefined();
   });
 
   it("存在 Harness 入口时应透传顶栏按钮文案", () => {

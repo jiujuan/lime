@@ -34,11 +34,16 @@ import {
 
 const OMITTED_HISTORY_CONTENT_TEXT =
   "历史消息内容过大，首屏已省略完整内容；需要时可加载完整历史查看。";
+const COMPLETION_SENTINEL_TEXTS = new Set(["CLAW_NEWS_FIXTURE_DONE"]);
 
 function isOmittedHistoryContentProjection(message: Message): boolean {
   return normalizeSignatureText(message.content).includes(
     OMITTED_HISTORY_CONTENT_TEXT,
   );
+}
+
+function isCompletionSentinelContent(content: string): boolean {
+  return COMPLETION_SENTINEL_TEXTS.has(normalizeSignatureText(content));
 }
 
 const findMatchingLocalUserMessageIndex = (
@@ -215,6 +220,14 @@ function shouldPreserveLocalAssistantVisibleOutput(
     return false;
   }
   if (!remoteContent || isOmittedHistoryContentProjection(remoteMessage)) {
+    return true;
+  }
+  if (
+    isCompletionSentinelContent(remoteMessage.content) &&
+    localMessage.runtimeTurnId?.trim() &&
+    remoteMessage.runtimeTurnId?.trim() &&
+    localMessage.runtimeTurnId === remoteMessage.runtimeTurnId
+  ) {
     return true;
   }
 

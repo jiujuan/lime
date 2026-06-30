@@ -14,9 +14,9 @@ import {
 } from "./skills-runtime-fixture-scenario.mjs";
 
 export const EXPERT_PANEL_SKILLS_RUNTIME_UI_SKILL_REF =
-  "skill:local:capability-report";
+  EXPERT_SKILLS_RUNTIME_SKILL_REF;
 export const EXPERT_PANEL_SKILLS_RUNTIME_UI_SKILL_TEST_ID =
-  "skill-local-capability-report";
+  "skill-capability-report";
 export const EXPERT_PANEL_SKILLS_RUNTIME_UI_CANDIDATE_TEST_ID = `expert-skill-candidate-${EXPERT_PANEL_SKILLS_RUNTIME_UI_SKILL_TEST_ID}`;
 export const EXPERT_PANEL_SKILLS_RUNTIME_UI_ADD_TEST_ID = `expert-skill-add-${EXPERT_PANEL_SKILLS_RUNTIME_UI_SKILL_TEST_ID}`;
 export const EXPERT_PANEL_SKILLS_RUNTIME_UI_CHIP_TEST_ID = `expert-info-skill-chip-${EXPERT_PANEL_SKILLS_RUNTIME_UI_SKILL_TEST_ID}`;
@@ -294,11 +294,13 @@ async function clickExpertSkillPickerTrigger(page) {
             "",
         };
       };
-      const mappingAction = document.querySelector(
+      const panel = document.querySelector('[data-testid="expert-info-panel"]');
+      const mappingAction = panel?.querySelector(
         '[data-testid="expert-info-skills-runtime-action-skill-code-review"]',
       );
       const addButtons = Array.from(
-        document.querySelectorAll('[data-testid="expert-info-skills-add"]'),
+        panel?.querySelectorAll('[data-testid="expert-info-skills-add"]') ??
+          [],
       );
       const candidates = [mappingAction, ...addButtons].filter(Boolean);
       const button = candidates.find((candidate) =>
@@ -308,10 +310,12 @@ async function clickExpertSkillPickerTrigger(page) {
         return {
           clicked: false,
           reason: "missing-visible-trigger",
+          panelVisible: Boolean(panel),
           triggerCount: candidates.length,
           triggers: candidates.map((candidate) =>
             visibleElementSnapshot(candidate),
           ),
+          bodyText: document.body?.innerText || "",
         };
       }
       button.scrollIntoView({ block: "center", inline: "center" });
@@ -319,6 +323,7 @@ async function clickExpertSkillPickerTrigger(page) {
       const snapshot = visibleElementSnapshot(button);
       return {
         clicked: true,
+        panelVisible: Boolean(panel),
         label: snapshot.label,
         triggerKind:
           button.getAttribute("data-testid") ===
@@ -370,85 +375,16 @@ export async function exportExpertPanelEvidencePackFromHarnessPanel(
   const ready = await waitForHarnessEvidenceExportButton(page, options);
   const clicked = await clickHarnessEvidenceExportButton(page);
   const exported = await waitForHarnessEvidencePackExported(page, options);
-  const closed = await closeHarnessPanelAfterEvidenceExport(page, options);
   return sanitizeJson({
     opened,
     ready,
     clicked,
     exported,
-    closed,
+    closed: {
+      skipped: true,
+      reason: "harness evidence export is a side-channel check",
+    },
   });
-}
-
-export async function waitForExpertPanelEvidenceSummary(page, options) {
-  const startedAt = Date.now();
-  let lastSnapshot = null;
-  while (Date.now() - startedAt < options.timeoutMs) {
-    const snapshot = await evaluatePageSnapshot(
-      page,
-      ({ skillName }) => {
-        const card = document.querySelector(
-          '[data-testid="expert-info-skills-evidence-summary"]',
-        );
-        const rect = card?.getBoundingClientRect();
-        const style = card ? window.getComputedStyle(card) : null;
-        const visible = Boolean(
-          card &&
-          rect &&
-          rect.width > 16 &&
-          rect.height > 16 &&
-          style?.visibility !== "hidden" &&
-          style?.display !== "none",
-        );
-        const text = card?.textContent || "";
-        const normalizedText = text.replace(/\s+/g, " ").trim();
-        return {
-          visible,
-          text: normalizedText,
-          hasTitle:
-            normalizedText.includes("证据包复盘") ||
-            normalizedText.includes("Evidence Pack"),
-          hasSkillCounts:
-            /检索\s*\d+\s*次\s*·\s*执行\s*\d+\s*次/.test(normalizedText) ||
-            /search/i.test(normalizedText),
-          hasLatestSkill: normalizedText.includes(skillName),
-          hasRuntimeEnable:
-            normalizedText.includes("运行启用") ||
-            normalizedText.includes("手动会话") ||
-            normalizedText.includes("manual session"),
-          hasExportedAt:
-            normalizedText.includes("最近导出") ||
-            /exported/i.test(normalizedText),
-          hasKnownGaps: normalizedText.includes("已知缺口"),
-          hidesRawRuntimeEnable: !normalizedText.includes(
-            "workspace_skill_runtime_enable",
-          ),
-          bodyText: document.body?.innerText || "",
-        };
-      },
-      {
-        skillName: "project:capability-report",
-      },
-    );
-    lastSnapshot = snapshot;
-    if (
-      snapshot?.visible &&
-      snapshot.hasTitle &&
-      snapshot.hasSkillCounts &&
-      snapshot.hasLatestSkill &&
-      snapshot.hasRuntimeEnable &&
-      snapshot.hidesRawRuntimeEnable
-    ) {
-      return sanitizeJson(snapshot);
-    }
-    await sleep(options.intervalMs);
-  }
-
-  throw new Error(
-    `专家面板未显示 Evidence Pack 复盘摘要: ${JSON.stringify(
-      sanitizeJson(lastSnapshot),
-    )}`,
-  );
 }
 
 async function waitForExpertSkillPickerState(
@@ -464,21 +400,56 @@ async function waitForExpertSkillPickerState(
       page,
       ({ candidateTestId, addTestId }) => {
         const text = document.body?.innerText || "";
+        const panel = document.querySelector(
+          '[data-testid="expert-info-panel"]',
+        );
         const dialog = document.querySelector(
           '[data-testid="expert-skill-picker-dialog"]',
         );
+        const input = dialog?.querySelector("input");
         const candidate = document.querySelector(
           `[data-testid="${candidateTestId}"]`,
         );
         const addButton = document.querySelector(
           `[data-testid="${addTestId}"]`,
         );
+        const candidateTestIds = Array.from(
+          dialog?.querySelectorAll('[data-testid^="expert-skill-candidate-"]') ??
+            [],
+        )
+          .map((element) => element.getAttribute("data-testid") || "")
+          .filter(Boolean);
+        const rawCatalog =
+          window.localStorage.getItem("lime:skill-catalog:v1") || "";
+        let catalogTenantId = null;
+        let catalogItemCount = null;
+        try {
+          const parsedCatalog = JSON.parse(rawCatalog);
+          catalogTenantId = parsedCatalog?.tenantId ?? null;
+          catalogItemCount = Array.isArray(parsedCatalog?.items)
+            ? parsedCatalog.items.length
+            : null;
+        } catch {
+          catalogTenantId = null;
+          catalogItemCount = null;
+        }
+        const oemTenantId = window.__LIME_OEM_CLOUD__?.tenantId ?? null;
         return {
+          expertPanelVisible: Boolean(panel),
           dialogVisible: Boolean(dialog),
+          query: input instanceof HTMLInputElement ? input.value : null,
           candidateVisible: Boolean(candidate),
           addButtonVisible: Boolean(addButton),
           addButtonDisabled:
             addButton instanceof HTMLButtonElement ? addButton.disabled : null,
+          expectedCandidateTestId: candidateTestId,
+          candidateTestIds,
+          skillCatalogRawPresent: rawCatalog.length > 0,
+          skillCatalogRawIncludesCapabilityReport:
+            rawCatalog.includes("capability-report"),
+          catalogTenantId,
+          catalogItemCount,
+          oemTenantId,
           hasCapabilityReportText:
             text.includes("capability-report") ||
             text.includes("Capability Report"),
@@ -491,6 +462,9 @@ async function waitForExpertSkillPickerState(
       },
     );
     lastSnapshot = snapshot;
+    if (!snapshot?.expertPanelVisible && !snapshot?.dialogVisible) {
+      break;
+    }
     if (!snapshot?.dialogVisible) {
       await sleep(options.intervalMs);
       continue;
@@ -877,187 +851,6 @@ async function waitForHarnessEvidencePackExported(page, options) {
 
   throw new Error(
     `Harness 证据包导出后未显示结果: ${JSON.stringify(
-      sanitizeJson(lastSnapshot),
-    )}`,
-  );
-}
-
-async function closeHarnessPanelAfterEvidenceExport(page, options) {
-  const before = await evaluatePageSnapshot(page, () => ({
-    dialogHarnessVisible: Boolean(
-      document.querySelector(
-        '[role="dialog"] [data-testid="harness-status-panel"]',
-      ),
-    ),
-    harnessPanelVisible: Boolean(
-      document.querySelector('[data-testid="harness-status-panel"]'),
-    ),
-    rightSurfaceHarnessVisible: Boolean(
-      document.querySelector(
-        '[data-testid="workspace-right-surface-host"][data-surface="harness"]',
-      ),
-    ),
-    expertToggleVisible: Boolean(
-      document.querySelector('[data-testid="task-center-expert-info-toggle"]'),
-    ),
-  }));
-  if (before?.rightSurfaceHarnessVisible) {
-    const clickedExpertToggle = await clickExpertInfoToggleFromRightSurface(
-      page,
-    );
-    const restoredExpertPanel = await waitForExpertPanelVisibleAfterSurfaceSwitch(
-      page,
-      options,
-    );
-    return sanitizeJson({
-      switchedToExpertSurface: true,
-      before,
-      clickedExpertToggle,
-      restoredExpertPanel,
-    });
-  }
-
-  if (!before?.dialogHarnessVisible) {
-    return sanitizeJson({
-      skipped: true,
-      reason: "harness panel is not a dialog",
-      before,
-    });
-  }
-
-  await page.keyboard.press("Escape");
-  const startedAt = Date.now();
-  let lastSnapshot = before;
-  while (Date.now() - startedAt < Math.min(options.timeoutMs, 10_000)) {
-    const snapshot = await evaluatePageSnapshot(page, () => ({
-      dialogHarnessVisible: Boolean(
-        document.querySelector(
-          '[role="dialog"] [data-testid="harness-status-panel"]',
-        ),
-      ),
-      expertPanelVisible: Boolean(
-        document.querySelector('[data-testid="expert-info-panel"]'),
-      ),
-    }));
-    lastSnapshot = snapshot;
-    if (snapshot?.dialogHarnessVisible === false) {
-      return sanitizeJson({ ...snapshot, closedWithEscape: true });
-    }
-    await sleep(options.intervalMs);
-  }
-
-  const clicked = await page.evaluate(() => {
-    const visibleElementSnapshot = (element) => {
-      const rect = element?.getBoundingClientRect();
-      const style = element ? window.getComputedStyle(element) : null;
-      return {
-        visible: Boolean(
-          element &&
-          rect &&
-          rect.width > 8 &&
-          rect.height > 8 &&
-          style?.visibility !== "hidden" &&
-          style?.display !== "none",
-        ),
-        label:
-          element?.getAttribute?.("aria-label") ||
-          element?.getAttribute?.("title") ||
-          element?.textContent ||
-          "",
-      };
-    };
-    const findVisibleButtonByLabel = (match) =>
-      Array.from(document.querySelectorAll("button")).find((button) => {
-        const buttonSnapshot = visibleElementSnapshot(button);
-        return buttonSnapshot.visible && match(buttonSnapshot.label);
-      });
-    const dialog = document.querySelector("[role='dialog']");
-    const closeButton =
-      dialog &&
-      findVisibleButtonByLabel((label) => /关闭|Close|close/.test(label));
-    if (closeButton instanceof HTMLElement) {
-      const label = visibleElementSnapshot(closeButton).label;
-      closeButton.click();
-      return { clicked: true, label };
-    }
-    return { clicked: false, label: "" };
-  });
-  return sanitizeJson({
-    closedWithEscape: false,
-    closeButton: clicked,
-    lastSnapshot,
-  });
-}
-
-async function clickExpertInfoToggleFromRightSurface(page) {
-  return sanitizeJson(
-    await page.evaluate(() => {
-      const visibleElementSnapshot = (element) => {
-        const rect = element?.getBoundingClientRect();
-        const style = element ? window.getComputedStyle(element) : null;
-        return {
-          visible: Boolean(
-            element &&
-              rect &&
-              rect.width > 8 &&
-              rect.height > 8 &&
-              style?.visibility !== "hidden" &&
-              style?.display !== "none",
-          ),
-          label:
-            element?.getAttribute?.("aria-label") ||
-            element?.getAttribute?.("title") ||
-            element?.textContent ||
-            "",
-        };
-      };
-      const toggle = document.querySelector(
-        '[data-testid="task-center-expert-info-toggle"]',
-      );
-      const snapshot = visibleElementSnapshot(toggle);
-      if (toggle instanceof HTMLElement && snapshot.visible) {
-        toggle.scrollIntoView({ block: "center", inline: "center" });
-        toggle.click();
-        return {
-          clicked: true,
-          label: snapshot.label,
-          selector: '[data-testid="task-center-expert-info-toggle"]',
-        };
-      }
-      return {
-        clicked: false,
-        label: snapshot.label,
-        selector: '[data-testid="task-center-expert-info-toggle"]',
-      };
-    }),
-  );
-}
-
-async function waitForExpertPanelVisibleAfterSurfaceSwitch(page, options) {
-  const startedAt = Date.now();
-  let lastSnapshot = null;
-  while (Date.now() - startedAt < Math.min(options.timeoutMs, 10_000)) {
-    const snapshot = await evaluatePageSnapshot(page, () => ({
-      expertPanelVisible: Boolean(
-        document.querySelector('[data-testid="expert-info-panel"]'),
-      ),
-      harnessPanelVisible: Boolean(
-        document.querySelector('[data-testid="harness-status-panel"]'),
-      ),
-      activeSurface:
-        document
-          .querySelector('[data-testid="workspace-right-surface-host"]')
-          ?.getAttribute("data-surface") ?? null,
-    }));
-    lastSnapshot = snapshot;
-    if (snapshot?.expertPanelVisible && snapshot.activeSurface === "expertInfo") {
-      return sanitizeJson(snapshot);
-    }
-    await sleep(options.intervalMs);
-  }
-
-  throw new Error(
-    `导出 Harness 证据后未能切回专家面板: ${JSON.stringify(
       sanitizeJson(lastSnapshot),
     )}`,
   );

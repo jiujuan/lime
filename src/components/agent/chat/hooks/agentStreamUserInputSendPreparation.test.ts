@@ -230,6 +230,23 @@ describe("agentStreamUserInputSendPreparation", () => {
     });
   });
 
+  it("默认 Claw 发送不应生成诊断 requestMetadata", () => {
+    vi.spyOn(crypto, "randomUUID")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000301")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000302");
+
+    const result = prepareAgentStreamUserInputSend({
+      content: "整理今天的国际新闻",
+      images: [],
+      skipUserMessage: false,
+      env: createEnv(),
+    });
+
+    expect(result.requestMetadata).toBeUndefined();
+    expect(result.assistantMsg.requestMetadata).toBeUndefined();
+    expect(result.userMsg?.requestMetadata).toBeUndefined();
+  });
+
   it("displayContent 应透传给用户消息草稿", () => {
     vi.spyOn(crypto, "randomUUID")
       .mockReturnValueOnce("00000000-0000-0000-0000-000000000101")

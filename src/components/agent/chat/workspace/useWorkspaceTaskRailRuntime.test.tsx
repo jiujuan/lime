@@ -234,7 +234,7 @@ describe("buildWorkspaceTaskRailRuntimeContext", () => {
 });
 
 describe("useWorkspaceTaskRailRuntime", () => {
-  it("应生成任务轨道上下文并透传运行事实", async () => {
+  it("应透传轻量运行事实但不预构建任务轨道上下文", async () => {
     const pendingActions = [
       {
         requestId: "approval-write",
@@ -254,13 +254,12 @@ describe("useWorkspaceTaskRailRuntime", () => {
     expect(getValue().messages).toHaveLength(1);
     expect(getValue().pendingActions).toBe(pendingActions);
     expect(getValue().onRespondToAction).toBe(onRespondToAction);
-    expect(getValue().context).toEqual({
-      providerType: "cloud",
-      model: "reasoner-pro",
-      accessMode: "current",
-      reasoningEffort: "medium",
-      workspacePath: "/tmp/project-1",
-    });
+    expect(getValue().providerType).toBe("cloud");
+    expect(getValue().model).toBe("reasoner-pro");
+    expect(getValue().accessMode).toBe("current");
+    expect(getValue().reasoningEffort).toBe("medium");
+    expect(getValue().workspaceRootPath).toBe("/tmp/project-1");
+    expect((getValue() as unknown as { context?: unknown }).context).toBeUndefined();
   });
 
   it("应透传 read model 与子任务摘要事实", async () => {
@@ -320,17 +319,9 @@ describe("useWorkspaceTaskRailRuntime", () => {
     await render();
 
     expect(getValue().threadRead).toBe(threadRead);
+    expect(getValue().threadItems).toBe(threadItems);
     expect(getValue().childSubagentSessions).toBe(childSubagentSessions);
-    expect(getValue().context).toMatchObject({
-      objectiveText: "完成顶部任务轨道",
-      changedFileCount: 1,
-      changedFiles: ["src/App.tsx"],
-      patchCount: 1,
-      sourceCount: 2,
-      sourceLabels: ["docs.example.com", "source.md"],
-      subtaskTotalCount: 1,
-      subtaskActiveCount: 1,
-    });
+    expect((getValue() as unknown as { context?: unknown }).context).toBeUndefined();
   });
 
   it("应透传 todo items 供运行控制区域恢复历史计划", async () => {

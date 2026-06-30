@@ -1,0 +1,1784 @@
+import {
+  APP_SERVER_METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
+  APP_SERVER_METHOD_ARTIFACT_READ,
+  APP_SERVER_METHOD_SESSION_READ,
+  APP_SERVER_METHOD_SESSION_START,
+  APP_SERVER_METHOD_SESSION_TURN_START,
+  APP_SERVER_METHOD_SESSION_UPDATE,
+  APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST,
+  CONTENT_FACTORY_ARTICLE_WORKSPACE_ARTICLE_ARTIFACT_ID,
+  CONTENT_FACTORY_ARTICLE_WORKSPACE_IMAGE_ARTIFACT_ID,
+  CONTENT_FACTORY_ARTICLE_WORKSPACE_REMOTE_REJECT_ERROR_CODE,
+  CONTENT_FACTORY_ARTICLE_WORKSPACE_REMOTE_REJECT_TURN_ID,
+  CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+  CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_TITLE,
+  CONTENT_FACTORY_ARTICLE_WORKSPACE_THREAD_ID,
+  CONTENT_FACTORY_ARTICLE_WORKSPACE_TURN_ID,
+  CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TASK_ID,
+  FIXTURE_MODEL,
+  FIXTURE_PROVIDER,
+} from "./claw-chat-current-fixture-constants.mjs";
+import {
+  runContentFactoryWorkerDogfoodTurn,
+  saveContentFactoryWorkerInstalledState,
+} from "./claw-chat-current-fixture-content-factory-worker-dogfood.mjs";
+import {
+  buildContentFactoryActionResultWorkspacePatch,
+  buildContentFactoryWorkspacePatch,
+} from "./claw-chat-current-fixture-content-factory-workspace-patches.mjs";
+import { invokeAppServerFromPage } from "./claw-chat-current-fixture-rpc.mjs";
+import {
+  openSessionFromSidebar,
+  waitForGuiSessionVisible,
+} from "./claw-chat-current-fixture-session.mjs";
+import { waitForRendererReady } from "./claw-chat-current-fixture-rpc.mjs";
+import {
+  assert,
+  sanitizeJson,
+  sleep,
+} from "./claw-chat-current-fixture-utils.mjs";
+
+const CONTENT_FACTORY_APP_ID = "content-factory-app";
+const IMAGE_SET_OBJECT_ID = "image-set-1";
+const CONTENT_FACTORY_ARTICLE_WORKSPACE_STORYBOARD_ARTIFACT_ID =
+  "artifact-video-storyboard";
+const CONTENT_FACTORY_ARTICLE_WORKSPACE_CHECKLIST_ARTIFACT_ID =
+  "artifact-delivery-checklist";
+const CONTENT_FACTORY_ARTICLE_WORKSPACE_EDITED_DRAFT_MARKER =
+  "E2E_EDITED_ARTICLE_DRAFT_RESTORED";
+const CONTENT_FACTORY_ARTICLE_WORKSPACE_EDITED_DRAFT_MARKDOWN = [
+  "# 内容工厂首版文章 - 编辑后恢复稿",
+  "",
+  "## 编辑恢复验证",
+  "",
+  `这是一段来自 Article Editor 画布编辑后的唯一正文标记：${CONTENT_FACTORY_ARTICLE_WORKSPACE_EDITED_DRAFT_MARKER}。`,
+  "",
+  "## 三轮资料检索",
+  "",
+  "- 第一轮：确认写作主题与读者预期。",
+  "- 第二轮：补齐案例、引用与反方风险。",
+  "- 第三轮：把资料收束成可发布正文。",
+  "",
+  "## 正文草稿",
+  "",
+  "编辑后的正文必须覆盖 worker 首稿，并且刷新或重新打开会话后仍回到 Article Editor 画布。",
+].join("\n");
+const CONTENT_FACTORY_ARTICLE_WORKSPACE_EDITED_DRAFT_UPDATED_AT =
+  "2026-06-29T10:00:00.000Z";
+
+export async function runContentFactoryArticleWorkspaceScenario({
+  page,
+  options,
+  workspace,
+  appServerRequests,
+}) {
+  const sessionCreation = await createContentFactoryArticleWorkspaceSession(
+    page,
+    workspace,
+    appServerRequests,
+  );
+  const installedStateSave = await saveContentFactoryWorkerInstalledState(
+    page,
+    appServerRequests,
+  );
+
+  const runtimeEventsAppend = await appendContentFactoryRuntimeEvents(
+    page,
+    workspace,
+    appServerRequests,
+  );
+  const workerTurnStart = await runContentFactoryWorkerDogfoodTurn({
+    page,
+    options,
+    workspace,
+    requestLog: appServerRequests,
+  });
+  const actionResultRuntimeEventsAppend =
+    await appendContentFactoryArticleWorkspaceActionResultRuntimeEvents(
+      page,
+      workspace,
+      appServerRequests,
+    );
+  const rightSurfaceRequest =
+    await requestContentFactoryArticleWorkspaceSurface(
+      page,
+      workspace,
+      appServerRequests,
+    );
+
+  await notifySessionChanged(page, workspace.workspaceId);
+
+  const guiSessionVisible = await waitForGuiSessionVisible(
+    page,
+    options,
+    CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_TITLE,
+  );
+  const guiSessionOpened = await openSessionFromSidebar(
+    page,
+    options,
+    appServerRequests,
+    {
+      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+      title: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_TITLE,
+    },
+  );
+
+  const articleArtifactFrame = await clickContentFactoryArticleArtifactFrame(
+    page,
+    options,
+  );
+  const rightSurface = await waitForContentFactoryArticleEditorOpened(
+    page,
+    options,
+  );
+  const articleObjectSelection = await selectContentFactoryArticleObject(
+    page,
+    options,
+  );
+  const articleWritingStructure =
+    await waitForContentFactoryArticleWritingStructure(page, options);
+  const articleEditedDraftUpdate =
+    await updateContentFactoryArticleWorkspaceEditedDraft(
+      page,
+      options,
+      appServerRequests,
+    );
+  const articleEditedDraftReload =
+    await reloadContentFactoryArticleWorkspaceSession(page, options, workspace);
+  const articleEditedDraftSessionReopened = await openSessionFromSidebar(
+    page,
+    options,
+    appServerRequests,
+    {
+      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+      title: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_TITLE,
+    },
+  );
+  const articleEditedDraftArtifactFrame =
+    await clickContentFactoryArticleArtifactFrame(page, options);
+  const articleEditedDraftRestored =
+    await waitForContentFactoryArticleWorkspaceEditedDraftRestored(
+      page,
+      options,
+    );
+  const storyboardObjectSelection = await selectContentFactoryStoryboardObject(
+    page,
+    options,
+  );
+  const gui = await waitForContentFactoryArticleWorkspaceGui(page, options);
+
+  const readModel = await invokeAppServerFromPage(
+    page,
+    APP_SERVER_METHOD_SESSION_READ,
+    {
+      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+      historyLimit: 20,
+    },
+    appServerRequests,
+  );
+  const readModelSummary = summarizeContentFactoryArticleWorkspaceReadModel(
+    readModel.result,
+  );
+  const articleArtifactRef =
+    readModelSummary.workerArticleObject?.previewArtifactId ||
+    CONTENT_FACTORY_ARTICLE_WORKSPACE_ARTICLE_ARTIFACT_ID;
+
+  const artifactRead = await invokeAppServerFromPage(
+    page,
+    APP_SERVER_METHOD_ARTIFACT_READ,
+    {
+      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+      artifactRef: articleArtifactRef,
+      includeContent: true,
+      limit: 1,
+    },
+    appServerRequests,
+  );
+  const artifactReadSummary = summarizeContentFactoryArtifactRead(
+    artifactRead.result,
+  );
+  const remoteRuntimeRejection = await runRemotePluginRuntimeRejectionProbe({
+    page,
+    workspace,
+    options,
+    requestLog: appServerRequests,
+  });
+
+  return sanitizeJson({
+    contentFactoryArticleWorkspaceSessionCreation: sessionCreation,
+    contentFactoryArticleWorkspaceInstalledStateSave: installedStateSave,
+    contentFactoryArticleWorkspaceRuntimeEventsAppend:
+      summarizeRuntimeEventsAppend(runtimeEventsAppend.result),
+    contentFactoryArticleWorkspaceWorkerTurnStart: workerTurnStart,
+    contentFactoryArticleWorkspaceRemoteRuntimeRejection:
+      remoteRuntimeRejection,
+    contentFactoryArticleWorkspaceActionResultRuntimeEventsAppend:
+      summarizeRuntimeEventsAppend(actionResultRuntimeEventsAppend.result),
+    contentFactoryArticleWorkspaceRightSurfaceRequest:
+      summarizeRightSurfaceRequest(rightSurfaceRequest.result),
+    guiContentFactoryArticleWorkspaceSessionVisible: guiSessionVisible,
+    guiContentFactoryArticleWorkspaceSessionOpened: guiSessionOpened,
+    contentFactoryArticleWorkspaceArtifactFrame: articleArtifactFrame,
+    contentFactoryArticleWorkspaceRightSurface: rightSurface,
+    contentFactoryArticleWorkspaceArticleObjectSelection:
+      articleObjectSelection,
+    contentFactoryArticleWorkspaceArticleWritingStructure:
+      articleWritingStructure,
+    contentFactoryArticleWorkspaceEditedDraftUpdate: articleEditedDraftUpdate,
+    contentFactoryArticleWorkspaceEditedDraftReload: articleEditedDraftReload,
+    contentFactoryArticleWorkspaceEditedDraftSessionReopened:
+      articleEditedDraftSessionReopened,
+    contentFactoryArticleWorkspaceEditedDraftArtifactFrame:
+      articleEditedDraftArtifactFrame,
+    contentFactoryArticleWorkspaceEditedDraftRestored:
+      articleEditedDraftRestored,
+    contentFactoryArticleWorkspaceStoryboardObjectSelection:
+      storyboardObjectSelection,
+    contentFactoryArticleWorkspaceGui: gui,
+    contentFactoryArticleWorkspaceReadModel: readModelSummary,
+    contentFactoryArticleWorkspaceArtifactRead: artifactReadSummary,
+  });
+}
+
+async function reloadContentFactoryArticleWorkspaceSession(
+  page,
+  options,
+  workspace,
+) {
+  await page.reload({ waitUntil: "domcontentloaded", timeout: options.timeoutMs });
+  const renderer = await waitForRendererReady(page, options);
+  await notifySessionChanged(page, workspace.workspaceId);
+  const sessionVisible = await waitForGuiSessionVisible(
+    page,
+    options,
+    CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_TITLE,
+  );
+  return sanitizeJson({
+    renderer,
+    sessionVisible,
+  });
+}
+
+async function updateContentFactoryArticleWorkspaceEditedDraft(
+  page,
+  options,
+  requestLog,
+) {
+  const objectRef = await readContentFactoryArticleDraftObjectRef(
+    page,
+    options,
+    requestLog,
+  );
+  const editedDraft = {
+    objectKey: `${objectRef.appId}:${objectRef.sessionId}:${objectRef.kind}:${objectRef.id}`,
+    objectRef,
+    markdown: CONTENT_FACTORY_ARTICLE_WORKSPACE_EDITED_DRAFT_MARKDOWN,
+    updatedAt: CONTENT_FACTORY_ARTICLE_WORKSPACE_EDITED_DRAFT_UPDATED_AT,
+  };
+  const response = await invokeAppServerFromPage(
+    page,
+    APP_SERVER_METHOD_SESSION_UPDATE,
+    {
+      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+      articleWorkspaceEditedDraft: editedDraft,
+    },
+    requestLog,
+  );
+
+  return sanitizeJson({
+    sessionId:
+      response.result?.session?.sessionId ??
+      response.result?.session?.session_id ??
+      CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+    objectKey: editedDraft.objectKey,
+    objectRef,
+    markdownMarker: CONTENT_FACTORY_ARTICLE_WORKSPACE_EDITED_DRAFT_MARKER,
+    updatedAt: editedDraft.updatedAt,
+  });
+}
+
+async function readContentFactoryArticleDraftObjectRef(
+  page,
+  options,
+  requestLog,
+) {
+  const startedAt = Date.now();
+  let lastSummary = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const readModel = await invokeAppServerFromPage(
+      page,
+      APP_SERVER_METHOD_SESSION_READ,
+      {
+        sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+        historyLimit: 20,
+      },
+      requestLog,
+    );
+    const summary = summarizeContentFactoryArticleWorkspaceReadModel(
+      readModel.result,
+    );
+    lastSummary = summary;
+    const objectRef = summary.workerArticleObject?.objectRef;
+    if (
+      objectRef?.appId &&
+      objectRef?.sessionId &&
+      objectRef?.kind === "articleDraft" &&
+      objectRef?.id
+    ) {
+      return objectRef;
+    }
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `内容工厂 Article Editor 未找到可编辑文章对象: ${JSON.stringify(
+      sanitizeJson(lastSummary),
+    )}`,
+  );
+}
+
+async function waitForContentFactoryArticleWorkspaceEditedDraftRestored(
+  page,
+  options,
+) {
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const snapshot = await page.evaluate(
+      ({ marker }) => {
+        const canvas = document.querySelector(
+          '[data-testid="workspace-article-editor-canvas"]',
+        );
+        const canvasContent = document.querySelector(
+          '[data-testid="workspace-article-editor-canvas-content"]',
+        );
+        const status = document.querySelector(
+          '[data-testid="workspace-article-editor-canvas-status"]',
+        );
+        const bodyText = document.body?.innerText || "";
+        const canvasText =
+          canvasContent?.textContent || canvas?.textContent || "";
+        return {
+          canvasVisible: isVisible(canvas),
+          canvasDirty: canvas?.getAttribute("data-dirty") ?? null,
+          canvasText: canvasText.slice(0, 1600),
+          statusText: status?.textContent ?? "",
+          markerVisibleInCanvas: canvasText.includes(marker),
+          markerVisibleInBody: bodyText.includes(marker),
+          hasEditedTitle: canvasText.includes(
+            "内容工厂首版文章 - 编辑后恢复稿",
+          ),
+          hasWorkerMetadataStillVisible:
+            bodyText.includes("标题候选") &&
+            bodyText.includes("关键观点") &&
+            bodyText.includes("配图"),
+        };
+
+        function isVisible(node) {
+          const rect = node?.getBoundingClientRect();
+          const style = node ? window.getComputedStyle(node) : null;
+          return Boolean(
+            node &&
+            rect &&
+            rect.width > 8 &&
+            rect.height > 8 &&
+            style?.display !== "none" &&
+            style?.visibility !== "hidden",
+          );
+        }
+      },
+      { marker: CONTENT_FACTORY_ARTICLE_WORKSPACE_EDITED_DRAFT_MARKER },
+    );
+    lastSnapshot = snapshot;
+    if (
+      snapshot?.canvasVisible &&
+      snapshot.markerVisibleInCanvas &&
+      snapshot.hasEditedTitle &&
+      snapshot.hasWorkerMetadataStillVisible
+    ) {
+      return sanitizeJson(snapshot);
+    }
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `内容工厂 Article Editor 编辑草稿未从会话恢复: ${JSON.stringify(
+      sanitizeJson(lastSnapshot),
+    )}`,
+  );
+}
+
+async function clickContentFactoryArticleArtifactFrame(page, options) {
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const snapshot = await page.evaluate(() => {
+      const frame =
+        document.querySelector('[data-testid="article-artifact-frame"]') ??
+        document.querySelector('[data-frame-kind="articleArtifacts"]');
+      const button = frame?.querySelector("button");
+      const bodyText = document.body?.innerText || "";
+      const rect = frame?.getBoundingClientRect();
+      const style = frame ? window.getComputedStyle(frame) : null;
+      const visible = Boolean(
+        frame &&
+        rect &&
+        rect.width > 8 &&
+        rect.height > 8 &&
+        style?.display !== "none" &&
+        style?.visibility !== "hidden",
+      );
+      const buttonDisabled =
+        button instanceof HTMLButtonElement
+          ? button.disabled || button.getAttribute("aria-disabled") === "true"
+          : null;
+      if (visible && button && buttonDisabled === false) {
+        button.click();
+      }
+      return {
+        visible,
+        buttonPresent: Boolean(button),
+        buttonDisabled,
+        frameText: frame?.textContent?.slice(0, 500) ?? "",
+        hasArticleTitle: bodyText.includes("公众号文章草稿"),
+        hasWorkerResearchText: bodyText.includes("三轮资料检索"),
+        hasWorkerDraftText: bodyText.includes("正文草稿"),
+        hasEditedDraftMarker: bodyText.includes(
+          "E2E_EDITED_ARTICLE_DRAFT_RESTORED",
+        ),
+        rect: rect ? rectToJson(rect) : null,
+      };
+
+      function rectToJson(rect) {
+        return {
+          x: Math.round(rect.x),
+          y: Math.round(rect.y),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+          top: Math.round(rect.top),
+          left: Math.round(rect.left),
+          right: Math.round(rect.right),
+          bottom: Math.round(rect.bottom),
+        };
+      }
+    });
+    lastSnapshot = snapshot;
+    if (
+      snapshot?.visible &&
+      snapshot.buttonPresent &&
+      snapshot.buttonDisabled === false
+    ) {
+      return sanitizeJson(snapshot);
+    }
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `内容工厂 ArticleArtifactFrame 不可点击: ${JSON.stringify(
+      sanitizeJson(lastSnapshot),
+    )}`,
+  );
+}
+
+async function waitForContentFactoryArticleEditorOpened(page, options) {
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const snapshot = await page.evaluate(() => {
+      const host = document.querySelector(
+        '[data-testid="workspace-right-surface-host"]',
+      );
+      const root = document.querySelector(
+        '[data-testid="workspace-article-editor-surface"]',
+      );
+      const canvas = document.querySelector(
+        '[data-testid="workspace-article-editor-canvas"]',
+      );
+      const bodyText = document.body?.innerText || "";
+      return {
+        activeSurface: host?.getAttribute("data-surface") ?? null,
+        rootVisible: isVisible(root),
+        canvasVisible: isVisible(canvas),
+        hasArticleEditorTitle: bodyText.includes("文章编辑器"),
+        hasArticleTitle: bodyText.includes("公众号文章草稿"),
+        hasLoadedDraftStatus: bodyText.includes("已载入产物正文"),
+        hasWorkerResearchText: bodyText.includes("三轮资料检索"),
+        hasWorkerDraftText: bodyText.includes("正文草稿"),
+        hasArticleArtifactFrame: Boolean(
+          document.querySelector('[data-testid="article-artifact-frame"]') ??
+          document.querySelector('[data-frame-kind="articleArtifacts"]'),
+        ),
+        bodyTextSample: bodyText.slice(0, 1600),
+      };
+
+      function isVisible(node) {
+        const rect = node?.getBoundingClientRect();
+        const style = node ? window.getComputedStyle(node) : null;
+        return Boolean(
+          node &&
+          rect &&
+          rect.width > 8 &&
+          rect.height > 8 &&
+          style?.display !== "none" &&
+          style?.visibility !== "hidden",
+        );
+      }
+    });
+    lastSnapshot = snapshot;
+    if (
+      snapshot?.activeSurface === "articleWorkspace" &&
+      snapshot.rootVisible &&
+      snapshot.canvasVisible &&
+      snapshot.hasArticleEditorTitle &&
+      snapshot.hasArticleTitle
+    ) {
+      return sanitizeJson(snapshot);
+    }
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `点击 ArticleArtifactFrame 后 Article Editor 未展开: ${JSON.stringify(
+      sanitizeJson(lastSnapshot),
+    )}`,
+  );
+}
+
+async function requestContentFactoryArticleWorkspaceSurface(
+  page,
+  workspace,
+  requestLog,
+) {
+  return await invokeAppServerFromPage(
+    page,
+    APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST,
+    {
+      workspaceId: workspace.workspaceId,
+      workspaceRoot: workspace.rootPath,
+      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+      surfaceKind: "articleWorkspace",
+      origin: "runtime",
+      priority: "foreground",
+      candidateId: "content-factory-article-workspace",
+      reason: "agent_app_article_workspace_ready",
+      ttlMs: 120_000,
+      metadata: {
+        fixtureOrigin: "content-factory-article-workspace",
+        contentFactoryWorkspacePatch:
+          buildContentFactoryWorkspacePatch(workspace),
+      },
+    },
+    requestLog,
+  );
+}
+
+async function createContentFactoryArticleWorkspaceSession(
+  page,
+  workspace,
+  requestLog,
+) {
+  assert(
+    workspace?.rootPath,
+    "内容工厂 Article Editor fixture 缺少 workspace rootPath",
+  );
+  assert(
+    workspace?.workspaceId,
+    "内容工厂 Article Editor fixture 缺少 workspaceId",
+  );
+
+  const session = await invokeAppServerFromPage(
+    page,
+    APP_SERVER_METHOD_SESSION_START,
+    {
+      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+      threadId: CONTENT_FACTORY_ARTICLE_WORKSPACE_THREAD_ID,
+      appId: CONTENT_FACTORY_APP_ID,
+      workspaceId: workspace.workspaceId,
+      workingDir: workspace.rootPath,
+      businessObjectRef: {
+        kind: "agent.session",
+        id: `agent-session:${workspace.workspaceId}:${CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID}`,
+        title: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_TITLE,
+        metadata: {
+          title: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_TITLE,
+          workingDir: workspace.rootPath,
+          working_dir: workspace.rootPath,
+          appId: CONTENT_FACTORY_APP_ID,
+          executionStrategy: "react",
+          runStartHooks: false,
+          harness: {
+            hiddenFromUserRecents: false,
+            source: "smoke:content-factory-article-workspace",
+          },
+        },
+      },
+    },
+    requestLog,
+  );
+
+  const update = await invokeAppServerFromPage(
+    page,
+    APP_SERVER_METHOD_SESSION_UPDATE,
+    {
+      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+      title: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_TITLE,
+      providerSelector: FIXTURE_PROVIDER,
+      providerName: FIXTURE_PROVIDER,
+      modelName: FIXTURE_MODEL,
+      executionStrategy: "react",
+      recentAccessMode: "full-access",
+      recentPreferences: {
+        searchMode: "auto",
+      },
+    },
+    requestLog,
+  );
+
+  return sanitizeJson({
+    sessionId:
+      session.result?.session?.sessionId ??
+      session.result?.session?.session_id ??
+      null,
+    updatedSessionId:
+      update.result?.session?.sessionId ??
+      update.result?.session?.session_id ??
+      null,
+    appId: CONTENT_FACTORY_APP_ID,
+    title: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_TITLE,
+  });
+}
+
+async function appendContentFactoryRuntimeEvents(page, workspace, requestLog) {
+  return await invokeAppServerFromPage(
+    page,
+    APP_SERVER_METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
+    {
+      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+      turnId: null,
+      runtimeEvents: [
+        {
+          type: "artifact.snapshot",
+          payload: {
+            artifact: {
+              artifactId: "artifact-workspace-patch-1",
+              path: ".lime/artifacts/content-factory-workspace-patch.json",
+              title: "内容工厂工作区补丁",
+              kind: "content_factory.workspace_patch",
+              status: "ready",
+              metadata: {
+                agentAppWorker: {
+                  appId: CONTENT_FACTORY_APP_ID,
+                  taskId: "article_job_1",
+                  taskKind: "content.article.generate",
+                  turnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_TURN_ID,
+                },
+                contentFactoryWorkspacePatch:
+                  buildContentFactoryWorkspacePatch(workspace),
+              },
+            },
+          },
+        },
+        {
+          type: "runtime.error",
+          payload: {
+            source: "agent_app_task_worker",
+            appId: CONTENT_FACTORY_APP_ID,
+            taskId: "image_job_1",
+            taskKind: "content.image.generate",
+            turnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_TURN_ID,
+            status: "failed",
+            errorCode: "worker_invalid_json_output",
+            errorMessage: "Agent App worker returned invalid JSON",
+            failureCategory: "worker_output",
+            retryable: false,
+            retryAdvice: "inspect_worker_output",
+            retryAttempt: 0,
+            retryMaxAttempts: 0,
+            message:
+              "Agent App task worker failed: Agent App worker returned invalid JSON",
+            metadata: {
+              agentAppWorker: {
+                appId: CONTENT_FACTORY_APP_ID,
+                taskId: "image_job_1",
+                taskKind: "content.image.generate",
+                turnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_TURN_ID,
+                status: "failed",
+                errorCode: "worker_invalid_json_output",
+                failureCategory: "worker_output",
+                retryable: false,
+                retryAdvice: "inspect_worker_output",
+                retryAttempt: 0,
+                retryMaxAttempts: 0,
+              },
+            },
+          },
+        },
+      ],
+    },
+    requestLog,
+  );
+}
+
+async function appendContentFactoryArticleWorkspaceActionResultRuntimeEvents(
+  page,
+  workspace,
+  requestLog,
+) {
+  return await invokeAppServerFromPage(
+    page,
+    APP_SERVER_METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
+    {
+      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+      turnId: null,
+      runtimeEvents: [
+        {
+          type: "artifact.snapshot",
+          payload: {
+            artifact: {
+              artifactId: "artifact-image-regenerate-workspace-patch",
+              artifactRef: "artifact-image-regenerate-workspace-patch",
+              path: ".lime/artifacts/article-workspace/image-regenerate-workspace-patch.json",
+              title: "配图组重新生成结果",
+              kind: "content_factory.workspace_patch",
+              status: "ready",
+              metadata: {
+                agentAppWorker: {
+                  appId: CONTENT_FACTORY_APP_ID,
+                  taskId: "image_regenerate_job_1",
+                  taskKind: "content.image.generate",
+                  turnId: "turn_content_factory_article_workspace_action",
+                  workerEntrypoint: "./runtime/content-factory-worker.mjs",
+                  status: "completed",
+                  inputSummary: "action=regenerate; object=image-set-1",
+                  outputSummary: "1 object: 配图组重新生成结果",
+                  outputObjectCount: 1,
+                  outputArtifactKind: "content_factory.workspace_patch",
+                },
+                contentFactoryWorkspacePatch:
+                  buildContentFactoryActionResultWorkspacePatch(workspace),
+              },
+            },
+          },
+        },
+      ],
+    },
+    requestLog,
+  );
+}
+
+async function notifySessionChanged(page, workspaceId) {
+  await page.evaluate(
+    ({ sessionId, workspaceId }) => {
+      window.dispatchEvent(
+        new CustomEvent("lime:agent-runtime-sessions-changed", {
+          detail: {
+            reason: "external",
+            sessionId,
+            workspaceId,
+          },
+        }),
+      );
+      window.dispatchEvent(new Event("focus"));
+    },
+    {
+      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+      workspaceId,
+    },
+  );
+}
+
+async function waitForContentFactoryArticleWorkspaceGui(page, options) {
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const snapshot = await page.evaluate(() => {
+      const host = document.querySelector(
+        '[data-testid="workspace-right-surface-host"]',
+      );
+      const root = document.querySelector(
+        '[data-testid="workspace-article-editor-surface"]',
+      );
+      const rendererHost = document.querySelector(
+        '[data-testid="workspace-article-workspace-app-declared-renderer"]',
+      );
+      const rendererExecutableHost =
+        rendererHost?.querySelector("iframe, webview");
+      const toggle = document.querySelector(
+        '[data-testid="task-center-object-canvas-toggle"]',
+      );
+      const bodyText = document.body?.innerText || "";
+      return {
+        activeSurface: host?.getAttribute("data-surface") ?? null,
+        rootVisible: isVisible(root),
+        toggleTitle: toggle?.getAttribute("title") ?? "",
+        toggleAria: toggle?.getAttribute("aria-label") ?? "",
+        hasArticleEditorTitle: bodyText.includes("文章编辑器"),
+        hasArticleTitle: bodyText.includes("公众号文章草稿"),
+        hasImageSetTitle: bodyText.includes("配图组"),
+        hasStoryboardTitle: bodyText.includes("视频分镜"),
+        hasChecklistTitle: bodyText.includes("交付检查清单"),
+        hasWorkerEvidenceTitle:
+          bodyText.includes("运行记录") || bodyText.includes("写作计划"),
+        hasWorkerResearchText: bodyText.includes("三轮资料检索"),
+        hasWorkerDraftText: bodyText.includes("正文草稿"),
+        hasArticlePreview:
+          bodyText.includes("三轮资料检索") && bodyText.includes("正文草稿"),
+        hasImagePrompt: bodyText.includes("明亮的中文内容工厂主图"),
+        hasRegeneratedImageSummary: bodyText.includes("已重新生成 2 张候选图"),
+        hasRegeneratedImagePrompt:
+          bodyText.includes("厨房台面主图，明亮自然光"),
+        rendererHost: {
+          visible: isVisible(rendererHost),
+          pluginVisible: bodyText.includes("content-factory-app"),
+          rendererKindVisible: bodyText.includes("app_declared"),
+          executionModeVisible: bodyText.includes("host_placeholder"),
+          rendererExecutionModelVisible: bodyText.includes(
+            "host_placeholder_only",
+          ),
+          entryLoadPolicyVisible: bodyText.includes("not_loaded"),
+          executableHostAbsent: !rendererExecutableHost,
+          reasonVisible: bodyText.includes(
+            "app_declared_renderer_placeholder_only",
+          ),
+          allowedOutputVisible: bodyText.includes(
+            "content_factory.workspace_patch",
+          ),
+          entryVisible: bodyText.includes("./renderer/storyboard.tsx"),
+          actionVisible: bodyText.includes("open_storyboard"),
+        },
+        bodyTextSample: bodyText.slice(0, 2000),
+      };
+
+      function isVisible(node) {
+        const rect = node?.getBoundingClientRect();
+        const style = node ? window.getComputedStyle(node) : null;
+        return Boolean(
+          node &&
+          rect &&
+          rect.width > 8 &&
+          rect.height > 8 &&
+          style?.display !== "none" &&
+          style?.visibility !== "hidden",
+        );
+      }
+    });
+    lastSnapshot = snapshot;
+    if (
+      snapshot?.activeSurface === "articleWorkspace" &&
+      snapshot.rootVisible &&
+      snapshot.hasArticleEditorTitle &&
+      snapshot.hasArticleTitle &&
+      snapshot.hasImageSetTitle &&
+      snapshot.hasStoryboardTitle &&
+      snapshot.hasChecklistTitle &&
+      snapshot.hasWorkerEvidenceTitle
+    ) {
+      return snapshot;
+    }
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `内容工厂 Article Editor GUI 未就绪: ${JSON.stringify(
+      sanitizeJson(lastSnapshot),
+    )}`,
+  );
+}
+
+async function selectContentFactoryArticleObject(page, options) {
+  return await selectContentFactoryArticleWorkspaceObject(page, options, {
+    objectKind: "articleDraft",
+    selector: '[data-testid="workspace-article-editor-related-articleDraft"]',
+    failureLabel: "文章对象",
+    preferredText: "公众号文章草稿",
+  });
+}
+
+async function waitForContentFactoryArticleWritingStructure(page, options) {
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const snapshot = await page.evaluate(() => {
+      const root = document.querySelector(
+        '[data-testid="workspace-article-editor-surface"]',
+      );
+      const structure = document.querySelector(
+        '[data-testid="workspace-article-editor-title-candidates"]',
+      );
+      const research = document.querySelector(
+        '[data-testid="workspace-article-editor-research"]',
+      );
+      const outline = document.querySelector(
+        '[data-testid="workspace-article-editor-outline"]',
+      );
+      const citations = document.querySelector(
+        '[data-testid="workspace-article-editor-citations"]',
+      );
+      const imageSlots = document.querySelector(
+        '[data-testid="workspace-article-editor-image-slots"]',
+      );
+      const documentCanvas = document.querySelector(
+        '[data-testid="workspace-article-editor-canvas"]',
+      );
+      const documentImageSlots = document.querySelector(
+        '[data-testid="workspace-article-editor-image-slots"]',
+      );
+      const takeaways = document.querySelector(
+        '[data-testid="workspace-article-editor-takeaways"]',
+      );
+      const writingPlan = document.querySelector(
+        '[data-testid="workspace-article-editor-writing-plan"]',
+      );
+      const review = document.querySelector(
+        '[data-testid="workspace-article-editor-review"]',
+      );
+      const bodyText = document.body?.innerText || "";
+      const structureText = structure?.innerText || "";
+      const researchText = research?.innerText || "";
+      const outlineText = outline?.innerText || "";
+      const citationsText = citations?.innerText || "";
+      const imageSlotsText = imageSlots?.innerText || "";
+      const documentCanvasText = documentCanvas?.innerText || "";
+      const documentImageSlotsText = documentImageSlots?.innerText || "";
+      const takeawaysText = takeaways?.innerText || "";
+      const writingPlanText = writingPlan?.innerText || "";
+      const reviewText = review?.innerText || "";
+      return {
+        rootVisible: isVisible(root),
+        structureVisible: isVisible(structure),
+        researchVisible: isVisible(research),
+        outlineVisible: isVisible(outline),
+        citationsVisible: isVisible(citations),
+        imageSlotsVisible: isVisible(imageSlots),
+        documentCanvasVisible: isVisible(documentCanvas),
+        documentImageSlotsVisible: isVisible(documentImageSlots),
+        hasDocumentPreview:
+          documentCanvasText.includes("正文产物") ||
+          documentCanvasText.includes("正文草稿"),
+        hasWritingStructureTitle: bodyText.includes("文章结构"),
+        hasResearchRound:
+          researchText.length > 0 &&
+          (researchText.includes("检索") || researchText.includes("资料")),
+        hasOutline:
+          outlineText.length > 0 &&
+          (outlineText.includes("小节") ||
+            outlineText.includes("结构") ||
+            outlineText.includes("正文")),
+        hasTitleCandidate:
+          bodyText.includes("标题候选") && structureText.length > 0,
+        hasKeyTakeaway:
+          bodyText.includes("关键观点") && takeawaysText.length > 0,
+        hasCitation:
+          citationsText.length > 0 &&
+          (citationsText.includes("引用") || citationsText.includes("来源")),
+        hasImagePrompt:
+          imageSlotsText.length > 0 &&
+          (imageSlotsText.includes("配图") ||
+            documentImageSlotsText.includes("配图")),
+        hasWritingPlan:
+          bodyText.includes("写作计划") && writingPlanText.length > 0,
+        hasReviewNote: bodyText.includes("复核备注") && reviewText.length > 0,
+        hasFullArticleCanvas:
+          (bodyText.includes("正文产物") ||
+            bodyText.includes("内容工厂首版文章") ||
+            bodyText.includes("公众号文章草稿")) &&
+          (bodyText.includes("先说结论") ||
+            bodyText.includes("Agent App worker") ||
+            bodyText.includes("三轮资料检索") ||
+            bodyText.includes("正文草稿")),
+        bodyTextSample: bodyText.slice(0, 2000),
+      };
+
+      function isVisible(node) {
+        const rect = node?.getBoundingClientRect();
+        const style = node ? window.getComputedStyle(node) : null;
+        return Boolean(
+          node &&
+          rect &&
+          rect.width > 8 &&
+          rect.height > 8 &&
+          style?.display !== "none" &&
+          style?.visibility !== "hidden",
+        );
+      }
+    });
+    lastSnapshot = snapshot;
+    if (
+      snapshot?.rootVisible &&
+      snapshot.structureVisible &&
+      snapshot.researchVisible &&
+      snapshot.outlineVisible &&
+      snapshot.citationsVisible &&
+      snapshot.imageSlotsVisible &&
+      snapshot.documentCanvasVisible &&
+      snapshot.documentImageSlotsVisible &&
+      snapshot.hasDocumentPreview &&
+      snapshot.hasWritingStructureTitle &&
+      snapshot.hasResearchRound &&
+      snapshot.hasOutline &&
+      snapshot.hasTitleCandidate &&
+      snapshot.hasKeyTakeaway &&
+      snapshot.hasCitation &&
+      snapshot.hasImagePrompt &&
+      snapshot.hasWritingPlan &&
+      snapshot.hasReviewNote &&
+      snapshot.hasFullArticleCanvas
+    ) {
+      return sanitizeJson(snapshot);
+    }
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `内容工厂 Article Editor 文章写作结构不可见: ${JSON.stringify(
+      sanitizeJson(lastSnapshot),
+    )}`,
+  );
+}
+
+async function selectContentFactoryStoryboardObject(page, options) {
+  return await selectContentFactoryArticleWorkspaceObject(page, options, {
+    objectKind: "videoStoryboard",
+    selector:
+      '[data-testid="workspace-article-editor-related-videoStoryboard"]',
+    failureLabel: "分镜对象",
+  });
+}
+
+async function selectContentFactoryArticleWorkspaceObject(
+  page,
+  options,
+  { failureLabel, objectKind, preferredText, selector },
+) {
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const snapshot = await page.evaluate(
+      ({ preferredText, selector }) => {
+        const buttons = Array.from(document.querySelectorAll(selector));
+        const preferredButton = preferredText
+          ? buttons.find((candidate) =>
+              (candidate.textContent || "").includes(preferredText),
+            )
+          : null;
+        const button = preferredText ? preferredButton : buttons[0];
+        const visible = isVisible(button);
+        if (visible) {
+          button.click();
+        }
+        return {
+          candidateCount: buttons.length,
+          preferredFound: Boolean(preferredButton),
+          visible,
+          text: button?.textContent ?? "",
+        };
+
+        function isVisible(node) {
+          const rect = node?.getBoundingClientRect();
+          const style = node ? window.getComputedStyle(node) : null;
+          return Boolean(
+            node &&
+            rect &&
+            rect.width > 8 &&
+            rect.height > 8 &&
+            style?.display !== "none" &&
+            style?.visibility !== "hidden",
+          );
+        }
+      },
+      { preferredText, selector },
+    );
+    lastSnapshot = snapshot;
+    if (snapshot?.visible) {
+      return sanitizeJson({
+        selected: true,
+        objectKind,
+        text: snapshot.text,
+      });
+    }
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `内容工厂 Article Editor ${failureLabel}不可选: ${JSON.stringify(
+      sanitizeJson(lastSnapshot),
+    )}`,
+  );
+}
+
+async function runRemotePluginRuntimeRejectionProbe({
+  page,
+  workspace,
+  options,
+  requestLog,
+}) {
+  const response = await invokeAppServerFromPage(
+    page,
+    APP_SERVER_METHOD_SESSION_TURN_START,
+    {
+      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+      turnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_REMOTE_REJECT_TURN_ID,
+      input: {
+        text: "尝试运行未授权的远端插件 Article Editor action。",
+      },
+      runtimeOptions: {
+        metadata: {
+          agent_app: {
+            source: "right_surface_article_workspace",
+            app_id: "creator-pack",
+            workspace_id: workspace.workspaceId,
+            article_workspace_action: {
+              key: "remote_regenerate",
+              intent: "regenerate",
+              risk: "write",
+              task_kind: "creator.generate",
+              output_artifact_kind: "creator.workspace_patch",
+              prompt: "Regenerate remote creator workspace.",
+              object: {
+                app_id: "creator-pack",
+                kind: "creatorCanvas",
+                id: "creator-canvas-1",
+                session_id: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+                artifact_ids: ["artifact-remote-creator-1"],
+              },
+            },
+          },
+          right_surface: {
+            surface_kind: "articleWorkspace",
+            source: "article_workspace",
+            action_key: "remote_regenerate",
+          },
+        },
+      },
+      queueIfBusy: false,
+      skipPreSubmitResume: true,
+    },
+    requestLog,
+  );
+
+  const events = response.messages
+    .filter((message) => message?.method === "agentSession/event")
+    .map((message) => message?.params?.event)
+    .filter(Boolean);
+  const payloads = events.map((event) => event?.payload ?? {});
+  const runtimeErrorPayload =
+    payloads.find(
+      (payload) =>
+        readString(payload?.errorCode, payload?.error_code) ===
+        CONTENT_FACTORY_ARTICLE_WORKSPACE_REMOTE_REJECT_ERROR_CODE,
+    ) ?? {};
+  const turn =
+    response.result?.turn && typeof response.result.turn === "object"
+      ? response.result.turn
+      : {};
+  const readModelRejection = await waitForRemotePluginRuntimeRejectionReadModel(
+    page,
+    options,
+    requestLog,
+  );
+
+  return sanitizeJson({
+    method: APP_SERVER_METHOD_SESSION_TURN_START,
+    turnId: turn.turnId ?? turn.turn_id ?? null,
+    turnStatus: turn.status ?? null,
+    eventTypes: events.map((event) => readString(event?.type)).filter(Boolean),
+    errorCode:
+      readString(
+        runtimeErrorPayload.errorCode,
+        runtimeErrorPayload.error_code,
+      ) || readModelRejection.errorCode,
+    failureCategory:
+      readString(
+        runtimeErrorPayload.failureCategory,
+        runtimeErrorPayload.failure_category,
+      ) || readModelRejection.failureCategory,
+    appId:
+      readString(runtimeErrorPayload.appId, runtimeErrorPayload.app_id) ||
+      readModelRejection.appId,
+    outputArtifactKind:
+      readString(
+        runtimeErrorPayload.outputArtifactKind,
+        runtimeErrorPayload.output_artifact_kind,
+      ) || readModelRejection.outputArtifactKind,
+    readModel: readModelRejection,
+    hasRuntimeError: events.some((event) => event?.type === "runtime.error"),
+    hasTurnFailed: events.some((event) => event?.type === "turn.failed"),
+  });
+}
+
+async function waitForRemotePluginRuntimeRejectionReadModel(
+  page,
+  options,
+  requestLog,
+) {
+  const startedAt = Date.now();
+  let lastSummary = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const readModel = await invokeAppServerFromPage(
+      page,
+      APP_SERVER_METHOD_SESSION_READ,
+      {
+        sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+        historyLimit: 20,
+      },
+      requestLog,
+    );
+    const summary = summarizeRemotePluginRuntimeRejectionReadModel(
+      readModel.result,
+    );
+    lastSummary = summary;
+    if (
+      summary.errorCode ===
+        CONTENT_FACTORY_ARTICLE_WORKSPACE_REMOTE_REJECT_ERROR_CODE &&
+      summary.status === "failed"
+    ) {
+      return summary;
+    }
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `远端插件运行拒绝证据未进入 read model: ${JSON.stringify(
+      sanitizeJson(lastSummary),
+    )}`,
+  );
+}
+
+function summarizeRuntimeEventsAppend(result) {
+  const events = Array.isArray(result?.events) ? result.events : [];
+  return sanitizeJson({
+    eventCount: events.length,
+    eventTypes: events
+      .map((event) => event?.type ?? event?.eventType ?? event?.event_type)
+      .filter(Boolean),
+    turnIds: events
+      .map((event) => event?.turnId ?? event?.turn_id ?? null)
+      .filter(Boolean),
+    sessionIds: Array.from(
+      new Set(
+        events
+          .map((event) => event?.sessionId ?? event?.session_id ?? null)
+          .filter(Boolean),
+      ),
+    ),
+  });
+}
+
+function summarizeRightSurfaceRequest(result) {
+  const pending = asRecord(result?.pending) ?? {};
+  return sanitizeJson({
+    requestId: readString(result?.requestId, pending.requestId),
+    status: readString(result?.status, pending.status),
+    surfaceKind: readString(pending.surfaceKind, pending.surface_kind),
+    candidateId: readString(pending.candidateId, pending.candidate_id),
+    origin: readString(pending.origin),
+  });
+}
+
+function summarizeContentFactoryArticleWorkspaceReadModel(result) {
+  const detail = asRecord(result?.detail) ?? asRecord(result);
+  const threadRead =
+    asRecord(detail?.threadRead) ?? asRecord(detail?.thread_read) ?? {};
+  const articleWorkspace =
+    asRecord(threadRead.articleWorkspace) ??
+    asRecord(threadRead.article_workspace) ??
+    asRecord(detail?.articleWorkspace) ??
+    asRecord(detail?.article_workspace) ??
+    {};
+  const objects = readArray(articleWorkspace.objects);
+  const workerEvidence = readArray(
+    articleWorkspace.workerEvidence,
+    articleWorkspace.worker_evidence,
+  );
+  const editedDraft =
+    asRecord(articleWorkspace.editedDraft) ??
+    asRecord(articleWorkspace.edited_draft) ??
+    {};
+  const artifacts = readArray(threadRead.artifacts, detail?.artifacts);
+  const articleArtifact = findArtifactByRef(
+    artifacts,
+    CONTENT_FACTORY_ARTICLE_WORKSPACE_ARTICLE_ARTIFACT_ID,
+  );
+  const storyboardArtifact = findArtifactByRef(
+    artifacts,
+    CONTENT_FACTORY_ARTICLE_WORKSPACE_STORYBOARD_ARTIFACT_ID,
+  );
+  const checklistArtifact = findArtifactByRef(
+    artifacts,
+    CONTENT_FACTORY_ARTICLE_WORKSPACE_CHECKLIST_ARTIFACT_ID,
+  );
+  const articleMetadata = asRecord(articleArtifact?.metadata) ?? {};
+  const articleArticleWorkspace =
+    asRecord(articleMetadata.articleWorkspace) ?? {};
+  const storyboardMetadata = asRecord(storyboardArtifact?.metadata) ?? {};
+  const storyboardArticleWorkspace =
+    asRecord(storyboardMetadata.articleWorkspace) ?? {};
+  const checklistMetadata = asRecord(checklistArtifact?.metadata) ?? {};
+  const checklistArticleWorkspace =
+    asRecord(checklistMetadata.articleWorkspace) ?? {};
+  const failedEvidence = workerEvidence.find(
+    (evidence) =>
+      readString(evidence?.status) === "failed" &&
+      readString(evidence?.errorCode, evidence?.error_code) ===
+        "worker_invalid_json_output",
+  );
+  const completedActionEvidence = workerEvidence.find(
+    (evidence) =>
+      readString(evidence?.taskId, evidence?.task_id) ===
+      "image_regenerate_job_1",
+  );
+  const workerDogfoodEvidence = workerEvidence.find(
+    (evidence) =>
+      readString(evidence?.taskId, evidence?.task_id) ===
+      CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TASK_ID,
+  );
+  const workerArticleObject = objects.find((object) => {
+    if (productObjectKind(object) !== "articleDraft") {
+      return false;
+    }
+    const source = asRecord(object?.source) ?? {};
+    return (
+      readString(source.taskId, source.task_id) ===
+      CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TASK_ID
+    );
+  });
+  const imageObject = objects.find((object) => {
+    const ref = asRecord(object?.ref) ?? asRecord(object?.objectRef) ?? {};
+    return readString(ref.id) === IMAGE_SET_OBJECT_ID;
+  });
+  const storyboardObject = objects.find(
+    (object) => productObjectKind(object) === "videoStoryboard",
+  );
+  const storyboardObjectSource =
+    asRecord(storyboardObject?.source) ??
+    asRecord(storyboardObject?.source_metadata) ??
+    {};
+  const storyboardRendererContract =
+    asRecord(storyboardObjectSource.rendererContract) ??
+    asRecord(storyboardObjectSource.renderer_contract) ??
+    {};
+  const storyboardRuntimeAuthorization =
+    asRecord(storyboardRendererContract.runtimeAuthorization) ??
+    asRecord(storyboardRendererContract.runtime_authorization) ??
+    {};
+  const actionResultArtifacts = artifacts.filter((artifact) => {
+    const artifactRef = readString(
+      artifact?.artifactRef,
+      artifact?.artifact_ref,
+    );
+    return (
+      artifactRef === "artifact-image-regenerated" ||
+      artifactRef === "artifact-image-regenerate-workspace-patch"
+    );
+  });
+
+  return sanitizeJson({
+    hasArticleWorkspace: Object.keys(articleWorkspace).length > 0,
+    schemaVersion: readString(
+      articleWorkspace.schemaVersion,
+      articleWorkspace.schema_version,
+    ),
+    appId: readString(articleWorkspace.appId, articleWorkspace.app_id),
+    sessionId: readString(
+      articleWorkspace.sessionId,
+      articleWorkspace.session_id,
+    ),
+    workspaceId: readString(
+      articleWorkspace.workspaceId,
+      articleWorkspace.workspace_id,
+    ),
+    objectCount: objects.length,
+    objectTitles: objects.map((object) => readString(object?.title)),
+    hasArticleObject: objects.some(
+      (object) => productObjectKind(object) === "articleDraft",
+    ),
+    hasImageSetObject: objects.some(
+      (object) => productObjectKind(object) === "imageGenerationSet",
+    ),
+    hasStoryboardObject: objects.some(
+      (object) => productObjectKind(object) === "videoStoryboard",
+    ),
+    hasChecklistObject: objects.some(
+      (object) => productObjectKind(object) === "deliveryChecklist",
+    ),
+    imageObject: imageObject
+      ? {
+          status: readString(imageObject.status),
+          summary: readString(imageObject.summary),
+          previewArtifactId: readString(
+            imageObject.previewArtifactId,
+            imageObject.preview_artifact_id,
+          ),
+          sourceTaskId: readString(
+            imageObject.ref?.sourceTaskId,
+            imageObject.ref?.source_task_id,
+          ),
+        }
+      : null,
+    workerEvidenceCount: workerEvidence.length,
+    failedWorkerEvidence: failedEvidence
+      ? {
+          taskId: readString(failedEvidence.taskId, failedEvidence.task_id),
+          status: readString(failedEvidence.status),
+          errorCode: readString(
+            failedEvidence.errorCode,
+            failedEvidence.error_code,
+          ),
+          failureCategory: readString(
+            failedEvidence.failureCategory,
+            failedEvidence.failure_category,
+          ),
+          retryable: readBoolean(failedEvidence.retryable),
+          retryAdvice: readString(
+            failedEvidence.retryAdvice,
+            failedEvidence.retry_advice,
+          ),
+          retryAttempt: readNumber(
+            failedEvidence.retryAttempt,
+            failedEvidence.retry_attempt,
+          ),
+          retryMaxAttempts: readNumber(
+            failedEvidence.retryMaxAttempts,
+            failedEvidence.retry_max_attempts,
+          ),
+        }
+      : null,
+    completedActionWorkerEvidence: completedActionEvidence
+      ? {
+          taskId: readString(
+            completedActionEvidence.taskId,
+            completedActionEvidence.task_id,
+          ),
+          status: readString(completedActionEvidence.status),
+          artifactRef: readString(
+            completedActionEvidence.artifactRef,
+            completedActionEvidence.artifact_ref,
+          ),
+        }
+      : null,
+    workerDogfoodEvidence: workerDogfoodEvidence
+      ? {
+          taskId: readString(
+            workerDogfoodEvidence.taskId,
+            workerDogfoodEvidence.task_id,
+          ),
+          taskKind: readString(
+            workerDogfoodEvidence.taskKind,
+            workerDogfoodEvidence.task_kind,
+          ),
+          status: readString(workerDogfoodEvidence.status),
+          artifactRef: readString(
+            workerDogfoodEvidence.artifactRef,
+            workerDogfoodEvidence.artifact_ref,
+          ),
+          artifactKind: readString(
+            workerDogfoodEvidence.artifactKind,
+            workerDogfoodEvidence.artifact_kind,
+          ),
+          outputObjectCount: readNumber(
+            workerDogfoodEvidence.outputObjectCount,
+            workerDogfoodEvidence.output_object_count,
+          ),
+          errorCode: readString(
+            workerDogfoodEvidence.errorCode,
+            workerDogfoodEvidence.error_code,
+          ),
+          errorMessage: readString(
+            workerDogfoodEvidence.errorMessage,
+            workerDogfoodEvidence.error_message,
+            workerDogfoodEvidence.message,
+          ),
+          failureCategory: readString(
+            workerDogfoodEvidence.failureCategory,
+            workerDogfoodEvidence.failure_category,
+          ),
+        }
+      : null,
+    workerArticleObject: workerArticleObject
+      ? {
+          objectRef: summarizeArticleObjectRef(workerArticleObject),
+          title: readString(workerArticleObject.title),
+          summary: readString(workerArticleObject.summary),
+          previewArtifactId: readString(
+            workerArticleObject.previewArtifactId,
+            workerArticleObject.preview_artifact_id,
+          ),
+          sourceTaskId: readString(
+            workerArticleObject.source?.taskId,
+            workerArticleObject.source?.task_id,
+          ),
+          markdownIncludesResearch: readString(
+            workerArticleObject.source?.markdown,
+          ).includes("## 三轮资料检索"),
+          markdownIncludesDraft: readString(
+            workerArticleObject.source?.markdown,
+          ).includes("## 正文草稿"),
+          markdownIncludesEditedDraftMarker: readString(
+            workerArticleObject.source?.markdown,
+          ).includes(CONTENT_FACTORY_ARTICLE_WORKSPACE_EDITED_DRAFT_MARKER),
+          sourceEdited: readBoolean(workerArticleObject.source?.edited),
+          updatedAt: readString(
+            workerArticleObject.source?.updatedAt,
+            workerArticleObject.source?.updated_at,
+          ),
+          researchRoundCount: readArray(
+            workerArticleObject.source?.researchRounds,
+            workerArticleObject.source?.research_rounds,
+          ).length,
+          imageSlotCount: readArray(
+            workerArticleObject.source?.imageSlots,
+            workerArticleObject.source?.image_slots,
+          ).length,
+        }
+      : null,
+    editedDraft:
+      Object.keys(editedDraft).length > 0
+        ? {
+            objectKey: readString(editedDraft.objectKey, editedDraft.object_key),
+            objectRef: summarizeArticleRefRecord(
+              asRecord(editedDraft.objectRef) ??
+                asRecord(editedDraft.object_ref) ??
+                {},
+            ),
+            markdownIncludesEditedDraftMarker: readString(
+              editedDraft.markdown,
+            ).includes(CONTENT_FACTORY_ARTICLE_WORKSPACE_EDITED_DRAFT_MARKER),
+            updatedAt: readString(editedDraft.updatedAt, editedDraft.updated_at),
+          }
+        : null,
+    artifactCount: artifacts.length,
+    actionResultArtifacts: actionResultArtifacts.map((artifact) => ({
+      artifactRef: readString(artifact.artifactRef, artifact.artifact_ref),
+      kind: readString(artifact.kind),
+      title: readString(artifact.title),
+    })),
+    articleArtifact: articleArtifact
+      ? {
+          artifactRef: readString(
+            articleArtifact.artifactRef,
+            articleArtifact.artifact_ref,
+          ),
+          kind: readString(articleArtifact.kind),
+          title: readString(articleArtifact.title),
+          artifactSchema: readString(articleMetadata.artifactSchema),
+          artifactDocumentId: readString(articleMetadata.artifactDocumentId),
+          articleWorkspaceObjectKind: readString(
+            articleArticleWorkspace.objectKind,
+            articleArticleWorkspace.object_kind,
+          ),
+        }
+      : null,
+    storyboardArtifact: storyboardArtifact
+      ? {
+          artifactRef: readString(
+            storyboardArtifact.artifactRef,
+            storyboardArtifact.artifact_ref,
+          ),
+          kind: readString(storyboardArtifact.kind),
+          title: readString(storyboardArtifact.title),
+          artifactSchema: readString(storyboardMetadata.artifactSchema),
+          artifactDocumentId: readString(storyboardMetadata.artifactDocumentId),
+          surfaceKind: readString(storyboardMetadata.surfaceKind),
+          articleWorkspaceObjectKind: readString(
+            storyboardArticleWorkspace.objectKind,
+            storyboardArticleWorkspace.object_kind,
+          ),
+          articleWorkspaceSurfaceKind: readString(
+            storyboardArticleWorkspace.surfaceKind,
+            storyboardArticleWorkspace.surface_kind,
+          ),
+          rendererContract: {
+            pluginId: readString(
+              storyboardRendererContract.pluginId,
+              storyboardRendererContract.plugin_id,
+            ),
+            rendererKind: readString(
+              storyboardRendererContract.rendererKind,
+              storyboardRendererContract.renderer_kind,
+            ),
+            entry: readString(storyboardRendererContract.entry),
+            executionMode: readString(
+              storyboardRuntimeAuthorization.executionMode,
+              storyboardRuntimeAuthorization.execution_mode,
+            ),
+            reasonCode: readString(
+              storyboardRuntimeAuthorization.reasonCode,
+              storyboardRuntimeAuthorization.reason_code,
+            ),
+            allowedOutputArtifactKinds: readArray(
+              storyboardRuntimeAuthorization.allowedOutputArtifactKinds,
+              storyboardRuntimeAuthorization.allowed_output_artifact_kinds,
+            )
+              .map((value) => readString(value))
+              .filter(Boolean),
+          },
+        }
+      : null,
+    checklistArtifact: checklistArtifact
+      ? {
+          artifactRef: readString(
+            checklistArtifact.artifactRef,
+            checklistArtifact.artifact_ref,
+          ),
+          kind: readString(checklistArtifact.kind),
+          title: readString(checklistArtifact.title),
+          artifactSchema: readString(checklistMetadata.artifactSchema),
+          artifactDocumentId: readString(checklistMetadata.artifactDocumentId),
+          surfaceKind: readString(checklistMetadata.surfaceKind),
+          articleWorkspaceObjectKind: readString(
+            checklistArticleWorkspace.objectKind,
+            checklistArticleWorkspace.object_kind,
+          ),
+          articleWorkspaceSurfaceKind: readString(
+            checklistArticleWorkspace.surfaceKind,
+            checklistArticleWorkspace.surface_kind,
+          ),
+        }
+      : null,
+  });
+}
+
+function summarizeArticleObjectRef(object) {
+  const ref = asRecord(object?.ref) ?? asRecord(object?.objectRef) ?? {};
+  return summarizeArticleRefRecord(ref);
+}
+
+function summarizeArticleRefRecord(ref) {
+  return sanitizeJson({
+    appId: readString(ref.appId, ref.app_id),
+    kind: readString(ref.kind),
+    id: readString(ref.id),
+    sessionId: readString(ref.sessionId, ref.session_id),
+    artifactIds: readArray(ref.artifactIds, ref.artifact_ids)
+      .map((value) => readString(value))
+      .filter(Boolean),
+    sourceTurnId: readString(ref.sourceTurnId, ref.source_turn_id),
+    sourceTaskId: readString(ref.sourceTaskId, ref.source_task_id),
+    version: readString(ref.version),
+  });
+}
+
+function summarizeRemotePluginRuntimeRejectionReadModel(result) {
+  const detail = asRecord(result?.detail) ?? asRecord(result);
+  const threadRead =
+    asRecord(detail?.threadRead) ?? asRecord(detail?.thread_read) ?? {};
+  const articleWorkspace =
+    asRecord(threadRead.articleWorkspace) ??
+    asRecord(threadRead.article_workspace) ??
+    asRecord(detail?.articleWorkspace) ??
+    asRecord(detail?.article_workspace) ??
+    {};
+  const workerEvidence = readArray(
+    articleWorkspace.workerEvidence,
+    articleWorkspace.worker_evidence,
+  );
+  const rejectionEvidence = workerEvidence.find(
+    (evidence) =>
+      readString(evidence?.errorCode, evidence?.error_code) ===
+      CONTENT_FACTORY_ARTICLE_WORKSPACE_REMOTE_REJECT_ERROR_CODE,
+  );
+  return sanitizeJson({
+    status: readString(rejectionEvidence?.status),
+    appId: readString(rejectionEvidence?.appId, rejectionEvidence?.app_id),
+    taskId: readString(rejectionEvidence?.taskId, rejectionEvidence?.task_id),
+    turnId: readString(rejectionEvidence?.turnId, rejectionEvidence?.turn_id),
+    errorCode: readString(
+      rejectionEvidence?.errorCode,
+      rejectionEvidence?.error_code,
+    ),
+    failureCategory: readString(
+      rejectionEvidence?.failureCategory,
+      rejectionEvidence?.failure_category,
+    ),
+    outputArtifactKind: readString(
+      rejectionEvidence?.outputArtifactKind,
+      rejectionEvidence?.output_artifact_kind,
+    ),
+  });
+}
+
+function findArtifactByRef(artifacts, artifactRef) {
+  return artifacts.find(
+    (artifact) =>
+      readString(artifact?.artifactRef, artifact?.artifact_ref) === artifactRef,
+  );
+}
+
+function productObjectKind(object) {
+  const ref = asRecord(object?.ref) ?? asRecord(object?.objectRef) ?? {};
+  return readString(ref.kind);
+}
+
+function summarizeContentFactoryArtifactRead(result) {
+  const artifacts = readArray(result?.artifacts);
+  const artifact = artifacts[0] ?? null;
+  const artifactRef = readString(artifact?.artifactRef, artifact?.artifact_ref);
+  const content = readString(artifact?.content);
+  const document = parseJsonObject(content);
+  const documentArtifactId = readString(
+    document?.artifactId,
+    document?.artifact_id,
+  );
+  return sanitizeJson({
+    artifactCount: artifacts.length,
+    artifactRef,
+    kind: readString(artifact?.kind),
+    title: readString(artifact?.title),
+    contentStatus: readString(
+      artifact?.contentStatus,
+      artifact?.content_status,
+    ),
+    contentIncludesSchema: content.includes("artifact_document.v1"),
+    contentIncludesDocumentId: documentArtifactId.startsWith(
+      `artifact-document:${CONTENT_FACTORY_APP_ID}:`,
+    ),
+    contentIncludesArticleTitle: content.includes("公众号文章草稿"),
+    contentIncludesWorkerArticle: content.includes("## 三轮资料检索"),
+  });
+}
+
+function parseJsonObject(value) {
+  if (!value) {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(value);
+    return asRecord(parsed) ?? {};
+  } catch {
+    return {};
+  }
+}
+
+function asRecord(value) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value
+    : null;
+}
+
+function readArray(...values) {
+  for (const value of values) {
+    if (Array.isArray(value)) {
+      return value;
+    }
+  }
+  return [];
+}
+
+function readString(...values) {
+  for (const value of values) {
+    if (typeof value === "string") {
+      return value;
+    }
+  }
+  return "";
+}
+
+function readNumber(...values) {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function readBoolean(...values) {
+  for (const value of values) {
+    if (typeof value === "boolean") {
+      return value;
+    }
+  }
+  return null;
+}

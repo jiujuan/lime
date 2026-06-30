@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { AgentThreadItem, SiteSavedContentTarget } from "../types";
-import { resolvePreferredServiceSkillResultFileTarget } from "./serviceSkillResultFileTarget";
+import {
+  hasPreferredServiceSkillResultFileTargetSignals,
+  resolvePreferredServiceSkillResultFileTarget,
+} from "./serviceSkillResultFileTarget";
 
 function createFileArtifactItem(
   overrides: Partial<Extract<AgentThreadItem, { type: "file_artifact" }>>,
@@ -23,6 +26,55 @@ function createFileArtifactItem(
 }
 
 describe("serviceSkillResultFileTarget", () => {
+  it("普通 Claw threadItems 没有当前 turn Markdown 文件产物时不触发结果文件扫描", () => {
+    const threadItems = [
+      createFileArtifactItem({
+        id: "artifact-old",
+        turn_id: "turn-old",
+        path: "workspace/index.md",
+      }),
+      createFileArtifactItem({
+        id: "artifact-json",
+        turn_id: "turn-current",
+        path: "workspace/result.json",
+      }),
+    ];
+
+    expect(
+      hasPreferredServiceSkillResultFileTargetSignals({
+        currentTurnId: "turn-current",
+        threadItems,
+        savedContentTarget: null,
+      }),
+    ).toBe(false);
+  });
+
+  it("保存链路或当前 turn Markdown 文件产物应触发结果文件扫描", () => {
+    const savedContentTarget: SiteSavedContentTarget = {
+      projectId: "project-1",
+      contentId: "content-1",
+      preferredTarget: "project_file",
+      projectFile: {
+        relativePath: "exports/x-article-export/google-cloud/index.md",
+      },
+    };
+
+    expect(
+      hasPreferredServiceSkillResultFileTargetSignals({
+        currentTurnId: null,
+        threadItems: [],
+        savedContentTarget,
+      }),
+    ).toBe(true);
+    expect(
+      hasPreferredServiceSkillResultFileTargetSignals({
+        currentTurnId: "turn-1",
+        threadItems: [createFileArtifactItem({ turn_id: "turn-1" })],
+        savedContentTarget: null,
+      }),
+    ).toBe(true);
+  });
+
   it("应优先选择真实导出 bundle 里的结果 index.md，而不是漂到 workspace 拷贝", () => {
     const savedContentTarget: SiteSavedContentTarget = {
       projectId: "project-1",

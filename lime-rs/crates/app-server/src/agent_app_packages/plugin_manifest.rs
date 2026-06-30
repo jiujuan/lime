@@ -8,6 +8,7 @@ const PLUGIN_PACKAGE_SCHEMA_VERSION: &str = "lime.plugin.package.v1";
 
 const RUNTIME_CONTRIBUTION_FIELD: &str = "runtime";
 const WORKBENCH_CONTRIBUTION_FIELD: &str = "workbench";
+const TEXT_PREVIEW_LIMIT: usize = 420;
 
 pub(crate) struct PluginPackageManifestProjection {
     pub(crate) plugin_manifest: Value,
@@ -26,12 +27,16 @@ pub(crate) fn resolve_plugin_package_manifest(
     let runtime = read_contribution_yaml(app_dir, &plugin_manifest, RUNTIME_CONTRIBUTION_FIELD)?;
     let workbench =
         read_contribution_yaml(app_dir, &plugin_manifest, WORKBENCH_CONTRIBUTION_FIELD)?;
+    let package_components = read_plugin_package_components(app_dir, &plugin_manifest)?;
     let agent_app_manifest = project_plugin_package_to_agent_app_manifest(
         app_dir,
         &plugin_manifest,
         runtime.as_ref(),
         workbench.as_ref(),
+        &package_components,
     )?;
+    let plugin_manifest =
+        merge_plugin_package_components(plugin_manifest, &package_components);
 
     Ok(PluginPackageManifestProjection {
         plugin_manifest,
@@ -109,11 +114,344 @@ fn resolve_package_relative_path(app_dir: &Path, relative_path: &str) -> Result<
     Ok(app_dir.join(path))
 }
 
+#[derive(Default)]
+struct PluginPackageComponents {
+    skills: Vec<Value>,
+    subagents: Vec<Value>,
+    cli_tools: Vec<Value>,
+    connectors: Vec<Value>,
+    hooks: Vec<Value>,
+}
+
+fn read_plugin_package_components(
+    app_dir: &Path,
+    plugin_manifest: &Value,
+) -> Result<PluginPackageComponents, String> {
+    Ok(PluginPackageComponents {
+        skills: read_skill_contributions(app_dir, plugin_manifest)?,
+        subagents: read_subagent_contributions(app_dir, plugin_manifest)?,
+        cli_tools: read_cli_contributions(app_dir, plugin_manifest)?,
+        connectors: read_connector_contributions(app_dir, plugin_manifest)?,
+        hooks: read_hook_contributions(app_dir, plugin_manifest)?,
+    })
+}
+
+fn merge_plugin_package_components(
+    plugin_manifest: Value,
+    components: &PluginPackageComponents,
+) -> Value {
+    let Some(mut manifest) = plugin_manifest.as_object().cloned() else {
+        return plugin_manifest;
+    };
+    insert_non_empty_array(&mut manifest, "skills", components.skills.clone());
+    insert_non_empty_array(&mut manifest, "subagents", components.subagents.clone());
+    insert_non_empty_array(&mut manifest, "connectors", components.connectors.clone());
+    if !components.cli_tools.is_empty() {
+        manifest.insert("clis".to_string(), json!({ "tools": components.cli_tools }));
+    }
+    if !components.hooks.is_empty() {
+        manifest.insert("hooks".to_string(), json!({ "items": components.hooks }));
+    }
+    Value::Object(manifest)
+}
+
+fn insert_non_empty_array(manifest: &mut Map<String, Value>, key: &str, values: Vec<Value>) {
+    if !values.is_empty() {
+        manifest.insert(key.to_string(), Value::Array(values));
+    }
+}
+
+fn contribution_path(
+    app_dir: &Path,
+    plugin_manifest: &Value,
+    field: &str,
+) -> Result<Option<PathBuf>, String> {
+    read_string(plugin_manifest, &["contributions", field])
+        .map(|relative_path| resolve_package_relative_path(app_dir, &relative_path))
+        .transpose()
+}
+
+fn package_relative_string(app_dir: &Path, path: &Path) -> Option<String> {
+    path.strip_prefix(app_dir)
+        .ok()
+        .map(|relative| format!("./{}", relative.to_string_lossy().replace('\\', "/")))
+}
+
+fn read_markdown_frontmatter_field(content: &str, field: &str) -> Option<String> {
+    let mut lines = content.lines();
+    if lines.next().map(str::trim) != Some("---") {
+        return None;
+    }
+    for line in lines {
+        let trimmed = line.trim();
+        if trimmed == "---" {
+            break;
+        }
+        let Some((key, value)) = trimmed.split_once(':') else {
+            continue;
+        };
+        if key.trim() == field {
+            let normalized = value
+                .trim()
+                .trim_matches('"')
+                .trim_matches('\'')
+                .trim()
+                .to_string();
+            if !normalized.is_empty() {
+                return Some(normalized);
+            }
+        }
+    }
+    None
+}
+
+fn first_markdown_heading(content: &str) -> Option<String> {
+    content
+        .lines()
+        .map(str::trim)
+        .find_map(|line| line.strip_prefix("# ").map(str::trim))
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+}
+
+fn text_preview(content: &str) -> Option<String> {
+    let mut preview = content
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with("---") && !line.starts_with('#'))
+        .collect::<Vec<_>>()
+        .join(" ");
+    if preview.is_empty() {
+        return None;
+    }
+    if preview.len() > TEXT_PREVIEW_LIMIT {
+        preview.truncate(TEXT_PREVIEW_LIMIT);
+        preview.push('…');
+    }
+    Some(preview)
+}
+
+fn read_skill_contributions(
+    app_dir: &Path,
+    plugin_manifest: &Value,
+) -> Result<Vec<Value>, String> {
+    let Some(skills_root) = contribution_path(app_dir, plugin_manifest, "skills")? else {
+        return Ok(Vec::new());
+    };
+    if !skills_root.is_dir() {
+        return Ok(Vec::new());
+    }
+    let mut entries = Vec::new();
+    for entry in fs::read_dir(&skills_root).map_err(|error| {
+        format!(
+            "读取插件包 contributions.skills 目录失败 {}: {error}",
+            skills_root.display()
+        )
+    })? {
+        let entry = entry.map_err(|error| format!("读取插件包 skill 条目失败: {error}"))?;
+        let skill_dir = entry.path();
+        if !skill_dir.is_dir() {
+            continue;
+        }
+        let skill_path = skill_dir.join("SKILL.md");
+        if !skill_path.is_file() {
+            continue;
+        }
+        let content = fs::read_to_string(&skill_path).map_err(|error| {
+            format!("读取插件包 skill 失败 {}: {error}", skill_path.display())
+        })?;
+        let directory_id = entry.file_name().to_string_lossy().replace('_', "-");
+        let id = read_markdown_frontmatter_field(&content, "name").unwrap_or(directory_id);
+        let title = first_markdown_heading(&content).unwrap_or_else(|| humanize_id(&id));
+        entries.push(json!({
+            "id": id,
+            "title": title,
+            "description": read_markdown_frontmatter_field(&content, "description")
+                .or_else(|| text_preview(&content)),
+            "path": package_relative_string(app_dir, &skill_path),
+            "required": false
+        }));
+    }
+    entries.sort_by_key(|value| {
+        value
+            .get("id")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string()
+    });
+    Ok(entries)
+}
+
+fn read_subagent_contributions(
+    app_dir: &Path,
+    plugin_manifest: &Value,
+) -> Result<Vec<Value>, String> {
+    let Some(subagents_root) = contribution_path(app_dir, plugin_manifest, "subagents")? else {
+        return Ok(Vec::new());
+    };
+    if !subagents_root.is_dir() {
+        return Ok(Vec::new());
+    }
+    let mut entries = Vec::new();
+    for entry in fs::read_dir(&subagents_root).map_err(|error| {
+        format!(
+            "读取插件包 contributions.subagents 目录失败 {}: {error}",
+            subagents_root.display()
+        )
+    })? {
+        let entry = entry.map_err(|error| format!("读取插件包 subagent 条目失败: {error}"))?;
+        let subagent_dir = entry.path();
+        if !subagent_dir.is_dir() {
+            continue;
+        }
+        let prompt_path = subagent_dir.join("prompt.md");
+        if !prompt_path.is_file() {
+            continue;
+        }
+        let content = fs::read_to_string(&prompt_path).map_err(|error| {
+            format!(
+                "读取插件包 subagent prompt 失败 {}: {error}",
+                prompt_path.display()
+            )
+        })?;
+        let id = entry.file_name().to_string_lossy().to_string();
+        entries.push(json!({
+            "id": id,
+            "title": first_markdown_heading(&content).unwrap_or_else(|| humanize_id(&id)),
+            "description": text_preview(&content),
+            "promptPath": package_relative_string(app_dir, &prompt_path),
+            "required": false
+        }));
+    }
+    entries.sort_by_key(|value| {
+        value
+            .get("id")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string()
+    });
+    Ok(entries)
+}
+
+fn read_cli_contributions(app_dir: &Path, plugin_manifest: &Value) -> Result<Vec<Value>, String> {
+    let Some(cli_path) = contribution_path(app_dir, plugin_manifest, "clis")? else {
+        return Ok(Vec::new());
+    };
+    if !cli_path.is_file() {
+        return Ok(Vec::new());
+    }
+    let registry = read_json_file(&cli_path, "读取插件包 contributions.clis 失败")?;
+    let tools = registry
+        .get("tools")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    Ok(tools
+        .into_iter()
+        .filter_map(|tool| {
+            let record = tool.as_object()?;
+            let id = read_string_from_record(&tool, "id")
+                .or_else(|| read_string_from_record(&tool, "key"))?;
+            let title = read_string_from_record(&tool, "displayName")
+                .or_else(|| read_string_from_record(&tool, "title"))
+                .unwrap_or_else(|| id.clone());
+            let source = record.get("source").cloned();
+            Some(json!({
+                "key": id,
+                "title": title,
+                "description": read_string_from_record(&tool, "description"),
+                "provider": "local-cli",
+                "path": package_relative_string(app_dir, &cli_path),
+                "capabilities": read_string_array(tool.get("capabilities")),
+                "required": false,
+                "source": source
+            }))
+        })
+        .collect())
+}
+
+fn read_connector_contributions(
+    app_dir: &Path,
+    plugin_manifest: &Value,
+) -> Result<Vec<Value>, String> {
+    let Some(connectors_path) = contribution_path(app_dir, plugin_manifest, "connectors")? else {
+        return Ok(Vec::new());
+    };
+    if !connectors_path.is_file() {
+        return Ok(Vec::new());
+    }
+    let registry = read_json_file(
+        &connectors_path,
+        "读取插件包 contributions.connectors 失败",
+    )?;
+    Ok(registry
+        .get("connectors")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|connector| {
+            let id = read_string_from_record(&connector, "id")?;
+            Some(json!({
+                "id": id,
+                "title": read_string_from_record(&connector, "title").unwrap_or_else(|| id.clone()),
+                "kind": read_string_from_record(&connector, "kind").unwrap_or_else(|| "api".to_string()),
+                "description": read_string_from_record(&connector, "description"),
+                "taskKinds": read_string_array(connector.get("taskKinds")),
+                "path": package_relative_string(app_dir, &connectors_path),
+                "required": connector.get("required").and_then(Value::as_bool).unwrap_or(false)
+            }))
+        })
+        .collect())
+}
+
+fn read_hook_contributions(app_dir: &Path, plugin_manifest: &Value) -> Result<Vec<Value>, String> {
+    let Some(hooks_root) = contribution_path(app_dir, plugin_manifest, "hooks")? else {
+        return Ok(Vec::new());
+    };
+    if !hooks_root.is_dir() {
+        return Ok(Vec::new());
+    }
+    let mut hooks = Vec::new();
+    for entry in fs::read_dir(&hooks_root).map_err(|error| {
+        format!(
+            "读取插件包 contributions.hooks 目录失败 {}: {error}",
+            hooks_root.display()
+        )
+    })? {
+        let entry = entry.map_err(|error| format!("读取插件包 hook 条目失败: {error}"))?;
+        let path = entry.path();
+        if !path.is_file() || path.extension().and_then(|value| value.to_str()) != Some("mjs") {
+            continue;
+        }
+        let id = path
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .unwrap_or("hook")
+            .to_string();
+        hooks.push(json!({
+            "key": id,
+            "title": humanize_id(&id),
+            "entrypoint": package_relative_string(app_dir, &path),
+            "required": false
+        }));
+    }
+    hooks.sort_by_key(|value| {
+        value
+            .get("key")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string()
+    });
+    Ok(hooks)
+}
+
 fn project_plugin_package_to_agent_app_manifest(
     app_dir: &Path,
     plugin_manifest: &Value,
     runtime_layer: Option<&Value>,
     workbench_layer: Option<&Value>,
+    package_components: &PluginPackageComponents,
 ) -> Result<Value, String> {
     let runtime = unwrap_named_object(runtime_layer, "agentRuntime")
         .or_else(|| unwrap_named_object(runtime_layer, "runtime"));
@@ -192,14 +530,31 @@ fn project_plugin_package_to_agent_app_manifest(
         let entries = entries_from_runtime(runtime, &display_name);
         manifest.insert("entries".to_string(), Value::Array(entries));
         manifest.insert("artifacts".to_string(), artifacts_from_runtime(runtime));
-        manifest.insert("subagents".to_string(), subagents_from_runtime(runtime));
+        manifest.insert(
+            "subagents".to_string(),
+            merge_records_by_id(
+                subagents_from_runtime(runtime)
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default(),
+                package_components.subagents.clone(),
+                "id",
+            ),
+        );
         manifest.insert(
             "skillRefs".to_string(),
-            skill_refs_from_runtime(app_dir, plugin_manifest, runtime),
+            merge_records_by_id(
+                skill_refs_from_runtime(app_dir, plugin_manifest, runtime)
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default(),
+                package_components.skills.clone(),
+                "id",
+            ),
         );
         manifest.insert(
             "toolRefs".to_string(),
-            tool_refs_from_runtime(plugin_manifest, runtime),
+            tool_refs_from_runtime(plugin_manifest, runtime, package_components),
         );
     } else {
         manifest.insert(
@@ -424,6 +779,37 @@ fn subagents_from_runtime(runtime: &Value) -> Value {
     Value::Array(subagents.into_values().collect())
 }
 
+fn merge_records_by_id(base: Vec<Value>, overlay: Vec<Value>, key: &str) -> Value {
+    let mut merged: Map<String, Value> = Map::new();
+    for value in base.into_iter().chain(overlay) {
+        let Some(id) = value.get(key).and_then(Value::as_str).map(ToString::to_string) else {
+            continue;
+        };
+        match (merged.remove(&id), value) {
+            (Some(Value::Object(mut existing)), Value::Object(next)) => {
+                for (field, field_value) in next {
+                    if !field_value.is_null() {
+                        existing.insert(field, field_value);
+                    }
+                }
+                merged.insert(id, Value::Object(existing));
+            }
+            (_, next) => {
+                merged.insert(id, next);
+            }
+        }
+    }
+    let mut values = merged.into_values().collect::<Vec<_>>();
+    values.sort_by_key(|value| {
+        value
+            .get(key)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string()
+    });
+    Value::Array(values)
+}
+
 fn skill_refs_from_runtime(app_dir: &Path, plugin_manifest: &Value, runtime: &Value) -> Value {
     let workflows = runtime
         .get("workflows")
@@ -491,7 +877,11 @@ fn activation_for_skill(workflows: &[Value], skill_id: &str) -> Option<String> {
         .next()
 }
 
-fn tool_refs_from_runtime(plugin_manifest: &Value, runtime: &Value) -> Value {
+fn tool_refs_from_runtime(
+    plugin_manifest: &Value,
+    runtime: &Value,
+    package_components: &PluginPackageComponents,
+) -> Value {
     let mut tool_refs = Vec::new();
     if let Some(cli_path) = read_string(plugin_manifest, &["contributions", "clis"]) {
         tool_refs.push(json!({
@@ -501,6 +891,7 @@ fn tool_refs_from_runtime(plugin_manifest: &Value, runtime: &Value) -> Value {
             "required": false
         }));
     }
+    tool_refs.extend(package_components.cli_tools.clone());
     runtime
         .get("connectors")
         .and_then(|connectors| connectors.get("registry"))
@@ -513,7 +904,48 @@ fn tool_refs_from_runtime(plugin_manifest: &Value, runtime: &Value) -> Value {
                 "required": false
             }))
         });
-    Value::Array(tool_refs)
+    tool_refs.extend(package_components.connectors.iter().filter_map(|connector| {
+        let id = read_string_from_record(connector, "id")?;
+        Some(json!({
+            "key": id,
+            "title": read_string_from_record(connector, "title").unwrap_or_else(|| id.clone()),
+            "description": read_string_from_record(connector, "description"),
+            "provider": format!(
+                "connector:{}",
+                read_string_from_record(connector, "kind").unwrap_or_else(|| "api".to_string())
+            ),
+            "path": read_string_from_record(connector, "path"),
+            "capabilities": read_string_array(connector.get("taskKinds")),
+            "required": connector.get("required").and_then(Value::as_bool).unwrap_or(false)
+        }))
+    }));
+    tool_refs.extend(package_components.hooks.iter().filter_map(|hook| {
+        let key = read_string_from_record(hook, "key")?;
+        Some(json!({
+            "key": format!("hook:{key}"),
+            "title": read_string_from_record(hook, "title").unwrap_or_else(|| key.clone()),
+            "description": "Plugin lifecycle hook",
+            "provider": "lifecycle-hook",
+            "path": read_string_from_record(hook, "entrypoint"),
+            "required": hook.get("required").and_then(Value::as_bool).unwrap_or(false)
+        }))
+    }));
+    let mut seen = Map::new();
+    for tool in tool_refs {
+        let Some(key) = read_string_from_record(&tool, "key") else {
+            continue;
+        };
+        seen.insert(key, tool);
+    }
+    let mut values = seen.into_values().collect::<Vec<_>>();
+    values.sort_by_key(|value| {
+        value
+            .get("key")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string()
+    });
+    Value::Array(values)
 }
 
 fn find_skill_path(skills_root: &Path, skill_id: &str) -> Option<PathBuf> {

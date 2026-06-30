@@ -413,6 +413,8 @@ function resolveContextTokenEstimate(
 }
 
 interface UseThemeContextWorkspaceOptions {
+  enabled?: boolean;
+  prefetchEnabled?: boolean;
   projectId?: string;
   activeTheme: string;
   messages: Message[];
@@ -421,17 +423,23 @@ interface UseThemeContextWorkspaceOptions {
 }
 
 export function useThemeContextWorkspace({
+  enabled: workspaceEnabled = true,
+  prefetchEnabled = true,
   projectId,
   activeTheme,
   messages,
   providerType,
   model,
 }: UseThemeContextWorkspaceOptions): ThemeContextWorkspaceState {
-  const enabled = isSpecializedWorkbenchTheme(activeTheme);
+  const themeEnabled = isSpecializedWorkbenchTheme(activeTheme);
+  const enabled = workspaceEnabled && themeEnabled;
+  const prefetchAllowed = enabled && prefetchEnabled;
   const normalizedProjectId = normalizeProjectId(projectId);
   const contextProjectId = enabled ? normalizedProjectId : null;
 
-  const materialWorkspace = useMaterials(contextProjectId);
+  const materialWorkspace = useMaterials(contextProjectId, {
+    enabled: prefetchAllowed,
+  });
   const materials = materialWorkspace.materials;
   const getMaterialContent = materialWorkspace.getContent;
   const uploadMaterial = materialWorkspace.upload;
@@ -470,7 +478,7 @@ export function useThemeContextWorkspace({
   }, [contextProjectId]);
 
   useEffect(() => {
-    if (!contextProjectId) {
+    if (!prefetchAllowed || !contextProjectId) {
       setProjectContents([]);
       return;
     }
@@ -492,12 +500,12 @@ export function useThemeContextWorkspace({
     return () => {
       cancelled = true;
     };
-  }, [contextProjectId]);
+  }, [contextProjectId, prefetchAllowed]);
 
   useEffect(() => {
     setGeneratedContextReadyProjectId(null);
 
-    if (!contextProjectId) {
+    if (!prefetchAllowed || !contextProjectId) {
       setGeneratedSearchContexts([]);
       return;
     }
@@ -506,18 +514,18 @@ export function useThemeContextWorkspace({
     const stored = loadTransient<GeneratedSearchContextItem[]>(storageKey, []);
     setGeneratedSearchContexts(Array.isArray(stored) ? stored : []);
     setGeneratedContextReadyProjectId(contextProjectId);
-  }, [contextProjectId]);
+  }, [contextProjectId, prefetchAllowed]);
 
   useEffect(() => {
-    if (!contextProjectId) {
+    if (!prefetchAllowed || !contextProjectId) {
       return;
     }
     const storageKey = buildGeneratedContextStorageKey(contextProjectId);
     saveTransient(storageKey, generatedSearchContexts);
-  }, [contextProjectId, generatedSearchContexts]);
+  }, [contextProjectId, generatedSearchContexts, prefetchAllowed]);
 
   const contextCatalog = useMemo<ContextCatalogItem[]>(() => {
-    if (!enabled) {
+    if (!prefetchAllowed) {
       return [];
     }
 
@@ -574,7 +582,7 @@ export function useThemeContextWorkspace({
     );
 
     return [...generatedItems, ...materialItems, ...contentItems];
-  }, [enabled, generatedSearchContexts, materials, projectContents]);
+  }, [generatedSearchContexts, materials, prefetchAllowed, projectContents]);
 
   const contextCatalogById = useMemo(
     () => new Map(contextCatalog.map((item) => [item.id, item])),
@@ -590,7 +598,7 @@ export function useThemeContextWorkspace({
   );
 
   useEffect(() => {
-    if (!contextProjectId) {
+    if (!enabled || !contextProjectId) {
       contextSelectionInitializedRef.current = null;
       setActiveContextIds([]);
       setManualContextIds([]);
@@ -630,7 +638,7 @@ export function useThemeContextWorkspace({
       setManualContextIds([]);
     }
     contextSelectionInitializedRef.current = contextProjectId;
-  }, [contextCatalog, contextProjectId, generatedContextReadyProjectId]);
+  }, [contextCatalog, contextProjectId, enabled, generatedContextReadyProjectId]);
 
   useEffect(() => {
     if (!enabled || !contextProjectId) {
@@ -666,14 +674,14 @@ export function useThemeContextWorkspace({
   }, [contextCatalog, contextProjectId, enabled, manualContextIds.length]);
 
   useEffect(() => {
-    if (!contextProjectId) {
+    if (!enabled || !contextProjectId) {
       return;
     }
     const storageKey = buildContextStorageKey(contextProjectId);
     const manualStorageKey = buildManualContextStorageKey(contextProjectId);
     saveTransient(storageKey, activeContextIds);
     saveTransient(manualStorageKey, manualContextIds);
-  }, [activeContextIds, contextProjectId, manualContextIds]);
+  }, [activeContextIds, contextProjectId, enabled, manualContextIds]);
 
   useEffect(() => {
     if (!enabled) {
@@ -721,7 +729,7 @@ export function useThemeContextWorkspace({
   );
 
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || !contextProjectId) {
       return;
     }
 
@@ -855,7 +863,7 @@ export function useThemeContextWorkspace({
       }
       void loadContextBody(item);
     });
-  }, [enabled, loadContextBody, orderedActiveContextItems]);
+  }, [contextProjectId, enabled, loadContextBody, orderedActiveContextItems]);
 
   const sidebarContextItems = useMemo<SidebarContextItem[]>(
     () =>

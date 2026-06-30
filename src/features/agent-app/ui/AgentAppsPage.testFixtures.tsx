@@ -211,7 +211,7 @@ vi.mock("@/lib/api/agentApps", () => ({
       physicalDockCount: 1,
       defaultActiveTab: null,
       supportedTabs: [],
-      productProfile: {
+      articleWorkspace: {
         enabled: false,
         objects: [],
         panes: [],

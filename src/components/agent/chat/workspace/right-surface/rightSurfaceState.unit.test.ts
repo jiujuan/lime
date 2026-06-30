@@ -95,13 +95,13 @@ describe("resolveWorkspaceRightSurfaceState", () => {
         layoutMode: "chat",
         hasExpertInfo: false,
         expertInfoVisible: false,
-        openSurfaces: ["productProfile", "files", "shell"],
-        requestedSurface: "productProfile",
+        openSurfaces: ["articleWorkspace", "files", "shell"],
+        requestedSurface: "articleWorkspace",
         source: "route",
       }),
     ).toMatchObject({
-      activeSurface: "productProfile",
-      openSurfaces: ["productProfile", "files", "shell"],
+      activeSurface: "articleWorkspace",
+      openSurfaces: ["articleWorkspace", "files", "shell"],
       source: "route",
     });
   });

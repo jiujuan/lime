@@ -530,15 +530,50 @@
     - 进一步二分到本轮 hooks 变更的 5 个入口文件后，`tsc -p .lime/tmp/tsconfig-chatHooksChanged.files.json --noEmit --pretty false` 运行 `338.96s` 仍未自然退出；单入口 `agentStreamAgentMessageContentSync.ts` 正常解析依赖图运行 `141.15s` 仍未自然退出。
     - `--noResolve` 单入口可在 `36.64s` 返回，但会产生大量缺失依赖假错误，不能作为有效 typecheck 证据；该结果仅说明慢点在正常依赖解析 / 类型图展开阶段，不是本轮文件的语法错误。
 
+- S4.11 `@配图` current chain Electron fixture：
+  - 问题：用户输入 `@配图` 后曾出现没有 Agent 思考 / 工具过程就直接生成图片、刷新后跳回首页或只剩前端伪 task 卡的现象；这类问题不能靠前端直建 task 或 `{task_id}` 模板占位修补，必须证明原文先进入 Agent turn，再由 Skill / tool / task file / GUI 恢复同一条 current 主链收口。
+  - Codex 对齐依据：图片命令验收必须按结构化生命周期定位，不能从截图猜测；工具过程、task artifact 和 GUI 轻卡应由同一 task id 串起来，刷新恢复继续消费 `.lime/tasks/image_generate/*.json`，而不是靠 renderer 内存状态或 draft card。
+  - current 修复：
+    - App Server protocol / method catalog / processor / runtime / local data source 已补齐 `mediaTaskArtifact/image/complete`；TS app-server-client、前端 `mediaTasks` 网关、DevBridge App Server method profile、schema fixture 和 generated protocol types 已同步。
+    - 新增 `scripts/agent-runtime/claw-chat-current-fixture-image-command.mjs` 承接 image-command 场景，避免继续往超大 `claw-chat-current-fixture-scenario-flow.mjs` 堆图片业务逻辑。
+    - `claw-chat-current-fixture-backend-file.mjs` 的 external fixture backend 发出 `Skill(image_generate)` 与 `lime_create_image_generation_task` 两段工具事件；真实 task artifact 仍由 GUI 侧通过 App Server current `mediaTaskArtifact/image/create` 创建，并把响应回传给 backend 作为 tool result。
+    - fixture 不再直接 patch `.lime/tasks/image_generate/*.json`；终态回写统一通过 App Server current `mediaTaskArtifact/image/complete`，再用 `get/list` 和 task file 读取验证同一 task artifact 已推进到 `succeeded`。
+    - GUI 断言锁定 `data-testid="image-workbench-message-preview-${taskId}"`，要求同一卡片进入终态、有真实 media、无 `draft-image-`、无 `{task_id}`；刷新后重新打开 fixture session，继续用同一 task id 验证恢复。
+    - assertion context / scenario assertions 增加 `IMAGE_COMMAND_ASSERTION_KEYS`，同时验证 backend metadata、App Server `mediaTaskArtifact/image/create|complete|get|list`、read model tool call、task file terminal、单卡终态和 reload restore。
+    - reload 前保存 `agentUiPerformanceTracePreReload`，避免刷新后 hydrate trace 覆盖 provider/client 分段证据。
+  - 分类：
+    - `current`：`@配图 原文 -> Agent turn -> harness.image_skill_launch -> Skill(image_generate) -> lime_create_image_generation_task -> mediaTaskArtifact/image/create -> mediaTaskArtifact/image/complete -> .lime/tasks/image_generate/*.json -> GUI 轻卡终态 -> 刷新恢复`。
+    - `test-only`：external fixture backend 等待 GUI 创建的 task artifact，再把真实响应作为 tool result 回灌；这不是生产 fallback。
+    - `dead`：前端静默直建图片 task、`draft-image-*` 伪结果卡、`{task_id}` 模板占位、旧 `agent_runtime_submit_turn` / `execute_skill` 首发路径。
+  - 定向验证：
+    - `cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server --test media_task_jsonrpc`，3 个用例通过，覆盖 `image/complete` JSON-RPC 正向、错误 task type 和 cancelled terminal 拒绝。
+    - `cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server-protocol app_server_method_catalog_keeps_request_and_notification_methods_together`，通过。
+    - `cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server-protocol schema_fixtures_match_generated_output --test schema_fixtures`，通过。
+    - `npm run check:protocol-types`，通过。
+    - `npx vitest run packages/app-server-client/tests/client.test.mjs`，53 个用例通过。
+    - `node scripts/check-app-server-client-contract.mjs`，283 checks 通过。
+    - `npx vitest run src/lib/api/mediaTasks.test.ts src/lib/api/mediaTasks.current-boundary.test.ts src/lib/api/appServer.test.ts src/lib/api/agentRuntime/mediaClient.test.ts src/lib/api/agentRuntime/mediaClient.current-boundary.test.ts scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs`，6 个文件、65 个用例通过。
+    - `node --check` 覆盖 `scripts/agent-runtime/claw-chat-current-fixture-image-command.mjs`、`claw-chat-current-fixture-scenario-assertions.mjs`、`claw-chat-current-fixture-constants.mjs`，通过。
+  - 真实 GUI fixture 验证：
+    - `npm run smoke:claw-chat-current-fixture -- --scenario image-command --timeout-ms 180000 --evidence-dir ".lime/qc/gui-evidence/claw-chat-current-fixture" --prefix "claw-chat-current-fixture-image-command"`，通过。
+      - evidence：`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-image-command-summary.json`
+      - backend ledger：`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-image-command-backend-ledger.json`
+      - 关键断言：`imageCommandUsedCurrentMediaTaskArtifactMethods=true`、`imageCommandTaskArtifactTerminal=true`、`imageCommandTaskArtifactSameTaskUpdated=true`、`guiImageCommandTaskCardTerminal=true`、`guiImageCommandSingleTaskCard=true`、`guiImageCommandRestoredAfterReload=true`、`agentUiPerformanceTraceSeparatesProviderAndClient=true`、`actionableConsoleErrors=[]`。
+  - 剩余边界：
+    - 本轮已新增 App Server `mediaTaskArtifact/image/complete` current method；仍未声明完整外部 worker orchestration、鉴权、重试或 live Provider 图片生成已产品化。
+    - 本轮未跑 live Provider 图片生成；验收范围是非 live Provider 的真实 Electron GUI + App Server current fixture 主链。
+    - 新增 image-command fixture 文件已接近 `800` 行体量预警；后续如果继续扩展 inline 配图、封面位或 retry/cancel，应先拆 task artifact helper / GUI wait / scenario runner 子模块。
+
 ## 5. 当前缺口
 
 1. S3 current 展示主线已完成：live running WebSearch 中间态已有结构化 evidence，completed read model 不再作为唯一证据。
 2. S4 后端 running 阻塞已完成 Rust current 修复、定向测试、Agent Runtime 聚合 fixture、Claw 新闻 GUI fixture 与 Web tools rendering fixture；App Server terminal 已被 GUI fixture 真实消费。
 3. S4.9 普通工具过程记录持久化已完成定向单测和真实 GUI fixture 复跑；WebTools、Skills Runtime、MCP structuredContent 证据已回填。
-4. 后续若复发展示问题，必须先看 `guiWebToolsRenderingInProgress.latestAssistantRendererContentPartTypes` 与 `latestAssistantTextAfterProcessPart`，普通工具则先看 DOM 中 `inline-tool-process-step` 数量与 tool id 时序，不要从截图文字猜 lifecycle。
-5. `request_tool_policy.rs` 仍是 2800+ 行巨型文件；本轮已把 idle 专项测试、stream diagnostics、text batcher、web retrieval process state、reply retry mode、WebSearch preflight、request policy config、runtime status 与 auto compaction projection 外移，后续应继续按职责拆 WebSearch execution tracker、stream attempt orchestration 或取消上下文持久化等 production 子模块。
-6. 无 sequence 的旧纯文本 provider 仍作为兼容兜底存在；后续要删除它，必须先确认 App Server / provider 全部输出 `phase` 或完成态 `turn_completed.text`。
-7. Expert Panel Skills Runtime override 旁路已关闭：GUI completion wait、local merge、completed thread item merge 与相邻 assistant merge 均按 runtime turn 边界收口；历史轮 summary 仍可见但不再污染当前轮 assistant bubble。
+4. S4.11 `@配图` current chain 已通过真实 Electron fixture：同一 task artifact 经 `mediaTaskArtifact/image/create -> mediaTaskArtifact/image/complete` 从 `pending_submit/pending` 推进到 `succeeded/succeeded`，GUI 同一卡片终态并在刷新后恢复；仍不声称 live Provider 或完整外部 worker orchestration 已完成。
+5. 后续若复发展示问题，必须先看 `guiWebToolsRenderingInProgress.latestAssistantRendererContentPartTypes` 与 `latestAssistantTextAfterProcessPart`，普通工具则先看 DOM 中 `inline-tool-process-step` 数量与 tool id 时序，图片命令则先看 `image-workbench-message-preview-${taskId}`、task file status 和 read model tool calls，不要从截图文字猜 lifecycle。
+6. `request_tool_policy.rs` 仍是 2800+ 行巨型文件；本轮已把 idle 专项测试、stream diagnostics、text batcher、web retrieval process state、reply retry mode、WebSearch preflight、request policy config、runtime status 与 auto compaction projection 外移，后续应继续按职责拆 WebSearch execution tracker、stream attempt orchestration 或取消上下文持久化等 production 子模块。
+7. 无 sequence 的旧纯文本 provider 仍作为兼容兜底存在；后续要删除它，必须先确认 App Server / provider 全部输出 `phase` 或完成态 `turn_completed.text`。
+8. Expert Panel Skills Runtime override 旁路已关闭：GUI completion wait、local merge、completed thread item merge 与相邻 assistant merge 均按 runtime turn 边界收口；历史轮 summary 仍可见但不再污染当前轮 assistant bubble。
 
 ## 6. 下一刀
 
@@ -546,5 +581,6 @@
 
 1. 继续拆 `request_tool_policy.rs` 的 production 子职责，优先拆 WebSearch execution tracker 或 stream attempt orchestration 中测试覆盖清晰且直接影响 streaming lifecycle 的一块。
 2. 继续收缩无 sequence legacy 兜底前，先让 App Server / provider 全面输出 `phase=commentary/final_answer` 或 `turn_completed.text`。
-3. 对 Browser action runtime 复用同一 live running capture 口径：process 后不得有无 phase text part。
-4. 不新增展示文案正则；新增 phase 必须先进入 App Server stream event / thread item protocol，再映射到 `ContentPart.metadata` 和定向 fixture。
+3. 如果继续扩 `@配图` 到 inline 配图、封面位、retry/cancel 或外部 worker 回写，先拆 `claw-chat-current-fixture-image-command.mjs` 子职责，并复用 App Server current `mediaTaskArtifact/image/complete`；不要继续堆前端直建 task 或 fixture-only 回写。
+4. 对 Browser action runtime 复用同一 live running capture 口径：process 后不得有无 phase text part。
+5. 不新增展示文案正则；新增 phase 必须先进入 App Server stream event / thread item protocol，再映射到 `ContentPart.metadata` 和定向 fixture。

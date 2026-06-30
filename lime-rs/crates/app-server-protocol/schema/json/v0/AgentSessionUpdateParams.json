@@ -7,6 +7,8 @@
         "null"
       ]
     },
+    "articleWorkspaceEditedDraft": true,
+    "articleWorkspaceSelectedObjectRef": true,
     "executionStrategy": {
       "type": [
         "null",
@@ -19,7 +21,6 @@
         "string"
       ]
     },
-    "productWorkspaceSelectedObjectRef": true,
     "providerName": {
       "type": [
         "null",

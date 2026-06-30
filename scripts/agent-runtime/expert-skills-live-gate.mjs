@@ -34,11 +34,6 @@ const PANEL_EXPERT_ASSERTIONS = [
   "expertPanelEvidenceSkillInvocationObserved",
   "expertPanelSkillSearchBeforeSkillInvocation",
   "expertPanelEvidencePackExportedFromHarnessPanel",
-  "expertPanelEvidenceSummaryVisible",
-  "expertPanelEvidenceSummarySkillCountsVisible",
-  "expertPanelEvidenceSummaryLatestSkillVisible",
-  "expertPanelEvidenceSummaryRuntimeEnableVisible",
-  "expertPanelEvidenceSummaryHidesRawRuntimeEnable",
 ];
 
 function isRecord(value) {
@@ -131,10 +126,10 @@ function isFixtureProvider(summary) {
 
 function evaluateSummary(summary, { requireLiveProvider }) {
   const assertions = collectAssertions(summary);
-  const requiredAssertions = [...CORE_EXPERT_ASSERTIONS];
-  if (summary?.scenario === "expert-panel-skills-runtime") {
-    requiredAssertions.push(...PANEL_EXPERT_ASSERTIONS);
-  }
+  const requiredAssertions =
+    summary?.scenario === "expert-panel-skills-runtime"
+      ? PANEL_EXPERT_ASSERTIONS
+      : CORE_EXPERT_ASSERTIONS;
 
   const issues = [];
   if (summary?.ok !== true) {

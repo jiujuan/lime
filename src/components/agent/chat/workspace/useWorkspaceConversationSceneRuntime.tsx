@@ -277,14 +277,13 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   onToggleRightSurfaceBrowser?: ConversationScenePresentationParams["scene"]["onToggleRightSurfaceBrowser"];
   rightSurfaceFilesOpen?: ConversationScenePresentationParams["scene"]["rightSurfaceFilesOpen"];
   onToggleRightSurfaceFiles?: ConversationScenePresentationParams["scene"]["onToggleRightSurfaceFiles"];
+  rightSurfaceTraceOpen?: ConversationScenePresentationParams["scene"]["rightSurfaceTraceOpen"];
+  onToggleRightSurfaceTrace?: ConversationScenePresentationParams["scene"]["onToggleRightSurfaceTrace"];
   rightSurfaceShellOpen?: ConversationScenePresentationParams["scene"]["rightSurfaceShellOpen"];
   onToggleRightSurfaceShell?: ConversationScenePresentationParams["scene"]["onToggleRightSurfaceShell"];
   showHarnessToggle: ConversationScenePresentationParams["scene"]["showHarnessToggle"];
   navbarHarnessPanelVisible: ConversationScenePresentationParams["scene"]["harnessPanelVisible"];
   handleToggleHarnessPanel: ConversationScenePresentationParams["scene"]["onToggleHarnessPanel"];
-  showTraceToggle?: ConversationScenePresentationParams["scene"]["showTraceToggle"];
-  tracePanelVisible?: ConversationScenePresentationParams["scene"]["tracePanelVisible"];
-  handleToggleTracePanel?: ConversationScenePresentationParams["scene"]["onToggleTracePanel"];
   showExpertInfoToggle?: ConversationScenePresentationParams["scene"]["showExpertInfoToggle"];
   expertInfoPanelVisible?: ConversationScenePresentationParams["scene"]["expertInfoPanelVisible"];
   handleToggleExpertInfoPanel?: ConversationScenePresentationParams["scene"]["onToggleExpertInfoPanel"];
@@ -321,10 +320,18 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   currentTurnId: ConversationScenePresentationParams["messageList"]["currentTurnId"];
   threadRead: ConversationScenePresentationParams["messageList"]["threadRead"];
   executionRuntime?: AsterSessionExecutionRuntime | null;
-  pendingActions: ConversationScenePresentationParams["messageList"]["pendingActions"];
-  submittedActionsInFlight: ConversationScenePresentationParams["messageList"]["submittedActionsInFlight"];
-  queuedTurns: ConversationScenePresentationParams["messageList"]["queuedTurns"];
-  childSubagentSessions?: ConversationScenePresentationParams["messageList"]["childSubagentSessions"];
+  pendingActions: NonNullable<
+    ConversationScenePresentationParams["messageList"]["pendingActions"]
+  >;
+  submittedActionsInFlight: NonNullable<
+    ConversationScenePresentationParams["messageList"]["submittedActionsInFlight"]
+  >;
+  queuedTurns: NonNullable<
+    ConversationScenePresentationParams["messageList"]["queuedTurns"]
+  >;
+  childSubagentSessions?: NonNullable<
+    ConversationScenePresentationParams["messageList"]["childSubagentSessions"]
+  >;
   sessionHistoryWindow?: ConversationScenePresentationParams["messageList"]["sessionHistoryWindow"];
   loadFullSessionHistory?: ConversationScenePresentationParams["messageList"]["onLoadFullHistory"];
   isPreparingSend: boolean;
@@ -459,14 +466,13 @@ export function useWorkspaceConversationSceneRuntime({
   onToggleRightSurfaceBrowser,
   rightSurfaceFilesOpen,
   onToggleRightSurfaceFiles,
+  rightSurfaceTraceOpen,
+  onToggleRightSurfaceTrace,
   rightSurfaceShellOpen,
   onToggleRightSurfaceShell,
   showHarnessToggle,
   navbarHarnessPanelVisible,
   handleToggleHarnessPanel,
-  showTraceToggle,
-  tracePanelVisible,
-  handleToggleTracePanel,
   showExpertInfoToggle,
   expertInfoPanelVisible,
   handleToggleExpertInfoPanel,
@@ -591,9 +597,14 @@ export function useWorkspaceConversationSceneRuntime({
     !isThemeWorkbench &&
     activeTheme === "general" &&
     layoutMode === "chat-canvas";
+  const shouldBuildRuntimeTaskCard = !shellChromeRuntime.showChatLayout;
   const runtimeTaskCard = useMemo(
-    () =>
-      buildAgentTaskRuntimeCardModel({
+    () => {
+      if (!shouldBuildRuntimeTaskCard) {
+        return null;
+      }
+
+      return buildAgentTaskRuntimeCardModel({
         messages: displayMessages,
         turns: projectedTurns,
         threadItems: projectedThreadItems,
@@ -604,7 +615,8 @@ export function useWorkspaceConversationSceneRuntime({
         queuedTurns: projectedQueuedTurns,
         childSubagentSessions: projectedChildSubagentSessions,
         isSending,
-      }),
+      });
+    },
     [
       displayMessages,
       isSending,
@@ -616,6 +628,7 @@ export function useWorkspaceConversationSceneRuntime({
       projectedThreadItems,
       projectedThreadRead,
       projectedTurns,
+      shouldBuildRuntimeTaskCard,
     ],
   );
   const codingWorkbenchViews = useMemo(
@@ -867,6 +880,11 @@ export function useWorkspaceConversationSceneRuntime({
       onToggleRightSurfaceFiles: taskCenterUtilityActionsVisible
         ? onToggleRightSurfaceFiles
         : undefined,
+      rightSurfaceTraceOpen:
+        taskCenterUtilityActionsVisible && Boolean(rightSurfaceTraceOpen),
+      onToggleRightSurfaceTrace: taskCenterUtilityActionsVisible
+        ? onToggleRightSurfaceTrace
+        : undefined,
       rightSurfaceShellOpen:
         taskCenterUtilityActionsVisible && Boolean(rightSurfaceShellOpen),
       onToggleRightSurfaceShell: taskCenterUtilityActionsVisible
@@ -877,13 +895,6 @@ export function useWorkspaceConversationSceneRuntime({
         taskCenterUtilityActionsVisible && navbarHarnessPanelVisible,
       onToggleHarnessPanel: taskCenterUtilityActionsVisible
         ? handleToggleHarnessPanel
-        : undefined,
-      showTraceToggle:
-        taskCenterUtilityActionsVisible && Boolean(showTraceToggle),
-      tracePanelVisible:
-        taskCenterUtilityActionsVisible && Boolean(tracePanelVisible),
-      onToggleTracePanel: taskCenterUtilityActionsVisible
-        ? handleToggleTracePanel
         : undefined,
       showExpertInfoToggle:
         taskCenterUtilityActionsVisible && Boolean(showExpertInfoToggle),

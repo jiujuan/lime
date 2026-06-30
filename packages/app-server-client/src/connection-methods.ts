@@ -756,6 +756,10 @@ declare module "./connection.js" {
       params: protocol.MediaTaskArtifactVideoCreateParams,
       options?: AppServerRequestOptions,
     ): Promise<AppServerRequestResult<protocol.MediaTaskArtifactResponse>>;
+    completeImageMediaTaskArtifact(
+      params: protocol.MediaTaskArtifactImageCompleteParams,
+      options?: AppServerRequestOptions,
+    ): Promise<AppServerRequestResult<protocol.MediaTaskArtifactResponse>>;
     completeAudioMediaTaskArtifact(
       params: protocol.MediaTaskArtifactAudioCompleteParams,
       options?: AppServerRequestOptions,
@@ -2155,6 +2159,12 @@ const CONNECTION_METHODS: readonly ConnectionMethodSpec[] = [
     name: "createVideoMediaTaskArtifact",
     clientMethod: "createVideoMediaTaskArtifact",
     method: protocol.METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE,
+    params: "required",
+  },
+  {
+    name: "completeImageMediaTaskArtifact",
+    clientMethod: "completeImageMediaTaskArtifact",
+    method: protocol.METHOD_MEDIA_TASK_ARTIFACT_IMAGE_COMPLETE,
     params: "required",
   },
   {

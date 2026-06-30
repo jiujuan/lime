@@ -1336,13 +1336,13 @@ export function AgentAppsPage({
                               >
                                 {dynamicT(hostSummary.labelKey)}
                               </span>
-                              {hostSummary.productProfileEnabled ? (
+                              {hostSummary.articleWorkspaceEnabled ? (
                                 <span
                                   className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-600"
-                                  data-testid={`agent-apps-host-product-profile-${item.appId}`}
+                                  data-testid={`agent-apps-host-article-workspace-${item.appId}`}
                                 >
                                   {t(
-                                    "agentApp.apps.center.host.productProfile",
+                                    "agentApp.apps.center.host.articleWorkspace",
                                     {
                                       count: hostSummary.productObjectCount,
                                     },
@@ -1690,9 +1690,9 @@ export function AgentAppsPage({
                               },
                             )}
                           </div>
-                          {hostSummary.productProfileEnabled ? (
+                          {hostSummary.articleWorkspaceEnabled ? (
                             <div className="rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 py-2 sm:col-span-2">
-                              {t("agentApp.apps.center.host.productProfile", {
+                              {t("agentApp.apps.center.host.articleWorkspace", {
                                 count: hostSummary.productObjectCount,
                               })}
                             </div>

@@ -293,7 +293,9 @@ export function buildPluginActivationContext(params: {
           objectId: "pending",
         }
       : undefined,
-    openedTabs: params.entry.defaultObjectKind ? ["productProfile"] : undefined,
+    openedTabs: params.entry.defaultObjectKind
+      ? ["articleWorkspace"]
+      : undefined,
     source: params.source ?? "user",
   };
 }

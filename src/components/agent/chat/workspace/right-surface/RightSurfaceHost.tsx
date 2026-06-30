@@ -25,9 +25,9 @@ const RIGHT_SURFACE_TAB_LABELS: Record<
     key: "agentChat.rightSurface.tabs.appSurface",
     fallback: "Agent App",
   },
-  productProfile: {
-    key: "agentChat.rightSurface.tabs.productProfile",
-    fallback: "产物 Profile",
+  articleWorkspace: {
+    key: "agentChat.rightSurface.tabs.articleWorkspace",
+    fallback: "文章编辑器",
   },
   expertInfo: {
     key: "agentChat.rightSurface.tabs.expertInfo",

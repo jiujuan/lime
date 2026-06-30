@@ -1,6 +1,12 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Clock3, FileText, Loader2, PauseCircle, PlayCircle } from "lucide-react";
+import {
+  Clock3,
+  FileText,
+  Loader2,
+  PauseCircle,
+  PlayCircle,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -26,17 +32,22 @@ import {
   truncateDiagnosticText,
   type AgentThreadReliabilityDiagnosticContext,
 } from "../utils/threadReliabilityDiagnosticText";
+import { type AgentUiProjectionTranslation } from "../projection/agentUiProjectionSummary";
 import {
-  type AgentUiProjectionTranslation,
+  EMPTY_AGENT_UI_PROJECTION_SUMMARY,
+  summarizeAgentUiProjectionEvents,
+  type AgentUiProjectionSummary,
 } from "../projection/agentUiProjectionSummary";
-import { useAgentUiProjectionSummary } from "../projection/useConversationProjectionStore";
+import {
+  conversationProjectionStore,
+  selectAgentUiProjectionEventsForScope,
+} from "../projection/conversationProjectionStore";
 import { AgentIncidentPanel } from "./AgentIncidentPanel";
 import { AgentThreadFileCheckpointDialog } from "./AgentThreadFileCheckpointDialog";
 import { AgentThreadOutcomeSummary } from "./AgentThreadOutcomeSummary";
 import { AgentThreadRoutingEvidenceCard } from "./AgentThreadRoutingEvidenceCard";
 import { AgentThreadPolicyEvidenceCard } from "./AgentThreadPolicyEvidenceCard";
 import { AgentThreadReliabilityPanelHeader } from "./AgentThreadReliabilityPanelHeader";
-import { AgentThreadReliabilityProjectionSummary } from "./AgentThreadReliabilityProjectionSummary";
 import { AgentThreadReliabilityStats } from "./AgentThreadReliabilityStats";
 import {
   resolveToneClassName,
@@ -77,6 +88,20 @@ type AgentNamespaceTranslation = (
   key: string,
   options?: Record<string, unknown>,
 ) => unknown;
+
+function readAgentUiProjectionSummarySnapshot(
+  sessionId: string,
+): AgentUiProjectionSummary {
+  if (!sessionId) {
+    return EMPTY_AGENT_UI_PROJECTION_SUMMARY;
+  }
+  return summarizeAgentUiProjectionEvents(
+    selectAgentUiProjectionEventsForScope(
+      conversationProjectionStore.getSnapshot(),
+      { sessionId },
+    ),
+  );
+}
 
 export const AgentThreadReliabilityPanel: React.FC<
   AgentThreadReliabilityPanelProps
@@ -343,10 +368,6 @@ export const AgentThreadReliabilityPanel: React.FC<
   const diagnosticSessionId = diagnosticRuntimeContext?.sessionId?.trim() || "";
   const diagnosticWorkingDir =
     diagnosticRuntimeContext?.workingDir?.trim() || "";
-  const agentUiProjectionSummary = useAgentUiProjectionSummary(
-    diagnosticSessionId ? { sessionId: diagnosticSessionId } : null,
-    { enabled: Boolean(diagnosticSessionId) },
-  );
 
   if (!view.shouldRender) {
     return null;
@@ -421,6 +442,8 @@ export const AgentThreadReliabilityPanel: React.FC<
     }
 
     try {
+      const agentUiProjectionSummary =
+        readAgentUiProjectionSummarySnapshot(diagnosticSessionId);
       await navigator.clipboard.writeText(
         buildReliabilityDiagnosticText({
           threadRead,
@@ -451,6 +474,8 @@ export const AgentThreadReliabilityPanel: React.FC<
     }
 
     try {
+      const agentUiProjectionSummary =
+        readAgentUiProjectionSummarySnapshot(diagnosticSessionId);
       await navigator.clipboard.writeText(
         serializeReliabilityClipboardPayload(
           buildReliabilityRawPayload({
@@ -514,24 +539,6 @@ export const AgentThreadReliabilityPanel: React.FC<
         pendingRequestsLabel={text("stats.pendingRequests")}
         queuedTurnCount={view.queuedTurnCount}
         queuedTurnsLabel={text("stats.queuedTurns")}
-      />
-
-      <AgentThreadReliabilityProjectionSummary
-        labels={{
-          action: text("projection.metric.action"),
-          artifact: text("projection.metric.artifact"),
-          count: text("projection.count", {
-            count: agentUiProjectionSummary.total,
-          }),
-          diagnostics: text("projection.metric.diagnostics"),
-          evidence: text("projection.metric.evidence"),
-          latestEventPrefix: text("projection.latestEventPrefix"),
-          source: text("projection.source"),
-          task: text("projection.metric.task"),
-          title: text("projection.title"),
-        }}
-        summary={agentUiProjectionSummary}
-        translateProjection={translateProjection}
       />
 
       <AgentThreadRoutingEvidenceCard
@@ -939,7 +946,7 @@ export const AgentThreadReliabilityPanel: React.FC<
         />
       ) : null}
 
-      <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="mt-4 grid min-w-0 gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,18rem),1fr))]">
         {view.outcome ? (
           <AgentThreadOutcomeSummary outcome={view.outcome} />
         ) : (

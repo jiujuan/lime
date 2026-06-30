@@ -144,6 +144,67 @@ function runtimeContext() {
 }
 
 describe("plugin marketplace actions", () => {
+  it("本地安装应先选择目录并调用 current local package install API", async () => {
+    const selectLocalDirectory = vi.fn(async () => "/Users/coso/Documents/dev/ai/limecloud/content-factory-app");
+    const installLocalPackage = vi.fn(async () => installedState("research-kit"));
+    const dispatchChanged = vi.fn();
+
+    const result = await performPluginMarketplaceAction(
+      viewItem({
+        install: {
+          local: true,
+          cloud: false,
+          authentication: "on_use",
+        },
+      }),
+      {
+        selectLocalDirectory,
+        installLocalPackage,
+        dispatchChanged,
+      },
+    );
+
+    expect(result).toMatchObject({
+      status: "performed",
+      action: "install",
+    });
+    expect(selectLocalDirectory).toHaveBeenCalledWith({
+      title: "Research Kit",
+    });
+    expect(installLocalPackage).toHaveBeenCalledWith({
+      appDir: "/Users/coso/Documents/dev/ai/limecloud/content-factory-app",
+    });
+    expect(dispatchChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it("本地安装取消选择目录时应保持无操作且不报错", async () => {
+    const selectLocalDirectory = vi.fn(async () => null);
+    const installLocalPackage = vi.fn();
+    const dispatchChanged = vi.fn();
+
+    const result = await performPluginMarketplaceAction(
+      viewItem({
+        install: {
+          local: true,
+          cloud: false,
+          authentication: "on_use",
+        },
+      }),
+      {
+        selectLocalDirectory,
+        installLocalPackage,
+        dispatchChanged,
+      },
+    );
+
+    expect(result).toMatchObject({
+      status: "noop",
+      action: "install",
+    });
+    expect(installLocalPackage).not.toHaveBeenCalled();
+    expect(dispatchChanged).not.toHaveBeenCalled();
+  });
+
   it("安装应复用 current Agent App cloud release install API", async () => {
     const installCloudRelease = vi.fn(async () => installedState());
     const reportInstallState: NonNullable<

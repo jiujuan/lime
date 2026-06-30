@@ -198,6 +198,12 @@ export function WorkspaceMainArea({
     <MainArea
       $compact={compactChrome}
       $taskCenterSurface={Boolean(taskCenterChromeNode)}
+      data-testid="workspace-main-area"
+      data-layout-mode={effectiveLayoutMode}
+      data-has-right-surface={hasRightSurfaceContent ? "true" : "false"}
+      data-floating-input-overlay={
+        showFloatingInputOverlay ? "true" : "false"
+      }
     >
       {shouldAutoHideNavbar ? (
         <AutoHideNavbarBackdrop

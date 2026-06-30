@@ -644,6 +644,22 @@ describe("http-client", () => {
         request: {
           lines: [
             JSON.stringify({
+              id: "local-package-inspect",
+              method: "agentAppLocalPackage/inspect",
+              params: {
+                appDir:
+                  "/Users/coso/Documents/dev/ai/limecloud/content-factory-app",
+              },
+            }),
+          ],
+        },
+      }),
+    ).toBe(240000);
+    expect(
+      resolveBridgeRequestTimeoutMs("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
               id: "list-sessions",
               method: "agentSession/list",
               params: { limit: 20 },

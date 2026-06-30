@@ -97,6 +97,7 @@ export interface MessageImageWorkbenchPreview {
   sourceImagePrompt?: string | null;
   sourceImageRef?: string | null;
   sourceImageCount?: number;
+  requestMetadata?: Record<string, unknown>;
   size?: string;
   phase?: string | null;
   statusMessage?: string | null;
@@ -439,6 +440,8 @@ export interface Message {
   toolCalls?: ToolCallState[];
   /** Token 使用量（响应完成后） */
   usage?: TokenUsage;
+  /** 本轮发送/草稿关联的请求元数据 */
+  requestMetadata?: Record<string, unknown>;
   /** 权限确认请求列表 */
   actionRequests?: ActionRequired[];
   /**
@@ -453,6 +456,8 @@ export interface Message {
   artifacts?: Artifact[];
   /** 图片工作台消息卡预览 */
   imageWorkbenchPreview?: MessageImageWorkbenchPreview;
+  /** 图片任务运行时合约（旧兼容字段，优先从 imageWorkbenchPreview.runtimeContract 读取） */
+  imageRuntimeContract?: ImageRuntimeContractSnapshot;
   /** 通用任务消息卡预览 */
   taskPreview?: MessageTaskPreview;
   /** 首个流式事件到达前的本地运行态 */

@@ -72,8 +72,7 @@ vi.mock("@/lib/oemCloudSession", async () => {
 });
 
 vi.mock("@/hooks/useGlobalMediaGenerationDefaults", () => ({
-  useGlobalMediaGenerationDefaults: () =>
-    mockUseGlobalMediaGenerationDefaults(),
+  readGlobalMediaGenerationDefaults: () => mockUseGlobalMediaGenerationDefaults(),
 }));
 
 vi.mock("@/lib/api/agentApps", () => ({
@@ -590,10 +589,7 @@ describe("useWorkspaceSendActions", () => {
     });
     mockResolveOemCloudRuntimeContext.mockReturnValue(null);
     mockGetOemCloudBootstrapSnapshot.mockReturnValue(null);
-    mockUseGlobalMediaGenerationDefaults.mockReturnValue({
-      mediaDefaults: {},
-      loading: false,
-    });
+    mockUseGlobalMediaGenerationDefaults.mockReturnValue({});
     mockInstallSkillFromPromptInstruction.mockResolvedValue({
       directory: "viral-content-breakdown",
       inspection: {
@@ -653,6 +649,24 @@ describe("useWorkspaceSendActions", () => {
           }),
         },
       });
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("普通发送不应读取媒体默认配置", async () => {
+    const harness = mountHook({
+      input: "整理一下今天的国际新闻",
+    });
+
+    try {
+      await act(async () => {
+        const started = await harness.getValue().handleSend();
+        expect(started).toBe(true);
+      });
+
+      expect(mockUseGlobalMediaGenerationDefaults).not.toHaveBeenCalled();
+      expect(mockSendMessage).toHaveBeenCalledTimes(1);
     } finally {
       harness.unmount();
     }
@@ -778,14 +792,14 @@ describe("useWorkspaceSendActions", () => {
               intent_key: "content_factory_generate",
               task_kind: "content.factory.generate",
               output_artifact_kind: "content_factory.workspace_patch",
-              right_surface: "productProfile",
+              right_surface: "articleWorkspace",
               expected_objects: [
                 "articleDraft",
                 "imageGenerationSet",
                 "videoStoryboard",
                 "deliveryChecklist",
               ],
-              opened_tabs: ["productProfile"],
+              opened_tabs: ["articleWorkspace"],
               selected_object_ref: {
                 plugin_id: "content-factory-app",
                 object_kind: "articleDraft",
@@ -853,9 +867,9 @@ describe("useWorkspaceSendActions", () => {
               intent_key: "content_article_generate",
               task_kind: "content.article.generate",
               output_artifact_kind: "content_factory.workspace_patch",
-              right_surface: "productProfile",
+              right_surface: "articleWorkspace",
               expected_objects: ["articleDraft"],
-              opened_tabs: ["productProfile"],
+              opened_tabs: ["articleWorkspace"],
             },
             plugin_activation_intent: {
               source: "agent_app_manifest_intent",
@@ -863,7 +877,7 @@ describe("useWorkspaceSendActions", () => {
               intent_key: "content_article_generate",
               task_kind: "content.article.generate",
               output_artifact_kind: "content_factory.workspace_patch",
-              right_surface: "productProfile",
+              right_surface: "articleWorkspace",
             },
           },
         },
@@ -931,9 +945,9 @@ describe("useWorkspaceSendActions", () => {
               intent_key: "content_article_generate",
               task_kind: "content.article.generate",
               output_artifact_kind: "content_factory.workspace_patch",
-              right_surface: "productProfile",
+              right_surface: "articleWorkspace",
               expected_objects: ["articleDraft"],
-              opened_tabs: ["productProfile"],
+              opened_tabs: ["articleWorkspace"],
             },
             plugin_activation_intent: {
               source: "agent_app_manifest_intent",
@@ -941,7 +955,7 @@ describe("useWorkspaceSendActions", () => {
               intent_key: "content_article_generate",
               task_kind: "content.article.generate",
               output_artifact_kind: "content_factory.workspace_patch",
-              right_surface: "productProfile",
+              right_surface: "articleWorkspace",
             },
           },
         },
@@ -1025,7 +1039,7 @@ describe("useWorkspaceSendActions", () => {
               intent_key: "content_factory_generate",
               task_kind: "content.factory.generate",
               output_artifact_kind: "content_factory.workspace_patch",
-              right_surface: "productProfile",
+              right_surface: "articleWorkspace",
             },
             plugin_activation_intent: {
               source: "agent_app_manifest_intent",
@@ -1033,7 +1047,7 @@ describe("useWorkspaceSendActions", () => {
               intent_key: "content_factory_generate",
               task_kind: "content.factory.generate",
               output_artifact_kind: "content_factory.workspace_patch",
-              right_surface: "productProfile",
+              right_surface: "articleWorkspace",
             },
           },
         },
@@ -1142,10 +1156,11 @@ describe("useWorkspaceSendActions", () => {
       expect(sendOptions?.systemPromptOverride).toBeUndefined();
       expect(sendOptions?.providerOverride).toBeUndefined();
       expect(sendOptions?.modelOverride).toBeUndefined();
-      expect(
-        (sendOptions?.requestMetadata?.harness as Record<string, unknown>)
-          .browser_assist,
-      ).toEqual(
+      const browserAssistHarness = (
+        (sendOptions?.requestMetadata?.harness as Record<string, unknown>) ||
+        {}
+      ) as Record<string, unknown>;
+      expect(browserAssistHarness.browser_assist).toEqual(
         expect.objectContaining({
           enabled: true,
           profile_key: "general_browser_assist",
@@ -1242,6 +1257,87 @@ describe("useWorkspaceSendActions", () => {
     }
   });
 
+  it("普通首轮快答不应等待延迟加载的 service model 配置", async () => {
+    const deferredServiceModels = createDeferred<{
+      serviceModels?: HookProps["serviceModels"];
+      agentResponseLanguage?: string | null;
+    }>();
+    const resolveServiceModelsBeforeSend = vi.fn(
+      async () => deferredServiceModels.promise,
+    );
+    const harness = mountHook({
+      resolveServiceModelsBeforeSend,
+    });
+
+    try {
+      await act(async () => {
+        const started = await harness
+          .getValue()
+          .handleSend([], false, false, "只回答一个字：好", "react");
+        expect(started).toBe(true);
+      });
+
+      expect(resolveServiceModelsBeforeSend).not.toHaveBeenCalled();
+      expect(mockSendMessage).toHaveBeenCalledTimes(1);
+      const sendOptions = mockSendMessage.mock.calls[0]?.[8];
+      expect(sendOptions?.requestMetadata).toMatchObject({
+        harness: {
+          fast_response_routing: {
+            reason: "first-turn-plain-text",
+            service_model_slot: "responsive_chat",
+          },
+        },
+      });
+      expect(JSON.stringify(sendOptions?.requestMetadata)).not.toContain(
+        "responsive-provider",
+      );
+    } finally {
+      deferredServiceModels.resolve({});
+      harness.unmount();
+    }
+  });
+
+  it("专用服务模型场景应按需补齐延迟加载的 service model 配置", async () => {
+    const resolveServiceModelsBeforeSend = vi.fn(async () => ({
+      agentResponseLanguage: "en-US",
+      serviceModels: {
+        prompt_rewrite: {
+          preferredProviderId: "rewrite-provider",
+          preferredModelId: "rewrite-model",
+        },
+      },
+    }));
+    const harness = mountHook({
+      resolveServiceModelsBeforeSend,
+    });
+
+    try {
+      await act(async () => {
+        const started = await harness
+          .getValue()
+          .handleSend([], false, false, "请改写这段文案", "react", undefined, {
+            purpose: "style_rewrite",
+          });
+        expect(started).toBe(true);
+      });
+
+      expect(resolveServiceModelsBeforeSend).toHaveBeenCalledTimes(1);
+      const sendOptions = mockSendMessage.mock.calls[0]?.[8];
+      expect(sendOptions).toMatchObject({
+        purpose: "style_rewrite",
+        providerOverride: "rewrite-provider",
+        modelOverride: "rewrite-model",
+      });
+      expect(sendOptions?.requestMetadata).toMatchObject({
+        harness: {
+          agent_response_language: "en-US",
+        },
+      });
+    } finally {
+      harness.unmount();
+    }
+  });
+
   it("首轮轻量对话不应在前端降级具体推理模型", async () => {
     const harness = mountHook();
 
@@ -1274,57 +1370,21 @@ describe("useWorkspaceSendActions", () => {
     }
   });
 
-  it("普通视觉 brief 没有 @命令时应先确认画图，不直接进入长方案或图片主链", async () => {
-    const harness = mountHook();
-
-    try {
-      await act(async () => {
-        const started = await harness
-          .getValue()
-          .handleSend(
-            [],
-            false,
-            false,
-            "青柠新品发布海报，竖版 4:5，水彩插画风格，清爽绿色调，留出标题区：鲜榨灵感",
-            "react",
-          );
-        expect(started).toBe(true);
-      });
-
-      expect(mockResolveImageWorkbenchSkillRequest).not.toHaveBeenCalled();
-      expect(mockPrepareRuntimeTeamBeforeSend).not.toHaveBeenCalled();
-      expect(mockSendMessage).not.toHaveBeenCalled();
-      expect(mockSetChatMessages).toHaveBeenCalledTimes(1);
-      const applyLocalMessages = mockSetChatMessages.mock.calls[0]?.[0] as
-        | ((previous: Message[]) => Message[])
-        | undefined;
-      expect(applyLocalMessages).toBeTypeOf("function");
-      const nextMessages = applyLocalMessages?.([]);
-      const confirmationText = getLimeI18n().t(
-        "agentChat.inputIntent.imageGeneration.confirm",
-        { ns: "agent" },
-      );
-      expect(nextMessages?.[0]).toMatchObject({
-        role: "user",
-        content:
-          "青柠新品发布海报，竖版 4:5，水彩插画风格，清爽绿色调，留出标题区：鲜榨灵感",
-      });
-      expect(nextMessages?.[1]).toMatchObject({
-        role: "assistant",
-        content: confirmationText,
-      });
-      expect(nextMessages?.[1]?.isThinking).toBeUndefined();
-      expect(nextMessages?.[1]?.runtimeStatus).toBeUndefined();
-      expect(mockSetInput).toHaveBeenCalledWith("");
-      expect(mockFinalizeAfterSendSuccess).toHaveBeenCalledTimes(1);
-    } finally {
-      harness.unmount();
-    }
-  });
-
-  it("普通视觉 brief 本地确认后，肯定回复应进入 image_skill_launch 而不是普通模型对话", async () => {
+  it("普通视觉 brief 没有 @命令时应直接进入 image_skill_launch", async () => {
     const brief =
       "青柠新品发布海报，竖版 4:5，水彩插画风格，清爽绿色调，留出标题区：鲜榨灵感";
+    mockResolveImageWorkbenchSkillRequest.mockReturnValueOnce({
+      images: [],
+      requestContext: {
+        kind: "image_task",
+        image_task: {
+          mode: "generate",
+          prompt: brief,
+          raw_text: `@配图 ${brief}`,
+          count: 1,
+        },
+      },
+    });
     const harness = mountHook({ providerType: "deepseek" });
 
     try {
@@ -1335,32 +1395,8 @@ describe("useWorkspaceSendActions", () => {
         expect(started).toBe(true);
       });
 
-      expect(mockSendMessage).not.toHaveBeenCalled();
-      expect(mockResolveImageWorkbenchSkillRequest).not.toHaveBeenCalled();
-
-      mockSendMessage.mockClear();
-      mockSetChatMessages.mockClear();
-      mockResolveImageWorkbenchSkillRequest.mockClear();
-      mockResolveImageWorkbenchSkillRequest.mockReturnValueOnce({
-        images: [],
-        requestContext: {
-          kind: "image_task",
-          image_task: {
-            mode: "generate",
-            prompt: brief,
-            raw_text: `@配图 ${brief}`,
-            count: 1,
-          },
-        },
-      });
-
-      await act(async () => {
-        const started = await harness
-          .getValue()
-          .handleSend([], false, false, "直接生成", "react");
-        expect(started).toBe(true);
-      });
-
+      expect(mockPrepareRuntimeTeamBeforeSend).not.toHaveBeenCalled();
+      expect(mockSetChatMessages).not.toHaveBeenCalled();
       expect(mockResolveImageWorkbenchSkillRequest).toHaveBeenCalledTimes(1);
       expect(mockResolveImageWorkbenchSkillRequest).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1377,7 +1413,7 @@ describe("useWorkspaceSendActions", () => {
       expect(mockSendMessage).toHaveBeenCalledTimes(1);
       expect(mockSendMessage.mock.calls[0]?.[0]).toBe(`@配图 ${brief}`);
       expect(mockSendMessage.mock.calls[0]?.[8]).toMatchObject({
-        displayContent: "直接生成",
+        displayContent: brief,
         requestMetadata: {
           harness: {
             allow_model_skills: true,
@@ -1391,6 +1427,189 @@ describe("useWorkspaceSendActions", () => {
           },
         },
       });
+      expect(mockSetInput).toHaveBeenCalledWith("");
+      expect(mockFinalizeAfterSendSuccess).toHaveBeenCalledTimes(1);
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("普通视觉 brief 没有项目时也应进入 image_skill_launch 对话回合", async () => {
+    const brief =
+      "参考图生成一张小红书封面，保留醒目的标题层级、清晰的主体构图和适合收藏转发的视觉冲击力";
+    mockResolveImageWorkbenchSkillRequest.mockReturnValueOnce({
+      images: [],
+      requestContext: {
+        kind: "image_task",
+        image_task: {
+          mode: "generate",
+          prompt: brief,
+          raw_text: `@配图 ${brief}`,
+          count: 1,
+        },
+      },
+    });
+    const harness = mountHook({
+      messages: [],
+      projectId: null,
+      projectRootPath: null,
+    });
+
+    try {
+      await act(async () => {
+        const started = await harness
+          .getValue()
+          .handleSend([], false, false, brief, "react");
+        expect(started).toBe(true);
+      });
+
+      expect(mockResolveImageWorkbenchSkillRequest).toHaveBeenCalledTimes(1);
+      expect(mockSendMessage).toHaveBeenCalledTimes(1);
+      expect(mockSendMessage.mock.calls[0]?.[0]).toBe(`@配图 ${brief}`);
+      expect(mockSendMessage.mock.calls[0]?.[8]).toMatchObject({
+        displayContent: brief,
+        requestMetadata: {
+          harness: {
+            allow_model_skills: true,
+            image_skill_launch: {
+              skill_name: "image_generate",
+              image_task: {
+                prompt: brief,
+              },
+            },
+          },
+        },
+      });
+      expect(harness.getValue().displayMessages).toEqual([]);
+      expect(harness.getValue().isPreparingSend).toBe(false);
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("普通视觉 brief 建会话悬挂时也不应卡在准备回复", async () => {
+    const brief =
+      "参考图生成一张小红书封面，保留醒目的标题层级、清晰的主体构图和适合收藏转发的视觉冲击力";
+    const deferredSession = createDeferred<string | null>();
+    const deferredSend = createDeferred<void>();
+    mockEnsureSessionForCommandMetadata.mockImplementationOnce(
+      async () => deferredSession.promise,
+    );
+    mockResolveImageWorkbenchSkillRequest.mockReturnValueOnce({
+      images: [],
+      requestContext: {
+        kind: "image_task",
+        image_task: {
+          mode: "generate",
+          prompt: brief,
+          raw_text: `@配图 ${brief}`,
+          count: 1,
+          session_id: "__local_image_workbench__:draft",
+        },
+      },
+    });
+    mockSendMessage.mockImplementationOnce(async () => deferredSend.promise);
+    const harness = mountHook();
+
+    let sendPromise: Promise<boolean> | null = null;
+
+    try {
+      await act(async () => {
+        sendPromise = harness
+          .getValue()
+          .handleSend([], false, false, brief, "react");
+        await Promise.resolve();
+      });
+
+      expect(mockEnsureSessionForCommandMetadata).toHaveBeenCalledTimes(1);
+      expect(mockSendMessage).toHaveBeenCalledTimes(1);
+      expect(mockSendMessage.mock.calls[0]?.[0]).toBe(`@配图 ${brief}`);
+      expect(mockSendMessage.mock.calls[0]?.[8]).toMatchObject({
+        displayContent: brief,
+        requestMetadata: {
+          harness: {
+            image_skill_launch: {
+              image_task: {
+                prompt: brief,
+              },
+            },
+          },
+        },
+      });
+      const imageSkillLaunchHarness = (
+        (mockSendMessage.mock.calls[0]?.[8]?.requestMetadata?.harness as
+          | Record<string, unknown>
+          | undefined) || {}
+      ) as Record<string, unknown>;
+      expect(
+        (imageSkillLaunchHarness.image_skill_launch as
+          | { image_task?: { session_id?: string } }
+          | undefined)?.image_task?.session_id,
+      ).toBeUndefined();
+
+      await act(async () => {
+        deferredSend.resolve();
+        await sendPromise;
+      });
+
+      expect(mockFinalizeAfterSendSuccess).toHaveBeenCalledTimes(1);
+      expect(harness.getValue().displayMessages).toEqual([]);
+    } finally {
+      deferredSession.resolve("session-image-late");
+      harness.unmount();
+    }
+  });
+
+  it("普通视觉 brief 无法创建图片任务时应清理准备态预览", async () => {
+    const brief =
+      "参考图生成一张小红书封面，保留醒目的标题层级、清晰的主体构图和适合收藏转发的视觉冲击力";
+    mockResolveImageWorkbenchSkillRequest.mockReturnValueOnce(null);
+    const harness = mountHook({
+      messages: [],
+      projectId: null,
+      projectRootPath: null,
+    });
+
+    try {
+      await act(async () => {
+        const started = await harness
+          .getValue()
+          .handleSend([], false, false, brief, "react");
+        expect(started).toBe(false);
+        await Promise.resolve();
+      });
+
+      expect(mockResolveImageWorkbenchSkillRequest).toHaveBeenCalledTimes(1);
+      expect(mockSendMessage).not.toHaveBeenCalled();
+      expect(harness.getValue().displayMessages).toEqual([]);
+      expect(harness.getValue().isPreparingSend).toBe(false);
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("普通视觉描述要求提示词时不应触发图片生成主链", async () => {
+    const promptText =
+      "帮我写一段小红书封面提示词，竖版 4:5，水彩插画风格，先不要生成图片";
+    const harness = mountHook();
+
+    try {
+      await act(async () => {
+        const started = await harness
+          .getValue()
+          .handleSend([], false, false, promptText, "react");
+        expect(started).toBe(true);
+      });
+
+      expect(mockResolveImageWorkbenchSkillRequest).not.toHaveBeenCalled();
+      expect(mockSendMessage).toHaveBeenCalledTimes(1);
+      expect(mockSendMessage.mock.calls[0]?.[0]).toBe(promptText);
+      const imageSkillLaunchHarness = (
+        mockSendMessage.mock.calls[0]?.[8]?.requestMetadata?.harness as
+          | Record<string, unknown>
+          | undefined
+      ) ?? {};
+      expect(imageSkillLaunchHarness.image_skill_launch).toBeUndefined();
     } finally {
       harness.unmount();
     }
@@ -1683,9 +1902,10 @@ Extract it into the Agent Skills directory.`,
       const args = mockSendMessage.mock.calls[0] as Parameters<
         HookProps["sendMessage"]
       >;
-      expect(args?.[8]?.requestMetadata?.harness).not.toHaveProperty(
-        "oem_routing",
-      );
+      const harnessMetadata = (
+        (args?.[8]?.requestMetadata?.harness as Record<string, unknown>) || {}
+      ) as Record<string, unknown>;
+      expect(harnessMetadata).not.toHaveProperty("oem_routing");
     } finally {
       harness.unmount();
     }
@@ -1900,16 +2120,19 @@ Extract it into the Agent Skills directory.`,
     }
   });
 
-  it("准备活动上下文较慢时，也应先展示 submission preview", async () => {
+  it("普通 Claw 空上下文准备较慢时不应阻塞发送", async () => {
     const deferredContext = createDeferred<string>();
     const deferredSend = createDeferred<void>();
+    const prepareActiveContextPrompt = vi.fn(
+      async () => deferredContext.promise,
+    );
     mockSendMessage.mockImplementationOnce(async () => deferredSend.promise);
     const harness = mountHook({
       input: "帮我整理一下今天的重要新闻",
       contextWorkspace: {
         enabled: true,
         activeContextPrompt: "",
-        prepareActiveContextPrompt: async () => deferredContext.promise,
+        prepareActiveContextPrompt,
       },
     });
 
@@ -1932,6 +2155,11 @@ Extract it into the Agent Skills directory.`,
           title: "正在启动处理流程",
         }),
       });
+      expect(mockSendMessage).toHaveBeenCalledTimes(1);
+      expect(mockSendMessage.mock.calls[0]?.[0]).toBe(
+        "帮我整理一下今天的重要新闻",
+      );
+      expect(prepareActiveContextPrompt).not.toHaveBeenCalled();
 
       await act(async () => {
         deferredContext.resolve("[上下文]\n今天关注科技与国际新闻。");
@@ -1949,7 +2177,7 @@ Extract it into the Agent Skills directory.`,
     }
   });
 
-  it("首页首轮普通发送在等待上下文时应并行预热会话", async () => {
+  it("主题工作台首轮发送等待上下文时应并行预热会话", async () => {
     const deferredContext = createDeferred<string>();
     const deferredSession = createDeferred<string | null>();
     const deferredSend = createDeferred<void>();
@@ -1959,6 +2187,7 @@ Extract it into the Agent Skills directory.`,
     mockSendMessage.mockImplementationOnce(async () => deferredSend.promise);
     const harness = mountHook({
       input: "帮我整理一下今天的重要新闻",
+      isThemeWorkbench: true,
       contextWorkspace: {
         enabled: true,
         activeContextPrompt: "",
@@ -1998,16 +2227,10 @@ Extract it into the Agent Skills directory.`,
   });
 
   it("发送准备阶段不应重复递交同一条首页消息", async () => {
-    const deferredContext = createDeferred<string>();
     const deferredSend = createDeferred<void>();
     mockSendMessage.mockImplementationOnce(async () => deferredSend.promise);
     const harness = mountHook({
       input: "帮我生成一版首页插图方案",
-      contextWorkspace: {
-        enabled: true,
-        activeContextPrompt: "",
-        prepareActiveContextPrompt: async () => deferredContext.promise,
-      },
     });
 
     let firstSendPromise: Promise<boolean> | null = null;
@@ -2020,16 +2243,13 @@ Extract it into the Agent Skills directory.`,
         await Promise.resolve();
       });
 
-      expect(harness.getValue().isPreparingSend).toBe(true);
       expect(await secondSendPromise).toBe(false);
-      expect(mockSendMessage).not.toHaveBeenCalled();
-
-      await act(async () => {
-        deferredContext.resolve("");
-        await Promise.resolve();
-      });
-
       expect(mockSendMessage).toHaveBeenCalledTimes(1);
+      expect(harness.getValue().displayMessages).toHaveLength(2);
+      expect(harness.getValue().displayMessages[0]).toMatchObject({
+        role: "user",
+        content: "帮我生成一版首页插图方案",
+      });
 
       await act(async () => {
         deferredSend.resolve();
@@ -2127,12 +2347,6 @@ Extract it into the Agent Skills directory.`,
         assistantDraft: {
           content: "",
           fallbackContent: "",
-          imageWorkbenchPreview: {
-            prompt: "一张春日咖啡馆插画",
-            mode: "generate",
-            status: "running",
-            expectedImageCount: 2,
-          },
         },
       });
       expect(listMentionEntryUsage()).toEqual([
@@ -2147,7 +2361,88 @@ Extract it into the Agent Skills directory.`,
     }
   });
 
-  it("@Nanobanana Pro 首次发送应在同一 assistant draft 中显示极简图片轻卡", async () => {
+  it("带 builtin route 的 @配图 发送不应重复包装或重复递交", async () => {
+    mockResolveImageWorkbenchSkillRequest.mockReturnValueOnce({
+      images: [],
+      requestContext: {
+        kind: "image_task",
+        image_task: {
+          mode: "generate",
+          prompt: "一张春日咖啡馆插画",
+          count: 1,
+        },
+      },
+    });
+    const harness = mountHook({
+      input: "@配图 生成 一张春日咖啡馆插画",
+    });
+
+    try {
+      await act(async () => {
+        const started = await harness.getValue().handleSend(
+          [],
+          false,
+          false,
+          "@配图 生成 一张春日咖啡馆插画",
+          "react",
+          undefined,
+          {
+            capabilityRoute: {
+              kind: "builtin_command",
+              commandKey: "image_generate",
+              commandPrefix: "@配图",
+            },
+            displayContent: "@配图 生成 一张春日咖啡馆插画",
+          },
+        );
+        expect(started).toBe(true);
+      });
+
+      expect(mockResolveImageWorkbenchSkillRequest).toHaveBeenCalledTimes(1);
+      expect(mockResolveImageWorkbenchSkillRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          rawText: "@配图 生成 一张春日咖啡馆插画",
+          parsedCommand: expect.objectContaining({
+            trigger: "@配图",
+            prompt: "一张春日咖啡馆插画",
+          }),
+        }),
+      );
+      expect(mockSendMessage).toHaveBeenCalledTimes(1);
+      expect(mockSendMessage.mock.calls[0]?.[0]).toBe(
+        "@配图 生成 一张春日咖啡馆插画",
+      );
+      const sendOptions = mockSendMessage.mock.calls[0]?.[8];
+      expect(sendOptions?.displayContent).toBe(
+        "@配图 生成 一张春日咖啡馆插画",
+      );
+      expect(sendOptions?.capabilityRoute).toMatchObject({
+        kind: "builtin_command",
+        commandKey: "image_generate",
+        commandPrefix: "@配图",
+      });
+      expect(
+        JSON.stringify(sendOptions?.requestMetadata).match(
+          /image_skill_launch/g,
+        ) ?? [],
+      ).toHaveLength(1);
+      expect(sendOptions?.requestMetadata).toMatchObject({
+        harness: {
+          allow_model_skills: true,
+          image_skill_launch: {
+            skill_name: "image_generate",
+            image_task: {
+              prompt: "一张春日咖啡馆插画",
+            },
+          },
+        },
+      });
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("@Nanobanana Pro 首次发送不应伪造本地图片任务轻卡", async () => {
     mockResolveImageWorkbenchSkillRequest.mockReturnValueOnce({
       images: [],
       requestContext: {
@@ -2178,14 +2473,6 @@ Extract it into the Agent Skills directory.`,
         assistantDraft: {
           content: "",
           fallbackContent: "",
-          imageWorkbenchPreview: {
-            prompt: "一张广州塔，从花城汇看过去的春天的照片",
-            mode: "generate",
-            status: "running",
-            providerName: "fal",
-            modelName: "fal-ai/nano-banana-pro",
-            expectedImageCount: 1,
-          },
         },
         requestMetadata: {
           harness: {
@@ -2198,9 +2485,7 @@ Extract it into the Agent Skills directory.`,
           },
         },
       });
-      expect(
-        sendOptions?.assistantDraft?.imageWorkbenchPreview?.taskId,
-      ).toMatch(/^draft-image-/);
+      expect(sendOptions?.assistantDraft?.imageWorkbenchPreview).toBeUndefined();
       expect(sendOptions?.assistantDraft?.content).toBe("");
       expect(sendOptions?.assistantDraft?.fallbackContent).toBe("");
       expect(sendOptions?.assistantDraft?.preserveContent).toBeUndefined();
@@ -2286,14 +2571,6 @@ Extract it into the Agent Skills directory.`,
         assistantDraft: {
           content: "",
           fallbackContent: "",
-          imageWorkbenchPreview: {
-            prompt: "一张广州塔，从花城汇看过去的春天的照片",
-            mode: "generate",
-            status: "running",
-            providerName: "fal",
-            modelName: "fal-ai/nano-banana-2",
-            expectedImageCount: 1,
-          },
         },
         requestMetadata: {
           harness: {
@@ -2315,9 +2592,7 @@ Extract it into the Agent Skills directory.`,
           },
         },
       });
-      expect(
-        sendOptions?.assistantDraft?.imageWorkbenchPreview?.taskId,
-      ).toMatch(/^draft-image-/);
+      expect(sendOptions?.assistantDraft?.imageWorkbenchPreview).toBeUndefined();
       expect(sendOptions?.assistantDraft?.content).toBe("");
       expect(sendOptions?.assistantDraft?.fallbackContent).toBe("");
       expect(listMentionEntryUsage()).toEqual([
@@ -6893,14 +7168,11 @@ Extract it into the Agent Skills directory.`,
 
   it("@配音 应保留原始消息，并通过本地 service scene launch 注入配音 prompt", async () => {
     mockUseGlobalMediaGenerationDefaults.mockReturnValue({
-      mediaDefaults: {
-        voice: {
-          preferredProviderId: "openai-tts",
-          preferredModelId: "gpt-4o-mini-tts",
-          allowFallback: false,
-        },
+      voice: {
+        preferredProviderId: "openai-tts",
+        preferredModelId: "gpt-4o-mini-tts",
+        allowFallback: false,
       },
-      loading: false,
     });
     const harness = mountHook({
       input: "@配音 目标语言: 英文 风格: 科技感 给这个新品视频做一版发布配音稿",
@@ -6987,13 +7259,10 @@ Extract it into the Agent Skills directory.`,
 
   it("@配音 当只声明首选 provider 且未显式选模型时，不应误注入发送覆盖", async () => {
     mockUseGlobalMediaGenerationDefaults.mockReturnValue({
-      mediaDefaults: {
-        voice: {
-          preferredProviderId: "openai-tts",
-          allowFallback: true,
-        },
+      voice: {
+        preferredProviderId: "openai-tts",
+        allowFallback: true,
       },
-      loading: false,
     });
     const harness = mountHook({
       input: "@配音 给这个新品视频做一版发布配音稿",
@@ -8021,9 +8290,10 @@ Extract it into the Agent Skills directory.`,
       const args = mockSendMessage.mock.calls[0] as Parameters<
         HookProps["sendMessage"]
       >;
-      expect(args?.[8]?.requestMetadata?.harness).not.toHaveProperty(
-        "access_mode",
-      );
+      const harnessMetadata = (
+        (args?.[8]?.requestMetadata?.harness as Record<string, unknown>) || {}
+      ) as Record<string, unknown>;
+      expect(harnessMetadata).not.toHaveProperty("access_mode");
     } finally {
       harness.unmount();
     }

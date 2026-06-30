@@ -5,16 +5,19 @@ use app_server_protocol::AgentAppTaskRuntimeContract;
 use serde_json::json;
 use serde_json::Map;
 use serde_json::Value;
+use std::io::Read;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
 use std::process::Stdio;
+use std::thread::JoinHandle;
 use std::time::Duration;
 use std::time::Instant;
 
 const DEFAULT_WORKER_TIMEOUT_MS: u64 = 30_000;
 const MAX_WORKER_STDOUT_BYTES: usize = 2 * 1024 * 1024;
+const MAX_WORKER_STDERR_BYTES: usize = 512 * 1024;
 const CONTENT_FACTORY_WORKSPACE_PATCH_KIND: &str = "content_factory.workspace_patch";
 
 #[derive(Debug, Clone)]
@@ -162,36 +165,41 @@ fn invoke_worker_process(
     let mut child = command.spawn().map_err(|error| {
         RuntimeCoreError::Backend(format!("failed to spawn Agent App worker: {error}"))
     })?;
+    let stdout_reader = child
+        .stdout
+        .take()
+        .map(|stdout| spawn_worker_output_reader(stdout, "stdout"));
+    let stderr_reader = child
+        .stderr
+        .take()
+        .map(|stderr| spawn_worker_output_reader(stderr, "stderr"));
     write_worker_request(child.stdin.take(), request)?;
     let started = Instant::now();
     let timeout = Duration::from_millis(timeout_ms);
     loop {
         if started.elapsed() > timeout {
             let _ = child.kill();
+            let _ = child.wait();
+            let _ = join_worker_output_reader(stdout_reader, "stdout", MAX_WORKER_STDOUT_BYTES);
+            let _ = join_worker_output_reader(stderr_reader, "stderr", MAX_WORKER_STDERR_BYTES);
             return Err(RuntimeCoreError::Backend(format!(
                 "Agent App worker timed out after {timeout_ms}ms"
             )));
         }
         match child.try_wait() {
-            Ok(Some(_status)) => {
-                let output = child.wait_with_output().map_err(|error| {
-                    RuntimeCoreError::Backend(format!(
-                        "failed to collect Agent App worker output: {error}"
-                    ))
-                })?;
-                if !output.status.success() {
+            Ok(Some(status)) => {
+                let stdout =
+                    join_worker_output_reader(stdout_reader, "stdout", MAX_WORKER_STDOUT_BYTES)?;
+                let stderr =
+                    join_worker_output_reader(stderr_reader, "stderr", MAX_WORKER_STDERR_BYTES)?;
+                if !status.success() {
                     return Err(RuntimeCoreError::Backend(format!(
                         "Agent App worker exited with {}: {}",
-                        output.status,
-                        String::from_utf8_lossy(&output.stderr).trim()
+                        status,
+                        String::from_utf8_lossy(&stderr).trim()
                     )));
                 }
-                if output.stdout.len() > MAX_WORKER_STDOUT_BYTES {
-                    return Err(RuntimeCoreError::Backend(
-                        "Agent App worker stdout exceeded the size limit.".to_string(),
-                    ));
-                }
-                return decode_worker_stdout(&output.stdout);
+                return decode_worker_stdout(&stdout);
             }
             Ok(None) => std::thread::sleep(Duration::from_millis(10)),
             Err(error) => {
@@ -201,6 +209,44 @@ fn invoke_worker_process(
             }
         }
     }
+}
+
+fn spawn_worker_output_reader<R>(
+    mut reader: R,
+    label: &'static str,
+) -> JoinHandle<Result<Vec<u8>, String>>
+where
+    R: Read + Send + 'static,
+{
+    std::thread::spawn(move || {
+        let mut output = Vec::new();
+        reader
+            .read_to_end(&mut output)
+            .map_err(|error| format!("failed to collect Agent App worker {label}: {error}"))?;
+        Ok(output)
+    })
+}
+
+fn join_worker_output_reader(
+    reader: Option<JoinHandle<Result<Vec<u8>, String>>>,
+    label: &'static str,
+    max_bytes: usize,
+) -> Result<Vec<u8>, RuntimeCoreError> {
+    let Some(reader) = reader else {
+        return Ok(Vec::new());
+    };
+    let output = reader.join().map_err(|_| {
+        RuntimeCoreError::Backend(format!(
+            "failed to collect Agent App worker {label}: panicked"
+        ))
+    })?;
+    let output = output.map_err(RuntimeCoreError::Backend)?;
+    if output.len() > max_bytes {
+        return Err(RuntimeCoreError::Backend(format!(
+            "Agent App worker {label} exceeded the size limit."
+        )));
+    }
+    Ok(output)
 }
 
 fn write_worker_request(
@@ -223,6 +269,10 @@ fn write_worker_request(
             "failed to finish Agent App worker request: {error}"
         ))
     })?;
+    stdin.flush().map_err(|error| {
+        RuntimeCoreError::Backend(format!("failed to flush Agent App worker request: {error}"))
+    })?;
+    drop(stdin);
     Ok(())
 }
 
@@ -553,21 +603,24 @@ mod tests {
             .expect("read session");
         let detail = read.detail.expect("detail");
         assert_eq!(
-            detail["product_workspace"]["selectedObjectRef"]["kind"],
+            detail["article_workspace"]["selectedObjectRef"]["kind"],
             "imageGenerationSet"
         );
-        let image_object = detail["product_workspace"]["objects"]
+        let image_object = detail["article_workspace"]["objects"]
             .as_array()
-            .expect("product workspace objects")
+            .expect("article workspace objects")
             .iter()
             .find(|object| object["ref"]["kind"] == "imageGenerationSet")
             .expect("image generation object");
         assert_eq!(
-            image_object["summary"],
-            "根据文章结构生成的首批配图提示词，等待模型执行或人工确认。"
+            image_object["source"]["imageSlots"]
+                .as_array()
+                .expect("image slots")
+                .len(),
+            3
         );
         assert_eq!(
-            detail["product_workspace"]["workerEvidence"][0]["artifactKind"],
+            detail["article_workspace"]["workerEvidence"][0]["artifactKind"],
             CONTENT_FACTORY_WORKSPACE_PATCH_KIND
         );
     }
@@ -615,9 +668,6 @@ mod tests {
                 sample_request,
             ))
             .expect("worker events");
-        assert!(runtime_events[0].payload["artifact"]["content"]
-            .as_str()
-            .is_some_and(|content| content.contains("product-workspace.v1")));
         core.start_session(AgentSessionStartParams {
             session_id: Some("session-content-factory-sidecar".to_string()),
             thread_id: Some("thread-content-factory-sidecar".to_string()),
@@ -673,8 +723,8 @@ mod tests {
             .content
             .as_deref()
             .expect("worker artifact content");
-        assert!(content.contains("product-workspace.v1"));
-        assert!(content.contains("根据文章结构生成的首批配图提示词，等待模型执行或人工确认。"));
+        assert!(content.contains("\"schemaVersion\":\"article-workspace.v1\""));
+        assert!(content.contains("\"imageGenerationSet\""));
         assert!(artifact_read.artifacts[0]
             .metadata
             .as_ref()
@@ -736,6 +786,145 @@ mod tests {
             .expect_err("timeout");
 
         assert!(error.to_string().contains("timed out"), "{error}");
+        assert!(!node.is_empty());
+    }
+
+    #[test]
+    fn worker_adapter_drains_large_stdout_while_waiting_for_exit() {
+        let Some(node) = node_available() else {
+            return;
+        };
+        let temp = tempfile::tempdir().expect("temp dir");
+        let worker = temp.path().join("worker.mjs");
+        fs::write(
+            &worker,
+            r#"
+const payload = "x".repeat(256 * 1024);
+process.stdout.write(JSON.stringify({
+  status: "completed",
+  artifacts: [
+    {
+      kind: "artifact.snapshot",
+      artifactId: "large-output:workspace-patch",
+      title: "Large worker output",
+      contentType: "application/json",
+      metadata: {
+        kind: "content_factory.workspace_patch",
+        contentFactoryWorkspacePatch: {
+          schemaVersion: "article-workspace.v1",
+          objects: [
+            {
+              ref: { kind: "articleDraft", id: "article-1" },
+              source: { payload }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}) + "\n");
+"#,
+        )
+        .expect("worker");
+        let contract = AgentAppTaskRuntimeContract {
+            enabled: true,
+            package_root_path: Some(temp.path().to_string_lossy().to_string()),
+            worker_entrypoint: Some("./worker.mjs".to_string()),
+            output_artifact_kind: Some(CONTENT_FACTORY_WORKSPACE_PATCH_KIND.to_string()),
+            ..AgentAppTaskRuntimeContract::default()
+        };
+
+        let core = RuntimeCore::default();
+        let events = core
+            .run_agent_app_worker(
+                AgentAppWorkerRunRequest::new(temp.path(), contract, json!({}))
+                    .with_timeout_ms(1_000),
+            )
+            .expect("large output worker events");
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "artifact.snapshot");
+        assert_eq!(
+            events[0].payload["artifact"]["artifactId"],
+            "large-output:workspace-patch"
+        );
+        assert!(!node.is_empty());
+    }
+
+    #[test]
+    fn worker_adapter_closes_stdin_after_request() {
+        let Some(node) = node_available() else {
+            return;
+        };
+        let temp = tempfile::tempdir().expect("temp dir");
+        let worker = temp.path().join("worker.mjs");
+        fs::write(
+            &worker,
+            r##"
+let input = "";
+for await (const chunk of process.stdin) {
+  input += chunk;
+}
+const request = JSON.parse(input);
+process.stdout.write(JSON.stringify({
+  status: "completed",
+  artifacts: [
+    {
+      kind: "artifact.snapshot",
+      artifactId: "stdin-eof:workspace-patch",
+      title: "stdin eof worker output",
+      contentType: "application/json",
+      metadata: {
+        kind: "content_factory.workspace_patch",
+        contentFactoryWorkspacePatch: {
+          schemaVersion: "article-workspace.v1",
+          objects: [
+            {
+              ref: {
+                appId: request.appId ?? "content-factory-app",
+                kind: "articleDraft",
+                id: "article-stdin-eof",
+                sessionId: request.sessionId ?? "session-stdin-eof"
+              },
+              source: { markdown: "# Done" }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}) + "\n");
+"##,
+        )
+        .expect("worker");
+        let contract = AgentAppTaskRuntimeContract {
+            enabled: true,
+            package_root_path: Some(temp.path().to_string_lossy().to_string()),
+            worker_entrypoint: Some("./worker.mjs".to_string()),
+            output_artifact_kind: Some(CONTENT_FACTORY_WORKSPACE_PATCH_KIND.to_string()),
+            ..AgentAppTaskRuntimeContract::default()
+        };
+
+        let core = RuntimeCore::default();
+        let events = core
+            .run_agent_app_worker(
+                AgentAppWorkerRunRequest::new(
+                    temp.path(),
+                    contract,
+                    json!({
+                        "appId": "content-factory-app",
+                        "sessionId": "session-stdin-eof"
+                    }),
+                )
+                .with_timeout_ms(1_000),
+            )
+            .expect("stdin eof worker events");
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(
+            events[0].payload["artifact"]["artifactId"],
+            "stdin-eof:workspace-patch"
+        );
         assert!(!node.is_empty());
     }
 

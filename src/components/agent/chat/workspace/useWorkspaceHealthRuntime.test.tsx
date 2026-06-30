@@ -131,6 +131,18 @@ describe("buildWorkspacePathAutoRecoveryKey", () => {
 });
 
 describe("useWorkspaceHealthRuntime", () => {
+  it("禁用时不应检查 workspace 路径", async () => {
+    const { render, getValue } = renderHook({
+      enabled: false,
+    });
+
+    await render();
+
+    expect(ensureWorkspaceReady).not.toHaveBeenCalled();
+    expect(scheduleMinimumDelayIdleTask).not.toHaveBeenCalled();
+    expect(getValue().workspaceHealthError).toBe(false);
+  });
+
   it("项目切换后应检查 workspace，并记录自动修复", async () => {
     vi.mocked(ensureWorkspaceReady).mockResolvedValueOnce({
       ...workspaceEnsureResultFixture({

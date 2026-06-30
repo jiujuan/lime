@@ -2,7 +2,8 @@ use super::request_context::{
     fast_response_selection_from_profile_model_slot, host_reasoning_effort, host_thinking_enabled,
     request_workspace_scope, resolve_runtime_model_selection, selection_from_explicit_preferences,
     selection_from_host_provider_config, selection_from_session_default,
-    should_defer_tool_surface_for_fast_response, turn_context_from_request, RuntimeModelSelection,
+    selection_with_effective_reasoning, should_defer_tool_surface_for_fast_response,
+    turn_context_from_request, RuntimeModelSelection,
 };
 use super::*;
 use crate::AgentAppDataSource;
@@ -39,6 +40,7 @@ use app_server_protocol::McpServerStatusListResponse;
 use app_server_protocol::ProtocolKind;
 use app_server_protocol::RuntimeOptions;
 use async_trait::async_trait;
+use aster::tools::{PermissionCheckResult, Tool, ToolContext, ToolError, ToolResult};
 use lime_agent::agent_tools::catalog::{
     MEMORY_ADD_NOTE_TOOL_NAME, MEMORY_LIST_TOOL_NAME, MEMORY_READ_TOOL_NAME,
     MEMORY_SEARCH_TOOL_NAME,
@@ -136,6 +138,90 @@ impl McpAppDataSource for TestMcpAutostartDataSource {
     }
 }
 
+struct FixedWebSearchTool;
+
+#[async_trait]
+impl Tool for FixedWebSearchTool {
+    fn name(&self) -> &str {
+        "WebSearch"
+    }
+
+    fn description(&self) -> &str {
+        "测试用 WebSearch"
+    }
+
+    fn input_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "query": { "type": "string" }
+            },
+            "required": ["query"]
+        })
+    }
+
+    async fn check_permissions(
+        &self,
+        _params: &Value,
+        _context: &ToolContext,
+    ) -> PermissionCheckResult {
+        PermissionCheckResult::allow()
+    }
+
+    async fn execute(&self, params: Value, context: &ToolContext) -> Result<ToolResult, ToolError> {
+        let query = params
+            .get("query")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        Ok(ToolResult::success(format!(
+            "session={} query={} result=found",
+            context.session_id, query
+        ))
+        .with_metadata("query", json!(query))
+        .with_metadata("source", json!("fixed_web_search")))
+    }
+}
+
+struct FailingWebSearchTool;
+
+#[async_trait]
+impl Tool for FailingWebSearchTool {
+    fn name(&self) -> &str {
+        "WebSearch"
+    }
+
+    fn description(&self) -> &str {
+        "测试用失败 WebSearch"
+    }
+
+    fn input_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "query": { "type": "string" }
+            },
+            "required": ["query"]
+        })
+    }
+
+    async fn check_permissions(
+        &self,
+        _params: &Value,
+        _context: &ToolContext,
+    ) -> PermissionCheckResult {
+        PermissionCheckResult::allow()
+    }
+
+    async fn execute(
+        &self,
+        _params: Value,
+        _context: &ToolContext,
+    ) -> Result<ToolResult, ToolError> {
+        Err(ToolError::execution_failed("web search unavailable"))
+    }
+}
+
 pub(super) fn request_for_test(
     message: &str,
     host_options: Option<Value>,
@@ -208,6 +294,48 @@ fn imported_request_with_session_metadata(metadata: Value) -> ExecutionRequest {
         reference.kind = "conversation.import".to_string();
     }
     request
+}
+
+fn article_workspace_search_request_event(query: &str) -> RuntimeEvent {
+    RuntimeEvent::new(
+        "artifact.snapshot",
+        json!({
+            "artifact": {
+                "artifactId": "artifact-article-workspace",
+                "kind": "content_factory.workspace_patch",
+                "metadata": {
+                    "contentFactoryWorkspacePatch": {
+                        "schemaVersion": 1,
+                        "appId": "content-factory-app",
+                        "sessionId": "session-1",
+                        "objects": [
+                            {
+                                "ref": {
+                                    "appId": "content-factory-app",
+                                    "kind": "articleDraft",
+                                    "id": "article-draft-1",
+                                    "sessionId": "session-1"
+                                },
+                                "title": "公众号文章草稿",
+                                "status": "ready",
+                                "source": {
+                                    "taskKind": "content.article.generate",
+                                    "taskId": "task-article-draft-1",
+                                    "searchRequests": [
+                                        {
+                                            "id": "search-request-1",
+                                            "query": query,
+                                            "purpose": "验证宿主真实检索回填"
+                                        }
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        }),
+    )
 }
 
 #[tokio::test]
@@ -390,6 +518,154 @@ async fn runtime_backend_registers_memory_tools_in_agent_registry() {
     }
 }
 
+#[tokio::test]
+async fn runtime_backend_prepares_content_factory_search_artifact_events_with_real_tool_output() {
+    let db: lime_core::database::DbConnection = std::sync::Arc::new(std::sync::Mutex::new(
+        rusqlite::Connection::open_in_memory().expect("db"),
+    ));
+    {
+        let conn = db.lock().expect("db lock");
+        lime_core::database::schema::create_tables(&conn).expect("schema");
+    }
+    lime_agent::initialize_aster_runtime(db.clone()).expect("runtime dirs");
+
+    let backend = RuntimeBackend::with_db(db.clone());
+    ExecutionBackend::set_app_data_source(&backend, std::sync::Arc::new(NoopAppDataSource))
+        .expect("app data source should be accepted");
+    backend
+        .agent_state
+        .init_agent_with_db(&db)
+        .await
+        .expect("agent should initialize");
+    backend
+        .agent_state
+        .register_native_tool(Box::new(FixedWebSearchTool))
+        .await
+        .expect("web search tool should register");
+
+    let request = request_for_test("写一篇文章", None, None);
+    let mut events = vec![
+        RuntimeEvent::new("turn.started", json!({})),
+        article_workspace_search_request_event("Lime 写文章"),
+        RuntimeEvent::new("turn.completed", json!({})),
+    ];
+
+    ExecutionBackend::prepare_runtime_worker_artifact_events(&backend, &request, &mut events)
+        .await
+        .expect("content factory search events");
+
+    assert_eq!(
+        events
+            .iter()
+            .map(|event| event.event_type.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "turn.started",
+            "tool.started",
+            "tool.args",
+            "tool.result",
+            "artifact.snapshot",
+            "turn.completed"
+        ]
+    );
+
+    let artifact_event = events
+        .iter()
+        .find(|event| event.event_type == "artifact.snapshot")
+        .expect("artifact event");
+    let patch = &artifact_event.payload["artifact"]["metadata"]["contentFactoryWorkspacePatch"];
+    let evidence = patch["objects"][0]["source"]["searchEvidence"]
+        .as_array()
+        .expect("search evidence");
+    assert_eq!(evidence.len(), 1);
+    assert_eq!(evidence[0]["tool"], "WebSearch");
+    assert_eq!(evidence[0]["status"], "completed");
+    assert_eq!(evidence[0]["summary"], "session=session-1 query=Lime 写文章 result=found");
+    assert_eq!(
+        patch["objects"][0]["source"]["hostSearchStatus"],
+        "completed"
+    );
+    assert_eq!(
+        patch["objects"][0]["source"]["hostSearchEvidence"],
+        Value::Array(evidence.clone())
+    );
+}
+
+#[tokio::test]
+async fn runtime_backend_keeps_content_factory_search_artifact_events_closed_on_tool_failure() {
+    let db: lime_core::database::DbConnection = std::sync::Arc::new(std::sync::Mutex::new(
+        rusqlite::Connection::open_in_memory().expect("db"),
+    ));
+    {
+        let conn = db.lock().expect("db lock");
+        lime_core::database::schema::create_tables(&conn).expect("schema");
+    }
+    lime_agent::initialize_aster_runtime(db.clone()).expect("runtime dirs");
+
+    let backend = RuntimeBackend::with_db(db.clone());
+    ExecutionBackend::set_app_data_source(&backend, std::sync::Arc::new(NoopAppDataSource))
+        .expect("app data source should be accepted");
+    backend
+        .agent_state
+        .init_agent_with_db(&db)
+        .await
+        .expect("agent should initialize");
+    backend
+        .agent_state
+        .register_native_tool(Box::new(FailingWebSearchTool))
+        .await
+        .expect("web search tool should register");
+
+    let request = request_for_test("写一篇文章", None, None);
+    let mut events = vec![
+        RuntimeEvent::new("turn.started", json!({})),
+        article_workspace_search_request_event("Lime 写文章"),
+        RuntimeEvent::new("turn.completed", json!({})),
+    ];
+
+    ExecutionBackend::prepare_runtime_worker_artifact_events(&backend, &request, &mut events)
+        .await
+        .expect("content factory search events");
+
+    assert_eq!(
+        events
+            .iter()
+            .map(|event| event.event_type.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "turn.started",
+            "tool.started",
+            "tool.args",
+            "tool.failed",
+            "artifact.snapshot",
+            "turn.completed"
+        ]
+    );
+
+    let artifact_event = events
+        .iter()
+        .find(|event| event.event_type == "artifact.snapshot")
+        .expect("artifact event");
+    let patch = &artifact_event.payload["artifact"]["metadata"]["contentFactoryWorkspacePatch"];
+    let evidence = patch["objects"][0]["source"]["searchEvidence"]
+        .as_array()
+        .expect("search evidence");
+    assert_eq!(evidence.len(), 1);
+    assert_eq!(evidence[0]["tool"], "WebSearch");
+    assert_eq!(evidence[0]["status"], "failed");
+    assert_eq!(evidence[0]["summary"], "");
+    assert_eq!(patch["objects"][0]["source"]["hostSearchStatus"], "failed");
+    assert_eq!(
+        patch["objects"][0]["source"]["hostSearchEvidence"],
+        Value::Array(evidence.clone())
+    );
+    assert_eq!(patch["objects"][0]["status"], "failed");
+    assert_eq!(
+        patch["objects"][0]["summary"],
+        "检索失败，文章草稿未达到可交付状态"
+    );
+}
+
 #[test]
 fn explicit_runtime_preferences_win() {
     let mut request = request_for_test("hello", None, None);
@@ -484,11 +760,42 @@ fn runtime_model_selection_prefers_fast_slot_for_fast_response_turn() {
     assert_eq!(selection.model, "fast-chat");
     assert_eq!(selection.source, "profile_model_slot");
     assert_eq!(selection.reasoning_effort.as_deref(), Some("minimal"));
+    let effective_selection = selection_with_effective_reasoning(&selection);
+    assert_eq!(effective_selection.reasoning_effort, None);
 
     let scope = session_scope_from_request(&request).expect("scope");
     let turn_context =
-        turn_context_from_request(&request, None, &scope, &selection, None).expect("turn context");
-    assert_eq!(turn_context.effort.as_deref(), Some("minimal"));
+        turn_context_from_request(&request, None, &scope, &effective_selection, None)
+            .expect("turn context");
+    assert_eq!(turn_context.effort, None);
+}
+
+#[test]
+fn effective_reasoning_selection_drops_unsupported_plain_chat_reasoning() {
+    let selection = RuntimeModelSelection {
+        provider: "openai-compatible".to_string(),
+        model: "gpt-4o-mini".to_string(),
+        source: "runtime_options",
+        reasoning_effort: Some("minimal".to_string()),
+    };
+
+    let effective_selection = selection_with_effective_reasoning(&selection);
+
+    assert_eq!(effective_selection.reasoning_effort, None);
+}
+
+#[test]
+fn effective_reasoning_selection_maps_minimal_for_reasoning_models() {
+    let selection = RuntimeModelSelection {
+        provider: "openai".to_string(),
+        model: "gpt-codex".to_string(),
+        source: "runtime_options",
+        reasoning_effort: Some("minimal".to_string()),
+    };
+
+    let effective_selection = selection_with_effective_reasoning(&selection);
+
+    assert_eq!(effective_selection.reasoning_effort.as_deref(), Some("low"));
 }
 
 #[test]
@@ -1442,7 +1749,7 @@ fn session_config_appends_plugin_activation_metadata_to_system_prompt() {
                         "object_kind": "articleDraft",
                         "object_id": "pending"
                     },
-                    "opened_tabs": ["productProfile"],
+                    "opened_tabs": ["articleWorkspace"],
                     "context_source": "user"
                 }
             }
@@ -1472,7 +1779,7 @@ fn session_config_appends_plugin_activation_metadata_to_system_prompt() {
     assert!(prompt.contains("plugin_id: creator-workbench"));
     assert!(prompt.contains("active_entry_key: creator"));
     assert!(prompt.contains("object_kind: articleDraft"));
-    assert!(prompt.contains("opened_tabs: productProfile"));
+    assert!(prompt.contains("opened_tabs: articleWorkspace"));
     assert!(prompt.contains("Do not infer or switch plugins from natural language"));
     assert!(!prompt.contains("allow_model_skills"));
 }
@@ -1895,7 +2202,8 @@ fn model_effective_event_records_selected_model_and_reasoning_policy() {
         toolshim_model: None,
     };
 
-    let event = model_effective_event_from_runtime(&selection, &provider_config, "coding");
+    let event =
+        model_effective_event_from_runtime(&selection, &selection, &provider_config, "coding");
 
     assert_eq!(event.event_type, "model.effective");
     assert_eq!(event.payload["model"]["providerId"], "openai-main");
@@ -1906,8 +2214,48 @@ fn model_effective_event_records_selected_model_and_reasoning_policy() {
     assert_eq!(event.payload["reasoning"]["effectiveLevel"], "high");
     assert_eq!(event.payload["toolCalling"]["supported"], true);
     assert_eq!(event.payload["requestedReasoningEffort"], "high");
+    assert_eq!(event.payload["effectiveReasoningEffort"], "high");
     assert_eq!(event.payload["serviceModelSlot"], "coding");
     assert_eq!(event.payload["source"], "runtime_options");
+}
+
+#[test]
+fn model_effective_event_records_requested_and_effective_reasoning_separately() {
+    let requested_selection = RuntimeModelSelection {
+        provider: "openai".to_string(),
+        model: "gpt-codex".to_string(),
+        source: "profile_model_slot",
+        reasoning_effort: Some("minimal".to_string()),
+    };
+    let effective_selection = selection_with_effective_reasoning(&requested_selection);
+    let provider_config = ProviderConfig {
+        provider_name: "openai".to_string(),
+        provider_selector: Some("openai-main".to_string()),
+        model_name: "gpt-codex".to_string(),
+        api_key: Some("sk-test".to_string()),
+        base_url: Some("https://api.example.test/v1".to_string()),
+        credential_uuid: None,
+        reasoning_effort: effective_selection.reasoning_effort.clone(),
+        protocol: None,
+        toolshim: false,
+        toolshim_model: None,
+    };
+
+    let event = model_effective_event_from_runtime(
+        &requested_selection,
+        &effective_selection,
+        &provider_config,
+        "fast",
+    );
+
+    assert_eq!(event.payload["reasoning"]["requestedLevel"], "minimal");
+    assert_eq!(event.payload["reasoning"]["effectiveLevel"], "low");
+    assert_eq!(
+        event.payload["reasoning"]["downgradeReason"],
+        "requested reasoning level is not supported by selected model"
+    );
+    assert_eq!(event.payload["requestedReasoningEffort"], "minimal");
+    assert_eq!(event.payload["effectiveReasoningEffort"], "low");
 }
 
 #[test]

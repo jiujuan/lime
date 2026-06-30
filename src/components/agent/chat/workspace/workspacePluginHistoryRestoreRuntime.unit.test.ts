@@ -4,6 +4,7 @@ import type { PluginContract, PluginRegistryItem } from "@/features/plugin";
 import {
   buildWorkspacePluginHistoryRestoreProjection,
   extractWorkspacePluginHistoryRestoreSnapshot,
+  hasWorkspacePluginHistoryRestoreMetadata,
 } from "./workspacePluginHistoryRestoreRuntime";
 
 const contract: PluginContract = {
@@ -38,14 +39,14 @@ const contract: PluginContract = {
     fallback: "artifactPreview",
   },
   rightSurface: {
-    defaultActiveTab: "productProfile",
-    supportedTabs: ["productProfile", "appSurface"],
+    defaultActiveTab: "articleWorkspace",
+    supportedTabs: ["articleWorkspace", "appSurface"],
     historyRestore: {
       enabled: true,
       restoreSelection: true,
       restoreLayout: true,
     },
-    productWorkspace: {
+    articleWorkspace: {
       enabled: true,
       primaryObjectKind: "articleDraft",
       selectionPolicy: "last",
@@ -101,12 +102,12 @@ function threadRead(): AgentRuntimeThreadReadModel {
               object_kind: "articleDraft",
               object_id: "draft-1",
             },
-            opened_tabs: ["productProfile", "appSurface"],
-            pinned_tabs: ["productProfile"],
+            opened_tabs: ["articleWorkspace", "appSurface"],
+            pinned_tabs: ["articleWorkspace"],
           },
           layout_state: {
-            active_surface_kind: "productProfile",
-            open_surface_kinds: ["productProfile", "appSurface"],
+            active_surface_kind: "articleWorkspace",
+            open_surface_kinds: ["articleWorkspace", "appSurface"],
           },
           artifact_refs: ["artifact-1"],
         },
@@ -116,6 +117,25 @@ function threadRead(): AgentRuntimeThreadReadModel {
 }
 
 describe("workspacePluginHistoryRestoreRuntime", () => {
+  it("普通 Claw thread metadata 没有插件恢复记录时应保持轻量短路", () => {
+    expect(
+      hasWorkspacePluginHistoryRestoreMetadata({
+        thread_id: "thread-plain",
+        session_business_object_ref_metadata: {
+          harness: {
+            expert: {
+              id: "expert-1",
+            },
+          },
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it("存在插件恢复记录时应允许进入完整恢复投影", () => {
+    expect(hasWorkspacePluginHistoryRestoreMetadata(threadRead())).toBe(true);
+  });
+
   it("应从 thread read session metadata 反投影插件历史恢复 snapshot", () => {
     expect(extractWorkspacePluginHistoryRestoreSnapshot(threadRead())).toMatchObject({
       sessionId: "session-1",
@@ -129,7 +149,7 @@ describe("workspacePluginHistoryRestoreRuntime", () => {
           objectKind: "articleDraft",
           objectId: "draft-1",
         },
-        openedTabs: ["productProfile", "appSurface"],
+        openedTabs: ["articleWorkspace", "appSurface"],
       },
       artifactRefs: ["artifact-1"],
     });
@@ -154,7 +174,7 @@ describe("workspacePluginHistoryRestoreRuntime", () => {
           objectKind: "articleDraft",
           objectId: "draft-1",
         },
-        openedTabs: ["productProfile", "appSurface"],
+        openedTabs: ["articleWorkspace", "appSurface"],
       },
     });
   });

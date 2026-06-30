@@ -81,7 +81,9 @@ pub struct AgentSessionUpdateParams {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub recent_team_selection: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub product_workspace_selected_object_ref: Option<serde_json::Value>,
+    pub article_workspace_selected_object_ref: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub article_workspace_edited_draft: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]

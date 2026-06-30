@@ -34,15 +34,15 @@ const filesPendingRequest: WorkspaceRightSurfacePendingRequest = {
   reason: "file_preview_ready",
   candidateId: "docs/report.md",
 };
-const productProfilePendingRequest: WorkspaceRightSurfacePendingRequest = {
+const articleEditorPendingRequest: WorkspaceRightSurfacePendingRequest = {
   ...pendingRequest,
-  requestId: "right_surface_product_profile_1",
-  surfaceKind: "productProfile",
+  requestId: "right_surface_article_workspace_1",
+  surfaceKind: "articleWorkspace",
   origin: "runtime",
-  reason: "product_profile_ready",
+  reason: "article_workspace_ready",
   metadata: {
     contentFactoryWorkspacePatch: {
-      schemaVersion: "product-workspace.v1",
+      schemaVersion: "article-workspace.v1",
       appId: "content-factory-app",
       sessionId: "session-main",
       workspaceId: "workspace-main",
@@ -71,9 +71,9 @@ const productProfilePendingRequest: WorkspaceRightSurfacePendingRequest = {
     },
   },
 };
-const productProfileArtifactPendingRequest: WorkspaceRightSurfacePendingRequest = {
-  ...productProfilePendingRequest,
-  requestId: "right_surface_product_profile_artifact_1",
+const articleEditorArtifactPendingRequest: WorkspaceRightSurfacePendingRequest = {
+  ...articleEditorPendingRequest,
+  requestId: "right_surface_article_workspace_artifact_1",
   metadata: {
     artifact: {
       artifactId: "artifact-workspace-patch-1",
@@ -81,15 +81,15 @@ const productProfileArtifactPendingRequest: WorkspaceRightSurfacePendingRequest 
       title: "内容工厂工作区补丁",
       kind: "content_factory.workspace_patch",
       status: "ready",
-      metadata: productProfilePendingRequest.metadata,
+      metadata: articleEditorPendingRequest.metadata,
     },
   },
 };
 const appDeclaredRendererPendingRequest: WorkspaceRightSurfacePendingRequest = {
-  ...productProfilePendingRequest,
+  ...articleEditorPendingRequest,
   requestId: "right_surface_creator_profile_1",
   sessionId: "session-main",
-  surfaceKind: "productProfile",
+  surfaceKind: "articleWorkspace",
   reason: "plugin_renderer_output_ready",
   metadata: {
     artifact: {
@@ -98,7 +98,7 @@ const appDeclaredRendererPendingRequest: WorkspaceRightSurfacePendingRequest = {
       title: "创作工作台输出",
     },
     workspacePatch: {
-      schemaVersion: "product-workspace.v1",
+      schemaVersion: "article-workspace.v1",
       appId: "creator-workbench",
       sessionId: "session-main",
       workspaceId: "workspace-main",
@@ -345,6 +345,49 @@ describe("applyWorkspaceRightSurfacePendingChanges", () => {
 });
 
 describe("useWorkspaceRightSurfacePendingRuntime", () => {
+  it("autoRefresh 关闭时不应首帧拉取或订阅右侧 surface pending", async () => {
+    const listPending = vi.fn(async () => ({ pending: [pendingRequest] }));
+    const drainPendingChanges = vi.fn(async () => []);
+    const subscribePendingChanges = vi.fn(() => () => undefined);
+    const { render, getValue } = renderHook({
+      autoRefreshEnabled: false,
+      listPending,
+      drainPendingChanges,
+      subscribePendingChanges,
+    });
+
+    await render();
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(listPending).not.toHaveBeenCalled();
+    expect(drainPendingChanges).not.toHaveBeenCalled();
+    expect(subscribePendingChanges).not.toHaveBeenCalled();
+    expect(getValue().pendingRequests).toEqual([]);
+    expect(getValue().pendingIntents).toEqual([]);
+  });
+
+  it("autoRefresh 关闭后仍允许显式刷新 pending 请求", async () => {
+    const listPending = vi.fn(async () => ({ pending: [pendingRequest] }));
+    const { render, getValue } = renderHook({
+      autoRefreshEnabled: false,
+      listPending,
+    });
+
+    await render();
+    await act(async () => {
+      await getValue().refreshPendingRequests();
+    });
+
+    expect(listPending).toHaveBeenCalledWith({
+      limit: 50,
+      workspaceId: "workspace-main",
+      workspaceRoot: "/workspace/project",
+    });
+    expect(getValue().pendingRequests).toEqual([pendingRequest]);
+  });
+
   it("应通过 App Server pending/list 拉取请求并投影为 Right Surface intent", async () => {
     const listPending = vi.fn(async () => ({ pending: [pendingRequest] }));
     const { render, getValue } = renderHook({ listPending });
@@ -383,16 +426,16 @@ describe("useWorkspaceRightSurfacePendingRuntime", () => {
     );
   });
 
-  it("应把 productProfile pending metadata 投影为产物 Profile", async () => {
+  it("应把 Article Editor pending metadata 投影为文章编辑器", async () => {
     const listPending = vi.fn(async () => ({
-      pending: [productProfilePendingRequest],
+      pending: [articleEditorPendingRequest],
     }));
     const { render, getValue } = renderHook({ listPending });
 
     await render();
 
     await vi.waitFor(() => {
-      expect(getValue().pendingProductProfile).toMatchObject({
+      expect(getValue().pendingArticleWorkspace).toMatchObject({
         appId: "content-factory-app",
         sessionId: "session-main",
         source: "rightSurfacePending",
@@ -406,32 +449,32 @@ describe("useWorkspaceRightSurfacePendingRuntime", () => {
     });
     expect(getValue().pendingIntents).toEqual([
       expect.objectContaining({
-        id: "app-server:right_surface_product_profile_1",
+        id: "app-server:right_surface_article_workspace_1",
         command: expect.objectContaining({
           action: "open",
-          kind: "productProfile",
-          reason: "product_profile_ready",
+          kind: "articleWorkspace",
+          reason: "article_workspace_ready",
         }),
       }),
     ]);
   });
 
-  it("应把 artifact metadata 包装的内容工厂 workspace patch 投影为产物 Profile", async () => {
+  it("应把 artifact metadata 包装的内容工厂 workspace patch 投影为文章编辑器", async () => {
     const listPending = vi.fn(async () => ({
-      pending: [productProfileArtifactPendingRequest],
+      pending: [articleEditorArtifactPendingRequest],
     }));
     const { render, getValue } = renderHook({ listPending });
 
     await render();
 
     await vi.waitFor(() => {
-      expect(getValue().pendingProductProfile).toMatchObject({
+      expect(getValue().pendingArticleWorkspace).toMatchObject({
         appId: "content-factory-app",
         sessionId: "session-main",
         source: "rightSurfacePending",
         sourceArtifacts: [
           {
-            requestId: "right_surface_product_profile_artifact_1",
+            requestId: "right_surface_article_workspace_artifact_1",
             origin: "runtime",
             artifactRef: "artifact-workspace-patch-1",
             kind: "content_factory.workspace_patch",
@@ -447,7 +490,7 @@ describe("useWorkspaceRightSurfacePendingRuntime", () => {
     });
   });
 
-  it("应把 app-declared renderer 输出合同接入 pending Product Profile", async () => {
+  it("应把 app-declared renderer 输出合同接入 pending Article Editor", async () => {
     const plugin = normalizePluginManifest({
       id: "creator-workbench",
       displayName: "创作工作台",
@@ -473,7 +516,7 @@ describe("useWorkspaceRightSurfacePendingRuntime", () => {
     await render();
 
     await vi.waitFor(() => {
-      expect(getValue().pendingProductProfile?.objects[0]?.source).toMatchObject(
+      expect(getValue().pendingArticleWorkspace?.objects[0]?.source).toMatchObject(
         {
           rendererContract: {
             pluginId: "creator-workbench",
@@ -492,7 +535,7 @@ describe("useWorkspaceRightSurfacePendingRuntime", () => {
     });
   });
 
-  it("应合并显式插件激活投影的 productProfile pending intent", async () => {
+  it("应合并显式插件激活投影的 Article Editor pending intent", async () => {
     const listPending = vi.fn(async () => ({ pending: [] }));
     const plugin = normalizePluginManifest({
       id: "creator-workbench",
@@ -517,7 +560,7 @@ describe("useWorkspaceRightSurfacePendingRuntime", () => {
           objectKind: "articleDraft",
           objectId: "pending",
         },
-        openedTabs: ["productProfile"],
+        openedTabs: ["articleWorkspace"],
         source: "user",
       },
       pluginContracts: [plugin],
@@ -534,7 +577,7 @@ describe("useWorkspaceRightSurfacePendingRuntime", () => {
         id: "plugin:creator-workbench:creator:articleDraft:pending",
         command: expect.objectContaining({
           action: "open",
-          kind: "productProfile",
+          kind: "articleWorkspace",
           origin: "runtime",
           reason: "plugin_activation_context",
         }),

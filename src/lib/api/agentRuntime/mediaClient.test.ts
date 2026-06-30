@@ -33,6 +33,15 @@ describe("agentRuntime mediaClient", () => {
       "complete_audio_generation_task_artifact is retired; use src/lib/api/mediaTasks.ts App Server current methods",
     );
     await expect(
+      client.completeImageGenerationTaskArtifact({
+        projectRootPath: "/workspace",
+        taskRef: "task-image-1",
+        images: [{ url: "file:///workspace/image.png" }],
+      }),
+    ).rejects.toThrow(
+      "complete_image_generation_task_artifact is retired; use src/lib/api/mediaTasks.ts App Server current methods",
+    );
+    await expect(
       client.getMediaTaskArtifact({
         projectRootPath: "/workspace",
         taskRef: "task-image-1",

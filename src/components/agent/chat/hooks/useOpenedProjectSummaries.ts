@@ -100,7 +100,9 @@ export function compactOpenedProjectSummaries(
 
 export function useOpenedProjectSummaries(
   currentProject?: OpenedProjectSummary | null,
+  options: { enabled?: boolean } = {},
 ): OpenedProjectSummary[] {
+  const enabled = options.enabled ?? true;
   const openedProjectIds = useOpenedProjectIds();
   const normalizedCurrentProjectId = normalizeProjectId(currentProject?.id);
   const [resolvedProjectsById, setResolvedProjectsById] = useState<
@@ -108,16 +110,23 @@ export function useOpenedProjectSummaries(
   >({});
 
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
     if (!normalizedCurrentProjectId) {
       return;
     }
     markProjectOpened(normalizedCurrentProjectId);
-  }, [normalizedCurrentProjectId]);
+  }, [enabled, normalizedCurrentProjectId]);
 
   const projectIds = useMemo(
     () =>
-      buildOpenedProjectIdOrder(openedProjectIds, normalizedCurrentProjectId),
-    [normalizedCurrentProjectId, openedProjectIds],
+      enabled
+        ? buildOpenedProjectIdOrder(openedProjectIds, normalizedCurrentProjectId)
+        : normalizedCurrentProjectId
+          ? [normalizedCurrentProjectId]
+          : [],
+    [enabled, normalizedCurrentProjectId, openedProjectIds],
   );
 
   const currentProjectSummary = useMemo<OpenedProjectSummary | null>(() => {
@@ -142,6 +151,9 @@ export function useOpenedProjectSummaries(
   }, [currentProject, normalizedCurrentProjectId, resolvedProjectsById]);
 
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
     const idsToResolve = projectIds.filter((projectId) => {
       if (projectId === normalizedCurrentProjectId && currentProject?.name) {
         return false;
@@ -190,6 +202,7 @@ export function useOpenedProjectSummaries(
     };
   }, [
     currentProject?.name,
+    enabled,
     normalizedCurrentProjectId,
     projectIds,
     resolvedProjectsById,

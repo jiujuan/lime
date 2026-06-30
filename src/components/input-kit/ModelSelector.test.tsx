@@ -293,6 +293,55 @@ describe("ModelSelector", () => {
     expect(setModel).not.toHaveBeenCalledWith("gpt-5.5");
   });
 
+  it("带模型过滤器的设置页切换供应商时不应回填该供应商不适用的首个自定义模型", () => {
+    const setProviderType = vi.fn();
+    const setModel = vi.fn();
+    mockUseConfiguredProviders.mockReturnValue({
+      providers: [
+        {
+          key: "openai",
+          label: "OpenAI",
+          registryId: "openai",
+          type: "openai",
+          providerId: "openai",
+          apiHost: "https://api.openai.com/v1",
+          customModels: ["gpt-4o-mini"],
+        },
+        {
+          key: "deepseek",
+          label: "DeepSeek",
+          registryId: "deepseek",
+          type: "openai",
+          providerId: "deepseek",
+          apiHost: "https://api.deepseek.com",
+          customModels: ["gpt-image-2", "deepseek-v4-pro"],
+        },
+      ],
+      loading: false,
+    });
+    mockUseProviderModels.mockReturnValue({
+      modelIds: ["gpt-4o-mini"],
+      models: [createTextOnlyModelMetadata("gpt-4o-mini")],
+      loading: false,
+      error: null,
+    });
+
+    const { container } = renderModelSelector({
+      providerType: "openai",
+      setProviderType,
+      model: "gpt-4o-mini",
+      setModel,
+      modelFilter: (item) => item.id !== "gpt-image-2",
+    });
+
+    clickModelSelectorTrigger(container);
+    clickBodyButtonByText("DeepSeek");
+
+    expect(setProviderType).toHaveBeenCalledWith("deepseek");
+    expect(setModel).toHaveBeenCalledWith("deepseek-v4-pro");
+    expect(setModel).not.toHaveBeenCalledWith("gpt-image-2");
+  });
+
   it("模型过滤清空本地模型时应展示调用方提供的图片模型回退", () => {
     mockUseConfiguredProviders.mockReturnValue({
       providers: [

@@ -1,10 +1,10 @@
 import type { PluginContract } from "@/features/plugin";
 import type {
-  WorkspaceProductObject,
-  WorkspaceProductObjectStatus,
-  WorkspaceProductProfile,
-  WorkspaceProductProfileLayoutState,
-} from "@/components/agent/chat/workspace/workspaceProductProfileModel";
+  WorkspaceArticleObject,
+  WorkspaceArticleObjectStatus,
+  WorkspaceArticleWorkspace,
+  WorkspaceArticleWorkspaceLayoutState,
+} from "@/components/agent/chat/workspace/workspaceArticleWorkspaceModel";
 import { CONTENT_FACTORY_PLUGIN_ID } from "./contentFactoryPlugin";
 
 export type ContentFactoryDeliveryStage =
@@ -25,7 +25,7 @@ export interface ContentFactoryDeliveryPart {
   required: boolean;
 }
 
-export interface BuildContentFactoryDeliveryProfileParams {
+export interface BuildContentFactoryDeliveryArticleWorkspaceParams {
   contract: PluginContract;
   sessionId: string;
   workspaceId?: string | null;
@@ -126,11 +126,15 @@ export function buildContentFactoryDeliveryParts(
   });
 }
 
-function buildObjectStatus(part: ContentFactoryDeliveryPart): WorkspaceProductObjectStatus {
+function buildObjectStatus(
+  part: ContentFactoryDeliveryPart,
+): WorkspaceArticleObjectStatus {
   return part.required ? "draft" : "unknown";
 }
 
-function buildObjectSource(part: ContentFactoryDeliveryPart): Record<string, unknown> {
+function buildObjectSource(
+  part: ContentFactoryDeliveryPart,
+): Record<string, unknown> {
   if (part.objectKind === "deliveryChecklist") {
     return {
       artifactType: part.artifactType,
@@ -168,7 +172,7 @@ function buildDeliveryObject(params: {
   appId: string;
   part: ContentFactoryDeliveryPart;
   sessionId: string;
-}): WorkspaceProductObject {
+}): WorkspaceArticleObject {
   const artifactId = `${params.sessionId}:${params.part.objectKind}`;
   return {
     ref: {
@@ -182,9 +186,7 @@ function buildDeliveryObject(params: {
     },
     title: params.part.title,
     status: buildObjectStatus(params.part),
-    summary: params.part.required
-      ? "等待内容工厂生成后回填"
-      : "可选交付内容",
+    summary: params.part.required ? "等待内容工厂生成后回填" : "可选交付内容",
     previewArtifactId: artifactId,
     source: buildObjectSource(params.part),
   };
@@ -193,11 +195,11 @@ function buildDeliveryObject(params: {
 function buildLayoutState(params: {
   contract: PluginContract;
   primaryPart: ContentFactoryDeliveryPart;
-}): WorkspaceProductProfileLayoutState | null {
+}): WorkspaceArticleWorkspaceLayoutState | null {
   const { contract, primaryPart } = params;
   const defaultTab =
     normalizeString(contract.rightSurface.defaultActiveTab) ??
-    "productProfile";
+    "articleWorkspace";
   return {
     activeTabKind: defaultTab,
     activePaneKind:
@@ -209,12 +211,12 @@ function buildLayoutState(params: {
   };
 }
 
-export function buildContentFactoryDeliveryProfile({
+export function buildContentFactoryDeliveryArticleWorkspace({
   contract,
   now = null,
   sessionId,
   workspaceId = null,
-}: BuildContentFactoryDeliveryProfileParams): WorkspaceProductProfile | null {
+}: BuildContentFactoryDeliveryArticleWorkspaceParams): WorkspaceArticleWorkspace | null {
   const normalizedSessionId = normalizeString(sessionId);
   if (!normalizedSessionId || contract.id !== CONTENT_FACTORY_PLUGIN_ID) {
     return null;
@@ -243,7 +245,7 @@ export function buildContentFactoryDeliveryProfile({
   }
 
   return {
-    schemaVersion: "product-workspace.v1",
+    schemaVersion: "article-workspace.v1",
     appId: contract.id,
     sessionId: normalizedSessionId,
     workspaceId: normalizeString(workspaceId),

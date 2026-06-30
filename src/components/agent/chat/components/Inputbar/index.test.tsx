@@ -70,6 +70,7 @@ interface MockInputbarPlusMenuConfig {
   onToggleTask: () => void;
   onToggleObjective: () => void;
   onToggleSubagent?: () => void;
+  onPanelOpen?: (panelId: MockInputbarPlusPanelId) => void;
 }
 
 interface MockInputbarCoreProps {
@@ -147,7 +148,10 @@ function MockInputbarCoreView(props: MockInputbarCoreProps) {
               type="button"
               data-testid="inputbar-plus-knowledge"
               disabled={!props.plusMenu.knowledgePanel}
-              onClick={() => setActivePanel("knowledge")}
+              onClick={() => {
+                props.plusMenu?.onPanelOpen?.("knowledge");
+                setActivePanel("knowledge");
+              }}
             >
               {props.plusMenu.labels.attachKnowledge}
             </button>
@@ -180,7 +184,10 @@ function MockInputbarCoreView(props: MockInputbarCoreProps) {
               type="button"
               data-testid="inputbar-plus-plugins"
               disabled={!props.plusMenu.pluginsPanel}
-              onClick={() => setActivePanel("plugins")}
+              onClick={() => {
+                props.plusMenu?.onPanelOpen?.("plugins");
+                setActivePanel("plugins");
+              }}
             >
               {props.plusMenu.labels.plugins}
               {props.plusMenu.pluginsActive ? " on" : " off"}
@@ -189,7 +196,10 @@ function MockInputbarCoreView(props: MockInputbarCoreProps) {
               type="button"
               data-testid="inputbar-plus-skills"
               disabled={!props.plusMenu.skillsPanel}
-              onClick={() => setActivePanel("skills")}
+              onClick={() => {
+                props.plusMenu?.onPanelOpen?.("skills");
+                setActivePanel("skills");
+              }}
             >
               {props.plusMenu.labels.skills}
             </button>
@@ -903,6 +913,7 @@ describe("Inputbar", () => {
 
   it("@资料兼容入口应打开资料中枢而不是直接启用资料或创建新的 Agent", async () => {
     const onToggleKnowledgePack = vi.fn();
+    const onKnowledgePacksNeeded = vi.fn();
     renderInputbar({
       knowledgePackSelection: {
         enabled: false,
@@ -911,6 +922,7 @@ describe("Inputbar", () => {
         label: "品牌资料",
         status: "ready",
       },
+      onKnowledgePacksNeeded,
       onToggleKnowledgePack,
     });
 
@@ -940,6 +952,7 @@ describe("Inputbar", () => {
     });
 
     expect(onToggleKnowledgePack).not.toHaveBeenCalled();
+    expect(onKnowledgePacksNeeded).toHaveBeenCalledTimes(1);
     expect(
       document.body.querySelector('[data-testid="inputbar-knowledge-hub"]')
         ?.textContent,
@@ -993,6 +1006,7 @@ describe("Inputbar", () => {
 
   it("初始路由带 @资料 时应兼容打开资料中枢而不是渲染命令 badge", async () => {
     const onToggleKnowledgePack = vi.fn();
+    const onKnowledgePacksNeeded = vi.fn();
     const { container } = renderInputbar({
       knowledgePackSelection: {
         enabled: false,
@@ -1001,6 +1015,7 @@ describe("Inputbar", () => {
         label: "品牌资料",
         status: "ready",
       },
+      onKnowledgePacksNeeded,
       onToggleKnowledgePack,
       initialInputCapability: {
         capabilityRoute: {
@@ -1025,6 +1040,7 @@ describe("Inputbar", () => {
         ?.textContent,
     ).toContain("使用这份资料");
     expect(onToggleKnowledgePack).not.toHaveBeenCalled();
+    expect(onKnowledgePacksNeeded).toHaveBeenCalledTimes(1);
   });
 
   it("先选内建命令再选技能时，应以后一次 capability 为准发送", async () => {
@@ -3732,6 +3748,7 @@ describe("Inputbar", () => {
 
   it("资料中枢应在加号菜单中作为独立二级浮层展示", async () => {
     const onToggleKnowledgePack = vi.fn();
+    const onKnowledgePacksNeeded = vi.fn();
     const { container } = renderInputbar({
       knowledgePackSelection: {
         enabled: false,
@@ -3740,6 +3757,7 @@ describe("Inputbar", () => {
         label: "品牌产品资料",
         status: "ready",
       },
+      onKnowledgePacksNeeded,
       onToggleKnowledgePack,
     });
 
@@ -3748,6 +3766,7 @@ describe("Inputbar", () => {
     });
 
     const knowledgePanel = openKnowledgePanel(container);
+    expect(onKnowledgePacksNeeded).toHaveBeenCalledTimes(1);
     expect(knowledgePanel).toBeTruthy();
     expect(
       knowledgePanel.querySelector('[data-testid="inputbar-knowledge-hub"]'),

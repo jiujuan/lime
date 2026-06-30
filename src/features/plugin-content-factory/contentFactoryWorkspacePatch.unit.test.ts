@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { WorkspaceRightSurfacePendingRequest } from "@/lib/api/workspaceRightSurface";
 import {
-  buildContentFactoryWorkspacePatchProfile,
-  buildContentFactoryWorkspacePatchProfileFromPendingRequests,
+  buildContentFactoryWorkspacePatchArticleWorkspace,
+  buildContentFactoryWorkspacePatchArticleWorkspaceFromPendingRequests,
   CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
 } from "./contentFactoryWorkspacePatch";
 import { CONTENT_FACTORY_PLUGIN_ID } from "./contentFactoryPlugin";
 
 const workspacePatch = {
-  schemaVersion: "product-workspace.v1",
+  schemaVersion: "article-workspace.v1",
   appId: CONTENT_FACTORY_PLUGIN_ID,
   sessionId: "session-main",
   workspaceId: "workspace-main",
@@ -62,9 +62,9 @@ const workspacePatch = {
     },
   ],
   layoutState: {
-    activeTabKind: "productProfile",
+    activeTabKind: "articleWorkspace",
     activePaneKind: "documentCanvas",
-    openTabKinds: ["productProfile", "files"],
+    openTabKinds: ["articleWorkspace", "files"],
   },
   sourceArtifacts: [{ artifactRef: "artifact-workspace-patch-1" }],
 };
@@ -73,22 +73,22 @@ function pendingRequest(
   metadata: Record<string, unknown>,
 ): WorkspaceRightSurfacePendingRequest {
   return {
-    requestId: "right_surface_product_profile_1",
+    requestId: "right_surface_article_workspace_1",
     workspaceId: "workspace-main",
     sessionId: "session-main",
-    surfaceKind: "productProfile",
+    surfaceKind: "articleWorkspace",
     origin: "runtime",
     priority: "foreground",
     status: "pending",
-    reason: "product_profile_ready",
+    reason: "article_workspace_ready",
     requestedAt: "2026-06-26T00:00:00.000Z",
     metadata,
   };
 }
 
 describe("contentFactoryWorkspacePatch", () => {
-  it("应从 worker artifact metadata 的 contentFactoryWorkspacePatch 投影 Product Profile", () => {
-    const profile = buildContentFactoryWorkspacePatchProfile({
+  it("应从 worker artifact metadata 的 contentFactoryWorkspacePatch 投影 Article Workspace", () => {
+    const profile = buildContentFactoryWorkspacePatchArticleWorkspace({
       artifact: {
         artifactId: "artifact-workspace-patch-1",
         kind: CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
@@ -110,7 +110,7 @@ describe("contentFactoryWorkspacePatch", () => {
       },
       layoutState: {
         activePaneKind: "documentCanvas",
-        openTabKinds: ["productProfile", "files"],
+        openTabKinds: ["articleWorkspace", "files"],
       },
     });
     expect(profile?.objects.map((object) => object.title)).toEqual([
@@ -120,7 +120,7 @@ describe("contentFactoryWorkspacePatch", () => {
   });
 
   it("应从 artifact content JSON 投影 workspace patch", () => {
-    const profile = buildContentFactoryWorkspacePatchProfile({
+    const profile = buildContentFactoryWorkspacePatchArticleWorkspace({
       artifact: {
         artifactId: "artifact-workspace-patch-1",
         kind: CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
@@ -138,14 +138,14 @@ describe("contentFactoryWorkspacePatch", () => {
     });
   });
 
-  it("应兼容 metadata.workspace_patch 与 productWorkspace 包装", () => {
-    const fromSnake = buildContentFactoryWorkspacePatchProfile({
+  it("应兼容 metadata.workspace_patch 与 articleWorkspace 包装", () => {
+    const fromSnake = buildContentFactoryWorkspacePatchArticleWorkspace({
       metadata: {
         workspace_patch: workspacePatch,
       },
     });
-    const fromCamel = buildContentFactoryWorkspacePatchProfile({
-      productWorkspace: workspacePatch,
+    const fromCamel = buildContentFactoryWorkspacePatchArticleWorkspace({
+      articleWorkspace: workspacePatch,
     });
 
     expect(fromSnake?.objects[0]?.ref.kind).toBe("articleDraft");
@@ -153,7 +153,7 @@ describe("contentFactoryWorkspacePatch", () => {
   });
 
   it("应从 pending requests 的 artifact metadata 包装形态投影并补请求来源", () => {
-    const profile = buildContentFactoryWorkspacePatchProfileFromPendingRequests([
+    const profile = buildContentFactoryWorkspacePatchArticleWorkspaceFromPendingRequests([
       pendingRequest({
         artifact: {
           artifactId: "artifact-workspace-patch-1",
@@ -175,9 +175,9 @@ describe("contentFactoryWorkspacePatch", () => {
       updatedAt: "2026-06-26T00:00:00.000Z",
       sourceArtifacts: [
         {
-          requestId: "right_surface_product_profile_1",
+          requestId: "right_surface_article_workspace_1",
           origin: "runtime",
-          reason: "product_profile_ready",
+          reason: "article_workspace_ready",
           artifactRef: "artifact-workspace-patch-1",
           kind: CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
         },
@@ -194,13 +194,13 @@ describe("contentFactoryWorkspacePatch", () => {
 
   it("非内容工厂、缺少 session 或坏 JSON 应 fail closed", () => {
     expect(
-      buildContentFactoryWorkspacePatchProfile({
+      buildContentFactoryWorkspacePatchArticleWorkspace({
         ...workspacePatch,
         appId: "other-plugin",
       }),
     ).toBeNull();
     expect(
-      buildContentFactoryWorkspacePatchProfile({
+      buildContentFactoryWorkspacePatchArticleWorkspace({
         ...workspacePatch,
         sessionId: "",
         objects: [
@@ -215,7 +215,7 @@ describe("contentFactoryWorkspacePatch", () => {
       }),
     ).toBeNull();
     expect(
-      buildContentFactoryWorkspacePatchProfile({
+      buildContentFactoryWorkspacePatchArticleWorkspace({
         artifact: {
           kind: CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
           content: "{not-json",

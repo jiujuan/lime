@@ -78,13 +78,18 @@ export interface PluginHistoryRestoreProjection {
   blockerCodes: string[];
 }
 
+function normalizeHistorySurfaceKind(value?: string | null): string | null {
+  const normalized = value?.trim();
+  return normalized || null;
+}
+
 export interface BuildPluginHistoryRestoreProjectionParams {
   snapshot: PluginHistoryRestoreSnapshot;
   contracts: readonly PluginContract[];
   registryItems?: readonly PluginRegistryItem[];
 }
 
-function uniqueStrings(values: Array<string | undefined>): string[] {
+function uniqueStrings(values: Array<string | undefined | null>): string[] {
   return Array.from(
     new Set(
       values
@@ -96,6 +101,29 @@ function uniqueStrings(values: Array<string | undefined>): string[] {
 
 function objectRefKey(ref: PluginObjectRef | undefined): string | undefined {
   return ref ? `${ref.pluginId}:${ref.objectKind}:${ref.objectId}` : undefined;
+}
+
+function collectArtifactRefs(
+  snapshot: PluginHistoryRestoreSnapshot,
+): string[] {
+  const refs: Array<string | undefined | null> = [
+    ...(snapshot.artifactRefs ?? []),
+  ];
+  if (snapshot.primaryObjectRef?.artifactIds) {
+    refs.push(...snapshot.primaryObjectRef.artifactIds);
+  }
+  if (snapshot.selectedObjectRef?.artifactIds) {
+    refs.push(...snapshot.selectedObjectRef.artifactIds);
+  }
+  for (const object of snapshot.pluginWorkspace?.objects ?? []) {
+    if (object.artifactIds) {
+      refs.push(...object.artifactIds);
+    }
+    if (object.ref.artifactIds) {
+      refs.push(...object.ref.artifactIds);
+    }
+  }
+  return uniqueStrings(refs);
 }
 
 function objectBelongsToPlugin(
@@ -197,13 +225,19 @@ function resolveTabs(params: {
   const restoreLayout = contract.historyRestore.restoreLayout;
   const requestedTabs = restoreLayout
     ? uniqueStrings([
-        snapshot.layoutState?.activeSurfaceKind,
-        ...(snapshot.layoutState?.openSurfaceKinds ?? []),
-        ...(snapshot.openedTabs ?? []),
-        ...(snapshot.pluginWorkspace?.openedTabs ?? []),
-        contract.rightSurface.defaultActiveTab,
+        normalizeHistorySurfaceKind(snapshot.layoutState?.activeSurfaceKind),
+        ...(snapshot.layoutState?.openSurfaceKinds ?? []).map(
+          normalizeHistorySurfaceKind,
+        ),
+        ...(snapshot.openedTabs ?? []).map(normalizeHistorySurfaceKind),
+        ...(snapshot.pluginWorkspace?.openedTabs ?? []).map(
+          normalizeHistorySurfaceKind,
+        ),
+        normalizeHistorySurfaceKind(contract.rightSurface.defaultActiveTab),
       ])
-    : uniqueStrings([contract.rightSurface.defaultActiveTab]);
+    : uniqueStrings([
+        normalizeHistorySurfaceKind(contract.rightSurface.defaultActiveTab),
+      ]);
   const openedTabs = requestedTabs.filter((tab) => supportedTabs.has(tab));
   const fallbackTab = contract.rightSurface.defaultActiveTab;
   const normalizedOpenedTabs =
@@ -211,10 +245,12 @@ function resolveTabs(params: {
       ? openedTabs
       : [fallbackTab];
   const pinnedTabs = restoreLayout
-    ? uniqueStrings([
-        ...(snapshot.pinnedTabs ?? []),
-        ...(snapshot.pluginWorkspace?.pinnedTabs ?? []),
-      ]).filter((tab) => normalizedOpenedTabs.includes(tab))
+    ? uniqueStrings(
+        [
+          ...(snapshot.pinnedTabs ?? []),
+          ...(snapshot.pluginWorkspace?.pinnedTabs ?? []),
+        ].map(normalizeHistorySurfaceKind),
+      ).filter((tab) => normalizedOpenedTabs.includes(tab))
     : [];
 
   return {
@@ -308,7 +344,7 @@ export function buildPluginHistoryRestoreProjection({
   registryItems,
 }: BuildPluginHistoryRestoreProjectionParams): PluginHistoryRestoreProjection {
   const pluginId = pluginIdFromSnapshot(snapshot);
-  const artifactRefs = [...(snapshot.artifactRefs ?? [])];
+  const artifactRefs = collectArtifactRefs(snapshot);
   if (!pluginId) {
     return fallbackProjection({
       snapshot,

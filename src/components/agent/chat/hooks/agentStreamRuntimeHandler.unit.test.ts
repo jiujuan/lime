@@ -50,7 +50,11 @@ describe("agentStreamRuntimeHandler", () => {
     clearAllAgentStreamTextOverlays();
   });
 
-  it("应在 reducer 边界记录标准 Agent UI projection envelope", () => {
+  async function flushProjectionQueue() {
+    await Promise.resolve();
+  }
+
+  it("应在 reducer 边界异步记录标准 Agent UI projection envelope", async () => {
     clearAgentUiProjectionEvents();
     const requestState = {
       accumulatedContent: "",
@@ -107,6 +111,10 @@ describe("agentStreamRuntimeHandler", () => {
       setIsSending: vi.fn() as never,
     });
 
+    expect(
+      selectAgentUiProjectionEvents(conversationProjectionStore.getSnapshot()),
+    ).toEqual([]);
+    await flushProjectionQueue();
     const projectionEvents = selectAgentUiProjectionEvents(
       conversationProjectionStore.getSnapshot(),
     );
@@ -146,7 +154,7 @@ describe("agentStreamRuntimeHandler", () => {
     ).toBe(1);
   });
 
-  it("应把工具进度和输出增量写入 projection 与运行中工具卡", () => {
+  it("应把工具进度和输出增量异步写入 projection，并同步更新运行中工具卡", async () => {
     clearAgentUiProjectionEvents();
     let messages: Message[] = [
       {
@@ -294,6 +302,10 @@ describe("agentStreamRuntimeHandler", () => {
 
     expect(
       selectAgentUiProjectionEvents(conversationProjectionStore.getSnapshot()),
+    ).toEqual([]);
+    await flushProjectionQueue();
+    expect(
+      selectAgentUiProjectionEvents(conversationProjectionStore.getSnapshot()),
     ).toEqual([
       expect.objectContaining({
         type: "tool.args.delta",
@@ -316,7 +328,7 @@ describe("agentStreamRuntimeHandler", () => {
     ]);
   });
 
-  it("legacy 工具投影出的 thread item 不应阻止 tool_end 更新 message 层", () => {
+  it("legacy 工具投影出的 thread item 不应阻止 tool_end 更新 message 层", async () => {
     let messages: Message[] = [
       {
         id: "assistant-legacy-tool",
@@ -450,7 +462,7 @@ describe("agentStreamRuntimeHandler", () => {
     });
   });
 
-  it("已有 item lifecycle 时 legacy 工具增量不应新建 message.toolCalls", () => {
+  it("已有 item lifecycle 时 legacy 工具增量不应新建 message.toolCalls", async () => {
     clearAgentUiProjectionEvents();
     let messages: Message[] = [
       {
@@ -600,6 +612,10 @@ describe("agentStreamRuntimeHandler", () => {
     });
     expect(
       selectAgentUiProjectionEvents(conversationProjectionStore.getSnapshot()),
+    ).toEqual([]);
+    await flushProjectionQueue();
+    expect(
+      selectAgentUiProjectionEvents(conversationProjectionStore.getSnapshot()),
     ).toEqual([
       expect.objectContaining({
         type: "tool.args.delta",
@@ -619,7 +635,7 @@ describe("agentStreamRuntimeHandler", () => {
     ]);
   });
 
-  it("已有 item lifecycle 时 App Server tool.failed 不应再改 message 层工具卡", () => {
+  it("已有 item lifecycle 时 App Server tool.failed 不应再改 message 层工具卡", async () => {
     clearAgentUiProjectionEvents();
     let messages: Message[] = [
       {
@@ -754,6 +770,10 @@ describe("agentStreamRuntimeHandler", () => {
       output: "test failed",
       error: "exit code 101",
     });
+    expect(
+      selectAgentUiProjectionEvents(conversationProjectionStore.getSnapshot()),
+    ).toEqual([]);
+    await flushProjectionQueue();
     expect(
       selectAgentUiProjectionEvents(conversationProjectionStore.getSnapshot()),
     ).toEqual([
@@ -1326,9 +1346,7 @@ describe("agentStreamRuntimeHandler", () => {
       } as AgentEvent,
     });
 
-    expect(
-      requestState.hasFinalAnswerRequiredProcessBoundary,
-    ).toBe(true);
+    expect(requestState.hasFinalAnswerRequiredProcessBoundary).toBe(true);
     expect(
       requestState.hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary,
     ).toBe(false);
@@ -1378,8 +1396,7 @@ describe("agentStreamRuntimeHandler", () => {
           | AgentThreadItem[]
           | ((prev: AgentThreadItem[]) => AgentThreadItem[]),
       ) => {
-        threadItems =
-          typeof value === "function" ? value(threadItems) : value;
+        threadItems = typeof value === "function" ? value(threadItems) : value;
       },
     );
 
@@ -1481,8 +1498,7 @@ describe("agentStreamRuntimeHandler", () => {
           | AgentThreadItem[]
           | ((prev: AgentThreadItem[]) => AgentThreadItem[]),
       ) => {
-        threadItems =
-          typeof value === "function" ? value(threadItems) : value;
+        threadItems = typeof value === "function" ? value(threadItems) : value;
       },
     );
     const baseOptions = {
@@ -1615,8 +1631,7 @@ describe("agentStreamRuntimeHandler", () => {
           | AgentThreadItem[]
           | ((prev: AgentThreadItem[]) => AgentThreadItem[]),
       ) => {
-        threadItems =
-          typeof value === "function" ? value(threadItems) : value;
+        threadItems = typeof value === "function" ? value(threadItems) : value;
       },
     );
     const callbacks = {
@@ -1762,9 +1777,7 @@ describe("agentStreamRuntimeHandler", () => {
         }),
       ]),
     );
-    expect(removeQueuedTurnState).toHaveBeenCalledWith([
-      "queued-search-final",
-    ]);
+    expect(removeQueuedTurnState).toHaveBeenCalledWith(["queued-search-final"]);
     expect(mockToast.error).not.toHaveBeenCalledWith(
       "模型未输出最终答复，请重试",
     );
@@ -2349,8 +2362,7 @@ describe("agentStreamRuntimeHandler", () => {
           | AgentThreadItem[]
           | ((prev: AgentThreadItem[]) => AgentThreadItem[]),
       ) => {
-        threadItems =
-          typeof value === "function" ? value(threadItems) : value;
+        threadItems = typeof value === "function" ? value(threadItems) : value;
       },
     );
     const requestState = {
@@ -2462,8 +2474,7 @@ describe("agentStreamRuntimeHandler", () => {
           | AgentThreadItem[]
           | ((prev: AgentThreadItem[]) => AgentThreadItem[]),
       ) => {
-        threadItems =
-          typeof value === "function" ? value(threadItems) : value;
+        threadItems = typeof value === "function" ? value(threadItems) : value;
       },
     );
     const requestState = {
@@ -2540,7 +2551,7 @@ describe("agentStreamRuntimeHandler", () => {
     expect(messages[0]?.contentParts?.map((part) => part.type)).toEqual([
       "tool_use",
     ]);
-    expect(JSON.stringify(messages[0]?.contentParts)).not.toContain("\"我\"");
+    expect(JSON.stringify(messages[0]?.contentParts)).not.toContain('"我"');
     expect(threadItems).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -2602,8 +2613,7 @@ describe("agentStreamRuntimeHandler", () => {
           | AgentThreadItem[]
           | ((prev: AgentThreadItem[]) => AgentThreadItem[]),
       ) => {
-        threadItems =
-          typeof value === "function" ? value(threadItems) : value;
+        threadItems = typeof value === "function" ? value(threadItems) : value;
       },
     );
     const requestState = {

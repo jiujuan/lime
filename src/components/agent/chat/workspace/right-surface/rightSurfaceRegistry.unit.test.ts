@@ -9,7 +9,7 @@ import type { WorkspaceRightSurfaceKind } from "./rightSurfaceTypes";
 const EXPECTED_SURFACE_KINDS: WorkspaceRightSurfaceKind[] = [
   "workbench",
   "appSurface",
-  "productProfile",
+  "articleWorkspace",
   "expertInfo",
   "objectCanvas",
   "browser",

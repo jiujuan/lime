@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { InstalledAgentAppState } from "@/features/agent-app/types";
 import {
   AGENT_APPS_CHANGED_EVENT,
@@ -12,6 +12,7 @@ import {
 const EMPTY_INSTALLED_AGENT_APPS: readonly InstalledAgentAppState[] = [];
 
 export interface UseWorkspacePluginRuntimeContextOptions {
+  enabled?: boolean;
   requestMetadata?: Record<string, unknown>;
   listInstalled?: () => Promise<{ states: InstalledAgentAppState[] }>;
 }
@@ -20,9 +21,11 @@ export interface UseWorkspacePluginRuntimeContextResult {
   context: WorkspacePluginRuntimeContext;
   loading: boolean;
   error: Error | null;
+  refresh: () => void;
 }
 
 export function useWorkspacePluginRuntimeContext({
+  enabled = false,
   requestMetadata,
   listInstalled = listInstalledAgentApps,
 }: UseWorkspacePluginRuntimeContextOptions): UseWorkspacePluginRuntimeContextResult {
@@ -31,6 +34,11 @@ export function useWorkspacePluginRuntimeContext({
   >(EMPTY_INSTALLED_AGENT_APPS);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const shouldLoadInstalledAgentApps = enabled || Boolean(requestMetadata);
+  const refresh = useCallback(() => {
+    setRefreshKey((value) => value + 1);
+  }, []);
 
   useEffect(() => {
     let disposed = false;
@@ -59,6 +67,15 @@ export function useWorkspacePluginRuntimeContext({
       }
     };
 
+    if (!shouldLoadInstalledAgentApps) {
+      setLoading(false);
+      setError(null);
+      setInstalledAgentApps(EMPTY_INSTALLED_AGENT_APPS);
+      return () => {
+        disposed = true;
+      };
+    }
+
     void refresh();
 
     if (typeof window === "undefined") {
@@ -72,7 +89,7 @@ export function useWorkspacePluginRuntimeContext({
       disposed = true;
       window.removeEventListener(AGENT_APPS_CHANGED_EVENT, refresh);
     };
-  }, [listInstalled]);
+  }, [listInstalled, refreshKey, shouldLoadInstalledAgentApps]);
 
   const context = useMemo(
     () =>
@@ -87,5 +104,6 @@ export function useWorkspacePluginRuntimeContext({
     context,
     loading,
     error,
+    refresh,
   };
 }

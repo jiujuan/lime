@@ -1,6 +1,7 @@
 import {
   getCurrentSkillCatalogSnapshot,
   listSkillCatalogSkillEntries,
+  type SkillCatalog,
   type SkillCatalogSkillEntry,
 } from "@/lib/api/skillCatalog";
 import type { ServiceSkillItem } from "@/lib/api/serviceSkills";
@@ -71,6 +72,7 @@ function upsertSkillCandidate(
 export function buildSkillCandidates(input: {
   localSkills?: Skill[];
   serviceSkills?: ServiceSkillItem[];
+  catalog?: SkillCatalog | null;
 }): ExpertSkillCandidate[] {
   const candidates = new Map<string, ExpertSkillCandidate>();
 
@@ -96,7 +98,7 @@ export function buildSkillCandidates(input: {
   }
 
   try {
-    const catalog = getCurrentSkillCatalogSnapshot();
+    const catalog = input.catalog ?? getCurrentSkillCatalogSnapshot();
     for (const item of catalog.items) {
       upsertSkillCandidate(candidates, {
         ref: serviceSkillRef(item),

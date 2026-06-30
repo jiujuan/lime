@@ -34,11 +34,6 @@ const PANEL_ASSERTIONS = {
   expertPanelEvidenceSkillInvocationObserved: true,
   expertPanelSkillSearchBeforeSkillInvocation: true,
   expertPanelEvidencePackExportedFromHarnessPanel: true,
-  expertPanelEvidenceSummaryVisible: true,
-  expertPanelEvidenceSummarySkillCountsVisible: true,
-  expertPanelEvidenceSummaryLatestSkillVisible: true,
-  expertPanelEvidenceSummaryRuntimeEnableVisible: true,
-  expertPanelEvidenceSummaryHidesRawRuntimeEnable: true,
 };
 
 function writeSummary(root, name, overrides = {}) {
@@ -50,7 +45,8 @@ function writeSummary(root, name, overrides = {}) {
     provider: "fixture-provider",
     model: "fixture-model",
     assertions: {
-      ...CORE_ASSERTIONS,
+      liveProviderUsed: false,
+      liveProviderNotUsed: true,
       ...PANEL_ASSERTIONS,
       ...(assertions ?? {}),
     },

@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "model": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "prompt": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "providerId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "revisedPrompt": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "size": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "slotId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "slotIndex": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "slotPrompt": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "url": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "url"
+  ],
+  "title": "MediaTaskArtifactCompletedImageInput",
+  "type": "object"
+}

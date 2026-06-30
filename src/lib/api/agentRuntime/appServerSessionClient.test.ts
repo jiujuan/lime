@@ -723,6 +723,22 @@ describe("appServerSessionClient", () => {
           thread_id: "thread-expert",
           status: "running",
           active_turn_id: "turn-expert",
+          article_workspace: {
+            appId: "content-factory-app",
+            sessionId: "session-expert",
+            objects: [
+              {
+                ref: {
+                  appId: "content-factory-app",
+                  kind: "articleDraft",
+                  id: "article-1",
+                  sessionId: "session-expert",
+                },
+                title: "公众号文章草稿",
+                status: "ready",
+              },
+            ],
+          },
           tool_calls: [
             {
               id: "tool-1",
@@ -756,6 +772,22 @@ describe("appServerSessionClient", () => {
             status: "completed",
           },
         ],
+        article_workspace: {
+          appId: "content-factory-app",
+          sessionId: "session-expert",
+          objects: [
+            {
+              ref: {
+                appId: "content-factory-app",
+                kind: "articleDraft",
+                id: "article-1",
+                sessionId: "session-expert",
+              },
+              title: "公众号文章草稿",
+              status: "ready",
+            },
+          ],
+        },
         session_business_object_ref_metadata: {
           title: "代码文学专家",
           expert: { expertId: "code-literature" },
@@ -1025,11 +1057,22 @@ describe("appServerSessionClient", () => {
         recent_team_selection: {
           disabled: true,
         },
-        product_workspace_selected_object_ref: {
+        article_workspace_selected_object_ref: {
           appId: "content-factory-app",
           sessionId: "session-1",
           kind: "imageGenerationSet",
           id: "image-set-1",
+        },
+        article_workspace_edited_draft: {
+          objectKey: "content-factory-app:session-1:articleDraft:article-1",
+          objectRef: {
+            appId: "content-factory-app",
+            sessionId: "session-1",
+            kind: "articleDraft",
+            id: "article-1",
+          },
+          markdown: "# 用户编辑稿\n\n这是画布编辑后的正文。",
+          updatedAt: "2026-06-29T10:00:00.000Z",
         },
       }),
     ).resolves.toBeUndefined();
@@ -1050,11 +1093,22 @@ describe("appServerSessionClient", () => {
       recentTeamSelection: {
         disabled: true,
       },
-      productWorkspaceSelectedObjectRef: {
+      articleWorkspaceSelectedObjectRef: {
         appId: "content-factory-app",
         sessionId: "session-1",
         kind: "imageGenerationSet",
         id: "image-set-1",
+      },
+      articleWorkspaceEditedDraft: {
+        objectKey: "content-factory-app:session-1:articleDraft:article-1",
+        objectRef: {
+          appId: "content-factory-app",
+          sessionId: "session-1",
+          kind: "articleDraft",
+          id: "article-1",
+        },
+        markdown: "# 用户编辑稿\n\n这是画布编辑后的正文。",
+        updatedAt: "2026-06-29T10:00:00.000Z",
       },
     });
   });

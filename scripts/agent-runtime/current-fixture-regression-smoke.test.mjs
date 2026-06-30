@@ -99,22 +99,22 @@ describe("agent runtime current fixture regression smoke guard", () => {
     );
   });
 
-  it("runs the Content Factory article Product Profile Electron fixture", () => {
+  it("runs the Content Factory article Article Editor Electron fixture", () => {
     const content = readSmokeScript();
 
     expect(content).toContain(
-      "Content Factory article Product Profile Electron fixture",
+      "Content Factory article Article Editor Electron fixture",
     );
     expect(content).toContain(
       "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
     );
     expect(content).toContain("--scenario");
-    expect(content).toContain("content-factory-product-profile");
+    expect(content).toContain("content-factory-article-workspace");
     expect(content).toContain(
-      "claw-chat-current-fixture-content-factory-product-profile-regression",
+      "claw-chat-current-fixture-content-factory-article-workspace-regression",
     );
     expect(content).toContain(
-      "内容工厂文章 Product Profile / articleDraft 右侧产物闭环 Electron fixture",
+      "内容工厂文章 Article Editor / articleDraft 右侧产物闭环 Electron fixture",
     );
   });
 

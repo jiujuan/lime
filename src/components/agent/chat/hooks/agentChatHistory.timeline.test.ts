@@ -485,10 +485,10 @@ describe("agentChatHistory timeline fallback", () => {
     });
   });
 
-  it("Product Profile artifact summary 不应恢复成中间产物消息", () => {
+  it("Article Editor artifact summary 不应恢复成中间产物消息", () => {
     const detail: AsterSessionDetail = {
-      id: "session-product-profile-artifacts",
-      thread_id: "session-product-profile-artifacts-thread",
+      id: "session-article-workspace-artifacts",
+      thread_id: "session-article-workspace-artifacts-thread",
       created_at: 1,
       updated_at: 2,
       messages: [],
@@ -497,20 +497,20 @@ describe("agentChatHistory timeline fallback", () => {
       artifacts: [
         {
           artifactRef: "artifact-article-1",
-          eventId: "event-product-profile-artifact-1",
+          eventId: "event-article-workspace-artifact-1",
           sequence: 1,
           artifactId: "artifact-article-1",
-          path: ".lime/artifacts/product-profile/article.artifact.json",
+          path: ".lime/artifacts/article-workspace/article.artifact.json",
           title: "公众号文章草稿",
           kind: "artifact_document",
           status: "complete",
           contentStatus: "available",
           metadata: {
-            openedFrom: "app_server_product_workspace",
+            openedFrom: "app_server_article_workspace",
             artifactSchema: "artifact_document.v1",
-            productProfile: {
+            articleWorkspace: {
               appId: "content-factory-app",
-              sessionId: "session-product-profile-artifacts",
+              sessionId: "session-article-workspace-artifacts",
               objectKind: "articleDraft",
               objectId: "article-1",
             },
@@ -518,7 +518,7 @@ describe("agentChatHistory timeline fallback", () => {
         },
         {
           artifactRef: "artifact-workspace-patch-1",
-          eventId: "event-product-profile-patch-1",
+          eventId: "event-article-workspace-patch-1",
           sequence: 2,
           artifactId: "artifact-workspace-patch-1",
           path: ".lime/artifacts/content-factory-workspace-patch.json",
@@ -529,14 +529,14 @@ describe("agentChatHistory timeline fallback", () => {
           metadata: {
             contentFactoryWorkspacePatch: {
               appId: "content-factory-app",
-              sessionId: "session-product-profile-artifacts",
+              sessionId: "session-article-workspace-artifacts",
               objects: [
                 {
                   ref: {
                     appId: "content-factory-app",
                     kind: "articleDraft",
                     id: "article-1",
-                    sessionId: "session-product-profile-artifacts",
+                    sessionId: "session-article-workspace-artifacts",
                   },
                   title: "公众号文章草稿",
                   status: "ready",
@@ -547,23 +547,23 @@ describe("agentChatHistory timeline fallback", () => {
         },
       ],
       thread_read: {
-        thread_id: "session-product-profile-artifacts-thread",
+        thread_id: "session-article-workspace-artifacts-thread",
         status: "completed",
         profile_status: "completed",
         pending_requests: [],
         incidents: [],
         queued_turns: [],
-        product_workspace: {
-          schemaVersion: "product-workspace.v1",
+        article_workspace: {
+          schemaVersion: "article-workspace.v1",
           appId: "content-factory-app",
-          sessionId: "session-product-profile-artifacts",
+          sessionId: "session-article-workspace-artifacts",
           objects: [
             {
               ref: {
                 appId: "content-factory-app",
                 kind: "articleDraft",
                 id: "article-1",
-                sessionId: "session-product-profile-artifacts",
+                sessionId: "session-article-workspace-artifacts",
               },
               title: "公众号文章草稿",
               status: "ready",
@@ -574,7 +574,7 @@ describe("agentChatHistory timeline fallback", () => {
     } as AsterSessionDetail & { artifacts: unknown[] };
 
     expect(
-      hydrateSessionDetailMessages(detail, "session-product-profile-artifacts"),
+      hydrateSessionDetailMessages(detail, "session-article-workspace-artifacts"),
     ).toEqual([]);
   });
 

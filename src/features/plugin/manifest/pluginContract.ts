@@ -24,6 +24,7 @@ import type {
   PluginManifest,
   PluginManifestComponentPaths,
   PluginManifestContributions,
+  PluginManifestInstallContract,
   PluginManifestInterface,
   PluginMcpServerDeclaration,
   PluginRendererKind,
@@ -348,6 +349,19 @@ function normalizeConnector(
   };
 }
 
+function connectorKindFromToolProvider(
+  provider: string | undefined,
+): PluginConnectorDeclaration["kind"] | undefined {
+  if (!provider?.startsWith("connector:")) {
+    return undefined;
+  }
+  const kind = provider.slice("connector:".length);
+  if (["account", "api", "data_source", "external_app"].includes(kind)) {
+    return kind as PluginConnectorDeclaration["kind"];
+  }
+  return "api";
+}
+
 function normalizeMcpServer(
   record: Record<string, unknown>,
 ): PluginMcpServerDeclaration {
@@ -469,6 +483,24 @@ function normalizeHistoryFallback(value: unknown): PluginHistoryFallback {
     : "chatOnly";
 }
 
+function normalizeInstallContract(value: unknown): PluginManifestInstallContract | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const install: PluginManifestInstallContract = {};
+  if (typeof value.local === "boolean") {
+    install.local = value.local;
+  }
+  if (typeof value.cloud === "boolean") {
+    install.cloud = value.cloud;
+  }
+  const authentication = readString(value.authentication);
+  if (authentication) {
+    install.authentication = authentication;
+  }
+  return Object.keys(install).length > 0 ? install : undefined;
+}
+
 function normalizeHistoryRestore(
   value: unknown,
 ): PluginHistoryRestoreDeclaration {
@@ -537,9 +569,9 @@ function buildRightSurfaceContract(params: {
   const primaryRenderer = renderers[0];
 
   return {
-    defaultActiveTab: renderers.length > 0 ? "productProfile" : undefined,
+    defaultActiveTab: renderers.length > 0 ? "articleWorkspace" : undefined,
     supportedTabs: [
-      "productProfile",
+      "articleWorkspace",
       "file",
       "evidence",
       "terminal",
@@ -551,7 +583,7 @@ function buildRightSurfaceContract(params: {
       restoreSelection: historyRestore.restoreSelection,
       restoreLayout: historyRestore.restoreLayout,
     },
-    productWorkspace: {
+    articleWorkspace: {
       enabled: renderers.length > 0,
       primaryObjectKind: primaryRenderer?.artifactType,
       selectionPolicy: historyRestore.restoreSelection ? "last" : "primary",
@@ -665,6 +697,7 @@ export function normalizePluginManifest(
     artifactRenderers,
     activationEntries,
     historyRestore,
+    install: normalizeInstallContract(raw.install),
     rightSurface:
       options.rightSurface ??
       buildRightSurfaceContract({
@@ -684,7 +717,7 @@ function primaryObjectKind(
 ): string | undefined {
   return (
     manifest.workbench?.productionObjects?.find((object) => object.primary)
-      ?.kind ?? manifest.workbench?.productWorkspace?.primaryObjectKinds?.[0]
+      ?.kind ?? manifest.workbench?.articleWorkspace?.primaryObjectKinds?.[0]
   );
 }
 
@@ -735,6 +768,26 @@ function readAgentAppWorkerOutputArtifactKind(
     readString(runtimeWorker?.outputArtifactKind) ??
     readString(runtimeWorker?.output_artifact_kind)
   );
+}
+
+function connectorsFromAgentAppToolRefs(
+  manifest: NormalizedAppManifest,
+): PluginConnectorDeclaration[] {
+  return (manifest.toolRefs ?? []).flatMap((tool) => {
+    const kind = connectorKindFromToolProvider(tool.provider);
+    if (!kind) {
+      return [];
+    }
+    return [
+      {
+        id: tool.key,
+        title: tool.title ?? tool.key,
+        description: tool.description,
+        kind,
+        required: tool.required ?? false,
+      },
+    ];
+  });
 }
 
 function artifactRenderersFromAgentApp(
@@ -859,19 +912,19 @@ function convertAgentRightSurface(
       restoreSelection: contract.historyRestore.restoreSelection,
       restoreLayout: contract.historyRestore.restoreLayout,
     },
-    productWorkspace: {
-      enabled: contract.productProfile.enabled,
+    articleWorkspace: {
+      enabled: contract.articleWorkspace.enabled,
       primaryObjectKind:
-        contract.productProfile.objects.find((object) => object.primary)
-          ?.kind ?? contract.productProfile.objects[0]?.kind,
+        contract.articleWorkspace.objects.find((object) => object.primary)
+          ?.kind ?? contract.articleWorkspace.objects[0]?.kind,
       selectionPolicy: contract.historyRestore.restoreSelection
         ? "last"
         : "primary",
     },
-    panes: contract.productProfile.panes.map((pane) => ({
+    panes: contract.articleWorkspace.panes.map((pane) => ({
       kind: pane,
       title: pane,
-      rendererKind: contract.productProfile.rendererKinds.includes(
+      rendererKind: contract.articleWorkspace.rendererKinds.includes(
         "app_declared",
       )
         ? "app_declared"
@@ -942,6 +995,7 @@ export function buildPluginManifestFromAgentAppManifest(
       humanReview: workflow.humanReview ?? false,
       required: workflow.required ?? false,
     })),
+    connectors: connectorsFromAgentAppToolRefs(manifest),
     artifactRenderers: artifactRenderersFromAgentApp(manifest),
     activationEntries: activationEntriesFromAgentApp(manifest),
     historyRestore: historyRestoreFromAgentApp(manifest),

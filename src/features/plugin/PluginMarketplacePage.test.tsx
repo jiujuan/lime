@@ -304,6 +304,53 @@ describe("PluginMarketplacePage", () => {
     ).not.toBeNull();
   });
 
+  it("本地安装取消选择目录时不应显示错误", async () => {
+    const localSnapshot = snapshot();
+    localSnapshot.marketplace.items[0] = marketplaceItem("research-kit@limecloud", {
+      displayName: "Research Kit",
+      install: {
+        local: true,
+        cloud: false,
+        authentication: "on_use",
+      },
+    });
+    localSnapshot.registry[0] = registryItem("research-kit@limecloud", {
+      displayName: "Research Kit",
+      installed: false,
+      enabled: false,
+      capabilityStates: ["installable"],
+      activationState: "blocked",
+      rendererState: "missing_renderer",
+      historyState: "unavailable",
+      blockerCodes: ["PLUGIN_INSTALL_UNAVAILABLE"],
+    });
+    const loader = vi.fn(async () => localSnapshot);
+    const installLocalPackage = vi.fn();
+    const selectLocalDirectory = vi.fn(async () => null);
+    const container = await renderPage({
+      loader,
+      actionDeps: {
+        selectLocalDirectory,
+        installLocalPackage,
+      },
+    });
+
+    const action = container.querySelector<HTMLButtonElement>(
+      '[data-testid="plugin-marketplace-action-research-kit@limecloud"]',
+    );
+    await act(async () => {
+      action?.click();
+      await Promise.resolve();
+    });
+    await flushEffects(4);
+
+    expect(selectLocalDirectory).toHaveBeenCalled();
+    expect(installLocalPackage).not.toHaveBeenCalled();
+    expect(container.textContent).not.toContain(
+      "plugin.marketplace.actionError.title",
+    );
+  });
+
   it("应展示插件详情并支持从列表切换当前插件", async () => {
     const loader = vi.fn(async () => snapshot());
     const container = await renderPage({ loader });

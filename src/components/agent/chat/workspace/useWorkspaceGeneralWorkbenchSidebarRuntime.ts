@@ -28,6 +28,7 @@ import {
 
 interface UseWorkspaceGeneralWorkbenchSidebarRuntimeParams {
   isThemeWorkbench: boolean;
+  sidebarVisible: boolean;
   sessionId?: string | null;
   messages: Message[];
   isSending: boolean;
@@ -38,6 +39,7 @@ interface UseWorkspaceGeneralWorkbenchSidebarRuntimeParams {
 
 export function useWorkspaceGeneralWorkbenchSidebarRuntime({
   isThemeWorkbench,
+  sidebarVisible,
   sessionId,
   messages,
   isSending,
@@ -75,6 +77,7 @@ export function useWorkspaceGeneralWorkbenchSidebarRuntime({
     async (offset: number, replace: boolean) => {
       if (
         !isThemeWorkbench ||
+        !sidebarVisible ||
         !sessionId ||
         generalWorkbenchHistoryLoadingRef.current
       ) {
@@ -108,11 +111,11 @@ export function useWorkspaceGeneralWorkbenchSidebarRuntime({
         setGeneralWorkbenchHistoryLoading(false);
       }
     },
-    [historyPageSize, isThemeWorkbench, sessionId],
+    [historyPageSize, isThemeWorkbench, sessionId, sidebarVisible],
   );
 
   useEffect(() => {
-    if (!isThemeWorkbench || !sessionId) {
+    if (!isThemeWorkbench || !sidebarVisible || !sessionId) {
       generalWorkbenchHistoryLoadingRef.current = false;
       setGeneralWorkbenchHistoryTerminals([]);
       setGeneralWorkbenchHistoryHasMore(false);
@@ -122,7 +125,7 @@ export function useWorkspaceGeneralWorkbenchSidebarRuntime({
     }
 
     void loadGeneralWorkbenchHistory(0, true);
-  }, [isThemeWorkbench, loadGeneralWorkbenchHistory, sessionId]);
+  }, [isThemeWorkbench, loadGeneralWorkbenchHistory, sessionId, sidebarVisible]);
 
   const generalWorkbenchRequiredSkillNames = useMemo(() => {
     if (!isThemeWorkbench) {
@@ -161,7 +164,7 @@ export function useWorkspaceGeneralWorkbenchSidebarRuntime({
   ]);
 
   useEffect(() => {
-    if (!isThemeWorkbench) {
+    if (!isThemeWorkbench || !sidebarVisible) {
       setGeneralWorkbenchSkillDetailMap((previous) =>
         Object.keys(previous).length === 0 ? previous : {},
       );
@@ -208,6 +211,7 @@ export function useWorkspaceGeneralWorkbenchSidebarRuntime({
     };
   }, [
     isThemeWorkbench,
+    sidebarVisible,
     generalWorkbenchRequiredSkillNames,
     generalWorkbenchSkillDetailMap,
   ]);

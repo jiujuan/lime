@@ -658,6 +658,10 @@ function collectTrackedTranscriptionTasks(
   return Array.from(tasks.values());
 }
 
+function hasTrackedTranscriptionTasks(messages: Message[]): boolean {
+  return collectTrackedTranscriptionTasks(messages).length > 0;
+}
+
 function buildLookupRequest(params: {
   task: TrackedTranscriptionTask;
   projectRootPath?: string | null;
@@ -752,12 +756,17 @@ export function useWorkspaceTranscriptionTaskPreviewRuntime({
   setChatMessages,
 }: UseWorkspaceTranscriptionTaskPreviewRuntimeParams) {
   const contextRef = useRef({ projectRootPath, messages });
+  const shouldRunPreviewRuntime = hasTrackedTranscriptionTasks(messages);
 
   useEffect(() => {
     contextRef.current = { projectRootPath, messages };
   }, [projectRootPath, messages]);
 
   useEffect(() => {
+    if (!shouldRunPreviewRuntime) {
+      return;
+    }
+
     let disposed = false;
     let polling = false;
 
@@ -947,5 +956,5 @@ export function useWorkspaceTranscriptionTaskPreviewRuntime({
         unlisten();
       }
     };
-  }, [setChatMessages]);
+  }, [setChatMessages, shouldRunPreviewRuntime]);
 }

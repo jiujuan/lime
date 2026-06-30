@@ -483,9 +483,6 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
   onToggleHarnessPanel?: ComponentProps<
     typeof ChatNavbar
   >["onToggleHarnessPanel"];
-  showTraceToggle?: boolean;
-  tracePanelVisible?: boolean;
-  onToggleTracePanel?: () => void;
   showExpertInfoToggle?: boolean;
   expertInfoPanelVisible?: boolean;
   onToggleExpertInfoPanel?: () => void;
@@ -516,6 +513,8 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
   onToggleRightSurfaceBrowser?: () => void;
   rightSurfaceFilesOpen?: boolean;
   onToggleRightSurfaceFiles?: () => void;
+  rightSurfaceTraceOpen?: boolean;
+  onToggleRightSurfaceTrace?: () => void;
   rightSurfaceShellOpen?: boolean;
   onToggleRightSurfaceShell?: () => void;
   currentImageWorkbenchActive: boolean;
@@ -639,9 +638,6 @@ export function WorkspaceConversationScene({
   showHarnessToggle,
   harnessPanelVisible,
   onToggleHarnessPanel,
-  showTraceToggle,
-  tracePanelVisible,
-  onToggleTracePanel,
   showExpertInfoToggle,
   expertInfoPanelVisible,
   onToggleExpertInfoPanel,
@@ -662,6 +658,8 @@ export function WorkspaceConversationScene({
   onToggleRightSurfaceBrowser,
   rightSurfaceFilesOpen,
   onToggleRightSurfaceFiles,
+  rightSurfaceTraceOpen,
+  onToggleRightSurfaceTrace,
   rightSurfaceShellOpen,
   onToggleRightSurfaceShell,
   currentImageWorkbenchActive,
@@ -828,9 +826,6 @@ export function WorkspaceConversationScene({
       showHarnessToggle={showHarnessToggle}
       harnessPanelVisible={harnessPanelVisible}
       onToggleHarnessPanel={onToggleHarnessPanel}
-      showTraceToggle={showTraceToggle}
-      tracePanelVisible={tracePanelVisible}
-      onToggleTracePanel={onToggleTracePanel}
       showExpertInfoToggle={showExpertInfoToggle}
       expertInfoPanelVisible={expertInfoPanelVisible}
       onToggleExpertInfoPanel={onToggleExpertInfoPanel}
@@ -851,6 +846,11 @@ export function WorkspaceConversationScene({
       onToggleFilesPanel={
         rightSurfaceFilesOpen || onToggleRightSurfaceFiles
           ? onToggleRightSurfaceFiles
+          : undefined
+      }
+      onToggleTracePanel={
+        rightSurfaceTraceOpen || onToggleRightSurfaceTrace
+          ? onToggleRightSurfaceTrace
           : undefined
       }
       rightSurfaceLaunchers={rightSurfaceLaunchers}

@@ -78,7 +78,7 @@ pub(super) fn build_agent_app_task_runtime_contract(
         blockers: unique_strings(blockers),
         follow_ups: if enabled {
             vec![
-                "补 worker 输出到 ArtifactDocument / Product Workspace 版本链。".to_string(),
+                "补 worker 输出到 ArtifactDocument / Article Workspace 版本链。".to_string(),
                 "补 worker 执行 evidence、超时 / 失败分类和发布签名门禁。".to_string(),
             ]
         } else {

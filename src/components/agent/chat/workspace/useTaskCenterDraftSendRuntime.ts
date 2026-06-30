@@ -60,6 +60,7 @@ interface UseTaskCenterDraftSendDispatchRuntimeParams {
     options?: { preserveInput?: boolean },
   ) => void;
   onNonMaterializedSessionReady?: (sessionId: string) => void;
+  restoreInput?: (value: string) => void;
   sendRef: MutableRefObject<WorkspaceHandleSend>;
   workspaceId?: string | null;
 }
@@ -307,6 +308,7 @@ export function useTaskCenterDraftSendDispatchRuntime({
   materializeDraftTab,
   commitMaterializedDraftTab,
   onNonMaterializedSessionReady,
+  restoreInput,
   sendRef,
   workspaceId,
 }: UseTaskCenterDraftSendDispatchRuntimeParams): void {
@@ -450,9 +452,13 @@ export function useTaskCenterDraftSendDispatchRuntime({
               source: request.source,
               workspaceId: workspaceId ?? null,
             });
+            if (result !== true && !request.materializeDraft) {
+              restoreInput?.(request.text);
+            }
             const latestCounts = messageCountsRef.current;
             clearRequest({
               keepHomePreview:
+                result === true &&
                 !request.materializeDraft &&
                 latestCounts.messagesLength === 0 &&
                 latestCounts.displayMessagesLength === 0,
@@ -474,6 +480,9 @@ export function useTaskCenterDraftSendDispatchRuntime({
               source: request.source,
               workspaceId: workspaceId ?? null,
             });
+            if (!request.materializeDraft) {
+              restoreInput?.(request.text);
+            }
             clearRequest();
           },
         );
@@ -487,6 +496,9 @@ export function useTaskCenterDraftSendDispatchRuntime({
           workspaceId: workspaceId ?? null,
         });
         if (!cancelled) {
+          if (!request.materializeDraft) {
+            restoreInput?.(request.text);
+          }
           clearRequest();
         }
       });
@@ -501,6 +513,7 @@ export function useTaskCenterDraftSendDispatchRuntime({
     materializeDraftTab,
     materializedSessionIdsRef,
     messageCountsRef,
+    restoreInput,
     sendRef,
     setHomePendingPreviewRequest,
     setTaskCenterDraftSendRequest,

@@ -432,7 +432,7 @@ mod tests {
       taskKind: content.article.generate
       workflow: content_article_workflow
       defaultObjectKind: articleDraft
-      rightSurface: productProfile
+      rightSurface: articleWorkspace
   workflows:
     - key: content_article_workflow
       taskKind: content.article.generate
@@ -457,7 +457,7 @@ mod tests {
             app_dir.join("app.workbench.yaml"),
             r#"workbench:
   profile: production
-  productWorkspace:
+  articleWorkspace:
     scope: session
     primaryObjectKinds:
       - articleDraft
@@ -476,6 +476,66 @@ mod tests {
     restoreLayout: true
     fallback: artifactPreview
 "#,
+        )?;
+        fs::create_dir_all(app_dir.join("skills/article_writing"))?;
+        fs::write(
+            app_dir.join("skills/article_writing/SKILL.md"),
+            r#"---
+name: article-writing
+description: 正文写作技能
+---
+
+# Article Writing
+
+## 何时使用
+
+根据检索、大纲和标题候选生成文章正文。
+"#,
+        )?;
+        fs::create_dir_all(app_dir.join("subagents/article-writer"))?;
+        fs::write(
+            app_dir.join("subagents/article-writer/prompt.md"),
+            r#"# 正文写作子智能体
+
+## 职责
+
+根据资料检索、标题候选和大纲生成可审核的文章草稿。
+"#,
+        )?;
+        fs::create_dir_all(app_dir.join("clis"))?;
+        fs::write(
+            app_dir.join("clis/clis.json"),
+            r#"{
+  "tools": [
+    {
+      "id": "content-factory",
+      "displayName": "content-factory",
+      "description": "Content Factory local helper.",
+      "source": { "type": "local-package", "bin": "./cli/content-factory.mjs" }
+    }
+  ]
+}"#,
+        )?;
+        fs::create_dir_all(app_dir.join("connectors"))?;
+        fs::write(
+            app_dir.join("connectors/connectors.json"),
+            r#"{
+  "connectors": [
+    {
+      "id": "web-research",
+      "title": "Web Research",
+      "kind": "api",
+      "required": false,
+      "taskKinds": ["content.article.generate"],
+      "description": "公开资料搜索和引用确认。"
+    }
+  ]
+}"#,
+        )?;
+        fs::create_dir_all(app_dir.join("hooks"))?;
+        fs::write(
+            app_dir.join("hooks/prompt-submit.mjs"),
+            "export default function promptSubmitHook() { return {}; }\n",
         )?;
         Ok(())
     }
@@ -550,7 +610,7 @@ mod tests {
         assert_eq!(
             read_test_json_string(
                 &inspected.manifest,
-                &["workbench", "productWorkspace", "primaryObjectKinds", "0"]
+                &["workbench", "articleWorkspace", "primaryObjectKinds", "0"]
             )
             .as_deref(),
             Some("articleDraft")
@@ -562,6 +622,80 @@ mod tests {
             )
             .as_deref(),
             Some("selectedObject")
+        );
+    }
+
+    #[test]
+    fn inspect_local_package_reads_plugin_component_content() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        write_minimal_plugin_package(
+            temp.path(),
+            r#"{
+              "runtime": "./app.runtime.yaml",
+              "workbench": "./app.workbench.yaml",
+              "skills": "./skills",
+              "subagents": "./subagents",
+              "clis": "./clis/clis.json",
+              "connectors": "./connectors/connectors.json",
+              "hooks": "./hooks"
+            }"#,
+        )
+        .expect("write plugin package");
+
+        let inspected = inspect_agent_app_local_package(AgentAppLocalPackageInspectParams {
+            app_dir: temp.path().to_string_lossy().to_string(),
+        })
+        .expect("inspect plugin package");
+
+        assert_eq!(
+            read_test_json_string(&inspected.plugin_manifest, &["skills", "0", "id"]).as_deref(),
+            Some("article-writing")
+        );
+        assert_eq!(
+            read_test_json_string(&inspected.plugin_manifest, &["subagents", "0", "id"])
+                .as_deref(),
+            Some("article-writer")
+        );
+        assert_eq!(
+            read_test_json_string(&inspected.plugin_manifest, &["connectors", "0", "id"])
+                .as_deref(),
+            Some("web-research")
+        );
+        assert_eq!(
+            read_test_json_string(&inspected.plugin_manifest, &["clis", "tools", "0", "key"])
+                .as_deref(),
+            Some("content-factory")
+        );
+        assert_eq!(
+            read_test_json_string(&inspected.plugin_manifest, &["hooks", "items", "0", "key"])
+                .as_deref(),
+            Some("prompt-submit")
+        );
+        assert_eq!(
+            read_test_json_string(&inspected.manifest, &["skillRefs", "0", "id"]).as_deref(),
+            Some("article-writing")
+        );
+        assert_eq!(
+            read_test_json_string(&inspected.manifest, &["subagents", "0", "id"]).as_deref(),
+            Some("article-writer")
+        );
+        assert_eq!(
+            read_test_json_string(&inspected.manifest, &["toolRefs", "0", "key"]).as_deref(),
+            Some("content-factory")
+        );
+        assert!(
+            inspected.manifest["toolRefs"]
+                .as_array()
+                .expect("toolRefs")
+                .iter()
+                .any(|tool| tool["key"] == "web-research")
+        );
+        assert!(
+            inspected.manifest["toolRefs"]
+                .as_array()
+                .expect("toolRefs")
+                .iter()
+                .any(|tool| tool["key"] == "hook:prompt-submit")
         );
     }
 

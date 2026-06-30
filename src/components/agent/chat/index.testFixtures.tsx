@@ -61,6 +61,7 @@ const {
   mockEmptyState,
   mockInputbar,
   mockMessageList,
+  mockExpertInfoPanel,
   mockWorkspacePendingA2UIPanel,
   mockExecutionRunGetGeneralWorkbenchState,
   mockExecutionRunListGeneralWorkbenchHistory,
@@ -153,6 +154,9 @@ const {
       </div>
     ),
   ),
+  mockExpertInfoPanel: vi.fn((_props?: Record<string, unknown>) => (
+    <div data-testid="expert-info-panel" />
+  )),
   mockWorkspacePendingA2UIPanel: vi.fn((_props?: Record<string, unknown>) => (
     <div data-testid="workspace-pending-a2ui-panel" />
   )),
@@ -262,6 +266,7 @@ export function getIndexTestMocks() {
     mockEmptyState,
     mockInputbar,
     mockMessageList,
+    mockExpertInfoPanel,
     mockWorkspacePendingA2UIPanel,
     mockExecutionRunGetGeneralWorkbenchState,
     mockExecutionRunListGeneralWorkbenchHistory,
@@ -598,6 +603,11 @@ vi.mock("./components/GeneralWorkbenchSidebar", () => ({
 
 vi.mock("./components/MessageList", () => ({
   MessageList: (props: Record<string, unknown>) => mockMessageList(props),
+}));
+
+vi.mock("./experts/ExpertInfoPanel", () => ({
+  ExpertInfoPanel: (props: Record<string, unknown>) =>
+    mockExpertInfoPanel(props),
 }));
 
 vi.mock("./components/MarkdownRenderer", () => ({
@@ -1553,6 +1563,10 @@ beforeEach(() => {
     serviceModels: {},
     agentResponseLanguage: undefined,
     loading: false,
+    refresh: vi.fn(async () => ({
+      serviceModels: {},
+      agentResponseLanguage: undefined,
+    })),
   });
   mockUseSoulArtifactVoiceGenerationBrief.mockReturnValue({
     generationBrief: undefined,

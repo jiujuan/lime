@@ -104,7 +104,7 @@ export function HarnessApprovalsSection({
                   {String(t(resolveApprovalActionLabelKey(item) as never))}
                 </Badge>
               </div>
-              <div className="mt-3 grid gap-2 md:grid-cols-2">
+              <div className="mt-3 grid min-w-0 gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr))]">
                 <div className="rounded-lg border border-amber-100 bg-white/70 px-3 py-2">
                   <div className="text-[11px] font-medium text-amber-950">
                     {String(

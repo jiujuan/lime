@@ -64,7 +64,7 @@ interface UseWorkspaceImageWorkbenchActionRuntimeParams {
   imageWorkbenchSelectedProviderId?: string;
   imageWorkbenchSelectedSize: string;
   imageWorkbenchSessionKey: string;
-  projectId?: string;
+  projectId?: string | null;
   projectRootPath?: string | null;
   saveImageWorkbenchImagesToResource: (
     imageIds: string[],
@@ -960,6 +960,7 @@ export function useWorkspaceImageWorkbenchActionRuntime({
         projectRootPath,
         contentId,
         applyTarget: params.applyTarget,
+        requireProjectContext: true,
         entrySource: params.applyTarget
           ? "image_workbench_action"
           : "at_image_command",
@@ -1019,6 +1020,7 @@ export function useWorkspaceImageWorkbenchActionRuntime({
         projectId,
         projectRootPath,
         contentId,
+        requireProjectContext: params.applyTarget != null,
       }),
   };
 }

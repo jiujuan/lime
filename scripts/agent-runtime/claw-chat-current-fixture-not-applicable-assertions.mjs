@@ -1,8 +1,9 @@
 import {
-  CONTENT_FACTORY_PRODUCT_PROFILE_ASSERTION_KEYS,
+  CONTENT_FACTORY_ARTICLE_WORKSPACE_ASSERTION_KEYS,
   EXPERT_PANEL_SKILLS_RUNTIME_ASSERTION_KEYS,
   EXPERT_PLAZA_SKILLS_RUNTIME_ASSERTION_KEYS,
   EXPERT_SKILLS_RUNTIME_ASSERTION_KEYS,
+  IMAGE_COMMAND_ASSERTION_KEYS,
   MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
   RIGHT_SURFACE_VISUAL_MATRIX_ASSERTION_KEYS,
   SKILLS_RUNTIME_ASSERTION_KEYS,
@@ -14,10 +15,11 @@ export function buildNotApplicableAssertions(context) {
     isAnyExpertSkillsRuntimeScenario,
     isCancelOnlyScenario,
     isCancelThenContinueScenario,
-    isContentFactoryProductProfileScenario,
+    isContentFactoryArticleWorkspaceScenario,
     isExpertPanelSkillsRuntimeScenario,
     isExpertPlazaSkillsRuntimeScenario,
     isGoalScenario,
+    isImageCommandScenario,
     isMcpStructuredContentScenario,
     isPlanScenario,
     isRightSurfaceVisualMatrixScenario,
@@ -26,7 +28,7 @@ export function buildNotApplicableAssertions(context) {
   } = context;
   if (
     isRightSurfaceVisualMatrixScenario ||
-    isContentFactoryProductProfileScenario
+    isContentFactoryArticleWorkspaceScenario
   ) {
     return [
       "usedCurrentTurnCancel",
@@ -61,12 +63,13 @@ export function buildNotApplicableAssertions(context) {
       "readModelGoalCompleted",
       ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
       ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
+      ...IMAGE_COMMAND_ASSERTION_KEYS,
       ...SKILLS_RUNTIME_ASSERTION_KEYS,
       ...EXPERT_SKILLS_RUNTIME_ASSERTION_KEYS,
       ...EXPERT_PLAZA_SKILLS_RUNTIME_ASSERTION_KEYS,
       ...EXPERT_PANEL_SKILLS_RUNTIME_ASSERTION_KEYS,
       ...(isRightSurfaceVisualMatrixScenario
-        ? CONTENT_FACTORY_PRODUCT_PROFILE_ASSERTION_KEYS
+        ? CONTENT_FACTORY_ARTICLE_WORKSPACE_ASSERTION_KEYS
         : RIGHT_SURFACE_VISUAL_MATRIX_ASSERTION_KEYS),
     ];
   }
@@ -98,6 +101,7 @@ export function buildNotApplicableAssertions(context) {
         "readModelGoalCompleted",
         ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
         ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
+        ...IMAGE_COMMAND_ASSERTION_KEYS,
         ...SKILLS_RUNTIME_ASSERTION_KEYS,
       ]
     : isCancelThenContinueScenario
@@ -123,6 +127,7 @@ export function buildNotApplicableAssertions(context) {
           "readModelGoalCompleted",
           ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
           ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
+          ...IMAGE_COMMAND_ASSERTION_KEYS,
           ...SKILLS_RUNTIME_ASSERTION_KEYS,
         ]
       : isPlanScenario
@@ -150,6 +155,7 @@ export function buildNotApplicableAssertions(context) {
             "readModelGoalCompleted",
             ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
             ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
+            ...IMAGE_COMMAND_ASSERTION_KEYS,
             ...SKILLS_RUNTIME_ASSERTION_KEYS,
           ]
         : isGoalScenario
@@ -179,9 +185,10 @@ export function buildNotApplicableAssertions(context) {
               "proposedPlanVisible",
               ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
               ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
+              ...IMAGE_COMMAND_ASSERTION_KEYS,
               ...SKILLS_RUNTIME_ASSERTION_KEYS,
             ]
-          : isWebToolsRenderingScenario
+          : isImageCommandScenario
             ? [
                 "usedCurrentTurnCancel",
                 "externalFixtureCancelUsed",
@@ -212,6 +219,42 @@ export function buildNotApplicableAssertions(context) {
                 "goalManagedObjectiveReachedBackend",
                 "guiGoalCompleted",
                 "readModelGoalCompleted",
+                ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
+                ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
+                ...SKILLS_RUNTIME_ASSERTION_KEYS,
+              ]
+            : isWebToolsRenderingScenario
+            ? [
+                "usedCurrentTurnCancel",
+                "externalFixtureCancelUsed",
+                "fixtureCancelReachedBackend",
+                "guiStopClicked",
+                "readModelCanceled",
+                "continuePromptReachedBackend",
+                "guiContinueInputSubmitted",
+                "guiContinueCompleted",
+                "readModelContinueCompleted",
+                "backendRecordedCancelThenContinue",
+                "noEpochFallbackTitle",
+                "readModelCompleted",
+                "eventReadProbeObserved",
+                "readModelEventReadAligned",
+                "readModelToolCallAligned",
+                "planModeEnabledInGui",
+                "planPromptReachedBackend",
+                "planCollaborationModeReachedBackend",
+                "guiPlanRailVisible",
+                "guiPlanStepsVisible",
+                "guiPlanDecisionDrawerVisible",
+                "readModelPlanCompleted",
+                "proposedPlanVisible",
+                "goalModeEnabledInGui",
+                "goalPromptReachedBackend",
+                "goalObjectiveTextReachedBackend",
+                "goalManagedObjectiveReachedBackend",
+                "guiGoalCompleted",
+                "readModelGoalCompleted",
+                ...IMAGE_COMMAND_ASSERTION_KEYS,
                 ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
               ]
             : isMcpStructuredContentScenario
@@ -246,6 +289,7 @@ export function buildNotApplicableAssertions(context) {
                   "guiGoalCompleted",
                   "readModelGoalCompleted",
                   ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
+                  ...IMAGE_COMMAND_ASSERTION_KEYS,
                   ...SKILLS_RUNTIME_ASSERTION_KEYS,
                 ]
               : isSkillsRuntimeScenario
@@ -281,6 +325,7 @@ export function buildNotApplicableAssertions(context) {
                     "readModelGoalCompleted",
                     ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
                     ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
+                    ...IMAGE_COMMAND_ASSERTION_KEYS,
                   ]
                 : [
                     "usedCurrentTurnCancel",
@@ -308,6 +353,7 @@ export function buildNotApplicableAssertions(context) {
                     "readModelGoalCompleted",
                     ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
                     ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
+                    ...IMAGE_COMMAND_ASSERTION_KEYS,
                     ...SKILLS_RUNTIME_ASSERTION_KEYS,
                   ];
   const notApplicableAssertions = isAnyExpertSkillsRuntimeScenario
@@ -343,6 +389,7 @@ export function buildNotApplicableAssertions(context) {
         "readModelGoalCompleted",
         ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
         ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
+        ...IMAGE_COMMAND_ASSERTION_KEYS,
         ...SKILLS_RUNTIME_ASSERTION_KEYS,
         ...(isExpertPlazaSkillsRuntimeScenario ||
         isExpertPanelSkillsRuntimeScenario
@@ -357,10 +404,11 @@ export function buildNotApplicableAssertions(context) {
         ...EXPERT_SKILLS_RUNTIME_ASSERTION_KEYS,
         ...EXPERT_PLAZA_SKILLS_RUNTIME_ASSERTION_KEYS,
         ...EXPERT_PANEL_SKILLS_RUNTIME_ASSERTION_KEYS,
+        ...(isImageCommandScenario ? [] : IMAGE_COMMAND_ASSERTION_KEYS),
       ];
   return [
     ...notApplicableAssertions,
     ...RIGHT_SURFACE_VISUAL_MATRIX_ASSERTION_KEYS,
-    ...CONTENT_FACTORY_PRODUCT_PROFILE_ASSERTION_KEYS,
+    ...CONTENT_FACTORY_ARTICLE_WORKSPACE_ASSERTION_KEYS,
   ];
 }

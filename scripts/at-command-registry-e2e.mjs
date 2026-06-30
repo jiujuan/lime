@@ -283,6 +283,16 @@ async function waitForTextareaValue(page, expectedValue, timeoutMs) {
   );
 }
 
+async function isComposerReady(page) {
+  return page.evaluate(() => {
+    const inputs = Array.from(
+      document.querySelectorAll('textarea[name="agent-chat-message"]'),
+    );
+    const input = inputs.at(-1);
+    return Boolean(input && input.offsetParent !== null && !input.disabled);
+  });
+}
+
 function readNestedObject(value, keys) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -650,7 +660,7 @@ async function main() {
     const textarea = page.locator('textarea[name="agent-chat-message"]').last();
     await textarea.waitFor({ state: "visible", timeout: options.timeoutMs });
     await page.waitForFunction(
-      () => {
+      async () => {
         const inputs = Array.from(
           document.querySelectorAll('textarea[name="agent-chat-message"]'),
         );
@@ -664,7 +674,7 @@ async function main() {
     logStage(options, "wait-workspace-ready");
     const workspaceReadySignal = await waitForCondition(
       "等待默认工作区完成加载",
-      () => {
+      async () => {
         const consoleText = readConsoleText(consoleMessages);
         if (
           consoleText.includes("AgentChatPage.loadData.projectOnlyComplete")
@@ -682,6 +692,9 @@ async function main() {
         }
         if (invokes.some((item) => item.cmd === "aster_agent_init")) {
           return "invoke:aster_agent_init";
+        }
+        if (await isComposerReady(page)) {
+          return "composer-ready";
         }
         return null;
       },

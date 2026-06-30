@@ -10,7 +10,13 @@ interface UseDeveloperFeatureFlagsResult {
   workspaceHarnessEnabled: boolean;
 }
 
-export function useDeveloperFeatureFlags(): UseDeveloperFeatureFlagsResult {
+interface UseDeveloperFeatureFlagsOptions {
+  enabled?: boolean;
+}
+
+export function useDeveloperFeatureFlags({
+  enabled = true,
+}: UseDeveloperFeatureFlagsOptions = {}): UseDeveloperFeatureFlagsResult {
   const [clawTraceEnabled, setClawTraceEnabled] = useState(() =>
     resolveClawTraceEnabled(),
   );
@@ -19,6 +25,12 @@ export function useDeveloperFeatureFlags(): UseDeveloperFeatureFlagsResult {
   );
 
   useEffect(() => {
+    if (!enabled) {
+      setClawTraceEnabled(resolveClawTraceEnabled());
+      setWorkspaceHarnessEnabled(resolveWorkspaceHarnessEnabled());
+      return;
+    }
+
     let active = true;
 
     const load = async (forceRefresh = false) => {
@@ -50,7 +62,7 @@ export function useDeveloperFeatureFlags(): UseDeveloperFeatureFlagsResult {
       active = false;
       unsubscribe();
     };
-  }, []);
+  }, [enabled]);
 
   return {
     clawTraceEnabled,

@@ -227,16 +227,16 @@ pub struct AgentAppRightSurfaceContract {
     pub default_active_tab: Option<String>,
     #[serde(default)]
     pub supported_tabs: Vec<String>,
-    pub product_profile: AgentAppProductProfileContract,
+    pub article_workspace: AgentAppArticleWorkspaceContract,
     pub history_restore: AgentAppHistoryRestoreContract,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct AgentAppProductProfileContract {
+pub struct AgentAppArticleWorkspaceContract {
     pub enabled: bool,
     #[serde(default)]
-    pub objects: Vec<AgentAppProductProfileObject>,
+    pub objects: Vec<AgentAppArticleWorkspaceObject>,
     #[serde(default)]
     pub panes: Vec<String>,
     #[serde(default)]
@@ -245,7 +245,7 @@ pub struct AgentAppProductProfileContract {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct AgentAppProductProfileObject {
+pub struct AgentAppArticleWorkspaceObject {
     pub kind: String,
     pub title: String,
     pub default_pane: String,

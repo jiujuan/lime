@@ -121,6 +121,10 @@ interface CharacterMentionProps {
   ) => void;
   /** Agent App 插件候选 */
   pluginSuggestions?: readonly InputbarPluginCapability[];
+  /** 需要加载技能候选时触发 */
+  onSkillSuggestionsNeeded?: () => void;
+  /** 需要加载 Agent App 插件候选时触发 */
+  onPluginSuggestionsNeeded?: () => void;
   projectId?: string | null;
   sessionId?: string | null;
   /** 当前默认带入的灵感引用 */
@@ -264,6 +268,8 @@ export function CharacterMention({
   onSelectCuratedTask,
   onSelectPlugin,
   pluginSuggestions = [],
+  onSkillSuggestionsNeeded,
+  onPluginSuggestionsNeeded,
   projectId,
   sessionId,
   defaultCuratedTaskReferenceMemoryIds = [],
@@ -302,6 +308,13 @@ export function CharacterMention({
   useIdleModulePreload(() => {
     void preloadCharacterMentionPanel();
   });
+
+  useEffect(() => {
+    if (showMentions) {
+      onSkillSuggestionsNeeded?.();
+      onPluginSuggestionsNeeded?.();
+    }
+  }, [onPluginSuggestionsNeeded, onSkillSuggestionsNeeded, showMentions]);
 
   const filteredBuiltinCommands = useMemo(
     () => filterBuiltinCommands(mentionQuery, runtimeBuiltinCommands),

@@ -1157,11 +1157,14 @@ fn merge_projected_session_metadata_json(
     if let Some(value) = params.recent_team_selection.as_ref() {
         metadata.insert("recentTeamSelection".to_string(), value.clone());
     }
-    if let Some(value) = params.product_workspace_selected_object_ref.as_ref() {
+    if let Some(value) = params.article_workspace_selected_object_ref.as_ref() {
         metadata.insert(
-            "productWorkspaceSelectedObjectRef".to_string(),
+            "articleWorkspaceSelectedObjectRef".to_string(),
             value.clone(),
         );
+    }
+    if let Some(value) = params.article_workspace_edited_draft.as_ref() {
+        metadata.insert("articleWorkspaceEditedDraft".to_string(), value.clone());
     }
     if metadata == before {
         return Ok(None);

@@ -1,11 +1,6 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  FileText,
-  GitCompare,
-  RotateCcw,
-  TerminalSquare,
-} from "lucide-react";
+import { FileText, GitCompare, RotateCcw, TerminalSquare } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { AgentRuntimeFileCheckpointThreadSummary } from "@/lib/api/agentRuntime";
@@ -16,9 +11,7 @@ import {
   countPassingHarnessOutputSignals,
   resolvePriorityHarnessOutputSignal,
 } from "../utils/harnessOutputSignals";
-import {
-  buildCodeFixPromptFromHarnessSignal,
-} from "../utils/codeFixPrompt";
+import { buildCodeFixPromptFromHarnessSignal } from "../utils/codeFixPrompt";
 import type { CodeWorkbenchGuideTarget } from "./CodeWorkbenchGuide";
 import type { HarnessFileChangeReviewSummary } from "./HarnessStatusPanel";
 import {
@@ -95,9 +88,8 @@ export function CodeReviewSummaryPanel({
     reviewPairFile,
   );
   const reviewSummary = normalizeReviewSummary(fileChangeReviewSummary);
-  const confirmedFileChangeCount = resolveConfirmedFileChangeCount(
-    reviewSummary,
-  );
+  const confirmedFileChangeCount =
+    resolveConfirmedFileChangeCount(reviewSummary);
   const primaryActionKey = resolvePrimaryActionKey({
     failedOutputCount,
     fileChangeCount: fileChanges.length,
@@ -122,9 +114,7 @@ export function CodeReviewSummaryPanel({
       fileCheckpointSummary,
       copy: {
         intro: t("agentChat.harness.codeReview.fixPrompt.intro"),
-        requirements: t(
-          "agentChat.harness.codeReview.fixPrompt.requirements",
-        ),
+        requirements: t("agentChat.harness.codeReview.fixPrompt.requirements"),
         failedTool: t("agentChat.harness.codeReview.fixPrompt.failedTool"),
         failedTitle: t("agentChat.harness.codeReview.fixPrompt.failedTitle"),
         failedSummary: t(
@@ -340,7 +330,7 @@ export function CodeReviewSummaryPanel({
 
       {shouldShowReviewPair ? (
         <div
-          className="mt-3 grid gap-2 md:grid-cols-2"
+          className="mt-3 grid min-w-0 gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr))]"
           data-testid="code-review-summary-pair"
         >
           <button
@@ -399,7 +389,7 @@ export function CodeReviewSummaryPanel({
         </div>
       ) : null}
 
-      <div className="mt-3 grid gap-2 md:grid-cols-3">
+      <div className="mt-3 grid min-w-0 gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),1fr))]">
         <button
           type="button"
           className={cn(

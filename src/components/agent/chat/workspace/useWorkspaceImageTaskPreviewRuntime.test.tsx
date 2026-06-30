@@ -23,7 +23,10 @@ import {
   createInitialSessionImageWorkbenchState,
   type SessionImageWorkbenchState,
 } from "./imageWorkbenchHelpers";
-import { useWorkspaceImageTaskPreviewRuntime } from "./useWorkspaceImageTaskPreviewRuntime";
+import {
+  shouldEnableWorkspaceImageTaskPreviewRuntime,
+  useWorkspaceImageTaskPreviewRuntime,
+} from "./useWorkspaceImageTaskPreviewRuntime";
 import type { DirectoryListing } from "@/lib/api/fileBrowser";
 import { createInitialDocumentState } from "@/components/workspace/canvas/canvasUtils";
 
@@ -317,6 +320,117 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
     vi.resetAllMocks();
   });
 
+  it("延迟入口无图片信号时不注册任务监听或恢复扫描", async () => {
+    const { render, getValue } = renderHook(
+      {
+        enabled: shouldEnableWorkspaceImageTaskPreviewRuntime({
+          shouldDeferWorkspaceAuxiliaryLoads: true,
+          restoreFromWorkspace: true,
+          messages: [],
+          imageWorkbenchState: createInitialSessionImageWorkbenchState(),
+          canvasState: null,
+        }),
+      },
+      {
+        initialMessages: [],
+      },
+    );
+
+    await render();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(safeListen).not.toHaveBeenCalled();
+    expect(listMediaTaskArtifacts).not.toHaveBeenCalled();
+    expect(listDirectory).not.toHaveBeenCalled();
+    expect(readFilePreview).not.toHaveBeenCalled();
+    expect(getValue().messages).toEqual([]);
+  });
+
+  it("延迟入口已有图片任务信号时仍启用任务监听", async () => {
+    const initialMessages: Message[] = [
+      {
+        id: "assistant-image-existing-1",
+        role: "assistant",
+        content: "图片任务进行中。",
+        timestamp: new Date("2026-05-14T08:00:01.000Z"),
+        imageWorkbenchPreview: {
+          taskId: "task-image-existing-1",
+          prompt: "青柠叶片插画",
+          mode: "generate",
+          status: "running",
+          projectId: DEFAULT_PROJECT_ID,
+          contentId: DEFAULT_CONTENT_ID,
+          imageCount: 0,
+          expectedImageCount: 1,
+          taskFilePath:
+            ".lime/tasks/image_generate/task-image-existing-1.json",
+        },
+      },
+    ];
+
+    const { render } = renderHook(
+      {
+        enabled: shouldEnableWorkspaceImageTaskPreviewRuntime({
+          shouldDeferWorkspaceAuxiliaryLoads: true,
+          restoreFromWorkspace: true,
+          messages: initialMessages,
+          imageWorkbenchState: createInitialSessionImageWorkbenchState(),
+          canvasState: null,
+        }),
+      },
+      {
+        initialMessages,
+      },
+    );
+
+    await render();
+
+    expect(safeListen).toHaveBeenCalledWith(
+      "lime://creation_task_submitted",
+      expect.any(Function),
+    );
+  });
+
+  it("延迟入口已有图片运行时合同时仍启用任务监听", async () => {
+    const initialMessages: Message[] = [
+      {
+        id: "assistant-image-contract-1",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-05-14T08:00:01.000Z"),
+        imageRuntimeContract: {
+          contractKey: "image_generation",
+          routingOutcome: "accepted",
+        },
+      },
+    ];
+
+    const { render } = renderHook(
+      {
+        enabled: shouldEnableWorkspaceImageTaskPreviewRuntime({
+          shouldDeferWorkspaceAuxiliaryLoads: true,
+          restoreFromWorkspace: true,
+          messages: initialMessages,
+          imageWorkbenchState: createInitialSessionImageWorkbenchState(),
+          canvasState: null,
+        }),
+      },
+      {
+        initialMessages,
+      },
+    );
+
+    await render();
+
+    expect(safeListen).toHaveBeenCalledWith(
+      "lime://creation_task_submitted",
+      expect.any(Function),
+    );
+  });
+
   it("图片工作台状态引用变化但内容无变化时，不应触发空消息更新", async () => {
     let messageDispatchCount = 0;
     const { render, getValue } = renderHook(
@@ -463,7 +577,7 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
     expect(getValue().imageWorkbenchState.tasks).toHaveLength(1);
   });
 
-  it("真实图片任务回流时，应合并发送前草稿轻卡而不是显示两张生成卡", async () => {
+  it("真实图片任务回流时，应丢弃发送前草稿轻卡并只显示真实任务卡", async () => {
     let listener: CreationTaskListener | null = null;
     vi.mocked(safeListen).mockImplementationOnce(async (_event, handler) => {
       listener = handler;
@@ -1935,7 +2049,7 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
     });
   });
 
-  it("发送中的草稿图片轻卡不应按真实 taskId 查询 artifact", async () => {
+  it("发送中的草稿图片轻卡不应按真实 taskId 查询 artifact，也不应保留为图片任务卡", async () => {
     vi.mocked(hasDesktopHostInvokeCapability).mockReturnValue(false);
     vi.mocked(hasDesktopHostRuntimeMarkers).mockReturnValue(false);
 
@@ -1970,12 +2084,10 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
     expect(getMediaTaskArtifact).not.toHaveBeenCalled();
     expect(listMediaTaskArtifacts).not.toHaveBeenCalled();
     expect(getValue().messages).toHaveLength(1);
-    expect(getValue().messages[0]?.imageWorkbenchPreview?.taskId).toBe(
-      "draft-image-local-only",
-    );
+    expect(getValue().messages[0]?.imageWorkbenchPreview).toBeUndefined();
   });
 
-  it("图片 skill 启动失败时应把草稿轻卡收敛为失败态并隐藏桥接原始错误", async () => {
+  it("图片 skill 启动失败时不应把草稿轻卡伪装成图片任务失败卡", async () => {
     const { render, getValue } = renderHook(
       {},
       {
@@ -2023,19 +2135,54 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
         text: "先确认这是正文配图，再调用图片生成能力。",
       },
     ]);
-    expect(message?.isThinking).toBe(false);
-    expect(message?.runtimeStatus).toBeUndefined();
-    expect(message?.imageWorkbenchPreview).toEqual(
-      expect.objectContaining({
-        taskId: "draft-image-failed",
-        status: "failed",
-        phase: "failed",
-        caption: "这次没有生成成功",
-        retryable: true,
-      }),
-    );
+    expect(message?.imageWorkbenchPreview).toBeUndefined();
     expect(JSON.stringify(message)).not.toContain("execute_skill");
     expect(JSON.stringify(message)).not.toContain("DevBridge");
+  });
+
+  it("Agent turn 失败且没有真实 task 时，不应显示图片生成中卡片", async () => {
+    vi.mocked(hasDesktopHostInvokeCapability).mockReturnValue(false);
+    vi.mocked(hasDesktopHostRuntimeMarkers).mockReturnValue(false);
+
+    const { render, getValue } = renderHook(
+      {},
+      {
+        initialMessages: [
+          {
+            id: "user-image-failed-turn",
+            role: "user",
+            content:
+              "@配图 参考图生成一张小红书封面，保留醒目的标题层级",
+            timestamp: new Date("2026-04-04T12:00:00Z"),
+          },
+          {
+            id: "assistant-image-failed-turn",
+            role: "assistant",
+            content:
+              "Agent provider execution failed: Request failed: Bad request (400): reasoning_effort unknown variant minimal",
+            timestamp: new Date("2026-04-04T12:00:01Z"),
+            isThinking: false,
+            runtimeStatus: {
+              phase: "failed",
+              title: "运行失败",
+              detail:
+                "Agent provider execution failed: Request failed: Bad request (400)",
+            },
+          },
+        ],
+      },
+    );
+    await render();
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(getMediaTaskArtifact).not.toHaveBeenCalled();
+    expect(listMediaTaskArtifacts).not.toHaveBeenCalled();
+    expect(getImageAssistantMessages(getValue().messages)).toEqual([]);
+    expect(getValue().messages[1]?.runtimeStatus?.phase).toBe("failed");
   });
 
   it("应从 task artifact 恢复多模态合同路由阻止状态", async () => {

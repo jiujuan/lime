@@ -203,14 +203,12 @@ export function isTaskCenterDraftSendPendingForLayout({
 
 export function shouldBuildFullThreadTimeline({
   harnessPanelVisible,
-  isSending,
   layoutMode,
 }: {
   harnessPanelVisible: boolean;
-  isSending: boolean;
   layoutMode: string;
 }): boolean {
-  return layoutMode !== "chat" || harnessPanelVisible || !isSending;
+  return layoutMode !== "chat" || harnessPanelVisible;
 }
 
 export function shouldSuppressTaskCenterDraftContentForLayout({

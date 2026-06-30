@@ -122,7 +122,7 @@ export function HarnessToolInventoryOverview({
 
       {toolInventory ? (
         <>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="grid min-w-0 gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr))]">
             <InventoryStatCard
               title={agentText(
                 "agentChat.harness.generated.c4740e4ca2",
@@ -162,7 +162,7 @@ export function HarnessToolInventoryOverview({
             />
           </div>
 
-          <div className="grid gap-2 sm:grid-cols-3">
+          <div className="grid min-w-0 gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,11rem),1fr))]">
             {(
               [
                 ["default", "默认策略"],

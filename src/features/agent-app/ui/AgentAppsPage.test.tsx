@@ -190,7 +190,7 @@ describe("AgentAppsPage", () => {
         profiles: ["workbench"],
         workbench: {
           profile: "production",
-          productWorkspace: {
+          articleWorkspace: {
             scope: "session",
             primaryObjectKinds: ["articleDraft"],
           },
@@ -228,9 +228,9 @@ describe("AgentAppsPage", () => {
       rightSurface: {
         dock: "right",
         physicalDockCount: 1,
-        defaultActiveTab: "productProfile",
-        supportedTabs: ["productProfile", "file"],
-        productProfile: {
+        defaultActiveTab: "articleWorkspace",
+        supportedTabs: ["articleWorkspace", "file"],
+        articleWorkspace: {
           enabled: true,
           objects: [
             {
@@ -246,7 +246,7 @@ describe("AgentAppsPage", () => {
         },
         historyRestore: {
           enabled: true,
-          defaultTab: "productProfile",
+          defaultTab: "articleWorkspace",
           defaultPane: "documentCanvas",
           restoreSelection: true,
           restoreLayout: true,
@@ -288,9 +288,9 @@ describe("AgentAppsPage", () => {
     ).toContain("agentApp.apps.center.host.status.");
     expect(
       container.querySelector(
-        '[data-testid="agent-apps-host-product-profile-content-factory-app"]',
+        '[data-testid="agent-apps-host-article-workspace-content-factory-app"]',
       )?.textContent,
-    ).toContain("agentApp.apps.center.host.productProfile");
+    ).toContain("agentApp.apps.center.host.articleWorkspace");
 
     await openAppDetail(container);
 

@@ -60,6 +60,50 @@ export interface StreamRequestState {
   performanceTrace?: AgentUiPerformanceTraceMetadata | null;
 }
 
+function normalizeUserMessageContent(value: string | undefined): string {
+  return (value || "").replace(/\s+/g, " ").trim();
+}
+
+function messageImageCount(message: Message): number {
+  return message.images?.length ?? 0;
+}
+
+function findEquivalentPendingUserMessage(
+  messages: Message[],
+  userMsg: Message | null,
+): Message | null {
+  if (!userMsg) {
+    return null;
+  }
+
+  const expectedContent = normalizeUserMessageContent(userMsg.content);
+  if (!expectedContent) {
+    return null;
+  }
+
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role !== "user") {
+      continue;
+    }
+
+    if (message.runtimeTurnId?.trim()) {
+      return null;
+    }
+
+    const currentContent = normalizeUserMessageContent(message.content);
+    if (
+      currentContent === expectedContent &&
+      messageImageCount(message) === messageImageCount(userMsg)
+    ) {
+      return message;
+    }
+    return null;
+  }
+
+  return null;
+}
+
 interface CreateSubmissionLifecycleOptions {
   assistantMsg: Message;
   assistantMsgId: string;
@@ -285,8 +329,13 @@ export function createAgentStreamSubmissionLifecycle(
       pendingItemKey,
     });
     setMessages((prev) => {
+      const equivalentPendingUserMsg = findEquivalentPendingUserMessage(
+        prev,
+        turnUserMsg,
+      );
       const hasUserMsg = userMsg
-        ? prev.some((msg) => msg.id === userMsg.id)
+        ? prev.some((msg) => msg.id === userMsg.id) ||
+          Boolean(equivalentPendingUserMsg)
         : true;
       const hasAssistantMsg = prev.some((msg) => msg.id === assistantMsgId);
       let nextMessages = prev;
@@ -308,7 +357,10 @@ export function createAgentStreamSubmissionLifecycle(
             : [...nextMessages, turnUserMsg];
       }
       return nextMessages.map((msg) =>
-        msg.id === userMsgId && turnUserMsg
+        ((msg.id === userMsgId ||
+          (equivalentPendingUserMsg &&
+            msg.id === equivalentPendingUserMsg.id)) &&
+          turnUserMsg)
           ? {
               ...msg,
               runtimeTurnId: msg.runtimeTurnId || pendingTurnKey,

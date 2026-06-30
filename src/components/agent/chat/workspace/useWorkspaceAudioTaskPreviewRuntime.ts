@@ -509,6 +509,10 @@ function collectTrackedAudioTasks(messages: Message[]): TrackedAudioTask[] {
   return Array.from(tasks.values());
 }
 
+function hasTrackedAudioTasks(messages: Message[]): boolean {
+  return collectTrackedAudioTasks(messages).length > 0;
+}
+
 function buildLookupRequest(params: {
   task: TrackedAudioTask;
   projectRootPath?: string | null;
@@ -593,12 +597,17 @@ export function useWorkspaceAudioTaskPreviewRuntime({
   setChatMessages,
 }: UseWorkspaceAudioTaskPreviewRuntimeParams) {
   const contextRef = useRef({ projectRootPath, messages });
+  const shouldRunPreviewRuntime = hasTrackedAudioTasks(messages);
 
   useEffect(() => {
     contextRef.current = { projectRootPath, messages };
   }, [projectRootPath, messages]);
 
   useEffect(() => {
+    if (!shouldRunPreviewRuntime) {
+      return;
+    }
+
     let disposed = false;
     let polling = false;
 
@@ -745,5 +754,5 @@ export function useWorkspaceAudioTaskPreviewRuntime({
         unlisten();
       }
     };
-  }, [setChatMessages]);
+  }, [setChatMessages, shouldRunPreviewRuntime]);
 }

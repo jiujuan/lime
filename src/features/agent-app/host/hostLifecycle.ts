@@ -20,7 +20,7 @@ export type AgentAppHostFunctionKey =
   | "uiRuntime"
   | "agentRuntime"
   | "rightSurfaceDock"
-  | "productProfile"
+  | "articleWorkspace"
   | "historyRestore"
   | "uninstall";
 
@@ -32,14 +32,14 @@ export type AgentAppHostFunctionStatus =
   | "planned";
 
 export type AgentAppRightSurfaceTabKind =
-  | "productProfile"
+  | "articleWorkspace"
   | "file"
   | "evidence"
   | "terminal"
   | "browser"
   | "sideChat";
 
-export type AgentAppProductProfilePaneKind =
+export type AgentAppArticleWorkspacePaneKind =
   | "artifact"
   | "inspector"
   | "runtime"
@@ -56,10 +56,10 @@ export interface AgentAppHostFunctionState {
   followUps: string[];
 }
 
-export interface AgentAppProductProfileObject {
+export interface AgentAppArticleWorkspaceObject {
   kind: string;
   title: string;
-  defaultPane: AgentAppProductProfilePaneKind;
+  defaultPane: AgentAppArticleWorkspacePaneKind;
   artifactKind?: string;
   primary: boolean;
 }
@@ -69,16 +69,16 @@ export interface AgentAppRightSurfaceContract {
   physicalDockCount: 1;
   defaultActiveTab: AgentAppRightSurfaceTabKind | null;
   supportedTabs: AgentAppRightSurfaceTabKind[];
-  productProfile: {
+  articleWorkspace: {
     enabled: boolean;
-    objects: AgentAppProductProfileObject[];
-    panes: AgentAppProductProfilePaneKind[];
+    objects: AgentAppArticleWorkspaceObject[];
+    panes: AgentAppArticleWorkspacePaneKind[];
     rendererKinds: string[];
   };
   historyRestore: {
     enabled: boolean;
     defaultTab: AgentAppRightSurfaceTabKind | null;
-    defaultPane: AgentAppProductProfilePaneKind | null;
+    defaultPane: AgentAppArticleWorkspacePaneKind | null;
     restoreSelection: boolean;
     restoreLayout: boolean;
     fallback: string;
@@ -130,7 +130,7 @@ export interface BuildAgentAppHostLifecycleSnapshotParams {
 }
 
 const DEFAULT_RIGHT_SURFACE_TABS: AgentAppRightSurfaceTabKind[] = [
-  "productProfile",
+  "articleWorkspace",
   "file",
   "evidence",
   "terminal",
@@ -161,14 +161,14 @@ function hasWorkbenchProfile(manifest: NormalizedAppManifest): boolean {
 
 function normalizePane(
   surfaceKind: string | undefined,
-): AgentAppProductProfilePaneKind {
+): AgentAppArticleWorkspacePaneKind {
   const value = surfaceKind?.trim();
   return value || "artifact";
 }
 
 function normalizeProductObject(
   object: WorkbenchProductionObjectDeclaration,
-): AgentAppProductProfileObject {
+): AgentAppArticleWorkspaceObject {
   return {
     kind: object.kind,
     title: object.title ?? object.kind,
@@ -265,7 +265,7 @@ export function buildAgentAppTaskRuntimeContract(
     blockers,
     followUps: enabled
       ? [
-          "补 worker 输出到 ArtifactDocument / Product Workspace 版本链。",
+          "补 worker 输出到 ArtifactDocument / Article Workspace 版本链。",
           "补 worker 执行 evidence、超时 / 失败分类和发布签名门禁。",
         ]
       : ["需要声明 runtimePackage.worker 或 agentRuntime.worker 后才能运行后台任务。"],
@@ -282,7 +282,7 @@ function listObjectSurfaces(
 
 function listProductObjects(
   workbench: WorkbenchDeclaration | undefined,
-): AgentAppProductProfileObject[] {
+): AgentAppArticleWorkspaceObject[] {
   const objects = Array.isArray(workbench?.productionObjects)
     ? workbench.productionObjects
     : [];
@@ -293,8 +293,8 @@ function listProductObjects(
 
 function resolveHistoryDefaultPane(params: {
   restoreDefaultSurface?: string;
-  objects: AgentAppProductProfileObject[];
-}): AgentAppProductProfilePaneKind {
+  objects: AgentAppArticleWorkspaceObject[];
+}): AgentAppArticleWorkspacePaneKind {
   const { restoreDefaultSurface, objects } = params;
   if (
     restoreDefaultSurface === "selectedObject" ||
@@ -338,9 +338,9 @@ export function buildAgentAppRightSurfaceContract(
   return {
     dock: "right",
     physicalDockCount: 1,
-    defaultActiveTab: enabled ? "productProfile" : null,
+    defaultActiveTab: enabled ? "articleWorkspace" : null,
     supportedTabs: [...DEFAULT_RIGHT_SURFACE_TABS],
-    productProfile: {
+    articleWorkspace: {
       enabled,
       objects,
       panes,
@@ -348,7 +348,7 @@ export function buildAgentAppRightSurfaceContract(
     },
     historyRestore: {
       enabled: Boolean(enabled && restore),
-      defaultTab: enabled ? "productProfile" : null,
+      defaultTab: enabled ? "articleWorkspace" : null,
       defaultPane: resolveHistoryDefaultPane({
         restoreDefaultSurface: restore?.defaultSurface,
         objects,
@@ -506,14 +506,14 @@ export function buildAgentAppHostLifecycleSnapshot(
       followUps: ["接入 WorkspaceConversationScene 的右侧 tab strip。"],
     }),
     createFunctionState({
-      key: "productProfile",
+      key: "articleWorkspace",
       status:
-        workbenchEnabled && rightSurface.productProfile.objects.length > 0
+        workbenchEnabled && rightSurface.articleWorkspace.objects.length > 0
           ? "ready"
           : "needs-setup",
       currentOwner: "claw",
       blockers:
-        workbenchEnabled && rightSurface.productProfile.objects.length === 0
+        workbenchEnabled && rightSurface.articleWorkspace.objects.length === 0
           ? ["WORKBENCH_PRODUCTION_OBJECTS_MISSING"]
           : [],
     }),

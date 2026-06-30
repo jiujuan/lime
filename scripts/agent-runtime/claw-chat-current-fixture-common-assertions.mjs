@@ -17,6 +17,8 @@ import {
   FIXTURE_PROVIDER,
   GOAL_DONE_TEXT,
   GOAL_PROMPT,
+  IMAGE_COMMAND_DONE_TEXT,
+  IMAGE_COMMAND_PROMPT,
   MCP_STRUCTURED_CONTENT_DONE_TEXT,
   NEWS_PROMPT,
   PLAN_DONE_TEXT,
@@ -35,11 +37,12 @@ export function buildCommonAssertions(context) {
     isCancelThenContinueScenario,
     isPlanScenario,
     isGoalScenario,
+    isImageCommandScenario,
     isWebToolsRenderingScenario,
     isMcpStructuredContentScenario,
     isSkillsRuntimeScenario,
     isRightSurfaceVisualMatrixScenario,
-    isContentFactoryProductProfileScenario,
+    isContentFactoryArticleWorkspaceScenario,
     isAnyExpertSkillsRuntimeScenario,
     isExpertPlazaSkillsRuntimeScenario,
     isExpertPanelSkillsRuntimeScenario,
@@ -50,7 +53,7 @@ export function buildCommonAssertions(context) {
   } = context;
   const shouldRequireAgentUiTraceEvidence =
     !isRightSurfaceVisualMatrixScenario &&
-    !isContentFactoryProductProfileScenario &&
+    !isContentFactoryArticleWorkspaceScenario &&
     !isExpertPlazaSkillsRuntimeScenario;
   const agentUiPerformanceTrace = summary.agentUiPerformanceTrace;
   const appServerTraceEvidence = summary.appServerTraceEvidence;
@@ -63,7 +66,7 @@ export function buildCommonAssertions(context) {
         appServerRequestMethods.includes(
           APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST,
         )) ||
-      (isContentFactoryProductProfileScenario &&
+      (isContentFactoryArticleWorkspaceScenario &&
         appServerRequestMethods.includes(
           APP_SERVER_METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
         )),
@@ -78,12 +81,12 @@ export function buildCommonAssertions(context) {
     ),
     externalFixtureBackendUsed:
       isRightSurfaceVisualMatrixScenario ||
-      isContentFactoryProductProfileScenario
+      isContentFactoryArticleWorkspaceScenario
         ? true
         : backendLedger.some((entry) => entry.kind === "turnStart"),
     fixturePromptReachedBackend:
       isRightSurfaceVisualMatrixScenario ||
-      isContentFactoryProductProfileScenario
+      isContentFactoryArticleWorkspaceScenario
         ? true
         : guiTurnStartReachedBackend,
     liveProviderNotUsed: backendLedger.every(
@@ -108,14 +111,16 @@ export function buildCommonAssertions(context) {
         : isRightSurfaceVisualMatrixScenario
           ? summary.rightSurfaceVisualMatrix?.captures?.expertInfo?.stable
               ?.rootVisible === true
-          : isContentFactoryProductProfileScenario
-            ? summary.contentFactoryProductProfileGui?.rootVisible === true &&
-              summary.contentFactoryProductProfileGui?.hasArticleTitle === true
+          : isContentFactoryArticleWorkspaceScenario
+            ? summary.contentFactoryArticleWorkspaceGui?.rootVisible === true &&
+              summary.contentFactoryArticleWorkspaceGui?.hasArticleTitle === true
             : isPlanScenario
               ? summary.guiPlanCompleted?.hasPrompt === true
               : isGoalScenario
-                ? summary.guiGoalCompleted?.hasPrompt === true
-                : isWebToolsRenderingScenario
+              ? summary.guiGoalCompleted?.hasPrompt === true
+                : isImageCommandScenario
+                  ? summary.guiImageCommandCompleted?.hasPrompt === true
+                  : isWebToolsRenderingScenario
                   ? summary.guiWebToolsRenderingCompleted?.hasPrompt === true
                   : isMcpStructuredContentScenario
                     ? summary.guiMcpStructuredContentCompleted?.hasPrompt ===
@@ -145,10 +150,10 @@ export function buildCommonAssertions(context) {
               ?.rootVisible === true &&
             summary.rightSurfaceVisualMatrix?.captures?.browser?.stable
               ?.rootVisible === true
-          : isContentFactoryProductProfileScenario
-            ? summary.contentFactoryProductProfileGui?.hasImageSetTitle ===
+          : isContentFactoryArticleWorkspaceScenario
+            ? summary.contentFactoryArticleWorkspaceGui?.hasImageSetTitle ===
                 true &&
-              summary.contentFactoryProductProfileGui
+              summary.contentFactoryArticleWorkspaceGui
                 ?.hasWorkerEvidenceTitle === true
             : isPlanScenario
               ? summary.guiPlanCompleted?.hasPlanIntro === true ||
@@ -158,7 +163,13 @@ export function buildCommonAssertions(context) {
               : isGoalScenario
                 ? summary.guiGoalCompleted?.hasAssistantSummary === true ||
                   summary.guiGoalCompleted?.hasDoneText === true
-                : isWebToolsRenderingScenario
+                : isImageCommandScenario
+                  ? summary.guiImageCommandCompleted?.hasAssistantSummary ===
+                      true ||
+                    summary.guiImageCommandCompleted?.hasDoneText === true ||
+                    summary.guiImageCommandCompleted?.imageTaskCardVisible ===
+                      true
+                  : isWebToolsRenderingScenario
                   ? summary.guiWebToolsRenderingCompleted
                       ?.hasAssistantSummary === true ||
                     summary.guiWebToolsRenderingCompleted?.hasDoneText === true
@@ -199,8 +210,8 @@ export function buildCommonAssertions(context) {
         : isRightSurfaceVisualMatrixScenario
           ? summary.guiRightSurfaceVisualMatrixSessionOpened?.inputReady
               ?.textareaDisabled === false
-          : isContentFactoryProductProfileScenario
-            ? summary.guiContentFactoryProductProfileSessionOpened?.inputReady
+          : isContentFactoryArticleWorkspaceScenario
+            ? summary.guiContentFactoryArticleWorkspaceSessionOpened?.inputReady
                 ?.textareaDisabled === false
             : isPlanScenario
               ? summary.guiPlanCompleted?.planDecisionVisible === true &&
@@ -208,7 +219,11 @@ export function buildCommonAssertions(context) {
               : isGoalScenario
                 ? summary.guiGoalCompleted?.textareaVisible === true &&
                   summary.guiGoalCompleted?.textareaDisabled === false
-                : isWebToolsRenderingScenario
+                : isImageCommandScenario
+                  ? summary.guiImageCommandCompleted?.textareaVisible ===
+                      true &&
+                    summary.guiImageCommandCompleted?.textareaDisabled === false
+                  : isWebToolsRenderingScenario
                   ? summary.guiWebToolsRenderingCompleted?.textareaVisible ===
                       true &&
                     summary.guiWebToolsRenderingCompleted?.textareaDisabled ===
@@ -249,13 +264,16 @@ export function buildCommonAssertions(context) {
         ? summary.guiContinueCompleted?.stopButtonVisible === false
         : isRightSurfaceVisualMatrixScenario
           ? true
-          : isContentFactoryProductProfileScenario
+          : isContentFactoryArticleWorkspaceScenario
             ? true
             : isPlanScenario
               ? summary.guiPlanCompleted?.stopButtonVisible === false
               : isGoalScenario
                 ? summary.guiGoalCompleted?.stopButtonVisible === false
-                : isWebToolsRenderingScenario
+                : isImageCommandScenario
+                  ? summary.guiImageCommandCompleted?.stopButtonVisible ===
+                    false
+                  : isWebToolsRenderingScenario
                   ? summary.guiWebToolsRenderingCompleted?.stopButtonVisible ===
                     false
                   : isMcpStructuredContentScenario
@@ -290,21 +308,21 @@ export function buildCommonAssertions(context) {
           ? summary.rightSurfaceVisualMatrix?.captures?.files?.stable
               ?.activeSurface === "files" &&
             summary.rightSurfaceVisualMatrix?.captures?.objectCanvas?.stable
-              ?.activeSurface === "productProfile" &&
+              ?.activeSurface === "articleWorkspace" &&
             summary.rightSurfaceVisualMatrix?.captures?.expertInfo?.stable
               ?.activeSurface === "expertInfo" &&
             summary.rightSurfaceVisualMatrix?.captures?.browser?.stable
               ?.activeSurface === "browser" &&
             summary.rightSurfaceVisualMatrix?.captures?.appSurface?.stable
               ?.activeSurface === "appSurface"
-          : isContentFactoryProductProfileScenario
-            ? summary.contentFactoryProductProfileGui?.activeSurface ===
-                "productProfile" &&
-              summary.contentFactoryProductProfileGui?.hasArticleTitle ===
+          : isContentFactoryArticleWorkspaceScenario
+            ? summary.contentFactoryArticleWorkspaceGui?.activeSurface ===
+                "articleWorkspace" &&
+              summary.contentFactoryArticleWorkspaceGui?.hasArticleTitle ===
                 true &&
-              summary.contentFactoryProductProfileGui?.hasImageSetTitle ===
+              summary.contentFactoryArticleWorkspaceGui?.hasImageSetTitle ===
                 true &&
-              summary.contentFactoryProductProfileGui
+              summary.contentFactoryArticleWorkspaceGui
                 ?.hasWorkerEvidenceTitle === true
             : isPlanScenario
               ? pageText.includes(PLAN_PROMPT) &&
@@ -313,7 +331,13 @@ export function buildCommonAssertions(context) {
                 ? pageText.includes(GOAL_PROMPT) &&
                   (pageText.includes("目标已绑定到本轮请求") ||
                     pageText.includes(GOAL_DONE_TEXT))
-                : isWebToolsRenderingScenario
+                : isImageCommandScenario
+                  ? pageText.includes(IMAGE_COMMAND_PROMPT) &&
+                    (pageText.includes("图片任务已提交到标准 task artifact") ||
+                      pageText.includes(IMAGE_COMMAND_DONE_TEXT)) &&
+                    (pageText.includes("image_generate") ||
+                      pageText.includes("lime_create_image_generation_task"))
+                  : isWebToolsRenderingScenario
                   ? summary.guiWebToolsRenderingCompleted?.hasPrompt === true &&
                     summary.guiWebToolsRenderingCompleted?.hasProcessTitle ===
                       true &&

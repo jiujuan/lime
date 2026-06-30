@@ -1,7 +1,9 @@
 import {
   AGENT_APPS_CHANGED_EVENT,
   installCloudAgentAppRelease,
+  installLocalAgentAppPackage,
   previewAgentAppUninstall,
+  selectLocalAgentAppDirectory,
   setAgentAppDisabled,
   submitAgentAppRegistrationCode,
   uninstallAgentApp,
@@ -69,6 +71,11 @@ export type PluginMarketplaceActionResult =
       remoteInstallStateSync?: PluginMarketplaceRemoteInstallStateSync;
     }
   | {
+      status: "noop";
+      action: PluginMarketplaceExecutableActionKind;
+      item: PluginMarketplaceViewItem;
+    }
+  | {
       status: "blocked";
       action: PluginMarketplaceExecutableActionKind;
       item: PluginMarketplaceViewItem;
@@ -77,6 +84,8 @@ export type PluginMarketplaceActionResult =
 
 export interface PluginMarketplaceActionDeps {
   installCloudRelease?: typeof installCloudAgentAppRelease;
+  installLocalPackage?: typeof installLocalAgentAppPackage;
+  selectLocalDirectory?: typeof selectLocalAgentAppDirectory;
   setDisabled?: typeof setAgentAppDisabled;
   previewUninstall?: typeof previewAgentAppUninstall;
   submitRegistrationCode?: typeof submitAgentAppRegistrationCode;
@@ -213,6 +222,21 @@ function buildMarketplaceCloudApp(item: PluginMarketplaceViewItem): {
   };
 }
 
+function buildMarketplaceLocalInstallParams(item: PluginMarketplaceViewItem): {
+  blockerCodes: PluginMarketplaceActionBlockerCode[];
+  title: string;
+} {
+  const blockerCodes: PluginMarketplaceActionBlockerCode[] = [];
+  const title = resolvePluginMarketplaceItemLabel(item);
+  if (item.policy.installation === "NOT_AVAILABLE" || !item.installable) {
+    blockerCodes.push("PLUGIN_INSTALL_UNAVAILABLE");
+  }
+  if (!item.appId?.trim()) {
+    blockerCodes.push("PLUGIN_APP_ID_MISSING");
+  }
+  return { blockerCodes, title };
+}
+
 function buildEnableBlockers(
   item: PluginMarketplaceViewItem,
 ): PluginMarketplaceActionBlockerCode[] {
@@ -315,25 +339,62 @@ export async function performPluginMarketplaceAction(
   }
 
   if (action === "install") {
-    const { app, blockerCodes } = buildMarketplaceCloudApp(item);
-    if (!app || blockerCodes.length > 0) {
-      return { status: "blocked", action, item, blockerCodes };
+    const supportsLocalInstall = item.install?.local === true;
+    const supportsCloudInstall =
+      item.sourceKind === "agent_app_release" && item.install?.cloud !== false;
+
+    if (supportsLocalInstall) {
+      const { blockerCodes, title } = buildMarketplaceLocalInstallParams(item);
+      if (blockerCodes.length > 0) {
+        return { status: "blocked", action, item, blockerCodes };
+      }
+      const selectLocalDirectory =
+        deps.selectLocalDirectory ?? selectLocalAgentAppDirectory;
+      const appDir = await selectLocalDirectory({ title });
+      if (!appDir) {
+        return { status: "noop", action, item };
+      }
+      const installedState = await (
+        deps.installLocalPackage ?? installLocalAgentAppPackage
+      )({ appDir });
+      (deps.dispatchChanged ?? defaultDispatchChanged)();
+      return {
+        status: "performed",
+        action,
+        item,
+        installedState,
+      };
     }
-    const installedState = await (
-      deps.installCloudRelease ?? installCloudAgentAppRelease
-    )({ app });
-    const remoteInstallStateSync = await syncRemotePluginInstallState(
-      item,
-      "installed",
-      deps,
-    );
-    (deps.dispatchChanged ?? defaultDispatchChanged)();
+
+    if (supportsCloudInstall) {
+      const { app, blockerCodes } = buildMarketplaceCloudApp(item);
+      if (!app || blockerCodes.length > 0) {
+        return { status: "blocked", action, item, blockerCodes };
+      }
+      const installedState = await (
+        deps.installCloudRelease ?? installCloudAgentAppRelease
+      )({ app });
+      const remoteInstallStateSync = await syncRemotePluginInstallState(
+        item,
+        "installed",
+        deps,
+      );
+      (deps.dispatchChanged ?? defaultDispatchChanged)();
+      return {
+        status: "performed",
+        action,
+        item,
+        installedState,
+        remoteInstallStateSync,
+      };
+    }
+
+    const { blockerCodes } = buildMarketplaceLocalInstallParams(item);
     return {
-      status: "performed",
+      status: "blocked",
       action,
       item,
-      installedState,
-      remoteInstallStateSync,
+      blockerCodes: blockerCodes.length > 0 ? blockerCodes : ["PLUGIN_MARKETPLACE_INSTALL_SOURCE_UNSUPPORTED"],
     };
   }
 

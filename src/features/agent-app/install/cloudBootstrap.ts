@@ -18,6 +18,7 @@ import type {
   AgentAppPackageVerificationResult,
   AgentAppCloudReleaseSignatureAlgorithm,
   AgentAppCloudReleaseSignatureProof,
+  RuntimeTarget,
 } from "../types";
 import {
   buildAgentAppPackageCacheEntry,
@@ -81,6 +82,13 @@ const FORBIDDEN_BOOTSTRAP_KEYS = new Set([
   "privatecontent",
   "registrationcode",
   "registrationcodehash",
+]);
+
+const ALLOWED_RUNTIME_TARGETS = new Set<RuntimeTarget>([
+  "local",
+  "hybrid",
+  "server-assisted",
+  "cloud",
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -330,6 +338,38 @@ function readToolAvailability(
     .filter((entry): entry is CloudBootstrapToolAvailability => Boolean(entry));
 }
 
+function readRuntimeTargets(
+  value: unknown,
+  path: string,
+  issues: CloudBootstrapValidationIssue[],
+): RuntimeTarget[] {
+  if (value == null) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    addIssue(issues, {
+      code: "FIELD_INVALID",
+      path,
+      message: "Cloud bootstrap runtimeTargets must be an array",
+    });
+    return [];
+  }
+  return value
+    .map((entry, index) => {
+      const normalized = normalizeOptionalString(entry);
+      if (!normalized || !ALLOWED_RUNTIME_TARGETS.has(normalized as RuntimeTarget)) {
+        addIssue(issues, {
+          code: "FIELD_INVALID",
+          path: `${path}[${index}]`,
+          message: `Unsupported cloud bootstrap runtime target: ${String(entry)}`,
+        });
+        return null;
+      }
+      return normalized as RuntimeTarget;
+    })
+    .filter((entry): entry is RuntimeTarget => Boolean(entry));
+}
+
 function isCanonicalAppId(value: string): boolean {
   return /^[a-z0-9][a-z0-9._-]*$/.test(value);
 }
@@ -502,6 +542,11 @@ function normalizeCloudBootstrapApp(
     appId,
     displayName: normalizeOptionalString(record.displayName),
     version,
+    runtimeTargets: readRuntimeTargets(
+      record.runtimeTargets,
+      `${path}.runtimeTargets`,
+      issues,
+    ),
     icon: normalizeOptionalString(record.icon),
     iconUrl: normalizeOptionalString(record.iconUrl),
     logo: normalizeOptionalString(record.logo),

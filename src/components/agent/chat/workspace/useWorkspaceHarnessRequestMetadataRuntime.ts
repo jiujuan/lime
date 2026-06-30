@@ -13,6 +13,7 @@ import type { TeamDefinition } from "../utils/teamDefinitions";
 import type { WorkspaceSkillRuntimeEnableInput } from "../utils/workspaceSkillBindingsMetadata";
 
 interface WorkspaceHarnessRequestMetadataParams {
+  enabled?: boolean;
   agentResponseLanguage?: string | null;
   browserAssistAutoLaunch?: boolean | null;
   browserAssistPreferredBackend?: BuildHarnessRequestMetadataOptions["browserAssistPreferredBackend"];
@@ -35,7 +36,11 @@ interface WorkspaceHarnessRequestMetadataParams {
   workspaceSkillRuntimeEnable?: WorkspaceSkillRuntimeEnableInput | null;
 }
 
+const EMPTY_WORKSPACE_HARNESS_REQUEST_METADATA: Record<string, unknown> =
+  Object.freeze({});
+
 export function resolveWorkspaceHarnessRequestMetadata({
+  enabled = true,
   agentResponseLanguage,
   browserAssistAutoLaunch,
   browserAssistPreferredBackend,
@@ -54,6 +59,10 @@ export function resolveWorkspaceHarnessRequestMetadata({
   workspaceSkillBindings,
   workspaceSkillRuntimeEnable,
 }: WorkspaceHarnessRequestMetadataParams): Record<string, unknown> {
+  if (!enabled) {
+    return EMPTY_WORKSPACE_HARNESS_REQUEST_METADATA;
+  }
+
   return buildHarnessRequestMetadata({
     theme: mappedTheme,
     preferences: {
@@ -90,6 +99,7 @@ export function useWorkspaceHarnessRequestMetadataRuntime(
   params: WorkspaceHarnessRequestMetadataParams,
 ): Record<string, unknown> {
   const {
+    enabled = true,
     agentResponseLanguage,
     browserAssistAutoLaunch,
     browserAssistPreferredBackend,
@@ -114,6 +124,7 @@ export function useWorkspaceHarnessRequestMetadataRuntime(
   return useMemo(
     () =>
       resolveWorkspaceHarnessRequestMetadata({
+        enabled,
         agentResponseLanguage,
         browserAssistAutoLaunch,
         browserAssistPreferredBackend,
@@ -142,6 +153,7 @@ export function useWorkspaceHarnessRequestMetadataRuntime(
       browserAssistProfileKey,
       contentId,
       currentGateKey,
+      enabled,
       isThemeWorkbench,
       mappedTheme,
       preferredTeamPresetId,

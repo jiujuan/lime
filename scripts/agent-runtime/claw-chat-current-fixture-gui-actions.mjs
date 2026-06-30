@@ -114,6 +114,12 @@ export async function waitForInputReady(page, options, constraints = {}) {
       const container = textarea?.closest(
         '[data-testid="inputbar-core-container"]',
       );
+      const mainArea = document.querySelector(
+        '[data-testid="workspace-main-area"]',
+      );
+      const floatingOverlay = document.querySelector(
+        '[data-testid="general-workbench-input-overlay"]',
+      );
       return {
         url: window.location.href,
         expectedSessionId: sessionId,
@@ -132,6 +138,20 @@ export async function waitForInputReady(page, options, constraints = {}) {
         sendButtonVisible: Boolean(
           container?.querySelector('[data-testid="send-btn"]'),
         ),
+        workspaceMainAreaPresent: Boolean(mainArea),
+        workspaceLayoutMode:
+          mainArea instanceof HTMLElement
+            ? mainArea.dataset.layoutMode || null
+            : null,
+        workspaceHasRightSurface:
+          mainArea instanceof HTMLElement
+            ? mainArea.dataset.hasRightSurface || null
+            : null,
+        workspaceFloatingInputOverlay:
+          mainArea instanceof HTMLElement
+            ? mainArea.dataset.floatingInputOverlay || null
+            : null,
+        floatingOverlayPresent: Boolean(floatingOverlay),
         bodyText: document.body?.innerText || "",
         mainText: document.querySelector("main")?.textContent || "",
       };

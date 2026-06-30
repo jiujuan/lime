@@ -78,8 +78,7 @@ function getStatusClassName(status: GeneralWorkbenchTaskRailItemStatus) {
     status === "failed" && "border-rose-200 bg-rose-50 text-rose-700",
     status === "completed" &&
       "border-emerald-200 bg-emerald-50 text-emerald-700",
-    status === "pending" &&
-      "border-slate-200 bg-slate-50 text-slate-500",
+    status === "pending" && "border-slate-200 bg-slate-50 text-slate-500",
   );
 }
 
@@ -107,7 +106,8 @@ function TaskRailOutputRow({
   onOpenOutput?: TaskCenterTaskRailProps["onOpenOutput"];
   t?: TaskCenterTaskRailProps["t"];
 }) {
-  const shouldShowStatus = item.status === "running" || item.status === "failed";
+  const shouldShowStatus =
+    item.status === "running" || item.status === "failed";
   const outputTitle = getOutputTitle(item);
   const outputPath = item.artifactPath?.trim();
   const openOutput = outputPath && onOpenOutput ? onOpenOutput : null;
@@ -223,7 +223,10 @@ function TaskRailContextItem({
             </span>
           ) : null}
           {item.detailStatus ? (
-            <span className={statusClassName} title={item.detailStatus.title || undefined}>
+            <span
+              className={statusClassName}
+              title={item.detailStatus.title || undefined}
+            >
               {item.detailStatus.label}
             </span>
           ) : null}
@@ -242,7 +245,7 @@ function TaskRailPlanItem({
 }) {
   return (
     <div
-      className="flex min-w-0 items-center gap-2"
+      className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"
       data-testid="task-center-task-rail-plan-item"
       data-status={item.status}
       title={item.title}
@@ -252,15 +255,14 @@ function TaskRailPlanItem({
           "h-2 w-2 shrink-0 rounded-full border",
           item.status === "running" && "border-sky-400 bg-sky-400",
           item.status === "failed" && "border-rose-400 bg-rose-400",
-          item.status === "completed" &&
-            "border-emerald-400 bg-emerald-400",
+          item.status === "completed" && "border-emerald-400 bg-emerald-400",
           item.status === "pending" && "border-slate-300 bg-slate-100",
         )}
       />
       <span className="shrink-0 text-[10px] text-[color:var(--lime-text-faint)]">
         {item.meta}
       </span>
-      <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-[color:var(--lime-text)]">
+      <span className="min-w-[8rem] flex-1 truncate text-[11px] font-medium text-[color:var(--lime-text)]">
         {item.title}
       </span>
       <span className={getStatusClassName(item.status)}>
@@ -279,7 +281,7 @@ function TaskRailActivityItem({
 }) {
   return (
     <div
-      className="flex min-w-0 items-center gap-2"
+      className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"
       data-testid="task-center-task-rail-activity-item"
       data-kind={item.kind}
       data-status={item.status}
@@ -288,7 +290,7 @@ function TaskRailActivityItem({
       <span className={getStatusClassName(item.status)}>
         {getStatusText(item.status, t)}
       </span>
-      <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-[color:var(--lime-text)]">
+      <span className="min-w-[8rem] flex-1 truncate text-[11px] font-medium text-[color:var(--lime-text)]">
         {item.title}
       </span>
     </div>
@@ -354,9 +356,7 @@ function getApprovalStatusClassName(
     status === "pending" && "border-amber-200 bg-amber-50 text-amber-700",
     status === "queued" && "border-slate-200 bg-slate-50 text-slate-500",
     status === "submitted" && "border-sky-200 bg-sky-50 text-sky-700",
-    (status === "approved" ||
-      status === "answered" ||
-      status === "resolved") &&
+    (status === "approved" || status === "answered" || status === "resolved") &&
       "border-emerald-200 bg-emerald-50 text-emerald-700",
     status === "rejected" && "border-rose-200 bg-rose-50 text-rose-700",
   );
@@ -388,11 +388,11 @@ function TaskRailApprovalItem({
       data-testid="task-center-task-rail-approval-item"
       data-status={item.status}
     >
-      <div className="flex min-w-0 items-start gap-2">
+      <div className="flex min-w-0 flex-wrap items-start gap-x-2 gap-y-1">
         <span className={getApprovalStatusClassName(item.status)}>
           {getApprovalStatusText(item.status, t)}
         </span>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-[8rem] flex-1">
           <div
             className={cn(
               "truncate text-[11px] font-medium",
@@ -418,7 +418,7 @@ function TaskRailApprovalItem({
         </div>
       </div>
       {canRespond ? (
-        <div className="mt-2 flex items-center gap-1.5">
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <button
             type="button"
             className="inline-flex h-6 items-center gap-1 rounded-lg border border-slate-900 bg-slate-900 px-2 text-[11px] font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
@@ -518,8 +518,8 @@ export function TaskCenterTaskRail({
     >
       {shouldShowProgress ? (
         <div>
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
+          <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-3 gap-y-1">
+            <div className="min-w-[min(100%,12rem)] flex-1">
               <div className="text-xs font-medium text-[color:var(--lime-text-muted)]">
                 {translateTaskRailText(
                   t,
@@ -536,7 +536,7 @@ export function TaskCenterTaskRail({
             </span>
           </div>
           {projection.totalCount > 0 ? (
-            <div className="mt-2 flex items-center gap-2">
+            <div className="mt-2 flex min-w-0 items-center gap-2">
               <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200">
                 <span
                   className="block h-full rounded-full bg-sky-500/70"
@@ -564,7 +564,7 @@ export function TaskCenterTaskRail({
 
       {hasPlan ? (
         <div
-          className="mt-2 space-y-1.5"
+          className="mt-2 min-w-0 space-y-1.5"
           data-testid="task-center-task-rail-plan"
         >
           {projection.planRevision ? (
@@ -616,7 +616,7 @@ export function TaskCenterTaskRail({
 
       {hasActivity ? (
         <div
-          className="mt-3 border-t border-[color:var(--lime-surface-border)] pt-3"
+          className="mt-3 min-w-0 border-t border-[color:var(--lime-surface-border)] pt-3"
           data-testid="task-center-task-rail-activity"
         >
           <div className="text-xs font-medium text-[color:var(--lime-text-muted)]">
@@ -649,7 +649,7 @@ export function TaskCenterTaskRail({
 
       {hasApprovals ? (
         <div
-          className="mt-3 border-t border-[color:var(--lime-surface-border)] pt-3"
+          className="mt-3 min-w-0 border-t border-[color:var(--lime-surface-border)] pt-3"
           data-testid="task-center-task-rail-approvals"
         >
           <div className="text-xs font-medium text-[color:var(--lime-text-muted)]">
@@ -688,6 +688,7 @@ export function TaskCenterTaskRail({
       {hasOutputs && !hasRunControlSurface ? (
         <div
           className={cn(
+            "min-w-0",
             (shouldShowProgress ||
               hasPlan ||
               hasContext ||

@@ -254,6 +254,7 @@ describe("Plugin P1 manifest contract", () => {
         }),
       ]),
     );
+    expect(contract.connectors).toEqual([]);
     expect(contract.artifactRenderers).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -280,16 +281,16 @@ describe("Plugin P1 manifest contract", () => {
       ]),
     );
     expect(contract.rightSurface).toMatchObject({
-      defaultActiveTab: "productProfile",
+      defaultActiveTab: "articleWorkspace",
       supportedTabs: [
-        "productProfile",
+        "articleWorkspace",
         "file",
         "evidence",
         "terminal",
         "browser",
         "sideChat",
       ],
-      productWorkspace: {
+      articleWorkspace: {
         enabled: true,
         primaryObjectKind: "articleDraft",
         selectionPolicy: "last",
@@ -345,7 +346,7 @@ describe("Plugin P1 manifest contract", () => {
       },
     ]);
     expect(contract.artifactRenderers).toEqual([]);
-    expect(contract.rightSurface.productWorkspace.enabled).toBe(false);
+    expect(contract.rightSurface.articleWorkspace.enabled).toBe(false);
     expect(contract.historyRestore.defaultSurface).toBe("chat");
   });
 

@@ -33,14 +33,14 @@ export interface SessionRuntimeProjectionDeferralInput<
 > {
   sessionId?: string | null;
   messages: Message[];
-  turns: AgentThreadTurn[];
-  threadItems: AgentThreadItem[];
+  turns: readonly AgentThreadTurn[];
+  threadItems: readonly AgentThreadItem[];
   currentTurnId?: string | null;
   threadRead?: AgentRuntimeThreadReadModel | null;
-  pendingActions: PendingAction[];
-  submittedActionsInFlight: SubmittedAction[];
-  queuedTurns: QueuedTurnSnapshot[];
-  childSubagentSessions: AsterSubagentSessionInfo[];
+  pendingActions: readonly PendingAction[];
+  submittedActionsInFlight: readonly SubmittedAction[];
+  queuedTurns: readonly QueuedTurnSnapshot[];
+  childSubagentSessions: readonly AsterSubagentSessionInfo[];
   isRestoringSession: boolean;
   isSending: boolean;
   focusedTimelineItemId?: string | null;
@@ -51,14 +51,14 @@ export interface SessionRuntimeProjectionDeferralResult<
   PendingAction,
   SubmittedAction,
 > {
-  turns: AgentThreadTurn[];
-  threadItems: AgentThreadItem[];
+  turns: readonly AgentThreadTurn[];
+  threadItems: readonly AgentThreadItem[];
   currentTurnId: string | null;
   threadRead: AgentRuntimeThreadReadModel | null;
-  pendingActions: PendingAction[];
-  submittedActionsInFlight: SubmittedAction[];
-  queuedTurns: QueuedTurnSnapshot[];
-  childSubagentSessions: AsterSubagentSessionInfo[];
+  pendingActions: readonly PendingAction[];
+  submittedActionsInFlight: readonly SubmittedAction[];
+  queuedTurns: readonly QueuedTurnSnapshot[];
+  childSubagentSessions: readonly AsterSubagentSessionInfo[];
 }
 
 export function useSessionRuntimeProjectionDeferral<

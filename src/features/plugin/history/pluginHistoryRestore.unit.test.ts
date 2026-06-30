@@ -61,12 +61,12 @@ describe("Plugin history restore projection", () => {
             objectKind: "articleDraft",
             objectId: "draft-1",
           },
-          openedTabs: ["productProfile", "unsupported"],
-          pinnedTabs: ["productProfile", "unsupported"],
+          openedTabs: ["articleWorkspace", "unsupported"],
+          pinnedTabs: ["articleWorkspace", "unsupported"],
         },
         layoutState: {
-          activeSurfaceKind: "productProfile",
-          openSurfaceKinds: ["productProfile", "browser", "unsupported"],
+          activeSurfaceKind: "articleWorkspace",
+          openSurfaceKinds: ["articleWorkspace", "browser", "unsupported"],
           activeTabId: "draft-tab",
         },
         artifactRefs: ["artifact-1"],
@@ -84,9 +84,9 @@ describe("Plugin history restore projection", () => {
         objectKind: "articleDraft",
         objectId: "draft-1",
       },
-      openedTabs: ["productProfile", "browser"],
-      pinnedTabs: ["productProfile"],
-      activeSurfaceKind: "productProfile",
+      openedTabs: ["articleWorkspace", "browser"],
+      pinnedTabs: ["articleWorkspace"],
+      activeSurfaceKind: "articleWorkspace",
       activeTabId: "draft-tab",
       actionMode: "interactive",
       fallbackTarget: "none",
@@ -96,8 +96,8 @@ describe("Plugin history restore projection", () => {
         pluginId: "content-factory",
         activeEntryKey: "content-factory",
         selectedSkillKeys: ["article-writer"],
-        openedTabs: ["productProfile", "browser"],
-        pinnedTabs: ["productProfile"],
+        openedTabs: ["articleWorkspace", "browser"],
+        pinnedTabs: ["articleWorkspace"],
         source: "history",
       },
     });
@@ -170,6 +170,86 @@ describe("Plugin history restore projection", () => {
       blockerCodes: ["PLUGIN_HISTORY_WORKSPACE_MISSING"],
     });
     expect(projection.activationContext).toBeUndefined();
+  });
+
+  it("同时没有 plugin workspace 和 artifact 时才回退纯聊天", () => {
+    const contract = buildContentPlugin();
+
+    const projection = buildPluginHistoryRestoreProjection({
+      contracts: [contract],
+      snapshot: {
+        sessionId: "session-3a",
+        pluginId: "content-factory",
+      },
+    });
+
+    expect(projection).toMatchObject({
+      status: "chat_only",
+      artifactRefs: [],
+      fallbackTarget: "chatOnly",
+      blockerCodes: ["PLUGIN_HISTORY_WORKSPACE_MISSING"],
+    });
+  });
+
+  it("缺少顶层 artifactRefs 时应从 workspace object 收集产物引用，避免误回退纯聊天", () => {
+    const contract = buildContentPlugin();
+
+    const projection = buildPluginHistoryRestoreProjection({
+      contracts: [contract],
+      snapshot: {
+        sessionId: "session-3b",
+        pluginId: "content-factory",
+        pluginWorkspace: {
+          pluginId: "content-factory",
+          objects: [
+            {
+              ref: {
+                pluginId: "content-factory",
+                objectKind: "articleDraft",
+                objectId: "draft-3b",
+                artifactIds: ["artifact-from-ref"],
+              },
+              artifactIds: ["artifact-from-object"],
+            },
+          ],
+        },
+      },
+    });
+
+    expect(projection).toMatchObject({
+      status: "restored",
+      artifactRefs: ["artifact-from-object", "artifact-from-ref"],
+      fallbackTarget: "none",
+    });
+  });
+
+  it("没有 workspace 对象但顶层对象引用携带产物时仍应恢复对象，而不是纯聊天", () => {
+    const contract = buildContentPlugin();
+
+    const projection = buildPluginHistoryRestoreProjection({
+      contracts: [contract],
+      snapshot: {
+        sessionId: "session-3c",
+        pluginId: "content-factory",
+        selectedObjectRef: {
+          pluginId: "content-factory",
+          objectKind: "articleDraft",
+          objectId: "draft-3c",
+          artifactIds: ["artifact-from-selected-ref"],
+        },
+      },
+    });
+
+    expect(projection).toMatchObject({
+      status: "restored",
+      artifactRefs: ["artifact-from-selected-ref"],
+      selectedObjectRef: {
+        pluginId: "content-factory",
+        objectKind: "articleDraft",
+        objectId: "draft-3c",
+      },
+      fallbackTarget: "none",
+    });
   });
 
   it("缺少插件标识时不猜测插件，只回退到历史 artifact 或聊天", () => {

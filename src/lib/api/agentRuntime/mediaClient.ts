@@ -1,5 +1,6 @@
 import type {
   CompleteAudioGenerationTaskArtifactRequest,
+  CompleteImageGenerationTaskArtifactRequest,
   CreateAudioGenerationTaskArtifactRequest,
   CreateImageGenerationTaskArtifactRequest,
   ListMediaTaskArtifactsRequest,
@@ -52,6 +53,14 @@ export function createMediaClient({
     return rejectRetiredMediaTaskCommand(command);
   }
 
+  async function completeImageGenerationTaskArtifact(
+    request: CompleteImageGenerationTaskArtifactRequest,
+  ): Promise<MediaTaskArtifactOutput> {
+    void request;
+    const command = "complete_image_generation_task_artifact";
+    return rejectRetiredMediaTaskCommand(command);
+  }
+
   async function getMediaTaskArtifact(
     request: MediaTaskLookupRequest,
   ): Promise<MediaTaskArtifactOutput> {
@@ -79,6 +88,7 @@ export function createMediaClient({
   return {
     cancelMediaTaskArtifact,
     completeAudioGenerationTaskArtifact,
+    completeImageGenerationTaskArtifact,
     createAudioGenerationTaskArtifact,
     createImageGenerationTaskArtifact,
     getMediaTaskArtifact,

@@ -87,7 +87,7 @@ function createInstalledPluginBackedApp(
             mode: "natural_language",
             taskKind: "creator.article.generate",
             outputArtifactKind: "creator.workspace_patch",
-            rightSurface: "productProfile",
+            rightSurface: "articleWorkspace",
             triggerPhrases: {
               "zh-CN": ["写一篇公众号文章", "写文章"],
             },
@@ -97,7 +97,7 @@ function createInstalledPluginBackedApp(
       },
       workbench: {
         profile: "production",
-        productWorkspace: {
+        articleWorkspace: {
           primaryObjectKinds: ["articleDraft"],
         },
         productionObjects: [
@@ -183,7 +183,7 @@ describe("workspacePluginActivation", () => {
         intentKey: "creator_article_generate",
         taskKind: "creator.article.generate",
         outputArtifactKind: "creator.workspace_patch",
-        rightSurface: "productProfile",
+        rightSurface: "articleWorkspace",
         expectedObjects: ["articleDraft"],
       },
     });
@@ -233,7 +233,7 @@ describe("workspacePluginActivation", () => {
         intentKey: "content_factory_generate",
         taskKind: "content.factory.generate",
         outputArtifactKind: "content_factory.workspace_patch",
-        rightSurface: "productProfile",
+        rightSurface: "articleWorkspace",
         expectedObjects: [
           "articleDraft",
           "imageGenerationSet",
@@ -271,7 +271,7 @@ describe("workspacePluginActivation", () => {
         intentKey: "content_article_generate",
         taskKind: "content.article.generate",
         outputArtifactKind: "content_factory.workspace_patch",
-        rightSurface: "productProfile",
+        rightSurface: "articleWorkspace",
         expectedObjects: ["articleDraft"],
       },
     });
@@ -304,7 +304,7 @@ describe("workspacePluginActivation", () => {
         intentKey: "content_article_generate",
         taskKind: "content.article.generate",
         outputArtifactKind: "content_factory.workspace_patch",
-        rightSurface: "productProfile",
+        rightSurface: "articleWorkspace",
         expectedObjects: ["articleDraft"],
       },
     });
@@ -432,14 +432,14 @@ describe("workspacePluginActivation", () => {
           intent_key: "creator_article_generate",
           task_kind: "creator.article.generate",
           output_artifact_kind: "creator.workspace_patch",
-          right_surface: "productProfile",
+          right_surface: "articleWorkspace",
           expected_objects: ["articleDraft"],
           selected_object_ref: {
             plugin_id: "creator-workbench",
             object_kind: "articleDraft",
             object_id: "pending",
           },
-          opened_tabs: ["productProfile"],
+          opened_tabs: ["articleWorkspace"],
           context_source: "user",
         },
       },
@@ -491,7 +491,7 @@ describe("workspacePluginActivation", () => {
           objectKind: "articleDraft",
           objectId: "pending",
         },
-        openedTabs: ["productProfile"],
+        openedTabs: ["articleWorkspace"],
         source: "user",
       },
     });
@@ -516,8 +516,8 @@ describe("workspacePluginActivation", () => {
               artifactIds: ["artifact-1"],
               sourceTurnId: "turn-1",
             },
-            openedTabs: ["productProfile", "productProfile"],
-            pinnedTabs: ["productProfile"],
+            openedTabs: ["articleWorkspace", "articleWorkspace"],
+            pinnedTabs: ["articleWorkspace"],
             contextSource: "history",
           },
         },
@@ -538,8 +538,8 @@ describe("workspacePluginActivation", () => {
           artifactIds: ["artifact-1"],
           sourceTurnId: "turn-1",
         },
-        openedTabs: ["productProfile"],
-        pinnedTabs: ["productProfile"],
+        openedTabs: ["articleWorkspace"],
+        pinnedTabs: ["articleWorkspace"],
         source: "history",
       },
     });

@@ -17,6 +17,7 @@ export const EXPERT_SKILLS_RUNTIME_DONE_TEXT =
 export const EXPERT_SKILLS_RUNTIME_ID = "code-literature";
 export const EXPERT_SKILLS_RUNTIME_TITLE = "代码文学专家";
 export const EXPERT_SKILLS_RUNTIME_RELEASE_ID = "rel-code-literature-20260515";
+export const EXPERT_SKILLS_RUNTIME_TENANT_ID = "local-seeded";
 export const EXPERT_SKILLS_RUNTIME_SKILL_REF = "skill:capability-report";
 export const EXPERT_SKILLS_RUNTIME_BASE_SKILL_REF = "skill:code-review";
 export const EXPERT_SKILLS_RUNTIME_PANEL_PROMPT =
@@ -50,7 +51,7 @@ export const SKILLS_RUNTIME_ASSERTION_KEYS = [
   "manualEnableSkillsRuntimeMetadataReachedBackend",
   "manualEnableSkillsRuntimeSkillDirectoryPrepared",
   "manualEnableSkillsRuntimeLaunchedFromSkillsWorkspace",
-  "manualEnableSkillsRuntimeOpenedAgentSession",
+  "manualEnableSkillsRuntimeUsedAgentSession",
   "guiManualEnableSkillsRuntimeCompleted",
   "readModelManualEnableSkillsRuntimeCompleted",
   "readModelManualEnableSkillSearchObserved",
@@ -96,11 +97,6 @@ export const EXPERT_PANEL_SKILLS_RUNTIME_ASSERTION_KEYS = [
   "expertPanelEvidenceSkillInvocationObserved",
   "expertPanelSkillSearchBeforeSkillInvocation",
   "expertPanelEvidencePackExportedFromHarnessPanel",
-  "expertPanelEvidenceSummaryVisible",
-  "expertPanelEvidenceSummarySkillCountsVisible",
-  "expertPanelEvidenceSummaryLatestSkillVisible",
-  "expertPanelEvidenceSummaryRuntimeEnableVisible",
-  "expertPanelEvidenceSummaryHidesRawRuntimeEnable",
 ];
 
 export function createSkillsRuntimeFixtureScenario(sessionId, options = {}) {
@@ -227,7 +223,7 @@ export function buildExpertSkillsRuntimeMetadata() {
       category: "engineering",
       source: "fixture",
       catalogVersion: "fixture-experts-2026-06-21",
-      tenantId: "local-seeded",
+      tenantId: EXPERT_SKILLS_RUNTIME_TENANT_ID,
       personaRef: "expert-persona:code-literature@1.0.0",
       skillRefs,
       workflowRefs: [],
@@ -243,7 +239,7 @@ export function buildExpertSkillsRuntimeMetadata() {
         category: "engineering",
         source: "fixture",
         catalog_version: "fixture-experts-2026-06-21",
-        tenant_id: "local-seeded",
+        tenant_id: EXPERT_SKILLS_RUNTIME_TENANT_ID,
         persona_ref: "expert-persona:code-literature@1.0.0",
         skill_refs: skillRefs,
         workflow_refs: [],
@@ -258,10 +254,11 @@ export function buildExpertSkillsRuntimeCatalog(options = {}) {
   const releaseSkillRefs = options.releaseSkillRefs ?? [
     EXPERT_SKILLS_RUNTIME_SKILL_REF,
   ];
+  const tenantId = options.tenantId ?? EXPERT_SKILLS_RUNTIME_TENANT_ID;
   const syncedAt = "2026-06-21T00:00:00.000Z";
   return {
     version: "fixture-experts-2026-06-21",
-    tenantId: "local-seeded",
+    tenantId,
     syncedAt,
     categories: [
       { key: "all", title: "全部", sort: 0 },

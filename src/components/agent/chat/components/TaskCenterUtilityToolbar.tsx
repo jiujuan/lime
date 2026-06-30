@@ -1,6 +1,5 @@
 import React from "react";
 import {
-  Activity,
   ChevronDown,
   CircleDot,
   Code2,
@@ -12,6 +11,7 @@ import {
   Monitor,
   PanelRightClose,
   PanelRightOpen,
+  PanelRight,
   SlidersHorizontal,
   SquareTerminal,
   UserRound,
@@ -69,6 +69,7 @@ import {
 import { TaskCenterTaskRail } from "./TaskCenterTaskRail";
 import { hasImportedRuntimeDetailSignal } from "../utils/importedSourceProcess";
 import type { WorkspaceRightSurfaceLauncherProjection } from "../workspace/right-surface";
+import { buildWorkspaceTaskRailRuntimeContext } from "../workspace/useWorkspaceTaskRailRuntime";
 
 interface TaskCenterUtilityToolbarProps {
   projectRootPath?: string | null;
@@ -86,6 +87,11 @@ interface TaskCenterUtilityToolbarProps {
     executionRuntime?: AsterSessionExecutionRuntime | null;
     childSubagentSessions?: readonly AsterSubagentSessionInfo[];
     context?: GeneralWorkbenchTaskRailContextInput;
+    providerType?: string | null;
+    model?: string | null;
+    accessMode?: GeneralWorkbenchTaskRailContextInput["accessMode"];
+    reasoningEffort?: string | null;
+    workspaceRootPath?: string | null;
     onOpenOutput?: (path: string) => void | Promise<void>;
     onRespondToAction?: (response: ConfirmResponse) => void | Promise<void>;
   };
@@ -96,9 +102,6 @@ interface TaskCenterUtilityToolbarProps {
   showHarnessToggle: boolean;
   harnessPanelVisible: boolean;
   onToggleHarnessPanel?: () => void;
-  showTraceToggle?: boolean;
-  tracePanelVisible?: boolean;
-  onToggleTracePanel?: () => void;
   showExpertInfoToggle?: boolean;
   expertInfoPanelVisible?: boolean;
   onToggleExpertInfoPanel?: () => void;
@@ -109,6 +112,7 @@ interface TaskCenterUtilityToolbarProps {
   onToggleShellPanel?: () => void;
   onToggleBrowserPanel?: () => void;
   onToggleFilesPanel?: () => void;
+  onToggleTracePanel?: () => void;
   onToggleObjectCanvasPanel?: () => void;
   rightSurfaceLaunchers?: readonly WorkspaceRightSurfaceLauncherProjection[];
 }
@@ -120,7 +124,7 @@ const taskCenterIconOnlyButtonClassName =
   "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[12px] border border-transparent bg-transparent leading-none text-[color:var(--lime-chrome-muted)] shadow-none transition-[background-color,color] hover:bg-[color:var(--lime-chrome-tab-hover)] hover:text-[color:var(--lime-chrome-text)] disabled:cursor-not-allowed disabled:opacity-50";
 
 const taskCenterToolGroupClassName =
-  "inline-flex max-w-full shrink-0 flex-nowrap items-center gap-1 overflow-hidden whitespace-nowrap";
+  "inline-flex max-w-full shrink-0 flex-wrap items-center gap-1 overflow-visible";
 
 function VisualStudioCodeIcon({ className }: { className?: string }) {
   return (
@@ -191,9 +195,6 @@ export function TaskCenterUtilityToolbar({
   showHarnessToggle,
   harnessPanelVisible,
   onToggleHarnessPanel,
-  showTraceToggle = false,
-  tracePanelVisible = false,
-  onToggleTracePanel,
   showExpertInfoToggle = false,
   expertInfoPanelVisible = false,
   onToggleExpertInfoPanel,
@@ -204,19 +205,19 @@ export function TaskCenterUtilityToolbar({
   onToggleShellPanel,
   onToggleBrowserPanel,
   onToggleFilesPanel,
+  onToggleTracePanel,
   onToggleObjectCanvasPanel,
   rightSurfaceLaunchers,
 }: TaskCenterUtilityToolbarProps) {
   const { t } = useTranslation("agent");
   const normalizedProjectRootPath = projectRootPath?.trim() || null;
   const [environmentVisited, setEnvironmentVisited] = React.useState(false);
+  const [environmentOpen, setEnvironmentOpen] = React.useState(false);
   const { status, loading, error } = useProjectGitStatus(
     environmentVisited ? normalizedProjectRootPath : null,
   );
   const shouldRenderHarnessToggle =
     showHarnessToggle || Boolean(onToggleHarnessPanel);
-  const shouldRenderTraceToggle =
-    showTraceToggle || Boolean(onToggleTracePanel);
   const isWorkbenchHeaderPlacement = placement === "workbench-header";
   const rightSurfaceLauncherByKind = React.useMemo(
     () =>
@@ -232,38 +233,38 @@ export function TaskCenterUtilityToolbar({
   const expertInfoLauncher = rightSurfaceLauncherByKind.get("expertInfo");
   const shellLauncher = rightSurfaceLauncherByKind.get("shell");
   const harnessLauncher = rightSurfaceLauncherByKind.get("harness");
-  const traceLauncher = rightSurfaceLauncherByKind.get("trace");
   const filesLauncher = rightSurfaceLauncherByKind.get("files");
   const browserLauncher = rightSurfaceLauncherByKind.get("browser");
-  const productProfileLauncher =
-    rightSurfaceLauncherByKind.get("productProfile");
+  const traceLauncher = rightSurfaceLauncherByKind.get("trace");
+  const articleEditorLauncher =
+    rightSurfaceLauncherByKind.get("articleWorkspace");
   const objectCanvasLauncher = rightSurfaceLauncherByKind.get("objectCanvas");
-  const productProfileHasVisibleSignal = Boolean(
-    productProfileLauncher?.active ||
-      (productProfileLauncher?.pendingCount ?? 0) > 0 ||
-      (!objectCanvasLauncher && productProfileLauncher),
+  const articleEditorHasVisibleSignal = Boolean(
+    articleEditorLauncher?.active ||
+    (articleEditorLauncher?.pendingCount ?? 0) > 0 ||
+    (!objectCanvasLauncher && articleEditorLauncher),
   );
-  const objectProfileLauncher = productProfileHasVisibleSignal
-    ? productProfileLauncher
-    : objectCanvasLauncher ?? productProfileLauncher;
+  const objectProfileLauncher = articleEditorHasVisibleSignal
+    ? articleEditorLauncher
+    : (objectCanvasLauncher ?? articleEditorLauncher);
   const objectProfilePendingCount =
-    (productProfileLauncher?.pendingCount ?? 0) +
+    (articleEditorLauncher?.pendingCount ?? 0) +
     (objectCanvasLauncher?.pendingCount ?? 0);
   const objectProfileActive = Boolean(
-    productProfileLauncher?.active || objectCanvasLauncher?.active,
+    articleEditorLauncher?.active || objectCanvasLauncher?.active,
   );
   const objectProfileDisabled = Boolean(objectProfileLauncher?.disabled);
-  const objectProfileLabelKey = productProfileHasVisibleSignal
-    ? "agentChat.navbar.productProfile"
+  const objectProfileLabelKey = articleEditorHasVisibleSignal
+    ? "agentChat.navbar.articleWorkspace"
     : "agentChat.navbar.objectCanvas";
-  const objectProfileDefaultLabel = productProfileHasVisibleSignal
-    ? "产物 Profile"
+  const objectProfileDefaultLabel = articleEditorHasVisibleSignal
+    ? "文章编辑器"
     : "对象画布";
-  const openObjectProfileLabelKey = productProfileHasVisibleSignal
-    ? "agentChat.navbar.openProductProfile"
+  const openObjectProfileLabelKey = articleEditorHasVisibleSignal
+    ? "agentChat.navbar.openArticleWorkspace"
     : "agentChat.navbar.openObjectCanvas";
-  const closeObjectProfileLabelKey = productProfileHasVisibleSignal
-    ? "agentChat.navbar.closeProductProfile"
+  const closeObjectProfileLabelKey = articleEditorHasVisibleSignal
+    ? "agentChat.navbar.closeArticleWorkspace"
     : "agentChat.navbar.closeObjectCanvas";
   const shouldRenderObjectCanvasToggle =
     Boolean(onToggleObjectCanvasPanel) &&
@@ -277,6 +278,12 @@ export function TaskCenterUtilityToolbar({
     (!filesLauncher?.disabled ||
       Boolean(filesLauncher?.active) ||
       (filesLauncher?.pendingCount ?? 0) > 0);
+  const shouldRenderTraceToggle =
+    Boolean(onToggleTracePanel) &&
+    Boolean(traceLauncher) &&
+    (!traceLauncher?.disabled ||
+      Boolean(traceLauncher?.active) ||
+      (traceLauncher?.pendingCount ?? 0) > 0);
   const shouldRenderBrowserToggle =
     Boolean(onToggleBrowserPanel) &&
     Boolean(browserLauncher) &&
@@ -287,8 +294,8 @@ export function TaskCenterUtilityToolbar({
     shouldRenderHarnessToggle ||
     showExpertInfoToggle ||
     showCanvasToggle ||
-    shouldRenderTraceToggle ||
     shouldRenderObjectCanvasToggle ||
+    shouldRenderTraceToggle ||
     shouldRenderBrowserToggle ||
     shouldRenderFilesToggle;
   const effectiveCanvasOpen = workbenchLauncher?.active ?? isCanvasOpen;
@@ -301,6 +308,7 @@ export function TaskCenterUtilityToolbar({
   const filesPendingCount = filesLauncher?.pendingCount ?? 0;
   const effectiveBrowserPanelOpen = Boolean(browserLauncher?.active);
   const browserPendingCount = browserLauncher?.pendingCount ?? 0;
+  const tracePendingCount = traceLauncher?.pendingCount ?? 0;
   const effectiveExpertInfoPanelVisible =
     expertInfoLauncher?.active ?? expertInfoPanelVisible;
   const expertInfoPendingCount = expertInfoLauncher?.pendingCount ?? 0;
@@ -310,12 +318,6 @@ export function TaskCenterUtilityToolbar({
     harnessPendingCount,
     harnessLauncher?.pendingCount ?? 0,
   );
-  const effectiveTracePanelVisible =
-    tracePanelVisible || Boolean(traceLauncher?.active);
-  const tracePendingCount = traceLauncher?.pendingCount ?? 0;
-  const traceToggleLabel = effectiveTracePanelVisible
-    ? agentText("agentChat.navbar.closeTrace", "关闭 Trace")
-    : agentText("agentChat.navbar.openTrace", "打开 Trace");
   const expertInfoToggleLabel = agentText(
     effectiveExpertInfoPanelVisible
       ? "agentChat.navbar.closeExpertInfo"
@@ -380,10 +382,22 @@ export function TaskCenterUtilityToolbar({
     [t],
   );
   const taskRailProjection = React.useMemo(() => {
-    if (!taskRail) {
+    if (!environmentOpen || !taskRail) {
       return null;
     }
     const completedSteps = countCompletedWorkflowSteps(taskRail.workflowSteps);
+    const taskRailContext =
+      taskRail.context ??
+      buildWorkspaceTaskRailRuntimeContext({
+        providerType: taskRail.providerType,
+        model: taskRail.model,
+        accessMode: taskRail.accessMode,
+        reasoningEffort: taskRail.reasoningEffort,
+        workspaceRootPath: taskRail.workspaceRootPath ?? null,
+        threadRead: taskRail.threadRead,
+        threadItems: taskRail.threadItems,
+        childSubagentSessions: taskRail.childSubagentSessions,
+      });
     return buildGeneralWorkbenchTaskRailProjection({
       workflowSteps: taskRail.workflowSteps,
       completedSteps,
@@ -404,11 +418,17 @@ export function TaskCenterUtilityToolbar({
       todoItems: taskRail.todoItems,
       threadRead: taskRail.threadRead,
       childSubagentSessions: taskRail.childSubagentSessions,
-      context: taskRail.context,
+      context: taskRailContext,
       t: taskRailTranslate,
     });
-  }, [taskRail, taskRailTranslate]);
+  }, [environmentOpen, taskRail, taskRailTranslate]);
   const importedRuntimeDetail = React.useMemo(() => {
+    if (!environmentOpen) {
+      return {
+        enabled: false,
+        sessionId: null,
+      };
+    }
     const sessionId = taskRail?.sessionId?.trim() || null;
     return {
       enabled:
@@ -421,6 +441,7 @@ export function TaskCenterUtilityToolbar({
       sessionId,
     };
   }, [
+    environmentOpen,
     taskRail?.executionRuntime,
     taskRail?.sessionId,
     taskRail?.threadItems,
@@ -483,8 +504,8 @@ export function TaskCenterUtilityToolbar({
   return (
     <div
       className={cn(
-        "ml-auto flex min-w-0 shrink-0 flex-nowrap items-center gap-2 overflow-hidden whitespace-nowrap",
-        isWorkbenchHeaderPlacement ? "h-8" : "h-9 pb-1",
+        "ml-auto flex min-w-0 shrink flex-wrap items-center justify-end gap-x-2 gap-y-1 overflow-visible",
+        isWorkbenchHeaderPlacement ? "min-h-8" : "min-h-9 pb-1",
       )}
       data-testid="task-center-utility-toolbar"
       data-placement={placement}
@@ -517,7 +538,7 @@ export function TaskCenterUtilityToolbar({
           <PopoverContent
             align="end"
             sideOffset={8}
-            className="w-44 rounded-2xl border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] p-2 text-[color:var(--lime-text)] shadow-xl shadow-slate-950/10"
+            className="w-[min(11rem,calc(100vw-1rem))] rounded-2xl border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] p-2 text-[color:var(--lime-text)] shadow-xl shadow-slate-950/10"
             data-testid="task-center-app-switcher-popover"
           >
             <AppSwitcherAction
@@ -558,7 +579,15 @@ export function TaskCenterUtilityToolbar({
         className={taskCenterToolGroupClassName}
         data-testid="task-center-tool-group-environment"
       >
-        <Popover>
+        <Popover
+          open={environmentOpen}
+          onOpenChange={(open) => {
+            setEnvironmentOpen(open);
+            if (open) {
+              setEnvironmentVisited(true);
+            }
+          }}
+        >
           <PopoverTrigger asChild>
             <Button
               type="button"
@@ -574,9 +603,6 @@ export function TaskCenterUtilityToolbar({
                 "打开环境信息",
               )}
               data-testid="task-center-environment-trigger"
-              onClick={() => {
-                setEnvironmentVisited(true);
-              }}
             >
               <SlidersHorizontal className="h-4 w-4" />
             </Button>
@@ -584,24 +610,24 @@ export function TaskCenterUtilityToolbar({
           <PopoverContent
             align="end"
             sideOffset={8}
-            className="w-[284px] rounded-3xl border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] p-4 text-[color:var(--lime-text)] shadow-xl shadow-slate-950/10"
+            className="w-[min(30rem,calc(100vw-1rem))] rounded-3xl border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] p-4 text-[color:var(--lime-text)] shadow-xl shadow-slate-950/10"
             data-testid="task-center-environment-popover"
           >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-[color:var(--lime-text-muted)]">
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1">
+              <span className="min-w-0 text-xs font-medium text-[color:var(--lime-text-muted)]">
                 {agentText("agentChat.navbar.environment.title", "环境信息")}
               </span>
-              <span className="max-w-[180px] truncate text-[11px] text-[color:var(--lime-text-muted)]">
+              <span className="min-w-0 max-w-full truncate text-[11px] text-[color:var(--lime-text-muted)]">
                 {environmentStatusLabel}
               </span>
             </div>
             <div className="mt-3 space-y-2 text-sm">
-              <div className="flex items-center justify-between gap-3">
-                <span className="flex items-center gap-2">
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <span className="flex min-w-0 items-center gap-2">
                   <GitCommitHorizontal className="h-4 w-4" />
                   {agentText("agentChat.navbar.environment.changes", "变更")}
                 </span>
-                <span className="text-xs text-[color:var(--lime-text-muted)]">
+                <span className="min-w-0 truncate text-xs text-[color:var(--lime-text-muted)]">
                   {status?.hasGitRepository
                     ? agentText(
                         "agentChat.navbar.environment.uncommittedFiles",
@@ -611,13 +637,13 @@ export function TaskCenterUtilityToolbar({
                     : environmentStatusLabel}
                 </span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex min-w-0 items-center gap-2">
                 <Monitor className="h-4 w-4" />
-                <span>
+                <span className="min-w-0 truncate">
                   {agentText("agentChat.navbar.environment.local", "本地")}
                 </span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex min-w-0 items-center gap-2">
                 <GitBranch className="h-4 w-4" />
                 <span className="min-w-0 truncate">{branchLabel}</span>
               </div>
@@ -697,33 +723,6 @@ export function TaskCenterUtilityToolbar({
                   {effectiveHarnessPendingCount > 99
                     ? "99+"
                     : effectiveHarnessPendingCount}
-                </span>
-              ) : null}
-            </Button>
-          ) : null}
-
-          {shouldRenderTraceToggle ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className={cn(
-                taskCenterIconOnlyButtonClassName,
-                "relative",
-                effectiveTracePanelVisible &&
-                  "bg-[color:var(--lime-chrome-tab-active-surface)] text-[color:var(--lime-text)]",
-              )}
-              disabled={traceLauncher?.disabled}
-              onClick={onToggleTracePanel}
-              aria-label={traceToggleLabel}
-              aria-expanded={effectiveTracePanelVisible}
-              title={agentText("agentChat.navbar.trace", "Trace")}
-              data-testid="task-center-trace-toggle"
-            >
-              <Activity className="h-4 w-4" />
-              {tracePendingCount > 0 ? (
-                <span className="absolute -right-1 -top-1 rounded-full border border-[color:var(--lime-surface-border-strong)] bg-[color:var(--lime-surface)] px-1 text-[9px] font-medium leading-4 text-[color:var(--lime-brand-strong)]">
-                  {tracePendingCount > 99 ? "99+" : tracePendingCount}
                 </span>
               ) : null}
             </Button>
@@ -825,6 +824,38 @@ export function TaskCenterUtilityToolbar({
             </Button>
           ) : null}
 
+          {shouldRenderTraceToggle ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={cn(
+                taskCenterIconOnlyButtonClassName,
+                "relative",
+                Boolean(traceLauncher?.active) &&
+                  "bg-[color:var(--lime-chrome-tab-active-surface)] text-[color:var(--lime-text)]",
+              )}
+              disabled={traceLauncher?.disabled}
+              onClick={onToggleTracePanel}
+              aria-label={agentText(
+                Boolean(traceLauncher?.active)
+                  ? "agentChat.navbar.closeTrace"
+                  : "agentChat.navbar.openTrace",
+                Boolean(traceLauncher?.active) ? "关闭 Trace" : "打开 Trace",
+              )}
+              aria-expanded={Boolean(traceLauncher?.active)}
+              title={agentText("agentChat.navbar.trace", "Trace")}
+              data-testid="task-center-trace-toggle"
+            >
+              <PanelRight className="h-4 w-4" />
+              {tracePendingCount > 0 ? (
+                <span className="absolute -right-1 -top-1 rounded-full border border-[color:var(--lime-surface-border-strong)] bg-[color:var(--lime-surface)] px-1 text-[9px] font-medium leading-4 text-[color:var(--lime-brand-strong)]">
+                  {tracePendingCount > 99 ? "99+" : tracePendingCount}
+                </span>
+              ) : null}
+            </Button>
+          ) : null}
+
           {shouldRenderFilesToggle ? (
             <Button
               type="button"
@@ -843,10 +874,7 @@ export function TaskCenterUtilityToolbar({
                 "打开文件",
               )}
               aria-expanded={effectiveFilesPanelOpen}
-              title={agentText(
-                "agentChat.canvasWorkbench.tabs.files",
-                "文件",
-              )}
+              title={agentText("agentChat.canvasWorkbench.tabs.files", "文件")}
               data-testid="task-center-files-toggle"
             >
               <FileText className="h-4 w-4" />

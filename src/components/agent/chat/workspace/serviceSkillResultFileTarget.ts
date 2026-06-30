@@ -8,6 +8,29 @@ export interface ServiceSkillResultFileTarget {
   title: string;
 }
 
+export function hasPreferredServiceSkillResultFileTargetSignals(params: {
+  currentTurnId: string | null;
+  threadItems: readonly AgentThreadItem[];
+  savedContentTarget?: SiteSavedContentTarget | null;
+}): boolean {
+  const savedPath = normalizePath(
+    params.savedContentTarget?.projectFile?.relativePath || undefined,
+  );
+  if (savedPath) {
+    return true;
+  }
+  if (!params.currentTurnId) {
+    return false;
+  }
+  return params.threadItems.some(
+    (item) =>
+      item.turn_id === params.currentTurnId &&
+      item.type === "file_artifact" &&
+      !isHiddenConversationArtifactPath(item.path) &&
+      isMarkdownLikePath(normalizePath(item.path)),
+  );
+}
+
 function normalizePath(value?: string | null): string {
   return (value || "").trim().replace(/\\/g, "/");
 }

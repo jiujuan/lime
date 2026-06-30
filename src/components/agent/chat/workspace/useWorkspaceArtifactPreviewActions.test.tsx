@@ -21,11 +21,6 @@ vi.mock("../hooks/useArtifactAutoPreviewSync", () => ({
   useArtifactAutoPreviewSync: vi.fn(),
 }));
 
-vi.mock("./workspaceProductProfilePreviewArtifact", () => ({
-  isWorkspaceProductProfilePreviewArtifact: (artifact: Artifact) =>
-    artifact.meta?.openedFrom === "right_surface_product_profile",
-}));
-
 vi.mock("sonner", () => ({
   toast: {
     info: vi.fn(),
@@ -219,54 +214,15 @@ describe("useWorkspaceArtifactPreviewActions", () => {
     expect(setLayoutMode).not.toHaveBeenCalled();
   });
 
-  it("内容工厂产物 Profile 预览卡点击应交给右侧栏入口，不再进入 workbench", async () => {
-    const suppressBrowserAssistCanvasAutoOpen = vi.fn();
-    const onOpenProductProfilePreviewArtifact = vi.fn();
-    const setSelectedArtifactId = vi.fn();
-    const setArtifactViewMode = vi.fn();
-    const setLayoutMode = vi.fn();
-    const artifact = createArtifact({
-      id: "preview-product-profile-1",
-      title: "产物 Profile",
-      content: "# 产物 Profile",
-      meta: {
-        openedFrom: "right_surface_product_profile",
-      },
-    });
-    const { render, getValue } = renderHook({
-      suppressBrowserAssistCanvasAutoOpen,
-      onOpenProductProfilePreviewArtifact,
-      setSelectedArtifactId,
-      setArtifactViewMode,
-      setLayoutMode,
-    });
-
-    await render();
-
-    act(() => {
-      getValue().handleArtifactClick(artifact);
-    });
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(onOpenProductProfilePreviewArtifact).toHaveBeenCalledWith(artifact);
-    expect(suppressBrowserAssistCanvasAutoOpen).not.toHaveBeenCalled();
-    expect(setSelectedArtifactId).not.toHaveBeenCalled();
-    expect(setArtifactViewMode).not.toHaveBeenCalled();
-    expect(setLayoutMode).not.toHaveBeenCalled();
-  });
-
-  it("产品 Profile 详情页里的打开预览按钮仍应进入 workbench", async () => {
+  it("文章编辑器 详情页里的打开预览按钮仍应进入 workbench", async () => {
     const suppressBrowserAssistCanvasAutoOpen = vi.fn();
     const setSelectedArtifactId = vi.fn();
     const setArtifactViewMode = vi.fn();
     const setLayoutMode = vi.fn();
     const artifact = createArtifact({
-      id: "preview-product-profile-2",
-      title: "产物 Profile",
-      content: "# 产物 Profile",
+      id: "preview-article-workspace-2",
+      title: "文章编辑器",
+      content: "# 文章编辑器",
       meta: {
         openedFrom: "general-workbench-file",
       },
@@ -285,9 +241,9 @@ describe("useWorkspaceArtifactPreviewActions", () => {
     });
 
     expect(suppressBrowserAssistCanvasAutoOpen).toHaveBeenCalledTimes(1);
-    expect(setSelectedArtifactId).toHaveBeenCalledWith("preview-product-profile-2");
+    expect(setSelectedArtifactId).toHaveBeenCalledWith("preview-article-workspace-2");
     expect(setArtifactViewMode).toHaveBeenCalledWith("preview", {
-      artifactId: "preview-product-profile-2",
+      artifactId: "preview-article-workspace-2",
     });
     expect(setLayoutMode).toHaveBeenCalledWith("chat-canvas");
   });

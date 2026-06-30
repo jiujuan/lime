@@ -8,6 +8,9 @@ import {
   type AgentUiProjectionTranslation,
 } from "../projection/agentUiProjectionSummary";
 
+const projectionMetricGridClassName =
+  "grid min-w-0 gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,9rem),1fr))]";
+
 interface AgentThreadReliabilityProjectionSummaryLabels {
   artifact: string;
   action: string;
@@ -28,8 +31,8 @@ interface AgentThreadReliabilityProjectionSummaryProps {
 
 function MetricCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl border border-sky-100 bg-white px-3 py-2">
-      <div className="text-[11px] text-sky-700">{label}</div>
+    <div className="min-w-0 rounded-xl border border-sky-100 bg-white px-3 py-2">
+      <div className="break-words text-[11px] text-sky-700">{label}</div>
       <div className="mt-1 text-lg font-semibold text-sky-950">{value}</div>
     </div>
   );
@@ -50,16 +53,21 @@ export function AgentThreadReliabilityProjectionSummary({
       data-testid="agent-thread-reliability-agentui-projection"
     >
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-2 text-sm font-medium text-sky-900">
+        <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-sky-900">
           <Bot className="h-4 w-4" />
-          <span>{labels.title}</span>
+          <span className="min-w-0 break-words">{labels.title}</span>
         </div>
-        <Badge variant="outline" className="border-sky-300 bg-white text-sky-700">
+        <Badge
+          variant="outline"
+          className="border-sky-300 bg-white text-sky-700"
+        >
           {labels.count}
         </Badge>
-        <span className="text-xs text-sky-800">{labels.source}</span>
+        <span className="min-w-0 break-words text-xs text-sky-800">
+          {labels.source}
+        </span>
       </div>
-      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+      <div className={`${projectionMetricGridClassName} mt-3`}>
         <MetricCard label={labels.action} value={summary.actionCount} />
         <MetricCard label={labels.task} value={summary.taskCount} />
         <MetricCard label={labels.artifact} value={summary.artifactCount} />

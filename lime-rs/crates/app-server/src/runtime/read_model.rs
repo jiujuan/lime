@@ -1,10 +1,10 @@
+use super::article_workspace_action_projection;
+use super::article_workspace_projection;
 use super::artifact_projection;
 use super::coding_activity_projection;
 use super::event_request_id;
 use super::file_checkpoint_projection;
 use super::output_refs;
-use super::product_profile_action_projection;
-use super::product_workspace_projection;
 use super::raw_string_field;
 use super::status::agent_session_status_label;
 use super::status::agent_turn_is_active;
@@ -47,25 +47,29 @@ pub(super) fn runtime_session_read_detail_with_options(
     stored: &StoredSession,
     options: ReadDetailOptions,
 ) -> serde_json::Value {
-    let product_workspace = product_workspace_projection::product_workspace_from_events(
+    let article_workspace = article_workspace_projection::article_workspace_from_events(
         &stored.session,
         &stored.events,
     );
-    let product_profile_actions =
-        product_profile_action_projection::product_profile_actions_from_turn_runtime_options(
+    let article_workspace_actions =
+        article_workspace_action_projection::article_workspace_actions_from_turn_runtime_options(
             stored,
         );
-    let product_workspace =
-        product_workspace_projection::apply_session_selection(product_workspace, &stored.session);
-    let product_workspace =
-        product_profile_action_projection::apply_action_history_to_product_workspace(
-            product_workspace,
-            &product_profile_actions,
+    let article_workspace =
+        article_workspace_projection::apply_session_selection(article_workspace, &stored.session);
+    let article_workspace = article_workspace_projection::apply_session_edited_draft(
+        article_workspace,
+        &stored.session,
+    );
+    let article_workspace =
+        article_workspace_action_projection::apply_action_history_to_article_workspace(
+            article_workspace,
+            &article_workspace_actions,
         );
     let thread_read = runtime_thread_read_from_stored_session(
         stored,
-        product_workspace.clone(),
-        product_profile_actions.clone(),
+        article_workspace.clone(),
+        article_workspace_actions.clone(),
     );
     let queued_turns = queued_turn_snapshots(stored);
     let all_messages = runtime_session_messages(stored);
@@ -109,10 +113,10 @@ pub(super) fn runtime_session_read_detail_with_options(
         "outputs": output_refs::read_model_outputs(stored.output_blobs.values(), None),
         "thread_read": thread_read,
     });
-    if let Some(product_workspace) = product_workspace {
+    if let Some(article_workspace) = article_workspace {
         if let Some(detail_object) = detail.as_object_mut() {
-            detail_object.insert("product_workspace".to_string(), product_workspace.clone());
-            detail_object.insert("productWorkspace".to_string(), product_workspace);
+            detail_object.insert("article_workspace".to_string(), article_workspace.clone());
+            detail_object.insert("articleWorkspace".to_string(), article_workspace);
         }
     }
     detail
@@ -398,8 +402,8 @@ fn latest_turn_error_message(stored: &StoredSession, turn_id: Option<&str>) -> O
 
 fn runtime_thread_read_from_stored_session(
     stored: &StoredSession,
-    product_workspace: Option<serde_json::Value>,
-    product_profile_actions: Vec<serde_json::Value>,
+    article_workspace: Option<serde_json::Value>,
+    article_workspace_actions: Vec<serde_json::Value>,
 ) -> serde_json::Value {
     let coding_activity = coding_activity_projection::coding_activity_from_events(stored);
     let model_routing = latest_model_routing_from_events(&stored.events);
@@ -471,21 +475,21 @@ fn runtime_thread_read_from_stored_session(
             "serviceModelSlot": service_model_slot,
         },
     });
-    if let Some(product_workspace) = product_workspace {
+    if let Some(article_workspace) = article_workspace {
         if let Some(thread_read_object) = thread_read.as_object_mut() {
-            thread_read_object.insert("product_workspace".to_string(), product_workspace.clone());
-            thread_read_object.insert("productWorkspace".to_string(), product_workspace);
+            thread_read_object.insert("article_workspace".to_string(), article_workspace.clone());
+            thread_read_object.insert("articleWorkspace".to_string(), article_workspace);
         }
     }
-    if !product_profile_actions.is_empty() {
+    if !article_workspace_actions.is_empty() {
         if let Some(thread_read_object) = thread_read.as_object_mut() {
             thread_read_object.insert(
-                "product_profile_actions".to_string(),
-                serde_json::Value::Array(product_profile_actions.clone()),
+                "article_workspace_actions".to_string(),
+                serde_json::Value::Array(article_workspace_actions.clone()),
             );
             thread_read_object.insert(
-                "productProfileActions".to_string(),
-                serde_json::Value::Array(product_profile_actions),
+                "articleWorkspaceActions".to_string(),
+                serde_json::Value::Array(article_workspace_actions),
             );
         }
     }

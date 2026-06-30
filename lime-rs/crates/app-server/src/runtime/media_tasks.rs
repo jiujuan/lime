@@ -38,6 +38,15 @@ impl RuntimeCore {
             .await
     }
 
+    pub async fn complete_image_media_task_artifact(
+        &self,
+        params: MediaTaskArtifactImageCompleteParams,
+    ) -> Result<MediaTaskArtifactResponse, RuntimeCoreError> {
+        self.app_data_source
+            .complete_image_media_task_artifact(params)
+            .await
+    }
+
     pub async fn get_media_task_artifact(
         &self,
         params: MediaTaskArtifactLookupParams,

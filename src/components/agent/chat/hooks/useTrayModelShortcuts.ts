@@ -32,6 +32,7 @@ interface UseTrayModelShortcutsOptions {
   model: string;
   setModel: (model: string) => void;
   activeTheme?: string;
+  autoSyncEnabled?: boolean;
   deferInitialSync?: boolean;
 }
 
@@ -344,6 +345,7 @@ export function useTrayModelShortcuts({
   model,
   setModel,
   activeTheme,
+  autoSyncEnabled = true,
   deferInitialSync = false,
 }: UseTrayModelShortcutsOptions) {
   const traySyncEnabled = hasDesktopHostInvokeCapability();
@@ -370,7 +372,7 @@ export function useTrayModelShortcuts({
   }, [model, providerType, setModel, setProviderType]);
 
   useEffect(() => {
-    if (!traySyncEnabled) {
+    if (!traySyncEnabled || !autoSyncEnabled) {
       return;
     }
 
@@ -422,7 +424,14 @@ export function useTrayModelShortcuts({
       cancelled = true;
       cleanupScheduledTask?.();
     };
-  }, [activeTheme, deferInitialSync, model, providerType, traySyncEnabled]);
+  }, [
+    activeTheme,
+    autoSyncEnabled,
+    deferInitialSync,
+    model,
+    providerType,
+    traySyncEnabled,
+  ]);
 
   useEffect(() => {
     if (!traySyncEnabled) {

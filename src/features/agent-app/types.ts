@@ -390,7 +390,7 @@ export interface AgentAppDistributionDeclaration {
   [key: string]: unknown;
 }
 
-export interface WorkbenchProductWorkspaceDeclaration {
+export interface WorkbenchArticleWorkspaceDeclaration {
   scope?: "session" | "workspace" | string;
   primaryObjectKinds?: string[];
   snapshotPolicy?: Record<string, unknown>;
@@ -435,7 +435,7 @@ export interface WorkbenchHistoryRestoreDeclaration {
 
 export interface WorkbenchDeclaration {
   profile?: "production" | string;
-  productWorkspace?: WorkbenchProductWorkspaceDeclaration;
+  articleWorkspace?: WorkbenchArticleWorkspaceDeclaration;
   productionObjects?: WorkbenchProductionObjectDeclaration[];
   workbenchTasks?: WorkbenchTaskDeclaration[];
   objectSurfaces?: WorkbenchObjectSurfaceDeclaration[];
@@ -675,6 +675,7 @@ export interface CloudBootstrapApp {
   appId: string;
   displayName?: string;
   version: string;
+  runtimeTargets?: RuntimeTarget[];
   icon?: string;
   iconUrl?: string;
   logo?: string;

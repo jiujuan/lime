@@ -1,0 +1,959 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Writing Prototype - ArtifactFrame 到 Article Editor</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f8fb;
+        --panel: #ffffff;
+        --panel-soft: #f8fafc;
+        --border: #d9e2ec;
+        --border-soft: #e7edf4;
+        --text: #172033;
+        --muted: #64748b;
+        --subtle: #94a3b8;
+        --ink: #0f172a;
+        --accent: #0f766e;
+        --accent-soft: #e6f6f2;
+        --blue: #2563eb;
+        --blue-soft: #eff6ff;
+        --amber: #b45309;
+        --amber-soft: #fff7ed;
+        --shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          "PingFang SC",
+          "Microsoft YaHei",
+          sans-serif;
+        letter-spacing: 0;
+      }
+
+      button,
+      textarea,
+      [contenteditable] {
+        font: inherit;
+      }
+
+      .app {
+        display: grid;
+        grid-template-columns: 72px minmax(420px, 1fr) minmax(460px, 42vw);
+        height: 100vh;
+        min-height: 720px;
+        overflow: hidden;
+      }
+
+      .rail {
+        border-right: 1px solid var(--border);
+        background: #f9fbfd;
+        padding: 14px 10px;
+      }
+
+      .rail-logo {
+        display: grid;
+        width: 40px;
+        height: 40px;
+        margin: 0 auto 22px;
+        place-items: center;
+        border-radius: 10px;
+        background: #111827;
+        color: white;
+        font-weight: 800;
+      }
+
+      .rail-item {
+        display: grid;
+        width: 42px;
+        height: 42px;
+        margin: 10px auto;
+        place-items: center;
+        border: 1px solid transparent;
+        border-radius: 10px;
+        color: var(--muted);
+      }
+
+      .rail-item.active {
+        border-color: var(--border);
+        background: white;
+        color: var(--ink);
+        box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
+      }
+
+      .chat {
+        display: flex;
+        min-width: 0;
+        flex-direction: column;
+        border-right: 1px solid var(--border);
+        background: linear-gradient(180deg, #fbfdff 0%, #f7fafc 100%);
+      }
+
+      .chat-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        padding: 18px 22px;
+        border-bottom: 1px solid var(--border-soft);
+        background: rgba(255, 255, 255, 0.92);
+      }
+
+      .chat-title {
+        margin: 0;
+        font-size: 18px;
+        line-height: 26px;
+      }
+
+      .chat-meta {
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid #b7e4d8;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        padding: 6px 10px;
+        color: #0f766e;
+        font-size: 12px;
+        font-weight: 650;
+        white-space: nowrap;
+      }
+
+      .messages {
+        min-height: 0;
+        flex: 1;
+        overflow: auto;
+        padding: 22px 26px 18px;
+      }
+
+      .message {
+        max-width: 760px;
+        margin-bottom: 18px;
+      }
+
+      .message.user {
+        margin-left: auto;
+      }
+
+      .bubble {
+        display: inline-block;
+        border: 1px solid var(--border-soft);
+        border-radius: 14px;
+        background: white;
+        padding: 12px 14px;
+        box-shadow: 0 10px 26px rgba(15, 23, 42, 0.04);
+        line-height: 1.65;
+      }
+
+      .message.user .bubble {
+        border-color: #dbeafe;
+        background: #f4f8ff;
+      }
+
+      .process-list {
+        display: grid;
+        gap: 10px;
+        margin-top: 10px;
+      }
+
+      .process-row {
+        display: grid;
+        grid-template-columns: 20px minmax(0, 1fr) auto;
+        align-items: start;
+        gap: 10px;
+        border: 1px solid var(--border-soft);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.78);
+        padding: 10px 12px;
+      }
+
+      .dot {
+        width: 10px;
+        height: 10px;
+        margin-top: 5px;
+        border-radius: 999px;
+        background: var(--accent);
+        box-shadow: 0 0 0 4px var(--accent-soft);
+      }
+
+      .process-title {
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .process-detail {
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 18px;
+      }
+
+      .process-time {
+        color: var(--subtle);
+        font-size: 11px;
+      }
+
+      .artifact-frame {
+        width: min(100%, 760px);
+        margin-top: 14px;
+        border: 1px solid #cbd5e1;
+        border-radius: 12px;
+        background: white;
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .artifact-frame-header {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 12px;
+        border-bottom: 1px solid var(--border-soft);
+        background: #fbfdff;
+        padding: 12px;
+      }
+
+      .artifact-frame-open {
+        display: grid;
+        grid-template-columns: 42px minmax(0, 1fr);
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+        width: 100%;
+        border: 0;
+        background: transparent;
+        padding: 0;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .artifact-frame-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        white-space: nowrap;
+      }
+
+      .artifact-frame-action {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: white;
+        padding: 7px 9px;
+        color: var(--text);
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .artifact-frame-body {
+        max-height: 560px;
+        overflow: auto;
+        padding: 22px 28px 28px;
+      }
+
+      .artifact-frame-body.streaming::after {
+        display: inline-block;
+        width: 7px;
+        height: 18px;
+        margin-left: 3px;
+        border-radius: 2px;
+        background: var(--accent);
+        vertical-align: -3px;
+        animation: caret 1s steps(1) infinite;
+        content: "";
+      }
+
+      @keyframes caret {
+        50% {
+          opacity: 0;
+        }
+      }
+
+      .artifact-frame-body h1 {
+        margin: 0 0 18px;
+        color: var(--ink);
+        font-size: 26px;
+        line-height: 1.32;
+        letter-spacing: 0;
+      }
+
+      .artifact-frame-body h2 {
+        margin: 26px 0 10px;
+        color: var(--ink);
+        font-size: 17px;
+        letter-spacing: 0;
+      }
+
+      .artifact-frame-body p {
+        margin: 12px 0;
+        line-height: 1.86;
+      }
+
+      .artifact-frame-footer {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        border-top: 1px solid var(--border-soft);
+        background: #fbfdff;
+        padding: 10px 12px;
+      }
+
+      .artifact-frame-note {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 18px;
+      }
+
+      .artifact-frame-footer button {
+        border: 0;
+        border-radius: 9px;
+        background: #111827;
+        padding: 8px 11px;
+        color: white;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .doc-icon {
+        display: grid;
+        width: 42px;
+        height: 42px;
+        place-items: center;
+        border: 1px solid #dbe3ec;
+        border-radius: 10px;
+        background: var(--blue-soft);
+        color: var(--blue);
+        font-weight: 800;
+      }
+
+      .card-badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 5px;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid var(--border);
+        border-radius: 7px;
+        background: var(--panel-soft);
+        padding: 3px 6px;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 650;
+        line-height: 16px;
+        white-space: nowrap;
+      }
+
+      .badge.ready {
+        border-color: #b7e4d8;
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+
+      .artifact-title {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 14px;
+        font-weight: 800;
+      }
+
+      .artifact-summary {
+        margin-top: 3px;
+        overflow: hidden;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 18px;
+      }
+
+      .composer {
+        padding: 14px 22px 18px;
+        border-top: 1px solid var(--border-soft);
+        background: white;
+      }
+
+      .composer-box {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: end;
+        gap: 12px;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: var(--panel-soft);
+        padding: 12px;
+      }
+
+      textarea {
+        min-height: 52px;
+        resize: none;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        color: var(--text);
+      }
+
+      .send {
+        border: 0;
+        border-radius: 10px;
+        background: #111827;
+        padding: 10px 14px;
+        color: white;
+        font-weight: 700;
+      }
+
+      .editor {
+        display: grid;
+        min-width: 0;
+        grid-template-rows: auto minmax(0, 1fr);
+        background: #eef3f8;
+      }
+
+      .editor.closed {
+        display: none;
+      }
+
+      .editor-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        border-bottom: 1px solid var(--border);
+        background: white;
+        padding: 14px 18px;
+      }
+
+      .editor-title {
+        margin: 0;
+        font-size: 15px;
+        line-height: 22px;
+      }
+
+      .editor-subtitle {
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .header-actions {
+        display: flex;
+        gap: 8px;
+      }
+
+      .ghost {
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        background: white;
+        padding: 8px 10px;
+        color: var(--text);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .primary {
+        border: 0;
+        border-radius: 9px;
+        background: #111827;
+        padding: 8px 11px;
+        color: white;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .editor-body {
+        display: grid;
+        min-height: 0;
+        grid-template-columns: 54px minmax(0, 1fr);
+      }
+
+      .toolstrip {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        border-right: 1px solid var(--border);
+        background: #fbfdff;
+        padding: 14px 8px;
+      }
+
+      .tool {
+        display: grid;
+        width: 36px;
+        height: 36px;
+        place-items: center;
+        border: 1px solid transparent;
+        border-radius: 9px;
+        background: transparent;
+        color: var(--muted);
+        font-weight: 800;
+      }
+
+      .tool.active {
+        border-color: #b7e4d8;
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+
+      .canvas-wrap {
+        min-height: 0;
+        overflow: auto;
+        padding: 22px;
+      }
+
+      .article-canvas {
+        width: min(100%, 820px);
+        min-height: calc(100vh - 156px);
+        margin: 0 auto;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: white;
+        box-shadow: var(--shadow);
+      }
+
+      .canvas-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        border-bottom: 1px solid var(--border-soft);
+        padding: 12px 16px;
+      }
+
+      .canvas-toolbar .badge {
+        background: white;
+      }
+
+      .article-content {
+        outline: 0;
+        padding: 28px 38px 44px;
+        line-height: 1.88;
+      }
+
+      .article-content h1 {
+        margin: 0 0 18px;
+        color: var(--ink);
+        font-size: 28px;
+        line-height: 1.28;
+        letter-spacing: 0;
+      }
+
+      .article-content h2 {
+        margin: 28px 0 10px;
+        color: var(--ink);
+        font-size: 18px;
+        letter-spacing: 0;
+      }
+
+      .article-content p {
+        margin: 12px 0;
+      }
+
+      .image-slot {
+        display: grid;
+        grid-template-columns: 132px minmax(0, 1fr);
+        gap: 14px;
+        margin: 18px 0;
+        border: 1px dashed #cbd5e1;
+        border-radius: 12px;
+        background: #f8fafc;
+        padding: 12px;
+      }
+
+      .image-thumb {
+        display: grid;
+        min-height: 94px;
+        place-items: center;
+        border-radius: 10px;
+        background:
+          linear-gradient(
+            135deg,
+            rgba(37, 99, 235, 0.14),
+            rgba(15, 118, 110, 0.16)
+          ),
+          #eef6ff;
+        color: #475569;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .slot-title {
+        font-weight: 800;
+      }
+
+      .slot-text {
+        margin-top: 5px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 18px;
+      }
+
+      .side-note {
+        margin-top: 18px;
+        border: 1px solid #fed7aa;
+        border-radius: 10px;
+        background: var(--amber-soft);
+        padding: 12px 14px;
+        color: var(--amber);
+        font-size: 12px;
+        line-height: 18px;
+      }
+
+      .empty-editor {
+        display: none;
+        height: 100%;
+        place-items: center;
+        padding: 26px;
+        text-align: center;
+      }
+
+      .empty-card {
+        max-width: 320px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: white;
+        padding: 20px;
+      }
+
+      .shell-no-editor {
+        grid-template-columns: 72px minmax(420px, 1fr);
+      }
+
+      .shell-no-editor .editor {
+        display: none;
+      }
+
+      @media (max-width: 1080px) {
+        .app {
+          grid-template-columns: 58px minmax(360px, 1fr);
+        }
+
+        .editor {
+          position: fixed;
+          inset: 0 0 0 58px;
+          z-index: 10;
+          box-shadow: -20px 0 50px rgba(15, 23, 42, 0.18);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app shell-no-editor" id="shell">
+      <aside class="rail" aria-label="主导航">
+        <div class="rail-logo">L</div>
+        <div class="rail-item active">⌘</div>
+        <div class="rail-item">文</div>
+        <div class="rail-item">件</div>
+        <div class="rail-item">设</div>
+      </aside>
+
+      <section class="chat" aria-label="Claw 对话">
+        <header class="chat-header">
+          <div>
+            <h1 class="chat-title">Claw 写作会话</h1>
+            <div class="chat-meta">
+              内容工厂插件 · content_article_workflow · 本地已安装
+            </div>
+          </div>
+          <span class="status-pill">已连接工作区</span>
+        </header>
+
+        <div class="messages">
+          <div class="message user">
+            <div class="bubble">
+              @写文章 写一篇关于 AI Agent 工作流的公众号文章，偏实战经验。
+            </div>
+          </div>
+
+          <div class="message">
+            <div class="bubble">
+              已启动内容工厂写作流程。我会先检索和整理资料，再生成初稿。
+              <div class="process-list" aria-label="写作过程">
+                <div class="process-row">
+                  <span class="dot"></span>
+                  <div>
+                    <div class="process-title">
+                      第 1 轮检索：行业产品和交互范式
+                    </div>
+                    <div class="process-detail">
+                      整理 6 条资料，标记可引用观点和风险。
+                    </div>
+                  </div>
+                  <span class="process-time">完成</span>
+                </div>
+                <div class="process-row">
+                  <span class="dot"></span>
+                  <div>
+                    <div class="process-title">
+                      第 2 轮检索：插件化工作流案例
+                    </div>
+                    <div class="process-detail">
+                      补充工具编排、子任务拆分和产物恢复材料。
+                    </div>
+                  </div>
+                  <span class="process-time">完成</span>
+                </div>
+                <div class="process-row">
+                  <span class="dot"></span>
+                  <div>
+                    <div class="process-title">
+                      第 3 轮检索：写作结构和反例校验
+                    </div>
+                    <div class="process-detail">
+                      确定“从对话到产物画布”的主线，不把正文刷在聊天里。
+                    </div>
+                  </div>
+                  <span class="process-time">完成</span>
+                </div>
+                <div class="process-row">
+                  <span class="dot"></span>
+                  <div>
+                    <div class="process-title">写作与审稿</div>
+                    <div class="process-detail">
+                      已生成初稿、段落级大纲、引用和配图占位。
+                    </div>
+                  </div>
+                  <span class="process-time">完成</span>
+                </div>
+              </div>
+
+              <section
+                class="artifact-frame"
+                aria-label="ArtifactFrame 文章产物框"
+              >
+                <div class="artifact-frame-header">
+                  <button
+                    class="artifact-frame-open"
+                    type="button"
+                    id="openArticle"
+                  >
+                    <div class="doc-icon">文</div>
+                    <div>
+                      <div class="card-badges">
+                        <span class="badge ready">ArtifactFrame</span>
+                        <span class="badge">articleArtifacts</span>
+                        <span class="badge">流式输出中</span>
+                        <span class="badge">3 轮检索</span>
+                        <span class="badge">5 个配图位</span>
+                      </div>
+                      <div class="artifact-title">
+                        当 AI Agent 从聊天走向工作流：一篇实战复盘
+                      </div>
+                      <div class="artifact-summary">
+                        独立产物框，可承载文章、图片集、表格、网页、报告等不同
+                        renderer。
+                      </div>
+                    </div>
+                  </button>
+                  <div class="artifact-frame-actions">
+                    <button class="artifact-frame-action" type="button">
+                      收起
+                    </button>
+                    <button
+                      class="artifact-frame-action"
+                      type="button"
+                      id="openArticleSecondary"
+                    >
+                      打开右侧
+                    </button>
+                  </div>
+                </div>
+
+                <article
+                  class="artifact-frame-body streaming"
+                  id="streamingArticlePreview"
+                >
+                  <h1>当 AI Agent 从聊天走向工作流</h1>
+                  <p>
+                    很多 AI
+                    产品最开始都像一个更聪明的聊天框。用户说一句，模型回一段，看起来足够自然，但真正进入生产场景后，问题会很快暴露：资料在哪里，步骤有没有完成，产物能不能继续编辑，失败后能不能恢复。
+                  </p>
+                  <p>
+                    写文章就是一个典型例子。用户要的不是普通消息里刷出一整篇长文，而是先搜索、再判断角度、再写稿、再审稿，最后把产物放进一个独立的框里。
+                  </p>
+                  <h2>一、产物框不是普通聊天气泡</h2>
+                  <p>
+                    对话区适合承载意图、过程和状态。产物框则承载真正的交付物。它有自己的标题栏、状态、操作和渲染器，内容可以完整展示，也可以继续流式更新。
+                  </p>
+                  <p>
+                    这意味着文章不会散落在 assistant message 里，而是进入
+                    `ArtifactFrame(articleArtifacts)`。同一个框架以后也可以替换成图片集、表格、演示稿、网页或报告。
+                  </p>
+                  <div class="image-slot" contenteditable="false">
+                    <div class="image-thumb">封面占位</div>
+                    <div>
+                      <div class="slot-title">封面图：从聊天到工作流</div>
+                      <div class="slot-text">
+                        画面建议：左侧是检索和步骤，中央是独立文章产物框，右侧是可编辑画布。
+                      </div>
+                    </div>
+                  </div>
+                  <h2>二、右侧画布负责编辑，不负责替代产物框</h2>
+                  <p>
+                    点击产物框后，右侧 Article Editor
+                    打开同一篇文章。用户可以在右侧做段落编辑、查看引用、处理配图、导出版本和继续改写。
+                  </p>
+                </article>
+
+                <div class="artifact-frame-footer">
+                  <div class="artifact-frame-note">
+                    文章仍在框内流式输出。点击打开右侧 Article
+                    Editor，可编辑正文、查看引用、处理配图和继续改写。
+                  </div>
+                  <button type="button" id="openArticleFooter">
+                    打开右侧 Article Editor
+                  </button>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+
+        <footer class="composer">
+          <div class="composer-box">
+            <textarea>@写文章 继续把第三节改得更像实战复盘</textarea>
+            <button class="send" type="button">发送</button>
+          </div>
+        </footer>
+      </section>
+
+      <aside class="editor closed" id="editor" aria-label="Article Editor">
+        <header class="editor-header">
+          <div>
+            <h2 class="editor-title">
+              当 AI Agent 从聊天走向工作流：一篇实战复盘
+            </h2>
+            <div class="editor-subtitle">
+              Article Editor · 可编辑草稿 · 保存到 articleDraft
+            </div>
+          </div>
+          <div class="header-actions">
+            <button class="ghost" type="button" id="closeArticle">收起</button>
+            <button class="ghost" type="button">导出</button>
+            <button class="primary" type="button">继续改写</button>
+          </div>
+        </header>
+
+        <div class="editor-body">
+          <nav class="toolstrip" aria-label="文章工具">
+            <button class="tool active" title="正文" type="button">文</button>
+            <button class="tool" title="大纲" type="button">纲</button>
+            <button class="tool" title="引用" type="button">引</button>
+            <button class="tool" title="配图" type="button">图</button>
+            <button class="tool" title="版本" type="button">版</button>
+          </nav>
+
+          <div class="canvas-wrap">
+            <article class="article-canvas">
+              <div class="canvas-toolbar">
+                <span class="badge ready">已保存</span>
+                <span class="badge">公众号长文</span>
+                <span class="badge">约 2400 字</span>
+                <span class="badge">引用 8 条</span>
+                <span class="badge">配图位 5 个</span>
+              </div>
+
+              <div
+                class="article-content"
+                contenteditable="true"
+                spellcheck="false"
+              >
+                <h1>当 AI Agent 从聊天走向工作流</h1>
+                <p>
+                  很多 AI
+                  产品最开始都像一个更聪明的聊天框。用户说一句，模型回一段，看起来足够自然，但真正进入生产场景后，问题会很快暴露：资料在哪里，步骤有没有完成，产物能不能继续编辑，失败后能不能恢复。
+                </p>
+                <p>
+                  写文章就是一个典型例子。用户要的不是聊天框里刷出一整篇长文，而是先搜索、再判断角度、再写稿、再审稿，最后进入一个可以继续工作的文章画布。
+                </p>
+
+                <h2>一、对话应该展示过程，不应该吞掉产物</h2>
+                <p>
+                  对话区适合承载意图、过程和状态。它应该告诉用户已经做了几轮检索、当前进入哪个阶段、产物是否可打开，而不是把完整正文塞进消息流里。
+                </p>
+
+                <div class="image-slot" contenteditable="false">
+                  <div class="image-thumb">封面占位</div>
+                  <div>
+                    <div class="slot-title">封面图：从聊天到工作流</div>
+                    <div class="slot-text">
+                      画面建议：中间是可编辑文章画布，左侧是对话过程，右侧浮出资料和配图节点。风格清晰、工作台感强。
+                    </div>
+                  </div>
+                </div>
+
+                <h2>二、ArtifactFrame 是用户真正点击的对象</h2>
+                <p>
+                  产物框应该是一个稳定、可点击、可替换 renderer
+                  的对象。它不是调试面板，不展示内部字段；文章 renderer
+                  可以完整阅读，图片集 renderer 可以显示网格，表格 renderer
+                  可以显示数据预览。
+                </p>
+
+                <h2>三、右侧 Article Editor 承接长期工作</h2>
+                <p>
+                  文章进入右侧画布后，用户可以继续编辑正文、查看大纲、定位引用、生成配图、导出版本。这才是写作任务的主要工作区。
+                </p>
+
+                <div class="side-note" contenteditable="false">
+                  原型口径：旧 Profile 路径已删除；Article Workspace
+                  承接工作区事实，Article Editor 承接用户编辑界面。
+                </div>
+              </div>
+            </article>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <script>
+      const shell = document.getElementById("shell");
+      const editor = document.getElementById("editor");
+      const openArticle = document.getElementById("openArticle");
+      const openArticleSecondary = document.getElementById(
+        "openArticleSecondary",
+      );
+      const openArticleFooter = document.getElementById("openArticleFooter");
+      const closeArticle = document.getElementById("closeArticle");
+
+      const showEditor = () => {
+        shell.classList.remove("shell-no-editor");
+        editor.classList.remove("closed");
+      };
+
+      openArticle.addEventListener("click", showEditor);
+      openArticleSecondary.addEventListener("click", showEditor);
+      openArticleFooter.addEventListener("click", showEditor);
+
+      closeArticle.addEventListener("click", () => {
+        shell.classList.add("shell-no-editor");
+        editor.classList.add("closed");
+      });
+    </script>
+  </body>
+</html>

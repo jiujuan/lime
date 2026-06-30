@@ -49,6 +49,11 @@ export interface PluginMarketplaceItem {
   sourceKind: PluginMarketplaceSourceKind;
   sourceRef?: string;
   appId?: string;
+  install?: {
+    local?: boolean;
+    cloud?: boolean;
+    authentication?: string;
+  };
   enabled: boolean;
   installState: PluginMarketplaceInstallState;
   activationState: PluginMarketplaceActivationState;

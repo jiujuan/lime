@@ -428,6 +428,30 @@ afterEach(() => {
 });
 
 describe("useWorkspaceAudioTaskPreviewRuntime", () => {
+  it("普通文本对话没有配音任务时不应启动音频任务旁路", async () => {
+    const setIntervalSpy = vi.spyOn(window, "setInterval");
+    const { render } = renderHook({
+      messages: [
+        {
+          id: "assistant-news-1",
+          role: "assistant",
+          content: "今天国际新闻主要集中在能源、气候和地区安全。",
+          timestamp: new Date("2026-04-30T00:00:00.000Z"),
+        },
+      ],
+    });
+
+    await render();
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(listMediaTaskArtifacts).not.toHaveBeenCalled();
+    expect(getMediaTaskArtifact).not.toHaveBeenCalled();
+    expect(safeListen).not.toHaveBeenCalled();
+    expect(setIntervalSpy).not.toHaveBeenCalled();
+  });
+
   it("应优先从统一媒体任务索引恢复 audio_output 完成态而不读取隐藏 task JSON", async () => {
     vi.mocked(listMediaTaskArtifacts).mockResolvedValueOnce(
       buildCompletedAudioTaskIndex(),

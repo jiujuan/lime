@@ -4,6 +4,9 @@ mod agent_app_worker_runtime;
 mod agent_app_worker_turn;
 mod agent_apps;
 mod app_data;
+mod article_workspace_action_projection;
+mod article_workspace_artifact_document_projection;
+mod article_workspace_projection;
 mod artifact_content;
 mod artifact_document_versions;
 mod artifact_projection;
@@ -37,9 +40,6 @@ pub(crate) mod memory_prompt;
 mod model_providers;
 mod objectives;
 mod output_refs;
-mod product_profile_action_projection;
-mod product_profile_artifact_document_projection;
-mod product_workspace_projection;
 mod project_git;
 mod projection_payload_summary;
 mod projection_protocol;
@@ -365,6 +365,14 @@ pub trait ExecutionBackend: Send + Sync {
         Err(RuntimeCoreError::Backend(
             "runtime backend does not expose tool inventory".to_string(),
         ))
+    }
+
+    async fn prepare_runtime_worker_artifact_events(
+        &self,
+        _request: &ExecutionRequest,
+        _events: &mut Vec<RuntimeEvent>,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
     }
 }
 

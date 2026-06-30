@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import * as inputbarRuntimeStatusLineModule from "../utils/inputbarRuntimeStatusLine";
 import {
   mockUseConfiguredProviders,
   mockFindConfiguredProviderBySelection,
@@ -11,8 +12,64 @@ import type {
   MockConfiguredProvider,
 } from "./MessageList.testHarness";
 
+vi.mock("../utils/inputbarRuntimeStatusLine", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../utils/inputbarRuntimeStatusLine")>();
+  return {
+    ...actual,
+    buildInputbarRuntimeStatusLineModel: vi.fn(
+      actual.buildInputbarRuntimeStatusLineModel,
+    ),
+  };
+});
+
 describe("MessageList runtime status", () => {
+  it("普通完成消息没有 runtime evidence 时不应构建输入栏运行状态", () => {
+    vi.mocked(
+      inputbarRuntimeStatusLineModule.buildInputbarRuntimeStatusLineModel,
+    ).mockClear();
+    const now = new Date();
+    const messages: Message[] = [
+      {
+        id: "msg-user-plain-completed",
+        role: "user",
+        content: "hello",
+        timestamp: now,
+      },
+      {
+        id: "msg-assistant-plain-completed",
+        role: "assistant",
+        content: "done",
+        timestamp: new Date(now.getTime() + 1000),
+      },
+    ];
+
+    const container = render(messages, {
+      isSending: false,
+      turns: [],
+      threadItems: [],
+      pendingActions: [],
+      queuedTurns: [],
+      childSubagentSessions: [],
+      threadRead: {
+        thread_id: "thread-plain-completed",
+        status: "completed",
+        pending_requests: [],
+      },
+    });
+
+    expect(
+      inputbarRuntimeStatusLineModule.buildInputbarRuntimeStatusLineModel,
+    ).not.toHaveBeenCalled();
+    expect(
+      container.querySelector('[data-testid="inputbar-runtime-status-line"]'),
+    ).toBeNull();
+  });
+
   it("复杂任务完成后应把运行状态、耗时与 token 结算收口到最后一条 assistant 消息尾部", async () => {
+    vi.mocked(
+      inputbarRuntimeStatusLineModule.buildInputbarRuntimeStatusLineModel,
+    ).mockClear();
     const now = new Date();
     const messages: Message[] = [
       {
@@ -134,6 +191,9 @@ describe("MessageList runtime status", () => {
     expect(
       container.querySelector('[data-testid="token-usage-display"]'),
     ).toBeNull();
+    expect(
+      inputbarRuntimeStatusLineModule.buildInputbarRuntimeStatusLineModel,
+    ).toHaveBeenCalled();
   });
 
   it("流式运行态不应再在消息底部重复渲染阶段 pill", () => {

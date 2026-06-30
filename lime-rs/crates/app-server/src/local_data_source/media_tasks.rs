@@ -6,6 +6,7 @@ use crate::model_task_contract::{
 };
 use app_server_protocol::MediaTaskArtifactAudioCompleteParams;
 use app_server_protocol::MediaTaskArtifactAudioCreateParams;
+use app_server_protocol::MediaTaskArtifactImageCompleteParams;
 use app_server_protocol::MediaTaskArtifactImageCreateParams;
 use app_server_protocol::MediaTaskArtifactListParams;
 use app_server_protocol::MediaTaskArtifactListResponse;
@@ -44,6 +45,12 @@ pub(crate) fn complete_audio_media_task_artifact(
     params: MediaTaskArtifactAudioCompleteParams,
 ) -> Result<MediaTaskArtifactResponse, String> {
     media_task::complete_audio_generation_task_artifact(params)
+}
+
+pub(crate) fn complete_image_media_task_artifact(
+    params: MediaTaskArtifactImageCompleteParams,
+) -> Result<MediaTaskArtifactResponse, String> {
+    media_task::complete_image_generation_task_artifact(params)
 }
 
 pub(crate) fn get_media_task_artifact(

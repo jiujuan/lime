@@ -26,6 +26,7 @@ vi.mock("@/lib/api/skill-execution", () => ({
 
 interface HookProps {
   isThemeWorkbench: boolean;
+  sidebarVisible: boolean;
   sessionId?: string | null;
   messages: Parameters<
     typeof useWorkspaceGeneralWorkbenchSidebarRuntime
@@ -56,6 +57,7 @@ function mountHook(initialProps?: Partial<HookProps>): HookHarness {
   > | null = null;
   let currentProps: HookProps = {
     isThemeWorkbench: true,
+    sidebarVisible: true,
     sessionId: null,
     messages: [],
     isSending: false,
@@ -118,6 +120,35 @@ describe("useWorkspaceGeneralWorkbenchSidebarRuntime", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("侧栏不可见时不应预取工作台历史和 Skill 详情", async () => {
+    const harness = mountHook({
+      sidebarVisible: false,
+      sessionId: "session-general-1",
+      messages: [
+        {
+          id: "user-1",
+          role: "user",
+          content: "/content_post 写一篇新品稿",
+          timestamp: new Date("2026-03-24T14:00:00.000Z"),
+        },
+      ],
+    });
+
+    try {
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(mockExecutionRunListGeneralWorkbenchHistory).not.toHaveBeenCalled();
+      expect(mockSkillGetDetail).not.toHaveBeenCalled();
+      expect(harness.getValue().generalWorkbenchHistoryLoading).toBe(false);
+      expect(harness.getValue().generalWorkbenchHistoryHasMore).toBe(false);
+    } finally {
+      harness.unmount();
+    }
   });
 
   it("应通过 artifact protocol 将后端运行项映射为侧栏产物路径", () => {

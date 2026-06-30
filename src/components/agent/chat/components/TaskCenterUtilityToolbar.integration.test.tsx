@@ -22,6 +22,8 @@ const {
   mockXtermWrite,
   mockXtermWriteln,
   mockReadConversationImportRuntimeEvents,
+  mockBuildGeneralWorkbenchTaskRailProjection,
+  mockBuildWorkspaceTaskRailRuntimeContext,
 } = vi.hoisted(() => ({
   mockOpenProjectPathWithTool: vi.fn(),
   mockReadProjectGitStatus: vi.fn(),
@@ -38,6 +40,8 @@ const {
   mockXtermWrite: vi.fn(),
   mockXtermWriteln: vi.fn(),
   mockReadConversationImportRuntimeEvents: vi.fn(),
+  mockBuildGeneralWorkbenchTaskRailProjection: vi.fn(),
+  mockBuildWorkspaceTaskRailRuntimeContext: vi.fn(),
 }));
 
 vi.mock("@/lib/api/fileSystem", () => ({
@@ -59,6 +63,34 @@ vi.mock("@/lib/api/projectShell", () => ({
 vi.mock("@/lib/api/conversationImport", () => ({
   readConversationImportRuntimeEvents: mockReadConversationImportRuntimeEvents,
 }));
+
+vi.mock("./generalWorkbenchTaskRailViewModel", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("./generalWorkbenchTaskRailViewModel")>();
+  return {
+    ...actual,
+    buildGeneralWorkbenchTaskRailProjection: (
+      ...args: Parameters<typeof actual.buildGeneralWorkbenchTaskRailProjection>
+    ) => {
+      mockBuildGeneralWorkbenchTaskRailProjection(...args);
+      return actual.buildGeneralWorkbenchTaskRailProjection(...args);
+    },
+  };
+});
+
+vi.mock("../workspace/useWorkspaceTaskRailRuntime", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../workspace/useWorkspaceTaskRailRuntime")>();
+  return {
+    ...actual,
+    buildWorkspaceTaskRailRuntimeContext: (
+      ...args: Parameters<typeof actual.buildWorkspaceTaskRailRuntimeContext>
+    ) => {
+      mockBuildWorkspaceTaskRailRuntimeContext(...args);
+      return actual.buildWorkspaceTaskRailRuntimeContext(...args);
+    },
+  };
+});
 
 vi.mock("@xterm/xterm/css/xterm.css", () => ({}));
 
@@ -141,8 +173,25 @@ vi.mock("@/components/ui/button", () => ({
   ),
 }));
 
+const PopoverTestContext = React.createContext<{
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+} | null>(null);
+
 vi.mock("@/components/ui/popover", () => ({
-  Popover: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  Popover: ({
+    children,
+    open,
+    onOpenChange,
+  }: {
+    children: React.ReactNode;
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+  }) => (
+    <PopoverTestContext.Provider value={{ open, onOpenChange }}>
+      {children}
+    </PopoverTestContext.Provider>
+  ),
   PopoverContent: ({
     children,
     align: _align,
@@ -152,9 +201,21 @@ vi.mock("@/components/ui/popover", () => ({
     align?: string;
     sideOffset?: number;
   }) => <div {...props}>{children}</div>,
-  PopoverTrigger: ({ children }: { children: React.ReactNode }) => (
-    <>{children}</>
-  ),
+  PopoverTrigger: ({ children }: { children: React.ReactNode }) => {
+    const context = React.useContext(PopoverTestContext);
+    if (!React.isValidElement(children)) {
+      return <>{children}</>;
+    }
+    const child = children as React.ReactElement<{
+      onClick?: React.MouseEventHandler<HTMLElement>;
+    }>;
+    return React.cloneElement(child, {
+      onClick: (event: React.MouseEvent<HTMLElement>) => {
+        child.props.onClick?.(event);
+        context?.onOpenChange?.(!context.open);
+      },
+    });
+  },
 }));
 
 interface MountedHarness {
@@ -284,7 +345,7 @@ function renderToolbar(
 }
 
 describe("TaskCenterUtilityToolbar", () => {
-  it("顶部工具栏按钮应保持单行图标布局，避免窄宽度下文字掉行", () => {
+  it("顶部工具栏应允许工具组自适应换行，避免窄宽度下挤压内容", () => {
     const container = renderToolbar({
       isCanvasOpen: true,
       harnessPendingCount: 3,
@@ -300,9 +361,12 @@ describe("TaskCenterUtilityToolbar", () => {
       '[data-testid="task-center-workbench-toggle"]',
     );
 
-    expect(toolbar?.className).toContain("flex-nowrap");
-    expect(toolbar?.className).toContain("whitespace-nowrap");
-    expect(panelGroup?.className).toContain("flex-nowrap");
+    expect(toolbar?.className).toContain("flex-wrap");
+    expect(toolbar?.className).toContain("gap-y-1");
+    expect(toolbar?.className).not.toContain("flex-nowrap");
+    expect(toolbar?.className).not.toContain("whitespace-nowrap");
+    expect(panelGroup?.className).toContain("flex-wrap");
+    expect(panelGroup?.className).not.toContain("overflow-hidden");
     expect(workbenchToggle?.className).toContain("shrink-0");
     expect(workbenchToggle?.textContent?.trim()).toBe("");
   });
@@ -450,34 +514,9 @@ describe("TaskCenterUtilityToolbar", () => {
     expect(disabledToggle?.textContent).toContain("4");
   });
 
-  it("Trace 入口应作为独立右侧 surface 图标态展开和收起", () => {
+  it("右侧 surface projection 应能驱动 Trace 入口展开态、badge 和点击回调", () => {
     const onToggleTracePanel = vi.fn();
     const container = renderToolbar({
-      showTraceToggle: true,
-      tracePanelVisible: false,
-      onToggleTracePanel,
-    });
-
-    const toggle = container.querySelector<HTMLButtonElement>(
-      '[data-testid="task-center-trace-toggle"]',
-    );
-
-    expect(toggle).not.toBeNull();
-    expect(toggle?.textContent?.trim()).toBe("");
-    expect(toggle?.getAttribute("aria-expanded")).toBe("false");
-    expect(toggle?.getAttribute("aria-label")).toBe("打开 Trace");
-    expect(toggle?.getAttribute("title")).toBe("Trace");
-    expect(toggle?.className).not.toContain("lime-chrome-tab-active-surface");
-
-    act(() => {
-      toggle?.click();
-    });
-
-    expect(onToggleTracePanel).toHaveBeenCalledTimes(1);
-
-    const activeContainer = renderToolbar({
-      showTraceToggle: true,
-      tracePanelVisible: false,
       onToggleTracePanel,
       rightSurfaceLaunchers: [
         {
@@ -489,35 +528,42 @@ describe("TaskCenterUtilityToolbar", () => {
         },
       ],
     });
-    const activeToggle = activeContainer.querySelector<HTMLButtonElement>(
+
+    const toggle = container.querySelector<HTMLButtonElement>(
       '[data-testid="task-center-trace-toggle"]',
     );
 
-    expect(activeToggle?.getAttribute("aria-expanded")).toBe("true");
-    expect(activeToggle?.getAttribute("aria-label")).toBe("关闭 Trace");
-    expect(activeToggle?.className).toContain("lime-chrome-tab-active-surface");
-    expect(activeToggle?.textContent).toContain("2");
+    expect(toggle).not.toBeNull();
+    expect(toggle?.getAttribute("aria-expanded")).toBe("true");
+    expect(toggle?.getAttribute("aria-label")).toBe("关闭 Trace");
+    expect(toggle?.className).toContain("lime-chrome-tab-active-surface");
+    expect(toggle?.textContent).toContain("2");
 
-    const disabledContainer = renderToolbar({
+    act(() => {
+      toggle?.click();
+    });
+
+    expect(onToggleTracePanel).toHaveBeenCalledTimes(1);
+  });
+
+  it("旧字段不应再控制 Trace 入口", () => {
+    const onToggleTracePanel = vi.fn();
+    const container = renderToolbar({
       showTraceToggle: true,
       tracePanelVisible: false,
-      rightSurfaceLaunchers: [
-        {
-          kind: "trace",
-          active: false,
-          disabled: true,
-          pendingCount: 1,
-          collapseTarget: "topToolbar",
-        },
-      ],
+      onToggleTracePanel,
+    } as Partial<React.ComponentProps<typeof TaskCenterUtilityToolbar>> & {
+      showTraceToggle: boolean;
+      tracePanelVisible: boolean;
+      onToggleTracePanel: () => void;
     });
-    const disabledToggle = disabledContainer.querySelector<HTMLButtonElement>(
+
+    const toggle = container.querySelector<HTMLButtonElement>(
       '[data-testid="task-center-trace-toggle"]',
     );
 
-    expect(disabledToggle?.disabled).toBe(true);
-    expect(disabledToggle?.getAttribute("aria-expanded")).toBe("false");
-    expect(disabledToggle?.textContent).toContain("1");
+    expect(toggle).toBeNull();
+    expect(onToggleTracePanel).not.toHaveBeenCalled();
   });
 
   it("右侧 surface projection 应能驱动文件入口展开态、badge 和点击回调", () => {
@@ -622,13 +668,13 @@ describe("TaskCenterUtilityToolbar", () => {
     expect(onToggleObjectCanvasPanel).toHaveBeenCalledTimes(1);
   });
 
-  it("右侧 productProfile projection 应复用对象入口并显示产物 Profile 语义", () => {
+  it("右侧 Article Editor projection 应复用对象入口并显示文章编辑器语义", () => {
     const onToggleObjectCanvasPanel = vi.fn();
     const container = renderToolbar({
       onToggleObjectCanvasPanel,
       rightSurfaceLaunchers: [
         {
-          kind: "productProfile",
+          kind: "articleWorkspace",
           active: true,
           disabled: false,
           pendingCount: 1,
@@ -644,20 +690,20 @@ describe("TaskCenterUtilityToolbar", () => {
       ],
     });
 
-    const productProfileToggle = container.querySelector<HTMLButtonElement>(
+    const articleEditorToggle = container.querySelector<HTMLButtonElement>(
       '[data-testid="task-center-object-canvas-toggle"]',
     );
 
-    expect(productProfileToggle).not.toBeNull();
-    expect(productProfileToggle?.getAttribute("aria-expanded")).toBe("true");
-    expect(productProfileToggle?.getAttribute("aria-label")).toBe(
-      "关闭产物 Profile",
+    expect(articleEditorToggle).not.toBeNull();
+    expect(articleEditorToggle?.getAttribute("aria-expanded")).toBe("true");
+    expect(articleEditorToggle?.getAttribute("aria-label")).toBe(
+      "关闭文章编辑器",
     );
-    expect(productProfileToggle?.getAttribute("title")).toBe("产物 Profile");
-    expect(productProfileToggle?.textContent).toContain("3");
+    expect(articleEditorToggle?.getAttribute("title")).toBe("文章编辑器");
+    expect(articleEditorToggle?.textContent).toContain("3");
 
     act(() => {
-      productProfileToggle?.click();
+      articleEditorToggle?.click();
     });
 
     expect(onToggleObjectCanvasPanel).toHaveBeenCalledTimes(1);
@@ -786,28 +832,11 @@ describe("TaskCenterUtilityToolbar", () => {
             ],
           },
         ],
-        context: {
-          providerType: "cloud",
-          model: "reasoner-pro",
-          accessMode: "current",
-          reasoningEffort: "medium",
-          workspacePath: "/tmp/project",
-          objectiveText: "完成任务轨道",
-          changedFileCount: 2,
-          changedFiles: ["src/App.tsx", "src/index.ts"],
-          patchCount: 2,
-          runningPatchCount: 1,
-          sourceCount: 4,
-          sourceEvidenceCount: 1,
-          sourceLabels: [
-            "AG-UI spec",
-            "https://example.com/report",
-            "docs/context.md",
-          ],
-          subtaskTotalCount: 3,
-          subtaskActiveCount: 1,
-          subtaskCompletedCount: 2,
-        },
+        providerType: "cloud",
+        model: "reasoner-pro",
+        accessMode: "current",
+        reasoningEffort: "medium",
+        workspaceRootPath: "/tmp/project",
         threadRead: {
           thread_id: "thread-1",
           active_turn_id: "turn-1",
@@ -824,10 +853,16 @@ describe("TaskCenterUtilityToolbar", () => {
             updated_at: "2026-06-16T10:00:00.000Z",
           },
           context_summary: {
-            sources: ["https://docs.example.com/task-rail"],
+            sources: ["AG-UI spec", "https://example.com/report", "docs/context.md"],
           },
           evidence_summary: {
             evidence_refs: ["evidence/task-rail.json"],
+          },
+          change_summary: {
+            changed_file_count: 2,
+            changed_files: ["src/App.tsx", "src/index.ts"],
+            patch_count: 2,
+            running_patch_count: 1,
           },
         } as any,
         childSubagentSessions: [
@@ -838,6 +873,22 @@ describe("TaskCenterUtilityToolbar", () => {
             updated_at: 2,
             session_type: "subagent",
             runtime_status: "running",
+          },
+          {
+            id: "subagent-2",
+            name: "验证",
+            created_at: 1,
+            updated_at: 2,
+            session_type: "subagent",
+            runtime_status: "completed",
+          },
+          {
+            id: "subagent-3",
+            name: "收尾",
+            created_at: 1,
+            updated_at: 2,
+            session_type: "subagent",
+            runtime_status: "completed",
           },
         ],
         onOpenOutput,
@@ -858,6 +909,9 @@ describe("TaskCenterUtilityToolbar", () => {
     const taskRail = document.body.querySelector(
       '[data-testid="task-center-task-rail"]',
     );
+    const runControlGrid = document.body.querySelector(
+      '[data-testid="task-center-run-control-section-grid"]',
+    );
     const items = Array.from(
       document.body.querySelectorAll(
         '[data-testid="task-center-task-rail-item"]',
@@ -865,7 +919,13 @@ describe("TaskCenterUtilityToolbar", () => {
     );
 
     expect(popover?.textContent).toContain("环境信息");
+    expect(popover?.className).toContain("min(30rem,calc(100vw-1rem))");
+    expect(popover?.className).not.toContain("w-[284px]");
     expect(taskRail?.textContent).toContain("当前任务");
+    expect(runControlGrid?.className).toContain(
+      "repeat(auto-fit,minmax(min(100%,12rem),1fr))",
+    );
+    expect(runControlGrid?.className).not.toContain("grid-cols-");
     expect(taskRail?.textContent).toContain("环境");
     expect(taskRail?.textContent).toContain("运行");
     expect(taskRail?.textContent).toContain("计划");
@@ -1005,6 +1065,39 @@ describe("TaskCenterUtilityToolbar", () => {
     expect(onOpenOutput).toHaveBeenCalledWith(
       "internal/roadmap/agent-workspace/task-rail.md",
     );
+  });
+
+  it("默认不打开环境信息时不应构建任务详情投影", () => {
+    renderToolbar({
+      taskRail: {
+        workflowSteps: [
+          { id: "read", title: "读取任务区结构", status: "completed" },
+        ],
+        messages: [],
+        threadRead: {
+          thread_id: "thread-heavy",
+          active_turn_id: "turn-heavy",
+          status: "completed",
+        } as AgentRuntimeThreadReadModel,
+        childSubagentSessions: [
+          {
+            id: "subagent-heavy",
+            name: "实现",
+            created_at: 1,
+            updated_at: 2,
+            session_type: "subagent",
+            runtime_status: "completed",
+          },
+        ],
+      },
+    });
+
+    expect(mockBuildGeneralWorkbenchTaskRailProjection).not.toHaveBeenCalled();
+    expect(mockBuildWorkspaceTaskRailRuntimeContext).not.toHaveBeenCalled();
+    expect(mockReadProjectGitStatus).not.toHaveBeenCalled();
+    expect(
+      document.body.querySelector('[data-testid="task-center-task-rail"]'),
+    ).toBeNull();
   });
 
   it("环境信息来源区应按需读取导入会话的完整运行记录", async () => {

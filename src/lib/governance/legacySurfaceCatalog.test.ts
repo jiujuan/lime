@@ -3481,6 +3481,7 @@ describe("legacySurfaceCatalog", () => {
       "lime-rs/crates/app-server/src/file_checkpoint.rs",
       "lime-rs/crates/app-server/src/file_checkpoint_snapshot.rs",
       "lime-rs/crates/app-server/src/runtime/artifact_reader.rs",
+      "lime-rs/crates/app-server/src/runtime/artifact_projection.rs",
       "lime-rs/crates/app-server/src/runtime/artifact_sidecar.rs",
       "lime-rs/crates/app-server/src/runtime/evidence_provider.rs",
       "lime-rs/crates/app-server/src/runtime/file_checkpoint_projection.rs",
@@ -3516,6 +3517,7 @@ describe("legacySurfaceCatalog", () => {
     expect(monitor?.allowedPaths).toEqual([
       "lime-rs/crates/app-server/src/runtime/artifact_sidecar.rs",
       "lime-rs/crates/app-server/src/runtime/artifact_reader.rs",
+      "lime-rs/crates/app-server/src/runtime/agent_app_worker_runtime.rs",
       "lime-rs/crates/app-server/src/runtime/event_store.rs",
       "lime-rs/crates/app-server/src/runtime/tests/artifacts.rs",
       "lime-rs/crates/app-server/src/runtime/tests/evidence_exports.rs",
@@ -3867,6 +3869,32 @@ describe("legacySurfaceCatalog", () => {
     expect(source).not.toContain("code_orchestrated runtime");
     expect(source).toContain(
       "legacy code_orchestrated 只能在兼容边界归一到 react",
+    );
+  });
+
+  it("旧 Product Profile 右栏 key 不应回流到 Article Workspace current surface", () => {
+    const monitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) => entry.id === "agent-chat-product-profile-current-surface-key",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.patterns).toEqual(
+      expect.arrayContaining([
+        "\"productProfile\"",
+        "productProfileAvailable",
+        "productProfileEnabled",
+        "AgentAppProductProfile",
+        "agentChat.navbar.productProfile",
+        "agentChat.rightSurface.tabs.productProfile",
+        "agentApp.apps.center.host.productProfile",
+      ]),
+    );
+    expect(monitor?.allowedPaths).toEqual(
+      expect.arrayContaining([
+        "src/components/agent/chat/workspace/right-surface/rightSurfaceTypes.ts",
+        "src/features/plugin/history/pluginHistoryRestore.ts",
+      ]),
     );
   });
 

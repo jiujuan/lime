@@ -72,7 +72,7 @@ function metricValue(
   summary: AgentUiPerformanceDiagnosticSummary,
   key: ClawTraceBaselineMetricKey,
 ): number | null {
-  for (const session of summary.sessions.toReversed()) {
+  for (const session of [...summary.sessions].reverse()) {
     const value = session.metrics[key];
     if (typeof value === "number" && Number.isFinite(value)) {
       return Math.max(0, Math.round(value));

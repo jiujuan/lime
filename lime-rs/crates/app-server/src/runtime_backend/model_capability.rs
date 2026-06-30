@@ -135,6 +135,17 @@ pub fn resolve_reasoning_policy(
     let effective_level = requested_level
         .filter(|level| capability.supported_reasoning_levels.contains(level))
         .or_else(|| {
+            (requested_level == Some(ReasoningLevel::Minimal))
+                .then(|| {
+                    capability
+                        .supported_reasoning_levels
+                        .iter()
+                        .find(|level| **level == ReasoningLevel::Low)
+                        .copied()
+                })
+                .flatten()
+        })
+        .or_else(|| {
             capability
                 .supported_reasoning_levels
                 .iter()
@@ -172,10 +183,10 @@ pub fn model_effective_payload(capability: &ModelCapability, policy: &ReasoningP
 
 fn standard_reasoning_levels() -> Vec<ReasoningLevel> {
     vec![
-        ReasoningLevel::Minimal,
         ReasoningLevel::Low,
         ReasoningLevel::Medium,
         ReasoningLevel::High,
+        ReasoningLevel::Max,
         ReasoningLevel::XHigh,
     ]
 }

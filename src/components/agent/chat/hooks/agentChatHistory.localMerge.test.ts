@@ -202,6 +202,73 @@ describe("agentChatHistory local merge", () => {
     expect(mergedMessages[3]?.toolCalls?.[0]?.name).toBe("read_file");
   });
 
+  it("刷新会话详情时不应用完成标记覆盖同 turn 本地正文", () => {
+    const turnId = "turn-news-fixture";
+    const localMessages = [
+      {
+        id: "local-user-news",
+        role: "user" as const,
+        content: "整理今天的国际新闻",
+        timestamp: new Date("2026-06-29T04:26:20.000Z"),
+        runtimeTurnId: turnId,
+      },
+      {
+        id: "local-assistant-news",
+        role: "assistant" as const,
+        content:
+          "1. 多国外交议题持续升温，地区安全与经贸协商仍是焦点。\n2. 全球市场继续关注能源、供应链和主要央行政策变化。\n3. 国际组织呼吁在气候、粮食与人道援助议题上保持协调。\n",
+        timestamp: new Date("2026-06-29T04:26:20.540Z"),
+        runtimeTurnId: turnId,
+        contentParts: [
+          {
+            type: "text" as const,
+            text:
+              "1. 多国外交议题持续升温，地区安全与经贸协商仍是焦点。\n2. 全球市场继续关注能源、供应链和主要央行政策变化。\n3. 国际组织呼吁在气候、粮食与人道援助议题上保持协调。\n",
+          },
+        ],
+      },
+    ];
+    const hydratedMessages = [
+      {
+        id: "history-user-news",
+        role: "user" as const,
+        content: "整理今天的国际新闻",
+        timestamp: new Date("2026-06-29T04:26:20.100Z"),
+        runtimeTurnId: turnId,
+      },
+      {
+        id: "history-assistant-news",
+        role: "assistant" as const,
+        content: "CLAW_NEWS_FIXTURE_DONE",
+        timestamp: new Date("2026-06-29T04:26:20.700Z"),
+        runtimeTurnId: turnId,
+        contentParts: [
+          {
+            type: "text" as const,
+            text: "CLAW_NEWS_FIXTURE_DONE",
+          },
+        ],
+        usage: {
+          input_tokens: 120,
+          output_tokens: 24,
+        },
+      },
+    ];
+
+    const mergedMessages = mergeHydratedMessagesWithLocalState(
+      localMessages,
+      hydratedMessages,
+    );
+
+    expect(mergedMessages[1]?.content).toContain("全球市场继续关注能源");
+    expect(mergedMessages[1]?.content).toContain("国际组织呼吁");
+    expect(mergedMessages[1]?.content).not.toContain("CLAW_NEWS_FIXTURE_DONE");
+    expect(mergedMessages[1]?.usage).toEqual({
+      input_tokens: 120,
+      output_tokens: 24,
+    });
+  });
+
   it("刷新会话详情时应保留同 turn 本地 commentary 过程文本", () => {
     const turnId = "turn-web-tools-commentary-merge";
     const localMessages = [

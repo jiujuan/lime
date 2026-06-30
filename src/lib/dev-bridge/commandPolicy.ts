@@ -9,6 +9,7 @@ export type DevBridgeCommandTimeoutProfile =
   | "app-server-turn-start"
   | "app-server-read"
   | "agent-runtime"
+  | "agent-app-package-inspect"
   | "agent-app-ui-runtime-start"
   | "agent-app-package"
   | "desktop-user-interaction"
@@ -165,6 +166,7 @@ const APP_SERVER_CURRENT_METHODS = new Set([
   "wechatChannel/accounts/list",
   "mediaTaskArtifact/image/create",
   "mediaTaskArtifact/audio/create",
+  "mediaTaskArtifact/image/complete",
   "mediaTaskArtifact/audio/complete",
   "mediaTaskArtifact/get",
   "mediaTaskArtifact/list",
@@ -321,6 +323,9 @@ export function resolveDevBridgeCommandTimeoutProfile(
   if (isAppServerKnowledgeCompileCommand(command, args)) {
     return "knowledge-compile";
   }
+  if (isAppServerAgentAppPackageInspectCommand(command, args)) {
+    return "agent-app-package-inspect";
+  }
   if (isAppServerCurrentMethodCommand(command, args)) {
     return "app-server-read";
   }
@@ -420,6 +425,18 @@ function isAppServerCurrentMethodCommand(
   }
   return extractAppServerJsonLines(args).some((line) =>
     jsonRpcLineHasAnyMethod(line, APP_SERVER_CURRENT_METHODS),
+  );
+}
+
+function isAppServerAgentAppPackageInspectCommand(
+  command: string,
+  args: unknown,
+): boolean {
+  if (command !== APP_SERVER_HANDLE_JSON_LINES_COMMAND) {
+    return false;
+  }
+  return extractAppServerJsonLines(args).some((line) =>
+    jsonRpcLineHasMethod(line, "agentAppLocalPackage/inspect"),
   );
 }
 

@@ -24,7 +24,11 @@ describe("agentStreamPerformanceMetrics", () => {
     clearConversationProjectionDiagnostics();
   });
 
-  it("记录现有性能指标时应同步写入 Conversation Projection Store", () => {
+  async function flushProjectionQueue() {
+    await Promise.resolve();
+  }
+
+  it("记录现有性能指标时应同步写入 diagnostics，并异步写入 Agent UI projection", async () => {
     const trace = {
       requestId: "request-stream-a",
       sessionId: "draft-session-a",
@@ -60,6 +64,10 @@ describe("agentStreamPerformanceMetrics", () => {
       },
     });
     expect(projection?.at).toBe(entry.at);
+    expect(
+      selectAgentUiProjectionEvents(conversationProjectionStore.getSnapshot()),
+    ).toEqual([]);
+    await flushProjectionQueue();
     expect(
       selectAgentUiProjectionEvents(conversationProjectionStore.getSnapshot()),
     ).toEqual([

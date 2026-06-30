@@ -1,6 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { projectCodingWorkbenchViewFromEvents } from "@limecloud/agent-runtime-projection";
 import { buildWorkspaceConversationCodingViews } from "./workspaceConversationCodingViews";
 
 vi.mock("@/lib/api/executionProcess", () => ({
@@ -10,6 +11,17 @@ vi.mock("@/lib/api/executionProcess", () => ({
   terminateExecutionProcess: vi.fn(async () => ({ snapshot: {} })),
   writeExecutionProcessStdin: vi.fn(async () => ({})),
 }));
+
+vi.mock("@limecloud/agent-runtime-projection", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@limecloud/agent-runtime-projection")>();
+  return {
+    ...actual,
+    projectCodingWorkbenchViewFromEvents: vi.fn(
+      actual.projectCodingWorkbenchViewFromEvents,
+    ),
+  };
+});
 
 vi.mock("react-i18next", async () => {
   const agentZhCN = (await import("@/i18n/resources/zh-CN/agent.json"))
@@ -61,7 +73,43 @@ afterEach(() => {
 });
 
 describe("buildWorkspaceConversationCodingViews", () => {
+  it("默认无 coding read model 时不应构建工作台投影", () => {
+    vi.mocked(projectCodingWorkbenchViewFromEvents).mockClear();
+
+    const views = buildWorkspaceConversationCodingViews({
+      t: t as never,
+      locale: "zh-CN",
+      turns: [
+        {
+          id: "turn-plain",
+          thread_id: "thread-plain",
+          prompt_text: "普通对话",
+          status: "completed",
+          started_at: "2026-06-24T10:00:00.000Z",
+          completed_at: "2026-06-24T10:00:01.000Z",
+          created_at: "2026-06-24T10:00:00.000Z",
+          updated_at: "2026-06-24T10:00:01.000Z",
+        },
+      ],
+      currentTurnId: "turn-plain",
+      threadRead: null,
+      pendingActions: [],
+      submittedActionsInFlight: [],
+      queuedTurns: [],
+      isSending: false,
+    });
+
+    expect(projectCodingWorkbenchViewFromEvents).not.toHaveBeenCalled();
+    expect(views.currentSessionTurn?.id).toBe("turn-plain");
+    expect(views.counters.shouldUseRuntimeWorkbench).toBe(false);
+    expect(views.sessionView).toBeNull();
+    expect(views.outputView).toBeNull();
+    expect(views.logView).toBeNull();
+    expect(views.changeView).toBeNull();
+  });
+
   it("进程控制成功后应刷新 session read model", async () => {
+    vi.mocked(projectCodingWorkbenchViewFromEvents).mockClear();
     const onRefreshSessionReadModel = vi.fn(async () => true);
     const views = buildWorkspaceConversationCodingViews({
       t: t as never,
@@ -121,6 +169,7 @@ describe("buildWorkspaceConversationCodingViews", () => {
 
     const { readExecutionProcessStatus } =
       await import("@/lib/api/executionProcess");
+    expect(projectCodingWorkbenchViewFromEvents).toHaveBeenCalled();
     expect(readExecutionProcessStatus).toHaveBeenCalledWith("process-1");
     expect(onRefreshSessionReadModel).toHaveBeenCalledTimes(1);
   });

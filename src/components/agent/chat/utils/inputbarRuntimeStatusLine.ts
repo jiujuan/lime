@@ -47,20 +47,20 @@ export interface InputbarRuntimeStatusLineModel {
 
 interface BuildInputbarRuntimeStatusLineModelParams {
   messages: Message[];
-  turns?: AgentThreadTurn[];
-  threadItems?: AgentThreadItem[];
+  turns?: readonly AgentThreadTurn[];
+  threadItems?: readonly AgentThreadItem[];
   currentTurnId?: string | null;
   threadRead?: AgentRuntimeThreadReadModel | null;
-  pendingActions?: ActionRequired[];
-  submittedActionsInFlight?: ActionRequired[];
-  queuedTurns?: QueuedTurnSnapshot[];
-  childSubagentSessions?: AsterSubagentSessionInfo[];
+  pendingActions?: readonly ActionRequired[];
+  submittedActionsInFlight?: readonly ActionRequired[];
+  queuedTurns?: readonly QueuedTurnSnapshot[];
+  childSubagentSessions?: readonly AsterSubagentSessionInfo[];
   isSending?: boolean;
 }
 
 function resolveVisiblePendingRequestCount(
   threadRead: AgentRuntimeThreadReadModel | null | undefined,
-  submittedActionsInFlight: ActionRequired[],
+  submittedActionsInFlight: readonly ActionRequired[],
 ): number {
   const submittedRequestIds = new Set(
     submittedActionsInFlight.map((item) => item.requestId),
@@ -76,13 +76,13 @@ function resolveVisiblePendingRequestCount(
 }
 
 function resolveVisiblePendingActions(
-  pendingActions: ActionRequired[],
+  pendingActions: readonly ActionRequired[],
 ): ActionRequired[] {
   return pendingActions.filter((action) => action.status !== "submitted");
 }
 
 function resolveLatestTurn(
-  turns: AgentThreadTurn[],
+  turns: readonly AgentThreadTurn[],
   currentTurnId?: string | null,
 ): AgentThreadTurn | null {
   if (currentTurnId) {
@@ -96,7 +96,7 @@ function resolveLatestTurn(
 
 function resolveLatestTurnItems(
   latestTurn: AgentThreadTurn | null,
-  threadItems: AgentThreadItem[],
+  threadItems: readonly AgentThreadItem[],
 ): AgentThreadItem[] {
   if (!latestTurn) {
     return [];
@@ -105,7 +105,9 @@ function resolveLatestTurnItems(
   return threadItems.filter((item) => item.turn_id === latestTurn.id);
 }
 
-function resolveLatestAssistantMessage(messages: Message[]): Message | null {
+function resolveLatestAssistantMessage(
+  messages: readonly Message[],
+): Message | null {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (message?.role === "assistant") {
@@ -120,8 +122,8 @@ function resolveFallbackStatus(params: {
   latestTurn: AgentThreadTurn | null;
   latestTurnItems: AgentThreadItem[];
   threadRead?: AgentRuntimeThreadReadModel | null;
-  pendingActions: ActionRequired[];
-  submittedActionsInFlight: ActionRequired[];
+  pendingActions: readonly ActionRequired[];
+  submittedActionsInFlight: readonly ActionRequired[];
   queuedTurnCount: number;
   isSending: boolean;
 }): AgentTaskRuntimeStatus | null {
@@ -203,7 +205,7 @@ function resolveFallbackStatus(params: {
 }
 
 function resolveSubtaskStats(
-  childSubagentSessions: AsterSubagentSessionInfo[],
+  childSubagentSessions: readonly AsterSubagentSessionInfo[],
 ): AgentTaskRuntimeSubtaskStats | null {
   if (childSubagentSessions.length === 0) {
     return null;
@@ -259,7 +261,7 @@ function isProcessThreadItem(item: AgentThreadItem): boolean {
 
 function resolveLatestTurnBatchDescriptor(
   latestTurn: AgentThreadTurn | null,
-  threadItems: AgentThreadItem[],
+  threadItems: readonly AgentThreadItem[],
 ): ToolBatchSummaryDescriptor | null {
   if (!latestTurn) {
     return null;
@@ -303,8 +305,8 @@ function resolveFallbackDetail(params: {
   status: AgentTaskRuntimeStatus;
   latestTurn: AgentThreadTurn | null;
   latestAssistant: Message | null;
-  pendingActions: ActionRequired[];
-  submittedActionsInFlight: ActionRequired[];
+  pendingActions: readonly ActionRequired[];
+  submittedActionsInFlight: readonly ActionRequired[];
   threadRead?: AgentRuntimeThreadReadModel | null;
 }): string | null {
   const {

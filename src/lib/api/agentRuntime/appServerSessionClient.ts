@@ -584,8 +584,10 @@ function appServerSessionUpdateParamsFromRequest(
     recentAccessMode: request.recent_access_mode,
     recentPreferences: request.recent_preferences,
     recentTeamSelection: request.recent_team_selection,
-    productWorkspaceSelectedObjectRef:
-      request.product_workspace_selected_object_ref ?? undefined,
+    articleWorkspaceSelectedObjectRef:
+      request.article_workspace_selected_object_ref ?? undefined,
+    articleWorkspaceEditedDraft:
+      request.article_workspace_edited_draft ?? undefined,
   });
 }
 
@@ -759,7 +761,7 @@ function readSessionDetail(
     queued_turns: Array.isArray(detail.queued_turns)
       ? detail.queued_turns
       : fallback.queued_turns,
-    thread_read: fallback.thread_read,
+    thread_read: mergeThreadReadDetail(detail.thread_read, fallback.thread_read),
     execution_runtime:
       detailExecutionRuntime === undefined
         ? fallback.execution_runtime
@@ -771,6 +773,38 @@ function readSessionDetail(
       ? detail.child_subagent_sessions
       : fallback.child_subagent_sessions,
   };
+}
+
+function mergeThreadReadDetail(
+  detailThreadRead: unknown,
+  fallbackThreadRead: AsterSessionDetail["thread_read"],
+): AsterSessionDetail["thread_read"] {
+  if (!isRecord(detailThreadRead)) {
+    return fallbackThreadRead;
+  }
+  return {
+    ...fallbackThreadRead,
+    ...detailThreadRead,
+    thread_id:
+      typeof detailThreadRead.thread_id === "string"
+        ? detailThreadRead.thread_id
+        : fallbackThreadRead?.thread_id,
+    status:
+      typeof detailThreadRead.status === "string"
+        ? detailThreadRead.status
+        : fallbackThreadRead?.status,
+    profile_status:
+      typeof detailThreadRead.profile_status === "string"
+        ? detailThreadRead.profile_status
+        : fallbackThreadRead?.profile_status,
+    session_business_object_ref_metadata:
+      Object.prototype.hasOwnProperty.call(
+        detailThreadRead,
+        "session_business_object_ref_metadata",
+      )
+        ? detailThreadRead.session_business_object_ref_metadata
+        : fallbackThreadRead?.session_business_object_ref_metadata,
+  } as AsterSessionDetail["thread_read"];
 }
 
 function timestampMillis(value: string | undefined): number {

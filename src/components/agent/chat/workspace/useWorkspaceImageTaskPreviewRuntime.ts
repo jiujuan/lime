@@ -121,6 +121,7 @@ interface ParsedImageTaskSnapshot {
 }
 
 interface UseWorkspaceImageTaskPreviewRuntimeParams {
+  enabled?: boolean;
   sessionId?: string | null;
   projectId?: string | null;
   contentId?: string | null;
@@ -314,6 +315,46 @@ function shouldProbeWorkspaceImageTaskCatalog(params: {
     hasCachedImageWorkbenchTasks(params.imageWorkbenchState) ||
     hasDocumentImageTaskRecoverySignal(params.canvasState)
   );
+}
+
+export function shouldEnableWorkspaceImageTaskPreviewRuntime(params: {
+  shouldDeferWorkspaceAuxiliaryLoads?: boolean;
+  restoreFromWorkspace?: boolean;
+  messages?: Message[];
+  imageWorkbenchState?: SessionImageWorkbenchState;
+  canvasState?: CanvasStateUnion | null;
+}): boolean {
+  if (!params.shouldDeferWorkspaceAuxiliaryLoads) {
+    return true;
+  }
+
+  const messages = params.messages || [];
+  if (
+    messages.some((message) =>
+      Boolean(message.imageWorkbenchPreview || message.imageRuntimeContract),
+    )
+  ) {
+    return true;
+  }
+
+  const imageWorkbenchState = params.imageWorkbenchState;
+  if (
+    imageWorkbenchState?.active ||
+    (imageWorkbenchState?.tasks || []).length > 0 ||
+    (imageWorkbenchState?.outputs || []).length > 0
+  ) {
+    return true;
+  }
+
+  if (!params.restoreFromWorkspace) {
+    return false;
+  }
+
+  return shouldProbeWorkspaceImageTaskCatalog({
+    messages,
+    imageWorkbenchState,
+    canvasState: params.canvasState,
+  });
 }
 
 function isImageWorkbenchTaskSatisfiedByCache(params: {
@@ -1089,11 +1130,38 @@ function messageHasImageWorkbenchProcessSignal(message: Message): boolean {
   return (
     Boolean(message.isThinking) ||
     Boolean(message.runtimeStatus) ||
-    Boolean(message.imageWorkbenchPreview) ||
+    Boolean(
+      message.imageWorkbenchPreview &&
+        !isDraftImageWorkbenchPreview(message.imageWorkbenchPreview),
+    ) ||
     isImageWorkbenchSubmissionTemplateText(message.content) ||
     (message.toolCalls?.length || 0) > 0 ||
     (message.contentParts || []).some(contentPartContainsProcess)
   );
+}
+
+function messageHasTerminalFailureWithoutImageTaskSignal(
+  message: Message,
+): boolean {
+  if (message.role !== "assistant") {
+    return false;
+  }
+  if (
+    message.runtimeStatus?.phase !== "failed" &&
+    message.runtimeStatus?.phase !== "cancelled"
+  ) {
+    return false;
+  }
+  if (
+    message.imageWorkbenchPreview &&
+    !isDraftImageWorkbenchPreview(message.imageWorkbenchPreview)
+  ) {
+    return false;
+  }
+  if ((message.toolCalls?.length || 0) > 0) {
+    return false;
+  }
+  return !(message.contentParts || []).some(contentPartContainsProcess);
 }
 
 function resolvePendingImageCommandRecoverySignature(
@@ -1116,6 +1184,10 @@ function resolvePendingImageCommandRecoverySignature(
 
     const trailingMessages = messages.slice(index + 1);
     if (trailingMessages.length === 0) {
+      return null;
+    }
+
+    if (trailingMessages.some(messageHasTerminalFailureWithoutImageTaskSignal)) {
       return null;
     }
 
@@ -2193,7 +2265,7 @@ function isDraftAndResolvedImageWorkbenchPreviewPair(
 function resolveImageWorkbenchPreviewIdentityKeys(
   preview?: MessageImageWorkbenchPreview,
 ): string[] {
-  if (!preview) {
+  if (!preview || isDraftImageWorkbenchPreview(preview)) {
     return [];
   }
 
@@ -2578,6 +2650,23 @@ function normalizeImageWorkbenchRuntimeFailureMessage(
   const retainedContentParts = (message.contentParts || []).filter(
     (part) => part.type !== "text",
   );
+  if (isDraftImageWorkbenchPreview(preview)) {
+    const nextMessage: Message = {
+      ...message,
+      content: "",
+      contentParts:
+        retainedContentParts.length > 0 ? retainedContentParts : undefined,
+      isThinking: false,
+      runtimeStatus: undefined,
+      imageWorkbenchPreview: undefined,
+    };
+
+    return buildImageWorkbenchMessageStateSignature(nextMessage) ===
+      buildImageWorkbenchMessageStateSignature(message)
+      ? message
+      : nextMessage;
+  }
+
   const nextPreview: MessageImageWorkbenchPreview = {
     ...preview,
     status: "failed",
@@ -2613,9 +2702,13 @@ function finalizePreviewMessages(
   previousMessages: Message[],
   nextMessages: Message[],
 ): Message[] {
-  const normalizedMessages = nextMessages.map(
-    normalizeImageWorkbenchRuntimeFailureMessage,
-  );
+  const normalizedMessages = nextMessages
+    .map(normalizeImageWorkbenchRuntimeFailureMessage)
+    .map((message) =>
+      isDraftImageWorkbenchPreview(message.imageWorkbenchPreview)
+        ? { ...message, imageWorkbenchPreview: undefined }
+        : message,
+    );
   const dedupedMessages = mergeAdjacentImageWorkbenchPreviewMessages(
     dedupeImageWorkbenchPreviewMessages(normalizedMessages),
   );
@@ -3421,6 +3514,7 @@ function syncMessagesWithImageWorkbenchState(params: {
 }
 
 export function useWorkspaceImageTaskPreviewRuntime({
+  enabled = true,
   sessionId,
   projectId,
   contentId,
@@ -3459,6 +3553,10 @@ export function useWorkspaceImageTaskPreviewRuntime({
   };
 
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
     const finalizedMessages = finalizePreviewMessages(
       effectiveMessages,
       effectiveMessages,
@@ -3468,9 +3566,13 @@ export function useWorkspaceImageTaskPreviewRuntime({
     }
 
     setChatMessages((previous) => finalizePreviewMessages(previous, previous));
-  }, [effectiveMessages, setChatMessages]);
+  }, [effectiveMessages, enabled, setChatMessages]);
 
   useLayoutEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
     const nextMessages = syncMessagesWithImageWorkbenchState({
       messages: effectiveMessages,
       imageWorkbenchState: currentImageWorkbenchState,
@@ -3495,16 +3597,33 @@ export function useWorkspaceImageTaskPreviewRuntime({
     contentId,
     currentImageWorkbenchState,
     effectiveMessages,
+    enabled,
     projectId,
     restoreFromWorkspace,
     setChatMessages,
   ]);
 
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
     restoreSeedMessagesRef.current?.(messages);
-  }, [messages, projectRootPath, sessionId]);
+  }, [enabled, messages, projectRootPath, sessionId]);
 
   useEffect(() => {
+    if (!enabled) {
+      const trackedTasks = trackedTasksRef.current;
+      trackedTasks.forEach((trackedTask) => {
+        if (trackedTask.timerId !== null) {
+          window.clearTimeout(trackedTask.timerId);
+        }
+      });
+      trackedTasks.clear();
+      restoreSeedMessagesRef.current = null;
+      return;
+    }
+
     const shouldRestoreWorkspaceTaskCatalog =
       restoreFromWorkspace &&
       (hasDesktopHostInvokeCapability() || hasDesktopHostRuntimeMarkers()) &&
@@ -4344,6 +4463,7 @@ export function useWorkspaceImageTaskPreviewRuntime({
       }
     };
   }, [
+    enabled,
     projectRootPath,
     restoreFromWorkspace,
     sessionId,

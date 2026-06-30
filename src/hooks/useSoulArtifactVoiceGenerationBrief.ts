@@ -7,13 +7,25 @@ interface UseSoulArtifactVoiceGenerationBriefResult {
   loading: boolean;
 }
 
-export function useSoulArtifactVoiceGenerationBrief(): UseSoulArtifactVoiceGenerationBriefResult {
+interface UseSoulArtifactVoiceGenerationBriefOptions {
+  enabled?: boolean;
+}
+
+export function useSoulArtifactVoiceGenerationBrief({
+  enabled = true,
+}: UseSoulArtifactVoiceGenerationBriefOptions = {}): UseSoulArtifactVoiceGenerationBriefResult {
   const [generationBrief, setGenerationBrief] = useState<
     Record<string, unknown> | undefined
   >();
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
 
   useEffect(() => {
+    if (!enabled) {
+      setGenerationBrief(undefined);
+      setLoading(false);
+      return;
+    }
+
     let active = true;
 
     const load = async (forceRefresh = false) => {
@@ -50,7 +62,7 @@ export function useSoulArtifactVoiceGenerationBrief(): UseSoulArtifactVoiceGener
       active = false;
       unsubscribe();
     };
-  }, []);
+  }, [enabled]);
 
   return { generationBrief, loading };
 }

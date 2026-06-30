@@ -45,6 +45,13 @@ impl MediaAppDataSource for LocalAppDataSource {
         media_tasks::complete_audio_media_task_artifact(params).map_err(data_error)
     }
 
+    async fn complete_image_media_task_artifact(
+        &self,
+        params: MediaTaskArtifactImageCompleteParams,
+    ) -> Result<MediaTaskArtifactResponse, RuntimeCoreError> {
+        media_tasks::complete_image_media_task_artifact(params).map_err(data_error)
+    }
+
     async fn get_media_task_artifact(
         &self,
         params: MediaTaskArtifactLookupParams,

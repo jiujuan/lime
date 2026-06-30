@@ -82,7 +82,7 @@ describe("buildPluginHistorySessionSelectionModel", () => {
               plugin_activation: {
                 session_id: "activation-session",
                 plugin_id: "content-factory@limecloud",
-                active_entry_key: "product-profile",
+                active_entry_key: "article-workspace",
               },
             },
           },
@@ -107,7 +107,7 @@ describe("buildPluginHistorySessionSelectionModel", () => {
     expect(model.candidates[0]).toEqual(
       expect.objectContaining({
         sessionId: "activation-session",
-        activeEntryKey: "product-profile",
+        activeEntryKey: "article-workspace",
         source: "plugin_activation",
       }),
     );

@@ -5,7 +5,10 @@ import {
 import type { WorkspaceRightSurfacePendingRequest } from "@/lib/api/workspaceRightSurface";
 import type { WorkspaceRightSurfaceCommandOrigin } from "./rightSurfaceCommand";
 import type { WorkspaceRightSurfaceRequestPriority } from "./rightSurfaceScheduler";
-import type { WorkspaceRightSurfaceKind } from "./rightSurfaceTypes";
+import {
+  normalizeWorkspaceRightSurfaceKind,
+  type WorkspaceRightSurfaceKind,
+} from "./rightSurfaceTypes";
 
 export interface WorkspaceRightSurfaceRuntimeOpenSignal {
   id: string;
@@ -61,7 +64,7 @@ const DEFAULT_RUNTIME_PENDING_INTENT_TTL_MS = 60_000;
 const KNOWN_RIGHT_SURFACE_KINDS = new Set<WorkspaceRightSurfaceKind>([
   "workbench",
   "appSurface",
-  "productProfile",
+  "articleWorkspace",
   "expertInfo",
   "objectCanvas",
   "browser",
@@ -231,8 +234,10 @@ function normalizeIntentKey(value?: string | null): string {
 function normalizeSurfaceKind(
   value?: string | null,
 ): WorkspaceRightSurfaceKind | null {
-  const normalized = (value || "").trim() as WorkspaceRightSurfaceKind;
-  return KNOWN_RIGHT_SURFACE_KINDS.has(normalized) ? normalized : null;
+  const normalized = normalizeWorkspaceRightSurfaceKind(value);
+  return normalized && KNOWN_RIGHT_SURFACE_KINDS.has(normalized)
+    ? normalized
+    : null;
 }
 
 function normalizeSurfaceOrigin(

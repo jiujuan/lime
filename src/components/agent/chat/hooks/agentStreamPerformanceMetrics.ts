@@ -9,7 +9,7 @@ import {
   type W3cTraceContextCarrier,
 } from "@/lib/trace/clawTrace";
 import {
-  recordAgentUiProjectionEvents,
+  enqueueAgentUiProjectionEvents,
   recordConversationStreamDiagnostic,
 } from "../projection/conversationProjectionStore";
 import { buildAgentUiMetricChangedEvent } from "../projection/agentUiEventProjection";
@@ -287,7 +287,7 @@ export function recordAgentStreamPerformanceMetric(
         : null,
     metrics: entry.metrics,
   });
-  recordAgentUiProjectionEvents([
+  enqueueAgentUiProjectionEvents([
     buildAgentUiMetricChangedEvent({
       phase: entry.phase,
       at: entry.at,

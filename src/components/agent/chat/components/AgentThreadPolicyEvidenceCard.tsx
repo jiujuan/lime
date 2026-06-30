@@ -10,6 +10,9 @@ import {
   type RuntimePolicyEvidence,
 } from "../utils/runtimePolicyEvidence";
 
+const policyEvidenceGridClassName =
+  "grid min-w-0 gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr))]";
+
 interface PolicyEvidenceText {
   title: string;
   policy: string;
@@ -136,7 +139,7 @@ export function AgentThreadPolicyEvidenceCard({
             type="button"
             variant="outline"
             size="sm"
-            className="h-7 border-amber-200 bg-white px-2 text-xs text-amber-800 hover:bg-amber-50"
+            className="h-auto min-h-7 min-w-0 border-amber-200 bg-white px-2 py-1 text-xs text-amber-800 hover:bg-amber-50"
             onClick={() =>
               onOpenExecutionPolicySettings?.(executionPolicyFocus)
             }
@@ -146,7 +149,9 @@ export function AgentThreadPolicyEvidenceCard({
           </Button>
         ) : null}
       </div>
-      <div className="mt-3 grid gap-3 text-sm text-amber-900 md:grid-cols-2">
+      <div
+        className={`${policyEvidenceGridClassName} mt-3 text-sm text-amber-900`}
+      >
         <div className="rounded-xl border border-amber-100 bg-white px-3 py-2.5">
           <div className="flex flex-wrap items-center gap-2">
             <Badge
@@ -164,7 +169,7 @@ export function AgentThreadPolicyEvidenceCard({
               </Badge>
             ) : null}
           </div>
-          <div className="mt-2 space-y-1 text-xs leading-5 text-amber-800">
+          <div className="mt-2 space-y-1 break-words text-xs leading-5 text-amber-800">
             {policyDetails ? (
               <div>{policyDetails}</div>
             ) : (
@@ -192,7 +197,7 @@ export function AgentThreadPolicyEvidenceCard({
               </span>
             ) : null}
           </div>
-          <div className="mt-2 space-y-1 text-xs leading-5 text-amber-800">
+          <div className="mt-2 space-y-1 break-words text-xs leading-5 text-amber-800">
             {sandboxBackendText ? (
               <div>
                 <span className="font-medium">{labels.sandboxBackend}:</span>{" "}

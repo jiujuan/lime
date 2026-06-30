@@ -66,6 +66,12 @@ describe("conversationProjectionStore", () => {
   it("应只通知 diagnostics 订阅者，未变化的其它 slice 保持引用稳定", () => {
     const store = createConversationProjectionStore();
     const before = store.getSnapshot();
+    const globalListener = vi.fn();
+    const diagnosticsListener = vi.fn();
+    const agentUiListener = vi.fn();
+    store.subscribe(globalListener);
+    store.subscribeToSlice("diagnostics", diagnosticsListener);
+    store.subscribeToSlice("agentUi", agentUiListener);
 
     store.recordStreamDiagnostic({
       phase: "agentStream.firstEvent",
@@ -86,6 +92,9 @@ describe("conversationProjectionStore", () => {
     expect(after.queue).toBe(before.queue);
     expect(after.render).toBe(before.render);
     expect(after.agentUi).toBe(before.agentUi);
+    expect(globalListener).toHaveBeenCalledTimes(1);
+    expect(diagnosticsListener).toHaveBeenCalledTimes(1);
+    expect(agentUiListener).not.toHaveBeenCalled();
   });
 
   it("无 sessionId 时应按 requestId 记录最新 stream diagnostic", () => {
@@ -114,7 +123,11 @@ describe("conversationProjectionStore", () => {
   it("应记录 Agent UI projection events，并按 run/tool/action/artifact 建索引", () => {
     const store = createConversationProjectionStore();
     const listener = vi.fn();
+    const agentUiListener = vi.fn();
+    const diagnosticsListener = vi.fn();
     store.subscribe(listener);
+    store.subscribeToSlice("agentUi", agentUiListener);
+    store.subscribeToSlice("diagnostics", diagnosticsListener);
 
     const [toolEvent, actionEvent, artifactEvent, evidenceEvent] =
       store.recordAgentUiProjectionEvents([
@@ -170,6 +183,8 @@ describe("conversationProjectionStore", () => {
 
     const snapshot = store.getSnapshot();
     expect(listener).toHaveBeenCalledTimes(1);
+    expect(agentUiListener).toHaveBeenCalledTimes(1);
+    expect(diagnosticsListener).not.toHaveBeenCalled();
     expect(selectAgentUiProjectionEvents(snapshot)).toEqual([
       toolEvent,
       actionEvent,

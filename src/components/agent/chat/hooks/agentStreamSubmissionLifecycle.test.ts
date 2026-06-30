@@ -348,4 +348,175 @@ describe("agentStreamSubmissionLifecycle", () => {
     expect(threadTurns[0]?.thread_id).toBe("session-image");
     expect(threadItems[0]?.thread_id).toBe("session-image");
   });
+
+  it("activateStream 不应在已有同内容 pending 用户消息后重复插入用户气泡", () => {
+    const existingUserMsg: Message = {
+      id: "snapshot-user-image",
+      role: "user",
+      content: "@配图 生成 一张春日咖啡馆插画",
+      timestamp: new Date("2026-03-27T01:00:00.000Z"),
+    };
+    const userMsg: Message = {
+      id: "optimistic-user-image",
+      role: "user",
+      content: "@配图 生成 一张春日咖啡馆插画",
+      timestamp: new Date("2026-03-27T01:00:01.000Z"),
+    };
+    const assistantMsg: Message = {
+      id: "assistant-image-dedupe",
+      role: "assistant",
+      content: "",
+      timestamp: new Date("2026-03-27T01:00:02.000Z"),
+      isThinking: true,
+      contentParts: [],
+      runtimeStatus: buildWaitingAgentRuntimeStatus({
+        executionStrategy: "react",
+      }),
+    };
+
+    let messages: Message[] = [existingUserMsg];
+    let threadItems: AgentThreadItem[] = [];
+    let threadTurns: AgentThreadTurn[] = [];
+    let currentTurnId: string | null = null;
+    const lifecycle = createAgentStreamSubmissionLifecycle({
+      assistantMsg,
+      assistantMsgId: assistantMsg.id,
+      userMsgId: userMsg.id,
+      userMsg,
+      content: userMsg.content,
+      expectingQueue: false,
+      initialThreadId: "local-thread:assistant-image-dedupe",
+      listenerMapRef: { current: new Map() },
+      setActiveStream: () => {},
+      setMessages: createStateSetter(
+        () => messages,
+        (value) => {
+          messages = value;
+        },
+      ),
+      setQueuedTurns: createStateSetter(
+        () => [] as QueuedTurnSnapshot[],
+        () => {},
+      ),
+      setThreadItems: createStateSetter(
+        () => threadItems,
+        (value) => {
+          threadItems = value;
+        },
+      ),
+      setThreadTurns: createStateSetter(
+        () => threadTurns,
+        (value) => {
+          threadTurns = value;
+        },
+      ),
+      setCurrentTurnId: createStateSetter(
+        () => currentTurnId,
+        (value) => {
+          currentTurnId = value;
+        },
+      ),
+    });
+
+    const runtimeStatus = buildWaitingAgentRuntimeStatus({
+      executionStrategy: "react",
+    });
+    lifecycle.activateStream("session-image", runtimeStatus);
+
+    expect(messages.filter((message) => message.role === "user")).toHaveLength(
+      1,
+    );
+    expect(messages.map((message) => message.id)).toEqual([
+      "snapshot-user-image",
+      "assistant-image-dedupe",
+    ]);
+    expect(messages[0]?.runtimeTurnId).toBe(lifecycle.pendingTurnKey);
+    expect(messages[1]?.runtimeTurnId).toBe(lifecycle.pendingTurnKey);
+    expect(messages[1]?.runtimeStatus).toEqual(runtimeStatus);
+  });
+
+  it("activateStream 不应合并同文本但附件不同的用户消息", () => {
+    const existingUserMsg: Message = {
+      id: "snapshot-user-without-image",
+      role: "user",
+      content: "@配图 生成 一张春日咖啡馆插画",
+      timestamp: new Date("2026-03-27T01:00:00.000Z"),
+    };
+    const userMsg: Message = {
+      id: "optimistic-user-with-image",
+      role: "user",
+      content: "@配图 生成 一张春日咖啡馆插画",
+      images: [{ data: "data:image/png;base64,AAAA", mediaType: "image/png" }],
+      timestamp: new Date("2026-03-27T01:00:01.000Z"),
+    };
+    const assistantMsg: Message = {
+      id: "assistant-image-attachment",
+      role: "assistant",
+      content: "",
+      timestamp: new Date("2026-03-27T01:00:02.000Z"),
+      isThinking: true,
+      contentParts: [],
+      runtimeStatus: buildWaitingAgentRuntimeStatus({
+        executionStrategy: "react",
+      }),
+    };
+
+    let messages: Message[] = [existingUserMsg];
+    let threadItems: AgentThreadItem[] = [];
+    let threadTurns: AgentThreadTurn[] = [];
+    let currentTurnId: string | null = null;
+    const lifecycle = createAgentStreamSubmissionLifecycle({
+      assistantMsg,
+      assistantMsgId: assistantMsg.id,
+      userMsgId: userMsg.id,
+      userMsg,
+      content: userMsg.content,
+      expectingQueue: false,
+      initialThreadId: "local-thread:assistant-image-attachment",
+      listenerMapRef: { current: new Map() },
+      setActiveStream: () => {},
+      setMessages: createStateSetter(
+        () => messages,
+        (value) => {
+          messages = value;
+        },
+      ),
+      setQueuedTurns: createStateSetter(
+        () => [] as QueuedTurnSnapshot[],
+        () => {},
+      ),
+      setThreadItems: createStateSetter(
+        () => threadItems,
+        (value) => {
+          threadItems = value;
+        },
+      ),
+      setThreadTurns: createStateSetter(
+        () => threadTurns,
+        (value) => {
+          threadTurns = value;
+        },
+      ),
+      setCurrentTurnId: createStateSetter(
+        () => currentTurnId,
+        (value) => {
+          currentTurnId = value;
+        },
+      ),
+    });
+
+    lifecycle.activateStream(
+      "session-image",
+      buildWaitingAgentRuntimeStatus({ executionStrategy: "react" }),
+    );
+
+    expect(messages.filter((message) => message.role === "user")).toHaveLength(
+      2,
+    );
+    expect(messages.map((message) => message.id)).toEqual([
+      "snapshot-user-without-image",
+      "optimistic-user-with-image",
+      "assistant-image-attachment",
+    ]);
+  });
 });

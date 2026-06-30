@@ -1,4 +1,190 @@
 use super::*;
+use serde_json::Value;
+
+fn article_workspace_search_snapshot_payload(search_evidence: Value) -> Value {
+    let host_search_evidence = search_evidence.clone();
+
+    let mut article_source = serde_json::Map::new();
+    article_source.insert(
+        "taskKind".to_string(),
+        json!("content.article.generate"),
+    );
+    article_source.insert("taskId".to_string(), json!("task-article-1"));
+    article_source.insert("turnId".to_string(), json!("turn_article_workspace"));
+    article_source.insert(
+        "artifactIds".to_string(),
+        json!(["artifact-article-1"]),
+    );
+    article_source.insert(
+        "searchRequests".to_string(),
+        json!([
+            {
+                "id": "search-request-1",
+                "query": "Lime 写文章",
+                "purpose": "验证宿主真实检索回填"
+            }
+        ]),
+    );
+    article_source.insert("searchEvidence".to_string(), search_evidence);
+    article_source.insert("hostSearchEvidence".to_string(), host_search_evidence);
+    article_source.insert("hostSearchStatus".to_string(), json!("completed"));
+    article_source.insert(
+        "markdown".to_string(),
+        json!("# 公众号文章草稿\n\n这是正文。"),
+    );
+    article_source.insert(
+        "researchRounds".to_string(),
+        json!([
+            {
+                "id": "research-1",
+                "title": "检索行业背景"
+            }
+        ]),
+    );
+    article_source.insert(
+        "outline".to_string(),
+        json!([
+            {
+                "id": "intro",
+                "title": "开场：为什么要把写作变成工作流"
+            }
+        ]),
+    );
+    article_source.insert(
+        "imageSlots".to_string(),
+        json!([
+            {
+                "id": "hero",
+                "title": "首图",
+                "prompt": "桌面端内容工厂写作流程图，中文标签"
+            }
+        ]),
+    );
+    article_source.insert("evidenceIds".to_string(), json!(["evidence-1"]));
+
+    let mut article_ref = serde_json::Map::new();
+    article_ref.insert("appId".to_string(), json!("content-factory-app"));
+    article_ref.insert("kind".to_string(), json!("articleDraft"));
+    article_ref.insert("id".to_string(), json!("article-1"));
+    article_ref.insert("sessionId".to_string(), json!("sess_article_workspace"));
+    article_ref.insert("artifactIds".to_string(), json!(["artifact-article-1"]));
+    article_ref.insert("sourceTurnId".to_string(), json!("turn_article_workspace"));
+
+    let mut article_object = serde_json::Map::new();
+    article_object.insert("ref".to_string(), Value::Object(article_ref));
+    article_object.insert("title".to_string(), json!("公众号文章草稿"));
+    article_object.insert("status".to_string(), json!("ready"));
+    article_object.insert("summary".to_string(), json!("已生成首版文章"));
+    article_object.insert("previewArtifactId".to_string(), json!("artifact-article-1"));
+    article_object.insert("source".to_string(), Value::Object(article_source));
+
+    let mut image_ref = serde_json::Map::new();
+    image_ref.insert("appId".to_string(), json!("content-factory-app"));
+    image_ref.insert("kind".to_string(), json!("imageGenerationSet"));
+    image_ref.insert("id".to_string(), json!("image-set-1"));
+    image_ref.insert("sessionId".to_string(), json!("sess_article_workspace"));
+    image_ref.insert("artifactIds".to_string(), json!(["artifact-image-1"]));
+    image_ref.insert("sourceTurnId".to_string(), json!("turn_article_workspace"));
+
+    let mut image_source = serde_json::Map::new();
+    image_source.insert(
+        "taskKind".to_string(),
+        json!("content.image.generate"),
+    );
+    image_source.insert("taskId".to_string(), json!("task-image-1"));
+    image_source.insert("turnId".to_string(), json!("turn_article_workspace"));
+    image_source.insert("artifactIds".to_string(), json!(["artifact-image-1"]));
+    image_source.insert("evidenceIds".to_string(), json!(["evidence-2"]));
+
+    let mut image_object = serde_json::Map::new();
+    image_object.insert("ref".to_string(), Value::Object(image_ref));
+    image_object.insert("title".to_string(), json!("配图组"));
+    image_object.insert("status".to_string(), json!("needs_review"));
+    image_object.insert("summary".to_string(), json!("等待选择主图"));
+    image_object.insert("previewArtifactId".to_string(), json!("artifact-image-1"));
+    image_object.insert("source".to_string(), Value::Object(image_source));
+
+    let mut patch = serde_json::Map::new();
+    patch.insert("schemaVersion".to_string(), json!(1));
+    patch.insert("appId".to_string(), json!("content-factory-app"));
+    patch.insert("sessionId".to_string(), json!("sess_article_workspace"));
+    patch.insert("primaryObjectRef".to_string(), json!({
+        "appId": "content-factory-app",
+        "kind": "articleDraft",
+        "id": "article-1",
+        "sessionId": "sess_article_workspace",
+        "artifactIds": ["artifact-article-1"],
+        "sourceTurnId": "turn_article_workspace"
+    }));
+    patch.insert("selectedObjectRef".to_string(), json!({
+        "appId": "content-factory-app",
+        "kind": "articleDraft",
+        "id": "article-1",
+        "sessionId": "sess_article_workspace"
+    }));
+    patch.insert(
+        "objects".to_string(),
+        Value::Array(vec![
+            Value::Object(article_object),
+            Value::Object(image_object),
+        ]),
+    );
+    patch.insert(
+        "layoutState".to_string(),
+        json!({
+            "activeTabKind": "articleWorkspace",
+            "activePaneKind": "documentCanvas",
+            "openTabKinds": ["articleWorkspace", "files"],
+            "splitMode": "chat-right-dock"
+        }),
+    );
+
+    let mut worker = serde_json::Map::new();
+    worker.insert("appId".to_string(), json!("content-factory-app"));
+    worker.insert("taskId".to_string(), json!("task-article-1"));
+    worker.insert("taskKind".to_string(), json!("content.article.generate"));
+    worker.insert("turnId".to_string(), json!("turn_article_workspace"));
+    worker.insert(
+        "workerEntrypoint".to_string(),
+        json!("./runtime/content-factory-worker.mjs"),
+    );
+    worker.insert("status".to_string(), json!("completed"));
+    worker.insert(
+        "inputSummary".to_string(),
+        json!("prompt=生成文章; inputKeys=topic"),
+    );
+    worker.insert(
+        "outputSummary".to_string(),
+        json!("2 objects: 公众号文章草稿, 配图组"),
+    );
+    worker.insert("outputObjectCount".to_string(), json!(2));
+    worker.insert(
+        "outputArtifactKind".to_string(),
+        json!("content_factory.workspace_patch"),
+    );
+
+    let mut metadata = serde_json::Map::new();
+    metadata.insert("agentAppWorker".to_string(), Value::Object(worker));
+    metadata.insert(
+        "contentFactoryWorkspacePatch".to_string(),
+        Value::Object(patch),
+    );
+
+    let mut artifact = serde_json::Map::new();
+    artifact.insert("artifactId".to_string(), json!("artifact-workspace-patch-1"));
+    artifact.insert(
+        "path".to_string(),
+        json!(".lime/artifacts/content-factory-workspace-patch.json"),
+    );
+    artifact.insert("title".to_string(), json!("内容工厂工作区补丁"));
+    artifact.insert("kind".to_string(), json!("content_factory.workspace_patch"));
+    artifact.insert("status".to_string(), json!("ready"));
+    artifact.insert("metadata".to_string(), Value::Object(metadata));
+
+    let mut payload = serde_json::Map::new();
+    payload.insert("artifact".to_string(), Value::Object(artifact));
+    Value::Object(payload)
+}
 
 #[tokio::test]
 async fn read_session_projects_runtime_events_into_thread_read_artifacts() {
@@ -86,7 +272,7 @@ async fn read_session_projects_runtime_events_into_thread_read_artifacts() {
 }
 
 #[tokio::test]
-async fn product_profile_artifact_documents_merge_version_history_across_turns() {
+async fn article_workspace_artifact_documents_merge_version_history_across_turns() {
     let core = RuntimeCore::default();
     core.start_session(AgentSessionStartParams {
         session_id: Some("sess_product_artifact_versions".to_string()),
@@ -166,8 +352,8 @@ async fn product_profile_artifact_documents_merge_version_history_across_turns()
                                         }
                                     ],
                                     "layoutState": {
-                                        "activeTabKind": "productProfile",
-                                        "openTabKinds": ["productProfile"]
+                                        "activeTabKind": "articleWorkspace",
+                                        "openTabKinds": ["articleWorkspace"]
                                     }
                                 }
                             }
@@ -255,7 +441,8 @@ async fn product_profile_artifact_documents_merge_version_history_across_turns()
 }
 
 #[tokio::test]
-async fn artifact_workbench_save_snapshot_merges_with_product_profile_artifact_document_history() {
+async fn artifact_workbench_save_snapshot_merges_with_article_workspace_artifact_document_history()
+{
     let sidecar_root = tempfile::tempdir().expect("sidecar root");
     let core = RuntimeCore::default().with_sidecar_store(Arc::new(
         SidecarStore::new(sidecar_root.path()).expect("sidecar store"),
@@ -397,7 +584,7 @@ async fn artifact_workbench_save_snapshot_merges_with_product_profile_artifact_d
                     "createdBy": "user"
                 }
             ],
-            "productProfile": {
+            "articleWorkspace": {
                 "appId": "content-factory-app",
                 "sessionId": "sess_product_artifact_workbench_save",
                 "workspaceId": "workspace-main",
@@ -437,7 +624,7 @@ async fn artifact_workbench_save_snapshot_merges_with_product_profile_artifact_d
                             "artifactVersionNo": 2,
                             "artifactRef": "artifact-article-1",
                             "filePath": "article.md",
-                            "productProfile": {
+                            "articleWorkspace": {
                                 "appId": "content-factory-app",
                                 "sessionId": "sess_product_artifact_workbench_save",
                                 "workspaceId": "workspace-main",
@@ -497,11 +684,11 @@ async fn artifact_workbench_save_snapshot_merges_with_product_profile_artifact_d
 }
 
 #[tokio::test]
-async fn read_session_materializes_content_factory_workspace_patch_into_product_workspace() {
+async fn read_session_materializes_content_factory_workspace_patch_into_article_workspace() {
     let core = RuntimeCore::default();
     core.start_session(AgentSessionStartParams {
-        session_id: Some("sess_product_workspace".to_string()),
-        thread_id: Some("thread_product_workspace".to_string()),
+        session_id: Some("sess_article_workspace".to_string()),
+        thread_id: Some("thread_article_workspace".to_string()),
         app_id: "content-factory-app".to_string(),
         workspace_id: Some("workspace-main".to_string()),
         business_object_ref: None,
@@ -512,8 +699,8 @@ async fn read_session_materializes_content_factory_workspace_patch_into_product_
     let turn = core
         .start_turn(
             AgentSessionTurnStartParams {
-                session_id: "sess_product_workspace".to_string(),
-                turn_id: Some("turn_product_workspace".to_string()),
+                session_id: "sess_article_workspace".to_string(),
+                turn_id: Some("turn_article_workspace".to_string()),
                 input: AgentInput {
                     text: "生成文章草稿".to_string(),
                     attachments: Vec::new(),
@@ -530,123 +717,26 @@ async fn read_session_materializes_content_factory_workspace_patch_into_product_
         .turn;
 
     core.append_external_runtime_events(
-        "sess_product_workspace",
+        "sess_article_workspace",
         Some(&turn.turn_id),
         vec![
             RuntimeEvent::new(
                 "artifact.snapshot",
-                json!({
-                    "artifact": {
-                        "artifactId": "artifact-workspace-patch-1",
-                        "path": ".lime/artifacts/content-factory-workspace-patch.json",
-                        "title": "内容工厂工作区补丁",
-                        "kind": "content_factory.workspace_patch",
-                        "status": "ready",
-                        "metadata": {
-                            "agentAppWorker": {
-                                "appId": "content-factory-app",
-                                "taskId": "task-article-1",
-                                "taskKind": "content.article.generate",
-                                "turnId": "turn_product_workspace",
-                                "workerEntrypoint": "./runtime/content-factory-worker.mjs",
-                                "status": "completed",
-                                "inputSummary": "prompt=生成文章; inputKeys=topic",
-                                "outputSummary": "2 objects: 公众号文章草稿, 配图组",
-                                "outputObjectCount": 2,
-                                "outputArtifactKind": "content_factory.workspace_patch"
-                            },
-                            "contentFactoryWorkspacePatch": {
-                                "schemaVersion": 1,
-                                "appId": "content-factory-app",
-                                "sessionId": "sess_product_workspace",
-                                "primaryObjectRef": {
-                                    "appId": "content-factory-app",
-                                    "kind": "articleDraft",
-                                    "id": "article-1",
-                                    "sessionId": "sess_product_workspace",
-                                    "artifactIds": ["artifact-article-1"],
-                                    "sourceTurnId": "turn_product_workspace"
-                                },
-                                "selectedObjectRef": {
-                                    "appId": "content-factory-app",
-                                    "kind": "articleDraft",
-                                    "id": "article-1",
-                                    "sessionId": "sess_product_workspace"
-                                },
-                                "objects": [
-                                    {
-                                        "ref": {
-                                            "appId": "content-factory-app",
-                                            "kind": "articleDraft",
-                                            "id": "article-1",
-                                            "sessionId": "sess_product_workspace",
-                                            "artifactIds": ["artifact-article-1"],
-                                            "sourceTurnId": "turn_product_workspace"
-                                        },
-                                        "title": "公众号文章草稿",
-                                        "status": "ready",
-                                        "summary": "已生成首版文章",
-                                        "previewArtifactId": "artifact-article-1",
-                                        "source": {
-                                            "taskKind": "content.article.generate",
-                                            "taskId": "task-article-1",
-                                            "turnId": "turn_product_workspace",
-                                            "artifactIds": ["artifact-article-1"],
-                                            "markdown": "# 公众号文章草稿\n\n这是正文。",
-                                            "researchRounds": [
-                                                {
-                                                    "id": "research-1",
-                                                    "title": "检索行业背景"
-                                                }
-                                            ],
-                                            "outline": [
-                                                {
-                                                    "id": "intro",
-                                                    "title": "开场：为什么要把写作变成工作流"
-                                                }
-                                            ],
-                                            "imageSlots": [
-                                                {
-                                                    "id": "hero",
-                                                    "title": "首图",
-                                                    "prompt": "桌面端内容工厂写作流程图，中文标签"
-                                                }
-                                            ],
-                                            "evidenceIds": ["evidence-1"]
-                                        }
-                                    },
-                                    {
-                                        "ref": {
-                                            "appId": "content-factory-app",
-                                            "kind": "imageGenerationSet",
-                                            "id": "image-set-1",
-                                            "sessionId": "sess_product_workspace",
-                                            "artifactIds": ["artifact-image-1"],
-                                            "sourceTurnId": "turn_product_workspace"
-                                        },
-                                        "title": "配图组",
-                                        "status": "needs_review",
-                                        "summary": "等待选择主图",
-                                        "previewArtifactId": "artifact-image-1",
-                                        "source": {
-                                            "taskKind": "content.image.generate",
-                                            "taskId": "task-image-1",
-                                            "turnId": "turn_product_workspace",
-                                            "artifactIds": ["artifact-image-1"],
-                                            "evidenceIds": ["evidence-2"]
-                                        }
-                                    }
-                                ],
-                                "layoutState": {
-                                    "activeTabKind": "productProfile",
-                                    "activePaneKind": "documentCanvas",
-                                    "openTabKinds": ["productProfile", "files"],
-                                    "splitMode": "chat-right-dock"
-                                }
-                            },
-                        }
+                article_workspace_search_snapshot_payload(json!([
+                    {
+                        "id": "host-search-evidence-search-request-1",
+                        "requestId": "search-request-1",
+                        "tool": "WebSearch",
+                        "toolCallId": "content-factory-web-search-search-request-1",
+                        "status": "completed",
+                        "query": "Lime 写文章",
+                        "purpose": "验证宿主真实检索回填",
+                        "summary": "session=sess_article_workspace query=Lime 写文章 result=found",
+                        "output": "session=sess_article_workspace query=Lime 写文章 result=found",
+                        "error": null,
+                        "confidence": "host_verified"
                     }
-                }),
+                ])),
             ),
             RuntimeEvent::new(
                 "runtime.error",
@@ -655,7 +745,7 @@ async fn read_session_materializes_content_factory_workspace_patch_into_product_
                     "appId": "content-factory-app",
                     "taskId": "task-image-1",
                     "taskKind": "content.image.generate",
-                    "turnId": "turn_product_workspace",
+                    "turnId": "turn_article_workspace",
                     "status": "failed",
                     "errorCode": "worker_invalid_json_output",
                     "errorMessage": "Agent App worker returned invalid JSON",
@@ -665,7 +755,7 @@ async fn read_session_materializes_content_factory_workspace_patch_into_product_
                             "appId": "content-factory-app",
                             "taskId": "task-image-1",
                             "taskKind": "content.image.generate",
-                            "turnId": "turn_product_workspace",
+                            "turnId": "turn_article_workspace",
                             "status": "failed",
                             "errorCode": "worker_invalid_json_output",
                             "workerEntrypoint": "./runtime/content-factory-worker.mjs",
@@ -681,75 +771,91 @@ async fn read_session_materializes_content_factory_workspace_patch_into_product_
 
     let read = core
         .read_session(AgentSessionReadParams {
-            session_id: "sess_product_workspace".to_string(),
+            session_id: "sess_article_workspace".to_string(),
             history_limit: None,
             history_offset: None,
             history_before_message_id: None,
         })
         .expect("read session");
     let detail = read.detail.expect("session detail");
-    let product_workspace = &detail["product_workspace"];
+    let article_workspace = &detail["article_workspace"];
 
-    assert_eq!(product_workspace["schemaVersion"], "product-workspace.v1");
-    assert_eq!(product_workspace["appId"], "content-factory-app");
-    assert_eq!(product_workspace["sessionId"], "sess_product_workspace");
-    assert_eq!(product_workspace["workspaceId"], "workspace-main");
-    assert_eq!(product_workspace["objectCount"], 2);
+    assert_eq!(article_workspace["schemaVersion"], "article-workspace.v1");
+    assert_eq!(article_workspace["appId"], "content-factory-app");
+    assert_eq!(article_workspace["sessionId"], "sess_article_workspace");
+    assert_eq!(article_workspace["workspaceId"], "workspace-main");
+    assert_eq!(article_workspace["objectCount"], 2);
     assert_eq!(
-        product_workspace["primaryObjectRef"]["kind"],
+        article_workspace["primaryObjectRef"]["kind"],
         "articleDraft"
     );
-    assert_eq!(product_workspace["selectedObjectRef"]["id"], "article-1");
-    assert_eq!(product_workspace["objects"][0]["title"], "公众号文章草稿");
-    assert_eq!(product_workspace["layoutState"]["openTabKinds"][1], "files");
+    assert_eq!(article_workspace["selectedObjectRef"]["id"], "article-1");
+    assert_eq!(article_workspace["objects"][0]["title"], "公众号文章草稿");
+    assert_eq!(article_workspace["layoutState"]["openTabKinds"][1], "files");
     assert_eq!(
-        product_workspace["sourceArtifacts"][0]["artifactRef"],
-        "artifact-workspace-patch-1"
+        article_workspace["objects"][0]["source"]["searchEvidence"][0]["tool"],
+        "WebSearch"
     );
     assert_eq!(
-        product_workspace["workerEvidence"][0]["taskId"],
-        "task-article-1"
-    );
-    assert_eq!(
-        product_workspace["workerEvidence"][0]["status"],
+        article_workspace["objects"][0]["source"]["searchEvidence"][0]["status"],
         "completed"
     );
     assert_eq!(
-        product_workspace["workerEvidence"][0]["workerEntrypoint"],
+        article_workspace["objects"][0]["source"]["hostSearchStatus"],
+        "completed"
+    );
+    assert_eq!(
+        article_workspace["objects"][0]["source"]["hostSearchEvidence"],
+        article_workspace["objects"][0]["source"]["searchEvidence"]
+    );
+    assert_eq!(
+        article_workspace["sourceArtifacts"][0]["artifactRef"],
+        "artifact-workspace-patch-1"
+    );
+    assert_eq!(
+        article_workspace["workerEvidence"][0]["taskId"],
+        "task-article-1"
+    );
+    assert_eq!(
+        article_workspace["workerEvidence"][0]["status"],
+        "completed"
+    );
+    assert_eq!(
+        article_workspace["workerEvidence"][0]["workerEntrypoint"],
         "./runtime/content-factory-worker.mjs"
     );
     assert_eq!(
-        product_workspace["workerEvidence"][0]["inputSummary"],
+        article_workspace["workerEvidence"][0]["inputSummary"],
         "prompt=生成文章; inputKeys=topic"
     );
     assert_eq!(
-        product_workspace["workerEvidence"][0]["outputSummary"],
+        article_workspace["workerEvidence"][0]["outputSummary"],
         "2 objects: 公众号文章草稿, 配图组"
     );
     assert_eq!(
-        product_workspace["workerEvidence"][0]["outputObjectCount"],
+        article_workspace["workerEvidence"][0]["outputObjectCount"],
         2
     );
     assert_eq!(
-        product_workspace["workerEvidence"][1]["taskId"],
+        article_workspace["workerEvidence"][1]["taskId"],
         "task-image-1"
     );
-    assert_eq!(product_workspace["workerEvidence"][1]["status"], "failed");
+    assert_eq!(article_workspace["workerEvidence"][1]["status"], "failed");
     assert_eq!(
-        product_workspace["workerEvidence"][1]["errorCode"],
+        article_workspace["workerEvidence"][1]["errorCode"],
         "worker_invalid_json_output"
     );
     assert_eq!(
-        product_workspace["workerEvidence"][1]["inputSummary"],
+        article_workspace["workerEvidence"][1]["inputSummary"],
         "prompt=生成图片; inputKeys=topic"
     );
     assert_eq!(
-        detail["thread_read"]["product_workspace"],
-        detail["product_workspace"]
+        detail["thread_read"]["article_workspace"],
+        detail["article_workspace"]
     );
     assert_eq!(
-        detail["thread_read"]["productWorkspace"],
-        detail["productWorkspace"]
+        detail["thread_read"]["articleWorkspace"],
+        detail["articleWorkspace"]
     );
     let artifacts = detail["thread_read"]["artifacts"]
         .as_array()
@@ -777,7 +883,7 @@ async fn read_session_materializes_content_factory_workspace_patch_into_product_
         "task-article-1"
     );
     assert_eq!(
-        article_artifact["metadata"]["productProfile"]["objectKind"],
+        article_artifact["metadata"]["articleWorkspace"]["objectKind"],
         "articleDraft"
     );
     assert!(article_artifact["content"].is_null());
@@ -785,8 +891,8 @@ async fn read_session_materializes_content_factory_workspace_patch_into_product_
 
     let artifact_read = core
         .read_artifacts(ArtifactReadParams {
-            session_id: "sess_product_workspace".to_string(),
-            turn_id: Some("turn_product_workspace".to_string()),
+            session_id: "sess_article_workspace".to_string(),
+            turn_id: Some("turn_article_workspace".to_string()),
             artifact_ref: Some("artifact-article-1".to_string()),
             include_content: Some(true),
             cursor: None,
@@ -807,12 +913,12 @@ async fn read_session_materializes_content_factory_workspace_patch_into_product_
         .contains("\"artifactId\": \"artifact-document:content-factory-app:artifact-article-1\""));
 
     core.update_session_current(AgentSessionUpdateParams {
-        session_id: "sess_product_workspace".to_string(),
-        product_workspace_selected_object_ref: Some(json!({
+        session_id: "sess_article_workspace".to_string(),
+        article_workspace_selected_object_ref: Some(json!({
             "appId": "content-factory-app",
             "kind": "imageGenerationSet",
             "id": "image-set-1",
-            "sessionId": "sess_product_workspace"
+            "sessionId": "sess_article_workspace"
         })),
         ..AgentSessionUpdateParams::default()
     })
@@ -821,7 +927,7 @@ async fn read_session_materializes_content_factory_workspace_patch_into_product_
 
     let updated_read = core
         .read_session(AgentSessionReadParams {
-            session_id: "sess_product_workspace".to_string(),
+            session_id: "sess_article_workspace".to_string(),
             history_limit: None,
             history_offset: None,
             history_before_message_id: None,
@@ -830,18 +936,68 @@ async fn read_session_materializes_content_factory_workspace_patch_into_product_
     let updated_detail = updated_read.detail.expect("updated session detail");
 
     assert_eq!(
-        updated_detail["product_workspace"]["selectedObjectRef"]["id"],
+        updated_detail["article_workspace"]["selectedObjectRef"]["id"],
         "image-set-1"
     );
     assert_eq!(
-        updated_detail["thread_read"]["product_workspace"]["selectedObjectRef"]["kind"],
+        updated_detail["thread_read"]["article_workspace"]["selectedObjectRef"]["kind"],
         "imageGenerationSet"
+    );
+
+    core.update_session_current(AgentSessionUpdateParams {
+        session_id: "sess_article_workspace".to_string(),
+        article_workspace_edited_draft: Some(json!({
+            "objectKey": "content-factory-app:sess_article_workspace:articleDraft:article-1",
+            "objectRef": {
+                "appId": "content-factory-app",
+                "kind": "articleDraft",
+                "id": "article-1",
+                "sessionId": "sess_article_workspace",
+                "artifactIds": ["artifact-article-1"],
+                "sourceTurnId": "turn_article_workspace"
+            },
+            "markdown": "# 用户编辑稿\n\n这是 Article Editor 画布写回后的正文。",
+            "updatedAt": "2026-06-29T10:00:00.000Z"
+        })),
+        ..AgentSessionUpdateParams::default()
+    })
+    .await
+    .expect("update edited article draft");
+
+    let edited_read = core
+        .read_session(AgentSessionReadParams {
+            session_id: "sess_article_workspace".to_string(),
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .expect("read edited session");
+    let edited_detail = edited_read.detail.expect("edited session detail");
+    assert_eq!(
+        edited_detail["article_workspace"]["objects"][0]["source"]["markdown"],
+        "# 用户编辑稿\n\n这是 Article Editor 画布写回后的正文。"
+    );
+    assert_eq!(
+        edited_detail["article_workspace"]["objects"][0]["source"]["researchRounds"][0]["title"],
+        "检索行业背景"
+    );
+    assert_eq!(
+        edited_detail["article_workspace"]["objects"][0]["source"]["edited"],
+        true
+    );
+    assert_eq!(
+        edited_detail["article_workspace"]["editedDraft"]["objectRef"]["id"],
+        "article-1"
+    );
+    assert_eq!(
+        edited_detail["thread_read"]["article_workspace"]["objects"][0]["source"]["markdown"],
+        "# 用户编辑稿\n\n这是 Article Editor 画布写回后的正文。"
     );
 
     core.start_turn(
         AgentSessionTurnStartParams {
-            session_id: "sess_product_workspace".to_string(),
-            turn_id: Some("turn_product_profile_action".to_string()),
+            session_id: "sess_article_workspace".to_string(),
+            turn_id: Some("turn_article_workspace_action".to_string()),
             input: AgentInput {
                 text: "请重新生成「配图组」".to_string(),
                 attachments: Vec::new(),
@@ -849,11 +1005,11 @@ async fn read_session_materializes_content_factory_workspace_patch_into_product_
             runtime_options: Some(RuntimeOptions {
                 metadata: Some(json!({
                     "agent_app": {
-                        "source": "right_surface_product_profile",
+                        "source": "right_surface_article_workspace",
                         "app_id": "content-factory-app",
-                        "session_id": "sess_product_workspace",
+                        "session_id": "sess_article_workspace",
                         "workspace_id": "workspace-main",
-                        "product_profile_action": {
+                        "article_workspace_action": {
                             "key": "regenerate",
                             "intent": "regenerate",
                             "risk": "write",
@@ -864,16 +1020,16 @@ async fn read_session_materializes_content_factory_workspace_patch_into_product_
                                 "app_id": "content-factory-app",
                                 "kind": "imageGenerationSet",
                                 "id": "image-set-1",
-                                "session_id": "sess_product_workspace",
+                                "session_id": "sess_article_workspace",
                                 "title": "配图组",
                                 "status": "needs_review",
                                 "artifact_ids": ["artifact-image-1"],
-                                "source_turn_id": "turn_product_workspace"
+                                "source_turn_id": "turn_article_workspace"
                             }
                         }
                     },
                     "right_surface": {
-                        "surface_kind": "productProfile",
+                        "surface_kind": "articleWorkspace",
                         "source": "threadRead",
                         "action_key": "regenerate"
                     }
@@ -886,11 +1042,11 @@ async fn read_session_materializes_content_factory_workspace_patch_into_product_
         RuntimeHostContext::default(),
     )
     .await
-    .expect("start product profile action turn");
+    .expect("start article workspace action turn");
 
     core.append_external_runtime_events(
-        "sess_product_workspace",
-        Some("turn_product_profile_action"),
+        "sess_article_workspace",
+        Some("turn_article_workspace_action"),
         vec![
             RuntimeEvent::new(
                 "artifact.snapshot",
@@ -898,7 +1054,7 @@ async fn read_session_materializes_content_factory_workspace_patch_into_product_
                     "artifact": {
                         "artifactId": "artifact-image-regenerate-workspace-patch",
                         "artifactRef": "artifact-image-regenerate-workspace-patch",
-                        "path": ".lime/artifacts/product-profile/image-regenerate-workspace-patch.json",
+                        "path": ".lime/artifacts/article-workspace/image-regenerate-workspace-patch.json",
                         "title": "配图组重新生成结果",
                         "kind": "content_factory.workspace_patch",
                         "status": "ready",
@@ -907,7 +1063,7 @@ async fn read_session_materializes_content_factory_workspace_patch_into_product_
                                 "appId": "content-factory-app",
                                 "taskId": "task-image-regenerate-1",
                                 "taskKind": "content.image.generate",
-                                "turnId": "turn_product_profile_action",
+                                "turnId": "turn_article_workspace_action",
                                 "workerEntrypoint": "./runtime/content-factory-worker.mjs",
                                 "status": "completed",
                                 "inputSummary": "action=regenerate; object=image-set-1",
@@ -918,12 +1074,12 @@ async fn read_session_materializes_content_factory_workspace_patch_into_product_
                             "contentFactoryWorkspacePatch": {
                                 "schemaVersion": 1,
                                 "appId": "content-factory-app",
-                                "sessionId": "sess_product_workspace",
+                                "sessionId": "sess_article_workspace",
                                 "selectedObjectRef": {
                                     "appId": "content-factory-app",
                                     "kind": "imageGenerationSet",
                                     "id": "image-set-1",
-                                    "sessionId": "sess_product_workspace"
+                                    "sessionId": "sess_article_workspace"
                                 },
                                 "objects": [
                                     {
@@ -931,9 +1087,9 @@ async fn read_session_materializes_content_factory_workspace_patch_into_product_
                                             "appId": "content-factory-app",
                                             "kind": "imageGenerationSet",
                                             "id": "image-set-1",
-                                            "sessionId": "sess_product_workspace",
+                                            "sessionId": "sess_article_workspace",
                                             "artifactIds": ["artifact-image-regenerated"],
-                                            "sourceTurnId": "turn_product_profile_action",
+                                            "sourceTurnId": "turn_article_workspace_action",
                                             "sourceTaskId": "task-image-regenerate-1",
                                             "version": "2"
                                         },
@@ -944,7 +1100,7 @@ async fn read_session_materializes_content_factory_workspace_patch_into_product_
                                         "source": {
                                             "taskKind": "content.image.generate",
                                             "taskId": "task-image-regenerate-1",
-                                            "turnId": "turn_product_profile_action",
+                                            "turnId": "turn_article_workspace_action",
                                             "artifactIds": ["artifact-image-regenerated"],
                                             "images": [
                                                 {
@@ -964,9 +1120,9 @@ async fn read_session_materializes_content_factory_workspace_patch_into_product_
                                     }
                                 ],
                                 "layoutState": {
-                                    "activeTabKind": "productProfile",
+                                    "activeTabKind": "articleWorkspace",
                                     "activePaneKind": "imageGrid",
-                                    "openTabKinds": ["productProfile", "files"],
+                                    "openTabKinds": ["articleWorkspace", "files"],
                                     "splitMode": "chat-right-dock"
                                 }
                             }
@@ -977,31 +1133,31 @@ async fn read_session_materializes_content_factory_workspace_patch_into_product_
             RuntimeEvent::new("turn.completed", json!({})),
         ],
     )
-    .expect("complete product profile action turn");
+    .expect("complete article workspace action turn");
 
     let action_read = core
         .read_session(AgentSessionReadParams {
-            session_id: "sess_product_workspace".to_string(),
+            session_id: "sess_article_workspace".to_string(),
             history_limit: None,
             history_offset: None,
             history_before_message_id: None,
         })
         .expect("read action history session");
     let action_detail = action_read.detail.expect("action history detail");
-    let action_history = action_detail["thread_read"]["product_profile_actions"]
+    let action_history = action_detail["thread_read"]["article_workspace_actions"]
         .as_array()
-        .expect("product profile action history");
+        .expect("article workspace action history");
 
     assert_eq!(action_history.len(), 1);
     assert_eq!(action_history[0]["key"], "regenerate");
     assert_eq!(action_history[0]["status"], "completed");
-    assert_eq!(action_history[0]["turnId"], "turn_product_profile_action");
+    assert_eq!(action_history[0]["turnId"], "turn_article_workspace_action");
     assert_eq!(action_history[0]["objectRef"]["id"], "image-set-1");
     assert_eq!(action_history[0]["objectTitle"], "配图组");
     assert_eq!(action_history[0]["taskKind"], "content.image.generate");
     let action_result_artifacts = action_history[0]["resultArtifacts"]
         .as_array()
-        .expect("product profile action result artifacts");
+        .expect("article workspace action result artifacts");
     assert!(action_result_artifacts
         .iter()
         .any(
@@ -1016,12 +1172,12 @@ async fn read_session_materializes_content_factory_workspace_patch_into_product_
                 && artifact["kind"] == "content_factory.workspace_patch"
         ));
     assert_eq!(
-        action_detail["product_workspace"]["actionHistory"][0],
+        action_detail["article_workspace"]["actionHistory"][0],
         action_history[0]
     );
-    let image_object = action_detail["product_workspace"]["objects"]
+    let image_object = action_detail["article_workspace"]["objects"]
         .as_array()
-        .expect("product workspace objects")
+        .expect("article workspace objects")
         .iter()
         .find(|object| object["ref"]["id"] == "image-set-1")
         .expect("updated image object");
@@ -1033,27 +1189,27 @@ async fn read_session_materializes_content_factory_workspace_patch_into_product_
     );
     assert_eq!(
         image_object["ref"]["sourceTurnId"],
-        "turn_product_profile_action"
+        "turn_article_workspace_action"
     );
     assert_eq!(
         image_object["ref"]["sourceTaskId"],
         "task-image-regenerate-1"
     );
     assert_eq!(
-        action_detail["product_workspace"]["selectedObjectRef"]["id"],
+        action_detail["article_workspace"]["selectedObjectRef"]["id"],
         "image-set-1"
     );
     assert_eq!(
-        action_detail["product_workspace"]["workerEvidence"][2]["taskId"],
+        action_detail["article_workspace"]["workerEvidence"][2]["taskId"],
         "task-image-regenerate-1"
     );
     assert_eq!(
-        action_detail["product_workspace"]["workerEvidence"][2]["status"],
+        action_detail["article_workspace"]["workerEvidence"][2]["status"],
         "completed"
     );
-    let article_object = action_detail["product_workspace"]["objects"]
+    let article_object = action_detail["article_workspace"]["objects"]
         .as_array()
-        .expect("product workspace objects")
+        .expect("article workspace objects")
         .iter()
         .find(|object| object["ref"]["id"] == "article-1")
         .expect("article object");
@@ -1069,4 +1225,116 @@ async fn read_session_materializes_content_factory_workspace_patch_into_product_
         article_object["source"]["imageSlots"][0]["prompt"],
         "桌面端内容工厂写作流程图，中文标签"
     );
+}
+
+#[tokio::test]
+async fn read_session_marks_failed_article_draft_as_non_deliverable_when_article_worker_errors() {
+    let core = RuntimeCore::default();
+    core.start_session(AgentSessionStartParams {
+        session_id: Some("sess_article_workspace_failed".to_string()),
+        thread_id: Some("thread_article_workspace_failed".to_string()),
+        app_id: "content-factory-app".to_string(),
+        workspace_id: Some("workspace-main".to_string()),
+        business_object_ref: None,
+        locale: None,
+    })
+    .expect("session");
+
+    let turn = core
+        .start_turn(
+            AgentSessionTurnStartParams {
+                session_id: "sess_article_workspace_failed".to_string(),
+                turn_id: Some("turn_article_workspace_failed".to_string()),
+                input: AgentInput {
+                    text: "生成文章草稿".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: None,
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("turn")
+        .response
+        .turn;
+
+    core.append_external_runtime_events(
+        "sess_article_workspace_failed",
+        Some(&turn.turn_id),
+        vec![
+            RuntimeEvent::new(
+                "artifact.snapshot",
+                article_workspace_search_snapshot_payload(json!([
+                    {
+                        "id": "host-search-evidence-search-request-1",
+                        "requestId": "search-request-1",
+                        "tool": "WebSearch",
+                        "toolCallId": "content-factory-web-search-search-request-1",
+                        "status": "completed",
+                        "query": "Lime 写文章",
+                        "purpose": "验证宿主真实检索回填",
+                        "summary": "session=sess_article_workspace_failed query=Lime 写文章 result=found",
+                        "output": "session=sess_article_workspace_failed query=Lime 写文章 result=found",
+                        "error": null,
+                        "confidence": "host_verified"
+                    }
+                ])),
+            ),
+            RuntimeEvent::new(
+                "runtime.error",
+                json!({
+                    "source": "agent_app_task_worker",
+                    "appId": "content-factory-app",
+                    "taskId": "task-article-1",
+                    "taskKind": "content.article.generate",
+                    "turnId": "turn_article_workspace_failed",
+                    "status": "failed",
+                    "errorCode": "worker_invalid_json_output",
+                    "errorMessage": "Agent App worker returned invalid JSON",
+                    "message": "Agent App task worker failed: Agent App worker returned invalid JSON",
+                    "metadata": {
+                        "agentAppWorker": {
+                            "appId": "content-factory-app",
+                            "taskId": "task-article-1",
+                            "taskKind": "content.article.generate",
+                            "turnId": "turn_article_workspace_failed",
+                            "status": "failed",
+                            "workerEntrypoint": "./runtime/content-factory-worker.mjs",
+                            "inputSummary": "prompt=生成文章; inputKeys=topic"
+                        }
+                    }
+                }),
+            ),
+            RuntimeEvent::new("turn.completed", json!({})),
+        ],
+    )
+    .expect("append artifact event");
+
+    let read = core
+        .read_session(AgentSessionReadParams {
+            session_id: "sess_article_workspace_failed".to_string(),
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .expect("read session");
+    let detail = read.detail.expect("session detail");
+    let article_workspace = &detail["article_workspace"];
+
+    assert_eq!(article_workspace["objects"][0]["status"], "failed");
+    assert_eq!(
+        article_workspace["objects"][0]["summary"],
+        "写作失败，文章草稿未达到可交付状态"
+    );
+    assert_eq!(
+        article_workspace["objects"][1]["status"],
+        "needs_review"
+    );
+    assert_eq!(
+        article_workspace["workerEvidence"][1]["taskKind"],
+        "content.article.generate"
+    );
+    assert_eq!(article_workspace["workerEvidence"][1]["status"], "failed");
 }

@@ -44,6 +44,9 @@
 - Agent QC 运营级测试体系执行计划：`internal/exec-plans/agent-qc-ops-testing-plan.md`
 - Agent App v2 独立安装与 Runtime 底座拆分执行计划：`internal/exec-plans/agentapp-v2-standalone-runtime.md`
 - AI 图层化设计实现计划：`internal/exec-plans/ai-layered-design-implementation-plan.md`
+- 图片能力 feature-flag / extension-tool 执行计划：`internal/exec-plans/image-capability-feature-flag-extension-tool-plan.md`
+- 图片能力 feature-flag / extension-tool 进度：`internal/exec-plans/image-capability-feature-flag-extension-tool-progress.md`
+- 图片能力 feature-flag / extension-tool 重构计划（历史草案，仅供对照）：`internal/exec-plans/image-capability-feature-flag-extension-tool-refactor-plan.md`
 - Skill Forge P1A Capability Authoring 执行计划：`internal/exec-plans/skill-forge-capability-authoring-p1a-plan.md`
 - Skill Forge P1B Capability Verification 执行计划：`internal/exec-plans/skill-forge-capability-verification-p1b-plan.md`
 - Skill Forge P3 Capability Registration 执行计划：`internal/exec-plans/skill-forge-capability-registration-p3-plan.md`

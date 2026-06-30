@@ -1321,7 +1321,8 @@ export interface AgentRuntimeUpdateSessionRequest {
   recent_access_mode?: AsterSessionExecutionRuntimeAccessMode;
   recent_preferences?: AsterSessionExecutionRuntimePreferences;
   recent_team_selection?: AsterSessionExecutionRuntimeRecentTeamSelection;
-  product_workspace_selected_object_ref?: Record<string, unknown> | null;
+  article_workspace_selected_object_ref?: Record<string, unknown> | null;
+  article_workspace_edited_draft?: Record<string, unknown> | null;
 }
 export interface AgentRuntimeFrontmatterHookMatcher {
   matcher?: string;
@@ -1570,6 +1571,29 @@ export interface CompleteAudioGenerationTaskArtifactRequest {
   durationMs?: number;
   providerId?: string;
   model?: string;
+}
+export interface CompletedImageGenerationTaskInput {
+  url: string;
+  prompt?: string;
+  revisedPrompt?: string;
+  size?: string;
+  providerId?: string;
+  model?: string;
+  slotId?: string;
+  slotIndex?: number;
+  slotPrompt?: string;
+}
+export interface CompleteImageGenerationTaskArtifactRequest {
+  projectRootPath: string;
+  taskRef: string;
+  images: CompletedImageGenerationTaskInput[];
+  responses?: Array<Record<string, unknown>>;
+  failures?: Array<Record<string, unknown>>;
+  providerId?: string;
+  model?: string;
+  executorMode?: string;
+  responseId?: string;
+  status?: string;
 }
 export interface MediaTaskArtifactRecord {
   task_id: string;

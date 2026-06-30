@@ -1,5 +1,66 @@
 {
   "$defs": {
+    "AgentAppArticleWorkspaceContract": {
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "objects": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentAppArticleWorkspaceObject"
+          },
+          "type": "array"
+        },
+        "panes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "rendererKinds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "enabled"
+      ],
+      "type": "object"
+    },
+    "AgentAppArticleWorkspaceObject": {
+      "properties": {
+        "artifactKind": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "defaultPane": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "primary": {
+          "type": "boolean"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "defaultPane",
+        "kind",
+        "primary",
+        "title"
+      ],
+      "type": "object"
+    },
     "AgentAppHistoryRestoreContract": {
       "properties": {
         "defaultPane": {
@@ -34,71 +95,13 @@
         "restoreSelection"
       ],
       "type": "object"
-    },
-    "AgentAppProductProfileContract": {
-      "properties": {
-        "enabled": {
-          "type": "boolean"
-        },
-        "objects": {
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/AgentAppProductProfileObject"
-          },
-          "type": "array"
-        },
-        "panes": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "rendererKinds": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        }
-      },
-      "required": [
-        "enabled"
-      ],
-      "type": "object"
-    },
-    "AgentAppProductProfileObject": {
-      "properties": {
-        "artifactKind": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "defaultPane": {
-          "type": "string"
-        },
-        "kind": {
-          "type": "string"
-        },
-        "primary": {
-          "type": "boolean"
-        },
-        "title": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "defaultPane",
-        "kind",
-        "primary",
-        "title"
-      ],
-      "type": "object"
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
+    "articleWorkspace": {
+      "$ref": "#/$defs/AgentAppArticleWorkspaceContract"
+    },
     "defaultActiveTab": {
       "type": [
         "null",
@@ -116,9 +119,6 @@
       "minimum": 0,
       "type": "integer"
     },
-    "productProfile": {
-      "$ref": "#/$defs/AgentAppProductProfileContract"
-    },
     "supportedTabs": {
       "default": [],
       "items": {
@@ -128,10 +128,10 @@
     }
   },
   "required": [
+    "articleWorkspace",
     "dock",
     "historyRestore",
-    "physicalDockCount",
-    "productProfile"
+    "physicalDockCount"
   ],
   "title": "AgentAppRightSurfaceContract",
   "type": "object"

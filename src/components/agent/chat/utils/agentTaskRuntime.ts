@@ -70,20 +70,20 @@ export interface AgentTaskRuntimeCardModel {
 
 interface BuildAgentTaskRuntimeCardModelParams {
   messages: Message[];
-  turns?: AgentThreadTurn[];
-  threadItems?: AgentThreadItem[];
+  turns?: readonly AgentThreadTurn[];
+  threadItems?: readonly AgentThreadItem[];
   currentTurnId?: string | null;
   threadRead?: AgentRuntimeThreadReadModel | null;
-  pendingActions?: ActionRequired[];
-  submittedActionsInFlight?: ActionRequired[];
-  queuedTurns?: QueuedTurnSnapshot[];
-  childSubagentSessions?: AsterSubagentSessionInfo[];
+  pendingActions?: readonly ActionRequired[];
+  submittedActionsInFlight?: readonly ActionRequired[];
+  queuedTurns?: readonly QueuedTurnSnapshot[];
+  childSubagentSessions?: readonly AsterSubagentSessionInfo[];
   isSending?: boolean;
 }
 
 function resolveVisiblePendingRequestCount(
   threadRead: AgentRuntimeThreadReadModel | null | undefined,
-  submittedActionsInFlight: ActionRequired[],
+  submittedActionsInFlight: readonly ActionRequired[],
 ): number {
   const submittedRequestIds = new Set(
     submittedActionsInFlight.map((item) => item.requestId),
@@ -99,16 +99,16 @@ function resolveVisiblePendingRequestCount(
 }
 
 function resolveVisiblePendingActions(
-  pendingActions: ActionRequired[],
+  pendingActions: readonly ActionRequired[],
 ): ActionRequired[] {
   return pendingActions.filter((action) => action.status !== "submitted");
 }
 
 function hasPendingRuntimeActionConfirmation(params: {
   latestTurnItems: AgentThreadItem[];
-  pendingActions: ActionRequired[];
+  pendingActions: readonly ActionRequired[];
   threadRead?: AgentRuntimeThreadReadModel | null;
-  submittedActionsInFlight: ActionRequired[];
+  submittedActionsInFlight: readonly ActionRequired[];
 }): boolean {
   const submittedRequestIds = new Set(
     params.submittedActionsInFlight.map((item) => item.requestId),
@@ -127,8 +127,8 @@ function hasPendingRuntimeActionConfirmation(params: {
 
 function hasSubmittedRuntimeActionConfirmation(params: {
   latestTurnItems: AgentThreadItem[];
-  pendingActions: ActionRequired[];
-  submittedActionsInFlight: ActionRequired[];
+  pendingActions: readonly ActionRequired[];
+  submittedActionsInFlight: readonly ActionRequired[];
 }): boolean {
   return (
     params.pendingActions.some(isSubmittedRuntimeActionConfirmation) ||
@@ -167,7 +167,7 @@ function isProcessItem(item: AgentThreadItem): boolean {
 }
 
 function resolveLatestTurn(
-  turns: AgentThreadTurn[],
+  turns: readonly AgentThreadTurn[],
   currentTurnId?: string | null,
 ): AgentThreadTurn | null {
   if (currentTurnId) {
@@ -179,7 +179,9 @@ function resolveLatestTurn(
   return turns[turns.length - 1] || null;
 }
 
-function resolveLatestAssistantMessage(messages: Message[]): Message | null {
+function resolveLatestAssistantMessage(
+  messages: readonly Message[],
+): Message | null {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (message?.role === "assistant") {
@@ -189,7 +191,7 @@ function resolveLatestAssistantMessage(messages: Message[]): Message | null {
   return null;
 }
 
-function resolveLatestUserMessage(messages: Message[]): Message | null {
+function resolveLatestUserMessage(messages: readonly Message[]): Message | null {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (
@@ -216,7 +218,9 @@ export function isAssistantAwaitingFinalResponse(
   );
 }
 
-function resolveLatestUsage(messages: Message[]): AgentTokenUsage | undefined {
+function resolveLatestUsage(
+  messages: readonly Message[],
+): AgentTokenUsage | undefined {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (message?.role === "assistant" && !message.isThinking && message.usage) {
@@ -231,8 +235,8 @@ function resolveTaskStatus(params: {
   latestTurn: AgentThreadTurn | null;
   latestTurnItems: AgentThreadItem[];
   threadRead?: AgentRuntimeThreadReadModel | null;
-  pendingActions: ActionRequired[];
-  submittedActionsInFlight: ActionRequired[];
+  pendingActions: readonly ActionRequired[];
+  submittedActionsInFlight: readonly ActionRequired[];
   queuedTurnCount: number;
   isSending: boolean;
 }): AgentTaskRuntimeStatus | null {
@@ -383,9 +387,9 @@ function resolvePhaseLabel(phase: AgentTaskRuntimePhase): string {
 
 function resolveBlockingDetail(
   threadRead: AgentRuntimeThreadReadModel | null | undefined,
-  latestTurnItems: AgentThreadItem[],
-  pendingActions: ActionRequired[],
-  submittedActionsInFlight: ActionRequired[],
+  latestTurnItems: readonly AgentThreadItem[],
+  pendingActions: readonly ActionRequired[],
+  submittedActionsInFlight: readonly ActionRequired[],
 ): string | null {
   const submittedRequestIds = new Set(
     submittedActionsInFlight.map((item) => item.requestId),
@@ -412,7 +416,7 @@ function resolveBlockingDetail(
 
 function resolveCompletedSummary(
   latestAssistant: Message | null,
-  latestTurnItems: AgentThreadItem[],
+  latestTurnItems: readonly AgentThreadItem[],
 ): string | null {
   let latestTurnSummary: AgentThreadItem | null = null;
   for (let index = latestTurnItems.length - 1; index >= 0; index -= 1) {
@@ -434,7 +438,7 @@ function resolveCompletedSummary(
 }
 
 function resolveSubtaskStats(
-  childSubagentSessions: AsterSubagentSessionInfo[],
+  childSubagentSessions: readonly AsterSubagentSessionInfo[],
 ): AgentTaskRuntimeSubtaskStats | null {
   if (childSubagentSessions.length === 0) {
     return null;

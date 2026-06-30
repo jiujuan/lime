@@ -25,6 +25,7 @@ type SceneAppQuickReviewActionKey =
   (typeof SCENEAPP_QUICK_REVIEW_ACTIONS)[number]["key"];
 
 export interface UseSceneAppReviewDecisionRuntimeParams {
+  enabled?: boolean;
   projectId?: string | null;
   sessionId?: string | null;
   sceneAppExecutionSummaryState?: SceneAppExecutionSummaryRuntimeState;
@@ -60,6 +61,7 @@ const REVIEWABLE_SCENE_APP_STATUSES: SceneAppRunSummary["status"][] = [
 ];
 
 export function useSceneAppReviewDecisionRuntime({
+  enabled,
   projectId,
   sessionId,
   sceneAppExecutionSummaryState,
@@ -72,13 +74,17 @@ export function useSceneAppReviewDecisionRuntime({
   const [saving, setSaving] = useState(false);
   const [signalsVersion, setSignalsVersion] = useState(0);
   const summary = sceneAppExecutionSummaryState?.summary ?? null;
+  const runtimeEnabled = enabled ?? Boolean(summary);
   const targetRunSummary =
-    sceneAppExecutionSummaryState?.reviewTargetRunSummary ?? null;
+    runtimeEnabled
+      ? (sceneAppExecutionSummaryState?.reviewTargetRunSummary ?? null)
+      : null;
   const targetSessionId = targetRunSummary?.sessionId?.trim() || "";
   const requestRefreshSceneAppExecutionSummary =
     sceneAppExecutionSummaryState?.requestRefresh;
   const failureSignal = summary?.runtimeBackflow?.topFailureSignalLabel;
   const humanReviewAvailable =
+    runtimeEnabled &&
     targetSessionId.length > 0 &&
     Boolean(
       targetRunSummary &&
@@ -86,13 +92,16 @@ export function useSceneAppReviewDecisionRuntime({
     );
 
   useEffect(() => {
+    if (!runtimeEnabled) {
+      return undefined;
+    }
     return subscribeCuratedTaskRecommendationSignalsChanged(() => {
       setSignalsVersion((previous) => previous + 1);
     });
-  }, []);
+  }, [runtimeEnabled]);
 
   const resolveReviewDecisionTemplate = useCallback(async () => {
-    if (!targetSessionId) {
+    if (!runtimeEnabled || !targetSessionId) {
       return null;
     }
 
@@ -112,7 +121,7 @@ export function useSceneAppReviewDecisionRuntime({
     } finally {
       setLoading(false);
     }
-  }, [targetSessionId, template]);
+  }, [runtimeEnabled, targetSessionId, template]);
 
   const persistHumanReview = useCallback(
     async (
@@ -240,6 +249,9 @@ export function useSceneAppReviewDecisionRuntime({
 
   const latestReviewFeedbackSignal = useMemo(() => {
     void signalsVersion;
+    if (!runtimeEnabled) {
+      return null;
+    }
     return (
       listCuratedTaskRecommendationSignals({
         projectId,
@@ -248,7 +260,7 @@ export function useSceneAppReviewDecisionRuntime({
         .filter((signal) => signal.source === "review_feedback")
         .sort((left, right) => right.createdAt - left.createdAt)[0] ?? null
     );
-  }, [projectId, sessionId, signalsVersion]);
+  }, [projectId, runtimeEnabled, sessionId, signalsVersion]);
 
   return useMemo(
     () => ({

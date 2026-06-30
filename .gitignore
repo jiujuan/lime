@@ -113,6 +113,8 @@ internal/roadmap/rightsurface/**
 !internal/roadmap/models/
 internal/roadmap/models/**
 !internal/roadmap/models/*.md
+!internal/roadmap/images/
+!internal/roadmap/images/*.md
 !internal/roadmap/plan/
 internal/roadmap/plan/**
 !internal/roadmap/plan/*.md

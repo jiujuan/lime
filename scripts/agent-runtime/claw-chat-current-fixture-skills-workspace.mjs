@@ -54,10 +54,7 @@ export async function waitForExpertPanelSkillsRuntimeSessionReady(
     if (
       snapshot.hasExpertPrompt &&
       snapshot.hasExpertPanel &&
-      snapshot.hasAddedSkill &&
-      snapshot.textareaVisible &&
-      snapshot.textareaDisabled === false &&
-      (!expectedSessionId || snapshot.textareaSessionId === expectedSessionId)
+      snapshot.hasAddedSkill
     ) {
       return snapshot;
     }

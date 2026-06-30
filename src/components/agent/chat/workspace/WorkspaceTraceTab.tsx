@@ -277,15 +277,12 @@ function useTraceComparisonsReady(
               120,
             )
         : (callback) =>
-            window.setTimeout(
-              () => {
-                callback({
-                  didTimeout: false,
-                  timeRemaining: () => 0,
-                });
-              },
-              120,
-            );
+            window.setTimeout(() => {
+              callback({
+                didTimeout: false,
+                timeRemaining: () => 0,
+              });
+            }, 120);
     const cancel =
       typeof window.cancelIdleCallback === "function"
         ? window.cancelIdleCallback
@@ -422,12 +419,12 @@ export function WorkspaceTraceTab({
         />
         <div className="min-h-0 flex-1 space-y-4 overflow-auto p-4">
           <section className="rounded-2xl border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-subtle)] p-4">
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-xs font-medium text-[color:var(--lime-text-muted)]">
                   {t("agentChat.tracePanel.currentSession")}
                 </p>
-                <p className="mt-1 max-w-[260px] truncate text-sm font-semibold text-[color:var(--lime-text-strong)]">
+                <p className="mt-1 break-all text-sm font-semibold text-[color:var(--lime-text-strong)]">
                   {model.session.sessionId}
                 </p>
               </div>
@@ -515,7 +512,7 @@ export function WorkspaceTraceTab({
               <p className="text-xs font-medium text-[color:var(--lime-text-muted)]">
                 {t("agentChat.tracePanel.currentSession")}
               </p>
-              <p className="mt-1 max-w-[260px] truncate text-sm font-semibold text-[color:var(--lime-text-strong)]">
+              <p className="mt-1 break-all text-sm font-semibold text-[color:var(--lime-text-strong)]">
                 {model.session.sessionId}
               </p>
             </div>
@@ -573,7 +570,7 @@ export function WorkspaceTraceTab({
                 data-testid={`workspace-trace-segment-${segment.id}`}
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1 basis-[150px]">
+                  <div className="min-w-[min(100%,9rem)] flex-1">
                     <p className="text-sm font-semibold">
                       {text(`agentChat.tracePanel.segment.${segment.id}.label`)}
                     </p>
@@ -871,8 +868,8 @@ function TraceHeader({
         : t("agentChat.tracePanel.copy.action");
 
   return (
-    <div className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-[color:var(--lime-surface-border)] px-4">
-      <div className="flex min-w-0 items-center gap-2">
+    <div className="flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[color:var(--lime-surface-border)] px-4 py-3">
+      <div className="flex min-w-[min(100%,12rem)] flex-1 items-center gap-2">
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[color:var(--lime-surface-subtle)] text-[color:var(--lime-text-strong)]">
           <Activity className="h-4 w-4" />
         </span>
@@ -889,7 +886,7 @@ function TraceHeader({
       </div>
       <button
         type="button"
-        className="inline-flex h-8 min-w-0 max-w-[48%] shrink items-center gap-1.5 rounded-xl border border-[color:var(--lime-surface-border)] px-2.5 text-xs font-medium text-[color:var(--lime-text)] transition hover:bg-[color:var(--lime-surface-hover)] disabled:cursor-not-allowed disabled:opacity-45"
+        className="inline-flex h-8 min-w-[min(100%,8rem)] shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[color:var(--lime-surface-border)] px-2.5 text-xs font-medium text-[color:var(--lime-text)] transition hover:bg-[color:var(--lime-surface-hover)] disabled:cursor-not-allowed disabled:opacity-45"
         disabled={copyDisabled}
         onClick={onCopyEvidence}
       >

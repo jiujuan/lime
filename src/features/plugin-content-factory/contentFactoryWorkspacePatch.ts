@@ -1,17 +1,17 @@
 import type { WorkspaceRightSurfacePendingRequest } from "@/lib/api/workspaceRightSurface";
 import {
-  buildWorkspaceProductProfileFromUnknown,
-  type WorkspaceProductProfile,
-  type WorkspaceProductProfileSource,
-} from "@/components/agent/chat/workspace/workspaceProductProfileModel";
-import { buildWorkspaceProductProfileWorkerEvidenceFromThreadRead } from "@/components/agent/chat/workspace/workspaceProductProfileWorkerEvidence";
+  buildWorkspaceArticleWorkspaceFromUnknown,
+  type WorkspaceArticleWorkspace,
+  type WorkspaceArticleWorkspaceSource,
+} from "@/components/agent/chat/workspace/workspaceArticleWorkspaceModel";
+import { buildWorkspaceArticleWorkspaceWorkerEvidenceFromThreadRead } from "@/components/agent/chat/workspace/workspaceArticleWorkspaceWorkerEvidence";
 import { CONTENT_FACTORY_PLUGIN_ID } from "./contentFactoryPlugin";
 
 export const CONTENT_FACTORY_WORKSPACE_PATCH_KIND =
   "content_factory.workspace_patch";
 
-export interface BuildContentFactoryWorkspacePatchProfileOptions {
-  source?: WorkspaceProductProfileSource;
+export interface BuildContentFactoryWorkspacePatchArticleWorkspaceOptions {
+  source?: WorkspaceArticleWorkspaceSource;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -48,16 +48,20 @@ function firstObjectRecord(value: unknown): Record<string, unknown> | null {
   return asRecord(first);
 }
 
-function objectRefRecord(object: Record<string, unknown> | null): Record<
-  string,
-  unknown
-> | null {
+function objectRefRecord(
+  object: Record<string, unknown> | null,
+): Record<string, unknown> | null {
   return asRecord(object?.ref) ?? asRecord(object?.objectRef) ?? null;
 }
 
 function readPatchAppId(patch: Record<string, unknown>): string | null {
   const firstRef = objectRefRecord(firstObjectRecord(patch.objects));
-  return readString(patch.appId, patch.app_id, firstRef?.appId, firstRef?.app_id);
+  return readString(
+    patch.appId,
+    patch.app_id,
+    firstRef?.appId,
+    firstRef?.app_id,
+  );
 }
 
 function readPatchSessionId(patch: Record<string, unknown>): string | null {
@@ -91,8 +95,9 @@ function pushKnownPatchFields(
   if (!record) {
     return;
   }
-  pushPatchCandidate(candidates, record.productWorkspace);
-  pushPatchCandidate(candidates, record.product_workspace);
+  // 历史 worker payload 仍写入 articleWorkspace；前端事实源已迁到 Article Workspace。
+  pushPatchCandidate(candidates, record.articleWorkspace);
+  pushPatchCandidate(candidates, record.article_workspace);
   pushPatchCandidate(candidates, record.workspacePatch);
   pushPatchCandidate(candidates, record.workspace_patch);
   pushPatchCandidate(candidates, record.contentFactoryWorkspacePatch);
@@ -143,16 +148,14 @@ function isContentFactoryPatch(patch: Record<string, unknown>): boolean {
 }
 
 function attachSourceArtifactIfMissing(params: {
-  profile: WorkspaceProductProfile;
+  profile: WorkspaceArticleWorkspace;
   request: WorkspaceRightSurfacePendingRequest;
-}): WorkspaceProductProfile {
+}): WorkspaceArticleWorkspace {
   const { profile, request } = params;
   const sourceArtifacts =
     profile.sourceArtifacts && profile.sourceArtifacts.length > 0
       ? profile.sourceArtifacts
-      : [
-          sourceArtifactFromPendingRequest(request),
-        ];
+      : [sourceArtifactFromPendingRequest(request)];
   return {
     ...profile,
     workspaceId: profile.workspaceId ?? request.workspaceId ?? null,
@@ -160,8 +163,8 @@ function attachSourceArtifactIfMissing(params: {
     workerEvidence:
       (profile.workerEvidence?.length ?? 0) > 0
         ? (profile.workerEvidence ?? [])
-        : buildWorkspaceProductProfileWorkerEvidenceFromThreadRead({
-            productWorkspace: profile as unknown as Record<string, unknown>,
+        : buildWorkspaceArticleWorkspaceWorkerEvidenceFromThreadRead({
+            articleWorkspace: profile as unknown as Record<string, unknown>,
             sourceArtifacts,
           }),
     updatedAt: profile.updatedAt ?? request.requestedAt,
@@ -192,16 +195,19 @@ function sourceArtifactFromPendingRequest(
   };
 }
 
-export function buildContentFactoryWorkspacePatchProfile(
+export function buildContentFactoryWorkspacePatchArticleWorkspace(
   value: unknown,
-  options: BuildContentFactoryWorkspacePatchProfileOptions = {},
-): WorkspaceProductProfile | null {
+  options: BuildContentFactoryWorkspacePatchArticleWorkspaceOptions = {},
+): WorkspaceArticleWorkspace | null {
   const source = options.source ?? "rightSurfacePending";
   for (const candidate of workspacePatchCandidates(value)) {
     if (!isContentFactoryPatch(candidate)) {
       continue;
     }
-    const profile = buildWorkspaceProductProfileFromUnknown(candidate, source);
+    const profile = buildWorkspaceArticleWorkspaceFromUnknown(
+      candidate,
+      source,
+    );
     if (profile?.appId === CONTENT_FACTORY_PLUGIN_ID) {
       return profile;
     }
@@ -209,19 +215,22 @@ export function buildContentFactoryWorkspacePatchProfile(
   return null;
 }
 
-export function buildContentFactoryWorkspacePatchProfileFromPendingRequests(
+export function buildContentFactoryWorkspacePatchArticleWorkspaceFromPendingRequests(
   pendingRequests: readonly WorkspaceRightSurfacePendingRequest[],
-): WorkspaceProductProfile | null {
+): WorkspaceArticleWorkspace | null {
   for (const request of pendingRequests) {
     if (
       request.status !== "pending" ||
-      request.surfaceKind !== "productProfile"
+      request.surfaceKind !== "articleWorkspace"
     ) {
       continue;
     }
-    const profile = buildContentFactoryWorkspacePatchProfile(request.metadata, {
-      source: "rightSurfacePending",
-    });
+    const profile = buildContentFactoryWorkspacePatchArticleWorkspace(
+      request.metadata,
+      {
+        source: "rightSurfacePending",
+      },
+    );
     if (!profile) {
       continue;
     }

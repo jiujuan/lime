@@ -31,6 +31,7 @@ import {
   getProviderPromptCacheMode,
   resolvePromptCacheSupportNotice,
 } from "@/lib/model/providerPromptCacheSupport";
+import { buildProviderModelsFromBackendModelIds } from "@/lib/model/providerModelsCatalog";
 import { ModelCapabilityBadges } from "@/components/model/ModelCapabilityBadges";
 import { resolveOemCloudRuntimeContext } from "@/lib/api/oemCloudRuntime";
 import { resolveOemLimeHubProviderName } from "@/lib/oemLimeHubProvider";
@@ -62,6 +63,52 @@ function resolveProviderSelectionValue(provider: ConfiguredProvider): string {
 function resolveInitialProviderModel(provider: ConfiguredProvider): string {
   return (
     provider.customModels?.find((modelId) => modelId.trim().length > 0) ?? ""
+  );
+}
+
+function resolveInitialProviderModelFromOptions(
+  provider: ConfiguredProvider,
+  modelOptions: Array<{ id: string; compatibilityIssue: unknown }>,
+): string {
+  const firstAvailableModel = modelOptions.find(
+    (item) => !item.compatibilityIssue,
+  )?.id;
+
+  return firstAvailableModel ?? resolveInitialProviderModel(provider);
+}
+
+function resolveProviderSelectionModel(params: {
+  provider: ConfiguredProvider;
+  modelFilter?: ModelSelectorProps["modelFilter"];
+  getFallbackModels?: ModelSelectorProps["getFallbackModels"];
+  isSelected: boolean;
+  currentModelOptions: Array<{ id: string; compatibilityIssue: unknown }>;
+}): string {
+  if (params.isSelected) {
+    return resolveInitialProviderModelFromOptions(
+      params.provider,
+      params.currentModelOptions,
+    );
+  }
+
+  if (!params.modelFilter) {
+    return resolveInitialProviderModel(params.provider);
+  }
+
+  const fallbackModels =
+    params.getFallbackModels?.(params.provider) ??
+    buildProviderModelsFromBackendModelIds(
+      params.provider,
+      [],
+      params.provider.customModels ?? [],
+    );
+  const compatibleModels = fallbackModels.filter((model) =>
+    params.modelFilter?.(model, params.provider),
+  );
+
+  return (
+    compatibleModels.find((model) => model.id.trim().length > 0)?.id ??
+    resolveInitialProviderModel(params.provider)
   );
 }
 
@@ -799,13 +846,22 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                             <button
                               key={provider.key}
                               onClick={() => {
+                                const nextModel = resolveProviderSelectionModel(
+                                  {
+                                    provider,
+                                    modelFilter,
+                                    getFallbackModels,
+                                    isSelected,
+                                    currentModelOptions: modelOptions,
+                                  },
+                                );
                                 setProviderType(
                                   resolveProviderSelectionValue(provider),
                                 );
                                 setModel(
                                   provider.authStatus === "login_required"
                                     ? ""
-                                    : resolveInitialProviderModel(provider),
+                                    : nextModel,
                                 );
                                 setReasoningEffort?.("");
                               }}

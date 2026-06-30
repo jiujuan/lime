@@ -38,9 +38,16 @@ describe("Agent App projection P0", () => {
       "content_factory_workspace_patch",
     ]);
     expect(projection.services.map((service) => service.key)).toEqual([]);
-    expect(projection.workflows.map((workflow) => workflow.key)).toEqual([]);
-    expect(projection.skillRequirements.map((skill) => skill.id)).toEqual([]);
-    expect(projection.toolRequirements.map((tool) => tool.key)).toEqual([]);
+    expect(projection.workflows.map((workflow) => workflow.key)).toEqual([
+      "content_article_workflow",
+    ]);
+    expect(projection.skillRequirements.map((skill) => skill.id)).toEqual([
+      "gongzonghao-article-writer",
+      "article-image-cheatsheet",
+    ]);
+    expect(projection.toolRequirements.map((tool) => tool.key)).toEqual([
+      "content-factory-worker",
+    ]);
     expect(projection.runtimePackage).toMatchObject({
       hasWorkerBundle: true,
       workerPath: "./src/runtime/content-factory-worker.mjs",

@@ -1,5 +1,9 @@
 import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
-import type { Artifact, ArtifactStatus, ArtifactType } from "@/lib/artifact/types";
+import type {
+  Artifact,
+  ArtifactStatus,
+  ArtifactType,
+} from "@/lib/artifact/types";
 import type { Message } from "../types";
 import { mergeArtifacts } from "../utils/messageArtifacts";
 import {
@@ -124,7 +128,7 @@ function historyArtifactFromSummary(params: {
 }): Artifact | null {
   const { sessionIdFallback, summary } = params;
   const metadata = asHistoryRecord(summary.metadata);
-  if (isProductProfileArtifactSummary(summary, metadata)) {
+  if (isArticleWorkspaceArtifactSummary(summary, metadata)) {
     return null;
   }
   const path =
@@ -204,7 +208,7 @@ function historyArtifactFromSummary(params: {
   };
 }
 
-function isProductProfileArtifactSummary(
+function isArticleWorkspaceArtifactSummary(
   summary: HistoryArtifactSummary,
   metadata: Record<string, unknown> | null,
 ): boolean {
@@ -215,16 +219,16 @@ function isProductProfileArtifactSummary(
   if (!metadata) {
     return false;
   }
-  const productProfile =
-    asHistoryRecord(metadata.productProfile) ??
-    asHistoryRecord(metadata.product_profile);
+  const articleWorkspaceCompat =
+    asHistoryRecord(metadata.articleWorkspace) ??
+    asHistoryRecord(metadata.article_workspace);
   const artifactDocument =
     asHistoryRecord(metadata.artifactDocument) ??
     asHistoryRecord(metadata.artifact_document);
   const artifactDocumentMetadata = asHistoryRecord(artifactDocument?.metadata);
-  const artifactDocumentProductProfile =
-    asHistoryRecord(artifactDocumentMetadata?.productProfile) ??
-    asHistoryRecord(artifactDocumentMetadata?.product_profile);
+  const artifactDocumentArticleWorkspace =
+    asHistoryRecord(artifactDocumentMetadata?.articleWorkspace) ??
+    asHistoryRecord(artifactDocumentMetadata?.article_workspace);
   const contentFactoryWorkspacePatch =
     asHistoryRecord(metadata.contentFactoryWorkspacePatch) ??
     asHistoryRecord(metadata.content_factory_workspace_patch);
@@ -242,12 +246,12 @@ function isProductProfileArtifactSummary(
     "kind",
   ]);
   return (
-    Boolean(productProfile || artifactDocumentProductProfile) ||
+    Boolean(articleWorkspaceCompat || artifactDocumentArticleWorkspace) ||
     Boolean(contentFactoryWorkspacePatch) ||
-    openedFrom === "app_server_product_workspace" ||
+    openedFrom === "app_server_article_workspace" ||
     artifactKind === "content_factory.workspace_patch" ||
     (artifactSchema === "artifact_document.v1" &&
-      Boolean(productProfile || artifactDocumentProductProfile))
+      Boolean(articleWorkspaceCompat || artifactDocumentArticleWorkspace))
   );
 }
 

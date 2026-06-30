@@ -49,21 +49,29 @@ interface UseMaterialsReturn {
   getContent: (id: string) => Promise<string>;
 }
 
+interface UseMaterialsOptions {
+  enabled?: boolean;
+}
+
 /**
  * 素材管理 Hook
  *
  * @param projectId - 项目 ID
  */
-export function useMaterials(projectId: string | null): UseMaterialsReturn {
+export function useMaterials(
+  projectId: string | null,
+  options: UseMaterialsOptions = {},
+): UseMaterialsReturn {
+  const { enabled = true } = options;
   const [materials, setMaterials] = useState<Material[]>([]);
   const [count, setCount] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(Boolean(projectId) && enabled);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<MaterialFilter>({});
 
   /** 刷新素材列表 */
   const refresh = useCallback(async () => {
-    if (!projectId) {
+    if (!projectId || !enabled) {
       setMaterials([]);
       setCount(0);
       setLoading(false);
@@ -86,7 +94,7 @@ export function useMaterials(projectId: string | null): UseMaterialsReturn {
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [enabled, projectId]);
 
   /** 筛选后的素材列表 */
   const filteredMaterials = useMemo(() => {
@@ -154,8 +162,15 @@ export function useMaterials(projectId: string | null): UseMaterialsReturn {
 
   // 初始加载
   useEffect(() => {
+    if (!projectId || !enabled) {
+      setMaterials([]);
+      setCount(0);
+      setLoading(false);
+      return;
+    }
+
     refresh();
-  }, [refresh]);
+  }, [enabled, projectId, refresh]);
 
   return {
     materials,

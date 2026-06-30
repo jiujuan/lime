@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { TFunction } from "i18next";
 import { AlertCircle, CheckCircle2, Pencil } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -234,6 +234,8 @@ export function MediaServicesSettings() {
   const [imageCountInput, setImageCountInput] = useState(
     String(DEFAULT_IMAGE_COUNT),
   );
+  const configRef = useRef<Config | null>(null);
+  const saveRevisionRef = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -246,6 +248,7 @@ export function MediaServicesSettings() {
         }
 
         setConfig(nextConfig);
+        configRef.current = nextConfig;
         const nextImageCount =
           nextConfig.image_gen?.default_count ?? DEFAULT_IMAGE_COUNT;
         setImageCountDraft(nextImageCount);
@@ -271,29 +274,44 @@ export function MediaServicesSettings() {
   };
 
   const persistConfig = async (updater: (current: Config) => Config) => {
-    if (!config) {
+    const currentConfig = configRef.current;
+    if (!currentConfig) {
       return;
     }
 
+    const nextRevision = saveRevisionRef.current + 1;
+    saveRevisionRef.current = nextRevision;
+
     try {
-      const nextConfig = updater(config);
-      await saveConfig(nextConfig);
+      const nextConfig = updater(currentConfig);
+      configRef.current = nextConfig;
       setConfig(nextConfig);
-      showMessage("success", t("settings.mediaServices.message.saved"));
+      await saveConfig(nextConfig);
+      if (saveRevisionRef.current === nextRevision) {
+        showMessage("success", t("settings.mediaServices.message.saved"));
+      }
     } catch (error) {
       console.error("保存服务模型配置失败:", error);
-      showMessage("error", t("settings.mediaServices.message.saveFailed"));
+      if (saveRevisionRef.current === nextRevision) {
+        configRef.current = currentConfig;
+        setConfig(currentConfig);
+        showMessage("error", t("settings.mediaServices.message.saveFailed"));
+      }
     }
   };
 
   const updateServiceModelPreference = (
     key: ServiceModelKey,
-    nextPreference: ServiceModelPreferenceConfig,
+    buildNextPreference: (
+      currentPreference: ServiceModelPreferenceConfig,
+    ) => ServiceModelPreferenceConfig,
   ) => {
     void persistConfig((currentConfig) => {
       const nextServiceModels: ServiceModelsConfig = {
         ...(currentConfig.workspace_preferences?.service_models ?? {}),
       };
+      const currentPreference = getSectionPreference(currentConfig, key);
+      const nextPreference = buildNextPreference(currentPreference);
       const persistedPreference =
         buildPersistedServiceModelPreference(nextPreference);
 
@@ -397,10 +415,10 @@ export function MediaServicesSettings() {
                   checked={preference.enabled ?? true}
                   disabled={!config}
                   onCheckedChange={(enabled) => {
-                    updateServiceModelPreference(section.key, {
-                      ...preference,
+                    updateServiceModelPreference(section.key, (current) => ({
+                      ...current,
                       enabled,
-                    });
+                    }));
                   }}
                 />
               ) : undefined
@@ -432,22 +450,22 @@ export function MediaServicesSettings() {
                 providerType={preference.preferredProviderId ?? ""}
                 setProviderType={(value) => {
                   const preferredProviderId = value.trim() || undefined;
-                  updateServiceModelPreference(section.key, {
-                    ...preference,
+                  updateServiceModelPreference(section.key, (current) => ({
+                    ...current,
                     preferredProviderId,
                     preferredModelId:
                       preferredProviderId &&
-                      preferredProviderId === preference.preferredProviderId
-                        ? preference.preferredModelId
+                      preferredProviderId === current.preferredProviderId
+                        ? current.preferredModelId
                         : undefined,
-                  });
+                  }));
                 }}
                 model={preference.preferredModelId ?? ""}
                 setModel={(value) => {
-                  updateServiceModelPreference(section.key, {
-                    ...preference,
+                  updateServiceModelPreference(section.key, (current) => ({
+                    ...current,
                     preferredModelId: value.trim() || undefined,
-                  });
+                  }));
                 }}
                 modelFilter={(model) =>
                   section.taskFamilies.some((taskFamily) =>
@@ -480,10 +498,10 @@ export function MediaServicesSettings() {
                     }}
                     onBlur={(event) => {
                       const nextPrompt = event.target.value.trim() || undefined;
-                      updateServiceModelPreference(section.key, {
-                        ...preference,
+                      updateServiceModelPreference(section.key, (current) => ({
+                        ...current,
                         customPrompt: nextPrompt,
-                      });
+                      }));
                       setPromptEditors((currentEditors) => ({
                         ...currentEditors,
                         [section.key]: Boolean(nextPrompt),

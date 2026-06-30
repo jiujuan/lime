@@ -22,21 +22,25 @@ function TaskIndexStatCard({
   hint: string;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-background p-3">
-      <div className="text-xs font-medium text-muted-foreground">{title}</div>
+    <div className="min-w-0 rounded-xl border border-border bg-background p-3">
+      <div className="break-words text-xs font-medium text-muted-foreground">
+        {title}
+      </div>
       <div className="mt-1 text-base font-semibold text-foreground">
         {value}
       </div>
-      <div className="mt-1 text-xs text-muted-foreground">{hint}</div>
+      <div className="mt-1 break-words text-xs text-muted-foreground">
+        {hint}
+      </div>
     </div>
   );
 }
 
 function TaskIndexItemCard({ item }: { item: ModalityTaskIndexRow }) {
   return (
-    <div className="rounded-lg border border-teal-200/80 bg-background/85 p-2.5">
+    <div className="min-w-0 rounded-lg border border-teal-200/80 bg-background/85 p-2.5">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-medium text-foreground">
+        <span className="min-w-0 break-words text-sm font-medium text-foreground">
           {item.title}
         </span>
         {item.modality ? (
@@ -61,7 +65,7 @@ function TaskIndexItemCard({ item }: { item: ModalityTaskIndexRow }) {
       <div className="mt-2 space-y-1 text-xs text-muted-foreground">
         <div className="flex flex-wrap gap-x-3 gap-y-1">
           {item.threadId ? (
-            <span>
+            <span className="min-w-0 break-all">
               thread：
               <span className="ml-1 font-mono text-foreground">
                 {item.threadId}
@@ -69,7 +73,7 @@ function TaskIndexItemCard({ item }: { item: ModalityTaskIndexRow }) {
             </span>
           ) : null}
           {item.turnId ? (
-            <span>
+            <span className="min-w-0 break-all">
               turn：
               <span className="ml-1 font-mono text-foreground">
                 {item.turnId}
@@ -77,7 +81,7 @@ function TaskIndexItemCard({ item }: { item: ModalityTaskIndexRow }) {
             </span>
           ) : null}
           {item.contentId ? (
-            <span>
+            <span className="min-w-0 break-all">
               content：
               <span className="ml-1 font-mono text-foreground">
                 {item.contentId}
@@ -87,7 +91,7 @@ function TaskIndexItemCard({ item }: { item: ModalityTaskIndexRow }) {
         </div>
         <div className="flex flex-wrap gap-x-3 gap-y-1">
           {item.skillId ? (
-            <span>
+            <span className="min-w-0 break-all">
               skill：
               <span className="ml-1 font-mono text-foreground">
                 {item.skillId}
@@ -95,7 +99,7 @@ function TaskIndexItemCard({ item }: { item: ModalityTaskIndexRow }) {
             </span>
           ) : null}
           {item.modelId ? (
-            <span>
+            <span className="min-w-0 break-all">
               model：
               <span className="ml-1 font-mono text-foreground">
                 {item.modelId}
@@ -103,7 +107,7 @@ function TaskIndexItemCard({ item }: { item: ModalityTaskIndexRow }) {
             </span>
           ) : null}
           {item.executorBindingKey ? (
-            <span>
+            <span className="min-w-0 break-all">
               binding：
               <span className="ml-1 font-mono text-foreground">
                 {item.executorBindingKey}
@@ -111,7 +115,7 @@ function TaskIndexItemCard({ item }: { item: ModalityTaskIndexRow }) {
             </span>
           ) : null}
           {item.entryKey ? (
-            <span>
+            <span className="min-w-0 break-all">
               entry：
               <span className="ml-1 font-mono text-foreground">
                 {item.entryKey}
@@ -120,7 +124,7 @@ function TaskIndexItemCard({ item }: { item: ModalityTaskIndexRow }) {
           ) : null}
         </div>
         {item.estimatedCostClass || item.limitEventKind ? (
-          <div>
+          <div className="break-all">
             cost/limit：
             <span className="ml-1 font-mono text-foreground">
               {[item.estimatedCostClass, item.limitEventKind]
@@ -154,10 +158,10 @@ function TaskIndexFilterSelect({
   onChange: (value?: string) => void;
 }) {
   return (
-    <label className="flex min-w-[150px] flex-1 flex-col gap-1 text-[11px] font-medium text-teal-900">
+    <label className="flex min-w-0 flex-1 flex-col gap-1 text-[11px] font-medium text-teal-900">
       <span>{label}</span>
       <select
-        className="h-8 rounded-lg border border-teal-200 bg-white px-2 text-xs font-normal text-teal-950 shadow-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-200"
+        className="h-8 min-w-0 rounded-lg border border-teal-200 bg-white px-2 text-xs font-normal text-teal-950 shadow-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-200"
         value={value ?? TASK_INDEX_FILTER_ALL_VALUE}
         onChange={(event) => {
           const nextValue = event.currentTarget.value;
@@ -225,7 +229,7 @@ export function HarnessTaskIndexSection({
         不另建任务事实源。
       </p>
 
-      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-3 grid min-w-0 gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr))]">
         <TaskIndexStatCard
           title="索引快照"
           value={`${index.snapshot_count}`}
@@ -272,7 +276,7 @@ export function HarnessTaskIndexSection({
                 {filteredRows.length} / {rows.length}
               </Badge>
             </div>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+            <div className="mt-3 grid min-w-0 gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr))]">
               <TaskIndexFilterSelect
                 label="入口"
                 value={filters.entryKey}

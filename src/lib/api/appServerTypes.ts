@@ -344,6 +344,8 @@ export type AppServerMediaTaskArtifactAudioCreateParams =
   protocol.MediaTaskArtifactAudioCreateParams;
 export type AppServerMediaTaskArtifactVideoCreateParams =
   protocol.MediaTaskArtifactVideoCreateParams;
+export type AppServerMediaTaskArtifactImageCompleteParams =
+  protocol.MediaTaskArtifactImageCompleteParams;
 export type AppServerMediaTaskArtifactAudioCompleteParams =
   protocol.MediaTaskArtifactAudioCompleteParams;
 export type AppServerMediaTaskArtifactLookupParams =

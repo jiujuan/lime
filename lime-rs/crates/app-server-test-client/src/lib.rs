@@ -228,7 +228,8 @@ fn sample_session_update_request(
             recent_access_mode: None,
             recent_preferences: None,
             recent_team_selection: None,
-            product_workspace_selected_object_ref: None,
+            article_workspace_selected_object_ref: None,
+            article_workspace_edited_draft: None,
         },
     )
 }

@@ -446,9 +446,12 @@ describe("appServerArtifactClient", () => {
 
     const event = params?.runtimeEvents?.[0];
     const payload = event?.payload as {
-      artifact?: { content?: string; metadata?: { artifactDocument?: unknown } };
+      artifact?: {
+        content?: string;
+        metadata?: { artifactDocument?: unknown };
+      };
     };
-    expect(payload.artifact?.content).toContain("\"artifactId\"");
+    expect(payload.artifact?.content).toContain('"artifactId"');
     expect(payload.artifact?.metadata?.artifactDocument).toMatchObject({
       artifactId: "artifact-document:report",
       metadata: {
@@ -457,7 +460,7 @@ describe("appServerArtifactClient", () => {
     });
   });
 
-  it("Product Profile preview 应从嵌套 metadata 读取 session 与稳定 artifactRef", () => {
+  it("Article Workspace preview 应从嵌套 metadata 读取 session 与稳定 artifactRef", () => {
     const params = appServerArtifactSnapshotAppendParamsFromArtifactDocument(
       createArtifact({
         id: "preview-artifact-id",
@@ -465,20 +468,20 @@ describe("appServerArtifactClient", () => {
           filename: "image.md",
           filePath: "image.md",
           sourceRef: "preview-image-id",
-          productProfile: {
-            sessionId: "session-product-profile",
+          articleWorkspace: {
+            sessionId: "session-article-workspace",
             artifactIds: ["artifact-image-1"],
           },
         },
       }),
       createDocument({
         artifactId: "artifact-document:content-factory-app:artifact-image-1",
-        turnId: "turn-product-profile",
+        turnId: "turn-article-workspace",
         metadata: {
           generatedBy: "automation",
-          productProfile: {
+          articleWorkspace: {
             appId: "content-factory-app",
-            sessionId: "session-product-profile",
+            sessionId: "session-article-workspace",
             artifactIds: ["artifact-image-1"],
           },
         },
@@ -486,8 +489,8 @@ describe("appServerArtifactClient", () => {
     );
 
     expect(params).toMatchObject({
-      sessionId: "session-product-profile",
-      turnId: "turn-product-profile",
+      sessionId: "session-article-workspace",
+      turnId: "turn-article-workspace",
       runtimeEvents: [
         {
           payload: {
@@ -497,9 +500,9 @@ describe("appServerArtifactClient", () => {
               artifactDocumentId:
                 "artifact-document:content-factory-app:artifact-image-1",
               metadata: {
-                productProfile: {
+                articleWorkspace: {
                   appId: "content-factory-app",
-                  sessionId: "session-product-profile",
+                  sessionId: "session-article-workspace",
                   artifactIds: ["artifact-image-1"],
                 },
               },
@@ -581,7 +584,9 @@ describe("appServerArtifactClient", () => {
       },
     });
 
-    expect(appServerClient.appendAgentSessionRuntimeEvents).toHaveBeenCalledWith(
+    expect(
+      appServerClient.appendAgentSessionRuntimeEvents,
+    ).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: "session-1",
         turnId: "turn-1",
@@ -654,7 +659,9 @@ describe("appServerArtifactClient", () => {
       reason: "missing_scope",
     });
 
-    expect(appServerClient.appendAgentSessionRuntimeEvents).not.toHaveBeenCalled();
+    expect(
+      appServerClient.appendAgentSessionRuntimeEvents,
+    ).not.toHaveBeenCalled();
   });
 
   it("保存后的 ArtifactDocument scope 应作为跨会话继续保存的稳定范围", () => {

@@ -3,6 +3,7 @@ import type { AgentThreadItem, Message } from "../types";
 import {
   buildPlanImplementationHarnessMetadata,
   buildPlanImplementationRequestId,
+  hasProposedPlanImplementationSignals,
   selectProposedPlanImplementationDecision,
 } from "./planImplementationDecision";
 
@@ -38,6 +39,63 @@ function createPlanThreadItem(
 }
 
 describe("planImplementationDecision", () => {
+  it("普通 Claw 完成态没有计划信号时应跳过本地计划实施扫描", () => {
+    expect(
+      hasProposedPlanImplementationSignals({
+        messages: [
+          createAssistantMessage(
+            "assistant-news",
+            "今天国际新闻主线包括中东局势、欧洲热浪和世界杯动态。",
+          ),
+        ],
+        planState: {
+          phase: "idle",
+          items: [],
+        },
+        threadItems: [
+          {
+            id: "tool-item-1",
+            thread_id: "thread-1",
+            turn_id: "turn-1",
+            sequence: 1,
+            status: "completed",
+            started_at: "2026-06-18T08:00:00.000Z",
+            updated_at: "2026-06-18T08:00:01.000Z",
+            type: "tool_call",
+            tool_name: "WebSearch",
+            arguments: { query: "world news" },
+          },
+        ],
+      }),
+    ).toBe(false);
+  });
+
+  it("存在任一计划来源时应允许进入本地计划实施扫描", () => {
+    expect(
+      hasProposedPlanImplementationSignals({
+        messages: [
+          createAssistantMessage(
+            "assistant-plan",
+            "<proposed_plan>\n- 修复默认路径\n</proposed_plan>",
+          ),
+        ],
+      }),
+    ).toBe(true);
+    expect(
+      hasProposedPlanImplementationSignals({
+        threadItems: [createPlanThreadItem()],
+      }),
+    ).toBe(true);
+    expect(
+      hasProposedPlanImplementationSignals({
+        planState: {
+          phase: "ready",
+          items: [{ content: "补计划实施确认", status: "completed" }],
+        },
+      }),
+    ).toBe(true);
+  });
+
   it("应从最新完整 proposed_plan 消息生成本地计划实施确认", () => {
     const decision = selectProposedPlanImplementationDecision({
       messages: [

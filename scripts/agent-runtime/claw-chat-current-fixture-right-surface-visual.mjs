@@ -17,7 +17,7 @@ const RIGHT_SURFACE_ROOTS = {
   expertInfo: "expert-info-panel",
   files: "workspace-files-surface",
   objectCanvas: "workspace-object-canvas-surface",
-  productProfile: "workspace-product-profile-surface",
+  articleWorkspace: "workspace-article-editor-surface",
 };
 
 export async function runRightSurfaceVisualMatrix({
@@ -142,7 +142,7 @@ export async function runRightSurfaceVisualMatrix({
     }),
     objectCanvas: await clickAndAssertRightSurface(page, options, {
       surfaceKind: "objectCanvas",
-      activeSurfaceKind: "productProfile",
+      activeSurfaceKind: "articleWorkspace",
       toggleTestId: "task-center-object-canvas-toggle",
       rootTestId: RIGHT_SURFACE_ROOTS.objectCanvas,
     }),
@@ -595,7 +595,7 @@ export function isRightSurfaceSnapshotReady(
 ) {
   const surfaceViewportReady =
     snapshot?.geometry?.rootFillsSurfaceViewport === true &&
-    (surfaceKind === "productProfile" ||
+    (surfaceKind === "articleWorkspace" ||
       snapshot?.geometry?.hostFillsCanvasPanel === true);
 
   return (

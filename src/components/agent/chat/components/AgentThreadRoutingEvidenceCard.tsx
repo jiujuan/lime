@@ -8,6 +8,9 @@ import {
 } from "../utils/runtimeRoutingEvidence";
 import type { ProviderSettingsFocusContext } from "@/types/page";
 
+const routingEvidenceGridClassName =
+  "grid min-w-0 gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,10rem),1fr))]";
+
 interface RoutingEvidenceText {
   appliedFallback: string;
   decisionReason: string;
@@ -138,12 +141,12 @@ export function AgentThreadRoutingEvidenceCard({
                 </span>
               ) : null}
             </div>
-            <div className="mt-2 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
+            <div className={`${routingEvidenceGridClassName} mt-2 text-xs`}>
               <div>
                 <div className="text-muted-foreground">
                   {labels.selectedModel}
                 </div>
-                <div className="mt-0.5 font-medium text-foreground">
+                <div className="mt-0.5 break-all font-medium text-foreground">
                   {selectedModel}
                 </div>
               </div>
@@ -151,7 +154,7 @@ export function AgentThreadRoutingEvidenceCard({
                 <div className="text-muted-foreground">
                   {labels.requestedModel}
                 </div>
-                <div className="mt-0.5 font-medium text-foreground">
+                <div className="mt-0.5 break-all font-medium text-foreground">
                   {requestedModel}
                 </div>
               </div>
@@ -266,7 +269,7 @@ export function AgentThreadRoutingEvidenceCard({
                     </Badge>
                   ) : null}
                   {evidence.providerReadinessReason ? (
-                    <span className="text-xs text-muted-foreground">
+                    <span className="min-w-0 break-words text-xs text-muted-foreground">
                       {evidence.providerReadinessReason}
                     </span>
                   ) : null}
@@ -276,7 +279,7 @@ export function AgentThreadRoutingEvidenceCard({
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-7 border-slate-300 bg-white px-2 text-xs text-slate-700"
+                      className="h-auto min-h-7 min-w-0 border-slate-300 bg-white px-2 py-1 text-xs text-slate-700"
                       onClick={() =>
                         onOpenProviderSettings(providerSettingsFocus)
                       }
@@ -286,7 +289,7 @@ export function AgentThreadRoutingEvidenceCard({
                     </Button>
                   ) : null}
                 </div>
-                <div className="mt-2 grid gap-2 text-xs sm:grid-cols-3">
+                <div className={`${routingEvidenceGridClassName} mt-2 text-xs`}>
                   {evidence.providerReadinessProviderType ? (
                     <div>
                       <div className="text-muted-foreground">
@@ -302,7 +305,7 @@ export function AgentThreadRoutingEvidenceCard({
                       <div className="text-muted-foreground">
                         {labels.providerReadinessKeys}
                       </div>
-                      <div className="mt-0.5 font-medium text-foreground">
+                      <div className="mt-0.5 break-words font-medium text-foreground">
                         {evidence.providerReadinessKeySummary}
                       </div>
                     </div>
@@ -339,12 +342,12 @@ export function AgentThreadRoutingEvidenceCard({
                     </Badge>
                   ) : null}
                   {evidence.modelRegistryReason ? (
-                    <span className="text-xs text-muted-foreground">
+                    <span className="min-w-0 break-words text-xs text-muted-foreground">
                       {evidence.modelRegistryReason}
                     </span>
                   ) : null}
                 </div>
-                <div className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
+                <div className={`${routingEvidenceGridClassName} mt-2 text-xs`}>
                   {evidence.modelRegistryCapabilityTags.length > 0 ? (
                     <div>
                       <div className="text-muted-foreground">

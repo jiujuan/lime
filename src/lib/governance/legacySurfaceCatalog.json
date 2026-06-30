@@ -1416,10 +1416,7 @@
       "id": "memory-retired-project-crud-gateway-surface",
       "classification": "dead",
       "description": "已删除的旧 src/lib/api/memory.ts 聚合网关；projectMemory/read 已收敛到 projectMemory current API，角色 / 世界观 / 大纲旧 CRUD 壳不得恢复为记忆主链",
-      "targets": [
-        "src/lib/api/memory.ts",
-        "src/lib/api/memory.test.ts"
-      ],
+      "targets": ["src/lib/api/memory.ts", "src/lib/api/memory.test.ts"],
       "allowedPaths": []
     },
     {
@@ -4266,6 +4263,36 @@
       ],
       "includePathPrefixes": ["src"],
       "allowedPaths": []
+    },
+    {
+      "id": "agent-chat-product-profile-current-surface-key",
+      "classification": "dead",
+      "description": "旧 Product Profile 右栏 surface key 已被 Article Workspace 取代；production UI / host lifecycle / plugin contract / runtime metadata 不得继续声明或兼容读取 productProfile，旧值只允许作为 forbidden snippet 出现在本守卫。",
+      "patterns": [
+        "\"productProfile\"",
+        "productProfileAvailable",
+        "productProfileEnabled",
+        "AgentAppProductProfile",
+        "agentChat.navbar.productProfile",
+        "agentChat.rightSurface.tabs.productProfile",
+        "agentApp.apps.center.host.productProfile"
+      ],
+      "includePathPrefixes": [
+        "src/components/agent/chat/AgentChatWorkspace.tsx",
+        "src/components/agent/chat/components/TaskCenterUtilityToolbar.tsx",
+        "src/components/agent/chat/workspace/right-surface/",
+        "src/components/agent/chat/workspace/workspaceRightSurfaceRuntimeProjection.ts",
+        "src/features/agent-app/host/",
+        "src/features/agent-app/ui/",
+        "src/features/plugin/activation/",
+        "src/features/plugin/history/",
+        "src/features/plugin/manifest/",
+        "src/i18n/resources/"
+      ],
+      "allowedPaths": [
+        "src/components/agent/chat/workspace/right-surface/rightSurfaceTypes.ts",
+        "src/features/plugin/history/pluginHistoryRestore.ts"
+      ]
     }
   ],
   "rustText": [
@@ -5138,6 +5165,7 @@
         "lime-rs/crates/app-server/src/file_checkpoint.rs",
         "lime-rs/crates/app-server/src/file_checkpoint_snapshot.rs",
         "lime-rs/crates/app-server/src/runtime/artifact_reader.rs",
+        "lime-rs/crates/app-server/src/runtime/artifact_projection.rs",
         "lime-rs/crates/app-server/src/runtime/artifact_sidecar.rs",
         "lime-rs/crates/app-server/src/runtime/evidence_provider.rs",
         "lime-rs/crates/app-server/src/runtime/file_checkpoint_projection.rs",
@@ -5154,6 +5182,7 @@
       "allowedPaths": [
         "lime-rs/crates/app-server/src/runtime/artifact_sidecar.rs",
         "lime-rs/crates/app-server/src/runtime/artifact_reader.rs",
+        "lime-rs/crates/app-server/src/runtime/agent_app_worker_runtime.rs",
         "lime-rs/crates/app-server/src/runtime/event_store.rs",
         "lime-rs/crates/app-server/src/runtime/tests/artifacts.rs",
         "lime-rs/crates/app-server/src/runtime/tests/evidence_exports.rs"

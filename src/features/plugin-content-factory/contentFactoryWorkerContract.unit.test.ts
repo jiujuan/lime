@@ -8,11 +8,11 @@ import contentFactoryFixture from "@/features/agent-app/fixtures/content-factory
 import {
   buildContentFactoryWorkerRequest,
   buildContentFactoryWorkerRuntimeContract,
-  CONTENT_FACTORY_PRODUCT_WORKSPACE_SCHEMA,
+  CONTENT_FACTORY_ARTICLE_WORKSPACE_SCHEMA,
   CONTENT_FACTORY_WORKER_REQUEST_SCHEMA,
   CONTENT_FACTORY_WORKER_RUNTIME_SCHEMA,
 } from "./contentFactoryWorkerContract";
-import { buildContentFactoryWorkspacePatchProfile } from "./contentFactoryWorkspacePatch";
+import { buildContentFactoryWorkspacePatchArticleWorkspace } from "./contentFactoryWorkspacePatch";
 import {
   CONTENT_FACTORY_PLUGIN_ID,
   CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
@@ -52,7 +52,7 @@ describe("contentFactoryWorkerContract", () => {
       directFilesystemAccess: false,
       expectedOutput: {
         artifactKind: CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
-        productWorkspaceSchema: CONTENT_FACTORY_PRODUCT_WORKSPACE_SCHEMA,
+        articleWorkspaceSchema: CONTENT_FACTORY_ARTICLE_WORKSPACE_SCHEMA,
         objectKinds: [
           "contentBrief",
           "articleDraft",
@@ -141,8 +141,8 @@ describe("contentFactoryWorkerContract", () => {
       },
       outputs: {
         artifactKind: CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
-        productWorkspace: {
-          schemaVersion: CONTENT_FACTORY_PRODUCT_WORKSPACE_SCHEMA,
+        articleWorkspace: {
+          schemaVersion: CONTENT_FACTORY_ARTICLE_WORKSPACE_SCHEMA,
         },
       },
     });
@@ -167,7 +167,7 @@ describe("contentFactoryWorkerContract", () => {
     );
   });
 
-  it("worker 应输出可被 Product Profile 解析的 artifact snapshot", () => {
+  it("worker 应输出可被 Article Workspace 解析的 artifact snapshot", () => {
     const contract = buildContentFactoryWorkerRuntimeContract();
     const workerEntrypointPath = resolveFixturePath(contract.workerEntrypoint);
     const sampleRequest = readFileSync(
@@ -197,7 +197,7 @@ describe("contentFactoryWorkerContract", () => {
         },
       ],
     });
-    const profile = buildContentFactoryWorkspacePatchProfile({ artifact });
+    const profile = buildContentFactoryWorkspacePatchArticleWorkspace({ artifact });
     expect(profile).toMatchObject({
       appId: CONTENT_FACTORY_PLUGIN_ID,
       sessionId: "session-content-factory",
@@ -260,6 +260,26 @@ describe("contentFactoryWorkerContract", () => {
             prompt: expect.stringContaining("Lime 桌面工作台"),
           }),
         ]),
+        searchRequests: expect.arrayContaining([
+          expect.objectContaining({
+            tool: "search_query",
+            status: "ready_for_host_execution",
+          }),
+        ]),
+        searchEvidence: expect.arrayContaining([
+          expect.objectContaining({
+            status: "pending_host_execution",
+          }),
+        ]),
+        reviewChecklist: expect.arrayContaining([
+          expect.objectContaining({
+            owner: "copy-editor",
+          }),
+        ]),
+        imagePlan: expect.objectContaining({
+          status: "planned",
+          connectorRef: "media-generation",
+        }),
         citations: expect.arrayContaining([
           expect.objectContaining({
             title: expect.stringContaining("Claw 中间保持对话"),
@@ -280,7 +300,11 @@ describe("contentFactoryWorkerContract", () => {
       "用户点击小框后展开右侧栏",
     );
     expect(String(article?.source?.markdown ?? "")).toContain("## 三轮资料检索");
+    expect(String(article?.source?.markdown ?? "")).toContain(
+      "## Host 待执行检索请求",
+    );
     expect(String(article?.source?.markdown ?? "")).toContain("## 配图占位");
+    expect(String(article?.source?.markdown ?? "")).toContain("## 审稿检查");
     expect(String(article?.source?.markdown ?? "")).toContain("## 工作流编排");
   });
 
@@ -305,7 +329,7 @@ describe("contentFactoryWorkerContract", () => {
     const artifact = Array.isArray(response.artifacts)
       ? (response.artifacts[0] as Record<string, unknown> | undefined)
       : undefined;
-    const profile = buildContentFactoryWorkspacePatchProfile({ artifact });
+    const profile = buildContentFactoryWorkspacePatchArticleWorkspace({ artifact });
     const article = profile?.objects.find(
       (object) => object.ref.kind === "articleDraft",
     );
@@ -360,6 +384,25 @@ describe("contentFactoryWorkerContract", () => {
           prompt: expect.stringContaining("Lime 桌面工作台"),
         }),
       ]),
+      searchRequests: expect.arrayContaining([
+        expect.objectContaining({
+          connectorRef: "web-research",
+          tool: "search_query",
+        }),
+      ]),
+      searchEvidence: expect.arrayContaining([
+        expect.objectContaining({
+          confidence: expect.any(String),
+        }),
+      ]),
+      reviewChecklist: expect.arrayContaining([
+        expect.objectContaining({
+          title: "结构完整",
+        }),
+      ]),
+      imagePlan: expect.objectContaining({
+        status: "planned",
+      }),
       citations: expect.arrayContaining([
         expect.objectContaining({
           title: expect.stringContaining("Claw 中间保持对话"),

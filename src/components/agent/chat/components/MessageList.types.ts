@@ -31,14 +31,14 @@ export interface MessageListProps {
   leadingContent?: React.ReactNode;
   trailingContent?: React.ReactNode;
   emptyStateVariant?: "default" | "task-center";
-  turns?: AgentThreadTurn[];
-  threadItems?: AgentThreadItem[];
+  turns?: readonly AgentThreadTurn[];
+  threadItems?: readonly AgentThreadItem[];
   currentTurnId?: string | null;
   threadRead?: AgentRuntimeThreadReadModel | null;
-  pendingActions?: ActionRequired[];
-  submittedActionsInFlight?: ActionRequired[];
-  queuedTurns?: QueuedTurnSnapshot[];
-  childSubagentSessions?: AsterSubagentSessionInfo[];
+  pendingActions?: readonly ActionRequired[];
+  submittedActionsInFlight?: readonly ActionRequired[];
+  queuedTurns?: readonly QueuedTurnSnapshot[];
+  childSubagentSessions?: readonly AsterSubagentSessionInfo[];
   sessionHistoryWindow?: {
     loadedMessages: number;
     totalMessages: number;

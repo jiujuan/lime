@@ -6,6 +6,7 @@ import { readAppServerApiSources } from "../../test/appServerApiSources";
 
 const RETIRED_MEDIA_TASK_FACADE_COMMANDS = [
   "create_image_generation_task_artifact",
+  "complete_image_generation_task_artifact",
   "create_audio_generation_task_artifact",
   "complete_audio_generation_task_artifact",
   "get_media_task_artifact",
@@ -21,6 +22,7 @@ const CURRENT_MEDIA_TASK_METHOD_CONSTANTS = [
   "APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE",
   "APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE",
   "APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE",
+  "APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_COMPLETE",
   "APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE",
   "APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_GET",
   "APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_LIST",
@@ -31,6 +33,7 @@ const CURRENT_MEDIA_TASK_CLIENT_HELPERS = [
   "createImageMediaTaskArtifact",
   "createAudioMediaTaskArtifact",
   "createVideoMediaTaskArtifact",
+  "completeImageMediaTaskArtifact",
   "completeAudioMediaTaskArtifact",
   "getMediaTaskArtifact",
   "listMediaTaskArtifacts",
@@ -41,6 +44,7 @@ const CURRENT_MEDIA_TASK_METHODS = [
   "mediaTaskArtifact/image/create",
   "mediaTaskArtifact/audio/create",
   "mediaTaskArtifact/video/create",
+  "mediaTaskArtifact/image/complete",
   "mediaTaskArtifact/audio/complete",
   "mediaTaskArtifact/get",
   "mediaTaskArtifact/list",

@@ -202,7 +202,7 @@ function EvidencePackContent({
 
   return (
     <>
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid min-w-0 gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr))]">
         <InventoryStatCard
           title={agentText(
             "agentChat.harness.generated.2a36de35aa",
@@ -264,7 +264,7 @@ function EvidencePackContent({
               )}
             </Badge>
           </div>
-          <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-3 grid min-w-0 gap-2 text-xs text-muted-foreground [grid-template-columns:repeat(auto-fit,minmax(min(100%,10rem),1fr))]">
             <div>
               {agentText(
                 "agentChat.harness.generated.feb6327847",
@@ -327,10 +327,11 @@ function EvidencePackContent({
           </div>
           <div className="mt-2 flex flex-wrap gap-2 text-xs">
             {skillInvocations.map((invocation, index) => {
-              const runtimeEnableMeta = formatWorkspaceSkillRuntimeEnableDisplay(
-                invocation.workspace_skill_runtime_enable,
-                agentText,
-              );
+              const runtimeEnableMeta =
+                formatWorkspaceSkillRuntimeEnableDisplay(
+                  invocation.workspace_skill_runtime_enable,
+                  agentText,
+                );
               return (
                 <div
                   key={`${invocation.source_event_id || invocation.skill_name}-${index}`}

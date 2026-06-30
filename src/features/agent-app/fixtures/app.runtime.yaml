@@ -17,8 +17,8 @@ tasks:
   - kind: content.delivery.review
 outputs:
   artifactKind: content_factory.workspace_patch
-  productWorkspace:
-    schemaVersion: product-workspace.v1
+  articleWorkspace:
+    schemaVersion: article-workspace.v1
     objectKinds:
       - contentBrief
       - articleDraft

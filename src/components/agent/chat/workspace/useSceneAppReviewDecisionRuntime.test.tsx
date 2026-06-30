@@ -196,6 +196,33 @@ describe("useSceneAppReviewDecisionRuntime", () => {
     vi.restoreAllMocks();
   });
 
+  it("disabled 时不订阅或读取复核推荐信号", () => {
+    recordCuratedTaskRecommendationSignalFromReviewDecision(
+      {
+        session_id: "review-session",
+        decision_status: "accepted",
+        decision_summary: "这轮可复用",
+        chosen_fix_strategy: "沿当前基线放量",
+        risk_level: "low",
+        risk_tags: [],
+        followup_actions: [],
+      },
+      {
+        projectId: "project-1",
+        sessionId: "session-1",
+        sceneTitle: "公众号选题",
+      },
+    );
+
+    renderHook({
+      enabled: false,
+      sceneAppExecutionSummaryState: undefined,
+    });
+
+    expect(latest?.humanReviewAvailable).toBe(false);
+    expect(latest?.latestReviewFeedbackSignal).toBeNull();
+  });
+
   it("打开人工复核时导出模板，并复用同一 session 的缓存模板", async () => {
     const template = createTemplate();
     exportAgentRuntimeReviewDecisionTemplateMock.mockResolvedValue(template);

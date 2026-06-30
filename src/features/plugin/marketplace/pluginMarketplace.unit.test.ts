@@ -156,6 +156,24 @@ describe("Plugin marketplace projection", () => {
     });
   });
 
+  it("应把 install contract 从 marketplace item 透传到 plugin contract", () => {
+    const contract = buildPluginContractFromMarketplaceItem(
+      marketplaceItem({
+        install: {
+          local: true,
+          cloud: false,
+          authentication: "on_use",
+        },
+      }),
+    );
+
+    expect(contract.install).toEqual({
+      local: true,
+      cloud: false,
+      authentication: "on_use",
+    });
+  });
+
   it("应从 manifestSummary.skills 投影技能声明并过滤坏数据", () => {
     const item = marketplaceItem({
       manifestSummary: {
@@ -256,7 +274,7 @@ describe("Plugin marketplace projection", () => {
       }),
     ]);
     expect(contract.rightSurface).toMatchObject({
-      productWorkspace: {
+      articleWorkspace: {
         enabled: true,
         primaryObjectKind: "creator.article_draft",
       },

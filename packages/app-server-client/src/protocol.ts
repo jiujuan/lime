@@ -283,6 +283,8 @@ export const METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE =
   "mediaTaskArtifact/audio/create";
 export const METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE =
   "mediaTaskArtifact/video/create";
+export const METHOD_MEDIA_TASK_ARTIFACT_IMAGE_COMPLETE =
+  "mediaTaskArtifact/image/complete";
 export const METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE =
   "mediaTaskArtifact/audio/complete";
 export const METHOD_MEDIA_TASK_ARTIFACT_GET = "mediaTaskArtifact/get";
@@ -626,6 +628,7 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE, kind: "request" },
   { method: METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE, kind: "request" },
   { method: METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE, kind: "request" },
+  { method: METHOD_MEDIA_TASK_ARTIFACT_IMAGE_COMPLETE, kind: "request" },
   { method: METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE, kind: "request" },
   { method: METHOD_MEDIA_TASK_ARTIFACT_GET, kind: "request" },
   { method: METHOD_MEDIA_TASK_ARTIFACT_LIST, kind: "request" },
@@ -1412,7 +1415,8 @@ export type AgentSessionUpdateParams = {
   recentAccessMode?: string;
   recentPreferences?: unknown;
   recentTeamSelection?: unknown;
-  productWorkspaceSelectedObjectRef?: unknown;
+  articleWorkspaceSelectedObjectRef?: unknown;
+  articleWorkspaceEditedDraft?: unknown;
 };
 
 export type AgentSessionUpdateResponse = {

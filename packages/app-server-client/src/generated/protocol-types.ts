@@ -2,6 +2,21 @@
 // Source: lime-rs/crates/app-server-protocol/schema/json/app_server_protocol.schemas.json
 // Run `npm run generate:protocol-types` to regenerate.
 
+export interface AgentAppArticleWorkspaceContract {
+  enabled: boolean;
+  objects?: AgentAppArticleWorkspaceObject[];
+  panes?: string[];
+  rendererKinds?: string[];
+}
+
+export interface AgentAppArticleWorkspaceObject {
+  artifactKind?: null | string;
+  defaultPane: string;
+  kind: string;
+  primary: boolean;
+  title: string;
+}
+
 export interface AgentAppCloudReleaseDescriptor {
   appId: string;
   channel?: null | string;
@@ -148,27 +163,12 @@ export interface AgentAppPackageIdentity {
   tenantId?: null | string;
 }
 
-export interface AgentAppProductProfileContract {
-  enabled: boolean;
-  objects?: AgentAppProductProfileObject[];
-  panes?: string[];
-  rendererKinds?: string[];
-}
-
-export interface AgentAppProductProfileObject {
-  artifactKind?: null | string;
-  defaultPane: string;
-  kind: string;
-  primary: boolean;
-  title: string;
-}
-
 export interface AgentAppRightSurfaceContract {
+  articleWorkspace: AgentAppArticleWorkspaceContract;
   defaultActiveTab?: null | string;
   dock: string;
   historyRestore: AgentAppHistoryRestoreContract;
   physicalDockCount: number;
-  productProfile: AgentAppProductProfileContract;
   supportedTabs?: string[];
 }
 
@@ -823,9 +823,10 @@ export interface AgentSessionTurnStartResponse {
 
 export interface AgentSessionUpdateParams {
   archived?: boolean | null;
+  articleWorkspaceEditedDraft?: unknown;
+  articleWorkspaceSelectedObjectRef?: unknown;
   executionStrategy?: null | string;
   modelName?: null | string;
-  productWorkspaceSelectedObjectRef?: unknown;
   providerName?: null | string;
   providerSelector?: null | string;
   recentAccessMode?: null | string;
@@ -2310,6 +2311,31 @@ export interface MediaTaskArtifactAudioCreateParams {
   turnId?: null | string;
   voice?: null | string;
   voiceStyle?: null | string;
+}
+
+export interface MediaTaskArtifactCompletedImageInput {
+  model?: null | string;
+  prompt?: null | string;
+  providerId?: null | string;
+  revisedPrompt?: null | string;
+  size?: null | string;
+  slotId?: null | string;
+  slotIndex?: number | null;
+  slotPrompt?: null | string;
+  url: string;
+}
+
+export interface MediaTaskArtifactImageCompleteParams {
+  executorMode?: null | string;
+  failures?: unknown[];
+  images?: MediaTaskArtifactCompletedImageInput[];
+  model?: null | string;
+  projectRootPath: string;
+  providerId?: null | string;
+  responseId?: null | string;
+  responses?: unknown[];
+  status?: null | string;
+  taskRef: string;
 }
 
 export interface MediaTaskArtifactImageCreateParams {

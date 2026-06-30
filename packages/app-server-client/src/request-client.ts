@@ -461,6 +461,9 @@ export interface AppServerClient {
   createVideoMediaTaskArtifact(
     params: protocol.MediaTaskArtifactVideoCreateParams,
   ): protocol.JsonRpcRequest;
+  completeImageMediaTaskArtifact(
+    params: protocol.MediaTaskArtifactImageCompleteParams,
+  ): protocol.JsonRpcRequest;
   completeAudioMediaTaskArtifact(
     params: protocol.MediaTaskArtifactAudioCompleteParams,
   ): protocol.JsonRpcRequest;

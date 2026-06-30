@@ -18,6 +18,7 @@ type WorkspaceHealthProject =
   | undefined;
 
 interface UseWorkspaceHealthRuntimeParams {
+  enabled?: boolean;
   project: WorkspaceHealthProject;
   projectId?: string | null;
   workspacePathMissing: WorkspacePathMissingState | boolean | null;
@@ -45,6 +46,7 @@ export function buildWorkspacePathAutoRecoveryKey({
 }
 
 export function useWorkspaceHealthRuntime({
+  enabled = true,
   project,
   projectId,
   workspacePathMissing,
@@ -55,6 +57,10 @@ export function useWorkspaceHealthRuntime({
 
   useEffect(() => {
     setWorkspaceHealthError(false);
+    if (!enabled) {
+      return;
+    }
+
     const normalizedId = normalizeProjectId(projectId);
     if (!normalizedId) {
       return;
@@ -130,6 +136,7 @@ export function useWorkspaceHealthRuntime({
     };
   }, [
     deferredWorkspaceAuxiliaryLoadMs,
+    enabled,
     projectId,
     shouldDeferWorkspaceAuxiliaryLoads,
   ]);

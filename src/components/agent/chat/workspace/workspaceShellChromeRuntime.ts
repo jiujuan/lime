@@ -113,10 +113,11 @@ export function resolveWorkspaceShellChromeRuntime({
   const shouldHideGeneralWorkbenchInputForTheme =
     shouldUseCompactGeneralWorkbench;
   const shouldKeepConversationInputOverlay =
-    shouldUseCompactGeneralWorkbench && hasConversationSessionForLayout;
+    (contextWorkspaceEnabled || shouldUseCompactGeneralWorkbench) &&
+    hasConversationSessionForLayout;
   const shouldShowGeneralWorkbenchFloatingInputOverlay =
-    isThemeWorkbench &&
     showChatLayout &&
+    (isThemeWorkbench || contextWorkspaceEnabled) &&
     (!shouldHideGeneralWorkbenchInputForTheme ||
       shouldKeepConversationInputOverlay);
   const isWorkspaceCompactChrome = topBarChrome === "workspace-compact";

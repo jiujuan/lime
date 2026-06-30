@@ -76,7 +76,7 @@ function createInstalledPluginBackedApp(
       },
       workbench: {
         profile: "production",
-        productWorkspace: {
+        articleWorkspace: {
           primaryObjectKinds: ["articleDraft"],
         },
         productionObjects: [
@@ -168,7 +168,7 @@ describe("workspacePluginRuntimeContext", () => {
           objectKind: "articleDraft",
           objectId: "pending",
         },
-        openedTabs: ["productProfile"],
+        openedTabs: ["articleWorkspace"],
       },
       skippedAppIds: [],
       blockerCodes: [],

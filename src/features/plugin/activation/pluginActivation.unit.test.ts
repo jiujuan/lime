@@ -77,7 +77,7 @@ describe("Plugin explicit activation", () => {
           objectKind: "articleDraft",
           objectId: "pending",
         },
-        openedTabs: ["productProfile"],
+        openedTabs: ["articleWorkspace"],
         source: "user",
       },
     });

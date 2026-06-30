@@ -73,3 +73,18 @@ export function resolveServiceModelSendOverrides(params: {
     modelOverride: preference.preferredModelId ?? undefined,
   };
 }
+
+export function shouldRefreshServiceModelsBeforeSend(params: {
+  requestMetadata: Record<string, unknown> | undefined;
+  purpose?: HandleSendOptions["purpose"];
+}): boolean {
+  const { requestMetadata, purpose } = params;
+  return (
+    hasHarnessLaunchRequestMetadata(requestMetadata, "translation_skill_launch") ||
+    hasHarnessLaunchRequestMetadata(
+      requestMetadata,
+      "resource_search_skill_launch",
+    ) ||
+    Boolean(purpose && PROMPT_REWRITE_PURPOSES.has(purpose))
+  );
+}

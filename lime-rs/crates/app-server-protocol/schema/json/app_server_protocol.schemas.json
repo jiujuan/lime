@@ -1,5 +1,101 @@
 {
   "$defs": {
+    "AgentAppArticleWorkspaceContract": {
+      "$defs": {
+        "AgentAppArticleWorkspaceObject": {
+          "properties": {
+            "artifactKind": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "defaultPane": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "primary": {
+              "type": "boolean"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "defaultPane",
+            "kind",
+            "primary",
+            "title"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "objects": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/AgentAppArticleWorkspaceObject"
+          },
+          "type": "array"
+        },
+        "panes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "rendererKinds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "enabled"
+      ],
+      "title": "AgentAppArticleWorkspaceContract",
+      "type": "object"
+    },
+    "AgentAppArticleWorkspaceObject": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "artifactKind": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "defaultPane": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "primary": {
+          "type": "boolean"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "defaultPane",
+        "kind",
+        "primary",
+        "title"
+      ],
+      "title": "AgentAppArticleWorkspaceObject",
+      "type": "object"
+    },
     "AgentAppCloudReleaseDescriptor": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -507,6 +603,67 @@
     },
     "AgentAppHostLifecycleListResponse": {
       "$defs": {
+        "AgentAppArticleWorkspaceContract": {
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "objects": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/AgentAppArticleWorkspaceObject"
+              },
+              "type": "array"
+            },
+            "panes": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "rendererKinds": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "enabled"
+          ],
+          "type": "object"
+        },
+        "AgentAppArticleWorkspaceObject": {
+          "properties": {
+            "artifactKind": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "defaultPane": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "primary": {
+              "type": "boolean"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "defaultPane",
+            "kind",
+            "primary",
+            "title"
+          ],
+          "type": "object"
+        },
         "AgentAppHistoryRestoreContract": {
           "properties": {
             "defaultPane": {
@@ -655,67 +812,6 @@
           ],
           "type": "object"
         },
-        "AgentAppProductProfileContract": {
-          "properties": {
-            "enabled": {
-              "type": "boolean"
-            },
-            "objects": {
-              "default": [],
-              "items": {
-                "$ref": "#/$defs/AgentAppProductProfileObject"
-              },
-              "type": "array"
-            },
-            "panes": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "rendererKinds": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            }
-          },
-          "required": [
-            "enabled"
-          ],
-          "type": "object"
-        },
-        "AgentAppProductProfileObject": {
-          "properties": {
-            "artifactKind": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "defaultPane": {
-              "type": "string"
-            },
-            "kind": {
-              "type": "string"
-            },
-            "primary": {
-              "type": "boolean"
-            },
-            "title": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "defaultPane",
-            "kind",
-            "primary",
-            "title"
-          ],
-          "type": "object"
-        },
         "AgentAppReadinessIssueCategorySummary": {
           "properties": {
             "category": {
@@ -742,6 +838,9 @@
         },
         "AgentAppRightSurfaceContract": {
           "properties": {
+            "articleWorkspace": {
+              "$ref": "#/$defs/AgentAppArticleWorkspaceContract"
+            },
             "defaultActiveTab": {
               "type": [
                 "null",
@@ -759,9 +858,6 @@
               "minimum": 0,
               "type": "integer"
             },
-            "productProfile": {
-              "$ref": "#/$defs/AgentAppProductProfileContract"
-            },
             "supportedTabs": {
               "default": [],
               "items": {
@@ -771,10 +867,10 @@
             }
           },
           "required": [
+            "articleWorkspace",
             "dock",
             "historyRestore",
-            "physicalDockCount",
-            "productProfile"
+            "physicalDockCount"
           ],
           "type": "object"
         },
@@ -869,6 +965,67 @@
     },
     "AgentAppHostLifecycleSnapshot": {
       "$defs": {
+        "AgentAppArticleWorkspaceContract": {
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "objects": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/AgentAppArticleWorkspaceObject"
+              },
+              "type": "array"
+            },
+            "panes": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "rendererKinds": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "enabled"
+          ],
+          "type": "object"
+        },
+        "AgentAppArticleWorkspaceObject": {
+          "properties": {
+            "artifactKind": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "defaultPane": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "primary": {
+              "type": "boolean"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "defaultPane",
+            "kind",
+            "primary",
+            "title"
+          ],
+          "type": "object"
+        },
         "AgentAppHistoryRestoreContract": {
           "properties": {
             "defaultPane": {
@@ -937,67 +1094,6 @@
           ],
           "type": "object"
         },
-        "AgentAppProductProfileContract": {
-          "properties": {
-            "enabled": {
-              "type": "boolean"
-            },
-            "objects": {
-              "default": [],
-              "items": {
-                "$ref": "#/$defs/AgentAppProductProfileObject"
-              },
-              "type": "array"
-            },
-            "panes": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "rendererKinds": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            }
-          },
-          "required": [
-            "enabled"
-          ],
-          "type": "object"
-        },
-        "AgentAppProductProfileObject": {
-          "properties": {
-            "artifactKind": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "defaultPane": {
-              "type": "string"
-            },
-            "kind": {
-              "type": "string"
-            },
-            "primary": {
-              "type": "boolean"
-            },
-            "title": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "defaultPane",
-            "kind",
-            "primary",
-            "title"
-          ],
-          "type": "object"
-        },
         "AgentAppReadinessIssueCategorySummary": {
           "properties": {
             "category": {
@@ -1024,6 +1120,9 @@
         },
         "AgentAppRightSurfaceContract": {
           "properties": {
+            "articleWorkspace": {
+              "$ref": "#/$defs/AgentAppArticleWorkspaceContract"
+            },
             "defaultActiveTab": {
               "type": [
                 "null",
@@ -1041,9 +1140,6 @@
               "minimum": 0,
               "type": "integer"
             },
-            "productProfile": {
-              "$ref": "#/$defs/AgentAppProductProfileContract"
-            },
             "supportedTabs": {
               "default": [],
               "items": {
@@ -1053,10 +1149,10 @@
             }
           },
           "required": [
+            "articleWorkspace",
             "dock",
             "historyRestore",
-            "physicalDockCount",
-            "productProfile"
+            "physicalDockCount"
           ],
           "type": "object"
         },
@@ -1486,9 +1582,41 @@
       "title": "AgentAppPackageIdentity",
       "type": "object"
     },
-    "AgentAppProductProfileContract": {
+    "AgentAppRightSurfaceContract": {
       "$defs": {
-        "AgentAppProductProfileObject": {
+        "AgentAppArticleWorkspaceContract": {
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "objects": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/AgentAppArticleWorkspaceObject"
+              },
+              "type": "array"
+            },
+            "panes": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "rendererKinds": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "enabled"
+          ],
+          "type": "object"
+        },
+        "AgentAppArticleWorkspaceObject": {
           "properties": {
             "artifactKind": {
               "type": [
@@ -1516,74 +1644,7 @@
             "title"
           ],
           "type": "object"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "enabled": {
-          "type": "boolean"
         },
-        "objects": {
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/AgentAppProductProfileObject"
-          },
-          "type": "array"
-        },
-        "panes": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "rendererKinds": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        }
-      },
-      "required": [
-        "enabled"
-      ],
-      "title": "AgentAppProductProfileContract",
-      "type": "object"
-    },
-    "AgentAppProductProfileObject": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "artifactKind": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "defaultPane": {
-          "type": "string"
-        },
-        "kind": {
-          "type": "string"
-        },
-        "primary": {
-          "type": "boolean"
-        },
-        "title": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "defaultPane",
-        "kind",
-        "primary",
-        "title"
-      ],
-      "title": "AgentAppProductProfileObject",
-      "type": "object"
-    },
-    "AgentAppRightSurfaceContract": {
-      "$defs": {
         "AgentAppHistoryRestoreContract": {
           "properties": {
             "defaultPane": {
@@ -1618,71 +1679,13 @@
             "restoreSelection"
           ],
           "type": "object"
-        },
-        "AgentAppProductProfileContract": {
-          "properties": {
-            "enabled": {
-              "type": "boolean"
-            },
-            "objects": {
-              "default": [],
-              "items": {
-                "$ref": "#/$defs/AgentAppProductProfileObject"
-              },
-              "type": "array"
-            },
-            "panes": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "rendererKinds": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            }
-          },
-          "required": [
-            "enabled"
-          ],
-          "type": "object"
-        },
-        "AgentAppProductProfileObject": {
-          "properties": {
-            "artifactKind": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "defaultPane": {
-              "type": "string"
-            },
-            "kind": {
-              "type": "string"
-            },
-            "primary": {
-              "type": "boolean"
-            },
-            "title": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "defaultPane",
-            "kind",
-            "primary",
-            "title"
-          ],
-          "type": "object"
         }
       },
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
+        "articleWorkspace": {
+          "$ref": "#/$defs/AgentAppArticleWorkspaceContract"
+        },
         "defaultActiveTab": {
           "type": [
             "null",
@@ -1700,9 +1703,6 @@
           "minimum": 0,
           "type": "integer"
         },
-        "productProfile": {
-          "$ref": "#/$defs/AgentAppProductProfileContract"
-        },
         "supportedTabs": {
           "default": [],
           "items": {
@@ -1712,10 +1712,10 @@
         }
       },
       "required": [
+        "articleWorkspace",
         "dock",
         "historyRestore",
-        "physicalDockCount",
-        "productProfile"
+        "physicalDockCount"
       ],
       "title": "AgentAppRightSurfaceContract",
       "type": "object"
@@ -7387,6 +7387,8 @@
             "null"
           ]
         },
+        "articleWorkspaceEditedDraft": true,
+        "articleWorkspaceSelectedObjectRef": true,
         "executionStrategy": {
           "type": [
             "null",
@@ -7399,7 +7401,6 @@
             "string"
           ]
         },
-        "productWorkspaceSelectedObjectRef": true,
         "providerName": {
           "type": [
             "null",
@@ -18413,6 +18414,196 @@
         "sourceText"
       ],
       "title": "MediaTaskArtifactAudioCreateParams",
+      "type": "object"
+    },
+    "MediaTaskArtifactCompletedImageInput": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "model": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "prompt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "providerId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "revisedPrompt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "size": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "slotId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "slotIndex": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "slotPrompt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "title": "MediaTaskArtifactCompletedImageInput",
+      "type": "object"
+    },
+    "MediaTaskArtifactImageCompleteParams": {
+      "$defs": {
+        "MediaTaskArtifactCompletedImageInput": {
+          "properties": {
+            "model": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "prompt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "providerId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "revisedPrompt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "size": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "slotId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "slotIndex": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "slotPrompt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "url"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "executorMode": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "failures": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        },
+        "images": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/MediaTaskArtifactCompletedImageInput"
+          },
+          "type": "array"
+        },
+        "model": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "projectRootPath": {
+          "type": "string"
+        },
+        "providerId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "responseId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "responses": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        },
+        "status": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "taskRef": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "projectRootPath",
+        "taskRef"
+      ],
+      "title": "MediaTaskArtifactImageCompleteParams",
       "type": "object"
     },
     "MediaTaskArtifactImageCreateParams": {
@@ -30824,6 +31015,7 @@
               "mediaTaskArtifact/audio/create",
               "mediaTaskArtifact/cancel",
               "mediaTaskArtifact/get",
+              "mediaTaskArtifact/image/complete",
               "mediaTaskArtifact/image/create",
               "mediaTaskArtifact/list",
               "mediaTaskArtifact/video/create",

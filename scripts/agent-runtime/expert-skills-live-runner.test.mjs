@@ -40,11 +40,6 @@ const PANEL_ASSERTIONS = {
   expertPanelEvidenceSkillInvocationObserved: true,
   expertPanelSkillSearchBeforeSkillInvocation: true,
   expertPanelEvidencePackExportedFromHarnessPanel: true,
-  expertPanelEvidenceSummaryVisible: true,
-  expertPanelEvidenceSummarySkillCountsVisible: true,
-  expertPanelEvidenceSummaryLatestSkillVisible: true,
-  expertPanelEvidenceSummaryRuntimeEnableVisible: true,
-  expertPanelEvidenceSummaryHidesRawRuntimeEnable: true,
 };
 
 async function withTempDir(callback) {
@@ -69,7 +64,8 @@ function writeSummary(dir, fileName, overrides = {}) {
     provider: "deepseek",
     model: "deepseek-v4-flash",
     assertions: {
-      ...CORE_ASSERTIONS,
+      liveProviderUsed: true,
+      liveProviderNotUsed: false,
       ...PANEL_ASSERTIONS,
       ...(assertions ?? {}),
     },

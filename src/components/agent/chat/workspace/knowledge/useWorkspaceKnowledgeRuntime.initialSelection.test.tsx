@@ -52,7 +52,7 @@ function buildPack(params: {
 }
 
 interface ProbeProps {
-  initialKnowledgePackSelection: AgentInitialKnowledgePackSelectionParams;
+  initialKnowledgePackSelection?: AgentInitialKnowledgePackSelectionParams | null;
   onRuntimeChange: (runtime: WorkspaceKnowledgeRuntime) => void;
   projectRootPath?: string | null;
 }
@@ -104,6 +104,74 @@ describe("useWorkspaceKnowledgeRuntime initial Knowledge selection", () => {
     });
     container.remove();
     vi.unstubAllGlobals();
+  });
+
+  it("默认 Claw 输入不应预读项目资料列表", async () => {
+    const latestRuntimeRef: { current: WorkspaceKnowledgeRuntime | null } = {
+      current: null,
+    };
+
+    act(() => {
+      root.render(
+        <Probe
+          initialKnowledgePackSelection={null}
+          onRuntimeChange={(runtime) => {
+            latestRuntimeRef.current = runtime;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    expect(knowledgeApiMocks.listKnowledgePacks).not.toHaveBeenCalled();
+    expect(latestRuntimeRef.current?.knowledgePackSelection).toBeNull();
+    expect(latestRuntimeRef.current?.knowledgePackOptions).toEqual([]);
+  });
+
+  it("用户打开资料面板时才读取项目资料列表", async () => {
+    knowledgeApiMocks.listKnowledgePacks.mockResolvedValue({
+      packs: [
+        buildPack({
+          name: "xiejing-persona",
+          type: "personal-ip",
+          defaultForWorkspace: true,
+        }),
+      ],
+    });
+    const latestRuntimeRef: { current: WorkspaceKnowledgeRuntime | null } = {
+      current: null,
+    };
+
+    act(() => {
+      root.render(
+        <Probe
+          initialKnowledgePackSelection={null}
+          onRuntimeChange={(runtime) => {
+            latestRuntimeRef.current = runtime;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    act(() => {
+      latestRuntimeRef.current?.onKnowledgePacksNeeded();
+    });
+    await flushEffects();
+
+    expect(knowledgeApiMocks.listKnowledgePacks).toHaveBeenCalledTimes(1);
+    expect(knowledgeApiMocks.listKnowledgePacks).toHaveBeenCalledWith({
+      workingDir: "/tmp/lime-project",
+      includeArchived: false,
+    });
+    expect(latestRuntimeRef.current?.knowledgePackOptions).toEqual([
+      expect.objectContaining({
+        packName: "xiejing-persona",
+        label: "xiejing-persona",
+        status: "ready",
+        defaultForWorkspace: true,
+      }),
+    ]);
   });
 
   it("从 Knowledge chooser 回流 Agent 时不应在资料列表加载前丢失显式 data 协同资料", async () => {

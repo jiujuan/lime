@@ -1,0 +1,220 @@
+.article-editor-root {
+  container-type: inline-size;
+}
+
+.article-editor-workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+}
+
+.article-editor-main-column {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: visible;
+  padding: 2px 4px 20px;
+}
+
+.article-editor-canvas-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: min(100%, 820px);
+  margin: 0 auto 10px;
+}
+
+.article-editor-canvas-shell {
+  width: min(100%, 820px);
+  margin: 0 auto;
+}
+
+.article-editor-side-panel {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: 10px;
+  overflow: visible;
+}
+
+.article-editor-canvas {
+  min-height: 620px;
+  overflow: hidden;
+  border: 1px solid var(--lime-surface-border);
+  border-radius: 12px;
+  background: var(--lime-surface);
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+}
+
+.article-editor-canvas .ProseMirror {
+  min-height: 536px;
+  padding: 28px 38px 44px;
+  outline: none;
+  color: var(--lime-text);
+  font-size: 14px;
+  line-height: 1.85;
+  word-break: break-word;
+}
+
+.article-editor-canvas .ProseMirror .is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: var(--lime-text-muted);
+  pointer-events: none;
+  height: 0;
+}
+
+.article-editor-canvas .ProseMirror h1,
+.article-editor-canvas .ProseMirror h2,
+.article-editor-canvas .ProseMirror h3 {
+  color: var(--lime-text-strong);
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: 0;
+}
+
+.article-editor-canvas .ProseMirror h1 {
+  margin: 0 0 18px;
+  font-size: 28px;
+  line-height: 1.28;
+}
+
+.article-editor-canvas .ProseMirror h2 {
+  margin: 28px 0 10px;
+  font-size: 18px;
+}
+
+.article-editor-canvas .ProseMirror h3 {
+  margin: 18px 0 8px;
+  font-size: 16px;
+}
+
+.article-editor-canvas .ProseMirror p {
+  margin: 0 0 12px;
+}
+
+.article-editor-canvas .ProseMirror blockquote {
+  margin: 14px 0;
+  border-left: 3px solid var(--lime-surface-border-strong);
+  padding-left: 12px;
+  color: var(--lime-text-muted);
+}
+
+.article-editor-canvas .ProseMirror ul,
+.article-editor-canvas .ProseMirror ol {
+  margin: 10px 0 12px;
+  padding-left: 22px;
+}
+
+.article-editor-canvas .ProseMirror li {
+  margin: 4px 0;
+}
+
+.article-editor-canvas .ProseMirror ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+
+.article-editor-canvas .ProseMirror ul[data-type="taskList"] li {
+  display: flex;
+  gap: 8px;
+}
+
+.article-editor-canvas .ProseMirror ul[data-type="taskList"] label {
+  margin-top: 2px;
+}
+
+.article-editor-canvas .ProseMirror img {
+  max-width: 100%;
+  border-radius: 8px;
+}
+
+.article-editor-canvas .ProseMirror pre {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid var(--lime-surface-border);
+  background: var(--lime-surface-subtle);
+  padding: 12px;
+}
+
+.article-editor-canvas .ProseMirror code {
+  border-radius: 4px;
+  background: var(--lime-surface-subtle);
+  padding: 1px 4px;
+  font-size: 0.92em;
+}
+
+.article-editor-canvas .ProseMirror pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.article-editor-canvas .ProseMirror table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+}
+
+.article-editor-canvas .ProseMirror th,
+.article-editor-canvas .ProseMirror td {
+  border: 1px solid var(--lime-surface-border);
+  padding: 7px 9px;
+  text-align: left;
+}
+
+.article-editor-canvas .ProseMirror th {
+  background: var(--lime-surface-subtle);
+  color: var(--lime-text-strong);
+  font-weight: 600;
+}
+
+.article-editor-canvas .ProseMirror mark {
+  border-radius: 3px;
+  background: rgba(250, 204, 21, 0.32);
+  padding: 0 2px;
+}
+
+@container (min-width: 920px) {
+  .article-editor-workbench {
+    grid-template-columns: minmax(520px, 1fr) minmax(260px, 320px);
+    overflow: hidden;
+  }
+
+  .article-editor-main-column,
+  .article-editor-side-panel {
+    overflow: auto;
+  }
+
+  .article-editor-side-panel {
+    padding-right: 2px;
+  }
+
+  .article-editor-canvas {
+    min-height: calc(100vh - 182px);
+  }
+
+  .article-editor-canvas .ProseMirror {
+    min-height: calc(100vh - 266px);
+  }
+}
+
+@container (max-width: 520px) {
+  .article-editor-workbench {
+    padding: 12px;
+  }
+
+  .article-editor-canvas .ProseMirror {
+    padding: 22px 20px 34px;
+  }
+
+  .article-editor-canvas .ProseMirror h1 {
+    font-size: 24px;
+  }
+}

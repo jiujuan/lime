@@ -7,6 +7,8 @@ import {
   extractCuratedTaskReferenceMemoryIds,
   mergeCuratedTaskReferenceEntries,
   type CuratedTaskReferenceEntry,
+  type CuratedTaskReferenceSelection,
+  normalizeCuratedTaskReferenceMemoryIds,
 } from "./curatedTaskReferenceSelection";
 import {
   buildCuratedTaskLaunchPrompt,
@@ -199,6 +201,10 @@ export function resolveSceneAppCuratedTaskReferenceCopy(
 }
 
 const SCENEAPP_REVIEW_BASELINE_FALLBACK_TASK_ID = "account-project-review";
+const EMPTY_CURATED_TASK_REFERENCE_SELECTION: CuratedTaskReferenceSelection = {
+  referenceMemoryIds: [],
+  referenceEntries: [],
+};
 
 function hasBaselinePrefillFields(
   prefill?: CuratedTaskInputValues | null,
@@ -401,6 +407,45 @@ export function buildCuratedTaskReferenceEntryFromSceneAppExecution(params: {
         }),
       },
     },
+  };
+}
+
+export function buildDefaultCuratedTaskReferenceSelection(params: {
+  replayReferenceEntries?:
+    | Array<CuratedTaskReferenceEntry | null | undefined>
+    | null;
+  replayReferenceMemoryIds?: Array<string | null | undefined> | null;
+  sceneAppReferenceEntry?: CuratedTaskReferenceEntry | null;
+}): CuratedTaskReferenceSelection {
+  const replayReferenceEntries = params.replayReferenceEntries ?? [];
+  const replayReferenceMemoryIds = params.replayReferenceMemoryIds ?? [];
+  const hasReferenceEntrySignals =
+    replayReferenceEntries.length > 0 || Boolean(params.sceneAppReferenceEntry);
+  const hasReferenceMemoryIdSignals = replayReferenceMemoryIds.length > 0;
+
+  if (!hasReferenceEntrySignals && !hasReferenceMemoryIdSignals) {
+    return EMPTY_CURATED_TASK_REFERENCE_SELECTION;
+  }
+
+  const referenceEntries = hasReferenceEntrySignals
+    ? mergeCuratedTaskReferenceEntries([
+        ...replayReferenceEntries,
+        params.sceneAppReferenceEntry,
+      ]).slice(0, 3)
+    : [];
+  const referenceMemoryIds =
+    normalizeCuratedTaskReferenceMemoryIds([
+      ...replayReferenceMemoryIds,
+      ...(extractCuratedTaskReferenceMemoryIds(referenceEntries) ?? []),
+    ]) ?? [];
+
+  if (referenceEntries.length === 0 && referenceMemoryIds.length === 0) {
+    return EMPTY_CURATED_TASK_REFERENCE_SELECTION;
+  }
+
+  return {
+    referenceMemoryIds,
+    referenceEntries,
   };
 }
 

@@ -13,7 +13,8 @@ import { normalizeExecutionStrategyToReact } from "@/lib/api/agentRuntime/execut
 import type { ServiceModelsConfig } from "@/lib/api/appConfigTypes";
 import { logAgentDebug } from "@/lib/agentDebug";
 import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
-import { useGlobalMediaGenerationDefaults } from "@/hooks/useGlobalMediaGenerationDefaults";
+import { readGlobalMediaGenerationDefaults } from "@/hooks/useGlobalMediaGenerationDefaults";
+import type { MediaGenerationDefaults } from "@/lib/mediaGeneration";
 import {
   mergeServiceModelPrompt,
   resolveServiceModelExecutionPreference,
@@ -179,9 +180,11 @@ import {
 } from "./workspacePluginActivation";
 import {
   isImageGenerationPlainInputIntent,
-  isPlainInputIntentAffirmativeReply,
 } from "./commands/intentHelpers";
-import { resolveServiceModelSendOverrides } from "./commands/serviceModelHelpers";
+import {
+  resolveServiceModelSendOverrides,
+  shouldRefreshServiceModelsBeforeSend,
+} from "./commands/serviceModelHelpers";
 import {
   shouldSkipBrowserAssistPrimeForPlainFirstTurn,
   buildFastResponseAssistantDraft,
@@ -284,6 +287,10 @@ interface UseWorkspaceSendActionsParams {
   soulArtifactVoiceEnabledForTurn?: boolean;
   serviceModels?: ServiceModelsConfig;
   agentResponseLanguage?: string | null;
+  resolveServiceModelsBeforeSend?: () => Promise<{
+    serviceModels?: ServiceModelsConfig;
+    agentResponseLanguage?: string | null;
+  }>;
   messages: Message[];
   setChatMessages: Dispatch<SetStateAction<Message[]>>;
   bootstrapDispatchPreview?: InitialDispatchPreviewSnapshot | null;
@@ -339,6 +346,7 @@ interface WorkspaceResolvedSendState {
 interface WorkspaceSendPlan extends WorkspaceResolvedSendState {
   text: string;
   images: MessageImage[];
+  hasContextWorkspace: boolean;
   sendExecutionStrategy?: CurrentExecutionStrategy;
   autoContinuePayload?: AutoContinueRequestPayload;
   sendOptions?: HandleSendOptions;
@@ -353,14 +361,6 @@ interface WorkspaceLocalConfirmationPlan {
   sendBoundary: GeneralWorkbenchSendBoundaryState;
   submissionPreviewKey: string | null;
   confirmation: string;
-  pendingIntent?: PendingPlainInputIntent;
-}
-
-interface PendingPlainInputIntent {
-  commandKey: string;
-  intentId: string;
-  sourceText: string;
-  images: MessageImage[];
 }
 
 type WorkspaceSendResolution =
@@ -418,6 +418,7 @@ export function useWorkspaceSendActions({
   soulArtifactVoiceEnabledForTurn,
   serviceModels,
   agentResponseLanguage,
+  resolveServiceModelsBeforeSend,
   messages,
   setChatMessages,
   bootstrapDispatchPreview,
@@ -441,10 +442,6 @@ export function useWorkspaceSendActions({
     useState<SubmissionPreviewSnapshot | null>(null);
   const [isPreparingSend, setIsPreparingSend] = useState(false);
   const isPreparingSendRef = useRef(false);
-  const pendingPlainInputIntentRef = useRef<PendingPlainInputIntent | null>(
-    null,
-  );
-  const { mediaDefaults } = useGlobalMediaGenerationDefaults();
   const translateAgentWorkspace = useCallback<AgentWorkspaceTranslator>(
     (key, options) => {
       const translate = t as unknown as (
@@ -550,32 +547,6 @@ export function useWorkspaceSendActions({
         sendExecutionStrategy ?? executionStrategy,
       );
       let sourceText = inputCapabilityDispatch.sourceText;
-      const pendingPlainInputIntent = pendingPlainInputIntentRef.current;
-      if (
-        pendingPlainInputIntent &&
-        !sendOptions?.purpose &&
-        isImageGenerationPlainInputIntent(pendingPlainInputIntent)
-      ) {
-        if (isPlainInputIntentAffirmativeReply(sourceText)) {
-          const confirmationText = sourceText;
-          const pendingSourceText = pendingPlainInputIntent.sourceText.trim();
-          sourceText = pendingSourceText
-            ? `@配图 ${pendingSourceText}`
-            : sourceText;
-          images =
-            images && images.length > 0
-              ? images
-              : pendingPlainInputIntent.images;
-          sendOptions = {
-            ...(sendOptions || {}),
-            displayContent:
-              sendOptions?.displayContent ?? confirmationText.trim(),
-          };
-          pendingPlainInputIntentRef.current = null;
-        } else if (sourceText.trim()) {
-          pendingPlainInputIntentRef.current = null;
-        }
-      }
       logAgentDebug("WorkspaceSend", "plan.start", {
         hasAutoContinue: Boolean(autoContinuePayload?.enabled),
         hasPurpose: Boolean(sendOptions?.purpose),
@@ -689,9 +660,17 @@ export function useWorkspaceSendActions({
           ? "disabled"
           : sendOptions?.searchMode;
 
+      const shouldAttachContextWorkspace =
+        Boolean(contextWorkspace.activeContextPrompt.trim()) ||
+        (contextWorkspace.enabled && isThemeWorkbench);
+      const effectiveContextWorkspace = {
+        ...contextWorkspace,
+        enabled: shouldAttachContextWorkspace,
+      };
       const preparedActiveContextPrompt =
-        contextWorkspace.enabled && !contextWorkspace.activeContextPrompt.trim()
-          ? contextWorkspace.prepareActiveContextPrompt().then(
+        effectiveContextWorkspace.enabled &&
+        !effectiveContextWorkspace.activeContextPrompt.trim()
+          ? effectiveContextWorkspace.prepareActiveContextPrompt().then(
               (value) => ({
                 ok: true as const,
                 value,
@@ -707,6 +686,8 @@ export function useWorkspaceSendActions({
       let commandSessionPromise: Promise<string | null> | null = null;
       let pendingCommandSessionBinding: PendingCommandSessionBinding | null =
         extractBoundSessionRequestContext(mergedLaunchRequestMetadata);
+      let pendingCommandSessionBindingMode: "blocking" | "best_effort" =
+        "blocking";
       let completedMentionCommandUsage:
         | WorkspaceSendPlan["completedMentionCommandUsage"]
         | null = null;
@@ -743,10 +724,7 @@ export function useWorkspaceSendActions({
         if (!submissionPreviewKey) {
           return;
         }
-        const previewKey = submissionPreviewKey;
-        setSubmissionPreview((current) =>
-          current?.key === previewKey ? null : current,
-        );
+        setSubmissionPreview(null);
       };
       const resolveCommandSessionEnsureOptions = () => ({
         skipSessionRestore: sendOptions?.skipSessionRestore === true,
@@ -833,17 +811,6 @@ export function useWorkspaceSendActions({
         });
       };
 
-      if (messagesCount === 0) {
-        const previewStartedAt = Date.now();
-        ensureSubmissionPreview();
-        void waitForNextPaint().then(() => {
-          logAgentDebug("WorkspaceSend", "initialPreview.paintDone", {
-            durationMs: Date.now() - previewStartedAt,
-            messagesCount,
-          });
-        });
-      }
-
       const skillInstallPromptInstruction =
         !sendOptions?.purpose && !hasBoundSkillLaunch && sourceText.trim()
           ? parseSkillInstallPromptInstruction(sourceText)
@@ -865,13 +832,25 @@ export function useWorkspaceSendActions({
         };
       }
 
-      const parsedImageWorkbenchCommand =
+      const explicitImageWorkbenchCommand =
         !sendOptions?.purpose && !hasBoundSkillLaunch && sourceText.trim()
           ? parseImageWorkbenchCommand(sourceText)
           : null;
+      const plainImageIntent =
+        !sendOptions?.purpose && !hasBoundSkillLaunch && !explicitImageWorkbenchCommand
+          ? resolvePlainInputIntentConfirmation(sourceText)
+          : null;
+      const parsedPlainImageWorkbenchCommand =
+        plainImageIntent && isImageGenerationPlainInputIntent(plainImageIntent)
+          ? parseImageWorkbenchCommand(`@配图 ${sourceText.trim()}`)
+          : null;
+      const parsedImageWorkbenchCommand =
+        explicitImageWorkbenchCommand ?? parsedPlainImageWorkbenchCommand;
       if (parsedImageWorkbenchCommand) {
+        const imageDispatchText =
+          parsedPlainImageWorkbenchCommand?.rawText || sourceText;
         const skillRequest = resolveImageWorkbenchSkillRequest({
-          rawText: sourceText,
+          rawText: imageDispatchText,
           parsedCommand: parsedImageWorkbenchCommand,
           images: effectiveImages,
           sessionIdOverride: commandSessionId,
@@ -893,6 +872,9 @@ export function useWorkspaceSendActions({
           requestContext: skillRequest.requestContext,
           requestContextKey: "image_task",
         };
+        pendingCommandSessionBindingMode = parsedPlainImageWorkbenchCommand
+          ? "best_effort"
+          : "blocking";
         ensureSubmissionPreview(effectiveImages);
         void primeCommandSessionId(
           "image_skill_launch",
@@ -915,6 +897,7 @@ export function useWorkspaceSendActions({
             ),
           );
         }
+        dispatchText = imageDispatchText;
         hasBoundSkillLaunch = true;
       }
 
@@ -977,29 +960,6 @@ export function useWorkspaceSendActions({
           ),
         );
         hasBoundSkillLaunch = true;
-      }
-
-      const plainInputIntentConfirmation =
-        !sendOptions?.purpose && !hasBoundSkillLaunch
-          ? resolvePlainInputIntentConfirmation(sourceText)
-          : null;
-      if (plainInputIntentConfirmation) {
-        return {
-          kind: "local_confirmation",
-          plan: {
-            sourceText,
-            images: effectiveImages,
-            sendBoundary,
-            submissionPreviewKey,
-            confirmation: plainInputIntentConfirmation.confirmation,
-            pendingIntent: {
-              commandKey: plainInputIntentConfirmation.commandKey,
-              intentId: plainInputIntentConfirmation.intentId,
-              sourceText,
-              images: effectiveImages,
-            },
-          },
-        };
       }
 
       const parsedCoverWorkbenchCommand =
@@ -2476,6 +2436,12 @@ export function useWorkspaceSendActions({
           ? parseVoiceWorkbenchCommand(sourceText)
           : null;
       if (parsedVoiceWorkbenchCommand) {
+        let mediaDefaults: MediaGenerationDefaults = {};
+        try {
+          mediaDefaults = await readGlobalMediaGenerationDefaults();
+        } catch (error) {
+          console.error("加载全局媒体默认设置失败:", error);
+        }
         const voiceSkillLaunch = await resolveVoiceSkillLaunchRequestContext({
           rawText: sourceText,
           parsedCommand: parsedVoiceWorkbenchCommand,
@@ -2768,6 +2734,15 @@ export function useWorkspaceSendActions({
       let text: string;
       try {
         const resolvedSubmissionPreviewKey = ensureSubmissionPreview();
+        if (messagesCount === 0) {
+          const previewStartedAt = Date.now();
+          void waitForNextPaint().then(() => {
+            logAgentDebug("WorkspaceSend", "initialPreview.paintDone", {
+              durationMs: Date.now() - previewStartedAt,
+              messagesCount,
+            });
+          });
+        }
         if (shouldPrimeSessionForInitialConversationSend) {
           void primeCommandSessionId(
             "initial_conversation_send",
@@ -2787,24 +2762,32 @@ export function useWorkspaceSendActions({
         }
         text = await buildWorkspaceSendText({
           sourceText: dispatchText,
-          contextWorkspace,
+          contextWorkspace: effectiveContextWorkspace,
           mentionedCharacters,
           sendOptions,
           preparedActiveContextPrompt,
         });
         if (pendingCommandSessionBinding) {
-          const resolvedSessionId = await ensureCommandSessionId();
-          if (pendingCommandSessionBinding.kind === "request_context") {
-            attachSessionIdToRequestContext(
-              pendingCommandSessionBinding.requestContext,
-              pendingCommandSessionBinding.requestContextKey,
-              resolvedSessionId,
-            );
-          } else {
-            attachSessionIdToScopedRequestContext(
-              pendingCommandSessionBinding.scopedRequestContext,
-              resolvedSessionId,
-            );
+          const resolvedSessionId =
+            pendingCommandSessionBindingMode === "blocking"
+              ? await ensureCommandSessionId()
+              : commandSessionId;
+          if (
+            resolvedSessionId !== undefined ||
+            pendingCommandSessionBindingMode === "best_effort"
+          ) {
+            if (pendingCommandSessionBinding.kind === "request_context") {
+              attachSessionIdToRequestContext(
+                pendingCommandSessionBinding.requestContext,
+                pendingCommandSessionBinding.requestContextKey,
+                resolvedSessionId,
+              );
+            } else {
+              attachSessionIdToScopedRequestContext(
+                pendingCommandSessionBinding.scopedRequestContext,
+                resolvedSessionId,
+              );
+            }
           }
         }
         submissionPreviewKey = resolvedSubmissionPreviewKey;
@@ -2840,6 +2823,7 @@ export function useWorkspaceSendActions({
           dispatchText,
           text,
           images: effectiveImages,
+          hasContextWorkspace: shouldAttachContextWorkspace,
           sendBoundary,
           browserRequirementForSend,
           effectiveToolPreferences,
@@ -2865,10 +2849,10 @@ export function useWorkspaceSendActions({
       ensureBrowserAssistCanvas,
       executionStrategy,
       handleAutoLaunchMatchedSiteSkill,
+      isThemeWorkbench,
       listInstalledAgentAppsForPluginActivation,
       resolveImageWorkbenchSkillRequest,
       input,
-      mediaDefaults.voice,
       messagesCount,
       mentionedCharacters,
       openRuntimeSceneGate,
@@ -2890,8 +2874,6 @@ export function useWorkspaceSendActions({
       setRuntimeTeamDispatchPreview(null);
       setInput("");
       setMentionedCharacters([]);
-      pendingPlainInputIntentRef.current = plan.pendingIntent ?? null;
-
       setChatMessages((previous) => {
         const timestamp = new Date();
         return [
@@ -2944,6 +2926,7 @@ export function useWorkspaceSendActions({
         sendOptions,
         completedMentionCommandUsage,
         completedMentionUsage,
+        hasContextWorkspace,
       } = plan;
 
       const executeStartedAt = Date.now();
@@ -2990,7 +2973,7 @@ export function useWorkspaceSendActions({
           );
         }
 
-        const nextRequestMetadata = buildWorkspaceRequestMetadata({
+        let nextRequestMetadata = buildWorkspaceRequestMetadata({
           workspaceRequestMetadataBase,
           savedSoulArtifactVoiceGenerationBrief,
           soulArtifactVoiceEnabledForTurn,
@@ -3018,10 +3001,53 @@ export function useWorkspaceSendActions({
           workspaceSkillRuntimeEnable,
           agentResponseLanguage,
         });
+        const shouldRefreshServiceModels =
+          Boolean(resolveServiceModelsBeforeSend) &&
+          shouldRefreshServiceModelsBeforeSend({
+            requestMetadata: nextRequestMetadata,
+            purpose: sendOptions?.purpose,
+          });
+        const serviceModelsForSend = shouldRefreshServiceModels
+          ? await resolveServiceModelsBeforeSend?.()
+          : null;
+        const effectiveServiceModels =
+          serviceModelsForSend?.serviceModels ?? serviceModels;
+        const effectiveAgentResponseLanguage =
+          serviceModelsForSend?.agentResponseLanguage ?? agentResponseLanguage;
+        if (shouldRefreshServiceModels) {
+          nextRequestMetadata = buildWorkspaceRequestMetadata({
+            workspaceRequestMetadataBase,
+            savedSoulArtifactVoiceGenerationBrief,
+            soulArtifactVoiceEnabledForTurn,
+            sendOptions: {
+              ...(sendOptions || {}),
+              toolPreferencesOverride: effectiveToolPreferences,
+            },
+            currentProviderType: providerType,
+            effectiveToolPreferences,
+            mappedTheme,
+            isThemeWorkbench,
+            currentGateKey,
+            themeWorkbenchActiveQueueTitle,
+            contentId,
+            browserRequirementMatch: browserRequirementForSend,
+            browserAssistProfileKey,
+            browserAssistPreferredBackend,
+            browserAssistAutoLaunch,
+            preferredTeamPresetId: effectivePreferredTeamPresetId,
+            selectedTeam,
+            selectedTeamLabel,
+            selectedTeamSummary,
+            teamMemoryShadowSnapshot,
+            workspaceSkillBindings,
+            workspaceSkillRuntimeEnable,
+            agentResponseLanguage: effectiveAgentResponseLanguage,
+          });
+        }
         const serviceModelSendOverrides = resolveServiceModelSendOverrides({
           requestMetadata: nextRequestMetadata,
           purpose: sendOptions?.purpose,
-          serviceModels,
+          serviceModels: effectiveServiceModels,
         });
         const fastResponseDecision = resolveAgentFastResponseRouting({
           mode: readFastResponseMode(),
@@ -3049,10 +3075,7 @@ export function useWorkspaceSendActions({
           hasSkillRequest: Boolean(sendOptions?.skillRequest),
           hasSelectedTeam: Boolean(selectedTeam),
           hasMentionedCharacters: mentionedCharacters.length > 0,
-          hasContextWorkspace: Boolean(
-            contextWorkspace.enabled ||
-            contextWorkspace.activeContextPrompt?.trim(),
-          ),
+          hasContextWorkspace,
           hasPurpose: Boolean(sendOptions?.purpose),
           hasAutoContinue: Boolean(autoContinuePayload?.enabled),
         });
@@ -3069,7 +3092,7 @@ export function useWorkspaceSendActions({
           requestMetadata: withFastResponseMetadata(
             nextRequestMetadata,
             fastResponseDecision,
-            serviceModels,
+            effectiveServiceModels,
           ),
           ...(effectiveSearchMode ? { searchMode: effectiveSearchMode } : {}),
           providerOverride:
@@ -3099,7 +3122,6 @@ export function useWorkspaceSendActions({
           autoContinuePayload,
           nextSendOptions,
         );
-        pendingPlainInputIntentRef.current = null;
         logAgentDebug("WorkspaceSend", "sendMessage.done", {
           durationMs: Date.now() - executeStartedAt,
         });
@@ -3169,6 +3191,7 @@ export function useWorkspaceSendActions({
       selectedTeamLabel,
       selectedTeamSummary,
       serviceModels,
+      resolveServiceModelsBeforeSend,
       sessionId,
       teamMemoryShadowSnapshot,
       workspaceSkillBindings,

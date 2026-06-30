@@ -140,6 +140,13 @@ function readHistoryRecord(
   );
 }
 
+export function hasWorkspacePluginHistoryRestoreMetadata(
+  threadRead: AgentRuntimeThreadReadModel | null | undefined,
+): boolean {
+  const metadata = asRecord(threadRead?.session_business_object_ref_metadata);
+  return Boolean(readHistoryRecord(metadata));
+}
+
 export function extractWorkspacePluginHistoryRestoreSnapshot(
   threadRead: AgentRuntimeThreadReadModel | null | undefined,
 ): PluginHistoryRestoreSnapshot | null {

@@ -5,6 +5,7 @@ import type {
   PluginContract,
   PluginArtifactRendererDeclaration,
   PluginHistoryRestoreDeclaration,
+  PluginManifestInstallContract,
   PluginManifest,
   PluginManifestInterface,
   PluginRegistryItem,
@@ -68,6 +69,34 @@ function readRecord(value: unknown): Record<string, unknown> | undefined {
 
 function readString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function readBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function runtimeTargetsInstallContract(
+  item: PluginMarketplaceItem,
+): PluginManifestInstallContract | undefined {
+  const manifest = readRecord(item.manifestSummary);
+  const install = readRecord(item.install) ?? readRecord(manifest?.install);
+  if (!install) {
+    return undefined;
+  }
+  const local = readBoolean(install.local);
+  const cloud = readBoolean(install.cloud);
+  const authentication = readString(install.authentication);
+  const contract: PluginManifestInstallContract = {};
+  if (typeof local === "boolean") {
+    contract.local = local;
+  }
+  if (typeof cloud === "boolean") {
+    contract.cloud = cloud;
+  }
+  if (authentication) {
+    contract.authentication = authentication;
+  }
+  return Object.keys(contract).length > 0 ? contract : undefined;
 }
 
 export function projectPluginMarketplaceItemSkills(
@@ -227,6 +256,7 @@ function marketplaceManifest(item: PluginMarketplaceItem): PluginManifest {
   const artifactRenderers = projectPluginMarketplaceItemArtifactRenderers(item);
   const historyRestore = projectPluginMarketplaceItemHistoryRestore(item);
   const manifestInterface = projectPluginMarketplaceItemInterface(item);
+  const install = runtimeTargetsInstallContract(item);
   return {
     id: item.pluginKey,
     name: item.pluginName,
@@ -239,6 +269,7 @@ function marketplaceManifest(item: PluginMarketplaceItem): PluginManifest {
     subagents: projectPluginMarketplaceItemSubagents(item),
     workflows: projectPluginMarketplaceItemWorkflows(item),
     interface: manifestInterface,
+    ...(install ? { install } : {}),
     artifactRenderers,
     ...(historyRestore ? { historyRestore } : {}),
     agentApps: item.appId
@@ -264,13 +295,15 @@ function marketplaceManifest(item: PluginMarketplaceItem): PluginManifest {
 }
 
 function isMarketplaceItemAvailable(item: PluginMarketplaceItem): boolean {
-  return (
+  const install = runtimeTargetsInstallContract(item);
+  const canInstallLocal = install?.local === true;
+  const canInstallCloud =
     item.enabled &&
     item.installState === "available" &&
     item.activationState === "activatable" &&
     item.policy.installation !== "NOT_AVAILABLE" &&
-    Boolean(item.package?.packageUrl)
-  );
+    Boolean(item.package?.packageUrl);
+  return canInstallLocal || canInstallCloud;
 }
 
 function setFrom(values: readonly string[] | undefined): Set<string> {

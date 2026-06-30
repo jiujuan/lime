@@ -21,6 +21,9 @@ vi.mock("@/lib/agentUiPerformanceMetrics", () => ({
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
+type DraftSendRuntimeHandle = {
+  restoreInput: ReturnType<typeof vi.fn>;
+};
 
 function createDraftSendRequest(
   overrides: Partial<TaskCenterDraftSendRequest> = {},
@@ -42,6 +45,7 @@ function mountDraftSendRuntime({
   messagesLength = 0,
   currentSessionId,
   request = createDraftSendRequest(),
+  sendResult = true,
   onSnapshot,
   onNonMaterializedSessionReady,
 }: {
@@ -49,15 +53,17 @@ function mountDraftSendRuntime({
   messagesLength?: number;
   currentSessionId?: string | null;
   request?: TaskCenterDraftSendRequest | null;
+  sendResult?: boolean;
   onNonMaterializedSessionReady?: (sessionId: string) => void;
   onSnapshot: (snapshot: {
     taskCenterDraftSendRequest: TaskCenterDraftSendRequest | null;
     homePendingPreviewRequest: TaskCenterDraftSendRequest | null;
   }) => void;
-}) {
+}): DraftSendRuntimeHandle {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
+  const restoreInput = vi.fn();
 
   function Harness() {
     const [taskCenterDraftSendRequest, setTaskCenterDraftSendRequest] =
@@ -65,7 +71,7 @@ function mountDraftSendRuntime({
     const [homePendingPreviewRequest, setHomePendingPreviewRequest] =
       useState<TaskCenterDraftSendRequest | null>(request);
     const materializedSessionIdsRef = useRef(new Map<string, string>());
-    const sendRef = useRef(vi.fn(async () => true));
+    const sendRef = useRef(vi.fn(async () => sendResult));
 
     useTaskCenterDraftSendDispatchRuntime({
       taskCenterDraftSendRequest,
@@ -78,6 +84,7 @@ function mountDraftSendRuntime({
       materializeDraftTab: vi.fn(async () => null),
       commitMaterializedDraftTab: vi.fn(),
       onNonMaterializedSessionReady,
+      restoreInput,
       sendRef,
       workspaceId: "workspace-test",
     });
@@ -96,6 +103,10 @@ function mountDraftSendRuntime({
     root.render(createElement(Harness));
   });
   mountedRoots.push({ root, container });
+
+  return {
+    restoreInput,
+  };
 }
 
 function mountEmptyStateSendRuntime({
@@ -316,6 +327,35 @@ describe("useTaskCenterDraftSendDispatchRuntime", () => {
 
     expect(onNonMaterializedSessionReady).toHaveBeenCalledWith(
       "sess_ready_from_state",
+    );
+  });
+
+  it("首页首发发送返回 false 时应清理 pending preview", async () => {
+    const snapshots: Array<{
+      taskCenterDraftSendRequest: TaskCenterDraftSendRequest | null;
+      homePendingPreviewRequest: TaskCenterDraftSendRequest | null;
+    }> = [];
+
+    const runtime = mountDraftSendRuntime({
+      displayMessagesLength: 0,
+      messagesLength: 0,
+      sendResult: false,
+      request: createDraftSendRequest({
+        draftTabId: "draft-send-image-no-project",
+        text: "参考图生成一张小红书封面",
+      }),
+      onSnapshot: (snapshot) => {
+        snapshots.push(snapshot);
+      },
+    });
+
+    await vi.waitFor(() => {
+      const latest = snapshots.at(-1);
+      expect(latest?.taskCenterDraftSendRequest).toBeNull();
+      expect(latest?.homePendingPreviewRequest).toBeNull();
+    });
+    expect(runtime.restoreInput).toHaveBeenCalledWith(
+      "参考图生成一张小红书封面",
     );
   });
 });

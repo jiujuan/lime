@@ -250,7 +250,7 @@ mod tests {
                     "intent_key": "content_article_generate",
                     "task_kind": "content.article.generate",
                     "output_artifact_kind": "content_factory.workspace_patch",
-                    "right_surface": "productProfile",
+                    "right_surface": "articleWorkspace",
                     "expected_objects": ["articleDraft"],
                     "matched_phrase": "写一篇公众号文章",
                     "selected_skill_keys": ["article-draft"],
@@ -260,7 +260,7 @@ mod tests {
                         "object_id": "pending",
                         "artifact_ids": ["artifact-1"]
                     },
-                    "opened_tabs": ["productProfile"],
+                    "opened_tabs": ["articleWorkspace"],
                     "context_source": "user"
                 }
             }

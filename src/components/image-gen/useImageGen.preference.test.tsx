@@ -13,7 +13,8 @@ const { mockUseApiKeyProvider } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/hooks/useApiKeyProvider", () => ({
-  useApiKeyProvider: mockUseApiKeyProvider,
+  useApiKeyProvider: (options?: { autoLoad?: boolean }) =>
+    mockUseApiKeyProvider(options),
 }));
 
 import { useImageGen } from "./useImageGen";
@@ -48,6 +49,8 @@ function mountHookWithOptions(options: {
   preferredProviderId?: string;
   preferredModelId?: string;
   allowFallback?: boolean;
+  providerLoadEnabled?: boolean;
+  providerLoadMode?: "immediate" | "deferred";
   selectionScopeKey?: string;
 }): HookHarness {
   let hookValue: ReturnType<typeof useImageGen> | null = null;
@@ -132,27 +135,30 @@ async function waitForReady(harness: HookHarness, timeout = 40): Promise<void> {
 
 beforeEach(() => {
   setReactActEnvironment();
-  mockUseApiKeyProvider.mockReturnValue({
-    providers: [
-      {
-        id: "zhipuai",
-        type: "zhipuai",
-        name: "智谱AI",
-        enabled: true,
-        api_key_count: 1,
-        api_host: "https://api.zhipu.test",
-      },
-      {
-        id: "fal",
-        type: "fal",
-        name: "Fal",
-        enabled: true,
-        api_key_count: 1,
-        api_host: "https://fal.run",
-      },
-    ],
-    loading: false,
-  });
+  const providers = [
+    {
+      id: "zhipuai",
+      type: "zhipuai",
+      name: "智谱AI",
+      enabled: true,
+      api_key_count: 1,
+      api_host: "https://api.zhipu.test",
+    },
+    {
+      id: "fal",
+      type: "fal",
+      name: "Fal",
+      enabled: true,
+      api_key_count: 1,
+      api_host: "https://fal.run",
+    },
+  ];
+  mockUseApiKeyProvider.mockImplementation(
+    (options?: { autoLoad?: boolean }) => ({
+      providers: options?.autoLoad === false ? [] : providers,
+      loading: false,
+    }),
+  );
 });
 
 afterEach(() => {
@@ -190,7 +196,7 @@ describe("useImageGen 项目偏好", () => {
       await waitForReady(harness);
     });
 
-    expect(harness.getValue().selectedProvider?.id).toBe("zhipuai");
+    expect(harness.getValue().selectedProvider?.id).toBe("fal");
 
     await harness.updateOptions({
       preferredProviderId: "fal",
@@ -206,28 +212,31 @@ describe("useImageGen 项目偏好", () => {
   });
 
   it("未显式指定图片 Provider 时，应优先命中 openai-like 图片渠道", async () => {
-    mockUseApiKeyProvider.mockReturnValue({
-      providers: [
-        {
-          id: "zhipuai",
-          type: "zhipuai",
-          name: "智谱AI",
-          enabled: true,
-          api_key_count: 1,
-          api_host: "https://api.zhipu.test",
-        },
-        {
-          id: "airgate-openai-images",
-          type: "openai",
-          name: "OpenAI-gpt-images-2",
-          enabled: true,
-          api_key_count: 1,
-          api_host: "https://airgate.k8ray.com/v1",
-          custom_models: ["gpt-images-2"],
-        },
-      ],
-      loading: false,
-    });
+    const providers = [
+      {
+        id: "zhipuai",
+        type: "zhipuai",
+        name: "智谱AI",
+        enabled: true,
+        api_key_count: 1,
+        api_host: "https://api.zhipu.test",
+      },
+      {
+        id: "airgate-openai-images",
+        type: "openai",
+        name: "OpenAI-gpt-images-2",
+        enabled: true,
+        api_key_count: 1,
+        api_host: "https://airgate.k8ray.com/v1",
+        custom_models: ["gpt-images-2"],
+      },
+    ];
+    mockUseApiKeyProvider.mockImplementation(
+      (options?: { autoLoad?: boolean }) => ({
+        providers: options?.autoLoad === false ? [] : providers,
+        loading: false,
+      }),
+    );
     const harness = mountHookWithOptions({});
     await act(async () => {
       await waitForReady(harness);
@@ -251,6 +260,30 @@ describe("useImageGen 项目偏好", () => {
     expect(harness.getValue().selectedProvider).toBeUndefined();
     expect(harness.getValue().selectedProviderId).toBe("");
     expect(harness.getValue().preferredProviderUnavailable).toBe(true);
+  });
+
+  it("禁用自动 Provider 加载时不应读取列表，显式请求后再加载", async () => {
+    const harness = mountHookWithOptions({
+      providerLoadEnabled: false,
+    });
+
+    await act(async () => {
+      await flushEffects();
+    });
+
+    expect(mockUseApiKeyProvider).toHaveBeenLastCalledWith({
+      autoLoad: false,
+    });
+    expect(harness.getValue().availableProviders).toEqual([]);
+
+    await act(async () => {
+      harness.getValue().ensureProvidersLoaded();
+      await flushEffects();
+    });
+
+    expect(mockUseApiKeyProvider).toHaveBeenLastCalledWith({
+      autoLoad: true,
+    });
   });
 
   it("切换会话范围后，应回到当前偏好的图片 Provider 和模型", async () => {

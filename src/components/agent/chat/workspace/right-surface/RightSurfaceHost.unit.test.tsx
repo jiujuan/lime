@@ -11,7 +11,7 @@ vi.mock("react-i18next", () => ({
       const copy: Record<string, string> = {
         "agentChat.rightSurface.tabs.appSurface": "Agent App",
         "agentChat.rightSurface.tabs.browser": "浏览器",
-        "agentChat.rightSurface.tabs.productProfile": "产物 Profile",
+        "agentChat.rightSurface.tabs.articleWorkspace": "文章编辑器",
         "agentChat.rightSurface.tabs.files": "文件",
         "agentChat.rightSurface.tabs.shell": "Shell",
       };
@@ -28,8 +28,8 @@ const definitions: RightSurfaceDefinition[] = [
     render: () => <div data-testid="agent-app-pane">Agent App</div>,
   },
   {
-    kind: "productProfile",
-    render: () => <div data-testid="product-profile-pane">产物详情</div>,
+    kind: "articleWorkspace",
+    render: () => <div data-testid="article-workspace-pane">文章详情</div>,
   },
   {
     kind: "files",
@@ -78,9 +78,9 @@ function renderHost(
   act(() => {
     root.render(
       <RightSurfaceHost
-        activeSurface="productProfile"
+        activeSurface="articleWorkspace"
         definitions={definitions}
-        openSurfaces={["productProfile", "files", "shell"]}
+        openSurfaces={["articleWorkspace", "files", "shell"]}
         {...props}
       />,
     );
@@ -101,14 +101,14 @@ describe("RightSurfaceHost", () => {
       container.querySelector('[data-testid="workspace-right-surface-tabs"]'),
     ).not.toBeNull();
     expect(
-      container.querySelector('[data-testid="workspace-right-surface-tab-productProfile"]')
+      container.querySelector('[data-testid="workspace-right-surface-tab-articleWorkspace"]')
         ?.getAttribute("aria-selected"),
     ).toBe("true");
-    expect(container.textContent).toContain("产物 Profile");
+    expect(container.textContent).toContain("文章编辑器");
     expect(container.textContent).toContain("文件");
     expect(container.textContent).toContain("Shell");
     expect(
-      container.querySelector('[data-testid="product-profile-pane"]'),
+      container.querySelector('[data-testid="article-workspace-pane"]'),
     ).not.toBeNull();
     expect(container.querySelector('[data-testid="files-pane"]')).toBeNull();
   });
@@ -143,13 +143,13 @@ describe("RightSurfaceHost", () => {
   });
 
   it("只有一个 open surface 时不渲染 tab strip", () => {
-    const container = renderHost({ openSurfaces: ["productProfile"] });
+    const container = renderHost({ openSurfaces: ["articleWorkspace"] });
 
     expect(
       container.querySelector('[data-testid="workspace-right-surface-tabs"]'),
     ).toBeNull();
     expect(
-      container.querySelector('[data-testid="product-profile-pane"]'),
+      container.querySelector('[data-testid="article-workspace-pane"]'),
     ).not.toBeNull();
   });
 });

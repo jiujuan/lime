@@ -31,13 +31,41 @@ export interface BuildWorkspaceRightSurfaceRuntimeLaunchersParams {
   appSurfaceAvailable?: boolean;
   hasExpertInfoPanel: boolean;
   objectCanvasAvailable: boolean;
-  productProfileAvailable?: boolean;
+  articleWorkspaceAvailable?: boolean;
   pendingIntents: WorkspaceRightSurfaceIntent[];
   shellAvailable: boolean;
   showHarnessToggle: boolean;
   traceAvailable?: boolean;
   suppressHomeNavbarUtilityActions: boolean;
   surfaceState: WorkspaceRightSurfaceState;
+}
+
+export function hasWorkspaceRightSurfaceRuntimePendingSignals({
+  harnessPendingCount,
+  objectCanvasCandidateId,
+  pluginActivationContext,
+  pluginContracts = [],
+  preferredServiceSkillResultFileTargetRelativePath,
+  showHarnessToggle,
+  suppressHomeNavbarUtilityActions,
+}: Omit<
+  BuildWorkspaceRightSurfaceRuntimePendingIntentsParams,
+  "createdAt" | "pluginRightSurfaceIntentTtlMs"
+>): boolean {
+  if (
+    !suppressHomeNavbarUtilityActions &&
+    showHarnessToggle &&
+    harnessPendingCount > 0
+  ) {
+    return true;
+  }
+  if (preferredServiceSkillResultFileTargetRelativePath?.trim()) {
+    return true;
+  }
+  if (objectCanvasCandidateId?.trim()) {
+    return true;
+  }
+  return Boolean(pluginActivationContext && pluginContracts.length > 0);
 }
 
 export function buildWorkspaceRightSurfaceRuntimePendingIntents({
@@ -81,7 +109,7 @@ export function buildWorkspaceRightSurfaceRuntimeAvailableSurfaces({
   appSurfaceAvailable = false,
   hasExpertInfoPanel,
   objectCanvasAvailable,
-  productProfileAvailable = objectCanvasAvailable,
+  articleWorkspaceAvailable = objectCanvasAvailable,
   shellAvailable,
   showHarnessToggle,
   traceAvailable = false,
@@ -92,7 +120,7 @@ export function buildWorkspaceRightSurfaceRuntimeAvailableSurfaces({
   | "appSurfaceAvailable"
   | "filesAvailable"
   | "objectCanvasAvailable"
-  | "productProfileAvailable"
+  | "articleWorkspaceAvailable"
   | "shellAvailable"
   | "showHarnessToggle"
   | "traceAvailable"
@@ -102,8 +130,8 @@ export function buildWorkspaceRightSurfaceRuntimeAvailableSurfaces({
   if (appSurfaceAvailable) {
     surfaces.push("appSurface");
   }
-  if (productProfileAvailable) {
-    surfaces.push("productProfile");
+  if (articleWorkspaceAvailable) {
+    surfaces.push("articleWorkspace");
   }
   if (hasExpertInfoPanel) {
     surfaces.push("expertInfo");
@@ -132,7 +160,7 @@ export function buildWorkspaceRightSurfaceRuntimeLaunchers({
   appSurfaceAvailable,
   hasExpertInfoPanel,
   objectCanvasAvailable,
-  productProfileAvailable,
+  articleWorkspaceAvailable,
   pendingIntents,
   shellAvailable,
   showHarnessToggle,
@@ -148,7 +176,7 @@ export function buildWorkspaceRightSurfaceRuntimeLaunchers({
       appSurfaceAvailable,
       hasExpertInfoPanel,
       objectCanvasAvailable,
-      productProfileAvailable,
+      articleWorkspaceAvailable,
       shellAvailable,
       showHarnessToggle,
       traceAvailable,

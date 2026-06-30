@@ -26,13 +26,13 @@ export interface WorkspaceTaskRailRuntimeInput {
   messages: Message[];
   activityLogs?: SidebarActivityLog[];
   creationTaskEvents?: GeneralWorkbenchCreationTaskEvent[];
-  pendingActions?: ActionRequired[];
-  submittedActionsInFlight?: ActionRequired[];
-  threadItems?: AgentThreadItem[];
-  todoItems?: AsterTodoItem[];
+  pendingActions?: readonly ActionRequired[];
+  submittedActionsInFlight?: readonly ActionRequired[];
+  threadItems?: readonly AgentThreadItem[];
+  todoItems?: readonly AsterTodoItem[];
   threadRead?: AgentRuntimeThreadReadModel | null;
   executionRuntime?: AsterSessionExecutionRuntime | null;
-  childSubagentSessions?: AsterSubagentSessionInfo[];
+  childSubagentSessions?: readonly AsterSubagentSessionInfo[];
   providerType?: string | null;
   model?: string | null;
   accessMode?: GeneralWorkbenchTaskRailContextInput["accessMode"];
@@ -49,14 +49,18 @@ export interface WorkspaceTaskRailProps {
   messages: Message[];
   activityLogs?: SidebarActivityLog[];
   creationTaskEvents?: GeneralWorkbenchCreationTaskEvent[];
-  pendingActions?: ActionRequired[];
-  submittedActionsInFlight?: ActionRequired[];
-  threadItems?: AgentThreadItem[];
-  todoItems?: AsterTodoItem[];
+  pendingActions?: readonly ActionRequired[];
+  submittedActionsInFlight?: readonly ActionRequired[];
+  threadItems?: readonly AgentThreadItem[];
+  todoItems?: readonly AsterTodoItem[];
   threadRead?: AgentRuntimeThreadReadModel | null;
   executionRuntime?: AsterSessionExecutionRuntime | null;
-  childSubagentSessions?: AsterSubagentSessionInfo[];
-  context: GeneralWorkbenchTaskRailContextInput;
+  childSubagentSessions?: readonly AsterSubagentSessionInfo[];
+  providerType?: string | null;
+  model?: string | null;
+  accessMode?: GeneralWorkbenchTaskRailContextInput["accessMode"];
+  reasoningEffort?: string | null;
+  workspaceRootPath: string | null;
   onOpenOutput: (path: string) => void | Promise<void>;
   onRespondToAction?: (response: ConfirmResponse) => void | Promise<void>;
 }
@@ -157,16 +161,11 @@ export function useWorkspaceTaskRailRuntime({
       threadRead,
       executionRuntime,
       childSubagentSessions,
-      context: buildWorkspaceTaskRailRuntimeContext({
-        providerType,
-        model,
-        accessMode,
-        reasoningEffort,
-        workspaceRootPath,
-        threadRead,
-        threadItems,
-        childSubagentSessions,
-      }),
+      providerType,
+      model,
+      accessMode,
+      reasoningEffort,
+      workspaceRootPath,
       onOpenOutput: handleOpenOutput,
       onRespondToAction,
     }),

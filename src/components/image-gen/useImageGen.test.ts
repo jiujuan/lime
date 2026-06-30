@@ -15,6 +15,7 @@ const {
   normalizeOpenAICompatibleImageReferences,
   requestImageFromNewApiResponsesStream,
   requestImageFromNewApi,
+  requestImageFromGemini,
   buildFalInput,
   requestImageFromFal,
   resolveFalEndpointModelCandidates,
@@ -460,6 +461,84 @@ describe("useImageGen New API 图片接口", () => {
             text: expect.stringContaining("请生成一张图片"),
           },
         ],
+      },
+    ]);
+  });
+});
+
+describe("useImageGen Gemini 图片接口", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+    silenceConsole();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("应通过 interactions 和 x-goog-api-key 请求 Gemini 图片", async () => {
+    const base64Image = "g".repeat(128);
+    const referenceImage = `data:image/png;base64,${"r".repeat(128)}`;
+    fetchMock.mockResolvedValueOnce(
+      createJsonResponse({
+        output_image: {
+          data: base64Image,
+        },
+      }),
+    );
+
+    const imageUrl = await requestImageFromGemini(
+      "https://generativelanguage.googleapis.com",
+      "test-gemini-key",
+      "gemini-3.1-flash-image",
+      "make a clean icon",
+      [referenceImage],
+      "1024x1024",
+    );
+
+    expect(imageUrl).toBe(`data:image/png;base64,${base64Image}`);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "https://generativelanguage.googleapis.com/v1beta/interactions",
+    );
+
+    const requestInit = fetchMock.mock.calls[0]?.[1] as {
+      method?: string;
+      headers?: Record<string, string>;
+      body?: string;
+    };
+
+    expect(requestInit?.method).toBe("POST");
+    expect(requestInit?.headers).toMatchObject({
+      "x-goog-api-key": "test-gemini-key",
+    });
+
+    const payload = JSON.parse(requestInit?.body ?? "{}") as Record<
+      string,
+      unknown
+    >;
+    expect(payload).toMatchObject({
+      model: "gemini-3.1-flash-image",
+      response_format: {
+        type: "image",
+        mime_type: "image/png",
+        aspect_ratio: "1:1",
+        image_size: "1K",
+      },
+    });
+    expect(payload.input).toEqual([
+      {
+        type: "text",
+        text: "make a clean icon",
+      },
+      {
+        type: "image",
+        mime_type: "image/png",
+        data: "r".repeat(128),
       },
     ]);
   });

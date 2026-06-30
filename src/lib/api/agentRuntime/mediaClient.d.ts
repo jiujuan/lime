@@ -1,5 +1,6 @@
 import type {
   CompleteAudioGenerationTaskArtifactRequest,
+  CompleteImageGenerationTaskArtifactRequest,
   CreateAudioGenerationTaskArtifactRequest,
   CreateImageGenerationTaskArtifactRequest,
   ListMediaTaskArtifactsRequest,
@@ -19,6 +20,9 @@ export declare function createMediaClient({
   ) => Promise<MediaTaskArtifactOutput>;
   completeAudioGenerationTaskArtifact: (
     request: CompleteAudioGenerationTaskArtifactRequest,
+  ) => Promise<MediaTaskArtifactOutput>;
+  completeImageGenerationTaskArtifact: (
+    request: CompleteImageGenerationTaskArtifactRequest,
   ) => Promise<MediaTaskArtifactOutput>;
   createAudioGenerationTaskArtifact: (
     request: CreateAudioGenerationTaskArtifactRequest,

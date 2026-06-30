@@ -1,7 +1,7 @@
 import {
   APP_SERVER_METHOD_SESSION_READ,
   ASSISTANT_DONE_TEXT,
-  CONTENT_FACTORY_PRODUCT_PROFILE_SCENARIO,
+  CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO,
   CONTINUE_DONE_TEXT,
   CONTINUE_PROMPT,
   EXPERT_PANEL_SKILLS_RUNTIME_SCENARIO,
@@ -13,6 +13,7 @@ import {
   EXPERT_SKILLS_RUNTIME_SESSION_TITLE,
   GOAL_DONE_TEXT,
   GOAL_PROMPT,
+  IMAGE_COMMAND_SCENARIO,
   MCP_STRUCTURED_CONTENT_DONE_TEXT,
   MCP_STRUCTURED_CONTENT_PROMPT,
   NEWS_PROMPT,
@@ -38,7 +39,7 @@ import {
   WEB_TOOLS_REASONING_PROVIDER_BACKEND,
   WEB_TOOLS_SEARCH_TOOL_CALL_ID,
 } from "./claw-chat-current-fixture-constants.mjs";
-import { runContentFactoryProductProfileScenario } from "./claw-chat-current-fixture-content-factory-product-profile.mjs";
+import { runContentFactoryArticleWorkspaceScenario } from "./claw-chat-current-fixture-content-factory-article-workspace.mjs";
 import { collectAgentUiPerformanceTraceEvidence } from "./claw-chat-current-fixture-agent-ui-trace.mjs";
 import {
   addExpertSkillsRuntimeSkillFromInfoPanel,
@@ -47,7 +48,6 @@ import {
   reloadRendererAfterExpertPanelSkillCatalogInjection,
   selectExpertPanelSkillsRuntimeSessionId,
   summarizeExpertPanelSkillsRuntimeTurnStart,
-  waitForExpertPanelEvidenceSummary,
 } from "./claw-chat-current-fixture-expert-actions.mjs";
 import { sendPromptFromGui } from "./claw-chat-current-fixture-gui-actions.mjs";
 import {
@@ -67,6 +67,7 @@ import {
   waitForGuiWebToolsRenderingCompleted,
   waitForGuiWebToolsRenderingInProgress,
 } from "./claw-chat-current-fixture-gui-web-tools-waits.mjs";
+import { runImageCommandScenario } from "./claw-chat-current-fixture-image-command.mjs";
 import {
   createExpertSkillsRuntimeSession,
   injectExpertSkillsRuntimeCatalog,
@@ -131,6 +132,27 @@ function summarizeThreadItemsForProbe(items) {
   }));
 }
 
+function traceEvidenceHasProviderAndClient(evidence) {
+  return (
+    evidence?.hasProviderWaitMs === true &&
+    evidence?.hasClientLocalOutputMs === true
+  );
+}
+
+async function recordAgentUiPerformanceTraceEvidence(summary, page) {
+  const evidence = sanitizeJson(
+    await collectAgentUiPerformanceTraceEvidence(page),
+  );
+  summary.agentUiPerformanceTraceLatest = evidence;
+  if (
+    !summary.agentUiPerformanceTrace ||
+    !traceEvidenceHasProviderAndClient(summary.agentUiPerformanceTrace) ||
+    traceEvidenceHasProviderAndClient(evidence)
+  ) {
+    summary.agentUiPerformanceTrace = evidence;
+  }
+}
+
 export async function executeScenarioFlow({
   page,
   options,
@@ -139,11 +161,11 @@ export async function executeScenarioFlow({
   appServerRequests,
   runtimeEnv,
 }) {
-  if (options.scenario === CONTENT_FACTORY_PRODUCT_PROFILE_SCENARIO) {
-    logStage("run-content-factory-product-profile");
+  if (options.scenario === CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO) {
+    logStage("run-content-factory-article-workspace");
     Object.assign(
       summary,
-      await runContentFactoryProductProfileScenario({
+      await runContentFactoryArticleWorkspaceScenario({
         page,
         options,
         workspace,
@@ -248,9 +270,7 @@ export async function executeScenarioFlow({
         JSON.stringify(readModelPlanCompleted || {}).includes(step.step),
       ),
     });
-    summary.agentUiPerformanceTrace = sanitizeJson(
-      await collectAgentUiPerformanceTraceEvidence(page),
-    );
+    await recordAgentUiPerformanceTraceEvidence(summary, page);
 
     logStage("verify-plan-history-hydrate-from-sidebar");
     Object.assign(
@@ -313,6 +333,18 @@ export async function executeScenarioFlow({
         readModelGoalCompleted || {},
       ).includes("目标已绑定到本轮请求"),
     });
+  } else if (options.scenario === IMAGE_COMMAND_SCENARIO) {
+    logStage("run-image-command-scenario");
+    Object.assign(
+      summary,
+      await runImageCommandScenario({
+        page,
+        options,
+        workspace,
+        appServerRequests,
+        runtimeEnv,
+      }),
+    );
   } else if (options.scenario === "web-tools-rendering") {
     logStage("send-web-tools-rendering-prompt-from-gui");
     summary.webToolsRenderingInputSend = sanitizeJson(
@@ -800,6 +832,27 @@ export async function executeScenarioFlow({
         ),
       );
 
+      if (
+        summary.guiExpertPanelSkillsRuntimeSessionReady?.textareaVisible !==
+          true ||
+        summary.guiExpertPanelSkillsRuntimeSessionReady?.textareaDisabled ===
+          true
+      ) {
+        logStage("reopen-expert-panel-skills-runtime-session");
+        summary.guiExpertPanelSkillsRuntimeSessionReopened = sanitizeJson(
+          await openSessionFromSidebar(page, options, appServerRequests, {
+            sessionId: expertPlazaSkillsRuntimeSessionId,
+            title: "请以「代码文学专家」专家身份工作。",
+          }),
+        );
+      } else {
+        summary.guiExpertPanelSkillsRuntimeSessionReopened = sanitizeJson({
+          skipped: true,
+          reason: "expert panel session input already ready",
+          sessionId: expertPlazaSkillsRuntimeSessionId,
+        });
+      }
+
       logStage("send-expert-panel-skills-runtime-followup");
       summary.expertPanelSkillsRuntimeInputSend = sanitizeJson(
         await sendPromptFromGui(
@@ -872,11 +925,6 @@ export async function executeScenarioFlow({
       logStage("export-expert-panel-evidence-pack-from-harness-panel");
       summary.expertPanelEvidencePackGuiExport = sanitizeJson(
         await exportExpertPanelEvidencePackFromHarnessPanel(page, options),
-      );
-
-      logStage("wait-expert-panel-evidence-summary");
-      summary.expertPanelEvidenceSummary = sanitizeJson(
-        await waitForExpertPanelEvidenceSummary(page, options),
       );
     }
   } else {
@@ -986,6 +1034,7 @@ export async function executeScenarioFlow({
   } else if (
     options.scenario !== "plan" &&
     options.scenario !== "goal" &&
+    options.scenario !== IMAGE_COMMAND_SCENARIO &&
     options.scenario !== "web-tools-rendering" &&
     options.scenario !== "mcp-structured-content" &&
     options.scenario !== "skills-runtime" &&
@@ -993,7 +1042,7 @@ export async function executeScenarioFlow({
     options.scenario !== "expert-plaza-skills-runtime" &&
     options.scenario !== "expert-panel-skills-runtime" &&
     options.scenario !== RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO &&
-    options.scenario !== CONTENT_FACTORY_PRODUCT_PROFILE_SCENARIO
+    options.scenario !== CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO
   ) {
     logStage("wait-gui-completed");
     summary.guiCompleted = sanitizeJson(

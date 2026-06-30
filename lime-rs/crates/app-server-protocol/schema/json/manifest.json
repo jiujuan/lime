@@ -632,6 +632,10 @@
     },
     {
       "kind": "request",
+      "method": "mediaTaskArtifact/image/complete"
+    },
+    {
+      "kind": "request",
       "method": "mediaTaskArtifact/image/create"
     },
     {
@@ -1147,6 +1151,8 @@
       "RequestId"
     ],
     "v0": [
+      "AgentAppArticleWorkspaceContract",
+      "AgentAppArticleWorkspaceObject",
       "AgentAppCloudReleaseDescriptor",
       "AgentAppDeleteDataExecutionEvidence",
       "AgentAppDeleteDataPostDeleteResidualAudit",
@@ -1163,8 +1169,6 @@
       "AgentAppLocalPackageInspectResponse",
       "AgentAppPackageCacheEntry",
       "AgentAppPackageIdentity",
-      "AgentAppProductProfileContract",
-      "AgentAppProductProfileObject",
       "AgentAppRightSurfaceContract",
       "AgentAppShellPackageMount",
       "AgentAppShellPrepareParams",
@@ -1466,6 +1470,8 @@
       "McpToolSearchParams",
       "MediaTaskArtifactAudioCompleteParams",
       "MediaTaskArtifactAudioCreateParams",
+      "MediaTaskArtifactCompletedImageInput",
+      "MediaTaskArtifactImageCompleteParams",
       "MediaTaskArtifactImageCreateParams",
       "MediaTaskArtifactListFilters",
       "MediaTaskArtifactListParams",

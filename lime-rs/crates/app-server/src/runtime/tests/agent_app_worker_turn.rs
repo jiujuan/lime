@@ -6,7 +6,7 @@ use std::process::Command;
 use std::sync::Arc;
 
 #[tokio::test]
-async fn product_profile_turn_runs_installed_worker_and_materializes_workspace_patch() {
+async fn article_workspace_turn_runs_installed_worker_and_materializes_workspace_patch() {
     let Some(fixture_root) = content_factory_fixture_root() else {
         return;
     };
@@ -30,13 +30,13 @@ async fn product_profile_turn_runs_installed_worker_and_materializes_workspace_p
         .start_turn(
             AgentSessionTurnStartParams {
                 session_id: session.session_id.clone(),
-                turn_id: Some("turn-product-profile-action".to_string()),
+                turn_id: Some("turn-article-workspace-action".to_string()),
                 input: AgentInput {
                     text: "重新生成配图".to_string(),
                     attachments: Vec::new(),
                 },
                 runtime_options: Some(RuntimeOptions {
-                    metadata: Some(product_profile_action_metadata()),
+                    metadata: Some(article_workspace_action_metadata()),
                     ..RuntimeOptions::default()
                 }),
                 queue_if_busy: false,
@@ -45,7 +45,7 @@ async fn product_profile_turn_runs_installed_worker_and_materializes_workspace_p
             RuntimeHostContext::default(),
         )
         .await
-        .expect("product profile worker turn");
+        .expect("article workspace worker turn");
 
     assert_eq!(output.response.turn.status, AgentTurnStatus::Completed);
     let event_types = output
@@ -73,20 +73,20 @@ async fn product_profile_turn_runs_installed_worker_and_materializes_workspace_p
         .expect("read session");
     let detail = read.detail.expect("detail");
     assert_eq!(
-        detail["product_workspace"]["selectedObjectRef"]["kind"],
+        detail["article_workspace"]["selectedObjectRef"]["kind"],
         "imageGenerationSet"
     );
-    let action_history = detail["thread_read"]["product_profile_actions"]
+    let action_history = detail["thread_read"]["article_workspace_actions"]
         .as_array()
         .expect("action history");
     assert_eq!(action_history[0]["status"], "completed");
     assert_eq!(
-        detail["product_workspace"]["workerEvidence"][0]["artifactKind"],
+        detail["article_workspace"]["workerEvidence"][0]["artifactKind"],
         "content_factory.workspace_patch"
     );
-    let article = detail["product_workspace"]["objects"]
+    let article = detail["article_workspace"]["objects"]
         .as_array()
-        .expect("product objects")
+        .expect("article workspace objects")
         .iter()
         .find(|object| object["ref"]["kind"] == "articleDraft")
         .expect("article object");
@@ -94,11 +94,25 @@ async fn product_profile_turn_runs_installed_worker_and_materializes_workspace_p
     assert!(article["source"]["markdown"]
         .as_str()
         .expect("article markdown")
-        .contains("点击小框后展开右侧 Product Profile"));
+        .contains("完整正文应该进入独立的文章产物框，再从这里打开右侧文章编辑器"));
+    assert_eq!(
+        article["source"]["outline"]
+            .as_array()
+            .expect("article outline")
+            .len(),
+        5
+    );
+    assert_eq!(
+        article["source"]["imageSlots"]
+            .as_array()
+            .expect("article image slots")
+            .len(),
+        3
+    );
 }
 
 #[tokio::test]
-async fn product_profile_worker_blocks_cloud_release_without_verified_signature_evidence() {
+async fn article_workspace_worker_blocks_cloud_release_without_verified_signature_evidence() {
     let installed_state = cloud_release_installed_state_with_evidence(json!({
         "status": "blocked",
         "signaturePolicy": "required",
@@ -126,13 +140,13 @@ async fn product_profile_worker_blocks_cloud_release_without_verified_signature_
         .start_turn(
             AgentSessionTurnStartParams {
                 session_id: session.session_id,
-                turn_id: Some("turn-product-profile-signature-gate".to_string()),
+                turn_id: Some("turn-article-workspace-signature-gate".to_string()),
                 input: AgentInput {
                     text: "重新生成配图".to_string(),
                     attachments: Vec::new(),
                 },
                 runtime_options: Some(RuntimeOptions {
-                    metadata: Some(product_profile_action_metadata()),
+                    metadata: Some(article_workspace_action_metadata()),
                     ..RuntimeOptions::default()
                 }),
                 queue_if_busy: false,
@@ -141,7 +155,7 @@ async fn product_profile_worker_blocks_cloud_release_without_verified_signature_
             RuntimeHostContext::default(),
         )
         .await
-        .expect("product profile worker signature gate turn");
+        .expect("article workspace worker signature gate turn");
 
     assert_eq!(output.response.turn.status, AgentTurnStatus::Failed);
     let event_types = output
@@ -176,7 +190,7 @@ async fn product_profile_worker_blocks_cloud_release_without_verified_signature_
 }
 
 #[tokio::test]
-async fn product_profile_worker_fails_closed_for_unauthorized_output_artifact_kind() {
+async fn article_workspace_worker_fails_closed_for_unauthorized_output_artifact_kind() {
     let core = RuntimeCore::default();
     let session = core
         .start_session(AgentSessionStartParams {
@@ -194,13 +208,13 @@ async fn product_profile_worker_fails_closed_for_unauthorized_output_artifact_ki
         .start_turn(
             AgentSessionTurnStartParams {
                 session_id: session.session_id,
-                turn_id: Some("turn-product-profile-output-auth".to_string()),
+                turn_id: Some("turn-article-workspace-output-auth".to_string()),
                 input: AgentInput {
                     text: "重新生成配图".to_string(),
                     attachments: Vec::new(),
                 },
                 runtime_options: Some(RuntimeOptions {
-                    metadata: Some(product_profile_action_metadata_with_output_kind(
+                    metadata: Some(article_workspace_action_metadata_with_output_kind(
                         "creator.workspace_patch",
                     )),
                     ..RuntimeOptions::default()
@@ -211,7 +225,7 @@ async fn product_profile_worker_fails_closed_for_unauthorized_output_artifact_ki
             RuntimeHostContext::default(),
         )
         .await
-        .expect("product profile worker unauthorized output turn");
+        .expect("article workspace worker unauthorized output turn");
 
     assert_eq!(output.response.turn.status, AgentTurnStatus::Failed);
     let event_types = output
@@ -257,7 +271,7 @@ async fn product_profile_worker_fails_closed_for_unauthorized_output_artifact_ki
 }
 
 #[tokio::test]
-async fn product_profile_worker_fails_closed_when_output_artifact_kind_is_missing() {
+async fn article_workspace_worker_fails_closed_when_output_artifact_kind_is_missing() {
     let core = RuntimeCore::default();
     let session = core
         .start_session(AgentSessionStartParams {
@@ -275,13 +289,13 @@ async fn product_profile_worker_fails_closed_when_output_artifact_kind_is_missin
         .start_turn(
             AgentSessionTurnStartParams {
                 session_id: session.session_id,
-                turn_id: Some("turn-product-profile-output-missing".to_string()),
+                turn_id: Some("turn-article-workspace-output-missing".to_string()),
                 input: AgentInput {
                     text: "重新生成配图".to_string(),
                     attachments: Vec::new(),
                 },
                 runtime_options: Some(RuntimeOptions {
-                    metadata: Some(product_profile_action_metadata_without_output_kind()),
+                    metadata: Some(article_workspace_action_metadata_without_output_kind()),
                     ..RuntimeOptions::default()
                 }),
                 queue_if_busy: false,
@@ -290,7 +304,7 @@ async fn product_profile_worker_fails_closed_when_output_artifact_kind_is_missin
             RuntimeHostContext::default(),
         )
         .await
-        .expect("product profile worker missing output turn");
+        .expect("article workspace worker missing output turn");
 
     assert_eq!(output.response.turn.status, AgentTurnStatus::Failed);
     let runtime_error = output
@@ -307,7 +321,7 @@ async fn product_profile_worker_fails_closed_when_output_artifact_kind_is_missin
 }
 
 #[tokio::test]
-async fn product_profile_worker_retries_retryable_failure_and_completes() {
+async fn article_workspace_worker_retries_retryable_failure_and_completes() {
     if !node_available() {
         return;
     }
@@ -333,13 +347,13 @@ async fn product_profile_worker_retries_retryable_failure_and_completes() {
         .start_turn(
             AgentSessionTurnStartParams {
                 session_id: session.session_id.clone(),
-                turn_id: Some("turn-product-profile-retry".to_string()),
+                turn_id: Some("turn-article-workspace-retry".to_string()),
                 input: AgentInput {
                     text: "重新生成配图".to_string(),
                     attachments: Vec::new(),
                 },
                 runtime_options: Some(RuntimeOptions {
-                    metadata: Some(product_profile_action_metadata()),
+                    metadata: Some(article_workspace_action_metadata()),
                     ..RuntimeOptions::default()
                 }),
                 queue_if_busy: false,
@@ -348,7 +362,7 @@ async fn product_profile_worker_retries_retryable_failure_and_completes() {
             RuntimeHostContext::default(),
         )
         .await
-        .expect("product profile worker retry turn");
+        .expect("article workspace worker retry turn");
 
     assert_eq!(output.response.turn.status, AgentTurnStatus::Completed);
     let event_types = output
@@ -388,10 +402,10 @@ async fn product_profile_worker_retries_retryable_failure_and_completes() {
         .expect("read session");
     let detail = read.detail.expect("detail");
     assert_eq!(
-        detail["product_workspace"]["selectedObjectRef"]["kind"],
+        detail["article_workspace"]["selectedObjectRef"]["kind"],
         "imageGenerationSet"
     );
-    let evidence = detail["product_workspace"]["workerEvidence"]
+    let evidence = detail["article_workspace"]["workerEvidence"]
         .as_array()
         .expect("worker evidence");
     assert_eq!(evidence.len(), 2);
@@ -402,14 +416,14 @@ async fn product_profile_worker_retries_retryable_failure_and_completes() {
     assert_eq!(evidence[1]["eventType"], "artifact.snapshot");
     assert_eq!(evidence[1]["status"], "completed");
 
-    let action_history = detail["thread_read"]["product_profile_actions"]
+    let action_history = detail["thread_read"]["article_workspace_actions"]
         .as_array()
         .expect("action history");
     assert_eq!(action_history[0]["status"], "completed");
 }
 
 #[tokio::test]
-async fn product_profile_worker_stops_after_retry_budget_is_exhausted() {
+async fn article_workspace_worker_stops_after_retry_budget_is_exhausted() {
     if !node_available() {
         return;
     }
@@ -439,13 +453,13 @@ async fn product_profile_worker_stops_after_retry_budget_is_exhausted() {
         .start_turn(
             AgentSessionTurnStartParams {
                 session_id: session.session_id,
-                turn_id: Some("turn-product-profile-retry-failed".to_string()),
+                turn_id: Some("turn-article-workspace-retry-failed".to_string()),
                 input: AgentInput {
                     text: "重新生成配图".to_string(),
                     attachments: Vec::new(),
                 },
                 runtime_options: Some(RuntimeOptions {
-                    metadata: Some(product_profile_action_metadata()),
+                    metadata: Some(article_workspace_action_metadata()),
                     ..RuntimeOptions::default()
                 }),
                 queue_if_busy: false,
@@ -454,7 +468,7 @@ async fn product_profile_worker_stops_after_retry_budget_is_exhausted() {
             RuntimeHostContext::default(),
         )
         .await
-        .expect("product profile worker exhausted retry turn");
+        .expect("article workspace worker exhausted retry turn");
 
     assert_eq!(output.response.turn.status, AgentTurnStatus::Failed);
     let event_types = output
@@ -599,14 +613,14 @@ fn node_available() -> bool {
         .is_ok_and(|output| output.status.success())
 }
 
-fn product_profile_action_metadata() -> serde_json::Value {
+fn article_workspace_action_metadata() -> serde_json::Value {
     json!({
         "agent_app": {
-            "source": "right_surface_product_profile",
+            "source": "right_surface_article_workspace",
             "app_id": "content-factory-app",
             "session_id": "session-content-factory",
             "workspace_id": "workspace-main",
-            "product_profile_action": {
+            "article_workspace_action": {
                 "key": "regenerate",
                 "intent": "regenerate",
                 "risk": "write",
@@ -624,25 +638,25 @@ fn product_profile_action_metadata() -> serde_json::Value {
             }
         },
         "right_surface": {
-            "surface_kind": "productProfile",
-            "source": "product_workspace",
+            "surface_kind": "articleWorkspace",
+            "source": "article_workspace",
             "action_key": "regenerate"
         }
     })
 }
 
-fn product_profile_action_metadata_with_output_kind(
+fn article_workspace_action_metadata_with_output_kind(
     output_artifact_kind: &str,
 ) -> serde_json::Value {
-    let mut metadata = product_profile_action_metadata();
-    metadata["agent_app"]["product_profile_action"]["output_artifact_kind"] =
+    let mut metadata = article_workspace_action_metadata();
+    metadata["agent_app"]["article_workspace_action"]["output_artifact_kind"] =
         json!(output_artifact_kind);
     metadata
 }
 
-fn product_profile_action_metadata_without_output_kind() -> serde_json::Value {
-    let mut metadata = product_profile_action_metadata();
-    if let Some(action) = metadata["agent_app"]["product_profile_action"].as_object_mut() {
+fn article_workspace_action_metadata_without_output_kind() -> serde_json::Value {
+    let mut metadata = article_workspace_action_metadata();
+    if let Some(action) = metadata["agent_app"]["article_workspace_action"].as_object_mut() {
         action.remove("output_artifact_kind");
     }
     metadata
@@ -679,7 +693,7 @@ const objectRef = {
   sourceTaskId: request.taskId
 };
 const patch = {
-  schemaVersion: 'product-workspace.v1',
+  schemaVersion: 'article-workspace.v1',
   appId: request.appId,
   sessionId: request.sessionId,
   workspaceId: request.workspaceId,

@@ -17,7 +17,7 @@
   },
   "expectedOutput": {
     "artifactKind": "content_factory.workspace_patch",
-    "productWorkspaceSchema": "product-workspace.v1",
+    "articleWorkspaceSchema": "article-workspace.v1",
     "objectKinds": [
       "contentBrief",
       "articleDraft",

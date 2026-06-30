@@ -46,6 +46,7 @@ export interface InputbarPlusMenuConfig {
   knowledgePanel?: React.ReactNode;
   pluginsPanel?: React.ReactNode;
   skillsPanel?: React.ReactNode;
+  onPanelOpen?: (panelId: InputbarPlusPanelId) => void;
 }
 
 interface InputbarPlusMenuProps {
@@ -171,6 +172,9 @@ export function InputbarPlusMenu({
     nextOpen: boolean,
   ) => {
     setSecondaryPanelId(nextOpen ? panelId : null);
+    if (nextOpen) {
+      config.onPanelOpen?.(panelId);
+    }
   };
 
   const renderSecondaryRow = ({

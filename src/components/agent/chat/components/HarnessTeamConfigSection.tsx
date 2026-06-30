@@ -58,7 +58,7 @@ export function HarnessTeamConfigSection({
         </div>
 
         {selectedTeamRoles && selectedTeamRoles.length > 0 ? (
-          <div className="grid gap-2 lg:grid-cols-2">
+          <div className="grid min-w-0 gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr))]">
             {selectedTeamRoles.map((role, index) => (
               <div
                 key={`${role.id || role.label}-${index}`}

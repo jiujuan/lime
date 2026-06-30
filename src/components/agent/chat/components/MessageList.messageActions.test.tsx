@@ -457,29 +457,29 @@ describe("MessageList message actions", () => {
     );
   });
 
-  it("内容工厂文章产物卡应只显示轻量摘要，不在聊天区摊开正文", () => {
+  it("内容工厂文章产物应在独立 ArtifactFrame 内完整输出正文", () => {
     const now = new Date();
     const onArtifactClick = vi.fn();
     const fullArticle =
-      "# 公众号文章草稿\n\n这是第一段正文，应该只在右侧 Product Profile 中查看。\n\n这是第二段正文，也不应该直接摊在聊天区。";
+      "# 公众号文章草稿\n\n这是第一段正文，应该在独立产物框内完整显示。\n\n这是第二段正文，点击框头后进入右侧文章编辑器。";
     const messages: Message[] = [
       {
-        id: "msg-assistant-product-profile",
+        id: "msg-assistant-article-workspace",
         role: "assistant",
         content: "",
         timestamp: now,
         artifacts: [
           {
-            id: "preview-product-profile-article",
+            id: "preview-article-workspace-article",
             type: "document",
             title: "公众号文章草稿",
             content: fullArticle,
             status: "complete",
             meta: {
-              openedFrom: "right_surface_product_profile",
+              openedFrom: "right_surface_article_workspace",
               filePath: "公众号文章草稿.md",
               filename: "公众号文章草稿.md",
-              productProfileCardPreview: {
+              articleWorkspaceCardPreview: {
                 layout: "document",
                 summary: null,
                 counts: {
@@ -489,7 +489,7 @@ describe("MessageList message actions", () => {
                   researchRounds: 3,
                 },
               },
-              productProfile: {
+              articleWorkspace: {
                 appId: "content-factory-app",
                 sessionId: "session-main",
                 objectKind: "articleDraft",
@@ -506,31 +506,41 @@ describe("MessageList message actions", () => {
     ];
 
     const container = render(messages, { onArtifactClick });
-    const artifactCard = container.querySelector(
-      '[data-testid="message-artifact-card"] button',
+    const artifactFrame = container.querySelector(
+      '[data-testid="article-artifact-frame"]',
+    );
+    const openButton = artifactFrame?.querySelector(
+      "button",
     ) as HTMLButtonElement | null;
 
-    expect(artifactCard?.textContent).toContain("公众号文章草稿");
-    expect(artifactCard?.textContent).toContain("3 research rounds");
-    expect(artifactCard?.textContent).toContain("5 article sections");
-    expect(artifactCard?.textContent).toContain("2 image slots");
-    expect(container.textContent).not.toContain(
-      "这是第一段正文，应该只在右侧 Product Profile 中查看。",
+    expect(artifactFrame).not.toBeNull();
+    expect(container.textContent).toContain("公众号文章草稿");
+    expect(container.textContent).toContain("Article output");
+    expect(container.textContent).toContain("Full draft");
+    expect(container.textContent).toContain("Article draft");
+    expect(container.textContent).toContain("Open right editor");
+    expect(container.textContent).toContain("3 research round(s) completed");
+    expect(container.textContent).toContain("3 research rounds");
+    expect(container.textContent).toContain("5 article sections");
+    expect(container.textContent).toContain("2 image slots");
+    expect(container.textContent).not.toContain("articleArtifacts");
+    expect(container.textContent).toContain(
+      "这是第一段正文，应该在独立产物框内完整显示。",
     );
-    expect(container.textContent).not.toContain(
-      "这是第二段正文，也不应该直接摊在聊天区。",
+    expect(container.textContent).toContain(
+      "这是第二段正文，点击框头后进入右侧文章编辑器。",
     );
 
     act(() => {
-      artifactCard?.click();
+      openButton?.click();
     });
 
     expect(onArtifactClick).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: "preview-product-profile-article",
+        id: "preview-article-workspace-article",
         meta: expect.objectContaining({
-          openedFrom: "right_surface_product_profile",
-          productProfile: expect.objectContaining({
+          openedFrom: "right_surface_article_workspace",
+          articleWorkspace: expect.objectContaining({
             objectKind: "articleDraft",
           }),
         }),

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { AutoContinueRequestPayload } from "@/lib/api/agentRuntime";
 import {
@@ -56,6 +56,7 @@ export function chooseDefaultKnowledgePack(
 }
 
 interface UseWorkspaceKnowledgeRuntimeParams {
+  autoLoad?: boolean;
   projectRootPath?: string | null;
   currentSessionTitle?: string | null;
   input: string;
@@ -71,6 +72,7 @@ interface UseWorkspaceKnowledgeRuntimeResult {
   onToggleKnowledgePack: (enabled: boolean) => void;
   onSelectKnowledgePack: (packName: string) => void;
   onToggleKnowledgeCompanionPack: (packName: string, enabled: boolean) => void;
+  onKnowledgePacksNeeded: () => void;
   onStartKnowledgeOrganize: () => void;
   onManageKnowledgePacks?: () => void;
   onImportPathReferenceAsKnowledge: (reference: MessagePathReference) => void;
@@ -83,6 +85,7 @@ interface UseWorkspaceKnowledgeRuntimeResult {
 }
 
 export function useWorkspaceKnowledgeRuntime({
+  autoLoad = false,
   projectRootPath,
   currentSessionTitle,
   input,
@@ -98,6 +101,7 @@ export function useWorkspaceKnowledgeRuntime({
     string | null
   >(null);
   const [knowledgePackEnabled, setKnowledgePackEnabled] = useState(false);
+  const loadedKnowledgeWorkingDirRef = useRef<string | null>(null);
   const [explicitCompanionPackNames, setExplicitCompanionPackNames] = useState<
     string[]
   >(
@@ -139,6 +143,7 @@ export function useWorkspaceKnowledgeRuntime({
       });
       const nextDefaultPack = chooseDefaultKnowledgePack(response.packs);
 
+      loadedKnowledgeWorkingDirRef.current = workingDir;
       setKnowledgePacks(response.packs);
       setSelectedKnowledgePackName((current) => {
         const normalizedPreferred = preferredPackName?.trim();
@@ -165,12 +170,52 @@ export function useWorkspaceKnowledgeRuntime({
     [],
   );
 
+  const handleKnowledgePacksNeeded = useCallback(() => {
+    const workingDir = effectiveProjectRootPath;
+    if (!workingDir) {
+      return;
+    }
+
+    if (loadedKnowledgeWorkingDirRef.current === workingDir) {
+      return;
+    }
+
+    void refreshKnowledgePacks(workingDir, initialSelectionPackName || null)
+      .then(() => {
+        setKnowledgePackEnabled((current) =>
+          current ? current : shouldEnableInitialSelection,
+        );
+      })
+      .catch((error) => {
+        console.warn("[AgentChatPage] 读取项目资料失败:", error);
+        setKnowledgePacks([]);
+        setSelectedKnowledgePackName(null);
+        setKnowledgePackEnabled(false);
+      });
+  }, [
+    effectiveProjectRootPath,
+    initialSelectionPackName,
+    refreshKnowledgePacks,
+    shouldEnableInitialSelection,
+  ]);
+
   useEffect(() => {
     const workingDir = effectiveProjectRootPath;
     if (!workingDir) {
+      loadedKnowledgeWorkingDirRef.current = null;
       setKnowledgePacks([]);
       setSelectedKnowledgePackName(null);
       setKnowledgePackEnabled(false);
+      return;
+    }
+
+    if (!autoLoad && !shouldEnableInitialSelection) {
+      if (loadedKnowledgeWorkingDirRef.current !== workingDir) {
+        loadedKnowledgeWorkingDirRef.current = null;
+        setKnowledgePacks([]);
+        setSelectedKnowledgePackName(null);
+        setKnowledgePackEnabled(false);
+      }
       return;
     }
 
@@ -197,6 +242,7 @@ export function useWorkspaceKnowledgeRuntime({
       cancelled = true;
     };
   }, [
+    autoLoad,
     effectiveProjectRootPath,
     initialSelectionPackName,
     refreshKnowledgePacks,
@@ -525,6 +571,7 @@ export function useWorkspaceKnowledgeRuntime({
     onToggleKnowledgePack: setKnowledgePackEnabled,
     onSelectKnowledgePack: handleSelectKnowledgePack,
     onToggleKnowledgeCompanionPack: handleToggleKnowledgeCompanionPack,
+    onKnowledgePacksNeeded: handleKnowledgePacksNeeded,
     onStartKnowledgeOrganize: handleStartKnowledgeOrganize,
     onManageKnowledgePacks: handleManageKnowledgePacks,
     onImportPathReferenceAsKnowledge: handleImportPathReferenceAsKnowledge,

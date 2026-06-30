@@ -24,6 +24,13 @@ export type PluginHistoryDefaultSurface =
 export type PluginHistoryFallback = "artifactPreview" | "chatOnly";
 export type PluginWorkspaceSelectionPolicy = "last" | "primary" | "manual";
 
+export interface PluginManifestInstallContract {
+  local?: boolean;
+  cloud?: boolean;
+  authentication?: "on_use" | "on_install" | string;
+  [key: string]: unknown;
+}
+
 export interface PluginManifest {
   schemaVersion?: string;
   id?: string;
@@ -51,6 +58,7 @@ export interface PluginManifest {
   artifactRenderers?: PluginArtifactRendererDeclaration[];
   activationEntries?: PluginActivationEntryDeclaration[];
   historyRestore?: PluginHistoryRestoreDeclaration;
+  install?: PluginManifestInstallContract;
 }
 
 export interface PluginManifestAuthor {
@@ -218,7 +226,7 @@ export interface PluginRightSurfaceContract {
     restoreSelection: boolean;
     restoreLayout: boolean;
   };
-  productWorkspace: {
+  articleWorkspace: {
     enabled: boolean;
     primaryObjectKind?: string;
     selectionPolicy: PluginWorkspaceSelectionPolicy;
@@ -252,6 +260,7 @@ export interface PluginContract {
   interface?: PluginManifestInterface;
   contributions?: PluginManifestContributions;
   componentPaths: PluginManifestComponentPaths;
+  install?: PluginManifestInstallContract;
   skills: PluginSkillDeclaration[];
   agentApps: PluginAgentAppDeclaration[];
   subagents: PluginSubagentDeclaration[];

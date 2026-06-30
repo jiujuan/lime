@@ -487,6 +487,11 @@ declare module "./appServerClient" {
     ): Promise<
       appServer.AppServerRequestResult<appServer.AppServerMediaTaskArtifactResponse>
     >;
+    completeImageMediaTaskArtifact(
+      params: appServer.AppServerMediaTaskArtifactImageCompleteParams,
+    ): Promise<
+      appServer.AppServerRequestResult<appServer.AppServerMediaTaskArtifactResponse>
+    >;
     completeAudioMediaTaskArtifact(
       params: appServer.AppServerMediaTaskArtifactAudioCompleteParams,
     ): Promise<
@@ -1152,6 +1157,11 @@ const APP_SERVER_CLIENT_METHODS: readonly AppServerClientMethodSpec[] = [
   {
     name: "createVideoMediaTaskArtifact",
     method: constants.APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE,
+    params: "required",
+  },
+  {
+    name: "completeImageMediaTaskArtifact",
+    method: constants.APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_COMPLETE,
     params: "required",
   },
   {

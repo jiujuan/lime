@@ -17,6 +17,9 @@ describe("HarnessStatusPanel", () => {
     const scrollArea = container.querySelector(
       '[data-testid="harness-status-panel"] > .relative.overflow-auto',
     ) as HTMLDivElement | null;
+    const summaryGrid = container.querySelector(
+      '[data-testid="harness-summary-cards-grid"]',
+    ) as HTMLDivElement | null;
 
     expect(document.body.textContent).toContain("待审批");
     expect(document.body.textContent).toContain("文件活动");
@@ -35,6 +38,11 @@ describe("HarnessStatusPanel", () => {
     expect(panel?.children.length).toBe(2);
     expect(scrollArea?.className).toContain("flex-1");
     expect(scrollArea?.className).toContain("min-h-0");
+    expect(summaryGrid?.className).toContain(
+      "repeat(auto-fit,minmax(min(100%,12rem),1fr))",
+    );
+    expect(summaryGrid?.className).not.toContain("xl:grid-cols");
+    expect(summaryGrid?.className).not.toContain("sm:grid-cols");
     expect(panel?.querySelector(".sticky.top-0")).toBeNull();
   });
 

@@ -763,6 +763,30 @@ describe("ElectronAppServerHost", () => {
     expect(requestCalls[0]?.[2]).toMatchObject({ timeoutMs: 60000 });
   });
 
+  it("current Agent App local package inspect 应覆盖包检查等待窗口", async () => {
+    const { ElectronAppServerHost } = await import("./appServerHost");
+    const host = new ElectronAppServerHost();
+
+    await host.handleJsonLines({
+      lines: [
+        encodeMessage({
+          id: "local-package-inspect",
+          method: "agentAppLocalPackage/inspect",
+          params: {
+            appDir: "/Users/coso/Documents/dev/ai/limecloud/content-factory-app",
+          },
+        }),
+      ],
+    });
+
+    const requestCalls = fakeConnection.request.mock.calls as unknown as Array<
+      [JsonRpcRequest, string, { timeoutMs?: number }]
+    >;
+    expect(recordedRequests).toHaveLength(1);
+    expect(requestCalls[0]?.[1]).toBe("agentAppLocalPackage/inspect");
+    expect(requestCalls[0]?.[2]).toMatchObject({ timeoutMs: 240000 });
+  });
+
   it("current conversation import commit 应覆盖大样本导入等待窗口", async () => {
     const { ElectronAppServerHost } = await import("./appServerHost");
     const host = new ElectronAppServerHost();

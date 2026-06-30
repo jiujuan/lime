@@ -203,7 +203,6 @@ describe("shouldBuildFullThreadTimeline", () => {
     expect(
       shouldBuildFullThreadTimeline({
         harnessPanelVisible: false,
-        isSending: true,
         layoutMode: "chat",
       }),
     ).toBe(false);
@@ -213,27 +212,24 @@ describe("shouldBuildFullThreadTimeline", () => {
     expect(
       shouldBuildFullThreadTimeline({
         harnessPanelVisible: true,
-        isSending: true,
         layoutMode: "chat",
       }),
     ).toBe(true);
     expect(
       shouldBuildFullThreadTimeline({
         harnessPanelVisible: false,
-        isSending: true,
         layoutMode: "canvas",
       }),
     ).toBe(true);
   });
 
-  it("非发送态应构建完整 timeline 以保留计划和历史详情", () => {
+  it("普通聊天非发送态也不应默认构建完整 timeline", () => {
     expect(
       shouldBuildFullThreadTimeline({
         harnessPanelVisible: false,
-        isSending: false,
         layoutMode: "chat",
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 });
 

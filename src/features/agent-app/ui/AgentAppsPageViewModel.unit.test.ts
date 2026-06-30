@@ -125,9 +125,9 @@ function buildHostLifecycleSnapshot(
     rightSurface: {
       dock: "right",
       physicalDockCount: 1,
-      defaultActiveTab: "productProfile",
-      supportedTabs: ["productProfile", "file"],
-      productProfile: {
+      defaultActiveTab: "articleWorkspace",
+      supportedTabs: ["articleWorkspace", "file"],
+      articleWorkspace: {
         enabled: true,
         objects: [],
         panes: ["artifact"],
@@ -135,7 +135,7 @@ function buildHostLifecycleSnapshot(
       },
       historyRestore: {
         enabled: true,
-        defaultTab: "productProfile",
+        defaultTab: "articleWorkspace",
         defaultPane: "artifact",
         restoreSelection: true,
         restoreLayout: true,
@@ -225,7 +225,7 @@ describe("AgentAppsPageViewModel", () => {
       }),
     );
     expect(items[0]?.hostLifecycle?.rightSurface.supportedTabs).toContain(
-      "productProfile",
+      "articleWorkspace",
     );
     expect(buildAppCenterFilterCounts(items)).toEqual({
       all: 4,
@@ -477,7 +477,7 @@ describe("AgentAppsPageViewModel", () => {
         profiles: ["workbench"],
         workbench: {
           profile: "production",
-          productWorkspace: {
+          articleWorkspace: {
             scope: "session",
             primaryObjectKinds: ["articleDraft"],
           },
@@ -515,9 +515,9 @@ describe("AgentAppsPageViewModel", () => {
       expect.arrayContaining(["workbench"]),
     );
     expect(item.hostLifecycle?.rightSurface.defaultActiveTab).toBe(
-      "productProfile",
+      "articleWorkspace",
     );
-    expect(item.hostLifecycle?.rightSurface.productProfile.objects).toEqual([
+    expect(item.hostLifecycle?.rightSurface.articleWorkspace.objects).toEqual([
       expect.objectContaining({
         kind: "articleDraft",
         defaultPane: "documentCanvas",
@@ -528,10 +528,10 @@ describe("AgentAppsPageViewModel", () => {
       expect.objectContaining({
         status: "needs-setup",
         labelKey: "agentApp.apps.center.host.status.needsSetup",
-        productProfileEnabled: true,
+        articleWorkspaceEnabled: true,
         productObjectCount: 1,
         supportedTabCount: 6,
-        defaultTab: "productProfile",
+        defaultTab: "articleWorkspace",
       }),
     );
   });

@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { describe, expect, it } from "vitest";
-import { CONTENT_FACTORY_PRODUCT_PROFILE_ASSERTION_KEYS } from "./claw-chat-current-fixture-constants.mjs";
+import { CONTENT_FACTORY_ARTICLE_WORKSPACE_ASSERTION_KEYS } from "./claw-chat-current-fixture-constants.mjs";
 import { isRightSurfaceSnapshotReady } from "./claw-chat-current-fixture-right-surface-visual.mjs";
 import {
   createExpertSkillsRuntimeFixtureScenario,
@@ -36,10 +36,11 @@ const fixtureSourceFiles = [
   "scripts/agent-runtime/claw-chat-current-fixture-gui-input-modes.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-gui-tool-waits.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-gui-web-tools-waits.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-image-command.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-skills-workspace.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-plan-history.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-right-surface-visual.mjs",
-  "scripts/agent-runtime/claw-chat-current-fixture-content-factory-product-profile.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-content-factory-article-workspace.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-content-factory-worker-dogfood.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-content-factory-workspace-patches.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-scenario-flow.mjs",
@@ -145,6 +146,9 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("includeTraceExport");
     expect(content).toContain("LIME_SUPPORT_BUNDLE_OUTPUT_DIR");
     expect(content).toContain('"diagnostics/trace/export"');
+    expect(content).toContain("recordAgentUiPerformanceTraceEvidence");
+    expect(content).toContain("agentUiPerformanceTraceLatest");
+    expect(content).toContain("traceEvidenceHasProviderAndClient(evidence)");
   });
 
   it("uses a local external fixture backend and current Agent Session methods", () => {
@@ -375,10 +379,78 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).not.toContain("agent_runtime_");
   });
 
+  it("covers Claw @配图 through Skill(image_generate) and current task artifact", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain("image-command");
+    expect(content).toContain("IMAGE_COMMAND_SCENARIO");
+    expect(content).toContain("@配图 E2E 图片命令路由测试，请生成一张青柠插画");
+    expect(content).toContain("imageCommandHarness?.image_skill_launch");
+    expect(content).toContain("image_skill_launch");
+    expect(content).toContain("image_task");
+    expect(content).toContain('toolName: "Skill"');
+    expect(content).toContain("IMAGE_COMMAND_SKILL_NAME");
+    expect(content).toContain("IMAGE_COMMAND_SKILL_TOOL_CALL_ID");
+    expect(content).toContain(
+      'const IMAGE_COMMAND_SKILL_NAME = "image_generate"',
+    );
+    expect(content).toContain("lime_create_image_generation_task");
+    expect(content).toContain("IMAGE_COMMAND_CREATE_TASK_TOOL_CALL_ID");
+    expect(content).toContain("mediaTaskArtifact/image/create");
+    expect(content).toContain("mediaTaskArtifact/image/complete");
+    expect(content).toContain("mediaTaskArtifact/get");
+    expect(content).toContain("mediaTaskArtifact/list");
+    expect(content).toContain(".lime/tasks/image_generate");
+    expect(content).toContain("runImageCommandScenario");
+    expect(content).toContain("options.scenario !== IMAGE_COMMAND_SCENARIO");
+    expect(content).toContain("waitForGuiImageCommandCompleted");
+    expect(content).toContain("waitForGuiImageCommandTerminal");
+    expect(content).toContain("waitForSessionReadImageCommandCompleted");
+    expect(content).toContain("completeImageCommandTaskArtifact");
+    expect(content).not.toContain("completeImageCommandTaskArtifactFile");
+    expect(content).toContain("imageCommandTaskArtifactTerminalPatch");
+    expect(content).toContain("completeMethodUsed");
+    expect(content).toContain("imageCommandTaskArtifactTerminal");
+    expect(content).toContain("imageCommandTaskArtifactAfterReload");
+    expect(content).toContain("guiImageCommandRestoredAfterReload");
+    expect(content).toContain("agentUiPerformanceTracePreReload");
+    expect(content).toContain("collectAgentUiPerformanceTraceEvidence");
+    expect(content).toContain("image-workbench-message-preview-${taskId}");
+    expect(content).toContain("page.reload");
+    expect(content).toContain("imageCommandTaskArtifact");
+    expect(content).toContain("imageCommandPromptReachedBackend");
+    expect(content).toContain("imageCommandMetadataReachedBackend");
+    expect(content).toContain(
+      "imageCommandUsedCurrentMediaTaskArtifactMethods",
+    );
+    expect(content).toContain("imageCommandTaskArtifactWritten");
+    expect(content).toContain("imageCommandTaskArtifactTerminal");
+    expect(content).toContain("imageCommandTaskArtifactSameTaskUpdated");
+    expect(content).toContain("imageCommandSkillToolObserved");
+    expect(content).toContain("imageCommandCreateTaskToolObserved");
+    expect(content).toContain("guiImageCommandToolProcessVisible");
+    expect(content).toContain("guiImageCommandTaskCardVisible");
+    expect(content).toContain("guiImageCommandTaskCardTerminal");
+    expect(content).toContain("guiImageCommandSingleTaskCard");
+    expect(content).toContain("guiImageCommandRestoredAfterReload");
+    expect(content).toContain("guiImageCommandNoDraftCard");
+    expect(content).toContain("guiImageCommandNoTemplateTaskId");
+    expect(content).toContain("readModelImageCommandTaskPreviewObserved");
+    expect(content).toContain("IMAGE_COMMAND_ASSERTION_KEYS");
+    expect(content).toContain("draft-image-");
+    expect(content).toContain("{task_id}");
+    expect(content).not.toContain("execute_skill");
+    expect(content).not.toContain("agent_runtime_submit_turn");
+  });
+
   it("covers Skills runtime search, on-demand body load, gate, and Evidence Pack in the real Electron fixture", () => {
     const content = readSmokeScript();
     const scenarioContent = readSkillsRuntimeFixtureScenario();
     const expertActionsContent = readExpertActionsScript();
+    const sessionContent = fs.readFileSync(
+      "scripts/agent-runtime/claw-chat-current-fixture-session.mjs",
+      "utf8",
+    );
     const guiActionsContent = readGuiActionsScript();
     const expertRuntimeContent = `${content}\n${expertActionsContent}\n${guiActionsContent}`;
 
@@ -442,10 +514,6 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(expertActionsContent).toContain(
       "exportExpertPanelEvidencePackFromHarnessPanel",
     );
-    expect(expertActionsContent).toContain("waitForExpertPanelEvidenceSummary");
-    expect(expertActionsContent).toContain(
-      "expert-info-skills-evidence-summary",
-    );
     expect(expertActionsContent).toContain("missing-visible-trigger");
     expect(expertActionsContent).toContain(
       "visibleElementSnapshot(candidate).visible",
@@ -460,7 +528,16 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(expertRuntimeContent).toContain(
       "EXPERT_PANEL_SKILLS_RUNTIME_UI_SKILL_REF",
     );
-    expect(expertActionsContent).toContain("skill:local:capability-report");
+    expect(expertActionsContent).toContain("EXPERT_SKILLS_RUNTIME_SKILL_REF");
+    expect(expertActionsContent).not.toContain("skill:local:capability-report");
+    expect(sessionContent).toContain("lime:skill-catalog-changed");
+    expect(sessionContent).toContain('source: "manual_override"');
+    expect(sessionContent).toContain("window.__LIME_OEM_CLOUD__?.tenantId");
+    expect(sessionContent).toContain(
+      "buildExpertPanelWorkspaceSkillCatalog(options.workspaceSkill, { tenantId })",
+    );
+    expect(sessionContent).toContain("EXPERT_SKILLS_RUNTIME_TENANT_ID");
+    expect(scenarioContent).toContain("EXPERT_SKILLS_RUNTIME_TENANT_ID");
     expect(expertRuntimeContent).toContain(
       "EXPERT_PANEL_SKILLS_RUNTIME_UI_ADD_TEST_ID",
     );
@@ -470,12 +547,17 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("selectExpertPanelSkillsRuntimeSessionId");
     expect(content).toContain("summary.expertPanelSkillsRuntimeSessionId");
     expect(content).toContain("expertPanelSkillsRuntimeSessionId");
+    expect(content).toContain("reopen-expert-panel-skills-runtime-session");
+    expect(content).toContain("guiExpertPanelSkillsRuntimeSessionReopened");
+    expect(content).toContain(
+      "openSessionFromSidebar(page, options, appServerRequests",
+    );
     expect(content).toContain("expectedSessionId");
     expect(content).toContain(
       "{ expectedSessionId: expertPlazaSkillsRuntimeSessionId }",
     );
     expect(expertRuntimeContent).toContain("data-session-id");
-    expect(expertRuntimeContent).toContain("textareaSessionId");
+    expect(expertRuntimeContent).toContain("hasAddedSkill");
     expect(content).toContain("expertPlazaCatalogInjected");
     expect(content).toContain("expertPlazaCardClicked");
     expect(content).toContain("expertPlazaAutoSendTurnStarted");
@@ -483,16 +565,8 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("expertPanelSkillAdded");
     expect(content).toContain("expertPanelAddedSkillVisible");
     expect(content).toContain("expertPanelEvidencePackGuiExport");
-    expect(content).toContain("expertPanelEvidenceSummary");
     expect(content).toContain(
       "expertPanelEvidencePackExportedFromHarnessPanel",
-    );
-    expect(content).toContain("expertPanelEvidenceSummaryVisible");
-    expect(content).toContain("expertPanelEvidenceSummarySkillCountsVisible");
-    expect(content).toContain("expertPanelEvidenceSummaryLatestSkillVisible");
-    expect(content).toContain("expertPanelEvidenceSummaryRuntimeEnableVisible");
-    expect(content).toContain(
-      "expertPanelEvidenceSummaryHidesRawRuntimeEnable",
     );
     expect(content).toContain("expertPanelSkillRefsOverrideReachedBackend");
     expect(content).toContain("waitForBackendLedgerTurnStartContaining");
@@ -562,7 +636,7 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain(
       "manualEnableSkillsRuntimeLaunchedFromSkillsWorkspace",
     );
-    expect(content).toContain("manualEnableSkillsRuntimeOpenedAgentSession");
+    expect(content).toContain("manualEnableSkillsRuntimeUsedAgentSession");
     expect(content).toContain("expertSkillsRuntimeMetadataReachedBackend");
     expect(content).toContain("expert_declared_skill_refs");
     expect(content).toContain("expert_selected_skill");
@@ -692,7 +766,7 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("browserView: false");
     expect(content).toContain("rightSurfaceVisualMatrixHostsFillRightSide");
     expect(content).toContain(
-      "rightSurfaceVisualMatrixProductProfileRailVisible",
+      "rightSurfaceVisualMatrixArticleWorkspaceRailVisible",
     );
     expect(content).toContain("rightSurfaceVisualMatrixBrowserSurfaceVisible");
     expect(content).toContain("rightSurfaceVisualMatrixAppSurfaceVisible");
@@ -706,20 +780,20 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).not.toContain("agent_runtime_");
   });
 
-  it("accepts Product Profile right rail snapshots without canvas-panel fill", () => {
+  it("accepts Article Editor right rail snapshots without canvas-panel fill", () => {
     expect(
       isRightSurfaceSnapshotReady(
         {
-          activeSurface: "productProfile",
+          activeSurface: "articleWorkspace",
           hostVisible: true,
           rootVisible: true,
-          visibleRootKinds: ["productProfile"],
+          visibleRootKinds: ["articleWorkspace"],
           geometry: {
             hostFillsCanvasPanel: false,
             rootFillsSurfaceViewport: true,
           },
         },
-        "productProfile",
+        "articleWorkspace",
       ),
     ).toBe(true);
 
@@ -740,18 +814,22 @@ describe("claw chat current Electron fixture smoke guard", () => {
     ).toBe(false);
   });
 
-  it("covers content factory Product Profile through runtime event append and artifact read", () => {
+  it("covers content factory Article Workspace through runtime event append and artifact read", () => {
     const content = readSmokeScript();
+    const contentFactoryScenario = fs.readFileSync(
+      "scripts/agent-runtime/claw-chat-current-fixture-content-factory-article-workspace.mjs",
+      "utf8",
+    );
 
-    expect(content).toContain("content-factory-product-profile");
-    expect(content).toContain("runContentFactoryProductProfileScenario");
+    expect(content).toContain("content-factory-article-workspace");
+    expect(content).toContain("runContentFactoryArticleWorkspaceScenario");
     expect(content).toContain("agentAppInstalled/save");
     expect(content).toContain("agentSession/turn/start");
     expect(content).toContain("agentSession/runtimeEvents/append");
     expect(content).toContain("artifact/read");
     expect(content).toContain("content_factory.workspace_patch");
     expect(content).toContain("contentFactoryWorkspacePatch");
-    expect(content).toContain("内容工厂 Product Profile Fixture");
+    expect(content).toContain("内容工厂 Article Editor Fixture");
     expect(content).toContain("公众号文章草稿");
     expect(content).toContain("配图组");
     expect(content).toContain("视频分镜");
@@ -764,46 +842,91 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("artifact-image-regenerated");
     expect(content).toContain("image_regenerate_job_1");
     expect(content).toContain("worker_dogfood");
-    expect(content).toContain("contentFactoryProductProfileWorkerTurnStart");
-    expect(content).toContain("contentFactoryProductProfileWorkerTurnExecuted");
+    expect(content).toContain("contentFactoryArticleWorkspaceWorkerTurnStart");
     expect(content).toContain(
-      "CONTENT_FACTORY_PRODUCT_PROFILE_REMOTE_REJECT_TURN_ID",
+      "contentFactoryArticleWorkspaceWorkerTurnExecuted",
+    );
+    expect(content).toContain("content.article.generate");
+    expect(content).toContain(
+      "CONTENT_FACTORY_ARTICLE_WORKSPACE_REMOTE_REJECT_TURN_ID",
     );
     expect(content).toContain("AGENT_APP_WORKER_REMOTE_RUNTIME_DISABLED");
     expect(content).toContain("runRemotePluginRuntimeRejectionProbe");
     expect(content).toContain(
-      "contentFactoryProductProfileRemoteRuntimeRejection",
+      "contentFactoryArticleWorkspaceRemoteRuntimeRejection",
     );
     expect(content).toContain(
-      "contentFactoryProductProfileRemoteRuntimeFailClosed",
+      "contentFactoryArticleWorkspaceRemoteRuntimeFailClosed",
     );
     expect(content).toContain(
-      "contentFactoryProductProfileStoryboardObjectSelection",
+      "contentFactoryArticleWorkspaceStoryboardObjectSelection",
     );
     expect(content).toContain(
-      "contentFactoryProductProfileArticleObjectSelection",
+      "contentFactoryArticleWorkspaceArticleObjectSelection",
     );
     expect(content).toContain(
-      "contentFactoryProductProfileArticleWritingStructure",
+      "contentFactoryArticleWorkspaceArticleWritingStructure",
     );
     expect(content).toContain(
-      "contentFactoryProductProfileArticleWritingStructureVisible",
+      "contentFactoryArticleWorkspaceArticleWritingStructureVisible",
     );
-    expect(content).toContain("workspace-product-profile-object-articleDraft");
     expect(content).toContain(
-      "workspace-product-profile-object-videoStoryboard",
+      "contentFactoryArticleWorkspaceEditedDraftUpdate",
     );
-    expect(content).toContain("workspace-product-profile-writing-structure");
-    expect(content).toContain("workspace-product-profile-writing-research");
-    expect(content).toContain("workspace-product-profile-writing-outline");
-    expect(content).toContain("workspace-product-profile-writing-citations");
-    expect(content).toContain("workspace-product-profile-writing-image-slots");
-    expect(content).toContain("检索行业背景");
-    expect(content).toContain("内容工厂不是聊天框");
-    expect(content).toContain("桌面端内容工厂写作流程图，中文标签");
+    expect(content).toContain(
+      "contentFactoryArticleWorkspaceEditedDraftSessionReopened",
+    );
+    expect(content).toContain(
+      "contentFactoryArticleWorkspaceEditedDraftReload",
+    );
+    expect(content).toContain(
+      "contentFactoryArticleWorkspaceEditedDraftArtifactFrame",
+    );
+    expect(content).toContain(
+      "contentFactoryArticleWorkspaceEditedDraftRestored",
+    );
+    expect(content).toContain("E2E_EDITED_ARTICLE_DRAFT_RESTORED");
+    expect(contentFactoryScenario).toContain(
+      "reloadContentFactoryArticleWorkspaceSession",
+    );
+    expect(contentFactoryScenario).toContain("page.reload");
+    expect(contentFactoryScenario).toContain(
+      "updateContentFactoryArticleWorkspaceEditedDraft",
+    );
+    expect(contentFactoryScenario).toContain(
+      "waitForContentFactoryArticleWorkspaceEditedDraftRestored",
+    );
+    expect(contentFactoryScenario).toContain(
+      "readContentFactoryArticleDraftObjectRef",
+    );
+    expect(contentFactoryScenario).toContain("article-artifact-frame");
+    expect(contentFactoryScenario).toContain(
+      "clickContentFactoryArticleArtifactFrame",
+    );
+    expect(contentFactoryScenario).toContain(
+      "waitForContentFactoryArticleEditorOpened",
+    );
+    expect(contentFactoryScenario).not.toContain(
+      'toggleTestId: "task-center-object-canvas-toggle"',
+    );
+    expect(content).toContain("workspace-article-editor-related-articleDraft");
+    expect(content).toContain(
+      "workspace-article-editor-related-videoStoryboard",
+    );
+    expect(content).toContain("workspace-article-editor-title-candidates");
+    expect(content).toContain("workspace-article-editor-research");
+    expect(content).toContain("workspace-article-editor-outline");
+    expect(content).toContain("workspace-article-editor-citations");
+    expect(content).toContain("workspace-article-editor-image-slots");
+    expect(content).toContain("workspace-article-editor-canvas");
+    expect(content).toContain("documentCanvasText.includes");
+    expect(content).toContain("researchText.includes");
+    expect(content).toContain("documentImageSlotsText.includes");
+    expect(content).toContain("takeawaysText.length");
+    expect(content).toContain("writingPlanText.length");
     expect(content).toContain("snapshot.hasWorkerEvidenceTitle");
     expect(content).toContain(
-      "workspace-product-profile-app-declared-renderer",
+      "workspace-article-workspace-app-declared-renderer",
     );
     expect(content).toContain("app_declared");
     expect(content).toContain("host_placeholder");
@@ -817,11 +940,10 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("./renderer/storyboard.tsx");
     expect(content).toContain("open_storyboard");
     expect(content).toContain(
-      "contentFactoryProductProfileRendererHostPlaceholderVisible",
+      "contentFactoryArticleWorkspaceStoryboardRendererContractPreserved",
     );
     expect(content).toContain("已重新生成 2 张候选图");
-    expect(content).toContain("task-center-object-canvas-toggle");
-    expect(content).toContain("workspace-product-profile-surface");
+    expect(content).toContain("workspace-article-editor-surface");
     expect(content).toContain("workspace-right-surface-host");
     expect(content).toContain("artifact_document.v1");
     expect(content).toContain("worker_invalid_json_output");
@@ -829,12 +951,12 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("retryAdvice");
     expect(content).toContain("inspect_worker_output");
     expect(content).toContain(
-      "contentFactoryProductProfileDoesNotUseModelTurn",
+      "contentFactoryArticleWorkspaceDoesNotUseModelTurn",
     );
     expect(content).toContain(
-      "contentFactoryProductProfileActionResultPatchProjected",
+      "contentFactoryArticleWorkspaceActionResultPatchProjected",
     );
-    for (const assertionKey of CONTENT_FACTORY_PRODUCT_PROFILE_ASSERTION_KEYS) {
+    for (const assertionKey of CONTENT_FACTORY_ARTICLE_WORKSPACE_ASSERTION_KEYS) {
       expect(content).toContain(assertionKey);
     }
     expect(content).not.toContain("APP_SERVER_METHOD_CONTENT_FACTORY");

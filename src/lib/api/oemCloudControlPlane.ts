@@ -1846,6 +1846,13 @@ function parsePluginMarketplaceItem(value: unknown): PluginMarketplaceItem {
     sourceKind: parsePluginMarketplaceSourceKind(value.sourceKind),
     sourceRef: normalizeText(value.sourceRef),
     appId: normalizeText(value.appId),
+    install: isRecord(value.install)
+      ? {
+          local: normalizeBoolean(value.install.local),
+          cloud: normalizeBoolean(value.install.cloud),
+          authentication: normalizeText(value.install.authentication),
+        }
+      : undefined,
     enabled: normalizeBoolean(value.enabled),
     installState: parsePluginMarketplaceInstallState(value.installState),
     activationState: parsePluginMarketplaceActivationState(

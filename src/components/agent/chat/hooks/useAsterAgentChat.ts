@@ -46,6 +46,7 @@ type UseAsterAgentChatRuntimeOptions = UseAsterAgentChatOptions & {
 
 const AUTO_TITLE_DEFERRED_LOAD_MS = 400;
 const AUTO_TITLE_IDLE_TIMEOUT_MS = 2_000;
+const DETACHED_RUNTIME_WARMUP_SCOPE = "detached";
 
 function normalizeProviderSelection(value?: string | null): string {
   return (value ?? "").trim().toLowerCase();
@@ -149,7 +150,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
       const isCurrentWorkspace = () =>
         !targetWorkspaceId ||
         activeWorkspaceIdRef.current === targetWorkspaceId;
-      if (!isCurrentWorkspace() || sessionIdRef.current) {
+      if (!isCurrentWorkspace()) {
         return;
       }
 
@@ -158,6 +159,10 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
       const hasPersistedWorkspacePreference = Boolean(
         currentProviderType && currentModel,
       );
+      if (sessionIdRef.current && hasPersistedWorkspacePreference) {
+        return;
+      }
+
       const runtimeProviderType =
         status?.provider_configured === true
           ? status.provider_selector?.trim() ||
@@ -222,11 +227,19 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
         return;
       }
 
+      let defaultProvider = "";
+      if (!hasPersistedWorkspacePreference && !runtimeProviderType) {
+        try {
+          defaultProvider = (await getDefaultProvider()).trim();
+        } catch (error) {
+          console.warn(
+            "[AsterChat] 读取默认 Provider 失败，继续从已配置 Provider 解析模型:",
+            error,
+          );
+        }
+      }
+
       try {
-        const defaultProvider =
-          !hasPersistedWorkspacePreference && !runtimeProviderType
-            ? (await getDefaultProvider()).trim()
-            : "";
         if (!isCurrentWorkspace()) {
           return;
         }
@@ -271,66 +284,72 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     [applyWorkspaceModelPreference, context.modelRef, context.providerTypeRef],
   );
 
-  const warmupRuntime = useCallback(async () => {
-    const resolvedWorkspaceId = workspaceId.trim();
-    if (!resolvedWorkspaceId) {
-      runtimeReadyWorkspaceRef.current = null;
-      runtimeWarmupPromiseRef.current = null;
-      setIsInitialized(false);
-      return;
-    }
-
-    if (runtimeReadyWorkspaceRef.current === resolvedWorkspaceId) {
-      return;
-    }
-
-    const activeWarmup = runtimeWarmupPromiseRef.current;
-    if (activeWarmup?.workspaceId === resolvedWorkspaceId) {
-      await activeWarmup.promise;
-      return;
-    }
-
-    const warmupPromise = runtime
-      .init()
-      .then(async (status) => {
-        if (activeWorkspaceIdRef.current !== resolvedWorkspaceId) {
-          return;
-        }
-        await resolveWarmupWorkspaceModelPreference(
-          status,
-          resolvedWorkspaceId,
-        );
-        if (activeWorkspaceIdRef.current !== resolvedWorkspaceId) {
-          return;
-        }
-        runtimeReadyWorkspaceRef.current = resolvedWorkspaceId;
-        setIsInitialized(true);
-        console.log("[AsterChat] Agent 初始化成功");
-      })
-      .catch((err) => {
-        if (runtimeReadyWorkspaceRef.current === resolvedWorkspaceId) {
-          runtimeReadyWorkspaceRef.current = null;
-        }
+  const warmupRuntime = useCallback(
+    async (options?: { allowDetached?: boolean }) => {
+      const resolvedWorkspaceId = workspaceId.trim();
+      const allowDetached = options?.allowDetached === true;
+      if (!resolvedWorkspaceId && !allowDetached) {
+        runtimeReadyWorkspaceRef.current = null;
+        runtimeWarmupPromiseRef.current = null;
         setIsInitialized(false);
-        console.error("[AsterChat] 初始化失败:", err);
-        throw err;
-      })
-      .finally(() => {
-        const active = runtimeWarmupPromiseRef.current;
-        if (
-          active?.workspaceId === resolvedWorkspaceId &&
-          active.promise === warmupPromise
-        ) {
-          runtimeWarmupPromiseRef.current = null;
-        }
-      });
+        return;
+      }
 
-    runtimeWarmupPromiseRef.current = {
-      workspaceId: resolvedWorkspaceId,
-      promise: warmupPromise,
-    };
-    await warmupPromise;
-  }, [resolveWarmupWorkspaceModelPreference, runtime, workspaceId]);
+      const warmupScopeId = resolvedWorkspaceId || DETACHED_RUNTIME_WARMUP_SCOPE;
+
+      if (runtimeReadyWorkspaceRef.current === warmupScopeId) {
+        return;
+      }
+
+      const activeWarmup = runtimeWarmupPromiseRef.current;
+      if (activeWarmup?.workspaceId === warmupScopeId) {
+        await activeWarmup.promise;
+        return;
+      }
+
+      const warmupPromise = runtime
+        .init()
+        .then(async (status) => {
+          if (activeWorkspaceIdRef.current !== resolvedWorkspaceId) {
+            return;
+          }
+          await resolveWarmupWorkspaceModelPreference(
+            status,
+            resolvedWorkspaceId,
+          );
+          if (activeWorkspaceIdRef.current !== resolvedWorkspaceId) {
+            return;
+          }
+          runtimeReadyWorkspaceRef.current = warmupScopeId;
+          setIsInitialized(true);
+          console.log("[AsterChat] Agent 初始化成功");
+        })
+        .catch((err) => {
+          if (runtimeReadyWorkspaceRef.current === warmupScopeId) {
+            runtimeReadyWorkspaceRef.current = null;
+          }
+          setIsInitialized(false);
+          console.error("[AsterChat] 初始化失败:", err);
+          throw err;
+        })
+        .finally(() => {
+          const active = runtimeWarmupPromiseRef.current;
+          if (
+            active?.workspaceId === warmupScopeId &&
+            active.promise === warmupPromise
+          ) {
+            runtimeWarmupPromiseRef.current = null;
+          }
+        });
+
+      runtimeWarmupPromiseRef.current = {
+        workspaceId: warmupScopeId,
+        promise: warmupPromise,
+      };
+      await warmupPromise;
+    },
+    [resolveWarmupWorkspaceModelPreference, runtime, workspaceId],
+  );
 
   const tools = useAgentTools({
     runtime,
@@ -429,7 +448,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
 
   const sendMessage = useCallback<SendMessageFn>(
     async (...args) => {
-      await warmupRuntime();
+      await warmupRuntime({ allowDetached: true });
       const send = createAgentChatSendMessage({
         baseStatusSnapshot: {
           sessionId: activeSessionId,

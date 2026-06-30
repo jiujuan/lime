@@ -1,7 +1,7 @@
 /**
- * 图片生成模型数据（从 components/image-gen/types 提取到 lib 层）
+ * 图片能力模型目录
  *
- * 纯数据，无 UI 依赖。详见 internal/refactor/progressive-refactor-plan.md R-31。
+ * 这里是图片模型与尺寸的单一事实源，供设置页、工作台和 runtime 共享。
  */
 
 export interface ImageGenModel {
@@ -24,6 +24,19 @@ const OPENAI_IMAGE_MODELS: ImageGenModel[] = [
   {
     id: "dall-e-3",
     name: "DALL-E 3",
+    supportedSizes: ["1024x1024", "1792x1024", "1024x1792"],
+  },
+];
+
+const GEMINI_IMAGE_MODELS: ImageGenModel[] = [
+  {
+    id: "gemini-3.1-flash-image",
+    name: "Nano Banana 2",
+    supportedSizes: ["1024x1024", "1792x1024", "1024x1792"],
+  },
+  {
+    id: "gemini-3-pro-image",
+    name: "Nano Banana Pro",
     supportedSizes: ["1024x1024", "1792x1024", "1024x1792"],
   },
 ];
@@ -154,6 +167,10 @@ export const IMAGE_GEN_MODELS: Record<string, ImageGenModel[]> = {
   ],
   // New API
   "new-api": OPENAI_IMAGE_MODELS,
+  gemini: GEMINI_IMAGE_MODELS,
+  google: GEMINI_IMAGE_MODELS,
+  vertexai: GEMINI_IMAGE_MODELS,
+  "google-vertex": GEMINI_IMAGE_MODELS,
   // Fal
   fal: [
     {
@@ -210,9 +227,3 @@ export const IMAGE_GEN_MODELS: Record<string, ImageGenModel[]> = {
     },
   ],
 };
-
-export const IMAGE_GEN_PROVIDER_IDS = [
-  ...Object.keys(IMAGE_GEN_MODELS),
-  // 兼容不同大小写的 type 值
-  "NewApi",
-];

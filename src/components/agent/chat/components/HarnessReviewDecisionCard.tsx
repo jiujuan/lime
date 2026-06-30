@@ -159,7 +159,7 @@ function ReviewDecisionContent({
 
   return (
     <>
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
+      <div className="grid min-w-0 gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr))]">
         <InventoryStatCard
           title={agentText(
             "agentChat.harness.generated.045859e792",
@@ -400,7 +400,7 @@ function ReviewDecisionSummaryCard({
           {formatReviewDecisionStatusLabel(decisionStatus)}
         </Badge>
       </div>
-      <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 xl:grid-cols-3">
+      <div className="mt-3 grid min-w-0 gap-2 text-xs text-muted-foreground [grid-template-columns:repeat(auto-fit,minmax(min(100%,10rem),1fr))]">
         <div>
           {agentText("agentChat.harness.generated.8132b4b996", "审核人：")}
           <span className="ml-1 text-foreground">
@@ -445,7 +445,7 @@ function ReviewDecisionSummaryCard({
             "尚未填写修复策略。"
           }
         />
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid min-w-0 gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr))]">
           <ReviewDecisionListBlock
             title={agentText(
               "agentChat.harness.generated.30861463a7",

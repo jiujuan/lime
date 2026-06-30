@@ -15,6 +15,7 @@ interface ResolveFallbackOpenedProjectIdParams {
 }
 
 interface UseWorkspaceOpenedProjectsRuntimeParams {
+  enabled?: boolean;
   project: Project | null;
   projectId?: string | null;
   applyProjectSelection: (projectId?: string | null) => void;
@@ -47,6 +48,7 @@ export function resolveFallbackOpenedProjectId({
 }
 
 export function useWorkspaceOpenedProjectsRuntime({
+  enabled = true,
   project,
   projectId,
   applyProjectSelection,
@@ -57,7 +59,9 @@ export function useWorkspaceOpenedProjectsRuntime({
     normalizeProjectId(project?.id) === normalizeProjectId(projectId)
       ? project
       : null;
-  const openedProjects = useOpenedProjectSummaries(currentOpenedProjectSummary);
+  const openedProjects = useOpenedProjectSummaries(currentOpenedProjectSummary, {
+    enabled,
+  });
 
   const handleCloseOpenedProject = useCallback(
     (closingProjectId: string) => {

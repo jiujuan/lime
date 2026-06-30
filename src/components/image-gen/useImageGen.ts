@@ -12,10 +12,11 @@ import {
   type ImportMaterialFromUrlRequest,
 } from "@/lib/api/materials";
 import {
-  findImageProviderForSelection,
-  getImageModelsForProvider,
-  isImageProvider,
-} from "@/lib/imageGeneration";
+  findDefaultImageCapabilityProvider,
+  isImageCapabilityProvider,
+  resolveImageCapabilityProviderEntry,
+  resolveImageCapabilityModels,
+} from "@/lib/imageGen/catalog";
 import { isDebugFlagEnabled } from "@/lib/perfDebug";
 import { setStoredResourceProjectId } from "@/lib/resourceProjectSelection";
 import { scheduleMinimumDelayIdleTask } from "@/lib/utils/scheduleMinimumDelayIdleTask";
@@ -24,7 +25,6 @@ import type {
   ImageGenRequest,
   ImageGenResponse,
 } from "./types";
-import { IMAGE_GEN_PROVIDER_IDS } from "./types";
 
 const HISTORY_KEY = "image-gen-history";
 const PROVIDER_DEBUG_KEY = "lime:provider-debug";
@@ -73,6 +73,32 @@ interface NewApiResponsesImageRequest {
   stream: true;
 }
 
+interface GeminiImageContentPartText {
+  type: "text";
+  text: string;
+}
+
+interface GeminiImageContentPartImage {
+  type: "image";
+  data?: string;
+  mime_type?: string;
+}
+
+type GeminiImageContentPart =
+  | GeminiImageContentPartText
+  | GeminiImageContentPartImage;
+
+interface GeminiInteractionsImageRequest {
+  model: string;
+  input: string | GeminiImageContentPart[];
+  response_format: {
+    type: "image";
+    mime_type: "image/png";
+    aspect_ratio?: string;
+    image_size?: "1K" | "2K" | "4K";
+  };
+}
+
 interface BackfillImagesResult {
   total: number;
   saved: number;
@@ -91,6 +117,7 @@ interface UseImageGenOptions {
   preferredProviderId?: string;
   preferredModelId?: string;
   allowFallback?: boolean;
+  providerLoadEnabled?: boolean;
   providerLoadMode?: "immediate" | "deferred";
   providerDeferredDelayMs?: number;
   selectionScopeKey?: string;
@@ -405,6 +432,15 @@ function resolveFalQueueHost(apiHost: string): string {
   return FAL_QUEUE_API_HOST;
 }
 
+function normalizeGeminiApiHost(apiHost: string): string {
+  const trimmed = (apiHost || "").trim().replace(/\/+$/, "");
+  if (!trimmed) {
+    return "https://generativelanguage.googleapis.com";
+  }
+
+  return ensureHttpProtocol(trimmed);
+}
+
 function normalizeReferenceImages(referenceImages: string[]): string[] {
   return referenceImages
     .map((url) => url.trim())
@@ -507,6 +543,161 @@ function buildFalInput(
   }
 
   return input;
+}
+
+function normalizeGeminiBase64ImageData(referenceImage: string): string | null {
+  const normalized = referenceImage.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  if (normalized.startsWith("data:image/")) {
+    const match = normalized.match(/^data:(image\/[\w.+-]+);base64,(.+)$/i);
+    if (match?.[2]) {
+      return match[2].replace(/\s+/g, "");
+    }
+  }
+
+  if (looksLikeBase64Data(normalized)) {
+    return normalized.replace(/\s+/g, "");
+  }
+
+  return null;
+}
+
+function resolveGeminiDirectImageReference(
+  referenceImage: string,
+): GeminiImageContentPartImage | null {
+  const normalized = referenceImage.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const base64Data = normalizeGeminiBase64ImageData(normalized);
+  if (base64Data) {
+    return {
+      type: "image",
+      mime_type: "image/png",
+      data: base64Data,
+    };
+  }
+
+  return null;
+}
+
+function buildGeminiImageInput(
+  prompt: string,
+  referenceImages: string[],
+): string | GeminiImageContentPart[] {
+  const parts: GeminiImageContentPart[] = [];
+  const cleanedPrompt = prompt.trim();
+
+  if (cleanedPrompt) {
+    parts.push({
+      type: "text",
+      text: cleanedPrompt,
+    });
+  }
+
+  for (const referenceImage of referenceImages) {
+    const normalizedReference = resolveGeminiDirectImageReference(referenceImage);
+    if (normalizedReference) {
+      parts.push(normalizedReference);
+    }
+  }
+
+  return parts.length > 0 ? parts : cleanedPrompt;
+}
+
+function resolveGeminiImageSize(size: string): "1K" | "2K" | "4K" | undefined {
+  const matched = size.match(/^(\d+)x(\d+)$/i);
+  if (!matched) {
+    return undefined;
+  }
+
+  const width = Number.parseInt(matched[1], 10);
+  const height = Number.parseInt(matched[2], 10);
+  if (
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width <= 0 ||
+    height <= 0
+  ) {
+    return undefined;
+  }
+
+  const longestEdge = Math.max(width, height);
+  if (longestEdge >= 3072) {
+    return "4K";
+  }
+  if (longestEdge >= 1536) {
+    return "2K";
+  }
+  return "1K";
+}
+
+function buildGeminiResponseFormat(size: string): GeminiInteractionsImageRequest["response_format"] {
+  const responseFormat: GeminiInteractionsImageRequest["response_format"] = {
+    type: "image",
+    mime_type: "image/png",
+  };
+
+  const aspectRatio = sizeToAspectRatio(size);
+  if (aspectRatio) {
+    responseFormat.aspect_ratio = aspectRatio;
+  }
+
+  const imageSize = resolveGeminiImageSize(size);
+  if (imageSize) {
+    responseFormat.image_size = imageSize;
+  }
+
+  return responseFormat;
+}
+
+function extractGeminiImageUrlFromPayload(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const record = payload as Record<string, unknown>;
+  const directOutputImage = record.output_image;
+  if (directOutputImage && typeof directOutputImage === "object") {
+    const imageRecord = directOutputImage as Record<string, unknown>;
+    const data = imageRecord.data;
+    if (typeof data === "string" && data.trim().length > 0) {
+      return wrapBase64AsDataUrl(data.replace(/\s+/g, ""));
+    }
+
+    const uri = imageRecord.uri;
+    if (typeof uri === "string" && uri.trim().length > 0) {
+      return uri.trim();
+    }
+  }
+
+  const interaction = record.interaction;
+  if (interaction && typeof interaction === "object") {
+    const nested =
+      extractGeminiImageUrlFromPayload(interaction) ??
+      extractImageUrlFromPayload(interaction);
+    if (nested) {
+      return nested;
+    }
+  }
+
+  const steps = record.steps;
+  if (Array.isArray(steps)) {
+    for (const step of steps) {
+      const extracted =
+        extractGeminiImageUrlFromPayload(step) ??
+        extractImageUrlFromPayload(step);
+      if (extracted) {
+        return extracted;
+      }
+    }
+  }
+
+  return extractImageUrlFromPayload(payload);
 }
 
 function resolveFalQueueResponseEndpoint(candidate: string): string {
@@ -1643,7 +1834,7 @@ async function requestImageFromNewApi(
   }
 
   console.warn(
-    `[ImageGen][new-api/responses] failed, fallback to gemini-native: ${responsesAttempt.error || "unknown"}`,
+    `[ImageGen][new-api/responses] failed: ${responsesAttempt.error || "unknown"}`,
   );
 
   if (!responsesStreamAttempt) {
@@ -1662,54 +1853,83 @@ async function requestImageFromNewApi(
     }
 
     console.warn(
-      `[ImageGen][new-api/responses-stream] failed, fallback to gemini-native: ${responsesStreamAttempt.error || "unknown"}`,
+      `[ImageGen][new-api/responses-stream] failed: ${responsesStreamAttempt.error || "unknown"}`,
     );
   }
 
-  const geminiNativeRequest = {
-    contents: [
-      {
-        role: "user",
-        parts: [
-          {
-            text:
-              "请根据以下描述生成图片，仅返回图片数据。" +
-              (() => {
-                const preferredAspectRatio = sizeToAspectRatio(size);
-                return preferredAspectRatio
-                  ? `\n优先比例：${preferredAspectRatio}`
-                  : "";
-              })() +
-              `\n描述：${prompt}${referenceText}`,
-          },
-        ],
-      },
-    ],
-    generationConfig: {
-      responseModalities: ["IMAGE", "TEXT"],
-    },
+  throw new Error(
+    `未能从响应中提取图片，请检查服务商返回格式（${imagesRequest.logTag}: ${imageAttempt.error || "未知"}; chat: ${chatAttempt.error || "未知"}; chat-retry: ${chatRetryAttempt?.error || "未触发"}; responses: ${responsesAttempt.error || "未知"}; responses-stream: ${responsesStreamAttempt.error || "未知"}）`,
+  );
+}
+
+async function requestImageFromGemini(
+  apiHost: string,
+  apiKey: string,
+  model: string,
+  prompt: string,
+  referenceImages: string[],
+  size: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  const endpoint = buildProviderEndpoint(
+    normalizeGeminiApiHost(apiHost),
+    "/v1beta/interactions",
+  );
+  const request: GeminiInteractionsImageRequest = {
+    model,
+    input: buildGeminiImageInput(prompt, referenceImages),
+    response_format: buildGeminiResponseFormat(size),
   };
 
-  const geminiNativeEndpoint = buildProviderEndpoint(
-    apiHost,
-    `/v1beta/models/${model}:generateContent`,
-  );
+  let response: Response;
+  try {
+    response = await fetchWithManagedAbort(
+      endpoint,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
+        body: JSON.stringify(request),
+      },
+      {
+        timeoutMs: IMAGE_REQUEST_TIMEOUT_MS,
+        signal,
+      },
+    );
+  } catch (error) {
+    if (signal?.aborted && isAbortLikeError(error)) {
+      throw new Error(IMAGE_GENERATION_CANCELED_MESSAGE);
+    }
 
-  const geminiNativeAttempt = await requestImageWithEndpoint(
-    geminiNativeEndpoint,
-    geminiNativeRequest,
-    apiKey,
-    "new-api/gemini-native",
-    { signal },
-  );
-
-  if (geminiNativeAttempt.imageUrl) {
-    return geminiNativeAttempt.imageUrl;
+    const rawErrorMessage =
+      error instanceof Error ? error.message : String(error);
+    throw new Error(`Gemini 图片请求异常: ${rawErrorMessage}`);
   }
 
-  throw new Error(
-    `未能从响应中提取图片，请检查服务商返回格式（${imagesRequest.logTag}: ${imageAttempt.error || "未知"}; chat: ${chatAttempt.error || "未知"}; chat-retry: ${chatRetryAttempt?.error || "未触发"}; responses: ${responsesAttempt.error || "未知"}; responses-stream: ${responsesStreamAttempt.error || "未知"}; gemini-native: ${geminiNativeAttempt.error || "未知"}）`,
+  const rawText = await response.text();
+  const parsedJson = tryParseJson(rawText);
+
+  console.log(
+    `[ImageGen][gemini/image] endpoint=${endpoint}, status=${response.status}`,
   );
+
+  if (!response.ok) {
+    throw new Error(
+      `Gemini 图片请求失败: ${response.status} - ${previewResponseText(rawText, 300)}`,
+    );
+  }
+
+  const imageUrl = parsedJson
+    ? extractGeminiImageUrlFromPayload(parsedJson)
+    : extractImageUrlFromText(rawText);
+
+  if (!imageUrl) {
+    throw new Error("Gemini 响应中未找到图片数据");
+  }
+
+  return normalizeImageUrl(endpoint, imageUrl);
 }
 
 function isNewApiResponsesImageGenerationModel(model: string): boolean {
@@ -2467,8 +2687,14 @@ function isImageGenProvider(provider: {
   id: string;
   type: string;
   custom_models?: string[];
+  api_host?: string;
 }): boolean {
-  return isImageProvider(provider.id, provider.type, provider.custom_models);
+  return isImageCapabilityProvider({
+    id: provider.id,
+    type: provider.type,
+    custom_models: provider.custom_models,
+    api_host: provider.api_host,
+  });
 }
 
 function isFalProviderLike(provider: {
@@ -2488,11 +2714,12 @@ function isFalProviderLike(provider: {
 }
 
 export function useImageGen(options: UseImageGenOptions = {}) {
+  const providerLoadEnabled = options.providerLoadEnabled ?? true;
   const providerLoadMode = options.providerLoadMode ?? "immediate";
   const providerDeferredDelayMs =
     options.providerDeferredDelayMs ?? IMAGE_GEN_PROVIDER_IDLE_TIMEOUT_MS;
   const [providerLoadReady, setProviderLoadReady] = useState(
-    providerLoadMode !== "deferred",
+    providerLoadEnabled && providerLoadMode !== "deferred",
   );
   const { providers, loading: providersLoading } = useApiKeyProvider({
     autoLoad: providerLoadReady,
@@ -2531,6 +2758,10 @@ export function useImageGen(options: UseImageGenOptions = {}) {
   }, [selectionScopeKey]);
 
   useEffect(() => {
+    if (!providerLoadEnabled) {
+      return;
+    }
+
     if (providerLoadMode !== "deferred") {
       setProviderLoadReady(true);
       return;
@@ -2549,14 +2780,18 @@ export function useImageGen(options: UseImageGenOptions = {}) {
         idleTimeoutMs: IMAGE_GEN_PROVIDER_IDLE_TIMEOUT_MS,
       },
     );
-  }, [providerDeferredDelayMs, providerLoadMode, providerLoadReady]);
+  }, [
+    providerDeferredDelayMs,
+    providerLoadEnabled,
+    providerLoadMode,
+    providerLoadReady,
+  ]);
 
-  // 过滤出支持图片生成、启用且有 API Key 的 Provider
+  const ensureProvidersLoaded = useCallback(() => {
+    setProviderLoadReady(true);
+  }, []);
+
   const availableProviders = useMemo(() => {
-    imageGenDebugLog(
-      "[useImageGen] 支持图片生成的 Provider IDs:",
-      IMAGE_GEN_PROVIDER_IDS,
-    );
     imageGenDebugLog(
       "[useImageGen] 所有 Provider:",
       providers.map((p) => ({
@@ -2647,12 +2882,11 @@ export function useImageGen(options: UseImageGenOptions = {}) {
       return;
     }
 
-    const nextProvider =
-      preferredProvider ??
-      (allowFallback
-        ? (findImageProviderForSelection(availableProviders, "basic") ??
-          availableProviders[0])
-        : null);
+    const nextProvider = preferredProvider
+      ? preferredProvider
+      : allowFallback
+        ? findDefaultImageCapabilityProvider(availableProviders)
+        : null;
 
     if (nextProvider) {
       hasManualProviderSelectionRef.current = false;
@@ -2817,12 +3051,12 @@ export function useImageGen(options: UseImageGenOptions = {}) {
   // 获取当前 Provider 支持的模型
   const availableModels = useMemo(() => {
     if (!selectedProvider) return [];
-    return getImageModelsForProvider(
-      selectedProvider.id,
-      selectedProvider.type,
-      selectedProvider.custom_models,
-      selectedProvider.api_host,
-    );
+    return resolveImageCapabilityModels({
+      id: selectedProvider.id,
+      type: selectedProvider.type,
+      custom_models: selectedProvider.custom_models,
+      api_host: selectedProvider.api_host,
+    });
   }, [selectedProvider]);
 
   // 获取当前选中的模型
@@ -2880,12 +3114,12 @@ export function useImageGen(options: UseImageGenOptions = {}) {
       setSelectedProviderId(providerId);
       const provider = availableProviders.find((p) => p.id === providerId);
       if (provider) {
-        const models = getImageModelsForProvider(
-          provider.id,
-          provider.type,
-          provider.custom_models,
-          provider.api_host,
-        );
+        const models = resolveImageCapabilityModels({
+          id: provider.id,
+          type: provider.type,
+          custom_models: provider.custom_models,
+          api_host: provider.api_host,
+        });
         if (models.length > 0) {
           setSelectedModelId(models[0].id);
         }
@@ -2983,6 +3217,18 @@ export function useImageGen(options: UseImageGenOptions = {}) {
           selectedProvider.type === "new-api" ||
           selectedProvider.type === "NewApi";
         const isFalProvider = isFalProviderLike(selectedProvider);
+        const providerEntry = resolveImageCapabilityProviderEntry(
+          selectedProvider,
+        );
+        const isGeminiProvider =
+          providerEntry?.transport === "gemini_image" ||
+          selectedProvider.id === "gemini" ||
+          selectedProvider.type === "gemini" ||
+          selectedProvider.id === "google" ||
+          selectedProvider.type === "google" ||
+          selectedProvider.id === "vertexai" ||
+          selectedProvider.type === "vertexai" ||
+          selectedProvider.id === "google-vertex";
 
         if (isNewApi) {
           for (const item of generationItems) {
@@ -2999,6 +3245,90 @@ export function useImageGen(options: UseImageGenOptions = {}) {
               }
 
               const imageUrl = await requestImageFromNewApi(
+                selectedProvider.api_host,
+                apiKey,
+                resolvedModelId,
+                prompt,
+                referenceImages,
+                requestSize,
+                generationController.signal,
+              );
+              ensureGenerationStillActive();
+
+              const completedImage: GeneratedImage = {
+                ...item,
+                url: imageUrl,
+                status: "complete",
+                error: undefined,
+              };
+
+              setImages((prev) => {
+                if (!canCommitGenerationState()) {
+                  return prev;
+                }
+                const updated = prev.map((img) =>
+                  img.id === item.id
+                    ? {
+                        ...img,
+                        url: imageUrl,
+                        status: "complete" as const,
+                        error: undefined,
+                      }
+                    : img,
+                );
+                saveHistory(updated);
+                return updated;
+              });
+
+              if (targetProjectId) {
+                ensureGenerationStillActive();
+                await saveImageToResource(completedImage, targetProjectId);
+                ensureGenerationStillActive();
+              }
+
+              completedResults.push(completedImage);
+            } catch (error) {
+              if (
+                isGenerationCanceledError(error) ||
+                generationRunIdRef.current !== generationRunId ||
+                generationController.signal.aborted
+              ) {
+                throw new Error(IMAGE_GENERATION_CANCELED_MESSAGE);
+              }
+
+              const errorMessage =
+                error instanceof Error ? error.message : String(error);
+              generationErrors.push(errorMessage);
+
+              setImages((prev) => {
+                if (!canCommitGenerationState()) {
+                  return prev;
+                }
+                const updated = prev.map((img) =>
+                  img.id === item.id
+                    ? { ...img, status: "error" as const, error: errorMessage }
+                    : img,
+                );
+                saveHistory(updated);
+                return updated;
+              });
+            }
+          }
+        } else if (isGeminiProvider) {
+          for (const item of generationItems) {
+            try {
+              ensureGenerationStillActive();
+              const apiKey = await apiKeyProviderApi.getNextApiKey(
+                selectedProvider.id,
+              );
+              ensureGenerationStillActive();
+              if (!apiKey) {
+                throw new Error(
+                  "该 Provider 没有可用的 API Key，请在设置 -> AI 服务商中添加",
+                );
+              }
+
+              const imageUrl = await requestImageFromGemini(
                 selectedProvider.api_host,
                 apiKey,
                 resolvedModelId,
@@ -3482,6 +3812,7 @@ export function useImageGen(options: UseImageGenOptions = {}) {
     selectedProvider,
     selectedProviderId,
     setSelectedProviderId: handleProviderChange,
+    ensureProvidersLoaded,
     providersLoading,
     preferredProviderUnavailable,
 
@@ -3520,6 +3851,7 @@ export const __imageGenFalTestUtils = {
   resolveFalQueueHost,
   requestImageFromFalQueue,
   requestImageFromFal,
+  requestImageFromGemini,
   buildOpenAICompatibleImageRequest,
   buildNewApiResponsesImageRequest,
   extractImageBase64FromResponsesStreamEvent,

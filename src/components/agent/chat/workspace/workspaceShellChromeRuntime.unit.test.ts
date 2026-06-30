@@ -120,4 +120,23 @@ describe("resolveWorkspaceShellChromeRuntime", () => {
     expect(runtime.shouldHideGeneralWorkbenchInputForTheme).toBe(true);
     expect(runtime.shouldShowGeneralWorkbenchFloatingInputOverlay).toBe(true);
   });
+
+  it("Claw 工作台会话打开右侧面板时仍保留浮层输入区", () => {
+    const runtime = resolveWorkspaceShellChromeRuntime(
+      baseInput({
+        contextWorkspaceEnabled: true,
+        hasCanvasWorkbenchContent: true,
+        hasDisplayMessages: true,
+        isThemeWorkbench: false,
+        layoutMode: "chat-canvas",
+        sessionId: "session-expert-panel",
+        shouldUseCompactGeneralWorkbench: false,
+        topBarChrome: "workspace-compact",
+      }),
+    );
+
+    expect(runtime.showChatLayout).toBe(true);
+    expect(runtime.shouldHideGeneralWorkbenchInputForTheme).toBe(false);
+    expect(runtime.shouldShowGeneralWorkbenchFloatingInputOverlay).toBe(true);
+  });
 });

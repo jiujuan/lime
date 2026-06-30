@@ -75,7 +75,7 @@ export function BrowserActionIndexSummarySection({
         </div>
       ) : null}
 
-      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-3 grid min-w-0 gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr))]">
         <InventoryStatCard
           title={agentText(
             "agentChat.harness.generated.e5d6795411",
@@ -336,7 +336,7 @@ export function LimeCorePolicyIndexSummarySection({
         )}
       </p>
 
-      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-3 grid min-w-0 gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr))]">
         <InventoryStatCard
           title={agentText(
             "agentChat.harness.generated.9862eec754",

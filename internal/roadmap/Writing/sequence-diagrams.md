@@ -1,6 +1,6 @@
 # Writing 时序图
 
-更新时间：2026-06-28  
+更新时间：2026-06-29
 状态：In Progress
 
 ## 1. 插件中心安装态展示
@@ -73,24 +73,25 @@ sequenceDiagram
   Store-->>Runtime: articleDraft artifact refs
 ```
 
-## 4. 小产物卡到右侧 Product Profile
+## 4. ArtifactFrame 到右侧 Article Editor
 
 ```mermaid
 sequenceDiagram
   autonumber
   participant Runtime as App Server Runtime
   participant Chat as Message List
-  participant Card as Article Card
+  participant Frame as ArtifactFrame
   participant Surface as Right Surface
-  participant Profile as Product Profile
+  participant Editor as Article Editor
 
-  Runtime-->>Chat: artifact / workspace patch
-  Chat->>Card: 渲染小产物卡
-  Card-->>Chat: objectRef / artifactRef
-  User->>Card: 点击打开
-  Card->>Surface: selectObject(articleDraft)
-  Surface->>Profile: render articleDraft
-  Profile-->>User: 展示正文、结构、引用、配图和动作
+  Runtime-->>Chat: articleArtifacts / workspace patch
+  Chat->>Frame: 创建独立产物框
+  Runtime-->>Frame: 流式写入完整文章内容
+  Frame-->>Chat: objectRef / artifactRef
+  User->>Frame: 点击打开
+  Frame->>Surface: openArticleArtifact(articleDraft)
+  Surface->>Editor: render articleDraft
+  Editor-->>User: 展示可编辑正文、结构、引用、配图和动作
 ```
 
 ## 5. 历史恢复
@@ -107,9 +108,9 @@ sequenceDiagram
   User->>Sidebar: 打开历史写作会话
   Sidebar->>Runtime: read session
   Runtime-->>Sidebar: messages + artifacts + plugin workspace
-  Sidebar->>Workspace: hydrate content-factory workspace
+  Sidebar->>Workspace: hydrate content-factory Article Workspace facts
   Workspace-->>Sidebar: selected articleDraft
-  Sidebar->>Surface: open productProfile(articleDraft)
+  Sidebar->>Surface: open articleArtifact(articleDraft)
   Surface-->>User: 恢复右侧文章草稿
 ```
 
@@ -119,15 +120,15 @@ sequenceDiagram
 sequenceDiagram
   autonumber
   participant User as 用户
-  participant Profile as Product Profile
+  participant Editor as Article Editor
   participant Action as Surface Action Router
   participant Runtime as App Server Runtime
   participant Worker as Content Factory Worker
 
-  User->>Profile: 点击继续改写
-  Profile->>Action: revise(articleDraftRef, instruction)
+  User->>Editor: 点击继续改写
+  Editor->>Action: revise(articleDraftRef, instruction)
   Action->>Runtime: agentSession/action/respond
   Runtime->>Worker: content.article.revise
   Worker-->>Runtime: updated articleDraft artifact
-  Runtime-->>Profile: 新版本 / workspace patch
+  Runtime-->>Editor: 新版本 / workspace patch
 ```

@@ -4,7 +4,7 @@ import type {
   PluginActivationContext,
   PluginContract,
 } from "@/features/plugin";
-import { buildContentFactoryWorkspacePatchProfileFromPendingRequests } from "@/features/plugin-content-factory";
+import { buildContentFactoryWorkspacePatchArticleWorkspaceFromPendingRequests } from "@/features/plugin-content-factory";
 import {
   consumeWorkspaceRightSurfacePending,
   dismissWorkspaceRightSurfacePending,
@@ -21,6 +21,7 @@ import {
 } from "@/lib/api/workspaceRightSurface";
 import {
   buildWorkspaceRightSurfaceAppServerPendingIntents,
+  normalizeWorkspaceRightSurfaceKind,
   type WorkspaceRightSurfaceKind,
   type WorkspaceRightSurfaceIntent,
 } from "./right-surface";
@@ -31,10 +32,10 @@ import {
 } from "./workspaceAgentAppSurfaceModel";
 import type { WorkspaceObjectCanvasCandidate } from "./workspaceObjectCanvasModel";
 import {
-  buildWorkspaceProductProfileFromPendingRequests,
-  type WorkspaceProductProfile,
-} from "./workspaceProductProfileModel";
-import { enrichWorkspaceProductProfileRendererOutput } from "./workspacePluginRendererOutputProjection";
+  buildWorkspaceArticleWorkspaceFromPendingRequests,
+  type WorkspaceArticleWorkspace,
+} from "./workspaceArticleWorkspaceModel";
+import { enrichWorkspaceArticleWorkspaceRendererOutput } from "./workspacePluginRendererOutputProjection";
 import {
   buildWorkspaceRightSurfacePendingBrowserIntent,
   type WorkspaceRightSurfaceBrowserIntent,
@@ -49,6 +50,7 @@ const EMPTY_PLUGIN_CONTRACTS: readonly PluginContract[] = [];
 
 export interface UseWorkspaceRightSurfacePendingRuntimeOptions {
   enabled: boolean;
+  autoRefreshEnabled?: boolean;
   workspaceId?: string | null;
   workspaceRoot?: string | null;
   sessionId?: string | null;
@@ -83,7 +85,7 @@ export interface WorkspaceRightSurfacePendingRuntime {
   pendingAgentAppSurface: WorkspaceAgentAppSurfaceDescriptor | null;
   pendingAgentAppSurfaces: WorkspaceAgentAppSurfaceDescriptor[];
   pendingObjectCanvasCandidate: WorkspaceObjectCanvasCandidate | null;
-  pendingProductProfile: WorkspaceProductProfile | null;
+  pendingArticleWorkspace: WorkspaceArticleWorkspace | null;
   pendingBrowserIntent: WorkspaceRightSurfaceBrowserIntent | null;
   lastError: Error | null;
   refreshPendingRequests: () => Promise<void>;
@@ -133,6 +135,7 @@ export function buildWorkspaceRightSurfacePendingListParams({
 
 export function useWorkspaceRightSurfacePendingRuntime({
   enabled,
+  autoRefreshEnabled = enabled,
   workspaceId,
   workspaceRoot,
   sessionId,
@@ -197,7 +200,9 @@ export function useWorkspaceRightSurfacePendingRuntime({
       const requestIds = pendingRequests
         .filter(
           (request) =>
-            request.status === "pending" && request.surfaceKind === surfaceKind,
+            request.status === "pending" &&
+            normalizeWorkspaceRightSurfaceKind(request.surfaceKind) ===
+              surfaceKind,
         )
         .map((request) => request.requestId)
         .filter((requestId) => requestId.trim().length > 0);
@@ -231,7 +236,9 @@ export function useWorkspaceRightSurfacePendingRuntime({
       const requestIds = pendingRequests
         .filter(
           (request) =>
-            request.status === "pending" && request.surfaceKind === surfaceKind,
+            request.status === "pending" &&
+            normalizeWorkspaceRightSurfaceKind(request.surfaceKind) ===
+              surfaceKind,
         )
         .map((request) => request.requestId)
         .filter((requestId) => requestId.trim().length > 0);
@@ -261,6 +268,10 @@ export function useWorkspaceRightSurfacePendingRuntime({
   );
 
   useEffect(() => {
+    if (!autoRefreshEnabled) {
+      return undefined;
+    }
+
     void refreshPendingRequests();
     if (!enabled || !listParams || pollIntervalMs <= 0) {
       return undefined;
@@ -271,10 +282,21 @@ export function useWorkspaceRightSurfacePendingRuntime({
     }, pollIntervalMs);
 
     return () => window.clearInterval(timer);
-  }, [enabled, listParams, pollIntervalMs, refreshPendingRequests]);
+  }, [
+    autoRefreshEnabled,
+    enabled,
+    listParams,
+    pollIntervalMs,
+    refreshPendingRequests,
+  ]);
 
   useEffect(() => {
-    if (!enabled || !listParams || eventDrainIntervalMs <= 0) {
+    if (
+      !autoRefreshEnabled ||
+      !enabled ||
+      !listParams ||
+      eventDrainIntervalMs <= 0
+    ) {
       return undefined;
     }
 
@@ -349,6 +371,7 @@ export function useWorkspaceRightSurfacePendingRuntime({
     };
   }, [
     drainPendingChanges,
+    autoRefreshEnabled,
     enabled,
     eventDrainIntervalMs,
     eventDrainLimit,
@@ -392,14 +415,14 @@ export function useWorkspaceRightSurfacePendingRuntime({
       buildWorkspaceRightSurfacePendingObjectCanvasCandidate(pendingRequests),
     [pendingRequests],
   );
-  const pendingProductProfile = useMemo(
+  const pendingArticleWorkspace = useMemo(
     () =>
-      enrichWorkspaceProductProfileRendererOutput({
+      enrichWorkspaceArticleWorkspaceRendererOutput({
         contracts: pluginContracts,
         pendingRequests,
-        profile:
-          buildWorkspaceProductProfileFromPendingRequests(pendingRequests) ??
-          buildContentFactoryWorkspacePatchProfileFromPendingRequests(
+        articleWorkspace:
+          buildWorkspaceArticleWorkspaceFromPendingRequests(pendingRequests) ??
+          buildContentFactoryWorkspacePatchArticleWorkspaceFromPendingRequests(
             pendingRequests,
           ),
       }),
@@ -417,7 +440,7 @@ export function useWorkspaceRightSurfacePendingRuntime({
     pendingAgentAppSurface,
     pendingAgentAppSurfaces,
     pendingObjectCanvasCandidate,
-    pendingProductProfile,
+    pendingArticleWorkspace,
     pendingBrowserIntent,
     lastError,
     refreshPendingRequests,
