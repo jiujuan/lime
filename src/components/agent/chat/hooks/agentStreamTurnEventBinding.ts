@@ -105,10 +105,10 @@ function buildAgentEventPerformanceTrace(params: {
     providerWaitMs:
       params.event.type === "provider_trace" &&
       params.event.stage === "first_text_delta_received"
-        ? normalizeEventNumber(params.event.elapsed_ms) ??
+        ? (normalizeEventNumber(params.event.elapsed_ms) ??
           previousTrace?.providerWaitMs ??
-          null
-        : previousTrace?.providerWaitMs ?? null,
+          null)
+        : (previousTrace?.providerWaitMs ?? null),
   };
 }
 
@@ -630,7 +630,9 @@ export async function registerAgentStreamTurnEventBinding(
             turnId: data.turn_id ?? null,
           },
           {
-            dedupeKey: `${eventName}:inboundTextDelta:${data.itemId ?? "no-item"}:${data.sequence ?? "no-sequence"}:${data.phase ?? "no-phase"}`,
+            consoleOnly: true,
+            dedupeKey: `${eventName}:inboundTextDelta:${data.itemId ?? "no-item"}:${data.phase ?? "no-phase"}`,
+            throttleMs: 1000,
           },
         );
       }
@@ -698,27 +700,33 @@ export async function registerAgentStreamTurnEventBinding(
       });
 
       if (data.type === "provider_trace") {
-        const providerTraceContext = buildAgentStreamProviderTraceMetricContext({
-          activeSessionId,
-          attempt: data.attempt,
-          cancelReason: data.cancel_reason,
-          elapsedMs: data.elapsed_ms,
-          eventName,
-          failureCategory: data.failure_category,
-          model: data.model,
-          provider: data.provider,
-          retryable: data.retryable,
-          runtimeEventType: data.runtime_event_type,
-          stage: data.stage,
-          status: data.status,
-          textChars: data.text_chars,
-        });
+        const providerTraceContext = buildAgentStreamProviderTraceMetricContext(
+          {
+            activeSessionId,
+            attempt: data.attempt,
+            cancelReason: data.cancel_reason,
+            elapsedMs: data.elapsed_ms,
+            eventName,
+            failureCategory: data.failure_category,
+            model: data.model,
+            provider: data.provider,
+            retryable: data.retryable,
+            runtimeEventType: data.runtime_event_type,
+            stage: data.stage,
+            status: data.status,
+            textChars: data.text_chars,
+          },
+        );
         recordAgentStreamPerformanceMetric(
           "agentStream.providerTrace",
           requestState.performanceTrace,
           providerTraceContext,
         );
-        logAgentDebug("AgentStream", "providerTrace", providerTraceContext);
+        logAgentDebug("AgentStream", "providerTrace", providerTraceContext, {
+          consoleOnly: true,
+          dedupeKey: `${eventName}:providerTrace:${data.stage ?? "no-stage"}:${data.status ?? "no-status"}`,
+          throttleMs: 1000,
+        });
         scheduleInactivityWatchdog();
         return;
       }

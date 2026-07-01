@@ -1,6 +1,5 @@
 import { createPreviewArtifact } from "@/lib/artifact/previewArtifact";
 import type { Artifact } from "@/lib/artifact/types";
-import { CONTENT_FACTORY_PLUGIN_ID } from "@/features/plugin-content-factory/contentFactoryPlugin";
 import { buildWorkspaceArticleWorkspaceArtifactDocument } from "./workspaceArticleWorkspaceArtifactDocument";
 import { buildWorkspaceArticleObjectKey } from "./workspaceArticleWorkspaceSelection";
 import type {
@@ -69,10 +68,6 @@ export function buildWorkspaceArticleWorkspacePreviewArtifact({
       layout,
     },
     workspacePatch: articleWorkspace,
-    contentFactoryWorkspacePatch:
-      articleWorkspace.appId === CONTENT_FACTORY_PLUGIN_ID
-        ? articleWorkspace
-        : undefined,
   };
 
   if (layout === "imageGrid") {
@@ -116,6 +111,13 @@ export function buildWorkspaceArticleWorkspacePreviewArtifact({
     object,
     preview,
   });
+  if (
+    layout === "document" &&
+    object.ref.kind === "articleDraft" &&
+    !content.trim()
+  ) {
+    return null;
+  }
   if (!content.trim() && artifactIds.length === 0) {
     return null;
   }
@@ -179,6 +181,10 @@ function buildPreviewMarkdown({
 >): string {
   if (preview.documentText) {
     return preview.documentText;
+  }
+
+  if (layout === "document" && object.ref.kind === "articleDraft") {
+    return "";
   }
 
   const lines: string[] = [`# ${object.title}`];

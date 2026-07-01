@@ -28,11 +28,11 @@ describe("AgentChatPage 话题切换项目恢复", () => {
       JSON.stringify("project-topic"),
     );
 
-    const mounted = mountPage();
-    await flushEffects();
+    const mounted = mountPage({ agentEntry: "claw" });
+    await flushEffects(60);
 
     mounted.rerender({ initialSessionId: "topic-a" });
-    await flushEffects();
+    await flushEffects(60);
 
     expect(sharedSwitchTopicMock).toHaveBeenCalledWith(
       "topic-a",
@@ -53,11 +53,14 @@ describe("AgentChatPage 话题切换项目恢复", () => {
       JSON.stringify("topic-project"),
     );
 
-    const mounted = mountPage({ projectId: "locked-project" });
-    await flushEffects();
+    const mounted = mountPage({
+      agentEntry: "claw",
+      projectId: "locked-project",
+    });
+    await flushEffects(60);
 
     mounted.rerender({ initialSessionId: "topic-a" });
-    await flushEffects();
+    await flushEffects(60);
 
     expect(sharedSwitchTopicMock).not.toHaveBeenCalled();
     expect(mockToast.error).toHaveBeenCalledWith(
@@ -78,11 +81,11 @@ describe("AgentChatPage 话题切换项目恢复", () => {
       createProject("default-new"),
     );
 
-    const mounted = mountPage();
-    await flushEffects();
+    const mounted = mountPage({ agentEntry: "claw" });
+    await flushEffects(60);
 
     mounted.rerender({ initialSessionId: "topic-a" });
-    await flushEffects();
+    await flushEffects(60);
 
     expect(mockGetOrCreateDefaultProject).not.toHaveBeenCalled();
     expect(mockToast.info).not.toHaveBeenCalledWith(
@@ -112,8 +115,8 @@ describe("AgentChatPage 话题切换项目恢复", () => {
       warning: null,
     });
 
-    renderPage({ projectId: "default" });
-    await flushEffects();
+    renderPage({ agentEntry: "claw", projectId: "default" });
+    await flushEffects(60);
 
     expect(mockGetOrCreateDefaultProject).not.toHaveBeenCalled();
     expect(mockEnsureWorkspaceReady).not.toHaveBeenCalledWith(
@@ -141,8 +144,8 @@ describe("AgentChatPage 话题切换项目恢复", () => {
       warning: null,
     });
 
-    renderPage({ projectId: "workspace-default" });
-    await flushEffects();
+    renderPage({ agentEntry: "claw", projectId: "workspace-default" });
+    await flushEffects(60);
 
     expect(mockGetOrCreateDefaultProject).not.toHaveBeenCalled();
     expect(mockEnsureWorkspaceReady).toHaveBeenCalledWith("project-remembered");
@@ -181,7 +184,7 @@ describe("AgentChatPage 话题切换项目恢复", () => {
       showChatPanel: false,
       newChatAt: 1234567890,
     });
-    await flushEffects();
+    await flushEffects(60);
 
     expect(mockGetProject).not.toHaveBeenCalledWith("workspace-1");
     expect(mockGetOrCreateDefaultProject).not.toHaveBeenCalled();
@@ -226,8 +229,8 @@ describe("AgentChatPage 话题切换项目恢复", () => {
       }),
     );
 
-    renderPage();
-    await flushEffects(6);
+    renderPage({ agentEntry: "claw" });
+    await flushEffects(60);
 
     expect(mockGetOrCreateDefaultProject).not.toHaveBeenCalled();
     expect(mockEnsureWorkspaceReady).not.toHaveBeenCalledWith(
@@ -246,8 +249,8 @@ describe("AgentChatPage 话题切换项目恢复", () => {
       JSON.stringify("project-manual"),
     );
 
-    const mounted = mountPage();
-    await flushEffects();
+    const mounted = mountPage({ agentEntry: "claw" });
+    await flushEffects(60);
 
     expect(observedWorkspaceIds[observedWorkspaceIds.length - 1]).toBe(
       "project-manual",
@@ -255,7 +258,7 @@ describe("AgentChatPage 话题切换项目恢复", () => {
 
     mounted.rerender({ newChatAt: 2233445566 });
 
-    await flushEffects();
+    await flushEffects(60);
     expect(observedWorkspaceIds).toContain("");
     expect(observedWorkspaceIds[observedWorkspaceIds.length - 1]).toBe(
       "",

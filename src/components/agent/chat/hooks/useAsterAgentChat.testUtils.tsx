@@ -172,6 +172,7 @@ vi.mock("../utils/clawWorkspaceProviderSelection", () => ({
 
 import { useAsterAgentChat } from "./useAsterAgentChat";
 import { publishAgentRuntimeEvent } from "@/lib/api/agentRuntimeEvents";
+import { changeLimeLocale } from "@/i18n/createI18n";
 import {
   clearAllAgentStreamTextOverlays,
   getAgentStreamTextOverlay as readAgentStreamTextOverlay,
@@ -425,12 +426,13 @@ export function completedTurn(id = "turn-completed") {
   };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  await changeLimeLocale("zh-CN");
 
   mockInitAsterAgent.mockReset();
   mockSubmitAgentRuntimeTurn.mockReset();

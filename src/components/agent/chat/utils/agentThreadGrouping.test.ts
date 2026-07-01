@@ -5,9 +5,13 @@ import { SUPPORTED_LOCALES } from "@/i18n/locales";
 import type { AgentThreadItem } from "../types";
 import { buildAgentThreadDisplayModel } from "./agentThreadGrouping";
 
-function importedProcessResourceKeys(resource: Record<string, string>): string[] {
+function importedProcessResourceKeys(
+  resource: Record<string, string>,
+): string[] {
   return Object.keys(resource)
-    .filter((key) => key.startsWith("generalWorkbench.taskRail.importedProcess."))
+    .filter((key) =>
+      key.startsWith("generalWorkbench.taskRail.importedProcess."),
+    )
     .sort();
 }
 
@@ -528,6 +532,38 @@ describe("agentThreadGrouping", () => {
     );
   });
 
+  it("内容工厂文章工作流的已完成工具过程应默认展开", () => {
+    const items: AgentThreadItem[] = [
+      {
+        ...createBaseItem("content-factory-search-1", 1),
+        type: "web_search",
+        query: "golang 学习路径",
+        output: "检索到 3 条资料",
+        metadata: {
+          source: "content_factory_search_requests",
+          workflowKey: "content_article_workflow",
+        },
+      },
+      {
+        ...createBaseItem("content-factory-search-2", 2),
+        type: "web_search",
+        query: "golang 并发实践",
+        output: "检索到 2 条资料",
+        metadata: {
+          source: "legacy_tool_event",
+          workflow_key: "content_article_workflow",
+        },
+      },
+    ];
+
+    const model = buildAgentThreadDisplayModel(items);
+
+    expect(model.orderedBlocks).toHaveLength(1);
+    expect(model.orderedBlocks[0]?.kind).toBe("process");
+    expect(model.orderedBlocks[0]?.status).toBe("completed");
+    expect(model.orderedBlocks[0]?.defaultExpanded).toBe(true);
+  });
+
   it("本地历史导入混合推理过程仍应保留命令记录入口", () => {
     const importedMetadata = {
       imported: true,
@@ -626,8 +662,7 @@ describe("agentThreadGrouping", () => {
           "generalWorkbench.taskRail.importedProcess.open":
             "Expand imported process",
         };
-        const template =
-          defaults[key] ?? String(options?.defaultValue ?? key);
+        const template = defaults[key] ?? String(options?.defaultValue ?? key);
         return template.replace(
           /\{\{\s*count\s*\}\}/g,
           String(options?.count ?? ""),

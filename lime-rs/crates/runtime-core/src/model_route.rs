@@ -764,6 +764,80 @@ mod tests {
     }
 
     #[test]
+    fn image_task_route_uses_gemini_protocol_for_gemini_provider() {
+        let task_request = build_model_task_request(ModelTaskRequestInput {
+            task_kind: ModelTaskKind::ImageGenerate,
+            source: ModelTaskSource::MediaTaskArtifact,
+            provider_id: Some("google".to_string()),
+            model_id: Some("gemini-2.5-flash-image".to_string()),
+            model_ref_source: ModelRefSource::Task,
+            modality_contract_key: Some("image_generation".to_string()),
+            routing_slot: Some("image_generation_model".to_string()),
+            task_families: vec!["image_generation".to_string()],
+            input_modalities: vec!["text".to_string()],
+            output_modalities: vec!["image".to_string()],
+            runtime_features: Vec::new(),
+            capabilities: vec!["image_generation".to_string()],
+            session_id: None,
+            thread_id: None,
+            turn_id: None,
+            content_id: None,
+            trace_id: None,
+        });
+        let provider = ModelRouteProvider {
+            provider_id: "google",
+            provider_type: Cow::Borrowed("gemini"),
+            base_url: Some("https://generativelanguage.googleapis.com"),
+            api_version: None,
+            project: None,
+            location: None,
+            region: None,
+            credential_ref: Some("runtime-api-key-google".to_string()),
+            auth_header: "x-goog-api-key",
+            auth_prefix: None,
+            prompt_cache_mode: None,
+        };
+        let route = resolved_route_from_task(
+            &task_request,
+            ModelRouteSelection {
+                provider_id: "google",
+                model_id: "gemini-2.5-flash-image",
+                model_ref_source: ModelRefSource::Task,
+                reasoning_effort: None,
+            },
+            &json!({
+                "providerReadiness": {
+                    "ready": true,
+                    "status": "ready"
+                },
+                "routingMode": "task_route",
+                "decisionSource": "media_task_artifact",
+                "decisionReason": "explicit_task_model",
+                "serviceModelSlot": "image_generation_model",
+                "modelRegistry": {
+                    "source": "api",
+                    "reasonCode": "matched_media_task_model",
+                    "modelCapabilities": {
+                        "taskFamilies": ["image_generation"],
+                        "inputModalities": ["text"],
+                        "outputModalities": ["image"],
+                        "runtimeFeatures": [],
+                        "capabilities": {
+                            "vision": false
+                        }
+                    }
+                }
+            }),
+            Some(&provider),
+            None,
+        );
+
+        assert_eq!(route.protocol, ProtocolKind::GeminiGenerateContent);
+        assert_eq!(route.auth.header_name.as_deref(), Some("x-goog-api-key"));
+        assert!(route.failure.is_none());
+    }
+
+    #[test]
     fn chat_task_route_uses_responses_protocol_when_runtime_feature_declares_it() {
         let task_request = build_model_task_request(ModelTaskRequestInput {
             task_kind: ModelTaskKind::Chat,

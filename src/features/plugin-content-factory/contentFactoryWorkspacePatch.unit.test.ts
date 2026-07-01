@@ -35,7 +35,8 @@ const workspacePatch = {
       source: {
         taskKind: "content.article.generate",
         artifactIds: ["artifact-article-1"],
-        markdown: "# 标题\n\n首版文章正文。",
+        documentText: "# 标题\n\n首版文章正文。",
+        finalMarkdown: "# 标题\n\n首版文章正文。",
       },
     },
     {

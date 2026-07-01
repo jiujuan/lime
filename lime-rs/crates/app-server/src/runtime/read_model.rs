@@ -5,6 +5,7 @@ use super::coding_activity_projection;
 use super::event_request_id;
 use super::file_checkpoint_projection;
 use super::output_refs;
+use super::permission_state_projection;
 use super::raw_string_field;
 use super::status::agent_session_status_label;
 use super::status::agent_turn_is_active;
@@ -80,6 +81,7 @@ pub(super) fn runtime_session_read_detail_with_options(
     items.extend(file_checkpoint_projection::file_artifact_items_from_events(
         &stored.events,
     ));
+    items.extend(runtime_warning_items_from_events(stored));
     items.extend(runtime_error_items_from_events(stored));
     sort_read_detail_items(&mut items);
     let loaded_count = messages.len();
@@ -293,20 +295,10 @@ fn runtime_assistant_message_from_events(
     let mut timestamp_value: Option<&str> = None;
     for event in events.iter().filter(|event| {
         event.turn_id.as_deref() == Some(turn.turn_id.as_str())
-            && event.event_type == "message.delta"
+            && is_assistant_message_event_type(&event.event_type)
             && should_use_message_delta_as_final_text(event)
     }) {
-        if let Some(delta) = raw_string_field(
-            &event.payload,
-            &[
-                "text",
-                "delta",
-                "content",
-                "message",
-                "outputText",
-                "output_text",
-            ],
-        ) {
+        if let Some(delta) = assistant_message_text_from_payload(&event.payload) {
             text.push_str(&delta);
             timestamp_value = Some(event.timestamp.as_str());
         }
@@ -339,6 +331,101 @@ fn should_use_message_delta_as_final_text(event: &AgentEvent) -> bool {
             normalized == "final" || normalized == "final_answer"
         }
     }
+}
+
+fn is_assistant_message_event_type(event_type: &str) -> bool {
+    matches!(
+        event_type,
+        "message.delta" | "message.delta_batch" | "message.batch"
+    )
+}
+
+fn assistant_message_text_from_payload(payload: &serde_json::Value) -> Option<String> {
+    if let Some(text) = payload
+        .as_str()
+        .map(str::to_string)
+        .filter(|text| !text.is_empty())
+    {
+        return Some(text);
+    }
+    raw_string_field(
+        payload,
+        &[
+            "text",
+            "delta",
+            "content",
+            "message",
+            "outputText",
+            "output_text",
+        ],
+    )
+    .or_else(|| {
+        payload
+            .get("content")
+            .and_then(|content| raw_string_field(content, &["text", "message"]))
+    })
+    .or_else(|| {
+        for key in ["deltas", "messages", "items", "parts", "content"] {
+            let Some(values) = payload.get(key).and_then(serde_json::Value::as_array) else {
+                continue;
+            };
+            let text = values
+                .iter()
+                .filter_map(assistant_message_text_from_payload)
+                .collect::<String>();
+            if !text.is_empty() {
+                return Some(text);
+            }
+        }
+        None
+    })
+}
+
+fn runtime_warning_items_from_events(stored: &StoredSession) -> Vec<serde_json::Value> {
+    stored
+        .events
+        .iter()
+        .filter(|event| event.event_type == "runtime.warning")
+        .filter_map(|event| {
+            let message = runtime_warning_message_from_event(event)?;
+            let turn_id = event
+                .turn_id
+                .clone()
+                .or_else(|| stored.turns.last().map(|turn| turn.turn_id.clone()))?;
+            Some(json!({
+                "id": format!("{}:warning:{}", turn_id, event.event_id),
+                "thread_id": event.thread_id.clone().unwrap_or_else(|| stored.session.thread_id.clone()),
+                "turn_id": turn_id,
+                "sequence": event.sequence,
+                "type": "warning",
+                "status": "warning",
+                "message": message,
+                "started_at": event.timestamp,
+                "completed_at": event.timestamp,
+                "updated_at": event.timestamp,
+            }))
+        })
+        .collect()
+}
+
+fn runtime_warning_message_from_event(event: &AgentEvent) -> Option<String> {
+    if event.event_type != "runtime.warning" {
+        return None;
+    }
+    raw_string_field(
+        &event.payload,
+        &[
+            "message",
+            "warning",
+            "reason",
+            "detail",
+            "details",
+            "warning_message",
+            "warningMessage",
+        ],
+    )
+    .map(|message| message.trim().to_string())
+    .filter(|message| !message.is_empty())
 }
 
 fn runtime_error_items_from_events(stored: &StoredSession) -> Vec<serde_json::Value> {
@@ -406,6 +493,7 @@ fn runtime_thread_read_from_stored_session(
     article_workspace_actions: Vec<serde_json::Value>,
 ) -> serde_json::Value {
     let coding_activity = coding_activity_projection::coding_activity_from_events(stored);
+    let permission_state = permission_state_projection::permission_state_from_events(stored);
     let model_routing = latest_model_routing_from_events(&stored.events);
     let service_model_slot = model_routing
         .as_ref()
@@ -444,6 +532,7 @@ fn runtime_thread_read_from_stored_session(
         "execution_strategy": session_execution_strategy(&stored.session),
         "turns": stored.turns,
         "pending_requests": coding_activity.pending_requests,
+        "permission_state": permission_state,
         "queued_turns": queued_turn_snapshots(stored),
         "active_turn_id": active_turn_id,
         "active_command_id": coding_activity.active_command_id,

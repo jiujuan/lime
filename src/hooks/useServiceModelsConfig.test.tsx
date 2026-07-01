@@ -115,6 +115,7 @@ describe("useServiceModelsConfig", () => {
 
   it("禁用时仍允许发送前显式 refresh 配置", async () => {
     let latest: HookValue | null = null;
+    let refreshed: Awaited<ReturnType<HookValue["refresh"]>> | null = null;
     mockGetConfig.mockResolvedValue({
       workspace_preferences: {
         agent_response_language: "en-US",
@@ -139,7 +140,7 @@ describe("useServiceModelsConfig", () => {
       if (!latest) {
         throw new Error("hook value 尚未初始化");
       }
-      const refreshed = await latest.refresh();
+      refreshed = await latest.refresh();
       expect(mockGetConfig).toHaveBeenCalledWith(undefined);
       expect(refreshed).toEqual({
         agentResponseLanguage: "en-US",
@@ -150,9 +151,11 @@ describe("useServiceModelsConfig", () => {
           },
         },
       });
-      expect(latest).toMatchObject(refreshed);
     });
     await flushEffects();
+    expect(latest).not.toBeNull();
+    expect(refreshed).not.toBeNull();
+    expect(latest!).toMatchObject(refreshed!);
   });
 
   it("启用时配置变更应强制刷新", async () => {

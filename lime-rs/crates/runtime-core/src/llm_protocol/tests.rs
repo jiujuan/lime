@@ -255,6 +255,36 @@ fn openai_images_mapper_builds_images_generation_shape() {
 }
 
 #[test]
+fn openai_images_mapper_keeps_reference_images_for_edit_body() {
+    let mut metadata = std::collections::BTreeMap::new();
+    metadata.insert(
+        "reference_images".to_string(),
+        json!([
+            "https://cdn.example.test/ref.png",
+            "",
+            "data:image/png;base64,abc"
+        ]),
+    );
+    let request = LlmRequest {
+        messages: vec![LlmMessage::text(LlmRole::User, "Change the background")],
+        metadata,
+        ..empty_request()
+    };
+
+    let wire =
+        build_provider_wire_request(&route(ProtocolKind::OpenaiImages), &request).expect("wire");
+
+    assert_eq!(wire.path, "images/generations");
+    assert_eq!(
+        wire.body["images"],
+        json!([
+            { "image_url": "https://cdn.example.test/ref.png" },
+            { "image_url": "data:image/png;base64,abc" }
+        ])
+    );
+}
+
+#[test]
 fn openai_images_mapper_rejects_non_text_prompt_parts() {
     let request = LlmRequest {
         messages: vec![LlmMessage {
@@ -308,6 +338,7 @@ fn responses_image_generation_mapper_builds_tool_request_shape() {
         &ResponsesImageGenerationOptions {
             outer_model: Some(" gpt-5.5 ".to_string()),
             input_shape: ResponsesImageGenerationInputShape::PromptString,
+            reference_image_urls: Vec::new(),
         },
     )
     .expect("responses image generation wire");
@@ -336,6 +367,7 @@ fn responses_image_generation_mapper_can_build_input_list_retry_shape() {
         &ResponsesImageGenerationOptions {
             outer_model: None,
             input_shape: ResponsesImageGenerationInputShape::InputList,
+            reference_image_urls: Vec::new(),
         },
     )
     .expect("responses image generation wire");
@@ -348,6 +380,45 @@ fn responses_image_generation_mapper_can_build_input_list_retry_shape() {
     assert_eq!(
         wire.body["input"][0]["content"][0]["text"],
         json!("Generate one image")
+    );
+}
+
+#[test]
+fn responses_image_generation_mapper_keeps_reference_images_in_input_list() {
+    let request = LlmRequest {
+        messages: vec![LlmMessage::text(LlmRole::User, "Edit this image")],
+        ..empty_request()
+    };
+
+    let wire = build_responses_image_generation_wire_request(
+        &route(ProtocolKind::OpenaiResponses),
+        &request,
+        &ResponsesImageGenerationOptions {
+            outer_model: None,
+            input_shape: ResponsesImageGenerationInputShape::PromptString,
+            reference_image_urls: vec![
+                "https://cdn.example.test/ref.png".to_string(),
+                "data:image/png;base64,abc".to_string(),
+            ],
+        },
+    )
+    .expect("responses image generation wire");
+
+    assert_eq!(
+        wire.body["input"][0]["content"][0]["type"],
+        json!("input_text")
+    );
+    assert_eq!(
+        wire.body["input"][0]["content"][1]["type"],
+        json!("input_image")
+    );
+    assert_eq!(
+        wire.body["input"][0]["content"][1]["image_url"],
+        json!("https://cdn.example.test/ref.png")
+    );
+    assert_eq!(
+        wire.body["input"][0]["content"][2]["image_url"],
+        json!("data:image/png;base64,abc")
     );
 }
 

@@ -5,10 +5,12 @@ import {
   readFile,
   rm,
   stat,
+  writeFile,
 } from "node:fs/promises";
 import { createServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
+import { parse as parseYaml } from "yaml";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ElectronHostCommands } from "./hostCommands";
@@ -1147,6 +1149,94 @@ describe("ElectronHostCommands local file shell facade", () => {
   });
 });
 
+describe("ElectronHostCommands app config persistence", () => {
+  it("save_config 应只写入 App Server current config.yaml", async () => {
+    const userDataDir = await createTempUserDataDir();
+    const host = createHost(userDataDir);
+
+    await expect(
+      host.invoke("save_config", {
+        config: {
+          default_provider: "anthropic",
+          workspace_preferences: {
+            media_defaults: {
+              image: {
+                preferredProviderId: "relay-openai",
+                preferredModelId: "gpt-images-2",
+                allowFallback: true,
+              },
+            },
+          },
+        },
+      }),
+    ).resolves.toBeNull();
+
+    const yamlConfig = parseYaml(
+      await readFile(path.join(userDataDir, "config.yaml"), "utf8"),
+    ) as Record<string, unknown>;
+
+    expect(yamlConfig).toMatchObject({
+      workspace_preferences: {
+        media_defaults: {
+          image: {
+            preferredProviderId: "relay-openai",
+            preferredModelId: "gpt-images-2",
+            allowFallback: true,
+          },
+        },
+      },
+    });
+    await expect(stat(path.join(userDataDir, "config.json"))).rejects.toThrow();
+  });
+
+  it("get_config 应读取 App Server current config.yaml", async () => {
+    const userDataDir = await createTempUserDataDir();
+    await mkdir(userDataDir, { recursive: true });
+    await writeFile(
+      path.join(userDataDir, "config.yaml"),
+      [
+        "default_provider: yaml-provider",
+        "workspace_preferences:",
+        "  media_defaults:",
+        "    image:",
+        "      preferredProviderId: relay-openai",
+        "      preferredModelId: gpt-images-2",
+      ].join("\n"),
+      "utf8",
+    );
+
+    await expect(
+      createHost(userDataDir).invoke("get_config"),
+    ).resolves.toMatchObject({
+      default_provider: "yaml-provider",
+      workspace_preferences: {
+        media_defaults: {
+          image: {
+            preferredProviderId: "relay-openai",
+            preferredModelId: "gpt-images-2",
+          },
+        },
+      },
+    });
+  });
+
+  it("get_config 不再读取旧 config.json", async () => {
+    const userDataDir = await createTempUserDataDir();
+    await mkdir(userDataDir, { recursive: true });
+    await writeFile(
+      path.join(userDataDir, "config.json"),
+      JSON.stringify({ default_provider: "legacy-json-provider" }, null, 2),
+      "utf8",
+    );
+
+    await expect(
+      createHost(userDataDir).invoke("get_config"),
+    ).resolves.toMatchObject({
+      default_provider: "openai",
+    });
+  });
+});
+
 describe("ElectronHostCommands experimental config", () => {
   it("默认读取关闭的 WebMCP 预留配置", async () => {
     const userDataDir = await createTempUserDataDir();
@@ -1184,8 +1274,8 @@ describe("ElectronHostCommands experimental config", () => {
       webmcp: { enabled: true },
       update_check: { enabled: true },
     });
-    const savedConfig = JSON.parse(
-      await readFile(path.join(userDataDir, "config.json"), "utf8"),
+    const savedConfig = parseYaml(
+      await readFile(path.join(userDataDir, "config.yaml"), "utf8"),
     ) as Record<string, unknown>;
     expect(savedConfig.default_provider).toBe("anthropic");
   });

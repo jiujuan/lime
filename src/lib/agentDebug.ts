@@ -143,6 +143,11 @@ export function logAgentDebug(
   }
 
   const level = options.level ?? "info";
+  const throttleMs = options.throttleMs ?? 0;
+  if (options.dedupeKey && !shouldEmitLog(options.dedupeKey, throttleMs)) {
+    return;
+  }
+
   const sanitizedContext = sanitizeDebugValue(context ?? {}) as
     | Record<string, SerializableDebugValue>
     | undefined;
@@ -150,7 +155,7 @@ export function logAgentDebug(
     options.dedupeKey ??
     `${component}:${phase}:${JSON.stringify(sanitizedContext ?? {})}`;
 
-  if (!shouldEmitLog(dedupeKey, options.throttleMs ?? 0)) {
+  if (!options.dedupeKey && !shouldEmitLog(dedupeKey, throttleMs)) {
     return;
   }
 

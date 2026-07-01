@@ -800,7 +800,7 @@
   "agentChat.managedObjective.audit.artifactsLabel": "成果物（{{count}}）",
   "agentChat.managedObjective.audit.artifactsMore": "ほか {{count}} 件の成果物",
   "agentChat.inputIntent.imageGeneration.rules.includeAny": "画像 | イラスト | ポスター | カバー | キービジュアル | ビジュアル | 画面 | 描いて | 生成して | 画像を生成 | 画像を作成",
-  "agentChat.inputIntent.imageGeneration.rules.requireAny": "縦長 | 横長 | 正方形 | 比率 | サイズ | 余白 | 見出し領域 | 構図 | 配色 | 色調 | スタイル | 水彩 | 写真 | 映画風 | 背景 | 被写体 | タイポグラフィ | ブランドビジュアル | 1:1 | 3:4 | 4:5 | 9:16 | 16:9 | 4:3 | 3:2 | 2:3 | 21:9 | 5:4",
+  "agentChat.inputIntent.imageGeneration.rules.requireAny": "描いて | 生成して | 画像を生成 | 画像を作成 | 縦長 | 横長 | 正方形 | 比率 | サイズ | 余白 | 見出し領域 | 構図 | 配色 | 色調 | スタイル | 水彩 | 写真 | 映画風 | 背景 | 被写体 | タイポグラフィ | ブランドビジュアル | 1:1 | 3:4 | 4:5 | 9:16 | 16:9 | 4:3 | 3:2 | 2:3 | 21:9 | 5:4",
   "agentChat.inputIntent.imageGeneration.rules.excludeAny": "プロンプト | prompt | 案 | 文章 | 分析 | 説明 | 書き換え | 推敲 | 翻訳 | 要約 | だけ | 生成しない | 描かない | 画像不要",
   "agentChat.inputIntent.imageGeneration.systemPrompt": "あなたは Lime のチャット入口の意図確認役です。\nユーザーは明示的な画像生成コマンドを使っていませんが、この入力は画像生成の依頼かもしれません。\nこの一文だけを返してください：{{confirmation}}\n案、完全なプロンプト、草案、タスク状態は書かず、画像ツールも呼び出さないでください。",
   "agentChat.threadReliability.panel.projection.metric.action": "操作 / HITL",

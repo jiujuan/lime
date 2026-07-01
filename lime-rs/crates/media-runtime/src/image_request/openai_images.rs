@@ -1,0 +1,271 @@
+use runtime_core::{build_openai_images_generation_body, LlmMessage, LlmRequest, LlmRole};
+use serde_json::{json, Value};
+
+use crate::{ImageGenerationRunnerConfig, TaskErrorRecord};
+
+use super::{
+    build_image_provider_http_error, build_image_task_error, read_response_error_code,
+    read_response_error_message, summarize_response_body, ImageGenerationRequestInput,
+};
+
+pub(super) async fn request_single_image_generation(
+    client: &reqwest::Client,
+    runner_config: &ImageGenerationRunnerConfig,
+    prepared_input: &ImageGenerationRequestInput,
+    request_prompt: &str,
+    task_id: &str,
+) -> Result<(Value, Value), TaskErrorRecord> {
+    let request_body =
+        build_image_generation_request_body(prepared_input, request_prompt, 1, task_id)?;
+
+    let endpoint = image_endpoint_for_reference_images(
+        &runner_config.endpoint,
+        !prepared_input.reference_image_urls.is_empty(),
+    );
+    let mut request_builder = client
+        .post(&endpoint)
+        .header("Authorization", format!("Bearer {}", runner_config.api_key));
+    if let Some(provider_id) = prepared_input
+        .provider_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        request_builder = request_builder.header("X-Provider-Id", provider_id);
+    }
+
+    let response = request_builder
+        .json(&request_body)
+        .send()
+        .await
+        .map_err(|error| {
+            build_image_task_error(
+                "image_request_failed",
+                format!("调用图片服务失败: {error}"),
+                true,
+                "request",
+            )
+        })?;
+
+    let status = response.status();
+    let response_body_raw = response.text().await.map_err(|error| {
+        build_image_task_error(
+            "image_response_read_failed",
+            format!("读取图片服务响应失败: {error}"),
+            false,
+            "response",
+        )
+    })?;
+
+    if !status.is_success() {
+        let response_body: Option<Value> = serde_json::from_str(&response_body_raw).ok();
+        let provider_code = response_body
+            .as_ref()
+            .and_then(|body| read_response_error_code(body, &[&["error", "code"], &["code"]]));
+        let error_message = response_body
+            .as_ref()
+            .and_then(|body| {
+                read_response_error_message(body, &[&["error", "message"], &["message"]])
+            })
+            .unwrap_or_else(|| summarize_response_body(&response_body_raw));
+        return Err(build_image_provider_http_error(
+            status,
+            provider_code,
+            error_message,
+            "request",
+            None,
+        ));
+    }
+
+    let response_body: Value = serde_json::from_str(&response_body_raw).map_err(|error| {
+        let detail = summarize_response_body(&response_body_raw);
+        build_image_task_error(
+            "image_response_parse_failed",
+            format!("解析图片服务响应失败: {error}；{detail}"),
+            false,
+            "response",
+        )
+    })?;
+
+    let image = collect_generated_images(&response_body).into_iter().next();
+    let Some(image) = image else {
+        return Err(build_image_task_error(
+            "image_result_empty",
+            "图片服务已返回成功，但没有可用的图片地址",
+            false,
+            "result",
+        ));
+    };
+
+    Ok((image, response_body))
+}
+
+pub(super) fn build_openai_compatible_image_generation_llm_request(
+    prepared_input: &ImageGenerationRequestInput,
+    request_prompt: &str,
+    task_id: &str,
+    count: Option<u32>,
+) -> LlmRequest {
+    let mut metadata = std::collections::BTreeMap::new();
+    if let Some(count) = count {
+        metadata.insert("n".to_string(), json!(count.max(1)));
+    }
+    if let Some(size) = prepared_input
+        .size
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        metadata.insert("size".to_string(), json!(size));
+    }
+    metadata.insert("response_format".to_string(), json!("b64_json"));
+    metadata.insert("user".to_string(), json!(task_id));
+    if let Some(style) = prepared_input
+        .style
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        metadata.insert("style".to_string(), json!(style));
+    }
+    if !prepared_input.reference_image_urls.is_empty() {
+        metadata.insert(
+            "reference_images".to_string(),
+            Value::Array(
+                prepared_input
+                    .reference_image_urls
+                    .iter()
+                    .map(|image_url| json!(image_url))
+                    .collect(),
+            ),
+        );
+    }
+
+    LlmRequest {
+        instructions: None,
+        messages: vec![LlmMessage::text(LlmRole::User, request_prompt)],
+        tools: Vec::new(),
+        temperature: None,
+        max_output_tokens: None,
+        stream: false,
+        reasoning_effort: None,
+        metadata,
+    }
+}
+
+fn build_image_generation_request_body(
+    prepared_input: &ImageGenerationRequestInput,
+    request_prompt: &str,
+    request_count: u32,
+    task_id: &str,
+) -> Result<Value, TaskErrorRecord> {
+    let request = build_openai_compatible_image_generation_llm_request(
+        prepared_input,
+        request_prompt,
+        task_id,
+        Some(request_count.max(1)),
+    );
+    build_openai_images_generation_body(&prepared_input.model, &request).map_err(|error| {
+        build_image_task_error(
+            "image_request_mapping_failed",
+            format!("构建图片生成请求失败: {error}"),
+            false,
+            "request",
+        )
+    })
+}
+
+fn collect_generated_images(response_body: &Value) -> Vec<Value> {
+    response_body
+        .get("data")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| {
+                    let record = item.as_object()?;
+                    let url = record
+                        .get("url")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .map(ToOwned::to_owned)
+                        .or_else(|| {
+                            record
+                                .get("b64_json")
+                                .and_then(Value::as_str)
+                                .map(str::trim)
+                                .filter(|value| !value.is_empty())
+                                .map(|value| format!("data:image/png;base64,{value}"))
+                        })?;
+                    Some(json!({
+                        "url": url,
+                        "revised_prompt": record
+                            .get("revised_prompt")
+                            .and_then(Value::as_str)
+                            .map(str::trim)
+                            .filter(|value| !value.is_empty()),
+                    }))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn image_endpoint_for_reference_images(endpoint: &str, has_reference_images: bool) -> String {
+    if !has_reference_images {
+        return endpoint.to_string();
+    }
+
+    let trimmed = endpoint.trim().trim_end_matches('/');
+    let (base, query) = trimmed
+        .split_once('?')
+        .map(|(left, right)| (left, Some(right)))
+        .unwrap_or((trimmed, None));
+    let edit_base = if base.ends_with("/v1/images/generations") {
+        format!(
+            "{}/v1/images/edits",
+            base.trim_end_matches("/v1/images/generations")
+        )
+    } else if base.ends_with("/images/generations") {
+        format!(
+            "{}/images/edits",
+            base.trim_end_matches("/images/generations")
+        )
+    } else if base.ends_with("/v1/images/edits") || base.ends_with("/images/edits") {
+        base.to_string()
+    } else if base.ends_with("/v1") {
+        format!("{base}/images/edits")
+    } else {
+        format!("{base}/v1/images/edits")
+    };
+
+    match query {
+        Some(value) if !value.is_empty() => format!("{edit_base}?{value}"),
+        _ => edit_base,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn image_endpoint_for_reference_images_uses_edit_endpoint() {
+        assert_eq!(
+            image_endpoint_for_reference_images("https://gateway.test/v1/images/generations", true),
+            "https://gateway.test/v1/images/edits"
+        );
+        assert_eq!(
+            image_endpoint_for_reference_images("https://gateway.test/v1?tenant=1", true),
+            "https://gateway.test/v1/images/edits?tenant=1"
+        );
+        assert_eq!(
+            image_endpoint_for_reference_images(
+                "https://gateway.test/v1/images/generations",
+                false
+            ),
+            "https://gateway.test/v1/images/generations"
+        );
+    }
+}

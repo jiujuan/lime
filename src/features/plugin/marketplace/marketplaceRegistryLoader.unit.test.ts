@@ -5,6 +5,7 @@ import contentFactoryFixtureData from "@/features/agent-app/fixtures/content-fac
 import { buildInstalledAgentAppState } from "@/features/agent-app/install/installedAppState";
 import { buildInstalledAppPreview } from "@/features/agent-app/install/installedAppPreview";
 import { buildAgentAppLabResolvedSetupState } from "@/features/agent-app/install/labInstallFlow";
+import { buildLocalAgentAppSourceState } from "@/features/agent-app/install/installReview";
 import { buildPackageIdentity } from "@/features/agent-app/install/packageIdentity";
 import type { AgentAppCloudCatalogResult } from "@/lib/api/agentApps";
 import type {
@@ -375,12 +376,7 @@ describe("plugin marketplace registry loader", () => {
         manifestVersion: staleState.manifest.manifestVersion,
         sourceKind: staleState.identity.sourceKind,
         sourceUri: staleState.identity.sourceUri,
-        sourceState: {
-          kind: "local-selected",
-          labelKey: "agentApp.apps.sourceState.localSelected",
-          tone: "sky",
-          canReview: true,
-        },
+        sourceState: buildLocalAgentAppSourceState(),
         packageHash: staleState.identity.packageHash,
         manifestHash: staleState.identity.manifestHash,
         entryCount: staleState.projection.entries.length,

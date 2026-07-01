@@ -82,6 +82,7 @@ fn parse_args() -> anyhow::Result<CliConfig> {
 async fn build_app_server(config: &CliConfig) -> anyhow::Result<AppServer> {
     let initialized = initialize_database(config)?;
     let db = initialized.db;
+    let _image_task_worker_scheduler = app_server::spawn_image_task_worker_scheduler(db.clone());
     let data_root = initialized
         .storage_roots
         .as_ref()

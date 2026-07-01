@@ -23,7 +23,6 @@ import type {
 import type { AgentAppRightSurfaceLaunchTarget } from "@/features/agent-app/ui/agentAppRightSurfaceLaunch";
 import { AutomationPage } from "./automation";
 import { ImConfigPage } from "./channels/ImConfigPage";
-import { AgentChatPage } from "./agent/chat";
 import { SettingsPageV2 } from "./settings-v2";
 
 const PageWrapper = styled.div<{ $isActive: boolean }>`
@@ -77,6 +76,10 @@ const loadBrowserRuntimeWorkspace = () =>
   import("@/features/browser-runtime").then((module) => ({
     default: module.BrowserRuntimeWorkspace,
   }));
+const loadAgentChatPage = () =>
+  import("./agent/chat").then((module) => ({
+    default: module.AgentChatPage,
+  }));
 
 const ResourcesPage = lazy(loadResourcesPage);
 const SkillsWorkspacePage = lazy(loadSkillsWorkspacePage);
@@ -87,94 +90,13 @@ const AgentAppsPage = lazy(loadAgentAppsPage);
 const AgentAppRuntimePage = lazy(loadAgentAppRuntimePage);
 const ExpertPlazaPage = lazy(loadExpertPlazaPage);
 const BrowserRuntimeWorkspace = lazy(loadBrowserRuntimeWorkspace);
-
-function serializeInitialInputCapabilityKey(params: AgentPageParams): string {
-  const route = params.initialInputCapability?.capabilityRoute;
-  if (!route) {
-    return "::0";
-  }
-
-  const routeKey =
-    route.kind === "installed_skill"
-      ? route.skillKey
-      : route.kind === "builtin_command"
-        ? route.commandKey
-        : route.kind === "runtime_scene"
-          ? route.sceneKey
-          : route.taskId;
-
-  return `${route.kind}:${routeKey}:${params.initialInputCapability?.requestKey ?? 0}`;
-}
-
-function serializeInitialKnowledgePackSelectionKey(
-  params: AgentPageParams,
-): string {
-  const selection = params.initialKnowledgePackSelection;
-  if (!selection) {
-    return "::0";
-  }
-
-  const companionKey = (selection.companionPacks ?? [])
-    .map((pack) => ({
-      name: pack.name.trim(),
-      activation: pack.activation ?? "",
-    }))
-    .filter((pack) => pack.name)
-    .sort((left, right) =>
-      `${left.name}:${left.activation}`.localeCompare(
-        `${right.name}:${right.activation}`,
-      ),
-    );
-
-  return JSON.stringify({
-    enabled: selection.enabled,
-    workingDir: selection.workingDir,
-    packName: selection.packName,
-    companionPacks: companionKey,
-  });
-}
-
-function serializeExpertAgentLaunchKey(params: AgentPageParams): string {
-  const launch = params.expertAgentLaunch;
-  if (!launch) {
-    return "";
-  }
-  return [
-    launch.agentInstanceKey,
-    launch.launchMode,
-    launch.expertId,
-    launch.releaseId,
-  ].join(":");
-}
-
-function serializeAgentChatPageInstanceKey(params: AgentPageParams): string {
-  return [
-    params.projectId || "",
-    params.contentId || "",
-    params.theme || "",
-    params.lockTheme ? "1" : "0",
-    params.agentEntry || "claw",
-    params.immersiveHome ? "immersive" : "standard",
-    params.preferHomeForInitialInputCapability
-      ? "home-input"
-      : "workspace-input",
-    params.initialPendingServiceSkillLaunch?.skillId || "",
-    params.initialPendingServiceSkillLaunch?.requestKey ?? 0,
-    params.initialSessionId || "",
-    serializeInitialInputCapabilityKey(params),
-    serializeInitialKnowledgePackSelectionKey(params),
-    params.initialProjectFileOpenTarget?.relativePath || "",
-    params.initialProjectFileOpenTarget?.requestKey ?? 0,
-    serializeExpertAgentLaunchKey(params),
-  ].join(":");
-}
+const AgentChatPage = lazy(loadAgentChatPage);
 
 interface AppPageContentProps {
   currentPage: Page;
   pageParams: PageParams;
   requestedPage?: Page;
   requestedPageParams?: PageParams;
-  navigationRequestId?: number;
   onNavigate: (page: Page, params?: PageParams) => void;
   onAgentHasMessagesChange: (hasMessages: boolean) => void;
   onAgentSessionChange?: (sessionId: string | null) => void;
@@ -248,7 +170,6 @@ export function AppPageContent({
     return (
       <div style={columnPageStyle}>
         <AgentChatPage
-          key={serializeAgentChatPageInstanceKey(agentPageParams)}
           onNavigate={onNavigate}
           projectId={agentPageParams.projectId}
           contentId={agentPageParams.contentId}

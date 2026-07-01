@@ -18,8 +18,73 @@ function normalizePageParams(params?: PageParams): PageParams {
   return params ? { ...params } : {};
 }
 
+type SerializableNavigationValue =
+  | null
+  | boolean
+  | number
+  | string
+  | SerializableNavigationValue[]
+  | { [key: string]: SerializableNavigationValue };
+
+function normalizeNavigationParamValue(
+  value: unknown,
+  insideArray = false,
+): SerializableNavigationValue | undefined {
+  if (
+    value === undefined ||
+    typeof value === "function" ||
+    typeof value === "symbol"
+  ) {
+    return insideArray ? null : undefined;
+  }
+
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "boolean"
+  ) {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  if (typeof value === "bigint") {
+    throw new TypeError("BigInt values are not supported in navigation params");
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(
+      (item) => normalizeNavigationParamValue(item, true) ?? null,
+    );
+  }
+
+  if (typeof value === "object") {
+    const toJson = (value as { toJSON?: unknown }).toJSON;
+    if (typeof toJson === "function") {
+      return normalizeNavigationParamValue(
+        (toJson as () => unknown).call(value),
+        insideArray,
+      );
+    }
+
+    const record = value as Record<string, unknown>;
+    const normalized: { [key: string]: SerializableNavigationValue } = {};
+    for (const key of Object.keys(record).sort()) {
+      const normalizedValue = normalizeNavigationParamValue(record[key]);
+      if (normalizedValue !== undefined) {
+        normalized[key] = normalizedValue;
+      }
+    }
+    return normalized;
+  }
+
+  return insideArray ? null : undefined;
+}
+
 function serializePageParams(params: PageParams): string {
-  return JSON.stringify(params);
+  return JSON.stringify(normalizeNavigationParamValue(params) ?? {});
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

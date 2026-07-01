@@ -25,6 +25,27 @@ interface HookHarness {
 
 const mountedRoots: MountedRoot[] = [];
 
+function createImageProviders() {
+  return [
+    {
+      id: "zhipuai",
+      type: "zhipuai",
+      name: "智谱AI",
+      enabled: true,
+      api_key_count: 1,
+      api_host: "https://api.zhipu.test",
+    },
+    {
+      id: "fal",
+      type: "fal",
+      name: "Fal",
+      enabled: true,
+      api_key_count: 1,
+      api_host: "https://fal.run",
+    },
+  ];
+}
+
 function mountHook(preferredProviderId?: string): HookHarness {
   let hookValue: ReturnType<typeof useImageGen> | null = null;
 
@@ -135,28 +156,12 @@ async function waitForReady(harness: HookHarness, timeout = 40): Promise<void> {
 
 beforeEach(() => {
   setReactActEnvironment();
-  const providers = [
-    {
-      id: "zhipuai",
-      type: "zhipuai",
-      name: "智谱AI",
-      enabled: true,
-      api_key_count: 1,
-      api_host: "https://api.zhipu.test",
-    },
-    {
-      id: "fal",
-      type: "fal",
-      name: "Fal",
-      enabled: true,
-      api_key_count: 1,
-      api_host: "https://fal.run",
-    },
-  ];
+  const providers = createImageProviders();
   mockUseApiKeyProvider.mockImplementation(
     (options?: { autoLoad?: boolean }) => ({
       providers: options?.autoLoad === false ? [] : providers,
       loading: false,
+      refresh: vi.fn(async () => undefined),
     }),
   );
 });
@@ -235,6 +240,7 @@ describe("useImageGen 项目偏好", () => {
       (options?: { autoLoad?: boolean }) => ({
         providers: options?.autoLoad === false ? [] : providers,
         loading: false,
+        refresh: vi.fn(async () => undefined),
       }),
     );
     const harness = mountHookWithOptions({});
@@ -277,7 +283,22 @@ describe("useImageGen 项目偏好", () => {
     expect(harness.getValue().availableProviders).toEqual([]);
 
     await act(async () => {
-      harness.getValue().ensureProvidersLoaded();
+      await harness.getValue().ensureProvidersLoaded();
+      await flushEffects();
+    });
+
+    expect(mockUseApiKeyProvider).toHaveBeenLastCalledWith({
+      autoLoad: true,
+    });
+  });
+
+  it("显式请求 Provider 加载时应立即打开加载闸门", async () => {
+    const harness = mountHookWithOptions({
+      providerLoadMode: "deferred",
+    });
+
+    await act(async () => {
+      await harness.getValue().ensureProvidersLoaded();
       await flushEffects();
     });
 

@@ -101,14 +101,9 @@ describe("AgentChatPage 任务中心顶部工具区", () => {
     expect(
       container.querySelector('[data-testid="task-center-tab-strip"]'),
     ).toBeNull();
-    expect(
-      container.querySelector(
-        '[data-testid="task-center-home-top-toolbar-host"]',
-      ),
-    ).not.toBeNull();
-    expect(
-      container.querySelector('[data-testid="task-center-utility-toolbar"]'),
-    ).not.toBeNull();
+    expect(mockUseAgentChatUnified).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId: "workspace-test" }),
+    );
   });
 
   it("默认 Claw 对话不应提前触发完整 Harness 派生", async () => {
@@ -279,12 +274,15 @@ describe("AgentChatPage 任务中心顶部工具区", () => {
     });
     await flushEffects();
 
-    expect(mockUseTrayModelShortcuts).toHaveBeenCalledWith(
-      expect.objectContaining({
-        autoSyncEnabled: false,
-        deferInitialSync: true,
-      }),
-    );
+    expect(mockUseTrayModelShortcuts).toHaveBeenCalled();
+    for (const [options] of mockUseTrayModelShortcuts.mock.calls) {
+      expect(options).toEqual(
+        expect.objectContaining({
+          autoSyncEnabled: false,
+          deferInitialSync: true,
+        }),
+      );
+    }
   });
 
   it("默认 Claw 对话不应提前渲染专家信息面板", async () => {
@@ -381,6 +379,7 @@ describe("AgentChatPage 任务中心顶部工具区", () => {
           id: "topic-current",
           title: "当前会话",
           updatedAt: new Date(FIXED_TOPIC_UPDATED_AT),
+          workspaceId: "workspace-test",
         },
       ],
     });
@@ -401,7 +400,12 @@ describe("AgentChatPage 任务中心顶部工具区", () => {
     const { container } = mounted;
     await flushEffects();
 
-    expect(requestTaskCenterDraftTask({ source: "sidebar" })).toBe(true);
+    expect(
+      requestTaskCenterDraftTask({
+        source: "sidebar",
+        projectId: "workspace-test",
+      }),
+    ).toBe(true);
     await flushEffects();
     mounted.rerender();
     await flushEffects();
@@ -449,6 +453,7 @@ describe("AgentChatPage 任务中心顶部工具区", () => {
           id: "topic-current",
           title: "当前会话",
           updatedAt: new Date(FIXED_TOPIC_UPDATED_AT),
+          workspaceId: "workspace-test",
         },
       ],
     });
@@ -467,7 +472,12 @@ describe("AgentChatPage 任务中心顶部工具区", () => {
     const { container } = mounted;
     await flushEffects();
 
-    expect(requestTaskCenterDraftTask({ source: "sidebar" })).toBe(true);
+    expect(
+      requestTaskCenterDraftTask({
+        source: "sidebar",
+        projectId: "workspace-test",
+      }),
+    ).toBe(true);
     await flushEffects();
     mounted.rerender();
     await flushEffects();

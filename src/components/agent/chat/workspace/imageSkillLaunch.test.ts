@@ -42,6 +42,7 @@ describe("resolveImageWorkbenchSkillRequest", () => {
         raw_text: rawText,
         provider_id: "fal",
         model: "fal-ai/nano-banana-pro",
+        executor_mode: "images_api",
         entry_source: "at_image_command",
         modality_contract_key: "image_generation",
         modality: "image",
@@ -92,5 +93,78 @@ describe("resolveImageWorkbenchSkillRequest", () => {
     expect(serializedContext).not.toMatch(
       new RegExp(["ri", "bbi"].join(""), "i"),
     );
+  });
+
+  it("应忽略图片工作台占位模型，交由后端图片默认模型补齐", () => {
+    const rawText = "@配图 画一张广州夏天的图";
+    const parsedCommand = parseImageWorkbenchCommand(rawText);
+
+    const skillRequest = resolveImageWorkbenchSkillRequest({
+      rawText,
+      parsedCommand: parsedCommand!,
+      images: [],
+      currentImageWorkbenchState: createInitialSessionImageWorkbenchState(),
+      imageWorkbenchSelectedProviderId:
+        "custom-637ea2d5-e430-43de-86de-39c5f1735438",
+      imageWorkbenchSelectedModelId: "default",
+      imageWorkbenchSelectedSize: "1024x1024",
+      imageWorkbenchSessionKey: "session-image-1",
+      projectId: "project-image-1",
+      projectRootPath: "/workspace/project-image-1",
+      contentId: "content-image-1",
+    });
+
+    expect(skillRequest?.requestContext).toMatchObject({
+      kind: "image_task",
+      image_task: {
+        prompt: "画一张广州夏天的图",
+        provider_id: "custom-637ea2d5-e430-43de-86de-39c5f1735438",
+        model: undefined,
+      },
+    });
+    expect(JSON.stringify(skillRequest?.requestContext)).not.toContain(
+      '"model":"default"',
+    );
+  });
+
+  it("文稿 inline 配图应保留既有配图位和锚点上下文", () => {
+    const rawText = "@配图 生成 桌面端内容工厂写作流程图，中文标签";
+    const parsedCommand = parseImageWorkbenchCommand(rawText);
+
+    const skillRequest = resolveImageWorkbenchSkillRequest({
+      rawText,
+      parsedCommand: parsedCommand!,
+      images: [],
+      currentImageWorkbenchState: createInitialSessionImageWorkbenchState(),
+      imageWorkbenchSelectedProviderId: "openai",
+      imageWorkbenchSelectedModelId: "gpt-image-2",
+      imageWorkbenchSelectedSize: "1024x1024",
+      imageWorkbenchSessionKey: "session-image-1",
+      projectId: "project-image-1",
+      projectRootPath: "/workspace/project-image-1",
+      contentId: "content-image-1",
+      applyTarget: {
+        kind: "canvas-insert",
+        canvasType: "document",
+        anchorHint: "section_end",
+        slotId: "hero",
+        sectionTitle: "开场",
+        anchorText: "首图",
+        actionLabel: "插入文稿",
+        dispatchLabel: "已切回文稿，正在插入图片",
+      },
+    });
+
+    expect(skillRequest?.requestContext).toMatchObject({
+      kind: "image_task",
+      image_task: {
+        usage: "document-inline",
+        slot_id: "hero",
+        anchor_hint: "section_end",
+        anchor_section_title: "开场",
+        anchor_text: "首图",
+        requested_target: "generate",
+      },
+    });
   });
 });

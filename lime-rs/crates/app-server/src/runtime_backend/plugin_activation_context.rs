@@ -21,6 +21,7 @@ struct PluginActivationContext {
     selected_object_ref: Option<PluginObjectRef>,
     opened_tabs: Vec<String>,
     context_source: Option<String>,
+    runtime_readiness: Option<PluginRuntimeReadiness>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -32,6 +33,27 @@ struct PluginObjectRef {
     artifact_ids: Vec<String>,
     source_turn_id: Option<String>,
     source_task_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PluginRuntimeReadiness {
+    status: String,
+    connector_refs: Vec<String>,
+    hook_refs: Vec<String>,
+    cli_refs: Vec<String>,
+    connectors: Vec<PluginRuntimeReadinessItem>,
+    hooks: Vec<PluginRuntimeReadinessItem>,
+    clis: Vec<PluginRuntimeReadinessItem>,
+    blocker_codes: Vec<String>,
+    warning_codes: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PluginRuntimeReadinessItem {
+    id: String,
+    status: String,
+    source: Option<String>,
+    reason_codes: Vec<String>,
 }
 
 pub(super) fn append_plugin_activation_context_to_system_prompt(
@@ -102,6 +124,10 @@ fn parse_plugin_activation(value: &Value) -> Option<PluginActivationContext> {
                 .or_else(|| object.get("openedTabs")),
         ),
         context_source: read_string(value, &["context_source", "contextSource"]),
+        runtime_readiness: object
+            .get("runtime_readiness")
+            .or_else(|| object.get("runtimeReadiness"))
+            .and_then(parse_plugin_runtime_readiness),
     })
 }
 
@@ -119,6 +145,59 @@ fn parse_plugin_object_ref(value: &Value) -> Option<PluginObjectRef> {
         ),
         source_turn_id: read_string(value, &["source_turn_id", "sourceTurnId"]),
         source_task_id: read_string(value, &["source_task_id", "sourceTaskId"]),
+    })
+}
+
+fn parse_plugin_runtime_readiness(value: &Value) -> Option<PluginRuntimeReadiness> {
+    let object = value.as_object()?;
+    Some(PluginRuntimeReadiness {
+        status: read_string(value, &["status"])?,
+        connector_refs: read_string_array(
+            object
+                .get("connector_refs")
+                .or_else(|| object.get("connectorRefs")),
+        ),
+        hook_refs: read_string_array(object.get("hook_refs").or_else(|| object.get("hookRefs"))),
+        cli_refs: read_string_array(object.get("cli_refs").or_else(|| object.get("cliRefs"))),
+        connectors: parse_plugin_runtime_readiness_items(object.get("connectors")),
+        hooks: parse_plugin_runtime_readiness_items(object.get("hooks")),
+        clis: parse_plugin_runtime_readiness_items(object.get("clis")),
+        blocker_codes: read_string_array(
+            object
+                .get("blocker_codes")
+                .or_else(|| object.get("blockerCodes")),
+        ),
+        warning_codes: read_string_array(
+            object
+                .get("warning_codes")
+                .or_else(|| object.get("warningCodes")),
+        ),
+    })
+}
+
+fn parse_plugin_runtime_readiness_items(value: Option<&Value>) -> Vec<PluginRuntimeReadinessItem> {
+    value
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(parse_plugin_runtime_readiness_item)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn parse_plugin_runtime_readiness_item(value: &Value) -> Option<PluginRuntimeReadinessItem> {
+    let object = value.as_object()?;
+    Some(PluginRuntimeReadinessItem {
+        id: read_string(value, &["id"])?,
+        status: read_string(value, &["status"])?,
+        source: read_string(value, &["source"]),
+        reason_codes: read_string_array(
+            object
+                .get("reason_codes")
+                .or_else(|| object.get("reasonCodes")),
+        ),
     })
 }
 
@@ -181,8 +260,57 @@ fn render_plugin_activation_context(context: &PluginActivationContext) -> String
         lines.push(format!("- opened_tabs: {}", context.opened_tabs.join(", ")));
     }
     push_optional_line(&mut lines, "context_source", &context.context_source);
+    if let Some(readiness) = &context.runtime_readiness {
+        render_plugin_runtime_readiness(&mut lines, readiness);
+    }
     lines.push("</plugin_activation_context>".to_string());
     lines.join("\n")
+}
+
+fn render_plugin_runtime_readiness(lines: &mut Vec<String>, readiness: &PluginRuntimeReadiness) {
+    lines.push("- runtime_readiness:".to_string());
+    lines.push(format!("  - status: {}", readiness.status));
+    push_runtime_readiness_refs(lines, "connector_refs", &readiness.connector_refs);
+    push_runtime_readiness_refs(lines, "hook_refs", &readiness.hook_refs);
+    push_runtime_readiness_refs(lines, "cli_refs", &readiness.cli_refs);
+    push_runtime_readiness_items(lines, "connectors", &readiness.connectors);
+    push_runtime_readiness_items(lines, "hooks", &readiness.hooks);
+    push_runtime_readiness_items(lines, "clis", &readiness.clis);
+    push_runtime_readiness_refs(lines, "blocker_codes", &readiness.blocker_codes);
+    push_runtime_readiness_refs(lines, "warning_codes", &readiness.warning_codes);
+}
+
+fn push_runtime_readiness_refs(lines: &mut Vec<String>, label: &str, refs: &[String]) {
+    if !refs.is_empty() {
+        lines.push(format!("  - {label}: {}", refs.join(", ")));
+    }
+}
+
+fn push_runtime_readiness_items(
+    lines: &mut Vec<String>,
+    label: &str,
+    items: &[PluginRuntimeReadinessItem],
+) {
+    if items.is_empty() {
+        return;
+    }
+    lines.push(format!("  - {label}:"));
+    for item in items {
+        let source = item
+            .source
+            .as_deref()
+            .map(|value| format!(", source={value}"))
+            .unwrap_or_default();
+        let reasons = if item.reason_codes.is_empty() {
+            String::new()
+        } else {
+            format!(", reasons={}", item.reason_codes.join("|"))
+        };
+        lines.push(format!(
+            "    - {}: {}{}{}",
+            item.id, item.status, source, reasons
+        ));
+    }
 }
 
 fn push_optional_line(lines: &mut Vec<String>, label: &str, value: &Option<String>) {
@@ -261,7 +389,36 @@ mod tests {
                         "artifact_ids": ["artifact-1"]
                     },
                     "opened_tabs": ["articleWorkspace"],
-                    "context_source": "user"
+                    "context_source": "user",
+                    "runtime_readiness": {
+                        "status": "declared",
+                        "connector_refs": ["web-research"],
+                        "hook_refs": ["prompt-submit"],
+                        "cli_refs": ["content-factory"],
+                        "connectors": [
+                            {
+                                "id": "web-research",
+                                "status": "declared",
+                                "source": "runtime_registry",
+                                "reason_codes": ["PLUGIN_RUNTIME_REGISTRY_DECLARED"]
+                            }
+                        ],
+                        "hooks": [
+                            {
+                                "id": "prompt-submit",
+                                "status": "ready",
+                                "source": "manifest_declaration"
+                            }
+                        ],
+                        "clis": [
+                            {
+                                "id": "content-factory",
+                                "status": "ready",
+                                "source": "runtime_registry"
+                            }
+                        ],
+                        "warning_codes": ["PLUGIN_RUNTIME_REGISTRY_DECLARED"]
+                    }
                 }
             }
         });
@@ -282,6 +439,13 @@ mod tests {
         assert!(prompt.contains("output_artifact_kind: content_factory.workspace_patch"));
         assert!(prompt.contains("expected_objects: articleDraft"));
         assert!(prompt.contains("object_kind: articleDraft"));
+        assert!(prompt.contains("runtime_readiness:"));
+        assert!(prompt.contains("status: declared"));
+        assert!(prompt.contains("connector_refs: web-research"));
+        assert!(prompt.contains("web-research: declared, source=runtime_registry"));
+        assert!(prompt.contains("prompt-submit: ready, source=manifest_declaration"));
+        assert!(prompt.contains("content-factory: ready, source=runtime_registry"));
+        assert!(prompt.contains("warning_codes: PLUGIN_RUNTIME_REGISTRY_DECLARED"));
         assert!(prompt.contains("Do not infer or switch plugins from natural language"));
     }
 

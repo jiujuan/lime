@@ -50,6 +50,12 @@ const providers: ImageCapabilitySelectionCandidate[] = [
     api_host: "https://generativelanguage.googleapis.com",
   },
   { id: "zhipuai", type: "zhipuai", custom_models: ["glm-image"] },
+  {
+    id: "alibaba",
+    type: "openai",
+    custom_models: ["qwen-image-plus"],
+    api_host: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  },
   { id: "fal", type: "fal", custom_models: ["fal-ai/nano-banana-pro"] },
 ];
 
@@ -77,6 +83,12 @@ describe("imageGen/catalog", () => {
       "glm-image",
     );
     expect(
+      resolveImageCapabilityProviderEntry(providers[3]!)?.providerKey,
+    ).toBe("dashscope");
+    expect(resolveImageCapabilityModelIds(providers[3]!)).toContain(
+      "qwen-image-plus",
+    );
+    expect(
       resolveImageCapabilityProviderEntry({
         id: "fal",
         type: "openai",
@@ -96,7 +108,7 @@ describe("imageGen/catalog", () => {
     expect(resolveImageCapabilityModelIds(providers[1]!)).toContain(
       "gemini-3.1-flash-image",
     );
-    expect(resolveImageCapabilityModels(providers[3]!)?.[0]?.id).toBe(
+    expect(resolveImageCapabilityModels(providers[4]!)?.[0]?.id).toBe(
       "fal-ai/nano-banana-pro",
     );
   });
@@ -130,6 +142,17 @@ describe("imageGen/catalog", () => {
         "agnes-image-2.0-flash",
       ]),
     );
+  });
+
+  it("DashScope 拉取的新 Qwen-Image 模型应进入图片默认模型候选", () => {
+    expect(
+      resolveImageCapabilityModelIds({
+        id: "custom-alibaba-provider",
+        type: "openai",
+        api_host: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+        custom_models: ["qwen3.5-72b", "qwen-image-2.0", "qwen-image-plus"],
+      }),
+    ).toEqual(expect.arrayContaining(["qwen-image-2.0", "qwen-image-plus"]));
   });
 
   it("settings 与 workspace 图片命令应共享图片能力目录入口", () => {

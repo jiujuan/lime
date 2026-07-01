@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { LoaderCircle, Sparkles, X } from "lucide-react";
+import { LoaderCircle, RotateCcw, Sparkles, X } from "lucide-react";
 import { openResourceManager } from "@/features/resource-manager";
 import { cn } from "@/lib/utils";
 import { RenderableTaskImage } from "./RenderableTaskImage";
@@ -7,6 +7,7 @@ import type { ImageTaskViewerProps } from "./imageWorkbenchTypes";
 import { buildImageTaskResourceSourceContext } from "../workspace/imageWorkbenchResourceManager";
 import {
   buildFollowUpCommand,
+  canRetryImageTask,
   orderTaskOutputsByTaskOutputIds,
   resolveEmptyStateDescription,
   resolveFollowUpLabel,
@@ -43,6 +44,7 @@ export function ImageTaskViewer({
   onSaveSelectedToLibrary,
   applySelectedOutputLabel,
   onApplySelectedOutput,
+  onRetryTask,
   onSeedFollowUpCommand,
   onSelectOutput,
   onClose,
@@ -160,6 +162,9 @@ export function ImageTaskViewer({
   const selectedModelName =
     selectedOutput?.modelName || selectedTask?.runtimeContract?.model;
   const canContinueEdit = Boolean(followUpCommand && onSeedFollowUpCommand);
+  const canRetryTask = Boolean(
+    selectedTask?.id && onRetryTask && canRetryImageTask(selectedTask.status),
+  );
   const handleOpenSelectedImagePreview = () => {
     if (!selectedOutput) {
       return;
@@ -483,10 +488,27 @@ export function ImageTaskViewer({
           ) : null}
         </div>
 
-        {canContinueEdit ||
+        {canRetryTask ||
+        canContinueEdit ||
         (selectedOutput && onSaveSelectedToLibrary) ||
         (selectedOutput && onApplySelectedOutput) ? (
           <div className="mt-4 flex flex-wrap items-center gap-2">
+            {canRetryTask ? (
+              <button
+                type="button"
+                data-testid="image-task-viewer-action-retry"
+                onClick={() => {
+                  if (!selectedTask?.id) {
+                    return;
+                  }
+                  onRetryTask?.(selectedTask.id);
+                }}
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800 transition hover:border-amber-300 hover:bg-amber-100"
+              >
+                <RotateCcw className="h-4 w-4" />
+                {t("agentChat.imageWorkbenchPreview.action.retry")}
+              </button>
+            ) : null}
             {canContinueEdit ? (
               <button
                 type="button"

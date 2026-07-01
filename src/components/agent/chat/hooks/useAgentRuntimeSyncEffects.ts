@@ -10,10 +10,34 @@ import {
 import { hasDesktopHostEventListenerCapability } from "@/lib/desktop-runtime";
 import type { AgentThreadTurn } from "../types";
 import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
+import type { AgentSessionDetailRefreshRequest } from "./agentSessionRefresh";
 
 const APP_SERVER_BRIDGE_RUNTIME_POLL_MS = 1000;
 const RECOVERED_RUNTIME_POLL_ACTIVE_WINDOW_MS = 30 * 60 * 1000;
 const RUNTIME_DETAIL_REFRESH_COALESCE_MS = 120;
+
+const RUNTIME_SYNC_REFRESH_REQUESTS = {
+  sendSettled: {
+    source: "runtimeSync.sendSettled",
+    detailMergeMode: "runtime_sync",
+  },
+  recoveredPoll: {
+    source: "runtimeSync.recoveredPoll",
+    detailMergeMode: "runtime_sync",
+  },
+  poll: {
+    source: "runtimeSync.poll",
+    detailMergeMode: "runtime_sync",
+  },
+  event: {
+    source: "runtimeSync.event",
+    detailMergeMode: "runtime_sync",
+  },
+  terminalEvent: {
+    source: "runtimeSync.event",
+    detailMergeMode: "terminal_reconcile",
+  },
+} satisfies Record<string, AgentSessionDetailRefreshRequest>;
 
 function parseTimestampMs(value: string | null | undefined): number | null {
   if (!value) {
@@ -66,30 +90,43 @@ function shouldPollRecoveredRuntimeWork(params: {
   );
 }
 
-function shouldRefreshReadModelForTurnEvent(payload: unknown): boolean {
+function resolveRefreshRequestForTurnEventPayload(
+  payload: unknown,
+): AgentSessionDetailRefreshRequest | null {
   const data = parseAgentEvent(payload);
   if (!data) {
-    return false;
+    return null;
   }
 
   switch (data.type) {
+    case "error":
+    case "turn_completed":
+    case "turn_canceled":
+    case "turn_failed":
+      return RUNTIME_SYNC_REFRESH_REQUESTS.terminalEvent;
     case "action_required":
     case "action_resolved":
     case "artifact_snapshot":
-    case "error":
     case "queue_added":
     case "queue_cleared":
     case "queue_removed":
     case "queue_started":
     case "runtime_status":
-    case "turn_completed":
-    case "turn_canceled":
-    case "turn_failed":
     case "warning":
-      return true;
+      return RUNTIME_SYNC_REFRESH_REQUESTS.event;
     default:
-      return false;
+      return null;
   }
+}
+
+function preferRuntimeRefreshRequest(
+  current: AgentSessionDetailRefreshRequest | null,
+  next: AgentSessionDetailRefreshRequest,
+): AgentSessionDetailRefreshRequest {
+  if (next.detailMergeMode === "terminal_reconcile") {
+    return next;
+  }
+  return current ?? next;
 }
 
 function isTerminalRuntimeStatus(status?: string | null): boolean {
@@ -124,7 +161,7 @@ interface UseAgentRuntimeSyncEffectsOptions {
   threadTurns: AgentThreadTurn[];
   refreshSessionDetail: (
     targetSessionId?: string,
-    source?: string,
+    request?: AgentSessionDetailRefreshRequest,
   ) => Promise<unknown>;
   settleActiveRuntimeStream?: (targetSessionId: string) => void;
 }
@@ -145,12 +182,15 @@ export function useAgentRuntimeSyncEffects(
     refreshSessionDetail,
     settleActiveRuntimeStream,
   } = options;
+  const normalizedParentSessionId = parentSessionId?.trim() || null;
+  const normalizedCurrentTurnEventName = currentTurnEventName?.trim() || null;
   const lastIsSendingRef = useRef(isSending);
+  const lastCurrentTurnEventNameRef = useRef(normalizedCurrentTurnEventName);
   const observedActiveRuntimeWorkRef = useRef(false);
   const refreshInFlightSessionRef = useRef<string | null>(null);
   const refreshTimerRef = useRef<number | null>(null);
-  const normalizedParentSessionId = parentSessionId?.trim() || null;
-  const normalizedCurrentTurnEventName = currentTurnEventName?.trim() || null;
+  const deferredRuntimeRefreshRequestRef =
+    useRef<AgentSessionDetailRefreshRequest | null>(null);
   const hasDesktopRuntimeEventListenerCapability =
     hasDesktopHostEventListenerCapability();
   const hasRuntimeEventListenerCapability =
@@ -164,6 +204,7 @@ export function useAgentRuntimeSyncEffects(
   const shouldUseAppServerBridgeRuntimePolling =
     Boolean(sessionId) &&
     isSending &&
+    !normalizedCurrentTurnEventName &&
     isAppServerBridgeAvailable() &&
     !hasRuntimeEventListenerCapability;
   const shouldSubscribeTeamEvents =
@@ -174,13 +215,13 @@ export function useAgentRuntimeSyncEffects(
       Boolean(normalizedParentSessionId));
 
   const refreshSessionDetailOnce = useCallback(
-    (targetSessionId: string, source: string) => {
+    (targetSessionId: string, request: AgentSessionDetailRefreshRequest) => {
       if (refreshInFlightSessionRef.current === targetSessionId) {
         return;
       }
 
       refreshInFlightSessionRef.current = targetSessionId;
-      void refreshSessionDetail(targetSessionId, source).finally(() => {
+      void refreshSessionDetail(targetSessionId, request).finally(() => {
         if (refreshInFlightSessionRef.current === targetSessionId) {
           refreshInFlightSessionRef.current = null;
         }
@@ -190,7 +231,7 @@ export function useAgentRuntimeSyncEffects(
   );
 
   const scheduleRefreshSessionDetail = useCallback(
-    (targetSessionId: string, source: string) => {
+    (targetSessionId: string, request: AgentSessionDetailRefreshRequest) => {
       if (refreshInFlightSessionRef.current === targetSessionId) {
         return;
       }
@@ -201,7 +242,7 @@ export function useAgentRuntimeSyncEffects(
 
       refreshTimerRef.current = window.setTimeout(() => {
         refreshTimerRef.current = null;
-        refreshSessionDetailOnce(targetSessionId, source);
+        refreshSessionDetailOnce(targetSessionId, request);
       }, RUNTIME_DETAIL_REFRESH_COALESCE_MS);
     },
     [refreshSessionDetailOnce],
@@ -219,14 +260,30 @@ export function useAgentRuntimeSyncEffects(
 
   useEffect(() => {
     const wasSending = lastIsSendingRef.current;
+    const wasCurrentTurnEventName = lastCurrentTurnEventNameRef.current;
     lastIsSendingRef.current = isSending;
+    lastCurrentTurnEventNameRef.current = normalizedCurrentTurnEventName;
 
-    if (!wasSending || isSending || !sessionId) {
+    if (!sessionId || isSending || normalizedCurrentTurnEventName) {
       return;
     }
 
-    scheduleRefreshSessionDetail(sessionId, "runtimeSync.sendSettled");
-  }, [isSending, scheduleRefreshSessionDetail, sessionId]);
+    if (!wasSending && !wasCurrentTurnEventName) {
+      return;
+    }
+
+    const deferredRefreshRequest = deferredRuntimeRefreshRequestRef.current;
+    deferredRuntimeRefreshRequestRef.current = null;
+    scheduleRefreshSessionDetail(
+      sessionId,
+      deferredRefreshRequest ?? RUNTIME_SYNC_REFRESH_REQUESTS.sendSettled,
+    );
+  }, [
+    isSending,
+    normalizedCurrentTurnEventName,
+    scheduleRefreshSessionDetail,
+    sessionId,
+  ]);
 
   useEffect(() => {
     if (!isSending) {
@@ -272,7 +329,7 @@ export function useAgentRuntimeSyncEffects(
   ]);
 
   useEffect(() => {
-    if (!sessionId || isSending) {
+    if (!sessionId || isSending || normalizedCurrentTurnEventName) {
       return;
     }
 
@@ -287,7 +344,10 @@ export function useAgentRuntimeSyncEffects(
     }
 
     const timer = window.setInterval(() => {
-      refreshSessionDetailOnce(sessionId, "runtimeSync.recoveredPoll");
+      refreshSessionDetailOnce(
+        sessionId,
+        RUNTIME_SYNC_REFRESH_REQUESTS.recoveredPoll,
+      );
     }, 1500);
 
     return () => {
@@ -297,6 +357,7 @@ export function useAgentRuntimeSyncEffects(
     isSending,
     threadReadStatus,
     queuedTurnCount,
+    normalizedCurrentTurnEventName,
     refreshSessionDetailOnce,
     sessionId,
     threadTurns,
@@ -307,10 +368,10 @@ export function useAgentRuntimeSyncEffects(
       return;
     }
 
-    refreshSessionDetailOnce(sessionId, "runtimeSync.poll");
+    refreshSessionDetailOnce(sessionId, RUNTIME_SYNC_REFRESH_REQUESTS.poll);
 
     const timer = window.setInterval(() => {
-      refreshSessionDetailOnce(sessionId, "runtimeSync.poll");
+      refreshSessionDetailOnce(sessionId, RUNTIME_SYNC_REFRESH_REQUESTS.poll);
     }, APP_SERVER_BRIDGE_RUNTIME_POLL_MS);
 
     return () => {
@@ -334,14 +395,21 @@ export function useAgentRuntimeSyncEffects(
       const nextUnlisten = await runtime.listenToTurnEvents(
         normalizedCurrentTurnEventName,
         (event) => {
+          const refreshRequest = resolveRefreshRequestForTurnEventPayload(
+            event.payload,
+          );
           if (
             disposed ||
             sessionIdRef.current !== sessionId ||
-            !shouldRefreshReadModelForTurnEvent(event.payload)
+            !refreshRequest
           ) {
             return;
           }
-          scheduleRefreshSessionDetail(sessionId, "runtimeSync.event");
+          deferredRuntimeRefreshRequestRef.current =
+            preferRuntimeRefreshRequest(
+              deferredRuntimeRefreshRequestRef.current,
+              refreshRequest,
+            );
         },
       );
 
@@ -359,13 +427,7 @@ export function useAgentRuntimeSyncEffects(
       disposed = true;
       unlisten?.();
     };
-  }, [
-    normalizedCurrentTurnEventName,
-    scheduleRefreshSessionDetail,
-    runtime,
-    sessionId,
-    sessionIdRef,
-  ]);
+  }, [normalizedCurrentTurnEventName, runtime, sessionId, sessionIdRef]);
 
   useEffect(() => {
     if (!sessionId || !shouldSubscribeTeamEvents) {
@@ -394,7 +456,18 @@ export function useAgentRuntimeSyncEffects(
             if (sessionIdRef.current !== sessionId) {
               return;
             }
-            scheduleRefreshSessionDetail(sessionId, "runtimeSync.event");
+            if (isSending || normalizedCurrentTurnEventName) {
+              deferredRuntimeRefreshRequestRef.current =
+                preferRuntimeRefreshRequest(
+                  deferredRuntimeRefreshRequestRef.current,
+                  RUNTIME_SYNC_REFRESH_REQUESTS.event,
+                );
+              return;
+            }
+            scheduleRefreshSessionDetail(
+              sessionId,
+              RUNTIME_SYNC_REFRESH_REQUESTS.event,
+            );
           },
         );
 
@@ -422,5 +495,7 @@ export function useAgentRuntimeSyncEffects(
     sessionId,
     sessionIdRef,
     shouldSubscribeTeamEvents,
+    isSending,
+    normalizedCurrentTurnEventName,
   ]);
 }

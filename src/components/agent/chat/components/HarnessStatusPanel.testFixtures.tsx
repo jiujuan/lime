@@ -151,6 +151,15 @@ export function renderPanel(
   return rendered;
 }
 
+export function renderExpandedPanel(
+  overrides: Partial<ComponentProps<typeof HarnessStatusPanel>> = {},
+): RenderResult {
+  return renderPanel({
+    layout: "dialog",
+    ...overrides,
+  });
+}
+
 export function mountHarnessElement(element: ReactNode): RenderResult {
   const container = document.createElement("div");
   document.body.appendChild(container);

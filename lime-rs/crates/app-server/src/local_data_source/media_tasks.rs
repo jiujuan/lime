@@ -14,6 +14,7 @@ use app_server_protocol::MediaTaskArtifactLookupParams;
 use app_server_protocol::MediaTaskArtifactResponse;
 use app_server_protocol::MediaTaskArtifactVideoCreateParams;
 use app_server_protocol::{ModelRefSource, ModelTaskRequest};
+use lime_core::config::{Config, ConfigManager};
 use lime_core::database::dao::api_key_provider::ProviderWithKeys;
 use lime_core::database::DbConnection;
 use lime_core::models::model_registry::EnhancedModelMetadata;
@@ -84,6 +85,118 @@ pub(crate) async fn assess_image_route(
         &image_model_task_request(params),
     )
     .await
+}
+
+pub(crate) fn normalize_image_create_params_for_task_submission(
+    params: MediaTaskArtifactImageCreateParams,
+) -> Result<MediaTaskArtifactImageCreateParams, String> {
+    normalize_image_create_params_with_defaults(params, configured_image_generation_defaults())
+}
+
+fn normalize_image_create_params_with_defaults(
+    params: MediaTaskArtifactImageCreateParams,
+    defaults: ImageGenerationDefaults,
+) -> Result<MediaTaskArtifactImageCreateParams, String> {
+    let mut normalized = params;
+    normalized.mode = normalize_image_task_mode(normalized.mode);
+    normalized.provider_id =
+        normalize_optional_task_field(normalized.provider_id).or(defaults.provider_id);
+    normalized.model = normalize_optional_task_field(normalized.model).or(defaults.model_id);
+    normalized.executor_mode = normalize_image_executor_mode(normalized.executor_mode);
+    normalized.outer_model = normalize_optional_task_field(normalized.outer_model);
+    normalized.session_id = normalize_optional_task_field(normalized.session_id);
+    normalized.thread_id = normalize_optional_task_field(normalized.thread_id);
+    normalized.turn_id = normalize_optional_task_field(normalized.turn_id);
+    normalized.project_id = normalize_optional_task_field(normalized.project_id);
+    normalized.modality_contract_key =
+        normalize_optional_task_field(normalized.modality_contract_key);
+    normalized.modality = normalize_optional_task_field(normalized.modality);
+    normalized.routing_slot = normalize_optional_task_field(normalized.routing_slot);
+    normalized.requested_target = normalize_optional_task_field(normalized.requested_target);
+    normalized.slot_id = normalize_optional_task_field(normalized.slot_id);
+    normalized.target_output_id = normalize_optional_task_field(normalized.target_output_id);
+    normalized.target_output_ref_id =
+        normalize_optional_task_field(normalized.target_output_ref_id);
+
+    if normalized.provider_id.is_none() || normalized.model.is_none() {
+        return Err(
+            "图片生成缺少默认 Provider 或模型，请在 设置 -> 媒体生成 -> 图片服务模型 选择可用图片模型后重试。"
+                .to_string(),
+        );
+    }
+
+    Ok(normalized)
+}
+
+fn normalize_image_task_mode(value: Option<String>) -> Option<String> {
+    match normalize_optional_task_field(value).as_deref() {
+        Some("generate") => Some("generate".to_string()),
+        Some("edit") => Some("edit".to_string()),
+        Some("variation") => Some("variation".to_string()),
+        _ => None,
+    }
+}
+
+fn normalize_image_executor_mode(value: Option<String>) -> Option<String> {
+    match normalize_optional_string(value).as_deref() {
+        Some("images_api") => Some("images_api".to_string()),
+        Some("responses_image_generation") => Some("responses_image_generation".to_string()),
+        _ => None,
+    }
+}
+
+fn normalize_optional_string(value: Option<String>) -> Option<String> {
+    value.and_then(|raw| {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    })
+}
+
+fn normalize_optional_task_field(value: Option<String>) -> Option<String> {
+    normalize_optional_string(value).filter(|value| !is_placeholder_task_field(value))
+}
+
+fn is_placeholder_task_field(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "default"
+            | "auto"
+            | "automatic"
+            | "system_default"
+            | "system-default"
+            | "__auto__"
+            | "__default__"
+    )
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct ImageGenerationDefaults {
+    provider_id: Option<String>,
+    model_id: Option<String>,
+}
+
+fn configured_image_generation_defaults() -> ImageGenerationDefaults {
+    image_generation_defaults_from_config_file()
+}
+
+fn image_generation_defaults_from_config_file() -> ImageGenerationDefaults {
+    let path = ConfigManager::default_config_path();
+    ConfigManager::load(&path)
+        .map(|manager| image_generation_defaults_from_config(manager.config()))
+        .unwrap_or_default()
+}
+
+fn image_generation_defaults_from_config(config: &Config) -> ImageGenerationDefaults {
+    let image = &config.workspace_preferences.media_defaults.image;
+
+    ImageGenerationDefaults {
+        provider_id: normalize_optional_task_field(image.preferred_provider_id.clone()),
+        model_id: normalize_optional_task_field(image.preferred_model_id.clone()),
+    }
 }
 
 pub(crate) async fn assess_video_route(
@@ -256,4 +369,127 @@ fn model_registry_payload(model: &EnhancedModelMetadata) -> Value {
         "modelCapabilities": capabilities,
         "model_capabilities": capabilities,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn image_create_params() -> MediaTaskArtifactImageCreateParams {
+        MediaTaskArtifactImageCreateParams {
+            project_root_path: "/tmp/project".to_string(),
+            prompt: "画一张广州夏天的图".to_string(),
+            ..MediaTaskArtifactImageCreateParams::default()
+        }
+    }
+
+    #[test]
+    fn image_defaults_support_current_config_preferences() {
+        let mut config = Config::default();
+        config
+            .workspace_preferences
+            .media_defaults
+            .image
+            .preferred_provider_id = Some("custom-provider".to_string());
+        config
+            .workspace_preferences
+            .media_defaults
+            .image
+            .preferred_model_id = Some("agnes-image-2.0-flash".to_string());
+
+        let defaults = image_generation_defaults_from_config(&config);
+
+        assert_eq!(defaults.provider_id.as_deref(), Some("custom-provider"));
+        assert_eq!(defaults.model_id.as_deref(), Some("agnes-image-2.0-flash"));
+    }
+
+    #[test]
+    fn image_task_submission_uses_config_defaults_and_cleans_direct_executor_mode() {
+        let params = MediaTaskArtifactImageCreateParams {
+            executor_mode: Some("direct".to_string()),
+            ..image_create_params()
+        };
+        let normalized = normalize_image_create_params_with_defaults(
+            params,
+            ImageGenerationDefaults {
+                provider_id: Some("custom-provider".to_string()),
+                model_id: Some("agnes-image-2.0-flash".to_string()),
+            },
+        )
+        .expect("normalized image params");
+
+        assert_eq!(normalized.provider_id.as_deref(), Some("custom-provider"));
+        assert_eq!(normalized.model.as_deref(), Some("agnes-image-2.0-flash"));
+        assert_eq!(normalized.executor_mode, None);
+    }
+
+    #[test]
+    fn image_task_submission_treats_default_model_as_config_fallback() {
+        let params = MediaTaskArtifactImageCreateParams {
+            mode: Some("default".to_string()),
+            provider_id: Some("custom-provider".to_string()),
+            model: Some("default".to_string()),
+            outer_model: Some("default".to_string()),
+            session_id: Some("default".to_string()),
+            thread_id: Some("default".to_string()),
+            turn_id: Some("default".to_string()),
+            project_id: Some("default".to_string()),
+            routing_slot: Some("default".to_string()),
+            requested_target: Some("default".to_string()),
+            slot_id: Some("default".to_string()),
+            target_output_id: Some("default".to_string()),
+            target_output_ref_id: Some("default".to_string()),
+            ..image_create_params()
+        };
+        let normalized = normalize_image_create_params_with_defaults(
+            params,
+            ImageGenerationDefaults {
+                provider_id: Some("custom-provider".to_string()),
+                model_id: Some("agnes-image-2.1-flash".to_string()),
+            },
+        )
+        .expect("normalized image params");
+
+        assert_eq!(normalized.provider_id.as_deref(), Some("custom-provider"));
+        assert_eq!(normalized.model.as_deref(), Some("agnes-image-2.1-flash"));
+        assert_eq!(normalized.mode, None);
+        assert_eq!(normalized.session_id, None);
+        assert_eq!(normalized.thread_id, None);
+        assert_eq!(normalized.turn_id, None);
+        assert_eq!(normalized.project_id, None);
+        assert_eq!(normalized.routing_slot, None);
+        assert_eq!(normalized.requested_target, None);
+        assert_eq!(normalized.slot_id, None);
+        assert_eq!(normalized.target_output_id, None);
+        assert_eq!(normalized.target_output_ref_id, None);
+        assert_eq!(normalized.outer_model, None);
+    }
+
+    #[test]
+    fn image_defaults_ignore_placeholder_values() {
+        let mut config = Config::default();
+        config
+            .workspace_preferences
+            .media_defaults
+            .image
+            .preferred_provider_id = Some("default".to_string());
+        config
+            .workspace_preferences
+            .media_defaults
+            .image
+            .preferred_model_id = Some("auto".to_string());
+
+        let defaults = image_generation_defaults_from_config(&config);
+
+        assert_eq!(defaults, ImageGenerationDefaults::default());
+    }
+
+    #[test]
+    fn image_task_submission_fails_without_explicit_or_default_model_ref() {
+        let error =
+            normalize_image_create_params_with_defaults(image_create_params(), Default::default())
+                .expect_err("missing image defaults should fail closed");
+
+        assert!(error.contains("图片生成缺少默认 Provider 或模型"));
+    }
 }

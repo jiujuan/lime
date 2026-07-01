@@ -305,6 +305,9 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
   onToggleFileManager?: ComponentProps<
     typeof EmptyState
   >["onToggleFileManager"];
+  initialInputCapability?: ComponentProps<
+    typeof EmptyState
+  >["initialInputCapability"];
   sceneAppExecutionSummaryCard?: WorkspaceChatContentParams["sceneAppExecutionSummaryCard"];
   pluginHistoryRestoreLandingCard?: WorkspaceChatContentParams["pluginHistoryRestoreLandingCard"];
   serviceSkillExecutionCard?: WorkspaceChatContentParams["serviceSkillExecutionCard"];

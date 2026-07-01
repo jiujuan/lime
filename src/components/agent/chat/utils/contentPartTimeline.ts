@@ -15,23 +15,18 @@ export function mergeIncrementalTextWithOverlap(
   if (!chunk) {
     return base;
   }
-  if (chunk.startsWith(base)) {
-    return chunk;
-  }
-  if (base.endsWith(chunk)) {
-    return base;
-  }
-  if (base.includes(chunk)) {
-    return base;
-  }
 
-  const maxOverlap = Math.min(base.length, chunk.length);
+  // 移除过于激进的包含检查，避免导致视觉刷新
+  // 检测合理长度的尾部重叠，限制最大检测长度提升性能
+  const maxOverlap = Math.min(base.length, chunk.length, 100);
+
   for (let overlap = maxOverlap; overlap > 0; overlap -= 1) {
     if (base.slice(-overlap) === chunk.slice(0, overlap)) {
       return base + chunk.slice(overlap);
     }
   }
 
+  // 没有找到重叠，直接拼接
   return base + chunk;
 }
 
@@ -99,7 +94,11 @@ function hasSameTextProvenance(
 
   const baseSequence = readContentPartSequence(base);
   const chunkSequence = readContentPartSequence(chunk);
-  if (baseSequence !== null || chunkSequence !== null) {
+  const source = provenanceValue(base.metadata, "source");
+  const isStreamingTextDelta =
+    source === "agent_text_delta" &&
+    provenanceValue(chunk.metadata, "source") === "agent_text_delta";
+  if (!isStreamingTextDelta && (baseSequence !== null || chunkSequence !== null)) {
     return baseSequence === chunkSequence;
   }
 

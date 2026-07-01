@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   type Dispatch,
   type SetStateAction,
 } from "react";
@@ -13,7 +14,6 @@ import type {
   MediaTaskArtifactOutput,
   MediaTaskLookupRequest,
 } from "@/lib/api/mediaTasks";
-import type { AgentRuntimeGeneratedTitleResult } from "@/lib/api/agentRuntime";
 import { generateAgentRuntimeTitleResult } from "@/lib/api/agentRuntime";
 import { emitCanvasImageInsertRequest } from "@/lib/canvasImageInsertBus";
 import { onImageWorkbenchTaskAction } from "@/lib/imageWorkbenchEvents";
@@ -24,6 +24,7 @@ import {
   isLocalImageWorkbenchSessionKey,
   resolveImageWorkbenchSkillRequest,
 } from "./imageSkillLaunch";
+import { ensureImageWorkbenchProviderSelectionCommitted } from "./imageWorkbenchProviderReadiness";
 import { buildImageTaskLookupRequest } from "./imageTaskLocator";
 import {
   collapseWhitespace,
@@ -33,6 +34,22 @@ import {
   type ImageWorkbenchApplyTarget,
   type SessionImageWorkbenchState,
 } from "./imageWorkbenchHelpers";
+import {
+  matchesTaskActionContext,
+  readTaskPayloadPositiveNumber,
+  readTaskPayloadString,
+  readTaskPayloadStringArray,
+  readTaskPayloadTitleGenerationResult,
+  resolvePendingImageTaskId,
+  resolveReplayMode,
+  resolveReplayTarget,
+  resolveTaskRecordAnchorHint,
+  resolveTaskRecordAnchorSectionTitle,
+  resolveTaskRecordAnchorText,
+  resolveTaskRecordSlotId,
+  resolveTrackedTaskReplayTarget,
+  resolveTrackedTaskReplayUsage,
+} from "./imageWorkbenchTaskActions";
 
 interface SaveImagesToResourceResult {
   saved: number;
@@ -64,6 +81,8 @@ interface UseWorkspaceImageWorkbenchActionRuntimeParams {
   imageWorkbenchSelectedProviderId?: string;
   imageWorkbenchSelectedSize: string;
   imageWorkbenchSessionKey: string;
+  ensureImageWorkbenchProvidersLoaded?: () => void | Promise<void>;
+  imageWorkbenchProvidersLoading?: boolean;
   projectId?: string | null;
   projectRootPath?: string | null;
   saveImageWorkbenchImagesToResource: (
@@ -82,260 +101,17 @@ interface UseWorkspaceImageWorkbenchActionRuntimeParams {
   ) => void;
 }
 
-function dedupeReferenceImages(values: Array<string | undefined>): string[] {
-  const normalized: string[] = [];
-  for (const value of values) {
-    const trimmed = value?.trim();
-    if (!trimmed || normalized.includes(trimmed)) {
-      continue;
-    }
-    normalized.push(trimmed);
-  }
-  return normalized;
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-  return value as Record<string, unknown>;
-}
-
-function readTaskPayloadString(
-  payload: Record<string, unknown>,
-  keys: string[],
-): string | undefined {
-  for (const key of keys) {
-    const value = payload[key];
-    if (typeof value === "string" && value.trim()) {
-      return value.trim();
-    }
-  }
-  return undefined;
-}
-
-function resolveTaskRecordSlotId(
-  taskRecord: MediaTaskArtifactOutput["record"] | undefined,
-): string | undefined {
-  return (
-    readTaskPayloadString(asRecord(taskRecord?.relationships) || {}, [
-      "slot_id",
-      "slotId",
-    ]) ||
-    readTaskPayloadString(asRecord(taskRecord?.payload) || {}, [
-      "slot_id",
-      "slotId",
-    ])
-  );
-}
-
-function resolveTaskRecordAnchorHint(
-  taskRecord: MediaTaskArtifactOutput["record"] | undefined,
-): string | undefined {
-  return readTaskPayloadString(asRecord(taskRecord?.payload) || {}, [
-    "anchor_hint",
-    "anchorHint",
-  ]);
-}
-
-function resolveTaskRecordAnchorSectionTitle(
-  taskRecord: MediaTaskArtifactOutput["record"] | undefined,
-): string | undefined {
-  return readTaskPayloadString(asRecord(taskRecord?.payload) || {}, [
-    "anchor_section_title",
-    "anchorSectionTitle",
-  ]);
-}
-
-function resolveTaskRecordAnchorText(
-  taskRecord: MediaTaskArtifactOutput["record"] | undefined,
-): string | undefined {
-  return readTaskPayloadString(asRecord(taskRecord?.payload) || {}, [
-    "anchor_text",
-    "anchorText",
-  ]);
-}
-
-function readTaskPayloadPositiveNumber(
-  payload: Record<string, unknown>,
-  keys: string[],
-): number | undefined {
-  for (const key of keys) {
-    const value = payload[key];
-    if (typeof value === "number" && Number.isFinite(value) && value > 0) {
-      return value;
-    }
-    if (typeof value === "string" && value.trim()) {
-      const parsed = Number(value);
-      if (Number.isFinite(parsed) && parsed > 0) {
-        return parsed;
-      }
-    }
-  }
-  return undefined;
-}
-
-function readTaskPayloadStringArray(
-  payload: Record<string, unknown>,
-  keys: string[],
-): string[] {
-  for (const key of keys) {
-    const value = payload[key];
-    if (!Array.isArray(value)) {
-      continue;
-    }
-
-    const normalized = dedupeReferenceImages(
-      value.map((item) => (typeof item === "string" ? item : undefined)),
-    );
-    if (normalized.length > 0) {
-      return normalized;
-    }
-  }
-
-  return [];
-}
-
-function readTaskPayloadTitleGenerationResult(
-  payload: Record<string, unknown>,
-): AgentRuntimeGeneratedTitleResult | undefined {
-  const result =
-    asRecord(payload.title_generation_result) ||
-    asRecord(payload.titleGenerationResult);
-  if (!result) {
-    return undefined;
-  }
-
-  const title =
-    (typeof result.title === "string" && result.title.trim()) || undefined;
-  if (!title) {
-    return undefined;
-  }
-
-  const sessionId =
-    (typeof result.sessionId === "string" && result.sessionId.trim()) ||
-    (typeof result.session_id === "string" && result.session_id.trim()) ||
-    null;
-  const executionRuntime =
-    result.executionRuntime ?? result.execution_runtime ?? null;
-  const usedFallback =
-    typeof result.usedFallback === "boolean"
-      ? result.usedFallback
-      : typeof result.used_fallback === "boolean"
-        ? result.used_fallback
-        : false;
-  const fallbackReason =
-    (typeof result.fallbackReason === "string" && result.fallbackReason) ||
-    (typeof result.fallback_reason === "string" && result.fallback_reason) ||
-    null;
-
-  return {
-    title,
-    sessionId,
-    executionRuntime:
-      executionRuntime === null
-        ? null
-        : (executionRuntime as AgentRuntimeGeneratedTitleResult["executionRuntime"]),
-    usedFallback,
-    fallbackReason,
-  };
-}
-
-function resolveReplayMode(
-  value: unknown,
-): CreateImageGenerationTaskArtifactRequest["mode"] {
-  const normalized =
-    typeof value === "string" ? value.trim().toLowerCase() : "";
-  if (normalized === "edit") {
-    return "edit";
-  }
-  if (normalized === "variation" || normalized === "variant") {
-    return "variation";
-  }
-  return "generate";
-}
-
-function resolveReplayTarget(
-  value: unknown,
-): CreateImageGenerationTaskArtifactRequest["requestedTarget"] {
-  return typeof value === "string" && value.trim().toLowerCase() === "cover"
-    ? "cover"
-    : "generate";
-}
-
-function resolveTrackedTaskReplayTarget(
-  task: SessionImageWorkbenchState["tasks"][number] | undefined,
-): CreateImageGenerationTaskArtifactRequest["requestedTarget"] {
-  return task?.applyTarget?.kind === "document-cover" ? "cover" : "generate";
-}
-
-function resolveTrackedTaskReplayUsage(
-  task: SessionImageWorkbenchState["tasks"][number] | undefined,
-): CreateImageGenerationTaskArtifactRequest["usage"] {
-  if (task?.applyTarget?.kind === "document-cover") {
-    return "cover";
-  }
-  if (task?.applyTarget?.kind === "canvas-insert") {
-    return "document-inline";
-  }
-  return "claw-image-workbench";
-}
-
-function resolvePendingImageTaskId(
-  tasks: SessionImageWorkbenchState["tasks"],
-): string | null {
-  let latestTask: SessionImageWorkbenchState["tasks"][number] | null = null;
-
-  for (const task of tasks) {
-    if (
-      task.status !== "queued" &&
-      task.status !== "routing" &&
-      task.status !== "running"
-    ) {
-      continue;
-    }
-    if (!latestTask || task.createdAt >= latestTask.createdAt) {
-      latestTask = task;
-    }
-  }
-
-  return latestTask?.id ?? null;
-}
-
-function matchesTaskActionContext(params: {
-  detailProjectId?: string | null;
-  detailContentId?: string | null;
-  projectId?: string | null;
-  contentId?: string | null;
-}): boolean {
-  if (
-    params.detailProjectId &&
-    params.projectId &&
-    params.detailProjectId !== params.projectId
-  ) {
-    return false;
-  }
-
-  if (
-    params.detailContentId &&
-    params.contentId &&
-    params.detailContentId !== params.contentId
-  ) {
-    return false;
-  }
-
-  return true;
-}
-
 export function useWorkspaceImageWorkbenchActionRuntime({
   cancelImageTask,
   contentId,
   createImageGenerationTask,
+  ensureImageWorkbenchProvidersLoaded,
   getImageTask,
   currentImageWorkbenchState,
   imageWorkbenchPreferredModelId,
   imageWorkbenchPreferredProviderId,
   imageWorkbenchPreferredProviderUnavailable,
+  imageWorkbenchProvidersLoading,
   imageWorkbenchSelectedModelId,
   imageWorkbenchSelectedProviderId,
   imageWorkbenchSelectedSize,
@@ -393,6 +169,46 @@ export function useWorkspaceImageWorkbenchActionRuntime({
     imageWorkbenchRequestProviderId,
     imageWorkbenchSelectedModelId,
   ]);
+  const imageWorkbenchSelectionRef = useRef({
+    preferredProviderUnavailable: Boolean(
+      imageWorkbenchPreferredProviderUnavailable,
+    ),
+    providersLoading: Boolean(imageWorkbenchProvidersLoading),
+    requestModelId: imageWorkbenchRequestModelId,
+    requestProviderId: imageWorkbenchRequestProviderId,
+  });
+  useEffect(() => {
+    imageWorkbenchSelectionRef.current = {
+      preferredProviderUnavailable: Boolean(
+        imageWorkbenchPreferredProviderUnavailable,
+      ),
+      providersLoading: Boolean(imageWorkbenchProvidersLoading),
+      requestModelId: imageWorkbenchRequestModelId,
+      requestProviderId: imageWorkbenchRequestProviderId,
+    };
+  }, [
+    imageWorkbenchPreferredProviderUnavailable,
+    imageWorkbenchProvidersLoading,
+    imageWorkbenchRequestModelId,
+    imageWorkbenchRequestProviderId,
+  ]);
+
+  const resolveImageGenerationSelectionError = useCallback(() => {
+    const selection = imageWorkbenchSelectionRef.current;
+    if (selection.providersLoading) {
+      return t("agentChat.imageWorkbench.selection.loading");
+    }
+
+    if (selection.preferredProviderUnavailable) {
+      return t("agentChat.imageWorkbench.selection.preferredUnavailable");
+    }
+
+    if (!selection.requestProviderId || !selection.requestModelId) {
+      return t("agentChat.imageWorkbench.selection.missing");
+    }
+
+    return null;
+  }, [t]);
 
   const resolveImageWorkbenchSessionKey = useCallback(
     async (params: { preferredSessionKey?: string | null }) => {
@@ -472,7 +288,10 @@ export function useWorkspaceImageWorkbenchActionRuntime({
           aspectRatio: undefined,
           count: trackedTask?.expectedCount || 1,
           usage: resolveTrackedTaskReplayUsage(trackedTask),
-          slotId: undefined,
+          slotId:
+            trackedTask?.applyTarget?.kind === "canvas-insert"
+              ? trackedTask.applyTarget.slotId || undefined
+              : undefined,
           anchorHint:
             trackedTask?.applyTarget?.kind === "canvas-insert"
               ? trackedTask.applyTarget.anchorHint
@@ -849,6 +668,10 @@ export function useWorkspaceImageWorkbenchActionRuntime({
       contentId: applyTarget.contentId ?? contentId ?? null,
       canvasType: applyTarget.canvasType,
       anchorHint: applyTarget.anchorHint,
+      taskId: selectedOutput.taskId,
+      slotId: applyTarget.slotId ?? selectedOutput.slotId ?? null,
+      sectionTitle: applyTarget.sectionTitle ?? null,
+      anchorText: applyTarget.anchorText ?? null,
       source: "manual",
       image: {
         id: selectedOutput.id,
@@ -917,6 +740,22 @@ export function useWorkspaceImageWorkbenchActionRuntime({
         return false;
       }
 
+      await ensureImageWorkbenchProviderSelectionCommitted(
+        ensureImageWorkbenchProvidersLoaded,
+        () => {
+          const selection = imageWorkbenchSelectionRef.current;
+          return Boolean(
+            selection.requestProviderId && selection.requestModelId,
+          );
+        },
+      );
+      const imageGenerationSelectionError =
+        resolveImageGenerationSelectionError();
+      if (imageGenerationSelectionError) {
+        toast.error(imageGenerationSelectionError);
+        return false;
+      }
+
       const resolvedSessionKey = await resolveImageWorkbenchSessionKey({});
       const titlePreviewText =
         params.parsedCommand.mode === "generate"
@@ -951,8 +790,10 @@ export function useWorkspaceImageWorkbenchActionRuntime({
         title: resolvedTaskTitle,
         titleGenerationResult,
         currentImageWorkbenchState,
-        imageWorkbenchSelectedModelId: imageWorkbenchRequestModelId,
-        imageWorkbenchSelectedProviderId: imageWorkbenchRequestProviderId,
+        imageWorkbenchSelectedModelId:
+          imageWorkbenchSelectionRef.current.requestModelId,
+        imageWorkbenchSelectedProviderId:
+          imageWorkbenchSelectionRef.current.requestProviderId,
         imageWorkbenchSelectedSize,
         imageWorkbenchSessionKey,
         sessionIdOverride: resolvedSessionKey,
@@ -979,13 +820,13 @@ export function useWorkspaceImageWorkbenchActionRuntime({
     [
       contentId,
       currentImageWorkbenchState,
-      imageWorkbenchRequestModelId,
-      imageWorkbenchRequestProviderId,
+      ensureImageWorkbenchProvidersLoaded,
       imageWorkbenchSelectedSize,
       imageWorkbenchSessionKey,
       projectId,
       projectRootPath,
       resolveImageWorkbenchSessionKey,
+      resolveImageGenerationSelectionError,
       submitImageWorkbenchAgentCommand,
       t,
     ],
@@ -1013,8 +854,10 @@ export function useWorkspaceImageWorkbenchActionRuntime({
       resolveImageWorkbenchSkillRequest({
         ...params,
         currentImageWorkbenchState,
-        imageWorkbenchSelectedModelId: imageWorkbenchRequestModelId,
-        imageWorkbenchSelectedProviderId: imageWorkbenchRequestProviderId,
+        imageWorkbenchSelectedModelId:
+          imageWorkbenchSelectionRef.current.requestModelId,
+        imageWorkbenchSelectedProviderId:
+          imageWorkbenchSelectionRef.current.requestProviderId,
         imageWorkbenchSelectedSize,
         imageWorkbenchSessionKey,
         projectId,

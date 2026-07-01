@@ -123,6 +123,7 @@ describe("Plugin P1 manifest contract", () => {
         apps: "./.app.json",
         mcpServers: "./.mcp.json",
       },
+      cli: "./cli/index.mjs",
     });
 
     expect(contract).toMatchObject({
@@ -144,11 +145,77 @@ describe("Plugin P1 manifest contract", () => {
       },
       componentPaths: {
         skills: "./skills",
+        cli: "./cli/index.mjs",
         hooks: "./hooks.json",
         apps: "./.app.json",
         mcpServers: "./.mcp.json",
       },
     });
+    expect(contract.clis).toEqual([]);
+  });
+
+  it("应把插件包 CLI 和 lifecycle hooks 归一为一等 contract", () => {
+    const contract = normalizePluginManifest({
+      id: "creator-pack",
+      displayName: "Creator Pack",
+      version: "1.0.0",
+      clis: [
+        {
+          id: "content-factory",
+          title: "Content Factory CLI",
+          entrypoint: "./cli/content-factory.mjs",
+          registry: "./clis/clis.json",
+          commands: ["inspect", "run", "validate", "run"],
+          required: true,
+        },
+      ],
+      hooks: {
+        handlers: [
+          {
+            key: "prompt-submit",
+            event: "prompt.submit",
+            entrypoint: "./hooks/prompt-submit.mjs",
+          },
+          {
+            key: "task-complete",
+            event: "task.complete",
+            entrypoint: "./hooks/task-complete.mjs",
+          },
+        ],
+      },
+    });
+
+    expect(contract.clis).toEqual([
+      {
+        id: "content-factory",
+        title: "Content Factory CLI",
+        description: undefined,
+        entrypoint: "./cli/content-factory.mjs",
+        registry: "./clis/clis.json",
+        commands: ["inspect", "run", "validate"],
+        required: true,
+      },
+    ]);
+    expect(contract.hooks).toEqual([
+      {
+        key: "prompt-submit",
+        title: undefined,
+        description: undefined,
+        event: "prompt.submit",
+        entrypoint: "./hooks/prompt-submit.mjs",
+        path: undefined,
+        required: false,
+      },
+      {
+        key: "task-complete",
+        title: undefined,
+        description: undefined,
+        event: "task.complete",
+        entrypoint: "./hooks/task-complete.mjs",
+        path: undefined,
+        required: false,
+      },
+    ]);
   });
 
   it("应兼容旧的 id / skills / mcpServers 声明形状", () => {
@@ -261,12 +328,52 @@ describe("Plugin P1 manifest contract", () => {
         }),
       ]),
     );
+    expect(contract.skills).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "gongzonghao-article-writer",
+          title: "公众号文章写作",
+        }),
+        expect.objectContaining({
+          id: "article-image-cheatsheet",
+          title: "文章配图规划",
+        }),
+      ]),
+    );
     expect(contract.workflows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           key: "content_article_workflow",
           taskKind: "content.article.generate",
           triggerIntents: ["content_article_generate"],
+          cliRefs: ["content-factory"],
+          connectorRefs: ["lime-knowledge", "web-research", "media-generation"],
+          hookPolicy: {
+            prompt: ["prompt-submit"],
+            task: ["task-complete"],
+          },
+        }),
+      ]),
+    );
+    expect(contract.clis).toEqual([
+      expect.objectContaining({
+        id: "agent-runtime-cli",
+        entrypoint: "./cli/content-factory.mjs",
+        registry: "./clis/clis.json",
+        commands: ["inspect", "run", "validate"],
+      }),
+    ]);
+    expect(contract.hooks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: "prompt-submit",
+          event: "prompt.submit",
+          entrypoint: "./hooks/prompt-submit.mjs",
+        }),
+        expect.objectContaining({
+          key: "task-complete",
+          event: "task.complete",
+          entrypoint: "./hooks/task-complete.mjs",
         }),
       ]),
     );

@@ -3,7 +3,8 @@ use super::request_context::{
     request_workspace_scope, resolve_runtime_model_selection, selection_from_explicit_preferences,
     selection_from_host_provider_config, selection_from_session_default,
     selection_with_effective_reasoning, should_defer_tool_surface_for_fast_response,
-    turn_context_from_request, RuntimeModelSelection,
+    should_use_compact_tool_surface_for_fast_response, turn_context_from_request,
+    RuntimeModelSelection,
 };
 use super::*;
 use crate::AgentAppDataSource;
@@ -298,6 +299,7 @@ fn imported_request_with_session_metadata(metadata: Value) -> ExecutionRequest {
 }
 
 fn article_workspace_search_request_event(query: &str) -> RuntimeEvent {
+    let document_text = "# 公众号文章草稿\n\n这是检索完成后才应该进入正式文章产物框的正文第一段，不能在工具检索前提前显示。这里继续补充对流程的说明，确保正式文章不是一个空占位，而是带有明确观点、读者对象和交付目标的可编辑正文。\n\n第二段继续展开核心观点，确保正式文章快照可以按前缀逐步流式输出。它会说明检索证据如何回填到文章产物，为什么过程信息留在对话流，而最终正文进入小产物卡和右侧编辑器。\n\n第三段补充引用和行动建议，让最后一个快照包含完整正文。这里还会覆盖发布检查、配图规划、标题复核和后续编辑动作，确保测试能稳定验证多段文章流式输出。";
     RuntimeEvent::new(
         "artifact.snapshot",
         json!({
@@ -322,6 +324,9 @@ fn article_workspace_search_request_event(query: &str) -> RuntimeEvent {
                                 "source": {
                                     "taskKind": "content.article.generate",
                                     "taskId": "task-article-draft-1",
+                                    "processMarkdown": "## 检索轮次\n\n这里只能作为对话过程展示。",
+                                    "documentText": document_text,
+                                    "finalMarkdown": document_text,
                                     "searchRequests": [
                                         {
                                             "id": "search-request-1",
@@ -364,7 +369,8 @@ fn article_workspace_snapshot_event_without_search() -> RuntimeEvent {
                                 "source": {
                                     "taskKind": "content.article.generate",
                                     "taskId": "task-article-draft-1",
-                                    "markdown": "# 草稿\n\n正文。"
+                                    "documentText": "# 草稿\n\n正文。",
+                                    "finalMarkdown": "# 草稿\n\n正文。"
                                 }
                             }
                         ]
@@ -592,25 +598,45 @@ async fn runtime_backend_prepares_content_factory_search_artifact_events_with_re
         .expect("content factory search events");
 
     assert_eq!(
-        events
+        &events
             .iter()
             .map(|event| event.event_type.as_str())
-            .collect::<Vec<_>>(),
-        vec![
-            "turn.started",
-            "artifact.snapshot",
-            "tool.started",
-            "tool.args",
-            "tool.result",
-            "artifact.snapshot",
-            "turn.completed"
-        ]
+            .collect::<Vec<_>>()[0..4],
+        vec!["turn.started", "tool.started", "tool.args", "tool.result",]
     );
-
-    let streaming_artifact_event = events
+    for event in events.iter().filter(|event| {
+        matches!(
+            event.event_type.as_str(),
+            "tool.started" | "tool.args" | "tool.result"
+        )
+    }) {
+        assert_eq!(event.payload["source"], "content_factory_search_requests");
+        assert_eq!(event.payload["workflowKey"], "content_article_workflow");
+        assert_eq!(event.payload["workflow_key"], "content_article_workflow");
+        assert_eq!(
+            event.payload["metadata"]["source"],
+            "content_factory_search_requests"
+        );
+        assert_eq!(
+            event.payload["metadata"]["workflowKey"],
+            "content_article_workflow"
+        );
+        assert_eq!(
+            event.payload["metadata"]["workflow_key"],
+            "content_article_workflow"
+        );
+    }
+    assert_eq!(
+        events.last().map(|event| event.event_type.as_str()),
+        Some("turn.completed")
+    );
+    let artifact_events = events
         .iter()
-        .find(|event| event.event_type == "artifact.snapshot")
-        .expect("streaming artifact event");
+        .filter(|event| event.event_type == "artifact.snapshot")
+        .collect::<Vec<_>>();
+    assert!(artifact_events.len() >= 2);
+
+    let streaming_artifact_event = artifact_events.first().expect("streaming artifact event");
     assert_eq!(
         streaming_artifact_event.payload["artifact"]["metadata"]["complete"],
         false
@@ -623,13 +649,27 @@ async fn runtime_backend_prepares_content_factory_search_artifact_events_with_re
     assert_eq!(
         streaming_artifact_event.payload["artifact"]["metadata"]["contentFactoryWorkspacePatch"]
             ["objects"][0]["source"]["hostSearchStatus"],
-        "running"
+        "completed"
+    );
+    assert!(
+        streaming_artifact_event.payload["artifact"]["metadata"]["contentFactoryWorkspacePatch"]
+            ["objects"][0]["source"]["documentText"]
+            .as_str()
+            .expect("streaming documentText")
+            .chars()
+            .count()
+            < artifact_events
+                .last()
+                .expect("final artifact event")
+                .payload["artifact"]["metadata"]["contentFactoryWorkspacePatch"]["objects"][0]
+                ["source"]["documentText"]
+                .as_str()
+                .expect("final documentText")
+                .chars()
+                .count()
     );
 
-    let artifact_event = events
-        .iter()
-        .rfind(|event| event.event_type == "artifact.snapshot")
-        .expect("artifact event");
+    let artifact_event = artifact_events.last().expect("artifact event");
     assert_eq!(
         artifact_event.payload["artifact"]["filePath"],
         ".lime/artifacts/content-factory/workspace-patch.json"
@@ -729,7 +769,6 @@ async fn runtime_backend_keeps_content_factory_search_artifact_events_closed_on_
             .collect::<Vec<_>>(),
         vec![
             "turn.started",
-            "artifact.snapshot",
             "tool.started",
             "tool.args",
             "tool.failed",
@@ -737,20 +776,26 @@ async fn runtime_backend_keeps_content_factory_search_artifact_events_closed_on_
             "turn.completed"
         ]
     );
-
-    let streaming_artifact_event = events
+    let failed_tool_event = events
         .iter()
-        .find(|event| event.event_type == "artifact.snapshot")
-        .expect("streaming artifact event");
+        .find(|event| event.event_type == "tool.failed")
+        .expect("failed tool event");
     assert_eq!(
-        streaming_artifact_event.payload["artifact"]["metadata"]["complete"],
-        false
+        failed_tool_event.payload["source"],
+        "content_factory_search_requests"
+    );
+    assert_eq!(
+        failed_tool_event.payload["metadata"]["workflowKey"],
+        "content_article_workflow"
     );
 
-    let artifact_event = events
+    let artifact_events = events
         .iter()
-        .rfind(|event| event.event_type == "artifact.snapshot")
-        .expect("artifact event");
+        .filter(|event| event.event_type == "artifact.snapshot")
+        .collect::<Vec<_>>();
+    assert_eq!(artifact_events.len(), 1);
+
+    let artifact_event = artifact_events.last().expect("artifact event");
     assert_eq!(
         artifact_event.payload["artifact"]["filePath"],
         ".lime/artifacts/content-factory/workspace-patch.json"
@@ -1468,6 +1513,9 @@ fn natural_language_news_turn_exposes_search_tool_surface_by_default() {
     assert!(policy.effective_web_search);
     assert_eq!(policy.search_mode, RequestToolPolicyMode::Auto);
     assert!(!policy.requires_web_search());
+    assert!(!should_defer_tool_surface_for_fast_response(
+        &request, &policy
+    ));
 }
 
 #[test]
@@ -1566,7 +1614,7 @@ Full body should not be rendered.
 }
 
 #[test]
-fn fast_response_without_tools_defers_tool_surface_preparation() {
+fn fast_response_with_default_auto_search_uses_compact_tool_surface() {
     let request = request_for_test(
         "帮我快速说明 TTFT 优化重点",
         None,
@@ -1582,7 +1630,70 @@ fn fast_response_without_tools_defers_tool_surface_preparation() {
     let host_request = aster_chat_request_from_request(&request);
     let policy = request_tool_policy_from_request(host_request.as_ref());
 
+    assert!(!should_defer_tool_surface_for_fast_response(
+        &request, &policy
+    ));
+    assert!(should_use_compact_tool_surface_for_fast_response(
+        &request, &policy
+    ));
+}
+
+#[test]
+fn fast_response_with_required_search_keeps_full_tool_surface_preparation() {
+    let request = request_for_test(
+        "帮我快速说明 TTFT 优化重点",
+        Some(json!({
+            "asterChatRequest": {
+                "search_mode": "required"
+            }
+        })),
+        Some(json!({
+            "harness": {
+                "fast_response_routing": {
+                    "mode": "auto",
+                    "service_model_slot": "responsive_chat"
+                }
+            }
+        })),
+    );
+    let host_request = aster_chat_request_from_request(&request);
+    let policy = request_tool_policy_from_request(host_request.as_ref());
+
+    assert_eq!(policy.search_mode, RequestToolPolicyMode::Required);
+    assert!(!should_defer_tool_surface_for_fast_response(
+        &request, &policy
+    ));
+    assert!(!should_use_compact_tool_surface_for_fast_response(
+        &request, &policy
+    ));
+}
+
+#[test]
+fn fast_response_with_explicit_search_disabled_can_defer_tool_surface_preparation() {
+    let request = request_for_test(
+        "帮我快速说明 TTFT 优化重点",
+        Some(json!({
+            "asterChatRequest": {
+                "web_search": false
+            }
+        })),
+        Some(json!({
+            "harness": {
+                "fast_response_routing": {
+                    "mode": "auto",
+                    "service_model_slot": "responsive_chat"
+                }
+            }
+        })),
+    );
+    let host_request = aster_chat_request_from_request(&request);
+    let policy = request_tool_policy_from_request(host_request.as_ref());
+
+    assert_eq!(policy.search_mode, RequestToolPolicyMode::Disabled);
     assert!(should_defer_tool_surface_for_fast_response(
+        &request, &policy
+    ));
+    assert!(!should_use_compact_tool_surface_for_fast_response(
         &request, &policy
     ));
 }
@@ -1613,10 +1724,13 @@ fn fast_response_with_plugin_activation_keeps_tool_surface_preparation() {
     assert!(!should_defer_tool_surface_for_fast_response(
         &request, &policy
     ));
+    assert!(!should_use_compact_tool_surface_for_fast_response(
+        &request, &policy
+    ));
 }
 
 #[test]
-fn session_config_defers_agent_skills_context_for_fast_response_without_tools() {
+fn session_config_defers_agent_skills_context_when_fast_response_search_disabled() {
     let workspace = TempDir::new().expect("workspace");
     let runtime_agents_dir = workspace.path().join(".lime");
     std::fs::create_dir_all(&runtime_agents_dir).expect("runtime agents dir");
@@ -1642,7 +1756,11 @@ Full body should not be rendered.
     .expect("skill file");
     let mut request = request_for_test(
         "帮我快速说明 TTFT 优化重点",
-        None,
+        Some(json!({
+            "asterChatRequest": {
+                "web_search": false
+            }
+        })),
         Some(json!({
             "harness": {
                 "workspace_root": workspace.path().to_string_lossy(),
@@ -1723,8 +1841,15 @@ Full body should not be rendered.
 }
 
 #[test]
-fn session_config_keeps_agent_skills_context_when_fast_response_allows_search() {
+fn session_config_uses_compact_tools_when_fast_response_allows_auto_search() {
     let workspace = TempDir::new().expect("workspace");
+    let runtime_agents_dir = workspace.path().join(".lime");
+    std::fs::create_dir_all(&runtime_agents_dir).expect("runtime agents dir");
+    std::fs::write(
+        runtime_agents_dir.join("AGENTS.md"),
+        "FAST_RESPONSE_AUTO_SHOULD_NOT_LOAD_RUNTIME_AGENTS",
+    )
+    .expect("runtime agents file");
     let skill_dir = workspace.path().join(".agents/skills/research");
     std::fs::create_dir_all(&skill_dir).expect("skill dir");
     std::fs::write(
@@ -1751,6 +1876,11 @@ Full body should not be rendered.
             "harness": {
                 "workspace_root": workspace.path().to_string_lossy(),
                 "cwd": workspace.path().to_string_lossy(),
+                "memory_store_prompt_context": {
+                    "scope": "workspace",
+                    "path": "memory_summary.md",
+                    "content": "FAST_RESPONSE_AUTO_SHOULD_NOT_LOAD_MEMORY_CONTEXT"
+                },
                 "fast_response_routing": {
                     "mode": "auto",
                     "service_model_slot": "responsive_chat"
@@ -1766,6 +1896,14 @@ Full body should not be rendered.
     let selection = selection_from_explicit_preferences(&request).expect("selection");
     let policy = request_tool_policy_from_request(host_request.as_ref());
     assert!(policy.allows_web_search());
+    let config_metadata = json!({
+        "memory": {
+            "soul": {
+                "source": "memory.soul",
+                "summary": "FAST_RESPONSE_AUTO_SHOULD_NOT_LOAD_SOUL_CONTEXT"
+            }
+        }
+    });
 
     let config = session_config_from_request(
         &request,
@@ -1773,16 +1911,43 @@ Full body should not be rendered.
         &scope,
         &selection,
         &policy,
-        None,
+        Some(config_metadata),
     );
-    assert_eq!(config.include_context_trace, Some(true));
+    assert_eq!(config.include_context_trace, Some(false));
     let turn_context = config.turn_context.as_ref().expect("turn context");
-    assert!(!turn_context.metadata.contains_key("lime_runtime"));
+    assert_eq!(
+        turn_context
+            .metadata
+            .get("lime_runtime")
+            .and_then(|metadata| metadata.get("tool_surface"))
+            .and_then(Value::as_str),
+        Some("compact_tools")
+    );
+    assert_eq!(
+        turn_context
+            .metadata
+            .get("lime_runtime")
+            .and_then(|metadata| metadata.get("source"))
+            .and_then(Value::as_str),
+        Some("fast_response_routing")
+    );
+    assert_eq!(
+        turn_context
+            .metadata
+            .get("web_search_enabled")
+            .and_then(Value::as_bool),
+        Some(true)
+    );
 
     let prompt = config.system_prompt.expect("system prompt");
-    assert!(prompt.contains("## 可用 Agent Skills"));
-    assert!(prompt.contains("`research`"));
-    assert!(prompt.contains("Use source-backed research."));
+    assert!(prompt.contains("你是 Lime 桌面端里的 AI 助手"));
+    assert!(!prompt.contains("【Lime Runtime AGENTS 指令】"));
+    assert!(!prompt.contains("FAST_RESPONSE_AUTO_SHOULD_NOT_LOAD_RUNTIME_AGENTS"));
+    assert!(!prompt.contains("## 可用 Agent Skills"));
+    assert!(!prompt.contains("`research`"));
+    assert!(!prompt.contains("Use source-backed research."));
+    assert!(!prompt.contains("FAST_RESPONSE_AUTO_SHOULD_NOT_LOAD_MEMORY_CONTEXT"));
+    assert!(!prompt.contains("FAST_RESPONSE_AUTO_SHOULD_NOT_LOAD_SOUL_CONTEXT"));
 }
 
 #[test]

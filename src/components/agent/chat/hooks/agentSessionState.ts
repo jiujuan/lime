@@ -25,6 +25,13 @@ import {
   mergeThreadItems,
   mergeThreadTurns,
 } from "../utils/threadTimelineView";
+import {
+  mergeRuntimeSyncThreadItems,
+  normalizeAgentSessionDetailMergeMode,
+  resolveAgentSessionTimelineMergeDecision,
+  shouldPreserveDetachedLocalSnapshot,
+  type AgentSessionDetailMergeMode,
+} from "./agentSessionTimelineMergePolicy";
 import { collectDetailThreadItems } from "./agentChatHistoryThreadItems";
 import { createExecutionRuntimeFromSessionDetail } from "../utils/sessionExecutionRuntime";
 import { normalizeExecutionStrategy } from "./agentChatCoreUtils";
@@ -45,6 +52,8 @@ export interface AgentSessionSnapshot {
   childSubagentSessions: AsterSubagentSessionInfo[];
   subagentParentContext: AsterSubagentParentContext | null;
 }
+
+export type { AgentSessionDetailMergeMode } from "./agentSessionTimelineMergePolicy";
 
 export function createEmptyAgentSessionSnapshot(options?: {
   executionRuntime?: AsterSessionExecutionRuntime | null;
@@ -105,94 +114,6 @@ function resolveCurrentTurnIdFromTimeline(params: {
     }
   }
   return null;
-}
-
-function normalizeConversationText(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
-}
-
-function firstUserMessageText(messages: Message[]): string {
-  return normalizeConversationText(
-    messages.find((message) => message.role === "user")?.content || "",
-  );
-}
-
-function userMessageTexts(messages: Message[]): string[] {
-  return messages
-    .filter((message) => message.role === "user")
-    .map((message) => normalizeConversationText(message.content || ""));
-}
-
-function areConversationTextsCompatible(left: string, right: string): boolean {
-  if (!left || !right) {
-    return true;
-  }
-
-  return left === right || left.includes(right) || right.includes(left);
-}
-
-function isLocalTimelineCompatibleWithHydratedMessages(params: {
-  hydratedMessages: Message[];
-  localMessages: Message[];
-}): boolean {
-  const hydratedUserTexts = userMessageTexts(params.hydratedMessages);
-  const localUserTexts = userMessageTexts(params.localMessages);
-  if (hydratedUserTexts.length === 0 || localUserTexts.length === 0) {
-    return true;
-  }
-
-  const compareCount = Math.min(
-    hydratedUserTexts.length,
-    localUserTexts.length,
-  );
-  for (let index = 0; index < compareCount; index += 1) {
-    if (
-      !areConversationTextsCompatible(
-        localUserTexts[index] || "",
-        hydratedUserTexts[index] || "",
-      )
-    ) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-function hasAssistantProcessSnapshot(messages: Message[]): boolean {
-  return messages.some(
-    (message) =>
-      message.role === "assistant" &&
-      (Boolean(message.thinkingContent?.trim()) ||
-        Boolean(message.contentParts?.some((part) => part.type !== "text")) ||
-        Boolean(message.runtimeTurnId?.trim().startsWith("skill-exec-")) ||
-        message.inlineProcessRetention === "skill"),
-  );
-}
-
-function shouldPreserveDetachedLocalSnapshot(params: {
-  hydratedMessages: Message[];
-  localMessages: Message[];
-  sessionId: string | null;
-}): boolean {
-  if (
-    params.sessionId !== null ||
-    !hasAssistantProcessSnapshot(params.localMessages)
-  ) {
-    return false;
-  }
-
-  const localUserText = firstUserMessageText(params.localMessages);
-  const hydratedUserText = firstUserMessageText(params.hydratedMessages);
-  if (!localUserText || !hydratedUserText) {
-    return false;
-  }
-
-  return (
-    localUserText === hydratedUserText ||
-    localUserText.includes(hydratedUserText) ||
-    hydratedUserText.includes(localUserText)
-  );
 }
 
 export function hasSessionHydrationActivity(options: {
@@ -414,6 +335,7 @@ interface BuildHydratedAgentSessionSnapshotOptions {
   syncSessionId?: boolean;
   executionStrategyOverride?: AsterExecutionStrategy;
   preserveExecutionStrategyOnMissingDetail?: boolean;
+  detailMergeMode?: AgentSessionDetailMergeMode;
 }
 
 export function buildHydratedAgentSessionSnapshot(
@@ -436,7 +358,10 @@ export function buildHydratedAgentSessionSnapshot(
     syncSessionId = false,
     executionStrategyOverride,
     preserveExecutionStrategyOnMissingDetail = false,
+    detailMergeMode,
   } = options;
+  const normalizedDetailMergeMode =
+    normalizeAgentSessionDetailMergeMode(detailMergeMode);
   const effectiveCurrentSessionId =
     localSnapshotOverride?.sessionId ?? currentSessionId;
   const effectiveCurrentMessages = localSnapshotOverride
@@ -446,6 +371,10 @@ export function buildHydratedAgentSessionSnapshot(
     localSnapshotOverride?.threadTurns ?? currentThreadTurns;
   const effectiveCurrentThreadItems =
     localSnapshotOverride?.threadItems ?? currentThreadItems;
+  const incomingTurns = detail.turns || [];
+  const incomingItems = normalizeLegacyThreadItems(
+    collectDetailThreadItems(detail),
+  );
   const mayPreserveExistingTimelineBySession =
     effectiveCurrentSessionId === topicId ||
     (effectiveCurrentSessionId === null &&
@@ -470,26 +399,27 @@ export function buildHydratedAgentSessionSnapshot(
           includeTimelineFallback: true,
         })
       : hydratedMessagesForCurrentMode;
-  const shouldPreserveExistingTimelineBySession =
-    mayPreserveExistingTimelineBySession &&
-    isLocalTimelineCompatibleWithHydratedMessages({
-      hydratedMessages: hydratedMessagesForCompatibility,
-      localMessages: effectiveCurrentMessages,
-    });
-  const hydratedMessages = shouldPreserveExistingTimelineBySession
-    ? hydratedMessagesForCurrentMode
-    : hydratedMessagesForCompatibility;
+  const timelineMergeDecision = resolveAgentSessionTimelineMergeDecision({
+    mode: normalizedDetailMergeMode,
+    mayPreserveExistingTimelineBySession,
+    hydratedMessagesForCompatibility,
+    localMessages: effectiveCurrentMessages,
+    threadRead: detail.thread_read,
+    incomingTurns,
+  });
+  const hydratedMessages =
+    timelineMergeDecision.shouldIgnoreIncompatibleHydratedMessages
+      ? []
+      : timelineMergeDecision.shouldPreserveBySession
+        ? hydratedMessagesForCurrentMode
+        : hydratedMessagesForCompatibility;
   const shouldPreserveExistingTimeline =
-    shouldPreserveExistingTimelineBySession ||
+    timelineMergeDecision.shouldPreserveBySession ||
     shouldPreserveDetachedLocalSnapshot({
       hydratedMessages,
       localMessages: effectiveCurrentMessages,
       sessionId: effectiveCurrentSessionId,
     });
-  const incomingTurns = detail.turns || [];
-  const incomingItems = normalizeLegacyThreadItems(
-    collectDetailThreadItems(detail),
-  );
   const shouldPreserveExecutionRuntimeOnMissingDetail =
     shouldPreserveExistingTimeline;
   const nextExecutionRuntime = createExecutionRuntimeFromSessionDetail(detail);
@@ -505,9 +435,11 @@ export function buildHydratedAgentSessionSnapshot(
     ? mergeThreadTurns(effectiveCurrentThreadTurns, incomingTurns)
     : mergeThreadTurns(incomingTurns);
   const nextThreadItems = shouldPreserveExistingTimeline
-    ? filterConversationThreadItems(
-        mergeThreadItems(effectiveCurrentThreadItems, incomingItems),
-      )
+    ? timelineMergeDecision.shouldPreserveByRuntimeSync
+      ? mergeRuntimeSyncThreadItems(effectiveCurrentThreadItems, incomingItems)
+      : filterConversationThreadItems(
+          mergeThreadItems(effectiveCurrentThreadItems, incomingItems),
+        )
     : filterConversationThreadItems(incomingItems);
   const visibleIncomingTurns = mergeThreadTurns(incomingTurns);
   const visibleIncomingItems = mergeThreadItems(incomingItems);

@@ -45,7 +45,9 @@ export const ImageWorkbenchMessagePreview: React.FC<
   const toolLabel = resolveToolLabel(preview, t);
   const modelLabel = resolveImageWorkbenchPreviewModelLabel(preview);
   const caption = preview.caption?.trim();
-  const showRetryAction = preview.status === "failed";
+  const showRetryAction =
+    (preview.status === "failed" || preview.status === "cancelled") &&
+    preview.retryable !== false;
 
   const openPreview = (selection?: MessageImageWorkbenchPreviewSelection) => {
     if (onOpen) {

@@ -1,0 +1,109 @@
+.workspace-plugin-orchestration-rail {
+  display: grid;
+  grid-template-columns: minmax(138px, 0.22fr) minmax(0, 1fr);
+  gap: 8px;
+  align-items: stretch;
+  margin: 0 0 10px;
+  border: 1px solid var(--lime-surface-border);
+  border-radius: 8px;
+  background: var(--lime-surface);
+  padding: 8px;
+}
+
+.workspace-plugin-orchestration-rail-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  border-right: 1px solid var(--lime-surface-border);
+  padding-right: 8px;
+}
+
+.workspace-plugin-orchestration-rail-body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.workspace-plugin-orchestration-rail-steps {
+  display: flex;
+  min-width: 0;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 1px;
+}
+
+.workspace-plugin-orchestration-rail-step {
+  display: grid;
+  grid-template-columns: 18px minmax(112px, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 208px;
+  max-width: 260px;
+  border: 1px solid var(--lime-surface-border);
+  border-radius: 7px;
+  background: var(--lime-surface-subtle);
+  padding: 6px 7px;
+}
+
+.workspace-plugin-orchestration-rail-index {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--lime-surface);
+  color: var(--lime-text-muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.workspace-plugin-orchestration-rail-status {
+  white-space: nowrap;
+  border-radius: 999px;
+  border: 1px solid rgba(34, 197, 94, 0.22);
+  background: rgba(34, 197, 94, 0.08);
+  padding: 2px 6px;
+  color: rgb(21, 128, 61);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.workspace-plugin-orchestration-rail-chips {
+  display: flex;
+  min-width: 0;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 1px;
+}
+
+.workspace-plugin-orchestration-rail-chip {
+  display: inline-flex;
+  max-width: 220px;
+  min-width: 0;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  border: 1px solid var(--lime-surface-border);
+  background: var(--lime-surface-subtle);
+  padding: 3px 8px;
+  color: var(--lime-text-muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+@container (max-width: 520px) {
+  .workspace-plugin-orchestration-rail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workspace-plugin-orchestration-rail-heading {
+    border-right: 0;
+    border-bottom: 1px solid var(--lime-surface-border);
+    padding-right: 0;
+    padding-bottom: 8px;
+  }
+}

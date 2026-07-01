@@ -660,7 +660,7 @@ async function collectDevBridgeDeniedRuntimeTranscript(options) {
           flow.before.permissionStatus === "requires_confirmation" &&
           flow.before.confirmationStatus === "requested" &&
           flow.before.pendingRequestCount > 0 &&
-          flow.before.latestTurnStatus === "failed" &&
+          flow.before.latestTurnStatus === "waitingAction" &&
           String(flow.before.confirmationRequestId || "").includes(flow.turnId),
       ),
       deniedDecisionClearsPendingRequest:
@@ -717,7 +717,7 @@ async function collectLiveRuntimeTranscript(options) {
           flow.before.permissionStatus === "requires_confirmation" &&
           flow.before.confirmationStatus === "requested" &&
           flow.before.pendingRequestCount > 0 &&
-          flow.before.latestTurnStatus === "failed" &&
+          flow.before.latestTurnStatus === "waitingAction" &&
           String(flow.before.confirmationRequestId || "").includes(flow.turnId),
       ),
       deniedDecisionClearsPendingRequest:

@@ -155,7 +155,43 @@ describe("AgentThreadTimeline", () => {
       }),
     );
   });
-  it("多个 file_artifact 应聚合成一个文件变更框", async () => {
+  it("多个只读 file_artifact 不应聚合成文件变更框", () => {
+    const container = renderTimeline([
+      createFileArtifactItem({
+        path: "skills/imagegen.md",
+        source: "file_read",
+        content: "# imagegen\n\nGenerate raster images.",
+        metadata: {
+          eventClass: "file.read",
+        },
+      }),
+      createFileArtifactItem({
+        ...createBaseItem("artifact-2", 2),
+        path: "skills/browser.md",
+        source: "file_read",
+        content: "# browser\n\nControl browser state.",
+        metadata: {
+          eventClass: "file.read",
+        },
+      }),
+    ]);
+
+    expect(
+      container.querySelector('[data-testid="timeline-file-artifact-group"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="file-changes-summary-card"]'),
+    ).toBeNull();
+    expect(
+      container.querySelectorAll(
+        '[data-testid="timeline-file-attachment-card"]',
+      ),
+    ).toHaveLength(2);
+    expect(container.textContent).not.toContain("已编辑 2 个文件");
+    expect(container.textContent).toContain("imagegen.md");
+    expect(container.textContent).toContain("browser.md");
+  });
+  it("多个带 file_change 的 file_artifact 应聚合成一个文件变更框", async () => {
     const onOpenArtifactFromTimeline = vi.fn();
     const container = renderTimeline(
       [

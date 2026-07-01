@@ -14,6 +14,11 @@ import {
   readHistoryNumber,
   readHistoryString,
 } from "./agentChatHistoryPrimitives";
+import {
+  isWorkspaceArticlePatchArtifactKind,
+  readWorkspaceArticlePatchRecordFromMetadata,
+  readWorkspaceArticleRecordFromMetadata,
+} from "../workspace/workspaceArticleWorkspaceMetadata";
 
 type HistoryArtifactSummary = {
   artifactRef?: unknown;
@@ -213,25 +218,21 @@ function isArticleWorkspaceArtifactSummary(
   metadata: Record<string, unknown> | null,
 ): boolean {
   const summaryKind = readHistoryString(summary.kind);
-  if (summaryKind === "content_factory.workspace_patch") {
+  if (isWorkspaceArticlePatchArtifactKind(summaryKind)) {
     return true;
   }
   if (!metadata) {
     return false;
   }
   const articleWorkspaceCompat =
-    asHistoryRecord(metadata.articleWorkspace) ??
-    asHistoryRecord(metadata.article_workspace);
+    readWorkspaceArticleRecordFromMetadata(metadata);
   const artifactDocument =
     asHistoryRecord(metadata.artifactDocument) ??
     asHistoryRecord(metadata.artifact_document);
   const artifactDocumentMetadata = asHistoryRecord(artifactDocument?.metadata);
   const artifactDocumentArticleWorkspace =
-    asHistoryRecord(artifactDocumentMetadata?.articleWorkspace) ??
-    asHistoryRecord(artifactDocumentMetadata?.article_workspace);
-  const contentFactoryWorkspacePatch =
-    asHistoryRecord(metadata.contentFactoryWorkspacePatch) ??
-    asHistoryRecord(metadata.content_factory_workspace_patch);
+    readWorkspaceArticleRecordFromMetadata(artifactDocumentMetadata);
+  const workspacePatch = readWorkspaceArticlePatchRecordFromMetadata(metadata);
   const openedFrom = readHistoryMetadataString(metadata, [
     "openedFrom",
     "opened_from",
@@ -247,9 +248,9 @@ function isArticleWorkspaceArtifactSummary(
   ]);
   return (
     Boolean(articleWorkspaceCompat || artifactDocumentArticleWorkspace) ||
-    Boolean(contentFactoryWorkspacePatch) ||
+    Boolean(workspacePatch) ||
     openedFrom === "app_server_article_workspace" ||
-    artifactKind === "content_factory.workspace_patch" ||
+    isWorkspaceArticlePatchArtifactKind(artifactKind) ||
     (artifactSchema === "artifact_document.v1" &&
       Boolean(articleWorkspaceCompat || artifactDocumentArticleWorkspace))
   );

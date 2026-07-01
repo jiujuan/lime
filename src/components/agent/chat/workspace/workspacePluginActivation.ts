@@ -6,6 +6,7 @@ import {
   type PluginActivationContext,
   type PluginActivationContextSource,
   type PluginActivationMentionParseResult,
+  type PluginContract,
   type PluginObjectRef,
 } from "@/features/plugin";
 import type { HandleSendOptions } from "../hooks/handleSendTypes";
@@ -16,6 +17,10 @@ import {
   type WorkspaceAgentAppIntentMatch,
   type WorkspaceAgentAppIntentSource,
 } from "./workspaceAgentAppIntentRouting";
+import {
+  buildWorkspacePluginRuntimeReadiness,
+  type WorkspacePluginRuntimeReadiness,
+} from "./workspacePluginRuntimeReadiness";
 
 export interface WorkspacePluginActivationResolution {
   status: "matched" | "blocked";
@@ -23,6 +28,7 @@ export interface WorkspacePluginActivationResolution {
   body: string;
   context?: PluginActivationContext;
   intentMatch?: WorkspaceAgentAppIntentMatch;
+  runtimeReadiness?: WorkspacePluginRuntimeReadiness;
   blockerCodes?: string[];
 }
 
@@ -36,6 +42,8 @@ export interface WorkspacePluginActivationRequestMetadata {
 interface WorkspacePluginActivationParseResolution {
   parseResult: PluginActivationMentionParseResult;
   intentSources: readonly WorkspaceAgentAppIntentSource[];
+  installedAgentApps: readonly InstalledAgentAppState[];
+  contracts: readonly PluginContract[];
 }
 
 function resolvePluginActivationParseResult(params: {
@@ -61,6 +69,8 @@ function resolvePluginActivationParseResult(params: {
       return {
         parseResult,
         intentSources: params.installedAgentApps,
+        installedAgentApps: params.installedAgentApps,
+        contracts,
       };
     }
   }
@@ -109,11 +119,29 @@ export function resolveWorkspacePluginActivation(params: {
     resolveWorkspaceAgentAppIntent(parseResult.match.body, activeSources) ??
     resolveWorkspaceAgentAppIntent(params.text, activeSources) ??
     undefined;
+  const contract = parseResolution.contracts.find(
+    (candidate) => candidate.id === parseResult.context.pluginId,
+  );
+  const installedAgentApp = parseResolution.installedAgentApps.find(
+    (source) => source.appId === activeAppId,
+  );
+  const runtimeReadiness = contract
+    ? buildWorkspacePluginRuntimeReadiness({
+        contract,
+        installedAgentApp,
+        activeAgentAppId: parseResult.context.activeAgentAppId,
+        workflowKey:
+          parseResult.context.workflowKey ?? intentMatch?.workflowKey,
+        taskKind: parseResult.context.taskKind ?? intentMatch?.taskKind,
+        intentKey: intentMatch?.intentKey,
+      })
+    : undefined;
   return {
     status: "matched",
     ...base,
     context: parseResult.context,
     intentMatch,
+    runtimeReadiness,
   };
 }
 
@@ -208,9 +236,17 @@ function pluginActivationMetadata(
       hook_policy:
         asRecord(workflowRecord?.hookPolicy) ??
         asRecord(workflowRecord?.hook_policy),
+      runtime_readiness: contextRuntimeReadiness(resolution.runtimeReadiness),
       runtime_registries: buildActivationRuntimeRegistries(runtimeRecord),
       default_prompts: readInterfaceDefaultPrompts(manifest?.interface),
     },
+    ...(resolution.runtimeReadiness
+      ? {
+          plugin_runtime_readiness: contextRuntimeReadiness(
+            resolution.runtimeReadiness,
+          ),
+        }
+      : {}),
     ...(intent
       ? {
           plugin_activation_intent: {
@@ -227,6 +263,47 @@ function pluginActivationMetadata(
           },
         }
       : {}),
+  };
+}
+
+function contextRuntimeReadiness(
+  readiness: WorkspacePluginRuntimeReadiness | undefined,
+) {
+  if (!readiness) {
+    return undefined;
+  }
+  return {
+    source: readiness.source,
+    plugin_id: readiness.pluginId,
+    active_agent_app_id: readiness.activeAgentAppId,
+    workflow_key: readiness.workflowKey,
+    task_kind: readiness.taskKind,
+    status: readiness.status,
+    checked_at: readiness.checkedAt,
+    connector_refs: readiness.connectorRefs,
+    hook_refs: readiness.hookRefs,
+    cli_refs: readiness.cliRefs,
+    connectors: readiness.connectors.map(runtimeReadinessItemRecord),
+    hooks: readiness.hooks.map(runtimeReadinessItemRecord),
+    clis: readiness.clis.map(runtimeReadinessItemRecord),
+    blocker_codes: readiness.blockerCodes,
+    warning_codes: readiness.warningCodes,
+  };
+}
+
+function runtimeReadinessItemRecord(
+  item: WorkspacePluginRuntimeReadiness["connectors"][number],
+) {
+  return {
+    id: item.id,
+    title: item.title,
+    required: item.required,
+    status: item.status,
+    reason_codes: item.reasonCodes,
+    source: item.source,
+    kind: item.kind,
+    event: item.event,
+    entrypoint: item.entrypoint,
   };
 }
 

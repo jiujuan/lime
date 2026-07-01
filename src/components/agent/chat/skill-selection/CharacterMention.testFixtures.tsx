@@ -103,9 +103,14 @@ vi.mock("@/components/ui/popover", () => {
 vi.mock("@/components/ui/command", () => {
   const Command = React.forwardRef<
     HTMLDivElement,
-    React.HTMLAttributes<HTMLDivElement>
-  >(({ children, ...props }, ref) => (
-    <div ref={ref} {...props}>
+    React.HTMLAttributes<HTMLDivElement> & { shouldFilter?: boolean }
+  >(({ children, shouldFilter = true, ...props }, ref) => (
+    <div
+      ref={ref}
+      data-testid="mention-command-root"
+      data-should-filter={String(shouldFilter)}
+      {...props}
+    >
       {children}
     </div>
   ));
@@ -474,7 +479,10 @@ export async function typeMentionAndWait(
   });
 }
 
-export async function typeSlashAndWait(textarea: HTMLTextAreaElement, value = "/") {
+export async function typeSlashAndWait(
+  textarea: HTMLTextAreaElement,
+  value = "/",
+) {
   await act(async () => {
     await import("./CharacterMentionPanel");
   });

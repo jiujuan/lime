@@ -715,6 +715,374 @@ async fn read_session_current_uses_projection_summary_for_limited_history() {
 }
 
 #[tokio::test]
+async fn read_session_current_projection_summary_preserves_process_items() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
+    let event_log_writer = Arc::new(EventLogWriter::new(&roots.event_log_root).expect("writer"));
+    let projection_store =
+        Arc::new(ProjectionStore::initialize(&roots.projection_db_path).expect("projection"));
+    let events = vec![
+        AgentEvent {
+            event_id: "evt_projection_process_user".to_string(),
+            sequence: 1,
+            session_id: "sess_projection_process".to_string(),
+            thread_id: Some("thread_projection_process".to_string()),
+            turn_id: Some("turn_projection_process".to_string()),
+            event_type: "message.created".to_string(),
+            timestamp: timestamp(),
+            payload: json!({
+                "input": {
+                    "text": "打开历史时保留工具调用和思考",
+                    "attachments": []
+                },
+                "session": {
+                    "workspaceId": "workspace-current",
+                    "modelName": "fixture-model"
+                }
+            }),
+        },
+        AgentEvent {
+            event_id: "evt_projection_process_reasoning".to_string(),
+            sequence: 2,
+            session_id: "sess_projection_process".to_string(),
+            thread_id: Some("thread_projection_process".to_string()),
+            turn_id: Some("turn_projection_process".to_string()),
+            event_type: "reasoning.delta".to_string(),
+            timestamp: timestamp(),
+            payload: json!({
+                "text": "我会先查找历史事件，再汇总结论。",
+                "metadata": {
+                    "source": "reasoning"
+                }
+            }),
+        },
+        AgentEvent {
+            event_id: "evt_projection_process_tool".to_string(),
+            sequence: 3,
+            session_id: "sess_projection_process".to_string(),
+            thread_id: Some("thread_projection_process".to_string()),
+            turn_id: Some("turn_projection_process".to_string()),
+            event_type: "item.completed".to_string(),
+            timestamp: timestamp(),
+            payload: json!({
+                "item": {
+                    "id": "tool-history-web-search",
+                    "type": "tool_call",
+                    "status": "completed",
+                    "payload": {
+                        "type": "tool_call",
+                        "name": "WebSearch",
+                        "arguments": {
+                            "query": "history process preservation"
+                        },
+                        "output": "搜索完成",
+                        "success": true
+                    }
+                }
+            }),
+        },
+        AgentEvent {
+            event_id: "evt_projection_process_commentary".to_string(),
+            sequence: 4,
+            session_id: "sess_projection_process".to_string(),
+            thread_id: Some("thread_projection_process".to_string()),
+            turn_id: Some("turn_projection_process".to_string()),
+            event_type: "message.delta".to_string(),
+            timestamp: timestamp(),
+            payload: json!({
+                "text": "上面工具还在查找。",
+                "phase": "commentary"
+            }),
+        },
+        AgentEvent {
+            event_id: "evt_projection_process_routing".to_string(),
+            sequence: 5,
+            session_id: "sess_projection_process".to_string(),
+            thread_id: Some("thread_projection_process".to_string()),
+            turn_id: Some("turn_projection_process".to_string()),
+            event_type: "routing.decision.made".to_string(),
+            timestamp: timestamp(),
+            payload: json!({
+                "routingDecision": {
+                    "decisionSource": "profile_model_slot",
+                    "decisionReason": "profile_slot_selected",
+                    "serviceModelSlot": "coding",
+                    "selectedProvider": "custom-coding",
+                    "selectedModel": "coder-large"
+                }
+            }),
+        },
+        AgentEvent {
+            event_id: "evt_projection_process_commentary_batch".to_string(),
+            sequence: 6,
+            session_id: "sess_projection_process".to_string(),
+            thread_id: Some("thread_projection_process".to_string()),
+            turn_id: Some("turn_projection_process".to_string()),
+            event_type: "message.delta_batch".to_string(),
+            timestamp: timestamp(),
+            payload: json!({
+                "deltas": [
+                    {
+                        "text": "批量过程输出也要保留。"
+                    },
+                    {
+                        "text": "不能混进最终结论。"
+                    }
+                ],
+                "phase": "commentary"
+            }),
+        },
+        AgentEvent {
+            event_id: "evt_projection_process_test_started".to_string(),
+            sequence: 7,
+            session_id: "sess_projection_process".to_string(),
+            thread_id: Some("thread_projection_process".to_string()),
+            turn_id: Some("turn_projection_process".to_string()),
+            event_type: "test.started".to_string(),
+            timestamp: timestamp(),
+            payload: json!({
+                "testRunId": "test-history-read",
+                "suite": "app-server",
+                "commandSummary": "cargo test read_session_current_"
+            }),
+        },
+        AgentEvent {
+            event_id: "evt_projection_process_test_completed".to_string(),
+            sequence: 8,
+            session_id: "sess_projection_process".to_string(),
+            thread_id: Some("thread_projection_process".to_string()),
+            turn_id: Some("turn_projection_process".to_string()),
+            event_type: "test.completed".to_string(),
+            timestamp: timestamp(),
+            payload: json!({
+                "testRunId": "test-history-read",
+                "suite": "app-server",
+                "commandSummary": "cargo test read_session_current_",
+                "result": "passed",
+                "passed": 5,
+                "failed": 0
+            }),
+        },
+        AgentEvent {
+            event_id: "evt_projection_process_ask".to_string(),
+            sequence: 9,
+            session_id: "sess_projection_process".to_string(),
+            thread_id: Some("thread_projection_process".to_string()),
+            turn_id: Some("turn_projection_process".to_string()),
+            event_type: "action.required".to_string(),
+            timestamp: timestamp(),
+            payload: json!({
+                "requestId": "ask-history-process",
+                "actionType": "ask_user",
+                "prompt": "是否继续对齐 Codex？",
+                "questions": [
+                    {
+                        "question": "是否继续保留非工具过程项？",
+                        "header": "历史",
+                        "options": [
+                            {
+                                "label": "继续",
+                                "description": "保留 reasoning、测试、告警和产物。"
+                            }
+                        ]
+                    }
+                ]
+            }),
+        },
+        AgentEvent {
+            event_id: "evt_projection_process_ask_resolved".to_string(),
+            sequence: 10,
+            session_id: "sess_projection_process".to_string(),
+            thread_id: Some("thread_projection_process".to_string()),
+            turn_id: Some("turn_projection_process".to_string()),
+            event_type: "action.resolved".to_string(),
+            timestamp: timestamp(),
+            payload: json!({
+                "requestId": "ask-history-process",
+                "actionType": "ask_user",
+                "decision": "submitted"
+            }),
+        },
+        AgentEvent {
+            event_id: "evt_projection_process_warning".to_string(),
+            sequence: 11,
+            session_id: "sess_projection_process".to_string(),
+            thread_id: Some("thread_projection_process".to_string()),
+            turn_id: Some("turn_projection_process".to_string()),
+            event_type: "runtime.warning".to_string(),
+            timestamp: timestamp(),
+            payload: json!({
+                "message": "模型路由发生降级，但任务继续。"
+            }),
+        },
+        AgentEvent {
+            event_id: "evt_projection_process_artifact".to_string(),
+            sequence: 12,
+            session_id: "sess_projection_process".to_string(),
+            thread_id: Some("thread_projection_process".to_string()),
+            turn_id: Some("turn_projection_process".to_string()),
+            event_type: "artifact.snapshot".to_string(),
+            timestamp: timestamp(),
+            payload: json!({
+                "artifact": {
+                    "id": "artifact-history-workspace",
+                    "kind": "article_workspace",
+                    "title": "历史过程工作台",
+                    "status": "completed",
+                    "metadata": {
+                        "agentAppWorker": {
+                            "appId": "content-factory",
+                            "taskId": "task-history-workspace",
+                            "taskKind": "content.article.generate",
+                            "outputArtifactKind": "article_workspace"
+                        },
+                        "articleWorkspace": {
+                            "objects": [
+                                {
+                                    "ref": {
+                                        "appId": "agent-runtime",
+                                        "sessionId": "sess_projection_process",
+                                        "kind": "articleDraft",
+                                        "id": "draft-history"
+                                    },
+                                    "kind": "articleDraft",
+                                    "title": "历史过程草稿",
+                                    "documentText": "过程项已保留"
+                                }
+                            ]
+                        }
+                    }
+                }
+            }),
+        },
+        AgentEvent {
+            event_id: "evt_projection_process_assistant".to_string(),
+            sequence: 13,
+            session_id: "sess_projection_process".to_string(),
+            thread_id: Some("thread_projection_process".to_string()),
+            turn_id: Some("turn_projection_process".to_string()),
+            event_type: "message.delta_batch".to_string(),
+            timestamp: timestamp(),
+            payload: json!({
+                "deltas": [
+                    {
+                        "text": "结论：历史打开后应保留工具调用"
+                    },
+                    {
+                        "text": "和思考。"
+                    }
+                ],
+                "phase": "final"
+            }),
+        },
+        AgentEvent {
+            event_id: "evt_projection_process_completed".to_string(),
+            sequence: 14,
+            session_id: "sess_projection_process".to_string(),
+            thread_id: Some("thread_projection_process".to_string()),
+            turn_id: Some("turn_projection_process".to_string()),
+            event_type: "turn.completed".to_string(),
+            timestamp: timestamp(),
+            payload: json!({}),
+        },
+    ];
+    event_log_writer
+        .append_events(&events)
+        .expect("append events");
+    projection_store
+        .apply_events(&events)
+        .expect("apply events");
+
+    let restarted_core = RuntimeCore::default()
+        .with_event_log_writer(event_log_writer)
+        .with_projection_store(projection_store);
+    let read = restarted_core
+        .read_session_current(AgentSessionReadParams {
+            session_id: "sess_projection_process".to_string(),
+            history_limit: Some(2),
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .await
+        .expect("read projection summary");
+    let detail = read.detail.expect("detail");
+    let items = detail["items"].as_array().expect("items");
+
+    assert_eq!(detail["projection_source"], "runtime.projection_1");
+    assert_eq!(
+        detail["messages"][1]["metadata"]["source"].as_str(),
+        Some("projection_summary")
+    );
+    assert_eq!(
+        detail["messages"][1]["content"][0]["text"].as_str(),
+        Some("结论：历史打开后应保留工具调用和思考。")
+    );
+    assert!(items.iter().any(|item| {
+        item["type"].as_str() == Some("reasoning")
+            && item["text"]
+                .as_str()
+                .is_some_and(|text| text.contains("查找历史事件"))
+    }));
+    assert!(items.iter().any(|item| {
+        item["type"].as_str() == Some("web_search")
+            && item["tool_name"].as_str() == Some("WebSearch")
+    }));
+    assert!(items.iter().any(|item| {
+        item["type"].as_str() == Some("agent_message")
+            && item["phase"].as_str() == Some("commentary")
+            && item["text"].as_str().is_some_and(|text| {
+                text.contains("上面工具还在查找。")
+                    && text.contains("批量过程输出也要保留。")
+                    && text.contains("不能混进最终结论。")
+            })
+    }));
+    assert!(items.iter().any(|item| {
+        item["type"].as_str() == Some("request_user_input")
+            && item["action_type"].as_str() == Some("ask_user")
+            && item["status"].as_str() == Some("completed")
+            && item["prompt"].as_str() == Some("是否继续对齐 Codex？")
+    }));
+    assert!(items.iter().any(|item| {
+        item["type"].as_str() == Some("warning")
+            && item["message"]
+                .as_str()
+                .is_some_and(|message| message.contains("模型路由发生降级"))
+    }));
+    assert_eq!(detail["thread_read"]["thread_items"], detail["items"]);
+    assert_eq!(
+        detail["thread_read"]["model_routing"]["decisionSource"].as_str(),
+        Some("profile_model_slot")
+    );
+    assert_eq!(
+        detail["thread_read"]["service_model_slot"].as_str(),
+        Some("coding")
+    );
+    let tests = detail["thread_read"]["tests"].as_array().expect("tests");
+    assert!(tests.iter().any(|test| {
+        test["test_run_id"].as_str() == Some("test-history-read")
+            && test["status"].as_str() == Some("completed")
+            && test["result"].as_str() == Some("passed")
+            && test["passed"].as_i64() == Some(5)
+    }));
+    let artifacts = detail["artifacts"].as_array().expect("artifacts");
+    assert!(artifacts.iter().any(|artifact| {
+        artifact["artifactRef"].as_str() == Some("artifact-history-workspace")
+            && artifact["kind"].as_str() == Some("article_workspace")
+    }));
+    assert_eq!(
+        detail["article_workspace"]["workerEvidence"][0]["eventType"].as_str(),
+        Some("artifact.snapshot")
+    );
+    let tool_calls = detail["thread_read"]["tool_calls"]
+        .as_array()
+        .expect("tool calls");
+    assert!(tool_calls.iter().any(|tool| {
+        tool["tool_name"].as_str() == Some("WebSearch")
+            && tool["status"].as_str() == Some("completed")
+    }));
+}
+
+#[tokio::test]
 async fn read_session_current_pages_projection_summary_with_cursor() {
     let temp = tempfile::tempdir().expect("tempdir");
     let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");

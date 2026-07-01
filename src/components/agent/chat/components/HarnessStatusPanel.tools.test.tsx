@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createAlignedRuntimeToolInventory,
   createToolInventory,
-  renderPanel,
+  renderExpandedPanel as renderPanel,
 } from "./HarnessStatusPanel.testFixtures";
 
 describe("HarnessStatusPanel tools", () => {

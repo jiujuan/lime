@@ -4,10 +4,17 @@ import { upsertMessageArtifact } from "../utils/messageArtifacts";
 import {
   buildWorkspaceArticleWorkspaceFromUnknown,
   buildWorkspaceArticleWorkspaceViewModel,
+  hasWorkspaceArticleFinalDocument,
   selectWorkspaceArticleDraftObject,
   type WorkspaceArticleWorkspace,
 } from "./workspaceArticleWorkspaceModel";
 import { buildWorkspaceArticleWorkspacePreviewArtifact } from "./workspaceArticleWorkspacePreviewArtifact";
+import {
+  collectWorkspaceArticlePatchRecordsFromArtifactLike,
+  hasWorkspaceArticlePatchMetadata,
+  isWorkspaceArticlePatchArtifactKind,
+  isWorkspaceArticlePatchRecord,
+} from "./workspaceArticleWorkspaceMetadata";
 
 export interface AttachWorkspaceArticleWorkspacePreviewArtifactParams {
   messages: Message[];
@@ -79,13 +86,6 @@ function readString(...values: unknown[]): string | null {
   return null;
 }
 
-function isWorkspacePatch(value: unknown): value is Record<string, unknown> {
-  const record = asRecord(value);
-  return Boolean(
-    record && Array.isArray(record.objects) && record.objects.length > 0,
-  );
-}
-
 function hasWorkspacePatchSignal(value: unknown): boolean {
   const record = asRecord(value);
   if (!record) {
@@ -96,7 +96,7 @@ function hasWorkspacePatchSignal(value: unknown): boolean {
   const metadata = asRecord(record.metadata);
   const artifactMetadata = asRecord(artifact?.metadata);
   return (
-    isWorkspacePatch(record) ||
+    isWorkspaceArticlePatchRecord(record) ||
     hasKnownWorkspacePatchFields(record) ||
     hasKnownWorkspacePatchFields(meta) ||
     hasKnownWorkspacePatchFields(metadata) ||
@@ -116,13 +116,7 @@ function hasKnownWorkspacePatchFields(
   if (!record) {
     return false;
   }
-  return Boolean(
-    record.articleWorkspace ||
-    record.article_workspace ||
-    record.workspacePatch ||
-    record.workspace_patch ||
-    record.contentFactoryWorkspacePatch,
-  );
+  return hasWorkspaceArticlePatchMetadata(record);
 }
 
 function hasWorkspacePatchKindSignal(
@@ -142,73 +136,11 @@ function hasWorkspacePatchKindSignal(
   if (!kind) {
     return false;
   }
-  return (
-    kind === "content_factory.workspace_patch" ||
-    kind === "content_factory_workspace_patch" ||
-    kind === "workspace_patch" ||
-    kind.endsWith(".workspace_patch")
-  );
-}
-
-function pushWorkspacePatchCandidate(
-  candidates: Record<string, unknown>[],
-  value: unknown,
-) {
-  if (isWorkspacePatch(value)) {
-    candidates.push(value);
-  }
-}
-
-function pushKnownWorkspacePatchFields(
-  candidates: Record<string, unknown>[],
-  record: Record<string, unknown> | null,
-) {
-  if (!record) {
-    return;
-  }
-  pushWorkspacePatchCandidate(candidates, record.articleWorkspace);
-  pushWorkspacePatchCandidate(candidates, record.article_workspace);
-  pushWorkspacePatchCandidate(candidates, record.workspacePatch);
-  pushWorkspacePatchCandidate(candidates, record.workspace_patch);
-  pushWorkspacePatchCandidate(candidates, record.contentFactoryWorkspacePatch);
-}
-
-function pushContentWorkspacePatch(
-  candidates: Record<string, unknown>[],
-  record: Record<string, unknown> | null,
-) {
-  const content = readString(record?.content);
-  if (!content) {
-    return;
-  }
-  try {
-    pushWorkspacePatchCandidate(candidates, JSON.parse(content));
-  } catch {
-    return;
-  }
+  return isWorkspaceArticlePatchArtifactKind(kind);
 }
 
 function workspacePatchCandidates(value: unknown): Record<string, unknown>[] {
-  const record = asRecord(value);
-  if (!record) {
-    return [];
-  }
-  const artifact = asRecord(record.artifact);
-  const meta = asRecord(record.meta);
-  const metadata = asRecord(record.metadata);
-  const artifactMetadata = asRecord(artifact?.metadata);
-  const candidates: Record<string, unknown>[] = [];
-
-  pushWorkspacePatchCandidate(candidates, record);
-  pushKnownWorkspacePatchFields(candidates, record);
-  pushKnownWorkspacePatchFields(candidates, meta);
-  pushKnownWorkspacePatchFields(candidates, metadata);
-  pushKnownWorkspacePatchFields(candidates, artifact);
-  pushKnownWorkspacePatchFields(candidates, artifactMetadata);
-  pushContentWorkspacePatch(candidates, record);
-  pushContentWorkspacePatch(candidates, artifact);
-
-  return candidates;
+  return collectWorkspaceArticlePatchRecordsFromArtifactLike(value);
 }
 
 export function attachWorkspaceArticleWorkspacePreviewArtifactToMessages({
@@ -217,7 +149,10 @@ export function attachWorkspaceArticleWorkspacePreviewArtifactToMessages({
   now,
   status,
 }: AttachWorkspaceArticleWorkspacePreviewArtifactParams): Message[] {
-  if (!articleWorkspace) {
+  if (
+    !articleWorkspace ||
+    !hasWorkspaceArticleFinalDocument(articleWorkspace)
+  ) {
     return messages;
   }
 

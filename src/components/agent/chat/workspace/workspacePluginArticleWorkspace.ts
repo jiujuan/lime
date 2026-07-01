@@ -4,10 +4,6 @@ import type {
   PluginObjectRef,
 } from "@/features/plugin";
 import { resolvePluginRendererOutputContract } from "@/features/plugin";
-import {
-  buildContentFactoryDeliveryArticleWorkspace,
-  CONTENT_FACTORY_PLUGIN_ID,
-} from "@/features/plugin-content-factory";
 import { normalizeWorkspaceRightSurfaceKind } from "./right-surface";
 import type {
   WorkspaceArticleObject,

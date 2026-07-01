@@ -4,6 +4,7 @@ import {
   sanitizeJson,
   sleep,
 } from "./claw-chat-current-fixture-gui-actions.mjs";
+import { reloadRendererDocument } from "./claw-chat-current-fixture-rpc.mjs";
 import {
   EXPERT_SKILLS_RUNTIME_BASE_SKILL_REF,
   EXPERT_SKILLS_RUNTIME_ID,
@@ -28,10 +29,7 @@ export async function reloadRendererAfterExpertPanelSkillCatalogInjection(
   waitForRendererReady,
   clearInvokeBuffers,
 ) {
-  await page.reload({
-    waitUntil: "domcontentloaded",
-    timeout: options.timeoutMs,
-  });
+  const reload = await reloadRendererDocument(page, options);
   const renderer = await waitForRendererReady(page, options);
   const catalogState = await evaluatePageSnapshot(page, () => {
     const raw = window.localStorage.getItem("lime:skill-catalog:v1") || "";
@@ -43,6 +41,7 @@ export async function reloadRendererAfterExpertPanelSkillCatalogInjection(
   });
   await clearInvokeBuffers(page);
   return sanitizeJson({
+    reload,
     renderer,
     catalogState,
   });

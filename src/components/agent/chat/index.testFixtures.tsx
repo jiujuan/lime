@@ -953,6 +953,8 @@ import * as providerModelsModule from "@/hooks/useProviderModels";
 import { AgentChatPage } from "./index";
 export { AgentChatPage };
 
+const agentChatWorkspacePreload = import("./AgentChatWorkspace");
+
 interface MountedHarness {
   container: HTMLDivElement;
   root: Root;
@@ -1106,12 +1108,13 @@ export function createMockThemeContextWorkspaceState(
   return merged;
 }
 
-export async function flushEffects(times = 6) {
+export async function flushEffects(times = 20) {
   for (let i = 0; i < times; i += 1) {
-    await new Promise<void>((resolve) => {
-      window.setTimeout(resolve, 20);
+    await act(async () => {
+      await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, 20);
+      });
     });
-    act(() => {});
   }
 }
 
@@ -1325,7 +1328,7 @@ export function mockBrowserAssistCompletedSession() {
   installMockAgentChatUnifiedState(state);
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -1681,7 +1684,8 @@ beforeEach(() => {
   sharedSendMessageMock = vi.fn(async () => undefined);
   sharedTriggerAIGuideMock = vi.fn();
   installMockAgentChatUnifiedState(createMockAgentChatUnifiedState());
-});
+  await agentChatWorkspacePreload;
+}, 30_000);
 
 afterEach(() => {
   while (mountedRoots.length > 0) {

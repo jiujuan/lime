@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
 import { getDefaultProvider } from "@/lib/api/appConfig";
+import { isLikelyImageGenerationModelId } from "@/lib/imageGen/providerMatchers";
 import { scheduleMinimumDelayIdleTask } from "@/lib/utils/scheduleMinimumDelayIdleTask";
 import {
   defaultAgentRuntimeAdapter,
@@ -170,13 +171,19 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
             ""
           : "";
       const runtimeModel = status?.model_name?.trim() || "";
+      const runtimeTextModelCandidate =
+        !runtimeModel || !isLikelyImageGenerationModelId(runtimeModel);
+      const usableRuntimeProviderType = runtimeTextModelCandidate
+        ? runtimeProviderType
+        : "";
+      const usableRuntimeModel = runtimeTextModelCandidate ? runtimeModel : "";
       const currentProviderMatchesRuntime =
-        Boolean(runtimeProviderType) &&
+        Boolean(usableRuntimeProviderType) &&
         normalizeProviderSelection(currentProviderType) ===
-          normalizeProviderSelection(runtimeProviderType);
+          normalizeProviderSelection(usableRuntimeProviderType);
 
       if (
-        runtimeProviderType &&
+        usableRuntimeProviderType &&
         hasPersistedWorkspacePreference &&
         !currentProviderMatchesRuntime
       ) {
@@ -205,16 +212,16 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
       }
 
       if (
-        runtimeProviderType &&
-        runtimeModel &&
+        usableRuntimeProviderType &&
+        usableRuntimeModel &&
         (!hasPersistedWorkspacePreference || !currentProviderMatchesRuntime)
       ) {
         if (!isCurrentWorkspace()) {
           return;
         }
         applyWorkspaceModelPreference({
-          providerType: runtimeProviderType,
-          model: runtimeModel,
+          providerType: usableRuntimeProviderType,
+          model: usableRuntimeModel,
         });
         return;
       }
@@ -222,13 +229,13 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
       if (
         status?.provider_configured &&
         hasPersistedWorkspacePreference &&
-        (!runtimeProviderType || currentProviderMatchesRuntime)
+        (!usableRuntimeProviderType || currentProviderMatchesRuntime)
       ) {
         return;
       }
 
       let defaultProvider = "";
-      if (!hasPersistedWorkspacePreference && !runtimeProviderType) {
+      if (!hasPersistedWorkspacePreference && !usableRuntimeProviderType) {
         try {
           defaultProvider = (await getDefaultProvider()).trim();
         } catch (error) {
@@ -244,16 +251,18 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
           return;
         }
         const fallbackProviderType =
-          runtimeProviderType || currentProviderType || defaultProvider;
+          usableRuntimeProviderType || currentProviderType || defaultProvider;
         const fallbackModel =
-          !runtimeProviderType || currentProviderMatchesRuntime
+          !usableRuntimeProviderType || currentProviderMatchesRuntime
             ? currentModel
             : "";
         const resolvedSelectionInput = {
           currentProviderType: fallbackProviderType || undefined,
           currentModel: fallbackModel || null,
           theme: "general",
-          ...(runtimeProviderType ? { allowProviderFallback: false } : {}),
+          ...(usableRuntimeProviderType
+            ? { allowProviderFallback: false }
+            : {}),
         };
         const resolvedSelection = await resolveClawWorkspaceProviderSelection(
           resolvedSelectionInput,
@@ -261,12 +270,12 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
 
         if (!resolvedSelection || !isCurrentWorkspace()) {
           if (
-            runtimeProviderType &&
+            usableRuntimeProviderType &&
             !currentProviderMatchesRuntime &&
             isCurrentWorkspace()
           ) {
             applyWorkspaceModelPreference({
-              providerType: runtimeProviderType,
+              providerType: usableRuntimeProviderType,
               model: "",
             });
           }
@@ -295,7 +304,8 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
         return;
       }
 
-      const warmupScopeId = resolvedWorkspaceId || DETACHED_RUNTIME_WARMUP_SCOPE;
+      const warmupScopeId =
+        resolvedWorkspaceId || DETACHED_RUNTIME_WARMUP_SCOPE;
 
       if (runtimeReadyWorkspaceRef.current === warmupScopeId) {
         return;

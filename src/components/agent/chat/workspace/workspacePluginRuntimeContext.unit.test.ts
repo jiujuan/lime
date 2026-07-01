@@ -140,6 +140,7 @@ describe("workspacePluginRuntimeContext", () => {
     expect(context).toMatchObject({
       status: "inactive",
       activationContext: null,
+      runtimeReadiness: null,
       skippedAppIds: [],
       blockerCodes: [],
     });
@@ -167,6 +168,11 @@ describe("workspacePluginRuntimeContext", () => {
             },
             opened_tabs: ["articleWorkspace"],
           },
+          plugin_runtime_readiness: {
+            plugin_id: "creator-workbench",
+            status: "ready",
+            workflow_key: "creator-workflow",
+          },
         },
       },
     });
@@ -174,6 +180,11 @@ describe("workspacePluginRuntimeContext", () => {
     expect(context).toMatchObject({
       status: "inactive",
       activationContext: null,
+      runtimeReadiness: {
+        pluginId: "creator-workbench",
+        status: "ready",
+        workflowKey: "creator-workflow",
+      },
       blockerCodes: [],
     });
   });
@@ -197,6 +208,10 @@ describe("workspacePluginRuntimeContext", () => {
           objectId: "pending",
         },
         openedTabs: ["articleWorkspace"],
+      },
+      runtimeReadiness: {
+        pluginId: "creator-workbench",
+        status: "ready",
       },
       skippedAppIds: [],
       blockerCodes: [],

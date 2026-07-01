@@ -15,6 +15,7 @@ mod lime_llm_provider;
 mod llm_provider;
 mod skill_loader;
 mod skill_matcher;
+mod skill_summary;
 
 // 电商 Skill 模块
 pub mod ecommerce_review_reply;
@@ -56,3 +57,6 @@ pub use skill_loader::{
     SkillTriggerConfig, WorkflowStep,
 };
 pub use skill_matcher::{SkillMatch, SkillMatcher};
+pub use skill_summary::{
+    load_skill_summaries_from_directory, load_skill_summary_from_file, LoadedSkillSummary,
+};

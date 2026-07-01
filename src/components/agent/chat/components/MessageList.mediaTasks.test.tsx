@@ -695,7 +695,7 @@ describe("MessageList media tasks", () => {
     ).toBeNull();
   });
 
-  it("失败的图片任务卡不暴露底层错误，即使原状态标记不可重试也提供单独重试入口", async () => {
+  it("失败的图片任务卡不暴露底层错误，原状态标记不可重试时不展示重试入口", async () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -728,11 +728,11 @@ describe("MessageList media tasks", () => {
     expect(
       container.querySelector(
         '[data-testid="image-workbench-message-preview-action-task-failed-no-retry-retry"]',
-      )?.textContent,
-    ).toContain("重试");
+      ),
+    ).toBeNull();
   });
 
-  it("已取消的图片任务卡应显示独立状态且不再展示重试按钮", async () => {
+  it("已取消的图片任务卡应显示独立状态并保留重试按钮", async () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -757,9 +757,14 @@ describe("MessageList media tasks", () => {
 
     expect(previewCard?.textContent).toContain("已取消");
     expect(previewCard?.textContent).not.toContain("打开查看");
+    const retryButton = container.querySelector(
+      '[data-testid="image-workbench-message-preview-action-task-cancelled-1-retry"]',
+    );
+    expect(retryButton).not.toBeNull();
+    expect(retryButton?.textContent).toContain("重试");
     expect(
       container.querySelector(
-        '[data-testid="image-workbench-message-preview-action-task-cancelled-1-retry"]',
+        '[data-testid="image-workbench-message-preview-action-task-cancelled-1-open"]',
       ),
     ).toBeNull();
   });

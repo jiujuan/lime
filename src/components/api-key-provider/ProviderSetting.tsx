@@ -62,7 +62,6 @@ import {
   extractApiModelIds,
   isFalProviderLike,
   isLikelyFalImageModel,
-  isResponsesImageModel,
   isProviderApiKeyRequired,
   type ProviderModelFetchStatusCopy,
 } from "./providerModelFetchHelpers";

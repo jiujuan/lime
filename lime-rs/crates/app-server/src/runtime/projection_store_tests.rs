@@ -446,3 +446,135 @@ fn read_session_projection_cursor_page_keeps_large_previous_assistant_summary() 
         Some(5_000)
     );
 }
+
+#[test]
+fn read_session_projection_keeps_plugin_workspace_events_outside_message_window() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let projection = ProjectionStore::initialize(temp.path().join("projection_1.sqlite"))
+        .expect("projection store");
+    let mut events = Vec::new();
+    for turn_index in 0..2 {
+        let base = (turn_index * 10) as u64;
+        let turn_id = format!("turn_{turn_index}");
+        let mut user = event(
+            base + 1,
+            "message.created",
+            "sess_1",
+            "thread_1",
+            Some(turn_id.as_str()),
+        );
+        user.payload = json!({
+            "input": {
+                "text": format!("user-{turn_index}"),
+                "attachments": []
+            }
+        });
+        let mut delta = event(
+            base + 2,
+            "message.delta",
+            "sess_1",
+            "thread_1",
+            Some(turn_id.as_str()),
+        );
+        delta.payload = json!({ "text": format!("assistant-{turn_index}") });
+        events.push(user);
+        events.push(delta);
+    }
+    let mut worker_artifact = event(
+        30,
+        "artifact.snapshot",
+        "sess_1",
+        "thread_1",
+        Some("turn_worker"),
+    );
+    worker_artifact.payload = json!({
+        "artifact": {
+            "metadata": {
+                "agentAppWorker": {
+                    "taskId": "turn-content-article-generate:content_article_generate"
+                },
+                "contentFactoryWorkspacePatch": {
+                    "objects": [
+                        {
+                            "ref": {
+                                "kind": "articleDraft",
+                                "id": "draft-1"
+                            }
+                        }
+                    ],
+                    "workerEvidence": [
+                        {
+                            "eventType": "artifact.snapshot",
+                            "status": "completed",
+                            "workflowKey": "content_article_workflow",
+                            "subagents": ["article-writer"],
+                            "skillRefs": ["article-writing", "article-image-plan"],
+                            "connectorRefs": ["web-research"],
+                            "hookPolicy": {
+                                "prompt": ["prompt-submit"]
+                            },
+                            "orchestration": [
+                                {
+                                    "key": "draft"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        }
+    });
+    let mut worker_hook = event(
+        31,
+        "agent_app_worker.hook",
+        "sess_1",
+        "thread_1",
+        Some("turn_worker"),
+    );
+    worker_hook.payload = json!({
+        "source": "agent_app_task_worker",
+        "agentAppWorker": {
+            "taskId": "turn-content-article-generate:content_article_generate"
+        },
+        "hookKey": "prompt-submit",
+        "hookEvent": "prompt.submit",
+        "status": "completed"
+    });
+    events.push(worker_artifact);
+    events.push(worker_hook);
+    projection.apply_events(&events).expect("apply events");
+
+    let session = projection
+        .read_session_projection("sess_1", ProjectionReadWindow::tail(Some(2)))
+        .expect("read projection")
+        .expect("session");
+
+    assert_eq!(session.messages.len(), 2);
+    assert_eq!(
+        session.messages[0]["content"][0]["text"].as_str(),
+        Some("user-1")
+    );
+    assert!(session
+        .item_events
+        .iter()
+        .any(|event| event.event_id == "evt-30"));
+    assert!(session
+        .item_events
+        .iter()
+        .any(|event| event.event_id == "evt-31"));
+    let artifact = session
+        .item_events
+        .iter()
+        .find(|event| event.event_id == "evt-30")
+        .expect("worker artifact event");
+    assert_eq!(
+        artifact.payload["artifact"]["metadata"]["contentFactoryWorkspacePatch"]["workerEvidence"]
+            [0]["workflowKey"],
+        "content_article_workflow"
+    );
+    assert_eq!(
+        artifact.payload["artifact"]["metadata"]["contentFactoryWorkspacePatch"]["workerEvidence"]
+            [0]["skillRefs"][1],
+        "article-image-plan"
+    );
+}

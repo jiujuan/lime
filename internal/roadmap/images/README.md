@@ -1,7 +1,7 @@
 # 图片能力系统路线图
 
-更新时间：2026-06-30
-状态：Draft
+更新时间：2026-07-02
+状态：进行中，App Server / Media Runtime worker 常驻调度骨架已接入；图片默认模型占位污染已收口，Provider adapter 细节仍在推进
 Owner：Agent Runtime / Media Runtime / Settings / Workspace
 
 对应执行计划：`internal/exec-plans/image-capability-feature-flag-extension-tool-plan.md`
@@ -181,6 +181,27 @@ flowchart TB
 当前仓库已经把最小目录真值收回到 `src/lib/imageGen/models.ts`；`src/lib/imageGeneration.ts` 的旧兼容壳已经删除，后续只允许在 `catalog.ts` / executor 里继续收口。
 2026-06-30 还补了一层 Rust 共享 matcher：`lime_core::image_generation_matcher` 已成为图片模型 / 搜索文本的共同事实源，`lime-services` 与 `lime-server` 不再各自维护图片关键词表。
 2026-07-01 智谱图片 Provider 已拆出 native 分支：`provider_routing.rs` 先识别 `zhipu` / `glm` / `bigmodel.cn/api/paas`，再由 `request_zhipu_images` 直连 `https://open.bigmodel.cn/api/paas/v4/images/generations`；`glm-image` 默认收敛为单图、`quality=hd`、`size=1280x1280`，并保留 URL 结果归一化。
+2026-07-01 `@命令` 面板已关闭 cmdk 内部二次过滤，搜索 `配图` 时不再把外层 catalog 已命中的 `@配图` 结果隐藏；回归覆盖完整输入 `@配图` 后仍展示可选择命令，`verify:gui-smoke` 已确认 Electron / renderer 主壳仍可启动。
+2026-07-01 `@配图` task 轻卡已兼容 `metadata`、`structuredContent`、`structured_content`、JSON `output` 与嵌套 `record/payload/progress/result`，避免 App Server 工具结果形态变化时丢失图片任务卡。
+2026-07-01 已补图片 task 最小执行骨架：`@配图 -> Skill(image_generate) -> lime_create_image_generation_task -> .lime/tasks/image_generate/*.json` 后，先由 `useWorkspaceImageTaskExecutorRuntime` 验证 renderer-side 读取 task artifact、本机 `/v1/images/generations` 执行和终态写回可跑通。发送边界会在图片 Provider/model 未就绪时 fail closed，不再创建 `provider_id/model/executor_mode` 为空且永远 `pending_submit` 的假任务；本机图片服务请求失败、返回空图片或旧任务缺少 runtime config 时，也会写回 `last_error/progress/result.failures`，避免 task 永远停留在 pending。
+2026-07-01 App Server 图片 worker 骨架已接管 current 执行链：`media_task_worker.rs` 在 `mediaTaskArtifact/image/create` 创建 `image_generate` 且非 reused task 后触发 `lime_media_runtime::execute_image_generation_task`，worker id 固定为 `lime-image-api-worker`；renderer 的 `useWorkspaceImageTaskExecutorRuntime` 已收缩为观察 task artifact / read model，不再直连本机图片服务或调用 `mediaTaskArtifact/image/complete`，避免前后端双执行。
+2026-07-01 真实 Electron `image-command` fixture 已跑通后端 worker 闭环：GUI 输入 `@配图` 后，断言 current `mediaTaskArtifact/image/create/get/list`、同一 task artifact 由 `media_runtime_worker` 推进终态、聊天轻卡终态、read model 完成态和 reload 后恢复都成立；fixture 还会创建本地图片 Provider stub，并断言 `x-provider-id` 与请求体 `model=gpt-image-1` 实际进入 `/v1/images/generations`，防止“设置有最新图片模型但运行时没用上”的回归。summary 记录在 `.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-summary.json`。
+2026-07-01 App Server 图片完成态补了 `preview_slots[].slot_id` fallback：图片执行结果缺少 `slotId` 时生成 `image-slot-{slot_index}`，避免 successful complete 因 `slot_id=null` 反序列化失败而把 task 错写成 failed。
+2026-07-01 真实用户 `@配图` 失败根因已定位为配置事实源分叉：Electron Host 当前 `get_config/save_config` 写 `config.json`，而 App Server / worker 优先读 `config.yaml`，导致设置页已保存的 `workspace_preferences.media_defaults.image.preferredProviderId/preferredModelId` 没进入真实图片 task，落盘 payload 出现 `provider_id=null/model=null/executor_mode=direct`，随后 worker 去撞未监听的 `127.0.0.1:8999/v1/images/generations`。
+2026-07-01 已把配置事实源收敛到 current `config.yaml`：Electron Host `get_config/save_config` 只读写 `config.yaml`，App Server 图片任务默认值也只读取 `ConfigManager::default_config_path()` 指向的 YAML；旧 `config.json` 在图片默认模型链路中判为 `dead`，不再读取或双写。仍缺 Provider 或模型时继续 fail closed，避免继续落空模型假任务；非法 `executor_mode=direct` 会被清洗为空，由 route/protocol 或 worker 默认执行模式决定。
+2026-07-01 App Server 图片 worker 新增 created-task 直接执行骨架：新建图片 task 会携带 `ImageTaskWorkerContext` 访问 App Server Provider DB，worker 优先从 `resolved_route` 读取 provider/model/protocol/base_url 和 API Key 执行；route 不完整时回退 task payload 的 provider/model 与 Provider store，覆盖 OpenAI-compatible / NewApi / Gateway / OpenAI Responses / Codex / Fal 这类图片 endpoint，不再只依赖外部手工启动的旧本机图片 HTTP 服务。
+2026-07-01 workspace recovery 已接回同一 Provider DB route：`workspace/default/ensure`、`workspace/ensure`、`workspace/ensureReady` 触发的 pending / retryable failed 图片任务恢复会携带 `ImageTaskWorkerContext`，复用 `resolved_route` 或 task provider/model 读取 Provider store；worker 主执行路径缺少 Provider route 时直接写 failed，不再回退到旧 local gateway / `config.server`。
+2026-07-01 worker route resolution 已拆到 `media_task_worker/route.rs`，父模块回到 spawn / recovery / 执行编排职责；`media_task_worker.rs` 从约 `970` 行降到约 `820` 行，解除本轮继续推进前的体量阻塞。
+2026-07-01 stale running lease 最小骨架已接入：workspace recovery 发现由 `lime-image-api-worker` 接手且运行超过 `10` 分钟的 running image task，会先写入 retryable `image_worker_stale_running_recovered` failed attempt，再复用同一 retry 机制追加新 attempt 并回到 pending；fresh running 或非本 worker running 不会被恢复。
+2026-07-01 App Server 图片 worker 常驻调度骨架已接入：`main.rs` 启动 App Server 时会启动后台 scheduler，每 `30` 秒从 Product DB 读取未归档 workspace root，复用同一 `spawn_pending_image_task_workers_for_workspace` 扫描 `.lime/tasks/image_generate` 的 pending / retryable failed / stale running 任务；调度职责已拆到 `media_task_worker/scheduler.rs`，父模块降到约 `725` 行。
+2026-07-01 普通自然语言画图入口已接回同一 current 主链：输入 `画一张广州夏天的图` 会在发送边界补齐为 `@配图 画一张广州夏天的图`，并继续走 `image_skill_launch -> Skill(image_generate) -> lime_create_image_generation_task -> mediaTaskArtifact/image/create -> lime-image-api-worker`，不会再落入普通文本 Agent 回复。新增 `plain-image-intent` Electron fixture 覆盖 GUI 输入、App Server `agentSession/turn/start` routed prompt、task payload `entrySource=plain_image_intent`、worker 终态和聊天轻卡终态。
+2026-07-02 图片 task 提交链路已清掉 `default / auto / automatic / system_default / __default__` 等占位值：前端 `image_skill_launch` 不再把工作台占位 model 写进 `image_task`，App Server `mediaTaskArtifact/image/create` 会在 route assessment 前用 current `config.yaml` 中的 `workspace_preferences.media_defaults.image` 补齐真实 Provider / model；仍缺默认值时 fail closed，不再落 `model=default` 的假任务。
+2026-07-02 图片 fixture Provider 已限定为 media/image defaults：`smoke:agent-runtime-current-fixture` 与独立 `expert-panel-skills-runtime` fixture 均验证普通 Expert Panel 文本 follow-up 不再继承图片 Provider / `gpt-image-1`，`liveProviderUsed=false`，图片 Provider 只在图片 task / media default 链路中生效。
+2026-07-02 Media Runtime Provider adapter 细节继续收口：`media-runtime/src/lib.rs` 拆出 `image_request.rs`、`image_postprocess.rs`、`image_references.rs`，其中请求层继续按协议拆到 `image_request/{openai_images,responses,gemini,zhipu}.rs`，让 Provider wire request / Responses SSE / Gemini generateContent / 智谱原生同步图片 / edit endpoint、图层设计 chroma-key 后处理、参考图 payload 解析分别独立；OpenAI-compatible 图片任务带 `reference_images` 时会改走 `/v1/images/edits` 并把 `images[].image_url` 传给 Provider，Responses `image_generation` executor 会把参考图放入 `input[].content` 的 `input_image`，Gemini executor 会使用 `x-goog-api-key` 与 `inlineData/fileData` 参考图结构，不再在 worker 请求体里丢参考图。
+2026-07-02 `lime_media_runtime` 根模块已按 current 职责拆成 facade：`lib.rs` 从 5k+ 行降到 31 行，只保留模块声明和 public re-export；通用 task artifact 拆到 `task_artifact/{types,record,store}.rs`，图片 payload / storyboard / reference 准备拆到 `image_task_input.rs`，图片执行编排拆到 `image_worker.rs`，video worker 内联测试已外置到 `tests/video_worker.rs`，运行时代码文件降到约 593 行；测试按 `tests/{task_artifact,image_postprocess,image_worker,image_worker_gemini,image_worker_responses,image_worker_zhipu,video_worker}.rs` 分组，Provider adapter 和测试单文件均低于 800 行。`cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-media-runtime -- --nocapture` 已通过，后续 Provider adapter 不再往根 `lib.rs` 追加逻辑。
+2026-07-02 智谱图片原生 adapter 已接入 current App Server / Media Runtime 主链：前端 catalog 的 Zhipu `provider_native` endpoint 对齐 `/api/paas/v4/images/generations`，App Server `media_task_worker/route.rs` 会把 `zhipuai` / `bigmodel.cn/api/paas` / `glm-image` / `cogview-*` 图片路由写成 `executor_mode=zhipu_images`，Media Runtime `image_request/zhipu.rs` 使用 Bearer Key 调用智谱同步图片接口、默认 `glm-image` 为 `1280x1280 + hd`、归一化 URL / b64 图片结果，并对参考图 / 修图 fail closed，避免错误回落 OpenAI-compatible `/v1/images/generations` 假路径。
+2026-07-02 Media Runtime Provider HTTP 错误分类已补第一层：`image_request/error.rs` 统一把 `401/403` 归为 `auth_failed`、`429` 归为 `rate_limited`、`5xx` 归为 `provider_unavailable`、其余非 2xx 归为 `provider_request_failed`，并把上游错误码写入 `TaskErrorRecord.provider_code`；OpenAI-compatible、Responses、Gemini、智谱 adapter 已接入该 helper，非 2xx 的 HTML / 纯文本错误不再被误归类为响应 JSON 解析失败，Responses endpoint-not-found fallback 仍保留特殊 code。
+2026-07-02 DashScope / 通义万相图片原生 adapter 已接入 current 主链：前端 catalog 新增 `dashscope` provider entry 与 `qwen-image-*` / `wan2.6-image` 模型，统一图片 matcher 同步识别 `qwen-image`；App Server `media_task_worker/route.rs` 会把 `alibaba` / `dashscope` / `qwen` / `tongyi` 且模型为 `qwen-image-*` 或 `wanx/wan2.*` 的图片任务写成 `executor_mode=dashscope_images`，endpoint 从 compatible-mode host 归一到 `/api/v1/services/aigc/multimodal-generation/generation`；Media Runtime `image_request/dashscope.rs` 使用 Bearer Key 调用 DashScope 同步 multimodal generation 接口、归一化 `output.choices[].message.content[].image` 等结果，并沿用 Provider HTTP 错误分类，避免通义图片模型误走 `/v1/images/generations` 假路径。
 
 建议字段：
 
@@ -408,11 +429,15 @@ flowchart TD
 3. `skill_tool_gate.rs` 不再作为图片原子能力的最终权限源。
 4. `Skill(image_generate)` 保留兼容，但执行落到统一 image task executor。
 
+当前状态：已完成最小骨架，并已由真实 Electron `image-command` 和 `plain-image-intent` fixture 证明显式 `@配图` 与普通“画一张...”请求都可进入 current task artifact 主链。
+
 ### P4：统一任务与回填
 
 1. 图片原子工具写标准 `.lime/tasks/image_generate`。
 2. 图片工作台、ImageTaskViewer、文稿 inline 占位、素材库继续消费 task artifact。
 3. 增加 task payload 中 provider/model/executorMode/routingSlot 的可观测字段。
+
+当前状态：标准 task artifact、聊天轻卡终态、read model 完成态、reload 后恢复和后端 worker 执行链已跑通；fixture 已证明 provider/model 会进入 worker 请求。workspace ensure 触发的 pending task 启动恢复、cancel 跳过、一次 retryable failed 恢复和 stale running lease 恢复已接入 Provider DB route，不再回退旧 local gateway；App Server 启动时也会常驻调度 Product DB 中登记 workspace 的图片任务。后续重点转为 Provider adapter 细化和更多图片形态。
 
 ### P5：治理与收口
 
@@ -439,7 +464,7 @@ flowchart TD
 3. `useWorkspaceSendActions` 测试覆盖 `image_skill_launch` metadata。
 4. App Server runtime 测试覆盖图片 turn 不依赖 workspace skill enable。
 5. 负向测试覆盖未声明 `@模型名` 不触发图片能力。
-6. GUI smoke 覆盖最小 `@配图` 主链。
+6. GUI smoke 覆盖最小 `@配图` 主链，并覆盖普通自然语言画图请求不会退回文本流。
 
 ## 16. 风险与约束
 
@@ -483,10 +508,12 @@ flowchart TD
 
 ## 20. 当前下一刀
 
-1. 骨架已优先收口：`useImageGen` 主执行链统一走本机 `/v1/images/generations`，通过 `x-provider-id` 锁定图片 Provider，不再在 renderer 里按 Fal / Gemini / OpenAI-compatible transport 直连外部 Provider；server 侧 provider kind 路由 heuristics 也已拆到 `provider_routing` 子模块。
-2. 回头补细节：继续细化本机图片服务 adapter 的 reference image / edit、Gemini 更完整的输入/输出字段和质量映射、国内 Provider 原生协议和错误分类；新增模型支持限制在 catalog + server adapter。
-3. 图片 projection / task viewer 最新模型显示已收口：聊天轻卡和工作台状态同步优先采用 task / runtime contract 的最新模型，不再让旧 `preview.modelName` 抢占；后续只在发现新的重复事实源时继续收口。
-4. 继续观察 `.lime/tasks/image_generate` artifact 的 provider/model/result 字段是否还存在运行时与 UI 展示不一致的边缘样本；若出现，只在 artifact 解析层补事实源优先级，不新增旁路。
-5. 维持 `image-command` 作为默认 current fixture regression 的稳定项，后续只扩展样本，不再把它从日常矩阵里拆出去。
-6. 如还要继续收口，优先把 `provider_routing` 里剩余的 host / provider 兼容判断与错误分类边角再往当前事实源收拢，不再往 renderer 或 settings 回流。
-7. 这轮已经把 server 侧 provider 路由 heuristics 再收了一层，后续优先盯 Gemini / 参考图 / 错误分类这几项，别再把判断散回 handler 主文件。
+1. 主线骨架已完成：App Server / Media Runtime worker 现在同时具备 created-task 触发、workspace ensure 恢复和常驻 scheduler 周期扫描，均保留同一 `.lime/tasks/image_generate` artifact，不再回退旧 local gateway。
+2. 下一刀回头补细节：reference image / edit 的 OpenAI-compatible 与 Responses worker 请求体已补第一层闭环，Gemini 与智谱 adapter 已进入 current worker，Provider HTTP 错误分类已统一到 `TaskErrorRecord.code/provider_code/retryable`；继续细化更多国内 Provider 原生协议。新增模型支持限制在 catalog + worker/server adapter，不新增前端直连旁路。
+3. 配置事实源已收敛：Electron `get_config/save_config` 与 App Server 图片默认值只认 current `config.yaml`，旧 `config.json` 不再作为图片默认模型 fallback；`default/auto` 这类 UI 占位值只表示“让后端读取 media default”，不会再写成真实 task model。
+4. 图片 projection / task viewer 最新模型显示已收口：聊天轻卡和工作台状态同步优先采用 task / runtime contract 的最新模型，不再让旧 `preview.modelName` 抢占；后续只在发现新的重复事实源时继续收口。
+5. 继续观察 `.lime/tasks/image_generate` artifact 的 provider/model/result 字段是否还存在运行时与 UI 展示不一致的边缘样本；若出现，只在 artifact 解析层补事实源优先级，不新增旁路。
+6. 维持 `image-command` 和 `plain-image-intent` 作为 current fixture regression 的稳定项，后续只扩展样本，不再把它们从日常矩阵里拆出去。
+7. `@配图` 搜索缺口已定位为输入能力面板二次过滤，不是 catalog 缺失；后续若再扩展命令搜索，过滤事实源继续放在 `filterBuiltinCommands / buildInputCapabilitySections`，不要让 UI command primitive 再维护一套隐藏规则。
+8. AgentChat 普通文本 turn 的 provider/model 事实源仍归 `agentSession/turn/start` 与 workspace runtime selection；图片默认值只服务 `image_skill_launch -> image task`，后续不要把 media default 注入 Expert Panel、普通 Claw 文本或 session provider selection。
+9. `media_task_worker.rs` 当前约 `725` 行，`route.rs` 和 `scheduler.rs` 已承接 route / 调度职责；`media-runtime/src/lib.rs` 已收敛为 31 行 facade，Provider 请求层按 `image_request/{openai_images,responses,gemini}.rs` 分治，下一次继续扩 Provider adapter 时继续优先拆协议子模块，避免重新逼近 `800` 行预警和 `1000` 行硬边界。

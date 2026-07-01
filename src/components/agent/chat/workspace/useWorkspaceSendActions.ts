@@ -59,9 +59,7 @@ import { parseVideoWorkbenchCommand } from "../utils/videoWorkbenchCommand";
 import { parseVoiceWorkbenchCommand } from "../utils/voiceWorkbenchCommand";
 import { parseWritingWorkbenchCommand } from "../utils/writingWorkbenchCommand";
 import { parseWebpageWorkbenchCommand } from "../utils/webpageWorkbenchCommand";
-import {
-  resolveAgentFastResponseRouting,
-} from "../utils/fastResponseRouting";
+import { resolveAgentFastResponseRouting } from "../utils/fastResponseRouting";
 import { resolvePlainInputIntentConfirmation } from "../utils/plainInputIntentConfirmation";
 import { detectBrowserTaskRequirement } from "../utils/browserTaskRequirement";
 import { isTeamRuntimeRecommendation } from "../utils/contextualRecommendations";
@@ -78,7 +76,11 @@ import { extractAgentUiPerformanceTraceMetadata } from "../hooks/agentStreamPerf
 import type { UseRuntimeTeamFormationResult } from "../hooks/useRuntimeTeamFormation";
 import type { SendMessageFn } from "../hooks/agentChatShared";
 import { normalizeExecutionStrategy } from "../hooks/agentChatCoreUtils";
-import type { BrowserAssistSessionState, Message, MessageImage } from "../types";
+import type {
+  BrowserAssistSessionState,
+  Message,
+  MessageImage,
+} from "../types";
 import type { TeamDefinition } from "../utils/teamDefinitions";
 import type { AgentAccessMode } from "../hooks/agentChatStorage";
 import {
@@ -180,6 +182,7 @@ import {
 } from "./workspacePluginActivation";
 import {
   isImageGenerationPlainInputIntent,
+  isLikelyPlainImageGenerationRequest,
 } from "./commands/intentHelpers";
 import {
   resolveServiceModelSendOverrides,
@@ -320,6 +323,7 @@ interface UseWorkspaceSendActionsParams {
     skipSessionRestore?: boolean;
     skipSessionStartHooks?: boolean;
   }) => Promise<string | null>;
+  prepareImageWorkbenchSkillSend?: () => boolean | Promise<boolean>;
   listInstalledAgentAppsForPluginActivation?: () => Promise<{
     states: InstalledAgentAppState[];
   }>;
@@ -431,6 +435,7 @@ export function useWorkspaceSendActions({
   handleAutoLaunchMatchedSiteSkill,
   openRuntimeSceneGate,
   ensureSessionForCommandMetadata,
+  prepareImageWorkbenchSkillSend,
   listInstalledAgentAppsForPluginActivation = listInstalledAgentApps,
   resolveImageWorkbenchSkillRequest,
 }: UseWorkspaceSendActionsParams) {
@@ -673,8 +678,7 @@ export function useWorkspaceSendActions({
         enabled: shouldAttachContextWorkspace,
       };
       const preparedActiveContextPrompt =
-        effectiveContextWorkspace.enabled &&
-        !activeContextPrompt.trim()
+        effectiveContextWorkspace.enabled && !activeContextPrompt.trim()
           ? prepareActiveContextPrompt().then(
               (value) => ({
                 ok: true as const,
@@ -842,16 +846,28 @@ export function useWorkspaceSendActions({
           ? parseImageWorkbenchCommand(sourceText)
           : null;
       const plainImageIntent =
-        !sendOptions?.purpose && !hasBoundSkillLaunch && !explicitImageWorkbenchCommand
+        !sendOptions?.purpose &&
+        !hasBoundSkillLaunch &&
+        !explicitImageWorkbenchCommand
           ? resolvePlainInputIntentConfirmation(sourceText)
           : null;
       const parsedPlainImageWorkbenchCommand =
-        plainImageIntent && isImageGenerationPlainInputIntent(plainImageIntent)
+        (plainImageIntent &&
+          isImageGenerationPlainInputIntent(plainImageIntent)) ||
+        (!plainImageIntent &&
+          isLikelyPlainImageGenerationRequest(sourceText.trim()))
           ? parseImageWorkbenchCommand(`@配图 ${sourceText.trim()}`)
           : null;
       const parsedImageWorkbenchCommand =
         explicitImageWorkbenchCommand ?? parsedPlainImageWorkbenchCommand;
       if (parsedImageWorkbenchCommand) {
+        if (prepareImageWorkbenchSkillSend) {
+          const prepared = await prepareImageWorkbenchSkillSend();
+          if (!prepared) {
+            clearSubmissionPreview();
+            return { kind: "done", result: false };
+          }
+        }
         const imageDispatchText =
           parsedPlainImageWorkbenchCommand?.rawText || sourceText;
         const skillRequest = resolveImageWorkbenchSkillRequest({
@@ -913,6 +929,13 @@ export function useWorkspaceSendActions({
           ? parsePosterWorkbenchCommand(sourceText)
           : null;
       if (parsedPosterWorkbenchCommand) {
+        if (prepareImageWorkbenchSkillSend) {
+          const prepared = await prepareImageWorkbenchSkillSend();
+          if (!prepared) {
+            clearSubmissionPreview();
+            return { kind: "done", result: false };
+          }
+        }
         const skillRequest = resolveImageWorkbenchSkillRequest({
           rawText: sourceText,
           parsedCommand: {
@@ -2607,36 +2630,36 @@ export function useWorkspaceSendActions({
 
       const hasMatchedWorkspaceMentionCommandWithoutAgentTurnRoute = Boolean(
         parsedImageWorkbenchCommand ||
-          parsedPosterWorkbenchCommand ||
-          parsedCoverWorkbenchCommand ||
-          parsedVideoWorkbenchCommand ||
-          parsedBroadcastWorkbenchCommand ||
-          parsedResourceSearchWorkbenchCommand ||
-          parsedTranscriptionWorkbenchCommand ||
-          parsedSearchWorkbenchCommand ||
-          parsedReportWorkbenchCommand ||
-          parsedCompetitorWorkbenchCommand ||
-          parsedDeepSearchWorkbenchCommand ||
-          parsedSiteSearchWorkbenchCommand ||
-          parsedPdfWorkbenchCommand ||
-          parsedFileReadWorkbenchCommand ||
-          parsedSummaryWorkbenchCommand ||
-          parsedTranslationWorkbenchCommand ||
-          parsedComplianceWorkbenchCommand ||
-          parsedLogoDecompositionWorkbenchCommand ||
-          parsedAnalysisWorkbenchCommand ||
-          parsedUrlParseWorkbenchCommand ||
-          parsedTypesettingWorkbenchCommand ||
-          parsedPresentationWorkbenchCommand ||
-          parsedFormWorkbenchCommand ||
-          parsedWebpageWorkbenchCommand ||
-          parsedWritingWorkbenchCommand ||
-          parsedChannelPreviewWorkbenchCommand ||
-          parsedUploadWorkbenchCommand ||
-          parsedPublishWorkbenchCommand ||
-          parsedVoiceWorkbenchCommand ||
-          parsedGrowthWorkbenchCommand ||
-          parsedBrowserWorkbenchCommand,
+        parsedPosterWorkbenchCommand ||
+        parsedCoverWorkbenchCommand ||
+        parsedVideoWorkbenchCommand ||
+        parsedBroadcastWorkbenchCommand ||
+        parsedResourceSearchWorkbenchCommand ||
+        parsedTranscriptionWorkbenchCommand ||
+        parsedSearchWorkbenchCommand ||
+        parsedReportWorkbenchCommand ||
+        parsedCompetitorWorkbenchCommand ||
+        parsedDeepSearchWorkbenchCommand ||
+        parsedSiteSearchWorkbenchCommand ||
+        parsedPdfWorkbenchCommand ||
+        parsedFileReadWorkbenchCommand ||
+        parsedSummaryWorkbenchCommand ||
+        parsedTranslationWorkbenchCommand ||
+        parsedComplianceWorkbenchCommand ||
+        parsedLogoDecompositionWorkbenchCommand ||
+        parsedAnalysisWorkbenchCommand ||
+        parsedUrlParseWorkbenchCommand ||
+        parsedTypesettingWorkbenchCommand ||
+        parsedPresentationWorkbenchCommand ||
+        parsedFormWorkbenchCommand ||
+        parsedWebpageWorkbenchCommand ||
+        parsedWritingWorkbenchCommand ||
+        parsedChannelPreviewWorkbenchCommand ||
+        parsedUploadWorkbenchCommand ||
+        parsedPublishWorkbenchCommand ||
+        parsedVoiceWorkbenchCommand ||
+        parsedGrowthWorkbenchCommand ||
+        parsedBrowserWorkbenchCommand,
       );
       const shouldResolvePluginActivation =
         !sendOptions?.purpose &&
@@ -2861,6 +2884,7 @@ export function useWorkspaceSendActions({
       messagesCount,
       mentionedCharacters,
       openRuntimeSceneGate,
+      prepareImageWorkbenchSkillSend,
       projectId,
       resolveSendBoundary,
       resourcePromptRewritePreference,
@@ -3074,8 +3098,7 @@ export function useWorkspaceSendActions({
             serviceModelSendOverrides.modelOverride,
           ),
           hasCapabilityRoute: Boolean(
-            sendOptions?.capabilityRoute ||
-              browserRequirementForSend,
+            sendOptions?.capabilityRoute || browserRequirementForSend,
           ),
           hasSkillRequest: Boolean(sendOptions?.skillRequest),
           hasSelectedTeam: Boolean(selectedTeam),

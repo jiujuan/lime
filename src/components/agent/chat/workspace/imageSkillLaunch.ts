@@ -58,6 +58,30 @@ function maybeReadMessageImageFromValue(value: string): MessageImage | null {
   }
 }
 
+function normalizeImageTaskSelectionValue(
+  value: string | null | undefined,
+): string | undefined {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return undefined;
+  }
+
+  const lowered = normalized.toLowerCase();
+  if (
+    lowered === "default" ||
+    lowered === "auto" ||
+    lowered === "automatic" ||
+    lowered === "system_default" ||
+    lowered === "system-default" ||
+    lowered === "__auto__" ||
+    lowered === "__default__"
+  ) {
+    return undefined;
+  }
+
+  return normalized;
+}
+
 export function isLocalImageWorkbenchSessionKey(
   sessionKey: string | null | undefined,
 ): boolean {
@@ -103,7 +127,7 @@ export function resolveImageWorkbenchSkillRequest(
   const documentInlineSlotId =
     effectiveApplyTarget?.kind === "canvas-insert" &&
     effectiveApplyTarget.canvasType === "document"
-      ? createDocumentImageTaskSlotId()
+      ? effectiveApplyTarget.slotId?.trim() || createDocumentImageTaskSlotId()
       : undefined;
   const documentInlineAnchorHint =
     effectiveApplyTarget?.kind === "canvas-insert" &&
@@ -176,6 +200,13 @@ export function resolveImageWorkbenchSkillRequest(
         ? "document-inline"
         : "claw-image-workbench";
   const runtimeContract = resolveImageGenerationRuntimeContractBinding();
+  const effectiveProviderId =
+    normalizeImageTaskSelectionValue(parsedCommand.providerId) ||
+    normalizeImageTaskSelectionValue(params.imageWorkbenchSelectedProviderId);
+  const effectiveModelId =
+    normalizeImageTaskSelectionValue(parsedCommand.modelId) ||
+    normalizeImageTaskSelectionValue(params.imageWorkbenchSelectedModelId);
+  const effectiveExecutorMode = parsedCommand.executorMode || "images_api";
 
   const imageTask: Record<string, unknown> = {
     title: collapseWhitespace(params.title) || undefined,
@@ -192,7 +223,7 @@ export function resolveImageWorkbenchSkillRequest(
     presentation: buildImageTaskPresentationContext({
       prompt: effectivePrompt,
       mode: parsedCommand.mode,
-      modelId: parsedCommand.modelId || params.imageWorkbenchSelectedModelId,
+      modelId: effectiveModelId,
     }),
     taste_context: buildImageTaskTasteContext({
       prompt: effectivePrompt,
@@ -202,10 +233,9 @@ export function resolveImageWorkbenchSkillRequest(
       targetOutputModelName: targetOutput?.modelName || null,
       applyTargetKind: effectiveApplyTarget?.kind || null,
     }),
-    provider_id:
-      parsedCommand.providerId || params.imageWorkbenchSelectedProviderId,
-    model: parsedCommand.modelId || params.imageWorkbenchSelectedModelId,
-    executor_mode: parsedCommand.executorMode,
+    provider_id: effectiveProviderId,
+    model: effectiveModelId,
+    executor_mode: effectiveExecutorMode,
     session_id: resolvedSessionId || undefined,
     content_id: params.contentId?.trim() || undefined,
     entry_source: params.entrySource || "at_image_command",

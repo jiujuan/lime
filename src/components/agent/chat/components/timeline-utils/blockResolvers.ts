@@ -181,6 +181,7 @@ export function resolveExpandedBlockIndexes(params: {
   focusBlockIndex: number;
   turn: AgentThreadTurn;
   collapseInactiveDetails?: boolean;
+  expandCompletedProcessDetails?: boolean;
 }): Set<number> {
   const {
     blocks,
@@ -188,11 +189,21 @@ export function resolveExpandedBlockIndexes(params: {
     focusBlockIndex,
     turn,
     collapseInactiveDetails = false,
+    expandCompletedProcessDetails = false,
   } = params;
   const expanded = new Set<number>();
 
   blocks.forEach((block, index) => {
     if (block.forceExpanded) {
+      expanded.add(index);
+      return;
+    }
+
+    if (
+      expandCompletedProcessDetails &&
+      block.kind === "process" &&
+      block.status === "completed"
+    ) {
       expanded.add(index);
       return;
     }

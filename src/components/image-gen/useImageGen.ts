@@ -104,9 +104,10 @@ export function useImageGen(options: UseImageGenOptions = {}) {
   const [providerLoadReady, setProviderLoadReady] = useState(
     providerLoadEnabled && providerLoadMode !== "deferred",
   );
-  const { providers, loading: providersLoading } = useApiKeyProvider({
+  const imageProviderRuntime = useApiKeyProvider({
     autoLoad: providerLoadReady,
   });
+  const { providers, loading: providersLoading } = imageProviderRuntime;
   const preferredProviderId = options.preferredProviderId?.trim() || "";
   const preferredModelId = options.preferredModelId?.trim() || "";
   const allowFallback = options.allowFallback ?? true;

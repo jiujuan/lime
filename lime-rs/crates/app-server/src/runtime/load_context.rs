@@ -10,6 +10,7 @@ use app_server_protocol::AgentEvent;
 use app_server_protocol::AgentSessionReadParams;
 use app_server_protocol::AgentSessionReadResponse;
 use serde_json::json;
+use serde_json::Value;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -144,6 +145,40 @@ fn projection_summary_detail(
     params: &AgentSessionReadParams,
 ) -> serde_json::Value {
     let messages = projection.messages.clone();
+    let process_detail = projection_process_detail(stored, projection);
+    let process_thread_read = process_detail
+        .as_ref()
+        .and_then(|detail| detail.get("thread_read"))
+        .and_then(Value::as_object);
+    let items = process_detail_array(process_detail.as_ref(), "items");
+    let thread_items = items.clone();
+    let artifacts = process_detail_array(process_detail.as_ref(), "artifacts");
+    let outputs = process_detail_array(process_detail.as_ref(), "outputs");
+    let pending_requests = process_thread_read_array(process_thread_read, "pending_requests");
+    let tool_calls = process_thread_read_array(process_thread_read, "tool_calls");
+    let commands = process_thread_read_array(process_thread_read, "commands");
+    let tests = process_thread_read_array(process_thread_read, "tests");
+    let active_turn_id = process_thread_read_value(process_thread_read, "active_turn_id");
+    let change_summary = process_thread_read_value(process_thread_read, "change_summary");
+    let active_command_id = process_thread_read_value(process_thread_read, "active_command_id");
+    let active_test_run_id = process_thread_read_value(process_thread_read, "active_test_run_id");
+    let active_action_id = process_thread_read_value(process_thread_read, "active_action_id");
+    let model_routing = process_thread_read_value(process_thread_read, "model_routing");
+    let service_model_slot = process_thread_read_value(process_thread_read, "service_model_slot");
+    let diagnostics =
+        process_thread_read_value(process_thread_read, "diagnostics").unwrap_or_else(|| {
+            json!({
+                "latest_turn_status": stored.turns.last().map(|turn| super::status::agent_turn_status_label(turn.status)),
+                "latest_turn_error_message": null,
+                "pending_request_count": 0,
+                "command_count": 0,
+                "test_count": 0,
+                "changed_file_count": 0,
+                "patch_count": 0,
+            })
+        });
+    let runtime_summary = process_thread_read_value(process_thread_read, "runtime_summary")
+        .unwrap_or_else(|| json!({}));
     let loaded_count = messages.len();
     let messages_count = projection.messages_count;
     let history_limit = params
@@ -160,16 +195,39 @@ fn projection_summary_detail(
         })
     });
     let status = super::status::agent_session_status_label(stored.session.status);
-    serde_json::json!({
+    let thread_read = serde_json::json!({
+        "session_id": stored.session.session_id,
+        "thread_id": stored.session.thread_id,
+        "status": status,
+        "turns": stored.turns,
+        "pending_requests": pending_requests,
+        "queued_turns": [],
+        "active_turn_id": active_turn_id,
+        "thread_items": thread_items,
+        "tool_calls": tool_calls,
+        "commands": commands,
+        "tests": tests,
+        "active_command_id": active_command_id,
+        "active_test_run_id": active_test_run_id,
+        "active_action_id": active_action_id,
+        "change_summary": change_summary,
+        "model_routing": model_routing,
+        "service_model_slot": service_model_slot,
+        "artifacts": process_thread_read_array(process_thread_read, "artifacts"),
+        "outputs": process_thread_read_array(process_thread_read, "outputs"),
+        "diagnostics": diagnostics,
+        "runtime_summary": runtime_summary,
+    });
+    let mut detail = serde_json::json!({
         "id": stored.session.session_id,
         "session_id": stored.session.session_id,
         "thread_id": stored.session.thread_id,
         "workspace_id": stored.session.workspace_id,
         "status": status,
-        "working_dir": null,
-        "archived_at": null,
-        "execution_strategy": null,
-        "execution_runtime": null,
+        "working_dir": process_detail_value(process_detail.as_ref(), "working_dir"),
+        "archived_at": process_detail_value(process_detail.as_ref(), "archived_at"),
+        "execution_strategy": process_detail_value(process_detail.as_ref(), "execution_strategy"),
+        "execution_runtime": process_detail_value(process_detail.as_ref(), "execution_runtime"),
         "messages_count": messages_count,
         "history_limit": history_limit,
         "history_offset": history_offset,
@@ -181,32 +239,102 @@ fn projection_summary_detail(
         "history_truncated": loaded_count < messages_count,
         "messages": messages,
         "turns": stored.turns,
-        "items": [],
+        "items": items,
         "queued_turns": [],
-        "artifacts": [],
-        "outputs": [],
-        "thread_read": {
-            "session_id": stored.session.session_id,
-            "thread_id": stored.session.thread_id,
-            "status": status,
-            "turns": stored.turns,
-            "pending_requests": [],
-            "queued_turns": [],
-            "tool_calls": [],
-            "commands": [],
-            "tests": [],
-            "artifacts": [],
-            "outputs": [],
-            "diagnostics": {
-                "latest_turn_status": stored.turns.last().map(|turn| super::status::agent_turn_status_label(turn.status)),
-                "latest_turn_error_message": null,
-                "pending_request_count": 0,
-                "command_count": 0,
-                "test_count": 0,
-                "changed_file_count": 0,
-                "patch_count": 0,
-            },
-            "runtime_summary": {},
-        },
-    })
+        "artifacts": artifacts,
+        "outputs": outputs,
+        "thread_read": thread_read,
+    });
+    merge_process_detail_value(&mut detail, process_detail.as_ref(), "article_workspace");
+    merge_process_detail_value(&mut detail, process_detail.as_ref(), "articleWorkspace");
+    merge_process_thread_read_value(&mut detail, process_thread_read, "article_workspace");
+    merge_process_thread_read_value(&mut detail, process_thread_read, "articleWorkspace");
+    merge_process_thread_read_value(
+        &mut detail,
+        process_thread_read,
+        "article_workspace_actions",
+    );
+    merge_process_thread_read_value(&mut detail, process_thread_read, "articleWorkspaceActions");
+    detail
+}
+
+fn projection_process_detail(
+    stored: &StoredSession,
+    projection: &ProjectionReadSession,
+) -> Option<Value> {
+    if projection.item_events.is_empty() {
+        return None;
+    }
+    let process_stored = StoredSession {
+        session: stored.session.clone(),
+        turns: stored.turns.clone(),
+        turn_inputs: HashMap::new(),
+        turn_runtime_options: HashMap::new(),
+        events: projection.item_events.clone(),
+        output_blobs: HashMap::new(),
+    };
+    Some(read_model::runtime_session_read_detail_with_options(
+        &process_stored,
+        read_model::ReadDetailOptions::default(),
+    ))
+}
+
+fn process_detail_array(detail: Option<&Value>, key: &str) -> Value {
+    detail
+        .and_then(|detail| detail.get(key))
+        .filter(|value| value.is_array())
+        .cloned()
+        .unwrap_or_else(|| json!([]))
+}
+
+fn process_detail_value(detail: Option<&Value>, key: &str) -> Value {
+    detail
+        .and_then(|detail| detail.get(key))
+        .cloned()
+        .unwrap_or(Value::Null)
+}
+
+fn process_thread_read_array(
+    thread_read: Option<&serde_json::Map<String, Value>>,
+    key: &str,
+) -> Value {
+    process_thread_read_value(thread_read, key)
+        .filter(|value| value.is_array())
+        .unwrap_or_else(|| json!([]))
+}
+
+fn process_thread_read_value(
+    thread_read: Option<&serde_json::Map<String, Value>>,
+    key: &str,
+) -> Option<Value> {
+    thread_read
+        .and_then(|thread_read| thread_read.get(key))
+        .cloned()
+}
+
+fn merge_process_detail_value(detail: &mut Value, process_detail: Option<&Value>, key: &str) {
+    let Some(value) = process_detail.and_then(|detail| detail.get(key)).cloned() else {
+        return;
+    };
+    let Some(detail_object) = detail.as_object_mut() else {
+        return;
+    };
+    detail_object.insert(key.to_string(), value);
+}
+
+fn merge_process_thread_read_value(
+    detail: &mut Value,
+    process_thread_read: Option<&serde_json::Map<String, Value>>,
+    key: &str,
+) {
+    let Some(value) = process_thread_read
+        .and_then(|thread_read| thread_read.get(key))
+        .cloned()
+    else {
+        return;
+    };
+    let Some(thread_read) = detail.get_mut("thread_read").and_then(Value::as_object_mut) else {
+        return;
+    };
+    thread_read.insert(key.to_string(), value);
 }

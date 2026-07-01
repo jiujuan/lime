@@ -14,13 +14,23 @@ const DEFAULT_SESSION_ID = "session-content-factory-local";
 const DEFAULT_TURN_ID = "turn-content-factory-local";
 const DEFAULT_TASK_ID = "task-content-factory-local";
 const DEFAULT_ARTICLE_WORKFLOW_KEY = "content_article_workflow";
+const DEFAULT_CLI_REFS = ["content-factory"];
+const DEFAULT_CONNECTOR_REFS = [
+  "lime-knowledge",
+  "web-research",
+  "media-generation",
+];
+const DEFAULT_HOOK_POLICY = {
+  prompt: ["prompt-submit"],
+  task: ["task-complete"],
+};
 const SUPPORTED_TASK_KINDS = new Set([
   "content.factory.generate",
   "content.article.generate",
   "content.image.generate",
   "content.video.script.generate",
   "content.video.storyboard.generate",
-  "content.delivery.review"
+  "content.delivery.review",
 ]);
 
 function normalizeText(value, fallback) {
@@ -54,6 +64,21 @@ function readStringListFromRecords(value, key) {
     : [];
 }
 
+function normalizeHookPolicy(value, fallback = {}) {
+  const record = asRecord(value);
+  if (!record) {
+    return fallback;
+  }
+  const policy = {};
+  for (const [key, hooks] of Object.entries(record)) {
+    const normalizedHooks = normalizeList(hooks, []);
+    if (normalizedHooks.length > 0) {
+      policy[key] = normalizedHooks;
+    }
+  }
+  return Object.keys(policy).length > 0 ? policy : fallback;
+}
+
 function normalizeOrchestration(value) {
   if (!Array.isArray(value)) {
     return DEFAULT_WRITING_ORCHESTRATION;
@@ -71,26 +96,30 @@ function normalizeOrchestration(value) {
         subagent: normalizeText(record.subagent, ""),
         skillRefs: normalizeList(record.skillRefs, []),
         status: normalizeText(record.status, "completed"),
-        summary: normalizeText(record.summary, "")
-      }
+        summary: normalizeText(record.summary, ""),
+      },
     ];
   });
   return items.length > 0 ? items : DEFAULT_WRITING_ORCHESTRATION;
 }
 
 function slugify(value) {
-  return normalizeText(value, "content")
-    .toLowerCase()
-    .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 48) || "content";
+  return (
+    normalizeText(value, "content")
+      .toLowerCase()
+      .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 48) || "content"
+  );
 }
 
 function safePathSegment(value) {
-  return normalizeText(value, "artifact")
-    .replace(/[^a-zA-Z0-9._-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 96) || "artifact";
+  return (
+    normalizeText(value, "artifact")
+      .replace(/[^a-zA-Z0-9._-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 96) || "artifact"
+  );
 }
 
 function normalizeRequest(request = {}) {
@@ -99,27 +128,26 @@ function normalizeRequest(request = {}) {
     throw new Error(`unsupported taskKind: ${taskKind}`);
   }
 
-  const brief = request.brief && typeof request.brief === "object"
-    ? request.brief
-    : {};
+  const brief =
+    request.brief && typeof request.brief === "object" ? request.brief : {};
   const topic = normalizeText(
     request.topic ?? brief.topic,
-    "内容工厂工作流升级"
+    "内容工厂工作流升级",
   );
   const audience = normalizeText(
     request.audience ?? brief.audience,
-    "需要稳定产出内容的运营团队"
+    "需要稳定产出内容的运营团队",
   );
   const tone = normalizeText(request.tone ?? brief.tone, "专业、直接、可执行");
   const channel = normalizeText(request.channel ?? brief.channel, "公众号");
   const goal = normalizeText(
     request.goal ?? brief.goal,
-    "生成可审核、可继续迭代的首版内容资产"
+    "生成可审核、可继续迭代的首版内容资产",
   );
   const references = normalizeList(request.references ?? brief.references, [
     "已有需求讨论",
     "目标读者痛点",
-    "产品当前能力边界"
+    "产品当前能力边界",
   ]);
 
   return {
@@ -136,16 +164,29 @@ function normalizeRequest(request = {}) {
     references,
     sourceObjectRef: asRecord(request.sourceObjectRef),
     requestedAt: normalizeText(request.requestedAt, ""),
-    workflowKey: normalizeText(request.workflowKey, DEFAULT_ARTICLE_WORKFLOW_KEY),
+    workflowKey: normalizeText(
+      request.workflowKey,
+      DEFAULT_ARTICLE_WORKFLOW_KEY,
+    ),
+    cliRefs: normalizeList(request.cliRefs, DEFAULT_CLI_REFS),
+    connectorRefs: normalizeList(request.connectorRefs, DEFAULT_CONNECTOR_REFS),
+    hookPolicy: normalizeHookPolicy(request.hookPolicy, DEFAULT_HOOK_POLICY),
+    runtimeRegistries: asRecord(request.runtimeRegistries),
     subagents: normalizeList(
       request.subagents,
-      DEFAULT_WRITING_ORCHESTRATION.map((step) => step.subagent).filter(Boolean)
+      DEFAULT_WRITING_ORCHESTRATION.map((step) => step.subagent).filter(
+        Boolean,
+      ),
     ),
     skillRefs: normalizeList(
       request.skillRefs,
-      Array.from(new Set(DEFAULT_WRITING_ORCHESTRATION.flatMap((step) => step.skillRefs)))
+      Array.from(
+        new Set(
+          DEFAULT_WRITING_ORCHESTRATION.flatMap((step) => step.skillRefs),
+        ),
+      ),
     ),
-    orchestration: normalizeOrchestration(request.orchestration)
+    orchestration: normalizeOrchestration(request.orchestration),
   };
 }
 
@@ -200,26 +241,59 @@ function normalizeHostWorkerRequest(input) {
       references: normalizeList(request.sourceArtifactIds, [
         "Claw 中间保持对话和审批",
         "右侧文章编辑器展示产物",
-        "所有修改回流到 current turn"
+        "所有修改回流到 current turn",
       ]),
       sourceObjectRef: asRecord(request.sourceObjectRef),
       requestedAt: normalizeText(request.requestedAt, ""),
       workflowKey: normalizeText(
-        request.workflowKey ?? request.pluginActivation?.workflow_key ?? request.pluginActivation?.workflowKey,
-        DEFAULT_ARTICLE_WORKFLOW_KEY
+        request.workflowKey ??
+          request.pluginActivation?.workflow_key ??
+          request.pluginActivation?.workflowKey,
+        DEFAULT_ARTICLE_WORKFLOW_KEY,
       ),
       subagents: normalizeList(
         request.subagents,
-        readStringListFromRecords(request.pluginActivation?.subagents, "id")
+        readStringListFromRecords(request.pluginActivation?.subagents, "id"),
       ),
       skillRefs: normalizeList(
         request.skillRefs,
-        readStringListFromRecords(request.pluginActivation?.skill_refs ?? request.pluginActivation?.skillRefs, "id")
+        readStringListFromRecords(
+          request.pluginActivation?.skill_refs ??
+            request.pluginActivation?.skillRefs,
+          "id",
+        ),
+      ),
+      cliRefs: normalizeList(
+        request.cliRefs,
+        normalizeList(
+          request.pluginActivation?.cli_refs ??
+            request.pluginActivation?.cliRefs,
+          DEFAULT_CLI_REFS,
+        ),
+      ),
+      connectorRefs: normalizeList(
+        request.connectorRefs,
+        normalizeList(
+          request.pluginActivation?.connector_refs ??
+            request.pluginActivation?.connectorRefs,
+          DEFAULT_CONNECTOR_REFS,
+        ),
+      ),
+      hookPolicy: normalizeHookPolicy(
+        request.hookPolicy ??
+          request.pluginActivation?.hook_policy ??
+          request.pluginActivation?.hookPolicy,
+        DEFAULT_HOOK_POLICY,
+      ),
+      runtimeRegistries: asRecord(
+        request.runtimeRegistries ??
+          request.pluginActivation?.runtime_registries ??
+          request.pluginActivation?.runtimeRegistries,
       ),
       orchestration: normalizeOrchestration(
-        request.orchestration ?? request.pluginActivation?.orchestration
-      )
-    }
+        request.orchestration ?? request.pluginActivation?.orchestration,
+      ),
+    },
   };
 }
 
@@ -232,7 +306,7 @@ function objectRef({ kind, id, sessionId, turnId, taskId, artifactIds }) {
     version: "v1",
     artifactIds,
     sourceTurnId: turnId,
-    sourceTaskId: taskId
+    sourceTaskId: taskId,
   };
 }
 
@@ -242,7 +316,7 @@ function sourceBase({ taskKind, taskId, turnId, artifactIds }) {
     taskId,
     turnId,
     artifactIds,
-    evidenceIds: [`evidence-${taskId}`]
+    evidenceIds: [`evidence-${taskId}`],
   };
 }
 
@@ -256,7 +330,7 @@ function mediaCacheRecord(context, { artifactId, format, kind, mimeType }) {
     safePathSegment(context.sessionId),
     "tasks",
     safePathSegment(context.taskId),
-    `${fileStem}.${format}`
+    `${fileStem}.${format}`,
   ].join("/");
 
   return {
@@ -266,7 +340,7 @@ function mediaCacheRecord(context, { artifactId, format, kind, mimeType }) {
     cacheKey: `${context.sessionId}:${context.taskId}:${artifactId}`,
     relativePath,
     manifestPath: `${relativePath}.manifest.json`,
-    mimeType
+    mimeType,
   };
 }
 
@@ -280,7 +354,7 @@ function buildBriefObject(context) {
       sessionId: context.sessionId,
       turnId: context.turnId,
       taskId: context.taskId,
-      artifactIds
+      artifactIds,
     }),
     title: "内容简报",
     status: "ready",
@@ -291,16 +365,16 @@ function buildBriefObject(context) {
         taskKind: context.taskKind,
         taskId: context.taskId,
         turnId: context.turnId,
-        artifactIds
+        artifactIds,
       }),
       fields: [
         { key: "topic", label: "主题", value: context.topic },
         { key: "audience", label: "读者", value: context.audience },
         { key: "channel", label: "渠道", value: context.channel },
         { key: "tone", label: "语气", value: context.tone },
-        { key: "goal", label: "目标", value: context.goal }
-      ]
-    }
+        { key: "goal", label: "目标", value: context.goal },
+      ],
+    },
   };
 }
 
@@ -308,6 +382,8 @@ function buildArticleObject(context) {
   const id = `article-${slugify(context.topic)}`;
   const artifactIds = [`artifact-${id}`];
   const planning = buildArticlePlanning(context);
+  const articleTitle =
+    planning.titleCandidates[0]?.title ?? `${context.channel}文章草稿`;
 
   return {
     ref: objectRef({
@@ -316,23 +392,22 @@ function buildArticleObject(context) {
       sessionId: context.sessionId,
       turnId: context.turnId,
       taskId: context.taskId,
-      artifactIds
+      artifactIds,
     }),
-    title: `${context.channel}文章草稿`,
+    title: articleTitle,
     status: "needs_review",
-    summary: `已完成 ${planning.researchRounds.length} 轮资料检索、${planning.outline.length} 段大纲、${planning.imageSlots.length} 个配图占位和首版正文，等待确认结构、观点和引用。`,
+    summary: `围绕“${planning.titleCandidates[0]?.title ?? context.topic}”生成首版${context.channel}正文，可继续编辑、审稿和发布。`,
     previewArtifactId: artifactIds[0],
     source: {
       ...sourceBase({
         taskKind: "content.article.generate",
         taskId: context.taskId,
         turnId: context.turnId,
-      artifactIds
+        artifactIds,
       }),
       processMarkdown: planning.processMarkdown,
       documentText: planning.documentText,
       finalMarkdown: planning.documentText,
-      markdown: planning.documentText,
       excerpt: planning.keyTakeaways[0],
       researchRounds: planning.researchRounds,
       titleCandidates: planning.titleCandidates,
@@ -348,23 +423,25 @@ function buildArticleObject(context) {
       reviewNotes: [
         "确认标题是否符合真实表达，不要夸大承诺。",
         "确认引用是否来自用户认可的资料。",
-        "确认配图占位是否和正文段落一致。"
-      ]
-    }
+        "确认配图占位是否和正文段落一致。",
+      ],
+    },
   };
 }
 
 function buildImageSetObject(context) {
   const id = `images-${slugify(context.topic)}`;
   const planning = buildArticlePlanning(context);
-  const artifactIds = planning.imageSlots.map((slot) => `artifact-${id}-${slot.id}`);
+  const artifactIds = planning.imageSlots.map(
+    (slot) => `artifact-${id}-${slot.id}`,
+  );
   const imageItems = planning.imageSlots.map((slot, index) => {
     const artifactId = artifactIds[index] ?? `artifact-${id}-${index + 1}`;
     const cache = mediaCacheRecord(context, {
       artifactId,
       format: "png",
       kind: "image",
-      mimeType: "image/png"
+      mimeType: "image/png",
     });
     return {
       id: artifactId,
@@ -376,7 +453,9 @@ function buildImageSetObject(context) {
       prompt: slot.prompt,
       purpose: slot.purpose,
       sectionId: slot.sectionId,
-      citationIds: planning.citations.slice(0, 2).map((citation) => citation.id)
+      citationIds: planning.citations
+        .slice(0, 2)
+        .map((citation) => citation.id),
     };
   });
   return {
@@ -386,7 +465,7 @@ function buildImageSetObject(context) {
       sessionId: context.sessionId,
       turnId: context.turnId,
       taskId: context.taskId,
-      artifactIds
+      artifactIds,
     }),
     title: "文章配图组",
     status: "draft",
@@ -397,14 +476,14 @@ function buildImageSetObject(context) {
         taskKind: "content.image.generate",
         taskId: context.taskId,
         turnId: context.turnId,
-        artifactIds
+        artifactIds,
       }),
       images: imageItems,
       imageSlots: planning.imageSlots,
       imagePlan: planning.imagePlan,
       searchRequests: planning.searchRequests,
-      searchEvidence: planning.searchEvidence
-    }
+      searchEvidence: planning.searchEvidence,
+    },
   };
 }
 
@@ -418,7 +497,7 @@ function buildVideoScriptObject(context) {
       sessionId: context.sessionId,
       turnId: context.turnId,
       taskId: context.taskId,
-      artifactIds
+      artifactIds,
     }),
     title: "视频脚本",
     status: "draft",
@@ -429,7 +508,7 @@ function buildVideoScriptObject(context) {
         taskKind: "content.video.script.generate",
         taskId: context.taskId,
         turnId: context.turnId,
-        artifactIds
+        artifactIds,
       }),
       markdown: [
         `# ${context.topic} 短视频脚本`,
@@ -441,9 +520,9 @@ function buildVideoScriptObject(context) {
         `内容工厂把文章、配图、视频分镜和交付清单放进右侧 Article Workspace，中间仍由 Claw 负责对话和审批。`,
         "",
         "## 20-35 秒",
-        `这样每一次继续写作、重生成图片或确认交付，都会回到同一条可追踪的运行链路。`
-      ].join("\n")
-    }
+        `这样每一次继续写作、重生成图片或确认交付，都会回到同一条可追踪的运行链路。`,
+      ].join("\n"),
+    },
   };
 }
 
@@ -457,7 +536,7 @@ function buildStoryboardObject(context) {
       sessionId: context.sessionId,
       turnId: context.turnId,
       taskId: context.taskId,
-      artifactIds
+      artifactIds,
     }),
     title: "视频分镜",
     status: "needs_review",
@@ -468,34 +547,36 @@ function buildStoryboardObject(context) {
         taskKind: "content.video.storyboard.generate",
         taskId: context.taskId,
         turnId: context.turnId,
-        artifactIds
+        artifactIds,
       }),
       shots: [
         {
           id: "shot-01",
           title: "痛点开场",
           description: "展示内容团队在多个工具间切换，素材和审核意见分散。",
-          visualPrompt: "桌面工作台，多窗口内容草稿和素材列表，信息分散但真实克制",
+          visualPrompt:
+            "桌面工作台，多窗口内容草稿和素材列表，信息分散但真实克制",
           duration: "5s",
           cache: mediaCacheRecord(context, {
             artifactId: `${artifactIds[0]}-shot-01`,
             format: "mp4",
             kind: "video",
-            mimeType: "video/mp4"
-          })
+            mimeType: "video/mp4",
+          }),
         },
         {
           id: "shot-02",
           title: "工作台收敛",
           description: "Claw 对话保持在中间，右侧出现文章草稿和配图规划。",
-          visualPrompt: "Lime 桌面端，中间对话，右侧 Article Workspace 产物区，清晰专业",
+          visualPrompt:
+            "Lime 桌面端，中间对话，右侧 Article Workspace 产物区，清晰专业",
           duration: "8s",
           cache: mediaCacheRecord(context, {
             artifactId: `${artifactIds[0]}-shot-02`,
             format: "mp4",
             kind: "video",
-            mimeType: "video/mp4"
-          })
+            mimeType: "video/mp4",
+          }),
         },
         {
           id: "shot-03",
@@ -507,11 +588,11 @@ function buildStoryboardObject(context) {
             artifactId: `${artifactIds[0]}-shot-03`,
             format: "mp4",
             kind: "video",
-            mimeType: "video/mp4"
-          })
-        }
-      ]
-    }
+            mimeType: "video/mp4",
+          }),
+        },
+      ],
+    },
   };
 }
 
@@ -526,7 +607,7 @@ function buildChecklistObject(context) {
       sessionId: context.sessionId,
       turnId: context.turnId,
       taskId: context.taskId,
-      artifactIds
+      artifactIds,
     }),
     title: "交付检查清单",
     status: "needs_review",
@@ -537,41 +618,41 @@ function buildChecklistObject(context) {
         taskKind: "content.delivery.review",
         taskId: context.taskId,
         turnId: context.turnId,
-        artifactIds
+        artifactIds,
       }),
       items: [
         {
           id: "check-article",
           title: "文章结构完整",
           status: planning.outline.length >= 5 ? "ready" : "pending",
-          notes: `确认 ${planning.outline.length} 段大纲是否覆盖开场、检索、策划、正文和交付。`
+          notes: `确认 ${planning.outline.length} 段大纲是否覆盖开场、检索、策划、正文和交付。`,
         },
         {
           id: "check-research",
           title: "检索依据可追踪",
           status: planning.researchRounds.length >= 3 ? "ready" : "pending",
-          notes: `已记录 ${planning.researchRounds.length} 轮检索，需确认引用是否来自用户认可资料。`
+          notes: `已记录 ${planning.researchRounds.length} 轮检索，需确认引用是否来自用户认可资料。`,
         },
         {
           id: "check-title",
           title: "标题候选可选择",
           status: planning.titleCandidates.length >= 3 ? "ready" : "pending",
-          notes: `已生成 ${planning.titleCandidates.length} 个标题候选，需确认是否符合${context.channel}语气。`
+          notes: `已生成 ${planning.titleCandidates.length} 个标题候选，需确认是否符合${context.channel}语气。`,
         },
         {
           id: "check-images",
           title: "配图提示词可执行",
           status: planning.imageSlots.length >= 2 ? "ready" : "pending",
-          notes: `已规划 ${planning.imageSlots.length} 个配图占位，需确认图片是否服务正文段落。`
+          notes: `已规划 ${planning.imageSlots.length} 个配图占位，需确认图片是否服务正文段落。`,
         },
         {
           id: "check-storyboard",
           title: "视频分镜可交付",
           status: "pending",
-          notes: "确认镜头标题、描述、视觉提示和时长都可用于后续生成。"
-        }
-      ]
-    }
+          notes: "确认镜头标题、描述、视觉提示和时长都可用于后续生成。",
+        },
+      ],
+    },
   };
 }
 
@@ -591,11 +672,20 @@ function selectObjectsForTask(context) {
     case "content.video.script.generate":
       return { primary: script, objects: [brief, article, script] };
     case "content.video.storyboard.generate":
-      return { primary: storyboard, objects: [brief, script, storyboard, checklist] };
+      return {
+        primary: storyboard,
+        objects: [brief, script, storyboard, checklist],
+      };
     case "content.delivery.review":
-      return { primary: checklist, objects: [article, images, storyboard, checklist] };
+      return {
+        primary: checklist,
+        objects: [article, images, storyboard, checklist],
+      };
     default:
-      return { primary: article, objects: [brief, article, images, script, storyboard, checklist] };
+      return {
+        primary: article,
+        objects: [brief, article, images, script, storyboard, checklist],
+      };
   }
 }
 
@@ -613,16 +703,17 @@ export function buildContentFactoryWorkspacePatch(request = {}) {
     objects: selection.objects,
     layoutState: {
       activeTabKind: "articleWorkspace",
-      activePaneKind: selection.primary.ref.kind === "imageGenerationSet"
-        ? "imageGrid"
-        : selection.primary.ref.kind === "videoStoryboard"
-          ? "storyboard"
-          : selection.primary.ref.kind === "deliveryChecklist"
-            ? "checklist"
-            : "documentCanvas",
+      activePaneKind:
+        selection.primary.ref.kind === "imageGenerationSet"
+          ? "imageGrid"
+          : selection.primary.ref.kind === "videoStoryboard"
+            ? "storyboard"
+            : selection.primary.ref.kind === "deliveryChecklist"
+              ? "checklist"
+              : "documentCanvas",
       openTabKinds: ["articleWorkspace", "files", "evidence"],
-      splitMode: "chat-right-dock"
-    }
+      splitMode: "chat-right-dock",
+    },
   };
   if (context.workspaceId) {
     patch.workspaceId = context.workspaceId;
@@ -632,8 +723,8 @@ export function buildContentFactoryWorkspacePatch(request = {}) {
       source: "content_factory_worker",
       artifactRef: `${context.taskId}:workspace-patch`,
       taskKind: context.taskKind,
-      turnId: context.turnId
-    }
+      turnId: context.turnId,
+    },
   ];
   patch.workerEvidence = [
     {
@@ -647,6 +738,10 @@ export function buildContentFactoryWorkspacePatch(request = {}) {
       outputSummary: `${selection.objects.length} workspace objects, ${planning.researchRounds.length} research rounds, ${planning.outline.length} outline sections`,
       outputObjectCount: selection.objects.length,
       workflowKey: context.workflowKey,
+      cliRefs: context.cliRefs,
+      connectorRefs: context.connectorRefs,
+      hookPolicy: context.hookPolicy,
+      runtimeRegistries: context.runtimeRegistries,
       subagents: context.subagents,
       skillRefs: context.skillRefs,
       researchRounds: planning.researchRounds,
@@ -660,8 +755,8 @@ export function buildContentFactoryWorkspacePatch(request = {}) {
       searchEvidence: planning.searchEvidence,
       reviewChecklist: planning.reviewChecklist,
       imagePlan: planning.imagePlan,
-      orchestration: context.orchestration
-    }
+      orchestration: context.orchestration,
+    },
   ];
   if (context.requestedAt) {
     patch.updatedAt = context.requestedAt;
@@ -675,7 +770,7 @@ export function runContentFactoryTask(request = {}) {
     artifactKind: WORKSPACE_PATCH_KIND,
     appId: APP_ID,
     taskKind: normalizeText(request.taskKind, "content.factory.generate"),
-    patch
+    patch,
   };
 }
 
@@ -698,11 +793,11 @@ export function handleContentFactoryWorkerRequest(input = {}) {
             kind: WORKSPACE_PATCH_KIND,
             articleWorkspaceSchema: ARTICLE_WORKSPACE_SCHEMA,
             contentFactoryWorkspacePatch: result.patch,
-            workspace_patch: result.patch
+            workspace_patch: result.patch,
           },
-          content: JSON.stringify(result.patch)
-        }
-      ]
+          content: JSON.stringify(result.patch),
+        },
+      ],
     };
   }
 
@@ -713,7 +808,7 @@ export function handleContentFactoryWorkerRequest(input = {}) {
       appId: APP_ID,
       status: "failed",
       error: { code: normalized.error },
-      artifacts: []
+      artifacts: [],
     };
   }
   const request = normalized.request;
@@ -736,11 +831,11 @@ export function handleContentFactoryWorkerRequest(input = {}) {
           kind: WORKSPACE_PATCH_KIND,
           articleWorkspaceSchema: ARTICLE_WORKSPACE_SCHEMA,
           contentFactoryWorkspacePatch: patch,
-          workspace_patch: patch
+          workspace_patch: patch,
         },
-        content: JSON.stringify(patch)
-      }
-    ]
+        content: JSON.stringify(patch),
+      },
+    ],
   };
 }
 

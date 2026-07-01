@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildBatches,
+  buildRelatedModeInvocation,
   buildVitestCommandArgs,
   findFirstResumableBatchIndex,
   markSkippedBatches,
@@ -113,6 +114,31 @@ describe("run-vitest-smart", () => {
       expect.arrayContaining(["related", "--run", "src/foo.ts"]),
     );
     expect(args.indexOf("related")).toBeLessThan(args.indexOf("src/foo.ts"));
+  });
+
+  it("related 模式跑前端源码时默认排除 Electron main 源码扫描", () => {
+    expect(
+      buildRelatedModeInvocation(["src/components/agent/chat/index.tsx"]),
+    ).toEqual({
+      command: "related",
+      args: ["--exclude", "electron/**", "src/components/agent/chat/index.tsx"],
+    });
+  });
+
+  it("related 模式输入 Electron 源码时直接运行相邻测试", () => {
+    expect(
+      buildRelatedModeInvocation(["electron/hostCommands.ts", "--bail=1"]),
+    ).toEqual({
+      command: "run",
+      args: ["electron/hostCommands.test.ts", "--bail=1"],
+    });
+  });
+
+  it("related 模式输入 Electron 测试文件时直接运行该测试", () => {
+    expect(buildRelatedModeInvocation(["electron/preload.test.ts"])).toEqual({
+      command: "run",
+      args: ["electron/preload.test.ts"],
+    });
   });
 
   it("应保持串行测试独立成批，其它测试按批次大小聚合", () => {

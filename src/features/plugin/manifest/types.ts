@@ -52,8 +52,11 @@ export interface PluginManifest {
   skills?: PluginSkillDeclaration[];
   agentApps?: PluginAgentAppDeclaration[];
   subagents?: PluginSubagentDeclaration[];
+  cli?: PluginCliDeclaration | Record<string, unknown> | string;
+  clis?: PluginCliDeclaration[] | Record<string, unknown>;
   workflows?: PluginWorkflowDeclaration[];
   connectors?: PluginConnectorDeclaration[];
+  hooks?: PluginHookDeclaration[] | Record<string, unknown> | string;
   mcpServers?: PluginMcpServerDeclaration[];
   artifactRenderers?: PluginArtifactRendererDeclaration[];
   activationEntries?: PluginActivationEntryDeclaration[];
@@ -146,6 +149,26 @@ export interface PluginSubagentDeclaration {
   skills?: string[];
 }
 
+export interface PluginCliDeclaration {
+  id: string;
+  title?: string;
+  description?: string;
+  entrypoint?: string;
+  registry?: string;
+  commands?: string[];
+  required?: boolean;
+}
+
+export interface PluginHookDeclaration {
+  key: string;
+  title?: string;
+  description?: string;
+  event?: string;
+  entrypoint?: string;
+  path?: string;
+  required?: boolean;
+}
+
 export interface PluginWorkflowStepDeclaration {
   id: string;
   title?: string;
@@ -161,6 +184,9 @@ export interface PluginWorkflowDeclaration {
   taskKind?: string;
   triggerIntents?: string[];
   outputArtifactKind?: string;
+  cliRefs?: string[];
+  connectorRefs?: string[];
+  hookPolicy?: Record<string, string[]>;
   steps?: PluginWorkflowStepDeclaration[];
   humanReview?: boolean;
   required?: boolean;
@@ -269,8 +295,10 @@ export interface PluginContract {
   skills: PluginSkillDeclaration[];
   agentApps: PluginAgentAppDeclaration[];
   subagents: PluginSubagentDeclaration[];
+  clis: PluginCliDeclaration[];
   workflows: PluginWorkflowDeclaration[];
   connectors: PluginConnectorDeclaration[];
+  hooks: PluginHookDeclaration[];
   mcpServers: PluginMcpServerDeclaration[];
   artifactRenderers: PluginArtifactRendererDeclaration[];
   activationEntries: PluginActivationEntryDeclaration[];

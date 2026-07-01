@@ -42,7 +42,10 @@ import {
   type CanvasImageInsertRequest,
   type InsertableImage,
 } from "@/lib/canvasImageInsertBus";
-import { appendImageToMarkdown } from "./utils/autoImageInsert";
+import {
+  applyDocumentImageInsertRequest,
+  hasDocumentImageInsertPlacement,
+} from "./utils/documentImageInsertRequest";
 import {
   loadAutoContinueSettings,
   saveAutoContinueSettings,
@@ -344,30 +347,34 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = memo(
       setTimeout(() => setShowToast(false), 2000);
     }, []);
 
-    const appendImageIntoDocument = useCallback(
-      (image: InsertableImage, description = "插入图片") => {
+    const applyImageInsertRequestIntoDocument = useCallback(
+      (request: CanvasImageInsertRequest, description = "插入图片") => {
         const latestState = latestStateRef.current;
         const baseContent = flushEditorDraft();
-        const nextContent = appendImageToMarkdown(baseContent, image, true);
-        if (nextContent === baseContent) {
-          showMessage("ℹ️ 图片已存在，跳过插入");
-          return false;
+        const result = applyDocumentImageInsertRequest(baseContent, request);
+        if (!result.changed) {
+          showMessage(
+            result.reason === "missing_image_url"
+              ? "⚠️ 插图失败，请重试"
+              : "ℹ️ 图片已存在，跳过插入",
+          );
+          return result;
         }
 
         const newVersion = {
           id: crypto.randomUUID(),
-          content: nextContent,
+          content: result.content,
           createdAt: Date.now(),
           description,
         };
         onStateChange({
           ...latestState,
-          content: nextContent,
+          content: result.content,
           versions: [...latestState.versions, newVersion],
           currentVersionId: newVersion.id,
         });
-        setEditingContent(nextContent);
-        return true;
+        setEditingContent(result.content);
+        return result;
       },
       [flushEditorDraft, onStateChange, showMessage],
     );
@@ -388,7 +395,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = memo(
           return;
         }
 
-        if (isEditing) {
+        if (isEditing && !hasDocumentImageInsertPlacement(request)) {
           setPendingEditorInsert({
             requestId: request.requestId,
             image: request.image,
@@ -396,20 +403,25 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = memo(
           return;
         }
 
-        const inserted = appendImageIntoDocument(request.image, "手动插图");
-        if (inserted) {
+        const result = applyImageInsertRequestIntoDocument(request, "手动插图");
+        if (result.changed) {
           showMessage("🖼️ 已插入文稿");
         }
         emitCanvasImageInsertAck({
           requestId: request.requestId,
-          success: inserted,
+          success: result.changed,
           canvasType: "document",
-          locationLabel: inserted ? "文档正文末尾" : "文档中已存在同图",
-          reason: inserted ? undefined : "duplicate",
+          locationLabel: result.changed ? result.locationLabel : undefined,
+          reason: result.changed ? undefined : result.reason || "duplicate",
         });
         ackCanvasImageInsertRequest(request.requestId);
       },
-      [appendImageIntoDocument, isEditing, matchesRequestTarget, showMessage],
+      [
+        applyImageInsertRequestIntoDocument,
+        isEditing,
+        matchesRequestTarget,
+        showMessage,
+      ],
     );
 
     useEffect(() => {

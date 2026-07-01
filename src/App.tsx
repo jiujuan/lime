@@ -186,7 +186,6 @@ function AppContent() {
     pageParams,
     requestedPage,
     requestedPageParams,
-    navigationRequestId,
     handleNavigate,
   } = useAppNavigation();
   const [agentHasMessages, setAgentHasMessages] = useState(false);
@@ -560,7 +559,6 @@ function AppContent() {
                 pageParams={pageParams}
                 requestedPage={requestedPage}
                 requestedPageParams={requestedPageParams}
-                navigationRequestId={navigationRequestId}
                 onNavigate={handleNavigate}
                 onAgentHasMessagesChange={setAgentHasMessages}
                 onAgentSessionChange={setActiveAgentSessionId}

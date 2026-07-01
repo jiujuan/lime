@@ -210,6 +210,7 @@ export function MessageListItem({
     canCopyMessage,
     displayContent,
     hasAssistantBodyContent,
+    hasArticleArtifactFrame,
     hasImageWorkbenchLeadContent,
     historicalAssistantPreviewContent,
     imageWorkbenchRendererState,
@@ -333,12 +334,6 @@ export function MessageListItem({
   const firstTokenRuntimeStatusNode = shouldRenderFirstTokenRuntimeStatus ? (
     <AssistantFirstTokenRuntimeStatus status={msg.runtimeStatus} />
   ) : null;
-  const shouldPinTrailingTimelineBeforeBubble =
-    msg.role === "assistant" &&
-    Boolean(trailingTimeline) &&
-    hasAssistantBodyContent &&
-    trailingTimeline!.items.some((item) => item.type === "file_artifact");
-
   if (
     msg.role === "assistant" &&
     !hasAssistantBodyContent &&
@@ -354,6 +349,7 @@ export function MessageListItem({
       actionRequests={primaryActionRequests}
       activeCurrentTurnId={activeCurrentTurnId}
       detailsDeferred={arePrimaryTimelineDetailsDeferred}
+      expandCompletedProcessDetails={hasArticleArtifactFrame}
       focusedTimelineItemId={focusedTimelineItemId}
       focusRequestKey={timelineFocusRequestKey}
       isCurrentTurnSending={isSending}
@@ -385,6 +381,7 @@ export function MessageListItem({
         timeline={trailingTimeline}
         actionRequests={trailingActionRequests}
         activeCurrentTurnId={activeCurrentTurnId}
+        expandCompletedProcessDetails={hasArticleArtifactFrame}
         focusedTimelineItemId={focusedTimelineItemId}
         focusRequestKey={timelineFocusRequestKey}
         isCurrentTurnSending={isSending}
@@ -421,14 +418,6 @@ export function MessageListItem({
             data-testid="assistant-runtime-status-shell"
           >
             {firstTokenRuntimeStatusNode}
-          </div>
-        ) : null}
-        {shouldPinTrailingTimelineBeforeBubble && trailingTimelineNode ? (
-          <div
-            className="mb-2"
-            data-testid="assistant-pinned-file-timeline-shell"
-          >
-            {trailingTimelineNode}
           </div>
         ) : null}
         {hasAssistantBodyContent ? (
@@ -554,6 +543,14 @@ export function MessageListItem({
             />
 
             {msg.role === "assistant" &&
+            trailingTimeline &&
+            !shouldRenderFirstTokenRuntimeStatus
+              ? trailingTimelineNode
+              : null}
+
+            {assistantMetaFooter}
+
+            {msg.role === "assistant" &&
             visibleAssistantArtifacts.length > 0 ? (
               <MessageArtifactCards
                 artifacts={visibleAssistantArtifacts}
@@ -562,15 +559,6 @@ export function MessageListItem({
                 onSaveMessageAsKnowledge={onSaveMessageAsKnowledge}
               />
             ) : null}
-
-            {msg.role === "assistant" &&
-            trailingTimeline &&
-            !shouldRenderFirstTokenRuntimeStatus &&
-            !shouldPinTrailingTimelineBeforeBubble
-              ? trailingTimelineNode
-              : null}
-
-            {assistantMetaFooter}
 
             {showMessageActions ? (
               <MessageActionButtons

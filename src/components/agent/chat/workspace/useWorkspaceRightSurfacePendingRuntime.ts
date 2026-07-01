@@ -40,7 +40,6 @@ import {
   buildWorkspaceRightSurfacePendingBrowserIntent,
   type WorkspaceRightSurfaceBrowserIntent,
 } from "./workspaceRightSurfaceBrowserIntent";
-import { buildWorkspacePluginRightSurfaceIntents } from "./workspacePluginRightSurfaceProjection";
 
 const DEFAULT_RIGHT_SURFACE_PENDING_POLL_MS = 5_000;
 const DEFAULT_RIGHT_SURFACE_PENDING_EVENT_DRAIN_MS = 250;
@@ -143,9 +142,9 @@ export function useWorkspaceRightSurfacePendingRuntime({
   eventDrainIntervalMs = DEFAULT_RIGHT_SURFACE_PENDING_EVENT_DRAIN_MS,
   eventDrainLimit = DEFAULT_RIGHT_SURFACE_PENDING_EVENT_LIMIT,
   limit = DEFAULT_RIGHT_SURFACE_PENDING_LIMIT,
-  pluginActivationContext = null,
+  pluginActivationContext: _pluginActivationContext = null,
   pluginContracts = EMPTY_PLUGIN_CONTRACTS,
-  pluginRightSurfaceIntentTtlMs,
+  pluginRightSurfaceIntentTtlMs: _pluginRightSurfaceIntentTtlMs,
   isBridgeAvailable = isAppServerBridgeAvailable,
   listPending = listWorkspaceRightSurfacePending,
   consumePending = consumeWorkspaceRightSurfacePending,
@@ -382,25 +381,11 @@ export function useWorkspaceRightSurfacePendingRuntime({
 
   const pendingIntents = useMemo(() => {
     const createdAt = now();
-    return [
-      ...buildWorkspaceRightSurfaceAppServerPendingIntents(
-        pendingRequests,
-        createdAt,
-      ),
-      ...buildWorkspacePluginRightSurfaceIntents({
-        activationContext: pluginActivationContext,
-        contracts: pluginContracts,
-        createdAt,
-        ttlMs: pluginRightSurfaceIntentTtlMs,
-      }),
-    ];
-  }, [
-    now,
-    pendingRequests,
-    pluginActivationContext,
-    pluginContracts,
-    pluginRightSurfaceIntentTtlMs,
-  ]);
+    return buildWorkspaceRightSurfaceAppServerPendingIntents(
+      pendingRequests,
+      createdAt,
+    );
+  }, [now, pendingRequests]);
   const pendingFileTarget = useMemo(
     () => buildWorkspaceRightSurfacePendingFileTarget(pendingRequests),
     [pendingRequests],

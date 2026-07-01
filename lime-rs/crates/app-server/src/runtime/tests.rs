@@ -27,6 +27,7 @@ mod gateway_runner;
 mod knowledge;
 mod memory_prompt;
 mod objectives;
+mod permission_preflight;
 mod queue;
 mod read_model;
 mod right_surface;

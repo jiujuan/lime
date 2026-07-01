@@ -231,6 +231,7 @@ fn tool_item_event_payload(
 }
 
 mod article_workspace_artifact_documents;
+mod article_workspace_worker_evidence;
 mod article_workspace_worker_failure;
 mod artifacts;
 mod imports_items;

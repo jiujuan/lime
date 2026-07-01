@@ -1,3 +1,51 @@
+## Lime v1.85.0
+
+<sub>The Simplified Chinese release notes are the primary version. This English page is a companion for international readers.</sub>
+
+### New Features
+
+- Moved the image-generation mainline into the App Server / Media Runtime worker: `@image`, plain natural-language image prompts, and article image slots now share `.lime/tasks/image_generate`, Provider DB routing, resident scheduling, and recovery.
+- Added a generic plugin orchestration rail to the Article Workspace right editor so Content Factory workflow, subagents, skills, connectors, and hooks remain visible and restorable.
+- Article image slots can now launch image tasks directly; completed tasks replace Markdown placeholders by slot / anchor, including multi-slot assignment, failed / cancelled safeguards, and manual apply metadata.
+- Completed the AgentChat Thread Timeline / Session Refresh mainline so live streaming timeline state is no longer overwritten by stale session detail refreshes.
+
+### Fixes
+
+- Fixed `@command` panel filtering that could hide the `@image` result after the outer catalog had already matched it.
+- Fixed image model placeholder leakage so `default / auto / __default__` and similar values are no longer persisted as real task models.
+- Fixed the Electron Host `config.json` vs App Server `config.yaml` split by making image defaults read from the current `config.yaml` source.
+- Fixed image worker fallback to the retired local gateway, long-pending tasks, stale running recovery, and successful completion records without `slot_id`.
+- Fixed regular Expert Panel text follow-ups inheriting the image Provider / `gpt-image-1`.
+- Fixed high-frequency `runtimeGetSession` / detail refresh behavior that could reduce, reorder, or erase already displayed live messages.
+
+### Improvements and Refactors
+
+- Split `lime_media_runtime` from a 5k+ line root module into a 31-line facade with dedicated image request, reference image, post-processing, task artifact, worker, and test modules.
+- Expanded Media Runtime Provider adapters for OpenAI-compatible edit / reference image requests, Responses `input_image`, Gemini `inlineData/fileData`, native Zhipu image generation, and shared HTTP error classification.
+- Split image-task frontend runtime code into `imageWorkbenchTaskActions`, `imageTaskPreviewRuntimeGuards`, `imageTaskPreviewRuntimePayload`, and `workspaceDocumentInlineImageTaskSync`.
+- Added projected item events to the App Server read model for message batches, reasoning, tool lifecycle, permission preflight, artifact snapshots, routing, and runtime events.
+- Continued tightening Agent Chat page and Workspace loading/projection boundaries with lazy-loading and smaller pure helpers.
+
+### Tests and Quality
+
+- Added and updated Rust and frontend coverage for image workers, Provider routing, stale running recovery, Media Runtime adapters, article slot writeback, failed / cancelled retry, thread timeline merging, and the orchestration rail.
+- Extended Electron fixtures including `image-command`, `plain-image-intent`, and `content-factory-article-workspace` to cover GUI state, App Server read model, task artifacts, reload restore, and provider request bodies.
+- `npm run test:contracts` and `npm run verify:gui-smoke` passed across multiple key increments; the release run will execute the version and release gates again.
+
+### Documentation
+
+- Updated the image capability roadmap with App Server image worker, resident scheduling, Provider adapter, and configuration source-of-truth boundaries.
+- Updated the Writing implementation plan with Content Factory orchestration rail, article image-slot tasks, slot replacement, and retry closure.
+- Added the Thread Timeline / Session Refresh source-of-truth governance roadmap.
+- Added the Agent verification research entry and Agent Verification Contract template.
+
+### Other
+
+- Updated version facts to `1.85.0` across the root app, CLI npm package, Rust workspace, main `lime-rs/Cargo.lock`, and the Aster sub-workspace lock.
+- This release excludes local temporary files `internal/roadmap/Writing/.DS_Store` and `lime-rs/test-tool-call-fix.sh`.
+
+**Full changes**: `v1.84.0` -> `v1.85.0`
+
 ## Lime v1.84.0
 
 <sub>The Simplified Chinese release notes are the primary version. This English page is a companion for international readers.</sub>

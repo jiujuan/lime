@@ -564,7 +564,14 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
     setSkillContentError(null);
     setSkillMarkdownBodyExpanded(false);
     setExpandedDiffFileIds({});
+    hasUserToggledExpandedRef.current = false;
   }, [toolCall.id]);
+
+  useEffect(() => {
+    if (defaultExpanded && !hasUserToggledExpandedRef.current) {
+      setIsExpanded(true);
+    }
+  }, [defaultExpanded]);
 
   useEffect(() => {
     if (

@@ -130,6 +130,8 @@ function marketplaceItemFromInstalledInput(
       subagents: contract.subagents,
       workflows: contract.workflows,
       connectors: contract.connectors,
+      clis: contract.clis,
+      hooks: contract.hooks,
       mcpServers: contract.mcpServers,
       activationEntries: contract.activationEntries,
       artifactRenderers: contract.artifactRenderers,

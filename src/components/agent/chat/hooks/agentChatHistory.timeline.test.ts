@@ -2,9 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
 
-import {
-  hydrateSessionDetailMessages,
-} from "./agentChatHistory";
+import { hydrateSessionDetailMessages } from "./agentChatHistory";
 
 describe("agentChatHistory timeline fallback", () => {
   it("应从历史消息的 thinking 字段恢复完整思考过程", () => {
@@ -545,6 +543,35 @@ describe("agentChatHistory timeline fallback", () => {
             },
           },
         },
+        {
+          artifactRef: "artifact-workspace-patch-current",
+          eventId: "event-article-workspace-patch-current",
+          sequence: 3,
+          artifactId: "artifact-workspace-patch-current",
+          path: ".lime/artifacts/article-workspace/workspace-patch.json",
+          title: "Article Workspace Patch",
+          kind: "workspace_patch",
+          status: "complete",
+          contentStatus: "available",
+          metadata: {
+            workspacePatch: {
+              appId: "content-factory-app",
+              sessionId: "session-article-workspace-artifacts",
+              objects: [
+                {
+                  ref: {
+                    appId: "content-factory-app",
+                    kind: "articleDraft",
+                    id: "article-1",
+                    sessionId: "session-article-workspace-artifacts",
+                  },
+                  title: "公众号文章草稿",
+                  status: "ready",
+                },
+              ],
+            },
+          },
+        },
       ],
       thread_read: {
         thread_id: "session-article-workspace-artifacts-thread",
@@ -574,7 +601,10 @@ describe("agentChatHistory timeline fallback", () => {
     } as AsterSessionDetail & { artifacts: unknown[] };
 
     expect(
-      hydrateSessionDetailMessages(detail, "session-article-workspace-artifacts"),
+      hydrateSessionDetailMessages(
+        detail,
+        "session-article-workspace-artifacts",
+      ),
     ).toEqual([]);
   });
 

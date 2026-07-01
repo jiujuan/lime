@@ -9,6 +9,61 @@ import {
 } from "./useWorkspaceImageWorkbenchActionRuntime.testFixtures";
 
 describe("useWorkspaceImageWorkbenchActionRuntime", () => {
+  it("图片 Provider 刷新后同一轮命令应使用最新 selection", async () => {
+    const submitImageWorkbenchAgentCommand = vi.fn().mockResolvedValue(true);
+    let resolveProvidersLoaded: (() => void) | null = null;
+    const ensureImageWorkbenchProvidersLoaded = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveProvidersLoaded = resolve;
+        }),
+    );
+    const { render, getValue } = renderHook({
+      ensureImageWorkbenchProvidersLoaded,
+      imageWorkbenchProvidersLoading: true,
+      imageWorkbenchSelectedModelId: "",
+      imageWorkbenchSelectedProviderId: "",
+      submitImageWorkbenchAgentCommand,
+    });
+
+    await render();
+
+    let handledPromise: Promise<boolean> | null = null;
+    await act(async () => {
+      handledPromise = getValue().handleImageWorkbenchCommand({
+        rawText: "@配图 生成 城市夜景主视觉",
+        parsedCommand: createParsedCommand(),
+        images: [],
+      });
+      await Promise.resolve();
+    });
+
+    await render({
+      imageWorkbenchProvidersLoading: false,
+      imageWorkbenchSelectedModelId: "fal-ai/nano-banana-pro",
+      imageWorkbenchSelectedProviderId: "fal",
+    });
+
+    await act(async () => {
+      resolveProvidersLoaded?.();
+      await handledPromise;
+    });
+
+    expect(await handledPromise).toBe(true);
+    expect(ensureImageWorkbenchProvidersLoaded).toHaveBeenCalledTimes(1);
+    expect(submitImageWorkbenchAgentCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestContext: expect.objectContaining({
+          image_task: expect.objectContaining({
+            provider_id: "fal",
+            model: "fal-ai/nano-banana-pro",
+          }),
+        }),
+      }),
+    );
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
   it("应通过 Agent 主链提交图片 skill launch，而不是前端直建 task", async () => {
     const submitImageWorkbenchAgentCommand = vi.fn().mockResolvedValue(true);
     const createImageGenerationTask = vi.fn();

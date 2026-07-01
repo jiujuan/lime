@@ -141,10 +141,14 @@ export const WEB_TOOLS_RENDERING_DONE_TEXT = "CLAW_WEB_TOOLS_RENDERING_DONE";
 export const MCP_STRUCTURED_CONTENT_DONE_TEXT =
   "CLAW_MCP_STRUCTURED_CONTENT_DONE";
 export const IMAGE_COMMAND_SCENARIO = "image-command";
+export const PLAIN_IMAGE_INTENT_SCENARIO = "plain-image-intent";
 export const IMAGE_COMMAND_PROMPT =
   "@配图 E2E 图片命令路由测试，请生成一张青柠插画";
 export const IMAGE_COMMAND_IMAGE_PROMPT =
   "E2E 图片命令路由测试，请生成一张青柠插画";
+export const PLAIN_IMAGE_INTENT_PROMPT = "画一张广州夏天的图";
+export const PLAIN_IMAGE_INTENT_ROUTED_PROMPT = `@配图 ${PLAIN_IMAGE_INTENT_PROMPT}`;
+export const PLAIN_IMAGE_INTENT_IMAGE_PROMPT = PLAIN_IMAGE_INTENT_PROMPT;
 export const IMAGE_COMMAND_DONE_TEXT = "CLAW_IMAGE_COMMAND_FIXTURE_DONE";
 export const WEB_TOOLS_SEARCH_TITLE = "Lime WebSearch Rendering Source";
 export const WEB_TOOLS_SEARCH_URL =
@@ -183,6 +187,8 @@ ${PLAN_STEPS.map((step) => `- ${step.step}`).join("\n")}
 </proposed_plan>`;
 export const FIXTURE_PROVIDER = "fixture-provider";
 export const FIXTURE_MODEL = "fixture-model";
+export const IMAGE_FIXTURE_PROVIDER_NAME = "Fixture Image Provider";
+export const IMAGE_FIXTURE_MODEL = "gpt-image-1";
 export const SESSION_ID = `claw-chat-current-${Date.now()}-${process.pid}`;
 export const THREAD_ID = `${SESSION_ID}-thread`;
 export const SESSION_TITLE = "Claw 新闻输入 Electron fixture";
@@ -293,6 +299,7 @@ export const IMAGE_COMMAND_ASSERTION_KEYS = [
   "imageCommandTaskArtifactReadable",
   "imageCommandTaskArtifactTerminal",
   "imageCommandTaskArtifactSameTaskUpdated",
+  "imageCommandWorkerUsedFixtureProviderAndModel",
   "imageCommandSkillToolObserved",
   "imageCommandCreateTaskToolObserved",
   "guiImageCommandInputSubmitted",

@@ -112,12 +112,35 @@ export function buildImageTaskPreviewFromToolResult(
   const resultRecord = asRecord(params.toolResult);
   const metadata = asRecord(resultRecord?.metadata);
   const outputRecord = parseJsonRecordString(resultRecord?.output);
-  const taskRecord = asRecord(outputRecord?.record);
+  const structuredContentRecord =
+    asRecord(resultRecord?.structuredContent) ||
+    asRecord(resultRecord?.structured_content);
+  const nestedResultRecord = asRecord(resultRecord?.result);
+  const taskRecord =
+    asRecord(metadata?.record) ||
+    asRecord(outputRecord?.record) ||
+    asRecord(structuredContentRecord?.record) ||
+    asRecord(nestedResultRecord?.record);
   const payloadRecord =
-    asRecord(taskRecord?.payload) || asRecord(outputRecord?.payload);
+    asRecord(taskRecord?.payload) ||
+    asRecord(metadata?.payload) ||
+    asRecord(outputRecord?.payload) ||
+    asRecord(structuredContentRecord?.payload) ||
+    asRecord(nestedResultRecord?.payload);
   const progressRecord =
-    asRecord(outputRecord?.progress) || asRecord(taskRecord?.progress);
-  const candidates = [metadata, outputRecord, taskRecord, payloadRecord];
+    asRecord(metadata?.progress) ||
+    asRecord(outputRecord?.progress) ||
+    asRecord(structuredContentRecord?.progress) ||
+    asRecord(nestedResultRecord?.progress) ||
+    asRecord(taskRecord?.progress);
+  const candidates = [
+    metadata,
+    outputRecord,
+    structuredContentRecord,
+    nestedResultRecord,
+    taskRecord,
+    payloadRecord,
+  ];
   const taskId = readMetadataString(candidates, ["task_id", "taskId"]);
   const taskType = readMetadataString(candidates, ["task_type", "taskType"]);
   if (!taskId || !taskType) {

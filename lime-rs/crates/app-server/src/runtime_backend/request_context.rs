@@ -21,7 +21,29 @@ const LIME_RUNTIME_METADATA_KEY: &str = "lime_runtime";
 const LIME_RUNTIME_AUTO_COMPACT_KEY: &str = "auto_compact";
 const LIME_RUNTIME_TOOL_SURFACE_KEY: &str = "tool_surface";
 const LIME_RUNTIME_DIRECT_ANSWER_TOOL_SURFACE: &str = "direct_answer";
+const LIME_RUNTIME_COMPACT_TOOLS_TOOL_SURFACE: &str = "compact_tools";
 const TRACE_METADATA_KEYS: &[&str] = &["agentUiPerformanceTrace", "agent_ui_performance_trace"];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FastResponseToolSurface {
+    Full,
+    DirectAnswer,
+    CompactTools,
+}
+
+impl FastResponseToolSurface {
+    fn uses_light_session_prompt(self) -> bool {
+        matches!(self, Self::DirectAnswer | Self::CompactTools)
+    }
+
+    fn metadata_tool_surface(self) -> Option<&'static str> {
+        match self {
+            Self::Full => None,
+            Self::DirectAnswer => Some(LIME_RUNTIME_DIRECT_ANSWER_TOOL_SURFACE),
+            Self::CompactTools => Some(LIME_RUNTIME_COMPACT_TOOLS_TOOL_SURFACE),
+        }
+    }
+}
 
 pub(super) fn selection_with_effective_reasoning(
     selection: &RuntimeModelSelection,
@@ -410,13 +432,13 @@ pub(super) fn host_thinking_enabled(host: &AsterChatRequestSnapshot) -> Option<b
         .or(host.thinking_enabled)
 }
 
-fn host_approval_policy(host: &AsterChatRequestSnapshot) -> Option<String> {
+pub(super) fn host_approval_policy(host: &AsterChatRequestSnapshot) -> Option<String> {
     host_turn_config(host)
         .and_then(|turn_config| non_empty(turn_config.approval_policy.as_deref()))
         .or_else(|| non_empty(host.approval_policy.as_deref()))
 }
 
-fn host_sandbox_policy(host: &AsterChatRequestSnapshot) -> Option<String> {
+pub(super) fn host_sandbox_policy(host: &AsterChatRequestSnapshot) -> Option<String> {
     host_turn_config(host)
         .and_then(|turn_config| non_empty(turn_config.sandbox_policy.as_deref()))
         .or_else(|| non_empty(host.sandbox_policy.as_deref()))
@@ -440,14 +462,6 @@ fn host_search_mode(host: &AsterChatRequestSnapshot) -> Option<RequestToolPolicy
         .or(host.search_mode)
 }
 
-fn host_explicitly_configures_search(host: &AsterChatRequestSnapshot) -> bool {
-    host.web_search.is_some()
-        || host.search_mode.is_some()
-        || host_turn_config(host).is_some_and(|turn_config| {
-            turn_config.web_search.is_some() || turn_config.search_mode.is_some()
-        })
-}
-
 pub(super) fn request_tool_policy_from_request(
     host_request: Option<&AsterChatRequestSnapshot>,
 ) -> RequestToolPolicy {
@@ -465,21 +479,45 @@ pub(super) fn should_defer_tool_surface_for_fast_response(
     request: &ExecutionRequest,
     request_tool_policy: &RequestToolPolicy,
 ) -> bool {
-    let host_request = aster_chat_request_from_request(request);
-    if request_tool_policy.allows_web_search()
-        && host_request
-            .as_ref()
-            .is_some_and(host_explicitly_configures_search)
-    {
-        return false;
+    matches!(
+        fast_response_tool_surface_for_request(request, request_tool_policy),
+        FastResponseToolSurface::DirectAnswer
+    )
+}
+
+pub(super) fn should_use_compact_tool_surface_for_fast_response(
+    request: &ExecutionRequest,
+    request_tool_policy: &RequestToolPolicy,
+) -> bool {
+    matches!(
+        fast_response_tool_surface_for_request(request, request_tool_policy),
+        FastResponseToolSurface::CompactTools
+    )
+}
+
+fn fast_response_tool_surface_for_request(
+    request: &ExecutionRequest,
+    request_tool_policy: &RequestToolPolicy,
+) -> FastResponseToolSurface {
+    if request_tool_policy.requires_web_search() {
+        return FastResponseToolSurface::Full;
     }
     let metadata_values = super::skill_runtime_enable::request_metadata_values(request);
-    metadata_values
+    let fast_response_enabled = metadata_values
         .iter()
-        .any(|metadata| fast_response_routing_enabled(metadata))
-        && !metadata_values
+        .any(|metadata| fast_response_routing_enabled(metadata));
+    if !fast_response_enabled
+        || metadata_values
             .iter()
             .any(|metadata| metadata_requests_tool_surface(metadata))
+    {
+        return FastResponseToolSurface::Full;
+    }
+    if request_tool_policy.allows_web_search() {
+        FastResponseToolSurface::CompactTools
+    } else {
+        FastResponseToolSurface::DirectAnswer
+    }
 }
 
 pub(super) fn session_config_from_request(
@@ -492,9 +530,9 @@ pub(super) fn session_config_from_request(
 ) -> aster::agents::SessionConfig {
     let workspace_scope = request_workspace_scope(request, host_request);
     let metadata_values = super::skill_runtime_enable::request_metadata_values(request);
-    let defer_tool_surface =
-        should_defer_tool_surface_for_fast_response(request, request_tool_policy);
-    let system_prompt = if defer_tool_surface {
+    let fast_response_tool_surface =
+        fast_response_tool_surface_for_request(request, request_tool_policy);
+    let system_prompt = if fast_response_tool_surface.uses_light_session_prompt() {
         Some(request_system_prompt(request))
     } else {
         let system_prompt = merge_system_prompt_with_runtime_agents_for_project(
@@ -528,7 +566,7 @@ pub(super) fn session_config_from_request(
     let mut builder = SessionConfigBuilder::new(&scope.session_id)
         .thread_id(scope.thread_id.clone())
         .turn_id(scope.turn_id.clone())
-        .include_context_trace(!defer_tool_surface);
+        .include_context_trace(!fast_response_tool_surface.uses_light_session_prompt());
     if let Some(system_prompt) = system_prompt {
         builder = builder.system_prompt(system_prompt);
     }
@@ -697,14 +735,14 @@ pub(super) fn turn_context_from_request(
         metadata.insert("w3c_trace_context".to_string(), w3c_trace_context);
     }
     let request_tool_policy = request_tool_policy_from_request(host_request);
-    let defer_tool_surface =
-        should_defer_tool_surface_for_fast_response(request, &request_tool_policy);
-    if defer_tool_surface {
+    let fast_response_tool_surface =
+        fast_response_tool_surface_for_request(request, &request_tool_policy);
+    if let Some(tool_surface) = fast_response_tool_surface.metadata_tool_surface() {
         metadata.insert(
             LIME_RUNTIME_METADATA_KEY.to_string(),
             json!({
                 LIME_RUNTIME_AUTO_COMPACT_KEY: false,
-                LIME_RUNTIME_TOOL_SURFACE_KEY: LIME_RUNTIME_DIRECT_ANSWER_TOOL_SURFACE,
+                LIME_RUNTIME_TOOL_SURFACE_KEY: tool_surface,
                 "source": "fast_response_routing",
             }),
         );
@@ -905,7 +943,7 @@ fn output_schema_from_output_format(value: &Value) -> Option<&Value> {
         .or_else(|| value.get("output_schema"))
 }
 
-fn host_metadata_value(host: &AsterChatRequestSnapshot) -> Option<Value> {
+pub(super) fn host_metadata_value(host: &AsterChatRequestSnapshot) -> Option<Value> {
     host_turn_config(host)
         .and_then(|turn_config| turn_config.metadata.clone())
         .or_else(|| host.metadata.clone())

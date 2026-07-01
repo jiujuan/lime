@@ -70,7 +70,12 @@ describe("isHiddenInternalArtifactPath", () => {
     ).toBe(false);
   });
 
-  it("聊天区应隐藏内容工厂 workspace patch 原始工件", () => {
+  it("聊天区应隐藏 workspace patch 原始工件", () => {
+    expect(
+      isHiddenConversationArtifactPath(
+        ".lime/artifacts/article-workspace/workspace-patch.json",
+      ),
+    ).toBe(true);
     expect(
       isHiddenConversationArtifactPath(
         ".lime/artifacts/content-factory/workspace-patch.json",

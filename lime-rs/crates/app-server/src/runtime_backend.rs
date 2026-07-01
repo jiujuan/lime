@@ -1,7 +1,6 @@
 mod agent_skills_context;
 mod agent_skills_telemetry;
 mod coding_events;
-mod content_factory_streaming;
 mod image_tools;
 mod live_execution_process;
 mod memory_tools;
@@ -11,6 +10,7 @@ mod model_route_contract;
 mod model_route_resolver;
 mod model_routing;
 mod native_tools;
+mod permission_preflight;
 mod plan_events;
 mod plugin_activation_context;
 mod proposed_plan_parser;
@@ -22,6 +22,10 @@ mod tool_inventory;
 use crate::execution_process::ExecutionProcessServer;
 use crate::runtime::memory_prompt::memory_soul_prompt_context_from_config;
 use crate::runtime::ToolInventoryReadRequest;
+use crate::runtime::{
+    content_factory_final_article_streaming_events,
+    ensure_content_factory_workspace_patch_artifact_paths,
+};
 use crate::ActionRespondRequest;
 use crate::AppDataSource;
 use crate::CancelExecutionRequest;
@@ -57,7 +61,8 @@ use request_context::{
     aster_chat_request_from_request, direct_provider_config_from_request,
     request_tool_policy_from_request, resolve_runtime_model_selection,
     selection_with_effective_reasoning, session_config_from_request, session_scope_from_request,
-    should_defer_tool_surface_for_fast_response, RuntimeModelSelection,
+    should_defer_tool_surface_for_fast_response, should_use_compact_tool_surface_for_fast_response,
+    RuntimeModelSelection,
 };
 
 #[derive(Default)]
@@ -83,6 +88,9 @@ struct ContentFactorySearchRequest {
     query: String,
     tool_id: String,
 }
+
+const CONTENT_FACTORY_SEARCH_EVENT_SOURCE: &str = "content_factory_search_requests";
+const CONTENT_FACTORY_ARTICLE_WORKFLOW_KEY: &str = "content_article_workflow";
 
 impl ContentFactorySearchPlan {
     fn from_events(events: &[RuntimeEvent]) -> Option<Self> {
@@ -139,6 +147,49 @@ fn content_factory_search_turn_context(
         .insert("webSearchEnabled".to_string(), json!(true));
     context.user_visible_input_text = Some(request.input.text.clone());
     context
+}
+
+fn enrich_content_factory_search_tool_event(event: &mut RuntimeEvent) {
+    if !matches!(
+        event.event_type.as_str(),
+        "tool.started" | "tool.args" | "tool.result" | "tool.failed"
+    ) {
+        return;
+    }
+    let Some(payload) = event.payload.as_object_mut() else {
+        return;
+    };
+    payload.insert(
+        "source".to_string(),
+        Value::String(CONTENT_FACTORY_SEARCH_EVENT_SOURCE.to_string()),
+    );
+    payload.insert(
+        "workflowKey".to_string(),
+        Value::String(CONTENT_FACTORY_ARTICLE_WORKFLOW_KEY.to_string()),
+    );
+    payload.insert(
+        "workflow_key".to_string(),
+        Value::String(CONTENT_FACTORY_ARTICLE_WORKFLOW_KEY.to_string()),
+    );
+    let metadata = payload
+        .entry("metadata")
+        .or_insert_with(|| json!({}))
+        .as_object_mut();
+    let Some(metadata) = metadata else {
+        return;
+    };
+    metadata.insert(
+        "source".to_string(),
+        Value::String(CONTENT_FACTORY_SEARCH_EVENT_SOURCE.to_string()),
+    );
+    metadata.insert(
+        "workflowKey".to_string(),
+        Value::String(CONTENT_FACTORY_ARTICLE_WORKFLOW_KEY.to_string()),
+    );
+    metadata.insert(
+        "workflow_key".to_string(),
+        Value::String(CONTENT_FACTORY_ARTICLE_WORKFLOW_KEY.to_string()),
+    );
 }
 
 fn content_factory_workspace_patch_from_events(events: &[RuntimeEvent]) -> Option<Value> {
@@ -458,6 +509,8 @@ impl RuntimeBackend {
         let request_tool_policy = request_tool_policy_from_request(host_request.as_ref());
         let defer_tool_surface =
             should_defer_tool_surface_for_fast_response(&request, &request_tool_policy);
+        let compact_tool_surface =
+            should_use_compact_tool_surface_for_fast_response(&request, &request_tool_policy);
         let _skill_runtime_enable_guard = if defer_tool_surface {
             skill_runtime_enable::clear_workspace_skill_runtime_enable(&session_scope.session_id)
         } else {
@@ -470,6 +523,14 @@ impl RuntimeBackend {
             for event in agent_skills_telemetry::runtime_status_events_for_agent_skills(&request) {
                 sink.emit(event)?;
             }
+        }
+        if let Some(event) = permission_preflight::browser_control_permission_event(
+            &request,
+            host_request.as_ref(),
+            &session_scope,
+        ) {
+            sink.emit(event)?;
+            return Ok(());
         }
         let db = initialize_runtime_database(self.db.as_ref())?;
         let requested_selection = resolve_runtime_model_selection(&request)?;
@@ -552,7 +613,7 @@ impl RuntimeBackend {
         ))?;
         self.install_live_execution_process_hook_if_available()
             .await?;
-        if !defer_tool_surface {
+        if !defer_tool_surface && !compact_tool_surface {
             self.register_current_native_tools_if_available().await?;
             self.sync_mcp_bridges_if_available().await?;
         }
@@ -738,7 +799,7 @@ impl ExecutionBackend for RuntimeBackend {
         request: &ExecutionRequest,
         events: &mut Vec<RuntimeEvent>,
     ) -> Result<(), RuntimeCoreError> {
-        content_factory_streaming::ensure_workspace_patch_artifact_paths(events.as_mut_slice());
+        ensure_content_factory_workspace_patch_artifact_paths(events.as_mut_slice());
         let Some(search_plan) = ContentFactorySearchPlan::from_events(events.as_slice()) else {
             return Ok(());
         };
@@ -793,8 +854,6 @@ impl ExecutionBackend for RuntimeBackend {
                 params: json!({ "query": request.query }),
             })
             .collect::<Vec<_>>();
-        let streaming_artifact_events =
-            content_factory_streaming::streaming_workspace_patch_events(events.as_slice());
         let batch = execute_planned_tool_batch(
             ToolExecutionBatchInput {
                 registry,
@@ -816,11 +875,23 @@ impl ExecutionBackend for RuntimeBackend {
         if search_evidence.is_empty() {
             return Ok(());
         }
+        let search_completed = search_evidence
+            .iter()
+            .all(|evidence| evidence.get("status").and_then(Value::as_str) == Some("completed"));
         update_content_factory_artifact_events(events, &search_evidence);
-        content_factory_streaming::ensure_workspace_patch_artifact_paths(events.as_mut_slice());
+        ensure_content_factory_workspace_patch_artifact_paths(events.as_mut_slice());
+        let streaming_artifact_events = if search_completed {
+            content_factory_final_article_streaming_events(events.as_slice())
+        } else {
+            Vec::new()
+        };
         let mut tool_runtime_events = Vec::new();
         for event in &batch.events {
-            tool_runtime_events.extend(tool_events::runtime_events_from_agent_event(event)?);
+            let mut runtime_events = tool_events::runtime_events_from_agent_event(event)?;
+            for runtime_event in &mut runtime_events {
+                enrich_content_factory_search_tool_event(runtime_event);
+            }
+            tool_runtime_events.extend(runtime_events);
         }
         let insert_at = events
             .iter()
@@ -828,9 +899,9 @@ impl ExecutionBackend for RuntimeBackend {
             .unwrap_or(events.len());
         events.splice(
             insert_at..insert_at,
-            streaming_artifact_events
+            tool_runtime_events
                 .into_iter()
-                .chain(tool_runtime_events.into_iter()),
+                .chain(streaming_artifact_events.into_iter()),
         );
         Ok(())
     }

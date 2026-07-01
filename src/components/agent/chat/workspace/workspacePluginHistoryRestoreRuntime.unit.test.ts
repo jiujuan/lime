@@ -20,8 +20,10 @@ const contract: PluginContract = {
   skills: [],
   agentApps: [],
   subagents: [],
+  clis: [],
   workflows: [],
   connectors: [],
+  hooks: [],
   mcpServers: [],
   artifactRenderers: [],
   activationEntries: [

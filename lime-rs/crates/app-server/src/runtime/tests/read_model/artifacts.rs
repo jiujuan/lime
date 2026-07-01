@@ -23,7 +23,11 @@ fn article_workspace_search_snapshot_payload(search_evidence: Value) -> Value {
     article_source.insert("hostSearchEvidence".to_string(), host_search_evidence);
     article_source.insert("hostSearchStatus".to_string(), json!("completed"));
     article_source.insert(
-        "markdown".to_string(),
+        "documentText".to_string(),
+        json!("# 公众号文章草稿\n\n这是正文。"),
+    );
+    article_source.insert(
+        "finalMarkdown".to_string(),
         json!("# 公众号文章草稿\n\n这是正文。"),
     );
     article_source.insert(
@@ -158,6 +162,64 @@ fn article_workspace_search_snapshot_payload(search_evidence: Value) -> Value {
     worker.insert(
         "outputArtifactKind".to_string(),
         json!("content_factory.workspace_patch"),
+    );
+    worker.insert(
+        "artifactKind".to_string(),
+        json!("content_factory.workspace_patch"),
+    );
+    worker.insert("workflowKey".to_string(), json!("content_article_workflow"));
+    worker.insert(
+        "subagents".to_string(),
+        json!(["content-researcher", "article-writer", "image-planner"]),
+    );
+    worker.insert(
+        "skillRefs".to_string(),
+        json!(["gongzonghao-article-writer", "article-image-cheatsheet"]),
+    );
+    worker.insert("cliRefs".to_string(), json!(["content-factory"]));
+    worker.insert(
+        "connectorRefs".to_string(),
+        json!(["lime-knowledge", "web-research", "media-generation"]),
+    );
+    worker.insert(
+        "hookPolicy".to_string(),
+        json!({
+            "prompt": ["prompt-submit"],
+            "task": ["task-complete"]
+        }),
+    );
+    worker.insert(
+        "orchestration".to_string(),
+        json!([
+            {
+                "id": "research",
+                "title": "资料检索",
+                "subagent": "content-researcher",
+                "skillRefs": ["gongzonghao-article-writer"],
+                "status": "completed",
+                "summary": "整理资料"
+            },
+            {
+                "id": "draft",
+                "title": "正文写作",
+                "subagent": "article-writer",
+                "skillRefs": ["gongzonghao-article-writer"],
+                "status": "completed",
+                "summary": "生成文章草稿"
+            },
+            {
+                "id": "image-plan",
+                "title": "配图规划",
+                "subagent": "image-planner",
+                "skillRefs": ["article-image-cheatsheet"],
+                "status": "completed",
+                "summary": "生成配图规划"
+            }
+        ]),
+    );
+    patch.insert(
+        "workerEvidence".to_string(),
+        Value::Array(vec![Value::Object(worker.clone())]),
     );
 
     let mut metadata = serde_json::Map::new();
@@ -837,6 +899,34 @@ async fn read_session_materializes_content_factory_workspace_patch_into_article_
         2
     );
     assert_eq!(
+        article_workspace["workerEvidence"][0]["workflowKey"],
+        "content_article_workflow"
+    );
+    assert_eq!(
+        article_workspace["workerEvidence"][0]["subagents"][1],
+        "article-writer"
+    );
+    assert_eq!(
+        article_workspace["workerEvidence"][0]["skillRefs"][0],
+        "gongzonghao-article-writer"
+    );
+    assert_eq!(
+        article_workspace["workerEvidence"][0]["cliRefs"][0],
+        "content-factory"
+    );
+    assert_eq!(
+        article_workspace["workerEvidence"][0]["connectorRefs"][1],
+        "web-research"
+    );
+    assert_eq!(
+        article_workspace["workerEvidence"][0]["hookPolicy"]["prompt"][0],
+        "prompt-submit"
+    );
+    assert_eq!(
+        article_workspace["workerEvidence"][0]["orchestration"][1]["subagent"],
+        "article-writer"
+    );
+    assert_eq!(
         article_workspace["workerEvidence"][1]["taskId"],
         "task-image-1"
     );
@@ -974,7 +1064,11 @@ async fn read_session_materializes_content_factory_workspace_patch_into_article_
         .expect("read edited session");
     let edited_detail = edited_read.detail.expect("edited session detail");
     assert_eq!(
-        edited_detail["article_workspace"]["objects"][0]["source"]["markdown"],
+        edited_detail["article_workspace"]["objects"][0]["source"]["documentText"],
+        "# 用户编辑稿\n\n这是 Article Editor 画布写回后的正文。"
+    );
+    assert_eq!(
+        edited_detail["article_workspace"]["objects"][0]["source"]["finalMarkdown"],
         "# 用户编辑稿\n\n这是 Article Editor 画布写回后的正文。"
     );
     assert_eq!(
@@ -990,7 +1084,7 @@ async fn read_session_materializes_content_factory_workspace_patch_into_article_
         "article-1"
     );
     assert_eq!(
-        edited_detail["thread_read"]["article_workspace"]["objects"][0]["source"]["markdown"],
+        edited_detail["thread_read"]["article_workspace"]["objects"][0]["source"]["documentText"],
         "# 用户编辑稿\n\n这是 Article Editor 画布写回后的正文。"
     );
 

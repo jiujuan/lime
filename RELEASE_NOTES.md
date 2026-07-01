@@ -1,3 +1,49 @@
+## Lime v1.85.0
+
+### 新功能
+
+- 图片生成主链进入 App Server / Media Runtime worker：`@配图`、普通“画一张...”自然语言入口和文稿配图位现在共享 `.lime/tasks/image_generate` 任务、Provider DB 路由、常驻调度和恢复机制。
+- Article Workspace 右侧编辑器新增通用 plugin orchestration rail，可展示内容工厂 workflow、subagent、skill、connector 与 hook 证据，并支持历史恢复。
+- 文稿配图位可直接发起图片任务，任务完成后按 slot / anchor 原位替换 Markdown 占位，多图 slot 分配、失败 / 取消不误写和手动应用透传已接入同一链路。
+- AgentChat Thread Timeline / Session Refresh 主线收口：流式输出期间的 live timeline 不再被过期 session detail 覆盖，read model 只补状态和过程事件。
+
+### 修复
+
+- 修复 `@命令` 面板二次过滤导致 `@配图` 搜索结果被隐藏的问题。
+- 修复图片默认模型占位值污染任务的问题，`default / auto / __default__` 等值不再作为真实 model 写入 task。
+- 修复 Electron Host 写 `config.json`、App Server 读 `config.yaml` 的配置分叉，图片默认 Provider / model 统一读取 current `config.yaml`。
+- 修复图片 worker 缺 Provider route 时回退旧 local gateway、任务长期 pending、stale running 不恢复和 successful complete 缺 `slot_id` 的问题。
+- 修复普通 Expert Panel 文本 follow-up 误继承图片 Provider / `gpt-image-1` 的问题。
+- 修复高频 `runtimeGetSession` / detail refresh 可能让已显示消息减少、乱序或前文消失的问题。
+
+### 优化与重构
+
+- `lime_media_runtime` 根模块从 5k+ 行拆成 31 行 facade，图片请求、参考图、后处理、task artifact、worker 和测试按职责拆分。
+- Media Runtime Provider adapter 补齐 OpenAI-compatible edit / reference image、Responses `input_image`、Gemini `inlineData/fileData`、智谱原生图片接口和统一 HTTP 错误分类。
+- 图片任务前端 runtime 拆出 `imageWorkbenchTaskActions`、`imageTaskPreviewRuntimeGuards`、`imageTaskPreviewRuntimePayload` 和 `workspaceDocumentInlineImageTaskSync`，减少巨型 hook 继续膨胀。
+- App Server read model 增加 projected item events，覆盖 message batch、reasoning、tool lifecycle、permission preflight、artifact snapshot 和 routing/runtime 事件。
+- Agent Chat 页面和 Workspace 继续按懒加载与纯投影边界收缩首屏负担。
+
+### 测试与质量
+
+- 新增 / 更新图片 worker、Provider route、stale running 恢复、Media Runtime adapter、文稿 slot 回填、失败 / 取消重试、线程 timeline merge 和 orchestration rail 的 Rust / 前端回归。
+- 重跑并扩展 `image-command`、`plain-image-intent`、`content-factory-article-workspace` 等 Electron fixture，覆盖 GUI、App Server read model、task artifact、reload restore 和 provider 请求体。
+- `npm run test:contracts` 与 `npm run verify:gui-smoke` 在多个关键增量中通过；本轮发版前会重新执行版本一致性与发布门禁。
+
+### 文档
+
+- 更新图片能力系统路线图，记录 App Server 图片 worker、常驻调度、Provider adapter 和配置事实源边界。
+- 更新 Writing 实施计划，记录内容工厂 orchestration rail、配图位任务、slot 原位替换和重试闭环。
+- 新增 Thread Timeline / Session Refresh 事实源治理路线图。
+- 新增 Agent 研发验证研究入口和 Agent Verification Contract 模板。
+
+### 其他
+
+- 版本事实源更新到 `1.85.0`：根应用、CLI npm package、Rust workspace、主 `lime-rs/Cargo.lock` 与 Aster 子工作区 lock。
+- 本版未纳入本地临时文件 `internal/roadmap/Writing/.DS_Store` 和 `lime-rs/test-tool-call-fix.sh`。
+
+**完整变更**: `v1.84.0` -> `v1.85.0`
+
 ## Lime v1.84.0
 
 ### 新功能

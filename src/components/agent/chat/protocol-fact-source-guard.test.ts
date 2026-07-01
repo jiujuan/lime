@@ -10,6 +10,12 @@ const RETIRED_COMPONENT_DIRS = [
   join(process.cwd(), "src/components/smart-input"),
 ] as const;
 const API_PROTOCOL_GUARD_DIR = join(process.cwd(), "src/lib/api");
+const RETIRED_AGENT_CHAT_FILES = [
+  join(
+    process.cwd(),
+    "src/components/agent/chat/utils/freshFactualSearchPolicy.ts",
+  ),
+] as const;
 
 function collectTsFiles(dir: string): string[] {
   const entries = readdirSync(dir);
@@ -71,6 +77,19 @@ const FORBIDDEN_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
     label: "Agent Chat 硬编码 Provider 模型配置",
     pattern: /\bPROVIDER_CONFIG\b/,
   },
+  {
+    label: "Agent Chat 前端关键词强制搜索策略",
+    pattern:
+      /freshFactualSearchPolicy|requiresFreshFactualWebSearch|fresh-factual-tool-required/,
+  },
+  {
+    label: "Agent Chat route shell 重建 key 序列化",
+    pattern: /serializeAgentChatPageInstanceKey/,
+  },
+  {
+    label: "Agent Chat 内部工作区强制重挂载 key",
+    pattern: /forcedMountKey/,
+  },
 ];
 
 describe("agent chat protocol fact source guard", () => {
@@ -94,6 +113,15 @@ describe("agent chat protocol fact source guard", () => {
     }
 
     expect(offenders).toEqual([]);
+  });
+
+  it("旧前端关键词搜索策略文件保持 deleted", () => {
+    const existing = RETIRED_AGENT_CHAT_FILES.filter((filePath) =>
+      existsSync(filePath),
+    );
+    expect(existing.map((filePath) => relative(process.cwd(), filePath))).toEqual(
+      [],
+    );
   });
 
   it("不应重新直接 import agentStream 旧协议出口", () => {

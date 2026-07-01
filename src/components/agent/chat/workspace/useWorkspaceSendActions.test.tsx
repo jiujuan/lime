@@ -72,7 +72,8 @@ vi.mock("@/lib/oemCloudSession", async () => {
 });
 
 vi.mock("@/hooks/useGlobalMediaGenerationDefaults", () => ({
-  readGlobalMediaGenerationDefaults: () => mockUseGlobalMediaGenerationDefaults(),
+  readGlobalMediaGenerationDefaults: () =>
+    mockUseGlobalMediaGenerationDefaults(),
 }));
 
 vi.mock("@/lib/api/agentApps", () => ({
@@ -129,6 +130,9 @@ const mockCreateImageGenerationTask = vi.fn();
 const mockEnsureSessionForCommandMetadata = vi.fn<
   NonNullable<HookProps["ensureSessionForCommandMetadata"]>
 >(async () => null);
+const mockPrepareImageWorkbenchSkillSend = vi.fn<
+  NonNullable<HookProps["prepareImageWorkbenchSkillSend"]>
+>(() => true);
 const mockResolveImageWorkbenchSkillRequest = vi.fn<
   HookProps["resolveImageWorkbenchSkillRequest"]
 >(() => null);
@@ -534,6 +538,8 @@ function mountHook(initialProps?: Partial<HookProps>): HookHarness {
       mockOpenRuntimeSceneGate as HookProps["openRuntimeSceneGate"],
     ensureSessionForCommandMetadata:
       mockEnsureSessionForCommandMetadata as HookProps["ensureSessionForCommandMetadata"],
+    prepareImageWorkbenchSkillSend:
+      mockPrepareImageWorkbenchSkillSend as HookProps["prepareImageWorkbenchSkillSend"],
     resolveImageWorkbenchSkillRequest:
       mockResolveImageWorkbenchSkillRequest as HookProps["resolveImageWorkbenchSkillRequest"],
     ...initialProps,
@@ -577,6 +583,7 @@ describe("useWorkspaceSendActions", () => {
     window.localStorage.clear();
     clearAgentUiProjectionEvents();
     mockResolveImageWorkbenchSkillRequest.mockReturnValue(null);
+    mockPrepareImageWorkbenchSkillSend.mockReturnValue(true);
     mockEnsureSessionForCommandMetadata.mockResolvedValue(null);
     mockListInstalledAgentApps.mockResolvedValue({
       states: [],
@@ -796,9 +803,7 @@ describe("useWorkspaceSendActions", () => {
               workflow_key: "content_article_workflow",
               output_artifact_kind: "content_factory.workspace_patch",
               right_surface: "articleWorkspace",
-              expected_objects: expect.arrayContaining([
-                "articleDraft",
-              ]),
+              expected_objects: expect.arrayContaining(["articleDraft"]),
               opened_tabs: ["articleWorkspace"],
               selected_object_ref: {
                 plugin_id: "content-factory-app",
@@ -871,9 +876,7 @@ describe("useWorkspaceSendActions", () => {
               workflow_key: "content_article_workflow",
               output_artifact_kind: "content_factory.workspace_patch",
               right_surface: "articleWorkspace",
-              expected_objects: expect.arrayContaining([
-                "articleDraft",
-              ]),
+              expected_objects: expect.arrayContaining(["articleDraft"]),
               opened_tabs: ["articleWorkspace"],
             },
             plugin_activation_intent: {
@@ -952,9 +955,7 @@ describe("useWorkspaceSendActions", () => {
               task_kind: "content.article.generate",
               output_artifact_kind: "content_factory.workspace_patch",
               right_surface: "articleWorkspace",
-              expected_objects: expect.arrayContaining([
-                "articleDraft",
-              ]),
+              expected_objects: expect.arrayContaining(["articleDraft"]),
               opened_tabs: ["articleWorkspace"],
             },
             plugin_activation_intent: {
@@ -1164,10 +1165,8 @@ describe("useWorkspaceSendActions", () => {
       expect(sendOptions?.systemPromptOverride).toBeUndefined();
       expect(sendOptions?.providerOverride).toBeUndefined();
       expect(sendOptions?.modelOverride).toBeUndefined();
-      const browserAssistHarness = (
-        (sendOptions?.requestMetadata?.harness as Record<string, unknown>) ||
-        {}
-      ) as Record<string, unknown>;
+      const browserAssistHarness = ((sendOptions?.requestMetadata
+        ?.harness as Record<string, unknown>) || {}) as Record<string, unknown>;
       expect(browserAssistHarness.browser_assist).toEqual(
         expect.objectContaining({
           enabled: true,
@@ -1544,15 +1543,15 @@ describe("useWorkspaceSendActions", () => {
           },
         },
       });
-      const imageSkillLaunchHarness = (
-        (mockSendMessage.mock.calls[0]?.[8]?.requestMetadata?.harness as
-          | Record<string, unknown>
-          | undefined) || {}
-      ) as Record<string, unknown>;
+      const imageSkillLaunchHarness = ((mockSendMessage.mock.calls[0]?.[8]
+        ?.requestMetadata?.harness as Record<string, unknown> | undefined) ||
+        {}) as Record<string, unknown>;
       expect(
-        (imageSkillLaunchHarness.image_skill_launch as
-          | { image_task?: { session_id?: string } }
-          | undefined)?.image_task?.session_id,
+        (
+          imageSkillLaunchHarness.image_skill_launch as
+            | { image_task?: { session_id?: string } }
+            | undefined
+        )?.image_task?.session_id,
       ).toBeUndefined();
 
       await act(async () => {
@@ -1612,11 +1611,10 @@ describe("useWorkspaceSendActions", () => {
       expect(mockResolveImageWorkbenchSkillRequest).not.toHaveBeenCalled();
       expect(mockSendMessage).toHaveBeenCalledTimes(1);
       expect(mockSendMessage.mock.calls[0]?.[0]).toBe(promptText);
-      const imageSkillLaunchHarness = (
-        mockSendMessage.mock.calls[0]?.[8]?.requestMetadata?.harness as
+      const imageSkillLaunchHarness =
+        (mockSendMessage.mock.calls[0]?.[8]?.requestMetadata?.harness as
           | Record<string, unknown>
-          | undefined
-      ) ?? {};
+          | undefined) ?? {};
       expect(imageSkillLaunchHarness.image_skill_launch).toBeUndefined();
     } finally {
       harness.unmount();
@@ -1910,9 +1908,10 @@ Extract it into the Agent Skills directory.`,
       const args = mockSendMessage.mock.calls[0] as Parameters<
         HookProps["sendMessage"]
       >;
-      const harnessMetadata = (
-        (args?.[8]?.requestMetadata?.harness as Record<string, unknown>) || {}
-      ) as Record<string, unknown>;
+      const harnessMetadata = ((args?.[8]?.requestMetadata?.harness as Record<
+        string,
+        unknown
+      >) || {}) as Record<string, unknown>;
       expect(harnessMetadata).not.toHaveProperty("oem_routing");
     } finally {
       harness.unmount();
@@ -2369,6 +2368,140 @@ Extract it into the Agent Skills directory.`,
     }
   });
 
+  it("普通画图句式应复用 @配图 主链并保留用户原始展示文案", async () => {
+    mockResolveImageWorkbenchSkillRequest.mockReturnValueOnce({
+      images: [],
+      requestContext: {
+        kind: "image_task",
+        image_task: {
+          mode: "generate",
+          prompt: "画一张广州夏天的图",
+          count: 1,
+        },
+      },
+    });
+    const harness = mountHook({
+      input: "画一张广州夏天的图",
+    });
+
+    try {
+      await act(async () => {
+        const started = await harness.getValue().handleSend();
+        expect(started).toBe(true);
+      });
+
+      expect(mockResolveImageWorkbenchSkillRequest).toHaveBeenCalledTimes(1);
+      expect(mockResolveImageWorkbenchSkillRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          rawText: "@配图 画一张广州夏天的图",
+          parsedCommand: expect.objectContaining({
+            trigger: "@配图",
+            mode: "generate",
+            prompt: "画一张广州夏天的图",
+            count: 1,
+          }),
+          images: [],
+          sessionIdOverride: undefined,
+        }),
+      );
+      expect(mockSendMessage).toHaveBeenCalledTimes(1);
+      expect(mockSendMessage.mock.calls[0]?.[0]).toBe(
+        "@配图 画一张广州夏天的图",
+      );
+      expect(mockSendMessage.mock.calls[0]?.[8]).toMatchObject({
+        displayContent: "画一张广州夏天的图",
+        requestMetadata: {
+          harness: {
+            allow_model_skills: true,
+            image_skill_launch: {
+              skill_name: "image_generate",
+              kind: "image_task",
+            },
+          },
+        },
+      });
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("纯文本 @配图 在图片服务未就绪时不应创建空 provider 任务", async () => {
+    mockPrepareImageWorkbenchSkillSend.mockReturnValueOnce(false);
+    const harness = mountHook({
+      input: "@配图 生成 一张春日咖啡馆插画",
+    });
+
+    try {
+      await act(async () => {
+        const started = await harness.getValue().handleSend();
+        expect(started).toBe(false);
+      });
+
+      expect(mockPrepareImageWorkbenchSkillSend).toHaveBeenCalledTimes(1);
+      expect(mockResolveImageWorkbenchSkillRequest).not.toHaveBeenCalled();
+      expect(mockSendMessage).not.toHaveBeenCalled();
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("纯文本 @配图 应等待图片服务刷新完成后再构造 skillRequest", async () => {
+    const deferredPrepare = createDeferred<boolean>();
+    mockPrepareImageWorkbenchSkillSend.mockImplementationOnce(
+      async () => deferredPrepare.promise,
+    );
+    mockResolveImageWorkbenchSkillRequest.mockReturnValueOnce({
+      images: [],
+      requestContext: {
+        kind: "image_task",
+        image_task: {
+          mode: "generate",
+          prompt: "一张春日咖啡馆插画",
+          provider_id: "fal",
+          model: "fal-ai/nano-banana-pro",
+        },
+      },
+    });
+    const harness = mountHook({
+      input: "@配图 生成 一张春日咖啡馆插画",
+    });
+    let sendPromise: Promise<boolean> | null = null;
+
+    try {
+      await act(async () => {
+        sendPromise = harness.getValue().handleSend();
+        await Promise.resolve();
+      });
+
+      expect(mockPrepareImageWorkbenchSkillSend).toHaveBeenCalledTimes(1);
+      expect(mockResolveImageWorkbenchSkillRequest).not.toHaveBeenCalled();
+      expect(mockSendMessage).not.toHaveBeenCalled();
+
+      await act(async () => {
+        deferredPrepare.resolve(true);
+        await sendPromise;
+      });
+
+      expect(await sendPromise).toBe(true);
+      expect(mockResolveImageWorkbenchSkillRequest).toHaveBeenCalledTimes(1);
+      expect(mockSendMessage).toHaveBeenCalledTimes(1);
+      expect(mockSendMessage.mock.calls[0]?.[8]).toMatchObject({
+        requestMetadata: {
+          harness: {
+            image_skill_launch: {
+              image_task: {
+                provider_id: "fal",
+                model: "fal-ai/nano-banana-pro",
+              },
+            },
+          },
+        },
+      });
+    } finally {
+      harness.unmount();
+    }
+  });
+
   it("带 builtin route 的 @配图 发送不应重复包装或重复递交", async () => {
     mockResolveImageWorkbenchSkillRequest.mockReturnValueOnce({
       images: [],
@@ -2387,22 +2520,24 @@ Extract it into the Agent Skills directory.`,
 
     try {
       await act(async () => {
-        const started = await harness.getValue().handleSend(
-          [],
-          false,
-          false,
-          "@配图 生成 一张春日咖啡馆插画",
-          "react",
-          undefined,
-          {
-            capabilityRoute: {
-              kind: "builtin_command",
-              commandKey: "image_generate",
-              commandPrefix: "@配图",
+        const started = await harness
+          .getValue()
+          .handleSend(
+            [],
+            false,
+            false,
+            "@配图 生成 一张春日咖啡馆插画",
+            "react",
+            undefined,
+            {
+              capabilityRoute: {
+                kind: "builtin_command",
+                commandKey: "image_generate",
+                commandPrefix: "@配图",
+              },
+              displayContent: "@配图 生成 一张春日咖啡馆插画",
             },
-            displayContent: "@配图 生成 一张春日咖啡馆插画",
-          },
-        );
+          );
         expect(started).toBe(true);
       });
 
@@ -2421,9 +2556,7 @@ Extract it into the Agent Skills directory.`,
         "@配图 生成 一张春日咖啡馆插画",
       );
       const sendOptions = mockSendMessage.mock.calls[0]?.[8];
-      expect(sendOptions?.displayContent).toBe(
-        "@配图 生成 一张春日咖啡馆插画",
-      );
+      expect(sendOptions?.displayContent).toBe("@配图 生成 一张春日咖啡馆插画");
       expect(sendOptions?.capabilityRoute).toMatchObject({
         kind: "builtin_command",
         commandKey: "image_generate",
@@ -2441,6 +2574,77 @@ Extract it into the Agent Skills directory.`,
             skill_name: "image_generate",
             image_task: {
               prompt: "一张春日咖啡馆插画",
+            },
+          },
+        },
+      });
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("通过 @ 面板选择配图后输入普通描述时应补齐 @配图 并进入图片任务", async () => {
+    mockResolveImageWorkbenchSkillRequest.mockReturnValueOnce({
+      images: [],
+      requestContext: {
+        kind: "image_task",
+        image_task: {
+          mode: "generate",
+          prompt: "画一张广州夏天的图",
+          count: 1,
+        },
+      },
+    });
+    const harness = mountHook({
+      input: "画一张广州夏天的图",
+    });
+
+    try {
+      await act(async () => {
+        const started = await harness
+          .getValue()
+          .handleSend(
+            [],
+            false,
+            false,
+            "画一张广州夏天的图",
+            "react",
+            undefined,
+            {
+              capabilityRoute: {
+                kind: "builtin_command",
+                commandKey: "image_generate",
+                commandPrefix: "@配图",
+              },
+              displayContent: "画一张广州夏天的图",
+            },
+          );
+        expect(started).toBe(true);
+      });
+
+      expect(mockResolveImageWorkbenchSkillRequest).toHaveBeenCalledTimes(1);
+      expect(mockResolveImageWorkbenchSkillRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          rawText: "@配图 画一张广州夏天的图",
+          parsedCommand: expect.objectContaining({
+            trigger: "@配图",
+            prompt: "画一张广州夏天的图",
+          }),
+        }),
+      );
+      expect(mockSendMessage).toHaveBeenCalledTimes(1);
+      expect(mockSendMessage.mock.calls[0]?.[0]).toBe(
+        "@配图 画一张广州夏天的图",
+      );
+      const sendOptions = mockSendMessage.mock.calls[0]?.[8];
+      expect(sendOptions?.displayContent).toBe("画一张广州夏天的图");
+      expect(sendOptions?.requestMetadata).toMatchObject({
+        harness: {
+          allow_model_skills: true,
+          image_skill_launch: {
+            skill_name: "image_generate",
+            image_task: {
+              prompt: "画一张广州夏天的图",
             },
           },
         },
@@ -2493,7 +2697,9 @@ Extract it into the Agent Skills directory.`,
           },
         },
       });
-      expect(sendOptions?.assistantDraft?.imageWorkbenchPreview).toBeUndefined();
+      expect(
+        sendOptions?.assistantDraft?.imageWorkbenchPreview,
+      ).toBeUndefined();
       expect(sendOptions?.assistantDraft?.content).toBe("");
       expect(sendOptions?.assistantDraft?.fallbackContent).toBe("");
       expect(sendOptions?.assistantDraft?.preserveContent).toBeUndefined();
@@ -2628,7 +2834,9 @@ Extract it into the Agent Skills directory.`,
           },
         },
       });
-      expect(sendOptions?.assistantDraft?.imageWorkbenchPreview).toBeUndefined();
+      expect(
+        sendOptions?.assistantDraft?.imageWorkbenchPreview,
+      ).toBeUndefined();
       expect(sendOptions?.assistantDraft?.content).toBe("");
       expect(sendOptions?.assistantDraft?.fallbackContent).toBe("");
       expect(listMentionEntryUsage()).toEqual([
@@ -8326,9 +8534,10 @@ Extract it into the Agent Skills directory.`,
       const args = mockSendMessage.mock.calls[0] as Parameters<
         HookProps["sendMessage"]
       >;
-      const harnessMetadata = (
-        (args?.[8]?.requestMetadata?.harness as Record<string, unknown>) || {}
-      ) as Record<string, unknown>;
+      const harnessMetadata = ((args?.[8]?.requestMetadata?.harness as Record<
+        string,
+        unknown
+      >) || {}) as Record<string, unknown>;
       expect(harnessMetadata).not.toHaveProperty("access_mode");
     } finally {
       harness.unmount();

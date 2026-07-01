@@ -166,13 +166,15 @@ pub fn resolve_request_tool_policy_with_mode(
 
 /// 合并请求级工具策略到系统提示词
 ///
-/// - `effective_web_search=false`：保持原始 system prompt 不变
+/// - `auto`：只暴露工具面，由模型按 tool_choice=auto 自行决定是否调用，保持原始 system prompt 不变
+/// - `disabled`：保持原始 system prompt 不变
+/// - `required`：追加必须完成联网工具调用的请求级约束
 /// - 已包含 marker 时：不重复追加
 pub fn merge_system_prompt_with_request_tool_policy(
     base_prompt: Option<String>,
     policy: &RequestToolPolicy,
 ) -> Option<String> {
-    if !policy.allows_web_search() {
+    if !policy.requires_web_search() {
         return base_prompt;
     }
 
@@ -184,18 +186,7 @@ pub fn merge_system_prompt_with_request_tool_policy(
 
     let policy_prompt = match policy.search_mode {
         RequestToolPolicyMode::Disabled => return base_prompt,
-        RequestToolPolicyMode::Auto => format!(
-            "{REQUEST_TOOL_POLICY_MARKER}\n\
-- 本次请求的工具选择模式为 auto；联网搜索工具面可用，但不代表本回合必须联网。\n\
-- 你必须先理解用户意图，优先判断应该直接回答、深度思考、规划、后台任务、多代理，还是联网核实。\n\
-- 只有在用户明确要求搜索，或问题涉及最新、实时、价格、政策、规则、版本、新闻、日期敏感信息，或高风险信息需要核实时，才调用 {}（必要时再调用 WebFetch）。\n\
-- 若无需联网即可可靠完成，就直接回答，不要为了展示工具能力而搜索。\n\
-- 允许工具: {}\n\
-- 禁止工具: {}",
-            policy.required_tools.join(", "),
-            policy.allowed_tools.join(", "),
-            disallowed_line
-        ),
+        RequestToolPolicyMode::Auto => return base_prompt,
         RequestToolPolicyMode::Required => format!(
             "{REQUEST_TOOL_POLICY_MARKER}\n\
 - 用户在本次请求中已明确要求联网搜索。\n\
@@ -345,15 +336,23 @@ mod tests {
     }
 
     #[test]
-    fn appends_policy_prompt_when_enabled() {
+    fn keeps_original_prompt_when_auto_search_enabled() {
         let policy = resolve_request_tool_policy(Some(true));
-        let merged =
-            merge_system_prompt_with_request_tool_policy(Some("base".to_string()), &policy)
-                .expect("merged prompt should exist");
-        assert!(merged.contains(REQUEST_TOOL_POLICY_MARKER));
-        assert!(merged.contains("工具选择模式为 auto"));
-        assert!(merged.contains("先理解用户意图"));
-        assert!(merged.contains("WebSearch"));
+        let base = Some("base".to_string());
+        assert_eq!(
+            merge_system_prompt_with_request_tool_policy(base.clone(), &policy),
+            base
+        );
+    }
+
+    #[test]
+    fn keeps_original_prompt_when_auto_search_enabled_by_default() {
+        let policy = resolve_request_tool_policy(None);
+        let base = Some("base".to_string());
+        assert_eq!(
+            merge_system_prompt_with_request_tool_policy(base.clone(), &policy),
+            base
+        );
     }
 
     #[test]
@@ -365,13 +364,18 @@ mod tests {
         let merged =
             merge_system_prompt_with_request_tool_policy(Some("base".to_string()), &policy)
                 .expect("merged prompt should exist");
+        assert!(merged.contains(REQUEST_TOOL_POLICY_MARKER));
         assert!(merged.contains("必须先调用"));
+        assert!(merged.contains("WebSearch"));
     }
 
     #[test]
     fn no_duplicate_when_marker_exists() {
         let base = Some(format!("{REQUEST_TOOL_POLICY_MARKER}\nexists"));
-        let policy = resolve_request_tool_policy(Some(true));
+        let policy = resolve_request_tool_policy_with_mode(
+            Some(true),
+            Some(RequestToolPolicyMode::Required),
+        );
         assert_eq!(
             merge_system_prompt_with_request_tool_policy(base.clone(), &policy),
             base

@@ -285,6 +285,61 @@ describe("useAppNavigation", () => {
     });
   });
 
+  it("同页同语义参数即使字段顺序不同也不应再次更新导航状态", async () => {
+    await renderProbe();
+
+    await act(async () => {
+      latestNavigation?.handleNavigate("agent", {
+        agentEntry: "claw",
+        projectId: "project-stable",
+        theme: "general",
+        initialRequestMetadata: {
+          harness: {
+            beta: 2,
+            alpha: 1,
+          },
+        },
+      });
+    });
+    await flushEffects();
+
+    const readyCallsAfterFirstNavigation = readyCallCount;
+    const requestIdAfterFirstNavigation =
+      latestNavigation?.navigationRequestId;
+
+    await act(async () => {
+      latestNavigation?.handleNavigate("agent", {
+        initialRequestMetadata: {
+          harness: {
+            alpha: 1,
+            beta: 2,
+          },
+        },
+        theme: "general",
+        projectId: "project-stable",
+        agentEntry: "claw",
+      });
+    });
+    await flushEffects();
+
+    expect(readyCallCount).toBe(readyCallsAfterFirstNavigation);
+    expect(latestNavigation?.navigationRequestId).toBe(
+      requestIdAfterFirstNavigation,
+    );
+    expect(latestNavigation?.currentPage).toBe("agent");
+    expect(latestNavigation?.pageParams).toMatchObject({
+      agentEntry: "claw",
+      projectId: "project-stable",
+      theme: "general",
+      initialRequestMetadata: {
+        harness: {
+          beta: 2,
+          alpha: 1,
+        },
+      },
+    });
+  });
+
   it("同一轮连续导航时应以最后一次请求为准", async () => {
     await renderProbe();
 

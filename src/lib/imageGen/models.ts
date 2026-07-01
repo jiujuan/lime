@@ -96,6 +96,64 @@ const ZHIPU_IMAGE_MODELS: ImageGenModel[] = [
   },
 ];
 
+const DASHSCOPE_IMAGE_MODELS: ImageGenModel[] = [
+  {
+    id: "qwen-image-2.0",
+    name: "Qwen-Image 2.0",
+    supportedSizes: [
+      "2048x2048",
+      "2304x1792",
+      "1792x2304",
+      "2560x1440",
+      "1440x2560",
+    ],
+  },
+  {
+    id: "qwen-image-2.0-pro",
+    name: "Qwen-Image 2.0 Pro",
+    supportedSizes: [
+      "2048x2048",
+      "2304x1792",
+      "1792x2304",
+      "2560x1440",
+      "1440x2560",
+    ],
+  },
+  {
+    id: "qwen-image-plus",
+    name: "Qwen-Image Plus",
+    supportedSizes: [
+      "1328x1328",
+      "1664x928",
+      "928x1664",
+      "1472x1140",
+      "1140x1472",
+    ],
+  },
+  {
+    id: "qwen-image",
+    name: "Qwen-Image",
+    supportedSizes: [
+      "1328x1328",
+      "1664x928",
+      "928x1664",
+      "1472x1140",
+      "1140x1472",
+    ],
+  },
+  {
+    id: "wan2.6-image",
+    name: "Wan2.6 Image",
+    supportedSizes: [
+      "1280x1280",
+      "1600x900",
+      "900x1600",
+      "1472x1104",
+      "1104x1472",
+    ],
+  },
+];
+
 /** 图片生成模型映射（根据 Provider ID 或类型） */
 export const IMAGE_GEN_MODELS: Record<string, ImageGenModel[]> = {
   openai: OPENAI_IMAGE_MODELS,
@@ -103,6 +161,12 @@ export const IMAGE_GEN_MODELS: Record<string, ImageGenModel[]> = {
   // 智谱 AI
   zhipuai: ZHIPU_IMAGE_MODELS,
   zhipu: ZHIPU_IMAGE_MODELS,
+  // 阿里云百炼 / 通义万相
+  alibaba: DASHSCOPE_IMAGE_MODELS,
+  "alibaba-cn": DASHSCOPE_IMAGE_MODELS,
+  dashscope: DASHSCOPE_IMAGE_MODELS,
+  qwen: DASHSCOPE_IMAGE_MODELS,
+  tongyi: DASHSCOPE_IMAGE_MODELS,
   // AiHubMix
   aihubmix: [
     {

@@ -15,6 +15,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use super::projection_item_events::query_projected_session_item_events;
 use super::projection_payload_summary::bounded_payload_summary;
 use super::projection_protocol::{
     projected_import_reference_from_metadata, projected_import_session_to_protocol,
@@ -41,6 +42,7 @@ pub struct ProjectionReadSession {
     pub messages_count: usize,
     pub messages_start_index: usize,
     pub messages: Vec<Value>,
+    pub item_events: Vec<AgentEvent>,
     pub last_event_sequence: u64,
 }
 
@@ -177,6 +179,7 @@ impl ProjectionStore {
         let messages_count = query_projected_message_count(&conn, session_id)?;
         let (messages, messages_start_index) =
             query_projected_window_messages(&conn, session_id, window, messages_count)?;
+        let item_events = query_projected_session_item_events(&conn, session_id, &messages)?;
         let first_user_message = query_projected_first_user_message(&conn, session_id)?;
         Ok(Some(ProjectionReadSession {
             session: projected_session_to_protocol(&session_row, first_user_message),
@@ -185,6 +188,7 @@ impl ProjectionStore {
             messages_count,
             messages_start_index,
             messages,
+            item_events,
             last_event_sequence: session_row.last_event_sequence,
         }))
     }
@@ -669,7 +673,7 @@ fn query_projected_message_count(conn: &Connection, session_id: &str) -> Result<
             "SELECT COUNT(DISTINCT COALESCE(turn_id, event_id))
              FROM projected_items
              WHERE session_id = ?1
-               AND item_type = 'message.delta'",
+               AND item_type IN ('message.delta', 'message.delta_batch', 'message.batch')",
             params![session_id],
             |row| row.get::<_, i64>(0),
         )
@@ -701,7 +705,7 @@ fn query_projected_message_count_before(
              FROM projected_items
              WHERE session_id = ?1
                AND sequence < ?2
-               AND item_type = 'message.delta'",
+               AND item_type IN ('message.delta', 'message.delta_batch', 'message.batch')",
             params![session_id, before_sequence],
             |row| row.get::<_, i64>(0),
         )
@@ -725,7 +729,7 @@ fn query_projected_window_messages(
                  FROM projected_items
                  WHERE session_id = ?1
                    AND sequence < ?2
-                   AND item_type IN ('message.created', 'message.delta')
+                   AND item_type IN ('message.created', 'message.delta', 'message.delta_batch', 'message.batch')
                  ORDER BY sequence DESC, event_id DESC
                  LIMIT ?3",
             )
@@ -748,7 +752,7 @@ fn query_projected_window_messages(
                 "SELECT event_id, turn_id, sequence, item_type, payload_summary_json, created_at
                  FROM projected_items
                  WHERE session_id = ?1
-                   AND item_type IN ('message.created', 'message.delta')
+                   AND item_type IN ('message.created', 'message.delta', 'message.delta_batch', 'message.batch')
                  ORDER BY sequence DESC, event_id DESC
                  LIMIT ?2",
             )
@@ -804,7 +808,10 @@ fn projected_messages_from_rows(rows: Vec<ProjectedMessageRow>) -> Vec<Value> {
     let mut assistant_by_turn: BTreeMap<String, ProjectedAssistantSummary> = BTreeMap::new();
     let mut messages = Vec::new();
     for row in rows {
-        if row.item_type == "message.delta" {
+        if is_projected_assistant_message_event_type(&row.item_type) {
+            if !should_project_message_delta_as_final_text(&row.payload) {
+                continue;
+            }
             let key = row
                 .turn_id
                 .clone()
@@ -950,26 +957,73 @@ fn truncate_projection_summary_text(text: String) -> String {
 }
 
 fn projected_message_text(payload: &Value) -> String {
-    payload
-        .get("input")
-        .and_then(|value| {
-            serde_json::from_value::<app_server_protocol::AgentInput>(value.clone()).ok()
-        })
-        .map(|input| input.text)
+    projected_text_from_payload(payload)
         .or_else(|| {
             payload
-                .get("text")
-                .and_then(Value::as_str)
-                .map(str::to_string)
-        })
-        .or_else(|| {
-            payload
-                .get("content")
-                .and_then(|content| content.get("text").or_else(|| content.get("message")))
-                .and_then(Value::as_str)
-                .map(str::to_string)
+                .get("input")
+                .and_then(|value| {
+                    serde_json::from_value::<app_server_protocol::AgentInput>(value.clone()).ok()
+                })
+                .map(|input| input.text)
         })
         .unwrap_or_default()
+}
+
+fn projected_text_from_payload(payload: &Value) -> Option<String> {
+    if let Some(text) = payload
+        .as_str()
+        .map(str::to_string)
+        .filter(|text| !text.is_empty())
+    {
+        return Some(text);
+    }
+    value_string(
+        Some(payload),
+        &[
+            "text",
+            "delta",
+            "content",
+            "message",
+            "outputText",
+            "output_text",
+        ],
+    )
+    .or_else(|| {
+        payload
+            .get("content")
+            .and_then(|content| value_string(Some(content), &["text", "message"]))
+    })
+    .or_else(|| {
+        for key in ["deltas", "messages", "items", "parts", "content"] {
+            let Some(values) = payload.get(key).and_then(Value::as_array) else {
+                continue;
+            };
+            let text = values
+                .iter()
+                .filter_map(projected_text_from_payload)
+                .collect::<String>();
+            if !text.is_empty() {
+                return Some(text);
+            }
+        }
+        None
+    })
+}
+
+fn is_projected_assistant_message_event_type(event_type: &str) -> bool {
+    matches!(
+        event_type,
+        "message.delta" | "message.delta_batch" | "message.batch"
+    )
+}
+
+fn should_project_message_delta_as_final_text(payload: &Value) -> bool {
+    let Some(phase) = value_string(Some(payload), &["phase", "messagePhase", "message_phase"])
+    else {
+        return true;
+    };
+    let normalized = phase.trim().to_ascii_lowercase();
+    matches!(normalized.as_str(), "final" | "final_answer")
 }
 
 fn query_projected_first_user_message(

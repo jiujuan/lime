@@ -298,15 +298,15 @@ jobs:
             package_status=${PIPESTATUS[0]}
             set -e
           }
-          is_notarytool_network_error() {
+          is_transient_macos_package_error() {
             [ "${{ matrix.host_platform }}" = "darwin" ] || return 1
-            grep -Eq "NSURLErrorDomain|The Internet connection appears to be offline|No network route|HTTPError\\(statusCode: nil|_NSURLErrorNWPathKey=unsatisfied" "$FORGE_PACKAGE_LOG"
+            grep -Eq "NSURLErrorDomain|The Internet connection appears to be offline|No network route|HTTPError\\(statusCode: nil|_NSURLErrorNWPathKey=unsatisfied|Response code 502 \\(Bad Gateway\\)" "$FORGE_PACKAGE_LOG"
           }
           package_attempt=1
           run_forge_package
-          while [ "$package_status" -ne 0 ] && [ "$package_attempt" -lt 3 ] && is_notarytool_network_error; do
+          while [ "$package_status" -ne 0 ] && [ "$package_attempt" -lt 3 ] && is_transient_macos_package_error; do
             package_attempt=$((package_attempt + 1))
-            echo "Electron Forge package hit a transient macOS notarization network error; retrying package attempt $package_attempt/3 after 60 seconds."
+            echo "Electron Forge package hit a transient macOS packaging or notarization network error; retrying package attempt $package_attempt/3 after 60 seconds."
             sleep 60
             run_forge_package
           done

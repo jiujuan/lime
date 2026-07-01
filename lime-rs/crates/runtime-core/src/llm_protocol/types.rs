@@ -185,4 +185,6 @@ pub struct ResponsesImageGenerationOptions {
     pub outer_model: Option<String>,
     #[serde(default)]
     pub input_shape: ResponsesImageGenerationInputShape,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reference_image_urls: Vec<String>,
 }

@@ -250,7 +250,7 @@ describe("workspaceRightSurfaceRuntimeProjection", () => {
     });
   });
 
-  it("显式插件激活应投影为 articleWorkspace runtime pending intent", () => {
+  it("显式插件激活不应自动投影为 articleWorkspace runtime pending intent", () => {
     const plugin = normalizePluginManifest({
       id: "creator-workbench",
       displayName: "创作工作台",
@@ -286,16 +286,6 @@ describe("workspaceRightSurfaceRuntimeProjection", () => {
       suppressHomeNavbarUtilityActions: false,
     });
 
-    expect(intents).toHaveLength(1);
-    expect(intents[0]).toMatchObject({
-      id: "plugin:creator-workbench:creator:articleDraft:pending",
-      priority: "background",
-      command: {
-        action: "open",
-        kind: "articleWorkspace",
-        origin: "runtime",
-        reason: "plugin_activation_context",
-      },
-    });
+    expect(intents).toEqual([]);
   });
 });

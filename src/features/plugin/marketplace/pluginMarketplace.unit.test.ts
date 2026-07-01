@@ -224,6 +224,67 @@ describe("Plugin marketplace projection", () => {
     ]);
   });
 
+  it("应从 manifestSummary 投影 CLI 和 lifecycle hooks 到 plugin contract", () => {
+    const contract = buildPluginContractFromMarketplaceItem(
+      marketplaceItem({
+        manifestSummary: {
+          workflows: [
+            {
+              key: "research-workflow",
+              cliRefs: ["research-kit"],
+              connectorRefs: ["web-research"],
+              hookPolicy: {
+                task: ["task-complete"],
+              },
+            },
+          ],
+          agentRuntime: {
+            cli: {
+              entrypoint: "./cli/research-kit.mjs",
+              registry: "./clis/clis.json",
+              commands: ["inspect", "run"],
+            },
+            hooks: {
+              handlers: [
+                {
+                  key: "task-complete",
+                  event: "task.complete",
+                  entrypoint: "./hooks/task-complete.mjs",
+                },
+              ],
+            },
+          },
+        },
+      }),
+    );
+
+    expect(contract.clis).toEqual([
+      expect.objectContaining({
+        id: "agent-runtime-cli",
+        entrypoint: "./cli/research-kit.mjs",
+        registry: "./clis/clis.json",
+        commands: ["inspect", "run"],
+      }),
+    ]);
+    expect(contract.hooks).toEqual([
+      expect.objectContaining({
+        key: "task-complete",
+        event: "task.complete",
+        entrypoint: "./hooks/task-complete.mjs",
+      }),
+    ]);
+    expect(contract.workflows).toEqual([
+      expect.objectContaining({
+        key: "research-workflow",
+        cliRefs: ["research-kit"],
+        connectorRefs: ["web-research"],
+        hookPolicy: {
+          task: ["task-complete"],
+        },
+      }),
+    ]);
+  });
+
   it("应从 manifestSummary.artifactRenderers 投影 renderer 输出 contract", () => {
     const contract = buildPluginContractFromMarketplaceItem(
       marketplaceItem({
@@ -484,7 +545,8 @@ describe("Plugin marketplace projection", () => {
       appId: "local-kit",
       package: {
         releaseId: "release-local",
-        packageUrl: "https://packages.limecloud.example/plugins/local-kit-1.2.3.lpkg",
+        packageUrl:
+          "https://packages.limecloud.example/plugins/local-kit-1.2.3.lpkg",
         packageHash:
           "sha256:9999999999999999999999999999999999999999999999999999999999999999",
         manifestHash:

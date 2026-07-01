@@ -55,21 +55,54 @@ export async function waitForGuiChatCompleted(
         const turnGroups = Array.from(
           document.querySelectorAll('[data-testid="message-turn-group"]'),
         );
-        const scopedTurnGroup =
-          [...turnGroups]
-            .reverse()
-            .find((group) => (group.innerText || "").includes(prompt)) ?? null;
-        const scopedText = scopedTurnGroup?.innerText || mainText;
-        const assistantBubbles = Array.from(
-          (
-            scopedTurnGroup ||
-            document.querySelector('[data-testid="message-list-column"]') ||
-            document
-          ).querySelectorAll('[data-message-role="assistant"]'),
+        const promptTurnGroups = turnGroups.filter((group) =>
+          (group.innerText || "").includes(prompt),
         );
-        const assistantScope =
-          assistantBubbles[assistantBubbles.length - 1] ?? scopedTurnGroup;
-        const assistantScopeText = assistantScope?.innerText || scopedText;
+        const messageListScope =
+          document.querySelector('[data-testid="message-list-column"]') ||
+          document;
+        const readTurnGroupSnapshot = (group) => {
+          const groupText = group?.innerText || mainText;
+          const assistantBubbles = Array.from(
+            (group || messageListScope).querySelectorAll(
+              '[data-message-role="assistant"]',
+            ),
+          );
+          const assistantScope =
+            assistantBubbles[assistantBubbles.length - 1] ?? group;
+          const assistantScopeText = assistantScope?.innerText || groupText;
+          const hasRequiredAssistantVisibleTexts =
+            requiredAssistantVisibleTexts.every((requiredText) =>
+              assistantScopeText.includes(requiredText),
+            );
+
+          return {
+            group,
+            groupText,
+            assistantScope,
+            assistantScopeText,
+            hasExpectedAssistantContent:
+              requiredAssistantVisibleTexts.length > 0
+                ? assistantScopeText.includes(summaryText) &&
+                  hasRequiredAssistantVisibleTexts
+                : assistantScopeText.includes(summaryText) ||
+                  assistantScopeText.includes(doneText),
+          };
+        };
+        const scopedSnapshot =
+          [...promptTurnGroups]
+            .reverse()
+            .map(readTurnGroupSnapshot)
+            .find((candidate) => candidate.hasExpectedAssistantContent) ??
+          (promptTurnGroups.length > 0
+            ? readTurnGroupSnapshot(
+                promptTurnGroups[promptTurnGroups.length - 1],
+              )
+            : readTurnGroupSnapshot(null));
+        const scopedTurnGroup = scopedSnapshot.group;
+        const scopedText = scopedSnapshot.groupText;
+        const assistantScope = scopedSnapshot.assistantScope;
+        const assistantScopeText = scopedSnapshot.assistantScopeText;
         const textarea = document.querySelector(
           'textarea[name="agent-chat-message"]',
         );

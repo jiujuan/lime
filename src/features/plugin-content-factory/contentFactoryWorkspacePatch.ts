@@ -4,6 +4,7 @@ import {
   type WorkspaceArticleWorkspace,
   type WorkspaceArticleWorkspaceSource,
 } from "@/components/agent/chat/workspace/workspaceArticleWorkspaceModel";
+import { collectWorkspaceArticlePatchLikeMetadataRecords } from "@/components/agent/chat/workspace/workspaceArticleWorkspaceMetadata";
 import { buildWorkspaceArticleWorkspaceWorkerEvidenceFromThreadRead } from "@/components/agent/chat/workspace/workspaceArticleWorkspaceWorkerEvidence";
 import { CONTENT_FACTORY_PLUGIN_ID } from "./contentFactoryPlugin";
 
@@ -95,12 +96,11 @@ function pushKnownPatchFields(
   if (!record) {
     return;
   }
-  // 历史 worker payload 仍写入 articleWorkspace；前端事实源已迁到 Article Workspace。
-  pushPatchCandidate(candidates, record.articleWorkspace);
-  pushPatchCandidate(candidates, record.article_workspace);
-  pushPatchCandidate(candidates, record.workspacePatch);
-  pushPatchCandidate(candidates, record.workspace_patch);
-  pushPatchCandidate(candidates, record.contentFactoryWorkspacePatch);
+  for (const candidate of collectWorkspaceArticlePatchLikeMetadataRecords(
+    record,
+  )) {
+    pushPatchCandidate(candidates, candidate);
+  }
 }
 
 function pushContentPatch(

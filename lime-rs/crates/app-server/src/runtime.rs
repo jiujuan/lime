@@ -1,5 +1,6 @@
 mod agent_app_host_lifecycle;
 mod agent_app_task_runtime;
+mod agent_app_worker_orchestration;
 mod agent_app_worker_runtime;
 mod agent_app_worker_streaming;
 mod agent_app_worker_turn;
@@ -41,7 +42,9 @@ pub(crate) mod memory_prompt;
 mod model_providers;
 mod objectives;
 mod output_refs;
+mod permission_state_projection;
 mod project_git;
+mod projection_item_events;
 mod projection_payload_summary;
 mod projection_protocol;
 mod projection_repair;
@@ -81,6 +84,10 @@ pub use crate::file_checkpoint_snapshot::FileCheckpointSnapshotSaveRequest;
 pub use crate::file_checkpoint_snapshot::FileCheckpointSnapshotStore;
 pub use crate::file_checkpoint_snapshot::FilesystemFileCheckpointSnapshotStore;
 pub use crate::file_checkpoint_snapshot::NoopFileCheckpointSnapshotStore;
+pub(crate) use agent_app_worker_streaming::{
+    ensure_workspace_patch_artifact_paths as ensure_content_factory_workspace_patch_artifact_paths,
+    streaming_workspace_patch_events as content_factory_final_article_streaming_events,
+};
 pub use app_data::AgentAppDataSource;
 pub use app_data::AppDataSource;
 pub use app_data::AutomationManagementAppDataSource;

@@ -153,4 +153,28 @@ describe("modelThemePolicy", () => {
       "relay-vision-image-pro",
     ]);
   });
+
+  it("general 主题只有图片生成模型时不应回退为聊天模型", () => {
+    const models = [
+      createModel("gpt-image-1", {
+        task_families: ["image_generation"],
+        input_modalities: ["text"],
+        output_modalities: ["image"],
+      }),
+      createModel("gpt-images-2", {
+        task_families: ["image_generation"],
+        input_modalities: ["text"],
+        output_modalities: ["image"],
+      }),
+    ];
+
+    const result = filterModelsByTheme("general", models);
+
+    expect(result).toEqual({
+      models: [],
+      usedFallback: false,
+      filteredOutCount: 2,
+      policyName: "chat-only",
+    });
+  });
 });

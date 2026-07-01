@@ -1,7 +1,7 @@
 use regex::Regex;
 use std::sync::OnceLock;
 
-const IMAGE_GENERATION_MODEL_PATTERN: &str = r"(gpt[-_ ]?images?|imagen|dall-e|dalle|nano[-_ ]?banana|banana|flux|seedream|kontext|recraft|ideogram|sdxl|sd3|stable[-_ ]?diffusion|cogview|glm[-_ ]?image|wanx|midjourney|(?:^|[^a-z0-9])mj(?:$|[^a-z0-9])|(?:^|[^a-z0-9])image[-_ ]?(?:\d|generation|gen|preview|model)(?:$|[^a-z0-9])|text[-_ ]?to[-_ ]?image|picture|drawing|绘图|图像生成|生图)";
+const IMAGE_GENERATION_MODEL_PATTERN: &str = r"(gpt[-_ ]?images?|qwen[-_ ]?image|imagen|dall-e|dalle|nano[-_ ]?banana|banana|flux|seedream|kontext|recraft|ideogram|sdxl|sd3|stable[-_ ]?diffusion|cogview|glm[-_ ]?image|wanx|midjourney|(?:^|[^a-z0-9])mj(?:$|[^a-z0-9])|(?:^|[^a-z0-9])image[-_ ]?(?:\d|generation|gen|preview|model)(?:$|[^a-z0-9])|text[-_ ]?to[-_ ]?image|picture|drawing|绘图|图像生成|生图)";
 const RESPONSES_IMAGE_MODEL_PATTERN: &str = r"(?:^|[^a-z0-9])gpt-images?-2(?:$|[^a-z0-9])";
 
 fn normalize_text(value: &str) -> String {
@@ -86,6 +86,7 @@ mod tests {
         assert!(is_likely_image_generation_model_id("doubao-seedream-4-0"));
         assert!(is_likely_image_generation_model_id("midjourney-v7"));
         assert!(is_likely_image_generation_model_id("glm-image"));
+        assert!(is_likely_image_generation_model_id("qwen-image-plus"));
         assert!(is_likely_image_generation_model_id("中文生图模型"));
         assert!(!is_likely_image_generation_model_id("gpt-5.2-pro"));
     }

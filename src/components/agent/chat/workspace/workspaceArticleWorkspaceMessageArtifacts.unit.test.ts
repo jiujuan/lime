@@ -46,7 +46,8 @@ const articleWorkspace: WorkspaceArticleWorkspace = {
       source: {
         taskKind: "content.article.generate",
         taskId: "task-article-1",
-        markdown: "# 公众号文章草稿\n\n这是正文。",
+        documentText: "# 公众号文章草稿\n\n这是正文。",
+        finalMarkdown: "# 公众号文章草稿\n\n这是正文。",
       },
     },
   ],
@@ -95,6 +96,43 @@ describe("workspaceArticleWorkspaceMessageArtifacts", () => {
     expect(
       buildWorkspaceArticleWorkspaceFromMessageArtifacts(messages),
     ).toBeNull();
+  });
+
+  it("消息 artifact 新旧字段同时存在时应优先使用 workspacePatch", () => {
+    const legacyWorkspacePatch: WorkspaceArticleWorkspace = {
+      ...articleWorkspace,
+      objects: [
+        {
+          ...articleWorkspace.objects[0]!,
+          title: "旧字段草稿",
+        },
+      ],
+    };
+    const messages = [
+      createMessage({
+        artifacts: [
+          {
+            id: "artifact-workspace-patch",
+            type: "document",
+            title: "Article Workspace Patch",
+            content: "",
+            status: "complete",
+            meta: {
+              workspacePatch: articleWorkspace,
+              contentFactoryWorkspacePatch: legacyWorkspacePatch,
+            },
+            position: { start: 0, end: 0 },
+            createdAt: 100,
+            updatedAt: 100,
+          },
+        ],
+      }),
+    ] satisfies Message[];
+
+    const restored =
+      buildWorkspaceArticleWorkspaceFromMessageArtifacts(messages);
+
+    expect(restored?.objects[0]?.title).toBe("公众号文章草稿");
   });
 
   it("应把 Article Editor preview artifact 挂到最后一条助手消息", () => {
@@ -252,7 +290,20 @@ describe("workspaceArticleWorkspaceMessageArtifacts", () => {
           source: {
             taskKind: "content.article.generate",
             taskId: "content-factory-worker-task",
-            markdown: [
+            documentText: [
+              "# 多轮检索后的公众号文章草稿",
+              "",
+              "## 三轮资料检索",
+              "",
+              "- 第一轮：确认用户目标。",
+              "- 第二轮：整理场景痛点。",
+              "- 第三轮：收敛结构和发布检查。",
+              "",
+              "## 正文草稿",
+              "",
+              "这是经过多轮检索后写出的完整正文。",
+            ].join("\n"),
+            finalMarkdown: [
               "# 多轮检索后的公众号文章草稿",
               "",
               "## 三轮资料检索",
@@ -324,6 +375,40 @@ describe("workspaceArticleWorkspaceMessageArtifacts", () => {
     );
   });
 
+  it("只有过程稿时不应追加文章产物小卡", () => {
+    const processOnlyWorkspace: WorkspaceArticleWorkspace = {
+      ...articleWorkspace,
+      objects: [
+        {
+          ...articleWorkspace.objects[0]!,
+          status: "generating",
+          source: {
+            taskKind: "content.article.generate",
+            processMarkdown: "## 资料检索\n\n这里只能作为对话过程展示。",
+          },
+        },
+      ],
+    };
+    const messages = [
+      createMessage({ id: "user-1", role: "user", content: "@写文章" }),
+      createMessage({
+        id: "assistant-streaming",
+        content: "正在检索资料",
+        isThinking: true,
+      }),
+    ];
+
+    const nextMessages =
+      attachWorkspaceArticleWorkspacePreviewArtifactToMessages({
+        messages,
+        articleWorkspace: processOnlyWorkspace,
+        now: 100,
+        status: "streaming",
+      });
+
+    expect(nextMessages).toBe(messages);
+  });
+
   it("正在流式输出的助手消息不应被小卡替换，但应追加独立文章产物框", () => {
     const messages = [
       createMessage({ id: "user-1", role: "user", content: "继续写" }),
@@ -370,7 +455,7 @@ describe("workspaceArticleWorkspaceMessageArtifacts", () => {
         content: "正在写文章",
         isThinking: true,
         runtimeStatus: {
-          phase: "streaming",
+          phase: "synthesizing",
           title: "正在生成",
           detail: "正在输出文章正文",
         },
@@ -442,7 +527,9 @@ describe("workspaceArticleWorkspaceMessageArtifacts", () => {
               status: "needs_review",
               source: {
                 taskKind: "content.article.generate",
-                markdown:
+                documentText:
+                  "# 恢复后的公众号文章\n\n这是从历史 read model 恢复的完整正文。",
+                finalMarkdown:
                   "# 恢复后的公众号文章\n\n这是从历史 read model 恢复的完整正文。",
               },
             },
@@ -469,18 +556,22 @@ describe("workspaceArticleWorkspaceMessageArtifacts", () => {
       content: expect.stringContaining("历史 read model 恢复的完整正文"),
       status: "complete",
       meta: expect.objectContaining({
-        contentFactoryWorkspacePatch: expect.objectContaining({
+        workspacePatch: expect.objectContaining({
           objects: expect.arrayContaining([
             expect.objectContaining({
               title: "恢复后的公众号文章",
               source: expect.objectContaining({
-                markdown: expect.stringContaining("完整正文"),
+                documentText: expect.stringContaining("完整正文"),
+                finalMarkdown: expect.stringContaining("完整正文"),
               }),
             }),
           ]),
         }),
       }),
     });
+    expect(nextMessages[1]?.artifacts?.[0]?.meta).not.toHaveProperty(
+      "contentFactoryWorkspacePatch",
+    );
   });
 
   it("Article Editor 无可选对象时应 fail closed", () => {
@@ -527,7 +618,9 @@ describe("workspaceArticleWorkspaceMessageArtifacts", () => {
             status: "needs_review",
             source: {
               taskKind: "content.article.generate",
-              markdown:
+              documentText:
+                "# 公众号文章草稿\n\n点击小框后展开右侧 Article Editor，再继续处理配图。",
+              finalMarkdown:
                 "# 公众号文章草稿\n\n点击小框后展开右侧 Article Editor，再继续处理配图。",
             },
           },
@@ -602,7 +695,8 @@ describe("workspaceArticleWorkspaceMessageArtifacts", () => {
                   summary: "首版文章草稿已生成。",
                   source: {
                     taskKind: "content.article.generate",
-                    markdown: "# 公众号文章草稿\n\n这是小框展开后的正文。",
+                    documentText: "# 公众号文章草稿\n\n这是小框展开后的正文。",
+                    finalMarkdown: "# 公众号文章草稿\n\n这是小框展开后的正文。",
                   },
                 },
               ],

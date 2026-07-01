@@ -33,6 +33,7 @@ pub(crate) fn build_for_model(
     body.insert("prompt".to_string(), json!(prompt));
     insert_string_metadata(&mut body, request);
     insert_image_count(&mut body, request);
+    insert_reference_images(&mut body, request);
 
     Ok(wire_request(
         protocol,
@@ -73,10 +74,40 @@ fn insert_image_count(body: &mut Map<String, Value>, request: &LlmRequest) {
     body.insert("n".to_string(), json!(count));
 }
 
+fn insert_reference_images(body: &mut Map<String, Value>, request: &LlmRequest) {
+    let references = metadata_string_array(request.metadata.get("reference_images"));
+    if references.is_empty() {
+        return;
+    }
+
+    body.insert(
+        "images".to_string(),
+        Value::Array(
+            references
+                .into_iter()
+                .map(|image_url| json!({ "image_url": image_url }))
+                .collect(),
+        ),
+    );
+}
+
 fn metadata_positive_u64(value: &Value) -> Option<u64> {
     match value {
         Value::Number(number) => number.as_u64().filter(|value| *value > 0),
         Value::String(raw) => raw.trim().parse::<u64>().ok().filter(|value| *value > 0),
         _ => None,
     }
+}
+
+fn metadata_string_array(value: Option<&Value>) -> Vec<String> {
+    value
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .filter_map(|raw| non_empty(Some(raw)).map(ToString::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
 }

@@ -223,6 +223,7 @@ export const mockAgentThreadTimeline = vi.fn(
     onOpenSavedSiteContent,
     placement,
     turn,
+    expandCompletedProcessDetails,
   }: {
     actionRequests?: Array<Record<string, unknown>>;
     items?: AgentThreadItem[];
@@ -232,11 +233,15 @@ export const mockAgentThreadTimeline = vi.fn(
       title?: string;
     }) => void;
     deferCompletedSingleDetails?: boolean;
+    expandCompletedProcessDetails?: boolean;
     placement?: "leading" | "trailing" | "default";
     turn?: { id?: string } | null;
   }) => (
     <div
       data-testid={`agent-thread-timeline:${placement || "default"}`}
+      data-expand-completed-process-details={
+        expandCompletedProcessDetails ? "yes" : "no"
+      }
       data-has-open-saved-site-content={onOpenSavedSiteContent ? "yes" : "no"}
       data-turn-id={turn?.id || ""}
     >
@@ -288,6 +293,7 @@ vi.mock("./AgentThreadTimeline", () => ({
   AgentThreadTimeline: (props: {
     actionRequests?: Array<Record<string, unknown>>;
     deferCompletedSingleDetails?: boolean;
+    expandCompletedProcessDetails?: boolean;
     items?: AgentThreadItem[];
     placement?: "leading" | "trailing" | "default";
   }) => mockAgentThreadTimeline(props),

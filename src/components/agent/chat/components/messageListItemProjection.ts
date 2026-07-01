@@ -48,6 +48,7 @@ import { shouldRenderAssistantRuntimeStatusPill } from "./messageAssistantMetaFo
 import { resolveAgentRuntimeErrorPresentation } from "../utils/agentRuntimeErrorPresentation";
 import { hasImportedSourceProcessItem } from "../utils/importedSourceProcess";
 import { isUpdatePlanToolName } from "../utils/toolNameFamily";
+import { isArticleArtifactFrameArtifact } from "./articleArtifactProjection";
 import {
   MESSAGE_LIST_COMPACT_HISTORICAL_ASSISTANT_PREVIEW_CHARS,
   MESSAGE_LIST_COMPACT_HISTORICAL_ASSISTANT_THRESHOLD,
@@ -787,6 +788,9 @@ export function resolveMessageListItemProjection({
           );
         })
       : [];
+  const hasArticleArtifactFrame = visibleAssistantArtifacts.some(
+    isArticleArtifactFrameArtifact,
+  );
   const shouldRenderMessageCanvasShortcut = Boolean(
     messageSavedSiteContentTarget &&
     canOpenSavedSiteContent &&
@@ -935,5 +939,6 @@ export function resolveMessageListItemProjection({
     trailingActionRequests,
     trailingTimeline,
     visibleAssistantArtifacts,
+    hasArticleArtifactFrame,
   };
 }

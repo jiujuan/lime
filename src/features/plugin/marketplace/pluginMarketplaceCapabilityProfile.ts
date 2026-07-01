@@ -341,7 +341,7 @@ function connectorItems(params: {
   const agentRuntime = asRecord(params.summary?.agentRuntime);
   const runtimeConnectors = asRecord(agentRuntime?.connectors);
   const registryPath = readString(runtimeConnectors?.registry);
-  const registryItems = registryPath
+  const registryItems: Record<string, unknown>[] = registryPath
     ? [
         {
           id: "connector-registry",

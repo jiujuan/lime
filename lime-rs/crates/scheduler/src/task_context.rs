@@ -601,7 +601,11 @@ mod tests {
         assert!(prompt.contains("调度覆盖规则"));
         assert!(!prompt.contains("父级规则不应出现"));
         assert!(prompt.contains("# AGENTS.md instructions"));
-        assert!(prompt.contains(REQUEST_TOOL_POLICY_MARKER));
+        assert!(!prompt.contains(REQUEST_TOOL_POLICY_MARKER));
+        assert_eq!(
+            context.request_tool_policy.search_mode,
+            RequestToolPolicyMode::Auto
+        );
     }
 
     #[test]

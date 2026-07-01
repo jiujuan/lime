@@ -241,9 +241,28 @@ export const IMAGE_CAPABILITY_CATALOG: ImageCapabilityProviderEntry[] = [
       providerTypeIncludes: ["zhipu"],
     },
     transport: "provider_native",
-    endpointPath: "/v1/images/generations",
+    endpointPath: "/api/paas/v4/images/generations",
     models: IMAGE_GEN_MODELS.zhipuai,
     fallbackPriority: 50,
+  },
+  {
+    providerKey: "dashscope",
+    displayName: "DashScope",
+    match: {
+      providerIds: ["alibaba", "alibaba-cn", "dashscope", "qwen", "tongyi"],
+      providerTypes: ["alibaba", "alibaba-cn", "dashscope", "qwen", "tongyi"],
+      providerIdIncludes: ["dashscope", "alibaba", "qwen", "tongyi"],
+      providerTypeIncludes: ["dashscope", "alibaba", "qwen", "tongyi"],
+      apiHostIncludes: [
+        "dashscope.aliyuncs.com",
+        "dashscope-intl.aliyuncs.com",
+        "maas.aliyuncs.com",
+      ],
+    },
+    transport: "provider_native",
+    endpointPath: "/api/v1/services/aigc/multimodal-generation/generation",
+    models: IMAGE_GEN_MODELS.dashscope,
+    fallbackPriority: 55,
   },
 ];
 

@@ -192,6 +192,57 @@ describe("buildImageTaskPreviewFromToolResult", () => {
     });
   });
 
+  it("应从 structuredContent 工具结果恢复图片轻卡，避免 Skill 子会话漏卡", () => {
+    const preview = buildImageTaskPreviewFromToolResult({
+      toolId: "tool-structured-image-1",
+      toolName: "lime_create_image_generation_task",
+      toolArguments: JSON.stringify({
+        prompt: "广州夏天的骑楼街景",
+        count: 1,
+      }),
+      toolResult: {
+        success: true,
+        output: "任务正在排队生成",
+        structuredContent: {
+          success: true,
+          task_id: "task-structured-image-1",
+          task_type: "image_generate",
+          task_family: "image",
+          status: "pending_submit",
+          normalized_status: "pending",
+          path: ".lime/tasks/image_generate/task-structured-image-1.json",
+          absolute_path:
+            "/workspace/.lime/tasks/image_generate/task-structured-image-1.json",
+          artifact_path:
+            ".lime/tasks/image_generate/task-structured-image-1.json",
+          record: {
+            task_id: "task-structured-image-1",
+            task_type: "image_generate",
+            payload: {
+              prompt: "广州夏天的骑楼街景",
+              size: "1024x1024",
+              provider_id: "openai",
+              model: "gpt-images-2",
+            },
+          },
+        },
+      },
+      fallbackPrompt: "@配图 广州夏天的骑楼街景",
+    });
+
+    expect(preview).toMatchObject({
+      taskId: "task-structured-image-1",
+      prompt: "广州夏天的骑楼街景",
+      status: "running",
+      phase: "queued",
+      taskFilePath:
+        "/workspace/.lime/tasks/image_generate/task-structured-image-1.json",
+      artifactPath: ".lime/tasks/image_generate/task-structured-image-1.json",
+      size: "1024x1024",
+      statusMessage: "正在生成图片。",
+    });
+  });
+
   it("3x3 分镜完成后应输出更贴近布局语义的摘要", () => {
     const preview = buildImageTaskPreviewFromToolResult({
       toolId: "tool-5",

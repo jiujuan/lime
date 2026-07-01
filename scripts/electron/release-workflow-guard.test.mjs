@@ -118,15 +118,37 @@ describe("Electron release workflow guard", () => {
     );
   });
 
-  it("rejects missing macOS notarization network retry in Forge package step", () => {
+  it("rejects missing macOS transient package retry in Forge package step", () => {
     const current = fs.readFileSync(".github/workflows/release.yml", "utf8");
     const workflowPath = tempWorkflowPath(
-      current.replaceAll("is_notarytool_network_error", "is_package_error"),
+      current.replaceAll(
+        "is_transient_macos_package_error",
+        "is_package_error",
+      ),
     );
 
     expect(() => validateReleaseWorkflow({ workflowPath })).toThrow(
-      /Electron Forge make step must include is_notarytool_network_error/,
+      /Electron Forge make step must include is_transient_macos_package_error/,
     );
+  });
+
+  it("rejects missing macOS 502 retry classification in Forge package step", () => {
+    const current = fs.readFileSync(".github/workflows/release.yml", "utf8");
+    const workflowPath = tempWorkflowPath(
+      current.replace(
+        "Response code 502 \\\\(Bad Gateway\\\\)",
+        "Response code 500 \\\\(Internal Server Error\\\\)",
+      ),
+    );
+
+    try {
+      validateReleaseWorkflow({ workflowPath });
+      throw new Error("expected validateReleaseWorkflow to throw");
+    } catch (error) {
+      expect(String(error)).toContain(
+        "Electron Forge make step must include Response code 502 \\\\(Bad Gateway\\\\)",
+      );
+    }
   });
 
   it("rejects Forge make without the existing package output", () => {

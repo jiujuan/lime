@@ -73,6 +73,13 @@ function resolveFileChangeRecord(
   return asRecord(metadata?.file_change) || asRecord(metadata?.fileChange);
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
+export function hasTimelineFileChangeEvidence(
+  item: AgentThreadItem,
+): item is FileArtifactItem {
+  return item.type === "file_artifact" && Boolean(resolveFileChangeRecord(item));
+}
+
 function normalizeFileChangeKind(value: unknown): FileChangeKind {
   if (value === "add" || value === "delete" || value === "update") {
     return value;

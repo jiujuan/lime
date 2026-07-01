@@ -13,6 +13,7 @@ import {
   clearInvokeBuffers,
   evaluatePageSnapshot,
   invokeAppServerFromPage,
+  reloadRendererDocument,
   waitForRendererReady,
 } from "./claw-chat-current-fixture-rpc.mjs";
 import { sanitizeJson, sleep } from "./claw-chat-current-fixture-utils.mjs";
@@ -28,10 +29,7 @@ export async function verifyPlanHistoryHydrate({
   const readModelPlanThreadItem =
     summarizeReadModelPlanThreadItem(readModelPlanCompleted);
 
-  await page.reload({
-    waitUntil: "domcontentloaded",
-    timeout: options.timeoutMs,
-  });
+  const planHistoryHydrateReload = await reloadRendererDocument(page, options);
   const planHistoryHydrateRendererReady = await waitForRendererReady(
     page,
     options,
@@ -70,6 +68,7 @@ export async function verifyPlanHistoryHydrate({
 
   return sanitizeJson({
     readModelPlanThreadItem,
+    planHistoryHydrateReload,
     planHistoryHydrateRendererReady,
     guiPlanHistoryHydrateSessionVisible,
     guiPlanHistoryHydrateSessionOpened,

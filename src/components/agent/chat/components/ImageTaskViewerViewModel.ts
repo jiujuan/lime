@@ -75,6 +75,11 @@ export function resolveFollowUpLabel(
   return t("agentChat.imageTaskViewer.action.redrawFromImage");
 }
 
+export function canRetryImageTask(status: string | undefined): boolean {
+  const normalizedStatus = (status || "").trim().toLowerCase();
+  return normalizedStatus === "error" || normalizedStatus === "cancelled";
+}
+
 export function resolveLayoutLabel(
   layoutHint: string | null | undefined,
   t: ImageTaskViewerTranslate,

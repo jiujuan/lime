@@ -21,7 +21,7 @@ pub(super) fn thread_items_from_events(stored: &StoredSession) -> Vec<Value> {
 
     for event in &stored.events {
         match event.event_type.as_str() {
-            "message.delta" => {
+            "message.delta" | "message.delta_batch" | "message.batch" => {
                 if let Some(item) = agent_message_item(stored, event) {
                     if let Some(stable_item_id) = agent_message_payload_id(event) {
                         if let Some(existing_index) =
@@ -328,27 +328,33 @@ fn upsert_approval_item(
     else {
         return;
     };
+    let existing_action_type = items
+        .get(&request_id)
+        .and_then(|item| string_field(item, &["action_type"]));
+    let action_type = string_field(&event.payload, &["actionType", "action_type"])
+        .or(existing_action_type)
+        .unwrap_or_else(|| "tool_confirmation".to_string());
+    let item_type = if matches!(action_type.as_str(), "ask_user" | "elicitation") {
+        "request_user_input"
+    } else {
+        "approval_request"
+    };
     let status = match event.event_type.as_str() {
         "action.required" => "in_progress",
         "action.cancelled" | "action.canceled" | "action.expired" => "failed",
         _ => "completed",
     };
-    let entry = items.entry(request_id.clone()).or_insert_with(|| {
-        lifecycle_base_item(stored, event, &request_id, "approval_request", status)
-    });
+    let entry = items
+        .entry(request_id.clone())
+        .or_insert_with(|| lifecycle_base_item(stored, event, &request_id, item_type, status));
     let Some(object) = entry.as_object_mut() else {
         return;
     };
 
     update_lifecycle_item(object, event, status);
     object.insert("request_id".to_string(), json!(request_id));
-    merge_optional_field(
-        object,
-        "action_type",
-        string_field(&event.payload, &["actionType", "action_type"])
-            .or_else(|| Some("tool_confirmation".to_string()))
-            .map(Value::String),
-    );
+    object.insert("type".to_string(), json!(item_type));
+    object.insert("action_type".to_string(), json!(action_type));
     merge_optional_field(
         object,
         "prompt",
@@ -367,6 +373,36 @@ fn upsert_approval_item(
             .get("arguments")
             .cloned()
             .or_else(|| event.payload.get("data").cloned()),
+    );
+    merge_optional_field(
+        object,
+        "questions",
+        event.payload.get("questions").cloned().or_else(|| {
+            event
+                .payload
+                .get("data")
+                .and_then(|data| data.get("questions"))
+                .cloned()
+        }),
+    );
+    merge_optional_field(
+        object,
+        "requested_schema",
+        event
+            .payload
+            .get("requestedSchema")
+            .or_else(|| event.payload.get("requested_schema"))
+            .cloned()
+            .or_else(|| {
+                event
+                    .payload
+                    .get("data")
+                    .and_then(|data| {
+                        data.get("requestedSchema")
+                            .or_else(|| data.get("requested_schema"))
+                    })
+                    .cloned()
+            }),
     );
     if event.event_type != "action.required" {
         object.insert(
@@ -690,17 +726,7 @@ fn command_string(payload: &Value) -> Option<String> {
 }
 
 fn agent_message_item(stored: &StoredSession, event: &AgentEvent) -> Option<Value> {
-    let text = raw_string_field(
-        &event.payload,
-        &[
-            "text",
-            "delta",
-            "content",
-            "message",
-            "outputText",
-            "output_text",
-        ],
-    )?;
+    let text = agent_message_text_from_payload(&event.payload)?;
     let text = text.trim();
     if text.is_empty() {
         return None;
@@ -722,6 +748,47 @@ fn agent_message_item(stored: &StoredSession, event: &AgentEvent) -> Option<Valu
             "metadata": event_metadata(event),
         }),
     ))
+}
+
+fn agent_message_text_from_payload(payload: &Value) -> Option<String> {
+    if let Some(text) = payload
+        .as_str()
+        .map(str::to_string)
+        .filter(|text| !text.is_empty())
+    {
+        return Some(text);
+    }
+    raw_string_field(
+        payload,
+        &[
+            "text",
+            "delta",
+            "content",
+            "message",
+            "outputText",
+            "output_text",
+        ],
+    )
+    .or_else(|| {
+        payload
+            .get("content")
+            .and_then(|content| raw_string_field(content, &["text", "message"]))
+    })
+    .or_else(|| {
+        for key in ["deltas", "messages", "items", "parts", "content"] {
+            let Some(values) = payload.get(key).and_then(Value::as_array) else {
+                continue;
+            };
+            let text = values
+                .iter()
+                .filter_map(agent_message_text_from_payload)
+                .collect::<String>();
+            if !text.is_empty() {
+                return Some(text);
+            }
+        }
+        None
+    })
 }
 
 fn merge_agent_message_item(existing: &mut Value, next: &Value) {

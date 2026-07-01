@@ -9,6 +9,8 @@ import {
   IMAGE_COMMAND_SCENARIO,
   MCP_STRUCTURED_CONTENT_PROMPT,
   NEWS_PROMPT,
+  PLAIN_IMAGE_INTENT_ROUTED_PROMPT,
+  PLAIN_IMAGE_INTENT_SCENARIO,
   PLAN_PROMPT,
   RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO,
   SKILLS_RUNTIME_EXPLICIT_PROMPT,
@@ -60,9 +62,14 @@ export function buildAssertionContext({
     const goalTurnStart = backendLedger.find(
       (entry) => entry.kind === "turnStart" && entry.inputText === GOAL_PROMPT,
     );
+    const expectedImageIntentRoutedPrompt =
+      options.scenario === PLAIN_IMAGE_INTENT_SCENARIO
+        ? PLAIN_IMAGE_INTENT_ROUTED_PROMPT
+        : IMAGE_COMMAND_PROMPT;
     const imageCommandTurnStart = backendLedger.find(
       (entry) =>
-        entry.kind === "turnStart" && entry.inputText === IMAGE_COMMAND_PROMPT,
+        entry.kind === "turnStart" &&
+        entry.inputText === expectedImageIntentRoutedPrompt,
     );
     const webToolsRenderingTurnStart = backendLedger.find(
       (entry) =>
@@ -111,7 +118,8 @@ export function buildAssertionContext({
     const isPlanScenario = options.scenario === "plan";
     const isGoalScenario = options.scenario === "goal";
     const isImageCommandScenario =
-      options.scenario === IMAGE_COMMAND_SCENARIO;
+      options.scenario === IMAGE_COMMAND_SCENARIO ||
+      options.scenario === PLAIN_IMAGE_INTENT_SCENARIO;
     const isWebToolsRenderingScenario =
       options.scenario === "web-tools-rendering";
     const isMcpStructuredContentScenario =
@@ -207,7 +215,8 @@ export function buildAssertionContext({
         : isGoalScenario
           ? goalTurnStart?.inputText === GOAL_PROMPT
           : isImageCommandScenario
-            ? imageCommandTurnStart?.inputText === IMAGE_COMMAND_PROMPT
+            ? imageCommandTurnStart?.inputText ===
+              expectedImageIntentRoutedPrompt
             : isWebToolsRenderingScenario
             ? webToolsRenderingTurnStart?.inputText === WEB_TOOLS_RENDERING_PROMPT
             : isMcpStructuredContentScenario
@@ -247,6 +256,7 @@ export function buildAssertionContext({
     planTurnStart,
     goalTurnStart,
     imageCommandTurnStart,
+    expectedImageIntentRoutedPrompt,
     webToolsRenderingTurnStart,
     mcpStructuredContentTurnStart,
     skillsRuntimeTurnStart,

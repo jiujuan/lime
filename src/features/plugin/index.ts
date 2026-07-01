@@ -57,6 +57,7 @@ export type {
   PluginAgentAppUiKind,
   PluginArtifactRendererActionDeclaration,
   PluginArtifactRendererDeclaration,
+  PluginCliDeclaration,
   PluginConnectorDeclaration,
   PluginConnectorKind,
   PluginContract,
@@ -67,6 +68,7 @@ export type {
   PluginHistoryDefaultSurface,
   PluginHistoryFallback,
   PluginHistoryRestoreDeclaration,
+  PluginHookDeclaration,
   PluginManifest,
   PluginMcpServerDeclaration,
   PluginRegistryActivationState,
@@ -79,6 +81,7 @@ export type {
   PluginRendererActionRisk,
   PluginRightSurfaceContract,
   PluginSkillDeclaration,
+  PluginWorkflowDeclaration,
   PluginWorkspaceSelectionPolicy,
 } from "./manifest/types";
 export type {

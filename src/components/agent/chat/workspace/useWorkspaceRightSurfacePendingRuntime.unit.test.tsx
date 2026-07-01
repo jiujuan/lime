@@ -572,17 +572,7 @@ describe("useWorkspaceRightSurfacePendingRuntime", () => {
       expect(listPending).toHaveBeenCalled();
     });
     expect(getValue().pendingRequests).toEqual([]);
-    expect(getValue().pendingIntents).toEqual([
-      expect.objectContaining({
-        id: "plugin:creator-workbench:creator:articleDraft:pending",
-        command: expect.objectContaining({
-          action: "open",
-          kind: "articleWorkspace",
-          origin: "runtime",
-          reason: "plugin_activation_context",
-        }),
-      }),
-    ]);
+    expect(getValue().pendingIntents).toEqual([]);
   });
 
   it("应把 appSurface pending metadata 投影为右侧 Agent App Surface", async () => {

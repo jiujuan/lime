@@ -9,7 +9,8 @@ use std::time::UNIX_EPOCH;
 
 use serde::{Deserialize, Serialize};
 
-use crate::skill_loader::{get_skill_roots, load_skills_from_directory, LoadedSkillDefinition};
+use crate::skill_loader::get_skill_roots;
+use crate::skill_summary::{load_skill_summaries_from_directory, LoadedSkillSummary};
 
 const PROJECT_SKILLS_RELATIVE_DIR: &str = ".agents/skills";
 
@@ -104,8 +105,8 @@ fn build_agent_skill_snapshot_uncached(
             scope: root.scope,
         });
 
-        for skill in load_skills_from_directory(&root_path) {
-            let metadata = metadata_from_loaded_skill(skill, root.scope);
+        for skill in load_skill_summaries_from_directory(&root_path) {
+            let metadata = metadata_from_skill_summary(skill, root.scope);
             let dedupe_key = (metadata.name.clone(), normalize_path(&metadata.directory));
             if seen.insert(dedupe_key) {
                 snapshot.skills.push(metadata);
@@ -251,8 +252,8 @@ impl AgentSkillScope {
     }
 }
 
-fn metadata_from_loaded_skill(
-    skill: LoadedSkillDefinition,
+fn metadata_from_skill_summary(
+    skill: LoadedSkillSummary,
     scope: AgentSkillScope,
 ) -> AgentSkillMetadata {
     let directory = normalize_path(&skill.local_directory_path);

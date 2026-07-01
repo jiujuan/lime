@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   isMockToolUsePart,
   findStreamingRendererCallByContent,
+  mockAgentThreadTimeline,
   mockStreamingRenderer,
   render,
 } from "./MessageList.testHarness";
@@ -304,7 +305,15 @@ describe("MessageList web process", () => {
     const toolNames = (rendererCall?.contentParts || [])
       .filter(isMockToolUsePart)
       .map((part) => part.toolCall.name);
-    expect(toolNames).toEqual(["Read", "Write"]);
+    expect(toolNames).toEqual(["lime_run_service_skill"]);
+
+    const timelineCall = mockAgentThreadTimeline.mock.calls.find(
+      ([props]) => props.turn?.id === "turn-service-tool",
+    )?.[0];
+    const timelineToolNames = (timelineCall?.items || [])
+      .filter((item) => item.type === "tool_call")
+      .map((item) => item.tool_name);
+    expect(timelineToolNames).toEqual(["Read", "Write"]);
   });
 
   it("完成态 timeline 已有计划时应保留执行轨迹但不重复渲染计划卡", () => {

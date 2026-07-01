@@ -137,7 +137,6 @@ interface RenderContentOptions {
   pageParams?: PageParams;
   requestedPage?: Page;
   requestedPageParams?: PageParams;
-  navigationRequestId?: number;
   onAgentSessionChange?: (sessionId: string | null) => void;
 }
 
@@ -155,7 +154,6 @@ function renderContentWithNavigationState(options: RenderContentOptions) {
             pageParams={nextOptions.pageParams ?? {}}
             requestedPage={nextOptions.requestedPage}
             requestedPageParams={nextOptions.requestedPageParams}
-            navigationRequestId={nextOptions.navigationRequestId}
             onNavigate={vi.fn() as (page: Page) => void}
             onAgentHasMessagesChange={vi.fn()}
             onAgentSessionChange={nextOptions.onAgentSessionChange}
@@ -391,7 +389,7 @@ describe("AppPageContent", () => {
     });
   });
 
-  it("agent 页面切换 initialSessionId 应重建 AgentChatPage 实例", async () => {
+  it("agent 页面切换 initialSessionId 应复用 AgentChatPage 实例", async () => {
     const rendered = renderContentWithNavigationState({
       currentPage: "agent",
       pageParams: {
@@ -416,12 +414,130 @@ describe("AppPageContent", () => {
     });
     await flushEffects();
 
-    expect(agentChatLifecycle.mounts).toBe(2);
-    expect(agentChatLifecycle.unmounts).toBe(1);
+    expect(agentChatLifecycle.mounts).toBe(1);
+    expect(agentChatLifecycle.unmounts).toBe(0);
     expect(latestAgentChatProps.value).toMatchObject({
       agentEntry: "claw",
       projectId: "project-1",
       initialSessionId: "session-opened-from-sidebar",
+    });
+  });
+
+  it("agent 页面切换 agentEntry 应复用 AgentChatPage 实例", async () => {
+    const rendered = renderContentWithNavigationState({
+      currentPage: "agent",
+      pageParams: {
+        agentEntry: "new-task",
+        projectId: "project-1",
+        theme: "general",
+      } satisfies AgentPageParams,
+    });
+    await flushEffects();
+
+    expect(agentChatLifecycle.mounts).toBe(1);
+    expect(agentChatLifecycle.unmounts).toBe(0);
+    expect(latestAgentChatProps.value).toMatchObject({
+      agentEntry: "new-task",
+      showChatPanel: false,
+    });
+
+    rendered.rerender({
+      currentPage: "agent",
+      pageParams: {
+        agentEntry: "claw",
+        projectId: "project-1",
+        theme: "general",
+      } satisfies AgentPageParams,
+    });
+    await flushEffects();
+
+    expect(agentChatLifecycle.mounts).toBe(1);
+    expect(agentChatLifecycle.unmounts).toBe(0);
+    expect(latestAgentChatProps.value).toMatchObject({
+      agentEntry: "claw",
+      showChatPanel: true,
+    });
+  });
+
+  it("agent 页面切换项目、文稿或主题边界也应复用 AgentChatPage 实例", async () => {
+    const rendered = renderContentWithNavigationState({
+      currentPage: "agent",
+      pageParams: {
+        agentEntry: "claw",
+        projectId: "project-1",
+        contentId: "content-1",
+        theme: "general",
+        lockTheme: false,
+      } satisfies AgentPageParams,
+    });
+    await flushEffects();
+
+    expect(agentChatLifecycle.mounts).toBe(1);
+    expect(agentChatLifecycle.unmounts).toBe(0);
+    expect(latestAgentChatProps.value).toMatchObject({
+      projectId: "project-1",
+      contentId: "content-1",
+      theme: "general",
+      lockTheme: false,
+    });
+
+    rendered.rerender({
+      currentPage: "agent",
+      pageParams: {
+        agentEntry: "claw",
+        projectId: "project-2",
+        contentId: "content-2",
+        theme: "writing",
+        lockTheme: true,
+      } satisfies AgentPageParams,
+    });
+    await flushEffects();
+
+    expect(agentChatLifecycle.mounts).toBe(1);
+    expect(agentChatLifecycle.unmounts).toBe(0);
+    expect(latestAgentChatProps.value).toMatchObject({
+      projectId: "project-2",
+      contentId: "content-2",
+      theme: "writing",
+      lockTheme: true,
+    });
+  });
+
+  it("agent 页面 pending navigation 被 currentPage 追平时不应重建 AgentChatPage 实例", async () => {
+    const agentParams = {
+      agentEntry: "claw",
+      projectId: "project-pending",
+      theme: "general",
+      initialSessionId: "session-pending-navigation",
+    } satisfies AgentPageParams;
+    const rendered = renderContentWithNavigationState({
+      currentPage: "settings",
+      pageParams: { tab: "general" },
+      requestedPage: "agent",
+      requestedPageParams: agentParams,
+    });
+    await flushEffects();
+
+    expect(agentChatLifecycle.mounts).toBe(1);
+    expect(agentChatLifecycle.unmounts).toBe(0);
+    expect(latestAgentChatProps.value).toMatchObject({
+      projectId: "project-pending",
+      initialSessionId: "session-pending-navigation",
+    });
+
+    rendered.rerender({
+      currentPage: "agent",
+      pageParams: agentParams,
+      requestedPage: "agent",
+      requestedPageParams: agentParams,
+    });
+    await flushEffects();
+
+    expect(agentChatLifecycle.mounts).toBe(1);
+    expect(agentChatLifecycle.unmounts).toBe(0);
+    expect(latestAgentChatProps.value).toMatchObject({
+      projectId: "project-pending",
+      initialSessionId: "session-pending-navigation",
     });
   });
 
@@ -527,7 +643,7 @@ describe("AppPageContent", () => {
     });
   });
 
-  it("agent 页面切换 initialInputCapability 时应重建 AgentChatPage 实例", async () => {
+  it("agent 页面切换 initialInputCapability 时应复用 AgentChatPage 实例", async () => {
     const rendered = renderContentWithNavigationState({
       currentPage: "agent",
       pageParams: {
@@ -567,11 +683,21 @@ describe("AppPageContent", () => {
     });
     await flushEffects();
 
-    expect(agentChatLifecycle.mounts).toBe(2);
-    expect(agentChatLifecycle.unmounts).toBe(1);
+    expect(agentChatLifecycle.mounts).toBe(1);
+    expect(agentChatLifecycle.unmounts).toBe(0);
+    expect(latestAgentChatProps.value).toMatchObject({
+      initialInputCapability: {
+        capabilityRoute: {
+          kind: "installed_skill",
+          skillKey: "local:analyst",
+          skillName: "分析助手",
+        },
+        requestKey: 20260419,
+      },
+    });
   });
 
-  it("agent 页面切换 Knowledge 协同资料时应重建 AgentChatPage 实例", async () => {
+  it("agent 页面切换 Knowledge 协同资料时应复用 AgentChatPage 实例", async () => {
     const rendered = renderContentWithNavigationState({
       currentPage: "agent",
       pageParams: {
@@ -623,8 +749,8 @@ describe("AppPageContent", () => {
     });
     await flushEffects();
 
-    expect(agentChatLifecycle.mounts).toBe(2);
-    expect(agentChatLifecycle.unmounts).toBe(1);
+    expect(agentChatLifecycle.mounts).toBe(1);
+    expect(agentChatLifecycle.unmounts).toBe(0);
     expect(latestAgentChatProps.value).toMatchObject({
       initialKnowledgePackSelection: {
         companionPacks: [
@@ -641,7 +767,7 @@ describe("AppPageContent", () => {
     });
   });
 
-  it("agent 页面切换结果模板 initialInputCapability 时也应重建 AgentChatPage 实例", async () => {
+  it("agent 页面切换结果模板 initialInputCapability 时也应复用 AgentChatPage 实例", async () => {
     const rendered = renderContentWithNavigationState({
       currentPage: "agent",
       pageParams: {
@@ -685,8 +811,20 @@ describe("AppPageContent", () => {
     });
     await flushEffects();
 
-    expect(agentChatLifecycle.mounts).toBe(2);
-    expect(agentChatLifecycle.unmounts).toBe(1);
+    expect(agentChatLifecycle.mounts).toBe(1);
+    expect(agentChatLifecycle.unmounts).toBe(0);
+    expect(latestAgentChatProps.value).toMatchObject({
+      initialInputCapability: {
+        capabilityRoute: {
+          kind: "curated_task",
+          taskId: "social-post-starter",
+          taskTitle: "内容主稿生成",
+          prompt:
+            "请先帮我起草一版内容首稿：明确目标受众、标题方向、正文结构、核心观点和可继续扩写的角度，并给我一版适合继续打磨的正文。",
+        },
+        requestKey: 20260419,
+      },
+    });
   });
 
   it("agent 页面应把做法执行摘要与自动发送 metadata 透传给 AgentChatPage", async () => {

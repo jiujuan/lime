@@ -27,7 +27,8 @@ const articleWorkspace: WorkspaceArticleWorkspace = {
       title: "公众号文章草稿",
       status: "needs_review",
       source: {
-        markdown: "# 旧正文\n\n这是旧正文。",
+        documentText: "# 旧正文\n\n这是旧正文。",
+        finalMarkdown: "# 旧正文\n\n这是旧正文。",
         researchRounds: [{ id: "research-1", title: "资料检索" }],
       },
     },
@@ -73,7 +74,8 @@ describe("workspaceArticleWorkspaceEditedDraft", () => {
     expect(nextWorkspace?.updatedAt).toBe("2026-06-29T10:00:00.000Z");
     expect(nextWorkspace?.objects[0]).toMatchObject({
       source: expect.objectContaining({
-        markdown: "# 新正文\n\n这是用户编辑后的正文。",
+        documentText: "# 新正文\n\n这是用户编辑后的正文。",
+        finalMarkdown: "# 新正文\n\n这是用户编辑后的正文。",
         updatedAt: "2026-06-29T10:00:00.000Z",
         researchRounds: [{ id: "research-1", title: "资料检索" }],
       }),
@@ -107,6 +109,8 @@ describe("workspaceArticleWorkspaceEditedDraft", () => {
           artifactIds: ["artifact-article-1"],
         },
         markdown: "# 新正文\n\n这是用户编辑后的正文。",
+        documentText: "# 新正文\n\n这是用户编辑后的正文。",
+        finalMarkdown: "# 新正文\n\n这是用户编辑后的正文。",
         updatedAt: "2026-06-29T10:00:00.000Z",
       },
     });

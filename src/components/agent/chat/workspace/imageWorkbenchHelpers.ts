@@ -33,6 +33,7 @@ export type ImageWorkbenchApplyTarget =
       kind: "canvas-insert";
       canvasType: CanvasImageTargetType;
       anchorHint?: CanvasImageInsertAnchorHint;
+      slotId?: string | null;
       sectionTitle?: string | null;
       anchorText?: string | null;
       projectId?: string | null;

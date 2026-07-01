@@ -20,6 +20,7 @@ use app_server_protocol::MediaTaskArtifactVideoCreateParams;
 use lime_media_runtime::list_task_outputs;
 use lime_media_runtime::load_task_output;
 use lime_media_runtime::patch_task_artifact;
+use lime_media_runtime::retry_task_artifact;
 use lime_media_runtime::update_task_status;
 use lime_media_runtime::write_task_artifact;
 use lime_media_runtime::MediaTaskOutput;
@@ -28,6 +29,7 @@ use lime_media_runtime::TaskArtifactPatch;
 use lime_media_runtime::TaskRelationships;
 use lime_media_runtime::TaskWriteOptions;
 use lime_media_runtime::DEFAULT_ARTIFACT_ROOT;
+use lime_media_runtime::{TaskErrorRecord, TaskProgress};
 use serde_json::json;
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -71,6 +73,12 @@ fn maybe_json_u64(value: &Value, keys: &[&str]) -> Option<u64> {
     keys.iter()
         .filter_map(|key| value.get(*key))
         .find_map(Value::as_u64)
+}
+
+fn maybe_json_bool(value: &Value, keys: &[&str]) -> Option<bool> {
+    keys.iter()
+        .filter_map(|key| value.get(*key))
+        .find_map(Value::as_bool)
 }
 
 fn build_image_idempotency_key(params: &MediaTaskArtifactImageCreateParams) -> String {
@@ -225,12 +233,44 @@ fn normalize_completed_image(
     }))
 }
 
+fn image_failure_error_record(failure: Option<&Value>) -> TaskErrorRecord {
+    let code = failure
+        .and_then(|value| maybe_json_string(value, &["code", "error_code", "errorCode"]))
+        .unwrap_or_else(|| "image_generation_failed".to_string());
+    let message = failure
+        .and_then(|value| {
+            value
+                .as_str()
+                .and_then(|raw| normalize_optional_string(Some(raw.to_string())))
+                .or_else(|| maybe_json_string(value, &["message", "error", "reason", "detail"]))
+        })
+        .unwrap_or_else(|| "图片任务生成失败。".to_string());
+
+    TaskErrorRecord {
+        code,
+        message,
+        retryable: failure
+            .and_then(|value| maybe_json_bool(value, &["retryable"]))
+            .unwrap_or(false),
+        stage: failure.and_then(|value| maybe_json_string(value, &["stage", "phase"])),
+        provider_code: failure
+            .and_then(|value| maybe_json_string(value, &["provider_code", "providerCode"])),
+        occurred_at: failure
+            .and_then(|value| maybe_json_string(value, &["occurred_at", "occurredAt"])),
+    }
+}
+
 fn build_image_task_result_value(
     payload: &Value,
     params: MediaTaskArtifactImageCompleteParams,
-) -> Result<(Value, Value, String, usize, usize), String> {
-    if params.images.is_empty() {
+) -> Result<(Value, Value, String, usize, usize, Option<TaskErrorRecord>), String> {
+    let requested_status = normalize_optional_string(params.status.clone());
+    let requested_failed = requested_status.as_deref() == Some("failed");
+    if params.images.is_empty() && !requested_failed {
         return Err("images 不能为空".to_string());
+    }
+    if requested_failed && params.failures.is_empty() {
+        return Err("failures 不能为空".to_string());
     }
 
     let payload_prompt = maybe_json_string(payload, &["prompt"]);
@@ -263,17 +303,24 @@ fn build_image_task_result_value(
     let requested_count = maybe_json_u64(payload, &["count", "requested_count", "requestedCount"])
         .unwrap_or(image_count as u64 + failure_count as u64)
         .max(image_count as u64 + failure_count as u64);
-    let requested_status = normalize_optional_string(params.status).unwrap_or_else(|| {
-        if failure_count > 0 && image_count < requested_count as usize {
+    let requested_status = requested_status.unwrap_or_else(|| {
+        if failure_count > 0 && image_count == 0 {
+            "failed".to_string()
+        } else if failure_count > 0 && image_count < requested_count as usize {
             "partial".to_string()
         } else {
             "succeeded".to_string()
         }
     });
-    let normalized_status = if requested_status == "partial" {
-        "partial".to_string()
+    let normalized_status = match requested_status.as_str() {
+        "failed" => "failed".to_string(),
+        "partial" => "partial".to_string(),
+        _ => "succeeded".to_string(),
+    };
+    let last_error = if normalized_status == "failed" {
+        Some(image_failure_error_record(params.failures.first()))
     } else {
-        "succeeded".to_string()
+        None
     };
     let response_status = normalized_status.clone();
     let response_id = normalize_optional_string(params.response_id)
@@ -306,6 +353,8 @@ fn build_image_task_result_value(
         })
         .collect::<Vec<_>>();
     let result = json!({
+        "kind": "image_generation_result",
+        "status": normalized_status,
         "prompt": payload_prompt,
         "provider_id": provider_id,
         "executor_mode": executor_mode,
@@ -347,6 +396,7 @@ fn build_image_task_result_value(
         normalized_status,
         image_count,
         failure_count,
+        last_error,
     ))
 }
 
@@ -767,9 +817,14 @@ pub fn complete_image_generation_task_artifact(
     }
 
     let payload = task_payload(&current);
-    let (result, payload_patch, status, image_count, failure_count) =
+    let (result, payload_patch, status, image_count, failure_count, last_error) =
         build_image_task_result_value(payload, params)?;
-    let success_message = if status == "partial" {
+    let progress_message = if status == "failed" {
+        last_error
+            .as_ref()
+            .map(|value| value.message.clone())
+            .unwrap_or_else(|| "图片任务生成失败。".to_string())
+    } else if status == "partial" {
         format!("图片任务已返回 {image_count} 张，另有 {failure_count} 张失败。")
     } else {
         format!("图片任务已完成，共生成 {image_count} 张。")
@@ -780,10 +835,15 @@ pub fn complete_image_generation_task_artifact(
         .cloned()
         .unwrap_or_default()
         .into_iter()
-        .map(|slot| {
+        .enumerate()
+        .map(|(index, slot)| {
+            let slot_index =
+                maybe_json_u64(&slot, &["slot_index", "slotIndex"]).unwrap_or((index + 1) as u64);
+            let slot_id = maybe_json_string(&slot, &["slot_id", "slotId"])
+                .unwrap_or_else(|| format!("image-slot-{slot_index}"));
             json!({
-                "slot_id": slot.get("slot_id").cloned().unwrap_or(Value::Null),
-                "slot_index": slot.get("slot_index").cloned().unwrap_or(Value::Null),
+                "slot_id": slot_id,
+                "slot_index": slot_index,
                 "label": slot.get("label").cloned().unwrap_or(Value::Null),
                 "prompt": slot.get("prompt").cloned().unwrap_or(Value::Null),
                 "shot_type": slot.get("shot_type").cloned().unwrap_or(Value::Null),
@@ -791,13 +851,20 @@ pub fn complete_image_generation_task_artifact(
             })
         })
         .collect::<Vec<_>>();
-    let progress = serde_json::from_value(json!({
+    let progress: TaskProgress = serde_json::from_value(json!({
         "phase": status,
         "percent": 100,
-        "message": success_message,
+        "message": progress_message,
         "preview_slots": preview_slots,
     }))
     .map_err(data_error)?;
+    let last_error_patch = if status == "failed" {
+        Some(Some(
+            last_error.unwrap_or_else(|| image_failure_error_record(None)),
+        ))
+    } else {
+        Some(None)
+    };
     let output = patch_task_artifact(
         workspace_root_path,
         &task_ref,
@@ -806,7 +873,7 @@ pub fn complete_image_generation_task_artifact(
             status: Some(status),
             payload_patch: Some(payload_patch),
             result: Some(Some(result)),
-            last_error: Some(None),
+            last_error: last_error_patch,
             progress: Some(progress),
             current_attempt_worker_id: Some(Some(IMAGE_TASK_COMPLETION_WORKER_ID.to_string())),
             ..TaskArtifactPatch::default()
@@ -895,3 +962,16 @@ pub fn cancel_media_task_artifact(
         .map_err(data_error)?;
     response_from_output(output)
 }
+
+pub(crate) fn retry_media_task_artifact(
+    params: MediaTaskArtifactLookupParams,
+) -> Result<MediaTaskArtifactResponse, String> {
+    let workspace_root = normalize_required_string(&params.project_root_path, "projectRootPath")?;
+    let task_ref = normalize_required_string(&params.task_ref, "taskRef")?;
+    let output =
+        retry_task_artifact(Path::new(&workspace_root), &task_ref, None).map_err(data_error)?;
+    response_from_output(output)
+}
+
+#[cfg(test)]
+mod tests;

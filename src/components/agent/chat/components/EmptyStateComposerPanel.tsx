@@ -594,7 +594,7 @@ export function EmptyStateComposerPanel({
     <SkillSelector {...skillSelectorProps} renderMode="inline" />
   ) : undefined;
   const plusMenuPluginsPanel = (
-      <InputbarPluginSelector
+    <InputbarPluginSelector
       plugins={pluginSuggestions}
       labels={{
         empty: copy.pluginChip.empty,

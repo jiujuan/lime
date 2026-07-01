@@ -105,6 +105,7 @@ struct ArticleWorkspaceBuilder<'a> {
     layout_state: Option<Value>,
     source_artifacts: Vec<Value>,
     worker_evidence: Vec<Value>,
+    worker_evidence_index_by_key: BTreeMap<String, usize>,
     article_generation_task_statuses: BTreeMap<String, String>,
     updated_at: Option<String>,
 }
@@ -121,6 +122,7 @@ impl<'a> ArticleWorkspaceBuilder<'a> {
             layout_state: None,
             source_artifacts: Vec::new(),
             worker_evidence: Vec::new(),
+            worker_evidence_index_by_key: BTreeMap::new(),
             article_generation_task_statuses: BTreeMap::new(),
             updated_at: None,
         }
@@ -174,14 +176,15 @@ impl<'a> ArticleWorkspaceBuilder<'a> {
         if let Some(source_artifact) = source_artifact_from_event(event) {
             self.source_artifacts.push(source_artifact);
         }
+        for worker_evidence in worker_evidence_from_patch(event, patch) {
+            self.push_worker_evidence(worker_evidence);
+        }
         self.updated_at = Some(event.timestamp.clone());
     }
 
     fn apply_worker_evidence(&mut self, event: &AgentEvent) {
         if let Some(worker_evidence) = worker_evidence_from_event(event) {
-            self.record_article_generation_task_status(&worker_evidence);
-            self.worker_evidence.push(worker_evidence);
-            self.updated_at = Some(event.timestamp.clone());
+            self.push_worker_evidence(worker_evidence);
         }
     }
 
@@ -248,6 +251,26 @@ impl<'a> ArticleWorkspaceBuilder<'a> {
         }
         self.article_generation_task_statuses
             .insert(task_id, status);
+    }
+
+    fn push_worker_evidence(&mut self, worker_evidence: Value) {
+        let key = worker_evidence_dedupe_key(&worker_evidence)
+            .unwrap_or_else(|| format!("worker-evidence:{}", self.worker_evidence.len()));
+        if let Some(existing_index) = self.worker_evidence_index_by_key.get(&key).copied() {
+            let merged = merge_worker_evidence_value(
+                &self.worker_evidence[existing_index],
+                &worker_evidence,
+            );
+            self.worker_evidence[existing_index] = merged;
+            return;
+        }
+        self.record_article_generation_task_status(&worker_evidence);
+        if let Some(updated_at) = string_field(&worker_evidence, &["updatedAt", "updated_at"]) {
+            self.updated_at = Some(updated_at);
+        }
+        let next_index = self.worker_evidence.len();
+        self.worker_evidence_index_by_key.insert(key, next_index);
+        self.worker_evidence.push(worker_evidence);
     }
 }
 
@@ -512,9 +535,12 @@ fn worker_evidence_from_event(event: &AgentEvent) -> Option<Value> {
 
     let artifact = event.payload.get("artifact").unwrap_or(&event.payload);
     let status = match event.event_type.as_str() {
-        "agent_app_worker.retry" | "runtime.error" | "turn.failed" => "failed",
-        "artifact.snapshot" => "completed",
-        _ => "unknown",
+        "agent_app_worker.retry" | "runtime.error" | "turn.failed" => "failed".to_string(),
+        "artifact.snapshot" => "completed".to_string(),
+        "agent_app_worker.hook" => {
+            string_field(&event.payload, &["status"]).unwrap_or_else(|| "unknown".to_string())
+        }
+        _ => "unknown".to_string(),
     };
     let message = string_field(
         &event.payload,
@@ -530,7 +556,8 @@ fn worker_evidence_from_event(event: &AgentEvent) -> Option<Value> {
     Some(json!({
         "id": format!("{}:workerEvidence", event.event_id),
         "eventId": event.event_id,
-        "turnId": event.turn_id,
+        "turnId": worker_string_field(worker_metadata, &["turnId", "turn_id"])
+            .or_else(|| event.turn_id.clone()),
         "status": status,
         "source": "agent_app_task_worker",
         "eventType": event.event_type,
@@ -547,6 +574,13 @@ fn worker_evidence_from_event(event: &AgentEvent) -> Option<Value> {
         "artifactRef": string_field(artifact, &["artifactId", "artifact_id", "id", "artifactRef", "artifact_ref", "path"]),
         "artifactKind": worker_string_field(worker_metadata, &["outputArtifactKind", "output_artifact_kind"])
             .or_else(|| string_field(artifact, &["kind", "artifactKind", "artifact_kind"])),
+        "workflowKey": worker_string_field(worker_metadata, &["workflowKey", "workflow_key"]),
+        "subagents": worker_metadata_array_field(worker_metadata, &["subagents", "sub_agents"]),
+        "skillRefs": worker_metadata_array_field(worker_metadata, &["skillRefs", "skill_refs"]),
+        "cliRefs": worker_metadata_array_field(worker_metadata, &["cliRefs", "cli_refs"]),
+        "connectorRefs": worker_metadata_array_field(worker_metadata, &["connectorRefs", "connector_refs"]),
+        "hookPolicy": worker_metadata_object_field(worker_metadata, &["hookPolicy", "hook_policy"]),
+        "orchestration": worker_metadata_array_field(worker_metadata, &["orchestration"]),
         "title": string_field(artifact, &["title", "artifactTitle", "artifact_title"]),
         "errorCode": string_field(&event.payload, &["errorCode", "error_code"])
             .or_else(|| worker_string_field(worker_metadata, &["errorCode", "error_code"])),
@@ -561,8 +595,136 @@ fn worker_evidence_from_event(event: &AgentEvent) -> Option<Value> {
             .or_else(|| worker_number_field(worker_metadata, &["retryAttempt", "retry_attempt"])),
         "retryMaxAttempts": event.payload.get("retryMaxAttempts").or_else(|| event.payload.get("retry_max_attempts")).and_then(Value::as_u64)
             .or_else(|| worker_number_field(worker_metadata, &["retryMaxAttempts", "retry_max_attempts"])),
+        "hookKey": string_field(&event.payload, &["hookKey", "hook_key"])
+            .or_else(|| worker_string_field(worker_metadata, &["hookKey", "hook_key"])),
+        "hookEvent": string_field(&event.payload, &["hookEvent", "hook_event"])
+            .or_else(|| worker_string_field(worker_metadata, &["hookEvent", "hook_event"])),
+        "hookScope": string_field(&event.payload, &["hookScope", "hook_scope"])
+            .or_else(|| worker_string_field(worker_metadata, &["hookScope", "hook_scope"])),
+        "hookEntrypoint": string_field(&event.payload, &["hookEntrypoint", "hook_entrypoint"])
+            .or_else(|| worker_string_field(worker_metadata, &["hookEntrypoint", "hook_entrypoint"])),
+        "hookRequired": event.payload.get("hookRequired").or_else(|| event.payload.get("hook_required")).and_then(Value::as_bool)
+            .or_else(|| worker_bool_field(worker_metadata, &["hookRequired", "hook_required"])),
+        "reasonCode": string_field(&event.payload, &["reasonCode", "reason_code"])
+            .or_else(|| worker_string_field(worker_metadata, &["reasonCode", "reason_code"])),
+        "resultSummary": string_field(&event.payload, &["resultSummary", "result_summary"])
+            .or_else(|| worker_string_field(worker_metadata, &["resultSummary", "result_summary"])),
         "updatedAt": event.timestamp,
     }))
+}
+
+fn worker_evidence_from_patch(event: &AgentEvent, patch: &Value) -> Vec<Value> {
+    patch
+        .get("workerEvidence")
+        .or_else(|| patch.get("worker_evidence"))
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .enumerate()
+                .filter_map(|(index, item)| worker_evidence_item_from_patch(event, item, index))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn worker_evidence_item_from_patch(
+    event: &AgentEvent,
+    item: &Value,
+    index: usize,
+) -> Option<Value> {
+    let mut object = item.as_object()?.clone();
+    object
+        .entry("id".to_string())
+        .or_insert_with(|| json!(format!("{}:patchWorkerEvidence:{index}", event.event_id)));
+    object
+        .entry("eventId".to_string())
+        .or_insert_with(|| json!(event.event_id));
+    object
+        .entry("turnId".to_string())
+        .or_insert_with(|| json!(event.turn_id));
+    object
+        .entry("eventType".to_string())
+        .or_insert_with(|| json!(event.event_type));
+    object
+        .entry("source".to_string())
+        .or_insert_with(|| json!("agent_app_task_worker"));
+    object
+        .entry("updatedAt".to_string())
+        .or_insert_with(|| json!(event.timestamp));
+    Some(Value::Object(object))
+}
+
+fn worker_evidence_dedupe_key(worker_evidence: &Value) -> Option<String> {
+    let task_id = string_field(worker_evidence, &["taskId", "task_id"])?;
+    let turn_id = string_field(worker_evidence, &["turnId", "turn_id"]).unwrap_or_default();
+    let status = string_field(worker_evidence, &["status"]).unwrap_or_default();
+    let event_type =
+        string_field(worker_evidence, &["eventType", "event_type"]).unwrap_or_default();
+    if event_type == "agent_app_worker.hook" {
+        let hook_scope =
+            string_field(worker_evidence, &["hookScope", "hook_scope"]).unwrap_or_default();
+        let hook_key = string_field(worker_evidence, &["hookKey", "hook_key"]).unwrap_or_default();
+        return Some(format!(
+            "{turn_id}:{task_id}:{event_type}:{hook_scope}:{hook_key}:{status}"
+        ));
+    }
+    let retry_attempt = worker_evidence
+        .get("retryAttempt")
+        .or_else(|| worker_evidence.get("retry_attempt"))
+        .and_then(Value::as_u64)
+        .map(|value| value.to_string())
+        .unwrap_or_default();
+    Some(format!("{turn_id}:{task_id}:{status}:{retry_attempt}"))
+}
+
+fn merge_worker_evidence_value(current: &Value, next: &Value) -> Value {
+    let (Some(current_object), Some(next_object)) = (current.as_object(), next.as_object()) else {
+        return if worker_evidence_value_score(next) > worker_evidence_value_score(current) {
+            next.clone()
+        } else {
+            current.clone()
+        };
+    };
+    let mut merged = current_object.clone();
+    for (key, value) in next_object {
+        let current_value = merged.get(key);
+        if worker_evidence_field_should_replace(current_value, value) {
+            merged.insert(key.clone(), value.clone());
+        }
+    }
+    Value::Object(merged)
+}
+
+fn worker_evidence_field_should_replace(current: Option<&Value>, next: &Value) -> bool {
+    if !worker_evidence_field_is_meaningful(next) {
+        return false;
+    }
+    current
+        .map(|value| !worker_evidence_field_is_meaningful(value))
+        .unwrap_or(true)
+}
+
+fn worker_evidence_field_is_meaningful(value: &Value) -> bool {
+    match value {
+        Value::Null => false,
+        Value::String(value) => !value.trim().is_empty(),
+        Value::Array(value) => !value.is_empty(),
+        Value::Object(value) => !value.is_empty(),
+        Value::Bool(_) | Value::Number(_) => true,
+    }
+}
+
+fn worker_evidence_value_score(value: &Value) -> usize {
+    value
+        .as_object()
+        .map(|object| {
+            object
+                .values()
+                .filter(|value| worker_evidence_field_is_meaningful(value))
+                .count()
+        })
+        .unwrap_or_default()
 }
 
 fn worker_metadata_from_event(event: &AgentEvent) -> Option<&Value> {
@@ -604,6 +766,28 @@ fn worker_number_field(value: Option<&Value>, keys: &[&str]) -> Option<u64> {
 
 fn worker_bool_field(value: Option<&Value>, keys: &[&str]) -> Option<bool> {
     value.and_then(|value| keys.iter().find_map(|key| value.get(*key)?.as_bool()))
+}
+
+fn worker_metadata_array_field(value: Option<&Value>, keys: &[&str]) -> Option<Value> {
+    value.and_then(|value| {
+        keys.iter().find_map(|key| {
+            value
+                .get(*key)
+                .filter(|candidate| candidate.is_array())
+                .cloned()
+        })
+    })
+}
+
+fn worker_metadata_object_field(value: Option<&Value>, keys: &[&str]) -> Option<Value> {
+    value.and_then(|value| {
+        keys.iter().find_map(|key| {
+            value
+                .get(*key)
+                .filter(|candidate| candidate.is_object())
+                .cloned()
+        })
+    })
 }
 
 fn default_layout_state() -> Value {

@@ -232,7 +232,35 @@ function shouldDefaultExpand(
   if (kind === "process" && hasImportedSourceProcessItem(items)) {
     return true;
   }
+  if (kind === "process" && hasContentFactoryWorkflowProcessItem(items)) {
+    return true;
+  }
   return status !== "completed";
+}
+
+function hasContentFactoryWorkflowProcessItem(
+  items: AgentThreadItem[],
+): boolean {
+  return items.some((item) => {
+    const metadata =
+      item.metadata &&
+      typeof item.metadata === "object" &&
+      !Array.isArray(item.metadata)
+        ? (item.metadata as Record<string, unknown>)
+        : null;
+    const source = typeof metadata?.source === "string" ? metadata.source : "";
+    const workflowKey =
+      typeof metadata?.workflowKey === "string"
+        ? metadata.workflowKey
+        : typeof metadata?.workflow_key === "string"
+          ? metadata.workflow_key
+          : "";
+
+    return (
+      source === "content_factory_search_requests" ||
+      workflowKey === "content_article_workflow"
+    );
+  });
 }
 
 function buildSummaryText(items: AgentThreadItem[]): string | null {

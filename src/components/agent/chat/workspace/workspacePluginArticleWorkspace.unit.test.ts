@@ -202,7 +202,7 @@ describe("workspacePluginArticleWorkspace", () => {
     );
   });
 
-  it("内容工厂显式激活时应生成完整交付包 profile", () => {
+  it("内容工厂显式激活时应生成待回填占位 profile", () => {
     const profile = buildWorkspacePluginArticleWorkspaceFromActivation({
       activationContext: {
         sessionId: "session-content-factory",
@@ -218,31 +218,25 @@ describe("workspacePluginArticleWorkspace", () => {
       appId: CONTENT_FACTORY_PLUGIN_ID,
       sessionId: "session-content-factory",
       workspaceId: "workspace-main",
-      objectCount: 6,
+      objectCount: 1,
       primaryObjectRef: {
         kind: "articleDraft",
-        id: "articleDraft",
-        artifactIds: ["session-content-factory:articleDraft"],
+        id: "pending",
       },
       layoutState: {
         activeTabKind: "articleWorkspace",
-        activePaneKind: "documentCanvas",
+        activePaneKind: "briefForm",
         openTabKinds: ["articleWorkspace"],
       },
       sourceArtifacts: [
         {
-          source: "content_factory_delivery_plan",
+          source: "plugin_activation_context",
           pluginId: CONTENT_FACTORY_PLUGIN_ID,
         },
       ],
     });
     expect(profile?.objects.map((object) => object.ref.kind)).toEqual([
-      "contentBrief",
       "articleDraft",
-      "imageGenerationSet",
-      "videoScript",
-      "videoStoryboard",
-      "deliveryChecklist",
     ]);
   });
 });

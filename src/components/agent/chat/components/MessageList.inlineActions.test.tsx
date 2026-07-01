@@ -276,18 +276,20 @@ describe("MessageList inline actions", () => {
       thinkingContent: "这段思考应只留在执行轨迹中。",
       toolCalls: undefined,
     });
-    expect(rendererCall?.contentParts).toEqual([
-      { type: "thinking", text: "这段思考应只留在执行轨迹中。" },
-      expect.objectContaining({
-        type: "tool_use",
-        toolCall: expect.objectContaining({
-          id: "item-process-suppressed",
-          name: "functions.exec_command",
-          status: "completed",
-        }),
-      }),
-      { type: "text", text: "最终说明" },
-    ]);
+    const contentParts = rendererCall?.contentParts || [];
+    expect(contentParts[0]).toEqual({
+      type: "thinking",
+      text: "这段思考应只留在执行轨迹中。",
+    });
+    expect(contentParts[1]).toMatchObject({
+      type: "tool_use",
+      toolCall: {
+        id: "tool-process-suppressed-1",
+        name: "functions.exec_command",
+        status: "completed",
+      },
+    });
+    expect(contentParts[2]).toEqual({ type: "text", text: "最终说明" });
   });
 
 });

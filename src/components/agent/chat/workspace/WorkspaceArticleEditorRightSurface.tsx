@@ -6,6 +6,7 @@ import type {
   WorkspaceArticleObjectRef,
   WorkspaceArticleWorkspace,
   WorkspaceArticleWorkspaceActionIntent,
+  WorkspaceArticleWorkspaceImageSlotIntent,
 } from "./workspaceArticleWorkspaceModel";
 import {
   buildWorkspaceArticleWorkspaceViewModel,
@@ -24,6 +25,9 @@ interface WorkspaceArticleEditorRightSurfaceProps {
   articleWorkspace: WorkspaceArticleWorkspace;
   actionsDisabled?: boolean;
   onActionIntent?: (intent: WorkspaceArticleWorkspaceActionIntent) => void;
+  onImageSlotIntent?: (
+    intent: WorkspaceArticleWorkspaceImageSlotIntent,
+  ) => void;
   onOpenPreviewArtifact?: (artifact: Artifact) => void;
   onArticleMarkdownChange?: (change: WorkspaceArticleMarkdownChange) => void;
   onSelectedObjectChange?: (
@@ -36,6 +40,7 @@ export function WorkspaceArticleEditorRightSurface({
   articleWorkspace,
   onArticleMarkdownChange,
   onActionIntent,
+  onImageSlotIntent,
   onOpenPreviewArtifact,
   onSelectedObjectChange,
 }: WorkspaceArticleEditorRightSurfaceProps) {
@@ -109,6 +114,7 @@ export function WorkspaceArticleEditorRightSurface({
       objects={viewModel.objects}
       onActionIntent={onActionIntent}
       onArticleMarkdownChange={onArticleMarkdownChange}
+      onImageSlotIntent={onImageSlotIntent}
       onOpenPreviewArtifact={onOpenPreviewArtifact}
       onSelectObject={handleSelectObject}
       preview={viewModel.selectedPreview}

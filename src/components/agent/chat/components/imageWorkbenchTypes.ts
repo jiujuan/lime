@@ -92,6 +92,7 @@ export interface ImageTaskViewerProps {
   onSaveSelectedToLibrary?: () => void;
   applySelectedOutputLabel?: string;
   onApplySelectedOutput?: () => void;
+  onRetryTask?: (taskId: string) => void;
   onSeedFollowUpCommand?: (command: string) => void;
   onClose?: () => void;
 }

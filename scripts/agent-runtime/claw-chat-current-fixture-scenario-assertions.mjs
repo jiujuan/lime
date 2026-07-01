@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import {
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_GET,
-  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_COMPLETE,
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE,
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_LIST,
   APP_SERVER_METHOD_SESSION_TURN_CANCEL,
@@ -21,6 +20,7 @@ import {
   IMAGE_COMMAND_CREATE_TASK_TOOL_NAME,
   IMAGE_COMMAND_PROMPT,
   IMAGE_COMMAND_SKILL_NAME,
+  IMAGE_FIXTURE_MODEL,
   MCP_STRUCTURED_CONTENT_PROMPT,
   PLAN_PROMPT,
   PLAN_STEPS,
@@ -47,6 +47,7 @@ export function buildScenarioAssertions(context) {
     expertRuntimeMetadata,
     expertPanelSkillsRuntimeTurnStart,
     expertSkillsRuntimeTurnStart,
+    expectedImageIntentRoutedPrompt,
     goalHarness,
     goalObjectiveText,
     goalTurnStart,
@@ -284,7 +285,8 @@ export function buildScenarioAssertions(context) {
           : isImageCommandScenario
             ? {
                 imageCommandPromptReachedBackend:
-                  imageCommandTurnStart?.inputText === IMAGE_COMMAND_PROMPT,
+                  imageCommandTurnStart?.inputText ===
+                  expectedImageIntentRoutedPrompt,
                 imageCommandMetadataReachedBackend:
                   imageCommandHarness?.image_skill_launch?.image_task
                     ?.modality_contract_key === "image_generation" &&
@@ -295,9 +297,6 @@ export function buildScenarioAssertions(context) {
                 imageCommandUsedCurrentMediaTaskArtifactMethods:
                   appServerRequestMethods.includes(
                     APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE,
-                  ) &&
-                  appServerRequestMethods.includes(
-                    APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_COMPLETE,
                   ) &&
                   appServerRequestMethods.includes(
                     APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_GET,
@@ -322,8 +321,7 @@ export function buildScenarioAssertions(context) {
                   summary.imageCommandTaskArtifactTerminalPatch?.status ===
                     "succeeded" &&
                   summary.imageCommandTaskArtifactTerminalPatch
-                    ?.completeMethodUsed ===
-                    APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_COMPLETE &&
+                    ?.completeMethodUsed === "media_runtime_worker" &&
                   summary.imageCommandTaskArtifactTerminalPatch
                     ?.completeReturned === true &&
                   summary.imageCommandTaskArtifactTerminalPatch
@@ -348,7 +346,22 @@ export function buildScenarioAssertions(context) {
                   summary.imageCommandTaskArtifactTerminalPatch
                     ?.currentAttemptStatus === "succeeded" &&
                   summary.imageCommandTaskArtifactTerminalPatch
+                    ?.currentAttemptWorkerId === "lime-image-api-worker" &&
+                  summary.imageCommandTaskArtifactTerminalPatch
                     ?.currentAttemptHasResultSnapshot === true,
+                imageCommandWorkerUsedFixtureProviderAndModel:
+                  summary.imageCommandTaskCreateRequest?.providerId ===
+                    summary.imageFixtureProvider?.providerId &&
+                  summary.imageCommandTaskCreateRequest?.model ===
+                    IMAGE_FIXTURE_MODEL &&
+                  summary.imageProviderFixtureServer?.requestCount === 1 &&
+                  summary.imageProviderFixtureServer?.requests?.[0]
+                    ?.headerProviderId ===
+                    summary.imageFixtureProvider?.providerId &&
+                  summary.imageProviderFixtureServer?.requests?.[0]?.model ===
+                    IMAGE_FIXTURE_MODEL &&
+                  summary.imageProviderFixtureServer?.requests?.[0]
+                    ?.bodyIncludesModel === true,
                 imageCommandSkillToolObserved:
                   summary.readModelImageCommandCompleted?.includesSkillTool ===
                     true &&

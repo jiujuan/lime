@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  renderPanel,
+  renderExpandedPanel as renderPanel,
   getHarnessPanelTestMocks,
 } from "./HarnessStatusPanel.testFixtures";
 

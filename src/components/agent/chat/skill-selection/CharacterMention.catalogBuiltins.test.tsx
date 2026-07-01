@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  findButtonContaining,
   getTextarea,
   renderHarness,
   typeMentionAndWait,
@@ -66,6 +67,23 @@ describe("CharacterMention mention built-in commands", () => {
     expect(document.body.textContent).toContain("媒体转换");
     expect(document.body.textContent).toContain("@配图");
     expect(document.body.textContent).toContain("@配音");
+  });
+
+  it("输入完整 @配图 时仍应展示配图命令", async () => {
+    const container = renderHarness();
+    const textarea = getTextarea(container);
+
+    await typeMentionAndWait(textarea, "@配图");
+
+    const commandButton = findButtonContaining("@配图");
+    const commandRoot = document.body.querySelector(
+      '[data-testid="mention-command-root"]',
+    );
+    expect(document.body.textContent).toContain("生成 / 表达");
+    expect(commandRoot?.getAttribute("data-should-filter")).toBe("false");
+    expect(commandButton).toBeTruthy();
+    expect(commandButton?.hidden).toBe(false);
+    expect(commandButton?.disabled).toBe(false);
   });
 
   it("输入 @海 时应展示新的海报命令", async () => {

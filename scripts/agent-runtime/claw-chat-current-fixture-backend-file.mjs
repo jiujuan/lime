@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -29,6 +30,7 @@ import {
   IMAGE_COMMAND_CREATE_TASK_TOOL_NAME,
   IMAGE_COMMAND_DONE_TEXT,
   IMAGE_COMMAND_PROMPT,
+  IMAGE_FIXTURE_MODEL,
   IMAGE_COMMAND_SKILL_NAME,
   IMAGE_COMMAND_SKILL_TOOL_CALL_ID,
   MCP_STRUCTURED_CONTENT_DONE_TEXT,
@@ -38,6 +40,7 @@ import {
   MCP_STRUCTURED_CONTENT_TOOL_CALL_ID,
   MCP_STRUCTURED_CONTENT_TOOL_NAME,
   NEWS_PROMPT,
+  PLAIN_IMAGE_INTENT_ROUTED_PROMPT,
   PLAN_DONE_TEXT,
   PLAN_PROMPT,
   PLAN_STEPS,
@@ -73,6 +76,32 @@ import {
 } from "./claw-chat-current-fixture-constants.mjs";
 import { writeJsonFile } from "./claw-chat-current-fixture-utils.mjs";
 
+export const LOCAL_IMAGE_SERVER_API_KEY = "pc_claw_image_fixture_local_key";
+export const IMAGE_PROVIDER_FIXTURE_API_KEY = "sk-claw-image-fixture";
+export const IMAGE_PROVIDER_FIXTURE_DATA_URL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
+
+function writeFixtureConfig(configPath, overrides = {}) {
+  const serverHost = overrides.serverHost ?? "127.0.0.1";
+  const serverPort = overrides.serverPort ?? 8999;
+  const serverApiKey = overrides.serverApiKey ?? LOCAL_IMAGE_SERVER_API_KEY;
+  fs.mkdirSync(path.dirname(configPath), { recursive: true });
+  fs.writeFileSync(
+    configPath,
+    [
+      "server:",
+      `  host: ${serverHost}`,
+      `  port: ${serverPort}`,
+      `  api_key: ${serverApiKey}`,
+      "workspace_preferences:",
+      "  media_defaults:",
+      "    image:",
+      "      allowFallback: false",
+      "",
+    ].join("\n"),
+  );
+}
+
 export function createTempRuntimeEnv() {
   const tempRoot = fs.mkdtempSync(
     path.join(os.tmpdir(), "claw-chat-current-fixture-"),
@@ -86,10 +115,7 @@ export function createTempRuntimeEnv() {
   const backendPath = path.join(tempRoot, "claw-chat-backend.mjs");
   const backendLedgerPath = path.join(tempRoot, "claw-chat-backend.jsonl");
   const cancelSignalPath = path.join(tempRoot, "claw-chat-cancel.signal");
-  const imageTaskFixturePath = path.join(
-    tempRoot,
-    "claw-chat-image-task.json",
-  );
+  const imageTaskFixturePath = path.join(tempRoot, "claw-chat-image-task.json");
 
   for (const dir of [
     home,
@@ -101,6 +127,16 @@ export function createTempRuntimeEnv() {
   ]) {
     fs.mkdirSync(dir, { recursive: true });
   }
+  const configPath = path.join(home, ".config", "lime", "config.yaml");
+  const macConfigPath = path.join(
+    home,
+    "Library",
+    "Application Support",
+    "lime",
+    "config.yaml",
+  );
+  writeFixtureConfig(configPath);
+  writeFixtureConfig(macConfigPath);
   fs.writeFileSync(backendLedgerPath, "");
   writeFixtureBackend(backendPath);
 
@@ -111,6 +147,12 @@ export function createTempRuntimeEnv() {
     backendLedgerPath,
     cancelSignalPath,
     imageTaskFixturePath,
+    configPath,
+    macConfigPath,
+    writeFixtureConfig: (overrides = {}) => {
+      writeFixtureConfig(configPath, overrides);
+      writeFixtureConfig(macConfigPath, overrides);
+    },
     env: {
       ...process.env,
       HOME: home,
@@ -119,6 +161,99 @@ export function createTempRuntimeEnv() {
       LOCALAPPDATA: localAppData,
       LIME_ASTER_ROOT: asterRoot,
     },
+  };
+}
+
+export async function startImageProviderFixtureServer() {
+  const requests = [];
+  const server = http.createServer((request, response) => {
+    let body = "";
+    request.setEncoding("utf8");
+    request.on("data", (chunk) => {
+      body += chunk;
+    });
+    request.on("end", () => {
+      requests.push({
+        method: request.method,
+        url: request.url,
+        headers: request.headers,
+        authorization: request.headers.authorization ? "present" : "missing",
+        body,
+      });
+
+      if (
+        request.method !== "POST" ||
+        request.url !== "/v1/images/generations"
+      ) {
+        response.writeHead(404, { "content-type": "application/json" });
+        response.end(JSON.stringify({ error: { message: "not found" } }));
+        return;
+      }
+
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          created: Math.floor(Date.now() / 1000),
+          data: [
+            {
+              url: IMAGE_PROVIDER_FIXTURE_DATA_URL,
+              revised_prompt: "fixture revised prompt",
+            },
+          ],
+        }),
+      );
+    });
+  });
+
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", reject);
+      resolve();
+    });
+  });
+
+  const address = server.address();
+  const port = address && typeof address === "object" ? address.port : null;
+  if (!port) {
+    await new Promise((resolve) => server.close(resolve));
+    throw new Error("图片 Provider fixture server 未返回端口");
+  }
+
+  return {
+    baseUrl: `http://127.0.0.1:${port}/v1`,
+    host: "127.0.0.1",
+    port,
+    requestCount: () => requests.length,
+    requests: () =>
+      requests.map((entry) => ({
+        method: entry.method,
+        url: entry.url,
+        authorization: entry.authorization,
+        providerId: (() => {
+          try {
+            return JSON.parse(entry.body || "{}").provider_id ?? null;
+          } catch {
+            return null;
+          }
+        })(),
+        headerProviderId: (() => {
+          const value = entry.headers?.["x-provider-id"];
+          return Array.isArray(value) ? value[0] : (value ?? null);
+        })(),
+        model: (() => {
+          try {
+            return JSON.parse(entry.body || "{}").model ?? null;
+          } catch {
+            return null;
+          }
+        })(),
+        bodyIncludesModel: entry.body.includes(IMAGE_FIXTURE_MODEL),
+      })),
+    close: () =>
+      new Promise((resolve) => {
+        server.close(() => resolve());
+      }),
   };
 }
 
@@ -261,7 +396,9 @@ if (input.kind === "turnStart") {
   const isContinuePrompt = inputText.includes("${CONTINUE_PROMPT}");
   const isPlanPrompt = inputText.includes("${PLAN_PROMPT}");
   const isGoalPrompt = inputText.includes("${GOAL_PROMPT}");
-  const isImageCommandPrompt = inputText.includes("${IMAGE_COMMAND_PROMPT}");
+  const isImageCommandPrompt =
+    inputText.includes("${IMAGE_COMMAND_PROMPT}") ||
+    inputText.includes("${PLAIN_IMAGE_INTENT_ROUTED_PROMPT}");
   const isWebToolsRenderingPrompt = inputText.includes("${WEB_TOOLS_RENDERING_PROMPT}");
   const isMcpStructuredContentPrompt = inputText.includes("${MCP_STRUCTURED_CONTENT_PROMPT}");
   const isManualEnableSkillsRuntimePrompt = inputText.includes("${SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT}");
@@ -473,12 +610,14 @@ if (input.kind === "turnStart") {
           toolName: "Skill",
           tool_name: "Skill",
           outputPreview: "image_generate selected ${IMAGE_COMMAND_CREATE_TASK_TOOL_NAME}",
-          output: ${JSON.stringify(JSON.stringify({
-            skill_name: IMAGE_COMMAND_SKILL_NAME,
-            allowed_tools: [IMAGE_COMMAND_CREATE_TASK_TOOL_NAME],
-            next_tool: IMAGE_COMMAND_CREATE_TASK_TOOL_NAME,
-            status: "selected",
-          }))},
+          output: ${JSON.stringify(
+            JSON.stringify({
+              skill_name: IMAGE_COMMAND_SKILL_NAME,
+              allowed_tools: [IMAGE_COMMAND_CREATE_TASK_TOOL_NAME],
+              next_tool: IMAGE_COMMAND_CREATE_TASK_TOOL_NAME,
+              status: "selected",
+            }),
+          )},
           success: true,
           metadata: {
             skill_name: "${IMAGE_COMMAND_SKILL_NAME}",
@@ -581,54 +720,58 @@ if (input.kind === "turnStart") {
           id: "${WEB_TOOLS_SEARCH_TOOL_CALL_ID}",
           toolName: "WebSearch",
           tool_name: "WebSearch",
-          outputPreview: ${JSON.stringify(JSON.stringify({
-            results: [
-              {
-                title: "Help",
-                url: "https://help.yahoo.com/kb/search-for-desktop",
-                snippet: "Yahoo search help navigation",
-              },
-              {
-                title: "Sign In",
-                url: "https://login.yahoo.com/?src=search",
-                snippet: "Yahoo sign in navigation",
-              },
-              {
-                title: "Yahoo Scout",
-                url: "https://scout.yahoo.com/chat",
-                snippet: "Yahoo search assistant navigation",
-              },
-              {
-                title: WEB_TOOLS_SEARCH_TITLE,
-                url: WEB_TOOLS_SEARCH_URL,
-                snippet: WEB_TOOLS_SEARCH_SNIPPET,
-              },
-            ],
-          }))},
-          output: ${JSON.stringify(JSON.stringify({
-            results: [
-              {
-                title: "Help",
-                url: "https://help.yahoo.com/kb/search-for-desktop",
-                snippet: "Yahoo search help navigation",
-              },
-              {
-                title: "Sign In",
-                url: "https://login.yahoo.com/?src=search",
-                snippet: "Yahoo sign in navigation",
-              },
-              {
-                title: "Yahoo Scout",
-                url: "https://scout.yahoo.com/chat",
-                snippet: "Yahoo search assistant navigation",
-              },
-              {
-                title: WEB_TOOLS_SEARCH_TITLE,
-                url: WEB_TOOLS_SEARCH_URL,
-                snippet: WEB_TOOLS_SEARCH_SNIPPET,
-              },
-            ],
-          }))},
+          outputPreview: ${JSON.stringify(
+            JSON.stringify({
+              results: [
+                {
+                  title: "Help",
+                  url: "https://help.yahoo.com/kb/search-for-desktop",
+                  snippet: "Yahoo search help navigation",
+                },
+                {
+                  title: "Sign In",
+                  url: "https://login.yahoo.com/?src=search",
+                  snippet: "Yahoo sign in navigation",
+                },
+                {
+                  title: "Yahoo Scout",
+                  url: "https://scout.yahoo.com/chat",
+                  snippet: "Yahoo search assistant navigation",
+                },
+                {
+                  title: WEB_TOOLS_SEARCH_TITLE,
+                  url: WEB_TOOLS_SEARCH_URL,
+                  snippet: WEB_TOOLS_SEARCH_SNIPPET,
+                },
+              ],
+            }),
+          )},
+          output: ${JSON.stringify(
+            JSON.stringify({
+              results: [
+                {
+                  title: "Help",
+                  url: "https://help.yahoo.com/kb/search-for-desktop",
+                  snippet: "Yahoo search help navigation",
+                },
+                {
+                  title: "Sign In",
+                  url: "https://login.yahoo.com/?src=search",
+                  snippet: "Yahoo sign in navigation",
+                },
+                {
+                  title: "Yahoo Scout",
+                  url: "https://scout.yahoo.com/chat",
+                  snippet: "Yahoo search assistant navigation",
+                },
+                {
+                  title: WEB_TOOLS_SEARCH_TITLE,
+                  url: WEB_TOOLS_SEARCH_URL,
+                  snippet: WEB_TOOLS_SEARCH_SNIPPET,
+                },
+              ],
+            }),
+          )},
           success: true
         }
       }
@@ -714,18 +857,22 @@ if (input.kind === "turnStart") {
           id: "${WEB_TOOLS_FETCH_TOOL_CALL_ID}",
           toolName: "WebFetch",
           tool_name: "WebFetch",
-          outputPreview: ${JSON.stringify(JSON.stringify({
-            bytes: 2048,
-            code: 200,
-            codeText: "OK",
-            result: WEB_TOOLS_FETCH_MARKDOWN,
-          }))},
-          output: ${JSON.stringify(JSON.stringify({
-            bytes: 2048,
-            code: 200,
-            codeText: "OK",
-            result: WEB_TOOLS_FETCH_MARKDOWN,
-          }))},
+          outputPreview: ${JSON.stringify(
+            JSON.stringify({
+              bytes: 2048,
+              code: 200,
+              codeText: "OK",
+              result: WEB_TOOLS_FETCH_MARKDOWN,
+            }),
+          )},
+          output: ${JSON.stringify(
+            JSON.stringify({
+              bytes: 2048,
+              code: 200,
+              codeText: "OK",
+              result: WEB_TOOLS_FETCH_MARKDOWN,
+            }),
+          )},
           success: true,
           metadata: {
             url: "${WEB_TOOLS_SEARCH_URL}"

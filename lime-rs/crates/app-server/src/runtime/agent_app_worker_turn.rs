@@ -1,7 +1,11 @@
 use super::agent_app_task_runtime::{
     build_agent_app_task_runtime_contract, resolve_agent_app_runtime_dir,
 };
-use super::agent_app_worker_runtime::AgentAppWorkerRunRequest;
+use super::agent_app_worker_orchestration::{
+    hook_refs_for_scope, resolve_agent_app_worker_orchestration, string_list_field,
+    AgentAppWorkerOrchestration, AgentAppWorkerOrchestrationOverrides,
+};
+use super::agent_app_worker_runtime::{AgentAppHookRunRequest, AgentAppWorkerRunRequest};
 use super::agent_app_worker_streaming::{
     initial_content_factory_workspace_snapshot, is_incomplete_content_factory_workspace_snapshot,
     ContentFactoryWorkspaceStreamingSnapshot,
@@ -14,6 +18,7 @@ use super::RuntimeEvent;
 use super::RuntimeEventSink;
 use serde_json::json;
 use serde_json::Value;
+use std::path::Path;
 
 const CONTENT_FACTORY_APP_ID: &str = "content-factory-app";
 const CONTENT_FACTORY_WORKSPACE_PATCH_KIND: &str = "content_factory.workspace_patch";
@@ -27,6 +32,7 @@ const WORKER_OUTPUT_UNAUTHORIZED: &str = "AGENT_APP_WORKER_OUTPUT_UNAUTHORIZED";
 const WORKER_REQUEST_INVALID: &str = "AGENT_APP_WORKER_REQUEST_INVALID";
 const PANE_ACTION_SOURCE: &str = "right_surface_pane_action";
 const PLUGIN_ACTIVATION_SOURCE: &str = "plugin_activation_context";
+const HOOK_REQUEST_SCHEMA: &str = "lime.plugin.hook-request.v1";
 
 #[derive(Debug, Clone)]
 struct PaneActionWorkerTurn {
@@ -42,7 +48,22 @@ struct PaneActionWorkerTurn {
     pane_kind: Option<String>,
     output_artifact_kind: Option<String>,
     task_kind: String,
+    workflow_key: Option<String>,
+    hook_policy: Option<Value>,
+    subagents: Vec<String>,
+    skill_refs: Vec<String>,
+    cli_refs: Vec<String>,
+    connector_refs: Vec<String>,
+    orchestration: Option<Value>,
     workspace_id: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct AgentAppHookDeclaration {
+    key: String,
+    event: Option<String>,
+    entrypoint: Option<String>,
+    required: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -117,6 +138,19 @@ impl RuntimeCore {
             return Ok(true);
         }
 
+        let package_root = resolve_agent_app_runtime_dir(&installed_state)?;
+        for event in self.run_worker_hook_lifecycle_events(
+            package_root.as_path(),
+            &installed_state,
+            &worker_turn,
+            request,
+            "prompt",
+            "prompt.submit",
+            None,
+        ) {
+            sink.emit(event)?;
+        }
+
         if worker_turn.should_emit_initial_workspace_snapshot() {
             let task_id = worker_turn.task_id(request.turn.turn_id.as_str());
             sink.emit(RuntimeEvent::new(
@@ -155,10 +189,22 @@ impl RuntimeCore {
                 .await
             {
                 Ok(events) => {
+                    let completion_context = worker_completion_context(&events);
                     for event in events
                         .into_iter()
                         .filter(|event| !is_incomplete_content_factory_workspace_snapshot(event))
                     {
+                        sink.emit(event)?;
+                    }
+                    for event in self.run_worker_hook_lifecycle_events(
+                        package_root.as_path(),
+                        &installed_state,
+                        &worker_turn,
+                        request,
+                        "task",
+                        "task.complete",
+                        Some(completion_context.clone()),
+                    ) {
                         sink.emit(event)?;
                     }
                     sink.emit(RuntimeEvent::new(
@@ -217,6 +263,7 @@ impl RuntimeCore {
             request.session.session_id.as_str(),
             request.turn.turn_id.as_str(),
             task_runtime.worker_entrypoint.as_deref(),
+            installed_state,
         );
 
         let mut events = self.run_agent_app_worker(AgentAppWorkerRunRequest::new(
@@ -230,6 +277,111 @@ impl RuntimeCore {
         Ok(events)
     }
 
+    fn run_worker_hook_lifecycle_events(
+        &self,
+        package_root: &Path,
+        installed_state: &Value,
+        worker_turn: &PaneActionWorkerTurn,
+        request: &ExecutionRequest,
+        hook_scope: &str,
+        hook_event: &str,
+        completion_context: Option<Value>,
+    ) -> Vec<RuntimeEvent> {
+        let orchestration = worker_turn.worker_orchestration(installed_state);
+        let refs = orchestration
+            .hook_policy
+            .as_ref()
+            .map(|policy| hook_refs_for_scope(policy, hook_scope))
+            .unwrap_or_default();
+        if refs.is_empty() {
+            return Vec::new();
+        }
+        let declarations = hook_declarations(installed_state);
+        refs.into_iter()
+            .map(|hook_key| {
+                let declaration = declarations
+                    .iter()
+                    .find(|declaration| declaration.matches(hook_key.as_str(), hook_event));
+                let payload = match declaration {
+                    Some(declaration) => match declaration.entrypoint.as_deref() {
+                        Some(entrypoint) => {
+                            let hook_request = worker_turn.hook_request_payload(
+                                request,
+                                &orchestration,
+                                hook_scope,
+                                hook_event,
+                                hook_key.as_str(),
+                                completion_context.clone(),
+                            );
+                            match self.run_agent_app_hook(AgentAppHookRunRequest::new(
+                                package_root,
+                                entrypoint,
+                                hook_request,
+                            )) {
+                                Ok(result) => {
+                                    let status = hook_result_status(&result).to_string();
+                                    worker_turn.hook_lifecycle_payload(
+                                        request,
+                                        &orchestration,
+                                        hook_scope,
+                                        hook_event,
+                                        hook_key.as_str(),
+                                        Some(declaration),
+                                        status.as_str(),
+                                        None,
+                                        Some(result),
+                                        completion_context.clone(),
+                                    )
+                                }
+                                Err(error) => worker_turn.hook_lifecycle_payload(
+                                    request,
+                                    &orchestration,
+                                    hook_scope,
+                                    hook_event,
+                                    hook_key.as_str(),
+                                    Some(declaration),
+                                    if declaration.required {
+                                        "failed"
+                                    } else {
+                                        "skipped"
+                                    },
+                                    Some(hook_error_reason(error.to_string().as_str())),
+                                    None,
+                                    completion_context.clone(),
+                                ),
+                            }
+                        }
+                        None => worker_turn.hook_lifecycle_payload(
+                            request,
+                            &orchestration,
+                            hook_scope,
+                            hook_event,
+                            hook_key.as_str(),
+                            Some(declaration),
+                            "skipped",
+                            Some("HOOK_HANDLER_ENTRYPOINT_MISSING"),
+                            None,
+                            completion_context.clone(),
+                        ),
+                    },
+                    None => worker_turn.hook_lifecycle_payload(
+                        request,
+                        &orchestration,
+                        hook_scope,
+                        hook_event,
+                        hook_key.as_str(),
+                        None,
+                        "skipped",
+                        Some("HOOK_HANDLER_NOT_DECLARED"),
+                        None,
+                        completion_context.clone(),
+                    ),
+                };
+                RuntimeEvent::new("agent_app_worker.hook", payload)
+            })
+            .collect()
+    }
+
     async fn find_agent_app_installed_state_for_worker(
         &self,
         app_id: &str,
@@ -239,6 +391,113 @@ impl RuntimeCore {
             .states
             .into_iter()
             .find(|state| json_string(state, &["appId"]).as_deref() == Some(app_id)))
+    }
+}
+
+fn hook_result_status(result: &Value) -> &str {
+    match json_string(result, &["status"]).as_deref() {
+        Some("completed" | "ok" | "ready") | None => "completed",
+        Some("skipped") => "skipped",
+        Some("failed" | "error") => "failed",
+        Some(_) => "completed",
+    }
+}
+
+fn hook_error_reason(error_message: &str) -> &'static str {
+    let lower = error_message.to_ascii_lowercase();
+    if lower.contains("not found") {
+        "HOOK_HANDLER_NOT_FOUND"
+    } else if lower.contains("timed out") || lower.contains("timeout") {
+        "HOOK_HANDLER_TIMEOUT"
+    } else if lower.contains("decode") || lower.contains("json") || lower.contains("stdout") {
+        "HOOK_HANDLER_OUTPUT_INVALID"
+    } else {
+        "HOOK_HANDLER_FAILED"
+    }
+}
+
+fn worker_completion_context(events: &[RuntimeEvent]) -> Value {
+    let artifact_refs = events
+        .iter()
+        .filter(|event| event.event_type == "artifact.snapshot")
+        .filter_map(|event| {
+            let artifact = event.payload.get("artifact").unwrap_or(&event.payload);
+            json_string(
+                artifact,
+                &[
+                    "artifactId",
+                    "artifact_id",
+                    "artifactRef",
+                    "artifact_ref",
+                    "path",
+                ],
+            )
+        })
+        .collect::<Vec<_>>();
+    let artifact_count = artifact_refs.len();
+    json!({
+        "status": "completed",
+        "artifactRefs": artifact_refs,
+        "artifactCount": artifact_count,
+    })
+}
+
+fn hook_declarations(installed_state: &Value) -> Vec<AgentAppHookDeclaration> {
+    let manifest = installed_state.get("manifest").unwrap_or(installed_state);
+    let agent_runtime = manifest.get("agentRuntime");
+    let runtime_package = manifest.get("runtimePackage");
+    let sources = [
+        agent_runtime
+            .and_then(|runtime| runtime.get("hooks"))
+            .and_then(|hooks| hooks.get("handlers")),
+        runtime_package
+            .and_then(|runtime| runtime.get("hooks"))
+            .and_then(|hooks| hooks.get("handlers")),
+        manifest
+            .get("hooks")
+            .and_then(|hooks| hooks.get("handlers")),
+        manifest.get("hooks"),
+    ];
+    let mut declarations = Vec::new();
+    for source in sources.into_iter().flatten() {
+        let Some(items) = source.as_array() else {
+            continue;
+        };
+        for item in items {
+            let Some(key) = json_string(item, &["key", "id"]) else {
+                continue;
+            };
+            let event = json_string(item, &["event", "hookEvent"]);
+            if declarations
+                .iter()
+                .any(|existing: &AgentAppHookDeclaration| {
+                    existing.key == key && existing.event == event
+                })
+            {
+                continue;
+            }
+            declarations.push(AgentAppHookDeclaration {
+                key,
+                event,
+                entrypoint: json_string(item, &["entrypoint", "path"]),
+                required: item
+                    .get("required")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
+            });
+        }
+    }
+    declarations
+}
+
+impl AgentAppHookDeclaration {
+    fn matches(&self, key: &str, hook_event: &str) -> bool {
+        self.key == key
+            && self
+                .event
+                .as_deref()
+                .map(|event| event == hook_event)
+                .unwrap_or(true)
     }
 }
 
@@ -621,6 +880,7 @@ impl PaneActionWorkerTurn {
             .as_ref()
             .map(|object| json_string_array(object, &["artifact_ids", "artifactIds"]))
             .unwrap_or_default();
+        let workflow_key = json_string(activation, &["workflow_key", "workflowKey"]);
         PaneActionWorkerTurnResolution::Run(Self {
             app_id,
             action_key: json_string(activation, &["intent_key", "intentKey"])
@@ -637,6 +897,20 @@ impl PaneActionWorkerTurn {
             output_artifact_kind,
             task_kind: json_string(activation, &["task_kind", "taskKind"])
                 .unwrap_or_else(|| DEFAULT_ARTICLE_WORKSPACE_TASK_KIND.to_string()),
+            workflow_key,
+            hook_policy: activation
+                .get("hook_policy")
+                .or_else(|| activation.get("hookPolicy"))
+                .filter(|value| value.is_object())
+                .cloned(),
+            subagents: string_list_field(activation, &["subagents", "sub_agents"]),
+            skill_refs: string_list_field(activation, &["skillRefs", "skill_refs"]),
+            cli_refs: string_list_field(activation, &["cliRefs", "cli_refs"]),
+            connector_refs: string_list_field(activation, &["connectorRefs", "connector_refs"]),
+            orchestration: activation
+                .get("orchestration")
+                .filter(|value| value.is_array())
+                .cloned(),
             workspace_id: request.session.workspace_id.clone(),
         })
     }
@@ -756,6 +1030,20 @@ impl PaneActionWorkerTurn {
             pane_kind: Some(pane_kind),
             output_artifact_kind,
             task_kind,
+            workflow_key: json_string(action, &["workflow_key", "workflowKey"]),
+            hook_policy: action
+                .get("hook_policy")
+                .or_else(|| action.get("hookPolicy"))
+                .filter(|value| value.is_object())
+                .cloned(),
+            subagents: string_list_field(action, &["subagents", "sub_agents"]),
+            skill_refs: string_list_field(action, &["skillRefs", "skill_refs"]),
+            cli_refs: string_list_field(action, &["cliRefs", "cli_refs"]),
+            connector_refs: string_list_field(action, &["connectorRefs", "connector_refs"]),
+            orchestration: action
+                .get("orchestration")
+                .filter(|value| value.is_array())
+                .cloned(),
             workspace_id: json_string(agent_app, &["workspace_id", "workspaceId"])
                 .or_else(|| request.session.workspace_id.clone()),
         })
@@ -879,6 +1167,20 @@ impl PaneActionWorkerTurn {
             }),
             output_artifact_kind,
             task_kind,
+            workflow_key: json_string(action, &["workflow_key", "workflowKey"]),
+            hook_policy: action
+                .get("hook_policy")
+                .or_else(|| action.get("hookPolicy"))
+                .filter(|value| value.is_object())
+                .cloned(),
+            subagents: string_list_field(action, &["subagents", "sub_agents"]),
+            skill_refs: string_list_field(action, &["skillRefs", "skill_refs"]),
+            cli_refs: string_list_field(action, &["cliRefs", "cli_refs"]),
+            connector_refs: string_list_field(action, &["connectorRefs", "connector_refs"]),
+            orchestration: action
+                .get("orchestration")
+                .filter(|value| value.is_array())
+                .cloned(),
             workspace_id: json_string(agent_app, &["workspace_id", "workspaceId"])
                 .or_else(|| request.session.workspace_id.clone()),
         })
@@ -889,7 +1191,9 @@ impl PaneActionWorkerTurn {
         session_id: &str,
         turn_id: &str,
         worker_entrypoint: Option<&str>,
+        installed_state: &Value,
     ) -> Value {
+        let orchestration = self.worker_orchestration(installed_state);
         json!({
             "schemaVersion": WORKER_REQUEST_SCHEMA,
             "appId": self.app_id,
@@ -906,6 +1210,13 @@ impl PaneActionWorkerTurn {
             "surfaceKind": self.surface_kind,
             "paneKind": self.pane_kind,
             "outputArtifactKind": self.output_artifact_kind(),
+            "workflowKey": orchestration.workflow_key,
+            "hookPolicy": orchestration.hook_policy,
+            "subagents": orchestration.subagents,
+            "skillRefs": orchestration.skill_refs,
+            "cliRefs": orchestration.cli_refs,
+            "connectorRefs": orchestration.connector_refs,
+            "orchestration": orchestration.orchestration,
             "sourceArtifactIds": self.source_artifact_ids,
             "sourceObjectRef": self.source_object_ref,
             "expectedOutput": {
@@ -933,6 +1244,118 @@ impl PaneActionWorkerTurn {
                 "directFilesystemAccess": false
             },
             "requestedAt": timestamp(),
+        })
+    }
+
+    fn worker_orchestration(&self, installed_state: &Value) -> AgentAppWorkerOrchestration {
+        resolve_agent_app_worker_orchestration(
+            installed_state,
+            self.task_kind.as_str(),
+            AgentAppWorkerOrchestrationOverrides {
+                workflow_key: self.workflow_key.clone(),
+                hook_policy: self.hook_policy.clone(),
+                subagents: self.subagents.clone(),
+                skill_refs: self.skill_refs.clone(),
+                cli_refs: self.cli_refs.clone(),
+                connector_refs: self.connector_refs.clone(),
+                orchestration: self.orchestration.clone(),
+            },
+        )
+    }
+
+    fn hook_request_payload(
+        &self,
+        request: &ExecutionRequest,
+        orchestration: &AgentAppWorkerOrchestration,
+        hook_scope: &str,
+        hook_event: &str,
+        hook_key: &str,
+        completion_context: Option<Value>,
+    ) -> Value {
+        let workflow_key = orchestration.workflow_key.clone();
+        json!({
+            "schemaVersion": HOOK_REQUEST_SCHEMA,
+            "appId": self.app_id,
+            "hookKey": hook_key,
+            "hookEvent": hook_event,
+            "hookScope": hook_scope,
+            "sessionId": request.session.session_id,
+            "workspaceId": self.workspace_id,
+            "turnId": request.turn.turn_id,
+            "taskId": self.task_id(request.turn.turn_id.as_str()),
+            "taskKind": self.task_kind,
+            "workflowKey": workflow_key,
+            "prompt": self.prompt,
+            "source": self.source,
+            "surfaceKind": self.surface_kind,
+            "paneKind": self.pane_kind,
+            "outputArtifactKind": self.output_artifact_kind(),
+            "sourceArtifactIds": self.source_artifact_ids,
+            "sourceObjectRef": self.source_object_ref,
+            "completion": completion_context,
+            "requestedAt": timestamp(),
+        })
+    }
+
+    fn hook_lifecycle_payload(
+        &self,
+        request: &ExecutionRequest,
+        orchestration: &AgentAppWorkerOrchestration,
+        hook_scope: &str,
+        hook_event: &str,
+        hook_key: &str,
+        declaration: Option<&AgentAppHookDeclaration>,
+        status: &str,
+        reason_code: Option<&str>,
+        result: Option<Value>,
+        completion_context: Option<Value>,
+    ) -> Value {
+        let result_summary = result
+            .as_ref()
+            .and_then(|value| json_string(value, &["summary", "message", "resultSummary"]));
+        let workflow_key = orchestration.workflow_key.clone();
+        json!({
+            "source": "agent_app_task_worker",
+            "backend": "agent_app_worker",
+            "appId": self.app_id,
+            "taskId": self.task_id(request.turn.turn_id.as_str()),
+            "taskKind": self.task_kind,
+            "turnId": request.turn.turn_id,
+            "workflowKey": workflow_key,
+            "surfaceKind": self.surface_kind,
+            "paneKind": self.pane_kind,
+            "outputArtifactKind": self.output_artifact_kind(),
+            "status": status,
+            "hookKey": hook_key,
+            "hookEvent": hook_event,
+            "hookScope": hook_scope,
+            "hookEntrypoint": declaration.and_then(|declaration| declaration.entrypoint.clone()),
+            "hookRequired": declaration.map(|declaration| declaration.required).unwrap_or(false),
+            "reasonCode": reason_code,
+            "resultSummary": result_summary.clone(),
+            "result": result,
+            "completion": completion_context,
+            "metadata": {
+                "agentAppWorker": {
+                    "appId": self.app_id,
+                    "taskId": self.task_id(request.turn.turn_id.as_str()),
+                    "taskKind": self.task_kind,
+                    "turnId": request.turn.turn_id,
+                    "workflowKey": workflow_key,
+                    "source": self.source,
+                    "surfaceKind": self.surface_kind,
+                    "paneKind": self.pane_kind,
+                    "outputArtifactKind": self.output_artifact_kind(),
+                    "status": status,
+                    "hookKey": hook_key,
+                    "hookEvent": hook_event,
+                    "hookScope": hook_scope,
+                    "hookEntrypoint": declaration.and_then(|declaration| declaration.entrypoint.clone()),
+                    "hookRequired": declaration.map(|declaration| declaration.required).unwrap_or(false),
+                    "reasonCode": reason_code,
+                    "resultSummary": result_summary,
+                }
+            },
         })
     }
 
@@ -1253,6 +1676,91 @@ mod tests {
     }
 
     #[test]
+    fn article_workspace_worker_request_resolves_manifest_workflow_defaults() {
+        let request = execution_request(json!({
+            "agent_app": {
+                "source": "right_surface_article_workspace",
+                "app_id": CONTENT_FACTORY_APP_ID,
+                "workspace_id": "workspace-main",
+                "article_workspace_action": {
+                    "key": "write_article",
+                    "intent": "write_article",
+                    "risk": "write",
+                    "task_kind": "content.article.generate",
+                    "output_artifact_kind": CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
+                    "prompt": "写一篇关于内容工厂插件编排的文章",
+                    "object": {
+                        "app_id": CONTENT_FACTORY_APP_ID,
+                        "kind": "articleDraft",
+                        "id": "article-1",
+                        "session_id": "session-content-factory"
+                    }
+                }
+            },
+            "right_surface": {
+                "surface_kind": "articleWorkspace"
+            }
+        }));
+        let installed_state = json!({
+            "manifest": {
+                "agentRuntime": {
+                    "workflows": [
+                        {
+                            "key": "content_article_workflow",
+                            "taskKind": "content.article.generate",
+                            "cliRefs": ["content-factory"],
+                            "connectorRefs": ["lime-knowledge", "web-research"],
+                            "hookPolicy": {
+                                "prompt": ["prompt-submit"],
+                                "task": ["task-complete"]
+                            },
+                            "steps": [
+                                {
+                                    "id": "draft",
+                                    "subagent": "article-writer",
+                                    "skillRefs": ["gongzonghao-article-writer"]
+                                },
+                                {
+                                    "id": "image-plan",
+                                    "subagent": "image-planner",
+                                    "skillRefs": ["article-image-cheatsheet"]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        });
+
+        let worker_turn =
+            PaneActionWorkerTurn::from_execution_request(&request).expect("worker turn");
+        let worker_request = worker_turn.worker_request(
+            request.session.session_id.as_str(),
+            request.turn.turn_id.as_str(),
+            Some("./src/runtime/content-factory-worker.mjs"),
+            &installed_state,
+        );
+
+        assert_eq!(worker_request["workflowKey"], "content_article_workflow");
+        assert_eq!(worker_request["hookPolicy"]["prompt"][0], "prompt-submit");
+        assert_eq!(worker_request["cliRefs"][0], "content-factory");
+        assert_eq!(worker_request["connectorRefs"][1], "web-research");
+        assert!(worker_request["subagents"]
+            .as_array()
+            .expect("subagents")
+            .iter()
+            .any(|value| value == "article-writer"));
+        assert_eq!(
+            worker_request["skillRefs"]
+                .as_array()
+                .expect("worker-owned skill refs")
+                .len(),
+            0
+        );
+        assert!(worker_request["orchestration"].is_null());
+    }
+
+    #[test]
     fn extracts_content_factory_plugin_activation_worker_turn() {
         let request = execution_request(json!({
             "harness": {
@@ -1362,6 +1870,7 @@ mod tests {
             request.session.session_id.as_str(),
             request.turn.turn_id.as_str(),
             Some("./src/runtime/content-factory-worker.mjs"),
+            &json!({}),
         );
 
         assert_eq!(worker_turn.app_id, CONTENT_FACTORY_APP_ID);

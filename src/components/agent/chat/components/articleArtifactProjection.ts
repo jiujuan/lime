@@ -11,6 +11,7 @@ import {
   buildWorkspaceArticleWorkspaceFromUnknown,
   buildWorkspaceArticleWorkspaceViewModel,
 } from "../workspace/workspaceArticleWorkspaceModel";
+import { readWorkspaceArticlePatchRecordFromMetadata } from "../workspace/workspaceArticleWorkspaceMetadata";
 
 export interface ArticleArtifactFrameModel {
   renderer: "articleArtifacts";
@@ -21,6 +22,17 @@ export interface ArticleArtifactFrameModel {
   imageSlotCount: number;
   outlineSectionCount: number;
   researchRoundCount: number;
+  processSummary: ArticleArtifactProcessSummary;
+}
+
+export interface ArticleArtifactProcessSummary {
+  subagents: string[];
+  skillRefs: string[];
+  researchRoundCount: number;
+  titleCandidateCount: number;
+  outlineSectionCount: number;
+  writingStepCount: number;
+  writingStepSummary: string[];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -203,6 +215,64 @@ function readArticleWorkspaceMetrics(
   };
 }
 
+function readWorkspacePatchRecord(
+  artifact: Artifact,
+): Record<string, unknown> | null {
+  return readWorkspaceArticlePatchRecordFromMetadata(artifact.meta);
+}
+
+function readArticleWorkspaceProcessSummary(
+  artifact: Artifact,
+): ArticleArtifactProcessSummary {
+  const workspacePatch = readWorkspacePatchRecord(artifact);
+  const workerEvidence = readArray(
+    workspacePatch?.workerEvidence,
+    workspacePatch?.worker_evidence,
+  );
+  const latestWorkerEvidence = readRecord(workerEvidence[0]);
+  const subagents = readArray(latestWorkerEvidence?.subagents)
+    .map((item) => readString(item))
+    .filter((item): item is string => Boolean(item));
+  const skillRefs = readArray(
+    latestWorkerEvidence?.skillRefs,
+    latestWorkerEvidence?.skill_refs,
+  )
+    .map((item) => readString(item))
+    .filter((item): item is string => Boolean(item));
+  const researchRounds = readArray(
+    latestWorkerEvidence?.researchRounds,
+    latestWorkerEvidence?.research_rounds,
+  );
+  const titleCandidates = readArray(
+    latestWorkerEvidence?.titleCandidates,
+    latestWorkerEvidence?.title_candidates,
+  );
+  const outline = readArray(latestWorkerEvidence?.outline);
+  const writingPlan = readArray(
+    latestWorkerEvidence?.writingPlan,
+    latestWorkerEvidence?.writing_plan,
+  );
+  return {
+    subagents,
+    skillRefs,
+    researchRoundCount: researchRounds.length,
+    titleCandidateCount: titleCandidates.length,
+    outlineSectionCount: outline.length,
+    writingStepCount: writingPlan.length,
+    writingStepSummary: writingPlan
+      .map((step) => {
+        const record = readRecord(step);
+        const title = readString(record?.title) || "步骤";
+        const owner = readString(record?.owner) || "未命名";
+        const skillRef = readString(record?.skillRef) || "";
+        return skillRef
+          ? `${title} / ${owner} / ${skillRef}`
+          : `${title} / ${owner}`;
+      })
+      .filter(Boolean),
+  };
+}
+
 function resolveWorkspacePatchArticleMarkdown(artifact: Artifact): {
   markdown: string;
   summary?: string;
@@ -211,10 +281,7 @@ function resolveWorkspacePatchArticleMarkdown(artifact: Artifact): {
   outlineSectionCount: number;
   researchRoundCount: number;
 } | null {
-  const workspacePatch = readRecord(
-    artifact.meta.contentFactoryWorkspacePatch,
-    artifact.meta.workspace_patch,
-  );
+  const workspacePatch = readWorkspacePatchRecord(artifact);
   const workspace = workspacePatch
     ? buildWorkspaceArticleWorkspaceFromUnknown(workspacePatch, "threadRead")
     : null;
@@ -234,13 +301,6 @@ function resolveWorkspacePatchArticleMarkdown(artifact: Artifact): {
     source.document_text,
     source.finalMarkdown,
     source.final_markdown,
-    source.markdown,
-    source.processMarkdown,
-    source.process_markdown,
-    source.body,
-    source.content,
-    source.text,
-    source.excerpt,
   );
   if (!markdown) {
     return null;
@@ -259,11 +319,13 @@ function resolveWorkspacePatchArticleMarkdown(artifact: Artifact): {
       return {
         id: readString(record.id) ?? `citation-${index + 1}`,
         type: "message" as const,
-        label: readString(record.title, record.label) ?? `Citation ${index + 1}`,
+        label:
+          readString(record.title, record.label) ?? `Citation ${index + 1}`,
         snippet: readString(record.summary, record.snippet) ?? undefined,
       };
     }),
-    imageSlotCount: readArray(source.imageSlots).length || selectedPreview.imageSlots.length,
+    imageSlotCount:
+      readArray(source.imageSlots).length || selectedPreview.imageSlots.length,
     outlineSectionCount:
       readArray(source.outline).length || selectedPreview.outline.length,
     researchRoundCount:
@@ -314,6 +376,7 @@ export function resolveArticleArtifactFrameModel(
   }
 
   const productMetrics = readArticleWorkspaceMetrics(artifact);
+  const processSummary = readArticleWorkspaceProcessSummary(artifact);
   return {
     renderer: "articleArtifacts",
     title: artifact.title,
@@ -333,5 +396,10 @@ export function resolveArticleArtifactFrameModel(
       countMarkdownHeadings(markdown),
     researchRoundCount:
       workspaceArticle?.researchRoundCount || productMetrics.researchRoundCount,
+    processSummary,
   };
+}
+
+export function isArticleArtifactFrameArtifact(artifact: Artifact): boolean {
+  return Boolean(resolveArticleArtifactFrameModel(artifact));
 }

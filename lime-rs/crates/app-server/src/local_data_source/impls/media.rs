@@ -7,6 +7,8 @@ impl MediaAppDataSource for LocalAppDataSource {
         &self,
         params: MediaTaskArtifactImageCreateParams,
     ) -> Result<MediaTaskArtifactResponse, RuntimeCoreError> {
+        let params = media_tasks::normalize_image_create_params_for_task_submission(params)
+            .map_err(data_error)?;
         let route_assessment = media_tasks::assess_image_route(
             &self.db,
             &self.api_key_provider_service,
@@ -14,7 +16,13 @@ impl MediaAppDataSource for LocalAppDataSource {
             &params,
         )
         .await;
-        media_tasks::create_image_media_task_artifact(params, route_assessment).map_err(data_error)
+        let response = media_tasks::create_image_media_task_artifact(params, route_assessment)
+            .map_err(data_error)?;
+        let _ = crate::media_task_worker::spawn_image_task_worker_for_created_task(
+            &response,
+            crate::media_task_worker::ImageTaskWorkerContext::new(self.db.clone()),
+        );
+        Ok(response)
     }
 
     async fn create_audio_media_task_artifact(

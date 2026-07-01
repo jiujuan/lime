@@ -378,3 +378,75 @@ async fn read_session_keeps_legacy_only_tool_events_as_synthetic_items() {
     assert_eq!(item["query"], "codex turn item lifecycle");
     assert_eq!(item["metadata"]["source"], "legacy_tool_event");
 }
+
+#[tokio::test]
+async fn read_session_preserves_legacy_tool_payload_metadata_on_thread_items() {
+    let (core, turn) = start_read_model_test_turn(
+        "sess_legacy_tool_metadata",
+        "thread_legacy_tool_metadata",
+        "turn_legacy_tool_metadata",
+    )
+    .await;
+
+    core.append_external_runtime_events(
+        "sess_legacy_tool_metadata",
+        Some(&turn.turn_id),
+        vec![
+            RuntimeEvent::new(
+                "tool.started",
+                json!({
+                    "toolCallId": "content-factory-web-search-1",
+                    "toolName": "WebSearch",
+                    "arguments": {
+                        "query": "golang 学习路径"
+                    },
+                    "metadata": {
+                        "source": "content_factory_search_requests",
+                        "workflowKey": "content_article_workflow",
+                        "workflow_key": "content_article_workflow"
+                    }
+                }),
+            ),
+            RuntimeEvent::new(
+                "tool.result",
+                json!({
+                    "toolCallId": "content-factory-web-search-1",
+                    "toolName": "WebSearch",
+                    "success": true,
+                    "outputPreview": "找到 3 条资料",
+                    "metadata": {
+                        "source": "content_factory_search_requests",
+                        "workflowKey": "content_article_workflow",
+                        "workflow_key": "content_article_workflow"
+                    }
+                }),
+            ),
+            RuntimeEvent::new("turn.completed", json!({})),
+        ],
+    )
+    .expect("append legacy tool events");
+
+    let read = core
+        .read_session(AgentSessionReadParams {
+            session_id: "sess_legacy_tool_metadata".to_string(),
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .expect("read session");
+    let detail = read.detail.expect("session detail");
+    let item = detail["items"]
+        .as_array()
+        .expect("items")
+        .iter()
+        .find(|item| item["id"] == "content-factory-web-search-1")
+        .expect("content factory search item");
+
+    assert_eq!(item["type"], "web_search");
+    assert_eq!(
+        item["metadata"]["source"],
+        "content_factory_search_requests"
+    );
+    assert_eq!(item["metadata"]["workflowKey"], "content_article_workflow");
+    assert_eq!(item["metadata"]["workflow_key"], "content_article_workflow");
+}

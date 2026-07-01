@@ -2,7 +2,7 @@ import { act } from "react";
 import { describe, expect, it } from "vitest";
 import {
   flushUntilTextAppears,
-  renderPanel,
+  renderExpandedPanel as renderPanel,
   getHarnessPanelTestMocks,
 } from "./HarnessStatusPanel.testFixtures";
 import {

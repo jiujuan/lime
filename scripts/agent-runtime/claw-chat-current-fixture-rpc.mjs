@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 import {
   APP_SERVER_DRAIN_EVENTS_COMMAND,
   APP_SERVER_HANDLE_JSON_LINES_COMMAND,
@@ -10,6 +12,8 @@ import {
   APP_SERVER_METHOD_WORKSPACE_DEFAULT_ENSURE,
   FIXTURE_MODEL,
   FIXTURE_PROVIDER,
+  IMAGE_FIXTURE_MODEL,
+  IMAGE_FIXTURE_PROVIDER_NAME,
   SESSION_ID,
 } from "./claw-chat-current-fixture-constants.mjs";
 import {
@@ -26,6 +30,123 @@ import {
   readModelTurnStatus,
   summarizeReadModelQueueState,
 } from "./claw-chat-current-fixture-read-model-core.mjs";
+
+export async function reloadRendererDocument(page, options) {
+  const urlBefore = page.url();
+  try {
+    await page.reload({
+      waitUntil: "domcontentloaded",
+      timeout: options.timeoutMs,
+    });
+    return {
+      reloaded: true,
+      recovered: false,
+      urlBefore,
+      urlAfter: page.url(),
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!isRecoverableRendererReloadError(message)) {
+      throw error;
+    }
+    const recovery = await recoverRendererReload(
+      page,
+      options,
+      urlBefore,
+      message,
+    );
+    if (!recovery.recovered) {
+      throw error;
+    }
+    return {
+      reloaded: true,
+      recovered: true,
+      recovery: recovery.method,
+      urlBefore,
+      urlAfter: page.url(),
+      reloadError: sanitizeText(message).slice(0, 240),
+    };
+  }
+}
+
+function isRecoverableRendererReloadError(message) {
+  return (
+    message.includes("net::ERR_ABORTED") ||
+    message.includes("frame was detached") ||
+    message.includes("net::ERR_FILE_NOT_FOUND")
+  );
+}
+
+async function recoverRendererReload(page, options, urlBefore, message) {
+  const fileTarget = await waitForFileUrlTarget(urlBefore, options);
+  if (fileTarget.exists) {
+    await page.goto(urlBefore, {
+      waitUntil: "domcontentloaded",
+      timeout: options.timeoutMs,
+    });
+    return {
+      recovered: true,
+      method: "goto-current-file-url",
+      filePath: fileTarget.filePath,
+    };
+  }
+  if (message.includes("net::ERR_FILE_NOT_FOUND")) {
+    return {
+      recovered: false,
+      method: "missing-file-url-target",
+      filePath: fileTarget.filePath ?? null,
+    };
+  }
+
+  await page
+    .waitForLoadState("domcontentloaded", {
+      timeout: Math.min(options.timeoutMs ?? 30_000, 30_000),
+    })
+    .catch(() => undefined);
+  return {
+    recovered: true,
+    method: "wait-load-state",
+    filePath: fileTarget.filePath ?? null,
+  };
+}
+
+async function waitForFileUrlTarget(rawUrl, options) {
+  const filePath = filePathFromFileUrl(rawUrl);
+  if (!filePath) {
+    return {
+      exists: false,
+      filePath: null,
+    };
+  }
+
+  const startedAt = Date.now();
+  const timeoutMs = Math.min(options.timeoutMs ?? 30_000, 10_000);
+  while (Date.now() - startedAt < timeoutMs) {
+    if (fs.existsSync(filePath)) {
+      return {
+        exists: true,
+        filePath,
+      };
+    }
+    await sleep(options.intervalMs);
+  }
+  return {
+    exists: fs.existsSync(filePath),
+    filePath,
+  };
+}
+
+function filePathFromFileUrl(rawUrl) {
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== "file:") {
+      return null;
+    }
+    return fileURLToPath(parsed);
+  } catch {
+    return null;
+  }
+}
 
 export async function waitForAppUrlReady(options) {
   if (!options.appUrl) {
@@ -434,6 +555,146 @@ export async function ensureDefaultWorkspace(page, requestLog) {
     rootPath: workspace?.rootPath || workspace?.root_path || null,
     workspace,
   };
+}
+
+export async function ensureFixtureImageProvider(
+  page,
+  requestLog,
+  options = {},
+) {
+  const apiHost =
+    typeof options.apiHost === "string" && options.apiHost.trim()
+      ? options.apiHost.trim()
+      : "https://example.invalid/v1";
+  const created = await invokeAppServerFromPage(
+    page,
+    "modelProvider/create",
+    {
+      name: IMAGE_FIXTURE_PROVIDER_NAME,
+      providerType: "openai",
+      apiHost,
+    },
+    requestLog,
+  );
+  const provider = created.result?.provider;
+  const providerId = String(provider?.id || "").trim();
+  assert(providerId, "modelProvider/create 未返回 fixture 图片 Provider id");
+
+  await invokeAppServerFromPage(
+    page,
+    "modelProvider/update",
+    {
+      providerId,
+      enabled: true,
+      customModels: [IMAGE_FIXTURE_MODEL],
+      sortOrder: 1,
+    },
+    requestLog,
+  );
+  await invokeAppServerFromPage(
+    page,
+    "modelProviderKey/create",
+    {
+      providerId,
+      apiKey: "sk-claw-image-fixture",
+      alias: "claw-image-fixture-key",
+      replaceExisting: true,
+    },
+    requestLog,
+  );
+
+  const configBinding = await page.evaluate(
+    async ({
+      providerId,
+      modelId,
+      localImageServerApiKey,
+      localImageServerHost,
+      localImageServerPort,
+    }) => {
+      const invoke = window.electronAPI?.invoke;
+      if (typeof invoke !== "function") {
+        throw new Error("Electron preload invoke bridge is unavailable");
+      }
+      const currentConfig = await invoke("get_config");
+      const nextConfig = {
+        ...(currentConfig || {}),
+        server: {
+          ...(currentConfig?.server || {}),
+          host:
+            typeof localImageServerHost === "string" &&
+            localImageServerHost.trim()
+              ? localImageServerHost.trim()
+              : currentConfig?.server?.host,
+          port:
+            typeof localImageServerPort === "number" &&
+            Number.isFinite(localImageServerPort) &&
+            localImageServerPort > 0
+              ? localImageServerPort
+              : currentConfig?.server?.port,
+          api_key:
+            typeof localImageServerApiKey === "string" &&
+            localImageServerApiKey.trim()
+              ? localImageServerApiKey.trim()
+              : currentConfig?.server?.api_key,
+        },
+        workspace_preferences: {
+          ...(currentConfig?.workspace_preferences || {}),
+          media_defaults: {
+            ...(currentConfig?.workspace_preferences?.media_defaults || {}),
+            image: {
+              preferredProviderId: providerId,
+              preferredModelId: modelId,
+              allowFallback: false,
+            },
+          },
+        },
+      };
+      await invoke("save_config", { config: nextConfig });
+      try {
+        window.localStorage.setItem(
+          "lime.app-config.changed-at",
+          String(Date.now()),
+        );
+      } catch {
+        // ignore
+      }
+      window.dispatchEvent(
+        new CustomEvent("provider-data-changed", {
+          detail: {
+            source: "fixture_refresh",
+            timestamp: Date.now(),
+          },
+        }),
+      );
+      window.dispatchEvent(new Event("lime:app-config-changed"));
+      return {
+        providerId,
+        modelId,
+        localImageServerApiKeyConfigured: Boolean(nextConfig.server?.api_key),
+        localImageServerEndpoint: {
+          host: nextConfig.server?.host ?? null,
+          port: nextConfig.server?.port ?? null,
+        },
+        imageDefaults:
+          nextConfig.workspace_preferences?.media_defaults?.image ?? null,
+      };
+    },
+    {
+      providerId,
+      modelId: IMAGE_FIXTURE_MODEL,
+      localImageServerApiKey: options.localImageServerApiKey ?? null,
+      localImageServerHost: options.localImageServerHost ?? null,
+      localImageServerPort: options.localImageServerPort ?? null,
+    },
+  );
+
+  return sanitizeJson({
+    providerId,
+    providerName: provider?.name ?? IMAGE_FIXTURE_PROVIDER_NAME,
+    apiHost,
+    modelId: IMAGE_FIXTURE_MODEL,
+    configBinding,
+  });
 }
 
 export async function bindGuiWorkspaceAndModelPreferences(page, workspaceId) {

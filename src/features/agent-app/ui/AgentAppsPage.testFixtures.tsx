@@ -7,7 +7,10 @@ import contentFactoryFixtureData from "../fixtures/content-factory-app.json";
 import { buildInstalledAgentAppState } from "../install/installedAppState";
 import { buildInstalledAppPreview } from "../install/installedAppPreview";
 import { buildAgentAppLabResolvedSetupState } from "../install/labInstallFlow";
-import type { AgentAppInstallReview } from "../install/installReview";
+import {
+  buildLocalAgentAppSourceState,
+  type AgentAppInstallReview,
+} from "../install/installReview";
 import { buildPackageIdentity } from "../install/packageIdentity";
 import { buildWorkflowRuntimeCapabilityProfile } from "../runtime/workflowRuntimeCapabilityProfile";
 import { buildAgentAppHostLifecycleSnapshot } from "../host";
@@ -421,12 +424,7 @@ export function buildReviewResult(
       manifestVersion: state.manifest.manifestVersion,
       sourceKind: state.identity.sourceKind,
       sourceUri: state.identity.sourceUri,
-      sourceState: {
-        kind: "local-selected",
-        labelKey: "agentApp.apps.sourceState.localSelected",
-        tone: "sky",
-        canReview: true,
-      },
+      sourceState: buildLocalAgentAppSourceState(),
       packageHash: state.identity.packageHash,
       manifestHash: state.identity.manifestHash,
       entryCount: state.projection.entries.length,
@@ -443,7 +441,6 @@ export function buildReviewResult(
       generatedAt: state.updatedAt,
       ...reviewOverrides,
     },
-    state,
   };
 }
 

@@ -17,6 +17,10 @@ import {
   type WorkspaceArticleWorkspaceWorkerEvidenceItem,
 } from "./workspaceArticleWorkspaceWorkerEvidence";
 import { buildWorkspacePluginPaneActionRequestMetadata } from "./workspacePluginPaneAction";
+import {
+  readWorkspaceArticlePatchRecordFromMetadata,
+  readWorkspaceArticleRecordFromMetadata,
+} from "./workspaceArticleWorkspaceMetadata";
 
 export type WorkspaceArticleWorkspaceSource =
   | "threadRead"
@@ -67,6 +71,16 @@ export interface WorkspaceArticleWorkspaceActionIntent {
   object: WorkspaceArticleObject;
   articleWorkspace: WorkspaceArticleWorkspace;
   prompt: string;
+}
+
+export interface WorkspaceArticleWorkspaceImageSlotIntent {
+  anchorSectionTitle?: string | null;
+  anchorText?: string | null;
+  articleWorkspace: WorkspaceArticleWorkspace;
+  editedMarkdown?: string | null;
+  object: WorkspaceArticleObject;
+  prompt: string;
+  slot: WorkspaceArticleWorkspaceImageSlot;
 }
 
 export interface WorkspaceArticleWorkspaceObjectSurface {
@@ -304,20 +318,10 @@ export function buildWorkspaceArticleWorkspaceFromPendingRequests(
     const artifactMetadata = asRecord(artifact?.metadata);
     const profile = buildWorkspaceArticleWorkspaceFromUnknown(
       firstRecord(
-        metadata?.articleWorkspace,
-        metadata?.article_workspace,
-        metadata?.articleWorkspace,
-        metadata?.article_workspace,
-        metadata?.workspacePatch,
-        metadata?.workspace_patch,
-        metadata?.contentFactoryWorkspacePatch,
-        artifactMetadata?.articleWorkspace,
-        artifactMetadata?.article_workspace,
-        artifactMetadata?.articleWorkspace,
-        artifactMetadata?.article_workspace,
-        artifactMetadata?.workspacePatch,
-        artifactMetadata?.workspace_patch,
-        artifactMetadata?.contentFactoryWorkspacePatch,
+        readWorkspaceArticleRecordFromMetadata(metadata),
+        readWorkspaceArticlePatchRecordFromMetadata(metadata),
+        readWorkspaceArticleRecordFromMetadata(artifactMetadata),
+        readWorkspaceArticlePatchRecordFromMetadata(artifactMetadata),
         metadata,
       ),
       "rightSurfacePending",
@@ -509,6 +513,23 @@ export function selectWorkspaceArticleDraftObject(
   }
 
   return selected;
+}
+
+export function hasWorkspaceArticleFinalDocument(
+  articleWorkspace: WorkspaceArticleWorkspace | null | undefined,
+): boolean {
+  if (!articleWorkspace) {
+    return false;
+  }
+  const articleObject = selectWorkspaceArticleDraftObject(
+    articleWorkspace.objects,
+  );
+  if (!articleObject) {
+    return false;
+  }
+  return Boolean(
+    buildWorkspaceArticleObjectStructuredPreview(articleObject).documentText,
+  );
 }
 
 interface ArticleDraftCompletenessScore {
@@ -949,7 +970,6 @@ function readWorkspaceArticleDraftProcessMarkdown(
       source.process_markdown,
       source.draftMarkdown,
       source.draft_markdown,
-      source.markdown,
     ) || null
   );
 }
@@ -963,10 +983,6 @@ function readWorkspaceArticleDraftDocumentText(
       source.document_text,
       source.finalMarkdown,
       source.final_markdown,
-      source.body,
-      source.content,
-      source.text,
-      source.excerpt,
     ) || null
   );
 }
@@ -974,11 +990,7 @@ function readWorkspaceArticleDraftDocumentText(
 function readWorkspaceArticleDraftMarkdown(
   source: Record<string, unknown>,
 ): string {
-  return (
-    readWorkspaceArticleDraftDocumentText(source) ??
-    readWorkspaceArticleDraftProcessMarkdown(source) ??
-    ""
-  );
+  return readWorkspaceArticleDraftDocumentText(source) ?? "";
 }
 
 function readStringItems(...values: unknown[]): string[] {

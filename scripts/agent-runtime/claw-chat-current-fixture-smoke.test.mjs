@@ -46,6 +46,7 @@ const fixtureSourceFiles = [
   "scripts/agent-runtime/claw-chat-current-fixture-scenario-flow.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-common-assertions.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-scenario-assertions.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-content-factory-assertions.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-not-applicable-assertions.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-assertion-context.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-assertions.mjs",
@@ -174,6 +175,17 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain('type: "turn.completed"');
     expect(content).toContain('type: "turn.canceled"');
     expect(content).not.toContain('type: "turn.final_done"');
+  });
+
+  it("uses a local image provider stub for @配图 fixture execution", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain("startImageProviderFixtureServer");
+    expect(content).toContain("LOCAL_IMAGE_SERVER_API_KEY");
+    expect(content).toContain("imageProviderFixtureServer.baseUrl");
+    expect(content).toContain("localImageServerApiKey");
+    expect(content).toContain("/v1/images/generations");
+    expect(content).toContain("IMAGE_PROVIDER_FIXTURE_DATA_URL");
   });
 
   it("proves agentSession/event notifications align with the same turn read model", () => {
@@ -381,10 +393,27 @@ describe("claw chat current Electron fixture smoke guard", () => {
 
   it("covers Claw @配图 through Skill(image_generate) and current task artifact", () => {
     const content = readSmokeScript();
+    const imageCommandContent = fs.readFileSync(
+      "scripts/agent-runtime/claw-chat-current-fixture-image-command.mjs",
+      "utf8",
+    );
+    const rpcContent = fs.readFileSync(
+      "scripts/agent-runtime/claw-chat-current-fixture-rpc.mjs",
+      "utf8",
+    );
 
     expect(content).toContain("image-command");
+    expect(content).toContain("plain-image-intent");
     expect(content).toContain("IMAGE_COMMAND_SCENARIO");
+    expect(content).toContain("PLAIN_IMAGE_INTENT_SCENARIO");
     expect(content).toContain("@配图 E2E 图片命令路由测试，请生成一张青柠插画");
+    expect(content).toContain("画一张广州夏天的图");
+    expect(content).toContain("@配图 ${PLAIN_IMAGE_INTENT_PROMPT}");
+    expect(imageCommandContent).toContain("expectedSessionId: SESSION_ID");
+    expect(content).toContain("ensure-fixture-image-provider");
+    expect(rpcContent).toContain("modelProvider/create");
+    expect(rpcContent).toContain("modelProviderKey/create");
+    expect(rpcContent).toContain("media_defaults");
     expect(content).toContain("imageCommandHarness?.image_skill_launch");
     expect(content).toContain("image_skill_launch");
     expect(content).toContain("image_task");
@@ -397,16 +426,18 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("lime_create_image_generation_task");
     expect(content).toContain("IMAGE_COMMAND_CREATE_TASK_TOOL_CALL_ID");
     expect(content).toContain("mediaTaskArtifact/image/create");
-    expect(content).toContain("mediaTaskArtifact/image/complete");
     expect(content).toContain("mediaTaskArtifact/get");
     expect(content).toContain("mediaTaskArtifact/list");
+    expect(content).toContain("media_runtime_worker");
+    expect(content).toContain("lime-image-api-worker");
     expect(content).toContain(".lime/tasks/image_generate");
     expect(content).toContain("runImageCommandScenario");
-    expect(content).toContain("options.scenario !== IMAGE_COMMAND_SCENARIO");
+    expect(content).toContain("isImageIntentScenario");
     expect(content).toContain("waitForGuiImageCommandCompleted");
     expect(content).toContain("waitForGuiImageCommandTerminal");
     expect(content).toContain("waitForSessionReadImageCommandCompleted");
-    expect(content).toContain("completeImageCommandTaskArtifact");
+    expect(content).toContain("waitForImageCommandTaskArtifactTerminal");
+    expect(content).not.toContain("completeImageCommandTaskArtifact");
     expect(content).not.toContain("completeImageCommandTaskArtifactFile");
     expect(content).toContain("imageCommandTaskArtifactTerminalPatch");
     expect(content).toContain("completeMethodUsed");
@@ -426,6 +457,10 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("imageCommandTaskArtifactWritten");
     expect(content).toContain("imageCommandTaskArtifactTerminal");
     expect(content).toContain("imageCommandTaskArtifactSameTaskUpdated");
+    expect(content).toContain("imageCommandWorkerUsedFixtureProviderAndModel");
+    expect(content).toContain("imageCommandFixtureProvider");
+    expect(content).toContain("bodyIncludesModel");
+    expect(content).toContain("headerProviderId");
     expect(content).toContain("imageCommandSkillToolObserved");
     expect(content).toContain("imageCommandCreateTaskToolObserved");
     expect(content).toContain("guiImageCommandToolProcessVisible");
@@ -889,7 +924,7 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(contentFactoryScenario).toContain(
       "reloadContentFactoryArticleWorkspaceSession",
     );
-    expect(contentFactoryScenario).toContain("page.reload");
+    expect(contentFactoryScenario).toContain("reloadRendererDocument");
     expect(contentFactoryScenario).toContain(
       "updateContentFactoryArticleWorkspaceEditedDraft",
     );
@@ -924,7 +959,10 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("documentImageSlotsText.includes");
     expect(content).toContain("takeawaysText.length");
     expect(content).toContain("writingPlanText.length");
-    expect(content).toContain("snapshot.hasWorkerEvidenceTitle");
+    expect(content).toContain("snapshot.hasArticleCanvasContent");
+    expect(content).toContain("readModel.hasImageSetObject");
+    expect(content).toContain("readModel.hasStoryboardObject");
+    expect(content).toContain("readModel.hasChecklistObject");
     expect(content).toContain(
       "workspace-article-workspace-app-declared-renderer",
     );

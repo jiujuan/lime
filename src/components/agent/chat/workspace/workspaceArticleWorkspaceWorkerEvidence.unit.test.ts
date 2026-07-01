@@ -21,6 +21,29 @@ describe("workspaceArticleWorkspaceWorkerEvidence", () => {
         outputObjectCount: 2,
         artifactRef: "artifact-workspace-patch-1",
         artifactKind: "content_factory.workspace_patch",
+        workflowKey: "content_article_workflow",
+        subagents: ["content-researcher", "article-writer"],
+        skillRefs: ["article-research", "article-writing"],
+        cliRefs: ["content-factory"],
+        connectorRefs: ["lime-knowledge", "web-research"],
+        hookPolicy: {
+          prompt: ["prompt-submit"],
+          task: ["task-complete"],
+        },
+        runtimeRegistries: {
+          cli: { entrypoint: "./clis/content-factory" },
+        },
+        orchestration: [
+          {
+            id: "research",
+            title: "资料检索",
+            subagent: "content-researcher",
+            skillRefs: ["article-research"],
+            status: "completed",
+            summary: "整理资料",
+            expectedOutput: "写作依据",
+          },
+        ],
         updatedAt: "2026-06-24T00:00:00.000Z",
       },
       {
@@ -42,9 +65,36 @@ describe("workspaceArticleWorkspaceWorkerEvidence", () => {
         retry_max_attempts: 0,
         updated_at: "2026-06-24T00:00:02.000Z",
       },
+      {
+        id: "evt-hook:workerEvidence",
+        status: "completed",
+        eventType: "agent_app_worker.hook",
+        appId: "content-factory-app",
+        taskId: "task-article-1",
+        taskKind: "content.article.generate",
+        turnId: "turn-1",
+        hookKey: "task-complete",
+        hookEvent: "task.complete",
+        hookScope: "task",
+        hookEntrypoint: "./hooks/task-complete.mjs",
+        hookRequired: false,
+        resultSummary: "Validated 2 workspace artifact snapshot(s)",
+        updatedAt: "2026-06-24T00:00:03.000Z",
+      },
     ]);
 
     expect(evidence).toEqual([
+      expect.objectContaining({
+        id: "evt-hook:workerEvidence",
+        status: "completed",
+        eventType: "agent_app_worker.hook",
+        hookKey: "task-complete",
+        hookEvent: "task.complete",
+        hookScope: "task",
+        hookEntrypoint: "./hooks/task-complete.mjs",
+        hookRequired: false,
+        resultSummary: "Validated 2 workspace artifact snapshot(s)",
+      }),
       expect.objectContaining({
         id: "evt-failed:workerEvidence",
         status: "failed",
@@ -69,20 +119,45 @@ describe("workspaceArticleWorkspaceWorkerEvidence", () => {
         inputSummary: "prompt=生成文章; inputKeys=topic",
         outputSummary: "2 objects: 公众号文章草稿, 配图组",
         outputObjectCount: 2,
+        workflowKey: "content_article_workflow",
+        subagents: ["content-researcher", "article-writer"],
+        skillRefs: ["article-research", "article-writing"],
+        cliRefs: ["content-factory"],
+        connectorRefs: ["lime-knowledge", "web-research"],
+        hookPolicy: {
+          prompt: ["prompt-submit"],
+          task: ["task-complete"],
+        },
+        runtimeRegistries: {
+          cli: { entrypoint: "./clis/content-factory" },
+        },
+        orchestration: [
+          {
+            id: "research",
+            title: "资料检索",
+            subagent: "content-researcher",
+            skillRefs: ["article-research"],
+            status: "completed",
+            summary: "整理资料",
+            expectedOutput: "写作依据",
+          },
+        ],
       }),
     ]);
   });
 
   it("没有显式 worker evidence 时应保留旧 source artifact fallback", () => {
-    const evidence = buildWorkspaceArticleWorkspaceWorkerEvidenceFromThreadRead({
-      sourceArtifacts: [
-        {
-          artifactRef: "artifact-workspace-patch-1",
-          kind: "content_factory.workspace_patch",
-          turnId: "turn-1",
-        },
-      ],
-    });
+    const evidence = buildWorkspaceArticleWorkspaceWorkerEvidenceFromThreadRead(
+      {
+        sourceArtifacts: [
+          {
+            artifactRef: "artifact-workspace-patch-1",
+            kind: "content_factory.workspace_patch",
+            turnId: "turn-1",
+          },
+        ],
+      },
+    );
 
     expect(evidence).toEqual([
       expect.objectContaining({

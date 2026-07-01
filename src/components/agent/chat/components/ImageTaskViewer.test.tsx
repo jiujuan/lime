@@ -343,6 +343,39 @@ describe("ImageTaskViewer", () => {
     ).toBeNull();
   });
 
+  it("失败或取消任务应显示重试动作并透传当前任务 ID", () => {
+    const onRetryTask = vi.fn();
+    const { container } = renderComponent({
+      tasks: [
+        {
+          id: "task-failed-retry",
+          mode: "generate",
+          status: "error",
+          prompt: "青柠极简插画",
+          rawText: "@配图 青柠极简插画",
+          expectedCount: 1,
+          outputIds: [],
+          createdAt: 2,
+        },
+      ],
+      outputs: [],
+      selectedTaskId: "task-failed-retry",
+      selectedOutputId: null,
+      onRetryTask,
+    });
+
+    const retryButton = container.querySelector(
+      '[data-testid="image-task-viewer-action-retry"]',
+    );
+    expect(retryButton?.textContent).toContain("重试");
+
+    act(() => {
+      retryButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(onRetryTask).toHaveBeenCalledWith("task-failed-retry");
+  });
+
   it("3x3 分镜应把分镜元信息传给独立资源管理器", () => {
     const onSelectOutput = vi.fn();
     const outputs = Array.from({ length: 3 }, (_, index) => ({

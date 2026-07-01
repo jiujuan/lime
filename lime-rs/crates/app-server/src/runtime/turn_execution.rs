@@ -539,7 +539,8 @@ impl RuntimeCore {
             .action_scope
             .as_ref()
             .and_then(|scope| scope.turn_id.clone());
-        let (session, turn_snapshot) = {
+        let request_id = params.request_id.clone();
+        let (session, turn_snapshot, cancel_denied_permission_action) = {
             let state = self
                 .state
                 .lock()
@@ -559,7 +560,17 @@ impl RuntimeCore {
                 ),
                 None => None,
             };
-            (stored.session.clone(), turn)
+            let cancel_denied_permission_action =
+                super::permission_state_projection::should_cancel_denied_permission_action(
+                    stored,
+                    &request_id,
+                    params.confirmed,
+                );
+            (
+                stored.session.clone(),
+                turn,
+                cancel_denied_permission_action,
+            )
         };
 
         let mut sink = CollectingRuntimeEventSink::default();
@@ -569,7 +580,7 @@ impl RuntimeCore {
                     host,
                     session: session.clone(),
                     turn: turn_snapshot.clone(),
-                    request_id: params.request_id,
+                    request_id: request_id.clone(),
                     action_type: params.action_type,
                     confirmed: params.confirmed,
                     response: params.response,
@@ -581,6 +592,16 @@ impl RuntimeCore {
                 &mut sink,
             )
             .await?;
+        if cancel_denied_permission_action {
+            sink.emit(RuntimeEvent::new(
+                "turn.canceled",
+                json!({
+                    "backend": "runtime",
+                    "reason": "permission_denied",
+                    "requestId": request_id,
+                }),
+            ))?;
+        }
         let events = self.append_runtime_events(
             &session.session_id,
             &session.thread_id,

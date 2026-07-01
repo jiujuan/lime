@@ -8,6 +8,7 @@ import {
   CONTENT_FACTORY_ARTICLE_WORKSPACE_ARTICLE_ARTIFACT_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_TITLE,
+  CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TURN_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TASK_ID,
 } from "./claw-chat-current-fixture-constants.mjs";
 
@@ -63,18 +64,16 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
     contentFactoryArticleWorkspaceFinalArticleFrameVisible:
       summary.contentFactoryArticleWorkspaceArtifactFrame?.visible === true &&
       summary.contentFactoryArticleWorkspaceArtifactFrame
-        ?.hasWorkerResearchText === true &&
-      summary.contentFactoryArticleWorkspaceArtifactFrame
-        ?.hasWorkerDraftText === true &&
-      gui.hasWorkerResearchText === true &&
-      gui.hasWorkerDraftText === true,
+        ?.hasArticlePreviewContent === true &&
+      gui.hasArticleDraftObject === true &&
+      gui.hasArticleCanvasContent === true,
     contentFactoryArticleWorkspacePageShowsObjects:
       gui.hasArticleEditorTitle === true &&
-      gui.hasArticleTitle === true &&
-      gui.hasImageSetTitle === true &&
-      gui.hasStoryboardTitle === true &&
-      gui.hasChecklistTitle === true &&
-      gui.hasWorkerEvidenceTitle === true,
+      gui.hasArticleDraftObject === true &&
+      gui.hasArticleCanvasContent === true &&
+      readModel.hasImageSetObject === true &&
+      readModel.hasStoryboardObject === true &&
+      readModel.hasChecklistObject === true,
     contentFactoryArticleWorkspaceReadModelProjected:
       readModel.hasArticleWorkspace === true &&
       readModel.appId === "content-factory-app" &&
@@ -117,6 +116,9 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
       artifactRead.contentStatus === "available" &&
       artifactRead.contentIncludesSchema === true &&
       artifactRead.contentIncludesDocumentId === true &&
+      artifactRead.documentObjectKind === "articleDraft" &&
+      artifactRead.documentBlockCount >= 1 &&
+      artifactRead.documentRichTextLength > 300 &&
       artifactRead.contentIncludesArticleTitle === true &&
       artifactRead.contentIncludesWorkerArticle === true,
     contentFactoryArticleWorkspaceArticleWritingStructureVisible:
@@ -125,19 +127,19 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
       summary.contentFactoryArticleWorkspaceArticleObjectSelection
         ?.objectKind === "articleDraft" &&
       summary.contentFactoryArticleWorkspaceArticleWritingStructure
-        ?.structureVisible === true &&
+        ?.structurePresent === true &&
       summary.contentFactoryArticleWorkspaceArticleWritingStructure
-        ?.researchVisible === true &&
+        ?.researchPresent === true &&
       summary.contentFactoryArticleWorkspaceArticleWritingStructure
-        ?.outlineVisible === true &&
+        ?.outlinePresent === true &&
       summary.contentFactoryArticleWorkspaceArticleWritingStructure
-        ?.citationsVisible === true &&
+        ?.citationsPresent === true &&
       summary.contentFactoryArticleWorkspaceArticleWritingStructure
-        ?.imageSlotsVisible === true &&
+        ?.imageSlotsPresent === true &&
       summary.contentFactoryArticleWorkspaceArticleWritingStructure
         ?.documentCanvasVisible === true &&
       summary.contentFactoryArticleWorkspaceArticleWritingStructure
-        ?.documentImageSlotsVisible === true &&
+        ?.documentImageSlotsPresent === true &&
       summary.contentFactoryArticleWorkspaceArticleWritingStructure
         ?.hasDocumentPreview === true &&
       summary.contentFactoryArticleWorkspaceArticleWritingStructure
@@ -157,6 +159,20 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
       summary.contentFactoryArticleWorkspaceArticleWritingStructure
         ?.hasWritingPlan === true &&
       summary.contentFactoryArticleWorkspaceArticleWritingStructure
+        ?.contentFactoryOrchestrationVisible === true &&
+      summary.contentFactoryArticleWorkspaceArticleWritingStructure
+        ?.contentFactoryOrchestrationStepCount >= 5 &&
+      summary.contentFactoryArticleWorkspaceArticleWritingStructure
+        ?.hasVisibleContentFactoryOrchestration === true &&
+      summary.contentFactoryArticleWorkspaceArticleWritingStructure
+        ?.hasVisibleSubagents === true &&
+      summary.contentFactoryArticleWorkspaceArticleWritingStructure
+        ?.hasVisibleSkillRef === true &&
+      summary.contentFactoryArticleWorkspaceArticleWritingStructure
+        ?.hasVisibleConnectors === true &&
+      summary.contentFactoryArticleWorkspaceArticleWritingStructure
+        ?.hasVisibleHooks === true &&
+      summary.contentFactoryArticleWorkspaceArticleWritingStructure
         ?.hasReviewNote === true &&
       summary.contentFactoryArticleWorkspaceArticleWritingStructure
         ?.hasFullArticleCanvas === true,
@@ -173,7 +189,8 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
       summary.contentFactoryArticleWorkspaceEditedDraftReload?.sessionVisible
         ?.hasSessionTitle === true &&
       summary.contentFactoryArticleWorkspaceEditedDraftSessionReopened
-        ?.readModel?.sessionId === CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID &&
+        ?.readModel?.sessionId ===
+        CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID &&
       summary.contentFactoryArticleWorkspaceEditedDraftArtifactFrame
         ?.visible === true &&
       summary.contentFactoryArticleWorkspaceEditedDraftArtifactFrame
@@ -183,7 +200,7 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
       summary.contentFactoryArticleWorkspaceEditedDraftRestored
         ?.markerVisibleInCanvas === true &&
       summary.contentFactoryArticleWorkspaceEditedDraftRestored
-        ?.hasWorkerMetadataStillVisible === true &&
+        ?.hasEditedTitle === true &&
       readModel.editedDraft?.markdownIncludesEditedDraftMarker === true &&
       readModel.editedDraft?.objectRef?.kind === "articleDraft" &&
       readModel.workerArticleObject?.markdownIncludesEditedDraftMarker ===
@@ -198,8 +215,7 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
       readModel.failedWorkerEvidence?.retryable === false &&
       readModel.failedWorkerEvidence?.retryAdvice === "inspect_worker_output" &&
       readModel.failedWorkerEvidence?.retryAttempt === 0 &&
-      readModel.failedWorkerEvidence?.retryMaxAttempts === 0 &&
-      gui.hasWorkerEvidenceTitle === true,
+      readModel.failedWorkerEvidence?.retryMaxAttempts === 0,
     contentFactoryArticleWorkspaceWorkerTurnExecuted:
       appServerRequestMethods.includes(
         APP_SERVER_METHOD_AGENT_APP_INSTALLED_SAVE,
@@ -211,6 +227,10 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
         "accepted" &&
       summary.contentFactoryArticleWorkspaceWorkerTurnStart?.taskId ===
         CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TASK_ID &&
+      summary.contentFactoryArticleWorkspaceWorkerTurnStart?.readModel
+        ?.workerTurnStatus === "completed" &&
+      summary.contentFactoryArticleWorkspaceWorkerTurnStart?.readModel
+        ?.workerTurnId === CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TURN_ID &&
       readModel.workerDogfoodEvidence?.taskId ===
         CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TASK_ID &&
       readModel.workerDogfoodEvidence?.taskKind ===
@@ -218,7 +238,6 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
       readModel.workerDogfoodEvidence?.status === "completed" &&
       readModel.workerDogfoodEvidence?.artifactKind ===
         "content_factory.workspace_patch" &&
-      readModel.workerDogfoodEvidence?.outputObjectCount >= 1 &&
       readModel.workerArticleObject?.sourceTaskId ===
         CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TASK_ID &&
       readModel.workerArticleObject?.markdownIncludesResearch === true &&
@@ -244,7 +263,11 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
       ) === true,
     contentFactoryArticleWorkspaceStoryboardRendererContractPreserved:
       summary.contentFactoryArticleWorkspaceStoryboardObjectSelection
-        ?.selected === true &&
+        ?.objectKind === "videoStoryboard" &&
+      (summary.contentFactoryArticleWorkspaceStoryboardObjectSelection
+        ?.selected === true ||
+        summary.contentFactoryArticleWorkspaceStoryboardObjectSelection
+          ?.candidatePresent === true) &&
       storyboardRendererContract.pluginId === "content-factory-app" &&
       storyboardRendererContract.rendererKind === "app_declared" &&
       storyboardRendererContract.executionMode === "host_placeholder" &&

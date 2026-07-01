@@ -6,7 +6,10 @@ import {
   APP_SERVER_METHOD_DIAGNOSTICS_TRACE_LIST,
   APP_SERVER_METHOD_DIAGNOSTICS_TRACE_READ,
 } from "./claw-chat-current-fixture-constants.mjs";
-import { invokeAppServerFromPage } from "./claw-chat-current-fixture-rpc.mjs";
+import {
+  invokeAppServerFromPage,
+  reloadRendererDocument,
+} from "./claw-chat-current-fixture-rpc.mjs";
 import {
   sanitizeJson,
   sanitizeText,
@@ -289,13 +292,11 @@ export async function enableClawTraceDebugOverride(page, options) {
 
 async function reloadAfterTraceDebugOverride(page, options) {
   try {
-    await page.reload({
-      waitUntil: "domcontentloaded",
-      timeout: options.timeoutMs,
-    });
+    const reload = await reloadRendererDocument(page, options);
     return {
       reloaded: true,
-      reloadRecovered: false,
+      reloadRecovered: reload.recovered,
+      reloadRecovery: reload.recovery ?? null,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

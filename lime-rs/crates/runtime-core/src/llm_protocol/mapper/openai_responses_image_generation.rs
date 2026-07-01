@@ -53,7 +53,11 @@ fn body_for_model_inner(
             .as_deref()
             .and_then(|value| non_empty(Some(value)))
             .unwrap_or(DEFAULT_RESPONSES_IMAGE_GENERATION_OUTER_MODEL),
-        "input": responses_image_generation_input(&prompt, options.input_shape),
+        "input": responses_image_generation_input(
+            prompt,
+            options.input_shape,
+            &options.reference_image_urls,
+        ),
         "tools": [responses_image_generation_tool(model_id)],
         "stream": true,
     })
@@ -62,21 +66,33 @@ fn body_for_model_inner(
 fn responses_image_generation_input(
     prompt: &str,
     input_shape: ResponsesImageGenerationInputShape,
+    reference_image_urls: &[String],
 ) -> Value {
-    match input_shape {
-        ResponsesImageGenerationInputShape::PromptString => json!(prompt),
-        ResponsesImageGenerationInputShape::InputList => json!([
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "input_text",
-                        "text": prompt,
-                    }
-                ],
-            }
-        ]),
+    let references: Vec<&str> = reference_image_urls
+        .iter()
+        .filter_map(|value| non_empty(Some(value)))
+        .collect();
+    if input_shape == ResponsesImageGenerationInputShape::PromptString && references.is_empty() {
+        return json!(prompt);
     }
+
+    let mut content = vec![json!({
+        "type": "input_text",
+        "text": prompt,
+    })];
+    content.extend(references.into_iter().map(|image_url| {
+        json!({
+            "type": "input_image",
+            "image_url": image_url,
+        })
+    }));
+
+    json!([
+        {
+            "role": "user",
+            "content": content,
+        }
+    ])
 }
 
 fn responses_image_generation_tool(model: &str) -> Value {

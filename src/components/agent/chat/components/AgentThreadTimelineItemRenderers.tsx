@@ -360,6 +360,7 @@ function renderGroupItemDetails(
   onOpenSubagentSession?: (sessionId: string) => void,
   onPermissionResponse?: (response: ConfirmResponse) => void,
   options?: {
+    defaultExpandCompletedToolResult?: boolean;
     groupedToolCall?: boolean;
     groupMarker?: string;
     openSubagentLabel?: string;
@@ -419,7 +420,10 @@ function renderGroupItemDetails(
     return (
       <ToolCallItem
         toolCall={toolCall}
-        defaultExpanded={item.status !== "completed"}
+        defaultExpanded={
+          item.status !== "completed" ||
+          Boolean(options?.defaultExpandCompletedToolResult)
+        }
         onFileClick={onFileClick}
         onOpenSavedSiteContent={onOpenSavedSiteContent}
         grouped={options?.groupedToolCall}
@@ -544,6 +548,7 @@ interface TimelineItemDetailsProps {
   onOpenSavedSiteContent?: (target: SiteSavedContentTarget) => void;
   onOpenSubagentSession?: (sessionId: string) => void;
   onPermissionResponse?: (response: ConfirmResponse) => void;
+  defaultExpandCompletedToolResult?: boolean;
   groupedToolCall?: boolean;
   groupMarker?: string;
   openSubagentLabel?: string;
@@ -563,6 +568,7 @@ export function TimelineItemDetails({
   onOpenSavedSiteContent,
   onOpenSubagentSession,
   onPermissionResponse,
+  defaultExpandCompletedToolResult,
   groupedToolCall,
   groupMarker,
   openSubagentLabel,
@@ -587,6 +593,7 @@ export function TimelineItemDetails({
     onOpenSubagentSession,
     onPermissionResponse,
     {
+      defaultExpandCompletedToolResult,
       groupedToolCall,
       groupMarker,
       openSubagentLabel,

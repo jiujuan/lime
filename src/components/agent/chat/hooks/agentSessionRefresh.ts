@@ -8,6 +8,12 @@ import { normalizeExecutionStrategy } from "./agentChatCoreUtils";
 import type { AgentAccessMode } from "./agentChatStorage";
 import { createSessionAccessModeFromExecutionRuntime } from "../utils/sessionExecutionRuntime";
 import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
+import type { AgentSessionDetailMergeMode } from "./agentSessionState";
+
+export interface AgentSessionDetailRefreshRequest {
+  source?: string | null;
+  detailMergeMode?: AgentSessionDetailMergeMode | null;
+}
 
 export interface AgentSessionReadModelSnapshot {
   queuedTurns: QueuedTurnSnapshot[];
@@ -23,6 +29,10 @@ export function createAgentSessionReadModelSnapshot(
   };
 }
 
+export function resolveDefaultAgentSessionDetailMergeMode(): AgentSessionDetailMergeMode {
+  return "history_hydrate";
+}
+
 interface RefreshAgentSessionDetailOptions {
   runtime: Pick<AgentRuntimeAdapter, "getSession">;
   sessionIdRef: MutableRefObject<string | null>;
@@ -30,7 +40,10 @@ interface RefreshAgentSessionDetailOptions {
   applySessionDetail: (
     sessionId: string,
     detail: Awaited<ReturnType<AgentRuntimeAdapter["getSession"]>>,
-    options: { preserveExecutionStrategyOnMissingDetail: boolean },
+    options: {
+      preserveExecutionStrategyOnMissingDetail: boolean;
+      detailMergeMode?: AgentSessionDetailMergeMode;
+    },
   ) => void;
   markSessionExecutionStrategySynced: (
     sessionId: string,
@@ -42,7 +55,8 @@ interface RefreshAgentSessionDetailOptions {
   ) => void;
   setAccessModeState?: (accessMode: AgentAccessMode) => void;
   onWarn?: (error: unknown) => void;
-  source?: string;
+  source?: string | null;
+  detailMergeMode?: AgentSessionDetailMergeMode | null;
 }
 
 export async function refreshAgentSessionDetailState(
@@ -71,6 +85,8 @@ export async function refreshAgentSessionDetailState(
     }
     applySessionDetail(resolvedSessionId, detail, {
       preserveExecutionStrategyOnMissingDetail: true,
+      detailMergeMode:
+        options.detailMergeMode ?? resolveDefaultAgentSessionDetailMergeMode(),
     });
     const runtimeAccessMode = createSessionAccessModeFromExecutionRuntime(
       detail.execution_runtime,

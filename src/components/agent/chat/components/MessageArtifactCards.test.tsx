@@ -72,12 +72,12 @@ afterEach(() => {
 });
 
 describe("MessageArtifactCards", () => {
-  it("文章产物应在独立 ArtifactFrame 内完整渲染正文并可打开右侧编辑器", async () => {
+  it("文章产物应在独立 ArtifactFrame 内展示完整正文并可打开右侧编辑器", async () => {
     const onArtifactClick = vi.fn();
     const fullArticle = [
       "# 公众号文章草稿",
       "",
-      "这是第一段正文，应该在独立产物框里完整展示。",
+      "这是第一段正文，应该在独立产物框里展示为完整正文。",
       "",
       "## 三轮资料检索",
       "",
@@ -88,6 +88,10 @@ describe("MessageArtifactCards", () => {
       "## 正文草稿",
       "",
       "这是第二段正文，点击框头后应打开右侧 Article Editor。",
+      "",
+      "## 长文尾部",
+      "",
+      "这段尾部内容也应该保留在文章产物框内，点击后可进入右侧编辑器继续编辑。",
     ].join("\n");
     const artifact = createArtifact({
       content: fullArticle,
@@ -95,6 +99,72 @@ describe("MessageArtifactCards", () => {
         openedFrom: "right_surface_article_workspace",
         articleWorkspace: {
           objectKind: "articleDraft",
+        },
+        contentFactoryWorkspacePatch: {
+          workerEvidence: [
+            {
+              subagents: [
+                "content-researcher",
+                "content-strategist",
+                "article-writer",
+              ],
+              skillRefs: [
+                "article-research",
+                "article-strategy",
+                "article-writing",
+                "article-editing",
+                "article-image-plan",
+              ],
+              researchRounds: [
+                { id: "research-1", title: "主题和用户目标检索" },
+                { id: "research-2", title: "场景痛点检索" },
+                { id: "research-3", title: "发布检查检索" },
+              ],
+              titleCandidates: [
+                { id: "title-1", title: "公众号文章草稿" },
+                { id: "title-2", title: "公众号文章备选" },
+              ],
+              outline: [
+                { id: "section-1", title: "开场" },
+                { id: "section-2", title: "基础" },
+                { id: "section-3", title: "实践" },
+                { id: "section-4", title: "进阶" },
+                { id: "section-5", title: "复盘" },
+              ],
+              writingPlan: [
+                {
+                  id: "plan-research",
+                  title: "资料检索",
+                  owner: "content-researcher",
+                  skillRef: "article-research",
+                },
+                {
+                  id: "plan-strategy",
+                  title: "选题策划",
+                  owner: "content-strategist",
+                  skillRef: "article-strategy",
+                },
+                {
+                  id: "plan-draft",
+                  title: "正文写作",
+                  owner: "article-writer",
+                  skillRef: "article-writing",
+                },
+                {
+                  id: "plan-review",
+                  title: "审稿校对",
+                  owner: "copy-editor",
+                  skillRef: "article-editing",
+                },
+                {
+                  id: "plan-image",
+                  title: "配图规划",
+                  owner: "image-planner",
+                  skillRef: "article-image-plan",
+                },
+              ],
+            },
+          ],
         },
         articleWorkspaceCardPreview: {
           counts: {
@@ -112,6 +182,11 @@ describe("MessageArtifactCards", () => {
       onArtifactClick,
     });
 
+    const bodyNode = container.querySelector(
+      '[data-testid="article-artifact-frame-body"]',
+    );
+    expect(bodyNode).not.toBeNull();
+
     expect(
       container.querySelector('[data-testid="article-artifact-frame"]'),
     ).not.toBeNull();
@@ -119,29 +194,21 @@ describe("MessageArtifactCards", () => {
       container.querySelector('[data-testid="article-artifact-frame-body"]'),
     ).not.toBeNull();
     expect(
-      container.querySelector('[data-testid="article-artifact-renderer"]'),
+      container.querySelector(
+        '[data-testid="article-artifact-frame-markdown"]',
+      ),
     ).not.toBeNull();
-    // 产物卡只承载完整文章本身，不再混入写作过程汇总卡或统计 chips。
-    expect(
-      container.querySelector('[data-testid="article-artifact-frame-process"]'),
-    ).toBeNull();
-    expect(
-      container.querySelector('[data-testid="article-artifact-frame-facts"]'),
-    ).toBeNull();
-    expect(container.textContent).toContain("文章产物");
-    expect(container.textContent).toContain("完整正文");
+    expect(container.textContent).toContain("已创建文档：");
+    expect(container.textContent).toContain("打开文档");
     expect(container.textContent).toContain("正文草稿");
-    expect(container.textContent).toContain("展开右侧编辑器");
     expect(container.textContent).not.toContain("articleArtifacts");
     expect(container.textContent).toContain(
-      "这是第一段正文，应该在独立产物框里完整展示。",
+      "这是第一段正文，应该在独立产物框里展示为完整正文。",
     );
     expect(container.textContent).toContain(
-      "这是第二段正文，点击框头后应打开右侧 Article Editor。",
+      "这段尾部内容也应该保留在文章产物框内，点击后可进入右侧编辑器继续编辑。",
     );
-    expect(container.textContent).not.toContain("已完成 3 轮资料检索");
-    expect(container.textContent).not.toContain("5 个文章小节");
-    expect(container.textContent).not.toContain("2 个配图位");
+    expect(container.textContent).not.toContain("过程摘要");
 
     const openButton = container.querySelector<HTMLButtonElement>(
       '[data-testid="article-artifact-frame"] button',
@@ -180,6 +247,7 @@ describe("MessageArtifactCards", () => {
     expect(
       container.querySelector('[data-testid="message-artifact-card"]'),
     ).toBeNull();
+    expect(container.textContent).toContain("正在创建文档：");
     expect(container.textContent).toContain("流式输出中");
     expect(container.textContent).toContain("正文正在流式生成。");
   });

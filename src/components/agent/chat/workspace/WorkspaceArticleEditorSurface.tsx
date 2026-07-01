@@ -15,13 +15,20 @@ import { useTranslation } from "react-i18next";
 import type { Artifact } from "@/lib/artifact/types";
 import { formatDate } from "@/i18n/format";
 import { ArticleTiptapCanvas } from "./ArticleTiptapCanvas";
+import { WorkspacePluginOrchestrationRail } from "./WorkspacePluginOrchestrationRail";
 import "./WorkspaceArticleEditorSurface.css";
+import {
+  buildWorkspacePluginOrchestrationModel,
+  buildWorkspaceArticleEditorOrchestrationModel,
+} from "./workspaceArticleEditorOrchestrationModel";
 import type {
   WorkspaceArticleObject,
   WorkspaceArticleObjectStatus,
   WorkspaceArticleWorkspace,
   WorkspaceArticleWorkspaceAction,
   WorkspaceArticleWorkspaceActionIntent,
+  WorkspaceArticleWorkspaceImageSlot,
+  WorkspaceArticleWorkspaceImageSlotIntent,
   WorkspaceArticleWorkspaceStructuredPreview,
 } from "./workspaceArticleWorkspaceModel";
 import { buildWorkspaceArticleObjectKey } from "./workspaceArticleWorkspaceSelection";
@@ -36,6 +43,9 @@ interface WorkspaceArticleEditorSurfaceProps {
   objects: readonly WorkspaceArticleObject[];
   onActionIntent?: (intent: WorkspaceArticleWorkspaceActionIntent) => void;
   onArticleMarkdownChange?: (change: WorkspaceArticleMarkdownChange) => void;
+  onImageSlotIntent?: (
+    intent: WorkspaceArticleWorkspaceImageSlotIntent,
+  ) => void;
   onOpenPreviewArtifact?: (artifact: Artifact) => void;
   onSelectObject?: (object: WorkspaceArticleObject) => void;
   preview: WorkspaceArticleWorkspaceStructuredPreview;
@@ -59,6 +69,7 @@ export function WorkspaceArticleEditorSurface({
   objects,
   onActionIntent,
   onArticleMarkdownChange,
+  onImageSlotIntent,
   onOpenPreviewArtifact,
   onSelectObject,
   preview,
@@ -110,6 +121,11 @@ export function WorkspaceArticleEditorSurface({
       preview.outline.length,
       preview.researchRounds.length,
     ],
+  );
+  const orchestrationRailModel = useMemo(
+    () =>
+      buildWorkspacePluginOrchestrationModel(articleWorkspace, preview),
+    [articleWorkspace, preview],
   );
 
   const articleCanvasContentKey = `${object.ref.appId}:${object.ref.kind}:${object.ref.id}`;
@@ -164,6 +180,44 @@ export function WorkspaceArticleEditorSurface({
         }}
       />
     );
+  };
+  const resolveImageSlotAnchorSectionTitle = (
+    slot: WorkspaceArticleWorkspaceImageSlot,
+  ): string | null => {
+    const sectionId = slot.sectionId?.trim();
+    if (!sectionId) {
+      return null;
+    }
+    return (
+      preview.outline.find((section) => section.id === sectionId)?.title ??
+      null
+    );
+  };
+  const buildImageSlotPrompt = (
+    slot: WorkspaceArticleWorkspaceImageSlot,
+  ): string =>
+    [slot.prompt, slot.purpose, slot.title]
+      .map((value) => value?.trim())
+      .find((value): value is string => Boolean(value)) ?? "";
+  const handleImageSlotIntent = (
+    slot: WorkspaceArticleWorkspaceImageSlot,
+  ) => {
+    const prompt = buildImageSlotPrompt(slot);
+    if (!prompt) {
+      return;
+    }
+    const currentArticleMarkdown =
+      editedMarkdown ??
+      (object.ref.kind === "articleDraft" ? preview.documentText : null);
+    onImageSlotIntent?.({
+      anchorSectionTitle: resolveImageSlotAnchorSectionTitle(slot),
+      anchorText: slot.title,
+      articleWorkspace,
+      editedMarkdown: currentArticleMarkdown,
+      object,
+      prompt,
+      slot,
+    });
   };
 
   return (
@@ -251,6 +305,50 @@ export function WorkspaceArticleEditorSurface({
           className="article-editor-main-column"
           data-testid="workspace-article-editor-main-canvas"
         >
+          {isCompactLayout && orchestrationRailModel ? (
+            <WorkspacePluginOrchestrationRail
+              copy={{
+                title: dynamicT("workspace.pluginWorkspace.orchestration.title"),
+                detail: dynamicT(
+                  "workspace.pluginWorkspace.orchestration.detail",
+                  {
+                    count: orchestrationRailModel.steps.length,
+                    workflow: orchestrationRailModel.workflowKey ?? "-",
+                  },
+                ),
+                workflowLabel: dynamicT(
+                  "workspace.pluginWorkspace.orchestration.workflow",
+                ),
+                subagentsLabel: dynamicT(
+                  "workspace.pluginWorkspace.orchestration.subagents",
+                ),
+                skillsLabel: dynamicT(
+                  "workspace.pluginWorkspace.orchestration.skills",
+                ),
+                cliLabel: dynamicT("workspace.pluginWorkspace.orchestration.cli"),
+                connectorsLabel: dynamicT(
+                  "workspace.pluginWorkspace.orchestration.connectors",
+                ),
+                hooksLabel: dynamicT(
+                  "workspace.pluginWorkspace.orchestration.hooks",
+                ),
+                doneLabel: dynamicT("workspace.articleEditor.writingPlan.done"),
+                pendingLabel: dynamicT(
+                  "workspace.articleEditor.writingPlan.pending",
+                ),
+              }}
+              model={orchestrationRailModel}
+              rootTestId="workspace-article-editor-content-factory-orchestration"
+              testIdPrefix="workspace-article-editor-orchestration"
+            />
+          ) : null}
+          {isCompactLayout && preview.imageSlots.length > 0 ? (
+            <ArticleEditorImageSlotRail
+              disabled={actionsDisabled || !onImageSlotIntent}
+              imageSlots={preview.imageSlots}
+              onGenerate={handleImageSlotIntent}
+            />
+          ) : null}
           <div className="article-editor-canvas-heading">
             <div className="min-w-0">
               <div className="text-sm font-semibold text-[color:var(--lime-text-strong)]">
@@ -392,11 +490,11 @@ export function WorkspaceArticleEditorSurface({
           >
             {preview.imageSlots.length > 0 ? (
               preview.imageSlots.map((slot) => (
-                <ArticleEditorListItem
+                <ArticleEditorImageSlotItem
                   key={slot.id}
-                  title={slot.title}
-                  meta={[slot.purpose, slot.status].filter(Boolean).join(" · ")}
-                  detail={slot.prompt}
+                  disabled={actionsDisabled || !onImageSlotIntent}
+                  onGenerate={handleImageSlotIntent}
+                  slot={slot}
                 />
               ))
             ) : (
@@ -558,6 +656,115 @@ export function WorkspaceArticleEditorSurface({
         </aside>
       </div>
     </section>
+  );
+}
+
+function ArticleEditorImageSlotRail({
+  disabled,
+  imageSlots,
+  onGenerate,
+}: {
+  disabled: boolean;
+  imageSlots: WorkspaceArticleWorkspaceImageSlot[];
+  onGenerate: (slot: WorkspaceArticleWorkspaceImageSlot) => void;
+}) {
+  const { t } = useTranslation("workspace");
+  const dynamicT = t as WorkspaceDynamicTranslation;
+  return (
+    <section
+      className="mb-2 rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] p-2"
+      data-testid="workspace-article-editor-compact-image-slots"
+    >
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <span className="min-w-0">
+          <span className="block truncate text-xs font-semibold text-[color:var(--lime-text-strong)]">
+            {dynamicT("workspace.articleEditor.images.title")}
+          </span>
+          <span className="block truncate text-[11px] text-[color:var(--lime-text-muted)]">
+            {dynamicT("workspace.articleEditor.images.detail", {
+              count: imageSlots.length,
+            })}
+          </span>
+        </span>
+      </div>
+      <div className="mt-2 flex min-w-0 gap-2 overflow-x-auto pb-1">
+        {imageSlots.map((slot) => (
+          <button
+            key={slot.id}
+            type="button"
+            className="grid min-w-[190px] max-w-[240px] grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-subtle)] px-2 py-2 text-left transition hover:bg-[color:var(--lime-surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={disabled}
+            onClick={() => onGenerate(slot)}
+            aria-label={dynamicT(
+              "workspace.articleEditor.images.generateSlotAria",
+              { title: slot.title },
+            )}
+            data-testid="workspace-article-editor-compact-image-slot-generate"
+            data-slot-id={slot.id}
+          >
+            <span className="min-w-0">
+              <span className="block truncate text-[12px] font-medium text-[color:var(--lime-text-strong)]">
+                {slot.title}
+              </span>
+              <span className="mt-0.5 block truncate text-[11px] text-[color:var(--lime-text-muted)]">
+                {[slot.purpose, slot.status].filter(Boolean).join(" · ")}
+              </span>
+            </span>
+            <span className="inline-flex h-7 shrink-0 items-center justify-center gap-1 rounded-md border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-2 text-[11px] font-medium text-[color:var(--lime-text-strong)]">
+              <ImagePlus className="h-3.5 w-3.5" />
+              {dynamicT("workspace.articleEditor.images.generateSlot")}
+            </span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ArticleEditorImageSlotItem({
+  disabled,
+  onGenerate,
+  slot,
+}: {
+  disabled: boolean;
+  onGenerate: (slot: WorkspaceArticleWorkspaceImageSlot) => void;
+  slot: WorkspaceArticleWorkspaceImageSlot;
+}) {
+  const { t } = useTranslation("workspace");
+  const dynamicT = t as WorkspaceDynamicTranslation;
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-subtle)] px-2 py-2">
+      <span className="min-w-0">
+        <span className="block text-xs font-medium text-[color:var(--lime-text-strong)]">
+          {slot.title}
+        </span>
+        {[slot.purpose, slot.status].filter(Boolean).length > 0 ? (
+          <span className="mt-0.5 block truncate text-[11px] text-[color:var(--lime-text-muted)]">
+            {[slot.purpose, slot.status].filter(Boolean).join(" · ")}
+          </span>
+        ) : null}
+        {slot.prompt ? (
+          <span className="mt-0.5 block text-[11px] leading-4 text-[color:var(--lime-text-muted)]">
+            {slot.prompt}
+          </span>
+        ) : null}
+      </span>
+      <button
+        type="button"
+        className="inline-flex h-7 shrink-0 items-center justify-center gap-1 rounded-md border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-2 text-[11px] font-medium text-[color:var(--lime-text-strong)] transition hover:bg-[color:var(--lime-surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={disabled}
+        onClick={() => onGenerate(slot)}
+        aria-label={dynamicT(
+          "workspace.articleEditor.images.generateSlotAria",
+          { title: slot.title },
+        )}
+        data-testid="workspace-article-editor-image-slot-generate"
+        data-slot-id={slot.id}
+      >
+        <ImagePlus className="h-3.5 w-3.5" />
+        <span>{dynamicT("workspace.articleEditor.images.generateSlot")}</span>
+      </button>
+    </div>
   );
 }
 

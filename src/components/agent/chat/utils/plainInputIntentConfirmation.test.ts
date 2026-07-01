@@ -151,6 +151,15 @@ describe("plainInputIntentConfirmation", () => {
     expect(resolved?.systemPrompt).toContain(resolved?.confirmation);
   });
 
+  it("明确中文画图句式应命中图片生成意图", () => {
+    expect(
+      resolvePlainInputIntentConfirmation("画一张广州夏天的图"),
+    ).toMatchObject({
+      commandKey: "image_generate",
+      intentId: "plain_image_generation",
+    });
+  });
+
   it("强浏览器后台任务不应被 plain input 本地确认拦截", () => {
     expect(
       resolvePlainInputIntentConfirmation("帮我把这篇文章发布到微信公众号后台"),

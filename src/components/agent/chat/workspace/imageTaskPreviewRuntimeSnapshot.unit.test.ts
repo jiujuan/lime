@@ -1,0 +1,356 @@
+import { describe, expect, it } from "vitest";
+import type { MediaTaskArtifactOutput } from "@/lib/api/mediaTasks";
+import type { ImageWorkbenchOutput } from "./imageWorkbenchHelpers";
+import {
+  buildImageTaskSnapshotFromArtifactOutput,
+  buildParsedImageTaskSnapshot,
+  buildPendingImageTaskSnapshot,
+  buildPreviewImageUrls,
+  normalizeTaskStatus,
+} from "./imageTaskPreviewRuntimeSnapshot";
+
+function createOutput(url: string, index: number): ImageWorkbenchOutput {
+  return {
+    id: `output-${index}`,
+    taskId: "task-preview",
+    hookImageId: `hook-${index}`,
+    refId: `img-${index}`,
+    url,
+    prompt: `预览图 ${index}`,
+    createdAt: index,
+    applyTarget: null,
+  };
+}
+
+function createArtifact(
+  overrides: Partial<MediaTaskArtifactOutput>,
+): MediaTaskArtifactOutput {
+  return {
+    success: true,
+    task_id: "task-artifact",
+    task_type: "image_generate",
+    task_family: "media",
+    status: "running",
+    normalized_status: "running",
+    current_attempt_id: null,
+    path: ".lime/media/task-artifact.json",
+    absolute_path: "/workspace/.lime/media/task-artifact.json",
+    artifact_path: ".lime/artifacts/task-artifact.json",
+    absolute_artifact_path: "/workspace/.lime/artifacts/task-artifact.json",
+    reused_existing: false,
+    record: null as unknown as MediaTaskArtifactOutput["record"],
+    ...overrides,
+  };
+}
+
+describe("imageTaskPreviewRuntimeSnapshot", () => {
+  it("应规范化任务状态，并为消息预览去重限制图片 URL", () => {
+    expect(normalizeTaskStatus("pending_submit")).toBe("pending");
+    expect(normalizeTaskStatus("processing")).toBe("running");
+    expect(normalizeTaskStatus("SUCCESS")).toBe("succeeded");
+    expect(normalizeTaskStatus("canceled")).toBe("cancelled");
+    expect(normalizeTaskStatus("unknown")).toBe("pending");
+
+    const outputs = Array.from({ length: 12 }, (_, index) =>
+      createOutput(
+        index === 3
+          ? "https://cdn.example.com/2.png"
+          : `https://cdn.example.com/${index}.png`,
+        index,
+      ),
+    );
+
+    expect(buildPreviewImageUrls(outputs)).toEqual([
+      "https://cdn.example.com/0.png",
+      "https://cdn.example.com/1.png",
+      "https://cdn.example.com/2.png",
+      "https://cdn.example.com/4.png",
+      "https://cdn.example.com/5.png",
+      "https://cdn.example.com/6.png",
+      "https://cdn.example.com/7.png",
+      "https://cdn.example.com/8.png",
+      "https://cdn.example.com/9.png",
+    ]);
+  });
+
+  it("应为 pending 图片任务投影 provider、model、分镜 slots 和恢复路径", () => {
+    const snapshot = buildPendingImageTaskSnapshot({
+      taskId: "task-pending",
+      taskType: "image_generate",
+      status: "pending_submit",
+      payload: {
+        prompt: "城市夜景分镜",
+        count: 2,
+        provider_id: "openai",
+        model: "gpt-image-2",
+        layout_hint: "storyboard_3x3",
+        storyboard_slots: [
+          {
+            slot_id: "hero",
+            slot_index: 1,
+            slot_label: "首图",
+            prompt: "霓虹城市全景",
+          },
+          {
+            slot_id: "detail",
+            slot_index: 2,
+            slot_label: "细节",
+            revised_prompt: "街角咖啡店灯牌",
+          },
+        ],
+      },
+      projectId: "project-1",
+      contentId: "content-1",
+      taskFilePath: "/workspace/.lime/media/task-pending.json",
+      artifactPath: ".lime/artifacts/task-pending.json",
+      canvasState: null,
+    });
+
+    expect(snapshot.terminal).toBe(false);
+    expect(snapshot.task).toMatchObject({
+      id: "task-pending",
+      status: "queued",
+      expectedCount: 2,
+      layoutHint: "storyboard_3x3",
+      taskFilePath: "/workspace/.lime/media/task-pending.json",
+      artifactPath: ".lime/artifacts/task-pending.json",
+    });
+    expect(snapshot.task.storyboardSlots).toEqual([
+      {
+        slotId: "hero",
+        slotIndex: 1,
+        label: "首图",
+        prompt: "霓虹城市全景",
+        shotType: null,
+        status: null,
+      },
+      {
+        slotId: "detail",
+        slotIndex: 2,
+        label: "细节",
+        prompt: "街角咖啡店灯牌",
+        shotType: null,
+        status: null,
+      },
+    ]);
+    expect(snapshot.message.imageWorkbenchPreview).toMatchObject({
+      taskId: "task-pending",
+      status: "running",
+      prompt: "城市夜景分镜",
+      expectedImageCount: 2,
+      imageCount: 2,
+      providerName: "openai",
+      modelName: "gpt-image-2",
+      projectId: "project-1",
+      contentId: "content-1",
+      phase: "pending_submit",
+    });
+  });
+
+  it("应从 completed task record 投影多图输出、runtime contract 和工作台任务", () => {
+    const snapshot = buildParsedImageTaskSnapshot({
+      taskId: "task-complete",
+      taskType: "image_generate",
+      projectId: "project-1",
+      contentId: "content-1",
+      taskFilePath: ".lime/media/task-complete.json",
+      artifactPath: ".lime/artifacts/task-complete.json",
+      canvasState: null,
+      taskRecord: {
+        status: "completed",
+        normalized_status: "success",
+        current_attempt_id: "attempt-1",
+        created_at: "2026-07-02T08:00:00.000Z",
+        payload: {
+          prompt: "春日咖啡馆插画",
+          raw_text: "@配图 春日咖啡馆插画",
+          count: 2,
+          size: "1024x1024",
+          provider_id: "openai",
+          model: "gpt-image-2",
+          modality_contract_key: "image_generation",
+          routing_slot: "primary-image",
+          model_capability_assessment: {
+            provider_id: "openai",
+            model_id: "gpt-image-2",
+            source: "model-registry",
+            supports_image_generation: true,
+          },
+          limecore_policy_snapshot: {
+            status: "evaluated",
+            decision: "allow",
+          },
+          storyboard_slots: [
+            {
+              slot_id: "hero",
+              slot_index: 1,
+              slot_label: "首图",
+              prompt: "窗边咖啡馆全景",
+            },
+          ],
+        },
+        progress: {
+          phase: "succeeded",
+          preview_slots: [
+            {
+              slot_id: "detail",
+              slot_index: 2,
+              slot_label: "细节",
+              revised_prompt: "咖啡杯与手写笔记",
+              status: "complete",
+            },
+          ],
+        },
+        result: {
+          images: [
+            {
+              url: "https://cdn.example.com/hero.png",
+              prompt: "首图成片",
+              provider: "openai",
+              model: "gpt-image-2",
+              size: "1024x1024",
+              slot_id: "hero",
+              slot_index: 1,
+              slot_label: "首图",
+              slot_prompt: "窗边咖啡馆全景",
+            },
+            {
+              url: "https://cdn.example.com/detail.png",
+              prompt: "细节成片",
+              slot_id: "detail",
+              slot_index: 2,
+              slot_label: "细节",
+              slot_prompt: "咖啡杯与手写笔记",
+            },
+          ],
+        },
+        attempts: [
+          {
+            attempt_id: "attempt-1",
+            provider: "openai",
+            model: "gpt-image-2",
+            result_snapshot: {
+              image_url: "https://cdn.example.com/detail.png",
+            },
+          },
+        ],
+      },
+    });
+
+    expect(snapshot).not.toBeNull();
+    expect(snapshot?.terminal).toBe(true);
+    expect(snapshot?.updatedAt).toBe(Date.parse("2026-07-02T08:00:00.000Z"));
+    expect(snapshot?.outputs.map((output) => output.url)).toEqual([
+      "https://cdn.example.com/hero.png",
+      "https://cdn.example.com/detail.png",
+    ]);
+    expect(snapshot?.outputs.map((output) => output.slotId)).toEqual([
+      "hero",
+      "detail",
+    ]);
+    expect(snapshot?.task).toMatchObject({
+      id: "task-complete",
+      status: "complete",
+      expectedCount: 2,
+      outputIds: ["task-complete:output:1", "task-complete:output:2"],
+      taskFilePath: ".lime/media/task-complete.json",
+      artifactPath: ".lime/artifacts/task-complete.json",
+    });
+    expect(snapshot?.task.storyboardSlots).toEqual([
+      {
+        slotId: "hero",
+        slotIndex: 1,
+        label: "首图",
+        prompt: "窗边咖啡馆全景",
+        shotType: null,
+        status: "complete",
+      },
+      {
+        slotId: "detail",
+        slotIndex: 2,
+        label: "细节",
+        prompt: "咖啡杯与手写笔记",
+        shotType: null,
+        status: "complete",
+      },
+    ]);
+    expect(snapshot?.message.imageWorkbenchPreview).toMatchObject({
+      taskId: "task-complete",
+      status: "complete",
+      imageUrl: "https://cdn.example.com/hero.png",
+      previewImages: [
+        "https://cdn.example.com/hero.png",
+        "https://cdn.example.com/detail.png",
+      ],
+      imageCount: 2,
+      expectedImageCount: 2,
+      providerName: "openai",
+      modelName: "gpt-image-2",
+      size: "1024x1024",
+      phase: "succeeded",
+      attemptCount: 1,
+      runtimeContract: {
+        contractKey: "image_generation",
+        routingSlot: "primary-image",
+        providerId: "openai",
+        model: "gpt-image-2",
+        routingOutcome: "accepted",
+        modelCapabilityAssessmentSource: "model-registry",
+        modelSupportsImageGeneration: true,
+        limecorePolicyDecision: "allow",
+      },
+    });
+  });
+
+  it("应从 artifact output 复用 record，并在无 record 时回退 pending snapshot", () => {
+    const recordSnapshot = buildImageTaskSnapshotFromArtifactOutput({
+      artifact: createArtifact({
+        task_id: "task-record",
+        status: "completed",
+        normalized_status: "success",
+        record: {
+          task_id: "task-record",
+          task_type: "image_generate",
+          task_family: "image",
+          status: "completed",
+          normalized_status: "success",
+          created_at: "2026-07-02T09:00:00.000Z",
+          payload: {
+            prompt: "落库图片",
+          },
+          result: {
+            image_url: "https://cdn.example.com/record.png",
+          },
+        },
+      }),
+      projectId: "project-1",
+      contentId: "content-1",
+      canvasState: null,
+    });
+
+    expect(recordSnapshot?.message.imageWorkbenchPreview).toMatchObject({
+      taskId: "task-record",
+      status: "complete",
+      imageUrl: "https://cdn.example.com/record.png",
+      taskFilePath: "/workspace/.lime/media/task-artifact.json",
+      artifactPath: ".lime/artifacts/task-artifact.json",
+    });
+
+    const pendingSnapshot = buildImageTaskSnapshotFromArtifactOutput({
+      artifact: createArtifact({
+        task_id: "task-pending-artifact",
+        status: "running",
+        normalized_status: "running",
+      }),
+      canvasState: null,
+    });
+
+    expect(pendingSnapshot?.terminal).toBe(false);
+    expect(pendingSnapshot?.message.imageWorkbenchPreview).toMatchObject({
+      taskId: "task-pending-artifact",
+      status: "running",
+      taskFilePath: "/workspace/.lime/media/task-artifact.json",
+      artifactPath: ".lime/artifacts/task-artifact.json",
+    });
+  });
+});

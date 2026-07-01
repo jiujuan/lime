@@ -97,6 +97,23 @@ describe("agent runtime current fixture regression smoke guard", () => {
     expect(content).toContain("真实 GUI 图片命令到 Claw Chat Electron fixture");
   });
 
+  it("runs the real Electron plain image intent Claw fixture in the current regression set", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain("Claw 普通画图意图 GUI Electron fixture");
+    expect(content).toContain(
+      "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
+    );
+    expect(content).toContain("--scenario");
+    expect(content).toContain("plain-image-intent");
+    expect(content).toContain(
+      "claw-chat-current-fixture-plain-image-intent-regression",
+    );
+    expect(content).toContain(
+      "普通自然语言画图意图到同一图片 task 主链 Electron fixture",
+    );
+  });
+
   it("runs the real Coding Workbench Electron fixture in the current regression set", () => {
     const content = readSmokeScript();
 

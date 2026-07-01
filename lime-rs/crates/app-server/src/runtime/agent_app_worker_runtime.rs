@@ -16,6 +16,7 @@ use std::time::Duration;
 use std::time::Instant;
 
 const DEFAULT_WORKER_TIMEOUT_MS: u64 = 30_000;
+const DEFAULT_HOOK_TIMEOUT_MS: u64 = 5_000;
 const MAX_WORKER_STDOUT_BYTES: usize = 2 * 1024 * 1024;
 const MAX_WORKER_STDERR_BYTES: usize = 512 * 1024;
 const CONTENT_FACTORY_WORKSPACE_PATCH_KIND: &str = "content_factory.workspace_patch";
@@ -26,6 +27,29 @@ pub(super) struct AgentAppWorkerRunRequest {
     pub task_runtime: AgentAppTaskRuntimeContract,
     pub request: Value,
     pub timeout_ms: u64,
+}
+
+#[derive(Debug, Clone)]
+pub(super) struct AgentAppHookRunRequest {
+    pub package_root: PathBuf,
+    pub hook_entrypoint: String,
+    pub request: Value,
+    pub timeout_ms: u64,
+}
+
+impl AgentAppHookRunRequest {
+    pub(super) fn new(
+        package_root: impl Into<PathBuf>,
+        hook_entrypoint: impl Into<String>,
+        request: Value,
+    ) -> Self {
+        Self {
+            package_root: package_root.into(),
+            hook_entrypoint: hook_entrypoint.into(),
+            request,
+            timeout_ms: DEFAULT_HOOK_TIMEOUT_MS,
+        }
+    }
 }
 
 impl AgentAppWorkerRunRequest {
@@ -74,6 +98,26 @@ impl RuntimeCore {
             self.sidecar_store.is_some(),
         )
     }
+
+    pub(in crate::runtime) fn run_agent_app_hook(
+        &self,
+        request: AgentAppHookRunRequest,
+    ) -> Result<Value, RuntimeCoreError> {
+        let entrypoint = resolve_package_entrypoint(
+            &request.package_root,
+            Some(request.hook_entrypoint.as_str()),
+            "Agent App hook",
+        )?;
+        let node = node_binary();
+        invoke_node_json_process(
+            "Agent App hook",
+            &node,
+            &request.package_root,
+            &entrypoint,
+            &request.request,
+            request.timeout_ms,
+        )
+    }
 }
 
 fn validate_task_runtime(contract: &AgentAppTaskRuntimeContract) -> Result<(), RuntimeCoreError> {
@@ -106,32 +150,38 @@ fn validate_task_runtime(contract: &AgentAppTaskRuntimeContract) -> Result<(), R
     Ok(())
 }
 
-fn resolve_worker_entrypoint(
+fn resolve_package_entrypoint(
     package_root: &Path,
     entrypoint: Option<&str>,
+    label: &str,
 ) -> Result<PathBuf, RuntimeCoreError> {
     let entrypoint = entrypoint
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            RuntimeCoreError::Backend("Agent App worker entrypoint is missing.".to_string())
-        })?;
+        .ok_or_else(|| RuntimeCoreError::Backend(format!("{label} entrypoint is missing.")))?;
     if entrypoint.starts_with("http://")
         || entrypoint.starts_with("https://")
         || entrypoint.contains("..")
     {
-        return Err(RuntimeCoreError::Backend(
-            "Agent App worker entrypoint must be a package-relative file path.".to_string(),
-        ));
+        return Err(RuntimeCoreError::Backend(format!(
+            "{label} entrypoint must be a package-relative file path."
+        )));
     }
     let path = package_root.join(entrypoint.trim_start_matches("./"));
     if !path.is_file() {
         return Err(RuntimeCoreError::Backend(format!(
-            "Agent App worker entrypoint was not found: {}",
+            "{label} entrypoint was not found: {}",
             path.display()
         )));
     }
     Ok(path)
+}
+
+fn resolve_worker_entrypoint(
+    package_root: &Path,
+    entrypoint: Option<&str>,
+) -> Result<PathBuf, RuntimeCoreError> {
+    resolve_package_entrypoint(package_root, entrypoint, "Agent App worker")
 }
 
 fn node_binary() -> String {
@@ -151,6 +201,24 @@ fn invoke_worker_process(
     request: &Value,
     timeout_ms: u64,
 ) -> Result<Value, RuntimeCoreError> {
+    invoke_node_json_process(
+        "Agent App worker",
+        node,
+        package_root,
+        entrypoint,
+        request,
+        timeout_ms,
+    )
+}
+
+fn invoke_node_json_process(
+    label: &str,
+    node: &str,
+    package_root: &Path,
+    entrypoint: &Path,
+    request: &Value,
+    timeout_ms: u64,
+) -> Result<Value, RuntimeCoreError> {
     let mut command = Command::new(node);
     command
         .arg(entrypoint)
@@ -162,9 +230,9 @@ fn invoke_worker_process(
         command.env_remove(key);
     }
 
-    let mut child = command.spawn().map_err(|error| {
-        RuntimeCoreError::Backend(format!("failed to spawn Agent App worker: {error}"))
-    })?;
+    let mut child = command
+        .spawn()
+        .map_err(|error| RuntimeCoreError::Backend(format!("failed to spawn {label}: {error}")))?;
     let stdout_reader = child
         .stdout
         .take()
@@ -183,7 +251,7 @@ fn invoke_worker_process(
             let _ = join_worker_output_reader(stdout_reader, "stdout", MAX_WORKER_STDOUT_BYTES);
             let _ = join_worker_output_reader(stderr_reader, "stderr", MAX_WORKER_STDERR_BYTES);
             return Err(RuntimeCoreError::Backend(format!(
-                "Agent App worker timed out after {timeout_ms}ms"
+                "{label} timed out after {timeout_ms}ms"
             )));
         }
         match child.try_wait() {
@@ -194,17 +262,17 @@ fn invoke_worker_process(
                     join_worker_output_reader(stderr_reader, "stderr", MAX_WORKER_STDERR_BYTES)?;
                 if !status.success() {
                     return Err(RuntimeCoreError::Backend(format!(
-                        "Agent App worker exited with {}: {}",
+                        "{label} exited with {}: {}",
                         status,
                         String::from_utf8_lossy(&stderr).trim()
                     )));
                 }
-                return decode_worker_stdout(&stdout);
+                return decode_node_stdout(label, &stdout);
             }
             Ok(None) => std::thread::sleep(Duration::from_millis(10)),
             Err(error) => {
                 return Err(RuntimeCoreError::Backend(format!(
-                    "failed to poll Agent App worker: {error}"
+                    "failed to poll {label}: {error}"
                 )));
             }
         }
@@ -276,20 +344,16 @@ fn write_worker_request(
     Ok(())
 }
 
-fn decode_worker_stdout(stdout: &[u8]) -> Result<Value, RuntimeCoreError> {
+fn decode_node_stdout(label: &str, stdout: &[u8]) -> Result<Value, RuntimeCoreError> {
     let text = std::str::from_utf8(stdout).map_err(|error| {
-        RuntimeCoreError::Backend(format!("Agent App worker stdout must be UTF-8: {error}"))
+        RuntimeCoreError::Backend(format!("{label} stdout must be UTF-8: {error}"))
     })?;
     let line = text
         .lines()
         .find(|line| !line.trim().is_empty())
-        .ok_or_else(|| {
-            RuntimeCoreError::Backend("Agent App worker returned empty stdout.".to_string())
-        })?;
+        .ok_or_else(|| RuntimeCoreError::Backend(format!("{label} returned empty stdout.")))?;
     serde_json::from_str(line).map_err(|error| {
-        RuntimeCoreError::Backend(format!(
-            "failed to decode Agent App worker response: {error}"
-        ))
+        RuntimeCoreError::Backend(format!("failed to decode {label} response: {error}"))
     })
 }
 
@@ -353,9 +417,6 @@ fn attach_worker_metadata(
     task_runtime: &AgentAppTaskRuntimeContract,
 ) {
     let metadata = ensure_object_field(artifact, "metadata");
-    if metadata.get("agentAppWorker").is_some() {
-        return;
-    }
     let workspace_patch = metadata
         .get("contentFactoryWorkspacePatch")
         .or_else(|| metadata.get("workspace_patch"));
@@ -364,21 +425,116 @@ fn attach_worker_metadata(
         .and_then(Value::as_array)
         .and_then(|objects| u64::try_from(objects.len()).ok());
     let output_summary = output_object_count.map(|count| format!("{count} product objects"));
-    metadata.insert(
-        "agentAppWorker".to_string(),
-        json!({
-            "appId": string_field(request, &["appId", "app_id"]),
-            "taskId": string_field(request, &["taskId", "task_id"]),
-            "taskKind": string_field(request, &["taskKind", "task_kind"]),
-            "turnId": string_field(request, &["turnId", "turn_id"]),
-            "status": "completed",
-            "workerEntrypoint": task_runtime.worker_entrypoint.as_deref(),
-            "inputSummary": string_field(request, &["prompt"])
-                .map(|prompt| format!("prompt={}", truncate_chars(&prompt, 80))),
-            "outputSummary": output_summary,
-            "outputObjectCount": output_object_count,
-            "outputArtifactKind": task_runtime.output_artifact_kind.as_deref(),
-        }),
+    let agent_app_worker = metadata
+        .entry("agentAppWorker".to_string())
+        .or_insert_with(|| Value::Object(Map::new()));
+    if !agent_app_worker.is_object() {
+        *agent_app_worker = Value::Object(Map::new());
+    }
+    let agent_app_worker = agent_app_worker
+        .as_object_mut()
+        .expect("agentAppWorker metadata is object");
+    insert_missing_metadata_field(
+        agent_app_worker,
+        "appId",
+        json!(string_field(request, &["appId", "app_id"])),
+    );
+    insert_missing_metadata_field(
+        agent_app_worker,
+        "taskId",
+        json!(string_field(request, &["taskId", "task_id"])),
+    );
+    insert_missing_metadata_field(
+        agent_app_worker,
+        "taskKind",
+        json!(string_field(request, &["taskKind", "task_kind"])),
+    );
+    insert_missing_metadata_field(
+        agent_app_worker,
+        "turnId",
+        json!(string_field(request, &["turnId", "turn_id"])),
+    );
+    insert_missing_metadata_field(agent_app_worker, "status", json!("completed"));
+    insert_missing_metadata_field(
+        agent_app_worker,
+        "workerEntrypoint",
+        json!(task_runtime.worker_entrypoint.as_deref()),
+    );
+    insert_missing_metadata_field(
+        agent_app_worker,
+        "inputSummary",
+        json!(string_field(request, &["prompt"])
+            .map(|prompt| format!("prompt={}", truncate_chars(&prompt, 80)))),
+    );
+    insert_missing_metadata_field(agent_app_worker, "outputSummary", json!(output_summary));
+    insert_missing_metadata_field(
+        agent_app_worker,
+        "outputObjectCount",
+        json!(output_object_count),
+    );
+    insert_missing_metadata_field(
+        agent_app_worker,
+        "outputArtifactKind",
+        json!(task_runtime.output_artifact_kind.as_deref()),
+    );
+    insert_missing_metadata_field(
+        agent_app_worker,
+        "workflowKey",
+        request
+            .get("workflowKey")
+            .or_else(|| request.get("workflow_key"))
+            .cloned()
+            .unwrap_or(Value::Null),
+    );
+    insert_missing_metadata_field(
+        agent_app_worker,
+        "subagents",
+        request
+            .get("subagents")
+            .or_else(|| request.get("sub_agents"))
+            .cloned()
+            .unwrap_or(Value::Null),
+    );
+    insert_missing_metadata_field(
+        agent_app_worker,
+        "skillRefs",
+        request
+            .get("skillRefs")
+            .or_else(|| request.get("skill_refs"))
+            .cloned()
+            .unwrap_or(Value::Null),
+    );
+    insert_missing_metadata_field(
+        agent_app_worker,
+        "cliRefs",
+        request
+            .get("cliRefs")
+            .or_else(|| request.get("cli_refs"))
+            .cloned()
+            .unwrap_or(Value::Null),
+    );
+    insert_missing_metadata_field(
+        agent_app_worker,
+        "connectorRefs",
+        request
+            .get("connectorRefs")
+            .or_else(|| request.get("connector_refs"))
+            .cloned()
+            .unwrap_or(Value::Null),
+    );
+    insert_missing_metadata_field(
+        agent_app_worker,
+        "hookPolicy",
+        request
+            .get("hookPolicy")
+            .or_else(|| request.get("hook_policy"))
+            .cloned()
+            .unwrap_or(Value::Null),
+    );
+    insert_missing_metadata_field(
+        agent_app_worker,
+        "orchestration",
+        request.get("orchestration").cloned().unwrap_or(Value::Null),
     );
 }
 
@@ -394,6 +550,29 @@ fn ensure_object_field<'a>(value: &'a mut Value, key: &str) -> &'a mut Map<Strin
         *entry = Value::Object(Map::new());
     }
     entry.as_object_mut().expect("field is object")
+}
+
+fn insert_missing_metadata_field(object: &mut Map<String, Value>, key: &str, value: Value) {
+    if !metadata_value_is_meaningful(&value) {
+        return;
+    }
+    let should_insert = object
+        .get(key)
+        .map(|current| !metadata_value_is_meaningful(current))
+        .unwrap_or(true);
+    if should_insert {
+        object.insert(key.to_string(), value);
+    }
+}
+
+fn metadata_value_is_meaningful(value: &Value) -> bool {
+    match value {
+        Value::Null => false,
+        Value::String(value) => !value.trim().is_empty(),
+        Value::Array(value) => !value.is_empty(),
+        Value::Object(value) => !value.is_empty(),
+        Value::Bool(_) | Value::Number(_) => true,
+    }
 }
 
 fn truncate_chars(value: &str, max_chars: usize) -> String {
@@ -515,6 +694,90 @@ mod tests {
             CONTENT_FACTORY_WORKSPACE_PATCH_KIND
         );
         assert!(events[0].payload["artifact"]["content"].is_null());
+    }
+
+    #[test]
+    fn worker_adapter_completes_existing_agent_app_worker_metadata() {
+        let state = json!({
+            "manifest": {
+                "runtimePackage": {
+                    "worker": {
+                        "entrypoint": "./src/runtime/content-factory-worker.mjs",
+                        "outputArtifactKind": "content_factory.workspace_patch"
+                    }
+                },
+                "agentRuntime": {
+                    "worker": {
+                        "directProviderAccess": false,
+                        "directFilesystemAccess": false
+                    }
+                }
+            }
+        });
+        let contract = build_agent_app_task_runtime_contract(&state, None);
+        let response = json!({
+            "status": "completed",
+            "artifacts": [
+                {
+                    "kind": "artifact.snapshot",
+                    "artifactId": "task-article:workspace-patch",
+                    "title": "Content Factory workspace patch",
+                    "metadata": {
+                        "agentAppWorker": {
+                            "taskId": "task-article",
+                            "workflowKey": "",
+                            "skillRefs": []
+                        },
+                        "contentFactoryWorkspacePatch": {
+                            "objects": [
+                                {
+                                    "ref": {
+                                        "kind": "articleDraft",
+                                        "id": "article-1"
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        });
+        let request = json!({
+            "appId": "content-factory-app",
+            "taskId": "task-article",
+            "taskKind": "content.article.generate",
+            "turnId": "turn-article",
+            "prompt": "写一篇文章",
+            "workflowKey": "content_article_workflow",
+            "subagents": ["article-writer"],
+            "skillRefs": ["article-writing", "article-image-plan"],
+            "cliRefs": ["content-factory"],
+            "connectorRefs": ["web-research"],
+            "hookPolicy": {
+                "prompt": ["prompt-submit"]
+            },
+            "orchestration": [
+                {
+                    "id": "draft",
+                    "subagent": "article-writer"
+                }
+            ]
+        });
+
+        let events = worker_response_to_runtime_events(response, &request, &contract, true)
+            .expect("worker events");
+
+        let metadata = &events[0].payload["artifact"]["metadata"]["agentAppWorker"];
+        assert_eq!(metadata["taskId"], "task-article");
+        assert_eq!(metadata["taskKind"], "content.article.generate");
+        assert_eq!(metadata["outputObjectCount"], 1);
+        assert_eq!(metadata["workflowKey"], "content_article_workflow");
+        assert_eq!(metadata["subagents"][0], "article-writer");
+        assert_eq!(metadata["skillRefs"][1], "article-image-plan");
+        assert_eq!(metadata["cliRefs"][0], "content-factory");
+        assert_eq!(metadata["connectorRefs"][0], "web-research");
+        assert_eq!(metadata["hookPolicy"]["prompt"][0], "prompt-submit");
+        assert_eq!(metadata["orchestration"][0]["subagent"], "article-writer");
     }
 
     #[tokio::test]
@@ -886,7 +1149,10 @@ process.stdout.write(JSON.stringify({
                 id: "article-stdin-eof",
                 sessionId: request.sessionId ?? "session-stdin-eof"
               },
-              source: { markdown: "# Done" }
+              source: {
+                documentText: "# Done",
+                finalMarkdown: "# Done"
+              }
             }
           ]
         }

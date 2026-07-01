@@ -457,9 +457,10 @@ describe("MessageList message actions", () => {
     );
   });
 
-  it("内容工厂文章产物应在独立 ArtifactFrame 内完整输出正文", () => {
+  it("内容工厂文章产物应在过程之后以受控预览展示", () => {
     const now = new Date();
     const onArtifactClick = vi.fn();
+    const onSaveMessageAsKnowledge = vi.fn();
     const fullArticle =
       "# 公众号文章草稿\n\n这是第一段正文，应该在独立产物框内完整显示。\n\n这是第二段正文，点击框头后进入右侧文章编辑器。";
     const messages: Message[] = [
@@ -496,6 +497,40 @@ describe("MessageList message actions", () => {
                 objectId: "article-1",
                 surfaceKind: "document",
               },
+              contentFactoryWorkspacePatch: {
+                workerEvidence: [
+                  {
+                    subagents: ["content-researcher", "article-writer"],
+                    skillRefs: ["article-research", "article-writing"],
+                    researchRounds: [
+                      { id: "research-1", title: "资料检索" },
+                      { id: "research-2", title: "资料交叉验证" },
+                      { id: "research-3", title: "发布检查" },
+                    ],
+                    outline: [
+                      { id: "section-1", title: "开场" },
+                      { id: "section-2", title: "基础" },
+                      { id: "section-3", title: "实践" },
+                      { id: "section-4", title: "进阶" },
+                      { id: "section-5", title: "复盘" },
+                    ],
+                    writingPlan: [
+                      {
+                        id: "plan-research",
+                        title: "资料检索",
+                        owner: "content-researcher",
+                        skillRef: "article-research",
+                      },
+                      {
+                        id: "plan-draft",
+                        title: "正文写作",
+                        owner: "article-writer",
+                        skillRef: "article-writing",
+                      },
+                    ],
+                  },
+                ],
+              },
             },
             position: { start: 0, end: fullArticle.length },
             createdAt: now.getTime(),
@@ -505,24 +540,31 @@ describe("MessageList message actions", () => {
       },
     ];
 
-    const container = render(messages, { onArtifactClick });
+    const container = render(messages, {
+      onArtifactClick,
+      onSaveMessageAsKnowledge,
+    });
     const artifactFrame = container.querySelector(
       '[data-testid="article-artifact-frame"]',
+    );
+    const messageActions = container.querySelector(
+      '[data-testid="message-actions"]',
     );
     const openButton = artifactFrame?.querySelector(
       "button",
     ) as HTMLButtonElement | null;
 
     expect(artifactFrame).not.toBeNull();
+    expect(messageActions).not.toBeNull();
+    expect(
+      Boolean(
+        artifactFrame!.compareDocumentPosition(messageActions!) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
     expect(container.textContent).toContain("公众号文章草稿");
-    expect(container.textContent).toContain("Article output");
-    expect(container.textContent).toContain("Full draft");
-    expect(container.textContent).toContain("Article draft");
-    expect(container.textContent).toContain("Open right editor");
-    expect(container.textContent).toContain("3 research round(s) completed");
-    expect(container.textContent).toContain("3 research rounds");
-    expect(container.textContent).toContain("5 article sections");
-    expect(container.textContent).toContain("2 image slots");
+    expect(container.textContent).toContain("Document created:");
+    expect(container.textContent).toContain("Open document");
     expect(container.textContent).not.toContain("articleArtifacts");
     expect(container.textContent).toContain(
       "这是第一段正文，应该在独立产物框内完整显示。",

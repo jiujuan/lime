@@ -3,6 +3,7 @@ import {
   AGENT_RUNTIME_SESSIONS_CHANGED_EVENT,
   listAgentRuntimeSessions,
   type AsterSessionInfo,
+  type AgentRuntimeSessionsChangedDetail,
 } from "@/lib/api/agentRuntime";
 import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
 import { logAgentDebug } from "@/lib/agentDebug";
@@ -86,6 +87,26 @@ function buildSidebarSessionLoadRequests(params: {
   }
 
   return requests;
+}
+
+function shouldDeferCurrentSessionMetadataRefresh(params: {
+  currentSessionId: string | null;
+  detail: unknown;
+}): boolean {
+  const detail = params.detail as
+    | Partial<AgentRuntimeSessionsChangedDetail>
+    | null
+    | undefined;
+  if (detail?.reason !== "updated") {
+    return false;
+  }
+
+  const changedSessionId = detail.sessionId?.trim();
+  return Boolean(
+    changedSessionId &&
+    params.currentSessionId &&
+    changedSessionId === params.currentSessionId,
+  );
 }
 
 export function useAppSidebarSessions({
@@ -421,7 +442,18 @@ export function useAppSidebarSessions({
       return;
     }
 
-    const handleSessionsChanged = () => {
+    const handleSessionsChanged = (event: Event) => {
+      const detail = event instanceof CustomEvent ? event.detail : undefined;
+      if (
+        shouldDeferCurrentSessionMetadataRefresh({
+          currentSessionId,
+          detail,
+        })
+      ) {
+        scheduleRecentSidebarReload(SIDEBAR_SESSION_ENTRY_REFRESH_DEFER_MS);
+        return;
+      }
+
       void refreshSidebarSessions();
     };
 
@@ -436,7 +468,12 @@ export function useAppSidebarSessions({
         handleSessionsChanged,
       );
     };
-  }, [refreshSidebarSessions, shouldLoadSidebarConversations]);
+  }, [
+    currentSessionId,
+    refreshSidebarSessions,
+    scheduleRecentSidebarReload,
+    shouldLoadSidebarConversations,
+  ]);
 
   useEffect(() => {
     if (!shouldLoadSidebarConversations || !sidebarSessionsHasMore) {

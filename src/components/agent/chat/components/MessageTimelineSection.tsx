@@ -16,6 +16,7 @@ interface MessageTimelineSectionProps {
   actionRequests: Message["actionRequests"] | undefined;
   activeCurrentTurnId: string | null;
   detailsDeferred?: boolean;
+  expandCompletedProcessDetails?: boolean;
   focusedTimelineItemId?: string | null;
   focusRequestKey: number;
   isCurrentTurnSending: boolean;
@@ -43,6 +44,7 @@ export function MessageTimelineSection({
   actionRequests,
   activeCurrentTurnId,
   detailsDeferred = false,
+  expandCompletedProcessDetails = false,
   focusedTimelineItemId,
   focusRequestKey,
   isCurrentTurnSending,
@@ -79,6 +81,7 @@ export function MessageTimelineSection({
       actionRequests={actionRequests}
       isCurrentTurn={timeline.turn.id === activeCurrentTurnId}
       collapseInactiveDetails={!isCurrentTurnSending}
+      expandCompletedProcessDetails={expandCompletedProcessDetails}
       deferCompletedSingleDetails={
         shouldDeferHistoricalTimelineDetails &&
         timeline.turn.id !== activeCurrentTurnId

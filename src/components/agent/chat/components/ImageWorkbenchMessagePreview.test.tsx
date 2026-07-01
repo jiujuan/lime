@@ -161,6 +161,61 @@ describe("ImageWorkbenchMessagePreview", () => {
     window.removeEventListener(IMAGE_WORKBENCH_TASK_ACTION_EVENT, handleAction);
   });
 
+  it("cancelled preview also exposes retry unless the task is marked non-retryable", () => {
+    const { container } = renderPreview({
+      taskId: "image-preview-cancelled",
+      prompt: "Create a lime poster",
+      mode: "generate",
+      status: "cancelled",
+      projectId: "project-1",
+      contentId: "content-1",
+    });
+
+    let actionDetail: Record<string, unknown> | null = null;
+    const handleAction = (event: Event) => {
+      if (!(event instanceof CustomEvent)) {
+        return;
+      }
+      actionDetail = event.detail as Record<string, unknown>;
+    };
+    window.addEventListener(IMAGE_WORKBENCH_TASK_ACTION_EVENT, handleAction);
+
+    const retryButton = container.querySelector(
+      '[data-testid="image-workbench-message-preview-action-image-preview-cancelled-retry"]',
+    ) as HTMLButtonElement | null;
+
+    expect(retryButton?.textContent).toContain("Retry");
+
+    act(() => {
+      retryButton?.click();
+    });
+
+    expect(actionDetail).toEqual({
+      action: "retry",
+      taskId: "image-preview-cancelled",
+      projectId: "project-1",
+      contentId: "content-1",
+    });
+
+    window.removeEventListener(IMAGE_WORKBENCH_TASK_ACTION_EVENT, handleAction);
+  });
+
+  it("does not expose retry when task preview explicitly marks it non-retryable", () => {
+    const { container } = renderPreview({
+      taskId: "image-preview-not-retryable",
+      prompt: "Create a lime poster",
+      mode: "generate",
+      status: "failed",
+      retryable: false,
+    });
+
+    expect(
+      container.querySelector(
+        '[data-testid="image-workbench-message-preview-action-image-preview-not-retryable-retry"]',
+      ),
+    ).toBeNull();
+  });
+
   it("passes the clicked grid image so the viewer does not fall back to the first output", () => {
     const onOpen = vi.fn();
     const { container } = renderPreview(

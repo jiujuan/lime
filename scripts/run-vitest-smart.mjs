@@ -203,6 +203,97 @@ function assertLiveProviderArgsAllowed(args) {
   }
 }
 
+function isElectronRelatedPath(arg) {
+  const normalized = String(arg || "").replaceAll("\\", "/");
+  return (
+    normalized === "electron" ||
+    normalized.startsWith("electron/") ||
+    normalized.startsWith("./electron/") ||
+    normalized.startsWith("scripts/electron/") ||
+    normalized.startsWith("./scripts/electron/")
+  );
+}
+
+function isOptionArg(arg) {
+  return String(arg || "").startsWith("-");
+}
+
+function resolveExistingRelatedPath(arg) {
+  if (isOptionArg(arg)) {
+    return null;
+  }
+
+  const resolved = path.resolve(repoRoot, arg);
+  return fs.existsSync(resolved) ? resolved : null;
+}
+
+function readRelatedSourceArgs(args) {
+  return args
+    .map((arg) => ({
+      arg,
+      resolved: resolveExistingRelatedPath(arg),
+    }))
+    .filter((entry) => entry.resolved !== null);
+}
+
+function resolveSiblingTestFileForSource(sourcePath) {
+  const parsed = path.parse(sourcePath);
+  if (/\.(test|spec)$/.test(parsed.name)) {
+    return sourcePath;
+  }
+
+  const candidate = path.join(parsed.dir, `${parsed.name}.test${parsed.ext}`);
+  return fs.existsSync(candidate) ? candidate : null;
+}
+
+function buildElectronRelatedRunArgs(args, sourceEntries) {
+  const testFiles = [];
+  const seen = new Set();
+  for (const entry of sourceEntries) {
+    const testFile = resolveSiblingTestFileForSource(entry.resolved);
+    if (!testFile || seen.has(testFile)) {
+      continue;
+    }
+    seen.add(testFile);
+    testFiles.push(displayPath(testFile));
+  }
+
+  if (testFiles.length === 0) {
+    throw new Error(
+      "[vitest-smart] Electron related 模式未找到相邻 *.test.* 文件，请直接点名测试文件运行。",
+    );
+  }
+
+  return [
+    ...testFiles,
+    ...args.filter(
+      (arg) => isOptionArg(arg) || !resolveExistingRelatedPath(arg),
+    ),
+  ];
+}
+
+export function buildRelatedModeInvocation(args) {
+  const sourceEntries = readRelatedSourceArgs(args);
+  const hasSourceEntries = sourceEntries.length > 0;
+  const allSourcesAreElectron =
+    hasSourceEntries &&
+    sourceEntries.every((entry) =>
+      isElectronRelatedPath(displayPath(entry.resolved)),
+    );
+
+  if (allSourcesAreElectron) {
+    return {
+      command: "run",
+      args: buildElectronRelatedRunArgs(args, sourceEntries),
+    };
+  }
+
+  return {
+    command: "related",
+    args: ["--exclude", "electron/**", ...args],
+  };
+}
+
 export function buildVitestCommandArgs(args, options = {}) {
   const command = options.command || "run";
   const baseArgs = [
@@ -568,8 +659,9 @@ function runRelatedMode(args) {
       "[vitest-smart] --related 需要至少一个源码文件，例如：npm run test:related -- src/foo.ts",
     );
   }
-  const status = runVitest(args, "运行 related 测试", {
-    command: "related",
+  const invocation = buildRelatedModeInvocation(args);
+  const status = runVitest(invocation.args, "运行 related 测试", {
+    command: invocation.command,
   });
   process.exit(status);
 }

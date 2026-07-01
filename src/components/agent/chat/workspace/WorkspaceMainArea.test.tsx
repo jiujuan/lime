@@ -201,9 +201,10 @@ describe("WorkspaceMainArea", () => {
       container.querySelector('[data-testid="workspace-right-surface"]'),
     ).not.toBeNull();
     expect(
-      container.querySelector<HTMLElement>('[data-testid="layout-canvas-panel"]')
-        ?.getBoundingClientRect().width,
-    ).toBeGreaterThan(0);
+      container.querySelector<HTMLElement>(
+        '[data-testid="layout-transition-root"]',
+      )?.dataset.hasCanvas,
+    ).toBe("true");
     expect(
       container.querySelector('[data-testid="workspace-canvas-content"]'),
     ).toBeNull();
@@ -337,7 +338,8 @@ describe("WorkspaceMainArea", () => {
       "bg-[color:var(--lime-chrome-rail)]",
     );
     expect(homeTopHost?.className).not.toContain("border-b");
-    expect(homeTopHost?.style.width).toBe("236px");
+    expect(homeTopHost?.dataset.widthPolicy).toBe("content-adaptive");
+    expect(homeTopHost?.style.maxWidth).toBe("100%");
     expect(
       homeTopHost?.querySelector('[data-testid="task-center-toolbar"]'),
     ).not.toBeNull();

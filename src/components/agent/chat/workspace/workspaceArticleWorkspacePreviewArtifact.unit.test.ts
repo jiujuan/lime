@@ -40,7 +40,8 @@ const articleWorkspace: WorkspaceArticleWorkspace = {
       source: {
         taskKind: "content.article.generate",
         taskId: "task-article-1",
-        markdown: "# 公众号文章草稿\n\n这是正文。",
+        documentText: "# 公众号文章草稿\n\n这是正文。",
+        finalMarkdown: "# 公众号文章草稿\n\n这是正文。",
       },
     },
     {
@@ -162,17 +163,15 @@ describe("workspaceArticleWorkspacePreviewArtifact", () => {
             expect.objectContaining({
               title: "公众号文章草稿",
               source: expect.objectContaining({
-                markdown: expect.stringContaining("这是正文"),
+                documentText: expect.stringContaining("这是正文"),
+                finalMarkdown: expect.stringContaining("这是正文"),
               }),
             }),
           ]),
         }),
-        contentFactoryWorkspacePatch: expect.objectContaining({
-          appId: "content-factory-app",
-          sessionId: "session-main",
-        }),
       }),
     });
+    expect(artifact?.meta).not.toHaveProperty("contentFactoryWorkspacePatch");
   });
 
   it("应把图片对象投影为 media preview artifact", () => {

@@ -1,8 +1,5 @@
 /* global Buffer, process */
-import {
-  app,
-  shell,
-} from "./electronRuntime";
+import { app, shell } from "./electronRuntime";
 import {
   METHOD_MODEL_LIST,
   METHOD_MODEL_PROVIDER_LIST,
@@ -26,14 +23,11 @@ import {
   type WorkspaceProjectsRootReadResponse,
   type WorkspaceReadResponse,
 } from "@limecloud/app-server-client";
-import {
-  mkdir,
-  readFile,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import path from "node:path";
 import type { ElectronAppServerHost } from "./appServerHost";
+import { AppConfigHost, buildDefaultConfig } from "./appConfigHost";
 import {
   openProjectPathWithLocalTool,
   type ProjectPathOpenTool,
@@ -50,7 +44,6 @@ import { VoiceModelHost } from "./voiceModelHost";
 type HostArgs = Record<string, unknown> | null | undefined;
 type AppServerParams = Record<string, unknown>;
 type HostEventEmitter = (event: string, payload?: unknown) => void;
-const CONFIG_FILE = "config.json";
 const OEM_CLOUD_OAUTH_CALLBACK_BRIDGE_EVENT = "oem-cloud-oauth-callback";
 const OEM_CLOUD_OAUTH_CALLBACK_PATH = "/oauth/callback";
 const OEM_CLOUD_OAUTH_CALLBACK_BRIDGE_TTL_MS = 10 * 60 * 1000;
@@ -89,6 +82,7 @@ export class ElectronHostCommands {
   readonly #projectShellHost: ProjectShellHost;
   readonly #systemUtilityHost: SystemUtilityHost;
   readonly #voiceModelHost: VoiceModelHost;
+  readonly #appConfigHost: AppConfigHost;
   #oauthCallbackBridgeServer: Server | null = null;
   #oauthCallbackBridgeTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -100,6 +94,7 @@ export class ElectronHostCommands {
     this.#appServerHost = appServerHost;
     this.#userDataDir = userDataDir;
     this.#emit = emit;
+    this.#appConfigHost = new AppConfigHost(userDataDir);
     this.#agentAppShellHost = new AgentAppShellHost(
       <T>(method: string, params: AppServerParams = {}) =>
         this.#appServerRequest<T>(method, params),
@@ -616,25 +611,11 @@ export class ElectronHostCommands {
   }
 
   async #readConfig(): Promise<Record<string, unknown>> {
-    const fallback = buildDefaultConfig();
-    try {
-      const text = await readFile(this.#configPath(), "utf8");
-      const parsed = JSON.parse(text) as Record<string, unknown>;
-      return { ...fallback, ...parsed };
-    } catch {
-      return fallback;
-    }
+    return await this.#appConfigHost.readConfig();
   }
 
   async #saveConfig(args: HostArgs): Promise<null> {
-    const config = readRecord(args, "config") ?? args ?? {};
-    await mkdir(this.#userDataDir, { recursive: true });
-    await writeFile(
-      this.#configPath(),
-      JSON.stringify(config, null, 2),
-      "utf8",
-    );
-    return null;
+    return await this.#appConfigHost.saveConfig(args);
   }
 
   #reportFrontendDebugLog(args: HostArgs): void {
@@ -653,10 +634,6 @@ export class ElectronHostCommands {
       message,
       report,
     );
-  }
-
-  #configPath(): string {
-    return path.join(this.#userDataDir, CONFIG_FILE);
   }
 
   disposeProjectShellSessionsForShutdown(): void {
@@ -881,67 +858,6 @@ function shouldEmitOemCloudOAuthCallback(
     payload.deviceCode ||
     payload.status,
   );
-}
-
-function buildDefaultConfig(): Record<string, unknown> {
-  return {
-    server: {
-      host: "127.0.0.1",
-      port: 8787,
-      api_key: "",
-      response_cache: {
-        enabled: true,
-        ttl_secs: 600,
-        max_entries: 200,
-        max_body_bytes: 1048576,
-        cacheable_status_codes: [200],
-      },
-      tls: { enable: false, cert_path: null, key_path: null },
-    },
-    default_provider: "openai",
-    remote_management: {
-      allow_remote: false,
-      secret_key: null,
-      disable_control_panel: false,
-    },
-    quota_exceeded: {
-      switch_project: true,
-      switch_preview_model: false,
-      cooldown_seconds: 60,
-    },
-    ampcode: {
-      upstream_url: null,
-      model_mappings: [],
-      restrict_management_to_localhost: true,
-    },
-    proxy_url: null,
-    minimize_to_tray: false,
-    language: "zh-CN",
-    experimental: { webmcp: { enabled: false } },
-    tool_calling: {
-      enabled: true,
-      dynamic_filtering: true,
-      native_input_examples: false,
-    },
-    automation: {
-      enabled: false,
-      poll_interval_secs: 30,
-      enable_history: true,
-    },
-    workspace_preferences: {
-      schema_version: 3,
-      media_defaults: {},
-      service_models: {},
-    },
-    navigation: { schema_version: 3, enabled_items: [] },
-    crash_reporting: {
-      enabled: true,
-      dsn: null,
-      environment: "development",
-      sample_rate: 1,
-      send_pii: false,
-    },
-  };
 }
 
 type ElectronHostLogMethod = "log" | "error";

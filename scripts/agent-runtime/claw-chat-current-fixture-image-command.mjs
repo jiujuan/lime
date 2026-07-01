@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import {
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_GET,
-  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_COMPLETE,
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE,
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_LIST,
   APP_SERVER_METHOD_SESSION_READ,
@@ -10,8 +9,13 @@ import {
   IMAGE_COMMAND_DONE_TEXT,
   IMAGE_COMMAND_IMAGE_PROMPT,
   IMAGE_COMMAND_PROMPT,
+  PLAIN_IMAGE_INTENT_IMAGE_PROMPT,
+  PLAIN_IMAGE_INTENT_PROMPT,
+  PLAIN_IMAGE_INTENT_ROUTED_PROMPT,
+  PLAIN_IMAGE_INTENT_SCENARIO,
   IMAGE_COMMAND_SKILL_NAME,
   IMAGE_COMMAND_SKILL_TOOL_CALL_ID,
+  IMAGE_FIXTURE_MODEL,
   SESSION_ID,
   THREAD_ID,
 } from "./claw-chat-current-fixture-constants.mjs";
@@ -26,6 +30,7 @@ import {
 import {
   evaluatePageSnapshot,
   invokeAppServerFromPage,
+  reloadRendererDocument,
   waitForRendererReady,
 } from "./claw-chat-current-fixture-rpc.mjs";
 import { openFixtureSessionFromSidebar } from "./claw-chat-current-fixture-session.mjs";
@@ -36,8 +41,29 @@ import {
 } from "./claw-chat-current-fixture-utils.mjs";
 
 const IMAGE_COMMAND_TERMINAL_STATUS = "succeeded";
-const IMAGE_COMMAND_RESULT_IMAGE_URL =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
+const IMAGE_COMMAND_WORKER_ID = "lime-image-api-worker";
+
+export function resolveImageIntentScenario(scenario) {
+  if (scenario === PLAIN_IMAGE_INTENT_SCENARIO) {
+    return {
+      scenario,
+      inputPrompt: PLAIN_IMAGE_INTENT_PROMPT,
+      routedPrompt: PLAIN_IMAGE_INTENT_ROUTED_PROMPT,
+      imagePrompt: PLAIN_IMAGE_INTENT_IMAGE_PROMPT,
+      taskTitle: "广州夏天 E2E",
+      entrySource: "plain_image_intent",
+    };
+  }
+
+  return {
+    scenario: "image-command",
+    inputPrompt: IMAGE_COMMAND_PROMPT,
+    routedPrompt: IMAGE_COMMAND_PROMPT,
+    imagePrompt: IMAGE_COMMAND_IMAGE_PROMPT,
+    taskTitle: "青柠插画 E2E",
+    entrySource: "at_image_command",
+  };
+}
 
 function traceEvidenceHasProviderAndClient(evidence) {
   return (
@@ -70,7 +96,15 @@ function imageTaskPath(taskArtifact) {
   );
 }
 
-function serializeReadModelSummary(readModel) {
+function imageTaskArtifactPath(taskArtifact) {
+  const task = taskOutputCandidate(taskArtifact);
+  return task.artifact_path ?? task.artifactPath ?? task.path ?? null;
+}
+
+function serializeReadModelSummary(
+  readModel,
+  scenarioConfig = resolveImageIntentScenario("image-command"),
+) {
   const serialized = JSON.stringify(readModel || {});
   const skillToolCall = findReadModelToolCall(
     readModel,
@@ -95,7 +129,7 @@ function serializeReadModelSummary(readModel) {
       : null,
     toolCallCount: collectReadModelToolCalls(readModel).length,
     latestTurnStatus: readModelLatestTurnStatus(readModel),
-    includesPrompt: serialized.includes(IMAGE_COMMAND_PROMPT),
+    includesPrompt: serialized.includes(scenarioConfig.routedPrompt),
     includesAssistantDone: serialized.includes(IMAGE_COMMAND_DONE_TEXT),
     includesSkillTool: Boolean(skillToolCall),
     includesImageSkillName: serialized.includes(IMAGE_COMMAND_SKILL_NAME),
@@ -113,7 +147,11 @@ function serializeReadModelSummary(readModel) {
   });
 }
 
-export async function waitForGuiImageCommandCompleted(page, options) {
+export async function waitForGuiImageCommandCompleted(
+  page,
+  options,
+  scenarioConfig = resolveImageIntentScenario(options.scenario),
+) {
   const startedAt = Date.now();
   let lastSnapshot = null;
   while (Date.now() - startedAt < options.timeoutMs) {
@@ -203,7 +241,7 @@ export async function waitForGuiImageCommandCompleted(page, options) {
         };
       },
       {
-        prompt: IMAGE_COMMAND_PROMPT,
+        prompt: scenarioConfig.inputPrompt,
         doneText: IMAGE_COMMAND_DONE_TEXT,
         skillName: IMAGE_COMMAND_SKILL_NAME,
         createTaskToolName: IMAGE_COMMAND_CREATE_TASK_TOOL_NAME,
@@ -241,6 +279,7 @@ export async function waitForSessionReadImageCommandCompleted(
   page,
   options,
   requestLog,
+  scenarioConfig = resolveImageIntentScenario(options.scenario),
 ) {
   const startedAt = Date.now();
   let lastRead = null;
@@ -256,9 +295,9 @@ export async function waitForSessionReadImageCommandCompleted(
       requestLog,
     );
     lastRead = read.result;
-    lastSummary = serializeReadModelSummary(lastRead);
+    lastSummary = serializeReadModelSummary(lastRead, scenarioConfig);
     if (
-      lastSummary.includesPrompt === true &&
+      JSON.stringify(lastRead || {}).includes(scenarioConfig.routedPrompt) &&
       lastSummary.includesAssistantDone === true &&
       lastSummary.includesSkillTool === true &&
       lastSummary.includesImageSkillName === true &&
@@ -317,87 +356,7 @@ function resolveCurrentAttemptIndex(record) {
   return attempts.length - 1;
 }
 
-function buildCompletedImageTaskResult(record) {
-  const payload =
-    record?.payload &&
-    typeof record.payload === "object" &&
-    !Array.isArray(record.payload)
-      ? record.payload
-      : {};
-  const prompt =
-    typeof payload.prompt === "string" && payload.prompt.trim()
-      ? payload.prompt.trim()
-      : IMAGE_COMMAND_IMAGE_PROMPT;
-  const size =
-    typeof payload.size === "string" && payload.size.trim()
-      ? payload.size.trim()
-      : "1024x1024";
-  const providerId =
-    typeof payload.provider_id === "string" && payload.provider_id.trim()
-      ? payload.provider_id.trim()
-      : "fixture-image-provider";
-  const model =
-    typeof payload.model === "string" && payload.model.trim()
-      ? payload.model.trim()
-      : "fixture-image-model";
-  const image = {
-    url: IMAGE_COMMAND_RESULT_IMAGE_URL,
-    prompt,
-    revised_prompt: "青柠插画 E2E fixture 结果",
-    size,
-    provider_id: providerId,
-    model,
-    slot_index: 1,
-    slot_id: "slot-1",
-    slot_prompt: prompt,
-  };
-  return {
-    prompt,
-    provider_id: providerId,
-    executor_mode:
-      typeof payload.executor_mode === "string"
-        ? payload.executor_mode
-        : "images_api",
-    outer_model:
-      typeof payload.outer_model === "string" ? payload.outer_model : null,
-    model,
-    size,
-    count: 1,
-    layout_hint:
-      typeof payload.layout_hint === "string" ? payload.layout_hint : null,
-    requested_count: 1,
-    received_count: 1,
-    images: [image],
-    response: {
-      id: "fixture-image-response-1",
-      status: IMAGE_COMMAND_TERMINAL_STATUS,
-      model,
-    },
-    responses: [
-      {
-        id: "fixture-image-response-1",
-        status: IMAGE_COMMAND_TERMINAL_STATUS,
-        model,
-      },
-    ],
-    failures: [],
-    postprocess: null,
-    storyboard_slots: [
-      {
-        slot_index: 1,
-        slot_id: "slot-1",
-        label: null,
-        prompt,
-        shot_type: null,
-      },
-    ],
-  };
-}
-
-function buildCompleteImageCommandTaskArtifactRequest({
-  taskArtifact,
-  workspace,
-}) {
+function imageCommandTaskRef(taskArtifact) {
   const taskId = imageTaskId(taskArtifact);
   const taskPath = imageTaskPath(taskArtifact);
   if (!taskId || !taskPath) {
@@ -411,84 +370,72 @@ function buildCompleteImageCommandTaskArtifactRequest({
     throw new Error(`image-command task file 不存在: ${taskPath}`);
   }
 
-  const record = readTaskArtifactFile(taskPath);
-  const result = buildCompletedImageTaskResult(record);
   return {
     taskId,
     taskPath,
-    previousStatus: record.normalized_status ?? record.status ?? null,
-    request: {
-      projectRootPath: workspace.rootPath,
-      taskRef: taskId,
-      providerId: result.provider_id,
-      model: result.model,
-      executorMode: result.executor_mode,
-      responseId: result.response?.id ?? "fixture-image-response-1",
-      status: IMAGE_COMMAND_TERMINAL_STATUS,
-      images: result.images.map((image) => ({
-        url: image.url,
-        prompt: image.prompt,
-        revisedPrompt: image.revised_prompt,
-        size: image.size,
-        providerId: image.provider_id,
-        model: image.model,
-        slotId: image.slot_id,
-        slotIndex: image.slot_index,
-        slotPrompt: image.slot_prompt,
-      })),
-      responses: result.responses,
-      failures: result.failures,
-    },
   };
 }
 
-async function completeImageCommandTaskArtifact({
+async function waitForImageCommandTaskArtifactTerminal({
   page,
   workspace,
   appServerRequests,
   taskArtifact,
+  options,
 }) {
-  const completion = buildCompleteImageCommandTaskArtifactRequest({
-    taskArtifact,
-    workspace,
-  });
-  const completeResult = await invokeAppServerFromPage(
-    page,
-    APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_COMPLETE,
-    completion.request,
-    appServerRequests,
+  const taskRef = imageCommandTaskRef(taskArtifact);
+  const startedAt = Date.now();
+  let lastSnapshot = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const getResult = await invokeAppServerFromPage(
+      page,
+      APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_GET,
+      {
+        projectRootPath: workspace.rootPath,
+        taskRef: taskRef.taskId,
+      },
+      appServerRequests,
+    );
+    const record = imageTaskRecord(getResult?.result);
+    const attempts = Array.isArray(record?.attempts) ? record.attempts : [];
+    const currentAttemptIndex = resolveCurrentAttemptIndex(record || {});
+    const currentAttempt =
+      currentAttemptIndex >= 0 ? attempts[currentAttemptIndex] : null;
+    const resultImageCount = Array.isArray(record?.result?.images)
+      ? record.result.images.length
+      : 0;
+    lastSnapshot = sanitizeJson({
+      taskId: taskRef.taskId,
+      taskPath: taskRef.taskPath,
+      completeMethodUsed: "media_runtime_worker",
+      completeReturned: Boolean(getResult?.result),
+      status: record?.status ?? getResult?.result?.status ?? null,
+      normalizedStatus:
+        record?.normalized_status ??
+        getResult?.result?.normalized_status ??
+        null,
+      sameTaskFileUpdated: true,
+      resultImageCount,
+      attemptCount: attempts.length,
+      currentAttemptStatus: currentAttempt?.status ?? null,
+      currentAttemptWorkerId: currentAttempt?.worker_id ?? null,
+      currentAttemptHasResultSnapshot: Boolean(currentAttempt?.result_snapshot),
+      response: getResult?.result ?? null,
+    });
+    if (
+      lastSnapshot.normalizedStatus === IMAGE_COMMAND_TERMINAL_STATUS &&
+      lastSnapshot.resultImageCount >= 1 &&
+      lastSnapshot.currentAttemptWorkerId === IMAGE_COMMAND_WORKER_ID
+    ) {
+      return lastSnapshot;
+    }
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `Claw @配图后端 worker 未把 task artifact 推进终态: ${JSON.stringify(
+      sanitizeJson(lastSnapshot),
+    )}`,
   );
-  const record = imageTaskRecord(completeResult?.result);
-  const attempts = Array.isArray(record?.attempts) ? record.attempts : [];
-  const currentAttemptIndex = resolveCurrentAttemptIndex(record || {});
-  const resultImageCount = Array.isArray(record?.result?.images)
-    ? record.result.images.length
-    : 0;
-  return sanitizeJson({
-    taskId: completion.taskId,
-    taskPath: completion.taskPath,
-    previousStatus: completion.previousStatus,
-    completeMethodUsed: APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_COMPLETE,
-    completeReturned: Boolean(completeResult?.result),
-    status: record?.status ?? completeResult?.result?.status ?? null,
-    normalizedStatus:
-      record?.normalized_status ??
-      completeResult?.result?.normalized_status ??
-      null,
-    sameTaskFileUpdated: true,
-    resultImageCount,
-    attemptCount: attempts.length,
-    currentAttemptStatus:
-      currentAttemptIndex >= 0
-        ? (attempts[currentAttemptIndex]?.status ?? null)
-        : null,
-    currentAttemptHasResultSnapshot:
-      currentAttemptIndex >= 0
-        ? Boolean(attempts[currentAttemptIndex]?.result_snapshot)
-        : false,
-    response: completeResult?.result ?? null,
-    request: completion.request,
-  });
 }
 
 async function createImageCommandTaskArtifact({
@@ -496,19 +443,24 @@ async function createImageCommandTaskArtifact({
   workspace,
   appServerRequests,
   turnId,
+  imageFixtureProvider,
+  scenarioConfig,
 }) {
   const request = {
     projectRootPath: workspace.rootPath,
-    prompt: IMAGE_COMMAND_IMAGE_PROMPT,
-    title: "青柠插画 E2E",
-    rawText: IMAGE_COMMAND_PROMPT,
+    prompt: scenarioConfig.imagePrompt,
+    title: scenarioConfig.taskTitle,
+    rawText: scenarioConfig.routedPrompt,
     mode: "generate",
     size: "1024x1024",
     count: 1,
+    providerId: imageFixtureProvider?.providerId ?? null,
+    model: imageFixtureProvider?.modelId ?? IMAGE_FIXTURE_MODEL,
+    executorMode: "images_api",
     sessionId: SESSION_ID,
     threadId: THREAD_ID,
     turnId,
-    entrySource: "at_image_command",
+    entrySource: scenarioConfig.entrySource,
     modalityContractKey: "image_generation",
     modality: "image",
     routingSlot: "image_generation_model",
@@ -534,7 +486,12 @@ async function createImageCommandTaskArtifact({
   };
 }
 
-export async function waitForGuiImageCommandTerminal(page, options, taskId) {
+export async function waitForGuiImageCommandTerminal(
+  page,
+  options,
+  taskId,
+  scenarioConfig = resolveImageIntentScenario(options.scenario),
+) {
   const startedAt = Date.now();
   let lastSnapshot = null;
   while (Date.now() - startedAt < options.timeoutMs) {
@@ -598,7 +555,7 @@ export async function waitForGuiImageCommandTerminal(page, options, taskId) {
         };
       },
       {
-        prompt: IMAGE_COMMAND_PROMPT,
+        prompt: scenarioConfig.inputPrompt,
         doneText: IMAGE_COMMAND_DONE_TEXT,
         taskId,
       },
@@ -637,9 +594,19 @@ async function readImageCommandTaskArtifact({
   workspace,
 }) {
   const taskId = imageTaskId(taskArtifact);
-  const taskRef = taskId || imageTaskPath(taskArtifact);
-  const getResult = taskRef
-    ? await invokeAppServerFromPage(
+  const taskRefs = Array.from(
+    new Set(
+      [taskId, imageTaskPath(taskArtifact), imageTaskArtifactPath(taskArtifact)]
+        .filter((value) => typeof value === "string")
+        .map((value) => value.trim())
+        .filter(Boolean),
+    ),
+  );
+  let getResult = null;
+  const getErrors = [];
+  for (const taskRef of taskRefs) {
+    try {
+      getResult = await invokeAppServerFromPage(
         page,
         APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_GET,
         {
@@ -647,8 +614,12 @@ async function readImageCommandTaskArtifact({
           taskRef,
         },
         appServerRequests,
-      )
-    : null;
+      );
+      break;
+    } catch (error) {
+      getErrors.push({ taskRef, error: String(error?.message || error) });
+    }
+  }
   const listResult = await invokeAppServerFromPage(
     page,
     APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_LIST,
@@ -684,6 +655,7 @@ async function readImageCommandTaskArtifact({
       typeof taskPath === "string" &&
       taskPath.includes(".lime/tasks/image_generate"),
     getReturned: Boolean(getResult?.result),
+    getErrors,
     getTaskId: imageTaskId(getResult?.result),
     getStatus: getRecord?.status ?? getResult?.result?.status ?? null,
     getNormalizedStatus:
@@ -708,10 +680,7 @@ async function reloadAndReopenImageCommandSession({
   options,
   appServerRequests,
 }) {
-  await page.reload({
-    waitUntil: "domcontentloaded",
-    timeout: options.timeoutMs,
-  });
+  const reload = await reloadRendererDocument(page, options);
   const renderer = await waitForRendererReady(page, options);
   const session = await openFixtureSessionFromSidebar(
     page,
@@ -719,6 +688,7 @@ async function reloadAndReopenImageCommandSession({
     appServerRequests,
   );
   return sanitizeJson({
+    reload,
     renderer,
     session,
   });
@@ -747,13 +717,21 @@ export async function runImageCommandScenario({
   workspace,
   appServerRequests,
   runtimeEnv,
+  imageFixtureProvider,
+  summary,
 }) {
+  const scenarioConfig = resolveImageIntentScenario(options.scenario);
   const imageCommandInputSend = sanitizeJson(
-    await sendPromptFromGui(page, options, IMAGE_COMMAND_PROMPT),
+    await sendPromptFromGui(page, options, scenarioConfig.inputPrompt, {
+      expectedSessionId: SESSION_ID,
+    }),
   );
+  if (summary) {
+    summary.imageCommandInputSend = imageCommandInputSend;
+  }
   const backendTurn = await waitForBackendLedgerTurnStart(
     runtimeEnv.backendLedgerPath,
-    IMAGE_COMMAND_PROMPT,
+    scenarioConfig.routedPrompt,
     options,
   );
   const turnId = backendTurn.entry.turnId ?? backendTurn.entry.turn_id ?? null;
@@ -762,6 +740,8 @@ export async function runImageCommandScenario({
     workspace,
     appServerRequests,
     turnId,
+    imageFixtureProvider,
+    scenarioConfig,
   });
   writeJsonFile(runtimeEnv.imageTaskFixturePath, {
     taskArtifact: imageTaskArtifact.response,
@@ -775,19 +755,22 @@ export async function runImageCommandScenario({
   const guiImageCommandCompleted = await waitForGuiImageCommandCompleted(
     page,
     options,
+    scenarioConfig,
   );
   const readModelImageCommandCompleted =
     await waitForSessionReadImageCommandCompleted(
       page,
       options,
       appServerRequests,
+      scenarioConfig,
     );
   const imageCommandTaskArtifactTerminalPatch =
-    await completeImageCommandTaskArtifact({
+    await waitForImageCommandTaskArtifactTerminal({
       page,
       workspace,
       appServerRequests,
       taskArtifact: imageTaskArtifact.response,
+      options,
     });
   const imageCommandTaskArtifactTerminal = await readImageCommandTaskArtifact({
     page,
@@ -799,6 +782,7 @@ export async function runImageCommandScenario({
     page,
     options,
     imageCommandTaskArtifactTerminalPatch.taskId,
+    scenarioConfig,
   );
   const agentUiPerformanceTracePreReload =
     await waitForImageCommandAgentUiPerformanceTrace(page, options);
@@ -812,6 +796,7 @@ export async function runImageCommandScenario({
       page,
       options,
       imageCommandTaskArtifactTerminalPatch.taskId,
+      scenarioConfig,
     );
   const imageCommandTaskArtifactAfterReload =
     await readImageCommandTaskArtifact({
@@ -837,6 +822,7 @@ export async function runImageCommandScenario({
       modelPreference: backendTurn.entry.modelPreference ?? null,
     },
     imageCommandTaskCreateRequest: imageTaskArtifact.request,
+    imageCommandFixtureProvider: imageFixtureProvider ?? null,
     imageCommandTaskArtifact,
     imageCommandTaskArtifactTerminalPatch,
     imageCommandTaskArtifactTerminal,

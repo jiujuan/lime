@@ -42,7 +42,8 @@ const workspacePatch = {
       source: {
         taskKind: "content.article.generate",
         artifactIds: ["artifact-article-1"],
-        markdown: "# 标题\n\n这是首版文章正文。",
+        documentText: "# 标题\n\n这是首版文章正文。",
+        finalMarkdown: "# 标题\n\n这是首版文章正文。",
         researchRounds: [{ id: "research-1", title: "资料检索" }],
       },
     },
@@ -210,7 +211,8 @@ describe("workspaceArticleWorkspaceModel", () => {
       updatedAt: "2026-06-29T10:00:00.000Z",
     });
     expect(profile?.objects[0]?.source).toMatchObject({
-      markdown: "# 用户编辑稿\n\n这是从历史恢复的正文。",
+      documentText: "# 用户编辑稿\n\n这是从历史恢复的正文。",
+      finalMarkdown: "# 用户编辑稿\n\n这是从历史恢复的正文。",
       updatedAt: "2026-06-29T10:00:00.000Z",
       researchRounds: [{ id: "research-1", title: "资料检索" }],
     });
@@ -220,6 +222,33 @@ describe("workspaceArticleWorkspaceModel", () => {
     const profile = buildWorkspaceArticleWorkspaceFromPendingRequests([
       {
         requestId: "right_surface_article_workspace_1",
+        workspaceId: "workspace-main",
+        sessionId: "session-main",
+        surfaceKind: "articleWorkspace",
+        origin: "runtime",
+        priority: "foreground",
+        status: "pending",
+        reason: "article_workspace_ready",
+        requestedAt: "2026-06-24T00:00:00.000Z",
+        metadata: {
+          workspacePatch,
+        },
+      },
+    ]);
+
+    expect(profile).toMatchObject({
+      source: "rightSurfacePending",
+      appId: "content-factory-app",
+      sessionId: "session-main",
+      workspaceId: "workspace-main",
+      updatedAt: "2026-06-24T00:00:00.000Z",
+    });
+  });
+
+  it("应继续兼容 Article Editor pending metadata 的旧 contentFactoryWorkspacePatch", () => {
+    const profile = buildWorkspaceArticleWorkspaceFromPendingRequests([
+      {
+        requestId: "right_surface_article_workspace_legacy",
         workspaceId: "workspace-main",
         sessionId: "session-main",
         surfaceKind: "articleWorkspace",
@@ -239,8 +268,38 @@ describe("workspaceArticleWorkspaceModel", () => {
       appId: "content-factory-app",
       sessionId: "session-main",
       workspaceId: "workspace-main",
-      updatedAt: "2026-06-24T00:00:00.000Z",
     });
+  });
+
+  it("Article Editor pending metadata 新旧字段同时存在时应优先使用 workspacePatch", () => {
+    const legacyWorkspacePatch = {
+      ...workspacePatch,
+      objects: [
+        {
+          ...workspacePatch.objects[0]!,
+          title: "旧字段草稿",
+        },
+      ],
+    };
+    const profile = buildWorkspaceArticleWorkspaceFromPendingRequests([
+      {
+        requestId: "right_surface_article_workspace_current_first",
+        workspaceId: "workspace-main",
+        sessionId: "session-main",
+        surfaceKind: "articleWorkspace",
+        origin: "runtime",
+        priority: "foreground",
+        status: "pending",
+        reason: "article_workspace_ready",
+        requestedAt: "2026-06-24T00:00:00.000Z",
+        metadata: {
+          workspacePatch,
+          contentFactoryWorkspacePatch: legacyWorkspacePatch,
+        },
+      },
+    ]);
+
+    expect(profile?.objects[0]?.title).toBe("公众号文章草稿");
   });
 
   it("view model 应优先选择 selectedObjectRef 并统计状态", () => {
@@ -322,7 +381,20 @@ describe("workspaceArticleWorkspaceModel", () => {
       source: {
         taskKind: "content.article.generate",
         taskId: "content-factory-worker-task",
-        markdown: [
+        documentText: [
+          "# 多轮检索后的公众号文章草稿",
+          "",
+          "## 三轮资料检索",
+          "",
+          "- 第一轮：确认用户目标。",
+          "- 第二轮：整理场景痛点。",
+          "- 第三轮：收敛结构和发布检查。",
+          "",
+          "## 正文草稿",
+          "",
+          "这是经过多轮检索后写出的完整正文。",
+        ].join("\n"),
+        finalMarkdown: [
           "# 多轮检索后的公众号文章草稿",
           "",
           "## 三轮资料检索",
@@ -419,6 +491,7 @@ describe("workspaceArticleWorkspaceModel", () => {
               ...workspacePatch.objects[0].source,
               processMarkdown: "## 过程稿\n\n只用于编排与检索。",
               documentText: "# 最终稿\n\n这是正式可编辑文章。",
+              finalMarkdown: "# 最终稿\n\n这是正式可编辑文章。",
             },
           },
         ],

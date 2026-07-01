@@ -32,8 +32,10 @@ function createContract(
     ],
     agentApps: [],
     subagents: [],
+    clis: [],
     workflows: [],
     connectors: [],
+    hooks: [],
     mcpServers: [],
     artifactRenderers: [],
     activationEntries: [],
@@ -71,6 +73,7 @@ function createContext(
   return {
     status: "inactive",
     activationContext: null,
+    runtimeReadiness: null,
     contracts: [createContract()],
     skippedAppIds: [],
     blockerCodes: [],

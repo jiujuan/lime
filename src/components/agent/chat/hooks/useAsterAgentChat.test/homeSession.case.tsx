@@ -1,9 +1,5 @@
 import { act } from "react";
-import {
-  describe,
-  expect,
-  it
-} from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   flushEffects,
   mockCreateAgentRuntimeSession,
@@ -16,7 +12,7 @@ import {
   mockSubmitAgentRuntimeTurn,
   mockUpdateAgentRuntimeSession,
   mountHook,
-  seedSession
+  seedSession,
 } from "../useAsterAgentChat.testUtils";
 
 describe("useAsterAgentChat 首页新会话", () => {
@@ -80,9 +76,7 @@ describe("useAsterAgentChat 首页新会话", () => {
       const request = mockSubmitAgentRuntimeTurn.mock.calls[0]?.[0];
       expect(request?.workspace_id).toBeUndefined();
       expect(request?.turn_config?.provider_preference).toBe("deepseek");
-      expect(request?.turn_config?.model_preference).toBe(
-        "deepseek-v4-flash",
-      );
+      expect(request?.turn_config?.model_preference).toBe("deepseek-v4-flash");
     } finally {
       harness.unmount();
     }
@@ -228,6 +222,48 @@ describe("useAsterAgentChat 首页新会话", () => {
           localStorage.getItem(`agent_pref_model_${workspaceId}`) || "null",
         ),
       ).toBe("gpt-5.4-mini");
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("Agent 初始化返回图片模型时不应覆盖普通聊天模型偏好", async () => {
+    const workspaceId = "ws-init-ignore-image-runtime-model";
+    localStorage.setItem(
+      `agent_pref_provider_${workspaceId}`,
+      JSON.stringify("fixture-provider"),
+    );
+    localStorage.setItem(
+      `agent_pref_model_${workspaceId}`,
+      JSON.stringify("fixture-model"),
+    );
+    mockInitAsterAgent.mockResolvedValue({
+      initialized: true,
+      provider_configured: true,
+      provider_selector: "custom-image-provider",
+      model_name: "gpt-image-1",
+    });
+    mockResolveClawWorkspaceProviderSelection.mockResolvedValue(null);
+
+    const harness = mountHook(workspaceId);
+
+    try {
+      await flushEffects();
+      await flushEffects();
+
+      expect(harness.getValue().providerType).toBe("fixture-provider");
+      expect(harness.getValue().model).toBe("fixture-model");
+      expect(
+        JSON.parse(
+          localStorage.getItem(`agent_pref_provider_${workspaceId}`) || "null",
+        ),
+      ).toBe("fixture-provider");
+      expect(
+        JSON.parse(
+          localStorage.getItem(`agent_pref_model_${workspaceId}`) || "null",
+        ),
+      ).toBe("fixture-model");
+      expect(mockResolveClawWorkspaceProviderSelection).not.toHaveBeenCalled();
     } finally {
       harness.unmount();
     }
@@ -593,9 +629,7 @@ describe("useAsterAgentChat 首页新会话", () => {
             sessionId === "session-live-missing" &&
             options?.historyLimit === 40,
         ),
-      ).toBe(
-        false,
-      );
+      ).toBe(false);
 
       await act(async () => {
         await harness.getValue().loadTopics();
@@ -688,9 +722,7 @@ describe("useAsterAgentChat 首页新会话", () => {
           ([sessionId, options]) =>
             sessionId === missingSessionId && options?.historyLimit === 40,
         ),
-      ).toBe(
-        false,
-      );
+      ).toBe(false);
 
       await act(async () => {
         await harness.getValue().loadTopics();

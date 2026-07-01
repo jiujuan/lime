@@ -221,13 +221,14 @@ describe("CharacterMention mention catalog", () => {
       displayName: "内容工厂",
       description: "从创作需求生成文章、配图、视频分镜和交付检查清单。",
     };
-    const onSelectPlugin = vi.fn<
-      (
-        selectedPlugin: InputbarPluginCapability,
-        skill?: InputbarPluginSkillCapability,
-        options?: InputbarPluginSelectionOptions,
-      ) => void
-    >();
+    const onSelectPlugin =
+      vi.fn<
+        (
+          selectedPlugin: InputbarPluginCapability,
+          skill?: InputbarPluginSkillCapability,
+          options?: InputbarPluginSelectionOptions,
+        ) => void
+      >();
     const onChangeSpy = vi.fn<(value: string) => void>();
     const container = renderHarness({
       pluginSuggestions: [plugin],
@@ -332,6 +333,7 @@ describe("CharacterMention mention catalog", () => {
     const pluginSuggestions = buildWorkspacePluginInputSuggestions({
       status: "inactive",
       activationContext: null,
+      runtimeReadiness: null,
       contracts: projection.contracts,
       registry: projection.registry,
       skippedAppIds: projection.skippedAppIds,
@@ -399,13 +401,14 @@ describe("CharacterMention mention catalog", () => {
       displayName: "内容工厂",
       description: "从创作需求生成文章、配图、视频分镜和交付检查清单。",
     };
-    const onSelectPlugin = vi.fn<
-      (
-        selectedPlugin: InputbarPluginCapability,
-        skill?: InputbarPluginSkillCapability,
-        options?: InputbarPluginSelectionOptions,
-      ) => void
-    >();
+    const onSelectPlugin =
+      vi.fn<
+        (
+          selectedPlugin: InputbarPluginCapability,
+          skill?: InputbarPluginSkillCapability,
+          options?: InputbarPluginSelectionOptions,
+        ) => void
+      >();
     const onChangeSpy = vi.fn<(value: string) => void>();
     const container = renderHarness({
       pluginSuggestions: [plugin],

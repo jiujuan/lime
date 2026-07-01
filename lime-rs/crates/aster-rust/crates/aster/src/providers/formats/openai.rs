@@ -846,6 +846,7 @@ where
                         continue;
                     };
 
+                    // Process tool call deltas if present
                     if let Some(delta_tool_calls) = &tool_choice.delta.tool_calls {
                         for (fallback_index, delta_call) in delta_tool_calls.iter().enumerate() {
                             if let Some(delta_message) = merge_streaming_tool_call_delta(
@@ -856,9 +857,9 @@ where
                                 yield (Some(delta_message), None);
                             }
                         }
-                        continue;
                     }
 
+                    // Check finish_reason after processing tool calls to ensure we don't miss the last delta
                     if tool_choice.finish_reason.is_some() {
                         break;
                     }

@@ -14,12 +14,44 @@ const latestWorkspaceProps = vi.hoisted(
       value: null as Record<string, unknown> | null,
     }) as { value: Record<string, unknown> | null },
 );
+const workspaceLifecycle = vi.hoisted(() => {
+  let currentNode: HTMLDivElement | null = null;
+  const state = {
+    mounts: 0,
+    unmounts: 0,
+  };
+  return {
+    get mounts() {
+      return state.mounts;
+    },
+    get unmounts() {
+      return state.unmounts;
+    },
+    ref(node: HTMLDivElement | null) {
+      if (node && node !== currentNode) {
+        currentNode = node;
+        state.mounts += 1;
+        return;
+      }
+      if (!node && currentNode) {
+        currentNode = null;
+        state.unmounts += 1;
+      }
+    },
+    reset() {
+      currentNode = null;
+      state.mounts = 0;
+      state.unmounts = 0;
+    },
+  };
+});
 
 vi.mock("./AgentChatWorkspace", () => ({
   AgentChatWorkspace: (props: Record<string, unknown>) => {
     latestWorkspaceProps.value = props;
     return (
       <div
+        ref={workspaceLifecycle.ref}
         data-testid="workspace"
         data-agent-entry={String(props.agentEntry || "")}
         data-show-chat-panel={String(Boolean(props.showChatPanel))}
@@ -79,6 +111,22 @@ function renderPage(props: Partial<AgentChatPageProps> = {}) {
   return container;
 }
 
+function renderPageWithRoot(props: Partial<AgentChatPageProps> = {}) {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+
+  const rerender = (nextProps: Partial<AgentChatPageProps>) => {
+    act(() => {
+      root.render(<AgentChatPage {...nextProps} />);
+    });
+  };
+
+  rerender(props);
+  mountedRoots.push({ root, container });
+  return { container, rerender };
+}
+
 async function flushEffects(times = 8) {
   await act(async () => {
     for (let index = 0; index < times; index += 1) {
@@ -88,6 +136,10 @@ async function flushEffects(times = 8) {
 }
 
 describe("AgentChatPage 工作区路由", () => {
+  beforeEach(() => {
+    workspaceLifecycle.reset();
+  });
+
   it("标准 new-task 空白入口应渲染完整工作区首页", async () => {
     const container = renderPage({
       agentEntry: "new-task",
@@ -251,6 +303,46 @@ describe("AgentChatPage 工作区路由", () => {
         },
         requestKey: 20260418,
       },
+      agentEntry: "claw",
+      showChatPanel: true,
+    });
+  });
+
+  it("new-task 从首页切到直达意图时应复用同一工作区实例", async () => {
+    const rendered = renderPageWithRoot({
+      agentEntry: "new-task",
+      projectId: "project-standard",
+      showChatPanel: false,
+    });
+    await flushEffects();
+
+    const firstWorkspace = rendered.container.querySelector(
+      '[data-testid="workspace"]',
+    ) as HTMLDivElement | null;
+    expect(firstWorkspace).not.toBeNull();
+    expect(firstWorkspace?.dataset.agentEntry).toBe("new-task");
+    expect(firstWorkspace?.dataset.showChatPanel).toBe("false");
+    expect(workspaceLifecycle.mounts).toBe(1);
+    expect(workspaceLifecycle.unmounts).toBe(0);
+
+    rendered.rerender({
+      agentEntry: "new-task",
+      projectId: "project-standard",
+      showChatPanel: false,
+      initialUserPrompt: "请直接开始处理这个任务",
+    });
+    await flushEffects();
+
+    const secondWorkspace = rendered.container.querySelector(
+      '[data-testid="workspace"]',
+    ) as HTMLDivElement | null;
+    expect(secondWorkspace).toBe(firstWorkspace);
+    expect(secondWorkspace?.dataset.agentEntry).toBe("claw");
+    expect(secondWorkspace?.dataset.showChatPanel).toBe("true");
+    expect(workspaceLifecycle.mounts).toBe(1);
+    expect(workspaceLifecycle.unmounts).toBe(0);
+    expect(latestWorkspaceProps.value).toMatchObject({
+      initialUserPrompt: "请直接开始处理这个任务",
       agentEntry: "claw",
       showChatPanel: true,
     });

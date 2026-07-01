@@ -492,14 +492,18 @@ describe("AppSidebar conversations", () => {
     const projectMenu = await openProjectMenu("示例项目");
     expect(projectMenu?.textContent).toContain("导入对话");
     expect(
-      projectMenu?.querySelector<HTMLButtonElement>(
-        '[data-testid="app-sidebar-project-menu-import-conversation"]',
-      )?.getAttribute("aria-label"),
+      projectMenu
+        ?.querySelector<HTMLButtonElement>(
+          '[data-testid="app-sidebar-project-menu-import-conversation"]',
+        )
+        ?.getAttribute("aria-label"),
     ).toContain("示例项目");
     expect(
-      projectMenu?.querySelector<HTMLButtonElement>(
-        '[data-testid="app-sidebar-project-menu-import-conversation"]',
-      )?.getAttribute("title"),
+      projectMenu
+        ?.querySelector<HTMLButtonElement>(
+          '[data-testid="app-sidebar-project-menu-import-conversation"]',
+        )
+        ?.getAttribute("title"),
     ).toContain("示例项目");
 
     await act(async () => {
@@ -612,9 +616,7 @@ describe("AppSidebar conversations", () => {
     });
     await flushEffects(4);
 
-    expect(document.body.textContent).toContain(
-      "已导入的会先清理后重新导入。",
-    );
+    expect(document.body.textContent).toContain("已导入的会先清理后重新导入。");
     expect(document.body.textContent).toContain("重新导入");
 
     await act(async () => {
@@ -1633,6 +1635,59 @@ describe("AppSidebar conversations", () => {
       limit: 11,
     });
     expect(container.textContent).toContain("外部创建的会话");
+  });
+
+  it("当前会话 metadata 更新应延迟合并刷新最近对话", async () => {
+    const scheduledTasks: Array<() => void> = [];
+    mockListAgentRuntimeSessions.mockResolvedValue([
+      {
+        id: "session-current",
+        name: "当前会话",
+        created_at: 1714000000,
+        updated_at: 1714000600,
+        archived_at: null,
+        workspace_id: null,
+      },
+    ]);
+
+    mountSidebarContainer({
+      currentPage: "agent",
+      currentPageParams: {
+        agentEntry: "claw",
+        initialSessionId: "session-current",
+      } as AgentPageParams,
+    });
+    await flushEffects(2);
+    mockListAgentRuntimeSessions.mockClear();
+    mockScheduleMinimumDelayIdleTask.mockImplementation((task: () => void) => {
+      scheduledTasks.push(task);
+      return () => undefined;
+    });
+
+    await act(async () => {
+      window.dispatchEvent(
+        new CustomEvent(AGENT_RUNTIME_SESSIONS_CHANGED_EVENT, {
+          detail: {
+            reason: "updated",
+            sessionId: "session-current",
+          },
+        }),
+      );
+      await Promise.resolve();
+    });
+    await flushEffects(1);
+
+    expect(mockListAgentRuntimeSessions).not.toHaveBeenCalled();
+    expect(scheduledTasks).toHaveLength(1);
+
+    await act(async () => {
+      scheduledTasks[0]?.();
+      await Promise.resolve();
+    });
+
+    expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
+      limit: 11,
+    });
   });
 
   it("最近对话应限制初始渲染数量，并保留当前会话可见", async () => {

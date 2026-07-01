@@ -317,7 +317,7 @@ export const CharacterMentionPanel: React.FC<CharacterMentionPanelProps> = ({
   };
 
   return (
-    <Command ref={commandRef} className="bg-background">
+    <Command ref={commandRef} className="bg-background" shouldFilter={false}>
       <CommandInput
         placeholder={
           mode === "slash"
@@ -435,9 +435,7 @@ export const CharacterMentionPanel: React.FC<CharacterMentionPanelProps> = ({
                     }
                   }}
                   className={cn(
-                    disabled
-                      ? "cursor-pointer opacity-60"
-                      : "cursor-pointer",
+                    disabled ? "cursor-pointer opacity-60" : "cursor-pointer",
                     shouldCompactSectionItems(section.key) && "min-h-0 py-1.5",
                     shouldSubdueMethodItems(section.key) && "py-1.5",
                     isRegistryLanding &&

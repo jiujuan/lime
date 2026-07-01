@@ -4,6 +4,7 @@ import { changeLimeLocale, getLimeI18n } from "@/i18n/createI18n";
 
 import {
   buildFollowUpCommand,
+  canRetryImageTask,
   orderTaskOutputsByTaskOutputIds,
   resolveEmptyStateDescription,
   resolveFollowUpLabel,
@@ -102,6 +103,9 @@ describe("ImageTaskViewerViewModel", () => {
       "重绘中",
     );
     expect(resolveStatusTone("error")).toContain("rose");
+    expect(canRetryImageTask("error")).toBe(true);
+    expect(canRetryImageTask("cancelled")).toBe(true);
+    expect(canRetryImageTask("complete")).toBe(false);
     expect(resolveEmptyStateDescription("queued", "", "generate", t)).toBe(
       "图片任务已经提交，正在等待服务分配执行槽位。",
     );

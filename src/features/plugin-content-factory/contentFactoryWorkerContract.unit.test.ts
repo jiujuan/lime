@@ -197,7 +197,9 @@ describe("contentFactoryWorkerContract", () => {
         },
       ],
     });
-    const profile = buildContentFactoryWorkspacePatchArticleWorkspace({ artifact });
+    const profile = buildContentFactoryWorkspacePatchArticleWorkspace({
+      artifact,
+    });
     expect(profile).toMatchObject({
       appId: CONTENT_FACTORY_PLUGIN_ID,
       sessionId: "session-content-factory",
@@ -237,9 +239,12 @@ describe("contentFactoryWorkerContract", () => {
       (object) => object.ref.kind === "articleDraft",
     );
     expect(article).toMatchObject({
-      title: "公众号文章草稿",
+      title: expect.stringContaining("学习路线"),
+      summary: expect.not.stringContaining("轮资料检索"),
       source: {
-        markdown: expect.stringContaining("## 三轮资料检索"),
+        processMarkdown: expect.stringContaining("## 检索轮次"),
+        documentText: expect.stringContaining("## 第一阶段：打牢基础"),
+        finalMarkdown: expect.stringContaining("## 第一阶段：打牢基础"),
         researchRounds: expect.arrayContaining([
           expect.objectContaining({
             title: "主题和用户目标检索",
@@ -247,17 +252,17 @@ describe("contentFactoryWorkerContract", () => {
         ]),
         titleCandidates: expect.arrayContaining([
           expect.objectContaining({
-            title: expect.stringContaining("不要只生成一段话"),
+            title: expect.stringContaining("学习路线"),
           }),
         ]),
         outline: expect.arrayContaining([
           expect.objectContaining({
-            title: "后写作：正文进入右侧文章框，而不是塞进聊天流",
+            title: "实践：用项目把知识连成闭环",
           }),
         ]),
         imageSlots: expect.arrayContaining([
           expect.objectContaining({
-            prompt: expect.stringContaining("Lime 桌面工作台"),
+            prompt: expect.stringContaining("学习路线图"),
           }),
         ]),
         searchRequests: expect.arrayContaining([
@@ -296,16 +301,30 @@ describe("contentFactoryWorkerContract", () => {
         ]),
       },
     });
-    expect(String(article?.source?.markdown ?? "")).toContain(
-      "用户点击小框后展开右侧栏",
+    expect(String(article?.source?.processMarkdown ?? "")).toContain(
+      "## 检索轮次",
     );
-    expect(String(article?.source?.markdown ?? "")).toContain("## 三轮资料检索");
-    expect(String(article?.source?.markdown ?? "")).toContain(
-      "## Host 待执行检索请求",
+    expect(String(article?.source?.processMarkdown ?? "")).toContain(
+      "## 待执行检索",
     );
-    expect(String(article?.source?.markdown ?? "")).toContain("## 配图占位");
-    expect(String(article?.source?.markdown ?? "")).toContain("## 审稿检查");
-    expect(String(article?.source?.markdown ?? "")).toContain("## 工作流编排");
+    expect(String(article?.source?.documentText ?? "")).toContain(
+      "## 第一阶段：打牢基础",
+    );
+    expect(String(article?.source?.documentText ?? "")).toContain(
+      "## 第二阶段：用项目建立反馈",
+    );
+    expect(String(article?.source?.documentText ?? "")).not.toContain(
+      "不要只生成一段话",
+    );
+    expect(String(article?.source?.documentText ?? "")).not.toContain(
+      "右侧编辑器",
+    );
+    expect(String(article?.source?.documentText ?? "")).not.toContain(
+      "## 待执行检索",
+    );
+    expect(String(article?.source?.finalMarkdown ?? "")).toBe(
+      article?.source?.documentText,
+    );
   });
 
   it("写文章 worker 请求应输出完整文章结构", () => {
@@ -317,7 +336,7 @@ describe("contentFactoryWorkerContract", () => {
       turnId: "turn-article-1",
       taskId: "task-article-1",
       taskKind: "content.article.generate",
-      prompt: "写一篇关于内容工厂插件化写文章的公众号文章",
+      prompt: "写一篇关于 golang 学习的公众号文章",
       requestedAt: "2026-06-28T00:00:00.000Z",
     });
     const response = JSON.parse(
@@ -329,7 +348,9 @@ describe("contentFactoryWorkerContract", () => {
     const artifact = Array.isArray(response.artifacts)
       ? (response.artifacts[0] as Record<string, unknown> | undefined)
       : undefined;
-    const profile = buildContentFactoryWorkspacePatchArticleWorkspace({ artifact });
+    const profile = buildContentFactoryWorkspacePatchArticleWorkspace({
+      artifact,
+    });
     const article = profile?.objects.find(
       (object) => object.ref.kind === "articleDraft",
     );
@@ -351,15 +372,66 @@ describe("contentFactoryWorkerContract", () => {
       "articleDraft",
       "deliveryChecklist",
     ]);
-    expect(article?.source?.markdown).toEqual(expect.stringContaining("# "));
-    expect(article?.source?.markdown).toEqual(
-      expect.stringContaining("## 三轮资料检索"),
+    expect(profile?.workerEvidence).toEqual([
+      expect.objectContaining({
+        taskKind: "content.article.generate",
+        workflowKey: "content_article_workflow",
+        subagents: expect.arrayContaining([
+          "content-researcher",
+          "article-writer",
+          "image-planner",
+        ]),
+        skillRefs: expect.arrayContaining([
+          "article-writing",
+          "article-image-plan",
+        ]),
+        cliRefs: expect.arrayContaining(["content-factory"]),
+        connectorRefs: expect.arrayContaining([
+          "lime-knowledge",
+          "web-research",
+          "media-generation",
+        ]),
+        hookPolicy: {
+          prompt: ["prompt-submit"],
+          task: ["task-complete"],
+        },
+        orchestration: expect.arrayContaining([
+          expect.objectContaining({
+            subagent: "article-writer",
+            skillRefs: ["article-writing"],
+          }),
+        ]),
+      }),
+    ]);
+    expect(article?.source?.documentText).toEqual(
+      expect.stringContaining("# "),
     );
-    expect(article?.source?.markdown).toEqual(
-      expect.stringContaining("## 正文草稿"),
+    expect(article?.source?.documentText).toEqual(
+      expect.stringContaining("Golang 学习路线"),
     );
-    expect(article?.source?.markdown).toEqual(
-      expect.stringContaining("## 配图占位"),
+    expect(article?.source?.documentText).toEqual(
+      expect.stringContaining("## 第一阶段：打牢基础"),
+    );
+    expect(article?.source?.documentText).toEqual(
+      expect.stringContaining("## 第二阶段：用项目建立反馈"),
+    );
+    expect(article?.source?.documentText).toEqual(
+      expect.stringContaining("## 第三阶段：补齐工程化能力"),
+    );
+    expect(article?.source?.documentText).not.toEqual(
+      expect.stringContaining("不要只生成一段话"),
+    );
+    expect(article?.source?.documentText).not.toEqual(
+      expect.stringContaining("右侧 Article Editor"),
+    );
+    expect(article?.source?.documentText).not.toEqual(
+      expect.stringContaining("## 检索入口"),
+    );
+    expect(article?.source?.documentText).not.toEqual(
+      expect.stringContaining("内容工厂"),
+    );
+    expect(article?.source?.finalMarkdown).toEqual(
+      article?.source?.documentText,
     );
     expect(article?.source).toMatchObject({
       researchRounds: expect.arrayContaining([
@@ -367,21 +439,21 @@ describe("contentFactoryWorkerContract", () => {
       ]),
       titleCandidates: expect.arrayContaining([
         expect.objectContaining({
-          title: expect.stringContaining("不要只生成一段话"),
+          title: expect.stringContaining("学习路线"),
         }),
       ]),
       outline: expect.arrayContaining([
         expect.objectContaining({
-          title: "后写作：正文进入右侧文章框，而不是塞进聊天流",
+          title: "实践：用项目把知识连成闭环",
         }),
       ]),
       keyTakeaways: expect.arrayContaining([
-        expect.stringContaining("写作过程需要先整理依据"),
+        expect.stringContaining("学习要先建立清晰主线"),
       ]),
       imageSlots: expect.arrayContaining([
         expect.objectContaining({
-          title: "封面图",
-          prompt: expect.stringContaining("Lime 桌面工作台"),
+          title: "学习路线封面图",
+          prompt: expect.stringContaining("学习路线图"),
         }),
       ]),
       searchRequests: expect.arrayContaining([

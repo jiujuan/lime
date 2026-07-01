@@ -16,6 +16,7 @@ import {
   IMAGE_COMMAND_SCENARIO,
   LOG_PREFIX,
   NEWS_PROMPT,
+  PLAIN_IMAGE_INTENT_SCENARIO,
   RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO,
   SESSION_ID,
   THREAD_ID,
@@ -26,7 +27,11 @@ import {
   collectAgentUiPerformanceTraceEvidence,
   enableClawTraceDebugOverride,
 } from "./claw-chat-current-fixture-agent-ui-trace.mjs";
-import { createTempRuntimeEnv } from "./claw-chat-current-fixture-backend-file.mjs";
+import {
+  createTempRuntimeEnv,
+  LOCAL_IMAGE_SERVER_API_KEY,
+  startImageProviderFixtureServer,
+} from "./claw-chat-current-fixture-backend-file.mjs";
 import {
   sanitizeBackendLedgerForEvidence,
   summarizeBackendLedger,
@@ -35,6 +40,7 @@ import {
   bindGuiWorkspaceAndModelPreferences,
   clearInvokeBuffers,
   ensureDefaultWorkspace,
+  ensureFixtureImageProvider,
   initializeAppServer,
   invokeAppServerFromPage,
   readTraceMessages,
@@ -79,7 +85,7 @@ Claw Chat Current Electron Fixture Smoke
   --app-url <url>        可选 renderer dev server，例如 http://127.0.0.1:1420/
   --evidence-dir <path>  证据目录
   --prefix <name>        证据文件前缀
-  --scenario <name>      complete | cancel | cancel-then-continue | plan | goal | image-command | web-tools-rendering | mcp-structured-content | skills-runtime | expert-skills-runtime | expert-plaza-skills-runtime | expert-panel-skills-runtime | right-surface-visual-matrix | content-factory-article-workspace，默认 complete
+  --scenario <name>      complete | cancel | cancel-then-continue | plan | goal | image-command | plain-image-intent | web-tools-rendering | mcp-structured-content | skills-runtime | expert-skills-runtime | expert-plaza-skills-runtime | expert-panel-skills-runtime | right-surface-visual-matrix | content-factory-article-workspace，默认 complete
   --timeout-ms <ms>      总超时，默认 180000
   --interval-ms <ms>     轮询间隔，默认 500
   --keep-temp            保留临时目录便于调试
@@ -149,6 +155,7 @@ function parseArgs(argv) {
     "plan",
     "goal",
     IMAGE_COMMAND_SCENARIO,
+    PLAIN_IMAGE_INTENT_SCENARIO,
     "web-tools-rendering",
     "mcp-structured-content",
     "skills-runtime",
@@ -242,6 +249,7 @@ async function run() {
     consoleErrors: [],
     rendererSnapshot: null,
     initialize: null,
+    imageFixtureProvider: null,
     guiWorkspaceBinding: null,
     sessionCreation: null,
     guiWorkspaceNavigation: null,
@@ -333,6 +341,7 @@ async function run() {
 
   let app = null;
   let page = null;
+  let imageProviderFixtureServer = null;
   const consoleErrors = [];
   const actionableConsoleErrors = [];
   const agentDebugLogs = [];
@@ -351,6 +360,17 @@ async function run() {
   };
 
   try {
+    imageProviderFixtureServer = await startImageProviderFixtureServer();
+    runtimeEnv.writeFixtureConfig?.({
+      serverHost: imageProviderFixtureServer.host,
+      serverPort: imageProviderFixtureServer.port,
+      serverApiKey: LOCAL_IMAGE_SERVER_API_KEY,
+    });
+    summary.imageProviderFixtureServer = sanitizeJson({
+      baseUrl: imageProviderFixtureServer.baseUrl,
+      requestCount: 0,
+    });
+
     if (options.appUrl) {
       logStage("wait-app-url");
       summary.rendererDevServer = sanitizeJson(
@@ -447,6 +467,16 @@ async function run() {
     summary.workspaceId = workspace.workspaceId;
     summary.workspace = sanitizeJson(workspace);
 
+    logStage("ensure-fixture-image-provider");
+    summary.imageFixtureProvider = sanitizeJson(
+      await ensureFixtureImageProvider(page, appServerRequests, {
+        apiHost: imageProviderFixtureServer.baseUrl,
+        localImageServerApiKey: LOCAL_IMAGE_SERVER_API_KEY,
+        localImageServerHost: imageProviderFixtureServer.host,
+        localImageServerPort: imageProviderFixtureServer.port,
+      }),
+    );
+
     logStage("bind-gui-workspace-model");
     summary.guiWorkspaceBinding = sanitizeJson(
       await bindGuiWorkspaceAndModelPreferences(page, workspace.workspaceId),
@@ -533,6 +563,11 @@ async function run() {
     );
     const traceMessages = readTraceMessages(traceRaw);
     await updateAgentUiPerformanceTraceEvidence(summary, page);
+    summary.imageProviderFixtureServer = sanitizeJson({
+      baseUrl: imageProviderFixtureServer.baseUrl,
+      requestCount: imageProviderFixtureServer.requestCount(),
+      requests: imageProviderFixtureServer.requests(),
+    });
     const assertionReport = buildFixtureAssertionReport({
       backendLedger,
       traceMessages,
@@ -616,6 +651,13 @@ async function run() {
     );
     summary.consoleErrors = consoleErrors;
     summary.actionableConsoleErrors = actionableConsoleErrors;
+    if (imageProviderFixtureServer) {
+      summary.imageProviderFixtureServer = sanitizeJson({
+        baseUrl: imageProviderFixtureServer.baseUrl,
+        requestCount: imageProviderFixtureServer.requestCount(),
+        requests: imageProviderFixtureServer.requests(),
+      });
+    }
     summary.agentDebugLogs = agentDebugLogs.slice(-200);
     summary.agentStreamDebugLogs = agentDebugLogs
       .filter((entry) => entry.text.includes("[AgentDebug] AgentStream."))
@@ -640,6 +682,9 @@ async function run() {
   } finally {
     if (app) {
       await app.close().catch(() => undefined);
+    }
+    if (imageProviderFixtureServer) {
+      await imageProviderFixtureServer.close().catch(() => undefined);
     }
     if (!options.keepTemp) {
       cleanupTempRoot(runtimeEnv.tempRoot);

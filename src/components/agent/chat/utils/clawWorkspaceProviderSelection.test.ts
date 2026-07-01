@@ -161,6 +161,33 @@ describe("resolveClawWorkspaceProviderSelection", () => {
     expect(mockFetchProviderModelsAuto).not.toHaveBeenCalled();
   });
 
+  it("解析普通聊天模型时应跳过纯图片模型", async () => {
+    mockLoadConfiguredProviders.mockResolvedValueOnce([createProvider()]);
+    mockGetModelRegistry.mockResolvedValueOnce([
+      createModel("gpt-image-1", {
+        task_families: ["image_generation"],
+        output_modalities: ["image"],
+        is_latest: true,
+      }),
+      createModel("gpt-5.4-mini", {
+        task_families: ["chat"],
+        output_modalities: ["text"],
+      }),
+    ]);
+
+    const result = await resolveClawWorkspaceProviderSelection({
+      currentProviderType: "custom-social-provider",
+      currentModel: null,
+      theme: "general",
+    });
+
+    expect(result).toEqual({
+      providerType: "custom-social-provider",
+      model: "gpt-5.4-mini",
+    });
+    expect(mockFetchProviderModelsAuto).not.toHaveBeenCalled();
+  });
+
   it("本地注册表无模型时应回退到后端 provider API 结果", async () => {
     mockLoadConfiguredProviders.mockResolvedValueOnce([
       createProvider({
@@ -275,5 +302,39 @@ describe("resolveClawWorkspaceProviderSelection", () => {
     expect(result).toBeNull();
     expect(mockFetchProviderModelsAuto).toHaveBeenCalledTimes(1);
     expect(mockFetchProviderModelsAuto).toHaveBeenCalledWith("lime-hub");
+  });
+
+  it("只有图片生成模型时不应为普通 Claw 聊天选择该 Provider", async () => {
+    mockLoadConfiguredProviders.mockResolvedValueOnce([
+      createProvider({
+        key: "fixture-image-provider",
+        label: "Fixture Image Provider",
+        registryId: "openai",
+        providerId: "custom-image-provider",
+        apiHost: "http://127.0.0.1:56755/v1",
+      }),
+    ]);
+    mockFetchProviderModelsAuto.mockResolvedValueOnce({
+      models: [
+        createModel("gpt-image-1", {
+          provider_id: "openai",
+          provider_name: "OpenAI",
+          task_families: ["image_generation"],
+          input_modalities: ["text"],
+          output_modalities: ["image"],
+          source: "custom",
+        }),
+      ],
+      source: "Api",
+      error: null,
+    });
+
+    const result = await resolveClawWorkspaceProviderSelection({
+      currentProviderType: "fixture-provider",
+      currentModel: "fixture-model",
+      theme: "general",
+    });
+
+    expect(result).toBeNull();
   });
 });

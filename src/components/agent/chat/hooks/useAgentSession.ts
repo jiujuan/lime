@@ -71,6 +71,7 @@ import {
   resolveRestorableTopicSessionId,
   shouldSkipAlreadyHydratedSession,
   shouldDeferSessionDetailHydration,
+  type AgentSessionDetailMergeMode,
   type AgentSessionSnapshot,
 } from "./agentSessionState";
 import {
@@ -108,6 +109,7 @@ import {
 import {
   refreshAgentSessionDetailState,
   refreshAgentSessionReadModelState,
+  type AgentSessionDetailRefreshRequest,
 } from "./agentSessionRefresh";
 import type { AgentAccessMode } from "./agentChatStorage";
 import {
@@ -1269,6 +1271,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         syncSessionId?: boolean;
         executionStrategyOverride?: AsterExecutionStrategy;
         preserveExecutionStrategyOnMissingDetail?: boolean;
+        detailMergeMode?: AgentSessionDetailMergeMode;
         localSnapshotOverride?: {
           sessionId: string;
           messages: Message[];
@@ -1292,6 +1295,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
           localSnapshotOverride: options?.localSnapshotOverride,
           syncSessionId: options?.syncSessionId,
           executionStrategyOverride: options?.executionStrategyOverride,
+          detailMergeMode: options?.detailMergeMode,
           preserveExecutionStrategyOnMissingDetail:
             options?.preserveExecutionStrategyOnMissingDetail,
         });
@@ -2449,12 +2453,16 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   );
 
   const refreshSessionDetail = useCallback(
-    async (targetSessionId?: string, source = "runtimeSync.refreshDetail") => {
+    async (
+      targetSessionId?: string,
+      request?: AgentSessionDetailRefreshRequest,
+    ) => {
       return refreshAgentSessionDetailState({
         runtime,
         sessionIdRef,
         targetSessionId,
-        source,
+        source: request?.source ?? "runtimeSync.refreshDetail",
+        detailMergeMode: request?.detailMergeMode,
         applySessionDetail,
         markSessionExecutionStrategySynced,
         persistSessionAccessMode,
@@ -2536,6 +2544,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
 
         applySessionDetail(resolvedSessionId, detail, {
           preserveExecutionStrategyOnMissingDetail: true,
+          detailMergeMode: "terminal_reconcile",
         });
         if (detail.execution_strategy) {
           markSessionExecutionStrategySynced(

@@ -1,4 +1,8 @@
 import { normalizeArtifactProtocolPath } from "@/lib/artifact-protocol";
+import {
+  isWorkspaceArticlePatchArtifactKind,
+  isWorkspaceArticlePatchArtifactPath,
+} from "../workspace/workspaceArticleWorkspaceMetadata";
 
 interface ConversationArtifactVisibilityTarget {
   content?: string;
@@ -19,10 +23,6 @@ function readString(...values: unknown[]): string | null {
   return null;
 }
 
-function normalizeKind(value?: string | null): string {
-  return value ? value.trim().toLowerCase() : "";
-}
-
 export function isHiddenInternalArtifactPath(path?: string | null): boolean {
   const normalizedPath = normalizeArtifactPath(path);
   if (!normalizedPath || !normalizedPath.endsWith(".json")) {
@@ -32,33 +32,6 @@ export function isHiddenInternalArtifactPath(path?: string | null): boolean {
   return (
     normalizedPath.startsWith(".lime/tasks/") ||
     normalizedPath.includes("/.lime/tasks/")
-  );
-}
-
-function isContentFactoryWorkspacePatchPath(path?: string | null): boolean {
-  const normalizedPath = normalizeArtifactPath(path);
-  if (!normalizedPath || !normalizedPath.endsWith(".json")) {
-    return false;
-  }
-  return (
-    normalizedPath === ".lime/artifacts/content-factory/workspace-patch.json" ||
-    normalizedPath.endsWith(
-      "/.lime/artifacts/content-factory/workspace-patch.json",
-    ) ||
-    normalizedPath === ".lime/artifacts/content-factory-workspace-patch.json" ||
-    normalizedPath.endsWith(
-      "/.lime/artifacts/content-factory-workspace-patch.json",
-    )
-  );
-}
-
-function isContentFactoryWorkspacePatchKind(kind?: string | null): boolean {
-  const normalizedKind = normalizeKind(kind);
-  return (
-    normalizedKind === "content_factory.workspace_patch" ||
-    normalizedKind === "content_factory_workspace_patch" ||
-    normalizedKind === "workspace_patch" ||
-    normalizedKind.endsWith(".workspace_patch")
   );
 }
 
@@ -83,7 +56,7 @@ export function isHiddenConversationArtifact(
     meta.outputArtifactKind,
     meta.output_artifact_kind,
   );
-  if (isContentFactoryWorkspacePatchKind(kind)) {
+  if (isWorkspaceArticlePatchArtifactKind(kind)) {
     return true;
   }
 
@@ -102,7 +75,7 @@ export function isHiddenConversationArtifactPath(
     return true;
   }
 
-  if (isContentFactoryWorkspacePatchPath(normalizedPath)) {
+  if (isWorkspaceArticlePatchArtifactPath(normalizedPath)) {
     return true;
   }
 

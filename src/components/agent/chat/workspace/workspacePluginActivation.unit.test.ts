@@ -404,6 +404,38 @@ describe("workspacePluginActivation", () => {
             prompt: ["prompt-submit"],
             task: ["task-complete"],
           },
+          runtime_readiness: {
+            plugin_id: "content-factory-app",
+            workflow_key: "content_article_workflow",
+            status: "declared",
+            connector_refs: [
+              "lime-knowledge",
+              "web-research",
+              "media-generation",
+            ],
+            hook_refs: ["prompt-submit", "task-complete"],
+            cli_refs: ["content-factory"],
+            connectors: expect.arrayContaining([
+              expect.objectContaining({
+                id: "web-research",
+                status: "declared",
+                source: "runtime_registry",
+              }),
+            ]),
+            hooks: expect.arrayContaining([
+              expect.objectContaining({
+                id: "prompt-submit",
+                status: "ready",
+                event: "prompt.submit",
+              }),
+            ]),
+            clis: expect.arrayContaining([
+              expect.objectContaining({
+                id: "content-factory",
+                required: true,
+              }),
+            ]),
+          },
           runtime_registries: {
             cli: {
               entrypoint: "./cli/content-factory.mjs",
@@ -424,6 +456,15 @@ describe("workspacePluginActivation", () => {
           default_prompts: expect.arrayContaining([
             expect.stringContaining("@写文章"),
           ]),
+        },
+      },
+    });
+    expect(sendOptions?.requestMetadata).toMatchObject({
+      harness: {
+        plugin_runtime_readiness: {
+          plugin_id: "content-factory-app",
+          workflow_key: "content_article_workflow",
+          status: "declared",
         },
       },
     });

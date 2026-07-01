@@ -190,8 +190,8 @@ function buildArtifactDocumentBlocks({
       id: "body",
       type: "rich_text",
       contentFormat: "markdown",
-      content: preview.documentText || object.summary || object.title,
-      markdown: preview.documentText || object.summary || object.title,
+      content: preview.documentText || "",
+      markdown: preview.documentText || "",
     },
   ];
 }

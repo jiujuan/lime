@@ -16,6 +16,7 @@ mod local_data_source;
 mod media_runtime_contract;
 mod media_task;
 mod media_task_payload;
+mod media_task_worker;
 mod memory_store;
 mod model_route_assembly;
 mod model_route_execution;
@@ -380,6 +381,14 @@ impl AppServer {
             .await
             .map_err(|_| AppServerError::ConnectionWriterClosed { connection_id })
     }
+}
+
+pub fn spawn_image_task_worker_scheduler(
+    db: lime_core::database::DbConnection,
+) -> tokio::task::JoinHandle<()> {
+    media_task_worker::spawn_image_task_worker_scheduler(
+        media_task_worker::ImageTaskWorkerContext::new(db),
+    )
 }
 
 impl AppServerEventBridge {

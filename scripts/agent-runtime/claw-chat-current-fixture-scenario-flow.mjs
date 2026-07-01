@@ -17,6 +17,7 @@ import {
   MCP_STRUCTURED_CONTENT_DONE_TEXT,
   MCP_STRUCTURED_CONTENT_PROMPT,
   NEWS_PROMPT,
+  PLAIN_IMAGE_INTENT_SCENARIO,
   PLAN_DONE_TEXT,
   PLAN_PROMPT,
   PLAN_STEPS,
@@ -161,6 +162,9 @@ export async function executeScenarioFlow({
   appServerRequests,
   runtimeEnv,
 }) {
+  const isImageIntentScenario =
+    options.scenario === IMAGE_COMMAND_SCENARIO ||
+    options.scenario === PLAIN_IMAGE_INTENT_SCENARIO;
   if (options.scenario === CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO) {
     logStage("run-content-factory-article-workspace");
     Object.assign(
@@ -333,7 +337,7 @@ export async function executeScenarioFlow({
         readModelGoalCompleted || {},
       ).includes("目标已绑定到本轮请求"),
     });
-  } else if (options.scenario === IMAGE_COMMAND_SCENARIO) {
+  } else if (isImageIntentScenario) {
     logStage("run-image-command-scenario");
     Object.assign(
       summary,
@@ -343,6 +347,8 @@ export async function executeScenarioFlow({
         workspace,
         appServerRequests,
         runtimeEnv,
+        imageFixtureProvider: summary.imageFixtureProvider,
+        summary,
       }),
     );
   } else if (options.scenario === "web-tools-rendering") {
@@ -392,9 +398,8 @@ export async function executeScenarioFlow({
           includesMidThinking: serializedProbe.includes(
             WEB_TOOLS_MID_THINKING_TEXT,
           ),
-          includesIntroText: serializedProbe.includes(
-            "我先联网核实目标页面来源。",
-          ),
+          includesIntroText:
+            serializedProbe.includes("我先联网核实目标页面来源。"),
           includesWebSearchTool: serializedProbe.includes(
             WEB_TOOLS_SEARCH_TOOL_CALL_ID,
           ),
@@ -804,7 +809,7 @@ export async function executeScenarioFlow({
         appServerRequests,
         EXPERT_SKILLS_RUNTIME_SCENARIO,
         expertPlazaSkillsRuntimeSessionId,
-      );
+    );
     summary.evidencePackExpertSkillsRuntime =
       evidencePackExpertSkillsRuntime.summary;
 
@@ -1034,7 +1039,7 @@ export async function executeScenarioFlow({
   } else if (
     options.scenario !== "plan" &&
     options.scenario !== "goal" &&
-    options.scenario !== IMAGE_COMMAND_SCENARIO &&
+    !isImageIntentScenario &&
     options.scenario !== "web-tools-rendering" &&
     options.scenario !== "mcp-structured-content" &&
     options.scenario !== "skills-runtime" &&

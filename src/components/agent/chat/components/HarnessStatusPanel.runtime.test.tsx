@@ -4,7 +4,7 @@ import { changeLimeLocale } from "@/i18n/createI18n";
 import {
   createHarnessState,
   findButtonByText,
-  renderPanel,
+  renderExpandedPanel as renderPanel,
   getHarnessPanelTestMocks,
 } from "./HarnessStatusPanel.testFixtures";
 

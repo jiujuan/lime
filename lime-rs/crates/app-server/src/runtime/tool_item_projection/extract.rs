@@ -46,6 +46,7 @@ pub(super) struct LegacyToolEvent {
     pub(super) error: Option<String>,
     pub(super) query: Option<String>,
     pub(super) action: Option<String>,
+    pub(super) metadata: Option<Value>,
 }
 
 pub(super) fn current_tool_item_from_event(event: &AgentEvent) -> Option<CurrentToolItem> {
@@ -133,6 +134,7 @@ pub(super) fn legacy_tool_event_from_event(event: &AgentEvent) -> Option<LegacyT
         error: raw_string_field(payload, &["error", "message", "reason"]),
         query: web_search_query(payload),
         action: web_search_action(payload),
+        metadata: payload.get("metadata").cloned(),
     })
 }
 

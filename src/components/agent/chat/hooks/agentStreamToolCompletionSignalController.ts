@@ -18,6 +18,10 @@ export function hasMeaningfulAgentStreamToolCompletionSignal(params: {
   normalizedResult:
     | {
         metadata?: unknown;
+        output?: unknown;
+        result?: unknown;
+        structuredContent?: unknown;
+        structured_content?: unknown;
       }
     | undefined;
 }): boolean {

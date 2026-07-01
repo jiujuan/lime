@@ -124,6 +124,7 @@ interface WorkspaceCanvasPreviewImageWorkbenchParams {
   onSaveSelectedToLibrary: ImageWorkbenchCanvasProps["onSaveSelectedToLibrary"];
   applySelectedOutputLabel: ImageWorkbenchCanvasProps["applySelectedOutputLabel"];
   onApplySelectedOutput?: ImageWorkbenchCanvasProps["onApplySelectedOutput"];
+  onRetryTask: ImageWorkbenchCanvasProps["onRetryTask"];
   onSeedFollowUpCommand: ImageWorkbenchCanvasProps["onSeedFollowUpCommand"];
 }
 
@@ -393,6 +394,7 @@ function useWorkspaceCanvasPreviewRuntime({
       onSaveSelectedToLibrary: imageWorkbench.onSaveSelectedToLibrary,
       applySelectedOutputLabel: imageWorkbench.applySelectedOutputLabel,
       onApplySelectedOutput: imageWorkbench.onApplySelectedOutput,
+      onRetryTask: imageWorkbench.onRetryTask,
       onSeedFollowUpCommand: imageWorkbench.onSeedFollowUpCommand,
     }),
     [
@@ -403,6 +405,7 @@ function useWorkspaceCanvasPreviewRuntime({
       imageWorkbench.onApplySelectedOutput,
       imageWorkbench.onModelChange,
       imageWorkbench.onProviderChange,
+      imageWorkbench.onRetryTask,
       imageWorkbench.onSaveSelectedToLibrary,
       imageWorkbench.onSeedFollowUpCommand,
       imageWorkbench.onSelectOutput,
@@ -960,6 +963,7 @@ export function useWorkspaceCanvasSceneRuntime({
           currentImageWorkbenchState.outputs.length > 0
             ? imageWorkbenchActionRuntime.handleApplySelectedImageWorkbenchOutput
             : undefined,
+        onRetryTask: imageWorkbenchActionRuntime.handleRetryImageWorkbenchTask,
         onSeedFollowUpCommand:
           imageWorkbenchActionRuntime.handleSeedImageWorkbenchFollowUp,
       },

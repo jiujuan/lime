@@ -221,7 +221,9 @@ impl ToolState {
         let id = legacy_tool_id(event, &tool_event);
         let item_type = item_type_for_tool_name(tool_event.tool_name.as_deref());
         let mut metadata = Map::new();
-        metadata.insert("source".to_string(), json!("legacy_tool_event"));
+        if !has_metadata_key(tool_event.metadata.as_ref(), "source") {
+            metadata.insert("source".to_string(), json!("legacy_tool_event"));
+        }
         let mut state = Self {
             id: id.clone(),
             item_id: None,
@@ -254,6 +256,7 @@ impl ToolState {
             sequence: event.sequence,
             has_current_item: false,
         };
+        state.merge_metadata_value(tool_event.metadata);
         state.merge_event_metadata(event);
         state
     }
@@ -317,6 +320,7 @@ impl ToolState {
             self.action = tool_event.action.or(self.action.take());
         }
         self.updated_at = event.timestamp.clone();
+        self.merge_metadata_value_prefer_new(tool_event.metadata);
         self.merge_event_metadata(event);
         self.sequence = self.sequence.min(event.sequence);
     }
@@ -383,6 +387,15 @@ impl ToolState {
         };
         for (key, value) in metadata {
             self.metadata.entry(key).or_insert(value);
+        }
+    }
+
+    fn merge_metadata_value_prefer_new(&mut self, metadata: Option<Value>) {
+        let Some(Value::Object(metadata)) = metadata else {
+            return;
+        };
+        for (key, value) in metadata {
+            self.metadata.insert(key, value);
         }
     }
 
@@ -525,6 +538,9 @@ fn merge_metadata_array(metadata: &mut Map<String, Value>, key: &str, value: Val
 
 fn copy_payload_metadata(metadata: &mut Map<String, Value>, payload: &Value) {
     for (source_key, target_key) in [
+        ("source", "source"),
+        ("workflowKey", "workflowKey"),
+        ("workflow_key", "workflow_key"),
         ("sourceClient", "source_client"),
         ("sourceProvenance", "source_provenance"),
         ("imported", "imported"),
@@ -535,6 +551,12 @@ fn copy_payload_metadata(metadata: &mut Map<String, Value>, payload: &Value) {
             metadata.insert(target_key.to_string(), value);
         }
     }
+}
+
+fn has_metadata_key(metadata: Option<&Value>, key: &str) -> bool {
+    metadata
+        .and_then(Value::as_object)
+        .is_some_and(|metadata| metadata.contains_key(key))
 }
 
 fn insert_optional(object: &mut Map<String, Value>, key: &str, value: Option<Value>) {

@@ -4,7 +4,9 @@ import type { InstalledAgentAppState } from "@/features/agent-app/types";
 import type {
   PluginContract,
   PluginArtifactRendererDeclaration,
+  PluginCliDeclaration,
   PluginConnectorDeclaration,
+  PluginHookDeclaration,
   PluginHistoryRestoreDeclaration,
   PluginManifestInstallContract,
   PluginManifest,
@@ -197,6 +199,11 @@ function projectPluginMarketplaceItemWorkflows(
         taskKind: readString(record.taskKind),
         triggerIntents: readStringArray(record.triggerIntents),
         outputArtifactKind: readString(record.outputArtifactKind),
+        cliRefs: readStringArray(record.cliRefs ?? record.cli_refs),
+        connectorRefs: readStringArray(
+          record.connectorRefs ?? record.connector_refs,
+        ),
+        hookPolicy: normalizeMarketplaceWorkflowHookPolicy(record),
         steps: Array.isArray(record.steps)
           ? record.steps.flatMap((step) => {
               const stepRecord = readRecord(step);
@@ -219,6 +226,23 @@ function projectPluginMarketplaceItemWorkflows(
       },
     ];
   });
+}
+
+function normalizeMarketplaceWorkflowHookPolicy(
+  record: Record<string, unknown>,
+): Record<string, string[]> | undefined {
+  const policy =
+    readRecord(record.hookPolicy) ?? readRecord(record.hook_policy);
+  if (!policy) {
+    return undefined;
+  }
+  const normalized = Object.fromEntries(
+    Object.entries(policy).flatMap(([eventName, refs]) => {
+      const values = readStringArray(refs);
+      return values.length > 0 ? [[eventName, values]] : [];
+    }),
+  );
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
 }
 
 function projectPluginMarketplaceItemConnectors(
@@ -279,6 +303,151 @@ function projectPluginMarketplaceItemConnectors(
   );
 }
 
+function projectCliDeclaration(
+  record: Record<string, unknown> | undefined,
+  options: {
+    fallbackId?: string;
+    requireExecutable?: boolean;
+  } = {},
+): PluginCliDeclaration | null {
+  if (!record) {
+    return null;
+  }
+  const id =
+    readString(record.id) ??
+    readString(record.key) ??
+    readString(record.name) ??
+    options.fallbackId;
+  if (!id) {
+    return null;
+  }
+  const entrypoint = readString(record.entrypoint) ?? readString(record.path);
+  const registry = readString(record.registry);
+  const commands = readStringArray(record.commands);
+  if (
+    options.requireExecutable &&
+    !entrypoint &&
+    !registry &&
+    commands.length === 0
+  ) {
+    return null;
+  }
+  return {
+    id,
+    title: readString(record.title) ?? readString(record.displayName),
+    description: readString(record.description),
+    entrypoint,
+    registry,
+    commands,
+    required: record.required === true,
+  };
+}
+
+function projectCliDeclarations(
+  value: unknown,
+  fallbackId?: string,
+): PluginCliDeclaration[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((entry): PluginCliDeclaration[] => {
+      const declaration = projectCliDeclaration(readRecord(entry));
+      return declaration ? [declaration] : [];
+    });
+  }
+  const declaration = projectCliDeclaration(readRecord(value), {
+    fallbackId,
+    requireExecutable: true,
+  });
+  return declaration ? [declaration] : [];
+}
+
+function projectPluginMarketplaceItemClis(
+  item: Pick<PluginMarketplaceItem, "manifestSummary">,
+): PluginCliDeclaration[] {
+  const summary = readRecord(item.manifestSummary);
+  const runtimePackage = readRecord(summary?.runtimePackage);
+  const agentRuntime = readRecord(summary?.agentRuntime);
+  const declarations = [
+    ...projectCliDeclarations(summary?.clis, "cli"),
+    ...projectCliDeclarations(runtimePackage?.cli, "runtime-cli"),
+    ...projectCliDeclarations(agentRuntime?.cli, "agent-runtime-cli"),
+  ];
+  const seen = new Set<string>();
+  return declarations.filter((declaration) => {
+    if (seen.has(declaration.id)) {
+      return false;
+    }
+    seen.add(declaration.id);
+    return true;
+  });
+}
+
+function projectHookDeclaration(
+  record: Record<string, unknown> | undefined,
+): PluginHookDeclaration | null {
+  if (!record) {
+    return null;
+  }
+  const key =
+    readString(record.key) ?? readString(record.id) ?? readString(record.event);
+  if (!key) {
+    return null;
+  }
+  return {
+    key,
+    title: readString(record.title),
+    description: readString(record.description),
+    event: readString(record.event),
+    entrypoint: readString(record.entrypoint),
+    path: readString(record.path),
+    required: record.required === true,
+  };
+}
+
+function projectHookDeclarations(value: unknown): PluginHookDeclaration[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((entry): PluginHookDeclaration[] => {
+      const declaration = projectHookDeclaration(readRecord(entry));
+      return declaration ? [declaration] : [];
+    });
+  }
+  const record = readRecord(value);
+  if (!record) {
+    return [];
+  }
+  const nested = ["items", "handlers"].flatMap((key) =>
+    Array.isArray(record[key]) ? (record[key] as unknown[]) : [],
+  );
+  if (nested.length > 0) {
+    return nested.flatMap((entry): PluginHookDeclaration[] => {
+      const declaration = projectHookDeclaration(readRecord(entry));
+      return declaration ? [declaration] : [];
+    });
+  }
+  const declaration = projectHookDeclaration(record);
+  return declaration ? [declaration] : [];
+}
+
+function projectPluginMarketplaceItemHooks(
+  item: Pick<PluginMarketplaceItem, "manifestSummary">,
+): PluginHookDeclaration[] {
+  const summary = readRecord(item.manifestSummary);
+  const runtimePackage = readRecord(summary?.runtimePackage);
+  const agentRuntime = readRecord(summary?.agentRuntime);
+  const declarations = [
+    ...projectHookDeclarations(summary?.hooks),
+    ...projectHookDeclarations(runtimePackage?.hooks),
+    ...projectHookDeclarations(agentRuntime?.hooks),
+  ];
+  const seen = new Set<string>();
+  return declarations.filter((declaration) => {
+    if (seen.has(declaration.key)) {
+      return false;
+    }
+    seen.add(declaration.key);
+    return true;
+  });
+}
+
 function projectPluginMarketplaceItemInterface(
   item: PluginMarketplaceItem,
 ): PluginManifestInterface {
@@ -330,6 +499,8 @@ function marketplaceManifest(item: PluginMarketplaceItem): PluginManifest {
     subagents: projectPluginMarketplaceItemSubagents(item),
     workflows: projectPluginMarketplaceItemWorkflows(item),
     connectors: projectPluginMarketplaceItemConnectors(item),
+    clis: projectPluginMarketplaceItemClis(item),
+    hooks: projectPluginMarketplaceItemHooks(item),
     interface: manifestInterface,
     ...(install ? { install } : {}),
     artifactRenderers,

@@ -3,6 +3,7 @@ import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime";
 export type WorkspaceArticleWorkspaceWorkerEvidenceStatus =
   | "completed"
   | "failed"
+  | "skipped"
   | "unknown";
 
 export interface WorkspaceArticleWorkspaceWorkerEvidenceItem {
@@ -27,7 +28,37 @@ export interface WorkspaceArticleWorkspaceWorkerEvidenceItem {
   retryAdvice: string | null;
   retryAttempt: number | null;
   retryMaxAttempts: number | null;
+  hookKey: string | null;
+  hookEvent: string | null;
+  hookScope: string | null;
+  hookEntrypoint: string | null;
+  hookRequired: boolean | null;
+  reasonCode: string | null;
+  resultSummary: string | null;
+  workflowKey: string | null;
+  subagents: string[];
+  skillRefs: string[];
+  cliRefs: string[];
+  connectorRefs: string[];
+  hookPolicy: WorkspaceArticleWorkspaceWorkerEvidenceHookPolicy | null;
+  runtimeRegistries: Record<string, unknown> | null;
+  orchestration: WorkspaceArticleWorkspaceWorkerEvidenceOrchestrationStep[];
   updatedAt: string | null;
+}
+
+export type WorkspaceArticleWorkspaceWorkerEvidenceHookPolicy = Record<
+  string,
+  string[]
+>;
+
+export interface WorkspaceArticleWorkspaceWorkerEvidenceOrchestrationStep {
+  id: string;
+  title: string;
+  subagent: string | null;
+  skillRefs: string[];
+  status: string | null;
+  summary: string | null;
+  expectedOutput: string | null;
 }
 
 export function readWorkspaceArticleWorkspaceWorkerEvidence(
@@ -41,13 +72,11 @@ export function readWorkspaceArticleWorkspaceWorkerEvidence(
     .sort(compareWorkerEvidenceDesc);
 }
 
-export function buildWorkspaceArticleWorkspaceWorkerEvidenceFromThreadRead(
-  params: {
-    articleWorkspace?: Record<string, unknown> | null;
-    sourceArtifacts?: unknown;
-    threadRead?: AgentRuntimeThreadReadModel | null;
-  },
-): WorkspaceArticleWorkspaceWorkerEvidenceItem[] {
+export function buildWorkspaceArticleWorkspaceWorkerEvidenceFromThreadRead(params: {
+  articleWorkspace?: Record<string, unknown> | null;
+  sourceArtifacts?: unknown;
+  threadRead?: AgentRuntimeThreadReadModel | null;
+}): WorkspaceArticleWorkspaceWorkerEvidenceItem[] {
   const articleWorkspace = params.articleWorkspace ?? null;
   const explicitEvidence = readWorkspaceArticleWorkspaceWorkerEvidence(
     firstArray(
@@ -99,8 +128,7 @@ function readWorkerEvidenceItem(
     turnId: readString(record.turnId, record.turn_id) || null,
     workerEntrypoint:
       readString(record.workerEntrypoint, record.worker_entrypoint) || null,
-    inputSummary:
-      readString(record.inputSummary, record.input_summary) || null,
+    inputSummary: readString(record.inputSummary, record.input_summary) || null,
     outputSummary:
       readString(record.outputSummary, record.output_summary) || null,
     outputObjectCount:
@@ -125,6 +153,31 @@ function readWorkerEvidenceItem(
     retryAttempt: readNumber(record.retryAttempt, record.retry_attempt) ?? null,
     retryMaxAttempts:
       readNumber(record.retryMaxAttempts, record.retry_max_attempts) ?? null,
+    hookKey: readString(record.hookKey, record.hook_key) || null,
+    hookEvent: readString(record.hookEvent, record.hook_event) || null,
+    hookScope: readString(record.hookScope, record.hook_scope) || null,
+    hookEntrypoint:
+      readString(record.hookEntrypoint, record.hook_entrypoint) || null,
+    hookRequired:
+      readBoolean(record.hookRequired, record.hook_required) ?? null,
+    reasonCode: readString(record.reasonCode, record.reason_code) || null,
+    resultSummary:
+      readString(record.resultSummary, record.result_summary) || null,
+    workflowKey: readString(record.workflowKey, record.workflow_key) || null,
+    subagents: readStringList(record.subagents, record.sub_agents),
+    skillRefs: readStringList(record.skillRefs, record.skill_refs),
+    cliRefs: readStringList(record.cliRefs, record.cli_refs),
+    connectorRefs: readStringList(record.connectorRefs, record.connector_refs),
+    hookPolicy:
+      readWorkerEvidenceHookPolicy(record.hookPolicy, record.hook_policy) ??
+      null,
+    runtimeRegistries:
+      firstRecord(record.runtimeRegistries, record.runtime_registries) ?? null,
+    orchestration: readWorkerEvidenceOrchestration(
+      record.orchestration,
+      record.workflowSteps,
+      record.workflow_steps,
+    ),
     updatedAt: readString(record.updatedAt, record.updated_at) || null,
   };
 }
@@ -176,6 +229,21 @@ function readSourceArtifactWorkerEvidence(
         retryAdvice: null,
         retryAttempt: null,
         retryMaxAttempts: null,
+        hookKey: null,
+        hookEvent: null,
+        hookScope: null,
+        hookEntrypoint: null,
+        hookRequired: null,
+        reasonCode: null,
+        resultSummary: null,
+        workflowKey: null,
+        subagents: [],
+        skillRefs: [],
+        cliRefs: [],
+        connectorRefs: [],
+        hookPolicy: null,
+        runtimeRegistries: null,
+        orchestration: [],
         updatedAt: readString(record.updatedAt, record.updated_at) || null,
       };
     })
@@ -223,6 +291,21 @@ function readDiagnosticWorkerEvidence(
       retryAdvice: null,
       retryAttempt: null,
       retryMaxAttempts: null,
+      hookKey: null,
+      hookEvent: null,
+      hookScope: null,
+      hookEntrypoint: null,
+      hookRequired: null,
+      reasonCode: null,
+      resultSummary: null,
+      workflowKey: null,
+      subagents: [],
+      skillRefs: [],
+      cliRefs: [],
+      connectorRefs: [],
+      hookPolicy: null,
+      runtimeRegistries: null,
+      orchestration: [],
       updatedAt:
         readString(
           threadRead?.diagnostics?.latest_turn_completed_at,
@@ -237,7 +320,7 @@ function readWorkerEvidenceStatus(
   value: unknown,
 ): WorkspaceArticleWorkspaceWorkerEvidenceStatus {
   const status = readString(value).replace(/-/g, "_");
-  if (status === "completed" || status === "failed") {
+  if (status === "completed" || status === "failed" || status === "skipped") {
     return status;
   }
   return "unknown";
@@ -309,4 +392,96 @@ function readBoolean(...values: unknown[]): boolean | undefined {
 
 function readArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
+}
+
+function firstRecord(...values: unknown[]): Record<string, unknown> | null {
+  for (const value of values) {
+    const record = asRecord(value);
+    if (record) {
+      return record;
+    }
+  }
+  return null;
+}
+
+function readStringList(...values: unknown[]): string[] {
+  const items: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    for (const item of readArray(value)) {
+      const text = readString(
+        item,
+        asRecord(item)?.id,
+        asRecord(item)?.key,
+        asRecord(item)?.name,
+        asRecord(item)?.title,
+      );
+      if (!text || seen.has(text)) {
+        continue;
+      }
+      seen.add(text);
+      items.push(text);
+    }
+  }
+  return items;
+}
+
+function readWorkerEvidenceHookPolicy(
+  ...values: unknown[]
+): WorkspaceArticleWorkspaceWorkerEvidenceHookPolicy | undefined {
+  const policy = firstRecord(...values);
+  if (!policy) {
+    return undefined;
+  }
+  const normalized: WorkspaceArticleWorkspaceWorkerEvidenceHookPolicy = {};
+  for (const [key, value] of Object.entries(policy)) {
+    const hooks = readStringList(value);
+    if (hooks.length > 0) {
+      normalized[key] = hooks;
+    }
+  }
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
+function readWorkerEvidenceOrchestration(
+  ...values: unknown[]
+): WorkspaceArticleWorkspaceWorkerEvidenceOrchestrationStep[] {
+  return values.flatMap((value) =>
+    readArray(value)
+      .map(readWorkerEvidenceOrchestrationStep)
+      .filter(
+        (
+          item,
+        ): item is WorkspaceArticleWorkspaceWorkerEvidenceOrchestrationStep =>
+          Boolean(item),
+      ),
+  );
+}
+
+function readWorkerEvidenceOrchestrationStep(
+  value: unknown,
+): WorkspaceArticleWorkspaceWorkerEvidenceOrchestrationStep | null {
+  const record = asRecord(value);
+  if (!record) {
+    return null;
+  }
+  const id = readString(record.id, record.key);
+  if (!id) {
+    return null;
+  }
+  return {
+    id,
+    title: readString(record.title, record.name) || id,
+    subagent:
+      readString(record.subagent, record.sub_agent, record.owner) || null,
+    skillRefs: readStringList(record.skillRefs, record.skill_refs),
+    status: readString(record.status) || null,
+    summary: readString(record.summary, record.description) || null,
+    expectedOutput:
+      readString(
+        record.expectedOutput,
+        record.expected_output,
+        record.output,
+      ) || null,
+  };
 }

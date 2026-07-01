@@ -20,6 +20,7 @@
 2. 会改变实现顺序、范围或回滚策略的决策，必须记录在这里或链接到这里
 3. 清理类工作如果不能直接回挂路线图，应登记到 `tech-debt-tracker.md`
 4. 被替代的计划不要悬空，保留跳转说明或归档指针
+5. Agent / Runtime / Agent App / Skill / Managed Objective / Harness / GUI 主链改动应先填写 [Agent Verification Contract 模板](./templates/agent-verification-contract.md)，明确预算标签、current 主链、Happy Path、Evidence Layers、必跑命令和 Agent QC 场景映射；普通开发默认低 token，不默认跑 full qcloop / live Provider。
 
 ## 关联入口
 

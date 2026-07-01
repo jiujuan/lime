@@ -38,6 +38,10 @@ export interface CanvasImageInsertRequest {
   contentId: string | null;
   canvasType: CanvasImageTargetType;
   anchorHint?: CanvasImageInsertAnchorHint;
+  taskId?: string | null;
+  slotId?: string | null;
+  sectionTitle?: string | null;
+  anchorText?: string | null;
   source: CanvasImageInsertSource;
   image: InsertableImage;
 }
@@ -47,6 +51,10 @@ interface EmitCanvasImageInsertRequestInput {
   contentId?: string | null;
   canvasType?: CanvasImageTargetType;
   anchorHint?: CanvasImageInsertAnchorHint;
+  taskId?: string | null;
+  slotId?: string | null;
+  sectionTitle?: string | null;
+  anchorText?: string | null;
   source: CanvasImageInsertSource;
   image: InsertableImage;
 }
@@ -94,6 +102,10 @@ const createRequest = (
   contentId: normalizeId(input.contentId),
   canvasType: normalizeCanvasType(input.canvasType),
   anchorHint: input.anchorHint,
+  taskId: normalizeId(input.taskId),
+  slotId: normalizeId(input.slotId),
+  sectionTitle: normalizeId(input.sectionTitle),
+  anchorText: normalizeId(input.anchorText),
   source: input.source,
   image: input.image,
 });

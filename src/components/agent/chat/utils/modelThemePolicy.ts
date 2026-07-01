@@ -144,20 +144,11 @@ export function filterModelsByTheme(
 
   if (normalizeThemeType(theme) === "general") {
     const chatModels = safeModels.filter(looksLikeChatModel);
-    if (chatModels.length > 0) {
-      return {
-        models: chatModels,
-        usedFallback: false,
-        filteredOutCount: safeModels.length - chatModels.length,
-        policyName: "chat-only",
-      };
-    }
-
     return {
-      models: safeModels,
-      usedFallback: true,
-      filteredOutCount: 0,
-      policyName: "fallback-all",
+      models: chatModels,
+      usedFallback: false,
+      filteredOutCount: safeModels.length - chatModels.length,
+      policyName: "chat-only",
     };
   }
 

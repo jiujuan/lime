@@ -99,11 +99,17 @@ async fn article_workspace_turn_runs_installed_worker_and_materializes_workspace
         .iter()
         .find(|object| object["ref"]["kind"] == "articleDraft")
         .expect("article object");
-    assert_eq!(article["title"], "公众号文章草稿");
-    assert!(article["source"]["markdown"]
+    let article_title = article["title"].as_str().expect("article title");
+    assert!(article_title.contains("学习路线：从基础语法到工程实战"));
+    let article_document = article["source"]["documentText"]
         .as_str()
-        .expect("article markdown")
-        .contains("完整正文应该进入独立的文章产物框，再从这里打开右侧文章编辑器"));
+        .expect("article documentText");
+    assert!(article_document.contains("## 第一阶段：打牢基础"));
+    assert!(article_document.contains("## 结尾"));
+    assert_eq!(
+        article["source"]["finalMarkdown"],
+        article["source"]["documentText"]
+    );
     assert_eq!(
         article["source"]["outline"]
             .as_array()
@@ -174,11 +180,28 @@ async fn article_generation_worker_emits_initial_streaming_workspace_snapshot() 
         vec![
             "message.created",
             "turn.accepted",
+            "agent_app_worker.hook",
+            "message.delta",
             "artifact.snapshot",
             "artifact.snapshot",
+            "agent_app_worker.hook",
             "turn.completed"
         ]
     );
+    let hook_events = output
+        .events
+        .iter()
+        .filter(|event| event.event_type == "agent_app_worker.hook")
+        .collect::<Vec<_>>();
+    assert_eq!(hook_events.len(), 2);
+    assert_eq!(hook_events[0].payload["hookKey"], "prompt-submit");
+    assert_eq!(hook_events[0].payload["hookEvent"], "prompt.submit");
+    assert_eq!(hook_events[0].payload["hookScope"], "prompt");
+    assert_eq!(hook_events[0].payload["status"], "completed");
+    assert_eq!(hook_events[1].payload["hookKey"], "task-complete");
+    assert_eq!(hook_events[1].payload["hookEvent"], "task.complete");
+    assert_eq!(hook_events[1].payload["hookScope"], "task");
+    assert_eq!(hook_events[1].payload["status"], "completed");
     let artifact_events = output
         .events
         .iter()
@@ -228,10 +251,77 @@ async fn article_generation_worker_emits_initial_streaming_workspace_snapshot() 
         .iter()
         .find(|object| object["ref"]["kind"] == "articleDraft")
         .expect("article object");
-    assert!(article["source"]["markdown"]
+    let article_document = article["source"]["documentText"]
         .as_str()
-        .expect("article markdown")
-        .contains("完整正文应该进入独立的文章产物框，再从这里打开右侧文章编辑器"));
+        .expect("article documentText");
+    assert!(article_document.contains("## 第一阶段：打牢基础"));
+    assert!(article_document.contains("## 结尾"));
+    assert_eq!(
+        article["source"]["finalMarkdown"],
+        article["source"]["documentText"]
+    );
+    let worker_evidence = detail["article_workspace"]["workerEvidence"]
+        .as_array()
+        .expect("worker evidence");
+    let completed_worker_evidence = worker_evidence
+        .iter()
+        .find(|evidence| {
+            evidence["eventType"] == "artifact.snapshot"
+                && evidence["taskId"] == "turn-content-article-generate:content_article_generate"
+                && evidence["status"] == "completed"
+        })
+        .expect("completed article worker evidence");
+    assert!(
+        completed_worker_evidence["outputObjectCount"]
+            .as_u64()
+            .unwrap_or_default()
+            >= 1
+    );
+    assert_eq!(
+        completed_worker_evidence["workflowKey"],
+        "content_article_workflow"
+    );
+    assert!(completed_worker_evidence["subagents"]
+        .as_array()
+        .expect("worker subagents")
+        .iter()
+        .any(|subagent| subagent == "article-writer"));
+    assert!(completed_worker_evidence["skillRefs"]
+        .as_array()
+        .expect("worker skill refs")
+        .iter()
+        .any(|skill| skill == "article-writing"));
+    assert!(completed_worker_evidence["skillRefs"]
+        .as_array()
+        .expect("worker skill refs")
+        .iter()
+        .any(|skill| skill == "article-image-plan"));
+    assert!(completed_worker_evidence["connectorRefs"]
+        .as_array()
+        .expect("worker connector refs")
+        .iter()
+        .any(|connector| connector == "web-research"));
+    assert_eq!(
+        completed_worker_evidence["hookPolicy"]["prompt"][0],
+        "prompt-submit"
+    );
+    assert!(
+        completed_worker_evidence["orchestration"]
+            .as_array()
+            .expect("worker orchestration")
+            .len()
+            >= 5
+    );
+    assert!(worker_evidence.iter().any(|evidence| {
+        evidence["eventType"] == "agent_app_worker.hook"
+            && evidence["hookKey"] == "prompt-submit"
+            && evidence["status"] == "completed"
+    }));
+    assert!(worker_evidence.iter().any(|evidence| {
+        evidence["eventType"] == "agent_app_worker.hook"
+            && evidence["hookKey"] == "task-complete"
+            && evidence["status"] == "completed"
+    }));
 }
 
 #[tokio::test]

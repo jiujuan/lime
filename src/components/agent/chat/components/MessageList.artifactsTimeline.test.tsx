@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  findStreamingRendererCallByContent,
   mockStreamingRenderer,
   mockAgentThreadTimeline,
   render,
 } from "./MessageList.testHarness";
-import type {
-  Message,
-} from "./MessageList.testHarness";
+import type { Message } from "./MessageList.testHarness";
 
 describe("MessageList artifacts timeline", () => {
   it("正文已承载过程流时，file_artifact 仍应作为尾部补充信息展示", () => {
@@ -74,12 +73,288 @@ describe("MessageList artifacts timeline", () => {
     const assistantBubble = container.querySelector(
       '[data-message-role="assistant"]',
     );
+    const streamingRenderer = container.querySelector(
+      '[data-testid="streaming-renderer"]',
+    );
+    const trailingTimeline = container.querySelector(
+      '[data-testid="agent-thread-timeline:trailing"]',
+    );
 
-    expect(pinnedFileTimeline).not.toBeNull();
+    expect(pinnedFileTimeline).toBeNull();
     expect(assistantBubble).not.toBeNull();
+    expect(streamingRenderer).not.toBeNull();
+    expect(trailingTimeline).not.toBeNull();
+    expect(assistantBubble?.contains(trailingTimeline)).toBe(true);
     expect(
       Boolean(
-        pinnedFileTimeline!.compareDocumentPosition(assistantBubble!) &
+        streamingRenderer!.compareDocumentPosition(trailingTimeline!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
+  });
+
+  it("文章产物卡应在对话过程和尾部时间线之后展示", () => {
+    const now = new Date();
+    const fullArticle =
+      "# 公众号文章草稿\n\n这是最终正文，只应在过程结束后作为文章产物预览出现。";
+    const messages: Message[] = [
+      {
+        id: "msg-assistant-article-after-process",
+        role: "assistant",
+        content: "我先完成检索、分析和编排，再给出文章产物。",
+        timestamp: now,
+        contentParts: [
+          {
+            type: "thinking",
+            text: "先检索资料，再组织写作结构。",
+          },
+          {
+            type: "text",
+            text: "我先完成检索、分析和编排，再给出文章产物。",
+          },
+        ],
+        artifacts: [
+          {
+            id: "artifact-article-after-process",
+            type: "document",
+            title: "公众号文章草稿",
+            content: fullArticle,
+            status: "complete",
+            meta: {
+              openedFrom: "right_surface_article_workspace",
+              articleWorkspace: {
+                objectKind: "articleDraft",
+              },
+              contentFactoryWorkspacePatch: {
+                workerEvidence: [
+                  {
+                    subagents: ["content-researcher", "article-writer"],
+                    skillRefs: ["article-research", "article-writing"],
+                    researchRounds: [
+                      { id: "research-1", title: "主题检索" },
+                      { id: "research-2", title: "资料交叉验证" },
+                    ],
+                    outline: [{ id: "section-1", title: "开场" }],
+                    writingPlan: [
+                      {
+                        id: "plan-research",
+                        title: "资料检索",
+                        owner: "content-researcher",
+                        skillRef: "article-research",
+                      },
+                      {
+                        id: "plan-draft",
+                        title: "正文写作",
+                        owner: "article-writer",
+                        skillRef: "article-writing",
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+            position: { start: 0, end: fullArticle.length },
+            createdAt: now.getTime(),
+            updatedAt: now.getTime(),
+          },
+        ],
+      },
+    ];
+
+    const container = render(messages, {
+      currentTurnId: "turn-article-after-process",
+      turns: [
+        {
+          id: "turn-article-after-process",
+          thread_id: "thread-1",
+          prompt_text: "写一篇公众号文章",
+          status: "completed",
+          started_at: "2026-03-29T13:10:00Z",
+          completed_at: "2026-03-29T13:10:06Z",
+          created_at: "2026-03-29T13:10:00Z",
+          updated_at: "2026-03-29T13:10:06Z",
+        },
+      ],
+      threadItems: [
+        {
+          id: "item-article-process-search",
+          thread_id: "thread-1",
+          turn_id: "turn-article-after-process",
+          sequence: 1,
+          status: "completed",
+          started_at: "2026-03-29T13:10:01Z",
+          completed_at: "2026-03-29T13:10:02Z",
+          updated_at: "2026-03-29T13:10:02Z",
+          type: "web_search",
+          query: "AI 趋势 公众号文章",
+          output: "找到 3 条可参考资料。",
+        },
+        {
+          id: "item-article-process-artifact",
+          thread_id: "thread-1",
+          turn_id: "turn-article-after-process",
+          sequence: 2,
+          status: "completed",
+          started_at: "2026-03-29T13:10:04Z",
+          completed_at: "2026-03-29T13:10:05Z",
+          updated_at: "2026-03-29T13:10:05Z",
+          type: "file_artifact",
+          path: "exports/content-factory/process.md",
+          source: "artifact_snapshot",
+          content: "# 写作过程\n\n已完成资料检索和结构编排。",
+        },
+      ],
+    });
+
+    const streamingRenderer = container.querySelector(
+      '[data-testid="streaming-renderer"]',
+    );
+    const trailingTimeline = container.querySelector(
+      '[data-testid="agent-thread-timeline:trailing"]',
+    );
+    const articleFrame = container.querySelector(
+      '[data-testid="article-artifact-frame"]',
+    );
+
+    expect(streamingRenderer).not.toBeNull();
+    expect(trailingTimeline).not.toBeNull();
+    expect(articleFrame).not.toBeNull();
+    expect(
+      Boolean(
+        streamingRenderer!.compareDocumentPosition(articleFrame!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
+    expect(
+      Boolean(
+        trailingTimeline!.compareDocumentPosition(articleFrame!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true);
+    expect(articleFrame?.textContent).toContain("Document created:");
+    expect(articleFrame?.textContent).toContain("Open document");
+    expect(articleFrame?.textContent).toContain("公众号文章草稿");
+  });
+
+  it("内容工厂文章产物前应展开已完成的搜索工具过程", () => {
+    const now = new Date();
+    const fullArticle = "# Go 学习文章\n\n这是最终正文。";
+    const messages: Message[] = [
+      {
+        id: "msg-assistant-content-factory-process",
+        role: "assistant",
+        content: "我会先检索资料，再输出文章草稿。",
+        timestamp: now,
+        artifacts: [
+          {
+            id: "artifact-content-factory-article",
+            type: "document",
+            title: "Go 学习文章",
+            content: fullArticle,
+            status: "complete",
+            meta: {
+              openedFrom: "right_surface_article_workspace",
+              articleWorkspace: {
+                objectKind: "articleDraft",
+              },
+            },
+            position: { start: 0, end: fullArticle.length },
+            createdAt: now.getTime(),
+            updatedAt: now.getTime(),
+          },
+        ],
+      },
+    ];
+
+    const container = render(messages, {
+      currentTurnId: "turn-content-factory-process",
+      turns: [
+        {
+          id: "turn-content-factory-process",
+          thread_id: "thread-1",
+          prompt_text: "@写文章 写一篇关于 golang 学习的文章",
+          status: "completed",
+          started_at: "2026-03-29T13:20:00Z",
+          completed_at: "2026-03-29T13:20:08Z",
+          created_at: "2026-03-29T13:20:00Z",
+          updated_at: "2026-03-29T13:20:08Z",
+        },
+      ],
+      threadItems: [
+        {
+          id: "item-content-factory-search-1",
+          thread_id: "thread-1",
+          turn_id: "turn-content-factory-process",
+          sequence: 1,
+          status: "completed",
+          started_at: "2026-03-29T13:20:01Z",
+          completed_at: "2026-03-29T13:20:02Z",
+          updated_at: "2026-03-29T13:20:02Z",
+          type: "web_search",
+          query: "golang 学习路径",
+          output: "找到 3 条可参考资料。",
+          metadata: {
+            source: "content_factory_search_requests",
+            workflowKey: "content_article_workflow",
+          },
+        },
+        {
+          id: "item-content-factory-search-2",
+          thread_id: "thread-1",
+          turn_id: "turn-content-factory-process",
+          sequence: 2,
+          status: "completed",
+          started_at: "2026-03-29T13:20:03Z",
+          completed_at: "2026-03-29T13:20:04Z",
+          updated_at: "2026-03-29T13:20:04Z",
+          type: "web_search",
+          query: "golang 并发实践",
+          output: "找到 2 条可参考资料。",
+          metadata: {
+            source: "legacy_tool_event",
+            workflow_key: "content_article_workflow",
+          },
+        },
+      ],
+    });
+
+    const streamingRenderer = container.querySelector(
+      '[data-testid="streaming-renderer"]',
+    );
+    const articleFrame = container.querySelector(
+      '[data-testid="article-artifact-frame"]',
+    );
+    const rendererCall =
+      findStreamingRendererCallByContent("我会先检索资料，再输出文章草稿。");
+    const contentFactoryToolParts = (rendererCall?.contentParts || []).filter(
+      (part) => {
+        const metadata = part.metadata as Record<string, unknown> | undefined;
+        return (
+          part.type === "tool_use" &&
+          (metadata?.source === "content_factory_search_requests" ||
+            metadata?.workflowKey === "content_article_workflow" ||
+            metadata?.workflow_key === "content_article_workflow")
+        );
+      },
+    );
+
+    expect(streamingRenderer).not.toBeNull();
+    expect(contentFactoryToolParts).toHaveLength(2);
+    expect(contentFactoryToolParts[0]?.metadata).toEqual(
+      expect.objectContaining({
+        source: "content_factory_search_requests",
+        workflowKey: "content_article_workflow",
+      }),
+    );
+    expect(contentFactoryToolParts[1]?.metadata).toEqual(
+      expect.objectContaining({
+        workflow_key: "content_article_workflow",
+      }),
+    );
+    expect(articleFrame).not.toBeNull();
+    expect(
+      Boolean(
+        streamingRenderer!.compareDocumentPosition(articleFrame!) &
         Node.DOCUMENT_POSITION_FOLLOWING,
       ),
     ).toBe(true);
@@ -691,5 +966,4 @@ describe("MessageList artifacts timeline", () => {
       }),
     );
   });
-
 });

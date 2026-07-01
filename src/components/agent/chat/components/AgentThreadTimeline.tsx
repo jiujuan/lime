@@ -21,7 +21,10 @@ import {
 } from "../utils/agentThreadGrouping";
 import type { AgentRuntimeThreadReadModel } from "@/lib/api/agentRuntime";
 import { cn } from "@/lib/utils";
-import { AgentThreadTimelineFileChangesCard } from "./AgentThreadTimelineFileChangesCard";
+import {
+  AgentThreadTimelineFileChangesCard,
+  hasTimelineFileChangeEvidence,
+} from "./AgentThreadTimelineFileChangesCard";
 import type { ArtifactTimelineOpenTarget } from "../utils/artifactTimelineNavigation";
 import {
   buildTimelineBlockRenderPlan,
@@ -69,6 +72,7 @@ interface AgentThreadTimelineProps {
   focusRequestKey?: number;
   deferCompletedSingleDetails?: boolean;
   collapseInactiveDetails?: boolean;
+  expandCompletedProcessDetails?: boolean;
 }
 
 function TimelineBlockCard({
@@ -87,6 +91,7 @@ function TimelineBlockCard({
   focusRequestKey,
   preferInlineDetails,
   deferCompletedSingleDetails,
+  expandCompletedProcessDetails,
 }: {
   block: AgentThreadOrderedBlock;
   index: number;
@@ -94,6 +99,7 @@ function TimelineBlockCard({
   isExpanded: boolean;
   preferInlineDetails: boolean;
   deferCompletedSingleDetails: boolean;
+  expandCompletedProcessDetails: boolean;
   onFileClick?: (fileName: string, content: string) => void;
   onOpenArtifactFromTimeline?: (target: ArtifactTimelineOpenTarget) => void;
   sourceMessageId?: string;
@@ -167,6 +173,7 @@ function TimelineBlockCard({
           onPermissionResponse={onPermissionResponse}
           groupedToolCall={renderPlan.shouldRenderGroupedToolRows}
           groupMarker={block.items[0]?.id === item.id ? "└" : "·"}
+          defaultExpandCompletedToolResult={expandCompletedProcessDetails}
           openSubagentLabel={openSubagentLabel}
           sourceMessageId={sourceMessageId}
           onSaveFileArtifactAsKnowledge={onSaveFileArtifactAsKnowledge}
@@ -187,6 +194,7 @@ function TimelineBlockCard({
     openSubagentLabel,
     renderPlan.shouldMaterializeDetailEntries,
     renderPlan.shouldRenderGroupedToolRows,
+    expandCompletedProcessDetails,
   ]);
 
   if (renderPlan.shouldRenderArtifactCardsInline) {
@@ -196,7 +204,8 @@ function TimelineBlockCard({
         data-testid={dataTestId}
         data-emphasis={emphasis}
       >
-        {block.items.length > 1 ? (
+        {block.items.length > 1 &&
+        block.items.every(hasTimelineFileChangeEvidence) ? (
           <AgentThreadTimelineFileChangesCard
             items={
               block.items.filter(
@@ -237,6 +246,7 @@ function TimelineBlockCard({
           onOpenSavedSiteContent={onOpenSavedSiteContent}
           onOpenSubagentSession={onOpenSubagentSession}
           onPermissionResponse={onPermissionResponse}
+          defaultExpandCompletedToolResult={expandCompletedProcessDetails}
           openSubagentLabel={openSubagentLabel}
           sourceMessageId={sourceMessageId}
           onSaveFileArtifactAsKnowledge={onSaveFileArtifactAsKnowledge}
@@ -413,6 +423,7 @@ export const AgentThreadTimeline: React.FC<AgentThreadTimelineProps> = ({
   focusRequestKey = 0,
   deferCompletedSingleDetails = false,
   collapseInactiveDetails = false,
+  expandCompletedProcessDetails = false,
 }) => {
   const { t } = useTranslation("agent");
   const translateThreadGrouping = useCallback(
@@ -453,6 +464,7 @@ export const AgentThreadTimeline: React.FC<AgentThreadTimelineProps> = ({
     focusBlockIndex,
     turn,
     collapseInactiveDetails,
+    expandCompletedProcessDetails,
   });
   const inlineStatusHint = resolveThreadInlineStatusHint({
     turn,
@@ -491,6 +503,7 @@ export const AgentThreadTimeline: React.FC<AgentThreadTimelineProps> = ({
             isExpanded={expandedBlockIndexes.has(index)}
             preferInlineDetails={isCurrentTurn}
             deferCompletedSingleDetails={deferCompletedSingleDetails}
+            expandCompletedProcessDetails={expandCompletedProcessDetails}
             onFileClick={onFileClick}
             onOpenArtifactFromTimeline={onOpenArtifactFromTimeline}
             sourceMessageId={sourceMessageId}

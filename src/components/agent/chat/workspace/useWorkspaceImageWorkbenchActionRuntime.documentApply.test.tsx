@@ -1,6 +1,10 @@
 import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
+import {
+  ackCanvasImageInsertRequest,
+  getPendingCanvasImageInsertRequests,
+} from "@/lib/canvasImageInsertBus";
 import { createInitialSessionImageWorkbenchState } from "./imageWorkbenchHelpers";
 import {
   type HookProps,
@@ -10,6 +14,12 @@ import {
 } from "./useWorkspaceImageWorkbenchActionRuntime.testFixtures";
 
 describe("useWorkspaceImageWorkbenchActionRuntime document apply", () => {
+  function clearPendingInsertRequests() {
+    getPendingCanvasImageInsertRequests().forEach((request) => {
+      ackCanvasImageInsertRequest(request.requestId);
+    });
+  }
+
   it("文稿插图任务应把 document-inline slot 信息写入 Agent launch 上下文", async () => {
     const submitImageWorkbenchAgentCommand = vi.fn().mockResolvedValue(true);
     const { render, getValue } = renderHook({
@@ -51,6 +61,7 @@ describe("useWorkspaceImageWorkbenchActionRuntime document apply", () => {
   });
 
   it("应用图片结果时应只关闭图片工作台并派发插入，不主动切换布局", async () => {
+    clearPendingInsertRequests();
     const updateCurrentImageWorkbenchState = vi.fn();
     const currentImageWorkbenchState: HookProps["currentImageWorkbenchState"] =
       {
@@ -74,6 +85,7 @@ describe("useWorkspaceImageWorkbenchActionRuntime document apply", () => {
               kind: "canvas-insert" as const,
               canvasType: "document" as const,
               anchorHint: "section_end" as const,
+              slotId: "hero",
               sectionTitle: "核心观点",
               anchorText: "这里是核心观点段落。",
               actionLabel: "插入文稿",
@@ -97,8 +109,25 @@ describe("useWorkspaceImageWorkbenchActionRuntime document apply", () => {
     expect(updateCurrentImageWorkbenchState).toHaveBeenCalledWith(
       expect.any(Function),
     );
+    expect(getPendingCanvasImageInsertRequests()).toContainEqual(
+      expect.objectContaining({
+        projectId: "project-1",
+        contentId: null,
+        canvasType: "document",
+        anchorHint: "section_end",
+        taskId: "task-image-1",
+        slotId: "hero",
+        sectionTitle: "核心观点",
+        anchorText: "这里是核心观点段落。",
+        source: "manual",
+        image: expect.objectContaining({
+          contentUrl: "https://example.com/image-2.png",
+        }),
+      }),
+    );
     expect(toast.info).toHaveBeenCalledWith("已切回文稿，正在插入图片");
     expect(toast.error).not.toHaveBeenCalled();
+    clearPendingInsertRequests();
   });
 
   it("继续修图 follow-up 应回填输入框并使用中性提示文案", async () => {

@@ -4,6 +4,7 @@ import {
   type ConfiguredProvider,
 } from "@/hooks/useConfiguredProviders";
 import { loadProviderModels } from "@/hooks/useProviderModels";
+import { isLikelyImageGenerationModelId } from "@/lib/imageGen/providerMatchers";
 import { resolveProviderModelLoadOptions } from "@/lib/model/providerModelLoadOptions";
 import { type EnhancedModelMetadata } from "@/lib/types/modelRegistry";
 import { filterModelsByTheme } from "./modelThemePolicy";
@@ -23,6 +24,22 @@ export interface ClawWorkspaceProviderSelection {
 
 function normalizeValue(value?: string | null): string {
   return (value || "").trim().toLowerCase();
+}
+
+function isTextChatCandidateModel(model: EnhancedModelMetadata): boolean {
+  const outputModalities = model.output_modalities ?? [];
+  const canReturnText =
+    outputModalities.length === 0 || outputModalities.includes("text");
+  if (!canReturnText) {
+    return false;
+  }
+
+  const taskFamilies = model.task_families ?? [];
+  const isImageTaskModel =
+    taskFamilies.includes("image_generation") ||
+    taskFamilies.includes("image_edit") ||
+    isLikelyImageGenerationModelId(model.id);
+  return !isImageTaskModel || outputModalities.includes("text");
 }
 
 function resolveExactModelId(
@@ -51,7 +68,9 @@ function resolvePreferredModelId(
   }
 
   const themedModels = filterModelsByTheme(theme, models).models;
-  const candidateModels = themedModels.length > 0 ? themedModels : models;
+  const candidateModels = (
+    themedModels.length > 0 ? themedModels : models
+  ).filter(isTextChatCandidateModel);
 
   if (candidateModels.length === 0) {
     return null;

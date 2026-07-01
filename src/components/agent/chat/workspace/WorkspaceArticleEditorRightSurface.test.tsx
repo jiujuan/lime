@@ -48,6 +48,14 @@ vi.mock("react-i18next", () => ({
         "workspace.articleEditor.writingPlan.empty": "等待写作计划。",
         "workspace.articleEditor.writingPlan.done": "已完成",
         "workspace.articleEditor.writingPlan.pending": "待处理",
+        "workspace.articleEditor.orchestration.title": "内容工厂编排",
+        "workspace.articleEditor.orchestration.detail": `${options?.count ?? 0} 个步骤 · ${options?.workflow ?? ""}`,
+        "workspace.articleEditor.orchestration.workflow": "Workflow",
+        "workspace.articleEditor.orchestration.subagents": "子 Agent",
+        "workspace.articleEditor.orchestration.skills": "Skills",
+        "workspace.articleEditor.orchestration.cli": "CLI",
+        "workspace.articleEditor.orchestration.connectors": "连接器",
+        "workspace.articleEditor.orchestration.hooks": "Hooks",
         "workspace.articleEditor.research.title": "资料检索",
         "workspace.articleEditor.research.detail": `${options?.count ?? 0} 轮检索`,
         "workspace.articleEditor.research.empty": "等待检索证据。",
@@ -57,6 +65,8 @@ vi.mock("react-i18next", () => ({
         "workspace.articleEditor.images.title": "配图规划",
         "workspace.articleEditor.images.detail": `${options?.count ?? 0} 个配图位`,
         "workspace.articleEditor.images.empty": "等待配图规划。",
+        "workspace.articleEditor.images.generateSlot": "生成",
+        "workspace.articleEditor.images.generateSlotAria": `生成${options?.title ?? ""}配图`,
         "workspace.articleEditor.review.title": "复核备注",
         "workspace.articleEditor.review.detail": `${options?.count ?? 0} 条备注`,
         "workspace.articleEditor.related.title": "关联产物",
@@ -85,7 +95,104 @@ const articleWorkspaceFixture: WorkspaceArticleWorkspace = {
   workspaceId: "workspace-main",
   source: "threadRead",
   objectCount: 2,
-  workerEvidence: [],
+  workerEvidence: [
+    {
+      id: "evt-worker-success:workerEvidence",
+      status: "completed",
+      source: "agent_app_task_worker",
+      eventType: "artifact.snapshot",
+      appId: "content-factory-app",
+      taskId: "task-article-1",
+      taskKind: "content.article.generate",
+      turnId: "turn-action-1",
+      workerEntrypoint: "./runtime/content-factory-worker.mjs",
+      inputSummary: "topic=内容工厂",
+      outputSummary: "3 objects",
+      outputObjectCount: 3,
+      artifactRef: "artifact-workspace-patch-1",
+      artifactKind: "content_factory.workspace_patch",
+      errorCode: null,
+      errorMessage: null,
+      failureCategory: null,
+      retryable: null,
+      retryAdvice: null,
+      retryAttempt: null,
+      retryMaxAttempts: null,
+      hookKey: null,
+      hookEvent: null,
+      hookScope: null,
+      hookEntrypoint: null,
+      hookRequired: null,
+      reasonCode: null,
+      resultSummary: null,
+      workflowKey: "content_article_workflow",
+      subagents: [
+        "content-researcher",
+        "content-strategist",
+        "article-writer",
+        "copy-editor",
+        "image-planner",
+      ],
+      skillRefs: ["gongzonghao-article-writer", "article-image-cheatsheet"],
+      cliRefs: ["content-factory"],
+      connectorRefs: ["lime-knowledge", "web-research", "media-generation"],
+      hookPolicy: {
+        prompt: ["prompt-submit"],
+        task: ["task-complete"],
+      },
+      runtimeRegistries: {
+        cli: { entrypoint: "./clis/content-factory" },
+      },
+      orchestration: [
+        {
+          id: "research",
+          title: "资料检索",
+          subagent: "content-researcher",
+          skillRefs: ["gongzonghao-article-writer"],
+          status: "completed",
+          summary: "整理用户需求、历史上下文和可引用资料。",
+          expectedOutput: "写作依据和素材摘要",
+        },
+        {
+          id: "strategy",
+          title: "选题策划",
+          subagent: "content-strategist",
+          skillRefs: ["gongzonghao-article-writer"],
+          status: "completed",
+          summary: "确定读者、文章角度、结构和标题方向。",
+          expectedOutput: "文章角度、结构和标题方向",
+        },
+        {
+          id: "draft",
+          title: "正文写作",
+          subagent: "article-writer",
+          skillRefs: ["gongzonghao-article-writer"],
+          status: "completed",
+          summary: "生成文章草稿。",
+          expectedOutput: "articleDraft",
+        },
+        {
+          id: "review",
+          title: "审稿校对",
+          subagent: "copy-editor",
+          skillRefs: ["gongzonghao-article-writer"],
+          status: "completed",
+          summary: "检查结构、语气、事实依据和可发布性。",
+          expectedOutput: "deliveryChecklist",
+        },
+        {
+          id: "image-plan",
+          title: "配图规划",
+          subagent: "image-planner",
+          skillRefs: ["article-image-cheatsheet"],
+          status: "completed",
+          summary: "生成主图和段落配图提示。",
+          expectedOutput: "imageGenerationSet",
+        },
+      ],
+      updatedAt: "2026-06-24T00:00:00.000Z",
+    },
+  ],
   actionHistory: [],
   selectedObjectRef: {
     appId: "content-factory-app",
@@ -106,7 +213,8 @@ const articleWorkspaceFixture: WorkspaceArticleWorkspace = {
       status: "ready",
       summary: "已生成首版文章",
       source: {
-        markdown: "# 公众号文章草稿\n\n这是可编辑的文章正文。",
+        documentText: "# 公众号文章草稿\n\n这是可编辑的文章正文。",
+        finalMarkdown: "# 公众号文章草稿\n\n这是可编辑的文章正文。",
         researchRounds: [
           {
             id: "research-1",
@@ -206,6 +314,7 @@ function renderSurface({
   actionsDisabled = false,
   onActionIntent = vi.fn(),
   onArticleMarkdownChange,
+  onImageSlotIntent,
   onOpenPreviewArtifact = vi.fn(),
   onSelectedObjectChange,
   surfaceArticleWorkspace = articleWorkspaceFixture,
@@ -220,6 +329,9 @@ function renderSurface({
   onOpenPreviewArtifact?: React.ComponentProps<
     typeof WorkspaceArticleEditorRightSurface
   >["onOpenPreviewArtifact"];
+  onImageSlotIntent?: React.ComponentProps<
+    typeof WorkspaceArticleEditorRightSurface
+  >["onImageSlotIntent"];
   onSelectedObjectChange?: React.ComponentProps<
     typeof WorkspaceArticleEditorRightSurface
   >["onSelectedObjectChange"];
@@ -236,6 +348,7 @@ function renderSurface({
         articleWorkspace={surfaceArticleWorkspace}
         onActionIntent={onActionIntent}
         onArticleMarkdownChange={onArticleMarkdownChange}
+        onImageSlotIntent={onImageSlotIntent}
         onOpenPreviewArtifact={onOpenPreviewArtifact}
         onSelectedObjectChange={onSelectedObjectChange}
       />,
@@ -290,6 +403,49 @@ describe("WorkspaceArticleEditorRightSurface", () => {
       "桌面端内容工厂写作流程图，中文标签",
     );
     expect(container.textContent).toContain("先做资料检索");
+    expect(
+      container.querySelector(
+        '[data-testid="workspace-article-editor-content-factory-orchestration"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelectorAll(
+        '[data-testid="workspace-article-editor-orchestration-step"]',
+      ),
+    ).toHaveLength(5);
+    expect(container.textContent).toContain("内容工厂编排");
+    expect(container.textContent).toContain("content_article_workflow");
+    expect(container.textContent).toContain("content-researcher");
+    expect(container.textContent).toContain("content-strategist");
+    expect(container.textContent).toContain("article-writer");
+    expect(container.textContent).toContain("copy-editor");
+    expect(container.textContent).toContain("image-planner");
+    expect(container.textContent).toContain("gongzonghao-article-writer");
+    expect(container.textContent).toContain("article-image-cheatsheet");
+    expect(container.textContent).toContain("lime-knowledge");
+    expect(container.textContent).toContain("web-research");
+    expect(container.textContent).toContain("media-generation");
+    expect(container.textContent).toContain("prompt:prompt-submit");
+    expect(container.textContent).toContain("task:task-complete");
+    expect(
+      container.querySelector(
+        '[data-testid="workspace-article-editor-orchestration-skill-ref"]',
+      )?.textContent,
+    ).toContain("gongzonghao-article-writer");
+    expect(
+      container
+        .querySelector(
+          '[data-testid="workspace-article-editor-orchestration-skill-ref"]',
+        )
+        ?.getAttribute("data-skill-ref"),
+    ).toBe("gongzonghao-article-writer");
+    expect(
+      container
+        .querySelector(
+          '[data-testid="workspace-article-editor-orchestration-connector"]',
+        )
+        ?.getAttribute("data-connector-ref"),
+    ).toBe("lime-knowledge");
     expect(container.textContent).toContain("正文需要保留真实引用来源。");
   });
 
@@ -366,7 +522,20 @@ describe("WorkspaceArticleEditorRightSurface", () => {
           source: {
             taskKind: "content.article.generate",
             taskId: "content-factory-worker-task",
-            markdown: [
+            documentText: [
+              "# 多轮检索后的公众号文章草稿",
+              "",
+              "## 三轮资料检索",
+              "",
+              "- 第一轮：确认用户目标。",
+              "- 第二轮：整理场景痛点。",
+              "- 第三轮：收敛结构和发布检查。",
+              "",
+              "## 正文草稿",
+              "",
+              "这是经过多轮检索后写出的完整正文。",
+            ].join("\n"),
+            finalMarkdown: [
               "# 多轮检索后的公众号文章草稿",
               "",
               "## 三轮资料检索",
@@ -508,6 +677,36 @@ describe("WorkspaceArticleEditorRightSurface", () => {
     );
 
     expect(button?.disabled).toBe(true);
+  });
+
+  it("点击配图位应转换为文稿 inline 图片意图", () => {
+    const onImageSlotIntent = vi.fn();
+    const container = renderSurface({ onImageSlotIntent });
+    const button = container.querySelector<HTMLButtonElement>(
+      '[data-testid="workspace-article-editor-compact-image-slot-generate"][data-slot-id="hero"]',
+    );
+
+    expect(button).not.toBeNull();
+    expect(button?.disabled).toBe(false);
+    expect(button?.textContent).toContain("生成");
+    act(() => {
+      button?.click();
+    });
+
+    expect(onImageSlotIntent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        anchorSectionTitle: "开场：为什么要把写作变成工作流",
+        anchorText: "首图",
+        editedMarkdown: expect.stringContaining("这是可编辑的文章正文"),
+        object: expect.objectContaining({ title: "公众号文章草稿" }),
+        prompt: "桌面端内容工厂写作流程图，中文标签",
+        slot: expect.objectContaining({
+          id: "hero",
+          title: "首图",
+          sectionId: "intro",
+        }),
+      }),
+    );
   });
 
   it("点击关联对象只在 Article Editor 内切换，不离开文章编辑器", () => {

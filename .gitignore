@@ -55,6 +55,8 @@ internal/exec-plans/
 internal/exec-plans/*
 !internal/exec-plans/agent-tools-test-batches/
 !internal/exec-plans/agent-tools-test-batches/*.md
+!internal/exec-plans/templates/
+!internal/exec-plans/templates/*.md
 !internal/exec-plans/README.md
 !internal/exec-plans/claw-streaming-rendering-codex-refactor-plan.md
 !internal/exec-plans/claw-trace-system-implementation-plan.md
@@ -80,6 +82,8 @@ internal/roadmap/**
 !internal/roadmap/browser/
 internal/roadmap/browser/**
 !internal/roadmap/browser/README.md
+!internal/roadmap/thread/
+!internal/roadmap/thread/**
 !internal/roadmap/plugin/
 !internal/roadmap/plugin/**
 !internal/roadmap/db/
@@ -197,6 +201,8 @@ internal/knowledge
 internal/knowledge/*
 !internal/knowledge/README.md
 internal/research/**
+!internal/research/agent/
+!internal/research/agent/**
 !internal/research/workbech/
 !internal/research/workbech/*.md
 

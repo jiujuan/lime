@@ -147,10 +147,13 @@ import {
 import { useWorkspaceImageWorkbenchSessionRuntime } from "./workspace/useWorkspaceImageWorkbenchSessionRuntime";
 import { useWorkspaceImageWorkbenchEventRuntime } from "./workspace/useWorkspaceImageWorkbenchEventRuntime";
 import { buildImageSkillLaunchRequestMetadata } from "./workspace/imageSkillLaunch";
+import { buildWorkspaceArticleEditorImageSlotCommand } from "./workspace/workspaceArticleEditorImageSlotDispatch";
 import {
   shouldEnableWorkspaceImageTaskPreviewRuntime,
   useWorkspaceImageTaskPreviewRuntime,
 } from "./workspace/useWorkspaceImageTaskPreviewRuntime";
+import { useWorkspaceImageTaskExecutorRuntime } from "./workspace/useWorkspaceImageTaskExecutorRuntime";
+import { ensureImageWorkbenchProviderSelectionCommitted } from "./workspace/imageWorkbenchProviderReadiness";
 import { useWorkspaceAudioTaskPreviewRuntime } from "./workspace/useWorkspaceAudioTaskPreviewRuntime";
 import { useWorkspaceTranscriptionTaskPreviewRuntime } from "./workspace/useWorkspaceTranscriptionTaskPreviewRuntime";
 import { useWorkspaceVideoTaskPreviewRuntime } from "./workspace/useWorkspaceVideoTaskPreviewRuntime";
@@ -171,7 +174,6 @@ import {
   buildWorkspacePluginHistoryRestoreArtifactPreviewItems,
   type WorkspacePluginHistoryRestoreArtifactPreviewItem,
 } from "./workspace/workspacePluginHistoryRestoreArtifacts";
-import { buildWorkspacePluginArticleWorkspaceFromActivation } from "./workspace/workspacePluginArticleWorkspace";
 import {
   useGeneralWorkbenchInitialAutoGuideRuntime,
   useGeneralWorkbenchInitialDispatchRuntime,
@@ -225,10 +227,16 @@ import { submitWorkspaceArticleEditorActionIntent } from "./workspace/workspaceA
 import {
   buildWorkspaceArticleWorkspaceFromThreadRead,
   buildWorkspaceArticleWorkspaceFromUnknown,
+  hasWorkspaceArticleFinalDocument,
   hasWorkspaceArticleWorkspaceThreadReadMetadata,
   type WorkspaceArticleWorkspaceActionIntent,
+  type WorkspaceArticleWorkspaceImageSlotIntent,
   type WorkspaceArticleWorkspace,
 } from "./workspace/workspaceArticleWorkspaceModel";
+import {
+  readWorkspaceArticlePatchRecordFromMetadata,
+  readWorkspaceArticleRecordFromMetadata,
+} from "./workspace/workspaceArticleWorkspaceMetadata";
 import {
   attachWorkspaceArticleWorkspacePreviewArtifactToMessages,
   buildWorkspaceArticleWorkspaceFromMessageArtifacts,
@@ -395,18 +403,12 @@ function buildArticleWorkspaceForArtifactOpen(
   }
   const openedFrom =
     typeof metadata.openedFrom === "string" ? metadata.openedFrom : "";
-  const articleWorkspace =
-    readRecord(metadata.articleWorkspace) ??
-    readRecord(metadata.article_workspace);
-  const workspacePatch =
-    readRecord(metadata.contentFactoryWorkspacePatch) ??
-    readRecord(metadata.workspacePatch) ??
-    readRecord(metadata.workspace_patch);
+  const articleWorkspace = readWorkspaceArticleRecordFromMetadata(metadata);
+  const workspacePatch = readWorkspaceArticlePatchRecordFromMetadata(metadata);
   const artifactDocument = readRecord(metadata.artifactDocument);
   const artifactDocumentMetadata = readRecord(artifactDocument?.metadata);
   const artifactDocumentArticleWorkspace =
-    readRecord(artifactDocumentMetadata?.articleWorkspace) ??
-    readRecord(artifactDocumentMetadata?.article_workspace);
+    readWorkspaceArticleRecordFromMetadata(artifactDocumentMetadata);
   const isArticleWorkspaceArtifact =
     openedFrom === "right_surface_article_workspace" ||
     Boolean(articleWorkspace || artifactDocumentArticleWorkspace);
@@ -828,6 +830,38 @@ export function AgentChatWorkspace({
     imageWorkbenchPreferenceViewModel.selectionWarning;
   const imageGenerationSelectionReady =
     imageWorkbenchPreferenceViewModel.selectionReady;
+  const imageWorkbenchRequestProviderId =
+    imageWorkbenchSelectedProviderId ||
+    (!imageWorkbenchPreferredProviderUnavailable
+      ? effectiveImageWorkbenchPreference.preferredProviderId
+      : undefined);
+  const imageWorkbenchRequestModelId =
+    imageWorkbenchSelectedModelId ||
+    (imageWorkbenchRequestProviderId &&
+    (!effectiveImageWorkbenchPreference.preferredProviderId ||
+      effectiveImageWorkbenchPreference.preferredProviderId ===
+        imageWorkbenchRequestProviderId)
+      ? effectiveImageWorkbenchPreference.preferredModelId
+      : undefined);
+  const imageWorkbenchSelectionRef = useRef({
+    preferredProviderUnavailable: imageWorkbenchPreferredProviderUnavailable,
+    providersLoading: imageWorkbenchProvidersLoading,
+    requestModelId: imageWorkbenchRequestModelId,
+    requestProviderId: imageWorkbenchRequestProviderId,
+  });
+  useEffect(() => {
+    imageWorkbenchSelectionRef.current = {
+      preferredProviderUnavailable: imageWorkbenchPreferredProviderUnavailable,
+      providersLoading: imageWorkbenchProvidersLoading,
+      requestModelId: imageWorkbenchRequestModelId,
+      requestProviderId: imageWorkbenchRequestProviderId,
+    };
+  }, [
+    imageWorkbenchPreferredProviderUnavailable,
+    imageWorkbenchProvidersLoading,
+    imageWorkbenchRequestModelId,
+    imageWorkbenchRequestProviderId,
+  ]);
 
   useWorkspaceTaskFilesRefSyncRuntime({
     taskFiles,
@@ -2093,6 +2127,8 @@ export function AgentChatWorkspace({
     imageWorkbenchSelectedProviderId,
     imageWorkbenchSelectedSize,
     imageWorkbenchSessionKey,
+    ensureImageWorkbenchProvidersLoaded,
+    imageWorkbenchProvidersLoading,
     projectId,
     projectRootPath: project?.rootPath || null,
     saveImageWorkbenchImagesToResource,
@@ -2104,6 +2140,32 @@ export function AgentChatWorkspace({
   });
   const { handleImageWorkbenchCommand, resolveImageWorkbenchSkillRequest } =
     imageWorkbenchActionRuntime;
+  const prepareImageWorkbenchSkillSend = useCallback(async () => {
+    await ensureImageWorkbenchProviderSelectionCommitted(
+      ensureImageWorkbenchProvidersLoaded,
+      () => {
+        const selection = imageWorkbenchSelectionRef.current;
+        return Boolean(selection.requestProviderId && selection.requestModelId);
+      },
+    );
+
+    const selection = imageWorkbenchSelectionRef.current;
+    if (selection.preferredProviderUnavailable) {
+      toast.error(t("agentChat.imageWorkbench.selection.preferredUnavailable"));
+      return false;
+    }
+    if (selection.requestProviderId && selection.requestModelId) {
+      return true;
+    }
+    if (selection.providersLoading) {
+      toast.error(t("agentChat.imageWorkbench.selection.loading"));
+      return false;
+    }
+    {
+      toast.error(t("agentChat.imageWorkbench.selection.missing"));
+      return false;
+    }
+  }, [ensureImageWorkbenchProvidersLoaded, t]);
   const {
     handleSend,
     handleRecommendationClick,
@@ -2169,6 +2231,7 @@ export function AgentChatWorkspace({
       workspaceServiceSkillEntryActions.handleAutoLaunchMatchedSiteSkill,
     openRuntimeSceneGate,
     ensureSessionForCommandMetadata: ensureSession,
+    prepareImageWorkbenchSkillSend,
     resolveImageWorkbenchSkillRequest,
   });
   useEffect(() => {
@@ -3611,6 +3674,12 @@ export function AgentChatWorkspace({
     setChatMessages,
     updateCurrentImageWorkbenchState,
   });
+  useWorkspaceImageTaskExecutorRuntime({
+    enabled: imageTaskPreviewRuntimeEnabled,
+    projectRootPath: project?.rootPath || null,
+    currentImageWorkbenchState,
+    getImageTask: getMediaTaskArtifact,
+  });
   useWorkspaceVideoTaskPreviewRuntime({
     projectRootPath: project?.rootPath || null,
     messages,
@@ -4516,10 +4585,6 @@ export function AgentChatWorkspace({
         : null,
     [sceneDisplayMessages],
   );
-  const articleWorkspaceFromPluginActivation = useMemo(
-    () => null,
-    [],
-  );
   const handleToggleExpertInfoPanel = useCallback(() => {
     setHarnessPanelVisible(false);
     setManualRightSurface(null);
@@ -4613,7 +4678,9 @@ export function AgentChatWorkspace({
     [activeArticleEditedDraft, rawArticleEditorRightSurface],
   );
   articleEditorRightSurfaceRef.current = articleEditorRightSurface;
-  const articleEditorRightSurfaceAvailable = Boolean(articleEditorRightSurface);
+  const articleEditorRightSurfaceAvailable = hasWorkspaceArticleFinalDocument(
+    articleEditorRightSurface,
+  );
   const sceneDisplayMessagesWithArticleWorkspaceArtifact = useMemo(
     () =>
       attachWorkspaceArticleWorkspacePreviewArtifactToMessages({
@@ -5144,6 +5211,29 @@ export function AgentChatWorkspace({
     },
     [handleSendRef, setInput],
   );
+  const handleArticleWorkspaceImageSlotIntent = useCallback(
+    async (intent: WorkspaceArticleWorkspaceImageSlotIntent) => {
+      const command = buildWorkspaceArticleEditorImageSlotCommand({
+        intent,
+        projectId,
+        contentId,
+        actionLabel: t("agentChat.imageWorkbenchAction.apply.documentLabel"),
+        dispatchLabel: t(
+          "agentChat.imageWorkbenchAction.apply.documentDispatch",
+        ),
+      });
+      if (!command) {
+        toast.error(
+          t("agentChat.imageWorkbenchAction.toast.command.missingPrompt"),
+        );
+        return;
+      }
+
+      setLayoutMode("chat");
+      await handleImageWorkbenchCommand(command);
+    },
+    [contentId, handleImageWorkbenchCommand, projectId, t],
+  );
   const handleArticleWorkspaceMarkdownChange = useCallback(
     (change: WorkspaceArticleMarkdownChange) => {
       const editedDraft = buildWorkspaceArticleEditedDraftFromChange(change);
@@ -5224,10 +5314,13 @@ export function AgentChatWorkspace({
               articleWorkspace={articleEditorRightSurface}
               onActionIntent={handleArticleWorkspaceActionIntent}
               onArticleMarkdownChange={handleArticleWorkspaceMarkdownChange}
+              onImageSlotIntent={handleArticleWorkspaceImageSlotIntent}
               onOpenPreviewArtifact={(artifact) => {
                 void openWorkspaceArtifactInWorkbench(artifact);
               }}
-              onSelectedObjectChange={handleArticleWorkspaceSelectedObjectChange}
+              onSelectedObjectChange={
+                handleArticleWorkspaceSelectedObjectChange
+              }
             />
           ),
         }
