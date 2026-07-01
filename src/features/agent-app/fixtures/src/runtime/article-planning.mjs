@@ -293,7 +293,7 @@ export function buildWritingPlan(context) {
       title: "正文写作",
       owner: "article-writer",
       skillRef: "article-writing",
-      output: "articleDraft.source.markdown",
+      output: "articleDraft.source.processMarkdown + documentText",
       done: true
     },
     {
@@ -381,105 +381,114 @@ export function buildArticleMarkdown(context, parts) {
     reviewChecklist,
     searchRequests,
     titleCandidates,
-    writingPlan
+    writingPlan,
   } = parts;
   const chosenTitle = titleCandidates[0]?.title ?? context.topic;
   const researchLines = researchRounds
-    .map((round) => `- **${round.title}**：${round.summary}`)
+    .map((round) => `- ${round.title}：${round.summary}`)
     .join("\n");
-  const searchLines = searchRequests
-    .map((request) => `- ${request.query}（${request.purpose}）`)
+  const outlineLines = outline
+    .map((section, index) => `${index + 1}. ${section.title}：${section.purpose}`)
     .join("\n");
   const citationLines = citations
     .map((citation) => `- ${citation.title}：${citation.summary}`)
     .join("\n");
-  const outlineLines = outline
-    .map((section, index) => `${index + 1}. **${section.title}**：${section.purpose}`)
-    .join("\n");
   const imageSlotLines = imageSlots
     .map((slot) => `- ${slot.title}：${slot.purpose}`)
     .join("\n");
-  const planLines = writingPlan
-    .map((step) => `- ${step.title}（${step.owner} / ${step.skillRef}）：${step.output}`)
-    .join("\n");
   const reviewLines = reviewChecklist
     .map((item) => `- ${item.title}：${item.notes}`)
+    .join("\n");
+  const planLines = writingPlan
+    .map((step) => `- ${step.title}（${step.owner}）`)
+    .join("\n");
+  const requestLines = searchRequests
+    .map((request) => `- ${request.query}（${request.purpose}）`)
     .join("\n");
 
   return [
     `# ${chosenTitle}`,
     "",
-    `这篇文章不是一次普通的聊天输出。面向${context.audience}，它要把“${context.topic}”讲成一条可追踪、可审核、可继续生产的内容工作流。`,
+    `这篇文章面向${context.audience}，目标不是把写作过程讲清楚，而是交付一篇可以直接继续编辑、复核和发布的正文。`,
     "",
     "## 先说结论",
     "",
-    keyTakeaways.map((item) => `- ${item}`).join("\n"),
+    `- ${keyTakeaways[0]}`,
+    `- ${keyTakeaways[3]}`,
     "",
-    "## 为什么第一步不是直接写",
-    "",
-    "很多写作失败不是模型不会写，而是系统太快进入正文。没有检索轮次，用户看不到依据；没有大纲，正文会变成松散段落；没有右侧产物框，文章会被埋进聊天流里，很难继续改。",
-    "",
-    `所以内容工厂启动“写文章”时，应该先让 ${DEFAULT_WRITING_ORCHESTRATION[0].subagent} 整理资料，再让 ${DEFAULT_WRITING_ORCHESTRATION[1].subagent} 规划结构，最后由 ${DEFAULT_WRITING_ORCHESTRATION[2].subagent} 把正文写入文章草稿对象。`,
-    "",
-    "## 三轮资料检索",
+    "## 为什么要先检索",
     "",
     researchLines,
     "",
-    "## Host 待执行检索请求",
-    "",
-    searchLines,
-    "",
-    "## 标题候选",
-    "",
-    titleCandidates
-      .map((candidate, index) => `${index + 1}. ${candidate.title}（${candidate.angle}）`)
-      .join("\n"),
-    "",
-    "## 文章大纲",
+    "## 内容结构",
     "",
     outlineLines,
     "",
-    "## 正文草稿",
+    "## 正文展开",
     "",
-    "### 1. 普通对话式写作的问题",
+    "如果只靠一次生成，文章通常会停留在“能读”而不是“能用”。这类内容更像草稿，它需要把观点、证据、结构和交付动作放在同一条链路里。",
     "",
-    "如果用户输入“帮我写一篇文章”，系统马上在聊天区输出几千字，表面上看是完成了，实际留下三个问题：过程不可见、正文不可管理、后续配图和审稿没有承接点。用户想修改标题、补证据或生成配图时，只能回到一长串聊天文本里重新描述。",
+    "把过程拆开后，前半段负责检索和策划，后半段才是正式写作。这样文章正文不会被过程说明淹没，编辑器里看到的也是最终可编辑正文。",
     "",
-    "### 2. 内容工厂应该先跑工作流",
-    "",
-    "更合理的方式是把写作拆成可观察步骤：资料检索、选题策划、正文写作、审稿校对、配图规划。每一步都由插件声明的子智能体和技能承担，运行证据写入 worker evidence。这样用户看到的是几轮搜索和整理后的产物，而不是一个突然出现的长答案。",
-    "",
-    "### 3. 正文应该进入右侧文章框",
-    "",
-    "聊天区适合承载过程、小框和继续动作；完整正文应该进入独立的文章产物框，再从这里打开右侧文章编辑器。用户点击小框后展开右侧栏，可以查看标题候选、大纲、正文、配图占位、引用和交付检查。这样“继续写”“生成配图”“审稿校对”都能回到同一个产物上。",
-    "",
-    "### 4. 子智能体和 skills 必须来自插件",
-    "",
-    "写作相关能力不应该由宿主 hard code。内容工厂插件本身要携带 agents、skills、workflow 和 CLI，这样本地安装 content-factory-app 后，@写文章、@写作、子智能体编排和 worker 输出都能从插件 manifest 读取。宿主只负责安装、激活、渲染和回流 action。",
-    "",
-    "### 5. 可交付的首版标准",
-    "",
-    `首版文章不需要一步到最终发布，但必须达到可审核：有检索摘要、有标题候选、有大纲、有正文、有配图规划、有引用来源和交付检查。达到这个标准后，${context.audience} 才能基于同一份文章产物继续修改，而不是重新开一轮对话。`,
-    "",
-    "## 配图占位",
-    "",
-    imageSlotLines,
-    "",
-    "## 审稿检查",
-    "",
-    reviewLines,
-    "",
-    "## 引用与依据",
+    "## 证据与引用",
     "",
     citationLines,
     "",
-    "## 工作流编排",
+    "## 配图规划",
+    "",
+    imageSlotLines,
+    "",
+    "## 交付检查",
+    "",
+    reviewLines,
+    "",
+    "## 写作动作",
     "",
     planLines,
     "",
-    "## 下一步",
+    "## 检索入口",
     "",
-    `先让用户在右侧文章框确认标题和大纲，再根据正文段落执行配图生成，最后用交付检查清单确认是否达成“${context.goal}”。`
+    requestLines,
+  ]
+    .filter((line) => line !== null && line !== undefined)
+    .join("\n")
+    .trim();
+}
+
+export function buildArticleProcessMarkdown(context, parts) {
+  const {
+    researchRounds,
+    searchRequests,
+    titleCandidates,
+    outline,
+    keyTakeaways,
+    writingPlan,
+  } = parts;
+  const chosenTitle = titleCandidates[0]?.title ?? context.topic;
+  return [
+    `# ${chosenTitle}`,
+    "",
+    `过程稿：面向${context.audience}，先完成检索、策划和正文草稿，再进入最终文章产物。`,
+    "",
+    "## 检索轮次",
+    "",
+    researchRounds.map((round) => `- ${round.title}：${round.summary}`).join("\n"),
+    "",
+    "## 待执行检索",
+    "",
+    searchRequests.map((request) => `- ${request.query}`).join("\n"),
+    "",
+    "## 结构与观点",
+    "",
+    outline.map((section) => `- ${section.title}`).join("\n"),
+    "",
+    "## 核心观点",
+    "",
+    keyTakeaways.map((item) => `- ${item}`).join("\n"),
+    "",
+    "## 编排步骤",
+    "",
+    writingPlan.map((step) => `- ${step.title}`).join("\n"),
   ].join("\n");
 }
 
@@ -498,7 +507,15 @@ export function buildArticlePlanning(context) {
     outline
   });
   const imagePlan = buildImagePlan(context, imageSlots);
-  const markdown = buildArticleMarkdown(context, {
+  const processMarkdown = buildArticleProcessMarkdown(context, {
+    keyTakeaways,
+    outline,
+    researchRounds,
+    searchRequests,
+    titleCandidates,
+    writingPlan,
+  });
+  const documentText = buildArticleMarkdown(context, {
     citations,
     imageSlots,
     keyTakeaways,
@@ -514,7 +531,8 @@ export function buildArticlePlanning(context) {
     imagePlan,
     imageSlots,
     keyTakeaways,
-    markdown,
+    processMarkdown,
+    documentText,
     outline,
     researchRounds,
     reviewChecklist,

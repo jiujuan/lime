@@ -46,7 +46,9 @@ function createArtifact(overrides: Partial<Artifact> = {}): Artifact {
   };
 }
 
-async function renderCards(props: React.ComponentProps<typeof MessageArtifactCards>) {
+async function renderCards(
+  props: React.ComponentProps<typeof MessageArtifactCards>,
+) {
   await changeLimeLocale("zh-CN");
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -110,9 +112,8 @@ describe("MessageArtifactCards", () => {
       onArtifactClick,
     });
 
-    expect(container.querySelector('[data-testid="article-artifact-frame"]')).not.toBeNull();
     expect(
-      container.querySelector('[data-testid="article-artifact-frame-process"]'),
+      container.querySelector('[data-testid="article-artifact-frame"]'),
     ).not.toBeNull();
     expect(
       container.querySelector('[data-testid="article-artifact-frame-body"]'),
@@ -120,14 +121,17 @@ describe("MessageArtifactCards", () => {
     expect(
       container.querySelector('[data-testid="article-artifact-renderer"]'),
     ).not.toBeNull();
+    // 产物卡只承载完整文章本身，不再混入写作过程汇总卡或统计 chips。
+    expect(
+      container.querySelector('[data-testid="article-artifact-frame-process"]'),
+    ).toBeNull();
     expect(
       container.querySelector('[data-testid="article-artifact-frame-facts"]'),
-    ).not.toBeNull();
+    ).toBeNull();
     expect(container.textContent).toContain("文章产物");
     expect(container.textContent).toContain("完整正文");
     expect(container.textContent).toContain("正文草稿");
     expect(container.textContent).toContain("展开右侧编辑器");
-    expect(container.textContent).toContain("已完成 3 轮资料检索");
     expect(container.textContent).not.toContain("articleArtifacts");
     expect(container.textContent).toContain(
       "这是第一段正文，应该在独立产物框里完整展示。",
@@ -135,9 +139,9 @@ describe("MessageArtifactCards", () => {
     expect(container.textContent).toContain(
       "这是第二段正文，点击框头后应打开右侧 Article Editor。",
     );
-    expect(container.textContent).toContain("3 轮资料检索");
-    expect(container.textContent).toContain("5 个文章小节");
-    expect(container.textContent).toContain("2 个配图位");
+    expect(container.textContent).not.toContain("已完成 3 轮资料检索");
+    expect(container.textContent).not.toContain("5 个文章小节");
+    expect(container.textContent).not.toContain("2 个配图位");
 
     const openButton = container.querySelector<HTMLButtonElement>(
       '[data-testid="article-artifact-frame"] button',
@@ -147,6 +151,135 @@ describe("MessageArtifactCards", () => {
     });
 
     expect(onArtifactClick).toHaveBeenCalledWith(artifact);
+  });
+
+  it("流式文章应直接渲染为 articleArtifacts 文章框", async () => {
+    const streamingArticle = createArtifact({
+      id: "artifact-article-streaming",
+      title: "公众号文章草稿",
+      content: "# 公众号文章草稿\n\n正文正在流式生成。",
+      status: "streaming",
+      meta: {
+        openedFrom: "right_surface_article_workspace",
+        artifactKind: "articleDraft",
+        articleWorkspace: {
+          objectKind: "articleDraft",
+        },
+      },
+    });
+
+    const container = await renderCards({
+      artifacts: [streamingArticle],
+      messageId: "msg-article-streaming",
+      onArtifactClick: vi.fn(),
+    });
+
+    expect(
+      container.querySelector('[data-testid="article-artifact-frame"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="message-artifact-card"]'),
+    ).toBeNull();
+    expect(container.textContent).toContain("流式输出中");
+    expect(container.textContent).toContain("正文正在流式生成。");
+  });
+
+  it("内容工厂 workspace patch 原始 JSON 不应作为独立文件卡重复显示", async () => {
+    const rawWorkspacePatch = createArtifact({
+      id: "artifact-workspace-patch",
+      title: "workspace-patch.json",
+      content: JSON.stringify({
+        appId: "content-factory-app",
+        objects: [],
+      }),
+      meta: {
+        filePath: ".lime/artifacts/content-factory/workspace-patch.json",
+        kind: "content_factory.workspace_patch",
+      },
+    });
+    const articlePreview = createArtifact({
+      id: "article-workspace-preview",
+      title: "公众号文章草稿",
+      content: "# 公众号文章草稿\n\n正文内容",
+      meta: {
+        openedFrom: "right_surface_article_workspace",
+        articleWorkspace: {
+          objectKind: "articleDraft",
+        },
+      },
+    });
+
+    const container = await renderCards({
+      artifacts: [rawWorkspacePatch, articlePreview],
+      messageId: "msg-article",
+      onArtifactClick: vi.fn(),
+    });
+
+    expect(
+      container.querySelectorAll('[data-testid="article-artifact-frame"]'),
+    ).toHaveLength(1);
+    expect(
+      container.querySelectorAll('[data-testid="message-artifact-card"]'),
+    ).toHaveLength(0);
+    expect(container.textContent).toContain("公众号文章草稿");
+    expect(container.textContent).not.toContain("workspace-patch.json");
+    expect(container.textContent).not.toContain('"appId"');
+  });
+
+  it("内容工厂 workspace patch 旧路径和 kind 不应被误渲染成第二个文章框", async () => {
+    const rawWorkspacePatch = createArtifact({
+      id: "artifact-workspace-patch-legacy-path",
+      title: "内容工厂工作区补丁",
+      content: JSON.stringify({
+        appId: "content-factory-app",
+        objects: [
+          {
+            ref: {
+              appId: "content-factory-app",
+              kind: "articleDraft",
+              id: "article-1",
+              sessionId: "session-1",
+            },
+            title: "错误的原始补丁框",
+            source: {
+              markdown: "# 错误的原始补丁框\n\n不应显示。",
+            },
+          },
+        ],
+      }),
+      meta: {
+        filePath: ".lime/artifacts/content-factory-workspace-patch.json",
+        kind: "content_factory.workspace_patch",
+        contentFactoryWorkspacePatch: {
+          appId: "content-factory-app",
+          objects: [],
+        },
+      },
+    });
+    const articlePreview = createArtifact({
+      id: "article-workspace-preview",
+      title: "公众号文章草稿",
+      content: "# 公众号文章草稿\n\n正文内容",
+      meta: {
+        openedFrom: "right_surface_article_workspace",
+        articleWorkspace: {
+          objectKind: "articleDraft",
+        },
+      },
+    });
+
+    const container = await renderCards({
+      artifacts: [rawWorkspacePatch, articlePreview],
+      messageId: "msg-article",
+      onArtifactClick: vi.fn(),
+    });
+
+    expect(
+      container.querySelectorAll('[data-testid="article-artifact-frame"]'),
+    ).toHaveLength(1);
+    expect(container.textContent).toContain("公众号文章草稿");
+    expect(container.textContent).not.toContain("内容工厂工作区补丁");
+    expect(container.textContent).not.toContain("错误的原始补丁框");
   });
 
   it("普通文档产物应继续使用轻量文件卡", async () => {
@@ -164,8 +297,12 @@ describe("MessageArtifactCards", () => {
       messageId: "msg-doc",
     });
 
-    expect(container.querySelector('[data-testid="artifact-frame"]')).toBeNull();
-    expect(container.querySelector('[data-testid="message-artifact-card"]')).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="artifact-frame"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="message-artifact-card"]'),
+    ).not.toBeNull();
     expect(container.textContent).toContain("demo.md");
     expect(container.textContent).toContain("docs/demo.md");
   });
@@ -177,9 +314,7 @@ describe("MessageArtifactCards", () => {
       priority: 20,
       supports: (artifact) => artifact.meta.kind === "chartArtifacts",
       component: ({ artifact }) => (
-        <section data-testid="chart-artifact-frame">
-          {artifact.title}
-        </section>
+        <section data-testid="chart-artifact-frame">{artifact.title}</section>
       ),
     });
 
@@ -196,8 +331,12 @@ describe("MessageArtifactCards", () => {
       messageId: "msg-chart",
     });
 
-    expect(container.querySelector('[data-testid="chart-artifact-frame"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="message-artifact-card"]')).toBeNull();
+    expect(
+      container.querySelector('[data-testid="chart-artifact-frame"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="message-artifact-card"]'),
+    ).toBeNull();
     expect(container.textContent).toContain("图表产物");
   });
 });

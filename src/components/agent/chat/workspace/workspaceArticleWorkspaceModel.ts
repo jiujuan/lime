@@ -158,6 +158,7 @@ export interface WorkspaceArticleWorkspaceWritingPlanStep {
 }
 
 export interface WorkspaceArticleWorkspaceStructuredPreview {
+  processMarkdown: string | null;
   documentText: string | null;
   images: WorkspaceArticleWorkspacePreviewImage[];
   storyboard: WorkspaceArticleWorkspacePreviewStoryboardRow[];
@@ -528,15 +529,7 @@ function scoreArticleDraftCompleteness(
   object: WorkspaceArticleObject,
 ): ArticleDraftCompletenessScore {
   const source = object.source ?? {};
-  const markdown = readString(
-    source.markdown,
-    source.documentText,
-    source.document_text,
-    source.body,
-    source.content,
-    source.text,
-    source.excerpt,
-  );
+  const markdown = readWorkspaceArticleDraftMarkdown(source);
   return {
     researchRounds: readArray(source.researchRounds, source.research_rounds)
       .length,
@@ -875,16 +868,8 @@ export function buildWorkspaceArticleObjectStructuredPreview(
 ): WorkspaceArticleWorkspaceStructuredPreview {
   const source = object.source ?? {};
   return {
-    documentText:
-      readString(
-        source.markdown,
-        source.documentText,
-        source.document_text,
-        source.body,
-        source.content,
-        source.text,
-        source.excerpt,
-      ) || null,
+    processMarkdown: readWorkspaceArticleDraftProcessMarkdown(source),
+    documentText: readWorkspaceArticleDraftDocumentText(source),
     images: readArray(
       source.images,
       source.imageItems,
@@ -953,6 +938,47 @@ export function buildWorkspaceArticleObjectStructuredPreview(
       source.risks,
     ),
   };
+}
+
+function readWorkspaceArticleDraftProcessMarkdown(
+  source: Record<string, unknown>,
+): string | null {
+  return (
+    readString(
+      source.processMarkdown,
+      source.process_markdown,
+      source.draftMarkdown,
+      source.draft_markdown,
+      source.markdown,
+    ) || null
+  );
+}
+
+function readWorkspaceArticleDraftDocumentText(
+  source: Record<string, unknown>,
+): string | null {
+  return (
+    readString(
+      source.documentText,
+      source.document_text,
+      source.finalMarkdown,
+      source.final_markdown,
+      source.body,
+      source.content,
+      source.text,
+      source.excerpt,
+    ) || null
+  );
+}
+
+function readWorkspaceArticleDraftMarkdown(
+  source: Record<string, unknown>,
+): string {
+  return (
+    readWorkspaceArticleDraftDocumentText(source) ??
+    readWorkspaceArticleDraftProcessMarkdown(source) ??
+    ""
+  );
 }
 
 function readStringItems(...values: unknown[]): string[] {

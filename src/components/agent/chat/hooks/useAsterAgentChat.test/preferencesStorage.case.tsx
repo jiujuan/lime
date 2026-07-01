@@ -6,7 +6,6 @@ import {
   vi,
 } from "vitest";
 import {
-  createDeferred,
   flushEffects,
   mockCreateAgentRuntimeSession,
   mockGetAgentRuntimeSession,
@@ -270,9 +269,7 @@ describe("useAsterAgentChat 偏好持久化 - storage cleanup", () => {
     try {
       await flushEffects();
       await flushEffects();
-      expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith(sessionId, {
-        historyLimit: 40,
-      });
+      expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith(sessionId, expect.objectContaining({ historyLimit: 40 }));
       expect(
         JSON.parse(
           localStorage.getItem(`agent_session_workspace_${sessionId}`) ||
@@ -324,21 +321,10 @@ describe("useAsterAgentChat 偏好持久化 - storage cleanup", () => {
     const workspaceId = "ws-stale-restore-submit";
     const staleSessionId = "session-stale-restore-submit";
     const freshSessionId = "session-fresh-after-stale-restore";
-    const staleHydration = createDeferred<{
-      id: string;
-      workspace_id: string;
-      messages: [];
-      turns: [];
-      items: [];
-      queued_turns: [];
-    }>();
     seedSession(workspaceId, staleSessionId);
     mockCreateAgentRuntimeSession.mockResolvedValue(freshSessionId);
     mockGetAgentRuntimeSession.mockImplementation(async (sessionId: string) => {
       if (sessionId === staleSessionId) {
-        if (mockGetAgentRuntimeSession.mock.calls.length === 1) {
-          return staleHydration.promise;
-        }
         throw new Error(`session not found: ${staleSessionId}`);
       }
 
@@ -356,8 +342,13 @@ describe("useAsterAgentChat 偏好持久化 - storage cleanup", () => {
 
     try {
       await flushEffects();
+      await flushEffects();
 
-      expect(harness.getValue().sessionId).toBe(staleSessionId);
+      expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith(
+        staleSessionId,
+        expect.objectContaining({ historyLimit: 40 }),
+      );
+      expect(harness.getValue().sessionId).toBeNull();
 
       await act(async () => {
         await harness
@@ -365,9 +356,6 @@ describe("useAsterAgentChat 偏好持久化 - storage cleanup", () => {
           .sendMessage("继续处理这个任务", [], false, false, false, "react");
       });
 
-      expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith(staleSessionId, {
-        historyLimit: 40,
-      });
       expect(mockCreateAgentRuntimeSession).toHaveBeenCalledWith(
         workspaceId,
         undefined,
@@ -388,19 +376,6 @@ describe("useAsterAgentChat 偏好持久化 - storage cleanup", () => {
       expect(
         sessionStorage.getItem(`aster_curr_sessionId_${workspaceId}`),
       ).toBe(JSON.stringify(freshSessionId));
-
-      await act(async () => {
-        staleHydration.resolve({
-          id: staleSessionId,
-          workspace_id: workspaceId,
-          messages: [],
-          turns: [],
-          items: [],
-          queued_turns: [],
-        });
-        await flushEffects();
-      });
-      expect(harness.getValue().sessionId).toBe(freshSessionId);
     } finally {
       harness.unmount();
     }

@@ -194,6 +194,65 @@ describe("ImageTaskViewer", () => {
     );
   });
 
+  it("输出缺少模型字段时应回退展示任务运行合同模型", () => {
+    const { container } = renderComponent({
+      tasks: [
+        {
+          id: "task-runtime-model-1",
+          mode: "generate",
+          status: "complete",
+          prompt: "最新模型青柠主视觉",
+          rawText: "@配图 最新模型青柠主视觉",
+          expectedCount: 1,
+          outputIds: ["output-runtime-model-1"],
+          createdAt: 1,
+          runtimeContract: {
+            providerId: "fal",
+            model: "fal-ai/nano-banana-pro-v2",
+          },
+        },
+      ],
+      outputs: [
+        {
+          id: "output-runtime-model-1",
+          refId: "img-runtime-model-1",
+          taskId: "task-runtime-model-1",
+          url: "https://example.com/runtime-model.png",
+          prompt: "最新模型青柠主视觉",
+          createdAt: 1,
+        },
+      ],
+      selectedTaskId: "task-runtime-model-1",
+      selectedOutputId: "output-runtime-model-1",
+    });
+
+    expect(container.textContent).toContain("fal");
+    expect(container.textContent).toContain("fal-ai/nano-banana-pro-v2");
+
+    const openButton = container.querySelector(
+      '[data-testid="image-task-viewer-open-image"]',
+    );
+    expect(openButton).toBeTruthy();
+
+    act(() => {
+      openButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(mockOpenResourceManager).toHaveBeenCalledWith(
+      expect.objectContaining({
+        items: [
+          expect.objectContaining({
+            id: "output-runtime-model-1",
+            metadata: expect.objectContaining({
+              providerName: "fal",
+              modelName: "fal-ai/nano-banana-pro-v2",
+            }),
+          }),
+        ],
+      }),
+    );
+  });
+
   it("结果图加载失败时应展示兜底文案并隐藏打开原图入口", () => {
     const { container } = renderComponent();
 

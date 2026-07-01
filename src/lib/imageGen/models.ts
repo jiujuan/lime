@@ -41,67 +41,68 @@ const GEMINI_IMAGE_MODELS: ImageGenModel[] = [
   },
 ];
 
+const ZHIPU_IMAGE_MODELS: ImageGenModel[] = [
+  {
+    id: "glm-image",
+    name: "GLM-Image",
+    supportedSizes: [
+      "1280x1280",
+      "1568x1056",
+      "1056x1568",
+      "1472x1088",
+      "1088x1472",
+      "1728x960",
+      "960x1728",
+    ],
+  },
+  {
+    id: "cogview-4-250304",
+    name: "CogView-4-250304",
+    supportedSizes: [
+      "1024x1024",
+      "768x1344",
+      "864x1152",
+      "1344x768",
+      "1152x864",
+      "1440x720",
+      "720x1440",
+    ],
+  },
+  {
+    id: "cogview-4",
+    name: "CogView-4",
+    supportedSizes: [
+      "1024x1024",
+      "768x1344",
+      "864x1152",
+      "1344x768",
+      "1152x864",
+      "1440x720",
+      "720x1440",
+    ],
+  },
+  {
+    id: "cogview-3-flash",
+    name: "CogView-3-Flash",
+    supportedSizes: [
+      "1024x1024",
+      "768x1344",
+      "864x1152",
+      "1344x768",
+      "1152x864",
+      "1440x720",
+      "720x1440",
+    ],
+  },
+];
+
 /** 图片生成模型映射（根据 Provider ID 或类型） */
 export const IMAGE_GEN_MODELS: Record<string, ImageGenModel[]> = {
   openai: OPENAI_IMAGE_MODELS,
   "openai-response": OPENAI_IMAGE_MODELS,
   // 智谱 AI
-  zhipuai: [
-    {
-      id: "cogview-3-flash",
-      name: "CogView-3-Flash",
-      supportedSizes: [
-        "1024x1024",
-        "768x1344",
-        "864x1152",
-        "1344x768",
-        "1152x864",
-        "1440x720",
-        "720x1440",
-      ],
-    },
-    {
-      id: "cogview-4-250304",
-      name: "CogView-4-250304",
-      supportedSizes: [
-        "1024x1024",
-        "768x1344",
-        "864x1152",
-        "1344x768",
-        "1152x864",
-        "1440x720",
-        "720x1440",
-      ],
-    },
-  ],
-  zhipu: [
-    {
-      id: "cogview-3-flash",
-      name: "CogView-3-Flash",
-      supportedSizes: [
-        "1024x1024",
-        "768x1344",
-        "864x1152",
-        "1344x768",
-        "1152x864",
-        "1440x720",
-        "720x1440",
-      ],
-    },
-    {
-      id: "cogview-4-250304",
-      name: "CogView-4-250304",
-      supportedSizes: [
-        "1024x1024",
-        "768x1344",
-        "864x1152",
-        "1344x768",
-        "1152x864",
-        "1440x720",
-        "720x1440",
-      ],
-    },
-  ],
+  zhipuai: ZHIPU_IMAGE_MODELS,
+  zhipu: ZHIPU_IMAGE_MODELS,
   // AiHubMix
   aihubmix: [
     {

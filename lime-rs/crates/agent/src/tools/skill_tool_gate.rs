@@ -16,9 +16,11 @@ const MODALITY_EXECUTION_PROFILES_JSON: &str =
     include_str!("../../../../../src/lib/governance/modalityExecutionProfiles.json");
 
 const PDF_EXTRACT_CONTRACT_KEY: &str = "pdf_extract";
+const IMAGE_GENERATION_CONTRACT_KEY: &str = "image_generation";
 const AUDIO_TRANSCRIPTION_CONTRACT_KEY: &str = "audio_transcription";
 const WEB_RESEARCH_CONTRACT_KEY: &str = "web_research";
 const TEXT_TRANSFORM_CONTRACT_KEY: &str = "text_transform";
+const IMAGE_GENERATE_SKILL_NAME: &str = "image_generate";
 const CONTENT_FACTORY_WORKSPACE_PATCH_KIND: &str = "content_factory.workspace_patch";
 
 const LIMECORE_POLICY_SNAPSHOT_STATUS_LOCAL_DEFAULTS_EVALUATED: &str = "local_defaults_evaluated";
@@ -39,6 +41,7 @@ struct SkillToolSessionAccess {
     enabled: bool,
     allowed_skills: Option<HashSet<String>>,
     skill_sources: HashMap<String, SkillToolSessionSkillSource>,
+    allowed_capabilities: HashSet<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,6 +79,7 @@ pub fn set_skill_tool_session_access(session_id: &str, enabled: bool) {
             enabled,
             allowed_skills: None,
             skill_sources: HashMap::new(),
+            allowed_capabilities: HashSet::new(),
         },
     );
 }
@@ -105,8 +109,45 @@ where
             enabled: !allowed.is_empty(),
             allowed_skills: Some(allowed),
             skill_sources: HashMap::new(),
+            allowed_capabilities: HashSet::new(),
         },
     );
+}
+
+pub fn add_skill_tool_session_allowed_capabilities<I, S>(session_id: &str, capabilities: I)
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let session_id = session_id.trim();
+    if session_id.is_empty() {
+        return;
+    }
+
+    let capabilities = capabilities
+        .into_iter()
+        .map(|capability| capability.as_ref().trim().to_ascii_lowercase())
+        .filter(|capability| !capability.is_empty())
+        .collect::<HashSet<_>>();
+    if capabilities.is_empty() {
+        return;
+    }
+
+    let store = session_access_store();
+    let mut guard = match store.lock() {
+        Ok(guard) => guard,
+        Err(error) => error.into_inner(),
+    };
+    let access = guard
+        .entry(session_id.to_string())
+        .or_insert_with(|| SkillToolSessionAccess {
+            enabled: true,
+            allowed_skills: Some(HashSet::new()),
+            skill_sources: HashMap::new(),
+            allowed_capabilities: HashSet::new(),
+        });
+    access.enabled = true;
+    access.allowed_capabilities.extend(capabilities);
 }
 
 pub fn set_skill_tool_session_allowed_skill_sources<I>(session_id: &str, sources: I)
@@ -141,6 +182,7 @@ where
             enabled: !allowed.is_empty(),
             allowed_skills: Some(allowed),
             skill_sources,
+            allowed_capabilities: HashSet::new(),
         },
     );
 }
@@ -202,6 +244,24 @@ fn skill_name_gate_aliases(skill_name: &str) -> Vec<String> {
     }
 }
 
+fn skill_required_turn_capability(skill_name: &str) -> Option<&'static str> {
+    match normalize_skill_name(skill_name).as_str() {
+        IMAGE_GENERATE_SKILL_NAME => Some(IMAGE_GENERATION_CONTRACT_KEY),
+        _ => None,
+    }
+}
+
+fn is_skill_allowed_by_turn_capability(
+    skill_name: &str,
+    allowed_capabilities: &HashSet<String>,
+) -> bool {
+    skill_required_turn_capability(skill_name).is_some_and(|required| {
+        allowed_capabilities
+            .iter()
+            .any(|capability| capability.eq_ignore_ascii_case(required))
+    })
+}
+
 fn is_skill_allowed_for_session(session_id: &str, skill_name: &str) -> bool {
     let session_id = session_id.trim();
     if session_id.is_empty() {
@@ -218,6 +278,10 @@ fn is_skill_allowed_for_session(session_id: &str, skill_name: &str) -> bool {
     };
     if !access.enabled {
         return false;
+    }
+
+    if is_skill_allowed_by_turn_capability(skill_name, &access.allowed_capabilities) {
+        return true;
     }
 
     let Some(allowed_skills) = access.allowed_skills.as_ref() else {
@@ -341,6 +405,10 @@ fn normalize_skill_name(skill_name: &str) -> String {
 
 fn current_skill_runtime_contract_spec(skill_name: &str) -> Option<SkillRuntimeContractSpec> {
     match normalize_skill_name(skill_name).as_str() {
+        IMAGE_GENERATE_SKILL_NAME => Some(SkillRuntimeContractSpec {
+            contract_key: IMAGE_GENERATION_CONTRACT_KEY,
+            default_entry_source: "at_image_command",
+        }),
         "pdf_read" => Some(SkillRuntimeContractSpec {
             contract_key: PDF_EXTRACT_CONTRACT_KEY,
             default_entry_source: "at_pdf_read_command",
@@ -1219,6 +1287,36 @@ mod tests {
         assert_eq!(allowed.behavior, PermissionBehavior::Allow);
         assert_eq!(denied.behavior, PermissionBehavior::Deny);
         assert!(denied
+            .message
+            .as_deref()
+            .unwrap_or_default()
+            .contains("未授权执行 Skill"));
+    }
+
+    #[tokio::test]
+    async fn turn_capability_should_allow_only_mapped_builtin_skill() {
+        let session_id = "skill-image-capability-session";
+        add_skill_tool_session_allowed_capabilities(session_id, [IMAGE_GENERATION_CONTRACT_KEY]);
+
+        let tool = LimeSkillTool::new();
+        let image_allowed = tool
+            .check_permissions(
+                &serde_json::json!({ "skill": IMAGE_GENERATE_SKILL_NAME }),
+                &create_context(session_id),
+            )
+            .await;
+        let research_denied = tool
+            .check_permissions(
+                &serde_json::json!({ "skill": "research" }),
+                &create_context(session_id),
+            )
+            .await;
+
+        clear_skill_tool_session_access(session_id);
+
+        assert_eq!(image_allowed.behavior, PermissionBehavior::Allow);
+        assert_eq!(research_denied.behavior, PermissionBehavior::Deny);
+        assert!(research_denied
             .message
             .as_deref()
             .unwrap_or_default()

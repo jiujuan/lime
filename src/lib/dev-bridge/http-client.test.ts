@@ -660,6 +660,19 @@ describe("http-client", () => {
         request: {
           lines: [
             JSON.stringify({
+              id: "installed-save",
+              method: "agentAppInstalled/save",
+              params: { state: { appId: "content-factory-app" } },
+            }),
+          ],
+        },
+      }),
+    ).toBe(240000);
+    expect(
+      resolveBridgeRequestTimeoutMs("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
               id: "list-sessions",
               method: "agentSession/list",
               params: { limit: 20 },

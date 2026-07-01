@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyInputbarPluginSelection,
+  isCompleteInputbarPluginTriggerQuery,
   normalizeInputbarPluginTrigger,
   removeInputbarPluginSelection,
   resolveInputbarPluginDisplayName,
@@ -66,6 +67,56 @@ describe("pluginInputCapability", () => {
     ).toBe("@写文章");
   });
 
+  it("应识别完整插件触发查询", () => {
+    expect(
+      isCompleteInputbarPluginTriggerQuery({
+        query: "写文章",
+        plugins: [
+          {
+            pluginId: "content-factory-app",
+            displayName: "写文章",
+            trigger: "@写文章",
+          },
+        ],
+      }),
+    ).toBe(true);
+  });
+
+  it("应识别完整插件技能触发查询", () => {
+    expect(
+      isCompleteInputbarPluginTriggerQuery({
+        query: "内容工厂:文章写作",
+        plugins: [
+          {
+            pluginId: "content-workbench",
+            displayName: "内容工厂",
+            skills: [
+              {
+                skillId: "article-writer",
+                title: "文章写作",
+              },
+            ],
+          },
+        ],
+      }),
+    ).toBe(true);
+  });
+
+  it("部分触发查询不应被当成完整插件触发词", () => {
+    expect(
+      isCompleteInputbarPluginTriggerQuery({
+        query: "写",
+        plugins: [
+          {
+            pluginId: "content-factory-app",
+            displayName: "写文章",
+            trigger: "@写文章",
+          },
+        ],
+      }),
+    ).toBe(false);
+  });
+
   it("展示名称为空时应回退到插件 id", () => {
     expect(
       normalizeInputbarPluginTrigger({
@@ -98,6 +149,23 @@ describe("pluginInputCapability", () => {
         },
       }).text,
     ).toBe("@写文章 写一篇公众号文章");
+  });
+
+  it("保留输入模式下应只激活插件选择而不写入触发词", () => {
+    expect(
+      applyInputbarPluginSelection({
+        input: "写一篇公众号文章",
+        plugin: {
+          pluginId: "content-factory-app",
+          displayName: "写文章",
+          trigger: "@写文章",
+        },
+        preserveInput: true,
+      }),
+    ).toMatchObject({
+      trigger: "@写文章",
+      text: "写一篇公众号文章",
+    });
   });
 
   it("选择显式触发词插件技能时应把该触发词写到输入开头", () => {

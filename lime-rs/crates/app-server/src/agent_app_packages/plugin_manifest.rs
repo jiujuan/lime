@@ -8,7 +8,7 @@ const PLUGIN_PACKAGE_SCHEMA_VERSION: &str = "lime.plugin.package.v1";
 
 const RUNTIME_CONTRIBUTION_FIELD: &str = "runtime";
 const WORKBENCH_CONTRIBUTION_FIELD: &str = "workbench";
-const TEXT_PREVIEW_LIMIT: usize = 420;
+const TEXT_PREVIEW_CHAR_LIMIT: usize = 420;
 
 pub(crate) struct PluginPackageManifestProjection {
     pub(crate) plugin_manifest: Value,
@@ -35,8 +35,7 @@ pub(crate) fn resolve_plugin_package_manifest(
         workbench.as_ref(),
         &package_components,
     )?;
-    let plugin_manifest =
-        merge_plugin_package_components(plugin_manifest, &package_components);
+    let plugin_manifest = merge_plugin_package_components(plugin_manifest, &package_components);
 
     Ok(PluginPackageManifestProjection {
         plugin_manifest,
@@ -224,17 +223,14 @@ fn text_preview(content: &str) -> Option<String> {
     if preview.is_empty() {
         return None;
     }
-    if preview.len() > TEXT_PREVIEW_LIMIT {
-        preview.truncate(TEXT_PREVIEW_LIMIT);
+    if preview.chars().count() > TEXT_PREVIEW_CHAR_LIMIT {
+        preview = preview.chars().take(TEXT_PREVIEW_CHAR_LIMIT).collect();
         preview.push('…');
     }
     Some(preview)
 }
 
-fn read_skill_contributions(
-    app_dir: &Path,
-    plugin_manifest: &Value,
-) -> Result<Vec<Value>, String> {
+fn read_skill_contributions(app_dir: &Path, plugin_manifest: &Value) -> Result<Vec<Value>, String> {
     let Some(skills_root) = contribution_path(app_dir, plugin_manifest, "skills")? else {
         return Ok(Vec::new());
     };
@@ -257,9 +253,8 @@ fn read_skill_contributions(
         if !skill_path.is_file() {
             continue;
         }
-        let content = fs::read_to_string(&skill_path).map_err(|error| {
-            format!("读取插件包 skill 失败 {}: {error}", skill_path.display())
-        })?;
+        let content = fs::read_to_string(&skill_path)
+            .map_err(|error| format!("读取插件包 skill 失败 {}: {error}", skill_path.display()))?;
         let directory_id = entry.file_name().to_string_lossy().replace('_', "-");
         let id = read_markdown_frontmatter_field(&content, "name").unwrap_or(directory_id);
         let title = first_markdown_heading(&content).unwrap_or_else(|| humanize_id(&id));
@@ -380,10 +375,7 @@ fn read_connector_contributions(
     if !connectors_path.is_file() {
         return Ok(Vec::new());
     }
-    let registry = read_json_file(
-        &connectors_path,
-        "读取插件包 contributions.connectors 失败",
-    )?;
+    let registry = read_json_file(&connectors_path, "读取插件包 contributions.connectors 失败")?;
     Ok(registry
         .get("connectors")
         .and_then(Value::as_array)
@@ -653,18 +645,68 @@ fn activation_entries_from_runtime(runtime: &Value) -> Vec<Value> {
                 .iter()
                 .filter_map(|item| {
                     let key = read_string_from_record(item, "key")?;
+                    let task_kind = read_string_from_record(item, "taskKind")
+                        .or_else(|| read_string_from_record(item, "task_kind"));
+                    let workflow_key = read_string_from_record(item, "workflowKey")
+                        .or_else(|| read_string_from_record(item, "workflow_key"))
+                        .or_else(|| read_string_from_record(item, "workflow"));
+                    let output_artifact_kind =
+                        read_string_from_record(item, "outputArtifactKind")
+                            .or_else(|| read_string_from_record(item, "output_artifact_kind"))
+                            .or_else(|| {
+                                activation_workflow_output_artifact_kind(
+                                    runtime,
+                                    workflow_key.as_deref(),
+                                    task_kind.as_deref(),
+                                )
+                            });
                     Some(json!({
                         "key": key,
                         "title": read_string_from_record(item, "title").unwrap_or_else(|| key.clone()),
                         "aliases": read_string_array(item.get("aliases")),
                         "kind": read_string_from_record(item, "kind").unwrap_or_else(|| "plugin".to_string()),
                         "intent": read_string_from_record(item, "intent").unwrap_or_else(|| "at_command".to_string()),
-                        "defaultObjectKind": read_string_from_record(item, "defaultObjectKind"),
+                        "taskKind": task_kind,
+                        "workflowKey": workflow_key,
+                        "outputArtifactKind": output_artifact_kind,
+                        "rightSurface": read_string_from_record(item, "rightSurface")
+                            .or_else(|| read_string_from_record(item, "right_surface")),
+                        "expectedObjects": read_string_array(item.get("expectedObjects"))
+                            .into_iter()
+                            .chain(read_string_array(item.get("expected_objects")))
+                            .collect::<Vec<_>>(),
+                        "defaultObjectKind": read_string_from_record(item, "defaultObjectKind")
+                            .or_else(|| read_string_from_record(item, "default_object_kind")),
                     }))
                 })
                 .collect()
         })
         .unwrap_or_default()
+}
+
+fn activation_workflow_output_artifact_kind(
+    runtime: &Value,
+    workflow_key: Option<&str>,
+    task_kind: Option<&str>,
+) -> Option<String> {
+    runtime
+        .get("workflows")
+        .and_then(Value::as_array)?
+        .iter()
+        .find(|workflow| {
+            workflow_key
+                .is_some_and(|key| read_string_from_record(workflow, "key").as_deref() == Some(key))
+                || task_kind.is_some_and(|kind| {
+                    read_string_from_record(workflow, "taskKind")
+                        .or_else(|| read_string_from_record(workflow, "task_kind"))
+                        .as_deref()
+                        == Some(kind)
+                })
+        })
+        .and_then(|workflow| {
+            read_string_from_record(workflow, "outputArtifactKind")
+                .or_else(|| read_string_from_record(workflow, "output_artifact_kind"))
+        })
 }
 
 fn entries_from_runtime(runtime: &Value, display_name: &str) -> Vec<Value> {
@@ -782,7 +824,11 @@ fn subagents_from_runtime(runtime: &Value) -> Value {
 fn merge_records_by_id(base: Vec<Value>, overlay: Vec<Value>, key: &str) -> Value {
     let mut merged: Map<String, Value> = Map::new();
     for value in base.into_iter().chain(overlay) {
-        let Some(id) = value.get(key).and_then(Value::as_str).map(ToString::to_string) else {
+        let Some(id) = value
+            .get(key)
+            .and_then(Value::as_str)
+            .map(ToString::to_string)
+        else {
             continue;
         };
         match (merged.remove(&id), value) {
@@ -1028,4 +1074,22 @@ fn read_string_array(value: Option<&Value>) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn text_preview_truncates_multibyte_text_on_char_boundary() {
+        let content = format!("# 标题\n\n{}", "中文描述".repeat(180));
+
+        let preview = text_preview(&content).expect("preview");
+
+        assert!(preview.ends_with('…'));
+        assert_eq!(
+            preview.trim_end_matches('…').chars().count(),
+            TEXT_PREVIEW_CHAR_LIMIT
+        );
+    }
 }

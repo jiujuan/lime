@@ -104,7 +104,17 @@ function installedState(
     },
     manifest: {} as InstalledAgentAppState["manifest"],
     projection: {} as InstalledAgentAppState["projection"],
-    readiness: {} as InstalledAgentAppState["readiness"],
+    readiness: {
+      appId,
+      status: "ready",
+      checkedAt: "2026-06-25T00:00:00.000Z",
+      blockers: [],
+      warnings: [],
+      supportedCapabilities: [],
+      missingCapabilities: [],
+      entryReadiness: [],
+      installModes: [],
+    },
     installMode: "in_lime",
     runtimeProfileSummary:
       {} as InstalledAgentAppState["runtimeProfileSummary"],
@@ -146,6 +156,31 @@ function readyInstalledState(): InstalledAgentAppState {
     installedAt: loadedAt,
     updatedAt: loadedAt,
   });
+}
+
+function staleProfileBlockedInstalledState(): InstalledAgentAppState {
+  const state = readyInstalledState();
+  return {
+    ...state,
+    readiness: {
+      ...state.readiness,
+      status: "blocked",
+      blockers: [
+        "lime.agent",
+        "lime.artifacts",
+        "lime.evidence",
+        "lime.knowledge",
+        "lime.storage",
+        "lime.workflow",
+      ].map((capability) => ({
+        code: "CAPABILITY_MISSING" as const,
+        severity: "blocker" as const,
+        message: `${capability} missing`,
+        capability,
+      })),
+      warnings: [],
+    },
+  };
 }
 
 function cloudApp(
@@ -243,7 +278,9 @@ describe("plugin marketplace registry loader", () => {
       }),
       expect.objectContaining({
         pluginId: "stale-kit@limecloud",
-        installed: false,
+        installed: true,
+        enabled: true,
+        activationState: "activatable",
         blockerCodes: expect.arrayContaining([
           "PLUGIN_INSTALLED_PACKAGE_MISMATCH",
         ]),
@@ -310,6 +347,89 @@ describe("plugin marketplace registry loader", () => {
       pluginId: localState.appId,
       installed: true,
       enabled: true,
+    });
+  });
+
+  it("本地旧 profile 造成的 blocked readiness 应在加载 registry 时自动修复", async () => {
+    const staleState = staleProfileBlockedInstalledState();
+    const repairedState = {
+      ...staleState,
+      readiness: {
+        ...staleState.readiness,
+        status: "degraded" as const,
+        blockers: [],
+      },
+    };
+    const listInstalled = vi.fn(
+      async (): Promise<InstalledAgentAppStateListResult> => ({
+        states: [staleState],
+        issues: [],
+      }),
+    );
+    const reviewLocalPackage = vi.fn(async () => ({
+      review: {
+        id: `${staleState.appId}:${staleState.identity.appVersion}`,
+        appId: staleState.appId,
+        displayName: staleState.manifest.displayName,
+        version: staleState.identity.appVersion,
+        manifestVersion: staleState.manifest.manifestVersion,
+        sourceKind: staleState.identity.sourceKind,
+        sourceUri: staleState.identity.sourceUri,
+        sourceState: {
+          kind: "local-selected",
+          labelKey: "agentApp.apps.sourceState.localSelected",
+          tone: "sky",
+          canReview: true,
+        },
+        packageHash: staleState.identity.packageHash,
+        manifestHash: staleState.identity.manifestHash,
+        entryCount: staleState.projection.entries.length,
+        capabilityCount: staleState.projection.requiredCapabilities.length,
+        requiredCapabilityKeys: staleState.projection.requiredCapabilities.map(
+          (item) => item.capability,
+        ),
+        permissionCount: staleState.manifest.permissions.length,
+        storageNamespace: staleState.projection.storage?.namespace,
+        cleanupTargetCount: 0,
+        readinessStatus: repairedState.readiness.status,
+        blockerCount: repairedState.readiness.blockers.length,
+        warningCount: repairedState.readiness.warnings.length,
+        generatedAt: staleState.updatedAt,
+      },
+      state: repairedState,
+    }));
+    const saveInstalledState = vi.fn(async () => repairedState);
+
+    const snapshot = await loadPluginMarketplaceRegistry("", {}, {
+      listInstalled,
+      getAgentAppCatalog: vi.fn(async () => agentAppCatalog([])),
+      reviewLocalPackage,
+      saveInstalledState,
+    });
+
+    expect(reviewLocalPackage).toHaveBeenCalledWith({
+      appDir: staleState.identity.sourceUri,
+      profile: expect.objectContaining({
+        capabilities: expect.objectContaining({
+          "lime.agent": expect.objectContaining({ enabled: true }),
+          "lime.workflow": expect.objectContaining({ enabled: true }),
+          "lime.storage": expect.objectContaining({ enabled: true }),
+          "lime.artifacts": expect.objectContaining({ enabled: true }),
+        }),
+      }),
+      sourceKind: "local_folder",
+    });
+    expect(saveInstalledState).toHaveBeenCalledWith({ state: repairedState });
+    expect(snapshot.installed.states[0].readiness).toMatchObject({
+      status: "degraded",
+      blockers: [],
+    });
+    expect(
+      snapshot.registry.find((item) => item.pluginId === staleState.appId),
+    ).toMatchObject({
+      installed: true,
+      enabled: true,
+      activationState: "activatable",
     });
   });
 

@@ -1,14 +1,5 @@
-import React from "react";
 import { useTranslation } from "react-i18next";
-import {
-  ChevronRight,
-  FileText,
-  ImagePlus,
-  ListChecks,
-  Loader2,
-  Search,
-  ShieldCheck,
-} from "lucide-react";
+import { ChevronRight, FileText, Loader2 } from "lucide-react";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import type { ArtifactFrameRendererProps } from "./artifactFrameRegistry";
 import { resolveArticleArtifactFrameModel } from "./articleArtifactProjection";
@@ -29,78 +20,6 @@ export function ArticleArtifactFrame({
     return null;
   }
 
-  const processSteps = [
-    model.researchRoundCount > 0
-      ? {
-          key: "research",
-          icon: <Search className="h-3.5 w-3.5" />,
-          label: dynamicT(
-            "agentChat.messageList.articleArtifact.process.research",
-            { count: model.researchRoundCount },
-          ),
-        }
-      : null,
-    model.outlineSectionCount > 0
-      ? {
-          key: "outline",
-          icon: <ListChecks className="h-3.5 w-3.5" />,
-          label: dynamicT(
-            "agentChat.messageList.articleArtifact.process.outline",
-            { count: model.outlineSectionCount },
-          ),
-        }
-      : null,
-    model.imageSlotCount > 0
-      ? {
-          key: "images",
-          icon: <ImagePlus className="h-3.5 w-3.5" />,
-          label: dynamicT("agentChat.messageList.articleArtifact.process.images", {
-            count: model.imageSlotCount,
-          }),
-        }
-      : null,
-    model.sourceCount > 0
-      ? {
-          key: "sources",
-          icon: <ShieldCheck className="h-3.5 w-3.5" />,
-          label: dynamicT(
-            "agentChat.messageList.articleArtifact.process.sources",
-            { count: model.sourceCount },
-          ),
-        }
-      : null,
-  ].filter(
-    (
-      item,
-    ): item is {
-      key: string;
-      icon: React.ReactElement;
-      label: string;
-    } => item !== null,
-  );
-
-  const facts = [
-    model.researchRoundCount > 0
-      ? dynamicT("agentChat.messageList.articleArtifact.fact.researchRounds", {
-          count: model.researchRoundCount,
-        })
-      : null,
-    model.outlineSectionCount > 0
-      ? dynamicT("agentChat.messageList.articleArtifact.fact.outlineSections", {
-          count: model.outlineSectionCount,
-        })
-      : null,
-    model.imageSlotCount > 0
-      ? dynamicT("agentChat.messageList.articleArtifact.fact.imageSlots", {
-          count: model.imageSlotCount,
-        })
-      : null,
-    model.sourceCount > 0
-      ? dynamicT("agentChat.messageList.articleArtifact.fact.sources", {
-          count: model.sourceCount,
-        })
-      : null,
-  ].filter((item): item is string => Boolean(item));
   const isStreaming = artifact.status === "streaming";
 
   return (
@@ -161,27 +80,6 @@ export function ArticleArtifactFrame({
         </button>
       </div>
 
-      {processSteps.length > 0 ? (
-        <div
-          className="grid gap-1.5 border-b border-slate-100 bg-white px-3 py-3 sm:grid-cols-2"
-          data-testid="article-artifact-frame-process"
-        >
-          {processSteps.map((step) => (
-            <div
-              key={step.key}
-              className="grid grid-cols-[1.75rem_minmax(0,1fr)] items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-2"
-            >
-              <span className="flex h-7 w-7 items-center justify-center rounded-md border border-emerald-100 bg-emerald-50 text-emerald-700">
-                {step.icon}
-              </span>
-              <span className="truncate text-xs font-medium text-slate-700">
-                {step.label}
-              </span>
-            </div>
-          ))}
-        </div>
-      ) : null}
-
       <div className="bg-white">
         <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-2">
           <span className="text-xs font-semibold text-slate-700">
@@ -215,21 +113,6 @@ export function ArticleArtifactFrame({
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 bg-slate-50 px-3 py-2">
-        {facts.length > 0 ? (
-          <div
-            className="flex min-w-0 flex-wrap gap-1.5"
-            data-testid="article-artifact-frame-facts"
-          >
-            {facts.map((fact) => (
-              <span
-                key={fact}
-                className="inline-flex rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] font-medium text-slate-600"
-              >
-                {fact}
-              </span>
-            ))}
-          </div>
-        ) : null}
         <button
           type="button"
           onClick={() => onArtifactClick?.(artifact)}

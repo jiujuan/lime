@@ -68,13 +68,13 @@ Lime 现在已经有图片主链，但职责还没有完全拆开：
 
 ## 3. 收益
 
-| 对象 | 收益 |
-| --- | --- |
-| 用户 | 设置一次图片模型后，`@配图`、文稿配图、修图、重绘都使用同一套默认能力，不再出现“设置可选但运行无权限”。 |
-| 产品 | 图片能力可以成为稳定一级能力，而不是散落在 Skill、设置页和模型名启发式里的特例。 |
-| 工程 | Provider / model 支持新增只改 catalog 和适配器，减少 UI、runtime、worker 多处补丁。 |
-| 生态 | 第三方中转站无需改造服务端，Lime 本地按 Provider / Host / Model 维护能力。 |
-| 后续扩展 | 国内模型、Google 模型、Lime Cloud command entry、用户自定义 Provider 可以进入同一能力体系。 |
+| 对象     | 收益                                                                                                    |
+| -------- | ------------------------------------------------------------------------------------------------------- |
+| 用户     | 设置一次图片模型后，`@配图`、文稿配图、修图、重绘都使用同一套默认能力，不再出现“设置可选但运行无权限”。 |
+| 产品     | 图片能力可以成为稳定一级能力，而不是散落在 Skill、设置页和模型名启发式里的特例。                        |
+| 工程     | Provider / model 支持新增只改 catalog 和适配器，减少 UI、runtime、worker 多处补丁。                     |
+| 生态     | 第三方中转站无需改造服务端，Lime 本地按 Provider / Host / Model 维护能力。                              |
+| 后续扩展 | 国内模型、Google 模型、Lime Cloud command entry、用户自定义 Provider 可以进入同一能力体系。             |
 
 ## 4. 用户故事
 
@@ -130,14 +130,14 @@ Lime 现在已经有图片主链，但职责还没有完全拆开：
 
 ## 5. 用户用例
 
-| 用例 | 触发 | 关键路径 | 结果 |
-| --- | --- | --- | --- |
-| 设置默认图片模型 | 设置 -> 媒体生成 -> 图片服务模型 | Provider 列表 -> 图片模型列表 -> 保存偏好 | 写入 `workspace_preferences.media_defaults.image` |
-| 自动配图 | 输入 `@配图 生成一张青柠插画` | 解析意图 -> 图片能力 launch -> Agent turn -> task artifact | 聊天区图片任务卡进入生成中 |
-| 文稿 inline 配图 | 文稿右侧栏点击生成配图 | 构造图片上下文 -> 绑定 session -> task artifact | 正文占位等待回填 |
-| 指定模型 | `@Nano Banana 2 生成封面` | catalog 匹配模型标签 -> 绑定 provider/model | 当前图片 turn 使用显式模型 |
-| 修图 / 重绘 | `@修图` / `@重绘` 带参考图 | 收集参考图 -> 判断 image edit capability | 创建编辑型 image task |
-| Provider 不可用 | 默认模型缺失或 Key 失效 | 能力路由失败 -> fallback 或错误 | 用户看到可操作提示 |
+| 用例             | 触发                             | 关键路径                                                   | 结果                                              |
+| ---------------- | -------------------------------- | ---------------------------------------------------------- | ------------------------------------------------- |
+| 设置默认图片模型 | 设置 -> 媒体生成 -> 图片服务模型 | Provider 列表 -> 图片模型列表 -> 保存偏好                  | 写入 `workspace_preferences.media_defaults.image` |
+| 自动配图         | 输入 `@配图 生成一张青柠插画`    | 解析意图 -> 图片能力 launch -> Agent turn -> task artifact | 聊天区图片任务卡进入生成中                        |
+| 文稿 inline 配图 | 文稿右侧栏点击生成配图           | 构造图片上下文 -> 绑定 session -> task artifact            | 正文占位等待回填                                  |
+| 指定模型         | `@Nano Banana 2 生成封面`        | catalog 匹配模型标签 -> 绑定 provider/model                | 当前图片 turn 使用显式模型                        |
+| 修图 / 重绘      | `@修图` / `@重绘` 带参考图       | 收集参考图 -> 判断 image edit capability                   | 创建编辑型 image task                             |
+| Provider 不可用  | 默认模型缺失或 Key 失效          | 能力路由失败 -> fallback 或错误                            | 用户看到可操作提示                                |
 
 ## 6. 系统架构
 
@@ -164,21 +164,23 @@ flowchart TB
 
 ### 6.1 分层边界
 
-| 层 | 责任 | 不允许 |
-| --- | --- | --- |
-| Settings UI | 展示可用图片 Provider / 模型，保存用户偏好 | 直接维护模型能力分叉规则 |
-| Image Capability Catalog | 声明 Provider、模型、协议、输入输出、标签、fallback | 保存用户密钥或执行网络请求 |
-| Composer / Workspace | 收集意图、文稿位置、参考图、显式模型标签 | 绕过 Agent turn 直接创建图片任务 |
-| Agent Runtime | 绑定 session / turn，注入图片能力，记录路由事实 | 用通用 Skill allowlist 决定图片原子能力是否存在 |
-| Image Atomic Tool | 创建标准 image task，调用 Provider adapter | 变成通用 Skill 编排系统替代品 |
-| Media Runtime | 执行任务、保存结果、更新 task artifact | 从聊天 UI 临时状态推断任务完成 |
-| UI Projection | 展示任务、图片、回填动作 | 作为图片任务事实源 |
+| 层                       | 责任                                                | 不允许                                          |
+| ------------------------ | --------------------------------------------------- | ----------------------------------------------- |
+| Settings UI              | 展示可用图片 Provider / 模型，保存用户偏好          | 直接维护模型能力分叉规则                        |
+| Image Capability Catalog | 声明 Provider、模型、协议、输入输出、标签、fallback | 保存用户密钥或执行网络请求                      |
+| Composer / Workspace     | 收集意图、文稿位置、参考图、显式模型标签            | 绕过 Agent turn 直接创建图片任务                |
+| Agent Runtime            | 绑定 session / turn，注入图片能力，记录路由事实     | 用通用 Skill allowlist 决定图片原子能力是否存在 |
+| Image Atomic Tool        | 创建标准 image task，调用 Provider adapter          | 变成通用 Skill 编排系统替代品                   |
+| Media Runtime            | 执行任务、保存结果、更新 task artifact              | 从聊天 UI 临时状态推断任务完成                  |
+| UI Projection            | 展示任务、图片、回填动作                            | 作为图片任务事实源                              |
 
 ## 7. Image Capability Catalog
 
 首期 catalog 可以是前后端共享的本地静态数据和解析 helper，后续再迁入 App Server 持久事实源。
 
 当前仓库已经把最小目录真值收回到 `src/lib/imageGen/models.ts`；`src/lib/imageGeneration.ts` 的旧兼容壳已经删除，后续只允许在 `catalog.ts` / executor 里继续收口。
+2026-06-30 还补了一层 Rust 共享 matcher：`lime_core::image_generation_matcher` 已成为图片模型 / 搜索文本的共同事实源，`lime-services` 与 `lime-server` 不再各自维护图片关键词表。
+2026-07-01 智谱图片 Provider 已拆出 native 分支：`provider_routing.rs` 先识别 `zhipu` / `glm` / `bigmodel.cn/api/paas`，再由 `request_zhipu_images` 直连 `https://open.bigmodel.cn/api/paas/v4/images/generations`；`glm-image` 默认收敛为单图、`quality=hd`、`size=1280x1280`，并保留 URL 结果归一化。
 
 建议字段：
 
@@ -191,7 +193,12 @@ type ImageCapabilityProvider = {
     providerTypes?: string[];
     apiHostIncludes?: string[];
   };
-  transport: "openai_images" | "openai_responses_image" | "gemini_image" | "fal_queue" | "custom";
+  transport:
+    | "openai_images"
+    | "openai_responses_image"
+    | "gemini_image"
+    | "fal_queue"
+    | "custom";
   endpointPath?: string;
   models: ImageCapabilityModel[];
   fallbackPriority?: number;
@@ -209,19 +216,23 @@ type ImageCapabilityModel = {
     transparentBackground?: boolean;
   };
   sizes?: string[];
-  executorMode: "images_api" | "responses_image_generation" | "gemini_image_generation" | "provider_native";
+  executorMode:
+    | "images_api"
+    | "responses_image_generation"
+    | "gemini_image_generation"
+    | "provider_native";
 };
 ```
 
 首批应覆盖：
 
-| 类别 | 示例 |
-| --- | --- |
-| OpenAI 官方 / 兼容 | `gpt-image-1`、`gpt-images-2`、`dall-e-3` |
-| 第三方中转 | Agnes `agnes-image-2.0-flash`、sub2api、new-api |
-| Google | Nano Banana 系列 / Gemini image generation 模型 |
-| 国内模型 | 即梦 / Seedream、通义万相、CogView、Flux、硅基流动等 |
-| Fal | `fal-ai/nano-banana-pro`、`fal-ai/flux/schnell` 等 |
+| 类别               | 示例                                                 |
+| ------------------ | ---------------------------------------------------- |
+| OpenAI 官方 / 兼容 | `gpt-image-1`、`gpt-images-2`、`dall-e-3`            |
+| 第三方中转         | Agnes `agnes-image-2.0-flash`、sub2api、new-api      |
+| Google             | Nano Banana 系列 / Gemini image generation 模型      |
+| 国内模型           | 即梦 / Seedream、通义万相、CogView、Flux、硅基流动等 |
+| Fal                | `fal-ai/nano-banana-pro`、`fal-ai/flux/schnell` 等   |
 
 注意：Google 和第三方平台的模型命名变化快，落实现时必须以官方文档或当前可调用模型列表为准；catalog 中可以保留用户友好别名，例如 `Nano Banana 2`，但 runtime 必须写入真实 `modelId`。
 
@@ -245,8 +256,9 @@ flowchart TD
 1. 不展示纯文本模型作为图片模型。
 2. Provider 有图片能力但模型列表为空时，展示“需要在 Provider 配置中声明图片模型 / 拉取模型”。
 3. 对 OpenAI 兼容中转，允许 catalog 提供默认图片模型候选。
-4. 对登录型云 Provider，允许显示登录引导，但不假装已有模型可用。
-5. 保存后偏好只记录稳定 `preferredProviderId`、`preferredModelId`、`allowFallback`，不把 UI 文案写入配置。
+4. 对 Provider live fetch / registry 返回且声明 `image_generation` task family 的最新模型，设置页按同一 catalog/matcher 接受，不要求模型 ID 预先写进内置表。
+5. 对登录型云 Provider，允许显示登录引导，但不假装已有模型可用。
+6. 保存后偏好只记录稳定 `preferredProviderId`、`preferredModelId`、`allowFallback`，不把 UI 文案写入配置。
 
 ## 9. @配图 时序
 
@@ -317,13 +329,13 @@ flowchart TD
 
 ## 12. Provider 执行协议
 
-| 协议 | 用途 | 示例 |
-| --- | --- | --- |
-| `openai_images` | OpenAI `/v1/images/generations` / `/v1/images/edits` 兼容接口 | OpenAI、Agnes、new-api、sub2api |
-| `openai_responses_image` | Responses API image generation tool | 支持 Responses image tool 的模型 |
-| `gemini_image` | Google Gemini image generation | Nano Banana / Gemini image models |
-| `fal_queue` | Fal queue / poll 模式 | Fal image models |
-| `provider_native` | 国内厂商原生协议 | 即梦、通义万相等需要单独 adapter 的模型 |
+| 协议                     | 用途                                                          | 示例                                    |
+| ------------------------ | ------------------------------------------------------------- | --------------------------------------- |
+| `openai_images`          | OpenAI `/v1/images/generations` / `/v1/images/edits` 兼容接口 | OpenAI、Agnes、new-api、sub2api         |
+| `openai_responses_image` | Responses API image generation tool                           | 支持 Responses image tool 的模型        |
+| `gemini_image`           | Google Gemini image generation                                | Nano Banana / Gemini image models       |
+| `fal_queue`              | Fal queue / poll 模式                                         | Fal image models                        |
+| `provider_native`        | 国内厂商原生协议                                              | 即梦、通义万相等需要单独 adapter 的模型 |
 
 执行 adapter 必须输出统一 task artifact：
 
@@ -360,13 +372,13 @@ flowchart TD
 
 错误分类：
 
-| 类别 | 用户提示方向 |
-| --- | --- |
-| Provider 未配置 Key | 去设置页添加或启用 Key |
-| 模型不支持图片 | 切换图片模型或更新 catalog |
-| 接口路径不兼容 | 检查中转站是否支持图片接口 |
-| 响应格式不兼容 | 显示 Provider 原始错误摘要 |
-| 显式模型失败 | 不自动 fallback，避免违背用户锁定 |
+| 类别                        | 用户提示方向                        |
+| --------------------------- | ----------------------------------- |
+| Provider 未配置 Key         | 去设置页添加或启用 Key              |
+| 模型不支持图片              | 切换图片模型或更新 catalog          |
+| 接口路径不兼容              | 检查中转站是否支持图片接口          |
+| 响应格式不兼容              | 显示 Provider 原始错误摘要          |
+| 显式模型失败                | 不自动 fallback，避免违背用户锁定   |
 | 默认模型失败且允许 fallback | 记录 fallback route，并告知实际模型 |
 
 ## 14. 实施阶段
@@ -431,14 +443,14 @@ flowchart TD
 
 ## 16. 风险与约束
 
-| 风险 | 约束 |
-| --- | --- |
-| catalog 变成第二套模型注册表 | catalog 只声明图片执行能力和路由，不复制完整模型注册表。 |
-| 过度绕开 Skill 体系 | 只对图片生成这类原子能力解耦，复杂工作流继续走 Skill。 |
-| 第三方中转模型名变化 | 支持用户自定义模型和 host/provider 匹配，错误提示引导更新本地声明。 |
-| Google / 国内模型接口差异 | 通过 `transport` 和 adapter 隔离协议差异，task artifact 保持统一。 |
-| UI 展示和 runtime 不一致 | 设置页和 runtime 必须消费同一 catalog resolver。 |
-| 显式模型被自动 fallback | 显式模型锁定失败时默认不 fallback，避免用户意图被覆盖。 |
+| 风险                         | 约束                                                                |
+| ---------------------------- | ------------------------------------------------------------------- |
+| catalog 变成第二套模型注册表 | catalog 只声明图片执行能力和路由，不复制完整模型注册表。            |
+| 过度绕开 Skill 体系          | 只对图片生成这类原子能力解耦，复杂工作流继续走 Skill。              |
+| 第三方中转模型名变化         | 支持用户自定义模型和 host/provider 匹配，错误提示引导更新本地声明。 |
+| Google / 国内模型接口差异    | 通过 `transport` 和 adapter 隔离协议差异，task artifact 保持统一。  |
+| UI 展示和 runtime 不一致     | 设置页和 runtime 必须消费同一 catalog resolver。                    |
+| 显式模型被自动 fallback      | 显式模型锁定失败时默认不 fallback，避免用户意图被覆盖。             |
 
 ## 17. 非目标
 
@@ -450,21 +462,31 @@ flowchart TD
 
 ## 18. 术语
 
-| 术语 | 含义 |
-| --- | --- |
-| Image Capability Catalog | Lime 本地图片能力目录，描述 Provider / model / transport / 支持能力。 |
-| Image Atomic Tool | 只负责图片生成 / 编辑的原子执行工具，不代表通用 Skill。 |
-| `image_skill_launch` | 前端到 Agent Runtime 的图片任务上下文 metadata。 |
-| `image_generation` capability | 当前 turn 允许执行图片原子能力的稳定机器语义。 |
-| `image_generate` task artifact | `.lime/tasks/image_generate/*.json` 标准图片任务文件。 |
-| 显式模型标签 | catalog 声明的 `@Nano Banana 2`、`@GPT Images 2` 等图片模型入口。 |
+| 术语                           | 含义                                                                  |
+| ------------------------------ | --------------------------------------------------------------------- |
+| Image Capability Catalog       | Lime 本地图片能力目录，描述 Provider / model / transport / 支持能力。 |
+| Image Atomic Tool              | 只负责图片生成 / 编辑的原子执行工具，不代表通用 Skill。               |
+| `image_skill_launch`           | 前端到 Agent Runtime 的图片任务上下文 metadata。                      |
+| `image_generation` capability  | 当前 turn 允许执行图片原子能力的稳定机器语义。                        |
+| `image_generate` task artifact | `.lime/tasks/image_generate/*.json` 标准图片任务文件。                |
+| 显式模型标签                   | catalog 声明的 `@Nano Banana 2`、`@GPT Images 2` 等图片模型入口。     |
 
 ## 19. Lime 重构切入口
 
-| 领域 | 当前事实源 | 重构动作 |
-| --- | --- | --- |
-| 设置与模型选择 | `src/lib/imageGen/catalog.ts`、`src/components/image-gen/useImageGen.ts` | 抽出统一 catalog resolver，统一 provider / model / alias / fallback / 错误分类。 |
-| 图片意图入口 | `src/components/agent/chat/workspace/modelSkillLaunchDescriptors.ts`、`src/components/agent/chat/workspace/useWorkspaceSendActions.ts` | 保留 `image_skill_launch`，补齐 `image_generation` capability hint 和 route metadata。 |
-| 运行时授权 | `lime-rs/crates/app-server/src/runtime_backend/skill_runtime_enable.rs`、`lime-rs/crates/agent/src/tools/skill_tool_gate.rs` | 图片能力不再由 session allowlist 决定，只保留普通 Skill gate。 |
-| 兼容 skill | `lime-rs/resources/default-skills/image_generate/SKILL.md` | 作为迁移期 facade 保留，最终不再承担权限事实源。 |
-| 任务与回填 | `.lime/tasks/image_generate`、图片工作台、文稿回填 projection | 继续复用统一 task artifact，不新增直连 Provider 旁路。 |
+| 领域           | 当前事实源                                                                                                                             | 重构动作                                                                               |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| 设置与模型选择 | `src/lib/imageGen/catalog.ts`、`src/components/image-gen/useImageGen.ts`                                                               | 抽出统一 catalog resolver，统一 provider / model / alias / fallback / 错误分类。       |
+| 图片意图入口   | `src/components/agent/chat/workspace/modelSkillLaunchDescriptors.ts`、`src/components/agent/chat/workspace/useWorkspaceSendActions.ts` | 保留 `image_skill_launch`，补齐 `image_generation` capability hint 和 route metadata。 |
+| 运行时授权     | `lime-rs/crates/app-server/src/runtime_backend/skill_runtime_enable.rs`、`lime-rs/crates/agent/src/tools/skill_tool_gate.rs`           | 图片能力不再由 session allowlist 决定，只保留普通 Skill gate。                         |
+| 兼容 skill     | `lime-rs/resources/default-skills/image_generate/SKILL.md`                                                                             | 作为迁移期 facade 保留，最终不再承担权限事实源。                                       |
+| 任务与回填     | `.lime/tasks/image_generate`、图片工作台、文稿回填 projection                                                                          | 继续复用统一 task artifact，不新增直连 Provider 旁路。                                 |
+
+## 20. 当前下一刀
+
+1. 骨架已优先收口：`useImageGen` 主执行链统一走本机 `/v1/images/generations`，通过 `x-provider-id` 锁定图片 Provider，不再在 renderer 里按 Fal / Gemini / OpenAI-compatible transport 直连外部 Provider；server 侧 provider kind 路由 heuristics 也已拆到 `provider_routing` 子模块。
+2. 回头补细节：继续细化本机图片服务 adapter 的 reference image / edit、Gemini 更完整的输入/输出字段和质量映射、国内 Provider 原生协议和错误分类；新增模型支持限制在 catalog + server adapter。
+3. 图片 projection / task viewer 最新模型显示已收口：聊天轻卡和工作台状态同步优先采用 task / runtime contract 的最新模型，不再让旧 `preview.modelName` 抢占；后续只在发现新的重复事实源时继续收口。
+4. 继续观察 `.lime/tasks/image_generate` artifact 的 provider/model/result 字段是否还存在运行时与 UI 展示不一致的边缘样本；若出现，只在 artifact 解析层补事实源优先级，不新增旁路。
+5. 维持 `image-command` 作为默认 current fixture regression 的稳定项，后续只扩展样本，不再把它从日常矩阵里拆出去。
+6. 如还要继续收口，优先把 `provider_routing` 里剩余的 host / provider 兼容判断与错误分类边角再往当前事实源收拢，不再往 renderer 或 settings 回流。
+7. 这轮已经把 server 侧 provider 路由 heuristics 再收了一层，后续优先盯 Gemini / 参考图 / 错误分类这几项，别再把判断散回 handler 主文件。

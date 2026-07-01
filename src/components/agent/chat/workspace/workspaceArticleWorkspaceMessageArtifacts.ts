@@ -1,4 +1,5 @@
 import type { Message } from "../types";
+import type { ArtifactStatus } from "@/lib/artifact/types";
 import { upsertMessageArtifact } from "../utils/messageArtifacts";
 import {
   buildWorkspaceArticleWorkspaceFromUnknown,
@@ -12,6 +13,7 @@ export interface AttachWorkspaceArticleWorkspacePreviewArtifactParams {
   messages: Message[];
   articleWorkspace: WorkspaceArticleWorkspace | null;
   now?: number;
+  status?: ArtifactStatus;
 }
 
 export function buildWorkspaceArticleWorkspaceFromMessageArtifacts(
@@ -213,12 +215,17 @@ export function attachWorkspaceArticleWorkspacePreviewArtifactToMessages({
   articleWorkspace,
   messages,
   now,
+  status,
 }: AttachWorkspaceArticleWorkspacePreviewArtifactParams): Message[] {
   if (!articleWorkspace) {
     return messages;
   }
 
-  const artifact = buildArticleWorkspacePreviewArtifact(articleWorkspace, now);
+  const artifact = buildArticleWorkspacePreviewArtifact(
+    articleWorkspace,
+    now,
+    status,
+  );
   if (!artifact) {
     return messages;
   }
@@ -248,11 +255,12 @@ export function attachWorkspaceArticleWorkspacePreviewArtifactToMessages({
 function buildArticleWorkspacePreviewArtifact(
   articleWorkspace: WorkspaceArticleWorkspace,
   now?: number,
+  status?: ArtifactStatus,
 ) {
   try {
     const previewWorkspace = selectArticlePreviewWorkspace(articleWorkspace);
     const viewModel = buildWorkspaceArticleWorkspaceViewModel(previewWorkspace);
-    return buildWorkspaceArticleWorkspacePreviewArtifact({
+    const artifact = buildWorkspaceArticleWorkspacePreviewArtifact({
       artifactIds: viewModel.selectedArtifactIds,
       layout: viewModel.selectedSurface.layout,
       object: viewModel.selectedObject,
@@ -260,6 +268,7 @@ function buildArticleWorkspacePreviewArtifact(
       articleWorkspace: previewWorkspace,
       now,
     });
+    return artifact && status ? { ...artifact, status } : artifact;
   } catch {
     return null;
   }

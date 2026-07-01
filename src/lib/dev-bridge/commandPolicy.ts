@@ -9,6 +9,7 @@ export type DevBridgeCommandTimeoutProfile =
   | "app-server-turn-start"
   | "app-server-read"
   | "agent-runtime"
+  | "agent-app-installed-write"
   | "agent-app-package-inspect"
   | "agent-app-ui-runtime-start"
   | "agent-app-package"
@@ -114,6 +115,9 @@ const APP_SERVER_AGENT_SESSION_LIST_METHOD = "agentSession/list";
 const APP_SERVER_AGENT_TURN_START_METHOD = "agentSession/turn/start";
 const APP_SERVER_AGENT_APP_UI_RUNTIME_START_METHOD = "agentAppUiRuntime/start";
 const APP_SERVER_KNOWLEDGE_COMPILE_METHOD = "knowledgePack/compile";
+const APP_SERVER_AGENT_APP_INSTALLED_WRITE_METHODS = new Set([
+  "agentAppInstalled/save",
+]);
 const APP_SERVER_CURRENT_METHODS = new Set([
   "capability/list",
   "artifact/read",
@@ -326,6 +330,9 @@ export function resolveDevBridgeCommandTimeoutProfile(
   if (isAppServerAgentAppPackageInspectCommand(command, args)) {
     return "agent-app-package-inspect";
   }
+  if (isAppServerAgentAppInstalledWriteCommand(command, args)) {
+    return "agent-app-installed-write";
+  }
   if (isAppServerCurrentMethodCommand(command, args)) {
     return "app-server-read";
   }
@@ -437,6 +444,18 @@ function isAppServerAgentAppPackageInspectCommand(
   }
   return extractAppServerJsonLines(args).some((line) =>
     jsonRpcLineHasMethod(line, "agentAppLocalPackage/inspect"),
+  );
+}
+
+function isAppServerAgentAppInstalledWriteCommand(
+  command: string,
+  args: unknown,
+): boolean {
+  if (command !== APP_SERVER_HANDLE_JSON_LINES_COMMAND) {
+    return false;
+  }
+  return extractAppServerJsonLines(args).some((line) =>
+    jsonRpcLineHasAnyMethod(line, APP_SERVER_AGENT_APP_INSTALLED_WRITE_METHODS),
   );
 }
 

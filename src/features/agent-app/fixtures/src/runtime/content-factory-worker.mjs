@@ -327,9 +327,12 @@ function buildArticleObject(context) {
         taskKind: "content.article.generate",
         taskId: context.taskId,
         turnId: context.turnId,
-        artifactIds
+      artifactIds
       }),
-      markdown: planning.markdown,
+      processMarkdown: planning.processMarkdown,
+      documentText: planning.documentText,
+      finalMarkdown: planning.documentText,
+      markdown: planning.documentText,
       excerpt: planning.keyTakeaways[0],
       researchRounds: planning.researchRounds,
       titleCandidates: planning.titleCandidates,

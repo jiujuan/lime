@@ -1,20 +1,26 @@
+mod gemini_image;
+mod provider_routing;
+
 use std::{collections::BTreeMap, time::Duration};
 
 use axum::http::StatusCode;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use futures::StreamExt;
-use lime_core::api_host_utils::{
-    is_openai_responses_compatible_host, normalize_openai_compatible_api_host,
-};
+use lime_core::api_host_utils::normalize_openai_compatible_api_host;
 use lime_core::config::ConfigManager;
-use lime_core::database::dao::api_key_provider::{
-    ApiKeyProvider, ApiKeyProviderDao, ApiProviderType,
-};
+use lime_core::database::dao::api_key_provider::{ApiKeyProvider, ApiKeyProviderDao};
 use lime_core::models::openai::{ImageData, ImageGenerationRequest, ImageGenerationResponse};
 use lime_providers::providers::codex::CodexProvider;
 use reqwest::{header::CONTENT_TYPE, Client};
 use serde_json::{json, Value};
 
+use self::gemini_image::{request_gemini_interactions_image, resolve_gemini_image_model};
+use self::provider_routing::{
+    is_gemini_image_provider, resolve_compatible_image_model,
+    resolve_configured_image_provider_kind, resolve_fal_model,
+    resolve_openai_responses_image_orchestration_model, should_prefer_openai_responses_image_api,
+    supports_openai_compatible_image_provider,
+};
 use crate::AppState;
 
 const FAL_DEFAULT_HOST: &str = "https://fal.run";
@@ -41,6 +47,8 @@ struct ImageProviderRoutingConfig {
 
 enum ConfiguredImageProviderKind {
     Fal,
+    Gemini,
+    Zhipu,
     OpenAiCompatible,
 }
 
@@ -49,29 +57,6 @@ struct OpenAiImageEndpointError {
     message: String,
     is_endpoint_not_found: bool,
 }
-
-const IMAGE_MODEL_KEYWORDS: [&str; 20] = [
-    "gpt-image",
-    "gpt-images",
-    "imagen",
-    "dall-e",
-    "dalle",
-    "stable diffusion",
-    "stable-diffusion",
-    "sdxl",
-    "sd3",
-    "midjourney",
-    "image generation",
-    "image-generation",
-    "image-gen",
-    "image-preview",
-    "flux",
-    "nano-banana",
-    "recraft",
-    "ideogram",
-    "seedream",
-    "cogview",
-];
 
 pub(crate) async fn try_generate_with_configured_provider(
     state: &AppState,
@@ -160,6 +145,8 @@ pub(crate) async fn try_generate_with_configured_provider(
             provider.id,
             match provider_kind {
                 ConfiguredImageProviderKind::Fal => "fal",
+                ConfiguredImageProviderKind::Gemini => "gemini-image",
+                ConfiguredImageProviderKind::Zhipu => "zhipu-image",
                 ConfiguredImageProviderKind::OpenAiCompatible => "openai-images",
             },
             request.model,
@@ -182,14 +169,64 @@ pub(crate) async fn try_generate_with_configured_provider(
                 &request_model,
                 &request_size,
                 request.n.max(1),
+                &request.reference_images,
             )
             .await
             {
                 Ok(image_urls) => {
-                    build_openai_response(&client, &image_urls, &request.response_format).await
+                    build_openai_response(&client, &image_urls, &request.response_format, None)
+                        .await
                 }
                 Err(error) => Err(error),
             }
+        }
+        ConfiguredImageProviderKind::Gemini => {
+            let Some(request_model) = resolve_gemini_image_model(
+                request.model.as_str(),
+                routing.preferred_model_id.as_deref(),
+                &provider.custom_models,
+            ) else {
+                return handle_routing_failure(
+                    state,
+                    &routing,
+                    format!("默认图片服务 {} 缺少可用 Gemini 图片模型", provider.id),
+                    "configured_provider_missing_model",
+                );
+            };
+
+            request_gemini_interactions_image(
+                &client,
+                &provider.api_host,
+                &api_key,
+                request,
+                &request_model,
+                &request_size,
+            )
+            .await
+        }
+        ConfiguredImageProviderKind::Zhipu => {
+            let Some(request_model) = resolve_zhipu_image_model(
+                request.model.as_str(),
+                routing.preferred_model_id.as_deref(),
+                &provider.custom_models,
+            ) else {
+                return handle_routing_failure(
+                    state,
+                    &routing,
+                    format!("默认图片服务 {} 缺少可用智谱图片模型", provider.id),
+                    "configured_provider_missing_model",
+                );
+            };
+
+            request_zhipu_images(
+                &client,
+                &provider.api_host,
+                &api_key,
+                request,
+                &request_model,
+                &request_size,
+            )
+            .await
         }
         ConfiguredImageProviderKind::OpenAiCompatible => {
             let Some(request_model) = resolve_compatible_image_model(
@@ -213,6 +250,7 @@ pub(crate) async fn try_generate_with_configured_provider(
                 request,
                 &request_model,
                 &request_size,
+                !request.reference_images.is_empty(),
             )
             .await
         }
@@ -313,82 +351,7 @@ fn load_api_key_provider(
     ApiKeyProviderDao::get_provider_by_id(&conn, provider_id).map_err(|error| error.to_string())
 }
 
-fn is_fal_provider(provider: &ApiKeyProvider) -> bool {
-    if provider.provider_type == ApiProviderType::Fal || provider.id == "fal" {
-        return true;
-    }
-
-    let normalized_host = provider.api_host.trim().to_ascii_lowercase();
-    normalized_host.contains("fal.run") || normalized_host.contains("queue.fal.run")
-}
-
-fn resolve_configured_image_provider_kind(
-    provider: &ApiKeyProvider,
-    request: &ImageGenerationRequest,
-    routing: &ImageProviderRoutingConfig,
-) -> Option<ConfiguredImageProviderKind> {
-    if is_fal_provider(provider) {
-        return Some(ConfiguredImageProviderKind::Fal);
-    }
-
-    if supports_openai_image_provider(provider)
-        && resolve_compatible_image_model(
-            request.model.as_str(),
-            routing.preferred_model_id.as_deref(),
-            &provider.custom_models,
-        )
-        .is_some()
-    {
-        return Some(ConfiguredImageProviderKind::OpenAiCompatible);
-    }
-
-    None
-}
-
-fn supports_openai_image_provider(provider: &ApiKeyProvider) -> bool {
-    matches!(
-        provider.effective_provider_type(),
-        ApiProviderType::Openai
-            | ApiProviderType::OpenaiResponse
-            | ApiProviderType::Codex
-            | ApiProviderType::NewApi
-            | ApiProviderType::Gateway
-    )
-}
-
-fn resolve_compatible_image_model(
-    request_model: &str,
-    preferred_model_id: Option<&str>,
-    custom_models: &[String],
-) -> Option<String> {
-    let normalized_request_model = request_model.trim();
-    if looks_like_image_generation_model(normalized_request_model) {
-        return Some(normalized_request_model.to_string());
-    }
-
-    if let Some(preferred_model) = preferred_model_id
-        .map(str::trim)
-        .filter(|value| looks_like_image_generation_model(value))
-    {
-        return Some(preferred_model.to_string());
-    }
-
-    custom_models
-        .iter()
-        .map(|model| model.trim())
-        .find(|model| looks_like_image_generation_model(model))
-        .map(|model| model.to_string())
-}
-
-fn looks_like_image_generation_model(model: &str) -> bool {
-    let normalized = model.trim().to_ascii_lowercase();
-    !normalized.is_empty()
-        && IMAGE_MODEL_KEYWORDS
-            .iter()
-            .any(|keyword| normalized.contains(keyword))
-}
-
-fn build_openai_images_url(api_host: &str) -> String {
+fn build_openai_image_endpoint_url(api_host: &str, endpoint_path: &str) -> String {
     let normalized_host = normalize_openai_compatible_api_host(api_host);
     let trimmed = normalized_host.trim().trim_end_matches('/');
     let normalized = if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
@@ -409,17 +372,29 @@ fn build_openai_images_url(api_host: &str) -> String {
         })
         .unwrap_or(false);
 
-    if has_version {
-        format!("{normalized}/images/generations")
+    let endpoint_path = endpoint_path.trim();
+    let endpoint_path = if endpoint_path.starts_with('/') {
+        endpoint_path.to_string()
     } else {
-        format!("{normalized}/v1/images/generations")
+        format!("/{endpoint_path}")
+    };
+
+    if has_version {
+        format!("{normalized}{endpoint_path}")
+    } else {
+        format!("{normalized}/v1{endpoint_path}")
     }
+}
+
+fn build_openai_images_url(api_host: &str) -> String {
+    build_openai_image_endpoint_url(api_host, "/images/generations")
 }
 
 fn build_openai_image_request_payload(
     request: &ImageGenerationRequest,
     model: &str,
     request_size: &str,
+    use_edit_endpoint: bool,
 ) -> Value {
     let mut payload = json!({
         "model": model,
@@ -456,7 +431,270 @@ fn build_openai_image_request_payload(
         payload["user"] = Value::String(user.to_string());
     }
 
+    if use_edit_endpoint && !request.reference_images.is_empty() {
+        payload["images"] = Value::Array(
+            request
+                .reference_images
+                .iter()
+                .filter_map(|image| {
+                    let trimmed = image.trim();
+                    if trimmed.is_empty() {
+                        None
+                    } else {
+                        Some(json!({ "image_url": trimmed }))
+                    }
+                })
+                .collect(),
+        );
+    }
+
     payload
+}
+
+fn looks_like_zhipu_image_model(model: &str) -> bool {
+    let normalized = model.trim().to_ascii_lowercase();
+    if normalized.is_empty() {
+        return false;
+    }
+
+    matches!(
+        normalized.as_str(),
+        "glm-image" | "cogview-4-250304" | "cogview-4" | "cogview-3-flash"
+    ) || normalized.starts_with("glm-image")
+        || normalized.contains("cogview")
+}
+
+fn resolve_zhipu_image_model(
+    request_model: &str,
+    preferred_model_id: Option<&str>,
+    custom_models: &[String],
+) -> Option<String> {
+    let trimmed = request_model.trim();
+    if looks_like_zhipu_image_model(trimmed) {
+        return Some(trimmed.to_string());
+    }
+
+    if let Some(preferred_model) = preferred_model_id
+        .map(str::trim)
+        .filter(|value| looks_like_zhipu_image_model(value))
+    {
+        return Some(preferred_model.to_string());
+    }
+
+    custom_models
+        .iter()
+        .map(String::as_str)
+        .map(str::trim)
+        .find(|candidate| looks_like_zhipu_image_model(candidate))
+        .map(ToString::to_string)
+}
+
+fn normalize_zhipu_model(model: &str) -> String {
+    let trimmed = model.trim();
+    if trimmed.is_empty() {
+        return "glm-image".to_string();
+    }
+
+    if matches!(
+        trimmed,
+        "cogview-4-250304" | "cogview-4" | "cogview-3-flash"
+    ) {
+        trimmed.to_string()
+    } else {
+        "glm-image".to_string()
+    }
+}
+
+fn normalize_zhipu_quality(model: &str, quality: Option<&str>) -> Option<String> {
+    let normalized_model = normalize_zhipu_model(model);
+    if normalized_model == "glm-image" {
+        return Some("hd".to_string());
+    }
+
+    let trimmed = quality?.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    if trimmed.eq_ignore_ascii_case("hd") {
+        return Some("hd".to_string());
+    }
+
+    if trimmed.eq_ignore_ascii_case("standard") {
+        return Some("standard".to_string());
+    }
+
+    None
+}
+
+fn normalize_zhipu_size(model: &str, request_size: &str) -> String {
+    let trimmed = request_size.trim();
+    if !trimmed.is_empty() {
+        return trimmed.to_string();
+    }
+
+    if normalize_zhipu_model(model) == "glm-image" {
+        "1280x1280".to_string()
+    } else {
+        "1024x1024".to_string()
+    }
+}
+
+fn build_zhipu_image_request_payload(
+    request: &ImageGenerationRequest,
+    model: &str,
+    request_size: &str,
+) -> Value {
+    let mut payload = json!({
+        "model": normalize_zhipu_model(model),
+        "prompt": request.prompt.trim(),
+        "size": normalize_zhipu_size(model, request_size),
+    });
+
+    if let Some(quality) = normalize_zhipu_quality(model, request.quality.as_deref()) {
+        payload["quality"] = Value::String(quality);
+    }
+
+    if let Some(user) = request
+        .user
+        .as_ref()
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .filter(|value| value.len() >= 6 && value.len() <= 128)
+    {
+        payload["user_id"] = Value::String(user.to_string());
+    }
+
+    if request.n.max(1) > 1 {
+        tracing::debug!(
+            "[IMAGE] Zhipu images API 仅按单图处理，已将 n={} 收敛为 1",
+            request.n
+        );
+    }
+
+    payload
+}
+
+fn build_zhipu_images_url(api_host: &str) -> String {
+    let trimmed = api_host.trim().trim_end_matches('/');
+    if trimmed.is_empty() {
+        return "https://open.bigmodel.cn/api/paas/v4/images/generations".to_string();
+    }
+
+    let normalized = if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        trimmed.to_string()
+    } else {
+        format!("https://{trimmed}")
+    };
+
+    let Ok(mut url) = reqwest::Url::parse(&normalized) else {
+        let base = normalized
+            .strip_suffix("/images/generations")
+            .unwrap_or(&normalized)
+            .trim_end_matches('/')
+            .to_string();
+        return if base.eq_ignore_ascii_case("https://open.bigmodel.cn") {
+            "https://open.bigmodel.cn/api/paas/v4/images/generations".to_string()
+        } else {
+            format!("{base}/images/generations")
+        };
+    };
+
+    let mut segments: Vec<String> = url
+        .path_segments()
+        .map(|items| {
+            items
+                .filter(|segment| !segment.is_empty())
+                .map(|segment| segment.to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    if segments.len() >= 2
+        && segments[segments.len() - 2] == "images"
+        && segments[segments.len() - 1] == "generations"
+    {
+        segments.truncate(segments.len() - 2);
+    }
+
+    if segments.is_empty() && url.host_str() == Some("open.bigmodel.cn") {
+        segments = vec!["api", "paas", "v4"]
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+    }
+
+    let base_path = if segments.is_empty() {
+        "/".to_string()
+    } else {
+        format!("/{}", segments.join("/"))
+    };
+    url.set_path(&base_path);
+    url.set_query(None);
+    url.set_fragment(None);
+
+    let base = url.to_string().trim_end_matches('/').to_string();
+    if base.eq_ignore_ascii_case("https://open.bigmodel.cn") {
+        "https://open.bigmodel.cn/api/paas/v4/images/generations".to_string()
+    } else {
+        format!("{base}/images/generations")
+    }
+}
+
+async fn request_zhipu_images(
+    client: &Client,
+    api_host: &str,
+    api_key: &str,
+    request: &ImageGenerationRequest,
+    model: &str,
+    request_size: &str,
+) -> Result<ImageGenerationResponse, String> {
+    if !request.reference_images.is_empty() {
+        return Err("智谱图片服务当前暂不支持参考图或修图请求".to_string());
+    }
+
+    let endpoint = build_zhipu_images_url(api_host);
+    let payload = build_zhipu_image_request_payload(request, model, request_size);
+    let response = client
+        .post(&endpoint)
+        .header("Authorization", format!("Bearer {api_key}"))
+        .header(CONTENT_TYPE, "application/json")
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|error| format!("智谱图片接口请求失败: {error}"))?;
+
+    let status = response.status();
+    let body = response
+        .text()
+        .await
+        .map_err(|error| format!("智谱图片接口响应读取失败: {error}"))?;
+
+    if !status.is_success() {
+        return Err(format!(
+            "智谱图片接口 HTTP {}: {}",
+            status.as_u16(),
+            summarize_image_service_error_body(&body)
+        ));
+    }
+
+    let payload = serde_json::from_str::<Value>(&body).map_err(|error| {
+        format!(
+            "智谱图片接口 JSON 解析失败: {error}; body={}",
+            preview_text(&body, 240)
+        )
+    })?;
+
+    let created_at = payload.get("created").and_then(Value::as_i64);
+    let image_urls = collect_image_urls(&payload);
+    if image_urls.is_empty() {
+        return Err(format!(
+            "智谱图片接口未返回可解析图片地址: {}",
+            preview_text(&body, 240)
+        ));
+    }
+
+    build_openai_response(client, &image_urls, &request.response_format, created_at).await
 }
 
 fn build_openai_responses_image_request_payload(
@@ -511,16 +749,30 @@ fn build_openai_responses_image_input(
         )
     };
 
-    if use_input_list {
+    if use_input_list || !request.reference_images.is_empty() {
+        let mut content = vec![json!({
+            "type": "input_text",
+            "text": input_text,
+        })];
+
+        if !request.reference_images.is_empty() {
+            content.extend(request.reference_images.iter().filter_map(|image| {
+                let trimmed = image.trim();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(json!({
+                        "type": "input_image",
+                        "image_url": trimmed,
+                    }))
+                }
+            }));
+        }
+
         return json!([
             {
                 "role": "user",
-                "content": [
-                    {
-                        "type": "input_text",
-                        "text": input_text,
-                    }
-                ],
+                "content": content,
             }
         ]);
     }
@@ -535,32 +787,6 @@ fn normalize_openai_responses_image_tool_model(model: &str) -> String {
     }
 
     trimmed.to_string()
-}
-
-fn resolve_openai_responses_image_orchestration_model(
-    provider: &ApiKeyProvider,
-    image_model: &str,
-) -> String {
-    let trimmed = image_model.trim();
-    if !trimmed.is_empty() && !looks_like_image_generation_model(trimmed) {
-        return trimmed.to_string();
-    }
-
-    provider
-        .custom_models
-        .iter()
-        .map(String::as_str)
-        .map(str::trim)
-        .find(|candidate| !candidate.is_empty() && !looks_like_image_generation_model(candidate))
-        .map(ToString::to_string)
-        .unwrap_or_else(|| OPENAI_RESPONSES_IMAGE_ORCHESTRATOR_MODEL.to_string())
-}
-
-fn should_prefer_openai_responses_image_api(provider: &ApiKeyProvider) -> bool {
-    matches!(
-        provider.effective_provider_type(),
-        ApiProviderType::OpenaiResponse | ApiProviderType::Codex
-    ) || is_openai_responses_compatible_host(&provider.api_host)
 }
 
 fn is_not_found_status(status: StatusCode, body: &str) -> bool {
@@ -966,7 +1192,7 @@ async fn request_openai_responses_images(
                 message: format!(
                     "OpenAI Responses 图片接口 HTTP {}: {}",
                     status.as_u16(),
-                    summarize_fal_error_body(&buffer)
+                    summarize_image_service_error_body(&buffer)
                 ),
             });
         }
@@ -998,52 +1224,6 @@ async fn request_openai_responses_images(
             message: "OpenAI Responses 图片接口解析失败: 未收齐所需图片事件".to_string(),
             is_endpoint_not_found: false,
         });
-    }
-}
-
-fn resolve_fal_model(request_model: &str, preferred_model_id: Option<&str>) -> String {
-    let trimmed = request_model.trim();
-    if trimmed.is_empty() {
-        return normalize_preferred_fal_model(preferred_model_id)
-            .unwrap_or_else(|| FAL_DEFAULT_MODEL.to_string());
-    }
-
-    if !looks_like_fal_model(trimmed) {
-        return normalize_preferred_fal_model(preferred_model_id)
-            .unwrap_or_else(|| FAL_DEFAULT_MODEL.to_string());
-    }
-
-    normalize_fal_model(trimmed)
-}
-
-fn normalize_preferred_fal_model(value: Option<&str>) -> Option<String> {
-    value
-        .map(str::trim)
-        .filter(|item| !item.is_empty())
-        .map(normalize_fal_model)
-}
-
-fn looks_like_fal_model(model: &str) -> bool {
-    let normalized = model.trim().to_ascii_lowercase();
-    normalized.starts_with("fal-ai/")
-        || normalized.contains("nano-banana")
-        || normalized.contains("flux")
-        || normalized.contains("seedream")
-        || normalized.contains("recraft")
-        || normalized.contains("ideogram")
-        || normalized.contains("fal")
-}
-
-fn normalize_fal_model(model: &str) -> String {
-    let trimmed = model.trim();
-    if trimmed.is_empty() {
-        return FAL_DEFAULT_MODEL.to_string();
-    }
-
-    if trimmed.starts_with("fal-ai/") {
-        trimmed.to_string()
-    } else {
-        format!("fal-ai/{trimmed}")
     }
 }
 
@@ -1132,7 +1312,7 @@ fn greatest_common_divisor(mut left: u32, mut right: u32) -> u32 {
     left.max(1)
 }
 
-fn build_fal_payload(prompt: &str, size: &str, count: u32) -> Value {
+fn build_fal_payload(prompt: &str, size: &str, count: u32, reference_images: &[String]) -> Value {
     let mut payload = json!({
         "prompt": prompt.trim(),
         "num_images": count.max(1),
@@ -1142,6 +1322,28 @@ fn build_fal_payload(prompt: &str, size: &str, count: u32) -> Value {
 
     if let Some(aspect_ratio) = size_to_aspect_ratio(size) {
         payload["aspect_ratio"] = Value::String(aspect_ratio);
+    }
+
+    let cleaned_references: Vec<String> = reference_images
+        .iter()
+        .filter_map(|image| {
+            let trimmed = image.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        })
+        .collect();
+
+    if !cleaned_references.is_empty() {
+        payload["image_urls"] = Value::Array(
+            cleaned_references
+                .iter()
+                .map(|image| Value::String(image.clone()))
+                .collect(),
+        );
+        payload["image_url"] = Value::String(cleaned_references[0].clone());
     }
 
     payload
@@ -1155,6 +1357,7 @@ async fn request_openai_compatible_images(
     request: &ImageGenerationRequest,
     model: &str,
     request_size: &str,
+    use_edit_endpoint: bool,
 ) -> Result<ImageGenerationResponse, String> {
     if should_prefer_openai_responses_image_api(provider) {
         return request_openai_responses_images(
@@ -1170,8 +1373,13 @@ async fn request_openai_compatible_images(
         .map_err(|error| error.message);
     }
 
-    let endpoint = build_openai_images_url(api_host);
-    let payload = build_openai_image_request_payload(request, model, request_size);
+    let endpoint = if use_edit_endpoint {
+        build_openai_image_endpoint_url(api_host, "/images/edits")
+    } else {
+        build_openai_images_url(api_host)
+    };
+    let payload =
+        build_openai_image_request_payload(request, model, request_size, use_edit_endpoint);
     let response = client
         .post(&endpoint)
         .header("Authorization", format!("Bearer {api_key}"))
@@ -1193,7 +1401,7 @@ async fn request_openai_compatible_images(
             message: format!(
                 "OpenAI 图片接口 HTTP {}: {}",
                 status.as_u16(),
-                summarize_fal_error_body(&body)
+                summarize_image_service_error_body(&body)
             ),
         };
 
@@ -1325,7 +1533,7 @@ async fn normalize_openai_compatible_image_response(
 
     let image_urls = collect_image_urls(payload);
     if !image_urls.is_empty() {
-        return build_openai_response(client, &image_urls, response_format).await;
+        return build_openai_response(client, &image_urls, response_format, None).await;
     }
 
     Err("默认图片服务未返回可解析图片字段".to_string())
@@ -1339,6 +1547,7 @@ async fn request_fal_images(
     model: &str,
     size: &str,
     count: u32,
+    reference_images: &[String],
 ) -> Result<Vec<String>, String> {
     let endpoint_model = model.trim().trim_start_matches('/');
     let sync_endpoint = format!(
@@ -1346,7 +1555,7 @@ async fn request_fal_images(
         normalize_fal_api_host(api_host).trim_end_matches('/'),
         endpoint_model
     );
-    let payload = build_fal_payload(prompt, size, count);
+    let payload = build_fal_payload(prompt, size, count, reference_images);
     let sync_result = post_fal_json(client, &sync_endpoint, &payload, api_key).await;
 
     if let Ok(sync_response) = &sync_result {
@@ -1390,7 +1599,7 @@ async fn post_fal_json(
         return Err(format!(
             "Fal HTTP {}: {}",
             status.as_u16(),
-            summarize_fal_error_body(&body)
+            summarize_image_service_error_body(&body)
         ));
     }
 
@@ -1554,7 +1763,7 @@ async fn get_fal_json(client: &Client, endpoint: &str, api_key: &str) -> Result<
         return Err(format!(
             "Fal GET HTTP {}: {}",
             status.as_u16(),
-            summarize_fal_error_body(&body)
+            summarize_image_service_error_body(&body)
         ));
     }
 
@@ -1570,6 +1779,7 @@ async fn build_openai_response(
     client: &Client,
     image_urls: &[String],
     response_format: &str,
+    created_at: Option<i64>,
 ) -> Result<ImageGenerationResponse, String> {
     if image_urls.is_empty() {
         return Err("默认图片服务未返回图片地址".to_string());
@@ -1607,7 +1817,7 @@ async fn build_openai_response(
     }
 
     Ok(ImageGenerationResponse {
-        created: chrono::Utc::now().timestamp(),
+        created: created_at.unwrap_or_else(|| chrono::Utc::now().timestamp()),
         data,
     })
 }
@@ -1708,10 +1918,10 @@ fn push_unique(urls: &mut Vec<String>, candidate: String) {
     }
 }
 
-fn summarize_fal_error_body(body: &str) -> String {
+fn summarize_image_service_error_body(body: &str) -> String {
     let normalized = body.trim();
     if normalized.is_empty() {
-        return "Fal 返回了空响应。".to_string();
+        return "图片服务返回了空响应。".to_string();
     }
 
     if normalized.contains("aspect_ratio") {
@@ -1769,15 +1979,19 @@ fn preview_text(text: &str, max_len: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_openai_images_url, build_openai_responses_image_request_payload, collect_image_urls,
-        load_image_provider_routing, looks_like_image_generation_model, normalize_fal_api_host,
+        build_fal_payload, build_openai_image_request_payload, build_openai_images_url,
+        build_openai_responses_image_input, build_openai_responses_image_request_payload,
+        build_zhipu_image_request_payload, build_zhipu_images_url, collect_image_urls,
+        is_gemini_image_provider, load_image_provider_routing, normalize_fal_api_host,
         normalize_openai_compatible_image_response, normalize_openai_responses_image_payload,
         normalize_openai_responses_image_sse, normalize_openai_responses_image_tool_model,
         request_fal_queue_images_with_options, request_openai_responses_images,
-        resolve_compatible_image_model, resolve_fal_model,
-        resolve_openai_responses_image_orchestration_model,
+        request_zhipu_images, resolve_compatible_image_model,
+        resolve_configured_image_provider_kind, resolve_fal_model,
+        resolve_openai_responses_image_orchestration_model, resolve_zhipu_image_model,
         should_prefer_openai_responses_image_api, size_to_aspect_ratio,
-        try_extract_partial_openai_responses_images,
+        supports_openai_compatible_image_provider, try_extract_partial_openai_responses_images,
+        ConfiguredImageProviderKind, ImageProviderRoutingConfig,
     };
     use async_stream::stream;
     use axum::{
@@ -1789,9 +2003,11 @@ mod tests {
     use lime_core::database::dao::api_key_provider::{
         ApiKeyProvider, ApiProviderType, ProviderGroup,
     };
+    use lime_core::image_generation_matcher::is_likely_image_generation_model_id;
     use lime_core::models::openai::ImageGenerationRequest;
     use reqwest::Client;
-    use serde_json::json;
+    use serde_json::{json, Value};
+    use std::sync::{Arc, Mutex};
     use std::{convert::Infallible, time::Duration};
     use tokio::net::TcpListener;
 
@@ -1969,6 +2185,234 @@ mod tests {
             Some("black-forest-labs/FLUX.1-schnell".to_string())
         );
         assert_eq!(resolve_compatible_image_model("gpt-5.2", None, &[]), None);
+    }
+
+    #[test]
+    fn provider_kind_should_route_catalog_image_providers_to_current_adapters() {
+        fn provider(
+            id: &str,
+            provider_type: ApiProviderType,
+            api_host: &str,
+            custom_models: Vec<String>,
+        ) -> ApiKeyProvider {
+            ApiKeyProvider {
+                id: id.to_string(),
+                name: id.to_string(),
+                provider_type,
+                api_host: api_host.to_string(),
+                is_system: false,
+                group: ProviderGroup::Custom,
+                enabled: true,
+                sort_order: 100,
+                api_version: None,
+                project: None,
+                location: None,
+                region: None,
+                custom_models,
+                prompt_cache_mode: None,
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+            }
+        }
+
+        let request = ImageGenerationRequest {
+            model: "gemini-3.1-flash-image".to_string(),
+            prompt: "青柠".to_string(),
+            n: 1,
+            size: Some("1024x1024".to_string()),
+            response_format: "url".to_string(),
+            quality: None,
+            style: None,
+            reference_images: vec![],
+            user: None,
+        };
+        let routing = ImageProviderRoutingConfig {
+            provider_id: "gemini".to_string(),
+            preferred_model_id: None,
+            allow_fallback: false,
+            default_size: None,
+            is_explicit: true,
+        };
+        let gemini_provider = provider(
+            "gemini",
+            ApiProviderType::Gemini,
+            "https://generativelanguage.googleapis.com",
+            vec!["gemini-3.1-flash-image".to_string()],
+        );
+
+        assert!(is_gemini_image_provider(&gemini_provider));
+        assert!(matches!(
+            resolve_configured_image_provider_kind(&gemini_provider, &request, &routing),
+            Some(ConfiguredImageProviderKind::Gemini)
+        ));
+        assert!(!supports_openai_compatible_image_provider(&gemini_provider));
+        let zhipu_provider = provider(
+            "zhipuai",
+            ApiProviderType::Openai,
+            "https://open.bigmodel.cn/api/paas/v4",
+            vec!["cogview-4-250304".to_string()],
+        );
+        assert!(matches!(
+            resolve_configured_image_provider_kind(&zhipu_provider, &request, &routing),
+            Some(ConfiguredImageProviderKind::Zhipu)
+        ));
+        assert!(!supports_openai_compatible_image_provider(&zhipu_provider));
+        assert!(supports_openai_compatible_image_provider(&provider(
+            "siliconflow",
+            ApiProviderType::Openai,
+            "https://api.siliconflow.cn/v1",
+            vec!["black-forest-labs/FLUX.1-schnell".to_string()],
+        )));
+        assert!(matches!(
+            resolve_configured_image_provider_kind(
+                &provider(
+                    "google-vertex",
+                    ApiProviderType::Vertexai,
+                    "",
+                    vec!["gemini-3.1-flash-image".to_string()],
+                ),
+                &request,
+                &routing,
+            ),
+            Some(ConfiguredImageProviderKind::Gemini)
+        ));
+    }
+
+    #[test]
+    fn zhipu_image_model_resolution_prefers_native_models() {
+        assert_eq!(
+            resolve_zhipu_image_model(
+                "gpt-images-2",
+                Some("cogview-4-250304"),
+                &["glm-image".to_string()]
+            ),
+            Some("cogview-4-250304".to_string())
+        );
+        assert_eq!(
+            resolve_zhipu_image_model("glm-image", None, &[]),
+            Some("glm-image".to_string())
+        );
+        assert_eq!(
+            resolve_zhipu_image_model("gpt-5.2", None, &["glm-image".to_string()]),
+            Some("glm-image".to_string())
+        );
+    }
+
+    #[test]
+    fn build_zhipu_images_url_uses_official_sync_endpoint() {
+        assert_eq!(
+            build_zhipu_images_url("https://open.bigmodel.cn"),
+            "https://open.bigmodel.cn/api/paas/v4/images/generations"
+        );
+        assert_eq!(
+            build_zhipu_images_url("https://open.bigmodel.cn/api/paas/v4"),
+            "https://open.bigmodel.cn/api/paas/v4/images/generations"
+        );
+    }
+
+    #[test]
+    fn build_zhipu_image_request_payload_defaults_glm_image_quality_to_hd() {
+        let request = ImageGenerationRequest {
+            model: "glm-image".to_string(),
+            prompt: "生成一个苹果".to_string(),
+            n: 1,
+            size: None,
+            response_format: "url".to_string(),
+            quality: None,
+            style: None,
+            reference_images: vec![],
+            user: None,
+        };
+
+        let payload = build_zhipu_image_request_payload(&request, "glm-image", "");
+
+        assert_eq!(payload["quality"].as_str(), Some("hd"));
+        assert_eq!(payload["size"].as_str(), Some("1280x1280"));
+    }
+
+    #[tokio::test]
+    async fn request_zhipu_images_sends_native_payload_and_normalizes_url_response() {
+        let captured_body: Arc<Mutex<Option<Value>>> = Arc::new(Mutex::new(None));
+        let captured_body_for_handler: Arc<Mutex<Option<Value>>> = Arc::clone(&captured_body);
+
+        let app = Router::new().route(
+            "/api/paas/v4/images/generations",
+            post(
+                move |headers: axum::http::HeaderMap, axum::Json(body): axum::Json<Value>| {
+                    let captured_body = Arc::clone(&captured_body_for_handler);
+                    async move {
+                        assert_eq!(
+                            headers
+                                .get("authorization")
+                                .and_then(|value| value.to_str().ok()),
+                            Some("Bearer test-key")
+                        );
+                        *captured_body.lock().expect("capture body mutex") = Some(body);
+                        axum::Json(json!({
+                            "created": 1_777_000_002i64,
+                            "data": [
+                                {
+                                    "url": "https://cdn.example.com/zhipu.png"
+                                }
+                            ]
+                        }))
+                    }
+                },
+            ),
+        );
+
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind listener");
+        let addr = listener.local_addr().expect("listener addr");
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.expect("serve test app");
+        });
+
+        let client = Client::builder().no_proxy().build().expect("client");
+        let request = ImageGenerationRequest {
+            model: "glm-image".to_string(),
+            prompt: "生成一个苹果".to_string(),
+            n: 3,
+            size: None,
+            response_format: "url".to_string(),
+            quality: Some("standard".to_string()),
+            style: None,
+            reference_images: vec![],
+            user: Some("user-123456".to_string()),
+        };
+
+        let response = request_zhipu_images(
+            &client,
+            &format!("http://{addr}/api/paas/v4"),
+            "test-key",
+            &request,
+            "glm-image",
+            "",
+        )
+        .await
+        .expect("zhipu image request");
+
+        assert_eq!(response.created, 1_777_000_002);
+        assert_eq!(
+            response.data[0].url.as_deref(),
+            Some("https://cdn.example.com/zhipu.png")
+        );
+        assert_eq!(response.data[0].b64_json, None);
+        assert_eq!(
+            captured_body
+                .lock()
+                .expect("capture body mutex")
+                .clone()
+                .expect("captured body"),
+            json!({
+                "model": "glm-image",
+                "prompt": "生成一个苹果",
+                "size": "1280x1280",
+                "quality": "hd",
+                "user_id": "user-123456",
+            })
+        );
     }
 
     #[test]
@@ -2157,6 +2601,7 @@ data: {"response":{"created_at":1777000001,"output":[]}}
             response_format: "b64_json".to_string(),
             quality: Some("high".to_string()),
             style: None,
+            reference_images: vec![],
             user: None,
         };
 
@@ -2204,6 +2649,7 @@ data: {"response":{"created_at":1777000001,"output":[]}}
             response_format: "b64_json".to_string(),
             quality: None,
             style: None,
+            reference_images: vec![],
             user: None,
         };
 
@@ -2228,6 +2674,7 @@ data: {"response":{"created_at":1777000001,"output":[]}}
             response_format: "b64_json".to_string(),
             quality: None,
             style: None,
+            reference_images: vec![],
             user: None,
         };
 
@@ -2274,6 +2721,97 @@ data: {"response":{"created_at":1777000001,"output":[]}}
         assert_eq!(
             resolve_openai_responses_image_orchestration_model(&provider, "gpt-images-2"),
             "gpt-5.4"
+        );
+    }
+
+    #[test]
+    fn build_openai_image_request_payload_includes_reference_images() {
+        let request = ImageGenerationRequest {
+            model: "gpt-image-1".to_string(),
+            prompt: "编辑这张图".to_string(),
+            n: 1,
+            size: Some("1024x1024".to_string()),
+            response_format: "url".to_string(),
+            quality: Some("high".to_string()),
+            style: Some("vivid".to_string()),
+            reference_images: vec![
+                "  https://cdn.example.com/ref-a.png  ".to_string(),
+                " ".to_string(),
+                "https://cdn.example.com/ref-b.png".to_string(),
+            ],
+            user: Some("user-1".to_string()),
+        };
+
+        let payload =
+            build_openai_image_request_payload(&request, "gpt-image-1", "1024x1024", true);
+
+        assert_eq!(
+            payload["images"],
+            json!([
+                { "image_url": "https://cdn.example.com/ref-a.png" },
+                { "image_url": "https://cdn.example.com/ref-b.png" },
+            ])
+        );
+        assert_eq!(payload["user"].as_str(), Some("user-1"));
+    }
+
+    #[test]
+    fn build_openai_responses_image_input_includes_reference_images() {
+        let request = ImageGenerationRequest {
+            model: "gpt-images-2".to_string(),
+            prompt: "编辑这张图".to_string(),
+            n: 1,
+            size: Some("1024x1024".to_string()),
+            response_format: "url".to_string(),
+            quality: None,
+            style: None,
+            reference_images: vec![
+                "https://cdn.example.com/ref-a.png".to_string(),
+                "  ".to_string(),
+                "https://cdn.example.com/ref-b.png".to_string(),
+            ],
+            user: None,
+        };
+
+        let payload = build_openai_responses_image_input(&request, false);
+        let content = payload[0]["content"].as_array().expect("content array");
+
+        assert_eq!(content.len(), 3);
+        assert_eq!(content[0]["type"].as_str(), Some("input_text"));
+        assert_eq!(content[1]["type"].as_str(), Some("input_image"));
+        assert_eq!(
+            content[1]["image_url"].as_str(),
+            Some("https://cdn.example.com/ref-a.png")
+        );
+        assert_eq!(
+            content[2]["image_url"].as_str(),
+            Some("https://cdn.example.com/ref-b.png")
+        );
+    }
+
+    #[test]
+    fn build_fal_payload_includes_reference_images() {
+        let payload = build_fal_payload(
+            "编辑这张图",
+            "1024x1024",
+            1,
+            &[
+                "https://cdn.example.com/ref-a.png".to_string(),
+                " ".to_string(),
+                "https://cdn.example.com/ref-b.png".to_string(),
+            ],
+        );
+
+        assert_eq!(
+            payload["image_urls"],
+            json!([
+                "https://cdn.example.com/ref-a.png",
+                "https://cdn.example.com/ref-b.png",
+            ])
+        );
+        assert_eq!(
+            payload["image_url"].as_str(),
+            Some("https://cdn.example.com/ref-a.png")
         );
     }
 
@@ -2335,6 +2873,7 @@ data: {"response":{"created_at":1777000001,"output":[]}}
             response_format: "b64_json".to_string(),
             quality: None,
             style: None,
+            reference_images: vec![],
             user: None,
         };
 
@@ -2409,6 +2948,7 @@ data: {"response":{"created_at":1777000001,"output":[]}}
             response_format: "b64_json".to_string(),
             quality: None,
             style: None,
+            reference_images: vec![],
             user: None,
         };
 
@@ -2485,6 +3025,7 @@ data: {"response":{"created_at":1777000001,"output":[]}}
             response_format: "b64_json".to_string(),
             quality: None,
             style: None,
+            reference_images: vec![],
             user: None,
         };
 
@@ -2558,15 +3099,27 @@ data: {"type":"response.output_item.done","output_index":0,"item":{"type":"image
     }
 
     #[test]
-    fn looks_like_image_generation_model_matches_supported_families() {
-        assert!(looks_like_image_generation_model("gpt-images-2"));
-        assert!(looks_like_image_generation_model("gpt-image-1"));
-        assert!(looks_like_image_generation_model("dall-e-3"));
-        assert!(looks_like_image_generation_model("cogview-3-flash"));
-        assert!(looks_like_image_generation_model(
+    fn image_generation_matcher_matches_supported_families() {
+        assert!(is_likely_image_generation_model_id("gpt-images-2"));
+        assert!(is_likely_image_generation_model_id("gpt-image-1"));
+        assert!(is_likely_image_generation_model_id("dall-e-3"));
+        assert!(is_likely_image_generation_model_id("cogview-3-flash"));
+        assert!(is_likely_image_generation_model_id(
             "black-forest-labs/FLUX.1-schnell"
         ));
-        assert!(looks_like_image_generation_model("nano-banana-pro"));
-        assert!(!looks_like_image_generation_model("gpt-5.2"));
+        assert!(is_likely_image_generation_model_id("nano-banana-pro"));
+        assert!(!is_likely_image_generation_model_id("gpt-5.2"));
+    }
+
+    #[test]
+    fn image_api_provider_should_not_restore_local_image_keyword_matchers() {
+        let source = include_str!("image_api_provider.rs");
+        let looks_like_marker = ["fn looks_like_", "image_generation_model("].concat();
+        let fal_marker = ["fn looks_like_", "fal_model("].concat();
+        let keywords_marker = ["IMAGE_MODEL", "_KEYWORDS"].concat();
+
+        assert!(!source.contains(&looks_like_marker));
+        assert!(!source.contains(&keywords_marker));
+        assert!(!source.contains(&fal_marker));
     }
 }

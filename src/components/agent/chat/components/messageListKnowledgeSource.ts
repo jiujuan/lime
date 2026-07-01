@@ -1,6 +1,6 @@
 import type { Artifact } from "@/lib/artifact/types";
 import { resolveArtifactProtocolFilePath } from "@/lib/artifact-protocol";
-import { isHiddenConversationArtifactPath } from "../utils/internalArtifactVisibility";
+import { isHiddenConversationArtifact } from "../utils/internalArtifactVisibility";
 
 export interface MessageListKnowledgeSource {
   sourceName?: string;
@@ -12,7 +12,10 @@ function resolveKnowledgeSourceFromArtifact(
   artifact: Artifact,
 ): MessageListKnowledgeSource | null {
   if (
-    isHiddenConversationArtifactPath(resolveArtifactProtocolFilePath(artifact))
+    isHiddenConversationArtifact(
+      artifact,
+      resolveArtifactProtocolFilePath(artifact),
+    )
   ) {
     return null;
   }
@@ -45,7 +48,8 @@ export function resolveKnowledgeSourceFromArtifacts(
   const visibleArtifacts =
     artifacts?.filter(
       (artifact) =>
-        !isHiddenConversationArtifactPath(
+        !isHiddenConversationArtifact(
+          artifact,
           resolveArtifactProtocolFilePath(artifact),
         ),
     ) ?? [];

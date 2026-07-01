@@ -10,12 +10,12 @@ import {
   type MountedRoot,
 } from "./test-utils";
 
-const { mockGetNextApiKey, mockImportProjectMaterialFromUrl, mockInvoke } =
+const { mockGetConfig, mockImportProjectMaterialFromUrl, mockInvoke } =
   vi.hoisted(() => ({
-  mockGetNextApiKey: vi.fn(),
-  mockImportProjectMaterialFromUrl: vi.fn(),
-  mockInvoke: vi.fn(),
-}));
+    mockGetConfig: vi.fn(),
+    mockImportProjectMaterialFromUrl: vi.fn(),
+    mockInvoke: vi.fn(),
+  }));
 
 vi.mock("@/hooks/useApiKeyProvider", () => ({
   useApiKeyProvider: () => ({
@@ -42,12 +42,6 @@ vi.mock("@/hooks/useApiKeyProvider", () => ({
   }),
 }));
 
-vi.mock("@/lib/api/apiKeyProvider", () => ({
-  apiKeyProviderApi: {
-    getNextApiKey: mockGetNextApiKey,
-  },
-}));
-
 vi.mock("@/lib/api/appServer", () => ({
   APP_SERVER_METHOD_PROJECT_MATERIAL_IMPORT_FROM_URL:
     "project/material/importFromUrl",
@@ -62,6 +56,10 @@ vi.mock("@/lib/dev-bridge", () => ({
 
 vi.mock("@/lib/desktop-host/core", () => ({
   invoke: mockInvoke,
+}));
+
+vi.mock("@/lib/api/appConfig", () => ({
+  getConfig: mockGetConfig,
 }));
 
 import { IMAGE_GENERATION_CANCELED_MESSAGE, useImageGen } from "./useImageGen";
@@ -181,7 +179,15 @@ beforeEach(() => {
   localStorage.clear();
   vi.clearAllMocks();
   silenceConsole();
-  mockGetNextApiKey.mockResolvedValue("test-api-key");
+  mockGetConfig.mockResolvedValue({
+    server: {
+      host: "127.0.0.1",
+      port: 48100,
+      api_key: "local-server-key",
+      tls: { enable: false },
+    },
+    default_provider: "openai",
+  });
   mockImportProjectMaterialFromUrl.mockResolvedValue({
     result: { material: { id: "material-1" } },
   });
@@ -277,14 +283,16 @@ describe("useImageGen 资源入库", () => {
     expect(completed).toBeDefined();
     expect(completed?.resourceMaterialId).toBeUndefined();
     expect(completed?.resourceProjectId).toBeUndefined();
-    expect(completed?.resourceSaveError).toBe("resource save failed");
+    expect(completed?.resourceSaveError).toBe("保存到素材库失败");
+    expect(completed?.resourceSaveErrorRecoveryHint).toBe(
+      "请稍后重试，或确认素材库是否可写。",
+    );
   });
 
-  it("Fal 全失败时应抛出详细错误而不是静默返回空结果", async () => {
+  it("本机图片服务失败时应抛出详细错误而不是静默返回空结果", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(createTextResponse("sync primary failed", 500))
-      .mockResolvedValueOnce(createTextResponse("queue submit failed", 500));
+      .mockResolvedValueOnce(createTextResponse("image server failed", 500));
     vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
 
     const harness = mountHookWithOptions({
@@ -304,16 +312,20 @@ describe("useImageGen 资源入库", () => {
     });
 
     expect(thrownError).toBeInstanceOf(Error);
-    expect((thrownError as Error).message).toContain("Fal 图片生成失败");
-    expect((thrownError as Error).message).toContain("sync-primary");
-    expect((thrownError as Error).message).toContain("queue");
+    expect((thrownError as Error).message).toBe("图片服务请求失败");
+    expect(
+      (thrownError as Error & { recoveryHint?: string }).recoveryHint,
+    ).toBe("请稍后重试；如果持续失败，请检查图片服务连接状态。");
 
     const failed = harness
       .getValue()
       .images.find((image) => image.status === "error");
 
     expect(failed).toBeDefined();
-    expect(failed?.error).toContain("Fal 图片生成失败");
+    expect(failed?.error).toBe("图片服务请求失败");
+    expect(failed?.errorRecoveryHint).toBe(
+      "请稍后重试；如果持续失败，请检查图片服务连接状态。",
+    );
   });
 
   it("Fal 历史配置混入文本模型时，应自动切回有效图片模型", async () => {
@@ -378,7 +390,10 @@ describe("useImageGen 资源入库", () => {
 
     expect(canceledImage).toBeDefined();
     expect(canceledImage?.status).toBe("error");
-    expect(canceledImage?.error).toBe(IMAGE_GENERATION_CANCELED_MESSAGE);
+    expect(canceledImage?.error).toBe("已停止当前图片任务");
+    expect(canceledImage?.errorRecoveryHint).toBe(
+      "可以直接再次提交同一条图片命令。",
+    );
     expect(canceledImage?.url).toBe("");
 
     deferred.resolve(createSuccessResponse());
@@ -389,7 +404,7 @@ describe("useImageGen 资源入库", () => {
       .images.find((image) => image.id === canceledImage?.id);
 
     expect(afterResolve?.status).toBe("error");
-    expect(afterResolve?.error).toBe(IMAGE_GENERATION_CANCELED_MESSAGE);
+    expect(afterResolve?.error).toBe("已停止当前图片任务");
     expect(afterResolve?.url).toBe("");
   });
 });

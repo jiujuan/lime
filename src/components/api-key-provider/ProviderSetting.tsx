@@ -35,12 +35,14 @@ import {
   fetchProviderModelsAuto,
   normalizeFetchProviderModelsSource,
 } from "@/lib/api/modelRegistry";
+import { isLikelyImageGenerationModelId } from "@/lib/imageGen/providerMatchers";
 import {
   findModelBoundImageCommandEntryForModel,
   getCurrentSkillCatalogSnapshot,
   subscribeSkillCatalogChanged,
   upsertLocalModelBoundImageCommandBinding,
 } from "@/lib/api/skillCatalog";
+import { resolveLayeredDesignImageExecutorMode } from "@/lib/layered-design/imageModelCapabilities";
 import { getProviderModelAutoFetchCapability } from "@/lib/model/providerModelFetchSupport";
 import { getProviderPromptCacheMode } from "@/lib/model/providerPromptCacheSupport";
 import {
@@ -150,18 +152,7 @@ function hasConfiguredApiKey(provider: ProviderWithKeysDisplay): boolean {
 }
 
 function isLikelyImageModelCommandModel(modelId: string): boolean {
-  const normalized = modelId.trim().toLowerCase();
-  if (!normalized) {
-    return false;
-  }
-
-  return (
-    isResponsesImageModel(normalized) ||
-    isLikelyFalImageModel(normalized) ||
-    /(image|images|nano-banana|banana|flux|seedream|kontext|recraft|ideogram|sdxl|stable-diffusion)/.test(
-      normalized,
-    )
-  );
+  return isLikelyImageGenerationModelId(modelId);
 }
 
 function titleCaseAsciiWords(value: string): string {
@@ -196,16 +187,11 @@ function buildSuggestedImageCommandTrigger(modelId: string): string {
 function resolveSuggestedImageCommandExecutorMode(
   provider: ProviderWithKeysDisplay,
   modelId: string,
-): ImageModelCommandExecutorMode | undefined {
-  if (isResponsesImageModel(modelId)) {
-    return "responses_image_generation";
-  }
-
-  if (isFalProviderLike(provider) || isLikelyFalImageModel(modelId)) {
-    return "images_api";
-  }
-
-  return undefined;
+): ImageModelCommandExecutorMode {
+  return resolveLayeredDesignImageExecutorMode({
+    providerId: provider.id,
+    model: modelId,
+  });
 }
 
 function readCommandTriggerLabel(entry: {

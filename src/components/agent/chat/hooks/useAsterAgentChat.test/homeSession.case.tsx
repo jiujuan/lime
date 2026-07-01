@@ -587,9 +587,14 @@ describe("useAsterAgentChat 首页新会话", () => {
 
       await flushEffects();
       await flushEffects();
-      expect(mockGetAgentRuntimeSession).not.toHaveBeenCalledWith(
-        "session-live-missing",
-        { historyLimit: 40 },
+      expect(
+        mockGetAgentRuntimeSession.mock.calls.some(
+          ([sessionId, options]) =>
+            sessionId === "session-live-missing" &&
+            options?.historyLimit === 40,
+        ),
+      ).toBe(
+        false,
       );
 
       await act(async () => {
@@ -612,7 +617,7 @@ describe("useAsterAgentChat 首页新会话", () => {
       });
       expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith(
         "session-live-missing",
-        { historyLimit: 40 },
+        expect.objectContaining({ historyLimit: 40 }),
       );
     } finally {
       harness.unmount();
@@ -678,9 +683,13 @@ describe("useAsterAgentChat 首页新会话", () => {
 
       await flushEffects();
       await flushEffects();
-      expect(mockGetAgentRuntimeSession).not.toHaveBeenCalledWith(
-        missingSessionId,
-        { historyLimit: 40 },
+      expect(
+        mockGetAgentRuntimeSession.mock.calls.some(
+          ([sessionId, options]) =>
+            sessionId === missingSessionId && options?.historyLimit === 40,
+        ),
+      ).toBe(
+        false,
       );
 
       await act(async () => {
@@ -691,7 +700,7 @@ describe("useAsterAgentChat 首页新会话", () => {
 
       expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith(
         missingSessionId,
-        { historyLimit: 40 },
+        expect.objectContaining({ historyLimit: 40 }),
       );
       expect(harness.getValue().sessionId).toBe(activeSessionId);
       expect(

@@ -22,6 +22,7 @@ pub mod app_paths;
 pub mod app_utils;
 pub mod data;
 pub mod env_compat;
+pub mod image_generation_matcher;
 pub mod logger;
 pub mod models;
 pub mod tray_format;

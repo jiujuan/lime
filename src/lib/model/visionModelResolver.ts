@@ -1,5 +1,6 @@
 import type { EnhancedModelMetadata } from "@/lib/types/modelRegistry";
 import { inferVisionCapability } from "./inferModelCapabilities";
+import { isLikelyImageGenerationSearchText } from "@/lib/imageGen/providerMatchers";
 
 export type VisionResolveReason =
   | "already_vision"
@@ -17,20 +18,6 @@ interface ResolveVisionModelParams {
   currentModelId: string;
   models: EnhancedModelMetadata[];
 }
-
-const IMAGE_GENERATION_KEYWORDS = [
-  "imagen",
-  "dall-e",
-  "stable-diffusion",
-  "stable diffusion",
-  "sdxl",
-  "sd3",
-  "midjourney",
-  "mj",
-  "flux",
-  "image generation",
-  "image-gen",
-];
 
 const TIER_WEIGHT: Record<EnhancedModelMetadata["tier"], number> = {
   mini: 1,
@@ -73,7 +60,7 @@ const isLikelyImageGenerationModel = (
   }
 
   const text = buildSearchText(model);
-  if (!IMAGE_GENERATION_KEYWORDS.some((keyword) => text.includes(keyword))) {
+  if (!isLikelyImageGenerationSearchText(text)) {
     return false;
   }
 

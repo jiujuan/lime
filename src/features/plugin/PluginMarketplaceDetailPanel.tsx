@@ -1,7 +1,9 @@
 import {
   AlertTriangle,
   Bot,
+  Cable,
   CheckCircle2,
+  GitBranch,
   KeyRound,
   Power,
   Terminal,
@@ -15,12 +17,8 @@ import {
   pluginMarketplaceStatusLabelKey,
   pluginMarketplaceStatusTone,
 } from "./marketplace/pluginMarketplacePresentation";
-import type {
-  PluginMarketplaceViewItem,
-} from "./marketplace/pluginMarketplaceViewModel";
-import type {
-  PluginMarketplaceExecutableActionKind,
-} from "./marketplace/pluginMarketplaceActions";
+import type { PluginMarketplaceViewItem } from "./marketplace/pluginMarketplaceViewModel";
+import type { PluginMarketplaceExecutableActionKind } from "./marketplace/pluginMarketplaceActions";
 import { PluginMarketplaceRegistrationPanel } from "./PluginMarketplaceRegistrationPanel";
 import { shouldShowPluginMarketplaceRegistrationPanel } from "./PluginMarketplaceRegistrationPanelModel";
 import { PluginMarketplaceHistorySessionPanel } from "./PluginMarketplaceHistorySessionPanel";
@@ -33,6 +31,7 @@ import type {
 
 export interface PluginMarketplaceDetailPanelProps {
   item: PluginMarketplaceViewItem | null;
+  showOverview?: boolean;
   pendingPluginId: string | null;
   registrationCode: string;
   onRegistrationCodeChange: (pluginId: string, code: string) => void;
@@ -58,6 +57,7 @@ export interface PluginMarketplaceDetailPanelProps {
 
 export function PluginMarketplaceDetailPanel({
   item,
+  showOverview = true,
   pendingPluginId,
   registrationCode,
   onRegistrationCodeChange,
@@ -92,29 +92,33 @@ export function PluginMarketplaceDetailPanel({
       className="min-h-0 overflow-auto rounded-2xl border border-[color:var(--lime-surface-border,#e2e8f0)] bg-white p-5 shadow-sm shadow-slate-950/5"
       data-testid="plugin-marketplace-detail-panel"
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="m-0 text-xs font-semibold text-emerald-700">
-            {t("plugin.marketplace.detail.eyebrow")}
-          </p>
-          <h2 className="m-0 mt-1 text-lg font-semibold text-slate-950">
-            {resolvePluginMarketplaceItemLabel(item)}
-          </h2>
+      {showOverview ? (
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="m-0 text-xs font-semibold text-emerald-700">
+              {t("plugin.marketplace.detail.eyebrow")}
+            </p>
+            <h2 className="m-0 mt-1 text-lg font-semibold text-slate-950">
+              {resolvePluginMarketplaceItemLabel(item)}
+            </h2>
+          </div>
+          <span
+            className={`shrink-0 rounded-md border px-2 py-0.5 text-xs font-semibold ${pluginMarketplaceStatusTone(
+              item,
+            )}`}
+          >
+            {t(pluginMarketplaceStatusLabelKey(item))}
+          </span>
         </div>
-        <span
-          className={`shrink-0 rounded-md border px-2 py-0.5 text-xs font-semibold ${pluginMarketplaceStatusTone(
-            item,
-          )}`}
-        >
-          {t(pluginMarketplaceStatusLabelKey(item))}
-        </span>
-      </div>
+      ) : null}
 
-      <p className="mt-3 text-sm leading-6 text-slate-600">
-        {item.description || t("plugin.marketplace.descriptionFallback")}
-      </p>
+      {showOverview ? (
+        <p className="mt-3 text-sm leading-6 text-slate-600">
+          {item.description || t("plugin.marketplace.descriptionFallback")}
+        </p>
+      ) : null}
 
-      <dl className="mt-5 grid gap-3">
+      <dl className={`${showOverview ? "mt-5" : ""} grid gap-3`}>
         <DetailField
           label={t("plugin.marketplace.detail.pluginId")}
           value={item.pluginId}
@@ -199,9 +203,7 @@ export function PluginMarketplaceDetailPanel({
           loading={historySelectionLoading}
           error={historySelectionError}
           pending={pendingPluginId === item.pluginId}
-          onOpenSession={(candidate) =>
-            onOpenHistorySession?.(item, candidate)
-          }
+          onOpenSession={(candidate) => onOpenHistorySession?.(item, candidate)}
           onRefresh={() => onRefreshHistorySessions?.(item)}
           t={t}
         />
@@ -330,8 +332,14 @@ function CapabilitySectionIcon({
       return <Bot className="size-4" aria-hidden="true" />;
     case "subagents":
       return <UsersRound className="size-4" aria-hidden="true" />;
+    case "workflows":
+      return <GitBranch className="size-4" aria-hidden="true" />;
     case "cli_tools":
       return <Terminal className="size-4" aria-hidden="true" />;
+    case "connectors":
+      return <Cable className="size-4" aria-hidden="true" />;
+    case "lifecycle_hooks":
+      return <Workflow className="size-4" aria-hidden="true" />;
     case "app_authorization":
       return <KeyRound className="size-4" aria-hidden="true" />;
     case "skills":

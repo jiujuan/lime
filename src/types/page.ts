@@ -199,6 +199,7 @@ export interface AgentAppsPageParams {
 export interface PluginsPageParams {
   query?: string;
   category?: string;
+  selectedPluginId?: string;
   statusFilter?:
     | "all"
     | "installed"

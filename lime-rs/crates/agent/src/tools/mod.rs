@@ -12,7 +12,7 @@ pub use apply_patch_tool::{ApplyPatchTool, APPLY_PATCH_TOOL_NAME};
 pub use browser_tool::{BrowserAction, BrowserTool, BrowserToolError, BrowserToolResult};
 pub use skill_search_tool::SkillSearchTool;
 pub use skill_tool_gate::{
-    clear_skill_tool_session_access, set_skill_tool_session_access,
-    set_skill_tool_session_allowed_skill_sources, set_skill_tool_session_allowed_skills,
-    LimeSkillTool, SkillToolSessionSkillSource,
+    add_skill_tool_session_allowed_capabilities, clear_skill_tool_session_access,
+    set_skill_tool_session_access, set_skill_tool_session_allowed_skill_sources,
+    set_skill_tool_session_allowed_skills, LimeSkillTool, SkillToolSessionSkillSource,
 };

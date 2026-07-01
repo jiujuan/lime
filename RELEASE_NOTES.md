@@ -1,3 +1,42 @@
+## Lime v1.84.0
+
+### 新功能
+
+- Writing 主线继续收口到 Article Workspace / Article Editor：`@写文章` 产物以独立 `ArtifactFrame` 呈现，右侧文章画布成为可编辑的 current 承载区。
+- 图片生成能力目录与执行链完成统一：OpenAI-compatible、Gemini、Fal、local image server 等路由现在共享同一套 catalog / executor / error presentation。
+- 插件市场和已安装 Agent Apps 的能力投影更完整，activation、capability profile、installed state 与当前可用性现在按同一视图模型展示。
+
+### 修复
+
+- 修复写文章历史恢复与右侧面板投影偏差，避免恢复后回落到旧 Profile 语义或错误的文章草稿。
+- 修复图片任务完成、取消和错误类型判定，图片任务现在对错误 task type 和取消态 fail closed。
+- 修复插件激活与 marketplace blocker 的展示口径，使禁用、安装不可用、包不匹配和 release evidence 缺失等状态更一致。
+
+### 优化与重构
+
+- 将 Article Workspace、右侧 Surface host、文章产物投影拆成更小模块，减少主文件职责堆叠。
+- 拆分图片生成的 provider matcher、executor、response parser 和本地服务适配器，收口到统一的 image capability catalog。
+- 重构插件 marketplace view model 和 capability profile 计算，提升 installed / activatable / attention 分类的一致性。
+- App Server 侧补充 streaming worker、content factory worker 和 image provider routing 的分层。
+
+### 测试与质量
+
+- 新增写作、图片任务、插件市场和能力投影回归测试，覆盖 current fixture、历史恢复和终态判定。
+- 补齐 Rust / 前端定向测试，覆盖 app-server runtime、image tools、plugin contract 和 image model matcher。
+
+### 文档
+
+- 更新 Writing 路线图与实施计划，继续对齐 Article Workspace / Article Editor 事实源。
+- 更新图片能力系统路线图，记录统一 catalog / executor 的产品边界。
+- 同步右侧 Surface 约束与相关执行计划。
+
+### 其他
+
+- 版本事实源更新到 `1.84.0`：根应用、CLI npm package、Rust workspace 与 `lime-rs/Cargo.lock`。
+- 本版未纳入 `internal/roadmap/Writing/.DS_Store`。
+
+**完整变更**: `v1.83.0` -> `v1.84.0`
+
 ## Lime v1.83.0
 
 ### 新功能

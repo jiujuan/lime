@@ -19,13 +19,37 @@ import {
 } from "./Inputbar/components/inputbarCoreCopy";
 import type { InputbarWorkflowCopyKey } from "./Inputbar/inputbarWorkflowCopy";
 import { changeLimeLocale } from "@/i18n/createI18n";
+import type {
+  InputbarPluginCapability,
+  InputbarPluginSelectionOptions,
+  InputbarPluginSkillCapability,
+} from "./Inputbar/pluginInputCapability";
 
 vi.mock("./ChatModelSelector", () => ({
   ChatModelSelector: () => <div data-testid="empty-state-model-selector" />,
 }));
 
+export const mockEmptyStateCharacterMention = vi.fn<
+  (props: {
+    onSelectPlugin?: (
+      plugin: InputbarPluginCapability,
+      skill?: InputbarPluginSkillCapability,
+      options?: InputbarPluginSelectionOptions,
+    ) => void;
+  }) => React.ReactNode
+>();
+
 vi.mock("../skill-selection/CharacterMention", () => ({
-  CharacterMention: () => <div data-testid="empty-state-character-mention" />,
+  CharacterMention: (props: {
+    onSelectPlugin?: (
+      plugin: InputbarPluginCapability,
+      skill?: InputbarPluginSkillCapability,
+      options?: InputbarPluginSelectionOptions,
+    ) => void;
+  }) => {
+    mockEmptyStateCharacterMention(props);
+    return <div data-testid="empty-state-character-mention" />;
+  },
 }));
 
 vi.mock("../skill-selection/SkillBadge", () => ({

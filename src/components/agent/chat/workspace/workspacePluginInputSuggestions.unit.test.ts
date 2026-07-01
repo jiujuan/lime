@@ -104,10 +104,12 @@ function createContext(
   };
 }
 
-function installedContentFactory(): InstalledAgentAppState {
+function installedContentFactory(
+  overrides: Partial<InstalledAgentAppState> = {},
+): InstalledAgentAppState {
   const parsedManifest = parseManifest(contentFactoryFixture);
   const manifest = normalizeManifest(parsedManifest);
-  return {
+  const base: InstalledAgentAppState = {
     appId: manifest.appId,
     identity: buildPackageIdentity({
       manifest: parsedManifest,
@@ -133,6 +135,14 @@ function installedContentFactory(): InstalledAgentAppState {
     disabled: false,
     installedAt: "2026-06-25T00:00:00.000Z",
     updatedAt: "2026-06-25T00:00:00.000Z",
+  };
+  return {
+    ...base,
+    ...overrides,
+    readiness: {
+      ...base.readiness,
+      ...(overrides.readiness ?? {}),
+    },
   };
 }
 
@@ -181,18 +191,19 @@ describe("workspacePluginInputSuggestions", () => {
     const projection = projectPluginRegistryFromInstalledAgentApps([
       installedContentFactory(),
     ]);
-    expect(
-      buildWorkspacePluginInputSuggestions(
-        createContext({
-          contracts: projection.contracts,
-          registry: projection.registry,
-        }),
-      ),
-    ).toEqual([
+    const suggestions = buildWorkspacePluginInputSuggestions(
+      createContext({
+        contracts: projection.contracts,
+        registry: projection.registry,
+      }),
+    );
+
+    expect(suggestions[0]).toEqual(
       expect.objectContaining({
         pluginId: "content-factory-app",
-        displayName: "内容工厂",
+        displayName: "写文章",
         description: expect.stringContaining("@写文章"),
+        trigger: "@写文章",
         defaultPrompts: expect.arrayContaining([
           expect.stringContaining("@写文章"),
           expect.stringContaining("@写作"),
@@ -201,19 +212,60 @@ describe("workspacePluginInputSuggestions", () => {
         skills: expect.arrayContaining([
           expect.objectContaining({
             skillId: "content_article_generate",
-            title: "写文章",
-            trigger: "@写文章",
-            defaultPrompt: expect.stringContaining("@写文章"),
-            disabled: false,
-          }),
-          expect.objectContaining({
-            skillId: "content_article_generate",
-            title: "写文章",
+            title: "@写作",
             trigger: "@写作",
+            defaultPrompt: expect.stringContaining("@写文章"),
             disabled: false,
           }),
         ]),
       }),
+    );
+    expect(suggestions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          pluginId: "content-factory-app",
+          displayName: "内容工厂",
+          trigger: "@内容工厂",
+        }),
+      ]),
+    );
+  });
+
+  it("内容工厂本地包需要维护时仍应出现在输入栏候选", () => {
+    const projection = projectPluginRegistryFromInstalledAgentApps([
+      installedContentFactory({
+        readiness: {
+          appId: "content-factory-app",
+          status: "needs-setup",
+          checkedAt: "2026-06-25T00:00:00.000Z",
+          blockers: [],
+          warnings: [],
+          supportedCapabilities: [],
+          missingCapabilities: [],
+          entryReadiness: [],
+          installModes: [],
+        },
+      }),
     ]);
+    const suggestions = buildWorkspacePluginInputSuggestions(
+      createContext({
+        contracts: projection.contracts,
+        registry: projection.registry,
+      }),
+    );
+
+    expect(projection.registry[0]).toMatchObject({
+      activationState: "activatable",
+    });
+    expect(suggestions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          pluginId: "content-factory-app",
+          displayName: "写文章",
+          trigger: "@写文章",
+          disabled: false,
+        }),
+      ]),
+    );
   });
 });

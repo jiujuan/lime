@@ -234,7 +234,9 @@ export async function executeAgentStreamSubmit(
       ? assistantDraft.content?.trim() || null
       : null;
   const assistantFallbackContent =
-    assistantDraft?.fallbackContent?.trim() || null;
+    assistantDraft?.fallbackContent === undefined
+      ? null
+      : assistantDraft.fallbackContent.trim();
   const managedObjectiveText = extractInputbarManagedObjectiveText(
     resolvedRequestMetadata,
   );

@@ -6,6 +6,7 @@ import {
 } from "vitest";
 import {
   flushEffects,
+  flushRuntimeDetailRefresh,
   mockGetAgentRuntimeSession,
   mockListAgentRuntimeSessions,
   mockSafeListen,
@@ -98,6 +99,7 @@ describe("useAsterAgentChat team 订阅", () => {
         });
       });
       await flushEffects();
+      await flushRuntimeDetailRefresh();
 
       expect(mockGetAgentRuntimeSession).toHaveBeenCalledTimes(2);
     } finally {
@@ -181,6 +183,7 @@ describe("useAsterAgentChat team 订阅", () => {
         });
       });
       await flushEffects();
+      await flushRuntimeDetailRefresh();
 
       expect(mockGetAgentRuntimeSession).toHaveBeenCalledTimes(2);
     } finally {

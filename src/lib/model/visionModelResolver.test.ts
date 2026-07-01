@@ -294,6 +294,46 @@ describe("resolveVisionModel", () => {
     expect(result.reason).toBe("fallback_latest");
   });
 
+  it("应复用图片 matcher，避免 OpenAI 兼容中转图片模型被当作视觉理解候选", () => {
+    const models = [
+      createModel("agnes-image-2.1-flash", {
+        family: "agnes-image",
+        capabilities: {
+          vision: true,
+          tools: false,
+          streaming: true,
+          json_mode: false,
+          function_calling: false,
+          reasoning: false,
+        },
+        description: "OpenAI-compatible image generation model",
+        is_latest: true,
+      }),
+      createModel("glm-4.6v-flash", {
+        family: "glm-4.6v",
+        tier: "mini",
+        capabilities: {
+          vision: true,
+          tools: true,
+          streaming: true,
+          json_mode: true,
+          function_calling: true,
+          reasoning: false,
+        },
+        release_date: "2026-02-01",
+        is_latest: true,
+      }),
+    ];
+
+    const result = resolveVisionModel({
+      currentModelId: "deepseek-chat",
+      models,
+    });
+
+    expect(result.targetModelId).toBe("glm-4.6v-flash");
+    expect(result.reason).toBe("fallback_latest");
+  });
+
   it("应允许显式同时支持视觉理解和生图的文本模型作为图片理解候选", () => {
     const models = [
       createModel("relay-vision-image-pro", {

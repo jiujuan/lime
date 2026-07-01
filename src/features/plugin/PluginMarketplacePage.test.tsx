@@ -122,6 +122,21 @@ function snapshot(): PluginMarketplaceRegistrySnapshot {
           category: "writing",
           categories: ["writing"],
           manifestSummary: {
+            activationEntries: [
+              {
+                key: "content_article_generate",
+                title: "写文章",
+                aliases: ["@写文章", "@写作"],
+                kind: "plugin",
+                intent: "at_command",
+                taskKind: "content.article.generate",
+                workflow: "content_article_workflow",
+                outputArtifactKind: "content_factory.workspace_patch",
+                rightSurface: "articleWorkspace",
+                expectedObjects: ["articleDraft"],
+                defaultObjectKind: "articleDraft",
+              },
+            ],
             skills: [
               {
                 id: "article-writer",
@@ -208,6 +223,17 @@ function installedState(appId: string): InstalledAgentAppState {
   } as InstalledAgentAppState;
 }
 
+function expectActionProfile() {
+  return expect.objectContaining({
+    capabilities: expect.objectContaining({
+      "lime.agent": expect.objectContaining({ enabled: true }),
+      "lime.workflow": expect.objectContaining({ enabled: true }),
+      "lime.storage": expect.objectContaining({ enabled: true }),
+      "lime.artifacts": expect.objectContaining({ enabled: true }),
+    }),
+  });
+}
+
 function uninstallPreview(appId: string) {
   return {
     appId,
@@ -243,16 +269,16 @@ describe("PluginMarketplacePage", () => {
     expect(loader).toHaveBeenCalledWith(
       "",
       { query: undefined, category: undefined, sort: "name" },
-      undefined,
+      expect.objectContaining({
+        profile: expectActionProfile(),
+      }),
     );
     expect(container.textContent).not.toContain(
       "plugin.marketplace.cloudRequired.title",
     );
     expect(container.textContent).toContain("Research Kit");
     expect(
-      container.querySelector(
-        '[data-testid="plugin-marketplace-list"]',
-      ),
+      container.querySelector('[data-testid="plugin-marketplace-list"]'),
     ).not.toBeNull();
   });
 
@@ -271,9 +297,7 @@ describe("PluginMarketplacePage", () => {
     );
     expect(container.textContent).not.toContain("invalid auth token");
     expect(
-      container.querySelector(
-        '[data-testid="plugin-marketplace-search"]',
-      ),
+      container.querySelector('[data-testid="plugin-marketplace-search"]'),
     ).not.toBeNull();
   });
 
@@ -284,7 +308,9 @@ describe("PluginMarketplacePage", () => {
     expect(loader).toHaveBeenCalledWith(
       "tenant-0001",
       { query: undefined, category: undefined, sort: "name" },
-      undefined,
+      expect.objectContaining({
+        profile: expectActionProfile(),
+      }),
     );
     expect(container.textContent).toContain("Research Kit");
     expect(container.textContent).toContain("Notes Kit");
@@ -294,26 +320,29 @@ describe("PluginMarketplacePage", () => {
     expect(action?.disabled).toBe(false);
     expect(
       container.querySelector(
-        '[data-testid="plugin-marketplace-row-research-kit@limecloud"]',
+        '[data-testid="plugin-marketplace-card-research-kit@limecloud"]',
       ),
     ).not.toBeNull();
     expect(
       container.querySelector(
-        '[data-testid="plugin-marketplace-detail-panel"]',
+        '[data-testid="plugin-marketplace-detail-empty"]',
       ),
-    ).not.toBeNull();
+    ).toBeNull();
   });
 
   it("本地安装取消选择目录时不应显示错误", async () => {
     const localSnapshot = snapshot();
-    localSnapshot.marketplace.items[0] = marketplaceItem("research-kit@limecloud", {
-      displayName: "Research Kit",
-      install: {
-        local: true,
-        cloud: false,
-        authentication: "on_use",
+    localSnapshot.marketplace.items[0] = marketplaceItem(
+      "research-kit@limecloud",
+      {
+        displayName: "Research Kit",
+        install: {
+          local: true,
+          cloud: false,
+          authentication: "on_use",
+        },
       },
-    });
+    );
     localSnapshot.registry[0] = registryItem("research-kit@limecloud", {
       displayName: "Research Kit",
       installed: false,
@@ -351,11 +380,89 @@ describe("PluginMarketplacePage", () => {
     );
   });
 
-  it("应展示插件详情并支持从列表切换当前插件", async () => {
-    const loader = vi.fn(async () => snapshot());
-    const container = await renderPage({ loader });
+  it("本地安装应使用应用中心当前 runtime profile 生成 readiness", async () => {
+    const localSnapshot = snapshot();
+    localSnapshot.marketplace.items[0] = marketplaceItem(
+      "research-kit@limecloud",
+      {
+        displayName: "Research Kit",
+        install: {
+          local: true,
+          cloud: false,
+          authentication: "on_use",
+        },
+      },
+    );
+    localSnapshot.registry[0] = registryItem("research-kit@limecloud", {
+      displayName: "Research Kit",
+      installed: false,
+      enabled: false,
+      capabilityStates: ["installable"],
+      activationState: "blocked",
+      rendererState: "missing_renderer",
+      historyState: "unavailable",
+      blockerCodes: ["PLUGIN_INSTALL_UNAVAILABLE"],
+    });
+    const loader = vi.fn(async () => localSnapshot);
+    const installLocalPackage: NonNullable<
+      PluginMarketplaceActionDeps["installLocalPackage"]
+    > = vi.fn(async () => ({}) as InstalledAgentAppState);
+    const selectLocalDirectory = vi.fn(async () => "/tmp/content-factory-app");
+    const container = await renderPage({
+      loader,
+      actionDeps: {
+        selectLocalDirectory,
+        installLocalPackage,
+        dispatchChanged: vi.fn(),
+      },
+    });
 
-    const detailPanel = container.querySelector(
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="plugin-marketplace-action-research-kit@limecloud"]',
+        )
+        ?.click();
+      await Promise.resolve();
+    });
+    await flushEffects(4);
+
+    expect(installLocalPackage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        appDir: "/tmp/content-factory-app",
+        profile: expectActionProfile(),
+      }),
+    );
+  });
+
+  it("应以独立页面展示插件详情并支持返回列表切换当前插件", async () => {
+    const loader = vi.fn(async () => snapshot());
+    const onNavigate = vi.fn();
+    const container = await renderPage({ loader, onNavigate });
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="plugin-marketplace-detail-notes-kit@limecloud"]',
+        )
+        ?.click();
+      await Promise.resolve();
+    });
+    await flushEffects(2);
+
+    expect(onNavigate).toHaveBeenCalledWith(
+      "plugins",
+      expect.objectContaining({
+        selectedPluginId: "notes-kit@limecloud",
+      }),
+    );
+    expect(
+      container.querySelector('[data-testid="plugin-marketplace-detail-page"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="plugin-marketplace-list"]'),
+    ).toBeNull();
+    let detailPanel = container.querySelector(
       '[data-testid="plugin-marketplace-detail-panel"]',
     );
     expect(detailPanel?.textContent).toContain("Notes Kit");
@@ -370,6 +477,26 @@ describe("PluginMarketplacePage", () => {
     await act(async () => {
       container
         .querySelector<HTMLButtonElement>(
+          '[data-testid="plugin-marketplace-detail-back"]',
+        )
+        ?.click();
+      await Promise.resolve();
+    });
+    await flushEffects(2);
+
+    expect(onNavigate).toHaveBeenCalledWith(
+      "plugins",
+      expect.objectContaining({
+        statusFilter: "all",
+      }),
+    );
+    expect(
+      container.querySelector('[data-testid="plugin-marketplace-list"]'),
+    ).not.toBeNull();
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
           '[data-testid="plugin-marketplace-detail-research-kit@limecloud"]',
         )
         ?.click();
@@ -377,14 +504,20 @@ describe("PluginMarketplacePage", () => {
     });
     await flushEffects(2);
 
-    const switchedPanel = container.querySelector(
+    expect(onNavigate).toHaveBeenCalledWith(
+      "plugins",
+      expect.objectContaining({
+        selectedPluginId: "research-kit@limecloud",
+      }),
+    );
+    detailPanel = container.querySelector(
       '[data-testid="plugin-marketplace-detail-panel"]',
     );
-    expect(switchedPanel?.textContent).toContain("Research Kit");
-    expect(switchedPanel?.textContent).toContain(
+    expect(detailPanel?.textContent).toContain("Research Kit");
+    expect(detailPanel?.textContent).toContain(
       "https://packages.limecloud.example/plugins/research-kit-1.0.0.lpkg",
     );
-    expect(switchedPanel?.textContent).toContain(
+    expect(detailPanel?.textContent).toContain(
       "plugin.marketplace.detail.nextStepInstall",
     );
   });
@@ -442,17 +575,21 @@ describe("PluginMarketplacePage", () => {
       "agent",
       expect.objectContaining({
         agentEntry: "new-task",
-        initialUserPrompt: "@Notes Kit ",
-        autoRunInitialPromptOnMount: true,
+        initialUserPrompt: "@写文章 ",
+        autoRunInitialPromptOnMount: false,
         initialAutoSendRequestMetadata: {
           harness: {
             plugin_activation_intent: {
               source: "plugin_marketplace_open",
-              trigger: "@Notes Kit",
+              trigger: "@写文章",
               plugin_id: "notes-kit@limecloud",
               active_agent_app_id: "notes-kit",
-              active_entry_key: "notes-kit",
-              selected_skill_keys: undefined,
+              active_entry_key: "content_article_generate",
+              entry_task_kind: "content.article.generate",
+              entry_workflow_key: "content_article_workflow",
+              entry_output_artifact_kind: "content_factory.workspace_patch",
+              entry_right_surface: "articleWorkspace",
+              entry_expected_objects: ["articleDraft"],
             },
           },
         },
@@ -462,7 +599,7 @@ describe("PluginMarketplacePage", () => {
     );
   });
 
-  it("插件详情技能入口应预填显式 @插件:技能 输入并自动发送", async () => {
+  it("插件详情技能入口应预填显式 @插件:技能 输入并等待用户发送", async () => {
     const openSnapshot = snapshot();
     openSnapshot.registry[1] = registryItem("notes-kit@limecloud", {
       displayName: "Notes Kit",
@@ -476,6 +613,16 @@ describe("PluginMarketplacePage", () => {
     const loader = vi.fn(async () => openSnapshot);
     const onNavigate = vi.fn();
     const container = await renderPage({ loader, onNavigate });
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="plugin-marketplace-detail-notes-kit@limecloud"]',
+        )
+        ?.click();
+      await Promise.resolve();
+    });
+    await flushEffects(2);
 
     expect(
       container.querySelector('[data-testid="plugin-marketplace-skill-panel"]'),
@@ -495,7 +642,7 @@ describe("PluginMarketplacePage", () => {
       expect.objectContaining({
         agentEntry: "new-task",
         initialUserPrompt: "@Notes Kit:Article Writer ",
-        autoRunInitialPromptOnMount: true,
+        autoRunInitialPromptOnMount: false,
         initialAutoSendRequestMetadata: {
           harness: {
             plugin_activation_intent: {
@@ -565,7 +712,13 @@ describe("PluginMarketplacePage", () => {
     expect(historySessionLoader).toHaveBeenCalledWith(
       expect.objectContaining({ pluginId: "notes-kit@limecloud" }),
     );
-    expect(onNavigate).not.toHaveBeenCalled();
+    expect(onNavigate).toHaveBeenCalledWith(
+      "plugins",
+      expect.objectContaining({
+        selectedPluginId: "notes-kit@limecloud",
+      }),
+    );
+    onNavigate.mockClear();
     const sessionAction = container.querySelector<HTMLButtonElement>(
       '[data-testid="plugin-marketplace-history-session-notes-session-1"]',
     );
@@ -622,15 +775,62 @@ describe("PluginMarketplacePage", () => {
     });
     await flushEffects(4);
 
-    expect(installCloudRelease).toHaveBeenCalledWith({
-      app: expect.objectContaining({
-        appId: "research-kit",
-        displayName: "Research Kit",
-        packageUrl:
-          "https://packages.limecloud.example/plugins/research-kit-1.0.0.lpkg",
+    expect(installCloudRelease).toHaveBeenCalledWith(
+      expect.objectContaining({
+        app: expect.objectContaining({
+          appId: "research-kit",
+          displayName: "Research Kit",
+          packageUrl:
+            "https://packages.limecloud.example/plugins/research-kit-1.0.0.lpkg",
+        }),
+        profile: expectActionProfile(),
       }),
-    });
+    );
     expect(loader).toHaveBeenCalledTimes(2);
+  });
+
+  it("安装成功后刷新失败不应把主动作显示为安装失败", async () => {
+    const loader = vi
+      .fn()
+      .mockResolvedValueOnce(snapshot())
+      .mockRejectedValueOnce(
+        new Error("timed out waiting for app-server message after 30000ms"),
+      );
+    const installCloudRelease: NonNullable<
+      PluginMarketplaceActionDeps["installCloudRelease"]
+    > = vi.fn(async (request) => installedState(request.app.appId));
+    const warnSpy = vi
+      .spyOn(console, "warn")
+      .mockImplementation(() => undefined);
+    const container = await renderPage({
+      loader,
+      actionDeps: {
+        installCloudRelease,
+        dispatchChanged: vi.fn(),
+      },
+    });
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="plugin-marketplace-action-research-kit@limecloud"]',
+        )
+        ?.click();
+      await Promise.resolve();
+    });
+    await flushEffects(4);
+
+    expect(installCloudRelease).toHaveBeenCalledTimes(1);
+    expect(container.textContent).not.toContain(
+      "timed out waiting for app-server message after 30000ms",
+    );
+    expect(container.textContent).not.toContain(
+      "plugin.marketplace.actionError.title",
+    );
+    expect(warnSpy).toHaveBeenCalledWith(
+      "[plugin-marketplace] action refresh failed",
+      expect.any(Error),
+    );
   });
 
   it("安装时授权插件应提交注册码并刷新列表", async () => {
@@ -646,18 +846,15 @@ describe("PluginMarketplacePage", () => {
         blockedReason: "registration required",
       },
     );
-    registrationSnapshot.registry[0] = registryItem(
-      "research-kit@limecloud",
-      {
-        displayName: "Research Kit",
-        capabilityStates: ["installable"],
-        activationState: "blocked",
-        blockerCodes: [
-          "PLUGIN_MARKETPLACE_BLOCKED:registration required",
-          "PLUGIN_ACTIVATION_BLOCKED",
-        ],
-      },
-    );
+    registrationSnapshot.registry[0] = registryItem("research-kit@limecloud", {
+      displayName: "Research Kit",
+      capabilityStates: ["installable"],
+      activationState: "blocked",
+      blockerCodes: [
+        "PLUGIN_MARKETPLACE_BLOCKED:registration required",
+        "PLUGIN_ACTIVATION_BLOCKED",
+      ],
+    });
     const loader = vi.fn(async () => registrationSnapshot);
     const submitRegistrationCode: NonNullable<
       PluginMarketplaceActionDeps["submitRegistrationCode"]
@@ -1045,6 +1242,12 @@ describe("PluginMarketplacePage", () => {
       mode: "keep-data",
     });
     expect(loader).toHaveBeenCalledTimes(2);
+    expect(
+      container.querySelector('[data-testid="plugin-marketplace-detail-page"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="plugin-marketplace-list"]'),
+    ).not.toBeNull();
   });
 
   it("打开参数应在显示名为空时回落到插件标识", () => {
@@ -1068,13 +1271,17 @@ describe("PluginMarketplacePage", () => {
       activatable: true,
       renderable: true,
       readOnlyHistory: false,
+      activationEntries: [],
       skills: [],
       capabilityProfile: {
         sections: [],
         summary: {
           agentCount: 0,
           subagentCount: 0,
+          workflowCount: 0,
           toolCount: 0,
+          connectorCount: 0,
+          hookCount: 0,
           skillCount: 0,
         },
       },
@@ -1092,7 +1299,7 @@ describe("PluginMarketplacePage", () => {
     expect(buildPluginMarketplaceOpenAgentParams(item)).toMatchObject({
       agentEntry: "new-task",
       initialUserPrompt: "@fallback-plugin ",
-      autoRunInitialPromptOnMount: true,
+      autoRunInitialPromptOnMount: false,
       initialAutoSendRequestMetadata: {
         harness: {
           plugin_activation_intent: {
@@ -1127,13 +1334,17 @@ describe("PluginMarketplacePage", () => {
       activatable: false,
       renderable: false,
       readOnlyHistory: true,
+      activationEntries: [],
       skills: [],
       capabilityProfile: {
         sections: [],
         summary: {
           agentCount: 0,
           subagentCount: 0,
+          workflowCount: 0,
           toolCount: 0,
+          connectorCount: 0,
+          hookCount: 0,
           skillCount: 0,
         },
       },

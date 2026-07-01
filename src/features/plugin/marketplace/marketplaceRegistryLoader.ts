@@ -1,6 +1,8 @@
 import {
   getAgentAppCloudCatalog,
   listInstalledAgentApps,
+  reviewLocalAgentAppPackage,
+  saveInstalledAgentAppState,
   type AgentAppCloudCatalogResult,
 } from "@/lib/api/agentApps";
 import {
@@ -9,10 +11,13 @@ import {
 } from "@/lib/api/oemCloudControlPlane";
 import type {
   CloudBootstrapApp,
+  HostCapabilityProfile,
   InstalledAgentAppState,
   RuntimeTarget,
 } from "@/features/agent-app/types";
 import type { InstalledAgentAppStateListResult } from "@/features/agent-app/install/installedAppState";
+import { repairStaleInstalledAgentAppReadinessList } from "@/features/agent-app/install/staleReadinessRepair";
+import { buildAppCenterRuntimeCapabilityProfile } from "@/features/agent-app/runtime/appCenterRuntimeProfile";
 import type {
   PluginRegistryItem,
   PluginRegistryProjectionInput,
@@ -48,6 +53,9 @@ export interface PluginMarketplaceRegistryLoaderDeps {
   ) => Promise<PluginMarketplaceListResponse>;
   listInstalled?: () => Promise<InstalledAgentAppStateListResult>;
   getAgentAppCatalog?: () => Promise<AgentAppCloudCatalogResult>;
+  reviewLocalPackage?: typeof reviewLocalAgentAppPackage;
+  saveInstalledState?: typeof saveInstalledAgentAppState;
+  profile?: HostCapabilityProfile;
 }
 
 function isAuthenticationError(error: unknown): boolean {
@@ -121,6 +129,8 @@ function marketplaceItemFromInstalledInput(
       agentApps: contract.agentApps,
       subagents: contract.subagents,
       workflows: contract.workflows,
+      connectors: contract.connectors,
+      mcpServers: contract.mcpServers,
       activationEntries: contract.activationEntries,
       artifactRenderers: contract.artifactRenderers,
       historyRestore: contract.historyRestore,
@@ -155,6 +165,7 @@ function installedAgentAppManifestSummary(
   state: InstalledAgentAppState,
 ): PluginMarketplaceItem["manifestSummary"] {
   const manifest = state.manifest;
+  const manifestRecord = manifest as unknown as Record<string, unknown>;
   return {
     agentRuntime: manifest.agentRuntime,
     runtimePackage: manifest.runtimePackage,
@@ -164,9 +175,13 @@ function installedAgentAppManifestSummary(
     activationEntries: manifest.activationEntries,
     subagents: manifest.subagents,
     workflows: manifest.workflows,
+    connectors: manifestRecord.connectors,
+    mcpServers: manifestRecord.mcpServers,
     requires: manifest.requires,
     skillRefs: manifest.skillRefs,
     toolRefs: manifest.toolRefs,
+    hooks: manifestRecord.hooks,
+    clis: manifestRecord.clis,
     secrets: manifest.secrets,
     operations: manifest.operations,
   };
@@ -203,6 +218,8 @@ function mergeManifestSummary(
     "agentApps",
     "subagents",
     "workflows",
+    "connectors",
+    "mcpServers",
     "activationEntries",
     "artifactRenderers",
     "historyRestore",
@@ -215,6 +232,8 @@ function mergeManifestSummary(
     "requires",
     "skillRefs",
     "toolRefs",
+    "hooks",
+    "clis",
     "secrets",
     "operations",
   ]);
@@ -237,12 +256,14 @@ function enrichMarketplaceItemWithInstalledStateSummary(params: {
   };
 }
 
-function hasCloudReleaseEvidence(state: InstalledAgentAppState | undefined): boolean {
+function hasCloudReleaseEvidence(
+  state: InstalledAgentAppState | undefined,
+): boolean {
   const setup = readRecord(state?.setup);
   return Boolean(
     state?.identity.sourceKind !== "cloud_release" ||
-      !state.identity.sourceUri.startsWith("https://seeded.local/") ||
-      setup?.cloudReleaseEvidence,
+    !state.identity.sourceUri.startsWith("https://seeded.local/") ||
+    setup?.cloudReleaseEvidence,
   );
 }
 
@@ -331,11 +352,12 @@ function marketplaceItemFromCloudAgentApp(
     activationState: enabled && installable ? "activatable" : "blocked",
     ...(blockedReason ? { blockedReason } : {}),
     policy: {
-      installation: installed && !installedEvidenceMissing
-        ? "INSTALLED_BY_DEFAULT"
-        : enabled
-          ? "AVAILABLE"
-          : "NOT_AVAILABLE",
+      installation:
+        installed && !installedEvidenceMissing
+          ? "INSTALLED_BY_DEFAULT"
+          : enabled
+            ? "AVAILABLE"
+            : "NOT_AVAILABLE",
       authentication: installed
         ? "ON_USE"
         : app.registrationRequired
@@ -354,7 +376,9 @@ function marketplaceItemFromCloudAgentApp(
         : undefined,
     manifestSummary: {
       install: {
-        local: (app.runtimeTargets ?? ([] as RuntimeTarget[])).includes("local"),
+        local: (app.runtimeTargets ?? ([] as RuntimeTarget[])).includes(
+          "local",
+        ),
         cloud: true,
         authentication: app.registrationRequired ? "on_install" : "on_use",
       },
@@ -411,18 +435,20 @@ function enrichMarketplaceItemWithInstalledManifest(params: {
     pluginName:
       readOptionalText(marketplaceItem.pluginName) ?? installedItem.pluginName,
     displayName:
-      readOptionalText(marketplaceItem.displayName) ?? installedItem.displayName,
+      readOptionalText(marketplaceItem.displayName) ??
+      installedItem.displayName,
     description:
       readOptionalText(marketplaceItem.description) ??
       readOptionalText(installedItem.description),
     version: readOptionalText(marketplaceItem.version) ?? installedItem.version,
-    category: readOptionalText(marketplaceItem.category) ?? installedItem.category,
+    category:
+      readOptionalText(marketplaceItem.category) ?? installedItem.category,
     categories: categories.length > 0 ? categories : undefined,
     keywords: keywords.length > 0 ? keywords : undefined,
     capabilities: capabilities.length > 0 ? capabilities : undefined,
     appId: readOptionalText(marketplaceItem.appId) ?? installedItem.appId,
     install:
-      marketplaceItem.install ?? installedItem.install
+      (marketplaceItem.install ?? installedItem.install)
         ? {
             local:
               marketplaceItem.install?.local ?? installedItem.install?.local,
@@ -447,17 +473,15 @@ function mergeInstalledManifestFieldsIntoMarketplace(params: {
   const projection = projectPluginRegistryFromInstalledAgentApps(
     params.installedAgentApps,
   );
-  const installedItems = projection.projectionInputs.map(
-    (input) => {
-      const item = marketplaceItemFromInstalledInput(input);
-      return enrichMarketplaceItemWithInstalledStateSummary({
-        item,
-        state: params.installedAgentApps.find(
-          (state) => state.appId === item.appId,
-        ),
-      });
-    },
-  );
+  const installedItems = projection.projectionInputs.map((input) => {
+    const item = marketplaceItemFromInstalledInput(input);
+    return enrichMarketplaceItemWithInstalledStateSummary({
+      item,
+      state: params.installedAgentApps.find(
+        (state) => state.appId === item.appId,
+      ),
+    });
+  });
   const installedItemsByAppId = new Map(
     installedItems
       .map((item) => (item.appId ? ([item.appId, item] as const) : null))
@@ -524,15 +548,13 @@ function buildLocalMarketplaceRegistrySnapshot(
   const installedByAppId = new Map(
     installedAgentApps.map((state) => [state.appId, state] as const),
   );
-  const installedItems = projection.projectionInputs.map(
-    (input) => {
-      const item = marketplaceItemFromInstalledInput(input);
-      return enrichMarketplaceItemWithInstalledStateSummary({
-        item,
-        state: installedByAppId.get(item.appId ?? ""),
-      });
-    },
-  );
+  const installedItems = projection.projectionInputs.map((input) => {
+    const item = marketplaceItemFromInstalledInput(input);
+    return enrichMarketplaceItemWithInstalledStateSummary({
+      item,
+      state: installedByAppId.get(item.appId ?? ""),
+    });
+  });
   const catalogItems =
     agentAppCatalog?.payload.apps.map((app) =>
       marketplaceItemFromCloudAgentApp(
@@ -582,7 +604,31 @@ export async function loadPluginMarketplaceRegistry(
   const listInstalled = deps.listInstalled ?? listInstalledAgentApps;
   const getAgentAppCatalog = deps.getAgentAppCatalog ?? getAgentAppCloudCatalog;
   const normalizedTenantId = tenantId.trim();
-  const installed = await listInstalled();
+  const loadedInstalled = await listInstalled();
+  let installed = loadedInstalled;
+  try {
+    const repairedStates = await repairStaleInstalledAgentAppReadinessList(
+      loadedInstalled.states,
+      deps.profile ?? buildAppCenterRuntimeCapabilityProfile(),
+      {
+        reviewLocalPackage:
+          deps.reviewLocalPackage ?? reviewLocalAgentAppPackage,
+        saveInstalledState:
+          deps.saveInstalledState ?? saveInstalledAgentAppState,
+      },
+    );
+    if (repairedStates !== loadedInstalled.states) {
+      installed = {
+        ...loadedInstalled,
+        states: repairedStates,
+      };
+    }
+  } catch (error) {
+    console.warn(
+      "[plugin-marketplace] stale Agent App readiness repair failed",
+      error,
+    );
+  }
   let marketplace: PluginMarketplaceListResponse | null = null;
 
   if (normalizedTenantId) {

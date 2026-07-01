@@ -365,8 +365,7 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
           contentId: DEFAULT_CONTENT_ID,
           imageCount: 0,
           expectedImageCount: 1,
-          taskFilePath:
-            ".lime/tasks/image_generate/task-image-existing-1.json",
+          taskFilePath: ".lime/tasks/image_generate/task-image-existing-1.json",
         },
       },
     ];
@@ -1042,6 +1041,83 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
     });
   });
 
+  it("task runtimeContract.model 更新时应覆盖旧 preview.modelName", async () => {
+    const taskId = "task-image-model-override-1";
+    const { render, getValue } = renderHook(
+      {},
+      {
+        initialMessages: [
+          {
+            id: `image-workbench:${taskId}:assistant`,
+            role: "assistant",
+            content: "图片任务已提交，正在同步任务状态。",
+            timestamp: new Date("2026-04-04T10:10:00Z"),
+            imageWorkbenchPreview: {
+              taskId,
+              prompt: "最新模型青柠主视觉",
+              status: "running",
+              phase: "queued",
+              modelName: "fal-ai/nano-banana-pro",
+            },
+          },
+        ],
+        initialImageWorkbenchState: {
+          ...createInitialSessionImageWorkbenchState(),
+          tasks: [
+            {
+              sessionId: DEFAULT_SESSION_ID,
+              id: taskId,
+              mode: "generate",
+              status: "complete",
+              prompt: "最新模型青柠主视觉",
+              rawText: "@配图 最新模型青柠主视觉",
+              expectedCount: 1,
+              outputIds: ["output-model-override-1"],
+              createdAt: Date.parse("2026-04-04T10:10:00Z"),
+              hookImageIds: ["hook-model-override-1"],
+              applyTarget: null,
+              runtimeContract: {
+                model: "fal-ai/nano-banana-pro-v2",
+              },
+            },
+          ],
+          outputs: [
+            {
+              id: "output-model-override-1",
+              hookImageId: "hook-model-override-1",
+              refId: "img-model-override-1",
+              taskId,
+              url: "https://example.com/model-override.png",
+              prompt: "最新模型青柠主视觉",
+              createdAt: Date.parse("2026-04-04T10:10:00Z"),
+              applyTarget: null,
+            },
+          ],
+        },
+      },
+    );
+
+    await render();
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expectSingleImageAssistantMessage(getValue().messages, {
+      id: `image-workbench:${taskId}:assistant`,
+      content: "",
+      toolCalls: undefined,
+      contentParts: undefined,
+      runtimeStatus: undefined,
+      imageWorkbenchPreview: expect.objectContaining({
+        taskId,
+        status: "complete",
+        modelName: "fal-ai/nano-banana-pro-v2",
+      }),
+    });
+  });
+
   it("已存在同 taskId 的 skill 消息时，应把 task 预览合并回原消息而不是再插一条伪造消息", async () => {
     let listener: CreationTaskListener | null = null;
     vi.mocked(safeListen).mockImplementationOnce(async (event, handler) => {
@@ -1066,6 +1142,17 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
             prompt: "[img:春日咖啡馆插画]",
             count: 2,
             size: "1024x1024",
+            provider_id: "openai",
+            model: "gpt-image-2",
+            executor_mode: "responses_image_generation",
+            usage: "document-inline",
+            slot_id: "document-image-slot-skill-1",
+            anchor_section_title: "咖啡馆",
+            anchor_text: "春日咖啡馆配图",
+            runtime_contract: {
+              contract_key: "image_generation",
+              routing_slot: "image_generation_model",
+            },
           },
           result: {
             images: [{ url: "https://example.com/skill-preview.png" }],
@@ -1086,10 +1173,24 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
             toolCalls: [
               {
                 id: "tool-image-1",
-                name: "Bash",
+                name: "lime_create_image_generation_task",
                 arguments: JSON.stringify({
-                  command:
-                    "lime media image generate --prompt '春日咖啡馆插画' --json",
+                  prompt: "春日咖啡馆插画",
+                  count: 2,
+                  size: "1024x1024",
+                  provider_id: "openai",
+                  model: "gpt-image-2",
+                  executor_mode: "responses_image_generation",
+                  usage: "document-inline",
+                  slot_id: "document-image-slot-skill-1",
+                  anchor_section_title: "咖啡馆",
+                  anchor_text: "春日咖啡馆配图",
+                  modality_contract_key: "image_generation",
+                  routing_slot: "image_generation_model",
+                  runtime_contract: {
+                    contract_key: "image_generation",
+                    routing_slot: "image_generation_model",
+                  },
                 }),
                 status: "completed",
                 result: {
@@ -1100,6 +1201,9 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
                     task_type: "image_generate",
                     task_family: "image",
                     status: "pending_submit",
+                    path: ".lime/tasks/image_generate/task-image-skill-1.json",
+                    artifact_path:
+                      ".lime/tasks/image_generate/task-image-skill-1.json",
                   },
                 },
                 startTime: new Date("2026-04-04T10:00:00Z"),
@@ -1141,7 +1245,7 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       toolCalls: [
         expect.objectContaining({
           id: "tool-image-1",
-          name: "Bash",
+          name: "lime_create_image_generation_task",
         }),
       ],
       imageWorkbenchPreview: expect.objectContaining({
@@ -1149,6 +1253,12 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
         status: "complete",
         imageUrl: "https://example.com/skill-preview.png",
         caption: null,
+        providerName: "openai",
+        modelName: "gpt-image-2",
+        runtimeContract: expect.objectContaining({
+          contractKey: "image_generation",
+          routingSlot: "image_generation_model",
+        }),
       }),
     });
   });
@@ -2151,8 +2261,7 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
           {
             id: "user-image-failed-turn",
             role: "user",
-            content:
-              "@配图 参考图生成一张小红书封面，保留醒目的标题层级",
+            content: "@配图 参考图生成一张小红书封面，保留醒目的标题层级",
             timestamp: new Date("2026-04-04T12:00:00Z"),
           },
           {

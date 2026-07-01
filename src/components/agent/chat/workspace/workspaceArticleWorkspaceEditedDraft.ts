@@ -56,7 +56,8 @@ export function applyWorkspaceArticleEditedDraft(
       ...object,
       source: {
         ...(object.source ?? {}),
-        markdown: editedDraft.markdown,
+        documentText: editedDraft.markdown,
+        finalMarkdown: editedDraft.markdown,
         updatedAt: editedDraft.updatedAt,
       },
     };
@@ -108,6 +109,8 @@ export function buildWorkspaceArticleEditedDraftUpdateRequest(
       objectKey: editedDraft.objectKey,
       objectRef: articleObjectRefToUpdatePayload(change.object.ref),
       markdown: editedDraft.markdown,
+      documentText: editedDraft.markdown,
+      finalMarkdown: editedDraft.markdown,
       updatedAt: editedDraft.updatedAt,
     },
   };

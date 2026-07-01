@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { cwd } from "node:process";
 import { describe, expect, it } from "vitest";
 import {
   findDefaultImageCapabilityProvider,
@@ -8,6 +11,36 @@ import {
   type ImageCapabilitySelectionCandidate,
 } from "./catalog";
 
+function readSource(relativePath: string): string {
+  return readFileSync(resolve(cwd(), relativePath), "utf8");
+}
+
+function expectNoLegacyImageCapabilityHeuristic(source: string): void {
+  expect(source).not.toContain("@/lib/imageGeneration");
+  expect(source).not.toContain("IMAGE_GEN_MODELS");
+  expect(source).not.toContain('from "@/lib/imageGen/models"');
+  expect(source).not.toContain("isImageProvider(");
+  expect(source).not.toContain("getImageModelIdsForProvider");
+  expect(source).not.toContain("function isFalProviderLike");
+  expect(source).not.toContain('includes("fal.run")');
+  expect(source).not.toContain('selectedProvider.id === "new-api"');
+  expect(source).not.toContain('selectedProvider.type === "new-api"');
+  expect(source).not.toContain('selectedProvider.type === "NewApi"');
+  expect(source).not.toContain('selectedProvider.id === "gemini"');
+  expect(source).not.toContain('selectedProvider.id === "google"');
+  expect(source).not.toContain('selectedProvider.id === "vertexai"');
+}
+
+function expectNoInlineFalProviderMatcher(source: string): void {
+  expect(source).toContain("@/lib/imageGen/providerMatchers");
+  expect(source).not.toContain('includes("fal.run")');
+  expect(source).not.toContain('includes("queue.fal.run")');
+  expect(source).not.toContain('providerType === "fal"');
+  expect(source).not.toContain('providerId === "fal"');
+  expect(source).not.toContain('providerId.startsWith("fal-")');
+  expect(source).not.toContain('providerId.includes("fal.ai")');
+}
+
 const providers: ImageCapabilitySelectionCandidate[] = [
   { id: "new-api", type: "openai", custom_models: ["gpt-images-2"] },
   {
@@ -16,7 +49,7 @@ const providers: ImageCapabilitySelectionCandidate[] = [
     custom_models: ["gemini-3.1-flash-image"],
     api_host: "https://generativelanguage.googleapis.com",
   },
-  { id: "zhipuai", type: "zhipuai", custom_models: ["cogview-4-250304"] },
+  { id: "zhipuai", type: "zhipuai", custom_models: ["glm-image"] },
   { id: "fal", type: "fal", custom_models: ["fal-ai/nano-banana-pro"] },
 ];
 
@@ -28,15 +61,28 @@ describe("imageGen/catalog", () => {
   });
 
   it("应解析 Provider 条目", () => {
-    expect(resolveImageCapabilityProviderEntry(providers[0]!)?.providerKey).toBe(
-      "openai-images",
+    expect(
+      resolveImageCapabilityProviderEntry(providers[0]!)?.providerKey,
+    ).toBe("openai-compatible-responses");
+    expect(resolveImageCapabilityProviderEntry(providers[0]!)?.transport).toBe(
+      "openai_responses_image",
     );
-    expect(resolveImageCapabilityProviderEntry(providers[1]!)?.providerKey).toBe(
-      "gemini",
+    expect(
+      resolveImageCapabilityProviderEntry(providers[1]!)?.providerKey,
+    ).toBe("gemini");
+    expect(
+      resolveImageCapabilityProviderEntry(providers[2]!)?.providerKey,
+    ).toBe("zhipu");
+    expect(resolveImageCapabilityModelIds(providers[2]!)).toContain(
+      "glm-image",
     );
-    expect(resolveImageCapabilityProviderEntry(providers[2]!)?.providerKey).toBe(
-      "zhipu",
-    );
+    expect(
+      resolveImageCapabilityProviderEntry({
+        id: "fal",
+        type: "openai",
+        api_host: "https://fal.run/fal-ai",
+      })?.providerKey,
+    ).toBe("fal");
   });
 
   it("应优先选择 openai-like 默认 Provider", () => {
@@ -53,5 +99,241 @@ describe("imageGen/catalog", () => {
     expect(resolveImageCapabilityModels(providers[3]!)?.[0]?.id).toBe(
       "fal-ai/nano-banana-pro",
     );
+  });
+
+  it("用户声明的图片模型应优先于内置 fallback 模型", () => {
+    expect(
+      resolveImageCapabilityModels({
+        id: "airgate-openai-images",
+        type: "openai",
+        api_host: "https://airgate.k8ray.com/v1",
+        custom_models: ["gpt-images-2"],
+      })[0]?.id,
+    ).toBe("gpt-images-2");
+  });
+
+  it("OpenAI 兼容中转拉取的新图片模型应进入图片默认模型候选", () => {
+    expect(
+      resolveImageCapabilityModelIds({
+        id: "agnes",
+        type: "openai",
+        api_host: "https://agnes.example.test/v1",
+        custom_models: [
+          "agnes-2.0-flash",
+          "agnes-image-2.1-flash",
+          "agnes-image-2.0-flash",
+        ],
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        "agnes-image-2.1-flash",
+        "agnes-image-2.0-flash",
+      ]),
+    );
+  });
+
+  it("settings 与 workspace 图片命令应共享图片能力目录入口", () => {
+    const imageGenTypesSource = readSource("src/components/image-gen/types.ts");
+    expect(imageGenTypesSource).not.toContain("ImageGenModel");
+    expectNoLegacyImageCapabilityHeuristic(imageGenTypesSource);
+
+    const settingsSource = readSource(
+      "src/components/settings-v2/agent/image-gen/index.tsx",
+    );
+    expect(settingsSource).toContain('from "@/lib/imageGen/catalog"');
+    expect(settingsSource).toContain("isImageCapabilityProvider");
+    expect(settingsSource).toContain("resolveImageCapabilityModelIds");
+    expect(settingsSource).toContain("resolveImageCapabilityModels");
+    expect(settingsSource).toContain("isImageCapabilityModelMetadata");
+    expect(settingsSource).not.toContain(
+      "buildProviderModelsFromBackendModelIds",
+    );
+    expectNoLegacyImageCapabilityHeuristic(settingsSource);
+
+    const seededCommandSource = readSource(
+      "src/lib/base-setup/seededCommandPackage.ts",
+    );
+    expect(seededCommandSource).toContain('from "@/lib/imageGen/catalog"');
+    expect(seededCommandSource).toContain("requireSeededImageCommandModelId");
+    expectNoLegacyImageCapabilityHeuristic(seededCommandSource);
+    expect(seededCommandSource).not.toContain(
+      'model: "fal-ai/nano-banana-pro"',
+    );
+    expect(seededCommandSource).not.toContain('model: "gpt-images-2"');
+
+    const workspaceLaunchSource = readSource(
+      "src/components/agent/chat/workspace/imageSkillLaunch.ts",
+    );
+    expect(workspaceLaunchSource).toContain(
+      'from "@/lib/governance/modalityRuntimeContracts"',
+    );
+    expect(workspaceLaunchSource).toContain(
+      "resolveImageGenerationRuntimeContractBinding",
+    );
+    expectNoLegacyImageCapabilityHeuristic(workspaceLaunchSource);
+  });
+
+  it("本机图片服务端点应允许前端锁定图片 Provider", () => {
+    const serverSource = readSource("lime-rs/crates/server/src/lib.rs");
+    const imageHandlerSource = readSource(
+      "lime-rs/crates/server/src/handlers/image_handler.rs",
+    );
+
+    expect(serverSource).toContain('HeaderName::from_static("x-provider-id")');
+    expect(imageHandlerSource).toContain('get("x-provider-id")');
+  });
+
+  it("Provider 模型拉取不应内联 Fal provider keyword 判断", () => {
+    const providerSettingSource = readSource(
+      "src/components/api-key-provider/ProviderSetting.tsx",
+    );
+    expect(providerSettingSource).toContain("@/lib/imageGen/providerMatchers");
+    expect(providerSettingSource).toContain(
+      "@/lib/layered-design/imageModelCapabilities",
+    );
+    expect(providerSettingSource).not.toContain(
+      "function isLikelyImageModelCommandModel(modelId: string): boolean {\n  const normalized",
+    );
+    expect(providerSettingSource).not.toContain(
+      "nano-banana|banana|flux|seedream|kontext|recraft|ideogram|sdxl|stable-diffusion",
+    );
+
+    const modelAddPanelSource = readSource(
+      "src/components/api-key-provider/ModelAddPanel.tsx",
+    );
+    expect(modelAddPanelSource).toContain("./providerModelFetchHelpers");
+    expect(modelAddPanelSource).not.toContain('includes("fal.run")');
+    expect(modelAddPanelSource).not.toContain('includes("queue.fal.run")');
+    expect(modelAddPanelSource).not.toContain('providerType === "fal"');
+    expect(modelAddPanelSource).not.toContain('providerId === "fal"');
+    expect(modelAddPanelSource).not.toContain('providerId.startsWith("fal-")');
+    expect(modelAddPanelSource).not.toContain('providerId.includes("fal.ai")');
+
+    const fetchHelpersSource = readSource(
+      "src/components/api-key-provider/providerModelFetchHelpers.ts",
+    );
+    expectNoInlineFalProviderMatcher(fetchHelpersSource);
+
+    const fetchSupportSource = readSource(
+      "src/lib/model/providerModelFetchSupport.ts",
+    );
+    expectNoInlineFalProviderMatcher(fetchSupportSource);
+  });
+
+  it("设计画布图片任务入口不应重新维护图片 Provider / 模型 heuristics", () => {
+    const canvasRuntimeSource = readSource(
+      "src/components/agent/chat/workspace/useWorkspaceCanvasSceneRuntime.tsx",
+    );
+    expect(canvasRuntimeSource).toContain(
+      "imageWorkbenchGenerationRuntime.selectedProviderId",
+    );
+    expect(canvasRuntimeSource).toContain(
+      "imageWorkbenchGenerationRuntime.selectedModelId",
+    );
+    expectNoLegacyImageCapabilityHeuristic(canvasRuntimeSource);
+
+    const canvasFactorySource = readSource(
+      "src/components/workspace/canvas/CanvasFactory.tsx",
+    );
+    expect(canvasFactorySource).toContain("imageGenerationProviderId");
+    expect(canvasFactorySource).toContain("imageGenerationModelId");
+    expectNoLegacyImageCapabilityHeuristic(canvasFactorySource);
+
+    const designCanvasSource = readSource(
+      "src/components/workspace/design/DesignCanvas.tsx",
+    );
+    expect(designCanvasSource).toContain(
+      "createLayeredDesignImageTaskArtifacts",
+    );
+    expect(designCanvasSource).toContain(
+      "providerId: imageGenerationProviderId",
+    );
+    expect(designCanvasSource).toContain("model: imageGenerationModelId");
+    expectNoLegacyImageCapabilityHeuristic(designCanvasSource);
+
+    const imageTaskSource = readSource("src/lib/layered-design/imageTasks.ts");
+    expect(imageTaskSource).toContain(
+      'modalityContractKey: "image_generation"',
+    );
+    expect(imageTaskSource).toContain('routingSlot: "image_generation_model"');
+    expectNoLegacyImageCapabilityHeuristic(imageTaskSource);
+  });
+
+  it("useImageGen 执行分支不应重新维护 Provider 关键词判断", () => {
+    const hookSource = readSource("src/components/image-gen/useImageGen.ts");
+
+    expect(hookSource).toContain("requestImagesFromLocalImageServer");
+    expect(hookSource).not.toContain("requestImageFromNewApi(");
+    expect(hookSource).not.toContain("requestImageFromFal(");
+    expect(hookSource).not.toContain("requestImageFromGemini(");
+    expect(hookSource).not.toContain("requestImagesFromStandardImagesApi(");
+    expect(hookSource).not.toContain("providerEntry?.transport");
+    expect(hookSource).not.toContain('providerTransport === "fal_queue"');
+    expect(hookSource).not.toContain('providerTransport === "gemini_image"');
+    expectNoLegacyImageCapabilityHeuristic(hookSource);
+
+    const openAICompatibleExecutorSource = readSource(
+      "src/components/image-gen/openAICompatibleImageExecutor.ts",
+    );
+    expect(openAICompatibleExecutorSource).toContain(
+      "@/lib/imageGen/providerMatchers",
+    );
+    expect(openAICompatibleExecutorSource).not.toContain(
+      'normalized.includes("gpt-image")',
+    );
+    expect(openAICompatibleExecutorSource).not.toContain(
+      'normalized.includes("gpt-images")',
+    );
+
+    const layeredImageModelCapabilitySource = readSource(
+      "src/lib/layered-design/imageModelCapabilities.ts",
+    );
+    expect(layeredImageModelCapabilitySource).toContain(
+      "@/lib/imageGen/providerMatchers",
+    );
+    expect(layeredImageModelCapabilitySource).not.toContain(
+      'normalized === "gpt-image-2"',
+    );
+    expect(layeredImageModelCapabilitySource).not.toContain(
+      'normalized === "gpt-images-2"',
+    );
+    expect(layeredImageModelCapabilitySource).not.toContain(
+      'normalized.endsWith("/gpt-image-2")',
+    );
+    expect(layeredImageModelCapabilitySource).not.toContain(
+      'normalized.endsWith("/gpt-images-2")',
+    );
+
+    const modelThemePolicySource = readSource(
+      "src/components/agent/chat/utils/modelThemePolicy.ts",
+    );
+    expect(modelThemePolicySource).toContain("@/lib/imageGen/providerMatchers");
+    expect(modelThemePolicySource).not.toContain("IMAGE_INCLUDE_KEYWORDS");
+    expect(modelThemePolicySource).not.toContain("midjourney");
+    expect(modelThemePolicySource).not.toContain("生图");
+
+    const visionModelResolverSource = readSource(
+      "src/lib/model/visionModelResolver.ts",
+    );
+    expect(visionModelResolverSource).toContain(
+      "@/lib/imageGen/providerMatchers",
+    );
+    expect(visionModelResolverSource).not.toContain(
+      "IMAGE_GENERATION_KEYWORDS",
+    );
+    expect(visionModelResolverSource).not.toContain("midjourney");
+    expect(visionModelResolverSource).not.toContain("stable diffusion");
+
+    const inferModelCapabilitiesSource = readSource(
+      "src/lib/model/inferModelCapabilities.ts",
+    );
+    expect(inferModelCapabilitiesSource).toContain(
+      "@/lib/imageGen/providerMatchers",
+    );
+    expect(inferModelCapabilitiesSource).not.toContain(
+      "IMAGE_GENERATION_PATTERN",
+    );
+    expect(inferModelCapabilitiesSource).not.toContain("image-preview");
+    expect(inferModelCapabilitiesSource).not.toContain("nano-banana");
   });
 });

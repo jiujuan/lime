@@ -87,6 +87,12 @@ describe("agentStreamCompletionController", () => {
         fallbackContent: "兜底内容",
       }),
     ).toBe("兜底内容");
+    expect(
+      resolveAgentStreamGracefulCompletionContent({
+        accumulatedContent: "<tool_call></tool_call>",
+        fallbackContent: "",
+      }),
+    ).toBe("");
   });
 
   it("最终文本变化时应保留过程顺序并把最终正文放到过程后", () => {
@@ -436,6 +442,22 @@ describe("agentStreamCompletionController", () => {
         status: "success",
         description: "请求完成，工具调用 2 次",
       },
+    });
+  });
+
+  it("final_done 在显式空 fallback 下不应回退到通用完成文案", () => {
+    expect(
+      buildAgentStreamFinalDonePlan({
+        accumulatedContent: "<tool_result>{}</tool_result>",
+        fallbackContent: "",
+        hasMeaningfulCompletionSignal: true,
+        queuedTurnId: "queued-empty-fallback",
+        toolCallCount: 0,
+      }),
+    ).toMatchObject({
+      type: "complete",
+      finalContent: "",
+      queuedTurnIds: ["queued-empty-fallback"],
     });
   });
 

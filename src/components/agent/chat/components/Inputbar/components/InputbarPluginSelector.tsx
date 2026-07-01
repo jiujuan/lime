@@ -10,10 +10,14 @@ interface InputbarPluginSelectorProps {
   plugins: readonly InputbarPluginCapability[];
   labels: {
     empty: string;
+    error: string;
+    loading: string;
     skillPrefix: string;
     title: string;
     unavailable: string;
   };
+  loading?: boolean;
+  error?: string | null;
   onSelectPlugin: (
     plugin: InputbarPluginCapability,
     skill?: InputbarPluginSkillCapability,
@@ -23,8 +27,32 @@ interface InputbarPluginSelectorProps {
 export const InputbarPluginSelector: React.FC<InputbarPluginSelectorProps> = ({
   plugins,
   labels,
+  loading = false,
+  error = null,
   onSelectPlugin,
 }) => {
+  if (loading) {
+    return (
+      <div
+        className="px-3 py-3 text-xs text-slate-400"
+        data-testid="inputbar-plugin-selector-loading"
+      >
+        {labels.loading}
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div
+        className="px-3 py-3 text-xs text-rose-500"
+        data-testid="inputbar-plugin-selector-error"
+      >
+        {labels.error}
+      </div>
+    );
+  }
+
   if (plugins.length === 0) {
     return (
       <div className="px-3 py-3 text-xs text-slate-400">{labels.empty}</div>
@@ -43,8 +71,11 @@ export const InputbarPluginSelector: React.FC<InputbarPluginSelectorProps> = ({
         const blocked =
           plugin.disabled === true || (plugin.blockerCodes?.length ?? 0) > 0;
         const displayName = resolveInputbarPluginDisplayName(plugin);
+        const optionKey = `${plugin.pluginId}::${
+          plugin.trigger?.trim() || displayName
+        }`;
         return (
-          <div key={plugin.pluginId} className="rounded-lg">
+          <div key={optionKey} className="rounded-lg">
             <button
               type="button"
               data-testid="inputbar-plugin-option"

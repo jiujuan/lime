@@ -14,7 +14,6 @@ interface WorkspaceShellSceneProps {
   fileManagerNode?: ReactNode;
   fileManagerToggleNode?: ReactNode;
   mainAreaNode: ReactNode;
-  rightRailNode?: ReactNode;
 }
 
 export function WorkspaceShellScene({
@@ -26,7 +25,6 @@ export function WorkspaceShellScene({
   fileManagerNode,
   fileManagerToggleNode,
   mainAreaNode,
-  rightRailNode,
 }: WorkspaceShellSceneProps) {
   return (
     <PageContainer
@@ -51,7 +49,6 @@ export function WorkspaceShellScene({
       {fileManagerToggleNode}
 
       {mainAreaNode}
-      {rightRailNode}
     </PageContainer>
   );
 }

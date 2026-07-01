@@ -7,11 +7,9 @@ import type {
   AsterSessionExecutionRuntime,
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
-import type { TaskFile } from "../TaskFiles";
 import { InputbarComposerSection } from "./components/InputbarComposerSection";
 import type { InputbarOpenedProject } from "./components/InputbarProjectContextBar";
 import { HintRoutePopup } from "./components/HintRoutePopup";
-import { TaskFilesPanel } from "./components/TaskFilesPanel";
 import { InputbarSurface } from "./components/InputbarSurface";
 import type { SkillSelectionSourceProps } from "../../skill-selection/skillSelectionBindings";
 import type {
@@ -30,9 +28,7 @@ import type {
 import type { InputbarPluginCapability } from "./pluginInputCapability";
 import { buildInputbarComposerSectionCopy } from "./components/inputbarComposerSectionCopy";
 import { buildInputbarCoreCopy } from "./components/inputbarCoreCopy";
-import {
-  buildInputbarWorkflowPanelCopy,
-} from "./inputbarWorkflowCopy";
+import { buildInputbarWorkflowPanelCopy } from "./inputbarWorkflowCopy";
 import type { InputbarSendHandler } from "./inputbarSendPayload";
 import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
 
@@ -64,16 +60,6 @@ interface InputbarProps extends SkillSelectionSourceProps {
   onStop?: () => void;
   isLoading: boolean;
   disabled?: boolean;
-  /** 任务文件列表 */
-  taskFiles?: TaskFile[];
-  /** 选中的文件 ID */
-  selectedFileId?: string;
-  /** 任务文件面板是否展开 */
-  taskFilesExpanded?: boolean;
-  /** 切换任务文件面板 */
-  onToggleTaskFiles?: () => void;
-  /** 文件点击回调 */
-  onTaskFileClick?: (file: TaskFile) => void;
   /** 输入区上方并排浮层控件 */
   overlayAccessory?: React.ReactNode;
   /** 角色列表（用于 @ 引用） */
@@ -101,6 +87,8 @@ interface InputbarProps extends SkillSelectionSourceProps {
   knowledgePackSelection?: InputbarKnowledgePackSelection | null;
   knowledgePackOptions?: InputbarKnowledgePackOption[];
   pluginSuggestions?: InputbarPluginCapability[];
+  pluginSuggestionsError?: string | null;
+  pluginSuggestionsLoading?: boolean;
   onSkillSuggestionsNeeded?: () => void;
   onPluginSuggestionsNeeded?: () => void;
   onKnowledgePacksNeeded?: () => void;
@@ -138,11 +126,6 @@ export const Inputbar: React.FC<InputbarProps> = ({
   onStop,
   isLoading,
   disabled,
-  taskFiles = [],
-  selectedFileId,
-  taskFilesExpanded = false,
-  onToggleTaskFiles,
-  onTaskFileClick,
   overlayAccessory,
   characters = [],
   skills,
@@ -175,6 +158,8 @@ export const Inputbar: React.FC<InputbarProps> = ({
   knowledgePackSelection = null,
   knowledgePackOptions = [],
   pluginSuggestions = [],
+  pluginSuggestionsError = null,
+  pluginSuggestionsLoading = false,
   onSkillSuggestionsNeeded,
   onPluginSuggestionsNeeded,
   onKnowledgePacksNeeded,
@@ -207,25 +192,20 @@ export const Inputbar: React.FC<InputbarProps> = ({
   );
   const inputbarComposerCopy = React.useMemo(
     () =>
-      buildInputbarComposerSectionCopy((key, values) =>
-        t(key, values ?? {}),
-      ),
+      buildInputbarComposerSectionCopy((key, values) => t(key, values ?? {})),
     [t],
   );
   const workflowPanelCopy = React.useMemo(
-    () =>
-      buildInputbarWorkflowPanelCopy((key, values) =>
-        t(key, values ?? {}),
-      ),
+    () => buildInputbarWorkflowPanelCopy((key, values) => t(key, values ?? {})),
     [t],
   );
   const showModelControls = Boolean(
     providerType ||
-      model ||
-      setProviderType ||
-      setModel ||
-      onManageProviders ||
-      executionRuntime,
+    model ||
+    setProviderType ||
+    setModel ||
+    onManageProviders ||
+    executionRuntime,
   );
   const {
     textareaRef,
@@ -319,15 +299,8 @@ export const Inputbar: React.FC<InputbarProps> = ({
           onSelect={handleHintSelect}
         />
       ) : null}
-      {taskFiles.length > 0 || overlayAccessory ? (
+      {overlayAccessory ? (
         <SecondaryControlsRow data-testid="inputbar-secondary-controls">
-          <TaskFilesPanel
-            files={taskFiles}
-            selectedFileId={selectedFileId}
-            expanded={taskFilesExpanded}
-            onToggle={onToggleTaskFiles}
-            onFileClick={onTaskFileClick}
-          />
           {overlayAccessory}
         </SecondaryControlsRow>
       ) : null}
@@ -361,6 +334,8 @@ export const Inputbar: React.FC<InputbarProps> = ({
         activeCapability={activeCapability}
         activePluginSelection={activePluginSelection}
         pluginSuggestions={resolvedPluginSuggestions}
+        pluginSuggestionsError={pluginSuggestionsError}
+        pluginSuggestionsLoading={pluginSuggestionsLoading}
         onPluginSuggestionsNeeded={onPluginSuggestionsNeeded}
         onSelectPlugin={handleSelectPlugin}
         projectId={projectId}

@@ -13,6 +13,7 @@ import {
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { Artifact } from "@/lib/artifact/types";
+import { formatDate } from "@/i18n/format";
 import { ArticleTiptapCanvas } from "./ArticleTiptapCanvas";
 import "./WorkspaceArticleEditorSurface.css";
 import type {
@@ -30,6 +31,7 @@ interface WorkspaceArticleEditorSurfaceProps {
   actions: readonly WorkspaceArticleWorkspaceAction[];
   actionsDisabled?: boolean;
   artifactIds: readonly string[];
+  compact?: boolean;
   object: WorkspaceArticleObject;
   objects: readonly WorkspaceArticleObject[];
   onActionIntent?: (intent: WorkspaceArticleWorkspaceActionIntent) => void;
@@ -52,6 +54,7 @@ export function WorkspaceArticleEditorSurface({
   actions,
   actionsDisabled = false,
   artifactIds,
+  compact = true,
   object,
   objects,
   onActionIntent,
@@ -64,12 +67,13 @@ export function WorkspaceArticleEditorSurface({
   selectedObjectKey,
   updatedAt,
 }: WorkspaceArticleEditorSurfaceProps) {
-  const { t } = useTranslation("workspace");
+  const { i18n, t } = useTranslation("workspace");
   const dynamicT = t as WorkspaceDynamicTranslation;
   const [pendingActionConfirmKey, setPendingActionConfirmKey] = useState<
     string | null
   >(null);
   const [editedMarkdown, setEditedMarkdown] = useState<string | null>(null);
+  const isCompactLayout = compact;
 
   useEffect(() => {
     setPendingActionConfirmKey(null);
@@ -109,6 +113,20 @@ export function WorkspaceArticleEditorSurface({
   );
 
   const articleCanvasContentKey = `${object.ref.appId}:${object.ref.kind}:${object.ref.id}`;
+  const locale = i18n?.resolvedLanguage || i18n?.language || "zh-CN";
+  const updatedAtLabel = useMemo(
+    () =>
+      updatedAt
+        ? formatDate(updatedAt, {
+            locale,
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : null,
+    [locale, updatedAt],
+  );
   const renderActionButton = (action: WorkspaceArticleWorkspaceAction) => {
     const actionConfirmKey = `${selectedObjectKey}:${action.key}`;
     const confirmationPending =
@@ -150,10 +168,14 @@ export function WorkspaceArticleEditorSurface({
 
   return (
     <section
-      className="article-editor-root flex h-full min-h-0 flex-col bg-[#eef3f8] text-[color:var(--lime-text)]"
+      className={`article-editor-root flex h-full min-h-0 w-full min-w-0 flex-col bg-[#eef3f8] text-[color:var(--lime-text)] ${
+        isCompactLayout ? "article-editor-root-compact" : ""
+      }`}
+      data-layout="responsive"
+      data-compact-layout={isCompactLayout ? "true" : "false"}
       data-testid="workspace-article-editor-surface"
     >
-      <header className="shrink-0 border-b border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-4 py-3">
+      <header className="article-editor-header shrink-0 border-b border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-4 py-3">
         <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-2">
             <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-subtle)] text-[color:var(--lime-text-muted)]">
@@ -166,19 +188,21 @@ export function WorkspaceArticleEditorSurface({
               <h2 className="mt-0.5 truncate text-[15px] font-semibold leading-5 text-[color:var(--lime-text-strong)]">
                 {object.title}
               </h2>
-              <p className="mt-0.5 truncate text-xs text-[color:var(--lime-text-muted)]">
-                {dynamicT("workspace.articleEditor.subtitle", {
-                  count: artifactIds.length,
-                })}
-              </p>
+              {!isCompactLayout ? (
+                <p className="mt-0.5 truncate text-xs text-[color:var(--lime-text-muted)]">
+                  {dynamicT("workspace.articleEditor.subtitle", {
+                    count: artifactIds.length,
+                  })}
+                </p>
+              ) : null}
             </div>
           </div>
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <div className="article-editor-header-actions flex shrink-0 flex-wrap items-center justify-end gap-2">
             <ArticleStatusBadge status={object.status} />
             {onOpenPreviewArtifact && previewArtifact ? (
               <button
                 type="button"
-                className="inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-2 text-xs font-medium text-[color:var(--lime-text-strong)] transition hover:bg-[color:var(--lime-surface-hover)]"
+                className="article-editor-preview-button inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-2 text-xs font-medium text-[color:var(--lime-text-strong)] transition hover:bg-[color:var(--lime-surface-hover)]"
                 onClick={() => onOpenPreviewArtifact(previewArtifact)}
                 data-testid="workspace-article-editor-open-preview"
               >
@@ -190,33 +214,37 @@ export function WorkspaceArticleEditorSurface({
             ) : null}
           </div>
         </div>
-        <div
-          className="mt-3 flex min-w-0 flex-wrap items-center gap-1.5"
-          data-testid="workspace-article-editor-stats"
-        >
-          {articleStats.map((stat) => (
-            <span
-              key={stat.key}
-              className="inline-flex items-center gap-1 rounded-md border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-subtle)] px-2 py-1 text-[11px] text-[color:var(--lime-text-muted)]"
-            >
-              <span>{stat.label}</span>
-              <span className="font-semibold text-[color:var(--lime-text-strong)]">
-                {stat.value}
+        {!isCompactLayout ? (
+          <div
+            className="mt-3 flex min-w-0 flex-wrap items-center gap-1.5"
+            data-testid="workspace-article-editor-stats"
+          >
+            {articleStats.map((stat) => (
+              <span
+                key={stat.key}
+                className="inline-flex items-center gap-1 rounded-md border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-subtle)] px-2 py-1 text-[11px] text-[color:var(--lime-text-muted)]"
+              >
+                <span>{stat.label}</span>
+                <span className="font-semibold text-[color:var(--lime-text-strong)]">
+                  {stat.value}
+                </span>
               </span>
-            </span>
-          ))}
-          {updatedAt ? (
-            <span className="ml-auto min-w-0 truncate text-[11px] text-[color:var(--lime-text-muted)]">
-              {dynamicT("workspace.articleEditor.updatedAt", {
-                value: updatedAt,
-              })}
-            </span>
-          ) : null}
-        </div>
+            ))}
+            {updatedAtLabel ? (
+              <span className="ml-auto min-w-0 truncate text-[11px] text-[color:var(--lime-text-muted)]">
+                {dynamicT("workspace.articleEditor.updatedAt", {
+                  value: updatedAtLabel,
+                })}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
       </header>
 
       <div
-        className="article-editor-workbench"
+        className={`article-editor-workbench ${
+          isCompactLayout ? "article-editor-workbench-compact" : ""
+        }`}
         data-testid="workspace-article-editor-workbench"
       >
         <main
@@ -232,6 +260,13 @@ export function WorkspaceArticleEditorSurface({
                 {dynamicT("workspace.articleEditor.canvas.detail")}
               </div>
             </div>
+            {isCompactLayout && updatedAtLabel ? (
+              <div className="article-editor-canvas-updated shrink-0 truncate text-[11px] text-[color:var(--lime-text-muted)]">
+                {dynamicT("workspace.articleEditor.updatedAt", {
+                  value: updatedAtLabel,
+                })}
+              </div>
+            ) : null}
           </div>
           <div className="article-editor-canvas-shell">
             <ArticleTiptapCanvas
@@ -252,13 +287,17 @@ export function WorkspaceArticleEditorSurface({
         </main>
 
         <aside
-          className="article-editor-side-panel"
+          className={`article-editor-side-panel ${
+            isCompactLayout ? "article-editor-side-panel-compact" : ""
+          }`}
           data-testid="workspace-article-editor-side-panel"
         >
           {actions.length > 0 ? (
             <ArticleEditorSection
               icon={<PenLine className="h-4 w-4" />}
-              title={dynamicT("workspace.articleWorkspace.rendererHost.actions")}
+              title={dynamicT(
+                "workspace.articleWorkspace.rendererHost.actions",
+              )}
               detail={dynamicT("workspace.articleEditor.canvas.detail")}
               testId="workspace-article-editor-actions"
             >

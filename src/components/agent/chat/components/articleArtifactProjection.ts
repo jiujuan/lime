@@ -7,6 +7,10 @@ import type {
   ArtifactDocumentBlock,
   ArtifactDocumentSource,
 } from "@/lib/artifact-document";
+import {
+  buildWorkspaceArticleWorkspaceFromUnknown,
+  buildWorkspaceArticleWorkspaceViewModel,
+} from "../workspace/workspaceArticleWorkspaceModel";
 
 export interface ArticleArtifactFrameModel {
   renderer: "articleArtifacts";
@@ -58,6 +62,22 @@ function readNumber(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0
     ? value
     : 0;
+}
+
+function readArtifactKind(artifact: Artifact): string | null {
+  return readString(
+    artifact.meta.artifactKind,
+    artifact.meta.kind,
+    artifact.meta.outputArtifactKind,
+  );
+}
+
+function readArtifactRenderer(artifact: Artifact): string | null {
+  return readString(
+    artifact.meta.renderer,
+    artifact.meta.artifactRenderer,
+    artifact.meta.renderAs,
+  );
 }
 
 function countMarkdownHeadings(markdown: string): number {
@@ -195,37 +215,61 @@ function resolveWorkspacePatchArticleMarkdown(artifact: Artifact): {
     artifact.meta.contentFactoryWorkspacePatch,
     artifact.meta.workspace_patch,
   );
-  const objects = readArray(workspacePatch?.objects);
-  for (const item of objects) {
-    const object = readRecord(item);
-    const ref = readRecord(object?.ref);
-    if (readString(ref?.kind) !== "articleDraft") {
-      continue;
-    }
-    const source = readRecord(object?.source);
-    const markdown = readString(source?.markdown);
-    if (!markdown) {
-      continue;
-    }
-    return {
-      markdown,
-      summary: readString(object?.summary) ?? undefined,
-      sources: readArray(source?.citations).map((citation, index) => {
-        const record = readRecord(citation) ?? {};
-        return {
-          id: readString(record.id) ?? `citation-${index + 1}`,
-          type: "message",
-          label:
-            readString(record.title, record.label) ?? `Citation ${index + 1}`,
-          snippet: readString(record.summary, record.snippet) ?? undefined,
-        };
-      }),
-      imageSlotCount: readArray(source?.imageSlots).length,
-      outlineSectionCount: readArray(source?.outline).length,
-      researchRoundCount: readArray(source?.researchRounds).length,
-    };
+  const workspace = workspacePatch
+    ? buildWorkspaceArticleWorkspaceFromUnknown(workspacePatch, "threadRead")
+    : null;
+  if (!workspace) {
+    return null;
   }
-  return null;
+
+  const viewModel = buildWorkspaceArticleWorkspaceViewModel(workspace);
+  const selectedObject = viewModel.selectedObject;
+  if (selectedObject.ref.kind !== "articleDraft") {
+    return null;
+  }
+
+  const source = selectedObject.source ?? {};
+  const markdown = readString(
+    source.documentText,
+    source.document_text,
+    source.finalMarkdown,
+    source.final_markdown,
+    source.markdown,
+    source.processMarkdown,
+    source.process_markdown,
+    source.body,
+    source.content,
+    source.text,
+    source.excerpt,
+  );
+  if (!markdown) {
+    return null;
+  }
+
+  const selectedPreview = viewModel.selectedPreview;
+  return {
+    markdown,
+    summary:
+      selectedObject.summary ??
+      readString(source.summary, source.description) ??
+      selectedPreview.documentText?.slice(0, 160) ??
+      undefined,
+    sources: readArray(source.citations).map((citation, index) => {
+      const record = readRecord(citation) ?? {};
+      return {
+        id: readString(record.id) ?? `citation-${index + 1}`,
+        type: "message" as const,
+        label: readString(record.title, record.label) ?? `Citation ${index + 1}`,
+        snippet: readString(record.summary, record.snippet) ?? undefined,
+      };
+    }),
+    imageSlotCount: readArray(source.imageSlots).length || selectedPreview.imageSlots.length,
+    outlineSectionCount:
+      readArray(source.outline).length || selectedPreview.outline.length,
+    researchRoundCount:
+      readArray(source.researchRounds).length ||
+      selectedPreview.researchRounds.length,
+  };
 }
 
 function isArticleArtifact(artifact: Artifact): boolean {
@@ -234,20 +278,12 @@ function isArticleArtifact(artifact: Artifact): boolean {
     return true;
   }
 
-  const artifactKind = readString(
-    artifact.meta.artifactKind,
-    artifact.meta.kind,
-    artifact.meta.outputArtifactKind,
-  );
+  const artifactKind = readArtifactKind(artifact);
   if (artifactKind === "articleDraft" || artifactKind === "articleArtifacts") {
     return true;
   }
 
-  const renderer = readString(
-    artifact.meta.renderer,
-    artifact.meta.artifactRenderer,
-    artifact.meta.renderAs,
-  );
+  const renderer = readArtifactRenderer(artifact);
   if (renderer === "articleArtifacts") {
     return true;
   }

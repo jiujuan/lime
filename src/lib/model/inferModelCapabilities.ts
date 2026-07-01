@@ -8,14 +8,13 @@ import type {
   ModelRuntimeFeature,
   ModelTaskFamily,
 } from "@/lib/types/modelRegistry";
+import { isLikelyImageGenerationSearchText } from "@/lib/imageGen/providerMatchers";
 
 const REASONING_TOKEN_PATTERN = /(^|[._/-])(thinking|reasoning)(?=$|[._/-])/i;
 const VISION_HINT_PATTERN =
   /\b(vision|multimodal|multi-modal|omni|image-input|image understanding)\b/i;
 const NON_VISION_PATTERN =
   /\b(embedding|embed|rerank|tts|stt|transcribe|transcription|speech|audio|moderation)\b/i;
-const IMAGE_GENERATION_PATTERN =
-  /\b(gpt-image|gpt-images|imagen|dall-e|dalle|stable[ -]?diffusion|sdxl|sd3|midjourney|mj|flux|image[ -]?generation|image-gen|image-preview|nano-banana|recraft|ideogram|seedream|cogview)\b/i;
 const IMAGE_EDIT_PATTERN =
   /\b(edit|inpaint|outpaint|img2img|image-edit|image_edit|image edits)\b/i;
 const OPENAI_VISION_PATTERN =
@@ -153,7 +152,10 @@ export function inferVisionCapability(params: {
     return false;
   }
 
-  if (NON_VISION_PATTERN.test(text) || IMAGE_GENERATION_PATTERN.test(text)) {
+  if (
+    NON_VISION_PATTERN.test(text) ||
+    isLikelyImageGenerationSearchText(text)
+  ) {
     return false;
   }
 
@@ -267,7 +269,7 @@ function inferBaseSignals(params: InferModelTaxonomyParams) {
   const isSpeechToText = SPEECH_TO_TEXT_PATTERN.test(text);
   const isTextToSpeech = TEXT_TO_SPEECH_PATTERN.test(text);
   const isImageGeneration =
-    hasExplicitImageOutput || IMAGE_GENERATION_PATTERN.test(text);
+    hasExplicitImageOutput || isLikelyImageGenerationSearchText(text);
   const isImageEdit =
     IMAGE_EDIT_PATTERN.test(text) ||
     (hasExplicitImageInput && hasExplicitImageOutput);

@@ -78,7 +78,63 @@ function snapshot(): PluginMarketplaceRegistrySnapshot {
                 provider: "local-worker",
                 capabilities: ["research.article.generate"],
               },
+              {
+                key: "web-research",
+                title: "Web Research",
+                provider: "connector:api",
+                description: "Search public sources",
+                capabilities: ["research.article.generate"],
+              },
+              {
+                key: "hook:task-complete",
+                title: "Task Complete",
+                provider: "lifecycle-hook",
+                path: "./hooks/task-complete.mjs",
+              },
             ],
+            workflows: [
+              {
+                key: "research_article_workflow",
+                title: "Research article workflow",
+                taskKind: "research.article.generate",
+                triggerIntents: ["research_article_generate"],
+                outputArtifactKind: "research.workspace_patch",
+                cliRefs: ["research-worker"],
+                connectorRefs: ["web-research"],
+                hookPolicy: {
+                  task: ["task-complete"],
+                },
+                steps: [
+                  {
+                    id: "research",
+                    subagent: "researcher",
+                    skillRefs: ["article-writer"],
+                  },
+                  {
+                    id: "draft",
+                    subagent: "writer",
+                    skillRefs: ["article-writer"],
+                  },
+                ],
+              },
+            ],
+            connectors: [
+              {
+                id: "web-research",
+                title: "Web Research",
+                kind: "api",
+                taskKinds: ["research.article.generate"],
+              },
+            ],
+            hooks: {
+              items: [
+                {
+                  key: "task-complete",
+                  event: "task.complete",
+                  entrypoint: "./hooks/task-complete.mjs",
+                },
+              ],
+            },
             skills: [
               {
                 id: "article-writer",
@@ -242,7 +298,10 @@ describe("plugin marketplace view model", () => {
         summary: {
           agentCount: 1,
           subagentCount: 2,
+          workflowCount: 1,
           toolCount: 1,
+          connectorCount: 1,
+          hookCount: 1,
           skillCount: 2,
         },
       }),
@@ -259,7 +318,10 @@ describe("plugin marketplace view model", () => {
         "research-kit",
         "researcher",
         "writer",
+        "research_article_workflow",
         "research-worker",
+        "web-research",
+        "task-complete",
         "article-writer",
         "article-image-cheatsheet",
       ]),
@@ -303,6 +365,66 @@ describe("plugin marketplace view model", () => {
         },
       ]),
     });
+  });
+
+  it("应合并被截短的顶层 activation entry 与 agentRuntime 完整入口", () => {
+    const source = snapshot();
+    source.marketplace.items[1] = {
+      ...source.marketplace.items[1],
+      manifestSummary: {
+        activationEntries: [
+          {
+            key: "content_article_generate",
+            title: "写文章",
+            aliases: ["@写文章"],
+            kind: "plugin",
+            intent: "at_command",
+            defaultObjectKind: "articleDraft",
+          },
+        ],
+        agentRuntime: {
+          activationEntries: [
+            {
+              key: "content_article_generate",
+              title: "写文章",
+              aliases: ["@写文章", "@写作"],
+              kind: "plugin",
+              intent: "at_command",
+              taskKind: "content.article.generate",
+              workflow: "content_article_workflow",
+              outputArtifactKind: "content_factory.workspace_patch",
+              rightSurface: "articleWorkspace",
+              expectedObjects: ["articleDraft"],
+            },
+          ],
+        },
+      },
+    };
+    source.registry[1] = {
+      ...source.registry[1],
+      enabled: true,
+      capabilityStates: ["activatable"],
+      activationState: "activatable",
+      historyState: "read_write",
+      blockerCodes: [],
+    };
+
+    const notesItem = buildPluginMarketplaceViewModel(source).items.find(
+      (item) => item.pluginId === "notes-kit@limecloud",
+    );
+
+    expect(notesItem?.activationEntries).toEqual([
+      expect.objectContaining({
+        key: "content_article_generate",
+        aliases: ["@写文章", "@写作"],
+        taskKind: "content.article.generate",
+        workflowKey: "content_article_workflow",
+        outputArtifactKind: "content_factory.workspace_patch",
+        rightSurface: "articleWorkspace",
+        expectedObjects: ["articleDraft"],
+        defaultObjectKind: "articleDraft",
+      }),
+    ]);
   });
 
   it("应支持 query / category / status filter 和 status sort", () => {

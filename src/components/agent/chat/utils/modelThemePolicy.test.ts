@@ -119,6 +119,19 @@ describe("modelThemePolicy", () => {
     expect(result.policyName).toBe("chat-only");
   });
 
+  it("general 主题应复用图片 matcher 过滤 OpenAI 兼容中转图片模型", () => {
+    const models = [
+      createModel("agnes-image-2.1-flash"),
+      createModel("deepseek-chat"),
+    ];
+
+    const result = filterModelsByTheme("general", models);
+
+    expect(result.usedFallback).toBe(false);
+    expect(result.filteredOutCount).toBe(1);
+    expect(result.models.map((model) => model.id)).toEqual(["deepseek-chat"]);
+  });
+
   it("general 主题应保留显式支持视觉理解的多模态图片模型", () => {
     const models = [
       createModel("relay-vision-image-pro", {

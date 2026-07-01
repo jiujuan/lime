@@ -18,11 +18,37 @@ vi.mock("@/components/input-kit", () => ({
     providerType,
     model,
     placeholderLabel,
+    providerFilter,
+    modelFilter,
     getFallbackModels,
   }: {
     providerType: string;
     model: string;
     placeholderLabel?: string;
+    providerFilter?: (provider: {
+      key: string;
+      label: string;
+      registryId: string;
+      fallbackRegistryId?: string;
+      type: string;
+      providerId?: string;
+      apiHost?: string;
+      customModels?: string[];
+      authStatus?: "ready" | "login_required";
+    }) => boolean;
+    modelFilter?: (
+      model: { id: string; task_families?: string[] },
+      provider: {
+        key: string;
+        label: string;
+        registryId: string;
+        fallbackRegistryId?: string;
+        type: string;
+        providerId?: string;
+        apiHost?: string;
+        customModels?: string[];
+      },
+    ) => boolean;
     getFallbackModels?: (provider: {
       key: string;
       label: string;
@@ -34,24 +60,76 @@ vi.mock("@/components/input-kit", () => ({
       customModels?: string[];
     }) => Array<{ id: string }>;
   }) => {
+    const providerFixtures = [
+      {
+        key: "relay-openai",
+        label: "Relay OpenAI",
+        registryId: "relay-openai",
+        type: "openai",
+        providerId: "relay-openai",
+        customModels: ["gpt-images-2"],
+      },
+      {
+        key: "fal",
+        label: "Fal",
+        registryId: "fal",
+        fallbackRegistryId: "openai",
+        type: "openai",
+        providerId: "fal",
+        apiHost: "https://fal.run/fal-ai",
+        customModels: ["gpt-5.2-pro"],
+      },
+      {
+        key: "agnes",
+        label: "agnes",
+        registryId: "agnes",
+        type: "openai",
+        providerId: "agnes",
+        apiHost: "https://agnes.example.test/v1",
+        customModels: [
+          "agnes-2.0-flash",
+          "agnes-image-2.1-flash",
+          "agnes-image-2.0-flash",
+        ],
+      },
+    ];
+    const selectedProvider = providerFixtures.find(
+      (provider) => provider.key === providerType,
+    );
+    const liveModelFixtures: Record<
+      string,
+      Array<{ id: string; task_families?: string[] }>
+    > = {
+      agnes: [
+        {
+          id: "agnes-live-creator-v9",
+          task_families: ["image_generation"],
+        },
+        {
+          id: "agnes-live-chat-v9",
+          task_families: ["chat"],
+        },
+      ],
+    };
     const providerLabel =
       providerType === "relay-openai"
         ? "Relay OpenAI"
         : providerType === "fal"
           ? "Fal"
-          : providerType;
+          : providerType === "agnes"
+            ? "agnes"
+            : providerType;
     const fallbackModelIds =
-      providerType === "fal"
-        ? (getFallbackModels?.({
-            key: "fal",
-            label: "Fal",
-            registryId: "fal",
-            fallbackRegistryId: "openai",
-            type: "openai",
-            providerId: "fal",
-            apiHost: "https://fal.run/fal-ai",
-            customModels: ["gpt-5.2-pro"],
-          })?.map((item) => item.id) ?? [])
+      selectedProvider && providerFilter?.(selectedProvider)
+        ? (getFallbackModels?.(selectedProvider)
+            ?.filter((item) => modelFilter?.(item, selectedProvider) ?? true)
+            .map((item) => item.id) ?? [])
+        : [];
+    const liveModelIds =
+      selectedProvider && providerFilter?.(selectedProvider)
+        ? (liveModelFixtures[selectedProvider.key] ?? [])
+            .filter((item) => modelFilter?.(item, selectedProvider) ?? true)
+            .map((item) => item.id)
         : [];
     return (
       <div data-testid="image-model-selector">
@@ -59,6 +137,9 @@ vi.mock("@/components/input-kit", () => ({
         {model || placeholderLabel || "Auto select"}
         {fallbackModelIds.length > 0 ? (
           <span> / {fallbackModelIds.join(",")}</span>
+        ) : null}
+        {liveModelIds.length > 0 ? (
+          <span> / live:{liveModelIds.join(",")}</span>
         ) : null}
       </div>
     );
@@ -86,6 +167,19 @@ vi.mock("@/hooks/useApiKeyProvider", () => ({
         custom_models: ["gpt-5.2-pro"],
       },
       {
+        id: "agnes",
+        type: "openai",
+        name: "agnes",
+        enabled: true,
+        api_key_count: 1,
+        api_host: "https://agnes.example.test/v1",
+        custom_models: [
+          "agnes-2.0-flash",
+          "agnes-image-2.1-flash",
+          "agnes-image-2.0-flash",
+        ],
+      },
+      {
         id: "tts-only",
         type: "audio",
         name: "TTS Only",
@@ -95,6 +189,46 @@ vi.mock("@/hooks/useApiKeyProvider", () => ({
       },
     ],
     loading: false,
+  }),
+}));
+
+vi.mock("@/hooks/useProviderModels", () => ({
+  useProviderModels: () => ({
+    models: [
+      {
+        id: "agnes-live-creator-v9",
+        display_name: "Agnes Live Creator V9",
+        provider_id: "agnes",
+        provider_name: "agnes",
+        family: null,
+        tier: "pro",
+        capabilities: {
+          vision: false,
+          tools: false,
+          streaming: false,
+          json_mode: false,
+          function_calling: false,
+          reasoning: false,
+        },
+        task_families: ["image_generation"],
+        pricing: null,
+        limits: {
+          context_length: null,
+          max_output_tokens: null,
+          requests_per_minute: null,
+          tokens_per_minute: null,
+        },
+        status: "active",
+        release_date: null,
+        is_latest: true,
+        description: null,
+        source: "api",
+        created_at: 0,
+        updated_at: 0,
+      },
+    ],
+    loading: false,
+    error: null,
   }),
 }));
 
@@ -299,5 +433,79 @@ describe("ImageGenSettings", () => {
     expect(container.textContent).toContain("Fal / Auto select");
     expect(container.textContent).toContain("fal-ai/nano-banana-pro");
     expect(container.textContent).not.toContain("gpt-5.2-pro");
+  });
+
+  it("OpenAI 兼容中转拉取的图片模型应进入默认图片模型选择器", async () => {
+    mockGetConfig.mockResolvedValueOnce({
+      workspace_preferences: {
+        media_defaults: {
+          image: {
+            preferredProviderId: "agnes",
+            allowFallback: true,
+          },
+        },
+      },
+      image_gen: {
+        default_count: 3,
+        default_quality: "hd",
+      },
+    });
+
+    const container = renderComponent();
+    await flushEffects(3);
+
+    expect(container.textContent).toContain("agnes / Auto select");
+    expect(container.textContent).toContain("agnes-image-2.1-flash");
+    expect(container.textContent).toContain("agnes-image-2.0-flash");
+    expect(container.textContent).not.toContain("agnes-2.0-flash");
+  });
+
+  it("后端实时返回的图片任务族模型应进入默认图片模型选择器", async () => {
+    mockGetConfig.mockResolvedValueOnce({
+      workspace_preferences: {
+        media_defaults: {
+          image: {
+            preferredProviderId: "agnes",
+            allowFallback: true,
+          },
+        },
+      },
+      image_gen: {
+        default_count: 3,
+        default_quality: "hd",
+      },
+    });
+
+    const container = renderComponent();
+    await flushEffects(3);
+
+    expect(container.textContent).toContain("live:agnes-live-creator-v9");
+    expect(container.textContent).not.toContain("agnes-live-chat-v9");
+  });
+
+  it("保存的后端实时图片模型不应被误报不可用", async () => {
+    mockGetConfig.mockResolvedValueOnce({
+      workspace_preferences: {
+        media_defaults: {
+          image: {
+            preferredProviderId: "agnes",
+            preferredModelId: "agnes-live-creator-v9",
+            allowFallback: true,
+          },
+        },
+      },
+      image_gen: {
+        default_count: 3,
+        default_quality: "hd",
+      },
+    });
+
+    const container = renderComponent();
+    await flushEffects(3);
+
+    expect(container.textContent).toContain("agnes / agnes-live-creator-v9");
+    expect(container.textContent).not.toContain(
+      "agnes-live-creator-v9 is unavailable",
+    );
   });
 });

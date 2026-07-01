@@ -222,6 +222,15 @@ describe("workspacePluginActivation", () => {
         pluginId: "content-factory-app",
         activeAgentAppId: "content-factory-app",
         activeEntryKey: "content_factory_generate",
+        taskKind: "content.factory.generate",
+        workflowKey: "content_article_workflow",
+        rightSurface: "articleWorkspace",
+        expectedObjects: [
+          "articleDraft",
+          "imageGenerationSet",
+          "videoStoryboard",
+          "deliveryChecklist",
+        ],
         selectedObjectRef: {
           pluginId: "content-factory-app",
           objectKind: "articleDraft",
@@ -232,6 +241,7 @@ describe("workspacePluginActivation", () => {
         appId: "content-factory-app",
         intentKey: "content_factory_generate",
         taskKind: "content.factory.generate",
+        workflowKey: "content_article_workflow",
         outputArtifactKind: "content_factory.workspace_patch",
         rightSurface: "articleWorkspace",
         expectedObjects: [
@@ -260,6 +270,10 @@ describe("workspacePluginActivation", () => {
         pluginId: "content-factory-app",
         activeAgentAppId: "content-factory-app",
         activeEntryKey: "content_article_generate",
+        taskKind: "content.article.generate",
+        workflowKey: "content_article_workflow",
+        rightSurface: "articleWorkspace",
+        expectedObjects: ["articleDraft"],
         selectedObjectRef: {
           pluginId: "content-factory-app",
           objectKind: "articleDraft",
@@ -270,9 +284,35 @@ describe("workspacePluginActivation", () => {
         appId: "content-factory-app",
         intentKey: "content_article_generate",
         taskKind: "content.article.generate",
+        workflowKey: "content_article_workflow",
         outputArtifactKind: "content_factory.workspace_patch",
         rightSurface: "articleWorkspace",
         expectedObjects: ["articleDraft"],
+      },
+    });
+  });
+
+  it("内容工厂本地包需要维护时 @写文章 仍应命中已安装插件", () => {
+    const base = createInstalledContentFactory();
+    const resolution = resolveWorkspacePluginActivation({
+      text: "@写文章 写一篇公众号文章",
+      sessionId: "session-write-article-needs-setup",
+      installedAgentApps: [
+        createInstalledContentFactory({
+          readiness: {
+            ...base.readiness,
+            status: "needs-setup",
+          },
+        }),
+      ],
+    });
+
+    expect(resolution).toMatchObject({
+      status: "matched",
+      trigger: "@写文章",
+      context: {
+        pluginId: "content-factory-app",
+        activeEntryKey: "content_article_generate",
       },
     });
   });
@@ -326,8 +366,10 @@ describe("workspacePluginActivation", () => {
       harness: {
         plugin_activation: {
           plugin_id: "content-factory-app",
+          entry_workflow_key: "content_article_workflow",
           intent_key: "content_article_generate",
           task_kind: "content.article.generate",
+          intent_workflow_key: "content_article_workflow",
           workflow_key: "content_article_workflow",
           workflow: expect.objectContaining({
             key: "content_article_workflow",
@@ -353,7 +395,11 @@ describe("workspacePluginActivation", () => {
             }),
           ]),
           cli_refs: ["content-factory"],
-          connector_refs: ["lime-knowledge", "web-research", "media-generation"],
+          connector_refs: [
+            "lime-knowledge",
+            "web-research",
+            "media-generation",
+          ],
           hook_policy: {
             prompt: ["prompt-submit"],
             task: ["task-complete"],
@@ -378,6 +424,14 @@ describe("workspacePluginActivation", () => {
           default_prompts: expect.arrayContaining([
             expect.stringContaining("@写文章"),
           ]),
+        },
+      },
+    });
+    expect(sendOptions?.requestMetadata).toMatchObject({
+      harness: {
+        plugin_activation_intent: {
+          intent_key: "content_article_generate",
+          workflow_key: "content_article_workflow",
         },
       },
     });

@@ -11,6 +11,7 @@ interface RightSurfaceHostProps {
   definitions: readonly RightSurfaceDefinition[];
   openSurfaces?: readonly WorkspaceRightSurfaceKind[];
   onSelectSurface?: (kind: WorkspaceRightSurfaceKind) => void;
+  tabMode?: "auto" | "hidden";
 }
 
 const RIGHT_SURFACE_TAB_LABELS: Record<
@@ -64,6 +65,7 @@ export function RightSurfaceHost({
   definitions,
   openSurfaces,
   onSelectSurface,
+  tabMode = "auto",
 }: RightSurfaceHostProps): ReactNode {
   const { t } = useTranslation("agent");
   if (!activeSurface) {
@@ -84,11 +86,11 @@ export function RightSurfaceHost({
 
   return (
     <div
-      className="flex h-full min-h-0 flex-col overflow-hidden"
+      className="flex h-full min-h-0 w-full flex-col overflow-hidden"
       data-testid="workspace-right-surface-host"
       data-surface={activeSurface}
     >
-      {tabs.length > 1 ? (
+      {tabMode !== "hidden" && tabs.length > 1 ? (
         <div
           className="flex h-10 shrink-0 items-center gap-1 overflow-x-auto border-b border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-2"
           data-testid="workspace-right-surface-tabs"
@@ -98,8 +100,7 @@ export function RightSurfaceHost({
             const label = t(RIGHT_SURFACE_TAB_LABELS[kind].key, {
               defaultValue: RIGHT_SURFACE_TAB_LABELS[kind].fallback,
             });
-            const tabLabel =
-              definitionByKind.get(kind)?.label?.trim() || label;
+            const tabLabel = definitionByKind.get(kind)?.label?.trim() || label;
             const active = kind === activeSurface;
             return (
               <button
@@ -128,7 +129,7 @@ export function RightSurfaceHost({
         </div>
       ) : null}
       <div
-        className="min-h-0 flex-1 overflow-hidden"
+        className="min-h-0 flex-1 w-full overflow-hidden"
         data-testid="workspace-right-surface-active-pane"
       >
         {definition.render({ activeSurface })}

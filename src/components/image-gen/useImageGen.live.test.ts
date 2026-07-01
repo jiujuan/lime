@@ -5,13 +5,13 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { __imageGenFalTestUtils } from "./useImageGen";
+import { requestImageFromNewApiResponsesStream } from "./openAICompatibleImageExecutor";
 
-const { requestImageFromNewApiResponsesStream } = __imageGenFalTestUtils;
-
-const env = (globalThis as typeof globalThis & {
-  process?: { env?: Record<string, string | undefined> };
-}).process?.env;
+const env = (
+  globalThis as typeof globalThis & {
+    process?: { env?: Record<string, string | undefined> };
+  }
+).process?.env;
 const LIVE_ENABLED =
   env?.LIME_IMAGE_GEN_LIVE === "1" &&
   (isTruthyEnv(env?.LIME_ALLOW_LIVE_PROVIDER_SMOKE) ||
@@ -25,7 +25,11 @@ function isTruthyEnv(value: string | undefined): boolean {
   return /^(1|true|yes|on)$/i.test(String(value || "").trim());
 }
 
-function requireLiveConfig(): { apiHost: string; apiKey: string; model: string } {
+function requireLiveConfig(): {
+  apiHost: string;
+  apiKey: string;
+  model: string;
+} {
   if (!LIVE_API_HOST.trim()) {
     throw new Error("缺少 LIME_IMAGE_GEN_LIVE_API_HOST");
   }

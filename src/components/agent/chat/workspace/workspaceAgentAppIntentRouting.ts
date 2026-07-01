@@ -16,6 +16,7 @@ export interface WorkspaceAgentAppIntentMatch {
   manifest: NormalizedAppManifest;
   intentKey: string;
   taskKind?: string;
+  workflowKey?: string;
   outputArtifactKind?: string;
   rightSurface?: string;
   expectedObjects: string[];
@@ -219,9 +220,14 @@ function readIntentDeclarations(
   const rawIntents = Array.isArray(agentRuntime?.intents)
     ? agentRuntime.intents
     : [];
-  const rawActivationEntries = Array.isArray(agentRuntime?.activationEntries)
-    ? agentRuntime.activationEntries
-    : [];
+  const rawActivationEntries = [
+    ...(Array.isArray(manifest.activationEntries)
+      ? manifest.activationEntries
+      : []),
+    ...(Array.isArray(agentRuntime?.activationEntries)
+      ? agentRuntime.activationEntries
+      : []),
+  ];
   const fallbackOutputArtifactKind =
     readRuntimeWorkerOutputArtifactKind(manifest);
   const fallbackTaskKind = readFirstRuntimeTaskKind(manifest);
@@ -272,6 +278,10 @@ function readIntentDeclarations(
           inferDefaultRightSurface(manifest),
         triggerPhrases,
         expectedObjects: expectedObjectsForIntent(manifest, {
+          explicitExpectedObjects: [
+            ...readStringArray(entry?.expectedObjects),
+            ...readStringArray(entry?.expected_objects),
+          ],
           defaultObjectKind: readTrimmedString(entry?.defaultObjectKind),
           intentKey: key,
           taskKind,
@@ -379,11 +389,27 @@ function scorePhraseMatch(sourceText: string, phrase: string): number {
   if (!normalizedSource || !normalizedPhrase) {
     return 0;
   }
+  const sourceStartsWithMention = sourceText.trimStart().startsWith("@");
+  const phraseStartsWithMention = phrase.trimStart().startsWith("@");
   if (normalizedSource === normalizedPhrase) {
-    return 1000 + normalizedPhrase.length;
+    return (
+      1000 + normalizedPhrase.length + (phraseStartsWithMention ? 1000 : 0)
+    );
+  }
+  if (
+    sourceStartsWithMention &&
+    phraseStartsWithMention &&
+    (normalizedSource.startsWith(`${normalizedPhrase} `) ||
+      normalizedSource.startsWith(normalizedPhrase))
+  ) {
+    return 900 + normalizedPhrase.length;
   }
   if (normalizedSource.includes(normalizedPhrase)) {
-    return 500 + normalizedPhrase.length;
+    return (
+      500 +
+      normalizedPhrase.length +
+      (sourceStartsWithMention && !phraseStartsWithMention ? -250 : 0)
+    );
   }
   return 0;
 }
@@ -416,6 +442,7 @@ export function resolveWorkspaceAgentAppIntent(
           manifest,
           intentKey: intent.key,
           taskKind: intent.taskKind,
+          workflowKey: intent.workflowKey,
           outputArtifactKind: intent.outputArtifactKind,
           rightSurface: intent.rightSurface,
           expectedObjects: intent.expectedObjects,
@@ -447,6 +474,9 @@ export function buildAgentAppIntentRequestMetadata(
   };
   if (match.taskKind) {
     agentAppIntent.task_kind = match.taskKind;
+  }
+  if (match.workflowKey) {
+    agentAppIntent.workflow_key = match.workflowKey;
   }
   if (match.outputArtifactKind) {
     agentAppIntent.output_artifact_kind = match.outputArtifactKind;
@@ -482,6 +512,7 @@ export function buildAgentAppIntentSystemPrompt(
     `Agent App: ${match.appName} (${match.appId})`,
     `Intent: ${match.intentKey}`,
     match.taskKind ? `Task kind: ${match.taskKind}` : null,
+    match.workflowKey ? `Workflow: ${match.workflowKey}` : null,
     match.outputArtifactKind
       ? `Output artifact kind: ${match.outputArtifactKind}`
       : null,

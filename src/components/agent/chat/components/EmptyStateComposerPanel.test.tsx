@@ -2,10 +2,12 @@ import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 import {
   createSkillSelection,
+  mockEmptyStateCharacterMention,
   openPlusMenuPanel,
   renderPanel,
   TEST_EN_COMPOSER_COPY,
   TEST_EN_INPUTBAR_CORE_COPY,
+  updateTextareaValue,
 } from "./EmptyStateComposerPanel.testFixtures";
 
 describe("EmptyStateComposerPanel", () => {
@@ -125,6 +127,40 @@ describe("EmptyStateComposerPanel", () => {
     ).toBe("@写文章 写一篇公众号文章");
   });
 
+  it("首页空态输入区通过 mention 选择插件时不应重复写回触发词", async () => {
+    const plugin = {
+      pluginId: "content-factory-app",
+      displayName: "写文章",
+      trigger: "@写文章",
+      description: "生成文章草稿",
+    };
+    const container = renderPanel({
+      input: "@写文章",
+      isGeneralTheme: true,
+      pluginSuggestions: [plugin],
+    });
+
+    const mentionProps = mockEmptyStateCharacterMention.mock.calls.at(-1)?.[0];
+    expect(mentionProps?.onSelectPlugin).toBeTruthy();
+
+    await act(async () => {
+      mentionProps?.onSelectPlugin?.(plugin, undefined, {
+        inputOverride: "",
+        preserveInputOverride: true,
+      });
+      await Promise.resolve();
+    });
+
+    expect(
+      container.querySelector('[data-testid="inputbar-plugin-badge"]')
+        ?.textContent,
+    ).toContain("写文章");
+    expect(
+      (container.querySelector("textarea") as HTMLTextAreaElement | null)
+        ?.value,
+    ).toBe("");
+  });
+
   it("首页空态输入区选择插件时应写回显式触发前缀并显示插件标记", async () => {
     const container = renderPanel({
       input: "整理今天的选题",
@@ -158,6 +194,53 @@ describe("EmptyStateComposerPanel", () => {
       (container.querySelector("textarea") as HTMLTextAreaElement | null)
         ?.value,
     ).toBe("@内容工厂 整理今天的选题");
+  });
+
+  it("首页空态输入区手动删除插件前缀后不应自动恢复标记", async () => {
+    const container = renderPanel({
+      input: "整理今天的选题",
+      isGeneralTheme: true,
+      pluginSuggestions: [
+        {
+          pluginId: "content-workbench",
+          displayName: "内容工厂",
+          description: "整理内容生产资料",
+        },
+      ],
+    });
+
+    openPlusMenuPanel(container, "plugins");
+
+    const option = document.body.querySelector(
+      '[data-testid="inputbar-plugin-option"]',
+    ) as HTMLButtonElement | null;
+    expect(option).toBeTruthy();
+
+    await act(async () => {
+      option?.click();
+      await Promise.resolve();
+    });
+
+    expect(
+      container.querySelector('[data-testid="inputbar-plugin-badge"]'),
+    ).toBeTruthy();
+
+    const textarea = container.querySelector(
+      "textarea",
+    ) as HTMLTextAreaElement | null;
+    updateTextareaValue(textarea, "整理今天的选题");
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(
+      container.querySelector('[data-testid="inputbar-plugin-badge"]'),
+    ).toBeNull();
+    expect(
+      (container.querySelector("textarea") as HTMLTextAreaElement | null)
+        ?.value,
+    ).toBe("整理今天的选题");
   });
 
   it("首页空态输入区选择插件技能时应写回 @插件:技能 前缀", async () => {

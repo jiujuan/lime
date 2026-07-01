@@ -51,6 +51,11 @@ interface AgentRuntimeIntent {
   key: string;
   title?: string;
   aliases: string[];
+  taskKind?: string;
+  workflowKey?: string;
+  outputArtifactKind?: string;
+  rightSurface?: string;
+  expectedObjects?: string[];
   defaultObjectKind?: string;
 }
 
@@ -78,8 +83,7 @@ function normalizeManifestInterface(
     capabilities,
     websiteUrl: readString(value.websiteUrl) ?? readString(value.websiteURL),
     privacyPolicyUrl:
-      readString(value.privacyPolicyUrl) ??
-      readString(value.privacyPolicyURL),
+      readString(value.privacyPolicyUrl) ?? readString(value.privacyPolicyURL),
     termsOfServiceUrl:
       readString(value.termsOfServiceUrl) ??
       readString(value.termsOfServiceURL),
@@ -101,8 +105,7 @@ function normalizeComponentPaths(
     readString(componentPaths.agents) ??
     (typeof raw.agents === "string" ? readString(raw.agents) : undefined);
   const subagents =
-    readString(componentPaths.subagents) ??
-    readString(contributions.subagents);
+    readString(componentPaths.subagents) ?? readString(contributions.subagents);
   const skills =
     readString(componentPaths.skills) ??
     readString(contributions.skills) ??
@@ -110,9 +113,11 @@ function normalizeComponentPaths(
   const cli =
     readString(componentPaths.cli) ??
     (typeof raw.cli === "string" ? readString(raw.cli) : undefined);
-  const clis = readString(componentPaths.clis) ?? readString(contributions.clis);
+  const clis =
+    readString(componentPaths.clis) ?? readString(contributions.clis);
   const connectors =
-    readString(componentPaths.connectors) ?? readString(contributions.connectors);
+    readString(componentPaths.connectors) ??
+    readString(contributions.connectors);
   const resources =
     readString(componentPaths.resources) ?? readString(contributions.resources);
   const workflows =
@@ -168,7 +173,9 @@ function normalizeContributions(
   }
   const mcpServers = value.mcpServers;
   const contributions: PluginManifestContributions = {
-    ...(readString(value.runtime) ? { runtime: readString(value.runtime) } : {}),
+    ...(readString(value.runtime)
+      ? { runtime: readString(value.runtime) }
+      : {}),
     ...(readString(value.workbench)
       ? { workbench: readString(value.workbench) }
       : {}),
@@ -190,7 +197,9 @@ function normalizeContributions(
     ...(readString(value.artifacts)
       ? { artifacts: readString(value.artifacts) }
       : {}),
-    ...(readString(value.locales) ? { locales: readString(value.locales) } : {}),
+    ...(readString(value.locales)
+      ? { locales: readString(value.locales) }
+      : {}),
     ...(readString(value.examples)
       ? { examples: readString(value.examples) }
       : {}),
@@ -395,6 +404,20 @@ function normalizeActivationEntry(
       `Plugin activation entry intent is unsupported: ${intent}`,
     );
   }
+  const taskKind = readString(record.taskKind) ?? readString(record.task_kind);
+  const workflowKey =
+    readString(record.workflowKey) ??
+    readString(record.workflow_key) ??
+    readString(record.workflow);
+  const outputArtifactKind =
+    readString(record.outputArtifactKind) ??
+    readString(record.output_artifact_kind);
+  const rightSurface =
+    readString(record.rightSurface) ?? readString(record.right_surface);
+  const expectedObjects = uniqueStrings([
+    ...readStringArray(record.expectedObjects),
+    ...readStringArray(record.expected_objects),
+  ]);
 
   return {
     key: requireString(record, "key"),
@@ -402,6 +425,11 @@ function normalizeActivationEntry(
     aliases: readStringArray(record.aliases),
     kind: normalizeActivationKind(record.kind),
     intent: intent as PluginActivationEntryDeclaration["intent"] | undefined,
+    ...(taskKind ? { taskKind } : {}),
+    ...(workflowKey ? { workflowKey } : {}),
+    ...(outputArtifactKind ? { outputArtifactKind } : {}),
+    ...(rightSurface ? { rightSurface } : {}),
+    ...(expectedObjects.length > 0 ? { expectedObjects } : {}),
     defaultObjectKind: readString(record.defaultObjectKind),
   };
 }
@@ -483,7 +511,9 @@ function normalizeHistoryFallback(value: unknown): PluginHistoryFallback {
     : "chatOnly";
 }
 
-function normalizeInstallContract(value: unknown): PluginManifestInstallContract | undefined {
+function normalizeInstallContract(
+  value: unknown,
+): PluginManifestInstallContract | undefined {
   if (!isRecord(value)) {
     return undefined;
   }
@@ -543,6 +573,28 @@ function defaultActivationEntry(params: {
     intent: "manual",
     defaultObjectKind: params.renderers[0]?.artifactType,
   };
+}
+
+function hasDefinedValue(value: unknown): boolean {
+  return Array.isArray(value) ? value.length > 0 : value !== undefined;
+}
+
+function mergeByKey<T extends { key: string }>(items: T[]): T[] {
+  const merged = new Map<string, T>();
+  for (const item of items) {
+    const existing = merged.get(item.key);
+    if (!existing) {
+      merged.set(item.key, item);
+      continue;
+    }
+    merged.set(item.key, {
+      ...existing,
+      ...Object.fromEntries(
+        Object.entries(item).filter(([, value]) => hasDefinedValue(value)),
+      ),
+    } as T);
+  }
+  return Array.from(merged.values());
 }
 
 function dedupeByKey<T extends { key: string }>(items: T[]): T[] {
@@ -724,7 +776,11 @@ function primaryObjectKind(
 function activationKindForEntry(
   entry: NormalizedAppEntry,
 ): PluginActivationEntryKind {
-  return entry.kind === "page" || entry.kind === "panel"
+  return entry.kind === "page" ||
+    entry.kind === "panel" ||
+    entry.kind === "workflow" ||
+    entry.kind === "command" ||
+    entry.kind === "expert-chat"
     ? "agentApp"
     : "plugin";
 }
@@ -809,11 +865,16 @@ function artifactRenderersFromAgentApp(
 }
 
 function readAgentRuntimeIntents(agentRuntime: unknown): AgentRuntimeIntent[] {
-  const intents = isRecord(agentRuntime) ? agentRuntime.intents : undefined;
-  if (!Array.isArray(intents)) {
+  const runtime = isRecord(agentRuntime) ? agentRuntime : undefined;
+  const intents = Array.isArray(runtime?.intents) ? runtime.intents : [];
+  const activationEntries = Array.isArray(runtime?.activationEntries)
+    ? runtime.activationEntries
+    : [];
+  const records = [...activationEntries, ...intents];
+  if (records.length === 0) {
     return [];
   }
-  return intents.flatMap((intent) => {
+  return records.flatMap((intent) => {
     if (!isRecord(intent)) {
       return [];
     }
@@ -823,12 +884,25 @@ function readAgentRuntimeIntents(agentRuntime: unknown): AgentRuntimeIntent[] {
     }
     const expectedObjects = Array.isArray(intent.expectedObjects)
       ? intent.expectedObjects.map(readString)
-      : [];
+      : Array.isArray(intent.expected_objects)
+        ? intent.expected_objects.map(readString)
+        : [];
     return [
       {
         key,
         title: readString(intent.title),
         aliases: readStringArray(intent.aliases),
+        taskKind: readString(intent.taskKind) ?? readString(intent.task_kind),
+        workflowKey:
+          readString(intent.workflowKey) ??
+          readString(intent.workflow_key) ??
+          readString(intent.workflow),
+        outputArtifactKind:
+          readString(intent.outputArtifactKind) ??
+          readString(intent.output_artifact_kind),
+        rightSurface:
+          readString(intent.rightSurface) ?? readString(intent.right_surface),
+        expectedObjects: uniqueStrings(expectedObjects),
         defaultObjectKind: expectedObjects.find(Boolean),
       },
     ];
@@ -849,6 +923,7 @@ function activationEntriesFromAgentApp(
     title: entry.title,
     kind: activationKindForEntry(entry),
     intent: "manual" as const,
+    workflowKey: entry.workflow,
     defaultObjectKind,
   }));
   const intents = readAgentRuntimeIntents(manifest.agentRuntime).map(
@@ -858,10 +933,44 @@ function activationEntriesFromAgentApp(
       aliases: intent.aliases,
       kind: "plugin" as const,
       intent: "at_command" as const,
+      taskKind: intent.taskKind,
+      workflowKey: intent.workflowKey,
+      outputArtifactKind: intent.outputArtifactKind,
+      rightSurface: intent.rightSurface,
+      expectedObjects: intent.expectedObjects,
       defaultObjectKind: intent.defaultObjectKind ?? defaultObjectKind,
     }),
   );
-  return dedupeByKey([...declared, ...entries, ...intents]);
+  return mergeByKey([...declared, ...entries, ...intents]).map((entry) =>
+    enrichAgentAppActivationWorkflowKey(manifest, entry),
+  );
+}
+
+function enrichAgentAppActivationWorkflowKey(
+  manifest: NormalizedAppManifest,
+  entry: PluginActivationEntryDeclaration,
+): PluginActivationEntryDeclaration {
+  if (entry.workflowKey) {
+    return entry;
+  }
+  const workflowKey = resolveAgentAppActivationWorkflowKey(manifest, entry);
+  return workflowKey ? { ...entry, workflowKey } : entry;
+}
+
+function resolveAgentAppActivationWorkflowKey(
+  manifest: NormalizedAppManifest,
+  entry: PluginActivationEntryDeclaration,
+): string | undefined {
+  return (
+    manifest.workflows?.find((workflow) =>
+      workflow.triggerIntents?.includes(entry.key),
+    )?.key ??
+    (entry.taskKind
+      ? manifest.workflows?.find(
+          (workflow) => workflow.taskKind === entry.taskKind,
+        )?.key
+      : undefined)
+  );
 }
 
 function historyRestoreFromAgentApp(

@@ -246,7 +246,8 @@ impl<'a> ArticleWorkspaceBuilder<'a> {
         if !matches!(status.as_str(), "completed" | "failed") {
             return;
         }
-        self.article_generation_task_statuses.insert(task_id, status);
+        self.article_generation_task_statuses
+            .insert(task_id, status);
     }
 }
 
@@ -367,9 +368,7 @@ fn article_object_task_id(object: &Value) -> Option<String> {
 }
 
 fn article_generation_task_id_from_worker_evidence(worker_evidence: &Value) -> Option<String> {
-    if string_field(worker_evidence, &["taskKind"]).as_deref()
-        != Some("content.article.generate")
-    {
+    if string_field(worker_evidence, &["taskKind"]).as_deref() != Some("content.article.generate") {
         return None;
     }
     string_field(worker_evidence, &["taskId"])
@@ -478,7 +477,8 @@ fn apply_markdown_to_article_object(object: &mut Value, markdown: &str, updated_
         *source = Value::Object(Map::new());
     }
     if let Some(source_map) = source.as_object_mut() {
-        source_map.insert("markdown".to_string(), json!(markdown));
+        source_map.insert("documentText".to_string(), json!(markdown));
+        source_map.insert("finalMarkdown".to_string(), json!(markdown));
         source_map.insert("edited".to_string(), json!(true));
         if let Some(updated_at) = updated_at {
             source_map.insert("updatedAt".to_string(), json!(updated_at));

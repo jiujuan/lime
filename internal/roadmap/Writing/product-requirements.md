@@ -1,20 +1,20 @@
 # Writing 产品需求
 
-更新时间：2026-06-29
+更新时间：2026-06-30
 状态：In Progress
 
 ## 1. 背景
 
 当前用户目标不是“打开一个内容工厂页面”，而是在 Lime 中完成一件具体任务：写一篇文章。01Agent 的交互可以参考，但 Lime 的布局边界不同：Lime 的中间区域是 Claw 对话和运行过程，画布 / 侧边栏在右侧，不应复制 01Agent 的左侧或全屏画布。
 
-内容工厂已经作为插件存在，因此写作入口不应再通过宿主硬编码。正确路径是让内容工厂按 Lime Plugin Package v1 声明自己能写文章，声明需要哪些子智能体、skills、CLI、connectors、hooks 和 workflow；宿主只负责安装态发现、显式激活、运行 metadata 透传、独立 `ArtifactFrame`、article renderer 和右侧 Article Editor。
+内容工厂已经作为插件存在，因此写作入口不应再通过宿主硬编码。正确路径是让内容工厂按 Lime Plugin Package v1 声明自己能写文章，声明需要哪些子智能体、skills、CLI、connectors、hooks 和 workflow；宿主只负责安装态发现、显式激活、运行 metadata 透传、独立 `ArtifactFrame`、article renderer 和右侧 Article Editor，右侧布局标准统一见 `../rightsurface/README.md`。
 
-前一版把 Profile 当成右侧文章主界面是错误方向。当前不再保留这条兼容路径；Article Workspace 承接插件工作区事实，用户看到的产物界面必须是 Article Editor 画布。
+前一版把 Profile 当成右侧文章主界面是错误方向。当前不再保留这条兼容路径；Article Workspace 承接插件工作区事实，用户看到的产物界面必须是 Article Editor 画布，并遵循 `../rightsurface/README.md` 的 dock / tab 规则。
 
 ## 2. 目的
 
 1. 用户输入 `@写文章`、`@写作` 或选择内容工厂写作入口后，明确进入内容工厂插件 workflow。
-2. 写作过程不是一次普通聊天回答，而是有搜索、策划、写作、校对和配图规划的多步编排。
+2. 写作过程不是一次普通聊天回答，而是先展示搜索、策划、写作、校对和配图规划的多步编排，再进入最终产物。
 3. 文章正文最终作为结构化 `articleArtifacts` 出现，并在独立 `ArtifactFrame` 内完整、流式输出。
 4. 用户点击 `ArtifactFrame` 的打开入口后，右侧 Article Editor 展开同一篇文章草稿、结构、引用、配图规划和后续动作。
 5. 未登录云端账号时，本地已安装内容工厂仍可见、可 `@`、可启动。
@@ -34,8 +34,8 @@
 | 编号  | 用户故事                                                                 | 验收                                                                                                            |
 | ----- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
 | WS-01 | 作为用户，我想在输入框 `@写文章`，让 Lime 帮我写一篇文章。               | 输入建议来自已安装内容工厂插件；未安装时不出现伪候选。                                                          |
-| WS-02 | 作为用户，我想看到系统先搜索和整理，再开始写文章。                       | timeline / 小卡状态能体现 research、strategy、writing、editing 等步骤。                                         |
-| WS-03 | 作为用户，我希望文章产物在一个独立框里完整输出，而不是混进普通聊天正文。 | `ArtifactFrame` 内可流式展示完整文章，普通 assistant message 只保留过程说明。                                   |
+| WS-02 | 作为用户，我想看到系统先搜索和整理，再开始写文章。                       | timeline / 小卡状态先体现 research、strategy、writing、editing 等步骤，最终再出现文章产物框。                 |
+| WS-03 | 作为用户，我希望文章产物在一个独立框里完整输出，而不是混进普通聊天正文。 | 过程说明留在对话区，`ArtifactFrame` 内只展示最终文章并可流式输出。                                               |
 | WS-04 | 作为用户，我想点击文章产物框后在右侧继续编辑或生成配图。                 | `ArtifactFrame` 打开入口点击后打开右侧 `articleDraft` Article Editor。                                          |
 | WS-05 | 作为用户，我即使没有登录云端账号，也能使用本地已安装内容工厂。           | cloud marketplace 401/403 只影响云端列表，不阻断 installed registry。                                           |
 | WS-06 | 作为插件开发者，我想在内容工厂插件包里声明写作 workflow。                | 宿主读取 `activationEntries`、`workflows`、`subagents`、`skillRefs`、CLI、connectors 和 hooks，不靠 hard code。 |
@@ -48,7 +48,7 @@
 2. 输入栏命中内容工厂插件的 activation entry。
 3. 发送时 request metadata 写入 `plugin_activation`、`workflow_key=content_article_workflow`、subagents、skill refs、CLI refs、connector refs 和 hook policy。
 4. Runtime 按 workflow 执行写作。
-5. 聊天中出现独立 `ArtifactFrame`，框内 `articleArtifacts` renderer 流式输出文章。
+5. 聊天中先出现任务卡和过程态，再出现独立 `ArtifactFrame`，框内 `articleArtifacts` renderer 流式输出最终文章。
 6. 用户点击产物框打开入口，右侧 Article Editor 打开同一篇文章草稿。
 
 ### UC-02：从插件中心安装后使用
@@ -76,7 +76,7 @@
 ## 6. 体验约束
 
 1. 输入建议、插件详情和 workflow 激活必须来自插件事实源。
-2. 普通聊天正文不承载完整文章；完整文章只允许进入独立 `ArtifactFrame`。
+2. 普通聊天正文不承载完整文章；普通聊天正文只承载任务卡和过程态，完整文章只允许进入独立 `ArtifactFrame`。
 3. `ArtifactFrame` 需要稳定尺寸、标题栏和内部滚动策略，避免流式内容把布局撑乱。
 4. 右侧 Article Editor 可展开 / 收起，并保留宿主 tab 行为。
 5. 子 Agent、skills、CLI、connectors 和 hooks 在插件中心可解释，在 runtime metadata 可追踪。
@@ -89,5 +89,5 @@
 - 激活 metadata 包含 `workflow_key`、`workflow.steps`、`subagents`、`skill_refs`、`cli_refs`、`connector_refs` 和 `hook_policy`。
 - Runtime evidence 能看到 workflow orchestration。
 - 写作产物物化为 `articleDraft` / `articleArtifacts` / `content_factory.workspace_patch`。
-- UI 显示独立 `ArtifactFrame`，框内完整文章可流式输出，点击后右侧 Article Editor 打开。
+- UI 先在对话流显示任务卡和过程态，再显示独立 `ArtifactFrame`，框内完整文章可流式输出，点击后右侧 Article Editor 打开。
 - Playwright 覆盖插件中心可见、输入栏 `@`、发送、`ArtifactFrame` 流式内容、右栏展开。

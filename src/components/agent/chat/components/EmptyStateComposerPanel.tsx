@@ -63,6 +63,7 @@ import {
   resolveInputbarPluginDisplayName,
   type InputbarPluginCapability,
   type InputbarPluginSelection,
+  type InputbarPluginSelectionOptions,
   type InputbarPluginSkillCapability,
 } from "./Inputbar/pluginInputCapability";
 import type { InputbarCoreCopy } from "./Inputbar/components/inputbarCoreCopy";
@@ -292,6 +293,7 @@ export function EmptyStateComposerPanel({
   const [draftInput, setDraftInput] = useState(input);
   const [activePluginSelection, setActivePluginSelection] =
     useState<InputbarPluginSelection | null>(null);
+  const pluginSelectionInputSyncedRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [localObjectiveEnabled, setLocalObjectiveEnabled] = useState(false);
@@ -313,6 +315,32 @@ export function EmptyStateComposerPanel({
   useEffect(() => {
     setDraftInput(input);
   }, [input]);
+
+  useEffect(() => {
+    if (!activePluginSelection) {
+      pluginSelectionInputSyncedRef.current = false;
+      return;
+    }
+
+    if (activePluginSelection.preserveInput) {
+      pluginSelectionInputSyncedRef.current = false;
+      return;
+    }
+
+    const inputText = draftInput.trimStart();
+    const trigger = activePluginSelection.trigger.trim();
+    if (inputText === trigger || inputText.startsWith(`${trigger} `)) {
+      pluginSelectionInputSyncedRef.current = true;
+      return;
+    }
+
+    if (!pluginSelectionInputSyncedRef.current) {
+      return;
+    }
+
+    pluginSelectionInputSyncedRef.current = false;
+    setActivePluginSelection(null);
+  }, [activePluginSelection, draftInput]);
 
   const handleSendDraft = () => {
     const submittedInput = draftInput;
@@ -397,7 +425,7 @@ export function EmptyStateComposerPanel({
   const handleSelectPlugin = (
     plugin: InputbarPluginCapability,
     skill?: InputbarPluginSkillCapability,
-    options?: { inputOverride?: string },
+    options?: InputbarPluginSelectionOptions,
   ) => {
     const blocked =
       plugin.disabled ||
@@ -411,7 +439,9 @@ export function EmptyStateComposerPanel({
       input: options?.inputOverride ?? draftInput,
       plugin,
       skill,
+      preserveInput: options?.preserveInputOverride === true,
     });
+    pluginSelectionInputSyncedRef.current = false;
     setDraftInput(selection.text);
     setActivePluginSelection(selection);
     window.requestAnimationFrame(() => {
@@ -564,10 +594,12 @@ export function EmptyStateComposerPanel({
     <SkillSelector {...skillSelectorProps} renderMode="inline" />
   ) : undefined;
   const plusMenuPluginsPanel = (
-    <InputbarPluginSelector
+      <InputbarPluginSelector
       plugins={pluginSuggestions}
       labels={{
         empty: copy.pluginChip.empty,
+        error: copy.pluginChip.error,
+        loading: copy.pluginChip.loading,
         skillPrefix: copy.pluginChip.skillPrefix,
         title: copy.pluginChip.selectorTitle,
         unavailable: copy.pluginChip.unavailable,

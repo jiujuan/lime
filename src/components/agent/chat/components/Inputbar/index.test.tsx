@@ -19,6 +19,11 @@ import {
   resolveCuratedTaskTemplateLaunchPrefill,
 } from "../../utils/curatedTaskTemplates";
 import type { InputbarSendPayload } from "./inputbarSendPayload";
+import type {
+  InputbarPluginCapability,
+  InputbarPluginSelectionOptions,
+  InputbarPluginSkillCapability,
+} from "./pluginInputCapability";
 
 const { setAgentRuntimeObjectiveMock } = vi.hoisted(() => ({
   setAgentRuntimeObjectiveMock: vi.fn(),
@@ -32,6 +37,11 @@ const mockCharacterMention = vi.fn<
     onSelectInputCapability?: (
       capability: InputCapabilitySelection,
       options?: { replayText?: string },
+    ) => void;
+    onSelectPlugin?: (
+      plugin: InputbarPluginCapability,
+      skill?: InputbarPluginSkillCapability,
+      options?: InputbarPluginSelectionOptions,
     ) => void;
     onSelectServiceSkill?: (skill: ServiceSkillHomeItem) => void;
     defaultCuratedTaskReferenceMemoryIds?: string[];
@@ -254,6 +264,11 @@ vi.mock("../../skill-selection/CharacterMention", () => ({
       capability: InputCapabilitySelection,
       options?: { replayText?: string },
     ) => void;
+    onSelectPlugin?: (
+      plugin: InputbarPluginCapability,
+      skill?: InputbarPluginSkillCapability,
+      options?: InputbarPluginSelectionOptions,
+    ) => void;
     onSelectServiceSkill?: (skill: ServiceSkillHomeItem) => void;
     defaultCuratedTaskReferenceMemoryIds?: string[];
     defaultCuratedTaskReferenceEntries?: Array<{
@@ -269,10 +284,6 @@ vi.mock("../../skill-selection/CharacterMention", () => ({
     mockCharacterMention(props);
     return <div data-testid="character-mention-stub" />;
   },
-}));
-
-vi.mock("../TaskFiles", () => ({
-  TaskFileList: () => <div data-testid="task-file-list" />,
 }));
 
 vi.mock("../../skill-selection/SkillBadge", () => ({
@@ -2886,53 +2897,8 @@ describe("Inputbar", () => {
     });
   });
 
-  it("应把任务文件与额外浮层控件放进同一条输入栏 overlay row", async () => {
-    const { container } = renderInputbar({
-      taskFiles: [
-        {
-          id: "file-1",
-          name: "notes.md",
-          type: "document",
-          version: 1,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        },
-      ],
-      overlayAccessory: (
-        <button type="button" data-testid="team-inline-toggle">
-          查看任务进展 · 2
-        </button>
-      ),
-    });
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    const row = container.querySelector<HTMLElement>(
-      '[data-testid="inputbar-secondary-controls"]',
-    );
-    expect(row).toBeTruthy();
-    expect(getComputedStyle(row as HTMLElement).position).toBe("absolute");
-    expect(getComputedStyle(row as HTMLElement).pointerEvents).toBe("none");
-    expect(getComputedStyle(row as HTMLElement).zIndex).toBe("80");
-    expect(
-      row?.querySelector('[data-testid="task-files-panel-area"]'),
-    ).toBeTruthy();
-    expect(
-      row?.querySelector('[data-testid="team-inline-toggle"]'),
-    ).toBeTruthy();
-
-    const fileInput = container.querySelector(
-      'input[type="file"][accept="image/*"]',
-    ) as HTMLInputElement | null;
-    expect(fileInput).toBeTruthy();
-    expect(fileInput?.multiple).toBe(true);
-  });
-
   it("没有任务文件和额外控件时不应渲染 overlay row", async () => {
     const { container } = renderInputbar({
-      taskFiles: [],
       overlayAccessory: null,
     });
 
@@ -3049,6 +3015,86 @@ describe("Inputbar", () => {
     ).toBeTruthy();
   });
 
+  it("加号菜单选择内容工厂写文章入口时应写回 @写文章", async () => {
+    const setInput = vi.fn();
+    const { container } = renderInputbar({
+      input: "写一篇关于登山的文章",
+      setInput,
+      pluginSuggestions: [
+        {
+          pluginId: "content-factory-app",
+          displayName: "写文章",
+          trigger: "@写文章",
+          description: "@写文章 · 启动内容工厂文章工作流",
+        },
+      ],
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const pluginsPanel = openPluginsPanel(container);
+    const option = pluginsPanel.querySelector(
+      '[data-testid="inputbar-plugin-option"]',
+    ) as HTMLButtonElement | null;
+
+    await act(async () => {
+      option?.click();
+      await Promise.resolve();
+    });
+
+    expect(setInput).toHaveBeenCalledWith("@写文章 写一篇关于登山的文章");
+  });
+
+  it("mention 面板选择插件时应保留插件标记但不重复写回触发词", async () => {
+    const setInput = vi.fn();
+    const plugin: InputbarPluginCapability = {
+      pluginId: "content-factory-app",
+      displayName: "写文章",
+      trigger: "@写文章",
+      description: "生成文章草稿",
+    };
+    const { container, rerender } = renderInputbar({
+      input: "@写文章",
+      setInput,
+      pluginSuggestions: [plugin],
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const mentionProps = mockCharacterMention.mock.calls.at(-1)?.[0];
+    expect(mentionProps?.onSelectPlugin).toBeTruthy();
+
+    await act(async () => {
+      mentionProps?.onSelectPlugin?.(plugin, undefined, {
+        inputOverride: "",
+        preserveInputOverride: true,
+      });
+      await Promise.resolve();
+    });
+
+    expect(setInput).toHaveBeenCalledWith("");
+
+    rerender({
+      input: "",
+      setInput,
+      pluginSuggestions: [plugin],
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(
+      container.querySelector('[data-testid="inputbar-plugin-badge"]')
+        ?.textContent,
+    ).toContain("写文章");
+    expect(setInput).not.toHaveBeenCalledWith("@写文章");
+  });
+
   it("加号菜单选择插件技能时应写回 @插件:技能 前缀", async () => {
     const setInput = vi.fn();
     const { container, rerender } = renderInputbar({
@@ -3086,9 +3132,7 @@ describe("Inputbar", () => {
       await Promise.resolve();
     });
 
-    expect(setInput).toHaveBeenCalledWith(
-      "@内容工厂:文章写作 整理今天的选题",
-    );
+    expect(setInput).toHaveBeenCalledWith("@内容工厂:文章写作 整理今天的选题");
 
     rerender({
       input: "@内容工厂:文章写作 整理今天的选题",
@@ -3119,6 +3163,101 @@ describe("Inputbar", () => {
     ).toContain("内容工厂:文章写作");
   });
 
+  it("用户手动删除插件技能前缀时不应自动恢复前缀", async () => {
+    const setInput = vi.fn();
+    const { container, rerender } = renderInputbar({
+      input: "整理今天的选题",
+      setInput,
+      pluginSuggestions: [
+        {
+          pluginId: "content-workbench",
+          displayName: "内容工厂",
+          description: "整理内容生产资料",
+          skills: [
+            {
+              skillId: "article-writer",
+              title: "文章写作",
+              description: "生成文章草稿",
+            },
+          ],
+        },
+      ],
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const pluginsPanel = openPluginsPanel(container);
+    const skillOption = pluginsPanel.querySelector(
+      '[data-testid="inputbar-plugin-skill-option"]',
+    ) as HTMLButtonElement | null;
+    expect(skillOption).toBeTruthy();
+
+    await act(async () => {
+      skillOption?.click();
+      await Promise.resolve();
+    });
+
+    expect(setInput).toHaveBeenCalledWith("@内容工厂:文章写作 整理今天的选题");
+
+    rerender({
+      input: "@内容工厂:文章写作 整理今天的选题",
+      setInput,
+      pluginSuggestions: [
+        {
+          pluginId: "content-workbench",
+          displayName: "内容工厂",
+          description: "整理内容生产资料",
+          skills: [
+            {
+              skillId: "article-writer",
+              title: "文章写作",
+              description: "生成文章草稿",
+            },
+          ],
+        },
+      ],
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(
+      container.querySelector('[data-testid="inputbar-plugin-badge"]'),
+    ).toBeTruthy();
+    setInput.mockClear();
+
+    rerender({
+      input: "@内容工厂:Ar",
+      setInput,
+      pluginSuggestions: [
+        {
+          pluginId: "content-workbench",
+          displayName: "内容工厂",
+          description: "整理内容生产资料",
+          skills: [
+            {
+              skillId: "article-writer",
+              title: "文章写作",
+              description: "生成文章草稿",
+            },
+          ],
+        },
+      ],
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(setInput).not.toHaveBeenCalled();
+    expect(
+      container.querySelector('[data-testid="inputbar-plugin-badge"]'),
+    ).toBeNull();
+  });
+
   it("没有插件候选时加号菜单仍应显示插件入口和空态", async () => {
     const { container } = renderInputbar();
 
@@ -3128,6 +3267,20 @@ describe("Inputbar", () => {
 
     const pluginsPanel = openPluginsPanel(container);
     expect(pluginsPanel.textContent).toContain("当前没有可选插件");
+  });
+
+  it("插件候选加载中时加号菜单不应提前显示空态", async () => {
+    const { container } = renderInputbar({
+      pluginSuggestionsLoading: true,
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const pluginsPanel = openPluginsPanel(container);
+    expect(pluginsPanel.textContent).toContain("正在读取已安装插件");
+    expect(pluginsPanel.textContent).not.toContain("当前没有可选插件");
   });
 
   it("插件候选名称为空时应回退显示插件 id", async () => {

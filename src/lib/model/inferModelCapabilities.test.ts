@@ -118,6 +118,25 @@ describe("inferModelCapabilities", () => {
     });
   });
 
+  it("image-input 命名的聊天模型不应被统一图片 matcher 误判为生图模型", () => {
+    expect(
+      inferModelTaskFamilies({
+        modelId: "provider-image-input-chat",
+        providerId: "custom-provider",
+        explicitInputModalities: ["text", "image"],
+        explicitOutputModalities: ["text"],
+      }),
+    ).toEqual(expect.arrayContaining(["chat", "vision_understanding"]));
+    expect(
+      inferModelTaskFamilies({
+        modelId: "provider-image-input-chat",
+        providerId: "custom-provider",
+        explicitInputModalities: ["text", "image"],
+        explicitOutputModalities: ["text"],
+      }),
+    ).not.toContain("image_generation");
+  });
+
   it("显式 chat 任务族不应遮蔽图片输入和已知视觉模型信号", () => {
     expect(
       inferModelTaskFamilies({

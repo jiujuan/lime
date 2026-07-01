@@ -1132,7 +1132,7 @@ function messageHasImageWorkbenchProcessSignal(message: Message): boolean {
     Boolean(message.runtimeStatus) ||
     Boolean(
       message.imageWorkbenchPreview &&
-        !isDraftImageWorkbenchPreview(message.imageWorkbenchPreview),
+      !isDraftImageWorkbenchPreview(message.imageWorkbenchPreview),
     ) ||
     isImageWorkbenchSubmissionTemplateText(message.content) ||
     (message.toolCalls?.length || 0) > 0 ||
@@ -1187,7 +1187,9 @@ function resolvePendingImageCommandRecoverySignature(
       return null;
     }
 
-    if (trailingMessages.some(messageHasTerminalFailureWithoutImageTaskSignal)) {
+    if (
+      trailingMessages.some(messageHasTerminalFailureWithoutImageTaskSignal)
+    ) {
       return null;
     }
 
@@ -2748,9 +2750,10 @@ function buildImageWorkbenchMessagePatchFromTask(params: {
       prompt,
       mode: params.task.mode,
       modelName:
-        params.preview.modelName ||
         params.outputs[0]?.modelName ||
         params.task.runtimeContract?.model ||
+        params.preview.runtimeContract?.model ||
+        params.preview.modelName ||
         null,
     }),
     timestamp: startedAt,
@@ -3372,9 +3375,9 @@ function patchMessagesWithImageWorkbenchState(params: {
       preferredOutput?.providerName ?? preview.providerName ?? null;
     const nextModelName =
       preferredOutput?.modelName ??
-      preview.modelName ??
       task.runtimeContract?.model ??
       preview.runtimeContract?.model ??
+      preview.modelName ??
       null;
     const nextPreview: MessageImageWorkbenchPreview = {
       ...preview,

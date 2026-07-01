@@ -189,14 +189,6 @@ export function buildWorkspacePluginArticleWorkspaceFromActivation({
     return null;
   }
 
-  if (contract.id === CONTENT_FACTORY_PLUGIN_ID) {
-    return buildContentFactoryDeliveryArticleWorkspace({
-      contract,
-      sessionId: activationContext.sessionId,
-      workspaceId,
-    });
-  }
-
   const objectRef = buildObjectRef({ activationContext, contract });
   if (!objectRef) {
     return null;

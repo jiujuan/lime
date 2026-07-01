@@ -604,6 +604,35 @@ description: 正文写作技能
             Some("@写文章")
         );
         assert_eq!(
+            read_test_json_string(&inspected.manifest, &["activationEntries", "0", "taskKind"])
+                .as_deref(),
+            Some("content.article.generate")
+        );
+        assert_eq!(
+            read_test_json_string(
+                &inspected.manifest,
+                &["activationEntries", "0", "workflowKey"]
+            )
+            .as_deref(),
+            Some("content_article_workflow")
+        );
+        assert_eq!(
+            read_test_json_string(
+                &inspected.manifest,
+                &["activationEntries", "0", "outputArtifactKind"]
+            )
+            .as_deref(),
+            Some("content_factory.workspace_patch")
+        );
+        assert_eq!(
+            read_test_json_string(
+                &inspected.manifest,
+                &["activationEntries", "0", "rightSurface"]
+            )
+            .as_deref(),
+            Some("articleWorkspace")
+        );
+        assert_eq!(
             read_test_json_string(&inspected.manifest, &["entries", "0", "workflow"]).as_deref(),
             Some("content_article_workflow")
         );
@@ -652,8 +681,7 @@ description: 正文写作技能
             Some("article-writing")
         );
         assert_eq!(
-            read_test_json_string(&inspected.plugin_manifest, &["subagents", "0", "id"])
-                .as_deref(),
+            read_test_json_string(&inspected.plugin_manifest, &["subagents", "0", "id"]).as_deref(),
             Some("article-writer")
         );
         assert_eq!(
@@ -683,20 +711,16 @@ description: 正文写作技能
             read_test_json_string(&inspected.manifest, &["toolRefs", "0", "key"]).as_deref(),
             Some("content-factory")
         );
-        assert!(
-            inspected.manifest["toolRefs"]
-                .as_array()
-                .expect("toolRefs")
-                .iter()
-                .any(|tool| tool["key"] == "web-research")
-        );
-        assert!(
-            inspected.manifest["toolRefs"]
-                .as_array()
-                .expect("toolRefs")
-                .iter()
-                .any(|tool| tool["key"] == "hook:prompt-submit")
-        );
+        assert!(inspected.manifest["toolRefs"]
+            .as_array()
+            .expect("toolRefs")
+            .iter()
+            .any(|tool| tool["key"] == "web-research"));
+        assert!(inspected.manifest["toolRefs"]
+            .as_array()
+            .expect("toolRefs")
+            .iter()
+            .any(|tool| tool["key"] == "hook:prompt-submit"));
     }
 
     #[test]

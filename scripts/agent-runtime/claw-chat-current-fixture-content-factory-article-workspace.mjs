@@ -345,12 +345,18 @@ async function waitForContentFactoryArticleWorkspaceEditedDraftRestored(
   while (Date.now() - startedAt < options.timeoutMs) {
     const snapshot = await page.evaluate(
       ({ marker }) => {
-        const canvas = document.querySelector(
-          '[data-testid="workspace-article-editor-canvas"]',
+        const canvases = Array.from(
+          document.querySelectorAll(
+            '[data-testid="workspace-article-editor-canvas"]',
+          ),
         );
-        const canvasContent = document.querySelector(
-          '[data-testid="workspace-article-editor-canvas-content"]',
+        const canvas = canvases.find(isVisible) ?? null;
+        const canvasContents = Array.from(
+          document.querySelectorAll(
+            '[data-testid="workspace-article-editor-canvas-content"]',
+          ),
         );
+        const canvasContent = canvasContents.find(isVisible) ?? null;
         const status = document.querySelector(
           '[data-testid="workspace-article-editor-canvas-status"]',
         );
@@ -411,10 +417,25 @@ async function clickContentFactoryArticleArtifactFrame(page, options) {
   let lastSnapshot = null;
   while (Date.now() - startedAt < options.timeoutMs) {
     const snapshot = await page.evaluate(() => {
-      const frame =
-        document.querySelector('[data-testid="article-artifact-frame"]') ??
-        document.querySelector('[data-frame-kind="articleArtifacts"]');
-      const button = frame?.querySelector("button");
+      const frames = Array.from(
+        document.querySelectorAll(
+          '[data-testid="article-artifact-frame"], [data-frame-kind="articleArtifacts"]',
+        ),
+      );
+      const frame = frames.find(isVisible) ?? frames[0] ?? null;
+      const buttons = Array.from(frame?.querySelectorAll("button") ?? []);
+      const button =
+        buttons.find((candidate) => {
+          const text = candidate.textContent?.replace(/\s+/g, " ").trim() ?? "";
+          return text.includes("展开右侧编辑器");
+        }) ??
+        buttons.find((candidate) => {
+          const text = candidate.textContent?.replace(/\s+/g, " ").trim() ?? "";
+          return text.includes("打开编辑器");
+        }) ??
+        buttons.at(-1) ??
+        buttons[0] ??
+        null;
       const bodyText = document.body?.innerText || "";
       const rect = frame?.getBoundingClientRect();
       const style = frame ? window.getComputedStyle(frame) : null;
@@ -435,7 +456,10 @@ async function clickContentFactoryArticleArtifactFrame(page, options) {
       }
       return {
         visible,
+        frameCount: frames.length,
+        visibleFrameCount: frames.filter(isVisible).length,
         buttonPresent: Boolean(button),
+        buttonText: button?.textContent?.replace(/\s+/g, " ").trim() ?? "",
         buttonDisabled,
         frameText: frame?.textContent?.slice(0, 500) ?? "",
         hasArticleTitle: bodyText.includes("公众号文章草稿"),
@@ -447,19 +471,32 @@ async function clickContentFactoryArticleArtifactFrame(page, options) {
         rect: rect ? rectToJson(rect) : null,
       };
 
-      function rectToJson(rect) {
-        return {
-          x: Math.round(rect.x),
-          y: Math.round(rect.y),
-          width: Math.round(rect.width),
+        function rectToJson(rect) {
+          return {
+            x: Math.round(rect.x),
+            y: Math.round(rect.y),
+            width: Math.round(rect.width),
           height: Math.round(rect.height),
           top: Math.round(rect.top),
           left: Math.round(rect.left),
           right: Math.round(rect.right),
           bottom: Math.round(rect.bottom),
         };
-      }
-    });
+        }
+
+        function isVisible(node) {
+          const rect = node?.getBoundingClientRect();
+          const style = node ? window.getComputedStyle(node) : null;
+          return Boolean(
+            node &&
+            rect &&
+            rect.width > 8 &&
+            rect.height > 8 &&
+            style?.display !== "none" &&
+            style?.visibility !== "hidden",
+          );
+        }
+      });
     lastSnapshot = snapshot;
     if (
       snapshot?.visible &&
@@ -485,17 +522,52 @@ async function waitForContentFactoryArticleEditorOpened(page, options) {
       const host = document.querySelector(
         '[data-testid="workspace-right-surface-host"]',
       );
-      const root = document.querySelector(
-        '[data-testid="workspace-article-editor-surface"]',
+      const hostPane = document.querySelector(
+        '[data-testid="workspace-right-surface-active-pane"]',
       );
-      const canvas = document.querySelector(
-        '[data-testid="workspace-article-editor-canvas"]',
+      const layoutRoot = document.querySelector(
+        '[data-testid="layout-transition-root"]',
       );
+      const layoutCanvasPanel = document.querySelector(
+        '[data-testid="layout-canvas-panel"]',
+      );
+      const roots = Array.from(
+        document.querySelectorAll(
+          '[data-testid="workspace-article-editor-surface"]',
+        ),
+      );
+      const root = roots.find(isVisible) ?? roots[0] ?? null;
+      const canvases = Array.from(
+        document.querySelectorAll(
+          '[data-testid="workspace-article-editor-canvas"]',
+        ),
+      );
+      const canvas = canvases.find(isVisible) ?? canvases[0] ?? null;
       const bodyText = document.body?.innerText || "";
       return {
         activeSurface: host?.getAttribute("data-surface") ?? null,
+        hostVisible: isVisible(host),
+        hostPaneVisible: isVisible(hostPane),
+        layoutRootVisible: isVisible(layoutRoot),
+        layoutCanvasPanelVisible: isVisible(layoutCanvasPanel),
+        hostRect: rectToJson(host?.getBoundingClientRect() ?? null),
+        hostPaneRect: rectToJson(hostPane?.getBoundingClientRect() ?? null),
+        layoutRootRect: rectToJson(layoutRoot?.getBoundingClientRect() ?? null),
+        layoutCanvasPanelRect: rectToJson(
+          layoutCanvasPanel?.getBoundingClientRect() ?? null,
+        ),
+        layoutRootStyle: readStyle(layoutRoot),
+        layoutCanvasPanelStyle: readStyle(layoutCanvasPanel),
+        hostStyle: readStyle(host),
+        hostPaneStyle: readStyle(hostPane),
+        rootRect: rectToJson(root?.getBoundingClientRect() ?? null),
+        canvasRect: rectToJson(canvas?.getBoundingClientRect() ?? null),
+        rootStyle: readStyle(root),
+        canvasStyle: readStyle(canvas),
         rootVisible: isVisible(root),
         canvasVisible: isVisible(canvas),
+        visibleRootCount: roots.filter(isVisible).length,
+        visibleCanvasCount: canvases.filter(isVisible).length,
         hasArticleEditorTitle: bodyText.includes("文章编辑器"),
         hasArticleTitle: bodyText.includes("公众号文章草稿"),
         hasLoadedDraftStatus: bodyText.includes("已载入产物正文"),
@@ -507,6 +579,43 @@ async function waitForContentFactoryArticleEditorOpened(page, options) {
         ),
         bodyTextSample: bodyText.slice(0, 1600),
       };
+
+      function rectToJson(rect) {
+        if (!rect) {
+          return null;
+        }
+        return {
+          x: Math.round(rect.x),
+          y: Math.round(rect.y),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+          top: Math.round(rect.top),
+          left: Math.round(rect.left),
+          right: Math.round(rect.right),
+          bottom: Math.round(rect.bottom),
+        };
+      }
+
+      function readStyle(node) {
+        if (!node) {
+          return null;
+        }
+        const style = window.getComputedStyle(node);
+        return {
+          display: style.display,
+          width: style.width,
+          height: style.height,
+          minWidth: style.minWidth,
+          minHeight: style.minHeight,
+          flex: style.flex,
+          flexBasis: style.flexBasis,
+          flexGrow: style.flexGrow,
+          flexShrink: style.flexShrink,
+          position: style.position,
+          overflow: style.overflow,
+          boxSizing: style.boxSizing,
+        };
+      }
 
       function isVisible(node) {
         const rect = node?.getBoundingClientRect();
@@ -791,9 +900,12 @@ async function waitForContentFactoryArticleWorkspaceGui(page, options) {
       const host = document.querySelector(
         '[data-testid="workspace-right-surface-host"]',
       );
-      const root = document.querySelector(
-        '[data-testid="workspace-article-editor-surface"]',
+      const roots = Array.from(
+        document.querySelectorAll(
+          '[data-testid="workspace-article-editor-surface"]',
+        ),
       );
+      const root = roots.find(isVisible) ?? roots[0] ?? null;
       const rendererHost = document.querySelector(
         '[data-testid="workspace-article-workspace-app-declared-renderer"]',
       );
@@ -806,6 +918,7 @@ async function waitForContentFactoryArticleWorkspaceGui(page, options) {
       return {
         activeSurface: host?.getAttribute("data-surface") ?? null,
         rootVisible: isVisible(root),
+        visibleRootCount: roots.filter(isVisible).length,
         toggleTitle: toggle?.getAttribute("title") ?? "",
         toggleAria: toggle?.getAttribute("aria-label") ?? "",
         hasArticleEditorTitle: bodyText.includes("文章编辑器"),

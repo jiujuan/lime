@@ -7,7 +7,10 @@ import type { PluginMarketplaceItem } from "./types";
 export type PluginMarketplaceCapabilitySectionKind =
   | "applied_agent"
   | "subagents"
+  | "workflows"
   | "cli_tools"
+  | "connectors"
+  | "lifecycle_hooks"
   | "app_authorization"
   | "skills";
 
@@ -37,7 +40,10 @@ export interface PluginMarketplaceCapabilityProfile {
   summary: {
     agentCount: number;
     subagentCount: number;
+    workflowCount: number;
     toolCount: number;
+    connectorCount: number;
+    hookCount: number;
     skillCount: number;
   };
 }
@@ -78,10 +84,50 @@ function readRecords(value: unknown): Record<string, unknown>[] {
     : [];
 }
 
+function readNestedRecords(
+  value: unknown,
+  keys: readonly string[],
+): Record<string, unknown>[] {
+  const record = asRecord(value);
+  if (!record) {
+    return [];
+  }
+  return keys.flatMap((key) => readRecords(record[key]));
+}
+
 function uniqueStrings(values: Array<string | undefined>): string[] {
   return Array.from(
     new Set(values.filter((value): value is string => Boolean(value))),
   );
+}
+
+function dedupeItemsById(
+  items: PluginMarketplaceCapabilityItem[],
+): PluginMarketplaceCapabilityItem[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (seen.has(item.id)) {
+      return false;
+    }
+    seen.add(item.id);
+    return true;
+  });
+}
+
+function toolProvider(tool: Record<string, unknown>): string | undefined {
+  return readString(tool.provider);
+}
+
+function isConnectorTool(tool: Record<string, unknown>): boolean {
+  const provider = toolProvider(tool);
+  return (
+    provider === "connector-registry" ||
+    Boolean(provider?.startsWith("connector:"))
+  );
+}
+
+function isLifecycleHookTool(tool: Record<string, unknown>): boolean {
+  return toolProvider(tool) === "lifecycle-hook";
 }
 
 function capabilityStatus(
@@ -186,17 +232,82 @@ function subagentItems(params: {
   });
 }
 
+function workflowHookPolicyMeta(value: unknown): string[] {
+  const policy = asRecord(value);
+  if (!policy) {
+    return [];
+  }
+  return Object.entries(policy).flatMap(([eventName, refs]) =>
+    readStringArray(refs).map((ref) => `hook:${eventName}:${ref}`),
+  );
+}
+
+function workflowItems(params: {
+  summary: Record<string, unknown> | undefined;
+  status: PluginMarketplaceCapabilityStatus;
+}): PluginMarketplaceCapabilityItem[] {
+  const agentRuntime = asRecord(params.summary?.agentRuntime);
+  return dedupeItemsById(
+    [
+      ...readRecords(params.summary?.workflows),
+      ...readRecords(agentRuntime?.workflows),
+    ].map((workflow) => {
+      const key =
+        readString(workflow.key) ?? readString(workflow.id) ?? "workflow";
+      const steps = readRecords(workflow.steps);
+      return {
+        id: key,
+        title: readString(workflow.title) ?? key,
+        description:
+          readString(workflow.description) ??
+          readString(workflow.taskKind) ??
+          readString(workflow.path),
+        status: params.status,
+        meta: uniqueStrings([
+          readString(workflow.taskKind),
+          readString(workflow.outputArtifactKind),
+          ...readStringArray(workflow.triggerIntents).map(
+            (intent) => `intent:${intent}`,
+          ),
+          ...readStringArray(workflow.cliRefs).map((cli) => `cli:${cli}`),
+          ...readStringArray(workflow.connectorRefs).map(
+            (connector) => `connector:${connector}`,
+          ),
+          ...workflowHookPolicyMeta(workflow.hookPolicy),
+          steps.length > 0 ? `steps:${steps.length}` : undefined,
+          readBoolean(workflow.humanReview) ? "human-review" : undefined,
+        ]),
+      };
+    }),
+  );
+}
+
 function cliToolItems(params: {
   summary: Record<string, unknown> | undefined;
   status: PluginMarketplaceCapabilityStatus;
 }): PluginMarketplaceCapabilityItem[] {
-  const toolRefs = readRecords(params.summary?.toolRefs).map((tool) => ({
-    id: readString(tool.key) ?? "tool",
-    title: readString(tool.title) ?? readString(tool.key) ?? "tool",
-    description: readString(tool.description) ?? readString(tool.provider),
-    status: params.status,
-    meta: readStringArray(tool.capabilities),
-  }));
+  const cliTools = readNestedRecords(params.summary?.clis, ["tools"]);
+  const toolRefs = [...cliTools, ...readRecords(params.summary?.toolRefs)]
+    .filter((tool) => !isConnectorTool(tool) && !isLifecycleHookTool(tool))
+    .map((tool) => ({
+      id: readString(tool.key) ?? readString(tool.id) ?? "tool",
+      title:
+        readString(tool.title) ??
+        readString(tool.displayName) ??
+        readString(tool.key) ??
+        readString(tool.id) ??
+        "tool",
+      description:
+        readString(tool.description) ??
+        readString(tool.provider) ??
+        readString(tool.path),
+      status: params.status,
+      meta: uniqueStrings([
+        ...readStringArray(tool.capabilities),
+        readString(tool.provider),
+        readString(tool.path),
+      ]),
+    }));
   const runtimePackage = asRecord(params.summary?.runtimePackage);
   const runtimeWorker = asRecord(runtimePackage?.worker);
   const agentRuntime = asRecord(params.summary?.agentRuntime);
@@ -208,7 +319,7 @@ function cliToolItems(params: {
   if (!workerEntrypoint) {
     return toolRefs;
   }
-  return [
+  return dedupeItemsById([
     ...toolRefs,
     {
       id: "task-worker",
@@ -220,7 +331,104 @@ function cliToolItems(params: {
           readString(agentRuntimeWorker?.outputArtifactKind),
       ]),
     },
+  ]);
+}
+
+function connectorItems(params: {
+  summary: Record<string, unknown> | undefined;
+  status: PluginMarketplaceCapabilityStatus;
+}): PluginMarketplaceCapabilityItem[] {
+  const agentRuntime = asRecord(params.summary?.agentRuntime);
+  const runtimeConnectors = asRecord(agentRuntime?.connectors);
+  const registryPath = readString(runtimeConnectors?.registry);
+  const registryItems = registryPath
+    ? [
+        {
+          id: "connector-registry",
+          title: "connector-registry",
+          description: registryPath,
+          kind: "registry",
+        },
+      ]
+    : [];
+  const connectorRecords = [
+    ...readRecords(params.summary?.connectors),
+    ...readRecords(runtimeConnectors?.items),
+    ...readRecords(runtimeConnectors?.connectors),
+    ...registryItems,
+    ...readRecords(params.summary?.toolRefs).filter(isConnectorTool),
   ];
+  return dedupeItemsById(
+    connectorRecords.map((connector) => {
+      const id =
+        readString(connector.id) ??
+        readString(connector.key) ??
+        readString(connector.title) ??
+        "connector";
+      const providerKind = toolProvider(connector)?.replace(/^connector:/, "");
+      return {
+        id,
+        title: readString(connector.title) ?? id,
+        description:
+          readString(connector.description) ??
+          readString(connector.path) ??
+          readString(connector.provider),
+        status: params.status,
+        meta: uniqueStrings([
+          readString(connector.kind) ?? providerKind,
+          ...readStringArray(connector.taskKinds).map((task) => `task:${task}`),
+          ...readStringArray(connector.capabilities).map(
+            (capability) => `task:${capability}`,
+          ),
+          readString(connector.path),
+          readBoolean(connector.required) ? "required" : undefined,
+        ]),
+      };
+    }),
+  );
+}
+
+function hookRecordsFromSummary(
+  summary: Record<string, unknown> | undefined,
+): Record<string, unknown>[] {
+  const agentRuntime = asRecord(summary?.agentRuntime);
+  const runtimeHooks = asRecord(agentRuntime?.hooks);
+  return [
+    ...readRecords(summary?.hooks),
+    ...readNestedRecords(summary?.hooks, ["items", "handlers"]),
+    ...readRecords(runtimeHooks?.items),
+    ...readRecords(runtimeHooks?.handlers),
+    ...readRecords(summary?.toolRefs).filter(isLifecycleHookTool),
+  ];
+}
+
+function hookItems(params: {
+  summary: Record<string, unknown> | undefined;
+  status: PluginMarketplaceCapabilityStatus;
+}): PluginMarketplaceCapabilityItem[] {
+  return dedupeItemsById(
+    hookRecordsFromSummary(params.summary).map((hook) => {
+      const id =
+        readString(hook.key) ??
+        readString(hook.id) ??
+        readString(hook.event) ??
+        "hook";
+      return {
+        id: id.startsWith("hook:") ? id.slice("hook:".length) : id,
+        title: readString(hook.title) ?? readString(hook.event) ?? id,
+        description:
+          readString(hook.description) ??
+          readString(hook.entrypoint) ??
+          readString(hook.path),
+        status: params.status,
+        meta: uniqueStrings([
+          readString(hook.event),
+          readString(hook.entrypoint) ?? readString(hook.path),
+          readBoolean(hook.required) ? "required" : undefined,
+        ]),
+      };
+    }),
+  );
 }
 
 function authorizationItems(params: {
@@ -295,7 +503,10 @@ export function buildPluginMarketplaceCapabilityProfile({
 
   const agents = appliedAgentItems({ item, summary, status });
   const subagents = subagentItems({ summary, status });
+  const workflows = workflowItems({ summary, status });
   const tools = cliToolItems({ summary, status });
+  const connectors = connectorItems({ summary, status });
+  const hooks = hookItems({ summary, status });
   const authorization = authorizationItems({ item, summary, status });
   const skillList = skillItems({ summary, skills, status });
 
@@ -312,10 +523,28 @@ export function buildPluginMarketplaceCapabilityProfile({
     items: subagents,
   });
   pushSection(sections, {
+    kind: "workflows",
+    titleKey: "plugin.marketplace.capability.workflows",
+    descriptionKey: "plugin.marketplace.capability.workflowsDescription",
+    items: workflows,
+  });
+  pushSection(sections, {
     kind: "cli_tools",
     titleKey: "plugin.marketplace.capability.cliTools",
     descriptionKey: "plugin.marketplace.capability.cliToolsDescription",
     items: tools,
+  });
+  pushSection(sections, {
+    kind: "connectors",
+    titleKey: "plugin.marketplace.capability.connectors",
+    descriptionKey: "plugin.marketplace.capability.connectorsDescription",
+    items: connectors,
+  });
+  pushSection(sections, {
+    kind: "lifecycle_hooks",
+    titleKey: "plugin.marketplace.capability.hooks",
+    descriptionKey: "plugin.marketplace.capability.hooksDescription",
+    items: hooks,
   });
   pushSection(sections, {
     kind: "app_authorization",
@@ -335,7 +564,10 @@ export function buildPluginMarketplaceCapabilityProfile({
     summary: {
       agentCount: agents.length,
       subagentCount: subagents.length,
+      workflowCount: workflows.length,
       toolCount: tools.length,
+      connectorCount: connectors.length,
+      hookCount: hooks.length,
       skillCount: skillList.length,
     },
   };

@@ -1,6 +1,7 @@
 mod agent_app_host_lifecycle;
 mod agent_app_task_runtime;
 mod agent_app_worker_runtime;
+mod agent_app_worker_streaming;
 mod agent_app_worker_turn;
 mod agent_apps;
 mod app_data;

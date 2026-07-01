@@ -32,11 +32,13 @@ function pluginMatchesQuery(
   return (
     includesQuery(plugin.pluginId, query) ||
     includesQuery(plugin.displayName, query) ||
+    includesQuery(plugin.trigger, query) ||
     includesQuery(plugin.description, query) ||
     (plugin.skills ?? []).some(
       (skill) =>
         includesQuery(skill.skillId, query) ||
         includesQuery(skill.title, query) ||
+        includesQuery(skill.trigger, query) ||
         includesQuery(skill.description, query),
     )
   );
@@ -54,8 +56,10 @@ function skillMatchesQuery(
   return (
     includesQuery(plugin.pluginId, query) ||
     includesQuery(plugin.displayName, query) ||
+    includesQuery(plugin.trigger, query) ||
     includesQuery(skill.skillId, query) ||
     includesQuery(skill.title, query) ||
+    includesQuery(skill.trigger, query) ||
     includesQuery(skill.description, query)
   );
 }
@@ -78,6 +82,10 @@ function pluginDescription(plugin: InputbarPluginCapability): string {
   return plugin.description?.trim() || plugin.pluginId;
 }
 
+function stableKeySegment(value: string | undefined): string {
+  return normalizeSearchText(value).replace(/\s+/g, " ") || "_";
+}
+
 export function buildMentionPluginCapabilityItems(params: {
   plugins: readonly InputbarPluginCapability[];
   query: string;
@@ -91,8 +99,11 @@ export function buildMentionPluginCapabilityItems(params: {
     }
 
     const displayName = resolveInputbarPluginDisplayName(plugin);
+    const pluginKey = `plugin:${plugin.pluginId}:trigger:${stableKeySegment(
+      plugin.trigger ?? displayName,
+    )}`;
     items.push({
-      key: `plugin:${plugin.pluginId}`,
+      key: pluginKey,
       title: displayName,
       description: pluginDescription(plugin),
       plugin,
@@ -105,7 +116,9 @@ export function buildMentionPluginCapabilityItems(params: {
       }
       const title = skill.title.trim() || skill.skillId;
       items.push({
-        key: `plugin:${plugin.pluginId}:skill:${skill.skillId}`,
+        key: `${pluginKey}:skill:${skill.skillId}:trigger:${stableKeySegment(
+          skill.trigger ?? title,
+        )}`,
         title: `${displayName}:${title}`,
         description: skill.description?.trim() || pluginDescription(plugin),
         plugin,

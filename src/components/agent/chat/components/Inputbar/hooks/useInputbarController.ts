@@ -64,6 +64,7 @@ import {
   resolveInputbarPluginDisplayName,
   type InputbarPluginCapability,
   type InputbarPluginSelection,
+  type InputbarPluginSelectionOptions,
   type InputbarPluginSkillCapability,
 } from "../pluginInputCapability";
 
@@ -158,6 +159,7 @@ export function useInputbarController({
   const [curatedTaskEditorPrefillHint, setCuratedTaskEditorPrefillHint] =
     useState<string | null>(null);
   const handledInitialInputCapabilitySignatureRef = useRef("");
+  const pluginSelectionInputSyncedRef = useRef(false);
   const {
     pendingImages,
     fileInputRef,
@@ -385,6 +387,28 @@ export function useInputbarController({
     copy: workflowCopy,
   });
 
+  useEffect(() => {
+    if (!activePluginSelection) {
+      pluginSelectionInputSyncedRef.current = false;
+      return;
+    }
+    if (activePluginSelection.preserveInput) {
+      pluginSelectionInputSyncedRef.current = false;
+      return;
+    }
+    const inputText = input.trimStart();
+    const trigger = activePluginSelection.trigger.trim();
+    if (inputText === trigger || inputText.startsWith(`${trigger} `)) {
+      pluginSelectionInputSyncedRef.current = true;
+      return;
+    }
+    if (!pluginSelectionInputSyncedRef.current) {
+      return;
+    }
+    pluginSelectionInputSyncedRef.current = false;
+    setActivePluginSelection(null);
+  }, [activePluginSelection, input]);
+
   const topExtra =
     activeSkill ||
     activeBuiltinCommand ||
@@ -586,7 +610,7 @@ export function useInputbarController({
   const handleSelectPlugin = (
     plugin: InputbarPluginCapability,
     skill?: InputbarPluginSkillCapability,
-    options?: { inputOverride?: string },
+    options?: InputbarPluginSelectionOptions,
   ) => {
     const blocked =
       plugin.disabled ||
@@ -600,7 +624,9 @@ export function useInputbarController({
       input: options?.inputOverride ?? input,
       plugin,
       skill,
+      preserveInput: options?.preserveInputOverride === true,
     });
+    pluginSelectionInputSyncedRef.current = false;
     setInput(selection.text);
     setActivePluginSelection(selection);
   };

@@ -407,6 +407,33 @@ describe("workspaceArticleWorkspaceModel", () => {
     expect(viewModel.selectedPreview.images).toEqual([]);
   });
 
+  it("应将过程稿与正式稿分开投影，正式稿优先进入 documentText", () => {
+    const profile = buildWorkspaceArticleWorkspaceFromThreadRead({
+      thread_id: "thread-main",
+      articleWorkspace: {
+        ...workspacePatch,
+        objects: [
+          {
+            ...workspacePatch.objects[0],
+            source: {
+              ...workspacePatch.objects[0].source,
+              processMarkdown: "## 过程稿\n\n只用于编排与检索。",
+              documentText: "# 最终稿\n\n这是正式可编辑文章。",
+            },
+          },
+        ],
+        selectedObjectRef: workspacePatch.objects[0].ref,
+        primaryObjectRef: workspacePatch.objects[0].ref,
+      },
+    });
+    expect(profile).not.toBeNull();
+
+    const viewModel = buildWorkspaceArticleWorkspaceViewModel(profile!);
+
+    expect(viewModel.selectedPreview.processMarkdown).toContain("过程稿");
+    expect(viewModel.selectedPreview.documentText).toContain("正式可编辑文章");
+  });
+
   it("旧 read model 没有 workerEvidence 时应从 diagnostics 投影失败记录", () => {
     const legacyWorkspacePatch = {
       ...workspacePatch,

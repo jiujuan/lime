@@ -6,6 +6,7 @@ import {
   createSkill,
   findButtonContaining,
   getButtonsContaining,
+  getMentionPopoverContent,
   getTextarea,
   renderHarness,
   typeAtAndWait,
@@ -14,8 +15,16 @@ import {
 import { recordServiceSkillUsage } from "@/components/agent/chat/service-skills/storage";
 import type {
   InputbarPluginCapability,
+  InputbarPluginSelectionOptions,
   InputbarPluginSkillCapability,
 } from "../components/Inputbar/pluginInputCapability";
+import contentFactoryFixture from "@/features/agent-app/fixtures/content-factory-app.json";
+import { buildPackageIdentity } from "@/features/agent-app/install/packageIdentity";
+import { normalizeManifest } from "@/features/agent-app/manifest/normalizeManifest";
+import { parseManifest } from "@/features/agent-app/manifest/parseManifest";
+import type { InstalledAgentAppState } from "@/features/agent-app/types";
+import { projectPluginRegistryFromInstalledAgentApps } from "@/features/plugin";
+import { buildWorkspacePluginInputSuggestions } from "../workspace/workspacePluginInputSuggestions";
 
 describe("CharacterMention mention catalog", () => {
   it("@ 面板中的已安装技能应展示统一的轻量 skill 合同", async () => {
@@ -206,7 +215,7 @@ describe("CharacterMention mention catalog", () => {
     );
   });
 
-  it("输入 @ 查询 Agent App 时，应展示已安装应用并替换当前 mention", async () => {
+  it("输入 @ 查询 Agent App 时，应激活应用并移除当前 mention", async () => {
     const plugin: InputbarPluginCapability = {
       pluginId: "content-factory-app",
       displayName: "内容工厂",
@@ -216,7 +225,7 @@ describe("CharacterMention mention catalog", () => {
       (
         selectedPlugin: InputbarPluginCapability,
         skill?: InputbarPluginSkillCapability,
-        options?: { inputOverride?: string },
+        options?: InputbarPluginSelectionOptions,
       ) => void
     >();
     const onChangeSpy = vi.fn<(value: string) => void>();
@@ -241,10 +250,189 @@ describe("CharacterMention mention catalog", () => {
       pluginButton?.click();
     });
 
-    expect(onChangeSpy).toHaveBeenCalledWith("@内容工厂 ");
+    expect(onChangeSpy).toHaveBeenCalledWith("");
     expect(onSelectPlugin).toHaveBeenCalledWith(plugin, undefined, {
-      inputOverride: "@内容工厂 ",
+      inputOverride: "",
+      preserveInputOverride: true,
     });
+    expect(getMentionPopoverContent()).toBeNull();
+  });
+
+  it("输入单独 @ 时应展示 Agent App 候选", async () => {
+    const plugin: InputbarPluginCapability = {
+      pluginId: "content-factory-app",
+      displayName: "写文章",
+      trigger: "@写文章",
+      description: "生成文章草稿。",
+    };
+    const container = renderHarness({
+      pluginSuggestions: [plugin],
+    });
+    const textarea = getTextarea(container);
+
+    await typeAtAndWait(textarea);
+
+    expect(getMentionPopoverContent()).not.toBeNull();
+    expect(document.body.textContent).toContain("Agent Apps");
+    expect(document.body.textContent).toContain("写文章");
+  });
+
+  it("输入部分 Agent App 触发词时应继续展示候选", async () => {
+    const plugin: InputbarPluginCapability = {
+      pluginId: "content-factory-app",
+      displayName: "写文章",
+      trigger: "@写文章",
+      description: "生成文章草稿。",
+    };
+    const container = renderHarness({
+      pluginSuggestions: [plugin],
+    });
+    const textarea = getTextarea(container);
+
+    await typeMentionAndWait(textarea, "@写");
+
+    expect(getMentionPopoverContent()).not.toBeNull();
+    expect(document.body.textContent).toContain("Agent Apps");
+    expect(document.body.textContent).toContain("写文章");
+  });
+
+  it("内容工厂本地包需要维护时 @写 仍应展示写文章候选", async () => {
+    const parsedManifest = parseManifest(contentFactoryFixture);
+    const manifest = normalizeManifest(parsedManifest);
+    const installedState: InstalledAgentAppState = {
+      appId: manifest.appId,
+      identity: buildPackageIdentity({
+        manifest: parsedManifest,
+        loadedAt: "2026-06-30T00:00:00.000Z",
+      }),
+      manifest,
+      projection: {} as InstalledAgentAppState["projection"],
+      readiness: {
+        appId: manifest.appId,
+        status: "needs-setup",
+        checkedAt: "2026-06-30T00:00:00.000Z",
+        blockers: [],
+        warnings: [],
+        supportedCapabilities: [],
+        missingCapabilities: [],
+        entryReadiness: [],
+        installModes: [],
+      },
+      installMode: "in_lime",
+      runtimeProfileSummary:
+        {} as InstalledAgentAppState["runtimeProfileSummary"],
+      setup: {} as InstalledAgentAppState["setup"],
+      disabled: false,
+      installedAt: "2026-06-30T00:00:00.000Z",
+      updatedAt: "2026-06-30T00:00:00.000Z",
+    };
+    const projection = projectPluginRegistryFromInstalledAgentApps([
+      installedState,
+    ]);
+    const pluginSuggestions = buildWorkspacePluginInputSuggestions({
+      status: "inactive",
+      activationContext: null,
+      contracts: projection.contracts,
+      registry: projection.registry,
+      skippedAppIds: projection.skippedAppIds,
+      blockerCodes: [],
+    });
+    const container = renderHarness({
+      pluginSuggestions,
+    });
+    const textarea = getTextarea(container);
+
+    await typeMentionAndWait(textarea, "@写");
+
+    expect(getMentionPopoverContent()).not.toBeNull();
+    expect(document.body.textContent).toContain("Agent Apps");
+    expect(document.body.textContent).toContain("写文章");
+    expect(document.body.textContent).toContain("@写文章");
+    expect(document.body.textContent).not.toContain("暂无可用 @命令");
+  });
+
+  it("输入完整 Agent App 触发词时不应展示 @ 面板", async () => {
+    const plugin: InputbarPluginCapability = {
+      pluginId: "content-factory-app",
+      displayName: "写文章",
+      trigger: "@写文章",
+      description: "生成文章草稿。",
+    };
+    const container = renderHarness({
+      pluginSuggestions: [plugin],
+    });
+    const textarea = getTextarea(container);
+
+    await typeMentionAndWait(textarea, "@写文章");
+
+    expect(getMentionPopoverContent()).toBeNull();
+    expect(document.body.textContent).not.toContain("暂无可用 @命令");
+  });
+
+  it("输入完整 Agent App 技能触发词时不应展示 @ 面板", async () => {
+    const plugin: InputbarPluginCapability = {
+      pluginId: "content-workbench",
+      displayName: "内容工厂",
+      description: "整理内容生产资料。",
+      skills: [
+        {
+          skillId: "article-writer",
+          title: "文章写作",
+          description: "生成文章草稿。",
+        },
+      ],
+    };
+    const container = renderHarness({
+      pluginSuggestions: [plugin],
+    });
+    const textarea = getTextarea(container);
+
+    await typeMentionAndWait(textarea, "@内容工厂:文章写作");
+
+    expect(getMentionPopoverContent()).toBeNull();
+    expect(document.body.textContent).not.toContain("暂无可用 @命令");
+  });
+
+  it("选择 Agent App 时即使输入框 selection 丢失，也应移除当前 mention", async () => {
+    const plugin: InputbarPluginCapability = {
+      pluginId: "content-factory-app",
+      displayName: "内容工厂",
+      description: "从创作需求生成文章、配图、视频分镜和交付检查清单。",
+    };
+    const onSelectPlugin = vi.fn<
+      (
+        selectedPlugin: InputbarPluginCapability,
+        skill?: InputbarPluginSkillCapability,
+        options?: InputbarPluginSelectionOptions,
+      ) => void
+    >();
+    const onChangeSpy = vi.fn<(value: string) => void>();
+    const container = renderHarness({
+      pluginSuggestions: [plugin],
+      onSelectPlugin,
+      onChangeSpy,
+    });
+    const textarea = getTextarea(container);
+
+    await typeMentionAndWait(textarea, "@内容");
+
+    act(() => {
+      textarea.setSelectionRange(0, 0);
+    });
+
+    const pluginButton = findButtonContaining("内容工厂");
+    expect(pluginButton).toBeTruthy();
+
+    act(() => {
+      pluginButton?.click();
+    });
+
+    expect(onChangeSpy).toHaveBeenCalledWith("");
+    expect(onSelectPlugin).toHaveBeenCalledWith(plugin, undefined, {
+      inputOverride: "",
+      preserveInputOverride: true,
+    });
+    expect(getMentionPopoverContent()).toBeNull();
   });
 
   it("最近使用的服务技能应优先显示在独立分组，且不在技能组里重复", async () => {

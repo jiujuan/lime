@@ -323,11 +323,14 @@ describe("useAsterAgentChat 偏好持久化 - history normalization", () => {
       });
       await flushEffects();
 
-      expect(mockGetAgentRuntimeSession).toHaveBeenLastCalledWith(topicId, {
-        historyLimit: 50,
-        historyOffset: 40,
-        historyBeforeMessageId: 281,
-      });
+      expect(mockGetAgentRuntimeSession).toHaveBeenLastCalledWith(
+        topicId,
+        expect.objectContaining({
+          historyLimit: 50,
+          historyOffset: 40,
+          historyBeforeMessageId: 281,
+        }),
+      );
       expect(harness.getValue().messages).toHaveLength(90);
       expect(harness.getValue().messages[0]?.content).toBe("更早的问题");
       expect(harness.getValue().messages.at(-1)?.content).toBe("最近一条回复");

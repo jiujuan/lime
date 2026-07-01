@@ -186,6 +186,11 @@ export interface PluginActivationEntryDeclaration {
   aliases?: string[];
   kind: PluginActivationEntryKind;
   intent?: PluginActivationIntent;
+  taskKind?: string;
+  workflowKey?: string;
+  outputArtifactKind?: string;
+  rightSurface?: string;
+  expectedObjects?: string[];
   defaultObjectKind?: string;
 }
 

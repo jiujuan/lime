@@ -8,6 +8,7 @@ import {
   captureTurnStream,
   completedTurn,
   flushEffects,
+  flushRuntimeDetailRefresh,
   getAgentStreamTextOverlay,
   mockGetAgentRuntimeSession,
   mockSubmitAgentRuntimeTurn,
@@ -233,11 +234,12 @@ describe("useAsterAgentChat runtime routing", () => {
       });
 
       await flushEffects();
-      await flushEffects();
+      await flushRuntimeDetailRefresh();
 
-      expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith(sessionId, {
-        historyLimit: 40,
-      });
+      expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith(
+        sessionId,
+        expect.objectContaining({ historyLimit: 40 }),
+      );
       expect(harness.getValue().threadItems).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
@@ -340,11 +342,12 @@ describe("useAsterAgentChat runtime routing", () => {
       });
 
       await flushEffects();
-      await flushEffects();
+      await flushRuntimeDetailRefresh();
 
-      expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith(sessionId, {
-        historyLimit: 40,
-      });
+      expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith(
+        sessionId,
+        expect.objectContaining({ historyLimit: 40 }),
+      );
       expect(harness.getValue().currentTurnId).toBe("turn-real-1");
       expect(harness.getValue().threadItems).toEqual(
         expect.arrayContaining([
@@ -547,14 +550,15 @@ describe("useAsterAgentChat runtime routing", () => {
       });
 
       await flushEffects();
-      await flushEffects();
+      await flushRuntimeDetailRefresh();
 
       const assistantMessage = [...harness.getValue().messages]
         .reverse()
         .find((msg) => msg.role === "assistant");
-      expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith(sessionId, {
-        historyLimit: 40,
-      });
+      expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith(
+        sessionId,
+        expect.objectContaining({ historyLimit: 40 }),
+      );
       expect(assistantMessage).toBeTruthy();
       expect(assistantMessage?.content).toContain(
         "执行失败：模型未输出最终答复，请重试",

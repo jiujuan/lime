@@ -46,7 +46,7 @@
 - AI 图层化设计实现计划：`internal/exec-plans/ai-layered-design-implementation-plan.md`
 - 图片能力 feature-flag / extension-tool 执行计划：`internal/exec-plans/image-capability-feature-flag-extension-tool-plan.md`
 - 图片能力 feature-flag / extension-tool 进度：`internal/exec-plans/image-capability-feature-flag-extension-tool-progress.md`
-- 图片能力 feature-flag / extension-tool 重构计划（历史草案，仅供对照）：`internal/exec-plans/image-capability-feature-flag-extension-tool-refactor-plan.md`
+- 图片能力历史草案已清理，不再保留独立 refactor plan。
 - Skill Forge P1A Capability Authoring 执行计划：`internal/exec-plans/skill-forge-capability-authoring-p1a-plan.md`
 - Skill Forge P1B Capability Verification 执行计划：`internal/exec-plans/skill-forge-capability-verification-p1b-plan.md`
 - Skill Forge P3 Capability Registration 执行计划：`internal/exec-plans/skill-forge-capability-registration-p3-plan.md`

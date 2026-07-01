@@ -13,7 +13,8 @@ async fn article_workspace_turn_runs_installed_worker_and_materializes_workspace
     let installed_state = content_factory_installed_state(&fixture_root);
     let data_source = TestSessionDataSource::new(empty_agent_session_read_response("unused"))
         .with_agent_app_installed_states(vec![installed_state]);
-    let core = RuntimeCore::default().with_app_data_source(Arc::new(data_source));
+    let sidecar_root = tempfile::tempdir().expect("sidecar root");
+    let core = runtime_core_with_sidecar(&sidecar_root).with_app_data_source(Arc::new(data_source));
     let session = core
         .start_session(AgentSessionStartParams {
             session_id: Some("session-content-factory".to_string()),
@@ -62,6 +63,14 @@ async fn article_workspace_turn_runs_installed_worker_and_materializes_workspace
             "turn.completed"
         ]
     );
+    let artifact_events = output
+        .events
+        .iter()
+        .filter(|event| event.event_type == "artifact.snapshot")
+        .collect::<Vec<_>>();
+    assert_eq!(artifact_events.len(), 1);
+    let completed_artifact = &artifact_events[0].payload["artifact"];
+    assert_ne!(completed_artifact["status"], "streaming");
 
     let read = core
         .read_session(AgentSessionReadParams {
@@ -109,6 +118,120 @@ async fn article_workspace_turn_runs_installed_worker_and_materializes_workspace
             .len(),
         3
     );
+}
+
+#[tokio::test]
+async fn article_generation_worker_emits_initial_streaming_workspace_snapshot() {
+    let Some(fixture_root) = content_factory_fixture_root() else {
+        return;
+    };
+    let installed_state = content_factory_installed_state(&fixture_root);
+    let data_source = TestSessionDataSource::new(empty_agent_session_read_response("unused"))
+        .with_agent_app_installed_states(vec![installed_state]);
+    let sidecar_root = tempfile::tempdir().expect("sidecar root");
+    let core = runtime_core_with_sidecar(&sidecar_root).with_app_data_source(Arc::new(data_source));
+    let session = core
+        .start_session(AgentSessionStartParams {
+            session_id: Some("session-content-factory-article".to_string()),
+            thread_id: Some("thread-content-factory-article".to_string()),
+            app_id: "content-factory-app".to_string(),
+            workspace_id: Some("workspace-main".to_string()),
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("session")
+        .session;
+
+    let output = core
+        .start_turn(
+            AgentSessionTurnStartParams {
+                session_id: session.session_id.clone(),
+                turn_id: Some("turn-content-article-generate".to_string()),
+                input: AgentInput {
+                    text: "@写文章 写一篇关于 AI Agent 工作流的公众号文章".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: Some(RuntimeOptions {
+                    metadata: Some(article_generation_metadata_with_locale("en-US")),
+                    ..RuntimeOptions::default()
+                }),
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("article generation worker turn");
+
+    assert_eq!(output.response.turn.status, AgentTurnStatus::Completed);
+    let event_types = output
+        .events
+        .iter()
+        .map(|event| event.event_type.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        event_types,
+        vec![
+            "message.created",
+            "turn.accepted",
+            "artifact.snapshot",
+            "artifact.snapshot",
+            "turn.completed"
+        ]
+    );
+    let artifact_events = output
+        .events
+        .iter()
+        .filter(|event| event.event_type == "artifact.snapshot")
+        .collect::<Vec<_>>();
+    assert_eq!(artifact_events.len(), 2);
+    let streaming_artifact = &artifact_events[0].payload["artifact"];
+    assert_eq!(streaming_artifact["status"], "streaming");
+    assert_eq!(streaming_artifact["title"], "Content Factory Workspace");
+    assert_eq!(streaming_artifact["metadata"]["complete"], false);
+    assert_eq!(
+        streaming_artifact["metadata"]["contentFactoryWorkspacePatch"]["objects"][0]["title"],
+        "Article Draft"
+    );
+    assert_eq!(
+        streaming_artifact["metadata"]["contentFactoryWorkspacePatch"]["objects"][0]["status"],
+        "generating"
+    );
+    assert_eq!(
+        streaming_artifact["metadata"]["contentFactoryWorkspacePatch"]["objects"][0]["source"]
+            ["hostSearchStatus"],
+        "running"
+    );
+    let streaming_sidecar_path = streaming_artifact["sidecarRef"]["relativePath"]
+        .as_str()
+        .expect("streaming sidecar path");
+    let streaming_content = SidecarStore::new(sidecar_root.path())
+        .expect("sidecar store")
+        .read_text(streaming_sidecar_path)
+        .expect("streaming sidecar content");
+    assert!(streaming_content.contains("Researching source material"));
+    let completed_artifact = &artifact_events[1].payload["artifact"];
+    assert_ne!(completed_artifact["status"], "streaming");
+
+    let read = core
+        .read_session(AgentSessionReadParams {
+            session_id: session.session_id,
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .expect("read session");
+    let detail = read.detail.expect("detail");
+    let article = detail["article_workspace"]["objects"]
+        .as_array()
+        .expect("article workspace objects")
+        .iter()
+        .find(|object| object["ref"]["kind"] == "articleDraft")
+        .expect("article object");
+    assert!(article["source"]["markdown"]
+        .as_str()
+        .expect("article markdown")
+        .contains("完整正文应该进入独立的文章产物框，再从这里打开右侧文章编辑器"));
 }
 
 #[tokio::test]
@@ -330,7 +453,8 @@ async fn article_workspace_worker_retries_retryable_failure_and_completes() {
     let installed_state = retry_worker_installed_state(temp.path());
     let data_source = TestSessionDataSource::new(empty_agent_session_read_response("unused"))
         .with_agent_app_installed_states(vec![installed_state]);
-    let core = RuntimeCore::default().with_app_data_source(Arc::new(data_source));
+    let sidecar_root = tempfile::tempdir().expect("sidecar root");
+    let core = runtime_core_with_sidecar(&sidecar_root).with_app_data_source(Arc::new(data_source));
     let session = core
         .start_session(AgentSessionStartParams {
             session_id: Some("session-content-factory-retry".to_string()),
@@ -379,6 +503,16 @@ async fn article_workspace_worker_retries_retryable_failure_and_completes() {
             "artifact.snapshot",
             "turn.completed"
         ]
+    );
+    let artifact_events = output
+        .events
+        .iter()
+        .filter(|event| event.event_type == "artifact.snapshot")
+        .collect::<Vec<_>>();
+    assert_eq!(artifact_events.len(), 1);
+    assert_ne!(
+        artifact_events[0].payload["artifact"]["status"],
+        "streaming"
     );
     let retry_event = output
         .events
@@ -436,7 +570,8 @@ async fn article_workspace_worker_stops_after_retry_budget_is_exhausted() {
     let installed_state = retry_worker_installed_state(temp.path());
     let data_source = TestSessionDataSource::new(empty_agent_session_read_response("unused"))
         .with_agent_app_installed_states(vec![installed_state]);
-    let core = RuntimeCore::default().with_app_data_source(Arc::new(data_source));
+    let sidecar_root = tempfile::tempdir().expect("sidecar root");
+    let core = runtime_core_with_sidecar(&sidecar_root).with_app_data_source(Arc::new(data_source));
     let session = core
         .start_session(AgentSessionStartParams {
             session_id: Some("session-content-factory-retry-failed".to_string()),
@@ -506,6 +641,12 @@ fn content_factory_fixture_root() -> Option<std::path::PathBuf> {
     root.join("src/runtime/content-factory-worker.mjs")
         .is_file()
         .then_some(root)
+}
+
+fn runtime_core_with_sidecar(sidecar_root: &tempfile::TempDir) -> RuntimeCore {
+    RuntimeCore::default().with_sidecar_store(Arc::new(
+        SidecarStore::new(sidecar_root.path()).expect("sidecar store"),
+    ))
 }
 
 fn content_factory_installed_state(fixture_root: &std::path::Path) -> serde_json::Value {
@@ -641,6 +782,35 @@ fn article_workspace_action_metadata() -> serde_json::Value {
             "surface_kind": "articleWorkspace",
             "source": "article_workspace",
             "action_key": "regenerate"
+        }
+    })
+}
+
+fn article_generation_metadata_with_locale(locale: &str) -> serde_json::Value {
+    json!({
+        "agent_response_language": locale,
+        "harness": {
+            "plugin_activation": {
+                "source": "plugin_explicit_mention",
+                "trigger": "@写文章",
+                "body": "写一篇关于 AI Agent 工作流的公众号文章",
+                "session_id": "session-content-factory-article",
+                "plugin_id": "content-factory-app",
+                "active_agent_app_id": "content-factory-app",
+                "active_entry_key": "content_factory",
+                "intent_key": "content_article_generate",
+                "task_kind": "content.article.generate",
+                "output_artifact_kind": "content_factory.workspace_patch",
+                "right_surface": "articleWorkspace",
+                "expected_objects": ["articleDraft"],
+                "selected_object_ref": {
+                    "plugin_id": "content-factory-app",
+                    "object_kind": "articleDraft",
+                    "object_id": "pending"
+                },
+                "opened_tabs": ["articleWorkspace"],
+                "context_source": "user"
+            }
         }
     })
 }

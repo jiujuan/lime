@@ -20,6 +20,7 @@ import type { CuratedTaskReferenceEntry } from "../utils/curatedTaskReferenceSel
 import { changeLimeLocale } from "@/i18n/createI18n";
 import type {
   InputbarPluginCapability,
+  InputbarPluginSelectionOptions,
   InputbarPluginSkillCapability,
 } from "../components/Inputbar/pluginInputCapability";
 
@@ -310,7 +311,7 @@ export interface HarnessProps {
   onSelectPlugin?: (
     plugin: InputbarPluginCapability,
     skill?: InputbarPluginSkillCapability,
-    options?: { inputOverride?: string },
+    options?: InputbarPluginSelectionOptions,
   ) => void;
   projectId?: string | null;
   sessionId?: string | null;

@@ -1,6 +1,6 @@
 # Writing 时序图
 
-更新时间：2026-06-29
+更新时间：2026-06-30
 状态：In Progress
 
 ## 1. 插件中心安装态展示
@@ -84,9 +84,11 @@ sequenceDiagram
   participant Surface as Right Surface
   participant Editor as Article Editor
 
+  Runtime-->>Chat: 先下发任务卡 / 对话流过程态
+  Chat-->>User: 在对话流展示检索、skills 编排和写作过程
   Runtime-->>Chat: articleArtifacts / workspace patch
   Chat->>Frame: 创建独立产物框
-  Runtime-->>Frame: 流式写入完整文章内容
+  Runtime-->>Frame: 流式写入最终文章内容
   Frame-->>Chat: objectRef / artifactRef
   User->>Frame: 点击打开
   Frame->>Surface: openArticleArtifact(articleDraft)

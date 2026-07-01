@@ -150,6 +150,34 @@ describe("workspacePluginRuntimeContext", () => {
     });
   });
 
+  it("plugin history restore metadata 不应冒充当前激活态", () => {
+    const context = buildWorkspacePluginRuntimeContext({
+      installedAgentApps: [createInstalledPluginBackedApp()],
+      requestMetadata: {
+        harness: {
+          plugin_history_restore: {
+            session_id: "session-1",
+            plugin_id: "creator-workbench",
+            active_agent_app_id: "creator-workbench",
+            active_entry_key: "creator",
+            selected_object_ref: {
+              plugin_id: "creator-workbench",
+              object_kind: "articleDraft",
+              object_id: "draft-1",
+            },
+            opened_tabs: ["articleWorkspace"],
+          },
+        },
+      },
+    });
+
+    expect(context).toMatchObject({
+      status: "inactive",
+      activationContext: null,
+      blockerCodes: [],
+    });
+  });
+
   it("应组合 request metadata 与 installed registry 成 active 插件运行上下文", () => {
     const installed = [createInstalledPluginBackedApp()];
     const context = buildWorkspacePluginRuntimeContext({

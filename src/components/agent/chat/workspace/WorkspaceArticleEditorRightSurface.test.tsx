@@ -304,6 +304,17 @@ describe("WorkspaceArticleEditorRightSurface", () => {
       ),
     ).not.toBeNull();
     expect(
+      container
+        .querySelector('[data-testid="workspace-article-editor-surface"]')
+        ?.getAttribute("data-compact-layout"),
+    ).toBe("true");
+    expect(
+      container.querySelector('[data-testid="workspace-article-editor-stats"]'),
+    ).toBeNull();
+    expect(container.textContent).not.toContain("2 个来源产物");
+    expect(container.textContent).not.toContain("2026-06-24T00:00:00.000Z");
+    expect(container.textContent).toContain("更新：06/24");
+    expect(
       container.querySelector(
         '[data-testid="workspace-article-editor-main-canvas"]',
       ),
@@ -313,6 +324,11 @@ describe("WorkspaceArticleEditorRightSurface", () => {
         '[data-testid="workspace-article-editor-side-panel"]',
       ),
     ).not.toBeNull();
+    expect(
+      container
+        .querySelector('[data-testid="workspace-article-editor-surface"]')
+        ?.getAttribute("data-layout"),
+    ).toBe("responsive");
     expect(
       container.querySelector(
         '[data-testid="workspace-article-editor-action-revise"]',
@@ -506,6 +522,7 @@ describe("WorkspaceArticleEditorRightSurface", () => {
       imageRow?.click();
     });
 
+    expect(container.textContent).toContain("公众号文章草稿");
     expect(container.textContent).toContain("配图组");
     expect(container.textContent).toContain("正文画布");
     expect(

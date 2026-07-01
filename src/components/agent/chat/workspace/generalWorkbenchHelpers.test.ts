@@ -58,7 +58,7 @@ describe("generalWorkbenchHelpers", () => {
     );
   });
 
-  it("应为 lime media CLI bash 调用生成明确的媒体任务标题", () => {
+  it("应仅为 legacy Bash CLI transcript 恢复明确的媒体任务标题", () => {
     const messages: Message[] = [
       {
         id: "user-1",

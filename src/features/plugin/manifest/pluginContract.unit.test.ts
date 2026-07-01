@@ -49,6 +49,11 @@ describe("Plugin P1 manifest contract", () => {
           aliases: ["@写文章", "@写作"],
           kind: "plugin",
           intent: "at_command",
+          taskKind: "content.article.generate",
+          workflow: "content_article_workflow",
+          outputArtifactKind: "content_factory.workspace_patch",
+          rightSurface: "articleWorkspace",
+          expectedObjects: ["articleDraft"],
           defaultObjectKind: "articleDraft",
         },
       ],
@@ -85,6 +90,11 @@ describe("Plugin P1 manifest contract", () => {
           aliases: ["@写文章", "@写作"],
           kind: "plugin",
           intent: "at_command",
+          taskKind: "content.article.generate",
+          workflowKey: "content_article_workflow",
+          outputArtifactKind: "content_factory.workspace_patch",
+          rightSurface: "articleWorkspace",
+          expectedObjects: ["articleDraft"],
           defaultObjectKind: "articleDraft",
         },
       ],
@@ -209,6 +219,9 @@ describe("Plugin P1 manifest contract", () => {
           aliases: ["@写文章", "@写作"],
           kind: "plugin",
           intent: "at_command",
+          taskKind: "content.article.generate",
+          workflowKey: "content_article_workflow",
+          rightSurface: "articleWorkspace",
           defaultObjectKind: "articleDraft",
         }),
         expect.objectContaining({
@@ -221,6 +234,9 @@ describe("Plugin P1 manifest contract", () => {
           key: "content_factory_generate",
           kind: "plugin",
           intent: "at_command",
+          taskKind: "content.factory.generate",
+          workflowKey: "content_article_workflow",
+          rightSurface: "articleWorkspace",
           defaultObjectKind: "articleDraft",
         }),
       ]),
@@ -472,6 +488,25 @@ describe("Plugin P1 registry projection", () => {
     ]);
     expect(historyOnly.activationState).toBe("disabled");
     expect(historyOnly.historyState).toBe("read_only_history");
+  });
+
+  it("已安装插件 needs-setup 只作为维护提醒，不应阻断输入区激活", () => {
+    const manifest = normalizeManifest(parseManifest(contentFactoryFixture));
+    const contract = buildPluginContractFromAgentAppManifest({ manifest });
+    const item = projectPluginRegistryItem({
+      contract,
+      installed: true,
+      enabled: true,
+      readinessStatus: "needs-setup",
+      blockerCodes: ["PLUGIN_INSTALLED_PACKAGE_MISMATCH"],
+    });
+
+    expect(item.activationState).toBe("activatable");
+    expect(item.capabilityStates).toEqual(
+      expect.arrayContaining(["activatable", "renderable"]),
+    );
+    expect(item.blockerCodes).toContain("PLUGIN_INSTALLED_PACKAGE_MISMATCH");
+    expect(item.blockerCodes).not.toContain("PLUGIN_ACTIVATION_BLOCKED");
   });
 
   it("registry 应按展示名排序并保留阻断原因", () => {

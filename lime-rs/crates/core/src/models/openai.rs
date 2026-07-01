@@ -42,6 +42,14 @@ pub struct ImageGenerationRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub style: Option<String>,
 
+    /// 参考图 URL 列表 (可选)
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        alias = "referenceImages"
+    )]
+    pub reference_images: Vec<String>,
+
     /// 用户标识 (可选)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user: Option<String>,

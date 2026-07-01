@@ -2,6 +2,10 @@
   container-type: inline-size;
 }
 
+.article-editor-root-compact {
+  background: var(--lime-surface);
+}
+
 .article-editor-workbench {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -60,6 +64,7 @@
   color: var(--lime-text);
   font-size: 14px;
   line-height: 1.85;
+  overflow-wrap: anywhere;
   word-break: break-word;
 }
 
@@ -206,15 +211,217 @@
 }
 
 @container (max-width: 520px) {
+  .article-editor-header {
+    padding: 10px 12px;
+  }
+
+  .article-editor-header-actions {
+    gap: 6px;
+  }
+
+  .article-editor-preview-button {
+    height: 30px;
+    padding-inline: 8px;
+    font-size: 11px;
+  }
+
   .article-editor-workbench {
-    padding: 12px;
+    display: block;
+    padding: 10px;
+    overflow: auto;
+  }
+
+  .article-editor-main-column {
+    padding: 0 0 12px;
+  }
+
+  .article-editor-canvas-heading {
+    margin-bottom: 8px;
+    padding: 0 2px;
+  }
+
+  .article-editor-canvas-shell {
+    width: 100%;
+  }
+
+  .article-editor-side-panel {
+    display: none;
+  }
+
+  .article-editor-canvas {
+    min-height: 0;
+    border-radius: 10px;
+    box-shadow: none;
+  }
+
+  .article-editor-canvas [data-testid="workspace-article-editor-toolbar"] {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 6px;
+  }
+
+  .article-editor-canvas
+    [data-testid="workspace-article-editor-toolbar"]
+    > span {
+    margin-left: 2px;
+    margin-right: 2px;
   }
 
   .article-editor-canvas .ProseMirror {
-    padding: 22px 20px 34px;
+    min-height: 360px;
+    padding: 18px 14px 28px;
+    font-size: 13px;
+    line-height: 1.75;
   }
 
   .article-editor-canvas .ProseMirror h1 {
-    font-size: 24px;
+    margin-bottom: 12px;
+    font-size: 20px;
+    line-height: 1.35;
   }
+
+  .article-editor-canvas .ProseMirror h2 {
+    margin-top: 22px;
+    font-size: 16px;
+  }
+
+  .article-editor-canvas .ProseMirror h3 {
+    font-size: 14px;
+  }
+
+  .article-editor-canvas
+    [data-testid="workspace-article-editor-canvas-status"] {
+    padding: 8px 10px;
+    font-size: 10px;
+  }
+}
+
+.article-editor-root-compact .article-editor-header {
+  padding: 12px 14px;
+}
+
+.article-editor-root-compact .article-editor-header-actions {
+  gap: 6px;
+}
+
+.article-editor-root-compact .article-editor-header > div:first-child {
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.article-editor-root-compact .article-editor-header h2 {
+  white-space: normal;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.article-editor-root-compact .article-editor-preview-button {
+  height: 30px;
+  padding-inline: 8px;
+  font-size: 11px;
+}
+
+.article-editor-root-compact .article-editor-workbench {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  padding: 12px 14px 16px;
+  overflow: auto;
+}
+
+.article-editor-root-compact .article-editor-main-column {
+  flex: 1;
+  min-height: 0;
+  padding: 0;
+}
+
+.article-editor-root-compact .article-editor-canvas-heading {
+  width: 100%;
+  margin: 0 0 8px;
+  padding: 0 1px;
+}
+
+.article-editor-root-compact .article-editor-canvas-heading > div:first-child {
+  min-width: 0;
+}
+
+.article-editor-root-compact
+  .article-editor-canvas-heading
+  > div:first-child
+  > div:first-child {
+  display: none;
+}
+
+.article-editor-root-compact
+  .article-editor-canvas-heading
+  > div:first-child
+  > div:last-child {
+  margin-top: 0;
+}
+
+.article-editor-root-compact .article-editor-canvas-updated {
+  max-width: 44%;
+}
+
+.article-editor-root-compact .article-editor-canvas-shell {
+  width: 100%;
+  margin: 0;
+}
+
+.article-editor-root-compact .article-editor-side-panel {
+  display: none;
+}
+
+.article-editor-root-compact .article-editor-canvas {
+  min-height: 100%;
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.article-editor-root-compact
+  .article-editor-canvas
+  [data-testid="workspace-article-editor-toolbar"] {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding: 6px;
+}
+
+.article-editor-root-compact
+  .article-editor-canvas
+  [data-testid="workspace-article-editor-toolbar"]
+  > span {
+  margin-left: 2px;
+  margin-right: 2px;
+}
+
+.article-editor-root-compact .article-editor-canvas .ProseMirror {
+  min-height: clamp(420px, calc(100vh - 236px), 760px);
+  padding: 20px 20px 32px;
+  font-size: 14px;
+  line-height: 1.78;
+}
+
+.article-editor-root-compact .article-editor-canvas .ProseMirror h1 {
+  margin-bottom: 12px;
+  font-size: 22px;
+  line-height: 1.35;
+}
+
+.article-editor-root-compact .article-editor-canvas .ProseMirror h2 {
+  margin-top: 22px;
+  font-size: 16px;
+}
+
+.article-editor-root-compact .article-editor-canvas .ProseMirror h3 {
+  font-size: 14px;
+}
+
+.article-editor-root-compact
+  .article-editor-canvas
+  [data-testid="workspace-article-editor-canvas-status"] {
+  padding: 8px 10px;
+  font-size: 10px;
 }

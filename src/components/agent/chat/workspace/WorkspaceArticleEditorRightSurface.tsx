@@ -104,6 +104,7 @@ export function WorkspaceArticleEditorRightSurface({
       actions={viewModel.selectedActions}
       actionsDisabled={actionsDisabled}
       artifactIds={viewModel.selectedArtifactIds}
+      compact
       object={viewModel.selectedObject}
       objects={viewModel.objects}
       onActionIntent={onActionIntent}
@@ -123,9 +124,24 @@ function resolveArticleEditorObject(
   articleWorkspace: WorkspaceArticleWorkspace,
   selectedObjectKey: string | null,
 ): WorkspaceArticleObject | null {
+  const preferredArticleDraft = selectWorkspaceArticleDraftObject(
+    articleWorkspace.objects,
+  );
   return (
-    findObjectByKey(articleWorkspace, selectedObjectKey) ??
-    selectWorkspaceArticleDraftObject(articleWorkspace.objects) ??
+    findDocumentObjectByKey(articleWorkspace, selectedObjectKey) ??
+    preferredArticleDraft ??
+    findDocumentObjectByRef(
+      articleWorkspace,
+      articleWorkspace.primaryObjectRef,
+    ) ??
+    findDocumentObjectByKey(
+      articleWorkspace,
+      readWorkspaceArticleWorkspaceSelectedObjectKey(articleWorkspace),
+    ) ??
+    findDocumentObjectByRef(
+      articleWorkspace,
+      articleWorkspace.selectedObjectRef,
+    ) ??
     findObjectByRef(articleWorkspace, articleWorkspace.primaryObjectRef) ??
     findObjectByKey(
       articleWorkspace,
@@ -135,6 +151,30 @@ function resolveArticleEditorObject(
     articleWorkspace.objects[0] ??
     null
   );
+}
+
+function isArticleEditorDocumentObject(
+  object: WorkspaceArticleObject,
+): boolean {
+  return (
+    object.ref.kind === "articleDraft" || object.ref.kind === "videoScript"
+  );
+}
+
+function findDocumentObjectByKey(
+  articleWorkspace: WorkspaceArticleWorkspace,
+  objectKey: string | null | undefined,
+): WorkspaceArticleObject | null {
+  const object = findObjectByKey(articleWorkspace, objectKey);
+  return object && isArticleEditorDocumentObject(object) ? object : null;
+}
+
+function findDocumentObjectByRef(
+  articleWorkspace: WorkspaceArticleWorkspace,
+  ref: WorkspaceArticleObjectRef | null | undefined,
+): WorkspaceArticleObject | null {
+  const object = findObjectByRef(articleWorkspace, ref);
+  return object && isArticleEditorDocumentObject(object) ? object : null;
 }
 
 function findObjectByKey(

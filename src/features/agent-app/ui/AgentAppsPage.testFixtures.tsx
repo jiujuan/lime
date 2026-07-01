@@ -443,6 +443,7 @@ export function buildReviewResult(
       generatedAt: state.updatedAt,
       ...reviewOverrides,
     },
+    state,
   };
 }
 

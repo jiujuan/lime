@@ -29,6 +29,8 @@ export type InputbarComposerSectionCopyKey =
   | "agentChat.inputbar.plusMenu.skills"
   | "agentChat.inputbar.plusMenu.unavailable"
   | "agentChat.inputbar.pluginChip.empty"
+  | "agentChat.inputbar.pluginChip.error"
+  | "agentChat.inputbar.pluginChip.loading"
   | "agentChat.inputbar.pluginChip.remove"
   | "agentChat.inputbar.pluginChip.skillPrefix"
   | "agentChat.inputbar.pluginChip.selectorTitle"
@@ -79,6 +81,8 @@ export interface InputbarComposerSectionCopy {
   };
   pluginChip: {
     empty: string;
+    error: string;
+    loading: string;
     remove: (name: string) => string;
     skillPrefix: string;
     selectorTitle: string;
@@ -143,6 +147,8 @@ export function buildInputbarComposerSectionCopy(
     },
     pluginChip: {
       empty: translate("agentChat.inputbar.pluginChip.empty"),
+      error: translate("agentChat.inputbar.pluginChip.error"),
+      loading: translate("agentChat.inputbar.pluginChip.loading"),
       remove: (name) =>
         translate("agentChat.inputbar.pluginChip.remove", { name }),
       skillPrefix: translate("agentChat.inputbar.pluginChip.skillPrefix"),

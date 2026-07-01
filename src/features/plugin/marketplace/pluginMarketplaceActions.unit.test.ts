@@ -48,13 +48,17 @@ function viewItem(
     activatable: false,
     renderable: false,
     readOnlyHistory: false,
+    activationEntries: [],
     skills: [],
     capabilityProfile: {
       sections: [],
       summary: {
         agentCount: 0,
         subagentCount: 0,
+        workflowCount: 0,
         toolCount: 0,
+        connectorCount: 0,
+        hookCount: 0,
         skillCount: 0,
       },
     },
@@ -145,8 +149,12 @@ function runtimeContext() {
 
 describe("plugin marketplace actions", () => {
   it("本地安装应先选择目录并调用 current local package install API", async () => {
-    const selectLocalDirectory = vi.fn(async () => "/Users/coso/Documents/dev/ai/limecloud/content-factory-app");
-    const installLocalPackage = vi.fn(async () => installedState("research-kit"));
+    const selectLocalDirectory = vi.fn(
+      async () => "/Users/coso/Documents/dev/ai/limecloud/content-factory-app",
+    );
+    const installLocalPackage = vi.fn(async () =>
+      installedState("research-kit"),
+    );
     const dispatchChanged = vi.fn();
 
     const result = await performPluginMarketplaceAction(

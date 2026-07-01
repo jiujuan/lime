@@ -52,7 +52,8 @@ import {
   preloadCharacterMentionPanel,
 } from "./characterMentionPanelLoader";
 import {
-  normalizeInputbarPluginTrigger,
+  isCompleteInputbarPluginTriggerQuery,
+  type InputbarPluginSelectionOptions,
   type InputbarPluginCapability,
   type InputbarPluginSkillCapability,
 } from "../components/Inputbar/pluginInputCapability";
@@ -117,7 +118,7 @@ interface CharacterMentionProps {
   onSelectPlugin?: (
     plugin: InputbarPluginCapability,
     skill?: InputbarPluginSkillCapability,
-    options?: { inputOverride?: string },
+    options?: InputbarPluginSelectionOptions,
   ) => void;
   /** Agent App 插件候选 */
   pluginSuggestions?: readonly InputbarPluginCapability[];
@@ -292,6 +293,7 @@ export function CharacterMention({
   });
   const commandRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const activeTriggerRef = useRef<ActiveTrigger | null>(null);
   const [
     curatedTaskRecommendationSignalsVersion,
     setCuratedTaskRecommendationSignalsVersion,
@@ -364,10 +366,25 @@ export function CharacterMention({
     const cursorPos = textarea.selectionStart ?? textarea.value.length;
     const activeTrigger = resolveActiveTrigger(textarea.value, cursorPos);
     if (!activeTrigger) {
+      activeTriggerRef.current = null;
       setShowMentions(false);
       return;
     }
 
+    if (
+      activeTrigger.mode === "mention" &&
+      isCompleteInputbarPluginTriggerQuery({
+        query: activeTrigger.query,
+        plugins: pluginSuggestions,
+      })
+    ) {
+      activeTriggerRef.current = null;
+      setMentionQuery("");
+      setShowMentions(false);
+      return;
+    }
+
+    activeTriggerRef.current = activeTrigger;
     setMentionQuery(activeTrigger.query);
     setTriggerMode(activeTrigger.mode);
     setShowMentions(true);
@@ -397,7 +414,7 @@ export function CharacterMention({
         120,
       ),
     });
-  }, [inputCompletionEnabled, inputRef]);
+  }, [inputCompletionEnabled, inputRef, pluginSuggestions]);
 
   useEffect(() => {
     if (!inputCompletionEnabled) {
@@ -771,31 +788,36 @@ export function CharacterMention({
     if (!textarea) return;
 
     const currentValue = textarea.value || value;
-    const cursorPos = textarea.selectionStart ?? currentValue.length;
-    const textAfterCursor = currentValue.slice(cursorPos);
-    const activeTrigger = resolveActiveTrigger(currentValue, cursorPos);
+    const fallbackCursorPos = textarea.selectionStart ?? currentValue.length;
+    const fallbackTrigger = resolveActiveTrigger(
+      currentValue,
+      fallbackCursorPos,
+    );
+    const activeTrigger =
+      activeTriggerRef.current?.mode === "mention"
+        ? activeTriggerRef.current
+        : fallbackTrigger;
     if (!activeTrigger || activeTrigger.mode !== "mention") {
       return;
     }
 
-    const mergedSelection = mergeTriggerSelectionText({
+    const mentionEnd =
+      activeTrigger.triggerIndex + activeTrigger.query.length + 1;
+    const textAfterCursor = currentValue.slice(mentionEnd);
+    const nextSelection = mergeTriggerSelectionText({
       leadingText: currentValue.slice(0, activeTrigger.triggerIndex),
-      insertedText: normalizeInputbarPluginTrigger(plugin, skill),
+      insertedText: "",
       trailingText: textAfterCursor,
     });
-    const nextSelection =
-      textAfterCursor.length === 0
-        ? {
-            value: `${mergedSelection.value} `,
-            cursorPos: mergedSelection.cursorPos + 1,
-          }
-        : mergedSelection;
     const normalizedValue =
       nextSelection.value.trimEnd() === "" ? "" : nextSelection.value;
 
     onChange(normalizedValue);
     setShowMentions(false);
-    onSelectPlugin?.(plugin, skill, { inputOverride: normalizedValue });
+    onSelectPlugin?.(plugin, skill, {
+      inputOverride: normalizedValue,
+      preserveInputOverride: true,
+    });
 
     setTimeout(() => {
       textarea.focus();

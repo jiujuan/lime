@@ -95,6 +95,42 @@ describe("installed Agent App plugin projection", () => {
     });
   });
 
+  it("应从 agentRuntime 合并旧安装状态中被截短的 activation entry", () => {
+    const base = installedContentFactory();
+    const projection = projectPluginRegistryFromInstalledAgentApps([
+      {
+        ...base,
+        manifest: {
+          ...base.manifest,
+          activationEntries: [
+            {
+              key: "content_article_generate",
+              title: "写文章",
+              aliases: ["@写文章"],
+              kind: "plugin",
+              intent: "at_command",
+              defaultObjectKind: "articleDraft",
+            },
+          ],
+        },
+      } as InstalledAgentAppState,
+    ]);
+
+    expect(projection.contracts[0]?.activationEntries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: "content_article_generate",
+          aliases: ["@写文章", "@写作"],
+          taskKind: "content.article.generate",
+          workflowKey: "content_article_workflow",
+          outputArtifactKind: "content_factory.workspace_patch",
+          rightSurface: "articleWorkspace",
+          expectedObjects: ["articleDraft"],
+        }),
+      ]),
+    );
+  });
+
   it("禁用的 Agent App 应投影成只读历史状态", () => {
     const projection = projectPluginRegistryFromInstalledAgentApps([
       installedContentFactory({ disabled: true }),

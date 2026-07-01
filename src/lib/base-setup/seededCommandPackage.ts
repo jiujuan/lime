@@ -4,6 +4,7 @@ import type {
   BaseSetupPackage,
   BaseSetupRenderContract,
 } from "./types";
+import { resolveImageCapabilityModels } from "@/lib/imageGen/catalog";
 import { SEEDED_SERVICE_SKILL_CATALOG_VERSION } from "./seededServiceSkillPackage";
 
 const SEEDED_COMMAND_PACKAGE_ID = "lime-seeded-command-catalog";
@@ -80,6 +81,45 @@ interface SeededCommandProjectionSpec {
   commandRenderContract: BaseSetupRenderContract;
 }
 
+function normalizeCatalogLabel(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function requireSeededImageCommandModelId(params: {
+  providerId: string;
+  providerType: string;
+  modelName: string;
+}): string {
+  const models = resolveImageCapabilityModels({
+    id: params.providerId,
+    type: params.providerType,
+  });
+  const model = models.find(
+    (candidate) =>
+      normalizeCatalogLabel(candidate.name) ===
+      normalizeCatalogLabel(params.modelName),
+  );
+  if (!model) {
+    throw new Error(
+      `missing seeded image command model in image capability catalog: ${params.providerId}/${params.modelName}`,
+    );
+  }
+
+  return model.id;
+}
+
+const SEEDED_NANOBANANA_PRO_MODEL_ID = requireSeededImageCommandModelId({
+  providerId: "fal",
+  providerType: "fal",
+  modelName: "Nano Banana Pro",
+});
+
+const SEEDED_GPT_IMAGES_2_MODEL_ID = requireSeededImageCommandModelId({
+  providerId: "new-api",
+  providerType: "openai",
+  modelName: "GPT Images 2",
+});
+
 const SEEDED_COMMAND_PROJECTION_SPECS: SeededCommandProjectionSpec[] = [
   {
     commandKey: "image_generate",
@@ -126,7 +166,7 @@ const SEEDED_COMMAND_PROJECTION_SPECS: SeededCommandProjectionSpec[] = [
       requestDefaults: {
         imageWorkbench: "true",
         providerId: "fal",
-        model: "fal-ai/nano-banana-pro",
+        model: SEEDED_NANOBANANA_PRO_MODEL_ID,
       },
     },
     commandRenderContract: COMMAND_IMAGE_GALLERY_CONTRACT,
@@ -151,7 +191,7 @@ const SEEDED_COMMAND_PROJECTION_SPECS: SeededCommandProjectionSpec[] = [
       executionKind: "task_queue",
       requestDefaults: {
         imageWorkbench: "true",
-        model: "gpt-images-2",
+        model: SEEDED_GPT_IMAGES_2_MODEL_ID,
         executorMode: "responses_image_generation",
       },
     },

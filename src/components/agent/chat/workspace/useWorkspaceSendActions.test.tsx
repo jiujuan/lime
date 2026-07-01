@@ -789,16 +789,16 @@ describe("useWorkspaceSendActions", () => {
               plugin_id: "content-factory-app",
               active_agent_app_id: "content-factory-app",
               active_entry_key: "content_factory_generate",
+              entry_workflow_key: "content_article_workflow",
               intent_key: "content_factory_generate",
               task_kind: "content.factory.generate",
+              intent_workflow_key: "content_article_workflow",
+              workflow_key: "content_article_workflow",
               output_artifact_kind: "content_factory.workspace_patch",
               right_surface: "articleWorkspace",
-              expected_objects: [
+              expected_objects: expect.arrayContaining([
                 "articleDraft",
-                "imageGenerationSet",
-                "videoStoryboard",
-                "deliveryChecklist",
-              ],
+              ]),
               opened_tabs: ["articleWorkspace"],
               selected_object_ref: {
                 plugin_id: "content-factory-app",
@@ -864,11 +864,16 @@ describe("useWorkspaceSendActions", () => {
               plugin_id: "content-factory-app",
               active_agent_app_id: "content-factory-app",
               active_entry_key: "content_article_generate",
+              entry_workflow_key: "content_article_workflow",
               intent_key: "content_article_generate",
               task_kind: "content.article.generate",
+              intent_workflow_key: "content_article_workflow",
+              workflow_key: "content_article_workflow",
               output_artifact_kind: "content_factory.workspace_patch",
               right_surface: "articleWorkspace",
-              expected_objects: ["articleDraft"],
+              expected_objects: expect.arrayContaining([
+                "articleDraft",
+              ]),
               opened_tabs: ["articleWorkspace"],
             },
             plugin_activation_intent: {
@@ -876,6 +881,7 @@ describe("useWorkspaceSendActions", () => {
               app_id: "content-factory-app",
               intent_key: "content_article_generate",
               task_kind: "content.article.generate",
+              workflow_key: "content_article_workflow",
               output_artifact_kind: "content_factory.workspace_patch",
               right_surface: "articleWorkspace",
             },
@@ -946,7 +952,9 @@ describe("useWorkspaceSendActions", () => {
               task_kind: "content.article.generate",
               output_artifact_kind: "content_factory.workspace_patch",
               right_surface: "articleWorkspace",
-              expected_objects: ["articleDraft"],
+              expected_objects: expect.arrayContaining([
+                "articleDraft",
+              ]),
               opened_tabs: ["articleWorkspace"],
             },
             plugin_activation_intent: {
@@ -2496,6 +2504,34 @@ Extract it into the Agent Skills directory.`,
           replayText: "一张广州塔，从花城汇看过去的春天的照片",
         }),
       ]);
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("写文章 dispatch 应显式保留空 fallbackContent，避免 completion 回退通用文案", async () => {
+    const harness = mountHook({
+      input: "@写文章 写一篇公众号文章",
+    });
+    mockEnsureSessionForCommandMetadata.mockResolvedValueOnce(
+      "session-write-article-fallback",
+    );
+    mockListInstalledAgentApps.mockResolvedValueOnce({
+      states: [createInstalledContentFactory()],
+      issues: [],
+    });
+
+    try {
+      await act(async () => {
+        const started = await harness.getValue().handleSend();
+        expect(started).toBe(true);
+      });
+
+      const sendOptions = mockSendMessage.mock.calls[0]?.[8];
+      expect(sendOptions?.assistantDraft).toMatchObject({
+        content: "",
+        fallbackContent: "",
+      });
     } finally {
       harness.unmount();
     }

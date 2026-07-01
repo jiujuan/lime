@@ -1,16 +1,11 @@
-use crate::local_data_source::create_image_media_task_artifact;
-use crate::runtime::ToolInventoryReadRequest;
-use crate::{AppDataSource, RuntimeCoreError};
-use app_server_protocol::{
-    MediaTaskArtifactImageCreateParams, MediaTaskArtifactResponse, MediaTaskArtifactImageCompleteParams,
-};
+use crate::AppDataSource;
+use app_server_protocol::{MediaTaskArtifactImageCreateParams, MediaTaskArtifactResponse};
 use aster::session_context::{current_action_scope, current_session_id, current_turn_context};
 use aster::tools::{PermissionCheckResult, Tool, ToolContext, ToolError, ToolOptions, ToolResult};
 use async_trait::async_trait;
 use lime_agent::agent_tools::catalog::LIME_CREATE_IMAGE_TASK_TOOL_NAME;
-use serde_json::{json, Value};
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use serde_json::{json, Map, Value};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 pub(crate) fn create_image_tools(app_data_source: Arc<dyn AppDataSource>) -> Vec<Box<dyn Tool>> {
@@ -27,14 +22,18 @@ impl ImageGenerationTool {
         Self { app_data_source }
     }
 
-    fn parse_params(&self, params: Value, context: &ToolContext) -> Result<ImageToolInput, ToolError> {
+    fn parse_params(
+        &self,
+        params: Value,
+        context: &ToolContext,
+    ) -> Result<ImageToolInput, ToolError> {
         let prompt = required_string(&params, &["prompt"])?;
         let size = optional_string(&params, &["size"]);
         let style = optional_string(&params, &["style"]);
         let usage = optional_string(&params, &["usage"]);
         let mode = optional_string(&params, &["mode"]);
         let layout_hint = optional_string(&params, &["layoutHint", "layout_hint"]);
-        let count = optional_u32(&params, &["count"]);
+        let count = optional_u32(&params, &["count"])?;
         let aspect_ratio = optional_string(&params, &["aspectRatio", "aspect_ratio"]);
         let provider_id = optional_string(&params, &["provider_id", "providerId"]);
         let model = optional_string(&params, &["model"]);
@@ -56,7 +55,14 @@ impl ImageGenerationTool {
         let turn_id = required_identity(
             optional_string(&params, &["turn_id", "turnId"])
                 .or_else(|| current_action_scope().and_then(|scope| scope.turn_id))
-                .or_else(|| current_turn_context().and_then(|ctx| ctx.metadata.get("turn_id").and_then(Value::as_str).map(str::to_string)))
+                .or_else(|| {
+                    current_turn_context().and_then(|ctx| {
+                        ctx.metadata
+                            .get("turn_id")
+                            .and_then(Value::as_str)
+                            .map(str::to_string)
+                    })
+                })
                 .as_deref(),
             "turn_id",
         )?;
@@ -64,31 +70,47 @@ impl ImageGenerationTool {
         let content_id = optional_string(&params, &["content_id", "contentId"]);
         let entry_source = optional_string(&params, &["entry_source", "entrySource"]);
         let requested_target = optional_string(&params, &["requested_target", "requestedTarget"]);
-        let modality_contract_key = optional_string(&params, &["modality_contract_key", "modalityContractKey"]);
+        let modality_contract_key =
+            optional_string(&params, &["modality_contract_key", "modalityContractKey"]);
         let modality = optional_string(&params, &["modality"]);
         let routing_slot = optional_string(&params, &["routing_slot", "routingSlot"]);
-        let runtime_contract = params.get("runtime_contract").cloned().or_else(|| params.get("runtimeContract").cloned());
+        let runtime_contract = params
+            .get("runtime_contract")
+            .cloned()
+            .or_else(|| params.get("runtimeContract").cloned());
         let slot_id = optional_string(&params, &["slot_id", "slotId"]);
         let anchor_hint = optional_string(&params, &["anchor_hint", "anchorHint"]);
         let anchor_section_title =
             optional_string(&params, &["anchor_section_title", "anchorSectionTitle"]);
         let anchor_text = optional_string(&params, &["anchor_text", "anchorText"]);
-        let target_output_id =
-            optional_string(&params, &["target_output_id", "targetOutputId"]);
+        let target_output_id = optional_string(&params, &["target_output_id", "targetOutputId"]);
         let target_output_ref_id =
             optional_string(&params, &["target_output_ref_id", "targetOutputRefId"]);
         let title = optional_string(&params, &["title"]);
-        let title_generation_result = params.get("title_generation_result").cloned().or_else(|| params.get("titleGenerationResult").cloned());
-        let persona_context = params.get("persona_context").cloned().or_else(|| params.get("personaContext").cloned());
+        let title_generation_result = params
+            .get("title_generation_result")
+            .cloned()
+            .or_else(|| params.get("titleGenerationResult").cloned());
+        let persona_context = params
+            .get("persona_context")
+            .cloned()
+            .or_else(|| params.get("personaContext").cloned());
         let presentation = params.get("presentation").cloned();
-        let taste_context = params.get("taste_context").cloned().or_else(|| params.get("tasteContext").cloned());
+        let taste_context = params
+            .get("taste_context")
+            .cloned()
+            .or_else(|| params.get("tasteContext").cloned());
         let raw_text = optional_string(&params, &["raw_text", "rawText"]);
         let reference_images = string_vec(&params, &["reference_images", "referenceImages"]);
-        let storyboard_slots = params
+        let storyboard_slots: Vec<app_server_protocol::ImageStoryboardSlotInput> = params
             .get("storyboard_slots")
             .or_else(|| params.get("storyboardSlots"))
             .cloned()
-            .map(|value| serde_json::from_value(value).map_err(|error| ToolError::invalid_params(format!("storyboard_slots invalid: {error}"))))
+            .map(|value| {
+                serde_json::from_value(value).map_err(|error| {
+                    ToolError::invalid_params(format!("storyboard_slots invalid: {error}"))
+                })
+            })
             .transpose()?
             .unwrap_or_default();
 
@@ -160,60 +182,73 @@ impl Tool for ImageGenerationTool {
     }
 
     fn input_schema(&self) -> Value {
+        let mut properties = Map::new();
+        for key in [
+            "project_root_path",
+            "prompt",
+            "title",
+            "mode",
+            "raw_text",
+            "layout_hint",
+            "size",
+            "aspect_ratio",
+            "usage",
+            "style",
+            "provider_id",
+            "model",
+            "executor_mode",
+            "outer_model",
+            "session_id",
+            "thread_id",
+            "turn_id",
+            "project_id",
+            "content_id",
+            "entry_source",
+            "modality_contract_key",
+            "modality",
+            "routing_slot",
+            "requested_target",
+            "slot_id",
+            "anchor_hint",
+            "anchor_section_title",
+            "anchor_text",
+            "target_output_id",
+            "target_output_ref_id",
+        ] {
+            properties.insert(key.to_string(), json!({ "type": "string" }));
+        }
+        properties.insert("title_generation_result".to_string(), json!({}));
+        properties.insert("persona_context".to_string(), json!({}));
+        properties.insert("presentation".to_string(), json!({}));
+        properties.insert("taste_context".to_string(), json!({}));
+        properties.insert("runtime_contract".to_string(), json!({}));
+        properties.insert(
+            "count".to_string(),
+            json!({ "type": "integer", "minimum": 1 }),
+        );
+        properties.insert(
+            "reference_images".to_string(),
+            json!({ "type": "array", "items": { "type": "string" } }),
+        );
+        properties.insert(
+            "storyboard_slots".to_string(),
+            json!({
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "prompt": { "type": "string" },
+                        "slot_id": { "type": "string" },
+                        "label": { "type": "string" },
+                        "shot_type": { "type": "string" }
+                    },
+                    "required": ["prompt"]
+                }
+            }),
+        );
         json!({
             "type": "object",
-            "properties": {
-                "project_root_path": { "type": "string" },
-                "prompt": { "type": "string" },
-                "title": { "type": "string" },
-                "title_generation_result": {},
-                "persona_context": {},
-                "presentation": {},
-                "taste_context": {},
-                "mode": { "type": "string" },
-                "raw_text": { "type": "string" },
-                "layout_hint": { "type": "string" },
-                "size": { "type": "string" },
-                "aspect_ratio": { "type": "string" },
-                "count": { "type": "integer", "minimum": 1 },
-                "usage": { "type": "string" },
-                "style": { "type": "string" },
-                "provider_id": { "type": "string" },
-                "model": { "type": "string" },
-                "executor_mode": { "type": "string" },
-                "outer_model": { "type": "string" },
-                "session_id": { "type": "string" },
-                "thread_id": { "type": "string" },
-                "turn_id": { "type": "string" },
-                "project_id": { "type": "string" },
-                "content_id": { "type": "string" },
-                "entry_source": { "type": "string" },
-                "modality_contract_key": { "type": "string" },
-                "modality": { "type": "string" },
-                "routing_slot": { "type": "string" },
-                "runtime_contract": {},
-                "requested_target": { "type": "string" },
-                "slot_id": { "type": "string" },
-                "anchor_hint": { "type": "string" },
-                "anchor_section_title": { "type": "string" },
-                "anchor_text": { "type": "string" },
-                "target_output_id": { "type": "string" },
-                "target_output_ref_id": { "type": "string" },
-                "reference_images": { "type": "array", "items": { "type": "string" } },
-                "storyboard_slots": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "prompt": { "type": "string" },
-                            "slot_id": { "type": "string" },
-                            "label": { "type": "string" },
-                            "shot_type": { "type": "string" }
-                        },
-                        "required": ["prompt"]
-                    }
-                }
-            },
+            "properties": properties,
             "required": ["project_root_path", "prompt"]
         })
     }
@@ -432,4 +467,140 @@ fn string_vec(params: &Value, keys: &[&str]) -> Vec<String> {
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runtime::RuntimeCoreError;
+    use crate::WorkspaceSkillBindingAppDataSource;
+    use crate::{AgentAppDataSource, AutomationManagementAppDataSource};
+    use crate::{AutomationOverviewAppDataSource, ConnectAppDataSource, DiagnosticsAppDataSource};
+    use crate::{GatewayAppDataSource, KnowledgeAppDataSource, McpAppDataSource};
+    use crate::{MediaAppDataSource, MemoryAppDataSource, ModelProviderAppDataSource};
+    use crate::{RightSurfaceAppDataSource, SessionAppDataSource, SkillAppDataSource};
+    use crate::{UsageStatsAppDataSource, VoiceAppDataSource, WorkspaceAppDataSource};
+    use app_server_protocol::{MediaTaskArtifactImageCreateParams, MediaTaskArtifactResponse};
+    use async_trait::async_trait;
+    use serde_json::json;
+    use tempfile::TempDir;
+
+    #[derive(Default)]
+    struct ImageToolTestDataSource;
+
+    impl SessionAppDataSource for ImageToolTestDataSource {}
+    impl WorkspaceAppDataSource for ImageToolTestDataSource {}
+    impl SkillAppDataSource for ImageToolTestDataSource {}
+    impl WorkspaceSkillBindingAppDataSource for ImageToolTestDataSource {}
+    impl GatewayAppDataSource for ImageToolTestDataSource {}
+    impl VoiceAppDataSource for ImageToolTestDataSource {}
+    impl AgentAppDataSource for ImageToolTestDataSource {}
+    impl KnowledgeAppDataSource for ImageToolTestDataSource {}
+    impl AutomationOverviewAppDataSource for ImageToolTestDataSource {}
+    impl McpAppDataSource for ImageToolTestDataSource {}
+    impl AutomationManagementAppDataSource for ImageToolTestDataSource {}
+    impl MemoryAppDataSource for ImageToolTestDataSource {}
+    impl DiagnosticsAppDataSource for ImageToolTestDataSource {}
+    impl UsageStatsAppDataSource for ImageToolTestDataSource {}
+    impl ModelProviderAppDataSource for ImageToolTestDataSource {}
+    impl ConnectAppDataSource for ImageToolTestDataSource {}
+    impl RightSurfaceAppDataSource for ImageToolTestDataSource {}
+
+    #[async_trait]
+    impl MediaAppDataSource for ImageToolTestDataSource {
+        async fn create_image_media_task_artifact(
+            &self,
+            params: MediaTaskArtifactImageCreateParams,
+        ) -> Result<MediaTaskArtifactResponse, RuntimeCoreError> {
+            crate::media_task::create_image_generation_task_artifact(params, None)
+                .map_err(RuntimeCoreError::Backend)
+        }
+    }
+
+    #[tokio::test]
+    async fn image_tool_creates_standard_image_task_artifact() {
+        let workspace = TempDir::new().expect("workspace");
+        let tool = ImageGenerationTool::new(Arc::new(ImageToolTestDataSource));
+        let result = tool
+            .execute(
+                json!({
+                    "project_root_path": workspace.path().to_string_lossy(),
+                    "prompt": "生成一张青柠实验室封面",
+                    "provider_id": "openai",
+                    "model": "gpt-image-2",
+                    "executor_mode": "images_api",
+                    "session_id": "session-image-1",
+                    "thread_id": "thread-image-1",
+                    "turn_id": "turn-image-1",
+                    "content_id": "content-image-1",
+                    "entry_source": "at_image_command",
+                    "modality_contract_key": "image_generation",
+                    "modality": "image",
+                    "routing_slot": "image_generation_model",
+                    "runtime_contract": {
+                        "contract_key": "image_generation",
+                        "routing_slot": "image_generation_model"
+                    },
+                    "usage": "document-inline",
+                    "slot_id": "document-image-slot-1",
+                    "anchor_section_title": "产品愿景",
+                    "anchor_text": "给这一段生成配图"
+                }),
+                &ToolContext::new(workspace.path().to_path_buf()),
+            )
+            .await
+            .expect("image tool should create task artifact");
+
+        assert_eq!(
+            result.metadata.get("task_type"),
+            Some(&json!("image_generate"))
+        );
+        assert_eq!(result.metadata.get("task_family"), Some(&json!("image")));
+        assert_eq!(
+            result.metadata.get("normalized_status"),
+            Some(&json!("pending"))
+        );
+        let artifact_path = result
+            .metadata
+            .get("artifact_path")
+            .and_then(Value::as_str)
+            .expect("artifact path");
+        assert!(artifact_path.starts_with(".lime/tasks/image_generate/"));
+        assert!(artifact_path.ends_with(".json"));
+
+        let record = result.metadata.get("record").expect("record metadata");
+        assert_eq!(record["task_type"].as_str(), Some("image_generate"));
+        let payload = &record["payload"];
+        assert_eq!(payload["provider_id"].as_str(), Some("openai"));
+        assert_eq!(payload["model"].as_str(), Some("gpt-image-2"));
+        assert_eq!(payload["executor_mode"].as_str(), Some("images_api"));
+        assert_eq!(payload["entry_source"].as_str(), Some("at_image_command"));
+        assert_eq!(
+            payload["modality_contract_key"].as_str(),
+            Some("image_generation")
+        );
+        assert_eq!(
+            payload["routing_slot"].as_str(),
+            Some("image_generation_model")
+        );
+        assert_eq!(payload["usage"].as_str(), Some("document-inline"));
+        assert_eq!(payload["slot_id"].as_str(), Some("document-image-slot-1"));
+        assert_eq!(payload["anchor_section_title"].as_str(), Some("产品愿景"));
+        assert_eq!(payload["anchor_text"].as_str(), Some("给这一段生成配图"));
+        assert_eq!(
+            payload["model_task_request"]["taskKind"].as_str(),
+            Some("image_generate")
+        );
+        assert_eq!(
+            payload["runtime_contract"]["contract_key"].as_str(),
+            Some("image_generation")
+        );
+
+        let absolute_artifact_path = workspace.path().join(artifact_path);
+        assert!(
+            absolute_artifact_path.exists(),
+            "standard image task artifact should exist at {}",
+            absolute_artifact_path.display()
+        );
+    }
 }

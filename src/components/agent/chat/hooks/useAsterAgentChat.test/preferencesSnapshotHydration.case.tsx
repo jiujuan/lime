@@ -235,9 +235,7 @@ describe("useAsterAgentChat 偏好持久化 - snapshot hydration", () => {
         error: null,
       });
       expect(mockScheduleMinimumDelayIdleTask).not.toHaveBeenCalled();
-      expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith("topic-stale", {
-        historyLimit: 40,
-      });
+      expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith("topic-stale", expect.objectContaining({ historyLimit: 40 }));
 
       await act(async () => {
         deferredTopicDetail.resolve({
@@ -331,9 +329,7 @@ describe("useAsterAgentChat 偏好持久化 - snapshot hydration", () => {
       expect(harness.getValue().sessionId).toBe(topicId);
       expect(harness.getValue().messages).toEqual([]);
       expect(harness.getValue().isSessionHydrating).toBe(true);
-      expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith(topicId, {
-        historyLimit: 40,
-      });
+      expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith(topicId, expect.objectContaining({ historyLimit: 40 }));
 
       await act(async () => {
         deferredTopicDetail.resolve({

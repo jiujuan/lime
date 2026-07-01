@@ -126,6 +126,15 @@ describe("PluginMarketplacePage visible blockers", () => {
     const container = await renderPage({ loader, onNavigate });
 
     expect(container.textContent).not.toContain("PLUGIN_RENDERER_UNAVAILABLE");
+    const detailAction = container.querySelector<HTMLButtonElement>(
+      '[data-testid="plugin-marketplace-detail-content-factory@limecloud"]',
+    );
+    await act(async () => {
+      detailAction?.click();
+      await Promise.resolve();
+    });
+    await flushEffects(2);
+
     expect(container.textContent).toContain(
       "plugin.marketplace.detail.noBlockers",
     );
@@ -144,7 +153,7 @@ describe("PluginMarketplacePage visible blockers", () => {
       "agent",
       expect.objectContaining({
         initialUserPrompt: "@内容工厂 ",
-        autoRunInitialPromptOnMount: true,
+        autoRunInitialPromptOnMount: false,
       }),
     );
   });

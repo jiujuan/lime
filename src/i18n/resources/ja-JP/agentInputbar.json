@@ -127,6 +127,8 @@
   "agentChat.inputbar.plusMenu.skills": "スキル",
   "agentChat.inputbar.plusMenu.unavailable": "このセッションでは利用できません",
   "agentChat.inputbar.pluginChip.empty": "選択できるプラグインはありません",
+  "agentChat.inputbar.pluginChip.error": "プラグイン一覧の読み込みに失敗しました。後でもう一度お試しください。",
+  "agentChat.inputbar.pluginChip.loading": "インストール済みプラグインを読み込み中…",
   "agentChat.inputbar.pluginChip.remove": "プラグイン {{name}} を外す",
   "agentChat.inputbar.pluginChip.skillPrefix": "スキル",
   "agentChat.inputbar.pluginChip.selectorTitle": "プラグインを選択",

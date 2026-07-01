@@ -437,9 +437,6 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
     typeof EmptyState
   >["runtimeToolAvailability"];
   pluginSuggestions?: ComponentProps<typeof EmptyState>["pluginSuggestions"];
-  initialInputCapability?: ComponentProps<
-    typeof EmptyState
-  >["initialInputCapability"];
   knowledgePackSelection?: ComponentProps<
     typeof EmptyState
   >["knowledgePackSelection"];

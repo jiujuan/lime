@@ -155,6 +155,10 @@ export function ImageTaskViewer({
     outputRef: selectedOutput?.refId,
     prompt: selectedTask?.prompt,
   });
+  const selectedProviderName =
+    selectedOutput?.providerName || selectedTask?.runtimeContract?.providerId;
+  const selectedModelName =
+    selectedOutput?.modelName || selectedTask?.runtimeContract?.model;
   const canContinueEdit = Boolean(followUpCommand && onSeedFollowUpCommand);
   const handleOpenSelectedImagePreview = () => {
     if (!selectedOutput) {
@@ -190,8 +194,9 @@ export function ImageTaskViewer({
             prompt: output.slotPrompt || output.prompt || prompt,
             slotLabel,
             size: output.size,
-            providerName: output.providerName,
-            modelName: output.modelName,
+            providerName:
+              output.providerName || selectedTask?.runtimeContract?.providerId,
+            modelName: output.modelName || selectedTask?.runtimeContract?.model,
           },
           sourceContext: buildImageTaskResourceSourceContext({
             taskId: output.taskId || selectedTask?.id,
@@ -449,14 +454,14 @@ export function ImageTaskViewer({
               {selectedStoryboardSlot.label}
             </span>
           ) : null}
-          {selectedOutput?.providerName ? (
+          {selectedProviderName ? (
             <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
-              {selectedOutput.providerName}
+              {selectedProviderName}
             </span>
           ) : null}
-          {selectedOutput?.modelName ? (
+          {selectedModelName ? (
             <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
-              {selectedOutput.modelName}
+              {selectedModelName}
             </span>
           ) : null}
           {selectedOutput?.size ? (

@@ -87,21 +87,6 @@ describe("AgentChatPage 自动引导", { timeout: 20_000 }, () => {
 
     expect(bodyUpdateCalls).toHaveLength(0);
 
-    const latestInputbarProps = mockInputbar.mock.calls.at(-1)?.[0] as
-      | {
-          taskFiles?: Array<{
-            id: string;
-            name: string;
-            type: string;
-          }>;
-        }
-      | undefined;
-
-    expect(
-      latestInputbarProps?.taskFiles?.some(
-        (file) => file.name === "content-posts/demo-post.md",
-      ),
-    ).toBe(false);
   });
 
   it("工作区编排在队列状态未就绪时写入主稿仍应创建可见版本", async () => {
@@ -225,27 +210,6 @@ describe("AgentChatPage 自动引导", { timeout: 20_000 }, () => {
       );
     });
     await flushEffects(16);
-
-    const latestInputbarProps = mockInputbar.mock.calls.at(-1)?.[0] as
-      | {
-          taskFiles?: Array<{
-            id: string;
-            name: string;
-            type: string;
-            metadata?: Record<string, unknown>;
-          }>;
-        }
-      | undefined;
-    const writtenFile = latestInputbarProps?.taskFiles?.find(
-      (file) => file.name === "content-posts/demo-post.md",
-    );
-
-    expect(writtenFile?.metadata).toMatchObject({
-      artifactType: "draft",
-      stage: "drafting",
-      versionLabel: "社媒初稿",
-      runId: "run-write-main",
-    });
 
     const latestTopicBranchCall = mockUseTopicBranchBoard.mock.calls.at(
       -1,

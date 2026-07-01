@@ -39,8 +39,8 @@ use app_server_protocol::McpServerStartParams;
 use app_server_protocol::McpServerStatusListResponse;
 use app_server_protocol::ProtocolKind;
 use app_server_protocol::RuntimeOptions;
-use async_trait::async_trait;
 use aster::tools::{PermissionCheckResult, Tool, ToolContext, ToolError, ToolResult};
+use async_trait::async_trait;
 use lime_agent::agent_tools::catalog::{
     MEMORY_ADD_NOTE_TOOL_NAME, MEMORY_LIST_TOOL_NAME, MEMORY_READ_TOOL_NAME,
     MEMORY_SEARCH_TOOL_NAME,
@@ -52,6 +52,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use tempfile::TempDir;
 
+mod image_tools;
 mod tool_inventory;
 
 #[derive(Default)]
@@ -338,6 +339,42 @@ fn article_workspace_search_request_event(query: &str) -> RuntimeEvent {
     )
 }
 
+fn article_workspace_snapshot_event_without_search() -> RuntimeEvent {
+    RuntimeEvent::new(
+        "artifact.snapshot",
+        json!({
+            "artifact": {
+                "artifactId": "artifact-article-workspace",
+                "kind": "content_factory.workspace_patch",
+                "metadata": {
+                    "contentFactoryWorkspacePatch": {
+                        "schemaVersion": 1,
+                        "appId": "content-factory-app",
+                        "sessionId": "session-1",
+                        "objects": [
+                            {
+                                "ref": {
+                                    "appId": "content-factory-app",
+                                    "kind": "articleDraft",
+                                    "id": "article-draft-1",
+                                    "sessionId": "session-1"
+                                },
+                                "title": "公众号文章草稿",
+                                "status": "ready",
+                                "source": {
+                                    "taskKind": "content.article.generate",
+                                    "taskId": "task-article-draft-1",
+                                    "markdown": "# 草稿\n\n正文。"
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        }),
+    )
+}
+
 #[tokio::test]
 async fn cancel_turn_cancels_runtime_stream_token() {
     let backend = RuntimeBackend::new();
@@ -497,7 +534,7 @@ async fn runtime_backend_registers_memory_tools_in_agent_registry() {
         .await
         .expect("agent should initialize");
     backend
-        .register_memory_tools_if_available()
+        .register_current_native_tools_if_available()
         .await
         .expect("memory tools should register");
 
@@ -561,6 +598,7 @@ async fn runtime_backend_prepares_content_factory_search_artifact_events_with_re
             .collect::<Vec<_>>(),
         vec![
             "turn.started",
+            "artifact.snapshot",
             "tool.started",
             "tool.args",
             "tool.result",
@@ -569,10 +607,33 @@ async fn runtime_backend_prepares_content_factory_search_artifact_events_with_re
         ]
     );
 
-    let artifact_event = events
+    let streaming_artifact_event = events
         .iter()
         .find(|event| event.event_type == "artifact.snapshot")
+        .expect("streaming artifact event");
+    assert_eq!(
+        streaming_artifact_event.payload["artifact"]["metadata"]["complete"],
+        false
+    );
+    assert_eq!(
+        streaming_artifact_event.payload["artifact"]["metadata"]["contentFactoryWorkspacePatch"]
+            ["objects"][0]["status"],
+        "generating"
+    );
+    assert_eq!(
+        streaming_artifact_event.payload["artifact"]["metadata"]["contentFactoryWorkspacePatch"]
+            ["objects"][0]["source"]["hostSearchStatus"],
+        "running"
+    );
+
+    let artifact_event = events
+        .iter()
+        .rfind(|event| event.event_type == "artifact.snapshot")
         .expect("artifact event");
+    assert_eq!(
+        artifact_event.payload["artifact"]["filePath"],
+        ".lime/artifacts/content-factory/workspace-patch.json"
+    );
     let patch = &artifact_event.payload["artifact"]["metadata"]["contentFactoryWorkspacePatch"];
     let evidence = patch["objects"][0]["source"]["searchEvidence"]
         .as_array()
@@ -580,7 +641,10 @@ async fn runtime_backend_prepares_content_factory_search_artifact_events_with_re
     assert_eq!(evidence.len(), 1);
     assert_eq!(evidence[0]["tool"], "WebSearch");
     assert_eq!(evidence[0]["status"], "completed");
-    assert_eq!(evidence[0]["summary"], "session=session-1 query=Lime 写文章 result=found");
+    assert_eq!(
+        evidence[0]["summary"],
+        "session=session-1 query=Lime 写文章 result=found"
+    );
     assert_eq!(
         patch["objects"][0]["source"]["hostSearchStatus"],
         "completed"
@@ -588,6 +652,37 @@ async fn runtime_backend_prepares_content_factory_search_artifact_events_with_re
     assert_eq!(
         patch["objects"][0]["source"]["hostSearchEvidence"],
         Value::Array(evidence.clone())
+    );
+}
+
+#[tokio::test]
+async fn runtime_backend_adds_content_factory_artifact_path_without_search_requests() {
+    let backend = RuntimeBackend::new();
+    let request = request_for_test("写一篇文章", None, None);
+    let mut events = vec![
+        RuntimeEvent::new("turn.started", json!({})),
+        article_workspace_snapshot_event_without_search(),
+        RuntimeEvent::new("turn.completed", json!({})),
+    ];
+
+    ExecutionBackend::prepare_runtime_worker_artifact_events(&backend, &request, &mut events)
+        .await
+        .expect("content factory artifact path");
+
+    assert_eq!(
+        events
+            .iter()
+            .map(|event| event.event_type.as_str())
+            .collect::<Vec<_>>(),
+        vec!["turn.started", "artifact.snapshot", "turn.completed"]
+    );
+    assert_eq!(
+        events[1].payload["artifact"]["filePath"],
+        ".lime/artifacts/content-factory/workspace-patch.json"
+    );
+    assert_eq!(
+        events[1].payload["artifact"]["path"],
+        ".lime/artifacts/content-factory/workspace-patch.json"
     );
 }
 
@@ -634,6 +729,7 @@ async fn runtime_backend_keeps_content_factory_search_artifact_events_closed_on_
             .collect::<Vec<_>>(),
         vec![
             "turn.started",
+            "artifact.snapshot",
             "tool.started",
             "tool.args",
             "tool.failed",
@@ -642,10 +738,23 @@ async fn runtime_backend_keeps_content_factory_search_artifact_events_closed_on_
         ]
     );
 
-    let artifact_event = events
+    let streaming_artifact_event = events
         .iter()
         .find(|event| event.event_type == "artifact.snapshot")
+        .expect("streaming artifact event");
+    assert_eq!(
+        streaming_artifact_event.payload["artifact"]["metadata"]["complete"],
+        false
+    );
+
+    let artifact_event = events
+        .iter()
+        .rfind(|event| event.event_type == "artifact.snapshot")
         .expect("artifact event");
+    assert_eq!(
+        artifact_event.payload["artifact"]["filePath"],
+        ".lime/artifacts/content-factory/workspace-patch.json"
+    );
     let patch = &artifact_event.payload["artifact"]["metadata"]["contentFactoryWorkspacePatch"];
     let evidence = patch["objects"][0]["source"]["searchEvidence"]
         .as_array()

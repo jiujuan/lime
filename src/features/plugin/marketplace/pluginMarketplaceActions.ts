@@ -18,6 +18,7 @@ import {
 import { resolveOemCloudRuntimeContext } from "@/lib/api/oemCloudRuntime";
 import type {
   CloudBootstrapApp,
+  HostCapabilityProfile,
   InstalledAgentAppState,
 } from "@/features/agent-app/types";
 import type { InstalledAgentAppStateListResult } from "@/features/agent-app/install/installedAppState";
@@ -93,6 +94,7 @@ export interface PluginMarketplaceActionDeps {
   reportInstallState?: typeof reportClientPluginInstallState;
   uninstall?: typeof uninstallAgentApp;
   resolveRuntimeContext?: typeof resolveOemCloudRuntimeContext;
+  profile?: HostCapabilityProfile;
   now?: () => string;
   dispatchChanged?: () => void;
 }
@@ -356,7 +358,7 @@ export async function performPluginMarketplaceAction(
       }
       const installedState = await (
         deps.installLocalPackage ?? installLocalAgentAppPackage
-      )({ appDir });
+      )({ appDir, profile: deps.profile });
       (deps.dispatchChanged ?? defaultDispatchChanged)();
       return {
         status: "performed",
@@ -373,7 +375,7 @@ export async function performPluginMarketplaceAction(
       }
       const installedState = await (
         deps.installCloudRelease ?? installCloudAgentAppRelease
-      )({ app });
+      )({ app, profile: deps.profile });
       const remoteInstallStateSync = await syncRemotePluginInstallState(
         item,
         "installed",

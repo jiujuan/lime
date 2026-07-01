@@ -24,6 +24,12 @@ export interface InputbarPluginSelection {
   skill?: InputbarPluginSkillCapability;
   trigger: string;
   text: string;
+  preserveInput?: boolean;
+}
+
+export interface InputbarPluginSelectionOptions {
+  inputOverride?: string;
+  preserveInputOverride?: boolean;
 }
 
 export function resolveInputbarPluginDisplayName(
@@ -53,12 +59,58 @@ export function normalizeInputbarPluginTrigger(
   return skillName ? `${pluginTrigger}:${skillName}` : pluginTrigger;
 }
 
+function normalizeInputbarPluginTriggerQuery(value: string): string {
+  const normalized = value.normalize("NFKC").trim();
+  const withoutPrefix = normalized.startsWith("@")
+    ? normalized.slice(1)
+    : normalized;
+  return withoutPrefix.toLowerCase();
+}
+
+export function isCompleteInputbarPluginTriggerQuery(params: {
+  query: string;
+  plugins: readonly InputbarPluginCapability[];
+}): boolean {
+  const normalizedQuery = normalizeInputbarPluginTriggerQuery(params.query);
+  if (!normalizedQuery) {
+    return false;
+  }
+
+  return params.plugins.some((plugin) => {
+    if (
+      normalizeInputbarPluginTriggerQuery(
+        normalizeInputbarPluginTrigger(plugin),
+      ) === normalizedQuery
+    ) {
+      return true;
+    }
+
+    return (plugin.skills ?? []).some(
+      (skill) =>
+        normalizeInputbarPluginTriggerQuery(
+          normalizeInputbarPluginTrigger(plugin, skill),
+        ) === normalizedQuery,
+    );
+  });
+}
+
 export function applyInputbarPluginSelection(params: {
   input: string;
   plugin: InputbarPluginCapability;
   skill?: InputbarPluginSkillCapability;
+  preserveInput?: boolean;
 }): InputbarPluginSelection {
   const trigger = normalizeInputbarPluginTrigger(params.plugin, params.skill);
+  if (params.preserveInput) {
+    return {
+      plugin: params.plugin,
+      skill: params.skill,
+      trigger,
+      text: params.input,
+      preserveInput: true,
+    };
+  }
+
   const trimmedInput = params.input.trim();
   const inputWithoutLeadingSpace = params.input.trimStart();
   if (!trimmedInput) {

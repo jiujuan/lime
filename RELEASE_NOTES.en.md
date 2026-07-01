@@ -1,3 +1,44 @@
+## Lime v1.84.0
+
+<sub>The Simplified Chinese release notes are the primary version. This English page is a companion for international readers.</sub>
+
+### New Features
+
+- Continued the Writing mainline into Article Workspace / Article Editor: `@write article` artifacts now render in a standalone `ArtifactFrame`, and the right-side canvas is now the editable current surface.
+- Unified the image-generation capability catalog and execution chain: OpenAI-compatible, Gemini, Fal, and local image-server routes now share one catalog / executor / error-presentation flow.
+- Expanded the plugin marketplace and installed Agent Apps projection so activation, capability profile, installed state, and availability are now presented through the same view model.
+
+### Fixes
+
+- Fixed history-restore and right-surface projection drift for Writing so restored sessions no longer fall back to old Profile semantics or the wrong draft.
+- Fixed image-task completion, cancellation, and wrong-type handling so image tasks now fail closed on invalid task types and cancelled terminal states.
+- Fixed the presentation of plugin activation and marketplace blockers so disabled, unavailable, package-mismatch, and missing-release-evidence states are shown consistently.
+
+### Improvements and Refactors
+
+- Split Article Workspace, the right-surface host, and article-artifact projection into smaller modules to reduce responsibility sprawl.
+- Split image-generation provider matching, executors, response parsers, and local-server adapters into a unified image capability catalog.
+- Refactored the plugin marketplace view model and capability-profile computation to make installed / activatable / attention classification more consistent.
+- Added streaming-worker, content-factory-worker, and image-provider-routing layering on the App Server side.
+
+### Tests and Quality
+
+- Added regression coverage for Writing, image tasks, the plugin marketplace, and capability projection, including current fixtures, history restore, and terminal-state assertions.
+- Added focused Rust and frontend tests covering app-server runtime, image tools, plugin contract behavior, and the image model matcher.
+
+### Documentation
+
+- Updated the Writing roadmap and implementation plan to stay aligned with the Article Workspace / Article Editor source of truth.
+- Updated the image capability roadmap to record the unified catalog / executor boundary.
+- Synchronized the right-surface constraints and related execution plans.
+
+### Other
+
+- Updated version facts to `1.84.0` across the root app, CLI npm package, Rust workspace, and `lime-rs/Cargo.lock`.
+- This release excludes `internal/roadmap/Writing/.DS_Store`.
+
+**Full changes**: `v1.83.0` -> `v1.84.0`
+
 ## Lime v1.83.0
 
 <sub>The Simplified Chinese release notes are the primary version. This English page is a companion for international readers.</sub>

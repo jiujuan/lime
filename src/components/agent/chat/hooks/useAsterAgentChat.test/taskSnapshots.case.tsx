@@ -8,6 +8,7 @@ import {
   captureTurnStream,
   createDeferred,
   flushEffects,
+  flushRuntimeDetailRefresh,
   mockCreateAgentRuntimeSession,
   mockGetAgentRuntimeSession,
   mockGetAgentRuntimeThreadRead,
@@ -63,11 +64,12 @@ describe("useAsterAgentChat 任务快照", () => {
       });
 
       await flushEffects();
-      await flushEffects();
+      await flushRuntimeDetailRefresh();
 
-      expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith(sessionId, {
-        historyLimit: 40,
-      });
+      expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith(
+        sessionId,
+        expect.objectContaining({ historyLimit: 40 }),
+      );
       expect(harness.getValue().messages).toHaveLength(2);
       expect(harness.getValue().messages[0]?.content).toContain(
         "帮我继续整理这份任务",
@@ -108,9 +110,12 @@ describe("useAsterAgentChat 任务快照", () => {
         await harness.getValue().stopSending();
       });
 
-      expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith(sessionId, {
-        historyLimit: 40,
-      });
+      await flushRuntimeDetailRefresh();
+
+      expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith(
+        sessionId,
+        expect.objectContaining({ historyLimit: 40 }),
+      );
       expect(mockInterruptAgentRuntimeTurn).toHaveBeenCalledWith({
         session_id: sessionId,
       });
@@ -245,9 +250,10 @@ describe("useAsterAgentChat 任务快照", () => {
       await flushEffects();
       await flushEffects();
 
-      expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith(sessionId, {
-        historyLimit: 40,
-      });
+      expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith(
+        sessionId,
+        expect.objectContaining({ historyLimit: 40 }),
+      );
       expect(harness.getValue().queuedTurns).toEqual([
         {
           queued_turn_id: "queued-hydrated-1",

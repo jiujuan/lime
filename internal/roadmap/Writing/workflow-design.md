@@ -1,21 +1,24 @@
 # Writing Workflow 设计
 
-更新时间：2026-06-29
+更新时间：2026-06-30
 状态：In Progress
 
 ## 1. Workflow 定义
 
 `content_article_workflow` 是内容工厂插件包声明的文章生产工作流。它不是宿主内置 parser，也不是普通聊天 prompt。
 
+右侧 dock / tab / pane 的统一规则见 `../rightsurface/README.md`；本文件只描述 articleDraft 产物、写作 workflow 和 Article Editor 子面内容。
+
 ```text
 content_article_generate
   -> content_article_workflow
+  -> task card / process state
   -> content-researcher
   -> content-strategist
   -> article-writer
   -> copy-editor
   -> image-planner
-  -> ArtifactFrame
+  -> ArtifactFrame(articleArtifacts)
   -> articleArtifacts.articleDraft
 ```
 
@@ -57,20 +60,21 @@ content_article_generate
 ```mermaid
 flowchart TD
   Start[触发 @写文章] --> Parse[解析主题 / 平台 / 受众 / 约束]
-  Parse --> Research[content-researcher 声明多轮检索请求]
+  Parse --> TaskCard[先在对话流回显任务卡 / 过程态]
+  TaskCard --> Research[content-researcher 声明多轮检索请求]
   Research --> HostSearch[宿主 connector 执行 searchRequests 并回填 evidence]
   HostSearch --> Strategy[content-strategist 选题和结构]
   Strategy --> Draft[article-writer 正文写作]
   Draft --> Edit[copy-editor 审稿校对]
   Edit --> ImagePlan[image-planner 配图规划]
   ImagePlan --> Materialize[物化 articleArtifacts.articleDraft]
-  Materialize --> Frame[聊天 ArtifactFrame 流式产物框]
+  Materialize --> Frame[聊天 ArtifactFrame 最终产物框]
   Frame --> Editor[右侧 Article Editor]
 ```
 
 ## 6. ArtifactFrame 规则
 
-`ArtifactFrame` 是聊天区里的通用独立产物框，承担“承载产物、展示状态、流式更新、点击进入右侧画布”的入口。文章只是其中一种 renderer，后续还应支持图片集、表格、演示稿、网页、报告、代码和媒体产物。注册链以 `ArtifactFrame` 为事实源，不再使用 message 专用命名。
+`ArtifactFrame` 是聊天区里的通用独立产物框，承担“承载产物、展示状态、流式更新、点击进入右侧画布”的入口。文章只是其中一种 renderer，后续还应支持图片集、表格、演示稿、网页、报告、代码和媒体产物。注册链以 `ArtifactFrame` 为事实源，不再使用 message 专用命名。写作流程里，任务卡和过程态先回显在对话区，最终文章成熟后才进入 `ArtifactFrame(articleArtifacts)`，右侧展开行为遵循 `../rightsurface/README.md`。
 
 当前 worker 的安全契约是 `directProviderAccess=false`、`directFilesystemAccess=false`：worker 可以输出 `searchRequests`、pending `searchEvidence`、`reviewChecklist` 和 `imagePlan`，但不能直接联网或读写宿主文件。真实检索必须由宿主 connector / tool timeline 执行并回填；在这一步完成前，不能把“多轮检索结构已生成”写成“真实搜索已完成”。
 
@@ -99,6 +103,8 @@ flowchart TD
 ## 7. Article Editor 规则
 
 右侧 `articleDraft` Article Editor 至少包含：
+
+> 右侧布局、dock 和 tab 规则统一见 `../rightsurface/README.md`，这里仅列写作编辑器的内容构成。
 
 | 区域       | 内容                                                 |
 | ---------- | ---------------------------------------------------- |

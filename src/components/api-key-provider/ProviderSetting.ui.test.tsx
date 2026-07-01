@@ -496,6 +496,65 @@ describe("ProviderSetting", () => {
     });
   });
 
+  it("OpenAI 兼容中转图片模型行应能创建本地 @命令绑定", async () => {
+    const container = renderSetting(
+      createProvider({
+        id: "agnes",
+        name: "agnes",
+        type: "openai",
+        api_host: "https://agnes.example.test/v1",
+        custom_models: ["agnes-image-2.1-flash"],
+      }),
+    );
+    await flushEffects();
+
+    const createButton = byTestId<HTMLButtonElement>(
+      container,
+      "create-image-command-button",
+    );
+    expect(createButton).not.toBeNull();
+
+    await act(async () => {
+      createButton?.click();
+      await Promise.resolve();
+    });
+
+    const input = byTestId<HTMLInputElement>(
+      container,
+      "image-command-trigger-input",
+    );
+    expect(input?.value).toBe("@Agnes Image 2.1 Flash");
+
+    await act(async () => {
+      byTestId<HTMLButtonElement>(
+        container,
+        "image-command-save-button",
+      )?.click();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent ?? "").toContain(
+      "已创建 @Agnes Image 2.1 Flash",
+    );
+    expect(
+      findModelBoundImageCommandEntryForModel(
+        getCurrentSkillCatalogSnapshot(),
+        "agnes",
+        "agnes-image-2.1-flash",
+      ),
+    ).toMatchObject({
+      commandKey: "image_model_agnes_image_2_1_flash",
+      binding: {
+        requestDefaults: expect.objectContaining({
+          modelBoundImageTask: "true",
+          providerId: "agnes",
+          model: "agnes-image-2.1-flash",
+          executorMode: "images_api",
+        }),
+      },
+    });
+  });
+
   it("Fal Provider 没有 API Key 时仍可确认手动声明模型", async () => {
     mockFetchProviderModelsAuto.mockResolvedValueOnce({
       source: "Api",

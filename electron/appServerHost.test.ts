@@ -787,6 +787,32 @@ describe("ElectronAppServerHost", () => {
     expect(requestCalls[0]?.[2]).toMatchObject({ timeoutMs: 240000 });
   });
 
+  it("current Agent App installed save 应覆盖本地安装写入等待窗口", async () => {
+    const { ElectronAppServerHost } = await import("./appServerHost");
+    const host = new ElectronAppServerHost();
+
+    await host.handleJsonLines({
+      lines: [
+        encodeMessage({
+          id: "installed-save",
+          method: "agentAppInstalled/save",
+          params: {
+            state: {
+              appId: "content-factory-app",
+            },
+          },
+        }),
+      ],
+    });
+
+    const requestCalls = fakeConnection.request.mock.calls as unknown as Array<
+      [JsonRpcRequest, string, { timeoutMs?: number }]
+    >;
+    expect(recordedRequests).toHaveLength(1);
+    expect(requestCalls[0]?.[1]).toBe("agentAppInstalled/save");
+    expect(requestCalls[0]?.[2]).toMatchObject({ timeoutMs: 240000 });
+  });
+
   it("current conversation import commit 应覆盖大样本导入等待窗口", async () => {
     const { ElectronAppServerHost } = await import("./appServerHost");
     const host = new ElectronAppServerHost();

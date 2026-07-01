@@ -51,6 +51,7 @@ import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
 import type {
   InputbarPluginCapability,
   InputbarPluginSelection,
+  InputbarPluginSelectionOptions,
   InputbarPluginSkillCapability,
 } from "../pluginInputCapability";
 
@@ -76,11 +77,13 @@ interface InputbarComposerSectionProps {
   activeCapability?: InputCapabilitySelection | null;
   activePluginSelection?: InputbarPluginSelection | null;
   pluginSuggestions?: readonly InputbarPluginCapability[];
+  pluginSuggestionsError?: string | null;
+  pluginSuggestionsLoading?: boolean;
   onPluginSuggestionsNeeded?: () => void;
   onSelectPlugin?: (
     plugin: InputbarPluginCapability,
     skill?: InputbarPluginSkillCapability,
-    options?: { inputOverride?: string },
+    options?: InputbarPluginSelectionOptions,
   ) => void;
   defaultCuratedTaskReferenceMemoryIds?: string[];
   defaultCuratedTaskReferenceEntries?: CuratedTaskReferenceEntry[];
@@ -151,6 +154,8 @@ export const InputbarComposerSection: React.FC<
   activeCapability,
   activePluginSelection = null,
   pluginSuggestions = [],
+  pluginSuggestionsError = null,
+  pluginSuggestionsLoading = false,
   onPluginSuggestionsNeeded,
   onSelectPlugin,
   defaultCuratedTaskReferenceMemoryIds = [],
@@ -301,10 +306,14 @@ export const InputbarComposerSection: React.FC<
       plugins={pluginSuggestions}
       labels={{
         empty: copy.pluginChip.empty,
+        error: copy.pluginChip.error,
+        loading: copy.pluginChip.loading,
         skillPrefix: copy.pluginChip.skillPrefix,
         title: copy.pluginChip.selectorTitle,
         unavailable: copy.pluginChip.unavailable,
       }}
+      loading={pluginSuggestionsLoading}
+      error={pluginSuggestionsError}
       onSelectPlugin={onSelectPlugin}
     />
   ) : undefined;

@@ -182,14 +182,19 @@ export function resolveAgentStreamGracefulCompletionContent(params: {
     params.accumulatedContent,
   );
 
-  return (
-    cleanedFinalContent ||
-    (!containsAssistantProtocolResidue(params.accumulatedContent)
-      ? rawFinalContent
-      : "") ||
-    params.fallbackContent ||
-    resolveAgentStreamEmptyFinalReplyFallbackContent()
-  );
+  if (cleanedFinalContent) {
+    return cleanedFinalContent;
+  }
+  if (
+    !containsAssistantProtocolResidue(params.accumulatedContent) &&
+    rawFinalContent
+  ) {
+    return rawFinalContent;
+  }
+  if (params.fallbackContent !== undefined) {
+    return params.fallbackContent;
+  }
+  return resolveAgentStreamEmptyFinalReplyFallbackContent();
 }
 
 function shouldRetainPersistedThinkingContentPart(
@@ -587,7 +592,7 @@ export function buildAgentStreamFinalDonePlan(params: {
     type: "complete",
     finalContent: resolveAgentStreamGracefulCompletionContent({
       accumulatedContent: params.accumulatedContent,
-      fallbackContent: params.fallbackContent || undefined,
+      fallbackContent: params.fallbackContent ?? undefined,
     }),
     queuedTurnIds: resolveQueuedTurnIds(params.queuedTurnId),
     requestLogPayload: {
@@ -616,7 +621,7 @@ export function buildAgentStreamEmptyFinalErrorPlan(params: {
     type: "complete",
     finalContent: resolveAgentStreamGracefulCompletionContent({
       accumulatedContent: params.accumulatedContent,
-      fallbackContent: params.fallbackContent || undefined,
+      fallbackContent: params.fallbackContent ?? undefined,
     }),
     queuedTurnIds: resolveQueuedTurnIds(params.queuedTurnId),
     requestLogPayload: {

@@ -214,6 +214,20 @@ function main() {
   );
 
   runElectronFixtureSmoke(
+    "Claw 图片命令 GUI Electron fixture",
+    [
+      "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
+      "--scenario",
+      "image-command",
+      "--prefix",
+      "claw-chat-current-fixture-image-command-regression",
+      "--timeout-ms",
+      "180000",
+    ],
+    options,
+  );
+
+  runElectronFixtureSmoke(
     "Claw 停止后同会话继续输出 Electron fixture",
     [
       "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
@@ -326,7 +340,7 @@ function main() {
   );
 
   console.log(
-    `[${LOG_PREFIX}] summary: current Agent Runtime fixture regression 已覆盖 history/cache hydration、final_done 工具收尾、failed read model、Claw 终态 UI、Electron fixture guard、真实 GUI coding 输入到 Coding Workbench Electron fixture、Claw GUI current fixture guard、停止后同会话继续输出 Electron fixture、Plan revisioned thread item + history hydrate Electron fixture、Skills Runtime natural + 显式 $skill + 技能中心试用入口三入口按需加载 Electron fixture、MCP structuredContent 到 Agent Chat GUI 可见 Electron fixture、Expert Skills Runtime declared + selected + invoked Electron fixture、Expert Plaza 点击专家卡片进入同一 Skills Runtime 闭环 Electron fixture、ExpertInfoPanel 调整 skillRefs 后下一轮继承同一 Skills Runtime 闭环并展示 Evidence Pack 复盘 Electron fixture、内容工厂文章 Article Editor / articleDraft 右侧产物闭环 Electron fixture；liveProviderUsed=false`,
+    `[${LOG_PREFIX}] summary: current Agent Runtime fixture regression 已覆盖 history/cache hydration、final_done 工具收尾、failed read model、Claw 终态 UI、Electron fixture guard、真实 GUI coding 输入到 Coding Workbench Electron fixture、真实 GUI 图片命令到 Claw Chat Electron fixture、Claw GUI current fixture guard、停止后同会话继续输出 Electron fixture、Plan revisioned thread item + history hydrate Electron fixture、Skills Runtime natural + 显式 $skill + 技能中心试用入口三入口按需加载 Electron fixture、MCP structuredContent 到 Agent Chat GUI 可见 Electron fixture、Expert Skills Runtime declared + selected + invoked Electron fixture、Expert Plaza 点击专家卡片进入同一 Skills Runtime 闭环 Electron fixture、ExpertInfoPanel 调整 skillRefs 后下一轮继承同一 Skills Runtime 闭环并展示 Evidence Pack 复盘 Electron fixture、内容工厂文章 Article Editor / articleDraft 右侧产物闭环 Electron fixture；liveProviderUsed=false`,
   );
   console.log(`\n[${LOG_PREFIX}] 通过`);
 }

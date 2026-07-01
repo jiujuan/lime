@@ -1,15 +1,8 @@
 /**
  * 图片生成类型入口
  *
- * 业务请求/响应结构保留在这里，模型与尺寸目录统一转发到 lib 层。
+ * 这里只保留业务请求/响应结构；图片模型目录统一从 catalog 消费。
  */
-
-export type {
-  ImageGenModel,
-} from "@/lib/imageGen/models";
-export {
-  IMAGE_GEN_MODELS,
-} from "@/lib/imageGen/models";
 
 /** 生成的图片记录 */
 export interface GeneratedImage {
@@ -23,10 +16,12 @@ export interface GeneratedImage {
   createdAt: number;
   status: "pending" | "generating" | "complete" | "error";
   error?: string;
+  errorRecoveryHint?: string;
   resourceMaterialId?: string;
   resourceProjectId?: string;
   resourceSavedAt?: number;
   resourceSaveError?: string;
+  resourceSaveErrorRecoveryHint?: string;
 }
 
 /** 图片生成请求 */
@@ -36,6 +31,7 @@ export interface ImageGenRequest {
   n?: number;
   size?: string;
   quality?: string;
+  reference_images?: string[];
 }
 
 /** 图片生成响应 */

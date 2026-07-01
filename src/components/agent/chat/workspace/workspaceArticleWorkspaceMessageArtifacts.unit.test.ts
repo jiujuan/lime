@@ -362,6 +362,37 @@ describe("workspaceArticleWorkspaceMessageArtifacts", () => {
     });
   });
 
+  it("发送中已有文章 workspace 时，小框应保持流式状态并展示当前正文", () => {
+    const messages = [
+      createMessage({ id: "user-1", role: "user", content: "@写文章" }),
+      createMessage({
+        id: "assistant-streaming",
+        content: "正在写文章",
+        isThinking: true,
+        runtimeStatus: {
+          phase: "streaming",
+          title: "正在生成",
+          detail: "正在输出文章正文",
+        },
+      }),
+    ];
+
+    const nextMessages =
+      attachWorkspaceArticleWorkspacePreviewArtifactToMessages({
+        messages,
+        articleWorkspace,
+        now: 100,
+        status: "streaming",
+      });
+
+    expect(nextMessages).toHaveLength(3);
+    expect(nextMessages[2]?.artifacts?.[0]).toMatchObject({
+      title: "公众号文章草稿",
+      content: expect.stringContaining("这是正文"),
+      status: "streaming",
+    });
+  });
+
   it("没有助手消息时应补一条只包含小卡的助手消息", () => {
     const messages = [
       createMessage({ id: "user-1", role: "user", content: "写文章" }),
@@ -382,6 +413,74 @@ describe("workspaceArticleWorkspaceMessageArtifacts", () => {
       timestamp: new Date(100),
     });
     expect(nextMessages[1]?.artifacts).toHaveLength(1);
+  });
+
+  it("历史恢复只有用户消息时，也应从 thread read workspace 补完整文章小框", () => {
+    const restoredArticleWorkspace =
+      buildWorkspaceArticleWorkspaceFromThreadRead({
+        thread_id: "thread-main",
+        article_workspace: {
+          schemaVersion: "article-workspace.v1",
+          appId: "content-factory-app",
+          sessionId: "session-main",
+          selectedObjectRef: {
+            appId: "content-factory-app",
+            kind: "articleDraft",
+            id: "article-restored",
+            sessionId: "session-main",
+          },
+          objects: [
+            {
+              ref: {
+                appId: "content-factory-app",
+                kind: "articleDraft",
+                id: "article-restored",
+                sessionId: "session-main",
+                artifactIds: ["artifact-restored"],
+              },
+              title: "恢复后的公众号文章",
+              status: "needs_review",
+              source: {
+                taskKind: "content.article.generate",
+                markdown:
+                  "# 恢复后的公众号文章\n\n这是从历史 read model 恢复的完整正文。",
+              },
+            },
+          ],
+        },
+      });
+
+    const nextMessages =
+      attachWorkspaceArticleWorkspacePreviewArtifactToMessages({
+        messages: [
+          createMessage({
+            id: "user-1",
+            role: "user",
+            content: "@写文章 写一篇公众号文章",
+          }),
+        ],
+        articleWorkspace: restoredArticleWorkspace,
+        now: 100,
+      });
+
+    expect(nextMessages).toHaveLength(2);
+    expect(nextMessages[1]?.artifacts?.[0]).toMatchObject({
+      title: "恢复后的公众号文章",
+      content: expect.stringContaining("历史 read model 恢复的完整正文"),
+      status: "complete",
+      meta: expect.objectContaining({
+        contentFactoryWorkspacePatch: expect.objectContaining({
+          objects: expect.arrayContaining([
+            expect.objectContaining({
+              title: "恢复后的公众号文章",
+              source: expect.objectContaining({
+                markdown: expect.stringContaining("完整正文"),
+              }),
+            }),
+          ]),
+        }),
+      }),
+    });
   });
 
   it("Article Editor 无可选对象时应 fail closed", () => {

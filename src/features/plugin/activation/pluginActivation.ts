@@ -26,6 +26,11 @@ export interface PluginActivationContext {
   pluginId: string;
   activeAgentAppId?: string;
   activeEntryKey?: string;
+  taskKind?: string;
+  workflowKey?: string;
+  outputArtifactKind?: string;
+  rightSurface?: string;
+  expectedObjects?: string[];
   selectedSkillKeys?: string[];
   selectedObjectRef?: PluginObjectRef;
   openedTabs?: string[];
@@ -40,6 +45,11 @@ export interface PluginActivationMentionCatalogEntry {
   activeAgentAppId?: string;
   activeEntryKey?: string;
   selectedSkillKeys?: string[];
+  taskKind?: string;
+  workflowKey?: string;
+  outputArtifactKind?: string;
+  rightSurface?: string;
+  expectedObjects?: string[];
   defaultObjectKind?: string;
   activationState: PluginRegistryActivationState;
   blockerCodes: string[];
@@ -163,6 +173,15 @@ function catalogEntryForPrefix(params: {
     pluginDisplayName: contract.displayName,
     activeAgentAppId: defaultAgentAppId(contract),
     activeEntryKey: entry.key,
+    taskKind: entry.taskKind,
+    workflowKey: entry.workflowKey,
+    outputArtifactKind: entry.outputArtifactKind,
+    rightSurface: entry.rightSurface,
+    expectedObjects: entry.expectedObjects?.length
+      ? entry.expectedObjects
+      : entry.defaultObjectKind
+        ? [entry.defaultObjectKind]
+        : undefined,
     defaultObjectKind: entry.defaultObjectKind,
     activationState: params.activationState,
     blockerCodes: params.blockerCodes,
@@ -208,6 +227,15 @@ function buildSkillCatalogEntries(params: {
         pluginDisplayName: contract.displayName,
         activeEntryKey: entry.key,
         selectedSkillKeys: [skill.id],
+        taskKind: entry.taskKind,
+        workflowKey: entry.workflowKey,
+        outputArtifactKind: entry.outputArtifactKind,
+        rightSurface: entry.rightSurface,
+        expectedObjects: entry.expectedObjects?.length
+          ? entry.expectedObjects
+          : entry.defaultObjectKind
+            ? [entry.defaultObjectKind]
+            : undefined,
         defaultObjectKind: entry.defaultObjectKind,
         activationState: params.activationState,
         blockerCodes: params.blockerCodes,
@@ -285,6 +313,11 @@ export function buildPluginActivationContext(params: {
     pluginId: params.entry.pluginId,
     activeAgentAppId: params.entry.activeAgentAppId,
     activeEntryKey: params.entry.activeEntryKey,
+    taskKind: params.entry.taskKind,
+    workflowKey: params.entry.workflowKey,
+    outputArtifactKind: params.entry.outputArtifactKind,
+    rightSurface: params.entry.rightSurface,
+    expectedObjects: params.entry.expectedObjects,
     selectedSkillKeys: params.entry.selectedSkillKeys,
     selectedObjectRef: params.entry.defaultObjectKind
       ? {
@@ -294,7 +327,7 @@ export function buildPluginActivationContext(params: {
         }
       : undefined,
     openedTabs: params.entry.defaultObjectKind
-      ? ["articleWorkspace"]
+      ? [params.entry.rightSurface ?? "articleWorkspace"]
       : undefined,
     source: params.source ?? "user",
   };

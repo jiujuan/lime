@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Writing Prototype - ArtifactFrame 到 Article Editor</title>
+    <title>Writing Prototype - 任务卡、过程态、ArtifactFrame 到 Article Editor</title>
     <style>
       :root {
         color-scheme: light;
@@ -175,6 +175,47 @@
         display: grid;
         gap: 10px;
         margin-top: 10px;
+      }
+
+      .stage-card {
+        margin-top: 14px;
+        border: 1px solid var(--border-soft);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.92);
+        padding: 14px 16px;
+        box-shadow: 0 10px 26px rgba(15, 23, 42, 0.04);
+      }
+
+      .stage-card-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 10px;
+      }
+
+      .stage-card-title {
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .stage-card-subtitle {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .stage-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid #dbe3ec;
+        border-radius: 999px;
+        background: white;
+        padding: 5px 10px;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 700;
+        white-space: nowrap;
       }
 
       .process-row {
@@ -388,6 +429,39 @@
       .artifact-summary {
         margin-top: 3px;
         overflow: hidden;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 18px;
+      }
+
+      .artifact-stage-sequence {
+        display: grid;
+        gap: 10px;
+        margin-bottom: 18px;
+      }
+
+      .artifact-stage {
+        border: 1px solid var(--border-soft);
+        border-radius: 12px;
+        background: #fbfdff;
+        padding: 12px 14px;
+      }
+
+      .artifact-stage-label {
+        color: var(--accent);
+        font-size: 11px;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      .artifact-stage-title {
+        margin-top: 4px;
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .artifact-stage-text {
+        margin-top: 4px;
         color: var(--muted);
         font-size: 12px;
         line-height: 18px;
@@ -691,8 +765,31 @@
           </div>
 
           <div class="message">
-            <div class="bubble">
-              已启动内容工厂写作流程。我会先检索和整理资料，再生成初稿。
+            <div class="stage-card">
+              <div class="stage-card-head">
+                <div>
+                  <div class="stage-card-title">写作任务卡</div>
+                  <div class="stage-card-subtitle">
+                    先确定目标，再进入搜索和 skills 编排
+                  </div>
+                </div>
+                <span class="stage-pill">任务已启动</span>
+              </div>
+              <div class="stage-pill">
+                写一篇关于 AI Agent 工作流的公众号文章
+              </div>
+            </div>
+
+            <div class="stage-card">
+              <div class="stage-card-head">
+                <div>
+                  <div class="stage-card-title">对话流过程态</div>
+                  <div class="stage-card-subtitle">
+                    先搜索、再判断角度、再写稿、再审稿
+                  </div>
+                </div>
+                <span class="stage-pill">3 轮检索</span>
+              </div>
               <div class="process-list" aria-label="写作过程">
                 <div class="process-row">
                   <span class="dot"></span>
@@ -741,6 +838,7 @@
                   <span class="process-time">完成</span>
                 </div>
               </div>
+            </div>
 
               <section
                 class="artifact-frame"
@@ -757,16 +855,14 @@
                       <div class="card-badges">
                         <span class="badge ready">ArtifactFrame</span>
                         <span class="badge">articleArtifacts</span>
+                        <span class="badge">最终文章</span>
                         <span class="badge">流式输出中</span>
-                        <span class="badge">3 轮检索</span>
-                        <span class="badge">5 个配图位</span>
                       </div>
                       <div class="artifact-title">
                         当 AI Agent 从聊天走向工作流：一篇实战复盘
                       </div>
                       <div class="artifact-summary">
-                        独立产物框，可承载文章、图片集、表格、网页、报告等不同
-                        renderer。
+                        先在对话流完成任务卡和过程态，再进入这里输出最终文章。
                       </div>
                     </div>
                   </button>
@@ -789,12 +885,28 @@
                   id="streamingArticlePreview"
                 >
                   <h1>当 AI Agent 从聊天走向工作流</h1>
+                  <div class="artifact-stage-sequence">
+                    <div class="artifact-stage">
+                      <div class="artifact-stage-label">research</div>
+                      <div class="artifact-stage-title">先搜索，再判断角度</div>
+                      <div class="artifact-stage-text">
+                        先整理资料、案例和可引用事实，再决定写作角度和大纲。
+                      </div>
+                    </div>
+                    <div class="artifact-stage">
+                      <div class="artifact-stage-label">draft</div>
+                      <div class="artifact-stage-title">正文在产物框内流式长出来</div>
+                      <div class="artifact-stage-text">
+                        不把完整文章刷进普通消息流，而是让最终正文在独立框里完整展开。
+                      </div>
+                    </div>
+                  </div>
                   <p>
                     很多 AI
                     产品最开始都像一个更聪明的聊天框。用户说一句，模型回一段，看起来足够自然，但真正进入生产场景后，问题会很快暴露：资料在哪里，步骤有没有完成，产物能不能继续编辑，失败后能不能恢复。
                   </p>
                   <p>
-                    写文章就是一个典型例子。用户要的不是普通消息里刷出一整篇长文，而是先搜索、再判断角度、再写稿、再审稿，最后把产物放进一个独立的框里。
+                    写文章就是一个典型例子。用户要的不是普通消息里刷出一整篇长文，而是先搜索、再判断角度、再写稿、再审稿，最后把最终文章放进一个独立的框里。
                   </p>
                   <h2>一、产物框不是普通聊天气泡</h2>
                   <p>
@@ -822,7 +934,7 @@
 
                 <div class="artifact-frame-footer">
                   <div class="artifact-frame-note">
-                    文章仍在框内流式输出。点击打开右侧 Article
+                    这里展示的是最终文章产物。点击打开右侧 Article
                     Editor，可编辑正文、查看引用、处理配图和继续改写。
                   </div>
                   <button type="button" id="openArticleFooter">
@@ -873,7 +985,7 @@
               <div class="canvas-toolbar">
                 <span class="badge ready">已保存</span>
                 <span class="badge">公众号长文</span>
-                <span class="badge">约 2400 字</span>
+                <span class="badge">最终草稿</span>
                 <span class="badge">引用 8 条</span>
                 <span class="badge">配图位 5 个</span>
               </div>

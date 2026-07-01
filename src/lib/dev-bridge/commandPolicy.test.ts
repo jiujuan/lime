@@ -447,6 +447,19 @@ describe("commandPolicy", () => {
         request: {
           lines: [
             JSON.stringify({
+              id: "installed-save",
+              method: "agentAppInstalled/save",
+              params: { state: { appId: "content-factory-app" } },
+            }),
+          ],
+        },
+      }),
+    ).toBe("agent-app-installed-write");
+    expect(
+      resolveDevBridgeCommandTimeoutProfile("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
               id: "session-files",
               method: "sessionFile/list",
               params: { sessionId: "session-1" },

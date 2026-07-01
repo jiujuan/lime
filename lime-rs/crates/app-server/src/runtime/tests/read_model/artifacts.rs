@@ -5,16 +5,10 @@ fn article_workspace_search_snapshot_payload(search_evidence: Value) -> Value {
     let host_search_evidence = search_evidence.clone();
 
     let mut article_source = serde_json::Map::new();
-    article_source.insert(
-        "taskKind".to_string(),
-        json!("content.article.generate"),
-    );
+    article_source.insert("taskKind".to_string(), json!("content.article.generate"));
     article_source.insert("taskId".to_string(), json!("task-article-1"));
     article_source.insert("turnId".to_string(), json!("turn_article_workspace"));
-    article_source.insert(
-        "artifactIds".to_string(),
-        json!(["artifact-article-1"]),
-    );
+    article_source.insert("artifactIds".to_string(), json!(["artifact-article-1"]));
     article_source.insert(
         "searchRequests".to_string(),
         json!([
@@ -87,10 +81,7 @@ fn article_workspace_search_snapshot_payload(search_evidence: Value) -> Value {
     image_ref.insert("sourceTurnId".to_string(), json!("turn_article_workspace"));
 
     let mut image_source = serde_json::Map::new();
-    image_source.insert(
-        "taskKind".to_string(),
-        json!("content.image.generate"),
-    );
+    image_source.insert("taskKind".to_string(), json!("content.image.generate"));
     image_source.insert("taskId".to_string(), json!("task-image-1"));
     image_source.insert("turnId".to_string(), json!("turn_article_workspace"));
     image_source.insert("artifactIds".to_string(), json!(["artifact-image-1"]));
@@ -108,20 +99,26 @@ fn article_workspace_search_snapshot_payload(search_evidence: Value) -> Value {
     patch.insert("schemaVersion".to_string(), json!(1));
     patch.insert("appId".to_string(), json!("content-factory-app"));
     patch.insert("sessionId".to_string(), json!("sess_article_workspace"));
-    patch.insert("primaryObjectRef".to_string(), json!({
-        "appId": "content-factory-app",
-        "kind": "articleDraft",
-        "id": "article-1",
-        "sessionId": "sess_article_workspace",
-        "artifactIds": ["artifact-article-1"],
-        "sourceTurnId": "turn_article_workspace"
-    }));
-    patch.insert("selectedObjectRef".to_string(), json!({
-        "appId": "content-factory-app",
-        "kind": "articleDraft",
-        "id": "article-1",
-        "sessionId": "sess_article_workspace"
-    }));
+    patch.insert(
+        "primaryObjectRef".to_string(),
+        json!({
+            "appId": "content-factory-app",
+            "kind": "articleDraft",
+            "id": "article-1",
+            "sessionId": "sess_article_workspace",
+            "artifactIds": ["artifact-article-1"],
+            "sourceTurnId": "turn_article_workspace"
+        }),
+    );
+    patch.insert(
+        "selectedObjectRef".to_string(),
+        json!({
+            "appId": "content-factory-app",
+            "kind": "articleDraft",
+            "id": "article-1",
+            "sessionId": "sess_article_workspace"
+        }),
+    );
     patch.insert(
         "objects".to_string(),
         Value::Array(vec![
@@ -171,7 +168,10 @@ fn article_workspace_search_snapshot_payload(search_evidence: Value) -> Value {
     );
 
     let mut artifact = serde_json::Map::new();
-    artifact.insert("artifactId".to_string(), json!("artifact-workspace-patch-1"));
+    artifact.insert(
+        "artifactId".to_string(),
+        json!("artifact-workspace-patch-1"),
+    );
     artifact.insert(
         "path".to_string(),
         json!(".lime/artifacts/content-factory-workspace-patch.json"),
@@ -1328,10 +1328,7 @@ async fn read_session_marks_failed_article_draft_as_non_deliverable_when_article
         article_workspace["objects"][0]["summary"],
         "写作失败，文章草稿未达到可交付状态"
     );
-    assert_eq!(
-        article_workspace["objects"][1]["status"],
-        "needs_review"
-    );
+    assert_eq!(article_workspace["objects"][1]["status"], "needs_review");
     assert_eq!(
         article_workspace["workerEvidence"][1]["taskKind"],
         "content.article.generate"

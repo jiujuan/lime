@@ -1,4 +1,5 @@
 import type { LayeredDesignAssetGenerationRequest } from "./generation";
+import { isResponsesImageGenerationModelId } from "@/lib/imageGen/providerMatchers";
 
 const GPT_IMAGE_2_MIN_PIXELS = 655_360;
 const GPT_IMAGE_2_MAX_PIXELS = 8_294_400;
@@ -113,13 +114,7 @@ function createCapability(
 }
 
 export function isGptImage2Model(model?: string): boolean {
-  const normalized = normalizeCapabilityToken(model);
-  return (
-    normalized === "gpt-image-2" ||
-    normalized === "gpt-images-2" ||
-    normalized.endsWith("/gpt-image-2") ||
-    normalized.endsWith("/gpt-images-2")
-  );
+  return isResponsesImageGenerationModelId(model ?? "");
 }
 
 export function resolveLayeredDesignImageExecutorMode(params: {

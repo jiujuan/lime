@@ -260,6 +260,13 @@ export async function flushEffects() {
   });
 }
 
+export async function flushRuntimeDetailRefresh() {
+  await act(async () => {
+    await new Promise((resolve) => window.setTimeout(resolve, 140));
+  });
+  await flushEffects();
+}
+
 export function captureTurnStream() {
   return captureRuntimeStream((eventName) => {
     return (

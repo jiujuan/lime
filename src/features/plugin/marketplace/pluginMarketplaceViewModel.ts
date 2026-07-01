@@ -1,6 +1,7 @@
 import type {
   PluginRegistryCapabilityState,
   PluginRegistryItem,
+  PluginActivationEntryDeclaration,
   PluginSkillDeclaration,
 } from "../manifest/types";
 import { projectPluginMarketplaceItemSkills } from "./pluginMarketplace";
@@ -87,6 +88,7 @@ export interface PluginMarketplaceViewItem {
   activatable: boolean;
   renderable: boolean;
   readOnlyHistory: boolean;
+  activationEntries: PluginActivationEntryDeclaration[];
   skills: PluginSkillDeclaration[];
   capabilityProfile: PluginMarketplaceCapabilityProfile;
   needsAttention: boolean;
@@ -117,6 +119,12 @@ const ATTENTION_BLOCKERS = new Set([
   "PLUGIN_DISABLED",
 ]);
 
+function readRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
 function uniqueStrings(values: Array<string | undefined>): string[] {
   return Array.from(
     new Set(
@@ -125,6 +133,115 @@ function uniqueStrings(values: Array<string | undefined>): string[] {
         .filter((value): value is string => Boolean(value)),
     ),
   );
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function readStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return uniqueStrings(value.map(readString));
+}
+
+function hasDefinedValue(value: unknown): boolean {
+  return Array.isArray(value) ? value.length > 0 : value !== undefined;
+}
+
+function mergeActivationEntries(
+  entries: PluginActivationEntryDeclaration[],
+): PluginActivationEntryDeclaration[] {
+  const merged = new Map<string, PluginActivationEntryDeclaration>();
+  for (const entry of entries) {
+    const existing = merged.get(entry.key);
+    merged.set(
+      entry.key,
+      existing
+        ? ({
+            ...existing,
+            ...Object.fromEntries(
+              Object.entries(entry).filter(([, value]) =>
+                hasDefinedValue(value),
+              ),
+            ),
+          } as PluginActivationEntryDeclaration)
+        : entry,
+    );
+  }
+  return Array.from(merged.values());
+}
+
+function rawActivationEntriesFromSummary(
+  summary: Record<string, unknown> | undefined,
+): unknown[] {
+  const runtime = readRecord(summary?.agentRuntime);
+  return [
+    ...(Array.isArray(summary?.activationEntries)
+      ? summary.activationEntries
+      : []),
+    ...(Array.isArray(runtime?.activationEntries)
+      ? runtime.activationEntries
+      : []),
+    ...(Array.isArray(runtime?.intents) ? runtime.intents : []),
+  ];
+}
+
+function projectPluginMarketplaceActivationEntries(
+  item: Pick<PluginMarketplaceItem, "manifestSummary">,
+): PluginActivationEntryDeclaration[] {
+  const summary = readRecord(item.manifestSummary);
+  const entries = rawActivationEntriesFromSummary(summary).flatMap(
+    (entry): PluginActivationEntryDeclaration[] => {
+      const record = readRecord(entry);
+      const key = readString(record?.key);
+      const title = readString(record?.title);
+      const kind = readString(record?.kind) ?? "plugin";
+      if (
+        !record ||
+        !key ||
+        !title ||
+        (kind !== "plugin" && kind !== "agentApp" && kind !== "skill")
+      ) {
+        return [];
+      }
+      const intent = readString(record.intent);
+      return [
+        {
+          key,
+          title,
+          kind,
+          aliases: readStringArray(record.aliases),
+          intent:
+            intent === "manual" ||
+            intent === "at_command" ||
+            intent === "history_restore" ||
+            intent === "chip"
+              ? intent
+              : undefined,
+          taskKind: readString(record.taskKind) ?? readString(record.task_kind),
+          workflowKey:
+            readString(record.workflowKey) ??
+            readString(record.workflow_key) ??
+            readString(record.workflow),
+          outputArtifactKind:
+            readString(record.outputArtifactKind) ??
+            readString(record.output_artifact_kind),
+          rightSurface:
+            readString(record.rightSurface) ?? readString(record.right_surface),
+          expectedObjects: uniqueStrings([
+            ...readStringArray(record.expectedObjects),
+            ...readStringArray(record.expected_objects),
+          ]),
+          defaultObjectKind:
+            readString(record.defaultObjectKind) ??
+            readString(record.default_object_kind),
+        },
+      ];
+    },
+  );
+  return mergeActivationEntries(entries);
 }
 
 function resolveDisplayName(
@@ -270,6 +387,7 @@ function viewItem(
     readOnlyHistory,
   );
   const skills = projectPluginMarketplaceItemSkills(item);
+  const activationEntries = projectPluginMarketplaceActivationEntries(item);
 
   return {
     pluginId: item.pluginKey,
@@ -293,6 +411,7 @@ function viewItem(
     activatable,
     renderable,
     readOnlyHistory,
+    activationEntries,
     skills,
     capabilityProfile: buildPluginMarketplaceCapabilityProfile({
       item,

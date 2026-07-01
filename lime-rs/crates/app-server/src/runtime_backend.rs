@@ -1,6 +1,8 @@
 mod agent_skills_context;
 mod agent_skills_telemetry;
 mod coding_events;
+mod content_factory_streaming;
+mod image_tools;
 mod live_execution_process;
 mod memory_tools;
 mod model_capability;
@@ -8,6 +10,7 @@ mod model_registry_metadata;
 mod model_route_contract;
 mod model_route_resolver;
 mod model_routing;
+mod native_tools;
 mod plan_events;
 mod plugin_activation_context;
 mod proposed_plan_parser;
@@ -31,8 +34,7 @@ use app_server_protocol::{AgentSessionActionType, McpServerStartParams, Protocol
 use aster::session::TurnContextOverride;
 use async_trait::async_trait;
 use lime_agent::agent_tools::tool_orchestrator::{
-    execute_planned_tool_batch, PlannedToolExecution, ToolExecutionBatchInput,
-    ToolExecutionOutcome,
+    execute_planned_tool_batch, PlannedToolExecution, ToolExecutionBatchInput, ToolExecutionOutcome,
 };
 use lime_agent::AsterProviderProtocol;
 use lime_agent::{
@@ -296,13 +298,15 @@ fn content_factory_search_output_summary(output: &str) -> String {
 }
 
 fn article_object_kind(object: &Value) -> Option<String> {
-    value_string(object, &["kind"]).map(ToString::to_string).or_else(|| {
-        object
-            .get("ref")
-            .or_else(|| object.get("objectRef"))
-            .and_then(|reference| value_string(reference, &["kind"]))
-            .map(ToString::to_string)
-    })
+    value_string(object, &["kind"])
+        .map(ToString::to_string)
+        .or_else(|| {
+            object
+                .get("ref")
+                .or_else(|| object.get("objectRef"))
+                .and_then(|reference| value_string(reference, &["kind"]))
+                .map(ToString::to_string)
+        })
 }
 
 fn value_string<'a>(value: &'a Value, keys: &[&str]) -> Option<&'a str> {
@@ -374,27 +378,12 @@ impl RuntimeBackend {
             .map_err(backend_error)
     }
 
-    async fn register_memory_tools_if_available(&self) -> Result<(), RuntimeCoreError> {
-        let app_data_source = self
-            .app_data_source
-            .read()
-            .map_err(|_| {
-                RuntimeCoreError::Backend("memory tool app data source lock poisoned".to_string())
-            })?
-            .clone();
-        let Some(app_data_source) = app_data_source else {
-            return Ok(());
-        };
-        if !self.agent_state.is_initialized().await {
-            return Ok(());
-        }
-        for tool in memory_tools::create_memory_tools(app_data_source.clone()) {
-            self.agent_state
-                .register_native_tool(tool)
-                .await
-                .map_err(backend_error)?;
-        }
-        Ok(())
+    async fn register_current_native_tools_if_available(&self) -> Result<(), RuntimeCoreError> {
+        native_tools::register_current_native_tools_if_available(
+            &self.agent_state,
+            &self.app_data_source,
+        )
+        .await
     }
 
     async fn sync_mcp_bridges_if_available(&self) -> Result<(), RuntimeCoreError> {
@@ -564,7 +553,7 @@ impl RuntimeBackend {
         self.install_live_execution_process_hook_if_available()
             .await?;
         if !defer_tool_surface {
-            self.register_memory_tools_if_available().await?;
+            self.register_current_native_tools_if_available().await?;
             self.sync_mcp_bridges_if_available().await?;
         }
         let config_metadata = current_agent_runtime_config_metadata();
@@ -724,7 +713,7 @@ impl ExecutionBackend for RuntimeBackend {
         &self,
         request: ToolInventoryReadRequest,
     ) -> Result<Value, RuntimeCoreError> {
-        self.register_memory_tools_if_available().await?;
+        self.register_current_native_tools_if_available().await?;
         self.sync_mcp_bridges_if_available().await?;
         let app_data_source = self
             .app_data_source
@@ -749,6 +738,7 @@ impl ExecutionBackend for RuntimeBackend {
         request: &ExecutionRequest,
         events: &mut Vec<RuntimeEvent>,
     ) -> Result<(), RuntimeCoreError> {
+        content_factory_streaming::ensure_workspace_patch_artifact_paths(events.as_mut_slice());
         let Some(search_plan) = ContentFactorySearchPlan::from_events(events.as_slice()) else {
             return Ok(());
         };
@@ -763,7 +753,7 @@ impl ExecutionBackend for RuntimeBackend {
             .map_err(backend_error)?;
         self.install_live_execution_process_hook_if_available()
             .await?;
-        self.register_memory_tools_if_available().await?;
+        self.register_current_native_tools_if_available().await?;
         self.sync_mcp_bridges_if_available().await?;
 
         let host_request = aster_chat_request_from_request(request);
@@ -803,6 +793,8 @@ impl ExecutionBackend for RuntimeBackend {
                 params: json!({ "query": request.query }),
             })
             .collect::<Vec<_>>();
+        let streaming_artifact_events =
+            content_factory_streaming::streaming_workspace_patch_events(events.as_slice());
         let batch = execute_planned_tool_batch(
             ToolExecutionBatchInput {
                 registry,
@@ -819,14 +811,13 @@ impl ExecutionBackend for RuntimeBackend {
             planned_tools,
         )
         .await;
-        let search_evidence = build_content_factory_search_evidence(
-            &search_plan.requests,
-            batch.outcomes.as_slice(),
-        );
+        let search_evidence =
+            build_content_factory_search_evidence(&search_plan.requests, batch.outcomes.as_slice());
         if search_evidence.is_empty() {
             return Ok(());
         }
         update_content_factory_artifact_events(events, &search_evidence);
+        content_factory_streaming::ensure_workspace_patch_artifact_paths(events.as_mut_slice());
         let mut tool_runtime_events = Vec::new();
         for event in &batch.events {
             tool_runtime_events.extend(tool_events::runtime_events_from_agent_event(event)?);
@@ -835,7 +826,12 @@ impl ExecutionBackend for RuntimeBackend {
             .iter()
             .position(|event| event.event_type == "artifact.snapshot")
             .unwrap_or(events.len());
-        events.splice(insert_at..insert_at, tool_runtime_events);
+        events.splice(
+            insert_at..insert_at,
+            streaming_artifact_events
+                .into_iter()
+                .chain(tool_runtime_events.into_iter()),
+        );
         Ok(())
     }
 }

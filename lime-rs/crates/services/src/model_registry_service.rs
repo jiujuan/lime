@@ -11,6 +11,7 @@ use lime_core::api_host_utils::{
 };
 use lime_core::database::dao::api_key_provider::{infer_managed_runtime_spec, ApiProviderType};
 use lime_core::database::DbConnection;
+use lime_core::image_generation_matcher::is_likely_image_generation_search_text;
 use lime_core::models::model_registry::{
     EnhancedModelMetadata, ModelAliasSource, ModelCapabilities, ModelDeploymentSource, ModelLimits,
     ModelManagementPlane, ModelModality, ModelReasoningEffortLevel, ModelReasoningEffortSource,
@@ -771,22 +772,9 @@ fn infer_vision_capability(
             "speech",
             "audio",
             "moderation",
-            "imagen",
-            "dall-e",
-            "dalle",
-            "stable diffusion",
-            "stable-diffusion",
-            "sdxl",
-            "sd3",
-            "midjourney",
-            "image generation",
-            "image-generation",
-            "image-gen",
-            "image-preview",
-            "flux",
-            "nano-banana",
         ],
-    ) {
+    ) || is_likely_image_generation_search_text(&text)
+    {
         return false;
     }
 
@@ -852,37 +840,13 @@ fn infer_image_generation_capability(
     output_modalities: &[ModelModality],
 ) -> bool {
     output_modalities.contains(&ModelModality::Image)
-        || text_contains_any(
-            &build_search_text(&[
-                Some(model_id.to_string()),
-                family.map(ToString::to_string),
-                description.map(ToString::to_string),
-                provider_model_id.map(ToString::to_string),
-                canonical_model_id.map(ToString::to_string),
-            ]),
-            &[
-                "gpt-image",
-                "gpt-images",
-                "imagen",
-                "dall-e",
-                "dalle",
-                "stable diffusion",
-                "stable-diffusion",
-                "sdxl",
-                "sd3",
-                "midjourney",
-                "image generation",
-                "image-generation",
-                "image-gen",
-                "image-preview",
-                "flux",
-                "nano-banana",
-                "recraft",
-                "ideogram",
-                "seedream",
-                "cogview",
-            ],
-        )
+        || is_likely_image_generation_search_text(&build_search_text(&[
+            Some(model_id.to_string()),
+            family.map(ToString::to_string),
+            description.map(ToString::to_string),
+            provider_model_id.map(ToString::to_string),
+            canonical_model_id.map(ToString::to_string),
+        ]))
         || (input_modalities.contains(&ModelModality::Image)
             && output_modalities.contains(&ModelModality::Image))
 }
@@ -3606,6 +3570,71 @@ mod tests {
         assert!(name_taxonomy
             .task_families
             .contains(&ModelTaskFamily::VisionUnderstanding));
+    }
+
+    #[test]
+    fn test_infer_model_taxonomy_uses_shared_image_generation_matcher_shape() {
+        let agnes_taxonomy = infer_model_taxonomy(ModelTaxonomyInput {
+            model_id: "agnes-image-2.1-flash",
+            provider_id: Some("openai-compatible"),
+            family: None,
+            description: None,
+            capabilities: None,
+            explicit_task_families: &[],
+            explicit_input_modalities: &[],
+            explicit_output_modalities: &[],
+            explicit_runtime_features: &[],
+            explicit_deployment_source: None,
+            explicit_management_plane: None,
+            provider_model_id: Some("agnes-image-2.1-flash"),
+            canonical_model_id: None,
+            explicit_alias_source: None,
+            canonical_model: None,
+        });
+        let image_input_modalities = vec![ModelModality::Text, ModelModality::Image];
+        let text_output_modalities = vec![ModelModality::Text];
+        let vision_taxonomy = infer_model_taxonomy(ModelTaxonomyInput {
+            model_id: "provider-image-input-chat",
+            provider_id: Some("custom-provider"),
+            family: None,
+            description: None,
+            capabilities: None,
+            explicit_task_families: &[],
+            explicit_input_modalities: &image_input_modalities,
+            explicit_output_modalities: &text_output_modalities,
+            explicit_runtime_features: &[],
+            explicit_deployment_source: None,
+            explicit_management_plane: None,
+            provider_model_id: Some("provider-image-input-chat"),
+            canonical_model_id: None,
+            explicit_alias_source: None,
+            canonical_model: None,
+        });
+
+        assert!(agnes_taxonomy
+            .task_families
+            .contains(&ModelTaskFamily::ImageGeneration));
+        assert!(!agnes_taxonomy
+            .task_families
+            .contains(&ModelTaskFamily::VisionUnderstanding));
+        assert!(vision_taxonomy
+            .task_families
+            .contains(&ModelTaskFamily::VisionUnderstanding));
+        assert!(!vision_taxonomy
+            .task_families
+            .contains(&ModelTaskFamily::ImageGeneration));
+    }
+
+    #[test]
+    fn test_model_registry_service_does_not_restore_local_image_generation_matchers() {
+        let source = include_str!("model_registry_service.rs");
+        let looks_like_marker = ["fn looks_like_", "image_generation_text"].concat();
+        let bounded_token_marker = ["fn contains_", "bounded_token"].concat();
+        let keywords_marker = ["IMAGE_MODEL", "_KEYWORDS"].concat();
+
+        assert!(!source.contains(&looks_like_marker));
+        assert!(!source.contains(&bounded_token_marker));
+        assert!(!source.contains(&keywords_marker));
     }
 
     #[test]

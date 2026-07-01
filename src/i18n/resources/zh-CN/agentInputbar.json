@@ -127,6 +127,8 @@
   "agentChat.inputbar.plusMenu.skills": "技能",
   "agentChat.inputbar.plusMenu.unavailable": "当前会话暂不可用",
   "agentChat.inputbar.pluginChip.empty": "当前没有可选插件",
+  "agentChat.inputbar.pluginChip.error": "插件列表读取失败，请稍后重试",
+  "agentChat.inputbar.pluginChip.loading": "正在读取已安装插件…",
   "agentChat.inputbar.pluginChip.remove": "移除插件 {{name}}",
   "agentChat.inputbar.pluginChip.skillPrefix": "技能",
   "agentChat.inputbar.pluginChip.selectorTitle": "选择插件",

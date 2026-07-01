@@ -42,6 +42,19 @@ describe("resolveImageWorkbenchSkillRequest", () => {
         raw_text: rawText,
         provider_id: "fal",
         model: "fal-ai/nano-banana-pro",
+        entry_source: "at_image_command",
+        modality_contract_key: "image_generation",
+        modality: "image",
+        required_capabilities: expect.arrayContaining(["image_generation"]),
+        routing_slot: "image_generation_model",
+        runtime_contract: expect.objectContaining({
+          contract_key: "image_generation",
+          routing_slot: "image_generation_model",
+          executor_binding: expect.objectContaining({
+            executor_kind: "skill",
+            binding_key: "image_generate",
+          }),
+        }),
         persona_context: {
           version: "lime-image-persona-v1",
           persona_id: "lime_image_creator",

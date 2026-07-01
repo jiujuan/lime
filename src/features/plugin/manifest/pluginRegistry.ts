@@ -10,7 +10,7 @@ import type {
 function isReadinessBlocked(
   status: PluginRegistryProjectionInput["readinessStatus"],
 ): boolean {
-  return status === "blocked" || status === "needs-setup";
+  return status === "blocked";
 }
 
 function canRestoreHistory(input: PluginRegistryProjectionInput): boolean {

@@ -1,5 +1,6 @@
 import { createPreviewArtifact } from "@/lib/artifact/previewArtifact";
 import type { Artifact } from "@/lib/artifact/types";
+import { CONTENT_FACTORY_PLUGIN_ID } from "@/features/plugin-content-factory/contentFactoryPlugin";
 import { buildWorkspaceArticleWorkspaceArtifactDocument } from "./workspaceArticleWorkspaceArtifactDocument";
 import { buildWorkspaceArticleObjectKey } from "./workspaceArticleWorkspaceSelection";
 import type {
@@ -67,6 +68,11 @@ export function buildWorkspaceArticleWorkspacePreviewArtifact({
       surfaceKind: layout,
       layout,
     },
+    workspacePatch: articleWorkspace,
+    contentFactoryWorkspacePatch:
+      articleWorkspace.appId === CONTENT_FACTORY_PLUGIN_ID
+        ? articleWorkspace
+        : undefined,
   };
 
   if (layout === "imageGrid") {

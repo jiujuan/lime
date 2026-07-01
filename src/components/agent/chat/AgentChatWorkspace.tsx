@@ -398,6 +398,10 @@ function buildArticleWorkspaceForArtifactOpen(
   const articleWorkspace =
     readRecord(metadata.articleWorkspace) ??
     readRecord(metadata.article_workspace);
+  const workspacePatch =
+    readRecord(metadata.contentFactoryWorkspacePatch) ??
+    readRecord(metadata.workspacePatch) ??
+    readRecord(metadata.workspace_patch);
   const artifactDocument = readRecord(metadata.artifactDocument);
   const artifactDocumentMetadata = readRecord(artifactDocument?.metadata);
   const artifactDocumentArticleWorkspace =
@@ -410,13 +414,18 @@ function buildArticleWorkspaceForArtifactOpen(
     return null;
   }
 
+  const workspaceFromArtifact = buildWorkspaceArticleWorkspaceFromUnknown(
+    workspacePatch ?? articleWorkspace ?? artifactDocumentArticleWorkspace,
+    "threadRead",
+  );
+  if (workspaceFromArtifact) {
+    return workspaceFromArtifact;
+  }
+
   if (currentArticleWorkspace) {
     return currentArticleWorkspace;
   }
-  return buildWorkspaceArticleWorkspaceFromUnknown(
-    articleWorkspace ?? artifactDocumentArticleWorkspace,
-    "threadRead",
-  );
+  return null;
 }
 
 export function AgentChatWorkspace({
@@ -709,7 +718,6 @@ export function AgentChatWorkspace({
 
   // 任务文件状态
   const [taskFiles, setTaskFiles] = useState<TaskFile[]>([]);
-  const [taskFilesExpanded, setTaskFilesExpanded] = useState(false);
   const [selectedFileId, setSelectedFileId] = useState<string | undefined>();
   const taskFilesRef = useRef<TaskFile[]>([]);
   const socialStageLogRef = useRef<Record<string, string>>({});
@@ -1243,8 +1251,7 @@ export function AgentChatWorkspace({
   });
   const handlePluginSuggestionsNeeded = useCallback(() => {
     setPluginSuggestionsEnabled(true);
-    workspacePluginRuntimeContext.refresh();
-  }, [workspacePluginRuntimeContext]);
+  }, []);
   const workspacePluginInputSuggestions = useMemo(
     () =>
       buildWorkspacePluginInputSuggestions(
@@ -4080,8 +4087,6 @@ export function AgentChatWorkspace({
     contextVariant: agentEntry === "claw" ? "task-center" : "default",
     setMentionedCharacters,
     taskFiles,
-    taskFilesExpanded,
-    setTaskFilesExpanded,
     selectedFileId,
     isThemeWorkbench,
     sessionId,
@@ -4122,7 +4127,6 @@ export function AgentChatWorkspace({
     activeTheme,
     navigationActions,
     selectedTeam,
-    handleTaskFileClick,
     characters: projectMemory?.characters || [],
     skills,
     serviceSkills: activeTheme === "general" ? serviceSkills : [],
@@ -4134,6 +4138,9 @@ export function AgentChatWorkspace({
     initialInputCapability: effectiveInitialInputCapability,
     initialKnowledgePackSelection,
     pluginSuggestions: workspacePluginInputSuggestions,
+    pluginSuggestionsError:
+      workspacePluginRuntimeContext.error?.message ?? null,
+    pluginSuggestionsLoading: workspacePluginRuntimeContext.loading,
     onPluginSuggestionsNeeded: handlePluginSuggestionsNeeded,
     setChatToolPreferences,
     objectiveEnabled: inputbarObjectiveModeEnabled,
@@ -4449,9 +4456,7 @@ export function AgentChatWorkspace({
   const activePluginActivationContext =
     workspacePluginRuntimeContext.context.status === "active"
       ? workspacePluginRuntimeContext.context.activationContext
-      : workspacePluginHistoryRestoreProjection?.status === "restored"
-        ? workspacePluginHistoryRestoreProjection.activationContext
-        : null;
+      : null;
   const shouldAutoRefreshRightSurfacePending =
     sceneIsSending ||
     sceneIsPreparingSend ||
@@ -4512,17 +4517,8 @@ export function AgentChatWorkspace({
     [sceneDisplayMessages],
   );
   const articleWorkspaceFromPluginActivation = useMemo(
-    () =>
-      buildWorkspacePluginArticleWorkspaceFromActivation({
-        activationContext: activePluginActivationContext,
-        contracts: workspacePluginRuntimeContext.context.contracts,
-        workspaceId: runtimeWorkspaceId,
-      }),
-    [
-      activePluginActivationContext,
-      runtimeWorkspaceId,
-      workspacePluginRuntimeContext.context.contracts,
-    ],
+    () => null,
+    [],
   );
   const handleToggleExpertInfoPanel = useCallback(() => {
     setHarnessPanelVisible(false);
@@ -4607,9 +4603,7 @@ export function AgentChatWorkspace({
   const rawArticleEditorRightSurface =
     articleWorkspaceFromThreadRead ??
     articleWorkspaceFromMessageArtifacts ??
-    activeArticleWorkspace ??
-    rightSurfaceAppServerPendingRuntime.pendingArticleWorkspace ??
-    articleWorkspaceFromPluginActivation;
+    activeArticleWorkspace;
   const articleEditorRightSurface = useMemo(
     () =>
       applyWorkspaceArticleEditedDraft(
@@ -4619,9 +4613,7 @@ export function AgentChatWorkspace({
     [activeArticleEditedDraft, rawArticleEditorRightSurface],
   );
   articleEditorRightSurfaceRef.current = articleEditorRightSurface;
-  const articleEditorRightSurfaceAvailable = Boolean(
-    articleEditorRightSurface || objectCanvasRightSurfaceAvailable,
-  );
+  const articleEditorRightSurfaceAvailable = Boolean(articleEditorRightSurface);
   const sceneDisplayMessagesWithArticleWorkspaceArtifact = useMemo(
     () =>
       attachWorkspaceArticleWorkspacePreviewArtifactToMessages({
@@ -4629,10 +4621,14 @@ export function AgentChatWorkspace({
         articleWorkspace: shouldHideCurrentSessionContent
           ? null
           : articleEditorRightSurface,
+        status:
+          sceneIsSending || sceneIsPreparingSend ? "streaming" : "complete",
       }),
     [
       articleEditorRightSurface,
       sceneDisplayMessages,
+      sceneIsPreparingSend,
+      sceneIsSending,
       shouldHideCurrentSessionContent,
     ],
   );
@@ -5220,32 +5216,24 @@ export function AgentChatWorkspace({
           ),
         }
       : {}),
-    ...(articleEditorRightSurface || objectCanvasRightSurfaceAvailable
+    ...(articleEditorRightSurface
       ? {
-          articleWorkspace: () =>
-            articleEditorRightSurface ? (
-              <WorkspaceArticleEditorRightSurface
-                actionsDisabled={sceneIsSending || sceneIsPreparingSend}
-                articleWorkspace={articleEditorRightSurface}
-                onActionIntent={handleArticleWorkspaceActionIntent}
-                onArticleMarkdownChange={handleArticleWorkspaceMarkdownChange}
-                onOpenPreviewArtifact={(artifact) => {
-                  void openWorkspaceArtifactInWorkbench(artifact);
-                }}
-                onSelectedObjectChange={
-                  handleArticleWorkspaceSelectedObjectChange
-                }
-              />
-            ) : (
-              <WorkspaceObjectCanvasSurface
-                candidate={objectCanvasRightSurfaceCandidate}
-                onOpenBrowserRuntime={
-                  browserAssistObjectCanvasCandidate
-                    ? handleOpenBrowserRuntimeForBrowserAssist
-                    : undefined
-                }
-              />
-            ),
+          articleWorkspace: () => (
+            <WorkspaceArticleEditorRightSurface
+              actionsDisabled={sceneIsSending || sceneIsPreparingSend}
+              articleWorkspace={articleEditorRightSurface}
+              onActionIntent={handleArticleWorkspaceActionIntent}
+              onArticleMarkdownChange={handleArticleWorkspaceMarkdownChange}
+              onOpenPreviewArtifact={(artifact) => {
+                void openWorkspaceArtifactInWorkbench(artifact);
+              }}
+              onSelectedObjectChange={handleArticleWorkspaceSelectedObjectChange}
+            />
+          ),
+        }
+      : {}),
+    ...(objectCanvasRightSurfaceAvailable
+      ? {
           objectCanvas: () => (
             <WorkspaceObjectCanvasSurface
               candidate={objectCanvasRightSurfaceCandidate}
@@ -5335,22 +5323,7 @@ export function AgentChatWorkspace({
         onSelectSurface={handleSelectRightSurfaceTab}
       />
     ) : null;
-  const rightSurfaceContent =
-    rightSurfaceState.activeSurface &&
-    rightSurfaceState.activeSurface !== "articleWorkspace"
-      ? rightSurfaceHostNode
-      : null;
-  const rightRailNode =
-    rightSurfaceState.activeSurface === "articleWorkspace" &&
-    hasActiveRightSurfaceDefinition ? (
-      <div
-        className="flex h-full min-h-0 shrink-0 overflow-hidden border-l border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)]"
-        data-testid="workspace-right-rail"
-        style={{ width: "min(100%, 392px)" }}
-      >
-        {rightSurfaceHostNode}
-      </div>
-    ) : null;
+  const rightSurfaceContent = rightSurfaceHostNode;
   const generalWorkbenchSidebarNode = (
     <WorkspaceGeneralWorkbenchSidebar
       visible={showGeneralWorkbenchSidebar}
@@ -5545,7 +5518,6 @@ export function AgentChatWorkspace({
     skillsLoading: combinedSkillsLoading,
     onSelectServiceSkill:
       workspaceServiceSkillEntryActions.handleServiceSkillSelect,
-    initialInputCapability: effectiveInitialInputCapability,
     handleNavigateToSkillSettings,
     handleRefreshSkills,
     handleOpenBrowserAssistInCanvas: handleOpenBrowserRuntimeForBrowserAssist,
@@ -5691,7 +5663,6 @@ export function AgentChatWorkspace({
         onExpandGeneralWorkbenchSidebar={handleExpandGeneralWorkbenchSidebar}
         fileManagerNode={fileManagerNode}
         mainAreaNode={conversationSceneRuntime.mainAreaNode}
-        rightRailNode={rightRailNode}
       />
       <AutomationJobDialog
         open={workspaceServiceSkillEntryActions.automationDialogOpen}

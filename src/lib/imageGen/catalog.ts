@@ -6,6 +6,13 @@
 
 import { inferModelTaskFamilies } from "@/lib/model/inferModelCapabilities";
 import { IMAGE_GEN_MODELS, type ImageGenModel } from "./models";
+import {
+  isFalImageProviderLike,
+  isLikelyImageGenerationModelId,
+  isLikelyFalImageModelId,
+} from "./providerMatchers";
+
+export type { ImageGenModel } from "./models";
 
 export type ImageCapabilityTransport =
   | "openai_images"
@@ -37,6 +44,12 @@ export interface ImageCapabilityProviderEntry {
   fallbackPriority: number;
 }
 
+export interface ImageCapabilityModelMetadataCandidate {
+  id?: string | null;
+  task_families?: string[] | null;
+  taskFamilies?: string[] | null;
+}
+
 function normalizeText(value?: string | null): string {
   return (value ?? "").trim().toLowerCase();
 }
@@ -47,8 +60,8 @@ function matchesAnyExactValue(
 ): boolean {
   return Boolean(
     normalizedValue &&
-      Array.isArray(values) &&
-      values.some((value) => normalizeText(value) === normalizedValue),
+    Array.isArray(values) &&
+    values.some((value) => normalizeText(value) === normalizedValue),
   );
 }
 
@@ -58,14 +71,14 @@ function matchesAnyIncludesValue(
 ): boolean {
   return Boolean(
     normalizedValue &&
-      Array.isArray(values) &&
-      values.some((value) => {
-        const normalizedNeedle = normalizeText(value);
-        return (
-          normalizedNeedle.length > 0 &&
-          normalizedValue.includes(normalizedNeedle)
-        );
-      }),
+    Array.isArray(values) &&
+    values.some((value) => {
+      const normalizedNeedle = normalizeText(value);
+      return (
+        normalizedNeedle.length > 0 &&
+        normalizedValue.includes(normalizedNeedle)
+      );
+    }),
   );
 }
 
@@ -74,37 +87,16 @@ function isImageGenerationModelId(
   providerId: string,
   providerType: string,
 ): boolean {
+  if (isLikelyImageGenerationModelId(modelId)) {
+    return true;
+  }
+
   return inferModelTaskFamilies({
     modelId,
     providerId,
     providerType,
     providerModelId: modelId,
   }).includes("image_generation");
-}
-
-function isFalLikeProvider(candidate: ImageCapabilitySelectionCandidate): boolean {
-  const normalizedSignature = `${normalizeText(candidate.id)}:${normalizeText(candidate.type)}`;
-  const normalizedHost = normalizeText(candidate.api_host);
-  return (
-    normalizedSignature.includes("fal") ||
-    normalizedHost.includes("fal.run") ||
-    normalizedHost.includes("queue.fal.run")
-  );
-}
-
-function isLikelyFalImageModel(modelId: string): boolean {
-  const normalized = normalizeText(modelId);
-  if (!normalized) {
-    return false;
-  }
-
-  if (normalized.startsWith("fal-ai/")) {
-    return true;
-  }
-
-  return /(image|flux|banana|seedream|kontext|recraft|ideogram|sdxl|stable-diffusion|wanx)/.test(
-    normalized,
-  );
 }
 
 function normalizeGeneratedModel(modelId: string): ImageGenModel {
@@ -121,15 +113,36 @@ function normalizeGeneratedModel(modelId: string): ImageGenModel {
   };
 }
 
+function hasImageGenerationTaskFamily(
+  model: ImageCapabilityModelMetadataCandidate,
+): boolean {
+  const taskFamilies = model.task_families ?? model.taskFamilies ?? [];
+  return taskFamilies.some(
+    (taskFamily) => normalizeText(taskFamily) === "image_generation",
+  );
+}
+
 export const IMAGE_CAPABILITY_CATALOG: ImageCapabilityProviderEntry[] = [
+  {
+    providerKey: "openai-compatible-responses",
+    displayName: "OpenAI-compatible Responses Images",
+    match: {
+      providerIds: ["new-api", "newapi"],
+      providerTypes: ["new-api", "NewApi", "newapi"],
+    },
+    transport: "openai_responses_image",
+    endpointPath: "/v1/responses",
+    models: IMAGE_GEN_MODELS["new-api"],
+    fallbackPriority: 10,
+  },
   {
     providerKey: "openai-images",
     displayName: "OpenAI Images",
     match: {
-      providerIds: ["openai", "new-api"],
+      providerIds: ["openai"],
       providerTypes: ["openai", "openai-response"],
-      providerIdIncludes: ["openai", "new-api"],
-      providerTypeIncludes: ["openai", "new-api"],
+      providerIdIncludes: ["openai"],
+      providerTypeIncludes: ["openai"],
     },
     transport: "openai_images",
     endpointPath: "/v1/images/generations",
@@ -242,7 +255,7 @@ export function resolveImageCapabilityProviderEntry(
   const normalizedApiHost = normalizeText(candidate.api_host);
 
   return (
-    IMAGE_CAPABILITY_CATALOG.find((entry) => {
+    IMAGE_CAPABILITY_CATALOG.map((entry, index) => {
       const exactProviderIdMatch = matchesAnyExactValue(
         normalizedProviderId,
         entry.match.providerIds,
@@ -264,14 +277,28 @@ export function resolveImageCapabilityProviderEntry(
         entry.match.apiHostIncludes,
       );
 
-      return Boolean(
-        exactProviderIdMatch ||
-          exactProviderTypeMatch ||
-          includesProviderIdMatch ||
-          includesProviderTypeMatch ||
-          apiHostMatch,
-      );
-    }) ?? null
+      const score =
+        (exactProviderIdMatch ? 100 : 0) +
+        (apiHostMatch ? 80 : 0) +
+        (includesProviderIdMatch ? 60 : 0) +
+        (exactProviderTypeMatch ? 40 : 0) +
+        (includesProviderTypeMatch ? 20 : 0);
+
+      return score > 0 ? { entry, score, index } : null;
+    })
+      .filter(
+        (
+          match,
+        ): match is {
+          entry: ImageCapabilityProviderEntry;
+          score: number;
+          index: number;
+        } => match !== null,
+      )
+      .sort(
+        (left, right) => right.score - left.score || left.index - right.index,
+      )
+      .at(0)?.entry ?? null
   );
 }
 
@@ -284,8 +311,8 @@ export function resolveImageCapabilityModels(
     candidate.custom_models && candidate.custom_models.length > 0
       ? candidate.custom_models
           .filter((modelId) =>
-            isFalLikeProvider(candidate)
-              ? isLikelyFalImageModel(modelId)
+            isFalImageProviderLike(candidate)
+              ? isLikelyFalImageModelId(modelId)
               : isImageGenerationModelId(modelId, candidate.id, candidate.type),
           )
           .map(normalizeGeneratedModel)
@@ -293,12 +320,49 @@ export function resolveImageCapabilityModels(
 
   if (customModels.length > 0) {
     const mergedModels = new Map(
-      [...builtinModels, ...customModels].map((model) => [model.id, model]),
+      customModels.map((model) => [model.id, model]),
     );
+    for (const model of builtinModels) {
+      mergedModels.set(model.id, model);
+    }
     return Array.from(mergedModels.values());
   }
 
   return builtinModels;
+}
+
+export function isImageCapabilityModelId(
+  candidate: ImageCapabilitySelectionCandidate,
+  modelId?: string | null,
+): boolean {
+  const normalizedModelId = modelId?.trim();
+  if (!normalizedModelId) {
+    return false;
+  }
+
+  const catalogModels = resolveImageCapabilityModels(candidate);
+  if (
+    catalogModels.some(
+      (model) => normalizeText(model.id) === normalizeText(normalizedModelId),
+    )
+  ) {
+    return true;
+  }
+
+  return isFalImageProviderLike(candidate)
+    ? isLikelyFalImageModelId(normalizedModelId)
+    : isImageGenerationModelId(normalizedModelId, candidate.id, candidate.type);
+}
+
+export function isImageCapabilityModelMetadata(
+  candidate: ImageCapabilitySelectionCandidate,
+  model: ImageCapabilityModelMetadataCandidate,
+): boolean {
+  if (hasImageGenerationTaskFamily(model)) {
+    return true;
+  }
+
+  return isImageCapabilityModelId(candidate, model.id);
 }
 
 export function resolveImageCapabilityModelIds(
@@ -316,9 +380,9 @@ export function isImageCapabilityProvider(
 
   return Boolean(
     Array.isArray(candidate.custom_models) &&
-      candidate.custom_models.some((modelId) =>
-        isImageGenerationModelId(modelId, candidate.id, candidate.type),
-      ),
+    candidate.custom_models.some((modelId) =>
+      isImageGenerationModelId(modelId, candidate.id, candidate.type),
+    ),
   );
 }
 
@@ -340,7 +404,9 @@ export function findDefaultImageCapabilityProvider<
       };
     })
     .filter(
-      (item): item is {
+      (
+        item,
+      ): item is {
         provider: T;
         index: number;
         priority: number;

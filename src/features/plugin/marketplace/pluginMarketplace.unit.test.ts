@@ -75,6 +75,7 @@ function installedState(
     manifestHash?: string;
     disabled?: boolean;
     sourceUri?: string;
+    sourceKind?: "fixture" | "local_folder" | "local_archive" | "cloud_release";
     loadedAt?: string;
   } = {},
 ): InstalledAgentAppState {
@@ -82,7 +83,7 @@ function installedState(
   return {
     appId,
     identity: {
-      sourceKind: "cloud_release",
+      sourceKind: overrides.sourceKind ?? "cloud_release",
       sourceUri:
         overrides.sourceUri ??
         "https://packages.limecloud.example/plugins/research-kit-1.2.3.lpkg",
@@ -367,7 +368,7 @@ describe("Plugin marketplace projection", () => {
     });
   });
 
-  it("应从 installed Agent App state 合并 installed / enabled key，并对 hash 不一致 fail closed", () => {
+  it("应从 installed Agent App state 合并 installed / enabled key，hash 不一致仅标记可刷新", () => {
     const matchItem = marketplaceItem({
       pluginKey: "research-kit@limecloud",
       pluginName: "research-kit",
@@ -431,8 +432,12 @@ describe("Plugin marketplace projection", () => {
     expect(projection.installedPluginKeys).toEqual([
       "research-kit@limecloud",
       "notes-kit@limecloud",
+      "broken-kit@limecloud",
     ]);
-    expect(projection.enabledPluginKeys).toEqual(["research-kit@limecloud"]);
+    expect(projection.enabledPluginKeys).toEqual([
+      "research-kit@limecloud",
+      "broken-kit@limecloud",
+    ]);
     expect(projection.disabledPluginKeys).toEqual(["notes-kit@limecloud"]);
     expect(projection.blockerCodesByPluginKey).toEqual({
       "broken-kit@limecloud": ["PLUGIN_INSTALLED_PACKAGE_MISMATCH"],
@@ -462,11 +467,57 @@ describe("Plugin marketplace projection", () => {
     expect(
       registryItemByPluginId(registry, "broken-kit@limecloud"),
     ).toMatchObject({
-      installed: false,
-      enabled: false,
+      installed: true,
+      enabled: true,
+      activationState: "activatable",
       blockerCodes: expect.arrayContaining([
         "PLUGIN_INSTALLED_PACKAGE_MISMATCH",
       ]),
+    });
+  });
+
+  it("本地安装的 Agent App 不应因为 marketplace 包 hash 不一致而被标记为 mismatch", () => {
+    const localItem = marketplaceItem({
+      pluginKey: "local-kit",
+      pluginName: "local-kit",
+      displayName: "Local Kit",
+      appId: "local-kit",
+      package: {
+        releaseId: "release-local",
+        packageUrl: "https://packages.limecloud.example/plugins/local-kit-1.2.3.lpkg",
+        packageHash:
+          "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+        manifestHash:
+          "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+      },
+    });
+
+    const installedApps = [
+      installedState({
+        appId: "local-kit",
+        sourceKind: "local_folder",
+        sourceUri: "/Users/coso/Documents/dev/ai/limecloud/content-factory-app",
+      }),
+    ];
+
+    const projection = projectPluginMarketplaceInstalledKeysFromAgentApps(
+      marketplace([localItem]),
+      installedApps,
+    );
+
+    expect(projection.blockerCodesByPluginKey).toEqual({});
+    expect(projection.refreshablePluginKeys).toEqual([]);
+
+    const registry = projectPluginMarketplaceRegistryFromInstalledAgentApps(
+      marketplace([localItem]),
+      { installedAgentApps: installedApps },
+    );
+
+    expect(registryItemByPluginId(registry, "local-kit")).toMatchObject({
+      installed: true,
+      enabled: true,
+      activationState: "activatable",
+      blockerCodes: expect.arrayContaining(["PLUGIN_RENDERER_UNAVAILABLE"]),
     });
   });
 

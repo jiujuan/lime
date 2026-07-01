@@ -8,6 +8,26 @@ function resolvePluginMentionLabel(item: PluginMarketplaceViewItem): string {
   return resolvePluginMarketplaceItemLabel(item);
 }
 
+function resolvePluginOpenActivationEntry(
+  item: PluginMarketplaceViewItem,
+): PluginMarketplaceViewItem["activationEntries"][number] | undefined {
+  return item.activationEntries.find(
+    (entry) =>
+      entry.intent === "at_command" &&
+      (entry.aliases?.some((alias) => alias.trim()) || entry.title.trim()),
+  );
+}
+
+function resolvePluginOpenSkill(
+  item: PluginMarketplaceViewItem,
+  skill: PluginSkillDeclaration | undefined,
+): PluginSkillDeclaration | undefined {
+  if (skill) {
+    return skill;
+  }
+  return item.skills.find((candidate) => candidate.id.trim());
+}
+
 export function buildPluginMarketplaceOpenAgentParams(
   item: PluginMarketplaceViewItem,
   skill?: PluginSkillDeclaration,
@@ -19,24 +39,50 @@ export function buildPluginMarketplaceOpenAgentParams(
   if (!mentionLabel) {
     return null;
   }
-  const skillLabel = skill?.title.trim() || skill?.id.trim();
-  const mention = skillLabel ? `${mentionLabel}:${skillLabel}` : mentionLabel;
+  const activationEntry = skill
+    ? undefined
+    : resolvePluginOpenActivationEntry(item);
+  const selectedSkill =
+    activationEntry && !skill ? undefined : resolvePluginOpenSkill(item, skill);
+  const activationMention =
+    activationEntry?.aliases?.find((alias) => alias.trim())?.trim() ||
+    (activationEntry?.title.trim() ? `@${activationEntry.title.trim()}` : "");
+  const skillLabel =
+    activationEntry && !skill
+      ? undefined
+      : selectedSkill?.title.trim() || selectedSkill?.id.trim();
+  const mention =
+    activationMention ||
+    (skillLabel ? `@${mentionLabel}:${skillLabel}` : `@${mentionLabel}`);
+  const trigger = mention.trim();
   return {
     agentEntry: "new-task",
-    initialUserPrompt: `@${mention} `,
+    initialUserPrompt: `${trigger} `,
     initialAutoSendRequestMetadata: {
       harness: {
         plugin_activation_intent: {
           source: "plugin_marketplace_open",
-          trigger: `@${mention}`,
+          trigger,
           plugin_id: item.pluginId,
           active_agent_app_id: item.appId?.trim() || undefined,
-          active_entry_key: item.pluginName.trim() || undefined,
-          selected_skill_keys: skill?.id.trim() ? [skill.id.trim()] : undefined,
+          active_entry_key:
+            activationEntry?.key.trim() || item.pluginName.trim() || undefined,
+          entry_task_kind: activationEntry?.taskKind?.trim() || undefined,
+          entry_workflow_key: activationEntry?.workflowKey?.trim() || undefined,
+          entry_output_artifact_kind:
+            activationEntry?.outputArtifactKind?.trim() || undefined,
+          entry_right_surface:
+            activationEntry?.rightSurface?.trim() || undefined,
+          entry_expected_objects: activationEntry?.expectedObjects?.length
+            ? activationEntry.expectedObjects
+            : undefined,
+          selected_skill_keys: selectedSkill?.id.trim()
+            ? [selectedSkill.id.trim()]
+            : undefined,
         },
       },
     },
-    autoRunInitialPromptOnMount: true,
+    autoRunInitialPromptOnMount: false,
     newChatAt: Date.now(),
     immersiveHome: false,
   };
@@ -46,7 +92,10 @@ export function buildPluginMarketplaceHistoryAgentParams(
   item: PluginMarketplaceViewItem,
   candidate: PluginHistorySessionCandidate,
 ): PageParams | null {
-  if (item.primaryAction.kind !== "view_history" || item.primaryAction.disabled) {
+  if (
+    item.primaryAction.kind !== "view_history" ||
+    item.primaryAction.disabled
+  ) {
     return null;
   }
   const pluginId = candidate.pluginId.trim() || item.pluginId.trim();

@@ -2,6 +2,10 @@ use super::agent_app_task_runtime::{
     build_agent_app_task_runtime_contract, resolve_agent_app_runtime_dir,
 };
 use super::agent_app_worker_runtime::AgentAppWorkerRunRequest;
+use super::agent_app_worker_streaming::{
+    initial_content_factory_workspace_snapshot, is_incomplete_content_factory_workspace_snapshot,
+    ContentFactoryWorkspaceStreamingSnapshot,
+};
 use super::timestamp;
 use super::ExecutionRequest;
 use super::RuntimeCore;
@@ -102,6 +106,48 @@ impl RuntimeCore {
             }),
         ))?;
 
+        if let Err(error) =
+            validate_worker_turn_launch_preconditions(&installed_state, &worker_turn)
+        {
+            let failure = classify_worker_failure(error.to_string().as_str());
+            let payload =
+                worker_turn.failure_payload(request.turn.turn_id.as_str(), &failure, "failed");
+            sink.emit(RuntimeEvent::new("runtime.error", payload.clone()))?;
+            sink.emit(RuntimeEvent::new("turn.failed", payload))?;
+            return Ok(true);
+        }
+
+        if worker_turn.should_emit_initial_workspace_snapshot() {
+            let task_id = worker_turn.task_id(request.turn.turn_id.as_str());
+            sink.emit(RuntimeEvent::new(
+                "message.delta",
+                json!({
+                    "role": "assistant",
+                    "visibility": "user_visible",
+                    "content": {
+                        "kind": "inline_text",
+                        "text": worker_turn.prompt,
+                    },
+                    "status": "streaming",
+                    "streamPhase": "process",
+                }),
+            ))?;
+            sink.emit(initial_content_factory_workspace_snapshot(
+                ContentFactoryWorkspaceStreamingSnapshot {
+                    app_id: worker_turn.app_id.as_str(),
+                    locale: runtime_locale(request).as_deref(),
+                    prompt: worker_turn.prompt.as_str(),
+                    process_markdown: None,
+                    session_id: request.session.session_id.as_str(),
+                    surface_kind: worker_turn.surface_kind.as_deref(),
+                    task_id: task_id.as_str(),
+                    task_kind: worker_turn.task_kind.as_str(),
+                    turn_id: request.turn.turn_id.as_str(),
+                    workspace_id: worker_turn.workspace_id.as_deref(),
+                },
+            ))?;
+        }
+
         let mut retry_attempt = 0;
         loop {
             match self
@@ -109,7 +155,10 @@ impl RuntimeCore {
                 .await
             {
                 Ok(events) => {
-                    for event in events {
+                    for event in events
+                        .into_iter()
+                        .filter(|event| !is_incomplete_content_factory_workspace_snapshot(event))
+                    {
                         sink.emit(event)?;
                     }
                     sink.emit(RuntimeEvent::new(
@@ -161,17 +210,6 @@ impl RuntimeCore {
         worker_turn: &PaneActionWorkerTurn,
         installed_state: &serde_json::Value,
     ) -> Result<Vec<RuntimeEvent>, RuntimeCoreError> {
-        if installed_state
-            .get("disabled")
-            .and_then(serde_json::Value::as_bool)
-            .unwrap_or(false)
-        {
-            return Err(RuntimeCoreError::Backend(format!(
-                "Agent App 已禁用: {}",
-                worker_turn.app_id
-            )));
-        }
-        validate_worker_cloud_release_signature(installed_state)?;
         let package_root = resolve_agent_app_runtime_dir(&installed_state)?;
         let task_runtime =
             build_agent_app_task_runtime_contract(&installed_state, Some(&package_root));
@@ -202,6 +240,23 @@ impl RuntimeCore {
             .into_iter()
             .find(|state| json_string(state, &["appId"]).as_deref() == Some(app_id)))
     }
+}
+
+fn validate_worker_turn_launch_preconditions(
+    installed_state: &Value,
+    worker_turn: &PaneActionWorkerTurn,
+) -> Result<(), RuntimeCoreError> {
+    if installed_state
+        .get("disabled")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false)
+    {
+        return Err(RuntimeCoreError::Backend(format!(
+            "Agent App 已禁用: {}",
+            worker_turn.app_id
+        )));
+    }
+    validate_worker_cloud_release_signature(installed_state)
 }
 
 fn validate_worker_cloud_release_signature(
@@ -896,6 +951,25 @@ impl PaneActionWorkerTurn {
             .unwrap_or(CONTENT_FACTORY_WORKSPACE_PATCH_KIND)
     }
 
+    fn should_emit_initial_workspace_snapshot(&self) -> bool {
+        self.app_id == CONTENT_FACTORY_APP_ID
+            && self.output_artifact_kind() == CONTENT_FACTORY_WORKSPACE_PATCH_KIND
+            && self.is_article_workspace_draft_turn()
+    }
+
+    fn is_article_workspace_draft_turn(&self) -> bool {
+        matches!(
+            self.task_kind.as_str(),
+            "content.article.generate" | "content.factory.generate"
+        ) || self.pane_kind.as_deref() == Some("articleDraft")
+            || self
+                .source_object_ref
+                .as_ref()
+                .and_then(|object| json_string(object, &["kind", "object_kind", "objectKind"]))
+                .as_deref()
+                == Some("articleDraft")
+    }
+
     fn failure_payload(
         &self,
         turn_id: &str,
@@ -1017,6 +1091,42 @@ fn content_factory_output_artifact_kind(
         Some(CONTENT_FACTORY_WORKSPACE_PATCH_KIND) => Some(output_artifact_kind),
         Some(_) => None,
     }
+}
+
+fn runtime_locale(request: &ExecutionRequest) -> Option<String> {
+    let metadata = request.metadata.as_ref();
+    json_string_from_optional_value(
+        metadata,
+        &[
+            "agent_response_language",
+            "agentResponseLanguage",
+            "locale",
+            "uiLocale",
+            "ui_locale",
+            "language",
+        ],
+    )
+    .or_else(|| {
+        metadata
+            .and_then(|metadata| metadata.get("harness"))
+            .and_then(|harness| {
+                json_string_from_optional_value(
+                    Some(harness),
+                    &[
+                        "agent_response_language",
+                        "agentResponseLanguage",
+                        "locale",
+                        "uiLocale",
+                        "ui_locale",
+                        "language",
+                    ],
+                )
+            })
+    })
+}
+
+fn json_string_from_optional_value(value: Option<&Value>, path: &[&str]) -> Option<String> {
+    value.and_then(|value| json_string(value, path))
 }
 
 fn json_string(value: &Value, path: &[&str]) -> Option<String> {

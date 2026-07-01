@@ -127,6 +127,8 @@
   "agentChat.inputbar.plusMenu.skills": "스킬",
   "agentChat.inputbar.plusMenu.unavailable": "현재 세션에서 사용할 수 없음",
   "agentChat.inputbar.pluginChip.empty": "선택할 수 있는 플러그인이 없습니다",
+  "agentChat.inputbar.pluginChip.error": "플러그인 목록을 불러오지 못했습니다. 잠시 후 다시 시도하세요.",
+  "agentChat.inputbar.pluginChip.loading": "설치된 플러그인을 읽는 중...",
   "agentChat.inputbar.pluginChip.remove": "{{name}} 플러그인 제거",
   "agentChat.inputbar.pluginChip.skillPrefix": "기술",
   "agentChat.inputbar.pluginChip.selectorTitle": "플러그인 선택",

@@ -127,6 +127,8 @@
   "agentChat.inputbar.plusMenu.skills": "Skills",
   "agentChat.inputbar.plusMenu.unavailable": "Unavailable in this session",
   "agentChat.inputbar.pluginChip.empty": "No plugins available",
+  "agentChat.inputbar.pluginChip.error": "Failed to load plugins. Try again later.",
+  "agentChat.inputbar.pluginChip.loading": "Loading installed plugins...",
   "agentChat.inputbar.pluginChip.remove": "Remove plugin {{name}}",
   "agentChat.inputbar.pluginChip.skillPrefix": "Skill",
   "agentChat.inputbar.pluginChip.selectorTitle": "Choose a plugin",

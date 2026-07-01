@@ -126,16 +126,13 @@ describe("workspaceAgentAppIntentRouting", () => {
   });
 
   it("内容工厂写文章应优先命中文章任务 intent，而不是泛化生成任务", () => {
-    const match = resolveWorkspaceAgentAppIntent(
-      "用内容工厂写一篇公众号文章",
-      [
-        {
-          appId: contentFactoryManifest.appId,
-          appName: contentFactoryManifest.displayName,
-          manifest: contentFactoryManifest,
-        },
-      ],
-    );
+    const match = resolveWorkspaceAgentAppIntent("用内容工厂写一篇公众号文章", [
+      {
+        appId: contentFactoryManifest.appId,
+        appName: contentFactoryManifest.displayName,
+        manifest: contentFactoryManifest,
+      },
+    ]);
 
     expect(match).toMatchObject({
       appId: "content-factory-app",
@@ -161,7 +158,8 @@ describe("workspaceAgentAppIntentRouting", () => {
     expect(match).toMatchObject({
       appId: "content-factory-app",
       appName: "内容工厂",
-      intentKey: "content_article_generate",
+      intentKey: "content_factory_generate",
+      workflowKey: "content_article_workflow",
       source: "agent_app_manifest_intent",
     });
   });
@@ -180,10 +178,11 @@ describe("workspaceAgentAppIntentRouting", () => {
       appName: "内容工厂",
       intentKey: "content_article_generate",
       taskKind: "content.article.generate",
+      workflowKey: "content_article_workflow",
       outputArtifactKind: "content_factory.workspace_patch",
       rightSurface: "articleWorkspace",
       expectedObjects: ["articleDraft"],
-      matchedPhrase: "写一篇公众号文章",
+      matchedPhrase: "@写文章",
       source: "agent_app_manifest_intent",
     });
   });

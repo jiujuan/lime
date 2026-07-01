@@ -129,6 +129,10 @@ describe("contentFactoryDeliveryPlan", () => {
         ],
       },
     ]);
+    expect(profile?.objects[1]?.source).toMatchObject({
+      processMarkdown: "",
+      documentText: "",
+    });
   });
 
   it("生成的 profile 应能投影出当前对象预览和动作", () => {

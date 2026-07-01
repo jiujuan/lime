@@ -1054,6 +1054,7 @@ async fn run_server(
             header::CONTENT_TYPE,
             header::ACCEPT,
             header::ORIGIN,
+            header::HeaderName::from_static("x-provider-id"),
         ]);
 
     let app = Router::new()

@@ -113,6 +113,21 @@ describe("imageWorkbenchPresentation", () => {
     ).toBe("GPT Images 2");
   });
 
+  it("运行合同模型应覆盖轻卡里的旧模型名", () => {
+    expect(
+      resolveImageWorkbenchPreviewModelLabel({
+        taskId: "task-image-model-updated",
+        mode: "generate",
+        prompt: "最新模型青柠主视觉",
+        status: "complete",
+        modelName: "fal-ai/nano-banana-pro",
+        runtimeContract: {
+          model: "fal-ai/nano-banana-pro-v2",
+        },
+      } satisfies MessageImageWorkbenchPreview),
+    ).toBe("Nano Banana Pro V2");
+  });
+
   it("旧固定寒暄与成功收尾资源不再作为展示事实源", () => {
     for (const locale of SUPPORTED_LOCALES) {
       const agent = limeI18nResources[locale]?.agent || {};

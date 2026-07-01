@@ -1,6 +1,6 @@
 # Writing 实施计划
 
-更新时间：2026-06-29
+更新时间：2026-06-30
 状态：In Progress
 
 ## 1. 当前主目标
@@ -8,7 +8,7 @@
 把写文章从宿主硬编码入口收敛为 Lime Plugin Package v1 下的内容工厂插件 workflow，并完成最小可用闭环：
 
 ```text
-已安装内容工厂插件包 -> @写文章 -> content_article_workflow -> ArtifactFrame(articleArtifacts renderer) -> 右侧 Article Editor
+已安装内容工厂插件包 -> @写文章 -> 任务卡 / 过程态留在对话流 -> content_article_workflow -> ArtifactFrame(articleArtifacts renderer) -> 右侧 Article Editor（dock / tab 标准见 ../rightsurface/README.md）
 ```
 
 ## 2. 当前状态
@@ -48,7 +48,7 @@
 
 ### P2：宿主 contract 投影
 
-状态：安装链与 activation 投影完成，详情展示待补
+状态：安装链、activation 投影和详情能力展示完成；contract 深化继续收口
 
 - [x] plugin contract 类型支持 `schemaVersion=lime.plugin.package.v1`、`contributions` 和 `plugin.json` 入口形状。
 - [x] plugin contract 可从 `contributions` 派生 runtime / workbench / skills / subagents / CLI / connectors / hooks 路径。
@@ -56,8 +56,10 @@
 - [x] 本地安装不再支持旧入口；只有负向测试可写旧文件名证明拒绝。
 - [x] 本地 / 云包 inspect 从 `plugin.json` 读取 runtime / workbench，并投影 activation entries、workflow、worker、workbench 和 articleDraft 恢复 contract。
 - [x] App Server 包解析 / 投影从 `local_data_source/agent_apps` 抽到 `agent_app_packages`，`local_data_source` 只保留 installed state / uninstall / 本地持久化委托。
-- [ ] normalizer 继续补齐 skills / subagents / CLI / connectors / hooks 的内容级读取，而不是只投影路径和引用。
-- [ ] 插件中心详情页展示 subagents、skills、CLI、connectors、hooks、授权和可用性。
+- [x] activation entry contract 保留 `taskKind`、`workflowKey`、`outputArtifactKind`、`rightSurface` 和 `expectedObjects`，不再在前端 contract 归一化时丢失插件包声明。
+- [x] 插件中心详情页展示 subagents、workflows、skills、CLI / worker、connectors、hooks、授权和可用性。
+- [x] marketplace summary 合并 installed plugin manifest 的 workflows / connectors / hooks / clis，不再只展示路径或少量摘要。
+- [ ] `pluginContract.ts` 已超过 1000 行；下一刀把 plugin package component normalizer 拆到独立 helper，再补齐 `clis` / `hooks` 的一等 contract 类型，避免继续向巨型文件堆逻辑。
 - [ ] 移除内容工厂专属 hard code 和旧临时字段依赖。
 
 ### P3：输入栏与激活
@@ -70,10 +72,11 @@
 - [x] 发送时写入 plugin activation metadata，且不回流旧 `writing_runtime`。
 - [x] metadata 包含 workflow、subagents、skill refs 和 default prompts。
 - [x] metadata 包含 CLI refs、connector refs、hook policy 和 runtime registry 路径。
+- [x] 显式 `@写文章` / `@内容工厂` 优先使用插件 activation entry 声明，发送 metadata 同时写入 entry 侧和 intent 侧 workflow key，避免靠自然语言二次匹配覆盖精确入口。
 
 ### P4：通用 ArtifactFrame 与右侧 Article Editor
 
-状态：基础可编辑主链已完成；右侧 Article Editor 已按原型调整为文章画布优先的可编辑工作区，编辑稿持久化、刷新和历史恢复已通过 Electron fixture 验证
+状态：基础可编辑主链已完成；右侧 Article Editor 已按原型调整为文章画布优先的可编辑工作区，dock / tab 规则统一见 `../rightsurface/README.md`，编辑稿持久化、刷新和历史恢复已通过 Electron fixture 验证
 
 - [x] 右侧 Artifact Workbench 和 plugin workspace 基础路径已有。
 - [x] 内容工厂 articleDraft object / workspace patch 基础路径已有。
@@ -86,13 +89,13 @@
 - [x] Article Editor 正文画布独立为 Tiptap 组件，避免继续膨胀右侧工作台主文件。
 - [x] Article Editor 后续 action 携带当前本地编辑 Markdown，避免改写 / 导出丢失画布内编辑上下文。
 - [x] `ArtifactFrame` 点击后打开 Article Editor，不再以 `right_surface_article_workspace` 作为用户可见入口。
-- [x] 文章 renderer 改为专用文章产物框：展示写作过程、完整正文容器和右侧编辑器入口，不再显示成通用 Document 文件卡。
+- [x] 文章 renderer 改为专用文章产物框：只承载完整文章产物本身（标题、流式/完成状态、完整正文容器、右侧编辑器入口），不再把写作过程汇总卡 / 统计 chips 塞进产物框，也不再显示成通用 Document 文件卡；右侧布局规则统一归 `../rightsurface/README.md`。
 - [x] 多个 articleDraft 并存时，聊天产物框和右侧 Article Editor 默认选择多轮检索后的最终稿，不再被初始短草稿覆盖。
 - [x] Article Editor 会话内编辑正文覆盖当前 selected articleDraft，后续 action / 预览默认携带当前画布 Markdown。
 - [x] Article Editor 编辑内容通过 `agentSession/update.articleWorkspaceEditedDraft` 持久写回 App Server read model，后续读取优先使用最新编辑正文。
 - [x] Article Editor 布局改为“主文章画布 + 辅助资料栏”：窄右栏默认单栏防变形，宽面板自动展开为画布 / 资料双栏；大纲、检索、引用、配图、标题候选、写作计划进入辅助栏。
 - [x] 补刷新 / 历史恢复 E2E，证明 persisted `articleWorkspaceEditedDraft` 可跨 Electron 重启恢复到 Article Editor。
-- [x] Playwright / Electron fixture 真实点击验证：聊天出现独立产物框，框内输出完整文章，点击展开右侧 articleDraft Article Editor。
+- [x] Playwright / Electron fixture 真实点击验证：聊天先出现任务卡 / 对话流过程态，再出现独立产物框，框内输出最终文章，点击展开右侧 articleDraft Article Editor。
 
 ### P5：真实 workflow 执行质量
 
@@ -201,14 +204,19 @@ Playwright 真实交互用例：
 - `2026-06-29 16:43`：重跑 `npm run smoke:claw-chat-current-fixture -- --scenario content-factory-article-workspace --timeout-ms 180000` 通过；summary session=`claw-chat-current-1782722594659-2154`，`contentFactoryArticleWorkspaceEditedDraftRestored = true`，`noConsoleErrors = true`，`appServerJsonRpcUsed = true`，`liveProviderNotUsed = true`。
 - `2026-06-29 16:45`：重跑外部插件包 `npm test` / `npm run runtime:sample` / `npm run validate:app` / `npm run cli:inspect` 通过；宿主 `contentFactoryWorkerContract`、`contentFactoryWorkspacePatch`、`workspaceArticleWorkspaceModel`、`workspaceArticleWorkspaceMessageArtifacts`、`MessageArtifactCards`、`artifactFrameRegistry` 定向回归通过。
 - `2026-06-29`：历史恢复 fallback 已收口：`artifactRefs` 统一从顶层 snapshot、selected / primary object ref 和 plugin workspace object 聚合；只有没有 plugin workspace / object / artifact 时才进入纯聊天。定向回归 `pluginHistoryRestore`、`workspacePluginHistoryRestoreRuntime`、`workspacePluginHistoryRestoreLanding`、`workspacePluginHistoryRestoreArtifacts` 通过。
+- `2026-06-30 10:41 CST`：插件 activation contract 收口：前端 `PluginActivationEntryDeclaration` 保留 workflow / task / right surface / expected objects；`workspaceAgentAppIntentRouting` 同时读取顶层 `activationEntries` 与 runtime intents，显式 `@` 前缀优先命中插件声明；`plugin_activation` 和 `plugin_activation_intent` 均写入 `content_article_workflow`。定向回归 `pluginContract`、`pluginActivation`、`workspaceAgentAppIntentRouting`、`workspacePluginActivation`、`useWorkspaceSendActions` 通过，插件中心 / 应用中心相邻回归通过。
+- `2026-06-30 11:00 CST`：插件中心详情页能力编排补齐：`PluginMarketplaceCapabilityProfile` 从 manifest summary / agentRuntime / toolRefs 投影 workflows、CLI / worker、connectors、lifecycle hooks、subagents 和 skills；详情页新增工作流、连接器、生命周期钩子分组和五语言文案；marketplace loader 合并 installed summary 的 workflows / connectors / hooks / clis。定向回归 `pluginMarketplaceViewModel`、`pluginMarketplace`、`marketplaceRegistryLoader`、`PluginMarketplacePage`、`pluginMarketplaceActions`、`pluginContract` 通过；Prettier 通过。
+- `2026-06-30 12:15 CST`：右侧 Article Editor 固定为 compact 事实源：`WorkspaceArticleEditorRightSurface` 显式向 `WorkspaceArticleEditorSurface` 传 `compact`，窄栏下隐藏辅助面板、压缩工具栏和正文字号，避免把完整桌面编辑器强塞进右侧栏；定向回归 `WorkspaceArticleEditorRightSurface` 通过。
+- `2026-06-30 12:45 CST`：右侧 Article Editor rail 从固定 `392px` 改为文档编辑自适应宽度 `clamp(440px, 30vw, 640px)`，compact 模式移除窄栏统计块和 raw ISO 更新时间，保留文章标题、打开预览、正文画布和语言化更新时间；定向回归 `WorkspaceArticleEditorRightSurface`、`WorkspaceShellScene` 通过。Playwright 复核停留在首页，当前本地 App Server 返回 `Server overloaded; retry later`，未能复现已打开 Article Editor 的真实会话态。
+- `2026-06-30 14:42 CST`：App Server `content.article.generate` 在 `turn.accepted` 后立即发出 `content_factory.workspace_patch` streaming snapshot，使用与 worker 最终稿一致的 articleDraft object ref，并按 `agent_response_language / locale` 选择五语言初始产物文案；签名失败 / 禁用 / 未授权输出不产生假 streaming 产物，非文章动作如配图重生成不产生文章初始框。定向回归 `cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server agent_app_worker_turn -- --nocapture` 通过，前端 artifact 过滤 / 文章小框回归 34 tests passed，`npm run verify:gui-smoke` 通过。
 
 ## 5. 剩余缺口优先级
 
-| 优先级 | 缺口                                                | 原因                                                              |
-| ------ | --------------------------------------------------- | ----------------------------------------------------------------- |
-| P1     | LimeCore v1 package release 同步                    | 宿主闭环稳定后再改云端控制面，避免服务端提前固化半成品合同。      |
-| P2     | 图片 workflow 深化                                  | 当前已有配图规划 metadata，真实图片任务、slot 回填和编辑器动作仍需深化。 |
-| P0     | `searchRequests` -> host connector / tool timeline 回填真实 evidence | 当前 fixture worker 已声明 host 可执行检索请求；宿主真实检索已接通，后续关注失败策略与回填收敛。 |
+| 优先级 | 缺口                                  | 原因                                                                                                 |
+| ------ | ------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| P0     | 重跑内容工厂真实点击 fixture          | 本轮已通过 App Server / 前端定向回归和 GUI smoke，但还需要重跑 `content-factory-article-workspace` fixture 证明端到端最新证据。 |
+| P1     | LimeCore v1 package release 同步      | 宿主闭环稳定后再改云端控制面，避免服务端提前固化半成品合同。                                         |
+| P2     | 图片 workflow 深化                    | 当前已有配图规划 metadata，真实图片任务、slot 回填和编辑器动作仍需深化。                             |
 
 ## 6. 完成判定
 
@@ -217,7 +225,7 @@ MVP 只有在以下条件同时满足时才算完成：
 - `@写文章` 来自内容工厂已安装插件。
 - request metadata 带完整 workflow orchestration。
 - runtime 产生 articleDraft artifact / workspace patch。
-- 聊天出现独立 `ArtifactFrame`，完整文章在框内流式输出。
+- 聊天先出现任务卡 / 对话流过程态，再出现独立 `ArtifactFrame`，最终文章在框内流式输出。
 - 点击产物框展开右侧 Article Editor。
 - Playwright 通过真实点击验证上述路径。
 

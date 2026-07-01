@@ -164,6 +164,7 @@ function buildObjectSource(
     artifactType: part.artifactType,
     surfaceKind: part.surfaceKind,
     outputArtifactKind: part.outputArtifactKind ?? null,
+    processMarkdown: "",
     documentText: "",
   };
 }

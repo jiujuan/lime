@@ -37,9 +37,7 @@ describe("useAsterAgentChat 偏好持久化 - session restore", () => {
       await flushEffects();
       await flushEffects();
 
-      expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith(sessionId, {
-        historyLimit: 40,
-      });
+      expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith(sessionId, expect.objectContaining({ historyLimit: 40 }));
       expect(harness.getValue().sessionId).toBeNull();
       expect(
         sessionStorage.getItem(`aster_curr_sessionId_${workspaceId}`),

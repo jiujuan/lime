@@ -156,6 +156,21 @@ describe("workspaceArticleWorkspacePreviewArtifact", () => {
           objectKind: "articleDraft",
           objectId: "article-1",
         }),
+        workspacePatch: expect.objectContaining({
+          appId: "content-factory-app",
+          objects: expect.arrayContaining([
+            expect.objectContaining({
+              title: "公众号文章草稿",
+              source: expect.objectContaining({
+                markdown: expect.stringContaining("这是正文"),
+              }),
+            }),
+          ]),
+        }),
+        contentFactoryWorkspacePatch: expect.objectContaining({
+          appId: "content-factory-app",
+          sessionId: "session-main",
+        }),
       }),
     });
   });

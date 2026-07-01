@@ -20,9 +20,11 @@ describe("buildImageTaskPreviewFromToolResult", () => {
   it("应在图片任务完成后输出更友好的完成态摘要", () => {
     const preview = buildImageTaskPreviewFromToolResult({
       toolId: "tool-1",
-      toolName: "Bash",
+      toolName: "lime_create_image_generation_task",
       toolArguments: JSON.stringify({
-        command: 'lime media image generate --prompt "未来感青柠实验室"',
+        prompt: "未来感青柠实验室",
+        size: "1024x1024",
+        count: 2,
       }),
       toolResult: {
         metadata: {
@@ -57,7 +59,7 @@ describe("buildImageTaskPreviewFromToolResult", () => {
     });
   });
 
-  it("应在图片任务失败时输出失败态摘要", () => {
+  it("应仅为 legacy Bash CLI transcript 恢复图片任务失败态摘要", () => {
     const preview = buildImageTaskPreviewFromToolResult({
       toolId: "tool-2",
       toolName: "Bash",
@@ -85,9 +87,10 @@ describe("buildImageTaskPreviewFromToolResult", () => {
   it("图片任务完成但尚未带回数量时，应输出面向用户的完成态文案", () => {
     const preview = buildImageTaskPreviewFromToolResult({
       toolId: "tool-3",
-      toolName: "Bash",
+      toolName: "lime_create_image_generation_task",
       toolArguments: JSON.stringify({
-        command: 'lime media image generate --prompt "清晨广州塔"',
+        prompt: "清晨广州塔",
+        size: "1024x1024",
       }),
       toolResult: {
         metadata: {
@@ -112,9 +115,9 @@ describe("buildImageTaskPreviewFromToolResult", () => {
   it("图片任务刚提交时，应输出同会话生成态文案", () => {
     const preview = buildImageTaskPreviewFromToolResult({
       toolId: "tool-4",
-      toolName: "Bash",
+      toolName: "lime_create_image_generation_task",
       toolArguments: JSON.stringify({
-        command: 'lime media image generate --prompt "广州塔夜景"',
+        prompt: "广州塔夜景",
       }),
       toolResult: {
         metadata: {
@@ -192,10 +195,11 @@ describe("buildImageTaskPreviewFromToolResult", () => {
   it("3x3 分镜完成后应输出更贴近布局语义的摘要", () => {
     const preview = buildImageTaskPreviewFromToolResult({
       toolId: "tool-5",
-      toolName: "Bash",
+      toolName: "lime_create_image_generation_task",
       toolArguments: JSON.stringify({
-        command:
-          'lime media image generate --prompt "三国主要人物" --layout-hint storyboard_3x3',
+        prompt: "三国主要人物",
+        count: 9,
+        layout_hint: "storyboard_3x3",
       }),
       toolResult: {
         metadata: {
@@ -224,10 +228,10 @@ describe("buildImageTaskPreviewFromToolResult", () => {
     await changeLimeLocale("en-US");
     const preview = buildImageTaskPreviewFromToolResult({
       toolId: "tool-image-en",
-      toolName: "Bash",
+      toolName: "lime_create_image_generation_task",
       toolArguments: JSON.stringify({
-        command:
-          'lime media image generate --prompt "workspace concept" --layout-hint storyboard_3x3',
+        prompt: "workspace concept",
+        layout_hint: "storyboard_3x3",
       }),
       toolResult: {
         metadata: {
@@ -247,7 +251,9 @@ describe("buildImageTaskPreviewFromToolResult", () => {
       prompt: "workspace concept",
       statusMessage: "3x3 storyboard generation completed.",
     });
-    expect(JSON.stringify(preview)).not.toMatch(/[图片圖片分镜分鏡生成进行進行]/);
+    expect(JSON.stringify(preview)).not.toMatch(
+      /[图片圖片分镜分鏡生成进行進行]/,
+    );
   });
 
   it("图片任务预览文案资源应覆盖所有支持语言", () => {
@@ -446,10 +452,7 @@ describe("buildTaskPreviewFromToolResult web image search", () => {
           eyebrow: "Asset search",
           summary:
             "1 high-relevance image candidate(s) were returned. Open the right panel to keep reviewing and checking sources.",
-          highlights: [
-            "Source: web image library",
-            "Candidates: 1",
-          ],
+          highlights: ["Source: web image library", "Candidates: 1"],
         }),
         expect.objectContaining({
           alt: "Image candidate 1",
@@ -577,7 +580,9 @@ describe("buildTaskPreviewFromToolResult video", () => {
       prompt: "launch film",
       statusMessage: "The video task is queued and will start automatically.",
     });
-    expect(JSON.stringify(preview)).not.toMatch(/[视频影片任務任务生成排队排隊]/);
+    expect(JSON.stringify(preview)).not.toMatch(
+      /[视频影片任務任务生成排队排隊]/,
+    );
   });
 
   it("视频任务预览文案资源应覆盖所有支持语言", () => {

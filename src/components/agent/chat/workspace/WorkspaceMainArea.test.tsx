@@ -201,6 +201,10 @@ describe("WorkspaceMainArea", () => {
       container.querySelector('[data-testid="workspace-right-surface"]'),
     ).not.toBeNull();
     expect(
+      container.querySelector<HTMLElement>('[data-testid="layout-canvas-panel"]')
+        ?.getBoundingClientRect().width,
+    ).toBeGreaterThan(0);
+    expect(
       container.querySelector('[data-testid="workspace-canvas-content"]'),
     ).toBeNull();
     expect(
@@ -211,6 +215,9 @@ describe("WorkspaceMainArea", () => {
       container.querySelector<HTMLElement>('[data-testid="layout-chat-panel"]')
         ?.dataset.chatPanelMinWidth,
     ).toBe(RIGHT_SURFACE_CHAT_PANEL_MIN_WIDTH);
+    expect(
+      container.querySelector('[data-testid="workspace-right-surface"]'),
+    ).not.toBeNull();
   });
 
   it("Right Surface 打开时应保留显式对话宽度配置", () => {

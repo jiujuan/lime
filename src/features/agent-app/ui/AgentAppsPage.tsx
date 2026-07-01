@@ -41,7 +41,6 @@ import {
   type AgentAppInstallReviewResult,
   type AgentAppUninstallRehearsalResult,
 } from "@/lib/api/agentApps";
-import { resolveAgentAppHostFlags } from "../featureFlag";
 import { InMemoryAgentAppCapabilityStore } from "../adapters/InMemoryAgentAppCapabilityStore";
 import { AdapterCapabilityHost } from "../adapters/AdapterCapabilityHost";
 import { buildCleanupPlan } from "../install/cleanupPlan";
@@ -54,6 +53,7 @@ import {
   buildAgentAppLifecycleUninstallRehearsalDescriptor,
   type AgentAppLifecycleUninstallRehearsalDescriptor,
 } from "../install/lifecycleAction";
+import { repairStaleInstalledAgentAppReadinessList } from "../install/staleReadinessRepair";
 import { buildRuntimePackageLoadForPreview } from "./agentAppsRuntime";
 import { resolveInstalledAgentAppDisplayName } from "./agentAppDisplay";
 import {
@@ -94,7 +94,10 @@ import { AgentAppReleaseEvidenceSummary } from "./AgentAppReleaseEvidenceSummary
 import { UiExtensionHost } from "../runtime/uiExtensionHost";
 import { WorkflowRuntimeHost } from "../runtime/workflowRuntimeHost";
 import { evaluateAgentAppEntryRuntimeGuard } from "../runtime/entryRuntimeGuard";
-import { buildWorkflowRuntimeCapabilityProfile } from "../runtime/workflowRuntimeCapabilityProfile";
+import {
+  APP_CENTER_AGENT_APP_FLAGS,
+  buildAppCenterRuntimeCapabilityProfile,
+} from "../runtime/appCenterRuntimeProfile";
 import type {
   AgentAppPageParams,
   AgentAppsPageParams,
@@ -111,25 +114,10 @@ import type {
 } from "../types";
 import type { AgentAppHostLifecycleSnapshot } from "../host";
 
-const PAGE_FLAGS = resolveAgentAppHostFlags({
-  labEnabled: true,
-  localPackageEnabled: true,
-  projectionEnabled: true,
-  readinessEnabled: true,
-  cleanupDryRunEnabled: true,
-  realAdapterEnabled: true,
-  uiRuntimeEnabled: true,
-  workerRuntimeEnabled: true,
-  cloudBootstrapEnabled: true,
-});
+const PAGE_FLAGS = APP_CENTER_AGENT_APP_FLAGS;
 
 function buildProfile(): HostCapabilityProfile {
-  return buildWorkflowRuntimeCapabilityProfile({
-    ...PAGE_FLAGS,
-    realAdapterEnabled: true,
-    uiRuntimeEnabled: true,
-    workerRuntimeEnabled: true,
-  });
+  return buildAppCenterRuntimeCapabilityProfile();
 }
 
 function isDeleteDataExecutionBlocked(params: {
@@ -386,7 +374,20 @@ export function AgentAppsPage({
         getAgentAppCloudCatalog(),
         listAgentAppHostLifecycleSnapshots(),
       ]);
-      setInstalled(list.states);
+      let states = list.states;
+      try {
+        states = await repairStaleInstalledAgentAppReadinessList(
+          list.states,
+          profile,
+          {
+            reviewLocalPackage: reviewLocalAgentAppPackage,
+            saveInstalledState: saveInstalledAgentAppState,
+          },
+        );
+      } catch (error) {
+        console.warn("[agent-apps] stale readiness repair failed", error);
+      }
+      setInstalled(states);
       setHostLifecycleSnapshots(hostLifecycle.snapshots);
       setIssueCount(list.issues.length + hostLifecycle.issues.length);
       setCloudCatalog(catalog);
@@ -399,14 +400,14 @@ export function AgentAppsPage({
           return null;
         }
         const stillExists =
-          list.states.some((state) => state.appId === current) ||
+          states.some((state) => state.appId === current) ||
           catalog.payload.apps.some((app) => app.appId === current);
         return stillExists ? current : null;
       });
     } finally {
       setLoading(false);
     }
-  }, [pageParams?.selectedAgentAppId]);
+  }, [pageParams?.selectedAgentAppId, profile]);
 
   useEffect(() => {
     void refresh();

@@ -101,7 +101,10 @@ describe("RightSurfaceHost", () => {
       container.querySelector('[data-testid="workspace-right-surface-tabs"]'),
     ).not.toBeNull();
     expect(
-      container.querySelector('[data-testid="workspace-right-surface-tab-articleWorkspace"]')
+      container
+        .querySelector(
+          '[data-testid="workspace-right-surface-tab-articleWorkspace"]',
+        )
         ?.getAttribute("aria-selected"),
     ).toBe("true");
     expect(container.textContent).toContain("文章编辑器");
@@ -144,6 +147,17 @@ describe("RightSurfaceHost", () => {
 
   it("只有一个 open surface 时不渲染 tab strip", () => {
     const container = renderHost({ openSurfaces: ["articleWorkspace"] });
+
+    expect(
+      container.querySelector('[data-testid="workspace-right-surface-tabs"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="article-workspace-pane"]'),
+    ).not.toBeNull();
+  });
+
+  it("文章编辑器右栏可隐藏通用 tab strip", () => {
+    const container = renderHost({ tabMode: "hidden" });
 
     expect(
       container.querySelector('[data-testid="workspace-right-surface-tabs"]'),

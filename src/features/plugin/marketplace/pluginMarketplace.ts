@@ -4,6 +4,7 @@ import type { InstalledAgentAppState } from "@/features/agent-app/types";
 import type {
   PluginContract,
   PluginArtifactRendererDeclaration,
+  PluginConnectorDeclaration,
   PluginHistoryRestoreDeclaration,
   PluginManifestInstallContract,
   PluginManifest,
@@ -135,7 +136,9 @@ function projectPluginMarketplaceItemArtifactRenderers(
 
   return rawRenderers.flatMap((entry): PluginArtifactRendererDeclaration[] => {
     const record = readRecord(entry);
-    return record ? [record as unknown as PluginArtifactRendererDeclaration] : [];
+    return record
+      ? [record as unknown as PluginArtifactRendererDeclaration]
+      : [];
   });
 }
 
@@ -218,6 +221,64 @@ function projectPluginMarketplaceItemWorkflows(
   });
 }
 
+function projectPluginMarketplaceItemConnectors(
+  item: Pick<PluginMarketplaceItem, "manifestSummary">,
+): PluginConnectorDeclaration[] {
+  const summary = readRecord(item.manifestSummary);
+  const rawConnectors = Array.isArray(summary?.connectors)
+    ? summary.connectors
+    : [];
+  const toolConnectors = Array.isArray(summary?.toolRefs)
+    ? summary.toolRefs.flatMap((entry): PluginConnectorDeclaration[] => {
+        const record = readRecord(entry);
+        const provider = readString(record?.provider);
+        if (!record || !provider?.startsWith("connector:")) {
+          return [];
+        }
+        const id = readString(record.key);
+        if (!id) {
+          return [];
+        }
+        const kind = provider.slice("connector:".length);
+        return [
+          {
+            id,
+            title: readString(record.title) ?? id,
+            kind: ["account", "api", "data_source", "external_app"].includes(
+              kind,
+            )
+              ? (kind as PluginConnectorDeclaration["kind"])
+              : "api",
+            required: record.required === true,
+          },
+        ];
+      })
+    : [];
+
+  return [...rawConnectors, ...toolConnectors].flatMap(
+    (entry): PluginConnectorDeclaration[] => {
+      const record = readRecord(entry);
+      const id = readString(record?.id);
+      const kind = readString(record?.kind);
+      if (!record || !id) {
+        return [];
+      }
+      return [
+        {
+          id,
+          title: readString(record.title) ?? id,
+          kind: ["account", "api", "data_source", "external_app"].includes(
+            kind ?? "",
+          )
+            ? (kind as PluginConnectorDeclaration["kind"])
+            : "api",
+          required: record.required === true,
+        },
+      ];
+    },
+  );
+}
+
 function projectPluginMarketplaceItemInterface(
   item: PluginMarketplaceItem,
 ): PluginManifestInterface {
@@ -233,7 +294,7 @@ function projectPluginMarketplaceItemInterface(
     category: readString(rawInterface?.category) ?? item.category,
     capabilities: Array.isArray(rawInterface?.capabilities)
       ? readStringArray(rawInterface.capabilities)
-      : item.capabilities ?? [],
+      : (item.capabilities ?? []),
     websiteUrl:
       readString(rawInterface?.websiteUrl) ??
       readString(rawInterface?.websiteURL),
@@ -268,6 +329,7 @@ function marketplaceManifest(item: PluginMarketplaceItem): PluginManifest {
     skills: projectPluginMarketplaceItemSkills(item),
     subagents: projectPluginMarketplaceItemSubagents(item),
     workflows: projectPluginMarketplaceItemWorkflows(item),
+    connectors: projectPluginMarketplaceItemConnectors(item),
     interface: manifestInterface,
     ...(install ? { install } : {}),
     artifactRenderers,
@@ -319,6 +381,9 @@ export function marketplaceItemMatchesInstalledAgentAppPackage(
   item: PluginMarketplaceItem,
   state: InstalledAgentAppState,
 ): boolean {
+  if (state.identity.sourceKind !== "cloud_release") {
+    return true;
+  }
   const expectedPackageHash = normalizeToken(item.package?.packageHash);
   const expectedManifestHash = normalizeToken(item.package?.manifestHash);
   if (!expectedPackageHash && !expectedManifestHash) {
@@ -386,18 +451,21 @@ export function projectPluginMarketplaceInstalledKeysFromAgentApps(
       ];
       return;
     }
-    if (!marketplaceItemMatchesInstalledAgentAppPackage(item, state)) {
-      refreshablePluginKeys.push(item.pluginKey);
-      blockerCodesByPluginKey[item.pluginKey] = [
-        "PLUGIN_INSTALLED_PACKAGE_MISMATCH",
-      ];
-      return;
-    }
+    const packageMismatched = !marketplaceItemMatchesInstalledAgentAppPackage(
+      item,
+      state,
+    );
     installedPluginKeys.push(item.pluginKey);
     if (state.disabled === true) {
       disabledPluginKeys.push(item.pluginKey);
     } else {
       enabledPluginKeys.push(item.pluginKey);
+    }
+    if (packageMismatched) {
+      refreshablePluginKeys.push(item.pluginKey);
+      blockerCodesByPluginKey[item.pluginKey] = [
+        "PLUGIN_INSTALLED_PACKAGE_MISMATCH",
+      ];
     }
   });
 

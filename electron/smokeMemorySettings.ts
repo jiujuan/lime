@@ -62,6 +62,11 @@ export async function waitForElectronSmokeMemorySettingsReady(
         "app_server_handle_json_lines",
         "app_server_drain_events",
       ];
+      const ignoredBackgroundErrorCommands = [
+        "check_for_updates",
+      ];
+      const isIgnoredBackgroundErrorEntry = (entry) =>
+        ignoredBackgroundErrorCommands.includes(String(entry?.command || ""));
       const isMemorySettingsErrorEntry = (entry) => {
         const command = String(entry?.command || "");
         return memorySettingsErrorCommands.includes(command) || command.startsWith("memoryStore/");
@@ -139,8 +144,12 @@ export async function waitForElectronSmokeMemorySettingsReady(
           const match = text.match(pattern);
           return match ? [match[0]] : [];
         });
-        const currentInvokeErrors = readJsonArray("lime_invoke_error_buffer_v1").filter(isCurrentRunEntry);
-        const currentTraceErrors = readJsonArray("lime_invoke_trace_buffer_v1").filter((entry) => entry && entry.status === "error" && isCurrentRunEntry(entry));
+        const currentInvokeErrors = readJsonArray("lime_invoke_error_buffer_v1")
+          .filter(isCurrentRunEntry)
+          .filter((entry) => !isIgnoredBackgroundErrorEntry(entry));
+        const currentTraceErrors = readJsonArray("lime_invoke_trace_buffer_v1")
+          .filter((entry) => entry && entry.status === "error" && isCurrentRunEntry(entry))
+          .filter((entry) => !isIgnoredBackgroundErrorEntry(entry));
         const invokeErrors = currentInvokeErrors.filter(isMemorySettingsErrorEntry);
         const traceErrors = currentTraceErrors.filter(isMemorySettingsErrorEntry);
         const backgroundInvokeErrors = currentInvokeErrors.filter((entry) => !isMemorySettingsErrorEntry(entry));
@@ -260,6 +269,9 @@ export async function waitForElectronSmokeMemorySettingsReady(
           rolloutCandidatesReady(),
           "wait memory settings panel",
         );
+        if (!result.ok) return result;
+
+        result = await waitFor(memoryActionsReady, "wait memory actions ready");
         if (!result.ok) return result;
 
         if (!click('[data-testid="settings-memory-review-refresh"]')) return summarize("refresh review notes");

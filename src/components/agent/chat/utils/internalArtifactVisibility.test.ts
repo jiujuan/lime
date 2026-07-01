@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isHiddenConversationArtifact,
   isHiddenConversationArtifactPath,
   isHiddenInternalArtifactPath,
 } from "./internalArtifactVisibility";
@@ -65,6 +66,51 @@ describe("isHiddenInternalArtifactPath", () => {
     expect(
       isHiddenConversationArtifactPath(
         ".lime/harness/sessions/session-1/evidence/runtime.json",
+      ),
+    ).toBe(false);
+  });
+
+  it("聊天区应隐藏内容工厂 workspace patch 原始工件", () => {
+    expect(
+      isHiddenConversationArtifactPath(
+        ".lime/artifacts/content-factory/workspace-patch.json",
+      ),
+    ).toBe(true);
+    expect(
+      isHiddenConversationArtifactPath(
+        ".lime/artifacts/content-factory-workspace-patch.json",
+      ),
+    ).toBe(true);
+    expect(
+      isHiddenConversationArtifact(
+        {
+          title: "内容工厂工作区补丁",
+          content: "{}",
+          meta: {
+            kind: "content_factory.workspace_patch",
+          },
+        },
+        "content-factory-workspace-patch.json",
+      ),
+    ).toBe(true);
+  });
+
+  it("聊天区不应隐藏可见的文章预览产物", () => {
+    expect(
+      isHiddenConversationArtifact(
+        {
+          title: "公众号文章草稿",
+          content: "# 公众号文章草稿\n\n正文",
+          meta: {
+            openedFrom: "right_surface_article_workspace",
+            artifactKind: "report",
+            contentFactoryWorkspacePatch: {
+              appId: "content-factory-app",
+              objects: [],
+            },
+          },
+        },
+        "公众号文章草稿.md",
       ),
     ).toBe(false);
   });

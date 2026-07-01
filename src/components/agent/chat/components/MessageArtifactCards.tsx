@@ -9,7 +9,7 @@ import {
   resolveArtifactWritePhase,
 } from "../utils/messageArtifacts";
 import { resolveContentPostArtifactDisplayTitle } from "../utils/contentPostSkill";
-import { isHiddenConversationArtifactPath } from "../utils/internalArtifactVisibility";
+import { isHiddenConversationArtifact } from "../utils/internalArtifactVisibility";
 import { resolveKnowledgeSourceFromArtifacts } from "./messageListKnowledgeSource";
 import { resolveArtifactFrameRenderer } from "./artifactFrameRenderers";
 import type {
@@ -34,7 +34,8 @@ export function MessageArtifactCards({
   const visibleArtifacts =
     artifacts?.filter(
       (artifact) =>
-        !isHiddenConversationArtifactPath(
+        !isHiddenConversationArtifact(
+          artifact,
           resolveArtifactProtocolFilePath(artifact),
         ),
     ) || [];
@@ -55,12 +56,7 @@ export function MessageArtifactCards({
             onArtifactClick,
             onSaveMessageAsKnowledge,
           };
-          return (
-            <FrameRenderer
-              key={artifact.id}
-              {...frameRendererProps}
-            />
-          );
+          return <FrameRenderer key={artifact.id} {...frameRendererProps} />;
         }
         const filePath = resolveArtifactProtocolFilePath(artifact);
         const displayTitle = resolveContentPostArtifactDisplayTitle({

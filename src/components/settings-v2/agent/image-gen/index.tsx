@@ -7,7 +7,20 @@ import {
   type ConfiguredProvider,
   useConfiguredProviders,
 } from "@/hooks/useConfiguredProviders";
+import { useProviderModels } from "@/hooks/useProviderModels";
 import { cn } from "@/lib/utils";
+import {
+  inferInputModalities,
+  inferModelAliasSource,
+  inferModelCapabilities,
+  inferModelDeploymentSource,
+  inferModelManagementPlane,
+  inferModelTaskFamilies,
+  inferOutputModalities,
+  inferRuntimeFeatures,
+} from "@/lib/model/inferModelCapabilities";
+import type { EnhancedModelMetadata } from "@/lib/types/modelRegistry";
+import { resolveProviderModelLoadOptions } from "@/lib/model/providerModelLoadOptions";
 import {
   buildPersistedMediaGenerationPreference,
   hasMediaGenerationPreferenceOverride,
@@ -15,14 +28,60 @@ import {
 } from "@/lib/mediaGeneration";
 import {
   resolveImageCapabilityModelIds,
+  resolveImageCapabilityModels,
   isImageCapabilityProvider,
+  isImageCapabilityModelMetadata,
+  type ImageGenModel,
 } from "@/lib/imageGen/catalog";
-import { buildProviderModelsFromBackendModelIds } from "@/lib/model/providerModelsCatalog";
 import { MediaPreferenceSection } from "../shared/MediaPreferenceSection";
 
 const DEFAULT_MEDIA_PREFERENCE: MediaGenerationPreference = {
   allowFallback: true,
 };
+
+function buildImageModelMetadata(
+  provider: ConfiguredProvider,
+  model: ImageGenModel,
+): EnhancedModelMetadata {
+  const providerId = provider.providerId ?? provider.key;
+  const taxonomyParams = {
+    modelId: model.id,
+    providerId,
+    providerModelId: model.id,
+  };
+  return {
+    id: model.id,
+    display_name: model.name || model.id,
+    provider_id: providerId,
+    provider_name: provider.label,
+    family: null,
+    tier: "pro",
+    capabilities: inferModelCapabilities(taxonomyParams),
+    task_families: inferModelTaskFamilies(taxonomyParams),
+    input_modalities: inferInputModalities(taxonomyParams),
+    output_modalities: inferOutputModalities(taxonomyParams),
+    runtime_features: inferRuntimeFeatures(taxonomyParams),
+    deployment_source: inferModelDeploymentSource(taxonomyParams),
+    management_plane: inferModelManagementPlane(taxonomyParams),
+    canonical_model_id: null,
+    provider_model_id: model.id,
+    alias_source: inferModelAliasSource(taxonomyParams),
+    pricing: null,
+    limits: {
+      context_length: null,
+      max_output_tokens: null,
+      requests_per_minute: null,
+      tokens_per_minute: null,
+    },
+    status: "active",
+    release_date: null,
+    is_latest: false,
+    description: null,
+    source: "embedded",
+    created_at: 0,
+    updated_at: 0,
+  };
+}
 
 export function ImageGenSettings() {
   const { t } = useTranslation("settings");
@@ -86,6 +145,51 @@ export function ImageGenSettings() {
       api_host: selectedProvider.apiHost,
     });
   }, [selectedProvider]);
+  const selectedProviderModelLoadOptions = useMemo(
+    () =>
+      resolveProviderModelLoadOptions({
+        providerId: selectedProvider?.providerId,
+        providerType: selectedProvider?.type,
+        apiHost: selectedProvider?.apiHost,
+      }),
+    [
+      selectedProvider?.apiHost,
+      selectedProvider?.providerId,
+      selectedProvider?.type,
+    ],
+  );
+  const { models: selectedProviderModels } = useProviderModels(
+    selectedProvider,
+    {
+      returnFullMetadata: true,
+      autoLoad: Boolean(selectedProvider),
+      ...selectedProviderModelLoadOptions,
+    },
+  );
+  const imageSelectableModelIds = useMemo(() => {
+    if (!selectedProvider) {
+      return availableModelIds;
+    }
+
+    const modelIds = new Set(availableModelIds);
+    for (const model of selectedProviderModels) {
+      if (
+        isImageCapabilityModelMetadata(
+          {
+            id: selectedProvider.providerId ?? selectedProvider.key,
+            type: selectedProvider.type,
+            custom_models: selectedProvider.customModels,
+            api_host: selectedProvider.apiHost,
+          },
+          model,
+        )
+      ) {
+        modelIds.add(model.id);
+      }
+    }
+
+    return Array.from(modelIds);
+  }, [availableModelIds, selectedProvider, selectedProviderModels]);
 
   const providerUnavailableLabel =
     globalImagePreference.preferredProviderId && !selectedProvider
@@ -96,7 +200,7 @@ export function ImageGenSettings() {
 
   const modelUnavailableLabel =
     globalImagePreference.preferredModelId &&
-    !availableModelIds.includes(globalImagePreference.preferredModelId)
+    !imageSelectableModelIds.includes(globalImagePreference.preferredModelId)
       ? t("settings.mediaGeneration.warning.unavailable", {
           id: globalImagePreference.preferredModelId,
         })
@@ -181,20 +285,17 @@ export function ImageGenSettings() {
     void savePreference(DEFAULT_MEDIA_PREFERENCE);
   };
 
-  const getImageFallbackModels = useCallback(
-    (provider: ConfiguredProvider) =>
-      buildProviderModelsFromBackendModelIds(
-        provider,
-        [],
-        resolveImageCapabilityModelIds({
-          id: provider.providerId ?? provider.key,
-          type: provider.type,
-          custom_models: provider.customModels,
-          api_host: provider.apiHost,
-        }),
-      ),
-    [],
-  );
+  const getImageFallbackModels = useCallback((provider: ConfiguredProvider) => {
+    const catalogModels = resolveImageCapabilityModels({
+      id: provider.providerId ?? provider.key,
+      type: provider.type,
+      custom_models: provider.customModels,
+      api_host: provider.apiHost,
+    });
+    return catalogModels.map((model) =>
+      buildImageModelMetadata(provider, model),
+    );
+  }, []);
 
   const providerHint = providersLoading
     ? t("settings.mediaGeneration.image.hint.loading")
@@ -224,12 +325,15 @@ export function ImageGenSettings() {
           })
         }
         modelFilter={(model, provider) =>
-          resolveImageCapabilityModelIds({
-            id: provider.providerId ?? provider.key,
-            type: provider.type,
-            custom_models: provider.customModels,
-            api_host: provider.apiHost,
-          }).includes(model.id)
+          isImageCapabilityModelMetadata(
+            {
+              id: provider.providerId ?? provider.key,
+              type: provider.type,
+              custom_models: provider.customModels,
+              api_host: provider.apiHost,
+            },
+            model,
+          )
         }
         getFallbackModels={getImageFallbackModels}
         allowFallback={globalImagePreference.allowFallback ?? true}

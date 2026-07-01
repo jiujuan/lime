@@ -102,8 +102,8 @@ export function resolveWorkspacePluginActivation(params: {
     (source) => source.appId === activeAppId,
   );
   const intentMatch =
-    resolveWorkspaceAgentAppIntent(
-      parseResult.context.activeEntryKey ?? "",
+    resolveWorkspaceAgentAppIntentFromActivationContext(
+      parseResult.context,
       activeSources,
     ) ??
     resolveWorkspaceAgentAppIntent(parseResult.match.body, activeSources) ??
@@ -114,6 +114,30 @@ export function resolveWorkspacePluginActivation(params: {
     ...base,
     context: parseResult.context,
     intentMatch,
+  };
+}
+
+function resolveWorkspaceAgentAppIntentFromActivationContext(
+  context: PluginActivationContext,
+  sources: readonly WorkspaceAgentAppIntentSource[],
+): WorkspaceAgentAppIntentMatch | null {
+  const activeEntryKey = context.activeEntryKey?.trim();
+  if (!activeEntryKey) {
+    return null;
+  }
+  const match = resolveWorkspaceAgentAppIntent(activeEntryKey, sources);
+  if (!match) {
+    return null;
+  }
+  return {
+    ...match,
+    taskKind: context.taskKind ?? match.taskKind,
+    workflowKey: context.workflowKey ?? match.workflowKey,
+    outputArtifactKind: context.outputArtifactKind ?? match.outputArtifactKind,
+    rightSurface: context.rightSurface ?? match.rightSurface,
+    expectedObjects: context.expectedObjects?.length
+      ? context.expectedObjects
+      : match.expectedObjects,
   };
 }
 
@@ -130,6 +154,7 @@ function pluginActivationMetadata(
     manifest,
     intent?.intentKey,
     intent?.taskKind,
+    intent?.workflowKey,
   );
   const subagents = resolveActivationSubagents(manifest, intent?.taskKind);
   const skillRefs = resolveActivationSkillRefs(manifest, intent?.taskKind);
@@ -144,6 +169,11 @@ function pluginActivationMetadata(
       plugin_id: context.pluginId,
       active_agent_app_id: context.activeAgentAppId,
       active_entry_key: context.activeEntryKey,
+      entry_task_kind: context.taskKind,
+      entry_workflow_key: context.workflowKey,
+      entry_output_artifact_kind: context.outputArtifactKind,
+      entry_right_surface: context.rightSurface,
+      entry_expected_objects: context.expectedObjects,
       selected_skill_keys: context.selectedSkillKeys,
       selected_object_ref: context.selectedObjectRef
         ? {
@@ -161,6 +191,7 @@ function pluginActivationMetadata(
       context_source: context.source,
       intent_key: intent?.intentKey,
       task_kind: intent?.taskKind,
+      intent_workflow_key: intent?.workflowKey,
       output_artifact_kind: intent?.outputArtifactKind,
       right_surface: intent?.rightSurface,
       expected_objects: intent?.expectedObjects,
@@ -188,6 +219,7 @@ function pluginActivationMetadata(
             app_name: intent.appName,
             intent_key: intent.intentKey,
             task_kind: intent.taskKind,
+            workflow_key: intent.workflowKey,
             output_artifact_kind: intent.outputArtifactKind,
             right_surface: intent.rightSurface,
             expected_objects: intent.expectedObjects,
@@ -236,12 +268,14 @@ function resolveActivationWorkflow(
   manifest: WorkspaceAgentAppIntentMatch["manifest"] | undefined,
   intentKey: string | undefined,
   taskKind: string | undefined,
+  workflowKey: string | undefined,
 ) {
-  if (!manifest || (!intentKey && !taskKind)) {
+  if (!manifest || (!intentKey && !taskKind && !workflowKey)) {
     return undefined;
   }
   return manifest.workflows.find(
     (workflow) =>
+      (workflowKey ? workflow.key === workflowKey : false) ||
       (intentKey
         ? workflow.triggerIntents?.includes(intentKey) ||
           workflow.key === intentKey
@@ -396,6 +430,23 @@ export function extractWorkspacePluginActivationFromRequestMetadata(
         "active_entry_key",
         "activeEntryKey",
       ]),
+      taskKind: readString(activation, ["entry_task_kind", "taskKind"]),
+      workflowKey: readString(activation, [
+        "entry_workflow_key",
+        "workflowKey",
+      ]),
+      outputArtifactKind: readString(activation, [
+        "entry_output_artifact_kind",
+        "outputArtifactKind",
+      ]),
+      rightSurface: readString(activation, [
+        "entry_right_surface",
+        "rightSurface",
+      ]),
+      expectedObjects: readStringArray(activation, [
+        "entry_expected_objects",
+        "expectedObjects",
+      ]),
       selectedSkillKeys: readStringArray(activation, [
         "selected_skill_keys",
         "selectedSkillKeys",
@@ -431,6 +482,15 @@ export function mergePluginActivationSendOptions(params: {
       intentSystemPrompt && previousSystemPrompt
         ? `${previousSystemPrompt}\n\n${intentSystemPrompt}`
         : intentSystemPrompt || params.sendOptions?.systemPromptOverride,
+    ...(shouldUseArticleActivationAssistantDraft(params.resolution)
+      ? {
+          assistantDraft: {
+            ...(params.sendOptions?.assistantDraft || {}),
+            content: params.sendOptions?.assistantDraft?.content ?? "",
+            fallbackContent: "",
+          },
+        }
+      : {}),
     requestMetadata: {
       ...previousRequestMetadata,
       harness: {
@@ -439,4 +499,13 @@ export function mergePluginActivationSendOptions(params: {
       },
     },
   };
+}
+
+function shouldUseArticleActivationAssistantDraft(
+  resolution: WorkspacePluginActivationResolution,
+): boolean {
+  return (
+    resolution.status === "matched" &&
+    resolution.intentMatch?.rightSurface === "articleWorkspace"
+  );
 }

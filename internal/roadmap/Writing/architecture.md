@@ -1,6 +1,6 @@
 # Writing 架构设计
 
-更新时间：2026-06-29
+更新时间：2026-06-30
 状态：In Progress
 
 ## 1. 一句话架构
@@ -10,12 +10,13 @@ Content Factory Plugin
   -> plugin.json
   -> app.runtime.yaml / app.workbench.yaml
   -> activationEntries / defaultPrompt
+  -> task card / process state
   -> content_article_workflow
   -> subagents + skillRefs + CLI + connectors + hooks
   -> App Server Agent Runtime
   -> articleDraft artifact / workspace patch
-  -> Claw ArtifactFrame(articleArtifacts renderer)
-  -> Right Surface Article Editor
+  -> Claw ArtifactFrame(articleArtifacts renderer) final artifact
+  -> 右侧 Article Editor（dock / tab 标准见 ../rightsurface/README.md）
 ```
 
 ## 2. 系统上下文
@@ -40,12 +41,14 @@ flowchart LR
 | ------------------ | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
 | 内容工厂插件       | 按 Lime Plugin Package v1 声明入口、workflow、subagents、skills、CLI、connectors、hooks、article renderer 契约。 | 直接控制 Lime 右侧栏布局。               |
 | Lime 插件 contract | 读取并归一化插件包能力。                                                                                         | 为内容工厂 hard code 入口或默认能力。    |
-| Claw 输入框        | 从 installed registry 生成 `@` 候选并发送 metadata。                                                             | 未安装时伪造 `@写文章`。                 |
+| Claw 输入框        | 从 installed registry 生成 `@` 候选并发送 metadata，任务卡和过程态留在对话流里，再承接最终产物。                       | 未安装时伪造 `@写文章`。                 |
 | App Server Runtime | 执行 turn、注入 plugin activation context、保存 read model。                                                     | 让前端 mock 代替 worker 结果。           |
 | 内容工厂 worker    | 执行写作 workflow，产出 workspace patch 和 evidence。                                                            | 输出无法物化的长文本聊天正文。           |
-| 聊天消息区         | 展示运行状态和独立 `ArtifactFrame`；文章 renderer 可在框内完整流式输出。                                         | 把完整正文散落到普通 assistant message。 |
-| Right Surface      | 承载 Article Editor、编辑动作、历史恢复。                                                                        | 直接调用 provider 或插件私有文件系统。   |
-| Article Workspace  | 插件工作区事实、调度桥、历史恢复输入。                                                                           | 恢复旧 Profile 命名或兼容入口。          |
+| 聊天消息区         | 展示运行状态、任务卡、过程态；独立 `ArtifactFrame` 只承载最终文章，文章 renderer 可在框内完整流式输出最终文章。                 | 把完整正文散落到普通 assistant message。 |
+| Right Surface      | 承载 Article Editor、编辑动作、历史恢复；dock / tab 规则见 `../rightsurface/README.md`。                          | 直接调用 provider 或插件私有文件系统。   |
+| Article Workspace  | 插件工作区事实、调度桥、历史恢复输入；右侧布局规则归 `../rightsurface/README.md` 统一。                            | 恢复旧 Profile 命名或兼容入口。          |
+
+Writing 不再单独定义右侧 dock / tab / pane 机制，相关布局与 surface 升降级都以 `../rightsurface/README.md` 为准。
 
 ## 4. 插件包事实源
 
@@ -180,13 +183,14 @@ flowchart TD
   A[用户输入 @写文章] --> B{已安装内容工厂?}
   B -- 否 --> C[不展示候选 / 引导安装]
   B -- 是 --> D[解析 activation entry]
-  D --> E[读取 workflow + subagents + skills + CLI + hooks]
-  E --> F[合并 plugin activation metadata]
-  F --> G[App Server turn/start]
-  G --> H[content_article_workflow]
-  H --> I[workspace patch + artifact evidence]
-  I --> J[聊天 ArtifactFrame 流式文章产物框]
-  J --> K[点击展开右侧 Article Editor]
+  D --> E[先在对话流回显任务卡 / 过程态]
+  E --> F[读取 workflow + subagents + skills + CLI + hooks]
+  F --> G[合并 plugin activation metadata]
+  G --> H[App Server turn/start]
+  H --> I[content_article_workflow]
+  I --> J[workspace patch + artifact evidence]
+  J --> K[聊天 ArtifactFrame 最终文章产物框]
+  K --> L[点击展开右侧 Article Editor]
 ```
 
 ## 7. 部署边界

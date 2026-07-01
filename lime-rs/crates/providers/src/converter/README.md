@@ -10,7 +10,6 @@
 
 - `mod.rs` - 模块入口
 - `anthropic_to_openai.rs` - Anthropic → OpenAI 转换
-- `openai_to_antigravity.rs` - OpenAI → Antigravity (Gemini CLI) 转换
 - `reasoning_handler.rs` - 推理内容处理器（DeepSeek/OpenAI o1 等）
 
 ## 工具类型支持

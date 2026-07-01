@@ -43,10 +43,6 @@ function createDefaultProps(overrides: Partial<HookProps> = {}): HookProps {
 
   return {
     setMentionedCharacters: noop,
-    taskFiles: [],
-    taskFilesExpanded: false,
-    setTaskFilesExpanded: noop,
-    selectedFileId: undefined,
     isThemeWorkbench: true,
     sessionId: "session-1",
     childSubagentSessions: [],
@@ -87,7 +83,6 @@ function createDefaultProps(overrides: Partial<HookProps> = {}): HookProps {
       handleProjectChange: noop,
     },
     selectedTeam: null,
-    handleTaskFileClick: noop,
     characters: [],
     skills: [],
     serviceSkills: [],

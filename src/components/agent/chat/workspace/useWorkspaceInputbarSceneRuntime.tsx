@@ -17,10 +17,10 @@ import type {
   AgentInitialKnowledgePackSelectionParams,
 } from "@/types/page";
 import { Inputbar } from "../components/Inputbar";
+import type { TaskFile } from "../components/TaskFiles";
 import { CONVERSATION_CONTENT_MAX_WIDTH } from "../styles/conversationLayoutTokens";
 import { useWorkspaceNavigationActions } from "./useWorkspaceNavigationActions";
 import type { Message } from "../types";
-import type { TaskFile } from "../components/TaskFiles";
 import {
   DEFAULT_CHAT_TOOL_PREFERENCES,
   type ChatToolPreferences,
@@ -30,13 +30,13 @@ import {
   type RuntimeToolAvailability,
 } from "../utils/runtimeToolAvailability";
 import { resolveCanvasTaskFileTarget } from "../utils/taskFileCanvasSync";
-import { isRenderableTaskFile } from "./generalWorkbenchHelpers";
 import { GeneralWorkbenchDialogSection } from "./WorkspaceHarnessDialogs";
 import type { InputbarSendHandler } from "../components/Inputbar/inputbarSendPayload";
 import type { GeneralWorkbenchEntryPromptState } from "./workspaceSendHelpers";
 import type { WorkspaceHandleSend } from "./useWorkspaceSendActions";
 import type { CuratedTaskReferenceEntry } from "../utils/curatedTaskReferenceSelection";
 import type { TeamDefinition } from "../utils/teamDefinitions";
+import { isRenderableTaskFile } from "./generalWorkbenchHelpers";
 import { useWorkspaceKnowledgeRuntime } from "./knowledge/useWorkspaceKnowledgeRuntime";
 
 interface GeneralWorkbenchEntryPromptAccessoryProps {
@@ -285,18 +285,12 @@ type WorkspaceInputbarBuilderParams = Omit<
 
 interface UseWorkspaceInputbarScenePresentationRuntimeParams {
   setMentionedCharacters: Dispatch<SetStateAction<Character[]>>;
-  taskFiles: TaskFile[];
-  taskFilesExpanded: boolean;
-  setTaskFilesExpanded: Dispatch<SetStateAction<boolean>>;
+  taskFiles?: TaskFile[];
   selectedFileId?: string;
   isThemeWorkbench: boolean;
   inputbarPresentation: {
     inputbar: Omit<
       WorkspaceInputbarBuilderParams,
-      | "taskFiles"
-      | "selectedFileId"
-      | "taskFilesExpanded"
-      | "onToggleTaskFiles"
       | "onSelectCharacter"
     >;
     generalWorkbenchEntryPrompt: GeneralWorkbenchEntryPromptState | null;
@@ -312,8 +306,6 @@ interface UseWorkspaceInputbarScenePresentationRuntimeParams {
   };
 }
 interface WorkspaceInputbarScenePresentationRuntimeResult {
-  visibleTaskFiles: TaskFile[];
-  visibleSelectedFileId?: string;
   activeCanvasTaskFile: TaskFile | null;
   inputbarNode: ReactNode;
   generalWorkbenchDialog: ReactNode;
@@ -333,9 +325,7 @@ type WorkspaceInputbarToolStates = NonNullable<
 
 function useWorkspaceInputbarScenePresentationRuntime({
   setMentionedCharacters,
-  taskFiles,
-  taskFilesExpanded,
-  setTaskFilesExpanded,
+  taskFiles = [],
   selectedFileId,
   isThemeWorkbench,
   inputbarPresentation,
@@ -353,10 +343,6 @@ function useWorkspaceInputbarScenePresentationRuntime({
     [setMentionedCharacters],
   );
 
-  const handleToggleTaskFiles = useCallback(() => {
-    setTaskFilesExpanded((previous) => !previous);
-  }, [setTaskFilesExpanded]);
-
   const visibleTaskFiles = useMemo(
     () =>
       taskFiles.filter((file) => isRenderableTaskFile(file, isThemeWorkbench)),
@@ -367,6 +353,7 @@ function useWorkspaceInputbarScenePresentationRuntime({
     if (!selectedFileId) {
       return undefined;
     }
+
     return visibleTaskFiles.some((file) => file.id === selectedFileId)
       ? selectedFileId
       : undefined;
@@ -425,20 +412,9 @@ function useWorkspaceInputbarScenePresentationRuntime({
   const workspaceInputbarProps = useMemo<WorkspaceInputbarBuilderParams>(
     () => ({
       ...inputbarPresentation.inputbar,
-      taskFiles: visibleTaskFiles,
-      selectedFileId: visibleSelectedFileId,
-      taskFilesExpanded,
-      onToggleTaskFiles: handleToggleTaskFiles,
       onSelectCharacter: handleSelectCharacter,
     }),
-    [
-      handleSelectCharacter,
-      handleToggleTaskFiles,
-      inputbarPresentation.inputbar,
-      taskFilesExpanded,
-      visibleSelectedFileId,
-      visibleTaskFiles,
-    ],
+    [handleSelectCharacter, inputbarPresentation.inputbar],
   );
 
   const overlayAccessory =
@@ -461,8 +437,6 @@ function useWorkspaceInputbarScenePresentationRuntime({
     />
   );
   return {
-    visibleTaskFiles,
-    visibleSelectedFileId,
     activeCanvasTaskFile,
     inputbarNode,
     generalWorkbenchDialog,
@@ -474,10 +448,8 @@ function useWorkspaceInputbarScenePresentationRuntime({
 interface UseWorkspaceInputbarSceneRuntimeParams {
   contextVariant?: "default" | "task-center";
   setMentionedCharacters: InputbarScenePresentationParams["setMentionedCharacters"];
-  taskFiles: InputbarScenePresentationParams["taskFiles"];
-  taskFilesExpanded: InputbarScenePresentationParams["taskFilesExpanded"];
-  setTaskFilesExpanded: InputbarScenePresentationParams["setTaskFilesExpanded"];
-  selectedFileId: InputbarScenePresentationParams["selectedFileId"];
+  taskFiles?: InputbarScenePresentationParams["taskFiles"];
+  selectedFileId?: InputbarScenePresentationParams["selectedFileId"];
   isThemeWorkbench: InputbarScenePresentationParams["isThemeWorkbench"];
   sessionId: InputbarParams["sessionId"];
   childSubagentSessions: GeneralWorkbenchDialogParams["childSubagentSessions"];
@@ -520,7 +492,6 @@ interface UseWorkspaceInputbarSceneRuntimeParams {
     | "handleProjectChange"
   >;
   selectedTeam?: TeamDefinition | null;
-  handleTaskFileClick: InputbarParams["onTaskFileClick"];
   characters: InputbarParams["characters"];
   skills: InputbarParams["skills"];
   serviceSkills: InputbarParams["serviceSkills"];
@@ -531,6 +502,8 @@ interface UseWorkspaceInputbarSceneRuntimeParams {
   initialInputCapability?: AgentInitialInputCapabilityParams;
   initialKnowledgePackSelection?: AgentInitialKnowledgePackSelectionParams;
   pluginSuggestions?: InputbarParams["pluginSuggestions"];
+  pluginSuggestionsError?: string | null;
+  pluginSuggestionsLoading?: boolean;
   onPluginSuggestionsNeeded?: InputbarParams["onPluginSuggestionsNeeded"];
   setChatToolPreferences: Dispatch<SetStateAction<ChatToolPreferences>>;
   objectiveEnabled?: boolean;
@@ -592,10 +565,6 @@ interface UseWorkspaceInputbarSceneRuntimeParams {
 export function useWorkspaceInputbarSceneRuntime({
   contextVariant = "default",
   setMentionedCharacters,
-  taskFiles,
-  taskFilesExpanded,
-  setTaskFilesExpanded,
-  selectedFileId,
   isThemeWorkbench,
   sessionId,
   childSubagentSessions,
@@ -630,7 +599,6 @@ export function useWorkspaceInputbarSceneRuntime({
   activeTheme,
   navigationActions,
   selectedTeam,
-  handleTaskFileClick,
   characters,
   skills,
   serviceSkills,
@@ -641,6 +609,8 @@ export function useWorkspaceInputbarSceneRuntime({
   initialInputCapability,
   initialKnowledgePackSelection,
   pluginSuggestions,
+  pluginSuggestionsError,
+  pluginSuggestionsLoading,
   onPluginSuggestionsNeeded,
   setChatToolPreferences,
   objectiveEnabled = false,
@@ -780,10 +750,6 @@ export function useWorkspaceInputbarSceneRuntime({
 
   const presentationRuntime = useWorkspaceInputbarScenePresentationRuntime({
     setMentionedCharacters,
-    taskFiles,
-    taskFilesExpanded,
-    setTaskFilesExpanded,
-    selectedFileId,
     isThemeWorkbench,
     inputbarPresentation: {
       inputbar: {
@@ -825,7 +791,6 @@ export function useWorkspaceInputbarSceneRuntime({
           isSessionRestoring ||
           isPreparingSend ||
           (contextVariant !== "task-center" && !projectId && !sessionId),
-        onTaskFileClick: handleTaskFileClick,
         characters,
         skills,
         serviceSkills,
@@ -835,6 +800,8 @@ export function useWorkspaceInputbarSceneRuntime({
         onSkillSuggestionsNeeded,
         initialInputCapability,
         pluginSuggestions,
+        pluginSuggestionsError,
+        pluginSuggestionsLoading,
         onPluginSuggestionsNeeded,
         toolStates: {
           objective: objectiveEnabled,

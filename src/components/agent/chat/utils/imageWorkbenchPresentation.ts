@@ -73,7 +73,7 @@ export function resolveImageWorkbenchPreviewModelLabel(
   preview: MessageImageWorkbenchPreview,
 ): string {
   return resolveImageWorkbenchModelLabel(
-    preview.modelName || preview.runtimeContract?.model || null,
+    preview.runtimeContract?.model || preview.modelName || null,
   );
 }
 
