@@ -404,6 +404,10 @@ async function sampleInputbarSubmitState(page, prompt, expectedSessionId = null)
                 id: message?.id || null,
                 sessionId: message?.params?.sessionId || null,
                 queueIfBusy: message?.params?.queueIfBusy ?? null,
+                providerPreference: message?.params?.providerPreference ?? null,
+                modelPreference: message?.params?.modelPreference ?? null,
+                runtimeOptions: message?.params?.runtimeOptions ?? null,
+                metadata: message?.params?.metadata ?? null,
                 text:
                   message?.params?.input?.text ??
                   message?.params?.input?.content ??

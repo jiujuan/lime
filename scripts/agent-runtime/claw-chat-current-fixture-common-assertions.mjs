@@ -54,6 +54,10 @@ export function buildCommonAssertions(context) {
     !isRightSurfaceVisualMatrixScenario &&
     !isContentFactoryArticleWorkspaceScenario &&
     !isExpertPlazaSkillsRuntimeScenario;
+  const shouldRequireTextStreamTraceSeparation =
+    shouldRequireAgentUiTraceEvidence &&
+    !isPlanScenario &&
+    !isImageCommandScenario;
   const agentUiPerformanceTrace = summary.agentUiPerformanceTrace;
   const appServerTraceEvidence = summary.appServerTraceEvidence;
   const commonAssertions = {
@@ -78,9 +82,10 @@ export function buildCommonAssertions(context) {
     usedCurrentSessionList: appServerRequestMethods.includes(
       APP_SERVER_METHOD_SESSION_LIST,
     ),
-    externalFixtureBackendUsed:
-      isRightSurfaceVisualMatrixScenario ||
-      isContentFactoryArticleWorkspaceScenario
+    externalFixtureBackendUsed: isImageCommandScenario
+      ? summary.imageCommandWorkflowUsed === true
+      : isRightSurfaceVisualMatrixScenario ||
+          isContentFactoryArticleWorkspaceScenario
         ? true
         : backendLedger.some((entry) => entry.kind === "turnStart"),
     fixturePromptReachedBackend:
@@ -413,8 +418,7 @@ export function buildCommonAssertions(context) {
       !shouldRequireAgentUiTraceEvidence ||
       agentUiPerformanceTrace?.available === true,
     agentUiPerformanceTraceSeparatesProviderAndClient:
-      !shouldRequireAgentUiTraceEvidence ||
-      isPlanScenario ||
+      !shouldRequireTextStreamTraceSeparation ||
       (agentUiPerformanceTrace?.hasProviderWaitMs === true &&
         agentUiPerformanceTrace?.hasClientLocalOutputMs === true),
     agentUiPerformanceTraceNoRawPayload:
@@ -441,7 +445,7 @@ export function buildCommonAssertions(context) {
         APP_SERVER_METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT,
       ),
     appServerTraceEvidenceSeparatesProviderAndServer:
-      !shouldRequireAgentUiTraceEvidence ||
+      !shouldRequireTextStreamTraceSeparation ||
       (appServerTraceEvidence?.hasProviderFirstTextDelta === true &&
         appServerTraceEvidence?.hasAppServerMessageDelta === true),
     appServerTraceEvidenceHasW3cCarrier:

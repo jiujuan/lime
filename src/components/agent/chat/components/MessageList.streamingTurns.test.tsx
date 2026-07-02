@@ -74,7 +74,7 @@ describe("MessageList streaming turns", () => {
     expect(container.textContent).not.toContain("00:12");
   });
 
-  it("当前回合运行且只有执行轨迹时，应在消息结算区显示小型输出提示", () => {
+  it("当前回合运行且执行轨迹已结束时，应在消息结算区提示正在整理最终答复", () => {
     const now = new Date("2026-05-12T09:00:00.000Z");
     const messages: Message[] = [
       {
@@ -132,7 +132,7 @@ describe("MessageList streaming turns", () => {
 
     expect(indicator).not.toBeNull();
     expect(indicator?.getAttribute("data-status")).toBe("running");
-    expect(indicator?.textContent).toContain("Writing...");
+    expect(indicator?.textContent).toContain("Synthesizing final reply");
     expect(
       container.querySelector('[data-testid="assistant-message-meta-footer"]'),
     ).not.toBeNull();

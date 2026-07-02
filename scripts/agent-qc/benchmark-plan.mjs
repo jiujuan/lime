@@ -3,8 +3,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { pathToFileURL } from "node:url";
 
-const DEFAULT_CONFIG = "benchmarks/lime-agent-runtime/benchmark.json";
+const DEFAULT_CONFIG = "internal/test/agent-qc-benchmark.manifest.json";
 
 function parseArgs(argv) {
   const options = {
@@ -50,7 +51,7 @@ function parseArgs(argv) {
 
 function printHelp() {
   console.log(`
-Lime Harbor benchmark plan
+Lime Agent benchmark plan
 
 用法:
   npm run agent-qc:benchmark:plan
@@ -126,10 +127,65 @@ function validateTask(rootDir, task) {
   };
 }
 
+function validateDifferentialScenario(scenario) {
+  const requiredEvidence = Array.isArray(scenario.requiredEvidence)
+    ? scenario.requiredEvidence
+    : [];
+  const deterministicAssertions = Array.isArray(
+    scenario.deterministicAssertions,
+  )
+    ? scenario.deterministicAssertions
+    : [];
+  const failureModes = Array.isArray(scenario.failureModes)
+    ? scenario.failureModes
+    : [];
+  const issues = [];
+
+  if (!scenario.id) {
+    issues.push("id 不能为空");
+  }
+  if (!scenario.scenarioId) {
+    issues.push("scenarioId 不能为空");
+  }
+  if (!scenario.baseline?.command || !scenario.baseline?.evidenceRef) {
+    issues.push("baseline 必须声明 command 和 evidenceRef");
+  }
+  if (!scenario.candidate?.command || !scenario.candidate?.evidenceRef) {
+    issues.push("candidate 必须声明 command 和 evidenceRef");
+  }
+  if (requiredEvidence.length === 0) {
+    issues.push("requiredEvidence 不能为空");
+  }
+  if (deterministicAssertions.length === 0) {
+    issues.push("deterministicAssertions 不能为空");
+  }
+  if (failureModes.length === 0) {
+    issues.push("failureModes 不能为空");
+  }
+
+  return {
+    id: scenario.id || "",
+    scenarioId: scenario.scenarioId || "",
+    status: scenario.status || "unknown",
+    budget: scenario.budget || "",
+    valid: issues.length === 0,
+    baseline: scenario.baseline || {},
+    candidate: scenario.candidate || {},
+    requiredEvidence,
+    deterministicAssertions,
+    failureModes,
+    supervisorRubric: scenario.supervisorRubric || null,
+    issues,
+  };
+}
+
 function createPlan(rootDir, configPath) {
   const benchmark = readJson(path.resolve(rootDir, configPath));
   const tasks = Array.isArray(benchmark.tasks)
     ? benchmark.tasks.map((task) => validateTask(rootDir, task))
+    : [];
+  const differentialScenarios = Array.isArray(benchmark.differentialScenarios)
+    ? benchmark.differentialScenarios.map(validateDifferentialScenario)
     : [];
   const issues = [];
 
@@ -142,13 +198,18 @@ function createPlan(rootDir, configPath) {
   if (!benchmark.harbor?.localPath) {
     issues.push("benchmark.json 缺少 harbor.localPath");
   }
-  if (tasks.length === 0) {
-    issues.push("benchmark.json 至少需要一个 task");
+  if (tasks.length === 0 && differentialScenarios.length === 0) {
+    issues.push("benchmark.json 至少需要一个 task 或 differentialScenarios");
   }
 
   for (const task of tasks) {
     if (!task.valid) {
       issues.push(`${task.id} 结构不完整`);
+    }
+  }
+  for (const scenario of differentialScenarios) {
+    if (!scenario.valid) {
+      issues.push(`${scenario.id || "differentialScenario"} 结构不完整`);
     }
   }
 
@@ -161,6 +222,7 @@ function createPlan(rootDir, configPath) {
     harbor: benchmark.harbor,
     decisionPolicy: benchmark.decisionPolicy,
     tasks,
+    differentialScenarios,
     backlog: Array.isArray(benchmark.backlog) ? benchmark.backlog : [],
     issues,
   };
@@ -198,6 +260,23 @@ function renderMarkdown(plan) {
         ].join("<br>") || "-"
       } |`,
     );
+  }
+
+  if (plan.differentialScenarios.length > 0) {
+    lines.push(
+      "",
+      "## Differential Scenarios",
+      "",
+      "| Scenario | Status | Valid | Budget | Missing |",
+      "| --- | --- | --- | --- | --- |",
+    );
+    for (const scenario of plan.differentialScenarios) {
+      lines.push(
+        `| ${scenario.id} | ${scenario.status} | ${
+          scenario.valid ? "yes" : "no"
+        } | ${scenario.budget || "-"} | ${scenario.issues.join("<br>") || "-"} |`,
+      );
+    }
   }
 
   if (plan.issues.length > 0) {
@@ -241,4 +320,13 @@ function main() {
   }
 }
 
-main();
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}
+
+export {
+  createPlan,
+  renderMarkdown,
+  validateDifferentialScenario,
+  validateTask,
+};

@@ -194,8 +194,9 @@ export function syncAssistantAgentMessageContentPartFromThreadItem(params: {
   threadItems?: readonly AgentThreadItem[];
   setMessages: Dispatch<SetStateAction<Message[]>>;
 }): void {
-  params.setMessages((prev) =>
-    prev.map((message) => {
+  params.setMessages((prev) => {
+    let changed = false;
+    const next = prev.map((message) => {
       if (message.id !== params.assistantMsgId) {
         return message;
       }
@@ -209,10 +210,12 @@ export function syncAssistantAgentMessageContentPartFromThreadItem(params: {
       if (nextParts === currentParts) {
         return message;
       }
+      changed = true;
       return {
         ...message,
         contentParts: nextParts,
       };
-    }),
-  );
+    });
+    return changed ? next : prev;
+  });
 }

@@ -15,12 +15,7 @@ import { useTranslation } from "react-i18next";
 import type { Artifact } from "@/lib/artifact/types";
 import { formatDate } from "@/i18n/format";
 import { ArticleTiptapCanvas } from "./ArticleTiptapCanvas";
-import { WorkspacePluginOrchestrationRail } from "./WorkspacePluginOrchestrationRail";
 import "./WorkspaceArticleEditorSurface.css";
-import {
-  buildWorkspacePluginOrchestrationModel,
-  buildWorkspaceArticleEditorOrchestrationModel,
-} from "./workspaceArticleEditorOrchestrationModel";
 import type {
   WorkspaceArticleObject,
   WorkspaceArticleObjectStatus,
@@ -122,12 +117,6 @@ export function WorkspaceArticleEditorSurface({
       preview.researchRounds.length,
     ],
   );
-  const orchestrationRailModel = useMemo(
-    () =>
-      buildWorkspacePluginOrchestrationModel(articleWorkspace, preview),
-    [articleWorkspace, preview],
-  );
-
   const articleCanvasContentKey = `${object.ref.appId}:${object.ref.kind}:${object.ref.id}`;
   const locale = i18n?.resolvedLanguage || i18n?.language || "zh-CN";
   const updatedAtLabel = useMemo(
@@ -189,8 +178,7 @@ export function WorkspaceArticleEditorSurface({
       return null;
     }
     return (
-      preview.outline.find((section) => section.id === sectionId)?.title ??
-      null
+      preview.outline.find((section) => section.id === sectionId)?.title ?? null
     );
   };
   const buildImageSlotPrompt = (
@@ -199,9 +187,7 @@ export function WorkspaceArticleEditorSurface({
     [slot.prompt, slot.purpose, slot.title]
       .map((value) => value?.trim())
       .find((value): value is string => Boolean(value)) ?? "";
-  const handleImageSlotIntent = (
-    slot: WorkspaceArticleWorkspaceImageSlot,
-  ) => {
+  const handleImageSlotIntent = (slot: WorkspaceArticleWorkspaceImageSlot) => {
     const prompt = buildImageSlotPrompt(slot);
     if (!prompt) {
       return;
@@ -305,43 +291,6 @@ export function WorkspaceArticleEditorSurface({
           className="article-editor-main-column"
           data-testid="workspace-article-editor-main-canvas"
         >
-          {isCompactLayout && orchestrationRailModel ? (
-            <WorkspacePluginOrchestrationRail
-              copy={{
-                title: dynamicT("workspace.pluginWorkspace.orchestration.title"),
-                detail: dynamicT(
-                  "workspace.pluginWorkspace.orchestration.detail",
-                  {
-                    count: orchestrationRailModel.steps.length,
-                    workflow: orchestrationRailModel.workflowKey ?? "-",
-                  },
-                ),
-                workflowLabel: dynamicT(
-                  "workspace.pluginWorkspace.orchestration.workflow",
-                ),
-                subagentsLabel: dynamicT(
-                  "workspace.pluginWorkspace.orchestration.subagents",
-                ),
-                skillsLabel: dynamicT(
-                  "workspace.pluginWorkspace.orchestration.skills",
-                ),
-                cliLabel: dynamicT("workspace.pluginWorkspace.orchestration.cli"),
-                connectorsLabel: dynamicT(
-                  "workspace.pluginWorkspace.orchestration.connectors",
-                ),
-                hooksLabel: dynamicT(
-                  "workspace.pluginWorkspace.orchestration.hooks",
-                ),
-                doneLabel: dynamicT("workspace.articleEditor.writingPlan.done"),
-                pendingLabel: dynamicT(
-                  "workspace.articleEditor.writingPlan.pending",
-                ),
-              }}
-              model={orchestrationRailModel}
-              rootTestId="workspace-article-editor-content-factory-orchestration"
-              testIdPrefix="workspace-article-editor-orchestration"
-            />
-          ) : null}
           {isCompactLayout && preview.imageSlots.length > 0 ? (
             <ArticleEditorImageSlotRail
               disabled={actionsDisabled || !onImageSlotIntent}

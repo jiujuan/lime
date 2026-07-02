@@ -96,7 +96,7 @@ Agent turn 必须把当前 OS、工作目录、shell 运行时和本机路径格
 
 对图片任务再补一条固定约束：
 
-`@配图/@修图/@重绘` 原始文本必须先进入 Agent turn，再由 `harness.image_skill_launch` 辅助首刀 `Skill(image_generate)`；文稿 inline 配图、封面位、图片工作台编辑/变体这类显式图片动作也一样，必须先组装 `image_task` 上下文后再复用统一发送主线。不要把这些通用图片命令重新改回前端预翻 slash skill、前端直建任务或“按钮直调 task API”。统一目录显式声明的图片模型标签，例如用户在“设置 -> AI 服务商”里从已配置 Provider 模型创建的 `@Nano Banana 2` / `@GPT Images 2`，或 Lime Cloud 下发的同构 command entry，也只表示“用户已经指定图片执行模型”；发送边界仍必须把 `entry_source / provider_id / model / executor_mode / modality_contract_key / runtime_contract / routing_slot` 等上下文并入 `harness.image_skill_launch.image_task`，由同一条 Agent / Skill 回合调用 `lime_create_image_generation_task` 创建标准 task artifact。未在 catalog 中声明的任意 `@模型名` 不得自动变成图片 API 入口。图片 launch 还必须显式压制 `ToolSearch / WebSearch / Read / Glob / Grep` 这类通用偏航工具，并在必要时直接从当前 session tool surface 移除这些 detour tools，避免模型在“搜技能目录”里空转或把权限错误暴露给用户。当前通用 `image_generate` 的唯一 current 执行面是 `Skill(image_generate) -> lime_create_image_generation_task -> 标准 image task artifact + worker`；旧的 `Bash -> lime media image generate --json` / `lime task create image --json` 和前端直接 `create_image_generation_task_artifact` 只允许停留在 compat、显式工具动作或手工 CLI 场景，不能再作为聊天 @图片命令首发路径。即使经过 compat 入口，最终也必须委托同一条 task artifact + worker 执行链，并禁止把任务改写到 `outputPath` / markdown 文稿。
+`@配图/@修图/@重绘`、文稿 inline 配图、封面位、图片工作台编辑/变体和统一目录显式声明的图片模型标签，current 主链统一是 `Agent turn -> App Server ImageCommandWorkflow -> 标准 image task artifact + worker`。前端只负责把 `entry_source / provider_id / model / executor_mode / modality_contract_key / runtime_contract / routing_slot` 等上下文并入 `harness.image_command_intent.image_task`，发送前的 `session_id` 绑定仍必须走统一发送边界。App Server 在普通聊天模型路由前识别 `ImageCommandIntent`：参数完整时创建 `.lime/tasks/image_generate/*.json`，参数不足时返回补参状态，provider/model 不可执行时 fail closed。`Skill(image_generate)`、旧 `harness.image_skill_launch`、`Bash -> lime media image generate --json`、`lime task create image --json` 和前端直接 `create_image_generation_task_artifact` 都不能再作为聊天 @图片命令首发事实源；短期读取旧 metadata 只能是输入桥，不能决定 current 架构命名。未在 catalog 中声明的任意 `@模型名` 不得自动变成图片 API 入口。图片 command 还必须显式压制 `ToolSearch / WebSearch / Read / Glob / Grep` 这类通用偏航工具，避免模型在“搜技能目录”里空转或把权限错误暴露给用户。
 
 对所有 skills 再补一条全局约束：
 
@@ -109,7 +109,7 @@ Agent turn 必须把当前 OS、工作目录、shell 运行时和本机路径格
 - 只要当前还需要模型做补参、作用域绑定、viewer 回填或结构化 metadata 投影，就不要把 CLI 当 current 首发路径。
 - 共享决策锚点见 `internal/roadmap/gongneng/command-runtime/architecture.md`；单功能如 `@配图` 还要继续服从各自 `internal/prd/gongneng/<feature>/architecture.md`。
 
-- 显式图片动作允许先在前端补 `image_skill_launch` metadata，但发送前的 `session_id` 绑定仍必须走统一发送边界；如果 metadata 里暂时还是本地 draft key，必须在真正发起 send 时替换成真实会话 ID，而不是在图片动作入口提前额外建一个图片专用会话。
+- 显式图片动作允许先在前端补 `image_command_intent` metadata；如果仍读到旧 `image_skill_launch`，只能在 App Server 入口标准化成同一个 `ImageCommandIntent`。发送前的 `session_id` 绑定仍必须走统一发送边界；如果 metadata 里暂时还是本地 draft key，必须在真正发起 send 时替换成真实会话 ID，而不是在图片动作入口提前额外建一个图片专用会话。
 - `.lime/tasks/**/*.json` 继续作为图片主链的唯一恢复事实源，但它们属于内部任务快照，默认不应直接渲染成用户可见 artifact 卡片或时间线文件卡；用户面看到的应该是轻结果卡、工具过程和右侧查看。
 
 图片结果进入 UI 时还必须遵守以下 viewer 收口规则：
@@ -235,10 +235,10 @@ Agent turn 必须把当前 OS、工作目录、shell 运行时和本机路径格
 
 其中图片类能力当前已经有额外运行时纪律：
 
-- `@配图` / `@修图` / `@重绘` 的 current 主链必须保留原始用户消息进入 Agent
-- 文稿 inline 配图、封面位、图片工作台编辑/变体等显式动作也必须补成同构的 `harness.image_skill_launch`，而不是绕过 Agent 直建任务
-- 前端只负责补 `harness.image_skill_launch` 这类结构化上下文，不负责预翻成 slash skill 或偷偷发起 task
-- Agent 首刀优先调用 `Skill(image_generate)`；若 Skill 返回的 `allowed_tools` 里包含 `lime_create_image_generation_task` 且尚未拿到 `task_id/path/status`，当前主会话必须继续调用 `lime_create_image_generation_task`，不能把 Skill 成功误判成任务已提交
+- `@配图` / `@修图` / `@重绘` 的 current 主链必须保留原始用户消息进入 Agent turn，并在普通聊天模型路由前进入 App Server `ImageCommandWorkflow`
+- 文稿 inline 配图、封面位、图片工作台编辑/变体等显式动作也必须补成同构的 `harness.image_command_intent`，而不是绕过 Agent turn 直建任务
+- 前端只负责补 `ImageCommandIntent` 结构化上下文，不负责预翻成 slash skill、偷偷发起 task，也不通过 prompt 强迫模型调用工具
+- App Server workflow 以 task artifact 创建、补参状态或结构化失败作为 turn 完成依据，不能把 `Skill(image_generate)` 成功或 assistant 文本成功误判成任务已提交
 - 不要为了“找技能”再先走 `ToolSearch`；如果运行时发现 `@配图` 在 `ToolSearch / WebSearch / Read / Glob / Grep` 上空转，应视为图片主链断裂
 - 聊天区轻卡与 viewer 只消费后端真实运行态，不伪造“已完成”
 

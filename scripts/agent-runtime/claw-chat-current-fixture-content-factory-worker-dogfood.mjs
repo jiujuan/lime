@@ -13,11 +13,11 @@ import {
 import { invokeAppServerFromPage } from "./claw-chat-current-fixture-rpc.mjs";
 import { sanitizeJson } from "./claw-chat-current-fixture-utils.mjs";
 
-const CONTENT_FACTORY_APP_ID = "content-factory-app";
+const WORKER_APP_ID = "content-factory-app";
 const ARTICLE_OBJECT_ID = "article-1";
 
-export async function saveContentFactoryWorkerInstalledState(page, requestLog) {
-  const state = buildContentFactoryInstalledState();
+export async function saveWorkspacePatchWorkerInstalledState(page, requestLog) {
+  const state = buildWorkspacePatchInstalledState();
   const response = await invokeAppServerFromPage(
     page,
     APP_SERVER_METHOD_AGENT_APP_INSTALLED_SAVE,
@@ -43,7 +43,7 @@ export async function saveContentFactoryWorkerInstalledState(page, requestLog) {
   });
 }
 
-export async function runContentFactoryWorkerDogfoodTurn({
+export async function runWorkspacePatchWorkerDogfoodTurn({
   page,
   options,
   workspace,
@@ -76,7 +76,7 @@ export async function runContentFactoryWorkerDogfoodTurn({
       ? response.result.turn
       : {};
   const readModel = options
-    ? await waitForContentFactoryWorkerTurnCompleted(page, options, requestLog)
+    ? await waitForWorkspacePatchWorkerTurnCompleted(page, options, requestLog)
     : null;
 
   return sanitizeJson({
@@ -92,7 +92,7 @@ export async function runContentFactoryWorkerDogfoodTurn({
   });
 }
 
-async function waitForContentFactoryWorkerTurnCompleted(
+async function waitForWorkspacePatchWorkerTurnCompleted(
   page,
   options,
   requestLog,
@@ -109,7 +109,7 @@ async function waitForContentFactoryWorkerTurnCompleted(
       },
       requestLog,
     );
-    const summary = summarizeContentFactoryWorkerTurnReadModel(
+    const summary = summarizeWorkspacePatchWorkerTurnReadModel(
       readModel.result,
     );
     lastSummary = summary;
@@ -126,7 +126,7 @@ async function waitForContentFactoryWorkerTurnCompleted(
   );
 }
 
-function summarizeContentFactoryWorkerTurnReadModel(result) {
+function summarizeWorkspacePatchWorkerTurnReadModel(result) {
   const detail =
     result?.detail && typeof result.detail === "object" ? result.detail : {};
   const threadRead =
@@ -151,19 +151,19 @@ function summarizeContentFactoryWorkerTurnReadModel(result) {
   });
 }
 
-function buildContentFactoryInstalledState() {
-  const fixtureRoot = contentFactoryFixtureRoot();
+function buildWorkspacePatchInstalledState() {
+  const fixtureRoot = resolveFixtureRoot();
   const manifest = JSON.parse(
     fs.readFileSync(path.join(fixtureRoot, "content-factory-app.json"), "utf8"),
   );
   const timestamp = new Date().toISOString();
   return {
     schemaVersion: "agent-app.installed-state.v1",
-    appId: CONTENT_FACTORY_APP_ID,
+    appId: WORKER_APP_ID,
     installMode: "runtime_backed",
     disabled: false,
     identity: {
-      appId: CONTENT_FACTORY_APP_ID,
+      appId: WORKER_APP_ID,
       appVersion: manifest.version,
       sourceKind: "local_folder",
       sourceUri: fixtureRoot,
@@ -182,7 +182,7 @@ function buildArticleWorkspaceWorkerMetadata(workspace) {
   return {
     agent_app: {
       source: "right_surface_article_workspace",
-      app_id: CONTENT_FACTORY_APP_ID,
+      app_id: WORKER_APP_ID,
       session_id: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
       workspace_id: workspace.workspaceId,
       article_workspace_action: {
@@ -194,7 +194,7 @@ function buildArticleWorkspaceWorkerMetadata(workspace) {
         prompt:
           "写一篇关于内容工厂插件化写文章的公众号文章。要求先完成资料检索、标题候选、文章大纲、正文草稿、配图占位、引用来源和交付检查，并把完整正文写入右侧文章框。",
         object: {
-          app_id: CONTENT_FACTORY_APP_ID,
+          app_id: WORKER_APP_ID,
           kind: "articleDraft",
           id: ARTICLE_OBJECT_ID,
           session_id: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
@@ -212,6 +212,6 @@ function buildArticleWorkspaceWorkerMetadata(workspace) {
   };
 }
 
-function contentFactoryFixtureRoot() {
-  return path.resolve(process.cwd(), "src/features/agent-app/fixtures");
+function resolveFixtureRoot() {
+  return path.resolve(process.cwd(), "src/features/agent-app/testing/fixtures");
 }

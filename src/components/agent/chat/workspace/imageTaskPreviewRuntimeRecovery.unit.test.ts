@@ -195,11 +195,33 @@ describe("imageTaskPreviewRuntimeRecovery", () => {
         taskId: "task-1",
       }),
     ).toBe(true);
+    expect(
+      isImageWorkbenchTaskSatisfiedByCache({
+        imageWorkbenchState: {
+          ...createInitialSessionImageWorkbenchState(),
+          tasks: [createTask({ status: "complete" })],
+        },
+        taskId: "task-1",
+      }),
+    ).toBe(false);
   });
 
   it("应按图片任务 family、上下文和活跃窗口筛选可恢复记录", () => {
     expect(normalizeTaskFamily("cover_generate")).toBe("image");
+    expect(normalizeTaskFamily("image_generate", "image_generation")).toBe(
+      "image",
+    );
     expect(normalizeTaskFamily("video_generate")).toBe("video");
+    expect(
+      shouldRestoreImageTaskRecord({
+        taskRecord: createTaskRecord({
+          task_family: "image_generation",
+        }),
+        sessionId: "session-1",
+        contentId: "content-1",
+        now: NOW,
+      }),
+    ).toBe(true);
     expect(
       shouldRestoreImageTaskRecord({
         taskRecord: createTaskRecord({

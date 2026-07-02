@@ -26,6 +26,7 @@ use lime_infra::telemetry::RequestStatus;
 use serde_json::json;
 use serde_json::Map;
 use serde_json::Value;
+use std::collections::BTreeMap;
 
 #[derive(Debug, Default)]
 pub struct NoopEvidenceExportProvider;
@@ -137,6 +138,7 @@ fn basic_evidence_pack_summary(request: &EvidencePackRequest) -> EvidencePackSum
     let skill_searches = skill_searches_summary(&request.events);
     let mcp_tool_results = mcp_tool_results_summary(&request.events);
     let mcp_resource_reads = mcp_resource_reads_summary(&request.events);
+    let workflow_audit = workflow_audit_summary(&request.workflow_audit_events);
     let workspace_skill_tool_call_count = skill_invocations
         .as_array()
         .map(Vec::len)
@@ -154,6 +156,7 @@ fn basic_evidence_pack_summary(request: &EvidencePackRequest) -> EvidencePackSum
         "skill_searches": skill_searches,
         "mcp_tool_results": mcp_tool_results,
         "mcp_resource_reads": mcp_resource_reads,
+        "workflow_audit": workflow_audit,
     });
     if browser_action_index.is_some() || browser_file_evidence.is_some() {
         let snapshot_count = browser_action_index
@@ -220,6 +223,161 @@ fn basic_evidence_pack_summary(request: &EvidencePackRequest) -> EvidencePackSum
             ],
         })),
         artifacts: evidence_artifacts,
+    }
+}
+
+#[derive(Debug, Default)]
+struct WorkflowAuditSummary {
+    event_type_breakdown: BTreeMap<String, usize>,
+    status_breakdown: BTreeMap<String, usize>,
+    workflow_run_ids: Vec<String>,
+    workflow_keys: Vec<String>,
+    turn_ids: Vec<String>,
+    step_ids: Vec<String>,
+    connector_refs: Vec<String>,
+    tool_names: Vec<String>,
+    source_event_ids: Vec<String>,
+    redaction_policy_event_count: usize,
+    redacted_value_count: usize,
+}
+
+fn workflow_audit_summary(events: &[AgentEvent]) -> Value {
+    const WORKFLOW_AUDIT_SUMMARY_VALUE_LIMIT: usize = 32;
+
+    let mut summary = WorkflowAuditSummary::default();
+    for event in events {
+        *summary
+            .event_type_breakdown
+            .entry(event.event_type.clone())
+            .or_default() += 1;
+        push_unique_limited(
+            &mut summary.source_event_ids,
+            event.event_id.clone(),
+            WORKFLOW_AUDIT_SUMMARY_VALUE_LIMIT,
+        );
+        if let Some(turn_id) = event.turn_id.as_deref() {
+            push_unique_limited(
+                &mut summary.turn_ids,
+                turn_id.to_string(),
+                WORKFLOW_AUDIT_SUMMARY_VALUE_LIMIT,
+            );
+        }
+        collect_workflow_audit_string(
+            &mut summary.workflow_run_ids,
+            &event.payload,
+            &["workflowRunId", "workflow_run_id", "runId", "run_id"],
+            WORKFLOW_AUDIT_SUMMARY_VALUE_LIMIT,
+        );
+        collect_workflow_audit_string(
+            &mut summary.workflow_keys,
+            &event.payload,
+            &["workflowKey", "workflow_key"],
+            WORKFLOW_AUDIT_SUMMARY_VALUE_LIMIT,
+        );
+        collect_workflow_audit_string(
+            &mut summary.step_ids,
+            &event.payload,
+            &["stepId", "step_id"],
+            WORKFLOW_AUDIT_SUMMARY_VALUE_LIMIT,
+        );
+        collect_workflow_audit_string(
+            &mut summary.connector_refs,
+            &event.payload,
+            &["connectorRef", "connector_ref"],
+            WORKFLOW_AUDIT_SUMMARY_VALUE_LIMIT,
+        );
+        collect_workflow_audit_string(
+            &mut summary.tool_names,
+            &event.payload,
+            &["toolName", "tool_name"],
+            WORKFLOW_AUDIT_SUMMARY_VALUE_LIMIT,
+        );
+        if let Some(status) = metadata_string(Some(&event.payload), &["status"]) {
+            *summary.status_breakdown.entry(status).or_default() += 1;
+        }
+        if workflow_audit_redaction_policy_present(&event.payload) {
+            summary.redaction_policy_event_count += 1;
+        }
+        summary.redacted_value_count += workflow_audit_redacted_value_count(&event.payload);
+    }
+
+    json!({
+        "schemaVersion": "workflow-audit-summary.v1",
+        "status": if events.is_empty() { "missing" } else { "exported" },
+        "source": "workflow-events.jsonl",
+        "eventCount": events.len(),
+        "metadataOnly": true,
+        "rawContentIncluded": false,
+        "redactionPolicy": "workflow_audit_metadata_only",
+        "redactionPolicyEventCount": summary.redaction_policy_event_count,
+        "redactedValueCount": summary.redacted_value_count,
+        "eventTypeBreakdown": summary.event_type_breakdown,
+        "statusBreakdown": summary.status_breakdown,
+        "workflowRunIds": summary.workflow_run_ids,
+        "workflowKeys": summary.workflow_keys,
+        "turnIds": summary.turn_ids,
+        "stepIds": summary.step_ids,
+        "connectorRefs": summary.connector_refs,
+        "toolNames": summary.tool_names,
+        "sourceEventIds": summary.source_event_ids,
+        "valueLimit": WORKFLOW_AUDIT_SUMMARY_VALUE_LIMIT,
+    })
+}
+
+fn collect_workflow_audit_string(
+    target: &mut Vec<String>,
+    value: &Value,
+    keys: &[&str],
+    limit: usize,
+) {
+    for key in keys {
+        if let Some(text) = value.get(*key).and_then(value_string) {
+            push_unique_limited(target, text, limit);
+        }
+    }
+}
+
+fn push_unique_limited(target: &mut Vec<String>, value: String, limit: usize) {
+    if target.len() >= limit || target.iter().any(|existing| existing == &value) {
+        return;
+    }
+    target.push(value);
+}
+
+fn workflow_audit_redaction_policy_present(payload: &Value) -> bool {
+    payload
+        .get("redaction")
+        .and_then(|redaction| redaction.get("policy"))
+        .and_then(Value::as_str)
+        .is_some_and(|policy| policy == "workflow_audit_metadata_only")
+}
+
+fn workflow_audit_redacted_value_count(value: &Value) -> usize {
+    match value {
+        Value::Object(object) => {
+            let current = object
+                .get("redacted")
+                .and_then(Value::as_bool)
+                .is_some_and(|redacted| redacted)
+                && object
+                    .get("policy")
+                    .and_then(Value::as_str)
+                    .is_some_and(|policy| policy == "workflow_audit_metadata_only");
+            (if current { 1 } else { 0 })
+                + object
+                    .values()
+                    .map(workflow_audit_redacted_value_count)
+                    .sum::<usize>()
+        }
+        Value::Array(items) => items.iter().map(workflow_audit_redacted_value_count).sum(),
+        Value::String(text) => {
+            if text == "[redacted:workflow_audit_metadata_only]" {
+                1
+            } else {
+                0
+            }
+        }
+        _ => 0,
     }
 }
 

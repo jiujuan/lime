@@ -312,11 +312,11 @@ function readNestedObject(value, keys) {
   return null;
 }
 
-function readImageLaunch(metadata) {
+function readImageCommandIntent(metadata) {
   const harness = readNestedObject(metadata, ["harness"]) || metadata;
   const launch = readNestedObject(harness, [
-    "image_skill_launch",
-    "imageSkillLaunch",
+    "image_command_intent",
+    "imageCommandIntent",
   ]);
   const requestContext = readNestedObject(launch, [
     "request_context",
@@ -836,7 +836,8 @@ async function main() {
     const metadata = runtimeOptions.metadata || {};
     const asterChatRequest = runtimeOptions.hostOptions?.asterChatRequest || {};
     const turnConfig = asterChatRequest.turn_config || asterChatRequest;
-    const { launch, imageTask } = readImageLaunch(metadata);
+    const harness = readNestedObject(metadata, ["harness"]) || metadata;
+    const { launch, imageTask } = readImageCommandIntent(metadata);
     const runtimeContract = readNestedObject(imageTask, [
       "runtime_contract",
       "runtimeContract",
@@ -847,7 +848,11 @@ async function main() {
       runtimeContract?.contract_key ||
       runtimeContract?.contractKey;
 
-    assert(launch, "@配图 提交缺少 harness.image_skill_launch");
+    assert(launch, "@配图 提交缺少 harness.image_command_intent");
+    assert(
+      !readNestedObject(harness, ["image_skill_launch", "imageSkillLaunch"]),
+      "@配图 不应继续提交旧 harness.image_skill_launch",
+    );
     assert(imageTask, "@配图 提交缺少 image_task");
     assert(
       String(imageTask.prompt || "").includes(IMAGE_PROMPT),
@@ -866,7 +871,8 @@ async function main() {
       "@配图 不应把当前聊天 model 提交为 request model_preference",
     );
 
-    summary.assertions.imageSkillLaunchSubmitted = true;
+    summary.assertions.imageCommandIntentSubmitted = true;
+    summary.assertions.legacyImageSkillLaunchNotSubmitted = true;
     summary.assertions.imageGenerationContractPreserved = true;
     summary.assertions.chatModelPreferenceSuppressed = true;
     summary.submitRequest = {

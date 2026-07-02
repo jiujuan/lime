@@ -1,6 +1,8 @@
 import { act } from "react";
 import { describe, expect, it } from "vitest";
 import {
+  captureTurnStream,
+  completedTurn,
   flushEffects,
   mockCreateAgentRuntimeSession,
   mockGetAgentRuntimeSession,
@@ -575,6 +577,7 @@ describe("useAsterAgentChat 首页新会话", () => {
 
   it("话题列表暂时未返回当前执行会话时不应清空本地执行态", async () => {
     const workspaceId = "ws-topic-missing-active-session";
+    const stream = captureTurnStream();
     mockCreateAgentRuntimeSession.mockResolvedValue("session-live-missing");
     mockListAgentRuntimeSessions
       .mockResolvedValueOnce([])
@@ -631,6 +634,40 @@ describe("useAsterAgentChat 首页新会话", () => {
         ),
       ).toBe(false);
 
+      const listCallsBeforeActiveLoad =
+        mockListAgentRuntimeSessions.mock.calls.length;
+      await act(async () => {
+        await harness.getValue().loadTopics();
+      });
+      await flushEffects();
+      await flushEffects();
+
+      expect(mockListAgentRuntimeSessions).toHaveBeenCalledTimes(
+        listCallsBeforeActiveLoad,
+      );
+      expect(harness.getValue().sessionId).toBe("session-live-missing");
+      expect(harness.getValue().messages.length).toBeGreaterThan(0);
+      expect(
+        mockGetAgentRuntimeSession.mock.calls.some(
+          ([sessionId, options]) =>
+            sessionId === "session-live-missing" &&
+            options?.source === "missingSessionVerify",
+        ),
+      ).toBe(false);
+
+      await act(async () => {
+        stream.emit({
+          type: "turn_completed",
+          turn: completedTurn("turn-live-missing"),
+        });
+      });
+      await flushEffects();
+      await flushEffects();
+
+      expect(mockListAgentRuntimeSessions.mock.calls.length).toBeGreaterThan(
+        listCallsBeforeActiveLoad,
+      );
+
       await act(async () => {
         await harness.getValue().loadTopics();
       });
@@ -662,6 +699,7 @@ describe("useAsterAgentChat 首页新会话", () => {
     const workspaceId = "ws-topic-missing-not-found";
     const missingSessionId = "session-live-gone";
     const activeSessionId = "session-existing";
+    const stream = captureTurnStream();
 
     mockCreateAgentRuntimeSession.mockResolvedValue(missingSessionId);
     mockListAgentRuntimeSessions
@@ -723,6 +761,26 @@ describe("useAsterAgentChat 首页新会话", () => {
             sessionId === missingSessionId && options?.historyLimit === 40,
         ),
       ).toBe(false);
+
+      await act(async () => {
+        await harness.getValue().loadTopics();
+      });
+      await flushEffects();
+      await flushEffects();
+
+      expect(mockGetAgentRuntimeSession).not.toHaveBeenCalledWith(
+        missingSessionId,
+        expect.objectContaining({ source: "missingSessionVerify" }),
+      );
+      expect(harness.getValue().sessionId).toBe(missingSessionId);
+
+      await act(async () => {
+        stream.emit({
+          type: "turn_completed",
+          turn: completedTurn("turn-live-gone"),
+        });
+      });
+      await flushEffects();
 
       await act(async () => {
         await harness.getValue().loadTopics();

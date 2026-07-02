@@ -105,7 +105,55 @@ export interface MessageImageWorkbenchPreview {
   attemptCount?: number;
   placeholderText?: string | null;
   runtimeContract?: ImageRuntimeContractSnapshot | null;
+  workflowRun?: ImageCommandRunSnapshot | null;
 }
+
+export interface ImageCommandRunSnapshot {
+  runId: string;
+  sessionId?: string | null;
+  threadId?: string | null;
+  turnId?: string | null;
+  workflowKey?: string | null;
+  title: string;
+  summary: string;
+  requestedCount: number;
+  status:
+    | "requires_parameters"
+    | "queued"
+    | "running"
+    | "succeeded"
+    | "partial"
+    | "failed";
+  steps: ImageCommandRunStep[];
+  branches: ImageGenerationBranch[];
+  nextActions: ImageCommandNextAction[];
+}
+
+export interface ImageCommandRunStep {
+  id: string;
+  title: string;
+  status: "pending" | "running" | "succeeded" | "failed";
+  detail?: string | null;
+}
+
+export interface ImageGenerationBranch {
+  branchId: string;
+  title: string;
+  prompt: string;
+  taskId?: string | null;
+  artifactPath?: string | null;
+  status: "queued" | "running" | "succeeded" | "failed" | "retryable";
+  previewUrl?: string | null;
+  failureReason?: string | null;
+  slotId?: string | null;
+  shotType?: string | null;
+}
+
+export type ImageCommandNextAction =
+  | { type: "retry_branch"; branchId: string }
+  | { type: "generate_more"; branchId?: string | null }
+  | { type: "open_workbench"; taskId?: string | null }
+  | { type: "apply_to_document"; slotId: string };
 
 export interface MessageImageWorkbenchPreviewSelection {
   imageUrl?: string | null;

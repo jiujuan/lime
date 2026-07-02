@@ -22,7 +22,7 @@ function createImageMessage(overrides: Partial<Message> = {}): Message {
 }
 
 describe("imageWorkbenchMessageDisplay", () => {
-  it("图片任务协议正文应被移出可见正文，但执行过程应折叠保留", () => {
+  it("图片任务协议正文应被移出可见正文，但预览态过程仍可见", () => {
     const message = createImageMessage({
       contentParts: [
         { type: "thinking", text: "先确认青柠插画风格。" },
@@ -60,6 +60,8 @@ describe("imageWorkbenchMessageDisplay", () => {
       message,
       sanitizedContentParts: message.contentParts,
       shouldDeferMessageDetails: false,
+      shouldFoldSuppressedProcessFlow:
+        displayState.shouldFoldSuppressedProcessFlow,
       shouldSuppressImageProcessFlow: displayState.shouldSuppressProcessFlow,
     });
     const rendererState = resolveImageWorkbenchRendererProcessState({
@@ -75,15 +77,15 @@ describe("imageWorkbenchMessageDisplay", () => {
     });
 
     expect(displayState.visibleRawDisplayContent).toBe("");
-    expect(processState.shouldFoldSuppressedProcessFlow).toBe(true);
+    expect(processState.shouldFoldSuppressedProcessFlow).toBe(false);
     expect(processState.shouldSuppressRendererProcessFlow).toBe(false);
     expect(processState.displayContentParts?.map((part) => part.type)).toEqual([
       "thinking",
-      "tool_use",
+      "text",
     ]);
     expect(rendererState.shouldRenderInlineProcess).toBe(true);
     expect(rendererState.thinkingContent).toBe("先确认青柠插画风格。");
-    expect(rendererState.toolCalls?.[0]?.id).toBe("tool-image-1");
+    expect(rendererState.toolCalls).toBeUndefined();
   });
 
   it("只有旧提交摘要且没有过程时，应只保留图片轻卡入口", () => {
@@ -96,6 +98,8 @@ describe("imageWorkbenchMessageDisplay", () => {
       message,
       sanitizedContentParts: undefined,
       shouldDeferMessageDetails: false,
+      shouldFoldSuppressedProcessFlow:
+        displayState.shouldFoldSuppressedProcessFlow,
       shouldSuppressImageProcessFlow: displayState.shouldSuppressProcessFlow,
     });
     const rendererState = resolveImageWorkbenchRendererProcessState({
@@ -109,7 +113,7 @@ describe("imageWorkbenchMessageDisplay", () => {
 
     expect(displayState.visibleRawDisplayContent).toBe("");
     expect(processState.shouldFoldSuppressedProcessFlow).toBe(false);
-    expect(processState.shouldSuppressRendererProcessFlow).toBe(true);
+    expect(processState.shouldSuppressRendererProcessFlow).toBe(false);
     expect(rendererState.shouldRenderInlineProcess).toBe(false);
   });
 

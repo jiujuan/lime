@@ -2014,8 +2014,6 @@
   "plugin.marketplace.description": "從雲端市場讀取插件目錄，合併本機安裝狀態後展示可安裝、可啟用、可渲染和只讀歷史狀態。",
   "plugin.marketplace.refresh": "重新整理",
   "plugin.marketplace.loading": "正在載入",
-  "plugin.marketplace.cloudRequired.title": "需要連接雲端帳號",
-  "plugin.marketplace.cloudRequired.description": "插件市場需要連接雲端帳號後讀取租戶目錄。本機已安裝插件仍可透過顯式 @ 呼叫進入執行鏈路。",
   "plugin.marketplace.count.all": "全部插件",
   "plugin.marketplace.count.installed": "已安裝",
   "plugin.marketplace.count.installable": "可安裝",

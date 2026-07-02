@@ -1,4 +1,3 @@
-import contentFactoryFixture from "../fixtures/content-factory-app.json";
 import { parseManifest } from "../manifest/parseManifest";
 import { normalizeManifest } from "../manifest/normalizeManifest";
 import { projectApp } from "../projection/projectApp";
@@ -38,7 +37,7 @@ function assertIdentityMatchesManifest(
 }
 
 export function buildInstalledAppPreview(params: {
-  fixture?: unknown;
+  fixture: unknown;
   identity?: PackageIdentity;
   cloud?: CloudBootstrapApp;
   packageVerification?: AgentAppPackageVerificationResult;
@@ -47,8 +46,8 @@ export function buildInstalledAppPreview(params: {
   loadedAt?: string;
   checkedAt?: string;
   generatedAt?: string;
-} = {}): InstalledAppPreview {
-  const manifest = parseManifest(params.fixture ?? contentFactoryFixture);
+}): InstalledAppPreview {
+  const manifest = parseManifest(params.fixture);
   const normalized = normalizeManifest(manifest);
   const identity =
     params.identity ??

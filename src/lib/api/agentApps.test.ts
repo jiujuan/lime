@@ -2,8 +2,7 @@ import { Buffer } from "node:buffer";
 import { webcrypto } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { safeInvoke } from "@/lib/dev-bridge";
-import contentFactoryFixture from "@/features/agent-app/fixtures/content-factory-app.json";
-import seededAgentAppsFixture from "@/features/agent-app/fixtures/seeded-agent-apps.json";
+import contentFactoryFixture from "@/features/agent-app/testing/fixtures/content-factory-app.json";
 import { buildCloudReleasePackageIdentity } from "@/features/agent-app/install/cloudBootstrap";
 import {
   buildCloudReleaseSignaturePayload,
@@ -1063,112 +1062,16 @@ describe("agentApps API", () => {
     );
   });
 
-  it("直接安装 seeded content-factory-app 应使用本地 fixture 包并写入 installed state", async () => {
+  it("无云端上下文且无 bootstrap 时 Agent App 云目录应返回空目录", async () => {
     const catalog = await getAgentAppCloudCatalog();
-    const app = catalog.payload.apps[0]!;
-    appServerRequestMock.mockImplementation(async (method, args) => {
-      if (method === "agentAppInstalled/save") {
-        return { result: (args as { state: unknown }).state };
-      }
-      throw new Error(`unexpected method ${method}`);
-    });
 
-    const state = await installCloudAgentAppRelease({
-      app,
-      catalogSource: catalog.source,
-    });
-
-    expect(state).toMatchObject({
-      appId: "content-factory-app",
-      manifest: {
-        version: (contentFactoryFixture as AppManifest).version,
-        agentRuntime: {
-          intents: expect.arrayContaining([
-            expect.objectContaining({
-              key: "content_article_generate",
-              aliases: expect.arrayContaining(["@写文章"]),
-            }),
-          ]),
-        },
-      },
-      identity: {
-        sourceKind: "cloud_release",
-        sourceUri: app.packageUrl,
-        appVersion: app.version,
-        packageHash: app.packageHash,
-        manifestHash: app.manifestHash,
-      },
-      setup: {
-        cloudReleaseEvidence: {
-          status: "warning",
-          signaturePolicy: "optional",
-          signatureVerificationStatus: "not_configured",
-          packageHashMatched: true,
-          manifestHashMatched: true,
-          packageVerificationStatus: "verified",
-        },
-      },
-    });
-    expect(appServerRequestMock).toHaveBeenCalledTimes(1);
-    expect(appServerRequestMock).toHaveBeenCalledWith(
-      "agentAppInstalled/save",
-      {
-        state: expect.objectContaining({
-          appId: "content-factory-app",
-          setup: expect.objectContaining({
-            cloudReleaseEvidence: expect.objectContaining({
-              signaturePolicy: "optional",
-              packageVerificationStatus: "verified",
-            }),
-          }),
-        }),
-      },
-    );
-    expect(appServerRequestMock).not.toHaveBeenCalledWith(
-      "agentAppPackage/fetchCloud",
-      expect.anything(),
-    );
-  });
-
-  it("审查 seeded content-factory-app 应使用本地 fixture 包且不拉远端", async () => {
-    const catalog = await getAgentAppCloudCatalog();
-    const app = catalog.payload.apps[0]!;
-
-    const result = await reviewCloudAgentAppRelease({
-      app,
-      catalogSource: catalog.source,
-    });
-
-    expect(result.review.releaseEvidence).toMatchObject({
-      status: "warning",
-      sourceKind: "explicit_manifest",
-      packageVerificationStatus: "verified",
-      signaturePolicy: "optional",
-      signatureVerificationStatus: "not_configured",
-      packageHashMatched: true,
-      manifestHashMatched: true,
-      blockerCodes: [],
-    });
-    expect(result.state).toMatchObject({
-      appId: "content-factory-app",
-      setup: {
-        cloudReleaseEvidence: expect.objectContaining({
-          status: "warning",
-          signaturePolicy: "optional",
-          signatureVerificationStatus: "not_configured",
-          packageVerificationStatus: "verified",
-        }),
-      },
-      manifest: {
-        version: (contentFactoryFixture as AppManifest).version,
-        agentRuntime: {
-          intents: expect.arrayContaining([
-            expect.objectContaining({
-              key: "content_article_generate",
-              aliases: expect.arrayContaining(["@写文章"]),
-            }),
-          ]),
-        },
+    expect(catalog).toEqual({
+      source: "bootstrap",
+      payload: {
+        schemaVersion: "agent-app-cloud-bootstrap/v1",
+        tenantId: "unavailable",
+        generatedAt: "1970-01-01T00:00:00.000Z",
+        apps: [],
       },
     });
     expect(appServerRequestMock).not.toHaveBeenCalled();
@@ -1339,23 +1242,11 @@ describe("agentApps API", () => {
     });
   });
 
-  it("无云端上下文时 seeded content-factory-app 不应要求注册码", async () => {
+  it("无云端上下文时不应注入 seeded content-factory-app", async () => {
     const result = await getAgentAppCloudCatalog();
-    const manifest = contentFactoryFixture as AppManifest;
-    const seededApp = seededAgentAppsFixture.apps[0];
 
-    expect(result.source).toBe("seeded");
-    expect(result.payload.apps[0]).toMatchObject({
-      appId: "content-factory-app",
-      version: manifest.version,
-      releaseId: `seeded-content-factory-app-${manifest.version}`,
-      registrationRequired: false,
-      registrationState: "not_required",
-      enabled: true,
-      packageUrl: `https://seeded.local/agent-apps/content-factory-app/${manifest.version}.lapp`,
-      packageHash: seededApp.packageHash,
-      manifestHash: seededApp.manifestHash,
-    });
+    expect(result.source).toBe("bootstrap");
+    expect(result.payload.apps).toEqual([]);
   });
 
   it("远端不可用时应使用 bootstrap 中缓存的 Agent App 目录", async () => {

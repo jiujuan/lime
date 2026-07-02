@@ -368,7 +368,7 @@ fn build_create_params(input: ImageToolInput) -> MediaTaskArtifactImageCreatePar
     }
 }
 
-fn tool_result_from_response(response: MediaTaskArtifactResponse) -> ToolResult {
+pub(super) fn tool_result_from_response(response: MediaTaskArtifactResponse) -> ToolResult {
     let text = serde_json::to_string_pretty(&response).unwrap_or_else(|_| "{}".to_string());
     let mut result = ToolResult::success(text)
         .with_metadata("task_id", json!(response.task_id))

@@ -1,5 +1,5 @@
 export type ModelSkillLaunchKey =
-  | "image_skill_launch"
+  | "image_command_intent"
   | "cover_skill_launch"
   | "video_skill_launch"
   | "broadcast_skill_launch"
@@ -81,7 +81,7 @@ export interface ModelSkillLaunchDescriptor {
 
 export const MODEL_SKILL_LAUNCH = {
   image: {
-    launchKey: "image_skill_launch",
+    launchKey: "image_command_intent",
     requestContextKey: "image_task",
     defaultKind: "image_task",
     skillName: "image_generate",
@@ -232,6 +232,31 @@ export function buildModelSkillLaunchRequestMetadata(
   );
   const existingHarness = asRecord(existingMetadata?.harness);
 
+  if (descriptor.launchKey === "image_command_intent") {
+    const currentHarness = { ...(existingHarness || {}) };
+    delete currentHarness.allow_model_skills;
+    delete currentHarness.image_skill_launch;
+    delete currentHarness.imageSkillLaunch;
+
+    return {
+      ...(existingMetadata || {}),
+      harness: {
+        ...currentHarness,
+        image_command_intent: {
+          kind:
+            typeof requestContext.kind === "string"
+              ? requestContext.kind
+              : descriptor.defaultKind,
+          ...(scopedRequestContext
+            ? {
+                image_task: scopedRequestContext,
+              }
+            : { request_context: requestContext }),
+        },
+      },
+    };
+  }
+
   return {
     ...(existingMetadata || {}),
     harness: {
@@ -277,7 +302,7 @@ export function buildModelSkillLaunchRequestMetadataFor(
   );
 }
 
-export function buildImageSkillLaunchRequestMetadata(
+export function buildImageCommandIntentRequestMetadata(
   existingMetadata: Record<string, unknown> | undefined,
   requestContext: Record<string, unknown>,
 ): Record<string, unknown> {

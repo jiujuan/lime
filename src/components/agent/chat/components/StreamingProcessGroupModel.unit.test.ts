@@ -156,7 +156,7 @@ describe("StreamingProcessGroupModel", () => {
     ).toBe(false);
   });
 
-  it("纯 thinking 遇到 WebSearch 时应留在同一检索过程组内", () => {
+  it("纯 thinking 遇到 WebSearch 时应拆成独立检索过程", () => {
     expect(
       shouldSplitProcessBeforeEntry(
         [
@@ -173,7 +173,143 @@ describe("StreamingProcessGroupModel", () => {
           }),
         ),
       ),
+    ).toBe(true);
+  });
+
+  it("WebSearch 后出现 thinking 时可保留在当前检索过程说明内", () => {
+    expect(
+      shouldSplitProcessBeforeEntry(
+        [
+          toolEntry(
+            toolCall({
+              id: "tool-web-search",
+              name: "WebSearch",
+            }),
+          ),
+        ],
+        {
+          kind: "thinking",
+          id: "thinking-after-web",
+          text: "继续核验来源。",
+        },
+      ),
     ).toBe(false);
+  });
+
+  it("WebFetch 只应作为已有检索链的伴随步骤，不应并入普通工具过程", () => {
+    expect(
+      shouldSplitProcessBeforeEntry(
+        [
+          toolEntry(
+            toolCall({
+              id: "tool-skill-before-fetch",
+              name: "Skill",
+            }),
+          ),
+        ],
+        toolEntry(
+          toolCall({
+            id: "tool-web-fetch",
+            name: "WebFetch",
+          }),
+        ),
+      ),
+    ).toBe(true);
+
+    expect(
+      shouldSplitProcessBeforeEntry(
+        [
+          toolEntry(
+            toolCall({
+              id: "tool-web-search",
+              name: "WebSearch",
+            }),
+          ),
+          {
+            kind: "thinking",
+            id: "thinking-between-search-fetch",
+            text: "读取最相关来源。",
+          },
+        ],
+        toolEntry(
+          toolCall({
+            id: "tool-web-fetch-after-search",
+            name: "WebFetch",
+          }),
+        ),
+      ),
+    ).toBe(false);
+  });
+
+  it("连续失败的 WebSearch 应保持同一批次，避免诊断详情铺满对话", () => {
+    expect(
+      shouldSplitProcessBeforeEntry(
+        [
+          toolEntry(
+            toolCall({
+              id: "tool-web-search-failed-1",
+              name: "web_search",
+              status: "failed",
+            }),
+          ),
+        ],
+        toolEntry(
+          toolCall({
+            id: "tool-web-search-failed-2",
+            name: "web_search",
+            status: "failed",
+          }),
+        ),
+      ),
+    ).toBe(false);
+
+    expect(
+      shouldSplitProcessBeforeEntry(
+        [
+          toolEntry(
+            toolCall({
+              id: "tool-web-search-completed-1",
+              name: "web_search",
+              status: "completed",
+            }),
+          ),
+        ],
+        toolEntry(
+          toolCall({
+            id: "tool-web-search-completed-2",
+            name: "web_search",
+            status: "completed",
+          }),
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  it("WebFetch 后出现新的 WebSearch 时应开启下一组检索过程", () => {
+    expect(
+      shouldSplitProcessBeforeEntry(
+        [
+          toolEntry(
+            toolCall({
+              id: "tool-web-search-before-fetch",
+              name: "web_search",
+            }),
+          ),
+          toolEntry(
+            toolCall({
+              id: "tool-web-fetch-before-next-search",
+              name: "WebFetch",
+            }),
+          ),
+        ],
+        toolEntry(
+          toolCall({
+            id: "tool-web-search-next",
+            name: "web_search",
+          }),
+        ),
+      ),
+    ).toBe(true);
   });
 
   it("失败 Skill 仍默认折叠，避免错误细节抢占正文", () => {

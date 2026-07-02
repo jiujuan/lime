@@ -6,18 +6,18 @@
  * @module imageWorkbenchHelpers
  */
 
-import { buildImageTaskAssistantContent } from "../imageTaskPersona";
 import type { HandleSendOptions } from "../../hooks/handleSendTypes";
-import { asRecord, normalizeImageWorkbenchMode } from "./skillSlotUtils";
+import { asRecord } from "./skillSlotUtils";
 import { normalizeOptionalText } from "./commandRecentDefaults";
+import { buildImageTaskAssistantContent } from "../imageTaskPersona";
 
 export function readImageSkillLaunchContext(
   requestMetadata: Record<string, unknown> | undefined,
 ): Record<string, unknown> | undefined {
   const harness = asRecord(requestMetadata?.harness);
   const launch =
-    asRecord(harness?.image_skill_launch) ||
-    asRecord(harness?.imageSkillLaunch);
+    asRecord(harness?.image_command_intent) ||
+    asRecord(harness?.imageCommandIntent);
   if (!launch) {
     return undefined;
   }
@@ -45,19 +45,17 @@ export function buildImageWorkbenchAssistantDraft(
     return undefined;
   }
 
-  const modelName =
-    normalizeOptionalText(imageTask.model as string | undefined) ||
-    normalizeOptionalText(imageTask.model_name as string | undefined) ||
-    normalizeOptionalText(imageTask.modelName as string | undefined) ||
-    null;
-  const mode = normalizeImageWorkbenchMode(imageTask.mode);
+  const assistantContent = buildImageTaskAssistantContent({
+    prompt,
+    mode: imageTask.mode as "generate" | "edit" | "variation" | undefined,
+    modelName:
+      normalizeOptionalText(imageTask.model as string | undefined) ||
+      normalizeOptionalText(imageTask.model_name as string | undefined) ||
+      normalizeOptionalText(imageTask.modelName as string | undefined),
+  });
 
   return {
-    content: "",
-    fallbackContent: buildImageTaskAssistantContent({
-      prompt,
-      mode,
-      modelName,
-    }),
+    content: assistantContent,
+    fallbackContent: assistantContent,
   };
 }

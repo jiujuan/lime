@@ -1,3 +1,41 @@
+## Lime v1.86.0
+
+<sub>The Simplified Chinese release notes are the primary version. This English page is a companion for international readers.</sub>
+
+### New Features
+
+- Continued grounding the Lime Plugin Package v1 content-factory source of truth: sample and technical docs now cover `plugin.json`, `app.runtime.yaml`, `app.workbench.yaml`, skills / subagents / CLIs / connectors / hooks / resources / workflows / artifacts / examples.
+- Kept tightening the current image-command mainline so `@image`, `@edit image`, and `@redraw` have a more complete preview, branch-selection, retry, and writeback path.
+- Continued shrinking the gap between Agent Chat live timeline, session restore, and read-model boundaries so stale history and ordering drift are less likely during streaming.
+
+### Fixes
+
+- Fixed several host-managed generation and image-task routing issues that could leak the wrong image context into normal follow-up turns.
+- Fixed stale-detail overwrite, rollback, and ordering drift during streaming refresh so message and thread-item projection is more stable.
+- Fixed projection drift in the plugin marketplace, installed Agent Apps, manifest parsing, and seeded fixtures.
+
+### Improvements and Refactors
+
+- Split App Server runtime, worker, image-command, plugin-manifest, and agent-app package code into narrower modules to reduce central-file sprawl.
+- Cleaned up Electron host commands / IPC channels / resource-manager window host integration and the renderer bridge surface.
+- Updated the `scripts/agent-runtime` current fixture set, `scripts/agent-qc` local gates, `scripts/i18n` unused-key checks, and release-doc tooling.
+
+### Tests and Quality
+
+- Added or updated coverage for Agent Apps, plugin contracts, image task viewer behavior, current fixture smoke, Rust runtime, and App Server regressions.
+- Continued tightening the release gates around `verify:app-version`, `test:contracts`, and GUI smoke.
+
+### Documentation
+
+- Updated the Writing v2, images v2, thread timeline, plugin technical-spec, and quality / command-runtime / Playwright guidance docs.
+
+### Other
+
+- Bumped version facts to `1.86.0` across the root app, CLI npm package, Rust workspace, `lime-rs/Cargo.lock`, and `lime-rs/crates/aster-rust/Cargo.lock`.
+- Excluded the local temporary file `internal/roadmap/Writing/.DS_Store`.
+
+**Full changes**: `v1.85.0` -> `v1.86.0`
+
 ## Lime v1.85.0
 
 <sub>The Simplified Chinese release notes are the primary version. This English page is a companion for international readers.</sub>

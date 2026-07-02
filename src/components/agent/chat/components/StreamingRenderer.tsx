@@ -691,7 +691,7 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
             return;
           }
           const hasDownstreamContent = hasRenderableDownstreamContent(index);
-          processBuffer.push({
+          const nextEntry: StreamingProcessEntry = {
             kind: "thinking",
             id: `thinking-${index}`,
             text: part.text,
@@ -700,7 +700,11 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
             isActive: isStreaming,
             autoCollapseEligible: hasDownstreamContent,
             metadata: part.metadata,
-          });
+          };
+          if (shouldSplitProcessBeforeEntry(processBuffer, nextEntry)) {
+            flushProcessBuffer(String(index));
+          }
+          processBuffer.push(nextEntry);
           return;
         }
 
@@ -717,6 +721,8 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
             processBuffer,
             nextEntry,
           );
+          const shouldKeepCompletedProcessIntroWithTool =
+            !isStreaming && processBufferOnlyThinking() && shouldSplitBeforeTool;
           if (
             isStreaming &&
             processBufferOnlyThinking() &&
@@ -726,7 +732,10 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
               forceGroup: true,
             });
           }
-          if (shouldSplitBeforeTool) {
+          if (
+            shouldSplitBeforeTool &&
+            !shouldKeepCompletedProcessIntroWithTool
+          ) {
             flushProcessBuffer(String(index));
           }
           processBuffer.push(nextEntry);
@@ -776,15 +785,19 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
         }
 
         if (!suppressProcessFlow) {
-          if (isStreaming && processBufferOnlyThinking()) {
-            flushProcessBuffer(String(index));
-          }
-          processBuffer.push({
+          const nextEntry: StreamingProcessEntry = {
             kind: "action",
             id: part.actionRequired.requestId,
             actionRequired: part.actionRequired,
-          });
-          flushProcessBuffer(String(index));
+          };
+          if (shouldSplitProcessBeforeEntry(processBuffer, nextEntry)) {
+            flushProcessBuffer(String(index));
+          }
+          if (isStreaming && processBufferOnlyThinking()) {
+            flushProcessBuffer(String(index));
+          }
+          processBuffer.push(nextEntry);
+          flushProcessBuffer(`${index}-action`);
         }
       });
 
@@ -847,6 +860,35 @@ export const StreamingRenderer: React.FC<StreamingRendererProps> = memo(
     const fallbackProcessNode = (() => {
       if (fallbackProcessEntries.length === 0) {
         return null;
+      }
+
+      const processSegments: StreamingProcessEntry[][] = [];
+      let segmentBuffer: StreamingProcessEntry[] = [];
+      for (const entry of fallbackProcessEntries) {
+        if (shouldSplitProcessBeforeEntry(segmentBuffer, entry)) {
+          processSegments.push(segmentBuffer);
+          segmentBuffer = [];
+        }
+        segmentBuffer.push(entry);
+      }
+      if (segmentBuffer.length > 0) {
+        processSegments.push(segmentBuffer);
+      }
+
+      if (processSegments.length > 1) {
+        return (
+          <>
+            {processSegments.map((segment, segmentIndex) =>
+              renderProcessRun(
+                segment,
+                `fallback-process-${segmentIndex}`,
+                {
+                  forceGroup: true,
+                },
+              ),
+            )}
+          </>
+        );
       }
 
       const [firstEntry, ...downstreamEntries] = fallbackProcessEntries;

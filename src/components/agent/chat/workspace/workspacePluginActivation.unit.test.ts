@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import contentFactoryFixture from "@/features/agent-app/fixtures/content-factory-app.json";
+import contentFactoryFixture from "@/features/agent-app/testing/fixtures/content-factory-app.json";
 import { buildPackageIdentity } from "@/features/agent-app/install/packageIdentity";
 import { normalizeManifest } from "@/features/agent-app/manifest/normalizeManifest";
 import { parseManifest } from "@/features/agent-app/manifest/parseManifest";
@@ -390,8 +390,8 @@ describe("workspacePluginActivation", () => {
           ]),
           skill_refs: expect.arrayContaining([
             expect.objectContaining({
-              id: "gongzonghao-article-writer",
-              title: "公众号文章写作",
+              id: "article-research",
+              title: "资料检索",
             }),
           ]),
           cli_refs: ["content-factory"],

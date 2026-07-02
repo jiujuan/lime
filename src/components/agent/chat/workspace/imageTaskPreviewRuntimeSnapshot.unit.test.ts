@@ -145,6 +145,8 @@ describe("imageTaskPreviewRuntimeSnapshot", () => {
       contentId: "content-1",
       phase: "pending_submit",
     });
+    expect(snapshot.message.content).toContain("城市夜景分镜");
+    expect(snapshot.task.assistantIntro).toContain("城市夜景分镜");
   });
 
   it("应从 completed task record 投影多图输出、runtime contract 和工作台任务", () => {
@@ -239,6 +241,8 @@ describe("imageTaskPreviewRuntimeSnapshot", () => {
 
     expect(snapshot).not.toBeNull();
     expect(snapshot?.terminal).toBe(true);
+    expect(snapshot?.message.content).toContain("春日咖啡馆插画");
+    expect(snapshot?.task.assistantIntro).toContain("春日咖啡馆插画");
     expect(snapshot?.updatedAt).toBe(Date.parse("2026-07-02T08:00:00.000Z"));
     expect(snapshot?.outputs.map((output) => output.url)).toEqual([
       "https://cdn.example.com/hero.png",
@@ -302,6 +306,53 @@ describe("imageTaskPreviewRuntimeSnapshot", () => {
     });
   });
 
+  it("应将 succeeded 或 partial 但无输出的图片任务继续视为 running", () => {
+    for (const normalizedStatus of ["success", "partial"] as const) {
+      const snapshot = buildParsedImageTaskSnapshot({
+        taskId: `task-${normalizedStatus}-no-output`,
+        taskType: "image_generate",
+        projectId: "project-1",
+        contentId: "content-1",
+        taskFilePath: ".lime/media/task-no-output.json",
+        artifactPath: ".lime/artifacts/task-no-output.json",
+        canvasState: null,
+        taskRecord: {
+          status: "completed",
+          normalized_status: normalizedStatus,
+          created_at: "2026-07-02T10:00:00.000Z",
+          payload: {
+            prompt: "从花城汇看广州塔的春天照片",
+            presentation: {
+              assistant_intro:
+                "好啊，用 Nanobanana Pro 给你生成一张从花城汇看广州塔的春天照片，先获取下工具参数，马上生成",
+              completion_caption: "搞定，从花城汇看广州塔的春日景象。",
+            },
+          },
+          progress: {
+            phase: "succeeded",
+            message: "图片生成完成。",
+          },
+        },
+      });
+
+      expect(snapshot).not.toBeNull();
+      expect(snapshot?.terminal).toBe(false);
+      expect(snapshot?.task.status).toBe("running");
+      expect(snapshot?.task.caption).toBeNull();
+      expect(snapshot?.message.content).toContain(
+        "好啊，用 Nanobanana Pro 给你生成一张从花城汇看广州塔的春天照片",
+      );
+      expect(snapshot?.message.imageWorkbenchPreview).toMatchObject({
+        taskId: `task-${normalizedStatus}-no-output`,
+        status: "running",
+        phase: "running",
+        imageUrl: null,
+        imageCount: 1,
+        caption: null,
+      });
+    }
+  });
+
   it("应从 artifact output 复用 record，并在无 record 时回退 pending snapshot", () => {
     const recordSnapshot = buildImageTaskSnapshotFromArtifactOutput({
       artifact: createArtifact({
@@ -351,6 +402,109 @@ describe("imageTaskPreviewRuntimeSnapshot", () => {
       status: "running",
       taskFilePath: "/workspace/.lime/media/task-artifact.json",
       artifactPath: ".lime/artifacts/task-artifact.json",
+    });
+  });
+
+  it("应从图片 task payload 恢复 ImageCommandRunSnapshot", () => {
+    const snapshot = buildImageTaskSnapshotFromArtifactOutput({
+      artifact: createArtifact({
+        task_id: "task-workflow",
+        status: "running",
+        normalized_status: "running",
+        record: {
+          task_id: "task-workflow",
+          task_type: "image_generate",
+          task_family: "image",
+          status: "running",
+          normalized_status: "running",
+          created_at: "2026-07-02T09:00:00.000Z",
+          payload: {
+            prompt: "生成两张青柠主图",
+            count: 2,
+            image_command_run: {
+              run_id: "image-command-run-turn-1",
+              workflow_key: "image_command_workflow",
+              session_id: "session-1",
+              thread_id: "thread-1",
+              turn_id: "turn-1",
+              title: "青柠主图",
+              summary: "生成两张青柠主图",
+              requested_count: 2,
+              status: "queued",
+              steps: [
+                {
+                  id: "intent",
+                  title: "解析图片需求",
+                  status: "succeeded",
+                },
+                {
+                  id: "generate",
+                  title: "生成图片",
+                  status: "running",
+                },
+              ],
+              branches: [
+                {
+                  branch_id: "image-command-run-turn-1:branch:white-bg",
+                  title: "白底主图",
+                  prompt: "白底青柠主图",
+                  status: "queued",
+                  slot_id: "white-bg",
+                },
+                {
+                  branch_id: "image-command-run-turn-1:branch:gray-bg",
+                  title: "浅灰主图",
+                  prompt: "浅灰背景青柠主图",
+                  status: "queued",
+                  slot_id: "gray-bg",
+                },
+              ],
+              next_actions: [
+                {
+                  type: "open_workbench",
+                },
+              ],
+            },
+          },
+        },
+      }),
+      projectId: "project-1",
+      contentId: "content-1",
+      canvasState: null,
+    });
+
+    expect(snapshot?.message.imageWorkbenchPreview?.workflowRun).toMatchObject({
+      runId: "image-command-run-turn-1",
+      workflowKey: "image_command_workflow",
+      requestedCount: 2,
+      status: "queued",
+      steps: [
+        {
+          id: "intent",
+          status: "succeeded",
+        },
+        {
+          id: "generate",
+          status: "running",
+        },
+      ],
+      branches: [
+        {
+          branchId: "image-command-run-turn-1:branch:white-bg",
+          title: "白底主图",
+          prompt: "白底青柠主图",
+          slotId: "white-bg",
+        },
+        {
+          branchId: "image-command-run-turn-1:branch:gray-bg",
+          title: "浅灰主图",
+        },
+      ],
+      nextActions: [
+        {
+          type: "open_workbench",
+        },
+      ],
     });
   });
 });

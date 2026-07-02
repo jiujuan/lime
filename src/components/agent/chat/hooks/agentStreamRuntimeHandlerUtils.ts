@@ -35,9 +35,9 @@ export function sequenceFromAgentEvent(event: AgentEvent): number | null {
 function hasOwnRecordKeys(value: unknown): value is Record<string, unknown> {
   return Boolean(
     value &&
-      typeof value === "object" &&
-      !Array.isArray(value) &&
-      Object.keys(value as Record<string, unknown>).length > 0,
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.keys(value as Record<string, unknown>).length > 0,
   );
 }
 
@@ -119,17 +119,23 @@ export function bindAssistantMessageToRuntimeTurn(
     return;
   }
 
-  setMessages((prev) =>
-    prev.map((message) =>
-      message.id === assistantMsgId &&
-      message.runtimeTurnId !== normalizedTurnId
-        ? {
-            ...message,
-            runtimeTurnId: normalizedTurnId,
-          }
-        : message,
-    ),
-  );
+  setMessages((prev) => {
+    let changed = false;
+    const next = prev.map((message) => {
+      if (
+        message.id !== assistantMsgId ||
+        message.runtimeTurnId === normalizedTurnId
+      ) {
+        return message;
+      }
+      changed = true;
+      return {
+        ...message,
+        runtimeTurnId: normalizedTurnId,
+      };
+    });
+    return changed ? next : prev;
+  });
 }
 
 export function hasRetainedSkillInlineProcess(message: Message): boolean {

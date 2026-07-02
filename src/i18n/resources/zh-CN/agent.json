@@ -2014,8 +2014,6 @@
   "plugin.marketplace.description": "从云端市场读取插件目录，合并本地安装态后展示可安装、可激活、可渲染和只读历史状态。",
   "plugin.marketplace.refresh": "刷新",
   "plugin.marketplace.loading": "正在加载",
-  "plugin.marketplace.cloudRequired.title": "需要连接云端账号",
-  "plugin.marketplace.cloudRequired.description": "插件市场需要连接云端账号后读取租户目录。本地已安装插件仍可通过显式 @ 调用进入运行链路。",
   "plugin.marketplace.count.all": "全部插件",
   "plugin.marketplace.count.installed": "已安装",
   "plugin.marketplace.count.installable": "可安装",

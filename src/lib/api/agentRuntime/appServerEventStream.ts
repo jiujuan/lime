@@ -378,6 +378,9 @@ export function projectAppServerAgentEventPayload(
   if (isLegacyTurnTerminalAppServerEventType(event.type)) {
     return null;
   }
+  if (event.type.startsWith("workflow.")) {
+    return null;
+  }
 
   const payload = normalizeRecord(event.payload) ?? {};
   const rendererEventReceivedAt = Date.now();
@@ -431,7 +434,7 @@ export function projectAppServerAgentEventPayload(
       return {
         ...basePayload,
         type: "text_delta",
-        text: readString(payload, "text", "delta", "message") ?? "",
+        text: readAgentMessageDeltaText(payload) ?? "",
         itemId: readAgentMessageItemId(payload),
         item_id: readAgentMessageItemId(payload),
         phase: readAgentMessagePhase(payload),
@@ -670,6 +673,72 @@ export function projectAppServerAgentEventPayload(
         tool_id: readToolCallId(payload) ?? "",
         result: normalizeToolExecutionResult(payload),
       };
+    case "image_task.created": {
+      const response = normalizeRecord(payload.response);
+      const responseSource = response ?? {};
+      const record = normalizeRecord(response?.record);
+      const responsePayload = normalizeRecord(record?.payload);
+      return {
+        ...basePayload,
+        type: "image_task_created",
+        task_id:
+          readString(payload, "task_id", "taskId") ??
+          readString(responseSource, "task_id", "taskId") ??
+          "",
+        task_type:
+          readString(payload, "task_type", "taskType") ??
+          readString(responseSource, "task_type", "taskType"),
+        task_family:
+          readString(payload, "task_family", "taskFamily") ??
+          readString(responseSource, "task_family", "taskFamily"),
+        status:
+          readString(payload, "status") ?? readString(responseSource, "status"),
+        normalized_status:
+          readString(payload, "normalized_status", "normalizedStatus") ??
+          readString(responseSource, "normalized_status", "normalizedStatus"),
+        artifact_path:
+          readString(payload, "artifact_path", "artifactPath") ??
+          readString(responseSource, "artifact_path", "artifactPath"),
+        absolute_path:
+          readString(payload, "absolute_path", "absolutePath") ??
+          readString(responseSource, "absolute_path", "absolutePath"),
+        ...(response ? { response } : {}),
+        ...(responsePayload ? { payload: responsePayload } : {}),
+      };
+    }
+    case "image_task.parameters.required":
+    case "image_task_parameters_required": {
+      const missing =
+        readStringArray(
+          payload,
+          "missing",
+          "missingParameters",
+          "missing_parameters",
+        ) ?? [];
+      const prompt =
+        readString(payload, "prompt", "message", "reason") ??
+        "图片生成还需要补充必要信息。";
+      return {
+        ...basePayload,
+        type: "runtime_status",
+        status: {
+          phase: "routing",
+          title: "图片生成需要补充信息",
+          detail: missing.length > 0 ? `缺少: ${missing.join(", ")}` : prompt,
+          checkpoints: missing,
+          metadata: {
+            source: readString(payload, "source") ?? "image_command_workflow",
+            agentui: {
+              workflow_key: "image_command_workflow",
+              status_kind: "image_task_parameters_required",
+              missing,
+              missing_parameters: missing,
+              image_task: normalizeRecord(payload.image_task),
+            },
+          },
+        },
+      };
+    }
     case "file.read":
       return {
         ...basePayload,
@@ -733,7 +802,37 @@ export function projectAppServerAgentEventPayload(
       return {
         ...basePayload,
         type: "artifact_snapshot",
+        artifact: readArtifactSnapshotSignalFromPayload(payload, event),
       };
+    case "agent_app_worker.hook":
+      return {
+        ...basePayload,
+        type: "item_completed",
+        item: readAgentAppWorkerHookItemFromPayload(payload, event),
+      };
+    case "agent_app_worker.retry":
+      return {
+        ...basePayload,
+        type: "item_completed",
+        item: readAgentAppWorkerRetryItemFromPayload(payload, event),
+      };
+    case "workflow.run.started":
+    case "workflow.run.retrying":
+    case "workflow.step.started":
+    case "workflow.step.retrying":
+    case "workflow.tool.started":
+    case "workflow.connector.requested":
+    case "workflow.connector.completed":
+    case "workflow.hook.started":
+    case "workflow.hook.completed":
+    case "workflow.artifact.delta":
+    case "workflow.step.progress":
+    case "workflow.step.completed":
+    case "workflow.tool.completed":
+    case "workflow.run.completed":
+    case "workflow.step.failed":
+    case "workflow.run.failed":
+      return null;
     case "action.required":
       return {
         ...basePayload,
@@ -1036,6 +1135,179 @@ function normalizeToolExecutionResult(
   };
 }
 
+function readArtifactSnapshotSignalFromPayload(
+  payload: Record<string, unknown>,
+  event: AppServerAgentEvent,
+): Record<string, unknown> {
+  const artifact = normalizeRecord(payload.artifact) ?? payload;
+  const artifactRef = readString(
+    artifact,
+    "artifactRef",
+    "artifact_ref",
+    "artifactId",
+    "artifact_id",
+    "id",
+  );
+  const artifactId =
+    readString(artifact, "artifactId", "artifact_id", "id", "artifactRef") ??
+    event.eventId;
+  const filePath = readString(
+    artifact,
+    "filePath",
+    "file_path",
+    "path",
+    "artifactPath",
+    "artifact_path",
+  );
+  const sidecarRef =
+    normalizeRecord(artifact.sidecarRef) ?? normalizeRecord(payload.sidecarRef);
+  const metadata = {
+    ...(normalizeRecord(artifact.metadata) ??
+      normalizeRecord(payload.metadata) ??
+      {}),
+    sessionId: event.sessionId,
+    ...(event.threadId ? { threadId: event.threadId } : {}),
+    ...(event.turnId ? { turnId: event.turnId } : {}),
+    artifactId,
+    ...(artifactRef ? { artifactRef, appServerArtifactRef: artifactRef } : {}),
+    ...(filePath ? { filePath } : {}),
+    ...(sidecarRef ? { sidecarRef } : {}),
+    ...copyDefinedFields(artifact, [
+      "contentStatus",
+      "contentBytes",
+      "contentSha256",
+    ]),
+    ...copyDefinedFields(payload, [
+      "contentStatus",
+      "contentBytes",
+      "contentSha256",
+    ]),
+  };
+  return {
+    ...artifact,
+    artifactId,
+    artifact_id: readString(artifact, "artifact_id") ?? artifactId,
+    ...(artifactRef ? { artifactRef, artifact_ref: artifactRef } : {}),
+    ...(filePath ? { filePath, file_path: filePath } : {}),
+    ...(typeof artifact.content === "string"
+      ? { content: artifact.content }
+      : typeof payload.content === "string"
+        ? { content: payload.content }
+        : {}),
+    metadata,
+  };
+}
+
+function copyDefinedFields(
+  record: Record<string, unknown>,
+  keys: string[],
+): Record<string, unknown> {
+  return Object.fromEntries(
+    keys
+      .map((key) => [key, record[key]] as const)
+      .filter(([, value]) => typeof value !== "undefined"),
+  );
+}
+
+function normalizeAgentAppWorkerTimelineStatus(
+  status: string | undefined,
+): "completed" | "failed" {
+  return status === "failed" || status === "error" ? "failed" : "completed";
+}
+
+function readAgentAppWorkerHookItemFromPayload(
+  payload: Record<string, unknown>,
+  event: AppServerAgentEvent,
+): Record<string, unknown> {
+  const status = readString(payload, "status");
+  const hookKey = readString(payload, "hookKey", "hook_key") ?? "hook";
+  const hookEvent = readString(payload, "hookEvent", "hook_event");
+  const hookScope = readString(payload, "hookScope", "hook_scope");
+  const reasonCode = readString(payload, "reasonCode", "reason_code");
+  const resultSummary = readString(
+    payload,
+    "resultSummary",
+    "result_summary",
+    "message",
+    "summary",
+  );
+  const text =
+    resultSummary ??
+    [hookScope, hookEvent, hookKey, status, reasonCode]
+      .filter(Boolean)
+      .join(" · ");
+  return {
+    ...readAgentThreadItemBase(
+      payload,
+      event,
+      normalizeAgentAppWorkerTimelineStatus(status),
+    ),
+    id: `${event.eventId}:agent-app-worker-hook`,
+    type: "turn_summary",
+    text,
+    metadata: {
+      source: "agent_app_worker.hook",
+      eventType: event.type,
+      status,
+      hookKey,
+      hookEvent,
+      hookScope,
+      reasonCode,
+      resultSummary,
+      agentAppWorker: normalizeRecord(payload.agentAppWorker),
+      agent_app_worker: normalizeRecord(payload.agent_app_worker),
+      raw: payload,
+    },
+  };
+}
+
+function readAgentAppWorkerRetryItemFromPayload(
+  payload: Record<string, unknown>,
+  event: AppServerAgentEvent,
+): Record<string, unknown> {
+  const status = readString(payload, "status") ?? "failed";
+  const message =
+    readString(
+      payload,
+      "message",
+      "errorMessage",
+      "error_message",
+      "error",
+      "retryAdvice",
+      "retry_advice",
+    ) ?? "agent_app_worker.retry";
+  return {
+    ...readAgentThreadItemBase(
+      payload,
+      event,
+      normalizeAgentAppWorkerTimelineStatus(status),
+    ),
+    id: `${event.eventId}:agent-app-worker-retry`,
+    type: "turn_summary",
+    text: message,
+    metadata: {
+      source: "agent_app_worker.retry",
+      eventType: event.type,
+      status,
+      retryAttempt: readFiniteNumber(payload, "retryAttempt", "retry_attempt"),
+      retryMaxAttempts: readFiniteNumber(
+        payload,
+        "retryMaxAttempts",
+        "retry_max_attempts",
+      ),
+      failureCategory: readString(
+        payload,
+        "failureCategory",
+        "failure_category",
+      ),
+      errorCode: readString(payload, "errorCode", "error_code"),
+      agentAppWorker: normalizeRecord(payload.agentAppWorker),
+      agent_app_worker: normalizeRecord(payload.agent_app_worker),
+      raw: payload,
+    },
+  };
+}
+
 function readCommandString(payload: Record<string, unknown>): string {
   const argv = Array.isArray(payload.commandArgv)
     ? payload.commandArgv.filter(
@@ -1278,7 +1550,7 @@ function projectTextDeltaBatchPayload(
   return {
     ...basePayload,
     type: "text_delta_batch",
-    text: readString(payload, "text", "delta", "message") ?? chunks.join(""),
+    text: readAgentMessageDeltaText(payload) ?? chunks.join(""),
     chunks,
     itemId: readAgentMessageItemId(payload),
     item_id: readAgentMessageItemId(payload),
@@ -1302,10 +1574,31 @@ function readAgentMessageItemId(
   );
 }
 
+function readAgentMessageDeltaText(
+  payload: Record<string, unknown>,
+): string | undefined {
+  return (
+    readString(payload, "text", "delta", "message") ??
+    readString(
+      normalizeRecord(payload.content) ?? {},
+      "text",
+      "delta",
+      "message",
+    )
+  );
+}
+
 function readAgentMessagePhase(
   payload: Record<string, unknown>,
 ): string | undefined {
-  return readString(payload, "phase", "messagePhase", "message_phase");
+  return readString(
+    payload,
+    "phase",
+    "messagePhase",
+    "message_phase",
+    "streamPhase",
+    "stream_phase",
+  );
 }
 
 function readAgentMessageFromPayload(

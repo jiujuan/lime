@@ -477,9 +477,9 @@ mod tests {
     fallback: artifactPreview
 "#,
         )?;
-        fs::create_dir_all(app_dir.join("skills/article_writing"))?;
+        fs::create_dir_all(app_dir.join("skills/article-writing"))?;
         fs::write(
-            app_dir.join("skills/article_writing/SKILL.md"),
+            app_dir.join("skills/article-writing/SKILL.md"),
             r#"---
 name: article-writing
 description: 正文写作技能

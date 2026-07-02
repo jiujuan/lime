@@ -24,6 +24,8 @@ const INDEX_ENTRY_PATH = "/index.html";
 const WINDOW_ROUTE_QUERY_PARAM = "lime_window";
 const UPDATE_NOTIFICATION_ROUTE_ID = "update-notification";
 const UPDATE_NOTIFICATION_PATH = "/update-notification";
+const RESOURCE_MANAGER_ROUTE_ID = "resource-manager";
+const RESOURCE_MANAGER_PATH = "/resource-manager";
 const BROWSER_CONNECTOR_GUIDE_ROUTE_ID = "browser-connector-guide";
 const BROWSER_CONNECTOR_GUIDE_PATH = "/browser-connector-guide";
 
@@ -39,6 +41,9 @@ function getEffectivePathname(location: Location): string {
   const windowRoute = params.get(WINDOW_ROUTE_QUERY_PARAM);
   if (windowRoute === UPDATE_NOTIFICATION_ROUTE_ID) {
     return UPDATE_NOTIFICATION_PATH;
+  }
+  if (windowRoute === RESOURCE_MANAGER_ROUTE_ID) {
+    return RESOURCE_MANAGER_PATH;
   }
   if (windowRoute === BROWSER_CONNECTOR_GUIDE_ROUTE_ID) {
     return BROWSER_CONNECTOR_GUIDE_PATH;

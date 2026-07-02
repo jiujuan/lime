@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import contentFactoryFixture from "@/features/agent-app/fixtures/content-factory-app.json";
+import contentFactoryFixture from "@/features/agent-app/testing/fixtures/content-factory-app.json";
 import { buildPackageIdentity } from "@/features/agent-app/install/packageIdentity";
 import { normalizeManifest } from "@/features/agent-app/manifest/normalizeManifest";
 import { parseManifest } from "@/features/agent-app/manifest/parseManifest";

@@ -2,6 +2,7 @@ import { listDirectory } from "@/lib/api/fileBrowser";
 import { resolveAbsoluteWorkspacePath } from "./workspacePath";
 import { IMAGE_TASKS_ROOT_RELATIVE_PATH } from "./imageTaskLocator";
 import type { SessionImageWorkbenchState } from "./imageWorkbenchHelpers";
+import { normalizeTaskFamily } from "./imageTaskFamily";
 import { asRecord, readString } from "./imageTaskPreviewRuntimePayload";
 import {
   normalizeTaskStatus,
@@ -89,32 +90,10 @@ export function isImageWorkbenchTaskSatisfiedByCache(params: {
     return true;
   }
 
-  return (
-    task.status === "cancelled" ||
-    task.status === "error" ||
-    task.status === "partial" ||
-    task.status === "complete"
-  );
+  return task.status === "cancelled" || task.status === "error";
 }
 
-export function normalizeTaskFamily(
-  taskType: string,
-  taskFamily?: string,
-): string | undefined {
-  const normalizedFamily = taskFamily?.trim().toLowerCase();
-  if (normalizedFamily) {
-    return normalizedFamily;
-  }
-
-  const normalizedType = taskType.trim().toLowerCase();
-  if (normalizedType.includes("image") || normalizedType.includes("cover")) {
-    return "image";
-  }
-  if (normalizedType.includes("video")) {
-    return "video";
-  }
-  return undefined;
-}
+export { normalizeTaskFamily } from "./imageTaskFamily";
 
 function normalizeTaskRef(value?: string | null): string | undefined {
   const normalized = value?.trim();

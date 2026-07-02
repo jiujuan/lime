@@ -160,6 +160,45 @@ describe("run-rust-layer unit helpers", () => {
     }
   });
 
+  it("excluded subcrate 元数据路径不阻断 workspace 边界校验", () => {
+    const repoRoot = createFixtureRepo();
+    try {
+      expect(
+        resolveRustPathSelection(
+          [
+            "lime-rs/Cargo.lock",
+            "lime-rs/crates/aster-rust/Cargo.lock",
+          ],
+          { repoRoot },
+        ),
+      ).toMatchObject({
+        rustPaths: ["lime-rs/Cargo.lock"],
+        skippedPaths: ["lime-rs/crates/aster-rust/Cargo.lock"],
+        workspaceWide: true,
+      });
+    } finally {
+      fs.rmSync(repoRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("excluded subcrate 元数据路径单独出现时跳过 Rust 层而不是空跑失败", () => {
+    const repoRoot = createFixtureRepo();
+    try {
+      expect(
+        resolveRustPathSelection(["lime-rs/crates/aster-rust/Cargo.lock"], {
+          repoRoot,
+        }),
+      ).toMatchObject({
+        errors: [],
+        rustPaths: [],
+        skippedPaths: ["lime-rs/crates/aster-rust/Cargo.lock"],
+        packages: [],
+      });
+    } finally {
+      fs.rmSync(repoRoot, { force: true, recursive: true });
+    }
+  });
+
   it("非 Rust 路径在 Rust changed scope 中可跳过", () => {
     const repoRoot = createFixtureRepo();
     try {

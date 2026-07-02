@@ -174,7 +174,7 @@ fn article_workspace_search_snapshot_payload(search_evidence: Value) -> Value {
     );
     worker.insert(
         "skillRefs".to_string(),
-        json!(["gongzonghao-article-writer", "article-image-cheatsheet"]),
+        json!(["article-research", "article-writing", "article-image-plan"]),
     );
     worker.insert("cliRefs".to_string(), json!(["content-factory"]));
     worker.insert(
@@ -195,7 +195,7 @@ fn article_workspace_search_snapshot_payload(search_evidence: Value) -> Value {
                 "id": "research",
                 "title": "资料检索",
                 "subagent": "content-researcher",
-                "skillRefs": ["gongzonghao-article-writer"],
+                "skillRefs": ["article-research"],
                 "status": "completed",
                 "summary": "整理资料"
             },
@@ -203,7 +203,7 @@ fn article_workspace_search_snapshot_payload(search_evidence: Value) -> Value {
                 "id": "draft",
                 "title": "正文写作",
                 "subagent": "article-writer",
-                "skillRefs": ["gongzonghao-article-writer"],
+                "skillRefs": ["article-writing"],
                 "status": "completed",
                 "summary": "生成文章草稿"
             },
@@ -211,7 +211,7 @@ fn article_workspace_search_snapshot_payload(search_evidence: Value) -> Value {
                 "id": "image-plan",
                 "title": "配图规划",
                 "subagent": "image-planner",
-                "skillRefs": ["article-image-cheatsheet"],
+                "skillRefs": ["article-image-plan"],
                 "status": "completed",
                 "summary": "生成配图规划"
             }
@@ -908,7 +908,7 @@ async fn read_session_materializes_content_factory_workspace_patch_into_article_
     );
     assert_eq!(
         article_workspace["workerEvidence"][0]["skillRefs"][0],
-        "gongzonghao-article-writer"
+        "article-research"
     );
     assert_eq!(
         article_workspace["workerEvidence"][0]["cliRefs"][0],

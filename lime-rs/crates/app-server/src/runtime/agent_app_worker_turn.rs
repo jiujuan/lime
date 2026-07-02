@@ -7,9 +7,16 @@ use super::agent_app_worker_orchestration::{
 };
 use super::agent_app_worker_runtime::{AgentAppHookRunRequest, AgentAppWorkerRunRequest};
 use super::agent_app_worker_streaming::{
-    initial_content_factory_workspace_snapshot, is_incomplete_content_factory_workspace_snapshot,
-    ContentFactoryWorkspaceStreamingSnapshot,
+    ensure_workspace_patch_artifact_paths, initial_workspace_patch_snapshot,
+    is_incomplete_workspace_patch_snapshot, WorkspacePatchStreamingSnapshot,
 };
+use super::agent_app_worker_workflow::{
+    build_agent_app_worker_workflow_context, workflow_completed_events,
+    workflow_connector_completed_events_from_artifact_events, workflow_failed_events,
+    workflow_started_events, AgentAppWorkerWorkflowContext, AgentAppWorkerWorkflowContextInput,
+};
+use super::agent_app_worker_workflow_hooks::workflow_hook_completed_events_from_worker_hook_events;
+use super::agent_app_worker_workflow_retry::workflow_retry_events;
 use super::timestamp;
 use super::ExecutionRequest;
 use super::RuntimeCore;
@@ -19,9 +26,10 @@ use super::RuntimeEventSink;
 use serde_json::json;
 use serde_json::Value;
 use std::path::Path;
+use std::time::Duration;
 
-const CONTENT_FACTORY_APP_ID: &str = "content-factory-app";
-const CONTENT_FACTORY_WORKSPACE_PATCH_KIND: &str = "content_factory.workspace_patch";
+const WORKER_APP_ID: &str = "content-factory-app";
+const WORKSPACE_PATCH_KIND: &str = "content_factory.workspace_patch";
 const ARTICLE_WORKSPACE_SCHEMA: &str = "article-workspace.v1";
 const WORKER_REQUEST_SCHEMA: &str = "content-factory.worker-request.v1";
 const DEFAULT_ARTICLE_WORKSPACE_TASK_KIND: &str = "content.factory.generate";
@@ -139,7 +147,11 @@ impl RuntimeCore {
         }
 
         let package_root = resolve_agent_app_runtime_dir(&installed_state)?;
-        for event in self.run_worker_hook_lifecycle_events(
+        let workflow_context = worker_turn.workflow_context(request, &installed_state);
+        if let Some(context) = workflow_context.as_ref() {
+            self.append_workflow_audit_runtime_events(request, workflow_started_events(context))?;
+        }
+        let prompt_hook_events = self.run_worker_hook_lifecycle_events(
             package_root.as_path(),
             &installed_state,
             &worker_turn,
@@ -147,8 +159,16 @@ impl RuntimeCore {
             "prompt",
             "prompt.submit",
             None,
-        ) {
-            sink.emit(event)?;
+        );
+        if let Some(context) = workflow_context.as_ref() {
+            self.append_workflow_audit_runtime_events(
+                request,
+                workflow_hook_completed_events_from_worker_hook_events(
+                    context,
+                    &prompt_hook_events,
+                )
+                .map_err(RuntimeCoreError::Backend)?,
+            )?;
         }
 
         if worker_turn.should_emit_initial_workspace_snapshot() {
@@ -166,8 +186,8 @@ impl RuntimeCore {
                     "streamPhase": "process",
                 }),
             ))?;
-            sink.emit(initial_content_factory_workspace_snapshot(
-                ContentFactoryWorkspaceStreamingSnapshot {
+            sink.emit(initial_workspace_patch_snapshot(
+                WorkspacePatchStreamingSnapshot {
                     app_id: worker_turn.app_id.as_str(),
                     locale: runtime_locale(request).as_deref(),
                     prompt: worker_turn.prompt.as_str(),
@@ -185,18 +205,24 @@ impl RuntimeCore {
         let mut retry_attempt = 0;
         loop {
             match self
-                .run_pane_action_worker_turn(request, &worker_turn, &installed_state)
+                .run_pane_action_worker_turn(
+                    request,
+                    &worker_turn,
+                    &installed_state,
+                    workflow_context.as_ref(),
+                    sink,
+                )
                 .await
             {
                 Ok(events) => {
                     let completion_context = worker_completion_context(&events);
                     for event in events
                         .into_iter()
-                        .filter(|event| !is_incomplete_content_factory_workspace_snapshot(event))
+                        .filter(|event| !is_incomplete_workspace_patch_snapshot(event))
                     {
                         sink.emit(event)?;
                     }
-                    for event in self.run_worker_hook_lifecycle_events(
+                    let task_hook_events = self.run_worker_hook_lifecycle_events(
                         package_root.as_path(),
                         &installed_state,
                         &worker_turn,
@@ -204,8 +230,22 @@ impl RuntimeCore {
                         "task",
                         "task.complete",
                         Some(completion_context.clone()),
-                    ) {
-                        sink.emit(event)?;
+                    );
+                    if let Some(context) = workflow_context.as_ref() {
+                        self.append_workflow_audit_runtime_events(
+                            request,
+                            workflow_hook_completed_events_from_worker_hook_events(
+                                context,
+                                &task_hook_events,
+                            )
+                            .map_err(RuntimeCoreError::Backend)?,
+                        )?;
+                    }
+                    if let Some(context) = workflow_context.as_ref() {
+                        self.append_workflow_audit_runtime_events(
+                            request,
+                            workflow_completed_events(context, &completion_context),
+                        )?;
                     }
                     sink.emit(RuntimeEvent::new(
                         "turn.completed",
@@ -223,14 +263,18 @@ impl RuntimeCore {
                     let failure = classify_worker_failure(error.to_string().as_str())
                         .with_retry_attempt(retry_attempt);
                     if failure.should_retry() {
-                        sink.emit(RuntimeEvent::new(
-                            "agent_app_worker.retry",
-                            worker_turn.failure_payload(
-                                request.turn.turn_id.as_str(),
-                                &failure,
-                                "retrying",
-                            ),
-                        ))?;
+                        let payload = worker_turn.failure_payload(
+                            request.turn.turn_id.as_str(),
+                            &failure,
+                            "retrying",
+                        );
+                        if let Some(context) = workflow_context.as_ref() {
+                            self.append_workflow_audit_runtime_events(
+                                request,
+                                workflow_retry_events(context, &payload),
+                            )?;
+                        }
+                        sink.emit(RuntimeEvent::new("agent_app_worker.retry", payload))?;
                         retry_attempt += 1;
                         continue;
                     }
@@ -240,6 +284,12 @@ impl RuntimeCore {
                         &failure,
                         "failed",
                     );
+                    if let Some(context) = workflow_context.as_ref() {
+                        self.append_workflow_audit_runtime_events(
+                            request,
+                            workflow_failed_events(context, &payload),
+                        )?;
+                    }
                     sink.emit(RuntimeEvent::new("runtime.error", payload.clone()))?;
                     sink.emit(RuntimeEvent::new("turn.failed", payload))?;
                     break;
@@ -255,25 +305,48 @@ impl RuntimeCore {
         request: &ExecutionRequest,
         worker_turn: &PaneActionWorkerTurn,
         installed_state: &serde_json::Value,
+        workflow_context: Option<&AgentAppWorkerWorkflowContext>,
+        sink: &mut dyn RuntimeEventSink,
     ) -> Result<Vec<RuntimeEvent>, RuntimeCoreError> {
         let package_root = resolve_agent_app_runtime_dir(&installed_state)?;
         let task_runtime =
             build_agent_app_task_runtime_contract(&installed_state, Some(&package_root));
-        let worker_request = worker_turn.worker_request(
+        let mut worker_request = worker_turn.worker_request(
             request.session.session_id.as_str(),
             request.turn.turn_id.as_str(),
             task_runtime.worker_entrypoint.as_deref(),
             installed_state,
         );
+        self.backend
+            .prepare_agent_app_worker_request(request, &mut worker_request)
+            .await?;
 
-        let mut events = self.run_agent_app_worker(AgentAppWorkerRunRequest::new(
-            package_root,
-            task_runtime,
-            worker_request,
-        ))?;
+        let mut emitted_workspace_progress = false;
+        let mut events = self.run_agent_app_worker_with_progress(
+            AgentAppWorkerRunRequest::new(package_root, task_runtime, worker_request),
+            &mut |event| {
+                let progress_events = worker_progress_events_for_sink(event, workflow_context)?;
+                let (audit_events, ui_events) = split_workflow_audit_events(progress_events);
+                self.append_workflow_audit_runtime_events(request, audit_events)?;
+                if ui_events.iter().any(is_streaming_workspace_patch_snapshot) {
+                    emitted_workspace_progress = true;
+                }
+                emit_worker_progress_events(sink, ui_events)
+            },
+        )?;
         self.backend
             .prepare_runtime_worker_artifact_events(request, &mut events)
             .await?;
+        if let Some(context) = workflow_context {
+            self.append_workflow_audit_runtime_events(
+                request,
+                workflow_connector_completed_events_from_artifact_events(context, &events)
+                    .map_err(RuntimeCoreError::Backend)?,
+            )?;
+        }
+        if emitted_workspace_progress {
+            events.retain(|event| !is_streaming_workspace_patch_snapshot(event));
+        }
         Ok(events)
     }
 
@@ -394,6 +467,85 @@ impl RuntimeCore {
     }
 }
 
+fn worker_progress_events_for_sink(
+    event: RuntimeEvent,
+    workflow_context: Option<&AgentAppWorkerWorkflowContext>,
+) -> Result<Vec<RuntimeEvent>, RuntimeCoreError> {
+    if event.event_type.starts_with("workflow.") {
+        let context = workflow_context.ok_or_else(|| {
+            RuntimeCoreError::Backend(format!(
+                "Agent App worker emitted {} without plugin workflow context",
+                event.event_type
+            ))
+        })?;
+        return context
+            .bind_worker_progress_event(event)
+            .map(|event| vec![event])
+            .map_err(RuntimeCoreError::Backend);
+    }
+    if event.event_type != "artifact.snapshot" {
+        return Ok(vec![event]);
+    }
+    let mut events = vec![event];
+    ensure_workspace_patch_artifact_paths(events.as_mut_slice());
+    Ok(events)
+}
+
+fn emit_worker_progress_events(
+    sink: &mut dyn RuntimeEventSink,
+    events: Vec<RuntimeEvent>,
+) -> Result<(), RuntimeCoreError> {
+    let total = events.len();
+    for (index, event) in events.into_iter().enumerate() {
+        sink.emit(event)?;
+        if total > 1 && index + 1 < total {
+            std::thread::sleep(Duration::from_millis(80));
+        }
+    }
+    Ok(())
+}
+
+fn split_workflow_audit_events(
+    events: Vec<RuntimeEvent>,
+) -> (Vec<RuntimeEvent>, Vec<RuntimeEvent>) {
+    let mut audit_events = Vec::new();
+    let mut ui_events = Vec::new();
+    for event in events {
+        if is_workflow_audit_event_type(event.event_type.as_str()) {
+            audit_events.push(event);
+        } else {
+            ui_events.push(event);
+        }
+    }
+    (audit_events, ui_events)
+}
+
+fn is_workflow_audit_event_type(event_type: &str) -> bool {
+    event_type.starts_with("workflow.")
+}
+
+fn is_streaming_workspace_patch_snapshot(event: &RuntimeEvent) -> bool {
+    if event.event_type != "artifact.snapshot" {
+        return false;
+    }
+    let Some(artifact) = event.payload.get("artifact") else {
+        return false;
+    };
+    artifact
+        .get("metadata")
+        .and_then(|metadata| metadata.get("complete"))
+        .and_then(Value::as_bool)
+        == Some(false)
+        && (artifact
+            .get("metadata")
+            .and_then(|metadata| metadata.get("contentFactoryWorkspacePatch"))
+            .is_some()
+            || artifact
+                .get("metadata")
+                .and_then(|metadata| metadata.get("workspace_patch"))
+                .is_some())
+}
+
 fn hook_result_status(result: &Value) -> &str {
     match json_string(result, &["status"]).as_deref() {
         Some("completed" | "ok" | "ready") | None => "completed",
@@ -488,6 +640,15 @@ fn hook_declarations(installed_state: &Value) -> Vec<AgentAppHookDeclaration> {
         }
     }
     declarations
+}
+
+fn host_managed_generation_config(installed_state: &Value) -> Option<Value> {
+    let manifest = installed_state.get("manifest").unwrap_or(installed_state);
+    manifest
+        .pointer("/agentRuntime/worker/hostManagedGeneration")
+        .or_else(|| manifest.pointer("/runtimePackage/worker/hostManagedGeneration"))
+        .filter(|value| value.is_object())
+        .cloned()
 }
 
 impl AgentAppHookDeclaration {
@@ -825,12 +986,12 @@ impl PaneActionWorkerTurn {
         let Some(plugin_id) = json_string(activation, &["plugin_id", "pluginId"]) else {
             return PaneActionWorkerTurnResolution::Ignore;
         };
-        if plugin_id != CONTENT_FACTORY_APP_ID {
+        if plugin_id != WORKER_APP_ID {
             return PaneActionWorkerTurnResolution::Ignore;
         }
         let app_id = json_string(activation, &["active_agent_app_id", "activeAgentAppId"])
             .unwrap_or(plugin_id);
-        if app_id != CONTENT_FACTORY_APP_ID {
+        if app_id != WORKER_APP_ID {
             return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
                 request,
                 activation,
@@ -853,7 +1014,7 @@ impl PaneActionWorkerTurn {
         let requested_output_artifact_kind =
             json_string(activation, &["output_artifact_kind", "outputArtifactKind"]);
         let Some(output_artifact_kind) =
-            content_factory_output_artifact_kind(requested_output_artifact_kind.clone())
+            workspace_patch_output_artifact_kind(requested_output_artifact_kind.clone())
         else {
             return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
                 request,
@@ -949,7 +1110,7 @@ impl PaneActionWorkerTurn {
                 "Agent App pane action app id is missing.",
             ));
         };
-        if app_id != CONTENT_FACTORY_APP_ID {
+        if app_id != WORKER_APP_ID {
             return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
                 request,
                 agent_app,
@@ -995,7 +1156,7 @@ impl PaneActionWorkerTurn {
         let requested_output_artifact_kind =
             json_string(action, &["output_artifact_kind", "outputArtifactKind"]);
         let Some(output_artifact_kind) =
-            content_factory_output_artifact_kind(requested_output_artifact_kind.clone())
+            workspace_patch_output_artifact_kind(requested_output_artifact_kind.clone())
         else {
             return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
                 request,
@@ -1079,7 +1240,7 @@ impl PaneActionWorkerTurn {
                 "Article Workspace action app id is missing.",
             ));
         };
-        if app_id != CONTENT_FACTORY_APP_ID {
+        if app_id != WORKER_APP_ID {
             return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
                 request,
                 agent_app,
@@ -1124,7 +1285,7 @@ impl PaneActionWorkerTurn {
         let requested_output_artifact_kind =
             json_string(action, &["output_artifact_kind", "outputArtifactKind"]);
         let Some(output_artifact_kind) =
-            content_factory_output_artifact_kind(requested_output_artifact_kind.clone())
+            workspace_patch_output_artifact_kind(requested_output_artifact_kind.clone())
         else {
             return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
                 request,
@@ -1194,6 +1355,13 @@ impl PaneActionWorkerTurn {
         installed_state: &Value,
     ) -> Value {
         let orchestration = self.worker_orchestration(installed_state);
+        let workflow_key = orchestration.workflow_key.clone();
+        let hook_policy = orchestration.hook_policy.clone();
+        let subagents = orchestration.subagents.clone();
+        let skill_refs = orchestration.skill_refs.clone();
+        let cli_refs = orchestration.cli_refs.clone();
+        let connector_refs = orchestration.connector_refs.clone();
+        let orchestration_steps = orchestration.orchestration.clone();
         json!({
             "schemaVersion": WORKER_REQUEST_SCHEMA,
             "appId": self.app_id,
@@ -1210,13 +1378,13 @@ impl PaneActionWorkerTurn {
             "surfaceKind": self.surface_kind,
             "paneKind": self.pane_kind,
             "outputArtifactKind": self.output_artifact_kind(),
-            "workflowKey": orchestration.workflow_key,
-            "hookPolicy": orchestration.hook_policy,
-            "subagents": orchestration.subagents,
-            "skillRefs": orchestration.skill_refs,
-            "cliRefs": orchestration.cli_refs,
-            "connectorRefs": orchestration.connector_refs,
-            "orchestration": orchestration.orchestration,
+            "workflowKey": workflow_key,
+            "hookPolicy": hook_policy,
+            "subagents": subagents,
+            "skillRefs": skill_refs,
+            "cliRefs": cli_refs,
+            "connectorRefs": connector_refs,
+            "orchestration": orchestration_steps,
             "sourceArtifactIds": self.source_artifact_ids,
             "sourceObjectRef": self.source_object_ref,
             "expectedOutput": {
@@ -1241,7 +1409,8 @@ impl PaneActionWorkerTurn {
                 "workerEntrypoint": worker_entrypoint,
                 "outputArtifactKind": self.output_artifact_kind(),
                 "directProviderAccess": false,
-                "directFilesystemAccess": false
+                "directFilesystemAccess": false,
+                "hostManagedGeneration": host_managed_generation_config(installed_state)
             },
             "requestedAt": timestamp(),
         })
@@ -1261,6 +1430,32 @@ impl PaneActionWorkerTurn {
                 orchestration: self.orchestration.clone(),
             },
         )
+    }
+
+    fn workflow_context(
+        &self,
+        request: &ExecutionRequest,
+        installed_state: &Value,
+    ) -> Option<AgentAppWorkerWorkflowContext> {
+        let orchestration = self.worker_orchestration(installed_state);
+        let task_id = self.task_id(request.turn.turn_id.as_str());
+        build_agent_app_worker_workflow_context(AgentAppWorkerWorkflowContextInput {
+            app_id: self.app_id.as_str(),
+            output_artifact_kind: self.output_artifact_kind(),
+            pane_kind: self.pane_kind.as_deref(),
+            prompt: self.prompt.as_str(),
+            session_id: request.session.session_id.as_str(),
+            source: self.source.as_str(),
+            source_object_ref: self.source_object_ref.as_ref(),
+            steps: orchestration.orchestration.as_ref(),
+            surface_kind: self.surface_kind.as_deref(),
+            task_id: task_id.as_str(),
+            task_kind: self.task_kind.as_str(),
+            turn_id: request.turn.turn_id.as_str(),
+            workflow_key: orchestration.workflow_key.as_deref(),
+            workflow_title: orchestration.workflow_title.as_deref(),
+            workspace_id: self.workspace_id.as_deref(),
+        })
     }
 
     fn hook_request_payload(
@@ -1314,6 +1509,10 @@ impl PaneActionWorkerTurn {
             .as_ref()
             .and_then(|value| json_string(value, &["summary", "message", "resultSummary"]));
         let workflow_key = orchestration.workflow_key.clone();
+        let hook_entrypoint = declaration.and_then(|declaration| declaration.entrypoint.clone());
+        let hook_required = declaration
+            .map(|declaration| declaration.required)
+            .unwrap_or(false);
         json!({
             "source": "agent_app_task_worker",
             "backend": "agent_app_worker",
@@ -1329,8 +1528,8 @@ impl PaneActionWorkerTurn {
             "hookKey": hook_key,
             "hookEvent": hook_event,
             "hookScope": hook_scope,
-            "hookEntrypoint": declaration.and_then(|declaration| declaration.entrypoint.clone()),
-            "hookRequired": declaration.map(|declaration| declaration.required).unwrap_or(false),
+            "hookEntrypoint": hook_entrypoint,
+            "hookRequired": hook_required,
             "reasonCode": reason_code,
             "resultSummary": result_summary.clone(),
             "result": result,
@@ -1341,7 +1540,7 @@ impl PaneActionWorkerTurn {
                     "taskId": self.task_id(request.turn.turn_id.as_str()),
                     "taskKind": self.task_kind,
                     "turnId": request.turn.turn_id,
-                    "workflowKey": workflow_key,
+                    "workflowKey": workflow_key.clone(),
                     "source": self.source,
                     "surfaceKind": self.surface_kind,
                     "paneKind": self.pane_kind,
@@ -1350,8 +1549,8 @@ impl PaneActionWorkerTurn {
                     "hookKey": hook_key,
                     "hookEvent": hook_event,
                     "hookScope": hook_scope,
-                    "hookEntrypoint": declaration.and_then(|declaration| declaration.entrypoint.clone()),
-                    "hookRequired": declaration.map(|declaration| declaration.required).unwrap_or(false),
+                    "hookEntrypoint": hook_entrypoint,
+                    "hookRequired": hook_required,
                     "reasonCode": reason_code,
                     "resultSummary": result_summary,
                 }
@@ -1371,12 +1570,12 @@ impl PaneActionWorkerTurn {
     fn output_artifact_kind(&self) -> &str {
         self.output_artifact_kind
             .as_deref()
-            .unwrap_or(CONTENT_FACTORY_WORKSPACE_PATCH_KIND)
+            .unwrap_or(WORKSPACE_PATCH_KIND)
     }
 
     fn should_emit_initial_workspace_snapshot(&self) -> bool {
-        self.app_id == CONTENT_FACTORY_APP_ID
-            && self.output_artifact_kind() == CONTENT_FACTORY_WORKSPACE_PATCH_KIND
+        self.app_id == WORKER_APP_ID
+            && self.output_artifact_kind() == WORKSPACE_PATCH_KIND
             && self.is_article_workspace_draft_turn()
     }
 
@@ -1506,12 +1705,12 @@ fn plugin_activation_value(metadata: &Value) -> Option<&Value> {
         .or_else(|| metadata.get("pluginActivation"))
 }
 
-fn content_factory_output_artifact_kind(
+fn workspace_patch_output_artifact_kind(
     output_artifact_kind: Option<String>,
 ) -> Option<Option<String>> {
     match output_artifact_kind.as_deref() {
         None => None,
-        Some(CONTENT_FACTORY_WORKSPACE_PATCH_KIND) => Some(output_artifact_kind),
+        Some(WORKSPACE_PATCH_KIND) => Some(output_artifact_kind),
         Some(_) => None,
     }
 }
@@ -1594,16 +1793,131 @@ mod tests {
     use app_server_protocol::AgentTurn;
     use app_server_protocol::AgentTurnStatus;
 
+    #[test]
+    fn worker_delta_workspace_snapshot_passes_through_without_resplitting() {
+        let document_text = "# 草稿\n\n第一段用于验证 worker 已经按段落输出 partial snapshot，App Server 不应再拿当前 partial 做比例切片。\n\n第二段用于验证同一个 artifact 继续增长，sequence 由 worker 负责维护。";
+        let event = RuntimeEvent::new(
+            "artifact.snapshot",
+            json!({
+                "artifact": {
+                    "artifactId": "task-article-1:workspace-patch",
+                    "status": "streaming",
+                    "metadata": {
+                        "complete": false,
+                        "writePhase": "streaming",
+                        "contentStatus": "streaming",
+                        "streamSource": "worker_delta",
+                        "streamSequence": 7,
+                        "contentFactoryWorkspacePatch": {
+                            "objects": [
+                                {
+                                    "ref": {
+                                        "kind": "articleDraft"
+                                    },
+                                    "source": {
+                                        "documentText": document_text,
+                                        "finalMarkdown": document_text
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }),
+        );
+
+        let events = worker_progress_events_for_sink(event, None).expect("progress events");
+
+        assert_eq!(events.len(), 1);
+        let artifact = &events[0].payload["artifact"];
+        assert_eq!(artifact["metadata"]["streamSource"], "worker_delta");
+        assert_eq!(artifact["metadata"]["streamSequence"], 7);
+        assert_eq!(
+            artifact["metadata"]["contentFactoryWorkspacePatch"]["objects"][0]["source"]
+                ["documentText"],
+            document_text
+        );
+        assert_eq!(
+            artifact["filePath"],
+            ".lime/artifacts/content-factory/workspace-patch.json"
+        );
+    }
+
+    #[test]
+    fn complete_workspace_snapshot_passes_through_without_fake_streaming() {
+        let document_text = "# 草稿\n\n第一段是 worker 最终正文。\n\n第二段也是最终正文。";
+        let event = RuntimeEvent::new(
+            "artifact.snapshot",
+            json!({
+                "artifact": {
+                    "artifactId": "task-article-1:workspace-patch",
+                    "status": "ready",
+                    "metadata": {
+                        "complete": true,
+                        "contentFactoryWorkspacePatch": {
+                            "objects": [
+                                {
+                                    "ref": {
+                                        "kind": "articleDraft"
+                                    },
+                                    "source": {
+                                        "documentText": document_text,
+                                        "finalMarkdown": document_text
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }),
+        );
+
+        let events = worker_progress_events_for_sink(event, None).expect("progress events");
+
+        assert_eq!(events.len(), 1);
+        let artifact = &events[0].payload["artifact"];
+        assert_eq!(artifact["metadata"]["complete"], true);
+        assert!(artifact["metadata"].get("streamSequence").is_none());
+        assert_eq!(
+            artifact["metadata"]["contentFactoryWorkspacePatch"]["objects"][0]["source"]
+                ["documentText"],
+            document_text
+        );
+        assert_eq!(
+            artifact["filePath"],
+            ".lime/artifacts/content-factory/workspace-patch.json"
+        );
+    }
+
+    #[test]
+    fn workflow_worker_progress_without_context_fails_closed() {
+        let error = worker_progress_events_for_sink(
+            RuntimeEvent::new(
+                "workflow.tool.completed",
+                json!({
+                    "stepId": "research",
+                    "toolName": "WebSearch"
+                }),
+            ),
+            None,
+        )
+        .expect_err("workflow progress requires plugin workflow context");
+
+        assert!(error
+            .to_string()
+            .contains("without plugin workflow context"));
+    }
+
     #[tokio::test]
     async fn skips_worker_turn_when_content_factory_is_not_installed() {
         let request = execution_request(json!({
             "agent_app": {
                 "source": "right_surface_article_workspace",
-                "app_id": CONTENT_FACTORY_APP_ID,
+                "app_id": WORKER_APP_ID,
                 "article_workspace_action": {
                     "key": "regenerate",
                     "task_kind": "content.image.generate",
-                    "output_artifact_kind": CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
+                    "output_artifact_kind": WORKSPACE_PATCH_KIND,
                     "prompt": "重新生成配图"
                 }
             },
@@ -1627,16 +1941,16 @@ mod tests {
         let request = execution_request(json!({
             "agent_app": {
                 "source": "right_surface_article_workspace",
-                "app_id": CONTENT_FACTORY_APP_ID,
+                "app_id": WORKER_APP_ID,
                 "session_id": "session-content-factory",
                 "workspace_id": "workspace-main",
                 "article_workspace_action": {
                     "key": "regenerate",
                     "task_kind": "content.image.generate",
-                    "output_artifact_kind": CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
+                    "output_artifact_kind": WORKSPACE_PATCH_KIND,
                     "prompt": "重新生成配图",
                     "object": {
-                        "app_id": CONTENT_FACTORY_APP_ID,
+                        "app_id": WORKER_APP_ID,
                         "kind": "imageGenerationSet",
                         "id": "image-set-1",
                         "session_id": "session-content-factory",
@@ -1652,7 +1966,7 @@ mod tests {
         let worker_turn =
             PaneActionWorkerTurn::from_execution_request(&request).expect("worker turn");
 
-        assert_eq!(worker_turn.app_id, CONTENT_FACTORY_APP_ID);
+        assert_eq!(worker_turn.app_id, WORKER_APP_ID);
         assert_eq!(worker_turn.action_key.as_deref(), Some("regenerate"));
         assert_eq!(worker_turn.task_kind, "content.image.generate");
         assert_eq!(worker_turn.workspace_id.as_deref(), Some("workspace-main"));
@@ -1663,7 +1977,7 @@ mod tests {
         assert_eq!(worker_turn.pane_kind.as_deref(), Some("imageGenerationSet"));
         assert_eq!(
             worker_turn.output_artifact_kind.as_deref(),
-            Some(CONTENT_FACTORY_WORKSPACE_PATCH_KIND)
+            Some(WORKSPACE_PATCH_KIND)
         );
         assert_eq!(
             worker_turn.source_artifact_ids,
@@ -1680,17 +1994,17 @@ mod tests {
         let request = execution_request(json!({
             "agent_app": {
                 "source": "right_surface_article_workspace",
-                "app_id": CONTENT_FACTORY_APP_ID,
+                "app_id": WORKER_APP_ID,
                 "workspace_id": "workspace-main",
                 "article_workspace_action": {
                     "key": "write_article",
                     "intent": "write_article",
                     "risk": "write",
                     "task_kind": "content.article.generate",
-                    "output_artifact_kind": CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
+                    "output_artifact_kind": WORKSPACE_PATCH_KIND,
                     "prompt": "写一篇关于内容工厂插件编排的文章",
                     "object": {
-                        "app_id": CONTENT_FACTORY_APP_ID,
+                        "app_id": WORKER_APP_ID,
                         "kind": "articleDraft",
                         "id": "article-1",
                         "session_id": "session-content-factory"
@@ -1718,12 +2032,12 @@ mod tests {
                                 {
                                     "id": "draft",
                                     "subagent": "article-writer",
-                                    "skillRefs": ["gongzonghao-article-writer"]
+                                    "skillRefs": ["article-writing"]
                                 },
                                 {
                                     "id": "image-plan",
                                     "subagent": "image-planner",
-                                    "skillRefs": ["article-image-cheatsheet"]
+                                    "skillRefs": ["article-image-plan"]
                                 }
                             ]
                         }
@@ -1753,11 +2067,22 @@ mod tests {
         assert_eq!(
             worker_request["skillRefs"]
                 .as_array()
-                .expect("worker-owned skill refs")
+                .expect("plugin workflow skill refs")
                 .len(),
-            0
+            2
         );
-        assert!(worker_request["orchestration"].is_null());
+        assert!(worker_request["skillRefs"]
+            .as_array()
+            .expect("plugin workflow skill refs")
+            .iter()
+            .any(|value| value == "article-image-plan"));
+        assert_eq!(
+            worker_request["orchestration"]
+                .as_array()
+                .expect("plugin workflow steps")
+                .len(),
+            2
+        );
     }
 
     #[test]
@@ -1769,16 +2094,16 @@ mod tests {
                     "trigger": "@内容工厂",
                     "body": "写一篇公众号文章",
                     "session_id": "session-content-factory",
-                    "plugin_id": CONTENT_FACTORY_APP_ID,
-                    "active_agent_app_id": CONTENT_FACTORY_APP_ID,
+                    "plugin_id": WORKER_APP_ID,
+                    "active_agent_app_id": WORKER_APP_ID,
                     "active_entry_key": "content_factory",
                     "intent_key": "content_article_generate",
                     "task_kind": "content.article.generate",
-                    "output_artifact_kind": CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
+                    "output_artifact_kind": WORKSPACE_PATCH_KIND,
                     "right_surface": "articleWorkspace",
                     "expected_objects": ["articleDraft"],
                     "selected_object_ref": {
-                        "plugin_id": CONTENT_FACTORY_APP_ID,
+                        "plugin_id": WORKER_APP_ID,
                         "object_kind": "articleDraft",
                         "object_id": "pending"
                     },
@@ -1791,7 +2116,7 @@ mod tests {
         let worker_turn =
             PaneActionWorkerTurn::from_execution_request(&request).expect("worker turn");
 
-        assert_eq!(worker_turn.app_id, CONTENT_FACTORY_APP_ID);
+        assert_eq!(worker_turn.app_id, WORKER_APP_ID);
         assert_eq!(
             worker_turn.action_key.as_deref(),
             Some("content_article_generate")
@@ -1810,7 +2135,7 @@ mod tests {
         assert_eq!(worker_turn.pane_kind.as_deref(), Some("articleDraft"));
         assert_eq!(
             worker_turn.output_artifact_kind.as_deref(),
-            Some(CONTENT_FACTORY_WORKSPACE_PATCH_KIND)
+            Some(WORKSPACE_PATCH_KIND)
         );
     }
 
@@ -1837,7 +2162,7 @@ mod tests {
         let request = execution_request(json!({
             "agent_app": {
                 "source": PANE_ACTION_SOURCE,
-                "app_id": CONTENT_FACTORY_APP_ID,
+                "app_id": WORKER_APP_ID,
                 "session_id": "session-content-factory",
                 "workspace_id": "workspace-main",
                 "pane_action": {
@@ -1845,13 +2170,13 @@ mod tests {
                     "intent": "regenerate",
                     "risk": "write",
                     "task_kind": "content.image.generate",
-                    "output_artifact_kind": CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
+                    "output_artifact_kind": WORKSPACE_PATCH_KIND,
                     "prompt": "重新生成配图",
                     "surface_kind": "appSurface",
                     "pane_kind": "imageGrid",
                     "source_artifact_ids": ["artifact-image-set-1", "artifact-image-set-1"],
                     "object": {
-                        "app_id": CONTENT_FACTORY_APP_ID,
+                        "app_id": WORKER_APP_ID,
                         "kind": "imageGenerationSet",
                         "id": "image-set-1",
                         "session_id": "session-content-factory"
@@ -1873,7 +2198,7 @@ mod tests {
             &json!({}),
         );
 
-        assert_eq!(worker_turn.app_id, CONTENT_FACTORY_APP_ID);
+        assert_eq!(worker_turn.app_id, WORKER_APP_ID);
         assert_eq!(worker_turn.source, PANE_ACTION_SOURCE);
         assert_eq!(worker_turn.action_key.as_deref(), Some("regenerate"));
         assert_eq!(worker_turn.action_intent.as_deref(), Some("regenerate"));
@@ -1882,7 +2207,7 @@ mod tests {
         assert_eq!(worker_turn.pane_kind.as_deref(), Some("imageGrid"));
         assert_eq!(
             worker_turn.output_artifact_kind.as_deref(),
-            Some(CONTENT_FACTORY_WORKSPACE_PATCH_KIND)
+            Some(WORKSPACE_PATCH_KIND)
         );
         assert_eq!(
             worker_turn.source_artifact_ids,
@@ -1894,17 +2219,14 @@ mod tests {
             worker_request["sourceArtifactIds"][0],
             "artifact-image-set-1"
         );
-        assert_eq!(
-            worker_request["outputArtifactKind"],
-            CONTENT_FACTORY_WORKSPACE_PATCH_KIND
-        );
+        assert_eq!(worker_request["outputArtifactKind"], WORKSPACE_PATCH_KIND);
         assert_eq!(
             worker_request["expectedOutput"]["artifactKind"],
-            CONTENT_FACTORY_WORKSPACE_PATCH_KIND
+            WORKSPACE_PATCH_KIND
         );
         assert_eq!(
             worker_request["runtime"]["outputArtifactKind"],
-            CONTENT_FACTORY_WORKSPACE_PATCH_KIND
+            WORKSPACE_PATCH_KIND
         );
     }
 
@@ -1913,7 +2235,7 @@ mod tests {
         let request = execution_request(json!({
             "agent_app": {
                 "source": PANE_ACTION_SOURCE,
-                "app_id": CONTENT_FACTORY_APP_ID,
+                "app_id": WORKER_APP_ID,
                 "pane_action": {
                     "key": "regenerate",
                     "task_kind": "content.image.generate",
@@ -2135,7 +2457,7 @@ mod tests {
             session: AgentSession {
                 session_id: "session-content-factory".to_string(),
                 thread_id: "thread-content-factory".to_string(),
-                app_id: CONTENT_FACTORY_APP_ID.to_string(),
+                app_id: WORKER_APP_ID.to_string(),
                 workspace_id: Some("workspace-main".to_string()),
                 business_object_ref: None,
                 status: AgentSessionStatus::Running,

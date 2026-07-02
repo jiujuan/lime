@@ -8,9 +8,7 @@ import {
   aggregateFileChanges,
   type FileChangesAggregate,
 } from "../utils/fileChangeSummary";
-import {
-  hasImportedSourceProcessItem,
-} from "../utils/importedSourceProcess";
+import { hasImportedSourceProcessItem } from "../utils/importedSourceProcess";
 import {
   toActionRequired,
   toToolCallState,
@@ -124,9 +122,7 @@ function isTextContentPart(
   return part.type === "text";
 }
 
-function readTextContentPartPhase(
-  part: TextMessageContentPart,
-): string | null {
+function readTextContentPartPhase(part: TextMessageContentPart): string | null {
   const phase = part.metadata?.phase;
   return typeof phase === "string" ? phase : null;
 }
@@ -434,6 +430,47 @@ function buildTimelineActionContentPart(
 function hasFinalTextContentPart(parts: MessageContentPart[]): boolean {
   return parts.some(
     (part) => isFinalTextContentPart(part) && part.text.trim().length > 0,
+  );
+}
+
+function isTimelineProcessItem(item: AgentThreadItem): boolean {
+  return (
+    item.type === "reasoning" ||
+    item.type === "plan" ||
+    (item.type === "tool_call" && !isUpdatePlanToolName(item.tool_name)) ||
+    item.type === "command_execution" ||
+    item.type === "patch" ||
+    item.type === "web_search" ||
+    item.type === "subagent_activity" ||
+    item.type === "context_compaction" ||
+    item.type === "approval_request" ||
+    item.type === "request_user_input"
+  );
+}
+
+function shouldPrependDisplayContentBeforeActiveTimelineProcess(params: {
+  processPrefaceContent: string;
+  existingContentParts?: Message["contentParts"];
+  items: AgentThreadItem[];
+}): boolean {
+  if (!params.processPrefaceContent.trim()) {
+    return false;
+  }
+  if (params.existingContentParts?.length) {
+    return false;
+  }
+  if (
+    params.items.some(
+      (item) =>
+        item.type === "agent_message" &&
+        shouldRenderTimelineAgentMessageAsVisibleText(item) &&
+        item.text.trim().length > 0,
+    )
+  ) {
+    return false;
+  }
+  return params.items.some(
+    (item) => isTimelineProcessItem(item) && item.status === "in_progress",
   );
 }
 
@@ -801,6 +838,7 @@ function buildTimelinePatchFallbackAggregate(
 
 export function buildTimelineInlineContentParts(params: {
   displayContent: string;
+  processPrefaceContent?: string;
   existingContentParts?: Message["contentParts"];
   items?: AgentThreadItem[];
 }): Message["contentParts"] | undefined {
@@ -864,6 +902,18 @@ export function buildTimelineInlineContentParts(params: {
   }
 
   const parts: MessageContentPart[] = [];
+  const processPrefaceContent =
+    params.processPrefaceContent ?? params.displayContent;
+  const didPrependDisplayContent =
+    shouldPrependDisplayContentBeforeActiveTimelineProcess({
+      processPrefaceContent,
+      existingContentParts: params.existingContentParts,
+      items,
+    });
+  if (didPrependDisplayContent) {
+    appendTextContentPart(parts, processPrefaceContent);
+  }
+
   for (const item of items) {
     if (item.type === "reasoning") {
       appendThinkingContentPart(
@@ -905,7 +955,7 @@ export function buildTimelineInlineContentParts(params: {
     }
   }
 
-  if (!hasFinalTextContentPart(parts)) {
+  if (!didPrependDisplayContent && !hasFinalTextContentPart(parts)) {
     appendTextContentPart(parts, params.displayContent);
   }
 

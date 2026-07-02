@@ -2014,8 +2014,6 @@
   "plugin.marketplace.description": "クラウドマーケットを読み込み、ローカルのインストール状態を統合して、インストール可能、有効化可能、描画可能、読み取り専用履歴の状態を表示します。",
   "plugin.marketplace.refresh": "更新",
   "plugin.marketplace.loading": "読み込み中",
-  "plugin.marketplace.cloudRequired.title": "クラウドアカウントが必要です",
-  "plugin.marketplace.cloudRequired.description": "テナントのプラグインカタログを読むにはクラウドアカウントの接続が必要です。ローカルにインストール済みのプラグインは明示的な @ 呼び出しで実行経路に入れます。",
   "plugin.marketplace.count.all": "すべてのプラグイン",
   "plugin.marketplace.count.installed": "インストール済み",
   "plugin.marketplace.count.installable": "インストール可能",

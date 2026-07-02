@@ -735,6 +735,8 @@ mod tests {
         let cache_dir = data_root.join("packages").join("package-fnv1a-a4d0e86f");
         assert!(cache_dir.join("package.json").is_file());
         assert!(cache_dir.join("plugin.json").is_file());
+        assert!(cache_dir.join("app.workbench.yaml").is_file());
+        assert!(cache_dir.join("skills/article-writing/SKILL.md").is_file());
         assert!(cache_dir
             .join("src/runtime/content-factory-worker.mjs")
             .is_file());

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { InstalledAgentAppStateListResult } from "@/features/agent-app";
-import contentFactoryFixtureData from "@/features/agent-app/fixtures/content-factory-app.json";
+import contentFactoryFixtureData from "@/features/agent-app/testing/fixtures/content-factory-app.json";
 import { buildInstalledAgentAppState } from "@/features/agent-app/install/installedAppState";
 import { buildInstalledAppPreview } from "@/features/agent-app/install/installedAppPreview";
 import { buildAgentAppLabResolvedSetupState } from "@/features/agent-app/install/labInstallFlow";
@@ -505,7 +505,7 @@ describe("plugin marketplace registry loader", () => {
         }),
         skillRefs: expect.arrayContaining([
           expect.objectContaining({
-            id: "gongzonghao-article-writer",
+            id: "article-research",
             activation: "content.article.generate",
           }),
         ]),

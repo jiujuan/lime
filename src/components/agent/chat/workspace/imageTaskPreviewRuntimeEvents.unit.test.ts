@@ -50,19 +50,19 @@ describe("imageTaskPreviewRuntimeEvents", () => {
     expect(snapshot).not.toBeNull();
     expect(snapshot?.task).toMatchObject({
       id: "task-1",
-      status: "complete",
+      status: "running",
       expectedCount: 2,
       taskFilePath: "/workspace/.lime/tasks/image/task-1.json",
       artifactPath: ".lime/artifacts/image/task-1.json",
     });
     expect(snapshot?.message.imageWorkbenchPreview).toMatchObject({
       taskId: "task-1",
-      status: "complete",
+      status: "running",
       prompt: "春日咖啡馆插画",
       projectId: "project-1",
       contentId: "content-1",
       expectedImageCount: 2,
-      phase: "succeeded",
+      phase: "running",
     });
   });
 
@@ -76,6 +76,27 @@ describe("imageTaskPreviewRuntimeEvents", () => {
         canvasState: null,
       }),
     ).toBeNull();
+  });
+
+  it("应接受 v2 image_generation family 构造 pending preview snapshot", () => {
+    const snapshot = buildPendingImageTaskSnapshotFromEvent({
+      taskId: "task-v2",
+      taskType: "image_generate",
+      taskFamily: "image_generation",
+      payload: createPayload(),
+      projectId: "fallback-project",
+      contentId: "fallback-content",
+      absolutePath: "/workspace/.lime/tasks/image_generate/task-v2.json",
+      artifactPath: ".lime/tasks/image_generate/task-v2.json",
+      canvasState: null,
+    });
+
+    expect(snapshot).not.toBeNull();
+    expect(snapshot?.message.imageWorkbenchPreview).toMatchObject({
+      taskId: "task-v2",
+      prompt: "春日咖啡馆插画",
+      phase: "pending_submit",
+    });
   });
 
   it("应为 document-inline slot 构造可同步占位状态的 task record", () => {

@@ -113,6 +113,66 @@ describe("toolProcessSummary", () => {
     expect(legacyAnalyzeNarrative.preSummary).toBe("先分析图片 chart.png");
   });
 
+  it("图片任务创建结果应显示任务状态文案而不是 raw JSON", () => {
+    const narrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "mediaTaskArtifact/image/create",
+        status: "completed",
+        result: {
+          success: true,
+          output: JSON.stringify({
+            success: true,
+            task_id: "task-image-1",
+            task_type: "image_generate",
+            task_family: "image",
+            status: "pending_submit",
+            normalized_status: "pending",
+            artifact_path: ".lime/tasks/image_generate/task-image-1.json",
+            record: {
+              payload: {
+                prompt: "画一张广州夏天的图",
+              },
+            },
+          }),
+        },
+      }),
+    );
+
+    expect(narrative.postSummary).toBe("正在生成图片。");
+    expect(narrative.summary).toBe("正在生成图片。");
+    expect(narrative.summary).not.toContain("task_id");
+  });
+
+  it("v2 image_generation task_family 结果应显示任务状态文案", () => {
+    const narrative = resolveToolProcessNarrative(
+      createToolCall({
+        name: "mediaTaskArtifact/image/create",
+        status: "completed",
+        result: {
+          success: true,
+          output: JSON.stringify({
+            success: true,
+            task_id: "task-image-v2-family",
+            task_family: "image_generation",
+            status: "pending_submit",
+            normalized_status: "pending",
+            artifact_path:
+              ".lime/tasks/image_generate/task-image-v2-family.json",
+            record: {
+              payload: {
+                prompt: "画一张广州夏天的图",
+              },
+            },
+          }),
+        },
+      }),
+    );
+
+    expect(narrative.postSummary).toBe("正在生成图片。");
+    expect(narrative.summary).toBe("正在生成图片。");
+    expect(narrative.summary).not.toContain("task_id");
+  });
+
   it("应为计划模式与最终答复提供专用文案", () => {
     const updatePlanNarrative = resolveToolProcessNarrative(
       createToolCall({
@@ -513,9 +573,7 @@ describe("toolProcessSummary", () => {
       }),
     );
 
-    expect(serviceSkillNarrative.preSummary).toBe(
-      "先执行服务技能 渠道预览",
-    );
+    expect(serviceSkillNarrative.preSummary).toBe("先执行服务技能 渠道预览");
     expect(serviceSkillNarrative.summary).toBe("先执行服务技能 渠道预览");
     expect(serviceSkillNarrative.summary).not.toContain("兼容");
     expect(siteRecommendNarrative.preSummary).toBe(
@@ -681,7 +739,9 @@ describe("toolProcessSummary", () => {
     expect(resourceNarrative.preSummary).toBe(
       "Start Asset search for podcast BGM",
     );
-    expect(resourceNarrative.summary).toBe("Start Asset search for podcast BGM");
+    expect(resourceNarrative.summary).toBe(
+      "Start Asset search for podcast BGM",
+    );
     expect(coverImageNarrative.preSummary).toBe(
       "Generate cover image for release recap",
     );

@@ -39,6 +39,7 @@ import {
   normalizeProjectId,
 } from "../utils/topicProjectResolution";
 import { normalizeExecutionStrategy } from "./agentChatCoreUtils";
+import { normalizeChatSessionModelPreference } from "../utils/sessionExecutionRuntime";
 
 interface UseAgentContextOptions {
   workspaceId: string;
@@ -360,24 +361,35 @@ export function useAgentContext(options: UseAgentContextOptions) {
       preference: SessionModelPreference,
       options?: { markSynced?: boolean },
     ) => {
-      providerTypeRef.current = preference.providerType;
-      modelRef.current = preference.model;
+      const normalizedPreference =
+        normalizeChatSessionModelPreference(preference);
+      const resolvedPreference =
+        normalizedPreference ?? {
+          providerType: "",
+          model: "",
+        };
+      providerTypeRef.current = resolvedPreference.providerType;
+      modelRef.current = resolvedPreference.model;
       reasoningEffortRef.current = "";
-      setProviderTypeState(preference.providerType);
-      setModelState(preference.model);
+      setProviderTypeState(resolvedPreference.providerType);
+      setModelState(resolvedPreference.model);
       setReasoningEffortState("");
-      savePersisted(scopedProviderPrefKeyRef.current, preference.providerType);
-      savePersisted(scopedModelPrefKeyRef.current, preference.model);
-      persistSessionModelPreference(
-        sessionId,
-        preference.providerType,
-        preference.model,
-      );
-      if (options?.markSynced === true) {
+      savePersisted(scopedProviderPrefKeyRef.current, resolvedPreference.providerType);
+      savePersisted(scopedModelPrefKeyRef.current, resolvedPreference.model);
+      if (normalizedPreference) {
+        persistSessionModelPreference(
+          sessionId,
+          normalizedPreference.providerType,
+          normalizedPreference.model,
+        );
+      } else {
+        savePersisted(getSessionModelPreferenceKey(workspaceId, sessionId), null);
+      }
+      if (options?.markSynced === true && normalizedPreference) {
         markSessionModelPreferenceSynced(
           sessionId,
-          preference.providerType,
-          preference.model,
+          normalizedPreference.providerType,
+          normalizedPreference.model,
         );
       } else {
         clearSessionModelPreferenceSynced(sessionId);
@@ -387,19 +399,27 @@ export function useAgentContext(options: UseAgentContextOptions) {
       clearSessionModelPreferenceSynced,
       markSessionModelPreferenceSynced,
       persistSessionModelPreference,
+      workspaceId,
     ],
   );
 
   const applyWorkspaceModelPreference = useCallback(
     (preference: SessionModelPreference) => {
-      providerTypeRef.current = preference.providerType;
-      modelRef.current = preference.model;
+      const normalizedPreference =
+        normalizeChatSessionModelPreference(preference);
+      const resolvedPreference =
+        normalizedPreference ?? {
+          providerType: "",
+          model: "",
+        };
+      providerTypeRef.current = resolvedPreference.providerType;
+      modelRef.current = resolvedPreference.model;
       reasoningEffortRef.current = "";
-      setProviderTypeState(preference.providerType);
-      setModelState(preference.model);
+      setProviderTypeState(resolvedPreference.providerType);
+      setModelState(resolvedPreference.model);
       setReasoningEffortState("");
-      savePersisted(scopedProviderPrefKeyRef.current, preference.providerType);
-      savePersisted(scopedModelPrefKeyRef.current, preference.model);
+      savePersisted(scopedProviderPrefKeyRef.current, resolvedPreference.providerType);
+      savePersisted(scopedModelPrefKeyRef.current, resolvedPreference.model);
     },
     [],
   );

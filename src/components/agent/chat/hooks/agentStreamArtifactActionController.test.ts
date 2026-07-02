@@ -52,6 +52,7 @@ describe("agentStreamArtifactActionController", () => {
       requestId: "request-a",
       shouldActivateStream: true,
       shouldClearOptimisticItem: true,
+      shouldMarkMeaningfulCompletionSignal: true,
     });
   });
 });

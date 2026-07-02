@@ -165,12 +165,15 @@ function buildMarketplaceCloudApp(item: PluginMarketplaceViewItem): {
   blockerCodes: PluginMarketplaceActionBlockerCode[];
 } {
   const blockerCodes: PluginMarketplaceActionBlockerCode[] = [];
-  const appId = item.appId?.trim();
+  const appId = item.appId?.trim() || item.pluginName.trim();
   const packageUrl = item.package?.packageUrl?.trim();
   const packageHash = item.package?.packageHash?.trim();
   const manifestHash = item.package?.manifestHash?.trim();
 
-  if (item.sourceKind !== "agent_app_release") {
+  if (
+    item.sourceKind !== "agent_app_release" &&
+    item.sourceKind !== "plugin_catalog"
+  ) {
     blockerCodes.push("PLUGIN_MARKETPLACE_INSTALL_SOURCE_UNSUPPORTED");
   }
   if (item.policy.installation === "NOT_AVAILABLE" || !item.installable) {
@@ -203,11 +206,11 @@ function buildMarketplaceCloudApp(item: PluginMarketplaceViewItem): {
   }
 
   return {
-    app: {
-      appId,
-      displayName: resolvePluginMarketplaceItemLabel(item),
-      version: item.version,
-      releaseId: item.releaseId ?? item.package?.releaseId,
+      app: {
+        appId,
+        displayName: resolvePluginMarketplaceItemLabel(item),
+        version: item.version,
+        releaseId: item.releaseId ?? item.package?.releaseId,
       signatureRef: item.package?.signatureRef,
       registrationRequired: false,
       registrationState: "not_required",
@@ -343,7 +346,8 @@ export async function performPluginMarketplaceAction(
   if (action === "install") {
     const supportsLocalInstall = item.install?.local === true;
     const supportsCloudInstall =
-      item.sourceKind === "agent_app_release" && item.install?.cloud !== false;
+      item.sourceKind === "plugin_catalog" ||
+      (item.sourceKind === "agent_app_release" && item.install?.cloud !== false);
 
     if (supportsLocalInstall) {
       const { blockerCodes, title } = buildMarketplaceLocalInstallParams(item);
@@ -359,12 +363,18 @@ export async function performPluginMarketplaceAction(
       const installedState = await (
         deps.installLocalPackage ?? installLocalAgentAppPackage
       )({ appDir, profile: deps.profile });
+      const remoteInstallStateSync = await syncRemotePluginInstallState(
+        item,
+        "installed",
+        deps,
+      );
       (deps.dispatchChanged ?? defaultDispatchChanged)();
       return {
         status: "performed",
         action,
         item,
         installedState,
+        remoteInstallStateSync,
       };
     }
 

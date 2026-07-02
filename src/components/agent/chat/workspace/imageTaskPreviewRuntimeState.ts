@@ -7,7 +7,6 @@ import {
   type ImageWorkbenchTask,
   type SessionImageWorkbenchState,
 } from "./imageWorkbenchHelpers";
-import { buildImageTaskAssistantContent } from "./imageTaskPersona";
 import { normalizeImageWorkbenchPreviewIdentityText } from "./imageTaskPreviewRuntimeGuards";
 import {
   finalizePreviewMessages,
@@ -36,23 +35,10 @@ function buildImageWorkbenchMessagePatchFromTask(params: {
   | "contentParts"
   | "runtimeStatus"
 > {
-  const prompt =
-    params.preview.prompt ||
-    params.task.prompt ||
-    `${resolveTaskLabelFromMode(params.task.mode)}进行中`;
   const startedAt = new Date(params.task.createdAt || Date.now());
 
   return {
-    content: buildImageTaskAssistantContent({
-      prompt,
-      mode: params.task.mode,
-      modelName:
-        params.outputs[0]?.modelName ||
-        params.task.runtimeContract?.model ||
-        params.preview.runtimeContract?.model ||
-        params.preview.modelName ||
-        null,
-    }),
+    content: params.task.assistantIntro || "",
     timestamp: startedAt,
     isThinking: false,
     toolCalls: undefined,
@@ -152,6 +138,7 @@ function buildImageWorkbenchPreviewMessageFromTask(params: {
           ? params.task.failureMessage || null
           : null,
     runtimeContract: params.task.runtimeContract ?? null,
+    workflowRun: params.task.workflowRun ?? null,
   };
 
   return {
@@ -193,6 +180,24 @@ function resolveImageTaskSnapshotProgressScore(params: {
   taskStatus?: ImageWorkbenchTask["status"];
   outputCount: number;
 }): number {
+  if (params.outputCount === 0) {
+    switch (params.taskStatus) {
+      case "complete":
+        return 0;
+      case "error":
+      case "cancelled":
+        return 4;
+      case "partial":
+      case "running":
+        return 2;
+      case "queued":
+      case "routing":
+        return 1;
+      default:
+        return 1;
+    }
+  }
+
   switch (params.taskStatus) {
     case "complete":
     case "error":
@@ -269,6 +274,7 @@ export function mergeImageTaskSnapshot(
         snapshot.task.artifactPath ?? previousTask?.artifactPath ?? null,
       runtimeContract:
         snapshot.task.runtimeContract ?? previousTask?.runtimeContract ?? null,
+      workflowRun: snapshot.task.workflowRun ?? previousTask?.workflowRun ?? null,
     },
     ...current.tasks.filter((task) => task.id !== snapshot.taskId),
   ];
@@ -629,6 +635,7 @@ function patchMessagesWithImageWorkbenchState(params: {
             ? task.failureMessage || preview.statusMessage || null
             : null,
       runtimeContract: task.runtimeContract ?? preview.runtimeContract ?? null,
+      workflowRun: task.workflowRun ?? preview.workflowRun ?? null,
       retryable:
         typeof preview.retryable === "boolean"
           ? preview.retryable

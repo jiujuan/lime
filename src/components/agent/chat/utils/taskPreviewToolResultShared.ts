@@ -139,6 +139,7 @@ export function resolveTaskPreviewStatus(
 ): MessageTaskPreviewStatus {
   switch ((status || "").trim().toLowerCase()) {
     case "completed":
+    case "complete":
     case "success":
     case "succeeded":
       return "complete";
@@ -164,6 +165,7 @@ export function resolveTaskPreviewStatus(
 export function resolveTaskPreviewPhase(status: string | undefined): string {
   switch ((status || "").trim().toLowerCase()) {
     case "completed":
+    case "complete":
     case "success":
     case "succeeded":
       return "succeeded";

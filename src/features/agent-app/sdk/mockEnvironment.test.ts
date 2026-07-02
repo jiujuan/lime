@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildInstalledAppPreview } from "../install/installedAppPreview";
+import contentFactoryFixture from "../testing/fixtures/content-factory-app.json";
 import { buildMockCapabilityProfile } from "./mockCapabilityProfile";
 import { MockCapabilityHost } from "./MockCapabilityHost";
 import { createMockLimeCapabilityTransport } from "./__tests__/testFixtures";
@@ -21,6 +22,7 @@ describe("Agent App mock SDK boundary", () => {
       () =>
         new MockCapabilityHost({
           preview: buildInstalledAppPreview({
+            fixture: contentFactoryFixture,
             loadedAt: "2026-05-15T00:00:00.000Z",
             checkedAt: "2026-05-15T00:00:00.000Z",
             generatedAt: "2026-05-15T00:00:00.000Z",

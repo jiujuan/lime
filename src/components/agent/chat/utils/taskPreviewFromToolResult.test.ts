@@ -138,6 +138,43 @@ describe("buildImageTaskPreviewFromToolResult", () => {
     });
   });
 
+  it("v2 图片任务只有 image_generation task_family 时，也应恢复图片轻卡", () => {
+    const preview = buildImageTaskPreviewFromToolResult({
+      toolId: "tool-v2-family",
+      toolName: "mediaTaskArtifact/image/create",
+      toolArguments: JSON.stringify({
+        prompt: "画一张广州夏天的图",
+      }),
+      toolResult: {
+        metadata: {
+          task_id: "task-v2-family",
+          task_family: "image_generation",
+          status: "pending_submit",
+          normalized_status: "pending",
+          artifact_path: ".lime/tasks/image_generate/task-v2-family.json",
+          record: {
+            payload: {
+              prompt: "画一张广州夏天的图",
+              count: 1,
+              session_id: "session-v2",
+            },
+          },
+        },
+      },
+      fallbackPrompt: "@配图 画一张广州夏天的图",
+    });
+
+    expect(preview).toMatchObject({
+      taskId: "task-v2-family",
+      prompt: "画一张广州夏天的图",
+      status: "running",
+      phase: "queued",
+      artifactPath: ".lime/tasks/image_generate/task-v2-family.json",
+      expectedImageCount: 1,
+      imageCount: 1,
+    });
+  });
+
   it("应从纯 JSON 工具输出恢复图片轻卡，而不是依赖额外 metadata", () => {
     const preview = buildImageTaskPreviewFromToolResult({
       toolId: "tool-json-1",
@@ -189,6 +226,81 @@ describe("buildImageTaskPreviewFromToolResult", () => {
       imageCount: 1,
       size: "1024x1024",
       statusMessage: "任务已创建，等待进入队列",
+    });
+  });
+
+  it("应从顶层 task JSON 工具结果恢复图片轻卡和模型标签", () => {
+    const preview = buildImageTaskPreviewFromToolResult({
+      toolId: "tool-top-level-image-1",
+      toolName: "mediaTaskArtifact/image/create",
+      toolArguments: undefined,
+      toolResult: {
+        success: true,
+        task_id: "task-top-level-image-1",
+        task_type: "image_generate",
+        task_family: "image",
+        status: "pending_submit",
+        artifact_path: ".lime/tasks/image_generate/task-top-level-image-1.json",
+        record: {
+          payload: {
+            prompt: "画一张深圳夏天的图",
+            provider_id: "fal",
+            model: "fal-ai/nano-banana-pro",
+            count: 1,
+          },
+        },
+      },
+      fallbackPrompt: "@Nanobanana Pro 画一张深圳夏天的图",
+    });
+
+    expect(preview).toMatchObject({
+      taskId: "task-top-level-image-1",
+      prompt: "画一张深圳夏天的图",
+      status: "running",
+      phase: "queued",
+      artifactPath: ".lime/tasks/image_generate/task-top-level-image-1.json",
+      expectedImageCount: 1,
+      imageCount: 1,
+      providerName: "fal",
+      modelName: "fal-ai/nano-banana-pro",
+      caption: null,
+    });
+  });
+
+  it("图片任务完成态应把结果描述投影为图片下方 caption", () => {
+    const preview = buildImageTaskPreviewFromToolResult({
+      toolId: "tool-caption-image-1",
+      toolName: "mediaTaskArtifact/image/create",
+      toolArguments: undefined,
+      toolResult: {
+        success: true,
+        task_id: "task-caption-image-1",
+        task_type: "image_generate",
+        task_family: "image",
+        status: "succeeded",
+        received_count: 1,
+        record: {
+          payload: {
+            prompt: "从花城汇看广州塔的春天照片",
+            model: "fal-ai/nano-banana-pro",
+            presentation: {
+              result_caption:
+                "搞定，从花城汇看广州塔的春日景象已经好了，要调整的话直接说。",
+            },
+          },
+        },
+      },
+      fallbackPrompt: "@Nanobanana Pro 从花城汇看广州塔",
+    });
+
+    expect(preview).toMatchObject({
+      taskId: "task-caption-image-1",
+      prompt: "从花城汇看广州塔的春天照片",
+      status: "complete",
+      imageCount: 1,
+      modelName: "fal-ai/nano-banana-pro",
+      caption:
+        "搞定，从花城汇看广州塔的春日景象已经好了，要调整的话直接说。",
     });
   });
 

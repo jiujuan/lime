@@ -118,6 +118,7 @@ const EXECUTOR_KINDS = new Set([
   "gateway",
   "scene_cloud",
   "local_cli",
+  "workflow",
 ]);
 const FAILURE_REASONS = new Set([
   "permission_denied",

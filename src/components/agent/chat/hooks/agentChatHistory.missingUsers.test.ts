@@ -200,6 +200,87 @@ describe("agentChatHistory missing user recovery", () => {
         status: "complete",
       },
     });
+    expect(messages[1]?.content).toContain("三国主要人物的群像海报");
+  });
+
+  it("current read model 图片工具历史恢复时应补回前置寒暄", () => {
+    const detail: AsterSessionDetail = {
+      id: "session-image-thread-item-intro",
+      thread_id: "thread-image-thread-item-intro",
+      created_at: 1,
+      updated_at: 2,
+      messages: [],
+      turns: [
+        {
+          id: "turn-image-thread-item-intro",
+          thread_id: "thread-image-thread-item-intro",
+          prompt_text: "画一张广州夏天的图",
+          status: "completed",
+          started_at: "2026-05-06T10:00:00.000Z",
+          completed_at: "2026-05-06T10:00:05.000Z",
+          created_at: "2026-05-06T10:00:00.000Z",
+          updated_at: "2026-05-06T10:00:05.000Z",
+        },
+      ],
+      items: [
+        {
+          id: "item-image-thread-item-user",
+          thread_id: "thread-image-thread-item-intro",
+          turn_id: "turn-image-thread-item-intro",
+          sequence: 1,
+          type: "user_message",
+          status: "completed",
+          text: "画一张广州夏天的图",
+          started_at: "2026-05-06T10:00:00.000Z",
+          completed_at: "2026-05-06T10:00:00.000Z",
+          updated_at: "2026-05-06T10:00:00.000Z",
+        } as never,
+        {
+          id: "tool-image-thread-item-intro",
+          thread_id: "thread-image-thread-item-intro",
+          turn_id: "turn-image-thread-item-intro",
+          sequence: 2,
+          type: "tool_call",
+          status: "completed",
+          tool_name: "lime_create_image_generation_task",
+          arguments: {
+            prompt: "画一张广州夏天的图",
+            model: "gpt-image-1",
+          },
+          output: "图片任务已提交",
+          success: true,
+          metadata: {
+            task_id: "task-image-thread-item-intro",
+            task_type: "image_generate",
+            status: "succeeded",
+            received_count: 1,
+            model: "gpt-image-1",
+          },
+          started_at: "2026-05-06T10:00:01.000Z",
+          completed_at: "2026-05-06T10:00:05.000Z",
+          updated_at: "2026-05-06T10:00:05.000Z",
+        } as never,
+      ],
+    };
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "session-image-thread-item-intro",
+    );
+
+    expect(messages.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+    ]);
+    expect(messages[1]).toMatchObject({
+      role: "assistant",
+      imageWorkbenchPreview: {
+        taskId: "task-image-thread-item-intro",
+        prompt: "画一张广州夏天的图",
+        status: "complete",
+      },
+    });
+    expect(messages[1]?.content).toContain("广州夏天");
   });
 
   it("后端连续两轮只有助手图片轨迹时应按 turn 顺序补回各自用户指令", () => {

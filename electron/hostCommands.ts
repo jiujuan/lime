@@ -38,6 +38,7 @@ import { showDesktopNotification } from "./desktopNotificationHost";
 import { FileShellHost } from "./fileShellHost";
 import { LayeredDesignProjectHost } from "./layeredDesignProjectHost";
 import { ProjectShellHost } from "./projectShellHost";
+import { openResourceManagerWindow } from "./resourceManagerWindowHost";
 import { SystemUtilityHost } from "./systemUtilityHost";
 import { VoiceModelHost } from "./voiceModelHost";
 
@@ -129,6 +130,8 @@ export class ElectronHostCommands {
         return await this.#systemUtilityHost.openExternalUrl(args);
       case "open_file_preview_window":
         return await this.#fileShellHost.openFilePreviewWindow(args);
+      case "open_resource_manager_window":
+        return openResourceManagerWindow(args);
       case "open_system_settings_url":
         return await this.#systemUtilityHost.openSystemSettingsUrl(args);
       case "show_desktop_notification":

@@ -24,13 +24,12 @@ export function projectAppServerSessionReadToThreadReadModel(
   );
   const sessionBusinessObjectRefMetadata =
     readSessionBusinessObjectRefMetadata(response);
-  const hasDetailSessionBusinessObjectRefMetadata = Boolean(
-    detailThreadRead &&
-      Object.prototype.hasOwnProperty.call(
+  const hasDetailSessionBusinessObjectRefMetadata = detailThreadRead
+    ? Object.prototype.hasOwnProperty.call(
         detailThreadRead,
         "session_business_object_ref_metadata",
-      ),
-  );
+      )
+    : false;
   const sessionStatus = profileStatusFromSessionStatus(response.session.status);
   const protocolTurns = response.turns.map(projectAppServerTurn);
   const projected: AgentRuntimeThreadReadModel = {
@@ -60,6 +59,10 @@ export function projectAppServerSessionReadToThreadReadModel(
     projected.session_business_object_ref_metadata =
       projectedSessionBusinessObjectRefMetadata;
   }
+  delete projected.workflow_runs;
+  delete projected.workflowRuns;
+  delete projected.workflow_steps;
+  delete projected.workflowSteps;
 
   return normalizeThreadReadModel(projected) as AgentRuntimeThreadReadModel;
 }

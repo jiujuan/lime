@@ -190,28 +190,28 @@ fn dedupe_agent_skill_selections(selections: Vec<AgentSkillSelection>) -> Vec<Ag
 fn catalog_bound_skill_candidates(metadata_values: &[&Value]) -> Vec<String> {
     let mut candidates = Vec::new();
     for metadata in metadata_values {
-        let Some(service_scene_run) = service_scene_run_value(metadata) else {
-            continue;
-        };
-        collect_skill_locator_candidates(&mut candidates, service_scene_run);
-        push_string_candidate(
-            &mut candidates,
-            service_scene_run
-                .get("skill_key")
-                .or_else(|| service_scene_run.get("skillKey")),
-        );
-        push_string_candidate(
-            &mut candidates,
-            service_scene_run
-                .get("linked_skill_id")
-                .or_else(|| service_scene_run.get("linkedSkillId")),
-        );
-        push_string_candidate(
-            &mut candidates,
-            service_scene_run
-                .get("skill_id")
-                .or_else(|| service_scene_run.get("skillId")),
-        );
+        if let Some(service_scene_run) = service_scene_run_value(metadata) {
+            collect_skill_locator_candidates(&mut candidates, service_scene_run);
+            push_string_candidate(
+                &mut candidates,
+                service_scene_run
+                    .get("skill_key")
+                    .or_else(|| service_scene_run.get("skillKey")),
+            );
+            push_string_candidate(
+                &mut candidates,
+                service_scene_run
+                    .get("linked_skill_id")
+                    .or_else(|| service_scene_run.get("linkedSkillId")),
+            );
+            push_string_candidate(
+                &mut candidates,
+                service_scene_run
+                    .get("skill_id")
+                    .or_else(|| service_scene_run.get("skillId")),
+            );
+        }
+        collect_model_skill_launch_candidates(&mut candidates, metadata);
     }
     candidates
 }
@@ -380,6 +380,43 @@ fn service_scene_run_value(metadata: &Value) -> Option<&Value> {
         .or_else(|| metadata.pointer("/serviceSceneLaunch/serviceSceneRun"))
 }
 
+fn collect_model_skill_launch_candidates(candidates: &mut Vec<String>, metadata: &Value) {
+    for launch in model_skill_launch_values(metadata) {
+        push_string_candidate(
+            candidates,
+            launch.get("skill_name").or_else(|| launch.get("skillName")),
+        );
+    }
+}
+
+fn model_skill_launch_values(metadata: &Value) -> Vec<&Value> {
+    let mut values = Vec::new();
+    if let Some(harness) = metadata.get("harness").and_then(Value::as_object) {
+        for (key, value) in harness {
+            if looks_like_model_skill_launch_key(key) && !is_image_skill_launch_key(key) {
+                values.push(value);
+            }
+        }
+    }
+    if let Some(object) = metadata.as_object() {
+        for (key, value) in object {
+            if looks_like_model_skill_launch_key(key) && !is_image_skill_launch_key(key) {
+                values.push(value);
+            }
+        }
+    }
+    values
+}
+
+fn looks_like_model_skill_launch_key(key: &str) -> bool {
+    let normalized = key.trim();
+    normalized.ends_with("_skill_launch") || normalized.ends_with("SkillLaunch")
+}
+
+fn is_image_skill_launch_key(key: &str) -> bool {
+    matches!(key.trim(), "image_skill_launch" | "imageSkillLaunch")
+}
+
 fn push_string_candidate(candidates: &mut Vec<String>, value: Option<&Value>) {
     let Some(candidate) = value
         .and_then(Value::as_str)
@@ -517,6 +554,58 @@ mod tests {
         assert!(prompt.contains("`writer`"));
         assert!(prompt.contains("# Body"));
         assert!(prompt.contains("## 可用 Agent Skills"));
+    }
+
+    #[test]
+    fn image_skill_launch_does_not_inject_agent_skill_body() {
+        let workspace = TempDir::new().expect("workspace");
+        let skill_dir = workspace.path().join(".agents/skills/image-router");
+        std::fs::create_dir_all(&skill_dir).expect("skill dir");
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            r#"---
+name: image-router
+description: Generate image task.
+allowed_tools: lime_create_image_generation_task
+---
+
+# Image Generate
+
+Call lime_create_image_generation_task directly.
+"#,
+        )
+        .expect("skill");
+        let metadata = serde_json::json!({
+            "harness": {
+                "image_skill_launch": {
+                    "skill_name": "image-router",
+                    "kind": "image_task",
+                    "image_task": {
+                        "prompt": "广州夏天",
+                        "modality_contract_key": "image_generation"
+                    }
+                }
+            }
+        });
+
+        let prompt = append_agent_skills_context_to_system_prompt(
+            Some("base".to_string()),
+            "@配图 画一张广州夏天的图",
+            &[&metadata],
+            Some(workspace.path()),
+            Some(workspace.path()),
+        )
+        .expect("prompt");
+        let allowed_tools = selected_agent_skill_allowed_tools_for_turn(
+            "@配图 画一张广州夏天的图",
+            &[&metadata],
+            Some(workspace.path()),
+            Some(workspace.path()),
+        );
+
+        assert!(!prompt.contains("<selected_skill_instructions>"));
+        assert!(!prompt.contains("Call lime_create_image_generation_task directly."));
+        assert!(allowed_tools.is_empty());
     }
 
     #[test]

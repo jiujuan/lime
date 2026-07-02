@@ -438,3 +438,51 @@ Phase 2 完成口径：
    - `npm run test:related -- src/components/agent/chat/hooks/agentSessionState.ts src/components/agent/chat/hooks/agentSessionRefresh.ts src/components/agent/chat/hooks/useAgentRuntimeSyncEffects.ts`：`31 files / 396 tests passed`。
 
 完成口径：`test:related` 现在能作为 Thread / Session / Route Shell 主线的有效缩小反馈环；Electron main 输入不会被前端排除策略误伤，前端输入也不会再因 Electron transform 触发 EISDIR。
+
+## 22. 2026-07-02 WebSearch Cell / 流式校验收口记录
+
+本轮继续按 `/Users/coso/Documents/dev/rust/codex` 复核用户日志中的两个问题：后续搜索会合并到前一个搜索工具组，以及首字仍慢。
+
+1. Codex 对照结论：
+   - `codex-rs/tui/src/chatwidget/tool_lifecycle.rs` 的 `on_web_search_begin` 会先 `flush_answer_stream_with_separator()`、`flush_active_cell()`，再用 `call_id` 创建新的 `WebSearchCell`。
+   - `on_web_search_end` 只更新相同 `call_id` 的 active cell；若 active cell 不匹配，则新增一条 history cell。
+   - `codex-rs/tui/src/history_cell/search.rs` 的 `WebSearchCell` 持有 `call_id`，不是把多次 WebSearch 跨 thinking / 正文聚成长期工具组。
+2. Lime 收口：
+   - `StreamingProcessGroupModel.shouldSplitProcessBeforeEntry` 现在把新的 WebSearch call 作为 process 边界：前置 thinking 不再被吸进 WebSearch；已有检索过程遇到后续 WebSearch 必须 flush，新搜索不回并旧组。
+   - 紧随 WebSearch 的 WebFetch 仍可作为同一次检索链的读取步骤展示，避免把“搜索来源 -> 读取页面”的支持关系拆碎；独立 WebFetch 不再并入普通工具过程。后续若 App Server 把 OpenPage / FindInPage 也投影为独立 WebSearch call，应继续按 call 边界处理。
+   - `StreamingRenderer` 的 interleaved 与 fallback 渲染都复用同一 split 规则，避免无 `contentParts` 的工具 fallback 继续聚合多个 WebSearch。
+   - 外置 `AgentThreadTimeline` 的 `agentThreadGrouping` 同步使用 WebSearch call 边界；内容工厂等工作流不再用特殊聚合规则绕过搜索拆组，完成态默认按普通 WebSearch 过程折叠展示。
+3. 活跃流式期间的 detail 校验：
+   - `useAgentSession` 的 missing-session hydrate effect 已把 `activeStreamingTimeline` 加入依赖数组，避免流式开始后旧闭包继续触发 `runtime.getSession(source: "missingSessionVerify")`。
+   - `useAgentSession.loadTopics` / 初始 `listSessions` 现在遇到 active streaming 会只标记 pending refresh，不在输出中段拉话题列表；收到 terminal 事件后再合并执行一次补刷新。
+   - 相关回归改口径为：话题列表暂时不含当前执行会话时，active streaming 期间不得校验；收到 terminal 事件后才允许校验并补回 / 清空会话。
+4. 活跃流式期间的 Sidebar 刷新：
+   - `AgentChatWorkspace` 现在把真实 `isSending` 上报到 App，再传给 `AppSidebar`；`useAppSidebarSessions` 在 active streaming 期间不再发起最近对话 `listSessions`。
+   - active streaming 期间收到 session metadata 更新、focus refresh 或分页触发时，只标记 pending；终态 / idle 后再合并成一次最近对话刷新，避免日志中的全局 / workspace / cwd 三组 `runtimeListSessions` 在长搜索中反复插队。
+5. 剩余慢因判断：
+   - 用户日志中 `firstTextDelta elapsedMs: 8058`、`firstEventDeltaMs: 7406`，但 `firstTextPaint` 只比首个 delta 晚约 `67ms`；当前首字慢主因在 provider / runtime 首个文本事件，而不是 React paint。
+   - `provider_trace(request_started / first_event_received)` 现在会在首字前补一个真实等待态 `runtimeStatus`，让 UI 立即显示“正在启动处理流程”；这只改善首字前可见反馈，不伪造 assistant 正文，也不把 provider 首 token 时间误报为前端渲染问题。
+   - Sidebar 的中途刷新已延后；若仍有卡顿，下一刀应继续下钻 provider/runtime 首 token 前的 provider trace、工具调度和后端搜索调用链。
+6. 回归：
+   - `StreamingProcessGroupModel.unit.test.ts` 覆盖 WebSearch 前置 thinking split 与 WebSearch 后 thinking 仍作为当前检索说明。
+   - `StreamingRenderer.webSearch.test.tsx` 覆盖多次 WebSearch 拆成独立过程组，后续搜索不出现在前一个组。
+   - `agentThreadGrouping.test.ts` 覆盖外置 timeline 中连续 WebSearch、WebSearch + WebFetch 后再次 WebSearch，以及内容工厂 WebSearch 都按调用边界拆组。
+   - `messageListItemProjection.timeline.unit.test.ts` 覆盖运行中工具 timeline 不再把已提交导语挪到搜索过程后。
+   - `useAsterAgentChat.test.tsx` 覆盖 active streaming 期间不执行 `missingSessionVerify`，terminal 后再校验缺失会话。
+   - `AppSidebar.conversations.test.tsx` 覆盖 active streaming 期间当前 session metadata 更新不会触发最近对话 `listSessions`，终态后只排一次刷新。
+   - `agentStreamRuntimeHandler.unit.test.ts` / `agentStreamRuntimeStatusController.test.ts` 覆盖 provider trace 早于首字时的等待态补位，以及后续真实 `runtime_status` 覆盖补位状态。
+
+完成口径：WebSearch UI 过程不再跨 call 合并；active streaming 期间由话题列表缺失触发的 session detail 校验已收口；Sidebar 最近对话 listSessions 不再插入流式中段；首字前有真实 provider trace 等待态可见。剩余性能项集中在 provider/runtime 首 token，不再归因于首字 paint 或侧栏中段刷新。
+
+## 23. 2026-07-02 Codex 流式流畅性架构索引
+
+用户指出“不是只有首 token 慢，过程中也会卡顿”。本路线图只保留结论索引，详细架构图、时序图和流程图已拆到独立文档：
+
+- [`streaming-fluidity-architecture.md`](./streaming-fluidity-architecture.md)
+
+索引结论：
+
+1. Codex 的流畅输出来自 active stream、history cell、工具 lifecycle、redraw / commit tick 分层，不是把每个 token 写进完整 UI 状态树。
+2. Lime 的目标是让 final answer delta 先进入轻量 overlay，只有 process boundary / terminal 时才提交 `messages.contentParts`。
+3. active streaming 期间的 `getSession` / `listSessions` 默认延后，避免在输出中段抢占主线程和 IO。
+4. 后续性能排查分成首字前反馈、中段 UI 抢资源、逐 delta 重渲染、后端多 provider attempt 四条线，不能只看一个 TTFT 指标。

@@ -1,4 +1,3 @@
-import contentFactoryFixture from "@/features/agent-app/fixtures/content-factory-app.json";
 import { buildPackageIdentity } from "@/features/agent-app/install/packageIdentity";
 import { normalizeManifest } from "@/features/agent-app/manifest/normalizeManifest";
 import { parseManifest } from "@/features/agent-app/manifest/parseManifest";
@@ -22,19 +21,29 @@ export interface ContentFactoryPluginDogfoodContract {
   activationCatalog: PluginActivationMentionCatalog;
 }
 
-export function buildContentFactoryPluginContract(): PluginContract {
-  const parsedManifest = parseManifest(contentFactoryFixture);
+export interface BuildContentFactoryPluginContractParams {
+  manifest: unknown;
+  loadedAt?: string;
+}
+
+export function buildContentFactoryPluginContract({
+  loadedAt = "2026-06-26T00:00:00.000Z",
+  manifest,
+}: BuildContentFactoryPluginContractParams): PluginContract {
+  const parsedManifest = parseManifest(manifest);
   return buildPluginContractFromAgentAppManifest({
     manifest: normalizeManifest(parsedManifest),
     identity: buildPackageIdentity({
       manifest: parsedManifest,
-      loadedAt: "2026-06-26T00:00:00.000Z",
+      loadedAt,
     }),
   });
 }
 
-export function buildContentFactoryPluginDogfoodContract(): ContentFactoryPluginDogfoodContract {
-  const contract = buildContentFactoryPluginContract();
+export function buildContentFactoryPluginDogfoodContract(
+  params: BuildContentFactoryPluginContractParams,
+): ContentFactoryPluginDogfoodContract {
+  const contract = buildContentFactoryPluginContract(params);
   const registryItem = projectPluginRegistryItem({
     contract,
     installed: true,

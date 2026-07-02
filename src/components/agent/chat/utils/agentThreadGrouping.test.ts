@@ -419,7 +419,7 @@ describe("agentThreadGrouping", () => {
     expect(model.orderedBlocks[0]?.rawDetailLabel).toBe("展开查看探索明细");
   });
 
-  it("连续 WebSearch 线程项应折叠成网页搜索摘要", () => {
+  it("连续 WebSearch 线程项应按调用边界拆成独立搜索过程", () => {
     const items: AgentThreadItem[] = [
       {
         ...createBaseItem("search-1", 1),
@@ -437,14 +437,72 @@ describe("agentThreadGrouping", () => {
 
     const model = buildAgentThreadDisplayModel(items);
 
-    expect(model.orderedBlocks).toHaveLength(1);
-    expect(model.orderedBlocks[0]?.title).toBe("已搜索网页 2 次");
+    expect(model.orderedBlocks).toHaveLength(2);
+    expect(model.orderedBlocks[0]?.title).toBe(
+      "已搜索网页：today world news Reuters",
+    );
     expect(model.orderedBlocks[0]?.previewLines).toEqual([
       "today world news Reuters",
+    ]);
+    expect(model.orderedBlocks[0]?.countLabel).toBe("1 次");
+    expect(model.orderedBlocks[0]?.rawDetailLabel).toBe("展开查看搜索来源");
+    expect(model.orderedBlocks[1]?.title).toBe(
+      "已搜索网页：https://apnews.com/hub/world-news",
+    );
+    expect(model.orderedBlocks[1]?.previewLines).toEqual([
       "https://apnews.com/hub/world-news",
     ]);
-    expect(model.orderedBlocks[0]?.countLabel).toBe("2 次");
-    expect(model.orderedBlocks[0]?.rawDetailLabel).toBe("展开查看搜索来源");
+    expect(model.orderedBlocks[1]?.countLabel).toBe("1 次");
+    expect(model.orderedBlocks[1]?.rawDetailLabel).toBe("展开查看搜索来源");
+  });
+
+  it("WebSearch 读取页面后遇到下一次 WebSearch 应新开过程块", () => {
+    const items: AgentThreadItem[] = [
+      {
+        ...createBaseItem("search-1", 1),
+        type: "web_search",
+        action: "search",
+        query: "today world news Reuters",
+      },
+      {
+        ...createBaseItem("fetch-1", 2),
+        type: "tool_call",
+        tool_name: "WebFetch",
+        arguments: { url: "https://www.reuters.com/world/" },
+      },
+      {
+        ...createBaseItem("search-2", 3),
+        type: "web_search",
+        action: "search",
+        query: "global headlines AP",
+      },
+      {
+        ...createBaseItem("fetch-2", 4),
+        type: "tool_call",
+        tool_name: "WebFetch",
+        arguments: { url: "https://apnews.com/hub/world-news" },
+      },
+    ];
+
+    const model = buildAgentThreadDisplayModel(items);
+
+    expect(model.orderedBlocks).toHaveLength(2);
+    expect(model.orderedBlocks[0]?.title).toBe(
+      "已搜索网页 1 次，读取网页 1 次",
+    );
+    expect(model.orderedBlocks[0]?.previewLines).toEqual([
+      "today world news Reuters",
+      "reuters.com/world",
+    ]);
+    expect(model.orderedBlocks[0]?.countLabel).toBe("搜 1 / 读 1");
+    expect(model.orderedBlocks[1]?.title).toBe(
+      "已搜索网页 1 次，读取网页 1 次",
+    );
+    expect(model.orderedBlocks[1]?.previewLines).toEqual([
+      "global headlines AP",
+      "apnews.com/hub/world-news",
+    ]);
+    expect(model.orderedBlocks[1]?.countLabel).toBe("搜 1 / 读 1");
   });
 
   it("运行中的 WebSearch 线程项应折叠成搜索进行态摘要", () => {
@@ -532,7 +590,7 @@ describe("agentThreadGrouping", () => {
     );
   });
 
-  it("内容工厂文章工作流的已完成工具过程应默认展开", () => {
+  it("内容工厂文章工作流的 WebSearch 也应按调用边界拆分", () => {
     const items: AgentThreadItem[] = [
       {
         ...createBaseItem("content-factory-search-1", 1),
@@ -558,10 +616,15 @@ describe("agentThreadGrouping", () => {
 
     const model = buildAgentThreadDisplayModel(items);
 
-    expect(model.orderedBlocks).toHaveLength(1);
+    expect(model.orderedBlocks).toHaveLength(2);
     expect(model.orderedBlocks[0]?.kind).toBe("process");
     expect(model.orderedBlocks[0]?.status).toBe("completed");
-    expect(model.orderedBlocks[0]?.defaultExpanded).toBe(true);
+    expect(model.orderedBlocks[0]?.defaultExpanded).toBe(false);
+    expect(model.orderedBlocks[0]?.title).toBe("已搜索网页：golang 学习路径");
+    expect(model.orderedBlocks[1]?.kind).toBe("process");
+    expect(model.orderedBlocks[1]?.status).toBe("completed");
+    expect(model.orderedBlocks[1]?.defaultExpanded).toBe(false);
+    expect(model.orderedBlocks[1]?.title).toBe("已搜索网页：golang 并发实践");
   });
 
   it("本地历史导入混合推理过程仍应保留命令记录入口", () => {

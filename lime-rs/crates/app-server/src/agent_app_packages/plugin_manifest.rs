@@ -255,14 +255,39 @@ fn read_skill_contributions(app_dir: &Path, plugin_manifest: &Value) -> Result<V
         }
         let content = fs::read_to_string(&skill_path)
             .map_err(|error| format!("读取插件包 skill 失败 {}: {error}", skill_path.display()))?;
-        let directory_id = entry.file_name().to_string_lossy().replace('_', "-");
-        let id = read_markdown_frontmatter_field(&content, "name").unwrap_or(directory_id);
+        let directory_id = entry.file_name().to_string_lossy().to_string();
+        if !is_valid_skill_id(&directory_id) {
+            return Err(format!(
+                "插件包 skill 目录名不符合 Agent Skills 规范 {}: {directory_id}",
+                skill_dir.display()
+            ));
+        }
+        let id = read_markdown_frontmatter_field(&content, "name").ok_or_else(|| {
+            format!(
+                "插件包 skill 缺少 frontmatter name，且必须与目录一致: {}",
+                skill_path.display()
+            )
+        })?;
+        if id != directory_id {
+            return Err(format!(
+                "插件包 skill frontmatter name 必须与目录一致 {}: expected {}, got {}",
+                skill_path.display(),
+                directory_id,
+                id
+            ));
+        }
+        let description =
+            read_markdown_frontmatter_field(&content, "description").ok_or_else(|| {
+                format!(
+                    "插件包 skill description 不能为空: {}",
+                    skill_path.display()
+                )
+            })?;
         let title = first_markdown_heading(&content).unwrap_or_else(|| humanize_id(&id));
         entries.push(json!({
             "id": id,
             "title": title,
-            "description": read_markdown_frontmatter_field(&content, "description")
-                .or_else(|| text_preview(&content)),
+            "description": description,
             "path": package_relative_string(app_dir, &skill_path),
             "required": false
         }));
@@ -996,16 +1021,26 @@ fn tool_refs_from_runtime(
 
 fn find_skill_path(skills_root: &Path, skill_id: &str) -> Option<PathBuf> {
     let direct = skills_root.join(skill_id).join("SKILL.md");
-    if direct.is_file() {
-        return Some(direct);
+    direct.is_file().then_some(direct)
+}
+
+fn is_valid_skill_id(value: &str) -> bool {
+    let mut chars = value.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    if !first.is_ascii_lowercase() && !first.is_ascii_digit() {
+        return false;
     }
-    let underscored = skills_root
-        .join(skill_id.replace('-', "_"))
-        .join("SKILL.md");
-    if underscored.is_file() {
-        return Some(underscored);
+    let mut previous_was_hyphen = false;
+    for ch in std::iter::once(first).chain(chars) {
+        match ch {
+            'a'..='z' | '0'..='9' => previous_was_hyphen = false,
+            '-' if !previous_was_hyphen => previous_was_hyphen = true,
+            _ => return false,
+        }
     }
-    None
+    !previous_was_hyphen
 }
 
 fn normalize_key(value: &str) -> String {
@@ -1079,6 +1114,7 @@ fn read_string_array(value: Option<&Value>) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     #[test]
     fn text_preview_truncates_multibyte_text_on_char_boundary() {
@@ -1091,5 +1127,48 @@ mod tests {
             preview.trim_end_matches('…').chars().count(),
             TEXT_PREVIEW_CHAR_LIMIT
         );
+    }
+
+    #[test]
+    fn resolve_plugin_package_manifest_rejects_legacy_skill_directory_name() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        fs::write(
+            temp.path().join("plugin.json"),
+            r#"{
+              "schemaVersion": "lime.plugin.package.v1",
+              "id": "content-factory-app",
+              "version": "1.0.0",
+              "contributions": {
+                "runtime": "./app.runtime.yaml",
+                "workbench": "./app.workbench.yaml",
+                "skills": "./skills"
+              }
+            }"#,
+        )
+        .expect("plugin.json");
+        fs::write(temp.path().join("app.runtime.yaml"), "agentRuntime: {}\n")
+            .expect("runtime yaml");
+        fs::write(temp.path().join("app.workbench.yaml"), "workbench: {}\n")
+            .expect("workbench yaml");
+        fs::create_dir_all(temp.path().join("skills/article_writing")).expect("skill dir");
+        fs::write(
+            temp.path().join("skills/article_writing/SKILL.md"),
+            r#"---
+name: article-writing
+description: 正文写作技能
+---
+
+# Article Writing
+"#,
+        )
+        .expect("skill markdown");
+
+        let error = match resolve_plugin_package_manifest(temp.path()) {
+            Ok(_) => panic!("legacy skill dir should be rejected"),
+            Err(error) => error,
+        };
+
+        assert!(error.contains("Agent Skills 规范"));
+        assert!(error.contains("article_writing"));
     }
 }

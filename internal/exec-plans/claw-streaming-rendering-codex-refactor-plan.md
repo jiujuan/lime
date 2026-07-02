@@ -564,6 +564,27 @@
     - 本轮未跑 live Provider 图片生成；验收范围是非 live Provider 的真实 Electron GUI + App Server current fixture 主链。
     - 新增 image-command fixture 文件已接近 `800` 行体量预警；后续如果继续扩展 inline 配图、封面位或 retry/cancel，应先拆 task artifact helper / GUI wait / scenario runner 子模块。
 
+- S4.12 WebSearch cell / active streaming refresh / first-visible-status 收口：
+  - 问题：用户日志显示后续 WebSearch 会并入前一个搜索工具组；active streaming 中段反复出现 `runtimeListSessions` / `runtimeGetSession`；首字前 `firstRuntimeStatusDeltaMs` 为 `null`，用户感知像卡住。
+  - Codex 对齐依据：`codex-rs/tui/src/chatwidget/tool_lifecycle.rs` 的 `on_web_search_begin` 会 flush active cell，并按 `call_id` 建立新的 `WebSearchCell`；`on_web_search_end` 只更新同 call cell，不跨多次搜索聚合。
+  - current 修复：
+    - `StreamingProcessGroupModel.shouldSplitProcessBeforeEntry` 把新的 WebSearch call 作为 process 边界；连续成功 WebSearch 不再回并旧组。
+    - WebFetch 只作为已有检索链的伴随读取步骤；独立 WebFetch 不再并入普通工具过程。
+    - `StreamingRenderer` 的 interleaved 与 fallback 渲染复用同一 split 规则，避免无 `contentParts` fallback 继续聚合多个 WebSearch。
+    - `AgentChatWorkspace` 上报真实 `isSending`，`AppSidebar` / `useAppSidebarSessions` 在 active streaming 期间延后最近会话刷新，终态后合并刷新一次。
+    - `useAgentSession` 在 active streaming 期间延后 topics `listSessions` 与 missing-session hydrate 校验，避免输出中段拉 session detail。
+    - `provider_trace(request_started / first_event_received)` 早于首字时补真实 `runtimeStatus` 等待态，后续真实 `runtime_status` 覆盖它；不伪造 assistant 正文。
+  - 大文件拆分债：
+    - 本轮触碰 `agentStreamRuntimeHandler.ts` 与 `useAgentSession.ts` 两个超过 `1000` 行的中心文件；已把 provider trace 等待态计划下沉到 `agentStreamRuntimeStatusController.ts`，并新增 `agentSessionStreamingGuards.ts` 承接 active streaming timeline 判定。
+    - 后续继续改 provider trace / runtime status 前，优先拆出 `agentStreamProviderTraceController.ts` 或等价 helper；继续改 topics/detail refresh 前，优先拆出 `useAgentSessionTopicsRefresh` / `useAgentSessionMissingSessionHydrate`。
+    - 退出条件：新增流式状态逻辑不再进入 `agentStreamRuntimeHandler.ts` 中心 switch；新增话题刷新 / 缺失会话校验逻辑不再进入 `useAgentSession.ts` 主体；或上述中心文件降到 `1000` 行以下。
+  - 定向验证：
+    - `./node_modules/.bin/vitest run "src/components/agent/chat/hooks/agentStreamRuntimeStatusController.test.ts" "src/components/agent/chat/hooks/agentStreamRuntimeHandler.unit.test.ts" "src/components/agent/chat/components/MessageList.runtimeStatus.test.tsx" "src/components/agent/chat/hooks/agentStreamRuntimeMetricsController.test.ts"`，4 个文件、67 个用例通过。
+    - `./node_modules/.bin/vitest run "src/components/agent/chat/components/StreamingProcessGroupModel.unit.test.ts" "src/components/agent/chat/components/StreamingRenderer.webSearch.test.tsx" "src/components/agent/chat/components/StreamingRenderer.webSearch.sequence.test.tsx" "src/components/agent/chat/components/StreamingRenderer.processGroups.test.tsx"`，4 个文件、39 个用例通过。
+    - `./node_modules/.bin/vitest run "src/components/agent/chat/components/StreamingProcessGroupModel.unit.test.ts" "src/components/agent/chat/components/StreamingRenderer.webSearch.test.tsx" "src/components/agent/chat/components/StreamingRenderer.webSearch.sequence.test.tsx" "src/components/agent/chat/components/StreamingRenderer.processGroups.test.tsx" "src/components/AppSidebar.conversations.test.tsx" "src/components/agent/chat/hooks/useAsterAgentChat.test.tsx"`，6 个文件、264 个用例通过，存在既有 React `act(...)` warning。
+    - `npm run smoke:agent-runtime-current-fixture`：前置 Agent Runtime / Claw fixture 多段通过，最终仍失败在既有 `Content Factory article Article Editor Electron fixture`，断言 `contentFactoryArticleWorkspaceArticleWritingStructureVisible`；failure summary 指向 `.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-content-factory-article-workspace-regression-summary.json`。
+    - `git diff --check`，通过。
+
 ## 5. 当前缺口
 
 1. S3 current 展示主线已完成：live running WebSearch 中间态已有结构化 evidence，completed read model 不再作为唯一证据。

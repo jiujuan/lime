@@ -70,6 +70,139 @@ pub(crate) fn image_model_task_request(
     })
 }
 
+fn image_command_run_id(params: &MediaTaskArtifactImageCreateParams) -> String {
+    normalize_optional_string(params.turn_id.clone())
+        .map(|turn_id| format!("image-command-run-{turn_id}"))
+        .or_else(|| {
+            normalize_optional_string(params.content_id.clone())
+                .map(|content_id| format!("image-command-run-{content_id}"))
+        })
+        .or_else(|| {
+            normalize_optional_string(params.session_id.clone())
+                .map(|session_id| format!("image-command-run-{session_id}"))
+        })
+        .unwrap_or_else(|| "image-command-run-manual".to_string())
+}
+
+fn image_command_run_title(params: &MediaTaskArtifactImageCreateParams) -> String {
+    normalize_optional_string(params.title.clone()).unwrap_or_else(|| "图片生成".to_string())
+}
+
+fn image_command_requested_count(params: &MediaTaskArtifactImageCreateParams) -> u32 {
+    let count = params.count.unwrap_or(1).max(1);
+    count.max(params.storyboard_slots.len() as u32)
+}
+
+fn image_command_branch_snapshot(
+    run_id: &str,
+    params: &MediaTaskArtifactImageCreateParams,
+    index: u32,
+) -> Value {
+    let slot = params
+        .storyboard_slots
+        .get(index.saturating_sub(1) as usize);
+    let branch_id = slot
+        .and_then(|slot| normalize_optional_string(slot.slot_id.clone()))
+        .map(|slot_id| format!("{run_id}:branch:{slot_id}"))
+        .unwrap_or_else(|| format!("{run_id}:branch:{index}"));
+    let title = slot
+        .and_then(|slot| normalize_optional_string(slot.label.clone()))
+        .unwrap_or_else(|| {
+            if image_command_requested_count(params) > 1 {
+                format!("图片 {index}")
+            } else {
+                "图片结果".to_string()
+            }
+        });
+    let prompt = slot
+        .and_then(|slot| normalize_optional_string(Some(slot.prompt.clone())))
+        .unwrap_or_else(|| params.prompt.clone());
+
+    json!({
+        "branch_id": branch_id,
+        "branchId": branch_id,
+        "title": title,
+        "prompt": prompt,
+        "slot_id": slot.and_then(|slot| normalize_optional_string(slot.slot_id.clone())),
+        "slotId": slot.and_then(|slot| normalize_optional_string(slot.slot_id.clone())),
+        "shot_type": slot.and_then(|slot| normalize_optional_string(slot.shot_type.clone())),
+        "shotType": slot.and_then(|slot| normalize_optional_string(slot.shot_type.clone())),
+        "status": "queued",
+    })
+}
+
+fn image_command_run_snapshot(
+    params: &MediaTaskArtifactImageCreateParams,
+    route_assessment: Option<&MediaRouteAssessment>,
+) -> Value {
+    let run_id = image_command_run_id(params);
+    let requested_count = image_command_requested_count(params);
+    let route_blocked = route_assessment
+        .map(|assessment| assessment.route_failure.is_some())
+        .unwrap_or(false);
+    let route_status = if route_blocked { "failed" } else { "succeeded" };
+    let run_status = if route_blocked { "failed" } else { "queued" };
+    let branches = (1..=requested_count)
+        .map(|index| image_command_branch_snapshot(&run_id, params, index))
+        .collect::<Vec<_>>();
+
+    json!({
+        "run_id": run_id,
+        "runId": run_id,
+        "workflow_key": "image_command_workflow",
+        "workflowKey": "image_command_workflow",
+        "session_id": params.session_id,
+        "sessionId": params.session_id,
+        "thread_id": params.thread_id,
+        "threadId": params.thread_id,
+        "turn_id": params.turn_id,
+        "turnId": params.turn_id,
+        "title": image_command_run_title(params),
+        "summary": params.prompt,
+        "requested_count": requested_count,
+        "requestedCount": requested_count,
+        "status": run_status,
+        "steps": [
+            {
+                "id": "intent",
+                "title": "解析图片需求",
+                "status": "succeeded"
+            },
+            {
+                "id": "route",
+                "title": "确认图片模型",
+                "status": route_status
+            },
+            {
+                "id": "create_tasks",
+                "title": "创建图片任务",
+                "status": if route_blocked { "pending" } else { "succeeded" }
+            },
+            {
+                "id": "generate",
+                "title": "生成图片",
+                "status": if route_blocked { "pending" } else { "running" }
+            },
+            {
+                "id": "persist_outputs",
+                "title": "保存结果",
+                "status": "pending"
+            }
+        ],
+        "branches": branches,
+        "next_actions": [
+            {
+                "type": "open_workbench"
+            }
+        ],
+        "nextActions": [
+            {
+                "type": "open_workbench"
+            }
+        ]
+    })
+}
+
 pub(crate) fn create_image_payload(
     params: &MediaTaskArtifactImageCreateParams,
     route_assessment: Option<&MediaRouteAssessment>,
@@ -83,6 +216,7 @@ pub(crate) fn create_image_payload(
     let required_capabilities = image_required_capabilities(params);
     let model_task_request = model_task_request_value(&image_model_task_request(params));
 
+    let image_command_run = image_command_run_snapshot(params, route_assessment);
     let mut payload = json!({
         "prompt": params.prompt,
         "title_generation_result": params.title_generation_result,
@@ -123,6 +257,8 @@ pub(crate) fn create_image_payload(
         "target_output_ref_id": params.target_output_ref_id,
         "reference_images": params.reference_images,
         "storyboard_slots": params.storyboard_slots,
+        "image_command_run": image_command_run,
+        "imageCommandRun": image_command_run,
     });
     apply_media_route_assessment_payload(&mut payload, route_assessment);
     payload
@@ -342,6 +478,59 @@ mod tests {
             payload["model_task_request"]["requirements"]["outputModalities"][0].as_str(),
             Some("image")
         );
+    }
+
+    #[test]
+    fn image_payload_contains_command_run_snapshot_with_branches() {
+        let payload = create_image_payload(
+            &MediaTaskArtifactImageCreateParams {
+                project_root_path: "/tmp/project".to_string(),
+                prompt: "生成两张青柠主图".to_string(),
+                title: Some("青柠主图".to_string()),
+                count: Some(2),
+                provider_id: Some("openai".to_string()),
+                model: Some("gpt-image-2".to_string()),
+                session_id: Some("session-1".to_string()),
+                thread_id: Some("thread-1".to_string()),
+                turn_id: Some("turn-1".to_string()),
+                storyboard_slots: vec![
+                    app_server_protocol::ImageStoryboardSlotInput {
+                        prompt: "白底青柠主图".to_string(),
+                        slot_id: Some("white-bg".to_string()),
+                        label: Some("白底主图".to_string()),
+                        shot_type: Some("product_main".to_string()),
+                    },
+                    app_server_protocol::ImageStoryboardSlotInput {
+                        prompt: "浅灰背景青柠主图".to_string(),
+                        slot_id: Some("gray-bg".to_string()),
+                        label: Some("浅灰主图".to_string()),
+                        shot_type: Some("product_main".to_string()),
+                    },
+                ],
+                ..MediaTaskArtifactImageCreateParams::default()
+            },
+            None,
+        );
+
+        let run = &payload["image_command_run"];
+        assert_eq!(run["run_id"].as_str(), Some("image-command-run-turn-1"));
+        assert_eq!(run["workflow_key"].as_str(), Some("image_command_workflow"));
+        assert_eq!(run["title"].as_str(), Some("青柠主图"));
+        assert_eq!(run["requested_count"].as_u64(), Some(2));
+        assert_eq!(run["status"].as_str(), Some("queued"));
+        assert_eq!(run["steps"][0]["id"].as_str(), Some("intent"));
+        assert_eq!(run["steps"][2]["status"].as_str(), Some("succeeded"));
+        assert_eq!(run["branches"].as_array().map(Vec::len), Some(2));
+        assert_eq!(
+            run["branches"][0]["branch_id"].as_str(),
+            Some("image-command-run-turn-1:branch:white-bg")
+        );
+        assert_eq!(run["branches"][0]["title"].as_str(), Some("白底主图"));
+        assert_eq!(
+            run["branches"][1]["prompt"].as_str(),
+            Some("浅灰背景青柠主图")
+        );
+        assert_eq!(payload["imageCommandRun"], payload["image_command_run"]);
     }
 
     #[test]

@@ -26,13 +26,9 @@ import {
   FIXTURE_PROVIDER,
   GOAL_DONE_TEXT,
   GOAL_PROMPT,
-  IMAGE_COMMAND_CREATE_TASK_TOOL_CALL_ID,
-  IMAGE_COMMAND_CREATE_TASK_TOOL_NAME,
-  IMAGE_COMMAND_DONE_TEXT,
-  IMAGE_COMMAND_PROMPT,
   IMAGE_FIXTURE_MODEL,
-  IMAGE_COMMAND_SKILL_NAME,
-  IMAGE_COMMAND_SKILL_TOOL_CALL_ID,
+  IMAGE_COMMAND_PRESENTATION_CAPTION,
+  IMAGE_COMMAND_PRESENTATION_INTRO,
   MCP_STRUCTURED_CONTENT_DONE_TEXT,
   MCP_STRUCTURED_CONTENT_PROMPT,
   MCP_STRUCTURED_CONTENT_PROTOCOL_OUTPUT,
@@ -40,7 +36,6 @@ import {
   MCP_STRUCTURED_CONTENT_TOOL_CALL_ID,
   MCP_STRUCTURED_CONTENT_TOOL_NAME,
   NEWS_PROMPT,
-  PLAIN_IMAGE_INTENT_ROUTED_PROMPT,
   PLAN_DONE_TEXT,
   PLAN_PROMPT,
   PLAN_STEPS,
@@ -115,7 +110,6 @@ export function createTempRuntimeEnv() {
   const backendPath = path.join(tempRoot, "claw-chat-backend.mjs");
   const backendLedgerPath = path.join(tempRoot, "claw-chat-backend.jsonl");
   const cancelSignalPath = path.join(tempRoot, "claw-chat-cancel.signal");
-  const imageTaskFixturePath = path.join(tempRoot, "claw-chat-image-task.json");
 
   for (const dir of [
     home,
@@ -146,7 +140,6 @@ export function createTempRuntimeEnv() {
     backendPath,
     backendLedgerPath,
     cancelSignalPath,
-    imageTaskFixturePath,
     configPath,
     macConfigPath,
     writeFixtureConfig: (overrides = {}) => {
@@ -291,7 +284,6 @@ import { appendFileSync, readFileSync } from "node:fs";
 
 const ledgerPath = process.argv[2];
 const cancelSignalPath = process.argv[3];
-const imageTaskFixturePath = process.argv[4];
 const input = JSON.parse(readFileSync(0, "utf8"));
 const asterChatRequest = input.request?.runtimeOptions?.hostOptions?.asterChatRequest;
 
@@ -318,31 +310,6 @@ export function emitEvents(events) {
 
 export function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-export async function waitForJsonFile(filePath, timeoutMs) {
-  if (!filePath) {
-    return null;
-  }
-  const startedAt = Date.now();
-  let lastError = null;
-  while (Date.now() - startedAt < timeoutMs) {
-    try {
-      const raw = readFileSync(filePath, "utf8").trim();
-      if (raw) {
-        return JSON.parse(raw);
-      }
-    } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error);
-    }
-    await sleep(100);
-  }
-  appendLedgerEntry({
-    kind: "imageTaskFixtureTimeout",
-    filePath,
-    lastError
-  });
-  return null;
 }
 
 export function currentThreadId() {
@@ -392,13 +359,14 @@ if (input.kind === "turnCancel") {
 
 if (input.kind === "turnStart") {
   const inputText = input.request?.input?.text || "";
+  const isImageTaskPresentationPrompt =
+    inputText.includes("image_task_presentation.v1") ||
+    inputText.includes("Generate user-visible copy for one image generation turn.") ||
+    JSON.stringify(input.request?.runtimeOptions || {}).includes("image_command_presentation");
   const isEventReadProbe = inputText.includes("agentSession/event");
   const isContinuePrompt = inputText.includes("${CONTINUE_PROMPT}");
   const isPlanPrompt = inputText.includes("${PLAN_PROMPT}");
   const isGoalPrompt = inputText.includes("${GOAL_PROMPT}");
-  const isImageCommandPrompt =
-    inputText.includes("${IMAGE_COMMAND_PROMPT}") ||
-    inputText.includes("${PLAIN_IMAGE_INTENT_ROUTED_PROMPT}");
   const isWebToolsRenderingPrompt = inputText.includes("${WEB_TOOLS_RENDERING_PROMPT}");
   const isMcpStructuredContentPrompt = inputText.includes("${MCP_STRUCTURED_CONTENT_PROMPT}");
   const isManualEnableSkillsRuntimePrompt = inputText.includes("${SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT}");
@@ -419,9 +387,7 @@ if (input.kind === "turnStart") {
         ? "${PLAN_DONE_TEXT}"
         : isGoalPrompt
           ? "${GOAL_DONE_TEXT}"
-          : isImageCommandPrompt
-            ? "${IMAGE_COMMAND_DONE_TEXT}"
-            : isWebToolsRenderingPrompt
+          : isWebToolsRenderingPrompt
             ? "${WEB_TOOLS_RENDERING_DONE_TEXT}"
             : isMcpStructuredContentPrompt
               ? "${MCP_STRUCTURED_CONTENT_DONE_TEXT}"
@@ -439,7 +405,6 @@ if (input.kind === "turnStart") {
   const hasProcessPrelude =
     isEventReadProbe ||
     isPlanPrompt ||
-    isImageCommandPrompt ||
     isWebToolsRenderingPrompt ||
     isMcpStructuredContentPrompt ||
     isSkillsRuntimePrompt ||
@@ -474,6 +439,26 @@ if (input.kind === "turnStart") {
       ...extra
     };
   }
+  if (isImageTaskPresentationPrompt) {
+    const presentationText = JSON.stringify({
+      assistant_intro: ${JSON.stringify(IMAGE_COMMAND_PRESENTATION_INTRO)},
+      completion_caption: ${JSON.stringify(IMAGE_COMMAND_PRESENTATION_CAPTION)}
+    });
+    emitEvents([
+      {
+        type: "message.delta",
+        payload: messageDeltaPayload(presentationText, "final_answer", finalAnswerItemId)
+      },
+      {
+        type: "turn.completed",
+        payload: {
+          status: "completed",
+          text: presentationText
+        }
+      }
+    ]);
+    process.exit(0);
+  }
   const initialMessageText = isEventReadProbe
     ? "事件流 probe 已进入 RuntimeCore：\\n"
     : isContinuePrompt
@@ -482,9 +467,7 @@ if (input.kind === "turnStart") {
         ? "我先给出计划，不会直接改代码：\\n"
         : isGoalPrompt
           ? "追求目标已进入当前回合：\\n"
-          : isImageCommandPrompt
-            ? "我先调用 image_generate 技能创建标准图片任务。\\n"
-            : isWebToolsRenderingPrompt
+          : isWebToolsRenderingPrompt
             ? "我先联网核实目标页面来源。\\n"
             : isMcpStructuredContentPrompt
               ? "我先调用 MCP docs 诊断工具，并只把用户答案放在 structuredContent。\\n"
@@ -527,12 +510,10 @@ if (input.kind === "turnStart") {
   const followupText = isContinuePrompt
     ? "停止后的同一会话已经可以继续输出，并由 App Server current 终态收口。\\n"
     : isPlanPrompt
-      ? ${JSON.stringify(proposedPlanFixtureText)}
+        ? ${JSON.stringify(proposedPlanFixtureText)}
       : isGoalPrompt
         ? "目标已绑定到本轮请求，后续会围绕 ${GOAL_PROMPT} 收口。\\n"
-        : isImageCommandPrompt
-          ? "图片任务已提交到标准 task artifact。\\n${IMAGE_COMMAND_DONE_TEXT}\\n"
-          : isWebToolsRenderingPrompt
+        : isWebToolsRenderingPrompt
           ? ${JSON.stringify(webToolsRenderingFixtureText)}
           : isMcpStructuredContentPrompt
             ? "MCP structuredContent 展示验证完成。\\n"
@@ -572,123 +553,6 @@ if (input.kind === "turnStart") {
 
   emitEvents(initialEvents);
   await sleep(120);
-  if (isImageCommandPrompt) {
-    emitEvents([
-      {
-        type: "tool.started",
-        payload: {
-          toolCallId: "${IMAGE_COMMAND_SKILL_TOOL_CALL_ID}",
-          tool_call_id: "${IMAGE_COMMAND_SKILL_TOOL_CALL_ID}",
-          toolId: "${IMAGE_COMMAND_SKILL_TOOL_CALL_ID}",
-          tool_id: "${IMAGE_COMMAND_SKILL_TOOL_CALL_ID}",
-          id: "${IMAGE_COMMAND_SKILL_TOOL_CALL_ID}",
-          toolName: "Skill",
-          tool_name: "Skill",
-          name: "Skill",
-          arguments: {
-            skill_name: "${IMAGE_COMMAND_SKILL_NAME}",
-            input: inputText,
-            allowed_tools: ["${IMAGE_COMMAND_CREATE_TASK_TOOL_NAME}"]
-          },
-          metadata: {
-            skill_name: "${IMAGE_COMMAND_SKILL_NAME}",
-            allowed_tools: ["${IMAGE_COMMAND_CREATE_TASK_TOOL_NAME}"]
-          }
-        }
-      }
-    ]);
-    await sleep(80);
-    emitEvents([
-      {
-        type: "tool.result",
-        payload: {
-          toolCallId: "${IMAGE_COMMAND_SKILL_TOOL_CALL_ID}",
-          tool_call_id: "${IMAGE_COMMAND_SKILL_TOOL_CALL_ID}",
-          toolId: "${IMAGE_COMMAND_SKILL_TOOL_CALL_ID}",
-          tool_id: "${IMAGE_COMMAND_SKILL_TOOL_CALL_ID}",
-          id: "${IMAGE_COMMAND_SKILL_TOOL_CALL_ID}",
-          toolName: "Skill",
-          tool_name: "Skill",
-          outputPreview: "image_generate selected ${IMAGE_COMMAND_CREATE_TASK_TOOL_NAME}",
-          output: ${JSON.stringify(
-            JSON.stringify({
-              skill_name: IMAGE_COMMAND_SKILL_NAME,
-              allowed_tools: [IMAGE_COMMAND_CREATE_TASK_TOOL_NAME],
-              next_tool: IMAGE_COMMAND_CREATE_TASK_TOOL_NAME,
-              status: "selected",
-            }),
-          )},
-          success: true,
-          metadata: {
-            skill_name: "${IMAGE_COMMAND_SKILL_NAME}",
-            skill_forwarded_tool_name: "${IMAGE_COMMAND_CREATE_TASK_TOOL_NAME}",
-            allowed_tools: ["${IMAGE_COMMAND_CREATE_TASK_TOOL_NAME}"]
-          }
-        }
-      }
-    ]);
-    await sleep(80);
-    emitEvents([
-      {
-        type: "tool.started",
-        payload: {
-          toolCallId: "${IMAGE_COMMAND_CREATE_TASK_TOOL_CALL_ID}",
-          tool_call_id: "${IMAGE_COMMAND_CREATE_TASK_TOOL_CALL_ID}",
-          toolId: "${IMAGE_COMMAND_CREATE_TASK_TOOL_CALL_ID}",
-          tool_id: "${IMAGE_COMMAND_CREATE_TASK_TOOL_CALL_ID}",
-          id: "${IMAGE_COMMAND_CREATE_TASK_TOOL_CALL_ID}",
-          toolName: "${IMAGE_COMMAND_CREATE_TASK_TOOL_NAME}",
-          tool_name: "${IMAGE_COMMAND_CREATE_TASK_TOOL_NAME}",
-          name: "${IMAGE_COMMAND_CREATE_TASK_TOOL_NAME}",
-          arguments: {
-            prompt: inputText,
-            size: "1024x1024",
-            count: 1
-          },
-          metadata: {
-            executor_binding_key: "${IMAGE_COMMAND_CREATE_TASK_TOOL_NAME}",
-            skill_name: "${IMAGE_COMMAND_SKILL_NAME}"
-          }
-        }
-      }
-    ]);
-    const imageTaskFixture = await waitForJsonFile(imageTaskFixturePath, 8000);
-    const imageTaskOutput = imageTaskFixture?.taskArtifact ?? imageTaskFixture ?? {};
-    appendLedgerEntry({
-      kind: "imageTaskFixtureRead",
-      taskId: imageTaskOutput?.task_id ?? imageTaskOutput?.taskId ?? null,
-      path: imageTaskOutput?.absolute_path ?? imageTaskOutput?.path ?? null,
-      hasRecord: Boolean(imageTaskOutput?.record)
-    });
-    await sleep(80);
-    emitEvents([
-      {
-        type: "tool.result",
-        payload: {
-          toolCallId: "${IMAGE_COMMAND_CREATE_TASK_TOOL_CALL_ID}",
-          tool_call_id: "${IMAGE_COMMAND_CREATE_TASK_TOOL_CALL_ID}",
-          toolId: "${IMAGE_COMMAND_CREATE_TASK_TOOL_CALL_ID}",
-          tool_id: "${IMAGE_COMMAND_CREATE_TASK_TOOL_CALL_ID}",
-          id: "${IMAGE_COMMAND_CREATE_TASK_TOOL_CALL_ID}",
-          toolName: "${IMAGE_COMMAND_CREATE_TASK_TOOL_NAME}",
-          tool_name: "${IMAGE_COMMAND_CREATE_TASK_TOOL_NAME}",
-          outputPreview: JSON.stringify(imageTaskOutput),
-          output: JSON.stringify(imageTaskOutput),
-          success: true,
-          metadata: {
-            task_id: imageTaskOutput?.task_id ?? imageTaskOutput?.taskId ?? null,
-            task_type: imageTaskOutput?.task_type ?? imageTaskOutput?.taskType ?? "image_generate",
-            path: imageTaskOutput?.path ?? null,
-            absolute_path: imageTaskOutput?.absolute_path ?? null,
-            artifact_path: imageTaskOutput?.artifact_path ?? null,
-            skill_name: "${IMAGE_COMMAND_SKILL_NAME}",
-            executor_binding_key: "${IMAGE_COMMAND_CREATE_TASK_TOOL_NAME}"
-          }
-        }
-      }
-    ]);
-    await sleep(120);
-  }
   if (isWebToolsRenderingPrompt) {
     emitEvents([
       {

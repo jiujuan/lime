@@ -223,6 +223,36 @@ describe("sessionMetadataSyncController", () => {
     });
   });
 
+  it("图片模型偏好不应生成聊天会话 metadata 回填 patch", () => {
+    const plan = buildSessionMetadataSyncPlan({
+      runtimeAccessMode: null,
+      runtimePreference: {
+        providerType: "custom-image-provider",
+        model: "gpt-image-1",
+      },
+      shadowAccessMode: "full-access",
+      topicPreference: {
+        providerType: "custom-image-provider",
+        model: "gpt-image-1",
+      },
+      workspaceDefaultAccessMode: "read-only",
+    });
+
+    expect(plan).toMatchObject({
+      accessMode: "full-access",
+      accessModeSource: "session_storage",
+      fallbackExecutionStrategy: null,
+      fallbackProviderPreference: null,
+      hasPatch: true,
+      modelPreferenceSource: null,
+      patch: {
+        accessMode: "full-access",
+      },
+      providerPreferenceToApply: null,
+      shouldPersistAccessMode: false,
+    });
+  });
+
   it("未从 runtime 恢复执行策略且 accessMode 来自 storage 时不持久化本地副本", () => {
     expect(
       buildSessionFinalizeLocalStatePlan({

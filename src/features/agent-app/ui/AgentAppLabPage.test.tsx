@@ -1,7 +1,8 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentAppHostFlags } from "../types";
+import contentFactoryFixture from "../testing/fixtures/content-factory-app.json";
+import type { AgentAppHostFlags, AppManifest } from "../types";
 import { AgentAppLabPage } from "./AgentAppLabPage";
 
 vi.mock("react-i18next", () => ({
@@ -28,7 +29,12 @@ async function renderPage(flags?: Partial<AgentAppHostFlags>) {
   const root = createRoot(container);
 
   await act(async () => {
-    root.render(<AgentAppLabPage flags={flags} />);
+    root.render(
+      <AgentAppLabPage
+        fixture={contentFactoryFixture as AppManifest}
+        flags={flags}
+      />,
+    );
     await Promise.resolve();
     await Promise.resolve();
   });

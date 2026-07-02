@@ -253,6 +253,54 @@ describe("ImageTaskViewer", () => {
     );
   });
 
+  it("右侧图片查看器不展示 workflow 审计过程", () => {
+    const { container } = renderComponent({
+      tasks: [
+        {
+          id: "task-workflow-hidden",
+          mode: "generate",
+          status: "running",
+          prompt: "生成一张深圳夏天的图",
+          rawText: "@配图 生成一张深圳夏天的图",
+          expectedCount: 1,
+          outputIds: [],
+          createdAt: 1,
+          workflowRun: {
+            runId: "run-image-workflow-hidden",
+            workflowKey: "image_command_workflow",
+            title: "图片生成工作流",
+            summary: "图片工作流正在运行",
+            requestedCount: 1,
+            status: "running",
+            steps: [
+              { id: "intent", title: "解析图片需求", status: "succeeded" },
+              { id: "generate", title: "生成图片", status: "running" },
+            ],
+            branches: [
+              {
+                branchId: "branch-1",
+                title: "深圳夏天",
+                prompt: "深圳夏天",
+                status: "running",
+              },
+            ],
+            nextActions: [],
+          },
+        },
+      ],
+      outputs: [],
+      selectedTaskId: "task-workflow-hidden",
+      selectedOutputId: null,
+    });
+
+    expect(
+      container.querySelector('[data-testid="image-task-viewer-workflow"]'),
+    ).toBeNull();
+    expect(container.textContent).not.toContain("图片生成工作流");
+    expect(container.textContent).not.toContain("解析图片需求");
+    expect(container.textContent).not.toContain("生成图片");
+  });
+
   it("结果图加载失败时应展示兜底文案并隐藏打开原图入口", () => {
     const { container } = renderComponent();
 

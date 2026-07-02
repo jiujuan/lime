@@ -7,6 +7,7 @@ import type {
 import {
   listCloudReleaseEvidenceIssueCodes,
   type AgentAppCloudReleaseEvidence,
+  type AgentAppCloudReleaseEvidenceCatalogSource,
 } from "./cloudReleaseEvidence";
 import { listAgentAppCleanupNamespaceGroups } from "./cleanupNamespaceClassifier";
 
@@ -75,7 +76,7 @@ export interface AgentAppInstallReview {
 
 export interface BuildCloudSourceStateParams {
   app: CloudBootstrapApp;
-  catalogSource: "remote" | "bootstrap" | "seeded";
+  catalogSource: AgentAppCloudReleaseEvidenceCatalogSource;
   installed: InstalledAgentAppState[];
   releaseEvidence?: AgentAppCloudReleaseEvidence;
 }

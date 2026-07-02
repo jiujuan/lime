@@ -1,5 +1,9 @@
 import type { MessageImageWorkbenchPreview } from "../types";
-import { collapseImageWorkbenchWhitespace } from "../utils/imageWorkbenchPresentation";
+import {
+  buildImageTaskAssistantContent as buildImageTaskAssistantContentCopy,
+  collapseImageWorkbenchWhitespace,
+  resolveImageTaskPromptSubject,
+} from "../utils/imageWorkbenchPresentation";
 
 type ImageTaskMode = NonNullable<MessageImageWorkbenchPreview["mode"]>;
 
@@ -22,26 +26,12 @@ function uniqueCompactStrings(values: Array<string | null | undefined>) {
   return result;
 }
 
-function normalizeImageTaskDisplayTarget(value: string): string {
-  const normalized = collapseImageWorkbenchWhitespace(value)
-    .replace(/```[\s\S]*?```/g, " ")
-    .replace(/!\[[^\]]*]\([^)]*\)/g, " ")
-    .replace(/^@\S+(?:\s+\S+)?\s*/u, "")
-    .trim();
-
-  if (normalized.length <= 72) {
-    return normalized;
-  }
-  return `${normalized.slice(0, 72).trim()}...`;
-}
-
 export function buildImageTaskAssistantContent(params: {
   prompt: string;
   mode?: ImageTaskMode;
   modelName?: string | null;
 }): string {
-  void params;
-  return "";
+  return buildImageTaskAssistantContentCopy(params);
 }
 
 export function buildImageTaskPersonaContext(): Record<string, unknown> {
@@ -78,7 +68,7 @@ export function buildImageTaskPresentationContext(params: {
   mode: ImageTaskMode;
   modelId?: string;
 }): Record<string, unknown> {
-  const promptIntent = normalizeImageTaskDisplayTarget(params.prompt);
+  const promptIntent = resolveImageTaskPromptSubject(params.prompt);
   return {
     version: IMAGE_TASK_PRESENTATION_VERSION,
     surface: "conversation",
@@ -155,7 +145,7 @@ export function buildImageTaskTasteContext(params: {
     source: "taste_layer",
     entry_source: params.entrySource || "at_image_command",
     memory_sources: memorySources,
-    prompt_intent: normalizeImageTaskDisplayTarget(params.prompt),
+    prompt_intent: resolveImageTaskPromptSubject(params.prompt),
     reference_image_count: params.referenceImageCount,
     reference_summaries: referenceSummaries,
     style_keywords: [],

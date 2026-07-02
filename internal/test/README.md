@@ -59,6 +59,7 @@ internal/test/
 ├── e2e-tests.md               # 浏览器续测与 E2E 总览
 ├── agent-evaluation.md        # Agent 评估指南（核心文档）
 ├── agent-qc-evidence.schema.json        # Agent QC Evidence Pack schema
+├── agent-qc-benchmark.manifest.json     # Agent QC baseline / candidate 差异验证计划
 ├── agent-qc-gui-flows.manifest.json     # Agent QC GUI / Playwright MCP flow 清单
 ├── agent-qc-scenarios.manifest.json     # Agent QC 核心场景清单
 ├── harness-evals.md           # Harness eval 任务集与 runner 入口
@@ -89,6 +90,7 @@ internal/tests/
 | [../tests/lime-agent-qc-rollout-plan.md](../tests/lime-agent-qc-rollout-plan.md)         | Lime 落地计划                | 分阶段构建 qcloop 证据链、GUI/Runtime 深测、release gate |
 | [../tests/lime-agent-qc-current-blockers.md](../tests/lime-agent-qc-current-blockers.md) | 当前 P0 阻断记录             | 真实 qcloop fail evidence、root cause、关闭条件          |
 | [agent-qc-scenarios.manifest.json](agent-qc-scenarios.manifest.json)                     | Agent QC 场景清单            | 机器可读场景、lane、命令、证据要求                       |
+| [agent-qc-benchmark.manifest.json](agent-qc-benchmark.manifest.json)                     | Agent QC 差异验证计划        | baseline / candidate 场景、确定性 diff、Supervisor 输入  |
 | [agent-qc-evidence.schema.json](agent-qc-evidence.schema.json)                           | Evidence Pack schema         | 测试证据、场景结果、verdict 合同                         |
 | [agent-qc-gui-flows.manifest.json](agent-qc-gui-flows.manifest.json)                     | GUI flow 清单                | Playwright MCP 步骤、断言、证据要求                      |
 | [harness-evals.md](harness-evals.md)                                                     | Harness eval 任务集与 runner | Replay 样本、grader、nightly 摘要                        |
@@ -171,13 +173,18 @@ npm run agent-qc:report:json
 npm run agent-qc:gui-flow:report
 npm run agent-qc:gui-flow:check
 npm run agent-qc:check
+npm run agent-qc:benchmark:check
+npm run agent-qc:benchmark:compare -- --baseline "<baseline-job-dir>" --candidate "<candidate-job-dir>"
 npm run agent-qc:qcloop-job -- --risk P0 --output "./.lime/qc/qcloop-p0-job.json" --check
+npm run agent-qc:payload-coverage -- --payload "./.lime/qc/qcloop-p0-job.json" --format json --output "./.lime/qc/qcloop-p0-single-owner-ready-coverage-current.json" --check
+npm run agent-qc:verify-local-gate -- --check
 npm run agent-qc:export-evidence -- --job-id "<qcloop-job-id>" --output "./.lime/qc/agent-qc-evidence.json" --check
 npm run agent-qc:release-summary -- --evidence "./.lime/qc/agent-qc-evidence.json" --require-scenario-manifest "internal/test/agent-qc-scenarios.manifest.json" --require-risk P0 --tag "<release-tag>" --output "./.lime/qc/release-agent-qc.md" --check
 npm run agent-qc:audit
+npm run agent-qc:objective-checklist -- --check
 ```
 
-`agent-qc:check` 已进入 `npm run test:contracts`，用于防止运营级测试场景、证据 schema 和 npm script 入口漂移。
+`agent-qc:check` 是本地显式 Agent QC 场景 / GUI flow 合同检查；GitHub Actions 与 `test:contracts` 不自动执行 qcloop 或 Agent QC 批量验证。`agent-qc:verify-local-gate` 只包装真实 `npm run verify:local` 并写入 `.lime/qc/verify-local-current.json`，不会覆盖 official Evidence Pack。
 
 ### 记录 Harness eval 历史窗口
 

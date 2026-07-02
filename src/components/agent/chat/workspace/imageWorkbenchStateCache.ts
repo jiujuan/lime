@@ -255,12 +255,13 @@ export function isSessionImageWorkbenchStateMeaningful(
 
 function normalizeTaskStatusFromPreview(
   status: MessageImageWorkbenchPreview["status"],
+  outputCount: number,
 ): ImageWorkbenchTask["status"] {
   switch (status) {
     case "complete":
-      return "complete";
+      return outputCount > 0 ? "complete" : "running";
     case "partial":
-      return "partial";
+      return outputCount > 0 ? "partial" : "running";
     case "failed":
       return "error";
     case "cancelled":
@@ -327,6 +328,10 @@ export function buildSessionImageWorkbenchStateFromMessages(
       createdAt,
     });
     const outputIds = outputs.map((output) => output.id);
+    const taskStatus = normalizeTaskStatusFromPreview(
+      preview.status,
+      outputs.length,
+    );
     const expectedCount =
       (preview.expectedImageCount ?? preview.imageCount ?? outputIds.length) ||
       1;
@@ -335,7 +340,7 @@ export function buildSessionImageWorkbenchStateFromMessages(
       sessionId: taskId,
       id: taskId,
       mode: preview.mode || "generate",
-      status: normalizeTaskStatusFromPreview(preview.status),
+      status: taskStatus,
       prompt: preview.prompt || "图片任务",
       rawText: preview.prompt || message.content || "图片任务",
       expectedCount,
@@ -349,9 +354,10 @@ export function buildSessionImageWorkbenchStateFromMessages(
       sourceImageRef: preview.sourceImageRef ?? null,
       sourceImageCount: preview.sourceImageCount,
       createdAt,
-      failureMessage: preview.statusMessage ?? undefined,
-      hookImageIds: outputs.map((output) => output.hookImageId),
-      applyTarget: null,
+    failureMessage: preview.statusMessage ?? undefined,
+    workflowRun: preview.workflowRun ?? null,
+    hookImageIds: outputs.map((output) => output.hookImageId),
+    applyTarget: null,
       taskFilePath: preview.taskFilePath ?? null,
       artifactPath: preview.artifactPath ?? null,
     });

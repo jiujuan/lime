@@ -29,6 +29,7 @@ import {
   isLimeTaskProtocolFailure,
   resolveLimeTaskProtocolFailureDisplayText,
 } from "./limeTaskProtocolNoise";
+import { resolveImageTaskToolResultSummary } from "./imageTaskToolResult";
 import {
   getToolDisplayInfo,
   isBrowserToolName,
@@ -139,6 +140,18 @@ function buildNarrative(input: ToolProcessInput): ToolProcessNarrative {
   ) {
     postSummary = buildFetchSearchFailureSummary(display.family);
     postSource = "error";
+  }
+
+  if (!postSummary) {
+    const imageTaskSummary = resolveImageTaskToolResultSummary({
+      toolName: input.toolName,
+      output: input.output,
+      metadata: input.metadata,
+    });
+    if (imageTaskSummary) {
+      postSummary = imageTaskSummary;
+      postSource = "generic";
+    }
   }
 
   if (!postSummary) {

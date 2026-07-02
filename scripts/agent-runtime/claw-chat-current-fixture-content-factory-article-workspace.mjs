@@ -19,8 +19,8 @@ import {
   FIXTURE_PROVIDER,
 } from "./claw-chat-current-fixture-constants.mjs";
 import {
-  runContentFactoryWorkerDogfoodTurn,
-  saveContentFactoryWorkerInstalledState,
+  runWorkspacePatchWorkerDogfoodTurn,
+  saveWorkspacePatchWorkerInstalledState,
 } from "./claw-chat-current-fixture-content-factory-worker-dogfood.mjs";
 import {
   buildContentFactoryActionResultWorkspacePatch,
@@ -80,7 +80,7 @@ export async function runContentFactoryArticleWorkspaceScenario({
     workspace,
     appServerRequests,
   );
-  const installedStateSave = await saveContentFactoryWorkerInstalledState(
+  const installedStateSave = await saveWorkspacePatchWorkerInstalledState(
     page,
     appServerRequests,
   );
@@ -90,7 +90,7 @@ export async function runContentFactoryArticleWorkspaceScenario({
     workspace,
     appServerRequests,
   );
-  const workerTurnStart = await runContentFactoryWorkerDogfoodTurn({
+  const workerTurnStart = await runWorkspacePatchWorkerDogfoodTurn({
     page,
     options,
     workspace,
@@ -1194,6 +1194,13 @@ async function waitForContentFactoryArticleWritingStructure(page, options) {
           contentFactoryOrchestration,
         ),
         contentFactoryOrchestrationStepCount: orchestrationSteps.length,
+        workflowUiRailHidden:
+          !contentFactoryOrchestration &&
+          orchestrationSteps.length === 0 &&
+          orchestrationSubagents.length === 0 &&
+          orchestrationSkillRefs.length === 0 &&
+          orchestrationConnectors.length === 0 &&
+          orchestrationHooks.length === 0,
         hasDocumentPreview:
           documentCanvasText.length > 160 &&
           !documentCanvasText.includes("文章正文生成后会出现在这里"),
@@ -1269,6 +1276,7 @@ async function waitForContentFactoryArticleWritingStructure(page, options) {
       snapshot.hasCitation &&
       snapshot.hasImagePrompt &&
       snapshot.hasWritingPlan &&
+      snapshot.workflowUiRailHidden &&
       snapshot.hasReviewNote &&
       snapshot.hasFullArticleCanvas
     ) {
@@ -1561,7 +1569,6 @@ function summarizeRightSurfaceRequest(result) {
   });
 }
 
-
 function selectContentFactoryWorkerDogfoodEvidence(workerEvidence) {
   const completedEvidence = workerEvidence.find((evidence) =>
     isCompletedContentFactoryWorkerEvidence(evidence),
@@ -1570,8 +1577,9 @@ function selectContentFactoryWorkerDogfoodEvidence(workerEvidence) {
     return completedEvidence;
   }
 
-  return workerEvidence.find((evidence) =>
-    readString(evidence?.taskId, evidence?.task_id) ===
+  return workerEvidence.find(
+    (evidence) =>
+      readString(evidence?.taskId, evidence?.task_id) ===
       CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TASK_ID,
   );
 }
@@ -1580,20 +1588,28 @@ function isCompletedContentFactoryWorkerEvidence(evidence) {
   if (readString(evidence?.status) !== "completed") {
     return false;
   }
-  if (readString(evidence?.eventType, evidence?.event_type) !== "artifact.snapshot") {
+  if (
+    readString(evidence?.eventType, evidence?.event_type) !==
+    "artifact.snapshot"
+  ) {
     return false;
   }
-  if (readString(evidence?.taskKind, evidence?.task_kind) !== "content.article.generate") {
+  if (
+    readString(evidence?.taskKind, evidence?.task_kind) !==
+    "content.article.generate"
+  ) {
     return false;
   }
   return Boolean(
     readString(evidence?.workflowKey, evidence?.workflow_key) ||
-      readArray(evidence?.orchestration).length > 0 ||
-      readStringArray(evidence?.skillRefs, evidence?.skill_refs).length > 0 ||
-      readStringArray(evidence?.subagents, evidence?.sub_agents).length > 0 ||
-      readStringArray(evidence?.cliRefs, evidence?.cli_refs).length > 0 ||
-      readStringArray(evidence?.connectorRefs, evidence?.connector_refs).length > 0 ||
-      readHookPolicyLabels(evidence?.hookPolicy, evidence?.hook_policy).length > 0
+    readArray(evidence?.orchestration).length > 0 ||
+    readStringArray(evidence?.skillRefs, evidence?.skill_refs).length > 0 ||
+    readStringArray(evidence?.subagents, evidence?.sub_agents).length > 0 ||
+    readStringArray(evidence?.cliRefs, evidence?.cli_refs).length > 0 ||
+    readStringArray(evidence?.connectorRefs, evidence?.connector_refs).length >
+      0 ||
+    readHookPolicyLabels(evidence?.hookPolicy, evidence?.hook_policy).length >
+      0,
   );
 }
 
@@ -1601,6 +1617,18 @@ function summarizeContentFactoryArticleWorkspaceReadModel(result) {
   const detail = asRecord(result?.detail) ?? asRecord(result);
   const threadRead =
     asRecord(detail?.threadRead) ?? asRecord(detail?.thread_read) ?? {};
+  const workflowRuns = readArray(
+    threadRead.workflowRuns,
+    threadRead.workflow_runs,
+    detail.workflowRuns,
+    detail.workflow_runs,
+  );
+  const workflowSteps = readArray(
+    threadRead.workflowSteps,
+    threadRead.workflow_steps,
+    detail.workflowSteps,
+    detail.workflow_steps,
+  );
   const articleWorkspace =
     asRecord(threadRead.articleWorkspace) ??
     asRecord(threadRead.article_workspace) ??
@@ -1649,9 +1677,8 @@ function summarizeContentFactoryArticleWorkspaceReadModel(result) {
       readString(evidence?.taskId, evidence?.task_id) ===
       "image_regenerate_job_1",
   );
-  const workerDogfoodEvidence = selectContentFactoryWorkerDogfoodEvidence(
-    workerEvidence,
-  );
+  const workerDogfoodEvidence =
+    selectContentFactoryWorkerDogfoodEvidence(workerEvidence);
   const workerArticleObject = objects.find((object) => {
     if (productObjectKind(object) !== "articleDraft") {
       return false;
@@ -1663,6 +1690,10 @@ function summarizeContentFactoryArticleWorkspaceReadModel(result) {
     );
   });
   const workerArticleSource = asRecord(workerArticleObject?.source) ?? {};
+  const workerArticleHostManagedGeneration =
+    asRecord(workerArticleSource.hostManagedGeneration) ??
+    asRecord(workerArticleSource.host_managed_generation) ??
+    {};
   const workerArticleSourceText = [
     readString(workerArticleSource.markdown, workerArticleSource.markdown_text),
     readString(
@@ -1762,6 +1793,10 @@ function summarizeContentFactoryArticleWorkspaceReadModel(result) {
         }
       : null,
     workerEvidenceCount: workerEvidence.length,
+    workflowRunCount: workflowRuns.length,
+    workflowStepCount: workflowSteps.length,
+    workflowUiFactsHidden:
+      workflowRuns.length === 0 && workflowSteps.length === 0,
     failedWorkerEvidence: failedEvidence
       ? {
           taskId: readString(failedEvidence.taskId, failedEvidence.task_id),
@@ -1891,14 +1926,25 @@ function summarizeContentFactoryArticleWorkspaceReadModel(result) {
               workerArticleSource.finalMarkdown,
               workerArticleSource.final_markdown,
             ).length > 300,
-          markdownIncludesEditedDraftMarker: workerArticleSourceText.includes(
-            CONTENT_FACTORY_ARTICLE_WORKSPACE_EDITED_DRAFT_MARKER,
-          ),
-          sourceEdited: readBoolean(workerArticleSource.edited),
-          updatedAt: readString(
-            workerArticleSource.updatedAt,
-            workerArticleSource.updated_at,
-          ),
+        markdownIncludesEditedDraftMarker: workerArticleSourceText.includes(
+          CONTENT_FACTORY_ARTICLE_WORKSPACE_EDITED_DRAFT_MARKER,
+        ),
+        sourceEdited: readBoolean(workerArticleSource.edited),
+        hostManagedGenerationStatus: readString(
+          workerArticleHostManagedGeneration.status,
+        ),
+        hostManagedGenerationReasonCode: readString(
+          workerArticleHostManagedGeneration.reasonCode,
+          workerArticleHostManagedGeneration.reason_code,
+        ),
+        hostManagedGenerationOutputIds: readStringArray(
+          workerArticleHostManagedGeneration.outputIds,
+          workerArticleHostManagedGeneration.output_ids,
+        ),
+        updatedAt: readString(
+          workerArticleSource.updatedAt,
+          workerArticleSource.updated_at,
+        ),
           researchRoundCount: workerArticleResearchRoundCount,
           imageSlotCount: workerArticleImageSlotCount,
         }

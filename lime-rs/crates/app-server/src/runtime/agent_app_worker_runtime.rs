@@ -1,16 +1,21 @@
 use super::RuntimeCore;
 use super::RuntimeCoreError;
 use super::RuntimeEvent;
+use crate::runtime::agent_app_worker_workflow::runtime_event_from_worker_progress_envelope;
 use app_server_protocol::AgentAppTaskRuntimeContract;
 use serde_json::json;
 use serde_json::Map;
 use serde_json::Value;
+use std::io::BufRead;
+use std::io::BufReader;
 use std::io::Read;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
 use std::process::Stdio;
+use std::sync::mpsc;
+use std::sync::mpsc::Receiver;
 use std::thread::JoinHandle;
 use std::time::Duration;
 use std::time::Instant;
@@ -74,9 +79,19 @@ impl AgentAppWorkerRunRequest {
 }
 
 impl RuntimeCore {
+    #[cfg(test)]
     pub(in crate::runtime) fn run_agent_app_worker(
         &self,
         request: AgentAppWorkerRunRequest,
+    ) -> Result<Vec<RuntimeEvent>, RuntimeCoreError> {
+        let mut ignore_progress = |_event: RuntimeEvent| Ok(());
+        self.run_agent_app_worker_with_progress(request, &mut ignore_progress)
+    }
+
+    pub(in crate::runtime) fn run_agent_app_worker_with_progress(
+        &self,
+        request: AgentAppWorkerRunRequest,
+        on_progress_event: &mut dyn FnMut(RuntimeEvent) -> Result<(), RuntimeCoreError>,
     ) -> Result<Vec<RuntimeEvent>, RuntimeCoreError> {
         validate_task_runtime(&request.task_runtime)?;
         let entrypoint = resolve_worker_entrypoint(
@@ -90,6 +105,7 @@ impl RuntimeCore {
             &entrypoint,
             &request.request,
             request.timeout_ms,
+            on_progress_event,
         )?;
         worker_response_to_runtime_events(
             output,
@@ -200,15 +216,122 @@ fn invoke_worker_process(
     entrypoint: &Path,
     request: &Value,
     timeout_ms: u64,
+    on_progress_event: &mut dyn FnMut(RuntimeEvent) -> Result<(), RuntimeCoreError>,
 ) -> Result<Value, RuntimeCoreError> {
-    invoke_node_json_process(
+    invoke_worker_json_process(
         "Agent App worker",
         node,
         package_root,
         entrypoint,
         request,
         timeout_ms,
+        on_progress_event,
     )
+}
+
+fn invoke_worker_json_process(
+    label: &str,
+    node: &str,
+    package_root: &Path,
+    entrypoint: &Path,
+    request: &Value,
+    timeout_ms: u64,
+    on_progress_event: &mut dyn FnMut(RuntimeEvent) -> Result<(), RuntimeCoreError>,
+) -> Result<Value, RuntimeCoreError> {
+    let mut command = Command::new(node);
+    command
+        .arg(entrypoint)
+        .current_dir(package_root)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    for key in inherited_agent_app_secret_env_keys() {
+        command.env_remove(key);
+    }
+
+    let mut child = command
+        .spawn()
+        .map_err(|error| RuntimeCoreError::Backend(format!("failed to spawn {label}: {error}")))?;
+    let (stdout_reader, stdout_rx) = child
+        .stdout
+        .take()
+        .map(|stdout| spawn_worker_stdout_line_reader(stdout))
+        .map(|(reader, rx)| (Some(reader), Some(rx)))
+        .unwrap_or((None, None));
+    let stderr_reader = child
+        .stderr
+        .take()
+        .map(|stderr| spawn_worker_output_reader(stderr, "stderr"));
+    write_worker_request(child.stdin.take(), request)?;
+    let started = Instant::now();
+    let timeout = Duration::from_millis(timeout_ms);
+    let mut stdout_bytes = 0usize;
+    let mut response: Option<Value> = None;
+
+    loop {
+        if started.elapsed() > timeout {
+            let _ = child.kill();
+            let _ = child.wait();
+            drain_worker_stdout_lines(
+                label,
+                stdout_rx.as_ref(),
+                &mut stdout_bytes,
+                &mut response,
+                on_progress_event,
+            )?;
+            let _ = join_worker_stdout_line_reader(stdout_reader, "stdout");
+            let _ = join_worker_output_reader(stderr_reader, "stderr", MAX_WORKER_STDERR_BYTES);
+            return Err(RuntimeCoreError::Backend(format!(
+                "{label} timed out after {timeout_ms}ms"
+            )));
+        }
+
+        drain_worker_stdout_lines(
+            label,
+            stdout_rx.as_ref(),
+            &mut stdout_bytes,
+            &mut response,
+            on_progress_event,
+        )?;
+
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                drain_worker_stdout_lines(
+                    label,
+                    stdout_rx.as_ref(),
+                    &mut stdout_bytes,
+                    &mut response,
+                    on_progress_event,
+                )?;
+                join_worker_stdout_line_reader(stdout_reader, "stdout")?;
+                drain_worker_stdout_lines(
+                    label,
+                    stdout_rx.as_ref(),
+                    &mut stdout_bytes,
+                    &mut response,
+                    on_progress_event,
+                )?;
+                let stderr =
+                    join_worker_output_reader(stderr_reader, "stderr", MAX_WORKER_STDERR_BYTES)?;
+                if !status.success() {
+                    return Err(RuntimeCoreError::Backend(format!(
+                        "{label} exited with {}: {}",
+                        status,
+                        String::from_utf8_lossy(&stderr).trim()
+                    )));
+                }
+                return response.ok_or_else(|| {
+                    RuntimeCoreError::Backend(format!("{label} returned empty stdout."))
+                });
+            }
+            Ok(None) => std::thread::sleep(Duration::from_millis(10)),
+            Err(error) => {
+                return Err(RuntimeCoreError::Backend(format!(
+                    "failed to poll {label}: {error}"
+                )));
+            }
+        }
+    }
 }
 
 fn invoke_node_json_process(
@@ -293,6 +416,113 @@ where
             .map_err(|error| format!("failed to collect Agent App worker {label}: {error}"))?;
         Ok(output)
     })
+}
+
+fn spawn_worker_stdout_line_reader<R>(
+    reader: R,
+) -> (
+    JoinHandle<Result<(), String>>,
+    Receiver<Result<String, String>>,
+)
+where
+    R: Read + Send + 'static,
+{
+    let (tx, rx) = mpsc::channel();
+    let handle = std::thread::spawn(move || {
+        let mut reader = BufReader::new(reader);
+        let mut line = String::new();
+        loop {
+            line.clear();
+            let bytes = reader
+                .read_line(&mut line)
+                .map_err(|error| format!("failed to collect Agent App worker stdout: {error}"))?;
+            if bytes == 0 {
+                return Ok(());
+            }
+            let text = line.trim_end_matches(['\r', '\n']).to_string();
+            if tx.send(Ok(text)).is_err() {
+                return Ok(());
+            }
+        }
+    });
+    (handle, rx)
+}
+
+fn drain_worker_stdout_lines(
+    label: &str,
+    rx: Option<&Receiver<Result<String, String>>>,
+    stdout_bytes: &mut usize,
+    response: &mut Option<Value>,
+    on_progress_event: &mut dyn FnMut(RuntimeEvent) -> Result<(), RuntimeCoreError>,
+) -> Result<(), RuntimeCoreError> {
+    let Some(rx) = rx else {
+        return Ok(());
+    };
+    loop {
+        match rx.try_recv() {
+            Ok(Ok(line)) => handle_worker_stdout_line(
+                label,
+                line.as_str(),
+                stdout_bytes,
+                response,
+                on_progress_event,
+            )?,
+            Ok(Err(error)) => return Err(RuntimeCoreError::Backend(error)),
+            Err(mpsc::TryRecvError::Empty) | Err(mpsc::TryRecvError::Disconnected) => return Ok(()),
+        }
+    }
+}
+
+fn handle_worker_stdout_line(
+    label: &str,
+    line: &str,
+    stdout_bytes: &mut usize,
+    response: &mut Option<Value>,
+    on_progress_event: &mut dyn FnMut(RuntimeEvent) -> Result<(), RuntimeCoreError>,
+) -> Result<(), RuntimeCoreError> {
+    let trimmed = line.trim();
+    if trimmed.is_empty() {
+        return Ok(());
+    }
+    *stdout_bytes = stdout_bytes.saturating_add(trimmed.len());
+    if *stdout_bytes > MAX_WORKER_STDOUT_BYTES {
+        return Err(RuntimeCoreError::Backend(format!(
+            "{label} stdout exceeded the size limit."
+        )));
+    }
+    let value = serde_json::from_str::<Value>(trimmed).map_err(|error| {
+        RuntimeCoreError::Backend(format!("failed to decode {label} stdout line: {error}"))
+    })?;
+    if let Some(event) = runtime_event_from_worker_progress_envelope(&value)
+        .map_err(|error| RuntimeCoreError::Backend(format!("{label} {error}")))?
+    {
+        on_progress_event(event)?;
+        return Ok(());
+    }
+    if response.is_some() {
+        return Err(RuntimeCoreError::Backend(format!(
+            "{label} returned multiple final JSON responses."
+        )));
+    }
+    *response = Some(value);
+    Ok(())
+}
+
+fn join_worker_stdout_line_reader(
+    reader: Option<JoinHandle<Result<(), String>>>,
+    label: &'static str,
+) -> Result<(), RuntimeCoreError> {
+    let Some(reader) = reader else {
+        return Ok(());
+    };
+    reader
+        .join()
+        .map_err(|_| {
+            RuntimeCoreError::Backend(format!(
+                "failed to collect Agent App worker {label}: panicked"
+            ))
+        })?
+        .map_err(RuntimeCoreError::Backend)
 }
 
 fn join_worker_output_reader(
@@ -637,11 +867,14 @@ mod tests {
         let Some(fixture_root) = fixture_root() else {
             return;
         };
-        let sample_request: Value = serde_json::from_str(
+        let mut sample_request: Value = serde_json::from_str(
             &fs::read_to_string(fixture_root.join("examples/runtime-request.sample.json"))
                 .expect("sample request"),
         )
         .expect("sample json");
+        sample_request["taskId"] = json!("task-image-regenerate-1");
+        sample_request["taskKind"] = json!("content.image.generate");
+        sample_request["prompt"] = json!("为文章重新生成配图");
         let state = json!({
             "manifest": {
                 "runtimePackage": {
@@ -694,6 +927,80 @@ mod tests {
             CONTENT_FACTORY_WORKSPACE_PATCH_KIND
         );
         assert!(events[0].payload["artifact"]["content"].is_null());
+    }
+
+    #[test]
+    fn worker_adapter_streams_ndjson_progress_before_final_response() {
+        let Some(fixture_root) = fixture_root() else {
+            return;
+        };
+        let mut sample_request: Value = serde_json::from_str(
+            &fs::read_to_string(fixture_root.join("examples/runtime-request.sample.json"))
+                .expect("sample request"),
+        )
+        .expect("sample json");
+        sample_request["taskKind"] = json!("content.article.generate");
+        sample_request["prompt"] = json!("写一篇关于 AI Agent 工作流的公众号文章");
+        sample_request["sourceObjectRef"] = Value::Null;
+        sample_request["workflowKey"] = json!("content_article_workflow");
+        sample_request["orchestration"] = json!([
+            {
+                "id": "research",
+                "title": "资料检索",
+                "subagent": "content-researcher",
+                "skillRefs": ["article-research"],
+            }
+        ]);
+        let state = json!({
+            "manifest": {
+                "runtimePackage": {
+                    "worker": {
+                        "entrypoint": "./src/runtime/content-factory-worker.mjs",
+                        "contract": "./app.runtime.yaml",
+                        "sampleRequest": "./examples/runtime-request.sample.json",
+                        "outputArtifactKind": "content_factory.workspace_patch"
+                    }
+                },
+                "agentRuntime": {
+                    "worker": {
+                        "directProviderAccess": false,
+                        "directFilesystemAccess": false
+                    },
+                    "tasks": [
+                        { "kind": "content.article.generate" }
+                    ]
+                }
+            }
+        });
+        let contract = build_agent_app_task_runtime_contract(&state, Some(&fixture_root));
+
+        let core = RuntimeCore::default();
+        let mut progress_events = Vec::new();
+        let events = core
+            .run_agent_app_worker_with_progress(
+                AgentAppWorkerRunRequest::new(fixture_root, contract, sample_request),
+                &mut |event| {
+                    progress_events.push(event);
+                    Ok(())
+                },
+            )
+            .expect("worker events");
+
+        assert!(!progress_events.is_empty());
+        assert!(progress_events
+            .iter()
+            .any(|event| event.event_type == "workflow.connector.requested"));
+        let artifact_progress_events = progress_events
+            .iter()
+            .filter(|event| event.event_type == "artifact.snapshot")
+            .collect::<Vec<_>>();
+        assert!(!artifact_progress_events.is_empty());
+        assert!(artifact_progress_events.iter().any(|event| {
+            event.payload["artifact"]["status"] == "ready"
+                || event.payload["artifact"]["status"] == "streaming"
+        }));
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_type, "artifact.snapshot");
     }
 
     #[test]
@@ -785,11 +1092,14 @@ mod tests {
         let Some(fixture_root) = fixture_root() else {
             return;
         };
-        let sample_request: Value = serde_json::from_str(
+        let mut sample_request: Value = serde_json::from_str(
             &fs::read_to_string(fixture_root.join("examples/runtime-request.sample.json"))
                 .expect("sample request"),
         )
         .expect("sample json");
+        sample_request["taskId"] = json!("task-image-regenerate-1");
+        sample_request["taskKind"] = json!("content.image.generate");
+        sample_request["prompt"] = json!("为文章重新生成配图");
         let state = json!({
             "manifest": {
                 "runtimePackage": {
@@ -893,11 +1203,14 @@ mod tests {
         let Some(fixture_root) = fixture_root() else {
             return;
         };
-        let sample_request: Value = serde_json::from_str(
+        let mut sample_request: Value = serde_json::from_str(
             &fs::read_to_string(fixture_root.join("examples/runtime-request.sample.json"))
                 .expect("sample request"),
         )
         .expect("sample json");
+        sample_request["taskId"] = json!("task-image-regenerate-1");
+        sample_request["taskKind"] = json!("content.image.generate");
+        sample_request["prompt"] = json!("为文章重新生成配图");
         let state = json!({
             "manifest": {
                 "runtimePackage": {
@@ -1197,7 +1510,7 @@ process.stdout.write(JSON.stringify({
     fn fixture_root() -> Option<PathBuf> {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../..")
-            .join("src/features/agent-app/fixtures");
+            .join("src/features/agent-app/testing/fixtures");
         root.join("src/runtime/content-factory-worker.mjs")
             .is_file()
             .then_some(root)

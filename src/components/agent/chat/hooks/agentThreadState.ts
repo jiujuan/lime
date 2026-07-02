@@ -1,6 +1,6 @@
 import type { AgentThreadItem, AgentThreadTurn } from "../types";
 
-function areJsonLikeValuesEqual(left: unknown, right: unknown): boolean {
+export function areJsonLikeValuesEqual(left: unknown, right: unknown): boolean {
   if (Object.is(left, right)) {
     return true;
   }

@@ -20,6 +20,7 @@ import {
   resolveArtifactProtocolFilePath,
   resolveArtifactProtocolPreviewText,
 } from "@/lib/artifact-protocol";
+import { logAgentDebug } from "@/lib/agentDebug";
 import type {
   ActionRequired,
   ContentPart,
@@ -61,6 +62,9 @@ import {
   buildTaskPreviewFromToolResult,
   buildToolResultArtifactFromToolResult,
 } from "../utils/taskPreviewFromToolResult";
+import { isHiddenInternalArtifactPath } from "../utils/internalArtifactVisibility";
+import { isImageTaskToolResultLike } from "../utils/imageTaskToolResult";
+import { readWorkspaceArticlePatchRecordFromMetadata } from "../workspace/workspaceArticleWorkspaceMetadata";
 
 interface BaseProcessorContext {
   assistantMsgId: string;
@@ -271,11 +275,38 @@ function shouldSkipBinaryArtifactWrite(params: {
   content: string;
   source: WriteArtifactContext["source"];
 }): boolean {
+  const isToolOrSnapshotSource =
+    params.source === "tool_result" || params.source === "artifact_snapshot";
+  if (isToolOrSnapshotSource && isHiddenInternalArtifactPath(params.filePath)) {
+    return true;
+  }
+
   return (
     params.content.length === 0 &&
     isArtifactProtocolImagePath(params.filePath) &&
-    (params.source === "tool_result" || params.source === "artifact_snapshot")
+    isToolOrSnapshotSource
   );
+}
+
+function resolveArtifactSnapshotContent(
+  data: AgentEventArtifactSnapshot,
+): string {
+  if (typeof data.artifact.content === "string") {
+    return data.artifact.content;
+  }
+
+  const patch = readWorkspaceArticlePatchRecordFromMetadata(
+    data.artifact.metadata ?? null,
+  );
+  if (!patch || typeof patch !== "object") {
+    return "";
+  }
+
+  try {
+    return JSON.stringify(patch);
+  } catch {
+    return "";
+  }
 }
 
 function extractPatchText(
@@ -501,10 +532,10 @@ function upsertAssistantWriteArtifact({
         artifactId: context.artifactId,
         filePath,
       });
-      const nextContent =
-        content.length > 0 || !existingArtifact
-          ? content
-          : existingArtifact.content;
+      const nextContent = resolveNextArtifactSnapshotContent(
+        existingArtifact,
+        content,
+      );
       const { metadata: nextMetadata } = buildWriteMetadataWithToolSources({
         content: nextContent,
         metadata: context.metadata,
@@ -527,6 +558,25 @@ function upsertAssistantWriteArtifact({
   );
 
   return nextArtifact;
+}
+
+function resolveNextArtifactSnapshotContent(
+  existingArtifact: Artifact | undefined,
+  incomingContent: string,
+): string {
+  if (!existingArtifact) {
+    return incomingContent;
+  }
+  if (!incomingContent.length) {
+    return existingArtifact.content;
+  }
+  if (
+    existingArtifact.content.length > incomingContent.length &&
+    existingArtifact.content.startsWith(incomingContent)
+  ) {
+    return existingArtifact.content;
+  }
+  return incomingContent;
 }
 
 function refreshAssistantArtifactDocumentsFromToolSources({
@@ -1105,6 +1155,8 @@ export function handleToolEndEvent({
       const currentToolCall = message.toolCalls?.find(
         (toolCall) => toolCall.id === data.tool_id,
       );
+      const resolvedToolName =
+        currentToolCall?.name || toolNameByToolId.get(data.tool_id) || "";
       const currentToolArguments = currentToolCall?.arguments;
       const normalizedResultRecord =
         normalizedResult &&
@@ -1170,26 +1222,74 @@ export function handleToolEndEvent({
 
       const imageTaskPreview = buildImageTaskPreviewFromToolResult({
         toolId: data.tool_id,
-        toolName: currentToolCall?.name || "",
+        toolName: resolvedToolName,
         toolArguments: currentToolArguments,
         toolResult: normalizedResultRecord,
         fallbackPrompt: message.content || "图片任务进行中",
       });
       completedImageTaskId = imageTaskPreview?.taskId || null;
-      const taskPreview = imageTaskPreview
-        ? null
-        : buildTaskPreviewFromToolResult({
+      const isImageTaskLike = isImageTaskToolResultLike({
+        toolName: resolvedToolName,
+        output: normalizedResultRecord?.output,
+        metadata: normalizedResultRecord?.metadata,
+        result: normalizedResultRecord,
+        toolResult: normalizedResultRecord,
+      });
+      const taskPreview =
+        imageTaskPreview || isImageTaskLike
+          ? null
+          : buildTaskPreviewFromToolResult({
+              toolId: data.tool_id,
+              toolName: resolvedToolName,
+              toolArguments: currentToolArguments,
+              toolResult: normalizedResultRecord,
+              fallbackPrompt: message.content || "任务进行中",
+            });
+      if (imageTaskPreview || isImageTaskLike) {
+        logAgentDebug(
+          "AgentStream",
+          imageTaskPreview
+            ? "imageTask.toolEndPreview.applied"
+            : "imageTask.toolEndPreview.missed",
+          {
             toolId: data.tool_id,
-            toolName: currentToolCall?.name || "",
-            toolArguments: currentToolArguments,
-            toolResult: normalizedResultRecord,
-            fallbackPrompt: message.content || "任务进行中",
-          });
+            resolvedToolName,
+            hasCurrentToolCall: Boolean(currentToolCall),
+            hasToolNameFallback: Boolean(toolNameByToolId.get(data.tool_id)),
+            imageTaskLike: isImageTaskLike,
+            previewTaskId: imageTaskPreview?.taskId ?? null,
+            previewStatus: imageTaskPreview?.status ?? null,
+            previewPhase: imageTaskPreview?.phase ?? null,
+            resultKeys: normalizedResultRecord
+              ? Object.keys(normalizedResultRecord).slice(0, 12)
+              : [],
+            metadataKeys:
+              normalizedResultRecord?.metadata &&
+              typeof normalizedResultRecord.metadata === "object" &&
+              !Array.isArray(normalizedResultRecord.metadata)
+                ? Object.keys(normalizedResultRecord.metadata).slice(0, 12)
+                : [],
+          },
+          { level: imageTaskPreview ? "debug" : "warn" },
+        );
+      }
+      const shouldSuppressImageTaskToolCall =
+        Boolean(imageTaskPreview) || isImageTaskLike;
+      const displayToolCalls = shouldSuppressImageTaskToolCall
+        ? updatedToolCalls.filter((toolCall) => toolCall.id !== data.tool_id)
+        : updatedToolCalls;
+      const displayContentParts = shouldSuppressImageTaskToolCall
+        ? finalContentParts.filter(
+            (part) =>
+              part.type !== "tool_use" || part.toolCall.id !== data.tool_id,
+          )
+        : finalContentParts;
 
       return {
         ...message,
-        toolCalls: updatedToolCalls,
-        contentParts: finalContentParts,
+        toolCalls: displayToolCalls.length > 0 ? displayToolCalls : undefined,
+        contentParts:
+          displayContentParts.length > 0 ? displayContentParts : undefined,
         imageWorkbenchPreview: imageTaskPreview
           ? {
               ...(message.imageWorkbenchPreview || {}),
@@ -1348,8 +1448,7 @@ export function handleArtifactSnapshotEvent({
   }
 
   const metadata = data.artifact.metadata;
-  const snapshotContent =
-    typeof data.artifact.content === "string" ? data.artifact.content : "";
+  const snapshotContent = resolveArtifactSnapshotContent(data);
   if (
     shouldSkipBinaryArtifactWrite({
       filePath: artifactPath,

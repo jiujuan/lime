@@ -177,7 +177,7 @@ fn load_seeded_agent_app_fixtures() -> Result<Vec<SeededAgentAppFixture>, String
 fn seeded_agent_app_fixture_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
-        .join("src/features/agent-app/fixtures")
+        .join("src/features/agent-app/testing/fixtures")
 }
 
 fn read_seeded_agent_apps_descriptor() -> Result<SeededAgentAppsDescriptor, String> {

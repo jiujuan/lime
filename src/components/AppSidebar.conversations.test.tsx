@@ -1883,6 +1883,113 @@ describe("AppSidebar conversations", () => {
     });
   });
 
+  it("流式输出期间应延后最近对话列表刷新到终态后", async () => {
+    const scheduledTasks: Array<() => void> = [];
+    mockListAgentRuntimeSessions.mockResolvedValue([
+      {
+        id: "session-current",
+        name: "正在输出的会话",
+        created_at: 1713000000,
+        updated_at: 1713000600,
+        archived_at: null,
+        workspace_id: "project-1",
+        working_dir: "/repo/project-1",
+        messages_count: 3,
+      },
+    ]);
+
+    const mounted = mountSidebar({
+      currentPage: "agent",
+      currentPageParams: {
+        agentEntry: "claw",
+        projectId: "project-1",
+        initialSessionId: "session-current",
+      } as AgentPageParams,
+      activeAgentSessionId: "session-current",
+    });
+    await flushEffects(2);
+
+    const callsBeforeStreaming =
+      mockListAgentRuntimeSessions.mock.calls.length;
+    expect(callsBeforeStreaming).toBeGreaterThan(0);
+
+    mockScheduleMinimumDelayIdleTask.mockImplementation((task: () => void) => {
+      scheduledTasks.push(task);
+      return () => undefined;
+    });
+
+    await act(async () => {
+      mounted.root.render(
+        <AppSidebar
+          currentPage="agent"
+          currentPageParams={
+            {
+              agentEntry: "claw",
+              projectId: "project-1",
+              initialSessionId: "session-current",
+            } as AgentPageParams
+          }
+          activeAgentSessionId="session-current"
+          activeAgentStreaming={true}
+          onNavigate={vi.fn()}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(AGENT_RUNTIME_SESSIONS_CHANGED_EVENT, {
+          detail: {
+            reason: "updated",
+            sessionId: "session-current",
+          },
+        }),
+      );
+    });
+    await flushEffects(2);
+
+    expect(mockListAgentRuntimeSessions).toHaveBeenCalledTimes(
+      callsBeforeStreaming,
+    );
+    expect(scheduledTasks).toHaveLength(0);
+
+    await act(async () => {
+      mounted.root.render(
+        <AppSidebar
+          currentPage="agent"
+          currentPageParams={
+            {
+              agentEntry: "claw",
+              projectId: "project-1",
+              initialSessionId: "session-current",
+            } as AgentPageParams
+          }
+          activeAgentSessionId="session-current"
+          activeAgentStreaming={false}
+          onNavigate={vi.fn()}
+        />,
+      );
+      await Promise.resolve();
+    });
+    await flushEffects(2);
+
+    expect(scheduledTasks).toHaveLength(1);
+
+    await act(async () => {
+      scheduledTasks[0]?.();
+      await Promise.resolve();
+    });
+
+    expect(mockListAgentRuntimeSessions.mock.calls.length).toBeGreaterThan(
+      callsBeforeStreaming,
+    );
+    expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
+      limit: 11,
+      cwd: "/repo/project-1",
+    });
+  });
+
   it("点击会话菜单归档动作时应走统一 session update 命令", async () => {
     mockListAgentRuntimeSessions.mockResolvedValue([
       {

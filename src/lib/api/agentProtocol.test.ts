@@ -326,6 +326,34 @@ describe("agentProtocol", () => {
     });
   });
 
+  it("应解析 ImageCommandWorkflow presentation 事件", () => {
+    expect(
+      parseAgentEvent({
+        type: "image_task.presentation.generated",
+        status: "generated",
+        workflowRunId: "workflow-1",
+        sessionId: "session-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        presentation: {
+          assistant_intro: "好啊，我来生成广州塔春天照片。",
+          completion_caption: "完成了，广州塔春天照片已经生成。",
+        },
+      }),
+    ).toEqual({
+      type: "image_task_presentation_generated",
+      status: "generated",
+      workflow_run_id: "workflow-1",
+      session_id: "session-1",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+      presentation: {
+        assistant_intro: "好啊，我来生成广州塔春天照片。",
+        completion_caption: "完成了，广州塔春天照片已经生成。",
+      },
+    });
+  });
+
   it("应解析工具进度与工具输出增量事件", () => {
     expect(
       parseAgentEvent({
@@ -851,6 +879,50 @@ describe("agentProtocol", () => {
           keepalive_kind: "runtime_turn_active",
           keepalive_sequence: 3,
           keepalive_elapsed_ms: 135000,
+        },
+      },
+    });
+
+    expect(
+      parseAgentEvent({
+        type: "runtime_status",
+        status: {
+          phase: "routing",
+          title: "图片生成需要补充信息",
+          detail: "缺少: project_root_path",
+          checkpoints: ["project_root_path"],
+          metadata: {
+            source: "image_command_workflow",
+            agentui: {
+              workflow_key: "image_command_workflow",
+              status_kind: "image_task_parameters_required",
+              missing: ["project_root_path"],
+              missing_parameters: ["project_root_path"],
+              image_task: {
+                prompt: "画一张广州夏天的图",
+              },
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      type: "runtime_status",
+      status: {
+        phase: "routing",
+        title: "图片生成需要补充信息",
+        detail: "缺少: project_root_path",
+        checkpoints: ["project_root_path"],
+        metadata: {
+          source: "image_command_workflow",
+          agentui: {
+            workflow_key: "image_command_workflow",
+            status_kind: "image_task_parameters_required",
+            missing: ["project_root_path"],
+            missing_parameters: ["project_root_path"],
+            image_task: {
+              prompt: "画一张广州夏天的图",
+            },
+          },
         },
       },
     });

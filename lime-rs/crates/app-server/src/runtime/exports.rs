@@ -94,6 +94,8 @@ impl RuntimeCore {
         }
         let request_logs =
             self.request_logs_for_evidence(&session.session_id, params.turn_id.as_deref());
+        let workflow_audit_events =
+            self.workflow_audit_events_for_evidence(&session.session_id, params.turn_id.as_deref());
         let evidence_pack = if params.include_evidence_pack.unwrap_or(true) {
             let evidence_pack = self
                 .evidence_export_provider
@@ -103,6 +105,7 @@ impl RuntimeCore {
                     events: events.clone(),
                     artifacts: artifacts.clone(),
                     request_logs: request_logs.clone(),
+                    workflow_audit_events: workflow_audit_events.clone(),
                 })
                 .await?;
             self.with_current_objective_completion_audit_summary(
@@ -148,6 +151,39 @@ impl RuntimeCore {
             Err(error) => {
                 tracing::warn!(
                     "failed to read request telemetry for evidence export session={} turn={:?}: {}",
+                    session_id,
+                    turn_id,
+                    error
+                );
+                Vec::new()
+            }
+        }
+    }
+
+    fn workflow_audit_events_for_evidence(
+        &self,
+        session_id: &str,
+        turn_id: Option<&str>,
+    ) -> Vec<AgentEvent> {
+        let Some(event_log_writer) = self.event_log_writer.as_ref() else {
+            return Vec::new();
+        };
+
+        match event_log_writer.read_session_workflow_audit_events(session_id) {
+            Ok(records) => records
+                .into_iter()
+                .map(|record| record.event)
+                .filter(|event| {
+                    turn_id.is_none()
+                        || event
+                            .turn_id
+                            .as_deref()
+                            .is_some_and(|event_turn_id| Some(event_turn_id) == turn_id)
+                })
+                .collect(),
+            Err(error) => {
+                tracing::warn!(
+                    "failed to read workflow audit events for evidence export session={} turn={:?}: {}",
                     session_id,
                     turn_id,
                     error

@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import {
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_GET,
-  APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE,
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_LIST,
   APP_SERVER_METHOD_SESSION_TURN_CANCEL,
   APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_LIST,
@@ -19,7 +18,6 @@ import {
   GOAL_PROMPT,
   IMAGE_COMMAND_CREATE_TASK_TOOL_NAME,
   IMAGE_COMMAND_PROMPT,
-  IMAGE_COMMAND_SKILL_NAME,
   IMAGE_FIXTURE_MODEL,
   MCP_STRUCTURED_CONTENT_PROMPT,
   PLAN_PROMPT,
@@ -34,6 +32,19 @@ import {
 } from "./claw-chat-current-fixture-constants.mjs";
 import { buildContentFactoryArticleWorkspaceScenarioAssertions } from "./claw-chat-current-fixture-content-factory-assertions.mjs";
 import { EXPERT_PANEL_SKILLS_RUNTIME_UI_SKILL_REF } from "./claw-chat-current-fixture-expert-actions.mjs";
+
+function readImageCommandTaskFromHarness(harness) {
+  const launch =
+    harness?.image_command_intent ?? harness?.imageCommandIntent ?? null;
+  const requestContext = launch?.request_context ?? launch?.requestContext;
+  return (
+    launch?.image_task ??
+    launch?.imageTask ??
+    requestContext?.image_task ??
+    requestContext?.imageTask ??
+    null
+  );
+}
 
 export function buildScenarioAssertions(context) {
   const {
@@ -84,6 +95,14 @@ export function buildScenarioAssertions(context) {
   const rightSurfaceVisualCaptures = rightSurfaceVisualMatrix.captures ?? {};
   const rightSurfaceVisualAppSurface =
     rightSurfaceVisualCaptures.appSurface?.stable?.agentAppSurface ?? {};
+  const imageCommandTask = readImageCommandTaskFromHarness(imageCommandHarness);
+  const imageCommandRuntimeContract =
+    imageCommandTask?.runtime_contract ?? imageCommandTask?.runtimeContract;
+  const imageCommandContractKey =
+    imageCommandTask?.modality_contract_key ??
+    imageCommandTask?.modalityContractKey ??
+    imageCommandRuntimeContract?.contract_key ??
+    imageCommandRuntimeContract?.contractKey;
   const scenarioAssertions = isContentFactoryArticleWorkspaceScenario
     ? buildContentFactoryArticleWorkspaceScenarioAssertions({
         appServerRequestMethods,
@@ -288,16 +307,14 @@ export function buildScenarioAssertions(context) {
                   imageCommandTurnStart?.inputText ===
                   expectedImageIntentRoutedPrompt,
                 imageCommandMetadataReachedBackend:
-                  imageCommandHarness?.image_skill_launch?.image_task
-                    ?.modality_contract_key === "image_generation" &&
-                  imageCommandHarness?.image_skill_launch?.image_task
-                    ?.runtime_contract?.contract_key === "image_generation" &&
+                  imageCommandContractKey === "image_generation" &&
                   imageCommandTurnStart?.providerPreference == null &&
                   imageCommandTurnStart?.modelPreference == null,
+                imageCommandLegacySkillLaunchNotSubmitted:
+                  imageCommandHarness?.image_skill_launch == null &&
+                  imageCommandHarness?.imageSkillLaunch == null,
                 imageCommandUsedCurrentMediaTaskArtifactMethods:
-                  appServerRequestMethods.includes(
-                    APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE,
-                  ) &&
+                  summary.imageCommandWorkflowUsed === true &&
                   appServerRequestMethods.includes(
                     APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_GET,
                   ) &&
@@ -350,9 +367,10 @@ export function buildScenarioAssertions(context) {
                   summary.imageCommandTaskArtifactTerminalPatch
                     ?.currentAttemptHasResultSnapshot === true,
                 imageCommandWorkerUsedFixtureProviderAndModel:
-                  summary.imageCommandTaskCreateRequest?.providerId ===
+                  (summary.imageCommandTaskCreateRequest?.provider_id ??
+                    summary.imageCommandTaskCreateRequest?.providerId) ===
                     summary.imageFixtureProvider?.providerId &&
-                  summary.imageCommandTaskCreateRequest?.model ===
+                  (summary.imageCommandTaskCreateRequest?.model ?? null) ===
                     IMAGE_FIXTURE_MODEL &&
                   summary.imageProviderFixtureServer?.requestCount === 1 &&
                   summary.imageProviderFixtureServer?.requests?.[0]
@@ -362,23 +380,24 @@ export function buildScenarioAssertions(context) {
                     IMAGE_FIXTURE_MODEL &&
                   summary.imageProviderFixtureServer?.requests?.[0]
                     ?.bodyIncludesModel === true,
-                imageCommandSkillToolObserved:
-                  summary.readModelImageCommandCompleted?.includesSkillTool ===
-                    true &&
+                imageCommandWorkflowToolObserved:
                   summary.readModelImageCommandCompleted
-                    ?.includesImageSkillName === true &&
-                  pageText.includes(IMAGE_COMMAND_SKILL_NAME),
+                    ?.includesWorkflowSource === true ||
+                  pageText.includes("image_command_workflow") ||
+                  (summary.imageCommandTaskCreateRequest?.runtimeContract
+                    ?.executor_adapter_key === "workflow:image_command" &&
+                    summary.imageCommandTaskCreateRequest?.runtimeContract
+                      ?.executor_binding_key === "image_command"),
                 imageCommandCreateTaskToolObserved:
                   summary.readModelImageCommandCompleted
-                    ?.includesCreateTaskTool === true &&
-                  pageText.includes(IMAGE_COMMAND_CREATE_TASK_TOOL_NAME),
+                    ?.includesCreateTaskTool === true,
                 guiImageCommandInputSubmitted:
                   summary.imageCommandInputSend?.afterFill
                     ?.promptVisibleInTextarea === true &&
                   summary.imageCommandInputSend?.clicked?.clicked === true,
                 guiImageCommandToolProcessVisible:
-                  summary.guiImageCommandCompleted?.hasSkillName === true &&
-                  summary.guiImageCommandCompleted?.hasCreateTaskTool === true,
+                  summary.guiImageCommandCompleted
+                    ?.hasVisibleImageTaskProcess === true,
                 guiImageCommandTaskCardVisible:
                   summary.guiImageCommandCompleted?.imageTaskCardVisible ===
                   true,
@@ -422,8 +441,8 @@ export function buildScenarioAssertions(context) {
                 readModelImageCommandCompleted:
                   summary.readModelImageCommandCompleted?.includesPrompt ===
                     true &&
-                  summary.readModelImageCommandCompleted
-                    ?.includesAssistantDone === true &&
+                  summary.readModelImageCommandCompleted?.latestTurnStatus ===
+                    "completed" &&
                   summary.readModelImageCommandCompleted
                     ?.includesCreateTaskTool === true,
                 readModelImageCommandTaskPreviewObserved:
@@ -443,19 +462,33 @@ export function buildScenarioAssertions(context) {
                     summary.webToolsRenderingInputSend?.clicked?.clicked ===
                       true,
                   guiWebToolsLiveRunningStateCaptured:
-                    summary.guiWebToolsRenderingInProgress?.hasPrompt ===
-                      true &&
-                    summary.guiWebToolsRenderingInProgress
-                      ?.webProcessGroupExpanded === true &&
-                    summary.guiWebToolsRenderingInProgress
-                      ?.hasAssistantSummary === false &&
-                    summary.guiWebToolsRenderingInProgress?.hasDoneText ===
-                      false,
+                    (summary.guiWebToolsRenderingInProgress
+                      ?.webToolsLiveRunningStateCaptured === true &&
+                      summary.guiWebToolsRenderingInProgress?.hasPrompt ===
+                        true &&
+                      summary.guiWebToolsRenderingInProgress
+                        ?.webProcessGroupExpanded === true &&
+                      summary.guiWebToolsRenderingInProgress
+                        ?.hasAssistantSummary === false &&
+                      summary.guiWebToolsRenderingInProgress?.hasDoneText ===
+                        false) ||
+                    (summary.guiWebToolsRenderingInProgress
+                      ?.fastCompletedBeforeLiveCapture === true &&
+                      summary.guiWebToolsRenderingInProgress?.hasPrompt ===
+                        true &&
+                      summary.guiWebToolsRenderingInProgress
+                        ?.hasAssistantSummary === true &&
+                      summary.guiWebToolsRenderingInProgress
+                        ?.hasFinalTextAfterProcess === true),
                   guiWebToolsLiveNoLegacyTextAfterProcess:
                     summary.guiWebToolsRenderingInProgress
-                      ?.latestAssistantTextAfterProcessPart === false &&
-                    summary.guiWebToolsRenderingInProgress
-                      ?.runningProcessHasLegacyTextAfterProcess === false,
+                      ?.runningProcessHasLegacyTextAfterProcess === false &&
+                    (summary.guiWebToolsRenderingInProgress
+                      ?.webToolsLiveRunningStateCaptured === true
+                      ? summary.guiWebToolsRenderingInProgress
+                          ?.latestAssistantTextAfterProcessPart === false
+                      : summary.guiWebToolsRenderingInProgress
+                          ?.fastCompletedBeforeLiveCapture === true),
                   guiWebSearchProcessDefaultCollapsed:
                     summary.guiWebToolsRenderingCompleted
                       ?.webProcessGroupExpanded === false,

@@ -166,6 +166,8 @@ export function isImageWorkbenchStatusOnlyText(value?: string | null): boolean {
 
   return [
     /^图片任务已创建正在准备执行$/,
+    /^已发起.*(?:图片生成|生成图片|配图|画图).*$/,
+    /^已发起.*的图片生成$/,
     /^图片任务已进入队列正在等待执行$/,
     /^图片任务正在生成中$/,
     /^图片任务已取消.*$/,

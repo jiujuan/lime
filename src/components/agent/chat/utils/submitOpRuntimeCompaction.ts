@@ -9,7 +9,6 @@ import type { ChatToolPreferences } from "./chatToolPreferences";
 import { normalizeHarnessSessionMode } from "./harnessSessionMode";
 import { normalizeExecutionStrategy } from "../hooks/agentChatCoreUtils";
 import { compactSubmitOpToolPreferences } from "./submitOpToolPreferenceCompaction";
-import { isImportedSourceExecutionRuntime } from "./sessionExecutionRuntime";
 
 const HARNESS_CONTENT_ID_KEYS = ["content_id", "contentId"] as const;
 const HARNESS_ACCESS_MODE_KEYS = ["access_mode", "accessMode"] as const;
@@ -21,7 +20,9 @@ const HARNESS_FAST_RESPONSE_ROUTING_KEYS = [
   "fast_response_routing",
   "fastResponseRouting",
 ] as const;
-const HARNESS_IMAGE_SKILL_LAUNCH_KEYS = [
+const HARNESS_IMAGE_COMMAND_INTENT_KEYS = [
+  "image_command_intent",
+  "imageCommandIntent",
   "image_skill_launch",
   "imageSkillLaunch",
 ] as const;
@@ -210,7 +211,7 @@ function hasImageGenerationLaunchRouting(
 ): boolean {
   const launch = readHarnessObjectFromRequestMetadata(
     requestMetadata,
-    HARNESS_IMAGE_SKILL_LAUNCH_KEYS,
+    HARNESS_IMAGE_COMMAND_INTENT_KEYS,
   );
   if (!launch) {
     return false;
@@ -491,29 +492,13 @@ export function buildSubmitOpRuntimeCompaction(
   const syncedProviderSelector =
     syncedSessionModelPreference?.providerType?.trim() || null;
   const syncedModelName = syncedSessionModelPreference?.model?.trim() || null;
-  const importedRuntimeWithoutCurrentSelection =
-    isImportedSourceExecutionRuntime(executionRuntime) &&
-    !executionRuntime?.provider_selector?.trim();
-  const runtimeProviderSelector =
-    executionRuntime?.provider_selector?.trim() ||
-    (importedRuntimeWithoutCurrentSelection
-      ? null
-      : executionRuntime?.provider_name?.trim()) ||
-    null;
-  const runtimeModelName = importedRuntimeWithoutCurrentSelection
-    ? null
-    : executionRuntime?.model_name?.trim() || null;
-  const knownProviderSelector =
-    syncedProviderSelector || runtimeProviderSelector;
-  const knownModelName = syncedModelName || runtimeModelName;
   const hasFastResponseRouting = hasHarnessObjectFromRequestMetadata(
     requestMetadata,
     HARNESS_FAST_RESPONSE_ROUTING_KEYS,
   );
   const hasImageGenerationRouting =
     hasImageGenerationLaunchRouting(requestMetadata);
-  const shouldDeferModelRoutingToBackend =
-    hasFastResponseRouting || hasImageGenerationRouting;
+  const shouldDeferModelRoutingToBackend = hasFastResponseRouting;
   const hasExplicitModelOverride = Boolean(modelOverride?.trim());
   const normalizedEffectiveProviderType = normalizeRuntimeIdentifier(
     effectiveProviderType,
@@ -521,26 +506,10 @@ export function buildSubmitOpRuntimeCompaction(
   const normalizedEffectiveModel = normalizeRuntimeIdentifier(effectiveModel);
   const hasEffectiveProviderType = Boolean(normalizedEffectiveProviderType);
   const hasEffectiveModel = Boolean(normalizedEffectiveModel);
-  const knownProviderChanged = Boolean(
-    knownProviderSelector &&
-    normalizedEffectiveProviderType &&
-    normalizeRuntimeIdentifier(knownProviderSelector) !==
-      normalizedEffectiveProviderType,
-  );
-  const knownModelChanged = Boolean(
-    knownModelName &&
-    normalizedEffectiveModel &&
-    normalizeRuntimeIdentifier(knownModelName) !== normalizedEffectiveModel,
-  );
   const shouldSubmitImageOrchestrationProviderConfig = Boolean(
     hasImageGenerationRouting &&
     effectiveProviderType.trim() &&
-    effectiveModel.trim() &&
-    (!knownProviderSelector ||
-      !knownModelName ||
-      knownProviderChanged ||
-      knownModelChanged ||
-      hasExplicitModelOverride),
+    effectiveModel.trim(),
   );
   const imageOrchestrationProviderConfig: AsterProviderConfig | undefined =
     shouldSubmitImageOrchestrationProviderConfig
@@ -562,7 +531,6 @@ export function buildSubmitOpRuntimeCompaction(
   const shouldSubmitModelPreference =
     hasEffectiveProviderType &&
     hasEffectiveModel &&
-    !hasImageGenerationRouting &&
     !(shouldDeferModelRoutingToBackend && !hasExplicitModelOverride) &&
     (hasExplicitModelOverride ||
       shouldSubmitProviderPreference ||

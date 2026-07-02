@@ -21,7 +21,7 @@ describe("modelSkillLaunchDescriptors", () => {
     expect(new Set(requestContextKeys).size).toBe(
       MODEL_SKILL_LAUNCH_DESCRIPTORS.length,
     );
-    expect(launchKeys).toContain("image_skill_launch");
+    expect(launchKeys).toContain("image_command_intent");
     expect(launchKeys).toContain("webpage_skill_launch");
   });
 
@@ -92,6 +92,39 @@ describe("modelSkillLaunchDescriptors", () => {
           kind: "research_request",
           request_context: {
             prompt: "查一下最新趋势",
+          },
+        },
+      },
+    });
+  });
+
+  it("图片命令 metadata 应写入 ImageCommandIntent 而不是打开 model skill", () => {
+    const metadata = buildModelSkillLaunchRequestMetadata(
+      MODEL_SKILL_LAUNCH.image,
+      {
+        harness: {
+          trace_id: "trace-image-1",
+          allow_model_skills: true,
+          image_skill_launch: {
+            skill_name: "image_generate",
+          },
+        },
+      },
+      {
+        kind: "image_task",
+        image_task: {
+          prompt: "画一张广州夏天的图",
+        },
+      },
+    );
+
+    expect(metadata).toEqual({
+      harness: {
+        trace_id: "trace-image-1",
+        image_command_intent: {
+          kind: "image_task",
+          image_task: {
+            prompt: "画一张广州夏天的图",
           },
         },
       },

@@ -1,4 +1,5 @@
 import type {
+  ImageCommandRunSnapshot,
   ImageRuntimeContractSnapshot,
   ImageStoryboardSlot,
 } from "../types";
@@ -41,6 +42,7 @@ export interface ImageWorkbenchTaskView {
   createdAt: number;
   failureMessage?: string;
   runtimeContract?: ImageRuntimeContractSnapshot | null;
+  workflowRun?: ImageCommandRunSnapshot | null;
 }
 
 export interface ImageWorkbenchOutputView {

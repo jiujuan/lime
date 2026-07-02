@@ -166,8 +166,10 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
       shouldHideToolResultEnvelope({
         toolName: toolCall.name,
         rawResultText,
+        metadata,
+        result: toolCall.result,
       }),
-    [rawResultText, toolCall.name],
+    [metadata, rawResultText, toolCall.name, toolCall.result],
   );
   const workspaceSkillRuntimeEnableSummary = useMemo(
     () =>

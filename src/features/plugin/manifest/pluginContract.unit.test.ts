@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import contentFactoryFixture from "@/features/agent-app/fixtures/content-factory-app.json";
+import contentFactoryFixture from "@/features/agent-app/testing/fixtures/content-factory-app.json";
 import { buildPackageIdentity } from "@/features/agent-app/install/packageIdentity";
 import { normalizeManifest } from "@/features/agent-app/manifest/normalizeManifest";
 import { parseManifest } from "@/features/agent-app/manifest/parseManifest";
@@ -331,11 +331,23 @@ describe("Plugin P1 manifest contract", () => {
     expect(contract.skills).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          id: "gongzonghao-article-writer",
-          title: "公众号文章写作",
+          id: "article-research",
+          title: "资料检索",
         }),
         expect.objectContaining({
-          id: "article-image-cheatsheet",
+          id: "article-strategy",
+          title: "选题策划",
+        }),
+        expect.objectContaining({
+          id: "article-writing",
+          title: "正文写作",
+        }),
+        expect.objectContaining({
+          id: "article-editing",
+          title: "审稿校对",
+        }),
+        expect.objectContaining({
+          id: "article-image-plan",
           title: "文章配图规划",
         }),
       ]),

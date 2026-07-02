@@ -1,7 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import contentFactoryFixtureData from "../fixtures/content-factory-app.json";
+import contentFactoryFixtureData from "../testing/fixtures/content-factory-app.json";
 import { resolveAgentAppHostFlags } from "../featureFlag";
 import { buildInstalledAgentAppState } from "../install/installedAppState";
 import { buildInstalledAppPreview } from "../install/installedAppPreview";

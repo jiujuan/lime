@@ -1,11 +1,11 @@
 import {
   buildAgentAppHostLifecycleForInstalledState,
-  type AgentAppCloudCatalogResult,
 } from "@/lib/api/agentApps";
 import {
   buildCloudAgentAppSourceState,
   type AgentAppSourceState,
 } from "../install/installReview";
+import type { AgentAppCloudReleaseEvidenceCatalogSource } from "../install/cloudReleaseEvidence";
 import type {
   AgentAppHostFunctionStatus,
   AgentAppHostLifecycleSnapshot,
@@ -373,7 +373,7 @@ function getStatusKind(params: {
 export function buildAppCenterItems(params: {
   installed: InstalledAgentAppState[];
   cloudApps: CloudBootstrapApp[];
-  catalogSource: AgentAppCloudCatalogResult["source"] | "seeded";
+  catalogSource: AgentAppCloudReleaseEvidenceCatalogSource;
   convertLocalFileSrc?: ConvertLocalFileSrc;
   hostLifecycleSnapshots?: AgentAppHostLifecycleSnapshot[];
 }): AppCenterItem[] {

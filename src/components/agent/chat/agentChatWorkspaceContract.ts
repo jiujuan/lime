@@ -54,6 +54,7 @@ export interface AgentChatWorkspaceProps {
   onRecommendationClick?: (shortLabel: string, fullPrompt: string) => void;
   onHasMessagesChange?: (hasMessages: boolean) => void;
   onSessionChange?: (sessionId: string | null) => void;
+  onAgentStreamingChange?: (isStreaming: boolean) => void;
   preferContentReviewInRightRail?: boolean;
   openBrowserAssistOnMount?: boolean;
   initialSiteSkillLaunch?: AgentSiteSkillLaunchParams;

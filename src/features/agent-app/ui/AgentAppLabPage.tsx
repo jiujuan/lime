@@ -17,7 +17,6 @@ import {
 import { AdapterCapabilityHost } from "../adapters/AdapterCapabilityHost";
 import { buildAdapterCapabilityProfile } from "../adapters/adapterCapabilityProfile";
 import { InMemoryAgentAppCapabilityStore } from "../adapters/InMemoryAgentAppCapabilityStore";
-import contentFactoryFixture from "../fixtures/content-factory-app.json";
 import { resolveAgentAppHostFlags } from "../featureFlag";
 import { buildInstalledAppPreview } from "../install/installedAppPreview";
 import {
@@ -74,6 +73,7 @@ import { AgentAppManagerPanel } from "./AgentAppManagerPanel";
 
 interface AgentAppLabPageProps {
   flags?: Partial<AgentAppHostFlags>;
+  fixture?: AppManifest;
 }
 
 type CapabilityHostMode = "adapter";
@@ -89,8 +89,7 @@ const LAB_INSTALL_FLOW_STAGES: AgentAppLabInstallFlowStage[] = [
   "cleanup-preview",
 ];
 
-function buildManagerCompanionFixture(): AppManifest {
-  const base = contentFactoryFixture as AppManifest;
+function buildManagerCompanionFixture(base: AppManifest): AppManifest {
   return {
     ...base,
     name: "content-factory-playbook-app",
@@ -1088,7 +1087,47 @@ function CapabilityTable({ preview }: { preview: InstalledAppPreview }) {
   );
 }
 
-export function AgentAppLabPage({ flags }: AgentAppLabPageProps = {}) {
+function AgentAppLabUnavailable() {
+  const { t } = useTranslation("agent");
+  return (
+    <div
+      className="min-h-full bg-slate-50 px-6 py-8 text-slate-900"
+      data-testid="agent-app-lab-page"
+    >
+      <div className="mx-auto max-w-5xl">
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm shadow-slate-950/5">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            {t("agentApp.lab.badge")}
+          </p>
+          <h1 className="mt-3 text-2xl font-semibold text-slate-950">
+            {t("agentApp.lab.title")}
+          </h1>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
+            {t("agentApp.lab.boundary.description")}
+          </p>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
+            {t("agentApp.lab.boundary.noRuntime")}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function AgentAppLabPage({
+  fixture,
+  flags,
+}: AgentAppLabPageProps = {}) {
+  if (!fixture) {
+    return <AgentAppLabUnavailable />;
+  }
+  return <AgentAppLabPageWithFixture fixture={fixture} flags={flags} />;
+}
+
+function AgentAppLabPageWithFixture({
+  fixture: contentFactoryFixture,
+  flags,
+}: AgentAppLabPageProps & { fixture: AppManifest }) {
   const { t } = useTranslation("agent");
   const resolvedFlags = useMemo(() => resolveAgentAppHostFlags(flags), [flags]);
   const [runResult, setRunResult] = useState<AgentAppRunResult | null>(null);
@@ -1155,12 +1194,13 @@ export function AgentAppLabPage({ flags }: AgentAppLabPageProps = {}) {
   const setupPreview = useMemo(
     () =>
       buildInstalledAppPreview({
+        fixture: contentFactoryFixture,
         profile: capabilityProfile,
         loadedAt: "2026-05-15T00:00:00.000Z",
         checkedAt: "2026-05-15T00:00:00.000Z",
         generatedAt: "2026-05-15T00:00:00.000Z",
       }),
-    [capabilityProfile],
+    [capabilityProfile, contentFactoryFixture],
   );
   const labSetup = useMemo(
     () =>
@@ -1172,17 +1212,18 @@ export function AgentAppLabPage({ flags }: AgentAppLabPageProps = {}) {
   const preview = useMemo(
     () =>
       buildInstalledAppPreview({
+        fixture: contentFactoryFixture,
         setup: labSetup,
         profile: capabilityProfile,
         loadedAt: "2026-05-15T00:00:00.000Z",
         checkedAt: "2026-05-15T00:00:00.000Z",
         generatedAt: "2026-05-15T00:00:00.000Z",
       }),
-    [capabilityProfile, labSetup],
+    [capabilityProfile, labSetup, contentFactoryFixture],
   );
   const managerCompanionFixture = useMemo(
-    () => buildManagerCompanionFixture(),
-    [],
+    () => buildManagerCompanionFixture(contentFactoryFixture),
+    [contentFactoryFixture],
   );
   const managerCompanionPreview = useMemo(() => {
     const identity = buildPackageIdentity({

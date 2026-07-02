@@ -1,10 +1,15 @@
 import type { Message } from "../types";
+import {
+  isImageTaskCreationToolName,
+  isImageTaskToolResultLike,
+} from "../utils/imageTaskToolResult";
 import { shouldSuppressImageWorkbenchStatusText } from "../utils/imageWorkbenchStatusText";
 import { isImageGenerationProtocolFailureResidue } from "../utils/limeTaskProtocolNoise";
 
 export interface ImageWorkbenchMessageDisplayState {
   hasLeadContent: boolean;
   isImageWorkbenchMessage: boolean;
+  shouldFoldSuppressedProcessFlow: boolean;
   shouldSuppressAssistantText: boolean;
   shouldSuppressProcessFlow: boolean;
   shouldSuppressStandaloneProcess: boolean;
@@ -25,6 +30,24 @@ export interface ImageWorkbenchRendererProcessState {
   toolCalls?: Message["toolCalls"];
 }
 
+function hasImageTaskCreationProcess(message: Message): boolean {
+  return Boolean(
+    message.toolCalls?.some((toolCall) => {
+      if (isImageTaskCreationToolName(toolCall.name)) {
+        return true;
+      }
+
+      return isImageTaskToolResultLike({
+        toolName: toolCall.name,
+        output: toolCall.result?.output,
+        metadata: toolCall.result?.metadata,
+        result: toolCall.result,
+        toolResult: toolCall.result,
+      });
+    }),
+  );
+}
+
 export function resolveImageWorkbenchMessageDisplayState(params: {
   message: Message;
   rawDisplayContent: string;
@@ -35,11 +58,17 @@ export function resolveImageWorkbenchMessageDisplayState(params: {
   const hasImageFailureProtocolResidue =
     isAssistantMessage &&
     isImageGenerationProtocolFailureResidue(params.rawDisplayContent);
-  const shouldSuppressStandaloneProcess =
+  const hasImageTaskProcess =
+    isAssistantMessage &&
+    !isImageWorkbenchMessage &&
+    hasImageTaskCreationProcess(params.message);
+  const shouldSuppressStandaloneText =
     isAssistantMessage &&
     !isImageWorkbenchMessage &&
     (shouldSuppressImageWorkbenchStatusText(params.rawDisplayContent) ||
       hasImageFailureProtocolResidue);
+  const shouldSuppressStandaloneProcess =
+    shouldSuppressStandaloneText || hasImageTaskProcess;
   const shouldSuppressAssistantText =
     isAssistantMessage &&
     isImageWorkbenchMessage &&
@@ -47,7 +76,7 @@ export function resolveImageWorkbenchMessageDisplayState(params: {
       hasImageFailureProtocolResidue);
   const visibleRawDisplayContent =
     isAssistantMessage &&
-    (shouldSuppressAssistantText || shouldSuppressStandaloneProcess)
+    (shouldSuppressAssistantText || shouldSuppressStandaloneText)
       ? ""
       : params.rawDisplayContent;
   const thinkingContent =
@@ -58,6 +87,8 @@ export function resolveImageWorkbenchMessageDisplayState(params: {
   return {
     hasLeadContent: Boolean(visibleRawDisplayContent.trim() || thinkingContent),
     isImageWorkbenchMessage,
+    shouldFoldSuppressedProcessFlow:
+      isImageWorkbenchMessage || !hasImageTaskProcess,
     shouldSuppressAssistantText,
     shouldSuppressProcessFlow: Boolean(
       isImageWorkbenchMessage || shouldSuppressStandaloneProcess,
@@ -74,34 +105,34 @@ function hasRenderableInlineProcessParts(
   return Boolean(parts?.some((part) => part.type !== "text"));
 }
 
-function collectToolCallsFromContentParts(
+function filterImageWorkbenchLeadContentParts(
   parts: Message["contentParts"] | undefined,
-): Message["toolCalls"] | undefined {
-  if (!parts?.length) {
-    return undefined;
-  }
-
-  const toolCalls = parts
-    .filter(
-      (
-        part,
-      ): part is Extract<
-        NonNullable<Message["contentParts"]>[number],
-        { type: "tool_use" }
-      > => part.type === "tool_use",
-    )
-    .map((part) => part.toolCall);
-
-  return toolCalls.length > 0 ? toolCalls : undefined;
+): Message["contentParts"] | undefined {
+  const filtered = (parts || []).filter(
+    (part) => part.type === "text" || part.type === "thinking",
+  );
+  return filtered.length > 0 ? filtered : undefined;
 }
 
 export function resolveImageWorkbenchProcessDisplayState(params: {
   message: Message;
   sanitizedContentParts?: Message["contentParts"];
   shouldDeferMessageDetails: boolean;
+  shouldFoldSuppressedProcessFlow: boolean;
   shouldSuppressImageProcessFlow: boolean;
 }): ImageWorkbenchProcessDisplayState {
+  if (params.message.imageWorkbenchPreview) {
+    return {
+      displayContentParts: filterImageWorkbenchLeadContentParts(
+        params.sanitizedContentParts,
+      ),
+      shouldFoldSuppressedProcessFlow: false,
+      shouldSuppressRendererProcessFlow: false,
+    };
+  }
+
   const shouldFoldSuppressedProcessFlow =
+    params.shouldFoldSuppressedProcessFlow &&
     !params.shouldDeferMessageDetails &&
     params.shouldSuppressImageProcessFlow &&
     params.message.role === "assistant" &&
@@ -142,32 +173,22 @@ export function resolveImageWorkbenchRendererProcessState(params: {
     };
   }
 
-  const toolCalls = !params.shouldSuppressRendererProcessFlow
-    ? params.rendererToolCalls && params.rendererToolCalls.length > 0
-      ? params.rendererToolCalls
-      : collectToolCallsFromContentParts(params.rendererContentParts)
-    : undefined;
-  const shouldUseFallbackProcess = Boolean(
-    params.actionContent || (toolCalls?.length || 0) > 0,
+  const leadContentParts = filterImageWorkbenchLeadContentParts(
+    params.rendererContentParts,
   );
-  const contentParts = shouldUseFallbackProcess
-    ? undefined
-    : params.rendererContentParts;
+  const hasLeadText = Boolean(params.actionContent.trim());
+  const contentParts = hasLeadText ? undefined : leadContentParts;
   const thinkingContent =
     params.imageWorkbenchThinkingContent ||
-    (shouldUseFallbackProcess ? params.rendererThinkingContent : undefined);
+    (hasLeadText ? params.rendererThinkingContent : undefined);
   const shouldRenderInlineProcess = Boolean(
-    !params.shouldSuppressRendererProcessFlow &&
-    ((contentParts?.length || 0) > 0 ||
-      (toolCalls?.length || 0) > 0 ||
-      (params.rendererActionRequests || []).length > 0 ||
-      thinkingContent?.trim()),
+    (contentParts?.length || 0) > 0 || thinkingContent?.trim(),
   );
 
   return {
     contentParts,
     shouldRenderInlineProcess,
     thinkingContent,
-    toolCalls,
+    toolCalls: undefined,
   };
 }

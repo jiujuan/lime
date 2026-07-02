@@ -260,6 +260,8 @@ export function resolveMessageListItemProjection({
       message,
       sanitizedContentParts: sanitizedDisplayContentParts,
       shouldDeferMessageDetails,
+      shouldFoldSuppressedProcessFlow:
+        imageWorkbenchDisplayState.shouldFoldSuppressedProcessFlow,
       shouldSuppressImageProcessFlow,
     });
   const {
@@ -403,6 +405,11 @@ export function resolveMessageListItemProjection({
           displayContent: shouldHideAssistantTextWhileRunning
             ? ""
             : displayContent,
+          processPrefaceContent:
+            shouldHideAssistantTextWhileRunning &&
+            !message.thinkingContent?.trim()
+              ? displayContent
+              : undefined,
           existingContentParts: displayContentParts,
           items: timelineItemsForDisplay,
         })
@@ -818,6 +825,7 @@ export function resolveMessageListItemProjection({
     !hasStructuredHistoricalContentHint(actionContent);
   const shouldRenderFirstTokenRuntimeStatus =
     message.role === "assistant" &&
+    isConversationTailAssistant &&
     message.isThinking &&
     !shouldSuppressRendererProcessFlow &&
     !shouldRenderAssistantRuntimeStatusPill(message.runtimeStatus) &&

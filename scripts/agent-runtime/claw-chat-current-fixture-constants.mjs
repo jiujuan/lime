@@ -150,6 +150,10 @@ export const PLAIN_IMAGE_INTENT_PROMPT = "画一张广州夏天的图";
 export const PLAIN_IMAGE_INTENT_ROUTED_PROMPT = `@配图 ${PLAIN_IMAGE_INTENT_PROMPT}`;
 export const PLAIN_IMAGE_INTENT_IMAGE_PROMPT = PLAIN_IMAGE_INTENT_PROMPT;
 export const IMAGE_COMMAND_DONE_TEXT = "CLAW_IMAGE_COMMAND_FIXTURE_DONE";
+export const IMAGE_COMMAND_PRESENTATION_INTRO =
+  "好啊，这张图我来处理，先把画面氛围定准。";
+export const IMAGE_COMMAND_PRESENTATION_CAPTION =
+  "完成了，画面已经生成。想更清爽、更写实或换构图，都可以继续调。";
 export const WEB_TOOLS_SEARCH_TITLE = "Lime WebSearch Rendering Source";
 export const WEB_TOOLS_SEARCH_URL =
   "https://example.com/lime-websearch-rendering";
@@ -240,9 +244,7 @@ export const MCP_STRUCTURED_CONTENT_RESULT = {
   answer: MCP_STRUCTURED_CONTENT_ANSWER,
   ids: [MCP_STRUCTURED_CONTENT_REFERENCE_ID],
 };
-export const IMAGE_COMMAND_SKILL_TOOL_CALL_ID = `${SESSION_ID}:tool:image-skill-generate`;
 export const IMAGE_COMMAND_CREATE_TASK_TOOL_CALL_ID = `${SESSION_ID}:tool:image-create-task`;
-export const IMAGE_COMMAND_SKILL_NAME = "image_generate";
 export const IMAGE_COMMAND_CREATE_TASK_TOOL_NAME =
   "lime_create_image_generation_task";
 export const SKILLS_RUNTIME_SCENARIO =
@@ -294,13 +296,14 @@ export const MCP_STRUCTURED_CONTENT_ASSERTION_KEYS = [
 export const IMAGE_COMMAND_ASSERTION_KEYS = [
   "imageCommandPromptReachedBackend",
   "imageCommandMetadataReachedBackend",
+  "imageCommandLegacySkillLaunchNotSubmitted",
   "imageCommandUsedCurrentMediaTaskArtifactMethods",
   "imageCommandTaskArtifactWritten",
   "imageCommandTaskArtifactReadable",
   "imageCommandTaskArtifactTerminal",
   "imageCommandTaskArtifactSameTaskUpdated",
   "imageCommandWorkerUsedFixtureProviderAndModel",
-  "imageCommandSkillToolObserved",
+  "imageCommandWorkflowToolObserved",
   "imageCommandCreateTaskToolObserved",
   "guiImageCommandInputSubmitted",
   "guiImageCommandToolProcessVisible",

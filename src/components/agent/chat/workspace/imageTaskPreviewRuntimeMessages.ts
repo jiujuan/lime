@@ -302,10 +302,12 @@ function mergeImageWorkbenchPreviewByProgress(
     ? {
         ...existingPreview,
         ...nextPreview,
+        caption: nextPreview.caption ?? existingPreview.caption ?? null,
       }
     : {
         ...nextPreview,
         ...existingPreview,
+        caption: existingPreview.caption ?? nextPreview.caption ?? null,
       };
 }
 

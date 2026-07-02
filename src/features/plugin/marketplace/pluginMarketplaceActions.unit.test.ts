@@ -155,6 +155,11 @@ describe("plugin marketplace actions", () => {
     const installLocalPackage = vi.fn(async () =>
       installedState("research-kit"),
     );
+    const reportInstallState: NonNullable<
+      PluginMarketplaceActionDeps["reportInstallState"]
+    > = vi.fn(async () => installStateReport("installed"));
+    const resolveRuntimeContext = vi.fn(runtimeContext);
+    const now = () => "2026-06-25T01:02:03.000Z";
     const dispatchChanged = vi.fn();
 
     const result = await performPluginMarketplaceAction(
@@ -168,6 +173,9 @@ describe("plugin marketplace actions", () => {
       {
         selectLocalDirectory,
         installLocalPackage,
+        reportInstallState,
+        resolveRuntimeContext,
+        now,
         dispatchChanged,
       },
     );
@@ -182,6 +190,25 @@ describe("plugin marketplace actions", () => {
     expect(installLocalPackage).toHaveBeenCalledWith({
       appDir: "/Users/coso/Documents/dev/ai/limecloud/content-factory-app",
     });
+    expect(reportInstallState).toHaveBeenCalledWith(
+      "tenant-0001",
+      "research-kit",
+      {
+        state: "installed",
+        releaseId: "release-001",
+        packageHash:
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        manifestHash:
+          "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        reportedAt: "2026-06-25T01:02:03.000Z",
+      },
+      "limecloud",
+    );
+    expect(
+      result.status === "performed"
+        ? result.remoteInstallStateSync?.status
+        : undefined,
+    ).toBe("synced");
     expect(dispatchChanged).toHaveBeenCalledTimes(1);
   });
 

@@ -3,6 +3,7 @@ use serde_json::Value;
 #[derive(Debug, Clone, Default)]
 pub(super) struct AgentAppWorkerOrchestration {
     pub(super) workflow_key: Option<String>,
+    pub(super) workflow_title: Option<String>,
     pub(super) hook_policy: Option<Value>,
     pub(super) subagents: Vec<String>,
     pub(super) skill_refs: Vec<String>,
@@ -93,6 +94,7 @@ fn orchestration_from_workflow(workflow: &Value, manifest: &Value) -> AgentAppWo
 
     AgentAppWorkerOrchestration {
         workflow_key: string_field(workflow, &["key", "workflowKey", "workflow_key"]),
+        workflow_title: string_field(workflow, &["title", "name"]),
         hook_policy: object_field(workflow, &["hookPolicy", "hook_policy"]),
         subagents,
         skill_refs,

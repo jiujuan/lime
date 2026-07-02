@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { buildProjection, type Message } from "./messageListItemProjection.testHarness";
+import {
+  buildProjection,
+  type Message,
+} from "./messageListItemProjection.testHarness";
 import type { AgentThreadItem } from "../types";
 
-function buildTimelineProjection(message: Message, timelineItems: AgentThreadItem[]) {
+function buildTimelineProjection(
+  message: Message,
+  timelineItems: AgentThreadItem[],
+) {
   return buildProjection(message, timelineItems, {
     turnId: "turn-commentary-process-final",
   });
@@ -110,6 +116,60 @@ describe("messageListItemProjection timeline", () => {
     expect(parts[1]?.type === "text" ? parts[1].text : "").toBe(
       "今日国际新闻摘要：",
     );
+  });
+
+  it("运行中工具 timeline 不应把已提交导语挪到搜索过程后", () => {
+    const message: Message = {
+      id: "assistant-live-search-preface",
+      role: "assistant",
+      content:
+        "要求我帮忙整理今天的国际新闻。今天是2026年7月2日。我需要搜索最新的国际新闻来提供帮助。",
+      timestamp: new Date("2026-07-02T10:00:06.000Z"),
+      isThinking: true,
+      runtimeStatus: {
+        phase: "synthesizing",
+        title: "正在输出",
+        detail: "",
+      },
+    };
+
+    const projection = buildProjection(
+      message,
+      [
+        {
+          id: "web-search-running",
+          type: "web_search",
+          thread_id: "thread-live-search-preface",
+          turn_id: "turn-live-search-preface",
+          sequence: 2,
+          action: "web_search",
+          query: "2026年7月2日 国际新闻",
+          status: "in_progress",
+          started_at: "2026-07-02T10:00:02.000Z",
+          updated_at: "2026-07-02T10:00:03.000Z",
+        },
+      ],
+      {
+        turnId: "turn-live-search-preface",
+        turnStatus: "running",
+        isSending: true,
+      },
+    );
+
+    const parts = projection.rendererContentParts || [];
+    expect(parts.map((part) => part.type)).toEqual(["text", "tool_use"]);
+    expect(parts[0]).toMatchObject({
+      type: "text",
+      text: expect.stringContaining("要求我帮忙整理今天的国际新闻"),
+    });
+    expect(parts[1]).toMatchObject({
+      type: "tool_use",
+      toolCall: expect.objectContaining({
+        id: "web-search-running",
+        status: "running",
+      }),
+    });
+    expect(projection.actionContent).toContain("要求我帮忙整理今天的国际新闻");
   });
 
   it("timeline 中的 commentary 首句应保留在工具过程之前，且不污染最终正文", () => {

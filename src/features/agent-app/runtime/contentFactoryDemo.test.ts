@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { AdapterCapabilityHost } from "../adapters/AdapterCapabilityHost";
 import { InMemoryAgentAppCapabilityStore } from "../adapters/InMemoryAgentAppCapabilityStore";
 import { buildInstalledAppPreview } from "../install/installedAppPreview";
+import contentFactoryFixture from "../testing/fixtures/content-factory-app.json";
 import { uninstallApp } from "../install/uninstallApp";
 import { runContentFactoryDemo } from "./contentFactoryDemo";
 import { buildWorkflowRuntimeCapabilityProfile } from "./workflowRuntimeCapabilityProfile";
@@ -14,6 +15,7 @@ function buildPreview(
   }),
 ) {
   return buildInstalledAppPreview({
+    fixture: contentFactoryFixture,
     profile,
     loadedAt: "2026-05-15T00:00:00.000Z",
     checkedAt: "2026-05-15T00:00:00.000Z",

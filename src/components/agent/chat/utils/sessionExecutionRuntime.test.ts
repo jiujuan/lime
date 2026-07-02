@@ -132,6 +132,16 @@ describe("sessionExecutionRuntime", () => {
     });
   });
 
+  it("图片生成 runtime 不应回流为普通会话模型偏好", () => {
+    expect(
+      createSessionModelPreferenceFromExecutionRuntime({
+        provider_selector: "custom-image-provider",
+        provider_name: "custom-image-provider",
+        model_name: "gpt-image-1",
+      }),
+    ).toBeNull();
+  });
+
   it("本地历史导入来源模型不应伪装为当前会话模型偏好", () => {
     expect(
       createSessionModelPreferenceFromExecutionRuntime({

@@ -1,13 +1,12 @@
 .workspace-plugin-orchestration-rail {
-  display: grid;
-  grid-template-columns: minmax(138px, 0.22fr) minmax(0, 1fr);
-  gap: 8px;
-  align-items: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   margin: 0 0 10px;
   border: 1px solid var(--lime-surface-border);
   border-radius: 8px;
   background: var(--lime-surface);
-  padding: 8px;
+  padding: 10px;
 }
 
 .workspace-plugin-orchestration-rail-heading {
@@ -15,36 +14,32 @@
   min-width: 0;
   align-items: center;
   gap: 8px;
-  border-right: 1px solid var(--lime-surface-border);
-  padding-right: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--lime-surface-border);
 }
 
 .workspace-plugin-orchestration-rail-body {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 7px;
+  gap: 10px;
 }
 
 .workspace-plugin-orchestration-rail-steps {
-  display: flex;
-  min-width: 0;
-  gap: 6px;
-  overflow-x: auto;
-  padding-bottom: 1px;
+  display: grid;
+  gap: 8px;
 }
 
 .workspace-plugin-orchestration-rail-step {
   display: grid;
-  grid-template-columns: 18px minmax(112px, 1fr) auto;
-  align-items: center;
-  gap: 6px;
-  min-width: 208px;
-  max-width: 260px;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  min-width: 0;
   border: 1px solid var(--lime-surface-border);
   border-radius: 7px;
   background: var(--lime-surface-subtle);
-  padding: 6px 7px;
+  padding: 7px 8px;
 }
 
 .workspace-plugin-orchestration-rail-index {
@@ -73,17 +68,14 @@
 
 .workspace-plugin-orchestration-rail-chips {
   display: flex;
-  min-width: 0;
+  flex-wrap: wrap;
   gap: 6px;
-  overflow-x: auto;
-  padding-bottom: 1px;
 }
 
 .workspace-plugin-orchestration-rail-chip {
   display: inline-flex;
-  max-width: 220px;
+  max-width: 100%;
   min-width: 0;
-  flex: 0 0 auto;
   align-items: center;
   gap: 5px;
   border-radius: 999px;
@@ -97,13 +89,20 @@
 
 @container (max-width: 520px) {
   .workspace-plugin-orchestration-rail {
-    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    padding: 8px;
   }
 
   .workspace-plugin-orchestration-rail-heading {
-    border-right: 0;
-    border-bottom: 1px solid var(--lime-surface-border);
-    padding-right: 0;
-    padding-bottom: 8px;
+    align-items: flex-start;
+  }
+
+  .workspace-plugin-orchestration-rail-step {
+    grid-template-columns: 18px minmax(0, 1fr);
+  }
+
+  .workspace-plugin-orchestration-rail-status {
+    grid-column: 2;
+    justify-self: start;
   }
 }

@@ -43,6 +43,13 @@ function findWorkspaceRootForPath(relPath, memberRoots) {
   );
 }
 
+function isExcludedSubcrateMetadataPath(relPath, packageRoot) {
+  return (
+    relPath === `${packageRoot}/Cargo.toml` ||
+    relPath === `${packageRoot}/Cargo.lock`
+  );
+}
+
 export function expandWithWorkspaceDependents(packageNames, dependencyGraph) {
   const selected = new Set(packageNames);
   const missingPackages = [...selected].filter(
@@ -101,15 +108,15 @@ export function resolveRustPathSelection(
       continue;
     }
 
-    rustPaths.push(relPath);
-
     if (isWorkspaceWideRustPath(relPath)) {
+      rustPaths.push(relPath);
       workspaceReasons.push(relPath);
       continue;
     }
 
     const packageRoot = findWorkspaceRootForPath(relPath, memberRoots);
     if (!packageRoot) {
+      rustPaths.push(relPath);
       errors.push(
         `${relPath}: 无法映射到 lime-rs workspace crate；请扩大到 --workspace 或手动指定 -p <crate>`,
       );
@@ -118,12 +125,18 @@ export function resolveRustPathSelection(
 
     const packageInfo = memberRoots.get(packageRoot);
     if (!packageInfo.workspaceMember) {
+      if (isExcludedSubcrateMetadataPath(relPath, packageRoot)) {
+        skippedPaths.push(relPath);
+        continue;
+      }
+      rustPaths.push(relPath);
       errors.push(
         `${relPath}: ${packageInfo.packageName} 已被 lime-rs workspace exclude，不能通过根 manifest 的 -p 定向运行`,
       );
       continue;
     }
 
+    rustPaths.push(relPath);
     directPackages.add(packageInfo.packageName);
   }
 

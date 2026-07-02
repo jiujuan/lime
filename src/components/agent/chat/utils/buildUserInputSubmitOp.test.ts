@@ -354,7 +354,7 @@ describe("buildUserInputSubmitOp", () => {
     expect(op.preferences?.modelPreference).toBeUndefined();
   });
 
-  it("图片生成首发应把聊天编排模型放进 provider_config，避免误锁图片模型槽位", () => {
+  it("图片生成首发应提交聊天编排模型，避免 presentation 路由缺失或误锁图片模型槽位", () => {
     const op = buildUserInputSubmitOp({
       content: "@Nanobanana Pro 生成一张广州塔春天照片",
       images: [],
@@ -362,8 +362,7 @@ describe("buildUserInputSubmitOp", () => {
       eventName: "aster_stream_image",
       requestMetadata: {
         harness: {
-          image_skill_launch: {
-            skill_name: "image_generate",
+          image_command_intent: {
             image_task: {
               prompt: "一张广州塔春天照片",
               provider_id: "fal",
@@ -391,8 +390,80 @@ describe("buildUserInputSubmitOp", () => {
       provider_name: "deepseek",
       model_name: "deepseek-v4-pro",
     });
+    expect(op.preferences?.providerPreference).toBe("deepseek");
+    expect(op.preferences?.modelPreference).toBe("deepseek-v4-pro");
+
+    const request = createSubmitTurnRequestFromAgentOp(op);
+    expect(request.turn_config?.provider_preference).toBe("deepseek");
+    expect(request.turn_config?.model_preference).toBe("deepseek-v4-pro");
+    expect(request.turn_config?.metadata).toMatchObject({
+      harness: {
+        image_command_intent: {
+          image_task: {
+            provider_id: "fal",
+            model: "fal-ai/nano-banana-pro",
+          },
+        },
+      },
+    });
+  });
+
+  it("图片生成命令已同步会话模型时仍应保留编排 provider_config", () => {
+    const op = buildUserInputSubmitOp({
+      content: "@Nanobanana Pro 生成一张广州塔春天照片",
+      images: [],
+      sessionId: "session-image-2",
+      eventName: "aster_stream_image_synced",
+      requestMetadata: {
+        harness: {
+          image_command_intent: {
+            image_task: {
+              prompt: "一张广州塔春天照片",
+              provider_id: "fal",
+              model: "fal-ai/nano-banana-pro",
+              runtime_contract: {
+                contract_key: "image_generation",
+                routing_slot: "image_generation_model",
+              },
+            },
+          },
+        },
+      },
+      executionRuntime: {
+        session_id: "session-image-2",
+        source: "runtime_snapshot",
+        provider_selector: "deepseek",
+        model_name: "deepseek-v4-pro",
+        execution_strategy: "react",
+      },
+      syncedRecentPreferences: null,
+      syncedSessionModelPreference: {
+        providerType: "deepseek",
+        model: "deepseek-v4-pro",
+      },
+      syncedExecutionStrategy: null,
+      effectiveExecutionStrategy: "react",
+      effectiveAccessMode: "current",
+      effectiveProviderType: "deepseek",
+      effectiveModel: "deepseek-v4-pro",
+    });
+
+    expect(op.preferences?.providerConfig).toEqual({
+      provider_id: "deepseek",
+      provider_name: "deepseek",
+      model_name: "deepseek-v4-pro",
+    });
     expect(op.preferences?.providerPreference).toBeUndefined();
     expect(op.preferences?.modelPreference).toBeUndefined();
+
+    const request = createSubmitTurnRequestFromAgentOp(op);
+    expect(request.turn_config?.provider_config).toEqual({
+      provider_id: "deepseek",
+      provider_name: "deepseek",
+      model_name: "deepseek-v4-pro",
+    });
+    expect(request.turn_config?.provider_preference).toBeUndefined();
+    expect(request.turn_config?.model_preference).toBeUndefined();
   });
 
   it("应同时透传显式搜索开关和搜索模式到 turn_config", () => {

@@ -481,6 +481,8 @@ describe("i18n unused key scan", () => {
       "agentChat.agentUiProjection.eventType.task.updated": "Task updated",
     });
     writeResource(root, "zh-CN", "workspace", {
+      "workspace.articleWorkspace.action.revise": "改写",
+      "workspace.articleWorkspace.actionPrompt.revise": "请改写",
       "workspace.document.editor.slashCommand.items.heading1.description":
         "Heading description",
       "workspace.document.editor.slashCommand.items.heading1.title": "Heading",
@@ -510,6 +512,14 @@ describe("i18n unused key scan", () => {
         namespace: "agentTeamWorkspace",
       },
       {
+        key: "workspace.articleWorkspace.action.revise",
+        namespace: "workspace",
+      },
+      {
+        key: "workspace.articleWorkspace.actionPrompt.revise",
+        namespace: "workspace",
+      },
+      {
         key: "workspace.document.editor.slashCommand.items.heading1.description",
         namespace: "workspace",
       },
@@ -525,17 +535,17 @@ describe("i18n unused key scan", () => {
     expect(result.unusedKeys).toEqual([]);
     expect(result.namespaceSummaries).toEqual([
       expect.objectContaining({
+        namespace: "workspace",
+        resourceKeyCount: 5,
+        referencedKeyCount: 0,
+        protectedKeyCount: 5,
+        unusedKeyCount: 0,
+      }),
+      expect.objectContaining({
         namespace: "agentTeamWorkspace",
         resourceKeyCount: 4,
         referencedKeyCount: 0,
         protectedKeyCount: 4,
-        unusedKeyCount: 0,
-      }),
-      expect.objectContaining({
-        namespace: "workspace",
-        resourceKeyCount: 3,
-        referencedKeyCount: 0,
-        protectedKeyCount: 3,
         unusedKeyCount: 0,
       }),
     ]);

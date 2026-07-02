@@ -1,8 +1,7 @@
 use crate::ExecutionRequest;
 use lime_agent::tools::{
-    add_skill_tool_session_allowed_capabilities, clear_skill_tool_session_access,
-    set_skill_tool_session_allowed_skill_sources, set_skill_tool_session_allowed_skills,
-    SkillToolSessionSkillSource,
+    clear_skill_tool_session_access, set_skill_tool_session_allowed_skill_sources,
+    set_skill_tool_session_allowed_skills, SkillToolSessionSkillSource,
 };
 use serde_json::{Map, Value};
 use std::path::{Component, Path, PathBuf};
@@ -10,8 +9,6 @@ use std::path::{Component, Path, PathBuf};
 const ENABLE_SOURCE_MANUAL_SESSION: &str = "manual_session_enable";
 const ENABLE_APPROVAL_MANUAL: &str = "manual";
 const MAX_PERMISSION_SUMMARY_ITEMS: usize = 8;
-const IMAGE_GENERATION_CAPABILITY: &str = "image_generation";
-const IMAGE_GENERATE_SKILL_NAME: &str = "image_generate";
 
 pub(super) struct SkillRuntimeEnableGuard {
     session_id: String,
@@ -33,17 +30,10 @@ pub(super) fn apply_workspace_skill_runtime_enable(
     if !sources.is_empty() {
         set_skill_tool_session_allowed_skill_sources(session_id, sources);
     } else {
-        let skill_names = selected_agent_skill_names_from_request(request)
-            .into_iter()
-            .filter(|skill_name| !is_image_generation_compat_skill(skill_name))
-            .collect::<Vec<_>>();
+        let skill_names = selected_agent_skill_names_from_request(request);
         if !skill_names.is_empty() {
             set_skill_tool_session_allowed_skills(session_id, skill_names);
         }
-    }
-    let turn_capabilities = turn_scoped_capabilities_from_request(request);
-    if !turn_capabilities.is_empty() {
-        add_skill_tool_session_allowed_capabilities(session_id, turn_capabilities);
     }
 
     guard
@@ -77,112 +67,6 @@ pub(super) fn workspace_skill_runtime_enable_sources(
         .find_map(workspace_skill_runtime_enable_value)
         .and_then(parse_workspace_skill_runtime_enable)
         .unwrap_or_default()
-}
-
-fn turn_scoped_capabilities_from_request(request: &ExecutionRequest) -> Vec<&'static str> {
-    let mut capabilities = Vec::new();
-    for metadata in request_metadata_values(request) {
-        if metadata_has_image_generation_launch(metadata) {
-            push_unique_capability(&mut capabilities, IMAGE_GENERATION_CAPABILITY);
-        }
-    }
-    capabilities
-}
-
-fn push_unique_capability(capabilities: &mut Vec<&'static str>, capability: &'static str) {
-    if !capabilities.contains(&capability) {
-        capabilities.push(capability);
-    }
-}
-
-fn is_image_generation_compat_skill(skill_name: &str) -> bool {
-    skill_name
-        .trim()
-        .trim_start_matches('/')
-        .rsplit(':')
-        .next()
-        .unwrap_or(skill_name)
-        .trim()
-        .eq_ignore_ascii_case(IMAGE_GENERATE_SKILL_NAME)
-}
-
-fn metadata_has_image_generation_launch(metadata: &Value) -> bool {
-    let Some(launch) = image_skill_launch_value(metadata) else {
-        return false;
-    };
-    image_launch_declares_image_generation(launch)
-}
-
-fn image_skill_launch_value(metadata: &Value) -> Option<&Value> {
-    metadata
-        .pointer("/harness/image_skill_launch")
-        .or_else(|| metadata.pointer("/harness/imageSkillLaunch"))
-        .or_else(|| metadata.get("image_skill_launch"))
-        .or_else(|| metadata.get("imageSkillLaunch"))
-}
-
-fn image_launch_declares_image_generation(launch: &Value) -> bool {
-    launch
-        .get("skill_name")
-        .or_else(|| launch.get("skillName"))
-        .and_then(Value::as_str)
-        .is_some_and(is_image_generation_compat_skill)
-        && value_declares_image_generation(launch, 0)
-}
-
-fn value_declares_image_generation(value: &Value, depth: usize) -> bool {
-    if depth > 8 {
-        return false;
-    }
-    match value {
-        Value::Object(object) => {
-            for key in [
-                "modality_contract_key",
-                "modalityContractKey",
-                "contract_key",
-                "contractKey",
-                "required_capability",
-                "requiredCapability",
-                "capability",
-            ] {
-                if object
-                    .get(key)
-                    .and_then(Value::as_str)
-                    .is_some_and(|value| value.trim() == IMAGE_GENERATION_CAPABILITY)
-                {
-                    return true;
-                }
-            }
-            for key in [
-                "required_capabilities",
-                "requiredCapabilities",
-                "capabilities",
-            ] {
-                if object
-                    .get(key)
-                    .is_some_and(string_array_contains_image_generation)
-                {
-                    return true;
-                }
-            }
-            object
-                .values()
-                .any(|nested| value_declares_image_generation(nested, depth + 1))
-        }
-        Value::Array(items) => items
-            .iter()
-            .any(|nested| value_declares_image_generation(nested, depth + 1)),
-        _ => false,
-    }
-}
-
-fn string_array_contains_image_generation(value: &Value) -> bool {
-    value.as_array().is_some_and(|items| {
-        items.iter().any(|item| {
-            item.as_str()
-                .is_some_and(|value| value.trim() == IMAGE_GENERATION_CAPABILITY)
-        })
-    })
 }
 
 pub(super) fn request_metadata_values(request: &ExecutionRequest) -> Vec<&Value> {
@@ -604,94 +488,6 @@ mod tests {
             )
             .await;
         assert_eq!(after_drop.behavior, PermissionBehavior::Deny);
-    }
-
-    #[tokio::test]
-    async fn image_skill_launch_uses_turn_capability_without_opening_skill_allowlist() {
-        let session_id = "app-server-image-generation-capability-session";
-        let request = request_with_metadata(json!({
-            "harness": {
-                "allow_model_skills": true,
-                "image_skill_launch": {
-                    "skill_name": "image_generate",
-                    "kind": "image_task",
-                    "image_task": {
-                        "prompt": "春日咖啡馆插画",
-                        "modality_contract_key": "image_generation",
-                        "required_capabilities": [
-                            "text_generation",
-                            "image_generation"
-                        ],
-                        "routing_slot": "image_generation_model",
-                        "runtime_contract": {
-                            "contract_key": "image_generation",
-                            "modality": "image",
-                            "required_capabilities": [
-                                "text_generation",
-                                "image_generation"
-                            ],
-                            "routing_slot": "image_generation_model"
-                        }
-                    }
-                }
-            }
-        }));
-        let guard = apply_workspace_skill_runtime_enable(&request, session_id);
-        let tool = LimeSkillTool::new();
-
-        let image_allowed = tool
-            .check_permissions(
-                &json!({ "skill": "image_generate" }),
-                &permission_context(session_id),
-            )
-            .await;
-        let research_denied = tool
-            .check_permissions(
-                &json!({ "skill": "research" }),
-                &permission_context(session_id),
-            )
-            .await;
-
-        assert_eq!(image_allowed.behavior, PermissionBehavior::Allow);
-        assert_eq!(research_denied.behavior, PermissionBehavior::Deny);
-
-        drop(guard);
-
-        let after_drop = tool
-            .check_permissions(
-                &json!({ "skill": "image_generate" }),
-                &permission_context(session_id),
-            )
-            .await;
-        assert_eq!(after_drop.behavior, PermissionBehavior::Deny);
-    }
-
-    #[tokio::test]
-    async fn image_skill_launch_without_contract_keeps_skill_tool_fail_closed() {
-        let session_id = "app-server-image-generation-missing-contract-session";
-        let request = request_with_metadata(json!({
-            "harness": {
-                "allow_model_skills": true,
-                "image_skill_launch": {
-                    "skill_name": "image_generate",
-                    "kind": "image_task",
-                    "image_task": {
-                        "prompt": "缺少合同的图片任务"
-                    }
-                }
-            }
-        }));
-        let _guard = apply_workspace_skill_runtime_enable(&request, session_id);
-        let tool = LimeSkillTool::new();
-
-        let result = tool
-            .check_permissions(
-                &json!({ "skill": "image_generate" }),
-                &permission_context(session_id),
-            )
-            .await;
-
-        assert_eq!(result.behavior, PermissionBehavior::Deny);
     }
 
     #[tokio::test]

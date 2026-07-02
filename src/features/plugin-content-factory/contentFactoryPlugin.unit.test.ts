@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import contentFactoryFixture from "@/features/agent-app/testing/fixtures/content-factory-app.json";
 import {
   buildContentFactoryPluginDogfoodContract,
   CONTENT_FACTORY_PLUGIN_ENTRY_KEY,
@@ -7,8 +8,10 @@ import {
 } from "./contentFactoryPlugin";
 
 describe("contentFactoryPlugin", () => {
+  const dogfoodParams = { manifest: contentFactoryFixture };
+
   it("应把内容工厂 dogfood 固定为插件 contract，而不是旧独立应用入口", () => {
-    const dogfood = buildContentFactoryPluginDogfoodContract();
+    const dogfood = buildContentFactoryPluginDogfoodContract(dogfoodParams);
 
     expect(dogfood.contract).toMatchObject({
       id: CONTENT_FACTORY_PLUGIN_ID,
@@ -54,7 +57,7 @@ describe("contentFactoryPlugin", () => {
   });
 
   it("应声明内容工厂 MVP 需要的 host builtin 产物 renderer", () => {
-    const dogfood = buildContentFactoryPluginDogfoodContract();
+    const dogfood = buildContentFactoryPluginDogfoodContract(dogfoodParams);
 
     expect(dogfood.contract.artifactRenderers).toEqual(
       expect.arrayContaining([
@@ -89,7 +92,7 @@ describe("contentFactoryPlugin", () => {
   });
 
   it("应生成可显式 @ 激活的 catalog 与可激活 registry", () => {
-    const dogfood = buildContentFactoryPluginDogfoodContract();
+    const dogfood = buildContentFactoryPluginDogfoodContract(dogfoodParams);
 
     expect(dogfood.registryItem).toMatchObject({
       pluginId: CONTENT_FACTORY_PLUGIN_ID,
@@ -112,7 +115,8 @@ describe("contentFactoryPlugin", () => {
   });
 
   it("dogfood catalog 应从 manifest aliases 提供写文章入口", () => {
-    const { activationCatalog: catalog } = buildContentFactoryPluginDogfoodContract();
+    const { activationCatalog: catalog } =
+      buildContentFactoryPluginDogfoodContract(dogfoodParams);
 
     expect(catalog.entries).toEqual(
       expect.arrayContaining([

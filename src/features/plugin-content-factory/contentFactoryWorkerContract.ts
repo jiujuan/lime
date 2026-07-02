@@ -1,4 +1,3 @@
-import contentFactoryFixture from "@/features/agent-app/fixtures/content-factory-app.json";
 import { CONTENT_FACTORY_WORKSPACE_PATCH_KIND } from "./contentFactoryWorkspacePatch";
 import {
   buildContentFactoryDeliveryParts,
@@ -8,12 +7,30 @@ import {
   buildContentFactoryPluginContract,
   CONTENT_FACTORY_PLUGIN_ID,
 } from "./contentFactoryPlugin";
+import type { PluginContract } from "@/features/plugin";
 
 export const CONTENT_FACTORY_WORKER_REQUEST_SCHEMA =
   "content-factory.worker-request.v1";
 export const CONTENT_FACTORY_WORKER_RUNTIME_SCHEMA =
   "content-factory.worker-runtime.v1";
 export const CONTENT_FACTORY_ARTICLE_WORKSPACE_SCHEMA = "article-workspace.v1";
+
+export interface ContentFactoryWorkerWorkflowContext {
+  taskKind: string;
+  workflowKey: string;
+  subagents: string[];
+  skillRefs: string[];
+  cliRefs: string[];
+  connectorRefs: string[];
+  hookPolicy: Record<string, string[]> | null;
+  orchestration: Array<{
+    id: string;
+    title: string | null;
+    subagent: string | null;
+    skillRefs: string[];
+    expectedOutput: string | null;
+  }>;
+}
 
 export interface ContentFactoryWorkerRuntimeContract {
   schemaVersion: typeof CONTENT_FACTORY_WORKER_RUNTIME_SCHEMA;
@@ -32,6 +49,7 @@ export interface ContentFactoryWorkerRuntimeContract {
     objectKinds: string[];
     requiredObjectKinds: string[];
   };
+  workflowContexts: ContentFactoryWorkerWorkflowContext[];
   blockerCodes: string[];
 }
 
@@ -46,6 +64,13 @@ export interface ContentFactoryWorkerRequest {
   prompt: string;
   actionKey: string | null;
   sourceObjectRef: Record<string, unknown> | null;
+  workflowKey?: string;
+  subagents?: string[];
+  skillRefs?: string[];
+  cliRefs?: string[];
+  connectorRefs?: string[];
+  hookPolicy?: Record<string, string[]> | null;
+  orchestration?: ContentFactoryWorkerWorkflowContext["orchestration"];
   expectedOutput: ContentFactoryWorkerRuntimeContract["expectedOutput"];
   runtime: {
     workerEntrypoint: string;
@@ -67,6 +92,11 @@ export interface BuildContentFactoryWorkerRequestParams {
   sourceObjectRef?: Record<string, unknown> | null;
   requestedAt?: string | null;
   runtimeContract?: ContentFactoryWorkerRuntimeContract;
+}
+
+export interface BuildContentFactoryWorkerRuntimeContractParams {
+  manifest?: unknown;
+  pluginContract?: PluginContract;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -120,11 +150,58 @@ function buildExpectedOutput(
   };
 }
 
-export function buildContentFactoryWorkerRuntimeContract(): ContentFactoryWorkerRuntimeContract {
-  const manifest = asRecord(contentFactoryFixture) ?? {};
-  const runtimePackage = asRecord(manifest.runtimePackage);
+function buildWorkflowContexts(
+  contract: PluginContract | null,
+): ContentFactoryWorkerWorkflowContext[] {
+  if (!contract) {
+    return [];
+  }
+  return contract.workflows
+    .filter((workflow) => workflow.taskKind)
+    .map((workflow) => {
+      const workflowSteps = workflow.steps ?? [];
+      const subagents = workflowSteps
+        .map((step) => normalizeRequestString(step.subagent))
+        .filter((value): value is string => Boolean(value));
+      const skillRefs = Array.from(
+        new Set(workflowSteps.flatMap((step) => step.skillRefs ?? [])),
+      );
+      const hookPolicy =
+        workflow.hookPolicy && Object.keys(workflow.hookPolicy).length > 0
+          ? Object.fromEntries(
+              Object.entries(workflow.hookPolicy).map(([eventName, refs]) => [
+                eventName,
+                [...refs],
+              ]),
+            )
+          : null;
+      return {
+        taskKind: workflow.taskKind!,
+        workflowKey: workflow.key,
+        subagents,
+        skillRefs,
+        cliRefs: [...(workflow.cliRefs ?? [])],
+        connectorRefs: [...(workflow.connectorRefs ?? [])],
+        hookPolicy,
+        orchestration: workflowSteps.map((step) => ({
+          id: step.id,
+          title: normalizeRequestString(step.title),
+          subagent: normalizeRequestString(step.subagent),
+          skillRefs: [...(step.skillRefs ?? [])],
+          expectedOutput: normalizeRequestString(step.expectedOutput),
+        })),
+      };
+    });
+}
+
+export function buildContentFactoryWorkerRuntimeContract({
+  manifest: manifestSource,
+  pluginContract,
+}: BuildContentFactoryWorkerRuntimeContractParams = {}): ContentFactoryWorkerRuntimeContract {
+  const manifest = asRecord(manifestSource);
+  const runtimePackage = asRecord(manifest?.runtimePackage);
   const runtimePackageWorker = asRecord(runtimePackage?.worker);
-  const agentRuntime = asRecord(manifest.agentRuntime);
+  const agentRuntime = asRecord(manifest?.agentRuntime);
   const agentRuntimeWorker = asRecord(agentRuntime?.worker);
   const taskKinds = readTasks(agentRuntime);
   const workerEntrypoint = readString(
@@ -150,10 +227,15 @@ export function buildContentFactoryWorkerRuntimeContract(): ContentFactoryWorker
   const directFilesystemAccess = readBoolean(
     agentRuntimeWorker?.directFilesystemAccess,
   );
-  const parts = buildContentFactoryDeliveryParts(
-    buildContentFactoryPluginContract(),
-  );
+  const contract =
+    pluginContract ??
+    (manifestSource
+      ? buildContentFactoryPluginContract({ manifest: manifestSource })
+      : null);
+  const parts = contract ? buildContentFactoryDeliveryParts(contract) : [];
+  const workflowContexts = buildWorkflowContexts(contract);
   const blockerCodes = [
+    ...(manifest ? [] : ["TASK_RUNTIME_MANIFEST_MISSING"]),
     ...(workerEntrypoint ? [] : ["TASK_RUNTIME_WORKER_ENTRYPOINT_MISSING"]),
     ...(taskKinds.length > 0 ? [] : ["TASK_RUNTIME_TASKS_MISSING"]),
     ...(outputArtifactKind === CONTENT_FACTORY_WORKSPACE_PATCH_KIND
@@ -183,6 +265,7 @@ export function buildContentFactoryWorkerRuntimeContract(): ContentFactoryWorker
     directProviderAccess,
     directFilesystemAccess,
     expectedOutput: buildExpectedOutput(parts),
+    workflowContexts,
     blockerCodes,
   };
 }
@@ -224,6 +307,10 @@ export function buildContentFactoryWorkerRequest({
   ) {
     return null;
   }
+  const workflowContext =
+    runtimeContract.workflowContexts.find(
+      (context) => context.taskKind === normalizedTaskKind,
+    ) ?? null;
 
   return {
     schemaVersion: CONTENT_FACTORY_WORKER_REQUEST_SCHEMA,
@@ -236,6 +323,29 @@ export function buildContentFactoryWorkerRequest({
     prompt: normalizedPrompt,
     actionKey: normalizeRequestString(actionKey),
     sourceObjectRef: sourceObjectRef ? { ...sourceObjectRef } : null,
+    ...(workflowContext
+      ? {
+          workflowKey: workflowContext.workflowKey,
+          subagents: [...workflowContext.subagents],
+          skillRefs: [...workflowContext.skillRefs],
+          cliRefs: [...workflowContext.cliRefs],
+          connectorRefs: [...workflowContext.connectorRefs],
+          hookPolicy: workflowContext.hookPolicy
+            ? Object.fromEntries(
+                Object.entries(workflowContext.hookPolicy).map(
+                  ([eventName, refs]) => [eventName, [...refs]],
+                ),
+              )
+            : null,
+          orchestration: workflowContext.orchestration.map((step) => ({
+            id: step.id,
+            title: step.title,
+            subagent: step.subagent,
+            skillRefs: [...step.skillRefs],
+            expectedOutput: step.expectedOutput,
+          })),
+        }
+      : {}),
     expectedOutput: runtimeContract.expectedOutput,
     runtime: {
       workerEntrypoint: runtimeContract.workerEntrypoint,

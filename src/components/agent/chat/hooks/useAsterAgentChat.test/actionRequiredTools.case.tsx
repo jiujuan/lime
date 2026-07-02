@@ -1,10 +1,5 @@
 import { act } from "react";
-import {
-  describe,
-  expect,
-  it,
-  vi,
-} from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   captureTurnStream,
   completedTurn,
@@ -536,6 +531,65 @@ describe("useAsterAgentChat action_required 渲染链路 - tools / artifacts", (
           source: "artifact_snapshot",
         }),
       });
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("workspace patch artifact_snapshot 缺 inline content 时应从 metadata 回填内容", async () => {
+    const workspaceId = "ws-artifact-snapshot-workspace-patch";
+    const onWriteFile = vi.fn();
+    seedSession(workspaceId, "session-artifact-snapshot-workspace-patch");
+    const harness = mountHook(workspaceId, { onWriteFile });
+    const stream = captureTurnStream();
+
+    try {
+      await flushEffects();
+
+      await act(async () => {
+        await harness
+          .getValue()
+          .sendMessage("生成文章", [], false, false, false, "react");
+      });
+
+      act(() => {
+        stream.emit({
+          type: "artifact_snapshot",
+          artifact: {
+            artifactId: "workspace-patch-1",
+            filePath: ".lime/artifacts/article-workspace/workspace-patch.json",
+            metadata: {
+              complete: false,
+              workspacePatch: {
+                schemaVersion: "article-workspace.v1",
+                objects: [
+                  {
+                    ref: { kind: "articleDraft", id: "article-1" },
+                    source: {
+                      documentText: "# 学习 Golang\n\n第一段正在生成。",
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        });
+      });
+
+      const assistantMessage = [...harness.getValue().messages]
+        .reverse()
+        .find((msg) => msg.role === "assistant");
+      const content = assistantMessage?.artifacts?.[0]?.content ?? "";
+
+      expect(content).toContain("学习 Golang");
+      expect(onWriteFile).toHaveBeenCalledWith(
+        expect.stringContaining("学习 Golang"),
+        ".lime/artifacts/article-workspace/workspace-patch.json",
+        expect.objectContaining({
+          source: "artifact_snapshot",
+          status: "streaming",
+        }),
+      );
     } finally {
       harness.unmount();
     }

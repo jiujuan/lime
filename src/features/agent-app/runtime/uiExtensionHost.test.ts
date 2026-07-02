@@ -26,7 +26,10 @@ function buildPreviewWithUiRuntime() {
 describe("UiExtensionHost", () => {
   it("关闭 uiRuntimeEnabled 时应拒绝挂载 UI entry", () => {
     const profile = buildAdapterCapabilityProfile({ realAdapterEnabled: true });
-    const preview = buildInstalledAppPreview({ profile });
+    const preview = buildInstalledAppPreview({
+      fixture: buildContentFactoryUiRuntimeTestManifest(),
+      profile,
+    });
     const host = new UiExtensionHost({
       preview,
       flags: {

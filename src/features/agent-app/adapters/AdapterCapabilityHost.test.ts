@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import contentFactoryFixture from "../testing/fixtures/content-factory-app.json";
 import { buildInstalledAppPreview } from "../install/installedAppPreview";
 import { uninstallApp } from "../install/uninstallApp";
 import { buildWorkflowRuntimeCapabilityProfile } from "../runtime/workflowRuntimeCapabilityProfile";
@@ -9,6 +10,7 @@ const CONTENT_FACTORY_ENTRY_KEY = "content_factory";
 
 function buildAdapterPreview() {
   return buildInstalledAppPreview({
+    fixture: contentFactoryFixture,
     profile: buildWorkflowRuntimeCapabilityProfile({
       realAdapterEnabled: true,
     }),

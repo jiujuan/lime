@@ -256,6 +256,45 @@ describe("appServerReadModelProjection", () => {
     ]);
   });
 
+  it("应丢弃 detail.thread_read 的 workflow facts", () => {
+    const result = projectAppServerSessionReadToThreadReadModel(
+      sessionRead({
+        detail: {
+          thread_read: {
+            thread_id: "thread-1",
+            status: "completed",
+            workflow_runs: [
+              {
+                workflow_run_id: "task-article:workflow",
+                workflow_key: "content_article_workflow",
+                status: "completed",
+                steps: [
+                  {
+                    workflow_run_id: "task-article:workflow",
+                    step_id: "research",
+                    status: "completed",
+                  },
+                ],
+              },
+            ],
+            workflow_steps: [
+              {
+                workflow_run_id: "task-article:workflow",
+                step_id: "research",
+                status: "completed",
+              },
+            ],
+          },
+        },
+      }),
+    );
+
+    expect(result.workflow_runs).toBeUndefined();
+    expect(result.workflowRuns).toBeUndefined();
+    expect(result.workflow_steps).toBeUndefined();
+    expect(result.workflowSteps).toBeUndefined();
+  });
+
   it("应把 session business object metadata 投影到 thread read model", () => {
     const result = projectAppServerSessionReadToThreadReadModel(
       sessionRead({

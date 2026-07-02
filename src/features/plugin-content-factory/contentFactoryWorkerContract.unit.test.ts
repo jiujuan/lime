@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
 import { describe, expect, it } from "vitest";
-import contentFactoryFixture from "@/features/agent-app/fixtures/content-factory-app.json";
+import contentFactoryFixture from "@/features/agent-app/testing/fixtures/content-factory-app.json";
 import {
   buildContentFactoryWorkerRequest,
   buildContentFactoryWorkerRuntimeContract,
@@ -19,7 +19,13 @@ import {
 } from "./index";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const fixtureRoot = resolve(repoRoot, "src/features/agent-app/fixtures");
+const fixtureRoot = resolve(repoRoot, "src/features/agent-app/testing/fixtures");
+
+function buildFixtureWorkerRuntimeContract() {
+  return buildContentFactoryWorkerRuntimeContract({
+    manifest: contentFactoryFixture,
+  });
+}
 
 function resolveFixturePath(relativePath: string | null): string {
   if (!relativePath) {
@@ -28,11 +34,30 @@ function resolveFixturePath(relativePath: string | null): string {
   return resolve(fixtureRoot, relativePath.replace(/^\.\//, ""));
 }
 
+function parseWorkerStdout(stdout: string): {
+  events: Array<Record<string, unknown>>;
+  response: Record<string, unknown>;
+} {
+  const values = stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+  const response = values.at(-1);
+  if (!response) {
+    throw new Error("worker stdout is empty");
+  }
+  return {
+    events: values.slice(0, -1),
+    response,
+  };
+}
+
 describe("contentFactoryWorkerContract", () => {
   it("应从内容工厂 manifest 投影 worker runtime 契约", () => {
-    const contract = buildContentFactoryWorkerRuntimeContract();
+    const contract = buildFixtureWorkerRuntimeContract();
 
-    expect(contract).toEqual({
+    expect(contract).toMatchObject({
       schemaVersion: CONTENT_FACTORY_WORKER_RUNTIME_SCHEMA,
       appId: CONTENT_FACTORY_PLUGIN_ID,
       enabled: true,
@@ -68,11 +93,42 @@ describe("contentFactoryWorkerContract", () => {
           "deliveryChecklist",
         ],
       },
+      workflowContexts: [
+        {
+          taskKind: "content.article.generate",
+          workflowKey: "content_article_workflow",
+          subagents: [
+            "content-researcher",
+            "content-strategist",
+            "article-writer",
+            "copy-editor",
+            "image-planner",
+          ],
+          skillRefs: [
+            "article-research",
+            "article-strategy",
+            "article-writing",
+            "article-editing",
+            "article-image-plan",
+          ],
+          cliRefs: ["content-factory"],
+          connectorRefs: [
+            "lime-knowledge",
+            "web-research",
+            "media-generation",
+          ],
+          hookPolicy: {
+            prompt: ["prompt-submit"],
+            task: ["task-complete"],
+          },
+        },
+      ],
       blockerCodes: [],
     });
   });
 
   it("应生成 action executor 可消费的 worker 请求骨架", () => {
+    const contract = buildFixtureWorkerRuntimeContract();
     const request = buildContentFactoryWorkerRequest({
       sessionId: "session-content-factory",
       workspaceId: "workspace-main",
@@ -88,6 +144,7 @@ describe("contentFactoryWorkerContract", () => {
         sessionId: "session-content-factory",
       },
       requestedAt: "2026-06-26T00:00:00.000Z",
+      runtimeContract: contract,
     });
 
     expect(request).toMatchObject({
@@ -118,7 +175,7 @@ describe("contentFactoryWorkerContract", () => {
   });
 
   it("manifest 声明的 worker 包文件应真实落盘并与 runtime contract 对齐", () => {
-    const contract = buildContentFactoryWorkerRuntimeContract();
+    const contract = buildFixtureWorkerRuntimeContract();
     const runtimeContractPath = resolveFixturePath(contract.contractPath);
     const sampleRequestPath = resolveFixturePath(contract.sampleRequestPath);
     const workerEntrypointPath = resolveFixturePath(contract.workerEntrypoint);
@@ -127,59 +184,74 @@ describe("contentFactoryWorkerContract", () => {
     ) as Record<string, unknown>;
     const sampleRequest = JSON.parse(
       readFileSync(sampleRequestPath, "utf8"),
-    ) as ReturnType<typeof buildContentFactoryWorkerRequest>;
+    ) as Record<string, unknown>;
 
     expect(existsSync(workerEntrypointPath)).toBe(true);
     expect(runtimeContract).toMatchObject({
-      schemaVersion: CONTENT_FACTORY_WORKER_RUNTIME_SCHEMA,
-      appId: CONTENT_FACTORY_PLUGIN_ID,
-      worker: {
-        entrypoint: contentFactoryFixture.runtimePackage.worker.entrypoint,
-        directProviderAccess: false,
-        directFilesystemAccess: false,
-        outputArtifactKind: CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
-      },
-      outputs: {
-        artifactKind: CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
-        articleWorkspace: {
-          schemaVersion: CONTENT_FACTORY_ARTICLE_WORKSPACE_SCHEMA,
+      agentRuntime: {
+        worker: {
+          entrypoint: contentFactoryFixture.runtimePackage.worker.entrypoint,
+          sampleRequest: contentFactoryFixture.runtimePackage.worker.sampleRequest,
+          directProviderAccess: false,
+          directFilesystemAccess: false,
+          outputArtifactKind: CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
         },
+        workflows: expect.arrayContaining([
+          expect.objectContaining({
+            key: "content_article_workflow",
+            taskKind: "content.article.generate",
+          }),
+        ]),
+        tasks: expect.arrayContaining([
+          expect.objectContaining({
+            kind: "content.article.generate",
+          }),
+        ]),
       },
     });
-    expect(sampleRequest).toEqual(
-      buildContentFactoryWorkerRequest({
-        sessionId: "session-content-factory",
-        workspaceId: "workspace-main",
-        turnId: "turn-action-1",
-        taskId: "task-image-regenerate-1",
-        taskKind: "content.image.generate",
-        prompt: "Regenerate the image set with two candidate images.",
-        actionKey: "regenerate",
-        sourceObjectRef: {
-          appId: CONTENT_FACTORY_PLUGIN_ID,
-          kind: "imageGenerationSet",
-          id: "image-set-1",
-          sessionId: "session-content-factory",
-          artifactIds: ["artifact-image-set-1"],
-        },
-        requestedAt: "2026-06-26T00:00:00.000Z",
-      }),
-    );
+    expect(sampleRequest).toMatchObject({
+      schemaVersion: CONTENT_FACTORY_WORKER_REQUEST_SCHEMA,
+      appId: CONTENT_FACTORY_PLUGIN_ID,
+      sessionId: "session-content-factory-demo",
+      workspaceId: "workspace-main",
+      turnId: "turn-demo-runtime-001",
+      taskId: "task-demo-runtime-001",
+      taskKind: "content.article.generate",
+      prompt: expect.stringContaining("Golang 学习路线"),
+      expectedOutput: {
+        artifactKind: CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
+      },
+      runtime: {
+        outputArtifactKind: CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
+        directProviderAccess: false,
+        directFilesystemAccess: false,
+      },
+      requestedAt: "2026-07-02T00:00:00.000Z",
+    });
   });
 
   it("worker 应输出可被 Article Workspace 解析的 artifact snapshot", () => {
-    const contract = buildContentFactoryWorkerRuntimeContract();
+    const contract = buildFixtureWorkerRuntimeContract();
     const workerEntrypointPath = resolveFixturePath(contract.workerEntrypoint);
     const sampleRequest = readFileSync(
       resolveFixturePath(contract.sampleRequestPath),
       "utf8",
     );
-    const response = JSON.parse(
+    const { events, response } = parseWorkerStdout(
       execFileSync("node", [workerEntrypointPath], {
         input: sampleRequest,
         encoding: "utf8",
+        maxBuffer: 8 * 1024 * 1024,
       }),
-    ) as Record<string, unknown>;
+    );
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "runtime.event",
+          eventType: "artifact.snapshot",
+        }),
+      ]),
+    );
     const artifact = Array.isArray(response.artifacts)
       ? (response.artifacts[0] as Record<string, unknown> | undefined)
       : undefined;
@@ -202,39 +274,19 @@ describe("contentFactoryWorkerContract", () => {
     });
     expect(profile).toMatchObject({
       appId: CONTENT_FACTORY_PLUGIN_ID,
-      sessionId: "session-content-factory",
+      sessionId: "session-content-factory-demo",
       selectedObjectRef: {
-        kind: "imageGenerationSet",
+        kind: "articleDraft",
       },
       layoutState: {
-        activePaneKind: "imageGrid",
+        activePaneKind: "documentCanvas",
       },
     });
     expect(profile?.objects.map((object) => object.ref.kind)).toEqual([
+      "contentBrief",
       "articleDraft",
-      "imageGenerationSet",
       "deliveryChecklist",
     ]);
-    expect(
-      profile?.objects.find(
-        (object) => object.ref.kind === "imageGenerationSet",
-      ),
-    ).toMatchObject({
-      status: "draft",
-      source: {
-        images: expect.arrayContaining([
-          expect.objectContaining({
-            prompt: expect.stringContaining("Regenerate the image set"),
-            cache: expect.objectContaining({
-              executor: "content-factory.media-cache.v1",
-            }),
-          }),
-        ]),
-        imageSlots: expect.arrayContaining([
-          expect.objectContaining({ id: "image-slot-cover" }),
-        ]),
-      },
-    });
     const article = profile?.objects.find(
       (object) => object.ref.kind === "articleDraft",
     );
@@ -328,7 +380,7 @@ describe("contentFactoryWorkerContract", () => {
   });
 
   it("写文章 worker 请求应输出完整文章结构", () => {
-    const contract = buildContentFactoryWorkerRuntimeContract();
+    const contract = buildFixtureWorkerRuntimeContract();
     const workerEntrypointPath = resolveFixturePath(contract.workerEntrypoint);
     const request = buildContentFactoryWorkerRequest({
       sessionId: "session-content-factory-article",
@@ -338,13 +390,15 @@ describe("contentFactoryWorkerContract", () => {
       taskKind: "content.article.generate",
       prompt: "写一篇关于 golang 学习的公众号文章",
       requestedAt: "2026-06-28T00:00:00.000Z",
+      runtimeContract: contract,
     });
-    const response = JSON.parse(
+    const { events, response } = parseWorkerStdout(
       execFileSync("node", [workerEntrypointPath], {
         input: JSON.stringify(request),
         encoding: "utf8",
+        maxBuffer: 8 * 1024 * 1024,
       }),
-    ) as Record<string, unknown>;
+    );
     const artifact = Array.isArray(response.artifacts)
       ? (response.artifacts[0] as Record<string, unknown> | undefined)
       : undefined;
@@ -358,7 +412,25 @@ describe("contentFactoryWorkerContract", () => {
     expect(response).toMatchObject({
       status: "completed",
       taskKind: "content.article.generate",
+      artifacts: [
+        {
+          metadata: {
+            articleWorkspaceSchema: CONTENT_FACTORY_ARTICLE_WORKSPACE_SCHEMA,
+            contentFactoryWorkspacePatch: expect.objectContaining({
+              appId: CONTENT_FACTORY_PLUGIN_ID,
+            }),
+          },
+        },
+      ],
     });
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "runtime.event",
+          eventType: "artifact.snapshot",
+        }),
+      ]),
+    );
     expect(profile).toMatchObject({
       selectedObjectRef: {
         kind: "articleDraft",
@@ -494,6 +566,7 @@ describe("contentFactoryWorkerContract", () => {
   });
 
   it("缺少必填字段、未知任务或 runtime blocker 时应 fail closed", () => {
+    const contract = buildFixtureWorkerRuntimeContract();
     expect(
       buildContentFactoryWorkerRequest({
         sessionId: "session-content-factory",
@@ -501,11 +574,22 @@ describe("contentFactoryWorkerContract", () => {
         taskId: "task-1",
         taskKind: "content.unknown",
         prompt: "生成内容",
+        runtimeContract: contract,
       }),
     ).toBeNull();
     expect(
       buildContentFactoryWorkerRequest({
         sessionId: " ",
+        turnId: "turn-1",
+        taskId: "task-1",
+        taskKind: "content.article.generate",
+        prompt: "生成内容",
+        runtimeContract: contract,
+      }),
+    ).toBeNull();
+    expect(
+      buildContentFactoryWorkerRequest({
+        sessionId: "session-content-factory",
         turnId: "turn-1",
         taskId: "task-1",
         taskKind: "content.article.generate",
@@ -520,7 +604,7 @@ describe("contentFactoryWorkerContract", () => {
         taskKind: "content.article.generate",
         prompt: "生成内容",
         runtimeContract: {
-          ...buildContentFactoryWorkerRuntimeContract(),
+          ...buildFixtureWorkerRuntimeContract(),
           blockerCodes: ["TASK_RUNTIME_DIRECT_PROVIDER_ACCESS_UNSUPPORTED"],
         },
       }),

@@ -39,6 +39,7 @@ import {
   mergeImageWorkbenchPreview,
   mergeTaskPreview,
   contentPartContainsProcess,
+  resolveImageWorkbenchHistoryAssistantIntro,
 } from "./agentChatHistoryProcess";
 import { hydrateFailedRuntimeReadModelMessage, hydrateSessionDetailMessagesFromThreadReadToolCalls } from "./agentChatHistoryReadModel";
 import { dedupeAdjacentHistoryMessages } from "./agentChatHistorySignatures";
@@ -363,12 +364,21 @@ export const hydrateSessionDetailMessages = (
       let normalizedRole =
         msg.role === "tool" ? "assistant" : (msg.role as "user" | "assistant");
       const usage = normalizeHistoryUsage(msg.usage);
-      const content = sanitizeMessageTextForDisplay(rawContent, {
+      const sanitizedRawContent = sanitizeMessageTextForDisplay(rawContent, {
         role: normalizedRole,
         hasImages: images.length > 0,
       });
+      const imageWorkbenchAssistantIntro =
+        normalizedRole === "assistant" && imageWorkbenchPreview
+          ? resolveImageWorkbenchHistoryAssistantIntro(imageWorkbenchPreview)
+          : "";
+      const content = sanitizedRawContent || imageWorkbenchAssistantIntro;
+      const displayContentParts =
+        !sanitizedRawContent && imageWorkbenchAssistantIntro
+          ? [{ type: "text" as const, text: imageWorkbenchAssistantIntro }, ...contentParts]
+          : contentParts;
       const sanitizedContentParts =
-        sanitizeContentPartsForDisplay(contentParts, {
+        sanitizeContentPartsForDisplay(displayContentParts, {
           role: normalizedRole,
           hasImages: images.length > 0,
         }) || [];

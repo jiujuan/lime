@@ -293,7 +293,7 @@ export function AgentAppsPage({
       buildAppCenterItems({
         installed,
         cloudApps,
-        catalogSource: cloudCatalog?.source ?? "seeded",
+        catalogSource: cloudCatalog?.source ?? "unknown",
         convertLocalFileSrc,
         hostLifecycleSnapshots: hostLifecycleSnapshots ?? undefined,
       }),
@@ -522,7 +522,7 @@ export function AgentAppsPage({
         app,
         profile,
         installed,
-        catalogSource: cloudCatalog?.source ?? "seeded",
+        catalogSource: cloudCatalog?.source ?? "unknown",
       }),
     );
     if (!review) {

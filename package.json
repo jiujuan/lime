@@ -5,7 +5,7 @@
   "workspaces": [
     "packages/*"
   ],
-  "version": "1.85.0",
+  "version": "1.86.0",
   "description": "AI content workspace for Chinese creators: desktop writing, research, prompt management, knowledge base, and multi-model workflows.",
   "keywords": [
     "ai",
@@ -132,6 +132,7 @@
     "agent-qc:qcloop-preflight": "node scripts/agent-qc/qcloop-preflight.mjs",
     "agent-qc:export-evidence": "node scripts/agent-qc/export-evidence.mjs",
     "agent-qc:release-summary": "node scripts/agent-qc/release-summary.mjs",
+    "agent-qc:verify-local-gate": "node scripts/agent-qc/verify-local-gate.mjs",
     "agent-qc:audit": "node scripts/agent-qc/completion-audit.mjs",
     "lint:rust": "cargo clippy --manifest-path \"lime-rs/Cargo.toml\"",
     "i18n:check": "npm run detect-translations",
@@ -241,6 +242,11 @@
     "agent-app:connector-production-preflight": "node scripts/agent-app/connector-production-preflight.mjs",
     "agent-app:connector-production-delivery-gate": "node scripts/agent-app/connector-production-delivery-gate.mjs",
     "agent-app:connector-production-webhook-delivery": "node scripts/agent-app/connector-production-webhook-delivery.mjs",
+    "smoke:content-factory-package": "node scripts/agent-app/content-factory-package-smoke.mjs",
+    "smoke:content-factory-current-turn": "node scripts/agent-app/content-factory-current-turn-smoke.mjs",
+    "smoke:content-factory-current-turn:host-generation": "node scripts/agent-app/content-factory-current-turn-smoke.mjs --host-generation-fixture",
+    "smoke:content-factory-current-turn:cloud-release": "node scripts/agent-app/content-factory-current-turn-smoke.mjs --cloud-release-fixture",
+    "smoke:content-factory-current-turn:cloud-release-host-generation": "node scripts/agent-app/content-factory-current-turn-smoke.mjs --cloud-release-fixture --host-generation-fixture",
     "smoke:agent-app-lab": "node scripts/agent-app/lab-smoke.mjs"
   },
   "dependencies": {

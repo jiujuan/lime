@@ -25,9 +25,9 @@
 | S4 P0 low-cost green | `done` | 100% | Phase A preflight 通过；8 个 P0 低成本 summaries pass；release startup 分层 summary 已补齐 |
 | S5 Scenario lane selector | `done` | 100% | 已跑通 deterministic contract、replay、workspace / GUI smoke、browser / adapter、Skill Forge、tool approval / sandbox、Claw current fixture、release startup lane |
 | S6 Supervisor policy | `done` | 80% | 使用边界已落盘；尚未接入具体 judge prompt |
-| S7 Flag differential harness | `pending` | 20% | 骨架已落盘；尚未接入 benchmark plan / compare |
+| S7 Flag differential harness | `done` | 100% | 最小样例已接入 benchmark plan / compare；Supervisor review input 与输出 schema 已固定 |
 | S8 30/60/90 路线图 | `done` | 100% | 路线图已落盘 |
-| S9 Managed Objective scene draft | `in-progress` | 20% | 已开始把 Managed Objective 收成 P1 / P2 场景草案，优先复用现有低成本入口 |
+| S9 Managed Objective scene draft | `done` | 100% | 场景草案已落盘并挂入索引和进度追踪 |
 
 ## 2. 已完成
 
@@ -136,24 +136,57 @@
 - `tool-approval-sandbox-boundary` 低成本门槛通过：`npm run smoke:agent-runtime-tool-surface`、`npm run smoke:agent-runtime-approval-sandbox -- --devbridge-denied-runtime --skip-live-runtime --output .lime/qc/runtime-approval-sandbox-denied-only-current.json`、Rust permission preflight 定向测试、`npm run test:contracts` 与 `npm run agent-qc:check` 均通过；denied-only runtime transcript 证明无 live Provider 时可在模型路由前进入权限确认，拒绝后 pending 清零且 turn canceled。
 - `claw-chat-ready-streaming` 低成本门槛通过：`npm run smoke:agent-runtime-current-fixture` 与 `npm run smoke:claw-chat-current-fixture` 均通过；本轮先修复 source-tree Electron fixture 下裸 `page.reload` 的 file URL 脆弱点，再证明默认新闻输入、图片命令、停止后继续、Plan hydrate、Skills Runtime、MCP structuredContent、Expert 与内容工厂 Article Editor 均走 current fixture 且 `liveProviderUsed=false`。
 - `release-package-startup-smoke` 低成本门槛通过：`npm run verify:app-version` 与 `npm run verify:gui-smoke` 通过；首次 smoke 暴露 `app-server` 编译阻断，current worktree 中的 orchestration-based 修正复核后，`cargo check --manifest-path "lime-rs/Cargo.toml" -p app-server` 与重跑 `verify:gui-smoke` 通过；当前仅证明 source-tree startup，不证明 installer artifact。
+- `objective-checklist` 已支持 completion audit sidecar 缺失时 fail-closed，不再以 `ENOENT` 崩溃；缺失时会输出单项 blocker，并提示先运行 `agent-qc:audit -- --format json --output .lime/qc/objective-completion-audit-current.json`。
+- `agent-qc:payload-coverage` 当前 sidecar 已刷新为 `status=ready`、`coverage=pass`、`repairGuard=pass`、`manifestP0=8`、`payloadItems=8`、`owner=pass`；只证明 ready payload 完整，不启动 qcloop。
+- 新增 `agent-qc:verify-local-gate`，可运行真实 `npm run verify:local` 并写入 `.lime/qc/verify-local-current.json` / `.md`；最新结果为 `status=fail`、`exitCode=1`，失败发生在 `i18n:unused --check`，尚未进入 lint / typecheck / Rust / GUI 层。
+- 最新 completion audit 为 `16/18`、`89%`；最新 objective checklist 为 `5/7`。
 
 缺口：
 
-- 尚未启动 qcloop 单场景 worker；当前只有本地 deterministic summary。
-- 尚未产生 official `.lime/qc/agent-qc-evidence.json`，也不应该用本次 sidecar 覆盖它。
+- 尚未产生 official `.lime/qc/agent-qc-evidence.json`；也不应该用 ready payload、partial sidecar 或 local direct pass 覆盖它。
+- `verify:local` 当前 sidecar 为 fail；失败点是当前工作树 i18n unused key 候选，不属于本轮 Agent QC 脚本主改动。
 - release artifact / installer smoke 仍未单独验证。
 
 下一刀：
 
 1. 继续保持 `budget:tight`，不默认启用 live Provider。
 2. 下一刀回到 official Evidence Pack / qcloop 批次规划，不再把 source-tree startup 误当 installer 验证。
-3. official Evidence Pack 仍等待 8/8 P0 同批次 pass。
+3. 修复或等 owner 收口当前 i18n unused key 候选后，重跑 `agent-qc:verify-local-gate -- --check`。
+4. official Evidence Pack 仍等待 8/8 P0 同批次 pass。
 
 预算：
 
 - 默认 `budget:tight`
 - 禁止 full qcloop
 - 禁止 live Provider
+
+### 3.3 Flag differential harness 最小样例
+
+状态：`in-progress`
+
+当前已有：
+
+- 已选 `Managed Objective auto continuation guard` 作为首个 baseline / candidate diff 对象。
+- baseline 复用最近 green 或稳定 sidecar，candidate 只切单个 flag。
+- `agent-qc:benchmark:plan` / `agent-qc:benchmark:compare` 已是现有入口，不需要另起平台。
+- 默认 benchmark manifest 已落到 `internal/test/agent-qc-benchmark.manifest.json`。
+- `benchmark:compare` 已输出 `scenarioDiffs[].deterministicDiff`，并能从 Managed Objective smoke sidecar 抽取 turn / objective / guard / evidence facts。
+- `benchmark:compare` 已输出 `supervisorReview.input`，schema 为 `agent-qc-supervisor-review-input-v1`。
+- Supervisor 输出 schema 已固定为 `agent-qc-supervisor-verdict-v1`，包含 `score / verdict / regressions / needsHumanReview / reason`。
+
+缺口：
+
+- 本阶段无阻断；真实 LLM judge 执行入口留作后续显式 opt-in，不作为默认 compare 行为。
+
+下一刀：
+
+1. 后续如需真实 LLM judge，再新增显式 opt-in 执行入口。
+2. 默认继续保持 `benchmark:compare` 只生成 review input，不调用 Provider。
+
+预算：
+
+- `budget:normal`
+- 先跑 deterministic diff，不默认启用 live Provider
 
 ## 4. 阻断与风险
 
@@ -185,8 +218,14 @@
 | P1 | 修 `tool-approval-sandbox-boundary` denied-only runtime transcript | `budget:tight` | `done` |
 | P1 | 给 `claw-chat-ready-streaming` 写低成本 runtime / GUI summary 示例 | `budget:tight` | `done` |
 | P1 | 给 `release-package-startup-smoke` 写 source-tree startup / release-artifact 分层 summary 示例 | `budget:tight` | `done` |
-| P2 | 把 Managed Objective 收成 Agent QC 场景草案 | `budget:normal` | `in-progress` |
-| P2 | 设计 flag differential 最小样例 | `budget:normal` | `pending` |
+| P2 | 把 Managed Objective 收成 Agent QC 场景草案 | `budget:normal` | `done` |
+| P2 | 设计 flag differential 最小样例 | `budget:normal` | `done` |
+| P2 | 接入 `benchmark:compare` deterministic diff 输出 | `budget:normal` | `done` |
+| P2 | 接入 Supervisor rubric 输入裁剪 | `budget:normal` | `done` |
+| P2 | objective checklist 缺 audit sidecar fail-closed | `budget:tight` | `done` |
+| P2 | local verify gate sidecar 脚本化 | `budget:tight` | `done` |
+| P0 | 修复当前 `i18n:unused --check` 阻断并重跑 local verify gate | `budget:normal` | `blocked` |
+| P0 | 生成 official 8/8 P0 qcloop Evidence Pack | `budget:high` | `blocked` |
 
 ## 6. 推进日志
 
@@ -207,6 +246,18 @@
 - 执行 `npm run test:contracts` 通过，形成 `command-bridge-contract` 的 deterministic 单场景证据。
 - 新增 `11-command-bridge-evidence-summary-example.md`，把本次命令结果整理成 structured evidence summary；明确它不是 official Evidence Pack，不能 gate release。
 - 生成 `.lime/qc/qcloop-command-bridge-contract-payload.json`，只验证单场景 payload 和结构化 evidence prompt 约束，不提交 qcloop job。
+- Managed Objective 场景草案已落盘并挂入索引和进度追踪，S9 从 `in-progress` 收口为 `done`。
+- 新增 flag differential harness 最小样例，选 `Managed Objective auto continuation guard` 作为首个 baseline / candidate diff 对象；S7 从 `pending` 进入 `in-progress`，下一刀是接 `benchmark:compare` 和 Supervisor rubric。
+- 新增默认 benchmark manifest `internal/test/agent-qc-benchmark.manifest.json`，`agent-qc:benchmark:plan` 现在可以输出 Managed Objective differential scenario。
+- 扩展 `agent-qc:benchmark:compare`，从 baseline / candidate sidecar 抽取 deterministic facts 并输出 `scenarioDiffs[].deterministicDiff`；新增脚本回归覆盖默认 plan、字段 diff 和 Managed Objective sidecar compare。
+- 扩展 `agent-qc:benchmark:compare` 的 Supervisor review 输出：只有 deterministic diff 非空、两侧证据完整且无法机械分类时，才生成裁剪后的 `supervisorReview.input`；输出 schema 固定为 `agent-qc-supervisor-verdict-v1`，不调用 LLM / Provider。
+- 验证通过：`npx vitest run "scripts/agent-qc/benchmark-plan.test.mjs" "scripts/agent-qc/benchmark-compare.test.mjs"`、`npm run agent-qc:benchmark:check`、`npm run governance:scripts`、`git diff --check`。`governance:scripts` 仍提示本地 ignored `scripts/__pycache__` 缓存存在，不属于本轮改动。
+- 修复 `agent-qc:objective-checklist` 在 `.lime/qc/objective-completion-audit-current.json` 缺失时的 `ENOENT` 崩溃；新增 `scripts/agent-qc/objective-checklist.test.mjs` 和 core 回归，缺 sidecar 时输出明确 incomplete blocker。
+- 新增 `agent-qc:verify-local-gate` 与 `scripts/lib/agent-qc-local-verify-gate-core.mjs`，把真实 `npm run verify:local` 的退出结果写成 `.lime/qc/verify-local-current.json` / `.md`，供 completion audit 消费。
+- 刷新 current sidecar：`objective-completion-audit-current.json/.md`、`objective-completion-checklist-current.json/.md`、`qcloop-p0-single-owner-ready-current.json`、`qcloop-p0-single-owner-ready-coverage-current.json/.md`、`verify-local-current.json/.md`。
+- 最新 `agent-qc:audit -- --check` 为 `incomplete`：`16/18`，缺 `real-qcloop-evidence` 与 `local-verify-gate`；最新 `objective-checklist -- --check` 为 `5/7`，缺 official Evidence Pack 与完整 `verify:local` pass。
+- `npm run agent-qc:verify-local-gate -- --check` 已真实运行完整本地门禁入口，但在 `i18n:unused --check` 失败；因此未关闭 `local-verify-gate`，也未进入后续 lint / typecheck / Rust / GUI smoke。
+- 本轮新增 / 触碰脚本验证通过：`npx vitest run "scripts/lib/agent-qc-objective-checklist-core.test.ts" "scripts/agent-qc/objective-checklist.test.mjs" "scripts/lib/agent-qc-local-verify-gate-core.test.mjs" "scripts/agent-qc/verify-local-gate.test.mjs" "scripts/agent-qc/benchmark-plan.test.mjs" "scripts/agent-qc/benchmark-compare.test.mjs"`、`npm run agent-qc:benchmark:check`、`npm run agent-qc:check`、`npm run governance:scripts`、相关 ESLint、`node --check` 与 `git diff --check`。
 - 执行 `npm run harness:eval` 通过：suites=3，cases=2，ready=2，invalid=0，current observability gap=0，degraded observability gap=1。
 - 执行 `npm run harness:eval:trend` 通过：sampleCount=1，delta invalid=0；明确当前只能形成 trend seed，不能判断长期退化。
 - 新增 `12-harness-replay-evidence-summary-example.md`，把 replay summary / trend seed 整理成 structured evidence summary；明确它不能替代 official Evidence Pack。

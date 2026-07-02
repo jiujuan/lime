@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "content-factory.worker-request.v1",
+  "appId": "content-factory-app",
+  "sessionId": "session-content-factory-demo",
+  "workspaceId": "workspace-main",
+  "turnId": "turn-demo-runtime-001",
+  "taskId": "task-demo-runtime-001",
+  "taskKind": "content.article.generate",
+  "prompt": "写一篇关于 Golang 学习路线的公众号文章，强调从基础语法到工程实战。",
+  "expectedOutput": {
+    "artifactKind": "content_factory.workspace_patch"
+  },
+  "runtime": {
+    "outputArtifactKind": "content_factory.workspace_patch",
+    "directProviderAccess": false,
+    "directFilesystemAccess": false
+  },
+  "requestedAt": "2026-07-02T00:00:00.000Z"
+}

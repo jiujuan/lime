@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildAgentQcObjectiveChecklist,
+  buildMissingAuditAgentQcObjectiveChecklist,
   renderAgentQcObjectiveChecklistMarkdown,
 } from "./agent-qc-objective-checklist-core.mjs";
 
@@ -122,5 +123,22 @@ describe("agent-qc-objective-checklist-core", () => {
 
     expect(markdown).toContain("Objective Completion Checklist");
     expect(markdown).toContain("Status: complete");
+  });
+
+  it("completion audit sidecar 缺失时应生成明确 blocker", () => {
+    const checklist = buildMissingAuditAgentQcObjectiveChecklist({
+      auditPath: ".lime/qc/objective-completion-audit-current.json",
+      generatedAt: "2026-05-11T00:00:00.000Z",
+    });
+
+    expect(checklist.status).toBe("incomplete");
+    expect(checklist.passedCount).toBe(0);
+    expect(checklist.totalCount).toBe(1);
+    expect(checklist.blockers[0]?.gap).toContain(
+      "缺少 completion audit sidecar",
+    );
+    expect(renderAgentQcObjectiveChecklistMarkdown(checklist)).toContain(
+      "npm run agent-qc:audit",
+    );
   });
 });

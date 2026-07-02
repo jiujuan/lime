@@ -33,8 +33,10 @@ import {
   shouldRecordAgentStreamFirstRuntimeStatus,
 } from "./agentStreamRuntimeMetricsController";
 import {
+  applyAgentStreamRuntimeStatusToMessages,
+  applyAgentStreamRuntimeStatusToThreadItems,
+  buildAgentStreamProviderTraceRuntimeStatusApplyPlan,
   buildAgentStreamRuntimeStatusApplyPlan,
-  buildAgentStreamRuntimeSummaryItemUpdate,
 } from "./agentStreamRuntimeStatusController";
 import { buildAgentStreamTextDeltaApplyPlan } from "./agentStreamTextDeltaController";
 import {
@@ -90,6 +92,10 @@ import {
   handleAgentStreamTurnFailedEvent,
   handleAgentStreamTurnStartedEvent,
 } from "./agentStreamRuntimeLifecycleEvents";
+import {
+  applyAgentStreamImageTaskCreatedEvent,
+  applyAgentStreamImageTaskPresentationGeneratedEvent,
+} from "./agentStreamImageTaskEventController";
 import type { HandleTurnStreamEventOptions } from "./agentStreamRuntimeHandlerTypes";
 import {
   bindAssistantMessageToRuntimeTurn,
@@ -352,7 +358,11 @@ export function handleTurnStreamEvent({
   };
   const upsertStructuredAgentMessageDeltaItem = (
     event: TextDeltaAgentEvent,
-    options: { shouldSyncThreadItem?: boolean; textDelta?: string } = {},
+    options: {
+      shouldSyncMessageContentPart?: boolean;
+      shouldSyncThreadItem?: boolean;
+      textDelta?: string;
+    } = {},
   ): boolean => {
     const textDelta = options.textDelta ?? event.text;
     if (!textDelta) {
@@ -433,7 +443,10 @@ export function handleTurnStreamEvent({
         ),
       );
     }
-    if (normalizeOptionalText(event.itemId)) {
+    if (
+      options.shouldSyncMessageContentPart !== false &&
+      normalizeOptionalText(event.itemId)
+    ) {
       syncAssistantAgentMessageContentPartFromThreadItem({
         assistantMsgId,
         item,
@@ -592,6 +605,18 @@ export function handleTurnStreamEvent({
     case "runtime_status":
       activateStream();
       {
+        const imageWorkflowStatus = data.status.metadata?.agentui;
+        if (
+          imageWorkflowStatus &&
+          typeof imageWorkflowStatus === "object" &&
+          !Array.isArray(imageWorkflowStatus) &&
+          (imageWorkflowStatus as Record<string, unknown>).workflow_key ===
+            "image_command_workflow" &&
+          (imageWorkflowStatus as Record<string, unknown>).status_kind ===
+            "image_task_parameters_required"
+        ) {
+          requestState.hasMeaningfulCompletionSignal = true;
+        }
         if (
           shouldRecordAgentStreamFirstRuntimeStatus({
             firstRuntimeStatusAt: requestState.firstRuntimeStatusAt,
@@ -641,31 +666,75 @@ export function handleTurnStreamEvent({
           updatedAt: new Date().toISOString(),
         });
         setThreadItems((prev) => {
-          const runtimeSummaryItem = buildAgentStreamRuntimeSummaryItemUpdate({
+          const nextItems = applyAgentStreamRuntimeStatusToThreadItems({
             activeSessionId,
             items: prev,
             pendingItemKey,
-            summaryText: runtimeStatusPlan.summaryText,
-            updatedAt: runtimeStatusPlan.updatedAt,
+            plan: runtimeStatusPlan,
           });
-          if (!runtimeSummaryItem) {
-            return prev;
-          }
-
-          return upsertThreadItemState(prev, runtimeSummaryItem);
+          return nextItems ?? prev;
         });
         setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === assistantMsgId
-              ? {
-                  ...msg,
-                  runtimeStatus: runtimeStatusPlan.normalizedStatus,
-                }
-              : msg,
-          ),
+          applyAgentStreamRuntimeStatusToMessages({
+            assistantMsgId,
+            messages: prev,
+            plan: runtimeStatusPlan,
+          }),
         );
       }
       break;
+
+    case "provider_trace": {
+      activateStream();
+      const runtimeStatusPlan =
+        buildAgentStreamProviderTraceRuntimeStatusApplyPlan({
+          executionStrategy: effectiveExecutionStrategy,
+          firstRuntimeStatusAt: requestState.firstRuntimeStatusAt,
+          stage: data.stage,
+          updatedAt: new Date().toISOString(),
+        });
+      if (runtimeStatusPlan) {
+        requestState.firstRuntimeStatusAt = Date.now();
+        const firstRuntimeStatusContext =
+          buildAgentStreamFirstRuntimeStatusMetricContext({
+            activeSessionId,
+            eventName,
+            firstEventReceivedAt: requestState.firstEventReceivedAt,
+            firstRuntimeStatusAt: requestState.firstRuntimeStatusAt,
+            requestStartedAt: requestState.requestStartedAt,
+            statusPhase: runtimeStatusPlan.normalizedStatus.phase,
+            statusTitle: runtimeStatusPlan.normalizedStatus.title,
+          });
+        recordAgentStreamPerformanceMetric(
+          "agentStream.firstRuntimeStatus",
+          requestState.performanceTrace,
+          firstRuntimeStatusContext,
+        );
+        logAgentDebug(
+          "AgentStream",
+          "firstRuntimeStatus",
+          firstRuntimeStatusContext,
+        );
+
+        setThreadItems((prev) => {
+          const nextItems = applyAgentStreamRuntimeStatusToThreadItems({
+            activeSessionId,
+            items: prev,
+            pendingItemKey,
+            plan: runtimeStatusPlan,
+          });
+          return nextItems ?? prev;
+        });
+        setMessages((prev) =>
+          applyAgentStreamRuntimeStatusToMessages({
+            assistantMsgId,
+            messages: prev,
+            plan: runtimeStatusPlan,
+          }),
+        );
+      }
+      break;
+    }
 
     case "turn_context":
       if (buildAgentStreamTurnContextPreApplyPlan(data).shouldActivateStream) {
@@ -893,6 +962,7 @@ export function handleTurnStreamEvent({
         Boolean(normalizeOptionalText(data.itemId));
       if (visibleTextDelta && isStructuredFinalDelta) {
         upsertStructuredAgentMessageDeltaItem(data, {
+          shouldSyncMessageContentPart: false,
           shouldSyncThreadItem: false,
           textDelta: visibleTextDelta,
         });
@@ -928,10 +998,6 @@ export function handleTurnStreamEvent({
           requestState.accumulatedContent,
         );
         playTypewriterSound();
-      }
-      if (isStructuredFinalDelta) {
-        clearStreamingTextOverlay();
-        break;
       }
       scheduleTextRenderFlush();
       break;
@@ -1069,6 +1135,29 @@ export function handleTurnStreamEvent({
       }
       break;
 
+    case "image_task_created":
+      activateStream();
+      clearOptimisticItem();
+      requestState.hasMeaningfulCompletionSignal =
+        applyAgentStreamImageTaskCreatedEvent({
+          assistantMsgId,
+          currentAssistantContent: requestState.accumulatedContent,
+          event: data,
+          fallbackPrompt: content || requestState.accumulatedContent,
+          setMessages,
+        }) || requestState.hasMeaningfulCompletionSignal;
+      break;
+
+    case "image_task_presentation_generated":
+      activateStream();
+      clearOptimisticItem();
+      applyAgentStreamImageTaskPresentationGeneratedEvent({
+        assistantMsgId,
+        event: data,
+        setMessages,
+      });
+      break;
+
     case "artifact_snapshot":
       {
         const artifactPlan = buildAgentStreamArtifactSnapshotPreApplyPlan({
@@ -1102,6 +1191,9 @@ export function handleTurnStreamEvent({
         }
         if (actionPlan.shouldClearOptimisticItem) {
           clearOptimisticItem();
+        }
+        if (actionPlan.shouldMarkMeaningfulCompletionSignal) {
+          requestState.hasMeaningfulCompletionSignal = true;
         }
       }
       noteProcessEventSequence(sequenceFromAgentEvent(data));

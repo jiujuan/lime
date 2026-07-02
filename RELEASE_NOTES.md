@@ -1,3 +1,39 @@
+## Lime v1.86.0
+
+### 新功能
+
+- 内容工厂插件包 v1 的事实源继续落地：`plugin.json`、`app.runtime.yaml`、`app.workbench.yaml`、skills / subagents / clis / connectors / hooks / resources / workflows / artifacts / examples 的样例与技术规范补齐。
+- 图片命令主链继续收口到 current workflow，`@配图` / `@修图` / `@重绘` 的预览、分支选择、重试和回填路径更完整。
+- Agent Chat 的 live timeline、session restore 和 read model 边界继续收敛，流式输出期间的历史覆盖和乱序风险进一步下降。
+
+### 修复
+
+- 修复 host-managed generation 和图片任务路由中的若干串台问题，避免普通 follow-up 继承错误的图片上下文。
+- 修复流式刷新过程中 detail snapshot 覆盖前文、回退或乱序的问题，消息和 thread item 投影更稳。
+- 修复插件 marketplace、installed Agent App、manifest 解析和 seeded fixture 的投影偏差。
+
+### 优化与重构
+
+- App Server runtime、worker、image command、plugin manifest 和 agent app package 拆分出更细模块，减少中心文件职责堆叠。
+- Electron host commands / IPC channels / resource manager window host 与前端桥接面整理。
+- `scripts/agent-runtime` current fixture、`scripts/agent-qc` 本地门禁、`scripts/i18n` 未引用 key 检查和 release docs 工具链更新。
+
+### 测试与质量
+
+- 新增 / 更新 Agent App、plugin contract、image task viewer、current fixture smoke、Rust runtime 和 App Server 回归。
+- 继续补齐 `verify:app-version`、`test:contracts` 和 GUI smoke 的发版门禁覆盖。
+
+### 文档
+
+- 更新 Writing v2、images v2、thread timeline、plugin 技术规范，以及 quality / command runtime / playwright 指南。
+
+### 其他
+
+- 版本事实源更新到 `1.86.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock` 与 `lime-rs/crates/aster-rust/Cargo.lock`。
+- 本版不纳入本地临时文件 `internal/roadmap/Writing/.DS_Store`。
+
+**完整变更**: `v1.85.0` -> `v1.86.0`
+
 ## Lime v1.85.0
 
 ### 新功能

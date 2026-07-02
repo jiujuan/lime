@@ -100,6 +100,7 @@ interface AppPageContentProps {
   onNavigate: (page: Page, params?: PageParams) => void;
   onAgentHasMessagesChange: (hasMessages: boolean) => void;
   onAgentSessionChange?: (sessionId: string | null) => void;
+  onAgentStreamingChange?: (isStreaming: boolean) => void;
   activeAgentSessionTarget?: AgentAppRightSurfaceLaunchTarget | null;
   agentSessionTargets?: AgentAppRightSurfaceLaunchTarget[] | null;
   onAgentSessionTargetChange?: (
@@ -115,6 +116,7 @@ export function AppPageContent({
   onNavigate,
   onAgentHasMessagesChange,
   onAgentSessionChange,
+  onAgentStreamingChange,
   activeAgentSessionTarget,
   agentSessionTargets,
   onAgentSessionTargetChange,
@@ -217,6 +219,7 @@ export function AppPageContent({
           expertAgentLaunch={agentPageParams.expertAgentLaunch}
           onHasMessagesChange={onAgentHasMessagesChange}
           onSessionChange={handleAgentSessionChange}
+          onAgentStreamingChange={onAgentStreamingChange}
         />
       </div>
     );

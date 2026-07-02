@@ -73,7 +73,7 @@ describe("ImageWorkbenchMessagePreview", () => {
           '[data-testid="image-workbench-message-preview-toolbar-image-preview-complete"]',
         )
         ?.className.toString(),
-    ).not.toContain("border");
+    ).toContain("bg-[#eef0ec]");
     expect(container.querySelector("img")?.getAttribute("src")).toBe(
       "data:image/png;base64,aW1hZ2U=",
     );
@@ -89,6 +89,44 @@ describe("ImageWorkbenchMessagePreview", () => {
     );
     expect(container.textContent).not.toContain("Result synced");
     expect(container.textContent).not.toContain("当前任务未提供提示词");
+  });
+
+  it("falls back to a natural completion caption when the preview has none", () => {
+    const { container } = renderPreview({
+      taskId: "image-preview-complete-fallback",
+      prompt: "从花城汇看广州塔的春天照片",
+      mode: "generate",
+      status: "complete",
+      imageUrl: "data:image/png;base64,aW1hZ2U=",
+      imageCount: 1,
+      runtimeContract: {
+        model: "fal-ai/nano-banana-pro",
+      },
+    });
+
+    expect(container.textContent).toContain("Image Generation");
+    expect(container.textContent).toContain("Nanobanana Pro");
+    expect(container.textContent).toContain("Done");
+    expect(container.textContent).toContain("从花城汇看广州塔的春天照片");
+  });
+
+  it("does not show completion caption while the image task is still running", () => {
+    const { container } = renderPreview({
+      taskId: "image-preview-running-caption",
+      prompt: "从花城汇看广州塔的春天照片",
+      mode: "generate",
+      status: "running",
+      imageCount: 1,
+      caption: "完成了，广州塔春天照片已经生成。",
+      runtimeContract: {
+        model: "fal-ai/nano-banana-pro",
+      },
+    });
+
+    expect(container.textContent).toContain("Image Generation");
+    expect(container.textContent).toContain("Nanobanana Pro");
+    expect(container.textContent).toContain("Generating image");
+    expect(container.textContent).not.toContain("完成了");
   });
 
   it("hides legacy task-card status and source chrome in chat preview", () => {
@@ -114,6 +152,62 @@ describe("ImageWorkbenchMessagePreview", () => {
     );
     expect(container.textContent).not.toContain("参考图");
     expect(container.textContent).not.toContain("部分完成");
+  });
+
+  it("does not render image command workflow steps inside the chat preview", () => {
+    const { container } = renderPreview({
+      taskId: "image-preview-workflow",
+      prompt: "Generate two lime product images",
+      mode: "generate",
+      status: "running",
+      expectedImageCount: 2,
+      workflowRun: {
+        runId: "image-command-run-turn-1",
+        workflowKey: "image_command_workflow",
+        title: "Lime product images",
+        summary: "Generate two lime product images",
+        requestedCount: 2,
+        status: "queued",
+        steps: [
+          {
+            id: "intent",
+            title: "Parse image request",
+            status: "succeeded",
+          },
+          {
+            id: "generate",
+            title: "Generate images",
+            status: "running",
+          },
+        ],
+        branches: [
+          {
+            branchId: "image-command-run-turn-1:branch:white-bg",
+            title: "White background",
+            prompt: "White background lime product image",
+            status: "queued",
+          },
+          {
+            branchId: "image-command-run-turn-1:branch:gray-bg",
+            title: "Gray background",
+            prompt: "Gray background lime product image",
+            status: "queued",
+          },
+        ],
+        nextActions: [{ type: "open_workbench" }],
+      },
+    });
+
+    const workflow = container.querySelector(
+      '[data-testid="image-workbench-message-preview-workflow-image-preview-workflow"]',
+    );
+
+    expect(workflow).toBeNull();
+    expect(container.textContent).toContain("Image Generation");
+    expect(container.textContent).not.toContain("Lime product images");
+    expect(container.textContent).not.toContain("2 steps");
+    expect(container.textContent).not.toContain("Parse image request");
+    expect(container.textContent).not.toContain("White background");
   });
 
   it("failed preview exposes a dedicated retry action without replacing the open card", () => {

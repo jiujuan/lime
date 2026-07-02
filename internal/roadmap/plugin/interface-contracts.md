@@ -74,11 +74,19 @@ export interface ConnectorDeclaration {
 export interface ActivationEntryDeclaration {
   key: string;
   title: string;
-  kind: "plugin" | "agentApp" | "skill";
+  kind: "plugin" | "agentApp" | "skill" | "command";
   intent?: "manual" | "at_command" | "history_restore" | "chip";
   defaultObjectKind?: string;
 }
 ```
+
+规则：
+
+- `kind="command"` 只表示插件声明了一个可被显式激活的命令入口，例如 `@插件` 或 `@插件:能力`。
+- 平台 `@` 原子命令事实源仍是 `SkillCatalog.entries.kind=command`，例如 `@配图`、`@修图`、`@重绘`。
+- 插件不得把未声明的任意 `@模型名`、自然语言词或 marketplace 名称自动升级成命令入口。
+- 插件 command entry 必须走显式 activation metadata，进入 `agentSession/turn/start` current 主链；不得绕过 App Server 或直接调用 provider / filesystem。
+- 客户端可以把插件 command entry 合并到 `@` 选择器展示，但解析结果必须保留 provenance：`platform_command` 与 `plugin_activation_command` 不能混同。
 
 ## 3. Activation Context
 

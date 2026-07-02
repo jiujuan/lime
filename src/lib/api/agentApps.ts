@@ -9,8 +9,6 @@ import {
   resolveOemCloudAgentAppSignatureTrustRoots,
   resolveOemCloudRuntimeContext,
 } from "./oemCloudRuntime";
-import contentFactoryFixture from "../../features/agent-app/fixtures/content-factory-app.json";
-import seededAgentAppsDescriptor from "../../features/agent-app/fixtures/seeded-agent-apps.json";
 import {
   AgentAppCloudBootstrapError,
   buildCloudBootstrapInstalledAppPreview,
@@ -44,6 +42,7 @@ import {
 import { buildCloudReleaseEvidence } from "../../features/agent-app/install/cloudReleaseEvidence";
 import { verifyCloudReleaseSignature } from "../../features/agent-app/install/cloudReleaseSignature";
 import type {
+  AgentAppCloudReleaseEvidenceCatalogSource,
   AgentAppCloudReleaseSignaturePolicy,
   AgentAppCloudReleaseSignatureVerificationStatus,
 } from "../../features/agent-app/install/cloudReleaseEvidence";
@@ -333,28 +332,6 @@ export interface AgentAppCloudCatalogResult {
   payload: CloudBootstrapPayload;
   source: "remote" | "bootstrap" | "seeded";
 }
-
-interface SeededAgentAppsDescriptor {
-  schemaVersion: "seeded-agent-apps/v1";
-  tenantId: string;
-  generatedAt: string;
-  apps: SeededAgentAppDescriptorEntry[];
-}
-
-interface SeededAgentAppDescriptorEntry {
-  appId: string;
-  version: string;
-  packageUrl: string;
-  packageSourceUri: string;
-  releaseId: string;
-  channel: string;
-  packageHash: string;
-  manifestHash: string;
-}
-
-const SEEDED_AGENT_APP_MANIFESTS: Record<string, AppManifest> = {
-  "content-factory-app": contentFactoryFixture as AppManifest,
-};
 
 export interface AgentAppHostLifecycleListResult {
   snapshots: AgentAppHostLifecycleSnapshot[];
@@ -749,95 +726,12 @@ function normalizeCloudCatalogPayload(value: unknown): CloudBootstrapPayload {
   throw new Error("Agent App 云端目录格式非法。");
 }
 
-function readSeededAgentAppsDescriptor(): SeededAgentAppsDescriptor {
-  return seededAgentAppsDescriptor as SeededAgentAppsDescriptor;
-}
-
-function assertSeededAgentAppManifestMatchesDescriptor(
-  descriptor: SeededAgentAppDescriptorEntry,
-  manifest: AppManifest,
-): void {
-  if (
-    manifest.name !== descriptor.appId ||
-    manifest.version !== descriptor.version
-  ) {
-    throw new Error(
-      `Seeded Agent App descriptor 与 manifest 不一致: ${descriptor.appId}@${descriptor.version}`,
-    );
-  }
-}
-
-function readSeededAgentAppManifest(
-  descriptor: SeededAgentAppDescriptorEntry,
-): AppManifest {
-  const manifest = SEEDED_AGENT_APP_MANIFESTS[descriptor.appId];
-  if (!manifest) {
-    throw new Error(`Seeded Agent App manifest 未注册: ${descriptor.appId}`);
-  }
-  assertSeededAgentAppManifestMatchesDescriptor(descriptor, manifest);
-  return manifest;
-}
-
-function buildSeededCloudPayload(): CloudBootstrapPayload {
-  const descriptor = readSeededAgentAppsDescriptor();
-  const apps: CloudBootstrapApp[] = descriptor.apps.map((seededApp) => {
-    const manifest = readSeededAgentAppManifest(seededApp);
-    return {
-      appId: seededApp.appId,
-      displayName: manifest.displayName ?? manifest.title ?? manifest.name,
-      version: seededApp.version,
-      runtimeTargets: manifest.runtimeTargets,
-      releaseId: seededApp.releaseId,
-      channel: seededApp.channel,
-      licenseState: "unknown",
-      registrationRequired: false,
-      registrationState: "not_required",
-      enabled: true,
-      packageUrl: seededApp.packageUrl,
-      packageHash: seededApp.packageHash,
-      manifestHash: seededApp.manifestHash,
-      capabilityRequirements:
-        typeof manifest.requires?.capabilities === "object" &&
-        !Array.isArray(manifest.requires.capabilities)
-          ? manifest.requires.capabilities
-          : {},
-      defaultEntries: manifest.entries.map((entry) => entry.key),
-      policyDefaults: {},
-      toolAvailability: [],
-    };
-  });
+function buildEmptyCloudPayload(): CloudBootstrapPayload {
   return {
     schemaVersion: "agent-app-cloud-bootstrap/v1",
-    tenantId: descriptor.tenantId,
-    generatedAt: descriptor.generatedAt,
-    apps,
-  };
-}
-
-function resolveSeededCloudReleasePackageManifest(
-  app: CloudBootstrapApp,
-): AgentAppCloudReleasePackageAcquisitionOptions | null {
-  const seededApp = readSeededAgentAppsDescriptor().apps.find(
-    (entry) =>
-      entry.appId === app.appId &&
-      entry.version === app.version &&
-      entry.channel === app.channel &&
-      entry.packageUrl === app.packageUrl,
-  );
-  if (!seededApp) {
-    return null;
-  }
-  const manifest = readSeededAgentAppManifest(seededApp);
-  if (
-    app.packageHash !== seededApp.packageHash ||
-    app.manifestHash !== seededApp.manifestHash
-  ) {
-    return null;
-  }
-  return {
-    packageManifest: manifest,
-    actualPackageHash: seededApp.packageHash,
-    actualManifestHash: seededApp.manifestHash,
+    tenantId: "unavailable",
+    generatedAt: "1970-01-01T00:00:00.000Z",
+    apps: [],
   };
 }
 
@@ -1042,6 +936,7 @@ async function assertLocalAgentAppRegistrationAllowed(
 
 export async function getAgentAppCloudCatalog(): Promise<AgentAppCloudCatalogResult> {
   const runtime = resolveOemCloudRuntimeContext();
+  const bootstrapCatalog = readBootstrapAgentAppCatalog();
   if (runtime) {
     try {
       return {
@@ -1049,14 +944,16 @@ export async function getAgentAppCloudCatalog(): Promise<AgentAppCloudCatalogRes
         source: "remote",
       };
     } catch {
-      const bootstrapCatalog = readBootstrapAgentAppCatalog();
       if (bootstrapCatalog) {
         return { payload: bootstrapCatalog, source: "bootstrap" };
       }
     }
   }
 
-  return { payload: buildSeededCloudPayload(), source: "seeded" };
+  return {
+    payload: bootstrapCatalog ?? buildEmptyCloudPayload(),
+    source: "bootstrap",
+  };
 }
 
 export async function submitAgentAppRegistrationCode(
@@ -1093,7 +990,7 @@ export async function installCloudAgentAppRelease(params: {
   fetchCloudPackage?: AgentAppCloudReleasePackageAcquisitionOptions["fetchCloudPackage"];
   skipPackageFetch?: boolean;
   profile?: HostCapabilityProfile;
-  catalogSource?: AgentAppCloudCatalogResult["source"];
+  catalogSource?: AgentAppCloudReleaseEvidenceCatalogSource;
 }): Promise<InstalledAgentAppState> {
   const result = await reviewCloudAgentAppRelease(params);
   if (result.review.releaseEvidence?.status === "blocked") {
@@ -1181,18 +1078,9 @@ export async function reviewCloudAgentAppRelease(params: {
   skipPackageFetch?: boolean;
   profile?: HostCapabilityProfile;
   installed?: InstalledAgentAppState[];
-  catalogSource?: AgentAppCloudCatalogResult["source"];
+  catalogSource?: AgentAppCloudReleaseEvidenceCatalogSource;
 }): Promise<AgentAppInstallReviewResult> {
-  const seededPackage =
-    params.packageManifest == null
-      ? resolveSeededCloudReleasePackageManifest(params.app)
-      : null;
-  const packageParams = {
-    ...params,
-    ...(seededPackage ?? {}),
-  };
-  const acquiredPackage =
-    await resolveCloudReleasePackageManifest(packageParams);
+  const acquiredPackage = await resolveCloudReleasePackageManifest(params);
   const verifiedPackage = buildVerifiedCloudReleasePackage({
     app: params.app,
     packageManifest: acquiredPackage.packageManifest,
@@ -1214,7 +1102,7 @@ export async function reviewCloudAgentAppRelease(params: {
     }));
   const releaseEvidence = buildCloudReleaseEvidence({
     app: params.app,
-    catalogSource: params.catalogSource ?? "seeded",
+    catalogSource: params.catalogSource ?? "unknown",
     sourceKind: acquiredPackage.sourceKind,
     actualPackageHash: acquiredPackage.actualPackageHash,
     actualManifestHash: acquiredPackage.actualManifestHash,
@@ -1261,7 +1149,7 @@ export async function reviewCloudAgentAppRelease(params: {
       packageVerificationStatus: verifiedPackage.verification.status,
       sourceState: buildCloudAgentAppSourceState({
         app: params.app,
-        catalogSource: params.catalogSource ?? "seeded",
+        catalogSource: params.catalogSource ?? "unknown",
         installed: params.installed ?? [],
         releaseEvidence,
       }),

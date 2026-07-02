@@ -70,13 +70,14 @@ Claw Chat Current Electron Fixture Smoke
 
 用途:
   启动真实 Electron Desktop Host，通过 GUI 输入框发送“${NEWS_PROMPT}”，
-  并验证 Frontend -> Electron IPC -> App Server JSON-RPC -> external fixture backend
-  的 current 主链可以完成用户消息、assistant 输出和 read model 收尾。
+  并验证 Frontend -> Electron IPC -> App Server JSON-RPC -> current runtime
+  的主链可以完成用户消息、assistant 输出和 read model 收尾。
 
 边界:
-  本脚本使用一次性本地 external backend fixture，不调用正式模型后端，不使用
-  APP_SERVER_BACKEND_MODE=mock，不走 Tauri / legacy runtime command / renderer
-  mock fallback 作为成功证据。
+  普通聊天场景使用一次性本地 external backend fixture；图片命令场景使用
+  APP_SERVER_BACKEND_MODE=runtime 以验证 App Server ImageCommandWorkflow。
+  全部场景均不调用正式模型后端，不使用 APP_SERVER_BACKEND_MODE=mock，
+  不走 Tauri / legacy runtime command / renderer mock fallback 作为成功证据。
 
 用法:
   node scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs
@@ -178,6 +179,35 @@ function traceEvidenceHasProviderAndClient(evidence) {
   );
 }
 
+function isImageWorkflowScenario(scenario) {
+  return (
+    scenario === IMAGE_COMMAND_SCENARIO ||
+    scenario === PLAIN_IMAGE_INTENT_SCENARIO
+  );
+}
+
+function resolveScenarioBackendEnv(options, runtimeEnv) {
+  if (isImageWorkflowScenario(options.scenario)) {
+    return {
+      APP_SERVER_BACKEND_MODE: "runtime",
+      APP_SERVER_BACKEND_COMMAND: "",
+      APP_SERVER_BACKEND_ARGS: "",
+      APP_SERVER_BACKEND_TIMEOUT_MS: "10000",
+    };
+  }
+
+  return {
+    APP_SERVER_BACKEND_MODE: "external",
+    APP_SERVER_BACKEND_COMMAND: process.execPath,
+    APP_SERVER_BACKEND_ARGS: JSON.stringify([
+      runtimeEnv.backendPath,
+      runtimeEnv.backendLedgerPath,
+      runtimeEnv.cancelSignalPath,
+    ]),
+    APP_SERVER_BACKEND_TIMEOUT_MS: "10000",
+  };
+}
+
 async function updateAgentUiPerformanceTraceEvidence(summary, page) {
   const evidence = sanitizeJson(
     await collectAgentUiPerformanceTraceEvidence(page),
@@ -224,6 +254,7 @@ async function run() {
       APP_SERVER_BIN: appServerBinary,
     },
   });
+  const scenarioBackendEnv = resolveScenarioBackendEnv(options, runtimeEnv);
   const appServerRequests = [];
   const summary = {
     ok: false,
@@ -236,6 +267,7 @@ async function run() {
     workspace: null,
     provider: FIXTURE_PROVIDER,
     model: FIXTURE_MODEL,
+    backendMode: scenarioBackendEnv.APP_SERVER_BACKEND_MODE,
     appUrl: options.appUrl || null,
     checkedAt: new Date().toISOString(),
     tempRoot: options.keepTemp ? runtimeEnv.tempRoot : null,
@@ -386,15 +418,7 @@ async function run() {
       env: {
         ...runtimeEnv.env,
         ...appServerEnv,
-        APP_SERVER_BACKEND_MODE: "external",
-        APP_SERVER_BACKEND_COMMAND: process.execPath,
-        APP_SERVER_BACKEND_ARGS: JSON.stringify([
-          runtimeEnv.backendPath,
-          runtimeEnv.backendLedgerPath,
-          runtimeEnv.cancelSignalPath,
-          runtimeEnv.imageTaskFixturePath,
-        ]),
-        APP_SERVER_BACKEND_TIMEOUT_MS: "10000",
+        ...scenarioBackendEnv,
         CLAW_CHAT_FIXTURE_SCENARIO: options.scenario,
         ELECTRON_E2E_USER_DATA_DIR: runtimeEnv.electronUserDataDir,
         LIME_ALLOW_LIVE_PROVIDER_SMOKE: "0",

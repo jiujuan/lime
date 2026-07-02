@@ -32,9 +32,9 @@
       ],
       "routing_slot": "image_generation_model",
       "executor_binding": {
-        "executor_kind": "skill",
-        "binding_key": "image_generate",
-        "current_path": "Agent turn -> Skill(image_generate) -> image task artifact",
+        "executor_kind": "workflow",
+        "binding_key": "image_command",
+        "current_path": "Agent turn -> App Server ImageCommandWorkflow -> image task artifact",
         "supports_progress": true,
         "supports_cancel": true,
         "supports_resume": false,
@@ -67,21 +67,21 @@
       "detour_policy": {
         "allowed": [
           "request_user_input",
-          "catalog_declared_model_bound_image_skill_launch"
+          "catalog_declared_model_bound_image_command"
         ],
         "denied": [
           "free_bash",
-          "web_search_before_skill",
+          "web_search_before_image_workflow",
           "unregistered_frontend_direct_task_creation"
         ]
       },
-      "owner_surface": "agent_runtime",
+      "owner_surface": "app_server_runtime",
       "bound_entries": [
         {
           "entry_key": "at_image_command",
           "entry_kind": "command",
           "display_name": "@配图 / @image / /image / @Vision 1",
-          "launch_metadata_path": "harness.image_skill_launch.image_task",
+          "launch_metadata_path": "harness.image_command_intent.image_task",
           "entry_source": "at_image_command",
           "default_input_mapping": [
             "user_text",
@@ -97,7 +97,7 @@
           "entry_key": "at_poster_command",
           "entry_kind": "command",
           "display_name": "@海报 / @Flyer 3",
-          "launch_metadata_path": "harness.image_skill_launch.image_task",
+          "launch_metadata_path": "harness.image_command_intent.image_task",
           "entry_source": "at_poster_command",
           "default_input_mapping": [
             "user_text",
@@ -113,7 +113,7 @@
           "entry_key": "at_image_edit_command",
           "entry_kind": "command",
           "display_name": "@修图",
-          "launch_metadata_path": "harness.image_skill_launch.image_task",
+          "launch_metadata_path": "harness.image_command_intent.image_task",
           "entry_source": "at_image_command",
           "default_input_mapping": [
             "user_text",
@@ -130,7 +130,7 @@
           "entry_key": "at_image_variation_command",
           "entry_kind": "command",
           "display_name": "@重绘",
-          "launch_metadata_path": "harness.image_skill_launch.image_task",
+          "launch_metadata_path": "harness.image_command_intent.image_task",
           "entry_source": "at_image_command",
           "default_input_mapping": [
             "user_text",
@@ -147,7 +147,7 @@
           "entry_key": "at_storyboard_command",
           "entry_kind": "command",
           "display_name": "@分镜",
-          "launch_metadata_path": "harness.image_skill_launch.image_task",
+          "launch_metadata_path": "harness.image_command_intent.image_task",
           "entry_source": "at_image_command",
           "default_input_mapping": [
             "user_text",
@@ -163,7 +163,7 @@
           "entry_key": "at_model_bound_image_command",
           "entry_kind": "command",
           "display_name": "用户或 Lime Cloud 目录声明的图片模型 @命令",
-          "launch_metadata_path": "harness.image_skill_launch.image_task",
+          "launch_metadata_path": "harness.image_command_intent.image_task",
           "entry_source": "at_model_bound_image_command",
           "default_input_mapping": [
             "user_text",
@@ -181,7 +181,7 @@
           "entry_key": "document_inline_image_action",
           "entry_kind": "button_action",
           "display_name": "文稿正文配图",
-          "launch_metadata_path": "harness.image_skill_launch.image_task",
+          "launch_metadata_path": "harness.image_command_intent.image_task",
           "entry_source": "at_image_command",
           "default_input_mapping": [
             "selected_text",
@@ -197,7 +197,7 @@
           "entry_key": "image_workbench_followup_action",
           "entry_kind": "button_action",
           "display_name": "图片工作台续做",
-          "launch_metadata_path": "harness.image_skill_launch.image_task",
+          "launch_metadata_path": "harness.image_command_intent.image_task",
           "entry_source": "at_image_command",
           "default_input_mapping": [
             "selected_image_output",

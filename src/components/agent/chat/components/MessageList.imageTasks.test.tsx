@@ -3,12 +3,11 @@ import { describe, expect, it } from "vitest";
 import {
   IMAGE_WORKBENCH_FOCUS_EVENT,
   mockStreamingRenderer,
+  mockTokenUsageDisplay,
   render,
   renderZh,
 } from "./MessageList.testHarness";
-import type {
-  Message,
-} from "./MessageList.testHarness";
+import type { Message } from "./MessageList.testHarness";
 
 describe("MessageList image tasks", () => {
   it("图片任务消息卡应在聊天区渲染预览并支持展开图片画布", async () => {
@@ -47,7 +46,8 @@ describe("MessageList image tasks", () => {
     ) as HTMLDivElement | null;
 
     expect(previewCard?.textContent).toContain("图片生成");
-    expect(previewCard?.textContent).not.toContain("一颗戴耳机的青柠");
+    expect(previewCard?.textContent).toContain("搞定");
+    expect(previewCard?.textContent).toContain("一颗戴耳机的青柠");
     expect(previewCard?.textContent).not.toContain("已生成");
     expect(previewCard?.textContent).not.toContain("可在右侧继续查看与使用");
     expect(container.textContent).not.toContain("图片生成已完成");
@@ -189,9 +189,7 @@ describe("MessageList image tasks", () => {
       expect.objectContaining({
         content: "收到，我按花城汇视角来生成广州塔的春天照片。",
         suppressProcessFlow: false,
-        toolCalls: expect.arrayContaining([
-          expect.objectContaining({ id: "tool-image-natural" }),
-        ]),
+        toolCalls: undefined,
         contentParts: undefined,
       }),
     );
@@ -204,6 +202,78 @@ describe("MessageList image tasks", () => {
         ?.textContent,
     ).toContain("广州塔");
     expect(leadRenderer).not.toBeNull();
+  });
+
+  it("自动图片任务 shell 应显示寒暄、灰色轻卡、图片描述和 Token", async () => {
+    const messages: Message[] = [
+      {
+        id: "msg-user-image-workbench-replica",
+        role: "user",
+        content: "@Nanobanana Pro 生成一张广州塔，从花城汇看过去的春天的照片",
+        timestamp: new Date(),
+      },
+      {
+        id: "msg-assistant-image-workbench-replica",
+        role: "assistant",
+        content: "好啊，我来按花城汇视角做一张广州塔春天照片。",
+        timestamp: new Date(),
+        usage: {
+          input_tokens: 31_000,
+          output_tokens: 120,
+          cached_input_tokens: 0,
+        },
+        imageWorkbenchPreview: {
+          taskId: "task-replica-image",
+          prompt: "从花城汇看广州塔的春天照片",
+          mode: "generate",
+          status: "complete",
+          imageUrl: "https://example.com/guangzhou-spring.png",
+          imageCount: 1,
+          modelName: "fal-ai/nano-banana-pro",
+          caption:
+            "完成了，从花城汇望向广州塔的春日画面已经生成，前景花和广场层次都保留住了。\n想换成更写实或更通透的光线，可以继续说。",
+        },
+      },
+    ];
+
+    const container = await renderZh(messages);
+    const text = container.textContent || "";
+    const toolbar = container.querySelector(
+      '[data-testid="image-workbench-message-preview-toolbar-task-replica-image"]',
+    );
+    const image = container.querySelector(
+      '[data-testid="image-workbench-message-preview-single-media-task-replica-image"] img',
+    );
+
+    expect(text).toContain("好啊，我来按花城汇视角做一张广州塔春天照片。");
+    expect(text).not.toContain("先获取下工具参数");
+    expect(text).not.toContain("马上生成");
+    expect(toolbar?.textContent).toContain("图片生成");
+    expect(toolbar?.textContent).toContain("Nanobanana Pro");
+    expect(toolbar?.className).toContain("bg-[#eef0ec]");
+    expect(image?.getAttribute("src")).toBe(
+      "https://example.com/guangzhou-spring.png",
+    );
+    expect(text).toContain("完成了，从花城汇望向广州塔的春日画面已经生成");
+    expect(text).toContain("想换成更写实或更通透的光线，可以继续说。");
+    expect(text).not.toContain("我随时待命");
+    const forbiddenBrandName = ["R", "ibbi"].join("");
+    expect(text).not.toContain(forbiddenBrandName);
+    expect(
+      container.querySelector('[data-testid="token-usage-display"]'),
+    ).not.toBeNull();
+    expect(mockTokenUsageDisplay).toHaveBeenCalledWith(
+      expect.objectContaining({
+        usage: expect.objectContaining({
+          input_tokens: 31_000,
+          output_tokens: 120,
+        }),
+      }),
+    );
+    expect(text).not.toContain("task_id");
+    expect(text).not.toContain(".lime/tasks");
+    expect(text).not.toContain("5 步");
+    expect(text).not.toContain("1 个方向");
   });
 
   it("同一会话连续两次图片生成应分别保留用户指令、自然铺垫和对应轻卡", async () => {
@@ -420,7 +490,7 @@ describe("MessageList image tasks", () => {
     );
   });
 
-  it("图片任务消息应保留思考并把内部工具过程折叠到同一回复里", () => {
+  it("图片任务消息应保留思考并隐藏内部工具完成摘要", () => {
     const container = render(
       [
         {
@@ -503,10 +573,10 @@ describe("MessageList image tasks", () => {
       thinkingContent: "先执行图片技能。",
       suppressProcessFlow: false,
     });
-    expect(rendererProps?.contentParts).toBeUndefined();
-    expect(rendererProps?.toolCalls).toEqual([
-      expect.objectContaining({ id: "tool-image-skill" }),
+    expect(rendererProps?.contentParts).toEqual([
+      { type: "thinking", text: "先执行图片技能。" },
     ]);
+    expect(rendererProps?.toolCalls).toBeUndefined();
     expect(
       container.querySelector(
         '[data-testid="image-workbench-message-preview-task-image-process-flow"]',
@@ -517,7 +587,7 @@ describe("MessageList image tasks", () => {
     ).toBeNull();
   });
 
-  it("旧图片提交过程消息没有轻卡时应隐藏协议正文并折叠保留过程", () => {
+  it("旧图片提交过程消息没有轻卡时应隐藏协议正文和图片工具过程", () => {
     const container = render(
       [
         {
@@ -578,30 +648,91 @@ describe("MessageList image tasks", () => {
 
     expect(container.textContent).not.toContain("图片生成任务已提交");
     expect(container.textContent).not.toContain("工具输入");
-    expect(mockStreamingRenderer).toHaveBeenCalledTimes(1);
-    const rendererProps = mockStreamingRenderer.mock.calls[0]?.[0] as
-      | {
-          content?: string;
-          contentParts?: unknown[];
-          rawContent?: string;
-          suppressProcessFlow?: boolean;
-          toolCalls?: unknown[];
-        }
-      | undefined;
-    expect(rendererProps).toMatchObject({
-      content: "",
-      rawContent: "",
-      suppressProcessFlow: false,
-    });
-    expect(rendererProps?.contentParts).toEqual([
-      { type: "thinking", text: "开始中 广州塔春天照片" },
-    ]);
-    expect(rendererProps?.toolCalls).toEqual([
-      expect.objectContaining({ id: "tool-image-generate" }),
-    ]);
+    expect(mockStreamingRenderer).not.toHaveBeenCalled();
+    expect(
+      container.querySelector('[data-testid="inline-tool-process-step"]'),
+    ).toBeNull();
     expect(
       container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
     ).toBeNull();
   });
 
+  it("图片任务创建工具未形成轻卡前不应外显普通工具过程", () => {
+    const container = render(
+      [
+        {
+          id: "msg-assistant-image-tool-hidden",
+          role: "assistant",
+          content: "好啊，我来画一张深圳夏天的城市画面。",
+          timestamp: new Date(),
+          isThinking: true,
+          contentParts: [
+            {
+              type: "text",
+              text: "好啊，我来画一张深圳夏天的城市画面。",
+            },
+            {
+              type: "tool_use",
+              toolCall: {
+                id: "tool-image-create-hidden",
+                name: "lime_create_image_generation_task",
+                arguments: JSON.stringify({ prompt: "深圳夏天" }),
+                status: "running",
+                startTime: new Date(),
+              },
+            },
+          ],
+          toolCalls: [
+            {
+              id: "tool-image-create-hidden",
+              name: "lime_create_image_generation_task",
+              arguments: JSON.stringify({ prompt: "深圳夏天" }),
+              status: "running",
+              startTime: new Date(),
+            },
+          ],
+        } as Message,
+      ],
+      {
+        currentTurnId: "turn-image-tool-hidden",
+        turns: [
+          {
+            id: "turn-image-tool-hidden",
+            thread_id: "thread-image-tool-hidden",
+            prompt_text: "@Nanobanana Pro 画一张深圳夏天的图",
+            status: "running",
+            started_at: "2026-07-02T13:17:36Z",
+            created_at: "2026-07-02T13:17:36Z",
+            updated_at: "2026-07-02T13:17:37Z",
+          },
+        ],
+      },
+    );
+
+    const text = container.textContent || "";
+    expect(text).toContain("好啊，我来画一张深圳夏天的城市画面。");
+    expect(text).not.toContain("先获取下工具参数");
+    expect(text).not.toContain("马上生成");
+    expect(text).not.toContain("已发起");
+    expect(text).not.toContain("图片生成 的图片生成");
+    expect(text).not.toContain("lime_create_image_generation_task");
+    expect(
+      container.querySelector('[data-testid="inline-tool-process-step"]'),
+    ).toBeNull();
+
+    const rendererProps = mockStreamingRenderer.mock.calls[0]?.[0] as
+      | {
+          content?: string;
+          contentParts?: unknown[];
+          suppressProcessFlow?: boolean;
+          toolCalls?: unknown[];
+        }
+      | undefined;
+    expect(rendererProps).toMatchObject({
+      content: "好啊，我来画一张深圳夏天的城市画面。",
+      suppressProcessFlow: true,
+    });
+    expect(rendererProps?.contentParts).toBeUndefined();
+    expect(rendererProps?.toolCalls).toBeUndefined();
+  });
 });

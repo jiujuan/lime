@@ -22,7 +22,6 @@ import {
 import type { HistoryToolCall } from "./agentChatHistoryTypes";
 import {
   hasMessageImages,
-  resolveMessageTimestampMs,
 } from "./agentChatHistorySignatures";
 import {
   findMatchingLocalAssistantMessageIndex,
@@ -35,11 +34,11 @@ import {
 } from "./agentChatHistoryLocalMergeMatching";
 import {
   hasRetainableLocalAssistantProcessState,
-  hasRetainableLocalMessageState,
   mergeAssistantVisibleOutput,
   shouldMergeLocalAssistantProcessState,
   shouldPreserveLocalAssistantVisibleOutput,
 } from "./agentChatHistoryLocalMergeState";
+import { collectRetainedLocalTail } from "./agentChatHistoryLocalMergeTail";
 
 export const mergeHydratedMessagesWithLocalState = (
   localMessages: Message[],
@@ -433,9 +432,6 @@ export const mergeHydratedMessagesWithLocalState = (
     hydratedMessages.length > 0
       ? (hydratedMessages[hydratedMessages.length - 1] as Message)
       : null;
-  const lastHydratedTimestampMs = lastHydratedMessage
-    ? resolveMessageTimestampMs(lastHydratedMessage)
-    : null;
   const lastMatchedLocalIndex = localMessages.reduce(
     (latest, message, index) => {
       if (!matchedLocalMessageIds.has(message.id)) {
@@ -455,34 +451,13 @@ export const mergeHydratedMessagesWithLocalState = (
       matchedLocalMessageIds,
     });
 
-  const retainedLocalTail = localMessages.filter((message, index) => {
-    if (hydratedMessageIds.has(message.id)) {
-      return false;
-    }
-    if (matchedLocalMessageIds.has(message.id)) {
-      return false;
-    }
-    if (index <= lastMatchedLocalIndex) {
-      return false;
-    }
-    if (!hasRetainableLocalMessageState(message)) {
-      return false;
-    }
-
-    const shouldRetainAssistantTailAfterHydratedUser =
-      message.role === "assistant" &&
-      lastHydratedMessage?.role === "user" &&
-      lastMatchedLocalMessage?.role === "user";
-    if (shouldRetainAssistantTailAfterHydratedUser) {
-      return true;
-    }
-
-    const localTimestampMs = resolveMessageTimestampMs(message);
-    if (lastHydratedTimestampMs === null || localTimestampMs === null) {
-      return true;
-    }
-
-    return localTimestampMs >= lastHydratedTimestampMs;
+  const retainedLocalTail = collectRetainedLocalTail({
+    hydratedMessageIds,
+    lastHydratedMessage,
+    lastMatchedLocalIndex,
+    lastMatchedLocalMessage,
+    localMessages,
+    matchedLocalMessageIds,
   });
 
   return projectConversationMessagesByRuntimeTurn(

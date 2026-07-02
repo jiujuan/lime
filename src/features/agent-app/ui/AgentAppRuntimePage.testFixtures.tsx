@@ -5,7 +5,7 @@ import {
   AGENT_APP_BRIDGE_PROTOCOL,
   AGENT_APP_BRIDGE_VERSION,
 } from "../runtime/hostBridge";
-import contentFactoryFixture from "../fixtures/content-factory-app.json";
+import contentFactoryFixture from "../testing/fixtures/content-factory-app.json";
 import { buildInstalledAgentAppState } from "../install/installedAppState";
 import { buildInstalledAppPreview } from "../install/installedAppPreview";
 import { buildAgentAppLabResolvedSetupState } from "../install/labInstallFlow";

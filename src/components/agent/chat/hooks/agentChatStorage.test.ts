@@ -2,8 +2,10 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   getExecutionStrategyStorageKey,
+  getSessionModelPreferenceKey,
   loadPersisted,
   loadTransient,
+  loadSessionModelPreference,
   resolvePersistedExecutionStrategy,
   resolveWorkspaceAgentPreferences,
 } from "./agentChatStorage";
@@ -45,6 +47,39 @@ describe("agentChatStorage", () => {
       providerType: "",
       model: "",
     });
+  });
+
+  it("图片模型偏好不应回流成普通工作区偏好", () => {
+    const providerKey = "agent_pref_provider_workspace-image-pref";
+    const modelKey = "agent_pref_model_workspace-image-pref";
+    localStorage.setItem(providerKey, JSON.stringify("custom-image-provider"));
+    localStorage.setItem(modelKey, JSON.stringify("gpt-image-1"));
+
+    expect(resolveWorkspaceAgentPreferences("workspace-image-pref")).toEqual({
+      providerType: "",
+      model: "",
+    });
+    expect(localStorage.getItem(providerKey)).toBe(JSON.stringify(""));
+    expect(localStorage.getItem(modelKey)).toBe(JSON.stringify(""));
+  });
+
+  it("图片模型会话偏好不应被当成普通聊天偏好读取", () => {
+    const key = getSessionModelPreferenceKey(
+      "workspace-image-pref",
+      "session-image-pref",
+    );
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        providerType: "custom-image-provider",
+        model: "gpt-image-1",
+      }),
+    );
+
+    expect(
+      loadSessionModelPreference("workspace-image-pref", "session-image-pref"),
+    ).toBeNull();
+    expect(localStorage.getItem(key)).toBe("null");
   });
 
   it("有 workspace 但没有持久化执行策略时应默认进入普通 Agent 主链", () => {

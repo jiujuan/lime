@@ -154,6 +154,7 @@ import {
   buildAgentSessionRestoreViewModel,
   buildCachedTopicSnapshotViewModel,
 } from "./agentSessionRestoreViewModel";
+import { hasActiveStreamingTimeline } from "./agentSessionStreamingGuards";
 
 const INITIAL_TOPICS_IDLE_TIMEOUT_MS = 1_500;
 const INITIAL_TOPICS_SESSION_REQUEST_LIMIT = 21;
@@ -445,6 +446,8 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   const missingSessionVerificationRef = useRef<string | null>(null);
   const detachedSessionIdRef = useRef<string | null>(null);
   const topicsListMayBeTruncatedRef = useRef(false);
+  const pendingTopicsRefreshRef = useRef(false);
+  const activeStreamingTimelineRef = useRef(false);
   const sessionStateWorkspaceRef = useRef<string | null>(
     workspaceId?.trim() || null,
   );
@@ -636,6 +639,38 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       setThreadRead(snapshot.threadRead);
     },
     [],
+  );
+
+  const activeStreamingTimeline = hasActiveStreamingTimeline({
+    currentAssistantMsgId: currentAssistantMsgIdRef.current,
+    currentStreamingEventName: currentStreamingEventNameRef.current,
+    currentStreamingSessionId: currentStreamingSessionIdRef.current,
+  });
+  activeStreamingTimelineRef.current = activeStreamingTimeline;
+
+  const deferTopicsLoadForActiveStream = useCallback(
+    (source: "initial" | "manual") => {
+      if (!activeStreamingTimelineRef.current) {
+        return false;
+      }
+
+      pendingTopicsRefreshRef.current = true;
+      setTopicsReady(true);
+      logAgentDebug(
+        "useAgentSession",
+        "loadTopics.deferredForActiveStream",
+        {
+          source,
+          workspaceId,
+        },
+        {
+          dedupeKey: `useAgentSession.loadTopics.deferredForActiveStream:${workspaceId ?? "none"}:${source}`,
+          throttleMs: 1000,
+        },
+      );
+      return true;
+    },
+    [workspaceId],
   );
 
   const resolveSessionHistoryWindow = useCallback(
@@ -922,6 +957,10 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     }
 
     const runListSessions = () => {
+      if (deferTopicsLoadForActiveStream("initial")) {
+        return;
+      }
+
       setTopicsReady(false);
       const startedAt = Date.now();
       logAgentDebug("useAgentSession", "listSessions.start", {
@@ -991,6 +1030,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   }, [
     initialTopicsDeferredDelayMs,
     initialTopicsLoadMode,
+    deferTopicsLoadForActiveStream,
     listWorkspaceTopics,
     workspaceId,
   ]);
@@ -1000,6 +1040,10 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       topicsListMayBeTruncatedRef.current = false;
       setTopics([]);
       setTopicsReady(true);
+      return;
+    }
+
+    if (deferTopicsLoadForActiveStream("manual")) {
       return;
     }
 
@@ -1041,7 +1085,19 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     } finally {
       setTopicsReady(true);
     }
-  }, [listWorkspaceTopics, workspaceId]);
+  }, [deferTopicsLoadForActiveStream, listWorkspaceTopics, workspaceId]);
+
+  useEffect(() => {
+    if (activeStreamingTimeline) {
+      return;
+    }
+    if (!pendingTopicsRefreshRef.current) {
+      return;
+    }
+
+    pendingTopicsRefreshRef.current = false;
+    void loadTopics();
+  }, [activeStreamingTimeline, loadTopics]);
 
   const createFreshSession = useCallback(
     async (
@@ -2658,6 +2714,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   useEffect(() => {
     if (!sessionId) return;
     if (!topicsReady) return;
+    if (activeStreamingTimeline) return;
 
     const sessionMissingFromTopics =
       topics.length > 0 && !topics.some((topic) => topic.id === sessionId);
@@ -2838,6 +2895,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     });
   }, [
     messages.length,
+    activeStreamingTimeline,
     currentTurnId,
     preserveRestoredMessages,
     persistSessionRestoreCandidate,
@@ -2895,6 +2953,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     threadTurns.length,
     topics.length,
     topicsReady,
+    activeStreamingTimeline,
     workspaceId,
   ]);
 

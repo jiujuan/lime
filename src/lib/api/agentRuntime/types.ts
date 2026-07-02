@@ -332,6 +332,10 @@ export interface AgentRuntimeThreadReadModel {
   active_test_run_id?: string | null;
   active_action_id?: string | null;
   artifacts?: Record<string, unknown>[];
+  workflow_runs?: Record<string, unknown>[];
+  workflowRuns?: Record<string, unknown>[];
+  workflow_steps?: Record<string, unknown>[];
+  workflowSteps?: Record<string, unknown>[];
   article_workspace?: Record<string, unknown> | null;
   articleWorkspace?: Record<string, unknown> | null;
   model_routing?: Record<string, unknown> | null;

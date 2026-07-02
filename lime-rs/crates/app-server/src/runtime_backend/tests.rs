@@ -409,6 +409,82 @@ async fn cancel_turn_cancels_runtime_stream_token() {
 }
 
 #[tokio::test]
+async fn runtime_backend_image_command_short_circuits_before_chat_model_routing() {
+    let backend = RuntimeBackend::new();
+    let workspace = TempDir::new().expect("workspace");
+    let request = request_for_test(
+        "画一张广州夏天的图",
+        None,
+        Some(json!({
+            "harness": {
+                "projectRoot": workspace.path().to_string_lossy(),
+                "image_command_intent": {
+                    "kind": "image_command",
+                    "image_task": {
+                        "prompt": "画一张广州夏天的图",
+                        "mode": "generate",
+                        "count": 1,
+                        "provider_id": "openai",
+                        "model": "gpt-image-2",
+                        "executor_mode": "images_api"
+                    }
+                }
+            }
+        })),
+    );
+    let mut sink = TestRuntimeEventSink::default();
+
+    backend
+        .handle_turn_start(request, &mut sink)
+        .await
+        .expect("image command should not require chat model routing");
+
+    let event_types = sink
+        .events
+        .iter()
+        .filter(|event| !event.event_type.starts_with("workflow."))
+        .map(|event| event.event_type.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        event_types,
+        vec![
+            "runtime.status",
+            "image_task.create_failed",
+            "tool.failed",
+            "turn.completed"
+        ]
+    );
+    assert_eq!(
+        sink.events
+            .iter()
+            .find(|event| event.event_type == "image_task.create_failed")
+            .and_then(|event| event.payload["reasonCode"].as_str()),
+        Some("app_data_source_unavailable")
+    );
+    let workflow_event_types = sink
+        .events
+        .iter()
+        .filter(|event| event.event_type.starts_with("workflow."))
+        .map(|event| event.event_type.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        workflow_event_types,
+        vec![
+            "workflow.run.started",
+            "workflow.step.completed",
+            "workflow.step.completed",
+            "workflow.run.completed"
+        ]
+    );
+    assert!(
+        sink.events
+            .iter()
+            .all(|event| event.event_type != "routing.decision.made"),
+        "image command should bypass chat model route events"
+    );
+}
+
+#[tokio::test]
 async fn respond_action_emits_resolved_fact_with_action_identity() {
     let backend = RuntimeBackend::new();
     let request = request_for_test("hello", None, None);
@@ -634,40 +710,14 @@ async fn runtime_backend_prepares_content_factory_search_artifact_events_with_re
         .iter()
         .filter(|event| event.event_type == "artifact.snapshot")
         .collect::<Vec<_>>();
-    assert!(artifact_events.len() >= 2);
-
-    let streaming_artifact_event = artifact_events.first().expect("streaming artifact event");
     assert_eq!(
-        streaming_artifact_event.payload["artifact"]["metadata"]["complete"],
-        false
+        artifact_events.len(),
+        1,
+        "宿主只回填检索 evidence，不应把最终 documentText 回切成伪流式 artifact"
     );
-    assert_eq!(
-        streaming_artifact_event.payload["artifact"]["metadata"]["contentFactoryWorkspacePatch"]
-            ["objects"][0]["status"],
-        "generating"
-    );
-    assert_eq!(
-        streaming_artifact_event.payload["artifact"]["metadata"]["contentFactoryWorkspacePatch"]
-            ["objects"][0]["source"]["hostSearchStatus"],
-        "completed"
-    );
-    assert!(
-        streaming_artifact_event.payload["artifact"]["metadata"]["contentFactoryWorkspacePatch"]
-            ["objects"][0]["source"]["documentText"]
-            .as_str()
-            .expect("streaming documentText")
-            .chars()
-            .count()
-            < artifact_events
-                .last()
-                .expect("final artifact event")
-                .payload["artifact"]["metadata"]["contentFactoryWorkspacePatch"]["objects"][0]
-                ["source"]["documentText"]
-                .as_str()
-                .expect("final documentText")
-                .chars()
-                .count()
-    );
+    assert!(artifact_events[0].payload["artifact"]["metadata"]
+        .get("streamSequence")
+        .is_none());
 
     let artifact_event = artifact_events.last().expect("artifact event");
     assert_eq!(

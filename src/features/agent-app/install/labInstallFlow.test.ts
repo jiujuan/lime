@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import contentFactoryFixture from "../testing/fixtures/content-factory-app.json";
 import { buildWorkflowRuntimeCapabilityProfile } from "../runtime/workflowRuntimeCapabilityProfile";
 import { buildInstalledAppPreview } from "./installedAppPreview";
 import {
@@ -16,6 +17,7 @@ function buildFlags() {
 
 function buildPreviewWithResolvedSetup() {
   const base = buildInstalledAppPreview({
+    fixture: contentFactoryFixture,
     profile: buildWorkflowRuntimeCapabilityProfile({
       realAdapterEnabled: true,
     }),
@@ -25,6 +27,7 @@ function buildPreviewWithResolvedSetup() {
   });
   const setup = buildAgentAppLabResolvedSetupState(base.projection);
   const preview = buildInstalledAppPreview({
+    fixture: contentFactoryFixture,
     setup,
     profile: buildWorkflowRuntimeCapabilityProfile({
       realAdapterEnabled: true,
@@ -39,6 +42,7 @@ function buildPreviewWithResolvedSetup() {
 describe("Agent App P15 Lab install flow", () => {
   it("应串联 review、verified cache、installed state，并在授权未确认时停在 permission-review", () => {
     const preview = buildInstalledAppPreview({
+      fixture: contentFactoryFixture,
       profile: buildWorkflowRuntimeCapabilityProfile({
         realAdapterEnabled: true,
       }),

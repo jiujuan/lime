@@ -192,6 +192,7 @@ function AppContent() {
   const [activeAgentSessionId, setActiveAgentSessionId] = useState<
     string | null
   >(null);
+  const [activeAgentStreaming, setActiveAgentStreaming] = useState(false);
   const [agentSessionTargetState, setAgentSessionTargetState] =
     useState<AgentSessionTargetState>(loadInitialAgentSessionTargetState);
   const activeAgentPage = requestedPage ?? currentPage;
@@ -471,6 +472,7 @@ function AppContent() {
   useEffect(() => {
     if (activeAgentPage !== "agent") {
       setActiveAgentSessionId(null);
+      setActiveAgentStreaming(false);
       return;
     }
 
@@ -537,6 +539,7 @@ function AppContent() {
               currentPage={currentPage}
               currentPageParams={pageParams}
               activeAgentSessionId={activeAgentSessionId}
+              activeAgentStreaming={activeAgentStreaming}
               requestedPage={requestedPage}
               requestedPageParams={requestedPageParams}
               onNavigate={handleNavigate}
@@ -562,6 +565,7 @@ function AppContent() {
                 onNavigate={handleNavigate}
                 onAgentHasMessagesChange={setAgentHasMessages}
                 onAgentSessionChange={setActiveAgentSessionId}
+                onAgentStreamingChange={setActiveAgentStreaming}
                 activeAgentSessionTarget={agentSessionTargetState.active}
                 agentSessionTargets={agentSessionTargetState.recent}
                 onAgentSessionTargetChange={handleAgentSessionTargetChange}

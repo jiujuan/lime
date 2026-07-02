@@ -3,7 +3,7 @@ import { act as reactAct } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { toast as sonnerToast } from "sonner";
 import { expect, vi } from "vitest";
-import contentFactoryFixtureData from "../fixtures/content-factory-app.json";
+import contentFactoryFixtureData from "../testing/fixtures/content-factory-app.json";
 import { buildInstalledAgentAppState } from "../install/installedAppState";
 import { buildInstalledAppPreview } from "../install/installedAppPreview";
 import { buildAgentAppLabResolvedSetupState } from "../install/labInstallFlow";

@@ -99,6 +99,7 @@ async fn article_workspace_turn_runs_installed_worker_and_materializes_workspace
         .iter()
         .find(|object| object["ref"]["kind"] == "articleDraft")
         .expect("article object");
+    assert!(article["source"]["hostManagedGeneration"].is_null());
     let article_title = article["title"].as_str().expect("article title");
     assert!(article_title.contains("学习路线：从基础语法到工程实战"));
     let article_document = article["source"]["documentText"]
@@ -135,7 +136,12 @@ async fn article_generation_worker_emits_initial_streaming_workspace_snapshot() 
     let data_source = TestSessionDataSource::new(empty_agent_session_read_response("unused"))
         .with_agent_app_installed_states(vec![installed_state]);
     let sidecar_root = tempfile::tempdir().expect("sidecar root");
-    let core = runtime_core_with_sidecar(&sidecar_root).with_app_data_source(Arc::new(data_source));
+    let event_log_root = tempfile::tempdir().expect("event log root");
+    let event_log_writer =
+        Arc::new(EventLogWriter::new(event_log_root.path()).expect("event log writer"));
+    let core = runtime_core_with_sidecar(&sidecar_root)
+        .with_event_log_writer(event_log_writer.clone())
+        .with_app_data_source(Arc::new(data_source));
     let session = core
         .start_session(AgentSessionStartParams {
             session_id: Some("session-content-factory-article".to_string()),
@@ -176,38 +182,175 @@ async fn article_generation_worker_emits_initial_streaming_workspace_snapshot() 
         .map(|event| event.event_type.as_str())
         .collect::<Vec<_>>();
     assert_eq!(
-        event_types,
-        vec![
+        &event_types[0..4],
+        &[
             "message.created",
             "turn.accepted",
-            "agent_app_worker.hook",
             "message.delta",
             "artifact.snapshot",
-            "artifact.snapshot",
-            "agent_app_worker.hook",
-            "turn.completed"
         ]
     );
-    let hook_events = output
-        .events
+    assert_eq!(event_types.last().copied(), Some("turn.completed"));
+    assert!(
+        event_types
+            .iter()
+            .all(|event_type| !event_type.starts_with("workflow.")),
+        "workflow events must not enter user-facing output: {event_types:?}"
+    );
+    assert!(
+        !event_types.contains(&"agent_app_worker.hook"),
+        "hook lifecycle events must be audit-only: {event_types:?}"
+    );
+
+    let regular_log_records = event_log_writer
+        .read_session_events(&session.session_id)
+        .expect("regular session event log");
+    assert!(
+        regular_log_records
+            .iter()
+            .all(|record| !record.event.event_type.starts_with("workflow.")),
+        "workflow events must not enter regular session log"
+    );
+    assert!(
+        regular_log_records
+            .iter()
+            .all(|record| record.event.event_type != "agent_app_worker.hook"),
+        "hook lifecycle events must not enter regular session log"
+    );
+    let workflow_audit_records = event_log_writer
+        .read_session_workflow_audit_events(&session.session_id)
+        .expect("workflow audit log");
+    let workflow_event_types = workflow_audit_records
         .iter()
-        .filter(|event| event.event_type == "agent_app_worker.hook")
+        .map(|record| record.event.event_type.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        workflow_event_types.first().copied(),
+        Some("workflow.run.started")
+    );
+    assert!(
+        workflow_event_types.contains(&"workflow.step.started"),
+        "audit log should include step start: {workflow_event_types:?}"
+    );
+    assert!(
+        workflow_event_types.contains(&"workflow.connector.requested"),
+        "audit log should include connector requests: {workflow_event_types:?}"
+    );
+    assert_eq!(
+        workflow_event_types
+            .iter()
+            .filter(|event_type| **event_type == "workflow.hook.completed")
+            .count(),
+        2,
+        "audit log should include prompt and task hooks: {workflow_event_types:?}"
+    );
+    assert_eq!(
+        workflow_event_types
+            .iter()
+            .filter(|event_type| **event_type == "workflow.step.completed")
+            .count(),
+        5
+    );
+    assert_eq!(
+        workflow_event_types.last().copied(),
+        Some("workflow.run.completed")
+    );
+    let workflow_run_started = workflow_audit_records
+        .iter()
+        .find(|record| record.event.event_type == "workflow.run.started")
+        .expect("workflow run started")
+        .event
+        .clone();
+    assert_eq!(
+        workflow_run_started.payload["workflowKey"],
+        "content_article_workflow"
+    );
+    assert_eq!(
+        workflow_run_started.payload["workflowTitle"],
+        "写文章工作流"
+    );
+    assert_eq!(workflow_run_started.payload["prompt"]["redacted"], true);
+    assert_eq!(
+        workflow_run_started.payload["redaction"]["policy"],
+        "workflow_audit_metadata_only"
+    );
+    assert_eq!(
+        workflow_run_started.payload["steps"]
+            .as_array()
+            .expect("workflow steps")
+            .len(),
+        5
+    );
+    let workflow_completed_step_events = workflow_audit_records
+        .iter()
+        .filter(|record| record.event.event_type == "workflow.step.completed")
+        .collect::<Vec<_>>();
+    assert_eq!(workflow_completed_step_events.len(), 5);
+    assert_eq!(
+        workflow_completed_step_events[0].event.payload["stepId"],
+        "research"
+    );
+    assert_eq!(
+        workflow_completed_step_events[0].event.payload["stepTitle"],
+        "资料检索"
+    );
+    let connector_request = workflow_audit_records
+        .iter()
+        .find(|record| record.event.event_type == "workflow.connector.requested")
+        .expect("workflow connector requested");
+    assert_eq!(
+        connector_request.event.payload["workflowRunId"],
+        format!(
+            "{}:{}:workflow",
+            output.response.turn.turn_id, "content_article_generate"
+        )
+    );
+    assert_eq!(connector_request.event.payload["stepId"], "research");
+    assert_eq!(connector_request.event.payload["stepTitle"], "资料检索");
+    assert_eq!(
+        connector_request.event.payload["connectorRef"],
+        "web-research"
+    );
+    assert_eq!(connector_request.event.payload["toolName"], "WebSearch");
+    assert_eq!(
+        connector_request.event.payload["metadata"]["agentAppWorkflow"]["eventSource"],
+        "worker_progress"
+    );
+    assert_eq!(connector_request.event.payload["query"]["redacted"], true);
+    assert_eq!(
+        connector_request.event.payload["redaction"]["policy"],
+        "workflow_audit_metadata_only"
+    );
+    let hook_events = workflow_audit_records
+        .iter()
+        .filter(|record| record.event.event_type == "workflow.hook.completed")
         .collect::<Vec<_>>();
     assert_eq!(hook_events.len(), 2);
-    assert_eq!(hook_events[0].payload["hookKey"], "prompt-submit");
-    assert_eq!(hook_events[0].payload["hookEvent"], "prompt.submit");
-    assert_eq!(hook_events[0].payload["hookScope"], "prompt");
-    assert_eq!(hook_events[0].payload["status"], "completed");
-    assert_eq!(hook_events[1].payload["hookKey"], "task-complete");
-    assert_eq!(hook_events[1].payload["hookEvent"], "task.complete");
-    assert_eq!(hook_events[1].payload["hookScope"], "task");
-    assert_eq!(hook_events[1].payload["status"], "completed");
+    assert_eq!(hook_events[0].event.payload["hookKey"], "prompt-submit");
+    assert_eq!(hook_events[0].event.payload["hookEvent"], "prompt.submit");
+    assert_eq!(hook_events[0].event.payload["hookScope"], "prompt");
+    assert_eq!(hook_events[0].event.payload["status"], "completed");
+    assert_eq!(hook_events[0].event.payload["stepId"], "research");
+    assert_eq!(hook_events[0].event.payload["auditOnly"], true);
+    assert_eq!(
+        hook_events[0].event.payload["metadata"]["agentAppWorkflow"]["eventSource"],
+        "agent_app_worker_hook"
+    );
+    assert_eq!(hook_events[1].event.payload["hookKey"], "task-complete");
+    assert_eq!(hook_events[1].event.payload["hookEvent"], "task.complete");
+    assert_eq!(hook_events[1].event.payload["hookScope"], "task");
+    assert_eq!(hook_events[1].event.payload["status"], "completed");
+    assert_eq!(hook_events[1].event.payload["stepId"], "image-plan");
+    assert_eq!(hook_events[1].event.payload["auditOnly"], true);
     let artifact_events = output
         .events
         .iter()
         .filter(|event| event.event_type == "artifact.snapshot")
         .collect::<Vec<_>>();
-    assert_eq!(artifact_events.len(), 2);
+    assert!(
+        artifact_events.len() >= 6,
+        "expected initial, progressive, and final workspace patch snapshots: {event_types:?}"
+    );
     let streaming_artifact = &artifact_events[0].payload["artifact"];
     assert_eq!(streaming_artifact["status"], "streaming");
     assert_eq!(streaming_artifact["title"], "Content Factory Workspace");
@@ -233,7 +376,38 @@ async fn article_generation_worker_emits_initial_streaming_workspace_snapshot() 
         .read_text(streaming_sidecar_path)
         .expect("streaming sidecar content");
     assert!(streaming_content.contains("Researching source material"));
-    let completed_artifact = &artifact_events[1].payload["artifact"];
+    let progressive_document_lengths = artifact_events
+        .iter()
+        .filter_map(|event| {
+            let artifact = &event.payload["artifact"];
+            if artifact["status"] != "streaming" {
+                return None;
+            }
+            artifact["metadata"]["contentFactoryWorkspacePatch"]["objects"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .find(|object| object["ref"]["kind"] == "articleDraft")
+                .and_then(|object| object["source"]["documentText"].as_str())
+                .map(str::chars)
+                .map(Iterator::count)
+                .filter(|length| *length > 0)
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        progressive_document_lengths.len() >= 4,
+        "expected progressive article document snapshots, got {progressive_document_lengths:?}"
+    );
+    assert!(
+        progressive_document_lengths
+            .windows(2)
+            .all(|window| window[0] <= window[1]),
+        "article document snapshots must not go backwards: {progressive_document_lengths:?}"
+    );
+    let completed_artifact = &artifact_events
+        .last()
+        .expect("completed artifact snapshot")
+        .payload["artifact"];
     assert_ne!(completed_artifact["status"], "streaming");
 
     let read = core
@@ -312,16 +486,12 @@ async fn article_generation_worker_emits_initial_streaming_workspace_snapshot() 
             .len()
             >= 5
     );
-    assert!(worker_evidence.iter().any(|evidence| {
-        evidence["eventType"] == "agent_app_worker.hook"
-            && evidence["hookKey"] == "prompt-submit"
-            && evidence["status"] == "completed"
-    }));
-    assert!(worker_evidence.iter().any(|evidence| {
-        evidence["eventType"] == "agent_app_worker.hook"
-            && evidence["hookKey"] == "task-complete"
-            && evidence["status"] == "completed"
-    }));
+    assert!(
+        !worker_evidence
+            .iter()
+            .any(|evidence| evidence["eventType"] == "agent_app_worker.hook"),
+        "hook lifecycle events must not enter article workspace workerEvidence"
+    );
 }
 
 #[tokio::test]
@@ -544,7 +714,12 @@ async fn article_workspace_worker_retries_retryable_failure_and_completes() {
     let data_source = TestSessionDataSource::new(empty_agent_session_read_response("unused"))
         .with_agent_app_installed_states(vec![installed_state]);
     let sidecar_root = tempfile::tempdir().expect("sidecar root");
-    let core = runtime_core_with_sidecar(&sidecar_root).with_app_data_source(Arc::new(data_source));
+    let event_log_root = tempfile::tempdir().expect("event log root");
+    let event_log_writer =
+        Arc::new(EventLogWriter::new(event_log_root.path()).expect("event log writer"));
+    let core = runtime_core_with_sidecar(&sidecar_root)
+        .with_event_log_writer(event_log_writer.clone())
+        .with_app_data_source(Arc::new(data_source));
     let session = core
         .start_session(AgentSessionStartParams {
             session_id: Some("session-content-factory-retry".to_string()),
@@ -556,11 +731,12 @@ async fn article_workspace_worker_retries_retryable_failure_and_completes() {
         })
         .expect("session")
         .session;
+    let session_id = session.session_id.clone();
 
     let output = core
         .start_turn(
             AgentSessionTurnStartParams {
-                session_id: session.session_id.clone(),
+                session_id: session_id.clone(),
                 turn_id: Some("turn-article-workspace-retry".to_string()),
                 input: AgentInput {
                     text: "重新生成配图".to_string(),
@@ -615,10 +791,45 @@ async fn article_workspace_worker_retries_retryable_failure_and_completes() {
     );
     assert_eq!(retry_event.payload["retryAttempt"], 0);
     assert_eq!(retry_event.payload["retryMaxAttempts"], 1);
+    let workflow_audit_records = event_log_writer
+        .read_session_workflow_audit_events(&session_id)
+        .expect("workflow audit log");
+    let workflow_event_types = workflow_audit_records
+        .iter()
+        .map(|record| record.event.event_type.as_str())
+        .collect::<Vec<_>>();
+    assert!(
+        workflow_event_types.contains(&"workflow.step.retrying"),
+        "audit log should include step retrying: {workflow_event_types:?}"
+    );
+    assert!(
+        workflow_event_types.contains(&"workflow.run.retrying"),
+        "audit log should include run retrying: {workflow_event_types:?}"
+    );
+    assert!(
+        workflow_event_types.contains(&"workflow.run.completed"),
+        "audit log should include final run completion: {workflow_event_types:?}"
+    );
+    let retry_run = workflow_audit_records
+        .iter()
+        .find(|record| record.event.event_type == "workflow.run.retrying")
+        .expect("workflow run retrying");
+    assert_eq!(
+        retry_run.event.payload["workflowKey"],
+        "content_image_workflow"
+    );
+    assert_eq!(retry_run.event.payload["status"], "retrying");
+    assert_eq!(retry_run.event.payload["failure"]["retryAttempt"], 0);
+    let retry_step = workflow_audit_records
+        .iter()
+        .find(|record| record.event.event_type == "workflow.step.retrying")
+        .expect("workflow step retrying");
+    assert_eq!(retry_step.event.payload["stepId"], "image-plan");
+    assert_eq!(retry_step.event.payload["status"], "retrying");
 
     let read = core
         .read_session(AgentSessionReadParams {
-            session_id: session.session_id,
+            session_id,
             history_limit: None,
             history_offset: None,
             history_before_message_id: None,
@@ -661,7 +872,12 @@ async fn article_workspace_worker_stops_after_retry_budget_is_exhausted() {
     let data_source = TestSessionDataSource::new(empty_agent_session_read_response("unused"))
         .with_agent_app_installed_states(vec![installed_state]);
     let sidecar_root = tempfile::tempdir().expect("sidecar root");
-    let core = runtime_core_with_sidecar(&sidecar_root).with_app_data_source(Arc::new(data_source));
+    let event_log_root = tempfile::tempdir().expect("event log root");
+    let event_log_writer =
+        Arc::new(EventLogWriter::new(event_log_root.path()).expect("event log writer"));
+    let core = runtime_core_with_sidecar(&sidecar_root)
+        .with_event_log_writer(event_log_writer.clone())
+        .with_app_data_source(Arc::new(data_source));
     let session = core
         .start_session(AgentSessionStartParams {
             session_id: Some("session-content-factory-retry-failed".to_string()),
@@ -673,11 +889,12 @@ async fn article_workspace_worker_stops_after_retry_budget_is_exhausted() {
         })
         .expect("session")
         .session;
+    let session_id = session.session_id.clone();
 
     let output = core
         .start_turn(
             AgentSessionTurnStartParams {
-                session_id: session.session_id,
+                session_id: session_id.clone(),
                 turn_id: Some("turn-article-workspace-retry-failed".to_string()),
                 input: AgentInput {
                     text: "重新生成配图".to_string(),
@@ -722,12 +939,36 @@ async fn article_workspace_worker_stops_after_retry_budget_is_exhausted() {
         runtime_error.payload["errorCode"],
         "AGENT_APP_WORKER_RETRYABLE_FAILURE"
     );
+    let workflow_audit_records = event_log_writer
+        .read_session_workflow_audit_events(&session_id)
+        .expect("workflow audit log");
+    let workflow_event_types = workflow_audit_records
+        .iter()
+        .map(|record| record.event.event_type.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        workflow_event_types
+            .iter()
+            .filter(|event_type| **event_type == "workflow.run.retrying")
+            .count(),
+        1,
+        "audit log should include one retrying run event: {workflow_event_types:?}"
+    );
+    assert!(
+        workflow_event_types.contains(&"workflow.run.failed"),
+        "audit log should include final run failure: {workflow_event_types:?}"
+    );
+    let failed_run = workflow_audit_records
+        .iter()
+        .find(|record| record.event.event_type == "workflow.run.failed")
+        .expect("workflow run failed");
+    assert_eq!(failed_run.event.payload["failure"]["retryAttempt"], 1);
 }
 
 fn content_factory_fixture_root() -> Option<std::path::PathBuf> {
     let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
-        .join("src/features/agent-app/fixtures");
+        .join("src/features/agent-app/testing/fixtures");
     root.join("src/runtime/content-factory-worker.mjs")
         .is_file()
         .then_some(root)
@@ -788,6 +1029,23 @@ fn retry_worker_installed_state(package_root: &Path) -> serde_json::Value {
                 },
                 "tasks": [
                     { "kind": "content.image.generate" }
+                ],
+                "workflows": [
+                    {
+                        "key": "content_image_workflow",
+                        "title": "内容配图工作流",
+                        "taskKind": "content.image.generate",
+                        "outputArtifactKind": "content_factory.workspace_patch",
+                        "steps": [
+                            {
+                                "id": "image-plan",
+                                "title": "配图规划",
+                                "subagent": "image-planner",
+                                "skillRefs": ["article-image-plan"],
+                                "expectedOutput": "imageGenerationSet"
+                            }
+                        ]
+                    }
                 ]
             }
         },

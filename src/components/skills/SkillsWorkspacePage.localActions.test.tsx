@@ -45,10 +45,10 @@ describe("SkillsWorkspacePage local actions", () => {
     mocks.localSkills = [
       ...mocks.localSkills,
       {
-        key: "project:article-image-cheatsheet",
-        name: "article-image-cheatsheet",
+        key: "project:article-image-plan",
+        name: "article-image-plan",
         description: "项目保存技能",
-        directory: "article-image-cheatsheet",
+        directory: "article-image-plan",
         installed: true,
         sourceKind: "other",
         catalogSource: "project",
@@ -61,7 +61,7 @@ describe("SkillsWorkspacePage local actions", () => {
     });
 
     expect(
-      findLocalSkillRow(container, "article-image-cheatsheet"),
+      findLocalSkillRow(container, "article-image-plan"),
     ).toBeUndefined();
     openLocalSkillMenu(container, "writer");
     expect(container.textContent).toContain("卸载");

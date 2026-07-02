@@ -3,8 +3,17 @@ import type {
   AgentThreadItem,
   AgentThreadTurnSummaryItem,
 } from "@/lib/api/agentProtocol";
+import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
 import { normalizeLegacyRuntimeStatusTitle } from "@/lib/api/agentTextNormalization";
-import { formatAgentRuntimeStatusSummary } from "../utils/agentRuntimeStatus";
+import type { Message } from "../types";
+import {
+  buildWaitingAgentRuntimeStatus,
+  formatAgentRuntimeStatusSummary,
+} from "../utils/agentRuntimeStatus";
+import {
+  areJsonLikeValuesEqual,
+  upsertThreadItemState,
+} from "./agentThreadState";
 
 export interface AgentStreamRuntimeStatusApplyPlan {
   normalizedStatus: AgentRuntimeStatusPayload;
@@ -33,6 +42,30 @@ export function buildAgentStreamRuntimeStatusApplyPlan(params: {
     summaryText: formatAgentRuntimeStatusSummary(normalizedStatus),
     updatedAt: params.updatedAt,
   };
+}
+
+export function buildAgentStreamProviderTraceRuntimeStatusApplyPlan(params: {
+  executionStrategy: AsterExecutionStrategy;
+  firstRuntimeStatusAt?: number | null;
+  stage?: string | null;
+  updatedAt: string;
+}): AgentStreamRuntimeStatusApplyPlan | null {
+  if (params.firstRuntimeStatusAt) {
+    return null;
+  }
+  if (
+    params.stage !== "request_started" &&
+    params.stage !== "first_event_received"
+  ) {
+    return null;
+  }
+
+  return buildAgentStreamRuntimeStatusApplyPlan({
+    status: buildWaitingAgentRuntimeStatus({
+      executionStrategy: params.executionStrategy,
+    }),
+    updatedAt: params.updatedAt,
+  });
 }
 
 export function selectAgentStreamRuntimeSummaryItem(params: {
@@ -69,10 +102,57 @@ export function buildAgentStreamRuntimeSummaryItemUpdate(params: {
   if (!summaryItem) {
     return null;
   }
+  if (summaryItem.text === params.summaryText) {
+    return null;
+  }
 
   return {
     ...summaryItem,
     text: params.summaryText,
     updated_at: params.updatedAt,
   };
+}
+
+export function applyAgentStreamRuntimeStatusToThreadItems(params: {
+  activeSessionId: string;
+  items: AgentThreadItem[];
+  pendingItemKey: string;
+  plan: AgentStreamRuntimeStatusApplyPlan;
+}): AgentThreadItem[] | null {
+  const runtimeSummaryItem = buildAgentStreamRuntimeSummaryItemUpdate({
+    activeSessionId: params.activeSessionId,
+    items: params.items,
+    pendingItemKey: params.pendingItemKey,
+    summaryText: params.plan.summaryText,
+    updatedAt: params.plan.updatedAt,
+  });
+  if (!runtimeSummaryItem) {
+    return null;
+  }
+
+  return upsertThreadItemState(params.items, runtimeSummaryItem);
+}
+
+export function applyAgentStreamRuntimeStatusToMessages(params: {
+  assistantMsgId: string;
+  messages: Message[];
+  plan: AgentStreamRuntimeStatusApplyPlan;
+}): Message[] {
+  let changed = false;
+  const nextMessages = params.messages.map((msg) => {
+    if (msg.id !== params.assistantMsgId) {
+      return msg;
+    }
+    if (
+      areJsonLikeValuesEqual(msg.runtimeStatus, params.plan.normalizedStatus)
+    ) {
+      return msg;
+    }
+    changed = true;
+    return {
+      ...msg,
+      runtimeStatus: params.plan.normalizedStatus,
+    };
+  });
+  return changed ? nextMessages : params.messages;
 }

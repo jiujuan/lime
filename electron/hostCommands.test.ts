@@ -197,6 +197,7 @@ type AppServerRequestMock = (
 vi.mock("./electronRuntime", () => ({
   app: {
     getFileIcon: getFileIconMock,
+    getAppPath: () => os.tmpdir(),
     getName: () => "Lime",
     getPath: getPathMock,
     getVersion: () => "0.0.0-test",
@@ -1022,6 +1023,32 @@ describe("ElectronHostCommands local file shell facade", () => {
       url: "file:///tmp/demo.html",
       title: "Demo",
     });
+
+    const resourceManagerResult = await host.invoke(
+      "open_resource_manager_window",
+      {
+        sessionId: "resource-session-1",
+      },
+    );
+    expect(resourceManagerResult).toEqual(
+      expect.objectContaining({
+        opened: true,
+        reused: false,
+      }),
+    );
+    expect(String((resourceManagerResult as { url: string }).url)).toContain(
+      "lime_window=resource-manager",
+    );
+    expect(String((resourceManagerResult as { url: string }).url)).toContain(
+      "session=resource-session-1",
+    );
+    expect(browserWindowCtorMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Lime 资源管理器",
+        width: 1240,
+        show: false,
+      }),
+    );
 
     await expect(
       host.invoke("get_file_icon_data_url", { path: "/Applications/Lime.app" }),

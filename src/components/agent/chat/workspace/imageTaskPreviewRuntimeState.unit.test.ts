@@ -145,6 +145,39 @@ describe("imageTaskPreviewRuntimeState", () => {
     expect(next).toBe(current);
   });
 
+  it("无输出的 completed 快照不应阻塞后续运行中状态回填", () => {
+    const current = createState({
+      tasks: [
+        createTask({
+          status: "complete",
+          outputIds: [],
+        }),
+      ],
+      outputs: [],
+      selectedTaskId: "task-1",
+      selectedOutputId: null,
+    });
+
+    const next = mergeImageTaskSnapshot(
+      current,
+      createSnapshot({
+        task: createTask({
+          status: "running",
+          outputIds: [],
+        }),
+        outputs: [],
+      }),
+    );
+
+    expect(next).not.toBe(current);
+    expect(next.tasks[0]).toEqual(
+      expect.objectContaining({
+        id: "task-1",
+        status: "running",
+      }),
+    );
+  });
+
   it("应在输出 id 改变时按 URL 延续 selected output", () => {
     const current = createState({
       tasks: [

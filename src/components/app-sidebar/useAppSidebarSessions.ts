@@ -38,6 +38,7 @@ interface UseAppSidebarSessionsParams {
   sidebarSearchQuery: string;
   isNewTaskHome: boolean;
   isClawTaskCenter: boolean;
+  activeAgentStreaming?: boolean;
   conversationUntitledLabel: string;
 }
 
@@ -119,6 +120,7 @@ export function useAppSidebarSessions({
   sidebarSearchQuery,
   isNewTaskHome,
   isClawTaskCenter,
+  activeAgentStreaming = false,
   conversationUntitledLabel,
 }: UseAppSidebarSessionsParams) {
   const sidebarSessionsRef = useRef<AsterSessionInfo[]>([]);
@@ -143,6 +145,7 @@ export function useAppSidebarSessions({
   const loadRecentSidebarSessionsRef = useRef<() => Promise<void>>(
     async () => undefined,
   );
+  const activeAgentStreamingRef = useRef(activeAgentStreaming);
   const sidebarFocusRefreshCancelRef = useRef<(() => void) | null>(null);
   const newTaskHomeSessionLoadCancelRef = useRef<(() => void) | null>(null);
   const shouldLoadSidebarConversations =
@@ -215,6 +218,23 @@ export function useAppSidebarSessions({
   }, [recentSessionsVisibleCount]);
 
   const scheduleRecentSidebarReload = useCallback((minimumDelayMs: number) => {
+    if (activeAgentStreamingRef.current) {
+      recentSidebarReloadPendingRef.current = true;
+      logAgentDebug(
+        "AppSidebar",
+        "recentConversations.load.deferredForActiveStream",
+        {
+          currentSessionId,
+          minimumDelayMs,
+        },
+        {
+          dedupeKey: `appSidebar.recentConversations.load.deferredForActiveStream:${currentSessionId ?? "none"}`,
+          throttleMs: 1000,
+        },
+      );
+      return;
+    }
+
     recentSidebarReloadCancelRef.current?.();
     recentSidebarReloadCancelRef.current = scheduleMinimumDelayIdleTask(
       () => {
@@ -229,7 +249,23 @@ export function useAppSidebarSessions({
         ),
       },
     );
-  }, []);
+  }, [currentSessionId]);
+
+  useEffect(() => {
+    activeAgentStreamingRef.current = activeAgentStreaming;
+    if (activeAgentStreaming) {
+      recentSidebarReloadCancelRef.current?.();
+      recentSidebarReloadCancelRef.current = null;
+      return;
+    }
+
+    if (!recentSidebarReloadPendingRef.current) {
+      return;
+    }
+
+    recentSidebarReloadPendingRef.current = false;
+    scheduleRecentSidebarReload(SIDEBAR_SESSION_ENTRY_REFRESH_DEFER_MS);
+  }, [activeAgentStreaming, scheduleRecentSidebarReload]);
 
   const loadRecentSidebarSessions = useCallback(async () => {
     if (!shouldLoadSidebarConversations) {
@@ -243,6 +279,26 @@ export function useAppSidebarSessions({
       setSidebarSessions([]);
       setSidebarSessionsHasMore(false);
       setSidebarSessionsLoading(false);
+      return;
+    }
+
+    if (activeAgentStreamingRef.current) {
+      recentSidebarReloadPendingRef.current = true;
+      setSidebarSessionsLoading(false);
+      logAgentDebug(
+        "AppSidebar",
+        "recentConversations.load.deferredForActiveStream",
+        {
+          currentSessionId,
+          limit: recentSessionRequestLimit,
+          projectIds: normalizedActiveProjectIds,
+          projectCwds: normalizedOpenedProjectCwds,
+        },
+        {
+          dedupeKey: `appSidebar.recentConversations.load.deferredForActiveStream:${currentSessionId ?? "none"}`,
+          throttleMs: 1000,
+        },
+      );
       return;
     }
 
@@ -347,6 +403,7 @@ export function useAppSidebarSessions({
     normalizedOpenedProjectCwds,
     activeProjectIdsKey,
     openedProjectCwdsKey,
+    currentSessionId,
     recentSessionRequestLimit,
     recentSessionsVisibleCount,
     requireOpenedProjectCwd,

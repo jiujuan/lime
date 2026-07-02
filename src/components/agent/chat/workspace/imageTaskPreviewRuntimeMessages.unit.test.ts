@@ -177,6 +177,38 @@ describe("imageTaskPreviewRuntimeMessages", () => {
     expect(merged.imageWorkbenchPreview?.status).toBe("complete");
   });
 
+  it("完成态 preview 没有 caption 时应保留 presentation 生成的结果描述", () => {
+    const existingMessage = createMessage({
+      id: "assistant-runtime",
+      content: "好啊，我来生成这张春天照片。",
+      imageWorkbenchPreview: createPreview({
+        status: "running",
+        caption: "完成了，春天照片已经生成，可以继续调光线。",
+      }),
+    });
+    const nextMessage = createMessage({
+      id: "image-workbench:task-1:assistant",
+      content: "",
+      imageWorkbenchPreview: createPreview({
+        status: "complete",
+        imageUrl: "https://cdn.example.com/spring.png",
+        caption: null,
+      }),
+    });
+
+    const merged = mergeImageWorkbenchPreviewMessage({
+      existingMessage,
+      nextMessage,
+    });
+
+    expect(merged.content).toBe("好啊，我来生成这张春天照片。");
+    expect(merged.imageWorkbenchPreview).toMatchObject({
+      status: "complete",
+      imageUrl: "https://cdn.example.com/spring.png",
+      caption: "完成了，春天照片已经生成，可以继续调光线。",
+    });
+  });
+
   it("应清理草稿 preview，并把 skill 执行失败归一成可重试失败态", () => {
     const draftMessage = createMessage({
       id: "draft",

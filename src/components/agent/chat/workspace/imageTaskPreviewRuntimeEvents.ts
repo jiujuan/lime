@@ -1,4 +1,5 @@
 import type { CanvasStateUnion } from "@/components/workspace/canvas/canvasUtils";
+import { normalizeTaskFamily } from "./imageTaskFamily";
 import {
   buildPendingImageTaskSnapshot,
   normalizeTaskStatus,
@@ -101,7 +102,11 @@ export function buildPendingImageTaskSnapshotFromEvent(params: {
   artifactPath?: string | null;
   canvasState: CanvasStateUnion | null;
 }): ParsedImageTaskSnapshot | null {
-  if (!params.taskId || !params.taskType || params.taskFamily !== "image") {
+  const taskFamily = normalizeTaskFamily(
+    params.taskType || "",
+    params.taskFamily,
+  );
+  if (!params.taskId || !params.taskType || taskFamily !== "image") {
     return null;
   }
 

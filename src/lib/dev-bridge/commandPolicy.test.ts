@@ -182,6 +182,10 @@ describe("commandPolicy", () => {
     expect(shouldDisallowMockFallbackCommand("open_file_preview_window")).toBe(
       true,
     );
+    expect(isBridgeTruthCommand("open_resource_manager_window")).toBe(false);
+    expect(
+      shouldDisallowMockFallbackCommand("open_resource_manager_window"),
+    ).toBe(true);
   });
 
   it("P6 Session files 旧写读链已退役，不再作为 DevBridge policy surface", () => {

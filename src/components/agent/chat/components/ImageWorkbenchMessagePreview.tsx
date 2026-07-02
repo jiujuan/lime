@@ -10,7 +10,10 @@ import type {
   MessageImageWorkbenchPreview,
   MessageImageWorkbenchPreviewSelection,
 } from "../types";
-import { resolveImageWorkbenchPreviewModelLabel } from "../utils/imageWorkbenchPresentation";
+import {
+  buildImageWorkbenchCaption,
+  resolveImageWorkbenchPreviewModelLabel,
+} from "../utils/imageWorkbenchPresentation";
 import { ImageWorkbenchPreviewMedia } from "./ImageWorkbenchPreviewMedia";
 
 interface ImageWorkbenchMessagePreviewProps {
@@ -44,7 +47,16 @@ export const ImageWorkbenchMessagePreview: React.FC<
   const { t } = useTranslation("agent");
   const toolLabel = resolveToolLabel(preview, t);
   const modelLabel = resolveImageWorkbenchPreviewModelLabel(preview);
-  const caption = preview.caption?.trim();
+  const explicitCaption =
+    preview.status === "running" ? "" : preview.caption?.trim() || "";
+  const caption =
+    explicitCaption ||
+    buildImageWorkbenchCaption({
+      prompt: preview.prompt,
+      status: preview.status,
+      imageCount: preview.imageCount ?? preview.expectedImageCount ?? null,
+      statusMessage: preview.statusMessage ?? null,
+    });
   const showRetryAction =
     (preview.status === "failed" || preview.status === "cancelled") &&
     preview.retryable !== false;
@@ -79,7 +91,7 @@ export const ImageWorkbenchMessagePreview: React.FC<
       >
         <div
           data-testid={`image-workbench-message-preview-toolbar-${preview.taskId}`}
-          className="mb-2 flex min-h-6 w-full max-w-full items-center gap-2 px-0.5 text-[13px] font-medium leading-5 text-[#435d2e]"
+          className="mb-3 flex min-h-10 w-full max-w-full items-center gap-2 rounded-[10px] border border-[#d9ded6] bg-[#eef0ec] px-4 text-[13px] font-medium leading-5 text-[#435d2e]"
         >
           <Leaf className="h-3.5 w-3.5 shrink-0 fill-[#496631]/15 text-[#496631]" />
           <span className="truncate">{toolLabel}</span>

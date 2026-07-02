@@ -12,6 +12,7 @@ import {
   appendTextToParts,
   normalizeSignatureText,
 } from "./agentChatHistoryPrimitives";
+import { buildImageTaskAssistantContent } from "../utils/imageWorkbenchPresentation";
 import {
   isProcessBoundaryContentPart,
   readContentPartSequence,
@@ -96,6 +97,19 @@ export function mergeImageWorkbenchPreview(
     ...previous,
     ...next,
   };
+}
+
+export function resolveImageWorkbenchHistoryAssistantIntro(
+  preview?: MessageImageWorkbenchPreview,
+): string {
+  if (!preview) {
+    return "";
+  }
+  return buildImageTaskAssistantContent({
+    prompt: preview.prompt,
+    mode: preview.mode,
+    modelName: preview.runtimeContract?.model || preview.modelName || null,
+  });
 }
 
 export function mergeTaskPreview(

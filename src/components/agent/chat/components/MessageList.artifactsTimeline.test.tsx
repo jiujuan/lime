@@ -360,6 +360,93 @@ describe("MessageList artifacts timeline", () => {
     ).toBe(true);
   });
 
+  it("内容工厂流式文章出现后应隐藏上一条首字前等待占位", () => {
+    const now = new Date("2026-07-02T10:00:00.000Z");
+    const streamingArticle =
+      "# 公众号文章草稿\n\n写作需求：帮我写一篇关于三国的故事。\n\n正在检索资料并生成文章草稿。";
+    const messages: Message[] = [
+      {
+        id: "msg-user-content-factory-streaming",
+        role: "user",
+        content: "@写文章 帮我写一篇关于三国的故事",
+        timestamp: now,
+      },
+      {
+        id: "msg-assistant-first-token-content-factory",
+        role: "assistant",
+        content: "",
+        timestamp: new Date(now.getTime() + 500),
+        isThinking: true,
+        runtimeStatus: {
+          phase: "routing",
+          title: "正在生成回复",
+          detail: "运行时已开始处理，等待首个输出。",
+        },
+      },
+      {
+        id: "msg-assistant-content-factory-streaming-article",
+        role: "assistant",
+        content: "",
+        timestamp: new Date(now.getTime() + 1000),
+        artifacts: [
+          {
+            id: "artifact-content-factory-streaming-article",
+            type: "document",
+            title: "公众号文章草稿",
+            content: streamingArticle,
+            status: "streaming",
+            meta: {
+              openedFrom: "right_surface_article_workspace",
+              articleWorkspace: {
+                objectKind: "articleDraft",
+              },
+            },
+            position: { start: 0, end: streamingArticle.length },
+            createdAt: now.getTime() + 1000,
+            updatedAt: now.getTime() + 1000,
+          },
+        ],
+      },
+    ];
+
+    const container = render(messages, {
+      currentTurnId: "turn-content-factory-streaming",
+      isSending: true,
+      threadRead: {
+        thread_id: "thread-content-factory-streaming",
+        status: "running",
+      },
+      turns: [
+        {
+          id: "turn-content-factory-streaming",
+          thread_id: "thread-content-factory-streaming",
+          prompt_text: "@写文章 帮我写一篇关于三国的故事",
+          status: "running",
+          started_at: "2026-07-02T10:00:00.000Z",
+          created_at: "2026-07-02T10:00:00.000Z",
+          updated_at: "2026-07-02T10:00:04.000Z",
+        },
+      ],
+    });
+
+    expect(
+      container.querySelector(
+        '[data-testid="assistant-first-token-runtime-status"]',
+      ),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="article-artifact-frame"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid="assistant-streaming-inline-indicator"]',
+      ),
+    ).not.toBeNull();
+    expect(container.textContent).not.toContain("Generating reply");
+    expect(container.textContent).toContain("Writing...");
+    expect(container.textContent).toContain("公众号文章草稿");
+  });
+
   it("不应把 .lime/artifacts 下的内部 artifact 文稿 JSON 渲染成尾部时间线", () => {
     const now = new Date();
     const messages: Message[] = [

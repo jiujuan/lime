@@ -158,6 +158,8 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain('"app_server_drain_events"');
     expect(content).toContain('"agentSession/event"');
     expect(content).toContain('APP_SERVER_BACKEND_MODE: "external"');
+    expect(content).toContain('APP_SERVER_BACKEND_MODE: "runtime"');
+    expect(content).toContain("resolveScenarioBackendEnv");
     expect(content).toContain("APP_SERVER_BACKEND_COMMAND: process.execPath");
     expect(content).toContain("writeFixtureBackend");
     expect(content).toContain('const FIXTURE_PROVIDER = "fixture-provider"');
@@ -391,7 +393,7 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).not.toContain("agent_runtime_");
   });
 
-  it("covers Claw @配图 through Skill(image_generate) and current task artifact", () => {
+  it("covers Claw @配图 through ImageCommandWorkflow and current task artifact", () => {
     const content = readSmokeScript();
     const imageCommandContent = fs.readFileSync(
       "scripts/agent-runtime/claw-chat-current-fixture-image-command.mjs",
@@ -414,29 +416,31 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(rpcContent).toContain("modelProvider/create");
     expect(rpcContent).toContain("modelProviderKey/create");
     expect(rpcContent).toContain("media_defaults");
-    expect(content).toContain("imageCommandHarness?.image_skill_launch");
-    expect(content).toContain("image_skill_launch");
+    expect(content).toContain("image_command_intent");
+    expect(content).toContain("imageCommandLegacySkillLaunchNotSubmitted");
     expect(content).toContain("image_task");
-    expect(content).toContain('toolName: "Skill"');
-    expect(content).toContain("IMAGE_COMMAND_SKILL_NAME");
-    expect(content).toContain("IMAGE_COMMAND_SKILL_TOOL_CALL_ID");
-    expect(content).toContain(
-      'const IMAGE_COMMAND_SKILL_NAME = "image_generate"',
-    );
+    expect(imageCommandContent).not.toContain('entrySource: "plain_image_intent"');
+    expect(imageCommandContent).toContain('entrySource: "at_image_command"');
+    expect(imageCommandContent).not.toContain("IMAGE_COMMAND_SKILL_NAME");
+    expect(imageCommandContent).not.toContain("IMAGE_COMMAND_SKILL_TOOL_CALL_ID");
+    expect(imageCommandContent).toContain("image_command_workflow");
     expect(content).toContain("lime_create_image_generation_task");
     expect(content).toContain("IMAGE_COMMAND_CREATE_TASK_TOOL_CALL_ID");
     expect(content).toContain("mediaTaskArtifact/image/create");
     expect(content).toContain("mediaTaskArtifact/get");
     expect(content).toContain("mediaTaskArtifact/list");
+    expect(content).toContain('APP_SERVER_BACKEND_MODE: "runtime"');
     expect(content).toContain("media_runtime_worker");
     expect(content).toContain("lime-image-api-worker");
     expect(content).toContain(".lime/tasks/image_generate");
     expect(content).toContain("runImageCommandScenario");
+    expect(content).toContain("waitForImageCommandWorkflowTaskArtifact");
     expect(content).toContain("isImageIntentScenario");
     expect(content).toContain("waitForGuiImageCommandCompleted");
     expect(content).toContain("waitForGuiImageCommandTerminal");
     expect(content).toContain("waitForSessionReadImageCommandCompleted");
     expect(content).toContain("waitForImageCommandTaskArtifactTerminal");
+    expect(content).not.toContain("createImageCommandTaskArtifact");
     expect(content).not.toContain("completeImageCommandTaskArtifact");
     expect(content).not.toContain("completeImageCommandTaskArtifactFile");
     expect(content).toContain("imageCommandTaskArtifactTerminalPatch");
@@ -461,7 +465,7 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("imageCommandFixtureProvider");
     expect(content).toContain("bodyIncludesModel");
     expect(content).toContain("headerProviderId");
-    expect(content).toContain("imageCommandSkillToolObserved");
+    expect(content).toContain("imageCommandWorkflowToolObserved");
     expect(content).toContain("imageCommandCreateTaskToolObserved");
     expect(content).toContain("guiImageCommandToolProcessVisible");
     expect(content).toContain("guiImageCommandTaskCardVisible");
@@ -470,6 +474,16 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("guiImageCommandRestoredAfterReload");
     expect(content).toContain("guiImageCommandNoDraftCard");
     expect(content).toContain("guiImageCommandNoTemplateTaskId");
+    expect(imageCommandContent).toContain(
+      "suppresses submission-summary chat",
+    );
+    expect(imageCommandContent).toContain("snapshot.hasVisibleImageTaskProcess");
+    expect(imageCommandContent).not.toContain(
+      '(snapshot.hasAssistantSummary || snapshot.hasDoneText) &&',
+    );
+    expect(imageCommandContent).not.toContain(
+      "snapshot.hasPresentationCaption === true",
+    );
     expect(content).toContain("readModelImageCommandTaskPreviewObserved");
     expect(content).toContain("IMAGE_COMMAND_ASSERTION_KEYS");
     expect(content).toContain("draft-image-");

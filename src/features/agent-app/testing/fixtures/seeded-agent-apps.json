@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "seeded-agent-apps/v1",
+  "tenantId": "seeded",
+  "generatedAt": "2026-05-15T00:00:00.000Z",
+  "apps": [
+    {
+      "appId": "content-factory-app",
+      "version": "2.0.0",
+      "manifestPath": "./content-factory-app.json",
+      "packageRoot": "./package-root",
+      "packageUrl": "https://seeded.local/agent-apps/content-factory-app/2.0.0.lapp",
+      "packageSourceUri": "seeded:content-factory-app@2.0.0",
+      "releaseId": "seeded-content-factory-app-2.0.0",
+      "channel": "seeded",
+      "runtimeTargets": ["local"],
+      "packageHash": "package-fnv1a-a4d0e86f",
+      "manifestHash": "manifest-fnv1a-b840e5c9",
+      "workerEntrypoint": "./src/runtime/content-factory-worker.mjs"
+    }
+  ]
+}

@@ -146,7 +146,7 @@ import {
 } from "./workspace/useWorkspaceImageWorkbenchActionRuntime";
 import { useWorkspaceImageWorkbenchSessionRuntime } from "./workspace/useWorkspaceImageWorkbenchSessionRuntime";
 import { useWorkspaceImageWorkbenchEventRuntime } from "./workspace/useWorkspaceImageWorkbenchEventRuntime";
-import { buildImageSkillLaunchRequestMetadata } from "./workspace/imageSkillLaunch";
+import { buildImageCommandIntentRequestMetadata } from "./workspace/imageCommandIntent";
 import { buildWorkspaceArticleEditorImageSlotCommand } from "./workspace/workspaceArticleEditorImageSlotDispatch";
 import {
   shouldEnableWorkspaceImageTaskPreviewRuntime,
@@ -464,6 +464,7 @@ export function AgentChatWorkspace({
   onRecommendationClick: _onRecommendationClick,
   onHasMessagesChange,
   onSessionChange,
+  onAgentStreamingChange,
   preferContentReviewInRightRail = false,
   openBrowserAssistOnMount = false,
   initialSiteSkillLaunch,
@@ -1637,6 +1638,16 @@ export function AgentChatWorkspace({
     onSessionChange?.(sessionId ?? null);
   }, [onSessionChange, sessionId]);
 
+  useEffect(() => {
+    onAgentStreamingChange?.(isSending);
+  }, [isSending, onAgentStreamingChange]);
+
+  useEffect(() => {
+    return () => {
+      onAgentStreamingChange?.(false);
+    };
+  }, [onAgentStreamingChange]);
+
   const contextHarnessRuntime = useWorkspaceContextHarnessRuntime({
     enabled: workspaceHarnessEnabled || generalHarnessEntryEnabled,
     prefetchEnabled: false,
@@ -2138,7 +2149,7 @@ export function AgentChatWorkspace({
     setInput,
     updateCurrentImageWorkbenchState,
   });
-  const { handleImageWorkbenchCommand, resolveImageWorkbenchSkillRequest } =
+  const { handleImageWorkbenchCommand, resolveImageWorkbenchCommandRequest } =
     imageWorkbenchActionRuntime;
   const prepareImageWorkbenchSkillSend = useCallback(async () => {
     await ensureImageWorkbenchProviderSelectionCommitted(
@@ -2232,7 +2243,7 @@ export function AgentChatWorkspace({
     openRuntimeSceneGate,
     ensureSessionForCommandMetadata: ensureSession,
     prepareImageWorkbenchSkillSend,
-    resolveImageWorkbenchSkillRequest,
+    resolveImageWorkbenchCommandRequest,
   });
   useEffect(() => {
     sceneGateResumeHandlerRef.current = async ({ rawText, requestMetadata }) =>
@@ -2260,7 +2271,7 @@ export function AgentChatWorkspace({
         undefined,
         {
           displayContent: params.displayContent,
-          requestMetadata: buildImageSkillLaunchRequestMetadata(
+          requestMetadata: buildImageCommandIntentRequestMetadata(
             undefined,
             params.requestContext,
           ),

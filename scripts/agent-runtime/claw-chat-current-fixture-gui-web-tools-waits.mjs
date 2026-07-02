@@ -40,11 +40,11 @@ function webToolsSnapshotFromDom({
   const style = textarea ? window.getComputedStyle(textarea) : null;
   const textareaVisible = Boolean(
     textarea &&
-      rect &&
-      rect.width > 16 &&
-      rect.height > 16 &&
-      style?.visibility !== "hidden" &&
-      style?.display !== "none",
+    rect &&
+    rect.width > 16 &&
+    rect.height > 16 &&
+    style?.visibility !== "hidden" &&
+    style?.display !== "none",
   );
   const buttons = Array.from(document.querySelectorAll("button")).map(
     (button) => ({
@@ -189,8 +189,7 @@ function webToolsSnapshotFromDom({
       .some(isTextContentPartSignature);
   })();
   const taskRailText =
-    document
-      .querySelector('[data-testid="task-center-run-control-surface"]')
+    document.querySelector('[data-testid="task-center-run-control-surface"]')
       ?.textContent ||
     document.querySelector('[data-testid="task-center-task-rail"]')
       ?.textContent ||
@@ -204,11 +203,11 @@ function webToolsSnapshotFromDom({
     : null;
   const planDecisionVisible = Boolean(
     planDecisionPanel &&
-      planDecisionRect &&
-      planDecisionRect.width > 320 &&
-      planDecisionRect.height > 48 &&
-      planDecisionStyle?.visibility !== "hidden" &&
-      planDecisionStyle?.display !== "none",
+    planDecisionRect &&
+    planDecisionRect.width > 320 &&
+    planDecisionRect.height > 48 &&
+    planDecisionStyle?.visibility !== "hidden" &&
+    planDecisionStyle?.display !== "none",
   );
 
   return {
@@ -217,16 +216,17 @@ function webToolsSnapshotFromDom({
     hasIntroText: text.includes(introText),
     hasAssistantSummary: text.includes(finalSummary),
     hasDoneText: text.includes(doneText),
-    hasProcessTitle: text.includes(completedTitle) || text.includes(runningTitle),
+    hasProcessTitle:
+      text.includes(completedTitle) || text.includes(runningTitle),
     hasCompletedProcessTitle: text.includes(completedTitle),
     hasRunningProcessTitle: text.includes(runningTitle),
     hasSearchSourceSection: Boolean(
       webProcessGroup?.text.includes("搜索来源") ||
-        webProcessGroup?.text.includes("Search sources"),
+      webProcessGroup?.text.includes("Search sources"),
     ),
     hasFetchPageSection: Boolean(
       webProcessGroup?.text.includes("读取页面") ||
-        webProcessGroup?.text.includes("Read pages"),
+      webProcessGroup?.text.includes("Read pages"),
     ),
     hasSearchTitle: text.includes(searchTitle),
     hasMidThinkingText: text.includes(midThinkingText),
@@ -287,7 +287,9 @@ function webToolsSnapshotFromDom({
       markdownStrongTexts.includes("理由"),
     markdownTableVisible,
     hasPlanSection: taskRailText.includes("计划"),
-    hasAllPlanSteps: planSteps.every((step) => taskRailText.includes(step.step)),
+    hasAllPlanSteps: planSteps.every((step) =>
+      taskRailText.includes(step.step),
+    ),
     planDecisionVisible,
     textareaVisible,
     textareaDisabled:
@@ -297,7 +299,7 @@ function webToolsSnapshotFromDom({
     stopButtonVisible,
     hasMessageList: Boolean(
       document.querySelector('[data-testid="message-list"]') ||
-        document.querySelector('[data-testid="message-list-frame"]'),
+      document.querySelector('[data-testid="message-list-frame"]'),
     ),
     bodyText: text,
   };
@@ -354,7 +356,34 @@ export async function waitForGuiWebToolsRenderingInProgress(page, options) {
       snapshot.rawJsonEnvelopeVisible === false &&
       snapshot.searchNoiseVisible === false
     ) {
-      return sanitizeJson(snapshot);
+      return sanitizeJson({
+        ...snapshot,
+        webToolsLiveRunningStateCaptured: true,
+      });
+    }
+    if (
+      snapshot.hasPrompt &&
+      snapshot.hasIntroText &&
+      (snapshot.hasAssistantSummary || snapshot.hasDoneText) &&
+      snapshot.hasProcessTitle &&
+      snapshot.webProcessGroupExpanded === false &&
+      snapshot.hasIntroBeforeProcess === true &&
+      snapshot.hasFinalTextAfterProcess === true &&
+      snapshot.latestAssistantRendererContentPartTypes.includes(
+        "tool:WebSearch",
+      ) &&
+      snapshot.latestAssistantRendererContentPartTypes.includes("thinking") &&
+      snapshot.latestAssistantRendererContentPartTypes.includes(
+        "tool:WebFetch",
+      ) &&
+      snapshot.processGroupExcludesFinalMarkdown === true &&
+      snapshot.rawJsonEnvelopeVisible === false &&
+      snapshot.searchNoiseVisible === false
+    ) {
+      return sanitizeJson({
+        ...snapshot,
+        fastCompletedBeforeLiveCapture: true,
+      });
     }
     await sleep(options.intervalMs);
   }

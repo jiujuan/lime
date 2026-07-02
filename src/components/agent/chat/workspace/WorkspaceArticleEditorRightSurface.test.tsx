@@ -48,14 +48,14 @@ vi.mock("react-i18next", () => ({
         "workspace.articleEditor.writingPlan.empty": "等待写作计划。",
         "workspace.articleEditor.writingPlan.done": "已完成",
         "workspace.articleEditor.writingPlan.pending": "待处理",
-        "workspace.articleEditor.orchestration.title": "内容工厂编排",
-        "workspace.articleEditor.orchestration.detail": `${options?.count ?? 0} 个步骤 · ${options?.workflow ?? ""}`,
-        "workspace.articleEditor.orchestration.workflow": "Workflow",
-        "workspace.articleEditor.orchestration.subagents": "子 Agent",
-        "workspace.articleEditor.orchestration.skills": "Skills",
-        "workspace.articleEditor.orchestration.cli": "CLI",
-        "workspace.articleEditor.orchestration.connectors": "连接器",
-        "workspace.articleEditor.orchestration.hooks": "Hooks",
+        "workspace.pluginWorkspace.orchestration.title": "插件工作流",
+        "workspace.pluginWorkspace.orchestration.detail": `${options?.count ?? 0} 个步骤 · ${options?.workflow ?? ""}`,
+        "workspace.pluginWorkspace.orchestration.workflow": "Workflow",
+        "workspace.pluginWorkspace.orchestration.subagents": "子 Agent",
+        "workspace.pluginWorkspace.orchestration.skills": "Skills",
+        "workspace.pluginWorkspace.orchestration.cli": "CLI",
+        "workspace.pluginWorkspace.orchestration.connectors": "连接器",
+        "workspace.pluginWorkspace.orchestration.hooks": "Hooks",
         "workspace.articleEditor.research.title": "资料检索",
         "workspace.articleEditor.research.detail": `${options?.count ?? 0} 轮检索`,
         "workspace.articleEditor.research.empty": "等待检索证据。",
@@ -133,9 +133,16 @@ const articleWorkspaceFixture: WorkspaceArticleWorkspace = {
         "copy-editor",
         "image-planner",
       ],
-      skillRefs: ["gongzonghao-article-writer", "article-image-cheatsheet"],
+      skillRefs: [
+        "article-research",
+        "article-strategy",
+        "article-writing",
+        "article-editing",
+        "article-image-plan",
+      ],
       cliRefs: ["content-factory"],
       connectorRefs: ["lime-knowledge", "web-research", "media-generation"],
+      hookRefs: ["prompt-submit", "task-complete"],
       hookPolicy: {
         prompt: ["prompt-submit"],
         task: ["task-complete"],
@@ -148,7 +155,7 @@ const articleWorkspaceFixture: WorkspaceArticleWorkspace = {
           id: "research",
           title: "资料检索",
           subagent: "content-researcher",
-          skillRefs: ["gongzonghao-article-writer"],
+          skillRefs: ["article-research"],
           status: "completed",
           summary: "整理用户需求、历史上下文和可引用资料。",
           expectedOutput: "写作依据和素材摘要",
@@ -157,7 +164,7 @@ const articleWorkspaceFixture: WorkspaceArticleWorkspace = {
           id: "strategy",
           title: "选题策划",
           subagent: "content-strategist",
-          skillRefs: ["gongzonghao-article-writer"],
+          skillRefs: ["article-strategy"],
           status: "completed",
           summary: "确定读者、文章角度、结构和标题方向。",
           expectedOutput: "文章角度、结构和标题方向",
@@ -166,7 +173,7 @@ const articleWorkspaceFixture: WorkspaceArticleWorkspace = {
           id: "draft",
           title: "正文写作",
           subagent: "article-writer",
-          skillRefs: ["gongzonghao-article-writer"],
+          skillRefs: ["article-writing"],
           status: "completed",
           summary: "生成文章草稿。",
           expectedOutput: "articleDraft",
@@ -175,7 +182,7 @@ const articleWorkspaceFixture: WorkspaceArticleWorkspace = {
           id: "review",
           title: "审稿校对",
           subagent: "copy-editor",
-          skillRefs: ["gongzonghao-article-writer"],
+          skillRefs: ["article-editing"],
           status: "completed",
           summary: "检查结构、语气、事实依据和可发布性。",
           expectedOutput: "deliveryChecklist",
@@ -184,7 +191,7 @@ const articleWorkspaceFixture: WorkspaceArticleWorkspace = {
           id: "image-plan",
           title: "配图规划",
           subagent: "image-planner",
-          skillRefs: ["article-image-cheatsheet"],
+          skillRefs: ["article-image-plan"],
           status: "completed",
           summary: "生成主图和段落配图提示。",
           expectedOutput: "imageGenerationSet",
@@ -407,45 +414,19 @@ describe("WorkspaceArticleEditorRightSurface", () => {
       container.querySelector(
         '[data-testid="workspace-article-editor-content-factory-orchestration"]',
       ),
-    ).not.toBeNull();
-    expect(
-      container.querySelectorAll(
-        '[data-testid="workspace-article-editor-orchestration-step"]',
-      ),
-    ).toHaveLength(5);
-    expect(container.textContent).toContain("内容工厂编排");
-    expect(container.textContent).toContain("content_article_workflow");
-    expect(container.textContent).toContain("content-researcher");
-    expect(container.textContent).toContain("content-strategist");
-    expect(container.textContent).toContain("article-writer");
-    expect(container.textContent).toContain("copy-editor");
-    expect(container.textContent).toContain("image-planner");
-    expect(container.textContent).toContain("gongzonghao-article-writer");
-    expect(container.textContent).toContain("article-image-cheatsheet");
-    expect(container.textContent).toContain("lime-knowledge");
-    expect(container.textContent).toContain("web-research");
-    expect(container.textContent).toContain("media-generation");
-    expect(container.textContent).toContain("prompt:prompt-submit");
-    expect(container.textContent).toContain("task:task-complete");
+    ).toBeNull();
     expect(
       container.querySelector(
         '[data-testid="workspace-article-editor-orchestration-skill-ref"]',
-      )?.textContent,
-    ).toContain("gongzonghao-article-writer");
+      ),
+    ).toBeNull();
     expect(
-      container
-        .querySelector(
-          '[data-testid="workspace-article-editor-orchestration-skill-ref"]',
-        )
-        ?.getAttribute("data-skill-ref"),
-    ).toBe("gongzonghao-article-writer");
-    expect(
-      container
-        .querySelector(
-          '[data-testid="workspace-article-editor-orchestration-connector"]',
-        )
-        ?.getAttribute("data-connector-ref"),
-    ).toBe("lime-knowledge");
+      container.querySelector(
+        '[data-testid="workspace-article-editor-orchestration-connector"]',
+      ),
+    ).toBeNull();
+    expect(container.textContent).not.toContain("插件工作流");
+    expect(container.textContent).not.toContain("content_article_workflow");
     expect(container.textContent).toContain("正文需要保留真实引用来源。");
   });
 

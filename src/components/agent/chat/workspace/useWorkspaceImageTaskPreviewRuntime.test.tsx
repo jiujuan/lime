@@ -27,6 +27,7 @@ import {
   shouldEnableWorkspaceImageTaskPreviewRuntime,
   useWorkspaceImageTaskPreviewRuntime,
 } from "./useWorkspaceImageTaskPreviewRuntime";
+import { buildImageWorkbenchCaption } from "../utils/imageWorkbenchPresentation";
 import type { DirectoryListing } from "@/lib/api/fileBrowser";
 import { createInitialDocumentState } from "@/components/workspace/canvas/canvasUtils";
 
@@ -814,15 +815,19 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       toolCalls: undefined,
       contentParts: undefined,
       runtimeStatus: undefined,
-      imageWorkbenchPreview: expect.objectContaining({
-        taskId: "task-image-1",
-        status: "complete",
-        prompt: "未来感实验室里的青柠主视觉",
-        imageUrl: "https://example.com/generated-lime.png",
-        imageCount: 1,
-        size: "1024x1024",
-        caption: null,
-      }),
+        imageWorkbenchPreview: expect.objectContaining({
+          taskId: "task-image-1",
+          status: "complete",
+          prompt: "未来感实验室里的青柠主视觉",
+          imageUrl: "https://example.com/generated-lime.png",
+          imageCount: 1,
+          size: "1024x1024",
+          caption: buildImageWorkbenchCaption({
+            prompt: "未来感实验室里的青柠主视觉",
+            status: "complete",
+            imageCount: 1,
+          }),
+        }),
     });
     expect(getValue().imageWorkbenchState.tasks).toEqual([
       expect.objectContaining({
@@ -1248,13 +1253,17 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
           name: "lime_create_image_generation_task",
         }),
       ],
-      imageWorkbenchPreview: expect.objectContaining({
-        taskId: "task-image-skill-1",
-        status: "complete",
-        imageUrl: "https://example.com/skill-preview.png",
-        caption: null,
-        providerName: "openai",
-        modelName: "gpt-image-2",
+        imageWorkbenchPreview: expect.objectContaining({
+          taskId: "task-image-skill-1",
+          status: "complete",
+          imageUrl: "https://example.com/skill-preview.png",
+          caption: buildImageWorkbenchCaption({
+            prompt: "春日咖啡馆插画",
+            status: "complete",
+            imageCount: 1,
+          }),
+          providerName: "openai",
+          modelName: "gpt-image-2",
         runtimeContract: expect.objectContaining({
           contractKey: "image_generation",
           routingSlot: "image_generation_model",
@@ -1633,14 +1642,18 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       runtimeStatus: undefined,
       toolCalls: undefined,
       contentParts: undefined,
-      imageWorkbenchPreview: expect.objectContaining({
-        taskId: "task-image-status-only-1",
-        status: "complete",
-        phase: "succeeded",
-        statusMessage: null,
-        imageUrl: "https://example.com/three-kingdoms-collage.png",
-        caption: null,
-      }),
+        imageWorkbenchPreview: expect.objectContaining({
+          taskId: "task-image-status-only-1",
+          status: "complete",
+          phase: "succeeded",
+          statusMessage: null,
+          imageUrl: "https://example.com/three-kingdoms-collage.png",
+          caption: buildImageWorkbenchCaption({
+            prompt: "三国主要人物聚合图",
+            status: "complete",
+            imageCount: 1,
+          }),
+        }),
     });
   });
 
@@ -1971,7 +1984,11 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
           mode: "edit",
           status: "complete",
           imageUrl: "https://example.com/edited-lime.png",
-          caption: null,
+          caption: buildImageWorkbenchCaption({
+            prompt: "把主视觉里的青柠改成玻璃质感",
+            status: "complete",
+            imageCount: 1,
+          }),
           sourceImageUrl: "https://example.com/source-summary.png",
           sourceImagePrompt: "原始青柠主视觉",
           sourceImageRef: "img-source-1",
@@ -2927,7 +2944,11 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
             status: "complete",
             imageUrl: "https://example.com/browser-template-recover-lime.png",
             prompt: "一颗鲜嫩的青柠，水彩插画风格",
-            caption: null,
+            caption: buildImageWorkbenchCaption({
+              prompt: "一颗鲜嫩的青柠，水彩插画风格",
+              status: "complete",
+              imageCount: 1,
+            }),
           }),
         }),
       ]);

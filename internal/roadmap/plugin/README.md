@@ -33,6 +33,7 @@ Lime Desktop 只负责本地安装态、显式激活、Right Surface 渲染和 A
 | [`technical-baseline.md`](./technical-baseline.md)                                                     | 插件运行的宿主基线、承载方式、current / deprecated / dead 分类。               |
 | [`interface-contracts.md`](./interface-contracts.md)                                                   | 插件 manifest、激活上下文、renderer contract、surface action contract。        |
 | [`implementation-plan.md`](./implementation-plan.md)                                                   | 插件中心、composer 激活、renderer host、迁移收口的实施顺序。                   |
+| [`../../tech/plugin/README.md`](../../tech/plugin/README.md)                                           | Lime Plugin Package v1 技术标准：`plugin.json`、runtime/workbench、skills、worker 和验证口径。 |
 | [`history-product-workspace.md`](./history-product-workspace.md)                                       | 历史对话、插件上下文和产物 tab 的恢复规则。                                    |
 | [`user-operations-guide.md`](./user-operations-guide.md)                                               | 插件中心消费、授权、本地安装态、显式激活、Right Surface 和运营排查指南。       |
 | [`e2e-evidence.md`](./e2e-evidence.md)                                                                 | 第二轮跨仓端到端证据包，串联 LimeCore 发布 / 审计与 Lime Desktop GUI fixture。 |
@@ -69,6 +70,7 @@ Lime Desktop 只负责本地安装态、显式激活、Right Surface 渲染和 A
 | 内容工厂           | 内容工厂应作为插件重建，而不是复用旧 `旧内容工作台` 代码。                                                                                              |
 | 现有路线上下文     | 现有 `rightsurface` 负责统一右侧 dock；plugin 路线只定义该 dock 如何承载插件产物。                                                                      |
 | 旧插件中心命令     | 历史插件中心命令族继续按 `dead` 处理，不恢复为生产入口。                                                                                               |
+| `@` 命令边界       | 平台 `@` 原子命令仍以 `SkillCatalog.entries.kind=command` 为事实源；插件只可贡献显式 activation command entry，并通过 `agentSession/turn/start` metadata 进入 current 主链。 |
 
 ## 4. 与现有路线图关系
 
@@ -84,4 +86,5 @@ Lime Desktop 只负责本地安装态、显式激活、Right Surface 渲染和 A
 2. 再读 [`architecture.md`](./architecture.md)。
 3. 然后读 [`technical-baseline.md`](./technical-baseline.md) 了解宿主边界。
 4. 对照 [`interface-contracts.md`](./interface-contracts.md) 固定 contract。
-5. 按 [`implementation-plan.md`](./implementation-plan.md) 分阶段落地。
+5. 落包结构、skills、worker 或 workbench 时，回到 [`../../tech/plugin/README.md`](../../tech/plugin/README.md) 作为技术事实源。
+6. 按 [`implementation-plan.md`](./implementation-plan.md) 分阶段落地。

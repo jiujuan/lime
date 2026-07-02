@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildWorkspaceArticleEditorOrchestrationModel } from "./workspaceArticleEditorOrchestrationModel";
+import {
+  buildWorkspaceArticleEditorOrchestrationModel,
+  buildWorkspacePluginOrchestrationModel,
+} from "./workspaceArticleEditorOrchestrationModel";
 import type {
   WorkspaceArticleWorkspace,
   WorkspaceArticleWorkspaceStructuredPreview,
@@ -76,6 +79,121 @@ describe("workspaceArticleEditorOrchestrationModel", () => {
     ]);
   });
 
+  it("应优先使用宿主 workflow facts 而不是旧 worker evidence 步骤", () => {
+    const model = buildWorkspaceArticleEditorOrchestrationModel(
+      {
+        ...articleWorkspaceWithEvidence([
+          workerEvidence({
+            workflowKey: "legacy_worker_workflow",
+            orchestration: [
+              {
+                id: "legacy",
+                title: "旧 worker 过程",
+                subagent: "legacy-agent",
+                skillRefs: ["legacy-skill"],
+                status: "completed",
+                summary: "旧过程",
+                expectedOutput: "旧输出",
+              },
+            ],
+          }),
+          workerEvidence({
+            workflowKey: "content_article_workflow",
+            connectorRefs: ["web-research"],
+            hookPolicy: { task: ["task-complete"] },
+          }),
+        ]),
+        workflowRuns: [
+          {
+            workflowRunId: "task-article:workflow",
+            workflowKey: "content_article_workflow",
+            workflowTitle: "写文章工作流",
+            status: "running",
+            appId: "content-factory-app",
+            sessionId: "session-main",
+            workspaceId: null,
+            turnId: "turn-action-1",
+            taskId: "task-article",
+            taskKind: "content.article.generate",
+            selectedObjectRef: null,
+            primaryArtifactRef: null,
+            eventCount: 3,
+            startedAt: null,
+            updatedAt: null,
+            completedAt: null,
+            failedAt: null,
+            steps: [
+              {
+                workflowRunId: "task-article:workflow",
+                workflowKey: "content_article_workflow",
+                id: "research",
+                title: "资料检索",
+                index: 0,
+                stepCount: 2,
+                status: "completed",
+                subagent: "content-researcher",
+                skillRefs: ["article-research"],
+                expectedOutput: "素材摘要",
+                progressMessage: "已完成资料检索",
+                detail: null,
+                output: null,
+                eventCount: 2,
+                startedAt: null,
+                updatedAt: null,
+                completedAt: null,
+                failedAt: null,
+              },
+              {
+                workflowRunId: "task-article:workflow",
+                workflowKey: "content_article_workflow",
+                id: "draft",
+                title: "正文写作",
+                index: 1,
+                stepCount: 2,
+                status: "running",
+                subagent: "article-writer",
+                skillRefs: ["article-writing"],
+                expectedOutput: "首版文章",
+                progressMessage: null,
+                detail: null,
+                output: null,
+                eventCount: 1,
+                startedAt: null,
+                updatedAt: null,
+                completedAt: null,
+                failedAt: null,
+              },
+            ],
+          },
+        ],
+      },
+      structuredPreview(),
+    );
+
+    expect(model).toMatchObject({
+      workflowKey: "content_article_workflow",
+      subagentRefs: ["content-researcher", "article-writer"],
+      skillRefs: ["article-research", "article-writing"],
+      connectorRefs: ["web-research"],
+      hookLabels: ["task:task-complete"],
+    });
+    expect(model?.steps).toEqual([
+      expect.objectContaining({
+        id: "research",
+        title: "资料检索",
+        summary: "已完成资料检索",
+        done: true,
+      }),
+      expect.objectContaining({
+        id: "draft",
+        title: "正文写作",
+        summary: "首版文章",
+        done: null,
+      }),
+    ]);
+    expect(model?.steps.some((step) => step.id === "legacy")).toBe(false);
+  });
+
   it("没有 worker evidence 时应回退到 writing plan", () => {
     const model = buildWorkspaceArticleEditorOrchestrationModel(
       articleWorkspaceWithEvidence([]),
@@ -112,6 +230,75 @@ describe("workspaceArticleEditorOrchestrationModel", () => {
       connectorRefs: [],
       hookLabels: [],
     });
+  });
+
+  it("应优先使用完成态 artifact.snapshot 并跳过 hook 事件", () => {
+    const model = buildWorkspacePluginOrchestrationModel(
+      articleWorkspaceWithEvidence([
+        workerEvidence({
+          status: "completed",
+          eventType: "agent_app_worker.hook",
+          taskKind: "content.article.generate",
+          workflowKey: "hook_workflow",
+          subagents: ["hook-subagent"],
+          skillRefs: ["hook-skill"],
+          cliRefs: ["hook-cli"],
+          connectorRefs: ["hook-connector"],
+          orchestration: [
+            {
+              id: "hook-step",
+              title: "Hook step",
+              subagent: "hook-subagent",
+              skillRefs: ["hook-skill"],
+              status: "completed",
+              summary: "hook",
+              expectedOutput: "hook",
+            },
+          ],
+        }),
+        workerEvidence({
+          taskKind: "content.article.generate",
+          workflowKey: "content_article_workflow",
+          subagents: ["content-researcher", "article-writer"],
+          skillRefs: ["article-research", "article-writing"],
+          cliRefs: ["content-factory"],
+          connectorRefs: ["lime-knowledge", "web-research"],
+          hookPolicy: {
+            prompt: ["prompt-submit"],
+            task: ["task-complete"],
+          },
+          orchestration: [
+            {
+              id: "research",
+              title: "资料检索",
+              subagent: "content-researcher",
+              skillRefs: ["article-research"],
+              status: "completed",
+              summary: "整理资料",
+              expectedOutput: "写作依据",
+            },
+          ],
+        }),
+      ]),
+      structuredPreview(),
+    );
+
+    expect(model).toMatchObject({
+      workflowKey: "content_article_workflow",
+      subagentRefs: ["content-researcher", "article-writer"],
+      skillRefs: ["article-research", "article-writing"],
+      cliRefs: ["content-factory"],
+      connectorRefs: ["lime-knowledge", "web-research"],
+      hookLabels: ["prompt:prompt-submit", "task:task-complete"],
+    });
+    expect(model?.steps).toEqual([
+      expect.objectContaining({
+        id: "research",
+        subagent: "content-researcher",
+        skillRefs: ["article-research"],
+        done: true,
+      }),
+    ]);
   });
 });
 
@@ -189,6 +376,7 @@ function workerEvidence(
     skillRefs: [],
     cliRefs: [],
     connectorRefs: [],
+    hookRefs: [],
     hookPolicy: null,
     runtimeRegistries: null,
     orchestration: [],

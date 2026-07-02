@@ -16,6 +16,11 @@ import {
   readWorkspaceArticleWorkspaceWorkerEvidence,
   type WorkspaceArticleWorkspaceWorkerEvidenceItem,
 } from "./workspaceArticleWorkspaceWorkerEvidence";
+import {
+  readWorkspaceArticleWorkflowRunsFromThreadRead,
+  readWorkspaceArticleWorkflowRunsFromUnknown,
+  type WorkspaceArticleWorkflowRun,
+} from "./workspaceArticleWorkspaceWorkflowFacts";
 import { buildWorkspacePluginPaneActionRequestMetadata } from "./workspacePluginPaneAction";
 import {
   readWorkspaceArticlePatchRecordFromMetadata,
@@ -218,6 +223,7 @@ export interface WorkspaceArticleWorkspace {
   sourceArtifacts?: Record<string, unknown>[];
   actionHistory: WorkspaceArticleWorkspaceActionHistoryItem[];
   workerEvidence?: WorkspaceArticleWorkspaceWorkerEvidenceItem[];
+  workflowRuns?: WorkspaceArticleWorkflowRun[];
   editedDraft?: WorkspaceArticleEditedDraft | null;
   updatedAt?: string | null;
 }
@@ -233,6 +239,7 @@ export interface WorkspaceArticleWorkspaceViewModel {
   sourceArtifacts: Record<string, unknown>[];
   updatedAt: string | null;
   workerEvidence: WorkspaceArticleWorkspaceWorkerEvidenceItem[];
+  workflowRuns: WorkspaceArticleWorkflowRun[];
   latestWorkerEvidence: WorkspaceArticleWorkspaceWorkerEvidenceItem | null;
   selectedSurface: WorkspaceArticleWorkspaceObjectSurface;
   selectedActions: WorkspaceArticleWorkspaceAction[];
@@ -289,6 +296,7 @@ export function buildWorkspaceArticleWorkspaceFromThreadRead(
       sourceArtifacts: profile.sourceArtifacts,
       threadRead,
     }),
+    workflowRuns: readWorkspaceArticleWorkflowRunsFromThreadRead(threadRead),
   };
 }
 
@@ -424,6 +432,7 @@ export function buildWorkspaceArticleWorkspaceFromUnknown(
     workerEvidence: readWorkspaceArticleWorkspaceWorkerEvidence(
       readArray(record.workerEvidence, record.worker_evidence),
     ),
+    workflowRuns: readWorkspaceArticleWorkflowRunsFromUnknown(record),
     editedDraft,
     updatedAt: readString(record.updatedAt, record.updated_at) || null,
   };
@@ -478,6 +487,7 @@ export function buildWorkspaceArticleWorkspaceViewModel(
     sourceArtifacts: profile.sourceArtifacts ?? [],
     updatedAt: profile.updatedAt ?? null,
     workerEvidence: profile.workerEvidence ?? [],
+    workflowRuns: profile.workflowRuns ?? [],
     latestWorkerEvidence: profile.workerEvidence?.[0] ?? null,
     selectedSurface: resolveArticleObjectSurface(selectedObject.ref.kind),
     selectedActions: resolveArticleObjectActions(selectedObject.ref.kind),

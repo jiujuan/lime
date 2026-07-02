@@ -6,20 +6,23 @@ import type {
   MessageImageWorkbenchPreview,
 } from "../types";
 import { parseImageWorkbenchCommand } from "../utils/imageWorkbenchCommand";
-import { buildImageWorkbenchCaption } from "../utils/imageWorkbenchPresentation";
+import {
+  buildImageTaskAssistantContent,
+  buildImageWorkbenchCaption,
+} from "../utils/imageWorkbenchPresentation";
 import {
   resolveImageWorkbenchAssistantMessageId,
   resolveScopedImageWorkbenchApplyTarget,
   type ImageWorkbenchOutput,
   type ImageWorkbenchTask,
 } from "./imageWorkbenchHelpers";
-import { buildImageTaskAssistantContent } from "./imageTaskPersona";
 import { normalizeImageTaskPath } from "./imageTaskLocator";
 import {
   asRecord,
   buildNormalizedStoryboardSlot,
   mergeStoryboardSlots,
   readBoolean,
+  readImageCommandRunSnapshot,
   readImageTaskPresentationCaption,
   readImageTaskPresentationText,
   readPositiveNumber,
@@ -263,6 +266,20 @@ function resolvePendingProgressPhase(status?: string): string {
   }
 }
 
+function resolveOutputAwareNormalizedStatus(
+  normalizedStatus: string,
+  outputCount: number,
+): string {
+  if (
+    outputCount === 0 &&
+    (normalizedStatus === "succeeded" || normalizedStatus === "partial")
+  ) {
+    return "running";
+  }
+
+  return normalizedStatus;
+}
+
 export function resolvePreviewPhaseFromWorkbenchTaskStatus(
   status: ImageWorkbenchTask["status"],
 ): string {
@@ -287,7 +304,15 @@ export function resolvePreviewPhaseFromWorkbenchTaskStatus(
 function resolveTaskProgressPhase(
   progressRecord: Record<string, unknown> | null,
   normalizedStatus: string,
+  outputCount: number,
 ): string | null {
+  if (
+    outputCount === 0 &&
+    (normalizedStatus === "succeeded" || normalizedStatus === "partial")
+  ) {
+    return "running";
+  }
+
   return (
     readString([progressRecord], ["phase"]) ||
     resolvePendingProgressPhase(normalizedStatus)
@@ -475,6 +500,10 @@ export function buildParsedImageTaskSnapshot(params: {
     taskRecord: params.taskRecord,
     normalizedStatus,
   });
+  const workflowRun = readImageCommandRunSnapshot([
+    payload,
+    params.taskRecord,
+  ]);
   const prompt = sanitizePreviewPrompt(
     readString(
       [payload, params.taskRecord, uiHintsRecord],
@@ -613,6 +642,10 @@ export function buildParsedImageTaskSnapshot(params: {
     resourceSaved: false,
     applyTarget,
   }));
+  const resolvedNormalizedStatus = resolveOutputAwareNormalizedStatus(
+    normalizedStatus,
+    outputs.length,
+  );
   const storyboardSlots = mergeStoryboardSlots(
     payloadStoryboardSlots,
     progressStoryboardSlots,
@@ -629,7 +662,7 @@ export function buildParsedImageTaskSnapshot(params: {
       .filter((item): item is ImageStoryboardSlot => Boolean(item)),
   );
   const successCount = outputs.length;
-  const previewStatus = resolvePreviewStatus(normalizedStatus);
+  const previewStatus = resolvePreviewStatus(resolvedNormalizedStatus);
   const attemptCount = Array.isArray(params.taskRecord.attempts)
     ? params.taskRecord.attempts.length
     : undefined;
@@ -650,6 +683,13 @@ export function buildParsedImageTaskSnapshot(params: {
     uiHintsRecord,
     params.taskRecord,
   ]);
+  const assistantIntro =
+    presentationText ||
+    buildImageTaskAssistantContent({
+      prompt: previewPrompt,
+      mode: taskMode,
+      modelName: previewModelName || runtimeContract?.model || null,
+    });
   const previewCaption =
     readImageTaskPresentationCaption(
       [
@@ -661,11 +701,11 @@ export function buildParsedImageTaskSnapshot(params: {
       ],
       previewStatus,
     ) ||
-    buildImageWorkbenchCaption({
-      prompt: previewPrompt,
-      status: previewStatus,
-      imageCount: successCount || undefined,
-      statusMessage: lastError || null,
+      buildImageWorkbenchCaption({
+        prompt: previewPrompt,
+        status: previewStatus,
+        imageCount: successCount || undefined,
+        statusMessage: lastError || null,
     });
   const preview: MessageImageWorkbenchPreview = {
     taskId: params.taskId,
@@ -691,7 +731,11 @@ export function buildParsedImageTaskSnapshot(params: {
     sourceImageRef: targetOutputRefId ?? null,
     sourceImageCount,
     size: fallbackSize,
-    phase: resolveTaskProgressPhase(progressRecord, normalizedStatus),
+    phase: resolveTaskProgressPhase(
+      progressRecord,
+      normalizedStatus,
+      outputs.length,
+    ),
     statusMessage:
       readString([progressRecord], ["message"]) || lastError || null,
     retryable: readBoolean([lastErrorRecord], ["retryable"]),
@@ -700,6 +744,7 @@ export function buildParsedImageTaskSnapshot(params: {
       readString([uiHintsRecord], ["placeholder_text", "placeholderText"]) ||
       null,
     runtimeContract,
+    workflowRun,
   };
 
   const messageTimestamp = new Date(createdAt);
@@ -709,13 +754,7 @@ export function buildParsedImageTaskSnapshot(params: {
     message: {
       id: resolveImageWorkbenchAssistantMessageId(params.taskId),
       role: "assistant",
-      content:
-        presentationText ||
-        buildImageTaskAssistantContent({
-          prompt: previewPrompt,
-          mode: taskMode,
-          modelName: previewModelName,
-        }),
+      content: assistantIntro,
       timestamp: messageTimestamp,
       imageWorkbenchPreview: preview,
     },
@@ -723,9 +762,9 @@ export function buildParsedImageTaskSnapshot(params: {
       sessionId: params.taskId,
       id: params.taskId,
       mode: taskMode,
-      status: resolveWorkbenchStatus(normalizedStatus),
+      status: resolveWorkbenchStatus(resolvedNormalizedStatus),
       prompt: previewPrompt,
-      assistantIntro: presentationText || null,
+      assistantIntro,
       caption: previewCaption,
       rawText,
       expectedCount,
@@ -741,6 +780,7 @@ export function buildParsedImageTaskSnapshot(params: {
       createdAt,
       failureMessage: lastError,
       runtimeContract,
+      workflowRun,
       hookImageIds: outputs.map((output) => output.hookImageId),
       applyTarget,
       taskFilePath,
@@ -748,9 +788,9 @@ export function buildParsedImageTaskSnapshot(params: {
     },
     outputs,
     terminal:
-      normalizedStatus === "succeeded" ||
-      normalizedStatus === "failed" ||
-      normalizedStatus === "cancelled",
+      resolvedNormalizedStatus === "succeeded" ||
+      resolvedNormalizedStatus === "failed" ||
+      resolvedNormalizedStatus === "cancelled",
     updatedAt: createdAt,
   };
 }
@@ -797,6 +837,14 @@ export function buildPendingImageTaskSnapshot(params: {
       [params.payload || null],
       ["model", "modelName", "model_name"],
     ) || null;
+  const workflowRun = readImageCommandRunSnapshot([params.payload || null]);
+  const fallbackAssistantIntro =
+    readImageTaskPresentationText([params.payload || null]) ||
+    buildImageTaskAssistantContent({
+      prompt: previewPrompt,
+      mode: taskMode,
+      modelName: previewModelName,
+    });
   return (
     buildParsedImageTaskSnapshot({
       taskRecord: {
@@ -823,13 +871,7 @@ export function buildPendingImageTaskSnapshot(params: {
       message: {
         id: resolveImageWorkbenchAssistantMessageId(params.taskId),
         role: "assistant",
-        content:
-          readImageTaskPresentationText([params.payload || null]) ||
-          buildImageTaskAssistantContent({
-            prompt: previewPrompt,
-            mode: taskMode,
-            modelName: previewModelName,
-          }),
+        content: fallbackAssistantIntro,
         timestamp: startedAt,
         isThinking: false,
         imageWorkbenchPreview: {
@@ -855,6 +897,7 @@ export function buildPendingImageTaskSnapshot(params: {
             storyboardSlots.length > 0 ? storyboardSlots : undefined,
           phase: resolvePendingProgressPhase(params.status),
           statusMessage: params.progressMessage || "正在生成图片。",
+          workflowRun,
         },
       },
       task: {
@@ -863,8 +906,7 @@ export function buildPendingImageTaskSnapshot(params: {
         mode: taskMode,
         status: "queued",
         prompt: previewPrompt,
-        assistantIntro:
-          readImageTaskPresentationText([params.payload || null]) || null,
+        assistantIntro: fallbackAssistantIntro,
         caption: null,
         rawText,
         expectedCount,
@@ -874,6 +916,7 @@ export function buildPendingImageTaskSnapshot(params: {
         outputIds: [],
         targetOutputId: null,
         createdAt: Date.now(),
+        workflowRun,
         hookImageIds: [],
         applyTarget: resolveScopedImageWorkbenchApplyTarget({
           canvasState: params.canvasState,

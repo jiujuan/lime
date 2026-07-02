@@ -153,6 +153,7 @@ interface AppSidebarProps {
   currentPage: Page;
   currentPageParams?: PageParams;
   activeAgentSessionId?: string | null;
+  activeAgentStreaming?: boolean;
   requestedPage?: Page;
   requestedPageParams?: PageParams;
   onNavigate: (page: Page, params?: PageParams) => void;
@@ -165,6 +166,7 @@ export function AppSidebar({
   currentPage,
   currentPageParams,
   activeAgentSessionId,
+  activeAgentStreaming = false,
   requestedPage,
   requestedPageParams,
   onNavigate,
@@ -814,6 +816,7 @@ export function AppSidebar({
     sidebarSearchQuery,
     isNewTaskHome,
     isClawTaskCenter,
+    activeAgentStreaming,
     conversationUntitledLabel,
   });
 

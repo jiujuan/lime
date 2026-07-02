@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MutableRefObject } from "react";
+import type { AsterSessionExecutionRuntime } from "@/lib/api/agentRuntime";
 import type { Message } from "../types";
 import {
   prepareAgentStreamUserInputSend,
@@ -29,6 +30,7 @@ describe("agentStreamUserInputSendPreparation", () => {
     providerType?: string;
     model?: string;
     reasoningEffort?: string;
+    executionRuntime?: AsterSessionExecutionRuntime | null;
   }): AgentStreamUserInputSendPreparationEnv {
     let messages: Message[] = [];
     let isSending = false;
@@ -47,6 +49,7 @@ describe("agentStreamUserInputSendPreparation", () => {
       sessionIdRef: {
         current: options?.sessionId ?? "session-1",
       } as MutableRefObject<string | null>,
+      executionRuntime: options?.executionRuntime ?? null,
       clawTraceEnabled: false,
       getWorkspaceIdForSubmit: () => "workspace-1",
       activeStreamRef: {
@@ -168,6 +171,53 @@ describe("agentStreamUserInputSendPreparation", () => {
     expect(result.expectingQueue).toBe(false);
     expect(result.assistantMsgId).toBe("00000000-0000-0000-0000-000000000001");
     expect(result.userMsgId).toBe("00000000-0000-0000-0000-000000000002");
+    expect(messages).toHaveLength(2);
+    expect(isSending).toBe(true);
+  });
+
+  it("应优先使用 executionRuntime 回填空的 provider/model 发送偏好", () => {
+    vi.spyOn(crypto, "randomUUID")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000010")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000011");
+
+    let messages: Message[] = [];
+    let isSending = false;
+    const env = {
+      ...createEnv({
+        providerType: "",
+        model: "",
+        executionRuntime: {
+          session_id: "session-runtime-fallback",
+          source: "runtime_snapshot",
+          provider_selector: "fixture-provider",
+          model_name: "fixture-model",
+          execution_strategy: "react",
+        },
+      }),
+      setMessages: createStateSetter(
+        () => messages,
+        (value) => {
+          messages = value;
+        },
+      ),
+      setIsSending: createStateSetter(
+        () => isSending,
+        (value) => {
+          isSending = value;
+        },
+      ),
+      getSyncedSessionModelPreference: () => null,
+    };
+
+    const result = prepareAgentStreamUserInputSend({
+      content: "继续",
+      images: [],
+      skipUserMessage: false,
+      env,
+    });
+
+    expect(result.effectiveProviderType).toBe("fixture-provider");
+    expect(result.effectiveModel).toBe("fixture-model");
     expect(messages).toHaveLength(2);
     expect(isSending).toBe(true);
   });

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   mergeHydratedMessagesWithLocalState,
 } from "./agentChatHistory";
+import { collectRetainedLocalTail } from "./agentChatHistoryLocalMergeTail";
 
 describe("agentChatHistory local tail preservation", () => {
   it("同会话 hydrate 时远端缺失过程字段也应保留本地 assistant 执行轨迹", () => {
@@ -635,5 +636,42 @@ describe("agentChatHistory local tail preservation", () => {
       imageUrl: "data:image/png;base64,dup-preview",
       status: "complete",
     });
+  });
+
+  it("尾部保留只应返回可保留的本地消息，不应污染已匹配的 timeline 主体", () => {
+    const retainedTail = collectRetainedLocalTail({
+      hydratedMessageIds: new Set(["history-user-1"]),
+      lastHydratedMessage: {
+        id: "history-user-1",
+        role: "user" as const,
+        content: "继续执行",
+        timestamp: new Date("2026-04-08T10:00:01.000Z"),
+      },
+      lastMatchedLocalIndex: 0,
+      lastMatchedLocalMessage: {
+        id: "local-user-1",
+        role: "user" as const,
+        content: "继续执行",
+        timestamp: new Date("2026-04-08T10:00:00.000Z"),
+      },
+      localMessages: [
+        {
+          id: "local-user-1",
+          role: "user" as const,
+          content: "继续执行",
+          timestamp: new Date("2026-04-08T10:00:00.000Z"),
+        },
+        {
+          id: "local-assistant-1",
+          role: "assistant" as const,
+          content: "本地尾部输出",
+          timestamp: new Date("2026-04-08T10:00:02.000Z"),
+        },
+      ],
+      matchedLocalMessageIds: new Set(["local-user-1"]),
+    });
+
+    expect(retainedTail).toHaveLength(1);
+    expect(retainedTail[0]?.id).toBe("local-assistant-1");
   });
 });

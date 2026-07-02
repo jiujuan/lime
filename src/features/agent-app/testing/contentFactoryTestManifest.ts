@@ -1,4 +1,4 @@
-import contentFactoryFixture from "../fixtures/content-factory-app.json";
+import contentFactoryFixture from "./fixtures/content-factory-app.json";
 import type { AgentAppSetupState, AppManifest } from "../types";
 
 const contentFactoryBaseManifest = contentFactoryFixture as AppManifest;

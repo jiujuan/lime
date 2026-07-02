@@ -17,6 +17,7 @@ import {
   resolveImageTaskFallbackPrompt,
   resolveImageTaskStatusMessage,
 } from "./taskPreviewCopy";
+import { findImageTaskRecord } from "./imageTaskToolResult";
 
 function extractImageTaskPromptFromToolArguments(
   toolName: string,
@@ -106,52 +107,130 @@ function readImageStoryboardSlots(
     .sort((left, right) => left.slotIndex - right.slotIndex);
 }
 
+function isImageTaskRecord(params: {
+  taskFamily?: string;
+  taskType?: string;
+}): boolean {
+  const normalizedTaskType = params.taskType?.trim().toLowerCase() || "";
+  const normalizedTaskFamily = params.taskFamily?.trim().toLowerCase() || "";
+  return (
+    normalizedTaskType.includes("image") ||
+    normalizedTaskType.includes("cover") ||
+    normalizedTaskFamily === "image" ||
+    normalizedTaskFamily === "image_generation" ||
+    normalizedTaskFamily.includes("image")
+  );
+}
+
+function readImageTaskPresentationCaption(
+  candidates: Array<Record<string, unknown> | null | undefined>,
+  status: MessageImageWorkbenchPreview["status"],
+): string | undefined {
+  if (status === "running") {
+    return undefined;
+  }
+
+  const statusKeys =
+    status === "complete"
+      ? ["completion_caption", "completionCaption", "complete"]
+      : status === "partial"
+        ? ["partial_caption", "partialCaption", "partial"]
+        : status === "failed"
+          ? [
+              "failed_caption",
+              "failedCaption",
+              "failure_caption",
+              "failureCaption",
+              "failed",
+              "failure",
+            ]
+          : status === "cancelled"
+            ? ["cancelled_caption", "cancelledCaption", "cancelled"]
+            : [];
+
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+    const presentation = asRecord(candidate.presentation) || candidate;
+    const captions = asRecord(presentation.result_captions);
+    const caption = readMetadataString(
+      [presentation, captions],
+      [...statusKeys, "result_caption", "resultCaption", "caption"],
+    );
+    if (caption) {
+      return caption;
+    }
+  }
+
+  return undefined;
+}
+
 export function buildImageTaskPreviewFromToolResult(
   params: ToolResultPreviewParams,
 ): MessageImageWorkbenchPreview | null {
   const resultRecord = asRecord(params.toolResult);
+  const detectedTaskRecord = findImageTaskRecord(params.toolResult);
   const metadata = asRecord(resultRecord?.metadata);
   const outputRecord = parseJsonRecordString(resultRecord?.output);
   const structuredContentRecord =
     asRecord(resultRecord?.structuredContent) ||
     asRecord(resultRecord?.structured_content);
   const nestedResultRecord = asRecord(resultRecord?.result);
+  const responseRecord = asRecord(resultRecord?.response);
+  const responseNestedRecord = asRecord(responseRecord?.record);
   const taskRecord =
+    asRecord(resultRecord?.record) ||
     asRecord(metadata?.record) ||
     asRecord(outputRecord?.record) ||
     asRecord(structuredContentRecord?.record) ||
-    asRecord(nestedResultRecord?.record);
+    asRecord(nestedResultRecord?.record) ||
+    responseNestedRecord ||
+    asRecord(detectedTaskRecord?.record) ||
+    detectedTaskRecord;
   const payloadRecord =
     asRecord(taskRecord?.payload) ||
+    asRecord(resultRecord?.payload) ||
     asRecord(metadata?.payload) ||
     asRecord(outputRecord?.payload) ||
     asRecord(structuredContentRecord?.payload) ||
-    asRecord(nestedResultRecord?.payload);
+    asRecord(nestedResultRecord?.payload) ||
+    asRecord(responseRecord?.payload) ||
+    asRecord(responseNestedRecord?.payload) ||
+    asRecord(detectedTaskRecord?.payload);
   const progressRecord =
+    asRecord(resultRecord?.progress) ||
     asRecord(metadata?.progress) ||
     asRecord(outputRecord?.progress) ||
     asRecord(structuredContentRecord?.progress) ||
     asRecord(nestedResultRecord?.progress) ||
-    asRecord(taskRecord?.progress);
+    asRecord(taskRecord?.progress) ||
+    asRecord(responseRecord?.progress) ||
+    asRecord(responseNestedRecord?.progress) ||
+    asRecord(detectedTaskRecord?.progress);
   const candidates = [
+    resultRecord,
+    detectedTaskRecord,
     metadata,
     outputRecord,
     structuredContentRecord,
     nestedResultRecord,
+    responseRecord,
+    responseNestedRecord,
     taskRecord,
     payloadRecord,
   ];
   const taskId = readMetadataString(candidates, ["task_id", "taskId"]);
   const taskType = readMetadataString(candidates, ["task_type", "taskType"]);
-  if (!taskId || !taskType) {
+  const taskFamily = readMetadataString(candidates, [
+    "task_family",
+    "taskFamily",
+  ]);
+  if (!taskId || (!taskType && !taskFamily)) {
     return null;
   }
 
-  const normalizedTaskType = taskType.trim().toLowerCase();
-  if (
-    !normalizedTaskType.includes("image") &&
-    !normalizedTaskType.includes("cover")
-  ) {
+  if (!isImageTaskRecord({ taskFamily, taskType })) {
     return null;
   }
 
@@ -219,6 +298,23 @@ export function buildImageTaskPreviewFromToolResult(
       readMetadataString(candidates, ["project_id", "projectId"]) || null,
     contentId:
       readMetadataString(candidates, ["content_id", "contentId"]) || null,
+    providerName:
+      readMetadataString(candidates, [
+        "provider_name",
+        "providerName",
+        "provider_id",
+        "providerId",
+        "provider",
+      ]) || null,
+    modelName:
+      readMetadataString(candidates, [
+        "model_name",
+        "modelName",
+        "model_id",
+        "modelId",
+        "model",
+      ]) || null,
+    caption: readImageTaskPresentationCaption(candidates, previewStatus) || null,
     taskFilePath:
       readMetadataString(
         candidates,

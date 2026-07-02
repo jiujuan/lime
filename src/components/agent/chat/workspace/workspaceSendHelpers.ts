@@ -819,8 +819,8 @@ export function hasModelSkillLaunchRequestMetadata(
   }
 
   const launchKeys = [
-    "image_skill_launch",
-    "imageSkillLaunch",
+    "image_command_intent",
+    "imageCommandIntent",
     "cover_skill_launch",
     "coverSkillLaunch",
     "video_skill_launch",

@@ -18,6 +18,10 @@ import {
   hasImportedSourceProcessItem,
   isImportedSourceMetadata,
 } from "./importedSourceProcess";
+import {
+  isUnifiedWebFetchToolName,
+  isUnifiedWebSearchToolName,
+} from "./toolNameFamily";
 
 export type {
   AgentThreadDisplayModel,
@@ -83,6 +87,51 @@ function mergeStatuses(
     return "failed";
   }
   return "completed";
+}
+
+function isWebSearchProcessItem(item: AgentThreadItem): boolean {
+  return (
+    item.type === "web_search" ||
+    (item.type === "tool_call" && isUnifiedWebSearchToolName(item.tool_name))
+  );
+}
+
+function isWebFetchProcessItem(item: AgentThreadItem): boolean {
+  return item.type === "tool_call" && isUnifiedWebFetchToolName(item.tool_name);
+}
+
+function isWebRetrievalProcessItem(item: AgentThreadItem): boolean {
+  return isWebSearchProcessItem(item) || isWebFetchProcessItem(item);
+}
+
+function isFailedWebSearchProcessItem(item: AgentThreadItem): boolean {
+  return isWebSearchProcessItem(item) && item.status === "failed";
+}
+
+function shouldSplitProcessBlockBeforeItem(
+  current: {
+    kind: AgentThreadGroupKind;
+    items: AgentThreadItem[];
+  },
+  item: AgentThreadItem,
+): boolean {
+  if (current.kind !== "process" || !isWebSearchProcessItem(item)) {
+    return false;
+  }
+
+  if (!current.items.some(isWebRetrievalProcessItem)) {
+    return false;
+  }
+
+  if (
+    current.items.length > 0 &&
+    current.items.every(isFailedWebSearchProcessItem) &&
+    isFailedWebSearchProcessItem(item)
+  ) {
+    return false;
+  }
+
+  return true;
 }
 
 function resolveGroupTitle(
@@ -232,35 +281,7 @@ function shouldDefaultExpand(
   if (kind === "process" && hasImportedSourceProcessItem(items)) {
     return true;
   }
-  if (kind === "process" && hasContentFactoryWorkflowProcessItem(items)) {
-    return true;
-  }
   return status !== "completed";
-}
-
-function hasContentFactoryWorkflowProcessItem(
-  items: AgentThreadItem[],
-): boolean {
-  return items.some((item) => {
-    const metadata =
-      item.metadata &&
-      typeof item.metadata === "object" &&
-      !Array.isArray(item.metadata)
-        ? (item.metadata as Record<string, unknown>)
-        : null;
-    const source = typeof metadata?.source === "string" ? metadata.source : "";
-    const workflowKey =
-      typeof metadata?.workflowKey === "string"
-        ? metadata.workflowKey
-        : typeof metadata?.workflow_key === "string"
-          ? metadata.workflow_key
-          : "";
-
-    return (
-      source === "content_factory_search_requests" ||
-      workflowKey === "content_article_workflow"
-    );
-  });
 }
 
 function buildSummaryText(items: AgentThreadItem[]): string | null {
@@ -385,6 +406,12 @@ export function buildAgentThreadDisplayModel(
   for (const item of sortedItems) {
     const kind = classifyItemKind(item);
     if (!current || current.kind !== kind) {
+      pushCurrentBlock();
+      current = { kind, items: [item] };
+      continue;
+    }
+
+    if (shouldSplitProcessBlockBeforeItem(current, item)) {
       pushCurrentBlock();
       current = { kind, items: [item] };
       continue;

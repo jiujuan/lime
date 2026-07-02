@@ -18,7 +18,7 @@
         "request_user_input"
       ],
       "executor_adapter_keys": [
-        "skill:image_generate"
+        "workflow:image_command"
       ],
       "artifact_policy": {
         "write_mode": "domain_task_artifact",
@@ -57,7 +57,7 @@
         "executor_kind",
         "artifact_kind"
       ],
-      "notes": "图片生成 profile 只允许写 image_task/image_output；通用 @配图 与 catalog / Lime Cloud 声明的图片模型 @命令都必须先进入 harness.image_skill_launch -> Skill(image_generate) 主链，再由工具创建标准 task artifact。未注册入口不得直接写 artifact 或退回 legacy CLI。"
+      "notes": "图片生成 profile 只允许写 image_task/image_output；通用 @配图 与 catalog / Lime Cloud 声明的图片模型 @命令都必须先进入 App Server ImageCommandWorkflow，再由 workflow 创建标准 task artifact。harness.image_skill_launch 只允许作为短期输入桥读取；未注册入口不得直接写 artifact、调用旧 Skill 首发链或退回 legacy CLI。"
     },
     {
       "profile_key": "browser_control_profile",
@@ -397,8 +397,44 @@
   ],
   "executor_adapters": [
     {
-      "adapter_key": "skill:image_generate",
+      "adapter_key": "workflow:image_command",
       "lifecycle": "current",
+      "executor_kind": "workflow",
+      "binding_key": "image_command",
+      "supported_contracts": [
+        "image_generation"
+      ],
+      "supports_progress": true,
+      "supports_cancel": true,
+      "supports_resume": false,
+      "supports_artifact": true,
+      "artifact_output_kinds": [
+        "image_task",
+        "image_output"
+      ],
+      "permission_requirements": [
+        "write_artifacts",
+        "media_upload",
+        "request_user_input"
+      ],
+      "credential_requirements": [
+        "provider_offer",
+        "model_catalog"
+      ],
+      "failure_mapping": [
+        "permission_denied",
+        "capability_gap",
+        "executor_error"
+      ],
+      "evidence_events": [
+        "executor_invoked",
+        "artifact_written"
+      ],
+      "notes": "ImageCommandWorkflow 在普通聊天模型路由前创建标准 image task/output artifact；旧 Skill(image_generate) 只能作为 compat/manual guard。"
+    },
+    {
+      "adapter_key": "skill:image_generate",
+      "lifecycle": "compat",
       "executor_kind": "skill",
       "binding_key": "image_generate",
       "supported_contracts": [
@@ -430,7 +466,7 @@
         "executor_invoked",
         "artifact_written"
       ],
-      "notes": "Image Skill 负责写标准 image task/output artifact，不支持 resume。"
+      "notes": "Image Skill 仅保留为 compat/manual guard；current @图片命令必须走 workflow:image_command。"
     },
     {
       "adapter_key": "browser:browser_assist",

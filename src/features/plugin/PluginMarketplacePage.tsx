@@ -503,7 +503,7 @@ export function PluginMarketplacePage({
               }`}
               onClick={() => setStatusFilter(filter)}
             >
-              {translate(`plugin.marketplace.filter.${filter}`)}
+              {t(`plugin.marketplace.filter.${filter}`)}
             </button>
           ))}
         </div>

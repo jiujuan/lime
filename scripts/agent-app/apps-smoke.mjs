@@ -2538,7 +2538,7 @@ async function ensureContentFactoryInstalled(
 
   const state = await page.evaluate(async (appDir) => {
     const fixtureResponse = await fetch(
-      "/src/features/agent-app/fixtures/content-factory-app.json",
+      "/src/features/agent-app/testing/fixtures/content-factory-app.json",
     );
     if (!fixtureResponse.ok) {
       throw new Error(

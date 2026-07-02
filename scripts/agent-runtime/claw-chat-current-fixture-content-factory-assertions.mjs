@@ -83,6 +83,10 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
       readModel.hasImageSetObject === true &&
       readModel.hasStoryboardObject === true &&
       readModel.hasChecklistObject === true,
+    contentFactoryArticleWorkspaceWorkflowFactsHidden:
+      readModel.workflowUiFactsHidden === true &&
+      readModel.workflowRunCount === 0 &&
+      readModel.workflowStepCount === 0,
     contentFactoryArticleWorkspaceArtifactsProjected:
       readModel.articleArtifact?.artifactRef ===
         CONTENT_FACTORY_ARTICLE_WORKSPACE_ARTICLE_ARTIFACT_ID &&
@@ -159,19 +163,21 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
       summary.contentFactoryArticleWorkspaceArticleWritingStructure
         ?.hasWritingPlan === true &&
       summary.contentFactoryArticleWorkspaceArticleWritingStructure
-        ?.contentFactoryOrchestrationVisible === true &&
+        ?.workflowUiRailHidden === true &&
       summary.contentFactoryArticleWorkspaceArticleWritingStructure
-        ?.contentFactoryOrchestrationStepCount >= 5 &&
+        ?.contentFactoryOrchestrationVisible === false &&
       summary.contentFactoryArticleWorkspaceArticleWritingStructure
-        ?.hasVisibleContentFactoryOrchestration === true &&
+        ?.contentFactoryOrchestrationStepCount === 0 &&
       summary.contentFactoryArticleWorkspaceArticleWritingStructure
-        ?.hasVisibleSubagents === true &&
+        ?.hasVisibleContentFactoryOrchestration === false &&
       summary.contentFactoryArticleWorkspaceArticleWritingStructure
-        ?.hasVisibleSkillRef === true &&
+        ?.hasVisibleSubagents === false &&
       summary.contentFactoryArticleWorkspaceArticleWritingStructure
-        ?.hasVisibleConnectors === true &&
+        ?.hasVisibleSkillRef === false &&
       summary.contentFactoryArticleWorkspaceArticleWritingStructure
-        ?.hasVisibleHooks === true &&
+        ?.hasVisibleConnectors === false &&
+      summary.contentFactoryArticleWorkspaceArticleWritingStructure
+        ?.hasVisibleHooks === false &&
       summary.contentFactoryArticleWorkspaceArticleWritingStructure
         ?.hasReviewNote === true &&
       summary.contentFactoryArticleWorkspaceArticleWritingStructure
@@ -242,6 +248,12 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
         CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TASK_ID &&
       readModel.workerArticleObject?.markdownIncludesResearch === true &&
       readModel.workerArticleObject?.markdownIncludesDraft === true &&
+      readModel.workerArticleObject?.hostManagedGenerationStatus ===
+        "unavailable" &&
+      readModel.workerArticleObject?.hostManagedGenerationReasonCode ===
+        "host_generation_unavailable" &&
+      readModel.workerArticleObject?.hostManagedGenerationOutputIds?.length ===
+        0 &&
       readModel.workerArticleObject?.researchRoundCount >= 3 &&
       readModel.workerArticleObject?.imageSlotCount >= 3,
     contentFactoryArticleWorkspaceActionResultPatchProjected:

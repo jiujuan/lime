@@ -1,4 +1,5 @@
 import { getProviderLabel } from "@/lib/constants/providerMappings";
+import { isLikelyImageGenerationSearchText } from "@/lib/imageGen/providerMatchers";
 import type {
   AsterSessionExecutionRuntime,
   AsterSessionExecutionRuntimePreferences,
@@ -186,6 +187,45 @@ export function createSessionModelPreferenceFromExecutionRuntime(
   const model = runtime?.model_name?.trim() || null;
 
   if (!providerType || !model) {
+    return null;
+  }
+
+  const preference = {
+    providerType,
+    model,
+  };
+
+  return isImageGenerationSessionModelPreference(preference)
+    ? null
+    : preference;
+}
+
+export function isImageGenerationSessionModelPreference(
+  preference?: Pick<SessionModelPreference, "providerType" | "model"> | null,
+): boolean {
+  const providerType = preference?.providerType?.trim() || "";
+  const model = preference?.model?.trim() || "";
+  if (!providerType && !model) {
+    return false;
+  }
+
+  return isLikelyImageGenerationSearchText(`${providerType} ${model}`);
+}
+
+export function normalizeChatSessionModelPreference(
+  preference?: SessionModelPreference | null,
+): SessionModelPreference | null {
+  if (!preference) {
+    return null;
+  }
+
+  const providerType = preference.providerType?.trim() || "";
+  const model = preference.model?.trim() || "";
+  if (!providerType && !model) {
+    return null;
+  }
+
+  if (isImageGenerationSessionModelPreference({ providerType, model })) {
     return null;
   }
 

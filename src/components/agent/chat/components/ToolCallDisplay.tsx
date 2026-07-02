@@ -213,8 +213,10 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
       shouldHideToolResultEnvelope({
         toolName: toolCall.name,
         rawResultText,
+        metadata: resultMetadata,
+        result: toolCall.result,
       }),
-    [rawResultText, toolCall.name],
+    [rawResultText, resultMetadata, toolCall.name, toolCall.result],
   );
   const limeTaskProtocolFailureText = useMemo(() => {
     if (!isFailed) {

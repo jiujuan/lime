@@ -46,6 +46,60 @@ impl RuntimeCoreEventAppender {
     }
 }
 
+impl RuntimeCore {
+    pub(in crate::runtime) fn append_workflow_audit_runtime_events(
+        &self,
+        request: &ExecutionRequest,
+        runtime_events: Vec<RuntimeEvent>,
+    ) -> Result<(), RuntimeCoreError> {
+        append_workflow_audit_runtime_events(
+            self.event_log_writer.as_deref(),
+            request.session.session_id.as_str(),
+            request.session.thread_id.as_str(),
+            Some(request.turn.turn_id.as_str()),
+            runtime_events,
+        )
+    }
+}
+
+pub(in crate::runtime) fn append_workflow_audit_runtime_events(
+    event_log_writer: Option<&EventLogWriter>,
+    session_id: &str,
+    thread_id: &str,
+    turn_id: Option<&str>,
+    runtime_events: Vec<RuntimeEvent>,
+) -> Result<(), RuntimeCoreError> {
+    let Some(event_log_writer) = event_log_writer else {
+        return Ok(());
+    };
+    if runtime_events.is_empty() {
+        return Ok(());
+    }
+
+    let base_sequence = event_log_writer
+        .read_session_workflow_audit_events(session_id)
+        .map_err(RuntimeCoreError::Backend)?
+        .len() as u64;
+    let audit_events = runtime_events
+        .into_iter()
+        .enumerate()
+        .map(|(index, runtime_event)| AgentEvent {
+            event_id: new_id("audit"),
+            sequence: base_sequence + index as u64 + 1,
+            session_id: session_id.to_string(),
+            thread_id: Some(thread_id.to_string()),
+            turn_id: turn_id.map(str::to_string),
+            event_type: runtime_event.event_type,
+            timestamp: timestamp(),
+            payload: runtime_event.payload,
+        })
+        .collect::<Vec<_>>();
+    event_log_writer
+        .append_workflow_audit_events(session_id, &audit_events)
+        .map_err(RuntimeCoreError::Backend)?;
+    Ok(())
+}
+
 pub(in crate::runtime) fn append_runtime_events_to_state(
     state: &Arc<Mutex<RuntimeCoreState>>,
     file_checkpoint_snapshot_store: &dyn crate::file_checkpoint_snapshot::FileCheckpointSnapshotStore,
@@ -96,6 +150,19 @@ fn append_runtime_events_to_stored_session(
         return Ok(Vec::new());
     }
     let runtime_events = runtime_events_with_turn_input(stored, turn_id, runtime_events);
+    if runtime_events.is_empty() {
+        return Ok(Vec::new());
+    }
+    let (workflow_audit_events, runtime_events): (Vec<_>, Vec<_>) = runtime_events
+        .into_iter()
+        .partition(|event| event.event_type.starts_with("workflow."));
+    append_workflow_audit_runtime_events(
+        event_log_writer,
+        session_id,
+        thread_id,
+        turn_id,
+        workflow_audit_events,
+    )?;
     if runtime_events.is_empty() {
         return Ok(Vec::new());
     }

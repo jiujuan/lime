@@ -185,7 +185,7 @@ describe("imageGen/catalog", () => {
     expect(seededCommandSource).not.toContain('model: "gpt-images-2"');
 
     const workspaceLaunchSource = readSource(
-      "src/components/agent/chat/workspace/imageSkillLaunch.ts",
+      "src/components/agent/chat/workspace/imageCommandIntent.ts",
     );
     expect(workspaceLaunchSource).toContain(
       'from "@/lib/governance/modalityRuntimeContracts"',

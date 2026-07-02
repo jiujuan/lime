@@ -3,6 +3,7 @@ import type { AgentSessionMetadataPatch } from "./agentRuntimeAdapter";
 import type { AgentAccessMode } from "./agentChatStorage";
 import type { SessionModelPreference } from "./agentChatShared";
 import { normalizeExecutionStrategy } from "./agentChatCoreUtils";
+import { normalizeChatSessionModelPreference } from "../utils/sessionExecutionRuntime";
 
 export type SessionAccessModeSource =
   | "execution_runtime"
@@ -98,13 +99,19 @@ export function buildSessionMetadataSyncInputPlan(params: {
   storedPreference?: SessionModelPreference | null;
   workspaceDefaultAccessMode: AgentAccessMode;
 }): SessionMetadataSyncInputPlan {
+  const runtimePreference = normalizeChatSessionModelPreference(
+    params.runtimePreference,
+  );
+  const storedPreference = normalizeChatSessionModelPreference(
+    params.storedPreference,
+  );
   return {
     runtimeAccessMode: params.runtimeAccessMode ?? null,
-    runtimePreference: params.runtimePreference ?? null,
+    runtimePreference,
     shadowAccessMode: params.shadowAccessMode ?? null,
     shadowExecutionStrategyFallback:
       params.shadowExecutionStrategyFallback ?? null,
-    topicPreference: params.runtimePreference ?? params.storedPreference ?? null,
+    topicPreference: runtimePreference ?? storedPreference ?? null,
     workspaceDefaultAccessMode: params.workspaceDefaultAccessMode,
   };
 }
@@ -117,6 +124,12 @@ export function buildSessionMetadataSyncPlan(params: {
   topicPreference?: SessionModelPreference | null;
   workspaceDefaultAccessMode: AgentAccessMode;
 }): SessionMetadataSyncPlan {
+  const runtimePreference = normalizeChatSessionModelPreference(
+    params.runtimePreference,
+  );
+  const topicPreference = normalizeChatSessionModelPreference(
+    params.topicPreference,
+  );
   const patch: AgentSessionMetadataPatch = {};
   let accessMode: AgentAccessMode;
   let accessModeSource: SessionAccessModeSource;
@@ -137,9 +150,9 @@ export function buildSessionMetadataSyncPlan(params: {
     patch.accessMode = params.workspaceDefaultAccessMode;
   }
 
-  const providerPreferenceToApply = params.topicPreference ?? null;
+  const providerPreferenceToApply = topicPreference;
   const fallbackProviderPreference =
-    providerPreferenceToApply && !params.runtimePreference
+    providerPreferenceToApply && !runtimePreference
       ? providerPreferenceToApply
       : null;
   if (fallbackProviderPreference) {
@@ -165,7 +178,7 @@ export function buildSessionMetadataSyncPlan(params: {
       patch.model ||
       patch.executionStrategy,
     ),
-    modelPreferenceSource: params.runtimePreference
+    modelPreferenceSource: runtimePreference
       ? "execution_runtime"
       : providerPreferenceToApply
         ? "session_storage"

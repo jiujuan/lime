@@ -159,7 +159,7 @@ describe("useWorkspaceImageWorkbenchActionRuntime", () => {
 
     await render();
 
-    const skillRequest = getValue().resolveImageWorkbenchSkillRequest({
+    const skillRequest = getValue().resolveImageWorkbenchCommandRequest({
       rawText: "@配图 生成 城市夜景主视觉",
       parsedCommand: createParsedCommand(),
       images: [],
@@ -190,7 +190,7 @@ describe("useWorkspaceImageWorkbenchActionRuntime", () => {
 
     await render();
 
-    const skillRequest = getValue().resolveImageWorkbenchSkillRequest({
+    const skillRequest = getValue().resolveImageWorkbenchCommandRequest({
       rawText: "@配图 生成 城市夜景主视觉",
       parsedCommand: createParsedCommand(),
       images: [],
@@ -233,7 +233,7 @@ describe("useWorkspaceImageWorkbenchActionRuntime", () => {
 
     await render();
 
-    const skillRequest = getValue().resolveImageWorkbenchSkillRequest({
+    const skillRequest = getValue().resolveImageWorkbenchCommandRequest({
       rawText: "@配图 编辑 #img-2 去掉角标，保留主体",
       parsedCommand: {
         rawText: "@配图 编辑 #img-2 去掉角标，保留主体",
@@ -288,7 +288,7 @@ describe("useWorkspaceImageWorkbenchActionRuntime", () => {
 
     await render();
 
-    const skillRequest = getValue().resolveImageWorkbenchSkillRequest({
+    const skillRequest = getValue().resolveImageWorkbenchCommandRequest({
       rawText: "@配图 生成 柴犬头像暖色插画",
       parsedCommand: {
         rawText: "@配图 生成 柴犬头像暖色插画",

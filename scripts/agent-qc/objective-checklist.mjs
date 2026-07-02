@@ -6,6 +6,7 @@ import process from "node:process";
 
 import {
   buildAgentQcObjectiveChecklist,
+  buildMissingAuditAgentQcObjectiveChecklist,
   renderAgentQcObjectiveChecklistMarkdown,
 } from "../lib/agent-qc-objective-checklist-core.mjs";
 
@@ -82,6 +83,48 @@ function readJson(filePath) {
   );
 }
 
+function readJsonResult(filePath) {
+  const resolvedPath = path.resolve(process.cwd(), filePath);
+  if (!fs.existsSync(resolvedPath)) {
+    return { ok: false, reason: "missing", value: null, error: "" };
+  }
+  try {
+    return { ok: true, reason: "", value: readJson(filePath), error: "" };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: "invalid-json",
+      value: null,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+function fallbackProcessOwner(readResult, filePath) {
+  if (readResult.ok) {
+    return readResult.value;
+  }
+  return {
+    verdict: {
+      status: "missing",
+      summary: `缺少 raw process owner sidecar：${filePath}`,
+    },
+    ownerIntervention: { status: "missing" },
+  };
+}
+
+function fallbackGuiOwner(readResult, filePath) {
+  if (readResult.ok) {
+    return readResult.value;
+  }
+  return {
+    verdict: {
+      status: "missing",
+      summary: `缺少 GUI owner sidecar：${filePath}`,
+    },
+  };
+}
+
 function writeOutput(outputPath, content) {
   if (!outputPath) {
     process.stdout.write(content);
@@ -98,11 +141,23 @@ function main() {
     printHelp();
     return;
   }
-  const result = buildAgentQcObjectiveChecklist({
-    audit: readJson(options.auditPath),
-    processOwner: readJson(options.processOwnerPath),
-    guiOwner: readJson(options.guiOwnerPath),
-  });
+  const auditReadResult = readJsonResult(options.auditPath);
+  const processOwnerReadResult = readJsonResult(options.processOwnerPath);
+  const guiOwnerReadResult = readJsonResult(options.guiOwnerPath);
+  const result = auditReadResult.ok
+    ? buildAgentQcObjectiveChecklist({
+        audit: auditReadResult.value,
+        processOwner: fallbackProcessOwner(
+          processOwnerReadResult,
+          options.processOwnerPath,
+        ),
+        guiOwner: fallbackGuiOwner(guiOwnerReadResult, options.guiOwnerPath),
+      })
+    : buildMissingAuditAgentQcObjectiveChecklist({
+        auditPath: options.auditPath,
+        reason: auditReadResult.reason,
+        detail: auditReadResult.error,
+      });
   const content =
     options.format === "json"
       ? `${JSON.stringify(result, null, 2)}\n`

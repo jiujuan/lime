@@ -144,7 +144,7 @@ function snapshot(): PluginMarketplaceRegistrySnapshot {
             ],
             skillRefs: [
               {
-                id: "article-image-cheatsheet",
+                id: "article-image-plan",
                 activation: "content.image.generate",
               },
             ],
@@ -323,7 +323,7 @@ describe("plugin marketplace view model", () => {
         "web-research",
         "task-complete",
         "article-writer",
-        "article-image-cheatsheet",
+        "article-image-plan",
       ]),
     );
     expect(

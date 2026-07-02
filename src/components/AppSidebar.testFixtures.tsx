@@ -280,6 +280,7 @@ export function mountSidebar(options?: {
   currentPage?: Page;
   currentPageParams?: PageParams;
   activeAgentSessionId?: string | null;
+  activeAgentStreaming?: boolean;
   requestedPage?: Page;
   requestedPageParams?: PageParams;
   onNavigate?: (page: Page, params?: PageParams) => void;
@@ -294,6 +295,7 @@ export function mountSidebar(options?: {
         currentPage={options?.currentPage ?? "agent"}
         currentPageParams={options?.currentPageParams}
         activeAgentSessionId={options?.activeAgentSessionId}
+        activeAgentStreaming={options?.activeAgentStreaming}
         requestedPage={options?.requestedPage}
         requestedPageParams={options?.requestedPageParams}
         onNavigate={options?.onNavigate ?? vi.fn()}
@@ -310,6 +312,7 @@ export function mountSidebarContainer(options?: {
   currentPage?: Page;
   currentPageParams?: PageParams;
   activeAgentSessionId?: string | null;
+  activeAgentStreaming?: boolean;
   requestedPage?: Page;
   requestedPageParams?: PageParams;
   onNavigate?: (page: Page, params?: PageParams) => void;

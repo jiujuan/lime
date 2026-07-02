@@ -3493,6 +3493,11 @@ describe("agentRuntime threadClient", () => {
       type: "artifact_snapshot",
       artifactId: "artifact-1",
       filePath: ".lime/artifacts/report.md",
+      artifact: {
+        artifactId: "artifact-1",
+        filePath: ".lime/artifacts/report.md",
+        file_path: ".lime/artifacts/report.md",
+      },
       event_id: "evt-artifact",
       renderer_event_received_at: expect.any(Number),
       sequence: 3,
@@ -3503,13 +3508,175 @@ describe("agentRuntime threadClient", () => {
       timestamp: "2026-06-06T00:00:02.000Z",
     });
 
+    const artifactPayload = projectAppServerAgentEventPayload({
+      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "evt-article-artifact",
+          sequence: 4,
+          sessionId: "session-1",
+          turnId: "turn-1",
+          type: "artifact.snapshot",
+          timestamp: "2026-06-06T00:00:02.500Z",
+          payload: {
+            artifact: {
+              artifactId: "artifact-workspace-patch",
+              filePath: ".lime/artifacts/content-factory/workspace-patch.json",
+              content: '{"schemaVersion":"article-workspace.v1"}',
+              metadata: {
+                kind: "content_factory.workspace_patch",
+              },
+            },
+          },
+        },
+      },
+    });
+    expect(parseAgentEvent(artifactPayload)).toMatchObject({
+      type: "artifact_snapshot",
+      artifact: {
+        artifactId: "artifact-workspace-patch",
+        filePath: ".lime/artifacts/content-factory/workspace-patch.json",
+        content: '{"schemaVersion":"article-workspace.v1"}',
+        metadata: {
+          kind: "content_factory.workspace_patch",
+        },
+      },
+    });
+
+    const hookPayload = projectAppServerAgentEventPayload({
+      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "evt-worker-hook",
+          sequence: 5,
+          sessionId: "session-1",
+          turnId: "turn-1",
+          type: "agent_app_worker.hook",
+          timestamp: "2026-06-06T00:00:02.750Z",
+          payload: {
+            source: "agent_app_task_worker",
+            backend: "agent_app_worker",
+            appId: "content-factory-app",
+            taskId: "turn-1:article-workspace-action",
+            taskKind: "content.article.generate",
+            status: "completed",
+            hookKey: "prompt-submit",
+            hookEvent: "prompt.submit",
+            hookScope: "prompt",
+            resultSummary: "Prepared prompt context for content task",
+          },
+        },
+      },
+    });
+    expect(hookPayload).toMatchObject({
+      type: "item_completed",
+      item: {
+        id: "evt-worker-hook:agent-app-worker-hook",
+        type: "turn_summary",
+        status: "completed",
+        text: "Prepared prompt context for content task",
+        metadata: {
+          source: "agent_app_worker.hook",
+          hookKey: "prompt-submit",
+          hookEvent: "prompt.submit",
+          hookScope: "prompt",
+        },
+      },
+    });
+    expect(parseAgentEvent(hookPayload)).toMatchObject({
+      type: "item_completed",
+      item: {
+        id: "evt-worker-hook:agent-app-worker-hook",
+        type: "turn_summary",
+        status: "completed",
+        text: "Prepared prompt context for content task",
+      },
+    });
+
+    const workflowRunPayload = projectAppServerAgentEventPayload({
+      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "evt-workflow-run",
+          sequence: 6,
+          sessionId: "session-1",
+          turnId: "turn-1",
+          type: "workflow.run.started",
+          timestamp: "2026-06-06T00:00:02.800Z",
+          payload: {
+            appId: "content-factory-app",
+            taskId: "turn-1:content_article_generate",
+            taskKind: "content.article.generate",
+            workflowRunId: "turn-1:content_article_generate:workflow",
+            workflowKey: "content_article_workflow",
+            workflowTitle: "写文章工作流",
+            status: "running",
+          },
+        },
+      },
+    });
+    expect(workflowRunPayload).toBeNull();
+
+    const workflowStepProgressPayload = projectAppServerAgentEventPayload({
+      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "evt-workflow-step-progress",
+          sequence: 7,
+          sessionId: "session-1",
+          turnId: "turn-1",
+          type: "workflow.step.progress",
+          timestamp: "2026-06-06T00:00:02.850Z",
+          payload: {
+            appId: "content-factory-app",
+            taskId: "turn-1:content_article_generate",
+            taskKind: "content.article.generate",
+            workflowRunId: "turn-1:content_article_generate:workflow",
+            workflowKey: "content_article_workflow",
+            workflowTitle: "写文章工作流",
+            stepId: "research",
+            stepTitle: "资料检索",
+            stepIndex: 0,
+            stepCount: 5,
+            status: "running",
+            progressMessage: "整理用户需求、历史上下文和可引用资料。",
+          },
+        },
+      },
+    });
+    expect(workflowStepProgressPayload).toBeNull();
+
+    const workflowStepCompletedPayload = projectAppServerAgentEventPayload({
+      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "evt-workflow-step-completed",
+          sequence: 8,
+          sessionId: "session-1",
+          turnId: "turn-1",
+          type: "workflow.step.completed",
+          timestamp: "2026-06-06T00:00:02.900Z",
+          payload: {
+            appId: "content-factory-app",
+            taskId: "turn-1:content_article_generate",
+            workflowRunId: "turn-1:content_article_generate:workflow",
+            workflowKey: "content_article_workflow",
+            stepId: "research",
+            stepTitle: "资料检索",
+            status: "completed",
+          },
+        },
+      },
+    });
+    expect(workflowStepCompletedPayload).toBeNull();
+
     expect(
       projectAppServerAgentEventPayload({
         method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
         params: {
           event: {
             eventId: "evt-status",
-            sequence: 4,
+            sequence: 9,
             sessionId: "session-1",
             type: "runtime.status",
             timestamp: "2026-06-06T00:00:03.000Z",
@@ -3772,6 +3939,57 @@ describe("agentRuntime threadClient", () => {
       tool_name: "Read",
       accumulated_arguments:
         '{"path":"src/App.tsx","start_line":2,"end_line":8}',
+    });
+
+    const imageTaskCreatedPayload = projectAppServerAgentEventPayload({
+      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "evt-image-task-created",
+          sequence: 11,
+          sessionId: "session-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          type: "image_task.created",
+          timestamp: "2026-06-06T00:00:08.500Z",
+          payload: {
+            taskId: "task-image-1",
+            artifactPath: ".lime/tasks/image_generate/task-image-1.json",
+            response: {
+              task_id: "task-image-1",
+              task_type: "image_generate",
+              task_family: "image",
+              status: "pending_submit",
+              normalized_status: "pending",
+              artifact_path: ".lime/tasks/image_generate/task-image-1.json",
+              record: {
+                payload: {
+                  prompt: "画一张广州夏天的图",
+                  session_id: "session-1",
+                  turn_id: "turn-1",
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    expect(imageTaskCreatedPayload).toMatchObject({
+      type: "image_task_created",
+      task_id: "task-image-1",
+      task_type: "image_generate",
+      task_family: "image",
+      artifact_path: ".lime/tasks/image_generate/task-image-1.json",
+      payload: {
+        prompt: "画一张广州夏天的图",
+        session_id: "session-1",
+      },
+    });
+    expect(parseAgentEvent(imageTaskCreatedPayload)).toMatchObject({
+      type: "image_task_created",
+      task_id: "task-image-1",
+      task_type: "image_generate",
     });
 
     const progressPayload = projectAppServerAgentEventPayload({

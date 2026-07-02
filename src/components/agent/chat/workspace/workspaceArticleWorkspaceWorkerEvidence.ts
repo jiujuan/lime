@@ -40,6 +40,7 @@ export interface WorkspaceArticleWorkspaceWorkerEvidenceItem {
   skillRefs: string[];
   cliRefs: string[];
   connectorRefs: string[];
+  hookRefs: string[];
   hookPolicy: WorkspaceArticleWorkspaceWorkerEvidenceHookPolicy | null;
   runtimeRegistries: Record<string, unknown> | null;
   orchestration: WorkspaceArticleWorkspaceWorkerEvidenceOrchestrationStep[];
@@ -168,6 +169,7 @@ function readWorkerEvidenceItem(
     skillRefs: readStringList(record.skillRefs, record.skill_refs),
     cliRefs: readStringList(record.cliRefs, record.cli_refs),
     connectorRefs: readStringList(record.connectorRefs, record.connector_refs),
+    hookRefs: readStringList(record.hookRefs, record.hook_refs),
     hookPolicy:
       readWorkerEvidenceHookPolicy(record.hookPolicy, record.hook_policy) ??
       null,
@@ -241,6 +243,7 @@ function readSourceArtifactWorkerEvidence(
         skillRefs: [],
         cliRefs: [],
         connectorRefs: [],
+        hookRefs: [],
         hookPolicy: null,
         runtimeRegistries: null,
         orchestration: [],
@@ -303,6 +306,7 @@ function readDiagnosticWorkerEvidence(
       skillRefs: [],
       cliRefs: [],
       connectorRefs: [],
+      hookRefs: [],
       hookPolicy: null,
       runtimeRegistries: null,
       orchestration: [],

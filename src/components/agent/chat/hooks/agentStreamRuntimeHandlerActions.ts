@@ -36,7 +36,6 @@ import { isPersistedReasoningContentPart } from "./agentStreamReasoningContentSy
 import { resetStreamedReasoningSegment } from "./agentStreamReasoningTimeline";
 import {
   clearActiveTextSegmentState,
-  hasActiveTextSegmentProvenance,
   resolveAccumulatedContentBeforeActiveTextSegment,
   shouldCommitActiveTextSegmentAsFinal,
 } from "./agentStreamTextDeltaLifecycle";
@@ -272,14 +271,6 @@ export function createAgentStreamRuntimeHandlerActions({
       return;
     }
 
-    if (!hasActiveTextSegmentProvenance(requestState)) {
-      requestState.accumulatedContent = "";
-      requestState.renderedContent = "";
-      clearActiveTextSegmentState(requestState);
-      clearAgentStreamTextOverlay(assistantMsgId);
-      return;
-    }
-
     setMessages((prev) =>
       prev.map((msg) => {
         if (msg.id !== assistantMsgId) {
@@ -310,6 +301,7 @@ export function createAgentStreamRuntimeHandlerActions({
       }),
     );
     clearActiveTextSegmentState(requestState);
+    clearAgentStreamTextOverlay(assistantMsgId);
   };
 
   const scheduleTextRenderFlush = () => {
@@ -555,6 +547,15 @@ export function createAgentStreamRuntimeHandlerActions({
         if (msg.id !== assistantMsgId) {
           return msg;
         }
+        const shouldPreserveRunningImageTaskContent =
+          msg.imageWorkbenchPreview?.status === "running" &&
+          !requestState.accumulatedContent.trim();
+        const resolvedFinalContent = shouldPreserveRunningImageTaskContent
+          ? msg.content
+          : finalContent;
+        const resolvedRawContent = shouldPreserveRunningImageTaskContent
+          ? msg.content
+          : rawContent;
 
         return {
           ...updateMessageArtifactsStatus(msg, "complete"),
@@ -570,15 +571,18 @@ export function createAgentStreamRuntimeHandlerActions({
                 ...(getThreadItems?.() ?? []),
               ],
             }),
-            finalContent,
+            finalContent: resolvedFinalContent,
             finalTextPartMetadata: buildAgentTextDeltaContentPartMetadata({
               itemId: requestState.activeTextSegmentItemId,
               phase: requestState.activeTextSegmentPhase,
               sequence: requestState.activeTextSegmentSequence,
               turnId: requestState.activeTextSegmentTurnId,
             }),
-            previousContent: rawContent === finalContent ? finalContent : msg.content,
-            rawContent,
+            previousContent:
+              resolvedRawContent === resolvedFinalContent
+                ? resolvedFinalContent
+                : msg.content,
+            rawContent: resolvedRawContent,
             surfaceThinkingDeltas:
               surfaceThinkingDeltas || isRetainedSkillProcessMessage(msg),
             thinkingContent: msg.thinkingContent,

@@ -1,4 +1,8 @@
 import type {
+  ImageCommandNextAction,
+  ImageCommandRunSnapshot,
+  ImageCommandRunStep,
+  ImageGenerationBranch,
   ImageRuntimeContractSnapshot,
   ImageStoryboardSlot,
   MessageImageWorkbenchPreview,
@@ -204,6 +208,189 @@ export function readStringArray(
     }
   }
   return values;
+}
+
+function readRecordArray(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value)
+    ? value
+        .map((item) => asRecord(item))
+        .filter((item): item is Record<string, unknown> => Boolean(item))
+    : [];
+}
+
+function normalizeRunStatus(
+  value?: string,
+): ImageCommandRunSnapshot["status"] {
+  switch (value?.trim()) {
+    case "requires_parameters":
+    case "queued":
+    case "running":
+    case "succeeded":
+    case "partial":
+    case "failed":
+      return value.trim() as ImageCommandRunSnapshot["status"];
+    default:
+      return "queued";
+  }
+}
+
+function normalizeRunStepStatus(
+  value?: string,
+): ImageCommandRunStep["status"] {
+  switch (value?.trim()) {
+    case "pending":
+    case "running":
+    case "succeeded":
+    case "failed":
+      return value.trim() as ImageCommandRunStep["status"];
+    default:
+      return "pending";
+  }
+}
+
+function normalizeBranchStatus(
+  value?: string,
+): ImageGenerationBranch["status"] {
+  switch (value?.trim()) {
+    case "queued":
+    case "running":
+    case "succeeded":
+    case "failed":
+    case "retryable":
+      return value.trim() as ImageGenerationBranch["status"];
+    default:
+      return "queued";
+  }
+}
+
+function readImageCommandRunSteps(
+  records: Record<string, unknown>[],
+): ImageCommandRunStep[] {
+  return records
+    .map((record): ImageCommandRunStep | null => {
+      const id = readString([record], ["id", "step_id", "stepId"]);
+      const title = readString([record], ["title"]);
+      if (!id || !title) {
+        return null;
+      }
+      return {
+        id,
+        title,
+        status: normalizeRunStepStatus(readString([record], ["status"])),
+        detail: readString([record], ["detail"]) || null,
+      };
+    })
+    .filter((step): step is ImageCommandRunStep => Boolean(step));
+}
+
+function readImageGenerationBranches(
+  records: Record<string, unknown>[],
+): ImageGenerationBranch[] {
+  return records
+    .map((record): ImageGenerationBranch | null => {
+      const branchId = readString([record], ["branch_id", "branchId", "id"]);
+      const title = readString([record], ["title"]);
+      const prompt = readString([record], ["prompt"]);
+      if (!branchId || !title || !prompt) {
+        return null;
+      }
+      return {
+        branchId,
+        title,
+        prompt,
+        taskId: readString([record], ["task_id", "taskId"]) || null,
+        artifactPath:
+          readString([record], ["artifact_path", "artifactPath"]) || null,
+        status: normalizeBranchStatus(readString([record], ["status"])),
+        previewUrl:
+          readString([record], ["preview_url", "previewUrl", "image_url"]) ||
+          null,
+        failureReason:
+          readString([record], ["failure_reason", "failureReason"]) || null,
+        slotId: readString([record], ["slot_id", "slotId"]) || null,
+        shotType: readString([record], ["shot_type", "shotType"]) || null,
+      };
+    })
+    .filter((branch): branch is ImageGenerationBranch => Boolean(branch));
+}
+
+function readImageCommandNextActions(
+  records: Record<string, unknown>[],
+): ImageCommandNextAction[] {
+  return records
+    .map((record): ImageCommandNextAction | null => {
+      const type = readString([record], ["type"]);
+      switch (type) {
+        case "retry_branch": {
+          const branchId = readString([record], ["branch_id", "branchId"]);
+          return branchId ? { type, branchId } : null;
+        }
+        case "generate_more":
+          return {
+            type,
+            branchId: readString([record], ["branch_id", "branchId"]) || null,
+          };
+        case "open_workbench":
+          return {
+            type,
+            taskId: readString([record], ["task_id", "taskId"]) || null,
+          };
+        case "apply_to_document": {
+          const slotId = readString([record], ["slot_id", "slotId"]);
+          return slotId ? { type, slotId } : null;
+        }
+        default:
+          return null;
+      }
+    })
+    .filter((action): action is ImageCommandNextAction => Boolean(action));
+}
+
+export function readImageCommandRunSnapshot(
+  candidates: Array<Record<string, unknown> | null | undefined>,
+): ImageCommandRunSnapshot | null {
+  for (const candidate of candidates) {
+    const record =
+      asRecord(candidate?.image_command_run) ||
+      asRecord(candidate?.imageCommandRun);
+    if (!record) {
+      continue;
+    }
+    const runId = readString([record], ["run_id", "runId"]);
+    const title = readString([record], ["title"]);
+    const summary = readString([record], ["summary"]);
+    const requestedCount = readPositiveNumber(
+      [record],
+      ["requested_count", "requestedCount"],
+    );
+    const steps = readImageCommandRunSteps(readRecordArray(record.steps));
+    const branches = readImageGenerationBranches(
+      readRecordArray(record.branches),
+    );
+    if (!runId || !title || !summary || !requestedCount) {
+      continue;
+    }
+    return {
+      runId,
+      sessionId: readString([record], ["session_id", "sessionId"]) || null,
+      threadId: readString([record], ["thread_id", "threadId"]) || null,
+      turnId: readString([record], ["turn_id", "turnId"]) || null,
+      workflowKey:
+        readString([record], ["workflow_key", "workflowKey"]) || null,
+      title,
+      summary,
+      requestedCount,
+      status: normalizeRunStatus(readString([record], ["status"])),
+      steps,
+      branches,
+      nextActions: readImageCommandNextActions(
+        readRecordArray(record.next_actions).length > 0
+          ? readRecordArray(record.next_actions)
+          : readRecordArray(record.nextActions),
+      ),
+    };
+  }
+  return null;
 }
 
 function isImageGenerationContractRoutingFailureCode(

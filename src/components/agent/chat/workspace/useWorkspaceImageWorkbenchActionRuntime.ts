@@ -22,8 +22,8 @@ import { parseImageWorkbenchCommand } from "../utils/imageWorkbenchCommand";
 import {
   buildImageWorkbenchSessionTitle,
   isLocalImageWorkbenchSessionKey,
-  resolveImageWorkbenchSkillRequest,
-} from "./imageSkillLaunch";
+  resolveImageWorkbenchCommandRequest,
+} from "./imageCommandIntent";
 import { ensureImageWorkbenchProviderSelectionCommitted } from "./imageWorkbenchProviderReadiness";
 import { buildImageTaskLookupRequest } from "./imageTaskLocator";
 import {
@@ -783,7 +783,7 @@ export function useWorkspaceImageWorkbenchActionRuntime({
           effectivePrompt,
         );
 
-      const skillRequest = resolveImageWorkbenchSkillRequest({
+      const skillRequest = resolveImageWorkbenchCommandRequest({
         rawText: params.rawText,
         parsedCommand: params.parsedCommand,
         images: params.images,
@@ -843,15 +843,17 @@ export function useWorkspaceImageWorkbenchActionRuntime({
     handleSelectImageWorkbenchOutput,
     handleStopImageWorkbenchGeneration,
     imageWorkbenchPrimaryActionLabel,
-    resolveImageWorkbenchSkillRequest: (params: {
+    resolveImageWorkbenchCommandRequest: (params: {
       rawText: string;
       parsedCommand: NonNullable<ReturnType<typeof parseImageWorkbenchCommand>>;
       images: MessageImage[];
       sessionIdOverride?: string | null;
       applyTarget?: ImageWorkbenchApplyTarget | null;
       entrySource?: string;
+      projectId?: string | null;
+      projectRootPath?: string | null;
     }) =>
-      resolveImageWorkbenchSkillRequest({
+      resolveImageWorkbenchCommandRequest({
         ...params,
         currentImageWorkbenchState,
         imageWorkbenchSelectedModelId:
@@ -860,8 +862,8 @@ export function useWorkspaceImageWorkbenchActionRuntime({
           imageWorkbenchSelectionRef.current.requestProviderId,
         imageWorkbenchSelectedSize,
         imageWorkbenchSessionKey,
-        projectId,
-        projectRootPath,
+        projectId: params.projectId ?? projectId,
+        projectRootPath: params.projectRootPath ?? projectRootPath,
         contentId,
         requireProjectContext: params.applyTarget != null,
       }),

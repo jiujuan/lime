@@ -104,6 +104,26 @@ export function isWebRetrievalToolCall(toolCall: ToolCallState): boolean {
   );
 }
 
+function isWebSearchToolCall(toolCall: ToolCallState): boolean {
+  return isUnifiedWebSearchToolName(toolCall.name);
+}
+
+function isFailedWebSearchToolCall(toolCall: ToolCallState): boolean {
+  return isWebSearchToolCall(toolCall) && toolCall.status === "failed";
+}
+
+function hasOnlyFailedWebSearchTools(
+  entries: StreamingProcessEntry[],
+): boolean {
+  return (
+    entries.length > 0 &&
+    entries.every(
+      (entry) =>
+        entry.kind === "tool" && isFailedWebSearchToolCall(entry.toolCall),
+    )
+  );
+}
+
 function isSuccessfulOrRunningWebRetrievalToolCall(
   toolCall: ToolCallState,
 ): boolean {
@@ -188,6 +208,8 @@ export function shouldSplitProcessBeforeEntry(
 
   const nextIsWebRetrieval =
     nextEntry.kind === "tool" && isWebRetrievalToolCall(nextEntry.toolCall);
+  const nextIsWebSearch =
+    nextEntry.kind === "tool" && isWebSearchToolCall(nextEntry.toolCall);
   const currentHasWebRetrieval = currentEntries.some(
     (entry) => entry.kind === "tool" && isWebRetrievalToolCall(entry.toolCall),
   );
@@ -199,14 +221,29 @@ export function shouldSplitProcessBeforeEntry(
   );
 
   if (currentHasOnlyThinking && nextIsWebRetrieval) {
-    return false;
+    return nextIsWebSearch;
+  }
+
+  if (currentHasWebRetrieval && nextIsWebSearch) {
+    if (
+      hasOnlyFailedWebSearchTools(currentEntries) &&
+      nextEntry.kind === "tool" &&
+      isFailedWebSearchToolCall(nextEntry.toolCall)
+    ) {
+      return false;
+    }
+    return true;
   }
 
   if (currentHasWebRetrieval && !nextIsWebRetrieval) {
     return nextEntry.kind !== "thinking";
   }
 
-  if (currentHasNonWebRetrieval && nextIsWebRetrieval) {
+  if (
+    !currentHasOnlyThinking &&
+    currentHasNonWebRetrieval &&
+    nextIsWebRetrieval
+  ) {
     return !currentHasWebRetrieval;
   }
 

@@ -14,10 +14,10 @@ describe("modalityExecutionProfiles", () => {
   it("应从 executor binding 解析标准 adapter key", () => {
     expect(
       resolveExecutorAdapterKey({
-        executor_kind: "skill",
-        binding_key: "image_generate",
+        executor_kind: "workflow",
+        binding_key: "image_command",
       }),
-    ).toBe("skill:image_generate");
+    ).toBe("workflow:image_command");
     expect(resolveExecutorAdapterKey({ executor_kind: "skill" })).toBeNull();
   });
 
@@ -26,7 +26,7 @@ describe("modalityExecutionProfiles", () => {
 
     expect(binding).toMatchObject({
       executionProfileKey: "image_generation_profile",
-      executorAdapterKey: "skill:image_generate",
+      executorAdapterKey: "workflow:image_command",
       runtimeContract: {
         execution_profile: expect.objectContaining({
           profile_key: "image_generation_profile",
@@ -37,7 +37,7 @@ describe("modalityExecutionProfiles", () => {
           }),
         }),
         executor_adapter: expect.objectContaining({
-          adapter_key: "skill:image_generate",
+          adapter_key: "workflow:image_command",
           supports_progress: true,
           supports_cancel: true,
           supports_resume: false,

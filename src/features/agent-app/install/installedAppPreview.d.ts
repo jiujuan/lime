@@ -2,8 +2,8 @@ import type { AgentAppSetupState, AgentAppPackageVerificationResult, CloudBootst
 export declare class AgentAppInstalledPreviewError extends Error {
     constructor(message: string);
 }
-export declare function buildInstalledAppPreview(params?: {
-    fixture?: unknown;
+export declare function buildInstalledAppPreview(params: {
+    fixture: unknown;
     identity?: PackageIdentity;
     cloud?: CloudBootstrapApp;
     packageVerification?: AgentAppPackageVerificationResult;

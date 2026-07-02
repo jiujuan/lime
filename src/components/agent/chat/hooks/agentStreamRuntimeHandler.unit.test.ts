@@ -154,6 +154,939 @@ describe("agentStreamRuntimeHandler", () => {
     ).toBe(1);
   });
 
+  it("provider_trace 早于首字时应补上轻量等待态，并允许后续 runtime_status 覆盖", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-09T10:00:00.300Z"));
+    let messages: Message[] = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-05-09T10:00:00.000Z"),
+      },
+    ];
+    let threadItems: AgentThreadItem[] = [];
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const setThreadItems = vi.fn(
+      (
+        value:
+          | AgentThreadItem[]
+          | ((prev: AgentThreadItem[]) => AgentThreadItem[]),
+      ) => {
+        threadItems = typeof value === "function" ? value(threadItems) : value;
+      },
+    );
+    const requestState = {
+      accumulatedContent: "",
+      queuedTurnId: null,
+      requestLogId: null,
+      requestStartedAt: Date.now() - 300,
+      firstEventReceivedAt: Date.now() - 250,
+      firstRuntimeStatusAt: null,
+      requestFinished: false,
+    } as Parameters<typeof handleTurnStreamEvent>[0]["requestState"];
+    let activated = false;
+    const baseOptions = {
+      requestState,
+      callbacks: {
+        activateStream: () => {
+          activated = true;
+        },
+        isStreamActivated: () => activated,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener: () => {},
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch: () => true,
+        upsertQueuedTurn: () => {},
+        removeQueuedTurnState: () => {},
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+        appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
+          parts,
+      },
+      eventName: "agent-runtime-provider-trace",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-1",
+      activeSessionId: "session-1",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react",
+      content: "",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      setMessages,
+      setPendingActions: vi.fn() as never,
+      getThreadItems: () => threadItems,
+      setThreadItems,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: vi.fn() as never,
+    } satisfies Omit<Parameters<typeof handleTurnStreamEvent>[0], "data">;
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "tool_start",
+        tool_id: "tool-image-workflow-stable",
+        tool_name: "lime_create_image_generation_task",
+        arguments: JSON.stringify({
+          prompt: "从花城汇看广州塔的春天照片",
+        }),
+      } as AgentEvent,
+    });
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "provider_trace",
+        stage: "request_started",
+        provider: "openai",
+        model: "gpt-5",
+        attempt: 1,
+        elapsed_ms: 0,
+      } as AgentEvent,
+    });
+
+    expect(activated).toBe(true);
+    expect(requestState.firstRuntimeStatusAt).toBe(Date.now());
+    expect(messages[0]?.runtimeStatus).toMatchObject({
+      phase: "routing",
+      title: "正在启动处理流程",
+    });
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "runtime_status",
+        status: {
+          phase: "context",
+          title: "正在整理上下文",
+          detail: "已收到真实运行时状态",
+        },
+      } as AgentEvent,
+    });
+
+    expect(messages[0]?.runtimeStatus).toMatchObject({
+      phase: "context",
+      title: "正在整理上下文",
+      detail: "已收到真实运行时状态",
+    });
+  });
+
+  it("ImageCommandWorkflow 创建图片任务后应立即挂上图片任务预览", () => {
+    let messages: Message[] = [
+      {
+        id: "assistant-image-workflow",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-07-02T10:00:00.000Z"),
+        contentParts: [],
+      },
+    ];
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const requestState = {
+      accumulatedContent: "",
+      queuedTurnId: null,
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+    } as Parameters<typeof handleTurnStreamEvent>[0]["requestState"];
+
+    handleTurnStreamEvent({
+      data: {
+        type: "image_task_created",
+        task_id: "task-image-workflow-1",
+        task_type: "image_generate",
+        task_family: "image",
+        status: "pending_submit",
+        normalized_status: "pending",
+        artifact_path: ".lime/tasks/image_generate/task-image-workflow-1.json",
+        response: {
+          task_id: "task-image-workflow-1",
+          task_type: "image_generate",
+          task_family: "image",
+          status: "pending_submit",
+          normalized_status: "pending",
+          path: ".lime/tasks/image_generate/task-image-workflow-1.json",
+          artifact_path:
+            ".lime/tasks/image_generate/task-image-workflow-1.json",
+          record: {
+            payload: {
+              prompt: "画一张广州夏天的图",
+              model: "fal-ai/nano-banana-pro",
+              session_id: "session-1",
+              turn_id: "turn-image-workflow",
+              presentation: {
+                assistant_intro: "好啊，我来画广州夏天的光感。",
+              },
+            },
+          },
+        },
+        payload: {
+          prompt: "画一张广州夏天的图",
+          model: "fal-ai/nano-banana-pro",
+          session_id: "session-1",
+          turn_id: "turn-image-workflow",
+          presentation: {
+            assistant_intro: "好啊，我来画广州夏天的光感。",
+          },
+        },
+      } as AgentEvent,
+      requestState,
+      callbacks: {
+        activateStream: vi.fn(),
+        isStreamActivated: () => true,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener: () => {},
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch: () => true,
+        upsertQueuedTurn: () => {},
+        removeQueuedTurnState: () => {},
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+        appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
+          parts,
+      },
+      eventName: "agent-runtime-image-workflow",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-image-workflow",
+      activeSessionId: "session-1",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react",
+      content: "画一张广州夏天的图",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      setMessages,
+      setPendingActions: vi.fn() as never,
+      setThreadItems: vi.fn() as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: vi.fn() as never,
+    });
+
+    expect(messages[0]?.imageWorkbenchPreview).toMatchObject({
+      taskId: "task-image-workflow-1",
+      prompt: "画一张广州夏天的图",
+      status: "running",
+      taskFilePath: ".lime/tasks/image_generate/task-image-workflow-1.json",
+      artifactPath: ".lime/tasks/image_generate/task-image-workflow-1.json",
+      modelName: "fal-ai/nano-banana-pro",
+    });
+    expect(messages[0]?.content).toBe("好啊，我来画广州夏天的光感。");
+    expect(messages[0]?.content).not.toContain("先获取下工具参数");
+    expect(messages[0]?.content).not.toContain("马上生成");
+    expect(messages[0]?.taskPreview).toBeUndefined();
+    expect(requestState.hasMeaningfulCompletionSignal).toBe(true);
+  });
+
+  it("ImageCommandWorkflow 创建事件找不到 assistant shell 时应补回稳定图片轻卡", () => {
+    let messages: Message[] = [];
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const requestState = {
+      accumulatedContent: "",
+      queuedTurnId: null,
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+    } as Parameters<typeof handleTurnStreamEvent>[0]["requestState"];
+
+    handleTurnStreamEvent({
+      data: {
+        type: "image_task_created",
+        task_id: "task-image-workflow-upsert",
+        task_type: "image_generate",
+        task_family: "image_generation",
+        status: "pending_submit",
+        normalized_status: "pending",
+        artifact_path:
+          ".lime/tasks/image_generate/task-image-workflow-upsert.json",
+        payload: {
+          prompt: "广州塔春天照片",
+          session_id: "session-1",
+          turn_id: "turn-image-workflow-upsert",
+        },
+      } as AgentEvent,
+      requestState,
+      callbacks: {
+        activateStream: vi.fn(),
+        isStreamActivated: () => true,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener: () => {},
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch: () => true,
+        upsertQueuedTurn: () => {},
+        removeQueuedTurnState: () => {},
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+        appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
+          parts,
+      },
+      eventName: "agent-runtime-image-workflow-upsert",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-image-workflow-upsert",
+      activeSessionId: "session-1",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react",
+      content: "广州塔春天照片",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      setMessages,
+      setPendingActions: vi.fn() as never,
+      setThreadItems: vi.fn() as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: vi.fn() as never,
+    });
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({
+      id: "assistant-image-workflow-upsert",
+      role: "assistant",
+      isThinking: true,
+      imageWorkbenchPreview: {
+        taskId: "task-image-workflow-upsert",
+        prompt: "广州塔春天照片",
+        status: "running",
+      },
+    });
+    expect(messages[0]?.content).toContain("广州塔春天照片");
+    expect(messages[0]?.content).not.toContain("已发起");
+    expect(requestState.hasMeaningfulCompletionSignal).toBe(true);
+  });
+
+  it("ImageCommandWorkflow presentation 事件应替换状态模板并缓存完成描述", () => {
+    let messages: Message[] = [
+      {
+        id: "assistant-image-presentation",
+        role: "assistant",
+        content: "已发起 广州塔春天照片 的图片生成",
+        timestamp: new Date("2026-07-02T10:00:00.000Z"),
+        isThinking: true,
+        imageWorkbenchPreview: {
+          taskId: "task-image-presentation",
+          prompt: "从花城汇看广州塔的春天照片",
+          status: "running",
+          modelName: "fal-ai/nano-banana-pro",
+        },
+      },
+    ];
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const requestState = {
+      accumulatedContent: "",
+      queuedTurnId: null,
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+    } as Parameters<typeof handleTurnStreamEvent>[0]["requestState"];
+
+    handleTurnStreamEvent({
+      data: {
+        type: "image_task_presentation_generated",
+        status: "generated",
+        workflow_run_id: "workflow-image-presentation",
+        session_id: "session-1",
+        thread_id: "thread-1",
+        turn_id: "turn-image-presentation",
+        presentation: {
+          assistant_intro:
+            "好啊，我来按花城汇视角做一张广州塔春天照片。",
+          completion_caption:
+            "完成了，从花城汇望向广州塔的春日画面已经生成。",
+        },
+      } as AgentEvent,
+      requestState,
+      callbacks: {
+        activateStream: vi.fn(),
+        isStreamActivated: () => true,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener: () => {},
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch: () => true,
+        upsertQueuedTurn: () => {},
+        removeQueuedTurnState: () => {},
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+        appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
+          parts,
+      },
+      eventName: "agent-runtime-image-presentation",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-image-presentation",
+      activeSessionId: "session-1",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react",
+      content: "@Nanobanana Pro 生成一张广州塔春天照片",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      setMessages,
+      setPendingActions: vi.fn() as never,
+      setThreadItems: vi.fn() as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: vi.fn() as never,
+    });
+
+    expect(messages[0]?.content).toBe(
+      "好啊，我来按花城汇视角做一张广州塔春天照片。",
+    );
+    expect(messages[0]?.content).not.toContain("已发起");
+    expect(messages[0]?.imageWorkbenchPreview?.caption).toBe(
+      "完成了，从花城汇望向广州塔的春日画面已经生成。",
+    );
+    expect(messages[0]?.imageWorkbenchPreview?.status).toBe("running");
+  });
+
+  it("ImageCommandWorkflow 空 turn_completed 后应保留寒暄和运行中图片轻卡", () => {
+    let messages: Message[] = [
+      {
+        id: "assistant-image-workflow-stable",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-07-02T10:00:00.000Z"),
+        isThinking: true,
+        contentParts: [],
+      },
+    ];
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const requestState = {
+      accumulatedContent: "",
+      queuedTurnId: null,
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+    } as Parameters<typeof handleTurnStreamEvent>[0]["requestState"];
+    const setIsSending = vi.fn();
+    const disposeListener = vi.fn();
+    const baseOptions = {
+      requestState,
+      callbacks: {
+        activateStream: vi.fn(),
+        isStreamActivated: () => true,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener,
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch: () => true,
+        upsertQueuedTurn: () => {},
+        removeQueuedTurnState: () => {},
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+        appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
+          parts,
+      },
+      eventName: "agent-runtime-image-workflow-stable",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-image-workflow-stable",
+      activeSessionId: "session-1",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react" as const,
+      content: "@Nanobanana Pro 生成一张广州塔春天照片",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      setMessages: setMessages as never,
+      setPendingActions: vi.fn() as never,
+      setThreadItems: vi.fn() as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: setIsSending as never,
+    } satisfies Omit<Parameters<typeof handleTurnStreamEvent>[0], "data">;
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "text_delta",
+        text: "好啊，我来按花城汇视角做一张广州塔春天照片。",
+        phase: "final_answer",
+      } as AgentEvent,
+    });
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "tool_end",
+        tool_id: "tool-image-workflow-stable",
+        result: {
+          success: true,
+          output: JSON.stringify({
+            success: true,
+            task_id: "task-image-workflow-stable",
+            task_type: "image_generate",
+            task_family: "image_generation",
+            status: "pending_submit",
+            normalized_status: "pending",
+            artifact_path:
+              ".lime/tasks/image_generate/task-image-workflow-stable.json",
+            record: {
+              payload: {
+                prompt: "从花城汇看广州塔的春天照片",
+                session_id: "session-1",
+                turn_id: "turn-image-workflow-stable",
+              },
+            },
+          }),
+          metadata: {
+            task_id: "task-image-workflow-stable",
+            task_type: "image_generate",
+            task_family: "image_generation",
+            status: "pending_submit",
+            normalized_status: "pending",
+            artifact_path:
+              ".lime/tasks/image_generate/task-image-workflow-stable.json",
+          },
+        },
+      } as AgentEvent,
+    });
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "image_task_created",
+        task_id: "task-image-workflow-stable",
+        task_type: "image_generate",
+        task_family: "image_generation",
+        status: "pending_submit",
+        normalized_status: "pending",
+        artifact_path:
+          ".lime/tasks/image_generate/task-image-workflow-stable.json",
+        response: {
+          task_id: "task-image-workflow-stable",
+          task_type: "image_generate",
+          task_family: "image_generation",
+          status: "pending_submit",
+          normalized_status: "pending",
+          artifact_path:
+            ".lime/tasks/image_generate/task-image-workflow-stable.json",
+          record: {
+            payload: {
+              prompt: "从花城汇看广州塔的春天照片",
+              session_id: "session-1",
+              turn_id: "turn-image-workflow-stable",
+            },
+          },
+        },
+        payload: {
+          prompt: "从花城汇看广州塔的春天照片",
+          session_id: "session-1",
+          turn_id: "turn-image-workflow-stable",
+        },
+      } as AgentEvent,
+    });
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "turn_completed",
+        turn: {
+          id: "turn-image-workflow-stable",
+          thread_id: "thread-image-workflow-stable",
+          prompt_text: "@Nanobanana Pro 生成一张广州塔春天照片",
+          status: "completed",
+          started_at: "2026-07-02T10:00:00.000Z",
+          completed_at: "2026-07-02T10:00:01.000Z",
+          created_at: "2026-07-02T10:00:00.000Z",
+          updated_at: "2026-07-02T10:00:01.000Z",
+        },
+      } as AgentEvent,
+    });
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.content).toBe(
+      "好啊，我来按花城汇视角做一张广州塔春天照片。",
+    );
+    expect(messages[0]?.content).not.toContain("先获取下工具参数");
+    expect(messages[0]?.content).not.toContain("马上生成");
+    expect(messages[0]?.content).not.toContain("本轮执行已完成");
+    expect(messages[0]?.content).not.toContain('"success":true');
+    expect(JSON.stringify(messages[0]?.contentParts || [])).not.toContain(
+      "task_id",
+    );
+    expect(messages[0]?.toolCalls).toBeUndefined();
+    expect(messages[0]?.imageWorkbenchPreview).toMatchObject({
+      taskId: "task-image-workflow-stable",
+      prompt: "从花城汇看广州塔的春天照片",
+      status: "running",
+      phase: "queued",
+    });
+    expect(messages[0]?.taskPreview).toBeUndefined();
+    expect(messages[0]?.isThinking).toBe(false);
+    expect(setIsSending).toHaveBeenCalledWith(false);
+    expect(disposeListener).toHaveBeenCalledTimes(1);
+  });
+
+  it("图片任务 tool_end 仅命中宽松 task 形态时也不回退普通工具过程", () => {
+    let messages: Message[] = [
+      {
+        id: "assistant-image-workflow-loose-task",
+        role: "assistant",
+        content: "好啊，我来画一张深圳夏天的城市画面。",
+        timestamp: new Date("2026-07-02T10:00:00.000Z"),
+        isThinking: true,
+        contentParts: [],
+      },
+    ];
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const requestState = {
+      accumulatedContent: "好啊，我来画一张深圳夏天的城市画面。",
+      queuedTurnId: null,
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+    } as Parameters<typeof handleTurnStreamEvent>[0]["requestState"];
+    const baseOptions = {
+      requestState,
+      callbacks: {
+        activateStream: vi.fn(),
+        isStreamActivated: () => true,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener: () => {},
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch: () => true,
+        upsertQueuedTurn: () => {},
+        removeQueuedTurnState: () => {},
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+        appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
+          parts,
+      },
+      eventName: "agent-runtime-image-workflow-loose-task",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-image-workflow-loose-task",
+      activeSessionId: "session-1",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react" as const,
+      content: "@Nanobanana Pro 生成深圳夏天图片",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      setMessages: setMessages as never,
+      setPendingActions: vi.fn() as never,
+      setThreadItems: vi.fn() as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: vi.fn() as never,
+    } satisfies Omit<Parameters<typeof handleTurnStreamEvent>[0], "data">;
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "tool_start",
+        tool_id: "tool-image-loose-task",
+        tool_name: "lime_create_image_generation_task",
+        arguments: JSON.stringify({ prompt: "深圳夏天" }),
+      } as AgentEvent,
+    });
+    expect(messages[0]?.toolCalls).toHaveLength(1);
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "tool_end",
+        tool_id: "tool-image-loose-task",
+        result: {
+          success: true,
+          output: "",
+          metadata: {
+            id: "task-image-loose-task",
+            task_family: "image_generation",
+            status: "pending_submit",
+          },
+        },
+      } as AgentEvent,
+    });
+
+    expect(messages[0]?.content).toBe(
+      "好啊，我来画一张深圳夏天的城市画面。",
+    );
+    expect(messages[0]?.toolCalls).toBeUndefined();
+    expect(messages[0]?.contentParts).toEqual([
+      { type: "text", text: "好啊，我来画一张深圳夏天的城市画面。" },
+    ]);
+    expect(messages[0]?.taskPreview).toBeUndefined();
+    expect(messages[0]?.imageWorkbenchPreview).toBeUndefined();
+  });
+
+  it("ImageCommandWorkflow 补参态应以 runtime_status 投影且不转成 action_required", () => {
+    let messages: Message[] = [
+      {
+        id: "assistant-image-workflow-status",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-07-02T10:00:00.000Z"),
+        contentParts: [],
+      },
+    ];
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const requestState = {
+      accumulatedContent: "",
+      queuedTurnId: null,
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+      hasMeaningfulCompletionSignal: false,
+    } as Parameters<typeof handleTurnStreamEvent>[0]["requestState"];
+
+    handleTurnStreamEvent({
+      data: {
+        type: "runtime_status",
+        status: {
+          phase: "routing",
+          title: "图片生成需要补充信息",
+          detail: "缺少: project_root_path",
+          metadata: {
+            source: "image_command_workflow",
+            agentui: {
+              workflow_key: "image_command_workflow",
+              status_kind: "image_task_parameters_required",
+              missing: ["project_root_path"],
+              missing_parameters: ["project_root_path"],
+              image_task: {
+                prompt: "画一张广州夏天的图",
+              },
+            },
+          },
+        },
+      } as AgentEvent,
+      requestState,
+      callbacks: {
+        activateStream: () => {},
+        isStreamActivated: () => true,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener: () => {},
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch: () => true,
+        upsertQueuedTurn: () => {},
+        removeQueuedTurnState: () => {},
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+        appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
+          parts,
+      },
+      eventName: "agent-runtime-image-workflow-status",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-image-workflow-status",
+      activeSessionId: "session-1",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react",
+      content: "",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      setMessages,
+      setPendingActions: vi.fn() as never,
+      setThreadItems: vi.fn() as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: vi.fn() as never,
+    });
+
+    expect(messages[0]?.runtimeStatus).toMatchObject({
+      phase: "routing",
+      title: "图片生成需要补充信息",
+      detail: "缺少: project_root_path",
+      metadata: {
+        source: "image_command_workflow",
+        agentui: {
+          workflow_key: "image_command_workflow",
+          status_kind: "image_task_parameters_required",
+          missing: ["project_root_path"],
+        },
+      },
+    });
+    expect(requestState.hasMeaningfulCompletionSignal).toBe(true);
+    expect(messages[0]?.actionRequests ?? []).toEqual([]);
+  });
+
+  it("图片任务 tool_end 不应把内部 task JSON 写入通用 artifact", () => {
+    let messages: Message[] = [
+      {
+        id: "assistant-image-tool-result",
+        role: "assistant",
+        content: "画一张广州夏天的图",
+        timestamp: new Date("2026-07-02T10:05:00.000Z"),
+        contentParts: [],
+      },
+    ];
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const onWriteFile = vi.fn();
+    const toolNameByToolId = new Map<string, string>();
+    const requestState = {
+      accumulatedContent: "",
+      queuedTurnId: null,
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+    } as Parameters<typeof handleTurnStreamEvent>[0]["requestState"];
+    const callbacks = {
+      activateStream: vi.fn(),
+      isStreamActivated: () => true,
+      clearOptimisticItem: () => {},
+      clearOptimisticTurn: () => {},
+      disposeListener: () => {},
+      removeQueuedDraftMessages: () => {},
+      clearActiveStreamIfMatch: () => true,
+      upsertQueuedTurn: () => {},
+      removeQueuedTurnState: () => {},
+      playToolcallSound: () => {},
+      playTypewriterSound: () => {},
+      appendThinkingToParts: (parts: NonNullable<Message["contentParts"]>) =>
+        parts,
+    };
+    const baseOptions = {
+      requestState,
+      callbacks,
+      eventName: "agent-runtime-image-tool-result",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-image-tool-result",
+      activeSessionId: "session-1",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react" as const,
+      content: "画一张广州夏天的图",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId,
+      onWriteFile,
+      setMessages: setMessages as never,
+      setPendingActions: vi.fn() as never,
+      setThreadItems: vi.fn() as never,
+      setThreadTurns: vi.fn() as never,
+      setCurrentTurnId: vi.fn() as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: vi.fn() as never,
+    };
+    const taskSnapshot = {
+      success: true,
+      task_id: "task-image-tool-result-1",
+      task_type: "image_generate",
+      task_family: "image",
+      status: "pending_submit",
+      normalized_status: "pending",
+      artifact_path: ".lime/tasks/image_generate/task-image-tool-result-1.json",
+      path: ".lime/tasks/image_generate/task-image-tool-result-1.json",
+      record: {
+        payload: {
+          prompt: "画一张广州夏天的图",
+          session_id: "session-1",
+        },
+      },
+    };
+
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "tool_start",
+        tool_id: "tool-image-task-1",
+        tool_name: "mediaTaskArtifact/image/create",
+        arguments: JSON.stringify({
+          prompt: "画一张广州夏天的图",
+        }),
+      } as AgentEvent,
+    });
+    handleTurnStreamEvent({
+      ...baseOptions,
+      data: {
+        type: "tool_end",
+        tool_id: "tool-image-task-1",
+        result: {
+          success: true,
+          output: JSON.stringify(taskSnapshot),
+          metadata: taskSnapshot,
+        },
+      } as AgentEvent,
+    });
+
+    expect(onWriteFile).not.toHaveBeenCalled();
+    expect(messages[0]?.artifacts ?? []).toEqual([]);
+    expect(messages[0]?.imageWorkbenchPreview).toMatchObject({
+      taskId: "task-image-tool-result-1",
+      prompt: "画一张广州夏天的图",
+      status: "running",
+      taskFilePath: ".lime/tasks/image_generate/task-image-tool-result-1.json",
+      artifactPath: ".lime/tasks/image_generate/task-image-tool-result-1.json",
+    });
+    expect(messages[0]?.taskPreview).toBeUndefined();
+  });
+
   it("应把工具进度和输出增量异步写入 projection，并同步更新运行中工具卡", async () => {
     clearAgentUiProjectionEvents();
     let messages: Message[] = [
@@ -1719,22 +2652,16 @@ describe("agentStreamRuntimeHandler", () => {
         turn_id: "turn-search-final",
       } as AgentEvent,
     });
-    expect(getAgentStreamTextOverlay("assistant-search-final")).toBeNull();
-    expect(messages[0]?.contentParts).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: "text",
-          text: "最终摘要：国际议题集中在安全、能源和供应链。",
-          metadata: expect.objectContaining({
-            itemId: "final-news-summary",
-            phase: "final_answer",
-            sequence: 4,
-            source: "agent_text_delta",
-            turnId: "turn-search-final",
-          }),
-        }),
-      ]),
+    expect(getAgentStreamTextOverlay("assistant-search-final")?.content).toBe(
+      "最终摘要：国际议题集中在安全、能源和供应链。",
     );
+    expect(
+      messages[0]?.contentParts?.some(
+        (part) =>
+          part.type === "text" &&
+          part.text === "最终摘要：国际议题集中在安全、能源和供应链。",
+      ),
+    ).toBe(false);
     handleTurnStreamEvent({
       ...baseOptions,
       data: {
@@ -1759,6 +2686,21 @@ describe("agentStreamRuntimeHandler", () => {
     ).toBe(true);
     expect(messages[0]?.content).toContain(
       "最终摘要：国际议题集中在安全、能源和供应链。",
+    );
+    expect(messages[0]?.contentParts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "text",
+          text: "最终摘要：国际议题集中在安全、能源和供应链。",
+          metadata: expect.objectContaining({
+            itemId: "final-news-summary",
+            phase: "final_answer",
+            sequence: 4,
+            source: "agent_text_delta",
+            turnId: "turn-search-final",
+          }),
+        }),
+      ]),
     );
     expect(messages[0]?.content).not.toContain(
       "我会先联网核实今天国际新闻的主要议题",
@@ -2339,7 +3281,7 @@ describe("agentStreamRuntimeHandler", () => {
     expect(playTypewriterSound).toHaveBeenCalledTimes(1);
   });
 
-  it("tool_start 前的无 provenance 文本不应提交为正文或 commentary", () => {
+  it("tool_start 前的无 provenance 文本应按过程边界提交为普通 text part", () => {
     let messages: Message[] = [
       {
         id: "assistant-1",
@@ -2428,9 +3370,13 @@ describe("agentStreamRuntimeHandler", () => {
       } as AgentEvent,
     });
 
-    expect(messages[0]?.content).toBe("");
+    expect(messages[0]?.content).toBe("先分析。");
     expect(getAgentStreamTextOverlay("assistant-1")).toBeNull();
     expect(messages[0]?.contentParts).toEqual([
+      {
+        type: "text",
+        text: "先分析。",
+      },
       expect.objectContaining({
         type: "tool_use",
         toolCall: expect.objectContaining({
@@ -2448,7 +3394,7 @@ describe("agentStreamRuntimeHandler", () => {
         }),
       ]),
     );
-    expect(requestState.accumulatedContent).toBe("");
+    expect(requestState.accumulatedContent).toBe("先分析。");
   });
 
   it("process 后的无 phase 文本不应 live 显示，最终只接受 turn_completed.text", () => {

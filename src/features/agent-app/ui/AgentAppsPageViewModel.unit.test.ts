@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import contentFactoryFixture from "../fixtures/content-factory-app.json";
+import contentFactoryFixture from "../testing/fixtures/content-factory-app.json";
 import { buildInstalledAgentAppState } from "../install/installedAppState";
 import { buildInstalledAppPreview } from "../install/installedAppPreview";
 import { buildAgentAppLabResolvedSetupState } from "../install/labInstallFlow";

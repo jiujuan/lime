@@ -119,6 +119,155 @@ async fn export_evidence_reads_session_turn_events_and_artifact_summaries() {
 }
 
 #[tokio::test]
+async fn export_evidence_summarizes_workflow_audit_jsonl_metadata_only() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let event_log_writer = Arc::new(EventLogWriter::new(temp.path()).expect("writer"));
+    let core = RuntimeCore::default().with_event_log_writer(event_log_writer.clone());
+    core.start_session(AgentSessionStartParams {
+        session_id: Some("sess_workflow_evidence".to_string()),
+        thread_id: Some("thread_workflow_evidence".to_string()),
+        app_id: "content-studio".to_string(),
+        workspace_id: Some("workspace-main".to_string()),
+        business_object_ref: None,
+        locale: None,
+    })
+    .expect("session");
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: "sess_workflow_evidence".to_string(),
+            turn_id: Some("turn_workflow_evidence".to_string()),
+            input: AgentInput {
+                text: "生成 workflow evidence".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: None,
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("turn");
+
+    let appended = core
+        .append_external_runtime_events(
+            "sess_workflow_evidence",
+            Some("turn_workflow_evidence"),
+            vec![
+                RuntimeEvent::new(
+                    "workflow.run.started",
+                    json!({
+                        "workflowRunId": "run-article",
+                        "workflowKey": "content_article_workflow",
+                        "status": "running",
+                        "prompt": "写一篇包含敏感素材的文章",
+                    }),
+                ),
+                RuntimeEvent::new(
+                    "workflow.step.completed",
+                    json!({
+                        "workflowRunId": "run-article",
+                        "workflowKey": "content_article_workflow",
+                        "stepId": "research",
+                        "connectorRef": "web-search",
+                        "toolName": "WebSearch",
+                        "status": "completed",
+                        "query": "secret launch plan",
+                        "result": {
+                            "summary": "raw search result",
+                        },
+                    }),
+                ),
+                RuntimeEvent::new(
+                    "workflow.run.completed",
+                    json!({
+                        "workflowRunId": "run-article",
+                        "workflowKey": "content_article_workflow",
+                        "status": "completed",
+                        "providerConfig": {
+                            "apiKey": "sk-live-secret",
+                        },
+                    }),
+                ),
+            ],
+        )
+        .expect("append workflow audit runtime events");
+    assert!(
+        appended.is_empty(),
+        "workflow audit events must not enter regular event output: {appended:?}"
+    );
+
+    let audit_records = event_log_writer
+        .read_session_workflow_audit_events("sess_workflow_evidence")
+        .expect("workflow audit records");
+    assert_eq!(audit_records.len(), 3);
+    assert_eq!(audit_records[0].event.payload["prompt"]["redacted"], true);
+    assert_eq!(audit_records[1].event.payload["query"]["redacted"], true);
+    assert_eq!(audit_records[1].event.payload["result"]["redacted"], true);
+    assert_eq!(
+        audit_records[2].event.payload["providerConfig"]["redacted"],
+        true
+    );
+
+    let response = core
+        .export_evidence(EvidenceExportParams {
+            session_id: "sess_workflow_evidence".to_string(),
+            turn_id: Some("turn_workflow_evidence".to_string()),
+            include_events: Some(true),
+            include_artifacts: Some(true),
+            include_evidence_pack: Some(true),
+        })
+        .await
+        .expect("export evidence");
+
+    let workflow_audit = response
+        .evidence_pack
+        .expect("evidence pack")
+        .observability_summary
+        .expect("observability summary")
+        .get("workflow_audit")
+        .cloned()
+        .expect("workflow audit summary");
+    assert_eq!(workflow_audit["status"], "exported");
+    assert_eq!(workflow_audit["source"], "workflow-events.jsonl");
+    assert_eq!(workflow_audit["eventCount"], json!(3));
+    assert_eq!(workflow_audit["metadataOnly"], true);
+    assert_eq!(workflow_audit["rawContentIncluded"], false);
+    assert_eq!(
+        workflow_audit["redactionPolicy"],
+        "workflow_audit_metadata_only"
+    );
+    assert_eq!(workflow_audit["redactionPolicyEventCount"], json!(3));
+    assert_eq!(
+        workflow_audit["eventTypeBreakdown"]["workflow.run.started"],
+        json!(1)
+    );
+    assert_eq!(
+        workflow_audit["eventTypeBreakdown"]["workflow.step.completed"],
+        json!(1)
+    );
+    assert_eq!(
+        workflow_audit["eventTypeBreakdown"]["workflow.run.completed"],
+        json!(1)
+    );
+    assert_eq!(workflow_audit["workflowRunIds"], json!(["run-article"]));
+    assert_eq!(
+        workflow_audit["workflowKeys"],
+        json!(["content_article_workflow"])
+    );
+    assert_eq!(workflow_audit["turnIds"], json!(["turn_workflow_evidence"]));
+    assert_eq!(workflow_audit["stepIds"], json!(["research"]));
+    assert_eq!(workflow_audit["connectorRefs"], json!(["web-search"]));
+    assert_eq!(workflow_audit["toolNames"], json!(["WebSearch"]));
+
+    let workflow_audit_json = serde_json::to_string(&workflow_audit).expect("summary json");
+    assert!(!workflow_audit_json.contains("写一篇包含敏感素材的文章"));
+    assert!(!workflow_audit_json.contains("secret launch plan"));
+    assert!(!workflow_audit_json.contains("raw search result"));
+    assert!(!workflow_audit_json.contains("sk-live-secret"));
+}
+
+#[tokio::test]
 async fn export_evidence_repairs_and_reads_jsonl_projection() {
     let temp = tempfile::tempdir().expect("tempdir");
     let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");

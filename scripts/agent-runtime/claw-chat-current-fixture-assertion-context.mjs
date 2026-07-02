@@ -66,11 +66,16 @@ export function buildAssertionContext({
       options.scenario === PLAIN_IMAGE_INTENT_SCENARIO
         ? PLAIN_IMAGE_INTENT_ROUTED_PROMPT
         : IMAGE_COMMAND_PROMPT;
-    const imageCommandTurnStart = backendLedger.find(
-      (entry) =>
-        entry.kind === "turnStart" &&
-        entry.inputText === expectedImageIntentRoutedPrompt,
-    );
+    const imageCommandWorkflowTurnStart =
+      summary.imageCommandWorkflowTurnStart ??
+      summary.imageCommandBackendTurnStart ??
+      null;
+    const imageCommandTurnStart =
+      backendLedger.find(
+        (entry) =>
+          entry.kind === "turnStart" &&
+          entry.inputText === expectedImageIntentRoutedPrompt,
+      ) ?? imageCommandWorkflowTurnStart;
     const webToolsRenderingTurnStart = backendLedger.find(
       (entry) =>
         entry.kind === "turnStart" &&

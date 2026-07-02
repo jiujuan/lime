@@ -4,6 +4,10 @@ mod agent_app_worker_orchestration;
 mod agent_app_worker_runtime;
 mod agent_app_worker_streaming;
 mod agent_app_worker_turn;
+mod agent_app_worker_workflow;
+mod agent_app_worker_workflow_cancel;
+mod agent_app_worker_workflow_hooks;
+mod agent_app_worker_workflow_retry;
 mod agent_apps;
 mod app_data;
 mod article_workspace_action_projection;
@@ -84,10 +88,7 @@ pub use crate::file_checkpoint_snapshot::FileCheckpointSnapshotSaveRequest;
 pub use crate::file_checkpoint_snapshot::FileCheckpointSnapshotStore;
 pub use crate::file_checkpoint_snapshot::FilesystemFileCheckpointSnapshotStore;
 pub use crate::file_checkpoint_snapshot::NoopFileCheckpointSnapshotStore;
-pub(crate) use agent_app_worker_streaming::{
-    ensure_workspace_patch_artifact_paths as ensure_content_factory_workspace_patch_artifact_paths,
-    streaming_workspace_patch_events as content_factory_final_article_streaming_events,
-};
+pub(crate) use agent_app_worker_streaming::ensure_workspace_patch_artifact_paths;
 pub use app_data::AgentAppDataSource;
 pub use app_data::AppDataSource;
 pub use app_data::AutomationManagementAppDataSource;
@@ -265,6 +266,7 @@ pub struct EvidencePackRequest {
     pub events: Vec<AgentEvent>,
     pub artifacts: Vec<ArtifactSummary>,
     pub request_logs: Vec<RequestLog>,
+    pub workflow_audit_events: Vec<AgentEvent>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -379,6 +381,14 @@ pub trait ExecutionBackend: Send + Sync {
         &self,
         _request: &ExecutionRequest,
         _events: &mut Vec<RuntimeEvent>,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+
+    async fn prepare_agent_app_worker_request(
+        &self,
+        _request: &ExecutionRequest,
+        _worker_request: &mut serde_json::Value,
     ) -> Result<(), RuntimeCoreError> {
         Ok(())
     }

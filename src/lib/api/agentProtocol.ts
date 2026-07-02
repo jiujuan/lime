@@ -508,6 +508,29 @@ export interface AgentEventToolEnd {
   result: AgentToolExecutionResult;
 }
 
+export interface AgentEventImageTaskCreated {
+  type: "image_task_created";
+  task_id: string;
+  task_type?: string;
+  task_family?: string;
+  status?: string;
+  normalized_status?: string;
+  artifact_path?: string;
+  absolute_path?: string;
+  response?: Record<string, unknown>;
+  payload?: Record<string, unknown>;
+}
+
+export interface AgentEventImageTaskPresentationGenerated {
+  type: "image_task_presentation_generated";
+  status?: string;
+  workflow_run_id?: string;
+  session_id?: string;
+  thread_id?: string;
+  turn_id?: string;
+  presentation?: Record<string, unknown>;
+}
+
 export interface AgentToolProgressPayload {
   message?: string;
   progress?: number;
@@ -702,6 +725,7 @@ export interface AgentRuntimeStatusPayload {
     | "retrying"
     | "continuing"
     | "synthesizing"
+    | "cancelled"
     | "failed";
   title: string;
   detail: string;
@@ -911,6 +935,8 @@ export type AgentEvent = (
   | AgentEventPlanFinal
   | AgentEventToolStart
   | AgentEventToolEnd
+  | AgentEventImageTaskCreated
+  | AgentEventImageTaskPresentationGenerated
   | AgentEventToolProgress
   | AgentEventToolOutputDelta
   | AgentEventToolInputDelta
@@ -1546,6 +1572,102 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
             "",
           result: normalizeToolExecutionResult(event),
         };
+      case "image_task_created":
+      case "image_task.created": {
+        const response = normalizeRecord(event.response);
+        const responseSource = response ?? {};
+        const record = normalizeRecord(response?.record);
+        const payload =
+          normalizeRecord(event.payload) || normalizeRecord(record?.payload);
+        return {
+          type: "image_task_created",
+          task_id:
+            pickStringField(event, "task_id", "taskId") ||
+            pickStringField(responseSource, "task_id", "taskId") ||
+            "",
+          task_type:
+            pickStringField(event, "task_type", "taskType") ||
+            pickStringField(responseSource, "task_type", "taskType"),
+          task_family:
+            pickStringField(event, "task_family", "taskFamily") ||
+            pickStringField(responseSource, "task_family", "taskFamily"),
+          status:
+            pickStringField(event, "status") ||
+            pickStringField(responseSource, "status"),
+          normalized_status:
+            pickStringField(event, "normalized_status", "normalizedStatus") ||
+            pickStringField(
+              responseSource,
+              "normalized_status",
+              "normalizedStatus",
+            ),
+          artifact_path:
+            pickStringField(event, "artifact_path", "artifactPath") ||
+            pickStringField(responseSource, "artifact_path", "artifactPath"),
+          absolute_path:
+            pickStringField(event, "absolute_path", "absolutePath") ||
+            pickStringField(responseSource, "absolute_path", "absolutePath"),
+          ...(response ? { response } : {}),
+          ...(payload ? { payload } : {}),
+        };
+      }
+      case "image_task.presentation.generated":
+      case "image_task_presentation_generated": {
+        const payload = normalizeRecord(event.payload);
+        const source = payload ?? event;
+        const presentation = normalizeRecord(source.presentation);
+        return {
+          type: "image_task_presentation_generated",
+          status: pickStringField(source, "status"),
+          workflow_run_id: pickStringField(
+            source,
+            "workflow_run_id",
+            "workflowRunId",
+          ),
+          session_id: pickStringField(source, "session_id", "sessionId"),
+          thread_id: pickStringField(source, "thread_id", "threadId"),
+          turn_id: pickStringField(source, "turn_id", "turnId"),
+          ...(presentation ? { presentation } : {}),
+        };
+      }
+      case "image_task.parameters.required":
+      case "image_task_parameters_required": {
+        const missing = Array.isArray(event.missing)
+          ? event.missing.filter(
+              (item): item is string => typeof item === "string",
+            )
+          : Array.isArray(event.missingParameters)
+            ? event.missingParameters.filter(
+                (item): item is string => typeof item === "string",
+              )
+            : [];
+        const prompt =
+          pickStringField(event, "prompt", "message", "reason") ||
+          "图片生成还需要补充必要信息。";
+        return {
+          type: "runtime_status",
+          status: {
+            phase: "routing",
+            title: "图片生成需要补充信息",
+            detail:
+              missing.length > 0
+                ? `缺少: ${missing.join(", ")}`
+                : prompt,
+            checkpoints: missing,
+            metadata: {
+              source:
+                pickStringField(event, "source") || "image_command_workflow",
+              agentui: {
+                workflow_key: "image_command_workflow",
+                status_kind: "image_task_parameters_required",
+                missing,
+                missing_parameters: missing,
+                image_task: normalizeRecord(event.image_task),
+              },
+            },
+          },
+        };
+      }
       case "tool_progress": {
         const progress = normalizeRecord(event.progress) || {};
         return {
@@ -1818,6 +1940,14 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
             metadata: metadata
               ? {
                   ...metadata,
+                  agentui:
+                    metadata.agentui && typeof metadata.agentui === "object"
+                      ? (metadata.agentui as Record<string, unknown>)
+                      : undefined,
+                  agentUi:
+                    metadata.agentUi && typeof metadata.agentUi === "object"
+                      ? (metadata.agentUi as Record<string, unknown>)
+                      : undefined,
                   team_phase:
                     typeof metadata.team_phase === "string"
                       ? metadata.team_phase

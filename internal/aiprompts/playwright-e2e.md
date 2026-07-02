@@ -235,13 +235,13 @@ npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 ### Claw `@配图` 异步任务验证
 
 1. 在 `Claw` 对话框输入 `@配图 生成 ...`
-2. 确认聊天区先进入 skill 执行态，并能看到 `image_generate` 相关工具轨迹，而不是前端静默直接创建任务
-3. 确认 current 主链会把图片请求交给 `Skill(image_generate) -> lime_create_image_generation_task`，而不是退回旧的 Bash/CLI 图片旁路；若界面或日志里出现 `任务 ID：{task_id}` 这类模板占位，说明仍在走废弃 prompt 旁路，视为失败
+2. 确认聊天区先进入图片命令运行态，并能看到 `lime_create_image_generation_task` / 图片任务轨迹，而不是前端静默直接创建任务
+3. 确认 current 主链会把图片请求交给 `App Server ImageCommandWorkflow -> mediaTaskArtifact/image/create -> image task worker`，而不是退回旧的 `Skill(image_generate)` 首发链或 Bash/CLI 图片旁路；若界面或日志里出现 `任务 ID：{task_id}` 这类模板占位，说明仍在走废弃 prompt 旁路，视为失败
 4. 等待 task file 回流后，确认同一条卡片被替换为成功或失败状态，而不是额外再插一条前端本地伪造结果
 5. 刷新页面或切换会话再返回原话题，确认最近图片任务会从 `.lime/tasks` 恢复
 6. 如手动打开右侧查看器，确认任务卡状态与聊天区一致，且不会自动展开独立图片画布
 7. 如当前界面已暴露任务控制入口，确认 `get/list/retry/cancel` 仍然只经由 task file 主链，不会回流前端直连图片服务
-8. 如果任务来自文稿工具栏的 inline 配图、封面位或图片工作台动作，确认聊天区也会出现一条对应的用户消息与 `image_generate` 工具轨迹，而不是只有 task 卡突然出现
+8. 如果任务来自文稿工具栏的 inline 配图、封面位或图片工作台动作，确认聊天区也会出现一条对应的用户消息与图片命令工具轨迹，而不是只有 task 卡突然出现
 9. 如果任务来自文稿工具栏的 inline 配图，确认正文先出现占位图块，task file 成功回填后同一位置被真实图片替换，而不是在正文末尾额外追加第二张图
 10. 刷新页面后再次返回该文稿，确认 inline 配图仍能通过 task file 中的 `relationships.slot_id` 恢复并原位替换，不依赖前端内存状态
 11. 如果当前文稿已有明确小节并且用户在某一节内发起配图，确认占位图与最终图片会优先落到 `anchor_section_title` 指向的小节，而不是默认追加到全文末尾
@@ -260,8 +260,8 @@ npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 ### Claw `@海报` 异步任务验证
 
 1. 在 `Claw` 对话框输入 `@海报 小红书 风格: 清新拼贴 春日咖啡市集活动海报`
-2. 确认聊天区先进入 skill 执行态，并能看到 `image_generate` 相关工具轨迹，而不是前端静默直接创建任务
-3. 确认当前海报请求仍会沿 `Skill(image_generate) -> lime_create_image_generation_task` 主链提交真实图片任务，而不是退回旧的 Bash/CLI 图片旁路
+2. 确认聊天区先进入图片命令运行态，并能看到 `lime_create_image_generation_task` / 图片任务轨迹，而不是前端静默直接创建任务
+3. 确认当前海报请求仍会沿 `App Server ImageCommandWorkflow -> mediaTaskArtifact/image/create -> image task worker` 主链提交真实图片任务，而不是退回旧的 `Skill(image_generate)` 或 Bash/CLI 图片旁路
 4. 确认请求 metadata 中写入了 `entry_source = at_poster_command`，而不是被当成普通 `@配图` 或另一套海报协议
 5. 确认默认海报尺寸会收敛到 `4:5 / 864x1152`，且 prompt 会补齐“海报设计”语义，而不是裸主题词直传
 6. 等待任务回流后，确认同一条结果只展示真实 task file 状态，不会额外再插一条前端本地伪造“海报已生成”

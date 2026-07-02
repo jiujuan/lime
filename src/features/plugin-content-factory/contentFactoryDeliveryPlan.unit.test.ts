@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import contentFactoryFixture from "@/features/agent-app/testing/fixtures/content-factory-app.json";
 import { buildWorkspaceArticleWorkspaceViewModel } from "@/components/agent/chat/workspace/workspaceArticleWorkspaceModel";
 import {
   buildContentFactoryDeliveryParts,
@@ -10,9 +11,12 @@ import {
 } from "./contentFactoryPlugin";
 
 describe("contentFactoryDeliveryPlan", () => {
+  const contentFactoryContract = () =>
+    buildContentFactoryPluginContract({ manifest: contentFactoryFixture });
+
   it("应从内容工厂 contract 生成固定 MVP 交付部件", () => {
     const parts = buildContentFactoryDeliveryParts(
-      buildContentFactoryPluginContract(),
+      contentFactoryContract(),
     );
 
     expect(parts).toEqual([
@@ -81,7 +85,7 @@ describe("contentFactoryDeliveryPlan", () => {
 
   it("应生成可被 Article Editor 右栏消费的交付包 workspace", () => {
     const profile = buildContentFactoryDeliveryArticleWorkspace({
-      contract: buildContentFactoryPluginContract(),
+      contract: contentFactoryContract(),
       sessionId: "session-content-factory",
       workspaceId: "workspace-main",
       now: "2026-06-26T00:00:00.000Z",
@@ -137,7 +141,7 @@ describe("contentFactoryDeliveryPlan", () => {
 
   it("生成的 profile 应能投影出当前对象预览和动作", () => {
     const profile = buildContentFactoryDeliveryArticleWorkspace({
-      contract: buildContentFactoryPluginContract(),
+      contract: contentFactoryContract(),
       sessionId: "session-content-factory",
     });
     expect(profile).not.toBeNull();
@@ -162,14 +166,14 @@ describe("contentFactoryDeliveryPlan", () => {
 
   it("非内容工厂 contract 或缺少 session 时应 fail closed", () => {
     const contract = {
-      ...buildContentFactoryPluginContract(),
+      ...contentFactoryContract(),
       id: "other-plugin",
     };
 
     expect(buildContentFactoryDeliveryParts(contract)).toEqual([]);
     expect(
       buildContentFactoryDeliveryArticleWorkspace({
-        contract: buildContentFactoryPluginContract(),
+        contract: contentFactoryContract(),
         sessionId: " ",
       }),
     ).toBeNull();

@@ -40,9 +40,7 @@ describe("workspaceModelSkillLaunchRequestContext", () => {
       trace_id: "trace-1",
       harness: {
         theme: "general",
-        allow_model_skills: true,
-        image_skill_launch: {
-          skill_name: "image_generate",
+        image_command_intent: {
           kind: "image_task",
           image_task: {
             prompt: "春日咖啡馆插画",
@@ -63,7 +61,7 @@ describe("workspaceModelSkillLaunchRequestContext", () => {
 
     expect(requestMetadata).toMatchObject({
       harness: {
-        image_skill_launch: {
+        image_command_intent: {
           image_task: {
             session_id: "session-image-1",
           },
@@ -84,6 +82,26 @@ describe("workspaceModelSkillLaunchRequestContext", () => {
       "runtime_default",
     );
     expect(resolveContractEntrySource(undefined, "fallback")).toBe("fallback");
+  });
+
+  it("旧 image_skill_launch 不应再作为 session 绑定读取桥", () => {
+    const requestMetadata = {
+      harness: {
+        image_skill_launch: {
+          image_task: {
+            prompt: "旧字段图片任务",
+            session_id: "__local_image_workbench__:draft",
+          },
+        },
+      },
+    };
+
+    const binding = extractBoundSessionRequestContext(requestMetadata);
+    expect(binding).toBeNull();
+
+    expect(
+      requestMetadata.harness.image_skill_launch.image_task.session_id,
+    ).toBe("__local_image_workbench__:draft");
   });
 
   it("播报与素材命令应构造 session-bound model skill request context", () => {

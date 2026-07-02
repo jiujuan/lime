@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AgentRuntimeClient } from "@limecloud/agent-runtime-client";
 import { AdapterCapabilityHost } from "../adapters/AdapterCapabilityHost";
 import { buildInstalledAppPreview } from "../install/installedAppPreview";
+import contentFactoryFixture from "../testing/fixtures/content-factory-app.json";
 import { AgentRuntimeCapabilityHost } from "./agentRuntimeCapabilityHost";
 import { buildWorkflowRuntimeCapabilityProfile } from "./workflowRuntimeCapabilityProfile";
 
@@ -9,6 +10,7 @@ const CONTENT_FACTORY_ENTRY_KEY = "content_factory";
 
 function buildDelegateHost() {
   const preview = buildInstalledAppPreview({
+    fixture: contentFactoryFixture,
     profile: buildWorkflowRuntimeCapabilityProfile({
       realAdapterEnabled: true,
       uiRuntimeEnabled: true,

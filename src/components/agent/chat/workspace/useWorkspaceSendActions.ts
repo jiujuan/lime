@@ -7,6 +7,7 @@ import type {
   AutoContinueRequestPayload,
 } from "@/lib/api/agentRuntime";
 import type { InstalledAgentAppState } from "@/features/agent-app/types";
+import { getOrCreateDefaultProject } from "@/lib/api/project";
 import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/types";
 import { listInstalledAgentApps } from "@/lib/api/agentApps";
 import { normalizeExecutionStrategyToReact } from "@/lib/api/agentRuntime/executionStrategyCompat";
@@ -111,7 +112,7 @@ import type {
   ServiceSkillHomeItem,
   ServiceSkillSlotValues,
 } from "../service-skills/types";
-import type { ImageWorkbenchSkillRequest } from "./imageSkillLaunch";
+import type { ImageWorkbenchCommandRequest } from "./imageCommandIntent";
 import type { WorkspaceSkillRuntimeEnableInput } from "../utils/workspaceSkillBindingsMetadata";
 import {
   attachSessionIdToRequestContext,
@@ -327,13 +328,15 @@ interface UseWorkspaceSendActionsParams {
   listInstalledAgentAppsForPluginActivation?: () => Promise<{
     states: InstalledAgentAppState[];
   }>;
-  resolveImageWorkbenchSkillRequest: (input: {
+  resolveImageWorkbenchCommandRequest: (input: {
     rawText: string;
     parsedCommand: ParsedImageWorkbenchCommand;
     images: MessageImage[];
     sessionIdOverride?: string | null;
     entrySource?: string;
-  }) => ImageWorkbenchSkillRequest | null;
+    projectId?: string | null;
+    projectRootPath?: string | null;
+  }) => ImageWorkbenchCommandRequest | null;
 }
 
 interface WorkspaceResolvedSendState {
@@ -357,6 +360,26 @@ interface WorkspaceSendPlan extends WorkspaceResolvedSendState {
   completedMentionCommandUsage: CompletedMentionCommandUsage | null;
   completedMentionUsage: CompletedMentionUsage | null;
   completedSlashUsage?: CompletedInputCapabilitySlashUsage | null;
+}
+
+async function resolveImageCommandProjectContext(params: {
+  projectId?: string | null;
+  projectRootPath?: string | null;
+}): Promise<{ projectId: string | null; projectRootPath: string | null }> {
+  const projectId = params.projectId?.trim() || null;
+  const projectRootPath = params.projectRootPath?.trim() || null;
+  if (projectRootPath) {
+    return { projectId, projectRootPath };
+  }
+  if (projectId) {
+    return { projectId, projectRootPath: null };
+  }
+
+  const defaultProject = await getOrCreateDefaultProject();
+  return {
+    projectId: defaultProject.id?.trim() || null,
+    projectRootPath: defaultProject.rootPath?.trim() || null,
+  };
 }
 
 interface WorkspaceLocalConfirmationPlan {
@@ -399,6 +422,7 @@ export function useWorkspaceSendActions({
   isThemeWorkbench,
   contextWorkspace,
   projectId,
+  projectRootPath,
   sessionId,
   executionStrategy,
   accessMode: _accessMode,
@@ -437,7 +461,7 @@ export function useWorkspaceSendActions({
   ensureSessionForCommandMetadata,
   prepareImageWorkbenchSkillSend,
   listInstalledAgentAppsForPluginActivation = listInstalledAgentApps,
-  resolveImageWorkbenchSkillRequest,
+  resolveImageWorkbenchCommandRequest,
 }: UseWorkspaceSendActionsParams) {
   const { t } = useTranslation("agent");
   const messagesCount = messages.length;
@@ -861,6 +885,16 @@ export function useWorkspaceSendActions({
       const parsedImageWorkbenchCommand =
         explicitImageWorkbenchCommand ?? parsedPlainImageWorkbenchCommand;
       if (parsedImageWorkbenchCommand) {
+        const imageCommandProjectContext =
+          await resolveImageCommandProjectContext({
+            projectId,
+            projectRootPath,
+          });
+        if (!imageCommandProjectContext.projectRootPath) {
+          clearSubmissionPreview();
+          toast.error("默认项目目录未就绪，暂时无法创建图片任务");
+          return { kind: "done", result: false };
+        }
         if (prepareImageWorkbenchSkillSend) {
           const prepared = await prepareImageWorkbenchSkillSend();
           if (!prepared) {
@@ -870,12 +904,14 @@ export function useWorkspaceSendActions({
         }
         const imageDispatchText =
           parsedPlainImageWorkbenchCommand?.rawText || sourceText;
-        const skillRequest = resolveImageWorkbenchSkillRequest({
+        const skillRequest = resolveImageWorkbenchCommandRequest({
           rawText: imageDispatchText,
           parsedCommand: parsedImageWorkbenchCommand,
           images: effectiveImages,
           sessionIdOverride: commandSessionId,
           entrySource: parsedImageWorkbenchCommand.entrySource,
+          projectId: imageCommandProjectContext.projectId,
+          projectRootPath: imageCommandProjectContext.projectRootPath,
         });
         if (!skillRequest) {
           clearSubmissionPreview();
@@ -898,7 +934,7 @@ export function useWorkspaceSendActions({
           : "blocking";
         ensureSubmissionPreview(effectiveImages);
         void primeCommandSessionId(
-          "image_skill_launch",
+          "image_command_intent",
           resolveCommandSessionEnsureOptions(),
         ).catch(() => undefined);
         sendOptions = {
@@ -929,6 +965,16 @@ export function useWorkspaceSendActions({
           ? parsePosterWorkbenchCommand(sourceText)
           : null;
       if (parsedPosterWorkbenchCommand) {
+        const imageCommandProjectContext =
+          await resolveImageCommandProjectContext({
+            projectId,
+            projectRootPath,
+          });
+        if (!imageCommandProjectContext.projectRootPath) {
+          clearSubmissionPreview();
+          toast.error("默认项目目录未就绪，暂时无法创建图片任务");
+          return { kind: "done", result: false };
+        }
         if (prepareImageWorkbenchSkillSend) {
           const prepared = await prepareImageWorkbenchSkillSend();
           if (!prepared) {
@@ -936,7 +982,7 @@ export function useWorkspaceSendActions({
             return { kind: "done", result: false };
           }
         }
-        const skillRequest = resolveImageWorkbenchSkillRequest({
+        const skillRequest = resolveImageWorkbenchCommandRequest({
           rawText: sourceText,
           parsedCommand: {
             rawText: parsedPosterWorkbenchCommand.rawText,
@@ -953,6 +999,8 @@ export function useWorkspaceSendActions({
           images: effectiveImages,
           sessionIdOverride: commandSessionId,
           entrySource: "at_poster_command",
+          projectId: imageCommandProjectContext.projectId,
+          projectRootPath: imageCommandProjectContext.projectRootPath,
         });
         if (!skillRequest) {
           clearSubmissionPreview();
@@ -2879,13 +2927,14 @@ export function useWorkspaceSendActions({
       handleAutoLaunchMatchedSiteSkill,
       isThemeWorkbench,
       listInstalledAgentAppsForPluginActivation,
-      resolveImageWorkbenchSkillRequest,
+      resolveImageWorkbenchCommandRequest,
       input,
       messagesCount,
       mentionedCharacters,
       openRuntimeSceneGate,
       prepareImageWorkbenchSkillSend,
       projectId,
+      projectRootPath,
       resolveSendBoundary,
       resourcePromptRewritePreference,
       serviceSkills,

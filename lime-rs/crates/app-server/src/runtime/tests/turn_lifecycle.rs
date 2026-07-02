@@ -135,6 +135,99 @@ async fn runtime_events_are_appended_to_jsonl_event_log() {
 }
 
 #[tokio::test]
+async fn workflow_events_are_written_only_to_workflow_audit_jsonl() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
+    let event_log_writer = Arc::new(EventLogWriter::new(&roots.event_log_root).expect("writer"));
+    let core = RuntimeCore::default().with_event_log_writer(event_log_writer.clone());
+    core.start_session(AgentSessionStartParams {
+        session_id: Some("sess_workflow_audit".to_string()),
+        thread_id: Some("thread_workflow_audit".to_string()),
+        app_id: "content-studio".to_string(),
+        workspace_id: Some("default".to_string()),
+        business_object_ref: None,
+        locale: None,
+    })
+    .expect("session");
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: "sess_workflow_audit".to_string(),
+            turn_id: Some("turn_workflow_audit".to_string()),
+            input: AgentInput {
+                text: "@配图 生成一张深圳夏天的图".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: None,
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("turn");
+
+    let appended = core
+        .append_external_runtime_events(
+            "sess_workflow_audit",
+            Some("turn_workflow_audit"),
+            vec![RuntimeEvent::new(
+                "workflow.run.started",
+                json!({
+                    "run_id": "image-command-run-turn_workflow_audit",
+                    "event": "run_started",
+                    "task_id": null,
+                    "status": "running",
+                    "redaction": {
+                        "policy": "workflow_audit_metadata_only"
+                    }
+                }),
+            )],
+        )
+        .expect("append workflow audit event");
+
+    assert!(
+        appended.is_empty(),
+        "workflow audit events must not enter UI event output: {appended:?}"
+    );
+    let regular_records = event_log_writer
+        .read_session_events("sess_workflow_audit")
+        .expect("regular records");
+    assert!(
+        regular_records
+            .iter()
+            .all(|record| !record.event.event_type.starts_with("workflow.")),
+        "workflow events must not enter regular session JSONL"
+    );
+    let audit_records = event_log_writer
+        .read_session_workflow_audit_events("sess_workflow_audit")
+        .expect("audit records");
+    assert_eq!(audit_records.len(), 1);
+    assert!(audit_records[0]
+        .path
+        .ends_with("events/sessions/session_sess_workflow_audit/workflow-events.jsonl"));
+    assert_eq!(audit_records[0].event.session_id, "sess_workflow_audit");
+    assert_eq!(
+        audit_records[0].event.thread_id.as_deref(),
+        Some("thread_workflow_audit")
+    );
+    assert_eq!(
+        audit_records[0].event.turn_id.as_deref(),
+        Some("turn_workflow_audit")
+    );
+    assert_eq!(audit_records[0].event.event_type, "workflow.run.started");
+    assert_eq!(
+        audit_records[0].event.payload["run_id"],
+        "image-command-run-turn_workflow_audit"
+    );
+    assert_eq!(audit_records[0].event.payload["event"], "run_started");
+    assert_eq!(audit_records[0].event.payload["status"], "running");
+    assert_eq!(
+        audit_records[0].event.payload["redaction"]["policy"],
+        "workflow_audit_metadata_only"
+    );
+}
+
+#[tokio::test]
 async fn completed_runtime_event_marks_turn_completed() {
     let core = RuntimeCore::with_backend(Arc::new(CompletedBackend));
     let session = core
@@ -646,6 +739,147 @@ async fn cancel_turn_returns_canceled_without_waiting_for_backend_cancel() {
     assert_eq!(read.session.status, AgentSessionStatus::Canceled);
     assert_eq!(read.turns[0].status, AgentTurnStatus::Canceled);
     assert!(read.turns[0].completed_at.is_some());
+}
+
+#[tokio::test]
+async fn cancel_turn_writes_open_workflow_cancel_events_to_workflow_audit_jsonl() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
+    let event_log_writer = Arc::new(EventLogWriter::new(&roots.event_log_root).expect("writer"));
+    let core = RuntimeCore::with_backend(Arc::new(HangingCancelBackend {
+        cancel_count: AtomicUsize::new(0),
+    }))
+    .with_event_log_writer(event_log_writer.clone());
+    let session = core
+        .start_session(AgentSessionStartParams {
+            session_id: Some("sess_cancel_workflow".to_string()),
+            thread_id: Some("thread_cancel_workflow".to_string()),
+            app_id: "content-studio".to_string(),
+            workspace_id: Some("default".to_string()),
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("session")
+        .session;
+    let turn = core
+        .start_turn(
+            AgentSessionTurnStartParams {
+                session_id: session.session_id.clone(),
+                turn_id: Some("turn_cancel_workflow".to_string()),
+                input: AgentInput {
+                    text: "start content workflow".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: None,
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("turn")
+        .response
+        .turn;
+
+    let workflow_output = core
+        .append_external_runtime_events(
+            &session.session_id,
+            Some(&turn.turn_id),
+            vec![
+                RuntimeEvent::new(
+                    "workflow.run.started",
+                    json!({
+                        "workflowRunId": "turn_cancel_workflow:content-article",
+                        "workflowKey": "content_article_workflow",
+                        "status": "running",
+                        "metadata": {
+                            "agentAppWorkflow": {
+                                "status": "running"
+                            }
+                        }
+                    }),
+                ),
+                RuntimeEvent::new(
+                    "workflow.step.started",
+                    json!({
+                        "workflowRunId": "turn_cancel_workflow:content-article",
+                        "stepId": "draft",
+                        "status": "running",
+                        "metadata": {
+                            "agentAppWorkflow": {
+                                "status": "running"
+                            }
+                        }
+                    }),
+                ),
+            ],
+        )
+        .expect("append workflow audit events");
+    assert!(
+        workflow_output.is_empty(),
+        "workflow audit events must not enter regular output: {workflow_output:?}"
+    );
+
+    let output = core
+        .cancel_turn(
+            AgentSessionTurnCancelParams {
+                session_id: session.session_id.clone(),
+                turn_id: turn.turn_id.clone(),
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("cancel");
+
+    assert_eq!(output.events.len(), 1);
+    assert_eq!(output.events[0].event_type, "turn.canceled");
+
+    let regular_records = event_log_writer
+        .read_session_events(&session.session_id)
+        .expect("regular records");
+    assert!(
+        regular_records
+            .iter()
+            .all(|record| !record.event.event_type.starts_with("workflow.")),
+        "workflow cancel audit must not enter regular session JSONL"
+    );
+    let workflow_audit_records = event_log_writer
+        .read_session_workflow_audit_events(&session.session_id)
+        .expect("workflow audit records");
+    let event_types = workflow_audit_records
+        .iter()
+        .map(|record| record.event.event_type.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        event_types,
+        vec![
+            "workflow.run.started",
+            "workflow.step.started",
+            "workflow.step.canceled",
+            "workflow.run.canceled"
+        ]
+    );
+    let canceled_step = &workflow_audit_records[2].event;
+    assert_eq!(
+        canceled_step.turn_id.as_deref(),
+        Some(turn.turn_id.as_str())
+    );
+    assert_eq!(canceled_step.payload["stepId"], "draft");
+    assert_eq!(canceled_step.payload["status"], "canceled");
+    assert_eq!(
+        canceled_step.payload["cancellation"]["source"],
+        "agentSession/turn/cancel"
+    );
+    assert_eq!(
+        canceled_step.payload["cancellation"]["reasonCode"],
+        "turn_canceled"
+    );
+    let canceled_run = &workflow_audit_records[3].event;
+    assert_eq!(canceled_run.payload["status"], "canceled");
+    assert_eq!(
+        canceled_run.payload["metadata"]["agentAppWorkflow"]["status"],
+        "canceled"
+    );
 }
 
 #[tokio::test]

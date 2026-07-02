@@ -11,6 +11,7 @@ import {
   summarizeRuntimeProfile,
 } from "./index";
 import { buildInstalledAppPreview } from "../install/installedAppPreview";
+import contentFactoryFixture from "../testing/fixtures/content-factory-app.json";
 
 describe("Agent App v2 LimeRuntimeProfile", () => {
   it("应把 install mode 映射为 host-neutral shell kind", () => {
@@ -65,6 +66,7 @@ describe("Agent App v2 LimeRuntimeProfile", () => {
 
   it("应从 preview 构建 RuntimeProfile，复用 projection storage namespace", () => {
     const preview = buildInstalledAppPreview({
+      fixture: contentFactoryFixture,
       profile: p0HostCapabilityProfile,
     });
     const profile = buildLimeRuntimeProfileForPreview({

@@ -1,5 +1,9 @@
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
 function itemById(audit) {
-  return new Map((audit.items || []).map((item) => [item.id, item]));
+  return new Map(asArray(audit?.items).map((item) => [item.id, item]));
 }
 
 function allPassed(items, ids) {
@@ -37,6 +41,54 @@ function ownerProtocolStatus(items, processOwner) {
   return processOwner?.verdict?.status === "busy"
     ? "pass_with_blocking_owner"
     : "pass";
+}
+
+function ownerProtocolGap(items, processOwner) {
+  if (processOwner?.verdict?.status === "busy") {
+    return "raw process owner 仍 busy，不能启动完整 verify:local 或 full GUI P0。";
+  }
+  if (!hasOwnerProtocolEvidence(items, processOwner)) {
+    return (
+      processOwner?.verdict?.summary ||
+      "qcloop / GUI owner / raw process owner 只读取证不完整。"
+    );
+  }
+  return "";
+}
+
+function buildMissingAuditAgentQcObjectiveChecklist({
+  auditPath = ".lime/qc/objective-completion-audit-current.json",
+  reason = "missing",
+  detail = "",
+  generatedAt = new Date().toISOString(),
+} = {}) {
+  const isInvalidJson = reason === "invalid-json";
+  const gap = isInvalidJson
+    ? `completion audit sidecar 无法解析：${auditPath}${detail ? `；${detail}` : ""}。先重新运行 npm run agent-qc:audit -- --format json --output ${auditPath}。`
+    : `缺少 completion audit sidecar：${auditPath}。先运行 npm run agent-qc:audit -- --format json --output ${auditPath}。`;
+  const checklist = [
+    {
+      requirement: "读取 objective completion audit sidecar",
+      artifacts: [auditPath, "npm run agent-qc:audit"],
+      evidence: isInvalidJson ? "invalid-json" : "missing",
+      status: "fail",
+      gap,
+    },
+  ];
+  return {
+    schemaVersion: "v1",
+    generatedAt,
+    objective: "实现 Agent QC / 测试体系整体目标，并以真实证据证明可发布",
+    status: "incomplete",
+    passedCount: 0,
+    totalCount: checklist.length,
+    blockers: checklist.map((item) => ({
+      requirement: item.requirement,
+      status: item.status,
+      gap: item.gap,
+    })),
+    checklist,
+  };
 }
 
 function buildAgentQcObjectiveChecklist({
@@ -114,10 +166,7 @@ function buildAgentQcObjectiveChecklist({
       ],
       evidence: `guiOwner=${guiOwner?.verdict?.status}; processOwner=${processOwner?.verdict?.status}; ${processOwner?.verdict?.summary || ""}; ownerIntervention=${processOwner?.ownerIntervention?.status}`,
       status: ownerProtocolStatus(items, processOwner),
-      gap:
-        processOwner?.verdict?.status === "busy"
-          ? "raw process owner 仍 busy，不能启动完整 verify:local 或 full GUI P0。"
-          : "",
+      gap: ownerProtocolGap(items, processOwner),
     },
     {
       requirement:
@@ -199,5 +248,6 @@ function renderAgentQcObjectiveChecklistMarkdown(result) {
 
 export {
   buildAgentQcObjectiveChecklist,
+  buildMissingAuditAgentQcObjectiveChecklist,
   renderAgentQcObjectiveChecklistMarkdown,
 };

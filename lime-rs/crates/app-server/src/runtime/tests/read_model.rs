@@ -237,3 +237,4 @@ mod artifacts;
 mod imports_items;
 mod messages_diagnostics;
 mod tool_calls;
+mod workflow;

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatWorkspaceSkillRuntimeEnableDisplay,
   resolveWorkspaceSkillRuntimeEnableResultDisplay,
+  shouldHideImageTaskToolResultEnvelope,
   shouldHideProtocolToolResultEnvelope,
   shouldHideSkillToolGateResultEnvelope,
   shouldHideToolResultEnvelope,
@@ -227,6 +228,59 @@ describe("toolResultEnvelopeDisplay", () => {
           runtime_enable_source: "legacy_tool_event",
           internal_payload: "skill protocol payload should stay hidden",
         }),
+      }),
+    ).toBe(true);
+  });
+
+  it("应隐藏图片任务创建结果的内部 task JSON", () => {
+    const rawResultText = JSON.stringify({
+      success: true,
+      task_id: "task-image-1",
+      task_type: "image_generate",
+      task_family: "image",
+      status: "pending_submit",
+      normalized_status: "pending",
+      artifact_path: ".lime/tasks/image_generate/task-image-1.json",
+      record: {
+        payload: {
+          prompt: "画一张广州夏天的图",
+        },
+      },
+    });
+
+    expect(
+      shouldHideImageTaskToolResultEnvelope({
+        toolName: "mediaTaskArtifact/image/create",
+        rawResultText,
+      }),
+    ).toBe(true);
+    expect(
+      shouldHideToolResultEnvelope({
+        toolName: "mediaTaskArtifact/image/create",
+        rawResultText,
+      }),
+    ).toBe(true);
+  });
+
+  it("应隐藏 v2 image_generation task_family 的内部 task JSON", () => {
+    const rawResultText = JSON.stringify({
+      success: true,
+      task_id: "task-image-v2-family",
+      task_family: "image_generation",
+      status: "pending_submit",
+      normalized_status: "pending",
+      artifact_path: ".lime/tasks/image_generate/task-image-v2-family.json",
+      record: {
+        payload: {
+          prompt: "画一张广州夏天的图",
+        },
+      },
+    });
+
+    expect(
+      shouldHideImageTaskToolResultEnvelope({
+        toolName: "mediaTaskArtifact/image/create",
+        rawResultText,
       }),
     ).toBe(true);
   });

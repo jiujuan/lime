@@ -25,6 +25,7 @@ export type AgentStreamUserInputSendPreparationEnv = Pick<
   | "modelRef"
   | "reasoningEffortRef"
   | "sessionIdRef"
+  | "executionRuntime"
   | "clawTraceEnabled"
   | "getWorkspaceIdForSubmit"
   | "activeStreamRef"
@@ -132,13 +133,29 @@ export function prepareAgentStreamUserInputSend(
   const resolvedReasoningEffort =
     sendOptions?.reasoningEffort?.trim() ||
     env.reasoningEffortRef.current.trim();
-  const effectiveProviderType =
-    resolvedProviderOverride || env.providerTypeRef.current;
-  const effectiveModel = resolvedModelOverride || env.modelRef.current;
   const currentSessionId = env.sessionIdRef.current;
   const syncedSessionModelPreference = currentSessionId
     ? env.getSyncedSessionModelPreference(currentSessionId)
     : null;
+  const currentProviderType = env.providerTypeRef.current.trim();
+  const currentModel = env.modelRef.current.trim();
+  const runtimeProviderType =
+    env.executionRuntime?.provider_selector?.trim() ||
+    env.executionRuntime?.provider_name?.trim() ||
+    "";
+  const runtimeModel = env.executionRuntime?.model_name?.trim() || "";
+  const effectiveProviderType =
+    resolvedProviderOverride ||
+    currentProviderType ||
+    runtimeProviderType ||
+    syncedSessionModelPreference?.providerType?.trim() ||
+    "";
+  const effectiveModel =
+    resolvedModelOverride ||
+    currentModel ||
+    runtimeModel ||
+    syncedSessionModelPreference?.model?.trim() ||
+    "";
   const observer = sendOptions?.observer;
   const requestMetadata = ensureAgentUiPerformanceTraceMetadata(
     sendOptions?.requestMetadata,

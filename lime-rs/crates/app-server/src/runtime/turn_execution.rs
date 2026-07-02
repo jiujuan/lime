@@ -1,4 +1,5 @@
-use super::event_store::append_runtime_events_to_state;
+use super::agent_app_worker_workflow_cancel::workflow_cancel_events_from_audit_records;
+use super::event_store::{append_runtime_events_to_state, append_workflow_audit_runtime_events};
 use super::status::{agent_turn_is_active, agent_turn_is_terminal};
 use super::*;
 use app_server_protocol::*;
@@ -482,6 +483,23 @@ impl RuntimeCore {
                 }),
             )],
         )?;
+        if !events.is_empty() {
+            if let Some(event_log_writer) = self.event_log_writer.as_deref() {
+                let workflow_audit_records = event_log_writer
+                    .read_session_workflow_audit_events(&session.session_id)
+                    .map_err(RuntimeCoreError::Backend)?;
+                append_workflow_audit_runtime_events(
+                    Some(event_log_writer),
+                    &session.session_id,
+                    &session.thread_id,
+                    Some(&turn_snapshot.turn_id),
+                    workflow_cancel_events_from_audit_records(
+                        &workflow_audit_records,
+                        &turn_snapshot.turn_id,
+                    ),
+                )?;
+            }
+        }
 
         if agent_turn_is_active(turn_snapshot.status) {
             let backend = self.backend.clone();

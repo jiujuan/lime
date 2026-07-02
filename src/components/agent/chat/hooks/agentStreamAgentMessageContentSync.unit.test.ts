@@ -1,6 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type { Dispatch, SetStateAction } from "react";
 import type { AgentThreadItem } from "@/lib/api/agentProtocol";
-import { mergeAssistantAgentMessageContentPartsFromThreadItems } from "./agentStreamAgentMessageContentSync";
+import type { Message } from "../types";
+import {
+  mergeAssistantAgentMessageContentPartsFromThreadItems,
+  syncAssistantAgentMessageContentPartFromThreadItem,
+} from "./agentStreamAgentMessageContentSync";
 
 describe("agentStreamAgentMessageContentSync", () => {
   it("完成态合并 agent_message content part 时不应跨 runtime turn 串线", () => {
@@ -47,5 +52,58 @@ describe("agentStreamAgentMessageContentSync", () => {
         }),
       }),
     ]);
+  });
+
+  it("同步 content part 无实际变化时应保留 messages 数组引用", () => {
+    const item: AgentThreadItem = {
+      id: "agent-message-final",
+      thread_id: "thread-1",
+      turn_id: "turn-current",
+      type: "agent_message",
+      status: "completed",
+      sequence: 20,
+      text: "最终摘要",
+      phase: "final_answer",
+      started_at: "2026-06-26T10:01:00.000Z",
+      updated_at: "2026-06-26T10:01:01.000Z",
+      completed_at: "2026-06-26T10:01:01.000Z",
+    };
+    const messages: Message[] = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-06-26T10:01:01.000Z"),
+        contentParts: [
+          {
+            type: "text",
+            text: "最终摘要",
+            metadata: {
+              itemId: "agent-message-final",
+              phase: "final_answer",
+              sequence: 20,
+              source: "agent_text_delta",
+              turnId: "turn-current",
+            },
+          },
+        ],
+      },
+    ];
+    let nextMessages: Message[] | undefined;
+    const setMessages: Dispatch<SetStateAction<Message[]>> = vi.fn(
+      (value: SetStateAction<Message[]>) => {
+        nextMessages =
+          typeof value === "function" ? value(messages) : value;
+      },
+    );
+
+    syncAssistantAgentMessageContentPartFromThreadItem({
+      assistantMsgId: "assistant-1",
+      item,
+      setMessages,
+    });
+
+    expect(setMessages).toHaveBeenCalledTimes(1);
+    expect(nextMessages).toBe(messages);
   });
 });

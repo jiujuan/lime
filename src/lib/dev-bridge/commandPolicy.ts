@@ -56,6 +56,7 @@ const noMockFallbackCompatCommands = new Set<string>([
 const electronHostNoMockFallbackCommands = new Set([
   "agent_app_select_directory",
   "open_file_preview_window",
+  "open_resource_manager_window",
   "open_system_settings_url",
   "save_layered_design_project_export",
   "read_layered_design_project_export",

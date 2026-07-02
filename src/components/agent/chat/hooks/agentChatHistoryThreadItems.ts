@@ -38,6 +38,7 @@ import {
   mergeHydratedToolStateContentParts,
   mergeImageWorkbenchPreview,
   mergeTaskPreview,
+  resolveImageWorkbenchHistoryAssistantIntro,
 } from "./agentChatHistoryProcess";
 import { dedupeAdjacentHistoryMessages } from "./agentChatHistorySignatures";
 import {
@@ -167,6 +168,11 @@ export function hydrateSessionDetailMessagesFromThreadItems(
   const flushAssistantDraft = () => {
     if (!assistantDraft) {
       return;
+    }
+    if (!assistantDraft.content.trim() && assistantDraft.imageWorkbenchPreview) {
+      assistantDraft.content = resolveImageWorkbenchHistoryAssistantIntro(
+        assistantDraft.imageWorkbenchPreview,
+      );
     }
     const sanitizedParts =
       sanitizeContentPartsForDisplay(assistantDraft.contentParts || [], {

@@ -17,6 +17,7 @@ export interface AgentStreamActionRequiredPreApplyPlan {
   requestId: string;
   shouldActivateStream: boolean;
   shouldClearOptimisticItem: boolean;
+  shouldMarkMeaningfulCompletionSignal: boolean;
 }
 
 export function buildAgentStreamArtifactSnapshotPreApplyPlan(params: {
@@ -40,5 +41,6 @@ export function buildAgentStreamActionRequiredPreApplyPlan(
     requestId: event.request_id,
     shouldActivateStream: true,
     shouldClearOptimisticItem: true,
+    shouldMarkMeaningfulCompletionSignal: true,
   };
 }

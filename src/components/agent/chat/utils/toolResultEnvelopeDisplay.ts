@@ -1,4 +1,5 @@
 import { normalizeToolNameKey } from "./toolDisplayInfo";
+import { isImageTaskToolResultLike } from "./imageTaskToolResult";
 import {
   extractStructuredToolDetailText,
   parseStructuredToolResult,
@@ -199,8 +200,8 @@ function isSkillToolGateEvent(record: Record<string, unknown>): boolean {
   const result = asRecord(record.result);
   return Boolean(
     readString(decision, ["action"]) &&
-      readString(decision, ["gate", "reason"]) &&
-      readString(result, ["status"]),
+    readString(decision, ["gate", "reason"]) &&
+    readString(result, ["status"]),
   );
 }
 
@@ -328,7 +329,8 @@ function isWorkspaceSkillRuntimeEnableRecord(
   record: Record<string, unknown>,
 ): boolean {
   return Boolean(
-    readString(record, ["source", "approval"]) || Array.isArray(record.bindings),
+    readString(record, ["source", "approval"]) ||
+    Array.isArray(record.bindings),
   );
 }
 
@@ -474,10 +476,15 @@ export function resolveWorkspaceSkillRuntimeEnableResultDisplay(params: {
   );
 }
 
-function hasUserFacingDetail(value: unknown, visited = new Set<unknown>()): boolean {
+function hasUserFacingDetail(
+  value: unknown,
+  visited = new Set<unknown>(),
+): boolean {
   if (typeof value === "string") {
     const parsed = parseStructuredToolResult(value);
-    return parsed ? hasUserFacingDetail(parsed, visited) : Boolean(value.trim());
+    return parsed
+      ? hasUserFacingDetail(parsed, visited)
+      : Boolean(value.trim());
   }
 
   if (Array.isArray(value)) {
@@ -600,11 +607,29 @@ export function shouldHideSkillToolGateResultEnvelope(params: {
   return !hasUsefulSkillResultDetail(parsed);
 }
 
+export function shouldHideImageTaskToolResultEnvelope(params: {
+  toolName?: string;
+  rawResultText?: string;
+  metadata?: unknown;
+  result?: unknown;
+}): boolean {
+  return isImageTaskToolResultLike({
+    toolName: params.toolName,
+    output: params.rawResultText,
+    metadata: params.metadata,
+    result: params.result,
+    toolResult: params.result,
+  });
+}
+
 export function shouldHideToolResultEnvelope(params: {
   toolName: string;
   rawResultText: string;
+  metadata?: unknown;
+  result?: unknown;
 }): boolean {
   return (
+    shouldHideImageTaskToolResultEnvelope(params) ||
     shouldHideServiceSkillToolResultEnvelope(params) ||
     shouldHideSkillToolGateResultEnvelope(params) ||
     shouldHideProtocolToolResultEnvelope(params)

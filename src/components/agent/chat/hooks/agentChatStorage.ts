@@ -5,6 +5,7 @@ import type {
   AgentPreferences,
   SessionModelPreference,
 } from "./agentChatShared";
+import { normalizeChatSessionModelPreference } from "../utils/sessionExecutionRuntime";
 import {
   hasLegacyFallbackToolNames,
   normalizeHistoryMessages,
@@ -326,7 +327,12 @@ export const loadSessionModelPreference = (
   ) {
     return null;
   }
-  return parsed;
+  const normalized = normalizeChatSessionModelPreference(parsed);
+  if (!normalized) {
+    savePersisted(key, null);
+    return null;
+  }
+  return normalized;
 };
 
 export const resolveWorkspaceAgentPreferences = (
@@ -338,9 +344,19 @@ export const resolveWorkspaceAgentPreferences = (
   const scopedProvider = loadPersistedString(providerKey);
   const scopedModel = loadPersistedString(modelKey);
   if (scopedProvider || scopedModel) {
-    return {
+    const scopedPreference = normalizeChatSessionModelPreference({
       providerType: scopedProvider || DEFAULT_AGENT_PROVIDER,
       model: scopedModel || DEFAULT_AGENT_MODEL,
+    });
+    if (scopedPreference) {
+      return scopedPreference;
+    }
+
+    savePersisted(providerKey, DEFAULT_AGENT_PROVIDER);
+    savePersisted(modelKey, DEFAULT_AGENT_MODEL);
+    return {
+      providerType: DEFAULT_AGENT_PROVIDER,
+      model: DEFAULT_AGENT_MODEL,
     };
   }
 
@@ -352,19 +368,25 @@ export const resolveWorkspaceAgentPreferences = (
     const legacyModel =
       loadPersistedString("agent_pref_model") ||
       loadPersistedString(GLOBAL_MODEL_PREF_KEY);
-
-    if (legacyProvider) {
-      savePersisted(providerKey, legacyProvider);
-    }
-    if (legacyModel) {
-      savePersisted(modelKey, legacyModel);
-    }
-
-    savePersisted(migratedKey, true);
-
-    return {
+    const legacyPreference = normalizeChatSessionModelPreference({
       providerType: legacyProvider || DEFAULT_AGENT_PROVIDER,
       model: legacyModel || DEFAULT_AGENT_MODEL,
+    });
+
+    if (legacyPreference) {
+      savePersisted(providerKey, legacyPreference.providerType);
+      savePersisted(modelKey, legacyPreference.model);
+      savePersisted(migratedKey, true);
+
+      return legacyPreference;
+    }
+
+    savePersisted(providerKey, DEFAULT_AGENT_PROVIDER);
+    savePersisted(modelKey, DEFAULT_AGENT_MODEL);
+    savePersisted(migratedKey, true);
+    return {
+      providerType: DEFAULT_AGENT_PROVIDER,
+      model: DEFAULT_AGENT_MODEL,
     };
   }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import contentFactoryFixture from "../fixtures/content-factory-app.json";
+import contentFactoryFixture from "../testing/fixtures/content-factory-app.json";
 import { buildCleanupPlan } from "../install/cleanupPlan";
 import { buildPackageIdentity } from "../install/packageIdentity";
 import { normalizeManifest } from "../manifest/normalizeManifest";
@@ -42,8 +42,11 @@ describe("Agent App projection P0", () => {
       "content_article_workflow",
     ]);
     expect(projection.skillRequirements.map((skill) => skill.id)).toEqual([
-      "gongzonghao-article-writer",
-      "article-image-cheatsheet",
+      "article-research",
+      "article-strategy",
+      "article-writing",
+      "article-editing",
+      "article-image-plan",
     ]);
     expect(projection.toolRequirements.map((tool) => tool.key)).toEqual([
       "content-factory-worker",

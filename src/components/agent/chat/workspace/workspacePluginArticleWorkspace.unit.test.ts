@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import contentFactoryFixture from "@/features/agent-app/testing/fixtures/content-factory-app.json";
 import { normalizePluginManifest } from "@/features/plugin";
 import {
   buildContentFactoryPluginContract,
@@ -210,7 +211,9 @@ describe("workspacePluginArticleWorkspace", () => {
         activeEntryKey: "content_factory_generate",
         source: "user",
       },
-      contracts: [buildContentFactoryPluginContract()],
+      contracts: [
+        buildContentFactoryPluginContract({ manifest: contentFactoryFixture }),
+      ],
       workspaceId: "workspace-main",
     });
 

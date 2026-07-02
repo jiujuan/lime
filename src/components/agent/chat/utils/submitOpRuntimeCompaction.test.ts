@@ -521,11 +521,10 @@ describe("submitOpRuntimeCompaction", () => {
     expect(result.shouldSubmitModelPreference).toBe(false);
   });
 
-  it("图片生成命令新会话应提交编排聊天模型 provider_config，但不锁定图片模型偏好", () => {
+  it("图片生成命令新会话应提交编排聊天模型，且不把图片执行模型当作聊天偏好", () => {
     const requestMetadata = {
       harness: {
-        image_skill_launch: {
-          skill_name: "image_generate",
+        image_command_intent: {
           kind: "image_task",
           image_task: {
             prompt: "生成一张公众号封面",
@@ -556,8 +555,8 @@ describe("submitOpRuntimeCompaction", () => {
       effectiveModel: "deepseek-v4-flash",
     });
 
-    expect(result.shouldSubmitProviderPreference).toBe(false);
-    expect(result.shouldSubmitModelPreference).toBe(false);
+    expect(result.shouldSubmitProviderPreference).toBe(true);
+    expect(result.shouldSubmitModelPreference).toBe(true);
     expect(result.providerConfig).toEqual({
       provider_id: "deepseek",
       provider_name: "deepseek",
@@ -566,11 +565,10 @@ describe("submitOpRuntimeCompaction", () => {
     expect(result.metadata).toBe(requestMetadata);
   });
 
-  it("图片生成命令已有会话模型时不重复提交编排 provider_config", () => {
+  it("图片生成命令已有会话模型时仍应提交编排 provider_config", () => {
     const requestMetadata = {
       harness: {
-        image_skill_launch: {
-          skill_name: "image_generate",
+        image_command_intent: {
           image_task: {
             prompt: "生成一张公众号封面",
             provider_id: "fal",
@@ -603,7 +601,11 @@ describe("submitOpRuntimeCompaction", () => {
       effectiveModel: "deepseek-v4-flash",
     });
 
-    expect(result.providerConfig).toBeUndefined();
+    expect(result.providerConfig).toEqual({
+      provider_id: "deepseek",
+      provider_name: "deepseek",
+      model_name: "deepseek-v4-flash",
+    });
     expect(result.shouldSubmitProviderPreference).toBe(false);
     expect(result.shouldSubmitModelPreference).toBe(false);
   });

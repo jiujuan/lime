@@ -104,7 +104,9 @@ function shorten(
   return `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
 }
 
-function formatShortSourceHint(value: string | null | undefined): string | null {
+function formatShortSourceHint(
+  value: string | null | undefined,
+): string | null {
   const normalized = value?.trim();
   if (!normalized) {
     return null;
@@ -168,7 +170,9 @@ function readFirstString(
       return value.trim();
     }
     if (Array.isArray(value)) {
-      const first = value.find((item) => typeof item === "string" && item.trim());
+      const first = value.find(
+        (item) => typeof item === "string" && item.trim(),
+      );
       if (typeof first === "string") {
         return first.trim();
       }
@@ -346,7 +350,9 @@ function resolveLatestHint(
   const args = asRecord(descriptor.argumentsValue);
   if (operationKind === "search" || operationKind === "web_search") {
     const webSearchDetail =
-      operationKind === "web_search" ? resolveWebSearchActionDetail(args) : null;
+      operationKind === "web_search"
+        ? resolveWebSearchActionDetail(args)
+        : null;
     return shorten(
       descriptor.query ||
         webSearchDetail ||
@@ -580,7 +586,9 @@ function buildWebSearchDescriptor(
 
   const statusPrefix = hasRunningWebRetrieval ? "正在搜索网页" : "已搜索网页";
   const title =
-    webSearchCount === 1 && webFetchCount === 0 && accumulator.latestWebSearchHint
+    webSearchCount === 1 &&
+    webFetchCount === 0 &&
+    accumulator.latestWebSearchHint
       ? hasRunningWebRetrieval
         ? `${statusPrefix} ${accumulator.latestWebSearchHint}`
         : `${statusPrefix}：${accumulator.latestWebSearchHint}`
@@ -727,7 +735,8 @@ function buildDescriptorFromEntries(
   }
 
   return (
-    buildExplorationDescriptor(accumulator) || buildBrowserDescriptor(accumulator)
+    buildExplorationDescriptor(accumulator) ||
+    buildBrowserDescriptor(accumulator)
   );
 }
 
@@ -748,7 +757,7 @@ export function summarizeThreadProcessBatch(
   items: AgentThreadItem[],
 ): ToolBatchSummaryDescriptor | null {
   const processItems = items.filter(isThreadProcessBatchItem);
-  if (processItems.length < 2 || processItems.length !== items.length) {
+  if (processItems.length < 1 || processItems.length !== items.length) {
     return null;
   }
 
