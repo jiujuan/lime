@@ -277,7 +277,7 @@ describe("useWorkspaceImageWorkbenchActionRuntime", () => {
     });
   });
 
-  it("当前选中 Provider 尚未就绪时应回退到已解析偏好", async () => {
+  it("普通输入 resolver 不应把工作台偏好写成图片执行路由", async () => {
     const { render, getValue } = renderHook({
       imageWorkbenchPreferredModelId: "gpt-images-2",
       imageWorkbenchPreferredProviderId:
@@ -305,13 +305,12 @@ describe("useWorkspaceImageWorkbenchActionRuntime", () => {
       images: [],
     });
 
-    expect(skillRequest).toMatchObject({
-      requestContext: {
-        image_task: {
-          provider_id: "custom-f0181b00-35b6-4731-94e2-24f17fd247c9",
-          model: "gpt-images-2",
-        },
-      },
-    });
+    const imageTask = skillRequest?.requestContext["image_task"] as Record<
+      string,
+      unknown
+    >;
+    expect(imageTask).not.toHaveProperty("provider_id");
+    expect(imageTask).not.toHaveProperty("model");
+    expect(imageTask).not.toHaveProperty("executor_mode");
   });
 });

@@ -96,6 +96,7 @@ describe("seededCommandPackage", () => {
             skillId: "image_generate",
             executionKind: "task_queue",
             requestDefaults: expect.objectContaining({
+              providerId: "new-api",
               model: "gpt-images-2",
               executorMode: "responses_image_generation",
             }),

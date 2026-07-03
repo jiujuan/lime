@@ -11,7 +11,8 @@ import {
 
 const SIGNATURE_PROOF = {
   algorithm: "Ed25519",
-  payloadHash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  payloadHash:
+    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   publicKeyId: "content-factory-prod-root-2026",
   signature: "base64-signature",
   signedAt: "2026-07-03T00:00:00.000Z",
@@ -140,7 +141,9 @@ describe("content factory signed release gate", () => {
       missingRequirements: expect.arrayContaining([
         expect.objectContaining({ code: "production_package_url_not_https" }),
         expect.objectContaining({ code: "fixture_cloud_release_not_allowed" }),
-        expect.objectContaining({ code: "production_host_generation_not_live" }),
+        expect.objectContaining({
+          code: "production_host_generation_not_live",
+        }),
       ]),
     });
   });
@@ -180,7 +183,9 @@ describe("content factory signed release gate", () => {
     const result = spawnSync(
       process.execPath,
       [
-        path.resolve("scripts/agent-app/content-factory-signed-release-gate.mjs"),
+        path.resolve(
+          "scripts/agent-app/content-factory-signed-release-gate.mjs",
+        ),
         "--expected-version",
         "2.2.2",
         "--output",
@@ -215,7 +220,9 @@ describe("content factory signed release gate", () => {
     const result = spawnSync(
       process.execPath,
       [
-        path.resolve("scripts/agent-app/content-factory-signed-release-gate.mjs"),
+        path.resolve(
+          "scripts/agent-app/content-factory-signed-release-gate.mjs",
+        ),
         "--catalog",
         catalogPath,
         "--bootstrap",

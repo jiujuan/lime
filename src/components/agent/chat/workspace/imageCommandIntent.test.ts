@@ -96,7 +96,7 @@ describe("resolveImageWorkbenchCommandRequest", () => {
     );
   });
 
-  it("应忽略图片工作台占位模型，交由后端图片默认模型补齐", () => {
+  it("普通 @配图 不应携带图片工作台旧选择，交由后端图片默认模型补齐", () => {
     const rawText = "@配图 画一张广州夏天的图";
     const parsedCommand = parseImageWorkbenchCommand(rawText);
 
@@ -105,9 +105,8 @@ describe("resolveImageWorkbenchCommandRequest", () => {
       parsedCommand: parsedCommand!,
       images: [],
       currentImageWorkbenchState: createInitialSessionImageWorkbenchState(),
-      imageWorkbenchSelectedProviderId:
-        "custom-637ea2d5-e430-43de-86de-39c5f1735438",
-      imageWorkbenchSelectedModelId: "default",
+      imageWorkbenchSelectedProviderId: "lime-hub",
+      imageWorkbenchSelectedModelId: "gpt-image-1",
       imageWorkbenchSelectedSize: "1024x1024",
       imageWorkbenchSessionKey: "session-image-1",
       projectId: "project-image-1",
@@ -119,13 +118,50 @@ describe("resolveImageWorkbenchCommandRequest", () => {
       kind: "image_task",
       image_task: {
         prompt: "画一张广州夏天的图",
-        provider_id: "custom-637ea2d5-e430-43de-86de-39c5f1735438",
-        model: undefined,
       },
     });
+    const imageTask = skillRequest?.requestContext["image_task"] as Record<
+      string,
+      unknown
+    >;
+    expect(imageTask).not.toHaveProperty("provider_id");
+    expect(imageTask).not.toHaveProperty("model");
+    expect(imageTask).not.toHaveProperty("executor_mode");
     expect(JSON.stringify(skillRequest?.requestContext)).not.toContain(
-      '"model":"default"',
+      "gpt-image-1",
     );
+    expect(JSON.stringify(skillRequest?.requestContext)).not.toContain(
+      "lime-hub",
+    );
+  });
+
+  it("显式图片模型命令仍应携带目录声明的 provider/model 路由", () => {
+    const rawText =
+      "@Nanobanana Pro 生成一张广州塔，从花城汇看过去的春天的照片";
+    const parsedCommand = parseImageWorkbenchCommand(rawText);
+
+    const skillRequest = resolveImageWorkbenchCommandRequest({
+      rawText,
+      parsedCommand: parsedCommand!,
+      images: [],
+      currentImageWorkbenchState: createInitialSessionImageWorkbenchState(),
+      imageWorkbenchSelectedProviderId: "lime-hub",
+      imageWorkbenchSelectedModelId: "gpt-image-1",
+      imageWorkbenchSelectedSize: "1024x1024",
+      imageWorkbenchSessionKey: "session-image-1",
+      projectId: "project-image-1",
+      projectRootPath: "/workspace/project-image-1",
+      contentId: "content-image-1",
+    });
+
+    expect(skillRequest?.requestContext).toMatchObject({
+      kind: "image_task",
+      image_task: {
+        provider_id: "fal",
+        model: "fal-ai/nano-banana-pro",
+        executor_mode: "images_api",
+      },
+    });
   });
 
   it("current image_command_intent 应携带项目根，避免后端退到进程 cwd", () => {

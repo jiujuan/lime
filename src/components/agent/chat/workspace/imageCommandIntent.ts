@@ -39,6 +39,7 @@ interface ResolveImageWorkbenchCommandRequestParams {
   applyTarget?: ImageWorkbenchApplyTarget | null;
   entrySource?: string;
   requireProjectContext?: boolean;
+  modelRoutingSource?: "backend_default" | "workbench_selection";
 }
 
 function createSkillInputImageRef(index: number): string {
@@ -200,13 +201,29 @@ export function resolveImageWorkbenchCommandRequest(
         ? "document-inline"
         : "claw-image-workbench";
   const runtimeContract = resolveImageGenerationRuntimeContractBinding();
-  const effectiveProviderId =
-    normalizeImageTaskSelectionValue(parsedCommand.providerId) ||
-    normalizeImageTaskSelectionValue(params.imageWorkbenchSelectedProviderId);
-  const effectiveModelId =
-    normalizeImageTaskSelectionValue(parsedCommand.modelId) ||
-    normalizeImageTaskSelectionValue(params.imageWorkbenchSelectedModelId);
-  const effectiveExecutorMode = parsedCommand.executorMode || "images_api";
+  const explicitProviderId = normalizeImageTaskSelectionValue(
+    parsedCommand.providerId,
+  );
+  const explicitModelId = normalizeImageTaskSelectionValue(
+    parsedCommand.modelId,
+  );
+  const shouldUseWorkbenchSelection =
+    params.modelRoutingSource === "workbench_selection";
+  const workbenchProviderId = shouldUseWorkbenchSelection
+    ? normalizeImageTaskSelectionValue(params.imageWorkbenchSelectedProviderId)
+    : undefined;
+  const workbenchModelId = shouldUseWorkbenchSelection
+    ? normalizeImageTaskSelectionValue(params.imageWorkbenchSelectedModelId)
+    : undefined;
+  const effectiveProviderId = explicitProviderId || workbenchProviderId;
+  const effectiveModelId = explicitModelId || workbenchModelId;
+  const hasExplicitRoute =
+    Boolean(explicitProviderId || explicitModelId) ||
+    Boolean(parsedCommand.executorMode);
+  const hasWorkbenchRoute = Boolean(workbenchProviderId || workbenchModelId);
+  const effectiveExecutorMode =
+    parsedCommand.executorMode ||
+    (hasExplicitRoute || hasWorkbenchRoute ? "images_api" : undefined);
 
   const imageTask: Record<string, unknown> = {
     title: collapseWhitespace(params.title) || undefined,
@@ -234,9 +251,6 @@ export function resolveImageWorkbenchCommandRequest(
       targetOutputModelName: targetOutput?.modelName || null,
       applyTargetKind: effectiveApplyTarget?.kind || null,
     }),
-    provider_id: effectiveProviderId,
-    model: effectiveModelId,
-    executor_mode: effectiveExecutorMode,
     session_id: resolvedSessionId || undefined,
     content_id: params.contentId?.trim() || undefined,
     entry_source: params.entrySource || "at_image_command",
@@ -271,6 +285,15 @@ export function resolveImageWorkbenchCommandRequest(
       source: index === 0 && targetOutputImage ? "target_output" : "attachment",
     })),
   };
+  if (effectiveProviderId) {
+    imageTask.provider_id = effectiveProviderId;
+  }
+  if (effectiveModelId) {
+    imageTask.model = effectiveModelId;
+  }
+  if (effectiveExecutorMode) {
+    imageTask.executor_mode = effectiveExecutorMode;
+  }
   const projectId = params.projectId?.trim();
   if (projectId) {
     imageTask.project_id = projectId;

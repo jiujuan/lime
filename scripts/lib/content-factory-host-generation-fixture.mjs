@@ -53,7 +53,9 @@ function extractOriginalPrompt(text) {
   }
   const afterMarker = normalized.slice(index + marker.length).trim();
   const endIndex = afterMarker.indexOf("\n\n生成目标：");
-  return normalizeText(endIndex >= 0 ? afterMarker.slice(0, endIndex) : afterMarker);
+  return normalizeText(
+    endIndex >= 0 ? afterMarker.slice(0, endIndex) : afterMarker,
+  );
 }
 
 function compactWhitespace(value) {
@@ -66,7 +68,9 @@ function promptFingerprint(prompt) {
 
 function topicFromPrompt(prompt) {
   const compact = compactWhitespace(prompt);
-  const match = compact.match(/(?:关于|围绕)(.+?)(?:的(?:公众号)?文章|，|。|$)/);
+  const match = compact.match(
+    /(?:关于|围绕)(.+?)(?:的(?:公众号)?文章|，|。|$)/,
+  );
   const topic = normalizeText(match?.[1], compact);
   return topic.slice(0, 42) || "内容生产任务";
 }
@@ -75,7 +79,9 @@ export function buildContentFactoryHostGenerationFixtureMarkdown(body) {
   const messages = requestMessagesText(body);
   const prompt = extractOriginalPrompt(messages);
   const topic = topicFromPrompt(prompt);
-  const fingerprint = promptFingerprint(prompt || messages || "content-factory");
+  const fingerprint = promptFingerprint(
+    prompt || messages || "content-factory",
+  );
 
   return [
     `# ${topic}：fixture-only 托管生成草稿`,
@@ -163,7 +169,9 @@ export async function startContentFactoryHostGenerationFixture() {
         ),
       })),
       responseFingerprints: responses.map((response) => response.fingerprint),
-      responseTitles: responses.map((response) => response.title).filter(Boolean),
+      responseTitles: responses
+        .map((response) => response.title)
+        .filter(Boolean),
       fixtureOnly: true,
     }),
     close: fixture.close,

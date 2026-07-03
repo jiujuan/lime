@@ -191,6 +191,7 @@ const SEEDED_COMMAND_PROJECTION_SPECS: SeededCommandProjectionSpec[] = [
       executionKind: "task_queue",
       requestDefaults: {
         imageWorkbench: "true",
+        providerId: "new-api",
         model: SEEDED_GPT_IMAGES_2_MODEL_ID,
         executorMode: "responses_image_generation",
       },

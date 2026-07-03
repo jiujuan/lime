@@ -32,7 +32,9 @@ function providerBody(prompt) {
 describe("content factory host generation fixture", () => {
   it("按 provider 请求动态生成 fixture-only Markdown", () => {
     const first = buildContentFactoryHostGenerationFixtureMarkdown(
-      providerBody("写一篇关于 AI Agent 工作流如何让内容生产可审计的公众号文章"),
+      providerBody(
+        "写一篇关于 AI Agent 工作流如何让内容生产可审计的公众号文章",
+      ),
     );
     const second = buildContentFactoryHostGenerationFixtureMarkdown(
       providerBody("写一篇关于团队知识库治理的公众号文章"),

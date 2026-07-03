@@ -53,7 +53,8 @@ export async function runWorkspacePatchWorkerDogfoodTurn({
   workspace,
   requestLog,
 }) {
-  const hostGenerationFixture = await startContentFactoryHostGenerationFixture();
+  const hostGenerationFixture =
+    await startContentFactoryHostGenerationFixture();
   try {
     const response = await invokeAppServerFromPage(
       page,

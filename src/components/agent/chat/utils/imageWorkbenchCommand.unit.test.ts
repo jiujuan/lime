@@ -159,6 +159,7 @@ describe("parseImageWorkbenchCommand", () => {
       trigger: "@GPT Images 2",
       mode: "generate",
       count: 1,
+      providerId: "new-api",
       modelId: "gpt-images-2",
       executorMode: "responses_image_generation",
       prompt: "画一张虞美人霸王别姬的图",

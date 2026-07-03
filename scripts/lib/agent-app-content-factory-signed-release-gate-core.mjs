@@ -158,7 +158,9 @@ function summarizeSignatureProof(appRecord) {
   const signedAt = firstStringAtPaths(proof, [["signedAt"], ["signed_at"]]);
   return {
     algorithm: algorithm || null,
-    present: Boolean(publicKeyId && algorithm && payloadHash && signature && signedAt),
+    present: Boolean(
+      publicKeyId && algorithm && payloadHash && signature && signedAt,
+    ),
     publicKeyId: publicKeyId || null,
     payloadHash: payloadHash || null,
     signaturePresent: Boolean(signature),
@@ -238,12 +240,17 @@ function summarizeCatalog(catalog, expectedVersion, appId) {
     sourceKind: sourceKind || null,
     sourceKindReady: sourceKind === "cloud_release" || sourceKind === "remote",
     version: version || null,
-    versionMatches: expectedVersion ? version === expectedVersion : Boolean(version),
+    versionMatches: expectedVersion
+      ? version === expectedVersion
+      : Boolean(version),
   };
 }
 
 function trustRootMatches(root, signatureProof, appId) {
-  const publicKeyId = firstStringAtPaths(root, [["publicKeyId"], ["public_key_id"]]);
+  const publicKeyId = firstStringAtPaths(root, [
+    ["publicKeyId"],
+    ["public_key_id"],
+  ]);
   const algorithm = firstStringAtPaths(root, [["algorithm"], ["alg"]]);
   const revoked = root?.revoked === true;
   const appIds = firstArrayAtPaths(root, [["appIds"], ["app_ids"]]).filter(
@@ -253,9 +260,13 @@ function trustRootMatches(root, signatureProof, appId) {
   const notBefore = firstStringAtPaths(root, [["notBefore"], ["not_before"]]);
   const notAfter = firstStringAtPaths(root, [["notAfter"], ["not_after"]]);
   const afterStart =
-    !notBefore || Number.isNaN(signedAtTime) || signedAtTime >= Date.parse(notBefore);
+    !notBefore ||
+    Number.isNaN(signedAtTime) ||
+    signedAtTime >= Date.parse(notBefore);
   const beforeEnd =
-    !notAfter || Number.isNaN(signedAtTime) || signedAtTime <= Date.parse(notAfter);
+    !notAfter ||
+    Number.isNaN(signedAtTime) ||
+    signedAtTime <= Date.parse(notAfter);
   return (
     publicKeyId === signatureProof.publicKeyId &&
     (!algorithm || algorithm === signatureProof.algorithm) &&
@@ -278,9 +289,9 @@ function summarizeBootstrap(bootstrap, signatureProof, appId) {
     directTrustRoots.length > 0
       ? directTrustRoots
       : recursiveArrayByKey(bootstrap || {}, [
-      "agentAppSignatureTrustRoots",
-      "signatureTrustRoots",
-      "signature_trust_roots",
+          "agentAppSignatureTrustRoots",
+          "signatureTrustRoots",
+          "signature_trust_roots",
         ]);
   const matchingTrustRoot = trustRoots.find((root) =>
     trustRootMatches(root, signatureProof, appId),
@@ -360,7 +371,10 @@ function acceptedStatus(status) {
 
 function summarizeGuiEvidence(guiEvidence) {
   const json = JSON.stringify(guiEvidence || {});
-  const status = firstStringAtPaths(guiEvidence || {}, [["status"], ["gui", "status"]]);
+  const status = firstStringAtPaths(guiEvidence || {}, [
+    ["status"],
+    ["gui", "status"],
+  ]);
   const sourceKind = firstStringAtPaths(guiEvidence || {}, [
     ["installedState", "sourceKind"],
     ["installed_state", "source_kind"],
@@ -377,7 +391,11 @@ function summarizeGuiEvidence(guiEvidence) {
     ["readModel", "hostManagedGenerationStatus"],
     ["currentTurn", "hostManagedGenerationStatus"],
     ["threadRead", "hostManagedGenerationStatus"],
-    ["contentFactoryArticleWorkspaceReadModel", "workerArticleObject", "hostManagedGenerationStatus"],
+    [
+      "contentFactoryArticleWorkspaceReadModel",
+      "workerArticleObject",
+      "hostManagedGenerationStatus",
+    ],
   ]);
   const workflowFactsHidden =
     firstOptionalBoolAtPaths(guiEvidence || {}, [
@@ -403,7 +421,9 @@ function summarizeGuiEvidence(guiEvidence) {
       ["providerEvidence", "liveProviderUsed"],
       ["assertions", "liveProviderUsed"],
     ]) ||
-    (firstBoolAtPaths(guiEvidence || {}, [["providerEvidence", "productionRoute"]]) &&
+    (firstBoolAtPaths(guiEvidence || {}, [
+      ["providerEvidence", "productionRoute"],
+    ]) &&
       !json.includes("hostGenerationFixture"));
   return {
     articleDraftDocumentPresent,
@@ -446,30 +466,162 @@ export function buildContentFactorySignedReleaseGate(input = {}) {
   const guiEvidence = summarizeGuiEvidence(input.guiEvidence || {});
   const missingRequirements = [];
 
-  if (!catalog.appFound) add(missingRequirements, "production_catalog_missing", "Production catalog must include content-factory-app.");
-  if (!catalog.versionMatches) add(missingRequirements, "production_version_mismatch", "Production catalog version must match expected content-factory-app version.");
-  if (!catalog.sourceKindReady) add(missingRequirements, "production_catalog_not_remote_release", "Catalog sourceKind must be cloud_release/remote.");
-  if (!catalog.packageUrlProductionHttps) add(missingRequirements, "production_package_url_not_https", "Catalog packageUrl must be non-fixture HTTPS.");
-  if (!catalog.packageHashValid) add(missingRequirements, "production_package_hash_missing", "Catalog packageHash must be sha256:<64 hex>.");
-  if (!catalog.manifestHashValid) add(missingRequirements, "production_manifest_hash_missing", "Catalog manifestHash must be sha256:<64 hex>.");
-  if (!catalog.signatureRef) add(missingRequirements, "production_signature_ref_missing", "Catalog identity must include signatureRef.");
-  if (!catalog.signatureProof.present) add(missingRequirements, "production_signature_proof_missing", "Catalog must include signatureProof with publicKeyId, algorithm, payloadHash, signature, and signedAt.");
-  if (catalog.signatureProof.algorithm && !catalog.signatureProof.supportedAlgorithm) add(missingRequirements, "production_signature_algorithm_unsupported", "signatureProof algorithm is not supported by the Host verifier.");
-  if (!bootstrap.trustRootCount) add(missingRequirements, "production_trust_roots_missing", "Bootstrap must include Agent App signature trust roots.");
-  if (bootstrap.trustRootCount && !bootstrap.matchingTrustRoot) add(missingRequirements, "production_signature_trust_root_missing", "Bootstrap trust roots must match signatureProof publicKeyId/algorithm/appId/time window.");
-  if (!input.fetchCloud) add(missingRequirements, "production_fetch_cloud_evidence_missing", "agentAppPackage/fetchCloud or package verification evidence is required.");
-  if (input.fetchCloud && !fetchCloud.ready) add(missingRequirements, "production_release_evidence_not_ready", "fetchCloud evidence must prove cloud_release, verified hashes, verified signature, and ready status.");
-  if (fetchCloud.fixtureLike) add(missingRequirements, "fixture_cloud_release_not_allowed", "Fixture cloud_release evidence is not production evidence.");
-  if (!input.guiEvidence) add(missingRequirements, "production_gui_evidence_missing", "Real Lime Desktop GUI install/run evidence is required.");
-  if (input.guiEvidence && !guiEvidence.statusReady) add(missingRequirements, "production_gui_evidence_not_ready", "GUI evidence status must be passed/ready/completed.");
-  if (input.guiEvidence && guiEvidence.sourceKind !== "cloud_release") add(missingRequirements, "production_gui_not_cloud_release", "GUI evidence must run the cloud_release installed app.");
-  if (input.guiEvidence && guiEvidence.signatureVerificationStatus !== "verified") add(missingRequirements, "production_gui_signature_not_verified", "GUI evidence must prove signature verification status is verified.");
-  if (input.guiEvidence && guiEvidence.hostManagedGenerationStatus !== "completed") add(missingRequirements, "production_host_generation_not_completed", "GUI/read model must show hostManagedGeneration completed.");
-  if (input.guiEvidence && (!guiEvidence.liveProviderUsed || guiEvidence.fixtureLike)) add(missingRequirements, "production_host_generation_not_live", "Production evidence must prove live Provider generation, not a localhost fixture.");
-  if (input.guiEvidence && guiEvidence.fixtureLike) add(missingRequirements, "fixture_cloud_release_not_allowed", "GUI evidence contains fixture/localhost markers and cannot close production.");
-  if (input.guiEvidence && !guiEvidence.workflowJsonlPresent) add(missingRequirements, "production_workflow_jsonl_missing", "GUI evidence must point to workflow-events.jsonl audit output.");
-  if (input.guiEvidence && !guiEvidence.workflowFactsHidden) add(missingRequirements, "production_workflow_facts_visible", "Right-side Article Editor must not display workflow steps.");
-  if (input.guiEvidence && !guiEvidence.articleDraftDocumentPresent) add(missingRequirements, "production_article_draft_document_missing", "GUI/read model must include article-draft-document output.");
+  if (!catalog.appFound)
+    add(
+      missingRequirements,
+      "production_catalog_missing",
+      "Production catalog must include content-factory-app.",
+    );
+  if (!catalog.versionMatches)
+    add(
+      missingRequirements,
+      "production_version_mismatch",
+      "Production catalog version must match expected content-factory-app version.",
+    );
+  if (!catalog.sourceKindReady)
+    add(
+      missingRequirements,
+      "production_catalog_not_remote_release",
+      "Catalog sourceKind must be cloud_release/remote.",
+    );
+  if (!catalog.packageUrlProductionHttps)
+    add(
+      missingRequirements,
+      "production_package_url_not_https",
+      "Catalog packageUrl must be non-fixture HTTPS.",
+    );
+  if (!catalog.packageHashValid)
+    add(
+      missingRequirements,
+      "production_package_hash_missing",
+      "Catalog packageHash must be sha256:<64 hex>.",
+    );
+  if (!catalog.manifestHashValid)
+    add(
+      missingRequirements,
+      "production_manifest_hash_missing",
+      "Catalog manifestHash must be sha256:<64 hex>.",
+    );
+  if (!catalog.signatureRef)
+    add(
+      missingRequirements,
+      "production_signature_ref_missing",
+      "Catalog identity must include signatureRef.",
+    );
+  if (!catalog.signatureProof.present)
+    add(
+      missingRequirements,
+      "production_signature_proof_missing",
+      "Catalog must include signatureProof with publicKeyId, algorithm, payloadHash, signature, and signedAt.",
+    );
+  if (
+    catalog.signatureProof.algorithm &&
+    !catalog.signatureProof.supportedAlgorithm
+  )
+    add(
+      missingRequirements,
+      "production_signature_algorithm_unsupported",
+      "signatureProof algorithm is not supported by the Host verifier.",
+    );
+  if (!bootstrap.trustRootCount)
+    add(
+      missingRequirements,
+      "production_trust_roots_missing",
+      "Bootstrap must include Agent App signature trust roots.",
+    );
+  if (bootstrap.trustRootCount && !bootstrap.matchingTrustRoot)
+    add(
+      missingRequirements,
+      "production_signature_trust_root_missing",
+      "Bootstrap trust roots must match signatureProof publicKeyId/algorithm/appId/time window.",
+    );
+  if (!input.fetchCloud)
+    add(
+      missingRequirements,
+      "production_fetch_cloud_evidence_missing",
+      "agentAppPackage/fetchCloud or package verification evidence is required.",
+    );
+  if (input.fetchCloud && !fetchCloud.ready)
+    add(
+      missingRequirements,
+      "production_release_evidence_not_ready",
+      "fetchCloud evidence must prove cloud_release, verified hashes, verified signature, and ready status.",
+    );
+  if (fetchCloud.fixtureLike)
+    add(
+      missingRequirements,
+      "fixture_cloud_release_not_allowed",
+      "Fixture cloud_release evidence is not production evidence.",
+    );
+  if (!input.guiEvidence)
+    add(
+      missingRequirements,
+      "production_gui_evidence_missing",
+      "Real Lime Desktop GUI install/run evidence is required.",
+    );
+  if (input.guiEvidence && !guiEvidence.statusReady)
+    add(
+      missingRequirements,
+      "production_gui_evidence_not_ready",
+      "GUI evidence status must be passed/ready/completed.",
+    );
+  if (input.guiEvidence && guiEvidence.sourceKind !== "cloud_release")
+    add(
+      missingRequirements,
+      "production_gui_not_cloud_release",
+      "GUI evidence must run the cloud_release installed app.",
+    );
+  if (
+    input.guiEvidence &&
+    guiEvidence.signatureVerificationStatus !== "verified"
+  )
+    add(
+      missingRequirements,
+      "production_gui_signature_not_verified",
+      "GUI evidence must prove signature verification status is verified.",
+    );
+  if (
+    input.guiEvidence &&
+    guiEvidence.hostManagedGenerationStatus !== "completed"
+  )
+    add(
+      missingRequirements,
+      "production_host_generation_not_completed",
+      "GUI/read model must show hostManagedGeneration completed.",
+    );
+  if (
+    input.guiEvidence &&
+    (!guiEvidence.liveProviderUsed || guiEvidence.fixtureLike)
+  )
+    add(
+      missingRequirements,
+      "production_host_generation_not_live",
+      "Production evidence must prove live Provider generation, not a localhost fixture.",
+    );
+  if (input.guiEvidence && guiEvidence.fixtureLike)
+    add(
+      missingRequirements,
+      "fixture_cloud_release_not_allowed",
+      "GUI evidence contains fixture/localhost markers and cannot close production.",
+    );
+  if (input.guiEvidence && !guiEvidence.workflowJsonlPresent)
+    add(
+      missingRequirements,
+      "production_workflow_jsonl_missing",
+      "GUI evidence must point to workflow-events.jsonl audit output.",
+    );
+  if (input.guiEvidence && !guiEvidence.workflowFactsHidden)
+    add(
+      missingRequirements,
+      "production_workflow_facts_visible",
+      "Right-side Article Editor must not display workflow steps.",
+    );
+  if (input.guiEvidence && !guiEvidence.articleDraftDocumentPresent)
+    add(
+      missingRequirements,
+      "production_article_draft_document_missing",
+      "GUI/read model must include article-draft-document output.",
+    );
 
   const ready =
     missingRequirements.length === 0 &&
@@ -488,8 +640,7 @@ export function buildContentFactorySignedReleaseGate(input = {}) {
     fetchCloud,
     guiEvidence,
     missingRequirements,
-    note:
-      "This gate accepts only production signed cloud_release + trust roots + fetchCloud verification + GUI live Provider evidence. Localhost fixtures remain blocked.",
+    note: "This gate accepts only production signed cloud_release + trust roots + fetchCloud verification + GUI live Provider evidence. Localhost fixtures remain blocked.",
   };
 }
 

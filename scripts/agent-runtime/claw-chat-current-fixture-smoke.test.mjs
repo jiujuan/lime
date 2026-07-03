@@ -43,6 +43,7 @@ const fixtureSourceFiles = [
   "scripts/agent-runtime/claw-chat-current-fixture-content-factory-article-workspace.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-content-factory-worker-dogfood.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-content-factory-workspace-patches.mjs",
+  "scripts/lib/content-factory-host-generation-fixture.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-scenario-flow.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-common-assertions.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-scenario-assertions.mjs",

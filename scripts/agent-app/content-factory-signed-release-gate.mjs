@@ -126,7 +126,9 @@ async function main() {
     );
   }
   if (options.output) {
-    console.log(`[content-factory-signed-release-gate] output=${options.output}`);
+    console.log(
+      `[content-factory-signed-release-gate] output=${options.output}`,
+    );
   }
   if (options.check && result.status !== "ready") {
     process.exitCode = 1;
