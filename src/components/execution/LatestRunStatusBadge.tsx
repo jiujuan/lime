@@ -44,7 +44,11 @@ export function LatestRunStatusBadge({
   className,
   pollMs = 15_000,
 }: LatestRunStatusBadgeProps) {
-  const { t } = useTranslation("common");
+  const { t: translate } = useTranslation("common");
+  const t = translate as unknown as (
+    key: string,
+    options?: Record<string, unknown>,
+  ) => string;
   const [latestRun, setLatestRun] = useState<AgentRun | null>(null);
   const resolvedLabel =
     label ?? t("common.execution.latestRunStatus.defaultLabel");

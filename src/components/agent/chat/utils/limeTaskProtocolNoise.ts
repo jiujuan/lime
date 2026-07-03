@@ -1,4 +1,4 @@
-import { getLimeI18n } from "@/i18n/createI18n";
+import { resolveAgentChatCopy } from "./agentChatCopy";
 import { resolveContentWorkbenchToolCopy } from "./contentWorkbenchToolCopy";
 
 const LIME_CREATE_TASK_RE = /\blime_create_([a-z0-9_]+?)_task\b/i;
@@ -211,10 +211,10 @@ export function isLimeTaskProtocolFailureResidue(
 }
 
 export function resolveImageGenerationFailureDisplayText(): string {
-  return getLimeI18n().t("agentChat.imageWorkbenchPreview.placeholder.failed", {
-    ns: "agent",
-    defaultValue: "生成失败",
-  });
+  return resolveAgentChatCopy(
+    "imageWorkbenchPreview.placeholder.failed",
+    "生成失败",
+  );
 }
 
 export function resolveLimeTaskProtocolFailureDisplayText(params: {

@@ -537,12 +537,13 @@ assert(
   "articleDraft processMarkdown must include research and orchestration sections"
 );
 assert(
-  String(article.source?.documentText ?? "").includes("## 第一阶段：打牢基础") &&
-    String(article.source?.documentText ?? "").includes("## 第二阶段：用项目建立反馈") &&
+  String(article.source?.documentText ?? "").includes("人才选聘不能只看简历关键词") &&
+    String(article.source?.documentText ?? "").includes("## 用任务验证真实能力") &&
     !String(article.source?.documentText ?? "").includes("## 待执行检索") &&
     !String(article.source?.documentText ?? "").includes("## 编排步骤") &&
+    !String(article.source?.documentText ?? "").includes("从基础语法到工程实战") &&
     !String(article.source?.documentText ?? "").includes("不要只生成一段话"),
-  "articleDraft documentText must include final article content without process sections"
+  "articleDraft documentText must come from host generation without process or template sections"
 );
 
 for (const locale of ["zh-CN", "zh-TW", "en-US", "ja-JP", "ko-KR"]) {

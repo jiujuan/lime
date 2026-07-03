@@ -213,6 +213,8 @@ export async function runContentFactoryArticleWorkspaceScenario({
     contentFactoryArticleWorkspaceRuntimeEventsAppend:
       summarizeRuntimeEventsAppend(runtimeEventsAppend.result),
     contentFactoryArticleWorkspaceWorkerTurnStart: workerTurnStart,
+    contentFactoryArticleWorkspaceWorkerHostGenerationFixture:
+      workerTurnStart.hostGenerationFixture,
     contentFactoryArticleWorkspaceRemoteRuntimeRejection:
       remoteRuntimeRejection,
     contentFactoryArticleWorkspaceActionResultRuntimeEventsAppend:
@@ -1926,25 +1928,25 @@ function summarizeContentFactoryArticleWorkspaceReadModel(result) {
               workerArticleSource.finalMarkdown,
               workerArticleSource.final_markdown,
             ).length > 300,
-        markdownIncludesEditedDraftMarker: workerArticleSourceText.includes(
-          CONTENT_FACTORY_ARTICLE_WORKSPACE_EDITED_DRAFT_MARKER,
-        ),
-        sourceEdited: readBoolean(workerArticleSource.edited),
-        hostManagedGenerationStatus: readString(
-          workerArticleHostManagedGeneration.status,
-        ),
-        hostManagedGenerationReasonCode: readString(
-          workerArticleHostManagedGeneration.reasonCode,
-          workerArticleHostManagedGeneration.reason_code,
-        ),
-        hostManagedGenerationOutputIds: readStringArray(
-          workerArticleHostManagedGeneration.outputIds,
-          workerArticleHostManagedGeneration.output_ids,
-        ),
-        updatedAt: readString(
-          workerArticleSource.updatedAt,
-          workerArticleSource.updated_at,
-        ),
+          markdownIncludesEditedDraftMarker: workerArticleSourceText.includes(
+            CONTENT_FACTORY_ARTICLE_WORKSPACE_EDITED_DRAFT_MARKER,
+          ),
+          sourceEdited: readBoolean(workerArticleSource.edited),
+          hostManagedGenerationStatus: readString(
+            workerArticleHostManagedGeneration.status,
+          ),
+          hostManagedGenerationReasonCode: readString(
+            workerArticleHostManagedGeneration.reasonCode,
+            workerArticleHostManagedGeneration.reason_code,
+          ),
+          hostManagedGenerationOutputIds: readStringArray(
+            workerArticleHostManagedGeneration.outputIds,
+            workerArticleHostManagedGeneration.output_ids,
+          ),
+          updatedAt: readString(
+            workerArticleSource.updatedAt,
+            workerArticleSource.updated_at,
+          ),
           researchRoundCount: workerArticleResearchRoundCount,
           imageSlotCount: workerArticleImageSlotCount,
         }

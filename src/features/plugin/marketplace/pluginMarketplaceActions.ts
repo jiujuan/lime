@@ -83,6 +83,15 @@ export type PluginMarketplaceActionResult =
       blockerCodes: PluginMarketplaceActionBlockerCode[];
     };
 
+export type PluginMarketplaceLocalInstallResult =
+  | {
+      status: "performed";
+      installedState: InstalledAgentAppState;
+    }
+  | {
+      status: "noop";
+    };
+
 export interface PluginMarketplaceActionDeps {
   installCloudRelease?: typeof installCloudAgentAppRelease;
   installLocalPackage?: typeof installLocalAgentAppPackage;
@@ -97,6 +106,29 @@ export interface PluginMarketplaceActionDeps {
   profile?: HostCapabilityProfile;
   now?: () => string;
   dispatchChanged?: () => void;
+}
+
+export async function performPluginMarketplaceLocalInstall(
+  options: { title: string },
+  deps: PluginMarketplaceActionDeps = {},
+): Promise<PluginMarketplaceLocalInstallResult> {
+  const selectLocalDirectory =
+    deps.selectLocalDirectory ?? selectLocalAgentAppDirectory;
+  const appDir = await selectLocalDirectory({ title: options.title });
+  if (!appDir) {
+    return { status: "noop" };
+  }
+  const installedState = await (
+    deps.installLocalPackage ?? installLocalAgentAppPackage
+  )({
+    appDir,
+    profile: deps.profile,
+  });
+  (deps.dispatchChanged ?? defaultDispatchChanged)();
+  return {
+    status: "performed",
+    installedState,
+  };
 }
 
 export async function submitPluginMarketplaceRegistrationCode(
@@ -206,11 +238,11 @@ function buildMarketplaceCloudApp(item: PluginMarketplaceViewItem): {
   }
 
   return {
-      app: {
-        appId,
-        displayName: resolvePluginMarketplaceItemLabel(item),
-        version: item.version,
-        releaseId: item.releaseId ?? item.package?.releaseId,
+    app: {
+      appId,
+      displayName: resolvePluginMarketplaceItemLabel(item),
+      version: item.version,
+      releaseId: item.releaseId ?? item.package?.releaseId,
       signatureRef: item.package?.signatureRef,
       registrationRequired: false,
       registrationState: "not_required",

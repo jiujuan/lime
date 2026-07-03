@@ -2,7 +2,7 @@
 
 > 状态：proposal  
 > 更新时间：2026-06-25  
-> 目标：把插件中心、显式激活、Agent App 子能力、右侧 dock 和历史恢复画成低保真原型，避免路线图只停留在概念解释。
+> 目标：把插件中心、显式激活、插件工作区能力、右侧 dock 和历史恢复画成低保真原型，避免路线图只停留在概念解释。
 
 HTML 原型：[prototype.html](./prototype.html)
 
@@ -36,12 +36,12 @@ HTML 原型：[prototype.html](./prototype.html)
 ┌────────────────────────────────────────────────────────────────────────┐
 │ Plugins                                                                │
 ├────────────────────────────────────────────────────────────────────────┤
-│ Search plugins... [内容工厂] [Agent App] [Skills] [Connectors] [Renderer]│
+│ Search plugins... [内容工厂] [工作区能力] [Skills] [Connectors] [Renderer]│
 ├────────────────────────────────────────────────────────────────────────┤
 │ Installed                                                              │
 │ ┌──────────────────────┐  ┌──────────────────────┐  ┌────────────────┐ │
 │ │ 内容工厂             │  │ 研究助手             │  │ Chrome         │ │
-│ │ Agent App · verified │  │ Skill Pack · ready   │  │ Connector      │ │
+│ │ 工作区能力 · verified │  │ Skill Pack · ready   │  │ Connector      │ │
 │ │ 文章 / 图片 / 视频   │  │ 知识检索 / 复核      │  │ 已连接         │ │
 │ │ [打开] [停用]        │  │ [打开] [停用]        │  │ [打开] [停用]  │ │
 │ └──────────────────────┘  └──────────────────────┘  └────────────────┘ │
@@ -62,12 +62,12 @@ HTML 原型：[prototype.html](./prototype.html)
 │ 内容工厂 · Plugin                                                          │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │ 状态        verified                                                        │
-│ 类型        Agent App + Renderer + Skills                                   │
+│ 类型        工作区能力 + Renderer + Skills                                  │
 │ 说明        内容工厂是文章、图片、视频脚本和分镜的生产型插件               │
 │                                                                             │
 │ [激活到当前会话] [安装] [停用] [卸载]                                       │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│ Tabs: [Overview] [Agent App] [Skills] [Renderer] [History] [Permissions]    │
+│ Tabs: [Overview] [Workspace] [Skills] [Renderer] [History] [Permissions]    │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -78,7 +78,7 @@ HTML 原型：[prototype.html](./prototype.html)
 │ 概览                                                         │
 ├──────────────────────────────────────────────────────────────┤
 │ 这个插件提供：                                               │
-│ - 独立 Agent App UI                                          │
+│ - 独立插件工作区 UI                                          │
 │ - 文章 / 图片 / 视频脚本 / 分镜 renderer                    │
 │ - content brief / checklist / export actions                 │
 │ - 历史会话恢复                                               │

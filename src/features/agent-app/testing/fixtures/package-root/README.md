@@ -41,7 +41,7 @@ npm run cli:inspect
 npm run cli:run
 ```
 
-这些校验证明插件包骨架文件完整、子智能体 / skills / CLI / connectors / hooks 随包落盘、worker 能生成包含检索轮次、标题候选、大纲、正文、配图占位和交付清单的 Article Workspace Patch，worker 自己输出 audit-only connector 请求和段落级 artifact partial；如果宿主注入 `hostManagedGeneration.outputs[]`，worker 会直接使用宿主生成的 Markdown 正文；如果宿主当前 backend 没返回结果，worker 会把 `hostManagedGeneration.status` 收敛为 `unavailable` 后继续 deterministic fallback。完整应用中心安装、`@写作` 激活和 Claw 历史恢复仍由 Lime 宿主侧验证。
+这些校验证明插件包骨架文件完整、子智能体 / skills / CLI / connectors / hooks 随包落盘、worker 能生成包含检索轮次、标题候选、大纲、正文、配图占位和交付清单的 Article Workspace Patch，worker 自己输出 audit-only connector 请求和段落级 artifact partial；宿主必须注入 `hostManagedGeneration.outputs[]`，worker 才会把宿主生成的 Markdown 正文写入文章草稿。若宿主当前 backend 没返回结果，`content.article.generate` 会 fail closed，不再用 deterministic fallback 伪造文章正文。完整应用中心安装、`@写作` 激活和 Claw 历史恢复仍由 Lime 宿主侧验证。
 
 ## 下一步开发
 

@@ -36,7 +36,7 @@ flowchart TD
 ### 验收
 
 - plugin 路线图完整，包含 PRD、架构、technical baseline、contract、实施计划、历史恢复。
-- workbench/v4 路线图完整，清楚表达 工作台应用 是插件内独立 UI 能力。
+- workbench/v4 路线图完整，清楚表达插件工作区能力是插件内独立 UI 能力。
 - 与 `rightsurface` 路线图边界清晰，不再写成两个右栏。
 - 内容工厂被明确为插件 dogfood，不再和 `旧内容工作台` 代码绑定。
 - 服务端 marketplace 边界落到 LimeCore，不在 Lime App Server 新增 marketplace JSON-RPC。
@@ -47,7 +47,7 @@ flowchart TD
 
 - 以上游插件 / 市场模型为参照，建立插件 manifest 与 marketplace item 的 current contract。
 - 从 LimeCore `client/plugins/marketplace` 获取 available plugin listing。
-- 让插件、工作台应用、skills、connectors、renderers、activation entries 同时可投影。
+- 让插件、插件工作区能力、skills、connectors、renderers、activation entries 同时可投影。
 - 形成统一 registry，供插件中心和右侧面板消费。
 
 ### 验收
@@ -55,7 +55,7 @@ flowchart TD
 - manifest normalizer 能输出统一 plugin contract。
 - 缺少必要字段时 fail closed。
 - registry 可区分可安装、可激活、可渲染和只读历史四种状态。
-- 工作台应用 catalog 只作为迁移输入，不作为插件 marketplace 设计模板。
+- 旧 Agent App / 工作台应用 catalog 只作为迁移输入，不作为插件 marketplace 设计模板。
 
 ## 5. P2：显式激活
 
@@ -105,7 +105,7 @@ flowchart TD
 ### 目标
 
 - 把历史对话、插件上下文、主产物和 tab 状态统一到 session read model。
-- 旧 工作台应用 中无法迁移的入口下架。
+- 旧 Agent App / 工作台应用中无法迁移的入口下架。
 - 旧 right surface 写死逻辑逐步替换为插件 contract。
 
 ### 验收
@@ -1005,6 +1005,14 @@ GUI 关注点：
 - LimeCore evidence 检查器新增 `live-acceptance-run` check：只有 `environmentType=production/staging`、control plane URL 不是本地地址、`acceptanceRun.tenantId` 与顶层租户一致、操作人和桌面 build 非空、完成时间不早于开始时间时才通过。
 - 该同步只提高 LimeCore live evidence 门禁强度，把“同一真实租户账号验收”变成 evidence 包硬字段；Lime Desktop 不新增协议、不新增 App Server marketplace JSON-RPC、不触发远端运行。
 - 验证已覆盖 `node --test scripts/plugin/live-acceptance-evidence.test.mjs`。
+
+### 2026-07-03 插件中心去 Agent App catalog fallback 同步
+
+- Lime Desktop 插件中心已新增“安装本地插件”入口，走 current 本地包选择、安装、持久化和刷新链路；离线或未登录时不再依赖旧云端 Agent App catalog 才能看到入口。
+- `marketplaceRegistryLoader` 已移除 `getAgentAppCloudCatalog` 云端兜底；插件中心 current 数据源固定为 LimeCore `client/plugins/marketplace` 与本地 installed registry 投影。
+- 旧 Agent App / 工作台应用 manifest 仍可作为迁移输入投影成插件 contract，但不再作为 marketplace 设计模板、云端目录兜底或独立产品入口。
+- LimeCore 服务端需要同步把 `client/plugins/marketplace`、`client/plugins/{pluginName}/registration` 和 `client/plugins/{pluginName}/install-state` 标为插件 current；`client/agent-apps` 与 Agent App 后台面只保留 compat / deprecated 口径，删除公开路由前必须另做兼容影响确认。
+- 验证已覆盖插件中心相关 Vitest 与 ESLint 定向检查；全量 typecheck 本轮未完成，不作为通过证据。
 
 ## 15. 第二轮完成审计矩阵
 

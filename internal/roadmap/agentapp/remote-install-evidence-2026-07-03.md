@@ -56,6 +56,7 @@ Lime Desktop current 策略对 `catalogSource=remote` 默认 `signaturePolicy=re
 - 私钥只从 `AGENT_APP_SIGNING_PRIVATE_KEY_PEM` 或 `--private-key-file` 读取，不写入仓库。
 - 可选输出 `agent-app-signature-trust-root.json`，用于后续配置 LimeCore `agentAppSignatureTrustRoots`。
 - Lime 内 `src/features/agent-app/testing/fixtures/package-root` 已同步该工具链，且 `contentFactoryFixtureSync.unit.test.ts` 覆盖 `plugin.json` / `package.json` 版本一致、`release:sign` 入口、签名脚本、签名测试和发布文档关键字段。
+- Lime Host `cloudReleaseSignature.test.ts` 直接加载 package-root `scripts/sign-release.mjs` 生成 proof，并用 `verifyCloudReleaseSignature(...)` 验证通过，证明发布脚本输出与宿主验签 payload 规则一致。
 
 该修复只证明发布工具链已具备生成 `signatureProof` 的能力；尚未使用 production key 签名、尚未把 trust root 配置到生产 LimeCore，也尚未发布新的 signed release。
 
@@ -72,5 +73,5 @@ Lime Desktop current 策略对 `catalogSource=remote` 默认 `signaturePolicy=re
 - 定向回归：`npx vitest run "src/features/agent-app/install/cloudReleaseEvidence.test.ts" "src/features/agent-app/ui/AgentAppsPage.test.tsx" --silent=passed-only --disableConsoleIntercept` 通过，2 files / 37 tests。
 - LimeCore 服务端契约验证：`go test ./services/control-plane-svc/configs ./services/control-plane-svc/internal/repo ./services/control-plane-svc/internal/controller -run "AgentApp|Signature|Snapshot|ClientBootstrap" -count=1`、`go test ./services/control-plane-svc/internal/service -run "AgentApp|ClientBootstrap" -count=1`、`make verify-contracts`、`make verify-client-contract-sync`、`make verify-version-sync` 均通过。
 - LimeCore 已知非本轮阻塞：`go test ./services/control-plane-svc/internal/service -count=1` 仍被既有 plugin marketplace 脏改动的 authentication policy 断言阻断，和 Agent App 签名契约无关。
-- 内容工厂发布工具验证：外部 `/Users/coso/Documents/dev/ai/limecloud/content-factory-app` 已通过 `npm test`、`npm run validate:app`；Lime package-root 快照已通过 `npm test`、`npm run validate:app`、`npm test -- src/features/agent-app/testing/contentFactoryFixtureSync.unit.test.ts`。
+- 内容工厂发布工具验证：外部 `/Users/coso/Documents/dev/ai/limecloud/content-factory-app` 已通过 `npm test`、`npm run validate:app`；Lime package-root 快照已通过 `npm test`、`npm run validate:app`、`npm test -- src/features/agent-app/testing/contentFactoryFixtureSync.unit.test.ts`；Host 验签兼容性已通过 `npm test -- src/features/agent-app/install/cloudReleaseSignature.test.ts`。
 - 文档格式：`npx prettier --check "internal/roadmap/agentapp/remote-install-evidence-2026-07-03.md"` 通过。

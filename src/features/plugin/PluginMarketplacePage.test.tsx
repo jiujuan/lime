@@ -330,6 +330,54 @@ describe("PluginMarketplacePage", () => {
     ).toBeNull();
   });
 
+  it("空插件目录仍应提供本地安装入口并刷新列表", async () => {
+    const emptySnapshot = snapshot();
+    emptySnapshot.marketplace.items = [];
+    emptySnapshot.registry = [];
+    emptySnapshot.projectionInputs = [];
+    const loader = vi
+      .fn()
+      .mockResolvedValueOnce(emptySnapshot)
+      .mockResolvedValueOnce(snapshot());
+    const installLocalPackage: NonNullable<
+      PluginMarketplaceActionDeps["installLocalPackage"]
+    > = vi.fn(async () => installedState("local-kit"));
+    const selectLocalDirectory = vi.fn(async () => "/tmp/local-plugin");
+    const dispatchChanged = vi.fn();
+    const container = await renderPage({
+      loader,
+      actionDeps: {
+        selectLocalDirectory,
+        installLocalPackage,
+        dispatchChanged,
+      },
+    });
+
+    const localInstall = container.querySelector<HTMLButtonElement>(
+      '[data-testid="plugin-marketplace-local-install"]',
+    );
+    expect(localInstall?.disabled).toBe(false);
+    expect(container.textContent).toContain("plugin.marketplace.empty.title");
+
+    await act(async () => {
+      localInstall?.click();
+      await Promise.resolve();
+    });
+    await flushEffects(6);
+
+    expect(selectLocalDirectory).toHaveBeenCalledWith({
+      title: "plugin.marketplace.localInstall.dialogTitle",
+    });
+    expect(installLocalPackage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        appDir: "/tmp/local-plugin",
+        profile: expectActionProfile(),
+      }),
+    );
+    expect(dispatchChanged).toHaveBeenCalledTimes(1);
+    expect(loader).toHaveBeenCalledTimes(2);
+  });
+
   it("本地安装取消选择目录时不应显示错误", async () => {
     const localSnapshot = snapshot();
     localSnapshot.marketplace.items[0] = marketplaceItem(

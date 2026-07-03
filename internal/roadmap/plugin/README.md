@@ -5,11 +5,11 @@
 
 ## 1. 定位
 
-Lime 的一级产品概念统一为 **插件**。插件负责安装、授权、发布、启用与分发；`工作台应用` 只作为插件中的一种能力形态，表示“带独立 UI 的工作台应用”。
+Lime 的一级产品概念统一为 **插件**。插件负责安装、授权、发布、启用与分发；`插件工作区能力` 只作为插件内部的一种能力形态，表示“带独立 UI 的工作台能力”。旧 `Agent App / 工作台应用` 命名只允许作为迁移输入或历史证据，不再作为插件中心的产品根对象。
 
 ```text
 插件 = 分发与授权根对象
-工作台应用 = 插件子类型
+插件工作区能力 = 插件内部 UI 子能力
 Right Surface = Host 管理的产物渲染工作区
 ```
 
@@ -29,7 +29,7 @@ Lime Desktop 只负责本地安装态、显式激活、Right Surface 渲染和 A
 | 文档                                                                                                   | 用途                                                                           |
 | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
 | [`prd.md`](./prd.md)                                                                                   | 插件产品定义、背景、用户路径、需求、里程碑和验收。                             |
-| [`architecture.md`](./architecture.md)                                                                 | 插件/工作台应用/Renderer/Claw/Right Surface 的分层架构。                       |
+| [`architecture.md`](./architecture.md)                                                                 | 插件/工作区能力/Renderer/Claw/Right Surface 的分层架构。                       |
 | [`technical-baseline.md`](./technical-baseline.md)                                                     | 插件运行的宿主基线、承载方式、current / deprecated / dead 分类。               |
 | [`interface-contracts.md`](./interface-contracts.md)                                                   | 插件 manifest、激活上下文、renderer contract、surface action contract。        |
 | [`implementation-plan.md`](./implementation-plan.md)                                                   | 插件中心、composer 激活、renderer host、迁移收口的实施顺序。                   |
@@ -63,13 +63,14 @@ Lime Desktop 只负责本地安装态、显式激活、Right Surface 渲染和 A
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 根对象             | 插件是用户侧可安装、可授权、可发布的根对象。                                                                                                            |
 | Marketplace 服务端 | `current` 在 LimeCore control-plane，不在 Lime App Server。                                                                                             |
-| 工作台应用         | 降级为插件迁移输入 / 插件内独立 UI 能力；不再作为插件 marketplace 的设计模板。                                                                          |
+| 插件工作区能力     | 作为插件内独立 UI 能力；旧 Agent App / 工作台应用只允许作为迁移输入，不再作为插件 marketplace 的设计模板。                                               |
 | 右侧渲染           | Right Surface 继续作为 Host 的唯一物理右栏，插件只提供数据模型、视图与 action。                                                                         |
 | 激活方式           | 不再在每次发送消息时全量读取插件列表做语义猜测；激活必须显式。                                                                                          |
 | Renderer 输出合同  | manifest / marketplace summary 可以声明 `outputArtifactKind`、`paneKind` 和 action，但 runtime 当前只接管内容工厂 workspace patch，不开放任意插件执行。 |
 | 内容工厂           | 内容工厂应作为插件重建，而不是复用旧 `旧内容工作台` 代码。                                                                                              |
 | 现有路线上下文     | 现有 `rightsurface` 负责统一右侧 dock；plugin 路线只定义该 dock 如何承载插件产物。                                                                      |
 | 旧插件中心命令     | 历史插件中心命令族继续按 `dead` 处理，不恢复为生产入口。                                                                                               |
+| 旧 Agent App 目录  | `client/agent-apps` 和本地 Agent App manifest 投影只允许作为 compat / migration 输入；插件中心 current 数据源是 `client/plugins/marketplace` 与本地插件安装态。 |
 | `@` 命令边界       | 平台 `@` 原子命令仍以 `SkillCatalog.entries.kind=command` 为事实源；插件只可贡献显式 activation command entry，并通过 `agentSession/turn/start` metadata 进入 current 主链。 |
 
 ## 4. 与现有路线图关系
@@ -77,7 +78,7 @@ Lime Desktop 只负责本地安装态、显式激活、Right Surface 渲染和 A
 | 路线图                                                                 | 关系                                                                |
 | ---------------------------------------------------------------------- | ------------------------------------------------------------------- |
 | [`internal/roadmap/rightsurface/README.md`](../rightsurface/README.md) | 定义唯一右侧 dock、多 tab 和 pane 状态机；plugin 路线复用这层宿主。 |
-| [`internal/roadmap/workbench/v4/README.md`](../workbench/v4/README.md) | 定义 工作台应用 在插件体系里的位置，以及内容工厂的工作台形态。      |
+| [`internal/roadmap/workbench/v4/README.md`](../workbench/v4/README.md) | 定义插件工作区能力在插件体系里的位置，以及内容工厂的工作台形态。    |
 | [`internal/roadmap/workbench/v3/README.md`](../workbench/v3/README.md) | 作为历史参考，帮助理解从 Workbench Profile 过渡到插件分层的原因。   |
 
 ## 5. 开发者阅读顺序

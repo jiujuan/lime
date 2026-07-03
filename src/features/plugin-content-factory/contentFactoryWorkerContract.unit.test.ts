@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,7 +19,19 @@ import {
 } from "./index";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const fixtureRoot = resolve(repoRoot, "src/features/agent-app/testing/fixtures");
+const fixtureRoot = resolve(
+  repoRoot,
+  "src/features/agent-app/testing/fixtures",
+);
+const HOST_GENERATED_MARKDOWN = [
+  "# 宿主生成标题",
+  "",
+  "导语先说明为什么文章正文必须来自宿主托管生成。",
+  "",
+  "## 第一节",
+  "",
+  "这里是宿主托管生成的正文。",
+].join("\n");
 
 function buildFixtureWorkerRuntimeContract() {
   return buildContentFactoryWorkerRuntimeContract({
@@ -50,6 +62,31 @@ function parseWorkerStdout(stdout: string): {
   return {
     events: values.slice(0, -1),
     response,
+  };
+}
+
+function withHostManagedGeneration<T extends Record<string, unknown>>(
+  request: T,
+): T & { hostManagedGeneration: Record<string, unknown> } {
+  return {
+    ...request,
+    hostManagedGeneration: {
+      schemaVersion: "lime.agent_app.host_managed_generation.v1",
+      source: "test-host-generation",
+      status: "completed",
+      provider: "test-provider",
+      model: "test-model",
+      outputs: [
+        {
+          id: "article-draft-document",
+          kind: "markdown_document",
+          targetObjectKind: "articleDraft",
+          outputField: "documentText",
+          contentType: "text/markdown",
+          content: HOST_GENERATED_MARKDOWN,
+        },
+      ],
+    },
   };
 }
 
@@ -112,11 +149,7 @@ describe("contentFactoryWorkerContract", () => {
             "article-image-plan",
           ],
           cliRefs: ["content-factory"],
-          connectorRefs: [
-            "lime-knowledge",
-            "web-research",
-            "media-generation",
-          ],
+          connectorRefs: ["lime-knowledge", "web-research", "media-generation"],
           hookPolicy: {
             prompt: ["prompt-submit"],
             task: ["task-complete"],
@@ -191,7 +224,8 @@ describe("contentFactoryWorkerContract", () => {
       agentRuntime: {
         worker: {
           entrypoint: contentFactoryFixture.runtimePackage.worker.entrypoint,
-          sampleRequest: contentFactoryFixture.runtimePackage.worker.sampleRequest,
+          sampleRequest:
+            contentFactoryFixture.runtimePackage.worker.sampleRequest,
           directProviderAccess: false,
           directFilesystemAccess: false,
           outputArtifactKind: CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
@@ -217,7 +251,7 @@ describe("contentFactoryWorkerContract", () => {
       turnId: "turn-demo-runtime-001",
       taskId: "task-demo-runtime-001",
       taskKind: "content.article.generate",
-      prompt: expect.stringContaining("Golang 学习路线"),
+      prompt: expect.stringContaining("人才选聘"),
       expectedOutput: {
         artifactKind: CONTENT_FACTORY_WORKSPACE_PATCH_KIND,
       },
@@ -291,12 +325,12 @@ describe("contentFactoryWorkerContract", () => {
       (object) => object.ref.kind === "articleDraft",
     );
     expect(article).toMatchObject({
-      title: expect.stringContaining("学习路线"),
+      title: "人才选聘不能只看简历关键词",
       summary: expect.not.stringContaining("轮资料检索"),
       source: {
         processMarkdown: expect.stringContaining("## 检索轮次"),
-        documentText: expect.stringContaining("## 第一阶段：打牢基础"),
-        finalMarkdown: expect.stringContaining("## 第一阶段：打牢基础"),
+        documentText: expect.stringContaining("## 先定义岗位要解决的问题"),
+        finalMarkdown: expect.stringContaining("## 先定义岗位要解决的问题"),
         researchRounds: expect.arrayContaining([
           expect.objectContaining({
             title: "主题和用户目标检索",
@@ -304,17 +338,17 @@ describe("contentFactoryWorkerContract", () => {
         ]),
         titleCandidates: expect.arrayContaining([
           expect.objectContaining({
-            title: expect.stringContaining("学习路线"),
+            title: expect.stringContaining("先把问题说清楚"),
           }),
         ]),
         outline: expect.arrayContaining([
           expect.objectContaining({
-            title: "实践：用项目把知识连成闭环",
+            title: "展开：把观点拆成可验证的段落",
           }),
         ]),
         imageSlots: expect.arrayContaining([
           expect.objectContaining({
-            prompt: expect.stringContaining("学习路线图"),
+            prompt: expect.stringContaining("主题封面图"),
           }),
         ]),
         searchRequests: expect.arrayContaining([
@@ -348,6 +382,11 @@ describe("contentFactoryWorkerContract", () => {
             skillRef: "article-writing",
           }),
         ]),
+        hostManagedGeneration: expect.objectContaining({
+          status: "completed",
+          provider: "sample-provider",
+          outputIds: ["article-draft-document"],
+        }),
         reviewNotes: expect.arrayContaining([
           expect.stringContaining("确认标题是否符合真实表达"),
         ]),
@@ -360,10 +399,22 @@ describe("contentFactoryWorkerContract", () => {
       "## 待执行检索",
     );
     expect(String(article?.source?.documentText ?? "")).toContain(
-      "## 第一阶段：打牢基础",
+      "## 用任务验证真实能力",
     );
     expect(String(article?.source?.documentText ?? "")).toContain(
-      "## 第二阶段：用项目建立反馈",
+      "## 保留复盘证据",
+    );
+    expect(String(article?.source?.documentText ?? "")).not.toContain(
+      "学习路线：从基础语法到工程实战",
+    );
+    expect(String(article?.source?.documentText ?? "")).not.toContain(
+      "## 第一阶段：打牢基础",
+    );
+    expect(String(article?.source?.processMarkdown ?? "")).not.toContain(
+      "学习路线：从基础语法到工程实战",
+    );
+    expect(String(article?.source?.processMarkdown ?? "")).not.toContain(
+      "## 第一阶段：打牢基础",
     );
     expect(String(article?.source?.documentText ?? "")).not.toContain(
       "不要只生成一段话",
@@ -379,7 +430,7 @@ describe("contentFactoryWorkerContract", () => {
     );
   });
 
-  it("写文章 worker 请求应输出完整文章结构", () => {
+  it("写文章 worker 请求必须使用宿主托管生成结果", () => {
     const contract = buildFixtureWorkerRuntimeContract();
     const workerEntrypointPath = resolveFixturePath(contract.workerEntrypoint);
     const request = buildContentFactoryWorkerRequest({
@@ -388,13 +439,16 @@ describe("contentFactoryWorkerContract", () => {
       turnId: "turn-article-1",
       taskId: "task-article-1",
       taskKind: "content.article.generate",
-      prompt: "写一篇关于 golang 学习的公众号文章",
+      prompt: "写一篇关于人才选聘的公众号文章",
       requestedAt: "2026-06-28T00:00:00.000Z",
       runtimeContract: contract,
     });
+    expect(request).not.toBeNull();
     const { events, response } = parseWorkerStdout(
       execFileSync("node", [workerEntrypointPath], {
-        input: JSON.stringify(request),
+        input: JSON.stringify(
+          withHostManagedGeneration(request as Record<string, unknown>),
+        ),
         encoding: "utf8",
         maxBuffer: 8 * 1024 * 1024,
       }),
@@ -479,16 +533,16 @@ describe("contentFactoryWorkerContract", () => {
       expect.stringContaining("# "),
     );
     expect(article?.source?.documentText).toEqual(
-      expect.stringContaining("Golang 学习路线"),
+      expect.stringContaining("宿主生成标题"),
     );
     expect(article?.source?.documentText).toEqual(
+      expect.stringContaining("这里是宿主托管生成的正文"),
+    );
+    expect(article?.source?.documentText).not.toEqual(
+      expect.stringContaining("学习路线：从基础语法到工程实战"),
+    );
+    expect(article?.source?.documentText).not.toEqual(
       expect.stringContaining("## 第一阶段：打牢基础"),
-    );
-    expect(article?.source?.documentText).toEqual(
-      expect.stringContaining("## 第二阶段：用项目建立反馈"),
-    );
-    expect(article?.source?.documentText).toEqual(
-      expect.stringContaining("## 第三阶段：补齐工程化能力"),
     );
     expect(article?.source?.documentText).not.toEqual(
       expect.stringContaining("不要只生成一段话"),
@@ -511,21 +565,21 @@ describe("contentFactoryWorkerContract", () => {
       ]),
       titleCandidates: expect.arrayContaining([
         expect.objectContaining({
-          title: expect.stringContaining("学习路线"),
+          title: expect.stringContaining("先把问题说清楚"),
         }),
       ]),
       outline: expect.arrayContaining([
         expect.objectContaining({
-          title: "实践：用项目把知识连成闭环",
+          title: "展开：把观点拆成可验证的段落",
         }),
       ]),
       keyTakeaways: expect.arrayContaining([
-        expect.stringContaining("学习要先建立清晰主线"),
+        expect.stringContaining("这篇文章要先回答"),
       ]),
       imageSlots: expect.arrayContaining([
         expect.objectContaining({
-          title: "学习路线封面图",
-          prompt: expect.stringContaining("学习路线图"),
+          title: "主题封面图",
+          prompt: expect.stringContaining("主题封面图"),
         }),
       ]),
       searchRequests: expect.arrayContaining([
@@ -559,9 +613,49 @@ describe("contentFactoryWorkerContract", () => {
           done: true,
         }),
       ]),
+      hostManagedGeneration: expect.objectContaining({
+        status: "completed",
+        provider: "test-provider",
+        outputIds: ["article-draft-document"],
+      }),
       reviewNotes: expect.arrayContaining([
         expect.stringContaining("确认标题是否符合真实表达"),
       ]),
+    });
+  });
+
+  it("写文章 worker 请求缺少宿主托管生成结果时应 fail closed", () => {
+    const contract = buildFixtureWorkerRuntimeContract();
+    const workerEntrypointPath = resolveFixturePath(contract.workerEntrypoint);
+    const request = buildContentFactoryWorkerRequest({
+      sessionId: "session-content-factory-article",
+      workspaceId: "workspace-main",
+      turnId: "turn-article-1",
+      taskId: "task-article-1",
+      taskKind: "content.article.generate",
+      prompt: "写一篇关于人才选聘的公众号文章",
+      requestedAt: "2026-06-28T00:00:00.000Z",
+      runtimeContract: contract,
+    });
+    expect(request).not.toBeNull();
+
+    const result = spawnSync("node", [workerEntrypointPath], {
+      input: JSON.stringify(request),
+      encoding: "utf8",
+      maxBuffer: 8 * 1024 * 1024,
+    });
+    expect(result.status).toBe(1);
+    const { events, response } = parseWorkerStdout(result.stdout);
+
+    expect(events).toEqual([]);
+    expect(response).toMatchObject({
+      schemaVersion: "content-factory.worker-response.v1",
+      appId: CONTENT_FACTORY_PLUGIN_ID,
+      status: "failed",
+      error: {
+        code: "HOST_MANAGED_GENERATION_REQUIRED",
+      },
+      artifacts: [],
     });
   });
 

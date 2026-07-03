@@ -1,19 +1,15 @@
 import {
-  getAgentAppCloudCatalog,
   listInstalledAgentApps,
   reviewLocalAgentAppPackage,
   saveInstalledAgentAppState,
-  type AgentAppCloudCatalogResult,
 } from "@/lib/api/agentApps";
 import {
   getClientPluginMarketplace,
   OemCloudControlPlaneError,
 } from "@/lib/api/oemCloudControlPlane";
 import type {
-  CloudBootstrapApp,
   HostCapabilityProfile,
   InstalledAgentAppState,
-  RuntimeTarget,
 } from "@/features/agent-app/types";
 import type { InstalledAgentAppStateListResult } from "@/features/agent-app/install/installedAppState";
 import { repairStaleInstalledAgentAppReadinessList } from "@/features/agent-app/install/staleReadinessRepair";
@@ -52,7 +48,6 @@ export interface PluginMarketplaceRegistryLoaderDeps {
     query?: PluginMarketplaceQuery,
   ) => Promise<PluginMarketplaceListResponse>;
   listInstalled?: () => Promise<InstalledAgentAppStateListResult>;
-  getAgentAppCatalog?: () => Promise<AgentAppCloudCatalogResult>;
   reviewLocalPackage?: typeof reviewLocalAgentAppPackage;
   saveInstalledState?: typeof saveInstalledAgentAppState;
   profile?: HostCapabilityProfile;
@@ -258,161 +253,6 @@ function enrichMarketplaceItemWithInstalledStateSummary(params: {
   };
 }
 
-function hasCloudReleaseEvidence(
-  state: InstalledAgentAppState | undefined,
-): boolean {
-  const setup = readRecord(state?.setup);
-  return Boolean(
-    state?.identity.sourceKind !== "cloud_release" ||
-    !state.identity.sourceUri.startsWith("https://seeded.local/") ||
-    setup?.cloudReleaseEvidence,
-  );
-}
-
-function agentAppCatalogMarketplaceName(
-  source: AgentAppCloudCatalogResult["source"],
-): string {
-  return source === "remote"
-    ? "agent-app-cloud"
-    : source === "bootstrap"
-      ? "agent-app-bootstrap"
-      : "agent-app-seeded";
-}
-
-function marketplaceItemFromCloudAgentApp(
-  app: CloudBootstrapApp,
-  source: AgentAppCloudCatalogResult["source"],
-  installedState?: InstalledAgentAppState,
-): PluginMarketplaceItem {
-  const marketplaceName = agentAppCatalogMarketplaceName(source);
-  const installed = Boolean(installedState);
-  const packageUrl =
-    readOptionalText(app.packageUrl) ??
-    readOptionalText(installedState?.identity.sourceUri);
-  const packageHash =
-    readOptionalText(app.packageHash) ??
-    readOptionalText(installedState?.identity.packageHash);
-  const manifestHash =
-    readOptionalText(app.manifestHash) ??
-    readOptionalText(installedState?.identity.manifestHash);
-  const registrationBlocked =
-    !installed &&
-    app.registrationRequired === true &&
-    app.registrationState !== "active";
-  const packageReady = Boolean(packageUrl && packageHash && manifestHash);
-  const installedEvidenceMissing =
-    installed && !hasCloudReleaseEvidence(installedState);
-  const enabled = installed ? installedState?.disabled !== true : app.enabled;
-  const installable =
-    (installed && !installedEvidenceMissing) ||
-    (enabled && packageReady && !registrationBlocked);
-  const blockedReason = installed
-    ? installedEvidenceMissing
-      ? "cloud release evidence missing"
-      : undefined
-    : (readOptionalText(app.disabledReason) ??
-      (registrationBlocked
-        ? "registration required"
-        : packageReady
-          ? undefined
-          : "package unavailable"));
-  const category = readOptionalText(app.presentation?.category);
-  const displayName =
-    readOptionalText(app.displayName) ??
-    readOptionalText(app.presentation?.title) ??
-    app.appId;
-
-  return {
-    pluginKey: app.appId,
-    pluginName: app.appId,
-    marketplaceName,
-    marketplaceDisplayName: "Agent Apps",
-    displayName,
-    description:
-      readOptionalText(app.presentation?.summary) ?? blockedReason ?? "",
-    version: app.version,
-    category,
-    categories: category ? [category] : [],
-    keywords: app.defaultEntries,
-    capabilities: Object.keys(app.capabilityRequirements).sort(),
-    sourceKind: "agent_app_release",
-    sourceRef: readOptionalText(app.releaseId) ?? app.appId,
-    appId: app.appId,
-    install: (app.runtimeTargets ?? ([] as RuntimeTarget[])).includes("local")
-      ? {
-          local: true,
-          cloud: source === "seeded" ? false : true,
-          authentication: app.registrationRequired ? "on_install" : "on_use",
-        }
-      : {
-          local: false,
-          cloud: true,
-          authentication: app.registrationRequired ? "on_install" : "on_use",
-        },
-    enabled,
-    installState: installable ? "available" : "blocked",
-    activationState: enabled && installable ? "activatable" : "blocked",
-    ...(blockedReason ? { blockedReason } : {}),
-    policy: {
-      installation:
-        installed && !installedEvidenceMissing
-          ? "INSTALLED_BY_DEFAULT"
-          : enabled
-            ? "AVAILABLE"
-            : "NOT_AVAILABLE",
-      authentication: installed
-        ? "ON_USE"
-        : app.registrationRequired
-          ? "ON_INSTALL"
-          : "ON_USE",
-    },
-    package:
-      packageUrl || packageHash || manifestHash || app.releaseId
-        ? {
-            releaseId: readOptionalText(app.releaseId),
-            packageUrl,
-            packageHash,
-            manifestHash,
-            signatureRef: readOptionalText(app.signatureRef),
-          }
-        : undefined,
-    manifestSummary: {
-      install: {
-        local: (app.runtimeTargets ?? ([] as RuntimeTarget[])).includes(
-          "local",
-        ),
-        cloud: true,
-        authentication: app.registrationRequired ? "on_install" : "on_use",
-      },
-    },
-  };
-}
-
-function mergeLocalMarketplaceItems(params: {
-  installedItems: PluginMarketplaceItem[];
-  catalogItems: PluginMarketplaceItem[];
-}): PluginMarketplaceItem[] {
-  const itemsByPluginKey = new Map<string, PluginMarketplaceItem>();
-  for (const item of params.installedItems) {
-    itemsByPluginKey.set(item.pluginKey, item);
-  }
-  for (const item of params.catalogItems) {
-    const installedItem = itemsByPluginKey.get(item.pluginKey);
-    itemsByPluginKey.set(
-      item.pluginKey,
-      installedItem
-        ? enrichMarketplaceItemWithInstalledManifest({
-            marketplaceItem: item,
-            installedItem,
-          })
-        : item,
-    );
-  }
-  return Array.from(itemsByPluginKey.values()).sort((left, right) =>
-    left.displayName.localeCompare(right.displayName, "zh-Hans-CN"),
-  );
-}
-
 function enrichMarketplaceItemWithInstalledManifest(params: {
   marketplaceItem: PluginMarketplaceItem;
   installedItem: PluginMarketplaceItem;
@@ -541,7 +381,6 @@ function mergeInstalledManifestFieldsIntoMarketplace(params: {
 
 function buildLocalMarketplaceRegistrySnapshot(
   installed: InstalledAgentAppStateListResult,
-  agentAppCatalog: AgentAppCloudCatalogResult | null,
 ): PluginMarketplaceRegistrySnapshot {
   const installedAgentApps: readonly InstalledAgentAppState[] =
     installed.states;
@@ -557,18 +396,9 @@ function buildLocalMarketplaceRegistrySnapshot(
       state: installedByAppId.get(item.appId ?? ""),
     });
   });
-  const catalogItems =
-    agentAppCatalog?.payload.apps.map((app) =>
-      marketplaceItemFromCloudAgentApp(
-        app,
-        agentAppCatalog.source,
-        installedByAppId.get(app.appId),
-      ),
-    ) ?? [];
-  const items = mergeLocalMarketplaceItems({
-    installedItems,
-    catalogItems,
-  });
+  const items = installedItems.sort((left, right) =>
+    left.displayName.localeCompare(right.displayName, "zh-Hans-CN"),
+  );
   const marketplace: PluginMarketplaceListResponse = {
     schemaVersion: "plugin-marketplace/v1",
     tenantId: "local",
@@ -604,7 +434,6 @@ export async function loadPluginMarketplaceRegistry(
 ): Promise<PluginMarketplaceRegistrySnapshot> {
   const getMarketplace = deps.getMarketplace ?? getClientPluginMarketplace;
   const listInstalled = deps.listInstalled ?? listInstalledAgentApps;
-  const getAgentAppCatalog = deps.getAgentAppCatalog ?? getAgentAppCloudCatalog;
   const normalizedTenantId = tenantId.trim();
   const loadedInstalled = await listInstalled();
   let installed = loadedInstalled;
@@ -644,13 +473,7 @@ export async function loadPluginMarketplaceRegistry(
   }
 
   if (!marketplace) {
-    let agentAppCatalog: AgentAppCloudCatalogResult | null = null;
-    try {
-      agentAppCatalog = await getAgentAppCatalog();
-    } catch {
-      agentAppCatalog = null;
-    }
-    return buildLocalMarketplaceRegistrySnapshot(installed, agentAppCatalog);
+    return buildLocalMarketplaceRegistrySnapshot(installed);
   }
 
   const installedAgentApps: readonly InstalledAgentAppState[] =

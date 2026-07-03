@@ -1,0 +1,68 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  buildContentFactoryHostGenerationFixtureMarkdown,
+  contentFactoryHostGenerationAsterChatRequest,
+} from "./content-factory-host-generation-fixture.mjs";
+
+function providerBody(prompt) {
+  return {
+    model: "lime-fixture-chat",
+    stream: true,
+    messages: [
+      {
+        role: "system",
+        content: "只输出 Markdown 正文。",
+      },
+      {
+        role: "user",
+        content: [
+          "用户原始请求：",
+          prompt,
+          "",
+          "生成目标：",
+          "- targetObjectKind: articleDraft",
+          "- outputField: documentText",
+        ].join("\n"),
+      },
+    ],
+  };
+}
+
+describe("content factory host generation fixture", () => {
+  it("按 provider 请求动态生成 fixture-only Markdown", () => {
+    const first = buildContentFactoryHostGenerationFixtureMarkdown(
+      providerBody("写一篇关于 AI Agent 工作流如何让内容生产可审计的公众号文章"),
+    );
+    const second = buildContentFactoryHostGenerationFixtureMarkdown(
+      providerBody("写一篇关于团队知识库治理的公众号文章"),
+    );
+
+    expect(first).toContain("fixture-only");
+    expect(first).toContain("fixturePromptFingerprint:");
+    expect(first).toContain("AI Agent 工作流如何让内容生产可审计");
+    expect(second).toContain("团队知识库治理");
+    expect(second).toContain("fixturePromptFingerprint:");
+    expect(second).not.toBe(first);
+    expect(first).not.toContain("受控宿主生成标题");
+    expect(first).not.toContain("内容工厂插件化写作：让文章生产可审计");
+  });
+
+  it("生成 Direct provider request 时只指向本地 fixture", () => {
+    const request = contentFactoryHostGenerationAsterChatRequest(
+      "http://127.0.0.1:41234",
+    );
+
+    expect(request).toMatchObject({
+      provider_config: {
+        provider_id: "fixture-openai",
+        provider_name: "openai",
+        model_name: "lime-fixture-chat",
+        api_key: "fixture-key",
+        base_url: "http://127.0.0.1:41234",
+      },
+      provider_preference: "fixture-openai",
+      model_preference: "lime-fixture-chat",
+    });
+  });
+});

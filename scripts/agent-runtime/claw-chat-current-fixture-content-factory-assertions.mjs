@@ -249,11 +249,13 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
       readModel.workerArticleObject?.markdownIncludesResearch === true &&
       readModel.workerArticleObject?.markdownIncludesDraft === true &&
       readModel.workerArticleObject?.hostManagedGenerationStatus ===
-        "unavailable" &&
-      readModel.workerArticleObject?.hostManagedGenerationReasonCode ===
-        "host_generation_unavailable" &&
-      readModel.workerArticleObject?.hostManagedGenerationOutputIds?.length ===
-        0 &&
+        "completed" &&
+      !readModel.workerArticleObject?.hostManagedGenerationReasonCode &&
+      readModel.workerArticleObject?.hostManagedGenerationOutputIds?.includes(
+        "article-draft-document",
+      ) === true &&
+      summary.contentFactoryArticleWorkspaceWorkerTurnStart
+        ?.hostGenerationFixture?.requestCount >= 1 &&
       readModel.workerArticleObject?.researchRoundCount >= 3 &&
       readModel.workerArticleObject?.imageSlotCount >= 3,
     contentFactoryArticleWorkspaceActionResultPatchProjected:

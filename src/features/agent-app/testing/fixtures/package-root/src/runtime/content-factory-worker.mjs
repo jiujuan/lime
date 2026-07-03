@@ -203,6 +203,23 @@ function generatedDocumentTextFromHost(hostManagedGeneration) {
   return normalizeText(output?.content, "");
 }
 
+function markdownTitleFromDocumentText(documentText) {
+  const heading = normalizeText(documentText, "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => /^#\s+/.test(line));
+  return heading ? heading.replace(/^#\s+/, "").trim() : "";
+}
+
+function markdownExcerptFromDocumentText(documentText) {
+  return (
+    normalizeText(documentText, "")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find((line) => line && !line.startsWith("#")) ?? ""
+  );
+}
+
 function slugify(value) {
   return normalizeText(value, "content")
     .toLowerCase()
@@ -317,42 +334,49 @@ function normalizeHostWorkerRequest(input) {
   ) {
     return { error: "WORKER_RUNTIME_CONTRACT_UNSUPPORTED" };
   }
+  const normalizedRequest = {
+    taskKind,
+    sessionId: normalizeText(request.sessionId, DEFAULT_SESSION_ID),
+    workspaceId: normalizeText(request.workspaceId, ""),
+    turnId: normalizeText(request.turnId, DEFAULT_TURN_ID),
+    taskId: normalizeText(request.taskId, DEFAULT_TASK_ID),
+    topic: prompt,
+    goal: "生成一套可审核的首版内容资产",
+    references: normalizeList(request.sourceArtifactIds, [
+      "Claw 中间保持对话和审批",
+      "右侧文章编辑器展示产物",
+      "所有修改回流到 current turn"
+    ]),
+    sourceObjectRef: asRecord(request.sourceObjectRef),
+    requestedAt: normalizeText(request.requestedAt, ""),
+    workflowKey: normalizeText(
+      request.workflowKey ?? request.pluginActivation?.workflow_key ?? request.pluginActivation?.workflowKey,
+      DEFAULT_ARTICLE_WORKFLOW_KEY
+    ),
+    cliRefs: normalizeList(request.cliRefs, DEFAULT_CLI_REFS),
+    connectorRefs: normalizeList(request.connectorRefs, DEFAULT_CONNECTOR_REFS),
+    hookPolicy: normalizeHookPolicy(request.hookPolicy, DEFAULT_HOOK_POLICY),
+    subagents: normalizeList(
+      request.subagents,
+      readStringListFromRecords(request.pluginActivation?.subagents, "id")
+    ),
+    skillRefs: normalizeList(
+      request.skillRefs,
+      readStringListFromRecords(request.pluginActivation?.skill_refs ?? request.pluginActivation?.skillRefs, "id")
+    ),
+    orchestration: normalizeOrchestration(
+      request.orchestration ?? request.pluginActivation?.orchestration
+    ),
+    hostManagedGeneration: hostManagedGenerationFromRequest(request)
+  };
+  if (
+    taskKind === "content.article.generate" &&
+    !generatedDocumentTextFromHost(normalizedRequest.hostManagedGeneration)
+  ) {
+    return { error: "HOST_MANAGED_GENERATION_REQUIRED" };
+  }
   return {
-    request: {
-      taskKind,
-      sessionId: normalizeText(request.sessionId, DEFAULT_SESSION_ID),
-      workspaceId: normalizeText(request.workspaceId, ""),
-      turnId: normalizeText(request.turnId, DEFAULT_TURN_ID),
-      taskId: normalizeText(request.taskId, DEFAULT_TASK_ID),
-      topic: prompt,
-      goal: "生成一套可审核的首版内容资产",
-      references: normalizeList(request.sourceArtifactIds, [
-        "Claw 中间保持对话和审批",
-        "右侧文章编辑器展示产物",
-        "所有修改回流到 current turn"
-      ]),
-      sourceObjectRef: asRecord(request.sourceObjectRef),
-      requestedAt: normalizeText(request.requestedAt, ""),
-      workflowKey: normalizeText(
-        request.workflowKey ?? request.pluginActivation?.workflow_key ?? request.pluginActivation?.workflowKey,
-        DEFAULT_ARTICLE_WORKFLOW_KEY
-      ),
-      cliRefs: normalizeList(request.cliRefs, DEFAULT_CLI_REFS),
-      connectorRefs: normalizeList(request.connectorRefs, DEFAULT_CONNECTOR_REFS),
-      hookPolicy: normalizeHookPolicy(request.hookPolicy, DEFAULT_HOOK_POLICY),
-      subagents: normalizeList(
-        request.subagents,
-        readStringListFromRecords(request.pluginActivation?.subagents, "id")
-      ),
-      skillRefs: normalizeList(
-        request.skillRefs,
-        readStringListFromRecords(request.pluginActivation?.skill_refs ?? request.pluginActivation?.skillRefs, "id")
-      ),
-      orchestration: normalizeOrchestration(
-        request.orchestration ?? request.pluginActivation?.orchestration
-      ),
-      hostManagedGeneration: hostManagedGenerationFromRequest(request)
-    }
+    request: normalizedRequest
   };
 }
 
@@ -597,11 +621,16 @@ function buildArticleObject(context) {
   const id = `article-${slugify(context.topic)}`;
   const artifactIds = [`artifact-${id}`];
   const planning = buildArticlePlanning(context);
-  const articleTitle = planning.titleCandidates[0]?.title ?? `${context.channel}文章草稿`;
   const generatedDocumentText = generatedDocumentTextFromHost(
     context.hostManagedGeneration
   );
+  const articleTitle =
+    markdownTitleFromDocumentText(generatedDocumentText) ||
+    planning.titleCandidates[0]?.title ||
+    `${context.channel}文章草稿`;
   const documentText = generatedDocumentText || planning.documentText;
+  const excerpt =
+    markdownExcerptFromDocumentText(documentText) || planning.keyTakeaways[0];
   const generationMetadata = context.hostManagedGeneration
     ? {
         status: context.hostManagedGeneration.status,
@@ -624,7 +653,7 @@ function buildArticleObject(context) {
     }),
     title: articleTitle,
     status: "needs_review",
-    summary: `围绕“${planning.titleCandidates[0]?.title ?? context.topic}”生成首版${context.channel}正文，可继续编辑、审稿和发布。`,
+    summary: `围绕“${articleTitle || context.topic}”生成首版${context.channel}正文，可继续编辑、审稿和发布。`,
     previewArtifactId: artifactIds[0],
     source: {
       ...sourceBase({
@@ -636,7 +665,7 @@ function buildArticleObject(context) {
       processMarkdown: planning.processMarkdown,
       documentText,
       finalMarkdown: documentText,
-      excerpt: planning.keyTakeaways[0],
+      excerpt,
       researchRounds: planning.researchRounds,
       titleCandidates: planning.titleCandidates,
       outline: planning.outline,

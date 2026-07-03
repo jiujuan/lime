@@ -2,12 +2,12 @@
 
 更新时间：2026-06-25  
 状态：Draft  
-适用范围：Lime Desktop / Claw / Plugin Center / Right Surface / 工作台应用 v4
+适用范围：Lime Desktop / Claw / Plugin Center / Right Surface / 插件工作区能力
 
 ## 1. 设计目标
 
 1. 插件作为分发与授权根对象。
-2. `工作台应用` 作为插件内部可选 UI 能力。
+2. `插件工作区能力` 作为插件内部可选 UI 能力。
 3. Claw 继续负责对话、运行、审批和事实链。
 4. Right Surface 作为 Host 管理的唯一右栏。
 5. 产物渲染足够强，但不把业务逻辑塞进 UI 壳。
@@ -98,7 +98,7 @@ flowchart TD
 flowchart TD
   subgraph PluginContract[Plugin Contract]
     Manifest[manifest]
-    Apps[agentApps]
+    WorkspaceApps[workspaceApps]
     Skills[skills]
     Connectors[connectors]
     Renderers[artifactRenderers]
@@ -135,7 +135,7 @@ flowchart TD
   end
 
   Manifest --> Parse --> Normalize --> Guard
-  Guard --> Apps
+  Guard --> WorkspaceApps
   Guard --> Skills
   Guard --> Connectors
   Guard --> Renderers
@@ -159,16 +159,16 @@ flowchart TD
 | --- | --- | --- |
 | Plugin Center | `current` | 插件的安装、启用、停用、授权和发布入口。 |
 | LimeCore Plugin Marketplace | `current` | 云端只读目录、安装策略、认证策略和 package metadata；不执行插件。 |
-| Plugin Manifest / Contract | `current` | 插件、工作台应用、skills、renderers 和 activation entries 的事实源。 |
-| 工作台应用 UI | `current` | 作为插件内部 UI 能力，可以有独立页面或 workbench shell，但不是根产品。 |
+| Plugin Manifest / Contract | `current` | 插件、工作区能力、skills、renderers 和 activation entries 的事实源。 |
+| 插件工作区 UI | `current` | 作为插件内部 UI 能力，可以有独立页面或 workbench shell，但不是根产品。 |
 | Right Surface Dock / Tabs | `current` | 右侧唯一物理 dock，承载插件产物和局部编辑。 |
 | Host builtin renderer | `current` | 文章、图片、storyboard、checklist 等标准对象首选渲染方式。 |
 | App declared pane | `current` | 复杂插件 UI 的受控挂载方式，只能作为右侧 pane。 |
 | Semantic guessing activation | `deprecated` | 不能作为新激活机制，只允许历史兼容说明。 |
-| 工作台应用 marketplace as design source | `deprecated` | 旧 工作台应用 目录可作为迁移输入，但插件模型按上游市场口径重建。 |
+| Agent App / 工作台应用 marketplace as design source | `deprecated` | 旧目录只可作为迁移输入；插件中心 current 数据源是 LimeCore `client/plugins/marketplace` 与本地插件安装态。 |
 | 独立第二右栏 | `dead for new work` | 不允许把插件 UI 再做成一个完整右栏。 |
 | 旧 旧内容工作台 代码 | `dead` | 只允许作为业务参考，不得复用代码、IPC、store 或 renderer。 |
-| 旧 工作台应用 同级产品名 | `deprecated` | 用户侧仍可看到“工作台应用”，但它只隶属于插件体系。 |
+| 旧 Agent App / 工作台应用同级产品名 | `deprecated` | 用户侧不再把它作为独立市场入口；历史文案只能解释为插件内部工作区能力。 |
 
 ## 6. 右侧 Renderer 怎么做强
 
@@ -288,7 +288,7 @@ Right Surface -X-> raw Tauri command
 
 内容工厂是插件系统里的高价值复杂插件，它说明：
 
-- 一个插件可以有 工作台应用 UI。
+- 一个插件可以有插件工作区 UI。
 - 同一个插件可以同时贡献多个产物 renderer。
 - 右侧 tab 可以承载多个业务对象。
 - 中间对话和右侧产物是同一 session 的两个视角。
@@ -307,5 +307,5 @@ Right Surface -X-> raw Tauri command
 
 1. 插件负责“是什么”和“能做什么”。
 2. Right Surface 负责“怎么摆”和“怎么恢复”。
-3. 工作台应用 负责“一个插件是否需要自己的独立 UI”。
+3. 插件工作区能力负责“一个插件是否需要自己的独立 UI”。
 4. 内容工厂验证的是插件体系和产物工作区，不是再造一套 App Shell。

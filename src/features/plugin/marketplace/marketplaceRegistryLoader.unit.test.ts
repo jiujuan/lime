@@ -7,11 +7,7 @@ import { buildInstalledAppPreview } from "@/features/agent-app/install/installed
 import { buildAgentAppLabResolvedSetupState } from "@/features/agent-app/install/labInstallFlow";
 import { buildLocalAgentAppSourceState } from "@/features/agent-app/install/installReview";
 import { buildPackageIdentity } from "@/features/agent-app/install/packageIdentity";
-import type { AgentAppCloudCatalogResult } from "@/lib/api/agentApps";
-import type {
-  AppManifest,
-  CloudBootstrapApp,
-} from "@/features/agent-app/types";
+import type { AppManifest } from "@/features/agent-app/types";
 import type { InstalledAgentAppState } from "@/features/agent-app/types";
 import { OemCloudControlPlaneError } from "@/lib/api/oemCloudControlPlane";
 import type { PluginMarketplaceListResponse } from "./types";
@@ -184,51 +180,6 @@ function staleProfileBlockedInstalledState(): InstalledAgentAppState {
   };
 }
 
-function cloudApp(
-  overrides: Partial<CloudBootstrapApp> = {},
-): CloudBootstrapApp {
-  return {
-    appId: "content-studio",
-    displayName: "Content Studio",
-    version: "0.4.0",
-    presentation: {
-      category: "content",
-      summary: "Content production app",
-    },
-    releaseId: "content-studio-0.4.0",
-    channel: "seeded",
-    registrationRequired: false,
-    registrationState: "not_required",
-    enabled: true,
-    packageUrl:
-      "https://packages.limecloud.example/agent-apps/content-studio-0.4.0.lpkg",
-    packageHash:
-      "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-    manifestHash:
-      "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-    capabilityRequirements: {},
-    defaultEntries: ["content-studio"],
-    policyDefaults: {},
-    toolAvailability: [],
-    ...overrides,
-  };
-}
-
-function agentAppCatalog(
-  apps: CloudBootstrapApp[],
-  source: AgentAppCloudCatalogResult["source"] = "seeded",
-): AgentAppCloudCatalogResult {
-  return {
-    source,
-    payload: {
-      schemaVersion: "agent-app-cloud-bootstrap/v1",
-      tenantId: "seeded",
-      generatedAt: "2026-06-25T00:00:00.000Z",
-      apps,
-    },
-  };
-}
-
 describe("plugin marketplace registry loader", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -290,7 +241,7 @@ describe("plugin marketplace registry loader", () => {
     expect(snapshot.projectionInputs).toHaveLength(2);
   });
 
-  it("没有云端租户时应合并本地已安装插件与 Agent App 目录", async () => {
+  it("没有云端租户时只使用本地已安装插件，不再读取 Agent App 云端目录", async () => {
     const getMarketplace = vi.fn(async () => marketplace());
     const localState = readyInstalledState();
     const listInstalled = vi.fn(
@@ -299,49 +250,25 @@ describe("plugin marketplace registry loader", () => {
         issues: [],
       }),
     );
-    const getAgentAppCatalog = vi.fn(async () => agentAppCatalog([cloudApp()]));
 
     const snapshot = await loadPluginMarketplaceRegistry(
       "",
       {},
-      { getMarketplace, listInstalled, getAgentAppCatalog },
+      { getMarketplace, listInstalled },
     );
 
     expect(getMarketplace).not.toHaveBeenCalled();
     expect(listInstalled).toHaveBeenCalledTimes(1);
-    expect(getAgentAppCatalog).toHaveBeenCalledTimes(1);
     expect(snapshot.marketplace.marketplaceName).toBe("local");
-    expect(snapshot.marketplace.items).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          pluginKey: localState.appId,
-          displayName: localState.manifest.displayName,
-          policy: {
-            installation: "INSTALLED_BY_DEFAULT",
-            authentication: "ON_USE",
-          },
-        }),
-        expect.objectContaining({
-          pluginKey: "content-studio",
-          displayName: "Content Studio",
-          appId: "content-studio",
-          policy: {
-            installation: "AVAILABLE",
-            authentication: "ON_USE",
-          },
-        }),
-      ]),
-    );
-    expect(snapshot.registry).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          pluginId: "content-studio",
-          installed: false,
-          enabled: false,
-          capabilityStates: expect.arrayContaining(["installable"]),
-        }),
-      ]),
-    );
+    expect(snapshot.marketplace.items).toHaveLength(1);
+    expect(snapshot.marketplace.items[0]).toMatchObject({
+      pluginKey: localState.appId,
+      displayName: localState.manifest.displayName,
+      policy: {
+        installation: "INSTALLED_BY_DEFAULT",
+        authentication: "ON_USE",
+      },
+    });
     expect(
       snapshot.registry.find((item) => item.pluginId === localState.appId),
     ).toMatchObject({
@@ -398,7 +325,6 @@ describe("plugin marketplace registry loader", () => {
 
     const snapshot = await loadPluginMarketplaceRegistry("", {}, {
       listInstalled,
-      getAgentAppCatalog: vi.fn(async () => agentAppCatalog([])),
       reviewLocalPackage,
       saveInstalledState,
     });
@@ -530,28 +456,13 @@ describe("plugin marketplace registry loader", () => {
     });
   });
 
-  it("Agent App 目录缺包哈希但本地已安装同 appId 时不应误报包不匹配", async () => {
-    const localState = installedState();
+  it("本地已安装插件不再与旧 Agent App 目录做包匹配", async () => {
+    const localState = readyInstalledState();
     const listInstalled = vi.fn(
       async (): Promise<InstalledAgentAppStateListResult> => ({
         states: [localState],
         issues: [],
       }),
-    );
-    const getAgentAppCatalog = vi.fn(async () =>
-      agentAppCatalog([
-        cloudApp({
-          appId: localState.appId,
-          displayName: "Research Kit",
-          packageUrl: "",
-          packageHash: "",
-          manifestHash: "",
-          registrationRequired: true,
-          registrationState: "required",
-          enabled: false,
-          disabledReason: "registration required",
-        }),
-      ]),
     );
 
     const snapshot = await loadPluginMarketplaceRegistry(
@@ -560,7 +471,6 @@ describe("plugin marketplace registry loader", () => {
       {
         getMarketplace: vi.fn(async () => marketplace()),
         listInstalled,
-        getAgentAppCatalog,
       },
     );
 
@@ -577,70 +487,6 @@ describe("plugin marketplace registry loader", () => {
     ]);
   });
 
-  it("本地 seeded 目录应保留可安装包信息以刷新缺 evidence 的旧安装态", async () => {
-    const localState = installedState({
-      appId: "content-factory-app",
-      packageHash: "package-fnv1a-a4d0e86f",
-      manifestHash: "manifest-fnv1a-b840e5c9",
-      sourceUri: "https://seeded.local/agent-apps/content-factory-app/2.0.0.lapp",
-    });
-    const listInstalled = vi.fn(
-      async (): Promise<InstalledAgentAppStateListResult> => ({
-        states: [localState],
-        issues: [],
-      }),
-    );
-    const getAgentAppCatalog = vi.fn(async () =>
-      agentAppCatalog([
-        cloudApp({
-          appId: "content-factory-app",
-          displayName: "内容工厂",
-          version: "2.0.0",
-          releaseId: "seeded-content-factory-app-2.0.0",
-          runtimeTargets: ["local"],
-          packageUrl:
-            "https://seeded.local/agent-apps/content-factory-app/2.0.0.lapp",
-          packageHash: "package-fnv1a-a4d0e86f",
-          manifestHash: "manifest-fnv1a-b840e5c9",
-          defaultEntries: ["content_factory"],
-        }),
-      ]),
-    );
-
-    const snapshot = await loadPluginMarketplaceRegistry(
-      "",
-      {},
-      {
-        getMarketplace: vi.fn(async () => marketplace()),
-        listInstalled,
-        getAgentAppCatalog,
-      },
-    );
-
-    expect(snapshot.marketplace.items[0]).toMatchObject({
-      pluginKey: "content-factory-app",
-      package: expect.objectContaining({
-        packageUrl:
-          "https://seeded.local/agent-apps/content-factory-app/2.0.0.lapp",
-      }),
-    });
-    expect(snapshot.registry[0]).toMatchObject({
-      pluginId: "content-factory-app",
-      installed: false,
-      capabilityStates: expect.arrayContaining(["installable"]),
-      blockerCodes: expect.arrayContaining([
-        "PLUGIN_CLOUD_RELEASE_EVIDENCE_MISSING",
-      ]),
-    });
-    expect(snapshot.marketplace.items[0]).toMatchObject({
-      pluginKey: "content-factory-app",
-      install: {
-        local: true,
-        cloud: false,
-      },
-    });
-  });
-
   it("云端认证失败时应回退到本地已安装插件目录", async () => {
     const getMarketplace = vi.fn(async () => {
       throw new OemCloudControlPlaneError("invalid auth token", {
@@ -654,18 +500,16 @@ describe("plugin marketplace registry loader", () => {
         issues: [],
       }),
     );
-    const getAgentAppCatalog = vi.fn(async () => agentAppCatalog([]));
 
     const snapshot = await loadPluginMarketplaceRegistry(
       "tenant-0001",
       { sort: "name" },
-      { getMarketplace, listInstalled, getAgentAppCatalog },
+      { getMarketplace, listInstalled },
     );
 
     expect(getMarketplace).toHaveBeenCalledWith("tenant-0001", {
       sort: "name",
     });
-    expect(getAgentAppCatalog).toHaveBeenCalledTimes(1);
     expect(snapshot.marketplace.marketplaceName).toBe("local");
     expect(snapshot.registry[0]).toMatchObject({
       pluginId: localState.appId,

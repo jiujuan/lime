@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
 import { describe, expect, it } from "vitest";
 import contentFactoryFixture from "./fixtures/content-factory-app.json";
+import seededAgentApps from "./fixtures/seeded-agent-apps.json";
 import type { AppManifest } from "../types";
 
 type ContentFactoryWorkflow = {
@@ -193,9 +194,17 @@ describe("contentFactoryFixtureSync", () => {
     const rootWorkerSource = readFixtureText(
       "src/runtime/content-factory-worker.mjs",
     );
+    const rootArticlePlanningSource = readFixtureText(
+      "src/runtime/article-planning.mjs",
+    );
+    const packageArticlePlanningSource = readFileSync(
+      resolve(packageRoot, "src/runtime/article-planning.mjs"),
+      "utf8",
+    );
 
     expect(rootRuntime).toEqual(packageRuntime);
     expect(rootSampleRequest).toEqual(packageSampleRequest);
+    expect(rootArticlePlanningSource).toBe(packageArticlePlanningSource);
     expect(rootWorkerSource).toContain(
       "../../package-root/src/runtime/content-factory-worker.mjs",
     );
@@ -247,5 +256,28 @@ describe("contentFactoryFixtureSync", () => {
     expect(signReleaseTest).toContain("host-verifiable canonical proof");
     expect(releaseDoc).toContain("signatureProof");
     expect(releaseDoc).toContain("agentAppSignatureTrustRoots");
+  });
+
+  it("seeded descriptor 应与 package-root 当前版本保持一致", () => {
+    const packageJson = JSON.parse(
+      readFileSync(resolve(packageRoot, "package.json"), "utf8"),
+    );
+    const pluginJson = JSON.parse(
+      readFileSync(resolve(packageRoot, "plugin.json"), "utf8"),
+    );
+    const manifest = contentFactoryFixture as AppManifest;
+    const seededApp = seededAgentApps.apps.find(
+      (app) => app.appId === "content-factory-app",
+    );
+
+    expect(seededApp).toBeTruthy();
+    expect(pluginJson.version).toBe(packageJson.version);
+    expect(manifest.version).toBe(packageJson.version);
+    expect(seededApp?.version).toBe(packageJson.version);
+    expect(seededApp?.packageUrl).toContain(packageJson.version);
+    expect(seededApp?.packageSourceUri).toContain(packageJson.version);
+    expect(seededApp?.releaseId).toContain(packageJson.version);
+    expect(seededApp?.packageHash).toMatch(/^sha256:[a-f0-9]{64}$/);
+    expect(seededApp?.manifestHash).toMatch(/^sha256:[a-f0-9]{64}$/);
   });
 });

@@ -586,6 +586,27 @@ export async function waitForGuiImageCommandTerminal(
         const hasPreviewImage = cards.some((card) =>
           Boolean(card.querySelector("img")),
         );
+        const imageMetrics = cards.flatMap((card) =>
+          Array.from(card.querySelectorAll("img")).map((image) => {
+            const rect = image.getBoundingClientRect();
+            return {
+              complete: image.complete,
+              naturalWidth: image.naturalWidth,
+              naturalHeight: image.naturalHeight,
+              width: rect.width,
+              height: rect.height,
+              dataImage: image.currentSrc.startsWith("data:image/"),
+            };
+          }),
+        );
+        const hasLoadedVisiblePreviewImage = imageMetrics.some(
+          (image) =>
+            image.complete === true &&
+            image.naturalWidth > 1 &&
+            image.naturalHeight > 1 &&
+            image.width > 16 &&
+            image.height > 16,
+        );
         const hasNaturalCompletionCaption =
           cardText.includes("搞定") && cardText.includes("已经做好了");
         const visiblePendingStatus =
@@ -611,6 +632,8 @@ export async function waitForGuiImageCommandTerminal(
           cardCount: cards.length,
           mediaCount: mediaNodes.length,
           hasPreviewImage,
+          hasLoadedVisiblePreviewImage,
+          imageMetrics,
           cardText,
           taskIdVisible: text.includes(taskId),
           terminalMessageVisible:
@@ -642,6 +665,7 @@ export async function waitForGuiImageCommandTerminal(
       snapshot.cardCount === 1 &&
       snapshot.mediaCount >= 1 &&
       snapshot.hasPreviewImage === true &&
+      snapshot.hasLoadedVisiblePreviewImage === true &&
       hasTerminalResultCaption &&
       snapshot.visiblePendingStatus === false &&
       snapshot.templateTaskIdVisible === false &&

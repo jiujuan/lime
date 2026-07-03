@@ -405,6 +405,8 @@ export function buildScenarioAssertions(context) {
                   summary.guiImageCommandTerminal?.cardCount === 1 &&
                   summary.guiImageCommandTerminal?.mediaCount >= 1 &&
                   summary.guiImageCommandTerminal?.hasPreviewImage === true &&
+                  summary.guiImageCommandTerminal
+                    ?.hasLoadedVisiblePreviewImage === true &&
                   summary.guiImageCommandTerminal?.visiblePendingStatus ===
                     false,
                 guiImageCommandSingleTaskCard:
@@ -418,6 +420,8 @@ export function buildScenarioAssertions(context) {
                   summary.guiImageCommandRestoredAfterReload?.mediaCount >= 1 &&
                   summary.guiImageCommandRestoredAfterReload
                     ?.hasPreviewImage === true &&
+                  summary.guiImageCommandRestoredAfterReload
+                    ?.hasLoadedVisiblePreviewImage === true &&
                   summary.guiImageCommandRestoredAfterReload
                     ?.visiblePendingStatus === false,
                 guiImageCommandNoDraftCard:

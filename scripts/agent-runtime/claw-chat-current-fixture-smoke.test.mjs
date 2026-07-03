@@ -188,6 +188,8 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("localImageServerApiKey");
     expect(content).toContain("/v1/images/generations");
     expect(content).toContain("IMAGE_PROVIDER_FIXTURE_DATA_URL");
+    expect(content).toContain("ADAAAAAbCAMAAAANt/x");
+    expect(content).not.toContain("AAAAEAAAABCAQAAAC1HAw");
   });
 
   it("proves agentSession/event notifications align with the same turn read model", () => {
@@ -419,10 +421,14 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("image_command_intent");
     expect(content).toContain("imageCommandLegacySkillLaunchNotSubmitted");
     expect(content).toContain("image_task");
-    expect(imageCommandContent).not.toContain('entrySource: "plain_image_intent"');
+    expect(imageCommandContent).not.toContain(
+      'entrySource: "plain_image_intent"',
+    );
     expect(imageCommandContent).toContain('entrySource: "at_image_command"');
     expect(imageCommandContent).not.toContain("IMAGE_COMMAND_SKILL_NAME");
-    expect(imageCommandContent).not.toContain("IMAGE_COMMAND_SKILL_TOOL_CALL_ID");
+    expect(imageCommandContent).not.toContain(
+      "IMAGE_COMMAND_SKILL_TOOL_CALL_ID",
+    );
     expect(imageCommandContent).toContain("image_command_workflow");
     expect(content).toContain("lime_create_image_generation_task");
     expect(content).toContain("IMAGE_COMMAND_CREATE_TASK_TOOL_CALL_ID");
@@ -472,14 +478,15 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("guiImageCommandTaskCardTerminal");
     expect(content).toContain("guiImageCommandSingleTaskCard");
     expect(content).toContain("guiImageCommandRestoredAfterReload");
+    expect(content).toContain("hasLoadedVisiblePreviewImage");
     expect(content).toContain("guiImageCommandNoDraftCard");
     expect(content).toContain("guiImageCommandNoTemplateTaskId");
+    expect(imageCommandContent).toContain("suppresses submission-summary chat");
     expect(imageCommandContent).toContain(
-      "suppresses submission-summary chat",
+      "snapshot.hasVisibleImageTaskProcess",
     );
-    expect(imageCommandContent).toContain("snapshot.hasVisibleImageTaskProcess");
     expect(imageCommandContent).not.toContain(
-      '(snapshot.hasAssistantSummary || snapshot.hasDoneText) &&',
+      "(snapshot.hasAssistantSummary || snapshot.hasDoneText) &&",
     );
     expect(imageCommandContent).not.toContain(
       "snapshot.hasPresentationCaption === true",
@@ -893,9 +900,28 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("worker_dogfood");
     expect(content).toContain("contentFactoryArticleWorkspaceWorkerTurnStart");
     expect(content).toContain(
+      "contentFactoryArticleWorkspaceWorkerHostGenerationFixture",
+    );
+    expect(content).toContain("contentFactoryHostGenerationAsterChatRequest");
+    expect(content).toContain("startContentFactoryHostGenerationFixture");
+    expect(content).toContain("fixture-openai");
+    expect(content).toContain("article-draft-document");
+    expect(content).not.toContain("受控宿主生成标题");
+    expect(content).not.toContain("内容工厂插件化写作：让文章生产可审计");
+    expect(content).toContain(
       "contentFactoryArticleWorkspaceWorkerTurnExecuted",
     );
     expect(content).toContain("content.article.generate");
+    expect(content).toContain(
+      "options.scenario === CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO",
+    );
+    expect(content).toContain(
+      "readModel.workerArticleObject?.hostManagedGenerationStatus ===",
+    );
+    expect(content).toContain('"completed"');
+    expect(content).not.toContain(
+      'readModel.workerArticleObject?.hostManagedGenerationStatus ===\n        "unavailable"',
+    );
     expect(content).toContain(
       "CONTENT_FACTORY_ARTICLE_WORKSPACE_REMOTE_REJECT_TURN_ID",
     );

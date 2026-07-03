@@ -7,6 +7,39 @@ import {
   runContentFactoryTask
 } from "../src/runtime/content-factory-worker.mjs";
 
+const HOST_GENERATED_MARKDOWN = [
+  "# 宿主生成标题",
+  "",
+  "导语先说明为什么内容生产链路必须收敛。",
+  "",
+  "## 第一节",
+  "",
+  "这里是宿主托管生成的正文。"
+].join("\n");
+
+function withHostManagedGeneration(request) {
+  return {
+    ...request,
+    hostManagedGeneration: {
+      schemaVersion: "lime.agent_app.host_managed_generation.v1",
+      source: "app_server_runtime_backend",
+      status: "completed",
+      provider: "test-provider",
+      model: "test-model",
+      outputs: [
+        {
+          id: "article-draft-document",
+          kind: "markdown_document",
+          targetObjectKind: "articleDraft",
+          outputField: "documentText",
+          contentType: "text/markdown",
+          content: HOST_GENERATED_MARKDOWN
+        }
+      ]
+    }
+  };
+}
+
 test("content.factory.generate outputs a full Article Workspace patch", () => {
   const result = runContentFactoryTask({
     taskKind: "content.factory.generate",
@@ -57,7 +90,7 @@ test("content.factory.generate outputs a full Article Workspace patch", () => {
 });
 
 test("host worker request returns artifact snapshot response", () => {
-  const response = handleContentFactoryWorkerRequest({
+  const response = handleContentFactoryWorkerRequest(withHostManagedGeneration({
     schemaVersion: "content-factory.worker-request.v1",
     appId: "content-factory-app",
     sessionId: "session-host-001",
@@ -75,7 +108,7 @@ test("host worker request returns artifact snapshot response", () => {
       directFilesystemAccess: false
     },
     requestedAt: "2026-06-28T00:00:00.000Z"
-  });
+  }));
 
   assert.equal(response.schemaVersion, "content-factory.worker-response.v1");
   assert.equal(response.status, "completed");
@@ -95,14 +128,9 @@ test("host worker request returns artifact snapshot response", () => {
   const article = patch.objects.find((object) => object.ref.kind === "articleDraft");
   assert.ok(article);
   assert.equal(Object.hasOwn(article.source, "markdown"), false);
-  assert.match(
-    article.source.documentText ?? "",
-    /Golang 学习路线/
-  );
-  assert.match(
-    article.source.finalMarkdown ?? "",
-    /Golang 学习路线/
-  );
+  assert.equal(article.title, "宿主生成标题");
+  assert.equal(article.source.documentText, HOST_GENERATED_MARKDOWN);
+  assert.equal(article.source.finalMarkdown, HOST_GENERATED_MARKDOWN);
   assert.match(
     article.source.processMarkdown ?? "",
     /待执行检索/
@@ -119,9 +147,10 @@ test("host worker request returns artifact snapshot response", () => {
   assert.ok(article?.source.writingPlan.length >= 5);
   assert.match(article?.source.processMarkdown ?? "", /## 检索轮次/);
   assert.match(article?.source.processMarkdown ?? "", /## 编排步骤/);
-  assert.match(article?.source.documentText ?? "", /## 第一阶段：打牢基础/);
-  assert.match(article?.source.documentText ?? "", /## 第二阶段：用项目建立反馈/);
-  assert.match(article?.source.documentText ?? "", /goroutine/);
+  assert.match(article?.source.documentText ?? "", /这里是宿主托管生成的正文/);
+  assert.doesNotMatch(article?.source.documentText ?? "", /## 第一阶段：打牢基础/);
+  assert.doesNotMatch(article?.source.documentText ?? "", /## 第二阶段：用项目建立反馈/);
+  assert.doesNotMatch(article?.source.documentText ?? "", /goroutine/);
   assert.doesNotMatch(article?.source.documentText ?? "", /## 待执行检索/);
   assert.doesNotMatch(article?.source.documentText ?? "", /## 编排步骤/);
   assert.doesNotMatch(article?.source.documentText ?? "", /不要只生成一段话/);
@@ -134,7 +163,7 @@ test("host worker request returns artifact snapshot response", () => {
 });
 
 test("host worker request emits paragraph-level artifact progress events", () => {
-  const request = {
+  const request = withHostManagedGeneration({
     schemaVersion: "content-factory.worker-request.v1",
     appId: "content-factory-app",
     sessionId: "session-host-001",
@@ -152,7 +181,7 @@ test("host worker request emits paragraph-level artifact progress events", () =>
       directFilesystemAccess: false
     },
     requestedAt: "2026-06-28T00:00:00.000Z"
-  };
+  });
 
   const progressEvents = buildContentFactoryWorkerProgressEvents(request);
   const response = handleContentFactoryWorkerRequest(request);
@@ -204,7 +233,7 @@ test("host worker request emits paragraph-level artifact progress events", () =>
     artifactProgressEvents[0].payload.artifact.metadata.contentFactoryWorkspacePatch.objects.find(
       (object) => object.ref.kind === "articleDraft"
     ).source.documentText,
-    /Golang 学习路线/
+    /# 宿主生成标题/
   );
 });
 
@@ -239,7 +268,7 @@ test("host managed generation output overrides deterministic article draft text"
           targetObjectKind: "articleDraft",
           outputField: "documentText",
           contentType: "text/markdown",
-          content: "# 宿主生成标题\n\n导语先说明为什么内容生产链路必须收敛。\n\n## 第一节\n\n这里是宿主托管生成的正文。"
+          content: HOST_GENERATED_MARKDOWN
         }
       ]
     },
@@ -251,8 +280,9 @@ test("host managed generation output overrides deterministic article draft text"
 
   assert.equal(
     article?.source.documentText,
-    "# 宿主生成标题\n\n导语先说明为什么内容生产链路必须收敛。\n\n## 第一节\n\n这里是宿主托管生成的正文。"
+    HOST_GENERATED_MARKDOWN
   );
+  assert.equal(article?.title, "宿主生成标题");
   assert.equal(article?.source.finalMarkdown, article?.source.documentText);
   assert.equal(article?.source.hostManagedGeneration?.status, "completed");
   assert.equal(article?.source.hostManagedGeneration?.provider, "test-provider");
@@ -262,8 +292,8 @@ test("host managed generation output overrides deterministic article draft text"
   ]);
 });
 
-test("missing host managed generation result falls back to unavailable status", () => {
-  const response = handleContentFactoryWorkerRequest({
+test("missing host managed generation result fails closed without template article", () => {
+  const request = {
     schemaVersion: "content-factory.worker-request.v1",
     appId: "content-factory-app",
     sessionId: "session-host-managed-missing-001",
@@ -291,18 +321,16 @@ test("missing host managed generation result falls back to unavailable status", 
       }
     },
     requestedAt: "2026-06-28T00:00:00.000Z"
+  };
+  const progressEvents = buildContentFactoryWorkerProgressEvents(request);
+  const response = handleContentFactoryWorkerRequest({
+    ...request
   });
 
-  const patch = response.artifacts[0].metadata.contentFactoryWorkspacePatch;
-  const article = patch.objects.find((object) => object.ref.kind === "articleDraft");
-
-  assert.equal(article?.source.hostManagedGeneration?.status, "unavailable");
-  assert.equal(
-    article?.source.hostManagedGeneration?.reasonCode,
-    "host_generation_unavailable"
-  );
-  assert.deepEqual(article?.source.hostManagedGeneration?.outputIds, []);
-  assert.match(article?.source.documentText ?? "", /内容工厂插件化写文章/);
+  assert.deepEqual(progressEvents, []);
+  assert.equal(response.status, "failed");
+  assert.equal(response.error?.code, "HOST_MANAGED_GENERATION_REQUIRED");
+  assert.deepEqual(response.artifacts, []);
 });
 
 test("content.image.generate selects image grid as the primary surface", () => {

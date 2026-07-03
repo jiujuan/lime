@@ -74,7 +74,7 @@ import { writeJsonFile } from "./claw-chat-current-fixture-utils.mjs";
 export const LOCAL_IMAGE_SERVER_API_KEY = "pc_claw_image_fixture_local_key";
 export const IMAGE_PROVIDER_FIXTURE_API_KEY = "sk-claw-image-fixture";
 export const IMAGE_PROVIDER_FIXTURE_DATA_URL =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAbCAMAAAANt/xAAAAAsVBMVEW398yz9M6v8tCr79Kn7dSj6taf6Nif59eE0bhWqYEuh1Efej+b5dqH1MEuh1KX4tx3x7IxhU2Bt4zV6s33/+iT4N6B0MVsqXuP3eCP3d8thlKL2+J1x8CH2ORMo4aD1uYrhVN/0+d70OkqhFR3zutFnolzy+1iuslvye9vyO8phFRrxvFfutVnw/NUsMSCt4xjwfVYttgng1VfvvdSsNE7mI8nglVbvPlXuftTt/1PtP9WydZkAAAA4UlEQVQ4y5XSx27DQAwE0EmcuI2binvv3XFP+f8PSwIb1EqgDnxnDhZLDmD1YoRXI2SM8GaEdyNkY3L5QpHFQj6XTYOSq1zhQ6VcSoGqo0Z6fhAGvkfWqjrUIw2yGT40yUZdhZZod2T+P9FptzToih69MOKx19WgLwb0nYDPQV+DoRgxcAIBR0MNxoIMXeRYg4mYJl6YTjSYiXniD/OZBguxTGxpudBgJdab2B0265UG28gudundVoW94/Ds0sdflw57HY6u0/nZ1vPpmAKXuOvtzvvtekmFTyN8GeHbCD9Gv4DxhnNTaC+HAAAAAElFTkSuQmCC";
 
 function writeFixtureConfig(configPath, overrides = {}) {
   const serverHost = overrides.serverHost ?? "127.0.0.1";

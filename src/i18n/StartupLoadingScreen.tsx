@@ -2,7 +2,11 @@ import { LIME_BRAND_LOGO_SRC, LIME_BRAND_NAME } from "@/lib/branding";
 import { useTranslation } from "react-i18next";
 
 export function StartupLoadingScreen() {
-  const { t } = useTranslation("common");
+  const { t: translate } = useTranslation("common");
+  const t = translate as unknown as (
+    key: string,
+    options?: Record<string, unknown>,
+  ) => string;
 
   return (
     <div

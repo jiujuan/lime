@@ -1,6 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
+  contentFactoryHostGenerationAsterChatRequest,
+  startContentFactoryHostGenerationFixture,
+} from "../lib/content-factory-host-generation-fixture.mjs";
+import {
   APP_SERVER_METHOD_AGENT_APP_INSTALLED_SAVE,
   APP_SERVER_METHOD_SESSION_READ,
   APP_SERVER_METHOD_SESSION_TURN_START,
@@ -49,47 +53,62 @@ export async function runWorkspacePatchWorkerDogfoodTurn({
   workspace,
   requestLog,
 }) {
-  const response = await invokeAppServerFromPage(
-    page,
-    APP_SERVER_METHOD_SESSION_TURN_START,
-    {
-      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
-      turnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TURN_ID,
-      input: {
-        text: "通过已安装内容工厂 worker 写一篇完整公众号文章。",
+  const hostGenerationFixture = await startContentFactoryHostGenerationFixture();
+  try {
+    const response = await invokeAppServerFromPage(
+      page,
+      APP_SERVER_METHOD_SESSION_TURN_START,
+      {
+        sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+        turnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TURN_ID,
+        input: {
+          text: "通过已安装内容工厂 worker 写一篇完整公众号文章。",
+        },
+        runtimeOptions: {
+          metadata: buildArticleWorkspaceWorkerMetadata(workspace),
+          hostOptions: {
+            asterChatRequest: contentFactoryHostGenerationAsterChatRequest(
+              hostGenerationFixture.baseUrl,
+            ),
+          },
+        },
+        queueIfBusy: false,
+        skipPreSubmitResume: true,
       },
-      runtimeOptions: {
-        metadata: buildArticleWorkspaceWorkerMetadata(workspace),
-      },
-      queueIfBusy: false,
-      skipPreSubmitResume: true,
-    },
-    requestLog,
-  );
+      requestLog,
+    );
 
-  const eventTypes = response.messages
-    .filter((message) => message?.method === "agentSession/event")
-    .map((message) => message?.params?.event?.type)
-    .filter(Boolean);
-  const turn =
-    response.result?.turn && typeof response.result.turn === "object"
-      ? response.result.turn
-      : {};
-  const readModel = options
-    ? await waitForWorkspacePatchWorkerTurnCompleted(page, options, requestLog)
-    : null;
+    const eventTypes = response.messages
+      .filter((message) => message?.method === "agentSession/event")
+      .map((message) => message?.params?.event?.type)
+      .filter(Boolean);
+    const turn =
+      response.result?.turn && typeof response.result.turn === "object"
+        ? response.result.turn
+        : {};
+    const readModel = options
+      ? await waitForWorkspacePatchWorkerTurnCompleted(
+          page,
+          options,
+          requestLog,
+        )
+      : null;
 
-  return sanitizeJson({
-    method: APP_SERVER_METHOD_SESSION_TURN_START,
-    turnId: turn.turnId ?? turn.turn_id ?? null,
-    turnStatus: turn.status ?? null,
-    taskId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TASK_ID,
-    eventTypes,
-    completed: eventTypes.includes("turn.completed"),
-    artifactSnapshotEmitted: eventTypes.includes("artifact.snapshot"),
-    runtimeErrorEmitted: eventTypes.includes("runtime.error"),
-    readModel,
-  });
+    return sanitizeJson({
+      method: APP_SERVER_METHOD_SESSION_TURN_START,
+      turnId: turn.turnId ?? turn.turn_id ?? null,
+      turnStatus: turn.status ?? null,
+      taskId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TASK_ID,
+      eventTypes,
+      completed: eventTypes.includes("turn.completed"),
+      artifactSnapshotEmitted: eventTypes.includes("artifact.snapshot"),
+      runtimeErrorEmitted: eventTypes.includes("runtime.error"),
+      hostGenerationFixture: hostGenerationFixture.summary(),
+      readModel,
+    });
+  } finally {
+    await hostGenerationFixture.close();
+  }
 }
 
 async function waitForWorkspacePatchWorkerTurnCompleted(

@@ -486,6 +486,14 @@ mod tests {
     use serde_json::json;
     use tempfile::TempDir;
 
+    const SEEDED_CONTENT_FACTORY_VERSION: &str = "2.2.2";
+    const SEEDED_CONTENT_FACTORY_SOURCE_URI: &str =
+        "https://seeded.local/agent-apps/content-factory-app/2.2.2.lapp";
+    const SEEDED_CONTENT_FACTORY_PACKAGE_HASH: &str =
+        "sha256:2b842c1401459db69e399002eeb2b7ead451e1fe3b8bab192c6a1ca7aa20d354";
+    const SEEDED_CONTENT_FACTORY_MANIFEST_HASH: &str =
+        "sha256:6df5c193ac89ff4400006a45d8340029446529d9b5953c7c5d03d4349f9dbfc3";
+
     const NOW: &str = "2026-03-13T01:00:00Z";
 
     #[test]
@@ -702,11 +710,11 @@ mod tests {
             "appId": "content-factory-app",
             "identity": {
                 "sourceKind": "cloud_release",
-                "sourceUri": "https://seeded.local/agent-apps/content-factory-app/2.0.0.lapp",
+                "sourceUri": SEEDED_CONTENT_FACTORY_SOURCE_URI,
                 "appId": "content-factory-app",
-                "appVersion": "2.0.0",
-                "packageHash": "package-fnv1a-a4d0e86f",
-                "manifestHash": "manifest-fnv1a-b840e5c9"
+                "appVersion": SEEDED_CONTENT_FACTORY_VERSION,
+                "packageHash": SEEDED_CONTENT_FACTORY_PACKAGE_HASH,
+                "manifestHash": SEEDED_CONTENT_FACTORY_MANIFEST_HASH
             },
             "manifest": {
                 "runtimePackage": {
@@ -732,7 +740,11 @@ mod tests {
         )
         .expect("materialize seeded package");
 
-        let cache_dir = data_root.join("packages").join("package-fnv1a-a4d0e86f");
+        let cache_dir = data_root
+            .join("packages")
+            .join(agent_app_packages::safe_hash_path_segment(
+                SEEDED_CONTENT_FACTORY_PACKAGE_HASH,
+            ));
         assert!(cache_dir.join("package.json").is_file());
         assert!(cache_dir.join("plugin.json").is_file());
         assert!(cache_dir.join("app.workbench.yaml").is_file());
@@ -751,7 +763,7 @@ mod tests {
             "identity": {
                 "sourceKind": "cloud_release",
                 "sourceUri": "https://packages.limecloud.example/content-factory-app.lapp",
-                "packageHash": "package-fnv1a-a4d0e86f"
+                "packageHash": SEEDED_CONTENT_FACTORY_PACKAGE_HASH
             },
             "manifest": {
                 "runtimePackage": {
@@ -814,14 +826,14 @@ mod tests {
             "appId": "content-factory-app",
             "identity": {
                 "sourceKind": "cloud_release",
-                "sourceUri": "https://seeded.local/agent-apps/content-factory-app/2.0.0.lapp",
+                "sourceUri": SEEDED_CONTENT_FACTORY_SOURCE_URI,
                 "appId": "content-factory-app",
-                "appVersion": "2.0.0",
-                "packageHash": "package-fnv1a-a4d0e86f",
-                "manifestHash": "manifest-fnv1a-b840e5c9"
+                "appVersion": SEEDED_CONTENT_FACTORY_VERSION,
+                "packageHash": SEEDED_CONTENT_FACTORY_PACKAGE_HASH,
+                "manifestHash": SEEDED_CONTENT_FACTORY_MANIFEST_HASH
             },
             "manifest": {
-                "version": "2.0.0",
+                "version": SEEDED_CONTENT_FACTORY_VERSION,
                 "runtimePackage": {
                     "worker": {
                         "entrypoint": "./src/runtime/content-factory-worker.mjs"

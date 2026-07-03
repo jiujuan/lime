@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Boxes, ChevronRight, Info, RefreshCw, Search } from "lucide-react";
+import {
+  Boxes,
+  ChevronRight,
+  FolderOpen,
+  Info,
+  RefreshCw,
+  Search,
+} from "lucide-react";
 import {
   resolveOemCloudRuntimeContext,
   type OemCloudRuntimeContext,
@@ -14,6 +21,7 @@ import {
   type PluginMarketplaceRegistryLoader,
 } from "./marketplace/usePluginMarketplaceRegistry";
 import {
+  performPluginMarketplaceLocalInstall,
   performPluginMarketplaceAction,
   resolvePluginMarketplaceItemLabel,
   submitPluginMarketplaceRegistrationCode,
@@ -105,6 +113,7 @@ export function PluginMarketplacePage({
     );
   const [category, setCategory] = useState(pageParams?.category ?? "");
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
+  const [localInstallPending, setLocalInstallPending] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [suppressedRegistryError, setSuppressedRegistryError] = useState<
     string | null
@@ -282,6 +291,31 @@ export function PluginMarketplacePage({
     }
   }
 
+  async function handleInstallLocalPackage() {
+    setLocalInstallPending(true);
+    setActionError(null);
+    setSuppressedRegistryError(null);
+    try {
+      const result = await performPluginMarketplaceLocalInstall(
+        {
+          title: t("plugin.marketplace.localInstall.dialogTitle"),
+        },
+        resolvedActionDeps,
+      );
+      if (result.status !== "performed") {
+        return;
+      }
+      registry.refresh().catch((error) => {
+        setSuppressedRegistryError(actionRefreshErrorMessage(error));
+        console.warn("[plugin-marketplace] local install refresh failed", error);
+      });
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setLocalInstallPending(false);
+    }
+  }
+
   function handleOpenSkill(
     item: PluginMarketplaceViewItem,
     skill: PluginSkillDeclaration,
@@ -420,18 +454,33 @@ export function PluginMarketplacePage({
             {t("plugin.marketplace.description")}
           </p>
         </div>
-        <button
-          type="button"
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-[color:var(--lime-surface-border,#e2e8f0)] bg-[color:var(--lime-surface,#fff)] px-4 text-sm font-semibold text-[color:var(--lime-text-strong,#0f172a)] transition hover:bg-[color:var(--lime-surface-hover,#f8fafc)] disabled:cursor-not-allowed disabled:opacity-60"
-          data-testid="plugin-marketplace-refresh"
-          disabled={registry.loading}
-          onClick={() => void registry.refresh().catch(() => undefined)}
-        >
-          <RefreshCw className="size-4" aria-hidden="true" />
-          {registry.loading
-            ? t("plugin.marketplace.loading")
-            : t("plugin.marketplace.refresh")}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-slate-950 bg-slate-950 px-4 text-sm font-semibold text-white shadow-sm shadow-slate-950/10 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            data-testid="plugin-marketplace-local-install"
+            disabled={localInstallPending}
+            title={t("plugin.marketplace.localInstall.actionTitle")}
+            onClick={() => void handleInstallLocalPackage()}
+          >
+            <FolderOpen className="size-4" aria-hidden="true" />
+            {localInstallPending
+              ? t("plugin.marketplace.localInstall.pending")
+              : t("plugin.marketplace.localInstall.action")}
+          </button>
+          <button
+            type="button"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-[color:var(--lime-surface-border,#e2e8f0)] bg-[color:var(--lime-surface,#fff)] px-4 text-sm font-semibold text-[color:var(--lime-text-strong,#0f172a)] transition hover:bg-[color:var(--lime-surface-hover,#f8fafc)] disabled:cursor-not-allowed disabled:opacity-60"
+            data-testid="plugin-marketplace-refresh"
+            disabled={registry.loading}
+            onClick={() => void registry.refresh().catch(() => undefined)}
+          >
+            <RefreshCw className="size-4" aria-hidden="true" />
+            {registry.loading
+              ? t("plugin.marketplace.loading")
+              : t("plugin.marketplace.refresh")}
+          </button>
+        </div>
       </header>
 
       <section className="grid gap-3 md:grid-cols-5">

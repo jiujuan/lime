@@ -71,7 +71,11 @@ export function buildVitestLayerReport({
     bucket.files.push(entry.file);
 
     const unitMigrationHints = entry.unitMigrationHints ?? [];
-    if (entry.layer === "component" && unitMigrationHints.length > 0) {
+    if (
+      entry.layer === "component" &&
+      entry.explicitLayer !== "unit" &&
+      unitMigrationHints.length > 0
+    ) {
       componentUnitMigrationCandidates.total += 1;
       componentUnitMigrationCandidates.files.push({
         file: entry.file,

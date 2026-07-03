@@ -5,6 +5,8 @@ use std::path::Path;
 use std::process::Command;
 use std::sync::Arc;
 
+const HOST_GENERATED_ARTICLE_MARKDOWN: &str = "# 人才选聘不能只看简历关键词\n\n人才选聘最难的地方，不是筛掉明显不合适的人，而是识别真正能把问题推进的人。\n\n## 先定义岗位要解决的问题\n\n招聘前先写清楚这个岗位未来三个月要交付什么。\n\n## 用任务验证真实能力\n\n面试可以围绕一个小型业务任务展开，让候选人说明拆解思路、取舍依据和风险判断。";
+
 #[tokio::test]
 async fn article_workspace_turn_runs_installed_worker_and_materializes_workspace_patch() {
     let Some(fixture_root) = content_factory_fixture_root() else {
@@ -101,11 +103,14 @@ async fn article_workspace_turn_runs_installed_worker_and_materializes_workspace
         .expect("article object");
     assert!(article["source"]["hostManagedGeneration"].is_null());
     let article_title = article["title"].as_str().expect("article title");
-    assert!(article_title.contains("学习路线：从基础语法到工程实战"));
+    assert!(!article_title.contains("学习路线：从基础语法到工程实战"));
+    assert!(article_title.contains("先把问题说清楚"));
     let article_document = article["source"]["documentText"]
         .as_str()
         .expect("article documentText");
-    assert!(article_document.contains("## 第一阶段：打牢基础"));
+    assert!(!article_document.contains("## 第一阶段：打牢基础"));
+    assert!(!article_document.contains("学习路线：从基础语法到工程实战"));
+    assert!(article_document.contains("## 把核心判断写成一句话"));
     assert!(article_document.contains("## 结尾"));
     assert_eq!(
         article["source"]["finalMarkdown"],
@@ -139,7 +144,7 @@ async fn article_generation_worker_emits_initial_streaming_workspace_snapshot() 
     let event_log_root = tempfile::tempdir().expect("event log root");
     let event_log_writer =
         Arc::new(EventLogWriter::new(event_log_root.path()).expect("event log writer"));
-    let core = runtime_core_with_sidecar(&sidecar_root)
+    let core = runtime_core_with_sidecar_and_host_generation(&sidecar_root)
         .with_event_log_writer(event_log_writer.clone())
         .with_app_data_source(Arc::new(data_source));
     let session = core
@@ -428,8 +433,10 @@ async fn article_generation_worker_emits_initial_streaming_workspace_snapshot() 
     let article_document = article["source"]["documentText"]
         .as_str()
         .expect("article documentText");
-    assert!(article_document.contains("## 第一阶段：打牢基础"));
-    assert!(article_document.contains("## 结尾"));
+    assert!(article_document.contains("## 先定义岗位要解决的问题"));
+    assert!(article_document.contains("## 用任务验证真实能力"));
+    assert!(!article_document.contains("## 第一阶段：打牢基础"));
+    assert!(!article_document.contains("学习路线：从基础语法到工程实战"));
     assert_eq!(
         article["source"]["finalMarkdown"],
         article["source"]["documentText"]
@@ -978,6 +985,74 @@ fn runtime_core_with_sidecar(sidecar_root: &tempfile::TempDir) -> RuntimeCore {
     RuntimeCore::default().with_sidecar_store(Arc::new(
         SidecarStore::new(sidecar_root.path()).expect("sidecar store"),
     ))
+}
+
+fn runtime_core_with_sidecar_and_host_generation(sidecar_root: &tempfile::TempDir) -> RuntimeCore {
+    RuntimeCore::with_backend(Arc::new(HostManagedArticleGenerationBackend)).with_sidecar_store(
+        Arc::new(SidecarStore::new(sidecar_root.path()).expect("sidecar store")),
+    )
+}
+
+struct HostManagedArticleGenerationBackend;
+
+#[async_trait]
+impl ExecutionBackend for HostManagedArticleGenerationBackend {
+    async fn start_turn(
+        &self,
+        _request: ExecutionRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+
+    async fn cancel_turn(
+        &self,
+        _request: CancelExecutionRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+
+    async fn respond_action(
+        &self,
+        _request: ActionRespondRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+
+    async fn prepare_agent_app_worker_request(
+        &self,
+        _request: &ExecutionRequest,
+        worker_request: &mut serde_json::Value,
+    ) -> Result<(), RuntimeCoreError> {
+        if worker_request["taskKind"] != "content.article.generate" {
+            return Ok(());
+        }
+        let payload = json!({
+            "schemaVersion": "lime.agent_app.host_managed_generation.v1",
+            "source": "test_host_generation",
+            "status": "completed",
+            "provider": "test-provider",
+            "model": "test-model",
+            "outputs": [
+                {
+                    "id": "article-draft-document",
+                    "kind": "markdown_document",
+                    "targetObjectKind": "articleDraft",
+                    "outputField": "documentText",
+                    "contentType": "text/markdown",
+                    "content": HOST_GENERATED_ARTICLE_MARKDOWN
+                }
+            ]
+        });
+        worker_request["hostManagedGeneration"] = payload.clone();
+        if !worker_request["runtime"].is_object() {
+            worker_request["runtime"] = json!({});
+        }
+        worker_request["runtime"]["hostManagedGenerationResult"] = payload;
+        Ok(())
+    }
 }
 
 fn content_factory_installed_state(fixture_root: &std::path::Path) -> serde_json::Value {

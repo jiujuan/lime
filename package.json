@@ -242,10 +242,11 @@
     "agent-app:connector-production-preflight": "node scripts/agent-app/connector-production-preflight.mjs",
     "agent-app:connector-production-delivery-gate": "node scripts/agent-app/connector-production-delivery-gate.mjs",
     "agent-app:connector-production-webhook-delivery": "node scripts/agent-app/connector-production-webhook-delivery.mjs",
+    "agent-app:content-factory-signed-release-gate": "node scripts/agent-app/content-factory-signed-release-gate.mjs",
     "smoke:content-factory-package": "node scripts/agent-app/content-factory-package-smoke.mjs",
-    "smoke:content-factory-current-turn": "node scripts/agent-app/content-factory-current-turn-smoke.mjs",
+    "smoke:content-factory-current-turn": "node scripts/agent-app/content-factory-current-turn-smoke.mjs --host-generation-fixture",
     "smoke:content-factory-current-turn:host-generation": "node scripts/agent-app/content-factory-current-turn-smoke.mjs --host-generation-fixture",
-    "smoke:content-factory-current-turn:cloud-release": "node scripts/agent-app/content-factory-current-turn-smoke.mjs --cloud-release-fixture",
+    "smoke:content-factory-current-turn:cloud-release": "node scripts/agent-app/content-factory-current-turn-smoke.mjs --cloud-release-fixture --host-generation-fixture",
     "smoke:content-factory-current-turn:cloud-release-host-generation": "node scripts/agent-app/content-factory-current-turn-smoke.mjs --cloud-release-fixture --host-generation-fixture",
     "smoke:agent-app-lab": "node scripts/agent-app/lab-smoke.mjs"
   },

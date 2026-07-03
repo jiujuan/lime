@@ -195,6 +195,14 @@ function resolveScenarioBackendEnv(options, runtimeEnv) {
       APP_SERVER_BACKEND_TIMEOUT_MS: "10000",
     };
   }
+  if (options.scenario === CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO) {
+    return {
+      APP_SERVER_BACKEND_MODE: "runtime",
+      APP_SERVER_BACKEND_COMMAND: "",
+      APP_SERVER_BACKEND_ARGS: "",
+      APP_SERVER_BACKEND_TIMEOUT_MS: "10000",
+    };
+  }
 
   return {
     APP_SERVER_BACKEND_MODE: "external",
@@ -338,6 +346,7 @@ async function run() {
     contentFactoryArticleWorkspaceInstalledStateSave: null,
     contentFactoryArticleWorkspaceRuntimeEventsAppend: null,
     contentFactoryArticleWorkspaceWorkerTurnStart: null,
+    contentFactoryArticleWorkspaceWorkerHostGenerationFixture: null,
     contentFactoryArticleWorkspaceRightSurfaceRequest: null,
     guiContentFactoryArticleWorkspaceSessionVisible: null,
     guiContentFactoryArticleWorkspaceSessionOpened: null,

@@ -1,5 +1,7 @@
 import { Buffer } from "node:buffer";
-import { webcrypto } from "node:crypto";
+import { generateKeyPairSync, webcrypto } from "node:crypto";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import type {
   AgentAppCloudReleaseSignatureProof,
@@ -15,6 +17,29 @@ const PACKAGE_HASH =
   "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const MANIFEST_HASH =
   "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+interface ContentFactoryReleaseSignatureModule {
+  buildReleaseSignature(params: {
+    release: {
+      appId: string;
+      version: string;
+      releaseId?: string;
+      tenantId?: string;
+      tenantEnablementRef?: string;
+      channel?: string;
+      packageUrl: string;
+      packageHash: string;
+      manifestHash: string;
+      signatureRef: string;
+    };
+    privateKeyPem: string;
+    publicKeyId: string;
+    signedAt: string;
+  }): {
+    proof: AgentAppCloudReleaseSignatureProof;
+    trustRoot: AgentAppCloudReleaseSignatureTrustRoot;
+  };
+}
 
 interface SignedFixtureKeyMaterial {
   privateKey: CryptoKey;
@@ -75,10 +100,12 @@ async function getSignedFixtureKeyMaterial(): Promise<SignedFixtureKeyMaterial> 
   return signedFixtureKeyMaterial;
 }
 
-async function buildSignedFixture(options: {
-  proof?: Partial<AgentAppCloudReleaseSignatureProof>;
-  trustRoot?: Partial<AgentAppCloudReleaseSignatureTrustRoot>;
-} = {}): Promise<{
+async function buildSignedFixture(
+  options: {
+    proof?: Partial<AgentAppCloudReleaseSignatureProof>;
+    trustRoot?: Partial<AgentAppCloudReleaseSignatureTrustRoot>;
+  } = {},
+): Promise<{
   app: CloudBootstrapApp;
   trustRoot: AgentAppCloudReleaseSignatureTrustRoot;
 }> {
@@ -124,6 +151,15 @@ async function buildSignedFixture(options: {
 
 function toBase64(value: ArrayBuffer): string {
   return Buffer.from(value).toString("base64");
+}
+
+function buildRsaPrivateKeyPem(): string {
+  const { privateKey } = generateKeyPairSync("rsa", {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: "spki", format: "pem" },
+    privateKeyEncoding: { type: "pkcs8", format: "pem" },
+  });
+  return privateKey;
 }
 
 describe("cloudReleaseSignature", () => {
@@ -300,5 +336,47 @@ describe("cloudReleaseSignature", () => {
         crypto: webcrypto as unknown as Crypto,
       }),
     ).resolves.toBe("declared");
+  });
+
+  it("应接受 content-factory release:sign 生成的签名证明", async () => {
+    const signatureModule = (await import(
+      pathToFileURL(
+        resolve(
+          process.cwd(),
+          "src/features/agent-app/testing/fixtures/package-root/scripts/sign-release.mjs",
+        ),
+      ).href
+    )) as ContentFactoryReleaseSignatureModule;
+    const release = {
+      appId: "content-factory-app",
+      version: "2.2.2",
+      releaseId: "agent-app-release-test",
+      tenantId: "tenant-0001",
+      tenantEnablementRef: "tenant-agent-app-test",
+      channel: "stable",
+      packageUrl:
+        "https://updates.limeai.run/agent-apps/content-factory-app-2.2.2.lapp",
+      packageHash: PACKAGE_HASH,
+      manifestHash: MANIFEST_HASH,
+      signatureRef: "sigstore:content-factory-app@2.2.2",
+    };
+    const signature = signatureModule.buildReleaseSignature({
+      release,
+      privateKeyPem: buildRsaPrivateKeyPem(),
+      publicKeyId: "agent-app-root-2026",
+      signedAt: "2026-07-03T00:00:00.000Z",
+    });
+
+    await expect(
+      verifyCloudReleaseSignature({
+        app: buildCloudApp({
+          ...release,
+          signatureProof: signature.proof,
+          registrationState: "active",
+        }),
+        trustRoots: [signature.trustRoot],
+        crypto: webcrypto as unknown as Crypto,
+      }),
+    ).resolves.toBe("verified");
   });
 });

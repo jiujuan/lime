@@ -2,7 +2,7 @@
   "manifestVersion": "0.11.0",
   "name": "content-factory-app",
   "displayName": "内容工厂",
-  "version": "2.0.0",
+  "version": "2.2.2",
   "status": "ready",
   "appType": "domain-app",
   "profiles": ["workbench"],

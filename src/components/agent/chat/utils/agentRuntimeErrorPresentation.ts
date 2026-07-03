@@ -41,12 +41,15 @@ function readAgentRuntimeCopy(key: string, fallback: string): string {
     return fallback;
   }
 
-  return String(
-    i18n.t(key, {
-      ns: "agent",
-      defaultValue: fallback,
-    }),
-  );
+  const translate = i18n.t as unknown as (
+    key: string,
+    options?: Record<string, unknown>,
+  ) => string;
+
+  return translate(key, {
+    ns: "agent",
+    defaultValue: fallback,
+  });
 }
 
 function isLikelyProviderAuthError(message: string): boolean {

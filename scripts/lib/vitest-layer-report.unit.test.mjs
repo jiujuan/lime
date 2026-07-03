@@ -136,4 +136,37 @@ describe("vitest-layer-report", () => {
       },
     ]);
   });
+
+  it("显式 unit 测试不应再计入 component VM 迁移候选", () => {
+    const report = buildVitestLayerReport({
+      entries: [
+        {
+          file: "src/components/FooViewModel.unit.test.ts",
+          layer: "component",
+          explicitLayer: "unit",
+          live: false,
+          reasons: ["browser-dom"],
+          unitMigrationHints: ["large-component-file"],
+        },
+        {
+          file: "src/components/Foo.test.tsx",
+          layer: "component",
+          explicitLayer: null,
+          live: false,
+          reasons: ["react-testing-library"],
+          unitMigrationHints: ["large-component-file"],
+        },
+      ],
+    });
+
+    expect(report.componentUnitMigrationCandidates).toMatchObject({
+      total: 1,
+      files: [
+        {
+          file: "src/components/Foo.test.tsx",
+          hints: ["large-component-file"],
+        },
+      ],
+    });
+  });
 });

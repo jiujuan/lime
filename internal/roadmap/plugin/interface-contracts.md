@@ -6,7 +6,7 @@
 ## 1. 架构不变量
 
 1. 插件是安装、授权、发布的根对象。
-2. `工作台应用` 是插件子类型，不是另一个并列根产品。
+2. `插件工作区能力` 是插件内部的可选 UI 能力，不是另一个并列根产品。
 3. 右侧 Renderer 由 Host 管壳子，插件只提供数据和动作。
 4. 激活必须显式，不能语义猜测。
 5. 历史恢复必须能恢复插件上下文和主产物。
@@ -23,7 +23,7 @@ export interface PluginManifest {
   categories?: string[];
   capabilities?: string[];
   skills?: SkillDeclaration[];
-  agentApps?: AgentAppDeclaration[];
+  workspaceApps?: PluginWorkspaceAppDeclaration[];
   connectors?: ConnectorDeclaration[];
   mcpServers?: McpServerDeclaration[];
   artifactRenderers?: ArtifactRendererDeclaration[];
@@ -44,10 +44,10 @@ export interface SkillDeclaration {
 }
 ```
 
-### 2.2 AgentAppDeclaration
+### 2.2 PluginWorkspaceAppDeclaration
 
 ```ts
-export interface AgentAppDeclaration {
+export interface PluginWorkspaceAppDeclaration {
   id: string;
   title: string;
   description?: string;
@@ -74,7 +74,7 @@ export interface ConnectorDeclaration {
 export interface ActivationEntryDeclaration {
   key: string;
   title: string;
-  kind: "plugin" | "agentApp" | "skill" | "command";
+  kind: "plugin" | "workspaceApp" | "skill" | "command";
   intent?: "manual" | "at_command" | "history_restore" | "chip";
   defaultObjectKind?: string;
 }
@@ -87,6 +87,7 @@ export interface ActivationEntryDeclaration {
 - 插件不得把未声明的任意 `@模型名`、自然语言词或 marketplace 名称自动升级成命令入口。
 - 插件 command entry 必须走显式 activation metadata，进入 `agentSession/turn/start` current 主链；不得绕过 App Server 或直接调用 provider / filesystem。
 - 客户端可以把插件 command entry 合并到 `@` 选择器展示，但解析结果必须保留 provenance：`platform_command` 与 `plugin_activation_command` 不能混同。
+- 旧 `kind="agentApp"` 只允许在迁移输入 adapter 中读取并投影为 `workspaceApp`；current manifest 不再声明 `agentApp` entry。
 
 ## 3. Activation Context
 
@@ -94,7 +95,7 @@ export interface ActivationEntryDeclaration {
 export interface PluginActivationContext {
   sessionId: string;
   pluginId: string;
-  activeAgentAppId?: string;
+  activeWorkspaceAppId?: string;
   activeEntryKey?: string;
   selectedSkillKeys?: string[];
   selectedObjectRef?: PluginObjectRef;
@@ -103,6 +104,11 @@ export interface PluginActivationContext {
   source: "user" | "history" | "route" | "restore";
 }
 ```
+
+迁移兼容：
+
+- 旧 manifest 中的 `agentApps?: AgentAppDeclaration[]` 只作为 migration / compat 输入，读取后必须投影为 `workspaceApps?: PluginWorkspaceAppDeclaration[]`。
+- 旧 session metadata 中的 `activeAgentAppId` 只作为恢复历史会话的只读输入；新写入必须使用 `activeWorkspaceAppId`。
 
 ## 4. Plugin Object Ref
 
