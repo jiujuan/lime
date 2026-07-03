@@ -175,7 +175,7 @@ export interface AgentWorkbenchSkillSelection<Skill extends AgentWorkbenchSkillL
 }
 
 export interface AgentTurnStartPayloadInput {
-  agentAppId: string;
+  pluginId: string;
   workspacePath: string;
   prompt: string;
   capabilityId?: string;
@@ -195,7 +195,7 @@ export interface AgentTurnStartPayloadInput {
 }
 
 export interface AgentTurnStartPayload {
-  agentAppId: string;
+  pluginId: string;
   taskId?: string;
   prompt: string;
   input?: Record<string, unknown>;
@@ -668,7 +668,7 @@ export function buildAgentTurnStartPayload(input: AgentTurnStartPayloadInput): A
     ...(input.metadata ?? {}),
   };
   return {
-    agentAppId: input.agentAppId,
+    pluginId: input.pluginId,
     taskId: input.workflowId,
     prompt: input.prompt,
     input: input.input,

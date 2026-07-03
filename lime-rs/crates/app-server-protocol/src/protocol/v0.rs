@@ -1,4 +1,3 @@
-mod agent_apps;
 mod agent_session;
 mod automation;
 mod browser_session;
@@ -16,6 +15,7 @@ mod memory_store;
 mod method_names;
 mod model;
 mod observability;
+mod plugins;
 mod project_git;
 mod project_materials;
 mod project_shell;
@@ -27,7 +27,6 @@ mod skills;
 mod voice;
 mod workspaces;
 
-pub use agent_apps::*;
 pub use agent_session::*;
 pub use automation::*;
 pub use browser_session::*;
@@ -45,6 +44,7 @@ pub use memory_store::*;
 pub use method_names::*;
 pub use model::*;
 pub use observability::*;
+pub use plugins::*;
 pub use project_git::*;
 pub use project_materials::*;
 pub use project_shell::*;

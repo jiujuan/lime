@@ -46,7 +46,7 @@ export interface PluginWorkspaceLayoutState {
 export interface PluginHistoryRestoreSnapshot {
   sessionId: string;
   pluginId?: string;
-  activeAgentAppId?: string;
+  activePluginUiId?: string;
   activeEntryKey?: string;
   selectedSkillKeys?: readonly string[];
   pluginWorkspace?: PluginSessionWorkspace;
@@ -62,7 +62,7 @@ export interface PluginHistoryRestoreProjection {
   status: PluginHistoryRestoreStatus;
   sessionId: string;
   pluginId?: string;
-  activeAgentAppId?: string;
+  activePluginUiId?: string;
   activeEntryKey?: string;
   selectedSkillKeys: string[];
   activationContext?: PluginActivationContext;
@@ -292,7 +292,7 @@ function fallbackProjection(params: {
         : "chat_only",
     sessionId: params.snapshot.sessionId,
     pluginId: params.pluginId,
-    activeAgentAppId: params.snapshot.activeAgentAppId,
+    activePluginUiId: params.snapshot.activePluginUiId,
     activeEntryKey: params.snapshot.activeEntryKey,
     selectedSkillKeys: [...(params.snapshot.selectedSkillKeys ?? [])],
     artifactRefs: params.artifactRefs,
@@ -396,7 +396,7 @@ export function buildPluginHistoryRestoreProjection({
   const activationContext: PluginActivationContext = {
     sessionId: snapshot.sessionId,
     pluginId,
-    activeAgentAppId: snapshot.activeAgentAppId,
+    activePluginUiId: snapshot.activePluginUiId,
     activeEntryKey: snapshot.activeEntryKey,
     selectedSkillKeys: [...(snapshot.selectedSkillKeys ?? [])],
     selectedObjectRef,
@@ -409,7 +409,7 @@ export function buildPluginHistoryRestoreProjection({
     status: "restored",
     sessionId: snapshot.sessionId,
     pluginId,
-    activeAgentAppId: snapshot.activeAgentAppId,
+    activePluginUiId: snapshot.activePluginUiId,
     activeEntryKey: snapshot.activeEntryKey,
     selectedSkillKeys: [...(snapshot.selectedSkillKeys ?? [])],
     activationContext,

@@ -528,16 +528,16 @@ fn worker_evidence_from_event(event: &AgentEvent) -> Option<Value> {
     let worker_metadata = worker_metadata_from_event(event);
     let payload_source = string_field(&event.payload, &["source"]);
     let is_worker_event =
-        worker_metadata.is_some() || payload_source.as_deref() == Some("agent_app_task_worker");
+        worker_metadata.is_some() || payload_source.as_deref() == Some("plugin_task_worker");
     if !is_worker_event {
         return None;
     }
 
     let artifact = event.payload.get("artifact").unwrap_or(&event.payload);
     let status = match event.event_type.as_str() {
-        "agent_app_worker.retry" | "runtime.error" | "turn.failed" => "failed".to_string(),
+        "plugin_worker.retry" | "runtime.error" | "turn.failed" => "failed".to_string(),
         "artifact.snapshot" => "completed".to_string(),
-        "agent_app_worker.hook" => {
+        "plugin_worker.hook" => {
             string_field(&event.payload, &["status"]).unwrap_or_else(|| "unknown".to_string())
         }
         _ => "unknown".to_string(),
@@ -559,7 +559,7 @@ fn worker_evidence_from_event(event: &AgentEvent) -> Option<Value> {
         "turnId": worker_string_field(worker_metadata, &["turnId", "turn_id"])
             .or_else(|| event.turn_id.clone()),
         "status": status,
-        "source": "agent_app_task_worker",
+        "source": "plugin_task_worker",
         "eventType": event.event_type,
         "appId": worker_string_field(worker_metadata, &["appId", "app_id"])
             .or_else(|| string_field(&event.payload, &["appId", "app_id"])),
@@ -648,7 +648,7 @@ fn worker_evidence_item_from_patch(
         .or_insert_with(|| json!(event.event_type));
     object
         .entry("source".to_string())
-        .or_insert_with(|| json!("agent_app_task_worker"));
+        .or_insert_with(|| json!("plugin_task_worker"));
     object
         .entry("updatedAt".to_string())
         .or_insert_with(|| json!(event.timestamp));
@@ -661,7 +661,7 @@ fn worker_evidence_dedupe_key(worker_evidence: &Value) -> Option<String> {
     let status = string_field(worker_evidence, &["status"]).unwrap_or_default();
     let event_type =
         string_field(worker_evidence, &["eventType", "event_type"]).unwrap_or_default();
-    if event_type == "agent_app_worker.hook" {
+    if event_type == "plugin_worker.hook" {
         let hook_scope =
             string_field(worker_evidence, &["hookScope", "hook_scope"]).unwrap_or_default();
         let hook_key = string_field(worker_evidence, &["hookKey", "hook_key"]).unwrap_or_default();
@@ -731,27 +731,27 @@ fn worker_metadata_from_event(event: &AgentEvent) -> Option<&Value> {
     let payload = &event.payload;
     let artifact = payload.get("artifact");
     payload
-        .get("agentAppWorker")
-        .or_else(|| payload.get("agent_app_worker"))
+        .get("pluginWorker")
+        .or_else(|| payload.get("plugin_worker"))
         .or_else(|| {
             payload
                 .get("metadata")
-                .and_then(|metadata| metadata.get("agentAppWorker"))
+                .and_then(|metadata| metadata.get("pluginWorker"))
         })
         .or_else(|| {
             payload
                 .get("metadata")
-                .and_then(|metadata| metadata.get("agent_app_worker"))
+                .and_then(|metadata| metadata.get("plugin_worker"))
         })
         .or_else(|| {
             artifact
                 .and_then(|artifact| artifact.get("metadata"))
-                .and_then(|metadata| metadata.get("agentAppWorker"))
+                .and_then(|metadata| metadata.get("pluginWorker"))
         })
         .or_else(|| {
             artifact
                 .and_then(|artifact| artifact.get("metadata"))
-                .and_then(|metadata| metadata.get("agent_app_worker"))
+                .and_then(|metadata| metadata.get("plugin_worker"))
         })
         .filter(|value| value.is_object())
 }

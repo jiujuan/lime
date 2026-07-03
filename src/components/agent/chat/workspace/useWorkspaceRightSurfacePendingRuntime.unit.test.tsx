@@ -124,12 +124,12 @@ const appDeclaredRendererPendingRequest: WorkspaceRightSurfacePendingRequest = {
     },
   },
 };
-const agentAppSurfacePendingRequest: WorkspaceRightSurfacePendingRequest = {
+const pluginSurfacePendingRequest: WorkspaceRightSurfacePendingRequest = {
   ...pendingRequest,
-  requestId: "right_surface_agent_app_1",
+  requestId: "right_surface_plugin_1",
   surfaceKind: "appSurface",
   origin: "runtime",
-  reason: "agent_app_surface_ready",
+  reason: "plugin_surface_ready",
   candidateId: "content-factory-app",
   metadata: {
     appId: "content-factory-app",
@@ -138,7 +138,7 @@ const agentAppSurfacePendingRequest: WorkspaceRightSurfacePendingRequest = {
       activeStrategy: "controlledBrowserWindow",
       supportedStrategies: ["controlledBrowserWindow", "webContentsView"],
       entryUrl: "http://127.0.0.1:4199/dashboard",
-      containerId: "agent-app-shell-content-factory-app-standalone",
+      containerId: "plugin-shell-content-factory-app-standalone",
       embedding: {
         standaloneWindow: true,
         rightSurfaceDock: true,
@@ -575,38 +575,38 @@ describe("useWorkspaceRightSurfacePendingRuntime", () => {
     expect(getValue().pendingIntents).toEqual([]);
   });
 
-  it("应把 appSurface pending metadata 投影为右侧 Agent App Surface", async () => {
+  it("应把 appSurface pending metadata 投影为右侧 Plugin Surface", async () => {
     const listPending = vi.fn(async () => ({
-      pending: [agentAppSurfacePendingRequest],
+      pending: [pluginSurfacePendingRequest],
     }));
     const { render, getValue } = renderHook({ listPending });
 
     await render();
 
     await vi.waitFor(() => {
-      expect(getValue().pendingAgentAppSurface).toEqual({
+      expect(getValue().pendingPluginSurface).toEqual({
         appId: "content-factory-app",
         title: "内容工厂",
         entryUrl: "http://127.0.0.1:4199/dashboard",
-        containerId: "agent-app-shell-content-factory-app-standalone",
+        containerId: "plugin-shell-content-factory-app-standalone",
         activeStrategy: "controlledBrowserWindow",
         supportedStrategies: ["controlledBrowserWindow", "webContentsView"],
-        sourceRequestId: "right_surface_agent_app_1",
+        sourceRequestId: "right_surface_plugin_1",
       });
     });
-    expect(getValue().pendingAgentAppSurfaces).toEqual([
+    expect(getValue().pendingPluginSurfaces).toEqual([
       expect.objectContaining({
         appId: "content-factory-app",
-        containerId: "agent-app-shell-content-factory-app-standalone",
+        containerId: "plugin-shell-content-factory-app-standalone",
       }),
     ]);
     expect(getValue().pendingIntents).toEqual([
       expect.objectContaining({
-        id: "app-server:right_surface_agent_app_1",
+        id: "app-server:right_surface_plugin_1",
         command: expect.objectContaining({
           action: "open",
           kind: "appSurface",
-          reason: "agent_app_surface_ready",
+          reason: "plugin_surface_ready",
         }),
       }),
     ]);

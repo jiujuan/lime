@@ -490,7 +490,7 @@ fn read_session_projection_keeps_plugin_workspace_events_outside_message_window(
     worker_artifact.payload = json!({
         "artifact": {
             "metadata": {
-                "agentAppWorker": {
+                "pluginWorker": {
                     "taskId": "turn-content-article-generate:content_article_generate"
                 },
                 "contentFactoryWorkspacePatch": {
@@ -526,14 +526,14 @@ fn read_session_projection_keeps_plugin_workspace_events_outside_message_window(
     });
     let mut worker_hook = event(
         31,
-        "agent_app_worker.hook",
+        "plugin_worker.hook",
         "sess_1",
         "thread_1",
         Some("turn_worker"),
     );
     worker_hook.payload = json!({
-        "source": "agent_app_task_worker",
-        "agentAppWorker": {
+        "source": "plugin_task_worker",
+        "pluginWorker": {
             "taskId": "turn-content-article-generate:content_article_generate"
         },
         "hookKey": "prompt-submit",

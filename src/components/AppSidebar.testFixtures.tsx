@@ -38,8 +38,8 @@ const {
   mockSaveConfig,
   mockSubscribeAppConfigChanged,
   mockListAgentRuntimeSessions,
-  mockListInstalledAgentApps,
-  mockSelectAgentAppDirectory,
+  mockListInstalledPlugins,
+  mockSelectPluginDirectory,
   mockGetProject,
   mockUpdateProject,
   mockDeleteProject,
@@ -77,8 +77,8 @@ const {
   mockSaveConfig: vi.fn(),
   mockSubscribeAppConfigChanged: vi.fn(),
   mockListAgentRuntimeSessions: vi.fn(),
-  mockListInstalledAgentApps: vi.fn(),
-  mockSelectAgentAppDirectory: vi.fn(),
+  mockListInstalledPlugins: vi.fn(),
+  mockSelectPluginDirectory: vi.fn(),
   mockGetProject: vi.fn(),
   mockUpdateProject: vi.fn(),
   mockDeleteProject: vi.fn(),
@@ -130,8 +130,8 @@ export {
   mockGetConfiguredOemCloudTarget,
   mockListenUpdateInstallSession,
   mockListAgentRuntimeSessions,
-  mockListInstalledAgentApps,
-  mockSelectAgentAppDirectory,
+  mockListInstalledPlugins,
+  mockSelectPluginDirectory,
   mockGetProject,
   mockUpdateProject,
   mockDeleteProject,
@@ -185,10 +185,10 @@ vi.mock("@/lib/api/conversationImport", () => ({
   commitConversationImportThread: mockCommitConversationImportThread,
 }));
 
-vi.mock("@/lib/api/agentApps", () => ({
-  AGENT_APPS_CHANGED_EVENT: "lime:agent-apps-changed",
-  listInstalledAgentApps: mockListInstalledAgentApps,
-  selectAgentAppDirectory: mockSelectAgentAppDirectory,
+vi.mock("@/lib/api/plugins", () => ({
+  PLUGINS_CHANGED_EVENT: "lime:plugins-changed",
+  listInstalledPlugins: mockListInstalledPlugins,
+  selectPluginDirectory: mockSelectPluginDirectory,
 }));
 
 vi.mock("@/lib/api/project", () => ({
@@ -610,8 +610,8 @@ export async function resetAppSidebarTest() {
   mockGetConfig.mockResolvedValue({});
   mockSaveConfig.mockResolvedValue(undefined);
   mockListAgentRuntimeSessions.mockResolvedValue([]);
-  mockListInstalledAgentApps.mockResolvedValue({ states: [], issues: [] });
-  mockSelectAgentAppDirectory.mockResolvedValue({
+  mockListInstalledPlugins.mockResolvedValue({ states: [], issues: [] });
+  mockSelectPluginDirectory.mockResolvedValue({
     path: null,
     cancelled: true,
   });

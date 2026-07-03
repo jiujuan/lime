@@ -49,6 +49,17 @@ const CONTENT_FACTORY_ARTICLE_WORKSPACE_CHECKLIST_ARTIFACT_ID =
   "artifact-delivery-checklist";
 const CONTENT_FACTORY_ARTICLE_WORKSPACE_EDITED_DRAFT_MARKER =
   "E2E_EDITED_ARTICLE_DRAFT_RESTORED";
+const FORBIDDEN_CONTENT_FACTORY_ARTICLE_TEMPLATE_MARKERS = [
+  "受控宿主生成标题",
+  "内容工厂插件化写作：让文章生产可审计",
+  "从基础语法到工程实战",
+  "## 请求摘要",
+  "## 资料检索",
+  "## 正文草稿",
+  "## 交付检查",
+  "targetObjectKind",
+  "outputField",
+];
 const CONTENT_FACTORY_ARTICLE_WORKSPACE_EDITED_DRAFT_MARKDOWN = [
   "# 内容工厂首版文章 - 编辑后恢复稿",
   "",
@@ -138,8 +149,10 @@ export async function runContentFactoryArticleWorkspaceScenario({
     page,
     options,
   );
-  const articleWritingStructure =
-    await waitForContentFactoryArticleWritingStructure(page, options);
+  const articleCanvasSurface = await waitForContentFactoryArticleCanvasSurface(
+    page,
+    options,
+  );
   const articleEditedDraftUpdate =
     await updateContentFactoryArticleWorkspaceEditedDraft(
       page,
@@ -227,8 +240,7 @@ export async function runContentFactoryArticleWorkspaceScenario({
     contentFactoryArticleWorkspaceRightSurface: rightSurface,
     contentFactoryArticleWorkspaceArticleObjectSelection:
       articleObjectSelection,
-    contentFactoryArticleWorkspaceArticleWritingStructure:
-      articleWritingStructure,
+    contentFactoryArticleWorkspaceArticleCanvasSurface: articleCanvasSurface,
     contentFactoryArticleWorkspaceEditedDraftUpdate: articleEditedDraftUpdate,
     contentFactoryArticleWorkspaceEditedDraftReload: articleEditedDraftReload,
     contentFactoryArticleWorkspaceEditedDraftSessionReopened:
@@ -477,13 +489,12 @@ async function clickContentFactoryArticleArtifactFrame(page, options) {
           frameText.length > 200 &&
           !frameText.includes("等待正文产物") &&
           !frameText.includes("文章正文生成后会出现在这里"),
-        hasWorkerResearchText:
+        hasLegacyWorkerTemplateText:
           bodyText.includes("三轮资料检索") ||
           frameText.includes("先把目标定清楚") ||
           frameText.includes("学习路线"),
-        hasWorkerDraftText:
-          bodyText.includes("正文草稿") ||
-          (frameText.length > 200 && frameText.includes("打开文档")),
+        hasArticlePreviewBodyContent:
+          frameText.length > 200 && frameText.includes("打开文档"),
         hasEditedDraftMarker: bodyText.includes(
           "E2E_EDITED_ARTICLE_DRAFT_RESTORED",
         ),
@@ -614,12 +625,11 @@ async function waitForContentFactoryArticleEditorOpened(page, options) {
         articleHeaderTitle,
         articleDraftObjectCount: articleDraftButtons.length,
         hasLoadedDraftStatus: bodyText.includes("已载入产物正文"),
-        hasWorkerResearchText:
+        hasLegacyWorkerTemplateText:
           bodyText.includes("三轮资料检索") ||
           canvasText.includes("先把目标定清楚") ||
           canvasText.includes("学习路线"),
-        hasWorkerDraftText:
-          bodyText.includes("正文草稿") || hasArticleCanvasContent,
+        hasArticleCanvasBodyContent: hasArticleCanvasContent,
         hasArticleArtifactFrame: Boolean(
           document.querySelector('[data-testid="article-artifact-frame"]') ??
           document.querySelector('[data-frame-kind="articleArtifacts"]'),
@@ -713,7 +723,7 @@ async function requestContentFactoryArticleWorkspaceSurface(
       origin: "runtime",
       priority: "foreground",
       candidateId: "content-factory-article-workspace",
-      reason: "agent_app_article_workspace_ready",
+      reason: "plugin_article_workspace_ready",
       ttlMs: 120_000,
       metadata: {
         fixtureOrigin: "content-factory-article-workspace",
@@ -819,7 +829,7 @@ async function appendContentFactoryRuntimeEvents(page, workspace, requestLog) {
               kind: "content_factory.workspace_patch",
               status: "ready",
               metadata: {
-                agentAppWorker: {
+                pluginWorker: {
                   appId: CONTENT_FACTORY_APP_ID,
                   taskId: "article_job_1",
                   taskKind: "content.article.generate",
@@ -834,23 +844,23 @@ async function appendContentFactoryRuntimeEvents(page, workspace, requestLog) {
         {
           type: "runtime.error",
           payload: {
-            source: "agent_app_task_worker",
+            source: "plugin_task_worker",
             appId: CONTENT_FACTORY_APP_ID,
             taskId: "image_job_1",
             taskKind: "content.image.generate",
             turnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_TURN_ID,
             status: "failed",
             errorCode: "worker_invalid_json_output",
-            errorMessage: "Agent App worker returned invalid JSON",
+            errorMessage: "Plugin worker returned invalid JSON",
             failureCategory: "worker_output",
             retryable: false,
             retryAdvice: "inspect_worker_output",
             retryAttempt: 0,
             retryMaxAttempts: 0,
             message:
-              "Agent App task worker failed: Agent App worker returned invalid JSON",
+              "Plugin task worker failed: Plugin worker returned invalid JSON",
             metadata: {
-              agentAppWorker: {
+              pluginWorker: {
                 appId: CONTENT_FACTORY_APP_ID,
                 taskId: "image_job_1",
                 taskKind: "content.image.generate",
@@ -895,7 +905,7 @@ async function appendContentFactoryArticleWorkspaceActionResultRuntimeEvents(
               kind: "content_factory.workspace_patch",
               status: "ready",
               metadata: {
-                agentAppWorker: {
+                pluginWorker: {
                   appId: CONTENT_FACTORY_APP_ID,
                   taskId: "image_regenerate_job_1",
                   taskKind: "content.image.generate",
@@ -971,18 +981,27 @@ async function waitForContentFactoryArticleWorkspaceGui(page, options) {
       const canvas = document.querySelector(
         '[data-testid="workspace-article-editor-canvas"]',
       );
+      const fixtureOnlyNotice = document.querySelector(
+        '[data-testid="workspace-article-editor-fixture-only"]',
+      );
       const canvasText = canvas?.innerText || "";
       const articleHeaderTitle =
         root?.querySelector("h2")?.textContent?.replace(/\s+/g, " ").trim() ??
         "";
+      const fixtureOnlyArticleHidden =
+        isVisible(fixtureOnlyNotice) &&
+        !canvasText.includes("fixtureOnlyHostGeneration") &&
+        !canvasText.includes("fixturePromptFingerprint");
       const hasArticleDraftObject =
         articleDraftButtons.length > 0 ||
         (articleHeaderTitle.length > 0 &&
-          canvasText.length > 160 &&
-          !canvasText.includes("文章正文生成后会出现在这里"));
+          (fixtureOnlyArticleHidden ||
+            (canvasText.length > 160 &&
+              !canvasText.includes("文章正文生成后会出现在这里"))));
       const hasArticleCanvasContent =
-        canvasText.length > 160 &&
-        !canvasText.includes("文章正文生成后会出现在这里");
+        fixtureOnlyArticleHidden ||
+        (canvasText.length > 160 &&
+          !canvasText.includes("文章正文生成后会出现在这里"));
       return {
         activeSurface: host?.getAttribute("data-surface") ?? null,
         rootVisible: isVisible(root),
@@ -996,6 +1015,7 @@ async function waitForContentFactoryArticleWorkspaceGui(page, options) {
           bodyText.includes("公众号文章草稿") || hasArticleDraftObject,
         hasArticleDraftObject,
         hasArticleCanvasContent,
+        hasFixtureOnlyArticleHidden: fixtureOnlyArticleHidden,
         articleHeaderTitle,
         articleDraftObjectCount: articleDraftButtons.length,
         hasImageSetTitle: bodyText.includes("配图组"),
@@ -1003,14 +1023,12 @@ async function waitForContentFactoryArticleWorkspaceGui(page, options) {
         hasChecklistTitle: bodyText.includes("交付检查清单"),
         hasWorkerEvidenceTitle:
           bodyText.includes("运行记录") || bodyText.includes("写作计划"),
-        hasWorkerResearchText:
+        hasLegacyWorkerTemplateText:
           bodyText.includes("三轮资料检索") ||
           canvasText.includes("先把目标定清楚") ||
           canvasText.includes("学习路线"),
-        hasWorkerDraftText:
-          bodyText.includes("正文草稿") || hasArticleCanvasContent,
-        hasArticlePreview:
-          bodyText.includes("三轮资料检索") && bodyText.includes("正文草稿"),
+        hasArticleCanvasBodyContent: hasArticleCanvasContent,
+        hasArticlePreview: hasArticleCanvasContent,
         hasImagePrompt: bodyText.includes("明亮的中文内容工厂主图"),
         hasRegeneratedImageSummary: bodyText.includes("已重新生成 2 张候选图"),
         hasRegeneratedImagePrompt:
@@ -1077,11 +1095,11 @@ async function selectContentFactoryArticleObject(page, options) {
   });
 }
 
-async function waitForContentFactoryArticleWritingStructure(page, options) {
+async function waitForContentFactoryArticleCanvasSurface(page, options) {
   const startedAt = Date.now();
   let lastSnapshot = null;
   while (Date.now() - startedAt < options.timeoutMs) {
-    const snapshot = await page.evaluate(() => {
+    const snapshot = await page.evaluate((forbiddenArticleTemplateMarkers) => {
       const root = document.querySelector(
         '[data-testid="workspace-article-editor-surface"]',
       );
@@ -1102,6 +1120,9 @@ async function waitForContentFactoryArticleWritingStructure(page, options) {
       );
       const documentCanvas = document.querySelector(
         '[data-testid="workspace-article-editor-canvas"]',
+      );
+      const fixtureOnlyNotice = document.querySelector(
+        '[data-testid="workspace-article-editor-fixture-only"]',
       );
       const documentImageSlots = document.querySelector(
         '[data-testid="workspace-article-editor-image-slots"]',
@@ -1143,16 +1164,8 @@ async function waitForContentFactoryArticleWritingStructure(page, options) {
       const review = document.querySelector(
         '[data-testid="workspace-article-editor-review"]',
       );
-      const bodyText = document.body?.innerText || "";
-      const structureText = structure?.textContent || "";
-      const researchText = research?.textContent || "";
-      const outlineText = outline?.textContent || "";
-      const citationsText = citations?.textContent || "";
-      const imageSlotsText = imageSlots?.textContent || "";
       const documentCanvasText = documentCanvas?.innerText || "";
-      const documentImageSlotsText = documentImageSlots?.textContent || "";
-      const takeawaysText = takeaways?.textContent || "";
-      const writingPlanText = writingPlan?.textContent || "";
+      const fixtureOnlyNoticeText = fixtureOnlyNotice?.textContent || "";
       const contentFactoryOrchestrationText =
         contentFactoryOrchestration?.textContent || "";
       const orchestrationSkillRefsText = orchestrationSkillRefs
@@ -1170,7 +1183,29 @@ async function waitForContentFactoryArticleWritingStructure(page, options) {
       const orchestrationHookValues = orchestrationHooks
         .map((item) => item.getAttribute("data-hook-ref") || "")
         .filter(Boolean);
-      const reviewText = review?.textContent || "";
+      const articleCanvasHasForbiddenTemplate =
+        forbiddenArticleTemplateMarkers.some((marker) =>
+          documentCanvasText.includes(marker),
+        ) ||
+        documentCanvasText.includes("fixtureOnlyHostGeneration") ||
+        documentCanvasText.includes("fixturePromptFingerprint");
+      const hasArticleDocumentPreview =
+        documentCanvasText.length > 160 &&
+        !documentCanvasText.includes("文章正文生成后会出现在这里");
+      const fixtureOnlyArticleHidden =
+        isVisible(fixtureOnlyNotice) &&
+        fixtureOnlyNoticeText.length > 0 &&
+        !documentCanvasText.includes("fixtureOnlyHostGeneration") &&
+        !documentCanvasText.includes("fixturePromptFingerprint");
+      const metadataPanelsHidden =
+        !structure &&
+        !research &&
+        !outline &&
+        !citations &&
+        !imageSlots &&
+        !takeaways &&
+        !writingPlan &&
+        !review;
       return {
         rootVisible: isVisible(root),
         structurePresent: Boolean(structure),
@@ -1203,29 +1238,8 @@ async function waitForContentFactoryArticleWritingStructure(page, options) {
           orchestrationSkillRefs.length === 0 &&
           orchestrationConnectors.length === 0 &&
           orchestrationHooks.length === 0,
-        hasDocumentPreview:
-          documentCanvasText.length > 160 &&
-          !documentCanvasText.includes("文章正文生成后会出现在这里"),
-        hasWritingStructureTitle:
-          bodyText.includes("文章结构") || outlineText.length > 0,
-        hasResearchRound:
-          researchText.length > 0 &&
-          (researchText.includes("检索") || researchText.includes("资料")),
-        hasOutline:
-          outlineText.length > 0 &&
-          (outlineText.includes("小节") ||
-            outlineText.includes("结构") ||
-            outlineText.includes("正文")),
-        hasTitleCandidate: structureText.length > 0,
-        hasKeyTakeaway: takeawaysText.length > 0,
-        hasCitation:
-          citationsText.length > 0 &&
-          (citationsText.includes("引用") || citationsText.includes("来源")),
-        hasImagePrompt:
-          imageSlotsText.length > 0 &&
-          (imageSlotsText.includes("配图") ||
-            documentImageSlotsText.includes("配图")),
-        hasWritingPlan: writingPlanText.length > 0,
+        metadataPanelsHidden,
+        hasDocumentPreview: hasArticleDocumentPreview,
         hasVisibleContentFactoryOrchestration:
           contentFactoryOrchestrationText.length > 0 &&
           isVisible(contentFactoryOrchestration),
@@ -1239,11 +1253,12 @@ async function waitForContentFactoryArticleWritingStructure(page, options) {
         visibleSkillRefs: orchestrationSkillRefValues,
         visibleConnectors: orchestrationConnectorValues,
         visibleHooks: orchestrationHookValues,
-        hasReviewNote: reviewText.length > 0,
+        articleCanvasHasForbiddenTemplate,
         hasFullArticleCanvas:
-          documentCanvasText.length > 300 &&
-          !documentCanvasText.includes("文章正文生成后会出现在这里"),
-        bodyTextSample: bodyText.slice(0, 2000),
+          hasArticleDocumentPreview && !articleCanvasHasForbiddenTemplate,
+        fixtureOnlyNoticeVisible: isVisible(fixtureOnlyNotice),
+        fixtureOnlyArticleHidden,
+        articleCanvasTextSample: documentCanvasText.slice(0, 2000),
       };
 
       function isVisible(node) {
@@ -1258,36 +1273,22 @@ async function waitForContentFactoryArticleWritingStructure(page, options) {
           style?.visibility !== "hidden",
         );
       }
-    });
+    }, FORBIDDEN_CONTENT_FACTORY_ARTICLE_TEMPLATE_MARKERS);
     lastSnapshot = snapshot;
     if (
       snapshot?.rootVisible &&
-      snapshot.structurePresent &&
-      snapshot.researchPresent &&
-      snapshot.outlinePresent &&
-      snapshot.citationsPresent &&
-      snapshot.imageSlotsPresent &&
       snapshot.documentCanvasVisible &&
-      snapshot.documentImageSlotsPresent &&
-      snapshot.hasDocumentPreview &&
-      snapshot.hasWritingStructureTitle &&
-      snapshot.hasResearchRound &&
-      snapshot.hasOutline &&
-      snapshot.hasTitleCandidate &&
-      snapshot.hasKeyTakeaway &&
-      snapshot.hasCitation &&
-      snapshot.hasImagePrompt &&
-      snapshot.hasWritingPlan &&
+      (snapshot.hasDocumentPreview || snapshot.fixtureOnlyArticleHidden) &&
+      snapshot.metadataPanelsHidden &&
       snapshot.workflowUiRailHidden &&
-      snapshot.hasReviewNote &&
-      snapshot.hasFullArticleCanvas
+      (snapshot.hasFullArticleCanvas || snapshot.fixtureOnlyArticleHidden)
     ) {
       return sanitizeJson(snapshot);
     }
     await sleep(options.intervalMs);
   }
   throw new Error(
-    `内容工厂 Article Editor 文章写作结构不可见: ${JSON.stringify(
+    `内容工厂 Article Editor 正文画布未按 current 口径渲染: ${JSON.stringify(
       sanitizeJson(lastSnapshot),
     )}`,
   );
@@ -1420,7 +1421,7 @@ async function runRemotePluginRuntimeRejectionProbe({
       },
       runtimeOptions: {
         metadata: {
-          agent_app: {
+          plugin: {
             source: "right_surface_article_workspace",
             app_id: "creator-pack",
             workspace_id: workspace.workspaceId,
@@ -2155,6 +2156,10 @@ function summarizeContentFactoryArtifactRead(result) {
     .map((block) => readString(block?.markdown, block?.content))
     .filter(Boolean)
     .join("\n\n");
+  const richTextHasForbiddenTemplate =
+    FORBIDDEN_CONTENT_FACTORY_ARTICLE_TEMPLATE_MARKERS.some((marker) =>
+      richTextMarkdown.includes(marker),
+    );
   return sanitizeJson({
     artifactCount: artifacts.length,
     artifactRef,
@@ -2177,10 +2182,9 @@ function summarizeContentFactoryArtifactRead(result) {
       `artifact-document:${CONTENT_FACTORY_APP_ID}:`,
     ),
     contentIncludesArticleTitle: Boolean(readString(document?.title)),
+    richTextHasForbiddenTemplate,
     contentIncludesWorkerArticle:
-      richTextMarkdown.includes("## 三轮资料检索") ||
-      richTextMarkdown.includes("## 先把目标定清楚") ||
-      richTextMarkdown.length > 300,
+      richTextMarkdown.length > 160 && !richTextHasForbiddenTemplate,
   });
 }
 

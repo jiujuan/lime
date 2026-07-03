@@ -40,7 +40,7 @@ describe("content factory host generation fixture", () => {
       providerBody("写一篇关于团队知识库治理的公众号文章"),
     );
 
-    expect(first).toContain("fixture-only");
+    expect(first).toContain("fixtureOnlyHostGeneration: true");
     expect(first).toContain("fixturePromptFingerprint:");
     expect(first).toContain("AI Agent 工作流如何让内容生产可审计");
     expect(second).toContain("团队知识库治理");
@@ -48,6 +48,14 @@ describe("content factory host generation fixture", () => {
     expect(second).not.toBe(first);
     expect(first).not.toContain("受控宿主生成标题");
     expect(first).not.toContain("内容工厂插件化写作：让文章生产可审计");
+    expect(first).not.toContain("## 请求摘要");
+    expect(first).not.toContain("## 资料检索");
+    expect(first).not.toContain("## 正文草稿");
+    expect(first).not.toContain("## 交付检查");
+    expect(first).not.toContain("targetObjectKind");
+    expect(first).not.toContain("outputField");
+    expect(first).not.toContain("右侧编辑器");
+    expect(first.split(/\n\s*\n/).length).toBeGreaterThanOrEqual(6);
   });
 
   it("生成 Direct provider request 时只指向本地 fixture", () => {

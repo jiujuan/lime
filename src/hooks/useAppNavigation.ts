@@ -99,7 +99,7 @@ function readNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
-function pickRestorableAgentAppParams(params: unknown): PageParams | null {
+function pickRestorablePluginParams(params: unknown): PageParams | null {
   if (!isRecord(params)) {
     return null;
   }
@@ -142,19 +142,19 @@ function readRestoredNavigationState(): {
       return null;
     }
     const parsed = JSON.parse(raw) as unknown;
-    if (!isRecord(parsed) || parsed.page !== "agent-app") {
+    if (!isRecord(parsed) || parsed.page !== "plugin") {
       clearRestoredNavigationState();
       return null;
     }
 
-    const params = pickRestorableAgentAppParams(parsed.params);
+    const params = pickRestorablePluginParams(parsed.params);
     if (!params) {
       clearRestoredNavigationState();
       return null;
     }
 
     return {
-      page: "agent-app",
+      page: "plugin",
       params,
     };
   } catch {
@@ -169,12 +169,12 @@ function persistRestorableNavigation(page: Page, params: PageParams): void {
   }
 
   try {
-    if (page !== "agent-app") {
+    if (page !== "plugin") {
       clearRestoredNavigationState();
       return;
     }
 
-    const restorableParams = pickRestorableAgentAppParams(params);
+    const restorableParams = pickRestorablePluginParams(params);
     if (!restorableParams) {
       clearRestoredNavigationState();
       return;

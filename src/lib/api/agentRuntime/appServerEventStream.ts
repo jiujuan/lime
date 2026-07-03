@@ -804,17 +804,17 @@ export function projectAppServerAgentEventPayload(
         type: "artifact_snapshot",
         artifact: readArtifactSnapshotSignalFromPayload(payload, event),
       };
-    case "agent_app_worker.hook":
+    case "plugin_worker.hook":
       return {
         ...basePayload,
         type: "item_completed",
-        item: readAgentAppWorkerHookItemFromPayload(payload, event),
+        item: readPluginWorkerHookItemFromPayload(payload, event),
       };
-    case "agent_app_worker.retry":
+    case "plugin_worker.retry":
       return {
         ...basePayload,
         type: "item_completed",
-        item: readAgentAppWorkerRetryItemFromPayload(payload, event),
+        item: readPluginWorkerRetryItemFromPayload(payload, event),
       };
     case "workflow.run.started":
     case "workflow.run.retrying":
@@ -1209,13 +1209,13 @@ function copyDefinedFields(
   );
 }
 
-function normalizeAgentAppWorkerTimelineStatus(
+function normalizePluginWorkerTimelineStatus(
   status: string | undefined,
 ): "completed" | "failed" {
   return status === "failed" || status === "error" ? "failed" : "completed";
 }
 
-function readAgentAppWorkerHookItemFromPayload(
+function readPluginWorkerHookItemFromPayload(
   payload: Record<string, unknown>,
   event: AppServerAgentEvent,
 ): Record<string, unknown> {
@@ -1240,13 +1240,13 @@ function readAgentAppWorkerHookItemFromPayload(
     ...readAgentThreadItemBase(
       payload,
       event,
-      normalizeAgentAppWorkerTimelineStatus(status),
+      normalizePluginWorkerTimelineStatus(status),
     ),
-    id: `${event.eventId}:agent-app-worker-hook`,
+    id: `${event.eventId}:plugin-worker-hook`,
     type: "turn_summary",
     text,
     metadata: {
-      source: "agent_app_worker.hook",
+      source: "plugin_worker.hook",
       eventType: event.type,
       status,
       hookKey,
@@ -1254,14 +1254,14 @@ function readAgentAppWorkerHookItemFromPayload(
       hookScope,
       reasonCode,
       resultSummary,
-      agentAppWorker: normalizeRecord(payload.agentAppWorker),
-      agent_app_worker: normalizeRecord(payload.agent_app_worker),
+      pluginWorker: normalizeRecord(payload.pluginWorker),
+      plugin_worker: normalizeRecord(payload.plugin_worker),
       raw: payload,
     },
   };
 }
 
-function readAgentAppWorkerRetryItemFromPayload(
+function readPluginWorkerRetryItemFromPayload(
   payload: Record<string, unknown>,
   event: AppServerAgentEvent,
 ): Record<string, unknown> {
@@ -1275,18 +1275,18 @@ function readAgentAppWorkerRetryItemFromPayload(
       "error",
       "retryAdvice",
       "retry_advice",
-    ) ?? "agent_app_worker.retry";
+    ) ?? "plugin_worker.retry";
   return {
     ...readAgentThreadItemBase(
       payload,
       event,
-      normalizeAgentAppWorkerTimelineStatus(status),
+      normalizePluginWorkerTimelineStatus(status),
     ),
-    id: `${event.eventId}:agent-app-worker-retry`,
+    id: `${event.eventId}:plugin-worker-retry`,
     type: "turn_summary",
     text: message,
     metadata: {
-      source: "agent_app_worker.retry",
+      source: "plugin_worker.retry",
       eventType: event.type,
       status,
       retryAttempt: readFiniteNumber(payload, "retryAttempt", "retry_attempt"),
@@ -1301,8 +1301,8 @@ function readAgentAppWorkerRetryItemFromPayload(
         "failure_category",
       ),
       errorCode: readString(payload, "errorCode", "error_code"),
-      agentAppWorker: normalizeRecord(payload.agentAppWorker),
-      agent_app_worker: normalizeRecord(payload.agent_app_worker),
+      pluginWorker: normalizeRecord(payload.pluginWorker),
+      plugin_worker: normalizeRecord(payload.plugin_worker),
       raw: payload,
     },
   };

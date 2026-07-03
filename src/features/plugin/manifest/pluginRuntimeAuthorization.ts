@@ -16,7 +16,7 @@ export type PluginRuntimeBoundary =
   | "output_kind_unsupported";
 
 export type PluginRuntimeExecutionMode =
-  | "local_agent_app_worker"
+  | "local_plugin_worker"
   | "host_placeholder"
   | "none";
 
@@ -152,7 +152,7 @@ export function resolvePluginRuntimeAuthorization({
 
   return {
     status: "allowed",
-    executionMode: "local_agent_app_worker",
+    executionMode: "local_plugin_worker",
     runtimeBoundary: "local_worker_allowlist",
     remoteRuntimePolicy,
     reasonCode: "local_worker_output_allowed",

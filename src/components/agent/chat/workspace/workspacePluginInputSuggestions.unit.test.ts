@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { PluginContract } from "@/features/plugin";
-import contentFactoryFixture from "@/features/agent-app/testing/fixtures/content-factory-app.json";
-import { buildPackageIdentity } from "@/features/agent-app/install/packageIdentity";
-import { normalizeManifest } from "@/features/agent-app/manifest/normalizeManifest";
-import { parseManifest } from "@/features/agent-app/manifest/parseManifest";
-import type { InstalledAgentAppState } from "@/features/agent-app/types";
-import { projectPluginRegistryFromInstalledAgentApps } from "@/features/plugin";
+import contentFactoryFixture from "@/features/plugin/testing/fixtures/content-factory-app.json";
+import { buildPackageIdentity } from "@/features/plugin/install/packageIdentity";
+import { normalizeManifest } from "@/features/plugin/manifest/normalizeManifest";
+import { parseManifest } from "@/features/plugin/manifest/parseManifest";
+import type { InstalledPluginState } from "@/features/plugin/types";
+import { projectPluginRegistryFromInstalledPlugins } from "@/features/plugin";
 import type { WorkspacePluginRuntimeContext } from "./workspacePluginRuntimeContext";
 import { buildWorkspacePluginInputSuggestions } from "./workspacePluginInputSuggestions";
 
@@ -30,7 +30,7 @@ function createContract(
         description: "生成文章草稿",
       },
     ],
-    agentApps: [],
+    ui: [],
     subagents: [],
     clis: [],
     workflows: [],
@@ -108,18 +108,18 @@ function createContext(
 }
 
 function installedContentFactory(
-  overrides: Partial<InstalledAgentAppState> = {},
-): InstalledAgentAppState {
+  overrides: Partial<InstalledPluginState> = {},
+): InstalledPluginState {
   const parsedManifest = parseManifest(contentFactoryFixture);
   const manifest = normalizeManifest(parsedManifest);
-  const base: InstalledAgentAppState = {
+  const base: InstalledPluginState = {
     appId: manifest.appId,
     identity: buildPackageIdentity({
       manifest: parsedManifest,
       loadedAt: "2026-06-25T00:00:00.000Z",
     }),
     manifest,
-    projection: {} as InstalledAgentAppState["projection"],
+    projection: {} as InstalledPluginState["projection"],
     readiness: {
       appId: manifest.appId,
       status: "ready",
@@ -133,8 +133,8 @@ function installedContentFactory(
     },
     installMode: "in_lime",
     runtimeProfileSummary:
-      {} as InstalledAgentAppState["runtimeProfileSummary"],
-    setup: {} as InstalledAgentAppState["setup"],
+      {} as InstalledPluginState["runtimeProfileSummary"],
+    setup: {} as InstalledPluginState["setup"],
     disabled: false,
     installedAt: "2026-06-25T00:00:00.000Z",
     updatedAt: "2026-06-25T00:00:00.000Z",
@@ -191,7 +191,7 @@ describe("workspacePluginInputSuggestions", () => {
   });
 
   it("内容工厂安装后应从 installed registry 投影写文章快捷入口", () => {
-    const projection = projectPluginRegistryFromInstalledAgentApps([
+    const projection = projectPluginRegistryFromInstalledPlugins([
       installedContentFactory(),
     ]);
     const suggestions = buildWorkspacePluginInputSuggestions(
@@ -235,7 +235,7 @@ describe("workspacePluginInputSuggestions", () => {
   });
 
   it("内容工厂本地包需要维护时仍应出现在输入栏候选", () => {
-    const projection = projectPluginRegistryFromInstalledAgentApps([
+    const projection = projectPluginRegistryFromInstalledPlugins([
       installedContentFactory({
         readiness: {
           appId: "content-factory-app",

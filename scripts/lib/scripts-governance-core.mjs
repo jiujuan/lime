@@ -95,8 +95,8 @@ export function inferRootBucket(filePath) {
   if (fileName.startsWith("electron-") || fileName.includes("electron")) {
     return "electron";
   }
-  if (fileName.startsWith("agent-app")) {
-    return "agent-app";
+  if (fileName.startsWith("plugin")) {
+    return "plugin";
   }
   if (fileName.startsWith("agent-qc")) {
     return "agent-qc";

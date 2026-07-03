@@ -19,8 +19,8 @@ describe("mockPriorityCommands", () => {
       "workspace_list",
       "aster_agent_init",
       "agent_runtime_get_tool_inventory",
-      "agent_app_list_installed",
-      "agent_app_start_ui_runtime",
+      "plugin_list_installed",
+      "plugin_start_ui_runtime",
       "get_model_registry",
       "knowledge_list_packs",
       "session_files_save_file",
@@ -99,16 +99,16 @@ describe("mockPriorityCommands", () => {
       shouldDisallowMockFallbackInBrowser("agent_runtime_submit_turn"),
     ).toBe(false);
     expect(
-      shouldDisallowMockFallbackInBrowser("agent_app_runtime_start_task"),
+      shouldDisallowMockFallbackInBrowser("plugin_runtime_start_task"),
     ).toBe(true);
     expect(
-      shouldDisallowMockFallbackInBrowser("agent_app_inspect_local_package"),
+      shouldDisallowMockFallbackInBrowser("plugin_inspect_local_package"),
     ).toBe(false);
     expect(
-      shouldDisallowMockFallbackInBrowser("agent_app_save_installed_state"),
+      shouldDisallowMockFallbackInBrowser("plugin_save_installed_state"),
     ).toBe(false);
     expect(
-      shouldDisallowMockFallbackInBrowser("agent_app_list_installed"),
+      shouldDisallowMockFallbackInBrowser("plugin_list_installed"),
     ).toBe(false);
     expect(shouldDisallowMockFallbackInBrowser("knowledge_list_packs")).toBe(
       false,
@@ -120,23 +120,23 @@ describe("mockPriorityCommands", () => {
       false,
     );
     expect(
-      shouldDisallowMockFallbackInBrowser("agent_app_start_ui_runtime"),
+      shouldDisallowMockFallbackInBrowser("plugin_start_ui_runtime"),
     ).toBe(true);
     expect(
-      shouldDisallowMockFallbackInBrowser("agent_app_get_ui_runtime_status"),
+      shouldDisallowMockFallbackInBrowser("plugin_get_ui_runtime_status"),
     ).toBe(true);
     expect(
-      shouldDisallowMockFallbackInBrowser("agent_app_stop_ui_runtime"),
+      shouldDisallowMockFallbackInBrowser("plugin_stop_ui_runtime"),
     ).toBe(true);
     expect(
-      shouldDisallowMockFallbackInBrowser("agent_app_runtime_cancel_task"),
+      shouldDisallowMockFallbackInBrowser("plugin_runtime_cancel_task"),
     ).toBe(true);
     expect(
-      shouldDisallowMockFallbackInBrowser("agent_app_runtime_get_task"),
+      shouldDisallowMockFallbackInBrowser("plugin_runtime_get_task"),
     ).toBe(true);
     expect(
       shouldDisallowMockFallbackInBrowser(
-        "agent_app_runtime_submit_host_response",
+        "plugin_runtime_submit_host_response",
       ),
     ).toBe(true);
     expect(

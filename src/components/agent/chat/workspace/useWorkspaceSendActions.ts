@@ -6,10 +6,10 @@ import type {
   AgentRuntimeWebSearchMode,
   AutoContinueRequestPayload,
 } from "@/lib/api/agentRuntime";
-import type { InstalledAgentAppState } from "@/features/agent-app/types";
+import type { InstalledPluginState } from "@/features/plugin/types";
 import { getOrCreateDefaultProject } from "@/lib/api/project";
 import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/types";
-import { listInstalledAgentApps } from "@/lib/api/agentApps";
+import { listInstalledPlugins } from "@/lib/api/plugins";
 import { normalizeExecutionStrategyToReact } from "@/lib/api/agentRuntime/executionStrategyCompat";
 import type { ServiceModelsConfig } from "@/lib/api/appConfigTypes";
 import { logAgentDebug } from "@/lib/agentDebug";
@@ -325,8 +325,8 @@ interface UseWorkspaceSendActionsParams {
     skipSessionStartHooks?: boolean;
   }) => Promise<string | null>;
   prepareImageWorkbenchSkillSend?: () => boolean | Promise<boolean>;
-  listInstalledAgentAppsForPluginActivation?: () => Promise<{
-    states: InstalledAgentAppState[];
+  listInstalledPluginsForPluginActivation?: () => Promise<{
+    states: InstalledPluginState[];
   }>;
   resolveImageWorkbenchCommandRequest: (input: {
     rawText: string;
@@ -460,7 +460,7 @@ export function useWorkspaceSendActions({
   openRuntimeSceneGate,
   ensureSessionForCommandMetadata,
   prepareImageWorkbenchSkillSend,
-  listInstalledAgentAppsForPluginActivation = listInstalledAgentApps,
+  listInstalledPluginsForPluginActivation = listInstalledPlugins,
   resolveImageWorkbenchCommandRequest,
 }: UseWorkspaceSendActionsParams) {
   const { t } = useTranslation("agent");
@@ -2716,12 +2716,12 @@ export function useWorkspaceSendActions({
         sourceText.trim().startsWith("@");
       if (shouldResolvePluginActivation) {
         const pluginSessionId = await ensureCommandSessionId();
-        const installedAgentApps =
-          await listInstalledAgentAppsForPluginActivation();
+        const installedPlugins =
+          await listInstalledPluginsForPluginActivation();
         const pluginActivationResolution = resolveWorkspacePluginActivation({
           text: sourceText,
           sessionId: pluginSessionId,
-          installedAgentApps: installedAgentApps.states,
+          installedPlugins: installedPlugins.states,
         });
         if (pluginActivationResolution?.status === "blocked") {
           clearSubmissionPreview();
@@ -2926,7 +2926,7 @@ export function useWorkspaceSendActions({
       executionStrategy,
       handleAutoLaunchMatchedSiteSkill,
       isThemeWorkbench,
-      listInstalledAgentAppsForPluginActivation,
+      listInstalledPluginsForPluginActivation,
       resolveImageWorkbenchCommandRequest,
       input,
       messagesCount,

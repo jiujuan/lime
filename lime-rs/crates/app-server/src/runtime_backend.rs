@@ -1,4 +1,3 @@
-mod agent_app_worker_generation;
 mod agent_skills_context;
 mod agent_skills_telemetry;
 mod coding_events;
@@ -15,6 +14,7 @@ mod native_tools;
 mod permission_preflight;
 mod plan_events;
 mod plugin_activation_context;
+mod plugin_worker_generation;
 mod proposed_plan_parser;
 mod reasoning_events;
 mod skill_runtime_enable;
@@ -622,13 +622,12 @@ impl ExecutionBackend for RuntimeBackend {
         Ok(())
     }
 
-    async fn prepare_agent_app_worker_request(
+    async fn prepare_plugin_worker_request(
         &self,
         request: &ExecutionRequest,
         worker_request: &mut Value,
     ) -> Result<(), RuntimeCoreError> {
-        agent_app_worker_generation::prepare_agent_app_worker_request(self, request, worker_request)
-            .await
+        plugin_worker_generation::prepare_plugin_worker_request(self, request, worker_request).await
     }
 }
 

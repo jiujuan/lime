@@ -206,11 +206,11 @@ Agent Runtime smoke 与 Service Skill 入口 smoke 已迁到 `scripts/agent-runt
 
 新增 Agent Runtime 脚本继续进入 `scripts/agent-runtime/` 或复用现有 Agent Runtime npm scripts；共享实现仍放在 `scripts/lib/`。
 
-### Agent App 脚本
+### Plugin 脚本
 
-Agent App smoke、runtime fixture、connector production gate、standalone release helper 与配套测试已迁到 `scripts/agent-app/`。对外继续使用 `package.json`、GitHub Actions 或路线图文档里的稳定入口，不直接依赖根目录脚本路径。
+Plugin smoke、runtime fixture、connector production gate、standalone release helper 与配套测试统一放在 `scripts/plugin/`。对外继续使用 `package.json`、GitHub Actions 或路线图文档里的稳定入口，不直接依赖根目录脚本路径。
 
-新增 Agent App 脚本继续进入 `scripts/agent-app/` 或复用现有 `smoke:agent-apps`、`smoke:agent-app-lab`、`agent-app:*` npm scripts；共享实现仍放在 `scripts/lib/`。
+新增 Plugin 脚本继续进入 `scripts/plugin/` 或复用现有 `plugin:*` / `smoke:content-factory-*` npm scripts；共享实现仍放在 `scripts/lib/`。旧 Plugin 页面和 Lab smoke 已归类为 `dead`，不得作为 Plugin smoke 恢复。
 
 ### 项目热力图
 

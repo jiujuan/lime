@@ -83,21 +83,21 @@ async fn article_workspace_worker_failure_evidence_carries_retry_projection() {
             RuntimeEvent::new(
                 "runtime.error",
                 json!({
-                    "source": "agent_app_task_worker",
+                    "source": "plugin_task_worker",
                     "appId": "content-factory-app",
                     "taskId": "task-image-1",
                     "taskKind": "content.image.generate",
                     "turnId": "turn_product_worker_failure",
                     "status": "failed",
-                    "errorCode": "AGENT_APP_WORKER_TIMEOUT",
-                    "errorMessage": "Agent App worker timed out after 100ms",
+                    "errorCode": "PLUGIN_WORKER_TIMEOUT",
+                    "errorMessage": "Plugin worker timed out after 100ms",
                     "failureCategory": "timeout",
                     "retryable": true,
                     "retryAdvice": "retry_same_action",
                     "retryAttempt": 0,
                     "retryMaxAttempts": 1,
                     "metadata": {
-                        "agentAppWorker": {
+                        "pluginWorker": {
                             "appId": "content-factory-app",
                             "taskId": "task-image-1",
                             "taskKind": "content.image.generate",
@@ -127,7 +127,7 @@ async fn article_workspace_worker_failure_evidence_carries_retry_projection() {
 
     assert_eq!(evidence["taskId"], "task-image-1");
     assert_eq!(evidence["status"], "failed");
-    assert_eq!(evidence["errorCode"], "AGENT_APP_WORKER_TIMEOUT");
+    assert_eq!(evidence["errorCode"], "PLUGIN_WORKER_TIMEOUT");
     assert_eq!(evidence["failureCategory"], "timeout");
     assert_eq!(evidence["retryable"], true);
     assert_eq!(evidence["retryAdvice"], "retry_same_action");

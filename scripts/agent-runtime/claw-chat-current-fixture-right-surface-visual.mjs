@@ -12,7 +12,7 @@ import {
 } from "./claw-chat-current-fixture-utils.mjs";
 
 const RIGHT_SURFACE_ROOTS = {
-  appSurface: "workspace-agent-app-surface",
+  appSurface: "workspace-plugin-surface",
   browser: "right-surface-browser-panel",
   expertInfo: "expert-info-panel",
   files: "workspace-files-surface",
@@ -87,14 +87,14 @@ export async function runRightSurfaceVisualMatrix({
         workspace,
         sessionId,
         surfaceKind: "appSurface",
-        candidateId: "agent-app-shell-content-factory-app-main",
+        candidateId: "plugin-shell-content-factory-app-main",
         metadata: {
           appId: "content-factory-app",
           title: "内容工厂",
           surface: {
             entryUrl:
-              "https://example.com/lime-agent-apps/content-factory/right-surface",
-            containerId: "agent-app-shell-content-factory-app-main",
+              "https://example.com/lime-plugins/content-factory/right-surface",
+            containerId: "plugin-shell-content-factory-app-main",
             activeStrategy: "webContentsView",
             supportedStrategies: ["controlledBrowserWindow", "webContentsView"],
             embedding: {
@@ -113,14 +113,14 @@ export async function runRightSurfaceVisualMatrix({
         workspace,
         sessionId,
         surfaceKind: "appSurface",
-        candidateId: "agent-app-shell-prompt-lab-app",
+        candidateId: "plugin-shell-prompt-lab-app",
         metadata: {
           appId: "prompt-lab-app",
           title: "Prompt Lab",
           surface: {
             entryUrl:
-              "https://example.com/lime-agent-apps/prompt-lab/right-surface",
-            containerId: "agent-app-shell-prompt-lab-app",
+              "https://example.com/lime-plugins/prompt-lab/right-surface",
+            containerId: "plugin-shell-prompt-lab-app",
             activeStrategy: "webContentsView",
             supportedStrategies: ["controlledBrowserWindow", "webContentsView"],
             embedding: {
@@ -402,22 +402,22 @@ async function captureRightSurfaceSnapshot(
         '[data-testid="layout-transition-root"]',
       );
       const root = document.querySelector(`[data-testid="${rootTestId}"]`);
-      const agentAppTabs = document.querySelector(
-        '[data-testid="workspace-agent-app-surface-tabs"]',
+      const pluginTabs = document.querySelector(
+        '[data-testid="workspace-plugin-surface-tabs"]',
       );
-      const agentAppTabButtons = Array.from(
+      const pluginTabButtons = Array.from(
         document.querySelectorAll(
-          '[data-testid^="workspace-agent-app-surface-tab-"]',
+          '[data-testid^="workspace-plugin-surface-tab-"]',
         ),
       );
-      const agentAppFrames = Array.from(
+      const pluginFrames = Array.from(
         document.querySelectorAll(
-          '[data-testid="workspace-agent-app-surface-frame"]',
+          '[data-testid="workspace-plugin-surface-frame"]',
         ),
       );
-      const agentAppViewports = Array.from(
+      const pluginViewports = Array.from(
         document.querySelectorAll(
-          '[data-testid="workspace-agent-app-surface-viewport"]',
+          '[data-testid="workspace-plugin-surface-viewport"]',
         ),
       );
       const browserPanel = document.querySelector(
@@ -499,21 +499,21 @@ async function captureRightSurfaceSnapshot(
           rootFillsActivePane,
           rootFillsSurfaceViewport: rootFillsHost || rootFillsActivePane,
         },
-        agentAppSurface: {
-          tabs: visibleInfo(agentAppTabs),
-          tabCount: agentAppTabButtons.length,
-          tabLabels: agentAppTabButtons.map((button) =>
+        pluginSurface: {
+          tabs: visibleInfo(pluginTabs),
+          tabCount: pluginTabButtons.length,
+          tabLabels: pluginTabButtons.map((button) =>
             (button.textContent || "").trim(),
           ),
-          activeTabLabels: agentAppTabButtons
+          activeTabLabels: pluginTabButtons
             .filter((button) => button.getAttribute("aria-selected") === "true")
             .map((button) => (button.textContent || "").trim()),
-          frameCount: agentAppFrames.length,
-          visibleFrameCount: agentAppFrames.filter(
+          frameCount: pluginFrames.length,
+          visibleFrameCount: pluginFrames.filter(
             (frame) => visibleInfo(frame).visible,
           ).length,
-          viewportCount: agentAppViewports.length,
-          visibleViewportCount: agentAppViewports.filter(
+          viewportCount: pluginViewports.length,
+          visibleViewportCount: pluginViewports.filter(
             (viewport) => visibleInfo(viewport).visible,
           ).length,
         },

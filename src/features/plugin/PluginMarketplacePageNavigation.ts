@@ -64,7 +64,7 @@ export function buildPluginMarketplaceOpenAgentParams(
           source: "plugin_marketplace_open",
           trigger,
           plugin_id: item.pluginId,
-          active_agent_app_id: item.appId?.trim() || undefined,
+          active_plugin_ui_id: item.appId?.trim() || undefined,
           active_entry_key:
             activationEntry?.key.trim() || item.pluginName.trim() || undefined,
           entry_task_kind: activationEntry?.taskKind?.trim() || undefined,
@@ -115,8 +115,8 @@ export function buildPluginMarketplaceHistoryAgentParams(
         plugin_history_restore: {
           session_id: sessionId,
           plugin_id: pluginId,
-          active_agent_app_id:
-            candidate.activeAgentAppId ?? item.appId?.trim() ?? undefined,
+          active_plugin_ui_id:
+            candidate.activePluginUiId ?? item.appId?.trim() ?? undefined,
           active_entry_key:
             candidate.activeEntryKey ?? item.pluginName.trim() ?? undefined,
           artifact_refs:

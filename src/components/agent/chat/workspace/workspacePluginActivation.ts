@@ -1,8 +1,8 @@
-import type { InstalledAgentAppState } from "@/features/agent-app/types";
+import type { InstalledPluginState } from "@/features/plugin/types";
 import {
   buildPluginActivationMentionCatalog,
   parsePluginActivationMention,
-  projectPluginRegistryFromInstalledAgentApps,
+  projectPluginRegistryFromInstalledPlugins,
   type PluginActivationContext,
   type PluginActivationContextSource,
   type PluginActivationMentionParseResult,
@@ -12,11 +12,11 @@ import {
 import type { HandleSendOptions } from "../hooks/handleSendTypes";
 import { asRecord } from "./commands/skillSlotUtils";
 import {
-  buildAgentAppIntentSystemPrompt,
-  resolveWorkspaceAgentAppIntent,
-  type WorkspaceAgentAppIntentMatch,
-  type WorkspaceAgentAppIntentSource,
-} from "./workspaceAgentAppIntentRouting";
+  buildPluginIntentSystemPrompt,
+  resolveWorkspacePluginIntent,
+  type WorkspacePluginIntentMatch,
+  type WorkspacePluginIntentSource,
+} from "./workspacePluginIntentRouting";
 import {
   buildWorkspacePluginRuntimeReadiness,
   type WorkspacePluginRuntimeReadiness,
@@ -27,7 +27,7 @@ export interface WorkspacePluginActivationResolution {
   trigger: string;
   body: string;
   context?: PluginActivationContext;
-  intentMatch?: WorkspaceAgentAppIntentMatch;
+  intentMatch?: WorkspacePluginIntentMatch;
   runtimeReadiness?: WorkspacePluginRuntimeReadiness;
   blockerCodes?: string[];
 }
@@ -41,18 +41,18 @@ export interface WorkspacePluginActivationRequestMetadata {
 
 interface WorkspacePluginActivationParseResolution {
   parseResult: PluginActivationMentionParseResult;
-  intentSources: readonly WorkspaceAgentAppIntentSource[];
-  installedAgentApps: readonly InstalledAgentAppState[];
+  intentSources: readonly WorkspacePluginIntentSource[];
+  installedPlugins: readonly InstalledPluginState[];
   contracts: readonly PluginContract[];
 }
 
 function resolvePluginActivationParseResult(params: {
   text: string;
   sessionId: string;
-  installedAgentApps: readonly InstalledAgentAppState[];
+  installedPlugins: readonly InstalledPluginState[];
 }): WorkspacePluginActivationParseResolution | null {
-  const projection = projectPluginRegistryFromInstalledAgentApps(
-    params.installedAgentApps,
+  const projection = projectPluginRegistryFromInstalledPlugins(
+    params.installedPlugins,
   );
   const contracts = projection.contracts;
   if (contracts.length > 0) {
@@ -68,8 +68,8 @@ function resolvePluginActivationParseResult(params: {
     if (parseResult) {
       return {
         parseResult,
-        intentSources: params.installedAgentApps,
-        installedAgentApps: params.installedAgentApps,
+        intentSources: params.installedPlugins,
+        installedPlugins: params.installedPlugins,
         contracts,
       };
     }
@@ -80,7 +80,7 @@ function resolvePluginActivationParseResult(params: {
 export function resolveWorkspacePluginActivation(params: {
   text: string;
   sessionId?: string | null;
-  installedAgentApps: readonly InstalledAgentAppState[];
+  installedPlugins: readonly InstalledPluginState[];
 }): WorkspacePluginActivationResolution | null {
   const sessionId = params.sessionId?.trim();
   if (!sessionId) {
@@ -89,7 +89,7 @@ export function resolveWorkspacePluginActivation(params: {
   const parseResolution = resolvePluginActivationParseResult({
     text: params.text,
     sessionId,
-    installedAgentApps: params.installedAgentApps,
+    installedPlugins: params.installedPlugins,
   });
   if (!parseResolution) {
     return null;
@@ -106,30 +106,30 @@ export function resolveWorkspacePluginActivation(params: {
       blockerCodes: parseResult.blockerCodes,
     };
   }
-  const activeAppId =
-    parseResult.context.activeAgentAppId ?? parseResult.context.pluginId;
+  const activePluginUiId =
+    parseResult.context.activePluginUiId ?? parseResult.context.pluginId;
   const activeSources = parseResolution.intentSources.filter(
-    (source) => source.appId === activeAppId,
+    (source) => source.appId === activePluginUiId,
   );
   const intentMatch =
-    resolveWorkspaceAgentAppIntentFromActivationContext(
+    resolveWorkspacePluginIntentFromActivationContext(
       parseResult.context,
       activeSources,
     ) ??
-    resolveWorkspaceAgentAppIntent(parseResult.match.body, activeSources) ??
-    resolveWorkspaceAgentAppIntent(params.text, activeSources) ??
+    resolveWorkspacePluginIntent(parseResult.match.body, activeSources) ??
+    resolveWorkspacePluginIntent(params.text, activeSources) ??
     undefined;
   const contract = parseResolution.contracts.find(
     (candidate) => candidate.id === parseResult.context.pluginId,
   );
-  const installedAgentApp = parseResolution.installedAgentApps.find(
-    (source) => source.appId === activeAppId,
+  const installedPlugin = parseResolution.installedPlugins.find(
+    (source) => source.appId === activePluginUiId,
   );
   const runtimeReadiness = contract
     ? buildWorkspacePluginRuntimeReadiness({
         contract,
-        installedAgentApp,
-        activeAgentAppId: parseResult.context.activeAgentAppId,
+        installedPlugin,
+        activePluginUiId: parseResult.context.activePluginUiId,
         workflowKey:
           parseResult.context.workflowKey ?? intentMatch?.workflowKey,
         taskKind: parseResult.context.taskKind ?? intentMatch?.taskKind,
@@ -145,15 +145,15 @@ export function resolveWorkspacePluginActivation(params: {
   };
 }
 
-function resolveWorkspaceAgentAppIntentFromActivationContext(
+function resolveWorkspacePluginIntentFromActivationContext(
   context: PluginActivationContext,
-  sources: readonly WorkspaceAgentAppIntentSource[],
-): WorkspaceAgentAppIntentMatch | null {
+  sources: readonly WorkspacePluginIntentSource[],
+): WorkspacePluginIntentMatch | null {
   const activeEntryKey = context.activeEntryKey?.trim();
   if (!activeEntryKey) {
     return null;
   }
-  const match = resolveWorkspaceAgentAppIntent(activeEntryKey, sources);
+  const match = resolveWorkspacePluginIntent(activeEntryKey, sources);
   if (!match) {
     return null;
   }
@@ -195,7 +195,7 @@ function pluginActivationMetadata(
       body: resolution.body,
       session_id: context.sessionId,
       plugin_id: context.pluginId,
-      active_agent_app_id: context.activeAgentAppId,
+      active_plugin_ui_id: context.activePluginUiId,
       active_entry_key: context.activeEntryKey,
       entry_task_kind: context.taskKind,
       entry_workflow_key: context.workflowKey,
@@ -275,7 +275,7 @@ function contextRuntimeReadiness(
   return {
     source: readiness.source,
     plugin_id: readiness.pluginId,
-    active_agent_app_id: readiness.activeAgentAppId,
+    active_plugin_ui_id: readiness.activePluginUiId,
     workflow_key: readiness.workflowKey,
     task_kind: readiness.taskKind,
     status: readiness.status,
@@ -342,7 +342,7 @@ function buildActivationRuntimeRegistries(
 }
 
 function resolveActivationWorkflow(
-  manifest: WorkspaceAgentAppIntentMatch["manifest"] | undefined,
+  manifest: WorkspacePluginIntentMatch["manifest"] | undefined,
   intentKey: string | undefined,
   taskKind: string | undefined,
   workflowKey: string | undefined,
@@ -362,7 +362,7 @@ function resolveActivationWorkflow(
 }
 
 function resolveActivationSubagents(
-  manifest: WorkspaceAgentAppIntentMatch["manifest"] | undefined,
+  manifest: WorkspacePluginIntentMatch["manifest"] | undefined,
   taskKind: string | undefined,
 ) {
   if (!manifest) {
@@ -383,7 +383,7 @@ function resolveActivationSubagents(
 }
 
 function resolveActivationSkillRefs(
-  manifest: WorkspaceAgentAppIntentMatch["manifest"] | undefined,
+  manifest: WorkspacePluginIntentMatch["manifest"] | undefined,
   taskKind: string | undefined,
 ) {
   if (!manifest) {
@@ -499,9 +499,9 @@ export function extractWorkspacePluginActivationFromRequestMetadata(
     context: {
       sessionId,
       pluginId,
-      activeAgentAppId: readString(activation, [
-        "active_agent_app_id",
-        "activeAgentAppId",
+      activePluginUiId: readString(activation, [
+        "active_plugin_ui_id",
+        "activePluginUiId",
       ]),
       activeEntryKey: readString(activation, [
         "active_entry_key",
@@ -550,7 +550,7 @@ export function mergePluginActivationSendOptions(params: {
   const previousRequestMetadata = params.sendOptions?.requestMetadata || {};
   const previousHarness = asRecord(previousRequestMetadata.harness) || {};
   const intentSystemPrompt = params.resolution.intentMatch
-    ? buildAgentAppIntentSystemPrompt(params.resolution.intentMatch)
+    ? buildPluginIntentSystemPrompt(params.resolution.intentMatch)
     : undefined;
   const previousSystemPrompt = params.sendOptions?.systemPromptOverride?.trim();
   return {

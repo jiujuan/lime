@@ -1,9 +1,9 @@
-import { buildPackageIdentity } from "@/features/agent-app/install/packageIdentity";
-import { normalizeManifest } from "@/features/agent-app/manifest/normalizeManifest";
-import { parseManifest } from "@/features/agent-app/manifest/parseManifest";
+import { buildPackageIdentity } from "@/features/plugin/install/packageIdentity";
+import { normalizeManifest } from "@/features/plugin/manifest/normalizeManifest";
+import { parseManifest } from "@/features/plugin/manifest/parseManifest";
 import {
   buildPluginActivationMentionCatalog,
-  buildPluginContractFromAgentAppManifest,
+  buildPluginContractFromPluginManifest,
   projectPluginRegistryItem,
   type PluginActivationMentionCatalog,
   type PluginContract,
@@ -31,7 +31,7 @@ export function buildContentFactoryPluginContract({
   manifest,
 }: BuildContentFactoryPluginContractParams): PluginContract {
   const parsedManifest = parseManifest(manifest);
-  return buildPluginContractFromAgentAppManifest({
+  return buildPluginContractFromPluginManifest({
     manifest: normalizeManifest(parsedManifest),
     identity: buildPackageIdentity({
       manifest: parsedManifest,

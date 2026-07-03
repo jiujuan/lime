@@ -1,6 +1,6 @@
-import type { ReadinessStatus } from "@/features/agent-app/types";
+import type { ReadinessStatus } from "@/features/plugin/types";
 
-export type PluginActivationEntryKind = "plugin" | "agentApp" | "skill";
+export type PluginActivationEntryKind = "plugin" | "pluginUi" | "skill";
 export type PluginActivationIntent =
   | "manual"
   | "at_command"
@@ -16,7 +16,7 @@ export type PluginConnectorKind =
   | "api"
   | "data_source"
   | "external_app";
-export type PluginAgentAppUiKind = "page" | "pane" | "webcontents_view";
+export type PluginUiKind = "page" | "pane" | "webcontents_view";
 export type PluginHistoryDefaultSurface =
   | "primaryArtifact"
   | "selectedObject"
@@ -50,7 +50,7 @@ export interface PluginManifest {
   contributions?: PluginManifestContributions;
   componentPaths?: PluginManifestComponentPaths;
   skills?: PluginSkillDeclaration[];
-  agentApps?: PluginAgentAppDeclaration[];
+  ui?: PluginUiDeclaration[];
   subagents?: PluginSubagentDeclaration[];
   cli?: PluginCliDeclaration | Record<string, unknown> | string;
   clis?: PluginCliDeclaration[] | Record<string, unknown>;
@@ -131,11 +131,11 @@ export interface PluginSkillDeclaration {
   required?: boolean;
 }
 
-export interface PluginAgentAppDeclaration {
+export interface PluginUiDeclaration {
   id: string;
   title: string;
   description?: string;
-  uiKind?: PluginAgentAppUiKind;
+  uiKind?: PluginUiKind;
   defaultSurfaceKind?: string;
   entryKey?: string;
 }
@@ -270,7 +270,7 @@ export interface PluginRightSurfaceContract {
 }
 
 export interface PluginContractProvenance {
-  sourceKind: "plugin_manifest" | "agent_app_manifest" | "plugin_marketplace";
+  sourceKind: "plugin_manifest" | "plugin_manifest" | "plugin_marketplace";
   sourceId: string;
   sourceVersion: string;
   packageHash?: string;
@@ -293,7 +293,7 @@ export interface PluginContract {
   componentPaths: PluginManifestComponentPaths;
   install?: PluginManifestInstallContract;
   skills: PluginSkillDeclaration[];
-  agentApps: PluginAgentAppDeclaration[];
+  ui: PluginUiDeclaration[];
   subagents: PluginSubagentDeclaration[];
   clis: PluginCliDeclaration[];
   workflows: PluginWorkflowDeclaration[];

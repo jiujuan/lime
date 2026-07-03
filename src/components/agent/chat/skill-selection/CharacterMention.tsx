@@ -114,17 +114,17 @@ interface CharacterMentionProps {
       launcherPrefillHint?: string;
     },
   ) => void;
-  /** 选择 Agent App 插件回调 */
+  /** 选择 Plugin 插件回调 */
   onSelectPlugin?: (
     plugin: InputbarPluginCapability,
     skill?: InputbarPluginSkillCapability,
     options?: InputbarPluginSelectionOptions,
   ) => void;
-  /** Agent App 插件候选 */
+  /** Plugin 插件候选 */
   pluginSuggestions?: readonly InputbarPluginCapability[];
   /** 需要加载技能候选时触发 */
   onSkillSuggestionsNeeded?: () => void;
-  /** 需要加载 Agent App 插件候选时触发 */
+  /** 需要加载 Plugin 插件候选时触发 */
   onPluginSuggestionsNeeded?: () => void;
   projectId?: string | null;
   sessionId?: string | null;

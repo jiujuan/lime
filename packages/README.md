@@ -155,7 +155,7 @@ const runtime = createAgentRuntimeClientFromSessionGateway({
 
 ### 3. Product workbench 从 quick intent 拼 turn payload
 
-适合从 Agent App / Content Studio 迁移 composer、quick intent、capability policy 的页面。UI 只保存当前输入和业务对象；intent 到 capability policy 的规则走共享包。
+适合从 Plugin / Content Studio 迁移 composer、quick intent、capability policy 的页面。UI 只保存当前输入和业务对象；intent 到 capability policy 的规则走共享包。
 
 ```ts
 import {
@@ -181,7 +181,7 @@ const policy = resolveWorkbenchIntentCapabilityPolicy({
 });
 
 const payload = buildAgentTurnStartPayload({
-  agentAppId: "content-studio",
+  pluginId: "content-studio",
   workspacePath,
   prompt,
   capabilityId: "content.draft.generate",
@@ -271,7 +271,7 @@ const toolPolicy = buildAgentCapabilityPolicy({
 
 ## Claw 迁移到 Agents 时怎么拆
 
-迁移 Claw / Agent App 前端实现时，不要把整页 React、store、CSS 或命令面板复制到每个 Product App。按下面的边界拆：
+迁移 Claw / Plugin 前端实现时，不要把整页 React、store、CSS 或命令面板复制到每个 Product App。按下面的边界拆：
 
 | Claw 中的能力 | 应落到哪里 | Product App 还要自己保留什么 |
 | --- | --- | --- |

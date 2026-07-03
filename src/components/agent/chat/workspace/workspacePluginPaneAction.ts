@@ -54,7 +54,7 @@ export function buildWorkspacePluginPaneActionRequestMetadata(
   });
 
   return {
-    agent_app: {
+    plugin: {
       source,
       app_id: intent.appId,
       session_id: intent.sessionId,

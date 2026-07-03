@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
 import { describe, expect, it } from "vitest";
-import contentFactoryFixture from "@/features/agent-app/testing/fixtures/content-factory-app.json";
+import contentFactoryFixture from "@/features/plugin/testing/fixtures/content-factory-app.json";
 import {
   buildContentFactoryWorkerRequest,
   buildContentFactoryWorkerRuntimeContract,
@@ -21,7 +21,7 @@ import {
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const fixtureRoot = resolve(
   repoRoot,
-  "src/features/agent-app/testing/fixtures",
+  "src/features/plugin/testing/fixtures",
 );
 const HOST_GENERATED_MARKDOWN = [
   "# 宿主生成标题",
@@ -71,7 +71,7 @@ function withHostManagedGeneration<T extends Record<string, unknown>>(
   return {
     ...request,
     hostManagedGeneration: {
-      schemaVersion: "lime.agent_app.host_managed_generation.v1",
+      schemaVersion: "lime.plugin.host_managed_generation.v1",
       source: "test-host-generation",
       status: "completed",
       provider: "test-provider",

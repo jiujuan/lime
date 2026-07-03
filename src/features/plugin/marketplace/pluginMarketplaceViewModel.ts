@@ -202,7 +202,7 @@ function projectPluginMarketplaceActivationEntries(
         !record ||
         !key ||
         !title ||
-        (kind !== "plugin" && kind !== "agentApp" && kind !== "skill")
+        (kind !== "plugin" && kind !== "pluginUi" && kind !== "skill")
       ) {
         return [];
       }

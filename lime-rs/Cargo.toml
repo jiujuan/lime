@@ -1,8 +1,6 @@
 [workspace]
 members = ["crates/*"]
 exclude = [
-  "crates/agent-app-server",
-  "crates/agent-app-server-protocol",
   "crates/aster",
   "crates/aster-models",
   "crates/aster-rust",
@@ -11,7 +9,7 @@ exclude = [
 resolver = "2"
 
 [workspace.package]
-version = "1.86.0"
+version = "1.87.0"
 edition = "2021"
 authors = ["coso"]
 repository = "https://github.com/aiclientproxy/lime"

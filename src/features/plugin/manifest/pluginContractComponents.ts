@@ -182,7 +182,7 @@ export function normalizeManifestInterface(
 
 function normalizeActivationKind(value: unknown): PluginActivationEntryKind {
   const kind = readString(value);
-  if (!kind || !["plugin", "agentApp", "skill"].includes(kind)) {
+  if (!kind || !["plugin", "pluginUi", "skill"].includes(kind)) {
     throw new PluginManifestError(
       `Plugin activation entry kind is unsupported: ${kind ?? ""}`,
     );

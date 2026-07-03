@@ -284,10 +284,10 @@ describe("previewArtifact", () => {
   it("应把应用入口投影为 app_shell 来源摘要，而不是普通文件预览", () => {
     const projection = createPreviewArtifact({
       source: "app",
-      sourceRef: "agent-app:research",
+      sourceRef: "plugin:research",
       title: "研究工作台",
       content: "可继续整理来源和生成报告。",
-      path: "agent-app:research",
+      path: "plugin:research",
       now: 100,
     });
 
@@ -303,7 +303,7 @@ describe("previewArtifact", () => {
           previewArtifact: true,
           isSourceBacked: true,
           source: "app",
-          sourceRef: "agent-app:research",
+          sourceRef: "plugin:research",
           contentKind: "app_shell",
           renderMode: "inline",
           capabilities: expect.objectContaining({

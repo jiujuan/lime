@@ -159,24 +159,24 @@ export const METHOD_WORKSPACE_SKILL_BINDINGS_LIST =
   "workspaceSkillBindings/list";
 export const METHOD_WORKSPACE_REGISTERED_SKILLS_LIST =
   "workspaceRegisteredSkills/list";
-export const METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT =
-  "agentAppLocalPackage/inspect";
-export const METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD =
-  "agentAppPackage/fetchCloud";
-export const METHOD_AGENT_APP_INSTALLED_SAVE = "agentAppInstalled/save";
-export const METHOD_AGENT_APP_INSTALLED_LIST = "agentAppInstalled/list";
-export const METHOD_AGENT_APP_INSTALLED_DISABLED_SET =
-  "agentAppInstalled/disabled/set";
-export const METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL =
-  "agentAppInstalled/uninstall/rehearsal";
-export const METHOD_AGENT_APP_INSTALLED_UNINSTALL =
-  "agentAppInstalled/uninstall";
-export const METHOD_AGENT_APP_HOST_LIFECYCLE_LIST =
-  "agentAppHostLifecycle/list";
-export const METHOD_AGENT_APP_SHELL_PREPARE = "agentAppShell/prepare";
-export const METHOD_AGENT_APP_UI_RUNTIME_START = "agentAppUiRuntime/start";
-export const METHOD_AGENT_APP_UI_RUNTIME_STATUS = "agentAppUiRuntime/status";
-export const METHOD_AGENT_APP_UI_RUNTIME_STOP = "agentAppUiRuntime/stop";
+export const METHOD_PLUGIN_LOCAL_PACKAGE_INSPECT =
+  "pluginLocalPackage/inspect";
+export const METHOD_PLUGIN_PACKAGE_FETCH_CLOUD =
+  "pluginPackage/fetchCloud";
+export const METHOD_PLUGIN_INSTALLED_SAVE = "pluginInstalled/save";
+export const METHOD_PLUGIN_INSTALLED_LIST = "pluginInstalled/list";
+export const METHOD_PLUGIN_INSTALLED_DISABLED_SET =
+  "pluginInstalled/disabled/set";
+export const METHOD_PLUGIN_INSTALLED_UNINSTALL_REHEARSAL =
+  "pluginInstalled/uninstall/rehearsal";
+export const METHOD_PLUGIN_INSTALLED_UNINSTALL =
+  "pluginInstalled/uninstall";
+export const METHOD_PLUGIN_HOST_LIFECYCLE_LIST =
+  "pluginHostLifecycle/list";
+export const METHOD_PLUGIN_SHELL_PREPARE = "pluginShell/prepare";
+export const METHOD_PLUGIN_UI_RUNTIME_START = "pluginUiRuntime/start";
+export const METHOD_PLUGIN_UI_RUNTIME_STATUS = "pluginUiRuntime/status";
+export const METHOD_PLUGIN_UI_RUNTIME_STOP = "pluginUiRuntime/stop";
 export const METHOD_KNOWLEDGE_PACK_LIST = "knowledgePack/list";
 export const METHOD_KNOWLEDGE_PACK_READ = "knowledgePack/read";
 export const METHOD_KNOWLEDGE_SOURCE_IMPORT = "knowledgePack/source/import";
@@ -545,21 +545,21 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_GATEWAY_TUNNEL_SYNC_WEBHOOK_URL, kind: "request" },
   { method: METHOD_WORKSPACE_SKILL_BINDINGS_LIST, kind: "request" },
   { method: METHOD_WORKSPACE_REGISTERED_SKILLS_LIST, kind: "request" },
-  { method: METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT, kind: "request" },
-  { method: METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD, kind: "request" },
-  { method: METHOD_AGENT_APP_INSTALLED_SAVE, kind: "request" },
-  { method: METHOD_AGENT_APP_INSTALLED_LIST, kind: "request" },
-  { method: METHOD_AGENT_APP_INSTALLED_DISABLED_SET, kind: "request" },
+  { method: METHOD_PLUGIN_LOCAL_PACKAGE_INSPECT, kind: "request" },
+  { method: METHOD_PLUGIN_PACKAGE_FETCH_CLOUD, kind: "request" },
+  { method: METHOD_PLUGIN_INSTALLED_SAVE, kind: "request" },
+  { method: METHOD_PLUGIN_INSTALLED_LIST, kind: "request" },
+  { method: METHOD_PLUGIN_INSTALLED_DISABLED_SET, kind: "request" },
   {
-    method: METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL,
+    method: METHOD_PLUGIN_INSTALLED_UNINSTALL_REHEARSAL,
     kind: "request",
   },
-  { method: METHOD_AGENT_APP_INSTALLED_UNINSTALL, kind: "request" },
-  { method: METHOD_AGENT_APP_HOST_LIFECYCLE_LIST, kind: "request" },
-  { method: METHOD_AGENT_APP_SHELL_PREPARE, kind: "request" },
-  { method: METHOD_AGENT_APP_UI_RUNTIME_START, kind: "request" },
-  { method: METHOD_AGENT_APP_UI_RUNTIME_STATUS, kind: "request" },
-  { method: METHOD_AGENT_APP_UI_RUNTIME_STOP, kind: "request" },
+  { method: METHOD_PLUGIN_INSTALLED_UNINSTALL, kind: "request" },
+  { method: METHOD_PLUGIN_HOST_LIFECYCLE_LIST, kind: "request" },
+  { method: METHOD_PLUGIN_SHELL_PREPARE, kind: "request" },
+  { method: METHOD_PLUGIN_UI_RUNTIME_START, kind: "request" },
+  { method: METHOD_PLUGIN_UI_RUNTIME_STATUS, kind: "request" },
+  { method: METHOD_PLUGIN_UI_RUNTIME_STOP, kind: "request" },
   { method: METHOD_KNOWLEDGE_PACK_LIST, kind: "request" },
   { method: METHOD_KNOWLEDGE_PACK_READ, kind: "request" },
   { method: METHOD_KNOWLEDGE_SOURCE_IMPORT, kind: "request" },
@@ -2804,11 +2804,11 @@ export type WorkspaceRegisteredSkillsListResponse = {
   skills: unknown[];
 };
 
-export type AgentAppLocalPackageInspectParams = {
+export type PluginLocalPackageInspectParams = {
   appDir: string;
 };
 
-export type AgentAppLocalPackageInspectResponse = {
+export type PluginLocalPackageInspectResponse = {
   sourceKind: "local_folder" | string;
   sourceUri: string;
   appDir: string;
@@ -2820,7 +2820,7 @@ export type AgentAppLocalPackageInspectResponse = {
   inspectedAt: string;
 };
 
-export type AgentAppCloudReleaseDescriptor = {
+export type PluginCloudReleaseDescriptor = {
   sourceUri: string;
   appId: string;
   version: string;
@@ -2835,11 +2835,11 @@ export type AgentAppCloudReleaseDescriptor = {
   loadedAt: string;
 };
 
-export type AgentAppFetchCloudPackageParams = {
-  descriptor: AgentAppCloudReleaseDescriptor;
+export type PluginFetchCloudPackageParams = {
+  descriptor: PluginCloudReleaseDescriptor;
 };
 
-export type AgentAppPackageIdentity = {
+export type PluginPackageIdentity = {
   sourceKind: string;
   sourceUri: string;
   appId: string;
@@ -2854,9 +2854,9 @@ export type AgentAppPackageIdentity = {
   signatureRef?: string;
 };
 
-export type AgentAppPackageCacheEntry = {
+export type PluginPackageCacheEntry = {
   appId: string;
-  identity: AgentAppPackageIdentity;
+  identity: PluginPackageIdentity;
   manifestSnapshot: unknown;
   packageHash: string;
   manifestHash: string;
@@ -2864,27 +2864,27 @@ export type AgentAppPackageCacheEntry = {
   cachedAt: string;
 };
 
-export type AgentAppInstalledSaveParams = {
+export type PluginInstalledSaveParams = {
   state: unknown;
 };
 
-export type AgentAppInstalledDisabledSetParams = {
+export type PluginInstalledDisabledSetParams = {
   appId: string;
   disabled: boolean;
   updatedAt?: string;
 };
 
-export type AgentAppInstalledListResponse = {
+export type PluginInstalledListResponse = {
   states: unknown[];
   issues: unknown[];
 };
 
-export type AgentAppUninstallRehearsalParams = {
+export type PluginUninstallRehearsalParams = {
   appId: string;
   mode: "keep-data" | "delete-data" | string;
 };
 
-export type AgentAppUninstallRehearsalTarget = {
+export type PluginUninstallRehearsalTarget = {
   kind: string;
   value: string;
   safeToDelete: boolean;
@@ -2892,24 +2892,24 @@ export type AgentAppUninstallRehearsalTarget = {
   reason: string;
 };
 
-export type AgentAppUninstallRehearsalResponse = {
+export type PluginUninstallRehearsalResponse = {
   appId: string;
   packageHash?: string;
   mode: "keep-data" | "delete-data" | string;
   generatedAt: string;
   deletedTargetCount: number;
   retainedTargetCount: number;
-  targets: AgentAppUninstallRehearsalTarget[];
+  targets: PluginUninstallRehearsalTarget[];
   warnings: string[];
 };
 
-export type AgentAppUninstallParams = {
+export type PluginUninstallParams = {
   appId: string;
   mode: "keep-data" | "delete-data" | string;
   confirmationPhrase?: string;
 };
 
-export type AgentAppDeleteDataTargetEvidence = {
+export type PluginDeleteDataTargetEvidence = {
   kind: string;
   value: string;
   action: string;
@@ -2919,41 +2919,41 @@ export type AgentAppDeleteDataTargetEvidence = {
   error?: string | null;
 };
 
-export type AgentAppDeleteDataExecutionEvidence = {
+export type PluginDeleteDataExecutionEvidence = {
   status: string;
   generatedAt: string;
   dataRoot: string;
-  removedTargets: AgentAppDeleteDataTargetEvidence[];
-  missingTargets: AgentAppDeleteDataTargetEvidence[];
-  retainedTargets: AgentAppDeleteDataTargetEvidence[];
-  blockedTargets: AgentAppDeleteDataTargetEvidence[];
-  failedTarget?: AgentAppDeleteDataTargetEvidence | null;
+  removedTargets: PluginDeleteDataTargetEvidence[];
+  missingTargets: PluginDeleteDataTargetEvidence[];
+  retainedTargets: PluginDeleteDataTargetEvidence[];
+  blockedTargets: PluginDeleteDataTargetEvidence[];
+  failedTarget?: PluginDeleteDataTargetEvidence | null;
   blockerCodes: string[];
   postDeleteResidualAudit?: {
     status: string;
     checkedAt: string;
     checkedTargetCount: number;
     remainingTargetCount: number;
-    remainingTargets: AgentAppDeleteDataTargetEvidence[];
-    failedTarget?: AgentAppDeleteDataTargetEvidence | null;
+    remainingTargets: PluginDeleteDataTargetEvidence[];
+    failedTarget?: PluginDeleteDataTargetEvidence | null;
   };
 };
 
-export type AgentAppUninstallResponse = {
+export type PluginUninstallResponse = {
   status: string;
-  rehearsal: AgentAppUninstallRehearsalResponse;
-  list: AgentAppInstalledListResponse;
+  rehearsal: PluginUninstallRehearsalResponse;
+  list: PluginInstalledListResponse;
   removedTargetCount: number;
   missingTargetCount: number;
   blockerCodes: string[];
-  deleteEvidence?: AgentAppDeleteDataExecutionEvidence | null;
+  deleteEvidence?: PluginDeleteDataExecutionEvidence | null;
 };
 
-export type AgentAppShellPrepareParams = {
+export type PluginShellPrepareParams = {
   descriptor: unknown;
 };
 
-export type AgentAppShellPackageMount = {
+export type PluginShellPackageMount = {
   kind: string;
   path: string;
   readOnly: boolean;
@@ -2961,7 +2961,7 @@ export type AgentAppShellPackageMount = {
   manifestHash: string;
 };
 
-export type AgentAppShellPrepareResponse = {
+export type PluginShellPrepareResponse = {
   appId?: string;
   status: string;
   installMode?: string;
@@ -2970,26 +2970,26 @@ export type AgentAppShellPrepareResponse = {
   devShell: boolean;
   blockerCodes: string[];
   message?: string;
-  packageMount?: AgentAppShellPackageMount;
+  packageMount?: PluginShellPackageMount;
   entryKey?: string;
   windowTitle?: string;
   preparedAt: string;
 };
 
-export type AgentAppUiRuntimeStartParams = {
+export type PluginUiRuntimeStartParams = {
   appId: string;
   entryKey?: string;
 };
 
-export type AgentAppUiRuntimeStatusParams = {
+export type PluginUiRuntimeStatusParams = {
   appId: string;
 };
 
-export type AgentAppUiRuntimeStopParams = {
+export type PluginUiRuntimeStopParams = {
   appId: string;
 };
 
-export type AgentAppTaskRuntimeContract = {
+export type PluginTaskRuntimeContract = {
   enabled: boolean;
   packageRootPath?: string | null;
   workerEntrypoint?: string | null;
@@ -3003,7 +3003,7 @@ export type AgentAppTaskRuntimeContract = {
   directFilesystemAccess: boolean;
 };
 
-export type AgentAppUiRuntimeStatusResponse = {
+export type PluginUiRuntimeStatusResponse = {
   appId: string;
   status: "starting" | "running" | "stopped" | "failed" | string;
   baseUrl?: string;
@@ -3013,7 +3013,7 @@ export type AgentAppUiRuntimeStatusResponse = {
   message?: string;
   entryKey?: string;
   route?: string;
-  taskRuntime?: AgentAppTaskRuntimeContract | null;
+  taskRuntime?: PluginTaskRuntimeContract | null;
 };
 
 export type KnowledgeListPacksParams = {

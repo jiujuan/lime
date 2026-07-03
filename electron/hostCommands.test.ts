@@ -17,15 +17,15 @@ import { ElectronHostCommands } from "./hostCommands";
 import type { ElectronAppServerHost } from "./appServerHost";
 
 const {
-  agentAppShellHostGetUiRuntimeStatusMock,
-  agentAppShellHostLaunchShellMock,
-  agentAppShellHostSelectDirectoryMock,
-  agentAppShellHostStartUiRuntimeMock,
-  agentAppShellHostStopUiRuntimeMock,
-  agentAppRuntimeTaskHostCancelTaskMock,
-  agentAppRuntimeTaskHostGetTaskMock,
-  agentAppRuntimeTaskHostStartTaskMock,
-  agentAppRuntimeTaskHostSubmitHostResponseMock,
+  pluginShellHostGetUiRuntimeStatusMock,
+  pluginShellHostLaunchShellMock,
+  pluginShellHostSelectDirectoryMock,
+  pluginShellHostStartUiRuntimeMock,
+  pluginShellHostStopUiRuntimeMock,
+  pluginRuntimeTaskHostCancelTaskMock,
+  pluginRuntimeTaskHostGetTaskMock,
+  pluginRuntimeTaskHostStartTaskMock,
+  pluginRuntimeTaskHostSubmitHostResponseMock,
   browserWindowCtorMock,
   browserWindowGetAllWindowsMock,
   fileShellHostGetFileIconDataUrlMock,
@@ -123,15 +123,15 @@ const {
   return {
     browserWindowCtorMock,
     browserWindowGetAllWindowsMock,
-    agentAppRuntimeTaskHostCancelTaskMock: vi.fn(),
-    agentAppRuntimeTaskHostGetTaskMock: vi.fn(),
-    agentAppRuntimeTaskHostStartTaskMock: vi.fn(),
-    agentAppRuntimeTaskHostSubmitHostResponseMock: vi.fn(),
-    agentAppShellHostGetUiRuntimeStatusMock: vi.fn(),
-    agentAppShellHostLaunchShellMock: vi.fn(),
-    agentAppShellHostSelectDirectoryMock: vi.fn(),
-    agentAppShellHostStartUiRuntimeMock: vi.fn(),
-    agentAppShellHostStopUiRuntimeMock: vi.fn(),
+    pluginRuntimeTaskHostCancelTaskMock: vi.fn(),
+    pluginRuntimeTaskHostGetTaskMock: vi.fn(),
+    pluginRuntimeTaskHostStartTaskMock: vi.fn(),
+    pluginRuntimeTaskHostSubmitHostResponseMock: vi.fn(),
+    pluginShellHostGetUiRuntimeStatusMock: vi.fn(),
+    pluginShellHostLaunchShellMock: vi.fn(),
+    pluginShellHostSelectDirectoryMock: vi.fn(),
+    pluginShellHostStartUiRuntimeMock: vi.fn(),
+    pluginShellHostStopUiRuntimeMock: vi.fn(),
     contentViewAddChildViewMock,
     contentViewRemoveChildViewMock,
     fileShellHostGetFileIconDataUrlMock: vi.fn(),
@@ -223,22 +223,22 @@ vi.mock("./desktopNotificationHost", () => ({
   showDesktopNotification: showDesktopNotificationMock,
 }));
 
-vi.mock("./agentAppShellHost", () => ({
-  AgentAppShellHost: vi.fn(() => ({
-    getUiRuntimeStatus: agentAppShellHostGetUiRuntimeStatusMock,
-    launchShell: agentAppShellHostLaunchShellMock,
-    selectDirectory: agentAppShellHostSelectDirectoryMock,
-    startUiRuntime: agentAppShellHostStartUiRuntimeMock,
-    stopUiRuntime: agentAppShellHostStopUiRuntimeMock,
+vi.mock("./pluginShellHost", () => ({
+  PluginShellHost: vi.fn(() => ({
+    getUiRuntimeStatus: pluginShellHostGetUiRuntimeStatusMock,
+    launchShell: pluginShellHostLaunchShellMock,
+    selectDirectory: pluginShellHostSelectDirectoryMock,
+    startUiRuntime: pluginShellHostStartUiRuntimeMock,
+    stopUiRuntime: pluginShellHostStopUiRuntimeMock,
   })),
 }));
 
-vi.mock("./agentAppRuntimeTaskHost", () => ({
-  AgentAppRuntimeTaskHost: vi.fn(() => ({
-    cancelTask: agentAppRuntimeTaskHostCancelTaskMock,
-    getTask: agentAppRuntimeTaskHostGetTaskMock,
-    startTask: agentAppRuntimeTaskHostStartTaskMock,
-    submitHostResponse: agentAppRuntimeTaskHostSubmitHostResponseMock,
+vi.mock("./pluginRuntimeTaskHost", () => ({
+  PluginRuntimeTaskHost: vi.fn(() => ({
+    cancelTask: pluginRuntimeTaskHostCancelTaskMock,
+    getTask: pluginRuntimeTaskHostGetTaskMock,
+    startTask: pluginRuntimeTaskHostStartTaskMock,
+    submitHostResponse: pluginRuntimeTaskHostSubmitHostResponseMock,
   })),
 }));
 
@@ -355,7 +355,7 @@ async function withRemotePngServer<T>(
   }
 }
 
-function buildAgentAppShellDescriptor(): Record<string, unknown> {
+function buildPluginShellDescriptor(): Record<string, unknown> {
   return {
     descriptorVersion: 1,
     appId: "content-factory-app",
@@ -868,26 +868,26 @@ describe("ElectronHostCommands local file shell facade", () => {
     });
   });
 
-  it("Agent App shell 命令应只分发到 AgentAppShellHost", async () => {
-    agentAppShellHostSelectDirectoryMock.mockResolvedValueOnce({
-      path: "/tmp/agent-app",
+  it("Plugin shell 命令应只分发到 PluginShellHost", async () => {
+    pluginShellHostSelectDirectoryMock.mockResolvedValueOnce({
+      path: "/tmp/plugin",
       cancelled: false,
     });
-    agentAppShellHostLaunchShellMock.mockResolvedValueOnce({
+    pluginShellHostLaunchShellMock.mockResolvedValueOnce({
       status: "launched",
       devShell: true,
       blockerCodes: [],
       launchedAt: "2026-05-15T00:00:00.000Z",
     });
-    agentAppShellHostStartUiRuntimeMock.mockResolvedValueOnce({
+    pluginShellHostStartUiRuntimeMock.mockResolvedValueOnce({
       appId: "content-factory-app",
       status: "running",
     });
-    agentAppShellHostGetUiRuntimeStatusMock.mockResolvedValueOnce({
+    pluginShellHostGetUiRuntimeStatusMock.mockResolvedValueOnce({
       appId: "content-factory-app",
       status: "running",
     });
-    agentAppShellHostStopUiRuntimeMock.mockResolvedValueOnce({
+    pluginShellHostStopUiRuntimeMock.mockResolvedValueOnce({
       appId: "content-factory-app",
       status: "stopped",
     });
@@ -896,19 +896,19 @@ describe("ElectronHostCommands local file shell facade", () => {
 
     const selectArgs = { request: { title: "选择应用目录" } };
     await expect(
-      host.invoke("agent_app_select_directory", selectArgs),
+      host.invoke("plugin_select_directory", selectArgs),
     ).resolves.toEqual({
-      path: "/tmp/agent-app",
+      path: "/tmp/plugin",
       cancelled: false,
     });
 
     const launchArgs = {
       request: {
-        descriptor: buildAgentAppShellDescriptor(),
+        descriptor: buildPluginShellDescriptor(),
       },
     };
     await expect(
-      host.invoke("agent_app_launch_shell", launchArgs),
+      host.invoke("plugin_launch_shell", launchArgs),
     ).resolves.toMatchObject({
       status: "launched",
       devShell: true,
@@ -921,26 +921,26 @@ describe("ElectronHostCommands local file shell facade", () => {
       },
     };
     await expect(
-      host.invoke("agent_app_start_ui_runtime", runtimeArgs),
+      host.invoke("plugin_start_ui_runtime", runtimeArgs),
     ).resolves.toMatchObject({ status: "running" });
     await expect(
-      host.invoke("agent_app_get_ui_runtime_status", runtimeArgs),
+      host.invoke("plugin_get_ui_runtime_status", runtimeArgs),
     ).resolves.toMatchObject({ status: "running" });
     await expect(
-      host.invoke("agent_app_stop_ui_runtime", runtimeArgs),
+      host.invoke("plugin_stop_ui_runtime", runtimeArgs),
     ).resolves.toMatchObject({ status: "stopped" });
 
-    expect(agentAppShellHostSelectDirectoryMock).toHaveBeenCalledWith(
+    expect(pluginShellHostSelectDirectoryMock).toHaveBeenCalledWith(
       selectArgs,
     );
-    expect(agentAppShellHostLaunchShellMock).toHaveBeenCalledWith(launchArgs);
-    expect(agentAppShellHostStartUiRuntimeMock).toHaveBeenCalledWith(
+    expect(pluginShellHostLaunchShellMock).toHaveBeenCalledWith(launchArgs);
+    expect(pluginShellHostStartUiRuntimeMock).toHaveBeenCalledWith(
       runtimeArgs,
     );
-    expect(agentAppShellHostGetUiRuntimeStatusMock).toHaveBeenCalledWith(
+    expect(pluginShellHostGetUiRuntimeStatusMock).toHaveBeenCalledWith(
       runtimeArgs,
     );
-    expect(agentAppShellHostStopUiRuntimeMock).toHaveBeenCalledWith(
+    expect(pluginShellHostStopUiRuntimeMock).toHaveBeenCalledWith(
       runtimeArgs,
     );
   });
@@ -1441,18 +1441,18 @@ describe("ElectronHostCommands model provider current source", () => {
   });
 });
 
-describe("ElectronHostCommands Agent App runtime dispatcher", () => {
-  it("agent_app_runtime_* 命令应只分发到 AgentAppRuntimeTaskHost", async () => {
-    agentAppRuntimeTaskHostStartTaskMock.mockResolvedValueOnce({
+describe("ElectronHostCommands Plugin runtime dispatcher", () => {
+  it("plugin_runtime_* 命令应只分发到 PluginRuntimeTaskHost", async () => {
+    pluginRuntimeTaskHostStartTaskMock.mockResolvedValueOnce({
       status: "accepted",
     });
-    agentAppRuntimeTaskHostGetTaskMock.mockResolvedValueOnce({
+    pluginRuntimeTaskHostGetTaskMock.mockResolvedValueOnce({
       status: "thread_read_available",
     });
-    agentAppRuntimeTaskHostCancelTaskMock.mockResolvedValueOnce({
+    pluginRuntimeTaskHostCancelTaskMock.mockResolvedValueOnce({
       status: "cancelled",
     });
-    agentAppRuntimeTaskHostSubmitHostResponseMock.mockResolvedValueOnce({
+    pluginRuntimeTaskHostSubmitHostResponseMock.mockResolvedValueOnce({
       status: "submitted",
     });
     const userDataDir = await createTempUserDataDir();
@@ -1464,26 +1464,26 @@ describe("ElectronHostCommands Agent App runtime dispatcher", () => {
     const responseArgs = { request: { taskId: "task-response" } };
 
     await expect(
-      host.invoke("agent_app_runtime_start_task", startArgs),
+      host.invoke("plugin_runtime_start_task", startArgs),
     ).resolves.toEqual({ status: "accepted" });
     await expect(
-      host.invoke("agent_app_runtime_get_task", getArgs),
+      host.invoke("plugin_runtime_get_task", getArgs),
     ).resolves.toEqual({ status: "thread_read_available" });
     await expect(
-      host.invoke("agent_app_runtime_cancel_task", cancelArgs),
+      host.invoke("plugin_runtime_cancel_task", cancelArgs),
     ).resolves.toEqual({ status: "cancelled" });
     await expect(
-      host.invoke("agent_app_runtime_submit_host_response", responseArgs),
+      host.invoke("plugin_runtime_submit_host_response", responseArgs),
     ).resolves.toEqual({ status: "submitted" });
 
-    expect(agentAppRuntimeTaskHostStartTaskMock).toHaveBeenCalledWith(
+    expect(pluginRuntimeTaskHostStartTaskMock).toHaveBeenCalledWith(
       startArgs,
     );
-    expect(agentAppRuntimeTaskHostGetTaskMock).toHaveBeenCalledWith(getArgs);
-    expect(agentAppRuntimeTaskHostCancelTaskMock).toHaveBeenCalledWith(
+    expect(pluginRuntimeTaskHostGetTaskMock).toHaveBeenCalledWith(getArgs);
+    expect(pluginRuntimeTaskHostCancelTaskMock).toHaveBeenCalledWith(
       cancelArgs,
     );
-    expect(agentAppRuntimeTaskHostSubmitHostResponseMock).toHaveBeenCalledWith(
+    expect(pluginRuntimeTaskHostSubmitHostResponseMock).toHaveBeenCalledWith(
       responseArgs,
     );
   });

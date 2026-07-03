@@ -13,8 +13,8 @@ import {
 import { CURRENT_SIDEBAR_NAV_SCHEMA_VERSION } from "@/lib/api/appConfigTypes";
 import { type AgentPageParams, type Page, type PageParams } from "@/types/page";
 import { SettingsTabs } from "@/types/settings";
-import { resolveAgentAppHostFlags } from "../../features/agent-app/featureFlag";
-import type { AgentAppHostFlags } from "../../features/agent-app/types";
+import { resolvePluginHostFlags } from "../../features/plugin/featureFlag";
+import type { PluginHostFlags } from "../../features/plugin/types";
 import { buildHomeAgentParams } from "@/lib/workspace/navigation";
 
 export { CURRENT_SIDEBAR_NAV_SCHEMA_VERSION };
@@ -80,23 +80,23 @@ const BASE_MAIN_SIDEBAR_NAV_ITEMS: SidebarNavItemDefinition[] = [
   },
 ];
 
-const AGENT_APP_LAB_NAV_ITEM: SidebarNavItemDefinition = {
-  id: "agent-app-lab",
-  label: "Agent App Lab",
+const PLUGIN_LAB_NAV_ITEM: SidebarNavItemDefinition = {
+  id: "plugin-lab",
+  label: "Plugin Lab",
   icon: FlaskConical,
-  page: "agent-app-lab",
-  isActive: (currentPage) => currentPage === "agent-app-lab",
+  page: "plugin-lab",
+  isActive: (currentPage) => currentPage === "plugin-lab",
   configurable: false,
 };
 
 export function buildMainSidebarNavItems(
-  flags: Pick<AgentAppHostFlags, "labEnabled"> = resolveAgentAppHostFlags(),
+  flags: Pick<PluginHostFlags, "labEnabled"> = resolvePluginHostFlags(),
 ): SidebarNavItemDefinition[] {
   if (!flags.labEnabled) {
     return BASE_MAIN_SIDEBAR_NAV_ITEMS;
   }
 
-  return [...BASE_MAIN_SIDEBAR_NAV_ITEMS, AGENT_APP_LAB_NAV_ITEM];
+  return [...BASE_MAIN_SIDEBAR_NAV_ITEMS, PLUGIN_LAB_NAV_ITEM];
 }
 
 export const MAIN_SIDEBAR_NAV_ITEMS: SidebarNavItemDefinition[] =

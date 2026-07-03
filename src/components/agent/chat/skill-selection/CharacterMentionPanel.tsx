@@ -208,8 +208,8 @@ export const CharacterMentionPanel: React.FC<CharacterMentionPanelProps> = ({
         return t("inputCapabilities.panel.helper.featuredServiceSkills");
       }
 
-      if (sectionKey === "agent-apps") {
-        return t("inputCapabilities.panel.helper.agentApps");
+      if (sectionKey === "plugins") {
+        return t("inputCapabilities.panel.helper.plugins");
       }
 
       if (sectionKey === "installed-skills") {
@@ -257,7 +257,7 @@ export const CharacterMentionPanel: React.FC<CharacterMentionPanelProps> = ({
     (isEmptyMentionQuery &&
       ([
         "featured-service-skills",
-        "agent-apps",
+        "plugins",
         "installed-skills",
         "available-skills",
         "characters",

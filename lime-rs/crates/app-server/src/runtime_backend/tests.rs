@@ -7,7 +7,6 @@ use super::request_context::{
     RuntimeModelSelection,
 };
 use super::*;
-use crate::AgentAppDataSource;
 use crate::AppDataSource;
 use crate::AutomationManagementAppDataSource;
 use crate::AutomationOverviewAppDataSource;
@@ -20,6 +19,7 @@ use crate::MediaAppDataSource;
 use crate::MemoryAppDataSource;
 use crate::ModelProviderAppDataSource;
 use crate::NoopAppDataSource;
+use crate::PluginDataSource;
 use crate::RightSurfaceAppDataSource;
 use crate::RuntimeHostContext;
 use crate::SessionAppDataSource;
@@ -104,7 +104,7 @@ impl WorkspaceSkillBindingAppDataSource for TestMcpAutostartDataSource {}
 impl GatewayAppDataSource for TestMcpAutostartDataSource {}
 impl MediaAppDataSource for TestMcpAutostartDataSource {}
 impl VoiceAppDataSource for TestMcpAutostartDataSource {}
-impl AgentAppDataSource for TestMcpAutostartDataSource {}
+impl PluginDataSource for TestMcpAutostartDataSource {}
 impl KnowledgeAppDataSource for TestMcpAutostartDataSource {}
 impl AutomationOverviewAppDataSource for TestMcpAutostartDataSource {}
 impl AutomationManagementAppDataSource for TestMcpAutostartDataSource {}

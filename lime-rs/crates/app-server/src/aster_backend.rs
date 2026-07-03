@@ -266,7 +266,7 @@ mod tests {
         ) -> Result<AsterBackendSubmitResult, RuntimeCoreError> {
             assert_eq!(request.host.client_name.as_deref(), Some("test-client"));
             assert_eq!(request.workspace_id(), Some("default"));
-            assert_eq!(request.event_name, "agent_app_runtime:app:task");
+            assert_eq!(request.event_name, "plugin_runtime:app:task");
             assert_eq!(request.provider_preference.as_deref(), Some("deepseek"));
             assert_eq!(
                 request.model_preference.as_deref(),
@@ -275,14 +275,14 @@ mod tests {
             assert_eq!(
                 request.metadata.as_ref().and_then(|metadata| {
                     metadata
-                        .pointer("/agent_app_runtime/task_id")
+                        .pointer("/plugin_runtime/task_id")
                         .and_then(serde_json::Value::as_str)
                 }),
                 Some("task-1")
             );
             assert_eq!(
                 request.queued_turn_id.as_deref(),
-                Some("agent-app-queued-task-1")
+                Some("plugin-queued-task-1")
             );
             assert!(request.queue_if_busy);
             assert!(request.skip_pre_submit_resume);
@@ -333,7 +333,7 @@ mod tests {
             request: AsterBackendActionRespondRequest,
         ) -> Result<AsterBackendActionRespondResult, RuntimeCoreError> {
             assert_eq!(request.host.client_name.as_deref(), Some("test-client"));
-            assert_eq!(request.event_name, "agent_app_runtime:app:task");
+            assert_eq!(request.event_name, "plugin_runtime:app:task");
             assert_eq!(request.request_id, "req_confirm_1");
             assert_eq!(
                 request.action_type,
@@ -380,15 +380,15 @@ mod tests {
                     runtime_options: Some(RuntimeOptions {
                         capability_id: None,
                         stream: true,
-                        event_name: Some("agent_app_runtime:app:task".to_string()),
+                        event_name: Some("plugin_runtime:app:task".to_string()),
                         provider_preference: Some("deepseek".to_string()),
                         model_preference: Some("deepseek-v4-flash".to_string()),
                         metadata: Some(serde_json::json!({
-                            "agent_app_runtime": {
+                            "plugin_runtime": {
                                 "task_id": "task-1"
                             }
                         })),
-                        queued_turn_id: Some("agent-app-queued-task-1".to_string()),
+                        queued_turn_id: Some("plugin-queued-task-1".to_string()),
                         host_options: None,
                         ..RuntimeOptions::default()
                     }),
@@ -508,15 +508,15 @@ mod tests {
                     runtime_options: Some(RuntimeOptions {
                         capability_id: None,
                         stream: true,
-                        event_name: Some("agent_app_runtime:app:task".to_string()),
+                        event_name: Some("plugin_runtime:app:task".to_string()),
                         provider_preference: Some("deepseek".to_string()),
                         model_preference: Some("deepseek-v4-flash".to_string()),
                         metadata: Some(serde_json::json!({
-                            "agent_app_runtime": {
+                            "plugin_runtime": {
                                 "task_id": "task-1"
                             }
                         })),
-                        queued_turn_id: Some("agent-app-queued-task-1".to_string()),
+                        queued_turn_id: Some("plugin-queued-task-1".to_string()),
                         host_options: None,
                         ..RuntimeOptions::default()
                     }),
@@ -543,7 +543,7 @@ mod tests {
                     response: Some("allow".to_string()),
                     user_data: None,
                     metadata: None,
-                    event_name: Some("agent_app_runtime:app:task".to_string()),
+                    event_name: Some("plugin_runtime:app:task".to_string()),
                     action_scope: Some(AgentSessionActionScope {
                         session_id: Some(session.session_id.clone()),
                         thread_id: Some(session.thread_id.clone()),

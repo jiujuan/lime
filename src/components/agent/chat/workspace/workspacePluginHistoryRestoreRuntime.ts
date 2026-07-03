@@ -159,9 +159,9 @@ export function extractWorkspacePluginHistoryRestoreSnapshot(
   return {
     sessionId,
     pluginId: readString(restore, ["plugin_id", "pluginId"]),
-    activeAgentAppId: readString(restore, [
-      "active_agent_app_id",
-      "activeAgentAppId",
+    activePluginUiId: readString(restore, [
+      "active_plugin_ui_id",
+      "activePluginUiId",
     ]),
     activeEntryKey: readString(restore, ["active_entry_key", "activeEntryKey"]),
     selectedSkillKeys: readStringArray(

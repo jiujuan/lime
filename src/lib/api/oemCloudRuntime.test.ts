@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { setStoredOemCloudSessionState } from "@/lib/oemCloudSession";
 import {
-  resolveOemCloudAgentAppSignatureTrustRoots,
+  resolveOemCloudPluginSignatureTrustRoots,
   resolveOemCloudRuntimeContext,
 } from "./oemCloudRuntime";
 
-const AGENT_APP_TRUST_ROOT = {
-  publicKeyId: "agent-app-root-2026",
+const PLUGIN_TRUST_ROOT = {
+  publicKeyId: "plugin-root-2026",
   algorithm: "RSASSA-PKCS1-v1_5-SHA256",
   publicKey: "public-key-spki-base64",
   appIds: ["content-factory-app"],
@@ -39,7 +39,7 @@ describe("oemCloudRuntime", () => {
       desktopClientId: "limehub-desktop",
       desktopOauthRedirectUrl: "lime://oauth/callback",
       desktopOauthNextPath: "/welcome",
-      agentAppSignatureTrustRoots: [AGENT_APP_TRUST_ROOT],
+      pluginSignatureTrustRoots: [PLUGIN_TRUST_ROOT],
     };
 
     expect(resolveOemCloudRuntimeContext()).toEqual({
@@ -54,7 +54,7 @@ describe("oemCloudRuntime", () => {
       desktopClientId: "limehub-desktop",
       desktopOauthRedirectUrl: "lime://oauth/callback",
       desktopOauthNextPath: "/welcome",
-      agentAppSignatureTrustRoots: [AGENT_APP_TRUST_ROOT],
+      pluginSignatureTrustRoots: [PLUGIN_TRUST_ROOT],
     });
   });
 
@@ -74,7 +74,7 @@ describe("oemCloudRuntime", () => {
       desktopClientId: "desktop-client",
       desktopOauthRedirectUrl: "lime://oauth/callback",
       desktopOauthNextPath: "/welcome",
-      agentAppSignatureTrustRoots: [],
+      pluginSignatureTrustRoots: [],
     });
   });
 
@@ -106,15 +106,15 @@ describe("oemCloudRuntime", () => {
       desktopClientId: "desktop-client",
       desktopOauthRedirectUrl: "lime://oauth/callback",
       desktopOauthNextPath: "/welcome",
-      agentAppSignatureTrustRoots: [],
+      pluginSignatureTrustRoots: [],
     });
   });
 
-  it("应从 bootstrap 快照解析 Agent App 签名可信根", () => {
+  it("应从 bootstrap 快照解析 Plugin 签名可信根", () => {
     window.__LIME_BOOTSTRAP__ = {
       tenantId: "tenant-0001",
-      agentApps: {
-        signatureTrustRoots: [AGENT_APP_TRUST_ROOT],
+      plugins: {
+        signatureTrustRoots: [PLUGIN_TRUST_ROOT],
       },
     };
 
@@ -124,61 +124,61 @@ describe("oemCloudRuntime", () => {
     };
 
     expect(resolveOemCloudRuntimeContext()).toMatchObject({
-      agentAppSignatureTrustRoots: [AGENT_APP_TRUST_ROOT],
+      pluginSignatureTrustRoots: [PLUGIN_TRUST_ROOT],
     });
-    expect(resolveOemCloudAgentAppSignatureTrustRoots()).toEqual([
-      AGENT_APP_TRUST_ROOT,
+    expect(resolveOemCloudPluginSignatureTrustRoots()).toEqual([
+      PLUGIN_TRUST_ROOT,
     ]);
   });
 
   it("运行时可信根应优先于 bootstrap 快照可信根", () => {
     const runtimeTrustRoot = {
-      ...AGENT_APP_TRUST_ROOT,
-      publicKeyId: "agent-app-root-runtime",
+      ...PLUGIN_TRUST_ROOT,
+      publicKeyId: "plugin-root-runtime",
       publicKey: "runtime-public-key-spki-base64",
     };
     window.__LIME_BOOTSTRAP__ = {
       tenantId: "tenant-0001",
-      agentAppSignatureTrustRoots: [AGENT_APP_TRUST_ROOT],
+      pluginSignatureTrustRoots: [PLUGIN_TRUST_ROOT],
     };
     window.__LIME_OEM_CLOUD__ = {
       enabled: true,
       baseUrl: "https://user.limeai.run",
       tenantId: "tenant-0001",
-      agentAppSignatureTrustRoots: [runtimeTrustRoot],
+      pluginSignatureTrustRoots: [runtimeTrustRoot],
     };
 
-    expect(resolveOemCloudAgentAppSignatureTrustRoots()).toEqual([
+    expect(resolveOemCloudPluginSignatureTrustRoots()).toEqual([
       runtimeTrustRoot,
     ]);
   });
 
-  it("应保留 Agent App 签名可信根的轮换字段", () => {
+  it("应保留 Plugin 签名可信根的轮换字段", () => {
     const rotatingTrustRoot = {
-      ...AGENT_APP_TRUST_ROOT,
+      ...PLUGIN_TRUST_ROOT,
       notBefore: "2026-01-01T00:00:00.000Z",
       notAfter: "2026-12-31T23:59:59.999Z",
       revoked: false,
     };
     window.__LIME_OEM_CLOUD__ = {
-      agentAppSignatureTrustRoots: [rotatingTrustRoot],
+      pluginSignatureTrustRoots: [rotatingTrustRoot],
     };
 
-    expect(resolveOemCloudAgentAppSignatureTrustRoots()).toEqual([
+    expect(resolveOemCloudPluginSignatureTrustRoots()).toEqual([
       rotatingTrustRoot,
     ]);
   });
 
   it("可信根轮换字段格式错误时应丢弃 root", () => {
     window.__LIME_OEM_CLOUD__ = {
-      agentAppSignatureTrustRoots: [
+      pluginSignatureTrustRoots: [
         {
-          ...AGENT_APP_TRUST_ROOT,
+          ...PLUGIN_TRUST_ROOT,
           notBefore: "invalid-date",
         },
       ],
     };
 
-    expect(resolveOemCloudAgentAppSignatureTrustRoots()).toEqual([]);
+    expect(resolveOemCloudPluginSignatureTrustRoots()).toEqual([]);
   });
 });

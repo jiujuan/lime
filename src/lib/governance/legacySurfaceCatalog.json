@@ -151,7 +151,7 @@
     {
       "id": "sceneapp-active-launch-surface",
       "classification": "dead",
-      "description": "已删除的 SceneApp 首页卡片、Workspace 启动 Hook 与 launch draft 运行链；Agent App current 后不得恢复独立 SceneApp 启动入口",
+      "description": "已删除的 SceneApp 首页卡片、Workspace 启动 Hook 与 launch draft 运行链；Plugin current 后不得恢复独立 SceneApp 启动入口",
       "targets": [
         "src/components/agent/chat/sceneappEntryTypes.ts",
         "src/components/agent/chat/workspace/useWorkspaceSceneAppEntryActions.ts",
@@ -165,7 +165,7 @@
     {
       "id": "sceneapp-catalog-projection-surface",
       "classification": "dead",
-      "description": "已删除的 SceneApp catalog 编译 / 存储投影；应用目录事实源已切到 Agent App，不允许恢复独立 SceneApp catalog 入口",
+      "description": "已删除的 SceneApp catalog 编译 / 存储投影；应用目录事实源已切到 Plugin，不允许恢复独立 SceneApp catalog 入口",
       "targets": ["src/lib/sceneapp/catalog.ts"],
       "allowedPaths": []
     },
@@ -2179,7 +2179,7 @@
     {
       "id": "sceneapps-independent-page-surface",
       "classification": "dead",
-      "description": "已下线的 SceneApps 独立页面、目录页运行时与最近访问入口；Agent App 是 current 应用主链，不允许恢复 sceneapps 页面路由",
+      "description": "已下线的 SceneApps 独立页面、目录页运行时与最近访问入口；Plugin 是 current 应用主链，不允许恢复 sceneapps 页面路由",
       "targets": [
         "src/components/sceneapps/SceneAppsPage.tsx",
         "src/components/sceneapps/useSceneAppsPageRuntime.ts",
@@ -2670,7 +2670,7 @@
     {
       "id": "sceneapp-legacy-desktop-host-command-surface",
       "classification": "dead",
-      "description": "SceneApp 独立 旧桌面宿主命令已随 Agent App current 主链下线，不得恢复前端网关、Rust 注册、DevBridge 或 mock",
+      "description": "SceneApp 独立 旧桌面宿主命令已随 Plugin current 主链下线，不得恢复前端网关、Rust 注册、DevBridge 或 mock",
       "commands": [
         "sceneapp_list_catalog",
         "sceneapp_get_descriptor",
@@ -2705,7 +2705,7 @@
       "patterns": ["ViewTree", "ProcessTree"],
       "includePathPrefixes": [
         "src/components/agent",
-        "src/features/agent-app",
+        "src/features/plugin",
         "src/lib/api/agentRuntime"
       ],
       "allowedPaths": []
@@ -2748,15 +2748,15 @@
       ],
       "includePathPrefixes": [
         "src/components/agent",
-        "src/features/agent-app",
+        "src/features/plugin",
         "src/lib/api/agentRuntime"
       ],
       "allowedPaths": []
     },
     {
-      "id": "agent-app-host-drawer-local-process-fallback",
+      "id": "plugin-host-drawer-local-process-fallback",
       "classification": "dead",
-      "description": "Agent App HostDrawer 主路径不得重新调用本地 process fallback；主抽屉必须始终渲染标准 AgentRunProjectionPanel，空态也交给标准 projection",
+      "description": "Plugin HostDrawer 主路径不得重新调用本地 process fallback；主抽屉必须始终渲染标准 AgentRunProjectionPanel，空态也交给标准 projection",
       "patterns": [
         "AgentRunHostDrawerFallback",
         "AgentRunLocalProcessFallback",
@@ -2764,7 +2764,7 @@
         "shouldRenderProjection ? ("
       ],
       "includePathPrefixes": [
-        "src/features/agent-app/ui/AgentRunHostDrawer.tsx"
+        "src/features/plugin/ui/AgentRunHostDrawer.tsx"
       ],
       "allowedPaths": []
     },
@@ -2781,7 +2781,7 @@
       ],
       "includePathPrefixes": [
         "src/components/agent",
-        "src/features/agent-app",
+        "src/features/plugin",
         "src/lib/api/agentRuntime"
       ],
       "allowedPaths": []
@@ -4072,7 +4072,7 @@
     {
       "id": "sceneapp-active-launch-frontend-surface",
       "classification": "dead",
-      "description": "前端不得恢复 SceneApp 首页推荐卡片、最近 SceneApp 恢复入口、Workspace 启动 Hook 或 launch bridge；Agent App Lab / service skill scene 是 current",
+      "description": "前端不得恢复 SceneApp 首页推荐卡片、最近 SceneApp 恢复入口、Workspace 启动 Hook 或 launch bridge；Plugin Lab / service skill scene 是 current",
       "patterns": [
         "useWorkspaceSceneAppEntryActions",
         "useSceneAppLaunchRuntime",
@@ -4094,7 +4094,7 @@
     {
       "id": "sceneapp-catalog-product-frontend-surface",
       "classification": "dead",
-      "description": "前端不得恢复 SceneApp 独立 catalog 投影、目录统计卡或目录卡片 view model；应用目录继续收敛到 Agent App current",
+      "description": "前端不得恢复 SceneApp 独立 catalog 投影、目录统计卡或目录卡片 view model；应用目录继续收敛到 Plugin current",
       "patterns": [
         "compileSceneAppCatalogFromPackage",
         "compileSceneAppCatalogFromSnapshot",
@@ -4251,7 +4251,7 @@
     {
       "id": "sceneapps-page-route-frontend-surface",
       "classification": "dead",
-      "description": "前端不得恢复 sceneapps 独立页面路由或页面参数工具；应用目录后续只允许收敛到 Agent App current 主链",
+      "description": "前端不得恢复 sceneapps 独立页面路由或页面参数工具；应用目录后续只允许收敛到 Plugin current 主链",
       "patterns": [
         "\"sceneapps\"",
         "'sceneapps'",
@@ -4272,18 +4272,18 @@
         "\"productProfile\"",
         "productProfileAvailable",
         "productProfileEnabled",
-        "AgentAppProductProfile",
+        "PluginProductProfile",
         "agentChat.navbar.productProfile",
         "agentChat.rightSurface.tabs.productProfile",
-        "agentApp.apps.center.host.productProfile"
+        "plugin.apps.center.host.productProfile"
       ],
       "includePathPrefixes": [
         "src/components/agent/chat/AgentChatWorkspace.tsx",
         "src/components/agent/chat/components/TaskCenterUtilityToolbar.tsx",
         "src/components/agent/chat/workspace/right-surface/",
         "src/components/agent/chat/workspace/workspaceRightSurfaceRuntimeProjection.ts",
-        "src/features/agent-app/host/",
-        "src/features/agent-app/ui/",
+        "src/features/plugin/host/",
+        "src/features/plugin/ui/",
         "src/features/plugin/activation/",
         "src/features/plugin/history/",
         "src/features/plugin/manifest/",
@@ -5182,7 +5182,7 @@
       "allowedPaths": [
         "lime-rs/crates/app-server/src/runtime/artifact_sidecar.rs",
         "lime-rs/crates/app-server/src/runtime/artifact_reader.rs",
-        "lime-rs/crates/app-server/src/runtime/agent_app_worker_runtime.rs",
+        "lime-rs/crates/app-server/src/runtime/plugin_worker_runtime.rs",
         "lime-rs/crates/app-server/src/runtime/event_store.rs",
         "lime-rs/crates/app-server/src/runtime/tests/artifacts.rs",
         "lime-rs/crates/app-server/src/runtime/tests/evidence_exports.rs"
@@ -5942,7 +5942,7 @@
     {
       "id": "rust-sceneapp-command-module-surface",
       "classification": "dead",
-      "description": "Rust 不得恢复 SceneApp 命令模块、应用服务或 DevBridge dispatcher；执行与目录能力回到 Agent App / agent_runtime current 主链",
+      "description": "Rust 不得恢复 SceneApp 命令模块、应用服务或 DevBridge dispatcher；执行与目录能力回到 Plugin / agent_runtime current 主链",
       "patterns": [
         "commands::sceneapp_cmd::",
         "pub mod sceneapp",

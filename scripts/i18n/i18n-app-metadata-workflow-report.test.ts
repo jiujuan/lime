@@ -83,12 +83,12 @@ describe("i18n app metadata workflow report", () => {
     writeFile(root, "forge.config.mjs", forgeConfigFixture());
     writeFile(
       root,
-      "lime-rs/capabilities/agent-app-shell.json",
+      "lime-rs/capabilities/plugin-shell.json",
       JSON.stringify(
         {
-          identifier: "agent-app-shell",
+          identifier: "plugin-shell",
           description:
-            "Agent App 独立 Shell 只允许使用 Desktop Host IPC 调用宿主封装能力。",
+            "Plugin 独立 Shell 只允许使用 Desktop Host IPC 调用宿主封装能力。",
         },
         null,
         2,
@@ -182,7 +182,7 @@ describe("i18n app metadata workflow report", () => {
               priority: "source-only",
             },
             {
-              path: "lime-rs/capabilities/agent-app-shell.json",
+              path: "lime-rs/capabilities/plugin-shell.json",
               field: "description",
               localization: "internal-source-only",
               priority: "source-only",
@@ -278,8 +278,8 @@ describe("i18n app metadata workflow report", () => {
     writeFile(root, "forge.config.mjs", forgeConfigFixture());
     writeFile(
       root,
-      "lime-rs/capabilities/agent-app-shell.json",
-      JSON.stringify({ identifier: "agent-app-shell" }, null, 2),
+      "lime-rs/capabilities/plugin-shell.json",
+      JSON.stringify({ identifier: "plugin-shell" }, null, 2),
     );
     writeFile(
       root,
@@ -348,8 +348,8 @@ describe("i18n app metadata workflow report", () => {
     writeFile(root, "forge.config.mjs", forgeConfigFixture());
     writeFile(
       root,
-      "lime-rs/capabilities/agent-app-shell.json",
-      JSON.stringify({ identifier: "agent-app-shell" }, null, 2),
+      "lime-rs/capabilities/plugin-shell.json",
+      JSON.stringify({ identifier: "plugin-shell" }, null, 2),
     );
 
     const outFile = path.join(root, "report.json");

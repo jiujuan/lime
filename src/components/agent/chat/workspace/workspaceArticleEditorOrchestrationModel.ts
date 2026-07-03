@@ -114,7 +114,7 @@ function selectRelatedOrchestrationEvidence(
   }
   const workflowKey = preferredWorkflowKey ?? selected?.workflowKey ?? null;
   const related = workerEvidence.filter((item) => {
-    if (item.eventType === "agent_app_worker.hook") {
+    if (item.eventType === "plugin_worker.hook") {
       return false;
     }
     if (workflowKey) {
@@ -137,7 +137,7 @@ function selectPluginOrchestrationEvidence(
   let selected: WorkspaceArticleWorkspaceWorkerEvidenceItem | null = null;
   let selectedScore = Number.NEGATIVE_INFINITY;
   for (const evidence of workerEvidence) {
-    if (evidence.eventType === "agent_app_worker.hook") {
+    if (evidence.eventType === "plugin_worker.hook") {
       continue;
     }
     const score = orchestrationEvidenceScore(evidence);

@@ -1,4 +1,3 @@
-mod agent_app;
 mod agent_session;
 mod automation;
 mod browser_session;
@@ -15,6 +14,7 @@ mod mcp;
 mod media;
 mod memory_store;
 mod model;
+mod plugin;
 mod project;
 mod project_git;
 mod project_shell;
@@ -59,18 +59,6 @@ use app_server_protocol::PlatformInfo;
 use app_server_protocol::ServerCapabilities;
 use app_server_protocol::ServerInfo;
 use app_server_protocol::UsageStatsRangeParams;
-use app_server_protocol::METHOD_AGENT_APP_HOST_LIFECYCLE_LIST;
-use app_server_protocol::METHOD_AGENT_APP_INSTALLED_DISABLED_SET;
-use app_server_protocol::METHOD_AGENT_APP_INSTALLED_LIST;
-use app_server_protocol::METHOD_AGENT_APP_INSTALLED_SAVE;
-use app_server_protocol::METHOD_AGENT_APP_INSTALLED_UNINSTALL;
-use app_server_protocol::METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL;
-use app_server_protocol::METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT;
-use app_server_protocol::METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD;
-use app_server_protocol::METHOD_AGENT_APP_SHELL_PREPARE;
-use app_server_protocol::METHOD_AGENT_APP_UI_RUNTIME_START;
-use app_server_protocol::METHOD_AGENT_APP_UI_RUNTIME_STATUS;
-use app_server_protocol::METHOD_AGENT_APP_UI_RUNTIME_STOP;
 use app_server_protocol::METHOD_AGENT_SESSION_ACTION_REPLAY;
 use app_server_protocol::METHOD_AGENT_SESSION_ACTION_RESPOND;
 use app_server_protocol::METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT;
@@ -253,6 +241,18 @@ use app_server_protocol::METHOD_MODEL_PROVIDER_UI_STATE_READ;
 use app_server_protocol::METHOD_MODEL_PROVIDER_UI_STATE_WRITE;
 use app_server_protocol::METHOD_MODEL_PROVIDER_UPDATE;
 use app_server_protocol::METHOD_MODEL_SYNC_STATE_READ;
+use app_server_protocol::METHOD_PLUGIN_HOST_LIFECYCLE_LIST;
+use app_server_protocol::METHOD_PLUGIN_INSTALLED_DISABLED_SET;
+use app_server_protocol::METHOD_PLUGIN_INSTALLED_LIST;
+use app_server_protocol::METHOD_PLUGIN_INSTALLED_SAVE;
+use app_server_protocol::METHOD_PLUGIN_INSTALLED_UNINSTALL;
+use app_server_protocol::METHOD_PLUGIN_INSTALLED_UNINSTALL_REHEARSAL;
+use app_server_protocol::METHOD_PLUGIN_LOCAL_PACKAGE_INSPECT;
+use app_server_protocol::METHOD_PLUGIN_PACKAGE_FETCH_CLOUD;
+use app_server_protocol::METHOD_PLUGIN_SHELL_PREPARE;
+use app_server_protocol::METHOD_PLUGIN_UI_RUNTIME_START;
+use app_server_protocol::METHOD_PLUGIN_UI_RUNTIME_STATUS;
+use app_server_protocol::METHOD_PLUGIN_UI_RUNTIME_STOP;
 use app_server_protocol::METHOD_PROJECT_GIT_BRANCH_CHECKOUT;
 use app_server_protocol::METHOD_PROJECT_GIT_BRANCH_CREATE;
 use app_server_protocol::METHOD_PROJECT_GIT_COMMITS_LIST;
@@ -799,43 +799,35 @@ impl RequestProcessor {
                 self.handle_browser_session_action_execute_impl(params)
                     .await
             }
-            METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT => {
-                self.handle_agent_app_local_package_inspect_impl(params)
+            METHOD_PLUGIN_LOCAL_PACKAGE_INSPECT => {
+                self.handle_plugin_local_package_inspect_impl(params).await
+            }
+            METHOD_PLUGIN_PACKAGE_FETCH_CLOUD => {
+                self.handle_plugin_package_fetch_cloud_impl(params).await
+            }
+            METHOD_PLUGIN_INSTALLED_SAVE => self.handle_plugin_installed_save_impl(params).await,
+            METHOD_PLUGIN_INSTALLED_LIST => self.handle_plugin_installed_list_impl().await,
+            METHOD_PLUGIN_INSTALLED_DISABLED_SET => {
+                self.handle_plugin_installed_disabled_set_impl(params).await
+            }
+            METHOD_PLUGIN_INSTALLED_UNINSTALL_REHEARSAL => {
+                self.handle_plugin_installed_uninstall_rehearsal_impl(params)
                     .await
             }
-            METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD => {
-                self.handle_agent_app_package_fetch_cloud_impl(params).await
+            METHOD_PLUGIN_INSTALLED_UNINSTALL => {
+                self.handle_plugin_installed_uninstall_impl(params).await
             }
-            METHOD_AGENT_APP_INSTALLED_SAVE => {
-                self.handle_agent_app_installed_save_impl(params).await
+            METHOD_PLUGIN_HOST_LIFECYCLE_LIST => {
+                self.handle_plugin_host_lifecycle_list_impl().await
             }
-            METHOD_AGENT_APP_INSTALLED_LIST => self.handle_agent_app_installed_list_impl().await,
-            METHOD_AGENT_APP_INSTALLED_DISABLED_SET => {
-                self.handle_agent_app_installed_disabled_set_impl(params)
-                    .await
+            METHOD_PLUGIN_SHELL_PREPARE => self.handle_plugin_shell_prepare_impl(params).await,
+            METHOD_PLUGIN_UI_RUNTIME_START => {
+                self.handle_plugin_ui_runtime_start_impl(params).await
             }
-            METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL => {
-                self.handle_agent_app_installed_uninstall_rehearsal_impl(params)
-                    .await
+            METHOD_PLUGIN_UI_RUNTIME_STATUS => {
+                self.handle_plugin_ui_runtime_status_impl(params).await
             }
-            METHOD_AGENT_APP_INSTALLED_UNINSTALL => {
-                self.handle_agent_app_installed_uninstall_impl(params).await
-            }
-            METHOD_AGENT_APP_HOST_LIFECYCLE_LIST => {
-                self.handle_agent_app_host_lifecycle_list_impl().await
-            }
-            METHOD_AGENT_APP_SHELL_PREPARE => {
-                self.handle_agent_app_shell_prepare_impl(params).await
-            }
-            METHOD_AGENT_APP_UI_RUNTIME_START => {
-                self.handle_agent_app_ui_runtime_start_impl(params).await
-            }
-            METHOD_AGENT_APP_UI_RUNTIME_STATUS => {
-                self.handle_agent_app_ui_runtime_status_impl(params).await
-            }
-            METHOD_AGENT_APP_UI_RUNTIME_STOP => {
-                self.handle_agent_app_ui_runtime_stop_impl(params).await
-            }
+            METHOD_PLUGIN_UI_RUNTIME_STOP => self.handle_plugin_ui_runtime_stop_impl(params).await,
             METHOD_KNOWLEDGE_PACK_LIST => self.handle_knowledge_pack_list_impl(params).await,
             METHOD_KNOWLEDGE_PACK_READ => self.handle_knowledge_pack_read_impl(params).await,
             METHOD_KNOWLEDGE_SOURCE_IMPORT => {

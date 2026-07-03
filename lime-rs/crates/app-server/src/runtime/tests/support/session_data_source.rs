@@ -9,7 +9,7 @@ pub(in crate::runtime::tests) struct TestSessionDataSource {
     memory_backend: Option<crate::LocalMemoryBackend>,
     objective: Mutex<Option<ManagedObjective>>,
     audit_updates: Mutex<Vec<ManagedObjectiveAuditUpdate>>,
-    agent_app_installed_states: Mutex<Vec<serde_json::Value>>,
+    plugin_installed_states: Mutex<Vec<serde_json::Value>>,
     knowledge_compile_requests: Mutex<Vec<lime_knowledge::KnowledgeCompilePackRequest>>,
     right_surface_pending: Mutex<Vec<WorkspaceRightSurfacePendingRequest>>,
     object_canvas_snapshots: Mutex<Vec<WorkspaceObjectCanvasSnapshot>>,
@@ -25,7 +25,7 @@ impl TestSessionDataSource {
             memory_backend: None,
             objective: Mutex::new(None),
             audit_updates: Mutex::new(Vec::new()),
-            agent_app_installed_states: Mutex::new(Vec::new()),
+            plugin_installed_states: Mutex::new(Vec::new()),
             knowledge_compile_requests: Mutex::new(Vec::new()),
             right_surface_pending: Mutex::new(Vec::new()),
             object_canvas_snapshots: Mutex::new(Vec::new()),
@@ -68,14 +68,14 @@ impl TestSessionDataSource {
         self
     }
 
-    pub(in crate::runtime::tests) fn with_agent_app_installed_states(
+    pub(in crate::runtime::tests) fn with_plugin_installed_states(
         self,
         states: Vec<serde_json::Value>,
     ) -> Self {
         *self
-            .agent_app_installed_states
+            .plugin_installed_states
             .lock()
-            .expect("test agent app installed states mutex poisoned") = states;
+            .expect("test plugin installed states mutex poisoned") = states;
         self
     }
 
@@ -261,15 +261,13 @@ impl GatewayAppDataSource for TestSessionDataSource {}
 impl MediaAppDataSource for TestSessionDataSource {}
 impl VoiceAppDataSource for TestSessionDataSource {}
 #[async_trait]
-impl AgentAppDataSource for TestSessionDataSource {
-    async fn list_agent_app_installed(
-        &self,
-    ) -> Result<AgentAppInstalledListResponse, RuntimeCoreError> {
-        Ok(AgentAppInstalledListResponse {
+impl PluginDataSource for TestSessionDataSource {
+    async fn list_plugin_installed(&self) -> Result<PluginInstalledListResponse, RuntimeCoreError> {
+        Ok(PluginInstalledListResponse {
             states: self
-                .agent_app_installed_states
+                .plugin_installed_states
                 .lock()
-                .expect("test agent app installed states mutex poisoned")
+                .expect("test plugin installed states mutex poisoned")
                 .clone(),
             issues: Vec::new(),
         })

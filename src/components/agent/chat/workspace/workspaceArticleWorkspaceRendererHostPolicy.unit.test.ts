@@ -47,14 +47,14 @@ describe("workspaceArticleWorkspaceRendererHostPolicy", () => {
     expect(
       buildWorkspaceArticleWorkspaceRendererHostPolicy({
         status: "allowed",
-        executionMode: "local_agent_app_worker",
+        executionMode: "local_plugin_worker",
         reasonCode: "local_worker_output_allowed",
         requestedOutputArtifactKind: "content_factory.workspace_patch",
         allowedOutputArtifactKinds: ["content_factory.workspace_patch"],
       }),
     ).toMatchObject({
       status: "placeholder",
-      executionMode: "local_agent_app_worker",
+      executionMode: "local_plugin_worker",
       rendererExecutionModel: "host_placeholder_only",
       entryLoadPolicy: "not_loaded",
       canLoadEntry: false,

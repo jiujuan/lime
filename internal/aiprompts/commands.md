@@ -189,7 +189,7 @@ AI 图层化设计扁平图 OCR 分析同样继续走 current `LayeredDesignDocu
 - 若服务端下发的 `renderContract` 超出 Lime 当前支持范围，优先由服务端回退到已支持类型，客户端也必须退化到通用 timeline / artifact 展示
 - `scene` 的展示命名、推荐文案和补参标题应继续围绕创作生产语义收敛；`@发布合规` 只是发布前风控检查，不应被产品文案扩写成独立“法务场景”，也不要在目录里长出“建立”这类脱离创作目标的泛入口
 
-`SceneApp` 独立应用面已经下线，Agent App 是应用目录与运行时装配的 current 事实源。以下旧命令统一判为 `dead`，不得重新接回前端网关、Rust `generate_handler!`、DevBridge、mock 或启动关键真相命令：
+`SceneApp` 独立应用面已经下线，Plugin 是应用目录与运行时装配的 current 事实源。以下旧命令统一判为 `dead`，不得重新接回前端网关、Rust `generate_handler!`、DevBridge、mock 或启动关键真相命令：
 
 - `sceneapp_list_catalog`
 - `sceneapp_get_descriptor`
@@ -203,46 +203,46 @@ AI 图层化设计扁平图 OCR 分析同样继续走 current `LayeredDesignDocu
 
 固定约束：
 
-- 不再恢复 `sceneapps` 独立页面、`SceneAppsPageParams`、最近访问恢复或目录页运行时；应用入口继续收敛到 `agent-app-lab` / Agent App 主链
-- 不再恢复 `src/lib/sceneapp/catalog.ts`、`listSceneAppCatalog`、`SceneAppCatalog`、目录统计卡或目录卡片 view model；应用目录与运行装配继续由 Agent App current 协议承接
+- 不再恢复 `sceneapps` 独立页面、`SceneAppsPageParams`、最近访问恢复或目录页运行时；应用入口继续收敛到 `plugin-lab` / Plugin 主链
+- 不再恢复 `src/lib/sceneapp/catalog.ts`、`listSceneAppCatalog`、`SceneAppCatalog`、目录统计卡或目录卡片 view model；应用目录与运行装配继续由 Plugin current 协议承接
 - 历史 `sceneapp_execution_summary` 只允许作为 Agent Chat / Automation 的只读结果摘要与灵感沉淀上下文保留，不能再触发新的 SceneApp 运行前规划、自动化创建、runs/scorecard 轮询或治理 artifact 动态准备
-- 若后续需要应用级目录、安装、运行、复盘或治理摘要，应扩展 Agent App current 协议，而不是复活 `sceneapp_*` 命令族
+- 若后续需要应用级目录、安装、运行、复盘或治理摘要，应扩展 Plugin current 协议，而不是复活 `sceneapp_*` 命令族
 
-Agent App current 安装 / package / UI runtime 主链不得在页面或 feature island 里直接 `safeInvoke` / `invoke`。应用中心的 package、installed lifecycle、uninstall 与 UI runtime 生命周期统一经由 `src/lib/api/agentApps.ts -> AppServerClient.request(...)` 进入 App Server JSON-RPC：
+Plugin current 安装 / package / UI runtime 主链不得在页面或 feature island 里直接 `safeInvoke` / `invoke`。应用中心的 package、installed lifecycle、uninstall 与 UI runtime 生命周期统一经由 `src/lib/api/plugins.ts -> AppServerClient.request(...)` 进入 App Server JSON-RPC：
 
-- `agentAppLocalPackage/inspect`
-- `agentAppPackage/fetchCloud`
-- `agentAppInstalled/save`
-- `agentAppInstalled/list`
-- `agentAppInstalled/disabled/set`
-- `agentAppInstalled/uninstall/rehearsal`
-- `agentAppInstalled/uninstall`
-- `agentAppHostLifecycle/list`
-- `agentAppShell/prepare`
-- `agentAppUiRuntime/start`
-- `agentAppUiRuntime/status`
-- `agentAppUiRuntime/stop`
+- `pluginLocalPackage/inspect`
+- `pluginPackage/fetchCloud`
+- `pluginInstalled/save`
+- `pluginInstalled/list`
+- `pluginInstalled/disabled/set`
+- `pluginInstalled/uninstall/rehearsal`
+- `pluginInstalled/uninstall`
+- `pluginHostLifecycle/list`
+- `pluginShell/prepare`
+- `pluginUiRuntime/start`
+- `pluginUiRuntime/status`
+- `pluginUiRuntime/stop`
 
-旧 Tauri lifecycle facade 已退役，以下命令不得重新接回前端网关、Electron Host、Rust `generate_handler!`、DevBridge truth、mock priority 或 runtime surface：`agent_app_inspect_local_package`、`agent_app_fetch_cloud_package`、`agent_app_save_installed_state`、`agent_app_list_installed`、`agent_app_set_disabled`、`agent_app_uninstall_rehearsal`、`agent_app_uninstall`。它们只允许作为 `agentCommandCatalog.deprecatedCommandReplacements`、contract forbidden snippet 或历史测试负向断言存在。
+旧 Tauri lifecycle facade 已退役，以下命令不得重新接回前端网关、Electron Host、Rust `generate_handler!`、DevBridge truth、mock priority 或 runtime surface：`plugin_inspect_local_package`、`plugin_fetch_cloud_package`、`plugin_save_installed_state`、`plugin_list_installed`、`plugin_set_disabled`、`plugin_uninstall_rehearsal`、`plugin_uninstall`。它们只允许作为 `agentCommandCatalog.deprecatedCommandReplacements`、contract forbidden snippet 或历史测试负向断言存在。
 
-Agent App 仍有两类 Desktop Host 壳能力保留 legacy command name，但事实源不是旧 Tauri wrapper：
+Plugin 仍有两类 Desktop Host 壳能力保留 legacy command name，但事实源不是旧 Tauri wrapper：
 
-- `agent_app_select_directory`：Electron Desktop Host directory picker current 能力，前端只能经由 `src/lib/api/agentApps.ts -> selectAgentAppDirectory(...)` 使用。
-- `agent_app_launch_shell`：Electron Desktop Host App Shell window current 能力，前端只能经由 `src/lib/api/agentApps.ts -> launchAgentAppShell(...)` 提交 `ShellDescriptor`；Electron Host 必须通过 App Server `agentAppShell/prepare` 校验 descriptor、installed state、package / manifest hash、install mode、runtime profile shell kind 与只读隔离策略，再通过 `agentAppUiRuntime/start` 启动 UI runtime 并打开独立 BrowserWindow。它不是第二套 Runtime，也不得让 Standalone App 绕过 `@lime/app-sdk`、Host Bridge、policy 或 evidence 主链。
+- `plugin_select_directory`：Electron Desktop Host directory picker current 能力，前端只能经由 `src/lib/api/plugins.ts -> selectPluginDirectory(...)` 使用。
+- `plugin_launch_shell`：Electron Desktop Host App Shell window current 能力，前端只能经由 `src/lib/api/plugins.ts -> launchPluginShell(...)` 提交 `ShellDescriptor`；Electron Host 必须通过 App Server `pluginShell/prepare` 校验 descriptor、installed state、package / manifest hash、install mode、runtime profile shell kind 与只读隔离策略，再通过 `pluginUiRuntime/start` 启动 UI runtime 并打开独立 BrowserWindow。它不是第二套 Runtime，也不得让 Standalone App 绕过 `@lime/app-sdk`、Host Bridge、policy 或 evidence 主链。
 
-`agentAppPackage/fetchCloud` 只负责 `packageUrl -> staging/cache -> APP.md manifest extraction -> sha256 package / manifest verification`，不生成 projection、不绕过 P17.2 install review；installed state 写入只走 `agentAppInstalled/save`。Cloud / LimeCore 仍只提供 release metadata。
+`pluginPackage/fetchCloud` 只负责 `packageUrl -> staging/cache -> APP.md manifest extraction -> sha256 package / manifest verification`，不生成 projection、不绕过 P17.2 install review；installed state 写入只走 `pluginInstalled/save`。Cloud / LimeCore 仍只提供 release metadata。
 
-`agentAppUiRuntime/start` 启动 App UI 子进程时只能注入 Lime 本机 Gateway 的短期 Agent App scoped token；不得把上游 Provider API Key 或全局 `server.api_key` 原样下发给 App。当前 token scope 固定为 `model-generation`，只允许 App 侧通过 `LIME_GATEWAY_BASE / LIME_ACCESS_TOKEN` 调 Lime Gateway 标准 `/v1/chat/completions` 或 `/v1/messages` 生成端点；图片、count tokens、Gemini 原生和其他控制面端点仍只接受全局 Gateway key。
+`pluginUiRuntime/start` 启动 App UI 子进程时只能注入 Lime 本机 Gateway 的短期 Plugin scoped token；不得把上游 Provider API Key 或全局 `server.api_key` 原样下发给 App。当前 token scope 固定为 `model-generation`，只允许 App 侧通过 `LIME_GATEWAY_BASE / LIME_ACCESS_TOKEN` 调 Lime Gateway 标准 `/v1/chat/completions` 或 `/v1/messages` 生成端点；图片、count tokens、Gemini 原生和其他控制面端点仍只接受全局 Gateway key。
 
-`agentAppUiRuntime/start/status/stop` 可以返回 `taskRuntime` readiness 合同，用于说明 installed state 中声明的 `runtimePackage.worker` / `agentRuntime.worker/tasks` 是否可被后续 Agent App task worker executor 使用。该字段只做宿主能力投影和启动链证据，不执行 worker、不下发 Provider Key、不替代 `agent_app_runtime_* -> agentSession/turn/start` 的 current task 主链。
+`pluginUiRuntime/start/status/stop` 可以返回 `taskRuntime` readiness 合同，用于说明 installed state 中声明的 `runtimePackage.worker` / `agentRuntime.worker/tasks` 是否可被后续 Plugin task worker executor 使用。该字段只做宿主能力投影和启动链证据，不执行 worker、不下发 Provider Key、不替代 `plugin_runtime_* -> agentSession/turn/start` 的 current task 主链。
 
-Claw / Aster 原完整执行链是 Agent 对话 runtime 的 current 参考实现，不应被前端 `agentRuntime` 模块或 Agent App UI runtime 替代。迁移方向是把 Claw 原链整体直迁到 App Server `RuntimeCore -> AsterBackend -> backend host`，让 Claw 与 Agent App 后续对话 turn 共用 `agentSession/start + agentSession/turn/start + agentSession/event + agentSession/read`。`src/lib/api/agentRuntime/*` 只允许作为前端 thin client gateway / compat projection，负责把旧 UI 形状投影到 App Server current method；它不是第二套业务 runtime，不得在其中补模型执行、事件合成、read model 拼装或 mock fallback。`agentAppUiRuntime/*` 只负责 Agent App UI 子进程 `start/status/stop/entryUrl` 生命周期，不承接对话 turn、tool runtime、evidence 或 Claw/Aster 私有请求合同。
+Claw / Aster 原完整执行链是 Agent 对话 runtime 的 current 参考实现，不应被前端 `agentRuntime` 模块或 Plugin UI runtime 替代。迁移方向是把 Claw 原链整体直迁到 App Server `RuntimeCore -> AsterBackend -> backend host`，让 Claw 与 Plugin 后续对话 turn 共用 `agentSession/start + agentSession/turn/start + agentSession/event + agentSession/read`。`src/lib/api/agentRuntime/*` 只允许作为前端 thin client gateway / compat projection，负责把旧 UI 形状投影到 App Server current method；它不是第二套业务 runtime，不得在其中补模型执行、事件合成、read model 拼装或 mock fallback。`pluginUiRuntime/*` 只负责 Plugin UI 子进程 `start/status/stop/entryUrl` 生命周期，不承接对话 turn、tool runtime、evidence 或 Claw/Aster 私有请求合同。
 
 前端从本地存储恢复出的 Agent session id 在发送前必须先被 App Server `agentSession/read` 确认存在且归属当前 workspace。明确 `session not found` 或 workspace mismatch 时只能丢弃本地恢复快照并创建新的 App Server session；普通 bridge / network error 必须 fail closed，不得静默创建会话或继续轮询 stale session。Electron `safeInvoke` 返回的 App Server JSON-RPC result envelope 也必须在 `src/lib/api/appServer.ts` 网关层统一解包，业务页面不得各自猜测 `{ result: { lines } }` / `{ lines }` 形状。
 
-`agent_app_runtime_*` 是 Agent App 进入 App Server / AgentRuntime 主链的 Desktop facade：`agent_app_runtime_start_task` 必须经 App Server JSON-RPC `agentSession/turn/start` 进入 `RuntimeCore -> AsterBackend -> backend host`，不能再直接复制 `AsterChatRequest -> build_queued_turn_task` 提交流程。`startTask.turnConfig` 必须随 facade 透传，并写入 `RuntimeOptions.hostOptions.asterChatRequest`：扁平 `AsterChatRequest` 字段供 Desktop Aster host 恢复 Claw 原链，`turn_config` 镜像供外部 App Server backend 读取 provider*config / system_prompt / reasoning / sandbox 等配置。cancel / read / host response 必须继续向 App Server current method 收敛；App Server protocol 尚未覆盖时应 fail closed 或登记阻塞，不得继续适配到既有 `agent_runtime*_`读写命令，不得复制 Claw`skill_launch.rs`，不得新增垂直 `content_factory`Agent 命令，也不得把`LIME_GATEWAY_\*` 直接模型调用宣称为完整 Agent 能力。
+`plugin_runtime_*` 是 Plugin 进入 App Server / AgentRuntime 主链的 Desktop facade：`plugin_runtime_start_task` 必须经 App Server JSON-RPC `agentSession/turn/start` 进入 `RuntimeCore -> AsterBackend -> backend host`，不能再直接复制 `AsterChatRequest -> build_queued_turn_task` 提交流程。`startTask.turnConfig` 必须随 facade 透传，并写入 `RuntimeOptions.hostOptions.asterChatRequest`：扁平 `AsterChatRequest` 字段供 Desktop Aster host 恢复 Claw 原链，`turn_config` 镜像供外部 App Server backend 读取 provider*config / system_prompt / reasoning / sandbox 等配置。cancel / read / host response 必须继续向 App Server current method 收敛；App Server protocol 尚未覆盖时应 fail closed 或登记阻塞，不得继续适配到既有 `agent_runtime*_`读写命令，不得复制 Claw`skill_launch.rs`，不得新增垂直 `content_factory`Agent 命令，也不得把`LIME_GATEWAY_\*` 直接模型调用宣称为完整 Agent 能力。
 
-P17.3 之前禁止真实删除 Agent App 本地数据：`agent_app_uninstall_rehearsal` 只生成 keep-data / delete-data 演练，`agent_app_uninstall` 只能返回同一演练摘要和未删除的 installed list，不得执行 `remove_file` / `remove_dir_all` 或移除 installed state。真实 delete-data 必须等后续路线图单独打开并补齐 evidence / residual audit / confirmation gate。
+P17.3 之前禁止真实删除 Plugin 本地数据：`plugin_uninstall_rehearsal` 只生成 keep-data / delete-data 演练，`plugin_uninstall` 只能返回同一演练摘要和未删除的 installed list，不得执行 `remove_file` / `remove_dir_all` 或移除 installed state。真实 delete-data 必须等后续路线图单独打开并补齐 evidence / residual audit / confirmation gate。
 
 技能脚手架创建同样只允许走当前命令网关主链：
 

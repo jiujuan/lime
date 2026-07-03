@@ -25,7 +25,7 @@ describe("workspacePluginPaneAction", () => {
     });
 
     expect(metadata).toEqual({
-      agent_app: {
+      plugin: {
         source: "right_surface_pane_action",
         app_id: "content-factory-app",
         session_id: "session-main",

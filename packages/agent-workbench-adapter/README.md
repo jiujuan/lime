@@ -2,7 +2,7 @@
 
 `@limecloud/agent-workbench-adapter` 是 Agent 工作台的 headless adapter。它不渲染 UI，只把产品页面的 intent、composer 状态、runtime facts 和 turn payload 拼成可复用的标准结构。
 
-目标是让 Agent App、Content Studio 这类 surface 共享工作台控制逻辑，而不是重复开发整套前端页面。
+目标是让 Plugin、Content Studio 这类 surface 共享工作台控制逻辑，而不是重复开发整套前端页面。
 
 ## Boundary
 
@@ -36,7 +36,7 @@ const policy = resolveWorkbenchIntentCapabilityPolicy({
 });
 
 const payload = buildAgentTurnStartPayload({
-  agentAppId: "content-studio",
+  pluginId: "content-studio",
   workspacePath,
   prompt,
   capabilityId: "content.draft.generate",

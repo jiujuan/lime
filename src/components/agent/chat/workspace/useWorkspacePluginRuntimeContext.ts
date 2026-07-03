@@ -1,20 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { InstalledAgentAppState } from "@/features/agent-app/types";
+import type { InstalledPluginState } from "@/features/plugin/types";
 import {
-  AGENT_APPS_CHANGED_EVENT,
-  listInstalledAgentApps,
-} from "@/lib/api/agentApps";
+  PLUGINS_CHANGED_EVENT,
+  listInstalledPlugins,
+} from "@/lib/api/plugins";
 import {
   buildWorkspacePluginRuntimeContext,
   type WorkspacePluginRuntimeContext,
 } from "./workspacePluginRuntimeContext";
 
-const EMPTY_INSTALLED_AGENT_APPS: readonly InstalledAgentAppState[] = [];
+const EMPTY_INSTALLED_PLUGINS: readonly InstalledPluginState[] = [];
 
 export interface UseWorkspacePluginRuntimeContextOptions {
   enabled?: boolean;
   requestMetadata?: Record<string, unknown>;
-  listInstalled?: () => Promise<{ states: InstalledAgentAppState[] }>;
+  listInstalled?: () => Promise<{ states: InstalledPluginState[] }>;
 }
 
 export interface UseWorkspacePluginRuntimeContextResult {
@@ -27,15 +27,15 @@ export interface UseWorkspacePluginRuntimeContextResult {
 export function useWorkspacePluginRuntimeContext({
   enabled = false,
   requestMetadata,
-  listInstalled = listInstalledAgentApps,
+  listInstalled = listInstalledPlugins,
 }: UseWorkspacePluginRuntimeContextOptions): UseWorkspacePluginRuntimeContextResult {
-  const [installedAgentApps, setInstalledAgentApps] = useState<
-    readonly InstalledAgentAppState[]
-  >(EMPTY_INSTALLED_AGENT_APPS);
+  const [installedPlugins, setInstalledPlugins] = useState<
+    readonly InstalledPluginState[]
+  >(EMPTY_INSTALLED_PLUGINS);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const shouldLoadInstalledAgentApps = enabled || Boolean(requestMetadata);
+  const shouldLoadInstalledPlugins = enabled || Boolean(requestMetadata);
   const refresh = useCallback(() => {
     setRefreshKey((value) => value + 1);
   }, []);
@@ -52,13 +52,13 @@ export function useWorkspacePluginRuntimeContext({
         if (disposed || currentSeq !== refreshSeq) {
           return;
         }
-        setInstalledAgentApps(result.states);
+        setInstalledPlugins(result.states);
         setError(null);
       } catch (caught) {
         if (disposed || currentSeq !== refreshSeq) {
           return;
         }
-        setInstalledAgentApps(EMPTY_INSTALLED_AGENT_APPS);
+        setInstalledPlugins(EMPTY_INSTALLED_PLUGINS);
         setError(caught instanceof Error ? caught : new Error(String(caught)));
       } finally {
         if (!disposed && currentSeq === refreshSeq) {
@@ -67,10 +67,10 @@ export function useWorkspacePluginRuntimeContext({
       }
     };
 
-    if (!shouldLoadInstalledAgentApps) {
+    if (!shouldLoadInstalledPlugins) {
       setLoading(false);
       setError(null);
-      setInstalledAgentApps(EMPTY_INSTALLED_AGENT_APPS);
+      setInstalledPlugins(EMPTY_INSTALLED_PLUGINS);
       return () => {
         disposed = true;
       };
@@ -84,20 +84,20 @@ export function useWorkspacePluginRuntimeContext({
       };
     }
 
-    window.addEventListener(AGENT_APPS_CHANGED_EVENT, refresh);
+    window.addEventListener(PLUGINS_CHANGED_EVENT, refresh);
     return () => {
       disposed = true;
-      window.removeEventListener(AGENT_APPS_CHANGED_EVENT, refresh);
+      window.removeEventListener(PLUGINS_CHANGED_EVENT, refresh);
     };
-  }, [listInstalled, refreshKey, shouldLoadInstalledAgentApps]);
+  }, [listInstalled, refreshKey, shouldLoadInstalledPlugins]);
 
   const context = useMemo(
     () =>
       buildWorkspacePluginRuntimeContext({
         requestMetadata,
-        installedAgentApps,
+        installedPlugins,
       }),
-    [installedAgentApps, requestMetadata],
+    [installedPlugins, requestMetadata],
   );
 
   return {

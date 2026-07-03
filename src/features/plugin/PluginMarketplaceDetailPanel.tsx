@@ -328,7 +328,7 @@ function CapabilitySectionIcon({
   kind: PluginMarketplaceViewItem["capabilityProfile"]["sections"][number]["kind"];
 }) {
   switch (kind) {
-    case "applied_agent":
+    case "plugin_ui":
       return <Bot className="size-4" aria-hidden="true" />;
     case "subagents":
       return <UsersRound className="size-4" aria-hidden="true" />;

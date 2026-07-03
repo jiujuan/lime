@@ -62,15 +62,15 @@ import {
   listenOpenVoiceModelSettingsRequest,
   persistVoiceModelSettingsFocusRequest,
 } from "./lib/voiceModelSettingsNavigation";
-import type { AgentAppRightSurfaceLaunchTarget } from "./features/agent-app/ui/agentAppRightSurfaceLaunch";
-import { normalizeAgentAppRightSurfaceLaunchTarget } from "./features/agent-app/ui/agentAppLaunchTargetPolicy";
+import type { PluginRightSurfaceLaunchTarget } from "./features/plugin/ui/pluginRightSurfaceLaunch";
+import { normalizePluginRightSurfaceLaunchTarget } from "./features/plugin/ui/pluginLaunchTargetPolicy";
 import {
-  DEFAULT_AGENT_APP_RIGHT_SURFACE_TARGET_LIMIT,
-  loadAgentAppRightSurfaceLaunchTargetsFromStorage,
-  saveAgentAppRightSurfaceLaunchTargetsToStorage,
-  upsertAgentAppRightSurfaceLaunchTarget,
-  type AgentAppLaunchTargetStorage,
-} from "./features/agent-app/ui/agentAppLaunchTargetPersistence";
+  DEFAULT_PLUGIN_RIGHT_SURFACE_TARGET_LIMIT,
+  loadPluginRightSurfaceLaunchTargetsFromStorage,
+  savePluginRightSurfaceLaunchTargetsToStorage,
+  upsertPluginRightSurfaceLaunchTarget,
+  type PluginLaunchTargetStorage,
+} from "./features/plugin/ui/pluginLaunchTargetPersistence";
 import type { AgentPageParams } from "./types/page";
 
 const AppContainer = styled.div`
@@ -148,11 +148,11 @@ const ConnectConfirmDialog = lazy(() =>
 );
 
 interface AgentSessionTargetState {
-  active: AgentAppRightSurfaceLaunchTarget | null;
-  recent: AgentAppRightSurfaceLaunchTarget[];
+  active: PluginRightSurfaceLaunchTarget | null;
+  recent: PluginRightSurfaceLaunchTarget[];
 }
 
-function getAgentSessionTargetStorage(): AgentAppLaunchTargetStorage | null {
+function getAgentSessionTargetStorage(): PluginLaunchTargetStorage | null {
   if (typeof window === "undefined") {
     return null;
   }
@@ -164,7 +164,7 @@ function getAgentSessionTargetStorage(): AgentAppLaunchTargetStorage | null {
 }
 
 function loadInitialAgentSessionTargetState(): AgentSessionTargetState {
-  const recent = loadAgentAppRightSurfaceLaunchTargetsFromStorage(
+  const recent = loadPluginRightSurfaceLaunchTargetsFromStorage(
     getAgentSessionTargetStorage(),
   );
   return {
@@ -464,7 +464,7 @@ function AppContent() {
     [],
   );
   useEffect(() => {
-    saveAgentAppRightSurfaceLaunchTargetsToStorage(
+    savePluginRightSurfaceLaunchTargetsToStorage(
       getAgentSessionTargetStorage(),
       agentSessionTargetState.recent,
     );
@@ -480,8 +480,8 @@ function AppContent() {
   }, [activeAgentPage, activeAgentRouteSessionId]);
 
   const handleAgentSessionTargetChange = useCallback(
-    (target: AgentAppRightSurfaceLaunchTarget | null) => {
-      const normalized = normalizeAgentAppRightSurfaceLaunchTarget(target);
+    (target: PluginRightSurfaceLaunchTarget | null) => {
+      const normalized = normalizePluginRightSurfaceLaunchTarget(target);
       if (!normalized?.sessionId) {
         setAgentSessionTargetState((current) => ({
           ...current,
@@ -490,10 +490,10 @@ function AppContent() {
         return;
       }
       setAgentSessionTargetState((current) => {
-        const recent = upsertAgentAppRightSurfaceLaunchTarget(
+        const recent = upsertPluginRightSurfaceLaunchTarget(
           current.recent,
           normalized,
-          DEFAULT_AGENT_APP_RIGHT_SURFACE_TARGET_LIMIT,
+          DEFAULT_PLUGIN_RIGHT_SURFACE_TARGET_LIMIT,
         );
         return {
           active: recent[0] ?? normalized,

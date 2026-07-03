@@ -19,7 +19,7 @@ function snapshot(): PluginMarketplaceRegistrySnapshot {
           description: "Research workflow",
           version: "1.2.3",
           category: "research",
-          sourceKind: "agent_app_release",
+          sourceKind: "plugin_catalog",
           appId: "research-kit",
           enabled: true,
           installState: "available",
@@ -38,7 +38,7 @@ function snapshot(): PluginMarketplaceRegistrySnapshot {
               "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           },
           manifestSummary: {
-            agentApps: [
+            ui: [
               {
                 id: "research-kit",
                 title: "Research Agent",
@@ -158,7 +158,7 @@ function snapshot(): PluginMarketplaceRegistrySnapshot {
           description: "Note workspace",
           version: "2.0.0",
           category: "writing",
-          sourceKind: "agent_app_release",
+          sourceKind: "plugin_catalog",
           appId: "notes-kit",
           enabled: true,
           installState: "available",
@@ -176,7 +176,7 @@ function snapshot(): PluginMarketplaceRegistrySnapshot {
           description: "Registration required",
           version: "0.1.0",
           category: "research",
-          sourceKind: "agent_app_release",
+          sourceKind: "plugin_catalog",
           appId: "blocked-kit",
           enabled: false,
           installState: "blocked",
@@ -194,7 +194,7 @@ function snapshot(): PluginMarketplaceRegistrySnapshot {
       issues: [
         {
           code: "READ_FAILED",
-          path: "<LimeAppData>/agent-apps/installed/broken.json",
+          path: "<LimeAppData>/plugins/installed/broken.json",
           message: "read failed",
         },
       ],
@@ -296,7 +296,7 @@ describe("plugin marketplace view model", () => {
       ],
       capabilityProfile: expect.objectContaining({
         summary: {
-          agentCount: 1,
+          uiCount: 1,
           subagentCount: 2,
           workflowCount: 1,
           toolCount: 1,

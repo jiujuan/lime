@@ -9,10 +9,10 @@ export type DevBridgeCommandTimeoutProfile =
   | "app-server-turn-start"
   | "app-server-read"
   | "agent-runtime"
-  | "agent-app-installed-write"
-  | "agent-app-package-inspect"
-  | "agent-app-ui-runtime-start"
-  | "agent-app-package"
+  | "plugin-installed-write"
+  | "plugin-package-inspect"
+  | "plugin-ui-runtime-start"
+  | "plugin-package"
   | "desktop-user-interaction"
   | "knowledge-compile"
   | "voice-model-download"
@@ -37,9 +37,9 @@ const bridgeTruthCommands = new Set<string>([
   "workspace_get",
   "workspace_ensure",
   "workspace_ensure_ready",
-  "agent_app_start_ui_runtime",
-  "agent_app_get_ui_runtime_status",
-  "agent_app_stop_ui_runtime",
+  "plugin_start_ui_runtime",
+  "plugin_get_ui_runtime_status",
+  "plugin_stop_ui_runtime",
   "get_default_provider",
   "app_server_handle_json_lines",
   "app_server_drain_events",
@@ -47,14 +47,14 @@ const bridgeTruthCommands = new Set<string>([
 ]);
 
 const noMockFallbackCompatCommands = new Set<string>([
-  "agent_app_runtime_start_task",
-  "agent_app_runtime_cancel_task",
-  "agent_app_runtime_get_task",
-  "agent_app_runtime_submit_host_response",
+  "plugin_runtime_start_task",
+  "plugin_runtime_cancel_task",
+  "plugin_runtime_get_task",
+  "plugin_runtime_submit_host_response",
 ]);
 
 const electronHostNoMockFallbackCommands = new Set([
-  "agent_app_select_directory",
+  "plugin_select_directory",
   "open_file_preview_window",
   "open_resource_manager_window",
   "open_system_settings_url",
@@ -68,12 +68,12 @@ const electronHostNoMockFallbackCommands = new Set([
 
 const optionalLegacyUxCommands = new Set<string>(["get_hint_routes"]);
 
-const devBridgeAgentAppUiRuntimeStartCommands = new Set([
-  "agent_app_start_ui_runtime",
+const devBridgePluginUiRuntimeStartCommands = new Set([
+  "plugin_start_ui_runtime",
 ]);
 
-const devBridgeAgentAppPackageCommands = new Set([
-  "agentAppLocalPackage/inspect",
+const devBridgePluginPackageCommands = new Set([
+  "pluginLocalPackage/inspect",
 ]);
 
 const electronHostLayeredDesignProjectCommands = new Set([
@@ -82,7 +82,7 @@ const electronHostLayeredDesignProjectCommands = new Set([
 ]);
 
 const electronHostUserInteractionCommands = new Set([
-  "agent_app_select_directory",
+  "plugin_select_directory",
 ]);
 
 const devBridgeCooldownBypassCommands = new Set([
@@ -114,10 +114,10 @@ const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
 const APP_SERVER_DRAIN_EVENTS_COMMAND = "app_server_drain_events";
 const APP_SERVER_AGENT_SESSION_LIST_METHOD = "agentSession/list";
 const APP_SERVER_AGENT_TURN_START_METHOD = "agentSession/turn/start";
-const APP_SERVER_AGENT_APP_UI_RUNTIME_START_METHOD = "agentAppUiRuntime/start";
+const APP_SERVER_PLUGIN_UI_RUNTIME_START_METHOD = "pluginUiRuntime/start";
 const APP_SERVER_KNOWLEDGE_COMPILE_METHOD = "knowledgePack/compile";
-const APP_SERVER_AGENT_APP_INSTALLED_WRITE_METHODS = new Set([
-  "agentAppInstalled/save",
+const APP_SERVER_PLUGIN_INSTALLED_WRITE_METHODS = new Set([
+  "pluginInstalled/save",
 ]);
 const APP_SERVER_CURRENT_METHODS = new Set([
   "capability/list",
@@ -148,15 +148,15 @@ const APP_SERVER_CURRENT_METHODS = new Set([
   "skillRemote/inspect",
   "workspaceSkillBindings/list",
   "workspaceRegisteredSkills/list",
-  "agentAppLocalPackage/inspect",
-  "agentAppPackage/fetchCloud",
-  "agentAppInstalled/save",
-  "agentAppInstalled/list",
-  "agentAppInstalled/disabled/set",
-  "agentAppInstalled/uninstall/rehearsal",
-  "agentAppInstalled/uninstall",
-  "agentAppShell/prepare",
-  "agentAppUiRuntime/status",
+  "pluginLocalPackage/inspect",
+  "pluginPackage/fetchCloud",
+  "pluginInstalled/save",
+  "pluginInstalled/list",
+  "pluginInstalled/disabled/set",
+  "pluginInstalled/uninstall/rehearsal",
+  "pluginInstalled/uninstall",
+  "pluginShell/prepare",
+  "pluginUiRuntime/status",
   "knowledgePack/list",
   "knowledgePack/read",
   "knowledgePack/source/import",
@@ -316,8 +316,8 @@ export function resolveDevBridgeCommandTimeoutProfile(
   if (isAppServerAgentTurnStartCommand(command, args)) {
     return "app-server-turn-start";
   }
-  if (isAppServerAgentAppUiRuntimeStartCommand(command, args)) {
-    return "agent-app-ui-runtime-start";
+  if (isAppServerPluginUiRuntimeStartCommand(command, args)) {
+    return "plugin-ui-runtime-start";
   }
   if (isAppServerAgentSessionListCommand(command, args)) {
     return "agent-session-list";
@@ -328,11 +328,11 @@ export function resolveDevBridgeCommandTimeoutProfile(
   if (isAppServerKnowledgeCompileCommand(command, args)) {
     return "knowledge-compile";
   }
-  if (isAppServerAgentAppPackageInspectCommand(command, args)) {
-    return "agent-app-package-inspect";
+  if (isAppServerPluginPackageInspectCommand(command, args)) {
+    return "plugin-package-inspect";
   }
-  if (isAppServerAgentAppInstalledWriteCommand(command, args)) {
-    return "agent-app-installed-write";
+  if (isAppServerPluginInstalledWriteCommand(command, args)) {
+    return "plugin-installed-write";
   }
   if (isAppServerCurrentMethodCommand(command, args)) {
     return "app-server-read";
@@ -340,14 +340,14 @@ export function resolveDevBridgeCommandTimeoutProfile(
   if (command === APP_SERVER_DRAIN_EVENTS_COMMAND) {
     return "app-server-read";
   }
-  if (command.startsWith("agent_app_runtime_")) {
+  if (command.startsWith("plugin_runtime_")) {
     return "agent-runtime";
   }
-  if (devBridgeAgentAppUiRuntimeStartCommands.has(command)) {
-    return "agent-app-ui-runtime-start";
+  if (devBridgePluginUiRuntimeStartCommands.has(command)) {
+    return "plugin-ui-runtime-start";
   }
-  if (devBridgeAgentAppPackageCommands.has(command)) {
-    return "agent-app-package";
+  if (devBridgePluginPackageCommands.has(command)) {
+    return "plugin-package";
   }
   if (electronHostUserInteractionCommands.has(command)) {
     return "desktop-user-interaction";
@@ -388,7 +388,7 @@ function isAppServerAgentTurnStartCommand(
   );
 }
 
-function isAppServerAgentAppUiRuntimeStartCommand(
+function isAppServerPluginUiRuntimeStartCommand(
   command: string,
   args: unknown,
 ): boolean {
@@ -396,7 +396,7 @@ function isAppServerAgentAppUiRuntimeStartCommand(
     return false;
   }
   return extractAppServerJsonLines(args).some((line) =>
-    jsonRpcLineHasMethod(line, APP_SERVER_AGENT_APP_UI_RUNTIME_START_METHOD),
+    jsonRpcLineHasMethod(line, APP_SERVER_PLUGIN_UI_RUNTIME_START_METHOD),
   );
 }
 
@@ -436,7 +436,7 @@ function isAppServerCurrentMethodCommand(
   );
 }
 
-function isAppServerAgentAppPackageInspectCommand(
+function isAppServerPluginPackageInspectCommand(
   command: string,
   args: unknown,
 ): boolean {
@@ -444,11 +444,11 @@ function isAppServerAgentAppPackageInspectCommand(
     return false;
   }
   return extractAppServerJsonLines(args).some((line) =>
-    jsonRpcLineHasMethod(line, "agentAppLocalPackage/inspect"),
+    jsonRpcLineHasMethod(line, "pluginLocalPackage/inspect"),
   );
 }
 
-function isAppServerAgentAppInstalledWriteCommand(
+function isAppServerPluginInstalledWriteCommand(
   command: string,
   args: unknown,
 ): boolean {
@@ -456,7 +456,7 @@ function isAppServerAgentAppInstalledWriteCommand(
     return false;
   }
   return extractAppServerJsonLines(args).some((line) =>
-    jsonRpcLineHasAnyMethod(line, APP_SERVER_AGENT_APP_INSTALLED_WRITE_METHODS),
+    jsonRpcLineHasAnyMethod(line, APP_SERVER_PLUGIN_INSTALLED_WRITE_METHODS),
   );
 }
 

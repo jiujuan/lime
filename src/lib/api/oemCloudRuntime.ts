@@ -9,15 +9,15 @@ export const DEFAULT_OEM_CLOUD_DESKTOP_OAUTH_REDIRECT_URL =
   "lime://oauth/callback";
 export const DEFAULT_OEM_CLOUD_DESKTOP_OAUTH_NEXT_PATH = "/welcome";
 
-export type OemCloudAgentAppSignatureAlgorithm =
+export type OemCloudPluginSignatureAlgorithm =
   | "RSASSA-PKCS1-v1_5-SHA256"
   | "RSA-PSS-SHA256"
   | "ECDSA-P256-SHA256"
   | "Ed25519";
 
-export interface OemCloudAgentAppSignatureTrustRoot {
+export interface OemCloudPluginSignatureTrustRoot {
   publicKeyId: string;
-  algorithm: OemCloudAgentAppSignatureAlgorithm;
+  algorithm: OemCloudPluginSignatureAlgorithm;
   publicKey: string;
   appIds?: string[];
   notBefore?: string;
@@ -75,8 +75,8 @@ function readRecordText(
   return null;
 }
 
-const AGENT_APP_SIGNATURE_ALGORITHMS =
-  new Set<OemCloudAgentAppSignatureAlgorithm>([
+const PLUGIN_SIGNATURE_ALGORITHMS =
+  new Set<OemCloudPluginSignatureAlgorithm>([
     "RSASSA-PKCS1-v1_5-SHA256",
     "RSA-PSS-SHA256",
     "ECDSA-P256-SHA256",
@@ -195,9 +195,9 @@ function readOptionalBoolean(
   return typeof record[key] === "boolean" ? record[key] : null;
 }
 
-function parseAgentAppSignatureTrustRoot(
+function parsePluginSignatureTrustRoot(
   value: unknown,
-): OemCloudAgentAppSignatureTrustRoot | null {
+): OemCloudPluginSignatureTrustRoot | null {
   if (!isRecord(value) || Array.isArray(value)) {
     return null;
   }
@@ -214,8 +214,8 @@ function parseAgentAppSignatureTrustRoot(
     !publicKeyId ||
     !algorithm ||
     !publicKey ||
-    !AGENT_APP_SIGNATURE_ALGORITHMS.has(
-      algorithm as OemCloudAgentAppSignatureAlgorithm,
+    !PLUGIN_SIGNATURE_ALGORITHMS.has(
+      algorithm as OemCloudPluginSignatureAlgorithm,
     )
   ) {
     return null;
@@ -235,7 +235,7 @@ function parseAgentAppSignatureTrustRoot(
 
   return {
     publicKeyId,
-    algorithm: algorithm as OemCloudAgentAppSignatureAlgorithm,
+    algorithm: algorithm as OemCloudPluginSignatureAlgorithm,
     publicKey,
     appIds: readStringList(value.appIds ?? value.app_ids),
     ...(notBefore ? { notBefore } : {}),
@@ -245,40 +245,40 @@ function parseAgentAppSignatureTrustRoot(
   };
 }
 
-function readAgentAppSignatureTrustRoots(
+function readPluginSignatureTrustRoots(
   value: unknown,
-): OemCloudAgentAppSignatureTrustRoot[] {
+): OemCloudPluginSignatureTrustRoot[] {
   if (!Array.isArray(value)) {
     return [];
   }
   return value
-    .map(parseAgentAppSignatureTrustRoot)
+    .map(parsePluginSignatureTrustRoot)
     .filter(
       (
         item,
-      ): item is OemCloudAgentAppSignatureTrustRoot => Boolean(item),
+      ): item is OemCloudPluginSignatureTrustRoot => Boolean(item),
     );
 }
 
-function extractAgentAppSignatureTrustRootsFromPayload(
+function extractPluginSignatureTrustRootsFromPayload(
   payload: unknown,
-): OemCloudAgentAppSignatureTrustRoot[] {
+): OemCloudPluginSignatureTrustRoot[] {
   if (!isRecord(payload)) {
     return [];
   }
 
-  const directRoots = readAgentAppSignatureTrustRoots(
-    payload.agentAppSignatureTrustRoots ??
-      payload.agent_app_signature_trust_roots,
+  const directRoots = readPluginSignatureTrustRoots(
+    payload.pluginSignatureTrustRoots ??
+      payload.plugin_signature_trust_roots,
   );
   if (directRoots.length > 0) {
     return directRoots;
   }
 
-  const agentApps = payload.agentApps ?? payload.agent_apps;
-  if (isRecord(agentApps)) {
-    const nestedRoots = readAgentAppSignatureTrustRoots(
-      agentApps.signatureTrustRoots ?? agentApps.signature_trust_roots,
+  const plugins = payload.plugins ?? payload.plugins;
+  if (isRecord(plugins)) {
+    const nestedRoots = readPluginSignatureTrustRoots(
+      plugins.signatureTrustRoots ?? plugins.signature_trust_roots,
     );
     if (nestedRoots.length > 0) {
       return nestedRoots;
@@ -287,9 +287,9 @@ function extractAgentAppSignatureTrustRootsFromPayload(
 
   const security = payload.security;
   if (isRecord(security)) {
-    const securityRoots = readAgentAppSignatureTrustRoots(
-      security.agentAppSignatureTrustRoots ??
-        security.agent_app_signature_trust_roots,
+    const securityRoots = readPluginSignatureTrustRoots(
+      security.pluginSignatureTrustRoots ??
+        security.plugin_signature_trust_roots,
     );
     if (securityRoots.length > 0) {
       return securityRoots;
@@ -297,7 +297,7 @@ function extractAgentAppSignatureTrustRootsFromPayload(
   }
 
   if (payload.bootstrap) {
-    return extractAgentAppSignatureTrustRootsFromPayload(payload.bootstrap);
+    return extractPluginSignatureTrustRootsFromPayload(payload.bootstrap);
   }
 
   return [];
@@ -314,7 +314,7 @@ interface OemCloudRuntimeOverride {
   desktopClientId: string | null;
   desktopOauthRedirectUrl: string | null;
   desktopOauthNextPath: string | null;
-  agentAppSignatureTrustRoots: OemCloudAgentAppSignatureTrustRoot[];
+  pluginSignatureTrustRoots: OemCloudPluginSignatureTrustRoot[];
 }
 
 function parseOemCloudRuntimeOverride(
@@ -331,7 +331,7 @@ function parseOemCloudRuntimeOverride(
       desktopClientId: null,
       desktopOauthRedirectUrl: null,
       desktopOauthNextPath: null,
-      agentAppSignatureTrustRoots: [],
+      pluginSignatureTrustRoots: [],
     };
   }
 
@@ -381,8 +381,8 @@ function parseOemCloudRuntimeOverride(
       payload.desktop_oauth_next_path ??
       payload.desktopOAuthNextPath,
   );
-  const agentAppSignatureTrustRoots =
-    extractAgentAppSignatureTrustRootsFromPayload(payload);
+  const pluginSignatureTrustRoots =
+    extractPluginSignatureTrustRootsFromPayload(payload);
 
   return {
     enabled: typeof payload.enabled === "boolean" ? payload.enabled : undefined,
@@ -395,7 +395,7 @@ function parseOemCloudRuntimeOverride(
     desktopClientId,
     desktopOauthRedirectUrl,
     desktopOauthNextPath,
-    agentAppSignatureTrustRoots,
+    pluginSignatureTrustRoots,
   };
 }
 
@@ -416,7 +416,7 @@ export interface OemCloudRuntimeContext {
   desktopClientId: string;
   desktopOauthRedirectUrl: string;
   desktopOauthNextPath: string;
-  agentAppSignatureTrustRoots: OemCloudAgentAppSignatureTrustRoot[];
+  pluginSignatureTrustRoots: OemCloudPluginSignatureTrustRoot[];
 }
 
 declare global {
@@ -461,7 +461,7 @@ export function resolveOemCloudRuntimeContext(): OemCloudRuntimeContext | null {
     desktopClientId: envDesktopClientId,
     desktopOauthRedirectUrl: envDesktopOauthRedirectUrl,
     desktopOauthNextPath: envDesktopOauthNextPath,
-    agentAppSignatureTrustRoots: [],
+    pluginSignatureTrustRoots: [],
   };
 
   const runtimeOverride =
@@ -476,7 +476,7 @@ export function resolveOemCloudRuntimeContext(): OemCloudRuntimeContext | null {
           desktopClientId: null,
           desktopOauthRedirectUrl: null,
           desktopOauthNextPath: null,
-          agentAppSignatureTrustRoots: [],
+          pluginSignatureTrustRoots: [],
         }
       : parseOemCloudRuntimeOverride(window.__LIME_OEM_CLOUD__);
 
@@ -533,10 +533,10 @@ export function resolveOemCloudRuntimeContext(): OemCloudRuntimeContext | null {
     runtimeOverride.desktopOauthNextPath ??
     envOverride.desktopOauthNextPath ??
     DEFAULT_OEM_CLOUD_DESKTOP_OAUTH_NEXT_PATH;
-  const agentAppSignatureTrustRoots =
-    runtimeOverride.agentAppSignatureTrustRoots.length > 0
-      ? runtimeOverride.agentAppSignatureTrustRoots
-      : extractAgentAppSignatureTrustRootsFromPayload(bootstrapPayload);
+  const pluginSignatureTrustRoots =
+    runtimeOverride.pluginSignatureTrustRoots.length > 0
+      ? runtimeOverride.pluginSignatureTrustRoots
+      : extractPluginSignatureTrustRootsFromPayload(bootstrapPayload);
 
   if (!enabled || !baseUrl || !gatewayBaseUrl || !tenantId) {
     return null;
@@ -554,19 +554,19 @@ export function resolveOemCloudRuntimeContext(): OemCloudRuntimeContext | null {
     desktopClientId,
     desktopOauthRedirectUrl,
     desktopOauthNextPath,
-    agentAppSignatureTrustRoots,
+    pluginSignatureTrustRoots,
   };
 }
 
-export function resolveOemCloudAgentAppSignatureTrustRoots(): OemCloudAgentAppSignatureTrustRoot[] {
+export function resolveOemCloudPluginSignatureTrustRoots(): OemCloudPluginSignatureTrustRoot[] {
   if (typeof window === "undefined") {
     return [];
   }
   const runtimeOverride = parseOemCloudRuntimeOverride(window.__LIME_OEM_CLOUD__);
-  if (runtimeOverride.agentAppSignatureTrustRoots.length > 0) {
-    return runtimeOverride.agentAppSignatureTrustRoots;
+  if (runtimeOverride.pluginSignatureTrustRoots.length > 0) {
+    return runtimeOverride.pluginSignatureTrustRoots;
   }
-  return extractAgentAppSignatureTrustRootsFromPayload(window.__LIME_BOOTSTRAP__);
+  return extractPluginSignatureTrustRootsFromPayload(window.__LIME_BOOTSTRAP__);
 }
 
 export function hasOemCloudSession(

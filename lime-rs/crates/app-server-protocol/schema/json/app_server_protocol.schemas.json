@@ -1,8 +1,8 @@
 {
   "$defs": {
-    "AgentAppArticleWorkspaceContract": {
+    "PluginArticleWorkspaceContract": {
       "$defs": {
-        "AgentAppArticleWorkspaceObject": {
+        "PluginArticleWorkspaceObject": {
           "properties": {
             "artifactKind": {
               "type": [
@@ -40,7 +40,7 @@
         "objects": {
           "default": [],
           "items": {
-            "$ref": "#/$defs/AgentAppArticleWorkspaceObject"
+            "$ref": "#/$defs/PluginArticleWorkspaceObject"
           },
           "type": "array"
         },
@@ -62,10 +62,10 @@
       "required": [
         "enabled"
       ],
-      "title": "AgentAppArticleWorkspaceContract",
+      "title": "PluginArticleWorkspaceContract",
       "type": "object"
     },
-    "AgentAppArticleWorkspaceObject": {
+    "PluginArticleWorkspaceObject": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "artifactKind": {
@@ -93,10 +93,10 @@
         "primary",
         "title"
       ],
-      "title": "AgentAppArticleWorkspaceObject",
+      "title": "PluginArticleWorkspaceObject",
       "type": "object"
     },
-    "AgentAppCloudReleaseDescriptor": {
+    "PluginCloudReleaseDescriptor": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "appId": {
@@ -160,12 +160,12 @@
         "sourceUri",
         "version"
       ],
-      "title": "AgentAppCloudReleaseDescriptor",
+      "title": "PluginCloudReleaseDescriptor",
       "type": "object"
     },
-    "AgentAppDeleteDataExecutionEvidence": {
+    "PluginDeleteDataExecutionEvidence": {
       "$defs": {
-        "AgentAppDeleteDataPostDeleteResidualAudit": {
+        "PluginDeleteDataPostDeleteResidualAudit": {
           "properties": {
             "checkedAt": {
               "type": "string"
@@ -178,7 +178,7 @@
             "failedTarget": {
               "anyOf": [
                 {
-                  "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+                  "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
                 },
                 {
                   "type": "null"
@@ -193,7 +193,7 @@
             "remainingTargets": {
               "default": [],
               "items": {
-                "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+                "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
               },
               "type": "array"
             },
@@ -209,7 +209,7 @@
           ],
           "type": "object"
         },
-        "AgentAppDeleteDataTargetEvidence": {
+        "PluginDeleteDataTargetEvidence": {
           "properties": {
             "action": {
               "type": "string"
@@ -255,7 +255,7 @@
         "blockedTargets": {
           "default": [],
           "items": {
-            "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+            "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
           },
           "type": "array"
         },
@@ -272,7 +272,7 @@
         "failedTarget": {
           "anyOf": [
             {
-              "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+              "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
             },
             {
               "type": "null"
@@ -285,24 +285,24 @@
         "missingTargets": {
           "default": [],
           "items": {
-            "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+            "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
           },
           "type": "array"
         },
         "postDeleteResidualAudit": {
-          "$ref": "#/$defs/AgentAppDeleteDataPostDeleteResidualAudit"
+          "$ref": "#/$defs/PluginDeleteDataPostDeleteResidualAudit"
         },
         "removedTargets": {
           "default": [],
           "items": {
-            "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+            "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
           },
           "type": "array"
         },
         "retainedTargets": {
           "default": [],
           "items": {
-            "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+            "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
           },
           "type": "array"
         },
@@ -316,12 +316,12 @@
         "postDeleteResidualAudit",
         "status"
       ],
-      "title": "AgentAppDeleteDataExecutionEvidence",
+      "title": "PluginDeleteDataExecutionEvidence",
       "type": "object"
     },
-    "AgentAppDeleteDataPostDeleteResidualAudit": {
+    "PluginDeleteDataPostDeleteResidualAudit": {
       "$defs": {
-        "AgentAppDeleteDataTargetEvidence": {
+        "PluginDeleteDataTargetEvidence": {
           "properties": {
             "action": {
               "type": "string"
@@ -375,7 +375,7 @@
         "failedTarget": {
           "anyOf": [
             {
-              "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+              "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
             },
             {
               "type": "null"
@@ -390,7 +390,7 @@
         "remainingTargets": {
           "default": [],
           "items": {
-            "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+            "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
           },
           "type": "array"
         },
@@ -404,10 +404,10 @@
         "remainingTargetCount",
         "status"
       ],
-      "title": "AgentAppDeleteDataPostDeleteResidualAudit",
+      "title": "PluginDeleteDataPostDeleteResidualAudit",
       "type": "object"
     },
-    "AgentAppDeleteDataTargetEvidence": {
+    "PluginDeleteDataTargetEvidence": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "action": {
@@ -446,12 +446,12 @@
         "status",
         "value"
       ],
-      "title": "AgentAppDeleteDataTargetEvidence",
+      "title": "PluginDeleteDataTargetEvidence",
       "type": "object"
     },
-    "AgentAppFetchCloudPackageParams": {
+    "PluginFetchCloudPackageParams": {
       "$defs": {
-        "AgentAppCloudReleaseDescriptor": {
+        "PluginCloudReleaseDescriptor": {
           "properties": {
             "appId": {
               "type": "string"
@@ -520,16 +520,16 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "descriptor": {
-          "$ref": "#/$defs/AgentAppCloudReleaseDescriptor"
+          "$ref": "#/$defs/PluginCloudReleaseDescriptor"
         }
       },
       "required": [
         "descriptor"
       ],
-      "title": "AgentAppFetchCloudPackageParams",
+      "title": "PluginFetchCloudPackageParams",
       "type": "object"
     },
-    "AgentAppHistoryRestoreContract": {
+    "PluginHistoryRestoreContract": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "defaultPane": {
@@ -563,10 +563,10 @@
         "restoreLayout",
         "restoreSelection"
       ],
-      "title": "AgentAppHistoryRestoreContract",
+      "title": "PluginHistoryRestoreContract",
       "type": "object"
     },
-    "AgentAppHostFunctionState": {
+    "PluginHostFunctionState": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "blockers": {
@@ -598,12 +598,12 @@
         "key",
         "status"
       ],
-      "title": "AgentAppHostFunctionState",
+      "title": "PluginHostFunctionState",
       "type": "object"
     },
-    "AgentAppHostLifecycleListResponse": {
+    "PluginHostLifecycleListResponse": {
       "$defs": {
-        "AgentAppArticleWorkspaceContract": {
+        "PluginArticleWorkspaceContract": {
           "properties": {
             "enabled": {
               "type": "boolean"
@@ -611,7 +611,7 @@
             "objects": {
               "default": [],
               "items": {
-                "$ref": "#/$defs/AgentAppArticleWorkspaceObject"
+                "$ref": "#/$defs/PluginArticleWorkspaceObject"
               },
               "type": "array"
             },
@@ -635,7 +635,7 @@
           ],
           "type": "object"
         },
-        "AgentAppArticleWorkspaceObject": {
+        "PluginArticleWorkspaceObject": {
           "properties": {
             "artifactKind": {
               "type": [
@@ -664,7 +664,7 @@
           ],
           "type": "object"
         },
-        "AgentAppHistoryRestoreContract": {
+        "PluginHistoryRestoreContract": {
           "properties": {
             "defaultPane": {
               "type": [
@@ -699,7 +699,7 @@
           ],
           "type": "object"
         },
-        "AgentAppHostFunctionState": {
+        "PluginHostFunctionState": {
           "properties": {
             "blockers": {
               "default": [],
@@ -732,7 +732,7 @@
           ],
           "type": "object"
         },
-        "AgentAppHostLifecycleSnapshot": {
+        "PluginHostLifecycleSnapshot": {
           "properties": {
             "appCenterStatus": {
               "type": "string"
@@ -760,7 +760,7 @@
             "functions": {
               "default": [],
               "items": {
-                "$ref": "#/$defs/AgentAppHostFunctionState"
+                "$ref": "#/$defs/PluginHostFunctionState"
               },
               "type": "array"
             },
@@ -770,7 +770,7 @@
             "issueCategories": {
               "default": [],
               "items": {
-                "$ref": "#/$defs/AgentAppReadinessIssueCategorySummary"
+                "$ref": "#/$defs/PluginReadinessIssueCategorySummary"
               },
               "type": "array"
             },
@@ -794,10 +794,10 @@
               "type": "string"
             },
             "rightSurface": {
-              "$ref": "#/$defs/AgentAppRightSurfaceContract"
+              "$ref": "#/$defs/PluginRightSurfaceContract"
             },
             "taskRuntime": {
-              "$ref": "#/$defs/AgentAppTaskRuntimeContract"
+              "$ref": "#/$defs/PluginTaskRuntimeContract"
             }
           },
           "required": [
@@ -812,7 +812,7 @@
           ],
           "type": "object"
         },
-        "AgentAppReadinessIssueCategorySummary": {
+        "PluginReadinessIssueCategorySummary": {
           "properties": {
             "category": {
               "type": "string"
@@ -836,10 +836,10 @@
           ],
           "type": "object"
         },
-        "AgentAppRightSurfaceContract": {
+        "PluginRightSurfaceContract": {
           "properties": {
             "articleWorkspace": {
-              "$ref": "#/$defs/AgentAppArticleWorkspaceContract"
+              "$ref": "#/$defs/PluginArticleWorkspaceContract"
             },
             "defaultActiveTab": {
               "type": [
@@ -851,7 +851,7 @@
               "type": "string"
             },
             "historyRestore": {
-              "$ref": "#/$defs/AgentAppHistoryRestoreContract"
+              "$ref": "#/$defs/PluginHistoryRestoreContract"
             },
             "physicalDockCount": {
               "format": "uint32",
@@ -874,7 +874,7 @@
           ],
           "type": "object"
         },
-        "AgentAppTaskRuntimeContract": {
+        "PluginTaskRuntimeContract": {
           "properties": {
             "blockers": {
               "default": [],
@@ -955,17 +955,17 @@
         "snapshots": {
           "default": [],
           "items": {
-            "$ref": "#/$defs/AgentAppHostLifecycleSnapshot"
+            "$ref": "#/$defs/PluginHostLifecycleSnapshot"
           },
           "type": "array"
         }
       },
-      "title": "AgentAppHostLifecycleListResponse",
+      "title": "PluginHostLifecycleListResponse",
       "type": "object"
     },
-    "AgentAppHostLifecycleSnapshot": {
+    "PluginHostLifecycleSnapshot": {
       "$defs": {
-        "AgentAppArticleWorkspaceContract": {
+        "PluginArticleWorkspaceContract": {
           "properties": {
             "enabled": {
               "type": "boolean"
@@ -973,7 +973,7 @@
             "objects": {
               "default": [],
               "items": {
-                "$ref": "#/$defs/AgentAppArticleWorkspaceObject"
+                "$ref": "#/$defs/PluginArticleWorkspaceObject"
               },
               "type": "array"
             },
@@ -997,7 +997,7 @@
           ],
           "type": "object"
         },
-        "AgentAppArticleWorkspaceObject": {
+        "PluginArticleWorkspaceObject": {
           "properties": {
             "artifactKind": {
               "type": [
@@ -1026,7 +1026,7 @@
           ],
           "type": "object"
         },
-        "AgentAppHistoryRestoreContract": {
+        "PluginHistoryRestoreContract": {
           "properties": {
             "defaultPane": {
               "type": [
@@ -1061,7 +1061,7 @@
           ],
           "type": "object"
         },
-        "AgentAppHostFunctionState": {
+        "PluginHostFunctionState": {
           "properties": {
             "blockers": {
               "default": [],
@@ -1094,7 +1094,7 @@
           ],
           "type": "object"
         },
-        "AgentAppReadinessIssueCategorySummary": {
+        "PluginReadinessIssueCategorySummary": {
           "properties": {
             "category": {
               "type": "string"
@@ -1118,10 +1118,10 @@
           ],
           "type": "object"
         },
-        "AgentAppRightSurfaceContract": {
+        "PluginRightSurfaceContract": {
           "properties": {
             "articleWorkspace": {
-              "$ref": "#/$defs/AgentAppArticleWorkspaceContract"
+              "$ref": "#/$defs/PluginArticleWorkspaceContract"
             },
             "defaultActiveTab": {
               "type": [
@@ -1133,7 +1133,7 @@
               "type": "string"
             },
             "historyRestore": {
-              "$ref": "#/$defs/AgentAppHistoryRestoreContract"
+              "$ref": "#/$defs/PluginHistoryRestoreContract"
             },
             "physicalDockCount": {
               "format": "uint32",
@@ -1156,7 +1156,7 @@
           ],
           "type": "object"
         },
-        "AgentAppTaskRuntimeContract": {
+        "PluginTaskRuntimeContract": {
           "properties": {
             "blockers": {
               "default": [],
@@ -1255,7 +1255,7 @@
         "functions": {
           "default": [],
           "items": {
-            "$ref": "#/$defs/AgentAppHostFunctionState"
+            "$ref": "#/$defs/PluginHostFunctionState"
           },
           "type": "array"
         },
@@ -1265,7 +1265,7 @@
         "issueCategories": {
           "default": [],
           "items": {
-            "$ref": "#/$defs/AgentAppReadinessIssueCategorySummary"
+            "$ref": "#/$defs/PluginReadinessIssueCategorySummary"
           },
           "type": "array"
         },
@@ -1289,10 +1289,10 @@
           "type": "string"
         },
         "rightSurface": {
-          "$ref": "#/$defs/AgentAppRightSurfaceContract"
+          "$ref": "#/$defs/PluginRightSurfaceContract"
         },
         "taskRuntime": {
-          "$ref": "#/$defs/AgentAppTaskRuntimeContract"
+          "$ref": "#/$defs/PluginTaskRuntimeContract"
         }
       },
       "required": [
@@ -1305,10 +1305,10 @@
         "rightSurface",
         "taskRuntime"
       ],
-      "title": "AgentAppHostLifecycleSnapshot",
+      "title": "PluginHostLifecycleSnapshot",
       "type": "object"
     },
-    "AgentAppInstalledDisabledSetParams": {
+    "PluginInstalledDisabledSetParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "appId": {
@@ -1328,10 +1328,10 @@
         "appId",
         "disabled"
       ],
-      "title": "AgentAppInstalledDisabledSetParams",
+      "title": "PluginInstalledDisabledSetParams",
       "type": "object"
     },
-    "AgentAppInstalledListResponse": {
+    "PluginInstalledListResponse": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "issues": {
@@ -1345,10 +1345,10 @@
           "type": "array"
         }
       },
-      "title": "AgentAppInstalledListResponse",
+      "title": "PluginInstalledListResponse",
       "type": "object"
     },
-    "AgentAppInstalledSaveParams": {
+    "PluginInstalledSaveParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "state": true
@@ -1356,10 +1356,10 @@
       "required": [
         "state"
       ],
-      "title": "AgentAppInstalledSaveParams",
+      "title": "PluginInstalledSaveParams",
       "type": "object"
     },
-    "AgentAppLocalPackageInspectParams": {
+    "PluginLocalPackageInspectParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "appDir": {
@@ -1369,10 +1369,10 @@
       "required": [
         "appDir"
       ],
-      "title": "AgentAppLocalPackageInspectParams",
+      "title": "PluginLocalPackageInspectParams",
       "type": "object"
     },
-    "AgentAppLocalPackageInspectResponse": {
+    "PluginLocalPackageInspectResponse": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "appDir": {
@@ -1410,12 +1410,12 @@
         "sourceKind",
         "sourceUri"
       ],
-      "title": "AgentAppLocalPackageInspectResponse",
+      "title": "PluginLocalPackageInspectResponse",
       "type": "object"
     },
-    "AgentAppPackageCacheEntry": {
+    "PluginPackageCacheEntry": {
       "$defs": {
-        "AgentAppPackageIdentity": {
+        "PluginPackageIdentity": {
           "properties": {
             "appId": {
               "type": "string"
@@ -1493,7 +1493,7 @@
           "type": "string"
         },
         "identity": {
-          "$ref": "#/$defs/AgentAppPackageIdentity"
+          "$ref": "#/$defs/PluginPackageIdentity"
         },
         "manifestHash": {
           "type": "string"
@@ -1512,10 +1512,10 @@
         "manifestSnapshot",
         "packageHash"
       ],
-      "title": "AgentAppPackageCacheEntry",
+      "title": "PluginPackageCacheEntry",
       "type": "object"
     },
-    "AgentAppPackageIdentity": {
+    "PluginPackageIdentity": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "appId": {
@@ -1579,12 +1579,12 @@
         "sourceKind",
         "sourceUri"
       ],
-      "title": "AgentAppPackageIdentity",
+      "title": "PluginPackageIdentity",
       "type": "object"
     },
-    "AgentAppRightSurfaceContract": {
+    "PluginRightSurfaceContract": {
       "$defs": {
-        "AgentAppArticleWorkspaceContract": {
+        "PluginArticleWorkspaceContract": {
           "properties": {
             "enabled": {
               "type": "boolean"
@@ -1592,7 +1592,7 @@
             "objects": {
               "default": [],
               "items": {
-                "$ref": "#/$defs/AgentAppArticleWorkspaceObject"
+                "$ref": "#/$defs/PluginArticleWorkspaceObject"
               },
               "type": "array"
             },
@@ -1616,7 +1616,7 @@
           ],
           "type": "object"
         },
-        "AgentAppArticleWorkspaceObject": {
+        "PluginArticleWorkspaceObject": {
           "properties": {
             "artifactKind": {
               "type": [
@@ -1645,7 +1645,7 @@
           ],
           "type": "object"
         },
-        "AgentAppHistoryRestoreContract": {
+        "PluginHistoryRestoreContract": {
           "properties": {
             "defaultPane": {
               "type": [
@@ -1684,7 +1684,7 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "articleWorkspace": {
-          "$ref": "#/$defs/AgentAppArticleWorkspaceContract"
+          "$ref": "#/$defs/PluginArticleWorkspaceContract"
         },
         "defaultActiveTab": {
           "type": [
@@ -1696,7 +1696,7 @@
           "type": "string"
         },
         "historyRestore": {
-          "$ref": "#/$defs/AgentAppHistoryRestoreContract"
+          "$ref": "#/$defs/PluginHistoryRestoreContract"
         },
         "physicalDockCount": {
           "format": "uint32",
@@ -1717,10 +1717,10 @@
         "historyRestore",
         "physicalDockCount"
       ],
-      "title": "AgentAppRightSurfaceContract",
+      "title": "PluginRightSurfaceContract",
       "type": "object"
     },
-    "AgentAppShellPackageMount": {
+    "PluginShellPackageMount": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "kind": {
@@ -1746,10 +1746,10 @@
         "path",
         "readOnly"
       ],
-      "title": "AgentAppShellPackageMount",
+      "title": "PluginShellPackageMount",
       "type": "object"
     },
-    "AgentAppShellPrepareParams": {
+    "PluginShellPrepareParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "descriptor": true
@@ -1757,12 +1757,12 @@
       "required": [
         "descriptor"
       ],
-      "title": "AgentAppShellPrepareParams",
+      "title": "PluginShellPrepareParams",
       "type": "object"
     },
-    "AgentAppShellPrepareResponse": {
+    "PluginShellPrepareResponse": {
       "$defs": {
-        "AgentAppShellPackageMount": {
+        "PluginShellPackageMount": {
           "properties": {
             "kind": {
               "type": "string"
@@ -1837,7 +1837,7 @@
         "packageMount": {
           "anyOf": [
             {
-              "$ref": "#/$defs/AgentAppShellPackageMount"
+              "$ref": "#/$defs/PluginShellPackageMount"
             },
             {
               "type": "null"
@@ -1868,10 +1868,10 @@
         "preparedAt",
         "status"
       ],
-      "title": "AgentAppShellPrepareResponse",
+      "title": "PluginShellPrepareResponse",
       "type": "object"
     },
-    "AgentAppTaskRuntimeContract": {
+    "PluginTaskRuntimeContract": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "blockers": {
@@ -1940,10 +1940,10 @@
         "directProviderAccess",
         "enabled"
       ],
-      "title": "AgentAppTaskRuntimeContract",
+      "title": "PluginTaskRuntimeContract",
       "type": "object"
     },
-    "AgentAppUiRuntimeStartParams": {
+    "PluginUiRuntimeStartParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "appId": {
@@ -1959,10 +1959,10 @@
       "required": [
         "appId"
       ],
-      "title": "AgentAppUiRuntimeStartParams",
+      "title": "PluginUiRuntimeStartParams",
       "type": "object"
     },
-    "AgentAppUiRuntimeStatusParams": {
+    "PluginUiRuntimeStatusParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "appId": {
@@ -1972,12 +1972,12 @@
       "required": [
         "appId"
       ],
-      "title": "AgentAppUiRuntimeStatusParams",
+      "title": "PluginUiRuntimeStatusParams",
       "type": "object"
     },
-    "AgentAppUiRuntimeStatusResponse": {
+    "PluginUiRuntimeStatusResponse": {
       "$defs": {
-        "AgentAppTaskRuntimeContract": {
+        "PluginTaskRuntimeContract": {
           "properties": {
             "blockers": {
               "default": [],
@@ -2106,7 +2106,7 @@
         "taskRuntime": {
           "anyOf": [
             {
-              "$ref": "#/$defs/AgentAppTaskRuntimeContract"
+              "$ref": "#/$defs/PluginTaskRuntimeContract"
             },
             {
               "type": "null"
@@ -2118,10 +2118,10 @@
         "appId",
         "status"
       ],
-      "title": "AgentAppUiRuntimeStatusResponse",
+      "title": "PluginUiRuntimeStatusResponse",
       "type": "object"
     },
-    "AgentAppUiRuntimeStopParams": {
+    "PluginUiRuntimeStopParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "appId": {
@@ -2131,10 +2131,10 @@
       "required": [
         "appId"
       ],
-      "title": "AgentAppUiRuntimeStopParams",
+      "title": "PluginUiRuntimeStopParams",
       "type": "object"
     },
-    "AgentAppUninstallParams": {
+    "PluginUninstallParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "appId": {
@@ -2154,10 +2154,10 @@
         "appId",
         "mode"
       ],
-      "title": "AgentAppUninstallParams",
+      "title": "PluginUninstallParams",
       "type": "object"
     },
-    "AgentAppUninstallRehearsalParams": {
+    "PluginUninstallRehearsalParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "appId": {
@@ -2171,12 +2171,12 @@
         "appId",
         "mode"
       ],
-      "title": "AgentAppUninstallRehearsalParams",
+      "title": "PluginUninstallRehearsalParams",
       "type": "object"
     },
-    "AgentAppUninstallRehearsalResponse": {
+    "PluginUninstallRehearsalResponse": {
       "$defs": {
-        "AgentAppUninstallRehearsalTarget": {
+        "PluginUninstallRehearsalTarget": {
           "properties": {
             "action": {
               "type": "string"
@@ -2234,7 +2234,7 @@
         "targets": {
           "default": [],
           "items": {
-            "$ref": "#/$defs/AgentAppUninstallRehearsalTarget"
+            "$ref": "#/$defs/PluginUninstallRehearsalTarget"
           },
           "type": "array"
         },
@@ -2253,10 +2253,10 @@
         "mode",
         "retainedTargetCount"
       ],
-      "title": "AgentAppUninstallRehearsalResponse",
+      "title": "PluginUninstallRehearsalResponse",
       "type": "object"
     },
-    "AgentAppUninstallRehearsalTarget": {
+    "PluginUninstallRehearsalTarget": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "action": {
@@ -2282,17 +2282,17 @@
         "safeToDelete",
         "value"
       ],
-      "title": "AgentAppUninstallRehearsalTarget",
+      "title": "PluginUninstallRehearsalTarget",
       "type": "object"
     },
-    "AgentAppUninstallResponse": {
+    "PluginUninstallResponse": {
       "$defs": {
-        "AgentAppDeleteDataExecutionEvidence": {
+        "PluginDeleteDataExecutionEvidence": {
           "properties": {
             "blockedTargets": {
               "default": [],
               "items": {
-                "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+                "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
               },
               "type": "array"
             },
@@ -2309,7 +2309,7 @@
             "failedTarget": {
               "anyOf": [
                 {
-                  "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+                  "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
                 },
                 {
                   "type": "null"
@@ -2322,24 +2322,24 @@
             "missingTargets": {
               "default": [],
               "items": {
-                "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+                "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
               },
               "type": "array"
             },
             "postDeleteResidualAudit": {
-              "$ref": "#/$defs/AgentAppDeleteDataPostDeleteResidualAudit"
+              "$ref": "#/$defs/PluginDeleteDataPostDeleteResidualAudit"
             },
             "removedTargets": {
               "default": [],
               "items": {
-                "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+                "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
               },
               "type": "array"
             },
             "retainedTargets": {
               "default": [],
               "items": {
-                "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+                "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
               },
               "type": "array"
             },
@@ -2355,7 +2355,7 @@
           ],
           "type": "object"
         },
-        "AgentAppDeleteDataPostDeleteResidualAudit": {
+        "PluginDeleteDataPostDeleteResidualAudit": {
           "properties": {
             "checkedAt": {
               "type": "string"
@@ -2368,7 +2368,7 @@
             "failedTarget": {
               "anyOf": [
                 {
-                  "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+                  "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
                 },
                 {
                   "type": "null"
@@ -2383,7 +2383,7 @@
             "remainingTargets": {
               "default": [],
               "items": {
-                "$ref": "#/$defs/AgentAppDeleteDataTargetEvidence"
+                "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
               },
               "type": "array"
             },
@@ -2399,7 +2399,7 @@
           ],
           "type": "object"
         },
-        "AgentAppDeleteDataTargetEvidence": {
+        "PluginDeleteDataTargetEvidence": {
           "properties": {
             "action": {
               "type": "string"
@@ -2439,7 +2439,7 @@
           ],
           "type": "object"
         },
-        "AgentAppInstalledListResponse": {
+        "PluginInstalledListResponse": {
           "properties": {
             "issues": {
               "default": [],
@@ -2454,7 +2454,7 @@
           },
           "type": "object"
         },
-        "AgentAppUninstallRehearsalResponse": {
+        "PluginUninstallRehearsalResponse": {
           "properties": {
             "appId": {
               "type": "string"
@@ -2484,7 +2484,7 @@
             "targets": {
               "default": [],
               "items": {
-                "$ref": "#/$defs/AgentAppUninstallRehearsalTarget"
+                "$ref": "#/$defs/PluginUninstallRehearsalTarget"
               },
               "type": "array"
             },
@@ -2505,7 +2505,7 @@
           ],
           "type": "object"
         },
-        "AgentAppUninstallRehearsalTarget": {
+        "PluginUninstallRehearsalTarget": {
           "properties": {
             "action": {
               "type": "string"
@@ -2545,7 +2545,7 @@
         "deleteEvidence": {
           "anyOf": [
             {
-              "$ref": "#/$defs/AgentAppDeleteDataExecutionEvidence"
+              "$ref": "#/$defs/PluginDeleteDataExecutionEvidence"
             },
             {
               "type": "null"
@@ -2553,7 +2553,7 @@
           ]
         },
         "list": {
-          "$ref": "#/$defs/AgentAppInstalledListResponse"
+          "$ref": "#/$defs/PluginInstalledListResponse"
         },
         "missingTargetCount": {
           "format": "uint",
@@ -2561,7 +2561,7 @@
           "type": "integer"
         },
         "rehearsal": {
-          "$ref": "#/$defs/AgentAppUninstallRehearsalResponse"
+          "$ref": "#/$defs/PluginUninstallRehearsalResponse"
         },
         "removedTargetCount": {
           "format": "uint",
@@ -2579,7 +2579,7 @@
         "removedTargetCount",
         "status"
       ],
-      "title": "AgentAppUninstallResponse",
+      "title": "PluginUninstallResponse",
       "type": "object"
     },
     "AgentAttachment": {
@@ -22829,7 +22829,7 @@
         },
         "ModelTaskSource": {
           "enum": [
-            "agent_app",
+            "plugin",
             "agent_turn",
             "automation",
             "media_task_artifact",
@@ -22913,7 +22913,7 @@
     "ModelTaskSource": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "enum": [
-        "agent_app",
+        "plugin",
         "agent_turn",
         "automation",
         "media_task_artifact",
@@ -30862,18 +30862,18 @@
         "requests": {
           "items": {
             "enum": [
-              "agentAppHostLifecycle/list",
-              "agentAppInstalled/disabled/set",
-              "agentAppInstalled/list",
-              "agentAppInstalled/save",
-              "agentAppInstalled/uninstall",
-              "agentAppInstalled/uninstall/rehearsal",
-              "agentAppLocalPackage/inspect",
-              "agentAppPackage/fetchCloud",
-              "agentAppShell/prepare",
-              "agentAppUiRuntime/start",
-              "agentAppUiRuntime/status",
-              "agentAppUiRuntime/stop",
+              "pluginHostLifecycle/list",
+              "pluginInstalled/disabled/set",
+              "pluginInstalled/list",
+              "pluginInstalled/save",
+              "pluginInstalled/uninstall",
+              "pluginInstalled/uninstall/rehearsal",
+              "pluginLocalPackage/inspect",
+              "pluginPackage/fetchCloud",
+              "pluginShell/prepare",
+              "pluginUiRuntime/start",
+              "pluginUiRuntime/status",
+              "pluginUiRuntime/stop",
               "agentSession/action/replay",
               "agentSession/action/respond",
               "agentSession/analysisHandoff/export",

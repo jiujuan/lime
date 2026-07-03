@@ -43,18 +43,18 @@ const {
   AppServerRequestError,
   DEFAULT_STANDALONE_BACKEND_MODE,
   createAgentRuntimeClient,
-  METHOD_AGENT_APP_INSTALLED_DISABLED_SET,
-  METHOD_AGENT_APP_INSTALLED_LIST,
-  METHOD_AGENT_APP_INSTALLED_SAVE,
-  METHOD_AGENT_APP_INSTALLED_UNINSTALL,
-  METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL,
-  METHOD_AGENT_APP_HOST_LIFECYCLE_LIST,
-  METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT,
-  METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD,
-  METHOD_AGENT_APP_SHELL_PREPARE,
-  METHOD_AGENT_APP_UI_RUNTIME_START,
-  METHOD_AGENT_APP_UI_RUNTIME_STATUS,
-  METHOD_AGENT_APP_UI_RUNTIME_STOP,
+  METHOD_PLUGIN_INSTALLED_DISABLED_SET,
+  METHOD_PLUGIN_INSTALLED_LIST,
+  METHOD_PLUGIN_INSTALLED_SAVE,
+  METHOD_PLUGIN_INSTALLED_UNINSTALL,
+  METHOD_PLUGIN_INSTALLED_UNINSTALL_REHEARSAL,
+  METHOD_PLUGIN_HOST_LIFECYCLE_LIST,
+  METHOD_PLUGIN_LOCAL_PACKAGE_INSPECT,
+  METHOD_PLUGIN_PACKAGE_FETCH_CLOUD,
+  METHOD_PLUGIN_SHELL_PREPARE,
+  METHOD_PLUGIN_UI_RUNTIME_START,
+  METHOD_PLUGIN_UI_RUNTIME_STATUS,
+  METHOD_PLUGIN_UI_RUNTIME_STOP,
   METHOD_AGENT_SESSION_ACTION_REPLAY,
   METHOD_AGENT_SESSION_ACTION_RESPOND,
   METHOD_AGENT_SESSION_ARCHIVE_MANY,
@@ -942,19 +942,19 @@ test("builds session file requests with current App Server methods", () => {
 test("builds app data surface requests with current methods", () => {
   const client = new AppServerClient();
 
-  const installed = client.listAgentAppInstalled();
-  const hostLifecycle = client.listAgentAppHostLifecycle();
-  const runtimeStart = client.startAgentAppUiRuntime({
+  const installed = client.listPluginInstalled();
+  const hostLifecycle = client.listPluginHostLifecycle();
+  const runtimeStart = client.startPluginUiRuntime({
     appId: "content-factory-app",
     entryKey: "dashboard",
   });
-  const runtimeStatus = client.getAgentAppUiRuntimeStatus({
+  const runtimeStatus = client.getPluginUiRuntimeStatus({
     appId: "content-factory-app",
   });
-  const runtimeStop = client.stopAgentAppUiRuntime({
+  const runtimeStop = client.stopPluginUiRuntime({
     appId: "content-factory-app",
   });
-  const shellPrepare = client.prepareAgentAppShell({
+  const shellPrepare = client.preparePluginShell({
     descriptor: {
       appId: "content-factory-app",
     },
@@ -1329,24 +1329,24 @@ test("builds app data surface requests with current methods", () => {
     file_path: "/tmp/interview.wav",
   });
 
-  assert.equal(installed.method, METHOD_AGENT_APP_INSTALLED_LIST);
+  assert.equal(installed.method, METHOD_PLUGIN_INSTALLED_LIST);
   assert.deepEqual(installed.params, {});
-  assert.equal(hostLifecycle.method, METHOD_AGENT_APP_HOST_LIFECYCLE_LIST);
+  assert.equal(hostLifecycle.method, METHOD_PLUGIN_HOST_LIFECYCLE_LIST);
   assert.deepEqual(hostLifecycle.params, {});
-  assert.equal(runtimeStart.method, METHOD_AGENT_APP_UI_RUNTIME_START);
+  assert.equal(runtimeStart.method, METHOD_PLUGIN_UI_RUNTIME_START);
   assert.deepEqual(runtimeStart.params, {
     appId: "content-factory-app",
     entryKey: "dashboard",
   });
-  assert.equal(runtimeStatus.method, METHOD_AGENT_APP_UI_RUNTIME_STATUS);
+  assert.equal(runtimeStatus.method, METHOD_PLUGIN_UI_RUNTIME_STATUS);
   assert.deepEqual(runtimeStatus.params, {
     appId: "content-factory-app",
   });
-  assert.equal(runtimeStop.method, METHOD_AGENT_APP_UI_RUNTIME_STOP);
+  assert.equal(runtimeStop.method, METHOD_PLUGIN_UI_RUNTIME_STOP);
   assert.deepEqual(runtimeStop.params, {
     appId: "content-factory-app",
   });
-  assert.equal(shellPrepare.method, METHOD_AGENT_APP_SHELL_PREPARE);
+  assert.equal(shellPrepare.method, METHOD_PLUGIN_SHELL_PREPARE);
   assert.deepEqual(shellPrepare.params, {
     descriptor: {
       appId: "content-factory-app",
@@ -2512,18 +2512,18 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_GATEWAY_TUNNEL_SYNC_WEBHOOK_URL, kind: "request" },
     { method: METHOD_WORKSPACE_SKILL_BINDINGS_LIST, kind: "request" },
     { method: METHOD_WORKSPACE_REGISTERED_SKILLS_LIST, kind: "request" },
-    { method: METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT, kind: "request" },
-    { method: METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD, kind: "request" },
-    { method: METHOD_AGENT_APP_INSTALLED_SAVE, kind: "request" },
-    { method: METHOD_AGENT_APP_INSTALLED_LIST, kind: "request" },
-    { method: METHOD_AGENT_APP_INSTALLED_DISABLED_SET, kind: "request" },
-    { method: METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL, kind: "request" },
-    { method: METHOD_AGENT_APP_INSTALLED_UNINSTALL, kind: "request" },
-    { method: METHOD_AGENT_APP_HOST_LIFECYCLE_LIST, kind: "request" },
-    { method: METHOD_AGENT_APP_SHELL_PREPARE, kind: "request" },
-    { method: METHOD_AGENT_APP_UI_RUNTIME_START, kind: "request" },
-    { method: METHOD_AGENT_APP_UI_RUNTIME_STATUS, kind: "request" },
-    { method: METHOD_AGENT_APP_UI_RUNTIME_STOP, kind: "request" },
+    { method: METHOD_PLUGIN_LOCAL_PACKAGE_INSPECT, kind: "request" },
+    { method: METHOD_PLUGIN_PACKAGE_FETCH_CLOUD, kind: "request" },
+    { method: METHOD_PLUGIN_INSTALLED_SAVE, kind: "request" },
+    { method: METHOD_PLUGIN_INSTALLED_LIST, kind: "request" },
+    { method: METHOD_PLUGIN_INSTALLED_DISABLED_SET, kind: "request" },
+    { method: METHOD_PLUGIN_INSTALLED_UNINSTALL_REHEARSAL, kind: "request" },
+    { method: METHOD_PLUGIN_INSTALLED_UNINSTALL, kind: "request" },
+    { method: METHOD_PLUGIN_HOST_LIFECYCLE_LIST, kind: "request" },
+    { method: METHOD_PLUGIN_SHELL_PREPARE, kind: "request" },
+    { method: METHOD_PLUGIN_UI_RUNTIME_START, kind: "request" },
+    { method: METHOD_PLUGIN_UI_RUNTIME_STATUS, kind: "request" },
+    { method: METHOD_PLUGIN_UI_RUNTIME_STOP, kind: "request" },
     { method: METHOD_KNOWLEDGE_PACK_LIST, kind: "request" },
     { method: METHOD_KNOWLEDGE_PACK_READ, kind: "request" },
     { method: METHOD_KNOWLEDGE_SOURCE_IMPORT, kind: "request" },
@@ -2838,43 +2838,43 @@ test("exports app-server method catalog with request and notification kinds", ()
     isAppServerRequestMethod(METHOD_WORKSPACE_REGISTERED_SKILLS_LIST),
     true,
   );
-  assert.equal(isAppServerRequestMethod(METHOD_AGENT_APP_INSTALLED_LIST), true);
+  assert.equal(isAppServerRequestMethod(METHOD_PLUGIN_INSTALLED_LIST), true);
   assert.equal(
-    isAppServerRequestMethod(METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT),
+    isAppServerRequestMethod(METHOD_PLUGIN_LOCAL_PACKAGE_INSPECT),
     true,
   );
   assert.equal(
-    isAppServerRequestMethod(METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD),
+    isAppServerRequestMethod(METHOD_PLUGIN_PACKAGE_FETCH_CLOUD),
     true,
   );
-  assert.equal(isAppServerRequestMethod(METHOD_AGENT_APP_INSTALLED_SAVE), true);
+  assert.equal(isAppServerRequestMethod(METHOD_PLUGIN_INSTALLED_SAVE), true);
   assert.equal(
-    isAppServerRequestMethod(METHOD_AGENT_APP_INSTALLED_DISABLED_SET),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL),
+    isAppServerRequestMethod(METHOD_PLUGIN_INSTALLED_DISABLED_SET),
     true,
   );
   assert.equal(
-    isAppServerRequestMethod(METHOD_AGENT_APP_INSTALLED_UNINSTALL),
+    isAppServerRequestMethod(METHOD_PLUGIN_INSTALLED_UNINSTALL_REHEARSAL),
     true,
   );
   assert.equal(
-    isAppServerRequestMethod(METHOD_AGENT_APP_HOST_LIFECYCLE_LIST),
-    true,
-  );
-  assert.equal(isAppServerRequestMethod(METHOD_AGENT_APP_SHELL_PREPARE), true);
-  assert.equal(
-    isAppServerRequestMethod(METHOD_AGENT_APP_UI_RUNTIME_START),
+    isAppServerRequestMethod(METHOD_PLUGIN_INSTALLED_UNINSTALL),
     true,
   );
   assert.equal(
-    isAppServerRequestMethod(METHOD_AGENT_APP_UI_RUNTIME_STATUS),
+    isAppServerRequestMethod(METHOD_PLUGIN_HOST_LIFECYCLE_LIST),
+    true,
+  );
+  assert.equal(isAppServerRequestMethod(METHOD_PLUGIN_SHELL_PREPARE), true);
+  assert.equal(
+    isAppServerRequestMethod(METHOD_PLUGIN_UI_RUNTIME_START),
     true,
   );
   assert.equal(
-    isAppServerRequestMethod(METHOD_AGENT_APP_UI_RUNTIME_STOP),
+    isAppServerRequestMethod(METHOD_PLUGIN_UI_RUNTIME_STATUS),
+    true,
+  );
+  assert.equal(
+    isAppServerRequestMethod(METHOD_PLUGIN_UI_RUNTIME_STOP),
     true,
   );
   assert.equal(isAppServerRequestMethod(METHOD_KNOWLEDGE_PACK_LIST), true);

@@ -70,6 +70,7 @@ async fn execute_image_generation_task_should_advance_task_file_to_succeeded() {
         &ImageGenerationRunnerConfig {
             endpoint: format!("http://{address}/v1/images/generations"),
             api_key: "test-key".to_string(),
+            request_body_format: Default::default(),
         },
     )
     .await
@@ -157,6 +158,114 @@ async fn execute_image_generation_task_should_advance_task_file_to_succeeded() {
 }
 
 #[tokio::test]
+async fn execute_image_generation_task_should_use_agnes_extra_body_request_shape() {
+    let temp_dir = tempfile::tempdir().expect("create temp dir");
+    let captured_body = Arc::new(Mutex::new(None::<Value>));
+    let created = write_task_artifact(
+        temp_dir.path(),
+        TaskType::ImageGenerate,
+        Some("深圳夏天".to_string()),
+        json!({
+            "prompt": "画一张深圳夏天的照片",
+            "size": "1024x1024",
+            "count": 1,
+            "provider_id": "agnes",
+            "model": "agnes-image-2.1-flash",
+            "reference_images": [
+                "https://cdn.example.test/reference.png"
+            ]
+        }),
+        TaskWriteOptions::default(),
+    )
+    .expect("create task");
+
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind agnes image api");
+    let address = listener.local_addr().expect("resolve address");
+    let captured_body_for_server = Arc::clone(&captured_body);
+    let server = tokio::spawn(async move {
+        let app = Router::new().route(
+            "/v1/images/generations",
+            post(move |Json(body): Json<Value>| {
+                let captured_body = Arc::clone(&captured_body_for_server);
+                async move {
+                    *captured_body.lock().expect("lock captured body") = Some(body);
+                    (
+                        StatusCode::OK,
+                        Json(json!({
+                            "created": 1_717_200_000i64,
+                            "data": [
+                                {
+                                    "url": "https://cdn.agnes.example/generated-shenzhen.png",
+                                    "revised_prompt": "深圳夏天街景照片"
+                                }
+                            ]
+                        })),
+                    )
+                }
+            }),
+        );
+        axum::serve(listener, app)
+            .await
+            .expect("serve agnes image api");
+    });
+
+    let result = execute_image_generation_task(
+        temp_dir.path(),
+        &created.task_id,
+        &ImageGenerationRunnerConfig {
+            endpoint: format!("http://{address}/v1/images/generations"),
+            api_key: "test-key".to_string(),
+            request_body_format: ImageGenerationRequestBodyFormat::AgnesImages,
+        },
+    )
+    .await
+    .expect("execute agnes image task");
+
+    assert_eq!(result.normalized_status, "succeeded");
+    let body = captured_body
+        .lock()
+        .expect("lock captured body")
+        .clone()
+        .expect("captured body");
+    assert_eq!(
+        body.get("model").and_then(Value::as_str),
+        Some("agnes-image-2.1-flash")
+    );
+    assert_eq!(
+        body.get("prompt").and_then(Value::as_str),
+        Some("画一张深圳夏天的照片")
+    );
+    assert_eq!(body.get("response_format"), None);
+    assert_eq!(
+        body.pointer("/extra_body/response_format")
+            .and_then(Value::as_str),
+        Some("url")
+    );
+    assert_eq!(
+        body.pointer("/extra_body/image")
+            .and_then(Value::as_array)
+            .cloned(),
+        Some(vec![json!("https://cdn.example.test/reference.png")])
+    );
+    assert_eq!(
+        result
+            .record
+            .result
+            .as_ref()
+            .and_then(|value| value.get("images"))
+            .and_then(Value::as_array)
+            .and_then(|images| images.first())
+            .and_then(|value| value.get("url"))
+            .and_then(Value::as_str),
+        Some("https://cdn.agnes.example/generated-shenzhen.png")
+    );
+
+    server.abort();
+}
+
+#[tokio::test]
 async fn execute_image_generation_task_should_send_reference_images_to_edit_endpoint() {
     let temp_dir = tempfile::tempdir().expect("create temp dir");
     let captured_body = Arc::new(Mutex::new(None::<Value>));
@@ -217,6 +326,7 @@ async fn execute_image_generation_task_should_send_reference_images_to_edit_endp
         &ImageGenerationRunnerConfig {
             endpoint: format!("http://{address}/v1/images/generations"),
             api_key: "test-key".to_string(),
+            request_body_format: Default::default(),
         },
     )
     .await
@@ -325,6 +435,7 @@ async fn execute_image_generation_task_should_limit_parallel_single_image_reques
         &ImageGenerationRunnerConfig {
             endpoint: format!("http://{address}/v1/images/generations"),
             api_key: "test-key".to_string(),
+            request_body_format: Default::default(),
         },
     )
     .await
@@ -462,6 +573,7 @@ async fn execute_image_generation_task_should_preserve_storyboard_slot_prompts_a
         &ImageGenerationRunnerConfig {
             endpoint: format!("http://{address}/v1/images/generations"),
             api_key: "test-key".to_string(),
+            request_body_format: Default::default(),
         },
     )
     .await
@@ -566,6 +678,7 @@ async fn execute_image_generation_task_should_mark_task_failed_when_service_reje
         &ImageGenerationRunnerConfig {
             endpoint: format!("http://{address}/v1/images/generations"),
             api_key: "test-key".to_string(),
+            request_body_format: Default::default(),
         },
     )
     .await
@@ -637,6 +750,7 @@ async fn execute_image_generation_task_should_classify_openai_compatible_auth_fa
         &ImageGenerationRunnerConfig {
             endpoint: format!("http://{address}/v1/images/generations"),
             api_key: "bad-key".to_string(),
+            request_body_format: Default::default(),
         },
     )
     .await

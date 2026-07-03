@@ -18,7 +18,7 @@ const contract: PluginContract = {
   capabilities: [],
   componentPaths: {},
   skills: [],
-  agentApps: [],
+  ui: [],
   subagents: [],
   clis: [],
   workflows: [],
@@ -30,7 +30,7 @@ const contract: PluginContract = {
     {
       key: "creator",
       title: "创作工作台",
-      kind: "agentApp",
+      kind: "pluginUi",
       defaultObjectKind: "articleDraft",
     },
   ],
@@ -56,7 +56,7 @@ const contract: PluginContract = {
     panes: [],
   },
   provenance: {
-    sourceKind: "agent_app_manifest",
+    sourceKind: "plugin_manifest",
     sourceId: "creator-workbench",
     sourceVersion: "1.0.0",
   },
@@ -83,7 +83,7 @@ function threadRead(): AgentRuntimeThreadReadModel {
         plugin_history_restore: {
           session_id: "session-1",
           plugin_id: "creator-workbench",
-          active_agent_app_id: "creator-workbench",
+          active_plugin_ui_id: "creator-workbench",
           active_entry_key: "creator",
           selected_skill_keys: ["article-draft"],
           plugin_workspace: {

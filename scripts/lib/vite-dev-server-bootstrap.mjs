@@ -12,7 +12,7 @@ const OPTIMIZED_DEP_FILES = [
   "react-dom_client.js",
   "react_jsx-dev-runtime.js",
 ];
-const HOST_BRIDGE_MODULE_PATH = "/src/features/agent-app/runtime/hostBridge.ts";
+const HOST_BRIDGE_MODULE_PATH = "/src/features/plugin/runtime/hostBridge.ts";
 const DESKTOP_HOST_DIALOG_MOCK_MARKER = "/src/lib/desktop-host/plugin-dialog";
 
 function isLimeDevShell(html) {

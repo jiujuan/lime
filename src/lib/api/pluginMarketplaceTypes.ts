@@ -1,6 +1,4 @@
-export type PluginMarketplaceSourceKind =
-  | "plugin_catalog"
-  | "agent_app_release";
+export type PluginMarketplaceSourceKind = "plugin_catalog";
 
 export type PluginMarketplaceInstallationPolicy =
   | "NOT_AVAILABLE"

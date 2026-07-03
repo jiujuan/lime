@@ -37,7 +37,7 @@ describe("vitest-test-file-filter", () => {
   it("应保留同时支持 Vitest 的 package 测试文件", () => {
     expect(
       isVitestRunnableTestFile(
-        "packages/agent-app-runtime/tests/projection-export.test.mjs",
+        "packages/plugin-runtime/tests/projection-export.test.mjs",
         "const { test } = process.env.VITEST ? await import('vitest') : await import('node:test');\n",
       ),
     ).toBe(true);

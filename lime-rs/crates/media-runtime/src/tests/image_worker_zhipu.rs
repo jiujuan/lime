@@ -60,6 +60,7 @@ async fn execute_image_generation_task_should_support_zhipu_native_executor() {
         &ImageGenerationRunnerConfig {
             endpoint: format!("http://{address}/api/paas/v4"),
             api_key: "zhipu-test-key".to_string(),
+            request_body_format: Default::default(),
         },
     )
     .await
@@ -131,6 +132,7 @@ async fn execute_image_generation_task_should_reject_zhipu_reference_images() {
         &ImageGenerationRunnerConfig {
             endpoint: "http://127.0.0.1:9/api/paas/v4".to_string(),
             api_key: "zhipu-test-key".to_string(),
+            request_body_format: Default::default(),
         },
     )
     .await
@@ -187,6 +189,7 @@ async fn execute_image_generation_task_should_classify_zhipu_rate_limit() {
         &ImageGenerationRunnerConfig {
             endpoint: format!("http://{address}/api/paas/v4"),
             api_key: "zhipu-test-key".to_string(),
+            request_body_format: Default::default(),
         },
     )
     .await

@@ -12,7 +12,7 @@ export interface PluginHistorySessionCandidate {
   updatedAt: number;
   messagesCount: number;
   pluginId: string;
-  activeAgentAppId?: string;
+  activePluginUiId?: string;
   activeEntryKey?: string;
   artifactRefs: string[];
   source: PluginHistorySessionCandidateSource;
@@ -105,9 +105,9 @@ function buildCandidateFromMetadata(
     sessionId:
       readString(historyRestore, ["session_id", "sessionId"]) ?? session.id,
     pluginId,
-    activeAgentAppId: readString(sourceRecord, [
-      "active_agent_app_id",
-      "activeAgentAppId",
+    activePluginUiId: readString(sourceRecord, [
+      "active_plugin_ui_id",
+      "activePluginUiId",
     ]),
     activeEntryKey: readString(sourceRecord, [
       "active_entry_key",

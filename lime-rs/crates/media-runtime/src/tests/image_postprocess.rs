@@ -181,6 +181,7 @@ async fn execute_image_generation_task_should_postprocess_remote_chroma_key_url(
         &ImageGenerationRunnerConfig {
             endpoint: format!("http://{address}/v1/images/generations"),
             api_key: "test-key".to_string(),
+            request_body_format: Default::default(),
         },
     )
     .await

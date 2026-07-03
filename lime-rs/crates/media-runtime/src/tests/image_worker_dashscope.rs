@@ -70,6 +70,7 @@ async fn execute_image_generation_task_should_support_dashscope_native_executor(
         &ImageGenerationRunnerConfig {
             endpoint: format!("http://{address}/compatible-mode/v1"),
             api_key: "dashscope-test-key".to_string(),
+            request_body_format: Default::default(),
         },
     )
     .await
@@ -168,6 +169,7 @@ async fn execute_image_generation_task_should_classify_dashscope_server_error() 
         &ImageGenerationRunnerConfig {
             endpoint: format!("http://{address}/compatible-mode/v1"),
             api_key: "dashscope-test-key".to_string(),
+            request_body_format: Default::default(),
         },
     )
     .await

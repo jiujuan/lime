@@ -37,7 +37,7 @@ function runtimeContext(): OemCloudRuntimeContext {
     desktopClientId: "desktop-client",
     desktopOauthRedirectUrl: "lime://oauth/callback",
     desktopOauthNextPath: "/welcome",
-    agentAppSignatureTrustRoots: [],
+    pluginSignatureTrustRoots: [],
   };
 }
 
@@ -51,7 +51,7 @@ function marketplaceItem(): PluginMarketplaceItem {
     version: "1.0.0",
     category: "writing",
     categories: ["writing"],
-    sourceKind: "agent_app_release",
+    sourceKind: "plugin_catalog",
     appId: "content-factory",
     enabled: true,
     installState: "available",

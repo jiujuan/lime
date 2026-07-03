@@ -89,57 +89,6 @@ describe("live-provider-smoke-gate", () => {
     CHILD_PROCESS_TEST_TIMEOUT_MS,
   );
 
-  it(
-    "内容工厂 full-flow 默认应在调用 DevBridge 前阻断 live Provider",
-    () => {
-      const result = spawnSync(
-        "node",
-        ["scripts/agent-app/content-factory-flow.mjs"],
-        {
-          cwd: process.cwd(),
-          encoding: "utf8",
-          timeout: CHILD_PROCESS_TIMEOUT_MS,
-          env: {
-            ...process.env,
-            [LIVE_PROVIDER_SMOKE_ENV]: "",
-            [REAL_API_TEST_ENV]: "",
-          },
-        },
-      );
-
-      expect(result.status).toBe(1);
-      expect(`${result.stdout}${result.stderr}`).toContain("默认禁止执行");
-    },
-    CHILD_PROCESS_TEST_TIMEOUT_MS,
-  );
-
-  it(
-    "Agent Apps 内容工厂 action E2E 默认应阻断 live Provider",
-    () => {
-      const result = spawnSync(
-        "node",
-        [
-          "scripts/agent-app/apps-smoke.mjs",
-          "--include-content-factory-action-e2e",
-        ],
-        {
-          cwd: process.cwd(),
-          encoding: "utf8",
-          timeout: CHILD_PROCESS_TIMEOUT_MS,
-          env: {
-            ...process.env,
-            [LIVE_PROVIDER_SMOKE_ENV]: "",
-            [REAL_API_TEST_ENV]: "",
-          },
-        },
-      );
-
-      expect(result.status).toBe(1);
-      expect(`${result.stdout}${result.stderr}`).toContain("默认禁止执行");
-    },
-    CHILD_PROCESS_TEST_TIMEOUT_MS,
-  );
-
   it("Claw streaming GUI E2E 是显式 live 入口，不应再接入二次授权 gate", () => {
     const content = fs.readFileSync(
       path.join(process.cwd(), "scripts/claw-chat-ready-streaming-smoke.mjs"),

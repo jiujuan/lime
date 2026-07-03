@@ -59,6 +59,13 @@ function readSmokeScript() {
     .join("\n");
 }
 
+function removeContentFactoryForbiddenMarkerGuard(content) {
+  return content.replace(
+    /const (?:FORBIDDEN_CONTENT_FACTORY_ARTICLE_TEMPLATE_MARKERS|forbiddenArticleTemplateMarkers) = \[[\s\S]*?\];/g,
+    "",
+  );
+}
+
 function readCurrentFixtureRegressionSmokeScript() {
   return fs.readFileSync(
     "scripts/agent-runtime/current-fixture-regression-smoke.mjs",
@@ -812,12 +819,12 @@ describe("claw chat current Electron fixture smoke guard", () => {
       "fs.existsSync(rightSurfaceVisualCaptures.browser.screenshot)",
     );
     expect(content).toContain("expert-info-panel");
-    expect(content).toContain("workspace-agent-app-surface");
-    expect(content).toContain("workspace-agent-app-surface-tabs");
-    expect(content).toContain("workspace-agent-app-surface-frame");
-    expect(content).toContain("workspace-agent-app-surface-viewport");
-    expect(content).toContain("agent-app-shell-content-factory-app-main");
-    expect(content).toContain("agent-app-shell-prompt-lab-app");
+    expect(content).toContain("workspace-plugin-surface");
+    expect(content).toContain("workspace-plugin-surface-tabs");
+    expect(content).toContain("workspace-plugin-surface-frame");
+    expect(content).toContain("workspace-plugin-surface-viewport");
+    expect(content).toContain("plugin-shell-content-factory-app-main");
+    expect(content).toContain("plugin-shell-prompt-lab-app");
     expect(content).toContain("webContentsView");
     expect(content).toContain("iframe: false");
     expect(content).toContain("browserView: false");
@@ -880,7 +887,7 @@ describe("claw chat current Electron fixture smoke guard", () => {
 
     expect(content).toContain("content-factory-article-workspace");
     expect(content).toContain("runContentFactoryArticleWorkspaceScenario");
-    expect(content).toContain("agentAppInstalled/save");
+    expect(content).toContain("pluginInstalled/save");
     expect(content).toContain("agentSession/turn/start");
     expect(content).toContain("agentSession/runtimeEvents/append");
     expect(content).toContain("artifact/read");
@@ -907,8 +914,17 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("startContentFactoryHostGenerationFixture");
     expect(content).toContain("fixture-openai");
     expect(content).toContain("article-draft-document");
-    expect(content).not.toContain("受控宿主生成标题");
-    expect(content).not.toContain("内容工厂插件化写作：让文章生产可审计");
+    const contentWithoutForbiddenMarkerGuard =
+      removeContentFactoryForbiddenMarkerGuard(content);
+    expect(contentWithoutForbiddenMarkerGuard).not.toContain(
+      "受控宿主生成标题",
+    );
+    expect(contentWithoutForbiddenMarkerGuard).not.toContain(
+      "内容工厂插件化写作：让文章生产可审计",
+    );
+    expect(contentFactoryScenario).toContain(
+      "articleCanvasHasForbiddenTemplate",
+    );
     expect(content).toContain(
       "contentFactoryArticleWorkspaceWorkerTurnExecuted",
     );
@@ -926,7 +942,7 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain(
       "CONTENT_FACTORY_ARTICLE_WORKSPACE_REMOTE_REJECT_TURN_ID",
     );
-    expect(content).toContain("AGENT_APP_WORKER_REMOTE_RUNTIME_DISABLED");
+    expect(content).toContain("PLUGIN_WORKER_REMOTE_RUNTIME_DISABLED");
     expect(content).toContain("runRemotePluginRuntimeRejectionProbe");
     expect(content).toContain(
       "contentFactoryArticleWorkspaceRemoteRuntimeRejection",
@@ -941,10 +957,10 @@ describe("claw chat current Electron fixture smoke guard", () => {
       "contentFactoryArticleWorkspaceArticleObjectSelection",
     );
     expect(content).toContain(
-      "contentFactoryArticleWorkspaceArticleWritingStructure",
+      "contentFactoryArticleWorkspaceArticleCanvasSurface",
     );
     expect(content).toContain(
-      "contentFactoryArticleWorkspaceArticleWritingStructureVisible",
+      "contentFactoryArticleWorkspaceArticleCanvasSurfaceVisible",
     );
     expect(content).toContain(
       "contentFactoryArticleWorkspaceEditedDraftUpdate",
@@ -996,10 +1012,18 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("workspace-article-editor-image-slots");
     expect(content).toContain("workspace-article-editor-canvas");
     expect(content).toContain("documentCanvasText.includes");
-    expect(content).toContain("researchText.includes");
-    expect(content).toContain("documentImageSlotsText.includes");
-    expect(content).toContain("takeawaysText.length");
-    expect(content).toContain("writingPlanText.length");
+    expect(contentFactoryScenario).toContain(
+      "FORBIDDEN_CONTENT_FACTORY_ARTICLE_TEMPLATE_MARKERS",
+    );
+    expect(contentFactoryScenario).toContain("metadataPanelsHidden");
+    expect(contentFactoryScenario).toContain(
+      "articleCanvasHasForbiddenTemplate",
+    );
+    expect(contentFactoryScenario).toContain("snapshot.metadataPanelsHidden");
+    expect(contentFactoryScenario).toContain("snapshot.hasFullArticleCanvas");
+    expect(contentFactoryScenario).not.toContain("researchText.includes");
+    expect(contentFactoryScenario).not.toContain("takeawaysText.length");
+    expect(contentFactoryScenario).not.toContain("writingPlanText.length");
     expect(content).toContain("snapshot.hasArticleCanvasContent");
     expect(content).toContain("readModel.hasImageSetObject");
     expect(content).toContain("readModel.hasStoryboardObject");

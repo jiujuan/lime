@@ -2536,19 +2536,19 @@ mod tests {
     }
 
     #[test]
-    fn extracts_agent_app_scope_from_lime_runtime_summary_fallback() {
+    fn extracts_plugin_scope_from_lime_runtime_summary_fallback() {
         let now = Utc::now();
         let snapshot = SessionRuntimeSnapshot {
-            session_id: "session-agent-app".to_string(),
+            session_id: "session-plugin".to_string(),
             threads: vec![ThreadRuntimeSnapshot {
                 thread: ThreadRuntime::new(
                     "thread-1",
-                    "session-agent-app",
+                    "session-plugin",
                     PathBuf::from("/tmp/workspace"),
                 ),
                 turns: vec![TurnRuntime {
                     id: "turn-1".to_string(),
-                    session_id: "session-agent-app".to_string(),
+                    session_id: "session-plugin".to_string(),
                     thread_id: "thread-1".to_string(),
                     status: TurnStatus::Completed,
                     input_text: Some("内容工厂任务".to_string()),
@@ -2557,7 +2557,7 @@ mod tests {
                         metadata: [(
                             "lime_runtime".to_string(),
                             json!({
-                                "surface": "agent_app",
+                                "surface": "plugin",
                                 "app_id": "content-factory-app",
                                 "task_id": "task-1",
                                 "trace_id": "trace-1",
@@ -2579,11 +2579,11 @@ mod tests {
         };
 
         let runtime =
-            build_session_execution_runtime("session-agent-app", None, None, Some(&snapshot), None)
+            build_session_execution_runtime("session-plugin", None, None, Some(&snapshot), None)
                 .expect("runtime");
         let summary = runtime.runtime_summary.expect("agent app scope summary");
 
-        assert_eq!(summary.surface.as_deref(), Some("agent_app"));
+        assert_eq!(summary.surface.as_deref(), Some("plugin"));
         assert_eq!(summary.app_id.as_deref(), Some("content-factory-app"));
         assert_eq!(summary.task_id.as_deref(), Some("task-1"));
         assert_eq!(summary.trace_id.as_deref(), Some("trace-1"));

@@ -73,14 +73,14 @@ describe("electron/ipcChannels", () => {
     expect(isElectronHostCommand("get_file_icon_data_url")).toBe(true);
     expect(isElectronHostCommand("get_file_manager_locations")).toBe(true);
     expect(isElectronHostCommand("get_home_dir")).toBe(true);
-    expect(isElectronHostCommand("agent_app_list_installed")).toBe(false);
-    expect(isElectronHostCommand("agent_app_select_directory")).toBe(true);
-    expect(isElectronHostCommand("agent_app_launch_shell")).toBe(true);
-    expect(isElectronHostCommand("agent_app_runtime_start_task")).toBe(true);
-    expect(isElectronHostCommand("agent_app_runtime_cancel_task")).toBe(true);
-    expect(isElectronHostCommand("agent_app_runtime_get_task")).toBe(true);
+    expect(isElectronHostCommand("plugin_list_installed")).toBe(false);
+    expect(isElectronHostCommand("plugin_select_directory")).toBe(true);
+    expect(isElectronHostCommand("plugin_launch_shell")).toBe(true);
+    expect(isElectronHostCommand("plugin_runtime_start_task")).toBe(true);
+    expect(isElectronHostCommand("plugin_runtime_cancel_task")).toBe(true);
+    expect(isElectronHostCommand("plugin_runtime_get_task")).toBe(true);
     expect(
-      isElectronHostCommand("agent_app_runtime_submit_host_response"),
+      isElectronHostCommand("plugin_runtime_submit_host_response"),
     ).toBe(true);
     expect(isElectronHostCommand("get_usage_stats")).toBe(false);
     expect(isElectronHostCommand("get_model_usage_ranking")).toBe(false);
@@ -206,16 +206,16 @@ describe("electron/ipcChannels", () => {
 
   it("App Server truth bridge 命令由 Desktop Host 投影，不走原始 JSONL 通道", () => {
     expect([...ELECTRON_APP_SERVER_TRUTH_BRIDGE_COMMANDS].sort()).toEqual([
-      "agent_app_get_ui_runtime_status",
-      "agent_app_runtime_cancel_task",
-      "agent_app_runtime_get_task",
-      "agent_app_runtime_start_task",
-      "agent_app_runtime_submit_host_response",
-      "agent_app_start_ui_runtime",
-      "agent_app_stop_ui_runtime",
       "aster_agent_init",
       "get_default_provider",
       "get_local_skills_for_app",
+      "plugin_get_ui_runtime_status",
+      "plugin_runtime_cancel_task",
+      "plugin_runtime_get_task",
+      "plugin_runtime_start_task",
+      "plugin_runtime_submit_host_response",
+      "plugin_start_ui_runtime",
+      "plugin_stop_ui_runtime",
       "workspace_ensure",
       "workspace_ensure_default_ready",
       "workspace_ensure_ready",

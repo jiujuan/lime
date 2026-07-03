@@ -93,7 +93,7 @@
 - **碰到 `src/lib/dev-bridge/**`**：先读 `commands.md`与`governance.md`；保留 current renderer bridge 传输，按命令组清 `commandPolicy`、`mockPriorityCommands`、旧 smoke、负向测试和 contract guard，把删不动的旧 policy 登记到对应执行计划；跨命令组长期 residual 必须同步回挂 `../exec-plans/tech-debt-tracker.md`的`CCD-012`
 - **改 `@` / `/` / 轻卡 / viewer / ServiceSkill 场景**：先读 `command-runtime.md`
 - **改 Claw 技能 / Service Skill / 统一 Skills 标准**：先读 `skill-standard.md`
-- **改插件包 / Agent App 包结构 / `plugin.json` / `app.runtime.yaml` / `skills/**/SKILL.md`**：先读 `../tech/plugin/README.md`，再看 `skill-standard.md` 与 `governance.md`
+- **改插件包 / Plugin 包结构 / `plugin.json` / `app.runtime.yaml` / `skills/**/SKILL.md`**：先读 `../tech/plugin/README.md`，再看 `skill-standard.md` 与 `governance.md`
 - **改站点适配器 / 导入外部 adapter**：先读 `site-adapter-standard.md`，再看 `web-browser-scene-skill.md` 与 `quality-workflow.md`
 - **做网页登录态访问 / 网页导出 / Markdown 落盘场景**：先读 `web-browser-scene-skill.md`
 - **改 Workspace / GUI 壳 / 主路径**：先读 `workspace.md`、`quality-workflow.md`、`playwright-e2e.md`

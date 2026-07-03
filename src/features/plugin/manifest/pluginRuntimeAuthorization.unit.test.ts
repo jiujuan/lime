@@ -23,7 +23,7 @@ describe("Plugin runtime authorization", () => {
       }),
     ).toMatchObject({
       status: "allowed",
-      executionMode: "local_agent_app_worker",
+      executionMode: "local_plugin_worker",
       runtimeBoundary: "local_worker_allowlist",
       remoteRuntimePolicy: {
         status: "disabled",

@@ -60,7 +60,7 @@ export function buildContentFactoryWorkspacePatch(workspace) {
           turnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_TURN_ID,
           artifactIds: [CONTENT_FACTORY_ARTICLE_WORKSPACE_ARTICLE_ARTIFACT_ID],
           markdown:
-            "# 内容工厂首版文章\n\n这是由 Agent App worker 写回的公众号文章草稿。",
+            "# 内容工厂首版文章\n\n这是由 Plugin worker 写回的公众号文章草稿。",
           researchRounds: [
             {
               id: "research-1",

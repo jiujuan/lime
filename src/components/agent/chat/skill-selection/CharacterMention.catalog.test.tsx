@@ -18,12 +18,12 @@ import type {
   InputbarPluginSelectionOptions,
   InputbarPluginSkillCapability,
 } from "../components/Inputbar/pluginInputCapability";
-import contentFactoryFixture from "@/features/agent-app/testing/fixtures/content-factory-app.json";
-import { buildPackageIdentity } from "@/features/agent-app/install/packageIdentity";
-import { normalizeManifest } from "@/features/agent-app/manifest/normalizeManifest";
-import { parseManifest } from "@/features/agent-app/manifest/parseManifest";
-import type { InstalledAgentAppState } from "@/features/agent-app/types";
-import { projectPluginRegistryFromInstalledAgentApps } from "@/features/plugin";
+import contentFactoryFixture from "@/features/plugin/testing/fixtures/content-factory-app.json";
+import { buildPackageIdentity } from "@/features/plugin/install/packageIdentity";
+import { normalizeManifest } from "@/features/plugin/manifest/normalizeManifest";
+import { parseManifest } from "@/features/plugin/manifest/parseManifest";
+import type { InstalledPluginState } from "@/features/plugin/types";
+import { projectPluginRegistryFromInstalledPlugins } from "@/features/plugin";
 import { buildWorkspacePluginInputSuggestions } from "../workspace/workspacePluginInputSuggestions";
 
 describe("CharacterMention mention catalog", () => {
@@ -215,7 +215,7 @@ describe("CharacterMention mention catalog", () => {
     );
   });
 
-  it("输入 @ 查询 Agent App 时，应激活应用并移除当前 mention", async () => {
+  it("输入 @ 查询 Plugin 时，应激活应用并移除当前 mention", async () => {
     const plugin: InputbarPluginCapability = {
       pluginId: "content-factory-app",
       displayName: "内容工厂",
@@ -239,7 +239,7 @@ describe("CharacterMention mention catalog", () => {
 
     await typeMentionAndWait(textarea, "@内容");
 
-    expect(document.body.textContent).toContain("Agent Apps");
+    expect(document.body.textContent).toContain("Plugins");
     expect(document.body.textContent).toContain("内容工厂");
     expect(document.body.textContent).toContain("从创作需求生成文章");
     expect(document.body.textContent).not.toContain("暂无可用 @命令");
@@ -259,7 +259,7 @@ describe("CharacterMention mention catalog", () => {
     expect(getMentionPopoverContent()).toBeNull();
   });
 
-  it("输入单独 @ 时应展示 Agent App 候选", async () => {
+  it("输入单独 @ 时应展示 Plugin 候选", async () => {
     const plugin: InputbarPluginCapability = {
       pluginId: "content-factory-app",
       displayName: "写文章",
@@ -274,11 +274,11 @@ describe("CharacterMention mention catalog", () => {
     await typeAtAndWait(textarea);
 
     expect(getMentionPopoverContent()).not.toBeNull();
-    expect(document.body.textContent).toContain("Agent Apps");
+    expect(document.body.textContent).toContain("Plugins");
     expect(document.body.textContent).toContain("写文章");
   });
 
-  it("输入部分 Agent App 触发词时应继续展示候选", async () => {
+  it("输入部分 Plugin 触发词时应继续展示候选", async () => {
     const plugin: InputbarPluginCapability = {
       pluginId: "content-factory-app",
       displayName: "写文章",
@@ -293,21 +293,21 @@ describe("CharacterMention mention catalog", () => {
     await typeMentionAndWait(textarea, "@写");
 
     expect(getMentionPopoverContent()).not.toBeNull();
-    expect(document.body.textContent).toContain("Agent Apps");
+    expect(document.body.textContent).toContain("Plugins");
     expect(document.body.textContent).toContain("写文章");
   });
 
   it("内容工厂本地包需要维护时 @写 仍应展示写文章候选", async () => {
     const parsedManifest = parseManifest(contentFactoryFixture);
     const manifest = normalizeManifest(parsedManifest);
-    const installedState: InstalledAgentAppState = {
+    const installedState: InstalledPluginState = {
       appId: manifest.appId,
       identity: buildPackageIdentity({
         manifest: parsedManifest,
         loadedAt: "2026-06-30T00:00:00.000Z",
       }),
       manifest,
-      projection: {} as InstalledAgentAppState["projection"],
+      projection: {} as InstalledPluginState["projection"],
       readiness: {
         appId: manifest.appId,
         status: "needs-setup",
@@ -321,13 +321,13 @@ describe("CharacterMention mention catalog", () => {
       },
       installMode: "in_lime",
       runtimeProfileSummary:
-        {} as InstalledAgentAppState["runtimeProfileSummary"],
-      setup: {} as InstalledAgentAppState["setup"],
+        {} as InstalledPluginState["runtimeProfileSummary"],
+      setup: {} as InstalledPluginState["setup"],
       disabled: false,
       installedAt: "2026-06-30T00:00:00.000Z",
       updatedAt: "2026-06-30T00:00:00.000Z",
     };
-    const projection = projectPluginRegistryFromInstalledAgentApps([
+    const projection = projectPluginRegistryFromInstalledPlugins([
       installedState,
     ]);
     const pluginSuggestions = buildWorkspacePluginInputSuggestions({
@@ -347,13 +347,13 @@ describe("CharacterMention mention catalog", () => {
     await typeMentionAndWait(textarea, "@写");
 
     expect(getMentionPopoverContent()).not.toBeNull();
-    expect(document.body.textContent).toContain("Agent Apps");
+    expect(document.body.textContent).toContain("Plugins");
     expect(document.body.textContent).toContain("写文章");
     expect(document.body.textContent).toContain("@写文章");
     expect(document.body.textContent).not.toContain("暂无可用 @命令");
   });
 
-  it("输入完整 Agent App 触发词时不应展示 @ 面板", async () => {
+  it("输入完整 Plugin 触发词时不应展示 @ 面板", async () => {
     const plugin: InputbarPluginCapability = {
       pluginId: "content-factory-app",
       displayName: "写文章",
@@ -371,7 +371,7 @@ describe("CharacterMention mention catalog", () => {
     expect(document.body.textContent).not.toContain("暂无可用 @命令");
   });
 
-  it("输入完整 Agent App 技能触发词时不应展示 @ 面板", async () => {
+  it("输入完整 Plugin 技能触发词时不应展示 @ 面板", async () => {
     const plugin: InputbarPluginCapability = {
       pluginId: "content-workbench",
       displayName: "内容工厂",
@@ -395,7 +395,7 @@ describe("CharacterMention mention catalog", () => {
     expect(document.body.textContent).not.toContain("暂无可用 @命令");
   });
 
-  it("选择 Agent App 时即使输入框 selection 丢失，也应移除当前 mention", async () => {
+  it("选择 Plugin 时即使输入框 selection 丢失，也应移除当前 mention", async () => {
     const plugin: InputbarPluginCapability = {
       pluginId: "content-factory-app",
       displayName: "内容工厂",

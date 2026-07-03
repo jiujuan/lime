@@ -94,7 +94,7 @@ export function buildScenarioAssertions(context) {
   const rightSurfaceVisualMatrix = summary.rightSurfaceVisualMatrix ?? {};
   const rightSurfaceVisualCaptures = rightSurfaceVisualMatrix.captures ?? {};
   const rightSurfaceVisualAppSurface =
-    rightSurfaceVisualCaptures.appSurface?.stable?.agentAppSurface ?? {};
+    rightSurfaceVisualCaptures.appSurface?.stable?.pluginSurface ?? {};
   const imageCommandTask = readImageCommandTaskFromHarness(imageCommandHarness);
   const imageCommandRuntimeContract =
     imageCommandTask?.runtime_contract ?? imageCommandTask?.runtimeContract;

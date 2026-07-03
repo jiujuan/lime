@@ -88,7 +88,7 @@ const workspacePatch = {
     {
       id: "evt-worker-success:workerEvidence",
       status: "completed",
-      source: "agent_app_task_worker",
+      source: "plugin_task_worker",
       appId: "content-factory-app",
       taskId: "task-article-1",
       taskKind: "content.article.generate",
@@ -100,13 +100,13 @@ const workspacePatch = {
     {
       id: "evt-worker-failed:workerEvidence",
       status: "failed",
-      source: "agent_app_task_worker",
+      source: "plugin_task_worker",
       appId: "content-factory-app",
       taskId: "task-image-1",
       taskKind: "content.image.generate",
       turnId: "turn-action-2",
       errorCode: "worker_invalid_json_output",
-      errorMessage: "Agent App worker returned invalid JSON",
+      errorMessage: "Plugin worker returned invalid JSON",
       failureCategory: "worker_output",
       retryable: false,
       retryAdvice: "inspect_worker_output",
@@ -517,7 +517,7 @@ describe("workspaceArticleWorkspaceModel", () => {
       active_turn_id: "turn-worker-failed",
       articleWorkspace: legacyWorkspacePatch,
       diagnostics: {
-        latest_turn_error_message: "Agent App task worker failed: invalid JSON",
+        latest_turn_error_message: "Plugin task worker failed: invalid JSON",
         latest_turn_completed_at: "2026-06-24T00:00:03.000Z",
         warning_count: 0,
         context_compaction_count: 0,
@@ -534,7 +534,7 @@ describe("workspaceArticleWorkspaceModel", () => {
       expect.objectContaining({
         status: "failed",
         turnId: "turn-worker-failed",
-        errorMessage: "Agent App task worker failed: invalid JSON",
+        errorMessage: "Plugin task worker failed: invalid JSON",
       }),
     );
   });
@@ -561,7 +561,7 @@ describe("workspaceArticleWorkspaceModel", () => {
     });
 
     expect(metadata).toMatchObject({
-      agent_app: {
+      plugin: {
         source: "right_surface_article_workspace",
         app_id: "content-factory-app",
         session_id: "session-main",

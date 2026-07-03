@@ -19,9 +19,9 @@ export type Page =
   | "experts"
   | "skills"
   | "plugins"
-  | "agent-app"
-  | "agent-apps"
-  | "agent-app-lab"
+  | "plugin"
+  | "plugins"
+  | "plugin-lab"
   | "knowledge"
   | "automation"
   | "channels"
@@ -186,20 +186,16 @@ export interface SkillsPageParams {
   initialView?: "store" | "builtin" | "installed" | "discover" | "manage";
 }
 
-export interface AgentAppLabPageParams {
+export interface PluginLabPageParams {
   source?: "fixture";
-}
-
-export interface AgentAppsPageParams {
-  selectedAgentAppId?: string;
-  launchAgentAppEntryKey?: string;
-  launchRequestKey?: number;
 }
 
 export interface PluginsPageParams {
   query?: string;
   category?: string;
   selectedPluginId?: string;
+  launchPluginEntryKey?: string;
+  launchRequestKey?: number;
   statusFilter?:
     | "all"
     | "installed"
@@ -208,11 +204,11 @@ export interface PluginsPageParams {
     | "attention";
 }
 
-export interface AgentAppPageParams {
+export interface PluginPageParams {
   appId?: string;
   entryKey?: string;
   launchRequestKey?: number;
-  rightSurfaceTarget?: import("@/features/agent-app/ui/agentAppRightSurfaceLaunch").AgentAppRightSurfaceLaunchTarget | null;
+  rightSurfaceTarget?: import("@/features/plugin/ui/pluginRightSurfaceLaunch").PluginRightSurfaceLaunchTarget | null;
 }
 
 export interface KnowledgePageParams {
@@ -286,8 +282,7 @@ export type PageParams =
   | SettingsPageParams
   | SkillsPageParams
   | PluginsPageParams
-  | AgentAppPageParams
-  | AgentAppLabPageParams
-  | AgentAppsPageParams
+  | PluginPageParams
+  | PluginLabPageParams
   | KnowledgePageParams
   | Record<string, unknown>;

@@ -184,8 +184,8 @@ describe("desktop-host/core invoke", () => {
     expect(mocks.invokeViaHttp).not.toHaveBeenCalled();
   });
 
-  it("Agent App uninstall / shell 默认 mock 已退场并 fail closed", async () => {
-    for (const command of ["agent_app_uninstall", "agent_app_launch_shell"]) {
+  it("Plugin uninstall / shell 默认 mock 已退场并 fail closed", async () => {
+    for (const command of ["plugin_uninstall", "plugin_launch_shell"]) {
       await expect(invokeMockOnly(command)).rejects.toThrow(
         `未注册命令 "${command}"`,
       );

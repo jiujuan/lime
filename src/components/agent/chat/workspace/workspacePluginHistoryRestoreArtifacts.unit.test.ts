@@ -13,7 +13,7 @@ function projection(
     status: "restored",
     sessionId: "session-1",
     pluginId: "creator-workbench",
-    activeAgentAppId: "creator-workbench",
+    activePluginUiId: "creator-workbench",
     activeEntryKey: "creator",
     selectedSkillKeys: ["article-draft"],
     artifactRefs: ["artifact-1", "artifact-1", "reports/final.md"],

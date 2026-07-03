@@ -17,7 +17,7 @@
 1. **先确认主线** - 用一句话复述当前路线图目标、阶段和本轮最小交付。
 2. **先只读盘点** - 在目标范围内执行 `git status --short -- <scope>` 和 `git diff --name-only -- <scope>`；不要先改文件。
 3. **声明写集** - 在动手前明确说出“我认领哪些文件 / 目录”“我只读哪些文件 / 目录”“我不碰哪些文件 / 目录”。
-4. **写集要窄** - 优先按垂直切片认领最少文件；不能用“整个 `src/features/agent-app`”替代真实写集，除非任务确实需要。
+4. **写集要窄** - 优先按垂直切片认领最少文件；不能用“整个 `src/features/plugin`”替代真实写集，除非任务确实需要。
 5. **DevBridge 先分类再认领** - 涉及 `src/lib/dev-bridge/**` 时，先声明本轮触碰的是 `current` renderer bridge（`safeInvoke`、HTTP client、`app_server_handle_json_lines`、事件监听、可用性探测）还是 `compat / deprecated` 命令 policy / mock fallback。不要把整个目录当成旧 Rust DevBridge 的删除写集；清旧命令只认领对应命令组的 `commandPolicy`、`mockPriorityCommands`、负向测试和 contract guard。若只是只读审计但发现删不动且跨命令组长期存在的 legacy residual，也要回写到当前执行计划和 `CCD-012`，不能只留在 handoff。
 6. **测试可共享** - 定向测试、`typecheck`、`git diff --check` 可以由任一进程执行，但报告时要说明它验证的是当前工作树，不代表改动归属。
 

@@ -100,7 +100,7 @@ const REVIEWED_METADATA_FIELDS = [
   { path: "forge.config.mjs", field: "mac.target" },
   { path: "forge.config.mjs", field: "win.icon" },
   { path: "forge.config.mjs", field: "win.target" },
-  { path: "lime-rs/capabilities/agent-app-shell.json", field: "description" },
+  { path: "lime-rs/capabilities/plugin-shell.json", field: "description" },
 ] as const;
 
 function normalizePath(filePath: string): string {
@@ -482,7 +482,7 @@ export function analyzeAppMetadataWorkflowReport(
     repoRoot,
     "lime-rs",
     "capabilities",
-    "agent-app-shell.json",
+    "plugin-shell.json",
   );
   const appMetadataTranslationScopePath = path.join(
     repoRoot,

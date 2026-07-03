@@ -1,18 +1,5 @@
 pub use app_server_protocol::is_app_server_notification_method;
 pub use app_server_protocol::is_app_server_request_method;
-pub use app_server_protocol::AgentAppFetchCloudPackageParams;
-pub use app_server_protocol::AgentAppInstalledDisabledSetParams;
-pub use app_server_protocol::AgentAppInstalledListResponse;
-pub use app_server_protocol::AgentAppInstalledSaveParams;
-pub use app_server_protocol::AgentAppLocalPackageInspectParams;
-pub use app_server_protocol::AgentAppShellPrepareParams;
-pub use app_server_protocol::AgentAppShellPrepareResponse;
-pub use app_server_protocol::AgentAppUiRuntimeStartParams;
-pub use app_server_protocol::AgentAppUiRuntimeStatusParams;
-pub use app_server_protocol::AgentAppUiRuntimeStatusResponse;
-pub use app_server_protocol::AgentAppUiRuntimeStopParams;
-pub use app_server_protocol::AgentAppUninstallParams;
-pub use app_server_protocol::AgentAppUninstallRehearsalParams;
 pub use app_server_protocol::AgentSessionActionReplayParams;
 pub use app_server_protocol::AgentSessionActionRespondParams;
 pub use app_server_protocol::AgentSessionAnalysisHandoffExportParams;
@@ -200,6 +187,19 @@ pub use app_server_protocol::MemoryStoreSearchParams;
 pub use app_server_protocol::MemoryStoreSearchResponse;
 pub use app_server_protocol::ModelListParams;
 pub use app_server_protocol::ModelProviderAliasReadParams;
+pub use app_server_protocol::PluginFetchCloudPackageParams;
+pub use app_server_protocol::PluginInstalledDisabledSetParams;
+pub use app_server_protocol::PluginInstalledListResponse;
+pub use app_server_protocol::PluginInstalledSaveParams;
+pub use app_server_protocol::PluginLocalPackageInspectParams;
+pub use app_server_protocol::PluginShellPrepareParams;
+pub use app_server_protocol::PluginShellPrepareResponse;
+pub use app_server_protocol::PluginUiRuntimeStartParams;
+pub use app_server_protocol::PluginUiRuntimeStatusParams;
+pub use app_server_protocol::PluginUiRuntimeStatusResponse;
+pub use app_server_protocol::PluginUiRuntimeStopParams;
+pub use app_server_protocol::PluginUninstallParams;
+pub use app_server_protocol::PluginUninstallRehearsalParams;
 pub use app_server_protocol::ProjectMemoryReadParams;
 pub use app_server_protocol::ProjectMemoryReadResponse;
 use app_server_protocol::RequestId;
@@ -259,17 +259,6 @@ pub use app_server_protocol::WorkspaceRightSurfaceRequestResponse;
 pub use app_server_protocol::WorkspaceSkillBindingsListParams;
 pub use app_server_protocol::WorkspaceSkillBindingsListResponse;
 pub use app_server_protocol::APP_SERVER_METHODS;
-pub use app_server_protocol::METHOD_AGENT_APP_INSTALLED_DISABLED_SET;
-pub use app_server_protocol::METHOD_AGENT_APP_INSTALLED_LIST;
-pub use app_server_protocol::METHOD_AGENT_APP_INSTALLED_SAVE;
-pub use app_server_protocol::METHOD_AGENT_APP_INSTALLED_UNINSTALL;
-pub use app_server_protocol::METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL;
-pub use app_server_protocol::METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT;
-pub use app_server_protocol::METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD;
-pub use app_server_protocol::METHOD_AGENT_APP_SHELL_PREPARE;
-pub use app_server_protocol::METHOD_AGENT_APP_UI_RUNTIME_START;
-pub use app_server_protocol::METHOD_AGENT_APP_UI_RUNTIME_STATUS;
-pub use app_server_protocol::METHOD_AGENT_APP_UI_RUNTIME_STOP;
 pub use app_server_protocol::METHOD_AGENT_SESSION_ACTION_REPLAY;
 pub use app_server_protocol::METHOD_AGENT_SESSION_ACTION_RESPOND;
 pub use app_server_protocol::METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT;
@@ -393,6 +382,17 @@ pub use app_server_protocol::METHOD_MODEL_PROVIDER_ALIAS_READ;
 pub use app_server_protocol::METHOD_MODEL_PROVIDER_CATALOG_LIST;
 pub use app_server_protocol::METHOD_MODEL_PROVIDER_LIST;
 pub use app_server_protocol::METHOD_MODEL_SYNC_STATE_READ;
+pub use app_server_protocol::METHOD_PLUGIN_INSTALLED_DISABLED_SET;
+pub use app_server_protocol::METHOD_PLUGIN_INSTALLED_LIST;
+pub use app_server_protocol::METHOD_PLUGIN_INSTALLED_SAVE;
+pub use app_server_protocol::METHOD_PLUGIN_INSTALLED_UNINSTALL;
+pub use app_server_protocol::METHOD_PLUGIN_INSTALLED_UNINSTALL_REHEARSAL;
+pub use app_server_protocol::METHOD_PLUGIN_LOCAL_PACKAGE_INSPECT;
+pub use app_server_protocol::METHOD_PLUGIN_PACKAGE_FETCH_CLOUD;
+pub use app_server_protocol::METHOD_PLUGIN_SHELL_PREPARE;
+pub use app_server_protocol::METHOD_PLUGIN_UI_RUNTIME_START;
+pub use app_server_protocol::METHOD_PLUGIN_UI_RUNTIME_STATUS;
+pub use app_server_protocol::METHOD_PLUGIN_UI_RUNTIME_STOP;
 pub use app_server_protocol::METHOD_PROJECT_MEMORY_READ;
 pub use app_server_protocol::METHOD_SKILL_LIST;
 pub use app_server_protocol::METHOD_SKILL_LOCAL_DETAIL_INSPECT;
@@ -874,78 +874,78 @@ impl AppServerClient {
         self.typed_request(typed::list_workspace_skill_bindings(params))
     }
 
-    pub fn inspect_agent_app_local_package(
+    pub fn inspect_plugin_local_package(
         &mut self,
-        params: AgentAppLocalPackageInspectParams,
+        params: PluginLocalPackageInspectParams,
     ) -> Result<JsonRpcRequest, ClientError> {
-        self.typed_request(typed::inspect_agent_app_local_package(params))
+        self.typed_request(typed::inspect_plugin_local_package(params))
     }
 
-    pub fn fetch_agent_app_cloud_package(
+    pub fn fetch_plugin_cloud_package(
         &mut self,
-        params: AgentAppFetchCloudPackageParams,
+        params: PluginFetchCloudPackageParams,
     ) -> Result<JsonRpcRequest, ClientError> {
-        self.typed_request(typed::fetch_agent_app_cloud_package(params))
+        self.typed_request(typed::fetch_plugin_cloud_package(params))
     }
 
-    pub fn save_agent_app_installed(
+    pub fn save_plugin_installed(
         &mut self,
-        params: AgentAppInstalledSaveParams,
+        params: PluginInstalledSaveParams,
     ) -> Result<JsonRpcRequest, ClientError> {
-        self.typed_request(typed::save_agent_app_installed(params))
+        self.typed_request(typed::save_plugin_installed(params))
     }
 
-    pub fn list_agent_app_installed(&mut self) -> Result<JsonRpcRequest, ClientError> {
-        self.typed_request(typed::list_agent_app_installed())
+    pub fn list_plugin_installed(&mut self) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::list_plugin_installed())
     }
 
-    pub fn set_agent_app_installed_disabled(
+    pub fn set_plugin_installed_disabled(
         &mut self,
-        params: AgentAppInstalledDisabledSetParams,
+        params: PluginInstalledDisabledSetParams,
     ) -> Result<JsonRpcRequest, ClientError> {
-        self.typed_request(typed::set_agent_app_installed_disabled(params))
+        self.typed_request(typed::set_plugin_installed_disabled(params))
     }
 
-    pub fn preview_agent_app_uninstall(
+    pub fn preview_plugin_uninstall(
         &mut self,
-        params: AgentAppUninstallRehearsalParams,
+        params: PluginUninstallRehearsalParams,
     ) -> Result<JsonRpcRequest, ClientError> {
-        self.typed_request(typed::preview_agent_app_uninstall(params))
+        self.typed_request(typed::preview_plugin_uninstall(params))
     }
 
-    pub fn uninstall_agent_app(
+    pub fn uninstall_plugin(
         &mut self,
-        params: AgentAppUninstallParams,
+        params: PluginUninstallParams,
     ) -> Result<JsonRpcRequest, ClientError> {
-        self.typed_request(typed::uninstall_agent_app(params))
+        self.typed_request(typed::uninstall_plugin(params))
     }
 
-    pub fn prepare_agent_app_shell(
+    pub fn prepare_plugin_shell(
         &mut self,
-        params: AgentAppShellPrepareParams,
+        params: PluginShellPrepareParams,
     ) -> Result<JsonRpcRequest, ClientError> {
-        self.typed_request(typed::prepare_agent_app_shell(params))
+        self.typed_request(typed::prepare_plugin_shell(params))
     }
 
-    pub fn start_agent_app_ui_runtime(
+    pub fn start_plugin_ui_runtime(
         &mut self,
-        params: AgentAppUiRuntimeStartParams,
+        params: PluginUiRuntimeStartParams,
     ) -> Result<JsonRpcRequest, ClientError> {
-        self.typed_request(typed::start_agent_app_ui_runtime(params))
+        self.typed_request(typed::start_plugin_ui_runtime(params))
     }
 
-    pub fn agent_app_ui_runtime_status(
+    pub fn plugin_ui_runtime_status(
         &mut self,
-        params: AgentAppUiRuntimeStatusParams,
+        params: PluginUiRuntimeStatusParams,
     ) -> Result<JsonRpcRequest, ClientError> {
-        self.typed_request(typed::agent_app_ui_runtime_status(params))
+        self.typed_request(typed::plugin_ui_runtime_status(params))
     }
 
-    pub fn stop_agent_app_ui_runtime(
+    pub fn stop_plugin_ui_runtime(
         &mut self,
-        params: AgentAppUiRuntimeStopParams,
+        params: PluginUiRuntimeStopParams,
     ) -> Result<JsonRpcRequest, ClientError> {
-        self.typed_request(typed::stop_agent_app_ui_runtime(params))
+        self.typed_request(typed::stop_plugin_ui_runtime(params))
     }
 
     pub fn list_knowledge_packs(
@@ -1812,68 +1812,66 @@ pub mod typed {
         TypedRequest::new(METHOD_WORKSPACE_SKILL_BINDINGS_LIST, params)
     }
 
-    pub fn inspect_agent_app_local_package(
-        params: AgentAppLocalPackageInspectParams,
-    ) -> TypedRequest<AgentAppLocalPackageInspectParams> {
-        TypedRequest::new(METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT, params)
+    pub fn inspect_plugin_local_package(
+        params: PluginLocalPackageInspectParams,
+    ) -> TypedRequest<PluginLocalPackageInspectParams> {
+        TypedRequest::new(METHOD_PLUGIN_LOCAL_PACKAGE_INSPECT, params)
     }
 
-    pub fn fetch_agent_app_cloud_package(
-        params: AgentAppFetchCloudPackageParams,
-    ) -> TypedRequest<AgentAppFetchCloudPackageParams> {
-        TypedRequest::new(METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD, params)
+    pub fn fetch_plugin_cloud_package(
+        params: PluginFetchCloudPackageParams,
+    ) -> TypedRequest<PluginFetchCloudPackageParams> {
+        TypedRequest::new(METHOD_PLUGIN_PACKAGE_FETCH_CLOUD, params)
     }
 
-    pub fn save_agent_app_installed(
-        params: AgentAppInstalledSaveParams,
-    ) -> TypedRequest<AgentAppInstalledSaveParams> {
-        TypedRequest::new(METHOD_AGENT_APP_INSTALLED_SAVE, params)
+    pub fn save_plugin_installed(
+        params: PluginInstalledSaveParams,
+    ) -> TypedRequest<PluginInstalledSaveParams> {
+        TypedRequest::new(METHOD_PLUGIN_INSTALLED_SAVE, params)
     }
 
-    pub fn list_agent_app_installed() -> TypedRequest<serde_json::Value> {
-        TypedRequest::new(METHOD_AGENT_APP_INSTALLED_LIST, serde_json::json!({}))
+    pub fn list_plugin_installed() -> TypedRequest<serde_json::Value> {
+        TypedRequest::new(METHOD_PLUGIN_INSTALLED_LIST, serde_json::json!({}))
     }
 
-    pub fn set_agent_app_installed_disabled(
-        params: AgentAppInstalledDisabledSetParams,
-    ) -> TypedRequest<AgentAppInstalledDisabledSetParams> {
-        TypedRequest::new(METHOD_AGENT_APP_INSTALLED_DISABLED_SET, params)
+    pub fn set_plugin_installed_disabled(
+        params: PluginInstalledDisabledSetParams,
+    ) -> TypedRequest<PluginInstalledDisabledSetParams> {
+        TypedRequest::new(METHOD_PLUGIN_INSTALLED_DISABLED_SET, params)
     }
 
-    pub fn preview_agent_app_uninstall(
-        params: AgentAppUninstallRehearsalParams,
-    ) -> TypedRequest<AgentAppUninstallRehearsalParams> {
-        TypedRequest::new(METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL, params)
+    pub fn preview_plugin_uninstall(
+        params: PluginUninstallRehearsalParams,
+    ) -> TypedRequest<PluginUninstallRehearsalParams> {
+        TypedRequest::new(METHOD_PLUGIN_INSTALLED_UNINSTALL_REHEARSAL, params)
     }
 
-    pub fn uninstall_agent_app(
-        params: AgentAppUninstallParams,
-    ) -> TypedRequest<AgentAppUninstallParams> {
-        TypedRequest::new(METHOD_AGENT_APP_INSTALLED_UNINSTALL, params)
+    pub fn uninstall_plugin(params: PluginUninstallParams) -> TypedRequest<PluginUninstallParams> {
+        TypedRequest::new(METHOD_PLUGIN_INSTALLED_UNINSTALL, params)
     }
 
-    pub fn prepare_agent_app_shell(
-        params: AgentAppShellPrepareParams,
-    ) -> TypedRequest<AgentAppShellPrepareParams> {
-        TypedRequest::new(METHOD_AGENT_APP_SHELL_PREPARE, params)
+    pub fn prepare_plugin_shell(
+        params: PluginShellPrepareParams,
+    ) -> TypedRequest<PluginShellPrepareParams> {
+        TypedRequest::new(METHOD_PLUGIN_SHELL_PREPARE, params)
     }
 
-    pub fn start_agent_app_ui_runtime(
-        params: AgentAppUiRuntimeStartParams,
-    ) -> TypedRequest<AgentAppUiRuntimeStartParams> {
-        TypedRequest::new(METHOD_AGENT_APP_UI_RUNTIME_START, params)
+    pub fn start_plugin_ui_runtime(
+        params: PluginUiRuntimeStartParams,
+    ) -> TypedRequest<PluginUiRuntimeStartParams> {
+        TypedRequest::new(METHOD_PLUGIN_UI_RUNTIME_START, params)
     }
 
-    pub fn agent_app_ui_runtime_status(
-        params: AgentAppUiRuntimeStatusParams,
-    ) -> TypedRequest<AgentAppUiRuntimeStatusParams> {
-        TypedRequest::new(METHOD_AGENT_APP_UI_RUNTIME_STATUS, params)
+    pub fn plugin_ui_runtime_status(
+        params: PluginUiRuntimeStatusParams,
+    ) -> TypedRequest<PluginUiRuntimeStatusParams> {
+        TypedRequest::new(METHOD_PLUGIN_UI_RUNTIME_STATUS, params)
     }
 
-    pub fn stop_agent_app_ui_runtime(
-        params: AgentAppUiRuntimeStopParams,
-    ) -> TypedRequest<AgentAppUiRuntimeStopParams> {
-        TypedRequest::new(METHOD_AGENT_APP_UI_RUNTIME_STOP, params)
+    pub fn stop_plugin_ui_runtime(
+        params: PluginUiRuntimeStopParams,
+    ) -> TypedRequest<PluginUiRuntimeStopParams> {
+        TypedRequest::new(METHOD_PLUGIN_UI_RUNTIME_STOP, params)
     }
 
     pub fn list_knowledge_packs(
@@ -3167,10 +3165,10 @@ mod tests {
         let mut client = AppServerClient::new();
 
         let installed = client
-            .list_agent_app_installed()
+            .list_plugin_installed()
             .expect("installed agent apps");
         let shell_prepare = client
-            .prepare_agent_app_shell(AgentAppShellPrepareParams {
+            .prepare_plugin_shell(PluginShellPrepareParams {
                 descriptor: json!({
                     "appId": "content-factory-app",
                 }),
@@ -3436,9 +3434,9 @@ mod tests {
             .clear_diagnostic_log_history()
             .expect("clear diagnostic history");
 
-        assert_eq!(installed.method, METHOD_AGENT_APP_INSTALLED_LIST);
+        assert_eq!(installed.method, METHOD_PLUGIN_INSTALLED_LIST);
         assert_eq!(installed.params.expect("params"), json!({}));
-        assert_eq!(shell_prepare.method, METHOD_AGENT_APP_SHELL_PREPARE);
+        assert_eq!(shell_prepare.method, METHOD_PLUGIN_SHELL_PREPARE);
         assert_eq!(
             shell_prepare.params.expect("params"),
             json!({
@@ -4143,7 +4141,7 @@ mod tests {
         assert!(methods.contains(&METHOD_EVIDENCE_EXPORT));
         assert!(methods.contains(&METHOD_AGENT_SESSION_TURN_START));
         assert!(methods.contains(&METHOD_WORKSPACE_LIST));
-        assert!(methods.contains(&METHOD_AGENT_APP_SHELL_PREPARE));
+        assert!(methods.contains(&METHOD_PLUGIN_SHELL_PREPARE));
         assert!(methods.contains(&METHOD_WORKSPACE_READ));
         assert!(methods.contains(&METHOD_WORKSPACE_BY_PATH_READ));
         assert!(methods.contains(&METHOD_WORKSPACE_ENSURE));
@@ -4169,7 +4167,7 @@ mod tests {
         assert!(methods.contains(&METHOD_SKILL_PACKAGE_LOCAL_INSTALL));
         assert!(methods.contains(&METHOD_SKILL_PACKAGE_EXPORT));
         assert!(methods.contains(&METHOD_WORKSPACE_SKILL_BINDINGS_LIST));
-        assert!(methods.contains(&METHOD_AGENT_APP_INSTALLED_LIST));
+        assert!(methods.contains(&METHOD_PLUGIN_INSTALLED_LIST));
         assert!(methods.contains(&METHOD_KNOWLEDGE_PACK_LIST));
         assert!(methods.contains(&METHOD_KNOWLEDGE_PACK_READ));
         assert!(methods.contains(&METHOD_AUTOMATION_SCHEDULER_CONFIG_READ));
@@ -4231,9 +4229,7 @@ mod tests {
             METHOD_BROWSER_SESSION_ACTION_EXECUTE
         ));
         assert!(is_app_server_request_method(METHOD_SKILL_LIST));
-        assert!(is_app_server_request_method(
-            METHOD_AGENT_APP_INSTALLED_LIST
-        ));
+        assert!(is_app_server_request_method(METHOD_PLUGIN_INSTALLED_LIST));
         assert!(is_app_server_request_method(METHOD_KNOWLEDGE_PACK_LIST));
         assert!(is_app_server_request_method(METHOD_KNOWLEDGE_PACK_READ));
         assert!(is_app_server_request_method(

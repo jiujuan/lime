@@ -50,7 +50,7 @@ function marketplaceItem(
     description: `${pluginName} plugin`,
     version: "1.0.0",
     category: "research",
-    sourceKind: "agent_app_release",
+    sourceKind: "plugin_catalog",
     appId: pluginName,
     enabled: true,
     installState: "available",

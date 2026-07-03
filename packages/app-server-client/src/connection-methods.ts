@@ -329,58 +329,58 @@ declare module "./connection.js" {
     ): Promise<
       AppServerRequestResult<protocol.WorkspaceRegisteredSkillsListResponse>
     >;
-    inspectAgentAppLocalPackage(
-      params: protocol.AgentAppLocalPackageInspectParams,
+    inspectPluginLocalPackage(
+      params: protocol.PluginLocalPackageInspectParams,
       options?: AppServerRequestOptions,
     ): Promise<
-      AppServerRequestResult<protocol.AgentAppLocalPackageInspectResponse>
+      AppServerRequestResult<protocol.PluginLocalPackageInspectResponse>
     >;
-    fetchAgentAppCloudPackage(
-      params: protocol.AgentAppFetchCloudPackageParams,
+    fetchPluginCloudPackage(
+      params: protocol.PluginFetchCloudPackageParams,
       options?: AppServerRequestOptions,
-    ): Promise<AppServerRequestResult<protocol.AgentAppPackageCacheEntry>>;
-    saveAgentAppInstalled(
-      params: protocol.AgentAppInstalledSaveParams,
+    ): Promise<AppServerRequestResult<protocol.PluginPackageCacheEntry>>;
+    savePluginInstalled(
+      params: protocol.PluginInstalledSaveParams,
       options?: AppServerRequestOptions,
     ): Promise<AppServerRequestResult<unknown>>;
-    listAgentAppInstalled(
+    listPluginInstalled(
       options?: AppServerRequestOptions,
-    ): Promise<AppServerRequestResult<protocol.AgentAppInstalledListResponse>>;
-    setAgentAppInstalledDisabled(
-      params: protocol.AgentAppInstalledDisabledSetParams,
+    ): Promise<AppServerRequestResult<protocol.PluginInstalledListResponse>>;
+    setPluginInstalledDisabled(
+      params: protocol.PluginInstalledDisabledSetParams,
       options?: AppServerRequestOptions,
-    ): Promise<AppServerRequestResult<protocol.AgentAppInstalledListResponse>>;
-    previewAgentAppUninstall(
-      params: protocol.AgentAppUninstallRehearsalParams,
+    ): Promise<AppServerRequestResult<protocol.PluginInstalledListResponse>>;
+    previewPluginUninstall(
+      params: protocol.PluginUninstallRehearsalParams,
       options?: AppServerRequestOptions,
     ): Promise<
-      AppServerRequestResult<protocol.AgentAppUninstallRehearsalResponse>
+      AppServerRequestResult<protocol.PluginUninstallRehearsalResponse>
     >;
-    uninstallAgentApp(
-      params: protocol.AgentAppUninstallParams,
+    uninstallPlugin(
+      params: protocol.PluginUninstallParams,
       options?: AppServerRequestOptions,
-    ): Promise<AppServerRequestResult<protocol.AgentAppUninstallResponse>>;
-    prepareAgentAppShell(
-      params: protocol.AgentAppShellPrepareParams,
+    ): Promise<AppServerRequestResult<protocol.PluginUninstallResponse>>;
+    preparePluginShell(
+      params: protocol.PluginShellPrepareParams,
       options?: AppServerRequestOptions,
-    ): Promise<AppServerRequestResult<protocol.AgentAppShellPrepareResponse>>;
-    startAgentAppUiRuntime(
-      params: protocol.AgentAppUiRuntimeStartParams,
+    ): Promise<AppServerRequestResult<protocol.PluginShellPrepareResponse>>;
+    startPluginUiRuntime(
+      params: protocol.PluginUiRuntimeStartParams,
       options?: AppServerRequestOptions,
     ): Promise<
-      AppServerRequestResult<protocol.AgentAppUiRuntimeStatusResponse>
+      AppServerRequestResult<protocol.PluginUiRuntimeStatusResponse>
     >;
-    getAgentAppUiRuntimeStatus(
-      params: protocol.AgentAppUiRuntimeStatusParams,
+    getPluginUiRuntimeStatus(
+      params: protocol.PluginUiRuntimeStatusParams,
       options?: AppServerRequestOptions,
     ): Promise<
-      AppServerRequestResult<protocol.AgentAppUiRuntimeStatusResponse>
+      AppServerRequestResult<protocol.PluginUiRuntimeStatusResponse>
     >;
-    stopAgentAppUiRuntime(
-      params: protocol.AgentAppUiRuntimeStopParams,
+    stopPluginUiRuntime(
+      params: protocol.PluginUiRuntimeStopParams,
       options?: AppServerRequestOptions,
     ): Promise<
-      AppServerRequestResult<protocol.AgentAppUiRuntimeStatusResponse>
+      AppServerRequestResult<protocol.PluginUiRuntimeStatusResponse>
     >;
     listKnowledgePacks(
       params: protocol.KnowledgeListPacksParams,
@@ -1556,75 +1556,75 @@ const CONNECTION_METHODS: readonly ConnectionMethodSpec[] = [
     params: "required",
   },
   {
-    name: "inspectAgentAppLocalPackage",
-    clientMethod: "inspectAgentAppLocalPackage",
-    method: protocol.METHOD_AGENT_APP_LOCAL_PACKAGE_INSPECT,
+    name: "inspectPluginLocalPackage",
+    clientMethod: "inspectPluginLocalPackage",
+    method: protocol.METHOD_PLUGIN_LOCAL_PACKAGE_INSPECT,
     params: "required",
   },
   {
-    name: "fetchAgentAppCloudPackage",
-    clientMethod: "fetchAgentAppCloudPackage",
-    method: protocol.METHOD_AGENT_APP_PACKAGE_FETCH_CLOUD,
+    name: "fetchPluginCloudPackage",
+    clientMethod: "fetchPluginCloudPackage",
+    method: protocol.METHOD_PLUGIN_PACKAGE_FETCH_CLOUD,
     params: "required",
   },
   {
-    name: "saveAgentAppInstalled",
-    clientMethod: "saveAgentAppInstalled",
-    method: protocol.METHOD_AGENT_APP_INSTALLED_SAVE,
+    name: "savePluginInstalled",
+    clientMethod: "savePluginInstalled",
+    method: protocol.METHOD_PLUGIN_INSTALLED_SAVE,
     params: "required",
   },
   {
-    name: "listAgentAppInstalled",
-    clientMethod: "listAgentAppInstalled",
-    method: protocol.METHOD_AGENT_APP_INSTALLED_LIST,
+    name: "listPluginInstalled",
+    clientMethod: "listPluginInstalled",
+    method: protocol.METHOD_PLUGIN_INSTALLED_LIST,
     params: "none",
   },
   {
-    name: "setAgentAppInstalledDisabled",
-    clientMethod: "setAgentAppInstalledDisabled",
-    method: protocol.METHOD_AGENT_APP_INSTALLED_DISABLED_SET,
+    name: "setPluginInstalledDisabled",
+    clientMethod: "setPluginInstalledDisabled",
+    method: protocol.METHOD_PLUGIN_INSTALLED_DISABLED_SET,
     params: "required",
   },
   {
-    name: "previewAgentAppUninstall",
-    clientMethod: "previewAgentAppUninstall",
-    method: protocol.METHOD_AGENT_APP_INSTALLED_UNINSTALL_REHEARSAL,
+    name: "previewPluginUninstall",
+    clientMethod: "previewPluginUninstall",
+    method: protocol.METHOD_PLUGIN_INSTALLED_UNINSTALL_REHEARSAL,
     params: "required",
   },
   {
-    name: "uninstallAgentApp",
-    clientMethod: "uninstallAgentApp",
-    method: protocol.METHOD_AGENT_APP_INSTALLED_UNINSTALL,
+    name: "uninstallPlugin",
+    clientMethod: "uninstallPlugin",
+    method: protocol.METHOD_PLUGIN_INSTALLED_UNINSTALL,
     params: "required",
   },
   {
-    name: "listAgentAppHostLifecycle",
-    clientMethod: "listAgentAppHostLifecycle",
-    method: protocol.METHOD_AGENT_APP_HOST_LIFECYCLE_LIST,
+    name: "listPluginHostLifecycle",
+    clientMethod: "listPluginHostLifecycle",
+    method: protocol.METHOD_PLUGIN_HOST_LIFECYCLE_LIST,
     params: "none",
   },
   {
-    name: "prepareAgentAppShell",
-    clientMethod: "prepareAgentAppShell",
-    method: protocol.METHOD_AGENT_APP_SHELL_PREPARE,
+    name: "preparePluginShell",
+    clientMethod: "preparePluginShell",
+    method: protocol.METHOD_PLUGIN_SHELL_PREPARE,
     params: "required",
   },
   {
-    name: "startAgentAppUiRuntime",
-    clientMethod: "startAgentAppUiRuntime",
-    method: protocol.METHOD_AGENT_APP_UI_RUNTIME_START,
+    name: "startPluginUiRuntime",
+    clientMethod: "startPluginUiRuntime",
+    method: protocol.METHOD_PLUGIN_UI_RUNTIME_START,
     params: "required",
   },
   {
-    name: "getAgentAppUiRuntimeStatus",
-    clientMethod: "getAgentAppUiRuntimeStatus",
-    method: protocol.METHOD_AGENT_APP_UI_RUNTIME_STATUS,
+    name: "getPluginUiRuntimeStatus",
+    clientMethod: "getPluginUiRuntimeStatus",
+    method: protocol.METHOD_PLUGIN_UI_RUNTIME_STATUS,
     params: "required",
   },
   {
-    name: "stopAgentAppUiRuntime",
-    clientMethod: "stopAgentAppUiRuntime",
-    method: protocol.METHOD_AGENT_APP_UI_RUNTIME_STOP,
+    name: "stopPluginUiRuntime",
+    clientMethod: "stopPluginUiRuntime",
+    method: protocol.METHOD_PLUGIN_UI_RUNTIME_STOP,
     params: "required",
   },
   {

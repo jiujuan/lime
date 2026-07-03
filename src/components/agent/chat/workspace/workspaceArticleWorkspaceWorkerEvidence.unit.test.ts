@@ -57,7 +57,7 @@ describe("workspaceArticleWorkspaceWorkerEvidence", () => {
         worker_entrypoint: "./runtime/content-factory-worker.mjs",
         input_summary: "prompt=生成图片; inputKeys=topic",
         error_code: "worker_invalid_json_output",
-        error_message: "Agent App worker returned invalid JSON",
+        error_message: "Plugin worker returned invalid JSON",
         failure_category: "worker_output",
         retryable: false,
         retry_advice: "inspect_worker_output",
@@ -68,7 +68,7 @@ describe("workspaceArticleWorkspaceWorkerEvidence", () => {
       {
         id: "evt-hook:workerEvidence",
         status: "completed",
-        eventType: "agent_app_worker.hook",
+        eventType: "plugin_worker.hook",
         appId: "content-factory-app",
         taskId: "task-article-1",
         taskKind: "content.article.generate",
@@ -87,7 +87,7 @@ describe("workspaceArticleWorkspaceWorkerEvidence", () => {
       expect.objectContaining({
         id: "evt-hook:workerEvidence",
         status: "completed",
-        eventType: "agent_app_worker.hook",
+        eventType: "plugin_worker.hook",
         hookKey: "task-complete",
         hookEvent: "task.complete",
         hookScope: "task",

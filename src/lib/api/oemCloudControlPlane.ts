@@ -1,7 +1,7 @@
 import { resolveOemCloudRuntimeContext } from "./oemCloudRuntime";
-import { parseCloudBootstrapPayload } from "../../features/agent-app/install/cloudBootstrap";
+import { parseCloudBootstrapPayload } from "../../features/plugin/install/cloudBootstrap";
 import type { OemCloudCurrentSessionLike } from "@/lib/oemCloudSession";
-import type { CloudBootstrapPayload } from "../../features/agent-app/types";
+import type { CloudBootstrapPayload } from "../../features/plugin/types";
 import type {
   PluginMarketplaceActivationState,
   PluginMarketplaceAuthenticationPolicy,
@@ -248,7 +248,7 @@ export interface OemCloudBootstrapResponse {
   skillCatalog?: unknown;
   serviceSkillCatalog?: unknown;
   siteAdapterCatalog?: unknown;
-  agentAppCatalog?: CloudBootstrapPayload;
+  pluginCatalog?: CloudBootstrapPayload;
   sceneCatalog?: Array<{ id: string }>;
   features: OemCloudFeatureFlags;
   gateway?: OemCloudGatewayConfig;
@@ -953,7 +953,7 @@ const MODEL_ALIAS_SOURCE_SET = new Set<ModelAliasSource>([
 ]);
 
 const PLUGIN_MARKETPLACE_SOURCE_KIND_SET = new Set<PluginMarketplaceSourceKind>(
-  ["plugin_catalog", "agent_app_release"],
+  ["plugin_catalog"],
 );
 
 const PLUGIN_MARKETPLACE_INSTALLATION_POLICY_SET =
@@ -1766,10 +1766,10 @@ function parseBootstrap(value: unknown): OemCloudBootstrapResponse {
     skillCatalog: value.skillCatalog,
     serviceSkillCatalog: value.serviceSkillCatalog,
     siteAdapterCatalog: value.siteAdapterCatalog ?? value.site_adapter_catalog,
-    agentAppCatalog:
-      value.agentAppCatalog == null
+    pluginCatalog:
+      value.pluginCatalog == null
         ? undefined
-        : parseCloudBootstrapPayload(value.agentAppCatalog),
+        : parseCloudBootstrapPayload(value.pluginCatalog),
     sceneCatalog: Array.isArray(value.sceneCatalog)
       ? value.sceneCatalog
           .filter((item) => isRecord(item) && normalizeText(item.id))
@@ -2928,12 +2928,12 @@ export async function getClientBootstrap(
   );
 }
 
-export async function getClientAgentApps(
+export async function getClientPlugins(
   tenantId: string,
 ): Promise<CloudBootstrapPayload> {
   return parseCloudBootstrapPayload(
     await requestControlPlane<unknown>(
-      `/v1/public/tenants/${encodeURIComponent(tenantId)}/client/agent-apps`,
+      `/v1/public/tenants/${encodeURIComponent(tenantId)}/client/plugins`,
       {
         auth: true,
       },
@@ -2968,14 +2968,14 @@ export async function getClientPluginMarketplace(
   );
 }
 
-export async function submitClientAgentAppRegistrationCode(
+export async function submitClientPluginRegistrationCode(
   tenantId: string,
   appId: string,
   payload: { code: string },
 ): Promise<CloudBootstrapPayload> {
   return parseCloudBootstrapPayload(
     await requestControlPlane<unknown>(
-      `/v1/public/tenants/${encodeURIComponent(tenantId)}/client/agent-apps/${encodeURIComponent(appId)}/registration`,
+      `/v1/public/tenants/${encodeURIComponent(tenantId)}/client/plugins/${encodeURIComponent(appId)}/registration`,
       {
         method: "POST",
         auth: true,
@@ -2985,7 +2985,7 @@ export async function submitClientAgentAppRegistrationCode(
   );
 }
 
-export async function submitClientPluginRegistrationCode(
+export async function submitClientPluginMarketplaceRegistrationCode(
   tenantId: string,
   pluginName: string,
   payload: { code: string },

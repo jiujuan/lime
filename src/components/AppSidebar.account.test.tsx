@@ -553,7 +553,7 @@ describe("AppSidebar account menu", () => {
     expect(
       container.querySelector('[data-testid="app-sidebar-account-menu"]')
         ?.textContent,
-    ).not.toContain("Agent Apps");
+    ).not.toContain("Plugins");
     expect(
       container.querySelector('[data-testid="app-sidebar-account-menu"]')
         ?.textContent,

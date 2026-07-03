@@ -861,8 +861,8 @@ describe("agentStreamTurnEventBinding", () => {
           type: "runtime.error",
           timestamp: "2026-06-28T07:45:02.000Z",
           payload: {
-            message: "Agent App worker failed",
-            errorCode: "AGENT_APP_WORKER_PACKAGE_SIGNATURE_UNVERIFIED",
+            message: "Plugin worker failed",
+            errorCode: "PLUGIN_WORKER_PACKAGE_SIGNATURE_UNVERIFIED",
           },
         },
       },
@@ -874,7 +874,7 @@ describe("agentStreamTurnEventBinding", () => {
     (streamHandler as (event: { payload: unknown }) => void)({ payload });
 
     expect(messages[0]?.content).toContain("执行失败");
-    expect(messages[0]?.content).toContain("Agent App worker failed");
+    expect(messages[0]?.content).toContain("Plugin worker failed");
     expect(messages[0]?.runtimeStatus).toMatchObject({
       phase: "failed",
       title: "当前处理失败",

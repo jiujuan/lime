@@ -42,8 +42,8 @@ const PROJECTED_THREAD_ITEM_EVENT_TYPES: &[&str] = &[
     "context.compaction.completed",
     "subagent.activity",
     "artifact.snapshot",
-    "agent_app_worker.retry",
-    "agent_app_worker.hook",
+    "plugin_worker.retry",
+    "plugin_worker.hook",
     "file.changed",
     "routing.decision.made",
     "routing.fallback.applied",
@@ -55,8 +55,8 @@ const PROJECTED_THREAD_ITEM_EVENT_TYPES: &[&str] = &[
 
 const PROJECTED_PLUGIN_WORKSPACE_EVENT_TYPES: &[&str] = &[
     "artifact.snapshot",
-    "agent_app_worker.retry",
-    "agent_app_worker.hook",
+    "plugin_worker.retry",
+    "plugin_worker.hook",
     "runtime.error",
     "turn.failed",
 ];
@@ -190,10 +190,10 @@ fn merge_projected_item_events(
 fn is_plugin_workspace_projection_event(event: &AgentEvent) -> bool {
     match event.event_type.as_str() {
         "artifact.snapshot" => payload_has_workspace_patch(&event.payload),
-        "agent_app_worker.retry" | "agent_app_worker.hook" | "runtime.error" | "turn.failed" => {
-            payload_has_agent_app_worker_metadata(&event.payload)
+        "plugin_worker.retry" | "plugin_worker.hook" | "runtime.error" | "turn.failed" => {
+            payload_has_plugin_worker_metadata(&event.payload)
                 || payload_string(Some(&event.payload), &["source"]).as_deref()
-                    == Some("agent_app_task_worker")
+                    == Some("plugin_task_worker")
         }
         _ => false,
     }
@@ -230,23 +230,23 @@ fn payload_has_workspace_patch(payload: &Value) -> bool {
     .any(|candidate| candidate.get("objects").and_then(Value::as_array).is_some())
 }
 
-fn payload_has_agent_app_worker_metadata(payload: &Value) -> bool {
+fn payload_has_plugin_worker_metadata(payload: &Value) -> bool {
     let artifact = payload.get("artifact");
     [
-        payload.get("agentAppWorker"),
-        payload.get("agent_app_worker"),
+        payload.get("pluginWorker"),
+        payload.get("plugin_worker"),
         payload
             .get("metadata")
-            .and_then(|metadata| metadata.get("agentAppWorker")),
+            .and_then(|metadata| metadata.get("pluginWorker")),
         payload
             .get("metadata")
-            .and_then(|metadata| metadata.get("agent_app_worker")),
+            .and_then(|metadata| metadata.get("plugin_worker")),
         artifact
             .and_then(|artifact| artifact.get("metadata"))
-            .and_then(|metadata| metadata.get("agentAppWorker")),
+            .and_then(|metadata| metadata.get("pluginWorker")),
         artifact
             .and_then(|artifact| artifact.get("metadata"))
-            .and_then(|metadata| metadata.get("agent_app_worker")),
+            .and_then(|metadata| metadata.get("plugin_worker")),
     ]
     .into_iter()
     .flatten()

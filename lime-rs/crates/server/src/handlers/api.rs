@@ -39,13 +39,13 @@ use aster::session_context::{
     PENDING_REQUEST_ID_HEADER, QUEUED_TURN_ID_HEADER, SESSION_ID_HEADER,
     SUBAGENT_SESSION_ID_HEADER, THREAD_ID_HEADER, TURN_ID_HEADER,
 };
-use lime_core::agent_app_runtime_token::{
-    verify_agent_app_runtime_token_for_scope, AGENT_APP_RUNTIME_SCOPE_MODEL_GENERATION,
-};
 use lime_core::errors::GatewayErrorCode;
 use lime_core::models::anthropic::AnthropicMessagesRequest;
 use lime_core::models::openai::{ChatCompletionRequest, ContentPart, MessageContent};
 use lime_core::models::{RuntimeCredentialData, RuntimeProviderCredential};
+use lime_core::plugin_runtime_token::{
+    verify_plugin_runtime_token_for_scope, PLUGIN_RUNTIME_SCOPE_MODEL_GENERATION,
+};
 use lime_core::ProviderType;
 use lime_processor::RequestContext;
 use lime_providers::streaming::StreamFormat as StreamingFormat;
@@ -1948,7 +1948,7 @@ pub async fn verify_api_key(
     Ok(())
 }
 
-/// OpenAI 格式的模型生成端点认证，允许 Agent App 使用内容生成 scope。
+/// OpenAI 格式的模型生成端点认证，允许 Plugin 使用内容生成 scope。
 pub async fn verify_model_generation_api_key(
     headers: &HeaderMap,
     expected_key: &str,
@@ -1976,7 +1976,7 @@ pub async fn verify_api_key_anthropic(
     Ok(())
 }
 
-/// Anthropic 格式的模型生成端点认证，允许 Agent App 使用内容生成 scope。
+/// Anthropic 格式的模型生成端点认证，允许 Plugin 使用内容生成 scope。
 pub async fn verify_model_generation_api_key_anthropic(
     headers: &HeaderMap,
     expected_key: &str,
@@ -1992,10 +1992,10 @@ pub async fn verify_model_generation_api_key_anthropic(
 
 fn model_generation_access_key_matches(expected_key: &str, key: &str) -> bool {
     static_api_key_matches(expected_key, key)
-        || verify_agent_app_runtime_token_for_scope(
+        || verify_plugin_runtime_token_for_scope(
             expected_key,
             key,
-            AGENT_APP_RUNTIME_SCOPE_MODEL_GENERATION,
+            PLUGIN_RUNTIME_SCOPE_MODEL_GENERATION,
         )
         .is_ok()
 }
@@ -3167,7 +3167,7 @@ fn convert_anthropic_response_to_openai(anthropic_resp: &serde_json::Value, mode
 mod auth_tests {
     use super::*;
     use axum::http::HeaderValue;
-    use lime_core::agent_app_runtime_token::issue_agent_app_runtime_token_with_nonce;
+    use lime_core::plugin_runtime_token::issue_plugin_runtime_token_with_nonce;
 
     fn bearer_headers(token: &str) -> HeaderMap {
         let mut headers = HeaderMap::new();
@@ -3189,8 +3189,8 @@ mod auth_tests {
     }
 
     #[tokio::test]
-    async fn verify_api_key_rejects_agent_app_scoped_token() {
-        let token = issue_agent_app_runtime_token_with_nonce(
+    async fn verify_api_key_rejects_plugin_scoped_token() {
+        let token = issue_plugin_runtime_token_with_nonce(
             "server-secret",
             "content-factory-app",
             chrono::Utc::now().timestamp() + 60,
@@ -3206,8 +3206,8 @@ mod auth_tests {
     }
 
     #[tokio::test]
-    async fn verify_model_generation_api_key_accepts_agent_app_scoped_token() {
-        let token = issue_agent_app_runtime_token_with_nonce(
+    async fn verify_model_generation_api_key_accepts_plugin_scoped_token() {
+        let token = issue_plugin_runtime_token_with_nonce(
             "server-secret",
             "content-factory-app",
             chrono::Utc::now().timestamp() + 60,
@@ -3225,8 +3225,8 @@ mod auth_tests {
     }
 
     #[tokio::test]
-    async fn verify_model_generation_api_key_rejects_wrong_agent_app_scoped_token_secret() {
-        let token = issue_agent_app_runtime_token_with_nonce(
+    async fn verify_model_generation_api_key_rejects_wrong_plugin_scoped_token_secret() {
+        let token = issue_plugin_runtime_token_with_nonce(
             "other-secret",
             "content-factory-app",
             chrono::Utc::now().timestamp() + 60,

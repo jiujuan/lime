@@ -51,15 +51,15 @@ describe("sidebarNav", () => {
     expect(resolveEnabledSidebarNavItems(["companion"], 2)).toEqual([]);
   });
 
-  it("Agent App Lab 只在实验开关开启时进入左侧栏", () => {
+  it("Plugin Lab 只在实验开关开启时进入左侧栏", () => {
     expect(
       buildMainSidebarNavItems({ labEnabled: false }).map((item) => item.id),
     ).toContain("plugins");
     expect(
       buildMainSidebarNavItems({ labEnabled: true }).map((item) => item.id),
-    ).toContain("agent-app-lab");
+    ).toContain("plugin-lab");
     expect(
       buildMainSidebarNavItems({ labEnabled: false }).map((item) => item.id),
-    ).not.toContain("agent-app-lab");
+    ).not.toContain("plugin-lab");
   });
 });

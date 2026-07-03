@@ -9,7 +9,7 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, options?: { defaultValue?: string }) => {
       const copy: Record<string, string> = {
-        "agentChat.rightSurface.tabs.appSurface": "Agent App",
+        "agentChat.rightSurface.tabs.appSurface": "Plugin",
         "agentChat.rightSurface.tabs.browser": "浏览器",
         "agentChat.rightSurface.tabs.articleWorkspace": "文章编辑器",
         "agentChat.rightSurface.tabs.files": "文件",
@@ -25,7 +25,7 @@ const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 const definitions: RightSurfaceDefinition[] = [
   {
     kind: "appSurface",
-    render: () => <div data-testid="agent-app-pane">Agent App</div>,
+    render: () => <div data-testid="plugin-pane">Plugin</div>,
   },
   {
     kind: "articleWorkspace",

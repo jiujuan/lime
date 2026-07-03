@@ -391,7 +391,7 @@ export function buildWorkspaceArticleWorkspaceFromUnknown(
   const appId =
     readString(record.appId, record.app_id) ||
     firstObjectRef?.appId ||
-    "agent-app";
+    "plugin";
   const sessionId =
     readString(record.sessionId, record.session_id) ||
     firstObjectRef?.sessionId ||
@@ -695,14 +695,14 @@ export function buildWorkspaceArticleWorkspaceActionRequestMetadata(
       source_task_id: intent.object.ref.sourceTaskId ?? null,
     },
   });
-  const paneAgentApp =
-    typeof paneActionMetadata.agent_app === "object" &&
-    paneActionMetadata.agent_app !== null
-      ? (paneActionMetadata.agent_app as Record<string, unknown>)
+  const panePlugin =
+    typeof paneActionMetadata.plugin === "object" &&
+    paneActionMetadata.plugin !== null
+      ? (paneActionMetadata.plugin as Record<string, unknown>)
       : {};
   return {
-    agent_app: {
-      ...paneAgentApp,
+    plugin: {
+      ...panePlugin,
       source: "right_surface_article_workspace",
       app_id: intent.articleWorkspace.appId,
       session_id: intent.articleWorkspace.sessionId,

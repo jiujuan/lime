@@ -30,7 +30,13 @@ vi.mock("react-i18next", () => ({
         "workspace.articleEditor.canvas.title": "正文画布",
         "workspace.articleEditor.canvas.detail": "可编辑草稿",
         "workspace.articleEditor.canvas.empty": "文章正文生成后会出现在这里。",
+        "workspace.articleEditor.canvas.fixtureOnlyPlaceholder":
+          "等待真实模型生成正文。",
+        "workspace.articleEditor.canvas.fixtureOnlyNotice":
+          "本地测试夹具输出已隐藏。请连接真实 Provider 后重新生成正文。",
         "workspace.articleEditor.canvas.status.synced": "已载入产物正文",
+        "workspace.articleEditor.canvas.status.fixtureOnlyHidden":
+          "测试夹具正文未载入",
         "workspace.articleEditor.canvas.status.edited":
           "已本地编辑，后续动作会带上当前正文",
         "workspace.articleEditor.outline.title": "文章结构",
@@ -99,7 +105,7 @@ const articleWorkspaceFixture: WorkspaceArticleWorkspace = {
     {
       id: "evt-worker-success:workerEvidence",
       status: "completed",
-      source: "agent_app_task_worker",
+      source: "plugin_task_worker",
       eventType: "artifact.snapshot",
       appId: "content-factory-app",
       taskId: "task-article-1",
@@ -399,17 +405,37 @@ describe("WorkspaceArticleEditorRightSurface", () => {
     expect(container.textContent).toContain("正文画布");
     expect(container.textContent).toContain("已载入产物正文");
     expect(container.textContent).toContain("这是可编辑的文章正文");
-    expect(container.textContent).toContain("文章结构");
-    expect(container.textContent).toContain("检索行业背景");
-    expect(container.textContent).toContain("内容工厂不是聊天框");
-    expect(container.textContent).toContain(
+    expect(container.textContent).not.toContain("文章结构");
+    expect(container.textContent).not.toContain("检索行业背景");
+    expect(container.textContent).not.toContain("内容工厂不是聊天框");
+    expect(container.textContent).not.toContain(
       "写作应该经过检索、提纲、正文、配图和复核",
     );
-    expect(container.textContent).toContain("产品规划文档");
-    expect(container.textContent).toContain(
+    expect(container.textContent).not.toContain("产品规划文档");
+    expect(container.textContent).not.toContain(
       "桌面端内容工厂写作流程图，中文标签",
     );
-    expect(container.textContent).toContain("先做资料检索");
+    expect(container.textContent).not.toContain("先做资料检索");
+    expect(
+      container.querySelector(
+        '[data-testid="workspace-article-editor-outline"]',
+      ),
+    ).toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid="workspace-article-editor-research"]',
+      ),
+    ).toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid="workspace-article-editor-title-candidates"]',
+      ),
+    ).toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid="workspace-article-editor-writing-plan"]',
+      ),
+    ).toBeNull();
     expect(
       container.querySelector(
         '[data-testid="workspace-article-editor-content-factory-orchestration"]',
@@ -427,7 +453,72 @@ describe("WorkspaceArticleEditorRightSurface", () => {
     ).toBeNull();
     expect(container.textContent).not.toContain("插件工作流");
     expect(container.textContent).not.toContain("content_article_workflow");
-    expect(container.textContent).toContain("正文需要保留真实引用来源。");
+    expect(container.textContent).not.toContain("正文需要保留真实引用来源。");
+  });
+
+  it("本地 host generation fixture 不应作为正式文章正文渲染", () => {
+    const fakeMarkdown = [
+      "# 内容工厂插件化写文章",
+      "",
+      "<!-- fixtureOnlyHostGeneration: true; fixturePromptFingerprint: abc123def456 -->",
+      "",
+      "这是本地 fixture 拼出来的模板正文，不应进入可见 Article Editor。",
+    ].join("\n");
+    const fixtureOnlyWorkspace: WorkspaceArticleWorkspace = {
+      ...articleWorkspaceFixture,
+      objects: articleWorkspaceFixture.objects.map((item) =>
+        item.ref.kind === "articleDraft"
+          ? {
+              ...item,
+              source: {
+                ...(item.source ?? {}),
+                documentText: fakeMarkdown,
+                finalMarkdown: fakeMarkdown,
+                hostManagedGeneration: {
+                  status: "completed",
+                  provider: "fixture-openai",
+                  model: "lime-fixture-chat",
+                  outputIds: ["article-draft-document"],
+                },
+              },
+            }
+          : item,
+      ),
+    };
+    const onActionIntent = vi.fn();
+    const container = renderSurface({
+      onActionIntent,
+      surfaceArticleWorkspace: fixtureOnlyWorkspace,
+    });
+
+    expect(
+      container.querySelector(
+        '[data-testid="workspace-article-editor-fixture-only"]',
+      ),
+    ).not.toBeNull();
+    expect(container.textContent).toContain("本地测试夹具输出已隐藏");
+    expect(container.textContent).toContain("测试夹具正文未载入");
+    expect(container.textContent).not.toContain("fixturePromptFingerprint");
+    expect(container.textContent).not.toContain("模板正文，不应进入可见");
+    expect(
+      container.querySelector(
+        '[data-testid="workspace-article-editor-open-preview"]',
+      ),
+    ).toBeNull();
+
+    const button = container.querySelector<HTMLButtonElement>(
+      '[data-testid="workspace-article-editor-action-revise"]',
+    );
+    act(() => {
+      button?.click();
+      button?.click();
+    });
+
+    expect(onActionIntent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        editedMarkdown: null,
+      }),
+    );
   });
 
   it("即使历史选择是图片组，也应默认回到文章编辑器主稿", () => {
@@ -571,7 +662,7 @@ describe("WorkspaceArticleEditorRightSurface", () => {
     expect(container.textContent).toContain("多轮检索后的公众号文章草稿");
     expect(container.textContent).toContain("这是经过多轮检索后写出的完整正文");
     expect(container.textContent).toContain("确认用户目标");
-    expect(container.textContent).toContain("流程图");
+    expect(container.textContent).not.toContain("流程图");
     expect(container.textContent).not.toContain("这是可编辑的文章正文");
   });
 
@@ -660,34 +751,23 @@ describe("WorkspaceArticleEditorRightSurface", () => {
     expect(button?.disabled).toBe(true);
   });
 
-  it("点击配图位应转换为文稿 inline 图片意图", () => {
+  it("不再把配图规划 metadata 渲染成可点击模板面板", () => {
     const onImageSlotIntent = vi.fn();
     const container = renderSurface({ onImageSlotIntent });
     const button = container.querySelector<HTMLButtonElement>(
       '[data-testid="workspace-article-editor-compact-image-slot-generate"][data-slot-id="hero"]',
     );
 
-    expect(button).not.toBeNull();
-    expect(button?.disabled).toBe(false);
-    expect(button?.textContent).toContain("生成");
-    act(() => {
-      button?.click();
-    });
-
-    expect(onImageSlotIntent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        anchorSectionTitle: "开场：为什么要把写作变成工作流",
-        anchorText: "首图",
-        editedMarkdown: expect.stringContaining("这是可编辑的文章正文"),
-        object: expect.objectContaining({ title: "公众号文章草稿" }),
-        prompt: "桌面端内容工厂写作流程图，中文标签",
-        slot: expect.objectContaining({
-          id: "hero",
-          title: "首图",
-          sectionId: "intro",
-        }),
-      }),
+    expect(button).toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid="workspace-article-editor-image-slots"]',
+      ),
+    ).toBeNull();
+    expect(container.textContent).not.toContain(
+      "桌面端内容工厂写作流程图，中文标签",
     );
+    expect(onImageSlotIntent).not.toHaveBeenCalled();
   });
 
   it("点击关联对象只在 Article Editor 内切换，不离开文章编辑器", () => {

@@ -474,7 +474,7 @@ mod tests {
     use super::*;
     use crate::runtime::RuntimeCoreError;
     use crate::WorkspaceSkillBindingAppDataSource;
-    use crate::{AgentAppDataSource, AutomationManagementAppDataSource};
+    use crate::{AutomationManagementAppDataSource, PluginDataSource};
     use crate::{AutomationOverviewAppDataSource, ConnectAppDataSource, DiagnosticsAppDataSource};
     use crate::{GatewayAppDataSource, KnowledgeAppDataSource, McpAppDataSource};
     use crate::{MediaAppDataSource, MemoryAppDataSource, ModelProviderAppDataSource};
@@ -494,7 +494,7 @@ mod tests {
     impl WorkspaceSkillBindingAppDataSource for ImageToolTestDataSource {}
     impl GatewayAppDataSource for ImageToolTestDataSource {}
     impl VoiceAppDataSource for ImageToolTestDataSource {}
-    impl AgentAppDataSource for ImageToolTestDataSource {}
+    impl PluginDataSource for ImageToolTestDataSource {}
     impl KnowledgeAppDataSource for ImageToolTestDataSource {}
     impl AutomationOverviewAppDataSource for ImageToolTestDataSource {}
     impl McpAppDataSource for ImageToolTestDataSource {}

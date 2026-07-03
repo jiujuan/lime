@@ -828,6 +828,7 @@ fn resolve_cli_image_generation_runner_config() -> Result<ImageGenerationRunnerC
     Ok(ImageGenerationRunnerConfig {
         endpoint: endpoint_override.unwrap_or_else(|| build_image_generation_endpoint(&host, port)),
         api_key,
+        request_body_format: Default::default(),
     })
 }
 

@@ -72,6 +72,7 @@ async fn execute_image_generation_task_should_support_gemini_generate_content_ex
         &ImageGenerationRunnerConfig {
             endpoint: format!("http://{address}/v1beta"),
             api_key: "gemini-test-key".to_string(),
+            request_body_format: Default::default(),
         },
     )
     .await
@@ -167,6 +168,7 @@ async fn execute_image_generation_task_should_classify_gemini_server_error() {
         &ImageGenerationRunnerConfig {
             endpoint: format!("http://{address}/v1beta"),
             api_key: "gemini-test-key".to_string(),
+            request_body_format: Default::default(),
         },
     )
     .await

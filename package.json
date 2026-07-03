@@ -5,7 +5,7 @@
   "workspaces": [
     "packages/*"
   ],
-  "version": "1.86.0",
+  "version": "1.87.0",
   "description": "AI content workspace for Chinese creators: desktop writing, research, prompt management, knowledge base, and multi-model workflows.",
   "keywords": [
     "ai",
@@ -238,17 +238,15 @@
     "agent-qc:process-owner-check": "node scripts/agent-qc/process-owner-check.mjs",
     "agent-qc:secret-scan": "node scripts/agent-qc/secret-scan.mjs",
     "agent-qc:objective-checklist": "node scripts/agent-qc/objective-checklist.mjs",
-    "smoke:agent-apps": "node scripts/agent-app/apps-smoke.mjs",
-    "agent-app:connector-production-preflight": "node scripts/agent-app/connector-production-preflight.mjs",
-    "agent-app:connector-production-delivery-gate": "node scripts/agent-app/connector-production-delivery-gate.mjs",
-    "agent-app:connector-production-webhook-delivery": "node scripts/agent-app/connector-production-webhook-delivery.mjs",
-    "agent-app:content-factory-signed-release-gate": "node scripts/agent-app/content-factory-signed-release-gate.mjs",
-    "smoke:content-factory-package": "node scripts/agent-app/content-factory-package-smoke.mjs",
-    "smoke:content-factory-current-turn": "node scripts/agent-app/content-factory-current-turn-smoke.mjs --host-generation-fixture",
-    "smoke:content-factory-current-turn:host-generation": "node scripts/agent-app/content-factory-current-turn-smoke.mjs --host-generation-fixture",
-    "smoke:content-factory-current-turn:cloud-release": "node scripts/agent-app/content-factory-current-turn-smoke.mjs --cloud-release-fixture --host-generation-fixture",
-    "smoke:content-factory-current-turn:cloud-release-host-generation": "node scripts/agent-app/content-factory-current-turn-smoke.mjs --cloud-release-fixture --host-generation-fixture",
-    "smoke:agent-app-lab": "node scripts/agent-app/lab-smoke.mjs"
+    "plugin:connector-production-preflight": "node scripts/plugin/connector-production-preflight.mjs",
+    "plugin:connector-production-delivery-gate": "node scripts/plugin/connector-production-delivery-gate.mjs",
+    "plugin:connector-production-webhook-delivery": "node scripts/plugin/connector-production-webhook-delivery.mjs",
+    "plugin:content-factory-signed-release-gate": "node scripts/plugin/content-factory-signed-release-gate.mjs",
+    "smoke:content-factory-package": "node scripts/plugin/content-factory-package-smoke.mjs",
+    "smoke:content-factory-current-turn": "node scripts/plugin/content-factory-current-turn-smoke.mjs --host-generation-fixture",
+    "smoke:content-factory-current-turn:host-generation": "node scripts/plugin/content-factory-current-turn-smoke.mjs --host-generation-fixture",
+    "smoke:content-factory-current-turn:cloud-release": "node scripts/plugin/content-factory-current-turn-smoke.mjs --cloud-release-fixture --host-generation-fixture",
+    "smoke:content-factory-current-turn:cloud-release-host-generation": "node scripts/plugin/content-factory-current-turn-smoke.mjs --cloud-release-fixture --host-generation-fixture"
   },
   "dependencies": {
     "@babel/standalone": "^7.29.0",

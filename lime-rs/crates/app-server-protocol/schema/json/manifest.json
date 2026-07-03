@@ -12,51 +12,51 @@
   "methods": [
     {
       "kind": "request",
-      "method": "agentAppHostLifecycle/list"
+      "method": "pluginHostLifecycle/list"
     },
     {
       "kind": "request",
-      "method": "agentAppInstalled/disabled/set"
+      "method": "pluginInstalled/disabled/set"
     },
     {
       "kind": "request",
-      "method": "agentAppInstalled/list"
+      "method": "pluginInstalled/list"
     },
     {
       "kind": "request",
-      "method": "agentAppInstalled/save"
+      "method": "pluginInstalled/save"
     },
     {
       "kind": "request",
-      "method": "agentAppInstalled/uninstall"
+      "method": "pluginInstalled/uninstall"
     },
     {
       "kind": "request",
-      "method": "agentAppInstalled/uninstall/rehearsal"
+      "method": "pluginInstalled/uninstall/rehearsal"
     },
     {
       "kind": "request",
-      "method": "agentAppLocalPackage/inspect"
+      "method": "pluginLocalPackage/inspect"
     },
     {
       "kind": "request",
-      "method": "agentAppPackage/fetchCloud"
+      "method": "pluginPackage/fetchCloud"
     },
     {
       "kind": "request",
-      "method": "agentAppShell/prepare"
+      "method": "pluginShell/prepare"
     },
     {
       "kind": "request",
-      "method": "agentAppUiRuntime/start"
+      "method": "pluginUiRuntime/start"
     },
     {
       "kind": "request",
-      "method": "agentAppUiRuntime/status"
+      "method": "pluginUiRuntime/status"
     },
     {
       "kind": "request",
-      "method": "agentAppUiRuntime/stop"
+      "method": "pluginUiRuntime/stop"
     },
     {
       "kind": "request",
@@ -1151,38 +1151,38 @@
       "RequestId"
     ],
     "v0": [
-      "AgentAppArticleWorkspaceContract",
-      "AgentAppArticleWorkspaceObject",
-      "AgentAppCloudReleaseDescriptor",
-      "AgentAppDeleteDataExecutionEvidence",
-      "AgentAppDeleteDataPostDeleteResidualAudit",
-      "AgentAppDeleteDataTargetEvidence",
-      "AgentAppFetchCloudPackageParams",
-      "AgentAppHistoryRestoreContract",
-      "AgentAppHostFunctionState",
-      "AgentAppHostLifecycleListResponse",
-      "AgentAppHostLifecycleSnapshot",
-      "AgentAppInstalledDisabledSetParams",
-      "AgentAppInstalledListResponse",
-      "AgentAppInstalledSaveParams",
-      "AgentAppLocalPackageInspectParams",
-      "AgentAppLocalPackageInspectResponse",
-      "AgentAppPackageCacheEntry",
-      "AgentAppPackageIdentity",
-      "AgentAppRightSurfaceContract",
-      "AgentAppShellPackageMount",
-      "AgentAppShellPrepareParams",
-      "AgentAppShellPrepareResponse",
-      "AgentAppTaskRuntimeContract",
-      "AgentAppUiRuntimeStartParams",
-      "AgentAppUiRuntimeStatusParams",
-      "AgentAppUiRuntimeStatusResponse",
-      "AgentAppUiRuntimeStopParams",
-      "AgentAppUninstallParams",
-      "AgentAppUninstallRehearsalParams",
-      "AgentAppUninstallRehearsalResponse",
-      "AgentAppUninstallRehearsalTarget",
-      "AgentAppUninstallResponse",
+      "PluginArticleWorkspaceContract",
+      "PluginArticleWorkspaceObject",
+      "PluginCloudReleaseDescriptor",
+      "PluginDeleteDataExecutionEvidence",
+      "PluginDeleteDataPostDeleteResidualAudit",
+      "PluginDeleteDataTargetEvidence",
+      "PluginFetchCloudPackageParams",
+      "PluginHistoryRestoreContract",
+      "PluginHostFunctionState",
+      "PluginHostLifecycleListResponse",
+      "PluginHostLifecycleSnapshot",
+      "PluginInstalledDisabledSetParams",
+      "PluginInstalledListResponse",
+      "PluginInstalledSaveParams",
+      "PluginLocalPackageInspectParams",
+      "PluginLocalPackageInspectResponse",
+      "PluginPackageCacheEntry",
+      "PluginPackageIdentity",
+      "PluginRightSurfaceContract",
+      "PluginShellPackageMount",
+      "PluginShellPrepareParams",
+      "PluginShellPrepareResponse",
+      "PluginTaskRuntimeContract",
+      "PluginUiRuntimeStartParams",
+      "PluginUiRuntimeStatusParams",
+      "PluginUiRuntimeStatusResponse",
+      "PluginUiRuntimeStopParams",
+      "PluginUninstallParams",
+      "PluginUninstallRehearsalParams",
+      "PluginUninstallRehearsalResponse",
+      "PluginUninstallRehearsalTarget",
+      "PluginUninstallResponse",
       "AgentAttachment",
       "AgentEvent",
       "AgentInput",

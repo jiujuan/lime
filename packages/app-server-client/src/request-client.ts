@@ -215,36 +215,36 @@ export interface AppServerClient {
   listWorkspaceRegisteredSkills(
     params: protocol.WorkspaceRegisteredSkillsListParams,
   ): protocol.JsonRpcRequest;
-  inspectAgentAppLocalPackage(
-    params: protocol.AgentAppLocalPackageInspectParams,
+  inspectPluginLocalPackage(
+    params: protocol.PluginLocalPackageInspectParams,
   ): protocol.JsonRpcRequest;
-  fetchAgentAppCloudPackage(
-    params: protocol.AgentAppFetchCloudPackageParams,
+  fetchPluginCloudPackage(
+    params: protocol.PluginFetchCloudPackageParams,
   ): protocol.JsonRpcRequest;
-  saveAgentAppInstalled(
-    params: protocol.AgentAppInstalledSaveParams,
+  savePluginInstalled(
+    params: protocol.PluginInstalledSaveParams,
   ): protocol.JsonRpcRequest;
-  listAgentAppInstalled(): protocol.JsonRpcRequest;
-  setAgentAppInstalledDisabled(
-    params: protocol.AgentAppInstalledDisabledSetParams,
+  listPluginInstalled(): protocol.JsonRpcRequest;
+  setPluginInstalledDisabled(
+    params: protocol.PluginInstalledDisabledSetParams,
   ): protocol.JsonRpcRequest;
-  previewAgentAppUninstall(
-    params: protocol.AgentAppUninstallRehearsalParams,
+  previewPluginUninstall(
+    params: protocol.PluginUninstallRehearsalParams,
   ): protocol.JsonRpcRequest;
-  uninstallAgentApp(
-    params: protocol.AgentAppUninstallParams,
+  uninstallPlugin(
+    params: protocol.PluginUninstallParams,
   ): protocol.JsonRpcRequest;
-  prepareAgentAppShell(
-    params: protocol.AgentAppShellPrepareParams,
+  preparePluginShell(
+    params: protocol.PluginShellPrepareParams,
   ): protocol.JsonRpcRequest;
-  startAgentAppUiRuntime(
-    params: protocol.AgentAppUiRuntimeStartParams,
+  startPluginUiRuntime(
+    params: protocol.PluginUiRuntimeStartParams,
   ): protocol.JsonRpcRequest;
-  getAgentAppUiRuntimeStatus(
-    params: protocol.AgentAppUiRuntimeStatusParams,
+  getPluginUiRuntimeStatus(
+    params: protocol.PluginUiRuntimeStatusParams,
   ): protocol.JsonRpcRequest;
-  stopAgentAppUiRuntime(
-    params: protocol.AgentAppUiRuntimeStopParams,
+  stopPluginUiRuntime(
+    params: protocol.PluginUiRuntimeStopParams,
   ): protocol.JsonRpcRequest;
   listKnowledgePacks(
     params: protocol.KnowledgeListPacksParams,

@@ -413,7 +413,7 @@ mod tests {
                 "apiKey": "sk-live-secret"
             },
             "metadata": {
-                "agentAppWorkflow": {
+                "pluginWorkflow": {
                     "eventSource": "worker_progress",
                     "safeLabel": "research"
                 },
@@ -437,11 +437,11 @@ mod tests {
         assert_eq!(payload["toolName"], "WebSearch");
         assert_eq!(payload["status"], "completed");
         assert_eq!(
-            payload["metadata"]["agentAppWorkflow"]["eventSource"],
+            payload["metadata"]["pluginWorkflow"]["eventSource"],
             "worker_progress"
         );
         assert_eq!(
-            payload["metadata"]["agentAppWorkflow"]["safeLabel"],
+            payload["metadata"]["pluginWorkflow"]["safeLabel"],
             "research"
         );
         assert_eq!(payload["prompt"]["redacted"], true);

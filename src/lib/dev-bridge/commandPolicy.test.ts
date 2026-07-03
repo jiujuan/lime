@@ -37,13 +37,13 @@ describe("commandPolicy", () => {
       expect(isBridgeTruthCommand(command)).toBe(false);
       expect(shouldDisallowMockFallbackCommand(command)).toBe(false);
     }
-    expect(isBridgeTruthCommand("agent_app_list_installed")).toBe(false);
-    expect(isBridgeTruthCommand("agent_app_launch_shell")).toBe(false);
+    expect(isBridgeTruthCommand("plugin_list_installed")).toBe(false);
+    expect(isBridgeTruthCommand("plugin_launch_shell")).toBe(false);
     expect(isBridgeTruthCommand("knowledge_list_packs")).toBe(false);
     expect(isBridgeTruthCommand("get_automation_jobs")).toBe(false);
     expect(isBridgeTruthCommand("project_memory_get")).toBe(false);
     for (const command of [
-      "agent_app_select_directory",
+      "plugin_select_directory",
       "save_layered_design_project_export",
       "read_layered_design_project_export",
       "recognize_layered_design_text",
@@ -105,10 +105,10 @@ describe("commandPolicy", () => {
     expect(isBridgeTruthCommand("workspace_ensure")).toBe(true);
     expect(shouldDisallowMockFallbackCommand("workspace_ensure")).toBe(true);
     for (const command of [
-      "agent_app_runtime_start_task",
-      "agent_app_runtime_cancel_task",
-      "agent_app_runtime_get_task",
-      "agent_app_runtime_submit_host_response",
+      "plugin_runtime_start_task",
+      "plugin_runtime_cancel_task",
+      "plugin_runtime_get_task",
+      "plugin_runtime_submit_host_response",
     ]) {
       expect(isBridgeTruthCommand(command)).toBe(false);
       expect(shouldDisallowMockFallbackCommand(command)).toBe(true);
@@ -307,11 +307,11 @@ describe("commandPolicy", () => {
       resolveDevBridgeCommandTimeoutProfile("agent_runtime_get_session"),
     ).toBe("default");
     expect(
-      resolveDevBridgeCommandTimeoutProfile("agent_app_runtime_get_task"),
+      resolveDevBridgeCommandTimeoutProfile("plugin_runtime_get_task"),
     ).toBe("agent-runtime");
     expect(
-      resolveDevBridgeCommandTimeoutProfile("agent_app_start_ui_runtime"),
-    ).toBe("agent-app-ui-runtime-start");
+      resolveDevBridgeCommandTimeoutProfile("plugin_start_ui_runtime"),
+    ).toBe("plugin-ui-runtime-start");
     expect(
       resolveDevBridgeCommandTimeoutProfile(
         "save_layered_design_project_export",
@@ -323,7 +323,7 @@ describe("commandPolicy", () => {
       ),
     ).toBe("layered-design-project");
     expect(
-      resolveDevBridgeCommandTimeoutProfile("agent_app_select_directory"),
+      resolveDevBridgeCommandTimeoutProfile("plugin_select_directory"),
     ).toBe("desktop-user-interaction");
     expect(
       resolveDevBridgeCommandTimeoutProfile("app_server_handle_json_lines", {
@@ -331,7 +331,7 @@ describe("commandPolicy", () => {
           lines: [
             JSON.stringify({
               id: "ui-runtime-start",
-              method: "agentAppUiRuntime/start",
+              method: "pluginUiRuntime/start",
               params: {
                 appId: "content-factory-sdk-fixture-app",
                 entryKey: "dashboard",
@@ -340,7 +340,7 @@ describe("commandPolicy", () => {
           ],
         },
       }),
-    ).toBe("agent-app-ui-runtime-start");
+    ).toBe("plugin-ui-runtime-start");
     expect(resolveDevBridgeCommandTimeoutProfile("execute_skill")).toBe(
       "default",
     );
@@ -436,7 +436,7 @@ describe("commandPolicy", () => {
           lines: [
             JSON.stringify({
               id: "local-package-inspect",
-              method: "agentAppLocalPackage/inspect",
+              method: "pluginLocalPackage/inspect",
               params: {
                 appDir:
                   "/Users/coso/Documents/dev/ai/limecloud/content-factory-app",
@@ -445,20 +445,20 @@ describe("commandPolicy", () => {
           ],
         },
       }),
-    ).toBe("agent-app-package-inspect");
+    ).toBe("plugin-package-inspect");
     expect(
       resolveDevBridgeCommandTimeoutProfile("app_server_handle_json_lines", {
         request: {
           lines: [
             JSON.stringify({
               id: "installed-save",
-              method: "agentAppInstalled/save",
+              method: "pluginInstalled/save",
               params: { state: { appId: "content-factory-app" } },
             }),
           ],
         },
       }),
-    ).toBe("agent-app-installed-write");
+    ).toBe("plugin-installed-write");
     expect(
       resolveDevBridgeCommandTimeoutProfile("app_server_handle_json_lines", {
         request: {

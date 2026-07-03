@@ -223,7 +223,7 @@ fn article_workspace_search_snapshot_payload(search_evidence: Value) -> Value {
     );
 
     let mut metadata = serde_json::Map::new();
-    metadata.insert("agentAppWorker".to_string(), Value::Object(worker));
+    metadata.insert("pluginWorker".to_string(), Value::Object(worker));
     metadata.insert(
         "contentFactoryWorkspacePatch".to_string(),
         Value::Object(patch),
@@ -803,17 +803,17 @@ async fn read_session_materializes_content_factory_workspace_patch_into_article_
             RuntimeEvent::new(
                 "runtime.error",
                 json!({
-                    "source": "agent_app_task_worker",
+                    "source": "plugin_task_worker",
                     "appId": "content-factory-app",
                     "taskId": "task-image-1",
                     "taskKind": "content.image.generate",
                     "turnId": "turn_article_workspace",
                     "status": "failed",
                     "errorCode": "worker_invalid_json_output",
-                    "errorMessage": "Agent App worker returned invalid JSON",
-                    "message": "Agent App task worker failed: Agent App worker returned invalid JSON",
+                    "errorMessage": "Plugin worker returned invalid JSON",
+                    "message": "Plugin task worker failed: Plugin worker returned invalid JSON",
                     "metadata": {
-                        "agentAppWorker": {
+                        "pluginWorker": {
                             "appId": "content-factory-app",
                             "taskId": "task-image-1",
                             "taskKind": "content.image.generate",
@@ -1098,7 +1098,7 @@ async fn read_session_materializes_content_factory_workspace_patch_into_article_
             },
             runtime_options: Some(RuntimeOptions {
                 metadata: Some(json!({
-                    "agent_app": {
+                    "plugin": {
                         "source": "right_surface_article_workspace",
                         "app_id": "content-factory-app",
                         "session_id": "sess_article_workspace",
@@ -1153,7 +1153,7 @@ async fn read_session_materializes_content_factory_workspace_patch_into_article_
                         "kind": "content_factory.workspace_patch",
                         "status": "ready",
                         "metadata": {
-                            "agentAppWorker": {
+                            "pluginWorker": {
                                 "appId": "content-factory-app",
                                 "taskId": "task-image-regenerate-1",
                                 "taskKind": "content.image.generate",
@@ -1379,17 +1379,17 @@ async fn read_session_marks_failed_article_draft_as_non_deliverable_when_article
             RuntimeEvent::new(
                 "runtime.error",
                 json!({
-                    "source": "agent_app_task_worker",
+                    "source": "plugin_task_worker",
                     "appId": "content-factory-app",
                     "taskId": "task-article-1",
                     "taskKind": "content.article.generate",
                     "turnId": "turn_article_workspace_failed",
                     "status": "failed",
                     "errorCode": "worker_invalid_json_output",
-                    "errorMessage": "Agent App worker returned invalid JSON",
-                    "message": "Agent App task worker failed: Agent App worker returned invalid JSON",
+                    "errorMessage": "Plugin worker returned invalid JSON",
+                    "message": "Plugin task worker failed: Plugin worker returned invalid JSON",
                     "metadata": {
-                        "agentAppWorker": {
+                        "pluginWorker": {
                             "appId": "content-factory-app",
                             "taskId": "task-article-1",
                             "taskKind": "content.article.generate",

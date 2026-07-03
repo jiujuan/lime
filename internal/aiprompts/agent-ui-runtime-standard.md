@@ -174,31 +174,31 @@ src/index.ts            -> barrel exports only
 
 ## 第二宿主复用基线
 
-Agent App Runtime 是当前第二个真实宿主基线：
+Plugin Runtime 是当前第二个真实宿主基线：
 
 ```text
 AgentRuntimeClient -> projectAgentUiState -> AgentUiProjectionView
 
-Agent App host run state
-  -> buildAgentAppStandardRuntimeEvents(...)
+Plugin host run state
+  -> buildPluginStandardRuntimeEvents(...)
   -> projectAgentUiState(...)
   -> AgentUiProjectionView
-  -> Agent App presentation adapter / action callback
+  -> Plugin presentation adapter / action callback
 ```
 
-`src/features/agent-app/runtime/agentRunProjectionState.ts` 负责把 Agent App host run state 经 `buildAgentAppStandardRuntimeEvents(...)` 投影成标准 execution events，并调用 `projectAgentUiState(...)` 生成标准 `AgentUiProjectionState`。`src/features/agent-app/ui/AgentRunHostDrawer.tsx` 必须生成 `standardProjectionState` 并传入 `AgentRunProjectionPanel`；`src/features/agent-app/ui/AgentRunProjectionPanel.tsx` 必须接收必填 `standardState` 并直接渲染 `AgentUiProjectionView`，不能只拼装 `UIMessagePartsView`、`ProcessTimelineView`、`ToolGroup`、`ExecutionGraphView` 等内部 primitives 来冒充标准入口，也不能继续渲染旧的 ordered parts / actions / artifacts / evidence / diagnostics 私有 DOM。
+`src/features/plugin/runtime/agentRunProjectionState.ts` 负责把 Plugin host run state 经 `buildPluginStandardRuntimeEvents(...)` 投影成标准 execution events，并调用 `projectAgentUiState(...)` 生成标准 `AgentUiProjectionState`。`src/features/plugin/ui/AgentRunHostDrawer.tsx` 必须生成 `standardProjectionState` 并传入 `AgentRunProjectionPanel`；`src/features/plugin/ui/AgentRunProjectionPanel.tsx` 必须接收必填 `standardState` 并直接渲染 `AgentUiProjectionView`，不能只拼装 `UIMessagePartsView`、`ProcessTimelineView`、`ToolGroup`、`ExecutionGraphView` 等内部 primitives 来冒充标准入口，也不能继续渲染旧的 ordered parts / actions / artifacts / evidence / diagnostics 私有 DOM。
 
-Agent App 可以继续保留自己的 summary、运行抽屉、业务对象 presentation adapter 和 `onAction` 回调；这些属于宿主 presentation，不是 runtime fact source。宿主 action 仍必须经 callback 交还宿主，由宿主调用 current action respond 或业务 route，不得让 UI package 直接调用 App Server。
+Plugin 可以继续保留自己的 summary、运行抽屉、业务对象 presentation adapter 和 `onAction` 回调；这些属于宿主 presentation，不是 runtime fact source。宿主 action 仍必须经 callback 交还宿主，由宿主调用 current action respond 或业务 route，不得让 UI package 直接调用 App Server。
 
 标准 UI 必须支持多 action controls。`AgentRuntimeEventProjection.action` 保持兼容单按钮读取，`AgentRuntimeEventProjection.actions` 承接 approve / reject / answer / retry / stop 等多按钮 intent；`agent-runtime-ui` 只能渲染这些 intent 并回调宿主，不得自行解释业务结果。
 
-Agent App 第二宿主的 runtime client 接入以 `src/features/agent-app/runtime/agentRuntimeClientApi.ts` 为 current adapter。`AgentRuntimeCapabilityHost` 可以直接注入 `AgentRuntimeClient`，由该 adapter 把 `lime.agent.startTask/getTask/cancelTask/submitHostResponse` 分别投影到 `startTurn/readThread/cancelTurn/respondAction`。`startTask` 必须携带已经存在的 `sessionId`，缺失时 fail closed，不在前端伪造 session 或独立 `readTask` 协议。adapter 负责写入 `runtimeOptions.hostOptions.asterChatRequest`，并保留 `turn_config` 镜像，保证后端 host 与 App Server backend 都能读取同一份 provider / 权限 / sandbox / system prompt / metadata 配置。`readThread` 返回的 `detail.thread_read` / `detail.threadRead` 是 Agent App host replay artifact、tool call 和 evidence 的 read model 事实源。
+Plugin 第二宿主的 runtime client 接入以 `src/features/plugin/runtime/agentRuntimeClientApi.ts` 为 current adapter。`AgentRuntimeCapabilityHost` 可以直接注入 `AgentRuntimeClient`，由该 adapter 把 `lime.agent.startTask/getTask/cancelTask/submitHostResponse` 分别投影到 `startTurn/readThread/cancelTurn/respondAction`。`startTask` 必须携带已经存在的 `sessionId`，缺失时 fail closed，不在前端伪造 session 或独立 `readTask` 协议。adapter 负责写入 `runtimeOptions.hostOptions.asterChatRequest`，并保留 `turn_config` 镜像，保证后端 host 与 App Server backend 都能读取同一份 provider / 权限 / sandbox / system prompt / metadata 配置。`readThread` 返回的 `detail.thread_read` / `detail.threadRead` 是 Plugin host replay artifact、tool call 和 evidence 的 read model 事实源。
 
-Agent App 默认运行页必须通过 `src/features/agent-app/runtime/agentRuntimeAppServerClient.ts` 先调用 App Server current `agentSession/start` 创建或绑定 session，再把该 sessionId 交给 `agentRuntimeClientApi.ts` 进入 `startTurn/readThread/cancelTurn/respondAction`。`readSession -> readThread` 的通用 lifecycle 适配必须复用 `@limecloud/agent-runtime-client/sessionGateway` 的 `createAgentRuntimeClientFromSessionGateway(...)`；Agent App feature 只保留 `agent_app.task` business object session resolver 与默认页面装配，不得重新实现私有 session gateway。renderer 运行时代码不得为了取 session gateway 适配器而从 `@limecloud/agent-runtime-client` 根入口导入运行时值，否则会把 Node 侧 App Server client 打进前端包。`src/features/agent-app/ui/AgentAppRuntimePage.tsx` 默认注入 `createDefaultAgentAppRuntimeHostOptions()`；这条默认宿主链路不得在标准 client 失败后回退 `agent_app_runtime_*`、renderer mock 或 desktop-host default mock，而应 fail closed。
+Plugin 默认运行页必须通过 `src/features/plugin/runtime/agentRuntimeAppServerClient.ts` 先调用 App Server current `agentSession/start` 创建或绑定 session，再把该 sessionId 交给 `agentRuntimeClientApi.ts` 进入 `startTurn/readThread/cancelTurn/respondAction`。`readSession -> readThread` 的通用 lifecycle 适配必须复用 `@limecloud/agent-runtime-client/sessionGateway` 的 `createAgentRuntimeClientFromSessionGateway(...)`；Plugin feature 只保留 `plugin.task` business object session resolver 与默认页面装配，不得重新实现私有 session gateway。renderer 运行时代码不得为了取 session gateway 适配器而从 `@limecloud/agent-runtime-client` 根入口导入运行时值，否则会把 Node 侧 App Server client 打进前端包。`src/features/plugin/ui/PluginRuntimePage.tsx` 默认注入 `createDefaultPluginRuntimeHostOptions()`；这条默认宿主链路不得在标准 client 失败后回退 `plugin_runtime_*`、renderer mock 或 desktop-host default mock，而应 fail closed。
 
-`AgentRuntimeCapabilityHost` 默认不再隐式回退 `agent_app_runtime_*` compat facade：没有注入标准 `AgentRuntimeClient`，也没有显式传入 compat `api` 时必须 fail closed。`src/lib/api/agentAppRuntime.ts` 与 `agent_app_runtime_*` 只保留为显式兼容入口和迁移期守卫，服务尚未迁完的既有桌面路径；新增第二宿主能力必须优先走 `AgentRuntimeClient` adapter。compat facade 只能委托、适配和退场，不得复制运行时提交、read model 拼装、tool replay 或 mock fallback。
+`AgentRuntimeCapabilityHost` 默认不再隐式回退 `plugin_runtime_*` compat facade：没有注入标准 `AgentRuntimeClient`，也没有显式传入 compat `api` 时必须 fail closed。`src/lib/api/pluginRuntime.ts` 与 `plugin_runtime_*` 只保留为显式兼容入口和迁移期守卫，服务尚未迁完的既有桌面路径；新增第二宿主能力必须优先走 `AgentRuntimeClient` adapter。compat facade 只能委托、适配和退场，不得复制运行时提交、read model 拼装、tool replay 或 mock fallback。
 
-DevBridge policy 中 `agent_app_runtime_*` 必须归类为 no-mock compat：它们可以 fail closed、走真实 Electron Desktop Host / App Server current 通道或作为迁移期显式兼容入口，但不得继续放在 `bridgeTruthCommands` 里充当后续演进事实源，也不得进入 `mockPriorityCommands`、desktop-host default mock 或 renderer mock fallback。
+DevBridge policy 中 `plugin_runtime_*` 必须归类为 no-mock compat：它们可以 fail closed、走真实 Electron Desktop Host / App Server current 通道或作为迁移期显式兼容入口，但不得继续放在 `bridgeTruthCommands` 里充当后续演进事实源，也不得进入 `mockPriorityCommands`、desktop-host default mock 或 renderer mock fallback。
 
 ## App Server 与 Runtime 配合
 
@@ -254,16 +254,16 @@ Electron 只作为 Desktop Host bridge 和 sidecar lifecycle host。新增 runti
 20. `agent_runtime_*` 不得作为新增 current 能力证据。
 21. mock fallback 只能在测试夹具中显式使用。
 22. 文档与路线图不得引导新能力回到旧命令或旧 projection 事实源。
-23. Agent App Runtime 的标准 projection panel 必须渲染 `AgentUiProjectionView`，证明第二宿主消费同一个 UI 入口。
+23. Plugin Runtime 的标准 projection panel 必须渲染 `AgentUiProjectionView`，证明第二宿主消费同一个 UI 入口。
 24. `agent-runtime-ui` 的 `index.ts` 必须保持 barrel exports，React primitives 必须按 messages / processTimeline / executionGraph / runtimeFacts / projectionView 等职责拆分。
 25. `agent-ui-contracts` 的 `index.ts` 只能做 barrel exports，events / runtime / projection / messages / timeline / graph 必须按职责拆分。
-26. 标准 UI 不得恢复旧私有 tree 命名或旧 Agent App `data-agent-run-projection-*` DOM；过程结构以 message parts、process timeline、execution graph 和 runtime facts 为标准 surface。
+26. 标准 UI 不得恢复旧私有 tree 命名或旧 Plugin `data-agent-run-projection-*` DOM；过程结构以 message parts、process timeline、execution graph 和 runtime facts 为标准 surface。
 27. `agent-runtime-ui` 用户可见文案必须可由 labels / formatter props 注入；默认 fallback 不得替代宿主五语言 i18n。
-28. Agent App 第二宿主必须支持注入标准 `AgentRuntimeClient`，并通过 `startTurn/readThread/cancelTurn/respondAction` 进入 App Server current 主链；没有标准 client 或显式 compat `api` 时必须 fail closed。
-29. Agent App 标准 client adapter 不得依赖 `safeInvoke`、legacy task command string、renderer mock、desktop-host default mock 或独立 task read protocol。
+28. Plugin 第二宿主必须支持注入标准 `AgentRuntimeClient`，并通过 `startTurn/readThread/cancelTurn/respondAction` 进入 App Server current 主链；没有标准 client 或显式 compat `api` 时必须 fail closed。
+29. Plugin 标准 client adapter 不得依赖 `safeInvoke`、legacy task command string、renderer mock、desktop-host default mock 或独立 task read protocol。
 30. `@limecloud/agent-runtime-client/sessionGateway` 必须提供 browser-safe 的 `createAgentRuntimeClientFromSessionGateway(...)`，把已有 App Server session gateway 适配成 `startTurn/readThread/cancelTurn/respondAction` lifecycle client；宿主 feature 不得复制这段通用映射，也不得从根入口导入该运行时值。
-31. Agent App 默认运行页必须注入 App Server-backed 标准 runtime host options，通过 `agentSession/start` 创建 session，再进入标准 client adapter；页面回归必须证明默认 Host Bridge 调用 App Server current methods，且未调用 `agent_app_runtime_*` compat facade。
-32. `agent_app_runtime_*` 不得停留在 DevBridge `bridgeTruthCommands`；只允许作为 no-mock compat residual 和显式兼容入口，且退出条件是所有既有桌面路径迁到标准 `AgentRuntimeClient` / App Server lifecycle 后删除 `src/lib/api/agentAppRuntime.ts`。
+31. Plugin 默认运行页必须注入 App Server-backed 标准 runtime host options，通过 `agentSession/start` 创建 session，再进入标准 client adapter；页面回归必须证明默认 Host Bridge 调用 App Server current methods，且未调用 `plugin_runtime_*` compat facade。
+32. `plugin_runtime_*` 不得停留在 DevBridge `bridgeTruthCommands`；只允许作为 no-mock compat residual 和显式兼容入口，且退出条件是所有既有桌面路径迁到标准 `AgentRuntimeClient` / App Server lifecycle 后删除 `src/lib/api/pluginRuntime.ts`。
 
 最低验证入口：
 
@@ -285,7 +285,7 @@ npm run test:contracts
 ## 下一步收缩顺序
 
 1. 给 `agent-ui-contracts` 增加更清晰的 event taxonomy / schema fixture，减少 string-only 事件漂移。
-2. 给第二宿主补 Agent App 专项 Electron fixture，直接证明 `AgentRuntimeClient -> Agent App host run state -> projectAgentUiState -> AgentUiProjectionView` 的完整链路；聚合 `verify:gui-smoke` 已作为桌面壳不回归证据，但不能替代第二宿主专项闭环。
-3. 继续收缩默认 `agent_app_runtime_*` compat facade；当前 DevBridge 已降为 no-mock compat residual，下一刀应删除或替换未注入标准 client 时的默认 fallback。
+2. 给第二宿主补 Plugin 专项 Electron fixture，直接证明 `AgentRuntimeClient -> Plugin host run state -> projectAgentUiState -> AgentUiProjectionView` 的完整链路；聚合 `verify:gui-smoke` 已作为桌面壳不回归证据，但不能替代第二宿主专项闭环。
+3. 继续收缩默认 `plugin_runtime_*` compat facade；当前 DevBridge 已降为 no-mock compat residual，下一刀应删除或替换未注入标准 client 时的默认 fallback。
 4. 收缩主聊天旧 projection 的兼容导出名和旧生成物。
 5. 将 `agentUiSubagentsViewModel.ts` 的 host-neutral selector 分批下沉为标准 Subagents selector，保留宿主业务 action route，并删除 workspace / 产品测试里的旧命名 residual。

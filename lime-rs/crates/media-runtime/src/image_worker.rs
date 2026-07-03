@@ -20,6 +20,28 @@ pub const IMAGE_TASK_MAX_PARALLEL_REQUESTS: usize = 3;
 pub struct ImageGenerationRunnerConfig {
     pub endpoint: String,
     pub api_key: String,
+    pub request_body_format: ImageGenerationRequestBodyFormat,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImageGenerationRequestBodyFormat {
+    OpenaiImages,
+    AgnesImages,
+}
+
+impl Default for ImageGenerationRequestBodyFormat {
+    fn default() -> Self {
+        Self::OpenaiImages
+    }
+}
+
+impl ImageGenerationRequestBodyFormat {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::OpenaiImages => "openai_images",
+            Self::AgnesImages => "agnes_images",
+        }
+    }
 }
 
 pub fn normalize_image_generation_service_host(host: &str) -> String {

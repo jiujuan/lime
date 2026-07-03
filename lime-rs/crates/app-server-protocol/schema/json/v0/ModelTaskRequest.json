@@ -101,7 +101,7 @@
     },
     "ModelTaskSource": {
       "enum": [
-        "agent_app",
+        "plugin",
         "agent_turn",
         "automation",
         "media_task_artifact",

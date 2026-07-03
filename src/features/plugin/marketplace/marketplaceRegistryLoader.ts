@@ -1,28 +1,28 @@
 import {
-  listInstalledAgentApps,
-  reviewLocalAgentAppPackage,
-  saveInstalledAgentAppState,
-} from "@/lib/api/agentApps";
+  listInstalledPlugins,
+  reviewLocalPluginPackage,
+  saveInstalledPluginState,
+} from "@/lib/api/plugins";
 import {
   getClientPluginMarketplace,
   OemCloudControlPlaneError,
 } from "@/lib/api/oemCloudControlPlane";
 import type {
   HostCapabilityProfile,
-  InstalledAgentAppState,
-} from "@/features/agent-app/types";
-import type { InstalledAgentAppStateListResult } from "@/features/agent-app/install/installedAppState";
-import { repairStaleInstalledAgentAppReadinessList } from "@/features/agent-app/install/staleReadinessRepair";
-import { buildAppCenterRuntimeCapabilityProfile } from "@/features/agent-app/runtime/appCenterRuntimeProfile";
+  InstalledPluginState,
+} from "@/features/plugin/types";
+import type { InstalledPluginStateListResult } from "@/features/plugin/install/installedAppState";
+import { repairStaleInstalledPluginReadinessList } from "@/features/plugin/install/staleReadinessRepair";
+import { buildAppCenterRuntimeCapabilityProfile } from "@/features/plugin/runtime/appCenterRuntimeProfile";
 import type {
   PluginRegistryItem,
   PluginRegistryProjectionInput,
 } from "../manifest/types";
-import { projectPluginRegistryFromInstalledAgentApps } from "../installed/installedAgentApps";
+import { projectPluginRegistryFromInstalledPlugins } from "../installed/installedPlugins";
 import {
-  marketplaceItemMatchesInstalledAgentAppPackage,
-  projectPluginMarketplaceRegistryFromInstalledAgentApps,
-  projectPluginMarketplaceRegistryInputsFromInstalledAgentApps,
+  marketplaceItemMatchesInstalledPluginPackage,
+  projectPluginMarketplaceRegistryFromInstalledPlugins,
+  projectPluginMarketplaceRegistryInputsFromInstalledPlugins,
 } from "./pluginMarketplace";
 import type {
   PluginMarketplaceItem,
@@ -37,7 +37,7 @@ export interface PluginMarketplaceQuery {
 
 export interface PluginMarketplaceRegistrySnapshot {
   marketplace: PluginMarketplaceListResponse;
-  installed: InstalledAgentAppStateListResult;
+  installed: InstalledPluginStateListResult;
   projectionInputs: PluginRegistryProjectionInput[];
   registry: PluginRegistryItem[];
 }
@@ -47,9 +47,9 @@ export interface PluginMarketplaceRegistryLoaderDeps {
     tenantId: string,
     query?: PluginMarketplaceQuery,
   ) => Promise<PluginMarketplaceListResponse>;
-  listInstalled?: () => Promise<InstalledAgentAppStateListResult>;
-  reviewLocalPackage?: typeof reviewLocalAgentAppPackage;
-  saveInstalledState?: typeof saveInstalledAgentAppState;
+  listInstalled?: () => Promise<InstalledPluginStateListResult>;
+  reviewLocalPackage?: typeof reviewLocalPluginPackage;
+  saveInstalledState?: typeof saveInstalledPluginState;
   profile?: HostCapabilityProfile;
 }
 
@@ -79,7 +79,7 @@ function marketplaceItemFromInstalledInput(
   input: PluginRegistryProjectionInput,
 ): PluginMarketplaceItem {
   const contract = input.contract;
-  const firstAgentApp = contract.agentApps[0];
+  const firstPluginUi = contract.ui[0];
   const category = contract.categories[0];
   return {
     pluginKey: contract.id,
@@ -93,9 +93,9 @@ function marketplaceItemFromInstalledInput(
     categories: contract.categories,
     keywords: contract.keywords,
     capabilities: contract.capabilities,
-    sourceKind: "agent_app_release",
+    sourceKind: "plugin_catalog",
     sourceRef: contract.provenance.sourceId,
-    appId: firstAgentApp?.id ?? contract.id,
+    appId: firstPluginUi?.id ?? contract.id,
     install: contract.install
       ? {
           local: contract.install.local,
@@ -121,7 +121,7 @@ function marketplaceItemFromInstalledInput(
       interface: contract.interface,
       install: contract.install,
       skills: contract.skills,
-      agentApps: contract.agentApps,
+      ui: contract.ui,
       subagents: contract.subagents,
       workflows: contract.workflows,
       connectors: contract.connectors,
@@ -158,8 +158,8 @@ function readRecord(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
-function installedAgentAppManifestSummary(
-  state: InstalledAgentAppState,
+function installedPluginManifestSummary(
+  state: InstalledPluginState,
 ): PluginMarketplaceItem["manifestSummary"] {
   const manifest = state.manifest;
   const manifestRecord = manifest as unknown as Record<string, unknown>;
@@ -212,7 +212,7 @@ function mergeManifestSummary(
     : {};
   mergeSummaryRecord(next, installedRecord, [
     "skills",
-    "agentApps",
+    "ui",
     "subagents",
     "workflows",
     "connectors",
@@ -239,7 +239,7 @@ function mergeManifestSummary(
 
 function enrichMarketplaceItemWithInstalledStateSummary(params: {
   item: PluginMarketplaceItem;
-  state?: InstalledAgentAppState;
+  state?: InstalledPluginState;
 }): PluginMarketplaceItem {
   if (!params.state) {
     return params.item;
@@ -248,7 +248,7 @@ function enrichMarketplaceItemWithInstalledStateSummary(params: {
     ...params.item,
     manifestSummary: mergeManifestSummary(
       params.item.manifestSummary,
-      installedAgentAppManifestSummary(params.state),
+      installedPluginManifestSummary(params.state),
     ),
   };
 }
@@ -310,16 +310,16 @@ function enrichMarketplaceItemWithInstalledManifest(params: {
 
 function mergeInstalledManifestFieldsIntoMarketplace(params: {
   marketplace: PluginMarketplaceListResponse;
-  installedAgentApps: readonly InstalledAgentAppState[];
+  installedPlugins: readonly InstalledPluginState[];
 }): PluginMarketplaceListResponse {
-  const projection = projectPluginRegistryFromInstalledAgentApps(
-    params.installedAgentApps,
+  const projection = projectPluginRegistryFromInstalledPlugins(
+    params.installedPlugins,
   );
   const installedItems = projection.projectionInputs.map((input) => {
     const item = marketplaceItemFromInstalledInput(input);
     return enrichMarketplaceItemWithInstalledStateSummary({
       item,
-      state: params.installedAgentApps.find(
+      state: params.installedPlugins.find(
         (state) => state.appId === item.appId,
       ),
     });
@@ -333,7 +333,7 @@ function mergeInstalledManifestFieldsIntoMarketplace(params: {
       ),
   );
   const installedStatesByAppId = new Map(
-    params.installedAgentApps.map((state) => [state.appId, state] as const),
+    params.installedPlugins.map((state) => [state.appId, state] as const),
   );
   const representedAppIds = new Set<string>();
   const representedPluginKeys = new Set<string>();
@@ -357,7 +357,7 @@ function mergeInstalledManifestFieldsIntoMarketplace(params: {
     if (
       !installedState ||
       !installedItem ||
-      !marketplaceItemMatchesInstalledAgentAppPackage(item, installedState)
+      !marketplaceItemMatchesInstalledPluginPackage(item, installedState)
     ) {
       return item;
     }
@@ -380,14 +380,14 @@ function mergeInstalledManifestFieldsIntoMarketplace(params: {
 }
 
 function buildLocalMarketplaceRegistrySnapshot(
-  installed: InstalledAgentAppStateListResult,
+  installed: InstalledPluginStateListResult,
 ): PluginMarketplaceRegistrySnapshot {
-  const installedAgentApps: readonly InstalledAgentAppState[] =
+  const installedPlugins: readonly InstalledPluginState[] =
     installed.states;
   const projection =
-    projectPluginRegistryFromInstalledAgentApps(installedAgentApps);
+    projectPluginRegistryFromInstalledPlugins(installedPlugins);
   const installedByAppId = new Map(
-    installedAgentApps.map((state) => [state.appId, state] as const),
+    installedPlugins.map((state) => [state.appId, state] as const),
   );
   const installedItems = projection.projectionInputs.map((input) => {
     const item = marketplaceItemFromInstalledInput(input);
@@ -412,16 +412,16 @@ function buildLocalMarketplaceRegistrySnapshot(
     marketplace,
     installed,
     projectionInputs:
-      projectPluginMarketplaceRegistryInputsFromInstalledAgentApps(
+      projectPluginMarketplaceRegistryInputsFromInstalledPlugins(
         marketplace,
         {
-          installedAgentApps,
+          installedPlugins,
         },
       ),
-    registry: projectPluginMarketplaceRegistryFromInstalledAgentApps(
+    registry: projectPluginMarketplaceRegistryFromInstalledPlugins(
       marketplace,
       {
-        installedAgentApps,
+        installedPlugins,
       },
     ),
   };
@@ -433,19 +433,19 @@ export async function loadPluginMarketplaceRegistry(
   deps: PluginMarketplaceRegistryLoaderDeps = {},
 ): Promise<PluginMarketplaceRegistrySnapshot> {
   const getMarketplace = deps.getMarketplace ?? getClientPluginMarketplace;
-  const listInstalled = deps.listInstalled ?? listInstalledAgentApps;
+  const listInstalled = deps.listInstalled ?? listInstalledPlugins;
   const normalizedTenantId = tenantId.trim();
   const loadedInstalled = await listInstalled();
   let installed = loadedInstalled;
   try {
-    const repairedStates = await repairStaleInstalledAgentAppReadinessList(
+    const repairedStates = await repairStaleInstalledPluginReadinessList(
       loadedInstalled.states,
       deps.profile ?? buildAppCenterRuntimeCapabilityProfile(),
       {
         reviewLocalPackage:
-          deps.reviewLocalPackage ?? reviewLocalAgentAppPackage,
+          deps.reviewLocalPackage ?? reviewLocalPluginPackage,
         saveInstalledState:
-          deps.saveInstalledState ?? saveInstalledAgentAppState,
+          deps.saveInstalledState ?? saveInstalledPluginState,
       },
     );
     if (repairedStates !== loadedInstalled.states) {
@@ -456,7 +456,7 @@ export async function loadPluginMarketplaceRegistry(
     }
   } catch (error) {
     console.warn(
-      "[plugin-marketplace] stale Agent App readiness repair failed",
+      "[plugin-marketplace] stale Plugin readiness repair failed",
       error,
     );
   }
@@ -476,27 +476,27 @@ export async function loadPluginMarketplaceRegistry(
     return buildLocalMarketplaceRegistrySnapshot(installed);
   }
 
-  const installedAgentApps: readonly InstalledAgentAppState[] =
+  const installedPlugins: readonly InstalledPluginState[] =
     installed.states;
   const enrichedMarketplace = mergeInstalledManifestFieldsIntoMarketplace({
     marketplace,
-    installedAgentApps,
+    installedPlugins,
   });
 
   return {
     marketplace: enrichedMarketplace,
     installed,
     projectionInputs:
-      projectPluginMarketplaceRegistryInputsFromInstalledAgentApps(
+      projectPluginMarketplaceRegistryInputsFromInstalledPlugins(
         enrichedMarketplace,
         {
-          installedAgentApps,
+          installedPlugins,
         },
       ),
-    registry: projectPluginMarketplaceRegistryFromInstalledAgentApps(
+    registry: projectPluginMarketplaceRegistryFromInstalledPlugins(
       enrichedMarketplace,
       {
-        installedAgentApps,
+        installedPlugins,
       },
     ),
   };

@@ -41,7 +41,7 @@ async fn article_workspace_worker_evidence_merges_event_metadata_with_patch_evid
                     "kind": "content_factory.workspace_patch",
                     "title": "Content Factory workspace patch",
                     "metadata": {
-                        "agentAppWorker": {
+                        "pluginWorker": {
                             "appId": "content-factory-app",
                             "taskId": "task-article",
                             "taskKind": "content.article.generate",

@@ -1,11 +1,11 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import contentFactoryFixture from "@/features/agent-app/testing/fixtures/content-factory-app.json";
-import { buildPackageIdentity } from "@/features/agent-app/install/packageIdentity";
-import { normalizeManifest } from "@/features/agent-app/manifest/normalizeManifest";
-import { parseManifest } from "@/features/agent-app/manifest/parseManifest";
-import type { InstalledAgentAppState } from "@/features/agent-app/types";
+import contentFactoryFixture from "@/features/plugin/testing/fixtures/content-factory-app.json";
+import { buildPackageIdentity } from "@/features/plugin/install/packageIdentity";
+import { normalizeManifest } from "@/features/plugin/manifest/normalizeManifest";
+import { parseManifest } from "@/features/plugin/manifest/parseManifest";
+import type { InstalledPluginState } from "@/features/plugin/types";
 import { changeLimeLocale, getLimeI18n } from "@/i18n/createI18n";
 import type { TeamMemorySnapshot } from "@/lib/teamMemorySync";
 import type { ServiceSkillHomeItem } from "../service-skills/types";
@@ -38,7 +38,7 @@ const mockResolveOemCloudRuntimeContext = vi.hoisted(() => vi.fn());
 const mockGetOemCloudBootstrapSnapshot = vi.hoisted(() => vi.fn());
 const mockUseGlobalMediaGenerationDefaults = vi.hoisted(() => vi.fn());
 const mockInstallSkillFromPromptInstruction = vi.hoisted(() => vi.fn());
-const mockListInstalledAgentApps = vi.hoisted(() => vi.fn());
+const mockListInstalledPlugins = vi.hoisted(() => vi.fn());
 
 vi.mock("../utils/browserAssistPreheat", () => ({
   preheatBrowserAssistInBackground: mockPreheatBrowserAssistInBackground,
@@ -77,9 +77,9 @@ vi.mock("@/hooks/useGlobalMediaGenerationDefaults", () => ({
     mockUseGlobalMediaGenerationDefaults(),
 }));
 
-vi.mock("@/lib/api/agentApps", () => ({
-  AGENT_APPS_CHANGED_EVENT: "lime:agent-apps-changed",
-  listInstalledAgentApps: () => mockListInstalledAgentApps(),
+vi.mock("@/lib/api/plugins", () => ({
+  PLUGINS_CHANGED_EVENT: "lime:plugins-changed",
+  listInstalledPlugins: () => mockListInstalledPlugins(),
 }));
 
 vi.mock("@/lib/skills/skillInstallPrompt", async () => {
@@ -148,7 +148,7 @@ function createDeferred<T>() {
   return { promise, resolve, reject };
 }
 
-function createInstalledContentFactory(): InstalledAgentAppState {
+function createInstalledContentFactory(): InstalledPluginState {
   const parsedManifest = parseManifest(contentFactoryFixture);
   const manifest = normalizeManifest(parsedManifest);
   return {
@@ -159,7 +159,7 @@ function createInstalledContentFactory(): InstalledAgentAppState {
       loadedAt: "2026-06-28T00:00:00.000Z",
     }),
     manifest,
-    projection: {} as InstalledAgentAppState["projection"],
+    projection: {} as InstalledPluginState["projection"],
     readiness: {
       appId: manifest.appId,
       status: "ready",
@@ -173,11 +173,11 @@ function createInstalledContentFactory(): InstalledAgentAppState {
     },
     installMode: "in_lime",
     runtimeProfileSummary:
-      {} as InstalledAgentAppState["runtimeProfileSummary"],
-    setup: {} as InstalledAgentAppState["setup"],
+      {} as InstalledPluginState["runtimeProfileSummary"],
+    setup: {} as InstalledPluginState["setup"],
     installedAt: "2026-06-28T00:00:00.000Z",
     updatedAt: "2026-06-28T00:00:00.000Z",
-  } as InstalledAgentAppState;
+  } as InstalledPluginState;
 }
 
 function createGithubSiteSkill(): ServiceSkillHomeItem {
@@ -586,7 +586,7 @@ describe("useWorkspaceSendActions", () => {
     mockResolveImageWorkbenchCommandRequest.mockReturnValue(null);
     mockPrepareImageWorkbenchSkillSend.mockReturnValue(true);
     mockEnsureSessionForCommandMetadata.mockResolvedValue(null);
-    mockListInstalledAgentApps.mockResolvedValue({
+    mockListInstalledPlugins.mockResolvedValue({
       states: [],
       issues: [],
     });
@@ -711,13 +711,13 @@ describe("useWorkspaceSendActions", () => {
     }
   });
 
-  it("普通对话挂载和发送不应查询 Agent Apps 列表", async () => {
+  it("普通对话挂载和发送不应查询 Plugins 列表", async () => {
     const harness = mountHook({
       input: "帮我整理一下今天的重要新闻",
     });
 
     try {
-      expect(mockListInstalledAgentApps).not.toHaveBeenCalled();
+      expect(mockListInstalledPlugins).not.toHaveBeenCalled();
       await act(async () => {
         const started = await harness
           .getValue()
@@ -726,20 +726,20 @@ describe("useWorkspaceSendActions", () => {
       });
 
       expect(mockSendMessage).toHaveBeenCalledTimes(1);
-      expect(mockListInstalledAgentApps).not.toHaveBeenCalled();
+      expect(mockListInstalledPlugins).not.toHaveBeenCalled();
     } finally {
       harness.unmount();
     }
   });
 
-  it("未安装内容工厂时 @内容工厂 不应注入 Agent App 激活 metadata", async () => {
+  it("未安装内容工厂时 @内容工厂 不应注入 Plugin 激活 metadata", async () => {
     const harness = mountHook({
       input: "@内容工厂 写一篇公众号文章",
     });
     mockEnsureSessionForCommandMetadata.mockResolvedValueOnce(
       "session-plugin-1",
     );
-    mockListInstalledAgentApps.mockResolvedValueOnce({
+    mockListInstalledPlugins.mockResolvedValueOnce({
       states: [],
       issues: [],
     });
@@ -752,7 +752,7 @@ describe("useWorkspaceSendActions", () => {
         expect(started).toBe(true);
       });
 
-      expect(mockListInstalledAgentApps).toHaveBeenCalledTimes(1);
+      expect(mockListInstalledPlugins).toHaveBeenCalledTimes(1);
       expect(mockSendMessage).toHaveBeenCalledTimes(1);
       expect(mockSendMessage.mock.calls[0]?.[0]).toBe(
         "@内容工厂 写一篇公众号文章",
@@ -769,14 +769,14 @@ describe("useWorkspaceSendActions", () => {
     }
   });
 
-  it("@内容工厂 安装后应解析为 Agent App 激活 metadata，并跳过图片命令解析", async () => {
+  it("@内容工厂 安装后应解析为 Plugin 激活 metadata，并跳过图片命令解析", async () => {
     const harness = mountHook({
       input: "@内容工厂 写一篇公众号文章",
     });
     mockEnsureSessionForCommandMetadata.mockResolvedValueOnce(
       "session-plugin-1",
     );
-    mockListInstalledAgentApps.mockResolvedValueOnce({
+    mockListInstalledPlugins.mockResolvedValueOnce({
       states: [createInstalledContentFactory()],
       issues: [],
     });
@@ -789,7 +789,7 @@ describe("useWorkspaceSendActions", () => {
         expect(started).toBe(true);
       });
 
-      expect(mockListInstalledAgentApps).toHaveBeenCalledTimes(1);
+      expect(mockListInstalledPlugins).toHaveBeenCalledTimes(1);
       expect(mockResolveImageWorkbenchCommandRequest).not.toHaveBeenCalled();
       expect(mockSendMessage).toHaveBeenCalledTimes(1);
       expect(mockSendMessage.mock.calls[0]?.[0]).toBe(
@@ -804,7 +804,7 @@ describe("useWorkspaceSendActions", () => {
               body: "写一篇公众号文章",
               session_id: "session-plugin-1",
               plugin_id: "content-factory-app",
-              active_agent_app_id: "content-factory-app",
+              active_plugin_ui_id: "content-factory-app",
               active_entry_key: "content_factory_generate",
               entry_workflow_key: "content_article_workflow",
               intent_key: "content_factory_generate",
@@ -827,7 +827,7 @@ describe("useWorkspaceSendActions", () => {
       });
       expect(
         mockSendMessage.mock.calls[0]?.[8]?.systemPromptOverride,
-      ).toContain("本轮请求已命中 Agent App manifest intent。");
+      ).toContain("本轮请求已命中 Plugin manifest intent。");
       expect(
         mockSendMessage.mock.calls[0]?.[8]?.systemPromptOverride,
       ).not.toContain("已安装");
@@ -842,14 +842,14 @@ describe("useWorkspaceSendActions", () => {
     }
   });
 
-  it("@写文章 应解析为内容工厂文章 Agent App 激活 metadata", async () => {
+  it("@写文章 应解析为内容工厂文章 Plugin 激活 metadata", async () => {
     const harness = mountHook({
       input: "@写文章 写一篇公众号文章",
     });
     mockEnsureSessionForCommandMetadata.mockResolvedValueOnce(
       "session-write-article",
     );
-    mockListInstalledAgentApps.mockResolvedValueOnce({
+    mockListInstalledPlugins.mockResolvedValueOnce({
       states: [createInstalledContentFactory()],
       issues: [],
     });
@@ -862,7 +862,7 @@ describe("useWorkspaceSendActions", () => {
         expect(started).toBe(true);
       });
 
-      expect(mockListInstalledAgentApps).toHaveBeenCalledTimes(1);
+      expect(mockListInstalledPlugins).toHaveBeenCalledTimes(1);
       expect(mockResolveImageWorkbenchCommandRequest).not.toHaveBeenCalled();
       expect(mockSendMessage).toHaveBeenCalledTimes(1);
       expect(mockSendMessage.mock.calls[0]?.[0]).toBe(
@@ -877,7 +877,7 @@ describe("useWorkspaceSendActions", () => {
               body: "写一篇公众号文章",
               session_id: "session-write-article",
               plugin_id: "content-factory-app",
-              active_agent_app_id: "content-factory-app",
+              active_plugin_ui_id: "content-factory-app",
               active_entry_key: "content_article_generate",
               entry_workflow_key: "content_article_workflow",
               intent_key: "content_article_generate",
@@ -890,7 +890,7 @@ describe("useWorkspaceSendActions", () => {
               opened_tabs: ["articleWorkspace"],
             },
             plugin_activation_intent: {
-              source: "agent_app_manifest_intent",
+              source: "plugin_manifest_intent",
               app_id: "content-factory-app",
               intent_key: "content_article_generate",
               task_kind: "content.article.generate",
@@ -910,20 +910,20 @@ describe("useWorkspaceSendActions", () => {
       });
       expect(
         mockSendMessage.mock.calls[0]?.[8]?.systemPromptOverride,
-      ).toContain("本轮请求已命中 Agent App manifest intent。");
+      ).toContain("本轮请求已命中 Plugin manifest intent。");
     } finally {
       harness.unmount();
     }
   });
 
-  it("@写作 应解析为内容工厂文章 Agent App 激活 metadata，而不是旧 writing_runtime", async () => {
+  it("@写作 应解析为内容工厂文章 Plugin 激活 metadata，而不是旧 writing_runtime", async () => {
     const harness = mountHook({
       input: "@写作 要求:你帮我写一篇关于登山的文章",
     });
     mockEnsureSessionForCommandMetadata.mockResolvedValueOnce(
       "session-writing-alias",
     );
-    mockListInstalledAgentApps.mockResolvedValueOnce({
+    mockListInstalledPlugins.mockResolvedValueOnce({
       states: [createInstalledContentFactory()],
       issues: [],
     });
@@ -942,7 +942,7 @@ describe("useWorkspaceSendActions", () => {
         expect(started).toBe(true);
       });
 
-      expect(mockListInstalledAgentApps).toHaveBeenCalledTimes(1);
+      expect(mockListInstalledPlugins).toHaveBeenCalledTimes(1);
       expect(mockSendMessage).toHaveBeenCalledTimes(1);
       expect(mockSendMessage.mock.calls[0]?.[0]).toBe(
         "@写作 要求:你帮我写一篇关于登山的文章",
@@ -959,7 +959,7 @@ describe("useWorkspaceSendActions", () => {
               body: "要求:你帮我写一篇关于登山的文章",
               session_id: "session-writing-alias",
               plugin_id: "content-factory-app",
-              active_agent_app_id: "content-factory-app",
+              active_plugin_ui_id: "content-factory-app",
               active_entry_key: "content_article_generate",
               intent_key: "content_article_generate",
               task_kind: "content.article.generate",
@@ -969,7 +969,7 @@ describe("useWorkspaceSendActions", () => {
               opened_tabs: ["articleWorkspace"],
             },
             plugin_activation_intent: {
-              source: "agent_app_manifest_intent",
+              source: "plugin_manifest_intent",
               app_id: "content-factory-app",
               intent_key: "content_article_generate",
               task_kind: "content.article.generate",
@@ -986,7 +986,7 @@ describe("useWorkspaceSendActions", () => {
     }
   });
 
-  it("@内容工厂 应优先于 catalog agent_turn mention route 激活 Agent App intent", async () => {
+  it("@内容工厂 应优先于 catalog agent_turn mention route 激活 Plugin intent", async () => {
     saveSkillCatalog(
       {
         version: "tenant-content-factory-command-conflict",
@@ -994,9 +994,9 @@ describe("useWorkspaceSendActions", () => {
         syncedAt: "2026-06-28T00:00:00.000Z",
         groups: [
           {
-            key: "agent-apps",
-            title: "Agent Apps",
-            summary: "Agent App shortcuts",
+            key: "plugins",
+            title: "Plugins",
+            summary: "Plugin shortcuts",
             sort: 1,
             itemCount: 0,
           },
@@ -1007,7 +1007,7 @@ describe("useWorkspaceSendActions", () => {
             id: "command:content_factory_runtime",
             kind: "command",
             title: "内容工厂",
-            summary: "旧 catalog mention route 不应抢走 Agent App intent。",
+            summary: "旧 catalog mention route 不应抢走 Plugin intent。",
             commandKey: "content_factory_runtime",
             triggers: [{ mode: "mention", prefix: "@内容工厂" }],
             binding: {
@@ -1027,7 +1027,7 @@ describe("useWorkspaceSendActions", () => {
     mockEnsureSessionForCommandMetadata.mockResolvedValueOnce(
       "session-plugin-conflict",
     );
-    mockListInstalledAgentApps.mockResolvedValueOnce({
+    mockListInstalledPlugins.mockResolvedValueOnce({
       states: [createInstalledContentFactory()],
       issues: [],
     });
@@ -1040,7 +1040,7 @@ describe("useWorkspaceSendActions", () => {
         expect(started).toBe(true);
       });
 
-      expect(mockListInstalledAgentApps).toHaveBeenCalledTimes(1);
+      expect(mockListInstalledPlugins).toHaveBeenCalledTimes(1);
       expect(mockSendMessage).toHaveBeenCalledTimes(1);
       expect(mockSendMessage.mock.calls[0]?.[0]).toBe(
         "@内容工厂 写一篇公众号文章",
@@ -1054,14 +1054,14 @@ describe("useWorkspaceSendActions", () => {
               body: "写一篇公众号文章",
               session_id: "session-plugin-conflict",
               plugin_id: "content-factory-app",
-              active_agent_app_id: "content-factory-app",
+              active_plugin_ui_id: "content-factory-app",
               intent_key: "content_factory_generate",
               task_kind: "content.factory.generate",
               output_artifact_kind: "content_factory.workspace_patch",
               right_surface: "articleWorkspace",
             },
             plugin_activation_intent: {
-              source: "agent_app_manifest_intent",
+              source: "plugin_manifest_intent",
               app_id: "content-factory-app",
               intent_key: "content_factory_generate",
               task_kind: "content.factory.generate",
@@ -1073,7 +1073,7 @@ describe("useWorkspaceSendActions", () => {
       });
       expect(
         mockSendMessage.mock.calls[0]?.[8]?.systemPromptOverride,
-      ).toContain("本轮请求已命中 Agent App manifest intent。");
+      ).toContain("本轮请求已命中 Plugin manifest intent。");
       expect(
         mockSendMessage.mock.calls[0]?.[8]?.systemPromptOverride,
       ).not.toContain("已安装");
@@ -2753,7 +2753,7 @@ Extract it into the Agent Skills directory.`,
     mockEnsureSessionForCommandMetadata.mockResolvedValueOnce(
       "session-write-article-fallback",
     );
-    mockListInstalledAgentApps.mockResolvedValueOnce({
+    mockListInstalledPlugins.mockResolvedValueOnce({
       states: [createInstalledContentFactory()],
       issues: [],
     });

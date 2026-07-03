@@ -13,7 +13,7 @@ import {
   type OemCloudRuntimeContext,
 } from "@/lib/api/oemCloudRuntime";
 import { listAgentRuntimeSessions } from "@/lib/api/agentRuntime";
-import { buildAppCenterRuntimeCapabilityProfile } from "@/features/agent-app/runtime/appCenterRuntimeProfile";
+import { buildAppCenterRuntimeCapabilityProfile } from "@/features/plugin/runtime/appCenterRuntimeProfile";
 import type { PluginsPageParams } from "@/types/page";
 import type { Page, PageParams } from "@/types/page";
 import {

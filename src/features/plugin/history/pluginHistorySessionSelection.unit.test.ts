@@ -54,7 +54,7 @@ describe("buildPluginHistorySessionSelectionModel", () => {
               plugin_history_restore: {
                 session_id: "newer",
                 plugin_id: "content-factory@limecloud",
-                active_agent_app_id: "content-factory-app",
+                active_plugin_ui_id: "content-factory-app",
               },
             },
           },

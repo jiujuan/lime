@@ -8,7 +8,7 @@ import {
   createClientDesktopAuthSession,
   claimClientReferral,
   getClientActiveAccessToken,
-  getClientAgentApps,
+  getClientPlugins,
   getClientCloudActivation,
   getClientCreditTopupOrder,
   getClientOrder,
@@ -27,14 +27,14 @@ import {
   pollClientDesktopAuthSession,
   rotateClientAccessToken,
   reportClientPluginInstallState,
-  submitClientAgentAppRegistrationCode,
+  submitClientPluginMarketplaceRegistrationCode,
   submitClientPluginRegistrationCode,
   updateClientSceneSkillPreferences,
 } from "./oemCloudControlPlane";
 
-const AGENT_APP_PACKAGE_HASH =
+const PLUGIN_PACKAGE_HASH =
   "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-const AGENT_APP_MANIFEST_HASH =
+const PLUGIN_MANIFEST_HASH =
   "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
 describe("oemCloudControlPlane desktop auth", () => {
@@ -261,8 +261,8 @@ describe("oemCloudControlPlane desktop auth", () => {
           features: {
             referralEnabled: true,
           },
-          agentAppCatalog: {
-            schemaVersion: "agent-app-cloud-bootstrap/v1",
+          pluginCatalog: {
+            schemaVersion: "plugin-cloud-bootstrap/v1",
             tenantId: "tenant-0001",
             generatedAt: "2026-05-15T00:00:00.000Z",
             apps: [
@@ -279,8 +279,8 @@ describe("oemCloudControlPlane desktop auth", () => {
                 enabled: true,
                 packageUrl:
                   "https://packages.limecloud.example/apps/content-factory-app-0.3.0.lapp",
-                packageHash: AGENT_APP_PACKAGE_HASH,
-                manifestHash: AGENT_APP_MANIFEST_HASH,
+                packageHash: PLUGIN_PACKAGE_HASH,
+                manifestHash: PLUGIN_MANIFEST_HASH,
                 capabilityRequirements: {
                   "lime.ui": "^0.3.0",
                   "lime.storage": "^0.3.0",
@@ -351,16 +351,16 @@ describe("oemCloudControlPlane desktop auth", () => {
       code: "LIME-2026",
       downloadUrl: "https://limeai.run",
     });
-    expect(bootstrap.agentAppCatalog?.apps[0]).toMatchObject({
+    expect(bootstrap.pluginCatalog?.apps[0]).toMatchObject({
       appId: "content-factory-app",
       releaseId: "release-001",
-      packageHash: AGENT_APP_PACKAGE_HASH,
-      manifestHash: AGENT_APP_MANIFEST_HASH,
+      packageHash: PLUGIN_PACKAGE_HASH,
+      manifestHash: PLUGIN_MANIFEST_HASH,
       enabled: true,
     });
   });
 
-  it("应通过正式 client/agent-apps 接口读取 Agent App 云目录", async () => {
+  it("应通过正式 client/plugins 接口读取 Plugin 云目录", async () => {
     window.__LIME_SESSION_TOKEN__ = "session-token-001";
 
     const fetchMock = vi.fn(async () => ({
@@ -370,7 +370,7 @@ describe("oemCloudControlPlane desktop auth", () => {
         code: 200,
         message: "success",
         data: {
-          schemaVersion: "agent-app-cloud-bootstrap/v1",
+          schemaVersion: "plugin-cloud-bootstrap/v1",
           tenantId: "tenant-0001",
           generatedAt: "2026-05-15T00:00:00.000Z",
           fetchedAt: "2026-05-15T00:00:01.000Z",
@@ -389,8 +389,8 @@ describe("oemCloudControlPlane desktop auth", () => {
               disabledReason: "license revoked",
               packageUrl:
                 "https://packages.limecloud.example/apps/content-factory-app-0.3.0.lapp",
-              packageHash: AGENT_APP_PACKAGE_HASH,
-              manifestHash: AGENT_APP_MANIFEST_HASH,
+              packageHash: PLUGIN_PACKAGE_HASH,
+              manifestHash: PLUGIN_MANIFEST_HASH,
               capabilityRequirements: {
                 "lime.ui": "^0.3.0",
                 "lime.storage": "^0.3.0",
@@ -413,10 +413,10 @@ describe("oemCloudControlPlane desktop auth", () => {
     }));
     vi.stubGlobal("fetch", fetchMock);
 
-    const catalog = await getClientAgentApps("tenant-0001");
+    const catalog = await getClientPlugins("tenant-0001");
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://user.limeai.run/api/v1/public/tenants/tenant-0001/client/agent-apps",
+      "https://user.limeai.run/api/v1/public/tenants/tenant-0001/client/plugins",
       expect.objectContaining({
         method: "GET",
         headers: expect.objectContaining({
@@ -426,7 +426,7 @@ describe("oemCloudControlPlane desktop auth", () => {
       }),
     );
     expect(catalog).toMatchObject({
-      schemaVersion: "agent-app-cloud-bootstrap/v1",
+      schemaVersion: "plugin-cloud-bootstrap/v1",
       tenantId: "tenant-0001",
       apps: [
         {
@@ -467,7 +467,7 @@ describe("oemCloudControlPlane desktop auth", () => {
               categories: ["research"],
               keywords: ["research", "research-style"],
               capabilities: ["lime.skills"],
-              sourceKind: "agent_app_release",
+              sourceKind: "plugin_catalog",
               sourceRef: "release-001",
               appId: "research-kit",
               enabled: true,
@@ -481,8 +481,8 @@ describe("oemCloudControlPlane desktop auth", () => {
                 releaseId: "release-001",
                 packageUrl:
                   "https://packages.limecloud.example/plugins/research-kit-1.2.3.lpkg",
-                packageHash: AGENT_APP_PACKAGE_HASH,
-                manifestHash: AGENT_APP_MANIFEST_HASH,
+                packageHash: PLUGIN_PACKAGE_HASH,
+                manifestHash: PLUGIN_MANIFEST_HASH,
               },
               manifestSummary: {
                 name: "research-kit",
@@ -518,7 +518,7 @@ describe("oemCloudControlPlane desktop auth", () => {
         {
           pluginKey: "research-kit@limecloud",
           pluginName: "research-kit",
-          sourceKind: "agent_app_release",
+          sourceKind: "plugin_catalog",
           installState: "available",
           activationState: "activatable",
           policy: {
@@ -527,15 +527,15 @@ describe("oemCloudControlPlane desktop auth", () => {
           },
           package: {
             releaseId: "release-001",
-            packageHash: AGENT_APP_PACKAGE_HASH,
-            manifestHash: AGENT_APP_MANIFEST_HASH,
+            packageHash: PLUGIN_PACKAGE_HASH,
+            manifestHash: PLUGIN_MANIFEST_HASH,
           },
         },
       ],
     });
   });
 
-  it("应提交 Agent App 注册码并解析刷新后的云目录", async () => {
+  it("应提交 Plugin 注册码并解析刷新后的云目录", async () => {
     window.__LIME_SESSION_TOKEN__ = "session-token-001";
 
     const fetchMock = vi.fn(async () => ({
@@ -545,7 +545,7 @@ describe("oemCloudControlPlane desktop auth", () => {
         code: 200,
         message: "success",
         data: {
-          schemaVersion: "agent-app-cloud-bootstrap/v1",
+          schemaVersion: "plugin-cloud-bootstrap/v1",
           tenantId: "tenant-0001",
           generatedAt: "2026-05-15T00:02:00.000Z",
           apps: [
@@ -558,8 +558,8 @@ describe("oemCloudControlPlane desktop auth", () => {
               enabled: true,
               packageUrl:
                 "https://packages.limecloud.example/apps/content-factory-app-0.3.0.lapp",
-              packageHash: AGENT_APP_PACKAGE_HASH,
-              manifestHash: AGENT_APP_MANIFEST_HASH,
+              packageHash: PLUGIN_PACKAGE_HASH,
+              manifestHash: PLUGIN_MANIFEST_HASH,
               capabilityRequirements: {},
               defaultEntries: ["dashboard"],
               policyDefaults: {},
@@ -571,14 +571,14 @@ describe("oemCloudControlPlane desktop auth", () => {
     }));
     vi.stubGlobal("fetch", fetchMock);
 
-    const catalog = await submitClientAgentAppRegistrationCode(
+    const catalog = await submitClientPluginRegistrationCode(
       "tenant-0001",
       "content-factory-app",
       { code: "CF-REG-2026" },
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://user.limeai.run/api/v1/public/tenants/tenant-0001/client/agent-apps/content-factory-app/registration",
+      "https://user.limeai.run/api/v1/public/tenants/tenant-0001/client/plugins/content-factory-app/registration",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ code: "CF-REG-2026" }),
@@ -591,7 +591,7 @@ describe("oemCloudControlPlane desktop auth", () => {
       appId: "content-factory-app",
       registrationRequired: true,
       registrationState: "active",
-      packageHash: AGENT_APP_PACKAGE_HASH,
+      packageHash: PLUGIN_PACKAGE_HASH,
     });
   });
 
@@ -632,8 +632,8 @@ describe("oemCloudControlPlane desktop auth", () => {
                 releaseId: "release-001",
                 packageUrl:
                   "https://packages.limecloud.example/plugins/research-kit-1.2.3.lpkg",
-                packageHash: AGENT_APP_PACKAGE_HASH,
-                manifestHash: AGENT_APP_MANIFEST_HASH,
+                packageHash: PLUGIN_PACKAGE_HASH,
+                manifestHash: PLUGIN_MANIFEST_HASH,
               },
             },
           ],
@@ -642,7 +642,7 @@ describe("oemCloudControlPlane desktop auth", () => {
     }));
     vi.stubGlobal("fetch", fetchMock);
 
-    const catalog = await submitClientPluginRegistrationCode(
+    const catalog = await submitClientPluginMarketplaceRegistrationCode(
       "tenant-0001",
       "research-kit",
       { code: "PLUGIN-REG-2026" },
@@ -666,7 +666,7 @@ describe("oemCloudControlPlane desktop auth", () => {
       activationState: "activatable",
       package: {
         releaseId: "release-001",
-        packageHash: AGENT_APP_PACKAGE_HASH,
+        packageHash: PLUGIN_PACKAGE_HASH,
       },
     });
   });
@@ -686,12 +686,12 @@ describe("oemCloudControlPlane desktop auth", () => {
           pluginName: "research-kit",
           marketplaceName: "limecloud",
           pluginKey: "research-kit@limecloud",
-          sourceKind: "agent_app_release",
+          sourceKind: "plugin_catalog",
           sourceRef: "release-001",
           state: "enabled",
           releaseId: "release-001",
-          packageHash: AGENT_APP_PACKAGE_HASH,
-          manifestHash: AGENT_APP_MANIFEST_HASH,
+          packageHash: PLUGIN_PACKAGE_HASH,
+          manifestHash: PLUGIN_MANIFEST_HASH,
           reportedAt: "2026-06-26T08:00:00.000Z",
           updatedAt: "2026-06-26T08:00:01.000Z",
         },
@@ -705,8 +705,8 @@ describe("oemCloudControlPlane desktop auth", () => {
       {
         state: "enabled",
         releaseId: "release-001",
-        packageHash: AGENT_APP_PACKAGE_HASH,
-        manifestHash: AGENT_APP_MANIFEST_HASH,
+        packageHash: PLUGIN_PACKAGE_HASH,
+        manifestHash: PLUGIN_MANIFEST_HASH,
         reportedAt: "2026-06-26T08:00:00.000Z",
       },
       "limecloud",
@@ -719,8 +719,8 @@ describe("oemCloudControlPlane desktop auth", () => {
         body: JSON.stringify({
           state: "enabled",
           releaseId: "release-001",
-          packageHash: AGENT_APP_PACKAGE_HASH,
-          manifestHash: AGENT_APP_MANIFEST_HASH,
+          packageHash: PLUGIN_PACKAGE_HASH,
+          manifestHash: PLUGIN_MANIFEST_HASH,
           reportedAt: "2026-06-26T08:00:00.000Z",
         }),
         headers: expect.objectContaining({
@@ -730,9 +730,9 @@ describe("oemCloudControlPlane desktop auth", () => {
     );
     expect(report).toMatchObject({
       pluginKey: "research-kit@limecloud",
-      sourceKind: "agent_app_release",
+      sourceKind: "plugin_catalog",
       state: "enabled",
-      packageHash: AGENT_APP_PACKAGE_HASH,
+      packageHash: PLUGIN_PACKAGE_HASH,
     });
   });
 

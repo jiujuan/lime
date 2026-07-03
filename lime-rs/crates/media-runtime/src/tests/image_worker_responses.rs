@@ -55,6 +55,7 @@ async fn execute_image_generation_task_should_support_responses_image_generation
         &ImageGenerationRunnerConfig {
             endpoint: format!("http://{address}/v1/images/generations"),
             api_key: "test-key".to_string(),
+            request_body_format: Default::default(),
         },
     )
     .await
@@ -177,6 +178,7 @@ async fn execute_image_generation_task_should_fallback_to_images_api_when_respon
         &ImageGenerationRunnerConfig {
             endpoint: format!("http://{address}/v1/images/generations"),
             api_key: "test-key".to_string(),
+            request_body_format: Default::default(),
         },
     )
     .await

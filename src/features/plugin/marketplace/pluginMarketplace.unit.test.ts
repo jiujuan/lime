@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import type { InstalledAgentAppState } from "@/features/agent-app/types";
+import type { InstalledPluginState } from "@/features/plugin/types";
 import {
   buildPluginContractFromMarketplaceItem,
   projectPluginMarketplaceItemSkills,
-  projectPluginMarketplaceInstalledKeysFromAgentApps,
-  projectPluginMarketplaceRegistryFromInstalledAgentApps,
+  projectPluginMarketplaceInstalledKeysFromPlugins,
+  projectPluginMarketplaceRegistryFromInstalledPlugins,
   projectPluginMarketplaceRegistry,
   projectPluginMarketplaceRegistryInputs,
 } from "./pluginMarketplace";
@@ -29,7 +29,7 @@ function marketplaceItem(
     categories: ["research"],
     keywords: ["research", "-style"],
     capabilities: ["lime.skills"],
-    sourceKind: "agent_app_release",
+    sourceKind: "plugin_catalog",
     sourceRef: "release-001",
     appId: "research-kit",
     enabled: true,
@@ -78,7 +78,7 @@ function installedState(
     sourceKind?: "fixture" | "local_folder" | "local_archive" | "cloud_release";
     loadedAt?: string;
   } = {},
-): InstalledAgentAppState {
+): InstalledPluginState {
   const appId = overrides.appId ?? "research-kit";
   return {
     appId,
@@ -97,17 +97,17 @@ function installedState(
         "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       loadedAt: overrides.loadedAt ?? "2026-06-25T00:00:00.000Z",
     },
-    manifest: {} as InstalledAgentAppState["manifest"],
-    projection: {} as InstalledAgentAppState["projection"],
-    readiness: {} as InstalledAgentAppState["readiness"],
+    manifest: {} as InstalledPluginState["manifest"],
+    projection: {} as InstalledPluginState["projection"],
+    readiness: {} as InstalledPluginState["readiness"],
     installMode: "in_lime",
     runtimeProfileSummary:
-      {} as InstalledAgentAppState["runtimeProfileSummary"],
-    setup: {} as InstalledAgentAppState["setup"],
+      {} as InstalledPluginState["runtimeProfileSummary"],
+    setup: {} as InstalledPluginState["setup"],
     disabled: overrides.disabled ?? false,
     installedAt: "2026-06-25T00:00:00.000Z",
     updatedAt: "2026-06-25T00:00:00.000Z",
-  } as InstalledAgentAppState;
+  } as InstalledPluginState;
 }
 
 function registryItemByPluginId(
@@ -146,13 +146,13 @@ describe("Plugin marketplace projection", () => {
           "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       },
     });
-    expect(contract.agentApps[0]).toMatchObject({
+    expect(contract.ui[0]).toMatchObject({
       id: "research-kit",
       title: "Research Kit",
     });
     expect(contract.activationEntries[0]).toMatchObject({
       key: "research-kit",
-      kind: "agentApp",
+      kind: "pluginUi",
       intent: "manual",
     });
   });
@@ -429,7 +429,7 @@ describe("Plugin marketplace projection", () => {
     });
   });
 
-  it("应从 installed Agent App state 合并 installed / enabled key，hash 不一致仅标记可刷新", () => {
+  it("应从 installed Plugin state 合并 installed / enabled key，hash 不一致仅标记可刷新", () => {
     const matchItem = marketplaceItem({
       pluginKey: "research-kit@limecloud",
       pluginName: "research-kit",
@@ -486,7 +486,7 @@ describe("Plugin marketplace projection", () => {
       }),
     ];
 
-    const projection = projectPluginMarketplaceInstalledKeysFromAgentApps(
+    const projection = projectPluginMarketplaceInstalledKeysFromPlugins(
       marketplace([matchItem, disabledItem, mismatchItem]),
       installedApps,
     );
@@ -504,9 +504,9 @@ describe("Plugin marketplace projection", () => {
       "broken-kit@limecloud": ["PLUGIN_INSTALLED_PACKAGE_MISMATCH"],
     });
 
-    const registry = projectPluginMarketplaceRegistryFromInstalledAgentApps(
+    const registry = projectPluginMarketplaceRegistryFromInstalledPlugins(
       marketplace([matchItem, disabledItem, mismatchItem]),
-      { installedAgentApps: installedApps },
+      { installedPlugins: installedApps },
     );
 
     expect(
@@ -537,7 +537,7 @@ describe("Plugin marketplace projection", () => {
     });
   });
 
-  it("本地安装的 Agent App 不应因为 marketplace 包 hash 不一致而被标记为 mismatch", () => {
+  it("本地安装的 Plugin 不应因为 marketplace 包 hash 不一致而被标记为 mismatch", () => {
     const localItem = marketplaceItem({
       pluginKey: "local-kit",
       pluginName: "local-kit",
@@ -562,7 +562,7 @@ describe("Plugin marketplace projection", () => {
       }),
     ];
 
-    const projection = projectPluginMarketplaceInstalledKeysFromAgentApps(
+    const projection = projectPluginMarketplaceInstalledKeysFromPlugins(
       marketplace([localItem]),
       installedApps,
     );
@@ -570,9 +570,9 @@ describe("Plugin marketplace projection", () => {
     expect(projection.blockerCodesByPluginKey).toEqual({});
     expect(projection.refreshablePluginKeys).toEqual([]);
 
-    const registry = projectPluginMarketplaceRegistryFromInstalledAgentApps(
+    const registry = projectPluginMarketplaceRegistryFromInstalledPlugins(
       marketplace([localItem]),
-      { installedAgentApps: installedApps },
+      { installedPlugins: installedApps },
     );
 
     expect(registryItemByPluginId(registry, "local-kit")).toMatchObject({
@@ -583,8 +583,8 @@ describe("Plugin marketplace projection", () => {
     });
   });
 
-  it("已安装 Agent App 即使 marketplace 缺包引用也应保持可激活", () => {
-    const registry = projectPluginMarketplaceRegistryFromInstalledAgentApps(
+  it("已安装 Plugin 即使 marketplace 缺包引用也应保持可激活", () => {
+    const registry = projectPluginMarketplaceRegistryFromInstalledPlugins(
       marketplace([
         marketplaceItem({
           package: undefined,
@@ -600,7 +600,7 @@ describe("Plugin marketplace projection", () => {
         }),
       ]),
       {
-        installedAgentApps: [installedState()],
+        installedPlugins: [installedState()],
       },
     );
 

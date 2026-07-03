@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "appId": {
+      "type": "string"
+    },
+    "disabled": {
+      "type": "boolean"
+    },
+    "updatedAt": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "appId",
+    "disabled"
+  ],
+  "title": "PluginInstalledDisabledSetParams",
+  "type": "object"
+}

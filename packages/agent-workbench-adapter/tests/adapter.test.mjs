@@ -231,7 +231,7 @@ test("projects empty workbench task as idle task surface", () => {
 
 test("builds a lime.agent turn payload with capability policy", () => {
   const payload = buildAgentTurnStartPayload({
-    agentAppId: "content-studio",
+    pluginId: "content-studio",
     workspacePath: "/tmp/workspace",
     prompt: "生成配图",
     capabilityId: "content.draft.generate",

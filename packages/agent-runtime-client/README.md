@@ -217,4 +217,4 @@ npm run test:contracts
 - 不要在这里生成 `AgentUiProjectionState`。
 - 不要在这里导入 React、Electron bridge、renderer bridge helper 或测试 mock registry。
 - 不要把 Provider API key、Provider SDK client 或 direct HTTP 放进 runtime client。
-- 不要把旧 Agent App desktop facade 当成新 runtime owner。
+- 不要把旧 Plugin desktop facade 当成新 runtime owner。

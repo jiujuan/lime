@@ -5,7 +5,7 @@ import type {
 import type { PluginMarketplaceItem } from "./types";
 
 export type PluginMarketplaceCapabilitySectionKind =
-  | "applied_agent"
+  | "plugin_ui"
   | "subagents"
   | "workflows"
   | "cli_tools"
@@ -38,7 +38,7 @@ export interface PluginMarketplaceCapabilitySection {
 export interface PluginMarketplaceCapabilityProfile {
   sections: PluginMarketplaceCapabilitySection[];
   summary: {
-    agentCount: number;
+    uiCount: number;
     subagentCount: number;
     workflowCount: number;
     toolCount: number;
@@ -154,15 +154,15 @@ function pushSection(
   }
 }
 
-function appliedAgentItems(params: {
+function pluginUiItems(params: {
   item: PluginMarketplaceItem;
   summary: Record<string, unknown> | undefined;
   status: PluginMarketplaceCapabilityStatus;
 }): PluginMarketplaceCapabilityItem[] {
-  const agentApps = readRecords(params.summary?.agentApps);
-  const declaredAgents =
-    agentApps.length > 0
-      ? agentApps
+  const pluginUi = readRecords(params.summary?.ui);
+  const declaredUi =
+    pluginUi.length > 0
+      ? pluginUi
       : params.item.appId
         ? [
             {
@@ -172,15 +172,14 @@ function appliedAgentItems(params: {
             },
           ]
         : [];
-  return declaredAgents.map((agent) => {
-    const id =
-      readString(agent.id) ?? params.item.appId ?? params.item.pluginKey;
-    const entryKey = readString(agent.entryKey);
-    const uiKind = readString(agent.uiKind);
+  return declaredUi.map((ui) => {
+    const id = readString(ui.id) ?? params.item.appId ?? params.item.pluginKey;
+    const entryKey = readString(ui.entryKey);
+    const uiKind = readString(ui.uiKind);
     return {
       id,
-      title: readString(agent.title) ?? params.item.displayName,
-      description: readString(agent.description) ?? params.item.description,
+      title: readString(ui.title) ?? params.item.displayName,
+      description: readString(ui.description) ?? params.item.description,
       status: params.status,
       meta: uniqueStrings([entryKey ? `entry:${entryKey}` : undefined, uiKind]),
     };
@@ -214,7 +213,7 @@ function subagentItems(params: {
   const runtimeTasks = readRecords(agentRuntime?.tasks);
   const sourceTasks = tasks.length > 0 ? tasks : runtimeTasks;
   return sourceTasks.map((task) => {
-    const kind = readString(task.kind) ?? "agent_app.task";
+    const kind = readString(task.kind) ?? "plugin.task";
     const expectedObjects = readStringArray(task.expectedObjects);
     const requiredCapabilities = readStringArray(task.requiredCapabilities);
     return {
@@ -501,7 +500,7 @@ export function buildPluginMarketplaceCapabilityProfile({
   const status = capabilityStatus(registryItem);
   const sections: PluginMarketplaceCapabilitySection[] = [];
 
-  const agents = appliedAgentItems({ item, summary, status });
+  const pluginUi = pluginUiItems({ item, summary, status });
   const subagents = subagentItems({ summary, status });
   const workflows = workflowItems({ summary, status });
   const tools = cliToolItems({ summary, status });
@@ -511,10 +510,10 @@ export function buildPluginMarketplaceCapabilityProfile({
   const skillList = skillItems({ summary, skills, status });
 
   pushSection(sections, {
-    kind: "applied_agent",
-    titleKey: "plugin.marketplace.capability.appliedAgent",
-    descriptionKey: "plugin.marketplace.capability.appliedAgentDescription",
-    items: agents,
+    kind: "plugin_ui",
+    titleKey: "plugin.marketplace.capability.pluginUi",
+    descriptionKey: "plugin.marketplace.capability.pluginUiDescription",
+    items: pluginUi,
   });
   pushSection(sections, {
     kind: "subagents",
@@ -562,7 +561,7 @@ export function buildPluginMarketplaceCapabilityProfile({
   return {
     sections,
     summary: {
-      agentCount: agents.length,
+      uiCount: pluginUi.length,
       subagentCount: subagents.length,
       workflowCount: workflows.length,
       toolCount: tools.length,

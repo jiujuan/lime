@@ -1,14 +1,3 @@
-mod agent_app_host_lifecycle;
-mod agent_app_task_runtime;
-mod agent_app_worker_orchestration;
-mod agent_app_worker_runtime;
-mod agent_app_worker_streaming;
-mod agent_app_worker_turn;
-mod agent_app_worker_workflow;
-mod agent_app_worker_workflow_cancel;
-mod agent_app_worker_workflow_hooks;
-mod agent_app_worker_workflow_retry;
-mod agent_apps;
 mod app_data;
 mod article_workspace_action_projection;
 mod article_workspace_artifact_document_projection;
@@ -47,6 +36,17 @@ mod model_providers;
 mod objectives;
 mod output_refs;
 mod permission_state_projection;
+mod plugin_host_lifecycle;
+mod plugin_task_runtime;
+mod plugin_worker_orchestration;
+mod plugin_worker_runtime;
+mod plugin_worker_streaming;
+mod plugin_worker_turn;
+mod plugin_worker_workflow;
+mod plugin_worker_workflow_cancel;
+mod plugin_worker_workflow_hooks;
+mod plugin_worker_workflow_retry;
+mod plugins;
 mod project_git;
 mod projection_item_events;
 mod projection_payload_summary;
@@ -88,8 +88,6 @@ pub use crate::file_checkpoint_snapshot::FileCheckpointSnapshotSaveRequest;
 pub use crate::file_checkpoint_snapshot::FileCheckpointSnapshotStore;
 pub use crate::file_checkpoint_snapshot::FilesystemFileCheckpointSnapshotStore;
 pub use crate::file_checkpoint_snapshot::NoopFileCheckpointSnapshotStore;
-pub(crate) use agent_app_worker_streaming::ensure_workspace_patch_artifact_paths;
-pub use app_data::AgentAppDataSource;
 pub use app_data::AppDataSource;
 pub use app_data::AutomationManagementAppDataSource;
 pub use app_data::AutomationOverviewAppDataSource;
@@ -102,6 +100,7 @@ pub use app_data::MediaAppDataSource;
 pub use app_data::MemoryAppDataSource;
 pub use app_data::ModelProviderAppDataSource;
 pub use app_data::NoopAppDataSource;
+pub use app_data::PluginDataSource;
 pub use app_data::RightSurfaceAppDataSource;
 pub use app_data::SessionAppDataSource;
 pub use app_data::SkillAppDataSource;
@@ -125,6 +124,7 @@ pub use output_refs::OutputSnapshotReadRequest;
 pub use output_refs::OutputSnapshotRecord;
 pub use output_refs::OutputSnapshotSaveRequest;
 pub use output_refs::OutputSnapshotStore;
+pub(crate) use plugin_worker_streaming::ensure_workspace_patch_artifact_paths;
 pub use projection_repair::ProjectionRepair;
 pub use projection_store::ProjectionStore;
 pub use right_surface::WorkspaceObjectCanvasReplayReadiness;
@@ -385,7 +385,7 @@ pub trait ExecutionBackend: Send + Sync {
         Ok(())
     }
 
-    async fn prepare_agent_app_worker_request(
+    async fn prepare_plugin_worker_request(
         &self,
         _request: &ExecutionRequest,
         _worker_request: &mut serde_json::Value,
@@ -431,7 +431,7 @@ pub(in crate::runtime) struct RuntimeCoreState {
     pub(in crate::runtime) right_surface_pending:
         Vec<app_server_protocol::WorkspaceRightSurfacePendingRequest>,
     pub(in crate::runtime) browser_profile_scopes: Vec<BrowserProfileScope>,
-    agent_app_ui_runtimes: HashMap<String, agent_apps::AgentAppUiRuntimeProcess>,
+    plugin_ui_runtimes: HashMap<String, plugins::PluginUiRuntimeProcess>,
 }
 
 #[derive(Debug, Clone)]

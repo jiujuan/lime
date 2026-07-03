@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import contentFactoryFixture from "@/features/agent-app/testing/fixtures/content-factory-app.json";
+import contentFactoryFixture from "@/features/plugin/testing/fixtures/content-factory-app.json";
 import { buildWorkspaceArticleWorkspaceViewModel } from "@/components/agent/chat/workspace/workspaceArticleWorkspaceModel";
 import {
   buildContentFactoryDeliveryParts,

@@ -24,7 +24,7 @@ const RIGHT_SURFACE_TAB_LABELS: Record<
   },
   appSurface: {
     key: "agentChat.rightSurface.tabs.appSurface",
-    fallback: "Agent App",
+    fallback: "Plugin",
   },
   articleWorkspace: {
     key: "agentChat.rightSurface.tabs.articleWorkspace",

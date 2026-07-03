@@ -1,6 +1,6 @@
 # @limecloud/agent-capability-catalog
 
-`@limecloud/agent-capability-catalog` 是共享 Agent Runtime capability 的 headless catalog。它把 Claw / Agent App / Product App 都要用到的能力 ID、alias、metadata contract 和 tool policy 输入收敛为纯 TypeScript 函数。
+`@limecloud/agent-capability-catalog` 是共享 Agent Runtime capability 的 headless catalog。它把 Claw / Plugin / Product App 都要用到的能力 ID、alias、metadata contract 和 tool policy 输入收敛为纯 TypeScript 函数。
 
 这个包不调用 runtime，不渲染 UI，不依赖 Electron，也不复制 Claw Chat 的 `@` 命令页面。
 

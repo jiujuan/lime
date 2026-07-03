@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { InstalledAgentAppStateListResult } from "@/features/agent-app";
-import contentFactoryFixtureData from "@/features/agent-app/testing/fixtures/content-factory-app.json";
-import { buildInstalledAgentAppState } from "@/features/agent-app/install/installedAppState";
-import { buildInstalledAppPreview } from "@/features/agent-app/install/installedAppPreview";
-import { buildAgentAppLabResolvedSetupState } from "@/features/agent-app/install/labInstallFlow";
-import { buildLocalAgentAppSourceState } from "@/features/agent-app/install/installReview";
-import { buildPackageIdentity } from "@/features/agent-app/install/packageIdentity";
-import type { AppManifest } from "@/features/agent-app/types";
-import type { InstalledAgentAppState } from "@/features/agent-app/types";
+import type { InstalledPluginStateListResult } from "@/features/plugin";
+import contentFactoryFixtureData from "@/features/plugin/testing/fixtures/content-factory-app.json";
+import { buildInstalledPluginState } from "@/features/plugin/install/installedAppState";
+import { buildInstalledAppPreview } from "@/features/plugin/install/installedAppPreview";
+import { buildPluginLabResolvedSetupState } from "@/features/plugin/install/labInstallFlow";
+import { buildLocalPluginSourceState } from "@/features/plugin/install/installReview";
+import { buildPackageIdentity } from "@/features/plugin/install/packageIdentity";
+import type { AppManifest } from "@/features/plugin/types";
+import type { InstalledPluginState } from "@/features/plugin/types";
 import { OemCloudControlPlaneError } from "@/lib/api/oemCloudControlPlane";
 import type { PluginMarketplaceListResponse } from "./types";
 import { loadPluginMarketplaceRegistry } from "./marketplaceRegistryLoader";
@@ -26,7 +26,7 @@ function marketplace(): PluginMarketplaceListResponse {
         marketplaceName: "limecloud",
         displayName: "Research Kit",
         version: "1.2.3",
-        sourceKind: "agent_app_release",
+        sourceKind: "plugin_catalog",
         appId: "research-kit",
         enabled: true,
         installState: "available",
@@ -50,7 +50,7 @@ function marketplace(): PluginMarketplaceListResponse {
         marketplaceName: "limecloud",
         displayName: "Stale Kit",
         version: "1.2.3",
-        sourceKind: "agent_app_release",
+        sourceKind: "plugin_catalog",
         appId: "stale-kit",
         enabled: true,
         installState: "available",
@@ -80,7 +80,7 @@ function installedState(
     sourceUri?: string;
     disabled?: boolean;
   } = {},
-): InstalledAgentAppState {
+): InstalledPluginState {
   const appId = overrides.appId ?? "research-kit";
   return {
     appId,
@@ -99,8 +99,8 @@ function installedState(
         "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       loadedAt: "2026-06-25T00:00:00.000Z",
     },
-    manifest: {} as InstalledAgentAppState["manifest"],
-    projection: {} as InstalledAgentAppState["projection"],
+    manifest: {} as InstalledPluginState["manifest"],
+    projection: {} as InstalledPluginState["projection"],
     readiness: {
       appId,
       status: "ready",
@@ -114,15 +114,15 @@ function installedState(
     },
     installMode: "in_lime",
     runtimeProfileSummary:
-      {} as InstalledAgentAppState["runtimeProfileSummary"],
-    setup: {} as InstalledAgentAppState["setup"],
+      {} as InstalledPluginState["runtimeProfileSummary"],
+    setup: {} as InstalledPluginState["setup"],
     disabled: overrides.disabled ?? false,
     installedAt: "2026-06-25T00:00:00.000Z",
     updatedAt: "2026-06-25T00:00:00.000Z",
-  } as InstalledAgentAppState;
+  } as InstalledPluginState;
 }
 
-function readyInstalledState(): InstalledAgentAppState {
+function readyInstalledState(): InstalledPluginState {
   const loadedAt = "2026-06-25T00:00:00.000Z";
   const manifest = contentFactoryFixtureData as AppManifest;
   const identity = buildPackageIdentity({
@@ -138,7 +138,7 @@ function readyInstalledState(): InstalledAgentAppState {
     checkedAt: loadedAt,
     generatedAt: loadedAt,
   });
-  const setup = buildAgentAppLabResolvedSetupState(setupPreview.projection);
+  const setup = buildPluginLabResolvedSetupState(setupPreview.projection);
   const preview = buildInstalledAppPreview({
     fixture: manifest,
     identity,
@@ -147,7 +147,7 @@ function readyInstalledState(): InstalledAgentAppState {
     checkedAt: loadedAt,
     generatedAt: loadedAt,
   });
-  return buildInstalledAgentAppState({
+  return buildInstalledPluginState({
     preview,
     setup,
     installedAt: loadedAt,
@@ -155,7 +155,7 @@ function readyInstalledState(): InstalledAgentAppState {
   });
 }
 
-function staleProfileBlockedInstalledState(): InstalledAgentAppState {
+function staleProfileBlockedInstalledState(): InstalledPluginState {
   const state = readyInstalledState();
   return {
     ...state,
@@ -188,7 +188,7 @@ describe("plugin marketplace registry loader", () => {
   it("应组合 LimeCore marketplace 与 App Server installed state 为统一 registry snapshot", async () => {
     const getMarketplace = vi.fn(async () => marketplace());
     const listInstalled = vi.fn(
-      async (): Promise<InstalledAgentAppStateListResult> => ({
+      async (): Promise<InstalledPluginStateListResult> => ({
         states: [
           installedState(),
           installedState({
@@ -202,7 +202,7 @@ describe("plugin marketplace registry loader", () => {
         issues: [
           {
             code: "READ_FAILED",
-            path: "<LimeAppData>/agent-apps/installed/broken.json",
+            path: "<LimeAppData>/plugins/installed/broken.json",
             message: "read failed",
           },
         ],
@@ -241,11 +241,11 @@ describe("plugin marketplace registry loader", () => {
     expect(snapshot.projectionInputs).toHaveLength(2);
   });
 
-  it("没有云端租户时只使用本地已安装插件，不再读取 Agent App 云端目录", async () => {
+  it("没有云端租户时只使用本地已安装插件，不再读取 Plugin 云端目录", async () => {
     const getMarketplace = vi.fn(async () => marketplace());
     const localState = readyInstalledState();
     const listInstalled = vi.fn(
-      async (): Promise<InstalledAgentAppStateListResult> => ({
+      async (): Promise<InstalledPluginStateListResult> => ({
         states: [localState],
         issues: [],
       }),
@@ -289,7 +289,7 @@ describe("plugin marketplace registry loader", () => {
       },
     };
     const listInstalled = vi.fn(
-      async (): Promise<InstalledAgentAppStateListResult> => ({
+      async (): Promise<InstalledPluginStateListResult> => ({
         states: [staleState],
         issues: [],
       }),
@@ -303,7 +303,7 @@ describe("plugin marketplace registry loader", () => {
         manifestVersion: staleState.manifest.manifestVersion,
         sourceKind: staleState.identity.sourceKind,
         sourceUri: staleState.identity.sourceUri,
-        sourceState: buildLocalAgentAppSourceState(),
+        sourceState: buildLocalPluginSourceState(),
         packageHash: staleState.identity.packageHash,
         manifestHash: staleState.identity.manifestHash,
         entryCount: staleState.projection.entries.length,
@@ -355,7 +355,7 @@ describe("plugin marketplace registry loader", () => {
     });
   });
 
-  it("远端 marketplace 条目应复用已安装 Agent App manifest 补齐说明与 renderer", async () => {
+  it("远端 marketplace 条目应复用已安装 Plugin manifest 补齐说明与 renderer", async () => {
     const localState = readyInstalledState();
     const getMarketplace = vi.fn(
       async (): Promise<PluginMarketplaceListResponse> => ({
@@ -371,7 +371,7 @@ describe("plugin marketplace registry loader", () => {
             displayName: "内容工厂",
             description: "",
             version: localState.manifest.version,
-            sourceKind: "agent_app_release",
+            sourceKind: "plugin_catalog",
             enabled: true,
             installState: "available",
             activationState: "activatable",
@@ -388,7 +388,7 @@ describe("plugin marketplace registry loader", () => {
       }),
     );
     const listInstalled = vi.fn(
-      async (): Promise<InstalledAgentAppStateListResult> => ({
+      async (): Promise<InstalledPluginStateListResult> => ({
         states: [localState],
         issues: [],
       }),
@@ -456,10 +456,10 @@ describe("plugin marketplace registry loader", () => {
     });
   });
 
-  it("本地已安装插件不再与旧 Agent App 目录做包匹配", async () => {
+  it("本地已安装插件不再与旧 Plugin 目录做包匹配", async () => {
     const localState = readyInstalledState();
     const listInstalled = vi.fn(
-      async (): Promise<InstalledAgentAppStateListResult> => ({
+      async (): Promise<InstalledPluginStateListResult> => ({
         states: [localState],
         issues: [],
       }),
@@ -495,7 +495,7 @@ describe("plugin marketplace registry loader", () => {
     });
     const localState = readyInstalledState();
     const listInstalled = vi.fn(
-      async (): Promise<InstalledAgentAppStateListResult> => ({
+      async (): Promise<InstalledPluginStateListResult> => ({
         states: [localState],
         issues: [],
       }),

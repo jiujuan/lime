@@ -9,7 +9,7 @@ struct PluginActivationContext {
     body: String,
     session_id: String,
     plugin_id: String,
-    active_agent_app_id: Option<String>,
+    active_plugin_id: Option<String>,
     active_entry_key: Option<String>,
     intent_key: Option<String>,
     task_kind: Option<String>,
@@ -97,7 +97,7 @@ fn parse_plugin_activation(value: &Value) -> Option<PluginActivationContext> {
         body: read_string(value, &["body"]).unwrap_or_default(),
         session_id,
         plugin_id,
-        active_agent_app_id: read_string(value, &["active_agent_app_id", "activeAgentAppId"]),
+        active_plugin_id: read_string(value, &["active_plugin_id", "activePluginId"]),
         active_entry_key: read_string(value, &["active_entry_key", "activeEntryKey"]),
         intent_key: read_string(value, &["intent_key", "intentKey"]),
         task_kind: read_string(value, &["task_kind", "taskKind"]),
@@ -214,11 +214,7 @@ fn render_plugin_activation_context(context: &PluginActivationContext) -> String
     if !context.body.is_empty() {
         lines.push(format!("- body_after_trigger: {}", context.body));
     }
-    push_optional_line(
-        &mut lines,
-        "active_agent_app_id",
-        &context.active_agent_app_id,
-    );
+    push_optional_line(&mut lines, "active_plugin_id", &context.active_plugin_id);
     push_optional_line(&mut lines, "active_entry_key", &context.active_entry_key);
     push_optional_line(&mut lines, "intent_key", &context.intent_key);
     push_optional_line(&mut lines, "task_kind", &context.task_kind);

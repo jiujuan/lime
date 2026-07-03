@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import contentFactoryFixture from "@/features/agent-app/testing/fixtures/content-factory-app.json";
+import contentFactoryFixture from "@/features/plugin/testing/fixtures/content-factory-app.json";
 import {
   buildContentFactoryPluginDogfoodContract,
   CONTENT_FACTORY_PLUGIN_ENTRY_KEY,
@@ -17,7 +17,7 @@ describe("contentFactoryPlugin", () => {
       id: CONTENT_FACTORY_PLUGIN_ID,
       displayName: "内容工厂",
       provenance: {
-        sourceKind: "agent_app_manifest",
+        sourceKind: "plugin_manifest",
         sourceId: CONTENT_FACTORY_PLUGIN_ID,
       },
       rightSurface: {

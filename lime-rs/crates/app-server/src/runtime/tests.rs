@@ -17,7 +17,6 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tokio::time::timeout;
 
-mod agent_app_worker_turn;
 mod artifacts;
 mod capabilities;
 mod coding_events;
@@ -28,6 +27,7 @@ mod knowledge;
 mod memory_prompt;
 mod objectives;
 mod permission_preflight;
+mod plugin_worker_turn;
 mod queue;
 mod read_model;
 mod right_surface;

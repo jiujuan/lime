@@ -43,8 +43,8 @@ pub mod tool_calling;
 
 // 类型模块（纯数据类型，供 database 等模块使用）
 pub mod agent;
-pub mod agent_app_runtime_token;
 pub mod general_chat;
+pub mod plugin_runtime_token;
 
 // 路由系统
 pub mod router;

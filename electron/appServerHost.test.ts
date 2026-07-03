@@ -734,7 +734,7 @@ describe("ElectronAppServerHost", () => {
     ]);
   });
 
-  it("current Agent App UI runtime start 应覆盖 App Server readiness 等待窗口", async () => {
+  it("current Plugin UI runtime start 应覆盖 App Server readiness 等待窗口", async () => {
     const { ElectronAppServerHost } = await import("./appServerHost");
     const host = new ElectronAppServerHost();
 
@@ -742,7 +742,7 @@ describe("ElectronAppServerHost", () => {
       lines: [
         encodeMessage({
           id: "ui-runtime-start",
-          method: "agentAppUiRuntime/start",
+          method: "pluginUiRuntime/start",
           params: {
             appId: "content-factory-sdk-fixture-app",
             entryKey: "dashboard",
@@ -757,13 +757,13 @@ describe("ElectronAppServerHost", () => {
     expect(recordedRequests).toHaveLength(1);
     expect(recordedRequests[0]).toMatchObject({
       id: "electron-host:1",
-      method: "agentAppUiRuntime/start",
+      method: "pluginUiRuntime/start",
     });
-    expect(requestCalls[0]?.[1]).toBe("agentAppUiRuntime/start");
+    expect(requestCalls[0]?.[1]).toBe("pluginUiRuntime/start");
     expect(requestCalls[0]?.[2]).toMatchObject({ timeoutMs: 60000 });
   });
 
-  it("current Agent App local package inspect 应覆盖包检查等待窗口", async () => {
+  it("current Plugin local package inspect 应覆盖包检查等待窗口", async () => {
     const { ElectronAppServerHost } = await import("./appServerHost");
     const host = new ElectronAppServerHost();
 
@@ -771,7 +771,7 @@ describe("ElectronAppServerHost", () => {
       lines: [
         encodeMessage({
           id: "local-package-inspect",
-          method: "agentAppLocalPackage/inspect",
+          method: "pluginLocalPackage/inspect",
           params: {
             appDir: "/Users/coso/Documents/dev/ai/limecloud/content-factory-app",
           },
@@ -783,11 +783,11 @@ describe("ElectronAppServerHost", () => {
       [JsonRpcRequest, string, { timeoutMs?: number }]
     >;
     expect(recordedRequests).toHaveLength(1);
-    expect(requestCalls[0]?.[1]).toBe("agentAppLocalPackage/inspect");
+    expect(requestCalls[0]?.[1]).toBe("pluginLocalPackage/inspect");
     expect(requestCalls[0]?.[2]).toMatchObject({ timeoutMs: 240000 });
   });
 
-  it("current Agent App installed save 应覆盖本地安装写入等待窗口", async () => {
+  it("current Plugin installed save 应覆盖本地安装写入等待窗口", async () => {
     const { ElectronAppServerHost } = await import("./appServerHost");
     const host = new ElectronAppServerHost();
 
@@ -795,7 +795,7 @@ describe("ElectronAppServerHost", () => {
       lines: [
         encodeMessage({
           id: "installed-save",
-          method: "agentAppInstalled/save",
+          method: "pluginInstalled/save",
           params: {
             state: {
               appId: "content-factory-app",
@@ -809,7 +809,7 @@ describe("ElectronAppServerHost", () => {
       [JsonRpcRequest, string, { timeoutMs?: number }]
     >;
     expect(recordedRequests).toHaveLength(1);
-    expect(requestCalls[0]?.[1]).toBe("agentAppInstalled/save");
+    expect(requestCalls[0]?.[1]).toBe("pluginInstalled/save");
     expect(requestCalls[0]?.[2]).toMatchObject({ timeoutMs: 240000 });
   });
 

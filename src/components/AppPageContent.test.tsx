@@ -21,7 +21,7 @@ const latestSkillsWorkspaceProps = vi.hoisted(() => ({
 const latestKnowledgePageProps = vi.hoisted(() => ({
   value: null as Record<string, unknown> | null,
 }));
-const latestAgentAppsProps = vi.hoisted(() => ({
+const latestPluginsProps = vi.hoisted(() => ({
   value: null as Record<string, unknown> | null,
 }));
 const latestPluginMarketplaceProps = vi.hoisted(() => ({
@@ -33,9 +33,9 @@ const latestExpertPlazaProps = vi.hoisted(() => ({
 const latestSettingsPageProps = vi.hoisted(() => ({
   value: null as Record<string, unknown> | null,
 }));
-const agentAppLabLifecycle = vi.hoisted(() => ({ mounts: 0 }));
-const agentAppsLifecycle = vi.hoisted(() => ({ mounts: 0 }));
-const agentAppRuntimeLifecycle = vi.hoisted(() => ({ mounts: 0 }));
+const pluginLabLifecycle = vi.hoisted(() => ({ mounts: 0 }));
+const pluginsLifecycle = vi.hoisted(() => ({ mounts: 0 }));
+const pluginRuntimeLifecycle = vi.hoisted(() => ({ mounts: 0 }));
 const pluginMarketplaceLifecycle = vi.hoisted(() => ({ mounts: 0 }));
 vi.mock("./agent/chat", () => ({
   AgentChatPage: (props: Record<string, unknown>) => {
@@ -93,28 +93,28 @@ vi.mock("@/features/plugin", () => ({
   },
 }));
 
-vi.mock("@/features/agent-app", () => ({
-  AgentAppRuntimePage: () => {
+vi.mock("@/features/plugin", () => ({
+  PluginRuntimePage: () => {
     useEffect(() => {
-      agentAppRuntimeLifecycle.mounts += 1;
+      pluginRuntimeLifecycle.mounts += 1;
     }, []);
 
-    return <div data-testid="agent-app-runtime-page" />;
+    return <div data-testid="plugin-runtime-page" />;
   },
-  AgentAppsPage: (props: Record<string, unknown>) => {
-    latestAgentAppsProps.value = props;
+  PluginsPage: (props: Record<string, unknown>) => {
+    latestPluginsProps.value = props;
     useEffect(() => {
-      agentAppsLifecycle.mounts += 1;
+      pluginsLifecycle.mounts += 1;
     }, []);
 
-    return <div data-testid="agent-apps-page" />;
+    return <div data-testid="plugins-page" />;
   },
-  AgentAppLabPage: () => {
+  PluginLabPage: () => {
     useEffect(() => {
-      agentAppLabLifecycle.mounts += 1;
+      pluginLabLifecycle.mounts += 1;
     }, []);
 
-    return <div data-testid="agent-app-lab-page" />;
+    return <div data-testid="plugin-lab-page" />;
   },
 }));
 
@@ -214,8 +214,8 @@ describe("AppPageContent", () => {
     latestPluginMarketplaceProps.value = null;
     latestExpertPlazaProps.value = null;
     latestSettingsPageProps.value = null;
-    agentAppLabLifecycle.mounts = 0;
-    agentAppsLifecycle.mounts = 0;
+    pluginLabLifecycle.mounts = 0;
+    pluginsLifecycle.mounts = 0;
     pluginMarketplaceLifecycle.mounts = 0;
   });
 
@@ -1037,12 +1037,12 @@ describe("AppPageContent", () => {
     );
   });
 
-  it("agent-app-lab 页面应渲染 P0 只读实验入口", async () => {
-    const { container } = renderContent("agent-app-lab");
+  it("plugin-lab 页面应渲染 P0 只读实验入口", async () => {
+    const { container } = renderContent("plugin-lab");
     await flushEffects();
 
-    expectTestId(container, "agent-app-lab-page");
-    expect(agentAppLabLifecycle.mounts).toBe(1);
+    expectTestId(container, "plugin-lab-page");
+    expect(pluginLabLifecycle.mounts).toBe(1);
   });
 
   it("plugins 页面应渲染 current 插件中心入口", async () => {
@@ -1062,32 +1062,32 @@ describe("AppPageContent", () => {
     });
   });
 
-  it("agent-apps 页面应渲染正式 Agent Apps 管理入口", async () => {
-    const { container } = renderContent("agent-apps", {
-      selectedAgentAppId: "content-factory-app",
+  it("plugins 页面应渲染正式 Plugins 管理入口", async () => {
+    const { container } = renderContent("plugins", {
+      selectedPluginId: "content-factory-app",
     });
     await flushEffects();
 
-    expectTestId(container, "agent-apps-page");
-    expect(agentAppsLifecycle.mounts).toBe(1);
-    expect(latestAgentAppsProps.value).toMatchObject({
+    expectTestId(container, "plugins-page");
+    expect(pluginsLifecycle.mounts).toBe(1);
+    expect(latestPluginsProps.value).toMatchObject({
       pageParams: {
-        selectedAgentAppId: "content-factory-app",
+        selectedPluginId: "content-factory-app",
       },
     });
-    expect(latestAgentAppsProps.value?.onNavigate).toEqual(
+    expect(latestPluginsProps.value?.onNavigate).toEqual(
       expect.any(Function),
     );
   });
 
-  it("agent-app 页面应渲染已安装 App 的独立使用入口", async () => {
-    const { container } = renderContent("agent-app", {
+  it("plugin 页面应渲染已安装 App 的独立使用入口", async () => {
+    const { container } = renderContent("plugin", {
       appId: "content-factory-app",
       entryKey: "dashboard",
     });
     await flushEffects();
 
-    expectTestId(container, "agent-app-runtime-page");
-    expect(agentAppRuntimeLifecycle.mounts).toBe(1);
+    expectTestId(container, "plugin-runtime-page");
+    expect(pluginRuntimeLifecycle.mounts).toBe(1);
   });
 });

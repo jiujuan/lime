@@ -34,7 +34,7 @@ Workspace 是 Lime 应用层的概念，用于组织和管理 AI Agent 的工作
 3. `ArtifactDocument v1` 继续承担正式交付物、结构化增量写入、版本、diff、导出；普通文件预览默认不升级为正式文档。
 4. Markdown / HTML 预览要以当前文件路径作为基准解析相对图片路径，保证同目录 `images/` 等资源能直接渲染。
 5. 文件标题、默认预览、工作台下载/打开动作应尽量保留项目内相对路径；只有在实际读取磁盘时才解析绝对路径。
-6. 二进制、DOCX、图片、URL、任务结果、知识库命中、Agent App shell entry 都应进入同一 preview projection，再按 `contentKind / renderMode / capabilities` 退化到文本、媒体、独立窗口、系统打开或 unsupported。
+6. 二进制、DOCX、图片、URL、任务结果、知识库命中、Plugin shell entry 都应进入同一 preview projection，再按 `contentKind / renderMode / capabilities` 退化到文本、媒体、独立窗口、系统打开或 unsupported。
 
 ## 架构设计
 

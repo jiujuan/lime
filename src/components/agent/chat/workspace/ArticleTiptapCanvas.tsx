@@ -37,6 +37,7 @@ interface ArticleTiptapCanvasProps {
   onEditedMarkdownChange?: (markdown: string | null) => void;
   placeholder: string;
   sourceText: string;
+  syncedStatusLabelKey?: string;
   testId: string;
 }
 
@@ -45,6 +46,7 @@ export function ArticleTiptapCanvas({
   onEditedMarkdownChange,
   placeholder,
   sourceText,
+  syncedStatusLabelKey = "workspace.articleEditor.canvas.status.synced",
   testId,
 }: ArticleTiptapCanvasProps) {
   const { t } = useTranslation("workspace");
@@ -134,7 +136,7 @@ export function ArticleTiptapCanvas({
         {dynamicT(
           isDirty
             ? "workspace.articleEditor.canvas.status.edited"
-            : "workspace.articleEditor.canvas.status.synced",
+            : syncedStatusLabelKey,
         )}
       </div>
     </div>

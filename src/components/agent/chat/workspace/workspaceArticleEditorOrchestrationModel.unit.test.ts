@@ -237,7 +237,7 @@ describe("workspaceArticleEditorOrchestrationModel", () => {
       articleWorkspaceWithEvidence([
         workerEvidence({
           status: "completed",
-          eventType: "agent_app_worker.hook",
+          eventType: "plugin_worker.hook",
           taskKind: "content.article.generate",
           workflowKey: "hook_workflow",
           subagents: ["hook-subagent"],
@@ -345,7 +345,7 @@ function workerEvidence(
   return {
     id: "evt-worker-success:workerEvidence",
     status: "completed",
-    source: "agent_app_task_worker",
+    source: "plugin_task_worker",
     eventType: "artifact.snapshot",
     appId: "content-factory-app",
     taskId: "task-article-1",

@@ -1,4 +1,3 @@
-mod agent_app_packages;
 mod agent_ui_event_schema;
 mod agent_ui_sequence_verifier;
 #[cfg(feature = "aster-backend")]
@@ -23,6 +22,7 @@ mod model_route_execution;
 mod model_task_contract;
 mod objective;
 mod otel_trace;
+mod plugin_packages;
 mod processor;
 mod project_shell;
 mod runtime;
@@ -141,7 +141,6 @@ use processor::RequestProcessor;
 pub(crate) use runtime::export_trace_events_from_store_to_path;
 pub(crate) use runtime::summarize_trace_event_store;
 pub use runtime::ActionRespondRequest;
-pub use runtime::AgentAppDataSource;
 pub use runtime::AppDataSource;
 pub use runtime::ArtifactContentProvider;
 pub use runtime::ArtifactContentRequest;
@@ -181,6 +180,7 @@ pub use runtime::OutputSnapshotReadRequest;
 pub use runtime::OutputSnapshotRecord;
 pub use runtime::OutputSnapshotSaveRequest;
 pub use runtime::OutputSnapshotStore;
+pub use runtime::PluginDataSource;
 pub use runtime::ProjectionRepair;
 pub use runtime::ProjectionStore;
 pub use runtime::RightSurfaceAppDataSource;

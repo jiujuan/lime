@@ -415,7 +415,7 @@ describe("voiceModels API", () => {
       desktopClientId: "desktop-client",
       desktopOauthRedirectUrl: "lime://oauth/callback",
       desktopOauthNextPath: "/welcome",
-      agentAppSignatureTrustRoots: [],
+      pluginSignatureTrustRoots: [],
     });
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -502,7 +502,7 @@ describe("voiceModels API", () => {
       desktopClientId: "desktop-client",
       desktopOauthRedirectUrl: "lime://oauth/callback",
       desktopOauthNextPath: "/welcome",
-      agentAppSignatureTrustRoots: [],
+      pluginSignatureTrustRoots: [],
     });
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

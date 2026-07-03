@@ -32,8 +32,8 @@ import {
   openProjectPathWithLocalTool,
   type ProjectPathOpenTool,
 } from "./projectToolsHost";
-import { AgentAppRuntimeTaskHost } from "./agentAppRuntimeTaskHost";
-import { AgentAppShellHost } from "./agentAppShellHost";
+import { PluginRuntimeTaskHost } from "./pluginRuntimeTaskHost";
+import { PluginShellHost } from "./pluginShellHost";
 import { showDesktopNotification } from "./desktopNotificationHost";
 import { FileShellHost } from "./fileShellHost";
 import { LayeredDesignProjectHost } from "./layeredDesignProjectHost";
@@ -76,8 +76,8 @@ export class ElectronHostCommands {
   readonly #appServerHost: ElectronAppServerHost;
   readonly #userDataDir: string;
   readonly #emit: HostEventEmitter;
-  readonly #agentAppRuntimeTaskHost: AgentAppRuntimeTaskHost;
-  readonly #agentAppShellHost: AgentAppShellHost;
+  readonly #pluginRuntimeTaskHost: PluginRuntimeTaskHost;
+  readonly #pluginShellHost: PluginShellHost;
   readonly #fileShellHost = new FileShellHost();
   readonly #layeredDesignProjectHost = new LayeredDesignProjectHost();
   readonly #projectShellHost: ProjectShellHost;
@@ -96,11 +96,11 @@ export class ElectronHostCommands {
     this.#userDataDir = userDataDir;
     this.#emit = emit;
     this.#appConfigHost = new AppConfigHost(userDataDir);
-    this.#agentAppShellHost = new AgentAppShellHost(
+    this.#pluginShellHost = new PluginShellHost(
       <T>(method: string, params: AppServerParams = {}) =>
         this.#appServerRequest<T>(method, params),
     );
-    this.#agentAppRuntimeTaskHost = new AgentAppRuntimeTaskHost(
+    this.#pluginRuntimeTaskHost = new PluginRuntimeTaskHost(
       <T>(method: string, params: AppServerParams = {}) =>
         this.#appServerRequest<T>(method, params),
     );
@@ -228,24 +228,24 @@ export class ElectronHostCommands {
         return this.#systemUtilityHost.getBrowserBackendPolicy();
       case "get_browser_backends_status":
         return this.#systemUtilityHost.getBrowserBackendsStatus();
-      case "agent_app_select_directory":
-        return await this.#agentAppShellHost.selectDirectory(args);
-      case "agent_app_launch_shell":
-        return await this.#agentAppShellHost.launchShell(args);
-      case "agent_app_start_ui_runtime":
-        return await this.#agentAppShellHost.startUiRuntime(args);
-      case "agent_app_get_ui_runtime_status":
-        return await this.#agentAppShellHost.getUiRuntimeStatus(args);
-      case "agent_app_stop_ui_runtime":
-        return await this.#agentAppShellHost.stopUiRuntime(args);
-      case "agent_app_runtime_start_task":
-        return await this.#agentAppRuntimeTaskHost.startTask(args);
-      case "agent_app_runtime_get_task":
-        return await this.#agentAppRuntimeTaskHost.getTask(args);
-      case "agent_app_runtime_cancel_task":
-        return await this.#agentAppRuntimeTaskHost.cancelTask(args);
-      case "agent_app_runtime_submit_host_response":
-        return await this.#agentAppRuntimeTaskHost.submitHostResponse(args);
+      case "plugin_select_directory":
+        return await this.#pluginShellHost.selectDirectory(args);
+      case "plugin_launch_shell":
+        return await this.#pluginShellHost.launchShell(args);
+      case "plugin_start_ui_runtime":
+        return await this.#pluginShellHost.startUiRuntime(args);
+      case "plugin_get_ui_runtime_status":
+        return await this.#pluginShellHost.getUiRuntimeStatus(args);
+      case "plugin_stop_ui_runtime":
+        return await this.#pluginShellHost.stopUiRuntime(args);
+      case "plugin_runtime_start_task":
+        return await this.#pluginRuntimeTaskHost.startTask(args);
+      case "plugin_runtime_get_task":
+        return await this.#pluginRuntimeTaskHost.getTask(args);
+      case "plugin_runtime_cancel_task":
+        return await this.#pluginRuntimeTaskHost.cancelTask(args);
+      case "plugin_runtime_submit_host_response":
+        return await this.#pluginRuntimeTaskHost.submitHostResponse(args);
       case "report_frontend_debug_log":
         this.#reportFrontendDebugLog(args);
         return null;

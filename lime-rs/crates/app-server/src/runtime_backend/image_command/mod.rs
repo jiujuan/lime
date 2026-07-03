@@ -11,8 +11,10 @@ mod presentation;
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::time::{timeout, Duration};
 
 const WORKFLOW_SOURCE: &str = "image_command_workflow";
+const PRESENTATION_GENERATION_TIMEOUT: Duration = Duration::from_secs(8);
 
 pub(super) async fn handle_image_command_turn_if_present(
     runtime_backend: Option<&super::RuntimeBackend>,
@@ -55,10 +57,13 @@ pub(super) async fn handle_image_command_turn_if_present(
     };
 
     if let Some(runtime_backend) = runtime_backend {
-        match presentation::generate_image_task_presentation(runtime_backend, request, &intent)
-            .await
+        match timeout(
+            PRESENTATION_GENERATION_TIMEOUT,
+            presentation::generate_image_task_presentation(runtime_backend, request, &intent),
+        )
+        .await
         {
-            Ok(Some(generated_presentation)) => {
+            Ok(Ok(Some(generated_presentation))) => {
                 if let Some(assistant_intro) = generated_presentation.assistant_intro.as_deref() {
                     emit_assistant_intro(&intent, assistant_intro, sink)?;
                 }
@@ -68,10 +73,10 @@ pub(super) async fn handle_image_command_turn_if_present(
                     &generated_presentation,
                 );
             }
-            Ok(None) => {
+            Ok(Ok(None)) => {
                 emit_presentation_unavailable(&intent, "empty_or_invalid_model_output", sink)?;
             }
-            Err(error) => {
+            Ok(Err(error)) => {
                 tracing::warn!(
                     session_id = %intent.scope.session_id,
                     thread_id = %intent.scope.thread_id,
@@ -81,6 +86,17 @@ pub(super) async fn handle_image_command_turn_if_present(
                     "[RuntimeBackend] ImageCommandWorkflow presentation generation unavailable"
                 );
                 emit_presentation_unavailable(&intent, "presentation_generation_failed", sink)?;
+            }
+            Err(_) => {
+                tracing::warn!(
+                    session_id = %intent.scope.session_id,
+                    thread_id = %intent.scope.thread_id,
+                    turn_id = %intent.scope.turn_id,
+                    workflow_run_id = %workflow_run_id(&intent.scope),
+                    timeout_ms = PRESENTATION_GENERATION_TIMEOUT.as_millis(),
+                    "[RuntimeBackend] ImageCommandWorkflow presentation generation timed out"
+                );
+                emit_presentation_unavailable(&intent, "presentation_generation_timeout", sink)?;
             }
         }
     }
@@ -887,11 +903,11 @@ mod tests {
     use super::*;
     use crate::runtime::RuntimeCoreError;
     use crate::{
-        AgentAppDataSource, AutomationManagementAppDataSource, AutomationOverviewAppDataSource,
-        ConnectAppDataSource, DiagnosticsAppDataSource, GatewayAppDataSource,
-        KnowledgeAppDataSource, McpAppDataSource, MediaAppDataSource, MemoryAppDataSource,
-        ModelProviderAppDataSource, RightSurfaceAppDataSource, SessionAppDataSource,
-        SkillAppDataSource, UsageStatsAppDataSource, VoiceAppDataSource, WorkspaceAppDataSource,
+        AutomationManagementAppDataSource, AutomationOverviewAppDataSource, ConnectAppDataSource,
+        DiagnosticsAppDataSource, GatewayAppDataSource, KnowledgeAppDataSource, McpAppDataSource,
+        MediaAppDataSource, MemoryAppDataSource, ModelProviderAppDataSource, PluginDataSource,
+        RightSurfaceAppDataSource, SessionAppDataSource, SkillAppDataSource,
+        UsageStatsAppDataSource, VoiceAppDataSource, WorkspaceAppDataSource,
         WorkspaceSkillBindingAppDataSource,
     };
     use app_server_protocol::{
@@ -924,7 +940,7 @@ mod tests {
     impl WorkspaceSkillBindingAppDataSource for ImageCommandTestDataSource {}
     impl GatewayAppDataSource for ImageCommandTestDataSource {}
     impl VoiceAppDataSource for ImageCommandTestDataSource {}
-    impl AgentAppDataSource for ImageCommandTestDataSource {}
+    impl PluginDataSource for ImageCommandTestDataSource {}
     impl KnowledgeAppDataSource for ImageCommandTestDataSource {}
     impl AutomationOverviewAppDataSource for ImageCommandTestDataSource {}
     impl McpAppDataSource for ImageCommandTestDataSource {}

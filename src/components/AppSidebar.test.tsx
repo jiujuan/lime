@@ -138,11 +138,11 @@ describe("AppSidebar navigation", () => {
     ).not.toBeNull();
   });
 
-  it("进入 Agent App 运行页时应临时折叠导航栏并在离开后恢复", async () => {
+  it("进入 Plugin 运行页时应临时折叠导航栏并在离开后恢复", async () => {
     localStorage.setItem(APP_SIDEBAR_COLLAPSED_STORAGE_KEY, "false");
     const onNavigate = vi.fn();
     const mounted = mountSidebar({
-      currentPage: "agent-app",
+      currentPage: "plugin",
       onNavigate,
     });
     await flushEffects(2);

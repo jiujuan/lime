@@ -1,3 +1,42 @@
+## Lime v1.87.0
+
+### 新功能
+
+- Plugin runtime 主线接替旧 Agent App 入口：插件安装、运行、Shell host、任务 worker、右侧 Surface、历史恢复和 SDK/manifest 流程统一走 Plugin 命名与 current 协议。
+- 内容工厂插件包继续补齐独立发布能力，覆盖 standalone release gate、connector 生产预检 / 交付 / webhook、runtime fixture smoke 和 signed release evidence。
+- Article Workspace / 右侧工作区支持 Plugin Surface 和插件工作流证据展示，内容工厂 worker dogfood、文章工作区 patch 与历史恢复链路更完整。
+
+### 修复
+
+- 修复 Agent App 与 Plugin 双轨命名造成的 marketplace、installed state、manifest contract、runtime authorization 和治理目录漂移。
+- 修复图片任务与媒体 worker 的路由、后处理和 provider 测试覆盖缺口，减少图像生成任务在不同 Provider 间的行为偏差。
+- 修复 App Server client / protocol schema / command catalog 中旧 Agent App 方法残留，避免 legacy command 或 mock fallback 回流到 current 主链。
+
+### 优化与重构
+
+- 大规模移除旧 `agent-app` 前端、Electron、App Server、脚本和 schema 表面，按 Plugin 领域重建同构模块，降低双轨维护成本。
+- App Server runtime、local data source、processor、runtime backend 和 protocol schema 收口到 Plugin owner，旧 Agent App 文件按 dead surface 删除。
+- 脚本治理、i18n app metadata、legacy surface catalog 和 quality workflow 文档同步 Plugin 命名与发布门禁。
+
+### 测试与质量
+
+- 新增 / 更新 Plugin runtime、Plugin marketplace、Plugin install / cleanup / packaging / SDK / shell / UI、Electron host、App Server protocol 和 content factory fixture 回归。
+- 更新 `test:contracts`、protocol type generation、script governance 和 legacy surface guard，覆盖 Agent App 清退与 Plugin current surface。
+- 发布 workflow skill 调整为稳定必要门禁优先：默认保留 `verify:app-version` / `typecheck`，不再自动把 `npm run lint`、裸 `npm test` 和全量 `cargo test` 作为发版阻断项。
+- 同步 current-turn smoke client 版本到 `1.87.0`，保持发布 fixture 与应用版本一致。
+
+### 文档
+
+- 更新 command boundary、quality workflow、design language、workspace、parallel collaboration 和 Writing v2 执行计划，记录 Plugin runtime current 主线与 Agent App 清退口径。
+- 更新 package README、agent runtime package README 和默认 skill 文档中的 Plugin / 内容工厂表述。
+
+### 其他
+
+- 版本事实源更新到 `1.87.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock`、`lime-rs/crates/aster-rust/Cargo.lock` 与发布 smoke fixture。
+- 本版不纳入本地临时文件 `internal/roadmap/Writing/.DS_Store` 和未引用的临时聚合文件 `src/features/plugin/host-sdk-index.tmp.ts`。
+
+**完整变更**: `v1.86.0` -> `v1.87.0`
+
 ## Lime v1.86.0
 
 ### 新功能

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { InstalledAgentAppState } from "@/features/agent-app/types";
+import type { InstalledPluginState } from "@/features/plugin/types";
 import {
   mergePluginActivationSendOptions,
   resolveWorkspacePluginActivation,
@@ -8,8 +8,8 @@ import {
 import { buildWorkspacePluginRuntimeContext } from "./workspacePluginRuntimeContext";
 
 function createInstalledPluginBackedApp(
-  overrides: Partial<InstalledAgentAppState> = {},
-): InstalledAgentAppState {
+  overrides: Partial<InstalledPluginState> = {},
+): InstalledPluginState {
   return {
     appId: "creator-workbench",
     disabled: false,
@@ -30,7 +30,7 @@ function createInstalledPluginBackedApp(
       manifestVersion: "0.11",
       version: "1.0.0",
       status: "ready",
-      appType: "agent-app",
+      appType: "plugin",
       description: "创作业务应用",
       runtimeTargets: ["local"],
       requires: {
@@ -106,24 +106,24 @@ function createInstalledPluginBackedApp(
       manifestHash: "manifest-hash",
       loadedAt: "2026-06-25T00:00:00.000Z",
     },
-    projection: {} as InstalledAgentAppState["projection"],
+    projection: {} as InstalledPluginState["projection"],
     installMode: "in_lime",
     runtimeProfileSummary:
-      {} as InstalledAgentAppState["runtimeProfileSummary"],
-    setup: {} as InstalledAgentAppState["setup"],
+      {} as InstalledPluginState["runtimeProfileSummary"],
+    setup: {} as InstalledPluginState["setup"],
     installedAt: "2026-06-25T00:00:00.000Z",
     updatedAt: "2026-06-25T00:00:00.000Z",
     ...overrides,
-  } as InstalledAgentAppState;
+  } as InstalledPluginState;
 }
 
 function pluginActivationRequestMetadata(
-  installedAgentApps: readonly InstalledAgentAppState[],
+  installedPlugins: readonly InstalledPluginState[],
 ) {
   const resolution = resolveWorkspacePluginActivation({
     text: "@创作工作台 写一篇公众号文章",
     sessionId: "session-1",
-    installedAgentApps,
+    installedPlugins,
   });
 
   return mergePluginActivationSendOptions({
@@ -134,7 +134,7 @@ function pluginActivationRequestMetadata(
 describe("workspacePluginRuntimeContext", () => {
   it("无 plugin_activation metadata 时应返回 inactive 但保留 installed registry", () => {
     const context = buildWorkspacePluginRuntimeContext({
-      installedAgentApps: [createInstalledPluginBackedApp()],
+      installedPlugins: [createInstalledPluginBackedApp()],
     });
 
     expect(context).toMatchObject({
@@ -153,13 +153,13 @@ describe("workspacePluginRuntimeContext", () => {
 
   it("plugin history restore metadata 不应冒充当前激活态", () => {
     const context = buildWorkspacePluginRuntimeContext({
-      installedAgentApps: [createInstalledPluginBackedApp()],
+      installedPlugins: [createInstalledPluginBackedApp()],
       requestMetadata: {
         harness: {
           plugin_history_restore: {
             session_id: "session-1",
             plugin_id: "creator-workbench",
-            active_agent_app_id: "creator-workbench",
+            active_plugin_ui_id: "creator-workbench",
             active_entry_key: "creator",
             selected_object_ref: {
               plugin_id: "creator-workbench",
@@ -192,7 +192,7 @@ describe("workspacePluginRuntimeContext", () => {
   it("应组合 request metadata 与 installed registry 成 active 插件运行上下文", () => {
     const installed = [createInstalledPluginBackedApp()];
     const context = buildWorkspacePluginRuntimeContext({
-      installedAgentApps: installed,
+      installedPlugins: installed,
       requestMetadata: pluginActivationRequestMetadata(installed),
     });
 
@@ -223,7 +223,7 @@ describe("workspacePluginRuntimeContext", () => {
 
   it("metadata 指向未安装插件时应 fail closed 为 blocked", () => {
     const context = buildWorkspacePluginRuntimeContext({
-      installedAgentApps: [],
+      installedPlugins: [],
       requestMetadata: {
         harness: {
           plugin_activation: {
@@ -249,7 +249,7 @@ describe("workspacePluginRuntimeContext", () => {
   it("metadata 指向禁用插件时应保留上下文但阻断后续接线", () => {
     const installed = [createInstalledPluginBackedApp({ disabled: true })];
     const context = buildWorkspacePluginRuntimeContext({
-      installedAgentApps: installed,
+      installedPlugins: installed,
       requestMetadata: {
         harness: {
           plugin_activation: {

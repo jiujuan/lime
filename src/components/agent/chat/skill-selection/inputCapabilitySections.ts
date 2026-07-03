@@ -211,7 +211,7 @@ export interface InputCapabilitySectionsCopy {
     availableSkills: string;
     characters: string;
     featuredServiceSkills: string;
-    agentApps: string;
+    plugins: string;
     installedSkills: string;
     installedSkillsEmpty: string;
     recentContinuations: string;
@@ -273,7 +273,7 @@ export function buildInputCapabilitySectionsCopy(
       translate("inputCapabilities.recentInput", { preview }),
     headings: {
       availableSkills: translate("inputCapabilities.heading.availableSkills"),
-      agentApps: translate("inputCapabilities.heading.agentApps"),
+      plugins: translate("inputCapabilities.heading.plugins"),
       characters: translate("inputCapabilities.heading.characters"),
       featuredServiceSkills: translate(
         "inputCapabilities.heading.featuredServiceSkills",
@@ -1084,8 +1084,8 @@ function buildMentionCapabilitySections(
 
   if (visiblePluginItems.length > 0) {
     sections.push({
-      key: "agent-apps",
-      heading: params.inputCapabilityCopy.headings.agentApps,
+      key: "plugins",
+      heading: params.inputCapabilityCopy.headings.plugins,
       items: visiblePluginItems.map((item) => ({
         key: item.key,
         kind: "plugin" as const,

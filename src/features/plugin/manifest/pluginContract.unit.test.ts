@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import contentFactoryFixture from "@/features/agent-app/testing/fixtures/content-factory-app.json";
-import { buildPackageIdentity } from "@/features/agent-app/install/packageIdentity";
-import { normalizeManifest } from "@/features/agent-app/manifest/normalizeManifest";
-import { parseManifest } from "@/features/agent-app/manifest/parseManifest";
+import contentFactoryFixture from "@/features/plugin/testing/fixtures/content-factory-app.json";
+import { buildPackageIdentity } from "@/features/plugin/install/packageIdentity";
+import { normalizeManifest } from "@/features/plugin/manifest/normalizeManifest";
+import { parseManifest } from "@/features/plugin/manifest/parseManifest";
 import {
-  buildPluginContractFromAgentAppManifest,
+  buildPluginContractFromPluginManifest,
   normalizePluginManifest,
   PluginManifestError,
 } from "./pluginContract";
@@ -248,13 +248,13 @@ describe("Plugin P1 manifest contract", () => {
     });
   });
 
-  it("应从 Agent App manifest 投影插件根对象、激活入口、renderer 和历史恢复 contract", () => {
+  it("应从 Plugin manifest 投影插件根对象、激活入口、renderer 和历史恢复 contract", () => {
     const manifest = normalizeManifest(parseManifest(contentFactoryFixture));
     const identity = buildPackageIdentity({
       manifest: parseManifest(contentFactoryFixture),
       loadedAt: "2026-06-25T00:00:00.000Z",
     });
-    const contract = buildPluginContractFromAgentAppManifest({
+    const contract = buildPluginContractFromPluginManifest({
       manifest,
       identity,
     });
@@ -265,12 +265,12 @@ describe("Plugin P1 manifest contract", () => {
       displayName: "内容工厂",
       version: "2.0.0",
       provenance: {
-        sourceKind: "agent_app_manifest",
+        sourceKind: "plugin_manifest",
         sourceId: "content-factory-app",
         sourceVersion: "2.0.0",
       },
     });
-    expect(contract.agentApps).toEqual([
+    expect(contract.ui).toEqual([
       expect.objectContaining({
         id: "content-factory-app",
         title: "内容工厂",
@@ -293,7 +293,7 @@ describe("Plugin P1 manifest contract", () => {
         }),
         expect.objectContaining({
           key: "content_factory",
-          kind: "agentApp",
+          kind: "pluginUi",
           intent: "manual",
           defaultObjectKind: "articleDraft",
         }),
@@ -576,7 +576,7 @@ describe("Plugin P1 manifest contract", () => {
 describe("Plugin P1 registry projection", () => {
   it("应区分可安装、可激活、可渲染和只读历史四种状态", () => {
     const manifest = normalizeManifest(parseManifest(contentFactoryFixture));
-    const contract = buildPluginContractFromAgentAppManifest({ manifest });
+    const contract = buildPluginContractFromPluginManifest({ manifest });
     const installable = projectPluginRegistryItem({
       contract,
       installed: false,
@@ -611,7 +611,7 @@ describe("Plugin P1 registry projection", () => {
 
   it("已安装插件 needs-setup 只作为维护提醒，不应阻断输入区激活", () => {
     const manifest = normalizeManifest(parseManifest(contentFactoryFixture));
-    const contract = buildPluginContractFromAgentAppManifest({ manifest });
+    const contract = buildPluginContractFromPluginManifest({ manifest });
     const item = projectPluginRegistryItem({
       contract,
       installed: true,

@@ -930,7 +930,7 @@ async fn read_session_current_projection_summary_preserves_process_items() {
                     "title": "历史过程工作台",
                     "status": "completed",
                     "metadata": {
-                        "agentAppWorker": {
+                        "pluginWorker": {
                             "appId": "content-factory",
                             "taskId": "task-history-workspace",
                             "taskKind": "content.article.generate",

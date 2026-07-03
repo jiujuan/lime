@@ -1,10 +1,9 @@
 import type {
   NormalizedAppManifest,
   PackageIdentity,
-} from "@/features/agent-app/types";
+} from "@/features/plugin/types";
 import type {
   PluginActivationEntryDeclaration,
-  PluginAgentAppDeclaration,
   PluginArtifactRendererActionDeclaration,
   PluginArtifactRendererDeclaration,
   PluginContract,
@@ -20,15 +19,16 @@ import type {
   PluginRightSurfaceContract,
   PluginSkillDeclaration,
   PluginSubagentDeclaration,
+  PluginUiDeclaration,
   PluginWorkflowDeclaration,
   PluginWorkflowStepDeclaration,
 } from "./types";
 export { PluginManifestError } from "./pluginContractErrors";
 import { PluginManifestError } from "./pluginContractErrors";
 import {
-  buildPluginManifestFromAgentAppManifest,
-  buildPluginRightSurfaceFromAgentAppManifest,
-} from "./pluginContractAgentApp";
+  buildPluginManifestFromPluginManifest,
+  buildPluginRightSurfaceFromPluginManifest,
+} from "./pluginContractPlugin";
 import {
   normalizeActivationEntry,
   normalizeCliDeclarations,
@@ -47,7 +47,7 @@ import {
   uniqueStrings,
 } from "./pluginContractUtils";
 
-export { buildPluginManifestFromAgentAppManifest } from "./pluginContractAgentApp";
+export { buildPluginManifestFromPluginManifest } from "./pluginContractPlugin";
 
 interface NormalizePluginManifestOptions {
   provenance?: PluginContractProvenance;
@@ -72,13 +72,13 @@ function normalizeSkill(
   };
 }
 
-function normalizeAgentApp(
+function normalizePluginUi(
   record: Record<string, unknown>,
-): PluginAgentAppDeclaration {
+): PluginUiDeclaration {
   const uiKind = readString(record.uiKind);
   if (uiKind && !["page", "pane", "webcontents_view"].includes(uiKind)) {
     throw new PluginManifestError(
-      `Plugin agentApp uiKind is unsupported: ${uiKind}`,
+      `Plugin UI kind is unsupported: ${uiKind}`,
     );
   }
 
@@ -86,7 +86,7 @@ function normalizeAgentApp(
     id: requireString(record, "id"),
     title: requireString(record, "title"),
     description: readString(record.description),
-    uiKind: uiKind as PluginAgentAppDeclaration["uiKind"] | undefined,
+    uiKind: uiKind as PluginUiDeclaration["uiKind"] | undefined,
     defaultSurfaceKind: readString(record.defaultSurfaceKind),
     entryKey: readString(record.entryKey),
   };
@@ -400,8 +400,8 @@ export function normalizePluginManifest(
   const skills = Array.isArray(raw.skills)
     ? readRecords(raw.skills, "skills").map(normalizeSkill)
     : [];
-  const agentApps = Array.isArray(raw.agentApps)
-    ? readRecords(raw.agentApps, "agentApps").map(normalizeAgentApp)
+  const ui = Array.isArray(raw.ui)
+    ? readRecords(raw.ui, "ui").map(normalizePluginUi)
     : [];
   const subagents = Array.isArray(raw.subagents)
     ? readRecords(raw.subagents, "subagents").map(normalizeSubagent)
@@ -470,7 +470,7 @@ export function normalizePluginManifest(
     ...(contributions ? { contributions } : {}),
     componentPaths,
     skills,
-    agentApps,
+    ui,
     subagents,
     clis,
     workflows,
@@ -495,21 +495,21 @@ export function normalizePluginManifest(
   };
 }
 
-export function buildPluginContractFromAgentAppManifest(params: {
+export function buildPluginContractFromPluginManifest(params: {
   manifest: NormalizedAppManifest;
   identity?: PackageIdentity;
 }): PluginContract {
-  const pluginManifest = buildPluginManifestFromAgentAppManifest(
+  const pluginManifest = buildPluginManifestFromPluginManifest(
     params.manifest,
   );
-  const rightSurface = buildPluginRightSurfaceFromAgentAppManifest(
+  const rightSurface = buildPluginRightSurfaceFromPluginManifest(
     params.manifest,
   );
 
   return normalizePluginManifest(pluginManifest, {
     rightSurface,
     provenance: {
-      sourceKind: "agent_app_manifest",
+      sourceKind: "plugin_manifest",
       sourceId: params.manifest.appId,
       sourceVersion: params.manifest.version,
       packageHash: params.identity?.packageHash,

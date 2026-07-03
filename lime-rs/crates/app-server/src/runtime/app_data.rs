@@ -1,4 +1,3 @@
-mod agent_apps;
 mod automation;
 mod connect;
 mod diagnostics;
@@ -8,6 +7,7 @@ mod mcp;
 mod media;
 mod memory;
 mod model_providers;
+mod plugins;
 mod right_surface;
 mod sessions;
 mod skills;
@@ -15,7 +15,6 @@ mod usage_stats;
 mod voice;
 mod workspaces;
 
-pub use agent_apps::AgentAppDataSource;
 pub use automation::AutomationManagementAppDataSource;
 pub use automation::AutomationOverviewAppDataSource;
 pub use connect::ConnectAppDataSource;
@@ -26,6 +25,7 @@ pub use mcp::McpAppDataSource;
 pub use media::MediaAppDataSource;
 pub use memory::MemoryAppDataSource;
 pub use model_providers::ModelProviderAppDataSource;
+pub use plugins::PluginDataSource;
 pub use right_surface::{
     RightSurfaceAppDataSource, WorkspaceObjectCanvasSnapshot,
     WorkspaceObjectCanvasSnapshotListParams,
@@ -47,7 +47,7 @@ pub trait AppDataSource:
     + GatewayAppDataSource
     + MediaAppDataSource
     + VoiceAppDataSource
-    + AgentAppDataSource
+    + PluginDataSource
     + KnowledgeAppDataSource
     + AutomationOverviewAppDataSource
     + McpAppDataSource
@@ -71,7 +71,7 @@ impl<T> AppDataSource for T where
         + GatewayAppDataSource
         + MediaAppDataSource
         + VoiceAppDataSource
-        + AgentAppDataSource
+        + PluginDataSource
         + KnowledgeAppDataSource
         + AutomationOverviewAppDataSource
         + McpAppDataSource

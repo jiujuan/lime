@@ -5,7 +5,7 @@ import {
   startContentFactoryHostGenerationFixture,
 } from "../lib/content-factory-host-generation-fixture.mjs";
 import {
-  APP_SERVER_METHOD_AGENT_APP_INSTALLED_SAVE,
+  APP_SERVER_METHOD_PLUGIN_INSTALLED_SAVE,
   APP_SERVER_METHOD_SESSION_READ,
   APP_SERVER_METHOD_SESSION_TURN_START,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_ARTICLE_ARTIFACT_ID,
@@ -24,7 +24,7 @@ export async function saveWorkspacePatchWorkerInstalledState(page, requestLog) {
   const state = buildWorkspacePatchInstalledState();
   const response = await invokeAppServerFromPage(
     page,
-    APP_SERVER_METHOD_AGENT_APP_INSTALLED_SAVE,
+    APP_SERVER_METHOD_PLUGIN_INSTALLED_SAVE,
     { state },
     requestLog,
   );
@@ -178,7 +178,7 @@ function buildWorkspacePatchInstalledState() {
   );
   const timestamp = new Date().toISOString();
   return {
-    schemaVersion: "agent-app.installed-state.v1",
+    schemaVersion: "plugin.installed-state.v1",
     appId: WORKER_APP_ID,
     installMode: "runtime_backed",
     disabled: false,
@@ -200,7 +200,7 @@ function buildWorkspacePatchInstalledState() {
 
 function buildArticleWorkspaceWorkerMetadata(workspace) {
   return {
-    agent_app: {
+    plugin: {
       source: "right_surface_article_workspace",
       app_id: WORKER_APP_ID,
       session_id: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
@@ -233,5 +233,5 @@ function buildArticleWorkspaceWorkerMetadata(workspace) {
 }
 
 function resolveFixtureRoot() {
-  return path.resolve(process.cwd(), "src/features/agent-app/testing/fixtures");
+  return path.resolve(process.cwd(), "src/features/plugin/testing/fixtures");
 }

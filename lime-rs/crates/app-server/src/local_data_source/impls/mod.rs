@@ -1,4 +1,3 @@
-mod agent_apps;
 mod automation_management;
 mod automation_overview;
 mod connect;
@@ -9,6 +8,7 @@ mod mcp;
 mod media;
 mod memory;
 mod model_providers;
+mod plugins;
 mod right_surface;
 mod sessions;
 mod skills;

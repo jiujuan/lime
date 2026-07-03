@@ -70,7 +70,7 @@ describe("workspaceArticleEditorActionDispatch", () => {
           "right_surface_article_workspace",
         ),
         requestMetadata: expect.objectContaining({
-          agent_app: expect.objectContaining({
+          plugin: expect.objectContaining({
             source: "right_surface_article_workspace",
             app_id: "content-factory-app",
             article_workspace_action: expect.objectContaining({

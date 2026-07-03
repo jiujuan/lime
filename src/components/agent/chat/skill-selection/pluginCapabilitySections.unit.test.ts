@@ -3,7 +3,7 @@ import type { InputbarPluginCapability } from "../components/Inputbar/pluginInpu
 import { buildMentionPluginCapabilityItems } from "./pluginCapabilitySections";
 
 describe("pluginCapabilitySections", () => {
-  it("应按触发词匹配 Agent App 候选并保持 item key 唯一", () => {
+  it("应按触发词匹配 Plugin 候选并保持 item key 唯一", () => {
     const plugins: InputbarPluginCapability[] = [
       {
         pluginId: "content-factory-app",

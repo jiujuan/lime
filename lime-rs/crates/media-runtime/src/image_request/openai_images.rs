@@ -1,7 +1,7 @@
 use runtime_core::{build_openai_images_generation_body, LlmMessage, LlmRequest, LlmRole};
 use serde_json::{json, Value};
 
-use crate::{ImageGenerationRunnerConfig, TaskErrorRecord};
+use crate::{ImageGenerationRequestBodyFormat, ImageGenerationRunnerConfig, TaskErrorRecord};
 
 use super::{
     build_image_provider_http_error, build_image_task_error, read_response_error_code,
@@ -15,12 +15,18 @@ pub(super) async fn request_single_image_generation(
     request_prompt: &str,
     task_id: &str,
 ) -> Result<(Value, Value), TaskErrorRecord> {
-    let request_body =
-        build_image_generation_request_body(prepared_input, request_prompt, 1, task_id)?;
+    let request_body = build_image_generation_request_body(
+        prepared_input,
+        request_prompt,
+        1,
+        task_id,
+        runner_config.request_body_format,
+    )?;
 
     let endpoint = image_endpoint_for_reference_images(
         &runner_config.endpoint,
         !prepared_input.reference_image_urls.is_empty(),
+        runner_config.request_body_format,
     );
     let mut request_builder = client
         .post(&endpoint)
@@ -158,7 +164,15 @@ fn build_image_generation_request_body(
     request_prompt: &str,
     request_count: u32,
     task_id: &str,
+    request_body_format: ImageGenerationRequestBodyFormat,
 ) -> Result<Value, TaskErrorRecord> {
+    if request_body_format == ImageGenerationRequestBodyFormat::AgnesImages {
+        return Ok(build_agnes_image_generation_request_body(
+            prepared_input,
+            request_prompt,
+        ));
+    }
+
     let request = build_openai_compatible_image_generation_llm_request(
         prepared_input,
         request_prompt,
@@ -173,6 +187,41 @@ fn build_image_generation_request_body(
             "request",
         )
     })
+}
+
+fn build_agnes_image_generation_request_body(
+    prepared_input: &ImageGenerationRequestInput,
+    request_prompt: &str,
+) -> Value {
+    let mut body = serde_json::Map::new();
+    body.insert("model".to_string(), json!(prepared_input.model));
+    body.insert("prompt".to_string(), json!(request_prompt));
+    if let Some(size) = prepared_input
+        .size
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        body.insert("size".to_string(), json!(size));
+    }
+
+    let mut extra_body = serde_json::Map::new();
+    extra_body.insert("response_format".to_string(), json!("url"));
+    if !prepared_input.reference_image_urls.is_empty() {
+        extra_body.insert(
+            "image".to_string(),
+            Value::Array(
+                prepared_input
+                    .reference_image_urls
+                    .iter()
+                    .map(|image_url| json!(image_url))
+                    .collect(),
+            ),
+        );
+    }
+    body.insert("extra_body".to_string(), Value::Object(extra_body));
+
+    Value::Object(body)
 }
 
 fn collect_generated_images(response_body: &Value) -> Vec<Value> {
@@ -212,8 +261,13 @@ fn collect_generated_images(response_body: &Value) -> Vec<Value> {
         .unwrap_or_default()
 }
 
-fn image_endpoint_for_reference_images(endpoint: &str, has_reference_images: bool) -> String {
-    if !has_reference_images {
+fn image_endpoint_for_reference_images(
+    endpoint: &str,
+    has_reference_images: bool,
+    request_body_format: ImageGenerationRequestBodyFormat,
+) -> String {
+    if !has_reference_images || request_body_format == ImageGenerationRequestBodyFormat::AgnesImages
+    {
         return endpoint.to_string();
     }
 
@@ -253,17 +307,34 @@ mod tests {
     #[test]
     fn image_endpoint_for_reference_images_uses_edit_endpoint() {
         assert_eq!(
-            image_endpoint_for_reference_images("https://gateway.test/v1/images/generations", true),
+            image_endpoint_for_reference_images(
+                "https://gateway.test/v1/images/generations",
+                true,
+                ImageGenerationRequestBodyFormat::OpenaiImages
+            ),
             "https://gateway.test/v1/images/edits"
         );
         assert_eq!(
-            image_endpoint_for_reference_images("https://gateway.test/v1?tenant=1", true),
+            image_endpoint_for_reference_images(
+                "https://gateway.test/v1?tenant=1",
+                true,
+                ImageGenerationRequestBodyFormat::OpenaiImages
+            ),
             "https://gateway.test/v1/images/edits?tenant=1"
         );
         assert_eq!(
             image_endpoint_for_reference_images(
                 "https://gateway.test/v1/images/generations",
-                false
+                false,
+                ImageGenerationRequestBodyFormat::OpenaiImages
+            ),
+            "https://gateway.test/v1/images/generations"
+        );
+        assert_eq!(
+            image_endpoint_for_reference_images(
+                "https://gateway.test/v1/images/generations",
+                true,
+                ImageGenerationRequestBodyFormat::AgnesImages
             ),
             "https://gateway.test/v1/images/generations"
         );

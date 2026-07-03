@@ -793,7 +793,7 @@ async fn cancel_turn_writes_open_workflow_cancel_events_to_workflow_audit_jsonl(
                         "workflowKey": "content_article_workflow",
                         "status": "running",
                         "metadata": {
-                            "agentAppWorkflow": {
+                            "pluginWorkflow": {
                                 "status": "running"
                             }
                         }
@@ -806,7 +806,7 @@ async fn cancel_turn_writes_open_workflow_cancel_events_to_workflow_audit_jsonl(
                         "stepId": "draft",
                         "status": "running",
                         "metadata": {
-                            "agentAppWorkflow": {
+                            "pluginWorkflow": {
                                 "status": "running"
                             }
                         }
@@ -877,7 +877,7 @@ async fn cancel_turn_writes_open_workflow_cancel_events_to_workflow_audit_jsonl(
     let canceled_run = &workflow_audit_records[3].event;
     assert_eq!(canceled_run.payload["status"], "canceled");
     assert_eq!(
-        canceled_run.payload["metadata"]["agentAppWorkflow"]["status"],
+        canceled_run.payload["metadata"]["pluginWorkflow"]["status"],
         "canceled"
     );
 }

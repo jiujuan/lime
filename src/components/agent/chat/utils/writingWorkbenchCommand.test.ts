@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseWritingWorkbenchCommand } from "./writingWorkbenchCommand";
 
 describe("parseWritingWorkbenchCommand", () => {
-  it("@写作 应交给内容工厂 Agent App manifest，不再走旧写作命令", () => {
+  it("@写作 应交给内容工厂 Plugin manifest，不再走旧写作命令", () => {
     expect(
       parseWritingWorkbenchCommand(
         "@写作 平台:微信公众号后台 帮我把这份活动素材整理成一版主稿",

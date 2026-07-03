@@ -103,7 +103,7 @@ export function buildWorkspacePluginHistoryRestoreArtifactPreviewArtifact({
       pluginHistoryRestore: {
         sessionId,
         pluginId: projection.pluginId ?? null,
-        activeAgentAppId: projection.activeAgentAppId ?? null,
+        activePluginUiId: projection.activePluginUiId ?? null,
         activeEntryKey: projection.activeEntryKey ?? null,
         artifactRef,
       },

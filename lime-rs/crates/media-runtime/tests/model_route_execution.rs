@@ -86,6 +86,7 @@ async fn image_worker_uses_resolved_route_provider_and_model() {
         &ImageGenerationRunnerConfig {
             endpoint: format!("http://{address}/v1/images/generations"),
             api_key: "test-key".to_string(),
+            request_body_format: Default::default(),
         },
     )
     .await
@@ -222,6 +223,7 @@ async fn image_worker_uses_nested_route_execution_without_route_only_migration()
         &ImageGenerationRunnerConfig {
             endpoint: format!("http://{address}/v1/images/generations"),
             api_key: "test-key".to_string(),
+            request_body_format: Default::default(),
         },
     )
     .await
@@ -466,6 +468,7 @@ async fn image_worker_fails_closed_on_capability_gap() {
         &ImageGenerationRunnerConfig {
             endpoint: "http://127.0.0.1:1/v1/images/generations".to_string(),
             api_key: "test-key".to_string(),
+            request_body_format: Default::default(),
         },
         move |output| {
             updates_for_hook
@@ -591,6 +594,7 @@ async fn image_worker_fails_closed_on_embedded_route_secret() {
         &ImageGenerationRunnerConfig {
             endpoint: "http://127.0.0.1:1/v1/images/generations".to_string(),
             api_key: "test-key".to_string(),
+            request_body_format: Default::default(),
         },
     )
     .await
@@ -693,6 +697,7 @@ async fn image_worker_fails_closed_on_unsupported_route_protocol() {
         &ImageGenerationRunnerConfig {
             endpoint: "http://127.0.0.1:1/v1/images/generations".to_string(),
             api_key: "test-key".to_string(),
+            request_body_format: Default::default(),
         },
     )
     .await

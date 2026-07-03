@@ -16,7 +16,7 @@ import {
   type ConversationImportThreadPreviewResponse,
   type ImportedThreadSummary,
 } from "@/lib/api/conversationImport";
-import { selectAgentAppDirectory } from "@/lib/api/agentApps";
+import { selectPluginDirectory } from "@/lib/api/plugins";
 import { formatNumber } from "@/i18n/format";
 import {
   DEFAULT_CONVERSATION_IMPORT_SOURCE_CLIENT,
@@ -305,7 +305,7 @@ export function AppSidebarConversationImportDialog({
     setSelectingSourceRoot(true);
     setError(null);
     try {
-      const result = await selectAgentAppDirectory({
+      const result = await selectPluginDirectory({
         title: t(
           "navigation.sidebar.importDialog.sourceRoot.dialogTitle",
           "Select local history data directory",

@@ -13,12 +13,12 @@ interface ImportMetaEnv {
   readonly VITE_OEM_DESKTOP_CLIENT_ID?: string;
   readonly VITE_OEM_DESKTOP_OAUTH_REDIRECT_URL?: string;
   readonly VITE_OEM_DESKTOP_OAUTH_NEXT_PATH?: string;
-  readonly VITE_LIME_AGENT_APP_LAB?: string;
-  readonly VITE_LIME_AGENT_APP_MOCK_SDK?: string;
-  readonly VITE_LIME_AGENT_APP_REAL_ADAPTER?: string;
-  readonly VITE_LIME_AGENT_APP_UI_RUNTIME?: string;
-  readonly VITE_LIME_AGENT_APP_WORKFLOW_RUNTIME?: string;
-  readonly VITE_LIME_AGENT_APP_CLOUD_BOOTSTRAP?: string;
+  readonly VITE_LIME_PLUGIN_LAB?: string;
+  readonly VITE_LIME_PLUGIN_MOCK_SDK?: string;
+  readonly VITE_LIME_PLUGIN_REAL_ADAPTER?: string;
+  readonly VITE_LIME_PLUGIN_UI_RUNTIME?: string;
+  readonly VITE_LIME_PLUGIN_WORKFLOW_RUNTIME?: string;
+  readonly VITE_LIME_PLUGIN_CLOUD_BOOTSTRAP?: string;
 }
 
 // SVG 模块声明 - 支持 ?react 后缀导入为 React 组件

@@ -27,9 +27,9 @@ import {
 } from "./right-surface";
 import type { WorkspaceFilesSurfaceTarget } from "./WorkspaceFilesSurface";
 import {
-  buildWorkspaceAgentAppSurfacesFromPendingRequests,
-  type WorkspaceAgentAppSurfaceDescriptor,
-} from "./workspaceAgentAppSurfaceModel";
+  buildWorkspacePluginSurfacesFromPendingRequests,
+  type WorkspacePluginSurfaceDescriptor,
+} from "./workspacePluginSurfaceModel";
 import type { WorkspaceObjectCanvasCandidate } from "./workspaceObjectCanvasModel";
 import {
   buildWorkspaceArticleWorkspaceFromPendingRequests,
@@ -81,8 +81,8 @@ export interface WorkspaceRightSurfacePendingRuntime {
   pendingRequests: WorkspaceRightSurfacePendingRequest[];
   pendingIntents: WorkspaceRightSurfaceIntent[];
   pendingFileTarget: WorkspaceFilesSurfaceTarget | null;
-  pendingAgentAppSurface: WorkspaceAgentAppSurfaceDescriptor | null;
-  pendingAgentAppSurfaces: WorkspaceAgentAppSurfaceDescriptor[];
+  pendingPluginSurface: WorkspacePluginSurfaceDescriptor | null;
+  pendingPluginSurfaces: WorkspacePluginSurfaceDescriptor[];
   pendingObjectCanvasCandidate: WorkspaceObjectCanvasCandidate | null;
   pendingArticleWorkspace: WorkspaceArticleWorkspace | null;
   pendingBrowserIntent: WorkspaceRightSurfaceBrowserIntent | null;
@@ -390,11 +390,11 @@ export function useWorkspaceRightSurfacePendingRuntime({
     () => buildWorkspaceRightSurfacePendingFileTarget(pendingRequests),
     [pendingRequests],
   );
-  const pendingAgentAppSurfaces = useMemo(
-    () => buildWorkspaceAgentAppSurfacesFromPendingRequests(pendingRequests),
+  const pendingPluginSurfaces = useMemo(
+    () => buildWorkspacePluginSurfacesFromPendingRequests(pendingRequests),
     [pendingRequests],
   );
-  const pendingAgentAppSurface = pendingAgentAppSurfaces[0] ?? null;
+  const pendingPluginSurface = pendingPluginSurfaces[0] ?? null;
   const pendingObjectCanvasCandidate = useMemo(
     () =>
       buildWorkspaceRightSurfacePendingObjectCanvasCandidate(pendingRequests),
@@ -422,8 +422,8 @@ export function useWorkspaceRightSurfacePendingRuntime({
     pendingRequests,
     pendingIntents,
     pendingFileTarget,
-    pendingAgentAppSurface,
-    pendingAgentAppSurfaces,
+    pendingPluginSurface,
+    pendingPluginSurfaces,
     pendingObjectCanvasCandidate,
     pendingArticleWorkspace,
     pendingBrowserIntent,

@@ -75,7 +75,7 @@ describe("managed-objective-automation-smoke-support", () => {
           },
         ],
       },
-      agent_app_runtime_skill_contract: {
+      plugin_runtime_skill_contract: {
         required_skills: [
           {
             skill: "project:capability-automation-smoke",

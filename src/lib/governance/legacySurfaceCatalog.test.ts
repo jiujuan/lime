@@ -88,7 +88,7 @@ describe("legacySurfaceCatalog", () => {
     );
     const hostDrawerFallbackMonitor =
       legacySurfaceCatalogJson.frontendText.find(
-        (entry) => entry.id === "agent-app-host-drawer-local-process-fallback",
+        (entry) => entry.id === "plugin-host-drawer-local-process-fallback",
       );
     const providerMonitor = legacySurfaceCatalogJson.frontendText.find(
       (entry) => entry.id === "agent-ui-direct-provider-runtime-surface",
@@ -99,7 +99,7 @@ describe("legacySurfaceCatalog", () => {
     expect(treeMonitor?.patterns).toEqual(["ViewTree", "ProcessTree"]);
     expect(treeMonitor?.includePathPrefixes).toEqual([
       "src/components/agent",
-      "src/features/agent-app",
+      "src/features/plugin",
       "src/lib/api/agentRuntime",
     ]);
     expect(treeMonitor?.allowedPaths).toEqual([]);
@@ -151,7 +151,7 @@ describe("legacySurfaceCatalog", () => {
       "shouldRenderProjection ? (",
     ]);
     expect(hostDrawerFallbackMonitor?.includePathPrefixes).toEqual([
-      "src/features/agent-app/ui/AgentRunHostDrawer.tsx",
+      "src/features/plugin/ui/AgentRunHostDrawer.tsx",
     ]);
     expect(hostDrawerFallbackMonitor?.allowedPaths).toEqual([]);
 
@@ -3517,7 +3517,7 @@ describe("legacySurfaceCatalog", () => {
     expect(monitor?.allowedPaths).toEqual([
       "lime-rs/crates/app-server/src/runtime/artifact_sidecar.rs",
       "lime-rs/crates/app-server/src/runtime/artifact_reader.rs",
-      "lime-rs/crates/app-server/src/runtime/agent_app_worker_runtime.rs",
+      "lime-rs/crates/app-server/src/runtime/plugin_worker_runtime.rs",
       "lime-rs/crates/app-server/src/runtime/event_store.rs",
       "lime-rs/crates/app-server/src/runtime/tests/artifacts.rs",
       "lime-rs/crates/app-server/src/runtime/tests/evidence_exports.rs",
@@ -3703,20 +3703,20 @@ describe("legacySurfaceCatalog", () => {
     ]);
   });
 
-  it("应记录 Agent App 应用中心 current App Server 方法目录", () => {
-    expect(agentCommandCatalog.appServerAgentAppMethods).toEqual([
-      "agentAppLocalPackage/inspect",
-      "agentAppPackage/fetchCloud",
-      "agentAppInstalled/save",
-      "agentAppInstalled/list",
-      "agentAppInstalled/disabled/set",
-      "agentAppInstalled/uninstall/rehearsal",
-      "agentAppInstalled/uninstall",
-      "agentAppHostLifecycle/list",
-      "agentAppShell/prepare",
-      "agentAppUiRuntime/start",
-      "agentAppUiRuntime/status",
-      "agentAppUiRuntime/stop",
+  it("应记录 Plugin 应用中心 current App Server 方法目录", () => {
+    expect(agentCommandCatalog.appServerPluginMethods).toEqual([
+      "pluginLocalPackage/inspect",
+      "pluginPackage/fetchCloud",
+      "pluginInstalled/save",
+      "pluginInstalled/list",
+      "pluginInstalled/disabled/set",
+      "pluginInstalled/uninstall/rehearsal",
+      "pluginInstalled/uninstall",
+      "pluginHostLifecycle/list",
+      "pluginShell/prepare",
+      "pluginUiRuntime/start",
+      "pluginUiRuntime/status",
+      "pluginUiRuntime/stop",
     ]);
   });
 
@@ -3731,26 +3731,26 @@ describe("legacySurfaceCatalog", () => {
     ]);
   });
 
-  it("旧 Agent App lifecycle Tauri 命令不应继续作为 runtime gateway current surface", () => {
+  it("旧 Plugin lifecycle Tauri 命令不应继续作为 runtime gateway current surface", () => {
     expect(agentCommandCatalog.runtimeGatewayCommands).not.toEqual(
       expect.arrayContaining([
-        "agent_app_inspect_local_package",
-        "agent_app_fetch_cloud_package",
-        "agent_app_save_installed_state",
-        "agent_app_list_installed",
-        "agent_app_set_disabled",
-        "agent_app_uninstall_rehearsal",
-        "agent_app_uninstall",
+        "plugin_inspect_local_package",
+        "plugin_fetch_cloud_package",
+        "plugin_save_installed_state",
+        "plugin_list_installed",
+        "plugin_set_disabled",
+        "plugin_uninstall_rehearsal",
+        "plugin_uninstall",
       ]),
     );
     expect(agentCommandCatalog.deprecatedCommandReplacements).toMatchObject({
-      agent_app_inspect_local_package: "agentAppLocalPackage/inspect",
-      agent_app_fetch_cloud_package: "agentAppPackage/fetchCloud",
-      agent_app_save_installed_state: "agentAppInstalled/save",
-      agent_app_list_installed: "agentAppInstalled/list",
-      agent_app_set_disabled: "agentAppInstalled/disabled/set",
-      agent_app_uninstall_rehearsal: "agentAppInstalled/uninstall/rehearsal",
-      agent_app_uninstall: "agentAppInstalled/uninstall",
+      plugin_inspect_local_package: "pluginLocalPackage/inspect",
+      plugin_fetch_cloud_package: "pluginPackage/fetchCloud",
+      plugin_save_installed_state: "pluginInstalled/save",
+      plugin_list_installed: "pluginInstalled/list",
+      plugin_set_disabled: "pluginInstalled/disabled/set",
+      plugin_uninstall_rehearsal: "pluginInstalled/uninstall/rehearsal",
+      plugin_uninstall: "pluginInstalled/uninstall",
     });
   });
 
@@ -3884,10 +3884,10 @@ describe("legacySurfaceCatalog", () => {
         "\"productProfile\"",
         "productProfileAvailable",
         "productProfileEnabled",
-        "AgentAppProductProfile",
+        "PluginProductProfile",
         "agentChat.navbar.productProfile",
         "agentChat.rightSurface.tabs.productProfile",
-        "agentApp.apps.center.host.productProfile",
+        "plugin.apps.center.host.productProfile",
       ]),
     );
     expect(monitor?.allowedPaths).toEqual(

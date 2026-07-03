@@ -90,13 +90,13 @@ describe("workspaceArticleWorkspaceActionHistory", () => {
           session_id: "session-main",
           app_id: "content-factory-app",
           error_code: "worker_invalid_json_output",
-          error_message: "Agent App worker returned invalid JSON",
+          error_message: "Plugin worker returned invalid JSON",
         },
       ]),
     ).toEqual([
       expect.objectContaining({
         errorCode: "worker_invalid_json_output",
-        errorMessage: "Agent App worker returned invalid JSON",
+        errorMessage: "Plugin worker returned invalid JSON",
       }),
     ]);
   });

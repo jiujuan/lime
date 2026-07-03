@@ -1,5 +1,5 @@
-use super::agent_app_worker_workflow_cancel::workflow_cancel_events_from_audit_records;
 use super::event_store::{append_runtime_events_to_state, append_workflow_audit_runtime_events};
+use super::plugin_worker_workflow_cancel::workflow_cancel_events_from_audit_records;
 use super::status::{agent_turn_is_active, agent_turn_is_terminal};
 use super::*;
 use app_server_protocol::*;
@@ -355,9 +355,7 @@ impl RuntimeCore {
                 turn.turn_id.clone(),
                 event_callback,
             );
-            let backend_result = match self
-                .maybe_run_agent_app_worker_turn(&request, &mut sink)
-                .await
+            let backend_result = match self.maybe_run_plugin_worker_turn(&request, &mut sink).await
             {
                 Ok(true) => Ok(()),
                 Ok(false) => self.backend.start_turn(request, &mut sink).await,
@@ -379,9 +377,7 @@ impl RuntimeCore {
             events
         } else {
             let mut sink = CollectingRuntimeEventSink::default();
-            let backend_result = match self
-                .maybe_run_agent_app_worker_turn(&request, &mut sink)
-                .await
+            let backend_result = match self.maybe_run_plugin_worker_turn(&request, &mut sink).await
             {
                 Ok(true) => Ok(()),
                 Ok(false) => self.backend.start_turn(request, &mut sink).await,

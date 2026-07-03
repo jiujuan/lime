@@ -106,8 +106,7 @@ export const APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_GET =
   "mediaTaskArtifact/get";
 export const APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_LIST =
   "mediaTaskArtifact/list";
-export const APP_SERVER_METHOD_AGENT_APP_INSTALLED_SAVE =
-  "agentAppInstalled/save";
+export const APP_SERVER_METHOD_PLUGIN_INSTALLED_SAVE = "pluginInstalled/save";
 export const APP_SERVER_METHOD_EVIDENCE_EXPORT = "evidence/export";
 export const APP_SERVER_METHOD_DIAGNOSTICS_TRACE_LIST =
   "diagnostics/trace/list";
@@ -208,7 +207,7 @@ export const CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TURN_ID = `${CONTENT_FACTO
 export const CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TASK_ID = `${CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TURN_ID}:${CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_ACTION_KEY}`;
 export const CONTENT_FACTORY_ARTICLE_WORKSPACE_REMOTE_REJECT_TURN_ID = `${CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID}-remote-reject-turn`;
 export const CONTENT_FACTORY_ARTICLE_WORKSPACE_REMOTE_REJECT_ERROR_CODE =
-  "AGENT_APP_WORKER_REMOTE_RUNTIME_DISABLED";
+  "PLUGIN_WORKER_REMOTE_RUNTIME_DISABLED";
 export const CONTENT_FACTORY_ARTICLE_WORKSPACE_ARTICLE_ARTIFACT_ID =
   "artifact-article-1";
 export const CONTENT_FACTORY_ARTICLE_WORKSPACE_IMAGE_ARTIFACT_ID =
@@ -337,7 +336,7 @@ export const CONTENT_FACTORY_ARTICLE_WORKSPACE_ASSERTION_KEYS = [
   "contentFactoryArticleWorkspaceArtifactsProjected",
   "contentFactoryArticleWorkspaceRendererArtifactsProjected",
   "contentFactoryArticleWorkspaceArtifactReadContent",
-  "contentFactoryArticleWorkspaceArticleWritingStructureVisible",
+  "contentFactoryArticleWorkspaceArticleCanvasSurfaceVisible",
   "contentFactoryArticleWorkspaceEditedDraftRestored",
   "contentFactoryArticleWorkspaceWorkerFailureEvidence",
   "contentFactoryArticleWorkspaceWorkerTurnExecuted",

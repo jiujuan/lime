@@ -9,7 +9,7 @@ function projection(
     status: "restored",
     sessionId: "session-1",
     pluginId: "creator-workbench",
-    activeAgentAppId: "creator-workbench",
+    activePluginUiId: "creator-workbench",
     activeEntryKey: "creator",
     selectedSkillKeys: ["article-draft"],
     primaryObjectRef: {

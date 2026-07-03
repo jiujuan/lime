@@ -1,7 +1,7 @@
 import { act, useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { InstalledAgentAppState } from "@/features/agent-app/types";
-import { AGENT_APPS_CHANGED_EVENT } from "@/lib/api/agentApps";
+import type { InstalledPluginState } from "@/features/plugin/types";
+import { PLUGINS_CHANGED_EVENT } from "@/lib/api/plugins";
 import {
   cleanupMountedRoots,
   flushEffects,
@@ -37,8 +37,8 @@ function HookHarness({ options, onReady }: HookHarnessProps) {
 }
 
 function createInstalledPluginBackedApp(
-  overrides: Partial<InstalledAgentAppState> = {},
-): InstalledAgentAppState {
+  overrides: Partial<InstalledPluginState> = {},
+): InstalledPluginState {
   return {
     appId: "creator-workbench",
     disabled: false,
@@ -59,7 +59,7 @@ function createInstalledPluginBackedApp(
       manifestVersion: "0.11",
       version: "1.0.0",
       status: "ready",
-      appType: "agent-app",
+      appType: "plugin",
       description: "创作业务应用",
       runtimeTargets: ["local"],
       requires: {
@@ -135,24 +135,24 @@ function createInstalledPluginBackedApp(
       manifestHash: "manifest-hash",
       loadedAt: "2026-06-25T00:00:00.000Z",
     },
-    projection: {} as InstalledAgentAppState["projection"],
+    projection: {} as InstalledPluginState["projection"],
     installMode: "in_lime",
     runtimeProfileSummary:
-      {} as InstalledAgentAppState["runtimeProfileSummary"],
-    setup: {} as InstalledAgentAppState["setup"],
+      {} as InstalledPluginState["runtimeProfileSummary"],
+    setup: {} as InstalledPluginState["setup"],
     installedAt: "2026-06-25T00:00:00.000Z",
     updatedAt: "2026-06-25T00:00:00.000Z",
     ...overrides,
-  } as InstalledAgentAppState;
+  } as InstalledPluginState;
 }
 
 function pluginActivationRequestMetadata(
-  installedAgentApps: readonly InstalledAgentAppState[],
+  installedPlugins: readonly InstalledPluginState[],
 ) {
   const resolution = resolveWorkspacePluginActivation({
     text: "@创作工作台 写一篇公众号文章",
     sessionId: "session-1",
-    installedAgentApps,
+    installedPlugins,
   });
 
   return mergePluginActivationSendOptions({
@@ -322,7 +322,7 @@ describe("useWorkspacePluginRuntimeContext", () => {
     expect(getLatestValue().context.status).toBe("active");
 
     act(() => {
-      window.dispatchEvent(new Event(AGENT_APPS_CHANGED_EVENT));
+      window.dispatchEvent(new Event(PLUGINS_CHANGED_EVENT));
     });
     await flushEffects(8);
 

@@ -8,19 +8,18 @@ import { lazy, useCallback } from "react";
 import styled from "styled-components";
 import type {
   AgentPageParams,
-  AgentAppPageParams,
-  AgentAppsPageParams,
+  PluginPageParams,
+  PluginsPageParams,
   AutomationPageParams,
   BrowserRuntimePageParams,
   KnowledgePageParams,
   Page,
   PageParams,
-  PluginsPageParams,
   ResourcesPageParams,
   SettingsPageParams,
   SkillsPageParams,
 } from "@/types/page";
-import type { AgentAppRightSurfaceLaunchTarget } from "@/features/agent-app/ui/agentAppRightSurfaceLaunch";
+import type { PluginRightSurfaceLaunchTarget } from "@/features/plugin/ui/pluginRightSurfaceLaunch";
 import { AutomationPage } from "./automation";
 import { ImConfigPage } from "./channels/ImConfigPage";
 import { SettingsPageV2 } from "./settings-v2";
@@ -55,18 +54,18 @@ const loadKnowledgePage = () =>
   import("@/features/knowledge").then((module) => ({
     default: module.KnowledgePage,
   }));
-const loadAgentAppLabPage = () =>
-  import("@/features/agent-app").then((module) => ({
-    default: module.AgentAppLabPage,
+const loadPluginLabPage = () =>
+  import("@/features/plugin").then((module) => ({
+    default: module.PluginLabPage,
   }));
-const loadAgentAppsPage = () =>
-  import("@/features/agent-app").then((module) => ({
-    default: module.AgentAppsPage,
+const loadPluginsPage = () =>
+  import("@/features/plugin").then((module) => ({
+    default: module.PluginsPage,
   }));
 
-const loadAgentAppRuntimePage = () =>
-  import("@/features/agent-app").then((module) => ({
-    default: module.AgentAppRuntimePage,
+const loadPluginRuntimePage = () =>
+  import("@/features/plugin").then((module) => ({
+    default: module.PluginRuntimePage,
   }));
 const loadExpertPlazaPage = () =>
   import("./experts").then((module) => ({
@@ -85,9 +84,9 @@ const ResourcesPage = lazy(loadResourcesPage);
 const SkillsWorkspacePage = lazy(loadSkillsWorkspacePage);
 const PluginMarketplacePage = lazy(loadPluginMarketplacePage);
 const KnowledgePage = lazy(loadKnowledgePage);
-const AgentAppLabPage = lazy(loadAgentAppLabPage);
-const AgentAppsPage = lazy(loadAgentAppsPage);
-const AgentAppRuntimePage = lazy(loadAgentAppRuntimePage);
+const PluginLabPage = lazy(loadPluginLabPage);
+const PluginsPage = lazy(loadPluginsPage);
+const PluginRuntimePage = lazy(loadPluginRuntimePage);
 const ExpertPlazaPage = lazy(loadExpertPlazaPage);
 const BrowserRuntimeWorkspace = lazy(loadBrowserRuntimeWorkspace);
 const AgentChatPage = lazy(loadAgentChatPage);
@@ -101,10 +100,10 @@ interface AppPageContentProps {
   onAgentHasMessagesChange: (hasMessages: boolean) => void;
   onAgentSessionChange?: (sessionId: string | null) => void;
   onAgentStreamingChange?: (isStreaming: boolean) => void;
-  activeAgentSessionTarget?: AgentAppRightSurfaceLaunchTarget | null;
-  agentSessionTargets?: AgentAppRightSurfaceLaunchTarget[] | null;
+  activeAgentSessionTarget?: PluginRightSurfaceLaunchTarget | null;
+  agentSessionTargets?: PluginRightSurfaceLaunchTarget[] | null;
   onAgentSessionTargetChange?: (
-    target: AgentAppRightSurfaceLaunchTarget | null,
+    target: PluginRightSurfaceLaunchTarget | null,
   ) => void;
 }
 
@@ -283,30 +282,30 @@ export function AppPageContent({
     );
   }
 
-  if (activePage === "agent-app-lab") {
+  if (activePage === "plugin-lab") {
     return (
       <div style={columnPageStyle}>
-        <AgentAppLabPage />
+        <PluginLabPage />
       </div>
     );
   }
 
-  if (activePage === "agent-app") {
+  if (activePage === "plugin") {
     return (
       <div style={columnPageStyle}>
-        <AgentAppRuntimePage
-          pageParams={activePageParams as AgentAppPageParams}
+        <PluginRuntimePage
+          pageParams={activePageParams as PluginPageParams}
         />
       </div>
     );
   }
 
-  if (activePage === "agent-apps") {
+  if (activePage === "plugins") {
     return (
       <div style={columnPageStyle}>
-        <AgentAppsPage
+        <PluginsPage
           onNavigate={onNavigate}
-          pageParams={activePageParams as AgentAppsPageParams}
+          pageParams={activePageParams as PluginsPageParams}
           rightSurfaceTarget={activeAgentSessionTarget}
           rightSurfaceTargets={agentSessionTargets}
         />

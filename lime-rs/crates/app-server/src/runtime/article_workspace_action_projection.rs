@@ -48,18 +48,16 @@ fn article_workspace_action_from_metadata(
     turn: &AgentTurn,
     metadata: &Value,
 ) -> Option<Value> {
-    let agent_app = metadata
-        .get("agent_app")
-        .or_else(|| metadata.get("agentApp"))?;
-    let action = agent_app
+    let plugin = metadata.get("plugin").or_else(|| metadata.get("plugin"))?;
+    let action = plugin
         .get("article_workspace_action")
-        .or_else(|| agent_app.get("articleWorkspaceAction"))?;
+        .or_else(|| plugin.get("articleWorkspaceAction"))?;
     if !action.is_object() {
         return None;
     }
     if !is_article_workspace_surface(metadata)
         && !matches!(
-            string_field(agent_app, &["source"]).as_deref(),
+            string_field(plugin, &["source"]).as_deref(),
             Some("right_surface_article_workspace")
         )
     {

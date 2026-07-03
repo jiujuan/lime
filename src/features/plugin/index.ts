@@ -1,7 +1,8 @@
+export * from "./sdk";
 export { PluginMarketplacePage } from "./PluginMarketplacePage";
 export {
-  buildPluginContractFromAgentAppManifest,
-  buildPluginManifestFromAgentAppManifest,
+  buildPluginContractFromPluginManifest,
+  buildPluginManifestFromPluginManifest,
   normalizePluginManifest,
   PluginManifestError,
 } from "./manifest/pluginContract";
@@ -16,10 +17,10 @@ export {
 export {
   buildPluginContractFromMarketplaceItem,
   buildPluginContractsFromMarketplace,
-  projectPluginMarketplaceInstalledKeysFromAgentApps,
+  projectPluginMarketplaceInstalledKeysFromPlugins,
   projectPluginMarketplaceRegistry,
-  projectPluginMarketplaceRegistryFromInstalledAgentApps,
-  projectPluginMarketplaceRegistryInputsFromInstalledAgentApps,
+  projectPluginMarketplaceRegistryFromInstalledPlugins,
+  projectPluginMarketplaceRegistryInputsFromInstalledPlugins,
   projectPluginMarketplaceRegistryInputs,
 } from "./marketplace/pluginMarketplace";
 export { loadPluginMarketplaceRegistry } from "./marketplace/marketplaceRegistryLoader";
@@ -29,10 +30,10 @@ export {
 } from "./marketplace/pluginMarketplaceViewModel";
 export { usePluginMarketplaceRegistry } from "./marketplace/usePluginMarketplaceRegistry";
 export {
-  projectPluginContractsFromInstalledAgentApps,
-  projectPluginRegistryFromInstalledAgentApps,
-  projectPluginRegistryInputsFromInstalledAgentApps,
-} from "./installed/installedAgentApps";
+  projectPluginContractsFromInstalledPlugins,
+  projectPluginRegistryFromInstalledPlugins,
+  projectPluginRegistryInputsFromInstalledPlugins,
+} from "./installed/installedPlugins";
 export { buildPluginHistoryRestoreProjection } from "./history/pluginHistoryRestore";
 export { buildPluginHistorySessionSelectionModel } from "./history/pluginHistorySessionSelection";
 export {
@@ -53,8 +54,6 @@ export type {
   PluginActivationEntryDeclaration,
   PluginActivationEntryKind,
   PluginActivationIntent,
-  PluginAgentAppDeclaration,
-  PluginAgentAppUiKind,
   PluginArtifactRendererActionDeclaration,
   PluginArtifactRendererDeclaration,
   PluginCliDeclaration,
@@ -81,6 +80,8 @@ export type {
   PluginRendererActionRisk,
   PluginRightSurfaceContract,
   PluginSkillDeclaration,
+  PluginUiDeclaration,
+  PluginUiKind,
   PluginWorkflowDeclaration,
   PluginWorkspaceSelectionPolicy,
 } from "./manifest/types";
@@ -100,7 +101,7 @@ export type {
   PluginMarketplaceSourceKind,
 } from "./marketplace/types";
 export type {
-  PluginMarketplaceInstalledAgentAppsProjectionOptions,
+  PluginMarketplaceInstalledPluginsProjectionOptions,
   PluginMarketplaceInstalledKeyProjection,
   PluginMarketplaceRegistryProjectionOptions,
 } from "./marketplace/pluginMarketplace";
@@ -126,9 +127,9 @@ export type {
   UsePluginMarketplaceRegistryResult,
 } from "./marketplace/usePluginMarketplaceRegistry";
 export type {
-  PluginContractsFromInstalledAgentAppsProjection,
-  PluginRegistryFromInstalledAgentAppsProjection,
-} from "./installed/installedAgentApps";
+  PluginContractsFromInstalledPluginsProjection,
+  PluginRegistryFromInstalledPluginsProjection,
+} from "./installed/installedPlugins";
 export type {
   BuildPluginHistoryRestoreProjectionParams,
   PluginHistoryRestoreActionMode,

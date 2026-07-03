@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import contentFactoryFixture from "@/features/agent-app/testing/fixtures/content-factory-app.json";
-import { buildPackageIdentity } from "@/features/agent-app/install/packageIdentity";
-import { normalizeManifest } from "@/features/agent-app/manifest/normalizeManifest";
-import { parseManifest } from "@/features/agent-app/manifest/parseManifest";
-import type { InstalledAgentAppState } from "@/features/agent-app/types";
+import contentFactoryFixture from "@/features/plugin/testing/fixtures/content-factory-app.json";
+import { buildPackageIdentity } from "@/features/plugin/install/packageIdentity";
+import { normalizeManifest } from "@/features/plugin/manifest/normalizeManifest";
+import { parseManifest } from "@/features/plugin/manifest/parseManifest";
+import type { InstalledPluginState } from "@/features/plugin/types";
 import {
   extractWorkspacePluginActivationFromRequestMetadata,
   mergePluginActivationSendOptions,
@@ -11,8 +11,8 @@ import {
 } from "./workspacePluginActivation";
 
 function createInstalledPluginBackedApp(
-  overrides: Partial<InstalledAgentAppState> = {},
-): InstalledAgentAppState {
+  overrides: Partial<InstalledPluginState> = {},
+): InstalledPluginState {
   return {
     appId: "creator-workbench",
     disabled: false,
@@ -33,7 +33,7 @@ function createInstalledPluginBackedApp(
       manifestVersion: "0.11",
       version: "1.0.0",
       status: "ready",
-      appType: "agent-app",
+      appType: "plugin",
       description: "创作业务应用",
       runtimeTargets: ["local"],
       requires: {
@@ -119,12 +119,12 @@ function createInstalledPluginBackedApp(
       },
     },
     ...overrides,
-  } as InstalledAgentAppState;
+  } as InstalledPluginState;
 }
 
 function createInstalledContentFactory(
-  overrides: Partial<InstalledAgentAppState> = {},
-): InstalledAgentAppState {
+  overrides: Partial<InstalledPluginState> = {},
+): InstalledPluginState {
   const parsedManifest = parseManifest(contentFactoryFixture);
   const manifest = normalizeManifest(parsedManifest);
   return {
@@ -135,7 +135,7 @@ function createInstalledContentFactory(
       loadedAt: "2026-06-28T00:00:00.000Z",
     }),
     manifest,
-    projection: {} as InstalledAgentAppState["projection"],
+    projection: {} as InstalledPluginState["projection"],
     readiness: {
       appId: manifest.appId,
       status: "ready",
@@ -149,20 +149,20 @@ function createInstalledContentFactory(
     },
     installMode: "in_lime",
     runtimeProfileSummary:
-      {} as InstalledAgentAppState["runtimeProfileSummary"],
-    setup: {} as InstalledAgentAppState["setup"],
+      {} as InstalledPluginState["runtimeProfileSummary"],
+    setup: {} as InstalledPluginState["setup"],
     installedAt: "2026-06-28T00:00:00.000Z",
     updatedAt: "2026-06-28T00:00:00.000Z",
     ...overrides,
-  } as InstalledAgentAppState;
+  } as InstalledPluginState;
 }
 
 describe("workspacePluginActivation", () => {
-  it("应从已安装 Agent App manifest 投影插件显式 @ 激活", () => {
+  it("应从已安装 Plugin manifest 投影插件显式 @ 激活", () => {
     const resolution = resolveWorkspacePluginActivation({
       text: "@创作工作台 写一篇公众号文章",
       sessionId: "session-1",
-      installedAgentApps: [createInstalledPluginBackedApp()],
+      installedPlugins: [createInstalledPluginBackedApp()],
     });
 
     expect(resolution).toMatchObject({
@@ -194,23 +194,23 @@ describe("workspacePluginActivation", () => {
       resolveWorkspacePluginActivation({
         text: "@内容工厂 写一篇公众号文章",
         sessionId: "session-content-factory",
-        installedAgentApps: [],
+        installedPlugins: [],
       }),
     ).toBeNull();
     expect(
       resolveWorkspacePluginActivation({
         text: "@写文章 写一篇公众号文章",
         sessionId: "session-write-article",
-        installedAgentApps: [],
+        installedPlugins: [],
       }),
     ).toBeNull();
   });
 
-  it("内容工厂 @ 激活应来自已安装 Agent App manifest", () => {
+  it("内容工厂 @ 激活应来自已安装 Plugin manifest", () => {
     const resolution = resolveWorkspacePluginActivation({
       text: "@内容工厂 写一篇公众号文章",
       sessionId: "session-content-factory",
-      installedAgentApps: [createInstalledContentFactory()],
+      installedPlugins: [createInstalledContentFactory()],
     });
 
     expect(resolution).toMatchObject({
@@ -220,7 +220,7 @@ describe("workspacePluginActivation", () => {
       context: {
         sessionId: "session-content-factory",
         pluginId: "content-factory-app",
-        activeAgentAppId: "content-factory-app",
+        activePluginUiId: "content-factory-app",
         activeEntryKey: "content_factory_generate",
         taskKind: "content.factory.generate",
         workflowKey: "content_article_workflow",
@@ -258,7 +258,7 @@ describe("workspacePluginActivation", () => {
     const resolution = resolveWorkspacePluginActivation({
       text: "@写文章 写一篇公众号文章",
       sessionId: "session-write-article",
-      installedAgentApps: [createInstalledContentFactory()],
+      installedPlugins: [createInstalledContentFactory()],
     });
 
     expect(resolution).toMatchObject({
@@ -268,7 +268,7 @@ describe("workspacePluginActivation", () => {
       context: {
         sessionId: "session-write-article",
         pluginId: "content-factory-app",
-        activeAgentAppId: "content-factory-app",
+        activePluginUiId: "content-factory-app",
         activeEntryKey: "content_article_generate",
         taskKind: "content.article.generate",
         workflowKey: "content_article_workflow",
@@ -297,7 +297,7 @@ describe("workspacePluginActivation", () => {
     const resolution = resolveWorkspacePluginActivation({
       text: "@写文章 写一篇公众号文章",
       sessionId: "session-write-article-needs-setup",
-      installedAgentApps: [
+      installedPlugins: [
         createInstalledContentFactory({
           readiness: {
             ...base.readiness,
@@ -321,7 +321,7 @@ describe("workspacePluginActivation", () => {
     const resolution = resolveWorkspacePluginActivation({
       text: "@写作 要求:你帮我写一篇关于登山的文章",
       sessionId: "session-writing-alias",
-      installedAgentApps: [createInstalledContentFactory()],
+      installedPlugins: [createInstalledContentFactory()],
     });
 
     expect(resolution).toMatchObject({
@@ -331,7 +331,7 @@ describe("workspacePluginActivation", () => {
       context: {
         sessionId: "session-writing-alias",
         pluginId: "content-factory-app",
-        activeAgentAppId: "content-factory-app",
+        activePluginUiId: "content-factory-app",
         activeEntryKey: "content_article_generate",
         selectedObjectRef: {
           pluginId: "content-factory-app",
@@ -354,7 +354,7 @@ describe("workspacePluginActivation", () => {
     const resolution = resolveWorkspacePluginActivation({
       text: "@写作 要求:你帮我写一篇关于登山的文章",
       sessionId: "session-writing-workflow",
-      installedAgentApps: [createInstalledContentFactory()],
+      installedPlugins: [createInstalledContentFactory()],
     });
 
     const sendOptions = mergePluginActivationSendOptions({
@@ -482,7 +482,7 @@ describe("workspacePluginActivation", () => {
     const resolution = resolveWorkspacePluginActivation({
       text: "@创作工作台 写一篇公众号文章",
       sessionId: "session-1",
-      installedAgentApps: [
+      installedPlugins: [
         createInstalledPluginBackedApp({
           disabled: true,
         }),
@@ -500,7 +500,7 @@ describe("workspacePluginActivation", () => {
     const resolution = resolveWorkspacePluginActivation({
       text: "@创作工作台 写一篇公众号文章",
       sessionId: "session-1",
-      installedAgentApps: [createInstalledPluginBackedApp()],
+      installedPlugins: [createInstalledPluginBackedApp()],
     });
 
     const sendOptions = mergePluginActivationSendOptions({
@@ -540,7 +540,7 @@ describe("workspacePluginActivation", () => {
       },
     });
     expect(sendOptions?.systemPromptOverride).toContain(
-      "本轮请求已命中 Agent App manifest intent。",
+      "本轮请求已命中 Plugin manifest intent。",
     );
     expect(sendOptions?.systemPromptOverride).not.toContain("已安装");
     expect(sendOptions?.systemPromptOverride).toContain("creator-workbench");
@@ -554,7 +554,7 @@ describe("workspacePluginActivation", () => {
     const resolution = resolveWorkspacePluginActivation({
       text: "@创作工作台:article-draft 写一篇公众号文章",
       sessionId: "session-1",
-      installedAgentApps: [createInstalledPluginBackedApp()],
+      installedPlugins: [createInstalledPluginBackedApp()],
     });
 
     const sendOptions = mergePluginActivationSendOptions({

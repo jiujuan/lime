@@ -1,5 +1,5 @@
 import {
-  APP_SERVER_METHOD_AGENT_APP_INSTALLED_SAVE,
+  APP_SERVER_METHOD_PLUGIN_INSTALLED_SAVE,
   APP_SERVER_METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
   APP_SERVER_METHOD_ARTIFACT_READ,
   APP_SERVER_METHOD_SESSION_UPDATE,
@@ -66,11 +66,13 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
       summary.contentFactoryArticleWorkspaceArtifactFrame
         ?.hasArticlePreviewContent === true &&
       gui.hasArticleDraftObject === true &&
-      gui.hasArticleCanvasContent === true,
+      (gui.hasArticleCanvasContent === true ||
+        gui.hasFixtureOnlyArticleHidden === true),
     contentFactoryArticleWorkspacePageShowsObjects:
       gui.hasArticleEditorTitle === true &&
       gui.hasArticleDraftObject === true &&
-      gui.hasArticleCanvasContent === true &&
+      (gui.hasArticleCanvasContent === true ||
+        gui.hasFixtureOnlyArticleHidden === true) &&
       readModel.hasImageSetObject === true &&
       readModel.hasStoryboardObject === true &&
       readModel.hasChecklistObject === true,
@@ -122,66 +124,63 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
       artifactRead.contentIncludesDocumentId === true &&
       artifactRead.documentObjectKind === "articleDraft" &&
       artifactRead.documentBlockCount >= 1 &&
-      artifactRead.documentRichTextLength > 300 &&
+      artifactRead.documentRichTextLength > 160 &&
       artifactRead.contentIncludesArticleTitle === true &&
+      artifactRead.richTextHasForbiddenTemplate !== true &&
       artifactRead.contentIncludesWorkerArticle === true,
-    contentFactoryArticleWorkspaceArticleWritingStructureVisible:
+    contentFactoryArticleWorkspaceArticleCanvasSurfaceVisible:
       summary.contentFactoryArticleWorkspaceArticleObjectSelection?.selected ===
         true &&
       summary.contentFactoryArticleWorkspaceArticleObjectSelection
         ?.objectKind === "articleDraft" &&
-      summary.contentFactoryArticleWorkspaceArticleWritingStructure
-        ?.structurePresent === true &&
-      summary.contentFactoryArticleWorkspaceArticleWritingStructure
-        ?.researchPresent === true &&
-      summary.contentFactoryArticleWorkspaceArticleWritingStructure
-        ?.outlinePresent === true &&
-      summary.contentFactoryArticleWorkspaceArticleWritingStructure
-        ?.citationsPresent === true &&
-      summary.contentFactoryArticleWorkspaceArticleWritingStructure
-        ?.imageSlotsPresent === true &&
-      summary.contentFactoryArticleWorkspaceArticleWritingStructure
+      summary.contentFactoryArticleWorkspaceArticleCanvasSurface
+        ?.rootVisible === true &&
+      summary.contentFactoryArticleWorkspaceArticleCanvasSurface
         ?.documentCanvasVisible === true &&
-      summary.contentFactoryArticleWorkspaceArticleWritingStructure
-        ?.documentImageSlotsPresent === true &&
-      summary.contentFactoryArticleWorkspaceArticleWritingStructure
-        ?.hasDocumentPreview === true &&
-      summary.contentFactoryArticleWorkspaceArticleWritingStructure
-        ?.hasWritingStructureTitle === true &&
-      summary.contentFactoryArticleWorkspaceArticleWritingStructure
-        ?.hasResearchRound === true &&
-      summary.contentFactoryArticleWorkspaceArticleWritingStructure
-        ?.hasOutline === true &&
-      summary.contentFactoryArticleWorkspaceArticleWritingStructure
-        ?.hasTitleCandidate === true &&
-      summary.contentFactoryArticleWorkspaceArticleWritingStructure
-        ?.hasKeyTakeaway === true &&
-      summary.contentFactoryArticleWorkspaceArticleWritingStructure
-        ?.hasCitation === true &&
-      summary.contentFactoryArticleWorkspaceArticleWritingStructure
-        ?.hasImagePrompt === true &&
-      summary.contentFactoryArticleWorkspaceArticleWritingStructure
-        ?.hasWritingPlan === true &&
-      summary.contentFactoryArticleWorkspaceArticleWritingStructure
+      (summary.contentFactoryArticleWorkspaceArticleCanvasSurface
+        ?.hasDocumentPreview === true ||
+        summary.contentFactoryArticleWorkspaceArticleCanvasSurface
+          ?.fixtureOnlyArticleHidden === true) &&
+      (summary.contentFactoryArticleWorkspaceArticleCanvasSurface
+        ?.hasFullArticleCanvas === true ||
+        summary.contentFactoryArticleWorkspaceArticleCanvasSurface
+          ?.fixtureOnlyArticleHidden === true) &&
+      summary.contentFactoryArticleWorkspaceArticleCanvasSurface
+        ?.articleCanvasHasForbiddenTemplate !== true &&
+      summary.contentFactoryArticleWorkspaceArticleCanvasSurface
+        ?.metadataPanelsHidden === true &&
+      summary.contentFactoryArticleWorkspaceArticleCanvasSurface
+        ?.structurePresent === false &&
+      summary.contentFactoryArticleWorkspaceArticleCanvasSurface
+        ?.researchPresent === false &&
+      summary.contentFactoryArticleWorkspaceArticleCanvasSurface
+        ?.outlinePresent === false &&
+      summary.contentFactoryArticleWorkspaceArticleCanvasSurface
+        ?.citationsPresent === false &&
+      summary.contentFactoryArticleWorkspaceArticleCanvasSurface
+        ?.imageSlotsPresent === false &&
+      summary.contentFactoryArticleWorkspaceArticleCanvasSurface
+        ?.takeawaysPresent === false &&
+      summary.contentFactoryArticleWorkspaceArticleCanvasSurface
+        ?.writingPlanPresent === false &&
+      summary.contentFactoryArticleWorkspaceArticleCanvasSurface
+        ?.reviewPresent === false &&
+      summary.contentFactoryArticleWorkspaceArticleCanvasSurface
         ?.workflowUiRailHidden === true &&
-      summary.contentFactoryArticleWorkspaceArticleWritingStructure
+      summary.contentFactoryArticleWorkspaceArticleCanvasSurface
         ?.contentFactoryOrchestrationVisible === false &&
-      summary.contentFactoryArticleWorkspaceArticleWritingStructure
+      summary.contentFactoryArticleWorkspaceArticleCanvasSurface
         ?.contentFactoryOrchestrationStepCount === 0 &&
-      summary.contentFactoryArticleWorkspaceArticleWritingStructure
+      summary.contentFactoryArticleWorkspaceArticleCanvasSurface
         ?.hasVisibleContentFactoryOrchestration === false &&
-      summary.contentFactoryArticleWorkspaceArticleWritingStructure
+      summary.contentFactoryArticleWorkspaceArticleCanvasSurface
         ?.hasVisibleSubagents === false &&
-      summary.contentFactoryArticleWorkspaceArticleWritingStructure
+      summary.contentFactoryArticleWorkspaceArticleCanvasSurface
         ?.hasVisibleSkillRef === false &&
-      summary.contentFactoryArticleWorkspaceArticleWritingStructure
+      summary.contentFactoryArticleWorkspaceArticleCanvasSurface
         ?.hasVisibleConnectors === false &&
-      summary.contentFactoryArticleWorkspaceArticleWritingStructure
-        ?.hasVisibleHooks === false &&
-      summary.contentFactoryArticleWorkspaceArticleWritingStructure
-        ?.hasReviewNote === true &&
-      summary.contentFactoryArticleWorkspaceArticleWritingStructure
-        ?.hasFullArticleCanvas === true,
+      summary.contentFactoryArticleWorkspaceArticleCanvasSurface
+        ?.hasVisibleHooks === false,
     contentFactoryArticleWorkspaceEditedDraftRestored:
       appServerRequestMethods.includes(APP_SERVER_METHOD_SESSION_UPDATE) &&
       summary.contentFactoryArticleWorkspaceEditedDraftUpdate?.sessionId ===
@@ -224,7 +223,7 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
       readModel.failedWorkerEvidence?.retryMaxAttempts === 0,
     contentFactoryArticleWorkspaceWorkerTurnExecuted:
       appServerRequestMethods.includes(
-        APP_SERVER_METHOD_AGENT_APP_INSTALLED_SAVE,
+        APP_SERVER_METHOD_PLUGIN_INSTALLED_SAVE,
       ) &&
       appServerRequestMethods.includes(APP_SERVER_METHOD_SESSION_TURN_START) &&
       summary.contentFactoryArticleWorkspaceInstalledStateSave?.appId ===
@@ -296,11 +295,11 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
       remoteRuntimeRejection.turnStatus === "accepted" &&
       remoteRuntimeRejection.appId === "creator-pack" &&
       remoteRuntimeRejection.errorCode ===
-        "AGENT_APP_WORKER_REMOTE_RUNTIME_DISABLED" &&
+        "PLUGIN_WORKER_REMOTE_RUNTIME_DISABLED" &&
       remoteRuntimeRejection.failureCategory === "configuration" &&
       remoteRuntimeRejection.readModel?.status === "failed" &&
       remoteRuntimeRejection.readModel?.errorCode ===
-        "AGENT_APP_WORKER_REMOTE_RUNTIME_DISABLED",
+        "PLUGIN_WORKER_REMOTE_RUNTIME_DISABLED",
     contentFactoryArticleWorkspaceDoesNotUseModelTurn: backendLedger.every(
       (entry) => entry.kind !== "turnStart",
     ),

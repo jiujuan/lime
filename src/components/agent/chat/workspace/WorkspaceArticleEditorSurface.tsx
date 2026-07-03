@@ -1,13 +1,10 @@
 import {
-  CheckCircle2,
+  AlertTriangle,
   ClipboardCheck,
   Download,
   FileText,
-  ImagePlus,
-  ListChecks,
   PenLine,
   RefreshCcw,
-  Search,
   Sparkles,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -22,7 +19,6 @@ import type {
   WorkspaceArticleWorkspace,
   WorkspaceArticleWorkspaceAction,
   WorkspaceArticleWorkspaceActionIntent,
-  WorkspaceArticleWorkspaceImageSlot,
   WorkspaceArticleWorkspaceImageSlotIntent,
   WorkspaceArticleWorkspaceStructuredPreview,
 } from "./workspaceArticleWorkspaceModel";
@@ -64,7 +60,6 @@ export function WorkspaceArticleEditorSurface({
   objects,
   onActionIntent,
   onArticleMarkdownChange,
-  onImageSlotIntent,
   onOpenPreviewArtifact,
   onSelectObject,
   preview,
@@ -86,39 +81,18 @@ export function WorkspaceArticleEditorSurface({
     setEditedMarkdown(null);
   }, [object.ref.id]);
 
-  const articleStats = useMemo(
-    () => [
-      {
-        key: "research",
-        label: dynamicT("workspace.articleEditor.stat.research"),
-        value: String(preview.researchRounds.length),
-      },
-      {
-        key: "outline",
-        label: dynamicT("workspace.articleEditor.stat.outline"),
-        value: String(preview.outline.length),
-      },
-      {
-        key: "citations",
-        label: dynamicT("workspace.articleEditor.stat.citations"),
-        value: String(preview.citations.length),
-      },
-      {
-        key: "images",
-        label: dynamicT("workspace.articleEditor.stat.images"),
-        value: String(preview.imageSlots.length),
-      },
-    ],
-    [
-      dynamicT,
-      preview.citations.length,
-      preview.imageSlots.length,
-      preview.outline.length,
-      preview.researchRounds.length,
-    ],
-  );
   const articleCanvasContentKey = `${object.ref.appId}:${object.ref.kind}:${object.ref.id}`;
   const locale = i18n?.resolvedLanguage || i18n?.language || "zh-CN";
+  const fixtureOnlyHostGeneration = isFixtureOnlyHostGenerationArticle(
+    object.source,
+    preview.documentText,
+  );
+  const visibleDocumentText = fixtureOnlyHostGeneration
+    ? ""
+    : (preview.documentText ?? "");
+  const canvasPlaceholder = fixtureOnlyHostGeneration
+    ? dynamicT("workspace.articleEditor.canvas.fixtureOnlyPlaceholder")
+    : dynamicT("workspace.articleEditor.canvas.empty");
   const updatedAtLabel = useMemo(
     () =>
       updatedAt
@@ -158,7 +132,9 @@ export function WorkspaceArticleEditorSurface({
           });
           const currentArticleMarkdown =
             editedMarkdown ??
-            (object.ref.kind === "articleDraft" ? preview.documentText : null);
+            (object.ref.kind === "articleDraft" && !fixtureOnlyHostGeneration
+              ? preview.documentText
+              : null);
           onActionIntent?.({
             action,
             editedMarkdown: currentArticleMarkdown,
@@ -170,42 +146,6 @@ export function WorkspaceArticleEditorSurface({
       />
     );
   };
-  const resolveImageSlotAnchorSectionTitle = (
-    slot: WorkspaceArticleWorkspaceImageSlot,
-  ): string | null => {
-    const sectionId = slot.sectionId?.trim();
-    if (!sectionId) {
-      return null;
-    }
-    return (
-      preview.outline.find((section) => section.id === sectionId)?.title ?? null
-    );
-  };
-  const buildImageSlotPrompt = (
-    slot: WorkspaceArticleWorkspaceImageSlot,
-  ): string =>
-    [slot.prompt, slot.purpose, slot.title]
-      .map((value) => value?.trim())
-      .find((value): value is string => Boolean(value)) ?? "";
-  const handleImageSlotIntent = (slot: WorkspaceArticleWorkspaceImageSlot) => {
-    const prompt = buildImageSlotPrompt(slot);
-    if (!prompt) {
-      return;
-    }
-    const currentArticleMarkdown =
-      editedMarkdown ??
-      (object.ref.kind === "articleDraft" ? preview.documentText : null);
-    onImageSlotIntent?.({
-      anchorSectionTitle: resolveImageSlotAnchorSectionTitle(slot),
-      anchorText: slot.title,
-      articleWorkspace,
-      editedMarkdown: currentArticleMarkdown,
-      object,
-      prompt,
-      slot,
-    });
-  };
-
   return (
     <section
       className={`article-editor-root flex h-full min-h-0 w-full min-w-0 flex-col bg-[#eef3f8] text-[color:var(--lime-text)] ${
@@ -239,7 +179,7 @@ export function WorkspaceArticleEditorSurface({
           </div>
           <div className="article-editor-header-actions flex shrink-0 flex-wrap items-center justify-end gap-2">
             <ArticleStatusBadge status={object.status} />
-            {onOpenPreviewArtifact && previewArtifact ? (
+            {onOpenPreviewArtifact && previewArtifact && !fixtureOnlyHostGeneration ? (
               <button
                 type="button"
                 className="article-editor-preview-button inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-2 text-xs font-medium text-[color:var(--lime-text-strong)] transition hover:bg-[color:var(--lime-surface-hover)]"
@@ -254,29 +194,16 @@ export function WorkspaceArticleEditorSurface({
             ) : null}
           </div>
         </div>
-        {!isCompactLayout ? (
+        {!isCompactLayout && updatedAtLabel ? (
           <div
-            className="mt-3 flex min-w-0 flex-wrap items-center gap-1.5"
-            data-testid="workspace-article-editor-stats"
+            className="mt-3 flex min-w-0 justify-end"
+            data-testid="workspace-article-editor-updated-at"
           >
-            {articleStats.map((stat) => (
-              <span
-                key={stat.key}
-                className="inline-flex items-center gap-1 rounded-md border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-subtle)] px-2 py-1 text-[11px] text-[color:var(--lime-text-muted)]"
-              >
-                <span>{stat.label}</span>
-                <span className="font-semibold text-[color:var(--lime-text-strong)]">
-                  {stat.value}
-                </span>
-              </span>
-            ))}
-            {updatedAtLabel ? (
-              <span className="ml-auto min-w-0 truncate text-[11px] text-[color:var(--lime-text-muted)]">
-                {dynamicT("workspace.articleEditor.updatedAt", {
-                  value: updatedAtLabel,
-                })}
-              </span>
-            ) : null}
+            <span className="min-w-0 truncate text-[11px] text-[color:var(--lime-text-muted)]">
+              {dynamicT("workspace.articleEditor.updatedAt", {
+                value: updatedAtLabel,
+              })}
+            </span>
           </div>
         ) : null}
       </header>
@@ -291,13 +218,6 @@ export function WorkspaceArticleEditorSurface({
           className="article-editor-main-column"
           data-testid="workspace-article-editor-main-canvas"
         >
-          {isCompactLayout && preview.imageSlots.length > 0 ? (
-            <ArticleEditorImageSlotRail
-              disabled={actionsDisabled || !onImageSlotIntent}
-              imageSlots={preview.imageSlots}
-              onGenerate={handleImageSlotIntent}
-            />
-          ) : null}
           <div className="article-editor-canvas-heading">
             <div className="min-w-0">
               <div className="text-sm font-semibold text-[color:var(--lime-text-strong)]">
@@ -315,6 +235,17 @@ export function WorkspaceArticleEditorSurface({
               </div>
             ) : null}
           </div>
+          {fixtureOnlyHostGeneration ? (
+            <div
+              className="mx-3 mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800"
+              data-testid="workspace-article-editor-fixture-only"
+            >
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>
+                {dynamicT("workspace.articleEditor.canvas.fixtureOnlyNotice")}
+              </span>
+            </div>
+          ) : null}
           <div className="article-editor-canvas-shell">
             <ArticleTiptapCanvas
               contentKey={articleCanvasContentKey}
@@ -326,8 +257,13 @@ export function WorkspaceArticleEditorSurface({
                   object,
                 });
               }}
-              sourceText={preview.documentText ?? ""}
-              placeholder={dynamicT("workspace.articleEditor.canvas.empty")}
+              sourceText={visibleDocumentText}
+              placeholder={canvasPlaceholder}
+              syncedStatusLabelKey={
+                fixtureOnlyHostGeneration
+                  ? "workspace.articleEditor.canvas.status.fixtureOnlyHidden"
+                  : undefined
+              }
               testId="workspace-article-editor-canvas"
             />
           </div>
@@ -351,215 +287,6 @@ export function WorkspaceArticleEditorSurface({
               <div className="grid grid-cols-2 gap-2">
                 {actions.map(renderActionButton)}
               </div>
-            </ArticleEditorSection>
-          ) : null}
-
-          <ArticleEditorSection
-            icon={<ListChecks className="h-4 w-4" />}
-            title={dynamicT("workspace.articleEditor.outline.title")}
-            detail={dynamicT("workspace.articleEditor.outline.detail", {
-              count: preview.outline.length,
-            })}
-            testId="workspace-article-editor-outline"
-          >
-            {preview.outline.length > 0 ? (
-              preview.outline.map((section, index) => (
-                <ArticleEditorListItem
-                  key={section.id}
-                  prefix={String(index + 1)}
-                  title={section.title}
-                  meta={section.purpose}
-                  detail={section.points.slice(0, 3).join(" · ")}
-                />
-              ))
-            ) : (
-              <ArticleEditorEmptyText>
-                {dynamicT("workspace.articleEditor.outline.empty")}
-              </ArticleEditorEmptyText>
-            )}
-          </ArticleEditorSection>
-
-          <ArticleEditorSection
-            icon={<Search className="h-4 w-4" />}
-            title={dynamicT("workspace.articleEditor.research.title")}
-            detail={dynamicT("workspace.articleEditor.research.detail", {
-              count: preview.researchRounds.length,
-            })}
-            testId="workspace-article-editor-research"
-          >
-            {preview.researchRounds.length > 0 ? (
-              preview.researchRounds.map((round) => (
-                <ArticleEditorListItem
-                  key={round.id}
-                  title={round.title}
-                  meta={[round.query, round.status].filter(Boolean).join(" · ")}
-                  detail={round.summary}
-                />
-              ))
-            ) : (
-              <ArticleEditorEmptyText>
-                {dynamicT("workspace.articleEditor.research.empty")}
-              </ArticleEditorEmptyText>
-            )}
-          </ArticleEditorSection>
-
-          <ArticleEditorSection
-            icon={<ClipboardCheck className="h-4 w-4" />}
-            title={dynamicT("workspace.articleEditor.citations.title")}
-            detail={dynamicT("workspace.articleEditor.citations.detail", {
-              count: preview.citations.length,
-            })}
-            testId="workspace-article-editor-citations"
-          >
-            {preview.citations.length > 0 ? (
-              preview.citations.map((citation) => (
-                <ArticleEditorListItem
-                  key={citation.id}
-                  title={citation.title}
-                  meta={[citation.sourceType, citation.status]
-                    .filter(Boolean)
-                    .join(" · ")}
-                  detail={citation.summary}
-                />
-              ))
-            ) : (
-              <ArticleEditorEmptyText>
-                {dynamicT("workspace.articleEditor.citations.empty")}
-              </ArticleEditorEmptyText>
-            )}
-          </ArticleEditorSection>
-
-          <ArticleEditorSection
-            icon={<ImagePlus className="h-4 w-4" />}
-            title={dynamicT("workspace.articleEditor.images.title")}
-            detail={dynamicT("workspace.articleEditor.images.detail", {
-              count: preview.imageSlots.length,
-            })}
-            testId="workspace-article-editor-image-slots"
-          >
-            {preview.imageSlots.length > 0 ? (
-              preview.imageSlots.map((slot) => (
-                <ArticleEditorImageSlotItem
-                  key={slot.id}
-                  disabled={actionsDisabled || !onImageSlotIntent}
-                  onGenerate={handleImageSlotIntent}
-                  slot={slot}
-                />
-              ))
-            ) : (
-              <ArticleEditorEmptyText>
-                {dynamicT("workspace.articleEditor.images.empty")}
-              </ArticleEditorEmptyText>
-            )}
-          </ArticleEditorSection>
-
-          <ArticleEditorSection
-            icon={<Sparkles className="h-4 w-4" />}
-            title={dynamicT("workspace.articleEditor.titleCandidates.title")}
-            detail={dynamicT("workspace.articleEditor.titleCandidates.detail", {
-              count: preview.titleCandidates.length,
-            })}
-            testId="workspace-article-editor-title-candidates"
-          >
-            {preview.titleCandidates.length > 0 ? (
-              preview.titleCandidates.map((candidate) => (
-                <ArticleEditorListItem
-                  key={candidate.id}
-                  title={candidate.title}
-                  meta={[
-                    candidate.angle,
-                    candidate.score === null || candidate.score === undefined
-                      ? null
-                      : dynamicT(
-                          "workspace.articleEditor.titleCandidates.score",
-                          {
-                            value: candidate.score,
-                          },
-                        ),
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
-                />
-              ))
-            ) : (
-              <ArticleEditorEmptyText>
-                {dynamicT("workspace.articleEditor.titleCandidates.empty")}
-              </ArticleEditorEmptyText>
-            )}
-          </ArticleEditorSection>
-
-          <ArticleEditorSection
-            icon={<CheckCircle2 className="h-4 w-4" />}
-            title={dynamicT("workspace.articleEditor.takeaways.title")}
-            detail={dynamicT("workspace.articleEditor.takeaways.detail", {
-              count: preview.keyTakeaways.length,
-            })}
-            testId="workspace-article-editor-takeaways"
-          >
-            {preview.keyTakeaways.length > 0 ? (
-              preview.keyTakeaways.map((takeaway, index) => (
-                <ArticleEditorListItem
-                  key={`${takeaway}:${index}`}
-                  prefix={String(index + 1)}
-                  title={takeaway}
-                />
-              ))
-            ) : (
-              <ArticleEditorEmptyText>
-                {dynamicT("workspace.articleEditor.takeaways.empty")}
-              </ArticleEditorEmptyText>
-            )}
-          </ArticleEditorSection>
-
-          <ArticleEditorSection
-            icon={<ListChecks className="h-4 w-4" />}
-            title={dynamicT("workspace.articleEditor.writingPlan.title")}
-            detail={dynamicT("workspace.articleEditor.writingPlan.detail", {
-              count: preview.writingPlan.length,
-            })}
-            testId="workspace-article-editor-writing-plan"
-          >
-            {preview.writingPlan.length > 0 ? (
-              preview.writingPlan.map((step, index) => (
-                <ArticleEditorListItem
-                  key={step.id}
-                  prefix={String(index + 1)}
-                  title={step.title}
-                  meta={[
-                    step.owner,
-                    step.skillRef,
-                    step.done === null || step.done === undefined
-                      ? null
-                      : dynamicT(
-                          step.done
-                            ? "workspace.articleEditor.writingPlan.done"
-                            : "workspace.articleEditor.writingPlan.pending",
-                        ),
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
-                  detail={step.output ?? step.goal}
-                />
-              ))
-            ) : (
-              <ArticleEditorEmptyText>
-                {dynamicT("workspace.articleEditor.writingPlan.empty")}
-              </ArticleEditorEmptyText>
-            )}
-          </ArticleEditorSection>
-
-          {preview.reviewNotes.length > 0 ? (
-            <ArticleEditorSection
-              icon={<CheckCircle2 className="h-4 w-4" />}
-              title={dynamicT("workspace.articleEditor.review.title")}
-              detail={dynamicT("workspace.articleEditor.review.detail", {
-                count: preview.reviewNotes.length,
-              })}
-              testId="workspace-article-editor-review"
-            >
-              {preview.reviewNotes.map((note, index) => (
-                <ArticleEditorListItem key={`${note}:${index}`} title={note} />
-              ))}
             </ArticleEditorSection>
           ) : null}
 
@@ -608,113 +335,47 @@ export function WorkspaceArticleEditorSurface({
   );
 }
 
-function ArticleEditorImageSlotRail({
-  disabled,
-  imageSlots,
-  onGenerate,
-}: {
-  disabled: boolean;
-  imageSlots: WorkspaceArticleWorkspaceImageSlot[];
-  onGenerate: (slot: WorkspaceArticleWorkspaceImageSlot) => void;
-}) {
-  const { t } = useTranslation("workspace");
-  const dynamicT = t as WorkspaceDynamicTranslation;
-  return (
-    <section
-      className="mb-2 rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] p-2"
-      data-testid="workspace-article-editor-compact-image-slots"
-    >
-      <div className="flex min-w-0 items-center justify-between gap-2">
-        <span className="min-w-0">
-          <span className="block truncate text-xs font-semibold text-[color:var(--lime-text-strong)]">
-            {dynamicT("workspace.articleEditor.images.title")}
-          </span>
-          <span className="block truncate text-[11px] text-[color:var(--lime-text-muted)]">
-            {dynamicT("workspace.articleEditor.images.detail", {
-              count: imageSlots.length,
-            })}
-          </span>
-        </span>
-      </div>
-      <div className="mt-2 flex min-w-0 gap-2 overflow-x-auto pb-1">
-        {imageSlots.map((slot) => (
-          <button
-            key={slot.id}
-            type="button"
-            className="grid min-w-[190px] max-w-[240px] grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-subtle)] px-2 py-2 text-left transition hover:bg-[color:var(--lime-surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={disabled}
-            onClick={() => onGenerate(slot)}
-            aria-label={dynamicT(
-              "workspace.articleEditor.images.generateSlotAria",
-              { title: slot.title },
-            )}
-            data-testid="workspace-article-editor-compact-image-slot-generate"
-            data-slot-id={slot.id}
-          >
-            <span className="min-w-0">
-              <span className="block truncate text-[12px] font-medium text-[color:var(--lime-text-strong)]">
-                {slot.title}
-              </span>
-              <span className="mt-0.5 block truncate text-[11px] text-[color:var(--lime-text-muted)]">
-                {[slot.purpose, slot.status].filter(Boolean).join(" · ")}
-              </span>
-            </span>
-            <span className="inline-flex h-7 shrink-0 items-center justify-center gap-1 rounded-md border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-2 text-[11px] font-medium text-[color:var(--lime-text-strong)]">
-              <ImagePlus className="h-3.5 w-3.5" />
-              {dynamicT("workspace.articleEditor.images.generateSlot")}
-            </span>
-          </button>
-        ))}
-      </div>
-    </section>
+function isFixtureOnlyHostGenerationArticle(
+  source: Record<string, unknown> | null | undefined,
+  documentText: string | null | undefined,
+): boolean {
+  const text = typeof documentText === "string" ? documentText : "";
+  if (
+    text.includes("fixtureOnlyHostGeneration: true") ||
+    text.includes("fixturePromptFingerprint:")
+  ) {
+    return true;
+  }
+  const sourceRecord = asRecord(source);
+  const hostGeneration =
+    asRecord(sourceRecord?.hostManagedGeneration) ??
+    asRecord(sourceRecord?.host_managed_generation);
+  const provider = readString(
+    hostGeneration?.provider,
+    hostGeneration?.providerId,
+    hostGeneration?.provider_id,
   );
+  const model = readString(
+    hostGeneration?.model,
+    hostGeneration?.modelName,
+    hostGeneration?.model_name,
+  );
+  return provider === "fixture-openai" || model === "lime-fixture-chat";
 }
 
-function ArticleEditorImageSlotItem({
-  disabled,
-  onGenerate,
-  slot,
-}: {
-  disabled: boolean;
-  onGenerate: (slot: WorkspaceArticleWorkspaceImageSlot) => void;
-  slot: WorkspaceArticleWorkspaceImageSlot;
-}) {
-  const { t } = useTranslation("workspace");
-  const dynamicT = t as WorkspaceDynamicTranslation;
-  return (
-    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-subtle)] px-2 py-2">
-      <span className="min-w-0">
-        <span className="block text-xs font-medium text-[color:var(--lime-text-strong)]">
-          {slot.title}
-        </span>
-        {[slot.purpose, slot.status].filter(Boolean).length > 0 ? (
-          <span className="mt-0.5 block truncate text-[11px] text-[color:var(--lime-text-muted)]">
-            {[slot.purpose, slot.status].filter(Boolean).join(" · ")}
-          </span>
-        ) : null}
-        {slot.prompt ? (
-          <span className="mt-0.5 block text-[11px] leading-4 text-[color:var(--lime-text-muted)]">
-            {slot.prompt}
-          </span>
-        ) : null}
-      </span>
-      <button
-        type="button"
-        className="inline-flex h-7 shrink-0 items-center justify-center gap-1 rounded-md border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-2 text-[11px] font-medium text-[color:var(--lime-text-strong)] transition hover:bg-[color:var(--lime-surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
-        disabled={disabled}
-        onClick={() => onGenerate(slot)}
-        aria-label={dynamicT(
-          "workspace.articleEditor.images.generateSlotAria",
-          { title: slot.title },
-        )}
-        data-testid="workspace-article-editor-image-slot-generate"
-        data-slot-id={slot.id}
-      >
-        <ImagePlus className="h-3.5 w-3.5" />
-        <span>{dynamicT("workspace.articleEditor.images.generateSlot")}</span>
-      </button>
-    </div>
-  );
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function readString(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return "";
 }
 
 function ArticleEditorSection({
@@ -750,51 +411,6 @@ function ArticleEditorSection({
       </div>
       <div className="mt-3 grid gap-2">{children}</div>
     </section>
-  );
-}
-
-function ArticleEditorListItem({
-  detail,
-  meta,
-  prefix,
-  title,
-}: {
-  detail?: string | null;
-  meta?: string | null;
-  prefix?: string;
-  title: string;
-}) {
-  return (
-    <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-2 rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-subtle)] px-2 py-2">
-      {prefix ? (
-        <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-[color:var(--lime-surface)] text-[11px] font-semibold text-[color:var(--lime-text-muted)]">
-          {prefix}
-        </span>
-      ) : null}
-      <span className="min-w-0">
-        <span className="block text-xs font-medium text-[color:var(--lime-text-strong)]">
-          {title}
-        </span>
-        {meta ? (
-          <span className="mt-0.5 block truncate text-[11px] text-[color:var(--lime-text-muted)]">
-            {meta}
-          </span>
-        ) : null}
-        {detail ? (
-          <span className="mt-0.5 block text-[11px] leading-4 text-[color:var(--lime-text-muted)]">
-            {detail}
-          </span>
-        ) : null}
-      </span>
-    </div>
-  );
-}
-
-function ArticleEditorEmptyText({ children }: { children: ReactNode }) {
-  return (
-    <div className="rounded-lg border border-dashed border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-subtle)] px-3 py-2 text-xs text-[color:var(--lime-text-muted)]">
-      {children}
-    </div>
   );
 }
 

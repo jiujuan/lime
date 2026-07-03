@@ -134,24 +134,24 @@ describe("useAppNavigation", () => {
     expect(latestNavigation?.pageParams).toEqual({});
   });
 
-  it("agent-app-lab 跳转应保留页面参数", async () => {
+  it("plugin-lab 跳转应保留页面参数", async () => {
     await renderProbe();
 
     await act(async () => {
-      latestNavigation?.handleNavigate("agent-app-lab", { source: "fixture" });
+      latestNavigation?.handleNavigate("plugin-lab", { source: "fixture" });
     });
 
-    expect(latestNavigation?.currentPage).toBe("agent-app-lab");
+    expect(latestNavigation?.currentPage).toBe("plugin-lab");
     expect(latestNavigation?.pageParams).toEqual({
       source: "fixture",
     });
   });
 
-  it("agent-app 跳转应写入可恢复的最小页面状态", async () => {
+  it("plugin 跳转应写入可恢复的最小页面状态", async () => {
     await renderProbe();
 
     await act(async () => {
-      latestNavigation?.handleNavigate("agent-app", {
+      latestNavigation?.handleNavigate("plugin", {
         appId: "content-factory-app",
         entryKey: "content_factory",
         launchRequestKey: 42,
@@ -159,7 +159,7 @@ describe("useAppNavigation", () => {
     });
     await flushEffects();
 
-    expect(latestNavigation?.currentPage).toBe("agent-app");
+    expect(latestNavigation?.currentPage).toBe("plugin");
     expect(latestNavigation?.pageParams).toEqual({
       appId: "content-factory-app",
       entryKey: "content_factory",
@@ -170,7 +170,7 @@ describe("useAppNavigation", () => {
         window.sessionStorage.getItem(NAVIGATION_RESTORE_STORAGE_KEY) ?? "{}",
       ),
     ).toEqual({
-      page: "agent-app",
+      page: "plugin",
       params: {
         appId: "content-factory-app",
         entryKey: "content_factory",
@@ -179,11 +179,11 @@ describe("useAppNavigation", () => {
     });
   });
 
-  it("重新挂载时应恢复 agent-app 页面和白名单参数", async () => {
+  it("重新挂载时应恢复 plugin 页面和白名单参数", async () => {
     window.sessionStorage.setItem(
       NAVIGATION_RESTORE_STORAGE_KEY,
       JSON.stringify({
-        page: "agent-app",
+        page: "plugin",
         params: {
           appId: "content-factory-app",
           entryKey: "content_factory",
@@ -195,8 +195,8 @@ describe("useAppNavigation", () => {
 
     await renderProbe();
 
-    expect(latestNavigation?.currentPage).toBe("agent-app");
-    expect(latestNavigation?.requestedPage).toBe("agent-app");
+    expect(latestNavigation?.currentPage).toBe("plugin");
+    expect(latestNavigation?.requestedPage).toBe("plugin");
     expect(latestNavigation?.navigationRequestId).toBe(0);
     expect(latestNavigation?.isNavigating).toBe(false);
     expect(latestNavigation?.pageParams).toEqual({
@@ -207,7 +207,7 @@ describe("useAppNavigation", () => {
 
     await remountProbe();
 
-    expect(latestNavigation?.currentPage).toBe("agent-app");
+    expect(latestNavigation?.currentPage).toBe("plugin");
     expect(latestNavigation?.pageParams).toEqual({
       appId: "content-factory-app",
       entryKey: "content_factory",
@@ -236,11 +236,11 @@ describe("useAppNavigation", () => {
     );
   });
 
-  it("离开 agent-app 时应清理恢复状态", async () => {
+  it("离开 plugin 时应清理恢复状态", async () => {
     await renderProbe();
 
     await act(async () => {
-      latestNavigation?.handleNavigate("agent-app", {
+      latestNavigation?.handleNavigate("plugin", {
         appId: "content-factory-app",
         entryKey: "content_factory",
       });
@@ -267,19 +267,19 @@ describe("useAppNavigation", () => {
     await renderProbe();
 
     await act(async () => {
-      latestNavigation?.handleNavigate("agent-app-lab", { source: "fixture" });
+      latestNavigation?.handleNavigate("plugin-lab", { source: "fixture" });
     });
     await flushEffects();
 
     const readyCallsAfterFirstNavigation = readyCallCount;
 
     await act(async () => {
-      latestNavigation?.handleNavigate("agent-app-lab", { source: "fixture" });
+      latestNavigation?.handleNavigate("plugin-lab", { source: "fixture" });
     });
     await flushEffects();
 
     expect(readyCallCount).toBe(readyCallsAfterFirstNavigation);
-    expect(latestNavigation?.currentPage).toBe("agent-app-lab");
+    expect(latestNavigation?.currentPage).toBe("plugin-lab");
     expect(latestNavigation?.pageParams).toEqual({
       source: "fixture",
     });
@@ -345,12 +345,12 @@ describe("useAppNavigation", () => {
 
     await act(async () => {
       latestNavigation?.handleNavigate("automation");
-      latestNavigation?.handleNavigate("agent-app-lab", { source: "fixture" });
+      latestNavigation?.handleNavigate("plugin-lab", { source: "fixture" });
     });
     await flushEffects();
 
-    expect(latestNavigation?.currentPage).toBe("agent-app-lab");
-    expect(latestNavigation?.requestedPage).toBe("agent-app-lab");
+    expect(latestNavigation?.currentPage).toBe("plugin-lab");
+    expect(latestNavigation?.requestedPage).toBe("plugin-lab");
     expect(latestNavigation?.pageParams).toEqual({
       source: "fixture",
     });

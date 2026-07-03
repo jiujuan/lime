@@ -212,14 +212,14 @@ import {
   WorkspaceFilesSurface,
   type WorkspaceFilesSurfaceTarget,
 } from "./workspace/WorkspaceFilesSurface";
-import { WorkspaceAgentAppSurface } from "./workspace/WorkspaceAgentAppSurface";
+import { WorkspacePluginSurface } from "./workspace/WorkspacePluginSurface";
 import {
-  closeWorkspaceAgentAppSurfaceDescriptor,
-  mergeWorkspaceAgentAppSurfaceDescriptors,
-  resolveWorkspaceAgentAppSurfaceActiveContainerId,
-  selectWorkspaceAgentAppSurfaceDescriptor,
-  type WorkspaceAgentAppSurfaceDescriptor,
-} from "./workspace/workspaceAgentAppSurfaceModel";
+  closeWorkspacePluginSurfaceDescriptor,
+  mergeWorkspacePluginSurfaceDescriptors,
+  resolveWorkspacePluginSurfaceActiveContainerId,
+  selectWorkspacePluginSurfaceDescriptor,
+  type WorkspacePluginSurfaceDescriptor,
+} from "./workspace/workspacePluginSurfaceModel";
 import { WorkspaceObjectCanvasSurface } from "./workspace/WorkspaceObjectCanvasSurface";
 import type { WorkspaceObjectCanvasCandidate } from "./workspace/workspaceObjectCanvasModel";
 import { WorkspaceArticleEditorRightSurface } from "./workspace/WorkspaceArticleEditorRightSurface";
@@ -3503,14 +3503,14 @@ export function AgentChatWorkspace({
       return;
     }
 
-    _onNavigate("agent-app-lab");
+    _onNavigate("plugin-lab");
   }, [_onNavigate]);
   const handleOpenSceneAppExecutionGovernance = useCallback(() => {
     if (!_onNavigate) {
       return;
     }
 
-    _onNavigate("agent-app-lab");
+    _onNavigate("plugin-lab");
   }, [_onNavigate]);
   const handleOpenSceneAppExecutionContentPost = useCallback(
     (entry: SceneAppExecutionContentPostEntry) => {
@@ -4511,12 +4511,12 @@ export function AgentChatWorkspace({
     useState<WorkspaceRightSurfaceBrowserIntent | null>(null);
   const [activeFilesRightSurfaceTarget, setActiveFilesRightSurfaceTarget] =
     useState<WorkspaceFilesSurfaceTarget | null>(null);
-  const [activeAgentAppSurfaces, setActiveAgentAppSurfaces] = useState<
-    WorkspaceAgentAppSurfaceDescriptor[]
+  const [activePluginSurfaces, setActivePluginSurfaces] = useState<
+    WorkspacePluginSurfaceDescriptor[]
   >([]);
   const [
-    activeAgentAppSurfaceContainerId,
-    setActiveAgentAppSurfaceContainerId,
+    activePluginSurfaceContainerId,
+    setActivePluginSurfaceContainerId,
   ] = useState<string | null>(null);
   const [
     activeObjectCanvasRightSurfaceCandidate,
@@ -4626,16 +4626,16 @@ export function AgentChatWorkspace({
   const liveFilesRightSurfaceTarget: WorkspaceFilesSurfaceTarget | null =
     preferredServiceSkillResultFileTarget ??
     rightSurfaceAppServerPendingRuntime.pendingFileTarget;
-  const agentAppSurfaceRightSurfaces =
-    activeAgentAppSurfaces.length > 0
-      ? activeAgentAppSurfaces
-      : rightSurfaceAppServerPendingRuntime.pendingAgentAppSurfaces;
-  const agentAppSurfaceRightSurface = selectWorkspaceAgentAppSurfaceDescriptor(
-    agentAppSurfaceRightSurfaces,
-    activeAgentAppSurfaceContainerId,
+  const pluginSurfaceRightSurfaces =
+    activePluginSurfaces.length > 0
+      ? activePluginSurfaces
+      : rightSurfaceAppServerPendingRuntime.pendingPluginSurfaces;
+  const pluginSurfaceRightSurface = selectWorkspacePluginSurfaceDescriptor(
+    pluginSurfaceRightSurfaces,
+    activePluginSurfaceContainerId,
   );
-  const agentAppSurfaceRightSurfaceAvailable =
-    agentAppSurfaceRightSurfaces.length > 0;
+  const pluginSurfaceRightSurfaceAvailable =
+    pluginSurfaceRightSurfaces.length > 0;
   const filesRightSurfaceTarget: WorkspaceFilesSurfaceTarget | null =
     activeFilesRightSurfaceTarget ?? liveFilesRightSurfaceTarget;
   const filesRightSurfaceAvailable = Boolean(
@@ -4711,27 +4711,27 @@ export function AgentChatWorkspace({
     ],
   );
   useEffect(() => {
-    const pendingAgentAppSurfaces =
-      rightSurfaceAppServerPendingRuntime.pendingAgentAppSurfaces;
-    if (pendingAgentAppSurfaces.length === 0) {
+    const pendingPluginSurfaces =
+      rightSurfaceAppServerPendingRuntime.pendingPluginSurfaces;
+    if (pendingPluginSurfaces.length === 0) {
       return;
     }
 
-    setActiveAgentAppSurfaces((current) =>
-      mergeWorkspaceAgentAppSurfaceDescriptors(
+    setActivePluginSurfaces((current) =>
+      mergeWorkspacePluginSurfaceDescriptors(
         current,
-        pendingAgentAppSurfaces,
+        pendingPluginSurfaces,
       ),
     );
-    setActiveAgentAppSurfaceContainerId((current) =>
-      resolveWorkspaceAgentAppSurfaceActiveContainerId({
+    setActivePluginSurfaceContainerId((current) =>
+      resolveWorkspacePluginSurfaceActiveContainerId({
         activeContainerId: current,
         preferredContainerId:
-          pendingAgentAppSurfaces[pendingAgentAppSurfaces.length - 1]
+          pendingPluginSurfaces[pendingPluginSurfaces.length - 1]
             ?.containerId,
-        surfaces: mergeWorkspaceAgentAppSurfaceDescriptors(
-          activeAgentAppSurfaces,
-          pendingAgentAppSurfaces,
+        surfaces: mergeWorkspacePluginSurfaceDescriptors(
+          activePluginSurfaces,
+          pendingPluginSurfaces,
         ),
       }),
     );
@@ -4744,10 +4744,10 @@ export function AgentChatWorkspace({
     void refreshRightSurfacePendingRequests();
     void consumePendingRequestsForSurface("appSurface");
   }, [
-    activeAgentAppSurfaces,
+    activePluginSurfaces,
     consumePendingRequestsForSurface,
     refreshRightSurfacePendingRequests,
-    rightSurfaceAppServerPendingRuntime.pendingAgentAppSurfaces,
+    rightSurfaceAppServerPendingRuntime.pendingPluginSurfaces,
     sceneLayoutMode,
     setHarnessPanelVisible,
   ]);
@@ -4997,11 +4997,11 @@ export function AgentChatWorkspace({
     }
     if (
       manualRightSurface === "appSurface" &&
-      !agentAppSurfaceRightSurfaceAvailable
+      !pluginSurfaceRightSurfaceAvailable
     ) {
       setManualRightSurface(null);
-      setActiveAgentAppSurfaces([]);
-      setActiveAgentAppSurfaceContainerId(null);
+      setActivePluginSurfaces([]);
+      setActivePluginSurfaceContainerId(null);
     }
     if (
       manualRightSurface === "objectCanvas" &&
@@ -5022,7 +5022,7 @@ export function AgentChatWorkspace({
       setManualRightSurface(null);
     }
   }, [
-    agentAppSurfaceRightSurfaceAvailable,
+    pluginSurfaceRightSurfaceAvailable,
     browserRightSurfaceAvailable,
     filesRightSurfaceAvailable,
     manualRightSurface,
@@ -5072,7 +5072,7 @@ export function AgentChatWorkspace({
     };
 
     add("workbench", sceneLayoutMode !== "chat");
-    add("appSurface", agentAppSurfaceRightSurfaceAvailable);
+    add("appSurface", pluginSurfaceRightSurfaceAvailable);
     add("articleWorkspace", articleEditorRightSurfaceAvailable);
     add(
       "objectCanvas",
@@ -5094,7 +5094,7 @@ export function AgentChatWorkspace({
     add("browser", manualRightSurface === "browser");
     return next;
   }, [
-    agentAppSurfaceRightSurfaceAvailable,
+    pluginSurfaceRightSurfaceAvailable,
     filesRightSurfaceAvailable,
     hasExpertInfoPanel,
     manualRightSurface,
@@ -5124,14 +5124,14 @@ export function AgentChatWorkspace({
       setActiveFilesRightSurfaceTarget(
         kind === "files" ? filesRightSurfaceTarget : null,
       );
-      if (kind === "appSurface" && agentAppSurfaceRightSurface) {
-        setActiveAgentAppSurfaces((current) =>
-          mergeWorkspaceAgentAppSurfaceDescriptors(current, [
-            agentAppSurfaceRightSurface,
+      if (kind === "appSurface" && pluginSurfaceRightSurface) {
+        setActivePluginSurfaces((current) =>
+          mergeWorkspacePluginSurfaceDescriptors(current, [
+            pluginSurfaceRightSurface,
           ]),
         );
-        setActiveAgentAppSurfaceContainerId(
-          agentAppSurfaceRightSurface.containerId,
+        setActivePluginSurfaceContainerId(
+          pluginSurfaceRightSurface.containerId,
         );
       }
       setActiveObjectCanvasRightSurfaceCandidate(
@@ -5159,7 +5159,7 @@ export function AgentChatWorkspace({
     },
     [
       consumePendingRequestsForSurface,
-      agentAppSurfaceRightSurface,
+      pluginSurfaceRightSurface,
       filesRightSurfaceTarget,
       objectCanvasRightSurfaceCandidate,
       pendingBrowserRightSurfaceIntent,
@@ -5169,24 +5169,24 @@ export function AgentChatWorkspace({
       setHarnessPanelVisible,
     ],
   );
-  const handleSelectAgentAppSurface = useCallback(
-    (surface: WorkspaceAgentAppSurfaceDescriptor) => {
+  const handleSelectPluginSurface = useCallback(
+    (surface: WorkspacePluginSurfaceDescriptor) => {
       setHarnessPanelVisible(false);
       setExpertInfoPanelCollapsed(true);
-      setActiveAgentAppSurfaceContainerId(surface.containerId);
+      setActivePluginSurfaceContainerId(surface.containerId);
       setManualRightSurface("appSurface");
     },
     [setHarnessPanelVisible],
   );
-  const handleCloseAgentAppSurface = useCallback(
-    (surface: WorkspaceAgentAppSurfaceDescriptor) => {
-      const result = closeWorkspaceAgentAppSurfaceDescriptor({
-        activeContainerId: activeAgentAppSurfaceContainerId,
+  const handleClosePluginSurface = useCallback(
+    (surface: WorkspacePluginSurfaceDescriptor) => {
+      const result = closeWorkspacePluginSurfaceDescriptor({
+        activeContainerId: activePluginSurfaceContainerId,
         containerId: surface.containerId,
-        surfaces: agentAppSurfaceRightSurfaces,
+        surfaces: pluginSurfaceRightSurfaces,
       });
-      setActiveAgentAppSurfaces(result.surfaces);
-      setActiveAgentAppSurfaceContainerId(result.activeContainerId);
+      setActivePluginSurfaces(result.surfaces);
+      setActivePluginSurfaceContainerId(result.activeContainerId);
       if (result.surfaces.length === 0 && manualRightSurface === "appSurface") {
         setManualRightSurface(null);
         void dismissPendingRequestsForSurface(
@@ -5196,8 +5196,8 @@ export function AgentChatWorkspace({
       }
     },
     [
-      activeAgentAppSurfaceContainerId,
-      agentAppSurfaceRightSurfaces,
+      activePluginSurfaceContainerId,
+      pluginSurfaceRightSurfaces,
       dismissPendingRequestsForSurface,
       manualRightSurface,
     ],
@@ -5304,15 +5304,15 @@ export function AgentChatWorkspace({
         }
       />
     ),
-    ...(agentAppSurfaceRightSurface
+    ...(pluginSurfaceRightSurface
       ? {
           appSurface: () => (
-            <WorkspaceAgentAppSurface
-              activeContainerId={activeAgentAppSurfaceContainerId}
-              surfaces={agentAppSurfaceRightSurfaces}
-              surface={agentAppSurfaceRightSurface}
-              onCloseSurface={handleCloseAgentAppSurface}
-              onSelectSurface={handleSelectAgentAppSurface}
+            <WorkspacePluginSurface
+              activeContainerId={activePluginSurfaceContainerId}
+              surfaces={pluginSurfaceRightSurfaces}
+              surface={pluginSurfaceRightSurface}
+              onCloseSurface={handleClosePluginSurface}
+              onSelectSurface={handleSelectPluginSurface}
             />
           ),
         }
@@ -5514,7 +5514,7 @@ export function AgentChatWorkspace({
         surfaceState: rightSurfaceState,
         pendingIntents: rightSurfacePendingIntents,
         filesAvailable: filesRightSurfaceAvailable,
-        appSurfaceAvailable: agentAppSurfaceRightSurfaceAvailable,
+        appSurfaceAvailable: pluginSurfaceRightSurfaceAvailable,
         hasExpertInfoPanel,
         objectCanvasAvailable: objectCanvasRightSurfaceAvailable,
         articleWorkspaceAvailable: articleEditorRightSurfaceAvailable,
@@ -5524,7 +5524,7 @@ export function AgentChatWorkspace({
         suppressHomeNavbarUtilityActions,
       }),
     [
-      agentAppSurfaceRightSurfaceAvailable,
+      pluginSurfaceRightSurfaceAvailable,
       articleEditorRightSurfaceAvailable,
       filesRightSurfaceAvailable,
       hasExpertInfoPanel,

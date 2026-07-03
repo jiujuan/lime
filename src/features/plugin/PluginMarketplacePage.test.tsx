@@ -8,7 +8,7 @@ import {
   type MountedRoot,
 } from "@/components/workspace/hooks/testUtils";
 import type { OemCloudRuntimeContext } from "@/lib/api/oemCloudRuntime";
-import type { InstalledAgentAppState } from "@/features/agent-app/types";
+import type { InstalledPluginState } from "@/features/plugin/types";
 import type { PluginMarketplaceRegistrySnapshot } from "./marketplace/marketplaceRegistryLoader";
 import type { PluginRegistryItem } from "./manifest/types";
 import type { PluginMarketplaceItem } from "./marketplace/types";
@@ -44,7 +44,7 @@ function runtimeContext(): OemCloudRuntimeContext {
     desktopClientId: "desktop-client",
     desktopOauthRedirectUrl: "lime://oauth/callback",
     desktopOauthNextPath: "/welcome",
-    agentAppSignatureTrustRoots: [],
+    pluginSignatureTrustRoots: [],
   };
 }
 
@@ -62,7 +62,7 @@ function marketplaceItem(
     version: "1.0.0",
     category: "research",
     categories: ["research"],
-    sourceKind: "agent_app_release",
+    sourceKind: "plugin_catalog",
     appId: pluginName,
     enabled: true,
     installState: "available",
@@ -196,7 +196,7 @@ function setInputValue(input: HTMLInputElement, value: string) {
   input.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
-function installedState(appId: string): InstalledAgentAppState {
+function installedState(appId: string): InstalledPluginState {
   return {
     appId,
     identity: {
@@ -210,17 +210,17 @@ function installedState(appId: string): InstalledAgentAppState {
         "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       loadedAt: "2026-06-25T00:00:00.000Z",
     },
-    manifest: {} as InstalledAgentAppState["manifest"],
-    projection: {} as InstalledAgentAppState["projection"],
-    readiness: {} as InstalledAgentAppState["readiness"],
+    manifest: {} as InstalledPluginState["manifest"],
+    projection: {} as InstalledPluginState["projection"],
+    readiness: {} as InstalledPluginState["readiness"],
     installMode: "in_lime",
     runtimeProfileSummary:
-      {} as InstalledAgentAppState["runtimeProfileSummary"],
-    setup: {} as InstalledAgentAppState["setup"],
+      {} as InstalledPluginState["runtimeProfileSummary"],
+    setup: {} as InstalledPluginState["setup"],
     disabled: false,
     installedAt: "2026-06-25T00:00:00.000Z",
     updatedAt: "2026-06-25T00:00:00.000Z",
-  } as InstalledAgentAppState;
+  } as InstalledPluginState;
 }
 
 function expectActionProfile() {
@@ -454,7 +454,7 @@ describe("PluginMarketplacePage", () => {
     const loader = vi.fn(async () => localSnapshot);
     const installLocalPackage: NonNullable<
       PluginMarketplaceActionDeps["installLocalPackage"]
-    > = vi.fn(async () => ({}) as InstalledAgentAppState);
+    > = vi.fn(async () => ({}) as InstalledPluginState);
     const selectLocalDirectory = vi.fn(async () => "/tmp/content-factory-app");
     const container = await renderPage({
       loader,
@@ -631,7 +631,7 @@ describe("PluginMarketplacePage", () => {
               source: "plugin_marketplace_open",
               trigger: "@写文章",
               plugin_id: "notes-kit@limecloud",
-              active_agent_app_id: "notes-kit",
+              active_plugin_ui_id: "notes-kit",
               active_entry_key: "content_article_generate",
               entry_task_kind: "content.article.generate",
               entry_workflow_key: "content_article_workflow",
@@ -697,7 +697,7 @@ describe("PluginMarketplacePage", () => {
               source: "plugin_marketplace_open",
               trigger: "@Notes Kit:Article Writer",
               plugin_id: "notes-kit@limecloud",
-              active_agent_app_id: "notes-kit",
+              active_plugin_ui_id: "notes-kit",
               active_entry_key: "notes-kit",
               selected_skill_keys: ["article-writer"],
             },
@@ -732,7 +732,7 @@ describe("PluginMarketplacePage", () => {
           updatedAt: 1710000123000,
           messagesCount: 4,
           pluginId: "notes-kit@limecloud",
-          activeAgentAppId: "notes-kit",
+          activePluginUiId: "notes-kit",
           activeEntryKey: "notes-kit",
           artifactRefs: ["artifact-1"],
           source: "history_restore" as const,
@@ -789,7 +789,7 @@ describe("PluginMarketplacePage", () => {
             plugin_history_restore: {
               session_id: "notes-session-1",
               plugin_id: "notes-kit@limecloud",
-              active_agent_app_id: "notes-kit",
+              active_plugin_ui_id: "notes-kit",
               active_entry_key: "notes-kit",
               artifact_refs: ["artifact-1"],
             },
@@ -800,7 +800,7 @@ describe("PluginMarketplacePage", () => {
     );
   });
 
-  it("可安装插件应调用 current Agent App cloud install API 并刷新列表", async () => {
+  it("可安装插件应调用 current Plugin cloud install API 并刷新列表", async () => {
     const loader = vi.fn(async () => snapshot());
     const installCloudRelease: NonNullable<
       PluginMarketplaceActionDeps["installCloudRelease"]
@@ -908,7 +908,7 @@ describe("PluginMarketplacePage", () => {
       PluginMarketplaceActionDeps["submitRegistrationCode"]
     > = vi.fn(async () => ({
       payload: {
-        schemaVersion: "agent-app-catalog/v1",
+        schemaVersion: "plugin-catalog/v1",
         generatedAt: "2026-06-25T01:02:03.000Z",
         apps: [],
       },
@@ -1324,7 +1324,7 @@ describe("PluginMarketplacePage", () => {
       capabilityProfile: {
         sections: [],
         summary: {
-          agentCount: 0,
+          uiCount: 0,
           subagentCount: 0,
           workflowCount: 0,
           toolCount: 0,
@@ -1387,7 +1387,7 @@ describe("PluginMarketplacePage", () => {
       capabilityProfile: {
         sections: [],
         summary: {
-          agentCount: 0,
+          uiCount: 0,
           subagentCount: 0,
           workflowCount: 0,
           toolCount: 0,
@@ -1415,7 +1415,7 @@ describe("PluginMarketplacePage", () => {
         updatedAt: 1710000000000,
         messagesCount: 2,
         pluginId: "history-plugin",
-        activeAgentAppId: "history-app",
+        activePluginUiId: "history-app",
         activeEntryKey: "history-entry",
         artifactRefs: ["artifact-1"],
         source: "history_restore",
@@ -1430,7 +1430,7 @@ describe("PluginMarketplacePage", () => {
           plugin_history_restore: {
             session_id: "history-session",
             plugin_id: "history-plugin",
-            active_agent_app_id: "history-app",
+            active_plugin_ui_id: "history-app",
             active_entry_key: "history-entry",
             artifact_refs: ["artifact-1"],
           },

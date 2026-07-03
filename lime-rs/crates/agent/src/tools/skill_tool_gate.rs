@@ -315,7 +315,7 @@ fn workspace_skill_source_for_session_skill(
         .find_map(|alias| access.skill_sources.get(alias).cloned())
 }
 
-fn is_agent_app_name_allowlisted_skill_session(session_id: &str, skill_name: &str) -> bool {
+fn is_plugin_name_allowlisted_skill_session(session_id: &str, skill_name: &str) -> bool {
     let session_id = session_id.trim();
     if session_id.is_empty() {
         return false;
@@ -1033,20 +1033,20 @@ fn content_factory_fast_skill_summary(skill_name: &str) -> Option<(&'static str,
     }
 }
 
-fn is_agent_app_runtime_session(session_id: &str) -> bool {
-    session_id.trim().starts_with("agent-app-runtime-")
+fn is_plugin_runtime_session(session_id: &str) -> bool {
+    session_id.trim().starts_with("plugin-runtime-")
 }
 
-fn build_agent_app_content_factory_fast_skill_result(
+fn build_plugin_content_factory_fast_skill_result(
     params: &Value,
     session_id: &str,
 ) -> Option<ToolResult> {
     let skill_name = params.get("skill").and_then(Value::as_str)?;
-    if !is_agent_app_name_allowlisted_skill_session(session_id, skill_name) {
+    if !is_plugin_name_allowlisted_skill_session(session_id, skill_name) {
         return None;
     }
     let (summary, artifact_kind) = content_factory_fast_skill_summary(skill_name)?;
-    if !looks_like_content_factory_skill_args(params) && !is_agent_app_runtime_session(session_id) {
+    if !looks_like_content_factory_skill_args(params) && !is_plugin_runtime_session(session_id) {
         return None;
     }
     let args = parse_skill_args_value(params).unwrap_or_else(|| json!({}));
@@ -1055,7 +1055,7 @@ fn build_agent_app_content_factory_fast_skill_result(
         "skillId": skill_id,
         "skill": skill_name.trim(),
         "status": "completed",
-        "source": "agent_app_runtime_content_factory_fast_path",
+        "source": "plugin_runtime_content_factory_fast_path",
         "artifactKind": artifact_kind,
         "summary": summary,
         "evidence": {
@@ -1074,8 +1074,8 @@ fn build_agent_app_content_factory_fast_skill_result(
     let skill_metadata = json!({
         "success": true,
         "stepsCompleted": [{
-            "id": "agent_app_content_factory_fast_path",
-            "name": "Agent App Content Factory Skill fast path",
+            "id": "plugin_content_factory_fast_path",
+            "name": "Plugin Content Factory Skill fast path",
             "success": true,
             "output": summary
         }],
@@ -1087,7 +1087,7 @@ fn build_agent_app_content_factory_fast_skill_result(
         ToolResult::success(output_text.clone())
             .with_metadata("skill", skill_metadata)
             .with_metadata("command_name", json!(skill_name.trim()))
-            .with_metadata("agent_app_skill_fast_path", json!(true))
+            .with_metadata("plugin_skill_fast_path", json!(true))
             .with_metadata("skill_name", json!(skill_name.trim()))
             .with_metadata("tool_family", json!("skill"))
             .with_metadata("content_factory_skill_evidence", output),
@@ -1174,7 +1174,7 @@ impl Tool for LimeSkillTool {
             }
         };
         if let Some(tool_result) =
-            build_agent_app_content_factory_fast_skill_result(&params, &context.session_id)
+            build_plugin_content_factory_fast_skill_result(&params, &context.session_id)
         {
             let tool_result = attach_skill_runtime_contract_metadata(
                 tool_result,
@@ -1378,8 +1378,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn agent_app_content_factory_skill_should_use_fast_path_for_object_args() {
-        let session_id = "agent-app-content-factory-skill-session";
+    async fn plugin_content_factory_skill_should_use_fast_path_for_object_args() {
+        let session_id = "plugin-content-factory-skill-session";
         set_skill_tool_session_allowed_skills(session_id, ["knowledge-builder"]);
 
         let tool = LimeSkillTool::new();
@@ -1404,7 +1404,7 @@ mod tests {
 
         assert!(result.success);
         assert_eq!(
-            result.metadata.get("agent_app_skill_fast_path"),
+            result.metadata.get("plugin_skill_fast_path"),
             Some(&json!(true))
         );
         assert_eq!(
@@ -1422,8 +1422,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn agent_app_content_factory_skill_should_use_fast_path_for_text_args() {
-        let session_id = "agent-app-runtime-content-factory-text-skill";
+    async fn plugin_content_factory_skill_should_use_fast_path_for_text_args() {
+        let session_id = "plugin-runtime-content-factory-text-skill";
         set_skill_tool_session_allowed_skills(session_id, ["content-reviewer"]);
 
         let tool = LimeSkillTool::new();
@@ -1442,7 +1442,7 @@ mod tests {
 
         assert!(result.success);
         assert_eq!(
-            result.metadata.get("agent_app_skill_fast_path"),
+            result.metadata.get("plugin_skill_fast_path"),
             Some(&json!(true))
         );
         assert_eq!(

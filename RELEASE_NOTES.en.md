@@ -1,3 +1,44 @@
+## Lime v1.87.0
+
+<sub>The Simplified Chinese release notes are the primary version. This English page is a companion for international readers.</sub>
+
+### New Features
+
+- The Plugin runtime mainline replaces the old Agent App entry points: install, runtime, shell host, task worker, right-side surface, history restore, SDK, and manifest flows now use Plugin naming and the current protocol.
+- Continued completing standalone release coverage for the Content Factory plugin package, including release gates, connector production preflight / delivery / webhook checks, runtime fixture smoke, and signed release evidence.
+- Article Workspace and the right-side workbench now support Plugin surfaces and plugin workflow evidence, with stronger Content Factory worker dogfood, article workspace patches, and history restore coverage.
+
+### Fixes
+
+- Fixed marketplace, installed-state, manifest-contract, runtime-authorization, and governance drift caused by the old Agent App / Plugin dual track.
+- Fixed image-task and media-worker routing, post-processing, and provider coverage gaps so image generation behaves more consistently across providers.
+- Fixed stale Agent App method residues in the App Server client, protocol schema, command catalog, and mock boundaries so legacy commands do not return to the current mainline.
+
+### Improvements and Refactors
+
+- Removed the old `agent-app` frontend, Electron, App Server, script, and schema surfaces at scale, replacing them with equivalent Plugin-domain modules.
+- Converged App Server runtime, local data source, processor, runtime backend, and protocol schema ownership around Plugin APIs; old Agent App files are now treated as dead surface.
+- Updated script governance, i18n app metadata, legacy surface catalog, and quality workflow docs to use Plugin naming and release gates.
+
+### Tests and Quality
+
+- Added or updated regressions for Plugin runtime, marketplace, install / cleanup / packaging / SDK / shell / UI flows, Electron host integration, App Server protocol, and Content Factory fixtures.
+- Updated `test:contracts`, protocol type generation, script governance, and legacy surface guards to cover Agent App retirement and the current Plugin surface.
+- Adjusted the release workflow skill to prefer stable required gates: keep `verify:app-version` / `typecheck` by default, and no longer auto-block releases on `npm run lint`, bare `npm test`, or full `cargo test`.
+- Synchronized the current-turn smoke client version to `1.87.0` so release fixtures match the app version.
+
+### Documentation
+
+- Updated command boundary, quality workflow, design language, workspace, parallel collaboration, and Writing v2 execution-plan docs for the Plugin runtime current mainline and Agent App retirement policy.
+- Updated package READMEs, agent runtime package READMEs, and default skill docs with Plugin / Content Factory wording.
+
+### Other
+
+- Bumped version facts to `1.87.0` across the root app, CLI npm package, Rust workspace, `lime-rs/Cargo.lock`, `lime-rs/crates/aster-rust/Cargo.lock`, and release smoke fixture.
+- Excluded the local temporary file `internal/roadmap/Writing/.DS_Store` and the unreferenced temporary barrel `src/features/plugin/host-sdk-index.tmp.ts`.
+
+**Full changes**: `v1.86.0` -> `v1.87.0`
+
 ## Lime v1.86.0
 
 <sub>The Simplified Chinese release notes are the primary version. This English page is a companion for international readers.</sub>

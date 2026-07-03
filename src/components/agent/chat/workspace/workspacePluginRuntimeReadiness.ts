@@ -1,7 +1,7 @@
 import type {
-  InstalledAgentAppState,
+  InstalledPluginState,
   ReadinessIssue,
-} from "@/features/agent-app/types";
+} from "@/features/plugin/types";
 import type {
   PluginCliDeclaration,
   PluginConnectorDeclaration,
@@ -39,7 +39,7 @@ export interface WorkspacePluginRuntimeReadinessItem {
 export interface WorkspacePluginRuntimeReadiness {
   source: "host_runtime_readiness";
   pluginId: string;
-  activeAgentAppId?: string;
+  activePluginUiId?: string;
   workflowKey?: string;
   taskKind?: string;
   status: WorkspacePluginRuntimeReadinessStatus;
@@ -56,8 +56,8 @@ export interface WorkspacePluginRuntimeReadiness {
 
 export interface BuildWorkspacePluginRuntimeReadinessParams {
   contract: PluginContract;
-  installedAgentApp?: InstalledAgentAppState;
-  activeAgentAppId?: string;
+  installedPlugin?: InstalledPluginState;
+  activePluginUiId?: string;
   workflowKey?: string;
   taskKind?: string;
   intentKey?: string;
@@ -107,7 +107,7 @@ function issueCodes(issues: readonly ReadinessIssue[] | undefined): string[] {
   return uniqueStrings(issues?.map((issue) => issue.code) ?? []);
 }
 
-function isHostBlocked(app: InstalledAgentAppState | undefined): boolean {
+function isHostBlocked(app: InstalledPluginState | undefined): boolean {
   return Boolean(
     app?.disabled ||
     app?.readiness.status === "blocked" ||
@@ -116,7 +116,7 @@ function isHostBlocked(app: InstalledAgentAppState | undefined): boolean {
 }
 
 function baseItemStatus(
-  app: InstalledAgentAppState | undefined,
+  app: InstalledPluginState | undefined,
   declarationAvailable: boolean,
   registryAvailable: boolean,
 ): WorkspacePluginRuntimeReadinessItemStatus {
@@ -139,7 +139,7 @@ function baseItemStatus(
 }
 
 function baseReasonCodes(params: {
-  app?: InstalledAgentAppState;
+  app?: InstalledPluginState;
   declarationAvailable: boolean;
   registryAvailable: boolean;
   missingDeclarationCode: string;
@@ -208,7 +208,7 @@ function declarationById<T extends { id?: string; key?: string }>(
 function buildCliItems(params: {
   refs: readonly string[];
   declarations: readonly PluginCliDeclaration[];
-  app?: InstalledAgentAppState;
+  app?: InstalledPluginState;
 }): WorkspacePluginRuntimeReadinessItem[] {
   const refs = uniqueStrings([
     ...params.refs,
@@ -256,7 +256,7 @@ function buildConnectorItems(params: {
   refs: readonly string[];
   declarations: readonly PluginConnectorDeclaration[];
   registryAvailable: boolean;
-  app?: InstalledAgentAppState;
+  app?: InstalledPluginState;
 }): WorkspacePluginRuntimeReadinessItem[] {
   const refs = uniqueStrings([
     ...params.refs,
@@ -296,7 +296,7 @@ function buildHookItems(params: {
   refs: readonly string[];
   declarations: readonly PluginHookDeclaration[];
   registryAvailable: boolean;
-  app?: InstalledAgentAppState;
+  app?: InstalledPluginState;
 }): WorkspacePluginRuntimeReadinessItem[] {
   const refs = uniqueStrings([
     ...params.refs,
@@ -336,7 +336,7 @@ function buildHookItems(params: {
 }
 
 function agentRuntimeRegistryAvailable(
-  app: InstalledAgentAppState | undefined,
+  app: InstalledPluginState | undefined,
   key: "connectors" | "hooks",
 ): boolean {
   const runtime = asRecord(app?.manifest.agentRuntime);
@@ -353,7 +353,7 @@ function agentRuntimeRegistryAvailable(
 
 function runtimeRegistryAvailable(
   contract: PluginContract,
-  app: InstalledAgentAppState | undefined,
+  app: InstalledPluginState | undefined,
   key: "connectors" | "hooks",
 ): boolean {
   return Boolean(
@@ -365,8 +365,8 @@ function runtimeRegistryAvailable(
 
 export function buildWorkspacePluginRuntimeReadiness({
   contract,
-  installedAgentApp,
-  activeAgentAppId,
+  installedPlugin,
+  activePluginUiId,
   workflowKey,
   taskKind,
   intentKey,
@@ -384,25 +384,25 @@ export function buildWorkspacePluginRuntimeReadiness({
     declarations: contract.connectors,
     registryAvailable: runtimeRegistryAvailable(
       contract,
-      installedAgentApp,
+      installedPlugin,
       "connectors",
     ),
-    app: installedAgentApp,
+    app: installedPlugin,
   });
   const hooks = buildHookItems({
     refs: hookRefs,
     declarations: contract.hooks,
     registryAvailable: runtimeRegistryAvailable(
       contract,
-      installedAgentApp,
+      installedPlugin,
       "hooks",
     ),
-    app: installedAgentApp,
+    app: installedPlugin,
   });
   const clis = buildCliItems({
     refs: cliRefs,
     declarations: contract.clis,
-    app: installedAgentApp,
+    app: installedPlugin,
   });
   const items = [...connectors, ...hooks, ...clis];
   const blockerCodes = uniqueStrings(
@@ -419,11 +419,11 @@ export function buildWorkspacePluginRuntimeReadiness({
   return {
     source: "host_runtime_readiness",
     pluginId: contract.id,
-    activeAgentAppId,
+    activePluginUiId,
     workflowKey: workflow?.key ?? workflowKey,
     taskKind: workflow?.taskKind ?? taskKind,
     status: blockerCodes.length > 0 ? "blocked" : topStatus(items),
-    checkedAt: installedAgentApp?.readiness.checkedAt,
+    checkedAt: installedPlugin?.readiness.checkedAt,
     connectorRefs,
     hookRefs,
     cliRefs,
@@ -527,9 +527,9 @@ export function extractWorkspacePluginRuntimeReadinessFromRequestMetadata(
   return {
     source: "host_runtime_readiness",
     pluginId,
-    activeAgentAppId:
-      readString(readiness.activeAgentAppId) ??
-      readString(readiness.active_agent_app_id),
+    activePluginUiId:
+      readString(readiness.activePluginUiId) ??
+      readString(readiness.active_plugin_ui_id),
     workflowKey:
       readString(readiness.workflowKey) ?? readString(readiness.workflow_key),
     taskKind: readString(readiness.taskKind) ?? readString(readiness.task_kind),

@@ -3,8 +3,8 @@ use lime_core::database::dao::api_key_provider::{
     ApiKeyProvider, ApiProviderType, ProviderProtocolFamily,
 };
 use lime_media_runtime::{
-    patch_task_artifact, ImageGenerationRunnerConfig, TaskArtifactPatch,
-    IMAGE_TASK_RUNNER_WORKER_ID,
+    patch_task_artifact, ImageGenerationRequestBodyFormat, ImageGenerationRunnerConfig,
+    TaskArtifactPatch, IMAGE_TASK_RUNNER_WORKER_ID,
 };
 use lime_services::api_key_provider_service::ApiKeyProviderService;
 use serde_json::Value;
@@ -35,6 +35,7 @@ pub(super) fn image_generation_runner_config_from_resolved_route(
     let Some(endpoint) = image_generation_endpoint_from_route(route, &protocol) else {
         return Ok(None);
     };
+    let request_body_format = image_request_body_format_from_route(route, &protocol);
     let api_key_service = ApiKeyProviderService::new();
     let Some((key_id, api_key)) = api_key_service
         .get_next_api_key_entry(&context.db, &provider_id)
@@ -60,6 +61,7 @@ pub(super) fn image_generation_runner_config_from_resolved_route(
                 "executor_mode": image_executor_mode_from_route(route, &protocol),
                 "provider_id": provider_id,
                 "model": model_id,
+                "request_body_format": request_body_format.as_str(),
             })),
             current_attempt_worker_id: Some(Some(IMAGE_TASK_RUNNER_WORKER_ID.to_string())),
             ..TaskArtifactPatch::default()
@@ -67,7 +69,11 @@ pub(super) fn image_generation_runner_config_from_resolved_route(
     )
     .map_err(|error| error.to_string())?;
 
-    Ok(Some(ImageGenerationRunnerConfig { endpoint, api_key }))
+    Ok(Some(ImageGenerationRunnerConfig {
+        endpoint,
+        api_key,
+        request_body_format,
+    }))
 }
 
 pub(super) fn image_generation_runner_config_from_task_provider(
@@ -103,6 +109,8 @@ pub(super) fn image_generation_runner_config_from_task_provider(
     else {
         return Ok(None);
     };
+    let request_body_format =
+        image_request_body_format_from_provider(&provider.provider, Some(model_id.as_str()));
     let Some((key_id, api_key)) = api_key_service
         .get_next_api_key_entry(&context.db, &provider_id)
         .map_err(|error| format!("读取图片 Provider API Key 失败: {error}"))?
@@ -127,6 +135,7 @@ pub(super) fn image_generation_runner_config_from_task_provider(
                 "executor_mode": image_executor_mode_from_provider(&provider.provider, Some(model_id.as_str())),
                 "provider_id": provider_id,
                 "model": model_id,
+                "request_body_format": request_body_format.as_str(),
             })),
             current_attempt_worker_id: Some(Some(IMAGE_TASK_RUNNER_WORKER_ID.to_string())),
             ..TaskArtifactPatch::default()
@@ -134,7 +143,11 @@ pub(super) fn image_generation_runner_config_from_task_provider(
     )
     .map_err(|error| error.to_string())?;
 
-    Ok(Some(ImageGenerationRunnerConfig { endpoint, api_key }))
+    Ok(Some(ImageGenerationRunnerConfig {
+        endpoint,
+        api_key,
+        request_body_format,
+    }))
 }
 
 fn route_failure_present(payload: &Value) -> bool {
@@ -388,6 +401,32 @@ fn image_executor_mode_from_provider(
     }
 }
 
+fn image_request_body_format_from_route(
+    route: &Value,
+    protocol: &str,
+) -> ImageGenerationRequestBodyFormat {
+    if matches!(
+        protocol,
+        "openai_images" | "openai_responses" | "codex_responses"
+    ) && is_agnes_image_route(route)
+    {
+        return ImageGenerationRequestBodyFormat::AgnesImages;
+    }
+
+    ImageGenerationRequestBodyFormat::OpenaiImages
+}
+
+fn image_request_body_format_from_provider(
+    provider: &ApiKeyProvider,
+    model_id: Option<&str>,
+) -> ImageGenerationRequestBodyFormat {
+    if is_agnes_image_provider(provider, model_id) {
+        return ImageGenerationRequestBodyFormat::AgnesImages;
+    }
+
+    ImageGenerationRequestBodyFormat::OpenaiImages
+}
+
 fn is_zhipu_image_provider(provider: &ApiKeyProvider) -> bool {
     let provider_id = provider.id.to_ascii_lowercase();
     let provider_name = provider.name.to_ascii_lowercase();
@@ -428,6 +467,22 @@ fn is_dashscope_image_provider(provider: &ApiKeyProvider, model_id: Option<&str>
             .iter()
             .any(|model| is_dashscope_image_model_id(model));
     has_dashscope_identity && has_dashscope_image_model
+}
+
+fn is_agnes_image_provider(provider: &ApiKeyProvider, model_id: Option<&str>) -> bool {
+    let provider_id = provider.id.to_ascii_lowercase();
+    let provider_name = provider.name.to_ascii_lowercase();
+    let api_host = provider.api_host.to_ascii_lowercase();
+    let provider_matches = provider_id.contains("agnes")
+        || provider_name.contains("agnes")
+        || api_host.contains("agnes-ai.com");
+    let model_matches = model_id.map(is_agnes_image_model_id).unwrap_or(false)
+        || provider
+            .custom_models
+            .iter()
+            .any(|model| is_agnes_image_model_id(model));
+
+    provider_matches || model_matches
 }
 
 fn is_zhipu_image_route(route: &Value) -> bool {
@@ -501,6 +556,40 @@ fn is_dashscope_image_model_id(model_id: &str) -> bool {
         || normalized.contains("wanx")
         || normalized.contains("wan2.")
         || normalized.contains("wan2-")
+}
+
+fn is_agnes_image_route(route: &Value) -> bool {
+    let provider_id = route_model_ref_string(route, &["providerId", "provider_id"])
+        .or_else(|| {
+            route
+                .get("provider")
+                .and_then(|value| read_value_string(value, &["id", "providerId", "provider_id"]))
+        })
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let model_id = route_model_ref_string(route, &["modelId", "model_id"])
+        .or_else(|| {
+            route
+                .get("model")
+                .and_then(|value| read_value_string(value, &["id", "modelId", "model_id"]))
+        })
+        .unwrap_or_default();
+    let base_url = route
+        .get("endpoint")
+        .and_then(|endpoint| read_value_string(endpoint, &["baseUrl", "base_url"]))
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+
+    provider_id.contains("agnes")
+        || base_url.contains("agnes-ai.com")
+        || is_agnes_image_model_id(&model_id)
+}
+
+fn is_agnes_image_model_id(model_id: &str) -> bool {
+    model_id
+        .trim()
+        .to_ascii_lowercase()
+        .starts_with("agnes-image-")
 }
 
 fn is_zhipu_image_route_for_protocol(route: &Value, protocol: &str) -> bool {
@@ -607,6 +696,28 @@ mod tests {
             image_executor_mode_from_route(&dashscope_route, "openai_images"),
             "dashscope_images"
         );
+        let agnes_route = serde_json::json!({
+            "protocol": "openai_images",
+            "modelRef": {
+                "providerId": "agnes",
+                "modelId": "agnes-image-2.1-flash"
+            },
+            "endpoint": {
+                "baseUrl": "https://api.agnes-ai.com/v1"
+            }
+        });
+        assert_eq!(
+            image_generation_endpoint_from_route(&agnes_route, "openai_images").as_deref(),
+            Some("https://api.agnes-ai.com/v1/images/generations")
+        );
+        assert_eq!(
+            image_executor_mode_from_route(&agnes_route, "openai_images"),
+            "images_api"
+        );
+        assert_eq!(
+            image_request_body_format_from_route(&agnes_route, "openai_images"),
+            ImageGenerationRequestBodyFormat::AgnesImages
+        );
         assert!(image_generation_endpoint_from_route(&zhipu_route, "anthropic_messages").is_none());
         assert!(image_generation_endpoint_from_route(&route, "anthropic_messages").is_none());
     }
@@ -685,6 +796,25 @@ mod tests {
         assert_eq!(
             image_executor_mode_from_provider(&provider, Some("qwen-image-plus")),
             "dashscope_images"
+        );
+
+        provider.id = "agnes".to_string();
+        provider.name = "Agnes".to_string();
+        provider.provider_type = ApiProviderType::Openai;
+        provider.api_host = "https://api.agnes-ai.com/v1".to_string();
+        provider.custom_models = vec!["agnes-image-2.1-flash".to_string()];
+        assert_eq!(
+            image_generation_endpoint_from_provider(&provider, Some("agnes-image-2.1-flash"))
+                .as_deref(),
+            Some("https://api.agnes-ai.com/v1/images/generations")
+        );
+        assert_eq!(
+            image_executor_mode_from_provider(&provider, Some("agnes-image-2.1-flash")),
+            "images_api"
+        );
+        assert_eq!(
+            image_request_body_format_from_provider(&provider, Some("agnes-image-2.1-flash")),
+            ImageGenerationRequestBodyFormat::AgnesImages
         );
 
         provider.id = "anthropic".to_string();

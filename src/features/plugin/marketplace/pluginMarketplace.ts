@@ -1,6 +1,6 @@
 import { normalizePluginManifest } from "../manifest/pluginContract";
 import { projectPluginRegistry } from "../manifest/pluginRegistry";
-import type { InstalledAgentAppState } from "@/features/agent-app/types";
+import type { InstalledPluginState } from "@/features/plugin/types";
 import type {
   PluginContract,
   PluginArtifactRendererDeclaration,
@@ -28,11 +28,11 @@ export interface PluginMarketplaceRegistryProjectionOptions {
   historyWorkspacePluginKeys?: readonly string[];
 }
 
-export interface PluginMarketplaceInstalledAgentAppsProjectionOptions extends Omit<
+export interface PluginMarketplaceInstalledPluginsProjectionOptions extends Omit<
   PluginMarketplaceRegistryProjectionOptions,
   "installedPluginKeys" | "enabledPluginKeys"
 > {
-  installedAgentApps?: readonly InstalledAgentAppState[];
+  installedPlugins?: readonly InstalledPluginState[];
 }
 
 export interface PluginMarketplaceInstalledKeyProjection {
@@ -505,7 +505,7 @@ function marketplaceManifest(item: PluginMarketplaceItem): PluginManifest {
     ...(install ? { install } : {}),
     artifactRenderers,
     ...(historyRestore ? { historyRestore } : {}),
-    agentApps: item.appId
+    ui: item.appId
       ? [
           {
             id: item.appId,
@@ -520,7 +520,7 @@ function marketplaceManifest(item: PluginMarketplaceItem): PluginManifest {
       {
         key: item.pluginName,
         title: item.displayName,
-        kind: item.appId ? "agentApp" : "plugin",
+        kind: item.appId ? "pluginUi" : "plugin",
         intent: "manual",
       },
     ],
@@ -548,9 +548,9 @@ function normalizeToken(value: string | undefined): string | undefined {
   return token ? token : undefined;
 }
 
-export function marketplaceItemMatchesInstalledAgentAppPackage(
+export function marketplaceItemMatchesInstalledPluginPackage(
   item: PluginMarketplaceItem,
-  state: InstalledAgentAppState,
+  state: InstalledPluginState,
 ): boolean {
   if (state.identity.sourceKind !== "cloud_release") {
     return true;
@@ -576,7 +576,7 @@ export function marketplaceItemMatchesInstalledAgentAppPackage(
 }
 
 function installedCloudReleaseEvidenceMissing(
-  state: InstalledAgentAppState,
+  state: InstalledPluginState,
 ): boolean {
   const setup = readRecord(state.setup);
   return (
@@ -588,8 +588,8 @@ function installedCloudReleaseEvidenceMissing(
 
 function installedStateForMarketplaceItem(
   item: PluginMarketplaceItem,
-  statesByAppId: ReadonlyMap<string, InstalledAgentAppState>,
-): InstalledAgentAppState | undefined {
+  statesByAppId: ReadonlyMap<string, InstalledPluginState>,
+): InstalledPluginState | undefined {
   const appId = normalizeToken(item.appId);
   if (!appId) {
     return undefined;
@@ -597,12 +597,12 @@ function installedStateForMarketplaceItem(
   return statesByAppId.get(appId);
 }
 
-export function projectPluginMarketplaceInstalledKeysFromAgentApps(
+export function projectPluginMarketplaceInstalledKeysFromPlugins(
   marketplace: PluginMarketplaceListResponse,
-  installedAgentApps: readonly InstalledAgentAppState[] = [],
+  installedPlugins: readonly InstalledPluginState[] = [],
 ): PluginMarketplaceInstalledKeyProjection {
   const statesByAppId = new Map(
-    installedAgentApps.map((state) => [state.appId, state] as const),
+    installedPlugins.map((state) => [state.appId, state] as const),
   );
   const installedPluginKeys: string[] = [];
   const enabledPluginKeys: string[] = [];
@@ -622,7 +622,7 @@ export function projectPluginMarketplaceInstalledKeysFromAgentApps(
       ];
       return;
     }
-    const packageMismatched = !marketplaceItemMatchesInstalledAgentAppPackage(
+    const packageMismatched = !marketplaceItemMatchesInstalledPluginPackage(
       item,
       state,
     );
@@ -704,14 +704,14 @@ export function projectPluginMarketplaceRegistryInputs(
   });
 }
 
-export function projectPluginMarketplaceRegistryInputsFromInstalledAgentApps(
+export function projectPluginMarketplaceRegistryInputsFromInstalledPlugins(
   marketplace: PluginMarketplaceListResponse,
-  options: PluginMarketplaceInstalledAgentAppsProjectionOptions = {},
+  options: PluginMarketplaceInstalledPluginsProjectionOptions = {},
 ): PluginRegistryProjectionInput[] {
   const installedProjection =
-    projectPluginMarketplaceInstalledKeysFromAgentApps(
+    projectPluginMarketplaceInstalledKeysFromPlugins(
       marketplace,
-      options.installedAgentApps,
+      options.installedPlugins,
     );
   const baseInputs = projectPluginMarketplaceRegistryInputs(marketplace, {
     installedPluginKeys: installedProjection.installedPluginKeys,
@@ -741,12 +741,12 @@ export function projectPluginMarketplaceRegistry(
   );
 }
 
-export function projectPluginMarketplaceRegistryFromInstalledAgentApps(
+export function projectPluginMarketplaceRegistryFromInstalledPlugins(
   marketplace: PluginMarketplaceListResponse,
-  options: PluginMarketplaceInstalledAgentAppsProjectionOptions = {},
+  options: PluginMarketplaceInstalledPluginsProjectionOptions = {},
 ): PluginRegistryItem[] {
   return projectPluginRegistry(
-    projectPluginMarketplaceRegistryInputsFromInstalledAgentApps(
+    projectPluginMarketplaceRegistryInputsFromInstalledPlugins(
       marketplace,
       options,
     ),

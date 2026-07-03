@@ -172,7 +172,7 @@ pub enum ModelTaskSource {
     #[default]
     AgentTurn,
     MediaTaskArtifact,
-    AgentApp,
+    Plugin,
     Automation,
     ProviderProbe,
 }

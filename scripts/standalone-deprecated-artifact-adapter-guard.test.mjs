@@ -6,10 +6,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildStandaloneNativeBuildPlan,
-} from "./lib/agent-app-standalone-native-build-runner-core.mjs";
+} from "./lib/plugin-standalone-native-build-runner-core.mjs";
 import {
   writeStandaloneNativeShellConfigFiles,
-} from "./lib/agent-app-standalone-native-shell-config-writer-core.mjs";
+} from "./lib/plugin-standalone-native-shell-config-writer-core.mjs";
 
 function readyConfigPlan(outputRoot) {
   return {
@@ -70,8 +70,8 @@ function readFile(filePath) {
 
 describe("standalone deprecated artifact adapter guard", () => {
   it.each([
-    "scripts/agent-app/standalone-native-shell-config-writer.mjs",
-    "scripts/agent-app/standalone-native-build-runner.mjs",
+    "scripts/plugin/standalone-native-shell-config-writer.mjs",
+    "scripts/plugin/standalone-native-build-runner.mjs",
   ])("%s exits through the deprecated artifact adapter gate", (entrypoint) => {
     const result = spawnSync(process.execPath, [path.resolve(entrypoint)], {
       encoding: "utf8",
@@ -116,11 +116,11 @@ describe("standalone deprecated artifact adapter guard", () => {
 
   it("does not let deprecated adapter naming leak into current release evidence", () => {
     const currentReleaseSources = [
-      "scripts/lib/agent-app-standalone-release-evidence-core.mjs",
-      "scripts/lib/agent-app-standalone-macos-release-commands-core.mjs",
-      "scripts/lib/agent-app-standalone-updater-publisher-core.mjs",
-      "scripts/agent-app/standalone-evidence-pack.mjs",
-      "src/features/agent-app/packaging/releasePipeline.ts",
+      "scripts/lib/plugin-standalone-release-evidence-core.mjs",
+      "scripts/lib/plugin-standalone-macos-release-commands-core.mjs",
+      "scripts/lib/plugin-standalone-updater-publisher-core.mjs",
+      "scripts/plugin/standalone-evidence-pack.mjs",
+      "src/features/plugin/packaging/releasePipeline.ts",
     ];
 
     for (const filePath of currentReleaseSources) {
@@ -129,7 +129,7 @@ describe("standalone deprecated artifact adapter guard", () => {
       expect(content, filePath).not.toMatch(/\bold\s+host\s+build\b/i);
       expect(content, filePath).not.toMatch(/\bold_host_config\b/i);
       expect(content, filePath).not.toMatch(/\bold_host_build_runner\b/i);
-      expect(content, filePath).not.toMatch(/agent-app-standalone-old-host/i);
+      expect(content, filePath).not.toMatch(/plugin-standalone-old-host/i);
       expect(content, filePath).not.toMatch(/verify:gui-smoke/);
     }
   });

@@ -24,7 +24,7 @@ export interface PluginObjectRef {
 export interface PluginActivationContext {
   sessionId: string;
   pluginId: string;
-  activeAgentAppId?: string;
+  activePluginUiId?: string;
   activeEntryKey?: string;
   taskKind?: string;
   workflowKey?: string;
@@ -42,7 +42,7 @@ export interface PluginActivationMentionCatalogEntry {
   prefix: string;
   pluginId: string;
   pluginDisplayName: string;
-  activeAgentAppId?: string;
+  activePluginUiId?: string;
   activeEntryKey?: string;
   selectedSkillKeys?: string[];
   taskKind?: string;
@@ -144,7 +144,7 @@ function prefixVariantsForEntry(params: {
   const includePluginPrefixes =
     entry.key === contract.id ||
     entry.title === contract.displayName ||
-    entry.kind === "agentApp";
+    entry.kind === "pluginUi";
   return uniqueStrings([
     includePluginPrefixes ? `@${contract.displayName}` : undefined,
     includePluginPrefixes ? `@${contract.id}` : undefined,
@@ -155,8 +155,8 @@ function prefixVariantsForEntry(params: {
   ]);
 }
 
-function defaultAgentAppId(contract: PluginContract): string | undefined {
-  return contract.agentApps[0]?.id;
+function defaultPluginUiId(contract: PluginContract): string | undefined {
+  return contract.ui[0]?.id;
 }
 
 function catalogEntryForPrefix(params: {
@@ -171,7 +171,7 @@ function catalogEntryForPrefix(params: {
     prefix: params.prefix,
     pluginId: contract.id,
     pluginDisplayName: contract.displayName,
-    activeAgentAppId: defaultAgentAppId(contract),
+    activePluginUiId: defaultPluginUiId(contract),
     activeEntryKey: entry.key,
     taskKind: entry.taskKind,
     workflowKey: entry.workflowKey,
@@ -311,7 +311,7 @@ export function buildPluginActivationContext(params: {
   return {
     sessionId: params.sessionId,
     pluginId: params.entry.pluginId,
-    activeAgentAppId: params.entry.activeAgentAppId,
+    activePluginUiId: params.entry.activePluginUiId,
     activeEntryKey: params.entry.activeEntryKey,
     taskKind: params.entry.taskKind,
     workflowKey: params.entry.workflowKey,

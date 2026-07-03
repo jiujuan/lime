@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import type {
   CloudBootstrapApp,
-  InstalledAgentAppState,
-} from "@/features/agent-app/types";
+  InstalledPluginState,
+} from "@/features/plugin/types";
 import {
   performPluginMarketplaceAction,
   resolvePluginMarketplaceItemLabel,
@@ -24,7 +24,7 @@ function viewItem(
     description: "Research workflow",
     version: "1.2.3",
     categories: ["research"],
-    sourceKind: "agent_app_release",
+    sourceKind: "plugin_catalog",
     marketplaceDisplayName: "LimeCloud Marketplace",
     appId: "research-kit",
     package: {
@@ -53,7 +53,7 @@ function viewItem(
     capabilityProfile: {
       sections: [],
       summary: {
-        agentCount: 0,
+        uiCount: 0,
         subagentCount: 0,
         workflowCount: 0,
         toolCount: 0,
@@ -75,7 +75,7 @@ function viewItem(
   };
 }
 
-function installedState(appId = "research-kit"): InstalledAgentAppState {
+function installedState(appId = "research-kit"): InstalledPluginState {
   return {
     appId,
     identity: {
@@ -90,17 +90,16 @@ function installedState(appId = "research-kit"): InstalledAgentAppState {
         "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       loadedAt: "2026-06-25T00:00:00.000Z",
     },
-    manifest: {} as InstalledAgentAppState["manifest"],
-    projection: {} as InstalledAgentAppState["projection"],
-    readiness: {} as InstalledAgentAppState["readiness"],
+    manifest: {} as InstalledPluginState["manifest"],
+    projection: {} as InstalledPluginState["projection"],
+    readiness: {} as InstalledPluginState["readiness"],
     installMode: "in_lime",
-    runtimeProfileSummary:
-      {} as InstalledAgentAppState["runtimeProfileSummary"],
-    setup: {} as InstalledAgentAppState["setup"],
+    runtimeProfileSummary: {} as InstalledPluginState["runtimeProfileSummary"],
+    setup: {} as InstalledPluginState["setup"],
     disabled: false,
     installedAt: "2026-06-25T00:00:00.000Z",
     updatedAt: "2026-06-25T00:00:00.000Z",
-  } as InstalledAgentAppState;
+  } as InstalledPluginState;
 }
 
 function uninstallPreview() {
@@ -126,7 +125,7 @@ function installStateReport(
     pluginName: "research-kit",
     marketplaceName: "limecloud",
     pluginKey: "research-kit@limecloud",
-    sourceKind: "agent_app_release" as const,
+    sourceKind: "plugin_catalog" as const,
     sourceRef: "release-001",
     state,
     releaseId: "release-001",
@@ -240,7 +239,7 @@ describe("plugin marketplace actions", () => {
     expect(dispatchChanged).not.toHaveBeenCalled();
   });
 
-  it("安装应复用 current Agent App cloud release install API", async () => {
+  it("安装应复用 current Plugin cloud release install API", async () => {
     const installCloudRelease = vi.fn(async () => installedState());
     const reportInstallState: NonNullable<
       PluginMarketplaceActionDeps["reportInstallState"]
@@ -344,7 +343,7 @@ describe("plugin marketplace actions", () => {
     expect(installCloudRelease).not.toHaveBeenCalled();
   });
 
-  it("启用应复用 current Agent App disabled-set API", async () => {
+  it("启用应复用 current Plugin disabled-set API", async () => {
     const setDisabled = vi.fn(async () => ({
       states: [installedState()],
       issues: [],
@@ -396,7 +395,7 @@ describe("plugin marketplace actions", () => {
     expect(dispatchChanged).toHaveBeenCalledTimes(1);
   });
 
-  it("禁用应复用 current Agent App disabled-set API", async () => {
+  it("禁用应复用 current Plugin disabled-set API", async () => {
     const setDisabled = vi.fn(async () => ({
       states: [installedState()],
       issues: [],
@@ -449,7 +448,7 @@ describe("plugin marketplace actions", () => {
     expect(dispatchChanged).toHaveBeenCalledTimes(1);
   });
 
-  it("卸载应先预演再复用 current Agent App keep-data uninstall API", async () => {
+  it("卸载应先预演再复用 current Plugin keep-data uninstall API", async () => {
     const previewUninstall = vi.fn(async () => uninstallPreview());
     const uninstall = vi.fn(async () => ({
       status: "uninstalled",
@@ -554,30 +553,42 @@ describe("plugin marketplace actions", () => {
     expect(dispatchChanged).not.toHaveBeenCalled();
   });
 
-  it("注册授权应复用 current Agent App registration API", async () => {
-    const submitRegistrationCode = vi.fn(async () => ({
-      payload: {
-        schemaVersion: "agent-app-catalog/v1",
-        generatedAt: "2026-06-25T01:02:03.000Z",
-        apps: [],
-      },
-      source: "remote" as const,
+  it("注册授权应复用 current Plugin marketplace registration API", async () => {
+    const submitPluginRegistrationCode: NonNullable<
+      PluginMarketplaceActionDeps["submitPluginRegistrationCode"]
+    > = vi.fn(async () => ({
+      schemaVersion: "plugin-marketplace/v1",
+      tenantId: "tenant-0001",
+      generatedAt: "2026-06-25T01:02:03.000Z",
+      marketplaceName: "limecloud",
+      items: [],
     }));
+    const resolveRuntimeContext = vi.fn(
+      () =>
+        ({
+          tenantId: "tenant-0001",
+        }) as ReturnType<
+          NonNullable<PluginMarketplaceActionDeps["resolveRuntimeContext"]>
+        >,
+    );
     const dispatchChanged = vi.fn();
 
     await submitPluginMarketplaceRegistrationCode(viewItem(), "  reg-001  ", {
-      submitRegistrationCode,
+      submitPluginRegistrationCode,
+      resolveRuntimeContext,
       dispatchChanged,
     });
 
-    expect(submitRegistrationCode).toHaveBeenCalledWith(
+    expect(submitPluginRegistrationCode).toHaveBeenCalledWith(
+      "tenant-0001",
       "research-kit",
-      "reg-001",
+      { code: "reg-001" },
+      "limecloud",
     );
     expect(dispatchChanged).toHaveBeenCalledTimes(1);
   });
 
-  it("原生目录项注册授权应调用 client plugin registration API", async () => {
+  it("原生目录项注册授权不依赖 appId，调用 client plugin registration API", async () => {
     const submitPluginRegistrationCode: NonNullable<
       PluginMarketplaceActionDeps["submitPluginRegistrationCode"]
     > = vi.fn(async () => ({
@@ -599,7 +610,6 @@ describe("plugin marketplace actions", () => {
 
     await submitPluginMarketplaceRegistrationCode(
       viewItem({
-        sourceKind: "plugin_catalog",
         appId: undefined,
       }),
       "  reg-001  ",
@@ -619,22 +629,34 @@ describe("plugin marketplace actions", () => {
     expect(dispatchChanged).toHaveBeenCalledTimes(1);
   });
 
-  it("注册授权缺少 appId 或注册码时应 fail closed", async () => {
-    const submitRegistrationCode = vi.fn();
+  it("注册授权缺少插件名、云端会话或注册码时应 fail closed", async () => {
+    const submitPluginRegistrationCode = vi.fn();
 
     await expect(
       submitPluginMarketplaceRegistrationCode(
-        viewItem({ appId: " " }),
+        viewItem({ pluginName: " " }),
         "reg-001",
-        { submitRegistrationCode },
+        {
+          submitPluginRegistrationCode,
+          resolveRuntimeContext: () =>
+            ({ tenantId: "tenant-0001" }) as ReturnType<
+              NonNullable<PluginMarketplaceActionDeps["resolveRuntimeContext"]>
+            >,
+        },
       ),
-    ).rejects.toThrow("PLUGIN_APP_ID_MISSING");
+    ).rejects.toThrow("PLUGIN_NAME_MISSING");
+    await expect(
+      submitPluginMarketplaceRegistrationCode(viewItem(), "reg-001", {
+        submitPluginRegistrationCode,
+        resolveRuntimeContext: () => null,
+      }),
+    ).rejects.toThrow("PLUGIN_MARKETPLACE_CLOUD_SESSION_REQUIRED");
     await expect(
       submitPluginMarketplaceRegistrationCode(viewItem(), " ", {
-        submitRegistrationCode,
+        submitPluginRegistrationCode,
       }),
     ).rejects.toThrow("PLUGIN_REGISTRATION_CODE_MISSING");
-    expect(submitRegistrationCode).not.toHaveBeenCalled();
+    expect(submitPluginRegistrationCode).not.toHaveBeenCalled();
   });
 
   it("名称为空时应回落到 marketplace 名称、插件名和插件标识", () => {

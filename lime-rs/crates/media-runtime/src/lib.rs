@@ -13,8 +13,8 @@ mod video_worker;
 pub use image_worker::{
     build_image_generation_endpoint, execute_image_generation_task,
     execute_image_generation_task_with_hook, normalize_image_generation_service_host,
-    ImageGenerationRunnerConfig, IMAGE_TASK_MAX_PARALLEL_REQUESTS, IMAGE_TASK_RUNNER_TIMEOUT_SECS,
-    IMAGE_TASK_RUNNER_WORKER_ID,
+    ImageGenerationRequestBodyFormat, ImageGenerationRunnerConfig,
+    IMAGE_TASK_MAX_PARALLEL_REQUESTS, IMAGE_TASK_RUNNER_TIMEOUT_SECS, IMAGE_TASK_RUNNER_WORKER_ID,
 };
 pub use task_artifact::{
     list_task_outputs, load_task_output, parse_media_task_output, parse_task_output,

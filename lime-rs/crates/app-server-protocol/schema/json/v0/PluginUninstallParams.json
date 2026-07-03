@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "appId": {
+      "type": "string"
+    },
+    "confirmationPhrase": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "mode": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "appId",
+    "mode"
+  ],
+  "title": "PluginUninstallParams",
+  "type": "object"
+}

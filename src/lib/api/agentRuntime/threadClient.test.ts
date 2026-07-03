@@ -3551,11 +3551,11 @@ describe("agentRuntime threadClient", () => {
           sequence: 5,
           sessionId: "session-1",
           turnId: "turn-1",
-          type: "agent_app_worker.hook",
+          type: "plugin_worker.hook",
           timestamp: "2026-06-06T00:00:02.750Z",
           payload: {
-            source: "agent_app_task_worker",
-            backend: "agent_app_worker",
+            source: "plugin_task_worker",
+            backend: "plugin_worker",
             appId: "content-factory-app",
             taskId: "turn-1:article-workspace-action",
             taskKind: "content.article.generate",
@@ -3571,12 +3571,12 @@ describe("agentRuntime threadClient", () => {
     expect(hookPayload).toMatchObject({
       type: "item_completed",
       item: {
-        id: "evt-worker-hook:agent-app-worker-hook",
+        id: "evt-worker-hook:plugin-worker-hook",
         type: "turn_summary",
         status: "completed",
         text: "Prepared prompt context for content task",
         metadata: {
-          source: "agent_app_worker.hook",
+          source: "plugin_worker.hook",
           hookKey: "prompt-submit",
           hookEvent: "prompt.submit",
           hookScope: "prompt",
@@ -3586,7 +3586,7 @@ describe("agentRuntime threadClient", () => {
     expect(parseAgentEvent(hookPayload)).toMatchObject({
       type: "item_completed",
       item: {
-        id: "evt-worker-hook:agent-app-worker-hook",
+        id: "evt-worker-hook:plugin-worker-hook",
         type: "turn_summary",
         status: "completed",
         text: "Prepared prompt context for content task",

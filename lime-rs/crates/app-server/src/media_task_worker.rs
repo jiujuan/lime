@@ -533,6 +533,7 @@ mod tests {
         let runner_config = ImageGenerationRunnerConfig {
             endpoint: format!("http://{}/v1/images/generations", image_server.address),
             api_key: "test-key".to_string(),
+            request_body_format: Default::default(),
         };
 
         let result = execute_image_task_with_runner_config(

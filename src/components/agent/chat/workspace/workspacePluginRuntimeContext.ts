@@ -1,10 +1,10 @@
-import type { InstalledAgentAppState } from "@/features/agent-app/types";
+import type { InstalledPluginState } from "@/features/plugin/types";
 import type {
   PluginActivationContext,
   PluginContract,
   PluginRegistryItem,
 } from "@/features/plugin";
-import { projectPluginRegistryFromInstalledAgentApps } from "@/features/plugin";
+import { projectPluginRegistryFromInstalledPlugins } from "@/features/plugin";
 import { extractWorkspacePluginActivationFromRequestMetadata } from "./workspacePluginActivation";
 import {
   buildWorkspacePluginRuntimeReadiness,
@@ -29,15 +29,15 @@ export interface WorkspacePluginRuntimeContext {
 
 export interface BuildWorkspacePluginRuntimeContextParams {
   requestMetadata?: Record<string, unknown>;
-  installedAgentApps: readonly InstalledAgentAppState[];
+  installedPlugins: readonly InstalledPluginState[];
 }
 
 export function buildWorkspacePluginRuntimeContext({
   requestMetadata,
-  installedAgentApps,
+  installedPlugins,
 }: BuildWorkspacePluginRuntimeContextParams): WorkspacePluginRuntimeContext {
   const projection =
-    projectPluginRegistryFromInstalledAgentApps(installedAgentApps);
+    projectPluginRegistryFromInstalledPlugins(installedPlugins);
   const activation =
     extractWorkspacePluginActivationFromRequestMetadata(requestMetadata);
   const restoredRuntimeReadiness =
@@ -60,17 +60,17 @@ export function buildWorkspacePluginRuntimeContext({
   const contract = projection.contracts.find(
     (item) => item.id === activation.context.pluginId,
   );
-  const installedAgentApp = installedAgentApps.find(
+  const installedPlugin = installedPlugins.find(
     (item) =>
       item.appId ===
-      (activation.context.activeAgentAppId ?? activation.context.pluginId),
+      (activation.context.activePluginUiId ?? activation.context.pluginId),
   );
   const runtimeReadiness =
     contract && registryItem
       ? buildWorkspacePluginRuntimeReadiness({
           contract,
-          installedAgentApp,
-          activeAgentAppId: activation.context.activeAgentAppId,
+          installedPlugin,
+          activePluginUiId: activation.context.activePluginUiId,
           workflowKey: activation.context.workflowKey,
           taskKind: activation.context.taskKind,
         })

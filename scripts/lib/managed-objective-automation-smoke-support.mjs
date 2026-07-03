@@ -388,7 +388,7 @@ function buildManagedObjectiveHarness(skillBinding) {
         },
       ],
     },
-    agent_app_runtime_skill_contract: {
+    plugin_runtime_skill_contract: {
       policy: "must_use_required_skills_before_final_artifact",
       required_skills: [{ skill: binding.skillName, required: true }],
     },

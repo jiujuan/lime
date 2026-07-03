@@ -75,6 +75,60 @@ function topicFromPrompt(prompt) {
   return topic.slice(0, 42) || "内容生产任务";
 }
 
+function channelFromPrompt(prompt) {
+  const compact = compactWhitespace(prompt);
+  const match = compact.match(/微信公众号|公众号|小红书|博客|报告|长文|文章/);
+  return match?.[0] ?? "文章";
+}
+
+function sentenceFragments(value) {
+  const compact = compactWhitespace(value);
+  const fragments = compact
+    .split(/(?:[。！？!?；;]|\s+-\s+|\n)+/)
+    .flatMap((fragment) =>
+      fragment.split(/(?:，|,)\s*(?=要求|并|同时|最终|先|再|最后|不要|需要)/),
+    )
+    .map((fragment) =>
+      fragment
+        .replace(/^用户原始请求：?/, "")
+        .replace(/^生成目标：?/, "")
+        .trim(),
+    )
+    .filter((fragment) => fragment.length >= 4);
+  return Array.from(new Set(fragments));
+}
+
+function promptDerivedParagraphs({ prompt, topic }) {
+  const fragments = sentenceFragments(prompt);
+  const primaryFragments =
+    fragments.length > 0 ? fragments : [`写作主题：${topic}`];
+  if (primaryFragments.length < 3) {
+    const channel = channelFromPrompt(prompt);
+    const compactPrompt = compactWhitespace(prompt || topic);
+    return [
+      `用户请求围绕“${topic}”，目标是形成一篇${channel}正文。`,
+      `开篇需要直接回应“${topic}”为什么值得被读者关注。`,
+      `主体段落应紧扣原始请求：“${compactPrompt}”。`,
+      `证据和案例位置应留给真实检索结果或用户材料，不能在本地 fixture 中补造事实。`,
+      `结尾需要回到“${topic}”的行动建议，方便后续编辑继续扩写。`,
+    ];
+  }
+  const paragraphs = primaryFragments.slice(0, 5).map((fragment) => {
+    const normalized = fragment.replace(/^写一篇/, "").trim();
+    return normalized.endsWith("。") ? normalized : `${normalized}。`;
+  });
+  while (paragraphs.length < 5) {
+    const source =
+      primaryFragments[paragraphs.length % primaryFragments.length];
+    const suffix =
+      paragraphs.length % 2 === 0
+        ? `围绕“${topic}”继续展开这一要求。`
+        : `保持主题“${topic}”和用户请求一致。`;
+    paragraphs.push(`${source} ${suffix}`.trim());
+  }
+  return paragraphs;
+}
+
 export function buildContentFactoryHostGenerationFixtureMarkdown(body) {
   const messages = requestMessagesText(body);
   const prompt = extractOriginalPrompt(messages);
@@ -82,36 +136,17 @@ export function buildContentFactoryHostGenerationFixtureMarkdown(body) {
   const fingerprint = promptFingerprint(
     prompt || messages || "content-factory",
   );
+  const paragraphs = promptDerivedParagraphs({
+    prompt,
+    topic,
+  });
 
   return [
-    `# ${topic}：fixture-only 托管生成草稿`,
+    `# ${topic}`,
     "",
-    `fixturePromptFingerprint: ${fingerprint}`,
+    `<!-- fixtureOnlyHostGeneration: true; fixturePromptFingerprint: ${fingerprint} -->`,
     "",
-    "> 这是本地 OpenAI-compatible fixture 按请求动态生成的测试正文，只用于证明 hostManagedGeneration 注入链路；生产完成度必须使用 live Provider evidence。",
-    "",
-    "## 请求摘要",
-    "",
-    compactWhitespace(prompt || "未提供用户原始请求。"),
-    "",
-    "## 资料检索",
-    "",
-    `- 围绕“${topic}”确认读者、交付边界和可验证依据。`,
-    "- 将检索过程保留在 workflow JSONL 审计中，不展示到右侧编辑器。",
-    "",
-    "## 正文草稿",
-    "",
-    `这篇文章应从“${topic}”的真实使用场景切入，说明为什么读者现在需要理解它，以及它能解决什么具体问题。`,
-    "",
-    "正文不应来自 worker 内置模板，也不应由插件持有 Provider Key。宿主负责模型调用与权限边界，worker 只消费宿主回填的 Markdown，并把它转换为 Article Workspace Patch。",
-    "",
-    "段落级流式应先输出可编辑的文章对象，再随着宿主生成结果递增更新 artifact snapshot；没有宿主正文时必须 fail closed。",
-    "",
-    "## 交付检查",
-    "",
-    "- 正文来自 hostManagedGeneration.outputs[].content。",
-    "- workflow 过程只写入 workflow-events.jsonl。",
-    "- 右侧 Article Editor 只展示文章对象，不展示 workflow 步骤。",
+    ...paragraphs.flatMap((paragraph) => [paragraph, ""]),
   ].join("\n");
 }
 

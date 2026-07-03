@@ -738,8 +738,8 @@ describe("ArtifactRenderer 空内容态", () => {
           previewArtifact: true,
           isSourceBacked: true,
           source: "app",
-          sourceRef: "agent-app:research",
-          sourcePath: "agent-app:research",
+          sourceRef: "plugin:research",
+          sourcePath: "plugin:research",
           appId: "research",
           contentKind: "app_shell",
           renderMode: "inline",
@@ -758,7 +758,7 @@ describe("ArtifactRenderer 空内容态", () => {
     );
     expect(container.textContent).toContain("应用入口");
     expect(container.textContent).toContain("研究工作台");
-    expect(container.textContent).toContain("agent-app:research");
+    expect(container.textContent).toContain("plugin:research");
     expect(container.textContent).toContain("当前来源没有可展示的摘要内容。");
     expect(
       container.querySelector('[data-testid="artifact-empty-surface"]'),

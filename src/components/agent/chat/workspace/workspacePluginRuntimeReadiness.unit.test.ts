@@ -1,29 +1,29 @@
 import { describe, expect, it } from "vitest";
-import contentFactoryFixture from "@/features/agent-app/testing/fixtures/content-factory-app.json";
-import { buildPackageIdentity } from "@/features/agent-app/install/packageIdentity";
-import { normalizeManifest } from "@/features/agent-app/manifest/normalizeManifest";
-import { parseManifest } from "@/features/agent-app/manifest/parseManifest";
-import type { InstalledAgentAppState } from "@/features/agent-app/types";
+import contentFactoryFixture from "@/features/plugin/testing/fixtures/content-factory-app.json";
+import { buildPackageIdentity } from "@/features/plugin/install/packageIdentity";
+import { normalizeManifest } from "@/features/plugin/manifest/normalizeManifest";
+import { parseManifest } from "@/features/plugin/manifest/parseManifest";
+import type { InstalledPluginState } from "@/features/plugin/types";
 import { normalizePluginManifest } from "@/features/plugin";
-import { projectPluginRegistryFromInstalledAgentApps } from "@/features/plugin";
+import { projectPluginRegistryFromInstalledPlugins } from "@/features/plugin";
 import {
   buildWorkspacePluginRuntimeReadiness,
   extractWorkspacePluginRuntimeReadinessFromRequestMetadata,
 } from "./workspacePluginRuntimeReadiness";
 
 function installedContentFactory(
-  overrides: Partial<InstalledAgentAppState> = {},
-): InstalledAgentAppState {
+  overrides: Partial<InstalledPluginState> = {},
+): InstalledPluginState {
   const parsedManifest = parseManifest(contentFactoryFixture);
   const manifest = normalizeManifest(parsedManifest);
-  const base: InstalledAgentAppState = {
+  const base: InstalledPluginState = {
     appId: manifest.appId,
     identity: buildPackageIdentity({
       manifest: parsedManifest,
       loadedAt: "2026-07-02T00:00:00.000Z",
     }),
     manifest,
-    projection: {} as InstalledAgentAppState["projection"],
+    projection: {} as InstalledPluginState["projection"],
     readiness: {
       appId: manifest.appId,
       status: "ready",
@@ -37,8 +37,8 @@ function installedContentFactory(
     },
     installMode: "in_lime",
     runtimeProfileSummary:
-      {} as InstalledAgentAppState["runtimeProfileSummary"],
-    setup: {} as InstalledAgentAppState["setup"],
+      {} as InstalledPluginState["runtimeProfileSummary"],
+    setup: {} as InstalledPluginState["setup"],
     disabled: false,
     installedAt: "2026-07-02T00:00:00.000Z",
     updatedAt: "2026-07-02T00:00:00.000Z",
@@ -56,13 +56,13 @@ function installedContentFactory(
 describe("workspacePluginRuntimeReadiness", () => {
   it("应从内容工厂 workflow 投影 CLI / connectors / hooks readiness", () => {
     const installed = installedContentFactory();
-    const projection = projectPluginRegistryFromInstalledAgentApps([installed]);
+    const projection = projectPluginRegistryFromInstalledPlugins([installed]);
     const contract = projection.contracts[0];
 
     const readiness = buildWorkspacePluginRuntimeReadiness({
       contract,
-      installedAgentApp: installed,
-      activeAgentAppId: "content-factory-app",
+      installedPlugin: installed,
+      activePluginUiId: "content-factory-app",
       workflowKey: "content_article_workflow",
       taskKind: "content.article.generate",
       intentKey: "content_article_generate",
@@ -70,7 +70,7 @@ describe("workspacePluginRuntimeReadiness", () => {
 
     expect(readiness).toMatchObject({
       pluginId: "content-factory-app",
-      activeAgentAppId: "content-factory-app",
+      activePluginUiId: "content-factory-app",
       workflowKey: "content_article_workflow",
       status: "declared",
       connectorRefs: ["lime-knowledge", "web-research", "media-generation"],
@@ -122,11 +122,11 @@ describe("workspacePluginRuntimeReadiness", () => {
         ],
       },
     });
-    const projection = projectPluginRegistryFromInstalledAgentApps([installed]);
+    const projection = projectPluginRegistryFromInstalledPlugins([installed]);
 
     const readiness = buildWorkspacePluginRuntimeReadiness({
       contract: projection.contracts[0],
-      installedAgentApp: installed,
+      installedPlugin: installed,
       workflowKey: "content_article_workflow",
     });
 

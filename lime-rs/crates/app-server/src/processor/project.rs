@@ -121,7 +121,7 @@ impl RequestProcessor {
     }
     // voice handlers 已提取到 processor/voice.rs
 
-    // agent_app handlers 已提取到 processor/agent_app.rs
+    // plugin handlers 已提取到 processor/plugin.rs
 
     pub(super) async fn handle_project_memory_read_impl(
         &self,

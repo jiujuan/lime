@@ -462,7 +462,7 @@ fn agent_session_turn_start_request_matches_protocol_fixture_shape() {
                 runtime_options: Some(RuntimeOptions {
                     capability_id: Some("draft.write".to_string()),
                     stream: true,
-                    event_name: Some("agent_app_runtime:app:task".to_string()),
+                    event_name: Some("plugin_runtime:app:task".to_string()),
                     provider_preference: Some("deepseek".to_string()),
                     model_preference: Some("deepseek-v4-flash".to_string()),
                     metadata: Some(json!({ "taskId": "task-1" })),
@@ -499,7 +499,7 @@ fn agent_session_turn_start_request_matches_protocol_fixture_shape() {
                 "runtimeOptions": {
                     "capabilityId": "draft.write",
                     "stream": true,
-                    "eventName": "agent_app_runtime:app:task",
+                    "eventName": "plugin_runtime:app:task",
                     "providerPreference": "deepseek",
                     "modelPreference": "deepseek-v4-flash",
                     "metadata": {
@@ -629,7 +629,7 @@ fn agent_session_action_respond_request_matches_protocol_fixture_shape() {
                 response: Some("allow".to_string()),
                 user_data: Some(json!({ "choice": "allow" })),
                 metadata: Some(json!({ "source": "content-studio" })),
-                event_name: Some("agent_app_runtime:app:task".to_string()),
+                event_name: Some("plugin_runtime:app:task".to_string()),
                 action_scope: Some(AgentSessionActionScope {
                     session_id: Some("sess_1".to_string()),
                     thread_id: Some("thread_1".to_string()),
@@ -658,7 +658,7 @@ fn agent_session_action_respond_request_matches_protocol_fixture_shape() {
                 "metadata": {
                     "source": "content-studio"
                 },
-                "eventName": "agent_app_runtime:app:task",
+                "eventName": "plugin_runtime:app:task",
                 "actionScope": {
                     "sessionId": "sess_1",
                     "threadId": "thread_1",
