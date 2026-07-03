@@ -1,6 +1,5 @@
 import type { MessageImageWorkbenchPreview } from "../types";
 import {
-  buildImageTaskAssistantContent as buildImageTaskAssistantContentCopy,
   collapseImageWorkbenchWhitespace,
   resolveImageTaskPromptSubject,
 } from "../utils/imageWorkbenchPresentation";
@@ -24,14 +23,6 @@ function uniqueCompactStrings(values: Array<string | null | undefined>) {
     result.push(normalized);
   }
   return result;
-}
-
-export function buildImageTaskAssistantContent(params: {
-  prompt: string;
-  mode?: ImageTaskMode;
-  modelName?: string | null;
-}): string {
-  return buildImageTaskAssistantContentCopy(params);
 }
 
 export function buildImageTaskPersonaContext(): Record<string, unknown> {

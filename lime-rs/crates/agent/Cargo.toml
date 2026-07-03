@@ -6,6 +6,8 @@ authors.workspace = true
 repository.workspace = true
 
 [dependencies]
+agent-protocol.workspace = true
+app-server-protocol.workspace = true
 lime-core.workspace = true
 lime-mcp.workspace = true
 lime-services.workspace = true

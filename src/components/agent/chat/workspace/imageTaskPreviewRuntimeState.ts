@@ -1,6 +1,9 @@
 import type { Message, MessageImageWorkbenchPreview } from "../types";
 import { parseImageWorkbenchCommand } from "../utils/imageWorkbenchCommand";
-import { buildImageWorkbenchCaption } from "../utils/imageWorkbenchPresentation";
+import {
+  buildImageWorkbenchCaption,
+  sanitizeImageWorkbenchPresentationText,
+} from "../utils/imageWorkbenchPresentation";
 import {
   resolveImageWorkbenchAssistantMessageId,
   type ImageWorkbenchOutput,
@@ -38,13 +41,31 @@ function buildImageWorkbenchMessagePatchFromTask(params: {
   const startedAt = new Date(params.task.createdAt || Date.now());
 
   return {
-    content: params.task.assistantIntro || "",
+    content:
+      sanitizeImageTaskDisplayText(
+        params.task.assistantIntro,
+        params.preview.prompt,
+      ) || "",
     timestamp: startedAt,
     isThinking: false,
     toolCalls: undefined,
     contentParts: undefined,
     runtimeStatus: undefined,
   };
+}
+
+function sanitizeImageTaskDisplayText(
+  value: string | null | undefined,
+  languageSource?: string | null,
+): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  return (
+    sanitizeImageWorkbenchPresentationText(value, {
+      languageSource,
+    }) || value
+  );
 }
 
 function resolvePreviewStatusFromWorkbenchTask(
@@ -94,7 +115,9 @@ function buildImageWorkbenchPreviewMessageFromTask(params: {
   const previewProviderName = preferredOutput?.providerName ?? null;
   const previewModelName =
     preferredOutput?.modelName ?? params.task.runtimeContract?.model ?? null;
-  const previewPrompt = params.task.prompt || "图片任务";
+  const previewPrompt =
+    sanitizeImageTaskDisplayText(params.task.prompt, params.task.prompt) ||
+    "图片任务";
   const preview: MessageImageWorkbenchPreview = {
     taskId: params.task.id,
     prompt: previewPrompt,
@@ -116,7 +139,7 @@ function buildImageWorkbenchPreviewMessageFromTask(params: {
     providerName: previewProviderName,
     modelName: previewModelName,
     caption:
-      params.task.caption ||
+      sanitizeImageTaskDisplayText(params.task.caption, previewPrompt) ||
       buildImageWorkbenchCaption({
         prompt: previewPrompt,
         status: previewStatus,
@@ -266,15 +289,23 @@ export function mergeImageTaskSnapshot(
       ...snapshot.task,
       sessionId: previousTask?.sessionId || snapshot.task.sessionId,
       assistantIntro:
-        snapshot.task.assistantIntro ?? previousTask?.assistantIntro ?? null,
-      caption: snapshot.task.caption ?? previousTask?.caption ?? null,
+        sanitizeImageTaskDisplayText(
+          snapshot.task.assistantIntro ?? previousTask?.assistantIntro,
+          snapshot.task.prompt || previousTask?.prompt,
+        ) ?? null,
+      caption:
+        sanitizeImageTaskDisplayText(
+          snapshot.task.caption ?? previousTask?.caption,
+          snapshot.task.prompt || previousTask?.prompt,
+        ) ?? null,
       taskFilePath:
         snapshot.task.taskFilePath ?? previousTask?.taskFilePath ?? null,
       artifactPath:
         snapshot.task.artifactPath ?? previousTask?.artifactPath ?? null,
       runtimeContract:
         snapshot.task.runtimeContract ?? previousTask?.runtimeContract ?? null,
-      workflowRun: snapshot.task.workflowRun ?? previousTask?.workflowRun ?? null,
+      workflowRun:
+        snapshot.task.workflowRun ?? previousTask?.workflowRun ?? null,
     },
     ...current.tasks.filter((task) => task.id !== snapshot.taskId),
   ];
@@ -596,7 +627,13 @@ function patchMessagesWithImageWorkbenchState(params: {
       null;
     const nextPreview: MessageImageWorkbenchPreview = {
       ...preview,
-      prompt: preview.prompt || task.prompt,
+      prompt:
+        sanitizeImageTaskDisplayText(
+          preview.prompt || task.prompt,
+          task.prompt,
+        ) ||
+        preview.prompt ||
+        task.prompt,
       mode: task.mode,
       status: nextPreviewStatus,
       taskFilePath: task.taskFilePath ?? preview.taskFilePath ?? null,
@@ -611,8 +648,14 @@ function patchMessagesWithImageWorkbenchState(params: {
       providerName: nextProviderName,
       modelName: nextModelName,
       caption:
-        task.caption ||
-        preview.caption ||
+        sanitizeImageTaskDisplayText(
+          task.caption,
+          preview.prompt || task.prompt,
+        ) ||
+        sanitizeImageTaskDisplayText(
+          preview.caption,
+          preview.prompt || task.prompt,
+        ) ||
         buildImageWorkbenchCaption({
           prompt: preview.prompt || task.prompt,
           status: nextPreviewStatus,

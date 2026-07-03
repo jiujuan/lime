@@ -572,6 +572,8 @@ pub const V0_SCHEMA_TYPE_NAMES: &[&str] = &[
     "AgentSessionRuntimeEventAppendParams",
     "AgentSessionRuntimeEventInput",
     "AgentSessionRuntimeEventAppendResponse",
+    "WorkflowReadParams",
+    "WorkflowReadResponse",
     "AgentSessionEventParams",
     "BusinessObjectRef",
     "AgentSessionStatus",

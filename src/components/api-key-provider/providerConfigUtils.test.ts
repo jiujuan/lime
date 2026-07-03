@@ -13,6 +13,7 @@ import { test } from "@fast-check/vitest";
 import * as fc from "fast-check";
 import { fastCheckRuns } from "../../test/fastCheckRuns";
 import {
+  AGNES_OPENAI_COMPATIBLE_API_HOST,
   getLatestSelectableModel,
   getFieldsForProviderType,
   getSpecialProtocolHint,
@@ -374,6 +375,19 @@ describe("已知 Provider API Host 归一化", () => {
         "https://api.sensenova.cn/compatible-mode/v1",
       ),
     ).toBe(SENSENOVA_OPENAI_COMPATIBLE_API_HOST);
+  });
+
+  test("应把 Agnes Image 文档页修正为官方 OpenAI 兼容 Base URL", () => {
+    expect(
+      normalizeKnownProviderApiHost(
+        "https://agnes-ai.com/zh-Hans/docs/agnes-image-21-flash",
+      ),
+    ).toBe(AGNES_OPENAI_COMPATIBLE_API_HOST);
+    expect(
+      normalizeKnownProviderApiHost(
+        "https://wiki.agnes-ai.com/zh-Hans/docs/agnes-image-21-flash",
+      ),
+    ).toBe(AGNES_OPENAI_COMPATIBLE_API_HOST);
   });
 
   test("未知地址只做 trim，不改写用户输入", () => {

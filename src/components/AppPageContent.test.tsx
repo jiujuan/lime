@@ -93,7 +93,7 @@ vi.mock("@/features/plugin", () => ({
   },
 }));
 
-vi.mock("@/features/plugin", () => ({
+vi.mock("@/features/plugin/ui/PluginRuntimePage", () => ({
   PluginRuntimePage: () => {
     useEffect(() => {
       pluginRuntimeLifecycle.mounts += 1;
@@ -101,6 +101,9 @@ vi.mock("@/features/plugin", () => ({
 
     return <div data-testid="plugin-runtime-page" />;
   },
+}));
+
+vi.mock("@/features/plugin/ui/PluginsPage", () => ({
   PluginsPage: (props: Record<string, unknown>) => {
     latestPluginsProps.value = props;
     useEffect(() => {
@@ -109,6 +112,9 @@ vi.mock("@/features/plugin", () => ({
 
     return <div data-testid="plugins-page" />;
   },
+}));
+
+vi.mock("@/features/plugin/ui/PluginLabPage", () => ({
   PluginLabPage: () => {
     useEffect(() => {
       pluginLabLifecycle.mounts += 1;

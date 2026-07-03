@@ -673,6 +673,245 @@ describe("agentChatHistory core hydrate", () => {
     ).toEqual(["tool_use", "text"]);
   });
 
+  it("App Server thread_read 图片工具应合入同一 turn 助手寒暄消息并恢复轻卡", () => {
+    const fullOutput = JSON.stringify({
+      success: true,
+      task_id: "task-thread-read-image-1",
+      task_type: "image_generate",
+      task_family: "image_generation",
+      status: "pending_submit",
+      normalized_status: "pending",
+      path: ".lime/tasks/image_generate/task-thread-read-image-1.json",
+      artifact_path: ".lime/tasks/image_generate/task-thread-read-image-1.json",
+      record: {
+        payload: {
+          prompt: "从花城汇看广州塔的春天照片",
+          model: "fal-ai/nano-banana-pro",
+          presentation: {
+            assistant_intro:
+              "我先按花城汇视角构图，保留春花、广场和广州塔。",
+            result_captions: {
+              complete:
+                "完成了，花城汇望向广州塔的春日画面已经生成。",
+            },
+          },
+        },
+      },
+    });
+    const detail: AsterSessionDetail = {
+      id: "session-thread-read-image-tool-calls",
+      thread_id: "thread-thread-read-image-tool-calls",
+      created_at: 1,
+      updated_at: 2,
+      messages_count: 2,
+      history_limit: 2,
+      history_offset: 0,
+      history_cursor: {
+        oldest_message_id: null,
+        start_index: 0,
+        loaded_count: 2,
+      },
+      history_truncated: false,
+      messages: [
+        {
+          role: "user",
+          timestamp: 1780704200,
+          runtimeTurnId: "turn-thread-read-image",
+          content: [
+            {
+              type: "text",
+              text: "@Nanobanana Pro 生成一张广州塔，从花城汇看过去的春天的照片",
+            },
+          ],
+        },
+        {
+          role: "assistant",
+          timestamp: 1780704202,
+          runtime_turn_id: "turn-thread-read-image",
+          content: [
+            {
+              type: "thinking",
+              text: "先判断花城汇视角、春花前景和广州塔主体。",
+            },
+            {
+              type: "text",
+              text: "我先按花城汇视角构图，保留春花、广场和广州塔。",
+            },
+          ],
+        } as never,
+      ],
+      turns: [
+        {
+          id: "turn-thread-read-image",
+          thread_id: "thread-thread-read-image-tool-calls",
+          prompt_text:
+            "@Nanobanana Pro 生成一张广州塔，从花城汇看过去的春天的照片",
+          status: "completed",
+          started_at: "2026-07-03T13:17:36.000Z",
+          completed_at: "2026-07-03T13:17:42.000Z",
+          created_at: "2026-07-03T13:17:36.000Z",
+          updated_at: "2026-07-03T13:17:42.000Z",
+        },
+      ],
+      thread_read: {
+        thread_id: "thread-thread-read-image-tool-calls",
+        status: "completed",
+        profile_status: "completed",
+        turns: [
+          {
+            turn_id: "turn-thread-read-image",
+            status: "completed",
+            native_status: "completed",
+          },
+        ],
+        pending_requests: [],
+        incidents: [],
+        queued_turns: [],
+        tool_calls: [
+          {
+            tool_call_id: "tool-thread-read-image",
+            turn_id: "turn-thread-read-image",
+            tool_name: "lime_create_image_generation_task",
+            status: "completed",
+            started_at: "2026-07-03T13:17:38.000Z",
+            finished_at: "2026-07-03T13:17:39.000Z",
+            arguments: {
+              prompt: "从花城汇看广州塔的春天照片",
+              model: "fal-ai/nano-banana-pro",
+            },
+            output: fullOutput,
+            output_preview: fullOutput.slice(0, 160),
+            success: true,
+          },
+        ],
+      },
+    };
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "session-thread-read-image-tool-calls",
+    );
+
+    expect(messages).toHaveLength(2);
+    expect(messages[1]).toMatchObject({
+      role: "assistant",
+      content: "我先按花城汇视角构图，保留春花、广场和广州塔。",
+      runtimeTurnId: "turn-thread-read-image",
+      thinkingContent: "先判断花城汇视角、春花前景和广州塔主体。",
+      imageWorkbenchPreview: {
+        taskId: "task-thread-read-image-1",
+        prompt: "从花城汇看广州塔的春天照片",
+        status: "running",
+        modelName: "fal-ai/nano-banana-pro",
+        caption: "完成了，花城汇望向广州塔的春日画面已经生成。",
+      },
+    });
+    expect(messages[1]?.contentParts?.map((part) => part.type)).toEqual([
+      "thinking",
+      "tool_use",
+      "text",
+    ]);
+    expect(messages[1]?.toolCalls?.[0]).toMatchObject({
+      id: "tool-thread-read-image",
+      name: "lime_create_image_generation_task",
+      status: "completed",
+    });
+    expect(messages.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+    ]);
+  });
+
+  it("App Server 图片工具历史应优先用完整 output 恢复图片轻卡", () => {
+    const fullOutput = JSON.stringify({
+      success: true,
+      task_id: "task-history-image-1",
+      task_type: "image_generate",
+      task_family: "image",
+      status: "pending_submit",
+      normalized_status: "pending",
+      path: ".lime/tasks/image_generate/task-history-image-1.json",
+      artifact_path: ".lime/tasks/image_generate/task-history-image-1.json",
+      record: {
+        payload: {
+          prompt: "深圳夏天午后的城市照片",
+          count: 1,
+        },
+      },
+    });
+    const detail: AsterSessionDetail = {
+      id: "session-history-image-tool",
+      thread_id: "thread-history-image-tool",
+      created_at: 1,
+      updated_at: 2,
+      messages: [
+        {
+          id: "turn-history-image:user",
+          role: "user",
+          timestamp: 1_783_057_990,
+          content: [
+            {
+              type: "text",
+              text: "@配图 深圳夏天午后的城市照片",
+            },
+          ] as never,
+        },
+      ],
+      items: [
+        {
+          id: "tool-history-image",
+          type: "tool_call",
+          thread_id: "thread-history-image-tool",
+          turn_id: "turn-history-image",
+          sequence: 4,
+          tool_name: "lime_create_image_generation_task",
+          status: "completed",
+          started_at: "2026-07-03T05:53:18.515Z",
+          completed_at: "2026-07-03T05:53:18.572Z",
+          updated_at: "2026-07-03T05:53:18.572Z",
+          arguments: {
+            prompt: "深圳夏天午后的城市照片",
+            projectRootPath:
+              "/Users/coso/Library/Application Support/lime/projects/demo",
+          },
+          output: fullOutput,
+          output_preview: `${fullOutput.slice(0, 160)}, "record":...[1201]`,
+          output_truncated: true,
+          success: true,
+        } as never,
+      ],
+      turns: [
+        {
+          id: "turn-history-image",
+          thread_id: "thread-history-image-tool",
+          prompt_text: "@配图 深圳夏天午后的城市照片",
+          status: "completed",
+          started_at: "2026-07-03T05:53:10.393Z",
+          completed_at: "2026-07-03T05:53:18.586Z",
+          created_at: "2026-07-03T05:53:10.393Z",
+          updated_at: "2026-07-03T05:53:18.586Z",
+        },
+      ],
+    };
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "session-history-image-tool",
+    );
+
+    expect(messages[1]).toMatchObject({
+      role: "assistant",
+      imageWorkbenchPreview: {
+        taskId: "task-history-image-1",
+        prompt: "深圳夏天午后的城市照片",
+        status: "running",
+        taskFilePath:
+          "/Users/coso/Library/Application Support/lime/projects/demo/.lime/tasks/image_generate/task-history-image-1.json",
+        artifactPath: ".lime/tasks/image_generate/task-history-image-1.json",
+      },
+    });
+  });
+
   it("本地历史导入的 detail.items 应按 turn 合入已恢复助手消息", () => {
     const detail: AsterSessionDetail = {
       id: "session-codex-import-timeline",

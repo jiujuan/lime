@@ -26,7 +26,7 @@
 - HTML 独立窗口
 - 图片/音视频任务结果卡
 - URL/知识库/数据库记录详情
-- Agent App shell window
+- Plugin shell window
 
 这些对象可以通过 Preview Artifact Contract 打开，但不会自动升级为 `ArtifactDocument v1`。
 

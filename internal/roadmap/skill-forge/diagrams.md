@@ -21,7 +21,7 @@ flowchart TB
     Verify --> Registry[Workspace-local Skill Registry<br/>Skill Catalog / ServiceSkill 投影]
     Registry --> Objective[Managed Objective<br/>目标 / 成功标准 / 续跑策略]
     Objective --> Runtime[Autonomous Execution<br/>Query Loop / tool_runtime / automation / subagent]
-    Runtime --> Workspace[Workspace / Agent App Surface<br/>artifact / task / memory / evidence]
+    Runtime --> Workspace[Workspace / Plugin Surface<br/>artifact / task / memory / evidence]
     Workspace --> AgentEnvelope[Agent Envelope<br/>Skill / Memory / Widget / Schedule / Permission / Evidence]
     AgentEnvelope --> User
     Workspace --> User

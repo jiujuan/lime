@@ -366,6 +366,29 @@ export function buildScenarioAssertions(context) {
                     ?.currentAttemptWorkerId === "lime-image-api-worker" &&
                   summary.imageCommandTaskArtifactTerminalPatch
                     ?.currentAttemptHasResultSnapshot === true,
+                imageCommandTaskAuditLogWritten:
+                  summary.imageCommandTaskAuditLog?.exists === true &&
+                  summary.imageCommandTaskAuditLog?.lineCount >= 6 &&
+                  summary.imageCommandTaskAuditLog?.logsRefLooksLikeTaskLog ===
+                    true,
+                imageCommandTaskAuditLogEventSequence:
+                  summary.imageCommandTaskAuditLog?.hasExpectedEventSequence ===
+                    true &&
+                  summary.imageCommandTaskAuditLog?.events?.[0] ===
+                    "worker_loaded" &&
+                  summary.imageCommandTaskAuditLog?.events?.at(-1) ===
+                    "task_succeeded" &&
+                  summary.imageCommandTaskAuditLog?.allEventTaskIdsMatch ===
+                    true &&
+                  summary.imageCommandTaskAuditLog?.parseError == null,
+                imageCommandTaskAuditLogNoSensitiveTokens:
+                  summary.imageCommandTaskAuditLog
+                    ?.hasNoSensitiveTokenMarkers === true &&
+                  Array.isArray(
+                    summary.imageCommandTaskAuditLog?.forbiddenMarkerHits,
+                  ) &&
+                  summary.imageCommandTaskAuditLog.forbiddenMarkerHits
+                    .length === 0,
                 imageCommandWorkerUsedFixtureProviderAndModel:
                   (summary.imageCommandTaskCreateRequest?.provider_id ??
                     summary.imageCommandTaskCreateRequest?.providerId) ===
@@ -404,6 +427,13 @@ export function buildScenarioAssertions(context) {
                 guiImageCommandTaskCardTerminal:
                   summary.guiImageCommandTerminal?.cardCount === 1 &&
                   summary.guiImageCommandTerminal?.mediaCount >= 1 &&
+                  summary.guiImageCommandTerminal?.hasPresentationIntro ===
+                    true &&
+                  summary.guiImageCommandTerminal?.hasToolStripLabel ===
+                    true &&
+                  summary.guiImageCommandTerminal?.hasImageModelLabel ===
+                    true &&
+                  summary.guiImageCommandTerminal?.hasTokenUsage === true &&
                   summary.guiImageCommandTerminal?.hasPreviewImage === true &&
                   summary.guiImageCommandTerminal
                     ?.hasLoadedVisiblePreviewImage === true &&
@@ -418,6 +448,14 @@ export function buildScenarioAssertions(context) {
                     ?.hasMessageList === true &&
                   summary.guiImageCommandRestoredAfterReload?.cardCount === 1 &&
                   summary.guiImageCommandRestoredAfterReload?.mediaCount >= 1 &&
+                  summary.guiImageCommandRestoredAfterReload
+                    ?.hasPresentationIntro === true &&
+                  summary.guiImageCommandRestoredAfterReload
+                    ?.hasToolStripLabel === true &&
+                  summary.guiImageCommandRestoredAfterReload
+                    ?.hasImageModelLabel === true &&
+                  summary.guiImageCommandRestoredAfterReload?.hasTokenUsage ===
+                    true &&
                   summary.guiImageCommandRestoredAfterReload
                     ?.hasPreviewImage === true &&
                   summary.guiImageCommandRestoredAfterReload

@@ -531,6 +531,16 @@ export interface AgentEventImageTaskPresentationGenerated {
   presentation?: Record<string, unknown>;
 }
 
+export interface AgentEventImageTaskPresentationUnavailable {
+  type: "image_task_presentation_unavailable";
+  status?: string;
+  reason?: string;
+  workflow_run_id?: string;
+  session_id?: string;
+  thread_id?: string;
+  turn_id?: string;
+}
+
 export interface AgentToolProgressPayload {
   message?: string;
   progress?: number;
@@ -937,6 +947,7 @@ export type AgentEvent = (
   | AgentEventToolEnd
   | AgentEventImageTaskCreated
   | AgentEventImageTaskPresentationGenerated
+  | AgentEventImageTaskPresentationUnavailable
   | AgentEventToolProgress
   | AgentEventToolOutputDelta
   | AgentEventToolInputDelta
@@ -1449,7 +1460,8 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
           model: source.model,
           providerMetadata:
             normalizeRecord(source.providerMetadata) ??
-            normalizeRecord(source.provider_metadata),
+            normalizeRecord(source.provider_metadata) ??
+            normalizeRecord(source.metadata),
         };
       }
       case "reasoning_delta":
@@ -1471,7 +1483,8 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
           model: source.model,
           providerMetadata:
             normalizeRecord(source.providerMetadata) ??
-            normalizeRecord(source.provider_metadata),
+            normalizeRecord(source.provider_metadata) ??
+            normalizeRecord(source.metadata),
         };
       }
       case "reasoning_final":
@@ -1492,7 +1505,8 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
           model: source.model,
           providerMetadata:
             normalizeRecord(source.providerMetadata) ??
-            normalizeRecord(source.provider_metadata),
+            normalizeRecord(source.provider_metadata) ??
+            normalizeRecord(source.metadata),
         };
       }
       case "reasoning_ended":
@@ -1512,7 +1526,8 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
           model: source.model,
           providerMetadata:
             normalizeRecord(source.providerMetadata) ??
-            normalizeRecord(source.provider_metadata),
+            normalizeRecord(source.provider_metadata) ??
+            normalizeRecord(source.metadata),
         };
       }
       case "plan_delta":
@@ -1630,6 +1645,30 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
           ...(presentation ? { presentation } : {}),
         };
       }
+      case "image_task.presentation.unavailable":
+      case "image_task_presentation_unavailable": {
+        const payload = normalizeRecord(event.payload);
+        const source = payload ?? event;
+        return {
+          type: "image_task_presentation_unavailable",
+          status: pickStringField(source, "status"),
+          reason: pickStringField(
+            source,
+            "reason",
+            "reasonCode",
+            "reason_code",
+            "message",
+          ),
+          workflow_run_id: pickStringField(
+            source,
+            "workflow_run_id",
+            "workflowRunId",
+          ),
+          session_id: pickStringField(source, "session_id", "sessionId"),
+          thread_id: pickStringField(source, "thread_id", "threadId"),
+          turn_id: pickStringField(source, "turn_id", "turnId"),
+        };
+      }
       case "image_task.parameters.required":
       case "image_task_parameters_required": {
         const missing = Array.isArray(event.missing)
@@ -1649,10 +1688,7 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
           status: {
             phase: "routing",
             title: "图片生成需要补充信息",
-            detail:
-              missing.length > 0
-                ? `缺少: ${missing.join(", ")}`
-                : prompt,
+            detail: missing.length > 0 ? `缺少: ${missing.join(", ")}` : prompt,
             checkpoints: missing,
             metadata: {
               source:

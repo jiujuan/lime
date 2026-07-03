@@ -6,10 +6,7 @@ import type {
   MessageImageWorkbenchPreview,
 } from "../types";
 import { parseImageWorkbenchCommand } from "../utils/imageWorkbenchCommand";
-import {
-  buildImageTaskAssistantContent,
-  buildImageWorkbenchCaption,
-} from "../utils/imageWorkbenchPresentation";
+import { buildImageWorkbenchCaption } from "../utils/imageWorkbenchPresentation";
 import {
   resolveImageWorkbenchAssistantMessageId,
   resolveScopedImageWorkbenchApplyTarget,
@@ -500,10 +497,7 @@ export function buildParsedImageTaskSnapshot(params: {
     taskRecord: params.taskRecord,
     normalizedStatus,
   });
-  const workflowRun = readImageCommandRunSnapshot([
-    payload,
-    params.taskRecord,
-  ]);
+  const workflowRun = readImageCommandRunSnapshot([payload, params.taskRecord]);
   const prompt = sanitizePreviewPrompt(
     readString(
       [payload, params.taskRecord, uiHintsRecord],
@@ -676,20 +670,16 @@ export function buildParsedImageTaskSnapshot(params: {
     runtimeContract?.model ??
     null;
   const previewPrompt = displayPrompt || prompt || `${taskLabel}进行中`;
-  const presentationText = readImageTaskPresentationText([
-    resultRecord,
-    attemptResultRecord,
-    payload,
-    uiHintsRecord,
-    params.taskRecord,
-  ]);
-  const assistantIntro =
-    presentationText ||
-    buildImageTaskAssistantContent({
-      prompt: previewPrompt,
-      mode: taskMode,
-      modelName: previewModelName || runtimeContract?.model || null,
-    });
+  const assistantIntro = readImageTaskPresentationText(
+    [
+      resultRecord,
+      attemptResultRecord,
+      payload,
+      uiHintsRecord,
+      params.taskRecord,
+    ],
+    previewPrompt,
+  ) || "";
   const previewCaption =
     readImageTaskPresentationCaption(
       [
@@ -700,12 +690,13 @@ export function buildParsedImageTaskSnapshot(params: {
         params.taskRecord,
       ],
       previewStatus,
+      previewPrompt,
     ) ||
-      buildImageWorkbenchCaption({
-        prompt: previewPrompt,
-        status: previewStatus,
-        imageCount: successCount || undefined,
-        statusMessage: lastError || null,
+    buildImageWorkbenchCaption({
+      prompt: previewPrompt,
+      status: previewStatus,
+      imageCount: successCount || undefined,
+      statusMessage: lastError || null,
     });
   const preview: MessageImageWorkbenchPreview = {
     taskId: params.taskId,
@@ -839,12 +830,8 @@ export function buildPendingImageTaskSnapshot(params: {
     ) || null;
   const workflowRun = readImageCommandRunSnapshot([params.payload || null]);
   const fallbackAssistantIntro =
-    readImageTaskPresentationText([params.payload || null]) ||
-    buildImageTaskAssistantContent({
-      prompt: previewPrompt,
-      mode: taskMode,
-      modelName: previewModelName,
-    });
+    readImageTaskPresentationText([params.payload || null], previewPrompt) ||
+    "";
   return (
     buildParsedImageTaskSnapshot({
       taskRecord: {

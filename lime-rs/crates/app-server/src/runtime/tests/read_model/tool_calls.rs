@@ -380,7 +380,189 @@ async fn read_session_keeps_legacy_only_tool_events_as_synthetic_items() {
 }
 
 #[tokio::test]
-async fn read_session_preserves_legacy_tool_payload_metadata_on_thread_items() {
+async fn read_session_preserves_image_tool_result_metadata_for_history_restore() {
+    let (core, turn) = start_read_model_test_turn(
+        "sess_image_tool_read",
+        "thread_image_tool_read",
+        "turn_image_tool_read",
+    )
+    .await;
+
+    let response_output = json!({
+        "task_id": "task-image-1",
+        "task_type": "image_generate",
+        "task_family": "image",
+        "status": "pending",
+        "normalized_status": "pending",
+        "artifact_path": ".lime/tasks/image_generate/task-image-1.json",
+        "record": {
+            "task_id": "task-image-1",
+            "task_type": "image_generate",
+            "task_family": "image",
+            "status": "pending",
+            "normalized_status": "pending",
+            "payload": {
+                "prompt": "画一张深圳夏天的图",
+                "provider_id": "agnes",
+                "model": "agnes-image-21-flash"
+            }
+        }
+    })
+    .to_string();
+
+    core.append_external_runtime_events(
+        "sess_image_tool_read",
+        Some(&turn.turn_id),
+        vec![
+            RuntimeEvent::new(
+                "tool.started",
+                json!({
+                    "toolCallId": "image-tool-1",
+                    "toolName": "lime_create_image_generation_task",
+                    "arguments": {
+                        "prompt": "画一张深圳夏天的图",
+                        "provider_id": "agnes",
+                        "model": "agnes-image-21-flash"
+                    }
+                }),
+            ),
+            RuntimeEvent::new(
+                "image_task.created",
+                json!({
+                    "taskId": "task-image-1",
+                    "task_id": "task-image-1",
+                    "artifactPath": ".lime/tasks/image_generate/task-image-1.json",
+                    "artifact_path": ".lime/tasks/image_generate/task-image-1.json"
+                }),
+            ),
+            RuntimeEvent::new(
+                "tool.result",
+                json!({
+                    "toolCallId": "image-tool-1",
+                    "toolName": "lime_create_image_generation_task",
+                    "result": {
+                        "success": true,
+                        "output": response_output,
+                        "metadata": {
+                            "task_id": "task-image-1",
+                            "task_type": "image_generate",
+                            "task_family": "image",
+                            "status": "pending",
+                            "normalized_status": "pending",
+                            "artifact_path": ".lime/tasks/image_generate/task-image-1.json",
+                            "record": {
+                                "task_id": "task-image-1",
+                                "task_type": "image_generate",
+                                "task_family": "image",
+                                "status": "pending",
+                                "normalized_status": "pending",
+                                "payload": {
+                                    "prompt": "画一张深圳夏天的图",
+                                    "provider_id": "agnes",
+                                    "model": "agnes-image-21-flash"
+                                }
+                            }
+                        }
+                    }
+                }),
+            ),
+            RuntimeEvent::new("turn.completed", json!({})),
+        ],
+    )
+    .expect("append image tool events");
+
+    let read = core
+        .read_session(AgentSessionReadParams {
+            session_id: "sess_image_tool_read".to_string(),
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .expect("read session");
+    let detail = read.detail.expect("session detail");
+    let tool_call = detail["thread_read"]["tool_calls"]
+        .as_array()
+        .expect("tool calls")
+        .iter()
+        .find(|call| call["id"] == "image-tool-1")
+        .expect("image tool call");
+    assert_eq!(tool_call["status"], "completed");
+    assert_eq!(tool_call["success"], true);
+    assert_eq!(tool_call["output"], response_output);
+    assert_eq!(tool_call["metadata"]["task_id"], "task-image-1");
+    assert_eq!(tool_call["metadata"]["task_type"], "image_generate");
+    assert_eq!(tool_call["metadata"]["task_family"], "image");
+    assert_eq!(
+        tool_call["metadata"]["record"]["payload"]["model"],
+        "agnes-image-21-flash"
+    );
+
+    let item = detail["items"]
+        .as_array()
+        .expect("items")
+        .iter()
+        .find(|item| item["id"] == "image-tool-1")
+        .expect("image synthetic item");
+    assert_eq!(item["type"], "tool_call");
+    assert_eq!(item["metadata"]["task_id"], "task-image-1");
+    assert_eq!(item["output"], response_output);
+}
+
+#[tokio::test]
+async fn read_session_projects_turn_completed_usage_into_read_model_turns() {
+    let (core, turn) = start_read_model_test_turn(
+        "sess_turn_usage_read",
+        "thread_turn_usage_read",
+        "turn_usage_read",
+    )
+    .await;
+
+    core.append_external_runtime_events(
+        "sess_turn_usage_read",
+        Some(&turn.turn_id),
+        vec![RuntimeEvent::new(
+            "turn.completed",
+            json!({
+                "usage": {
+                    "input_tokens": 31_000,
+                    "output_tokens": 119,
+                    "cached_input_tokens": 0
+                }
+            }),
+        )],
+    )
+    .expect("append usage terminal event");
+
+    let read = core
+        .read_session(AgentSessionReadParams {
+            session_id: "sess_turn_usage_read".to_string(),
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .expect("read session");
+    let detail = read.detail.expect("session detail");
+
+    assert_eq!(
+        detail["turns"][0]["usage"]["input_tokens"].as_u64(),
+        Some(31_000)
+    );
+    assert_eq!(
+        detail["thread_read"]["turns"][0]["usage"]["output_tokens"].as_u64(),
+        Some(119)
+    );
+    assert_eq!(
+        detail["thread_read"]["diagnostics"]["latest_turn_usage"]["cached_input_tokens"].as_u64(),
+        Some(0)
+    );
+    assert_eq!(
+        detail["thread_read"]["runtime_summary"]["latestTurnUsage"]["input_tokens"].as_u64(),
+        Some(31_000)
+    );
+}
+
+#[tokio::test]
+async fn read_session_preserves_workspace_patch_host_tool_metadata_on_thread_items() {
     let (core, turn) = start_read_model_test_turn(
         "sess_legacy_tool_metadata",
         "thread_legacy_tool_metadata",
@@ -395,13 +577,13 @@ async fn read_session_preserves_legacy_tool_payload_metadata_on_thread_items() {
             RuntimeEvent::new(
                 "tool.started",
                 json!({
-                    "toolCallId": "content-factory-web-search-1",
+                    "toolCallId": "workspace-patch-host-tool-websearch-1",
                     "toolName": "WebSearch",
                     "arguments": {
                         "query": "golang 学习路径"
                     },
                     "metadata": {
-                        "source": "content_factory_search_requests",
+                        "source": "workspace_patch_host_tool_requests",
                         "workflowKey": "content_article_workflow",
                         "workflow_key": "content_article_workflow"
                     }
@@ -410,12 +592,12 @@ async fn read_session_preserves_legacy_tool_payload_metadata_on_thread_items() {
             RuntimeEvent::new(
                 "tool.result",
                 json!({
-                    "toolCallId": "content-factory-web-search-1",
+                    "toolCallId": "workspace-patch-host-tool-websearch-1",
                     "toolName": "WebSearch",
                     "success": true,
                     "outputPreview": "找到 3 条资料",
                     "metadata": {
-                        "source": "content_factory_search_requests",
+                        "source": "workspace_patch_host_tool_requests",
                         "workflowKey": "content_article_workflow",
                         "workflow_key": "content_article_workflow"
                     }
@@ -439,13 +621,13 @@ async fn read_session_preserves_legacy_tool_payload_metadata_on_thread_items() {
         .as_array()
         .expect("items")
         .iter()
-        .find(|item| item["id"] == "content-factory-web-search-1")
-        .expect("content factory search item");
+        .find(|item| item["id"] == "workspace-patch-host-tool-websearch-1")
+        .expect("workspace patch host tool item");
 
     assert_eq!(item["type"], "web_search");
     assert_eq!(
         item["metadata"]["source"],
-        "content_factory_search_requests"
+        "workspace_patch_host_tool_requests"
     );
     assert_eq!(item["metadata"]["workflowKey"], "content_article_workflow");
     assert_eq!(item["metadata"]["workflow_key"], "content_article_workflow");

@@ -3,6 +3,7 @@
 //! 收口 Lime 对 Aster thread runtime store 的访问边界，
 //! 避免业务层散落依赖上游 free function。
 
+use crate::aster_session_store::LimeSessionStore;
 use crate::aster_state::QueuedTurnTask;
 use crate::queued_turn::QueuedTurnSnapshot;
 use aster::session::{
@@ -12,7 +13,6 @@ use aster::session::{
 };
 use lime_core::app_paths;
 use lime_core::database::DbConnection;
-use lime_services::aster_session_store::LimeSessionStore;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::future::Future;

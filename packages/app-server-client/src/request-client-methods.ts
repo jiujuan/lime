@@ -1465,6 +1465,12 @@ const REQUEST_CLIENT_METHODS: readonly RequestClientMethodSpec[] = [
     params: "required",
   },
   {
+    name: "readWorkflow",
+    method: protocol.METHOD_WORKFLOW_READ,
+    kind: "request",
+    params: "required",
+  },
+  {
     name: "readAgentSessionToolInventory",
     method: protocol.METHOD_AGENT_SESSION_TOOL_INVENTORY_READ,
     kind: "request",

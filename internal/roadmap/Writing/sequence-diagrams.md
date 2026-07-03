@@ -38,7 +38,7 @@ sequenceDiagram
   User->>Composer: 输入 @写文章 写一篇文章
   Composer->>Registry: buildPluginActivationMentionCatalog
   Registry-->>Composer: 内容工厂插件包 activation entry
-  Composer->>Intent: resolveWorkspaceAgentAppIntent
+  Composer->>Intent: resolveWorkspacePluginIntent
   Intent-->>Composer: content_article_generate + plugin contract
   Composer->>Runtime: agentSession/turn/start + plugin_activation metadata
   Runtime-->>Composer: turn started

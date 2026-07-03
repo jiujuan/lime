@@ -7,6 +7,7 @@ use super::file_checkpoint_projection;
 use super::output_refs;
 use super::permission_state_projection;
 use super::raw_string_field;
+use super::read_model_turn_usage;
 use super::status::agent_session_status_label;
 use super::status::agent_turn_is_active;
 use super::status::agent_turn_status_label;
@@ -15,6 +16,7 @@ use super::thread_item_projection;
 use super::timestamp_seconds;
 use super::tool_item_projection;
 use super::turn_input_events;
+use super::workflow::read_model::{workflow_read_model_from_events, WorkflowReadModel};
 use super::StoredSession;
 use app_server_protocol::AgentEvent;
 use app_server_protocol::AgentInput;
@@ -47,6 +49,7 @@ impl ReadDetailOptions {
 pub(super) fn runtime_session_read_detail_with_options(
     stored: &StoredSession,
     options: ReadDetailOptions,
+    workflow_audit_events: &[AgentEvent],
 ) -> serde_json::Value {
     let article_workspace = article_workspace_projection::article_workspace_from_events(
         &stored.session,
@@ -71,6 +74,7 @@ pub(super) fn runtime_session_read_detail_with_options(
         stored,
         article_workspace.clone(),
         article_workspace_actions.clone(),
+        workflow_audit_events,
     );
     let queued_turns = queued_turn_snapshots(stored);
     let all_messages = runtime_session_messages(stored);
@@ -88,6 +92,7 @@ pub(super) fn runtime_session_read_detail_with_options(
     let oldest_message_id = messages.first().and_then(message_numeric_id);
     let history_limit = options.history_limit.unwrap_or(messages_count);
     let history_truncated = loaded_count < messages_count;
+    let turns = read_model_turn_usage::turns_with_usage(&stored.turns, &stored.events);
     let mut detail = json!({
         "id": stored.session.session_id,
         "session_id": stored.session.session_id,
@@ -108,7 +113,7 @@ pub(super) fn runtime_session_read_detail_with_options(
         },
         "history_truncated": history_truncated,
         "messages": messages,
-        "turns": stored.turns,
+        "turns": turns,
         "items": items,
         "queued_turns": queued_turns,
         "artifacts": artifact_projection::stored_artifact_summaries_for_turn(stored, None),
@@ -491,9 +496,12 @@ fn runtime_thread_read_from_stored_session(
     stored: &StoredSession,
     article_workspace: Option<serde_json::Value>,
     article_workspace_actions: Vec<serde_json::Value>,
+    workflow_audit_events: &[AgentEvent],
 ) -> serde_json::Value {
     let coding_activity = coding_activity_projection::coding_activity_from_events(stored);
     let permission_state = permission_state_projection::permission_state_from_events(stored);
+    let workflow_read_model =
+        workflow_read_model_from_stored_session(stored, workflow_audit_events);
     let model_routing = latest_model_routing_from_events(&stored.events);
     let service_model_slot = model_routing
         .as_ref()
@@ -525,12 +533,15 @@ fn runtime_thread_read_from_stored_session(
         .and_then(|summary| summary.get("patch_count"))
         .and_then(serde_json::Value::as_u64)
         .unwrap_or(0);
+    let turns = read_model_turn_usage::turns_with_usage(&stored.turns, &stored.events);
+    let latest_turn_usage =
+        read_model_turn_usage::latest_usage_for_turn(&stored.events, latest_turn_id);
     let mut thread_read = json!({
         "session_id": stored.session.session_id,
         "thread_id": stored.session.thread_id,
         "status": agent_session_status_label(stored.session.status),
         "execution_strategy": session_execution_strategy(&stored.session),
-        "turns": stored.turns,
+        "turns": turns,
         "pending_requests": coding_activity.pending_requests,
         "permission_state": permission_state,
         "queued_turns": queued_turn_snapshots(stored),
@@ -549,6 +560,7 @@ fn runtime_thread_read_from_stored_session(
         "diagnostics": {
             "latest_turn_status": latest_turn_status,
             "latest_turn_error_message": latest_turn_error_message,
+            "latest_turn_usage": latest_turn_usage.clone(),
             "pending_request_count": pending_request_count,
             "command_count": command_count,
             "test_count": test_count,
@@ -558,12 +570,14 @@ fn runtime_thread_read_from_stored_session(
         "runtime_summary": {
             "latestTurnStatus": latest_turn_status,
             "latestTurnErrorMessage": latest_turn_error_message,
+            "latestTurnUsage": latest_turn_usage,
             "decisionSource": model_routing
                 .as_ref()
                 .and_then(|routing| string_field(routing, &["decisionSource", "decision_source"])),
             "serviceModelSlot": service_model_slot,
         },
     });
+    insert_workflow_read_model_into_thread_read(&mut thread_read, &workflow_read_model);
     if let Some(article_workspace) = article_workspace {
         if let Some(thread_read_object) = thread_read.as_object_mut() {
             thread_read_object.insert("article_workspace".to_string(), article_workspace.clone());
@@ -583,6 +597,43 @@ fn runtime_thread_read_from_stored_session(
         }
     }
     thread_read
+}
+
+pub(in crate::runtime) fn workflow_read_model_from_stored_session(
+    stored: &StoredSession,
+    workflow_audit_events: &[AgentEvent],
+) -> WorkflowReadModel {
+    if workflow_audit_events.is_empty() {
+        return workflow_read_model_from_events(&stored.events);
+    }
+    let mut events = Vec::with_capacity(stored.events.len() + workflow_audit_events.len());
+    events.extend(stored.events.iter().cloned());
+    events.extend(workflow_audit_events.iter().cloned());
+    workflow_read_model_from_events(&events)
+}
+
+pub(in crate::runtime) fn insert_workflow_read_model_into_thread_read(
+    thread_read: &mut serde_json::Value,
+    workflow_read_model: &WorkflowReadModel,
+) {
+    if workflow_read_model.workflow_runs.is_empty() && workflow_read_model.workflow_steps.is_empty()
+    {
+        return;
+    }
+    let Some(thread_read_object) = thread_read.as_object_mut() else {
+        return;
+    };
+    if let Ok(workflow_value) = serde_json::to_value(workflow_read_model) {
+        thread_read_object.insert("workflow".to_string(), workflow_value);
+    }
+    if let Ok(workflow_runs) = serde_json::to_value(&workflow_read_model.workflow_runs) {
+        thread_read_object.insert("workflow_runs".to_string(), workflow_runs.clone());
+        thread_read_object.insert("workflowRuns".to_string(), workflow_runs);
+    }
+    if let Ok(workflow_steps) = serde_json::to_value(&workflow_read_model.workflow_steps) {
+        thread_read_object.insert("workflow_steps".to_string(), workflow_steps.clone());
+        thread_read_object.insert("workflowSteps".to_string(), workflow_steps);
+    }
 }
 
 fn queued_turn_snapshots(stored: &StoredSession) -> Vec<serde_json::Value> {

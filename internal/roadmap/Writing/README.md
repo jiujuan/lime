@@ -49,12 +49,12 @@ Writing 路线图只描述写文章闭环；插件包结构、字段、目录契
 | [`implementation-plan.md`](./implementation-plan.md)                                     | 实施切片、当前进展、验证入口和剩余缺口。                                                                      |
 | [`prototypes/article-artifacts-editor.html`](./prototypes/article-artifacts-editor.html) | 通用 `ArtifactFrame`、文章 renderer 和右侧 Article Editor 的静态交互原型。                                    |
 
-## 5. 与 Agent App v4 的关系
+## 5. 与 Plugin v4 的关系
 
-Writing 是 Agent App v4 内容工厂主线的第一个可用闭环。v4 的总边界仍然成立：
+Writing 是 Plugin v4 内容工厂主线的第一个可用闭环。v4 的总边界仍然成立：
 
 - 插件是分发和授权根对象。
-- Agent App 是插件内 UI 能力，不是宿主内置页面。
+- Plugin 是插件内 UI 能力，不是宿主内置页面。
 - Claw 中间区域保留对话、运行过程和审批。
 - 右侧 Article Editor 是文章产物的唯一编辑承载区。
 - Article Workspace 承接插件工作区事实，旧 Profile 路径不再作为内部或外部事实源。

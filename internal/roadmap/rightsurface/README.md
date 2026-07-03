@@ -690,7 +690,7 @@ right-surface/
 | Slice 4 | 工具栏改成消费 launcher projection，并显示 pending badge | 已接入真实 `TaskCenterUtilityToolbar` props；产物、文件、证据、终端、浏览器、侧聊都按 tab 口径消费 projection |
 | Slice 5 | 加入 ConversationBridge 初版 | Surface selection 能带入输入框，且不拼隐藏 prompt |
 | Slice 6 | 对接 Skills / MCP intent metadata | background 请求只 badge，foreground 才可调度打开 / 聚焦 tab |
-| Slice 7 | 预留 `productProfile.appSurface` pane 注册位 | 不改变中间 Claw 对话，但能承接内容工厂等 Agent App 自定义 UI |
+| Slice 7 | 预留 `productProfile.appSurface` pane 注册位 | 不改变中间 Claw 对话，但能承接内容工厂等 Plugin 自定义 UI |
 
 ## 14. 与现有组件的边界
 

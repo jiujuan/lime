@@ -80,6 +80,12 @@ export function toToolCallState(item: AgentThreadItem): ToolCallState | null {
   switch (item.type) {
     case "tool_call": {
       const metadata = itemMetadataRecord(item);
+      const itemRecord = item as AgentThreadItem & {
+        output_preview?: string;
+        outputPreview?: string;
+      };
+      const outputText =
+        item.output ?? itemRecord.output_preview ?? itemRecord.outputPreview ?? "";
       return {
         id: item.id,
         name: item.tool_name,
@@ -90,13 +96,15 @@ export function toToolCallState(item: AgentThreadItem): ToolCallState | null {
         status: mapItemStatus(item.status),
         result:
           item.output !== undefined ||
+          itemRecord.output_preview !== undefined ||
+          itemRecord.outputPreview !== undefined ||
           item.error !== undefined ||
           item.metadata !== undefined
             ? {
                 success:
                   item.success ??
                   (item.status === "completed" && item.error === undefined),
-                output: item.output || "",
+                output: outputText,
                 error: item.error,
                 metadata,
               }

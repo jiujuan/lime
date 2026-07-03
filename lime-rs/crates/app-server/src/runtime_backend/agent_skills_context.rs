@@ -53,30 +53,6 @@ pub(super) fn selected_agent_skill_names_for_turn(
         .collect()
 }
 
-pub(super) fn selected_agent_skill_allowed_tools_for_turn(
-    user_input: &str,
-    metadata_values: &[&Value],
-    working_dir: Option<&Path>,
-    project_root: Option<&Path>,
-) -> Vec<String> {
-    let snapshot = build_agent_skill_snapshot_from_workspace(working_dir, project_root);
-    let selections =
-        selected_agent_skill_body_selections_for_prompt(user_input, metadata_values, &snapshot);
-    let mut allowed_tools = Vec::new();
-    for selection in selections {
-        let Some(skill) = snapshot.skills.iter().find(|skill| {
-            skill.skill_file_path == selection.locator.skill_file_path
-                || skill.name == selection.locator.name
-        }) else {
-            continue;
-        };
-        for tool in &skill.allowed_tools {
-            push_unique_string(&mut allowed_tools, tool);
-        }
-    }
-    allowed_tools
-}
-
 fn append_selected_agent_skill_bodies(
     system_prompt: Option<String>,
     user_input: &str,
@@ -596,16 +572,8 @@ Call lime_create_image_generation_task directly.
             Some(workspace.path()),
         )
         .expect("prompt");
-        let allowed_tools = selected_agent_skill_allowed_tools_for_turn(
-            "@配图 画一张广州夏天的图",
-            &[&metadata],
-            Some(workspace.path()),
-            Some(workspace.path()),
-        );
-
         assert!(!prompt.contains("<selected_skill_instructions>"));
         assert!(!prompt.contains("Call lime_create_image_generation_task directly."));
-        assert!(allowed_tools.is_empty());
     }
 
     #[test]
@@ -696,14 +664,6 @@ Call lime_create_image_generation_task directly.
         assert!(prompt.contains("`skill:capability-report` -> `capability-report`"));
         assert!(!prompt.contains("<selected_skill_instructions>"));
         assert!(!prompt.contains("# Body"));
-
-        let allowed_tools = selected_agent_skill_allowed_tools_for_turn(
-            "请先搜索 capability-report 后再执行",
-            &[&metadata],
-            Some(workspace.path()),
-            Some(workspace.path()),
-        );
-        assert!(allowed_tools.is_empty());
     }
 
     #[test]

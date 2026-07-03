@@ -7,9 +7,7 @@ use aster::agents::AgentEvent;
 use aster::conversation::message::{
     ActionRequiredData, ActionRequiredScope, Message, MessageContent,
 };
-use aster::session::{
-    ItemRuntime, ItemRuntimePayload, ItemStatus, TurnContextOverride, TurnRuntime, TurnStatus,
-};
+use aster::session::{ItemRuntime, ItemRuntimePayload, ItemStatus, TurnRuntime, TurnStatus};
 use lime_core::database::dao::agent_timeline::{
     AgentRequestOption, AgentRequestQuestion, AgentThreadItem, AgentThreadItemPayload,
     AgentThreadTurn,
@@ -32,6 +30,7 @@ use crate::text_normalization::{
     normalize_legacy_runtime_status_title, normalize_legacy_turn_summary_text,
 };
 use crate::tool_io_offload::{maybe_offload_tool_arguments, maybe_offload_tool_result_payload};
+use crate::turn_context_configuration::{to_agent_turn_context, AgentTurnContext};
 use rmcp::model::ServerNotification;
 use std::collections::HashMap;
 
@@ -884,18 +883,6 @@ fn legacy_message_tool_response_metadata(
     metadata
 }
 
-fn read_object_string(
-    object: &serde_json::Map<String, serde_json::Value>,
-    keys: &[&str],
-) -> Option<String> {
-    keys.iter()
-        .filter_map(|key| object.get(*key))
-        .find_map(serde_json::Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string)
-}
-
 fn read_metadata_string(
     metadata: &HashMap<String, serde_json::Value>,
     keys: &[&str],
@@ -908,258 +895,7 @@ fn read_metadata_string(
         .map(str::to_string)
 }
 
-fn read_object_u32(
-    object: &serde_json::Map<String, serde_json::Value>,
-    keys: &[&str],
-) -> Option<u32> {
-    keys.iter()
-        .filter_map(|key| object.get(*key))
-        .find_map(serde_json::Value::as_u64)
-        .and_then(|value| u32::try_from(value).ok())
-}
-
-fn read_object_i64(
-    object: &serde_json::Map<String, serde_json::Value>,
-    keys: &[&str],
-) -> Option<i64> {
-    keys.iter()
-        .filter_map(|key| object.get(*key))
-        .find_map(|value| {
-            value
-                .as_i64()
-                .or_else(|| value.as_u64().and_then(|value| i64::try_from(value).ok()))
-        })
-}
-
-fn read_object_f64(
-    object: &serde_json::Map<String, serde_json::Value>,
-    keys: &[&str],
-) -> Option<f64> {
-    keys.iter()
-        .filter_map(|key| object.get(*key))
-        .find_map(serde_json::Value::as_f64)
-}
-
-fn metadata_object<'a>(
-    metadata: &'a HashMap<String, serde_json::Value>,
-    keys: &[&str],
-) -> Option<&'a serde_json::Map<String, serde_json::Value>> {
-    keys.iter()
-        .filter_map(|key| metadata.get(*key))
-        .find_map(serde_json::Value::as_object)
-}
-
-fn nested_object<'a>(
-    object: &'a serde_json::Map<String, serde_json::Value>,
-    keys: &[&str],
-) -> Option<&'a serde_json::Map<String, serde_json::Value>> {
-    keys.iter()
-        .filter_map(|key| object.get(*key))
-        .find_map(serde_json::Value::as_object)
-}
-
-fn nested_array<'a>(
-    object: &'a serde_json::Map<String, serde_json::Value>,
-    keys: &[&str],
-) -> Option<&'a Vec<serde_json::Value>> {
-    keys.iter()
-        .filter_map(|key| object.get(*key))
-        .find_map(serde_json::Value::as_array)
-}
-
-fn build_context_budget_from_object(
-    object: &serde_json::Map<String, serde_json::Value>,
-) -> Option<TauriContextBudget> {
-    let budget = TauriContextBudget {
-        used_tokens: read_object_u32(object, &["used_tokens", "usedTokens"]),
-        max_tokens: read_object_u32(
-            object,
-            &["max_tokens", "maxTokens", "token_limit", "tokenLimit"],
-        ),
-        remaining_tokens: read_object_i64(object, &["remaining_tokens", "remainingTokens"]),
-        status: read_object_string(object, &["status"]),
-        source: read_object_string(object, &["source"]),
-    };
-
-    if budget.used_tokens.is_none()
-        && budget.max_tokens.is_none()
-        && budget.remaining_tokens.is_none()
-        && budget.status.is_none()
-        && budget.source.is_none()
-    {
-        None
-    } else {
-        Some(budget)
-    }
-}
-
-fn build_missing_context_from_object(
-    object: &serde_json::Map<String, serde_json::Value>,
-    index: usize,
-) -> Option<TauriMissingContextFact> {
-    let label = read_object_string(object, &["label", "title", "path", "id"])
-        .unwrap_or_else(|| format!("missing_context:{index}"));
-    Some(TauriMissingContextFact {
-        id: read_object_string(object, &["id"]),
-        kind: read_object_string(object, &["kind"]).unwrap_or_else(|| "context".to_string()),
-        label,
-        status: read_object_string(object, &["status"]).unwrap_or_else(|| "unknown".to_string()),
-        reason: read_object_string(object, &["reason", "message", "detail"]),
-        source: read_object_string(object, &["source"]),
-    })
-}
-
-fn build_retrieval_ref_from_object(
-    object: &serde_json::Map<String, serde_json::Value>,
-    index: usize,
-) -> Option<TauriRetrievalRef> {
-    let source_id = read_object_string(object, &["source_id", "sourceId", "id"])
-        .or_else(|| read_object_string(object, &["path", "url"]))
-        .unwrap_or_else(|| format!("retrieval_ref:{index}"));
-    Some(TauriRetrievalRef {
-        source_id,
-        kind: read_object_string(object, &["kind"]).unwrap_or_else(|| "context".to_string()),
-        title: read_object_string(object, &["title", "label", "name"]),
-        path: read_object_string(
-            object,
-            &[
-                "path",
-                "file_path",
-                "filePath",
-                "relative_path",
-                "relativePath",
-            ],
-        ),
-        url: read_object_string(object, &["url"]),
-        score: read_object_f64(object, &["score"]),
-        scope: read_object_string(object, &["scope"]),
-        status: read_object_string(object, &["status"]),
-        source: read_object_string(object, &["source"]),
-    })
-}
-
-fn build_team_memory_ref_from_object(
-    object: &serde_json::Map<String, serde_json::Value>,
-    repo_scope: Option<String>,
-    index: usize,
-) -> Option<TauriTeamMemoryRef> {
-    let key = read_object_string(object, &["key", "id", "label"])?;
-    Some(TauriTeamMemoryRef {
-        key,
-        repo_scope: read_object_string(object, &["repo_scope", "repoScope"]).or(repo_scope),
-        updated_at: read_object_i64(object, &["updated_at", "updatedAt"]),
-        priority: read_object_u32(object, &["priority"]).or_else(|| u32::try_from(index).ok()),
-        source: read_object_string(object, &["source"])
-            .or_else(|| Some("team_memory_shadow".to_string())),
-    })
-}
-
-fn extract_agentui_context_object(
-    metadata: &HashMap<String, serde_json::Value>,
-) -> Option<&serde_json::Map<String, serde_json::Value>> {
-    metadata_object(metadata, &["agentui_context", "agentUiContext"]).or_else(|| {
-        metadata_object(metadata, &["harness"])
-            .and_then(|harness| nested_object(harness, &["agentui_context", "agentUiContext"]))
-    })
-}
-
-fn extract_team_memory_shadow_object(
-    metadata: &HashMap<String, serde_json::Value>,
-) -> Option<&serde_json::Map<String, serde_json::Value>> {
-    metadata_object(metadata, &["team_memory_shadow", "teamMemoryShadow"]).or_else(|| {
-        metadata_object(metadata, &["harness"])
-            .and_then(|harness| nested_object(harness, &["team_memory_shadow", "teamMemoryShadow"]))
-    })
-}
-
-pub(crate) fn build_turn_context_summary(
-    turn_context: Option<&TurnContextOverride>,
-) -> Option<TauriTurnContextSummary> {
-    let metadata = &turn_context?.metadata;
-    let agentui_context = extract_agentui_context_object(metadata);
-    let mut summary = TauriTurnContextSummary::default();
-
-    if let Some(context) = agentui_context {
-        summary.memory_budget = nested_object(
-            context,
-            &[
-                "memory_budget",
-                "memoryBudget",
-                "context_budget",
-                "contextBudget",
-            ],
-        )
-        .and_then(build_context_budget_from_object);
-
-        if let Some(items) = nested_array(context, &["missing_context", "missingContext"]) {
-            summary
-                .missing_context
-                .extend(items.iter().enumerate().filter_map(|(index, value)| {
-                    value
-                        .as_object()
-                        .and_then(|object| build_missing_context_from_object(object, index))
-                }));
-        }
-
-        if let Some(items) = nested_array(context, &["retrieval_refs", "retrievalRefs"]) {
-            summary
-                .retrieval_refs
-                .extend(items.iter().enumerate().filter_map(|(index, value)| {
-                    value
-                        .as_object()
-                        .and_then(|object| build_retrieval_ref_from_object(object, index))
-                }));
-        }
-
-        if let Some(items) = nested_array(context, &["team_memory_refs", "teamMemoryRefs"]) {
-            summary
-                .team_memory_refs
-                .extend(items.iter().enumerate().filter_map(|(index, value)| {
-                    value
-                        .as_object()
-                        .and_then(|object| build_team_memory_ref_from_object(object, None, index))
-                }));
-        }
-    }
-
-    if let Some(shadow) = extract_team_memory_shadow_object(metadata) {
-        let repo_scope = read_object_string(shadow, &["repo_scope", "repoScope"]);
-        if let Some(entries) = nested_array(shadow, &["entries"]) {
-            summary
-                .team_memory_refs
-                .extend(entries.iter().enumerate().filter_map(|(index, value)| {
-                    value.as_object().and_then(|object| {
-                        build_team_memory_ref_from_object(object, repo_scope.clone(), index)
-                    })
-                }));
-        }
-    }
-
-    let mut seen_retrieval_refs = std::collections::HashSet::new();
-    summary
-        .retrieval_refs
-        .retain(|item| seen_retrieval_refs.insert(item.source_id.clone()));
-    let mut seen_team_memory_refs = std::collections::HashSet::new();
-    summary.team_memory_refs.retain(|item| {
-        seen_team_memory_refs.insert(format!(
-            "{}:{}",
-            item.repo_scope.as_deref().unwrap_or_default(),
-            item.key
-        ))
-    });
-
-    if summary.memory_budget.is_none()
-        && summary.missing_context.is_empty()
-        && summary.retrieval_refs.is_empty()
-        && summary.team_memory_refs.is_empty()
-    {
-        None
-    } else {
-        Some(summary)
-    }
-}
-
-fn extract_turn_execution_strategy(turn_context: Option<&TurnContextOverride>) -> Option<String> {
+fn extract_turn_execution_strategy(turn_context: Option<&AgentTurnContext>) -> Option<String> {
     let metadata = &turn_context?.metadata;
     read_metadata_string(
         metadata,
@@ -1179,15 +915,15 @@ fn extract_turn_execution_strategy(turn_context: Option<&TurnContextOverride>) -
 pub fn convert_agent_event(event: AgentEvent) -> Vec<TauriAgentEvent> {
     match event {
         AgentEvent::TurnStarted { turn } => {
-            let context_summary = build_turn_context_summary(turn.context_override.as_ref());
-            let execution_strategy =
-                extract_turn_execution_strategy(turn.context_override.as_ref());
-            let approval_policy = turn
-                .context_override
+            let agent_turn_context = turn.context_override.clone().map(to_agent_turn_context);
+            let context_summary = crate::protocol_projection::project_turn_context_summary(
+                agent_turn_context.as_ref(),
+            );
+            let execution_strategy = extract_turn_execution_strategy(agent_turn_context.as_ref());
+            let approval_policy = agent_turn_context
                 .as_ref()
                 .and_then(|context| context.approval_policy.clone());
-            let sandbox_policy = turn
-                .context_override
+            let sandbox_policy = agent_turn_context
                 .as_ref()
                 .and_then(|context| context.sandbox_policy.clone());
             let turn_context_event = if turn.context_override.is_some()
@@ -1199,7 +935,10 @@ pub fn convert_agent_event(event: AgentEvent) -> Vec<TauriAgentEvent> {
                     thread_id: turn.thread_id.clone(),
                     turn_id: turn.id.clone(),
                     execution_strategy,
-                    output_schema_runtime: turn.output_schema_runtime.clone(),
+                    output_schema_runtime: turn
+                        .output_schema_runtime
+                        .as_ref()
+                        .map(crate::aster_runtime_projection::project_aster_output_schema_runtime),
                     context_summary,
                     approval_policy,
                     sandbox_policy,
@@ -1353,7 +1092,7 @@ fn convert_turn_status(
     }
 }
 
-pub fn convert_turn_runtime(turn: TurnRuntime) -> AgentThreadTurn {
+pub(crate) fn convert_turn_runtime(turn: TurnRuntime) -> AgentThreadTurn {
     AgentThreadTurn {
         id: turn.id,
         thread_id: turn.thread_id,
@@ -1601,7 +1340,7 @@ fn convert_item_payload(payload: ItemRuntimePayload) -> Option<AgentThreadItemPa
     }
 }
 
-pub fn convert_item_runtime(item: ItemRuntime) -> Option<AgentThreadItem> {
+pub(crate) fn convert_item_runtime(item: ItemRuntime) -> Option<AgentThreadItem> {
     let payload = convert_item_payload(item.payload)?;
     Some(AgentThreadItem {
         id: item.id,

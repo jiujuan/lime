@@ -5,6 +5,7 @@ use crate::agent_tools::tool_orchestrator::{
     ToolExecutionBatchInput, ToolTerminalEventUpdate,
 };
 use crate::protocol::AgentEvent as RuntimeAgentEvent;
+use crate::turn_context_configuration::AgentTurnContext;
 use aster::agents::Agent;
 use lime_core::env_compat;
 use regex::Regex;
@@ -37,7 +38,7 @@ pub struct WebSearchPreflightRequest<'a> {
     pub message_text: &'a str,
     pub working_directory: Option<&'a Path>,
     pub cancel_token: Option<CancellationToken>,
-    pub turn_context: Option<aster::session::TurnContextOverride>,
+    pub turn_context: Option<AgentTurnContext>,
     pub policy: &'a RequestToolPolicy,
 }
 

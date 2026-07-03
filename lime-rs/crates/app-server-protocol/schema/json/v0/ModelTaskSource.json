@@ -1,10 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "enum": [
-    "plugin",
     "agent_turn",
     "automation",
     "media_task_artifact",
+    "plugin",
     "provider_probe"
   ],
   "title": "ModelTaskSource",

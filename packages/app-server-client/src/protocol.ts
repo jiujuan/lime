@@ -344,6 +344,7 @@ export const METHOD_AGENT_SESSION_ACTION_RESPOND =
 export const METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND =
   "agentSession/runtimeEvents/append";
 export const METHOD_AGENT_SESSION_EVENT = "agentSession/event";
+export const METHOD_WORKFLOW_READ = "workflow/read";
 export const METHOD_MODEL_LIST = "model/list";
 export const METHOD_MODEL_PREFERENCES_LIST = "modelPreferences/list";
 export const METHOD_MODEL_SYNC_STATE_READ = "modelSyncState/read";
@@ -707,6 +708,7 @@ export const APP_SERVER_METHODS = [
   { method: METHOD_AGENT_SESSION_ACTION_REPLAY, kind: "request" },
   { method: METHOD_AGENT_SESSION_ACTION_RESPOND, kind: "request" },
   { method: METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND, kind: "request" },
+  { method: METHOD_WORKFLOW_READ, kind: "request" },
   { method: METHOD_AGENT_SESSION_EVENT, kind: "notification" },
 ] as const satisfies readonly AppServerMethodSpec[];
 

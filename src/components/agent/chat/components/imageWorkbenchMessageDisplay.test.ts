@@ -85,6 +85,75 @@ describe("imageWorkbenchMessageDisplay", () => {
     ]);
     expect(rendererState.shouldRenderInlineProcess).toBe(true);
     expect(rendererState.thinkingContent).toBe("先确认青柠插画风格。");
+    expect(rendererState.contentParts?.map((part) => part.type)).toEqual([
+      "thinking",
+      "text",
+    ]);
+    expect(rendererState.toolCalls).toBeUndefined();
+  });
+
+  it("图片任务已有自然正文时仍应把 text/thinking 交给 renderer，内部工具不外显", () => {
+    const message = createImageMessage({
+      content: "好啊，我按花城汇视角来生成广州塔春天照片。",
+      contentParts: [
+        { type: "thinking", text: "先判断花城汇视角和春天元素。" },
+        { type: "text", text: "好啊，我按花城汇视角来生成广州塔春天照片。" },
+        {
+          type: "tool_use",
+          toolCall: {
+            id: "tool-image-natural-1",
+            name: "lime_create_image_generation_task",
+            arguments: JSON.stringify({ prompt: "广州塔春天照片" }),
+            status: "completed",
+            startTime: new Date("2026-05-14T08:00:01.000Z"),
+            endTime: new Date("2026-05-14T08:00:02.000Z"),
+          },
+        },
+      ],
+      toolCalls: [
+        {
+          id: "tool-image-natural-1",
+          name: "lime_create_image_generation_task",
+          arguments: JSON.stringify({ prompt: "广州塔春天照片" }),
+          status: "completed",
+          startTime: new Date("2026-05-14T08:00:01.000Z"),
+          endTime: new Date("2026-05-14T08:00:02.000Z"),
+        },
+      ],
+    });
+    const displayState = resolveImageWorkbenchMessageDisplayState({
+      message,
+      rawDisplayContent: message.content,
+      thinkingContent: "先判断花城汇视角和春天元素。",
+    });
+    const processState = resolveImageWorkbenchProcessDisplayState({
+      message,
+      sanitizedContentParts: message.contentParts,
+      shouldDeferMessageDetails: false,
+      shouldFoldSuppressedProcessFlow:
+        displayState.shouldFoldSuppressedProcessFlow,
+      shouldSuppressImageProcessFlow: displayState.shouldSuppressProcessFlow,
+    });
+    const rendererState = resolveImageWorkbenchRendererProcessState({
+      actionContent: message.content,
+      imageWorkbenchThinkingContent: displayState.thinkingContent,
+      message,
+      rendererContentParts: processState.displayContentParts,
+      rendererThinkingContent: undefined,
+      rendererToolCalls: message.toolCalls,
+      shouldSuppressRendererProcessFlow:
+        processState.shouldSuppressRendererProcessFlow,
+    });
+
+    expect(displayState.visibleRawDisplayContent).toBe(message.content);
+    expect(rendererState.shouldRenderInlineProcess).toBe(true);
+    expect(rendererState.contentParts?.map((part) => part.type)).toEqual([
+      "thinking",
+      "text",
+    ]);
+    expect(rendererState.thinkingContent).toBe(
+      "先判断花城汇视角和春天元素。",
+    );
     expect(rendererState.toolCalls).toBeUndefined();
   });
 

@@ -94,7 +94,7 @@
 | `packages/app-server-client` | `@limecloud/agent-runtime-client` seed | 不生成 UI projection，不带 React。 |
 | `packages/agent-runtime-projection` | `@limecloud/agent-runtime-projection` current | projector / selectors 在 React 外可测，输出 `state.subagents`。 |
 | `packages/agent-runtime-ui` | `@limecloud/agent-runtime-ui` current | 只消费 projection state，Subagents 不重算 runtime facts，Artifact/Evidence refs 不读取大 payload。 |
-| `packages/agent-app-runtime/projection` | compat adapter | 迁完后不保留第二套 projection owner。 |
+| `packages/plugin-runtime/projection` | compat adapter | 迁完后不保留第二套 projection owner。 |
 | 产品应用 local process component | deprecated | 迁到共享 ProcessTimeline / ExecutionGraph / Subagents surfaces。 |
 
 ## 7. 发布验收
@@ -115,8 +115,8 @@
 | 50% | P0 文档齐全，构建通过，导航完整。 |
 | 70% | SDK API 草案、fixture、conformance 和迁移表完整。 |
 | 85% | Lime 主仓 seed 包实现可被至少一个产品应用消费。 |
-| 95% | 四包 seed、SDK reference、refs surface、Agent App seed adoption 和 Content Studio adoption blueprint 完成，但仍缺真实产品主路径 smoke。 |
-| 97% | Agent App 主路径已通过真实 Electron smoke 证明复用 runtime-client + projection + React surfaces；Content Studio 仍停留在 adoption blueprint。 |
+| 95% | 四包 seed、SDK reference、refs surface、Plugin seed adoption 和 Content Studio adoption blueprint 完成，但仍缺真实产品主路径 smoke。 |
+| 97% | Plugin 主路径已通过真实 Electron smoke 证明复用 runtime-client + projection + React surfaces；Content Studio 仍停留在 adoption blueprint。 |
 | 98% | Content Studio 产品 UI 主路径已统一到标准 projection surface，且有边界审计阻止页面直接拼共享 primitives；但 App Server turn 主链仍未抽成标准 session gateway 形状。 |
 | 98.5% | Content Studio App Server turn 主链已抽到标准 session gateway 形状，`nextEvent()` 保持 `agentSession/event` notification 合同，sidecar service 已委托 gateway；标准包已发布到 `@limecloud` organization：`@limecloud/app-server-client@1.66.0` 与 `@limecloud/agent-runtime-client@0.1.1`。Content Studio 已固定安装 registry 版 `@limecloud/agent-runtime-client@0.1.1`，并通过 `@limecloud/agent-runtime-client/sessionGateway` 包装现有 gateway；首轮误发的无 scope `app-server-client@1.66.0` 和依赖旧名的 `@limecloud/agent-runtime-client@0.1.0` 只作为 compat-misrelease 记录。 |
-| 100% | Content Studio 主路径真实复用 runtime-client + projection + React surfaces，且 Agent App / Content Studio 均有 smoke / contract 证明。Content Studio 证据为 `npm run verify:lime-agent` 和 `npm run test:e2e -- --grep "agents 将平台运行事实投影到 AgentUI 面板而不是普通正文"`：真实 Electron 页面断言 `.agent-ui-projection.agent-ui-conversation-only`、`.agent-ui-main[data-agent-ui-surface="conversation"]`、`.agents-runtime-inline.agent-ui-runtime-only`、`.agent-ui-sidecar[data-agent-ui-surface="runtime"]`，并继续证明运行事实进入 runtime facts 而不是普通正文。 |
+| 100% | Content Studio 主路径真实复用 runtime-client + projection + React surfaces，且 Plugin / Content Studio 均有 smoke / contract 证明。Content Studio 证据为 `npm run verify:lime-agent` 和 `npm run test:e2e -- --grep "agents 将平台运行事实投影到 AgentUI 面板而不是普通正文"`：真实 Electron 页面断言 `.agent-ui-projection.agent-ui-conversation-only`、`.agent-ui-main[data-agent-ui-surface="conversation"]`、`.agents-runtime-inline.agent-ui-runtime-only`、`.agent-ui-sidecar[data-agent-ui-surface="runtime"]`，并继续证明运行事实进入 runtime facts 而不是普通正文。 |

@@ -1,5 +1,23 @@
-use aster::session::SessionRuntimeSnapshot;
 use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeProjectionSnapshotSource {
+    pub threads: Vec<RuntimeProjectionThreadSnapshot>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeProjectionThreadSnapshot {
+    pub thread_id: String,
+    pub turns: Vec<RuntimeProjectionTurnSnapshot>,
+    pub item_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeProjectionTurnSnapshot {
+    pub id: String,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RuntimeProjectionSnapshot {
@@ -15,7 +33,7 @@ pub struct RuntimeProjectionSnapshot {
 impl RuntimeProjectionSnapshot {
     pub fn from_snapshot(
         session_id: impl Into<String>,
-        snapshot: Option<&SessionRuntimeSnapshot>,
+        snapshot: Option<&RuntimeProjectionSnapshotSource>,
     ) -> Self {
         let session_id = session_id.into();
         let Some(snapshot) = snapshot else {
@@ -34,7 +52,7 @@ impl RuntimeProjectionSnapshot {
         let primary_thread_id = snapshot
             .threads
             .first()
-            .map(|thread| thread.thread.id.clone());
+            .map(|thread| thread.thread_id.clone());
         let turn_count = snapshot
             .threads
             .iter()
@@ -43,16 +61,16 @@ impl RuntimeProjectionSnapshot {
         let item_count = snapshot
             .threads
             .iter()
-            .map(|thread| thread.items.len())
+            .map(|thread| thread.item_count)
             .sum();
         let latest_turn_id = snapshot
             .threads
             .iter()
             .flat_map(|thread| thread.turns.iter())
             .max_by(|left, right| {
-                left.updated_at
-                    .cmp(&right.updated_at)
-                    .then_with(|| left.created_at.cmp(&right.created_at))
+                left.updated_at_ms
+                    .cmp(&right.updated_at_ms)
+                    .then_with(|| left.created_at_ms.cmp(&right.created_at_ms))
                     .then_with(|| left.id.cmp(&right.id))
             })
             .map(|turn| turn.id.clone());
@@ -75,54 +93,29 @@ impl RuntimeProjectionSnapshot {
 
 #[cfg(test)]
 mod tests {
-    use super::RuntimeProjectionSnapshot;
-    use aster::session::{
-        SessionRuntimeSnapshot, ThreadRuntime, ThreadRuntimeSnapshot, TurnRuntime, TurnStatus,
+    use super::{
+        RuntimeProjectionSnapshot, RuntimeProjectionSnapshotSource,
+        RuntimeProjectionThreadSnapshot, RuntimeProjectionTurnSnapshot,
     };
-    use chrono::{Duration, Utc};
 
     #[test]
     fn test_runtime_projection_snapshot_reads_primary_thread_and_latest_turn() {
-        let now = Utc::now();
-        let snapshot = SessionRuntimeSnapshot {
-            session_id: "session-1".to_string(),
-            threads: vec![ThreadRuntimeSnapshot {
-                thread: ThreadRuntime::new(
-                    "thread-1",
-                    "session-1",
-                    std::path::PathBuf::from("/tmp/workspace"),
-                ),
+        let snapshot = RuntimeProjectionSnapshotSource {
+            threads: vec![RuntimeProjectionThreadSnapshot {
+                thread_id: "thread-1".to_string(),
                 turns: vec![
-                    TurnRuntime {
+                    RuntimeProjectionTurnSnapshot {
                         id: "turn-old".to_string(),
-                        session_id: "session-1".to_string(),
-                        thread_id: "thread-1".to_string(),
-                        status: TurnStatus::Running,
-                        input_text: Some("old".to_string()),
-                        error_message: None,
-                        context_override: None,
-                        output_schema_runtime: None,
-                        created_at: now - Duration::minutes(2),
-                        started_at: Some(now - Duration::minutes(2)),
-                        completed_at: None,
-                        updated_at: now - Duration::minutes(1),
+                        created_at_ms: 100,
+                        updated_at_ms: 200,
                     },
-                    TurnRuntime {
+                    RuntimeProjectionTurnSnapshot {
                         id: "turn-new".to_string(),
-                        session_id: "session-1".to_string(),
-                        thread_id: "thread-1".to_string(),
-                        status: TurnStatus::Completed,
-                        input_text: Some("new".to_string()),
-                        error_message: None,
-                        context_override: None,
-                        output_schema_runtime: None,
-                        created_at: now - Duration::seconds(30),
-                        started_at: Some(now - Duration::seconds(30)),
-                        completed_at: Some(now - Duration::seconds(10)),
-                        updated_at: now,
+                        created_at_ms: 300,
+                        updated_at_ms: 400,
                     },
                 ],
-                items: Vec::new(),
+                item_count: 0,
             }],
         };
 

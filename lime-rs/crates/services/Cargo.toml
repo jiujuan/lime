@@ -14,6 +14,7 @@ local-sensevoice = ["voice-core/local-sensevoice"]
 # 项目内 crate
 lime-core.workspace = true
 lime-providers.workspace = true
+model-provider.workspace = true
 voice-core.workspace = true
 document-preview.workspace = true
 
@@ -58,9 +59,6 @@ once_cell.workspace = true
 url.workspace = true
 urlencoding.workspace = true
 zip.workspace = true
-
-# Aster Agent Framework
-aster.workspace = true
 
 # 数据库
 rusqlite.workspace = true

@@ -103,7 +103,7 @@ pub(super) fn current_tool_item_from_event(event: &AgentEvent) -> Option<Current
         error: raw_string_field(payload, &["error", "message", "reason"]),
         query: web_search_query(payload),
         action: web_search_action(payload),
-        metadata: payload.get("metadata").cloned(),
+        metadata: tool_metadata(payload),
         started_at: string_field(item, &["started_at", "startedAt"]),
         updated_at: string_field(item, &["updated_at", "updatedAt"]),
         completed_at: string_field(item, &["completed_at", "completedAt"]),
@@ -134,7 +134,7 @@ pub(super) fn legacy_tool_event_from_event(event: &AgentEvent) -> Option<LegacyT
         error: raw_string_field(payload, &["error", "message", "reason"]),
         query: web_search_query(payload),
         action: web_search_action(payload),
-        metadata: payload.get("metadata").cloned(),
+        metadata: tool_metadata(payload),
     })
 }
 
@@ -229,6 +229,20 @@ fn tool_output(payload: &Value) -> Option<String> {
         ],
     )
     .or_else(|| {
+        payload.get("result").and_then(|result| {
+            raw_string_field(
+                result,
+                &[
+                    "outputPreview",
+                    "output_preview",
+                    "output",
+                    "text",
+                    "content",
+                ],
+            )
+        })
+    })
+    .or_else(|| {
         payload
             .get("result")
             .filter(|value| !value.is_null())
@@ -239,6 +253,20 @@ fn tool_output(payload: &Value) -> Option<String> {
                     .unwrap_or_else(|| value.to_string())
             })
     })
+}
+
+fn tool_metadata(payload: &Value) -> Option<Value> {
+    payload
+        .get("metadata")
+        .filter(|value| !value.is_null())
+        .cloned()
+        .or_else(|| {
+            payload
+                .get("result")
+                .and_then(|result| result.get("metadata"))
+                .filter(|value| !value.is_null())
+                .cloned()
+        })
 }
 
 fn tool_structured_content(payload: &Value) -> Option<Value> {

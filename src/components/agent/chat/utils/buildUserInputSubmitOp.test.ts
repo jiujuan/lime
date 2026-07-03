@@ -466,6 +466,99 @@ describe("buildUserInputSubmitOp", () => {
     expect(request.turn_config?.model_preference).toBeUndefined();
   });
 
+  it("图片生成命令当前有效模型为图片通道时应退回会话文本模型编排", () => {
+    const op = buildUserInputSubmitOp({
+      content: "@Agnes Image 2.1 Flash 生成一张广州夏天照片",
+      images: [],
+      sessionId: "session-image-agnes",
+      eventName: "aster_stream_image_agnes",
+      requestMetadata: {
+        harness: {
+          image_command_intent: {
+            image_task: {
+              prompt: "一张广州夏天照片",
+              provider_id: "agnes",
+              model: "agnes-image-2.1-flash",
+              runtime_contract: {
+                contract_key: "image_generation",
+                routing_slot: "image_generation_model",
+              },
+            },
+          },
+        },
+      },
+      executionRuntime: null,
+      syncedRecentPreferences: null,
+      syncedSessionModelPreference: {
+        providerType: "deepseek",
+        model: "deepseek-v4-pro",
+      },
+      syncedExecutionStrategy: null,
+      effectiveExecutionStrategy: "react",
+      effectiveAccessMode: "current",
+      effectiveProviderType: "agnes",
+      effectiveModel: "agnes-image-2.1-flash",
+    });
+
+    expect(op.preferences?.providerConfig).toEqual({
+      provider_id: "deepseek",
+      provider_name: "deepseek",
+      model_name: "deepseek-v4-pro",
+    });
+    expect(op.preferences?.providerPreference).toBeUndefined();
+    expect(op.preferences?.modelPreference).toBeUndefined();
+
+    const request = createSubmitTurnRequestFromAgentOp(op);
+    expect(request.turn_config?.provider_config).toEqual({
+      provider_id: "deepseek",
+      provider_name: "deepseek",
+      model_name: "deepseek-v4-pro",
+    });
+    expect(request.turn_config?.provider_preference).toBeUndefined();
+    expect(request.turn_config?.model_preference).toBeUndefined();
+  });
+
+  it("图片生成命令没有文本模型候选时不应提交图片 provider 作为编排模型", () => {
+    const op = buildUserInputSubmitOp({
+      content: "@Agnes Image 2.1 Flash 生成一张广州夏天照片",
+      images: [],
+      sessionId: "session-image-no-text-model",
+      eventName: "aster_stream_image_no_text",
+      requestMetadata: {
+        harness: {
+          image_command_intent: {
+            image_task: {
+              prompt: "一张广州夏天照片",
+              provider_id: "agnes",
+              model: "agnes-image-2.1-flash",
+              runtime_contract: {
+                contract_key: "image_generation",
+                routing_slot: "image_generation_model",
+              },
+            },
+          },
+        },
+      },
+      executionRuntime: null,
+      syncedRecentPreferences: null,
+      syncedSessionModelPreference: null,
+      syncedExecutionStrategy: null,
+      effectiveExecutionStrategy: "react",
+      effectiveAccessMode: "current",
+      effectiveProviderType: "agnes",
+      effectiveModel: "agnes-image-2.1-flash",
+    });
+
+    expect(op.preferences?.providerConfig).toBeUndefined();
+    expect(op.preferences?.providerPreference).toBeUndefined();
+    expect(op.preferences?.modelPreference).toBeUndefined();
+
+    const request = createSubmitTurnRequestFromAgentOp(op);
+    expect(request.turn_config?.provider_config).toBeUndefined();
+    expect(request.turn_config?.provider_preference).toBeUndefined();
+    expect(request.turn_config?.model_preference).toBeUndefined();
+  });
+
   it("应同时透传显式搜索开关和搜索模式到 turn_config", () => {
     const op = buildUserInputSubmitOp({
       content: "请搜索最新 AI 新闻",

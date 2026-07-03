@@ -104,14 +104,20 @@ async fn article_workspace_turn_runs_installed_worker_and_materializes_workspace
     assert!(article["source"]["hostManagedGeneration"].is_null());
     let article_title = article["title"].as_str().expect("article title");
     assert!(!article_title.contains("学习路线：从基础语法到工程实战"));
-    assert!(article_title.contains("先把问题说清楚"));
+    assert_eq!(
+        article_title,
+        "Regenerate the image set with two candidate images."
+    );
     let article_document = article["source"]["documentText"]
         .as_str()
         .expect("article documentText");
     assert!(!article_document.contains("## 第一阶段：打牢基础"));
     assert!(!article_document.contains("学习路线：从基础语法到工程实战"));
-    assert!(article_document.contains("## 把核心判断写成一句话"));
-    assert!(article_document.contains("## 结尾"));
+    assert!(article_document.is_empty());
+    assert_eq!(
+        article["source"]["articleGenerationStatus"],
+        "host_generation_required"
+    );
     assert_eq!(
         article["source"]["finalMarkdown"],
         article["source"]["documentText"]
@@ -187,13 +193,8 @@ async fn article_generation_worker_emits_initial_streaming_workspace_snapshot() 
         .map(|event| event.event_type.as_str())
         .collect::<Vec<_>>();
     assert_eq!(
-        &event_types[0..4],
-        &[
-            "message.created",
-            "turn.accepted",
-            "message.delta",
-            "artifact.snapshot",
-        ]
+        &event_types[0..3],
+        &["message.created", "turn.accepted", "artifact.snapshot",]
     );
     assert_eq!(event_types.last().copied(), Some("turn.completed"));
     assert!(
@@ -205,6 +206,29 @@ async fn article_generation_worker_emits_initial_streaming_workspace_snapshot() 
     assert!(
         !event_types.contains(&"plugin_worker.hook"),
         "hook lifecycle events must be audit-only: {event_types:?}"
+    );
+    let assistant_events = output
+        .events
+        .iter()
+        .filter(|event| event.event_type == "message.delta")
+        .collect::<Vec<_>>();
+    assert_eq!(
+        assistant_events.len(),
+        1,
+        "article generation should emit one final assistant message"
+    );
+    let assistant_text = assistant_events[0]
+        .payload
+        .get("text")
+        .and_then(serde_json::Value::as_str)
+        .expect("assistant final text");
+    assert_eq!(assistant_events[0].payload["phase"], "final_answer");
+    assert_eq!(assistant_events[0].payload["backend"], "plugin_worker");
+    assert!(assistant_text.contains("## 先定义岗位要解决的问题"));
+    assert!(assistant_text.contains("## 用任务验证真实能力"));
+    assert!(
+        !assistant_text.contains("@写文章"),
+        "assistant final text must not repeat the user command"
     );
 
     let regular_log_records = event_log_writer
@@ -424,6 +448,16 @@ async fn article_generation_worker_emits_initial_streaming_workspace_snapshot() 
         })
         .expect("read session");
     let detail = read.detail.expect("detail");
+    let messages = detail["messages"].as_array().expect("messages");
+    let assistant_message = messages
+        .iter()
+        .find(|message| message["role"] == "assistant")
+        .expect("assistant message");
+    let assistant_message_text = assistant_message["content"][0]["text"]
+        .as_str()
+        .expect("assistant message text");
+    assert!(assistant_message_text.contains("## 先定义岗位要解决的问题"));
+    assert!(assistant_message_text.contains("## 用任务验证真实能力"));
     let article = detail["article_workspace"]["objects"]
         .as_array()
         .expect("article workspace objects")
@@ -435,6 +469,7 @@ async fn article_generation_worker_emits_initial_streaming_workspace_snapshot() 
         .expect("article documentText");
     assert!(article_document.contains("## 先定义岗位要解决的问题"));
     assert!(article_document.contains("## 用任务验证真实能力"));
+    assert_eq!(assistant_message_text, article_document);
     assert!(!article_document.contains("## 第一阶段：打牢基础"));
     assert!(!article_document.contains("学习路线：从基础语法到工程实战"));
     assert_eq!(
@@ -581,7 +616,13 @@ async fn article_workspace_worker_blocks_cloud_release_without_verified_signatur
 
 #[tokio::test]
 async fn article_workspace_worker_fails_closed_for_unauthorized_output_artifact_kind() {
-    let core = RuntimeCore::default();
+    let Some(fixture_root) = content_factory_fixture_root() else {
+        return;
+    };
+    let installed_state = content_factory_installed_state(&fixture_root);
+    let data_source = TestSessionDataSource::new(empty_agent_session_read_response("unused"))
+        .with_plugin_installed_states(vec![installed_state]);
+    let core = RuntimeCore::default().with_app_data_source(Arc::new(data_source));
     let session = core
         .start_session(AgentSessionStartParams {
             session_id: Some("session-content-factory-output-auth".to_string()),
@@ -637,10 +678,11 @@ async fn article_workspace_worker_fails_closed_for_unauthorized_output_artifact_
         .iter()
         .find(|event| event.event_type == "turn.accepted")
         .expect("accepted event");
-    assert_eq!(accepted.payload["authorization"], "denied");
+    assert_eq!(accepted.payload["backend"], "plugin_worker");
+    assert_eq!(accepted.payload["appId"], "content-factory-app");
     assert_eq!(
-        accepted.payload["reasonCode"],
-        "PLUGIN_WORKER_OUTPUT_UNAUTHORIZED"
+        accepted.payload["outputArtifactKind"],
+        "creator.workspace_patch"
     );
 
     let runtime_error = output
@@ -650,7 +692,7 @@ async fn article_workspace_worker_fails_closed_for_unauthorized_output_artifact_
         .expect("runtime error");
     assert_eq!(
         runtime_error.payload["errorCode"],
-        "PLUGIN_WORKER_OUTPUT_UNAUTHORIZED"
+        "PLUGIN_WORKER_CONTRACT_UNSUPPORTED"
     );
     assert_eq!(
         runtime_error.payload["outputArtifactKind"],

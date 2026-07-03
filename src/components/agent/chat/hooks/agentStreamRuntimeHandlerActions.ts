@@ -9,6 +9,7 @@ import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
 import { logAgentDebug } from "@/lib/agentDebug";
 import type { Message } from "../types";
 import { buildAgentTextDeltaContentPartMetadata } from "../utils/contentPartTimeline";
+import { sanitizeImageWorkbenchPresentationText } from "../utils/imageWorkbenchPresentation";
 import { updateMessageArtifactsStatus } from "../utils/messageArtifacts";
 import { isRetainedSkillProcessMessage } from "../utils/skillInlineProcessRetention";
 import {
@@ -80,6 +81,24 @@ export type AgentStreamRuntimeToolEvent = Extract<
   }
 >;
 
+function sanitizeImageWorkbenchAssistantContentForMessage(params: {
+  fallbackLanguageSource?: string | null;
+  message: Message;
+  value: string;
+}): string {
+  if (!params.message.imageWorkbenchPreview) {
+    return params.value;
+  }
+  const languageSource =
+    params.message.imageWorkbenchPreview.prompt ||
+    params.fallbackLanguageSource ||
+    params.value;
+  const sanitized = sanitizeImageWorkbenchPresentationText(params.value, {
+    languageSource,
+  });
+  return sanitized || params.message.content || params.value;
+}
+
 interface CreateAgentStreamRuntimeHandlerActionsOptions {
   activeSessionId: string;
   assistantFallbackContent?: string | null;
@@ -130,6 +149,12 @@ export function createAgentStreamRuntimeHandlerActions({
     removeQueuedDraftMessages,
     removeQueuedTurnState,
   } = callbacks;
+
+  const shouldPreserveVisibleProcessForMessage = (message: Message): boolean =>
+    surfaceThinkingDeltas ||
+    requestState.shouldSurfaceVisibleProcessReasoning === true ||
+    Boolean(message.imageWorkbenchPreview) ||
+    isRetainedSkillProcessMessage(message);
 
   const clearQueuedDraftCleanupTimer = () => {
     const clearPlan = buildAgentStreamTimerClearPlan({
@@ -281,8 +306,7 @@ export function createAgentStreamRuntimeHandlerActions({
           parts: msg.contentParts,
           renderedContent: requestState.renderedContent,
           shouldRetainThinkingPart: isPersistedReasoningContentPart,
-          surfaceThinkingDeltas:
-            surfaceThinkingDeltas || isRetainedSkillProcessMessage(msg),
+          surfaceThinkingDeltas: shouldPreserveVisibleProcessForMessage(msg),
           textPartMetadata: buildAgentTextDeltaContentPartMetadata({
             itemId: requestState.activeTextSegmentItemId,
             phase: requestState.activeTextSegmentPhase,
@@ -372,10 +396,19 @@ export function createAgentStreamRuntimeHandlerActions({
   const buildStreamingTextCommitPatch = (
     msg: Message,
   ): Partial<Pick<Message, "content" | "contentParts">> => {
-    const finalContent = requestState.accumulatedContent || msg.content;
+    const finalContent = sanitizeImageWorkbenchAssistantContentForMessage({
+      fallbackLanguageSource: content || requestState.accumulatedContent,
+      message: msg,
+      value: requestState.accumulatedContent || msg.content,
+    });
     if (!finalContent) {
       return {};
     }
+    const rawContent = sanitizeImageWorkbenchAssistantContentForMessage({
+      fallbackLanguageSource: content || requestState.accumulatedContent,
+      message: msg,
+      value: requestState.accumulatedContent || finalContent,
+    });
 
     return {
       content: finalContent,
@@ -385,12 +418,11 @@ export function createAgentStreamRuntimeHandlerActions({
         finalTextPartMetadata: buildAgentTextDeltaContentPartMetadata({
           itemId: requestState.activeTextSegmentItemId,
           phase: requestState.activeTextSegmentPhase,
-          sequence: requestState.activeTextSegmentSequence,
-          turnId: requestState.activeTextSegmentTurnId,
-        }),
-        rawContent: requestState.accumulatedContent || finalContent,
-        surfaceThinkingDeltas:
-          surfaceThinkingDeltas || isRetainedSkillProcessMessage(msg),
+            sequence: requestState.activeTextSegmentSequence,
+            turnId: requestState.activeTextSegmentTurnId,
+          }),
+        rawContent,
+        surfaceThinkingDeltas: shouldPreserveVisibleProcessForMessage(msg),
       }),
     };
   };
@@ -552,10 +584,18 @@ export function createAgentStreamRuntimeHandlerActions({
           !requestState.accumulatedContent.trim();
         const resolvedFinalContent = shouldPreserveRunningImageTaskContent
           ? msg.content
-          : finalContent;
+          : sanitizeImageWorkbenchAssistantContentForMessage({
+              fallbackLanguageSource: content || finalContent,
+              message: msg,
+              value: finalContent,
+            });
         const resolvedRawContent = shouldPreserveRunningImageTaskContent
           ? msg.content
-          : rawContent;
+          : sanitizeImageWorkbenchAssistantContentForMessage({
+              fallbackLanguageSource: content || rawContent,
+              message: msg,
+              value: rawContent,
+            });
 
         return {
           ...updateMessageArtifactsStatus(msg, "complete"),
@@ -583,8 +623,9 @@ export function createAgentStreamRuntimeHandlerActions({
                 ? resolvedFinalContent
                 : msg.content,
             rawContent: resolvedRawContent,
-            surfaceThinkingDeltas:
-              surfaceThinkingDeltas || isRetainedSkillProcessMessage(msg),
+            surfaceThinkingDeltas: shouldPreserveVisibleProcessForMessage(msg),
+            preserveThinkingContent:
+              shouldPreserveVisibleProcessForMessage(msg),
             thinkingContent: msg.thinkingContent,
             toolCalls: msg.toolCalls,
             usage: usage ?? msg.usage,

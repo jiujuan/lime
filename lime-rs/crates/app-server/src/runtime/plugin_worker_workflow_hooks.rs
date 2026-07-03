@@ -1,4 +1,5 @@
 use super::plugin_worker_workflow::PluginWorkerWorkflowContext;
+use super::workflow::events::WORKFLOW_HOOK_COMPLETED;
 use super::RuntimeEvent;
 use serde_json::{json, Map, Value};
 
@@ -23,7 +24,7 @@ fn workflow_hook_completed_event_from_worker_hook(
     insert_object_field(&mut payload, "stepId", json!(step_id));
     insert_object_field(&mut payload, "auditOnly", json!(true));
     context.bind_internal_workflow_event(
-        RuntimeEvent::new("workflow.hook.completed", payload),
+        RuntimeEvent::new(WORKFLOW_HOOK_COMPLETED, payload),
         "plugin_worker_hook",
     )
 }

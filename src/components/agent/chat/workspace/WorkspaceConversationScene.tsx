@@ -440,6 +440,15 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
     typeof EmptyState
   >["runtimeToolAvailability"];
   pluginSuggestions?: ComponentProps<typeof EmptyState>["pluginSuggestions"];
+  pluginSuggestionsError?: ComponentProps<
+    typeof EmptyState
+  >["pluginSuggestionsError"];
+  pluginSuggestionsLoading?: ComponentProps<
+    typeof EmptyState
+  >["pluginSuggestionsLoading"];
+  onPluginSuggestionsNeeded?: ComponentProps<
+    typeof EmptyState
+  >["onPluginSuggestionsNeeded"];
   knowledgePackSelection?: ComponentProps<
     typeof EmptyState
   >["knowledgePackSelection"];
@@ -612,6 +621,9 @@ export function WorkspaceConversationScene({
   onOpenSettings,
   runtimeToolAvailability,
   pluginSuggestions,
+  pluginSuggestionsError,
+  pluginSuggestionsLoading,
+  onPluginSuggestionsNeeded,
   initialInputCapability,
   knowledgePackSelection,
   knowledgePackOptions,
@@ -731,6 +743,9 @@ export function WorkspaceConversationScene({
     sessionId,
     runtimeToolAvailability,
     pluginSuggestions,
+    pluginSuggestionsError,
+    pluginSuggestionsLoading,
+    onPluginSuggestionsNeeded,
     initialInputCapability,
     knowledgePackSelection,
     knowledgePackOptions,

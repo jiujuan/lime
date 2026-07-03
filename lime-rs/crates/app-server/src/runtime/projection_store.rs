@@ -15,6 +15,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use super::article_workspace_edited_draft;
 use super::projection_item_events::query_projected_session_item_events;
 use super::projection_payload_summary::bounded_payload_summary;
 use super::projection_protocol::{
@@ -1218,7 +1219,12 @@ fn merge_projected_session_metadata_json(
         );
     }
     if let Some(value) = params.article_workspace_edited_draft.as_ref() {
-        metadata.insert("articleWorkspaceEditedDraft".to_string(), value.clone());
+        if !article_workspace_edited_draft::should_reject_edited_draft_update(
+            article_workspace_edited_draft::metadata_edited_draft(&metadata),
+            value,
+        ) {
+            metadata.insert("articleWorkspaceEditedDraft".to_string(), value.clone());
+        }
     }
     if metadata == before {
         return Ok(None);

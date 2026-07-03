@@ -1,4 +1,5 @@
 {
+  "agentChat.imageWorkbenchPreview.tool.generation": "Image Generation",
   "plugin.apps.action.confirmUninstall": "Confirm uninstall",
   "plugin.apps.action.deleteDataUnavailable": "Delete Data Unavailable",
   "plugin.apps.action.disable": "Disable",
@@ -132,6 +133,7 @@
   "plugin.apps.launch.shellLaunched": "Started the standalone entry for {{title}} ({{target}}).",
   "plugin.apps.launch.uiMounted": "Mounted {{title}} ({{route}}).",
   "plugin.apps.launch.workflowCompleted": "{{title}} workflow completed: {{runId}}.",
+  "plugin.apps.launch.workflowRequiresCurrentApi": "{{title}} requires the App Server Workflow API; the local frontend workflow DSL is retired.",
   "plugin.apps.launchTarget.label": "Open in",
   "plugin.apps.launchTarget.rightSurface": "Claw right panel",
   "plugin.apps.launchTarget.rightSurfaceUnavailable": "No Claw conversation is available for delivery.",
@@ -1271,7 +1273,7 @@
   "agentChat.tokenUsage.promptCache.readWrite": "Cache {{total}} (read {{read}} / write {{write}})",
   "agentChat.tokenUsage.promptCache.write": "Cache {{count}}",
   "agentChat.tokenUsage.promptCache.zero": "Cache 0",
-  "agentChat.tokenUsage.total": "Total {{count}}",
+  "agentChat.tokenUsage.total": "{{count}} Tokens",
   "agentChat.toolCall.actionOverride.memoryAddNote.completed": "Memory correction saved",
   "agentChat.toolCall.actionOverride.memoryAddNote.failed": "Memory correction failed",
   "agentChat.toolCall.actionOverride.memoryAddNote.running": "Saving memory correction",

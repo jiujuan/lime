@@ -18,6 +18,19 @@ pub struct EventLogWriter {
     root: PathBuf,
 }
 
+pub const WORKFLOW_AUDIT_ACTIVE_COMPACT_AFTER_RECORDS: usize = 1024;
+pub const WORKFLOW_AUDIT_ACTIVE_RETAIN_RECENT_RECORDS: usize = 512;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkflowAuditCompactionReport {
+    pub session_id: String,
+    pub before_count: usize,
+    pub archived_count: usize,
+    pub retained_count: usize,
+    pub archive_path: Option<PathBuf>,
+    pub active_path: PathBuf,
+}
+
 impl EventLogWriter {
     pub fn new(root: impl AsRef<Path>) -> Result<Self, String> {
         let root = root.as_ref().to_path_buf();
@@ -74,6 +87,13 @@ impl EventLogWriter {
             .collect::<Vec<_>>();
         let events = redacted_events.iter().collect::<Vec<_>>();
         append_events_to_path(&path, &events)?;
+        if let Err(error) = self.compact_session_workflow_audit_events_if_needed(session_id) {
+            tracing::warn!(
+                "[event-log] failed to compact workflow audit events for session {}: {}",
+                session_id,
+                error
+            );
+        }
         Ok(path)
     }
 
@@ -81,15 +101,130 @@ impl EventLogWriter {
         &self,
         session_id: &str,
     ) -> Result<Vec<EventLogRecord>, String> {
+        let mut records = Vec::new();
+        for path in self.workflow_audit_archive_paths(session_id)? {
+            records.extend(read_events_from_path(&path)?);
+        }
         let path = self.workflow_audit_path(session_id);
-        read_events_from_path(&path)
+        records.extend(read_events_from_path(&path)?);
+        Ok(records)
+    }
+
+    pub fn compact_session_workflow_audit_events(
+        &self,
+        session_id: &str,
+        retain_recent: usize,
+    ) -> Result<WorkflowAuditCompactionReport, String> {
+        if retain_recent == 0 {
+            return Err(
+                "workflow audit compaction retain_recent must be greater than 0".to_string(),
+            );
+        }
+        let active_path = self.workflow_audit_path(session_id);
+        let current_records = read_events_from_path(&active_path)?;
+        let before_count = current_records.len();
+        if before_count <= retain_recent {
+            return Ok(WorkflowAuditCompactionReport {
+                session_id: session_id.to_string(),
+                before_count,
+                archived_count: 0,
+                retained_count: before_count,
+                archive_path: None,
+                active_path,
+            });
+        }
+
+        let archive_count = before_count - retain_recent;
+        let archived_records = &current_records[..archive_count];
+        let retained_records = &current_records[archive_count..];
+        let archive_path = self.workflow_audit_archive_path(session_id, archived_records);
+        write_events_to_path(
+            &archive_path,
+            &archived_records
+                .iter()
+                .map(|record| &record.event)
+                .collect::<Vec<_>>(),
+        )?;
+        write_events_to_path(
+            &active_path,
+            &retained_records
+                .iter()
+                .map(|record| &record.event)
+                .collect::<Vec<_>>(),
+        )?;
+        Ok(WorkflowAuditCompactionReport {
+            session_id: session_id.to_string(),
+            before_count,
+            archived_count: archived_records.len(),
+            retained_count: retained_records.len(),
+            archive_path: Some(archive_path),
+            active_path,
+        })
+    }
+
+    pub fn compact_session_workflow_audit_events_if_needed(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<WorkflowAuditCompactionReport>, String> {
+        let active_path = self.workflow_audit_path(session_id);
+        let active_count = read_events_from_path(&active_path)?.len();
+        if active_count <= WORKFLOW_AUDIT_ACTIVE_COMPACT_AFTER_RECORDS {
+            return Ok(None);
+        }
+        self.compact_session_workflow_audit_events(
+            session_id,
+            WORKFLOW_AUDIT_ACTIVE_RETAIN_RECENT_RECORDS,
+        )
+        .map(Some)
     }
 
     pub fn workflow_audit_path(&self, session_id: &str) -> PathBuf {
+        self.workflow_audit_dir(session_id)
+            .join("workflow-events.jsonl")
+    }
+
+    fn workflow_audit_dir(&self, session_id: &str) -> PathBuf {
         self.root
             .join("sessions")
             .join(format!("session_{}", safe_file_stem(session_id)))
-            .join("workflow-events.jsonl")
+    }
+
+    fn workflow_audit_archive_paths(&self, session_id: &str) -> Result<Vec<PathBuf>, String> {
+        let dir = self.workflow_audit_dir(session_id);
+        if !dir.exists() {
+            return Ok(Vec::new());
+        }
+        let mut paths = Vec::new();
+        let entries = fs::read_dir(&dir)
+            .map_err(|error| format!("无法读取 workflow audit 目录 {}: {error}", dir.display()))?;
+        for entry in entries {
+            let entry = entry.map_err(|error| {
+                format!("无法读取 workflow audit 目录项 {}: {error}", dir.display())
+            })?;
+            let path = entry.path();
+            let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
+                continue;
+            };
+            if file_name.starts_with("workflow-events.archive.") && file_name.ends_with(".jsonl") {
+                paths.push(path);
+            }
+        }
+        paths.sort();
+        Ok(paths)
+    }
+
+    fn workflow_audit_archive_path(&self, session_id: &str, records: &[EventLogRecord]) -> PathBuf {
+        let first_sequence = records
+            .first()
+            .map(|record| record.event.sequence)
+            .unwrap_or(0);
+        let last_sequence = records
+            .last()
+            .map(|record| record.event.sequence)
+            .unwrap_or(first_sequence);
+        self.workflow_audit_dir(session_id).join(format!(
+            "workflow-events.archive.{first_sequence:020}-{last_sequence:020}.jsonl"
+        ))
     }
 
     fn session_path(&self, session_id: &str) -> PathBuf {
@@ -128,15 +263,60 @@ fn append_events_to_path(path: &Path, events: &[&AgentEvent]) -> Result<(), Stri
     if events.is_empty() {
         return Ok(());
     }
+    let mut file = open_event_log_for_append(path)?;
+    write_events(&mut file, path, events)
+}
+
+fn write_events_to_path(path: &Path, events: &[&AgentEvent]) -> Result<(), String> {
+    let temp_path = path.with_extension("jsonl.tmp");
+    if let Some(parent) = temp_path.parent() {
+        fs::create_dir_all(parent).map_err(|error| {
+            format!(
+                "无法创建 event log 临时父目录 {}: {error}",
+                parent.display()
+            )
+        })?;
+    }
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&temp_path)
+        .map_err(|error| {
+            format!(
+                "无法打开 event log 临时文件 {}: {error}",
+                temp_path.display()
+            )
+        })?;
+    write_events(&mut file, &temp_path, events)?;
+    file.flush().map_err(|error| {
+        format!(
+            "无法刷新 event log 临时文件 {}: {error}",
+            temp_path.display()
+        )
+    })?;
+    fs::rename(&temp_path, path).map_err(|error| {
+        format!(
+            "无法替换 event log {} <- {}: {error}",
+            path.display(),
+            temp_path.display()
+        )
+    })
+}
+
+fn open_event_log_for_append(path: &Path) -> Result<fs::File, String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
             .map_err(|error| format!("无法创建 event log 父目录 {}: {error}", parent.display()))?;
     }
-    let mut file = fs::OpenOptions::new()
+    fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(path)
-        .map_err(|error| format!("无法打开 event log {}: {error}", path.display()))?;
+        .map_err(|error| format!("无法打开 event log {}: {error}", path.display()))
+}
+
+fn write_events(file: &mut fs::File, path: &Path, events: &[&AgentEvent]) -> Result<(), String> {
     for event in events {
         let json = serde_json::to_vec(event)
             .map_err(|error| format!("无法序列化 event {}: {error}", event.event_id))?;
@@ -151,8 +331,13 @@ impl EventLogWriter {
     pub fn clear_session(&self, session_id: &str) -> Result<(), String> {
         let session_event_path = self.session_path(session_id);
         let workflow_audit_path = self.workflow_audit_path(session_id);
+        let workflow_audit_archive_paths = self.workflow_audit_archive_paths(session_id)?;
         remove_event_log_path(&session_event_path)?;
-        remove_event_log_path(&workflow_audit_path)
+        remove_event_log_path(&workflow_audit_path)?;
+        for archive_path in workflow_audit_archive_paths {
+            remove_event_log_path(&archive_path)?;
+        }
+        Ok(())
     }
 }
 
@@ -302,182 +487,4 @@ fn safe_file_stem(value: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use app_server_protocol::AgentEvent;
-    use serde_json::json;
-
-    fn event(sequence: u64) -> AgentEvent {
-        AgentEvent {
-            event_id: format!("evt-{sequence}"),
-            sequence,
-            session_id: "session-a".to_string(),
-            thread_id: Some("thread-a".to_string()),
-            turn_id: Some("turn-a".to_string()),
-            event_type: "message.delta".to_string(),
-            timestamp: "2026-06-14T00:00:00.000Z".to_string(),
-            payload: json!({ "text": format!("hello-{sequence}") }),
-        }
-    }
-
-    #[test]
-    fn append_and_read_session_events() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let writer = EventLogWriter::new(temp.path()).expect("writer");
-        let first = event(1);
-        let second = event(2);
-
-        let first_path = writer.append(&first).expect("first append");
-        let second_path = writer.append(&second).expect("second append");
-
-        assert!(first_path.ends_with("sessions/session_session-a.jsonl"));
-        assert_eq!(first_path, second_path);
-
-        let records = writer.read_session_events("session-a").expect("records");
-        assert_eq!(records.len(), 2);
-        assert_eq!(records[0].event.sequence, 1);
-        assert_eq!(records[1].event.sequence, 2);
-    }
-
-    #[test]
-    fn append_events_groups_by_session_and_writes_all_events() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let writer = EventLogWriter::new(temp.path()).expect("writer");
-        let first = event(1);
-        let mut second = event(2);
-        second.session_id = "session-b".to_string();
-        second.event_id = "evt-2".to_string();
-
-        let paths = writer
-            .append_events(&[first.clone(), second.clone()])
-            .expect("append events");
-
-        assert_eq!(paths.len(), 2);
-        let first_records = writer.read_session_events("session-a").expect("session a");
-        let second_records = writer.read_session_events("session-b").expect("session b");
-        assert_eq!(first_records.len(), 1);
-        assert_eq!(second_records.len(), 1);
-        assert_eq!(first_records[0].event.sequence, first.sequence);
-        assert_eq!(second_records[0].event.sequence, second.sequence);
-    }
-
-    #[test]
-    fn append_and_read_workflow_audit_events() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let writer = EventLogWriter::new(temp.path()).expect("writer");
-        let mut first = event(1);
-        first.event_type = "workflow.run.started".to_string();
-        let mut second = event(2);
-        second.event_type = "workflow.step.completed".to_string();
-
-        let path = writer
-            .append_workflow_audit_events("session-a", &[first.clone(), second.clone()])
-            .expect("append workflow audit events");
-
-        assert!(path.ends_with("sessions/session_session-a/workflow-events.jsonl"));
-        assert_eq!(
-            writer
-                .read_session_events("session-a")
-                .expect("regular events")
-                .len(),
-            0
-        );
-        let records = writer
-            .read_session_workflow_audit_events("session-a")
-            .expect("workflow audit events");
-        assert_eq!(records.len(), 2);
-        assert_eq!(records[0].event.event_type, "workflow.run.started");
-        assert_eq!(records[1].event.event_type, "workflow.step.completed");
-    }
-
-    #[test]
-    fn workflow_audit_events_are_metadata_only_redacted() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let writer = EventLogWriter::new(temp.path()).expect("writer");
-        let mut audit = event(1);
-        audit.event_type = "workflow.connector.completed".to_string();
-        audit.payload = json!({
-            "workflowRunId": "task-1:workflow",
-            "workflowKey": "content_article_workflow",
-            "stepId": "research",
-            "connectorRef": "web-research",
-            "toolName": "WebSearch",
-            "status": "completed",
-            "prompt": "写一篇包含敏感素材的文章",
-            "query": "secret launch plan",
-            "result": {
-                "summary": "raw search result",
-                "url": "https://example.test/private"
-            },
-            "providerConfig": {
-                "apiKey": "sk-live-secret"
-            },
-            "metadata": {
-                "pluginWorkflow": {
-                    "eventSource": "worker_progress",
-                    "safeLabel": "research"
-                },
-                "note": "Bearer should-redact"
-            }
-        });
-
-        writer
-            .append_workflow_audit_events("session-a", &[audit])
-            .expect("append workflow audit");
-
-        let records = writer
-            .read_session_workflow_audit_events("session-a")
-            .expect("workflow audit events");
-        assert_eq!(records.len(), 1);
-        let payload = &records[0].event.payload;
-        assert_eq!(payload["workflowRunId"], "task-1:workflow");
-        assert_eq!(payload["workflowKey"], "content_article_workflow");
-        assert_eq!(payload["stepId"], "research");
-        assert_eq!(payload["connectorRef"], "web-research");
-        assert_eq!(payload["toolName"], "WebSearch");
-        assert_eq!(payload["status"], "completed");
-        assert_eq!(
-            payload["metadata"]["pluginWorkflow"]["eventSource"],
-            "worker_progress"
-        );
-        assert_eq!(
-            payload["metadata"]["pluginWorkflow"]["safeLabel"],
-            "research"
-        );
-        assert_eq!(payload["prompt"]["redacted"], true);
-        assert_eq!(payload["query"]["redacted"], true);
-        assert_eq!(payload["result"]["redacted"], true);
-        assert_eq!(payload["providerConfig"]["redacted"], true);
-        assert_eq!(
-            payload["metadata"]["note"],
-            "[redacted:workflow_audit_metadata_only]"
-        );
-        assert_eq!(
-            payload["redaction"]["policy"],
-            "workflow_audit_metadata_only"
-        );
-        assert_eq!(payload["redaction"]["promptText"], false);
-        assert_eq!(payload["redaction"]["providerPayload"], false);
-        assert_eq!(payload["redaction"]["rawContent"], false);
-    }
-
-    #[test]
-    fn clear_session_removes_session_event_log() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let writer = EventLogWriter::new(temp.path()).expect("writer");
-        writer.append(&event(1)).expect("append");
-        writer
-            .append_workflow_audit_events("session-a", &[event(2)])
-            .expect("append workflow audit");
-
-        writer.clear_session("session-a").expect("clear");
-
-        let records = writer.read_session_events("session-a").expect("records");
-        assert!(records.is_empty());
-        let audit_records = writer
-            .read_session_workflow_audit_events("session-a")
-            .expect("audit records");
-        assert!(audit_records.is_empty());
-        writer.clear_session("session-a").expect("clear missing");
-    }
-}
+mod tests;

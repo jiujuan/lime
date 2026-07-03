@@ -26,6 +26,7 @@ use serde_json::Value;
 use std::path::Path;
 use std::time::Duration;
 
+#[cfg(test)]
 const WORKER_APP_ID: &str = "content-factory-app";
 const WORKSPACE_PATCH_KIND: &str = "content_factory.workspace_patch";
 const ARTICLE_WORKSPACE_SCHEMA: &str = "article-workspace.v1";
@@ -33,7 +34,6 @@ const WORKER_REQUEST_SCHEMA: &str = "content-factory.worker-request.v1";
 const DEFAULT_ARTICLE_WORKSPACE_TASK_KIND: &str = "content.factory.generate";
 const CLOUD_RELEASE_SOURCE_KIND: &str = "cloud_release";
 const WORKER_PACKAGE_SIGNATURE_UNVERIFIED: &str = "PLUGIN_WORKER_PACKAGE_SIGNATURE_UNVERIFIED";
-const WORKER_REMOTE_RUNTIME_DISABLED: &str = "PLUGIN_WORKER_REMOTE_RUNTIME_DISABLED";
 const WORKER_OUTPUT_UNAUTHORIZED: &str = "PLUGIN_WORKER_OUTPUT_UNAUTHORIZED";
 const WORKER_REQUEST_INVALID: &str = "PLUGIN_WORKER_REQUEST_INVALID";
 const PANE_ACTION_SOURCE: &str = "right_surface_pane_action";
@@ -171,19 +171,6 @@ impl RuntimeCore {
 
         if worker_turn.should_emit_initial_workspace_snapshot() {
             let task_id = worker_turn.task_id(request.turn.turn_id.as_str());
-            sink.emit(RuntimeEvent::new(
-                "message.delta",
-                json!({
-                    "role": "assistant",
-                    "visibility": "user_visible",
-                    "content": {
-                        "kind": "inline_text",
-                        "text": worker_turn.prompt,
-                    },
-                    "status": "streaming",
-                    "streamPhase": "process",
-                }),
-            ))?;
             sink.emit(initial_workspace_patch_snapshot(
                 WorkspacePatchStreamingSnapshot {
                     app_id: worker_turn.app_id.as_str(),
@@ -214,6 +201,11 @@ impl RuntimeCore {
             {
                 Ok(events) => {
                     let completion_context = worker_completion_context(&events);
+                    for event in
+                        assistant_message_events_from_worker_events(request, &worker_turn, &events)
+                    {
+                        sink.emit(event)?;
+                    }
                     for event in events
                         .into_iter()
                         .filter(|event| !is_incomplete_workspace_patch_snapshot(event))
@@ -309,6 +301,7 @@ impl RuntimeCore {
         let package_root = resolve_plugin_runtime_dir(&installed_state)?;
         let task_runtime =
             build_plugin_task_runtime_contract(&installed_state, Some(&package_root));
+        validate_worker_turn_runtime_contract(worker_turn, &task_runtime)?;
         let mut worker_request = worker_turn.worker_request(
             request.session.session_id.as_str(),
             request.turn.turn_id.as_str(),
@@ -590,6 +583,116 @@ fn worker_completion_context(events: &[RuntimeEvent]) -> Value {
         "artifactRefs": artifact_refs,
         "artifactCount": artifact_count,
     })
+}
+
+fn assistant_message_events_from_worker_events(
+    request: &ExecutionRequest,
+    worker_turn: &PaneActionWorkerTurn,
+    events: &[RuntimeEvent],
+) -> Vec<RuntimeEvent> {
+    let Some(text) = final_article_document_text_from_events(events) else {
+        return Vec::new();
+    };
+    let task_id = worker_turn.task_id(request.turn.turn_id.as_str());
+    vec![RuntimeEvent::new(
+        "message.delta",
+        json!({
+            "backend": "plugin_worker",
+            "source": "plugin_task_worker",
+            "role": "assistant",
+            "type": "text_delta",
+            "text": text,
+            "delta": text,
+            "phase": "final_answer",
+            "messagePhase": "final_answer",
+            "message_phase": "final_answer",
+            "itemId": format!("{}:plugin-worker:final-answer", request.turn.turn_id),
+            "item_id": format!("{}:plugin-worker:final-answer", request.turn.turn_id),
+            "sessionId": request.session.session_id,
+            "session_id": request.session.session_id,
+            "threadId": request.session.thread_id,
+            "thread_id": request.session.thread_id,
+            "turnId": request.turn.turn_id,
+            "turn_id": request.turn.turn_id,
+            "appId": worker_turn.app_id,
+            "taskId": task_id,
+            "taskKind": worker_turn.task_kind,
+            "outputArtifactKind": worker_turn.output_artifact_kind(),
+            "metadata": {
+                "pluginWorker": {
+                    "appId": worker_turn.app_id,
+                    "taskId": task_id,
+                    "taskKind": worker_turn.task_kind,
+                    "turnId": request.turn.turn_id,
+                    "source": worker_turn.source,
+                    "surfaceKind": worker_turn.surface_kind,
+                    "paneKind": worker_turn.pane_kind,
+                    "outputArtifactKind": worker_turn.output_artifact_kind(),
+                    "status": "completed",
+                }
+            },
+        }),
+    )]
+}
+
+fn final_article_document_text_from_events(events: &[RuntimeEvent]) -> Option<String> {
+    events
+        .iter()
+        .rev()
+        .filter(|event| event.event_type == "artifact.snapshot")
+        .filter(|event| !is_streaming_workspace_patch_snapshot(event))
+        .find_map(|event| {
+            let artifact = event.payload.get("artifact").unwrap_or(&event.payload);
+            let patch = workspace_patch_from_artifact(artifact)?;
+            article_document_text_from_workspace_patch(patch)
+        })
+}
+
+fn workspace_patch_from_artifact(artifact: &Value) -> Option<&Value> {
+    artifact
+        .get("metadata")
+        .and_then(|metadata| metadata.get("contentFactoryWorkspacePatch"))
+        .or_else(|| {
+            artifact
+                .get("metadata")
+                .and_then(|metadata| metadata.get("workspace_patch"))
+        })
+        .or_else(|| artifact.get("contentFactoryWorkspacePatch"))
+        .or_else(|| artifact.get("workspace_patch"))
+}
+
+fn article_document_text_from_workspace_patch(patch: &Value) -> Option<String> {
+    patch
+        .get("objects")
+        .and_then(Value::as_array)?
+        .iter()
+        .filter(|object| {
+            object
+                .get("ref")
+                .and_then(|ref_value| {
+                    json_string(ref_value, &["kind", "object_kind", "objectKind"])
+                })
+                .as_deref()
+                == Some("articleDraft")
+        })
+        .filter_map(|object| object.get("source"))
+        .find_map(|source| {
+            json_text_preserving(source, &["documentText", "document_text"])
+                .or_else(|| json_text_preserving(source, &["finalMarkdown", "final_markdown"]))
+        })
+}
+
+fn json_text_preserving(value: &Value, path: &[&str]) -> Option<String> {
+    for key in path {
+        let Some(raw) = value.get(*key).and_then(Value::as_str) else {
+            continue;
+        };
+        if raw.trim().is_empty() {
+            continue;
+        }
+        return Some(raw.to_string());
+    }
+    None
 }
 
 fn hook_declarations(installed_state: &Value) -> Vec<PluginHookDeclaration> {
@@ -981,20 +1084,8 @@ impl PaneActionWorkerTurn {
         let Some(plugin_id) = json_string(activation, &["plugin_id", "pluginId"]) else {
             return PaneActionWorkerTurnResolution::Ignore;
         };
-        if plugin_id != WORKER_APP_ID {
-            return PaneActionWorkerTurnResolution::Ignore;
-        }
         let app_id =
             json_string(activation, &["active_plugin_id", "activePluginId"]).unwrap_or(plugin_id);
-        if app_id != WORKER_APP_ID {
-            return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
-                request,
-                activation,
-                None,
-                WORKER_REMOTE_RUNTIME_DISABLED,
-                format!("Remote Plugin runtime is disabled for app: {app_id}"),
-            ));
-        }
         let prompt =
             json_string(activation, &["body"]).unwrap_or_else(|| request.input.text.clone());
         if prompt.trim().is_empty() {
@@ -1009,7 +1100,7 @@ impl PaneActionWorkerTurn {
         let requested_output_artifact_kind =
             json_string(activation, &["output_artifact_kind", "outputArtifactKind"]);
         let Some(output_artifact_kind) =
-            workspace_patch_output_artifact_kind(requested_output_artifact_kind.clone())
+            plugin_output_artifact_kind(requested_output_artifact_kind.clone())
         else {
             return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
                 request,
@@ -1102,15 +1193,6 @@ impl PaneActionWorkerTurn {
                 "Plugin pane action app id is missing.",
             ));
         };
-        if app_id != WORKER_APP_ID {
-            return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
-                request,
-                plugin,
-                Some(action),
-                WORKER_REMOTE_RUNTIME_DISABLED,
-                format!("Remote Plugin runtime is disabled for app: {app_id}"),
-            ));
-        }
         let task_kind = json_string(action, &["task_kind", "taskKind"])
             .unwrap_or_else(|| DEFAULT_ARTICLE_WORKSPACE_TASK_KIND.to_string());
         let prompt = json_string(action, &["prompt"]).unwrap_or_else(|| request.input.text.clone());
@@ -1148,7 +1230,7 @@ impl PaneActionWorkerTurn {
         let requested_output_artifact_kind =
             json_string(action, &["output_artifact_kind", "outputArtifactKind"]);
         let Some(output_artifact_kind) =
-            workspace_patch_output_artifact_kind(requested_output_artifact_kind.clone())
+            plugin_output_artifact_kind(requested_output_artifact_kind.clone())
         else {
             return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
                 request,
@@ -1229,15 +1311,6 @@ impl PaneActionWorkerTurn {
                 "Article Workspace action app id is missing.",
             ));
         };
-        if app_id != WORKER_APP_ID {
-            return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
-                request,
-                plugin,
-                None,
-                WORKER_REMOTE_RUNTIME_DISABLED,
-                format!("Remote Plugin runtime is disabled for app: {app_id}"),
-            ));
-        }
         let Some(action) = plugin
             .get("article_workspace_action")
             .or_else(|| plugin.get("articleWorkspaceAction"))
@@ -1274,7 +1347,7 @@ impl PaneActionWorkerTurn {
         let requested_output_artifact_kind =
             json_string(action, &["output_artifact_kind", "outputArtifactKind"]);
         let Some(output_artifact_kind) =
-            workspace_patch_output_artifact_kind(requested_output_artifact_kind.clone())
+            plugin_output_artifact_kind(requested_output_artifact_kind.clone())
         else {
             return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
                 request,
@@ -1376,24 +1449,7 @@ impl PaneActionWorkerTurn {
             "orchestration": orchestration_steps,
             "sourceArtifactIds": self.source_artifact_ids,
             "sourceObjectRef": self.source_object_ref,
-            "expectedOutput": {
-                "artifactKind": self.output_artifact_kind(),
-                "articleWorkspaceSchema": ARTICLE_WORKSPACE_SCHEMA,
-                "objectKinds": [
-                    "contentBrief",
-                    "articleDraft",
-                    "imageGenerationSet",
-                    "videoScript",
-                    "videoStoryboard",
-                    "deliveryChecklist"
-                ],
-                "requiredObjectKinds": [
-                    "articleDraft",
-                    "imageGenerationSet",
-                    "videoStoryboard",
-                    "deliveryChecklist"
-                ]
-            },
+            "expectedOutput": expected_output_contract(self.output_artifact_kind()),
             "runtime": {
                 "workerEntrypoint": worker_entrypoint,
                 "outputArtifactKind": self.output_artifact_kind(),
@@ -1563,8 +1619,7 @@ impl PaneActionWorkerTurn {
     }
 
     fn should_emit_initial_workspace_snapshot(&self) -> bool {
-        self.app_id == WORKER_APP_ID
-            && self.output_artifact_kind() == WORKSPACE_PATCH_KIND
+        self.output_artifact_kind() == WORKSPACE_PATCH_KIND
             && self.is_article_workspace_draft_turn()
     }
 
@@ -1693,14 +1748,53 @@ fn plugin_activation_value(metadata: &Value) -> Option<&Value> {
         .or_else(|| metadata.get("pluginActivation"))
 }
 
-fn workspace_patch_output_artifact_kind(
-    output_artifact_kind: Option<String>,
-) -> Option<Option<String>> {
-    match output_artifact_kind.as_deref() {
-        None => None,
-        Some(WORKSPACE_PATCH_KIND) => Some(output_artifact_kind),
-        Some(_) => None,
+fn plugin_output_artifact_kind(output_artifact_kind: Option<String>) -> Option<Option<String>> {
+    match output_artifact_kind {
+        Some(value) if !value.trim().is_empty() => Some(Some(value)),
+        _ => None,
     }
+}
+
+fn expected_output_contract(output_artifact_kind: &str) -> Value {
+    if output_artifact_kind != WORKSPACE_PATCH_KIND {
+        return json!({
+            "artifactKind": output_artifact_kind,
+        });
+    }
+    json!({
+        "artifactKind": output_artifact_kind,
+        "articleWorkspaceSchema": ARTICLE_WORKSPACE_SCHEMA,
+        "objectKinds": [
+            "contentBrief",
+            "articleDraft",
+            "imageGenerationSet",
+            "videoScript",
+            "videoStoryboard",
+            "deliveryChecklist"
+        ],
+        "requiredObjectKinds": [
+            "articleDraft",
+            "imageGenerationSet",
+            "videoStoryboard",
+            "deliveryChecklist"
+        ]
+    })
+}
+
+fn validate_worker_turn_runtime_contract(
+    worker_turn: &PaneActionWorkerTurn,
+    task_runtime: &app_server_protocol::PluginTaskRuntimeContract,
+) -> Result<(), RuntimeCoreError> {
+    if let Some(expected_output_artifact_kind) = task_runtime.output_artifact_kind.as_deref() {
+        if worker_turn.output_artifact_kind() != expected_output_artifact_kind {
+            return Err(RuntimeCoreError::Backend(format!(
+                "Plugin worker output artifact kind is unsupported by runtime contract: requested={}, declared={}",
+                worker_turn.output_artifact_kind(),
+                expected_output_artifact_kind
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn runtime_locale(request: &ExecutionRequest) -> Option<String> {
@@ -2128,7 +2222,7 @@ mod tests {
     }
 
     #[test]
-    fn ignores_non_content_factory_plugin_activation_worker_turn() {
+    fn extracts_generic_plugin_activation_worker_turn() {
         let request = execution_request(json!({
             "harness": {
                 "plugin_activation": {
@@ -2137,12 +2231,20 @@ mod tests {
                     "body": "写文章",
                     "session_id": "session-other",
                     "plugin_id": "other-plugin",
-                    "active_entry_key": "other"
+                    "active_entry_key": "other",
+                    "output_artifact_kind": "other.workspace_patch"
                 }
             }
         }));
 
-        assert!(PaneActionWorkerTurn::from_execution_request(&request).is_none());
+        let worker_turn =
+            PaneActionWorkerTurn::from_execution_request(&request).expect("worker turn");
+
+        assert_eq!(worker_turn.app_id, "other-plugin");
+        assert_eq!(
+            worker_turn.output_artifact_kind.as_deref(),
+            Some("other.workspace_patch")
+        );
     }
 
     #[test]
@@ -2219,7 +2321,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_unsupported_pane_action_output_artifact_kind() {
+    fn defers_pane_action_output_artifact_kind_validation_to_runtime_contract() {
         let request = execution_request(json!({
             "plugin": {
                 "source": PANE_ACTION_SOURCE,
@@ -2239,11 +2341,29 @@ mod tests {
             }
         }));
 
-        assert!(PaneActionWorkerTurn::from_execution_request(&request).is_none());
+        let worker_turn =
+            PaneActionWorkerTurn::from_execution_request(&request).expect("worker turn");
+        assert_eq!(
+            worker_turn.output_artifact_kind.as_deref(),
+            Some("other.workspace_patch")
+        );
+
+        let error = validate_worker_turn_runtime_contract(
+            &worker_turn,
+            &app_server_protocol::PluginTaskRuntimeContract {
+                output_artifact_kind: Some(WORKSPACE_PATCH_KIND.to_string()),
+                ..Default::default()
+            },
+        )
+        .expect_err("output kind mismatch should fail closed");
+
+        assert!(error
+            .to_string()
+            .contains("unsupported by runtime contract"));
     }
 
     #[test]
-    fn rejects_remote_plugin_pane_action_runtime() {
+    fn extracts_generic_plugin_pane_action_worker_turn() {
         let request = execution_request(json!({
             "plugin": {
                 "source": PANE_ACTION_SOURCE,
@@ -2263,24 +2383,24 @@ mod tests {
             }
         }));
 
-        let PaneActionWorkerTurnResolution::Reject(rejection) =
-            PaneActionWorkerTurn::resolve_from_execution_request(&request)
-        else {
-            panic!("remote plugin runtime should be rejected");
-        };
-
+        let worker_turn =
+            PaneActionWorkerTurn::from_execution_request(&request).expect("worker turn");
+        assert_eq!(worker_turn.app_id, "creator-pack");
         assert_eq!(
-            rejection.error_code,
-            "PLUGIN_WORKER_REMOTE_RUNTIME_DISABLED"
-        );
-        assert_eq!(rejection.app_id.as_deref(), Some("creator-pack"));
-        assert_eq!(
-            rejection.output_artifact_kind.as_deref(),
+            worker_turn.output_artifact_kind.as_deref(),
             Some("creator.workspace_patch")
         );
-        assert!(rejection
-            .error_message
-            .contains("Remote Plugin runtime is disabled"));
+
+        let worker_request = worker_turn.worker_request(
+            request.session.session_id.as_str(),
+            request.turn.turn_id.as_str(),
+            Some("./worker.mjs"),
+            &json!({}),
+        );
+        assert_eq!(
+            worker_request["expectedOutput"],
+            json!({ "artifactKind": "creator.workspace_patch" })
+        );
     }
 
     #[test]

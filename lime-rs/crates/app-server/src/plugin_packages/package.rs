@@ -652,6 +652,90 @@ description: 正文写作技能
     }
 
     #[test]
+    fn inspect_local_package_projects_ui_runtime_entry() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        write_minimal_plugin_package(
+            temp.path(),
+            r#"{ "runtime": "./app.runtime.yaml", "workbench": "./app.workbench.yaml" }"#,
+        )
+        .expect("write plugin package");
+        fs::write(
+            temp.path().join("app.runtime.yaml"),
+            r#"agentRuntime:
+  ui:
+    key: content_factory
+    kind: page
+    title: 内容工厂
+    path: ./src/ui/dev-server.mjs
+    route: /
+  worker:
+    entrypoint: ./worker.mjs
+    outputArtifactKind: content_factory.workspace_patch
+  activationEntries:
+    - key: content_article_generate
+      title: 写文章
+      aliases:
+        - "@写文章"
+      kind: plugin
+      intent: at_command
+      taskKind: content.article.generate
+      workflow: content_article_workflow
+      defaultObjectKind: articleDraft
+      rightSurface: articleWorkspace
+  workflows:
+    - key: content_article_workflow
+      taskKind: content.article.generate
+      triggerIntents:
+        - content_article_generate
+      outputArtifactKind: content_factory.workspace_patch
+      steps:
+        - id: draft
+          subagent: article-writer
+          skillRefs:
+            - article-writing
+          expectedOutput: articleDraft
+  tasks:
+    - kind: content.article.generate
+"#,
+        )
+        .expect("write runtime with ui");
+        fs::create_dir_all(temp.path().join("src/ui")).expect("create ui dir");
+        fs::write(
+            temp.path().join("src/ui/dev-server.mjs"),
+            "console.log('content factory ui');\n",
+        )
+        .expect("write ui runtime");
+
+        let inspected = inspect_plugin_local_package(PluginLocalPackageInspectParams {
+            app_dir: temp.path().to_string_lossy().to_string(),
+        })
+        .expect("inspect plugin package");
+
+        assert_eq!(
+            read_test_json_string(&inspected.manifest, &["runtimePackage", "ui", "path"])
+                .as_deref(),
+            Some("./src/ui/dev-server.mjs")
+        );
+        assert_eq!(
+            read_test_json_string(&inspected.manifest, &["entries", "0", "key"]).as_deref(),
+            Some("content_factory")
+        );
+        assert_eq!(
+            read_test_json_string(&inspected.manifest, &["entries", "0", "kind"]).as_deref(),
+            Some("page")
+        );
+        assert_eq!(
+            read_test_json_string(&inspected.manifest, &["entries", "1", "workflow"]).as_deref(),
+            Some("content_article_workflow")
+        );
+        assert!(inspected.manifest["requires"]["capabilities"]
+            .as_array()
+            .expect("capabilities")
+            .iter()
+            .any(|capability| capability == "lime.ui"));
+    }
+
+    #[test]
     fn inspect_local_package_reads_plugin_component_content() {
         let temp = tempfile::tempdir().expect("tempdir");
         write_minimal_plugin_package(

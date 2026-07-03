@@ -1,18 +1,66 @@
 import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 import {
-  IMAGE_WORKBENCH_FOCUS_EVENT,
   IMAGE_WORKBENCH_TASK_ACTION_EVENT,
   VIDEO_WORKBENCH_TASK_ACTION_EVENT,
   render,
   renderZh,
 } from "./MessageList.testHarness";
-import type {
-  Message,
-  MessagePreviewTarget,
-} from "./MessageList.testHarness";
+import type { Message } from "./MessageList.testHarness";
 
 describe("MessageList media tasks", () => {
+  it("空正文图片任务轻卡应保留并支持打开图片工作台", () => {
+    const now = new Date();
+    const onOpenMessagePreview = vi.fn();
+    const messages: Message[] = [
+      {
+        id: "msg-assistant-image-task",
+        role: "assistant",
+        content: "",
+        timestamp: now,
+        imageWorkbenchPreview: {
+          taskId: "task-image-1",
+          mode: "generate",
+          prompt: "深圳夏天午后的城市照片",
+          status: "complete",
+          imageUrl: "data:image/png;base64,aW1hZ2U=",
+          imageCount: 1,
+          runtimeContract: {
+            model: "agnes-image-2.1-flash",
+          },
+        },
+      },
+    ];
+
+    const container = render(messages, { onOpenMessagePreview });
+    const previewCard = container.querySelector(
+      '[data-testid="image-workbench-message-preview-task-image-1"]',
+    ) as HTMLDivElement | null;
+
+    expect(previewCard).not.toBeNull();
+    expect(previewCard?.textContent).toContain("Image Generation");
+    expect(container.querySelector("img")?.getAttribute("src")).toBe(
+      "data:image/png;base64,aW1hZ2U=",
+    );
+
+    act(() => {
+      previewCard?.click();
+    });
+
+    expect(onOpenMessagePreview).toHaveBeenCalledWith(
+      {
+        kind: "image_workbench",
+        preview: expect.objectContaining({
+          taskId: "task-image-1",
+        }),
+        selection: undefined,
+      },
+      expect.objectContaining({
+        id: "msg-assistant-image-task",
+      }),
+    );
+  });
+
   it("视频任务消息卡应在聊天区渲染预览并支持打开工作区查看", () => {
     const now = new Date();
     const onOpenMessagePreview = vi.fn();
@@ -603,7 +651,7 @@ describe("MessageList media tasks", () => {
       '[data-testid="image-workbench-message-preview-task-complete-sync-copy"]',
     );
 
-    expect(previewCard?.textContent).toContain("图片生成");
+    expect(previewCard?.textContent).toContain("Image Generation");
     expect(previewCard?.textContent).not.toContain("已生成");
     expect(previewCard?.textContent).not.toContain("可在右侧继续查看与使用");
     expect(previewCard?.textContent).not.toContain("正在同步任务状态");
@@ -769,8 +817,9 @@ describe("MessageList media tasks", () => {
     ).toBeNull();
   });
 
-  it("图片任务卡点击后仍应打开右侧查看区，而不是丢失导航能力", () => {
+  it("图片任务卡点击后应打开右侧查看区", () => {
     const now = new Date();
+    const onOpenMessagePreview = vi.fn();
     const messages: Message[] = [
       {
         id: "msg-assistant-image-workbench-cancelled-open",
@@ -787,16 +836,7 @@ describe("MessageList media tasks", () => {
       },
     ];
 
-    let focusDetail: Record<string, unknown> | null = null;
-    const handleFocus = (event: Event) => {
-      if (!(event instanceof CustomEvent)) {
-        return;
-      }
-      focusDetail = event.detail as Record<string, unknown>;
-    };
-    window.addEventListener(IMAGE_WORKBENCH_FOCUS_EVENT, handleFocus);
-
-    const container = render(messages);
+    const container = render(messages, { onOpenMessagePreview });
     const previewCard = container.querySelector(
       '[data-testid="image-workbench-message-preview-task-open-1"]',
     ) as HTMLDivElement | null;
@@ -805,12 +845,19 @@ describe("MessageList media tasks", () => {
       previewCard?.click();
     });
 
-    expect(focusDetail).toEqual({
-      projectId: "project-1",
-      contentId: "content-1",
-    });
-
-    window.removeEventListener(IMAGE_WORKBENCH_FOCUS_EVENT, handleFocus);
+    expect(onOpenMessagePreview).toHaveBeenCalledWith(
+      {
+        kind: "image_workbench",
+        preview: expect.objectContaining({
+          taskId: "task-open-1",
+        }),
+        selection: undefined,
+      },
+      expect.objectContaining({
+        id: "msg-assistant-image-workbench-cancelled-open",
+      }),
+    );
+    expect(previewCard?.className).toContain("cursor-pointer");
   });
 
   it("图片任务卡默认不再渲染任何底部操作按钮", () => {
@@ -869,7 +916,7 @@ describe("MessageList media tasks", () => {
       '[data-testid="image-workbench-message-preview-grid-task-storyboard-preview-1"]',
     ) as HTMLDivElement | null;
 
-    expect(container.textContent).toContain("图片生成");
+    expect(container.textContent).toContain("Image Generation");
     expect(container.textContent).not.toContain(
       "3x3 分镜已经完成，可在右侧继续查看与使用。",
     );
@@ -880,7 +927,7 @@ describe("MessageList media tasks", () => {
     expect(grid?.textContent).not.toContain("9");
   });
 
-  it("点击九宫格后面的图片时应把具体图片选择传给工作台", async () => {
+  it("点击九宫格图片时应打开右侧工作台并带上选择项", async () => {
     const now = new Date();
     const onOpenMessagePreview = vi.fn();
     const messages: Message[] = [
@@ -908,29 +955,30 @@ describe("MessageList media tasks", () => {
     ];
 
     const container = await renderZh(messages, { onOpenMessagePreview });
-    const secondImageButton = container.querySelector(
+    const secondImageTile = container.querySelector(
       '[data-testid="image-workbench-message-preview-media-task-storyboard-select-2"]',
-    ) as HTMLButtonElement | null;
+    ) as HTMLDivElement | null;
 
     act(() => {
-      secondImageButton?.click();
+      secondImageTile?.click();
     });
 
-    const [target, message] = onOpenMessagePreview.mock.calls[0] as [
-      MessagePreviewTarget,
-      Message,
-    ];
-    expect(message.id).toBe("msg-assistant-image-workbench-storyboard-select");
-    expect(target).toEqual({
-      kind: "image_workbench",
-      preview: expect.objectContaining({
-        taskId: "task-storyboard-select",
-      }),
-      selection: {
-        imageUrl: "https://example.com/chapter-2.png",
-        imageIndex: 1,
+    expect(onOpenMessagePreview).toHaveBeenCalledWith(
+      {
+        kind: "image_workbench",
+        preview: expect.objectContaining({
+          taskId: "task-storyboard-select",
+        }),
+        selection: {
+          imageIndex: 1,
+          imageUrl: "https://example.com/chapter-2.png",
+        },
       },
-    });
+      expect.objectContaining({
+        id: "msg-assistant-image-workbench-storyboard-select",
+      }),
+    );
+    expect(secondImageTile?.tagName.toLowerCase()).toBe("button");
   });
 
 });

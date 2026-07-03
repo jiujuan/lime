@@ -14,7 +14,7 @@ updated: 2026-06-09
 
 这带来一个必须先固定的架构问题：
 
-> `lime-desktop-platform` 是否多余？如果不多余，它和 App Server、Agent App 标准、Product App 的边界是什么？
+> `lime-desktop-platform` 是否多余？如果不多余，它和 App Server、Plugin 标准、Product App 的边界是什么？
 
 结论：`lime-desktop-platform` 不多余，但它不能成为第二个 App Server，也不能成为业务 App 宿主大壳。它的正确位置是桌面宿主平台套件：公共设置 UI、应用中心、Host Bridge、Capability Gateway、sidecar lifecycle、Electron / Tauri adapter 和 Product App 接入层。
 
@@ -25,7 +25,7 @@ updated: 2026-06-09
 保留 `lime-desktop-platform`，但把它收敛为 Host Kit / 公共平台 UX。
 
 ```text
-agentapp
+plugin
   -> 定义应用包、manifest、projection、readiness、Host Bridge / Capability SDK 标准
 
 Lime App Server
@@ -35,7 +35,7 @@ lime-desktop-platform
   -> 拥有桌面宿主体验、公共设置、应用中心、Host Bridge、Capability Gateway、sidecar lifecycle
 
 Product App: zhongcao / content-studio / OEM
-  -> 拥有业务页面、业务 workflow、业务 workspace、产品内 Agent App package
+  -> 拥有业务页面、业务 workflow、业务 workspace、产品内 Plugin package
 ```
 
 ### 2.2 被拒绝的两条路线
@@ -49,14 +49,14 @@ Product App: zhongcao / content-studio / OEM
 
 ```mermaid
 flowchart TB
-  subgraph Standard[agentapp 标准]
+  subgraph Standard[plugin 标准]
     Manifest[manifest / install mode]
     Projection[projection / readiness]
     BridgeSpec[Host Bridge / Capability SDK 语义]
   end
 
   subgraph ProductApps[独立 Product App]
-    Zhongcao[zhongcao<br/>业务 UI / workspace / 产品内 Agent App]
+    Zhongcao[zhongcao<br/>业务 UI / workspace / 产品内 Plugin]
     ContentStudio[content-studio]
     OEM[OEM App]
   end
@@ -118,10 +118,10 @@ flowchart TB
 
 | 层 | current 职责 | 明确不负责 |
 | --- | --- | --- |
-| `agentapp` | 标准、manifest、projection、readiness、Host Bridge 语义 | 具体 DB、token、桌面 UI 实现 |
+| `plugin` | 标准、manifest、projection、readiness、Host Bridge 语义 | 具体 DB、token、桌面 UI 实现 |
 | Lime App Server | Agent runtime、Provider metadata/key、session/turn、tool、artifact、evidence、runtime DB | Electron/Tauri 壳、设置页、应用中心 UI、业务页面 |
 | `lime-desktop-platform` | 公共平台 UX、Host Snapshot、Capability Gateway、sidecar owner、settings orchestration、Product App settings/storage boundary | Agent 执行循环、Provider key 双存、业务 workflow、业务 DB schema |
-| Product App | 业务对象、业务 UI、业务 workspace、产品内 Agent App package、业务 artifact 展示 | OAuth、Provider 设置、billing 账本、平台安装表、App Server DB |
+| Product App | 业务对象、业务 UI、业务 workspace、产品内 Plugin package、业务 artifact 展示 | OAuth、Provider 设置、billing 账本、平台安装表、App Server DB |
 
 ## 5. Provider 与 Runtime 时序图
 
@@ -171,7 +171,7 @@ flowchart TD
   G --> H{App Server initialized?}
   H -->|否| I[Runtime capability blocked + 诊断入口]
   H -->|是| J[生成 Host Snapshot]
-  J --> K[Product App 渲染业务首页和产品内 Agent App]
+  J --> K[Product App 渲染业务首页和产品内 Plugin]
   K --> L[业务调用统一走 capability invoke]
 ```
 

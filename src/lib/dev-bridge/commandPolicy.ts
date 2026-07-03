@@ -130,6 +130,7 @@ const APP_SERVER_CURRENT_METHODS = new Set([
   "fileSystem/deleteFile",
   "agentSession/start",
   "agentSession/read",
+  "workflow/read",
   "agentSession/update",
   "agentSession/archiveMany",
   "skill/list",

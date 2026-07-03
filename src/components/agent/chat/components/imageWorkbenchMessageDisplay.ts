@@ -176,13 +176,21 @@ export function resolveImageWorkbenchRendererProcessState(params: {
   const leadContentParts = filterImageWorkbenchLeadContentParts(
     params.rendererContentParts,
   );
-  const hasLeadText = Boolean(params.actionContent.trim());
-  const contentParts = hasLeadText ? undefined : leadContentParts;
+  const hasActionContent = Boolean(params.actionContent.trim());
+  const hasLeadTextPart = Boolean(
+    leadContentParts?.some(
+      (part) => part.type === "text" && part.text.trim().length > 0,
+    ),
+  );
+  const contentParts =
+    hasLeadTextPart || !hasActionContent ? leadContentParts : undefined;
   const thinkingContent =
     params.imageWorkbenchThinkingContent ||
-    (hasLeadText ? params.rendererThinkingContent : undefined);
+    params.rendererThinkingContent;
   const shouldRenderInlineProcess = Boolean(
-    (contentParts?.length || 0) > 0 || thinkingContent?.trim(),
+    hasActionContent ||
+      (contentParts?.length || 0) > 0 ||
+      thinkingContent?.trim(),
   );
 
   return {

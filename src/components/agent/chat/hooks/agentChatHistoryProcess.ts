@@ -12,7 +12,6 @@ import {
   appendTextToParts,
   normalizeSignatureText,
 } from "./agentChatHistoryPrimitives";
-import { buildImageTaskAssistantContent } from "../utils/imageWorkbenchPresentation";
 import {
   isProcessBoundaryContentPart,
   readContentPartSequence,
@@ -102,14 +101,12 @@ export function mergeImageWorkbenchPreview(
 export function resolveImageWorkbenchHistoryAssistantIntro(
   preview?: MessageImageWorkbenchPreview,
 ): string {
-  if (!preview) {
+  const prompt = preview?.prompt?.trim();
+  if (!prompt) {
     return "";
   }
-  return buildImageTaskAssistantContent({
-    prompt: preview.prompt,
-    mode: preview.mode,
-    modelName: preview.runtimeContract?.model || preview.modelName || null,
-  });
+
+  return `我先按「${prompt}」整理图片生成参数，并继续跟进结果。`;
 }
 
 export function mergeTaskPreview(

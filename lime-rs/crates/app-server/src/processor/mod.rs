@@ -23,6 +23,7 @@ mod right_surface;
 mod skill;
 mod voice;
 mod wechat;
+mod workflow;
 mod workspace;
 
 use crate::execution_process::ExecutionProcessServer;
@@ -323,6 +324,7 @@ use app_server_protocol::METHOD_WECHAT_CHANNEL_LOGIN_START;
 use app_server_protocol::METHOD_WECHAT_CHANNEL_LOGIN_WAIT;
 use app_server_protocol::METHOD_WECHAT_CHANNEL_PROBE;
 use app_server_protocol::METHOD_WECHAT_CHANNEL_RUNTIME_MODEL_SET;
+use app_server_protocol::METHOD_WORKFLOW_READ;
 use app_server_protocol::METHOD_WORKSPACE_BY_PATH_READ;
 use app_server_protocol::METHOD_WORKSPACE_DEFAULT_ENSURE;
 use app_server_protocol::METHOD_WORKSPACE_DEFAULT_READ;
@@ -559,6 +561,7 @@ impl RequestProcessor {
             METHOD_SESSION_FILE_LIST => self.handle_session_file_list_impl(params).await,
             METHOD_AGENT_SESSION_START => self.handle_session_start(params),
             METHOD_AGENT_SESSION_READ => self.handle_session_read_impl(params).await,
+            METHOD_WORKFLOW_READ => self.handle_workflow_read_impl(params).await,
             METHOD_WORKSPACE_LIST => self.handle_workspace_list_impl().await,
             METHOD_WORKSPACE_READ => self.handle_workspace_read_impl(params).await,
             METHOD_WORKSPACE_UPDATE => self.handle_workspace_update_impl(params).await,

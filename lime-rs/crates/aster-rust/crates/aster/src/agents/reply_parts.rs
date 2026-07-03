@@ -251,10 +251,6 @@ fn is_compact_tool_surface_tool(tool_name: &str) -> bool {
         .any(|candidate| candidate.eq_ignore_ascii_case(tool_name))
 }
 
-fn is_compact_tool_surface_tool_or_allowed(tool_name: &str, allowed_tools: &[String]) -> bool {
-    is_compact_tool_surface_tool(tool_name) || matches_turn_tool_scope(tool_name, allowed_tools)
-}
-
 fn normalize_turn_metadata_tool_list(value: Option<&Value>) -> Vec<String> {
     let Some(items) = value.and_then(Value::as_array) else {
         return Vec::new();
@@ -301,10 +297,25 @@ fn extract_turn_scoped_tool_scope(metadata: &HashMap<String, Value>) -> (Vec<Str
     (allowed_tools, disallowed_tools)
 }
 
-fn matches_turn_tool_scope(tool_name: &str, scope: &[String]) -> bool {
-    scope
-        .iter()
-        .any(|candidate| candidate.eq_ignore_ascii_case(tool_name))
+fn matches_turn_tool_scope(
+    tool_name: &str,
+    scope: &[String],
+    tool_registry: Option<&ToolRegistry>,
+) -> bool {
+    scope.iter().any(|candidate| {
+        if candidate.eq_ignore_ascii_case(tool_name) {
+            return true;
+        }
+        let Some(tool_registry) = tool_registry else {
+            return false;
+        };
+        let Some(scope_canonical) = tool_registry.canonical_name(candidate) else {
+            return false;
+        };
+        tool_registry
+            .canonical_name(tool_name)
+            .is_some_and(|tool_canonical| tool_canonical.eq_ignore_ascii_case(&scope_canonical))
+    })
 }
 
 fn resolve_turn_tool_scope() -> (Vec<String>, Vec<String>) {
@@ -317,12 +328,13 @@ fn filter_tools_for_turn_scope(
     mut tools: Vec<Tool>,
     allowed_tools: &[String],
     disallowed_tools: &[String],
+    tool_registry: Option<&ToolRegistry>,
 ) -> Vec<Tool> {
     if !allowed_tools.is_empty() {
-        tools.retain(|tool| matches_turn_tool_scope(&tool.name, allowed_tools));
+        tools.retain(|tool| matches_turn_tool_scope(&tool.name, allowed_tools, tool_registry));
     }
     if !disallowed_tools.is_empty() {
-        tools.retain(|tool| !matches_turn_tool_scope(&tool.name, disallowed_tools));
+        tools.retain(|tool| !matches_turn_tool_scope(&tool.name, disallowed_tools, tool_registry));
     }
     tools
 }
@@ -331,6 +343,7 @@ fn filter_tools_for_turn_surface(
     mut tools: Vec<Tool>,
     tool_surface_mode: Option<&str>,
     allowed_tools: &[String],
+    tool_registry: Option<&ToolRegistry>,
 ) -> Vec<Tool> {
     match tool_surface_mode {
         Some(TURN_TOOL_SURFACE_DIRECT_ANSWER) => Vec::new(),
@@ -339,7 +352,10 @@ fn filter_tools_for_turn_surface(
             tools
         }
         Some(TURN_TOOL_SURFACE_COMPACT_TOOLS) => {
-            tools.retain(|tool| is_compact_tool_surface_tool_or_allowed(&tool.name, allowed_tools));
+            tools.retain(|tool| {
+                is_compact_tool_surface_tool(&tool.name)
+                    || matches_turn_tool_scope(&tool.name, allowed_tools, tool_registry)
+            });
             tools
         }
         _ => tools,
@@ -940,12 +956,20 @@ impl Agent {
         }
 
         let (turn_allowed_tools, turn_disallowed_tools) = resolve_turn_tool_scope();
+        let tool_registry = self.tool_registry.read().await;
         tools = filter_tools_for_turn_surface(
             tools,
             turn_tool_surface_mode.as_deref(),
             &turn_allowed_tools,
+            Some(&tool_registry),
         );
-        tools = filter_tools_for_turn_scope(tools, &turn_allowed_tools, &turn_disallowed_tools);
+        tools = filter_tools_for_turn_scope(
+            tools,
+            &turn_allowed_tools,
+            &turn_disallowed_tools,
+            Some(&tool_registry),
+        );
+        drop(tool_registry);
         if !tools.is_empty() {
             let provider_name = self
                 .provider()
@@ -2789,6 +2813,50 @@ mod tests {
 
         let names: Vec<String> = tools.iter().map(|tool| tool.name.to_string()).collect();
         assert_eq!(names, vec!["Grep".to_string(), "Read".to_string()]);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn prepare_tools_and_prompt_resolves_turn_scoped_native_tool_aliases(
+    ) -> anyhow::Result<()> {
+        let agent = crate::agents::Agent::new();
+
+        let session = SessionManager::create_session(
+            std::path::PathBuf::default(),
+            "test-turn-scoped-native-tool-aliases".to_string(),
+            SessionType::Hidden,
+        )
+        .await?;
+
+        let model_config = ModelConfig::new("test-model").unwrap();
+        let provider = std::sync::Arc::new(MockProvider {
+            model_config,
+            observed_models: None,
+        });
+        agent.update_provider(provider, &session.id).await?;
+
+        let working_dir = std::env::current_dir()?;
+        let (tools, _toolshim_tools, _system_prompt) = crate::session_context::with_turn_context(
+            Some(build_turn_context_with_tool_scope(
+                vec!["search_query", "WebFetchTool"],
+                Vec::new(),
+            )),
+            async {
+                agent
+                    .prepare_tools_and_prompt(
+                        &working_dir,
+                        None,
+                        false,
+                        &ModelConfig::new("test-model").unwrap(),
+                    )
+                    .await
+            },
+        )
+        .await?;
+
+        let names: Vec<String> = tools.iter().map(|tool| tool.name.to_string()).collect();
+        assert_eq!(names, vec!["WebFetch".to_string(), "WebSearch".to_string()]);
 
         Ok(())
     }

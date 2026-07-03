@@ -1,0 +1,164 @@
+use super::model_capability;
+use super::request_context::RuntimeModelSelection;
+use crate::runtime::memory_prompt::memory_soul_prompt_context_from_config;
+use crate::RuntimeCoreError;
+use crate::RuntimeEvent;
+use app_server_protocol::ProtocolKind;
+use lime_agent::{
+    configure_provider_for_session, AsterAgentState, ProviderConfig, ProviderConfigurationRequest,
+};
+use lime_core::config::{load_config, ToolExecutionPolicyConfig, WorkspaceSandboxConfig};
+use lime_core::database::{self, DbConnection};
+use serde_json::{json, Value};
+use std::sync::Arc;
+
+pub(super) fn current_agent_runtime_config_metadata() -> Option<Value> {
+    let config = match load_config() {
+        Ok(config) => config,
+        Err(error) => {
+            return Some(json!({
+                "agent": {
+                    "toolExecution": {
+                        "loadError": error.to_string(),
+                    }
+                }
+            }));
+        }
+    };
+    let mut agent_config = serde_json::Map::new();
+    if !WorkspaceSandboxConfig::is_default(&config.agent.workspace_sandbox) {
+        agent_config.insert(
+            "workspaceSandbox".to_string(),
+            json!(config.agent.workspace_sandbox),
+        );
+    }
+    if !ToolExecutionPolicyConfig::is_default(&config.agent.tool_execution) {
+        agent_config.insert(
+            "toolExecution".to_string(),
+            json!(config.agent.tool_execution),
+        );
+    }
+    let soul_context = memory_soul_prompt_context_from_config(config.memory.soul.as_ref());
+    if agent_config.is_empty() && soul_context.is_none() {
+        return None;
+    }
+
+    let mut metadata = serde_json::Map::new();
+    if !agent_config.is_empty() {
+        metadata.insert("agent".to_string(), Value::Object(agent_config));
+    }
+    if let Some(soul_context) = soul_context {
+        metadata.insert(
+            "memory".to_string(),
+            json!({
+                "soul": soul_context,
+            }),
+        );
+    }
+
+    Some(Value::Object(metadata))
+}
+
+pub(super) fn model_effective_event_from_runtime(
+    requested_selection: &RuntimeModelSelection,
+    selection: &RuntimeModelSelection,
+    provider_config: &ProviderConfig,
+    service_model_slot: &str,
+) -> RuntimeEvent {
+    let provider_id = provider_config
+        .provider_selector
+        .as_deref()
+        .unwrap_or(&selection.provider)
+        .to_string();
+    let model_ref =
+        model_capability::ModelRef::new(provider_id.clone(), provider_config.model_name.clone());
+    let capability = model_capability::resolve_basic_model_capability(model_ref);
+    let requested_reasoning_effort = requested_selection.reasoning_effort.as_deref();
+    let effective_reasoning_effort = provider_config
+        .reasoning_effort
+        .as_deref()
+        .or(selection.reasoning_effort.as_deref());
+    let reasoning_policy = model_capability::resolve_reasoning_policy(
+        &capability,
+        requested_reasoning_effort.and_then(model_capability::reasoning_level_from_str),
+    );
+    let mut payload = model_capability::model_effective_payload(&capability, &reasoning_policy);
+    if let Some(payload_object) = payload.as_object_mut() {
+        payload_object.insert("provider".to_string(), json!(provider_id));
+        payload_object.insert(
+            "modelName".to_string(),
+            json!(provider_config.model_name.clone()),
+        );
+        payload_object.insert(
+            "model_name".to_string(),
+            json!(provider_config.model_name.clone()),
+        );
+        payload_object.insert("source".to_string(), json!(selection.source));
+        payload_object.insert("serviceModelSlot".to_string(), json!(service_model_slot));
+        payload_object.insert("service_model_slot".to_string(), json!(service_model_slot));
+        if let Some(reasoning_effort) = requested_reasoning_effort {
+            payload_object.insert(
+                "requestedReasoningEffort".to_string(),
+                json!(reasoning_effort),
+            );
+            payload_object.insert(
+                "requested_reasoning_effort".to_string(),
+                json!(reasoning_effort),
+            );
+        }
+        if let Some(reasoning_effort) = effective_reasoning_effort {
+            payload_object.insert(
+                "effectiveReasoningEffort".to_string(),
+                json!(reasoning_effort),
+            );
+            payload_object.insert(
+                "effective_reasoning_effort".to_string(),
+                json!(reasoning_effort),
+            );
+        }
+    }
+    RuntimeEvent::new("model.effective", payload)
+}
+
+pub(super) fn initialize_runtime_database(
+    db: Option<&DbConnection>,
+) -> Result<DbConnection, RuntimeCoreError> {
+    let db = if let Some(db) = db {
+        Arc::clone(db)
+    } else {
+        database::init_database().map_err(|error| {
+            RuntimeCoreError::Backend(format!("failed to initialize database: {error}"))
+        })?
+    };
+    crate::agent_runtime_registry::initialize_agent_runtime(db.clone()).map_err(|error| {
+        RuntimeCoreError::Backend(format!(
+            "failed to initialize Aster runtime for App Server runtime backend: {error}"
+        ))
+    })?;
+    Ok(db)
+}
+
+pub(super) async fn configure_provider_for_route(
+    agent_state: &AsterAgentState,
+    db: &DbConnection,
+    provider: &str,
+    model: &str,
+    session_id: &str,
+    reasoning_effort: Option<String>,
+    route_protocol: &ProtocolKind,
+    direct_provider_config: Option<ProviderConfig>,
+) -> Result<ProviderConfig, String> {
+    configure_provider_for_session(
+        agent_state,
+        ProviderConfigurationRequest {
+            db,
+            session_id,
+            provider,
+            model,
+            reasoning_effort,
+            route_protocol: Some(route_protocol.clone()),
+            direct_provider_config,
+        },
+    )
+    .await
+}

@@ -1,4 +1,10 @@
 use super::event_log::EventLogRecord;
+use super::workflow::events::{
+    workflow_run_event_is_terminal,
+    workflow_step_event_is_terminal as workflow_step_event_type_is_terminal, WORKFLOW_RUN_CANCELED,
+    WORKFLOW_RUN_STARTED, WORKFLOW_STEP_CANCELED,
+};
+use super::workflow::status::normalize_workflow_status;
 use super::{timestamp, RuntimeEvent};
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
@@ -11,7 +17,7 @@ pub(super) fn workflow_cancel_events_from_audit_records(
     let mut seen_run_ids = BTreeSet::new();
     for run_started in records.iter().filter(|record| {
         record.event.turn_id.as_deref() == Some(turn_id)
-            && record.event.event_type == "workflow.run.started"
+            && record.event.event_type == WORKFLOW_RUN_STARTED
     }) {
         let Some(workflow_run_id) = workflow_run_id(&run_started.event.payload) else {
             continue;
@@ -26,11 +32,11 @@ pub(super) fn workflow_cancel_events_from_audit_records(
         if let Some(step_payload) =
             open_step_payload(records, turn_id, &workflow_run_id).map(canceled_payload)
         {
-            events.push(RuntimeEvent::new("workflow.step.canceled", step_payload));
+            events.push(RuntimeEvent::new(WORKFLOW_STEP_CANCELED, step_payload));
         }
 
         events.push(RuntimeEvent::new(
-            "workflow.run.canceled",
+            WORKFLOW_RUN_CANCELED,
             canceled_payload(run_started.event.payload.clone()),
         ));
     }
@@ -45,10 +51,7 @@ fn workflow_run_is_terminal(
     records.iter().any(|record| {
         record.event.turn_id.as_deref() == Some(turn_id)
             && workflow_run_id_matches(&record.event.payload, workflow_run_id)
-            && matches!(
-                record.event.event_type.as_str(),
-                "workflow.run.completed" | "workflow.run.failed" | "workflow.run.canceled"
-            )
+            && workflow_run_event_is_terminal(record.event.event_type.as_str())
     })
 }
 
@@ -90,13 +93,10 @@ fn step_has_later_terminal_event(
 }
 
 fn workflow_step_event_is_terminal(record: &EventLogRecord) -> bool {
-    matches!(
-        record.event.event_type.as_str(),
-        "workflow.step.completed" | "workflow.step.failed" | "workflow.step.canceled"
-    ) || matches!(
-        string_field(&record.event.payload, "status").as_deref(),
-        Some("completed" | "failed" | "canceled")
-    )
+    workflow_step_event_type_is_terminal(record.event.event_type.as_str())
+        || string_field(&record.event.payload, "status")
+            .and_then(|status| normalize_workflow_status(&status))
+            .is_some_and(|status| status.is_terminal())
 }
 
 fn workflow_run_id_matches(payload: &Value, expected: &str) -> bool {

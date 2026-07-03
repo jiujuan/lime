@@ -18,6 +18,7 @@ import {
   resolveImageTaskStatusMessage,
 } from "./taskPreviewCopy";
 import { findImageTaskRecord } from "./imageTaskToolResult";
+import { sanitizeImageWorkbenchPresentationText } from "./imageWorkbenchPresentation";
 
 function extractImageTaskPromptFromToolArguments(
   toolName: string,
@@ -27,6 +28,7 @@ function extractImageTaskPromptFromToolArguments(
   size?: string;
   imageCount?: number;
   layoutHint?: string;
+  projectRootPath?: string;
 } {
   if (!toolArguments) {
     return {};
@@ -44,11 +46,22 @@ function extractImageTaskPromptFromToolArguments(
       [parsed],
       ["layout_hint", "layoutHint"],
     );
+    const projectRootPath = readMetadataString(
+      [parsed],
+      ["project_root_path", "projectRootPath"],
+    );
     const command =
       typeof parsed.command === "string" ? parsed.command.trim() : undefined;
 
-    if (prompt || size || imageCount || layoutHint || !command) {
-      return { prompt, size, imageCount, layoutHint };
+    if (
+      prompt ||
+      size ||
+      imageCount ||
+      layoutHint ||
+      projectRootPath ||
+      !command
+    ) {
+      return { prompt, size, imageCount, layoutHint, projectRootPath };
     }
 
     if (
@@ -66,6 +79,7 @@ function extractImageTaskPromptFromToolArguments(
             )
           : undefined,
         layoutHint: readCommandArgumentValue(command, "--layout-hint"),
+        projectRootPath,
       };
     }
   } catch {
@@ -73,6 +87,69 @@ function extractImageTaskPromptFromToolArguments(
   }
 
   return {};
+}
+
+function isAbsoluteTaskPath(value?: string | null): boolean {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return false;
+  }
+  return (
+    normalized.startsWith("/") ||
+    normalized.startsWith("\\\\") ||
+    /^[A-Za-z]:[\\/]/.test(normalized)
+  );
+}
+
+function joinProjectRelativeTaskPath(
+  projectRootPath?: string | null,
+  relativePath?: string | null,
+): string | null {
+  const root = projectRootPath?.trim().replace(/[\\/]+$/, "");
+  const path = relativePath?.trim().replace(/^[\\/]+/, "");
+  if (!root || !path) {
+    return null;
+  }
+  if (isAbsoluteTaskPath(path)) {
+    return path;
+  }
+
+  const separator = root.includes("\\") && !root.includes("/") ? "\\" : "/";
+  const normalizedPath =
+    separator === "\\" ? path.replace(/\//g, "\\") : path.replace(/\\/g, "/");
+  return `${root}${separator}${normalizedPath}`;
+}
+
+function resolveImageTaskPreviewFilePath(params: {
+  explicitTaskFilePath?: string | null;
+  genericPath?: string | null;
+  projectRootPath?: string | null;
+}): string | null {
+  const explicitTaskFilePath = params.explicitTaskFilePath?.trim();
+  if (explicitTaskFilePath) {
+    if (isAbsoluteTaskPath(explicitTaskFilePath)) {
+      return explicitTaskFilePath;
+    }
+    return (
+      joinProjectRelativeTaskPath(
+        params.projectRootPath,
+        explicitTaskFilePath,
+      ) || explicitTaskFilePath
+    );
+  }
+
+  const genericPath = params.genericPath?.trim();
+  if (!genericPath) {
+    return null;
+  }
+  if (isAbsoluteTaskPath(genericPath)) {
+    return genericPath;
+  }
+
+  return (
+    joinProjectRelativeTaskPath(params.projectRootPath, genericPath) ||
+    genericPath
+  );
 }
 
 function readImageStoryboardSlots(
@@ -125,11 +202,8 @@ function isImageTaskRecord(params: {
 function readImageTaskPresentationCaption(
   candidates: Array<Record<string, unknown> | null | undefined>,
   status: MessageImageWorkbenchPreview["status"],
+  languageSource?: string | null,
 ): string | undefined {
-  if (status === "running") {
-    return undefined;
-  }
-
   const statusKeys =
     status === "complete"
       ? ["completion_caption", "completionCaption", "complete"]
@@ -146,7 +220,7 @@ function readImageTaskPresentationCaption(
             ]
           : status === "cancelled"
             ? ["cancelled_caption", "cancelledCaption", "cancelled"]
-            : [];
+            : ["completion_caption", "completionCaption", "complete"];
 
   for (const candidate of candidates) {
     if (!candidate) {
@@ -159,11 +233,95 @@ function readImageTaskPresentationCaption(
       [...statusKeys, "result_caption", "resultCaption", "caption"],
     );
     if (caption) {
-      return caption;
+      return sanitizeImageWorkbenchPresentationText(caption, {
+        languageSource,
+      });
     }
   }
 
   return undefined;
+}
+
+function normalizeRenderableImageUrl(value?: string | null): string | null {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return null;
+  }
+  if (
+    normalized.toLowerCase().startsWith("data:image/") ||
+    normalized.startsWith("blob:") ||
+    normalized.startsWith("file://") ||
+    /^https?:\/\//i.test(normalized)
+  ) {
+    return normalized;
+  }
+  return null;
+}
+
+function collectImageTaskPreviewUrls(
+  value: unknown,
+  urls: string[],
+  seenUrls: Set<string>,
+  depth = 0,
+): void {
+  if (value === null || value === undefined || depth > 4) {
+    return;
+  }
+
+  if (typeof value === "string") {
+    const url = normalizeRenderableImageUrl(value);
+    if (url && !seenUrls.has(url)) {
+      seenUrls.add(url);
+      urls.push(url);
+    }
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((item) =>
+      collectImageTaskPreviewUrls(item, urls, seenUrls, depth + 1),
+    );
+    return;
+  }
+
+  const record = asRecord(value);
+  if (!record) {
+    return;
+  }
+
+  const directUrl =
+    normalizeRenderableImageUrl(
+      readMetadataString([record], ["url", "src", "imageUrl", "image_url"]),
+    ) ||
+    normalizeRenderableImageUrl(
+      readMetadataString([record], ["b64_json", "b64Json"])
+        ? `data:image/png;base64,${readMetadataString(
+            [record],
+            ["b64_json", "b64Json"],
+          )}`
+        : null,
+    );
+  if (directUrl && !seenUrls.has(directUrl)) {
+    seenUrls.add(directUrl);
+    urls.push(directUrl);
+  }
+
+  [
+    record.images,
+    record.outputs,
+    record.results,
+    record.items,
+    record.data,
+    record.output,
+    record.result,
+    record.image,
+    record.asset,
+    record.assets,
+    record.response,
+    record.responses,
+  ].forEach((nested) =>
+    collectImageTaskPreviewUrls(nested, urls, seenUrls, depth + 1),
+  );
 }
 
 export function buildImageTaskPreviewFromToolResult(
@@ -238,6 +396,9 @@ export function buildImageTaskPreviewFromToolResult(
     params.toolName,
     params.toolArguments,
   );
+  const projectRootPath =
+    parsedArguments.projectRootPath ||
+    readMetadataString(candidates, ["project_root_path", "projectRootPath"]);
   const status = readMetadataString(candidates, [
     "status",
     "normalized_status",
@@ -246,28 +407,25 @@ export function buildImageTaskPreviewFromToolResult(
   const previewStatus = resolveTaskPreviewStatus(status);
   const requestedCount =
     parsedArguments.imageCount ||
-    readMetadataPositiveNumber(
-      candidates,
-      [
-        "requested_count",
-        "requestedCount",
-        "count",
-        "image_count",
-        "imageCount",
-      ],
-    );
-  const receivedCount = readMetadataPositiveNumber(
-    candidates,
-    ["received_count", "receivedCount"],
-  );
+    readMetadataPositiveNumber(candidates, [
+      "requested_count",
+      "requestedCount",
+      "count",
+      "image_count",
+      "imageCount",
+    ]);
+  const receivedCount = readMetadataPositiveNumber(candidates, [
+    "received_count",
+    "receivedCount",
+  ]);
   const layoutHint =
     parsedArguments.layoutHint ||
     readMetadataString(candidates, ["layout_hint", "layoutHint"]) ||
     null;
-  const storyboardSlots = readImageStoryboardSlots(
-    candidates,
-    ["storyboard_slots", "storyboardSlots"],
-  );
+  const storyboardSlots = readImageStoryboardSlots(candidates, [
+    "storyboard_slots",
+    "storyboardSlots",
+  ]);
   const expectedImageCount = Math.max(
     requestedCount || 0,
     storyboardSlots.length,
@@ -276,23 +434,62 @@ export function buildImageTaskPreviewFromToolResult(
     previewStatus === "running"
       ? expectedImageCount || requestedCount
       : receivedCount || expectedImageCount || requestedCount;
-  const progressStatusMessage = readMetadataString([progressRecord], [
-    "message",
-  ]);
+  const progressStatusMessage = readMetadataString(
+    [progressRecord],
+    ["message"],
+  );
   const statusMessage =
     progressStatusMessage ||
     resolveImageTaskStatusMessage({
       status: previewStatus,
       layoutHint,
     });
+  const explicitTaskFilePath = readMetadataString(candidates, [
+    "absolute_path",
+    "absolutePath",
+    "absolute_artifact_path",
+    "absoluteArtifactPath",
+    "task_file_path",
+    "taskFilePath",
+  ]);
+  const genericTaskPath = readMetadataString(candidates, ["path"]);
+  const artifactPath =
+    readMetadataString(candidates, ["artifact_path", "artifactPath"]) ||
+    genericTaskPath ||
+    null;
+  const taskFilePath = resolveImageTaskPreviewFilePath({
+    explicitTaskFilePath,
+    genericPath: genericTaskPath,
+    projectRootPath,
+  });
+  const prompt =
+    parsedArguments.prompt ||
+    readMetadataString(candidates, ["prompt", "summary", "title"]) ||
+    params.fallbackPrompt.trim() ||
+    resolveImageTaskFallbackPrompt();
+  const previewImages: string[] = [];
+  const seenPreviewImageUrls = new Set<string>();
+  [
+    resultRecord,
+    detectedTaskRecord,
+    metadata,
+    outputRecord,
+    structuredContentRecord,
+    nestedResultRecord,
+    responseRecord,
+    responseNestedRecord,
+    taskRecord,
+  ].forEach((candidate) =>
+    collectImageTaskPreviewUrls(
+      candidate,
+      previewImages,
+      seenPreviewImageUrls,
+    ),
+  );
 
   return {
     taskId,
-    prompt:
-      parsedArguments.prompt ||
-      readMetadataString(candidates, ["prompt", "summary", "title"]) ||
-      params.fallbackPrompt.trim() ||
-      resolveImageTaskFallbackPrompt(),
+    prompt,
     status: previewStatus,
     projectId:
       readMetadataString(candidates, ["project_id", "projectId"]) || null,
@@ -314,23 +511,13 @@ export function buildImageTaskPreviewFromToolResult(
         "modelId",
         "model",
       ]) || null,
-    caption: readImageTaskPresentationCaption(candidates, previewStatus) || null,
-    taskFilePath:
-      readMetadataString(
-        candidates,
-        [
-          "absolute_path",
-          "absolutePath",
-          "task_file_path",
-          "taskFilePath",
-          "path",
-        ],
-      ) || null,
-    artifactPath:
-      readMetadataString(
-        candidates,
-        ["artifact_path", "artifactPath", "path"],
-      ) || null,
+    caption:
+      readImageTaskPresentationCaption(candidates, previewStatus, prompt) ||
+      null,
+    taskFilePath,
+    artifactPath,
+    imageUrl: previewImages[0] || null,
+    previewImages: previewImages.slice(0, 9),
     imageCount: resolvedImageCount,
     expectedImageCount: expectedImageCount || requestedCount,
     layoutHint,

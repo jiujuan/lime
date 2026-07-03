@@ -17,7 +17,6 @@ import {
 } from "../skill-selection/mentionEntryUsage";
 import { listServiceSkillUsage } from "../service-skills/storage";
 import { useWorkspaceSendActions } from "./useWorkspaceSendActions";
-import { buildImageTaskAssistantContent } from "./imageTaskPersona";
 import type { TeamWorkspaceRuntimeFormationState } from "../teamWorkspaceRuntime";
 import { listSlashEntryUsage } from "../skill-selection/slashEntryUsage";
 import {
@@ -2363,14 +2362,8 @@ Extract it into the Agent Skills directory.`,
           },
         },
         assistantDraft: {
-          content: buildImageTaskAssistantContent({
-            prompt: "一张春日咖啡馆插画",
-            mode: "generate",
-          }),
-          fallbackContent: buildImageTaskAssistantContent({
-            prompt: "一张春日咖啡馆插画",
-            mode: "generate",
-          }),
+          content: "",
+          fallbackContent: "",
         },
       });
       expect(listMentionEntryUsage()).toEqual([
@@ -2694,16 +2687,8 @@ Extract it into the Agent Skills directory.`,
       const sendOptions = mockSendMessage.mock.calls[0]?.[8];
       expect(sendOptions).toMatchObject({
         assistantDraft: {
-          content: buildImageTaskAssistantContent({
-            prompt: "一张广州塔，从花城汇看过去的春天的照片",
-            mode: "generate",
-            modelName: "fal-ai/nano-banana-pro",
-          }),
-          fallbackContent: buildImageTaskAssistantContent({
-            prompt: "一张广州塔，从花城汇看过去的春天的照片",
-            mode: "generate",
-            modelName: "fal-ai/nano-banana-pro",
-          }),
+          content: "",
+          fallbackContent: "",
         },
         requestMetadata: {
           harness: {
@@ -2719,20 +2704,8 @@ Extract it into the Agent Skills directory.`,
       expect(
         sendOptions?.assistantDraft?.imageWorkbenchPreview,
       ).toBeUndefined();
-      expect(sendOptions?.assistantDraft?.content).toBe(
-        buildImageTaskAssistantContent({
-          prompt: "一张广州塔，从花城汇看过去的春天的照片",
-          mode: "generate",
-          modelName: "fal-ai/nano-banana-pro",
-        }),
-      );
-      expect(sendOptions?.assistantDraft?.fallbackContent).toBe(
-        buildImageTaskAssistantContent({
-          prompt: "一张广州塔，从花城汇看过去的春天的照片",
-          mode: "generate",
-          modelName: "fal-ai/nano-banana-pro",
-        }),
-      );
+      expect(sendOptions?.assistantDraft?.content).toBe("");
+      expect(sendOptions?.assistantDraft?.fallbackContent).toBe("");
       expect(sendOptions?.assistantDraft?.preserveContent).toBeUndefined();
       expect(listMentionEntryUsage()).toEqual([
         expect.objectContaining({
@@ -2842,16 +2815,8 @@ Extract it into the Agent Skills directory.`,
       const sendOptions = mockSendMessage.mock.calls[0]?.[8];
       expect(sendOptions).toMatchObject({
         assistantDraft: {
-          content: buildImageTaskAssistantContent({
-            prompt: "一张广州塔，从花城汇看过去的春天的照片",
-            mode: "generate",
-            modelName: "fal-ai/nano-banana-2",
-          }),
-          fallbackContent: buildImageTaskAssistantContent({
-            prompt: "一张广州塔，从花城汇看过去的春天的照片",
-            mode: "generate",
-            modelName: "fal-ai/nano-banana-2",
-          }),
+          content: "",
+          fallbackContent: "",
         },
         requestMetadata: {
           harness: {
@@ -2874,20 +2839,8 @@ Extract it into the Agent Skills directory.`,
       expect(
         sendOptions?.assistantDraft?.imageWorkbenchPreview,
       ).toBeUndefined();
-      expect(sendOptions?.assistantDraft?.content).toBe(
-        buildImageTaskAssistantContent({
-          prompt: "一张广州塔，从花城汇看过去的春天的照片",
-          mode: "generate",
-          modelName: "fal-ai/nano-banana-2",
-        }),
-      );
-      expect(sendOptions?.assistantDraft?.fallbackContent).toBe(
-        buildImageTaskAssistantContent({
-          prompt: "一张广州塔，从花城汇看过去的春天的照片",
-          mode: "generate",
-          modelName: "fal-ai/nano-banana-2",
-        }),
-      );
+      expect(sendOptions?.assistantDraft?.content).toBe("");
+      expect(sendOptions?.assistantDraft?.fallbackContent).toBe("");
       expect(listMentionEntryUsage()).toEqual([
         expect.objectContaining({
           kind: "builtin_command",

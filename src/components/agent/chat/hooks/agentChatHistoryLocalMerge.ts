@@ -61,6 +61,7 @@ export const mergeHydratedMessagesWithLocalState = (
     string,
     MessageImageWorkbenchPreview
   >();
+  const localImageAssistantMessageByTaskId = new Map<string, Message>();
   const localTaskPreviewByTaskId = new Map<string, MessageTaskPreview>();
   const hydratedMessageIds = new Set<string>();
 
@@ -96,6 +97,7 @@ export const mergeHydratedMessagesWithLocalState = (
         imageTaskId,
         message.imageWorkbenchPreview as MessageImageWorkbenchPreview,
       );
+      localImageAssistantMessageByTaskId.set(imageTaskId, message);
     }
 
     const taskPreviewId = message.taskPreview?.taskId;
@@ -144,10 +146,14 @@ export const mergeHydratedMessagesWithLocalState = (
               matchedLocalMessageIds,
               lastMatchedLocalUserMessageIndex,
             );
+      const shouldSearchProcessAssistantByRuntimeTurn = Boolean(
+        message.runtimeTurnId?.trim(),
+      );
       const processAssistantIndex =
         matchedAssistantIndex >= 0 ||
         sequentialAssistantIndex >= 0 ||
-        hasRetainableLocalAssistantProcessState(message)
+        (hasRetainableLocalAssistantProcessState(message) &&
+          !shouldSearchProcessAssistantByRuntimeTurn)
           ? -1
           : findNextLocalProcessAssistantIndex(
               localAssistantMessages,
@@ -165,10 +171,16 @@ export const mergeHydratedMessagesWithLocalState = (
         processAssistantIndex >= 0 &&
         matchedAssistantIndex < 0 &&
         sequentialAssistantIndex < 0;
+      const taskMatchedAssistantMessage =
+        resolvedMatchedAssistantIndex < 0 && message.imageWorkbenchPreview?.taskId
+          ? localImageAssistantMessageByTaskId.get(
+              message.imageWorkbenchPreview.taskId,
+            )
+          : undefined;
       const localAssistantMessage =
         resolvedMatchedAssistantIndex >= 0
           ? localAssistantMessages[resolvedMatchedAssistantIndex]
-          : undefined;
+          : taskMatchedAssistantMessage;
       if (resolvedMatchedAssistantIndex >= 0) {
         localAssistantCursor = Math.max(
           localAssistantCursor,
@@ -177,6 +189,8 @@ export const mergeHydratedMessagesWithLocalState = (
         if (localAssistantMessage?.id) {
           matchedLocalMessageIds.add(localAssistantMessage.id);
         }
+      } else if (taskMatchedAssistantMessage?.id) {
+        matchedLocalMessageIds.add(taskMatchedAssistantMessage.id);
       }
 
       const localImagePreview =

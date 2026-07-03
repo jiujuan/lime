@@ -55,7 +55,7 @@ flowchart TD
 - manifest normalizer 能输出统一 plugin contract。
 - 缺少必要字段时 fail closed。
 - registry 可区分可安装、可激活、可渲染和只读历史四种状态。
-- 旧 Agent App / 工作台应用 catalog 只作为迁移输入，不作为插件 marketplace 设计模板。
+- 旧 Plugin / 工作台应用 catalog 只作为迁移输入，不作为插件 marketplace 设计模板。
 
 ## 5. P2：显式激活
 
@@ -105,7 +105,7 @@ flowchart TD
 ### 目标
 
 - 把历史对话、插件上下文、主产物和 tab 状态统一到 session read model。
-- 旧 Agent App / 工作台应用中无法迁移的入口下架。
+- 旧 Plugin / 工作台应用中无法迁移的入口下架。
 - 旧 right surface 写死逻辑逐步替换为插件 contract。
 
 ### 验收
@@ -143,9 +143,9 @@ GUI 关注点：
 ### 2026-06-25 P1 Manifest / Registry 纯函数基座
 
 - 新增 `src/features/plugin/manifest/*`，建立插件根对象的 `PluginManifest -> PluginContract` current contract。
-- 新增 `buildPluginContractFromAgentAppManifest(...)`，把现有 工作台应用 v3 manifest 作为插件输入来源之一，投影出插件、工作台应用 子能力、显式激活入口、artifact renderer、history restore 和 Right Surface contract。
+- 新增 `buildPluginContractFromPluginManifest(...)`，把现有 工作台应用 v3 manifest 作为插件输入来源之一，投影出插件、工作台应用 子能力、显式激活入口、artifact renderer、history restore 和 Right Surface contract。
 - 新增 `projectPluginRegistryItem(...)` / `projectPluginRegistry(...)`，先用纯函数区分 `installable`、`activatable`、`renderable`、`read_only_history` 四类状态。
-- 复用 `agent-app/host` 的唯一 Right Surface / productProfile contract，不新增第二右栏或业务自有 dock。
+- 复用 `plugin/host` 的唯一 Right Surface / productProfile contract，不新增第二右栏或业务自有 dock。
 - 当前尚未接入插件中心 GUI、composer chip、`@插件` 选择器或 App Server JSON-RPC；这些仍属于 P2 / P3 后续主线。
 
 ### 2026-06-25 P2 显式 `@插件` 发送接线
@@ -195,7 +195,7 @@ GUI 关注点：
 - LimeCore 已新增客户端原生 plugin 注册码提交接口：`POST /api/v1/public/tenants/{tenantId}/client/plugins/{pluginName}/registration`。
 - 原生 plugin enablement 现在可持久化注册码 hash、激活状态、失败次数、短时锁定和过期时间；明文注册码只在后台 create/update 请求进入服务层后转 hash。
 - 客户端提交正确注册码后，LimeCore 返回刷新后的 `PluginMarketplaceListResponse`；注册前 item blocked 且不下发 package ref，注册成功后 item available 并下发 package ref。
-- 该切片仍不新增 Lime App Server marketplace JSON-RPC、不恢复旧插件命令族、不让客户端写服务端安装态；Lime 客户端后续只需把 `plugin_catalog + ON_INSTALL` 从 Agent App 注册 API 切到该 SDK 方法。
+- 该切片仍不新增 Lime App Server marketplace JSON-RPC、不恢复旧插件命令族、不让客户端写服务端安装态；Lime 客户端后续只需把 `plugin_catalog + ON_INSTALL` 从 Plugin 注册 API 切到该 SDK 方法。
 - 下一刀应聚焦客户端注册授权分流、灰度规则、后台审计，或 app-declared renderer / 自定义 pane 输出 contract。
 
 ### 2026-06-25 路线图追踪入口
@@ -213,15 +213,15 @@ GUI 关注点：
 
 ### 2026-06-25 P1 Installed Registry 合并骨架
 
-- `src/features/plugin/marketplace/pluginMarketplace.ts` 新增 `projectPluginMarketplaceInstalledKeysFromAgentApps(...)`，把 current `InstalledAgentAppState[]` 投影成 marketplace plugin 的 `installedPluginKeys`、`enabledPluginKeys`、`disabledPluginKeys` 和 hash mismatch blocker。
+- `src/features/plugin/marketplace/pluginMarketplace.ts` 新增 `projectPluginMarketplaceInstalledKeysFromPlugins(...)`，把 current `InstalledPluginState[]` 投影成 marketplace plugin 的 `installedPluginKeys`、`enabledPluginKeys`、`disabledPluginKeys` 和 hash mismatch blocker。
 - installed 判定必须同时匹配 `appId`、`packageHash` 与 `manifestHash`；hash 不一致时 fail closed，不把旧 工作台应用 包误认成当前 marketplace 插件。
-- 新增 `projectPluginMarketplaceRegistryInputsFromInstalledAgentApps(...)` / `projectPluginMarketplaceRegistryFromInstalledAgentApps(...)`，供后续插件中心 GUI 和显式激活直接复用统一 registry 投影。
+- 新增 `projectPluginMarketplaceRegistryInputsFromInstalledPlugins(...)` / `projectPluginMarketplaceRegistryFromInstalledPlugins(...)`，供后续插件中心 GUI 和显式激活直接复用统一 registry 投影。
 - blocked marketplace item 仍由云端 policy / readiness blocker 控制；本地 disabled 只表达用户关闭态，不替代云端可用性判断。
 - 当前仍不接安装按钮、卸载流程、composer chip 或 Right Surface tab；这些继续作为 P2 / P3 后续切片。
 
 ### 2026-06-25 P1 Marketplace Registry Loader 骨架
 
-- 新增 `src/features/plugin/marketplace/marketplaceRegistryLoader.ts`，用 feature 层 loader 组合 LimeCore `getClientPluginMarketplace(...)` 与 App Server current `listInstalledAgentApps()`，避免继续向已超 1000 行的 `oemCloudControlPlane.ts` / `agentApps.ts` 追加业务逻辑，也避免 `src/lib/api` 反向依赖 `features`。
+- 新增 `src/features/plugin/marketplace/marketplaceRegistryLoader.ts`，用 feature 层 loader 组合 LimeCore `getClientPluginMarketplace(...)` 与 App Server current `listInstalledPlugins()`，避免继续向已超 1000 行的 `oemCloudControlPlane.ts` / `agentApps.ts` 追加业务逻辑，也避免 `src/lib/api` 反向依赖 `features`。
 - `loadPluginMarketplaceRegistry(...)` 返回 `marketplace`、`installed`、`projectionInputs` 与统一 `registry` snapshot，后续插件中心 GUI / 显式激活可直接消费同一份投影。
 - loader 不新增 Electron IPC、App Server JSON-RPC、DevBridge mock 或旧插件中心命令；只是组合现有 current 网关。
 - installed state persistence issues 会原样透出给上层展示 / 诊断，hash mismatch 继续由 `PLUGIN_INSTALLED_PACKAGE_MISMATCH` fail closed。
@@ -273,16 +273,16 @@ GUI 关注点：
 
 ### 2026-06-26 P4 内容工厂 Runtime Package 落盘骨架
 
-- 新增 `src/features/agent-app/fixtures/app.runtime.yaml`、`examples/runtime-request.sample.json` 和 `src/runtime/content-factory-worker.mjs`，让内容工厂 manifest 声明的 worker entrypoint、contract path 与 sample request 不再是缺文件引用。
+- 新增 `src/features/plugin/fixtures/app.runtime.yaml`、`examples/runtime-request.sample.json` 和 `src/runtime/content-factory-worker.mjs`，让内容工厂 manifest 声明的 worker entrypoint、contract path 与 sample request 不再是缺文件引用。
 - worker skeleton 只接收标准 request，校验 `content-factory.worker-request.v1`、task kind、runtime 限制和 `content_factory.workspace_patch` 输出约束；失败时返回结构化错误，不直连 provider、不直接访问文件系统。
 - worker skeleton 成功时返回 `artifact.snapshot`，metadata 同时带 `contentFactoryWorkspacePatch` 与 `workspace_patch`，可被当前 Product Profile / Workspace Patch 解析链消费。
 - `contentFactoryWorkerContract.unit.test.ts` 已覆盖 runtime package 文件存在、sample request 与 request builder 对齐，以及 worker CLI 输出可反投影为右侧 Product Profile。
-- App Server `agent_app_task_runtime` 已补就近单测，证明声明 worker 但 entrypoint 缺文件会触发 `TASK_RUNTIME_WORKER_ENTRYPOINT_NOT_FOUND`，entrypoint 文件存在时 readiness blocker 清空。
+- App Server `plugin_task_runtime` 已补就近单测，证明声明 worker 但 entrypoint 缺文件会触发 `TASK_RUNTIME_WORKER_ENTRYPOINT_NOT_FOUND`，entrypoint 文件存在时 readiness blocker 清空。
 - 该切片仍不接真实 executor、不写 session read model、不执行模型调用、不新增 marketplace / plugin 运行 JSON-RPC；它只把后续 worker adapter 的可落盘包骨架补齐。
 
 ### 2026-06-26 P4 App Server Worker Adapter 内部骨架
 
-- 新增 App Server 内部 `agent_app_worker_runtime` adapter，可用 `AgentAppTaskRuntimeContract + package root + worker request` 执行本地 worker entrypoint，并把 worker response 投影为 `artifact.snapshot` RuntimeEvent。
+- 新增 App Server 内部 `plugin_worker_runtime` adapter，可用 `PluginTaskRuntimeContract + package root + worker request` 执行本地 worker entrypoint，并把 worker response 投影为 `artifact.snapshot` RuntimeEvent。
 - adapter 校验 task runtime readiness blocker、禁止 direct provider / filesystem access、限制输出 artifact kind、清理敏感环境变量、设置超时、限制 stdout 大小，并拒绝非 completed / 无 artifact snapshot 的 worker 响应。
 - adapter 不新增 JSON-RPC method、不接 marketplace、不恢复旧插件 RPC；它只是后续 Product Profile action executor / task executor 可调用的 App Server current 内部能力。
 - worker response 中的 inline `content` 在无 sidecar root 时仍会从 RuntimeEvent 投影移除，避免把正文塞进 event payload；配置 sidecar root 时会保留到 append 阶段，并由现有 artifact sidecar 链持久化。
@@ -291,12 +291,12 @@ GUI 关注点：
 
 ### 2026-06-26 P4 Product Profile Action Worker 接线骨架
 
-- App Server `agentSession/turn/start` 已按 Product Profile action metadata 做条件分流：仅当 `right_surface.productProfile` 且 `agent_app.source=right_surface_product_profile` 且 `appId=content-factory-app` 时，才从 installed Agent App state 读取 runtime package 并执行 worker adapter。
+- App Server `agentSession/turn/start` 已按 Product Profile action metadata 做条件分流：仅当 `right_surface.productProfile` 且 `plugin.source=right_surface_product_profile` 且 `appId=content-factory-app` 时，才从 installed Plugin state 读取 runtime package 并执行 worker adapter。
 - 该接线不新增 marketplace JSON-RPC、不恢复旧插件 RPC，也不把普通 turn 改成 worker；未命中 metadata 或本地未安装内容工厂应用时，turn 仍走原 backend。
 - worker 接管前会先确认本地 installed state；未安装不会写入 `turn.accepted` / `runtime.error` / `turn.failed`，避免普通 read model fixture 或未安装环境被误判为 worker 失败。已安装但 disabled、runtime blocker 或 worker 执行失败仍 fail closed。
 - worker adapter 已给 `artifact.snapshot` metadata 补 `agentAppWorker` 运行证据，Product Workspace read model 可投影 worker evidence，action history 可显示 completed / failed 状态。
-- Agent App runtime package 路径解析已从 UI runtime lifecycle 大文件收敛到 `agent_app_task_runtime`，供 UI runtime status 与 worker turn executor 复用，避免继续扩大中心文件。
-- 已移除 `agent_app_worker_runtime` 的临时 `dead_code` 允许；生产路径现在通过 Product Profile action turn 调用 adapter。
+- Plugin runtime package 路径解析已从 UI runtime lifecycle 大文件收敛到 `plugin_task_runtime`，供 UI runtime status 与 worker turn executor 复用，避免继续扩大中心文件。
+- 已移除 `plugin_worker_runtime` 的临时 `dead_code` 允许；生产路径现在通过 Product Profile action turn 调用 adapter。
 - 定向测试覆盖 Product Profile action turn 从 installed state 找到 worker、执行内容工厂 skeleton、写回 `artifact.snapshot`、完成 turn，并在 session read model 中物化 Product Workspace、worker evidence 和 action result；同时覆盖未安装时不接管 turn 的回归。
 - 仍未完成：真实发布包签名门禁、自定义 pane action executor 和完整内容工厂 worker dogfood GUI 证据。
 
@@ -325,9 +325,9 @@ GUI 关注点：
 
 ### 2026-06-26 P4 Product Profile Worker 自动重试 executor 骨架
 
-- App Server Product Profile worker turn 已把 retryable failure 元数据接成真实自动重试 executor：首次可重试失败只发内部 `agent_app_worker.retry` event，不写 `runtime.error`，避免 turn 被提前置为 failed。
+- App Server Product Profile worker turn 已把 retryable failure 元数据接成真实自动重试 executor：首次可重试失败只发内部 `plugin_worker.retry` event，不写 `runtime.error`，避免 turn 被提前置为 failed。
 - retry 预算仍由失败分类统一控制，当前自动重试一次；重试成功后继续写入 worker `artifact.snapshot` 和 `turn.completed`，最终失败才写 `runtime.error` / `turn.failed`，并带最终 `retryAttempt`。
-- Product Workspace read model 已把 `agent_app_worker.retry` 投影为 worker evidence，保留 `errorCode`、`failureCategory`、`retryAdvice` 和重试次数；action history 在重试成功时保持 completed，不被中间 retry event 污染。
+- Product Workspace read model 已把 `plugin_worker.retry` 投影为 worker evidence，保留 `errorCode`、`failureCategory`、`retryAdvice` 和重试次数；action history 在重试成功时保持 completed，不被中间 retry event 污染。
 - 新增定向测试覆盖“首次 `WORKER_RETRYABLE` 失败后重试成功”和“连续可重试失败后按预算停在 failed”两条路径。
 - 该骨架不新增公开 worker/run API、不新增 marketplace JSON-RPC、不恢复旧插件 RPC；完整内容工厂 worker dogfood GUI 证据、发布包签名门禁和自定义 pane action executor 仍是后续缺口。
 
@@ -340,7 +340,7 @@ GUI 关注点：
 
 ### 2026-06-25 P2/P3 Installed 工作台应用 投影复用骨架
 
-- 新增 `src/features/plugin/installed/installedAgentApps.ts`，把 current `InstalledAgentAppState[]` 投影成 `PluginContract[]`、`PluginRegistryProjectionInput[]` 与 `PluginRegistryItem[]`。
+- 新增 `src/features/plugin/installed/installedPlugins.ts`，把 current `InstalledPluginState[]` 投影成 `PluginContract[]`、`PluginRegistryProjectionInput[]` 与 `PluginRegistryItem[]`。
 - `workspacePluginActivation` 已改为复用 feature 层 installed projection，组件层不再私有维护 工作台应用 -> plugin contract / registry 转换。
 - 投影对坏 manifest fail closed，并返回 `skippedAppIds`，后续插件中心、右栏 pending 和历史恢复可复用同一份本地 installed plugin 来源。
 - 当前仍不接插件中心 GUI、不接 `AgentChatWorkspace.tsx` 页面参数、不触发安装 / enable / 卸载写操作，也不恢复旧插件中心命令族。
@@ -477,7 +477,7 @@ GUI 关注点：
 ### 2026-06-26 P1 插件中心只读页面壳
 
 - 新增 `src/features/plugin/PluginMarketplacePage.tsx`，把 LimeCore marketplace registry snapshot 暴露成 current 插件中心只读 GUI，展示云端连接态、状态统计、搜索、分类、状态筛选、插件列表和 blocker 摘要。
-- 一级侧边栏入口已从旧 工作台应用 管理语义切到 `plugins` 页面；旧 `agent-apps` / `agent-app` 路由继续保留为兼容运行页，不再作为插件主入口。
+- 一级侧边栏入口已从旧 工作台应用 管理语义切到 `plugins` 页面；旧 `plugins` / `plugin` 路由继续保留为兼容运行页，不再作为插件主入口。
 - 页面只消费 `usePluginMarketplaceRegistry(...)` 与现有 OEM cloud runtime context；搜索只重建本地 view model，不重复请求云端目录。
 - 主按钮当前为只读状态投影，不触发安装 / enable / open 写操作，不恢复旧插件中心命令族。
 - 新增五语言 `plugin.marketplace.*` 与 `navigation.sidebar.items.plugins` 文案，并补 `PluginMarketplacePage`、页面分发、侧边栏导航定向测试。
@@ -485,9 +485,9 @@ GUI 关注点：
 ### 2026-06-26 P1/P2 Marketplace Install / Enable Action 骨架
 
 - `PluginMarketplaceViewItem` 已保留 marketplace `package`、policy、release id、marketplace display name 和稳定 displayName fallback，避免后端空名称导致列表标题为空或按钮不可识别。
-- 新增 `pluginMarketplaceActions` 纯 action helper，把插件中心 install / enable 分别接到 current `installCloudAgentAppRelease(...)` 与 `setAgentAppDisabled(...)`，不新增 Lime App Server marketplace JSON-RPC，也不恢复旧插件安装 / RPC 命令族。
-- 安装动作只支持 `agent_app_release + AVAILABLE + ON_USE + 完整 packageUrl/packageHash/manifestHash + appId`；缺包、缺 appId、非 cloud release、`ON_INSTALL` 注册流未接入时 fail closed 并显示 blocker code。
-- 启用动作只对已安装且 disabled 的 marketplace item 调用 `disabled:false`，成功后触发 Agent App changed event 并刷新 registry snapshot。
+- 新增 `pluginMarketplaceActions` 纯 action helper，把插件中心 install / enable 分别接到 current `installCloudPluginRelease(...)` 与 `setPluginDisabled(...)`，不新增 Lime App Server marketplace JSON-RPC，也不恢复旧插件安装 / RPC 命令族。
+- 安装动作只支持 `plugin_release + AVAILABLE + ON_USE + 完整 packageUrl/packageHash/manifestHash + appId`；缺包、缺 appId、非 cloud release、`ON_INSTALL` 注册流未接入时 fail closed 并显示 blocker code。
+- 启用动作只对已安装且 disabled 的 marketplace item 调用 `disabled:false`，成功后触发 Plugin changed event 并刷新 registry snapshot。
 - `PluginMarketplacePage` 已允许 install / enable / open 三类主动作；进行中禁用按钮，action 失败显示页面内错误区，Open 仍只跳到 Agent 新任务并预填 `@插件名 `，不自动发送或执行。
 - 五语言文案已从“待安装 / 待启用”改为真实动作“安装 / 启用 / 打开”，并新增 action pending、write action title 与 action error 标题。
 - 该切片仍不实现卸载、注册授权、详情页、只读历史落页、package 发布后台、插件 renderer action 或内容工厂 worker 闭环。
@@ -502,7 +502,7 @@ GUI 关注点：
 
 ### 2026-06-26 P1/P2 插件中心本地管理骨架
 
-- `pluginMarketplaceActions` 已把详情管理动作扩展到 `disable` 与 `uninstall_keep_data`，继续复用 current Agent App `setAgentAppDisabled(...)`、`previewAgentAppUninstall(...)` 和 `uninstallAgentApp(...)`，不新增 marketplace 写接口。
+- `pluginMarketplaceActions` 已把详情管理动作扩展到 `disable` 与 `uninstall_keep_data`，继续复用 current Plugin `setPluginDisabled(...)`、`previewPluginUninstall(...)` 和 `uninstallPlugin(...)`，不新增 marketplace 写接口。
 - 详情面板新增“本地管理”区：已安装且启用插件可禁用，已安装插件可执行保留数据卸载；禁用插件仍通过列表主动作启用，避免主路径按钮和管理动作混在一起。
 - 卸载前增加确认提示，当前只支持 `keep-data`，不会触发真实数据删除、云端目录写入、插件运行或 renderer action。
 - 卸载返回 blocked / failed 时 fail closed，只显示 blocker，不广播 installed state changed，也不把列表刷新当作成功。
@@ -512,7 +512,7 @@ GUI 关注点：
 ### 2026-06-26 P1/P2 安装授权注册骨架
 
 - `PluginMarketplacePage` 详情面板已对未安装且 `policy.authentication === "ON_INSTALL"` 的插件显示安装授权表单，提示用户先提交企业注册码再刷新安装状态。
-- `submitPluginMarketplaceRegistrationCode(...)` 复用 current Agent App `submitAgentAppRegistrationCode(...)`，成功后只广播 installed app changed event 并刷新 registry，不新增 Lime App Server marketplace JSON-RPC，也不新增服务端 marketplace 写接口。
+- `submitPluginMarketplaceRegistrationCode(...)` 复用 current Plugin `submitPluginRegistrationCode(...)`，成功后只广播 installed app changed event 并刷新 registry，不新增 Lime App Server marketplace JSON-RPC，也不新增服务端 marketplace 写接口。
 - 主安装动作对 `ON_INSTALL` 仍 fail closed，避免在服务端 marketplace 状态刷新前绕过授权直接安装；详情下一步文案会明确指向注册表单。
 - 空注册码、缺少 `appId` 时 fail closed；注册码提交失败只显示页面内 action error，不自动安装、不执行插件 action、不写 session read model。
 - 已补 action 单测与页面回归，覆盖注册 API 调用、空码不可提交、提交后刷新和输入框清空。
@@ -521,7 +521,7 @@ GUI 关注点：
 ### 2026-06-26 P1/P2 原生 Plugin 注册授权分流
 
 - `src/lib/api/oemCloudControlPlane.ts` 新增 `submitClientPluginRegistrationCode(...)`，对接 LimeCore `client/plugins/{pluginName}/registration`，返回刷新后的 `plugin-marketplace/v1` 目录。
-- `submitPluginMarketplaceRegistrationCode(...)` 已按 marketplace `sourceKind` 分流：`plugin_catalog + ON_INSTALL` 使用 `tenantId + pluginName + marketplaceName` 调服务端原生 plugin 注册接口；`agent_app_release` 继续使用现有 Agent App 注册接口。
+- `submitPluginMarketplaceRegistrationCode(...)` 已按 marketplace `sourceKind` 分流：`plugin_catalog + ON_INSTALL` 使用 `tenantId + pluginName + marketplaceName` 调服务端原生 plugin 注册接口；`plugin_release` 继续使用现有 Plugin 注册接口。
 - 注册面板显示条件改为原生 plugin 只要求 `pluginName`，不再要求 `appId`；因此服务端原生 catalog item 未下发本地 app id 时，详情侧栏仍可提交注册码。
 - 主安装动作仍对 `ON_INSTALL` fail closed，不会在注册成功前绕过授权安装 package；注册成功只刷新 marketplace / installed registry，不自动安装、不执行插件 action、不写 session read model。
 - 已补 action 单测、页面回归和控制面网关契约测试，覆盖原生注册路径、无 `appId` 详情提交、查询参数、返回目录解析和刷新行为。
@@ -552,12 +552,12 @@ GUI 关注点：
 
 ### 2026-06-26 P4 发布包签名门禁骨架
 
-- `reviewCloudAgentAppRelease(...)` 已把 Cloud release 审查生成的 `releaseEvidence` 持久化到 installed state 的 `setup.cloudReleaseEvidence`，避免只在安装弹窗展示证据而运行时无法检查。
+- `reviewCloudPluginRelease(...)` 已把 Cloud release 审查生成的 `releaseEvidence` 持久化到 installed state 的 `setup.cloudReleaseEvidence`，避免只在安装弹窗展示证据而运行时无法检查。
 - App Server 内容工厂 Product Profile worker 执行前新增 `cloud_release` 专用 fail-closed 门禁：必须具备 `signaturePolicy=required`、`signatureVerificationStatus=verified`、包 hash / manifest hash 均匹配、package verification 为 `verified` 且 evidence `ready`。
-- 门禁失败会在 `agentSession/turn/start` current 主链写入 `runtime.error` / `turn.failed`，错误码为 `AGENT_APP_WORKER_PACKAGE_SIGNATURE_UNVERIFIED`，不可重试，建议重新安装已验证发布包；本地目录 / 开发 fixture 不受影响。
+- 门禁失败会在 `agentSession/turn/start` current 主链写入 `runtime.error` / `turn.failed`，错误码为 `PLUGIN_WORKER_PACKAGE_SIGNATURE_UNVERIFIED`，不可重试，建议重新安装已验证发布包；本地目录 / 开发 fixture 不受影响。
 - 该骨架不新增 Lime App Server marketplace JSON-RPC、不新增公开 worker/run API、不恢复旧插件命令族；LimeCore marketplace 仍只读提供目录、策略、blocker 和 package ref。
-- 代码体量风险：`src/lib/api/agentApps.ts` 已超过 1000 行，本轮仅做最小 evidence 持久化接线。退出条件是后续把 Cloud release review / install 逻辑拆到 `src/features/agent-app/install/cloudReleaseInstall.ts` 或同级领域模块，再继续扩展发布包校验。
-- 验证：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server agent_app_worker -- --nocapture`、`npm test -- "src/lib/api/agentApps.test.ts"`。
+- 代码体量风险：`src/lib/api/agentApps.ts` 已超过 1000 行，本轮仅做最小 evidence 持久化接线。退出条件是后续把 Cloud release review / install 逻辑拆到 `src/features/plugin/install/cloudReleaseInstall.ts` 或同级领域模块，再继续扩展发布包校验。
+- 验证：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server plugin_worker -- --nocapture`、`npm test -- "src/lib/api/agentApps.test.ts"`。
 - 当时剩余主缺口：自定义 pane action executor，以及 LimeCore 原生 plugin catalog / tenant enablement。
 
 ### 2026-06-26 P4 完整内容工厂 worker dogfood GUI 证据
@@ -583,18 +583,18 @@ GUI 关注点：
 
 ### 2026-06-26 P4 自定义 Pane Action Executor 骨架
 
-- 新增 `workspacePluginPaneAction` 纯模型，把右侧自定义 pane action 归一为 `agent_app.pane_action` metadata，包含 app/session/workspace、surface kind、pane kind、action key / intent / risk、task kind、object ref 和 source artifact ids。
+- 新增 `workspacePluginPaneAction` 纯模型，把右侧自定义 pane action 归一为 `plugin.pane_action` metadata，包含 app/session/workspace、surface kind、pane kind、action key / intent / risk、task kind、object ref 和 source artifact ids。
 - Product Profile action 继续保留旧 `product_profile_action` 字段，同时补 `pane_action` 通用字段；现有右侧产物按钮不改变 UI 行为，但后端已有稳定的自定义 pane action 入口。
-- App Server worker turn 解析从 Product Profile 专用结构扩展为 `PaneActionWorkerTurn`：优先识别 `agent_app.pane_action`，再兼容旧 `product_profile_action`；当前仍只允许内容工厂本地 installed worker 执行 `content_factory.workspace_patch`，其他插件 / 输出类型 fail closed 或回到原 turn/start backend。
+- App Server worker turn 解析从 Product Profile 专用结构扩展为 `PaneActionWorkerTurn`：优先识别 `plugin.pane_action`，再兼容旧 `product_profile_action`；当前仍只允许内容工厂本地 installed worker 执行 `content_factory.workspace_patch`，其他插件 / 输出类型 fail closed 或回到原 turn/start backend。
 - worker request 已带上 `source`、`surfaceKind`、`paneKind`、`actionIntent`、`actionRisk` 和 `sourceArtifactIds`，供后续 custom pane renderer / worker adapter 复用，不新增 Lime App Server marketplace JSON-RPC、不新增公开 worker/run API、不恢复旧插件 RPC。
-- 验证：`npm test -- "src/components/agent/chat/workspace/workspacePluginPaneAction.unit.test.ts" "src/components/agent/chat/workspace/workspaceProductProfileModel.unit.test.ts" "src/components/agent/chat/workspace/workspaceProductProfileActionDispatch.unit.test.ts"`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server extracts_content_factory -- --nocapture`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server agent_app_worker_turn -- --nocapture`。
+- 验证：`npm test -- "src/components/agent/chat/workspace/workspacePluginPaneAction.unit.test.ts" "src/components/agent/chat/workspace/workspaceProductProfileModel.unit.test.ts" "src/components/agent/chat/workspace/workspaceProductProfileActionDispatch.unit.test.ts"`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server extracts_content_factory -- --nocapture`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server plugin_worker_turn -- --nocapture`。
 - 当时剩余主缺口：LimeCore 原生 plugin catalog / release / tenant enablement；自定义 pane action 仍只是内容工厂 worker dogfood 的骨架，尚未开放任意插件输出类型或复杂 app-declared renderer。
 
 ### 2026-06-26 P4 LimeCore 原生 Plugin Catalog 骨架同步
 
-- LimeCore 已新增原生 plugin catalog / release / tenant enablement 内部模型、仓储和 service 骨架，marketplace 输入不再只能依赖 Agent App catalog 兼容数据。
+- LimeCore 已新增原生 plugin catalog / release / tenant enablement 内部模型、仓储和 service 骨架，marketplace 输入不再只能依赖 Plugin catalog 兼容数据。
 - LimeCore 现有 `client/plugins/marketplace` HTTP contract 不变：原生 plugin item 输出 `SourceKind=plugin_catalog`，并复用 `plugin-marketplace/v1`、`pluginKey`、package ref、install/auth policy、blocker 和 manifest summary。
-- marketplace 投影现在原生 plugin 优先，同一 `pluginKey` 下 Agent App release 兼容输入只做补位；Lime 客户端现有消费路径无需改协议。
+- marketplace 投影现在原生 plugin 优先，同一 `pluginKey` 下 Plugin release 兼容输入只做补位；Lime 客户端现有消费路径无需改协议。
 - LimeCore 已继续补齐原生 plugin 后台发布路由、发布生命周期、注册授权写流和 `gray + whitelistUserIds` 灰度白名单裁剪；仍不新增安装写接口、插件运行接口、worker API、历史列表接口或 Lime App Server marketplace JSON-RPC。
 - LimeCore 验证：`go test ./services/control-plane-svc/internal/service -run 'TestControlPlaneServiceListClientPluginMarketplace'`、受影响 Go 包、`npm run openapi:bundle:control-plane`、`make verify-contracts`、`npm run check:client-contract-sync`。
 - 当时骨架主缺口转为：后台审计、批量发布、百分比 / 角色 / 套餐灰度、自定义 pane 任意插件输出 contract，以及更复杂 app-declared renderer。
@@ -636,14 +636,14 @@ GUI 关注点：
 - LimeCore 已新增 `POST /api/v1/public/tenants/{tenantId}/client/plugins/{pluginName}/install-state`，用于记录客户端本地安装、启用、禁用和保留数据卸载后的最新安装态。
 - Lime 客户端 `oemCloudControlPlane.ts` 已新增 `reportClientPluginInstallState(...)`，并对返回的 `ClientPluginInstallStateReport` 做 fail-closed 解析。
 - `performPluginMarketplaceAction(...)` 在本地 install / enable / disable / uninstall 成功后，会 fail-soft 写回 `installed / enabled / disabled / uninstalled` 状态；远端写回失败会进入 action result 的 `remoteInstallStateSync`，不回滚本地 installed registry。
-- 本地 Agent App installed state 仍是插件运行事实源；LimeCore 安装态只作为控制面可观测状态与审计，不新增 Lime App Server marketplace JSON-RPC、不恢复旧插件安装 / RPC 命令族。
+- 本地 Plugin installed state 仍是插件运行事实源；LimeCore 安装态只作为控制面可观测状态与审计，不新增 Lime App Server marketplace JSON-RPC、不恢复旧插件安装 / RPC 命令族。
 - 验证：LimeCore 受影响 Go 包、OpenAPI bundle、`make verify-contracts`、`npm run check:client-contract-sync`；Lime 客户端 `npm test -- src/features/plugin/marketplace/pluginMarketplaceActions.unit.test.ts`、`npm test -- src/lib/api/oemCloudControlPlane.contract.test.ts`。
 - 当前骨架主缺口收敛为：远端插件运行、自定义 pane 任意插件输出 contract、更复杂 app-declared renderer，以及最终完整 GUI 端到端验证。
 
 ### 2026-06-26 P4 App-declared Renderer 输出 Contract 骨架
 
 - `PluginArtifactRendererDeclaration` 已补 `outputArtifactKind`、`paneKind`、`actionKeys` 与 `actions`，manifest normalizer 同时接受 camelCase / snake_case，并对未知 action risk fail closed。
-- marketplace `manifestSummary.artifactRenderers` 会进入 `PluginContract`，Agent App manifest 投影也会把 worker `outputArtifactKind` 写入 renderer contract，避免右侧 renderer / action 继续靠 app id 或自然语言推断输出类型。
+- marketplace `manifestSummary.artifactRenderers` 会进入 `PluginContract`，Plugin manifest 投影也会把 worker `outputArtifactKind` 写入 renderer contract，避免右侧 renderer / action 继续靠 app id 或自然语言推断输出类型。
 - 新增 `pluginRendererOutput` 纯 helper，统一把 `artifactType + surfaceKind + paneKind + actionKey` 解析为 renderer 输出合同；Product Profile 占位对象、内容工厂交付计划、pane action metadata 与 Product Profile action metadata 都已透传 `output_artifact_kind`。
 - App Server `PaneActionWorkerTurn` 已把 `output_artifact_kind` 写入 worker request、accepted / completed / failure event metadata；当前仍只接受空值或 `content_factory.workspace_patch`，其他输出类型不被 worker turn 接管。
 - 该切片不新增 Lime App Server marketplace JSON-RPC、不开放任意插件 worker、不恢复旧插件 RPC，也不把 app-declared renderer 实现成 iframe / webview 运行面；它只把“声明可渲染 / 可路由的输出 contract”接入 current 主链。
@@ -672,10 +672,10 @@ GUI 关注点：
 
 - 新增 `pluginRuntimeAuthorization` 纯模型，把 renderer / pane action 的输出类型先判定为 `allowed / placeholder_only / denied`；当前唯一允许本地 worker 执行的是内容工厂 `content_factory.workspace_patch`。
 - `PluginRendererOutputContract` 已携带 `runtimeAuthorization`，右侧宿主和 action 层不用再从 renderer kind、app id 或自然语言推断能否执行。
-- `workspacePluginPaneAction` 会把前端侧授权结论写入 `agent_app.runtime_authorization` 作为审计证据；该字段不作为信任来源，App Server 会独立验证。
-- App Server `agent_app_worker_turn` 已从二态解析升级为 `Run / Reject / Ignore`：结构化 pane / Product Profile action 如果请求未授权 app 或未授权 output artifact kind，会直接写 `turn.accepted + runtime.error + turn.failed`，不回落普通 backend、不打开远端运行。
+- `workspacePluginPaneAction` 会把前端侧授权结论写入 `plugin.runtime_authorization` 作为审计证据；该字段不作为信任来源，App Server 会独立验证。
+- App Server `plugin_worker_turn` 已从二态解析升级为 `Run / Reject / Ignore`：结构化 pane / Product Profile action 如果请求未授权 app 或未授权 output artifact kind，会直接写 `turn.accepted + runtime.error + turn.failed`，不回落普通 backend、不打开远端运行。
 - 该骨架不新增 Lime App Server marketplace JSON-RPC、不开放任意插件 worker、不执行 app-declared renderer，也不改变 LimeCore 只读 marketplace 职责。
-- 验证：`npm test -- "src/features/plugin/manifest/pluginRuntimeAuthorization.unit.test.ts" "src/features/plugin/manifest/pluginContract.unit.test.ts" "src/components/agent/chat/workspace/workspacePluginPaneAction.unit.test.ts" "src/components/agent/chat/workspace/workspaceProductProfileModel.unit.test.ts"`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server agent_app_worker_turn -- --nocapture`。
+- 验证：`npm test -- "src/features/plugin/manifest/pluginRuntimeAuthorization.unit.test.ts" "src/features/plugin/manifest/pluginContract.unit.test.ts" "src/components/agent/chat/workspace/workspacePluginPaneAction.unit.test.ts" "src/components/agent/chat/workspace/workspaceProductProfileModel.unit.test.ts"`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server plugin_worker_turn -- --nocapture`。
 - 当前骨架主缺口收敛为：远端插件运行是否开放的产品边界、复杂 app-declared renderer 的真实渲染器挂载，以及最终完整 GUI 端到端验证。
 
 ### 2026-06-26 P4 App-declared Renderer 执行门禁可见骨架
@@ -690,7 +690,7 @@ GUI 关注点：
 ### 2026-06-26 P4 远端插件运行边界 Fail-Closed 骨架
 
 - `pluginRuntimeAuthorization` 已新增显式原因码 `remote_plugin_runtime_disabled`：非本地 allowlist 插件请求运行时，前端合同会进入 `denied + none`，而不是用普通缺少 allowlist 文案模糊处理。
-- App Server 结构化 pane / Product Profile action 对非本地内容工厂插件继续 fail closed，并把错误码收敛为 `AGENT_APP_WORKER_REMOTE_RUNTIME_DISABLED`；该路径只写 `turn.accepted + runtime.error + turn.failed`，不回退普通 backend、不打开远端执行。
+- App Server 结构化 pane / Product Profile action 对非本地内容工厂插件继续 fail closed，并把错误码收敛为 `PLUGIN_WORKER_REMOTE_RUNTIME_DISABLED`；该路径只写 `turn.accepted + runtime.error + turn.failed`，不回退普通 backend、不打开远端执行。
 - app-declared renderer 仍只进入 `host_placeholder + app_declared_renderer_placeholder_only`，因此“识别 renderer contract”和“执行 renderer / worker”继续是两个独立门禁。
 - 该切片不新增 Lime App Server marketplace JSON-RPC、不新增公开 worker/run API、不执行远端插件、不恢复旧插件命令族；它只把未开放远端运行从文档边界提升为代码化拒绝证据。
 - 验证：`npm test -- "src/features/plugin/manifest/pluginRuntimeAuthorization.unit.test.ts" "src/features/plugin/manifest/pluginContract.unit.test.ts" "src/components/agent/chat/workspace/workspaceProductProfileRendererHostPolicy.unit.test.ts" "src/components/agent/chat/workspace/WorkspaceProductProfileSurface.test.tsx" "src/components/agent/chat/workspace/workspacePluginPaneAction.unit.test.ts"`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server rejects_remote_plugin_pane_action_runtime -- --nocapture`。
@@ -700,7 +700,7 @@ GUI 关注点：
 
 - `claw-chat-current-fixture --scenario content-factory-product-profile` 已补 app-declared renderer 宿主占位和远端插件运行拒绝的真实 Electron 证据：场景会打开 Product Profile，选择 `videoStoryboard` 对象，并断言右侧宿主卡片可见 `app_declared`、`host_placeholder`、`app_declared_renderer_placeholder_only`、entry 与 action keys。
 - 内容工厂 worker dogfood metadata 已显式携带 `output_artifact_kind=content_factory.workspace_patch`，与 App Server fail-closed 输出授权一致；缺失输出类型不再被 fixture 隐式放行。
-- 远端插件运行 probe 仍只通过 current `agentSession/turn/start` 提交结构化 Product Profile action，并通过 `agentSession/read` 轮询 read model 中的 `AGENT_APP_WORKER_REMOTE_RUNTIME_DISABLED` 失败 evidence；不新增公开 worker/run API，不新增 Lime App Server marketplace JSON-RPC。
+- 远端插件运行 probe 仍只通过 current `agentSession/turn/start` 提交结构化 Product Profile action，并通过 `agentSession/read` 轮询 read model 中的 `PLUGIN_WORKER_REMOTE_RUNTIME_DISABLED` 失败 evidence；不新增公开 worker/run API，不新增 Lime App Server marketplace JSON-RPC。
 - smoke assertion 新增 `contentFactoryProductProfileRendererHostPlaceholderVisible` 与 `contentFactoryProductProfileRemoteRuntimeFailClosed`，把“声明型 renderer 只占位”和“远端运行 fail closed”固定为 GUI 回归证据。
 - 真实证据：`.lime/qc/gui-evidence/claw-chat-current-fixture/plugin-skeleton-product-profile-summary.json`。
 - 验证：`npm test -- "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs"`、`npm run smoke:claw-chat-current-fixture -- --scenario content-factory-product-profile --prefix plugin-skeleton-product-profile --timeout-ms 180000`。
@@ -719,7 +719,7 @@ GUI 关注点：
 
 - `pluginRuntimeAuthorization` 已新增显式 `remoteRuntimePolicy`：当前固定为 `disabled / fail_closed / marketplace_control_plane_only`，把“远端插件运行未开放”从分支条件提升为可测试合同。
 - `PluginRuntimeAuthorizationDecision` 已新增 `runtimeBoundary`，区分 `local_worker_allowlist`、`remote_runtime_disabled`、`host_placeholder_only`、`output_kind_missing` 和 `output_kind_unsupported`，避免后续把不同拒绝原因混成同一类。
-- `workspacePluginPaneAction` 会把 `runtime_boundary` 与 `remote_runtime_policy` 写入 `agent_app.runtime_authorization` 审计 metadata；该字段只做客户端证据，App Server 仍独立验证并 fail closed。
+- `workspacePluginPaneAction` 会把 `runtime_boundary` 与 `remote_runtime_policy` 写入 `plugin.runtime_authorization` 审计 metadata；该字段只做客户端证据，App Server 仍独立验证并 fail closed。
 - 单测覆盖非 allowlist 插件拒绝、本地 allowlist 输出类型不支持时不回退远端运行，以及声明型 renderer 只进入宿主占位。
 - 该切片不新增 Lime App Server marketplace JSON-RPC、不新增公开 worker/run API、不新增 LimeCore 运行 API、不执行远端插件、不恢复旧插件命令族。
 - 当前骨架主缺口收敛为：未来若开放远端运行，需要单独设计隔离执行、包签名 / 权限、租户策略、审计和回滚；第一轮骨架默认不开放。
@@ -803,7 +803,7 @@ GUI 关注点：
 - LimeCore `BulkPublishPlugin(...)` 已在写入 catalog / release 前增加 target payload 预检，覆盖空租户、重复租户、发布状态、可见性、灰度百分比、license、注册状态、注册过期时间和灰度可见性规则。
 - 预检失败时服务端会在写 catalog / release 前返回错误，降低跨租户发布时“版本已写入但目标租户配置失败”的部分写入风险。
 - 该同步仍不等于跨租户强事务补偿：现有 enablement 状态、release ready、注册码 hash 和仓储并发仍由 create / update 写路径兜底；客户端不需要新增协议，也不新增远端运行、worker API、renderer API、历史列表 API 或 App Server marketplace JSON-RPC。
-- 验证已覆盖 `go test ./services/control-plane-svc/internal/service -run 'TestControlPlaneServiceBulkPublish'` 与 `go test ./services/control-plane-svc/internal/controller -run 'TestAgentAppRoutesBulkPublishNativePlugin'`。
+- 验证已覆盖 `go test ./services/control-plane-svc/internal/service -run 'TestControlPlaneServiceBulkPublish'` 与 `go test ./services/control-plane-svc/internal/controller -run 'TestPluginRoutesBulkPublishNativePlugin'`。
 
 ### 2026-06-27 LimeCore Enablement 审计恢复快照同步
 
@@ -923,7 +923,7 @@ GUI 关注点：
 - MySQL snapshot 仓储用调用前 rollback point 包住 bulk publish；snapshot persist 失败时会恢复调用前内存状态，不留下新版 release、enablement update 或污染审计。
 - 该同步不改变 Lime Desktop 客户端事实源：桌面仍只消费 marketplace 只读投影和本地 installed registry，不新增 App Server marketplace JSON-RPC、不触发远端运行、不恢复旧插件命令族。
 - 当前完成的是 snapshot 存储形态下的单仓储原子保护；仍不声明真实多表数据库事务，也不替代同一租户账号的 live 手工全链路。
-- 验证已覆盖 `go test ./services/control-plane-svc/internal/repo -run 'TestMySQLSnapshotBulk(PublishPlugin|RollbackPluginEnablements)RestoresMemoryOnPersistFailure'`、`go test ./services/control-plane-svc/internal/service -run 'TestControlPlaneService.*Plugin|TestExternalPluginReleaseSignatureVerifier|TestPluginReleaseSignature'` 与 `go test ./services/control-plane-svc/internal/controller -run 'TestAgentAppRoutesBulkPublishNativePlugin'`。
+- 验证已覆盖 `go test ./services/control-plane-svc/internal/repo -run 'TestMySQLSnapshotBulk(PublishPlugin|RollbackPluginEnablements)RestoresMemoryOnPersistFailure'`、`go test ./services/control-plane-svc/internal/service -run 'TestControlPlaneService.*Plugin|TestExternalPluginReleaseSignatureVerifier|TestPluginReleaseSignature'` 与 `go test ./services/control-plane-svc/internal/controller -run 'TestPluginRoutesBulkPublishNativePlugin'`。
 
 ### 2026-06-27 LimeCore Bulk publish 表级事务骨架同步
 
@@ -1006,12 +1006,12 @@ GUI 关注点：
 - 该同步只提高 LimeCore live evidence 门禁强度，把“同一真实租户账号验收”变成 evidence 包硬字段；Lime Desktop 不新增协议、不新增 App Server marketplace JSON-RPC、不触发远端运行。
 - 验证已覆盖 `node --test scripts/plugin/live-acceptance-evidence.test.mjs`。
 
-### 2026-07-03 插件中心去 Agent App catalog fallback 同步
+### 2026-07-03 插件中心去 Plugin catalog fallback 同步
 
-- Lime Desktop 插件中心已新增“安装本地插件”入口，走 current 本地包选择、安装、持久化和刷新链路；离线或未登录时不再依赖旧云端 Agent App catalog 才能看到入口。
-- `marketplaceRegistryLoader` 已移除 `getAgentAppCloudCatalog` 云端兜底；插件中心 current 数据源固定为 LimeCore `client/plugins/marketplace` 与本地 installed registry 投影。
-- 旧 Agent App / 工作台应用 manifest 仍可作为迁移输入投影成插件 contract，但不再作为 marketplace 设计模板、云端目录兜底或独立产品入口。
-- LimeCore 服务端需要同步把 `client/plugins/marketplace`、`client/plugins/{pluginName}/registration` 和 `client/plugins/{pluginName}/install-state` 标为插件 current；`client/agent-apps` 与 Agent App 后台面只保留 compat / deprecated 口径，删除公开路由前必须另做兼容影响确认。
+- Lime Desktop 插件中心已新增“安装本地插件”入口，走 current 本地包选择、安装、持久化和刷新链路；离线或未登录时不再依赖旧云端 Plugin catalog 才能看到入口。
+- `marketplaceRegistryLoader` 已移除 `getPluginCloudCatalog` 云端兜底；插件中心 current 数据源固定为 LimeCore `client/plugins/marketplace` 与本地 installed registry 投影。
+- 旧 Plugin / 工作台应用 manifest 仍可作为迁移输入投影成插件 contract，但不再作为 marketplace 设计模板、云端目录兜底或独立产品入口。
+- LimeCore 服务端需要同步把 `client/plugins/marketplace`、`client/plugins/{pluginName}/registration` 和 `client/plugins/{pluginName}/install-state` 标为插件 current；`client/plugins` 与 Plugin 后台面只保留 compat / deprecated 口径，删除公开路由前必须另做兼容影响确认。
 - 验证已覆盖插件中心相关 Vitest 与 ESLint 定向检查；全量 typecheck 本轮未完成，不作为通过证据。
 
 ## 15. 第二轮完成审计矩阵

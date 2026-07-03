@@ -4,12 +4,17 @@ use app_server_protocol::{
     ExecutionProcessOutputKind, ExecutionProcessSnapshot, ExecutionProcessStartParams,
     ExecutionProcessStatus,
 };
-use aster::agents::{NativeToolExecutionHook, NativeToolExecutionRequest, ToolCallResult};
 use futures::channel::mpsc::{unbounded, UnboundedSender};
 use futures::FutureExt;
 use lime_agent::agent_tools::execution::{
     decide_tool_execution, ToolExecutionDecisionInput, ToolExecutionDecisionKind,
     ToolExecutionResolverInput,
+};
+use lime_agent::runtime_facade::{
+    current_agent_turn_context, NativeToolExecutionHook, NativeToolExecutionRequest, ToolCallResult,
+};
+use lime_agent::{
+    agent_turn_approval_policy, agent_turn_context_metadata, agent_turn_sandbox_policy,
 };
 use rmcp::model::{
     CallToolResult, Content, ErrorCode, ErrorData, LoggingLevel, LoggingMessageNotification,
@@ -101,14 +106,10 @@ fn prepare_live_execution(
         .map(str::trim)
         .filter(|value| !value.is_empty())?
         .to_string();
-    let turn_context = aster::session_context::current_turn_context();
-    let runtime_metadata = turn_context_metadata(turn_context.as_ref());
-    let approval_policy = turn_context
-        .as_ref()
-        .and_then(|context| context.approval_policy.clone());
-    let sandbox_policy = turn_context
-        .as_ref()
-        .and_then(|context| context.sandbox_policy.clone());
+    let turn_context = current_agent_turn_context();
+    let runtime_metadata = agent_turn_context_metadata(turn_context.as_ref());
+    let approval_policy = agent_turn_approval_policy(turn_context.as_ref());
+    let sandbox_policy = agent_turn_sandbox_policy(turn_context.as_ref());
     let decision = decide_tool_execution(ToolExecutionDecisionInput {
         tool_name,
         params: &json!({ "command": command_text.clone() }),
@@ -496,13 +497,6 @@ fn executable_candidate_exists(dir: &Path, program: &str) -> bool {
         .any(|extension| dir.join(format!("{program}{extension}")).is_file())
 }
 
-fn turn_context_metadata(
-    turn_context: Option<&aster::session::TurnContextOverride>,
-) -> Option<Value> {
-    let metadata = &turn_context?.metadata;
-    (!metadata.is_empty()).then(|| Value::Object(Map::from_iter(metadata.clone())))
-}
-
 fn process_status_is_terminal(status: ExecutionProcessStatus) -> bool {
     matches!(
         status,
@@ -539,19 +533,20 @@ fn execution_error(error: crate::execution_process::ExecutionProcessError) -> Er
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aster::tools::ToolContext;
+    use lime_agent::runtime_facade::{with_agent_turn_context, ToolContext};
+    use lime_agent::AgentTurnContext;
     use std::path::PathBuf;
 
     #[tokio::test]
     async fn hook_runs_bash_through_shared_execution_process_server() {
         let server = ExecutionProcessServer::default();
         let hook = RuntimeLiveExecutionProcessHook::new(server.clone());
-        let turn_context = aster::session::TurnContextOverride {
+        let turn_context = AgentTurnContext {
             approval_policy: Some("never".to_string()),
             sandbox_policy: Some("danger-full-access".to_string()),
-            ..aster::session::TurnContextOverride::default()
+            ..AgentTurnContext::default()
         };
-        let tool_call = aster::session_context::with_turn_context(Some(turn_context), async {
+        let tool_call = with_agent_turn_context(Some(turn_context), async {
             hook.execute_native_tool(NativeToolExecutionRequest {
                 tool_name: "Bash".to_string(),
                 tool_id: "tool-live-test".to_string(),

@@ -5,6 +5,7 @@ import {
   normalizeInputbarPluginTrigger,
   removeInputbarPluginSelection,
   resolveInputbarPluginDisplayName,
+  resolveInputbarPluginSubmissionText,
 } from "./pluginInputCapability";
 
 describe("pluginInputCapability", () => {
@@ -183,6 +184,41 @@ describe("pluginInputCapability", () => {
         },
       }).text,
     ).toBe("@写文章 写一篇公众号文章");
+  });
+
+  it("插件 chip 激活但输入未含触发词时提交文本应补齐触发词", () => {
+    expect(
+      resolveInputbarPluginSubmissionText({
+        input: "帮我整理项目资料",
+        selection: {
+          plugin: {
+            pluginId: "content-factory-app",
+            displayName: "写文章",
+            trigger: "@写文章",
+          },
+          trigger: "@写文章",
+          text: "帮我整理项目资料",
+          preserveInput: true,
+        },
+      }),
+    ).toBe("@写文章 帮我整理项目资料");
+  });
+
+  it("提交文本已含插件触发词时不应重复补齐", () => {
+    expect(
+      resolveInputbarPluginSubmissionText({
+        input: "@写文章 帮我整理项目资料",
+        selection: {
+          plugin: {
+            pluginId: "content-factory-app",
+            displayName: "写文章",
+            trigger: "@写文章",
+          },
+          trigger: "@写文章",
+          text: "@写文章 帮我整理项目资料",
+        },
+      }),
+    ).toBe("@写文章 帮我整理项目资料");
   });
 
   it("选择插件技能时应把显式技能触发前缀写到输入开头", () => {

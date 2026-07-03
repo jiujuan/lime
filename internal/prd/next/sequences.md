@@ -81,12 +81,12 @@ sequenceDiagram
     Projection-->>UI: timeline update
 ```
 
-## 4. Agent App 对话 Turn
+## 4. Plugin 对话 Turn
 
 ```mermaid
 sequenceDiagram
-    participant App as Agent App UI
-    participant Runtime as Agent App Runtime Facade
+    participant App as Plugin UI
+    participant Runtime as Plugin Runtime Facade
     participant Client as AppServerClient
     participant Server as App Server
     participant Policy as Permission Control
@@ -112,7 +112,7 @@ sequenceDiagram
     Runtime-->>App: projection update
 ```
 
-要求：Agent App UI runtime start/status/stop 只负责 UI 子进程生命周期，不承接对话 runtime。对话必须进入 `agentSession/* -> RuntimeCore -> ExecutionBackend`。
+要求：Plugin UI runtime start/status/stop 只负责 UI 子进程生命周期，不承接对话 runtime。对话必须进入 `agentSession/* -> RuntimeCore -> ExecutionBackend`。
 
 ## 5. content-studio 业务对象绑定
 

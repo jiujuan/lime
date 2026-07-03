@@ -8,7 +8,7 @@
 
 ```mermaid
 flowchart TB
-    User[用户 / Agent App / Automation] --> Surface[Product Surface]
+    User[用户 / Plugin / Automation] --> Surface[Product Surface]
     Surface --> Gateway[Frontend Runtime Gateway]
     Gateway --> AppServer[App Server Runtime API]
 

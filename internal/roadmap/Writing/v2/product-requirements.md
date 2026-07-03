@@ -1,17 +1,17 @@
 # Writing v2 产品需求
 
-更新时间：2026-07-02
-状态：Draft
+更新时间：2026-07-03
+状态：Draft + host tool evidence contract added + inline host command shortcode contract added
 
 ## 1. 背景
 
 Writing v1 已经把内容工厂写文章链路的产品形态收敛到 Lime Plugin Package v1：用户可以通过 `@写文章` 激活内容工厂插件形态，最终目标是产出 `ArtifactFrame(articleArtifacts)`，并在右侧 Article Editor 中继续编辑文章。
 
-截至 2026-07-02，Writing v2 仍是产品需求和工程规划：已有 Worker 接口规范、前端 Article Editor / Workspace UI、以及 test-only fixture smoke；没有真实 LLM 集成 Worker。`src/features/agent-app/testing/fixtures` 只能用于测试和审计证据，不能作为 production current 实现。
+截至 2026-07-02，Writing v2 仍是产品需求和工程规划：已有 Worker 接口规范、前端 Article Editor / Workspace UI、以及 test-only fixture smoke；没有真实 LLM 集成 Worker。`src/features/plugin/testing/fixtures` 只能用于测试和审计证据，不能作为 production current 实现。
 
-当前最大缺口不在右侧栏宽度，而在流式产物和审计边界：用户发起写作后，界面先出现一个很早的初始状态，随后长时间等待，等 worker、宿主检索和 artifact 处理完成后，再集中出现过程和结果。用户面需要的是文章正文按段落持续进入同一个产物框；workflow 步骤不需要展示在右侧，只需要作为后台 JSONL 审计记录留存。
+当前最大缺口不在右侧栏宽度，而在流式产物、执行卡片和审计边界：用户发起写作后，界面不能只出现一个最终文章卡，也不能把内部 workflow 流程轨塞到右侧。用户面需要的是资料检索 / 网络搜索这类必要过程以可展开执行卡片出现，文章正文按段落持续进入同一个产物框；完整 workflow 步骤只作为后台 JSONL 审计记录留存。
 
-v2 要解决的问题是：写文章这类长任务必须由内容工厂 Agent App worker / 插件包在生成期输出增量产物，并由宿主把 workflow 过程写入可审计 JSONL，而不是靠 fixture 最终 response 一次性投影，也不是把内容工厂写作逻辑内置到 App Server 宿主里，更不是把 workflow 步骤列表塞进右侧编辑器。
+v2 要解决的问题是：写文章这类长任务必须由内容工厂 Plugin worker / 插件包在生成期输出增量产物，并由宿主把 workflow 过程写入可审计 JSONL，而不是靠 fixture 最终 response 一次性投影，也不是把内容工厂写作逻辑内置到 App Server 宿主里，更不是把 workflow 步骤列表塞进右侧编辑器。
 
 ## 2. 当前问题诊断
 
@@ -25,7 +25,7 @@ v2 要解决的问题是：写文章这类长任务必须由内容工厂 Agent A
 
 ## 3. 目的
 
-1. 用户输入 `@写文章` 后，尽快看到同一个文章产物框开始按段落增长，而不是等待最终长回复。
+1. 用户输入 `@写文章` 后，尽快看到资料检索 / 网络搜索执行卡片和同一个文章产物框开始按段落增长，而不是等待最终长回复。
 2. 右侧 Article Editor 只承载文章编辑体验，不展示 workflow step / task card / 流程轨。
 3. App Server 和 worker 保持生成期增量事件合同：partial snapshot 由 producer 发出，最终 snapshot 只负责完成态和历史恢复。
 4. workflow run / step / tool / connector / hook / evidence 事件进入 append-only JSONL，用于未来审计、排障和质量复盘。
@@ -43,8 +43,8 @@ v2 要解决的问题是：写文章这类长任务必须由内容工厂 Agent A
 
 ## 5. 产品原则
 
-1. **产物优先**：用户面只需要文章产物持续增长和最终可编辑，不需要 workflow 步骤 UI。
-2. **Producer 真流式**：正文 partial 必须由内容工厂 Agent App worker 在生成期发出，App Server 不用最终正文回切伪流式，也不承接内容工厂领域写作逻辑。
+1. **主链可解释**：用户面需要可展开执行卡片和文章产物持续增长，不需要右侧 workflow 步骤 UI。
+2. **Producer 真流式**：正文 partial 必须由内容工厂 Plugin worker 在生成期发出，App Server 不用最终正文回切伪流式，也不承接内容工厂领域写作逻辑。
 3. **稳定引用**：所有 partial 使用稳定 `artifactRef` 和递增 `streamSequence` 更新同一个文章 artifact。
 4. **审计分离**：workflow run、step、tool、connector、hook、evidence、耗时和失败码只追加到 JSONL audit log。
 5. **恢复聚焦产物**：普通历史恢复只恢复消息、ArtifactFrame 和右侧 Article Editor；审计回放另走后台工具。
@@ -54,7 +54,7 @@ v2 要解决的问题是：写文章这类长任务必须由内容工厂 Agent A
 
 | 编号     | 用户故事                                                  | 验收                                                                        |
 | -------- | --------------------------------------------------------- | --------------------------------------------------------------------------- |
-| W2-US-01 | 作为用户，我输入 `@写文章` 后，希望立刻看到文章开始生成。 | 发送后尽快出现同一个文章产物框，并开始接收段落级 partial。                  |
+| W2-US-01 | 作为用户，我输入 `@写文章` 后，希望立刻看到文章开始生成。 | 发送后尽快出现资料检索 / 网络搜索执行卡片和同一个文章产物框，并开始接收段落级 partial。 |
 | W2-US-02 | 作为用户，我希望右侧专注文章编辑。                        | 右侧 Article Editor 不显示 workflow 步骤、任务卡或流程轨。                  |
 | W2-US-03 | 作为用户，我希望正文不是突然整篇出现。                    | draft 期间通过分段 snapshot / artifact delta 更新同一 `ArtifactFrame`。     |
 | W2-US-04 | 作为用户，我从历史打开会话时，希望看到文章和编辑稿。      | 历史恢复包含最终文章、ArtifactFrame 和右侧 Article Editor，不恢复步骤列表。 |
@@ -79,7 +79,7 @@ v2 要解决的问题是：写文章这类长任务必须由内容工厂 Agent A
 
 1. research step 发起多个搜索请求。
 2. 每个 tool call 开始 / 完成时追加到 workflow JSONL。
-3. 用户面不展示 research step 列表，只保持文章产物框处于生成中。
+3. 用户面展示必要的资料检索 / 网络搜索执行卡片，但不展示 research step 流程轨。
 4. 如果 draft 已有段落，段落继续进入同一个 `ArtifactFrame`。
 5. 搜索完成后的引用和来源进入 articleDraft source，供 Article Editor 引用栏读取。
 
@@ -216,7 +216,54 @@ type WorkflowStepExecutionResult = {
 - 右侧 Article Editor 不展示 workflow step、task card 或流程轨。
 - Article Editor 的继续改写、补充搜索、生成配图等动作绑定 `articleDraftRef`；审计层可在服务端关联 `workflowAuditRunId`，但不把该字段变成右侧 UI 依赖。
 
-### 8.6 历史恢复
+### 8.6 聊天主链执行卡片
+
+- 内容工厂插件必须在 `articleDraft.source.hostToolRequests[]` 暴露需要宿主执行的资料检索 / 网络搜索请求。
+- `hostToolRequests[]` 是当前事实源，旧 `searchRequests[]` 只作为兼容输入保留。
+- 宿主执行工具后，应把 `tool.started` / `tool.result` 投影为聊天主链里的可展开执行卡片，并显示在文章产物卡之前。
+- 执行卡片只展示用户可理解的标题、参数摘要、结果摘要和来源；完整 payload、失败码和内部 workflow 细节进入 `workflow-events.jsonl`。
+- streaming partial 中仍要保留 `hostToolRequests[]`，不能为了精简文章流式 payload 把工具请求剥掉。
+- current-turn smoke 必须同时断言：streaming / final `artifact.snapshot` 保留 `hostToolRequests[]`，普通事件流包含宿主 `tool.started -> tool.args -> tool.result`，`agentSession/read.detail.items` 与 `thread_read.tool_calls` 投影出 completed `web_search` 工具项，`evidence/export` 可证明 `hostToolEvidence` 已回填。
+
+### 8.7 文章内联 Host Command Shortcode
+
+内容工厂插件可以在文章正文中输出结构化 host command shortcode，用来表达“这里需要宿主已有 `@` 命令补产物”。这不是裸正则替换，也不是 worker 直接执行命令；宿主必须先把 shortcode 解析为结构化 `hostCommandRequests[]`，再按命令目录和现有运行时授权执行。
+
+首批自动执行范围只开放 `@配图`：
+
+```md
+[@配图 一张广州夏天午后的城市照片，阳光明亮，街边绿树和高楼，真实摄影风格，前景有广州塔珠江新城的花城大道]
+```
+
+宿主解析后生成等价请求：
+
+```ts
+type HostCommandRequest = {
+  commandKey: "image_generate";
+  commandName: "配图";
+  prompt: string;
+  usage: "document-inline";
+  slotId: "article-image-slot-1";
+  anchorSectionTitle?: string | null;
+  anchorText?: string | null;
+  presentation: {
+    surface: "article_editor";
+    replacement: "slot_marker";
+  };
+};
+```
+
+执行规则：
+
+- shortcode 只允许出现在普通 Markdown 正文；代码块、inline code、Markdown link / image alt 中的 `[@...]` 不执行。
+- 单篇文章默认最多自动处理 `3` 个 `@配图` shortcode；短文建议 `2` 张，长文建议 `3` 张，超出的 shortcode 保留原文供用户手动处理。
+- 宿主把 shortcode 物化为 `<!-- lime:image-task-slot:<slotId> -->`，再通过既有 `image_command_intent.image_task` 进入 App Server `ImageCommandWorkflow`。
+- slotId 必须基于正文中已有 `lime:image-task-slot:*` 分配下一个可用值；同一篇文章后续新增 `[@配图 ...]` 不得重新使用已存在的 slotId。
+- 图片任务 running 时回填 `pending-image-task://...` 占位；completed 后按同一 `slotId` 替换为真实图片 URL。
+- worker 不允许直接创建 `.lime/tasks/image_generate/*.json`，也不允许伪造 `tool.started / tool.result`。
+- 其他 `@` 命令可以先进入 `hostCommandRequests[]` 文档合同，但自动执行必须等对应 runtime contract、授权、结果卡和 viewer 都接入后再开启。
+
+### 8.8 历史恢复
 
 普通用户历史恢复必须按以下优先级：
 
@@ -455,7 +502,7 @@ JSONL 约束：
 - 内容工厂 worker 在生成期间输出段落级 `artifact.snapshot` partial。
 - partial 使用稳定 `artifactRef` / path 和递增 `streamSequence`。
 - App Server 对 worker 输出的 `artifact.snapshot` partial 做通用 pass-through，不再用最终正文二次切片。
-- 内容工厂正文生成、标题、大纲、引用组织等领域逻辑必须留在内容工厂 Agent App worker / 插件包内，不新增 `runtime_backend/content_factory_*` 这类宿主模块。
+- 内容工厂正文生成、标题、大纲、引用组织等领域逻辑必须留在内容工厂 Plugin worker / 插件包内，不新增 `runtime_backend/content_factory_*` 这类宿主模块。
 - final snapshot 标记 `complete=true`、`writePhase=persisted`、`contentStatus=complete`。
 
 ### P1：JSONL audit writer
@@ -481,18 +528,19 @@ JSONL 约束：
 ## 15. 验收标准
 
 - `@写文章` 发送后，同一个文章 `ArtifactFrame` 开始接收段落级 partial，而不是最终一次性出现。
-- App Server 不再对最终正文做二次切片；partial 必须来自内容工厂 Agent App worker 生成期。
+- App Server 不再对最终正文做二次切片；partial 必须来自内容工厂 Plugin worker 生成期。
 - `ArtifactFrame` 不显示普通 assistant 长文 fallback。
 - 右侧 Article Editor 只读取同一 articleDraft，不显示 workflow step、task card 或流程轨。
 - workflow run / step / tool / connector / hook / evidence 事件写入 JSONL，可用于内部审计回放。
 - `agentSession/read` 普通历史恢复能恢复 artifact refs 和 Article Editor，不恢复 workflow timeline。
+- `hostToolRequests -> WebSearch tool event -> read model tool item/tool_call -> article artifact hostToolEvidence` 必须有稳定 smoke 证据，不能只靠插件 worker 本地输出证明。
 - GUI smoke 覆盖发送、段落流式、最终产物、右侧展开、历史恢复；审计测试覆盖 JSONL 行事件。
 
 ## 16. 风险与约束
 
 | 风险                          | 处理                                                                  |
 | ----------------------------- | --------------------------------------------------------------------- |
-| 最终正文回切伪流式            | 验收明确 partial 必须来自内容工厂 Agent App worker 生成期。           |
+| 最终正文回切伪流式            | 验收明确 partial 必须来自内容工厂 Plugin worker 生成期。           |
 | workflow 步骤挤占右侧写作体验 | 右侧 Article Editor 明确禁止展示 workflow step / task card / 流程轨。 |
 | JSONL 被误当 UI read model    | `workflow-events.jsonl` 只供审计、排障和质量复盘读取。                |
 | 旧 worker 一次性输出继续存在  | 兼容只读恢复可以保留，新运行必须产生 artifact partial。               |
@@ -513,4 +561,4 @@ JSONL 约束：
 - 右侧 Article Editor 不显示 workflow 步骤、任务卡或流程轨。
 - workflow run / step / tool / connector / hook / evidence 只写 JSONL，用于未来审计、排障和质量复盘。
 - 用户面以 `ArtifactFrame` 段落级流式和最终 Article Editor 为主。
-- App Server 不应通过最终正文回切来制造流式；真实 partial 必须由内容工厂 Agent App worker 在生成期发出。
+- App Server 不应通过最终正文回切来制造流式；真实 partial 必须由内容工厂 Plugin worker 在生成期发出。

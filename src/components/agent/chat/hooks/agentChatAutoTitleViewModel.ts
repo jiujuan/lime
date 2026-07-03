@@ -82,12 +82,24 @@ export function buildAutoTitleConversationText(
     .slice(-1000);
 }
 
+export function sanitizeGeneratedAutoTitle(
+  generatedTitle: string | null | undefined,
+  _languageSource?: string | null,
+): string {
+  const normalizedTitle = generatedTitle?.trim() || "";
+  return normalizedTitle;
+}
+
 export function applyGeneratedAutoTitleToTopics(
   topics: Topic[],
   sessionId: string,
   generatedTitle: string | null | undefined,
+  languageSource?: string | null,
 ): Topic[] {
-  const normalizedTitle = generatedTitle?.trim();
+  const normalizedTitle = sanitizeGeneratedAutoTitle(
+    generatedTitle,
+    languageSource,
+  );
   if (!sessionId || !normalizedTitle) {
     return topics;
   }

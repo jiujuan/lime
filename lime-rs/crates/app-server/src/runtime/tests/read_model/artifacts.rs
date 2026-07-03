@@ -2,7 +2,8 @@ use super::*;
 use serde_json::Value;
 
 fn article_workspace_search_snapshot_payload(search_evidence: Value) -> Value {
-    let host_search_evidence = search_evidence.clone();
+    let legacy_host_search_evidence = search_evidence.clone();
+    let host_tool_evidence = search_evidence.clone();
 
     let mut article_source = serde_json::Map::new();
     article_source.insert("taskKind".to_string(), json!("content.article.generate"));
@@ -10,18 +11,27 @@ fn article_workspace_search_snapshot_payload(search_evidence: Value) -> Value {
     article_source.insert("turnId".to_string(), json!("turn_article_workspace"));
     article_source.insert("artifactIds".to_string(), json!(["artifact-article-1"]));
     article_source.insert(
-        "searchRequests".to_string(),
+        "hostToolRequests".to_string(),
         json!([
             {
                 "id": "search-request-1",
+                "toolName": "WebSearch",
+                "params": {
+                    "query": "Lime 写文章"
+                },
                 "query": "Lime 写文章",
                 "purpose": "验证宿主真实检索回填"
             }
         ]),
     );
     article_source.insert("searchEvidence".to_string(), search_evidence);
-    article_source.insert("hostSearchEvidence".to_string(), host_search_evidence);
+    article_source.insert(
+        "hostSearchEvidence".to_string(),
+        legacy_host_search_evidence,
+    );
     article_source.insert("hostSearchStatus".to_string(), json!("completed"));
+    article_source.insert("hostToolEvidence".to_string(), host_tool_evidence);
+    article_source.insert("hostToolStatus".to_string(), json!("completed"));
     article_source.insert(
         "documentText".to_string(),
         json!("# 公众号文章草稿\n\n这是正文。"),
@@ -786,10 +796,11 @@ async fn read_session_materializes_content_factory_workspace_patch_into_article_
                 "artifact.snapshot",
                 article_workspace_search_snapshot_payload(json!([
                     {
-                        "id": "host-search-evidence-search-request-1",
+                        "id": "host-tool-evidence-search-request-1",
                         "requestId": "search-request-1",
                         "tool": "WebSearch",
-                        "toolCallId": "content-factory-web-search-search-request-1",
+                        "toolCallId": "workspace-patch-host-tool-websearch-search-request-1",
+                        "source": "workspace_patch_host_tool_requests",
                         "status": "completed",
                         "query": "Lime 写文章",
                         "purpose": "验证宿主真实检索回填",
@@ -868,6 +879,14 @@ async fn read_session_materializes_content_factory_workspace_patch_into_article_
     );
     assert_eq!(
         article_workspace["objects"][0]["source"]["hostSearchEvidence"],
+        article_workspace["objects"][0]["source"]["searchEvidence"]
+    );
+    assert_eq!(
+        article_workspace["objects"][0]["source"]["hostToolStatus"],
+        "completed"
+    );
+    assert_eq!(
+        article_workspace["objects"][0]["source"]["hostToolEvidence"],
         article_workspace["objects"][0]["source"]["searchEvidence"]
     );
     assert_eq!(
@@ -1086,6 +1105,68 @@ async fn read_session_materializes_content_factory_workspace_patch_into_article_
     assert_eq!(
         edited_detail["thread_read"]["article_workspace"]["objects"][0]["source"]["documentText"],
         "# 用户编辑稿\n\n这是 Article Editor 画布写回后的正文。"
+    );
+
+    core.update_session_current(AgentSessionUpdateParams {
+        session_id: "sess_article_workspace".to_string(),
+        article_workspace_edited_draft: Some(json!({
+            "objectKey": "content-factory-app:sess_article_workspace:articleDraft:article-1",
+            "objectRef": {
+                "appId": "content-factory-app",
+                "kind": "articleDraft",
+                "id": "article-1",
+                "sessionId": "sess_article_workspace",
+                "artifactIds": ["artifact-article-1"],
+                "sourceTurnId": "turn_article_workspace"
+            },
+            "markdown": "# 用户编辑稿\n\n![正文配图](pending-image-task://task-inline?status=running&prompt=%E9%85%8D%E5%9B%BE)\n<!-- lime:image-task-slot:article-image-slot-1 -->",
+            "updatedAt": "2026-06-29T10:01:00.000Z"
+        })),
+        ..AgentSessionUpdateParams::default()
+    })
+    .await
+    .expect("update inline image slot edited article draft");
+
+    core.update_session_current(AgentSessionUpdateParams {
+        session_id: "sess_article_workspace".to_string(),
+        article_workspace_edited_draft: Some(json!({
+            "objectKey": "content-factory-app:sess_article_workspace:articleDraft:article-1",
+            "objectRef": {
+                "appId": "content-factory-app",
+                "kind": "articleDraft",
+                "id": "article-1",
+                "sessionId": "sess_article_workspace",
+                "artifactIds": ["artifact-article-1"],
+                "sourceTurnId": "turn_article_workspace"
+            },
+            "markdown": "# 用户编辑稿\n\n正文被陈旧编辑器写回覆盖，已经没有 inline slot。",
+            "updatedAt": "2026-06-29T10:02:00.000Z"
+        })),
+        ..AgentSessionUpdateParams::default()
+    })
+    .await
+    .expect("ignore stale inline image slot downgrade");
+
+    let inline_slot_read = core
+        .read_session(AgentSessionReadParams {
+            session_id: "sess_article_workspace".to_string(),
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .expect("read inline image slot session");
+    let inline_slot_detail = inline_slot_read
+        .detail
+        .expect("inline image slot session detail");
+    assert!(
+        inline_slot_detail["article_workspace"]["objects"][0]["source"]["documentText"]
+            .as_str()
+            .expect("inline slot document text")
+            .contains("lime:image-task-slot:article-image-slot-1")
+    );
+    assert_eq!(
+        inline_slot_detail["article_workspace"]["editedDraft"]["updatedAt"],
+        "2026-06-29T10:01:00.000Z"
     );
 
     core.start_turn(
@@ -1362,10 +1443,11 @@ async fn read_session_marks_failed_article_draft_as_non_deliverable_when_article
                 "artifact.snapshot",
                 article_workspace_search_snapshot_payload(json!([
                     {
-                        "id": "host-search-evidence-search-request-1",
+                        "id": "host-tool-evidence-search-request-1",
                         "requestId": "search-request-1",
                         "tool": "WebSearch",
-                        "toolCallId": "content-factory-web-search-search-request-1",
+                        "toolCallId": "workspace-patch-host-tool-websearch-search-request-1",
+                        "source": "workspace_patch_host_tool_requests",
                         "status": "completed",
                         "query": "Lime 写文章",
                         "purpose": "验证宿主真实检索回填",

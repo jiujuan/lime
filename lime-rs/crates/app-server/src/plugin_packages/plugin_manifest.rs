@@ -530,8 +530,8 @@ fn project_plugin_package_to_plugin_manifest(
     );
     if let Some(runtime) = runtime {
         manifest.insert("agentRuntime".to_string(), runtime.clone());
-        if let Some(worker) = runtime.get("worker") {
-            manifest.insert("runtimePackage".to_string(), json!({ "worker": worker }));
+        if let Some(runtime_package) = runtime_package_from_runtime(runtime) {
+            manifest.insert("runtimePackage".to_string(), runtime_package);
         }
         let activation_entries = activation_entries_from_runtime(runtime);
         if !activation_entries.is_empty() {
@@ -540,7 +540,7 @@ fn project_plugin_package_to_plugin_manifest(
                 Value::Array(activation_entries),
             );
         }
-        let entries = entries_from_runtime(runtime, &display_name);
+        let entries = entries_from_runtime(runtime, &plugin_id, &display_name);
         manifest.insert("entries".to_string(), Value::Array(entries));
         manifest.insert("artifacts".to_string(), artifacts_from_runtime(runtime));
         manifest.insert(
@@ -611,6 +611,9 @@ fn build_requires(runtime: Option<&Value>, workbench: Option<&Value>) -> Value {
     ];
     if runtime.and_then(|value| value.get("connectors")).is_some() {
         capabilities.push("lime.knowledge".to_string());
+    }
+    if runtime.and_then(|value| value.get("ui")).is_some() {
+        capabilities.push("lime.ui".to_string());
     }
     if workbench.is_some() {
         capabilities.push("lime.storage".to_string());
@@ -730,20 +733,68 @@ fn activation_workflow_output_artifact_kind(
         })
 }
 
-fn entries_from_runtime(runtime: &Value, display_name: &str) -> Vec<Value> {
+fn runtime_package_from_runtime(runtime: &Value) -> Option<Value> {
+    let mut package = Map::new();
+    if let Some(worker) = runtime.get("worker") {
+        package.insert("worker".to_string(), worker.clone());
+    }
+    if let Some(ui) = runtime.get("ui") {
+        package.insert("ui".to_string(), ui.clone());
+    }
+    if package.is_empty() {
+        None
+    } else {
+        Some(Value::Object(package))
+    }
+}
+
+fn ui_entry_from_runtime(runtime: &Value, plugin_id: &str, display_name: &str) -> Option<Value> {
+    let ui = runtime.get("ui")?.as_object()?;
+    let key = ui
+        .get("key")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(plugin_id)
+        .to_string();
+    let kind = ui
+        .get("kind")
+        .and_then(Value::as_str)
+        .filter(|value| matches!(*value, "page" | "panel" | "settings"))
+        .unwrap_or("page");
+    Some(json!({
+        "key": key,
+        "kind": kind,
+        "title": ui
+            .get("title")
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or(display_name),
+        "description": ui.get("description").and_then(Value::as_str),
+        "route": ui.get("route").and_then(Value::as_str).unwrap_or("/"),
+        "requiredCapabilities": ["lime.ui", "lime.agent", "lime.storage"]
+    }))
+}
+
+fn entries_from_runtime(runtime: &Value, plugin_id: &str, display_name: &str) -> Vec<Value> {
     let activation_entries = runtime
         .get("activationEntries")
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
+    let mut entries = ui_entry_from_runtime(runtime, plugin_id, display_name)
+        .into_iter()
+        .collect::<Vec<_>>();
     if activation_entries.is_empty() {
-        return vec![json!({
-            "key": "default",
-            "kind": "workflow",
-            "title": display_name
-        })];
+        if entries.is_empty() {
+            entries.push(json!({
+                "key": "default",
+                "kind": "workflow",
+                "title": display_name
+            }));
+        }
+        return entries;
     }
-    activation_entries
+    entries.extend(activation_entries
         .iter()
         .filter_map(|entry| {
             let key = read_string_from_record(entry, "key")?;
@@ -755,8 +806,8 @@ fn entries_from_runtime(runtime: &Value, display_name: &str) -> Vec<Value> {
                 "workflow": read_string_from_record(entry, "workflow"),
                 "requiredCapabilities": ["lime.agent", "lime.artifacts", "lime.workflow"]
             }))
-        })
-        .collect()
+        }));
+    entries
 }
 
 fn artifacts_from_runtime(runtime: &Value) -> Value {

@@ -142,6 +142,27 @@ export function applyInputbarPluginSelection(params: {
   };
 }
 
+export function resolveInputbarPluginSubmissionText(params: {
+  input: string;
+  selection?: InputbarPluginSelection | null;
+}): string {
+  const trigger = params.selection?.trigger.trim();
+  if (!trigger) {
+    return params.input;
+  }
+
+  const inputWithoutLeadingSpace = params.input.trimStart();
+  if (
+    inputWithoutLeadingSpace === trigger ||
+    inputWithoutLeadingSpace.startsWith(`${trigger} `)
+  ) {
+    return params.input;
+  }
+
+  const body = params.input.trim();
+  return body ? `${trigger} ${body}` : trigger;
+}
+
 export function removeInputbarPluginSelection(params: {
   input: string;
   selection: InputbarPluginSelection;

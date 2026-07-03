@@ -2726,6 +2726,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       currentTurnId,
       detachedSessionId: detachedSessionIdRef.current,
       queuedTurnsCount: queuedTurns.length,
+      remoteConfirmed: appServerConfirmedSessionIdsRef.current.has(sessionId),
       sessionId,
       threadItemsCount: threadItems.length,
       threadTurnsCount: threadTurns.length,

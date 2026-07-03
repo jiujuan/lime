@@ -12,7 +12,7 @@ HTML 原型：[prototype.html](./prototype.html)
 - [./prd.md](./prd.md)
 - [./architecture.md](./architecture.md)
 - [../rightsurface/README.md](../rightsurface/README.md)
-- [../agentapp/v4/README.md](../agentapp/v4/README.md)
+- [./technical-baseline.md](./technical-baseline.md)
 
 ## 1. 原型原则
 

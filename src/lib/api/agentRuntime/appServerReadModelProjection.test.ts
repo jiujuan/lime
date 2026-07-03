@@ -256,7 +256,7 @@ describe("appServerReadModelProjection", () => {
     ]);
   });
 
-  it("应丢弃 detail.thread_read 的 workflow facts", () => {
+  it("应保留 detail.thread_read 的 workflow facts", () => {
     const result = projectAppServerSessionReadToThreadReadModel(
       sessionRead({
         detail: {
@@ -284,15 +284,53 @@ describe("appServerReadModelProjection", () => {
                 status: "completed",
               },
             ],
+            workflowRuns: [
+              {
+                workflowRunId: "task-article:workflow",
+                workflowKey: "content_article_workflow",
+                status: "completed",
+              },
+            ],
+            workflowSteps: [
+              {
+                workflowRunId: "task-article:workflow",
+                stepId: "research",
+                status: "completed",
+              },
+            ],
           },
         },
       }),
     );
 
-    expect(result.workflow_runs).toBeUndefined();
-    expect(result.workflowRuns).toBeUndefined();
-    expect(result.workflow_steps).toBeUndefined();
-    expect(result.workflowSteps).toBeUndefined();
+    expect(result.workflow_runs).toEqual([
+      expect.objectContaining({
+        workflow_run_id: "task-article:workflow",
+        workflow_key: "content_article_workflow",
+        status: "completed",
+      }),
+    ]);
+    expect(result.workflow_steps).toEqual([
+      expect.objectContaining({
+        workflow_run_id: "task-article:workflow",
+        step_id: "research",
+        status: "completed",
+      }),
+    ]);
+    expect(result.workflowRuns).toEqual([
+      expect.objectContaining({
+        workflowRunId: "task-article:workflow",
+        workflowKey: "content_article_workflow",
+        status: "completed",
+      }),
+    ]);
+    expect(result.workflowSteps).toEqual([
+      expect.objectContaining({
+        workflowRunId: "task-article:workflow",
+        stepId: "research",
+        status: "completed",
+      }),
+    ]);
   });
 
   it("应把 session business object metadata 投影到 thread read model", () => {

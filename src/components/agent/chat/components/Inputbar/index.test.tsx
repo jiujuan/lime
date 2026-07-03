@@ -3163,6 +3163,61 @@ describe("Inputbar", () => {
     ).toContain("内容工厂:文章写作");
   });
 
+  it("插件技能同一 skillId 的多个 alias 不应触发重复 key 警告", async () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+
+    try {
+      const { container } = renderInputbar({
+        pluginSuggestions: [
+          {
+            pluginId: "content-factory-app",
+            displayName: "写文章",
+            trigger: "@写文章",
+            description: "@写文章 · 启动内容工厂文章工作流",
+            skills: [
+              {
+                skillId: "content_article_generate",
+                title: "@写文章",
+                trigger: "@写文章",
+              },
+              {
+                skillId: "content_article_generate",
+                title: "@写作",
+                trigger: "@写作",
+              },
+            ],
+          },
+        ],
+      });
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      const pluginsPanel = openPluginsPanel(container);
+
+      expect(
+        pluginsPanel.querySelectorAll(
+          '[data-testid="inputbar-plugin-skill-option"]',
+        ),
+      ).toHaveLength(2);
+      expect(pluginsPanel.textContent).toContain("@写文章");
+      expect(pluginsPanel.textContent).toContain("@写作");
+      expect(
+        consoleErrorSpy.mock.calls.some((call) =>
+          call
+            .map((item) => String(item))
+            .join(" ")
+            .includes("Encountered two children with the same key"),
+        ),
+      ).toBe(false);
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
+  });
+
   it("用户手动删除插件技能前缀时不应自动恢复前缀", async () => {
     const setInput = vi.fn();
     const { container, rerender } = renderInputbar({

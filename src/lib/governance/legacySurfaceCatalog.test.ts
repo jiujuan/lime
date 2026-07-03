@@ -1097,6 +1097,19 @@ describe("legacySurfaceCatalog", () => {
     );
   });
 
+  it("应将旧 workspace useWorkflow Hook 标记为退场守卫", () => {
+    const monitor = legacySurfaceCatalogJson.imports.find(
+      (entry) => entry.id === "workspace-use-workflow-legacy-hook-shell",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead-candidate");
+    expect(monitor?.targets).toEqual([
+      "src/components/workspace/hooks/useWorkflow.ts",
+    ]);
+    expect(monitor?.allowedPaths).toEqual([]);
+  });
+
   it("应记录已删除的旧工作区 runtime 文件路径", () => {
     const monitor = legacySurfaceCatalogJson.imports.find(
       (entry) => entry.id === "workspace-theme-workbench-runtime-entry",
@@ -3013,6 +3026,25 @@ describe("legacySurfaceCatalog", () => {
     ]);
   });
 
+  it("应禁止 WorkflowRuntimeHost 被生产 Agent runtime 重新引用", () => {
+    const monitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) => entry.id === "workflow-runtime-host-production-usage",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.patterns).toEqual(["WorkflowRuntimeHost"]);
+    expect(monitor?.includePathPrefixes).toEqual([
+      "src/components/agent",
+      "src/lib/api/agentRuntime",
+      "packages/agent-ui-contracts",
+      "packages/agent-runtime-projection",
+      "packages/agent-runtime-ui",
+      "packages/agent-runtime-client",
+    ]);
+  });
+
   it("应禁止 InputbarCore 恢复零调用的 allowEmptySend 透传", () => {
     const monitor = legacySurfaceCatalogJson.frontendText.find(
       (entry) => entry.id === "inputbar-core-legacy-allow-empty-send-prop",
@@ -3811,6 +3843,44 @@ describe("legacySurfaceCatalog", () => {
         "set_provider_ui_state",
       ]),
     );
+  });
+
+  it("应将旧 content workflow 命令面固定为 dead", () => {
+    const apiMonitor = legacySurfaceCatalogJson.imports.find(
+      (entry) => entry.id === "content-workflow-legacy-api-gateway",
+    );
+    const rustMonitor = legacySurfaceCatalogJson.imports.find(
+      (entry) => entry.id === "content-workflow-rust-command-module",
+    );
+    const commandMonitor = legacySurfaceCatalogJson.commands.find(
+      (entry) => entry.id === "content-workflow-legacy-commands",
+    );
+
+    expect(apiMonitor).toBeTruthy();
+    expect(apiMonitor?.classification).toBe("dead");
+    expect(apiMonitor?.targets).toEqual(["src/lib/api/content-workflow.ts"]);
+    expect(apiMonitor?.allowedPaths).toEqual([]);
+
+    expect(rustMonitor).toBeTruthy();
+    expect(rustMonitor?.classification).toBe("dead");
+    expect(rustMonitor?.targets).toEqual([
+      "lime-rs/src/commands/content_workflow_cmd.rs",
+    ]);
+    expect(rustMonitor?.allowedPaths).toEqual([]);
+
+    expect(commandMonitor).toBeTruthy();
+    expect(commandMonitor?.classification).toBe("dead");
+    expect(commandMonitor?.commands).toEqual(
+      expect.arrayContaining([
+        "content_workflow_create",
+        "content_workflow_get",
+        "content_workflow_get_by_content",
+        "content_workflow_advance",
+        "content_workflow_retry",
+        "content_workflow_cancel",
+      ]),
+    );
+    expect(commandMonitor?.allowedPaths).toEqual([]);
   });
 
   it("应禁止 Coding Workbench current session overview 重新直读旧 thread item facts", () => {

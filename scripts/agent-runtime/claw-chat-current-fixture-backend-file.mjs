@@ -52,6 +52,7 @@ import {
   SKILLS_RUNTIME_SCENARIO,
   SKILLS_RUNTIME_SKILL_NAME,
   THREAD_ID,
+  TEXT_PROVIDER_FIXTURE_API_KEY,
   WEB_TOOLS_BROKEN_MARKDOWN_TEXT,
   WEB_TOOLS_FETCH_MARKDOWN,
   WEB_TOOLS_FETCH_TOOL_CALL_ID,
@@ -80,6 +81,15 @@ function writeFixtureConfig(configPath, overrides = {}) {
   const serverHost = overrides.serverHost ?? "127.0.0.1";
   const serverPort = overrides.serverPort ?? 8999;
   const serverApiKey = overrides.serverApiKey ?? LOCAL_IMAGE_SERVER_API_KEY;
+  const imageProviderId = String(overrides.imageProviderId ?? "").trim();
+  const imageModelId = String(overrides.imageModelId ?? "").trim();
+  const imageDefaults = ["      allowFallback: false"];
+  if (imageProviderId) {
+    imageDefaults.push(`      preferredProviderId: ${imageProviderId}`);
+  }
+  if (imageModelId) {
+    imageDefaults.push(`      preferredModelId: ${imageModelId}`);
+  }
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
   fs.writeFileSync(
     configPath,
@@ -91,7 +101,7 @@ function writeFixtureConfig(configPath, overrides = {}) {
       "workspace_preferences:",
       "  media_defaults:",
       "    image:",
-      "      allowFallback: false",
+      ...imageDefaults,
       "",
     ].join("\n"),
   );
@@ -250,6 +260,264 @@ export async function startImageProviderFixtureServer() {
   };
 }
 
+function fixtureTextForChatRequest(body) {
+  const serialized = typeof body === "string" ? body : JSON.stringify(body);
+  const presentationText = JSON.stringify({
+    assistant_intro: IMAGE_COMMAND_PRESENTATION_INTRO,
+    completion_caption: IMAGE_COMMAND_PRESENTATION_CAPTION,
+  });
+  if (
+    serialized.includes("image_task_presentation.v1") ||
+    serialized.includes(
+      "Generate user-visible copy for one image generation turn.",
+    ) ||
+    serialized.includes("image_command_presentation")
+  ) {
+    return presentationText;
+  }
+  return presentationText;
+}
+
+function previewText(value, maxLength = 260) {
+  const text =
+    typeof value === "string" ? value : JSON.stringify(value ?? null);
+  return text.replace(/\s+/g, " ").slice(0, maxLength);
+}
+
+function readChatContentText(content) {
+  if (typeof content === "string") {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === "string") {
+          return part;
+        }
+        if (part && typeof part === "object") {
+          return (
+            part.text ??
+            part.content ??
+            part.input_text ??
+            part.output_text ??
+            ""
+          );
+        }
+        return "";
+      })
+      .filter(Boolean)
+      .join(" ");
+  }
+  if (content && typeof content === "object") {
+    return content.text ?? content.content ?? "";
+  }
+  return "";
+}
+
+function summarizeChatCompletionRequestBody(body) {
+  let parsed = {};
+  try {
+    parsed = JSON.parse(body || "{}");
+  } catch {
+    parsed = {};
+  }
+  const messages = Array.isArray(parsed.messages) ? parsed.messages : [];
+  const serialized = body || "";
+  return {
+    stream: parsed.stream ?? null,
+    messageCount: messages.length,
+    responseFormatType:
+      parsed.response_format?.type ?? parsed.responseFormat?.type ?? null,
+    toolChoice: parsed.tool_choice ?? parsed.toolChoice ?? null,
+    bodyIncludesPresentationContract:
+      serialized.includes("image_task_presentation.v1") ||
+      serialized.includes(
+        "Generate user-visible copy for one image generation turn.",
+      ) ||
+      serialized.includes("image_command_presentation"),
+    bodyPreview: previewText(serialized, 400),
+    messages: messages.slice(-4).map((message) => ({
+      role: message?.role ?? null,
+      contentPreview: previewText(readChatContentText(message?.content), 320),
+    })),
+  };
+}
+
+function openaiChatCompletionChunk({ content, finishReason = null }) {
+  return {
+    id: "chatcmpl-claw-text-fixture",
+    object: "chat.completion.chunk",
+    created: Math.floor(Date.now() / 1000),
+    model: FIXTURE_MODEL,
+    choices: [
+      {
+        index: 0,
+        delta: finishReason
+          ? {}
+          : {
+              role: "assistant",
+              content,
+            },
+        finish_reason: finishReason,
+      },
+    ],
+  };
+}
+
+function openaiChatCompletionUsageChunk() {
+  return {
+    id: "chatcmpl-claw-text-fixture",
+    object: "chat.completion.chunk",
+    created: Math.floor(Date.now() / 1000),
+    model: FIXTURE_MODEL,
+    choices: [],
+    usage: {
+      prompt_tokens: 31_000,
+      completion_tokens: 0,
+      total_tokens: 31_000,
+    },
+  };
+}
+
+function openaiChatCompletionBody(content) {
+  return {
+    id: "chatcmpl-claw-text-fixture",
+    object: "chat.completion",
+    created: Math.floor(Date.now() / 1000),
+    model: FIXTURE_MODEL,
+    choices: [
+      {
+        index: 0,
+        message: {
+          role: "assistant",
+          content,
+        },
+        finish_reason: "stop",
+      },
+    ],
+    usage: {
+      prompt_tokens: 31_000,
+      completion_tokens: 0,
+      total_tokens: 31_000,
+    },
+  };
+}
+
+function openaiChatCompletionSseBody(content) {
+  const firstChunk = JSON.stringify(
+    openaiChatCompletionChunk({ content, finishReason: null }),
+  );
+  const finalChunk = JSON.stringify(
+    openaiChatCompletionChunk({ content: "", finishReason: "stop" }),
+  );
+  const usageChunk = JSON.stringify(openaiChatCompletionUsageChunk());
+  return `data: ${firstChunk}\n\ndata: ${finalChunk}\n\ndata: ${usageChunk}\n\ndata: [DONE]\n\n`;
+}
+
+export async function startTextProviderFixtureServer() {
+  const requests = [];
+  const server = http.createServer((request, response) => {
+    let body = "";
+    request.setEncoding("utf8");
+    request.on("data", (chunk) => {
+      body += chunk;
+    });
+    request.on("end", () => {
+      requests.push({
+        method: request.method,
+        url: request.url,
+        headers: request.headers,
+        authorization: request.headers.authorization ? "present" : "missing",
+        body,
+      });
+
+      const pathname = (() => {
+        try {
+          return new URL(request.url || "/", "http://127.0.0.1").pathname;
+        } catch {
+          return request.url || "/";
+        }
+      })();
+      if (
+        request.method !== "POST" ||
+        !["/chat/completions", "/v1/chat/completions"].includes(pathname)
+      ) {
+        response.writeHead(404, { "content-type": "application/json" });
+        response.end(JSON.stringify({ error: { message: "not found" } }));
+        return;
+      }
+
+      let parsedBody = {};
+      try {
+        parsedBody = JSON.parse(body || "{}");
+      } catch {
+        parsedBody = {};
+      }
+      const content = fixtureTextForChatRequest(body);
+      if (parsedBody.stream === false) {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify(openaiChatCompletionBody(content)));
+        return;
+      }
+
+      const responseBody = openaiChatCompletionSseBody(content);
+      response.writeHead(200, {
+        "content-type": "text/event-stream; charset=utf-8",
+        "cache-control": "no-cache",
+        connection: "close",
+        "content-length": Buffer.byteLength(responseBody),
+      });
+      response.end(responseBody);
+    });
+  });
+
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", reject);
+      resolve();
+    });
+  });
+
+  const address = server.address();
+  const port = address && typeof address === "object" ? address.port : null;
+  if (!port) {
+    await new Promise((resolve) => server.close(resolve));
+    throw new Error("文本 Provider fixture server 未返回端口");
+  }
+
+  return {
+    baseUrl: `http://127.0.0.1:${port}/v1`,
+    host: "127.0.0.1",
+    port,
+    requestCount: () => requests.length,
+    requests: () =>
+      requests.map((entry) => ({
+        method: entry.method,
+        url: entry.url,
+        authorization: entry.authorization,
+        model: (() => {
+          try {
+            return JSON.parse(entry.body || "{}").model ?? null;
+          } catch {
+            return null;
+          }
+        })(),
+        bodySummary: summarizeChatCompletionRequestBody(entry.body),
+        bodyIncludesPresentationContract:
+          entry.body.includes("image_task_presentation.v1") ||
+          entry.body.includes(
+            "Generate user-visible copy for one image generation turn.",
+          ) ||
+          entry.body.includes("image_command_presentation"),
+      })),
+    close: () =>
+      new Promise((resolve) => {
+        server.close(() => resolve());
+      }),
+  };
+}
+
 export function writeFixtureBackend(backendPath) {
   const proposedPlanFixtureText = `${PROPOSED_PLAN_BLOCK}\n计划已写入右侧计划轨，等待你确认后再执行。\n`;
   const proposedPlanThreadItemText = PLAN_STEPS.map(
@@ -359,10 +627,13 @@ if (input.kind === "turnCancel") {
 
 if (input.kind === "turnStart") {
   const inputText = input.request?.input?.text || "";
+  const serializedInput = JSON.stringify(input);
   const isImageTaskPresentationPrompt =
     inputText.includes("image_task_presentation.v1") ||
     inputText.includes("Generate user-visible copy for one image generation turn.") ||
-    JSON.stringify(input.request?.runtimeOptions || {}).includes("image_command_presentation");
+    serializedInput.includes("image_task_presentation.v1") ||
+    serializedInput.includes("Generate user-visible copy for one image generation turn.") ||
+    serializedInput.includes("image_command_presentation");
   const isEventReadProbe = inputText.includes("agentSession/event");
   const isContinuePrompt = inputText.includes("${CONTINUE_PROMPT}");
   const isPlanPrompt = inputText.includes("${PLAN_PROMPT}");

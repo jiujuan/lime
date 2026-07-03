@@ -1,4 +1,5 @@
 {
+  "agentChat.imageWorkbenchPreview.tool.generation": "Image Generation",
   "plugin.apps.action.confirmUninstall": "确认卸载",
   "plugin.apps.action.deleteDataUnavailable": "删除数据暂未开放",
   "plugin.apps.action.disable": "停用",
@@ -132,6 +133,7 @@
   "plugin.apps.launch.shellLaunched": "已启动 {{title}} 的独立入口（{{target}}）。",
   "plugin.apps.launch.uiMounted": "已挂载 {{title}}（{{route}}）。",
   "plugin.apps.launch.workflowCompleted": "{{title}} workflow 已完成：{{runId}}。",
+  "plugin.apps.launch.workflowRequiresCurrentApi": "{{title}} 需要 App Server Workflow API；前端本地 workflow DSL 已下线。",
   "plugin.apps.launchTarget.label": "打开位置",
   "plugin.apps.launchTarget.rightSurface": "Claw 右侧",
   "plugin.apps.launchTarget.rightSurfaceUnavailable": "当前没有可投递的 Claw 对话。",
@@ -1271,7 +1273,7 @@
   "agentChat.tokenUsage.promptCache.readWrite": "缓存 {{total}}（读 {{read}} / 写 {{write}}）",
   "agentChat.tokenUsage.promptCache.write": "缓存 {{count}}",
   "agentChat.tokenUsage.promptCache.zero": "缓存 0",
-  "agentChat.tokenUsage.total": "共 {{count}}",
+  "agentChat.tokenUsage.total": "{{count}} Tokens",
   "agentChat.toolCall.actionOverride.memoryAddNote.completed": "已保存记忆修正",
   "agentChat.toolCall.actionOverride.memoryAddNote.failed": "记忆修正保存失败",
   "agentChat.toolCall.actionOverride.memoryAddNote.running": "正在保存记忆修正",

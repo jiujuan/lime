@@ -43,7 +43,7 @@
 | 轴 A 协议链路自动化 | R-10 protocol.ts 代码生成 | **完整闭环**（codegen + `protocol.ts` @generated re-export + 漂移守卫已入 `test:contracts`；剩可选 Rust 宏收敛） |
 | 轴 B App Server 去中心化 | R-20 handler 按 domain 注册 | **基本完成**（`runtime.rs` 8105→588 行，`processor.rs` 拆成 24 domain 模块）；R-21 aster `agent.rs` 待做 |
 | 轴 C 前端分层矫正 | R-30 守卫 → R-31 修违例 → R-32 状态分层 | **进行中**（R-30 完成；R-32 `useWorkspaceSendActions` -1937 行，`AgentChatWorkspace` 已抽第一刀 usePathReferences） |
-| 轴 D 网关收敛 | R-40 lib/api 唯一网关 + R-41 packages 收缩 | **守卫完成 + R-41 已删 agent-app-runtime**（剩 11 处 import 迁移随 R-31 协同） |
+| 轴 D 网关收敛 | R-40 lib/api 唯一网关 + R-41 packages 收缩 | **守卫完成 + R-41 已删 plugin-runtime**（剩 11 处 import 迁移随 R-31 协同） |
 | 轴 E crate 抗膨胀 | R-50 抗膨胀规则 + 重复定义归并 | **规则 + 调查完成**（services 分组延后到 R-20 后评估，现可启动） |
 | 轴 F 体量护栏 | R-60 文件体量棘轮 | **已恢复绿**（基线刷新为 152 前端 + 161 Rust；`governance:file-size` 通过） |
 

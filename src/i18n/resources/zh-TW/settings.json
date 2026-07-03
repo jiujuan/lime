@@ -2589,6 +2589,8 @@
   "settings.providers.modelAdd.catalog.template.alibaba-coding-plan-cn.description": "阿里雲百煉中國區 Claude Code Coding Plan 專用 Anthropic 入口",
   "settings.providers.modelAdd.catalog.template.alibaba-coding-plan-global.name": "Alibaba Coding Plan（海外）",
   "settings.providers.modelAdd.catalog.template.alibaba-coding-plan-global.description": "阿里雲 Model Studio 國際區 Claude Code Coding Plan 專用 Anthropic 入口",
+  "settings.providers.modelAdd.catalog.template.agnes-image-flash.name": "Agnes",
+  "settings.providers.modelAdd.catalog.template.agnes-image-flash.description": "Agnes 官方圖片生成入口，OpenAI 相容介面，預設使用 agnes-image-2.1-flash。",
   "settings.providers.modelAdd.catalog.template.aihubmix-recommended.name": "AiHubMix",
   "settings.providers.modelAdd.catalog.template.aihubmix-recommended.description": "聚合 Claude、OpenAI、Gemini 的常用中轉服務",
   "settings.providers.modelAdd.catalog.template.openrouter-recommended.name": "OpenRouter",

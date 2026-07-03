@@ -88,6 +88,42 @@ describe("workspaceDocumentInlineImageTaskSync", () => {
     expect(next).not.toContain("should-not-appear");
   });
 
+  it("slot marker 来自文章 shortcode 时，应在同一位置插入 pending 占位并在完成后替换图片", () => {
+    const markdown = `# 标题
+
+## 核心观点
+核心观点段落
+
+<!-- lime:image-task-slot:hero -->`;
+
+    const pending = applyDocumentInlineImageTaskSync(markdown, {
+      taskId: "task-inline",
+      taskRecord: createTaskRecord({
+        status: "running",
+        normalized_status: "running",
+      }),
+      outputs: [],
+    });
+
+    expect(pending).toContain("![正文配图](pending-image-task://");
+    expect(pending).toContain("<!-- lime:image-task-slot:hero -->");
+
+    const completed = applyDocumentInlineImageTaskSync(pending, {
+      taskId: "task-inline",
+      taskRecord: createTaskRecord(),
+      outputs: [
+        {
+          url: "https://example.com/hero.png",
+          prompt: "正文配图",
+          slotId: "hero",
+        },
+      ],
+    });
+
+    expect(completed).toContain("![正文配图](https://example.com/hero.png)");
+    expect(completed).not.toContain("pending-image-task://");
+  });
+
   it("hook 接线应保持 document canvas 类型并只在内容变化时返回新状态", () => {
     const setCanvasState = vi.fn((updater) => {
       const previous = createInitialDocumentState(`# 标题

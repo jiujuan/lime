@@ -5,11 +5,9 @@ use crate::model_route_assembly::{
 use crate::model_task_contract::{build_model_task_request, ModelTaskRequestInput};
 use crate::ExecutionRequest;
 use app_server_protocol::{
-    ModelRefSource, ModelTaskKind, ModelTaskRequest, ModelTaskSource, ProtocolKind,
-    ResolvedModelRoute,
+    ModelRefSource, ModelTaskKind, ModelTaskRequest, ModelTaskSource, ResolvedModelRoute,
 };
-use lime_agent::AsterProviderProtocol;
-use lime_agent::ProviderConfig;
+use lime_agent::{route_protocol_from_provider_config, ProviderConfig};
 use lime_core::database::dao::api_key_provider::ProviderWithKeys;
 use serde_json::Value;
 
@@ -117,19 +115,9 @@ fn direct_route_config(config: &ProviderConfig) -> DirectRouteConfig<'_> {
             .is_some_and(|key| !key.trim().is_empty()),
         base_url: config.base_url.as_deref(),
         credential_ref: config.credential_uuid.as_deref(),
-        protocol: route_protocol_from_aster_protocol(config.protocol),
+        protocol: route_protocol_from_provider_config(config),
         toolshim: config.toolshim,
         toolshim_model: config.toolshim_model.as_deref(),
-    }
-}
-
-fn route_protocol_from_aster_protocol(
-    protocol: Option<AsterProviderProtocol>,
-) -> Option<ProtocolKind> {
-    match protocol {
-        Some(AsterProviderProtocol::Responses) => Some(ProtocolKind::OpenaiResponses),
-        Some(AsterProviderProtocol::ChatCompletions) => Some(ProtocolKind::OpenaiChat),
-        None => None,
     }
 }
 

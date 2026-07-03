@@ -2,7 +2,7 @@
 
 更新时间：2026-06-25  
 状态：Draft
-事实源：`internal/roadmap/rightsurface/README.md`、`internal/roadmap/workbench/v3/*`、`internal/tech/plugin/README.md`、上游插件模型参考；旧 Agent App 标准仅作为迁移输入参考
+事实源：`internal/roadmap/rightsurface/README.md`、`internal/roadmap/workbench/v3/*`、`internal/tech/plugin/README.md`、上游插件模型参考；旧 Plugin 标准仅作为迁移输入参考
 
 ## 1. 一句话目标
 
@@ -170,7 +170,7 @@ flowchart TD
 | P1 | 显式激活 | composer chip、`@插件`、session activation context。 |
 | P2 | 右侧 renderer | Host builtin renderer、tab/pane registry、history restore。 |
 | P3 | 内容工厂 dogfood | 内容工厂插件的文章、图片、视频脚本 / 分镜最小闭环。 |
-| P4 | 迁移与收口 | 旧 Agent App / 旧内容工作台退出用户主路径。 |
+| P4 | 迁移与收口 | 旧 Plugin / 旧内容工作台退出用户主路径。 |
 
 ## 9. 验收标准
 

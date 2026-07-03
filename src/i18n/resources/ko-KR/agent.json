@@ -1,4 +1,5 @@
 {
+  "agentChat.imageWorkbenchPreview.tool.generation": "Image Generation",
   "plugin.apps.action.confirmUninstall": "제거 확인",
   "plugin.apps.action.deleteDataUnavailable": "데이터 삭제 미지원",
   "plugin.apps.action.disable": "중지",
@@ -132,6 +133,7 @@
   "plugin.apps.launch.shellLaunched": "{{title}} 독립 실행 항목을 시작했습니다({{target}}).",
   "plugin.apps.launch.uiMounted": "{{title}} 마운트 완료({{route}}).",
   "plugin.apps.launch.workflowCompleted": "{{title}} workflow 완료: {{runId}}.",
+  "plugin.apps.launch.workflowRequiresCurrentApi": "{{title}}에는 App Server Workflow API가 필요합니다. 프런트엔드 로컬 workflow DSL은 퇴역했습니다.",
   "plugin.apps.launchTarget.label": "열 위치",
   "plugin.apps.launchTarget.rightSurface": "Claw 오른쪽",
   "plugin.apps.launchTarget.rightSurfaceUnavailable": "전달할 수 있는 Claw 대화가 없습니다.",
@@ -1271,7 +1273,7 @@
   "agentChat.tokenUsage.promptCache.readWrite": "캐시 {{total}}(읽기 {{read}} / 쓰기 {{write}})",
   "agentChat.tokenUsage.promptCache.write": "캐시 {{count}}",
   "agentChat.tokenUsage.promptCache.zero": "캐시 0",
-  "agentChat.tokenUsage.total": "총 {{count}}",
+  "agentChat.tokenUsage.total": "{{count}} Tokens",
   "agentChat.toolCall.actionOverride.memoryAddNote.completed": "메모리 수정 저장 완료",
   "agentChat.toolCall.actionOverride.memoryAddNote.failed": "메모리 수정 저장 실패",
   "agentChat.toolCall.actionOverride.memoryAddNote.running": "메모리 수정 저장 중",

@@ -209,6 +209,39 @@ describe("imageTaskPreviewRuntimeMessages", () => {
     });
   });
 
+  it("合并图片 preview 时不应在前端改写已有 content 与 caption 语义", () => {
+    const existingMessage = createMessage({
+      id: "assistant-runtime",
+      content:
+        "好啊，先来Generate深圳夏day午后的城市照片，阳光明亮，真实摄影Style。",
+      imageWorkbenchPreview: createPreview({
+        prompt: "用 Agnes 生成一张深圳夏天午后的城市照片，真实摄影风格",
+        status: "running",
+        caption: "搞定，深圳夏day午后的城市照片，真实摄影Style 已经做好了。",
+      }),
+    });
+    const nextMessage = createMessage({
+      id: "image-workbench:task-1:assistant",
+      content: "",
+      imageWorkbenchPreview: createPreview({
+        prompt: "用 Agnes 生成一张深圳夏天午后的城市照片，真实摄影风格",
+        status: "complete",
+        imageUrl: "https://cdn.example.com/shenzhen.png",
+        caption: null,
+      }),
+    });
+
+    const merged = mergeImageWorkbenchPreviewMessage({
+      existingMessage,
+      nextMessage,
+    });
+
+    expect(merged.content).toContain("Generate深圳夏day午后");
+    expect(merged.content).toContain("真实摄影Style");
+    expect(merged.imageWorkbenchPreview?.caption).toContain("深圳夏day");
+    expect(merged.imageWorkbenchPreview?.caption).toContain("真实摄影Style");
+  });
+
   it("应清理草稿 preview，并把 skill 执行失败归一成可重试失败态", () => {
     const draftMessage = createMessage({
       id: "draft",

@@ -15,6 +15,8 @@ import {
   IMAGE_FIXTURE_MODEL,
   IMAGE_FIXTURE_PROVIDER_NAME,
   SESSION_ID,
+  TEXT_PROVIDER_FIXTURE_API_KEY,
+  TEXT_FIXTURE_PROVIDER_NAME,
 } from "./claw-chat-current-fixture-constants.mjs";
 import {
   assert,
@@ -697,7 +699,65 @@ export async function ensureFixtureImageProvider(
   });
 }
 
-export async function bindGuiWorkspaceAndModelPreferences(page, workspaceId) {
+export async function ensureFixtureTextProvider(
+  page,
+  requestLog,
+  options = {},
+) {
+  const apiHost =
+    typeof options.apiHost === "string" && options.apiHost.trim()
+      ? options.apiHost.trim()
+      : "https://example.invalid/v1";
+  const created = await invokeAppServerFromPage(
+    page,
+    "modelProvider/create",
+    {
+      name: TEXT_FIXTURE_PROVIDER_NAME,
+      providerType: "openai",
+      apiHost,
+    },
+    requestLog,
+  );
+  const provider = created.result?.provider;
+  const providerId = String(provider?.id || "").trim();
+  assert(providerId, "modelProvider/create 未返回 fixture 文本 Provider id");
+
+  await invokeAppServerFromPage(
+    page,
+    "modelProvider/update",
+    {
+      providerId,
+      enabled: true,
+      customModels: [FIXTURE_MODEL],
+      sortOrder: 0,
+    },
+    requestLog,
+  );
+  await invokeAppServerFromPage(
+    page,
+    "modelProviderKey/create",
+    {
+      providerId,
+      apiKey: options.apiKey || TEXT_PROVIDER_FIXTURE_API_KEY,
+      alias: "claw-text-fixture-key",
+      replaceExisting: true,
+    },
+    requestLog,
+  );
+
+  return sanitizeJson({
+    providerId,
+    providerName: provider?.name ?? TEXT_FIXTURE_PROVIDER_NAME,
+    apiHost,
+    modelId: FIXTURE_MODEL,
+  });
+}
+
+export async function bindGuiWorkspaceAndModelPreferences(
+  page,
+  workspaceId,
+  preferences = {},
+) {
   return await page.evaluate(
     ({ workspaceId, sessionId, provider, model }) => {
       const providerKey = `agent_pref_provider_${workspaceId}`;
@@ -781,8 +841,8 @@ export async function bindGuiWorkspaceAndModelPreferences(page, workspaceId) {
     {
       workspaceId,
       sessionId: SESSION_ID,
-      provider: FIXTURE_PROVIDER,
-      model: FIXTURE_MODEL,
+      provider: preferences.provider || FIXTURE_PROVIDER,
+      model: preferences.model || FIXTURE_MODEL,
     },
   );
 }

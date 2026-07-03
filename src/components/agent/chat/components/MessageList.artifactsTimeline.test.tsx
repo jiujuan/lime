@@ -294,7 +294,7 @@ describe("MessageList artifacts timeline", () => {
           query: "golang 学习路径",
           output: "找到 3 条可参考资料。",
           metadata: {
-            source: "content_factory_search_requests",
+            source: "workspace_patch_host_tool_requests",
             workflowKey: "content_article_workflow",
           },
         },
@@ -331,7 +331,7 @@ describe("MessageList artifacts timeline", () => {
         const metadata = part.metadata as Record<string, unknown> | undefined;
         return (
           part.type === "tool_use" &&
-          (metadata?.source === "content_factory_search_requests" ||
+          (metadata?.source === "workspace_patch_host_tool_requests" ||
             metadata?.workflowKey === "content_article_workflow" ||
             metadata?.workflow_key === "content_article_workflow")
         );
@@ -342,7 +342,7 @@ describe("MessageList artifacts timeline", () => {
     expect(contentFactoryToolParts).toHaveLength(2);
     expect(contentFactoryToolParts[0]?.metadata).toEqual(
       expect.objectContaining({
-        source: "content_factory_search_requests",
+        source: "workspace_patch_host_tool_requests",
         workflowKey: "content_article_workflow",
       }),
     );

@@ -1,9 +1,8 @@
 use crate::session_query::read_session;
 use crate::session_update::persist_session_extension_data;
+use agent_protocol::turn_context::TurnOutputSchemaRuntime;
 use aster::session::extension_data::{ExtensionData, ExtensionState};
-use aster::session::{
-    Session, SessionRuntimeSnapshot, TurnContextOverride, TurnOutputSchemaRuntime, TurnStatus,
-};
+use aster::session::Session;
 use lime_core::database::dao::agent_timeline::{AgentThreadItem, AgentThreadItemPayload};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
@@ -19,7 +18,7 @@ const LIME_RUNTIME_OEM_POLICY_KEY: &str = "oem_policy";
 const LIME_RUNTIME_SUMMARY_KEY: &str = "runtime_summary";
 const RUNTIME_MODEL_PERMISSION_FALLBACK_WARNING_CODE: &str = "runtime_model_permission_fallback";
 
-fn normalize_optional_text(value: Option<String>) -> Option<String> {
+pub(crate) fn normalize_optional_text(value: Option<String>) -> Option<String> {
     let trimmed = value?.trim().to_string();
     if trimmed.is_empty() {
         None
@@ -105,14 +104,6 @@ impl SessionExecutionRuntimeAccessMode {
         }
     }
 
-    fn from_extension_data(extension_data: &ExtensionData) -> Option<Self> {
-        <Self as ExtensionState>::from_extension_data(extension_data)
-    }
-
-    fn from_session(session: &Session) -> Option<Self> {
-        Self::from_extension_data(&session.extension_data)
-    }
-
     fn write_extension_data(self, extension_data: &mut ExtensionData) -> Result<(), String> {
         <Self as ExtensionState>::to_extension_data(&self, extension_data)
             .map_err(|error| error.to_string())
@@ -122,14 +113,6 @@ impl SessionExecutionRuntimeAccessMode {
         let mut extension_data = session.extension_data.clone();
         self.write_extension_data(&mut extension_data)?;
         Ok(extension_data)
-    }
-
-    fn from_turn_context_override(turn_context: &TurnContextOverride) -> Option<Self> {
-        Self::from_runtime_policies(
-            turn_context.approval_policy.as_deref(),
-            turn_context.sandbox_policy.as_deref(),
-        )
-        .or_else(|| extract_recent_access_mode_from_metadata(&turn_context.metadata))
     }
 }
 
@@ -150,14 +133,6 @@ impl ExtensionState for SessionExecutionRuntimePreferences {
 }
 
 impl SessionExecutionRuntimePreferences {
-    fn from_extension_data(extension_data: &ExtensionData) -> Option<Self> {
-        <Self as ExtensionState>::from_extension_data(extension_data)
-    }
-
-    fn from_session(session: &Session) -> Option<Self> {
-        Self::from_extension_data(&session.extension_data)
-    }
-
     fn to_extension_data(&self, extension_data: &mut ExtensionData) -> Result<(), String> {
         <Self as ExtensionState>::to_extension_data(self, extension_data)
             .map_err(|error| error.to_string())
@@ -242,7 +217,7 @@ impl ExtensionState for SessionExecutionRuntimeRecentTeamSelection {
 }
 
 impl SessionExecutionRuntimeRecentTeamSelection {
-    fn normalize(self) -> Option<Self> {
+    pub(crate) fn normalize(self) -> Option<Self> {
         let selected_team_roles = self
             .selected_team_roles
             .map(|roles| {
@@ -281,14 +256,6 @@ impl SessionExecutionRuntimeRecentTeamSelection {
         }
 
         Some(normalized)
-    }
-
-    fn from_extension_data(extension_data: &ExtensionData) -> Option<Self> {
-        <Self as ExtensionState>::from_extension_data(extension_data).and_then(Self::normalize)
-    }
-
-    fn from_session(session: &Session) -> Option<Self> {
-        Self::from_extension_data(&session.extension_data)
     }
 
     fn to_extension_data(&self, extension_data: &mut ExtensionData) -> Result<(), String> {
@@ -574,24 +541,30 @@ pub struct SessionExecutionRuntime {
     pub runtime_summary: Option<SessionExecutionRuntimeSummary>,
 }
 
-fn resolve_session_token_usage(session: &Session) -> Option<crate::protocol::AgentTokenUsage> {
-    match (session.input_tokens, session.output_tokens) {
-        (Some(input_tokens), Some(output_tokens)) if input_tokens >= 0 && output_tokens >= 0 => {
-            Some(crate::protocol::AgentTokenUsage {
-                input_tokens: input_tokens as u32,
-                output_tokens: output_tokens as u32,
-                cached_input_tokens: session
-                    .cached_input_tokens
-                    .filter(|value| *value >= 0)
-                    .map(|value| value as u32),
-                cache_creation_input_tokens: session
-                    .cache_creation_input_tokens
-                    .filter(|value| *value >= 0)
-                    .map(|value| value as u32),
-            })
-        }
-        _ => None,
-    }
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct SessionExecutionRuntimeSessionProjection {
+    pub provider_name: Option<String>,
+    pub model_name: Option<String>,
+    pub usage: Option<crate::protocol::AgentTokenUsage>,
+    pub recent_access_mode: Option<SessionExecutionRuntimeAccessMode>,
+    pub recent_preferences: Option<SessionExecutionRuntimePreferences>,
+    pub recent_team_selection: Option<SessionExecutionRuntimeRecentTeamSelection>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct SessionExecutionRuntimeSnapshotProjection {
+    pub recent_harness_context: RecentHarnessContext,
+    pub recent_access_mode: Option<SessionExecutionRuntimeAccessMode>,
+    pub latest_turn: Option<SessionExecutionRuntimeTurnProjection>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct SessionExecutionRuntimeTurnProjection {
+    pub id: String,
+    pub status: String,
+    pub context: Option<crate::turn_context_configuration::AgentTurnContext>,
+    pub output_schema_runtime: Option<TurnOutputSchemaRuntime>,
+    pub error_message: Option<String>,
 }
 
 fn calculate_estimated_total_cost(cost_state: &SessionExecutionRuntimeCostState) -> Option<f64> {
@@ -713,20 +686,13 @@ pub fn detect_runtime_limit_event(
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-struct RecentHarnessContext {
-    theme: Option<String>,
-    session_mode: Option<String>,
-    gate_key: Option<String>,
-    run_title: Option<String>,
-    content_id: Option<String>,
-    response_language: Option<String>,
-}
-
-fn resolve_session_model_name(session: &Session) -> Option<String> {
-    session
-        .model_config
-        .as_ref()
-        .and_then(|config| normalize_optional_text(Some(config.model_name.clone())))
+pub(crate) struct RecentHarnessContext {
+    pub theme: Option<String>,
+    pub session_mode: Option<String>,
+    pub gate_key: Option<String>,
+    pub run_title: Option<String>,
+    pub content_id: Option<String>,
+    pub response_language: Option<String>,
 }
 
 fn extract_bool_from_value(value: Option<&Value>) -> Option<bool> {
@@ -843,7 +809,7 @@ fn extract_recent_preferences_from_metadata(
     })
 }
 
-fn extract_recent_access_mode_from_metadata(
+pub(crate) fn extract_recent_access_mode_from_metadata(
     metadata: &std::collections::HashMap<String, Value>,
 ) -> Option<SessionExecutionRuntimeAccessMode> {
     let harness = metadata.get("harness").and_then(Value::as_object);
@@ -929,7 +895,7 @@ fn extract_recent_team_selection_from_metadata(
     .normalize()
 }
 
-fn extract_recent_harness_context_from_metadata(
+pub(crate) fn extract_recent_harness_context_from_metadata(
     metadata: &std::collections::HashMap<String, Value>,
 ) -> RecentHarnessContext {
     let harness = metadata.get("harness").and_then(Value::as_object);
@@ -1157,90 +1123,6 @@ fn extract_runtime_summary_from_metadata(
     Some(summary)
 }
 
-fn extract_recent_harness_context_from_runtime_snapshot(
-    snapshot: &SessionRuntimeSnapshot,
-) -> RecentHarnessContext {
-    let from_turn = snapshot
-        .threads
-        .iter()
-        .flat_map(|thread| thread.turns.iter())
-        .filter_map(|turn| {
-            let context = turn
-                .context_override
-                .as_ref()
-                .map(|value| extract_recent_harness_context_from_metadata(&value.metadata))?;
-            Some((turn.updated_at, context))
-        })
-        .max_by_key(|(updated_at, _)| *updated_at)
-        .map(|(_, context)| context)
-        .unwrap_or_default();
-
-    if from_turn.theme.is_some()
-        && from_turn.session_mode.is_some()
-        && from_turn.gate_key.is_some()
-        && from_turn.run_title.is_some()
-        && from_turn.content_id.is_some()
-        && from_turn.response_language.is_some()
-    {
-        return from_turn;
-    }
-
-    let from_thread = snapshot
-        .threads
-        .iter()
-        .filter_map(|thread| {
-            let context = extract_recent_harness_context_from_metadata(&thread.thread.metadata);
-            if context.theme.is_none()
-                && context.session_mode.is_none()
-                && context.gate_key.is_none()
-                && context.run_title.is_none()
-                && context.content_id.is_none()
-                && context.response_language.is_none()
-            {
-                return None;
-            }
-            Some((thread.thread.updated_at, context))
-        })
-        .max_by_key(|(updated_at, _)| *updated_at)
-        .map(|(_, context)| context)
-        .unwrap_or_default();
-
-    RecentHarnessContext {
-        theme: from_turn.theme.or(from_thread.theme),
-        session_mode: from_turn.session_mode.or(from_thread.session_mode),
-        gate_key: from_turn.gate_key.or(from_thread.gate_key),
-        run_title: from_turn.run_title.or(from_thread.run_title),
-        content_id: from_turn.content_id.or(from_thread.content_id),
-        response_language: from_turn
-            .response_language
-            .or(from_thread.response_language),
-    }
-}
-
-pub fn extract_recent_content_id_from_runtime_snapshot(
-    snapshot: &SessionRuntimeSnapshot,
-) -> Option<String> {
-    extract_recent_harness_context_from_runtime_snapshot(snapshot).content_id
-}
-
-fn extract_recent_access_mode_from_runtime_snapshot(
-    snapshot: &SessionRuntimeSnapshot,
-) -> Option<SessionExecutionRuntimeAccessMode> {
-    snapshot
-        .threads
-        .iter()
-        .flat_map(|thread| thread.turns.iter())
-        .filter_map(|turn| {
-            let access_mode = turn
-                .context_override
-                .as_ref()
-                .and_then(SessionExecutionRuntimeAccessMode::from_turn_context_override)?;
-            Some((turn.updated_at, access_mode))
-        })
-        .max_by_key(|(updated_at, _)| *updated_at)
-        .map(|(_, access_mode)| access_mode)
-}
-
 pub async fn persist_session_recent_access_mode(
     session_id: &str,
     recent_access_mode: SessionExecutionRuntimeAccessMode,
@@ -1278,34 +1160,11 @@ pub async fn persist_session_recent_team_selection(
     Ok(())
 }
 
-fn resolve_latest_turn(snapshot: &SessionRuntimeSnapshot) -> Option<&aster::session::TurnRuntime> {
-    snapshot
-        .threads
-        .iter()
-        .flat_map(|thread| thread.turns.iter())
-        .max_by(|left, right| {
-            left.updated_at
-                .cmp(&right.updated_at)
-                .then_with(|| left.created_at.cmp(&right.created_at))
-                .then_with(|| left.id.cmp(&right.id))
-        })
-}
-
-fn map_turn_status(status: TurnStatus) -> String {
-    match status {
-        TurnStatus::Queued => "queued".to_string(),
-        TurnStatus::Running => "running".to_string(),
-        TurnStatus::Completed => "completed".to_string(),
-        TurnStatus::Failed => "failed".to_string(),
-        TurnStatus::Aborted => "aborted".to_string(),
-    }
-}
-
-pub fn build_session_execution_runtime(
+pub(crate) fn build_session_execution_runtime(
     session_id: &str,
-    session: Option<&Session>,
+    session: Option<&SessionExecutionRuntimeSessionProjection>,
     execution_strategy: Option<String>,
-    snapshot: Option<&SessionRuntimeSnapshot>,
+    snapshot: Option<&SessionExecutionRuntimeSnapshotProjection>,
     provider_selector: Option<String>,
 ) -> Option<SessionExecutionRuntime> {
     let mut runtime = SessionExecutionRuntime {
@@ -1313,7 +1172,7 @@ pub fn build_session_execution_runtime(
         provider_selector: normalize_optional_text(provider_selector),
         provider_name: session
             .and_then(|value| normalize_optional_text(value.provider_name.clone())),
-        model_name: session.and_then(resolve_session_model_name),
+        model_name: session.and_then(|value| normalize_optional_text(value.model_name.clone())),
         execution_strategy: normalize_optional_text(execution_strategy),
         output_schema_runtime: None,
         source: SessionExecutionRuntimeSource::Session,
@@ -1341,24 +1200,22 @@ pub fn build_session_execution_runtime(
     };
 
     if let Some(snapshot) = snapshot {
-        let recent_harness_context = extract_recent_harness_context_from_runtime_snapshot(snapshot);
-        runtime.recent_theme = recent_harness_context.theme;
-        runtime.recent_session_mode = recent_harness_context.session_mode;
-        runtime.recent_gate_key = recent_harness_context.gate_key;
-        runtime.recent_run_title = recent_harness_context.run_title;
-        runtime.recent_content_id = recent_harness_context.content_id;
-        runtime.recent_response_language = recent_harness_context.response_language;
-        runtime.recent_access_mode = extract_recent_access_mode_from_runtime_snapshot(snapshot);
+        runtime.recent_theme = snapshot.recent_harness_context.theme.clone();
+        runtime.recent_session_mode = snapshot.recent_harness_context.session_mode.clone();
+        runtime.recent_gate_key = snapshot.recent_harness_context.gate_key.clone();
+        runtime.recent_run_title = snapshot.recent_harness_context.run_title.clone();
+        runtime.recent_content_id = snapshot.recent_harness_context.content_id.clone();
+        runtime.recent_response_language =
+            snapshot.recent_harness_context.response_language.clone();
+        runtime.recent_access_mode = snapshot.recent_access_mode;
 
-        if let Some(latest_turn) = resolve_latest_turn(snapshot) {
+        if let Some(latest_turn) = snapshot.latest_turn.as_ref() {
             runtime.latest_turn_id = Some(latest_turn.id.clone());
-            runtime.latest_turn_status = Some(map_turn_status(latest_turn.status));
-            runtime.context_summary = crate::protocol_projection::project_turn_context_summary(
-                latest_turn.context_override.as_ref(),
-            );
-            runtime.execution_strategy = latest_turn
-                .context_override
-                .as_ref()
+            runtime.latest_turn_status = Some(latest_turn.status.clone());
+            let turn_context = latest_turn.context.as_ref();
+            runtime.context_summary =
+                crate::protocol_projection::project_turn_context_summary(turn_context);
+            runtime.execution_strategy = turn_context
                 .and_then(|value| extract_execution_strategy_from_metadata(&value.metadata))
                 .or(runtime.execution_strategy);
             runtime.output_schema_runtime = latest_turn.output_schema_runtime.clone();
@@ -1367,10 +1224,7 @@ pub fn build_session_execution_runtime(
                 .as_ref()
                 .and_then(|value| normalize_optional_text(value.model_name.clone()))
                 .or_else(|| {
-                    latest_turn
-                        .context_override
-                        .as_ref()
-                        .and_then(|value| normalize_optional_text(value.model.clone()))
+                    turn_context.and_then(|value| normalize_optional_text(value.model.clone()))
                 })
                 .or(runtime.model_name);
             runtime.provider_name = latest_turn
@@ -1378,51 +1232,33 @@ pub fn build_session_execution_runtime(
                 .as_ref()
                 .and_then(|value| normalize_optional_text(value.provider_name.clone()))
                 .or(runtime.provider_name);
-            runtime.recent_preferences = latest_turn
-                .context_override
-                .as_ref()
+            runtime.recent_preferences = turn_context
                 .and_then(|value| extract_recent_preferences_from_metadata(&value.metadata));
-            runtime.recent_team_selection = latest_turn
-                .context_override
-                .as_ref()
+            runtime.recent_team_selection = turn_context
                 .and_then(|value| extract_recent_team_selection_from_metadata(&value.metadata));
-            runtime.task_profile = latest_turn
-                .context_override
-                .as_ref()
-                .and_then(|value| extract_task_profile_from_metadata(&value.metadata));
-            runtime.routing_decision = latest_turn
-                .context_override
-                .as_ref()
+            runtime.task_profile =
+                turn_context.and_then(|value| extract_task_profile_from_metadata(&value.metadata));
+            runtime.routing_decision = turn_context
                 .and_then(|value| extract_routing_decision_from_metadata(&value.metadata));
-            runtime.limit_state = latest_turn
-                .context_override
-                .as_ref()
-                .and_then(|value| extract_limit_state_from_metadata(&value.metadata));
-            runtime.cost_state = latest_turn
-                .context_override
-                .as_ref()
-                .and_then(|value| extract_cost_state_from_metadata(&value.metadata));
-            runtime.permission_state = latest_turn
-                .context_override
-                .as_ref()
+            runtime.limit_state =
+                turn_context.and_then(|value| extract_limit_state_from_metadata(&value.metadata));
+            runtime.cost_state =
+                turn_context.and_then(|value| extract_cost_state_from_metadata(&value.metadata));
+            runtime.permission_state = turn_context
                 .and_then(|value| extract_permission_state_from_metadata(&value.metadata));
-            runtime.oem_policy = latest_turn
-                .context_override
-                .as_ref()
-                .and_then(|value| extract_oem_policy_from_metadata(&value.metadata));
-            runtime.runtime_summary = latest_turn
-                .context_override
-                .as_ref()
+            runtime.oem_policy =
+                turn_context.and_then(|value| extract_oem_policy_from_metadata(&value.metadata));
+            runtime.runtime_summary = turn_context
                 .and_then(|value| extract_runtime_summary_from_metadata(&value.metadata));
-            let metadata_limit_event = latest_turn
-                .context_override
-                .as_ref()
-                .and_then(|value| extract_limit_event_from_metadata(&value.metadata));
+            let metadata_limit_event =
+                turn_context.and_then(|value| extract_limit_event_from_metadata(&value.metadata));
             runtime.limit_event = detect_runtime_limit_event(latest_turn.error_message.as_deref())
                 .or(metadata_limit_event);
             if let (Some(cost_state), Some(session)) = (runtime.cost_state.take(), session) {
                 runtime.cost_state = Some(
-                    resolve_session_token_usage(session)
+                    session
+                        .usage
+                        .as_ref()
                         .map(|usage| apply_usage_to_cost_state(cost_state.clone(), &usage))
                         .unwrap_or(cost_state),
                 );
@@ -1432,18 +1268,16 @@ pub fn build_session_execution_runtime(
     }
 
     if runtime.recent_access_mode.is_none() {
-        runtime.recent_access_mode =
-            session.and_then(SessionExecutionRuntimeAccessMode::from_session);
+        runtime.recent_access_mode = session.and_then(|value| value.recent_access_mode);
     }
 
     if runtime.recent_preferences.is_none() {
-        runtime.recent_preferences =
-            session.and_then(SessionExecutionRuntimePreferences::from_session);
+        runtime.recent_preferences = session.and_then(|value| value.recent_preferences.clone());
     }
 
     if runtime.recent_team_selection.is_none() {
         runtime.recent_team_selection =
-            session.and_then(SessionExecutionRuntimeRecentTeamSelection::from_session);
+            session.and_then(|value| value.recent_team_selection.clone());
     }
 
     if runtime.provider_selector.is_none()
@@ -1524,7 +1358,7 @@ pub fn reconcile_session_execution_runtime_permission_fallback(
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_usage_to_cost_state, build_session_execution_runtime, detect_runtime_limit_event,
+        apply_usage_to_cost_state, detect_runtime_limit_event,
         reconcile_session_execution_runtime_permission_fallback, SessionExecutionRuntime,
         SessionExecutionRuntimeAccessMode, SessionExecutionRuntimeCostState,
         SessionExecutionRuntimeLimitEvent, SessionExecutionRuntimePreferences,
@@ -1544,6 +1378,26 @@ mod tests {
     };
     use serde_json::json;
     use std::path::PathBuf;
+
+    fn build_session_execution_runtime(
+        session_id: &str,
+        session: Option<&Session>,
+        execution_strategy: Option<String>,
+        snapshot: Option<&SessionRuntimeSnapshot>,
+        provider_selector: Option<String>,
+    ) -> Option<SessionExecutionRuntime> {
+        let session_projection = session
+            .map(crate::aster_runtime_projection::project_aster_session_execution_runtime_session);
+        let snapshot_projection = snapshot
+            .map(crate::aster_runtime_projection::project_aster_session_execution_runtime_snapshot);
+        super::build_session_execution_runtime(
+            session_id,
+            session_projection.as_ref(),
+            execution_strategy,
+            snapshot_projection.as_ref(),
+            provider_selector,
+        )
+    }
 
     #[test]
     fn falls_back_to_session_when_runtime_snapshot_missing() {
@@ -2581,7 +2435,7 @@ mod tests {
         let runtime =
             build_session_execution_runtime("session-plugin", None, None, Some(&snapshot), None)
                 .expect("runtime");
-        let summary = runtime.runtime_summary.expect("agent app scope summary");
+        let summary = runtime.runtime_summary.expect("plugin scope summary");
 
         assert_eq!(summary.surface.as_deref(), Some("plugin"));
         assert_eq!(summary.app_id.as_deref(), Some("content-factory-app"));

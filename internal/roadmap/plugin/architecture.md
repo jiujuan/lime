@@ -165,10 +165,10 @@ flowchart TD
 | Host builtin renderer | `current` | 文章、图片、storyboard、checklist 等标准对象首选渲染方式。 |
 | App declared pane | `current` | 复杂插件 UI 的受控挂载方式，只能作为右侧 pane。 |
 | Semantic guessing activation | `deprecated` | 不能作为新激活机制，只允许历史兼容说明。 |
-| Agent App / 工作台应用 marketplace as design source | `deprecated` | 旧目录只可作为迁移输入；插件中心 current 数据源是 LimeCore `client/plugins/marketplace` 与本地插件安装态。 |
+| Plugin / 工作台应用 marketplace as design source | `deprecated` | 旧目录只可作为迁移输入；插件中心 current 数据源是 LimeCore `client/plugins/marketplace` 与本地插件安装态。 |
 | 独立第二右栏 | `dead for new work` | 不允许把插件 UI 再做成一个完整右栏。 |
 | 旧 旧内容工作台 代码 | `dead` | 只允许作为业务参考，不得复用代码、IPC、store 或 renderer。 |
-| 旧 Agent App / 工作台应用同级产品名 | `deprecated` | 用户侧不再把它作为独立市场入口；历史文案只能解释为插件内部工作区能力。 |
+| 旧 Plugin / 工作台应用同级产品名 | `deprecated` | 用户侧不再把它作为独立市场入口；历史文案只能解释为插件内部工作区能力。 |
 
 ## 6. 右侧 Renderer 怎么做强
 

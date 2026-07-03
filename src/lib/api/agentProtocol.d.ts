@@ -430,6 +430,15 @@ export interface AgentEventImageTaskPresentationGenerated {
   turn_id?: string;
   presentation?: Record<string, unknown>;
 }
+export interface AgentEventImageTaskPresentationUnavailable {
+  type: "image_task_presentation_unavailable";
+  status?: string;
+  reason?: string;
+  workflow_run_id?: string;
+  session_id?: string;
+  thread_id?: string;
+  turn_id?: string;
+}
 export interface AgentToolProgressPayload {
   message?: string;
   progress?: number;
@@ -755,6 +764,7 @@ export type AgentEvent =
   | AgentEventToolEnd
   | AgentEventImageTaskCreated
   | AgentEventImageTaskPresentationGenerated
+  | AgentEventImageTaskPresentationUnavailable
   | AgentEventToolProgress
   | AgentEventToolOutputDelta
   | AgentEventToolInputDelta

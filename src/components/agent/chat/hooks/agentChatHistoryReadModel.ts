@@ -4,9 +4,17 @@ import type {
 } from "@/lib/api/agentProtocol";
 import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
 import type { Message } from "../types";
-import { buildFailedAgentMessageContent, buildFailedAgentRuntimeStatus } from "../utils/agentRuntimeStatus";
+import {
+  buildFailedAgentMessageContent,
+  buildFailedAgentRuntimeStatus,
+} from "../utils/agentRuntimeStatus";
+import { isImageTaskCreationToolName } from "../utils/imageTaskToolResult";
+import { buildImageTaskPreviewFromToolResult } from "../utils/taskPreviewFromToolResult";
 import { stringifyToolArguments } from "./agentChatToolResult";
-import type { HistoryThreadToolCall, HistoryToolCall } from "./agentChatHistoryTypes";
+import type {
+  HistoryThreadToolCall,
+  HistoryToolCall,
+} from "./agentChatHistoryTypes";
 import {
   asHistoryRecord,
   isFailedHistoryStatus,
@@ -17,6 +25,8 @@ import {
   readHistoryString,
 } from "./agentChatHistoryPrimitives";
 import { isAuxiliaryHistoryTurn } from "./agentChatHistoryTimelineBasics";
+import { mergeImageWorkbenchPreview } from "./agentChatHistoryProcess";
+import { normalizeHistoryUsage } from "./agentChatHistoryUsage";
 
 function isImportedHistorySession(detail: AsterSessionDetail): boolean {
   const runtime = detail.execution_runtime;
@@ -202,12 +212,19 @@ function historyToolCallStatusFromThreadToolCall(
 
 function historyToolCallOutputFromThreadToolCall(
   toolCall: HistoryThreadToolCall,
+  toolName: string,
 ): string {
   const record = asHistoryRecord(toolCall);
-  return (
+  const output = readHistoryString(record?.output);
+  const outputPreview =
     readHistoryString(record?.output_preview) ||
-    readHistoryString(record?.outputPreview) ||
-    readHistoryString(record?.output)
+    readHistoryString(record?.outputPreview);
+  if (isImageTaskCreationToolName(toolName)) {
+    return output || outputPreview;
+  }
+  return (
+    outputPreview ||
+    output
   );
 }
 
@@ -223,6 +240,13 @@ function historyToolCallStructuredContentFromThreadToolCall(
 ): unknown {
   const record = asHistoryRecord(toolCall);
   return record?.structured_content ?? record?.structuredContent;
+}
+
+function historyToolCallMetadataFromThreadToolCall(
+  toolCall: HistoryThreadToolCall,
+): Record<string, unknown> | undefined {
+  const record = asHistoryRecord(toolCall);
+  return asHistoryRecord(record?.metadata) ?? undefined;
 }
 
 function historyToolCallTurnIdFromThreadToolCall(
@@ -259,10 +283,11 @@ function historyToolCallFromThreadToolCall(
 
   const status = historyToolCallStatusFromThreadToolCall(toolCall);
   const record = asHistoryRecord(toolCall);
-  const output = historyToolCallOutputFromThreadToolCall(toolCall);
+  const output = historyToolCallOutputFromThreadToolCall(toolCall, name);
   const error = historyToolCallErrorFromThreadToolCall(toolCall);
   const structuredContent =
     historyToolCallStructuredContentFromThreadToolCall(toolCall);
+  const metadata = historyToolCallMetadataFromThreadToolCall(toolCall);
   const startTime = historyToolCallTimeFromThreadToolCall(toolCall, [
     "started_at",
     "startedAt",
@@ -299,8 +324,60 @@ function historyToolCallFromThreadToolCall(
             error: error || undefined,
             images: undefined,
             structuredContent,
+            metadata,
           },
+    metadata,
   };
+}
+
+function historyTurnIdFromRecord(value: unknown): string {
+  const record = asHistoryRecord(value);
+  return (
+    readHistoryString(record?.turn_id) ||
+    readHistoryString(record?.turnId) ||
+    readHistoryString(record?.id)
+  );
+}
+
+function historyUsageFromTurnRecord(value: unknown): Message["usage"] {
+  const record = asHistoryRecord(value);
+  return normalizeHistoryUsage(
+    record?.usage ?? record?.token_usage ?? record?.tokenUsage,
+  );
+}
+
+function findTurnUsageInRecords(
+  turns: readonly unknown[],
+  runtimeTurnId: string,
+): Message["usage"] {
+  return [...turns]
+    .reverse()
+    .filter((turn) => {
+      if (!runtimeTurnId) {
+        return true;
+      }
+      return historyTurnIdFromRecord(turn) === runtimeTurnId;
+    })
+    .map(historyUsageFromTurnRecord)
+    .find((usage): usage is NonNullable<Message["usage"]> =>
+      Boolean(usage),
+    );
+}
+
+function resolveThreadReadToolCallUsage(
+  detail: AsterSessionDetail,
+  runtimeTurnId: string,
+): Message["usage"] {
+  return (
+    findTurnUsageInRecords(detail.thread_read?.turns || [], runtimeTurnId) ??
+    findTurnUsageInRecords(detail.turns || [], runtimeTurnId) ??
+    normalizeHistoryUsage(
+      asHistoryRecord(detail.thread_read?.diagnostics)?.latest_turn_usage ??
+        asHistoryRecord(detail.thread_read?.diagnostics)?.latestTurnUsage ??
+        asHistoryRecord(detail.thread_read?.runtime_summary)?.latest_turn_usage ??
+        asHistoryRecord(detail.thread_read?.runtime_summary)?.latestTurnUsage,
+    )
+  );
 }
 
 export function hydrateSessionDetailMessagesFromThreadReadToolCalls(
@@ -329,6 +406,26 @@ export function hydrateSessionDetailMessagesFromThreadReadToolCalls(
       .reverse()
       .map((toolCall) => toolCall.endTime || toolCall.startTime)
       .find((date) => date.getTime() > 0) || new Date(0);
+  const usage = resolveThreadReadToolCallUsage(detail, runtimeTurnId);
+  const imageWorkbenchPreview = toolCalls.reduce(
+    (current, toolCall) =>
+      mergeImageWorkbenchPreview(
+        current,
+        buildImageTaskPreviewFromToolResult({
+          toolId: toolCall.id,
+          toolName: toolCall.name,
+          toolArguments: toolCall.arguments,
+          toolResult:
+            toolCall.result &&
+            typeof toolCall.result === "object" &&
+            !Array.isArray(toolCall.result)
+              ? (toolCall.result as unknown as Record<string, unknown>)
+              : undefined,
+          fallbackPrompt: "",
+        }) || undefined,
+      ),
+    undefined as Message["imageWorkbenchPreview"],
+  );
 
   return [
     {
@@ -343,6 +440,8 @@ export function hydrateSessionDetailMessagesFromThreadReadToolCalls(
       timestamp,
       isThinking: false,
       runtimeTurnId: runtimeTurnId || undefined,
+      usage,
+      imageWorkbenchPreview,
     },
   ];
 }

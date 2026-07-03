@@ -1588,10 +1588,7 @@ async function fillComposer(page, value) {
     ),
     value,
   );
-  assert(
-    result?.ok,
-    `输入框填充失败: ${result?.reason || "unknown"}`,
-  );
+  assert(result?.ok, `输入框填充失败: ${result?.reason || "unknown"}`);
   assert(
     String(result.value || "").includes(String(value).slice(0, 12)),
     "输入框填充后未读回目标内容",
@@ -1651,12 +1648,7 @@ async function submitComposer(
     await clickComposerSendButton(page, timeoutMs);
   }
 
-  return await waitForCondition(
-    submitLabel,
-    observeSubmitted,
-    timeoutMs,
-    250,
-  );
+  return await waitForCondition(submitLabel, observeSubmitted, timeoutMs, 250);
 }
 
 async function clickLastEnabledButton(page, label, timeoutMs = 30_000) {
@@ -1698,7 +1690,7 @@ function isLikelyDetachedBlankTaskSnapshot(snapshot) {
 function recoveryResultVisible(snapshot, persisted = false) {
   return Boolean(
     snapshot?.recoveryVisible &&
-      (Number(snapshot?.recoveryTextCount || 0) >= 1 || persisted),
+    (Number(snapshot?.recoveryTextCount || 0) >= 1 || persisted),
   );
 }
 
@@ -2167,8 +2159,10 @@ async function main() {
             invokes,
             APP_SERVER_METHOD_SKILL_MANAGEMENT_LIST,
           );
-          if (snapshot?.ready && workspaceReady && skillsReady) {
-            return "AgentChatPage.loadData.noProject";
+          if (snapshot?.ready && workspaceReady) {
+            return skillsReady
+              ? "AgentChatPage.loadData.noProject+skillManagement/list"
+              : "AgentChatPage.loadData.noProject+workspace/default/ensure";
           }
         }
         return null;
@@ -2965,9 +2959,13 @@ async function main() {
       summary.interruptedTurnStatus === "completed";
     const longTurnCanBeInterrupted =
       Boolean(firstDelta?.stopVisible) &&
-      appServerMethodSeen(invokes, APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL, {
-        direction: "request",
-      }) &&
+      appServerMethodSeen(
+        invokes,
+        APP_SERVER_METHOD_AGENT_SESSION_TURN_CANCEL,
+        {
+          direction: "request",
+        },
+      ) &&
       Boolean(summary.interruptHasTurnScope) &&
       isInterruptedTurnStatus(summary.interruptedTurnStatus);
     summary.assertions = {
@@ -3020,7 +3018,7 @@ async function main() {
           liveWebToolStreamEvidence.required.find(
             (item) => item.name === "WebSearch",
           )?.result) ||
-          liveWebSearchReadModelCompleted,
+        liveWebSearchReadModelCompleted,
       ),
       liveWebFetchToolEventsSeen: Boolean(
         (liveWebToolStreamEvidence.required.find(
@@ -3029,23 +3027,23 @@ async function main() {
           liveWebToolStreamEvidence.required.find(
             (item) => item.name === "WebFetch",
           )?.result) ||
-          liveWebFetchReadModelCompleted,
+        liveWebFetchReadModelCompleted,
       ),
       liveWebRequiredToolEventsSeen: Boolean(
         liveWebToolStreamEvidence.allRequiredToolEventsForTurn ||
-          liveWebRequiredReadModelToolsCompleted,
+        liveWebRequiredReadModelToolsCompleted,
       ),
       liveWebRequiredToolEventOutputsPresent: Boolean(
         liveWebToolStreamEvidence.allRequiredOutputPresentForTurn ||
-          liveWebRequiredReadModelToolOutputsPresent,
+        liveWebRequiredReadModelToolOutputsPresent,
       ),
       liveWebRequiredToolEventOrderValid: Boolean(
         liveWebToolStreamEvidence.allRequiredResultAfterStartForTurn ||
-          liveWebRequiredReadModelToolsCompleted,
+        liveWebRequiredReadModelToolsCompleted,
       ),
       liveWebTurnCompletedEventSeen: Boolean(
         liveWebToolStreamEvidence.terminalEventSeen ||
-          summary.liveWebTurnStatus === "completed",
+        summary.liveWebTurnStatus === "completed",
       ),
       interruptScopedToLongTurn: longTurnFastCompleteAccepted
         ? false

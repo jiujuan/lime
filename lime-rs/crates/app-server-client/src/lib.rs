@@ -235,6 +235,8 @@ pub use app_server_protocol::WechatChannelAccountListResponse;
 pub use app_server_protocol::WechatConfiguredAccount;
 pub use app_server_protocol::WindowsStartupCheck;
 pub use app_server_protocol::WindowsStartupDiagnosticsResponse;
+pub use app_server_protocol::WorkflowReadParams;
+pub use app_server_protocol::WorkflowReadResponse;
 pub use app_server_protocol::WorkspaceEnsureParams;
 pub use app_server_protocol::WorkspaceEnsureProjectParams;
 pub use app_server_protocol::WorkspaceEnsureProjectResponse;
@@ -408,6 +410,7 @@ pub use app_server_protocol::METHOD_USAGE_STATS_DAILY_TRENDS_LIST;
 pub use app_server_protocol::METHOD_USAGE_STATS_MODEL_RANKING_LIST;
 pub use app_server_protocol::METHOD_USAGE_STATS_READ;
 pub use app_server_protocol::METHOD_WECHAT_CHANNEL_ACCOUNT_LIST;
+pub use app_server_protocol::METHOD_WORKFLOW_READ;
 pub use app_server_protocol::METHOD_WORKSPACE_BY_PATH_READ;
 pub use app_server_protocol::METHOD_WORKSPACE_DEFAULT_ENSURE;
 pub use app_server_protocol::METHOD_WORKSPACE_DEFAULT_READ;
@@ -538,6 +541,13 @@ impl AppServerClient {
         params: AgentSessionReadParams,
     ) -> Result<JsonRpcRequest, ClientError> {
         self.typed_request(typed::read_session(params))
+    }
+
+    pub fn read_workflow(
+        &mut self,
+        params: WorkflowReadParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::read_workflow(params))
     }
 
     pub fn read_agent_session_objective(
@@ -1531,6 +1541,10 @@ pub mod typed {
         TypedRequest::new(METHOD_AGENT_SESSION_READ, params)
     }
 
+    pub fn read_workflow(params: WorkflowReadParams) -> TypedRequest<WorkflowReadParams> {
+        TypedRequest::new(METHOD_WORKFLOW_READ, params)
+    }
+
     pub fn read_agent_session_objective(
         params: AgentSessionObjectiveReadParams,
     ) -> TypedRequest<AgentSessionObjectiveReadParams> {
@@ -2380,6 +2394,19 @@ mod tests {
         assert_eq!(request.id, RequestId::Integer(1));
         assert_eq!(request.method, METHOD_AGENT_SESSION_READ);
         assert_eq!(request.params.expect("params")["sessionId"], "sess_1");
+
+        let typed = typed::read_workflow(WorkflowReadParams {
+            session_id: "sess_1".to_string(),
+        });
+
+        assert_eq!(typed.method(), METHOD_WORKFLOW_READ);
+        assert_eq!(typed.params().session_id, "sess_1");
+
+        let request = client.typed_request(typed).expect("request");
+
+        assert_eq!(request.id, RequestId::Integer(2));
+        assert_eq!(request.method, METHOD_WORKFLOW_READ);
+        assert_eq!(request.params.expect("params")["sessionId"], "sess_1");
     }
 
     #[test]
@@ -3164,16 +3191,14 @@ mod tests {
     fn app_data_surface_helpers_use_current_methods() {
         let mut client = AppServerClient::new();
 
-        let installed = client
-            .list_plugin_installed()
-            .expect("installed agent apps");
+        let installed = client.list_plugin_installed().expect("installed plugins");
         let shell_prepare = client
             .prepare_plugin_shell(PluginShellPrepareParams {
                 descriptor: json!({
                     "appId": "content-factory-app",
                 }),
             })
-            .expect("agent app shell prepare");
+            .expect("plugin shell prepare");
         let knowledge = client
             .list_knowledge_packs(KnowledgeListPacksParams {
                 working_dir: "/workspace/project".to_string(),

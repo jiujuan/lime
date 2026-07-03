@@ -50,11 +50,32 @@ pub(crate) fn spawn_image_task_worker_for_created_task(
     context: ImageTaskWorkerContext,
 ) -> Option<JoinHandle<Result<MediaTaskOutput, String>>> {
     if !should_execute_created_image_task(task) {
+        tracing::info!(
+            task_id = %task.task_id,
+            task_type = %task.task_type,
+            status = %task.normalized_status,
+            reused_existing = task.reused_existing,
+            "image task worker skipped created task"
+        );
         return None;
     }
 
-    let workspace_root = workspace_root_from_task(task)?;
+    let Some(workspace_root) = workspace_root_from_task(task) else {
+        tracing::warn!(
+            task_id = %task.task_id,
+            artifact_path = %task.artifact_path,
+            absolute_artifact_path = %task.absolute_artifact_path,
+            "image task worker could not resolve workspace root"
+        );
+        return None;
+    };
     let task_id = task.task_id.clone();
+    tracing::info!(
+        task_id = %task_id,
+        workspace_root = %workspace_root.display(),
+        status = %task.normalized_status,
+        "image task worker spawned for created task"
+    );
     Some(tokio::spawn(async move {
         let result = execute_image_task(workspace_root, task_id.clone(), &context).await;
         if let Err(error) = &result {
@@ -103,11 +124,23 @@ pub(super) fn spawn_image_task_worker_for_existing_task(
     context: ImageTaskWorkerContext,
 ) -> Option<JoinHandle<Result<MediaTaskOutput, String>>> {
     if !should_execute_pending_image_task(task) {
+        tracing::info!(
+            task_id = %task.task_id,
+            task_type = %task.task_type,
+            status = %task.normalized_status,
+            "image task worker skipped existing task"
+        );
         return None;
     }
 
     let workspace_root = workspace_root.to_path_buf();
     let task_id = task.task_id.clone();
+    tracing::info!(
+        task_id = %task_id,
+        workspace_root = %workspace_root.display(),
+        status = %task.normalized_status,
+        "image task worker spawned for existing task"
+    );
     Some(tokio::spawn(async move {
         let result = execute_image_task(workspace_root, task_id.clone(), &context).await;
         if let Err(error) = &result {
@@ -122,8 +155,19 @@ pub(super) async fn execute_image_task(
     task_id: String,
     context: &ImageTaskWorkerContext,
 ) -> Result<MediaTaskOutput, String> {
+    tracing::info!(
+        task_id = %task_id,
+        workspace_root = %workspace_root.display(),
+        "image task worker resolving runner config"
+    );
     match image_generation_runner_config_from_resolved_route(&workspace_root, &task_id, context) {
         Ok(Some(runner_config)) => {
+            tracing::info!(
+                task_id = %task_id,
+                endpoint = %runner_config.endpoint,
+                request_body_format = %runner_config.request_body_format.as_str(),
+                "image task worker using resolved route"
+            );
             return execute_image_task_with_runner_config(workspace_root, task_id, runner_config)
                 .await;
         }
@@ -139,6 +183,12 @@ pub(super) async fn execute_image_task(
     }
     match image_generation_runner_config_from_task_provider(&workspace_root, &task_id, context) {
         Ok(Some(runner_config)) => {
+            tracing::info!(
+                task_id = %task_id,
+                endpoint = %runner_config.endpoint,
+                request_body_format = %runner_config.request_body_format.as_str(),
+                "image task worker using provider store route"
+            );
             return execute_image_task_with_runner_config(workspace_root, task_id, runner_config)
                 .await;
         }
@@ -164,9 +214,17 @@ async fn execute_image_task_with_runner_config(
     task_id: String,
     runner_config: ImageGenerationRunnerConfig,
 ) -> Result<MediaTaskOutput, String> {
-    execute_image_generation_task(Path::new(&workspace_root), &task_id, &runner_config)
-        .await
-        .map_err(|error| error.to_string())
+    let output =
+        execute_image_generation_task(Path::new(&workspace_root), &task_id, &runner_config)
+            .await
+            .map_err(|error| error.to_string())?;
+    tracing::info!(
+        task_id = %task_id,
+        status = %output.normalized_status,
+        attempt_count = output.attempt_count,
+        "image task worker finished"
+    );
+    Ok(output)
 }
 
 fn workspace_root_from_task(task: &MediaTaskArtifactResponse) -> Option<PathBuf> {

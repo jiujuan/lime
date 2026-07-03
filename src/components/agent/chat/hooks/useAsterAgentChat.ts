@@ -34,6 +34,7 @@ import {
   buildAutoTitleConversationText,
   hasUserTextMessage,
   isAutoTitlePlaceholder,
+  sanitizeGeneratedAutoTitle,
   shouldGenerateAutoTitle,
 } from "./agentChatAutoTitleViewModel";
 import { hasActiveRuntimeTurn } from "./agentSessionState";
@@ -607,12 +608,16 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
             const conversationText =
               buildAutoTitleConversationText(sessionMessages);
 
-            const generatedTitle = (
+            const rawGeneratedTitle = (
               await runtime.generateSessionTitle?.(
                 activeSessionId,
                 conversationText,
               )
             )?.trim();
+            const generatedTitle = sanitizeGeneratedAutoTitle(
+              rawGeneratedTitle,
+              conversationText,
+            );
             if (
               cancelled ||
               !generatedTitle ||
@@ -627,6 +632,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
                 previous,
                 activeSessionId,
                 generatedTitle,
+                conversationText,
               ),
             );
             titleApplied = true;

@@ -245,6 +245,9 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   skillsLoading: ConversationScenePresentationParams["scene"]["isSkillsLoading"];
   onSelectServiceSkill?: ConversationScenePresentationParams["scene"]["onSelectServiceSkill"];
   pluginSuggestions?: ConversationScenePresentationParams["scene"]["pluginSuggestions"];
+  pluginSuggestionsError?: ConversationScenePresentationParams["scene"]["pluginSuggestionsError"];
+  pluginSuggestionsLoading?: ConversationScenePresentationParams["scene"]["pluginSuggestionsLoading"];
+  onPluginSuggestionsNeeded?: ConversationScenePresentationParams["scene"]["onPluginSuggestionsNeeded"];
   handleNavigateToSkillSettings: ConversationScenePresentationParams["scene"]["onNavigateToSettings"];
   handleRefreshSkills: ConversationScenePresentationParams["scene"]["onRefreshSkills"];
   handleOpenBrowserAssistInCanvas: ConversationScenePresentationParams["scene"]["onLaunchBrowserAssist"];
@@ -433,6 +436,9 @@ export function useWorkspaceConversationSceneRuntime({
   skillsLoading,
   onSelectServiceSkill,
   pluginSuggestions,
+  pluginSuggestionsError,
+  pluginSuggestionsLoading,
+  onPluginSuggestionsNeeded,
   handleNavigateToSkillSettings,
   handleRefreshSkills,
   handleOpenBrowserAssistInCanvas,
@@ -828,6 +834,9 @@ export function useWorkspaceConversationSceneRuntime({
         : undefined,
       runtimeToolAvailability: inputbarScene.runtimeToolAvailability,
       pluginSuggestions,
+      pluginSuggestionsError,
+      pluginSuggestionsLoading,
+      onPluginSuggestionsNeeded,
       knowledgePackSelection: inputbarScene.knowledgePackSelection,
       knowledgePackOptions: inputbarScene.knowledgePackOptions,
       onToggleKnowledgePack: inputbarScene.onToggleKnowledgePack,

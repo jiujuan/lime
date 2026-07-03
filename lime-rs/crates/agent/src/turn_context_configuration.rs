@@ -1,0 +1,123 @@
+use agent_protocol::turn_context::TurnOutputSchemaSource;
+use serde_json::{Map, Value};
+use std::collections::HashMap;
+use std::path::PathBuf;
+
+pub type AgentTurnContext = agent_protocol::turn_context::TurnContextOverride;
+pub type AgentTurnContextOverride = AgentTurnContext;
+
+#[derive(Debug, Default)]
+pub struct AgentTurnContextConfigurationRequest {
+    pub cwd: Option<PathBuf>,
+    pub model: Option<String>,
+    pub effort: Option<String>,
+    pub approval_policy: Option<String>,
+    pub sandbox_policy: Option<String>,
+    pub collaboration_mode: Option<String>,
+    pub user_visible_input_text: Option<String>,
+    pub output_schema: Option<Value>,
+    pub metadata: HashMap<String, Value>,
+}
+
+pub fn build_agent_turn_context(
+    request: AgentTurnContextConfigurationRequest,
+) -> Option<AgentTurnContext> {
+    let mut context = AgentTurnContext {
+        cwd: request.cwd,
+        model: request.model,
+        effort: request.effort,
+        approval_policy: request.approval_policy,
+        sandbox_policy: request.sandbox_policy,
+        collaboration_mode: request.collaboration_mode,
+        user_visible_input_text: request.user_visible_input_text,
+        metadata: request.metadata,
+        ..AgentTurnContext::default()
+    };
+    if let Some(output_schema) = request.output_schema {
+        set_agent_turn_output_schema(&mut context, output_schema);
+    }
+    if context.approval_policy.is_none()
+        && context.sandbox_policy.is_none()
+        && context.user_visible_input_text.is_none()
+        && context.output_schema.is_none()
+        && context.collaboration_mode.is_none()
+        && context.metadata.is_empty()
+    {
+        None
+    } else {
+        Some(context)
+    }
+}
+
+pub fn set_agent_turn_output_schema(context: &mut AgentTurnContext, output_schema: Value) {
+    context.output_schema = Some(output_schema);
+    context.output_schema_source = Some(TurnOutputSchemaSource::Turn);
+}
+
+pub(crate) fn to_aster_turn_context(
+    context: AgentTurnContext,
+) -> aster::session::TurnContextOverride {
+    aster::session::TurnContextOverride {
+        cwd: context.cwd,
+        model: context.model,
+        effort: context.effort,
+        approval_policy: context.approval_policy,
+        sandbox_policy: context.sandbox_policy,
+        collaboration_mode: context.collaboration_mode,
+        user_visible_input_text: context.user_visible_input_text,
+        output_schema: context.output_schema,
+        output_schema_source: context.output_schema_source.map(|source| match source {
+            TurnOutputSchemaSource::Session => aster::session::TurnOutputSchemaSource::Session,
+            TurnOutputSchemaSource::Turn => aster::session::TurnOutputSchemaSource::Turn,
+        }),
+        metadata: context.metadata,
+    }
+}
+
+pub(crate) fn to_agent_turn_context(
+    context: aster::session::TurnContextOverride,
+) -> AgentTurnContext {
+    AgentTurnContext {
+        cwd: context.cwd,
+        model: context.model,
+        effort: context.effort,
+        approval_policy: context.approval_policy,
+        sandbox_policy: context.sandbox_policy,
+        collaboration_mode: context.collaboration_mode,
+        user_visible_input_text: context.user_visible_input_text,
+        output_schema: context.output_schema,
+        output_schema_source: context.output_schema_source.map(|source| match source {
+            aster::session::TurnOutputSchemaSource::Session => TurnOutputSchemaSource::Session,
+            aster::session::TurnOutputSchemaSource::Turn => TurnOutputSchemaSource::Turn,
+        }),
+        metadata: context.metadata,
+    }
+}
+
+pub fn set_agent_turn_user_visible_input_text(
+    context: &mut AgentTurnContext,
+    input_text: Option<String>,
+) {
+    context.user_visible_input_text = input_text;
+}
+
+pub fn insert_agent_turn_metadata(
+    context: &mut AgentTurnContext,
+    key: impl Into<String>,
+    value: Value,
+) {
+    context.metadata.insert(key.into(), value);
+}
+
+pub fn agent_turn_context_metadata(context: Option<&AgentTurnContext>) -> Option<Value> {
+    let metadata = &context?.metadata;
+    (!metadata.is_empty()).then(|| Value::Object(Map::from_iter(metadata.clone())))
+}
+
+pub fn agent_turn_approval_policy(context: Option<&AgentTurnContext>) -> Option<String> {
+    context.and_then(|context| context.approval_policy.clone())
+}
+
+pub fn agent_turn_sandbox_policy(context: Option<&AgentTurnContext>) -> Option<String> {
+    context.and_then(|context| context.sandbox_policy.clone())
+}

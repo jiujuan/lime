@@ -21,7 +21,7 @@ Lime Next 不只服务桌面端。目标形态必须同时容纳：
 | --- | --- | --- | --- | --- | --- |
 | Lime Desktop / Claw | 旗舰桌面工作台 | 本地 App Server sidecar / in-process bridge | Electron renderer | `current shell` | 真实 GUI E2E 必须证明 turn lifecycle。 |
 | content-studio | 首批独立业务 App | 打包 app-server sidecar，后续可切 remote gateway | Electron renderer | `current target` | 只通过 app-server-client 和 businessObjectRef 接入。 |
-| Agent App | 垂直任务 App | Lime Runtime / App Server | iframe / standalone shell | `current target` | UI runtime 不等于对话 runtime；turn 必须走 `agentSession/*`。 |
+| Plugin | 垂直任务 App | Lime Runtime / App Server | iframe / standalone shell | `current target` | UI runtime 不等于对话 runtime；turn 必须走 `agentSession/*`。 |
 | 独立桌面 App | 第三方或内部垂直桌面产品 | 本地 sidecar 或 remote gateway | 自有桌面壳 | `current target` | 不链接 Lime Rust workspace，不 copy Claw shell。 |
 | 移动 App | 轻量任务、审批、查看、继续会话 | 优先 remote gateway，少量离线 projection | 原生 / 跨端 UI | `current target` | 不在手机端运行完整 ToolRuntime。 |
 | 微信小程序 | 微信生态轻入口、审批、查看、触发任务 | 只能通过服务端 gateway | 小程序页面 | `current target` | 不持有 secret，不直接访问本地 sidecar，不自建 runtime。 |

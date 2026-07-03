@@ -16,6 +16,7 @@ import type { InputCapabilitySendRoute } from "../skill-selection/inputCapabilit
 import { normalizeProjectId } from "../utils/topicProjectResolution";
 import { normalizeExecutionStrategy } from "./agentChatCoreUtils";
 import { sanitizeMessageTextForPreview } from "../utils/messageDisplaySanitizer";
+import { sanitizeGeneratedAutoTitle } from "./agentChatAutoTitleViewModel";
 
 export type TaskStatus = "draft" | "running" | "waiting" | "done" | "failed";
 export type TaskStatusReason =
@@ -584,10 +585,15 @@ export const mapSessionToTopic = (session: AsterSessionInfo): Topic => {
   const messagesCount = session.messages_count ?? 0;
   const createdAt = resolveSessionTimestampDate(session.created_at);
   const updatedAt = resolveSessionTimestampDate(updatedAtValue);
+  const fallbackTitle = buildSessionFallbackTitle(createdAt);
+  const sessionTitle = sanitizeGeneratedAutoTitle(
+    session.name || fallbackTitle,
+    session.name,
+  );
 
   return {
     id: session.id,
-    title: session.name || buildSessionFallbackTitle(createdAt),
+    title: sessionTitle || fallbackTitle,
     createdAt,
     updatedAt,
     workspaceId: normalizeProjectId(session.workspace_id),

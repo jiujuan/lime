@@ -9,7 +9,7 @@ exclude = [
 resolver = "2"
 
 [workspace.package]
-version = "1.87.0"
+version = "1.88.0"
 edition = "2021"
 authors = ["coso"]
 repository = "https://github.com/aiclientproxy/lime"
@@ -29,6 +29,11 @@ lime-server = { path = "crates/server" }
 lime-skills = { path = "crates/skills" }
 lime-mcp = { path = "crates/mcp" }
 lime-agent = { path = "crates/agent" }
+agent-protocol = { path = "crates/agent-protocol" }
+agent-runtime = { path = "crates/agent-runtime" }
+model-provider = { path = "crates/model-provider" }
+thread-store = { path = "crates/thread-store" }
+tool-runtime = { path = "crates/tool-runtime" }
 lime-scheduler = { path = "crates/scheduler" }
 lime-embedding = { path = "crates/embedding", default-features = false }
 lime-gateway = { path = "crates/gateway" }
@@ -46,7 +51,6 @@ patch-apply = { path = "crates/patch-apply" }
 voice-core = { path = "crates/voice-core" }
 document-preview = { path = "crates/document-preview" }
 aster = { package = "aster-core", path = "crates/aster-rust/crates/aster" }
-aster-models = { path = "crates/aster-rust/crates/aster-models" }
 
 # 序列化
 serde = { version = "1", features = ["derive"] }

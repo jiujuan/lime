@@ -1,6 +1,5 @@
 //! 运行态 timeline / usage 到持久会话详情的投影。
 
-use aster::session::{Session as AsterSession, SessionRuntimeSnapshot};
 use lime_core::database::agent_session_repository::SessionRecordOverview;
 use lime_core::database::dao::agent_timeline::{
     AgentThreadItem, AgentThreadTurn, AgentThreadTurnStatus,
@@ -8,8 +7,8 @@ use lime_core::database::dao::agent_timeline::{
 use std::collections::HashMap;
 
 use super::session_store_types::{SessionDetail, SessionInfo};
+use crate::aster_runtime_projection::RuntimeTimelineSnapshotProjection;
 use crate::protocol::AgentMessage as RuntimeAgentMessage;
-use crate::protocol_projection::{project_item_runtime, project_turn_runtime};
 
 fn sort_runtime_turns(turns: &mut [AgentThreadTurn]) {
     turns.sort_by(|left, right| {
@@ -52,15 +51,15 @@ fn should_preserve_persisted_terminal_turn(
     ) && matches!(runtime.status, AgentThreadTurnStatus::Running)
 }
 
-pub(super) fn apply_aster_runtime_snapshot(
+pub(super) fn apply_runtime_snapshot(
     detail: &mut SessionDetail,
-    snapshot: &SessionRuntimeSnapshot,
+    snapshot: &RuntimeTimelineSnapshotProjection,
 ) {
-    if let Some(thread) = snapshot.threads.first() {
-        detail.thread_id = thread.thread.id.clone();
+    if let Some(thread_id) = snapshot.thread_id.as_ref() {
+        detail.thread_id = thread_id.clone();
     }
 
-    if snapshot.threads.is_empty() {
+    if snapshot.turns.is_empty() && snapshot.items.is_empty() {
         return;
     }
 
@@ -69,18 +68,15 @@ pub(super) fn apply_aster_runtime_snapshot(
         .drain(..)
         .map(|turn| (turn.id.clone(), turn))
         .collect::<HashMap<_, _>>();
-    for thread in &snapshot.threads {
-        for turn in &thread.turns {
-            let runtime_turn = project_turn_runtime(turn.clone());
-            if turns_by_id
-                .get(&runtime_turn.id)
-                .map(|persisted| should_preserve_persisted_terminal_turn(persisted, &runtime_turn))
-                .unwrap_or(false)
-            {
-                continue;
-            }
-            turns_by_id.insert(runtime_turn.id.clone(), runtime_turn);
+    for runtime_turn in &snapshot.turns {
+        if turns_by_id
+            .get(&runtime_turn.id)
+            .map(|persisted| should_preserve_persisted_terminal_turn(persisted, runtime_turn))
+            .unwrap_or(false)
+        {
+            continue;
         }
+        turns_by_id.insert(runtime_turn.id.clone(), runtime_turn.clone());
     }
     detail.turns = turns_by_id.into_values().collect();
     sort_runtime_turns(&mut detail.turns);
@@ -96,12 +92,8 @@ pub(super) fn apply_aster_runtime_snapshot(
         .drain(..)
         .map(|item| (item.id.clone(), item))
         .collect::<HashMap<_, _>>();
-    for thread in &snapshot.threads {
-        for item in &thread.items {
-            if let Some(projected) = project_item_runtime(item.clone()) {
-                items_by_id.insert(projected.id.clone(), projected);
-            }
-        }
+    for projected in &snapshot.items {
+        items_by_id.insert(projected.id.clone(), projected.clone());
     }
     detail.items = items_by_id.into_values().collect();
     sort_runtime_items(&mut detail.items, &turn_started_at);
@@ -134,33 +126,11 @@ pub(super) fn build_runtime_session_info(overview: SessionRecordOverview) -> Ses
     }
 }
 
-fn resolve_runtime_usage_from_aster_session(
-    session: &AsterSession,
-) -> Option<crate::protocol::AgentTokenUsage> {
-    match (session.input_tokens, session.output_tokens) {
-        (Some(input_tokens), Some(output_tokens)) if input_tokens >= 0 && output_tokens >= 0 => {
-            Some(crate::protocol::AgentTokenUsage {
-                input_tokens: input_tokens as u32,
-                output_tokens: output_tokens as u32,
-                cached_input_tokens: session
-                    .cached_input_tokens
-                    .filter(|value| *value >= 0)
-                    .map(|value| value as u32),
-                cache_creation_input_tokens: session
-                    .cache_creation_input_tokens
-                    .filter(|value| *value >= 0)
-                    .map(|value| value as u32),
-            })
-        }
-        _ => None,
-    }
-}
-
 pub(super) fn apply_runtime_usage_fallback_to_latest_assistant_message(
     messages: &mut [RuntimeAgentMessage],
-    session: &AsterSession,
+    usage: Option<crate::protocol::AgentTokenUsage>,
 ) -> Option<crate::protocol::AgentTokenUsage> {
-    let usage = resolve_runtime_usage_from_aster_session(session)?;
+    let usage = usage?;
     let latest_assistant_message = messages
         .iter_mut()
         .rev()

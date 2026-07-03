@@ -25,6 +25,7 @@ mod session_admin;
 mod session_files;
 mod skills;
 mod voice;
+mod workflow;
 mod workspaces;
 
 pub use agent_session::*;
@@ -54,6 +55,7 @@ pub use session_admin::*;
 pub use session_files::*;
 pub use skills::*;
 pub use voice::*;
+pub use workflow::*;
 pub use workspaces::*;
 
 #[cfg(test)]

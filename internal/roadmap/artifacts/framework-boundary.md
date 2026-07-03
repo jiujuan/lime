@@ -62,7 +62,7 @@ AG-UI 可作为交互协议参考，但不成为 Lime current wire format。
 | HTML            | file domain + Electron Host                 | canvas + external_window     |
 | 图片            | task/media/file domain                      | media preview                |
 | 正式报告        | ArtifactDocument domain                     | 非临时 artifact              |
-| Agent App shell | App Server runtime + Electron Host          | app_shell preview entry      |
+| Plugin shell | App Server runtime + Electron Host          | app_shell preview entry      |
 | 知识库命中      | knowledge domain                            | source-backed record preview |
 
 ## 设计约束

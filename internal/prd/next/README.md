@@ -2,17 +2,17 @@
 
 > 状态：north-star planning source
 > 更新时间：2026-06-07
-> Owner：Lime Runtime / App Server / Claw / Agent Apps / 独立 App 集成
+> Owner：Lime Runtime / App Server / Claw / Plugins / 独立 App 集成
 
 ## 1. 定位
 
-本目录定义 Lime 下一阶段的北极星：把 Lime 从单一桌面产品内的 Agent 工作台，升级为以 `lime-rs` App Server 为底座、以 Claw 为旗舰体验、以 Agent Apps、独立 App、移动 App、微信小程序和服务端运行形态为扩展面的多端 Agent 平台。
+本目录定义 Lime 下一阶段的北极星：把 Lime 从单一桌面产品内的 Agent 工作台，升级为以 `lime-rs` App Server 为底座、以 Claw 为旗舰体验、以 Plugins、独立 App、移动 App、微信小程序和服务端运行形态为扩展面的多端 Agent 平台。
 
 本目录不是替代 `internal/roadmap/appserver/` 的执行路线图，而是上层产品与架构对齐文档。具体 App Server current 实施仍以 `internal/roadmap/appserver/` 为准。
 
 ## 2. 一句话方向
 
-Lime Next 要把 `lime-rs` 抽成可被 Lime Desktop、Claw、Agent Apps、content-studio、移动 App、微信小程序、未来独立 App 和受控服务端运行形态复用的 Agent Runtime 服务底座；安全模型采用 sandbox-first，客户端和服务端都必须通过 permission profile、sandbox manager、approval / escalation 和 audit 执行工具；前端复用以 headless projection 和 UI primitives 为核心，不复制 Claw 整页产品壳。
+Lime Next 要把 `lime-rs` 抽成可被 Lime Desktop、Claw、Plugins、content-studio、移动 App、微信小程序、未来独立 App 和受控服务端运行形态复用的 Agent Runtime 服务底座；安全模型采用 sandbox-first，客户端和服务端都必须通过 permission profile、sandbox manager、approval / escalation 和 audit 执行工具；前端复用以 headless projection 和 UI primitives 为核心，不复制 Claw 整页产品壳。
 
 ## 3. 事实源声明
 
@@ -41,7 +41,7 @@ App Server JSON-RPC
 | `current target` | Sandbox / Permissions Control Plane | 客户端与服务端共同执行边界；permission profile、FS / network policy、approval、exec policy、audit 是主轴。 |
 | `current target` | Mobile App / 微信小程序 | 端侧轻壳；只消费服务端或本地 gateway 的 projection / action / artifact，不自建 runtime。 |
 | `current shell` | Claw / Lime Desktop | 旗舰 Agent 工作台和多 App 桌面壳。 |
-| `current shell` | content-studio / Agent App shell | 通过 client、projection 和 UI primitives 消费 runtime 的独立业务壳。 |
+| `current shell` | content-studio / Plugin shell | 通过 client、projection 和 UI primitives 消费 runtime 的独立业务壳。 |
 | `compat` | `src/lib/api/agentRuntime/*` 旧 UI 形状投影 | 迁移期保留，只允许委托 App Server current 主链。 |
 | `compat` | legacy desktop facade | 迁移期保留，只允许委托 RuntimeCore / App Server。 |
 | `deprecated` | UI 组件内直接绑定 Electron / `safeInvoke` / legacy command 的 Agent 逻辑 | 只允许迁移和下线，不允许新增。 |
@@ -56,7 +56,7 @@ App Server JSON-RPC
 | [architecture.md](./architecture.md) | 总体架构、分层职责、数据事实源、前后端共享边界。 |
 | [sandbox-and-permissions.md](./sandbox-and-permissions.md) | Codex 架构借鉴、客户端 / 服务端 sandbox、permission profile、approval、exec policy 和平台 sandbox backend。 |
 | [flowcharts.md](./flowcharts.md) | 用户路径、技术主链、UI 共享、迁移和治理流程图。 |
-| [sequences.md](./sequences.md) | 初始化、Claw、Agent App、content-studio、projection、artifact/evidence 时序图。 |
+| [sequences.md](./sequences.md) | 初始化、Claw、Plugin、content-studio、projection、artifact/evidence 时序图。 |
 | [frontend-runtime-ui-sharing.md](./frontend-runtime-ui-sharing.md) | Claw AgentRuntime UI 可共享边界、组件规范和禁止路径。 |
 | [runtime-deployment-surfaces.md](./runtime-deployment-surfaces.md) | 本地 sidecar、服务端运行形态、移动 App、微信小程序和远程入口矩阵。 |
 | [client-server-infrastructure.md](./client-server-infrastructure.md) | 客户端与服务端缓存、文件、数据库、对象存储、队列、密钥、观测的 ports / adapters 边界。 |
@@ -84,7 +84,7 @@ App Server JSON-RPC
 1. `lime-rs` 从桌面内部实现升级为跨 App、跨端、可服务端化的 Runtime 底座。
 2. Claw 从单一页面升级为 Lime AgentRuntime 的旗舰体验和共享组件来源。
 3. 客户端和服务端执行安全统一到 permission profile、sandbox manager、approval / escalation 与 audit，而不是散落在各端。
-4. Agent Apps / content-studio / 移动 App / 微信小程序 / 未来独立 App 不再复制 runtime，而是复用协议、client、projection、远程 gateway 和可组合 UI。
+4. Plugins / content-studio / 移动 App / 微信小程序 / 未来独立 App 不再复制 runtime，而是复用协议、client、projection、远程 gateway 和可组合 UI。
 
 ## 7. 下一刀
 
@@ -94,7 +94,7 @@ App Server JSON-RPC
 App Server facts
   -> headless projection / view model
   -> UI primitives
-  -> Claw / Agent App / content-studio shell adapters
+  -> Claw / Plugin / content-studio shell adapters
 ```
 
 只有当第二个真实消费者开始接入共享组件时，才把内部模块物理抽成独立 npm 包。

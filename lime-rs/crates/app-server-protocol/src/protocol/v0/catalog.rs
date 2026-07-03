@@ -313,6 +313,7 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
     method!(METHOD_AGENT_SESSION_ACTION_REPLAY, Request),
     method!(METHOD_AGENT_SESSION_ACTION_RESPOND, Request),
     method!(METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND, Request),
+    method!(METHOD_WORKFLOW_READ, Request),
     method!(METHOD_AGENT_SESSION_EVENT, Notification),
 ];
 

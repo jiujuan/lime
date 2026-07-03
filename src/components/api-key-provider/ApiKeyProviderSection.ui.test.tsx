@@ -708,6 +708,58 @@ describe("ApiKeyProviderSection 模型管理布局", () => {
     expect(container.textContent ?? "").toContain("SenseChat-5");
   });
 
+  it("推荐 Agnes 模板应使用 OpenAI 格式和官方图片模型", async () => {
+    const hookState = createHookState();
+    const container = renderSection();
+
+    await act(async () => {
+      findByTestId<HTMLButtonElement>("add-model-button").click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      maybeTemplateCard(container, "agnes-image-flash")?.click();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent ?? "").toContain("Agnes");
+    expect(container.textContent ?? "").toContain(
+      "https://apihub.agnes-ai.com/v1",
+    );
+    expect(container.textContent ?? "").toContain("OpenAI 兼容");
+    expect(container.textContent ?? "").toContain("agnes-image-2.1-flash");
+    expect(container.textContent ?? "").not.toContain("Anthropic 格式");
+
+    await act(async () => {
+      setInputValue(
+        findByTestId<HTMLInputElement>("model-api-key-input"),
+        "sk-agnes-test",
+      );
+    });
+    await clickByTestId("model-activate-button", 3);
+
+    expect(hookState.addCustomProvider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Agnes",
+        type: "openai",
+        api_host: "https://apihub.agnes-ai.com/v1",
+      }),
+    );
+    expect(hookState.updateProvider).toHaveBeenCalledWith(
+      "custom-1",
+      expect.objectContaining({
+        enabled: true,
+        custom_models: ["agnes-image-2.1-flash"],
+      }),
+    );
+    expect(mockTestConnection).toHaveBeenCalledWith(
+      "custom-1",
+      "agnes-image-2.1-flash",
+    );
+    expect(hookState.selectProvider).toHaveBeenCalledWith("custom-1");
+  });
+
   it("海外分类应展示国内厂商的国际订阅入口", async () => {
     createHookState();
     const container = renderSection();

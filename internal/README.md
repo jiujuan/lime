@@ -11,7 +11,7 @@
 - `aiprompts/`：模块级工程导航、架构说明、质量流程、命令边界、治理规则和 Agent 协作规则
 - `exec-plans/`：执行计划、进度日志和技术债追踪
 - `refactor/`：渐进式重构方案（文件体量治理、目录架构蓝图）
-- `roadmap/`：产品、架构、运行时、Agent App、Warp 对齐、i18n 等路线图
+- `roadmap/`：产品、架构、运行时、Plugin、Warp 对齐、i18n 等路线图
 - `research/`：外部产品、竞品、协议和工程范式研究
 - `prd/`：功能 PRD、工具 PRD 和方案草案
 - `test/`、`tests/`、`testing/`：测试策略、场景、manifest、QC 与 E2E 资料

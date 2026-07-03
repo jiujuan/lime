@@ -1,5 +1,8 @@
 import type { Message, MessageImageWorkbenchPreview } from "../types";
-import { buildImageWorkbenchCaption } from "../utils/imageWorkbenchPresentation";
+import {
+  buildImageWorkbenchCaption,
+  sanitizeImageWorkbenchPresentationText,
+} from "../utils/imageWorkbenchPresentation";
 import {
   isImageWorkbenchStatusOnlyText,
   isImageWorkbenchSubmissionTemplateText,
@@ -274,12 +277,49 @@ function resolveImageWorkbenchPreviewProgressScore(
   }
 }
 
+function sanitizeImageWorkbenchMergedText(
+  value: string | null | undefined,
+  languageSource?: string | null,
+): string | null | undefined {
+  if (typeof value !== "string") {
+    return value;
+  }
+  const sanitized = sanitizeImageWorkbenchPresentationText(value, {
+    languageSource,
+  });
+  return sanitized || null;
+}
+
+function sanitizeImageWorkbenchPreviewForDisplay(
+  preview?: MessageImageWorkbenchPreview,
+): MessageImageWorkbenchPreview | undefined {
+  if (!preview) {
+    return preview;
+  }
+  const prompt = sanitizeImageWorkbenchMergedText(
+    preview.prompt,
+    preview.prompt,
+  ) as string;
+  const caption = sanitizeImageWorkbenchMergedText(
+    preview.caption,
+    prompt || preview.prompt,
+  );
+  if (prompt === preview.prompt && caption === preview.caption) {
+    return preview;
+  }
+  return {
+    ...preview,
+    prompt,
+    caption: caption ?? null,
+  };
+}
+
 function mergeImageWorkbenchPreviewByProgress(
   existingPreview?: MessageImageWorkbenchPreview,
   nextPreview?: MessageImageWorkbenchPreview,
 ): MessageImageWorkbenchPreview | undefined {
   if (!existingPreview) {
-    return nextPreview;
+    return sanitizeImageWorkbenchPreviewForDisplay(nextPreview);
   }
   if (
     !nextPreview ||
@@ -288,17 +328,21 @@ function mergeImageWorkbenchPreviewByProgress(
     if (
       isDraftAndResolvedImageWorkbenchPreviewPair(existingPreview, nextPreview)
     ) {
-      return isDraftImageWorkbenchPreview(existingPreview)
-        ? nextPreview
-        : existingPreview;
+      return sanitizeImageWorkbenchPreviewForDisplay(
+        isDraftImageWorkbenchPreview(existingPreview)
+          ? nextPreview
+          : existingPreview,
+      );
     }
-    return nextPreview || existingPreview;
+    return sanitizeImageWorkbenchPreviewForDisplay(
+      nextPreview || existingPreview,
+    );
   }
 
   const nextIsAtLeastAsFresh =
     resolveImageWorkbenchPreviewProgressScore(nextPreview) >=
     resolveImageWorkbenchPreviewProgressScore(existingPreview);
-  return nextIsAtLeastAsFresh
+  const merged = nextIsAtLeastAsFresh
     ? {
         ...existingPreview,
         ...nextPreview,
@@ -309,6 +353,7 @@ function mergeImageWorkbenchPreviewByProgress(
         ...existingPreview,
         caption: existingPreview.caption ?? nextPreview.caption ?? null,
       };
+  return sanitizeImageWorkbenchPreviewForDisplay(merged);
 }
 
 export function mergeImageWorkbenchPreviewMessage(params: {
@@ -322,12 +367,16 @@ export function mergeImageWorkbenchPreviewMessage(params: {
     nextPreview,
   );
   const replaceBody = shouldReplaceImageWorkbenchMessageBody(params);
+  const mergedPrompt = mergedPreview?.prompt || nextPreview?.prompt;
+  const nextContent =
+    replaceBody || !params.existingMessage.content.trim()
+      ? params.nextMessage.content
+      : params.existingMessage.content;
   const mergedMessage: Message = {
     ...params.existingMessage,
     content:
-      replaceBody || !params.existingMessage.content.trim()
-        ? params.nextMessage.content
-        : params.existingMessage.content,
+      sanitizeImageWorkbenchMergedText(nextContent, mergedPrompt) ||
+      nextContent,
     contentParts: mergeImageWorkbenchContentParts({
       existingMessage: params.existingMessage,
       nextMessage: params.nextMessage,
@@ -348,7 +397,8 @@ export function mergeImageWorkbenchPreviewMessage(params: {
         : false,
     thinkingContent: mergeMessageThinkingContent(params),
     runtimeStatus: params.nextMessage.runtimeStatus,
-    imageWorkbenchPreview: mergedPreview,
+    imageWorkbenchPreview:
+      sanitizeImageWorkbenchPreviewForDisplay(mergedPreview),
   };
 
   return buildImageWorkbenchMessageStateSignature(mergedMessage) ===

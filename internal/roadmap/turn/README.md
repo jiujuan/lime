@@ -120,7 +120,7 @@ AgentThreadItem / ItemRuntime 是事实源
 1. 生产路径依赖 mock backend 或 renderer mock fallback 跑通工具状态。
 2. live provider 二次授权 gate 作为默认联网前置条件。
 3. 前端假进度或假工具卡掩盖后端首字慢。
-4. 第二套 Agent App / Claw 专用工具生命周期事实源。
+4. 第二套 Plugin / Claw 专用工具生命周期事实源。
 5. 用 assistant 文本内容作为工具、审批、路由、完成态 join key。
 
 ## 6. 完成判定

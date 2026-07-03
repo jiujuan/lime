@@ -9,7 +9,11 @@ use crate::image_request::{
     IMAGE_EXECUTOR_MODE_ZHIPU_IMAGES,
 };
 use crate::image_task_input::{prepare_image_task_input, PreparedImageTaskSlot};
-use crate::image_worker::{build_image_task_result_value, decorate_generated_image_with_slot};
+use crate::image_worker::{
+    build_image_task_result_value, decorate_generated_image_with_slot,
+    image_task_runner_timeout_secs, AGNES_IMAGE_TASK_RUNNER_TIMEOUT_SECS,
+    IMAGE_TASK_RUNNER_TIMEOUT_SECS,
+};
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc, Mutex,

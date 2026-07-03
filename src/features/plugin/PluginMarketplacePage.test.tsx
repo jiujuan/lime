@@ -904,20 +904,19 @@ describe("PluginMarketplacePage", () => {
       ],
     });
     const loader = vi.fn(async () => registrationSnapshot);
-    const submitRegistrationCode: NonNullable<
-      PluginMarketplaceActionDeps["submitRegistrationCode"]
+    const submitPluginRegistrationCode: NonNullable<
+      PluginMarketplaceActionDeps["submitPluginRegistrationCode"]
     > = vi.fn(async () => ({
-      payload: {
-        schemaVersion: "plugin-catalog/v1",
-        generatedAt: "2026-06-25T01:02:03.000Z",
-        apps: [],
-      },
-      source: "remote" as const,
+      schemaVersion: "plugin-marketplace/v1",
+      tenantId: "tenant-0001",
+      generatedAt: "2026-06-25T01:02:03.000Z",
+      marketplaceName: "limecloud",
+      items: [],
     }));
     const container = await renderPage({
       loader,
       actionDeps: {
-        submitRegistrationCode,
+        submitPluginRegistrationCode,
         dispatchChanged: vi.fn(),
       },
     });
@@ -966,9 +965,11 @@ describe("PluginMarketplacePage", () => {
     });
     await flushEffects(4);
 
-    expect(submitRegistrationCode).toHaveBeenCalledWith(
+    expect(submitPluginRegistrationCode).toHaveBeenCalledWith(
+      "tenant-0001",
       "research-kit",
-      "REG-001",
+      { code: "REG-001" },
+      "limecloud",
     );
     expect(loader).toHaveBeenCalledTimes(2);
     expect(codeInput?.value).toBe("");

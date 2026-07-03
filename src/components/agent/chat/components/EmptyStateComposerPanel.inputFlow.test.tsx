@@ -1,6 +1,7 @@
 import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 import {
+  mockEmptyStateCharacterMention,
   renderPanel,
   updateTextareaValue,
 } from "./EmptyStateComposerPanel.testFixtures";
@@ -158,6 +159,52 @@ describe("EmptyStateComposerPanel", () => {
     expect(
       (container.querySelector("textarea") as HTMLTextAreaElement).value,
     ).toBe("");
+  });
+
+  it("插件 chip 激活但输入未含触发词时发送应补齐插件触发词", async () => {
+    const onSend = vi.fn();
+    const plugin = {
+      pluginId: "content-factory-app",
+      displayName: "写文章",
+      trigger: "@写文章",
+      description: "生成文章草稿",
+    };
+    const container = renderPanel({
+      input: "帮我整理项目资料",
+      onSend,
+      pluginSuggestions: [plugin],
+    });
+    const mentionProps = mockEmptyStateCharacterMention.mock.calls.at(-1)?.[0];
+
+    await act(async () => {
+      mentionProps?.onSelectPlugin?.(plugin, undefined, {
+        inputOverride: "帮我整理项目资料",
+        preserveInputOverride: true,
+      });
+      await Promise.resolve();
+    });
+
+    expect(
+      container.querySelector('[data-testid="inputbar-plugin-badge"]')
+        ?.textContent,
+    ).toContain("写文章");
+    expect(
+      (container.querySelector("textarea") as HTMLTextAreaElement).value,
+    ).toBe("帮我整理项目资料");
+
+    const sendButton = container.querySelector(
+      'button[title="发送"]',
+    ) as HTMLButtonElement | null;
+
+    act(() => {
+      sendButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(onSend).toHaveBeenCalledWith("@写文章 帮我整理项目资料", {
+      goalEnabled: false,
+      planEnabled: false,
+      subagentEnabled: false,
+    });
   });
 
   it("发送准备中应禁用首页发送入口并展示忙碌态", () => {

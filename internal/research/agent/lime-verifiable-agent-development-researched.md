@@ -23,7 +23,7 @@ Lime 现在已经做了非常多工作。更准确的判断应该是：
 - Harness Engine：Evidence Pack、replay case、analysis handoff、review template
 - Agent QC：scenario manifest、Evidence schema、qcloop payload、export evidence、release summary、completion audit
 - 8 条 Agent QC P0 场景
-- GUI smoke / runtime fixture / Claw smoke / approval sandbox / Skill Forge / Agent App / Browser Runtime / Knowledge / Design Canvas 等 smoke 入口
+- GUI smoke / runtime fixture / Claw smoke / approval sandbox / Skill Forge / Plugin / Browser Runtime / Knowledge / Design Canvas 等 smoke 入口
 - Agent UI projection：process、tool、HITL、artifact、evidence、review、Subagents、remote teammate、work board 等标准投影
 - Managed Objective：objective state、evidence-based audit、manual continuation、automation owner binding、受控 auto idle continuation
 
@@ -231,7 +231,7 @@ Lime 已经把这个问题提升成契约：
 
 这已经非常接近成熟 Agent eval 系统的形状。
 
-### 2.5 GUI / Runtime / Agent App / Skill Forge 的 smoke 入口很丰富
+### 2.5 GUI / Runtime / Plugin / Skill Forge 的 smoke 入口很丰富
 
 `package.json` 里已经有很多入口，不是只有一个 `verify:local`。
 
@@ -247,7 +247,7 @@ npm run smoke:claw-chat-ready-streaming
 npm run smoke:agent-runtime-tool-surface
 npm run smoke:agent-runtime-approval-sandbox
 npm run smoke:agent-service-skill-entry
-npm run smoke:agent-apps
+npm run smoke:plugins
 npm run smoke:browser-runtime
 npm run smoke:site-adapters
 npm run smoke:knowledge-gui
@@ -622,7 +622,7 @@ regression decision
 - SkillTool gate
 - Supervisor rubric
 - Managed Objective auto continuation guard
-- Agent App UI runtime lifecycle
+- Plugin UI runtime lifecycle
 
 这一步不是为了 A/B 实验好看。
 
@@ -744,7 +744,7 @@ agent-qc:audit complete
 
 目标：
 
-每个 Agent / runtime / Agent App / Skill / Managed Objective 改动，都在执行计划里有 Verification Contract。
+每个 Agent / runtime / Plugin / Skill / Managed Objective 改动，都在执行计划里有 Verification Contract。
 
 交付物：
 

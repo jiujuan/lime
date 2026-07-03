@@ -135,6 +135,24 @@ function isDraftImageWorkbenchPreview(
   return isDraftImageWorkbenchTaskId(preview?.taskId);
 }
 
+function imageWorkbenchPreviewHasImage(
+  preview: MessageImageWorkbenchPreview,
+): boolean {
+  if (preview.imageUrl?.trim()) {
+    return true;
+  }
+  return (preview.previewImages || []).some((url) => url.trim().length > 0);
+}
+
+function imageWorkbenchPreviewBlocksPendingRecovery(
+  preview?: MessageImageWorkbenchPreview,
+): boolean {
+  if (!preview || isDraftImageWorkbenchPreview(preview)) {
+    return false;
+  }
+  return preview.status !== "running" || imageWorkbenchPreviewHasImage(preview);
+}
+
 function messageHasImageWorkbenchProcessSignal(message: Message): boolean {
   if (message.role !== "assistant") {
     return false;
@@ -214,7 +232,9 @@ export function resolvePendingImageCommandRecoverySignature(
       trailingMessages.some(
         (candidate) =>
           candidate.role === "assistant" &&
-          Boolean(candidate.imageWorkbenchPreview),
+          imageWorkbenchPreviewBlocksPendingRecovery(
+            candidate.imageWorkbenchPreview,
+          ),
       )
     ) {
       return null;

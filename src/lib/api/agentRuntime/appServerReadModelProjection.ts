@@ -59,11 +59,6 @@ export function projectAppServerSessionReadToThreadReadModel(
     projected.session_business_object_ref_metadata =
       projectedSessionBusinessObjectRefMetadata;
   }
-  delete projected.workflow_runs;
-  delete projected.workflowRuns;
-  delete projected.workflow_steps;
-  delete projected.workflowSteps;
-
   return normalizeThreadReadModel(projected) as AgentRuntimeThreadReadModel;
 }
 

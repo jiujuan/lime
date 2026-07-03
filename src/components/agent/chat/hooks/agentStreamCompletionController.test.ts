@@ -425,6 +425,31 @@ describe("agentStreamCompletionController", () => {
     });
   });
 
+  it("关闭普通思考展示时仍可为可见过程摘要保留图片任务思考", () => {
+    expect(
+      buildAgentStreamCompletedAssistantMessagePatch({
+        parts: [
+          { type: "thinking", text: "先确认深圳夏天午后的光线。" },
+          { type: "text", text: "正在为你生成深圳夏天午后的照片。" },
+        ],
+        finalContent: "正在为你生成深圳夏天午后的照片。",
+        rawContent: "正在为你生成深圳夏天午后的照片。",
+        surfaceThinkingDeltas: false,
+        preserveThinkingContent: true,
+        thinkingContent: "先确认深圳夏天午后的光线。",
+      }),
+    ).toEqual({
+      isThinking: false,
+      content: "正在为你生成深圳夏天午后的照片。",
+      contentParts: [
+        { type: "thinking", text: "先确认深圳夏天午后的光线。" },
+        { type: "text", text: "正在为你生成深圳夏天午后的照片。" },
+      ],
+      thinkingContent: "先确认深圳夏天午后的光线。",
+      runtimeStatus: undefined,
+    });
+  });
+
   it("应为 final_done 构造完成副作用计划", () => {
     expect(
       buildAgentStreamFinalDonePlan({

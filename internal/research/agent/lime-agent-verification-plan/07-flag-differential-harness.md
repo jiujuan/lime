@@ -18,7 +18,7 @@ decision -> pass / regression / needs-human-review
 - SkillTool gate
 - approval / sandbox policy
 - Managed Objective auto continuation guard
-- Agent App UI runtime lifecycle
+- Plugin UI runtime lifecycle
 - Supervisor rubric 自身
 
 ## 3. 复用现有入口

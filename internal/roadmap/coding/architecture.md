@@ -275,7 +275,7 @@ Evidence join 规则：
 | file checkpoint                      | current artifact support  | 作为 patch/file change 的 checkpoint owner。                                                |
 | AgentUI sequence gate                | current guard             | 扩展覆盖 coding command/patch/test/action 配对。                                            |
 | Workspace Harness 局部面板           | compat UI                 | 迁到 Coding Workbench shared surfaces。                                                     |
-| Agent App runtime projection         | current consumer          | 可复用 coding task/read model，不复制执行事实。                                             |
+| Plugin runtime projection         | current consumer          | 可复用 coding task/read model，不复制执行事实。                                             |
 | `CanvasWorkbenchLayout` coding mode  | compat/current UI surface | 可以保留壳和视觉，但事实解释必须来自 `CodingWorkbenchView`。                                |
 | thread item / checkpoint change view | compat migration input    | 只能先 adapter 成 RuntimeEvent，不能直接驱动最终 UI。                                       |
 

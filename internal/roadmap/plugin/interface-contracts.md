@@ -107,8 +107,8 @@ export interface PluginActivationContext {
 
 迁移兼容：
 
-- 旧 manifest 中的 `agentApps?: AgentAppDeclaration[]` 只作为 migration / compat 输入，读取后必须投影为 `workspaceApps?: PluginWorkspaceAppDeclaration[]`。
-- 旧 session metadata 中的 `activeAgentAppId` 只作为恢复历史会话的只读输入；新写入必须使用 `activeWorkspaceAppId`。
+- 旧 manifest 中的 `agentApps?: PluginDeclaration[]` 只作为 migration / compat 输入，读取后必须投影为 `workspaceApps?: PluginWorkspaceAppDeclaration[]`。
+- 旧 session metadata 中的 `activePluginId` 只作为恢复历史会话的只读输入；新写入必须使用 `activeWorkspaceAppId`。
 
 ## 4. Plugin Object Ref
 

@@ -13,7 +13,7 @@ lime-websocket.workspace = true
 lime-processor.workspace = true
 lime-server-utils.workspace = true
 lime-agent.workspace = true
-aster.workspace = true
+agent-protocol.workspace = true
 
 serde.workspace = true
 serde_json.workspace = true

@@ -1,5 +1,195 @@
 # 图片能力 v2 进度记录
 
+## 2026-07-03
+
+### Checkpoint：真实 Electron + runtime + Agnes live 验证通过
+
+背景：
+
+- 用户明确指出此前验证不能再用 mock / fixture，当轮必须跑真实 Electron、真实 App Server runtime sidecar、真实 Agnes 图片生成链路。
+- 需要验证的不是“图片能出来”而已，而是同一条 assistant 消息中保留自然前置引导、图片轻卡、真实图片预览和完成描述；raw JSON / task id / 内部路径只进入 JSONL / task log / read model 审计，不进入普通 UI。
+
+真实环境：
+
+- Electron Desktop Host：`.lime/electron-dev-host/Lime.app/Contents/MacOS/Lime --remote-debugging-port=9223 .`。
+- App Server sidecar：`lime-rs/target/debug/app-server --stdio --backend runtime --data-dir "$HOME/Library/Application Support/lime/app-server"`。
+- Bridge health：`http://127.0.0.1:3030/health` 返回 `{"status":"ok","transport":"electron-host"}`。
+- CDP：`http://127.0.0.1:9223/json/version` 返回 Electron `Lime/1.87.0`。
+
+本轮修复：
+
+- `ImageCommandWorkflow` 的 presentation 预算从过短的快路径提升到 `45s`，避免真实文本模型冷启动 / 排队时过早发 `image_task.presentation.unavailable`。
+- `turn.completed` 携带 presentation 文本模型 usage，历史和 token footer 能从真实 turn 终态读取用量。
+- `services` 中已迁出的 `aster_session_store` 不再作为 current module 暴露，`lime-agent` 作为 current owner 暴露会话存储，保证 Rust workspace 能构建当前 App Server。
+
+live 输入：
+
+- `@配图 用 Agnes Image 2.1 Flash 画一张深圳夏天傍晚的真实摄影照片，街边绿树、高楼、海风和暖色夕阳，画面自然，不要文字 live-1783096716883`
+
+live 结果：
+
+- session：`sess_8541091911564f4cb2f975262b87ac50`。
+- turn：`61042753-1838-426a-8ffa-10e6dbe5693e`。
+- task：`61276cc0-2254-4756-9df7-55d5a4bfd29d`。
+- 真实 task artifact：`$HOME/Library/Application Support/lime/projects/Skill Think Keep Audit 20260513/.lime/tasks/image_generate/20260703-163852-1d245fb6556449e39e27b8a35b80b910.json`。
+- 真实图片输出：`https://platform-outputs.agnes-ai.space/images/t2i/60ae4d5909e04e8f9917ddc2c9bd86c9.png`。
+- UI 历史恢复后可见结构：
+  - 用户消息：`@配图 ... live-1783096716883`。
+  - assistant 前置引导：`好的，这就为您呈现深圳夏日傍晚的迷人街景。`
+  - 图片轻卡：`Image Generation | Agnes Image 2.1 Flash`。
+  - 图片预览：远端 `platform-outputs.agnes-ai.space` 真实图片，`1024x1024`。
+  - 完成描述：`照片已生成。暖色调的夕阳洒在绿树与高楼之间，海风似乎正拂过画面，氛围自然惬意。如果需要调整光影或构图细节，随时告诉我。`
+- 普通 UI 扫描未出现 `任务 ID`、`task_id`、`artifact_path`、`workflow_run_id`、`.lime/tasks`、`JSONL` 或 raw JSON。
+- 右侧 viewer 未自动打开。
+
+JSONL / 审计证据：
+
+- presentation 模型请求：`$HOME/Library/Application Support/lime/aster/state/logs/llm_request.1.jsonl`，runtime context 为 `sess_8541091911564f4cb2f975262b87ac50:image-presentation:61042753-1838-426a-8ffa-10e6dbe5693e`，模型 `agnes-2.0-flash`，`tool_surface=direct_answer`。
+- session event log：`$HOME/Library/Application Support/lime/app-server/runtime/events/sessions/session_sess_8541091911564f4cb2f975262b87ac50.jsonl`，包含 `message.created`、`image_task.presentation.generated`、`tool.started`、`tool.ended`、`turn.completed`，其中 `turn.completed.usage.input_tokens=1097`、`output_tokens=70`。
+- image worker task log：`.lime/task-logs/61276cc0-2254-4756-9df7-55d5a4bfd29d/attempt_1.jsonl`，事件序列为 `worker_loaded -> task_queued -> task_running -> request_slot_started -> request_slot_succeeded -> task_succeeded`。
+
+验证：
+
+- `cargo fmt --manifest-path "lime-rs/Cargo.toml" --all -- --check` 通过。
+- `git diff --check -- "lime-rs/crates/app-server/src/runtime_backend/image_command/mod.rs" "lime-rs/crates/app-server/src/runtime_backend/image_command/presentation.rs" "lime-rs/crates/agent/src/lib.rs" "lime-rs/crates/services/src/lib.rs"` 通过。
+- `npm run test:rust:unit -- -p app-server image_command` 通过，19 个测试。
+- `cargo build --manifest-path "lime-rs/Cargo.toml" -p app-server --bin app-server` 通过。
+- Playwright CLI 通过 CDP 连接真实 Electron 页签，截图证据：`.lime/evidence/image-command-live-1783096716883-history.png`。
+
+当前分类：
+
+- `current`：真实 `Agent turn -> App Server ImageCommandWorkflow -> mediaTaskArtifact/image/create -> .lime/tasks/image_generate task artifact -> lime-image-api-worker -> imageWorkbenchPreview`。
+- `audit-only`：presentation request summary、workflow/task 参数、task path、worker attempt log、raw JSON 和内部路径只进 JSONL / task artifact / read model / evidence。
+- `test-only`：此前 Electron fixture 仍只用于稳定回归，不作为本 checkpoint 的交付证据。
+- `dead`：前端 hard-code 图片寒暄 / 完成文案、App Server mock backend 伪造图片成功、右侧 viewer 自动展开 workflow、普通 UI 展示 raw task JSON。
+
+待继续确认：
+
+- 本次 live 发送后主区曾短暂回到空态，但从最近对话打开后历史完整恢复。后端 event log、task artifact、JSONL 和 read model 均完整；下一刀需要确认 active session 前端状态为何被清空，避免用户误以为“打开历史对话数据没了”。
+
+### Checkpoint：presentation 文本路由与流事件乱序收口
+
+背景：
+
+- live 日志仍出现 `image_task_presentation_unavailable`，且截图里只剩图片轻卡 / 占位，不像参考结构中的“前置寒暄 -> 图片生成轻卡 -> 图片预览 -> 后置描述”。
+- 根因不是再补前端模板，而是两条 current 主链缺口：
+  - App Server presentation 仍可能复用当前 turn 的图片模型 / Agnes direct provider config，导致“写对话文案”的请求打到图片接口。
+  - 前端默认 `image_task_presentation_generated` 一定晚于 `image_task_created`；乱序时 completion caption 没有合入新建的 assistant 图片轻卡。
+
+已完成：
+
+- `ImageCommandWorkflow` 的 presentation 路由新增文本模型选择器：优先消费 `fast / base / coding / local` 文本槽位，其次才看 session default / host config / explicit preference，并显式跳过 Agnes、Fal、`gpt-image`、`dall-e`、Flux、SD 等图片模型选择。
+- presentation 只在 host direct provider config 与选中的文本 provider/model 完全一致时复用 direct config；如果 host direct config 指向图片模型，会记录 `presentation_direct_config_skipped_for_non_text_selection`，然后走文本 Provider 路由。
+- `image_task.presentation.unavailable` 的 reason code 细化为 `presentation_text_model_unavailable` / `presentation_text_route_unavailable` / `presentation_generation_failed`，便于继续排查 live Provider。
+- 前端 `StreamRequestState` 增加 pending image presentation 缓存：presentation 先到时缓存 `assistant_intro / completion_caption`，created 后到时合入同一 assistant 消息和 `imageWorkbenchPreview.caption`。
+- 前端仍不生成“好啊 / 搞定 / 马上生成”模板；已有自然寒暄 / thinking 不被 presentation 覆盖，右侧 viewer 不自动打开，workflow/task id/raw JSON 继续只进 JSONL / evidence。
+
+验证：
+
+- `npm run test:rust:unit -- -p app-server image_command::presentation` 通过，9 个测试。
+- `npx vitest run "src/components/agent/chat/hooks/agentStreamRuntimeHandler.unit.test.ts" "src/components/agent/chat/components/MessageList.imageTasks.test.tsx" "src/lib/api/agentProtocol.test.ts" --silent=passed-only` 通过，3 个文件 / 92 个测试。
+- `rustfmt --edition 2021 --check "lime-rs/crates/app-server/src/runtime_backend/image_command/presentation.rs" "lime-rs/crates/app-server/src/runtime_backend/image_command/mod.rs"` 通过。
+- `git diff --check -- ...本轮触碰文件` 通过。
+- `npm run smoke:agent-runtime-current-fixture` 通过，覆盖图片命令 GUI Electron fixture、普通自然语言画图意图 GUI Electron fixture及其它 Agent Runtime current fixture。
+- `npm run smoke:claw-chat-current-fixture -- --scenario image-command --prefix images-v2-presentation-route-cache-fixed --timeout-ms 180000` 通过；summary：`.lime/qc/gui-evidence/claw-chat-current-fixture/images-v2-presentation-route-cache-fixed-summary.json`。
+
+GUI 证据：
+
+- `guiImageCommandTerminal.bodyText` 包含用户输入、前置文案“好啊，这张图我来处理，先把画面氛围定准。”、轻卡“图片生成 | GPT Image 1”和完成 caption“完成了，画面已经生成。想更清爽、更写实或换构图，都可以继续调。”
+- `guiImageCommandTerminal`：`cardCount=1`、`mediaCount=1`、`hasPreviewImage=true`、`hasLoadedVisiblePreviewImage=true`、`taskIdVisible=false`、`visiblePendingStatus=false`。
+- `guiImageCommandRestoredAfterReload` 同样保持 `cardCount=1`、`mediaCount=1`、`hasPreviewImage=true`，说明历史恢复没有丢前后文案和图片预览。
+- `imageCommandTaskAuditLog`：JSONL 存在，事件序列为 `worker_loaded -> task_queued -> task_running -> request_slot_started -> request_slot_succeeded -> task_succeeded`，敏感 token 扫描通过。
+
+当前分类：
+
+- `current`：图片 task 仍走 `ImageCommandWorkflow -> mediaTaskArtifact/image/create -> .lime/tasks/image_generate/*.json -> worker -> imageWorkbenchPreview`；presentation 是独立文本模型首刀，不复用图片模型。
+- `audit-only`：workflow run / step / branch / provider / model / task path / JSONL 继续只进入 read model、JSONL 和 evidence。
+- `test-only`：Electron fixture 的本地文本 / 图片 Provider endpoint，只用于证明 current 主链，不作为生产 fallback。
+- `dead`：前端模板硬编码图片寒暄、图片模型承担 presentation 文案生成、右侧 workflow 自动展示、raw task JSON 进入普通聊天 UI。
+
+### Checkpoint：presentation direct generation 去除 StructuredOutput 重试环
+
+背景：
+
+- `@配图` 和普通画图意图的图片任务、图片预览、JSONL 审计均已跑通，但聊天区仍缺少图片生成前的自然引导和完成后的自然 caption。
+- 诊断发现 App Server presentation 请求已经正确命中文本 Provider，Provider 也返回了 `assistant_intro / completion_caption` JSON。
+- 根因是 `ImageCommandWorkflow` 给 direct text generation 注入了 structured-output schema，同时 direct generation 禁用工具；Aster 因此反复要求模型调用 `StructuredOutput`，直到 presentation timeout，导致 GUI 收到 `image_task.presentation.unavailable`。
+
+已完成：
+
+- `image_command/presentation.rs` 改为复用 `lime-agent` direct text generation，但不再注入 structured-output schema；JSON 合同由 prompt + 后端解析 / 语言 / 禁词校验负责。
+- presentation 生成链补充安全 tracing：记录 provider/model、输出长度、解析失败分类和脱敏输出预览，便于后续排查，不记录内部 prompt、API key 或 raw task 文件内容。
+- 前端 App Server event projection / Agent protocol 保留 `reasonCode / reason_code`，后续 presentation unavailable 不再在 debug 中丢失原因。
+- Electron fixture 的文本 Provider evidence 增加脱敏请求摘要，可看到请求是否携带 presentation contract、message roles 和 content preview，避免再次盲猜请求形状。
+
+验证：
+
+- `cargo fmt --manifest-path "lime-rs/Cargo.toml" --all -- --check` 通过。
+- `npm run test:rust:unit -- -p app-server image_command::presentation` 通过，6 个测试。
+- `npx vitest run "src/lib/api/agentProtocol.test.ts" "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs" --silent=passed-only` 通过，2 个文件 / 50 个测试。
+- `npm run smoke:claw-chat-current-fixture -- --scenario image-command --prefix images-v2-reference-followup-fixed --timeout-ms 180000` 通过；summary：`.lime/qc/gui-evidence/claw-chat-current-fixture/images-v2-reference-followup-fixed-summary.json`。
+- `npm run smoke:claw-chat-current-fixture -- --scenario plain-image-intent --prefix images-v2-plain-image-intent-fixed --timeout-ms 180000` 通过；summary：`.lime/qc/gui-evidence/claw-chat-current-fixture/images-v2-plain-image-intent-fixed-summary.json`。
+- `npm run smoke:agent-runtime-current-fixture` 通过；聚合覆盖图片命令 GUI Electron fixture、普通画图意图 GUI Electron fixture、停止后继续、Plan、Skills、MCP、Expert 和 Content Factory 场景。
+
+当前分类：
+
+- `current`：图片对话自然引导与完成 caption 由 App Server presentation model output 驱动，并合入同一 assistant 消息。
+- `audit-only`：workflow/task id、raw task JSON、task path 和工具参数继续只进 JSONL / evidence / read model，不进入普通聊天 UI。
+- `test-only`：文本 Provider fixture 只用于验证 OpenAI-compatible current runtime 调用链，不作为生产 fallback。
+- `dead`：前端模板拼“好啊 / 搞定”、structured-output 工具重试环、右侧自动展开 workflow。
+
+### Checkpoint：历史恢复保留 Agent 铺垫与后端图片 caption
+
+背景：
+
+- 用户再次确认参考图重点是同一条 assistant 消息的自然结构：前置寒暄 / 思考、轻量 `Image Generation | <model>` 卡、图片预览、后置结果描述。
+- 不能通过前端模板硬编码“好啊 / 马上生成 / 搞定”来伪造体验；这些文案必须来自 App Server presentation / SOUL 或模型真实输出。
+- 图片任务仍可能处于 `pending_submit`，不能因为已有 completion caption 就在 UI 中提前显示“完成”。
+
+已完成：
+
+- 历史 `thread_read.tool_calls` 中的图片任务会合入同一 turn 的 assistant 消息，保留已有 `thinking` 和真实寒暄文本，不再生成一条空白图片 assistant 消息。
+- `buildImageTaskPreviewFromToolResult` 会从后端 `record.payload.presentation.result_captions.complete` 读取并保留 completion caption，供任务进入完成态后展示；`running` 状态下聊天轻卡继续不显示完成 caption。
+- 图片任务 snapshot 测试改为显式提供后端 `presentation.assistant_intro`，不再依赖前端根据 prompt 拼装寒暄模板。
+
+验证：
+
+- `npm test -- --run "src/components/agent/chat/hooks/agentStreamRuntimeHandler.unit.test.ts" "src/components/agent/chat/components/imageWorkbenchMessageDisplay.test.ts" "src/components/agent/chat/components/messageListItemProjection.contentParts.unit.test.ts" "src/components/agent/chat/components/MessageList.imageTasks.test.tsx" "src/components/agent/chat/hooks/agentChatHistory.test.ts" "src/components/agent/chat/utils/taskPreviewFromToolResult.test.ts"` 通过，6 个文件 / 117 个测试。
+- `npm test -- --run "src/components/agent/chat/components/ImageWorkbenchMessagePreview.test.tsx" "src/components/agent/chat/utils/imageWorkbenchPresentation.test.ts" "src/components/agent/chat/workspace/imageTaskPreviewRuntimePayload.unit.test.ts" "src/components/agent/chat/workspace/imageTaskPreviewRuntimeMessages.unit.test.ts" "src/components/agent/chat/workspace/imageTaskPreviewRuntimeSnapshot.unit.test.ts" "src/components/agent/chat/workspace/imageTaskPreviewRuntimeGuards.unit.test.ts" "src/components/agent/chat/workspace/useWorkspaceImageTaskPreviewRuntime.test.tsx"` 通过，7 个文件 / 90 个测试。
+
+当前分类：
+
+- `current`：后端 presentation / read model / task artifact 驱动聊天轻卡、历史恢复和完成 caption。
+- `audit-only`：workflow run / step / branch / task path / raw JSON 继续只进 JSONL、read model 和 evidence。
+- `dead`：前端按图片 prompt 拼寒暄、running 阶段展示完成文案、右侧自动打开 workflow。
+
+### Checkpoint：Playwright E2E fixture 配置同步，图片 v2 核心场景跑通
+
+背景：
+
+- `image-command` Playwright Electron fixture 一度失败在 `ImageCommandWorkflow 未创建匹配的 image task artifact`。
+- GUI 发送的 `harness.image_command_intent` 已存在，但前端不再把图片 Provider / Model 直接写进 turn metadata；这是 v2 避免图片模型污染普通 Agent Chat 的正确方向。
+- E2E fixture 中 Electron `save_config` 写入 `electron-user-data/config.yaml`，而 App Server `ConfigManager::default_config_path()` 在 macOS fixture 环境读取 `$HOME/Library/Application Support/lime/config.yaml`，导致 App Server 侧缺默认图片模型。
+
+已完成：
+
+- `claw-chat-current-fixture` 在创建 fixture 图片 Provider 后，同步把 `preferredProviderId / preferredModelId` 写入 App Server 侧 fixture config。
+- summary 增加 `appServerConfigBinding`，可直接看到同步写入的 `$HOME/.config/lime/config.yaml` 与 macOS config path。
+- 未恢复前端把图片模型写进普通 turn metadata 的旧做法，仍保持 `providerPreference/modelPreference = null`。
+
+验证：
+
+- `npx vitest run "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs" --silent=passed-only` 通过，23 个测试。
+- `npm run smoke:claw-chat-current-fixture -- --scenario image-command --prefix images-v2-image-command-playwright --timeout-ms 180000` 通过，summary：`.lime/qc/gui-evidence/claw-chat-current-fixture/images-v2-image-command-playwright-summary.json`。
+- `npm run smoke:claw-chat-current-fixture -- --scenario plain-image-intent --prefix images-v2-plain-image-intent-playwright --timeout-ms 180000` 通过，summary：`.lime/qc/gui-evidence/claw-chat-current-fixture/images-v2-plain-image-intent-playwright-summary.json`。
+- `git diff --check -- scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs scripts/agent-runtime/claw-chat-current-fixture-backend-file.mjs` 通过。
+
+当前分类：
+
+- `current`：`Agent turn -> ImageCommandWorkflow -> mediaTaskArtifact/image/create -> .lime/tasks/image_generate task artifact + lime-image-api-worker -> GUI imageWorkbenchPreview`。
+- `test-only`：Playwright fixture 写双份 config，只用于让 Electron E2E 自定义 userData 与 App Server `$HOME` config 在测试环境中对齐。
+- `dead`：通过重新把图片 Provider / Model 塞回普通 turn provider preference 来修 E2E。
+
 ## 2026-07-02
 
 ### Checkpoint：presentation contract 接入 SOUL，撤掉前端模板文案
@@ -313,3 +503,104 @@
 验证：
 
 - `npx vitest run "src/components/agent/chat/components/MessageList.imageTasks.test.tsx" "src/components/agent/chat/hooks/agentStreamRuntimeHandler.unit.test.ts" "src/components/agent/chat/utils/taskPreviewFromToolResult.test.ts" "src/components/agent/chat/utils/taskPreviewImage.topLevel.test.ts" --silent=passed-only --disableConsoleIntercept` 通过，4 个文件 / 86 个测试。
+
+### Checkpoint：JSONL 审计与真实 GUI 图片主链验证通过
+
+背景：
+
+- 用户要求继续验证，不只证明右侧 viewer 不显示，还要证明聊天列表图片占位不会一闪而过、普通“画一张图”意图不会假完成、图片 worker 不是 mock 成功。
+- 用户明确要求 workflow / run / step / task id 不进入聊天区或右侧，审计信息只写 JSONL。
+
+本轮验证结论：
+
+- `@配图` 和普通画图意图都已走 `ImageCommandWorkflow -> mediaTaskArtifact/image/create -> .lime/tasks/image_generate task artifact -> lime-image-api-worker`。
+- 两条 Electron fixture 均使用 `APP_SERVER_BACKEND_MODE=runtime`，图片 Provider 是本地 fixture endpoint；这证明 App Server / task worker / GUI current 链路，不调用正式 Provider，也不是 App Server mock backend。
+- GUI 截图中聊天区包含自然引导文本、图片任务轻卡、真实图片预览和完成 caption；右侧 viewer 未自动打开。
+- task artifact 的 `attempts[].logs_ref` 指向 `.lime/task-logs/<task_id>/attempt_1.jsonl`，JSONL 实际落盘。
+- JSONL 事件序列为 `worker_loaded -> task_queued -> task_running -> request_slot_started -> request_slot_succeeded -> task_succeeded`。
+- JSONL 扫描未出现 `Authorization` / `Bearer` / `api_key` / fixture API key 等敏感标记。
+- GUI 可见文本扫描未出现禁用品牌词、`任务 ID`、`任务文件`、`Image Workbench`、`图片工作台`。
+
+验证：
+
+- `npm run smoke:claw-chat-current-fixture -- --scenario image-command --keep-temp --evidence-dir ".lime/qc/image-command-jsonl-verify" --prefix "image-command-jsonl" --timeout-ms 180000` 通过；summary：`.lime/qc/image-command-jsonl-verify/image-command-jsonl-summary.json`。
+- `npm run smoke:claw-chat-current-fixture -- --scenario plain-image-intent --keep-temp --evidence-dir ".lime/qc/plain-image-intent-jsonl-verify" --prefix "plain-image-intent-jsonl" --timeout-ms 180000` 通过；summary：`.lime/qc/plain-image-intent-jsonl-verify/plain-image-intent-jsonl-summary.json`。
+- `npm run test:contracts` 通过。
+- `cargo fmt --manifest-path "lime-rs/crates/media-runtime/Cargo.toml" --check` 通过。
+- `cargo fmt --manifest-path "lime-rs/crates/app-server/Cargo.toml" --check` 通过。
+- `cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-media-runtime image_worker --lib` 通过，17 个测试。
+- `cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server media_task_worker --lib` 通过，13 个测试。
+- `npx vitest run "src/components/agent/chat/components/ImageWorkbenchMessagePreview.test.tsx" "src/components/agent/chat/hooks/agentStreamRuntimeHandler.unit.test.ts" "src/components/agent/chat/workspace/imageTaskPreviewRuntimeMessages.unit.test.ts" "src/components/agent/chat/workspace/imageTaskPreviewRuntimeSnapshot.unit.test.ts" "src/components/agent/chat/workspace/imageTaskPreviewRuntimeState.unit.test.ts" "src/components/agent/chat/workspace/imageTaskPreviewRuntimeEvents.unit.test.ts" "src/components/agent/chat/workspace/imageTaskPreviewRuntimeGuards.unit.test.ts" "src/components/agent/chat/workspace/imageTaskPreviewRuntimeRecovery.unit.test.ts" "src/components/agent/chat/workspace/imageTaskPreviewRuntimePayload.unit.test.ts" "src/components/agent/chat/workspace/imageCommandIntent.test.ts" "src/components/agent/chat/utils/imageWorkbenchCommand.unit.test.ts" "src/components/agent/chat/utils/imageWorkbenchCommand.test.ts" "src/components/agent/chat/workspace/useWorkspaceSendActions.test.tsx"` 通过，13 个文件 / 279 个测试。
+- `npm run verify:gui-smoke` 通过。
+- `npm run smoke:agent-runtime-current-fixture` 通过，覆盖图片命令 GUI Electron fixture、普通自然语言画图意图 GUI Electron fixture及其它 Agent Runtime current fixture。
+- `git diff --check` 通过。
+
+当前分类：
+
+- `current`：图片任务状态、图片结果和恢复以 `.lime/tasks/image_generate/*.json` + `imageWorkbenchPreview` 为事实源。
+- `audit-only`：worker attempt、route、run/step/branch、failure category 和 task 文件细节只进入 JSONL / evidence / read model。
+- `test-only`：Electron 图片 fixture 的本地 image provider endpoint，只用于离线证明 current 链路，不作为生产 fallback。
+- `dead`：右侧 workflow 自动展示、聊天区 raw JSON / task id / task path、前端伪造图片完成态、App Server mock backend 伪造图片成功。
+
+补充固化：
+
+- `claw-chat-current-fixture` 的图片场景 summary 新增 `imageCommandTaskAuditLog`，自动摘要 `logs_ref`、行数、事件名、事件序列、task id 一致性和敏感 token 扫描结果。
+- 图片场景断言新增 `imageCommandTaskAuditLogWritten`、`imageCommandTaskAuditLogEventSequence`、`imageCommandTaskAuditLogNoSensitiveTokens`，后续 `image-command` 和 `plain-image-intent` fixture 会自动失败，而不是依赖人工读取临时目录。
+- `logsRefLooksLikeTaskLog=true` 使用未脱敏原始值计算；summary 中的 `task-logs` 路径展示仍会经过通用 evidence 脱敏。
+
+补充验证：
+
+- `npx vitest run "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs" --silent=passed-only` 通过，1 个文件 / 23 个测试。
+- `npm run smoke:claw-chat-current-fixture -- --scenario image-command --keep-temp --evidence-dir ".lime/qc/image-command-audit-summary-verify" --prefix "image-command-audit-summary" --timeout-ms 180000` 通过。
+- `npm run smoke:claw-chat-current-fixture -- --scenario plain-image-intent --keep-temp --evidence-dir ".lime/qc/plain-image-intent-audit-summary-verify" --prefix "plain-image-intent-audit-summary" --timeout-ms 180000` 通过。
+
+### Checkpoint：Agnes Image 2.1 Flash 渠道一致性
+
+背景：
+
+- 用户要求支持 Agnes `agnes-image-2.1-flash` 渠道，并允许为跑通图片业务调整前后端产品实现。
+- 官方文档事实源：`https://agnes-ai.com/zh-Hans/docs/agnes-image-21-flash`；关键接入点是 `POST https://apihub.agnes-ai.com/v1/images/generations`、模型名 `agnes-image-2.1-flash`、`response_format` 放在 `extra_body.response_format`，图生图输入放在 `extra_body.image`。
+
+已完成：
+
+- 前端图片能力目录新增 Agnes 一等 Provider entry，不再只靠 custom model heuristic 识别。
+- 内置图片模型目录新增 `agnes-image-2.1-flash`，设置页和工作区图片命令共享同一事实源。
+- App Server route 测试把 Agnes 官方 host 固化为 `https://apihub.agnes-ai.com/v1/images/generations`。
+- 添加模型面板新增 Agnes 推荐模板：对用户仍显示为 OpenAI 兼容格式，不新增第三种 API 格式；模板自动填入 `https://apihub.agnes-ai.com/v1` 和 `agnes-image-2.1-flash`。
+- provider host 归一化新增 Agnes 文档页识别，误填 `agnes-ai.com/zh-Hans/docs/agnes-image-21-flash` 或 `wiki.agnes-ai.com/zh-Hans/docs/agnes-image-21-flash` 时会修正到官方 API Base URL。
+- 保留旧 `https://api.agnes-ai.com/v1` 兼容断言，避免已有用户配置突然失效。
+- media-runtime 既有测试已覆盖 Agnes 请求体：顶层不写 `response_format`，`extra_body.response_format=url`，参考图写入 `extra_body.image`，响应支持 `data[0].url`。
+
+验证：
+
+- `npx vitest run "src/components/api-key-provider/ApiKeyProviderSection.ui.test.tsx" "src/components/api-key-provider/providerConfigUtils.test.ts" --silent=passed-only` 通过，48 个测试；覆盖 Agnes 模板不显示 Anthropic 格式、激活时写入 OpenAI 类型、官方 host 和官方模型。
+- `npx vitest run "src/lib/imageGen/catalog.test.ts" "src/components/settings-v2/agent/image-gen/index.test.tsx" --silent=passed-only` 通过，20 个测试。
+- `npx vitest run "src/lib/imageGen/catalog.test.ts" --silent=passed-only` 通过，13 个测试；覆盖 `custom-openai + apihub.agnes-ai.com` 仍会归入 Agnes，而不是被通用 OpenAI 条目抢走。
+- `cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server media_task_worker --lib` 通过，13 个测试。
+- `cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-media-runtime image_worker --lib` 通过，17 个测试。
+- `npm run test:contracts` 通过。
+- `git diff --check` 通过。
+- 禁用品牌词与死代码告警扫描在本轮触碰范围无命中。
+- live Provider 调用不进入默认验证；只有用户显式提供 Agnes API key 并接受额度消耗时，才通过 live-gated smoke 单独跑。
+
+### Checkpoint：Agnes 添加模型真实 UI 复核
+
+背景：
+
+- 用户追问是否需要新增其他 API 格式；产品口径已确定 Agnes 不新增第三种格式，而是作为 OpenAI 兼容渠道。
+- 需要用真实页面点击链确认用户看到的是 `OpenAI compatible / OpenAI 兼容`，而不是 `Agnes 格式` 或 `Anthropic 格式`。
+
+验证结论：
+
+- 通过 Playwright CLI 从主应用进入左下设置入口，再进入 `AI Providers / AI 服务商`。
+- 点击 `Add model / 添加模型` 后选择 Agnes 推荐模板，进入配置页。
+- 配置页显示 `Configure Agnes`、`API Base URL=https://apihub.agnes-ai.com/v1`、`API format=OpenAI compatible`、默认模型 `agnes-image-2.1-flash`。
+- 页面未出现 `Anthropic Format / Anthropic 格式`，也没有新增 `Agnes Format / Agnes 格式`。
+- API key 输入框保持空值；本轮没有写入真实 key，也没有触发 live Provider 调用。
+
+验证：
+
+- `npm run bridge:health -- --timeout-ms 120000` 通过，App Server bridge 就绪。
+- `npx playwright test --config ".lime/tmp/playwright-agnes-provider.config.cjs" --workers 1 --timeout 60000 --reporter line` 通过，1 个测试。
+- Playwright CLI 使用本机 Chrome channel；仓库默认 Playwright browser cache 未安装，不执行浏览器下载。
+- UI 截图证据：`.lime/qc/agnes-provider-template-ui.png`。

@@ -13,7 +13,6 @@ use app_server_protocol::SkillRepositoryEntry;
 use app_server_protocol::SkillRepositoryListResponse;
 use app_server_protocol::SkillRepositorySaveParams;
 use chrono::Utc;
-use lime_agent::AsterAgentState;
 use lime_core::database::dao::skills::SkillDao;
 use lime_core::database::DbConnection;
 use lime_core::models::skill_model::SkillCatalogSource;
@@ -144,7 +143,7 @@ pub(crate) async fn install_management_skill(
         .map_err(|error| error.to_string())?;
     }
     if matches!(app, SkillPackageApp::Lime) {
-        AsterAgentState::reload_lime_skills();
+        crate::skill_registry::reload_lime_skill_registry();
     }
     Ok(SkillManagementWriteResponse { success: true })
 }
@@ -170,7 +169,7 @@ pub(crate) fn uninstall_management_skill(
     )
     .map_err(|error| error.to_string())?;
     if matches!(app, SkillPackageApp::Lime) {
-        AsterAgentState::reload_lime_skills();
+        crate::skill_registry::reload_lime_skill_registry();
     }
     Ok(SkillManagementWriteResponse { success: true })
 }

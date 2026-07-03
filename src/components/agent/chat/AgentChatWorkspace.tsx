@@ -34,7 +34,6 @@ import { type CanvasWorkbenchLayoutMode } from "./components/CanvasWorkbenchLayo
 import { TaskCenterShellPanel } from "./components/TaskCenterShellPanel";
 import type { CreationMode } from "./components/types";
 import { type TaskFile } from "./components/TaskFiles";
-import { useWorkflow } from "@/components/workspace/hooks/useWorkflow";
 import { createInitialVideoState } from "@/components/workspace/canvas/canvasUtils";
 import {
   type CanvasState as GeneralCanvasState,
@@ -250,9 +249,21 @@ import {
   applyWorkspaceArticleEditedDraft,
   buildWorkspaceArticleEditedDraftFromChange,
   buildWorkspaceArticleEditedDraftUpdateRequest,
+  readWorkspaceArticleObjectMarkdown,
+  shouldRejectWorkspaceArticleEditedDraftChange,
   type WorkspaceArticleEditedDraft,
   type WorkspaceArticleMarkdownChange,
 } from "./workspace/workspaceArticleWorkspaceEditedDraft";
+import {
+  applyWorkspaceArticleInlineImageTaskSyncResult,
+  buildWorkspaceArticleInlineImageTaskSync,
+  selectWorkspaceArticleInlineImageTaskIds,
+  suppressWorkspaceArticleInlineImageTaskPreviewMessages,
+} from "./workspace/workspaceArticleInlineImageTaskSync";
+import {
+  applyWorkspaceArticleInlineHostCommandSyncResult,
+  buildWorkspaceArticleInlineHostCommandSync,
+} from "./workspace/workspaceArticleInlineHostCommandSync";
 import { WorkspaceShellScene } from "./workspace/WorkspaceShellScene";
 import {
   buildWorkspaceRightSurfaceDefinitions,
@@ -288,8 +299,6 @@ import type { ArtifactDocumentV1 } from "@/lib/artifact-document";
 import type { ArtifactTimelineOpenTarget } from "./utils/artifactTimelineNavigation";
 import { resolveInitialTaskSessionSwitchOptions } from "./utils/taskCenterTabs";
 import { resolveImageWorkbenchStateForPreviewSelection } from "./workspace/imageWorkbenchPreviewSelection";
-import { buildImageWorkbenchPreviewResourceManagerInput } from "./workspace/imageWorkbenchResourceManager";
-import { openResourceManager } from "@/features/resource-manager";
 import { GENERAL_WORKBENCH_HISTORY_PAGE_SIZE } from "./workspace/generalWorkbenchHelpers";
 import { normalizeInitialTheme } from "./agentChatWorkspaceShared";
 import type { AgentChatWorkspaceProps } from "./agentChatWorkspaceContract";
@@ -386,6 +395,12 @@ export type {
   AgentChatWorkspaceProps,
   WorkflowProgressSnapshot,
 } from "./agentChatWorkspaceContract";
+
+const EMPTY_LEGACY_WORKFLOW_STEPS: never[] = [];
+const LEGACY_WORKFLOW_STEP_INDEX = 0;
+const ignoreLegacyWorkflowStepClick = (index: number) => {
+  void index;
+};
 
 function readRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -944,12 +959,7 @@ export function AgentChatWorkspace({
     }) => Promise<boolean>
   >(async () => false);
 
-  // 工作流状态（仅在内容创作模式下使用）
   const mappedTheme = activeTheme as ThemeType;
-  const { steps, currentStepIndex, goToStep, completeStep } = useWorkflow(
-    mappedTheme,
-    creationMode,
-  );
 
   // 内容同步 Hook
   const { syncContent, syncStatus } = useContentSync({
@@ -1284,9 +1294,12 @@ export function AgentChatWorkspace({
     enabled: pluginSuggestionsEnabled,
     requestMetadata: workspaceRequestMetadataWithExpertSkills ?? undefined,
   });
+  const refreshWorkspacePluginRuntimeContext =
+    workspacePluginRuntimeContext.refresh;
   const handlePluginSuggestionsNeeded = useCallback(() => {
     setPluginSuggestionsEnabled(true);
-  }, []);
+    refreshWorkspacePluginRuntimeContext();
+  }, [refreshWorkspacePluginRuntimeContext]);
   const workspacePluginInputSuggestions = useMemo(
     () =>
       buildWorkspacePluginInputSuggestions(
@@ -2697,8 +2710,6 @@ export function AgentChatWorkspace({
     artifacts,
     contentId,
     currentGateKey: currentGate.key,
-    currentStepIndex,
-    isSpecializedThemeMode,
     isThemeWorkbench,
     mappedTheme,
     projectId,
@@ -2716,7 +2727,6 @@ export function AgentChatWorkspace({
     setArtifactViewMode: applyAutoArtifactViewMode,
     setLayoutMode,
     suppressCanvasAutoOpen: suppressCanvasAutoOpenForPendingA2UI,
-    completeStep,
     setTaskFiles,
     setSelectedFileId,
     setCanvasState,
@@ -2983,6 +2993,12 @@ export function AgentChatWorkspace({
   const articleEditorRightSurfaceRef = useRef<WorkspaceArticleWorkspace | null>(
     null,
   );
+  const articleInlineHostCommandDispatchSignatureRef = useRef<string | null>(
+    null,
+  );
+  const handleArticleWorkspaceImageSlotIntentRef = useRef<
+    ((intent: WorkspaceArticleWorkspaceImageSlotIntent) => void | Promise<void>) | null
+  >(null);
   const rightSurfacePendingActionsRef = useRef<{
     consumePendingRequestsForSurface?: (
       surface: WorkspaceRightSurfaceKind,
@@ -3132,19 +3148,6 @@ export function AgentChatWorkspace({
   const handleOpenMessagePreview = useCallback(
     (target: MessagePreviewTarget, message: Message) => {
       if (target.kind === "image_workbench") {
-        const resourceManagerInput =
-          buildImageWorkbenchPreviewResourceManagerInput({
-            message,
-            preview: target.preview,
-            selection: target.selection,
-            threadId: sessionId ?? null,
-          });
-
-        if (resourceManagerInput) {
-          void openResourceManager(resourceManagerInput);
-          return;
-        }
-
         updateCurrentImageWorkbenchState((current) =>
           resolveImageWorkbenchStateForPreviewSelection({
             current,
@@ -3213,7 +3216,6 @@ export function AgentChatWorkspace({
       handleWorkspaceFileClick,
       openMessageAttachmentPreview,
       messages,
-      sessionId,
       setCanvasState,
       setLayoutMode,
       taskFiles,
@@ -4122,11 +4124,11 @@ export function AgentChatWorkspace({
     "enabled" | "harnessState"
   >;
   useWorkspaceWorkflowProgressRuntime({
-    currentStepIndex,
+    currentStepIndex: LEGACY_WORKFLOW_STEP_INDEX,
     hasMessages,
     isSpecializedThemeMode,
     onWorkflowProgressChange,
-    steps,
+    steps: EMPTY_LEGACY_WORKFLOW_STEPS,
   });
   const navigationActions = useWorkspaceNavigationActions({
     applyProjectSelection,
@@ -4183,7 +4185,7 @@ export function AgentChatWorkspace({
     currentGate,
     generalWorkbenchWorkflowSteps:
       generalWorkbenchSidebarRuntime.generalWorkbenchWorkflowSteps,
-    steps,
+    steps: EMPTY_LEGACY_WORKFLOW_STEPS,
     workflowRunState: themeWorkbenchRunState,
     handleSend,
     isPreparingSend,
@@ -4680,13 +4682,172 @@ export function AgentChatWorkspace({
     articleWorkspaceFromThreadRead ??
     articleWorkspaceFromMessageArtifacts ??
     activeArticleWorkspace;
-  const articleEditorRightSurface = useMemo(
+  const baseArticleEditorRightSurface = useMemo(
     () =>
       applyWorkspaceArticleEditedDraft(
         rawArticleEditorRightSurface,
         activeArticleEditedDraft,
       ),
     [activeArticleEditedDraft, rawArticleEditorRightSurface],
+  );
+  const articleInlineHostCommandSyncResult = useMemo(
+    () =>
+      buildWorkspaceArticleInlineHostCommandSync({
+        articleWorkspace: baseArticleEditorRightSurface,
+        editedDraft: activeArticleEditedDraft,
+      }),
+    [activeArticleEditedDraft, baseArticleEditorRightSurface],
+  );
+  const articleInlineHostMaterializedRightSurface = useMemo(
+    () =>
+      applyWorkspaceArticleInlineHostCommandSyncResult(
+        baseArticleEditorRightSurface,
+        articleInlineHostCommandSyncResult,
+      ),
+    [articleInlineHostCommandSyncResult, baseArticleEditorRightSurface],
+  );
+  useEffect(() => {
+    const syncResult = articleInlineHostCommandSyncResult;
+    if (!syncResult || !baseArticleEditorRightSurface) {
+      return;
+    }
+    if (sceneIsSending || sceneIsPreparingSend) {
+      return;
+    }
+
+    const signature = [
+      syncResult.object.ref.appId,
+      syncResult.object.ref.sessionId,
+      syncResult.object.ref.kind,
+      syncResult.object.ref.id,
+      syncResult.markdown,
+    ].join(":");
+    if (articleInlineHostCommandDispatchSignatureRef.current === signature) {
+      return;
+    }
+    articleInlineHostCommandDispatchSignatureRef.current = signature;
+
+    const change: WorkspaceArticleMarkdownChange = {
+      articleWorkspace: baseArticleEditorRightSurface,
+      markdown: syncResult.markdown,
+      object: syncResult.object,
+    };
+    const editedDraft = buildWorkspaceArticleEditedDraftFromChange(change);
+    if (editedDraft) {
+      setActiveArticleEditedDraft((previous) =>
+        previous?.objectKey === editedDraft.objectKey &&
+        previous.markdown === editedDraft.markdown
+          ? previous
+          : editedDraft,
+      );
+
+      const request = buildWorkspaceArticleEditedDraftUpdateRequest(
+        change,
+        editedDraft,
+      );
+      if (request) {
+        void updateAgentRuntimeSession(request).catch((error) => {
+          console.warn(
+            "[AgentChatWorkspace] Article Editor 配图占位写回失败:",
+            error,
+          );
+        });
+      }
+    }
+
+    syncResult.imageSlotIntents.forEach((intent) => {
+      void handleArticleWorkspaceImageSlotIntentRef.current?.({
+        ...intent,
+        articleWorkspace: baseArticleEditorRightSurface,
+      });
+    });
+  }, [
+    articleInlineHostCommandSyncResult,
+    baseArticleEditorRightSurface,
+    sceneIsPreparingSend,
+    sceneIsSending,
+    updateAgentRuntimeSession,
+  ]);
+  const articleInlineImageTaskSyncResult = useMemo(
+    () =>
+      buildWorkspaceArticleInlineImageTaskSync({
+        articleWorkspace: articleInlineHostMaterializedRightSurface,
+        editedDraft: null,
+        imageWorkbenchState: currentImageWorkbenchState,
+      }),
+    [
+      articleInlineHostMaterializedRightSurface,
+      currentImageWorkbenchState,
+    ],
+  );
+  const articleEditorRightSurface = useMemo(
+    () =>
+      applyWorkspaceArticleInlineImageTaskSyncResult(
+        articleInlineHostMaterializedRightSurface,
+        articleInlineImageTaskSyncResult,
+      ),
+    [
+      articleInlineHostMaterializedRightSurface,
+      articleInlineImageTaskSyncResult,
+    ],
+  );
+  const articleInlineImageTaskIds = useMemo(
+    () =>
+      selectWorkspaceArticleInlineImageTaskIds({
+        articleWorkspace: articleEditorRightSurface,
+        editedDraft: null,
+        imageWorkbenchState: currentImageWorkbenchState,
+      }),
+    [articleEditorRightSurface, currentImageWorkbenchState],
+  );
+  useEffect(() => {
+    const syncResult = articleInlineImageTaskSyncResult;
+    if (!syncResult || !articleInlineHostMaterializedRightSurface) {
+      return;
+    }
+
+    const change: WorkspaceArticleMarkdownChange = {
+      articleWorkspace: articleInlineHostMaterializedRightSurface,
+      markdown: syncResult.markdown,
+      object: syncResult.object,
+    };
+    const editedDraft = buildWorkspaceArticleEditedDraftFromChange(change);
+    if (!editedDraft) {
+      return;
+    }
+
+    setActiveArticleEditedDraft((previous) =>
+      previous?.objectKey === editedDraft.objectKey &&
+      previous.markdown === editedDraft.markdown
+        ? previous
+        : editedDraft,
+    );
+
+    const request = buildWorkspaceArticleEditedDraftUpdateRequest(
+      change,
+      editedDraft,
+    );
+    if (!request) {
+      return;
+    }
+    void updateAgentRuntimeSession(request).catch((error) => {
+      console.warn(
+        "[AgentChatWorkspace] Article Editor 配图回填写回失败:",
+        error,
+      );
+    });
+  }, [
+    articleInlineImageTaskSyncResult,
+    articleInlineHostMaterializedRightSurface,
+    updateAgentRuntimeSession,
+  ]);
+  const sceneDisplayMessagesWithoutArticleInlineImageTasks = useMemo(
+    () =>
+      suppressWorkspaceArticleInlineImageTaskPreviewMessages(
+        sceneDisplayMessages,
+        articleInlineImageTaskIds,
+      ),
+    [articleInlineImageTaskIds, sceneDisplayMessages],
   );
   articleEditorRightSurfaceRef.current = articleEditorRightSurface;
   const articleEditorRightSurfaceAvailable = hasWorkspaceArticleFinalDocument(
@@ -4695,7 +4856,7 @@ export function AgentChatWorkspace({
   const sceneDisplayMessagesWithArticleWorkspaceArtifact = useMemo(
     () =>
       attachWorkspaceArticleWorkspacePreviewArtifactToMessages({
-        messages: sceneDisplayMessages,
+        messages: sceneDisplayMessagesWithoutArticleInlineImageTasks,
         articleWorkspace: shouldHideCurrentSessionContent
           ? null
           : articleEditorRightSurface,
@@ -4704,7 +4865,7 @@ export function AgentChatWorkspace({
       }),
     [
       articleEditorRightSurface,
-      sceneDisplayMessages,
+      sceneDisplayMessagesWithoutArticleInlineImageTasks,
       sceneIsPreparingSend,
       sceneIsSending,
       shouldHideCurrentSessionContent,
@@ -5245,9 +5406,20 @@ export function AgentChatWorkspace({
     },
     [contentId, handleImageWorkbenchCommand, projectId, t],
   );
+  handleArticleWorkspaceImageSlotIntentRef.current =
+    handleArticleWorkspaceImageSlotIntent;
   const handleArticleWorkspaceMarkdownChange = useCallback(
     (change: WorkspaceArticleMarkdownChange) => {
       const editedDraft = buildWorkspaceArticleEditedDraftFromChange(change);
+      if (
+        shouldRejectWorkspaceArticleEditedDraftChange({
+          currentDraft: activeArticleEditedDraft,
+          currentMarkdown: readWorkspaceArticleObjectMarkdown(change.object),
+          nextDraft: editedDraft,
+        })
+      ) {
+        return;
+      }
       setActiveArticleEditedDraft(editedDraft);
       const request = buildWorkspaceArticleEditedDraftUpdateRequest(
         change,
@@ -5263,7 +5435,7 @@ export function AgentChatWorkspace({
         );
       });
     },
-    [],
+    [activeArticleEditedDraft, updateAgentRuntimeSession],
   );
   const handleArticleWorkspaceSelectedObjectChange = useCallback(
     (change: WorkspaceArticleWorkspaceSelectionChange) => {
@@ -5325,7 +5497,6 @@ export function AgentChatWorkspace({
               articleWorkspace={articleEditorRightSurface}
               onActionIntent={handleArticleWorkspaceActionIntent}
               onArticleMarkdownChange={handleArticleWorkspaceMarkdownChange}
-              onImageSlotIntent={handleArticleWorkspaceImageSlotIntent}
               onOpenPreviewArtifact={(artifact) => {
                 void openWorkspaceArtifactInWorkbench(artifact);
               }}
@@ -5591,6 +5762,10 @@ export function AgentChatWorkspace({
     serviceSkillExecutionCard,
     contextWorkspaceEnabled: contextWorkspace.generalWorkbenchEnabled,
     pluginSuggestions: workspacePluginInputSuggestions,
+    pluginSuggestionsError:
+      workspacePluginRuntimeContext.error?.message ?? null,
+    pluginSuggestionsLoading: workspacePluginRuntimeContext.loading,
+    onPluginSuggestionsNeeded: handlePluginSuggestionsNeeded,
     input,
     setInput,
     providerType,
@@ -5680,12 +5855,12 @@ export function AgentChatWorkspace({
     hideInlineStepProgress,
     isSpecializedThemeMode,
     hasMessages,
-    steps,
+    steps: EMPTY_LEGACY_WORKFLOW_STEPS,
     activityLogs: generalWorkbenchSidebarRuntime.generalWorkbenchActivityLogs,
     creationTaskEvents:
       generalWorkbenchScaffoldRuntime.generalWorkbenchCreationTaskEvents,
-    currentStepIndex,
-    goToStep,
+    currentStepIndex: LEGACY_WORKFLOW_STEP_INDEX,
+    goToStep: ignoreLegacyWorkflowStepClick,
     displayMessages: sceneDisplayMessagesWithArticleWorkspaceArtifact,
     turns: sceneTurns,
     effectiveThreadItems: sceneThreadItems,

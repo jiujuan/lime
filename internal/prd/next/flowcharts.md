@@ -7,7 +7,7 @@
 
 ```mermaid
 flowchart TD
-    A["用户在 Claw / Agent App / content-studio / 移动 App / 微信小程序中发起任务"] --> B["Shell 收集业务上下文"]
+    A["用户在 Claw / Plugin / content-studio / 移动 App / 微信小程序中发起任务"] --> B["Shell 收集业务上下文"]
     B --> C{"端侧运行形态"}
     C -- 本地桌面 --> D["app-server-client / Desktop Host Bridge"]
     C -- 移动 / 小程序 / Web --> E["Remote Runtime Gateway"]

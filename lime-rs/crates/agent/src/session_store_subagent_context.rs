@@ -1,6 +1,4 @@
 use aster::session::{resolve_subagent_session_metadata, Session as AsterSession};
-#[cfg(test)]
-use aster::session::{SessionRuntimeSnapshot, TurnStatus};
 use chrono::{DateTime, Utc};
 use lime_core::database::dao::agent_timeline::{AgentThreadItemStatus, AgentThreadTurnStatus};
 use lime_core::database::DbConnection;
@@ -12,6 +10,8 @@ use super::session_store_types::{
 };
 use crate::session_query::{list_child_subagent_sessions, read_session};
 use crate::subagent_control::SubagentRuntimeStatusKind;
+#[cfg(test)]
+use crate::subagent_control::SubagentTurnStatus;
 use crate::subagent_control::{load_subagent_runtime_status, SubagentRuntimeStatus};
 use crate::subagent_profiles::{SubagentCustomizationState, SubagentSkillSummary};
 
@@ -304,13 +304,20 @@ fn map_child_subagent_runtime_status(
 }
 
 #[cfg(test)]
-pub(crate) fn resolve_child_subagent_runtime_status_from_snapshot(
-    snapshot: &SessionRuntimeSnapshot,
+#[derive(Debug, Clone)]
+pub(crate) struct ChildSubagentRuntimeTurnProjection {
+    pub id: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub status: SubagentTurnStatus,
+}
+
+#[cfg(test)]
+pub(crate) fn resolve_child_subagent_runtime_status_from_turns(
+    turns: &[ChildSubagentRuntimeTurnProjection],
 ) -> ChildSubagentRuntimeStatus {
-    snapshot
-        .threads
+    turns
         .iter()
-        .flat_map(|thread| thread.turns.iter())
         .max_by(|left, right| {
             left.updated_at
                 .cmp(&right.updated_at)
@@ -319,11 +326,11 @@ pub(crate) fn resolve_child_subagent_runtime_status_from_snapshot(
         })
         .and_then(|turn| {
             map_child_subagent_runtime_status(match turn.status {
-                TurnStatus::Queued => SubagentRuntimeStatusKind::Queued,
-                TurnStatus::Running => SubagentRuntimeStatusKind::Running,
-                TurnStatus::Completed => SubagentRuntimeStatusKind::Completed,
-                TurnStatus::Failed => SubagentRuntimeStatusKind::Failed,
-                TurnStatus::Aborted => SubagentRuntimeStatusKind::Aborted,
+                SubagentTurnStatus::Queued => SubagentRuntimeStatusKind::Queued,
+                SubagentTurnStatus::Running => SubagentRuntimeStatusKind::Running,
+                SubagentTurnStatus::Completed => SubagentRuntimeStatusKind::Completed,
+                SubagentTurnStatus::Failed => SubagentRuntimeStatusKind::Failed,
+                SubagentTurnStatus::Aborted => SubagentRuntimeStatusKind::Aborted,
             })
         })
         .unwrap_or(ChildSubagentRuntimeStatus::Idle)

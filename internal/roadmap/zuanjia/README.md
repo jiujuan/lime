@@ -30,7 +30,7 @@ Agent Runtime Current Chain
 | reference | `internal/aiprompts/skill-standard.md` | 专家绑定技能时必须复用的 Skill / ServiceSkill 标准。 |
 | reference | `internal/aiprompts/prompt-foundation.md` | 专家 persona 注入 Agent Runtime 的 Prompt 主链。 |
 | reference | `internal/aiprompts/memory-compaction.md` | 专家记忆和上下文压缩边界。 |
-| reference | `internal/roadmap/agentapp/README.md` | Agent App 与 `expert-chat` entry 的平台边界。 |
+| reference | `internal/roadmap/plugin/README.md` | Plugin 与 `expert-chat` entry 的平台边界。 |
 
 ## 文档索引
 
@@ -44,7 +44,7 @@ Agent Runtime Current Chain
 
 1. 专家不是第二套聊天系统，专家对话必须继续进入 `agent_runtime_submit_turn` 主链。
 2. 专家不是独立技能格式，`skillRefs` 必须引用 `SkillCatalog` / `ServiceSkillCatalog` 中的 current 对象。
-3. 专家不是完整 Agent App 平台替代品；如果某个专家需要独立 UI、storage、worker 或 workflow runtime，应升级为 Agent App。
+3. 专家不是完整 Plugin 平台替代品；如果某个专家需要独立 UI、storage、worker 或 workflow runtime，应升级为 Plugin。
 4. 专家目录来自 LimeCore；客户端 seeded catalog 只做离线兜底和开发 fixture。
 5. 用户私有记忆、对话内容、workspace 数据不进入公共专家目录。
 6. 新增用户可见文案必须覆盖 `zh-CN / zh-TW / en-US / ja-JP / ko-KR`。

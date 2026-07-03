@@ -5,6 +5,8 @@ import {
   buildWorkspaceArticleEditedDraftFromChange,
   buildWorkspaceArticleEditedDraftKey,
   buildWorkspaceArticleEditedDraftUpdateRequest,
+  markdownContainsWorkspaceArticleInlineImageTask,
+  shouldRejectWorkspaceArticleEditedDraftChange,
 } from "./workspaceArticleWorkspaceEditedDraft";
 
 const articleWorkspace: WorkspaceArticleWorkspace = {
@@ -141,5 +143,72 @@ describe("workspaceArticleWorkspaceEditedDraft", () => {
     expect(applyWorkspaceArticleEditedDraft(articleWorkspace, null)).toBe(
       articleWorkspace,
     );
+  });
+
+  it("已有 inline 配图占位时不应接受会丢失 slot 关系的编辑器写回", () => {
+    const currentDraft = {
+      objectKey: "content-factory-app:session-main:articleDraft:article-1",
+      markdown: [
+        "# 标题",
+        "",
+        "![正文配图](pending-image-task://task-inline?status=running&prompt=%E9%85%8D%E5%9B%BE)",
+        "<!-- lime:image-task-slot:article-image-slot-1 -->",
+      ].join("\n"),
+      updatedAt: "2026-06-29T10:00:00.000Z",
+    };
+    const nextDraft = {
+      ...currentDraft,
+      markdown: "# 标题\n\n正文被 Tiptap 序列化后丢失了 slot。",
+      updatedAt: "2026-06-29T10:01:00.000Z",
+    };
+
+    expect(
+      markdownContainsWorkspaceArticleInlineImageTask(currentDraft.markdown),
+    ).toBe(true);
+    expect(
+      shouldRejectWorkspaceArticleEditedDraftChange({
+        currentDraft,
+        nextDraft,
+      }),
+    ).toBe(true);
+  });
+
+  it("仍允许带着 inline 配图占位继续编辑正文", () => {
+    const currentDraft = {
+      objectKey: "content-factory-app:session-main:articleDraft:article-1",
+      markdown:
+        "# 标题\n\n<!-- lime:image-task-slot:article-image-slot-1 -->",
+      updatedAt: "2026-06-29T10:00:00.000Z",
+    };
+    const nextDraft = {
+      ...currentDraft,
+      markdown:
+        "# 标题\n\n新增正文。\n\n<!-- lime:image-task-slot:article-image-slot-1 -->",
+      updatedAt: "2026-06-29T10:01:00.000Z",
+    };
+
+    expect(
+      shouldRejectWorkspaceArticleEditedDraftChange({
+        currentDraft,
+        nextDraft,
+      }),
+    ).toBe(false);
+  });
+
+  it("内存草稿为空时也应根据当前 object markdown 拦截 slot 降级", () => {
+    const nextDraft = {
+      objectKey: "content-factory-app:session-main:articleDraft:article-1",
+      markdown: "# 标题\n\n正文被序列化后没有占位。",
+      updatedAt: "2026-06-29T10:01:00.000Z",
+    };
+
+    expect(
+      shouldRejectWorkspaceArticleEditedDraftChange({
+        currentDraft: null,
+        currentMarkdown:
+          "# 标题\n\n<!-- lime:image-task-slot:article-image-slot-1 -->",
+        nextDraft,
+      }),
+    ).toBe(true);
   });
 });

@@ -2,12 +2,13 @@ use crate::agent_tools::execution::{
     decide_tool_execution, persisted_tool_execution_policy_from_metadata,
     ToolExecutionDecisionInput, ToolExecutionDecisionKind, ToolExecutionResolverInput,
 };
+use crate::runtime_facade::current_agent_turn_context;
+use crate::turn_context_configuration::agent_turn_context_metadata;
 use anyhow::Result;
 use aster::conversation::message::{Message, ToolRequest};
-use aster::session_context;
 use aster::tool_inspection::{InspectionAction, InspectionResult, ToolInspector};
 use async_trait::async_trait;
-use serde_json::{Map as JsonMap, Value};
+use serde_json::Value;
 
 #[derive(Debug, Default)]
 pub struct WorkspaceToolPolicyInspector;
@@ -33,13 +34,13 @@ impl ToolInspector for WorkspaceToolPolicyInspector {
         tool_requests: &[ToolRequest],
         _messages: &[Message],
     ) -> Result<Vec<InspectionResult>> {
-        let turn_context = session_context::current_turn_context();
+        let turn_context = current_agent_turn_context();
         let working_directory = turn_context
             .as_ref()
             .and_then(|context| context.cwd.clone())
             .or_else(|| std::env::current_dir().ok())
             .unwrap_or_default();
-        let request_metadata = turn_context.as_ref().and_then(turn_context_metadata_value);
+        let request_metadata = agent_turn_context_metadata(turn_context.as_ref());
         let persisted_policy =
             persisted_tool_execution_policy_from_metadata(request_metadata.as_ref());
 
@@ -96,22 +97,11 @@ impl ToolInspector for WorkspaceToolPolicyInspector {
     }
 }
 
-fn turn_context_metadata_value(context: &aster::session::TurnContextOverride) -> Option<Value> {
-    if context.metadata.is_empty() {
-        return None;
-    }
-    let object = context
-        .metadata
-        .iter()
-        .map(|(key, value)| (key.clone(), value.clone()))
-        .collect::<JsonMap<String, Value>>();
-    Some(Value::Object(object))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aster::session::TurnContextOverride;
+    use crate::runtime_facade::with_agent_turn_context;
+    use crate::AgentTurnContext;
     use rmcp::model::CallToolRequestParam;
     use rmcp::object;
     use std::path::PathBuf;
@@ -131,14 +121,14 @@ mod tests {
     #[tokio::test]
     async fn shell_on_request_policy_requires_approval_in_main_tool_inspector() {
         let inspector = WorkspaceToolPolicyInspector::new();
-        let turn_context = TurnContextOverride {
+        let turn_context = AgentTurnContext {
             cwd: Some(PathBuf::from("/tmp/workspace")),
             approval_policy: Some("on-request".to_string()),
             sandbox_policy: Some("workspace-write".to_string()),
-            ..TurnContextOverride::default()
+            ..AgentTurnContext::default()
         };
 
-        let results = session_context::with_turn_context(
+        let results = with_agent_turn_context(
             Some(turn_context),
             inspector.inspect(
                 &[request(
@@ -167,7 +157,7 @@ mod tests {
     #[tokio::test]
     async fn persisted_policy_in_turn_metadata_allows_shell_in_main_tool_inspector() {
         let inspector = WorkspaceToolPolicyInspector::new();
-        let turn_context = TurnContextOverride {
+        let turn_context = AgentTurnContext {
             cwd: Some(PathBuf::from("/tmp/workspace")),
             approval_policy: Some("on-request".to_string()),
             sandbox_policy: Some("workspace-write".to_string()),
@@ -186,10 +176,10 @@ mod tests {
                     }
                 }),
             )]),
-            ..TurnContextOverride::default()
+            ..AgentTurnContext::default()
         };
 
-        let results = session_context::with_turn_context(
+        let results = with_agent_turn_context(
             Some(turn_context),
             inspector.inspect(
                 &[request(
@@ -214,14 +204,14 @@ mod tests {
     #[tokio::test]
     async fn shell_never_policy_allows_main_tool_inspector_to_continue() {
         let inspector = WorkspaceToolPolicyInspector::new();
-        let turn_context = TurnContextOverride {
+        let turn_context = AgentTurnContext {
             cwd: Some(PathBuf::from("/tmp/workspace")),
             approval_policy: Some("never".to_string()),
             sandbox_policy: Some("workspace-write".to_string()),
-            ..TurnContextOverride::default()
+            ..AgentTurnContext::default()
         };
 
-        let results = session_context::with_turn_context(
+        let results = with_agent_turn_context(
             Some(turn_context),
             inspector.inspect(
                 &[request(
@@ -246,14 +236,14 @@ mod tests {
     #[tokio::test]
     async fn shell_read_only_sandbox_denies_write_command_in_main_tool_inspector() {
         let inspector = WorkspaceToolPolicyInspector::new();
-        let turn_context = TurnContextOverride {
+        let turn_context = AgentTurnContext {
             cwd: Some(PathBuf::from("/tmp/workspace")),
             approval_policy: Some("never".to_string()),
             sandbox_policy: Some("read-only".to_string()),
-            ..TurnContextOverride::default()
+            ..AgentTurnContext::default()
         };
 
-        let results = session_context::with_turn_context(
+        let results = with_agent_turn_context(
             Some(turn_context),
             inspector.inspect(
                 &[request(

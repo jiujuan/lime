@@ -19,11 +19,11 @@ import type {
   WorkspaceArticleWorkspace,
   WorkspaceArticleWorkspaceAction,
   WorkspaceArticleWorkspaceActionIntent,
-  WorkspaceArticleWorkspaceImageSlotIntent,
   WorkspaceArticleWorkspaceStructuredPreview,
 } from "./workspaceArticleWorkspaceModel";
 import { buildWorkspaceArticleObjectKey } from "./workspaceArticleWorkspaceSelection";
 import type { WorkspaceArticleMarkdownChange } from "./workspaceArticleWorkspaceEditedDraft";
+import { isFixtureOnlyHostGenerationArticle } from "./workspaceArticleInlineHostCommandSync";
 
 interface WorkspaceArticleEditorSurfaceProps {
   actions: readonly WorkspaceArticleWorkspaceAction[];
@@ -34,9 +34,6 @@ interface WorkspaceArticleEditorSurfaceProps {
   objects: readonly WorkspaceArticleObject[];
   onActionIntent?: (intent: WorkspaceArticleWorkspaceActionIntent) => void;
   onArticleMarkdownChange?: (change: WorkspaceArticleMarkdownChange) => void;
-  onImageSlotIntent?: (
-    intent: WorkspaceArticleWorkspaceImageSlotIntent,
-  ) => void;
   onOpenPreviewArtifact?: (artifact: Artifact) => void;
   onSelectObject?: (object: WorkspaceArticleObject) => void;
   preview: WorkspaceArticleWorkspaceStructuredPreview;
@@ -84,12 +81,12 @@ export function WorkspaceArticleEditorSurface({
   const articleCanvasContentKey = `${object.ref.appId}:${object.ref.kind}:${object.ref.id}`;
   const locale = i18n?.resolvedLanguage || i18n?.language || "zh-CN";
   const fixtureOnlyHostGeneration = isFixtureOnlyHostGenerationArticle(
-    object.source,
     preview.documentText,
   );
   const visibleDocumentText = fixtureOnlyHostGeneration
     ? ""
     : (preview.documentText ?? "");
+  const articleDocumentText = visibleDocumentText;
   const canvasPlaceholder = fixtureOnlyHostGeneration
     ? dynamicT("workspace.articleEditor.canvas.fixtureOnlyPlaceholder")
     : dynamicT("workspace.articleEditor.canvas.empty");
@@ -259,7 +256,7 @@ export function WorkspaceArticleEditorSurface({
                   object,
                 });
               }}
-              sourceText={visibleDocumentText}
+              sourceText={articleDocumentText}
               placeholder={canvasPlaceholder}
               syncedStatusLabelKey={
                 fixtureOnlyHostGeneration
@@ -335,49 +332,6 @@ export function WorkspaceArticleEditorSurface({
       </div>
     </section>
   );
-}
-
-function isFixtureOnlyHostGenerationArticle(
-  source: Record<string, unknown> | null | undefined,
-  documentText: string | null | undefined,
-): boolean {
-  const text = typeof documentText === "string" ? documentText : "";
-  if (
-    text.includes("fixtureOnlyHostGeneration: true") ||
-    text.includes("fixturePromptFingerprint:")
-  ) {
-    return true;
-  }
-  const sourceRecord = asRecord(source);
-  const hostGeneration =
-    asRecord(sourceRecord?.hostManagedGeneration) ??
-    asRecord(sourceRecord?.host_managed_generation);
-  const provider = readString(
-    hostGeneration?.provider,
-    hostGeneration?.providerId,
-    hostGeneration?.provider_id,
-  );
-  const model = readString(
-    hostGeneration?.model,
-    hostGeneration?.modelName,
-    hostGeneration?.model_name,
-  );
-  return provider === "fixture-openai" || model === "lime-fixture-chat";
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
-
-function readString(...values: unknown[]): string {
-  for (const value of values) {
-    if (typeof value === "string" && value.trim()) {
-      return value.trim();
-    }
-  }
-  return "";
 }
 
 function ArticleEditorSection({

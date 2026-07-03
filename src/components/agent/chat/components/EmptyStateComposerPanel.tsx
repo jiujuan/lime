@@ -61,6 +61,7 @@ import {
   applyInputbarPluginSelection,
   removeInputbarPluginSelection,
   resolveInputbarPluginDisplayName,
+  resolveInputbarPluginSubmissionText,
   type InputbarPluginCapability,
   type InputbarPluginSelection,
   type InputbarPluginSelectionOptions,
@@ -139,6 +140,9 @@ interface EmptyStateComposerPanelProps {
   copy: HomeSurfaceComposerCopy;
   inputbarCopy: InputbarCoreCopy;
   pluginSuggestions?: readonly InputbarPluginCapability[];
+  pluginSuggestionsError?: string | null;
+  pluginSuggestionsLoading?: boolean;
+  onPluginSuggestionsNeeded?: () => void;
   showCreationModeSelector: boolean;
   creationMode: CreationMode;
   onCreationModeChange?: (mode: CreationMode) => void;
@@ -265,6 +269,9 @@ export function EmptyStateComposerPanel({
   copy,
   inputbarCopy,
   pluginSuggestions = [],
+  pluginSuggestionsError = null,
+  pluginSuggestionsLoading = false,
+  onPluginSuggestionsNeeded,
   showCreationModeSelector,
   creationMode,
   onCreationModeChange,
@@ -343,7 +350,10 @@ export function EmptyStateComposerPanel({
   }, [activePluginSelection, draftInput]);
 
   const handleSendDraft = () => {
-    const submittedInput = draftInput;
+    const submittedInput = resolveInputbarPluginSubmissionText({
+      input: draftInput,
+      selection: activePluginSelection,
+    });
     setDraftInput("");
     onSend(submittedInput, {
       goalEnabled: objectiveEnabled,
@@ -604,6 +614,8 @@ export function EmptyStateComposerPanel({
         title: copy.pluginChip.selectorTitle,
         unavailable: copy.pluginChip.unavailable,
       }}
+      loading={pluginSuggestionsLoading}
+      error={pluginSuggestionsError}
       onSelectPlugin={handleSelectPlugin}
     />
   );
@@ -627,6 +639,11 @@ export function EmptyStateComposerPanel({
     knowledgePanel: plusMenuKnowledgePanel,
     pluginsPanel: plusMenuPluginsPanel,
     skillsPanel: plusMenuSkillsPanel,
+    onPanelOpen: (panelId: "knowledge" | "plugins" | "skills") => {
+      if (panelId === "plugins") {
+        onPluginSuggestionsNeeded?.();
+      }
+    },
     onAddFiles: () => handleToolAction("attach"),
     onToggleTask: () => handleToolAction("task_mode"),
     onToggleObjective: () => handleToolAction("objective_mode"),
@@ -753,6 +770,7 @@ export function EmptyStateComposerPanel({
         onChange={setDraftInput}
         onSelectInputCapability={onSelectInputCapability}
         pluginSuggestions={pluginSuggestions}
+        onPluginSuggestionsNeeded={onPluginSuggestionsNeeded}
         onSelectPlugin={handleSelectPlugin}
         projectId={projectId}
         defaultCuratedTaskReferenceMemoryIds={

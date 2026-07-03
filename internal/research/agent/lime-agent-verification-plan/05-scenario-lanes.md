@@ -21,7 +21,7 @@
 | Agent runtime 状态机 | L0 + L1 + targeted L2 |
 | GUI 主路径 | L0 + L2 |
 | SkillTool / approval / sandbox | L0 + L1 + targeted L3 |
-| Agent App runtime | L0 + L1 + L2 |
+| Plugin runtime | L0 + L1 + L2 |
 | Managed Objective | L0 + L1，必要时 L3 |
 | release | L0 + L1 + L2 + L3，必要时 L4 |
 

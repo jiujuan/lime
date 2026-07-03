@@ -267,6 +267,41 @@ describe("buildImageTaskPreviewFromToolResult", () => {
     });
   });
 
+  it("图片任务只有相对 path 时，应结合工具参数里的项目根目录恢复 task file", () => {
+    const preview = buildImageTaskPreviewFromToolResult({
+      toolId: "tool-relative-image-1",
+      toolName: "mediaTaskArtifact/image/create",
+      toolArguments: JSON.stringify({
+        prompt: "画一张深圳夏天的图",
+        projectRootPath:
+          "/Users/coso/Library/Application Support/lime/projects/demo",
+      }),
+      toolResult: {
+        success: true,
+        task_id: "task-relative-image-1",
+        task_type: "image_generate",
+        task_family: "image",
+        status: "pending_submit",
+        path: ".lime/tasks/image_generate/task-relative-image-1.json",
+        record: {
+          payload: {
+            prompt: "画一张深圳夏天的图",
+            count: 1,
+          },
+        },
+      },
+      fallbackPrompt: "@配图 画一张深圳夏天的图",
+    });
+
+    expect(preview).toMatchObject({
+      taskId: "task-relative-image-1",
+      taskFilePath:
+        "/Users/coso/Library/Application Support/lime/projects/demo/.lime/tasks/image_generate/task-relative-image-1.json",
+      artifactPath: ".lime/tasks/image_generate/task-relative-image-1.json",
+      status: "running",
+    });
+  });
+
   it("图片任务完成态应把结果描述投影为图片下方 caption", () => {
     const preview = buildImageTaskPreviewFromToolResult({
       toolId: "tool-caption-image-1",
@@ -299,9 +334,125 @@ describe("buildImageTaskPreviewFromToolResult", () => {
       status: "complete",
       imageCount: 1,
       modelName: "fal-ai/nano-banana-pro",
-      caption:
-        "搞定，从花城汇看广州塔的春日景象已经好了，要调整的话直接说。",
+      caption: "搞定，从花城汇看广州塔的春日景象已经好了，要调整的话直接说。",
     });
+  });
+
+  it("图片任务排队态应保留后端 completion caption 供完成态展示", () => {
+    const preview = buildImageTaskPreviewFromToolResult({
+      toolId: "tool-pending-caption-image-1",
+      toolName: "lime_create_image_generation_task",
+      toolArguments: JSON.stringify({
+        prompt: "从花城汇看广州塔的春天照片",
+        model: "fal-ai/nano-banana-pro",
+      }),
+      toolResult: {
+        success: true,
+        task_id: "task-pending-caption-image-1",
+        task_type: "image_generate",
+        task_family: "image_generation",
+        status: "pending_submit",
+        normalized_status: "pending",
+        record: {
+          payload: {
+            prompt: "从花城汇看广州塔的春天照片",
+            model: "fal-ai/nano-banana-pro",
+            presentation: {
+              result_captions: {
+                complete:
+                  "完成了，花城汇望向广州塔的春日画面已经生成。",
+              },
+            },
+          },
+        },
+      },
+      fallbackPrompt: "@Nanobanana Pro 从花城汇看广州塔",
+    });
+
+    expect(preview).toMatchObject({
+      taskId: "task-pending-caption-image-1",
+      prompt: "从花城汇看广州塔的春天照片",
+      status: "running",
+      modelName: "fal-ai/nano-banana-pro",
+      caption: "完成了，花城汇望向广州塔的春日画面已经生成。",
+    });
+  });
+
+  it("图片任务完成态应从 result.images 读取真实预览图", () => {
+    const preview = buildImageTaskPreviewFromToolResult({
+      toolId: "tool-result-image-url",
+      toolName: "mediaTaskArtifact/image/create",
+      toolArguments: undefined,
+      toolResult: {
+        success: true,
+        task_id: "task-result-image-url",
+        task_type: "image_generate",
+        task_family: "image",
+        status: "succeeded",
+        normalized_status: "succeeded",
+        record: {
+          task_id: "task-result-image-url",
+          task_type: "image_generate",
+          status: "succeeded",
+          normalized_status: "succeeded",
+          payload: {
+            prompt: "深圳夏天午后的城市照片",
+            model: "agnes-image-2.1-flash",
+          },
+          result: {
+            images: [
+              {
+                url: "https://platform-outputs.agnes-ai.space/images/t2i/example.png",
+                slot_id: "image-slot-1",
+                slot_index: 1,
+              },
+            ],
+          },
+        },
+      },
+      fallbackPrompt: "@配图 深圳夏天午后的城市照片",
+    });
+
+    expect(preview).toMatchObject({
+      taskId: "task-result-image-url",
+      status: "complete",
+      imageUrl:
+        "https://platform-outputs.agnes-ai.space/images/t2i/example.png",
+      previewImages: [
+        "https://platform-outputs.agnes-ai.space/images/t2i/example.png",
+      ],
+      modelName: "agnes-image-2.1-flash",
+    });
+  });
+
+  it("图片任务完成态会清理 caption 里的混合命令标签", () => {
+    const preview = buildImageTaskPreviewFromToolResult({
+      toolId: "tool-caption-image-polluted",
+      toolName: "mediaTaskArtifact/image/create",
+      toolArguments: undefined,
+      toolResult: {
+        success: true,
+        task_id: "task-caption-image-polluted",
+        task_type: "image_generate",
+        task_family: "image",
+        status: "succeeded",
+        received_count: 1,
+        record: {
+          payload: {
+            prompt: "Generate 深圳夏day午后的城市照片，阳光明亮，真实摄影Style",
+            presentation: {
+              result_caption:
+                "搞定，深圳夏day午后的城市照片，真实摄影Style 已经做好了。",
+            },
+          },
+        },
+      },
+      fallbackPrompt:
+        "@配图 用 Agnes Generate一张深圳夏day午后的城市照片，真实摄影Style",
+    });
+
+    expect(preview?.caption).toContain("真实摄影Style");
+    expect(preview?.caption).toContain("深圳夏day");
   });
 
   it("应从 structuredContent 工具结果恢复图片轻卡，避免 Skill 子会话漏卡", () => {

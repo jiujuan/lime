@@ -1,7 +1,6 @@
 import { act } from "react";
 import { describe, expect, it } from "vitest";
 import {
-  IMAGE_WORKBENCH_FOCUS_EVENT,
   mockStreamingRenderer,
   mockTokenUsageDisplay,
   render,
@@ -10,7 +9,7 @@ import {
 import type { Message } from "./MessageList.testHarness";
 
 describe("MessageList image tasks", () => {
-  it("图片任务消息卡应在聊天区渲染预览并支持展开图片画布", async () => {
+  it("图片任务消息卡应只在聊天区渲染预览，不主动打开右侧查看区", async () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -31,23 +30,14 @@ describe("MessageList image tasks", () => {
       },
     ];
 
-    let focusDetail: Record<string, unknown> | null = null;
-    const handleFocus = (event: Event) => {
-      if (!(event instanceof CustomEvent)) {
-        return;
-      }
-      focusDetail = event.detail as Record<string, unknown>;
-    };
-    window.addEventListener(IMAGE_WORKBENCH_FOCUS_EVENT, handleFocus);
-
     const container = await renderZh(messages);
     const previewCard = container.querySelector(
       '[data-testid="image-workbench-message-preview-task-1"]',
     ) as HTMLDivElement | null;
 
-    expect(previewCard?.textContent).toContain("图片生成");
-    expect(previewCard?.textContent).toContain("搞定");
-    expect(previewCard?.textContent).toContain("一颗戴耳机的青柠");
+    expect(previewCard?.textContent).toContain("Image Generation");
+    expect(previewCard?.textContent).not.toContain("搞定");
+    expect(previewCard?.textContent).not.toContain("一颗戴耳机的青柠");
     expect(previewCard?.textContent).not.toContain("已生成");
     expect(previewCard?.textContent).not.toContain("可在右侧继续查看与使用");
     expect(container.textContent).not.toContain("图片生成已完成");
@@ -63,11 +53,7 @@ describe("MessageList image tasks", () => {
       previewCard?.click();
     });
 
-    expect(focusDetail).toEqual({
-      projectId: "project-1",
-      contentId: "content-1",
-    });
-    window.removeEventListener(IMAGE_WORKBENCH_FOCUS_EVENT, handleFocus);
+    expect(previewCard?.className).not.toContain("cursor-pointer");
   });
 
   it("图片任务消息应隐藏旧提交详情表，只保留自然正文和轻量工具条", async () => {
@@ -97,7 +83,7 @@ describe("MessageList image tasks", () => {
       '[data-testid="image-workbench-message-preview-task-verbose-template"]',
     );
 
-    expect(previewCard?.textContent).toContain("图片生成");
+    expect(previewCard?.textContent).toContain("Image Generation");
     expect(previewCard?.textContent).toContain("Nanobanana Pro");
     expect(container.textContent).not.toContain("任务已创建成功");
     expect(container.textContent).not.toContain("这里是生成详情");
@@ -122,7 +108,7 @@ describe("MessageList image tasks", () => {
         timestamp: new Date(),
         usage: {
           input_tokens: 31_000,
-          output_tokens: 120,
+          output_tokens: 0,
           cached_input_tokens: 0,
         },
         contentParts: [
@@ -171,7 +157,7 @@ describe("MessageList image tasks", () => {
     expect(text).toContain("收到，我按花城汇视角来生成广州塔的春天照片。");
     expect(text).not.toContain("先获取下工具参数");
     expect(text).not.toContain("马上生成");
-    expect(text).toContain("图片生成");
+    expect(text).toContain("Image Generation");
     expect(text).toContain("Nanobanana Pro");
     expect(text).not.toContain("我继续改");
     expect(
@@ -219,7 +205,7 @@ describe("MessageList image tasks", () => {
         timestamp: new Date(),
         usage: {
           input_tokens: 31_000,
-          output_tokens: 120,
+          output_tokens: 0,
           cached_input_tokens: 0,
         },
         imageWorkbenchPreview: {
@@ -248,7 +234,7 @@ describe("MessageList image tasks", () => {
     expect(text).toContain("好啊，我来按花城汇视角做一张广州塔春天照片。");
     expect(text).not.toContain("先获取下工具参数");
     expect(text).not.toContain("马上生成");
-    expect(toolbar?.textContent).toContain("图片生成");
+    expect(toolbar?.textContent).toContain("Image Generation");
     expect(toolbar?.textContent).toContain("Nanobanana Pro");
     expect(toolbar?.className).toContain("bg-[#eef0ec]");
     expect(image?.getAttribute("src")).toBe(
@@ -262,11 +248,12 @@ describe("MessageList image tasks", () => {
     expect(
       container.querySelector('[data-testid="token-usage-display"]'),
     ).not.toBeNull();
+    expect(text).toContain("31.0K Tokens");
     expect(mockTokenUsageDisplay).toHaveBeenCalledWith(
       expect.objectContaining({
         usage: expect.objectContaining({
           input_tokens: 31_000,
-          output_tokens: 120,
+          output_tokens: 0,
         }),
       }),
     );
@@ -274,6 +261,109 @@ describe("MessageList image tasks", () => {
     expect(text).not.toContain(".lime/tasks");
     expect(text).not.toContain("5 步");
     expect(text).not.toContain("1 个方向");
+  });
+
+  it("图片已回流但任务状态仍为 running 时也应显示 Token", async () => {
+    const messages: Message[] = [
+      {
+        id: "msg-assistant-image-workbench-running-with-image",
+        role: "assistant",
+        content: "好啊，这张图我来处理，先把画面氛围定准。",
+        timestamp: new Date(),
+        isThinking: false,
+        usage: {
+          input_tokens: 31_000,
+          output_tokens: 0,
+          cached_input_tokens: 0,
+        },
+        imageWorkbenchPreview: {
+          taskId: "task-running-with-image",
+          prompt: "E2E 图片命令路由测试，请生成一张青柠插画",
+          mode: "generate",
+          status: "running",
+          imageUrl: "data:image/png;base64,fixture",
+          imageCount: 1,
+          modelName: "fal-ai/nano-banana-pro",
+          caption:
+            "完成了，画面已经生成。想更清爽、更写实或换构图，都可以继续调。",
+        },
+      },
+    ];
+
+    const container = await renderZh(messages);
+    const text = container.textContent || "";
+
+    expect(text).toContain("Image Generation");
+    expect(text).toContain("Nanobanana Pro");
+    expect(text).toContain("31.0K Tokens");
+    expect(
+      container.querySelector('[data-testid="token-usage-display"]'),
+    ).not.toBeNull();
+  });
+
+  it("历史中的非尾部图片任务消息有 usage 时仍应显示 Token", async () => {
+    const messages: Message[] = [
+      {
+        id: "msg-user-image-workbench-with-followup",
+        role: "user",
+        content: "@配图 生成一张深圳夏天午后的真实摄影照片",
+        timestamp: new Date(),
+      },
+      {
+        id: "msg-assistant-image-workbench-with-followup",
+        role: "assistant",
+        content: "我先把深圳夏天午后的光线和街景定准。",
+        timestamp: new Date(),
+        isThinking: false,
+        usage: {
+          input_tokens: 31_000,
+          output_tokens: 119,
+          cached_input_tokens: 0,
+        },
+        imageWorkbenchPreview: {
+          taskId: "task-image-with-followup",
+          prompt: "深圳夏天午后的真实摄影照片",
+          mode: "generate",
+          status: "complete",
+          imageUrl: "https://example.com/shenzhen-summer.png",
+          imageCount: 1,
+          modelName: "agnes-2.0-flash",
+          caption: "画面已生成，阳光和街边绿树的层次都保留下来了。",
+        },
+      },
+      {
+        id: "msg-user-followup-after-image",
+        role: "user",
+        content: "再帮我改成傍晚。",
+        timestamp: new Date(),
+      },
+      {
+        id: "msg-assistant-followup-after-image",
+        role: "assistant",
+        content: "可以，我会把光线改成傍晚暖色。",
+        timestamp: new Date(),
+      },
+    ];
+
+    const container = await renderZh(messages);
+
+    expect(container.textContent).toContain("Tokens");
+    expect(
+      container.querySelector(
+        '[data-testid="image-workbench-message-preview-task-image-with-followup"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="token-usage-display"]'),
+    ).not.toBeNull();
+    expect(mockTokenUsageDisplay).toHaveBeenCalledWith(
+      expect.objectContaining({
+        usage: expect.objectContaining({
+          input_tokens: 31_000,
+          output_tokens: 119,
+        }),
+      }),
+    );
   });
 
   it("同一会话连续两次图片生成应分别保留用户指令、自然铺垫和对应轻卡", async () => {
@@ -358,8 +448,18 @@ describe("MessageList image tasks", () => {
       mockStreamingRenderer.mock.calls.map((call) => call[0].thinkingContent),
     ).toEqual(["先判断广州塔照片的季节和视角。", "再判断青柠插画的极简构图。"]);
     expect(
+      mockStreamingRenderer.mock.calls.map((call) =>
+        call[0].contentParts?.map(
+          (part) => (part as { type?: string }).type,
+        ),
+      ),
+    ).toEqual([
+      ["thinking", "text"],
+      ["thinking", "text"],
+    ]);
+    expect(
       mockStreamingRenderer.mock.calls.every(
-        (call) => !call[0].toolCalls && !call[0].contentParts,
+        (call) => !call[0].toolCalls,
       ),
     ).toBe(true);
     expect(

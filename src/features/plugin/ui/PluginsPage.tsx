@@ -92,7 +92,6 @@ import { PluginLaunchTargetControl } from "./PluginLaunchTargetControl";
 import { PluginReadinessIssueSummary } from "./PluginReadinessIssueSummary";
 import { PluginReleaseEvidenceSummary } from "./PluginReleaseEvidenceSummary";
 import { UiExtensionHost } from "../runtime/uiExtensionHost";
-import { WorkflowRuntimeHost } from "../runtime/workflowRuntimeHost";
 import { evaluatePluginEntryRuntimeGuard } from "../runtime/entryRuntimeGuard";
 import {
   APP_CENTER_PLUGIN_FLAGS,
@@ -118,6 +117,23 @@ const PAGE_FLAGS = APP_CENTER_PLUGIN_FLAGS;
 
 function buildProfile(): HostCapabilityProfile {
   return buildAppCenterRuntimeCapabilityProfile();
+}
+
+function normalizeStatusFilter(
+  statusFilter: PluginsPageParams["statusFilter"] | undefined,
+): AppCenterStatusFilter {
+  if (
+    statusFilter === "all" ||
+    statusFilter === "installed" ||
+    statusFilter === "installable" ||
+    statusFilter === "attention"
+  ) {
+    return statusFilter;
+  }
+  if (statusFilter === "activatable") {
+    return "attention";
+  }
+  return "all";
 }
 
 function isDeleteDataExecutionBlocked(params: {
@@ -212,6 +228,16 @@ type PluginDynamicTranslation = (
   options?: Record<string, unknown>,
 ) => string;
 
+function applyAppIconFallback(
+  event: { currentTarget: HTMLImageElement },
+  title: string,
+): void {
+  const fallback = resolveAppIconSrc({ title });
+  if (event.currentTarget.getAttribute("src") !== fallback) {
+    event.currentTarget.src = fallback;
+  }
+}
+
 export function PluginsPage({
   onNavigate,
   pageParams,
@@ -252,9 +278,13 @@ export function PluginsPage({
     useState<PluginLifecycleUninstallRehearsalDescriptor | null>(null);
   const [deleteDataConfirmationInput, setDeleteDataConfirmationInput] =
     useState("");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(
+    () => pageParams?.query?.trim() ?? "",
+  );
   const [statusFilter, setStatusFilter] =
-    useState<AppCenterStatusFilter>("all");
+    useState<AppCenterStatusFilter>(() =>
+      normalizeStatusFilter(pageParams?.statusFilter),
+    );
   const [sourceFilter, setSourceFilter] =
     useState<AppCenterSourceFilter>("all");
   const [launchTargetMode, setLaunchTargetMode] =
@@ -299,15 +329,18 @@ export function PluginsPage({
       }),
     [cloudApps, cloudCatalog?.source, hostLifecycleSnapshots, installed],
   );
+  const searchPlaceholder = t("plugin.apps.center.searchPlaceholder");
+  const effectiveSearchQuery =
+    searchQuery.trim() === searchPlaceholder.trim() ? "" : searchQuery;
 
   const filteredItems = useMemo(
     () =>
       filterAppCenterItems(appItems, {
-        searchQuery,
+        searchQuery: effectiveSearchQuery,
         sourceFilter,
         statusFilter,
       }),
-    [appItems, searchQuery, sourceFilter, statusFilter],
+    [appItems, effectiveSearchQuery, sourceFilter, statusFilter],
   );
 
   const totalPages = getAppCenterPageCount(filteredItems.length);
@@ -419,6 +452,17 @@ export function PluginsPage({
       setSelectedAppId(requestedAppId);
     }
   }, [pageParams?.selectedPluginId]);
+
+  useEffect(() => {
+    const requestedQuery = pageParams?.query?.trim() ?? "";
+    setSearchQuery((current) =>
+      current.trim() === requestedQuery ? current : requestedQuery,
+    );
+  }, [pageParams?.query]);
+
+  useEffect(() => {
+    setStatusFilter(normalizeStatusFilter(pageParams?.statusFilter));
+  }, [pageParams?.statusFilter]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -797,37 +841,22 @@ export function PluginsPage({
           return;
         }
 
+        if (entry.kind === "workflow") {
+          const summary = t("plugin.apps.launch.workflowRequiresCurrentApi", {
+            title: entry.title,
+          });
+          setMountedUi(null);
+          setLaunchSummary(summary);
+          toast.error(t("plugin.apps.toast.failed"), {
+            description: summary,
+          });
+          return;
+        }
         const host = new AdapterCapabilityHost({
           preview,
           realAdapterEnabled: true,
           store: adapterStore,
         });
-        const workflowHost = new WorkflowRuntimeHost({
-          host,
-          flags: PAGE_FLAGS,
-        });
-        if (entry.kind === "workflow") {
-          const result = await workflowHost.runWorkflow({
-            workflowKey: entry.key,
-            entryKey: entry.key,
-            title: entry.title,
-            steps: [
-              {
-                id: "record-launch",
-                kind: "evidence.record",
-                evidenceKind: "plugin_entry_launch",
-                message: `Plugin entry ${entry.key} launched from Plugins.`,
-              },
-            ],
-          });
-          setLaunchSummary(
-            t("plugin.apps.launch.workflowCompleted", {
-              title: entry.title,
-              runId: result.run.runId,
-            }),
-          );
-          return;
-        }
         const result = await host.runEntry(entry.key);
         setMountedUi(null);
         setLaunchSummary(
@@ -988,6 +1017,7 @@ export function PluginsPage({
           src={item.iconSrc}
           alt={item.title}
           loading="lazy"
+          onError={(event) => applyAppIconFallback(event, item.title)}
         />
       </div>
     );
@@ -1053,6 +1083,12 @@ export function PluginsPage({
                       src={reviewIconSrc}
                       alt={installReview.review.displayName}
                       loading="lazy"
+                      onError={(event) =>
+                        applyAppIconFallback(
+                          event,
+                          installReview.review.displayName,
+                        )
+                      }
                     />
                   </div>
                   <div className="min-w-0">
@@ -1591,12 +1627,13 @@ export function PluginsPage({
                     </p>
                     <button
                       type="button"
-                      className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-full bg-[color:var(--lime-text-strong)] px-3 text-sm font-semibold text-[color:var(--lime-surface)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-80"
+                      className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-full bg-[color:var(--lime-text-strong)] px-3 text-sm font-semibold text-[color:var(--lime-surface)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 disabled:opacity-100"
                       disabled={isPrimaryActionDisabled(
                         selectedItem,
                         busyAction,
                       )}
                       onClick={() => void handlePrimaryAction(selectedItem)}
+                      data-testid={`plugins-detail-primary-action-${selectedItem.appId}`}
                     >
                       {canOneClickUpdate(selectedItem) ? (
                         <RefreshCw size={16} />
@@ -1773,7 +1810,8 @@ export function PluginsPage({
 
                   {launchSummary ? (
                     <div
-                      className="sr-only"
+                      role="status"
+                      className="rounded-lg border border-[color:var(--lime-info-border)] bg-[color:var(--lime-info-soft)] px-4 py-3 text-sm font-medium text-[color:var(--lime-text-strong)]"
                       data-testid="plugins-launch-summary"
                     >
                       {launchSummary}

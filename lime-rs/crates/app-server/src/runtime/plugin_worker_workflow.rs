@@ -1,4 +1,10 @@
 use super::timestamp;
+use super::workflow::events::{
+    is_allowed_worker_progress_event, requires_step_binding, validate_required_progress_payload,
+    WORKFLOW_CONNECTOR_COMPLETED, WORKFLOW_RUN_COMPLETED, WORKFLOW_RUN_FAILED,
+    WORKFLOW_RUN_STARTED, WORKFLOW_STEP_COMPLETED, WORKFLOW_STEP_FAILED, WORKFLOW_STEP_STARTED,
+};
+use super::workflow::source_map::workflow_step_definitions_from_value;
 use super::RuntimeEvent;
 use serde_json::{json, Map, Value};
 use std::collections::BTreeSet;
@@ -83,12 +89,12 @@ pub(super) fn build_plugin_worker_workflow_context(
 
 pub(super) fn workflow_started_events(context: &PluginWorkerWorkflowContext) -> Vec<RuntimeEvent> {
     let mut events = vec![RuntimeEvent::new(
-        "workflow.run.started",
+        WORKFLOW_RUN_STARTED,
         context.run_payload("running"),
     )];
     if let Some(step) = context.steps.first() {
         events.push(RuntimeEvent::new(
-            "workflow.step.started",
+            WORKFLOW_STEP_STARTED,
             context.step_payload(step, 0, "running", None),
         ));
     }
@@ -105,14 +111,14 @@ pub(super) fn workflow_completed_events(
         .enumerate()
         .map(|(index, step)| {
             RuntimeEvent::new(
-                "workflow.step.completed",
+                WORKFLOW_STEP_COMPLETED,
                 context.step_payload(step, index, "completed", Some(completion.clone())),
             )
         })
         .collect::<Vec<_>>();
     let mut payload = context.run_payload("completed");
     insert_object_field(&mut payload, "completion", completion.clone());
-    events.push(RuntimeEvent::new("workflow.run.completed", payload));
+    events.push(RuntimeEvent::new(WORKFLOW_RUN_COMPLETED, payload));
     events
 }
 
@@ -123,13 +129,13 @@ pub(super) fn workflow_failed_events(
     let mut events = Vec::new();
     if let Some(step) = context.steps.first() {
         events.push(RuntimeEvent::new(
-            "workflow.step.failed",
+            WORKFLOW_STEP_FAILED,
             context.step_payload(step, 0, "failed", Some(failure.clone())),
         ));
     }
     let mut payload = context.run_payload("failed");
     insert_object_field(&mut payload, "failure", failure.clone());
-    events.push(RuntimeEvent::new("workflow.run.failed", payload));
+    events.push(RuntimeEvent::new(WORKFLOW_RUN_FAILED, payload));
     events
 }
 
@@ -354,7 +360,7 @@ pub(super) fn workflow_connector_completed_events_from_artifact_events(
 ) -> Result<Vec<RuntimeEvent>, String> {
     let mut seen = BTreeSet::new();
     let mut completed_events = Vec::new();
-    for evidence in host_search_evidence_from_artifact_events(events) {
+    for evidence in host_tool_evidence_from_artifact_events(events) {
         let request_id = string_field(&evidence, &["requestId", "request_id"]);
         let tool_call_id = string_field(&evidence, &["toolCallId", "tool_call_id"]);
         let query = string_field(&evidence, &["query"]);
@@ -393,80 +399,24 @@ pub(super) fn workflow_connector_completed_events_from_artifact_events(
         insert_optional_string(&mut payload, "summary", summary);
 
         completed_events.push(context.bind_workflow_event(
-            RuntimeEvent::new("workflow.connector.completed", payload),
-            "workspace_patch_host_search",
+            RuntimeEvent::new(WORKFLOW_CONNECTOR_COMPLETED, payload),
+            "workspace_patch_host_tools",
         )?);
     }
     Ok(completed_events)
 }
 
 fn workflow_steps_from_value(value: Option<&Value>) -> Vec<PluginWorkerWorkflowStep> {
-    let Some(items) = value.and_then(Value::as_array) else {
-        return Vec::new();
-    };
-    items
-        .iter()
-        .filter_map(workflow_step_from_value)
-        .collect::<Vec<_>>()
-}
-
-fn workflow_step_from_value(value: &Value) -> Option<PluginWorkerWorkflowStep> {
-    let id = string_field(value, &["id", "key"])?;
-    Some(PluginWorkerWorkflowStep {
-        title: string_field(value, &["title", "name"]).unwrap_or_else(|| id.clone()),
-        subagent: string_field(value, &["subagent", "subAgent"]),
-        skill_refs: string_list_field(value, &["skillRefs", "skill_refs"]),
-        expected_output: string_field(value, &["expectedOutput", "expected_output"]),
-        id,
-    })
-}
-
-fn is_allowed_worker_progress_event(event_type: &str) -> bool {
-    matches!(
-        event_type,
-        "workflow.step.progress"
-            | "workflow.tool.started"
-            | "workflow.tool.completed"
-            | "workflow.connector.requested"
-            | "workflow.connector.completed"
-            | "workflow.hook.started"
-            | "workflow.hook.completed"
-            | "workflow.artifact.delta"
-            | "artifact.snapshot"
-    )
-}
-
-fn requires_step_binding(event_type: &str) -> bool {
-    matches!(
-        event_type,
-        "workflow.step.progress"
-            | "workflow.tool.started"
-            | "workflow.tool.completed"
-            | "workflow.connector.requested"
-            | "workflow.connector.completed"
-            | "workflow.hook.started"
-            | "workflow.hook.completed"
-            | "workflow.artifact.delta"
-    )
-}
-
-fn validate_required_progress_payload(event_type: &str, payload: &Value) -> Result<(), String> {
-    if event_type.starts_with("workflow.tool.")
-        && string_field(payload, &["toolName", "tool_name", "name"]).is_none()
-    {
-        return Err(format!("{event_type} missing toolName"));
-    }
-    if event_type.starts_with("workflow.connector.")
-        && string_field(payload, &["connectorRef", "connector_ref"]).is_none()
-    {
-        return Err(format!("{event_type} missing connectorRef"));
-    }
-    if event_type.starts_with("workflow.hook.")
-        && string_field(payload, &["hookKey", "hook_key"]).is_none()
-    {
-        return Err(format!("{event_type} missing hookKey"));
-    }
-    Ok(())
+    workflow_step_definitions_from_value(value, None)
+        .into_iter()
+        .map(|step| PluginWorkerWorkflowStep {
+            id: step.id,
+            title: step.title,
+            subagent: step.subagent_ref,
+            skill_refs: step.skill_refs,
+            expected_output: step.expected_output,
+        })
+        .collect()
 }
 
 fn bind_common_workflow_payload(
@@ -575,27 +525,6 @@ fn string_field(value: &Value, keys: &[&str]) -> Option<String> {
         .map(ToString::to_string)
 }
 
-fn string_list_field(value: &Value, keys: &[&str]) -> Vec<String> {
-    keys.iter()
-        .filter_map(|key| value.get(*key))
-        .find_map(Value::as_array)
-        .map(|items| {
-            items
-                .iter()
-                .filter_map(Value::as_str)
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(ToString::to_string)
-                .fold(Vec::new(), |mut result, value| {
-                    if !result.iter().any(|existing| existing == &value) {
-                        result.push(value);
-                    }
-                    result
-                })
-        })
-        .unwrap_or_default()
-}
-
 fn insert_object_field(value: &mut Value, key: &str, field: Value) {
     if let Some(object) = value.as_object_mut() {
         object.insert(key.to_string(), field);
@@ -612,7 +541,7 @@ fn insert_optional_string(value: &mut Value, key: &str, field: Option<String>) {
     }
 }
 
-fn host_search_evidence_from_artifact_events(events: &[RuntimeEvent]) -> Vec<Value> {
+fn host_tool_evidence_from_artifact_events(events: &[RuntimeEvent]) -> Vec<Value> {
     events
         .iter()
         .filter(|event| event.event_type == "artifact.snapshot")
@@ -620,7 +549,7 @@ fn host_search_evidence_from_artifact_events(events: &[RuntimeEvent]) -> Vec<Val
             let artifact = event.payload.get("artifact").unwrap_or(&event.payload);
             workspace_patch_from_artifact(artifact)
                 .into_iter()
-                .flat_map(|patch| host_search_evidence_from_workspace_patch(&patch))
+                .flat_map(|patch| host_tool_evidence_from_workspace_patch(&patch))
                 .collect::<Vec<_>>()
         })
         .collect()
@@ -641,14 +570,18 @@ fn workspace_patch_from_artifact(artifact: &Value) -> Option<Value> {
         .or_else(|| artifact.get("workspace_patch").cloned())
 }
 
-fn host_search_evidence_from_workspace_patch(patch: &Value) -> Vec<Value> {
+fn host_tool_evidence_from_workspace_patch(patch: &Value) -> Vec<Value> {
     patch
         .get("objects")
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
         .filter_map(|object| object.get("source"))
-        .filter_map(|source| source.get("hostSearchEvidence"))
+        .filter_map(|source| {
+            source
+                .get("hostToolEvidence")
+                .or_else(|| source.get("hostSearchEvidence"))
+        })
         .filter_map(Value::as_array)
         .flat_map(|items| items.iter().filter(|item| item.is_object()).cloned())
         .collect()
@@ -813,7 +746,7 @@ mod tests {
     }
 
     #[test]
-    fn builds_connector_completed_audit_events_from_host_search_evidence() {
+    fn builds_connector_completed_audit_events_from_host_tool_evidence() {
         let steps = json!([
             {
                 "id": "research",
@@ -851,13 +784,13 @@ mod tests {
                                 {
                                     "ref": { "kind": "articleDraft" },
                                     "source": {
-                                        "hostSearchEvidence": [
+                                        "hostToolEvidence": [
                                             {
                                                 "requestId": "search-request-1",
                                                 "roundId": "research-round-1",
                                                 "connectorRef": "web-research",
                                                 "tool": "WebSearch",
-                                                "toolCallId": "content-factory-web-search-1",
+                                                "toolCallId": "workspace-patch-host-tool-websearch-1",
                                                 "status": "completed",
                                                 "query": "Lime 写文章",
                                                 "purpose": "确认主题",
@@ -870,13 +803,13 @@ mod tests {
                                 {
                                     "ref": { "kind": "imageGenerationSet" },
                                     "source": {
-                                        "hostSearchEvidence": [
+                                        "hostToolEvidence": [
                                             {
                                                 "requestId": "search-request-1",
                                                 "roundId": "research-round-1",
                                                 "connectorRef": "web-research",
                                                 "tool": "WebSearch",
-                                                "toolCallId": "content-factory-web-search-1",
+                                                "toolCallId": "workspace-patch-host-tool-websearch-1",
                                                 "status": "completed",
                                                 "query": "Lime 写文章",
                                                 "summary": "duplicate object evidence"
@@ -912,7 +845,7 @@ mod tests {
         assert_eq!(event.payload["result"]["output"], "result body");
         assert_eq!(
             event.payload["metadata"]["pluginWorkflow"]["eventSource"],
-            "workspace_patch_host_search"
+            "workspace_patch_host_tools"
         );
     }
 

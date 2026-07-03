@@ -7,6 +7,7 @@ import type {
   ImageStoryboardSlot,
   MessageImageWorkbenchPreview,
 } from "../types";
+import { sanitizeImageWorkbenchPresentationText } from "../utils/imageWorkbenchPresentation";
 
 const IMAGE_GENERATION_CONTRACT_KEY = "image_generation";
 const IMAGE_GENERATION_CONTRACT_ROUTING_FAILURE_CODES = new Set([
@@ -43,6 +44,7 @@ export function readString(
 
 export function readImageTaskPresentationText(
   candidates: Array<Record<string, unknown> | null | undefined>,
+  languageSource?: string | null,
 ): string | undefined {
   for (const candidate of candidates) {
     if (!candidate) {
@@ -60,7 +62,7 @@ export function readImageTaskPresentationText(
       ],
     );
     if (value) {
-      return value;
+      return sanitizeImageWorkbenchPresentationText(value, { languageSource });
     }
   }
   return undefined;
@@ -69,6 +71,7 @@ export function readImageTaskPresentationText(
 function readNestedPresentationCaption(
   presentation: Record<string, unknown> | null | undefined,
   status: MessageImageWorkbenchPreview["status"],
+  languageSource?: string | null,
 ): string | undefined {
   if (!presentation) {
     return undefined;
@@ -98,15 +101,19 @@ function readNestedPresentationCaption(
     }
   })();
 
-  return readString(
-    [presentation, resultCaptions],
-    [...statusSpecificKeys, "result_caption", "resultCaption"],
+  return sanitizeImageWorkbenchPresentationText(
+    readString(
+      [presentation, resultCaptions],
+      [...statusSpecificKeys, "result_caption", "resultCaption"],
+    ),
+    { languageSource },
   );
 }
 
 export function readImageTaskPresentationCaption(
   candidates: Array<Record<string, unknown> | null | undefined>,
   status: MessageImageWorkbenchPreview["status"],
+  languageSource?: string | null,
 ): string | undefined {
   if (status === "running") {
     return undefined;
@@ -119,6 +126,7 @@ export function readImageTaskPresentationCaption(
     const value = readNestedPresentationCaption(
       asRecord(candidate.presentation) || candidate,
       status,
+      languageSource,
     );
     if (value) {
       return value;
@@ -218,9 +226,7 @@ function readRecordArray(value: unknown): Record<string, unknown>[] {
     : [];
 }
 
-function normalizeRunStatus(
-  value?: string,
-): ImageCommandRunSnapshot["status"] {
+function normalizeRunStatus(value?: string): ImageCommandRunSnapshot["status"] {
   switch (value?.trim()) {
     case "requires_parameters":
     case "queued":
@@ -234,9 +240,7 @@ function normalizeRunStatus(
   }
 }
 
-function normalizeRunStepStatus(
-  value?: string,
-): ImageCommandRunStep["status"] {
+function normalizeRunStepStatus(value?: string): ImageCommandRunStep["status"] {
   switch (value?.trim()) {
     case "pending":
     case "running":

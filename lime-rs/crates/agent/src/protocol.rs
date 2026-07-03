@@ -1,4 +1,4 @@
-use aster::session::TurnOutputSchemaRuntime;
+use agent_protocol::turn_context::TurnOutputSchemaRuntime;
 use lime_core::database::dao::agent_timeline::{AgentThreadItem, AgentThreadTurn};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};

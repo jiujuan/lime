@@ -20,10 +20,10 @@ use lime_core::database::dao::agent_timeline::AgentTimelineDao;
 use lime_core::database::dao::agent_timeline::{AgentThreadTurn, AgentThreadTurnStatus};
 use lime_core::database::DbConnection;
 use lime_core::workspace::WorkspaceManager;
-use lime_services::aster_session_store::LimeSessionStore;
 use std::time::Instant;
 use uuid::Uuid;
 
+use crate::aster_session_store::LimeSessionStore;
 use crate::execution_strategy_compat::normalize_execution_strategy_to_react;
 #[cfg(test)]
 use crate::protocol::AgentMessageContent as RuntimeAgentMessageContent;
@@ -47,8 +47,7 @@ mod session_store_types;
 
 #[cfg(test)]
 use self::session_store_message_projection::{
-    convert_agent_message, convert_agent_messages, convert_user_visible_agent_messages,
-    parse_tool_call_arguments,
+    convert_agent_message, convert_agent_messages, parse_tool_call_arguments,
 };
 pub use self::session_store_runtime_detail::{
     get_runtime_session_detail, get_runtime_session_detail_with_history_limit,
@@ -60,9 +59,9 @@ use self::session_store_runtime_projection::build_runtime_session_info;
 use self::session_store_subagent_context::{
     apply_runtime_status_to_child_subagent_session, build_child_subagent_session_summaries,
     build_child_subagent_session_summary, build_subagent_parent_context,
-    resolve_child_subagent_runtime_status_from_snapshot, should_load_runtime_overlay,
+    resolve_child_subagent_runtime_status_from_turns, should_load_runtime_overlay,
     should_load_runtime_overlay_at, should_load_subagent_runtime_context,
-    SubagentPresentationProjection,
+    ChildSubagentRuntimeTurnProjection, SubagentPresentationProjection,
 };
 pub use self::session_store_subagent_context::{
     ChildSubagentRuntimeStatus, ChildSubagentSession, SubagentParentContext,

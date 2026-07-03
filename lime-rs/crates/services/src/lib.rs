@@ -32,7 +32,6 @@
 //! - `model_registry_service` - 模型注册服务
 //! - `prompt_service` - Prompt 服务
 //! - `mcp_service` - MCP 服务
-//! - `aster_session_store` - Aster 会话存储
 //! - `session_context_service` - 会话上下文服务
 //! - `ai_summary_service` - AI 摘要服务
 //! - `project_context_builder` - 项目上下文构建器
@@ -59,7 +58,6 @@ pub mod prompt_sync;
 pub mod skill_service;
 
 // 依赖 database + models 的服务
-pub mod aster_session_store;
 pub mod backup_service;
 pub mod material_service;
 pub mod mcp_service;

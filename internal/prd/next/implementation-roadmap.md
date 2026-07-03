@@ -21,7 +21,7 @@
 | N1 | App Server 主链实证 | Claw turn lifecycle 真实 GUI E2E | 发送、streaming、event refresh、read model 回流可证。 |
 | N2 | Projection 标准化 | `AgentEvent/readModel -> AgentRuntimeViewModel` | Claw 可通过 projection 渲染核心 timeline。 |
 | N3 | UI primitives 内部复用 | message/timeline/tool/action/artifact/evidence 组件候选 | 组件不依赖 host，单测覆盖状态。 |
-| N4 | Agent App 对话复用 | Agent App turn 进入 `agentSession/*` | 不靠 UI runtime 生命周期伪造对话完成。 |
+| N4 | Plugin 对话复用 | Plugin turn 进入 `agentSession/*` | 不靠 UI runtime 生命周期伪造对话完成。 |
 | N5 | content-studio 试点 | Electron main client + businessObjectRef | 内容业务对象内完成最小 Agent flow。 |
 | N6 | Sandbox / Permissions PRD | permission profile、FS / network policy、approval、exec policy、sandbox backend | 客户端和服务端都有统一执行安全模型。 |
 | N7 | Remote Runtime Gateway PRD | auth / tenant / sandbox profile / event / action / artifact gateway | 移动 App / 小程序 / 消息渠道有统一服务端入口设计。 |
@@ -36,7 +36,7 @@
 
 1. **完整 Claw streaming GUI E2E**：证明 `agentSession/turn/start -> event -> read model` 主链真实可用。
 2. **Projection 标准化**：把当前 Claw timeline / runtime status 的事实解释收敛成 headless view model。
-3. **Agent App 对话 turn fixture**：证明 Agent App 不只启动 UI iframe，而是能复用 `agentSession/*` 对话主链。
+3. **Plugin 对话 turn fixture**：证明 Plugin 不只启动 UI iframe，而是能复用 `agentSession/*` 对话主链。
 4. **content-studio client 试点**：接入 app-server-client、sidecar lifecycle 和 businessObjectRef。
 5. **Sandbox / Permissions PRD**：把 permission profile、filesystem / network policy、approval、exec policy、client / server sandbox backend 写清楚。
 6. **Remote Gateway / Server Mode PRD**：把认证、租户、sandbox profile、事件订阅、action 幂等、artifact 安全预览、基础设施 ports 写清楚。
@@ -87,11 +87,11 @@
 2. 状态覆盖完整。
 3. 至少一组组件可在测试 fixture 中脱离 Claw shell 渲染。
 
-## 7. N4：Agent App 对话复用
+## 7. N4：Plugin 对话复用
 
 目标：
 
-Agent App 不只复用 UI runtime start/status/stop，而是复用 Agent turn runtime。
+Plugin 不只复用 UI runtime start/status/stop，而是复用 Agent turn runtime。
 
 退出条件：
 
@@ -206,7 +206,7 @@ Agent App 不只复用 UI runtime start/status/stop，而是复用 Agent turn ru
 3. `@limecloud/agent-runtime-projection` 提供 `projectAgentUiState`、`createAgentUiProjector` 等纯投影函数，并 re-export contracts 类型以兼容旧调用。旧 `projectAgentRuntimeReadModel` 保留为兼容事实栏入口。
 4. `@limecloud/agent-runtime-ui` 提供 `AgentUiProjectionView`、`UIMessagePartsView`、`ProcessTimelineView`、`ExecutionGraphView`、`ToolGroup`、`ActionRequiredList`，直接消费 contracts / projection state。旧 `AgentTimeline` / `RuntimeFactsPanel` 保留为兼容 primitives。
 5. `app-server-client` 仍是底层 App Server JSON-RPC 与 sidecar lifecycle client；`AgentRuntimeClient` facade 落在这里，`@limecloud/agent-runtime-client` 只作为对外标准包入口。
-6. Agent App Host Drawer 已把运行过程 view model 切到 `AgentUiProjectionState -> Agent App view model`，并保留本地 artifact / evidence / action 业务卡片作为宿主扩展层；旧组件目录 projection 类型只作为迁移输入适配来源，不再是该入口的最终 read model。
+6. Plugin Host Drawer 已把运行过程 view model 切到 `AgentUiProjectionState -> Plugin view model`，并保留本地 artifact / evidence / action 业务卡片作为宿主扩展层；旧组件目录 projection 类型只作为迁移输入适配来源，不再是该入口的最终 read model。
 7. 公共 Agent UI adapter event 类型已迁到 `@limecloud/agent-ui-contracts`；主聊天旧 projection 文件只 re-export 这些公共类型并继续保留自己的投影构建逻辑，作为后续分批迁移来源，而不是新的类型事实源。
 8. 前端 `src/lib/api/agentRuntime/threadClient.ts` 的 turn lifecycle 已可消费标准 `AgentRuntimeClient` facade：`submit / cancel / respond / read` 先从旧 UI 请求 shape 投影为 App Server current 参数，再委托 `startTurn / cancelTurn / respondAction / readThread`。该文件仍是迁移期 compat gateway，负责旧 DTO、事件路由、read model 投影、file checkpoint / queue / compact / replay 等尚未进入标准 client 的业务面，不允许继续扩展成第二套 runtime SDK。
 9. 根依赖、TypeScript paths 与 Vite alias 已接入 `@limecloud/agent-runtime-client`，避免标准包只停留在 package 目录而无法被前端 current 网关消费。
@@ -214,7 +214,7 @@ Agent App 不只复用 UI runtime start/status/stop，而是复用 Agent turn ru
 11. `@limecloud/agent-runtime-projection` 已承接 host-neutral 的 Agent UI summary selectors：事件类型分组、action / task / artifact / evidence / diagnostics 计数、notable latest events、Subagents surface / lane 聚合和 artifact latest lookup。主聊天 `agentUiProjectionSummary.ts` 只保留本地化 label、展示文案 formatter 和兼容导出名，不再作为这些 selector 的事实源。
 12. `internal/aiprompts/agent-ui-runtime-standard.md` 已成为四包职责、宿主接入、App Server runtime 配合、主聊天 projection 迁移分类和守卫要求的集中事实源；后续改标准包或主聊天 projection 前应先读该文档。
 13. `scripts/check-app-server-client-contract.mjs` 已守住标准包名入口，扫描根依赖、lockfile、TypeScript paths、Vite alias 和 `packages/*/package.json`，防止早期讨论包名回流成新的物理包或 alias。
-14. Agent App Runtime 已作为第二个真实宿主基线消费标准 projection：`agentRunProjectionState.ts` 从 host run state 生成标准 `AgentUiProjectionState`，`AgentRunProjectionPanel.tsx` 直接渲染 `AgentUiProjectionView`，宿主 summary / action callback / artifact presentation 保留在 Agent App adapter 层。
+14. Plugin Runtime 已作为第二个真实宿主基线消费标准 projection：`agentRunProjectionState.ts` 从 host run state 生成标准 `AgentUiProjectionState`，`AgentRunProjectionPanel.tsx` 直接渲染 `AgentUiProjectionView`，宿主 summary / action callback / artifact presentation 保留在 Plugin adapter 层。
 
 退出条件补充：
 
@@ -244,7 +244,7 @@ Lime Next 不是某个文件夹完成，而是满足：
 1. 至少两个 App 通过 App Server 复用同一 Agent turn runtime。
 2. 至少两个 App 复用同一 headless projection。
 3. Claw 旗舰体验不退化。
-4. Agent Apps 不自建 runtime。
+4. Plugins 不自建 runtime。
 5. content-studio 不直接依赖 Lime 内部 Rust workspace。
 6. 移动 App / 小程序通过 Remote Runtime Gateway 消费 runtime，不直连 sidecar。
 7. 客户端和服务端执行链都通过 permission profile、Sandbox Manager、approval / escalation 和 audit。

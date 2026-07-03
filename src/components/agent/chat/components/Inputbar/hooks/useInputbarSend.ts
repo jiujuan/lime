@@ -2,6 +2,10 @@ import { useCallback } from "react";
 import type { MessageImage, MessagePathReference } from "../../../types";
 import type { InputbarKnowledgePackSelection } from "../types";
 import type { InputbarSendHandler } from "../inputbarSendPayload";
+import {
+  resolveInputbarPluginSubmissionText,
+  type InputbarPluginSelection,
+} from "../pluginInputCapability";
 import { buildKnowledgeRequestMetadata } from "@/features/knowledge/agent/knowledgeMetadata";
 import { recordCuratedTaskTemplateUsage } from "../../../utils/curatedTaskTemplates";
 import { buildPathReferenceRequestMetadata } from "../../../utils/pathReferences";
@@ -20,6 +24,7 @@ interface UseInputbarSendParams {
   pendingImages: MessageImage[];
   pathReferences: MessagePathReference[];
   activeCapability: InputCapabilitySelection | null;
+  activePluginSelection?: InputbarPluginSelection | null;
   knowledgePackSelection?: InputbarKnowledgePackSelection | null;
   activeTools?: Record<string, boolean>;
   projectId?: string | null;
@@ -35,6 +40,7 @@ export function useInputbarSend({
   pendingImages,
   pathReferences,
   activeCapability,
+  activePluginSelection = null,
   knowledgePackSelection,
   activeTools = {},
   projectId,
@@ -45,8 +51,12 @@ export function useInputbarSend({
   clearActiveCapability,
 }: UseInputbarSendParams) {
   return useCallback(async () => {
+    const submittedInput = resolveInputbarPluginSubmissionText({
+      input,
+      selection: activePluginSelection,
+    });
     if (
-      !input.trim() &&
+      !submittedInput.trim() &&
       pendingImages.length === 0 &&
       pathReferences.length === 0
     ) {
@@ -55,7 +65,7 @@ export function useInputbarSend({
 
     const capabilityDispatch = resolveInputCapabilityDispatch(
       activeCapability,
-      input,
+      submittedInput,
     );
     const baseRequestMetadata = buildPathReferenceRequestMetadata(
       capabilityDispatch.requestMetadata,
@@ -77,7 +87,7 @@ export function useInputbarSend({
         : baseRequestMetadata;
     const inputbarModeState = {
       goalEnabled: Boolean(activeTools["objective_mode"]),
-      objectiveText: input,
+      objectiveText: submittedInput,
       planEnabled: Boolean(activeTools["task_mode"]),
       source: "inputbar",
       subagentEnabled: Boolean(activeTools["subagent_mode"]),
@@ -90,8 +100,8 @@ export function useInputbarSend({
     const toolPreferencesOverride =
       buildInputbarToolPreferencesOverride(inputbarModeState);
     const hasPathReferences = pathReferences.length > 0;
-    const textOverride = input.trim()
-      ? input
+    const textOverride = submittedInput.trim()
+      ? submittedInput
       : hasPathReferences
         ? "请查看这些文件或文件夹。"
         : undefined;
@@ -103,11 +113,11 @@ export function useInputbarSend({
             ...(capabilityDispatch.capabilityRoute
               ? { capabilityRoute: capabilityDispatch.capabilityRoute }
               : {}),
-            ...(capabilityDispatch.displayContent || input.trim()
+            ...(capabilityDispatch.displayContent || submittedInput.trim()
               ? {
                   displayContent:
                     capabilityDispatch.displayContent ||
-                    (input.trim() ? input : undefined),
+                    (submittedInput.trim() ? submittedInput : undefined),
                 }
               : {}),
             ...(requestMetadata ? { requestMetadata } : {}),
@@ -119,12 +129,12 @@ export function useInputbarSend({
       if (
         inputbarModeState.goalEnabled &&
         sessionId?.trim() &&
-        input.trim()
+        submittedInput.trim()
       ) {
         await setAgentRuntimeObjective({
           sessionId: sessionId.trim(),
           workspaceId: projectId ?? undefined,
-          objectiveText: input.trim(),
+          objectiveText: submittedInput.trim(),
           successCriteria: [],
         });
       }
@@ -152,6 +162,7 @@ export function useInputbarSend({
     }
   }, [
     activeCapability,
+    activePluginSelection,
     activeTools,
     clearActiveCapability,
     clearPendingImages,

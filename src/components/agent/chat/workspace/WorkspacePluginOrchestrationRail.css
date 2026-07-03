@@ -25,47 +25,6 @@
   gap: 10px;
 }
 
-.workspace-plugin-orchestration-rail-steps {
-  display: grid;
-  gap: 8px;
-}
-
-.workspace-plugin-orchestration-rail-step {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 8px;
-  min-width: 0;
-  border: 1px solid var(--lime-surface-border);
-  border-radius: 7px;
-  background: var(--lime-surface-subtle);
-  padding: 7px 8px;
-}
-
-.workspace-plugin-orchestration-rail-index {
-  display: inline-flex;
-  width: 18px;
-  height: 18px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  background: var(--lime-surface);
-  color: var(--lime-text-muted);
-  font-size: 10px;
-  font-weight: 600;
-}
-
-.workspace-plugin-orchestration-rail-status {
-  white-space: nowrap;
-  border-radius: 999px;
-  border: 1px solid rgba(34, 197, 94, 0.22);
-  background: rgba(34, 197, 94, 0.08);
-  padding: 2px 6px;
-  color: rgb(21, 128, 61);
-  font-size: 10px;
-  font-weight: 600;
-}
-
 .workspace-plugin-orchestration-rail-chips {
   display: flex;
   flex-wrap: wrap;
@@ -95,14 +54,5 @@
 
   .workspace-plugin-orchestration-rail-heading {
     align-items: flex-start;
-  }
-
-  .workspace-plugin-orchestration-rail-step {
-    grid-template-columns: 18px minmax(0, 1fr);
-  }
-
-  .workspace-plugin-orchestration-rail-status {
-    grid-column: 2;
-    justify-self: start;
   }
 }

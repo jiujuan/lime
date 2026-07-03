@@ -101,10 +101,10 @@
     },
     "ModelTaskSource": {
       "enum": [
-        "plugin",
         "agent_turn",
         "automation",
         "media_task_artifact",
+        "plugin",
         "provider_probe"
       ],
       "type": "string"

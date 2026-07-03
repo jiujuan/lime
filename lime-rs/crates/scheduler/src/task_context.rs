@@ -4,7 +4,7 @@
 //! 真实自动化执行必须走 App Server `automationJob/runNow` current 主链。
 
 use crate::types::ScheduledTask;
-use aster::session::{TurnContextOverride, TurnOutputSchemaSource};
+use agent_protocol::turn_context::{TurnContextOverride, TurnOutputSchemaSource};
 use lime_agent::merge_system_prompt_with_runtime_agents_for_project;
 use lime_agent::request_tool_policy::{
     merge_system_prompt_with_request_tool_policy, resolve_request_tool_policy_with_mode,

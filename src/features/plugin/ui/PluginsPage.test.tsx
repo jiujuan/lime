@@ -18,6 +18,7 @@ import {
   REMOVED_MACHINE_PATH,
   renderPage,
   resetPluginsPageTest,
+  setInputValue,
   toast,
 } from "./PluginsPage.testFixtures";
 
@@ -147,6 +148,49 @@ describe("PluginsPage", () => {
     ).toContain("min-h-[188px]");
   });
 
+  it("已安装筛选应展示本地已安装应用", async () => {
+    installedStates.push(buildReadyState());
+    const container = await renderPage({ statusFilter: "installed" });
+    await flush();
+
+    expect(
+      container.querySelector(
+        '[data-testid="plugins-list-row-content-factory-app"]',
+      ),
+    ).not.toBeNull();
+    expect(container.textContent).toContain(
+      "plugin.apps.center.pagination.summary:1",
+    );
+  });
+
+  it("搜索占位文案不应被当成真实搜索词隐藏已安装应用", async () => {
+    installedStates.push(buildReadyState());
+    const container = await renderPage();
+    await flush();
+
+    const search = container.querySelector(
+      '[data-testid="plugins-search"]',
+    ) as HTMLInputElement | null;
+    expect(search).not.toBeNull();
+
+    await act(async () => {
+      if (search) {
+        setInputValue(search, "plugin.apps.center.searchPlaceholder");
+      }
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(
+      container.querySelector(
+        '[data-testid="plugins-list-row-content-factory-app"]',
+      ),
+    ).not.toBeNull();
+    expect(container.textContent).toContain(
+      "plugin.apps.center.pagination.summary:1",
+    );
+  });
+
   it("本地 App 卡片应优先展示 manifest 声明的图标", async () => {
     installedStates.push(
       buildReadyState({
@@ -180,6 +224,130 @@ describe("PluginsPage", () => {
     expect(detailIcon?.getAttribute("src")).toBe(
       `asset://${LOCAL_APP_DIR}/assets/icon.svg`,
     );
+  });
+
+  it("本地 App 卡片应解析 manifest presentation.icon 的包内 resources 路径", async () => {
+    const manifest = structuredClone(contentFactoryFixture) as AppManifest;
+    manifest.presentation = {
+      ...(manifest.presentation ?? {}),
+      icon: "./resources/icons/icon.svg",
+    };
+    const manifestInterface = manifest.interface as
+      | Record<string, unknown>
+      | undefined;
+    if (manifestInterface) {
+      delete manifestInterface.logo;
+      delete manifestInterface.composerIcon;
+    }
+    installedStates.push(
+      buildReadyState({
+        manifest,
+        profile: buildWorkflowRuntimeCapabilityProfile({
+          realAdapterEnabled: true,
+          uiRuntimeEnabled: true,
+          workerRuntimeEnabled: true,
+        }),
+      }),
+    );
+
+    const container = await renderPage();
+    await flush();
+
+    const icon = container.querySelector(
+      '[data-testid="plugins-icon-content-factory-app"] img',
+    ) as HTMLImageElement | null;
+    expect(icon?.getAttribute("src")).toBe(
+      `asset://${LOCAL_APP_DIR}/resources/icons/icon.svg`,
+    );
+    expect(
+      container.querySelector('img[src="./resources/icons/icon.svg"]'),
+    ).toBeNull();
+  });
+
+  it("应用图标加载失败时应回退到名称 SVG", async () => {
+    installedStates.push(
+      buildReadyState({
+        manifest: {
+          ...(contentFactoryFixture as AppManifest),
+          presentation: {
+            logo: "https://lime.local/missing-content-factory-logo.svg",
+          },
+        },
+      }),
+    );
+
+    const container = await renderPage();
+    await flush();
+
+    const icon = container.querySelector(
+      '[data-testid="plugins-icon-content-factory-app"] img',
+    ) as HTMLImageElement | null;
+    expect(icon?.getAttribute("src")).toBe(
+      "https://lime.local/missing-content-factory-logo.svg",
+    );
+
+    await act(async () => {
+      icon?.dispatchEvent(new Event("error"));
+      await Promise.resolve();
+    });
+
+    const fallbackSrc = icon?.getAttribute("src") ?? "";
+    expect(fallbackSrc).toContain("data:image/svg+xml");
+    expect(decodeURIComponent(fallbackSrc)).toContain("内容工厂");
+  });
+
+  it("详情主按钮应阻断 workflow-only 本地 DSL 并提示 current API", async () => {
+    const manifest = structuredClone(contentFactoryFixture) as AppManifest;
+    manifest.runtimePackage = {
+      ...manifest.runtimePackage,
+      ui: undefined,
+    };
+    manifest.entries = [
+      {
+        key: "content_article_generate",
+        kind: "workflow",
+        title: "写文章",
+        requiredCapabilities: ["lime.agent", "lime.artifacts", "lime.workflow"],
+      },
+    ];
+    installedStates.push(
+      buildReadyState({
+        manifest,
+        profile: buildWorkflowRuntimeCapabilityProfile({
+          realAdapterEnabled: true,
+          uiRuntimeEnabled: true,
+          workerRuntimeEnabled: true,
+        }),
+      }),
+    );
+
+    const container = await renderPage();
+    await flush();
+
+    await openAppDetail(container);
+
+    const primaryAction = container.querySelector(
+      '[data-testid="plugins-detail-primary-action-content-factory-app"]',
+    ) as HTMLButtonElement | null;
+    expect(primaryAction).not.toBeNull();
+    expect(primaryAction?.disabled).toBe(false);
+
+    await act(async () => {
+      primaryAction?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await flush();
+
+    const launchSummary = container.querySelector(
+      '[data-testid="plugins-launch-summary"]',
+    );
+    expect(launchSummary?.getAttribute("role")).toBe("status");
+    expect(launchSummary?.className).not.toContain("sr-only");
+    expect(launchSummary?.textContent).toContain(
+      "plugin.apps.launch.workflowRequiresCurrentApi",
+    );
+    expect(launchSummary?.textContent).not.toContain("workflow:写文章:");
   });
 
   it("应用中心应展示 Plugin 宿主状态和 Right Surface 合同", async () => {

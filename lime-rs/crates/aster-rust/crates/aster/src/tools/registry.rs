@@ -101,7 +101,12 @@ pub(crate) const DEFAULT_NATIVE_ALIAS_PAIRS: &[(&str, &[&str])] = &[
     ),
     (
         "WebSearch",
-        &["WebSearchTool", "web_search", "mcp__system__web_search"],
+        &[
+            "WebSearchTool",
+            "web_search",
+            "search_query",
+            "mcp__system__web_search",
+        ],
     ),
 ];
 

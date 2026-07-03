@@ -2,7 +2,7 @@
 
 > 状态：north-star planning source
 > 更新时间：2026-06-07
-> Owner：Lime Runtime / App Server / Claw / Agent Apps
+> Owner：Lime Runtime / App Server / Claw / Plugins
 
 ## 1. 一句话目标
 
@@ -12,7 +12,7 @@
 
 1. 让 Lime Desktop / Claw 继续承载最完整的 Agent 工作台体验。
 2. 让 content-studio 和未来独立 App 不需要自建 AgentRuntime，就能获得会话、turn、工具、审批、artifact、evidence 和事件流能力。
-3. 让 Agent Apps 既可以在 Lime Desktop 中运行，也可以向独立壳演进，但 runtime 能力仍受 Lime App Server 治理。
+3. 让 Plugins 既可以在 Lime Desktop 中运行，也可以向独立壳演进，但 runtime 能力仍受 Lime App Server 治理。
 4. 让移动 App 和微信小程序成为轻量入口：查看、审批、触发、继续任务，但不自建 runtime。
 5. 让服务端模式成为长任务、多端同步、消息渠道和小程序的受控执行底座。
 6. 让客户端和服务端都通过 permission profile、filesystem / network policy、sandbox manager、approval / escalation、exec policy 和 audit 执行工具。
@@ -26,7 +26,7 @@
 | --- | --- | --- |
 | Claw 用户 | 在桌面工作台中完成复杂 Agent 协作 | 完整 Claw shell、流式 timeline、工具审批、本地 sandbox、artifact/evidence、工作区上下文。 |
 | content-studio 用户 | 在内容业务对象内直接使用 Agent | App Server session 绑定业务对象，事件投影到内容工作台。 |
-| Agent App 用户 | 使用垂直 Agent App 完成具体任务 | 复用 RuntimeCore、capability、artifact、evidence 和默认 UI primitives。 |
+| Plugin 用户 | 使用垂直 Plugin 完成具体任务 | 复用 RuntimeCore、capability、artifact、evidence 和默认 UI primitives。 |
 | 独立 App 开发者 | 快速接入 Lime Agent 能力 | TypeScript client、protocol schema、projection SDK 和可选 UI 组件。 |
 | 移动 App 用户 | 随时查看任务、审批 action、继续轻量会话 | Remote Runtime Gateway、推送、轻量 projection、移动端 UI primitives。 |
 | 微信小程序用户 | 在微信内触发任务、审批、看摘要 | HTTPS gateway、OpenID 绑定、预定义 capability、受控 artifact preview。 |
@@ -66,10 +66,10 @@
 3. renderer 只消费业务投影，不直接操作 runtime。
 4. artifact / evidence 能回到业务对象上下文。
 
-### 4.3 Agent App 开发者：不用复制 Claw
+### 4.3 Plugin 开发者：不用复制 Claw
 
-作为 Agent App 开发者，
-当我要做一个垂直 Agent App 时，
+作为 Plugin 开发者，
+当我要做一个垂直 Plugin 时，
 我希望可以复用默认 AgentRuntime projection 和 UI primitives，
 但仍能保留自己的业务页面和交互。
 
@@ -157,7 +157,7 @@
 1. `AgentEvent/readModel -> AgentRuntimeViewModel` 是 headless projection。
 2. UI primitives 不直接调用 `safeInvoke`、Electron bridge、App Server client 或 store。
 3. Claw shell 只负责旗舰布局、导航、工作区、模型选择和宿主能力。
-4. content-studio / Agent Apps 通过自己的 shell adapter 消费同一 projection。
+4. content-studio / Plugins 通过自己的 shell adapter 消费同一 projection。
 5. 共享组件必须覆盖加载、空态、运行中、等待 action、失败、取消、完成等状态。
 
 ### 5.3 多 App 能力发现
@@ -176,7 +176,7 @@
 1. artifact 和 evidence 从 RuntimeCore facts 派生。
 2. App 只读取 refs、summary、preview 或导出结果。
 3. UI 不能用本地状态伪造完成态。
-4. evidence export 能跨 Claw、Agent App、content-studio 复用。
+4. evidence export 能跨 Claw、Plugin、content-studio 复用。
 
 ### 5.5 服务端 / 移动 / 小程序入口
 
@@ -249,7 +249,7 @@
 MVP 只认一条竖切：
 
 ```text
-Claw 或 Agent App 发起真实 turn
+Claw 或 Plugin 发起真实 turn
   -> App Server agentSession/turn/start
   -> RuntimeCore
   -> ExecutionBackend

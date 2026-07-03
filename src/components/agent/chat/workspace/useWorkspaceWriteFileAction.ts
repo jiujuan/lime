@@ -18,7 +18,6 @@ import type { TopicBranchStatus } from "../hooks/useTopicBranchBoard";
 import type { WriteArtifactContext } from "../types";
 import type { Artifact } from "@/lib/artifact/types";
 import { getContent, updateContent } from "@/lib/api/project";
-import { getFileToStepMap } from "../utils/workflowMapping";
 import {
   buildArtifactFromWrite,
   resolveDefaultArtifactViewMode,
@@ -122,8 +121,6 @@ interface UseWorkspaceWriteFileActionParams {
   artifacts: Artifact[];
   contentId?: string | null;
   currentGateKey: string;
-  currentStepIndex: number;
-  isSpecializedThemeMode: boolean;
   isThemeWorkbench: boolean;
   mappedTheme: ThemeType;
   projectId?: string | null;
@@ -148,9 +145,6 @@ interface UseWorkspaceWriteFileActionParams {
   setArtifactViewMode: ApplyArtifactViewMode;
   setLayoutMode: Dispatch<SetStateAction<LayoutMode>>;
   suppressCanvasAutoOpen: boolean;
-  completeStep: (payload: {
-    aiOutput: { fileName: string; preview: string };
-  }) => void;
   setTaskFiles: Dispatch<SetStateAction<TaskFile[]>>;
   setSelectedFileId: (fileId: string) => void;
   setCanvasState: Dispatch<SetStateAction<CanvasStateUnion | null>>;
@@ -161,8 +155,6 @@ export function useWorkspaceWriteFileAction({
   artifacts,
   contentId,
   currentGateKey,
-  currentStepIndex,
-  isSpecializedThemeMode,
   isThemeWorkbench,
   mappedTheme,
   projectId,
@@ -178,7 +170,6 @@ export function useWorkspaceWriteFileAction({
   setArtifactViewMode,
   setLayoutMode,
   suppressCanvasAutoOpen,
-  completeStep,
   setTaskFiles,
   setSelectedFileId,
   setCanvasState,
@@ -404,24 +395,6 @@ export function useWorkspaceWriteFileAction({
         );
       }
 
-      const fileToStepMap = getFileToStepMap(mappedTheme);
-      const stepIndex = fileToStepMap[fileName];
-      if (
-        stepIndex !== undefined &&
-        stepIndex === currentStepIndex &&
-        isSpecializedThemeMode
-      ) {
-        logWorkspaceWriteInfo(
-          "[AgentChatPage] 推进工作流步骤:",
-          stepIndex,
-          "->",
-          stepIndex + 1,
-        );
-        completeStep({
-          aiOutput: { fileName, preview: content.slice(0, 100) },
-        });
-      }
-
       if (baseVersionMetadata && hasTaskFileChanged) {
         const stageLogKey = effectiveDocumentVersionId || fileName;
         activityLogger.log({
@@ -609,11 +582,8 @@ export function useWorkspaceWriteFileAction({
     [
       activeTheme,
       artifacts,
-      completeStep,
       contentId,
       currentGateKey,
-      currentStepIndex,
-      isSpecializedThemeMode,
       isThemeWorkbench,
       mappedTheme,
       projectId,

@@ -703,12 +703,12 @@ mod tests {
                 "modelId": "agnes-image-2.1-flash"
             },
             "endpoint": {
-                "baseUrl": "https://api.agnes-ai.com/v1"
+                "baseUrl": "https://apihub.agnes-ai.com/v1"
             }
         });
         assert_eq!(
             image_generation_endpoint_from_route(&agnes_route, "openai_images").as_deref(),
-            Some("https://api.agnes-ai.com/v1/images/generations")
+            Some("https://apihub.agnes-ai.com/v1/images/generations")
         );
         assert_eq!(
             image_executor_mode_from_route(&agnes_route, "openai_images"),
@@ -801,12 +801,12 @@ mod tests {
         provider.id = "agnes".to_string();
         provider.name = "Agnes".to_string();
         provider.provider_type = ApiProviderType::Openai;
-        provider.api_host = "https://api.agnes-ai.com/v1".to_string();
+        provider.api_host = "https://apihub.agnes-ai.com/v1".to_string();
         provider.custom_models = vec!["agnes-image-2.1-flash".to_string()];
         assert_eq!(
             image_generation_endpoint_from_provider(&provider, Some("agnes-image-2.1-flash"))
                 .as_deref(),
-            Some("https://api.agnes-ai.com/v1/images/generations")
+            Some("https://apihub.agnes-ai.com/v1/images/generations")
         );
         assert_eq!(
             image_executor_mode_from_provider(&provider, Some("agnes-image-2.1-flash")),
@@ -815,6 +815,12 @@ mod tests {
         assert_eq!(
             image_request_body_format_from_provider(&provider, Some("agnes-image-2.1-flash")),
             ImageGenerationRequestBodyFormat::AgnesImages
+        );
+        provider.api_host = "https://api.agnes-ai.com/v1".to_string();
+        assert_eq!(
+            image_generation_endpoint_from_provider(&provider, Some("agnes-image-2.1-flash"))
+                .as_deref(),
+            Some("https://api.agnes-ai.com/v1/images/generations")
         );
 
         provider.id = "anthropic".to_string();

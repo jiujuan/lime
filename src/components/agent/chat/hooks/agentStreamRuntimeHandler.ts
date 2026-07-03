@@ -70,6 +70,7 @@ import {
   buildAgentStreamThinkingDeltaMessagePatch,
   buildAgentStreamThinkingDeltaPreApplyPlan,
 } from "./agentStreamThinkingDeltaController";
+import { shouldSurfaceReasoningEventAsVisibleProcess } from "./agentStreamVisibleReasoningPolicy";
 import { syncAssistantAgentMessageContentPartFromThreadItem } from "./agentStreamAgentMessageContentSync";
 import { isPersistedReasoningContentPart } from "./agentStreamReasoningContentSync";
 import { isRuntimePermissionConfirmationWaitMessage } from "../utils/runtimeActionConfirmation";
@@ -758,6 +759,15 @@ export function handleTurnStreamEvent({
     case "reasoning_delta":
       {
         const eventSequence = sequenceFromAgentEvent(data);
+        const shouldSurfaceVisibleProcessReasoning =
+          data.type === "reasoning_delta" &&
+          shouldSurfaceReasoningEventAsVisibleProcess(data);
+        if (shouldSurfaceVisibleProcessReasoning) {
+          requestState.shouldSurfaceVisibleProcessReasoning = true;
+        }
+        const effectiveSurfaceThinkingDeltas =
+          surfaceThinkingDeltas ||
+          requestState.shouldSurfaceVisibleProcessReasoning === true;
         if (data.type === "reasoning_delta" || eventSequence !== null) {
           noteFinalAnswerRequiredProcessBoundary(eventSequence);
           commitRenderedTextBeforeProcessPart();
@@ -779,7 +789,8 @@ export function handleTurnStreamEvent({
             firstRuntimeStatusDeltaMs: requestState.firstRuntimeStatusAt
               ? Math.max(0, now - requestState.firstRuntimeStatusAt)
               : null,
-            surfaced: surfaceThinkingDeltas,
+            surfaced: effectiveSurfaceThinkingDeltas,
+            visibleProcessReasoning: shouldSurfaceVisibleProcessReasoning,
             sessionId: activeSessionId,
           };
           recordAgentStreamPerformanceMetric(
@@ -790,7 +801,7 @@ export function handleTurnStreamEvent({
           logAgentDebug("AgentStream", "firstThinkingDelta", context);
         }
         const thinkingPlan = buildAgentStreamThinkingDeltaPreApplyPlan({
-          surfaceThinkingDeltas,
+          surfaceThinkingDeltas: effectiveSurfaceThinkingDeltas,
         });
         if (thinkingPlan.shouldActivateStream) {
           activateStream();
@@ -970,6 +981,7 @@ export function handleTurnStreamEvent({
       if (visibleTextDelta) {
         if (
           !surfaceThinkingDeltas &&
+          !requestState.shouldSurfaceVisibleProcessReasoning &&
           !requestState.hiddenThinkingPartsCleared
         ) {
           requestState.hiddenThinkingPartsCleared = true;
@@ -1138,14 +1150,22 @@ export function handleTurnStreamEvent({
     case "image_task_created":
       activateStream();
       clearOptimisticItem();
-      requestState.hasMeaningfulCompletionSignal =
-        applyAgentStreamImageTaskCreatedEvent({
+      {
+        const didApplyImageTaskCreated = applyAgentStreamImageTaskCreatedEvent({
           assistantMsgId,
           currentAssistantContent: requestState.accumulatedContent,
           event: data,
           fallbackPrompt: content || requestState.accumulatedContent,
+          pendingPresentation: requestState.pendingImageTaskPresentation,
           setMessages,
-        }) || requestState.hasMeaningfulCompletionSignal;
+        });
+        requestState.hasMeaningfulCompletionSignal =
+          didApplyImageTaskCreated ||
+          requestState.hasMeaningfulCompletionSignal;
+        if (didApplyImageTaskCreated) {
+          requestState.pendingImageTaskPresentation = null;
+        }
+      }
       break;
 
     case "image_task_presentation_generated":
@@ -1154,8 +1174,42 @@ export function handleTurnStreamEvent({
       applyAgentStreamImageTaskPresentationGeneratedEvent({
         assistantMsgId,
         event: data,
+        cachePresentation: (presentation) => {
+          const existing = requestState.pendingImageTaskPresentation;
+          requestState.pendingImageTaskPresentation = {
+            assistantIntro:
+              presentation.assistantIntro || existing?.assistantIntro || "",
+            completionCaption:
+              presentation.completionCaption ||
+              existing?.completionCaption ||
+              "",
+            workflowRunId:
+              presentation.workflowRunId ?? existing?.workflowRunId ?? null,
+            turnId: presentation.turnId ?? existing?.turnId ?? null,
+          };
+        },
         setMessages,
       });
+      break;
+
+    case "image_task_presentation_unavailable":
+      logAgentDebug(
+        "AgentStream",
+        "imageTask.presentationUnavailable",
+        {
+          reason: data.reason ?? null,
+          status: data.status ?? null,
+          workflowRunId: data.workflow_run_id ?? null,
+          sessionId: data.session_id ?? activeSessionId,
+          threadId: data.thread_id ?? null,
+          turnId: data.turn_id ?? null,
+        },
+        {
+          consoleOnly: true,
+          dedupeKey: `${eventName}:imageTask.presentationUnavailable:${data.workflow_run_id ?? "unknown"}`,
+          throttleMs: 1000,
+        },
+      );
       break;
 
     case "artifact_snapshot":
@@ -1336,7 +1390,13 @@ export function handleTurnStreamEvent({
                     rawContent: requestState.accumulatedContent,
                     surfaceThinkingDeltas:
                       surfaceThinkingDeltas ||
+                      requestState.shouldSurfaceVisibleProcessReasoning ===
+                        true ||
+                      Boolean(msg.imageWorkbenchPreview) ||
                       isRetainedSkillProcessMessage(msg),
+                    preserveThinkingContent:
+                      requestState.shouldSurfaceVisibleProcessReasoning ===
+                        true || Boolean(msg.imageWorkbenchPreview),
                     thinkingContent: msg.thinkingContent,
                     toolCalls: msg.toolCalls,
                   }),

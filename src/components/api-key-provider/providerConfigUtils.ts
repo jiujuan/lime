@@ -13,6 +13,8 @@ import type { EnhancedModelMetadata } from "@/lib/types/modelRegistry";
 
 export const SENSENOVA_OPENAI_COMPATIBLE_API_HOST =
   "https://api.sensenova.cn/compatible-mode/v2";
+export const AGNES_OPENAI_COMPATIBLE_API_HOST =
+  "https://apihub.agnes-ai.com/v1";
 
 /** 支持的 Provider 类型列表 */
 export const PROVIDER_TYPE_OPTIONS: { value: ProviderType; label: string }[] = [
@@ -272,6 +274,13 @@ export function normalizeKnownProviderApiHost(value: string): string {
 
     if (hostname === "platform.sensenova.cn" && pathname.startsWith("/docs")) {
       return SENSENOVA_OPENAI_COMPATIBLE_API_HOST;
+    }
+
+    if (
+      (hostname === "agnes-ai.com" || hostname === "wiki.agnes-ai.com") &&
+      pathname.includes("/docs/agnes-image-21-flash")
+    ) {
+      return AGNES_OPENAI_COMPATIBLE_API_HOST;
     }
 
     if (

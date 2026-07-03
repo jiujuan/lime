@@ -94,7 +94,7 @@ pages → domains/*/ui → domains/*/viewmodel → platform/api → @limecloud/a
 |---|---|
 | `components/agent/chat/`（UI 部分） | `domains/agent/ui/` |
 | `components/agent/chat/`（状态/hooks/解析） | `domains/agent/viewmodel/` + `commands/` |
-| `features/agent-app/runtime/` | `domains/agent/`（与上合并）或独立 `domains/agent-app/` |
+| `features/plugin/runtime/` | `domains/agent/`（与上合并）或独立 `domains/plugin/` |
 | `components/workspace/` + `components/image-gen/` 等 | `domains/workspace/` |
 | `lib/api/` | `platform/api/` |
 | `lib/dev-bridge/` | `platform/desktop-host/` 内部传输细节 |
@@ -149,7 +149,7 @@ packages/
 └── (T3) plugin-sdk/          # 插件生态打开后新增
 ```
 
-收缩动作：`agent-app-runtime`（零引用）下线；`agent-runtime-ui`（1 处引用）并回 src；`agent-runtime-client` 观察后决定并入 `app-server-client` 或保留。
+收缩动作：`plugin-runtime`（零引用）下线；`agent-runtime-ui`（1 处引用）并回 src；`agent-runtime-client` 观察后决定并入 `app-server-client` 或保留。
 
 ---
 
@@ -164,7 +164,7 @@ packages/
 
 ### T2（3-9 个月）：结构归位——存量迁移到目标结构
 
-- **前端**：`components/agent` + `features/agent-app` 归并为 `domains/agent/`，随后 workspace、knowledge、settings 逐领域迁移（§ 1.4 映射表），每领域一轮、commit 可回滚；`lib/` 拆解为 `platform/` + `shared/`。
+- **前端**：`components/agent` + `features/plugin` 归并为 `domains/agent/`，随后 workspace、knowledge、settings 逐领域迁移（§ 1.4 映射表），每领域一轮、commit 可回滚；`lib/` 拆解为 `platform/` + `shared/`。
 - **Rust**：`services/` 按四类落物理分组；`lime-core` 拆"纯类型 crate"（参照 codex-protocol 模式），core 收缩为最小共享层；协议宏（`client_request_definitions!` 等价物）把 protocol crate 4 处注册收敛为 1 处。
 - **packages**：完成 § 3 收缩。
 - **internal/**：`test`/`testing`/`tests` 三目录归并、`bussniss` typo 修正、16 个一级目录收到 ~10 个。

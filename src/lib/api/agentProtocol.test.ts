@@ -354,6 +354,28 @@ describe("agentProtocol", () => {
     });
   });
 
+  it("应解析 ImageCommandWorkflow presentation unavailable 审计事件", () => {
+    expect(
+      parseAgentEvent({
+        type: "image_task.presentation.unavailable",
+        status: "unavailable",
+        reasonCode: "policy_filtered",
+        workflowRunId: "workflow-1",
+        sessionId: "session-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+      }),
+    ).toEqual({
+      type: "image_task_presentation_unavailable",
+      status: "unavailable",
+      reason: "policy_filtered",
+      workflow_run_id: "workflow-1",
+      session_id: "session-1",
+      thread_id: "thread-1",
+      turn_id: "turn-1",
+    });
+  });
+
   it("应解析工具进度与工具输出增量事件", () => {
     expect(
       parseAgentEvent({

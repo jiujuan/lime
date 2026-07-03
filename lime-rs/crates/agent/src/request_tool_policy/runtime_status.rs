@@ -1,7 +1,7 @@
+use crate::aster_runtime_projection::project_aster_runtime_event;
 use crate::protocol::{
     build_diagnostics_runtime_status_metadata, AgentEvent as RuntimeAgentEvent, AgentRuntimeStatus,
 };
-use crate::protocol_projection::project_runtime_event;
 use aster::agents::Agent;
 
 pub(crate) fn build_empty_reply_retry_runtime_status() -> AgentRuntimeStatus {
@@ -118,7 +118,7 @@ pub(crate) async fn emit_runtime_status_with_projection<F>(
         .await
     {
         Ok(agent_event) => {
-            for event in project_runtime_event(agent_event) {
+            for event in project_aster_runtime_event(agent_event) {
                 on_event(&event);
             }
         }

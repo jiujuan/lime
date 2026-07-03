@@ -17,6 +17,7 @@ use std::collections::HashMap;
 pub(in crate::runtime) struct SessionLoadContext {
     pub response: AgentSessionReadResponse,
     pub stored: StoredSession,
+    pub workflow_audit_events: Vec<AgentEvent>,
 }
 
 impl RuntimeCore {
@@ -24,7 +25,7 @@ impl RuntimeCore {
         &self,
         params: AgentSessionReadParams,
     ) -> Result<SessionLoadContext, RuntimeCoreError> {
-        if let Some(context) = self.load_runtime_core_session(&params) {
+        if let Some(context) = self.load_runtime_core_session(&params)? {
             return Ok(context);
         }
         if let Some(context) = self.load_projection_session(&params)? {
@@ -39,22 +40,34 @@ impl RuntimeCore {
     fn load_runtime_core_session(
         &self,
         params: &AgentSessionReadParams,
-    ) -> Option<SessionLoadContext> {
-        let state = self
-            .state
-            .lock()
-            .expect("runtime core state mutex poisoned");
-        let stored = state.sessions.get(&params.session_id)?.clone();
+    ) -> Result<Option<SessionLoadContext>, RuntimeCoreError> {
+        let stored = {
+            let state = self
+                .state
+                .lock()
+                .expect("runtime core state mutex poisoned");
+            state.sessions.get(&params.session_id).cloned()
+        };
+        let Some(stored) = stored else {
+            return Ok(None);
+        };
+        let workflow_audit_events =
+            self.read_workflow_audit_events_for_session(&params.session_id)?;
         let detail = read_model::runtime_session_read_detail_with_options(
             &stored,
             read_model::ReadDetailOptions::from_params(params),
+            &workflow_audit_events,
         );
         let response = AgentSessionReadResponse {
             session: stored.session.clone(),
             turns: stored.turns.clone(),
             detail: Some(detail),
         };
-        Some(SessionLoadContext { response, stored })
+        Ok(Some(SessionLoadContext {
+            response,
+            stored,
+            workflow_audit_events,
+        }))
     }
 
     fn load_projection_session(
@@ -80,19 +93,53 @@ impl RuntimeCore {
         else {
             return Ok(None);
         };
-        Ok(Some(projection_load_context(projection, events, params)))
+        let workflow_audit_events =
+            self.read_workflow_audit_events_for_session(&params.session_id)?;
+        Ok(Some(projection_load_context(
+            projection,
+            events,
+            params,
+            workflow_audit_events,
+        )))
     }
 
     async fn load_app_data_session(
         &self,
         params: AgentSessionReadParams,
     ) -> Result<Option<SessionLoadContext>, RuntimeCoreError> {
+        let session_id = params.session_id.clone();
         let Some(response) = self.app_data_source.read_agent_session(params).await? else {
             return Ok(None);
         };
         let stored =
             super::session_hydration::hydrated_stored_session_from_response(response.clone());
-        Ok(Some(SessionLoadContext { response, stored }))
+        let workflow_audit_events = self.read_workflow_audit_events_for_session(&session_id)?;
+        Ok(Some(SessionLoadContext {
+            response,
+            stored,
+            workflow_audit_events,
+        }))
+    }
+
+    pub(in crate::runtime) fn read_workflow_audit_events_for_session(
+        &self,
+        session_id: &str,
+    ) -> Result<Vec<AgentEvent>, RuntimeCoreError> {
+        self.event_log_writer
+            .as_ref()
+            .map(|writer| {
+                writer
+                    .read_session_workflow_audit_events(session_id)
+                    .map(|records| {
+                        records
+                            .into_iter()
+                            .map(|record| record.event)
+                            .collect::<Vec<_>>()
+                    })
+                    .map_err(RuntimeCoreError::Backend)
+            })
+            .transpose()
+            .map(|events| events.unwrap_or_default())
     }
 }
 
@@ -100,6 +147,7 @@ pub(in crate::runtime) fn projection_load_context(
     projection: ProjectionReadSession,
     events: Vec<AgentEvent>,
     params: &AgentSessionReadParams,
+    workflow_audit_events: Vec<AgentEvent>,
 ) -> SessionLoadContext {
     let stored = StoredSession {
         session: projection.session.clone(),
@@ -110,11 +158,12 @@ pub(in crate::runtime) fn projection_load_context(
         output_blobs: HashMap::new(),
     };
     let mut detail = if stored.events.is_empty() && params.history_limit.is_some() {
-        projection_summary_detail(&stored, &projection, params)
+        projection_summary_detail(&stored, &projection, params, &workflow_audit_events)
     } else {
         read_model::runtime_session_read_detail_with_options(
             &stored,
             read_model::ReadDetailOptions::from_params(params),
+            &workflow_audit_events,
         )
     };
     if let Some(detail_object) = detail.as_object_mut() {
@@ -136,13 +185,18 @@ pub(in crate::runtime) fn projection_load_context(
         turns: stored.turns.clone(),
         detail: Some(detail),
     };
-    SessionLoadContext { response, stored }
+    SessionLoadContext {
+        response,
+        stored,
+        workflow_audit_events,
+    }
 }
 
 fn projection_summary_detail(
     stored: &StoredSession,
     projection: &ProjectionReadSession,
     params: &AgentSessionReadParams,
+    workflow_audit_events: &[AgentEvent],
 ) -> serde_json::Value {
     let messages = projection.messages.clone();
     let process_detail = projection_process_detail(stored, projection);
@@ -195,7 +249,7 @@ fn projection_summary_detail(
         })
     });
     let status = super::status::agent_session_status_label(stored.session.status);
-    let thread_read = serde_json::json!({
+    let mut thread_read = serde_json::json!({
         "session_id": stored.session.session_id,
         "thread_id": stored.session.thread_id,
         "status": status,
@@ -218,6 +272,9 @@ fn projection_summary_detail(
         "diagnostics": diagnostics,
         "runtime_summary": runtime_summary,
     });
+    let workflow_read_model =
+        read_model::workflow_read_model_from_stored_session(stored, workflow_audit_events);
+    read_model::insert_workflow_read_model_into_thread_read(&mut thread_read, &workflow_read_model);
     let mut detail = serde_json::json!({
         "id": stored.session.session_id,
         "session_id": stored.session.session_id,
@@ -276,6 +333,7 @@ fn projection_process_detail(
     Some(read_model::runtime_session_read_detail_with_options(
         &process_stored,
         read_model::ReadDetailOptions::default(),
+        &[],
     ))
 }
 

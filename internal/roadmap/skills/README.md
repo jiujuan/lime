@@ -1728,7 +1728,7 @@ P5D 第十九刀已经补齐 P0 qcloop payload coverage sidecar，但 `agent-qc:
 2. 修复 Markdown 代码高亮测试环境兼容性：生产导入统一改为 `react-syntax-highlighter/dist/esm/prism`，对应测试 mock 同步到 ESM prism 入口，避免 Vitest CJS 入口误 require ESM `refractor`。
 3. 补齐 workspace Markdown 代码块复制按钮 i18n：`workspace.documentRenderer.action.copyCode` 覆盖 `zh-CN / zh-TW / en-US / ja-JP / ko-KR`。
 4. 收口测试间 locale 污染：
-   - `AgentAppRuntimePage.agentRun.test.tsx` fixture 每轮固定 `document.documentElement.lang = "zh-CN"`。
+   - `PluginRuntimePage.agentRun.test.tsx` fixture 每轮固定 `document.documentElement.lang = "zh-CN"`。
    - `ToolSearchSummaryPanel.test.tsx` 和 `harnessStatusPanelViewModel.unit.test.ts` 同步全局语言状态与 DOM lang。
 5. 修复 MCP 页面 i18n 扫描误报：`Authorization` 作为 HTTP header 协议名保留为表达式常量，不进入用户文案扫描。
 6. 修复专家右侧 surface 自动恢复：新增 `autoCollapsedByLayout` 状态，区分布局自动收起和用户手动收起；专家入口从 canvas 回到 chat 时只恢复布局自动收起的 ExpertInfoPanel。
@@ -1753,7 +1753,7 @@ P5D 第十九刀已经补齐 P0 qcloop payload coverage sidecar，但 `agent-qc:
 
 ```bash
 npm test -- --run src/components/agent/chat/components/Inputbar/index.test.tsx
-npm test -- --run src/features/agent-app/ui/AgentAppRuntimePage.agentRun.test.tsx
+npm test -- --run src/features/plugin/ui/PluginRuntimePage.agentRun.test.tsx
 npm test -- --run src/components/agent/chat/workspace/right-surface/rightSurfaceState.unit.test.ts src/components/agent/chat/index.workbench04.test.tsx
 npm test -- --run src/components/agent/chat/components/ToolSearchSummaryPanel.test.tsx src/components/agent/chat/components/harnessStatusPanelViewModel.unit.test.ts
 npm run i18n:check

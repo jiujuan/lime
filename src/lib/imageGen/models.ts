@@ -154,6 +154,20 @@ const DASHSCOPE_IMAGE_MODELS: ImageGenModel[] = [
   },
 ];
 
+const AGNES_IMAGE_MODELS: ImageGenModel[] = [
+  {
+    id: "agnes-image-2.1-flash",
+    name: "Agnes Image 2.1 Flash",
+    supportedSizes: [
+      "1024x1024",
+      "1024x768",
+      "768x1024",
+      "768x1344",
+      "1344x768",
+    ],
+  },
+];
+
 /** 图片生成模型映射（根据 Provider ID 或类型） */
 export const IMAGE_GEN_MODELS: Record<string, ImageGenModel[]> = {
   openai: OPENAI_IMAGE_MODELS,
@@ -167,6 +181,8 @@ export const IMAGE_GEN_MODELS: Record<string, ImageGenModel[]> = {
   dashscope: DASHSCOPE_IMAGE_MODELS,
   qwen: DASHSCOPE_IMAGE_MODELS,
   tongyi: DASHSCOPE_IMAGE_MODELS,
+  // Agnes
+  agnes: AGNES_IMAGE_MODELS,
   // AiHubMix
   aihubmix: [
     {

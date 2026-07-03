@@ -339,11 +339,7 @@ export function buildStandaloneState(): InstalledPluginState {
 }
 
 export async function renderPage(
-  pageParams?: {
-    selectedPluginId?: string;
-    launchPluginEntryKey?: string;
-    launchRequestKey?: number;
-  },
+  pageParams?: Parameters<typeof PluginsPage>[0]["pageParams"],
   onNavigate?: Parameters<typeof PluginsPage>[0]["onNavigate"],
   rightSurfaceTarget?: Parameters<
     typeof PluginsPage

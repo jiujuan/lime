@@ -3,7 +3,7 @@ use super::session_store_message_projection::{
     convert_agent_messages_with_history_eviction, convert_user_visible_agent_messages_with_flags,
 };
 use super::session_store_runtime_projection::{
-    apply_aster_runtime_snapshot, apply_runtime_usage_fallback_to_latest_assistant_message,
+    apply_runtime_snapshot, apply_runtime_usage_fallback_to_latest_assistant_message,
 };
 use super::session_store_subagent_context::{
     should_load_runtime_overlay_for_runtime_detail,
@@ -11,6 +11,7 @@ use super::session_store_subagent_context::{
 };
 use super::*;
 use crate::protocol::AgentMessage as RuntimeAgentMessage;
+use crate::subagent_control::SubagentTurnStatus;
 use aster::session::{
     SessionRuntimeSnapshot, SessionType as AsterSessionType, SubagentSessionMetadata,
     ThreadRuntime, ThreadRuntimeSnapshot, TurnRuntime, TurnStatus,
@@ -310,7 +311,9 @@ fn apply_runtime_snapshot_should_not_regress_aborted_turn_to_running() {
         }],
     };
 
-    apply_aster_runtime_snapshot(&mut detail, &snapshot);
+    let runtime_projection =
+        crate::aster_runtime_projection::project_aster_runtime_snapshot(&snapshot);
+    apply_runtime_snapshot(&mut detail, &runtime_projection);
 
     assert_eq!(detail.turns.len(), 1);
     assert_eq!(detail.turns[0].id, turn_id);
@@ -625,52 +628,25 @@ fn build_subagent_parent_context_should_merge_customization_projection() {
 }
 
 #[test]
-fn resolve_child_subagent_runtime_status_from_snapshot_should_use_latest_turn_status() {
+fn resolve_child_subagent_runtime_status_from_turns_should_use_latest_turn_status() {
     let now = Utc::now();
-    let snapshot = SessionRuntimeSnapshot {
-        session_id: "child-session-1".to_string(),
-        threads: vec![ThreadRuntimeSnapshot {
-            thread: ThreadRuntime::new(
-                "thread-1",
-                "child-session-1",
-                std::path::PathBuf::from("/tmp/workspace-child"),
-            ),
-            turns: vec![
-                TurnRuntime {
-                    id: "turn-old".to_string(),
-                    session_id: "child-session-1".to_string(),
-                    thread_id: "thread-1".to_string(),
-                    status: TurnStatus::Running,
-                    input_text: Some("旧任务".to_string()),
-                    error_message: None,
-                    context_override: None,
-                    output_schema_runtime: None,
-                    created_at: now - Duration::minutes(2),
-                    started_at: Some(now - Duration::minutes(2)),
-                    completed_at: None,
-                    updated_at: now - Duration::minutes(1),
-                },
-                TurnRuntime {
-                    id: "turn-new".to_string(),
-                    session_id: "child-session-1".to_string(),
-                    thread_id: "thread-1".to_string(),
-                    status: TurnStatus::Completed,
-                    input_text: Some("新任务".to_string()),
-                    error_message: None,
-                    context_override: None,
-                    output_schema_runtime: None,
-                    created_at: now - Duration::seconds(30),
-                    started_at: Some(now - Duration::seconds(30)),
-                    completed_at: Some(now - Duration::seconds(10)),
-                    updated_at: now,
-                },
-            ],
-            items: Vec::new(),
-        }],
-    };
+    let turns = vec![
+        ChildSubagentRuntimeTurnProjection {
+            id: "turn-old".to_string(),
+            status: SubagentTurnStatus::Running,
+            created_at: now - Duration::minutes(2),
+            updated_at: now - Duration::minutes(1),
+        },
+        ChildSubagentRuntimeTurnProjection {
+            id: "turn-new".to_string(),
+            status: SubagentTurnStatus::Completed,
+            created_at: now - Duration::seconds(30),
+            updated_at: now,
+        },
+    ];
 
     assert_eq!(
-        resolve_child_subagent_runtime_status_from_snapshot(&snapshot),
+        resolve_child_subagent_runtime_status_from_turns(&turns),
         ChildSubagentRuntimeStatus::Completed
     );
 }
@@ -803,7 +779,7 @@ fn convert_agent_message_should_preserve_tool_request_and_response() {
 }
 
 #[test]
-fn convert_user_visible_agent_messages_should_skip_agent_only_history() {
+fn convert_user_visible_agent_messages_with_flags_should_fallback_on_length_mismatch() {
     let messages = vec![
         AgentMessage {
             role: "user".to_string(),
@@ -824,21 +800,19 @@ fn convert_user_visible_agent_messages_should_skip_agent_only_history() {
             usage: None,
         },
     ];
-    let persisted_messages = vec![
-        aster::conversation::message::Message::user().with_text("用户消息"),
-        aster::conversation::message::Message::user()
-            .with_text("内部续跑提示")
-            .agent_only(),
-    ];
 
     let converted =
-        convert_user_visible_agent_messages(&messages, &persisted_messages, Some("gpt-4.1"));
+        convert_user_visible_agent_messages_with_flags(&messages, &[true], Some("gpt-4.1"), true);
 
-    assert_eq!(converted.len(), 1);
+    assert_eq!(converted.len(), 2);
     assert_eq!(converted[0].role, "user");
     assert!(matches!(
         converted[0].content.as_slice(),
         [RuntimeAgentMessageContent::Text { text }] if text == "用户消息"
+    ));
+    assert!(matches!(
+        converted[1].content.as_slice(),
+        [RuntimeAgentMessageContent::Text { text }] if text == "内部续跑提示"
     ));
 }
 
@@ -1043,7 +1017,10 @@ fn apply_runtime_usage_fallback_should_fill_latest_assistant_message() {
         ..AsterSession::default()
     };
 
-    let applied = apply_runtime_usage_fallback_to_latest_assistant_message(&mut messages, &session);
+    let applied = apply_runtime_usage_fallback_to_latest_assistant_message(
+        &mut messages,
+        crate::aster_runtime_projection::project_aster_session_usage(&session),
+    );
 
     assert_eq!(
         applied.map(|usage| (
@@ -1086,7 +1063,10 @@ fn apply_runtime_usage_fallback_should_not_override_existing_usage() {
         ..AsterSession::default()
     };
 
-    let applied = apply_runtime_usage_fallback_to_latest_assistant_message(&mut messages, &session);
+    let applied = apply_runtime_usage_fallback_to_latest_assistant_message(
+        &mut messages,
+        crate::aster_runtime_projection::project_aster_session_usage(&session),
+    );
 
     assert!(applied.is_none());
     assert_eq!(

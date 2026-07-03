@@ -77,6 +77,11 @@ function buildSlotMarker(slotId: string): string {
   return `<!-- ${IMAGE_TASK_SLOT_MARKER_PREFIX}${slotId} -->`;
 }
 
+export function buildDocumentImageTaskSlotMarker(slotId: string): string {
+  const normalizedSlotId = normalizeSlotId(slotId);
+  return normalizedSlotId ? buildSlotMarker(normalizedSlotId) : "";
+}
+
 function replaceImageUrlForSlot(
   markdown: string,
   slotId: string,
@@ -94,6 +99,27 @@ function replaceImageUrlForSlot(
     (_match, altText: string, _url: string, suffix: string) =>
       `![${altText}](${nextUrl})${suffix}`,
   );
+}
+
+function insertImageBlockBeforeSlotMarker(
+  markdown: string,
+  slotId: string,
+  imageUrl: string,
+  prompt: string,
+): string | null {
+  const marker = buildSlotMarker(slotId);
+  if (!markdown.includes(marker)) {
+    return null;
+  }
+  const [imageLine] = createImageTaskBlockLines({
+    imageUrl,
+    prompt,
+    slotId: null,
+  });
+  if (!imageLine) {
+    return null;
+  }
+  return markdown.replace(marker, `${imageLine}\n${marker}`);
 }
 
 function replacePlaceholderUrlForTaskId(
@@ -251,6 +277,15 @@ export function upsertDocumentImageTaskPlaceholder(
     if (replacedBySlot) {
       return replacedBySlot;
     }
+    const insertedBySlotMarker = insertImageBlockBeforeSlotMarker(
+      markdown,
+      normalizedSlotId,
+      placeholderSrc,
+      params.prompt,
+    );
+    if (insertedBySlotMarker) {
+      return insertedBySlotMarker;
+    }
   }
 
   const replacedByTaskId = replacePlaceholderUrlForTaskId(
@@ -290,6 +325,15 @@ export function replaceDocumentImageTaskPlaceholderWithImage(
     );
     if (replacedBySlot) {
       return replacedBySlot;
+    }
+    const insertedBySlotMarker = insertImageBlockBeforeSlotMarker(
+      markdown,
+      normalizedSlotId,
+      normalizedImageUrl,
+      params.prompt,
+    );
+    if (insertedBySlotMarker) {
+      return insertedBySlotMarker;
     }
   }
 

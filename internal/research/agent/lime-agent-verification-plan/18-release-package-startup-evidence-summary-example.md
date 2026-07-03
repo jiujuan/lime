@@ -26,7 +26,7 @@ GUI full P0 batch: not used
 4. release gate 还缺什么，不能被这次低成本 smoke 误判为 green？
 ```
 
-结论：前两项通过，第三项通过且明确是 source-tree scope，第四项仍不通过。首次执行 `verify:gui-smoke` 时，`electron:build:app-server` 暴露 `lime-rs/crates/app-server/src/runtime/agent_app_worker_turn.rs` 的编译阻断；当前工作树中的 orchestration-based 修正已存在，`cargo check --manifest-path "lime-rs/Cargo.toml" -p app-server` 通过后，`verify:gui-smoke` 重跑通过。
+结论：前两项通过，第三项通过且明确是 source-tree scope，第四项仍不通过。首次执行 `verify:gui-smoke` 时，`electron:build:app-server` 暴露 `lime-rs/crates/app-server/src/runtime/plugin_worker_turn.rs` 的编译阻断；当前工作树中的 orchestration-based 修正已存在，`cargo check --manifest-path "lime-rs/Cargo.toml" -p app-server` 通过后，`verify:gui-smoke` 重跑通过。
 
 ## 2. 结构化摘要
 
@@ -80,7 +80,7 @@ GUI full P0 batch: not used
   "artifacts": [],
   "initial_blocker": {
     "command": "npm run verify:gui-smoke",
-    "failure": "electron:build:app-server 阶段因 app-server Rust 编译失败中断，错误集中在 lime-rs/crates/app-server/src/runtime/agent_app_worker_turn.rs 的 PaneActionWorkerTurn 初始化缺字段，以及缺少 manifest_workflow_hook_policy。",
+    "failure": "electron:build:app-server 阶段因 app-server Rust 编译失败中断，错误集中在 lime-rs/crates/app-server/src/runtime/plugin_worker_turn.rs 的 PaneActionWorkerTurn 初始化缺字段，以及缺少 manifest_workflow_hook_policy。",
     "resolution": "current worktree 中的 orchestration-based 修正已存在；`cargo check --manifest-path \"lime-rs/Cargo.toml\" -p app-server` 通过后，重新执行 `verify:gui-smoke` 通过。"
   },
   "runtime_fix": {

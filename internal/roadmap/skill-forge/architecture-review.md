@@ -107,7 +107,7 @@ Level 6: policy-approved scheduled external write
 ```text
 Coding Agent / Agent Builder
   -> Autonomous Execution / Runtime
-  -> Workspace / Agent App Surface
+  -> Workspace / Plugin Surface
 ```
 
 这说明方向没错，但实现还缺几个硬边界。

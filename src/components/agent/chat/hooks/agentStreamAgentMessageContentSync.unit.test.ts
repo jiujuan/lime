@@ -106,4 +106,54 @@ describe("agentStreamAgentMessageContentSync", () => {
     expect(setMessages).toHaveBeenCalledTimes(1);
     expect(nextMessages).toBe(messages);
   });
+
+  it("同步图片任务 agent_message content part 时保留后端原文", () => {
+    const item: AgentThreadItem = {
+      id: "agent-message-image",
+      thread_id: "thread-1",
+      turn_id: "turn-image",
+      type: "agent_message",
+      status: "completed",
+      sequence: 20,
+      text: "好啊，先来Generate深圳夏day午后的城市照片，阳光明亮，真实摄影Style。",
+      phase: "final_answer",
+      started_at: "2026-06-26T10:01:00.000Z",
+      updated_at: "2026-06-26T10:01:01.000Z",
+      completed_at: "2026-06-26T10:01:01.000Z",
+    };
+    const messages: Message[] = [
+      {
+        id: "assistant-image",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-06-26T10:01:01.000Z"),
+        contentParts: [],
+      },
+    ];
+    let nextMessages: Message[] | undefined;
+    const setMessages: Dispatch<SetStateAction<Message[]>> = vi.fn(
+      (value: SetStateAction<Message[]>) => {
+        nextMessages =
+          typeof value === "function" ? value(messages) : value;
+      },
+    );
+
+    syncAssistantAgentMessageContentPartFromThreadItem({
+      assistantMsgId: "assistant-image",
+      item,
+      setMessages,
+    });
+
+    const textPart = nextMessages?.[0]?.contentParts?.find(
+      (
+        part,
+      ): part is Extract<
+        NonNullable<Message["contentParts"]>[number],
+        { type: "text" }
+      > => part.type === "text",
+    );
+    expect(textPart?.text).toBe(
+      "好啊，先来Generate深圳夏day午后的城市照片，阳光明亮，真实摄影Style。",
+    );
+  });
 });

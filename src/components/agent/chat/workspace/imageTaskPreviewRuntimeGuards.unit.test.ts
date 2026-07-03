@@ -89,7 +89,7 @@ describe("imageTaskPreviewRuntimeGuards", () => {
     ]);
   });
 
-  it("应识别图片命令后只有过程态的恢复签名，并排除已失败或已有预览的回合", () => {
+  it("应识别图片命令后只有过程态的恢复签名，并排除已失败或已有终态图片的回合", () => {
     const userMessage = createMessage({
       role: "user",
       id: "user-image-command",
@@ -131,11 +131,44 @@ describe("imageTaskPreviewRuntimeGuards", () => {
         userMessage,
         createMessage({
           role: "assistant",
-          id: "assistant-preview",
+          id: "assistant-preview-running",
           imageWorkbenchPreview: {
             taskId: "task-1",
             prompt: "春日咖啡馆插画",
             status: "running",
+          },
+        }),
+      ]),
+    ).toBe(
+      `user-image-command::${userMessage.timestamp.getTime()}::@配图 生成 春日咖啡馆插画`,
+    );
+
+    expect(
+      resolvePendingImageCommandRecoverySignature([
+        userMessage,
+        createMessage({
+          role: "assistant",
+          id: "assistant-preview-with-image",
+          imageWorkbenchPreview: {
+            taskId: "task-1",
+            prompt: "春日咖啡馆插画",
+            status: "running",
+            imageUrl: "https://cdn.example.com/spring.png",
+          },
+        }),
+      ]),
+    ).toBeNull();
+
+    expect(
+      resolvePendingImageCommandRecoverySignature([
+        userMessage,
+        createMessage({
+          role: "assistant",
+          id: "assistant-preview-complete",
+          imageWorkbenchPreview: {
+            taskId: "task-1",
+            prompt: "春日咖啡馆插画",
+            status: "complete",
           },
         }),
       ]),

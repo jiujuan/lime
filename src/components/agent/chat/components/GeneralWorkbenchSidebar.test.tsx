@@ -233,9 +233,6 @@ describe("GeneralWorkbenchSidebar", () => {
     expect(container.textContent).toContain("当前进展");
     expect(container.textContent).toContain("当前焦点");
     expect(container.textContent).toContain("撰写主稿");
-    expect(container.textContent).toContain("后续任务");
-    expect(container.textContent).toContain("已完成 1/4");
-    expect(container.textContent).toContain("已完成 1 项");
     expect(container.textContent).toContain("结果去向");
     expect(container.textContent).toContain("产出记录 / 执行经过");
     expect(container.textContent).toContain("继续上次做法");
@@ -251,15 +248,13 @@ describe("GeneralWorkbenchSidebar", () => {
       '[data-testid="workflow-sidebar-branch-section"]',
     ) as HTMLElement | null;
 
-    expect(stepNodes).toHaveLength(2);
-    expect(stepNodes.map((node) => node.getAttribute("data-status"))).toEqual([
-      "error",
-      "pending",
-    ]);
     expect(taskSection).toBeTruthy();
     expect(branchSection).toBeTruthy();
+    expect(stepNodes).toHaveLength(0);
     expect(taskSection?.textContent).toContain("当前焦点");
-    expect(taskSection?.textContent).toContain("后续任务");
+    expect(container.textContent).not.toContain("后续任务");
+    expect(container.textContent).not.toContain("已完成 1/4");
+    expect(container.textContent).not.toContain("已完成 1 项");
     expect(
       taskSection?.querySelector(
         '[data-testid="workflow-sidebar-result-destination-hint"]',

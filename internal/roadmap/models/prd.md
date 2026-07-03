@@ -90,7 +90,7 @@ Route
 ### 4.2 产品收益
 
 1. 支持更多 provider 和模型时，不需要为每个入口单独接一遍。
-2. 模型设置页、Agent Chat、媒体工作台、Agent App 和自动化任务能共享模型目录。
+2. 模型设置页、Agent Chat、媒体工作台、Plugin 和自动化任务能共享模型目录。
 3. Lime Cloud 下发模型绑定、OEM managed provider、本地自定义 provider 可以进入同一路由链。
 4. 多模态模型能力可解释，减少“看起来能选但实际不能跑”的假入口。
 5. 后续模型经济调度、成本控制、fallback、限额和 continuation 可以统一落在 runtime facts。
@@ -137,7 +137,7 @@ Route
 
 ### 6.3 App / Skill 开发者
 
-为 Lime 创建 Agent App、Skill、场景或自动化。需要：
+为 Lime 创建 Plugin、Skill、场景或自动化。需要：
 
 1. 声明任务所需能力，而不是直接硬编码 provider/model。
 2. 调用统一 runtime 后拿到标准事件和错误。
@@ -208,9 +208,9 @@ Route
 2. 不创建伪成功任务。
 3. UI 提供设置入口或模型切换提示。
 
-### 7.5 多模态 Agent App
+### 7.5 多模态 Plugin
 
-作为 Agent App 开发者，
+作为 Plugin 开发者，
 当我的 App 需要分析图片、生成文案、再生成配图时，
 我希望只声明不同 step 的能力需求，
 这样 App 不需要自己管理 provider API、凭证、HTTP 协议和事件解析。
@@ -290,11 +290,11 @@ Route
 2. provider endpoint 不支持当前图片协议：返回 `unsupported_endpoint`。
 3. 图片任务 worker 失败：task artifact 写入 failed 状态和 provider error。
 
-### UC-04 Agent App 使用模型生成能力
+### UC-04 Plugin 使用模型生成能力
 
 前置条件：
 
-1. Agent App 已通过 App Server current 主链接入 runtime。
+1. Plugin 已通过 App Server current 主链接入 runtime。
 2. App 声明 task capability。
 
 主流程：
@@ -306,7 +306,7 @@ Route
 
 约束：
 
-1. Agent App UI runtime 不接收上游 provider API Key。
+1. Plugin UI runtime 不接收上游 provider API Key。
 2. App 不直接调用 provider endpoint。
 3. App 只消费 scoped token 或 App Server 协议。
 
@@ -358,7 +358,7 @@ Route
 
 1. 音频、视频、转写、TTS、embedding、rerank 等任务族接入同一 route 合同。
 2. 模型成本、限额、fallback、continuation 进入 routing facts。
-3. Agent App 和自动化任务复用统一模型 route。
+3. Plugin 和自动化任务复用统一模型 route。
 
 ## 10. 事实源分类
 
@@ -411,7 +411,7 @@ Route
 ```text
 ┌─────────────────────────────────────────────────────────────────────┐
 │                          Product / UX                               │
-│ Settings / Chat / Agent App / Media Workbench / Automation          │
+│ Settings / Chat / Plugin / Media Workbench / Automation          │
 └───────────────────────────────┬─────────────────────────────────────┘
                                 │ App Server JSON-RPC
                                 ▼
@@ -450,7 +450,7 @@ Route
 
 ```mermaid
 flowchart TD
-  UX[Product UX\nSettings / Chat / Media / Agent App] --> API[App Server JSON-RPC]
+  UX[Product UX\nSettings / Chat / Media / Plugin] --> API[App Server JSON-RPC]
   API --> Catalog[Typed Catalog\nProviderInfo + ModelInfo]
   API --> Runtime[RuntimeCore]
   Catalog --> Resolver[RouteResolver]
@@ -812,7 +812,7 @@ flowchart TD
 | 可扩展性 | 新 provider 优先复用现有 protocol，只新增 endpoint/auth/catalog 映射。        |
 | 可测试性 | 每个 ProtocolMapper 必须有 request fixture 和 stream fixture。                |
 | 可解释性 | 每次 routing decision 都有 source、reason、fallback_chain 和 capability_gap。 |
-| 安全     | Provider API Key 不下发给 Agent App UI runtime 或 renderer。                  |
+| 安全     | Provider API Key 不下发给 Plugin UI runtime 或 renderer。                  |
 | 稳定性   | provider discovery 失败不覆盖上一次成功缓存。                                 |
 | 兼容性   | 旧字段只在边界投影，不进入新事实源。                                          |
 | 可观测   | usage、error、latency、route id、protocol id 写入 telemetry。                 |
@@ -973,7 +973,7 @@ cargo test --manifest-path "lime-rs/Cargo.toml" -p <affected-crate>
 
 1. cost / limit / continuation 进入 route decision。
 2. video/audio/transcription/embedding 接入。
-3. Agent App 和 automation 复用模型 runtime。
+3. Plugin 和 automation 复用模型 runtime。
 
 关键退出条件：
 

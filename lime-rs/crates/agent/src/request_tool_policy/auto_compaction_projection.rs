@@ -1,6 +1,4 @@
 use crate::protocol::AgentEvent as RuntimeAgentEvent;
-use aster::agents::AgentEvent as AsterAgentEvent;
-use aster::conversation::message::{Message, MessageContent, SystemNotificationType};
 
 const ASTER_AUTO_COMPACTION_START_PREFIX: &str = "Exceeded auto-compact threshold of ";
 pub(crate) const ASTER_AUTO_COMPACTION_COMPLETE_TEXT: &str = "Compaction complete";
@@ -9,47 +7,67 @@ pub(crate) const ASTER_AUTO_COMPACTION_THINKING_TEXT: &str =
 const ASTER_AUTO_COMPACTION_ERROR_PREFIX: &str = "Ran into this error trying to compact:";
 pub(crate) const ASTER_AUTO_COMPACTION_DISABLED_TEXT: &str = "Automatic compaction is disabled for this turn. The conversation reached the context limit. Compact the session manually or start a new session before retrying.";
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AutoCompactionSystemNotificationKind {
+    InlineMessage,
+    ThinkingMessage,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum AutoCompactionEventProjection {
+    SystemNotification {
+        notification_type: AutoCompactionSystemNotificationKind,
+        text: String,
+    },
+    Text {
+        text: String,
+    },
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct AutoCompactionProjectionState;
 
 impl AutoCompactionProjectionState {
     pub(crate) fn project_event(
         &mut self,
-        agent_event: &AsterAgentEvent,
+        agent_event: &AutoCompactionEventProjection,
     ) -> Option<Vec<RuntimeAgentEvent>> {
         match agent_event {
-            AsterAgentEvent::Message(message) => self.project_message(message),
-            _ => None,
+            AutoCompactionEventProjection::SystemNotification {
+                notification_type,
+                text,
+            } => self.project_system_notification(*notification_type, text),
+            AutoCompactionEventProjection::Text { text } => {
+                let error_message = extract_auto_compaction_failure(text)?;
+                Some(vec![RuntimeAgentEvent::Error {
+                    message: error_message,
+                }])
+            }
         }
     }
 
-    fn project_message(&mut self, message: &Message) -> Option<Vec<RuntimeAgentEvent>> {
-        let Some((notification_type, notification_text)) =
-            extract_single_system_notification(message)
-        else {
-            let error_message = extract_auto_compaction_failure(message)?;
-            return Some(vec![RuntimeAgentEvent::Error {
-                message: error_message,
-            }]);
-        };
-
+    fn project_system_notification(
+        &mut self,
+        notification_type: AutoCompactionSystemNotificationKind,
+        notification_text: &str,
+    ) -> Option<Vec<RuntimeAgentEvent>> {
         match notification_type {
-            SystemNotificationType::InlineMessage
+            AutoCompactionSystemNotificationKind::InlineMessage
                 if notification_text.starts_with(ASTER_AUTO_COMPACTION_START_PREFIX) =>
             {
                 Some(vec![])
             }
-            SystemNotificationType::ThinkingMessage
+            AutoCompactionSystemNotificationKind::ThinkingMessage
                 if notification_text == ASTER_AUTO_COMPACTION_THINKING_TEXT =>
             {
                 Some(vec![])
             }
-            SystemNotificationType::InlineMessage
+            AutoCompactionSystemNotificationKind::InlineMessage
                 if notification_text == ASTER_AUTO_COMPACTION_COMPLETE_TEXT =>
             {
                 Some(vec![])
             }
-            SystemNotificationType::InlineMessage
+            AutoCompactionSystemNotificationKind::InlineMessage
                 if notification_text == ASTER_AUTO_COMPACTION_DISABLED_TEXT =>
             {
                 Some(vec![RuntimeAgentEvent::Error {
@@ -63,22 +81,7 @@ impl AutoCompactionProjectionState {
     }
 }
 
-fn extract_single_system_notification(message: &Message) -> Option<(SystemNotificationType, &str)> {
-    if message.content.len() != 1 {
-        return None;
-    }
-
-    match message.content.first()? {
-        MessageContent::SystemNotification(notification) => Some((
-            notification.notification_type.clone(),
-            notification.msg.trim(),
-        )),
-        _ => None,
-    }
-}
-
-fn extract_auto_compaction_failure(message: &Message) -> Option<String> {
-    let text = message.as_concat_text();
+fn extract_auto_compaction_failure(text: &str) -> Option<String> {
     let trimmed = text.trim();
     if !trimmed.starts_with(ASTER_AUTO_COMPACTION_ERROR_PREFIX) {
         return None;

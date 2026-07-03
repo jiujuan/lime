@@ -40,7 +40,7 @@
 | WebSearch: SWE-bench / Terminal-Bench | coding 与 terminal 任务要用真实环境和测试验证 | Bash、PowerShell、apply_patch、Read/Write/Edit 必须能关联 diff、exit code、测试结果 |
 | WebSearch: WebArena / OSWorld / GAIA / AgentBench | browser、桌面、通用工具任务需要独立 benchmark | browser / site / web search 工具不能只看调用成功，要有操作轨迹、来源、页面状态和 outcome |
 | Codex app-server | thread / turn / item、stream notifications、approval、command、fs、skills | Lime UI 要消费 runtime facts，不解析 assistant 文本充当事实源 |
-| CodexMonitor | workspace/thread、queue vs steer、reasoning/tool/diff、approval、terminal dock | 桌面端 Agent App 的工具 UI 应和工作区、文件、终端、审批、diff 一体化 |
+| CodexMonitor | workspace/thread、queue vs steer、reasoning/tool/diff、approval、terminal dock | 桌面端 Plugin 的工具 UI 应和工作区、文件、终端、审批、diff 一体化 |
 | Claude Code `MCPTool/UI.tsx` | input 截断、progress、大输出 token warning、image placeholder、small JSON flatten | Lime 对 MCP / workbench / browser 工具需要输入摘要、progress、长输出保护和结构化结果 |
 
 ## 3. 当前工具事实源

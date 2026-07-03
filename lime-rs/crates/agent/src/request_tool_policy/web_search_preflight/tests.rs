@@ -189,9 +189,9 @@ async fn web_search_preflight_uses_turn_context_for_permission_check() {
         resolve_request_tool_policy_with_mode(Some(true), Some(RequestToolPolicyMode::Required));
     let mut metadata = HashMap::new();
     metadata.insert("webSearchEnabled".to_string(), serde_json::json!(true));
-    let turn_context = aster::session::TurnContextOverride {
+    let turn_context = crate::turn_context_configuration::AgentTurnContext {
         metadata,
-        ..aster::session::TurnContextOverride::default()
+        ..crate::turn_context_configuration::AgentTurnContext::default()
     };
     let mut tracker = WebSearchExecutionTracker::default();
 

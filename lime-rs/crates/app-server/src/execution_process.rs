@@ -5,8 +5,6 @@ use app_server_protocol::{
     ExecutionProcessStartResponse, ExecutionProcessStatus, ExecutionProcessStatusResponse,
     ExecutionProcessWriteStdinParams,
 };
-use aster::tools::{BashTool, PowerShellTool, ToolContext, ToolRegistry};
-use lime_agent::agent_tools::catalog::tool_catalog_entry;
 use lime_agent::agent_tools::execution::{
     decide_tool_execution, start_local_execution_process,
     ExecutionOutputDelta as AgentExecutionOutputDelta,
@@ -16,7 +14,10 @@ use lime_agent::agent_tools::execution::{
     LocalExecutionRequest, ToolExecutionDecisionInput, ToolExecutionDecisionKind,
     ToolExecutionResolverInput,
 };
-use lime_agent::agent_tools::tool_orchestrator::LiveExecutionProcessRegistry;
+use lime_agent::agent_tools::tool_orchestrator::{
+    canonical_shell_tool_name, check_shell_tool_permissions, shell_command_text_from_argv,
+    LiveExecutionProcessRegistry,
+};
 use serde_json::json;
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
@@ -139,8 +140,9 @@ impl ExecutionProcessServer {
             return Err(ExecutionProcessError::EmptyCommand);
         }
         let working_directory = PathBuf::from(params.working_directory.clone());
-        let canonical_tool_name = shell_tool_name(&params.tool_name)?;
-        let command_text = command_text_from_argv(&params.command);
+        let canonical_tool_name = canonical_shell_tool_name(&params.tool_name)
+            .ok_or(ExecutionProcessError::UnsupportedTool)?;
+        let command_text = shell_command_text_from_argv(&params.command);
         let decision = decide_tool_execution(ToolExecutionDecisionInput {
             tool_name: canonical_tool_name,
             params: &json!({ "command": command_text }),
@@ -169,19 +171,13 @@ impl ExecutionProcessServer {
         if decision.requires_sandboxed_execution() {
             return Err(ExecutionProcessError::SandboxRequired);
         }
-        let mut registry = ToolRegistry::new();
-        registry.register(Box::new(BashTool::new()));
-        registry.register(Box::new(PowerShellTool::new()));
-        let tool_context = ToolContext::new(working_directory.clone());
-        registry
-            .check_tool_permissions(
-                canonical_tool_name,
-                json!({ "command": command_text }),
-                &tool_context,
-                None,
-            )
-            .await
-            .map_err(|error| ExecutionProcessError::Policy(error.to_string()))?;
+        check_shell_tool_permissions(
+            canonical_tool_name,
+            &command_text,
+            working_directory.clone(),
+        )
+        .await
+        .map_err(ExecutionProcessError::Policy)?;
 
         {
             let state = self.inner.lock().map_err(|_| ExecutionProcessError::Lock)?;
@@ -390,45 +386,6 @@ impl LiveExecutionProcessRegistry for ExecutionProcessServer {
         self.finish_process(snapshot)
             .map_err(|error| error.to_string())
     }
-}
-
-fn shell_tool_name(tool_name: &str) -> Result<&'static str, ExecutionProcessError> {
-    match tool_catalog_entry(tool_name).map(|entry| entry.name) {
-        Some("Bash") => Ok("Bash"),
-        Some("PowerShell") => Ok("PowerShell"),
-        _ => Err(ExecutionProcessError::UnsupportedTool),
-    }
-}
-
-fn command_text_from_argv(command: &[String]) -> String {
-    command
-        .iter()
-        .skip_while(|part| shell_wrapper_part(part))
-        .map(String::as_str)
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-fn shell_wrapper_part(part: &str) -> bool {
-    matches!(
-        part,
-        "sh" | "bash"
-            | "zsh"
-            | "cmd"
-            | "cmd.exe"
-            | "powershell"
-            | "powershell.exe"
-            | "pwsh"
-            | "pwsh.exe"
-            | "-c"
-            | "/C"
-            | "/c"
-            | "/D"
-            | "/S"
-            | "-NoProfile"
-            | "-NonInteractive"
-            | "-Command"
-    )
 }
 
 fn push_output(state: &mut ExecutionProcessState, delta: ExecutionProcessOutputDelta) {

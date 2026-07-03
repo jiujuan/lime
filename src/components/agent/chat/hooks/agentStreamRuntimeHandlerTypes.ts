@@ -23,6 +23,13 @@ export interface StreamObserver {
   onError?: (message: string) => void;
 }
 
+export interface PendingImageTaskPresentation {
+  assistantIntro: string;
+  completionCaption: string;
+  workflowRunId?: string | null;
+  turnId?: string | null;
+}
+
 export interface StreamRequestState extends AgentStreamReasoningTimelineState {
   accumulatedContent: string;
   hasMeaningfulCompletionSignal?: boolean;
@@ -52,6 +59,7 @@ export interface StreamRequestState extends AgentStreamReasoningTimelineState {
   renderedContent?: string;
   preservedAssistantContentInitialized?: boolean;
   hiddenThinkingPartsCleared?: boolean;
+  shouldSurfaceVisibleProcessReasoning?: boolean;
   performanceTrace?: AgentUiPerformanceTraceMetadata | null;
   agentUiEventSequence?: number;
   currentTurnId?: string | null;
@@ -71,6 +79,7 @@ export interface StreamRequestState extends AgentStreamReasoningTimelineState {
   latestAssistantTextEventSequence?: number | null;
   maxProcessEventSequence?: number | null;
   maxFinalAnswerRequiredProcessEventSequence?: number | null;
+  pendingImageTaskPresentation?: PendingImageTaskPresentation | null;
 }
 
 export interface StreamLifecycleCallbacks {

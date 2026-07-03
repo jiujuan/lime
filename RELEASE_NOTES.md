@@ -1,33 +1,70 @@
+## Lime v1.88.0
+
+### 新功能
+
+- Agent Runtime 主线拆出 `agent-protocol`、`agent-runtime`、`model-provider`、`thread-store` 和 `tool-runtime` crates，开始用更清晰的协议、模型上下文、会话线程和工具运行时边界承接 Codex-style 执行链。
+- App Server workflow runtime 继续落地，补齐 plugin worker workflow、事件日志拆分、workflow read model、queue resume audit、content factory host tool evidence 和 Article Workspace edited draft 投影。
+- Claw / Article Workspace 补强图片任务与内联宿主命令体验，覆盖文稿内联配图同步、图片任务预览状态、reasoning 展示策略、Plugin 输入能力和工作区发送链路。
+
+### 修复
+
+- 修复 Agent Chat 流式终态、历史恢复、自动标题、read model 投影和 reasoning 可见性相关的多处边界问题，减少输出乱序、状态未收口和历史覆盖偏差。
+- 修复图片任务、media worker、图片工作台预览和文稿内联图片回填的状态投影问题，失败、取消、完成和工具结果展示更一致。
+- 修复 Plugin 安装 readiness、Content Factory runtime fixture、provider 模型展示和 App Server protocol/client schema 的漂移风险，避免旧 demo / mock / legacy surface 回流。
+
+### 优化与重构
+
+- 大幅拆分 App Server runtime backend、plugin worker runtime、request context、memory tools、image tools 和 event log 模块，中心文件职责继续收缩。
+- 将旧 services 侧 Aster session store 迁入 Agent 侧事实源，并同步 Aster runtime / migration / App Server 边界治理，降低旧运行时与 current 主线的双轨成本。
+- 删除旧 `agentapp` 路线图目录和过期 Content Factory demo surface，改由 Plugin、Workflow、Aster migration 和 Agent Runtime 文档承接当前事实源。
+
+### 测试与质量
+
+- 新增 / 更新 Agent Runtime、App Server protocol、workflow read model、media task JSON-RPC、image worker、plugin runtime、provider config、legacy surface guard 和治理边界测试。
+- 前端回归覆盖 Agent Chat 输入区、消息列表、图片任务预览、Article Workspace、Plugin 页面、API key provider、i18n 资源和 App Server event stream / read model projection。
+- `content-factory-current-turn` fixture 拆出 host tool assertions / fixtures，并同步 release smoke client 版本到 `1.88.0`。
+
+### 文档
+
+- 新增 workflow 标准化、Aster migration、App Server / Aster runtime 边界治理、Writing v2 content factory reframe 和 Plugin runtime completion audit 文档。
+- 更新 next PRD、Writing / Workflow / Plugin / Agent Runtime / App Server / images 路线图、技术债追踪和命令边界说明，记录本轮 current 主线与清退口径。
+
+### 其他
+
+- 版本事实源更新到 `1.88.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock`、`lime-rs/crates/aster-rust/Cargo.lock`、App Server release manifest 和 current-turn smoke client。
+
+**完整变更**: `v1.87.0` -> `v1.88.0`
+
 ## Lime v1.87.0
 
 ### 新功能
 
-- Plugin runtime 主线接替旧 Agent App 入口：插件安装、运行、Shell host、任务 worker、右侧 Surface、历史恢复和 SDK/manifest 流程统一走 Plugin 命名与 current 协议。
+- Plugin runtime 主线接替旧 Plugin 入口：插件安装、运行、Shell host、任务 worker、右侧 Surface、历史恢复和 SDK/manifest 流程统一走 Plugin 命名与 current 协议。
 - 内容工厂插件包继续补齐独立发布能力，覆盖 standalone release gate、connector 生产预检 / 交付 / webhook、runtime fixture smoke 和 signed release evidence。
 - Article Workspace / 右侧工作区支持 Plugin Surface 和插件工作流证据展示，内容工厂 worker dogfood、文章工作区 patch 与历史恢复链路更完整。
 
 ### 修复
 
-- 修复 Agent App 与 Plugin 双轨命名造成的 marketplace、installed state、manifest contract、runtime authorization 和治理目录漂移。
+- 修复 Plugin 与 Plugin 双轨命名造成的 marketplace、installed state、manifest contract、runtime authorization 和治理目录漂移。
 - 修复图片任务与媒体 worker 的路由、后处理和 provider 测试覆盖缺口，减少图像生成任务在不同 Provider 间的行为偏差。
-- 修复 App Server client / protocol schema / command catalog 中旧 Agent App 方法残留，避免 legacy command 或 mock fallback 回流到 current 主链。
+- 修复 App Server client / protocol schema / command catalog 中旧 Plugin 方法残留，避免 legacy command 或 mock fallback 回流到 current 主链。
 
 ### 优化与重构
 
-- 大规模移除旧 `agent-app` 前端、Electron、App Server、脚本和 schema 表面，按 Plugin 领域重建同构模块，降低双轨维护成本。
-- App Server runtime、local data source、processor、runtime backend 和 protocol schema 收口到 Plugin owner，旧 Agent App 文件按 dead surface 删除。
+- 大规模移除旧 `plugin` 前端、Electron、App Server、脚本和 schema 表面，按 Plugin 领域重建同构模块，降低双轨维护成本。
+- App Server runtime、local data source、processor、runtime backend 和 protocol schema 收口到 Plugin owner，旧 Plugin 文件按 dead surface 删除。
 - 脚本治理、i18n app metadata、legacy surface catalog 和 quality workflow 文档同步 Plugin 命名与发布门禁。
 
 ### 测试与质量
 
 - 新增 / 更新 Plugin runtime、Plugin marketplace、Plugin install / cleanup / packaging / SDK / shell / UI、Electron host、App Server protocol 和 content factory fixture 回归。
-- 更新 `test:contracts`、protocol type generation、script governance 和 legacy surface guard，覆盖 Agent App 清退与 Plugin current surface。
+- 更新 `test:contracts`、protocol type generation、script governance 和 legacy surface guard，覆盖 Plugin 清退与 Plugin current surface。
 - 发布 workflow skill 调整为稳定必要门禁优先：默认保留 `verify:app-version` / `typecheck`，不再自动把 `npm run lint`、裸 `npm test` 和全量 `cargo test` 作为发版阻断项。
 - 同步 current-turn smoke client 版本到 `1.87.0`，保持发布 fixture 与应用版本一致。
 
 ### 文档
 
-- 更新 command boundary、quality workflow、design language、workspace、parallel collaboration 和 Writing v2 执行计划，记录 Plugin runtime current 主线与 Agent App 清退口径。
+- 更新 command boundary、quality workflow、design language、workspace、parallel collaboration 和 Writing v2 执行计划，记录 Plugin runtime current 主线与 Plugin 清退口径。
 - 更新 package README、agent runtime package README 和默认 skill 文档中的 Plugin / 内容工厂表述。
 
 ### 其他
@@ -49,17 +86,17 @@
 
 - 修复 host-managed generation 和图片任务路由中的若干串台问题，避免普通 follow-up 继承错误的图片上下文。
 - 修复流式刷新过程中 detail snapshot 覆盖前文、回退或乱序的问题，消息和 thread item 投影更稳。
-- 修复插件 marketplace、installed Agent App、manifest 解析和 seeded fixture 的投影偏差。
+- 修复插件 marketplace、installed Plugin、manifest 解析和 seeded fixture 的投影偏差。
 
 ### 优化与重构
 
-- App Server runtime、worker、image command、plugin manifest 和 agent app package 拆分出更细模块，减少中心文件职责堆叠。
+- App Server runtime、worker、image command、plugin manifest 和 plugin package 拆分出更细模块，减少中心文件职责堆叠。
 - Electron host commands / IPC channels / resource manager window host 与前端桥接面整理。
 - `scripts/agent-runtime` current fixture、`scripts/agent-qc` 本地门禁、`scripts/i18n` 未引用 key 检查和 release docs 工具链更新。
 
 ### 测试与质量
 
-- 新增 / 更新 Agent App、plugin contract、image task viewer、current fixture smoke、Rust runtime 和 App Server 回归。
+- 新增 / 更新 Plugin、plugin contract、image task viewer、current fixture smoke、Rust runtime 和 App Server 回归。
 - 继续补齐 `verify:app-version`、`test:contracts` 和 GUI smoke 的发版门禁覆盖。
 
 ### 文档
@@ -125,7 +162,7 @@
 
 - Writing 主线继续收口到 Article Workspace / Article Editor：`@写文章` 产物以独立 `ArtifactFrame` 呈现，右侧文章画布成为可编辑的 current 承载区。
 - 图片生成能力目录与执行链完成统一：OpenAI-compatible、Gemini、Fal、local image server 等路由现在共享同一套 catalog / executor / error presentation。
-- 插件市场和已安装 Agent Apps 的能力投影更完整，activation、capability profile、installed state 与当前可用性现在按同一视图模型展示。
+- 插件市场和已安装 Plugins 的能力投影更完整，activation、capability profile、installed state 与当前可用性现在按同一视图模型展示。
 
 ### 修复
 
@@ -163,7 +200,7 @@
 ### 新功能
 
 - Writing 主线切到 Article Workspace / Article Editor：`@写文章` 产物以独立 `ArtifactFrame` 展示，右侧栏承接可编辑文章画布，旧 Product Profile 路径已退出主路径。
-- 内容工厂插件包投影增强，宿主现在能从 plugin manifest 读取 skills、subagents、CLI、connectors 和 hooks，并汇总进 agent app manifest 与历史恢复。
+- 内容工厂插件包投影增强，宿主现在能从 plugin manifest 读取 skills、subagents、CLI、connectors 和 hooks，并汇总进 plugin manifest 与历史恢复。
 - `@配图` current 链路补齐 `mediaTaskArtifact/image/complete`，图片任务从创建、完成、回填到 GUI 终态卡片和刷新恢复形成同一条 current 闭环。
 - 图片工作台事件流收敛，前端不再依赖旧的模型预设分流逻辑，而是统一走当前图片任务与 runtime 触发链。
 

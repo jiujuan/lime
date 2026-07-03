@@ -83,6 +83,10 @@ describe("imageTaskPreviewRuntimeSnapshot", () => {
         count: 2,
         provider_id: "openai",
         model: "gpt-image-2",
+        presentation: {
+          assistant_intro:
+            "我先按城市夜景分镜整理两张画面，保留全景和细节。",
+        },
         layout_hint: "storyboard_3x3",
         storyboard_slots: [
           {
@@ -145,8 +149,12 @@ describe("imageTaskPreviewRuntimeSnapshot", () => {
       contentId: "content-1",
       phase: "pending_submit",
     });
-    expect(snapshot.message.content).toContain("城市夜景分镜");
-    expect(snapshot.task.assistantIntro).toContain("城市夜景分镜");
+    expect(snapshot.message.content).toBe(
+      "我先按城市夜景分镜整理两张画面，保留全景和细节。",
+    );
+    expect(snapshot.task.assistantIntro).toBe(
+      "我先按城市夜景分镜整理两张画面，保留全景和细节。",
+    );
   });
 
   it("应从 completed task record 投影多图输出、runtime contract 和工作台任务", () => {
@@ -170,6 +178,10 @@ describe("imageTaskPreviewRuntimeSnapshot", () => {
           size: "1024x1024",
           provider_id: "openai",
           model: "gpt-image-2",
+          presentation: {
+            assistant_intro:
+              "我先按春日咖啡馆插画整理构图，保留窗边和细节两张。",
+          },
           modality_contract_key: "image_generation",
           routing_slot: "primary-image",
           model_capability_assessment: {
@@ -241,8 +253,12 @@ describe("imageTaskPreviewRuntimeSnapshot", () => {
 
     expect(snapshot).not.toBeNull();
     expect(snapshot?.terminal).toBe(true);
-    expect(snapshot?.message.content).toContain("春日咖啡馆插画");
-    expect(snapshot?.task.assistantIntro).toContain("春日咖啡馆插画");
+    expect(snapshot?.message.content).toBe(
+      "我先按春日咖啡馆插画整理构图，保留窗边和细节两张。",
+    );
+    expect(snapshot?.task.assistantIntro).toBe(
+      "我先按春日咖啡馆插画整理构图，保留窗边和细节两张。",
+    );
     expect(snapshot?.updatedAt).toBe(Date.parse("2026-07-02T08:00:00.000Z"));
     expect(snapshot?.outputs.map((output) => output.url)).toEqual([
       "https://cdn.example.com/hero.png",

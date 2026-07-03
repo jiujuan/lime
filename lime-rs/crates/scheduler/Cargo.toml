@@ -30,7 +30,7 @@ uuid = { workspace = true, features = ["v4", "serde"] }
 # 项目内依赖
 lime-core = { workspace = true }
 lime-agent = { workspace = true }
-aster = { workspace = true }
+agent-protocol = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

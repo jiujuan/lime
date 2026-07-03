@@ -279,6 +279,12 @@ describe("agentSessionState", () => {
     expect(
       resolveMissingSessionFromTopicsAction({
         ...base,
+        remoteConfirmed: true,
+      }),
+    ).toEqual({ kind: "verify_remote" });
+    expect(
+      resolveMissingSessionFromTopicsAction({
+        ...base,
         currentTurnId: "turn-1",
       }),
     ).toEqual({ kind: "verify_remote" });

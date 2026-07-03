@@ -122,30 +122,6 @@ pub(super) fn convert_user_visible_agent_messages_with_flags(
 }
 
 #[cfg(test)]
-pub(super) fn convert_user_visible_agent_messages(
-    messages: &[AgentMessage],
-    persisted_messages: &[aster::conversation::message::Message],
-    model_name: Option<&str>,
-) -> Vec<RuntimeAgentMessage> {
-    if messages.len() != persisted_messages.len() {
-        tracing::warn!(
-            "[SessionStore] user_visible 过滤失败，消息条数不一致: core={}, aster={}",
-            messages.len(),
-            persisted_messages.len()
-        );
-        return convert_agent_messages(messages, model_name);
-    }
-
-    let filtered = messages
-        .iter()
-        .zip(persisted_messages.iter())
-        .filter_map(|(message, persisted)| persisted.is_user_visible().then_some(message.clone()))
-        .collect::<Vec<_>>();
-
-    convert_agent_messages(&filtered, model_name)
-}
-
-#[cfg(test)]
 pub(super) fn convert_agent_message(
     message: &AgentMessage,
     eviction_plan: &HistoryToolIoEvictionPlan,

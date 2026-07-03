@@ -1,6 +1,6 @@
 # Agent Verification Contract 模板
 
-> 用途：每个 Agent / Runtime / Agent App / Skill / Managed Objective 主链改动，在实现前先填这份合同。
+> 用途：每个 Agent / Runtime / Plugin / Skill / Managed Objective 主链改动，在实现前先填这份合同。
 > 执行计划主模板已迁入：`internal/exec-plans/templates/agent-verification-contract.md`
 
 ## 0. 当前入口

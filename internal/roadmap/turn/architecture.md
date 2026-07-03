@@ -24,7 +24,7 @@
 
 | 层 | 职责 | 输入 | 输出 | Owner |
 | --- | --- | --- | --- | --- |
-| Product Surface | 收集用户输入和 UI 上下文 | Chat / Claw / Agent App / Automation 输入 | submit request | Frontend |
+| Product Surface | 收集用户输入和 UI 上下文 | Chat / Claw / Plugin / Automation 输入 | submit request | Frontend |
 | Frontend Runtime Gateway | 调用 current App Server API，绑定 request id 和 session id | submit request | accepted / stream subscription | `src/lib/api/agentRuntime/*` |
 | Runtime Control Plane | 创建 session/thread/turn，排队、中断、恢复 | submit / interrupt / respond | turn lifecycle | App Server RuntimeCore |
 | Execution Loop | 调模型、调工具、处理 retry / synthesis | turn input snapshot | runtime agent events | `lime-rs/crates/agent` / Aster |

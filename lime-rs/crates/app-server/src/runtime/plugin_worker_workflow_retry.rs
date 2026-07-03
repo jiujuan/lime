@@ -1,4 +1,5 @@
 use super::plugin_worker_workflow::PluginWorkerWorkflowContext;
+use super::workflow::events::{WORKFLOW_RUN_RETRYING, WORKFLOW_STEP_RETRYING};
 use super::RuntimeEvent;
 use serde_json::{Map, Value};
 
@@ -8,11 +9,11 @@ pub(super) fn workflow_retry_events(
 ) -> Vec<RuntimeEvent> {
     let mut events = Vec::new();
     if let Some(payload) = context.first_step_payload("retrying", Some(failure.clone())) {
-        events.push(RuntimeEvent::new("workflow.step.retrying", payload));
+        events.push(RuntimeEvent::new(WORKFLOW_STEP_RETRYING, payload));
     }
     let mut payload = context.workflow_run_payload("retrying");
     insert_object_field(&mut payload, "failure", failure.clone());
-    events.push(RuntimeEvent::new("workflow.run.retrying", payload));
+    events.push(RuntimeEvent::new(WORKFLOW_RUN_RETRYING, payload));
     events
 }
 

@@ -522,6 +522,7 @@ export function buildAgentStreamCompletedAssistantMessagePatch(params: {
   finalTextPartMetadata?: Record<string, unknown>;
   parts: Message["contentParts"];
   previousContent?: string;
+  preserveThinkingContent?: boolean;
   rawContent: string;
   surfaceThinkingDeltas: boolean;
   thinkingContent?: string;
@@ -530,7 +531,9 @@ export function buildAgentStreamCompletedAssistantMessagePatch(params: {
 }): Pick<Message, "content" | "contentParts" | "isThinking" | "runtimeStatus"> &
   Partial<Pick<Message, "thinkingContent">> &
   Partial<Pick<Message, "toolCalls" | "usage">> {
-  const retainedThinkingContent = params.surfaceThinkingDeltas
+  const shouldRetainThinkingContent =
+    params.surfaceThinkingDeltas || params.preserveThinkingContent === true;
+  const retainedThinkingContent = shouldRetainThinkingContent
     ? params.thinkingContent?.trim() || undefined
     : undefined;
   const finalContent = resolveAgentStreamCompletedVisibleContent({
@@ -549,7 +552,7 @@ export function buildAgentStreamCompletedAssistantMessagePatch(params: {
         finalContent,
         finalTextPartMetadata: params.finalTextPartMetadata,
         rawContent: params.rawContent,
-        surfaceThinkingDeltas: params.surfaceThinkingDeltas,
+        surfaceThinkingDeltas: shouldRetainThinkingContent,
       }),
       completedAt,
     ),

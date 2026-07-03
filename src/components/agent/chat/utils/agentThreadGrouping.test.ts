@@ -590,7 +590,7 @@ describe("agentThreadGrouping", () => {
     );
   });
 
-  it("内容工厂文章工作流的 WebSearch 也应按调用边界拆分", () => {
+  it("workspace patch 宿主工具 WebSearch 也应按调用边界拆分", () => {
     const items: AgentThreadItem[] = [
       {
         ...createBaseItem("content-factory-search-1", 1),
@@ -598,7 +598,7 @@ describe("agentThreadGrouping", () => {
         query: "golang 学习路径",
         output: "检索到 3 条资料",
         metadata: {
-          source: "content_factory_search_requests",
+          source: "workspace_patch_host_tool_requests",
           workflowKey: "content_article_workflow",
         },
       },

@@ -29,6 +29,7 @@ mod objectives;
 mod permission_preflight;
 mod plugin_worker_turn;
 mod queue;
+mod queue_resume_audit;
 mod read_model;
 mod right_surface;
 mod session_list_projection;

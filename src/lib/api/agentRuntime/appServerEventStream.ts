@@ -378,9 +378,6 @@ export function projectAppServerAgentEventPayload(
   if (isLegacyTurnTerminalAppServerEventType(event.type)) {
     return null;
   }
-  if (event.type.startsWith("workflow.")) {
-    return null;
-  }
 
   const payload = normalizeRecord(event.payload) ?? {};
   const rendererEventReceivedAt = Date.now();
@@ -467,7 +464,8 @@ export function projectAppServerAgentEventPayload(
         model: normalizeRecord(payload.model),
         providerMetadata:
           normalizeRecord(payload.providerMetadata) ??
-          normalizeRecord(payload.provider_metadata),
+          normalizeRecord(payload.provider_metadata) ??
+          normalizeRecord(payload.metadata),
       };
     case "reasoning.started":
       return {
@@ -477,7 +475,8 @@ export function projectAppServerAgentEventPayload(
         model: normalizeRecord(payload.model),
         providerMetadata:
           normalizeRecord(payload.providerMetadata) ??
-          normalizeRecord(payload.provider_metadata),
+          normalizeRecord(payload.provider_metadata) ??
+          normalizeRecord(payload.metadata),
       };
     case "reasoning.final":
       return {
@@ -488,7 +487,8 @@ export function projectAppServerAgentEventPayload(
         model: normalizeRecord(payload.model),
         providerMetadata:
           normalizeRecord(payload.providerMetadata) ??
-          normalizeRecord(payload.provider_metadata),
+          normalizeRecord(payload.provider_metadata) ??
+          normalizeRecord(payload.metadata),
       };
     case "reasoning.ended":
       return {
@@ -499,7 +499,8 @@ export function projectAppServerAgentEventPayload(
         model: normalizeRecord(payload.model),
         providerMetadata:
           normalizeRecord(payload.providerMetadata) ??
-          normalizeRecord(payload.provider_metadata),
+          normalizeRecord(payload.provider_metadata) ??
+          normalizeRecord(payload.metadata),
       };
     case "thinking.delta":
       return {
@@ -706,6 +707,27 @@ export function projectAppServerAgentEventPayload(
         ...(responsePayload ? { payload: responsePayload } : {}),
       };
     }
+    case "image_task.presentation.unavailable":
+    case "image_task_presentation_unavailable": {
+      const eventPayload = normalizeRecord(payload.payload);
+      const source = eventPayload ?? payload;
+      return {
+        ...basePayload,
+        type: "image_task_presentation_unavailable",
+        status: readString(source, "status"),
+        reason: readString(
+          source,
+          "reason",
+          "reasonCode",
+          "reason_code",
+          "message",
+        ),
+        workflow_run_id: readString(source, "workflow_run_id", "workflowRunId"),
+        session_id: readString(source, "session_id", "sessionId"),
+        thread_id: readString(source, "thread_id", "threadId"),
+        turn_id: readString(source, "turn_id", "turnId"),
+      };
+    }
     case "image_task.parameters.required":
     case "image_task_parameters_required": {
       const missing =
@@ -832,7 +854,13 @@ export function projectAppServerAgentEventPayload(
     case "workflow.run.completed":
     case "workflow.step.failed":
     case "workflow.run.failed":
-      return null;
+    case "workflow.step.canceled":
+    case "workflow.run.canceled":
+      return projectWorkflowReadModelRefreshPayload(
+        basePayload,
+        payload,
+        event,
+      );
     case "action.required":
       return {
         ...basePayload,
@@ -938,6 +966,64 @@ export function projectAppServerAgentEventPayload(
         type: event.type.split(".").join("_"),
       };
   }
+}
+
+function projectWorkflowReadModelRefreshPayload(
+  basePayload: Record<string, unknown>,
+  payload: Record<string, unknown>,
+  event: AppServerAgentEvent,
+): Record<string, unknown> {
+  const workflowRunId = readString(
+    payload,
+    "workflowRunId",
+    "workflow_run_id",
+    "runId",
+    "run_id",
+  );
+  const workflowKey = readString(payload, "workflowKey", "workflow_key", "key");
+  const stepId = readString(payload, "stepId", "step_id", "id");
+  const status = readString(payload, "status");
+  const checkpoints = [workflowRunId, stepId].filter(
+    (value): value is string => Boolean(value),
+  );
+  const workflowMetadata = {
+    sourceType: "runtime_status",
+    source: "workflow_read_model_refresh",
+    surface: "runtime_status",
+    visibility: "diagnostics",
+    persistence: "transient",
+    runtime_event_type: event.type,
+    workflow_run_id: workflowRunId,
+    workflow_key: workflowKey,
+    workflow_status: status,
+    step_id: stepId,
+    agentui: {
+      eventClass: "workflow.read_model_refresh",
+      surface: "runtime_status",
+      visibility: "diagnostics",
+      status_kind: "workflow_read_model_refresh",
+      runtime_event_type: event.type,
+      workflow_run_id: workflowRunId,
+      workflow_key: workflowKey,
+      step_id: stepId,
+    },
+  };
+
+  return {
+    ...basePayload,
+    type: "runtime_status",
+    runtime_event_type: event.type,
+    workflow_run_id: workflowRunId,
+    workflow_key: workflowKey,
+    step_id: stepId,
+    status: {
+      phase: "routing",
+      title: "Workflow read model refresh",
+      detail: `${event.type} recorded in workflow read model`,
+      checkpoints,
+      metadata: workflowMetadata,
+    },
+  };
 }
 
 function isLegacyTurnTerminalAppServerEventType(type: string): boolean {

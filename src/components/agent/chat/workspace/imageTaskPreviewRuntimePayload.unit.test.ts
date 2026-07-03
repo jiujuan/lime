@@ -64,6 +64,30 @@ describe("imageTaskPreviewRuntimePayload", () => {
     );
   });
 
+  it("读取图片任务 presentation 时不应在前端改写模型文案语义", () => {
+    const payload = {
+      presentation: {
+        opening_text:
+          "好啊，先来Generate 深圳夏day午后的城市照片，真实摄影Style。",
+        result_captions: {
+          completion_caption:
+            "搞定，深圳夏day午后的城市照片，真实摄影Style 已经做好了。",
+        },
+      },
+    };
+    const languageSource = "Generate 深圳夏day午后的城市照片，真实摄影Style";
+
+    expect(readImageTaskPresentationText([payload], languageSource)).toContain(
+      "先来Generate 深圳夏day午后",
+    );
+    expect(
+      readImageTaskPresentationCaption([payload], "complete", languageSource),
+    ).toContain("深圳夏day午后");
+    expect(
+      readImageTaskPresentationCaption([payload], "complete", languageSource),
+    ).toContain("真实摄影Style");
+  });
+
   it("应从 task record 投影图片运行时合约，并把路由阻止映射为 blocked", () => {
     const snapshot = resolveImageRuntimeContractSnapshot({
       normalizedStatus: "failed",

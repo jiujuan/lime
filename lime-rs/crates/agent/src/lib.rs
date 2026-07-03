@@ -13,27 +13,37 @@
 pub mod agent_tools;
 pub mod artifact_protocol;
 pub mod ask_bridge;
+mod aster_runtime_projection;
 pub mod aster_runtime_support;
+pub mod aster_session_store;
 pub mod aster_state;
 pub mod aster_state_support;
 pub mod credential_bridge;
+mod direct_text_generation;
 pub mod durable_memory_fs;
 pub mod event_converter;
 mod execution_strategy_compat;
 pub mod filesystem_event_protocol;
 pub mod hooks;
+mod host_managed_generation;
+mod knowledge_builder_skill;
 pub mod lsp_bridge;
 pub mod mcp_bridge;
+pub mod native_tools;
 pub mod prompt;
 pub mod protocol;
+mod protocol_context_projection;
 pub mod protocol_projection;
+mod provider_configuration;
 pub mod provider_continuation_state;
 pub mod provider_runtime_governor;
 mod provider_safety;
 pub mod queued_turn;
 pub mod request_tool_policy;
+pub mod runtime_facade;
 pub mod runtime_projection_snapshot;
 pub mod runtime_queue;
+mod session_configuration;
 mod session_execution_runtime;
 mod session_query;
 pub mod session_state_snapshot;
@@ -47,6 +57,8 @@ pub mod team_runtime_governor;
 mod text_normalization;
 pub mod tool_io_offload;
 pub mod tools;
+mod turn_context_configuration;
+mod turn_execution;
 pub mod turn_input_envelope;
 pub mod turn_state;
 mod write_artifact_events;
@@ -62,10 +74,22 @@ pub use credential_bridge::{
     create_aster_provider, AsterProviderConfig, AsterProviderProtocol, CredentialBridge,
     CredentialBridgeError,
 };
+pub use direct_text_generation::{
+    run_direct_text_generation, DirectTextGenerationRequest, DirectTextGenerationResult,
+};
 pub use durable_memory_fs::{
     durable_memory_permission_pattern, is_virtual_memory_path, resolve_durable_memory_root,
     resolve_virtual_memory_path, to_virtual_memory_path, virtual_memory_relative_path,
     DURABLE_MEMORY_VIRTUAL_ROOT, LEGACY_DURABLE_MEMORY_ROOT_ENV, LIME_DURABLE_MEMORY_ROOT_ENV,
+};
+pub use host_managed_generation::{
+    host_managed_generation_session_id, run_host_managed_generation,
+    write_host_managed_generation_status, HostManagedGenerationPlan,
+    HostManagedGenerationRunRequest, HostManagedGenerationRunResult,
+    HOST_MANAGED_GENERATION_SCHEMA, HOST_MANAGED_GENERATION_SOURCE,
+};
+pub use knowledge_builder_skill::{
+    run_knowledge_builder_skill, KnowledgeBuilderSkillRequest, KnowledgeBuilderSkillRunner,
 };
 pub use lime_mcp as mcp;
 pub use lsp_bridge::create_lsp_callback;
@@ -88,7 +112,11 @@ pub use protocol::{
     AgentToolProgressPayload, AgentToolResult, AgentUserInputOp, AgentUserPreferences,
     TextDeltaBatchBoundary,
 };
-pub use protocol_projection::{project_item_runtime, project_runtime_event, project_turn_runtime};
+pub use protocol_projection::{project_item_runtime, project_turn_runtime};
+pub use provider_configuration::{
+    configure_provider_for_session, route_protocol_from_provider_config,
+    ProviderConfigurationRequest,
+};
 pub use provider_continuation_state::{
     ProviderContinuationCapability, ProviderContinuationCapable, ProviderContinuationState,
 };
@@ -113,9 +141,11 @@ pub use runtime_queue::{
     resume_persisted_runtime_queues_on_startup, resume_runtime_queue_if_needed,
     submit_runtime_turn, RuntimeQueueEventEmitter, RuntimeQueueExecutor,
 };
+pub use session_configuration::{
+    build_agent_session_config, AgentSessionConfig, AgentSessionConfigurationRequest,
+};
 pub use session_execution_runtime::{
-    apply_usage_to_cost_state, build_session_execution_runtime, detect_runtime_limit_event,
-    extract_recent_content_id_from_runtime_snapshot, persist_session_recent_access_mode,
+    apply_usage_to_cost_state, detect_runtime_limit_event, persist_session_recent_access_mode,
     persist_session_recent_preferences, persist_session_recent_team_selection,
     SessionExecutionRuntime, SessionExecutionRuntimeAccessMode, SessionExecutionRuntimeCostState,
     SessionExecutionRuntimeLimitEvent, SessionExecutionRuntimeLimitState,
@@ -175,6 +205,13 @@ pub use team_runtime_governor::{
     snapshot_team_runtime_session, TeamRuntimeGovernorSnapshot, TeamRuntimePermit,
 };
 pub use tools::{BrowserAction, BrowserTool, BrowserToolError, BrowserToolResult};
+pub use turn_context_configuration::{
+    agent_turn_approval_policy, agent_turn_context_metadata, agent_turn_sandbox_policy,
+    build_agent_turn_context, insert_agent_turn_metadata, set_agent_turn_output_schema,
+    set_agent_turn_user_visible_input_text, AgentTurnContext, AgentTurnContextConfigurationRequest,
+    AgentTurnContextOverride,
+};
+pub use turn_execution::{run_agent_turn_with_policy, AgentTurnExecutionRequest};
 pub use turn_input_envelope::{
     TurnDiagnosticsSnapshot, TurnExecutionProfile, TurnInputEnvelope, TurnInputEnvelopeBuilder,
     TurnMessageHistorySource, TurnPromptAugmentationStage, TurnPromptAugmentationStageKind,

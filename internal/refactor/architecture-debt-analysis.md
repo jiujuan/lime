@@ -43,7 +43,7 @@ src/lib/api/projectGit.ts                                         # 前端网关
 
 它们不是经典 God object（业务实现已大多下沉 `services` / `local_data_source`），而是**强制中心化的接线层**：任何新方法都必须在这两个 impl 块各加一段，文件只能单调变大。`runtime/tests.rs` 4428 行同理。
 
-**佐证**：`local_data_source.rs` 周边已经长出子模块结构（`local_data_source/agent_apps/`、`automation/`、`knowledge/` 等），说明仓库已有"按 domain 拆模块"的成熟先例，唯独 processor/runtime 的方法注册没有跟上。
+**佐证**：`local_data_source.rs` 周边已经长出子模块结构（`local_data_source/plugins/`、`automation/`、`knowledge/` 等），说明仓库已有"按 domain 拆模块"的成熟先例，唯独 processor/runtime 的方法注册没有跟上。
 
 **结论**：拆 8000 行为 4 个 2000 行文件不解决问题；要改的是**注册模式**——按 domain 把 handler 和 RuntimeCore 方法下放到 `runtime/<domain>.rs` + 注册表/宏接线，让新增方法默认不触碰中心文件。
 
@@ -64,12 +64,12 @@ import { IMAGE_GEN_MODELS, type ImageGenModel } from "@/components/image-gen/typ
 // src/lib/workspace/workbenchWorkflow.ts
 export { useWorkflow } from "@/components/workspace/hooks/useWorkflow";
 // src/lib/navigation/sidebarNav.ts
-import { resolveAgentAppHostFlags } from "@/features/agent-app/featureFlag";
+import { resolvePluginHostFlags } from "@/features/plugin/featureFlag";
 // src/lib/api/agentApps.ts
-import { buildInstalledAppPreview } from "@/features/agent-app/install/installedAppPreview";
+import { buildInstalledAppPreview } from "@/features/plugin/install/installedAppPreview";
 ```
 
-且 `features/agent-app/ui/` 反向 import `components/agent/chat/` 的 UI 组件（如 `ThinkingBlock`）；反方向（components → features）为零。当前没有任何 ESLint / 结构测试约束 import 方向，违例只会增加。
+且 `features/plugin/ui/` 反向 import `components/agent/chat/` 的 UI 组件（如 `ThinkingBlock`）；反方向（components → features）为零。当前没有任何 ESLint / 结构测试约束 import 方向，违例只会增加。
 
 ### C-2 状态无分层（巨型文件的真实成因）
 
@@ -121,7 +121,7 @@ import { buildInstalledAppPreview } from "@/features/agent-app/install/installed
 | agent-runtime-projection | 30 | current，正确模式样板 |
 | agent-ui-contracts | 28 | current 类型契约 |
 | app-server-client | 20 | current |
-| agent-runtime-client | 6 | 仅 `features/agent-app/runtime` 用 |
+| agent-runtime-client | 6 | 仅 `features/plugin/runtime` 用 |
 | agent-runtime-ui | 1 | 几乎未用 |
-| agent-app-runtime | **0** | 零引用，候选下线 |
+| plugin-runtime | **0** | 零引用，候选下线 |
 | lime-cli-npm | 0（外发 CLI） | 保留 |

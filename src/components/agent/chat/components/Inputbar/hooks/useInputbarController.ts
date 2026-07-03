@@ -342,6 +342,7 @@ export function useInputbarController({
     pendingImages,
     pathReferences,
     activeCapability,
+    activePluginSelection,
     knowledgePackSelection,
     activeTools,
     projectId,

@@ -334,7 +334,6 @@ use app_server_protocol::WorkspaceSkillBindingsListParams;
 use app_server_protocol::WorkspaceSkillBindingsListResponse;
 use app_server_protocol::WorkspaceUpdateParams;
 use app_server_protocol::WorkspaceUpdateResponse;
-use lime_agent::initialize_aster_runtime;
 use lime_core::app_paths;
 use lime_core::config::load_config;
 use lime_core::database;
@@ -392,7 +391,7 @@ impl LocalAppDataSource {
         db: DbConnection,
         data_root: impl Into<std::path::PathBuf>,
     ) -> Result<Self, String> {
-        initialize_aster_runtime(db.clone())
+        crate::agent_runtime_registry::initialize_agent_runtime(db.clone())
             .map_err(|error| format!("初始化 App Server Channels Aster runtime 失败: {error}"))?;
         let config = load_config().map_err(|error| error.to_string())?;
         let logs = std::sync::Arc::new(tokio::sync::RwLock::new(

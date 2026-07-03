@@ -65,7 +65,7 @@
 **状态**：**基本完成**（2026-06-17 复核确认；中心文件 domain 化已落地，分 13 刀完成）
 **消除的机制**：238 个 `handle_*` 和 521 个 RuntimeCore fn 必须写进两个中心文件的强制路径——已破除。
 
-**执行轨迹**（git 可查，R-20 first→thirteenth cut）：first cut 把 `processor.rs` 转目录模块并抽 project_git → 逐轮抽 knowledge / skill / workspace / agent_session / gateway+agent_app+automation+media / model / mcp / voice / unified+project+gallery / wechat / file system / log+diagnostics+connect。
+**执行轨迹**（git 可查，R-20 first→thirteenth cut）：first cut 把 `processor.rs` 转目录模块并抽 project_git → 逐轮抽 knowledge / skill / workspace / agent_session / gateway+plugin+automation+media / model / mcp / voice / unified+project+gallery / wechat / file system / log+diagnostics+connect。
 
 **实测结果**：
 
@@ -107,7 +107,7 @@
 ### R-31 偿还存量依赖违例（半轮-1 轮）
 
 **状态**：proposed，依赖 R-30
-**方向**：逐个把违例改为正向依赖——`lib/workspace/workbenchCanvas.ts` 的 re-export 移回 components 层或下沉真正的纯逻辑到 lib；`lib/api/agentApps.ts` 对 `features/agent-app/install` 的依赖改为参数注入或类型契约下沉。每修一处从 baseline 删除一行。
+**方向**：逐个把违例改为正向依赖——`lib/workspace/workbenchCanvas.ts` 的 re-export 移回 components 层或下沉真正的纯逻辑到 lib；`lib/api/agentApps.ts` 对 `features/plugin/install` 的依赖改为参数注入或类型契约下沉。每修一处从 baseline 删除一行。
 
 ### R-32 巨型组件状态分层拆分（N 轮，原 v1 的 R-03/R-06 在此归并）
 
@@ -173,12 +173,12 @@
 
 **退出条件**：dev-bridge 的非 lib/api 消费者归零且有 lint 守卫。
 
-### R-41 packages 收缩：下线零引用的 agent-app-runtime
+### R-41 packages 收缩：下线零引用的 plugin-runtime
 
 **状态**：**完成**（2026-06-17 复核确认已删除）
 **结果**：
 
-- `agent-app-runtime`：已从 `packages/` 删除（复核时目录已不存在）。
+- `plugin-runtime`：已从 `packages/` 删除（复核时目录已不存在）。
 - `agent-runtime-ui`：仍保留（`packages/agent-runtime-ui`），1 处 import（`AgentRunProjectionPanel.tsx`），可在后续轮次评估并回 src，非阻塞。
   **剩余**：仅 `agent-runtime-ui` 的并回评估（低优先，登记后续）。
 

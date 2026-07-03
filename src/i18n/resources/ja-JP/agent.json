@@ -1,4 +1,5 @@
 {
+  "agentChat.imageWorkbenchPreview.tool.generation": "Image Generation",
   "plugin.apps.action.confirmUninstall": "アンインストールを確定",
   "plugin.apps.action.deleteDataUnavailable": "データ削除は未開放",
   "plugin.apps.action.disable": "停止",
@@ -132,6 +133,7 @@
   "plugin.apps.launch.shellLaunched": "{{title}} の独立エントリを起動しました（{{target}}）。",
   "plugin.apps.launch.uiMounted": "{{title}} をマウントしました（{{route}}）。",
   "plugin.apps.launch.workflowCompleted": "{{title}} workflow が完了しました: {{runId}}。",
+  "plugin.apps.launch.workflowRequiresCurrentApi": "{{title}} には App Server Workflow API が必要です。フロントエンドのローカル workflow DSL は退役しました。",
   "plugin.apps.launchTarget.label": "開く場所",
   "plugin.apps.launchTarget.rightSurface": "Claw 右側",
   "plugin.apps.launchTarget.rightSurfaceUnavailable": "配信先の Claw 会話がありません。",
@@ -1271,7 +1273,7 @@
   "agentChat.tokenUsage.promptCache.readWrite": "キャッシュ {{total}}（読み取り {{read}} / 書き込み {{write}}）",
   "agentChat.tokenUsage.promptCache.write": "キャッシュ {{count}}",
   "agentChat.tokenUsage.promptCache.zero": "キャッシュ 0",
-  "agentChat.tokenUsage.total": "合計 {{count}}",
+  "agentChat.tokenUsage.total": "{{count}} Tokens",
   "agentChat.toolCall.actionOverride.memoryAddNote.completed": "メモリ修正を保存しました",
   "agentChat.toolCall.actionOverride.memoryAddNote.failed": "メモリ修正の保存に失敗",
   "agentChat.toolCall.actionOverride.memoryAddNote.running": "メモリ修正を保存中",

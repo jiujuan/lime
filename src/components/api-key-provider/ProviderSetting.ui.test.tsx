@@ -956,8 +956,8 @@ describe("ProviderSetting", () => {
         requireChatReady: true,
       }),
     );
-    expect(container.textContent ?? "").toContain(
-      "当前模型通道返回了计费或额度类错误，请检查该 Provider/模型通道的计费、配额或授权状态，或切换到其他可用模型后重试。",
+    expect(container.textContent ?? "").toMatch(
+      /当前模型通道返回了计费或额度类错误|The current model channel returned a billing or quota error/,
     );
     expect(container.textContent ?? "").not.toContain("Insufficient Balance");
   });

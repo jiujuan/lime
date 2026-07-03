@@ -7,6 +7,32 @@ import {
 import type { ContentPart } from "../types";
 
 describe("messageDisplaySanitizer", () => {
+  it("不应在展示层改写图片命令用户原文", () => {
+    expect(
+      sanitizeMessageTextForDisplay(
+        "@配图 用 Agnes Generate一张深圳夏day午后的城市照片，真实摄影Style",
+        { role: "user" },
+      ),
+    ).toBe("@配图 用 Agnes Generate一张深圳夏day午后的城市照片，真实摄影Style");
+  });
+
+  it("不应在展示层改写图片命令 assistant 文案", () => {
+    expect(
+      sanitizeMessageTextForDisplay(
+        "好啊，先来Generate深圳夏day午后的城市照片，阳光明亮，真实摄影Style。",
+        { role: "assistant" },
+      ),
+    ).toBe("好啊，先来Generate深圳夏day午后的城市照片，阳光明亮，真实摄影Style。");
+  });
+
+  it("不应清洗正常英文展示文本", () => {
+    expect(
+      sanitizeMessageTextForDisplay("Generate landing page style guide", {
+        role: "assistant",
+      }),
+    ).toBe("Generate landing page style guide");
+  });
+
   it("应清理紧邻工具调用的调度自述文本", () => {
     const contentParts: ContentPart[] = [
       {

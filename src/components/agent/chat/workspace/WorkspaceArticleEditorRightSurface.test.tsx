@@ -327,7 +327,6 @@ function renderSurface({
   actionsDisabled = false,
   onActionIntent = vi.fn(),
   onArticleMarkdownChange,
-  onImageSlotIntent,
   onOpenPreviewArtifact = vi.fn(),
   onSelectedObjectChange,
   surfaceArticleWorkspace = articleWorkspaceFixture,
@@ -342,9 +341,6 @@ function renderSurface({
   onOpenPreviewArtifact?: React.ComponentProps<
     typeof WorkspaceArticleEditorRightSurface
   >["onOpenPreviewArtifact"];
-  onImageSlotIntent?: React.ComponentProps<
-    typeof WorkspaceArticleEditorRightSurface
-  >["onImageSlotIntent"];
   onSelectedObjectChange?: React.ComponentProps<
     typeof WorkspaceArticleEditorRightSurface
   >["onSelectedObjectChange"];
@@ -361,7 +357,6 @@ function renderSurface({
         articleWorkspace={surfaceArticleWorkspace}
         onActionIntent={onActionIntent}
         onArticleMarkdownChange={onArticleMarkdownChange}
-        onImageSlotIntent={onImageSlotIntent}
         onOpenPreviewArtifact={onOpenPreviewArtifact}
         onSelectedObjectChange={onSelectedObjectChange}
       />,
@@ -754,8 +749,7 @@ describe("WorkspaceArticleEditorRightSurface", () => {
   });
 
   it("不再把配图规划 metadata 渲染成可点击模板面板", () => {
-    const onImageSlotIntent = vi.fn();
-    const container = renderSurface({ onImageSlotIntent });
+    const container = renderSurface();
     const button = container.querySelector<HTMLButtonElement>(
       '[data-testid="workspace-article-editor-compact-image-slot-generate"][data-slot-id="hero"]',
     );
@@ -769,7 +763,46 @@ describe("WorkspaceArticleEditorRightSurface", () => {
     expect(container.textContent).not.toContain(
       "桌面端内容工厂写作流程图，中文标签",
     );
-    expect(onImageSlotIntent).not.toHaveBeenCalled();
+  });
+
+  it("Article Editor 渲染层不应直接派发正文 shortcode，避免重复触发 @配图", () => {
+    const shortcodeWorkspace: WorkspaceArticleWorkspace = {
+      ...articleWorkspaceFixture,
+      objects: articleWorkspaceFixture.objects.map((item) =>
+        item.ref.kind === "articleDraft"
+          ? {
+              ...item,
+              source: {
+                ...(item.source ?? {}),
+                documentText: [
+                  "# 广州夏天",
+                  "",
+                  "## 花城大道",
+                  "这里是午后街景段落。",
+                  "",
+                  "[@配图 一张广州夏天午后的城市照片，阳光明亮，街边绿树和高楼，真实摄影风格，前景有广州塔珠江新城的花城大道]",
+                ].join("\n"),
+                finalMarkdown: [
+                  "# 广州夏天",
+                  "",
+                  "## 花城大道",
+                  "这里是午后街景段落。",
+                  "",
+                  "[@配图 一张广州夏天午后的城市照片，阳光明亮，街边绿树和高楼，真实摄影风格，前景有广州塔珠江新城的花城大道]",
+                ].join("\n"),
+              },
+            }
+          : item,
+      ),
+    };
+    const onArticleMarkdownChange = vi.fn();
+
+    renderSurface({
+      onArticleMarkdownChange,
+      surfaceArticleWorkspace: shortcodeWorkspace,
+    });
+
+    expect(onArticleMarkdownChange).not.toHaveBeenCalled();
   });
 
   it("点击关联对象只在 Article Editor 内切换，不离开文章编辑器", () => {

@@ -273,7 +273,7 @@ fn read_string_array(value: Option<&Value>) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aster::tools::{PermissionBehavior, Tool, ToolContext};
+    use lime_agent::runtime_facade::{PermissionBehavior, Tool, ToolContext};
     use lime_agent::tools::LimeSkillTool;
     use serde_json::json;
     use tempfile::TempDir;

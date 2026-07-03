@@ -30,8 +30,6 @@ interface WorkspacePluginOrchestrationRailCopy {
   cliLabel: string;
   connectorsLabel: string;
   hooksLabel: string;
-  doneLabel: string;
-  pendingLabel: string;
 }
 
 interface WorkspacePluginOrchestrationRailProps {
@@ -67,52 +65,6 @@ export function WorkspacePluginOrchestrationRail({
       </div>
 
       <div className="workspace-plugin-orchestration-rail-body">
-        {model.steps.length > 0 ? (
-          <div className="workspace-plugin-orchestration-rail-steps">
-            {model.steps.map((step, index) => (
-              <div
-                key={step.id}
-                className="workspace-plugin-orchestration-rail-step"
-                data-testid={`${testIdPrefix}-step`}
-              >
-                <span className="workspace-plugin-orchestration-rail-index">
-                  {index + 1}
-                </span>
-                <span className="min-w-0">
-                  <span className="block truncate text-[12px] font-medium text-[color:var(--lime-text-strong)]">
-                    {step.title}
-                  </span>
-                  <span
-                    className="block truncate text-[11px] text-[color:var(--lime-text-muted)]"
-                    data-testid={`${testIdPrefix}-subagent`}
-                    data-subagent-ref={step.subagent ?? ""}
-                  >
-                    {step.subagent ?? "-"}
-                  </span>
-                  {step.skillRefs.length > 0 ? (
-                    <span
-                      className="block truncate text-[11px] text-[color:var(--lime-text-muted)]"
-                      data-testid={`${testIdPrefix}-skill-ref`}
-                      data-skill-ref={step.skillRefs.join(",")}
-                    >
-                      {step.skillRefs.join(" · ")}
-                    </span>
-                  ) : null}
-                </span>
-                {step.done !== null || step.status ? (
-                  <span className="workspace-plugin-orchestration-rail-status">
-                    {step.done === null
-                      ? step.status
-                      : step.done
-                        ? copy.doneLabel
-                        : copy.pendingLabel}
-                  </span>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        ) : null}
-
         <div className="workspace-plugin-orchestration-rail-chips">
           {model.workflowKey ? (
             <WorkspacePluginOrchestrationChip

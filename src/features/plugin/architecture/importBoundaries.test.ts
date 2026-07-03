@@ -90,6 +90,8 @@ const LEGACY_HOST_DIRECT_IMPORT_PATTERN = new RegExp(
 const LEGACY_HOST_BUILD_LABEL_PATTERN = new RegExp(
   `\\b${["Ta", "uri"].join("")}\\s+(?:build|release)\\b`,
 );
+const HOST_BUILTIN_CONTENT_FACTORY_DEMO_PATTERN =
+  /\b(?:runContentFactoryDemo|content_factory_demo|plugin-run-content-demo|plugin-content-demo-result)\b/;
 
 describe("Plugin v2 import boundaries", () => {
   it("Domain / Shell / Packaging 模块不反向依赖 UI、Desktop Host 或前端命令网关", () => {
@@ -179,6 +181,16 @@ describe("Plugin v2 import boundaries", () => {
       files,
       LEGACY_HOST_BUILD_LABEL_PATTERN,
       "Plugin current 代码不能继续用旧桌面宿主命名 standalone production artifact build/release；旧桌面宿主只允许作为明确的 legacy/deprecated adapter 或 config artifact 语境。",
+    );
+  });
+
+  it("Plugin production code 不恢复宿主内置内容工厂 demo runtime", () => {
+    const files = readPluginProductionSources();
+
+    expectNoForbiddenPattern(
+      files,
+      HOST_BUILTIN_CONTENT_FACTORY_DEMO_PATTERN,
+      "内容工厂必须通过插件包 worker/runtime 运行，不能恢复 Lime 宿主内置 content factory demo。",
     );
   });
 });

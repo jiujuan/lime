@@ -6,6 +6,7 @@ import type { Skill } from "@/lib/api/skills";
 import type { MessagePathReference } from "../../../types";
 import type { InputCapabilitySelection } from "../../../skill-selection/inputCapabilitySelection";
 import type { InputbarSendHandler } from "../inputbarSendPayload";
+import type { InputbarPluginSelection } from "../pluginInputCapability";
 import { useInputbarSend } from "./useInputbarSend";
 
 const { setAgentRuntimeObjectiveMock } = vi.hoisted(() => ({
@@ -23,6 +24,7 @@ interface MountedHarness {
 
 interface HarnessProps {
   activeCapability?: InputCapabilitySelection | null;
+  activePluginSelection?: InputbarPluginSelection | null;
   activeTools?: Record<string, boolean>;
   input?: string;
   onSend: InputbarSendHandler;
@@ -39,6 +41,7 @@ let clearPendingImagesMock: ReturnType<typeof vi.fn>;
 
 function Harness({
   activeCapability = null,
+  activePluginSelection = null,
   activeTools = {},
   input = "",
   onSend,
@@ -51,6 +54,7 @@ function Harness({
     pendingImages: [],
     pathReferences,
     activeCapability,
+    activePluginSelection,
     knowledgePackSelection: null,
     activeTools,
     projectId,
@@ -156,6 +160,32 @@ describe("useInputbarSend", () => {
       sendOptions: undefined,
     });
     expect(clearPendingImagesMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("插件 chip 激活但输入未含触发词时应补齐插件触发词发送", async () => {
+    const onSend = vi.fn().mockResolvedValue(true);
+    renderHarness({
+      activePluginSelection: {
+        plugin: {
+          pluginId: "content-factory-app",
+          displayName: "写文章",
+          trigger: "@写文章",
+        },
+        trigger: "@写文章",
+        text: "帮我整理项目资料",
+        preserveInput: true,
+      },
+      input: "帮我整理项目资料",
+      onSend,
+    });
+
+    await send();
+
+    expect(onSend).toHaveBeenCalledWith({
+      images: undefined,
+      textOverride: "@写文章 帮我整理项目资料",
+      sendOptions: undefined,
+    });
   });
 
   it("只有路径引用时仍应发送路径占位文本并保留 metadata", async () => {

@@ -3,7 +3,7 @@
 //! 该模块沉淀“请求级工具策略（例如联网搜索）”与统一流式执行逻辑，
 //! 供 aster_agent_cmd、scheduler、gateway 等入口复用同一条执行主链。
 
-mod auto_compaction_projection;
+pub(crate) mod auto_compaction_projection;
 mod policy_config;
 mod reply_retry;
 mod runtime_status;
@@ -17,6 +17,7 @@ mod web_search_preflight;
 use self::auto_compaction_projection::AutoCompactionProjectionState;
 #[cfg(test)]
 use self::auto_compaction_projection::{
+    AutoCompactionEventProjection, AutoCompactionSystemNotificationKind,
     ASTER_AUTO_COMPACTION_COMPLETE_TEXT, ASTER_AUTO_COMPACTION_DISABLED_TEXT,
     ASTER_AUTO_COMPACTION_THINKING_TEXT,
 };
@@ -55,13 +56,14 @@ pub use self::web_search_preflight::{
     execute_web_search_preflight_if_needed, merge_system_prompt_with_web_search_preflight_context,
     PreflightToolExecution, WebSearchPreflightRequest,
 };
+use crate::aster_runtime_projection::{
+    project_aster_auto_compaction_event, project_aster_runtime_event,
+};
 use crate::protocol::{AgentEvent as RuntimeAgentEvent, TextDeltaBatchBoundary};
-use crate::protocol_projection::project_runtime_event;
+use crate::turn_context_configuration::to_agent_turn_context;
 use crate::write_artifact_events::WriteArtifactEventEmitter;
 use aster::agents::{Agent, AgentEvent as AsterAgentEvent};
 use aster::conversation::message::Message;
-#[cfg(test)]
-use aster::conversation::message::SystemNotificationType;
 use aster::session::SessionManager;
 use futures::StreamExt;
 #[cfg(test)]
@@ -345,9 +347,9 @@ where
                     continue;
                 }
 
-                let runtime_events = auto_compaction_projection
-                    .project_event(&agent_event)
-                    .unwrap_or_else(|| project_runtime_event(agent_event));
+                let runtime_events = project_aster_auto_compaction_event(&agent_event)
+                    .and_then(|event| auto_compaction_projection.project_event(&event))
+                    .unwrap_or_else(|| project_aster_runtime_event(agent_event));
                 for mut runtime_event in runtime_events {
                     let extra_events = write_artifact_emitter.process_event(&mut runtime_event);
                     for extra_event in &extra_events {
@@ -613,7 +615,10 @@ where
                 message_text: &message_text,
                 working_directory,
                 cancel_token: cancel_token.clone(),
-                turn_context: session_config.turn_context.clone(),
+                turn_context: session_config
+                    .turn_context
+                    .clone()
+                    .map(to_agent_turn_context),
                 policy: request_tool_policy,
             },
             &mut web_search_tracker,
@@ -2197,31 +2202,27 @@ mod tests {
     fn auto_compaction_projection_swallows_aster_compaction_system_notifications() {
         let mut state = AutoCompactionProjectionState;
 
-        let start_events = state.project_event(&AsterAgentEvent::Message(
-            Message::assistant().with_system_notification(
-                SystemNotificationType::InlineMessage,
-                "Exceeded auto-compact threshold of 80%. Performing auto-compaction...",
-            ),
-        ));
+        let start_events =
+            state.project_event(&AutoCompactionEventProjection::SystemNotification {
+                notification_type: AutoCompactionSystemNotificationKind::InlineMessage,
+                text: "Exceeded auto-compact threshold of 80%. Performing auto-compaction..."
+                    .to_string(),
+            });
         assert!(matches!(start_events, Some(events) if events.is_empty()));
 
         let thinking_events = state
-            .project_event(&AsterAgentEvent::Message(
-                Message::assistant().with_system_notification(
-                    SystemNotificationType::ThinkingMessage,
-                    ASTER_AUTO_COMPACTION_THINKING_TEXT,
-                ),
-            ))
+            .project_event(&AutoCompactionEventProjection::SystemNotification {
+                notification_type: AutoCompactionSystemNotificationKind::ThinkingMessage,
+                text: ASTER_AUTO_COMPACTION_THINKING_TEXT.to_string(),
+            })
             .expect("应识别自动压缩 thinking 通知");
         assert!(thinking_events.is_empty());
 
         let complete_events = state
-            .project_event(&AsterAgentEvent::Message(
-                Message::assistant().with_system_notification(
-                    SystemNotificationType::InlineMessage,
-                    ASTER_AUTO_COMPACTION_COMPLETE_TEXT,
-                ),
-            ))
+            .project_event(&AutoCompactionEventProjection::SystemNotification {
+                notification_type: AutoCompactionSystemNotificationKind::InlineMessage,
+                text: ASTER_AUTO_COMPACTION_COMPLETE_TEXT.to_string(),
+            })
             .expect("应识别自动压缩完成通知");
         assert!(complete_events.is_empty());
     }
@@ -2229,17 +2230,16 @@ mod tests {
     #[test]
     fn auto_compaction_projection_surfaces_compaction_failure_as_error() {
         let mut state = AutoCompactionProjectionState;
-        let _ = state.project_event(&AsterAgentEvent::Message(
-            Message::assistant().with_system_notification(
-                SystemNotificationType::InlineMessage,
-                "Exceeded auto-compact threshold of 80%. Performing auto-compaction...",
-            ),
-        ));
+        let _ = state.project_event(&AutoCompactionEventProjection::SystemNotification {
+            notification_type: AutoCompactionSystemNotificationKind::InlineMessage,
+            text: "Exceeded auto-compact threshold of 80%. Performing auto-compaction..."
+                .to_string(),
+        });
 
         let failure_events = state
-            .project_event(&AsterAgentEvent::Message(Message::assistant().with_text(
-                "Ran into this error trying to compact: context window exceeded.\n\nPlease try again or create a new session",
-            )))
+            .project_event(&AutoCompactionEventProjection::Text {
+                text: "Ran into this error trying to compact: context window exceeded.\n\nPlease try again or create a new session".to_string(),
+            })
             .expect("应识别自动压缩失败事件");
 
         assert_eq!(failure_events.len(), 1);
@@ -2259,12 +2259,10 @@ mod tests {
         let mut state = AutoCompactionProjectionState;
 
         let events = state
-            .project_event(&AsterAgentEvent::Message(
-                Message::assistant().with_system_notification(
-                    SystemNotificationType::InlineMessage,
-                    ASTER_AUTO_COMPACTION_DISABLED_TEXT,
-                ),
-            ))
+            .project_event(&AutoCompactionEventProjection::SystemNotification {
+                notification_type: AutoCompactionSystemNotificationKind::InlineMessage,
+                text: ASTER_AUTO_COMPACTION_DISABLED_TEXT.to_string(),
+            })
             .expect("应识别自动压缩禁用后的上下文上限提示");
 
         assert_eq!(events.len(), 1);

@@ -9,11 +9,11 @@ Lime 现在最容易掉进去的坑，不是不会写功能。
 
 恰恰相反，是功能越来越容易被写出来。
 
-一个 Agent App、一条 App Server method、一个前端入口、一个 runtime metadata 字段、一个 Harness 面板，看起来都可以让 AI 很快生成。但真正消耗时间的地方不在这里。
+一个 Plugin、一条 App Server method、一个前端入口、一个 runtime metadata 字段、一个 Harness 面板，看起来都可以让 AI 很快生成。但真正消耗时间的地方不在这里。
 
 真正消耗时间的是：我们怎么知道这次改动没有把 Lime 悄悄改坏？
 
-尤其 Lime 不是一个普通网页。它是本地优先的 AI Agent 桌面工作台，里面有 Electron Desktop Host、App Server JSON-RPC、RuntimeCore、Workspace、Skills、MCP、Evidence Pack、Agent App、GUI smoke、Playwright、qcloop、release evidence。
+尤其 Lime 不是一个普通网页。它是本地优先的 AI Agent 桌面工作台，里面有 Electron Desktop Host、App Server JSON-RPC、RuntimeCore、Workspace、Skills、MCP、Evidence Pack、Plugin、GUI smoke、Playwright、qcloop、release evidence。
 
 任何一个功能只在页面上“看起来能点”，都不等于它真的进入了 Lime 的 current 主链。
 
@@ -81,7 +81,7 @@ GUI 仍然重要。Lime 是桌面产品，不能只用 lint、typecheck、单测
 
 **我要固化一条新的 Happy Path。**
 
-比如新加一个 Agent App 安装能力，Happy Path 不是“页面上多一个按钮”。它至少应该说清楚：
+比如新加一个 Plugin 安装能力，Happy Path 不是“页面上多一个按钮”。它至少应该说清楚：
 
 - 用户从哪里触发
 - 前端调用哪个 `src/lib/api/*` 网关

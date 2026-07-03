@@ -1,4 +1,4 @@
-use aster::session::{TurnContextOverride, TurnOutputSchemaSource};
+use agent_protocol::turn_context::{TurnContextOverride, TurnOutputSchemaSource};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
@@ -527,7 +527,7 @@ mod tests {
     use crate::provider_continuation_state::{
         ProviderContinuationCapability, ProviderContinuationState,
     };
-    use aster::session::TurnOutputSchemaSource;
+    use agent_protocol::turn_context::TurnOutputSchemaSource;
     use serde_json::json;
 
     #[test]

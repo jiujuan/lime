@@ -462,7 +462,11 @@ fn notification_event_types(messages: &[Value]) -> Vec<&str> {
     messages
         .iter()
         .filter(|message| message.get("method") == Some(&json!(METHOD_AGENT_SESSION_EVENT)))
-        .filter_map(|message| message.pointer("/params/event/type").and_then(Value::as_str))
+        .filter_map(|message| {
+            message
+                .pointer("/params/event/type")
+                .and_then(Value::as_str)
+        })
         .collect()
 }
 

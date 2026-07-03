@@ -22,8 +22,15 @@ import {
 } from "./claw-chat-current-fixture-rpc.mjs";
 import { assert, sanitizeJson, sleep } from "./claw-chat-current-fixture-utils.mjs";
 
-export async function createFixtureSession(page, workspace, requestLog) {
+export async function createFixtureSession(
+  page,
+  workspace,
+  requestLog,
+  preferences = {},
+) {
   const { workspaceId, rootPath } = workspace;
+  const provider = preferences.provider || FIXTURE_PROVIDER;
+  const model = preferences.model || FIXTURE_MODEL;
   assert(rootPath, "workspace/default/ensure 未返回可用 rootPath");
   const session = await invokeAppServerFromPage(
     page,
@@ -60,9 +67,9 @@ export async function createFixtureSession(page, workspace, requestLog) {
     {
       sessionId: SESSION_ID,
       title: SESSION_TITLE,
-      providerSelector: FIXTURE_PROVIDER,
-      providerName: FIXTURE_PROVIDER,
-      modelName: FIXTURE_MODEL,
+      providerSelector: provider,
+      providerName: provider,
+      modelName: model,
       executionStrategy: "react",
       recentAccessMode: "full-access",
       recentPreferences: {

@@ -196,6 +196,11 @@ async fn export_evidence_summarizes_workflow_audit_jsonl_metadata_only() {
         appended.is_empty(),
         "workflow audit events must not enter regular event output: {appended:?}"
     );
+    let compaction = event_log_writer
+        .compact_session_workflow_audit_events("sess_workflow_evidence", 1)
+        .expect("compact workflow audit");
+    assert_eq!(compaction.archived_count, 2);
+    assert_eq!(compaction.retained_count, 1);
 
     let audit_records = event_log_writer
         .read_session_workflow_audit_events("sess_workflow_evidence")

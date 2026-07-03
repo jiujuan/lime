@@ -712,6 +712,8 @@ pub(super) fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<AgentSessionRuntimeEventAppendResponse>(
             "AgentSessionRuntimeEventAppendResponse",
         ),
+        typed_schema::<WorkflowReadParams>("WorkflowReadParams"),
+        typed_schema::<WorkflowReadResponse>("WorkflowReadResponse"),
         typed_schema::<AgentSessionEventParams>("AgentSessionEventParams"),
         typed_schema::<BusinessObjectRef>("BusinessObjectRef"),
         typed_schema::<AgentSessionStatus>("AgentSessionStatus"),

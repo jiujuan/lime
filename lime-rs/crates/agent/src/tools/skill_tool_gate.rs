@@ -1436,7 +1436,7 @@ mod tests {
                 &create_context(session_id),
             )
             .await
-            .expect("agent app text args should still avoid nested skill execution");
+            .expect("plugin text args should still avoid nested skill execution");
 
         clear_skill_tool_session_access(session_id);
 

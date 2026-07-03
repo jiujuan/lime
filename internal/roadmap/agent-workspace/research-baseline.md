@@ -9,7 +9,7 @@
 | 来源 | 已读证据 | 对 Agent Workspace 评测的启发 |
 | --- | --- | --- |
 | OpenAI Codex 本地源码：`/Users/coso/Documents/dev/rust/codex` | `codex-rs/app-server/README.md`、`codex-rs/protocol/README.md`、app-server / tui / sandbox / approval / thread / command / search 文件索引 | Codex 的桌面/IDE级 Agent 能力围绕 thread、turn、item、stream notification、approval、sandbox、command、fs、diff、skills、thread restore 建模 |
-| CodexMonitor：`/Users/coso/Documents/dev/rust/CodexMonitor` | `README.md`、`docs/app-server-events.md` | 可作为桌面 Agent App 参考：workspace/thread、queue vs steer、composer controls、reasoning/tool/diff rendering、approval prompts、git/github、file tree、terminal dock |
+| CodexMonitor：`/Users/coso/Documents/dev/rust/CodexMonitor` | `README.md`、`docs/app-server-events.md` | 可作为桌面 Plugin 参考：workspace/thread、queue vs steer、composer controls、reasoning/tool/diff rendering、approval prompts、git/github、file tree、terminal dock |
 | Claude Code 本地源码：`/Users/coso/Documents/dev/js/claudecode` | `src/tools/MCPTool/UI.tsx`、`src/tasks/pillLabel.ts`、tools / tasks 文件索引 | 工具 UI 应截断输入、展示 progress、大输出 token warning、空输出、图片占位、dominant text payload；后台任务 pill 只在 needs-input / plan-ready 抢注意力 |
 | AgentUI 标准：`/Users/coso/Documents/dev/ai/limecloud/agentui` | `README.md`、`docs/en/reference/source-index.md`、`flow-and-taxonomy.md`、`ecosystem-boundaries.md` | Agent UI 的边界是把 runtime facts 投影为 conversation、process、task、artifact、evidence、session surfaces，不拥有 runtime truth |
 | AG-UI：`/Users/coso/Documents/dev/js/ag-ui` 与 Context7 `/ag-ui-protocol/ag-ui` | README、Dojo、Context7 event docs | AG-UI 标准事件包括 run lifecycle、text、thinking、tool、state snapshot/delta、messages snapshot、error；前端要处理 shared state 和 tool args/result lifecycle |
@@ -71,7 +71,7 @@
 | Anthropic Claude Code Subagents | https://docs.anthropic.com/en/docs/claude-code/sub-agents |
 | OpenAI Codex App | https://developers.openai.com/codex/app |
 | OpenAI Codex App Features | https://developers.openai.com/codex/app/features |
-| OpenAI Codex Agent approvals & security | https://developers.openai.com/codex/agent-approvals-security |
+| OpenAI Codex Agent approvals & security | https://developers.openai.com/codex/pluginrovals-security |
 | AG-UI overview | https://docs.ag-ui.com/introduction |
 | AG-UI events | https://docs.ag-ui.com/concepts/events |
 | AG-UI tools / HITL | https://docs.ag-ui.com/concepts/tools |

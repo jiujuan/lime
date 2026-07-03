@@ -8,7 +8,7 @@
 
 ## 背景
 
-当前 Lime 已有 Agent Chat、Skill Catalog、ServiceSkill、Memory、Workflow 和 Agent App 平台能力，但用户仍需要理解底层能力名、工具名或命令入口。专家功能把这些能力重新包装成面向任务和角色的入口，让用户先回答“我需要哪位专家帮我”，再由系统完成 prompt、技能和工作流绑定。
+当前 Lime 已有 Agent Chat、Skill Catalog、ServiceSkill、Memory、Workflow 和 Plugin 平台能力，但用户仍需要理解底层能力名、工具名或命令入口。专家功能把这些能力重新包装成面向任务和角色的入口，让用户先回答“我需要哪位专家帮我”，再由系统完成 prompt、技能和工作流绑定。
 
 截图参考的关键体验包括：
 

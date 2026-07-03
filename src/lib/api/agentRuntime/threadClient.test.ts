@@ -3615,7 +3615,22 @@ describe("agentRuntime threadClient", () => {
         },
       },
     });
-    expect(workflowRunPayload).toBeNull();
+    expect(workflowRunPayload).toMatchObject({
+      type: "runtime_status",
+      runtime_event_type: "workflow.run.started",
+      workflow_run_id: "turn-1:content_article_generate:workflow",
+      workflow_key: "content_article_workflow",
+      status: {
+        metadata: {
+          source: "workflow_read_model_refresh",
+          visibility: "diagnostics",
+          agentui: {
+            status_kind: "workflow_read_model_refresh",
+          },
+        },
+      },
+    });
+    expect(workflowRunPayload).not.toHaveProperty("item");
 
     const workflowStepProgressPayload = projectAppServerAgentEventPayload({
       method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
@@ -3644,7 +3659,14 @@ describe("agentRuntime threadClient", () => {
         },
       },
     });
-    expect(workflowStepProgressPayload).toBeNull();
+    expect(workflowStepProgressPayload).toMatchObject({
+      type: "runtime_status",
+      runtime_event_type: "workflow.step.progress",
+      workflow_run_id: "turn-1:content_article_generate:workflow",
+      workflow_key: "content_article_workflow",
+      step_id: "research",
+    });
+    expect(workflowStepProgressPayload).not.toHaveProperty("item");
 
     const workflowStepCompletedPayload = projectAppServerAgentEventPayload({
       method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
@@ -3668,7 +3690,14 @@ describe("agentRuntime threadClient", () => {
         },
       },
     });
-    expect(workflowStepCompletedPayload).toBeNull();
+    expect(workflowStepCompletedPayload).toMatchObject({
+      type: "runtime_status",
+      runtime_event_type: "workflow.step.completed",
+      workflow_run_id: "turn-1:content_article_generate:workflow",
+      workflow_key: "content_article_workflow",
+      step_id: "research",
+    });
+    expect(workflowStepCompletedPayload).not.toHaveProperty("item");
 
     expect(
       projectAppServerAgentEventPayload({

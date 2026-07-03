@@ -86,7 +86,7 @@ flowchart TB
     subgraph AppLayer["独立 App"]
         A["Lime Desktop"]
         B["content-studio"]
-        C["Agent App Shell"]
+        C["Plugin Shell"]
         D["未来垂直 App"]
     end
 

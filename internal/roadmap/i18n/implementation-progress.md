@@ -280,7 +280,7 @@
 
 本轮完成：
 
-- 新增 `scripts/i18n/i18n-app-metadata-workflow-report.ts` 与测试 `scripts/i18n/i18n-app-metadata-workflow-report.test.ts`，把 `package.json`、`lime-rs/Cargo.toml`、`forge.config.mjs` 与 `lime-rs/capabilities/agent-app-shell.json` 的 app / installer 元数据事实源做成可重复 inventory 报告。
+- 新增 `scripts/i18n/i18n-app-metadata-workflow-report.ts` 与测试 `scripts/i18n/i18n-app-metadata-workflow-report.test.ts`，把 `package.json`、`lime-rs/Cargo.toml`、`forge.config.mjs` 与 `lime-rs/capabilities/plugin-shell.json` 的 app / installer 元数据事实源做成可重复 inventory 报告。
 - 通过 `npm run i18n:app-metadata-report -- --format json --output "internal/roadmap/i18n/evidence/app-metadata-workflow-inventory.json"` 落盘库存报告，确认当前这些元数据仍是单语事实源，没有独立 installer 翻译工作流。
 - 新增 `internal/roadmap/i18n/app-metadata-workflow-evaluation.md`，把 installer / app metadata 的边界判断、建议工作流和重新评估条件写成可引用的 roadmap 工件。
 - 报告结论保持不变：app / installer 元数据现在只有单一文本事实源，没有 `zh-CN / en-US` 之类的专门翻译链路；如果后续要做，必须先定义 source locale、metadata ownership 和发布约束，再补 workflow。
@@ -825,7 +825,7 @@ benchmark 摘要：
 - `npm run i18n:check` 通过。
 - `npm run typecheck` 通过。
 - `git diff --check` 通过。
-- `npm run verify:local` 已重新跑到 Rust 单测阶段，但当前工作区仍有 4 个与本刀无关的 Rust 失败：`commands::aster_agent_cmd::tool_runtime::connector_tools::tests::agent_app_connector_fixture_executes_host_managed_mutation`、`commands::skill_cmd::tests::test_rename_user_local_skill_dir_moves_skill_directory`、`commands::skill_cmd::tests::test_replace_user_local_skill_package_replaces_existing_tree`、`dev_bridge::dispatcher::tests::skill_execution_catalog_commands_are_bridged`；这些失败不来自本次 i18n 资源修复，暂不在本刀扩大写集。
+- `npm run verify:local` 已重新跑到 Rust 单测阶段，但当前工作区仍有 4 个与本刀无关的 Rust 失败：`commands::aster_agent_cmd::tool_runtime::connector_tools::tests::plugin_connector_fixture_executes_host_managed_mutation`、`commands::skill_cmd::tests::test_rename_user_local_skill_dir_moves_skill_directory`、`commands::skill_cmd::tests::test_replace_user_local_skill_package_replaces_existing_tree`、`dev_bridge::dispatcher::tests::skill_execution_catalog_commands_are_bridged`；这些失败不来自本次 i18n 资源修复，暂不在本刀扩大写集。
 
 ## 2026-05-26：P2 media task content / ASR language 边界回归
 
@@ -970,13 +970,13 @@ benchmark 摘要：
 
 - `npm run i18n:patch-retirement-gate:json -- --output "internal/roadmap/i18n/evidence/patch-retirement-gate-report.json" --patch-report ".lime/i18n/patch-metrics-report.json" --legacy-report ".lime/governance/legacy-surface-report.json"` 通过。
 - `npm run i18n:patch-retirement-gate -- --check --format json --patch-report ".lime/i18n/patch-metrics-report.json" --legacy-report ".lime/governance/legacy-surface-report.json"` 通过。
-- 本轮观察到 `verify:gui-smoke` 进程已自然退出，`.lime/locks/gui-smoke.lock/owner.json` 已清理；同时 `code-runtime-fixture-smoke`、`runtime-approval-sandbox-smoke`、`agent-apps-smoke` 与 `at-command-registry-e2e` 产物均为通过状态。
+- 本轮观察到 `verify:gui-smoke` 进程已自然退出，`.lime/locks/gui-smoke.lock/owner.json` 已清理；同时 `code-runtime-fixture-smoke`、`runtime-approval-sandbox-smoke`、`plugins-smoke` 与 `at-command-registry-e2e` 产物均为通过状态。
 
 ## 2026-05-27：P3/P4 GUI smoke Patch gate 复验
 
 本轮继续完成：
 
-- 复用已运行的 headless Tauri 环境执行 `npm run verify:gui-smoke -- --reuse-running`，覆盖 DevBridge、workspace ready、browser runtime、site adapters、code runtime 页面级 smoke、code runtime fixture、approval sandbox、@ command registry、Agent Apps、Knowledge GUI 与 design canvas。
+- 复用已运行的 headless Tauri 环境执行 `npm run verify:gui-smoke -- --reuse-running`，覆盖 DevBridge、workspace ready、browser runtime、site adapters、code runtime 页面级 smoke、code runtime fixture、approval sandbox、@ command registry、Plugins、Knowledge GUI 与 design canvas。
 - GUI smoke 刷新的 `.lime/i18n/patch-metrics-report.json` 继续显示 `status=no-hit`、`retirementCandidate=true`、`totalRuns=10`、`totalMatchedSegments=0`、`totalReplacedNodes=0`。
 - GUI smoke 刷新的 `.lime/governance/legacy-surface-report.json` 继续显示 `classificationDriftCandidates=[]`、`violations=[]`、`zeroReferenceCandidates=[]`。
 - 已重新落盘 `internal/roadmap/i18n/evidence/patch-retirement-gate-report.json`；当前 `retirementReady=true`、`gateIssues=[]`、`advisoryIssues=[]`。
@@ -1017,7 +1017,7 @@ benchmark 摘要：
 本轮继续完成：
 
 - `scripts/quality-task-planner.mjs` 将发布材料 / 官网文档 / 帮助文档事实源变更映射到 `i18n:release-docs-report:json` 推荐命令；docs-only 变更仍跳过代码校验，但会保留 evidence 刷新建议。
-- installer / app metadata 相关的 `package.json`、`lime-rs/Cargo.toml`、`forge.config.mjs` 与 `agent-app-shell.json` 变更现在会推荐刷新 `app-metadata-workflow-inventory.json`。
+- installer / app metadata 相关的 `package.json`、`lime-rs/Cargo.toml`、`forge.config.mjs` 与 `plugin-shell.json` 变更现在会推荐刷新 `app-metadata-workflow-inventory.json`。
 - RTL 方向基础与 readiness inventory 审计过的设置页、侧栏、Workspace、弹窗和 Knowledge 主路径 surface 变更，会推荐刷新 `rtl-readiness-inventory.json`；布局敏感 surface 同时推荐 `npm run i18n:rtl-smoke`。
 - `scripts/local-ci.mjs` 调整 docs-only 摘要输出顺序，确保 docs-only 仍跳过本地代码校验，但不会吞掉 P4 evidence 推荐命令。
 

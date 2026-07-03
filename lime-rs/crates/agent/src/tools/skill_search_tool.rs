@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::agent_tools::catalog::SKILL_SEARCH_TOOL_NAME;
+use crate::runtime_facade::current_agent_turn_context;
 use aster::tools::{PermissionCheckResult, Tool, ToolContext, ToolError, ToolResult};
 use async_trait::async_trait;
 use lime_skills::{
@@ -129,7 +130,7 @@ fn parse_input(params: Value) -> Result<ParsedSkillSearchInput, ToolError> {
 }
 
 fn resolve_skill_search_workspace(context: &ToolContext) -> SkillSearchWorkspace {
-    let turn_context = aster::session_context::current_turn_context();
+    let turn_context = current_agent_turn_context();
     let metadata = turn_context
         .as_ref()
         .map(|turn_context| &turn_context.metadata);
@@ -276,7 +277,8 @@ fn skill_search_metadata(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aster::session::TurnContextOverride;
+    use crate::runtime_facade::with_agent_turn_context;
+    use crate::AgentTurnContext;
     use tempfile::TempDir;
 
     #[tokio::test]
@@ -337,15 +339,15 @@ mod tests {
             "uniquetranslateprobe 中英翻译",
         );
         let context = ToolContext::new(nested);
-        let turn_context = TurnContextOverride {
+        let turn_context = AgentTurnContext {
             metadata: HashMap::from([(
                 "project_root".to_string(),
                 json!(project.path().display().to_string()),
             )]),
-            ..TurnContextOverride::default()
+            ..AgentTurnContext::default()
         };
 
-        let result = aster::session_context::with_turn_context(Some(turn_context), async {
+        let result = with_agent_turn_context(Some(turn_context), async {
             SkillSearchTool
                 .execute(json!({ "query": "翻译" }), &context)
                 .await

@@ -4,7 +4,7 @@ use lime_core::database::DbConnection;
 use std::time::Instant;
 
 use super::session_store_runtime_projection::{
-    apply_aster_runtime_snapshot, apply_runtime_usage_fallback_to_latest_assistant_message,
+    apply_runtime_snapshot, apply_runtime_usage_fallback_to_latest_assistant_message,
 };
 use super::session_store_subagent_context::{
     load_child_subagent_sessions, load_subagent_parent_context,
@@ -13,8 +13,12 @@ use super::session_store_subagent_context::{
 };
 use super::session_store_types::SessionDetail;
 use super::{get_session_sync_with_history_page, resolve_session_provider_selector};
+use crate::aster_runtime_projection::{
+    project_aster_message, project_aster_runtime_snapshot,
+    project_aster_session_execution_runtime_session,
+    project_aster_session_execution_runtime_snapshot, project_aster_session_usage,
+};
 use crate::aster_runtime_support::load_aster_runtime_snapshot;
-use crate::protocol_projection::project_message;
 use crate::session_execution_runtime::{
     build_session_execution_runtime, reconcile_session_execution_runtime_permission_fallback,
 };
@@ -39,7 +43,7 @@ pub(super) fn apply_current_runtime_conversation(
         .messages()
         .iter()
         .filter(|message| message.is_user_visible())
-        .map(project_message)
+        .map(project_aster_message)
         .collect::<Vec<_>>();
 
     if let Some(limit) = history_limit {
@@ -191,23 +195,33 @@ pub async fn get_runtime_session_detail_with_history_page(
 
     let usage_fallback_started_at = Instant::now();
     if let Some(session) = session.as_ref() {
-        apply_runtime_usage_fallback_to_latest_assistant_message(&mut detail.messages, session);
+        apply_runtime_usage_fallback_to_latest_assistant_message(
+            &mut detail.messages,
+            project_aster_session_usage(session),
+        );
     }
     let usage_fallback_ms = usage_fallback_started_at.elapsed().as_millis();
 
     let execution_runtime_started_at = Instant::now();
+    let execution_runtime_session = session
+        .as_ref()
+        .map(project_aster_session_execution_runtime_session);
+    let execution_runtime_snapshot = runtime_snapshot
+        .as_ref()
+        .map(project_aster_session_execution_runtime_snapshot);
     detail.execution_runtime = build_session_execution_runtime(
         session_id,
-        session.as_ref(),
+        execution_runtime_session.as_ref(),
         detail.execution_strategy.clone(),
-        runtime_snapshot.as_ref(),
+        execution_runtime_snapshot.as_ref(),
         session.as_ref().and_then(resolve_session_provider_selector),
     );
     let execution_runtime_ms = execution_runtime_started_at.elapsed().as_millis();
 
     let apply_snapshot_started_at = Instant::now();
     if let Some(snapshot) = runtime_snapshot.as_ref() {
-        apply_aster_runtime_snapshot(&mut detail, snapshot);
+        let projected_snapshot = project_aster_runtime_snapshot(snapshot);
+        apply_runtime_snapshot(&mut detail, &projected_snapshot);
     }
     if let Some(runtime) = detail.execution_runtime.as_mut() {
         reconcile_session_execution_runtime_permission_fallback(

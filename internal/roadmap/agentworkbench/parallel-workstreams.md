@@ -31,7 +31,7 @@ git status --short
 2. Runtime 事实与 scope ids。
 3. ExecutionGraph / Subagents 投影。
 4. Handoff / review / worker notification。
-5. 与 Agent App / Content Studio 的采用边界。
+5. 与 Plugin / Content Studio 的采用边界。
 6. Conformance fixture。
 7. current / compat / deprecated / dead。
 
@@ -65,10 +65,10 @@ git status --short
 
 | 项 | 内容 |
 | --- | --- |
-| 主目标 | 把 Workbench 标准落到 Content Studio 和未来 Agent Apps 的接入路径。 |
+| 主目标 | 把 Workbench 标准落到 Content Studio 和未来 Plugins 的接入路径。 |
 | 推荐写集 | `docs/tutorials/content-studio.md`、`docs/profiles/content-studio.md`、`docs/quickstart/product-app.md`。 |
 | 暂不触碰 | `content-studio` 生产代码。 |
-| 依赖 | Host Provider Runtime PRD、Agent App runtime roadmap。 |
+| 依赖 | Host Provider Runtime PRD、Plugin runtime roadmap。 |
 | 验收 | 产品应用只提交业务 context 和 callbacks，不传 Provider key、不读 App Server DB、不自建 process component。 |
 
 ## Workstream E：导航 / 构建 / 发布集成

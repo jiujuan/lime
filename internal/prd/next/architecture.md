@@ -8,7 +8,7 @@
 1. 后端事实源只有一条：App Server JSON-RPC 语义 + RuntimeCore + ExecutionBackend。
 2. 前端复用只复用 projection、ViewModel 和 UI primitives，不复用 Claw 整页 shell。
 3. HostBridge 只负责宿主能力和 sidecar 生命周期，不承接 runtime 业务逻辑。
-4. Agent Apps、独立 App、移动 App 和微信小程序只通过 client / gateway / protocol / capability 消费 runtime。
+4. Plugins、独立 App、移动 App 和微信小程序只通过 client / gateway / protocol / capability 消费 runtime。
 5. 服务端模式复用 RuntimeCore facts，不发明第二套 session / turn / event。
 6. Sandbox-first：客户端和服务端都必须通过 permission profile、sandbox manager、approval / escalation、exec policy 和 audit 执行工具。
 7. 客户端和服务端的基础设施能力必须分层隔离：缓存、文件、数据库、对象存储、队列、容器调度、密钥和观测都走 ports / adapters，不在 RuntimeCore 写死平台实现。
@@ -21,7 +21,7 @@
 flowchart TB
     subgraph ProductShells["产品壳 / Host Shells"]
         Claw["Claw / Lime Desktop<br/>旗舰 Agent 工作台"]
-        AgentApps["Agent Apps<br/>垂直任务 App"]
+        Plugins["Plugins<br/>垂直任务 App"]
         ContentStudio["content-studio<br/>内容业务 App"]
         FutureApps["未来独立 App"]
         Mobile["移动 App<br/>审批 / 查看 / 轻量继续任务"]
@@ -108,7 +108,7 @@ flowchart TB
     end
 
     Claw --> ShellAdapters
-    AgentApps --> ShellAdapters
+    Plugins --> ShellAdapters
     ContentStudio --> ShellAdapters
     FutureApps --> ShellAdapters
     Mobile --> ShellAdapters

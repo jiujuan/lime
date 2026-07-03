@@ -31,6 +31,7 @@ import {
   createTempRuntimeEnv,
   LOCAL_IMAGE_SERVER_API_KEY,
   startImageProviderFixtureServer,
+  startTextProviderFixtureServer,
 } from "./claw-chat-current-fixture-backend-file.mjs";
 import {
   sanitizeBackendLedgerForEvidence,
@@ -41,6 +42,7 @@ import {
   clearInvokeBuffers,
   ensureDefaultWorkspace,
   ensureFixtureImageProvider,
+  ensureFixtureTextProvider,
   initializeAppServer,
   invokeAppServerFromPage,
   readTraceMessages,
@@ -383,6 +385,11 @@ async function run() {
   let app = null;
   let page = null;
   let imageProviderFixtureServer = null;
+  let textProviderFixtureServer = null;
+  let chatProviderPreference = {
+    provider: FIXTURE_PROVIDER,
+    model: FIXTURE_MODEL,
+  };
   const consoleErrors = [];
   const actionableConsoleErrors = [];
   const agentDebugLogs = [];
@@ -402,6 +409,13 @@ async function run() {
 
   try {
     imageProviderFixtureServer = await startImageProviderFixtureServer();
+    if (isImageWorkflowScenario(options.scenario)) {
+      textProviderFixtureServer = await startTextProviderFixtureServer();
+      summary.textProviderFixtureServer = sanitizeJson({
+        baseUrl: textProviderFixtureServer.baseUrl,
+        requestCount: 0,
+      });
+    }
     runtimeEnv.writeFixtureConfig?.({
       serverHost: imageProviderFixtureServer.host,
       serverPort: imageProviderFixtureServer.port,
@@ -501,18 +515,56 @@ async function run() {
     summary.workspace = sanitizeJson(workspace);
 
     logStage("ensure-fixture-image-provider");
-    summary.imageFixtureProvider = sanitizeJson(
-      await ensureFixtureImageProvider(page, appServerRequests, {
+    const imageFixtureProvider = await ensureFixtureImageProvider(
+      page,
+      appServerRequests,
+      {
         apiHost: imageProviderFixtureServer.baseUrl,
         localImageServerApiKey: LOCAL_IMAGE_SERVER_API_KEY,
         localImageServerHost: imageProviderFixtureServer.host,
         localImageServerPort: imageProviderFixtureServer.port,
-      }),
+      },
     );
+    runtimeEnv.writeFixtureConfig({
+      serverHost: imageProviderFixtureServer.host,
+      serverPort: imageProviderFixtureServer.port,
+      serverApiKey: LOCAL_IMAGE_SERVER_API_KEY,
+      imageProviderId: imageFixtureProvider.providerId,
+      imageModelId: imageFixtureProvider.modelId,
+    });
+    summary.imageFixtureProvider = sanitizeJson({
+      ...imageFixtureProvider,
+      appServerConfigBinding: {
+        providerId: imageFixtureProvider.providerId,
+        modelId: imageFixtureProvider.modelId,
+        configPath: runtimeEnv.configPath,
+        macConfigPath: runtimeEnv.macConfigPath,
+      },
+    });
+
+    if (textProviderFixtureServer) {
+      logStage("ensure-fixture-text-provider");
+      const textFixtureProvider = await ensureFixtureTextProvider(
+        page,
+        appServerRequests,
+        {
+          apiHost: textProviderFixtureServer.baseUrl,
+        },
+      );
+      chatProviderPreference = {
+        provider: textFixtureProvider.providerId,
+        model: textFixtureProvider.modelId,
+      };
+      summary.textFixtureProvider = sanitizeJson(textFixtureProvider);
+    }
 
     logStage("bind-gui-workspace-model");
     summary.guiWorkspaceBinding = sanitizeJson(
-      await bindGuiWorkspaceAndModelPreferences(page, workspace.workspaceId),
+      await bindGuiWorkspaceAndModelPreferences(
+        page,
+        workspace.workspaceId,
+        chatProviderPreference,
+      ),
     );
 
     logStage("create-fixture-session");
@@ -520,6 +572,7 @@ async function run() {
       page,
       workspace,
       appServerRequests,
+      chatProviderPreference,
     );
     summary.sessionCreation = sanitizeJson({
       sessionId:
@@ -601,6 +654,13 @@ async function run() {
       requestCount: imageProviderFixtureServer.requestCount(),
       requests: imageProviderFixtureServer.requests(),
     });
+    if (textProviderFixtureServer) {
+      summary.textProviderFixtureServer = sanitizeJson({
+        baseUrl: textProviderFixtureServer.baseUrl,
+        requestCount: textProviderFixtureServer.requestCount(),
+        requests: textProviderFixtureServer.requests(),
+      });
+    }
     const assertionReport = buildFixtureAssertionReport({
       backendLedger,
       traceMessages,
@@ -691,6 +751,13 @@ async function run() {
         requests: imageProviderFixtureServer.requests(),
       });
     }
+    if (textProviderFixtureServer) {
+      summary.textProviderFixtureServer = sanitizeJson({
+        baseUrl: textProviderFixtureServer.baseUrl,
+        requestCount: textProviderFixtureServer.requestCount(),
+        requests: textProviderFixtureServer.requests(),
+      });
+    }
     summary.agentDebugLogs = agentDebugLogs.slice(-200);
     summary.agentStreamDebugLogs = agentDebugLogs
       .filter((entry) => entry.text.includes("[AgentDebug] AgentStream."))
@@ -718,6 +785,9 @@ async function run() {
     }
     if (imageProviderFixtureServer) {
       await imageProviderFixtureServer.close().catch(() => undefined);
+    }
+    if (textProviderFixtureServer) {
+      await textProviderFixtureServer.close().catch(() => undefined);
     }
     if (!options.keepTemp) {
       cleanupTempRoot(runtimeEnv.tempRoot);

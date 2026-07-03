@@ -18,7 +18,6 @@ use app_server_protocol::SkillScaffoldCreateParams;
 use app_server_protocol::SkillScaffoldCreateResponse;
 use chrono::SecondsFormat;
 use chrono::Utc;
-use lime_agent::AsterAgentState;
 use lime_core::app_paths;
 use lime_services::skill_service::SkillService;
 use serde::Deserialize;
@@ -518,7 +517,7 @@ pub(crate) fn create_skill_scaffold(
     };
     let inspection = create_skill_scaffold_in_root(&skills_root, &request, registration)?;
     if matches!(app, SkillPackageApp::Lime) {
-        AsterAgentState::reload_lime_skills();
+        crate::skill_registry::reload_lime_skill_registry();
     }
     Ok(SkillScaffoldCreateResponse {
         inspection: serde_json::to_value(inspection)
@@ -533,7 +532,7 @@ pub(crate) fn import_local_skill(
     let skills_root = skill_package_app_root(app)?;
     let directory = import_local_skill_into_root(&skills_root, Path::new(&params.source_path))?;
     if matches!(app, SkillPackageApp::Lime) {
-        AsterAgentState::reload_lime_skills();
+        crate::skill_registry::reload_lime_skill_registry();
     }
     Ok(SkillLocalImportResponse { directory })
 }

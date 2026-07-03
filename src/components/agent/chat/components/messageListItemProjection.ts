@@ -119,6 +119,17 @@ function isRuntimeFailureOnlyAssistantText(
   );
 }
 
+function sanitizeProjectedMessageText(message: Message, value: string): string {
+  if (!value.trim()) {
+    return "";
+  }
+
+  return sanitizeMessageTextForDisplay(value, {
+    role: message.role,
+    hasImages: Array.isArray(message.images) && message.images.length > 0,
+  });
+}
+
 function canMergeTimelineAsSparseProcessPatch(
   items?: AgentThreadItem[],
 ): boolean {
@@ -657,12 +668,16 @@ export function resolveMessageListItemProjection({
         : conversationContentParts,
       useProcessSeparatedFinalText: usesProcessSeparatedFinalText,
     });
+  const sanitizedRawActionContent = sanitizeProjectedMessageText(
+    message,
+    rawActionContent,
+  );
   const shouldSuppressDuplicatedFailureText =
     Boolean(timeline) &&
-    isRuntimeFailureOnlyAssistantText(message, rawActionContent);
+    isRuntimeFailureOnlyAssistantText(message, sanitizedRawActionContent);
   const actionContent = shouldSuppressDuplicatedFailureText
     ? ""
-    : rawActionContent;
+    : sanitizedRawActionContent;
   const installedSkillMessageLabel =
     message.role === "user" ? resolveInstalledSkillMessageLabel(message) : null;
   const isUserCommandMessage =
@@ -724,7 +739,7 @@ export function resolveMessageListItemProjection({
         MESSAGE_LIST_LONG_HISTORICAL_MESSAGE_PREVIEW_CHARS,
       )
     : actionContent;
-  const rendererRawContent = shouldSuppressDuplicatedFailureText
+  const rawRendererRawContent = shouldSuppressDuplicatedFailureText
     ? ""
     : shouldCollapseLongHistoricalMessage ||
         shouldFlattenHistoricalAssistantContent
@@ -733,6 +748,10 @@ export function resolveMessageListItemProjection({
         ? actionContent
         : actionContent ||
           (shouldHideAssistantTextWhileRunning ? "" : visibleRawDisplayContent);
+  const rendererRawContent = sanitizeProjectedMessageText(
+    message,
+    rawRendererRawContent,
+  );
   const rendererContentParts =
     shouldSuppressDuplicatedFailureText ||
     shouldCollapseLongHistoricalMessage ||

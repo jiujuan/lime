@@ -1,2587 +1,5 @@
 {
   "$defs": {
-    "PluginArticleWorkspaceContract": {
-      "$defs": {
-        "PluginArticleWorkspaceObject": {
-          "properties": {
-            "artifactKind": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "defaultPane": {
-              "type": "string"
-            },
-            "kind": {
-              "type": "string"
-            },
-            "primary": {
-              "type": "boolean"
-            },
-            "title": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "defaultPane",
-            "kind",
-            "primary",
-            "title"
-          ],
-          "type": "object"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "enabled": {
-          "type": "boolean"
-        },
-        "objects": {
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/PluginArticleWorkspaceObject"
-          },
-          "type": "array"
-        },
-        "panes": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "rendererKinds": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        }
-      },
-      "required": [
-        "enabled"
-      ],
-      "title": "PluginArticleWorkspaceContract",
-      "type": "object"
-    },
-    "PluginArticleWorkspaceObject": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "artifactKind": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "defaultPane": {
-          "type": "string"
-        },
-        "kind": {
-          "type": "string"
-        },
-        "primary": {
-          "type": "boolean"
-        },
-        "title": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "defaultPane",
-        "kind",
-        "primary",
-        "title"
-      ],
-      "title": "PluginArticleWorkspaceObject",
-      "type": "object"
-    },
-    "PluginCloudReleaseDescriptor": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "appId": {
-          "type": "string"
-        },
-        "channel": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "loadedAt": {
-          "type": "string"
-        },
-        "manifestHash": {
-          "type": "string"
-        },
-        "packageHash": {
-          "type": "string"
-        },
-        "packageUrl": {
-          "type": "string"
-        },
-        "releaseId": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "signatureRef": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "sourceUri": {
-          "type": "string"
-        },
-        "tenantEnablementRef": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "tenantId": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "version": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "appId",
-        "loadedAt",
-        "manifestHash",
-        "packageHash",
-        "packageUrl",
-        "sourceUri",
-        "version"
-      ],
-      "title": "PluginCloudReleaseDescriptor",
-      "type": "object"
-    },
-    "PluginDeleteDataExecutionEvidence": {
-      "$defs": {
-        "PluginDeleteDataPostDeleteResidualAudit": {
-          "properties": {
-            "checkedAt": {
-              "type": "string"
-            },
-            "checkedTargetCount": {
-              "format": "uint",
-              "minimum": 0,
-              "type": "integer"
-            },
-            "failedTarget": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "remainingTargetCount": {
-              "format": "uint",
-              "minimum": 0,
-              "type": "integer"
-            },
-            "remainingTargets": {
-              "default": [],
-              "items": {
-                "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
-              },
-              "type": "array"
-            },
-            "status": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "checkedAt",
-            "checkedTargetCount",
-            "remainingTargetCount",
-            "status"
-          ],
-          "type": "object"
-        },
-        "PluginDeleteDataTargetEvidence": {
-          "properties": {
-            "action": {
-              "type": "string"
-            },
-            "blockerCodes": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "error": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "kind": {
-              "type": "string"
-            },
-            "reason": {
-              "type": "string"
-            },
-            "status": {
-              "type": "string"
-            },
-            "value": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "action",
-            "kind",
-            "reason",
-            "status",
-            "value"
-          ],
-          "type": "object"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "blockedTargets": {
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
-          },
-          "type": "array"
-        },
-        "blockerCodes": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "dataRoot": {
-          "type": "string"
-        },
-        "failedTarget": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "generatedAt": {
-          "type": "string"
-        },
-        "missingTargets": {
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
-          },
-          "type": "array"
-        },
-        "postDeleteResidualAudit": {
-          "$ref": "#/$defs/PluginDeleteDataPostDeleteResidualAudit"
-        },
-        "removedTargets": {
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
-          },
-          "type": "array"
-        },
-        "retainedTargets": {
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
-          },
-          "type": "array"
-        },
-        "status": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "dataRoot",
-        "generatedAt",
-        "postDeleteResidualAudit",
-        "status"
-      ],
-      "title": "PluginDeleteDataExecutionEvidence",
-      "type": "object"
-    },
-    "PluginDeleteDataPostDeleteResidualAudit": {
-      "$defs": {
-        "PluginDeleteDataTargetEvidence": {
-          "properties": {
-            "action": {
-              "type": "string"
-            },
-            "blockerCodes": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "error": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "kind": {
-              "type": "string"
-            },
-            "reason": {
-              "type": "string"
-            },
-            "status": {
-              "type": "string"
-            },
-            "value": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "action",
-            "kind",
-            "reason",
-            "status",
-            "value"
-          ],
-          "type": "object"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "checkedAt": {
-          "type": "string"
-        },
-        "checkedTargetCount": {
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "failedTarget": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "remainingTargetCount": {
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "remainingTargets": {
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
-          },
-          "type": "array"
-        },
-        "status": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "checkedAt",
-        "checkedTargetCount",
-        "remainingTargetCount",
-        "status"
-      ],
-      "title": "PluginDeleteDataPostDeleteResidualAudit",
-      "type": "object"
-    },
-    "PluginDeleteDataTargetEvidence": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "action": {
-          "type": "string"
-        },
-        "blockerCodes": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "error": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "kind": {
-          "type": "string"
-        },
-        "reason": {
-          "type": "string"
-        },
-        "status": {
-          "type": "string"
-        },
-        "value": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "action",
-        "kind",
-        "reason",
-        "status",
-        "value"
-      ],
-      "title": "PluginDeleteDataTargetEvidence",
-      "type": "object"
-    },
-    "PluginFetchCloudPackageParams": {
-      "$defs": {
-        "PluginCloudReleaseDescriptor": {
-          "properties": {
-            "appId": {
-              "type": "string"
-            },
-            "channel": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "loadedAt": {
-              "type": "string"
-            },
-            "manifestHash": {
-              "type": "string"
-            },
-            "packageHash": {
-              "type": "string"
-            },
-            "packageUrl": {
-              "type": "string"
-            },
-            "releaseId": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "signatureRef": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "sourceUri": {
-              "type": "string"
-            },
-            "tenantEnablementRef": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "tenantId": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "version": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "appId",
-            "loadedAt",
-            "manifestHash",
-            "packageHash",
-            "packageUrl",
-            "sourceUri",
-            "version"
-          ],
-          "type": "object"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "descriptor": {
-          "$ref": "#/$defs/PluginCloudReleaseDescriptor"
-        }
-      },
-      "required": [
-        "descriptor"
-      ],
-      "title": "PluginFetchCloudPackageParams",
-      "type": "object"
-    },
-    "PluginHistoryRestoreContract": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "defaultPane": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "defaultTab": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "enabled": {
-          "type": "boolean"
-        },
-        "fallback": {
-          "type": "string"
-        },
-        "restoreLayout": {
-          "type": "boolean"
-        },
-        "restoreSelection": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "enabled",
-        "fallback",
-        "restoreLayout",
-        "restoreSelection"
-      ],
-      "title": "PluginHistoryRestoreContract",
-      "type": "object"
-    },
-    "PluginHostFunctionState": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "blockers": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "currentOwner": {
-          "type": "string"
-        },
-        "followUps": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "key": {
-          "type": "string"
-        },
-        "status": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "currentOwner",
-        "key",
-        "status"
-      ],
-      "title": "PluginHostFunctionState",
-      "type": "object"
-    },
-    "PluginHostLifecycleListResponse": {
-      "$defs": {
-        "PluginArticleWorkspaceContract": {
-          "properties": {
-            "enabled": {
-              "type": "boolean"
-            },
-            "objects": {
-              "default": [],
-              "items": {
-                "$ref": "#/$defs/PluginArticleWorkspaceObject"
-              },
-              "type": "array"
-            },
-            "panes": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "rendererKinds": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            }
-          },
-          "required": [
-            "enabled"
-          ],
-          "type": "object"
-        },
-        "PluginArticleWorkspaceObject": {
-          "properties": {
-            "artifactKind": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "defaultPane": {
-              "type": "string"
-            },
-            "kind": {
-              "type": "string"
-            },
-            "primary": {
-              "type": "boolean"
-            },
-            "title": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "defaultPane",
-            "kind",
-            "primary",
-            "title"
-          ],
-          "type": "object"
-        },
-        "PluginHistoryRestoreContract": {
-          "properties": {
-            "defaultPane": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "defaultTab": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "enabled": {
-              "type": "boolean"
-            },
-            "fallback": {
-              "type": "string"
-            },
-            "restoreLayout": {
-              "type": "boolean"
-            },
-            "restoreSelection": {
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "enabled",
-            "fallback",
-            "restoreLayout",
-            "restoreSelection"
-          ],
-          "type": "object"
-        },
-        "PluginHostFunctionState": {
-          "properties": {
-            "blockers": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "currentOwner": {
-              "type": "string"
-            },
-            "followUps": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "key": {
-              "type": "string"
-            },
-            "status": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "currentOwner",
-            "key",
-            "status"
-          ],
-          "type": "object"
-        },
-        "PluginHostLifecycleSnapshot": {
-          "properties": {
-            "appCenterStatus": {
-              "type": "string"
-            },
-            "appId": {
-              "type": "string"
-            },
-            "blockers": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "displayName": {
-              "type": "string"
-            },
-            "followUps": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "functions": {
-              "default": [],
-              "items": {
-                "$ref": "#/$defs/PluginHostFunctionState"
-              },
-              "type": "array"
-            },
-            "generatedAt": {
-              "type": "string"
-            },
-            "issueCategories": {
-              "default": [],
-              "items": {
-                "$ref": "#/$defs/PluginReadinessIssueCategorySummary"
-              },
-              "type": "array"
-            },
-            "primaryIssueCategory": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "profiles": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "publishBlocked": {
-              "type": "boolean"
-            },
-            "readinessStatus": {
-              "type": "string"
-            },
-            "rightSurface": {
-              "$ref": "#/$defs/PluginRightSurfaceContract"
-            },
-            "taskRuntime": {
-              "$ref": "#/$defs/PluginTaskRuntimeContract"
-            }
-          },
-          "required": [
-            "appCenterStatus",
-            "appId",
-            "displayName",
-            "generatedAt",
-            "publishBlocked",
-            "readinessStatus",
-            "rightSurface",
-            "taskRuntime"
-          ],
-          "type": "object"
-        },
-        "PluginReadinessIssueCategorySummary": {
-          "properties": {
-            "category": {
-              "type": "string"
-            },
-            "codes": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "count": {
-              "format": "uint",
-              "minimum": 0,
-              "type": "integer"
-            }
-          },
-          "required": [
-            "category",
-            "count"
-          ],
-          "type": "object"
-        },
-        "PluginRightSurfaceContract": {
-          "properties": {
-            "articleWorkspace": {
-              "$ref": "#/$defs/PluginArticleWorkspaceContract"
-            },
-            "defaultActiveTab": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "dock": {
-              "type": "string"
-            },
-            "historyRestore": {
-              "$ref": "#/$defs/PluginHistoryRestoreContract"
-            },
-            "physicalDockCount": {
-              "format": "uint32",
-              "minimum": 0,
-              "type": "integer"
-            },
-            "supportedTabs": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            }
-          },
-          "required": [
-            "articleWorkspace",
-            "dock",
-            "historyRestore",
-            "physicalDockCount"
-          ],
-          "type": "object"
-        },
-        "PluginTaskRuntimeContract": {
-          "properties": {
-            "blockers": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "contractPath": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "directFilesystemAccess": {
-              "type": "boolean"
-            },
-            "directProviderAccess": {
-              "type": "boolean"
-            },
-            "enabled": {
-              "type": "boolean"
-            },
-            "followUps": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "outputArtifactKind": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "packageRootPath": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "sampleRequestPath": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "taskKinds": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "workerEntrypoint": {
-              "type": [
-                "null",
-                "string"
-              ]
-            }
-          },
-          "required": [
-            "directFilesystemAccess",
-            "directProviderAccess",
-            "enabled"
-          ],
-          "type": "object"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "issues": {
-          "default": [],
-          "items": true,
-          "type": "array"
-        },
-        "snapshots": {
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/PluginHostLifecycleSnapshot"
-          },
-          "type": "array"
-        }
-      },
-      "title": "PluginHostLifecycleListResponse",
-      "type": "object"
-    },
-    "PluginHostLifecycleSnapshot": {
-      "$defs": {
-        "PluginArticleWorkspaceContract": {
-          "properties": {
-            "enabled": {
-              "type": "boolean"
-            },
-            "objects": {
-              "default": [],
-              "items": {
-                "$ref": "#/$defs/PluginArticleWorkspaceObject"
-              },
-              "type": "array"
-            },
-            "panes": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "rendererKinds": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            }
-          },
-          "required": [
-            "enabled"
-          ],
-          "type": "object"
-        },
-        "PluginArticleWorkspaceObject": {
-          "properties": {
-            "artifactKind": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "defaultPane": {
-              "type": "string"
-            },
-            "kind": {
-              "type": "string"
-            },
-            "primary": {
-              "type": "boolean"
-            },
-            "title": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "defaultPane",
-            "kind",
-            "primary",
-            "title"
-          ],
-          "type": "object"
-        },
-        "PluginHistoryRestoreContract": {
-          "properties": {
-            "defaultPane": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "defaultTab": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "enabled": {
-              "type": "boolean"
-            },
-            "fallback": {
-              "type": "string"
-            },
-            "restoreLayout": {
-              "type": "boolean"
-            },
-            "restoreSelection": {
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "enabled",
-            "fallback",
-            "restoreLayout",
-            "restoreSelection"
-          ],
-          "type": "object"
-        },
-        "PluginHostFunctionState": {
-          "properties": {
-            "blockers": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "currentOwner": {
-              "type": "string"
-            },
-            "followUps": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "key": {
-              "type": "string"
-            },
-            "status": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "currentOwner",
-            "key",
-            "status"
-          ],
-          "type": "object"
-        },
-        "PluginReadinessIssueCategorySummary": {
-          "properties": {
-            "category": {
-              "type": "string"
-            },
-            "codes": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "count": {
-              "format": "uint",
-              "minimum": 0,
-              "type": "integer"
-            }
-          },
-          "required": [
-            "category",
-            "count"
-          ],
-          "type": "object"
-        },
-        "PluginRightSurfaceContract": {
-          "properties": {
-            "articleWorkspace": {
-              "$ref": "#/$defs/PluginArticleWorkspaceContract"
-            },
-            "defaultActiveTab": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "dock": {
-              "type": "string"
-            },
-            "historyRestore": {
-              "$ref": "#/$defs/PluginHistoryRestoreContract"
-            },
-            "physicalDockCount": {
-              "format": "uint32",
-              "minimum": 0,
-              "type": "integer"
-            },
-            "supportedTabs": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            }
-          },
-          "required": [
-            "articleWorkspace",
-            "dock",
-            "historyRestore",
-            "physicalDockCount"
-          ],
-          "type": "object"
-        },
-        "PluginTaskRuntimeContract": {
-          "properties": {
-            "blockers": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "contractPath": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "directFilesystemAccess": {
-              "type": "boolean"
-            },
-            "directProviderAccess": {
-              "type": "boolean"
-            },
-            "enabled": {
-              "type": "boolean"
-            },
-            "followUps": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "outputArtifactKind": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "packageRootPath": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "sampleRequestPath": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "taskKinds": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "workerEntrypoint": {
-              "type": [
-                "null",
-                "string"
-              ]
-            }
-          },
-          "required": [
-            "directFilesystemAccess",
-            "directProviderAccess",
-            "enabled"
-          ],
-          "type": "object"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "appCenterStatus": {
-          "type": "string"
-        },
-        "appId": {
-          "type": "string"
-        },
-        "blockers": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "displayName": {
-          "type": "string"
-        },
-        "followUps": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "functions": {
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/PluginHostFunctionState"
-          },
-          "type": "array"
-        },
-        "generatedAt": {
-          "type": "string"
-        },
-        "issueCategories": {
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/PluginReadinessIssueCategorySummary"
-          },
-          "type": "array"
-        },
-        "primaryIssueCategory": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "profiles": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "publishBlocked": {
-          "type": "boolean"
-        },
-        "readinessStatus": {
-          "type": "string"
-        },
-        "rightSurface": {
-          "$ref": "#/$defs/PluginRightSurfaceContract"
-        },
-        "taskRuntime": {
-          "$ref": "#/$defs/PluginTaskRuntimeContract"
-        }
-      },
-      "required": [
-        "appCenterStatus",
-        "appId",
-        "displayName",
-        "generatedAt",
-        "publishBlocked",
-        "readinessStatus",
-        "rightSurface",
-        "taskRuntime"
-      ],
-      "title": "PluginHostLifecycleSnapshot",
-      "type": "object"
-    },
-    "PluginInstalledDisabledSetParams": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "appId": {
-          "type": "string"
-        },
-        "disabled": {
-          "type": "boolean"
-        },
-        "updatedAt": {
-          "type": [
-            "null",
-            "string"
-          ]
-        }
-      },
-      "required": [
-        "appId",
-        "disabled"
-      ],
-      "title": "PluginInstalledDisabledSetParams",
-      "type": "object"
-    },
-    "PluginInstalledListResponse": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "issues": {
-          "default": [],
-          "items": true,
-          "type": "array"
-        },
-        "states": {
-          "default": [],
-          "items": true,
-          "type": "array"
-        }
-      },
-      "title": "PluginInstalledListResponse",
-      "type": "object"
-    },
-    "PluginInstalledSaveParams": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "state": true
-      },
-      "required": [
-        "state"
-      ],
-      "title": "PluginInstalledSaveParams",
-      "type": "object"
-    },
-    "PluginLocalPackageInspectParams": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "appDir": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "appDir"
-      ],
-      "title": "PluginLocalPackageInspectParams",
-      "type": "object"
-    },
-    "PluginLocalPackageInspectResponse": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "appDir": {
-          "type": "string"
-        },
-        "inspectedAt": {
-          "type": "string"
-        },
-        "manifest": true,
-        "manifestHash": {
-          "type": "string"
-        },
-        "manifestSource": {
-          "type": "string"
-        },
-        "packageHash": {
-          "type": "string"
-        },
-        "pluginManifest": true,
-        "sourceKind": {
-          "type": "string"
-        },
-        "sourceUri": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "appDir",
-        "inspectedAt",
-        "manifest",
-        "manifestHash",
-        "manifestSource",
-        "packageHash",
-        "pluginManifest",
-        "sourceKind",
-        "sourceUri"
-      ],
-      "title": "PluginLocalPackageInspectResponse",
-      "type": "object"
-    },
-    "PluginPackageCacheEntry": {
-      "$defs": {
-        "PluginPackageIdentity": {
-          "properties": {
-            "appId": {
-              "type": "string"
-            },
-            "appVersion": {
-              "type": "string"
-            },
-            "channel": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "loadedAt": {
-              "type": "string"
-            },
-            "manifestHash": {
-              "type": "string"
-            },
-            "packageHash": {
-              "type": "string"
-            },
-            "releaseId": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "signatureRef": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "sourceKind": {
-              "type": "string"
-            },
-            "sourceUri": {
-              "type": "string"
-            },
-            "tenantEnablementRef": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "tenantId": {
-              "type": [
-                "null",
-                "string"
-              ]
-            }
-          },
-          "required": [
-            "appId",
-            "appVersion",
-            "loadedAt",
-            "manifestHash",
-            "packageHash",
-            "sourceKind",
-            "sourceUri"
-          ],
-          "type": "object"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "appId": {
-          "type": "string"
-        },
-        "cachePath": {
-          "type": "string"
-        },
-        "cachedAt": {
-          "type": "string"
-        },
-        "identity": {
-          "$ref": "#/$defs/PluginPackageIdentity"
-        },
-        "manifestHash": {
-          "type": "string"
-        },
-        "manifestSnapshot": true,
-        "packageHash": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "appId",
-        "cachePath",
-        "cachedAt",
-        "identity",
-        "manifestHash",
-        "manifestSnapshot",
-        "packageHash"
-      ],
-      "title": "PluginPackageCacheEntry",
-      "type": "object"
-    },
-    "PluginPackageIdentity": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "appId": {
-          "type": "string"
-        },
-        "appVersion": {
-          "type": "string"
-        },
-        "channel": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "loadedAt": {
-          "type": "string"
-        },
-        "manifestHash": {
-          "type": "string"
-        },
-        "packageHash": {
-          "type": "string"
-        },
-        "releaseId": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "signatureRef": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "sourceKind": {
-          "type": "string"
-        },
-        "sourceUri": {
-          "type": "string"
-        },
-        "tenantEnablementRef": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "tenantId": {
-          "type": [
-            "null",
-            "string"
-          ]
-        }
-      },
-      "required": [
-        "appId",
-        "appVersion",
-        "loadedAt",
-        "manifestHash",
-        "packageHash",
-        "sourceKind",
-        "sourceUri"
-      ],
-      "title": "PluginPackageIdentity",
-      "type": "object"
-    },
-    "PluginRightSurfaceContract": {
-      "$defs": {
-        "PluginArticleWorkspaceContract": {
-          "properties": {
-            "enabled": {
-              "type": "boolean"
-            },
-            "objects": {
-              "default": [],
-              "items": {
-                "$ref": "#/$defs/PluginArticleWorkspaceObject"
-              },
-              "type": "array"
-            },
-            "panes": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "rendererKinds": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            }
-          },
-          "required": [
-            "enabled"
-          ],
-          "type": "object"
-        },
-        "PluginArticleWorkspaceObject": {
-          "properties": {
-            "artifactKind": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "defaultPane": {
-              "type": "string"
-            },
-            "kind": {
-              "type": "string"
-            },
-            "primary": {
-              "type": "boolean"
-            },
-            "title": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "defaultPane",
-            "kind",
-            "primary",
-            "title"
-          ],
-          "type": "object"
-        },
-        "PluginHistoryRestoreContract": {
-          "properties": {
-            "defaultPane": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "defaultTab": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "enabled": {
-              "type": "boolean"
-            },
-            "fallback": {
-              "type": "string"
-            },
-            "restoreLayout": {
-              "type": "boolean"
-            },
-            "restoreSelection": {
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "enabled",
-            "fallback",
-            "restoreLayout",
-            "restoreSelection"
-          ],
-          "type": "object"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "articleWorkspace": {
-          "$ref": "#/$defs/PluginArticleWorkspaceContract"
-        },
-        "defaultActiveTab": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "dock": {
-          "type": "string"
-        },
-        "historyRestore": {
-          "$ref": "#/$defs/PluginHistoryRestoreContract"
-        },
-        "physicalDockCount": {
-          "format": "uint32",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "supportedTabs": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        }
-      },
-      "required": [
-        "articleWorkspace",
-        "dock",
-        "historyRestore",
-        "physicalDockCount"
-      ],
-      "title": "PluginRightSurfaceContract",
-      "type": "object"
-    },
-    "PluginShellPackageMount": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "kind": {
-          "type": "string"
-        },
-        "manifestHash": {
-          "type": "string"
-        },
-        "packageHash": {
-          "type": "string"
-        },
-        "path": {
-          "type": "string"
-        },
-        "readOnly": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "kind",
-        "manifestHash",
-        "packageHash",
-        "path",
-        "readOnly"
-      ],
-      "title": "PluginShellPackageMount",
-      "type": "object"
-    },
-    "PluginShellPrepareParams": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "descriptor": true
-      },
-      "required": [
-        "descriptor"
-      ],
-      "title": "PluginShellPrepareParams",
-      "type": "object"
-    },
-    "PluginShellPrepareResponse": {
-      "$defs": {
-        "PluginShellPackageMount": {
-          "properties": {
-            "kind": {
-              "type": "string"
-            },
-            "manifestHash": {
-              "type": "string"
-            },
-            "packageHash": {
-              "type": "string"
-            },
-            "path": {
-              "type": "string"
-            },
-            "readOnly": {
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "kind",
-            "manifestHash",
-            "packageHash",
-            "path",
-            "readOnly"
-          ],
-          "type": "object"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "appId": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "blockerCodes": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "descriptorVersion": {
-          "format": "uint64",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "devShell": {
-          "type": "boolean"
-        },
-        "entryKey": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "installMode": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "message": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "packageMount": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/PluginShellPackageMount"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "preparedAt": {
-          "type": "string"
-        },
-        "shellKind": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "status": {
-          "type": "string"
-        },
-        "windowTitle": {
-          "type": [
-            "null",
-            "string"
-          ]
-        }
-      },
-      "required": [
-        "devShell",
-        "preparedAt",
-        "status"
-      ],
-      "title": "PluginShellPrepareResponse",
-      "type": "object"
-    },
-    "PluginTaskRuntimeContract": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "blockers": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "contractPath": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "directFilesystemAccess": {
-          "type": "boolean"
-        },
-        "directProviderAccess": {
-          "type": "boolean"
-        },
-        "enabled": {
-          "type": "boolean"
-        },
-        "followUps": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "outputArtifactKind": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "packageRootPath": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "sampleRequestPath": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "taskKinds": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "workerEntrypoint": {
-          "type": [
-            "null",
-            "string"
-          ]
-        }
-      },
-      "required": [
-        "directFilesystemAccess",
-        "directProviderAccess",
-        "enabled"
-      ],
-      "title": "PluginTaskRuntimeContract",
-      "type": "object"
-    },
-    "PluginUiRuntimeStartParams": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "appId": {
-          "type": "string"
-        },
-        "entryKey": {
-          "type": [
-            "null",
-            "string"
-          ]
-        }
-      },
-      "required": [
-        "appId"
-      ],
-      "title": "PluginUiRuntimeStartParams",
-      "type": "object"
-    },
-    "PluginUiRuntimeStatusParams": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "appId": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "appId"
-      ],
-      "title": "PluginUiRuntimeStatusParams",
-      "type": "object"
-    },
-    "PluginUiRuntimeStatusResponse": {
-      "$defs": {
-        "PluginTaskRuntimeContract": {
-          "properties": {
-            "blockers": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "contractPath": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "directFilesystemAccess": {
-              "type": "boolean"
-            },
-            "directProviderAccess": {
-              "type": "boolean"
-            },
-            "enabled": {
-              "type": "boolean"
-            },
-            "followUps": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "outputArtifactKind": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "packageRootPath": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "sampleRequestPath": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "taskKinds": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "workerEntrypoint": {
-              "type": [
-                "null",
-                "string"
-              ]
-            }
-          },
-          "required": [
-            "directFilesystemAccess",
-            "directProviderAccess",
-            "enabled"
-          ],
-          "type": "object"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "appId": {
-          "type": "string"
-        },
-        "baseUrl": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "entryKey": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "entryUrl": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "message": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "pid": {
-          "format": "uint32",
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "port": {
-          "format": "uint16",
-          "maximum": 65535,
-          "minimum": 0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "route": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "status": {
-          "type": "string"
-        },
-        "taskRuntime": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/PluginTaskRuntimeContract"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "required": [
-        "appId",
-        "status"
-      ],
-      "title": "PluginUiRuntimeStatusResponse",
-      "type": "object"
-    },
-    "PluginUiRuntimeStopParams": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "appId": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "appId"
-      ],
-      "title": "PluginUiRuntimeStopParams",
-      "type": "object"
-    },
-    "PluginUninstallParams": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "appId": {
-          "type": "string"
-        },
-        "confirmationPhrase": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "mode": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "appId",
-        "mode"
-      ],
-      "title": "PluginUninstallParams",
-      "type": "object"
-    },
-    "PluginUninstallRehearsalParams": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "appId": {
-          "type": "string"
-        },
-        "mode": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "appId",
-        "mode"
-      ],
-      "title": "PluginUninstallRehearsalParams",
-      "type": "object"
-    },
-    "PluginUninstallRehearsalResponse": {
-      "$defs": {
-        "PluginUninstallRehearsalTarget": {
-          "properties": {
-            "action": {
-              "type": "string"
-            },
-            "kind": {
-              "type": "string"
-            },
-            "reason": {
-              "type": "string"
-            },
-            "safeToDelete": {
-              "type": "boolean"
-            },
-            "value": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "action",
-            "kind",
-            "reason",
-            "safeToDelete",
-            "value"
-          ],
-          "type": "object"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "appId": {
-          "type": "string"
-        },
-        "deletedTargetCount": {
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "generatedAt": {
-          "type": "string"
-        },
-        "mode": {
-          "type": "string"
-        },
-        "packageHash": {
-          "type": [
-            "null",
-            "string"
-          ]
-        },
-        "retainedTargetCount": {
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "targets": {
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/PluginUninstallRehearsalTarget"
-          },
-          "type": "array"
-        },
-        "warnings": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        }
-      },
-      "required": [
-        "appId",
-        "deletedTargetCount",
-        "generatedAt",
-        "mode",
-        "retainedTargetCount"
-      ],
-      "title": "PluginUninstallRehearsalResponse",
-      "type": "object"
-    },
-    "PluginUninstallRehearsalTarget": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "action": {
-          "type": "string"
-        },
-        "kind": {
-          "type": "string"
-        },
-        "reason": {
-          "type": "string"
-        },
-        "safeToDelete": {
-          "type": "boolean"
-        },
-        "value": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "action",
-        "kind",
-        "reason",
-        "safeToDelete",
-        "value"
-      ],
-      "title": "PluginUninstallRehearsalTarget",
-      "type": "object"
-    },
-    "PluginUninstallResponse": {
-      "$defs": {
-        "PluginDeleteDataExecutionEvidence": {
-          "properties": {
-            "blockedTargets": {
-              "default": [],
-              "items": {
-                "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
-              },
-              "type": "array"
-            },
-            "blockerCodes": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "dataRoot": {
-              "type": "string"
-            },
-            "failedTarget": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "generatedAt": {
-              "type": "string"
-            },
-            "missingTargets": {
-              "default": [],
-              "items": {
-                "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
-              },
-              "type": "array"
-            },
-            "postDeleteResidualAudit": {
-              "$ref": "#/$defs/PluginDeleteDataPostDeleteResidualAudit"
-            },
-            "removedTargets": {
-              "default": [],
-              "items": {
-                "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
-              },
-              "type": "array"
-            },
-            "retainedTargets": {
-              "default": [],
-              "items": {
-                "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
-              },
-              "type": "array"
-            },
-            "status": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "dataRoot",
-            "generatedAt",
-            "postDeleteResidualAudit",
-            "status"
-          ],
-          "type": "object"
-        },
-        "PluginDeleteDataPostDeleteResidualAudit": {
-          "properties": {
-            "checkedAt": {
-              "type": "string"
-            },
-            "checkedTargetCount": {
-              "format": "uint",
-              "minimum": 0,
-              "type": "integer"
-            },
-            "failedTarget": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "remainingTargetCount": {
-              "format": "uint",
-              "minimum": 0,
-              "type": "integer"
-            },
-            "remainingTargets": {
-              "default": [],
-              "items": {
-                "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
-              },
-              "type": "array"
-            },
-            "status": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "checkedAt",
-            "checkedTargetCount",
-            "remainingTargetCount",
-            "status"
-          ],
-          "type": "object"
-        },
-        "PluginDeleteDataTargetEvidence": {
-          "properties": {
-            "action": {
-              "type": "string"
-            },
-            "blockerCodes": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "error": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "kind": {
-              "type": "string"
-            },
-            "reason": {
-              "type": "string"
-            },
-            "status": {
-              "type": "string"
-            },
-            "value": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "action",
-            "kind",
-            "reason",
-            "status",
-            "value"
-          ],
-          "type": "object"
-        },
-        "PluginInstalledListResponse": {
-          "properties": {
-            "issues": {
-              "default": [],
-              "items": true,
-              "type": "array"
-            },
-            "states": {
-              "default": [],
-              "items": true,
-              "type": "array"
-            }
-          },
-          "type": "object"
-        },
-        "PluginUninstallRehearsalResponse": {
-          "properties": {
-            "appId": {
-              "type": "string"
-            },
-            "deletedTargetCount": {
-              "format": "uint",
-              "minimum": 0,
-              "type": "integer"
-            },
-            "generatedAt": {
-              "type": "string"
-            },
-            "mode": {
-              "type": "string"
-            },
-            "packageHash": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "retainedTargetCount": {
-              "format": "uint",
-              "minimum": 0,
-              "type": "integer"
-            },
-            "targets": {
-              "default": [],
-              "items": {
-                "$ref": "#/$defs/PluginUninstallRehearsalTarget"
-              },
-              "type": "array"
-            },
-            "warnings": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            }
-          },
-          "required": [
-            "appId",
-            "deletedTargetCount",
-            "generatedAt",
-            "mode",
-            "retainedTargetCount"
-          ],
-          "type": "object"
-        },
-        "PluginUninstallRehearsalTarget": {
-          "properties": {
-            "action": {
-              "type": "string"
-            },
-            "kind": {
-              "type": "string"
-            },
-            "reason": {
-              "type": "string"
-            },
-            "safeToDelete": {
-              "type": "boolean"
-            },
-            "value": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "action",
-            "kind",
-            "reason",
-            "safeToDelete",
-            "value"
-          ],
-          "type": "object"
-        }
-      },
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "properties": {
-        "blockerCodes": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "deleteEvidence": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/PluginDeleteDataExecutionEvidence"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "list": {
-          "$ref": "#/$defs/PluginInstalledListResponse"
-        },
-        "missingTargetCount": {
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "rehearsal": {
-          "$ref": "#/$defs/PluginUninstallRehearsalResponse"
-        },
-        "removedTargetCount": {
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
-        },
-        "status": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "list",
-        "missingTargetCount",
-        "rehearsal",
-        "removedTargetCount",
-        "status"
-      ],
-      "title": "PluginUninstallResponse",
-      "type": "object"
-    },
     "AgentAttachment": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -22829,10 +20247,10 @@
         },
         "ModelTaskSource": {
           "enum": [
-            "plugin",
             "agent_turn",
             "automation",
             "media_task_artifact",
+            "plugin",
             "provider_probe"
           ],
           "type": "string"
@@ -22913,10 +20331,10 @@
     "ModelTaskSource": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "enum": [
-        "plugin",
         "agent_turn",
         "automation",
         "media_task_artifact",
+        "plugin",
         "provider_probe"
       ],
       "title": "ModelTaskSource",
@@ -22972,6 +20390,2588 @@
         "os"
       ],
       "title": "PlatformInfo",
+      "type": "object"
+    },
+    "PluginArticleWorkspaceContract": {
+      "$defs": {
+        "PluginArticleWorkspaceObject": {
+          "properties": {
+            "artifactKind": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "defaultPane": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "primary": {
+              "type": "boolean"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "defaultPane",
+            "kind",
+            "primary",
+            "title"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "objects": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/PluginArticleWorkspaceObject"
+          },
+          "type": "array"
+        },
+        "panes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "rendererKinds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "enabled"
+      ],
+      "title": "PluginArticleWorkspaceContract",
+      "type": "object"
+    },
+    "PluginArticleWorkspaceObject": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "artifactKind": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "defaultPane": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "primary": {
+          "type": "boolean"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "defaultPane",
+        "kind",
+        "primary",
+        "title"
+      ],
+      "title": "PluginArticleWorkspaceObject",
+      "type": "object"
+    },
+    "PluginCloudReleaseDescriptor": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appId": {
+          "type": "string"
+        },
+        "channel": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "loadedAt": {
+          "type": "string"
+        },
+        "manifestHash": {
+          "type": "string"
+        },
+        "packageHash": {
+          "type": "string"
+        },
+        "packageUrl": {
+          "type": "string"
+        },
+        "releaseId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "signatureRef": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sourceUri": {
+          "type": "string"
+        },
+        "tenantEnablementRef": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "tenantId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "appId",
+        "loadedAt",
+        "manifestHash",
+        "packageHash",
+        "packageUrl",
+        "sourceUri",
+        "version"
+      ],
+      "title": "PluginCloudReleaseDescriptor",
+      "type": "object"
+    },
+    "PluginDeleteDataExecutionEvidence": {
+      "$defs": {
+        "PluginDeleteDataPostDeleteResidualAudit": {
+          "properties": {
+            "checkedAt": {
+              "type": "string"
+            },
+            "checkedTargetCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "failedTarget": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "remainingTargetCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "remainingTargets": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
+              },
+              "type": "array"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "checkedAt",
+            "checkedTargetCount",
+            "remainingTargetCount",
+            "status"
+          ],
+          "type": "object"
+        },
+        "PluginDeleteDataTargetEvidence": {
+          "properties": {
+            "action": {
+              "type": "string"
+            },
+            "blockerCodes": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "error": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "kind": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "action",
+            "kind",
+            "reason",
+            "status",
+            "value"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "blockedTargets": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
+          },
+          "type": "array"
+        },
+        "blockerCodes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "dataRoot": {
+          "type": "string"
+        },
+        "failedTarget": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "generatedAt": {
+          "type": "string"
+        },
+        "missingTargets": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
+          },
+          "type": "array"
+        },
+        "postDeleteResidualAudit": {
+          "$ref": "#/$defs/PluginDeleteDataPostDeleteResidualAudit"
+        },
+        "removedTargets": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
+          },
+          "type": "array"
+        },
+        "retainedTargets": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
+          },
+          "type": "array"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "dataRoot",
+        "generatedAt",
+        "postDeleteResidualAudit",
+        "status"
+      ],
+      "title": "PluginDeleteDataExecutionEvidence",
+      "type": "object"
+    },
+    "PluginDeleteDataPostDeleteResidualAudit": {
+      "$defs": {
+        "PluginDeleteDataTargetEvidence": {
+          "properties": {
+            "action": {
+              "type": "string"
+            },
+            "blockerCodes": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "error": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "kind": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "action",
+            "kind",
+            "reason",
+            "status",
+            "value"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "checkedAt": {
+          "type": "string"
+        },
+        "checkedTargetCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "failedTarget": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "remainingTargetCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "remainingTargets": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
+          },
+          "type": "array"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "checkedAt",
+        "checkedTargetCount",
+        "remainingTargetCount",
+        "status"
+      ],
+      "title": "PluginDeleteDataPostDeleteResidualAudit",
+      "type": "object"
+    },
+    "PluginDeleteDataTargetEvidence": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "blockerCodes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "error": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "kind": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "kind",
+        "reason",
+        "status",
+        "value"
+      ],
+      "title": "PluginDeleteDataTargetEvidence",
+      "type": "object"
+    },
+    "PluginFetchCloudPackageParams": {
+      "$defs": {
+        "PluginCloudReleaseDescriptor": {
+          "properties": {
+            "appId": {
+              "type": "string"
+            },
+            "channel": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "loadedAt": {
+              "type": "string"
+            },
+            "manifestHash": {
+              "type": "string"
+            },
+            "packageHash": {
+              "type": "string"
+            },
+            "packageUrl": {
+              "type": "string"
+            },
+            "releaseId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "signatureRef": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "sourceUri": {
+              "type": "string"
+            },
+            "tenantEnablementRef": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "tenantId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "version": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "appId",
+            "loadedAt",
+            "manifestHash",
+            "packageHash",
+            "packageUrl",
+            "sourceUri",
+            "version"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "descriptor": {
+          "$ref": "#/$defs/PluginCloudReleaseDescriptor"
+        }
+      },
+      "required": [
+        "descriptor"
+      ],
+      "title": "PluginFetchCloudPackageParams",
+      "type": "object"
+    },
+    "PluginHistoryRestoreContract": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "defaultPane": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "defaultTab": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "fallback": {
+          "type": "string"
+        },
+        "restoreLayout": {
+          "type": "boolean"
+        },
+        "restoreSelection": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "enabled",
+        "fallback",
+        "restoreLayout",
+        "restoreSelection"
+      ],
+      "title": "PluginHistoryRestoreContract",
+      "type": "object"
+    },
+    "PluginHostFunctionState": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "blockers": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "currentOwner": {
+          "type": "string"
+        },
+        "followUps": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "key": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "currentOwner",
+        "key",
+        "status"
+      ],
+      "title": "PluginHostFunctionState",
+      "type": "object"
+    },
+    "PluginHostLifecycleListResponse": {
+      "$defs": {
+        "PluginArticleWorkspaceContract": {
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "objects": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/PluginArticleWorkspaceObject"
+              },
+              "type": "array"
+            },
+            "panes": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "rendererKinds": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "enabled"
+          ],
+          "type": "object"
+        },
+        "PluginArticleWorkspaceObject": {
+          "properties": {
+            "artifactKind": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "defaultPane": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "primary": {
+              "type": "boolean"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "defaultPane",
+            "kind",
+            "primary",
+            "title"
+          ],
+          "type": "object"
+        },
+        "PluginHistoryRestoreContract": {
+          "properties": {
+            "defaultPane": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "defaultTab": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "fallback": {
+              "type": "string"
+            },
+            "restoreLayout": {
+              "type": "boolean"
+            },
+            "restoreSelection": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "enabled",
+            "fallback",
+            "restoreLayout",
+            "restoreSelection"
+          ],
+          "type": "object"
+        },
+        "PluginHostFunctionState": {
+          "properties": {
+            "blockers": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "currentOwner": {
+              "type": "string"
+            },
+            "followUps": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "key": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "currentOwner",
+            "key",
+            "status"
+          ],
+          "type": "object"
+        },
+        "PluginHostLifecycleSnapshot": {
+          "properties": {
+            "appCenterStatus": {
+              "type": "string"
+            },
+            "appId": {
+              "type": "string"
+            },
+            "blockers": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "displayName": {
+              "type": "string"
+            },
+            "followUps": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "functions": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/PluginHostFunctionState"
+              },
+              "type": "array"
+            },
+            "generatedAt": {
+              "type": "string"
+            },
+            "issueCategories": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/PluginReadinessIssueCategorySummary"
+              },
+              "type": "array"
+            },
+            "primaryIssueCategory": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "profiles": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "publishBlocked": {
+              "type": "boolean"
+            },
+            "readinessStatus": {
+              "type": "string"
+            },
+            "rightSurface": {
+              "$ref": "#/$defs/PluginRightSurfaceContract"
+            },
+            "taskRuntime": {
+              "$ref": "#/$defs/PluginTaskRuntimeContract"
+            }
+          },
+          "required": [
+            "appCenterStatus",
+            "appId",
+            "displayName",
+            "generatedAt",
+            "publishBlocked",
+            "readinessStatus",
+            "rightSurface",
+            "taskRuntime"
+          ],
+          "type": "object"
+        },
+        "PluginReadinessIssueCategorySummary": {
+          "properties": {
+            "category": {
+              "type": "string"
+            },
+            "codes": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "category",
+            "count"
+          ],
+          "type": "object"
+        },
+        "PluginRightSurfaceContract": {
+          "properties": {
+            "articleWorkspace": {
+              "$ref": "#/$defs/PluginArticleWorkspaceContract"
+            },
+            "defaultActiveTab": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "dock": {
+              "type": "string"
+            },
+            "historyRestore": {
+              "$ref": "#/$defs/PluginHistoryRestoreContract"
+            },
+            "physicalDockCount": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "supportedTabs": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "articleWorkspace",
+            "dock",
+            "historyRestore",
+            "physicalDockCount"
+          ],
+          "type": "object"
+        },
+        "PluginTaskRuntimeContract": {
+          "properties": {
+            "blockers": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "contractPath": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "directFilesystemAccess": {
+              "type": "boolean"
+            },
+            "directProviderAccess": {
+              "type": "boolean"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "followUps": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "outputArtifactKind": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "packageRootPath": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "sampleRequestPath": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "taskKinds": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "workerEntrypoint": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "directFilesystemAccess",
+            "directProviderAccess",
+            "enabled"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "issues": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        },
+        "snapshots": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/PluginHostLifecycleSnapshot"
+          },
+          "type": "array"
+        }
+      },
+      "title": "PluginHostLifecycleListResponse",
+      "type": "object"
+    },
+    "PluginHostLifecycleSnapshot": {
+      "$defs": {
+        "PluginArticleWorkspaceContract": {
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "objects": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/PluginArticleWorkspaceObject"
+              },
+              "type": "array"
+            },
+            "panes": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "rendererKinds": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "enabled"
+          ],
+          "type": "object"
+        },
+        "PluginArticleWorkspaceObject": {
+          "properties": {
+            "artifactKind": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "defaultPane": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "primary": {
+              "type": "boolean"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "defaultPane",
+            "kind",
+            "primary",
+            "title"
+          ],
+          "type": "object"
+        },
+        "PluginHistoryRestoreContract": {
+          "properties": {
+            "defaultPane": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "defaultTab": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "fallback": {
+              "type": "string"
+            },
+            "restoreLayout": {
+              "type": "boolean"
+            },
+            "restoreSelection": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "enabled",
+            "fallback",
+            "restoreLayout",
+            "restoreSelection"
+          ],
+          "type": "object"
+        },
+        "PluginHostFunctionState": {
+          "properties": {
+            "blockers": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "currentOwner": {
+              "type": "string"
+            },
+            "followUps": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "key": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "currentOwner",
+            "key",
+            "status"
+          ],
+          "type": "object"
+        },
+        "PluginReadinessIssueCategorySummary": {
+          "properties": {
+            "category": {
+              "type": "string"
+            },
+            "codes": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "count": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "category",
+            "count"
+          ],
+          "type": "object"
+        },
+        "PluginRightSurfaceContract": {
+          "properties": {
+            "articleWorkspace": {
+              "$ref": "#/$defs/PluginArticleWorkspaceContract"
+            },
+            "defaultActiveTab": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "dock": {
+              "type": "string"
+            },
+            "historyRestore": {
+              "$ref": "#/$defs/PluginHistoryRestoreContract"
+            },
+            "physicalDockCount": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "supportedTabs": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "articleWorkspace",
+            "dock",
+            "historyRestore",
+            "physicalDockCount"
+          ],
+          "type": "object"
+        },
+        "PluginTaskRuntimeContract": {
+          "properties": {
+            "blockers": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "contractPath": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "directFilesystemAccess": {
+              "type": "boolean"
+            },
+            "directProviderAccess": {
+              "type": "boolean"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "followUps": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "outputArtifactKind": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "packageRootPath": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "sampleRequestPath": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "taskKinds": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "workerEntrypoint": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "directFilesystemAccess",
+            "directProviderAccess",
+            "enabled"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appCenterStatus": {
+          "type": "string"
+        },
+        "appId": {
+          "type": "string"
+        },
+        "blockers": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "followUps": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "functions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/PluginHostFunctionState"
+          },
+          "type": "array"
+        },
+        "generatedAt": {
+          "type": "string"
+        },
+        "issueCategories": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/PluginReadinessIssueCategorySummary"
+          },
+          "type": "array"
+        },
+        "primaryIssueCategory": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "profiles": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "publishBlocked": {
+          "type": "boolean"
+        },
+        "readinessStatus": {
+          "type": "string"
+        },
+        "rightSurface": {
+          "$ref": "#/$defs/PluginRightSurfaceContract"
+        },
+        "taskRuntime": {
+          "$ref": "#/$defs/PluginTaskRuntimeContract"
+        }
+      },
+      "required": [
+        "appCenterStatus",
+        "appId",
+        "displayName",
+        "generatedAt",
+        "publishBlocked",
+        "readinessStatus",
+        "rightSurface",
+        "taskRuntime"
+      ],
+      "title": "PluginHostLifecycleSnapshot",
+      "type": "object"
+    },
+    "PluginInstalledDisabledSetParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appId": {
+          "type": "string"
+        },
+        "disabled": {
+          "type": "boolean"
+        },
+        "updatedAt": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "appId",
+        "disabled"
+      ],
+      "title": "PluginInstalledDisabledSetParams",
+      "type": "object"
+    },
+    "PluginInstalledListResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "issues": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        },
+        "states": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        }
+      },
+      "title": "PluginInstalledListResponse",
+      "type": "object"
+    },
+    "PluginInstalledSaveParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "state": true
+      },
+      "required": [
+        "state"
+      ],
+      "title": "PluginInstalledSaveParams",
+      "type": "object"
+    },
+    "PluginLocalPackageInspectParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appDir": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "appDir"
+      ],
+      "title": "PluginLocalPackageInspectParams",
+      "type": "object"
+    },
+    "PluginLocalPackageInspectResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appDir": {
+          "type": "string"
+        },
+        "inspectedAt": {
+          "type": "string"
+        },
+        "manifest": true,
+        "manifestHash": {
+          "type": "string"
+        },
+        "manifestSource": {
+          "type": "string"
+        },
+        "packageHash": {
+          "type": "string"
+        },
+        "pluginManifest": true,
+        "sourceKind": {
+          "type": "string"
+        },
+        "sourceUri": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "appDir",
+        "inspectedAt",
+        "manifest",
+        "manifestHash",
+        "manifestSource",
+        "packageHash",
+        "pluginManifest",
+        "sourceKind",
+        "sourceUri"
+      ],
+      "title": "PluginLocalPackageInspectResponse",
+      "type": "object"
+    },
+    "PluginPackageCacheEntry": {
+      "$defs": {
+        "PluginPackageIdentity": {
+          "properties": {
+            "appId": {
+              "type": "string"
+            },
+            "appVersion": {
+              "type": "string"
+            },
+            "channel": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "loadedAt": {
+              "type": "string"
+            },
+            "manifestHash": {
+              "type": "string"
+            },
+            "packageHash": {
+              "type": "string"
+            },
+            "releaseId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "signatureRef": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "sourceKind": {
+              "type": "string"
+            },
+            "sourceUri": {
+              "type": "string"
+            },
+            "tenantEnablementRef": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "tenantId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "appId",
+            "appVersion",
+            "loadedAt",
+            "manifestHash",
+            "packageHash",
+            "sourceKind",
+            "sourceUri"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appId": {
+          "type": "string"
+        },
+        "cachePath": {
+          "type": "string"
+        },
+        "cachedAt": {
+          "type": "string"
+        },
+        "identity": {
+          "$ref": "#/$defs/PluginPackageIdentity"
+        },
+        "manifestHash": {
+          "type": "string"
+        },
+        "manifestSnapshot": true,
+        "packageHash": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "appId",
+        "cachePath",
+        "cachedAt",
+        "identity",
+        "manifestHash",
+        "manifestSnapshot",
+        "packageHash"
+      ],
+      "title": "PluginPackageCacheEntry",
+      "type": "object"
+    },
+    "PluginPackageIdentity": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appId": {
+          "type": "string"
+        },
+        "appVersion": {
+          "type": "string"
+        },
+        "channel": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "loadedAt": {
+          "type": "string"
+        },
+        "manifestHash": {
+          "type": "string"
+        },
+        "packageHash": {
+          "type": "string"
+        },
+        "releaseId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "signatureRef": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sourceKind": {
+          "type": "string"
+        },
+        "sourceUri": {
+          "type": "string"
+        },
+        "tenantEnablementRef": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "tenantId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "appId",
+        "appVersion",
+        "loadedAt",
+        "manifestHash",
+        "packageHash",
+        "sourceKind",
+        "sourceUri"
+      ],
+      "title": "PluginPackageIdentity",
+      "type": "object"
+    },
+    "PluginRightSurfaceContract": {
+      "$defs": {
+        "PluginArticleWorkspaceContract": {
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "objects": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/PluginArticleWorkspaceObject"
+              },
+              "type": "array"
+            },
+            "panes": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "rendererKinds": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "enabled"
+          ],
+          "type": "object"
+        },
+        "PluginArticleWorkspaceObject": {
+          "properties": {
+            "artifactKind": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "defaultPane": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "primary": {
+              "type": "boolean"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "defaultPane",
+            "kind",
+            "primary",
+            "title"
+          ],
+          "type": "object"
+        },
+        "PluginHistoryRestoreContract": {
+          "properties": {
+            "defaultPane": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "defaultTab": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "fallback": {
+              "type": "string"
+            },
+            "restoreLayout": {
+              "type": "boolean"
+            },
+            "restoreSelection": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "enabled",
+            "fallback",
+            "restoreLayout",
+            "restoreSelection"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "articleWorkspace": {
+          "$ref": "#/$defs/PluginArticleWorkspaceContract"
+        },
+        "defaultActiveTab": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "dock": {
+          "type": "string"
+        },
+        "historyRestore": {
+          "$ref": "#/$defs/PluginHistoryRestoreContract"
+        },
+        "physicalDockCount": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "supportedTabs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "articleWorkspace",
+        "dock",
+        "historyRestore",
+        "physicalDockCount"
+      ],
+      "title": "PluginRightSurfaceContract",
+      "type": "object"
+    },
+    "PluginShellPackageMount": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "manifestHash": {
+          "type": "string"
+        },
+        "packageHash": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "readOnly": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "manifestHash",
+        "packageHash",
+        "path",
+        "readOnly"
+      ],
+      "title": "PluginShellPackageMount",
+      "type": "object"
+    },
+    "PluginShellPrepareParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "descriptor": true
+      },
+      "required": [
+        "descriptor"
+      ],
+      "title": "PluginShellPrepareParams",
+      "type": "object"
+    },
+    "PluginShellPrepareResponse": {
+      "$defs": {
+        "PluginShellPackageMount": {
+          "properties": {
+            "kind": {
+              "type": "string"
+            },
+            "manifestHash": {
+              "type": "string"
+            },
+            "packageHash": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "readOnly": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "manifestHash",
+            "packageHash",
+            "path",
+            "readOnly"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "blockerCodes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "descriptorVersion": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "devShell": {
+          "type": "boolean"
+        },
+        "entryKey": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "installMode": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "message": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "packageMount": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginShellPackageMount"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "preparedAt": {
+          "type": "string"
+        },
+        "shellKind": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "status": {
+          "type": "string"
+        },
+        "windowTitle": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "devShell",
+        "preparedAt",
+        "status"
+      ],
+      "title": "PluginShellPrepareResponse",
+      "type": "object"
+    },
+    "PluginTaskRuntimeContract": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "blockers": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "contractPath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "directFilesystemAccess": {
+          "type": "boolean"
+        },
+        "directProviderAccess": {
+          "type": "boolean"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "followUps": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "outputArtifactKind": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "packageRootPath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sampleRequestPath": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "taskKinds": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "workerEntrypoint": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "directFilesystemAccess",
+        "directProviderAccess",
+        "enabled"
+      ],
+      "title": "PluginTaskRuntimeContract",
+      "type": "object"
+    },
+    "PluginUiRuntimeStartParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appId": {
+          "type": "string"
+        },
+        "entryKey": {
+          "type": [
+            "null",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "appId"
+      ],
+      "title": "PluginUiRuntimeStartParams",
+      "type": "object"
+    },
+    "PluginUiRuntimeStatusParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "appId"
+      ],
+      "title": "PluginUiRuntimeStatusParams",
+      "type": "object"
+    },
+    "PluginUiRuntimeStatusResponse": {
+      "$defs": {
+        "PluginTaskRuntimeContract": {
+          "properties": {
+            "blockers": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "contractPath": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "directFilesystemAccess": {
+              "type": "boolean"
+            },
+            "directProviderAccess": {
+              "type": "boolean"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "followUps": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "outputArtifactKind": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "packageRootPath": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "sampleRequestPath": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "taskKinds": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "workerEntrypoint": {
+              "type": [
+                "null",
+                "string"
+              ]
+            }
+          },
+          "required": [
+            "directFilesystemAccess",
+            "directProviderAccess",
+            "enabled"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appId": {
+          "type": "string"
+        },
+        "baseUrl": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "entryKey": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "entryUrl": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "message": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "pid": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "port": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "route": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "status": {
+          "type": "string"
+        },
+        "taskRuntime": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginTaskRuntimeContract"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "appId",
+        "status"
+      ],
+      "title": "PluginUiRuntimeStatusResponse",
+      "type": "object"
+    },
+    "PluginUiRuntimeStopParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "appId"
+      ],
+      "title": "PluginUiRuntimeStopParams",
+      "type": "object"
+    },
+    "PluginUninstallParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appId": {
+          "type": "string"
+        },
+        "confirmationPhrase": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "mode": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "appId",
+        "mode"
+      ],
+      "title": "PluginUninstallParams",
+      "type": "object"
+    },
+    "PluginUninstallRehearsalParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appId": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "appId",
+        "mode"
+      ],
+      "title": "PluginUninstallRehearsalParams",
+      "type": "object"
+    },
+    "PluginUninstallRehearsalResponse": {
+      "$defs": {
+        "PluginUninstallRehearsalTarget": {
+          "properties": {
+            "action": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "safeToDelete": {
+              "type": "boolean"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "action",
+            "kind",
+            "reason",
+            "safeToDelete",
+            "value"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "appId": {
+          "type": "string"
+        },
+        "deletedTargetCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "generatedAt": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "packageHash": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "retainedTargetCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "targets": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/PluginUninstallRehearsalTarget"
+          },
+          "type": "array"
+        },
+        "warnings": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "appId",
+        "deletedTargetCount",
+        "generatedAt",
+        "mode",
+        "retainedTargetCount"
+      ],
+      "title": "PluginUninstallRehearsalResponse",
+      "type": "object"
+    },
+    "PluginUninstallRehearsalTarget": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "safeToDelete": {
+          "type": "boolean"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "kind",
+        "reason",
+        "safeToDelete",
+        "value"
+      ],
+      "title": "PluginUninstallRehearsalTarget",
+      "type": "object"
+    },
+    "PluginUninstallResponse": {
+      "$defs": {
+        "PluginDeleteDataExecutionEvidence": {
+          "properties": {
+            "blockedTargets": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
+              },
+              "type": "array"
+            },
+            "blockerCodes": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "dataRoot": {
+              "type": "string"
+            },
+            "failedTarget": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "generatedAt": {
+              "type": "string"
+            },
+            "missingTargets": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
+              },
+              "type": "array"
+            },
+            "postDeleteResidualAudit": {
+              "$ref": "#/$defs/PluginDeleteDataPostDeleteResidualAudit"
+            },
+            "removedTargets": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
+              },
+              "type": "array"
+            },
+            "retainedTargets": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
+              },
+              "type": "array"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "dataRoot",
+            "generatedAt",
+            "postDeleteResidualAudit",
+            "status"
+          ],
+          "type": "object"
+        },
+        "PluginDeleteDataPostDeleteResidualAudit": {
+          "properties": {
+            "checkedAt": {
+              "type": "string"
+            },
+            "checkedTargetCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "failedTarget": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "remainingTargetCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "remainingTargets": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/PluginDeleteDataTargetEvidence"
+              },
+              "type": "array"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "checkedAt",
+            "checkedTargetCount",
+            "remainingTargetCount",
+            "status"
+          ],
+          "type": "object"
+        },
+        "PluginDeleteDataTargetEvidence": {
+          "properties": {
+            "action": {
+              "type": "string"
+            },
+            "blockerCodes": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "error": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "kind": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "action",
+            "kind",
+            "reason",
+            "status",
+            "value"
+          ],
+          "type": "object"
+        },
+        "PluginInstalledListResponse": {
+          "properties": {
+            "issues": {
+              "default": [],
+              "items": true,
+              "type": "array"
+            },
+            "states": {
+              "default": [],
+              "items": true,
+              "type": "array"
+            }
+          },
+          "type": "object"
+        },
+        "PluginUninstallRehearsalResponse": {
+          "properties": {
+            "appId": {
+              "type": "string"
+            },
+            "deletedTargetCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "generatedAt": {
+              "type": "string"
+            },
+            "mode": {
+              "type": "string"
+            },
+            "packageHash": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "retainedTargetCount": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "targets": {
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/PluginUninstallRehearsalTarget"
+              },
+              "type": "array"
+            },
+            "warnings": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "appId",
+            "deletedTargetCount",
+            "generatedAt",
+            "mode",
+            "retainedTargetCount"
+          ],
+          "type": "object"
+        },
+        "PluginUninstallRehearsalTarget": {
+          "properties": {
+            "action": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "safeToDelete": {
+              "type": "boolean"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "action",
+            "kind",
+            "reason",
+            "safeToDelete",
+            "value"
+          ],
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "blockerCodes": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "deleteEvidence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginDeleteDataExecutionEvidence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "list": {
+          "$ref": "#/$defs/PluginInstalledListResponse"
+        },
+        "missingTargetCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rehearsal": {
+          "$ref": "#/$defs/PluginUninstallRehearsalResponse"
+        },
+        "removedTargetCount": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "list",
+        "missingTargetCount",
+        "rehearsal",
+        "removedTargetCount",
+        "status"
+      ],
+      "title": "PluginUninstallResponse",
       "type": "object"
     },
     "ProjectGitBranchCheckoutParams": {
@@ -29831,6 +29831,44 @@
       "title": "WindowsStartupDiagnosticsResponse",
       "type": "object"
     },
+    "WorkflowReadParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId"
+      ],
+      "title": "WorkflowReadParams",
+      "type": "object"
+    },
+    "WorkflowReadResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        },
+        "workflow": true,
+        "workflowRuns": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        },
+        "workflowSteps": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        }
+      },
+      "required": [
+        "sessionId",
+        "workflow"
+      ],
+      "title": "WorkflowReadResponse",
+      "type": "object"
+    },
     "WorkspaceDeleteParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -30862,18 +30900,6 @@
         "requests": {
           "items": {
             "enum": [
-              "pluginHostLifecycle/list",
-              "pluginInstalled/disabled/set",
-              "pluginInstalled/list",
-              "pluginInstalled/save",
-              "pluginInstalled/uninstall",
-              "pluginInstalled/uninstall/rehearsal",
-              "pluginLocalPackage/inspect",
-              "pluginPackage/fetchCloud",
-              "pluginShell/prepare",
-              "pluginUiRuntime/start",
-              "pluginUiRuntime/status",
-              "pluginUiRuntime/stop",
               "agentSession/action/replay",
               "agentSession/action/respond",
               "agentSession/analysisHandoff/export",
@@ -31054,6 +31080,18 @@
               "modelProviderUiState/read",
               "modelProviderUiState/write",
               "modelSyncState/read",
+              "pluginHostLifecycle/list",
+              "pluginInstalled/disabled/set",
+              "pluginInstalled/list",
+              "pluginInstalled/save",
+              "pluginInstalled/uninstall",
+              "pluginInstalled/uninstall/rehearsal",
+              "pluginLocalPackage/inspect",
+              "pluginPackage/fetchCloud",
+              "pluginShell/prepare",
+              "pluginUiRuntime/start",
+              "pluginUiRuntime/status",
+              "pluginUiRuntime/stop",
               "projectGit/branch/checkout",
               "projectGit/branch/create",
               "projectGit/commits/list",
@@ -31124,6 +31162,7 @@
               "wechatChannel/login/wait",
               "wechatChannel/probe",
               "wechatChannel/runtimeModel/set",
+              "workflow/read",
               "workspace/byPath/read",
               "workspace/default/ensure",
               "workspace/default/read",

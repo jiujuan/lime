@@ -12,54 +12,6 @@
   "methods": [
     {
       "kind": "request",
-      "method": "pluginHostLifecycle/list"
-    },
-    {
-      "kind": "request",
-      "method": "pluginInstalled/disabled/set"
-    },
-    {
-      "kind": "request",
-      "method": "pluginInstalled/list"
-    },
-    {
-      "kind": "request",
-      "method": "pluginInstalled/save"
-    },
-    {
-      "kind": "request",
-      "method": "pluginInstalled/uninstall"
-    },
-    {
-      "kind": "request",
-      "method": "pluginInstalled/uninstall/rehearsal"
-    },
-    {
-      "kind": "request",
-      "method": "pluginLocalPackage/inspect"
-    },
-    {
-      "kind": "request",
-      "method": "pluginPackage/fetchCloud"
-    },
-    {
-      "kind": "request",
-      "method": "pluginShell/prepare"
-    },
-    {
-      "kind": "request",
-      "method": "pluginUiRuntime/start"
-    },
-    {
-      "kind": "request",
-      "method": "pluginUiRuntime/status"
-    },
-    {
-      "kind": "request",
-      "method": "pluginUiRuntime/stop"
-    },
-    {
-      "kind": "request",
       "method": "agentSession/action/replay"
     },
     {
@@ -788,6 +740,54 @@
     },
     {
       "kind": "request",
+      "method": "pluginHostLifecycle/list"
+    },
+    {
+      "kind": "request",
+      "method": "pluginInstalled/disabled/set"
+    },
+    {
+      "kind": "request",
+      "method": "pluginInstalled/list"
+    },
+    {
+      "kind": "request",
+      "method": "pluginInstalled/save"
+    },
+    {
+      "kind": "request",
+      "method": "pluginInstalled/uninstall"
+    },
+    {
+      "kind": "request",
+      "method": "pluginInstalled/uninstall/rehearsal"
+    },
+    {
+      "kind": "request",
+      "method": "pluginLocalPackage/inspect"
+    },
+    {
+      "kind": "request",
+      "method": "pluginPackage/fetchCloud"
+    },
+    {
+      "kind": "request",
+      "method": "pluginShell/prepare"
+    },
+    {
+      "kind": "request",
+      "method": "pluginUiRuntime/start"
+    },
+    {
+      "kind": "request",
+      "method": "pluginUiRuntime/status"
+    },
+    {
+      "kind": "request",
+      "method": "pluginUiRuntime/stop"
+    },
+    {
+      "kind": "request",
       "method": "projectGit/branch/checkout"
     },
     {
@@ -1068,6 +1068,10 @@
     },
     {
       "kind": "request",
+      "method": "workflow/read"
+    },
+    {
+      "kind": "request",
       "method": "workspace/byPath/read"
     },
     {
@@ -1151,38 +1155,6 @@
       "RequestId"
     ],
     "v0": [
-      "PluginArticleWorkspaceContract",
-      "PluginArticleWorkspaceObject",
-      "PluginCloudReleaseDescriptor",
-      "PluginDeleteDataExecutionEvidence",
-      "PluginDeleteDataPostDeleteResidualAudit",
-      "PluginDeleteDataTargetEvidence",
-      "PluginFetchCloudPackageParams",
-      "PluginHistoryRestoreContract",
-      "PluginHostFunctionState",
-      "PluginHostLifecycleListResponse",
-      "PluginHostLifecycleSnapshot",
-      "PluginInstalledDisabledSetParams",
-      "PluginInstalledListResponse",
-      "PluginInstalledSaveParams",
-      "PluginLocalPackageInspectParams",
-      "PluginLocalPackageInspectResponse",
-      "PluginPackageCacheEntry",
-      "PluginPackageIdentity",
-      "PluginRightSurfaceContract",
-      "PluginShellPackageMount",
-      "PluginShellPrepareParams",
-      "PluginShellPrepareResponse",
-      "PluginTaskRuntimeContract",
-      "PluginUiRuntimeStartParams",
-      "PluginUiRuntimeStatusParams",
-      "PluginUiRuntimeStatusResponse",
-      "PluginUiRuntimeStopParams",
-      "PluginUninstallParams",
-      "PluginUninstallRehearsalParams",
-      "PluginUninstallRehearsalResponse",
-      "PluginUninstallRehearsalTarget",
-      "PluginUninstallResponse",
       "AgentAttachment",
       "AgentEvent",
       "AgentInput",
@@ -1554,6 +1526,38 @@
       "ModelTaskSource",
       "OpenDeepLinkPayload",
       "PlatformInfo",
+      "PluginArticleWorkspaceContract",
+      "PluginArticleWorkspaceObject",
+      "PluginCloudReleaseDescriptor",
+      "PluginDeleteDataExecutionEvidence",
+      "PluginDeleteDataPostDeleteResidualAudit",
+      "PluginDeleteDataTargetEvidence",
+      "PluginFetchCloudPackageParams",
+      "PluginHistoryRestoreContract",
+      "PluginHostFunctionState",
+      "PluginHostLifecycleListResponse",
+      "PluginHostLifecycleSnapshot",
+      "PluginInstalledDisabledSetParams",
+      "PluginInstalledListResponse",
+      "PluginInstalledSaveParams",
+      "PluginLocalPackageInspectParams",
+      "PluginLocalPackageInspectResponse",
+      "PluginPackageCacheEntry",
+      "PluginPackageIdentity",
+      "PluginRightSurfaceContract",
+      "PluginShellPackageMount",
+      "PluginShellPrepareParams",
+      "PluginShellPrepareResponse",
+      "PluginTaskRuntimeContract",
+      "PluginUiRuntimeStartParams",
+      "PluginUiRuntimeStatusParams",
+      "PluginUiRuntimeStatusResponse",
+      "PluginUiRuntimeStopParams",
+      "PluginUninstallParams",
+      "PluginUninstallRehearsalParams",
+      "PluginUninstallRehearsalResponse",
+      "PluginUninstallRehearsalTarget",
+      "PluginUninstallResponse",
       "ProjectGitBranchCheckoutParams",
       "ProjectGitBranchCreateParams",
       "ProjectGitCommit",
@@ -1706,6 +1710,8 @@
       "WechatRuntimeModelSetResponse",
       "WindowsStartupCheck",
       "WindowsStartupDiagnosticsResponse",
+      "WorkflowReadParams",
+      "WorkflowReadResponse",
       "WorkspaceDeleteParams",
       "WorkspaceDeleteResponse",
       "WorkspaceEnsureParams",

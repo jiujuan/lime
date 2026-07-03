@@ -1,3 +1,4 @@
+use super::article_workspace_edited_draft;
 use super::read_model;
 use super::session_list_scope::normalize_cwd_values;
 use super::session_list_scope::SessionListScope;
@@ -138,6 +139,12 @@ fn update_session_business_object_metadata(
     session: &mut AgentSession,
     params: &AgentSessionUpdateParams,
 ) {
+    let existing_article_workspace_edited_draft = session
+        .business_object_ref
+        .as_ref()
+        .and_then(|reference| reference.metadata.as_ref())
+        .and_then(serde_json::Value::as_object)
+        .and_then(article_workspace_edited_draft::metadata_edited_draft);
     let mut updates = serde_json::Map::new();
     insert_trimmed_metadata_string(
         &mut updates,
@@ -173,7 +180,12 @@ fn update_session_business_object_metadata(
         );
     }
     if let Some(value) = params.article_workspace_edited_draft.as_ref() {
-        updates.insert("articleWorkspaceEditedDraft".to_string(), value.clone());
+        if !article_workspace_edited_draft::should_reject_edited_draft_update(
+            existing_article_workspace_edited_draft,
+            value,
+        ) {
+            updates.insert("articleWorkspaceEditedDraft".to_string(), value.clone());
+        }
     }
     if updates.is_empty() {
         return;
@@ -371,17 +383,23 @@ impl RuntimeCore {
         &self,
         params: AgentSessionReadParams,
     ) -> Result<AgentSessionReadResponse, RuntimeCoreError> {
-        let state = self
-            .state
-            .lock()
-            .expect("runtime core state mutex poisoned");
-        let stored = state
-            .sessions
-            .get(&params.session_id)
-            .ok_or_else(|| RuntimeCoreError::SessionNotFound(params.session_id.clone()))?;
+        let stored = {
+            let state = self
+                .state
+                .lock()
+                .expect("runtime core state mutex poisoned");
+            state
+                .sessions
+                .get(&params.session_id)
+                .cloned()
+                .ok_or_else(|| RuntimeCoreError::SessionNotFound(params.session_id.clone()))?
+        };
+        let workflow_audit_events =
+            self.read_workflow_audit_events_for_session(&params.session_id)?;
         let detail = read_model::runtime_session_read_detail_with_options(
-            stored,
+            &stored,
             read_model::ReadDetailOptions::from_params(&params),
+            &workflow_audit_events,
         );
 
         Ok(AgentSessionReadResponse {

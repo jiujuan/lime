@@ -1,35 +1,74 @@
+## Lime v1.88.0
+
+<sub>The Simplified Chinese release notes are the primary version. This English page is a companion for international readers.</sub>
+
+### New Features
+
+- Split the Agent Runtime mainline into `agent-protocol`, `agent-runtime`, `model-provider`, `thread-store`, and `tool-runtime` crates so Codex-style execution has clearer protocol, model-context, session-thread, and tool-runtime boundaries.
+- Continued landing the App Server workflow runtime, including plugin-worker workflows, event-log modules, workflow read models, queue-resume audit coverage, Content Factory host-tool evidence, and Article Workspace edited-draft projection.
+- Strengthened Claw / Article Workspace image-task and inline host-command flows, covering document-inline image synchronization, image-task preview state, visible reasoning policy, Plugin input capability, and workspace send behavior.
+
+### Fixes
+
+- Fixed several Agent Chat streaming terminal-state, history restore, auto-title, read-model projection, and visible-reasoning boundary issues to reduce ordering drift, unfinished send state, and stale history overwrite.
+- Fixed image-task, media-worker, image-workbench preview, and document-inline image writeback projection issues so failed, cancelled, completed, and tool-result states are displayed more consistently.
+- Fixed drift around Plugin install readiness, Content Factory runtime fixtures, provider model display, and App Server protocol/client schemas so retired demo, mock, or legacy surfaces do not return to the current mainline.
+
+### Improvements and Refactors
+
+- Split App Server runtime backend, plugin-worker runtime, request context, memory tools, image tools, and event-log code into narrower modules, continuing to reduce central-file responsibility.
+- Moved the old services-side Aster session store into the Agent-owned source of truth and synchronized Aster runtime / migration / App Server boundary governance.
+- Removed the old `agentapp` roadmap directory and stale Content Factory demo surface, replacing them with current Plugin, Workflow, Aster migration, and Agent Runtime documentation.
+
+### Tests and Quality
+
+- Added or updated coverage for Agent Runtime, App Server protocol, workflow read models, media-task JSON-RPC, image workers, plugin runtime, provider config, legacy-surface guards, and governance boundaries.
+- Frontend regressions now cover the Agent Chat input area, message list, image-task preview, Article Workspace, Plugin page, API key provider, i18n resources, and App Server event-stream / read-model projection.
+- Split the `content-factory-current-turn` fixture into host-tool assertions / fixtures and synchronized the release smoke client version to `1.88.0`.
+
+### Documentation
+
+- Added workflow standardization, Aster migration, App Server / Aster runtime boundary governance, Writing v2 Content Factory reframe, and Plugin runtime completion-audit docs.
+- Updated next PRD, Writing / Workflow / Plugin / Agent Runtime / App Server / images roadmaps, tech-debt tracking, and command-boundary guidance for this round of current-mainline and retirement decisions.
+
+### Other
+
+- Bumped version facts to `1.88.0` across the root app, CLI npm package, Rust workspace, `lime-rs/Cargo.lock`, `lime-rs/crates/aster-rust/Cargo.lock`, App Server release manifest, and current-turn smoke client.
+
+**Full changes**: `v1.87.0` -> `v1.88.0`
+
 ## Lime v1.87.0
 
 <sub>The Simplified Chinese release notes are the primary version. This English page is a companion for international readers.</sub>
 
 ### New Features
 
-- The Plugin runtime mainline replaces the old Agent App entry points: install, runtime, shell host, task worker, right-side surface, history restore, SDK, and manifest flows now use Plugin naming and the current protocol.
+- The Plugin runtime mainline replaces the old Plugin entry points: install, runtime, shell host, task worker, right-side surface, history restore, SDK, and manifest flows now use Plugin naming and the current protocol.
 - Continued completing standalone release coverage for the Content Factory plugin package, including release gates, connector production preflight / delivery / webhook checks, runtime fixture smoke, and signed release evidence.
 - Article Workspace and the right-side workbench now support Plugin surfaces and plugin workflow evidence, with stronger Content Factory worker dogfood, article workspace patches, and history restore coverage.
 
 ### Fixes
 
-- Fixed marketplace, installed-state, manifest-contract, runtime-authorization, and governance drift caused by the old Agent App / Plugin dual track.
+- Fixed marketplace, installed-state, manifest-contract, runtime-authorization, and governance drift caused by the old Plugin / Plugin dual track.
 - Fixed image-task and media-worker routing, post-processing, and provider coverage gaps so image generation behaves more consistently across providers.
-- Fixed stale Agent App method residues in the App Server client, protocol schema, command catalog, and mock boundaries so legacy commands do not return to the current mainline.
+- Fixed stale Plugin method residues in the App Server client, protocol schema, command catalog, and mock boundaries so legacy commands do not return to the current mainline.
 
 ### Improvements and Refactors
 
-- Removed the old `agent-app` frontend, Electron, App Server, script, and schema surfaces at scale, replacing them with equivalent Plugin-domain modules.
-- Converged App Server runtime, local data source, processor, runtime backend, and protocol schema ownership around Plugin APIs; old Agent App files are now treated as dead surface.
+- Removed the old `plugin` frontend, Electron, App Server, script, and schema surfaces at scale, replacing them with equivalent Plugin-domain modules.
+- Converged App Server runtime, local data source, processor, runtime backend, and protocol schema ownership around Plugin APIs; old Plugin files are now treated as dead surface.
 - Updated script governance, i18n app metadata, legacy surface catalog, and quality workflow docs to use Plugin naming and release gates.
 
 ### Tests and Quality
 
 - Added or updated regressions for Plugin runtime, marketplace, install / cleanup / packaging / SDK / shell / UI flows, Electron host integration, App Server protocol, and Content Factory fixtures.
-- Updated `test:contracts`, protocol type generation, script governance, and legacy surface guards to cover Agent App retirement and the current Plugin surface.
+- Updated `test:contracts`, protocol type generation, script governance, and legacy surface guards to cover Plugin retirement and the current Plugin surface.
 - Adjusted the release workflow skill to prefer stable required gates: keep `verify:app-version` / `typecheck` by default, and no longer auto-block releases on `npm run lint`, bare `npm test`, or full `cargo test`.
 - Synchronized the current-turn smoke client version to `1.87.0` so release fixtures match the app version.
 
 ### Documentation
 
-- Updated command boundary, quality workflow, design language, workspace, parallel collaboration, and Writing v2 execution-plan docs for the Plugin runtime current mainline and Agent App retirement policy.
+- Updated command boundary, quality workflow, design language, workspace, parallel collaboration, and Writing v2 execution-plan docs for the Plugin runtime current mainline and Plugin retirement policy.
 - Updated package READMEs, agent runtime package READMEs, and default skill docs with Plugin / Content Factory wording.
 
 ### Other
@@ -53,17 +92,17 @@
 
 - Fixed several host-managed generation and image-task routing issues that could leak the wrong image context into normal follow-up turns.
 - Fixed stale-detail overwrite, rollback, and ordering drift during streaming refresh so message and thread-item projection is more stable.
-- Fixed projection drift in the plugin marketplace, installed Agent Apps, manifest parsing, and seeded fixtures.
+- Fixed projection drift in the plugin marketplace, installed Plugins, manifest parsing, and seeded fixtures.
 
 ### Improvements and Refactors
 
-- Split App Server runtime, worker, image-command, plugin-manifest, and agent-app package code into narrower modules to reduce central-file sprawl.
+- Split App Server runtime, worker, image-command, plugin-manifest, and plugin package code into narrower modules to reduce central-file sprawl.
 - Cleaned up Electron host commands / IPC channels / resource-manager window host integration and the renderer bridge surface.
 - Updated the `scripts/agent-runtime` current fixture set, `scripts/agent-qc` local gates, `scripts/i18n` unused-key checks, and release-doc tooling.
 
 ### Tests and Quality
 
-- Added or updated coverage for Agent Apps, plugin contracts, image task viewer behavior, current fixture smoke, Rust runtime, and App Server regressions.
+- Added or updated coverage for Plugins, plugin contracts, image task viewer behavior, current fixture smoke, Rust runtime, and App Server regressions.
 - Continued tightening the release gates around `verify:app-version`, `test:contracts`, and GUI smoke.
 
 ### Documentation
@@ -133,7 +172,7 @@
 
 - Continued the Writing mainline into Article Workspace / Article Editor: `@write article` artifacts now render in a standalone `ArtifactFrame`, and the right-side canvas is now the editable current surface.
 - Unified the image-generation capability catalog and execution chain: OpenAI-compatible, Gemini, Fal, and local image-server routes now share one catalog / executor / error-presentation flow.
-- Expanded the plugin marketplace and installed Agent Apps projection so activation, capability profile, installed state, and availability are now presented through the same view model.
+- Expanded the plugin marketplace and installed Plugins projection so activation, capability profile, installed state, and availability are now presented through the same view model.
 
 ### Fixes
 
@@ -173,7 +212,7 @@
 ### New Features
 
 - Moved the Writing mainline to Article Workspace / Article Editor: `@写文章` artifacts now render as a standalone `ArtifactFrame`, and the right rail hosts the editable article canvas. The old Product Profile path has left the main path.
-- Expanded plugin-package projection so the host can read skills, subagents, CLI tools, connectors, and hooks from plugin manifests and merge them into the agent app manifest and history restore flow.
+- Expanded plugin-package projection so the host can read skills, subagents, CLI tools, connectors, and hooks from plugin manifests and merge them into the plugin manifest and history restore flow.
 - Completed the current `@配图` chain with `mediaTaskArtifact/image/complete`, forming one end-to-end path from task creation to completion, GUI terminal card, and reload restore.
 - Narrowed image workbench event handling so the frontend no longer depends on the old model-preset split and instead follows the current image task and runtime trigger path.
 

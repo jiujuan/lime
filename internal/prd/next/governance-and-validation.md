@@ -189,7 +189,7 @@ npm run smoke:claw-chat-ready-streaming -- --timeout-ms 180000
 | --- | --- | --- |
 | 抽象过早 | 没有第二消费者就发布 UI 包 | 先内部模块化，等真实复用再包化。 |
 | 共享过度 | Claw shell 被其他 App 强依赖 | 只共享 projection / primitives。 |
-| Runtime 分裂 | Agent App 自建 turn loop | 强制走 `agentSession/*`。 |
+| Runtime 分裂 | Plugin 自建 turn loop | 强制走 `agentSession/*`。 |
 | 服务端分裂 | Server Mode 重造 session / turn / event 模型 | Gateway 只能映射 App Server 语义。 |
 | Sandbox 旁路 | ToolRuntime / ExecutionBackend 直接执行命令 | Sandbox Manager 结构测试和执行审计。 |
 | 容器误用 | 把 Docker / Kubernetes 当成 sandbox 本身 | permission profile 才是事实源，容器只做 worker 承载。 |
@@ -205,7 +205,7 @@ npm run smoke:claw-chat-ready-streaming -- --timeout-ms 180000
 
 1. App Server 路线图和 crate 家族已有基础。
 2. Claw shell / composer ready smoke 已有，但完整 streaming GUI E2E 仍是关键缺口。
-3. Agent App UI runtime 生命周期已有证据，但对话 turn 复用仍需继续证明。
-4. 前端共享已有 `@limecloud/agent-app-runtime` / projection 雏形，但 Claw UI primitives 尚未系统抽边界。
+3. Plugin UI runtime 生命周期已有证据，但对话 turn 复用仍需继续证明。
+4. 前端共享已有 `@limecloud/plugin-runtime` / projection 雏形，但 Claw UI primitives 尚未系统抽边界。
 5. 服务端 / 移动 App / 微信小程序已进入北极星范围，但还没有 Sandbox / Permissions、Remote Gateway / infrastructure ports 的执行级 PRD。
 6. 当前最值得继续的一刀仍是 App Server 真实 turn lifecycle 和 headless projection 标准化；服务端方向的下一刀是 Sandbox / Permissions PRD，再进入 Remote Gateway PRD 与 infrastructure ports。

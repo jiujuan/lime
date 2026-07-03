@@ -8,8 +8,6 @@
 
 import type { HandleSendOptions } from "../../hooks/handleSendTypes";
 import { asRecord } from "./skillSlotUtils";
-import { normalizeOptionalText } from "./commandRecentDefaults";
-import { buildImageTaskAssistantContent } from "../imageTaskPersona";
 
 export function readImageSkillLaunchContext(
   requestMetadata: Record<string, unknown> | undefined,
@@ -37,25 +35,8 @@ export function buildImageWorkbenchAssistantDraft(
     return undefined;
   }
 
-  const prompt =
-    normalizeOptionalText(imageTask.prompt as string | undefined) ||
-    normalizeOptionalText(imageTask.raw_text as string | undefined) ||
-    normalizeOptionalText(imageTask.rawText as string | undefined);
-  if (!prompt) {
-    return undefined;
-  }
-
-  const assistantContent = buildImageTaskAssistantContent({
-    prompt,
-    mode: imageTask.mode as "generate" | "edit" | "variation" | undefined,
-    modelName:
-      normalizeOptionalText(imageTask.model as string | undefined) ||
-      normalizeOptionalText(imageTask.model_name as string | undefined) ||
-      normalizeOptionalText(imageTask.modelName as string | undefined),
-  });
-
   return {
-    content: assistantContent,
-    fallbackContent: assistantContent,
+    content: "",
+    fallbackContent: "",
   };
 }

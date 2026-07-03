@@ -447,7 +447,9 @@ describe("contentFactoryWorkerContract", () => {
     const { events, response } = parseWorkerStdout(
       execFileSync("node", [workerEntrypointPath], {
         input: JSON.stringify(
-          withHostManagedGeneration(request as Record<string, unknown>),
+          withHostManagedGeneration(
+            request as unknown as Record<string, unknown>,
+          ),
         ),
         encoding: "utf8",
         maxBuffer: 8 * 1024 * 1024,

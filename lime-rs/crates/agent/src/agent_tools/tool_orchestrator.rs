@@ -6,9 +6,9 @@ use crate::agent_tools::execution::{
     ToolExecutionResolverInput,
 };
 use crate::protocol::{AgentEvent as RuntimeAgentEvent, AgentToolResult};
+use crate::turn_context_configuration::{to_aster_turn_context, AgentTurnContext};
 use aster::sandbox::{SandboxConfig, SandboxType};
-use aster::session::TurnContextOverride;
-use aster::tools::{ToolContext, ToolError, ToolRegistry};
+use aster::tools::{BashTool, PowerShellTool, ToolContext, ToolError, ToolRegistry};
 use futures::{stream, StreamExt};
 use lime_core::config::ToolExecutionPolicyConfig as ConfigToolExecutionPolicyConfig;
 use serde_json::{json, Map as JsonMap, Value};
@@ -49,7 +49,7 @@ pub struct ToolExecutionBatchInput {
     pub session_id: String,
     pub working_directory: PathBuf,
     pub cancel_token: Option<CancellationToken>,
-    pub turn_context: Option<TurnContextOverride>,
+    pub turn_context: Option<AgentTurnContext>,
     pub persisted_execution_policy: Option<ConfigToolExecutionPolicyConfig>,
     pub parallelism: usize,
     pub auto_mode: bool,
@@ -191,6 +191,68 @@ fn process_id_for_tool(tool_id: &str) -> String {
     format!("process-{tool_id}")
 }
 
+pub fn canonical_shell_tool_name(tool_name: &str) -> Option<&'static str> {
+    match crate::agent_tools::catalog::tool_catalog_entry(tool_name).map(|entry| entry.name) {
+        Some("Bash") => Some("Bash"),
+        Some("PowerShell") => Some("PowerShell"),
+        _ => None,
+    }
+}
+
+pub fn shell_command_text_from_argv(command: &[String]) -> String {
+    command
+        .iter()
+        .skip_while(|part| shell_wrapper_part(part))
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+pub async fn check_shell_tool_permissions(
+    tool_name: &str,
+    command_text: &str,
+    working_directory: PathBuf,
+) -> Result<(), String> {
+    let canonical_tool_name = canonical_shell_tool_name(tool_name)
+        .ok_or_else(|| format!("Unsupported shell tool: {tool_name}"))?;
+    let mut registry = ToolRegistry::new();
+    registry.register(Box::new(BashTool::new()));
+    registry.register(Box::new(PowerShellTool::new()));
+    let tool_context = ToolContext::new(working_directory);
+    registry
+        .check_tool_permissions(
+            canonical_tool_name,
+            json!({ "command": command_text }),
+            &tool_context,
+            None,
+        )
+        .await
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+fn shell_wrapper_part(part: &str) -> bool {
+    matches!(
+        part,
+        "sh" | "bash"
+            | "zsh"
+            | "cmd"
+            | "cmd.exe"
+            | "powershell"
+            | "powershell.exe"
+            | "pwsh"
+            | "pwsh.exe"
+            | "-c"
+            | "/C"
+            | "/c"
+            | "/D"
+            | "/S"
+            | "-NoProfile"
+            | "-NonInteractive"
+            | "-Command"
+    )
+}
+
 fn is_shell_tool_name(tool_name: &str) -> bool {
     matches!(
         normalized_tool_name(tool_name).as_str(),
@@ -241,7 +303,8 @@ async fn execute_planned_tool(
         return execute_live_shell_process(input, planned, context, &mut metadata).await;
     }
 
-    let result = aster::session_context::with_turn_context(input.turn_context.clone(), async {
+    let aster_turn_context = input.turn_context.clone().map(to_aster_turn_context);
+    let result = aster::session_context::with_turn_context(aster_turn_context, async {
         let registry = input.registry.read().await;
         registry
             .execute(&planned.tool_name, planned.params.clone(), &context, None)
@@ -599,7 +662,8 @@ async fn execute_registry_tool_after_live_process_skip(
     context: ToolContext,
     metadata: &mut HashMap<String, Value>,
 ) -> ToolExecutionOutcome {
-    let result = aster::session_context::with_turn_context(input.turn_context.clone(), async {
+    let aster_turn_context = input.turn_context.clone().map(to_aster_turn_context);
+    let result = aster::session_context::with_turn_context(aster_turn_context, async {
         let registry = input.registry.read().await;
         registry
             .execute(&planned.tool_name, planned.params.clone(), &context, None)
@@ -763,7 +827,7 @@ fn sandbox_blocked_outcome(
 fn policy_error_metadata(
     planned: &PlannedToolExecution,
     working_directory: &PathBuf,
-    turn_context: Option<&TurnContextOverride>,
+    turn_context: Option<&AgentTurnContext>,
     persisted_execution_policy: Option<&ConfigToolExecutionPolicyConfig>,
     error: &ToolError,
 ) -> Option<HashMap<String, Value>> {
@@ -864,7 +928,7 @@ fn param_string(value: &Value, keys: &[&str]) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-fn turn_context_metadata_value(turn_context: Option<&TurnContextOverride>) -> Option<Value> {
+fn turn_context_metadata_value(turn_context: Option<&AgentTurnContext>) -> Option<Value> {
     let metadata = &turn_context?.metadata;
     if metadata.is_empty() {
         return None;

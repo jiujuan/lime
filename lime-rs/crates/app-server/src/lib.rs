@@ -1,3 +1,4 @@
+mod agent_runtime_registry;
 mod agent_ui_event_schema;
 mod agent_ui_sequence_verifier;
 #[cfg(feature = "aster-backend")]
@@ -28,6 +29,7 @@ mod project_shell;
 mod runtime;
 mod runtime_backend;
 mod runtime_factory;
+mod skill_registry;
 mod trace_context;
 
 pub use app_server_protocol::error_codes;
@@ -72,6 +74,8 @@ pub use app_server_protocol::JsonRpcNotification;
 pub use app_server_protocol::JsonRpcRequest;
 pub use app_server_protocol::RequestId;
 pub use app_server_protocol::RuntimeOptions;
+pub use app_server_protocol::WorkflowReadParams;
+pub use app_server_protocol::WorkflowReadResponse;
 pub use app_server_protocol::METHOD_AGENT_SESSION_ACTION_REPLAY;
 pub use app_server_protocol::METHOD_AGENT_SESSION_ACTION_RESPOND;
 pub use app_server_protocol::METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT;
@@ -89,6 +93,7 @@ pub use app_server_protocol::METHOD_CAPABILITY_LIST;
 pub use app_server_protocol::METHOD_EVIDENCE_EXPORT;
 pub use app_server_protocol::METHOD_INITIALIZE;
 pub use app_server_protocol::METHOD_INITIALIZED;
+pub use app_server_protocol::METHOD_WORKFLOW_READ;
 use app_server_transport::decode_message;
 use app_server_transport::encode_message;
 use app_server_transport::start_stdio_connection;

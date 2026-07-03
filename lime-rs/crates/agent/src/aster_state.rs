@@ -37,6 +37,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 
+use crate::aster_session_store::LimeSessionStore;
 use crate::credential_bridge::{
     create_aster_provider, AsterProviderConfig, AsterProviderProtocol, CredentialBridge,
 };
@@ -49,13 +50,14 @@ use crate::provider_continuation_state::{
 use crate::queued_turn::QueuedTurnSnapshot;
 use lime_core::database::DbConnection;
 use lime_mcp::McpBridgeSnapshot;
-use lime_services::aster_session_store::LimeSessionStore;
 use std::collections::HashSet;
 
-async fn configure_lime_native_file_tools(agent: &mut Agent) {
+async fn configure_lime_native_tool_overlay(agent: &mut Agent) {
     agent.add_tool_inspector(Box::new(
         crate::agent_tools::tool_policy_inspector::WorkspaceToolPolicyInspector::new(),
     ));
+    // Aster 默认工具池由 Agent::with_tool_config -> register_all_tools 注册。
+    // 这里只覆盖 Lime 需要改变策略或收口事实源的工具，不重复接管 Aster 默认工具。
     let shared_history = create_shared_history();
     let registry_arc = agent.tool_registry().clone();
     let mut registry = registry_arc.write().await;
@@ -258,7 +260,7 @@ impl AsterAgentState {
             // 使用异步方法设置 Lime 专属身份
             let identity = crate::create_lime_identity();
             agent.set_identity(identity).await;
-            configure_lime_native_file_tools(&mut agent).await;
+            configure_lime_native_tool_overlay(&mut agent).await;
 
             // 加载 Lime Skills 到 aster-rust 的 global_registry
             crate::reload_lime_skills();
@@ -841,6 +843,13 @@ mod tests {
 
         state.init_agent_with_db(&db).await.unwrap();
         assert!(state.is_initialized().await);
+
+        let agent_arc = state.get_agent_arc();
+        let agent_guard = agent_arc.read().await;
+        let agent = agent_guard.as_ref().expect("agent should exist");
+        let registry = agent.tool_registry().read().await;
+        assert!(registry.contains_native("WebFetch"));
+        assert!(registry.contains_native("WebSearch"));
     }
 
     #[tokio::test]

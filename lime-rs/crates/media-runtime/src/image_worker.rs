@@ -6,6 +6,7 @@ use tokio::task::JoinSet;
 
 use super::image_postprocess::infer_image_postprocess_outcome;
 use super::image_request::request_single_image_generation_for_executor;
+use super::image_task_audit::record_image_task_audit_event;
 use super::image_task_input::{image_generation_request_input, prepare_image_task_input};
 use super::image_worker_state::{
     apply_image_route_preflight, load_current_image_task, mark_image_task_failed, patch_image_task,
@@ -15,6 +16,7 @@ use crate::{llm_events, TaskArtifactPatch};
 
 pub const IMAGE_TASK_RUNNER_WORKER_ID: &str = "lime-image-api-worker";
 pub const IMAGE_TASK_RUNNER_TIMEOUT_SECS: u64 = 300;
+pub const AGNES_IMAGE_TASK_RUNNER_TIMEOUT_SECS: u64 = 120;
 pub const IMAGE_TASK_MAX_PARALLEL_REQUESTS: usize = 3;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImageGenerationRunnerConfig {
@@ -27,6 +29,15 @@ pub struct ImageGenerationRunnerConfig {
 pub enum ImageGenerationRequestBodyFormat {
     OpenaiImages,
     AgnesImages,
+}
+
+pub(crate) fn image_task_runner_timeout_secs(
+    request_body_format: ImageGenerationRequestBodyFormat,
+) -> u64 {
+    match request_body_format {
+        ImageGenerationRequestBodyFormat::AgnesImages => AGNES_IMAGE_TASK_RUNNER_TIMEOUT_SECS,
+        ImageGenerationRequestBodyFormat::OpenaiImages => IMAGE_TASK_RUNNER_TIMEOUT_SECS,
+    }
 }
 
 impl Default for ImageGenerationRequestBodyFormat {
@@ -93,10 +104,26 @@ where
     F: FnMut(&MediaTaskOutput) + Send,
 {
     let current = load_current_image_task(workspace_root, task_id)?;
+    record_image_task_audit_event(
+        workspace_root,
+        &current,
+        "worker_loaded",
+        json!({
+            "request_body_format": runner_config.request_body_format.as_str(),
+        }),
+    );
     if matches!(
         current.normalized_status.as_str(),
         "cancelled" | "failed" | "succeeded" | "partial"
     ) {
+        record_image_task_audit_event(
+            workspace_root,
+            &current,
+            "worker_skipped_terminal_task",
+            json!({
+                "reason": "terminal_status",
+            }),
+        );
         return Ok(current);
     }
 
@@ -115,6 +142,14 @@ where
                 ..TaskArtifactPatch::default()
             },
         )?;
+        record_image_task_audit_event(
+            workspace_root,
+            &output,
+            "task_queued",
+            json!({
+                "request_body_format": runner_config.request_body_format.as_str(),
+            }),
+        );
         on_update(&output);
         output
     } else {
@@ -133,7 +168,18 @@ where
     )? {
         Ok(output) => output,
         Err(task_error) => {
-            return mark_image_task_failed(workspace_root, task_id, task_error, &mut on_update);
+            let failed =
+                mark_image_task_failed(workspace_root, task_id, task_error, &mut on_update)?;
+            record_image_task_audit_event(
+                workspace_root,
+                &failed,
+                "task_failed",
+                json!({
+                    "stage": "route_preflight",
+                    "error": failed.last_error.clone(),
+                }),
+            );
+            return Ok(failed);
         }
     };
 
@@ -142,10 +188,22 @@ where
         Err(message) => {
             let task_error =
                 build_image_task_error("invalid_image_task_payload", message, false, "payload");
-            return mark_image_task_failed(workspace_root, task_id, task_error, &mut on_update);
+            let failed =
+                mark_image_task_failed(workspace_root, task_id, task_error, &mut on_update)?;
+            record_image_task_audit_event(
+                workspace_root,
+                &failed,
+                "task_failed",
+                json!({
+                    "stage": "payload",
+                    "error": failed.last_error.clone(),
+                }),
+            );
+            return Ok(failed);
         }
     };
 
+    let requested_count = prepared_input.request_slots.len().max(1);
     let running_output = patch_image_task(
         workspace_root,
         task_id,
@@ -164,14 +222,25 @@ where
             ..TaskArtifactPatch::default()
         },
     )?;
+    record_image_task_audit_event(
+        workspace_root,
+        &running_output,
+        "task_running",
+        json!({
+            "executor_mode": prepared_input.executor_mode.clone(),
+            "request_body_format": runner_config.request_body_format.as_str(),
+            "requested_count": requested_count,
+            "reference_image_count": prepared_input.reference_images.len(),
+        }),
+    );
     on_update(&running_output);
 
+    let request_timeout_secs = image_task_runner_timeout_secs(runner_config.request_body_format);
     let client = reqwest::Client::builder()
         .no_proxy()
-        .timeout(Duration::from_secs(IMAGE_TASK_RUNNER_TIMEOUT_SECS))
+        .timeout(Duration::from_secs(request_timeout_secs))
         .build()
         .unwrap_or_else(|_| reqwest::Client::new());
-    let requested_count = prepared_input.request_slots.len().max(1);
     let mut images: Vec<Option<Value>> = vec![None; requested_count];
     let mut responses: Vec<Option<Value>> = vec![None; requested_count];
     let mut failures: Vec<Option<Value>> = vec![None; requested_count];
@@ -191,6 +260,18 @@ where
             .iter()
             .cloned()
         {
+            record_image_task_audit_event(
+                workspace_root,
+                &latest,
+                "request_slot_started",
+                json!({
+                    "slot_index": request_slot.slot_index,
+                    "slot_id": request_slot.slot_id,
+                    "request_body_format": runner_config.request_body_format.as_str(),
+                    "executor_mode": prepared_input.executor_mode.clone(),
+                    "prompt_chars": request_slot.prompt.chars().count(),
+                }),
+            );
             let client = client.clone();
             let runner_config = runner_config.clone();
             let request_input = request_input.clone();
@@ -230,7 +311,7 @@ where
                     }
                     failures[slot_index] = Some(json!({
                         "slot_index": slot_index + 1,
-                        "error": task_error,
+                        "error": task_error.clone(),
                     }));
                     let latest = load_current_image_task(workspace_root, task_id)?;
                     if latest.normalized_status == "cancelled" {
@@ -277,14 +358,39 @@ where
                             ..TaskArtifactPatch::default()
                         },
                     )?;
+                    record_image_task_audit_event(
+                        workspace_root,
+                        &running_snapshot,
+                        "request_slot_failed",
+                        json!({
+                            "slot_index": slot_index + 1,
+                            "stage": "join",
+                            "error": task_error,
+                            "completed_count": images.iter().filter(|value| value.is_some()).count(),
+                            "failed_count": failures.iter().filter(|value| value.is_some()).count(),
+                        }),
+                    );
                     on_update(&running_snapshot);
                     continue;
                 }
             };
 
             let slot_position = request_slot.slot_index.saturating_sub(1) as usize;
+            let mut slot_audit_event = "request_slot_failed";
+            let slot_audit_details: Value;
             match result {
                 Ok((image, response_body)) => {
+                    slot_audit_event = "request_slot_succeeded";
+                    let image_url = image
+                        .get("url")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .map(ToOwned::to_owned);
+                    let response_data_count = response_body
+                        .get("data")
+                        .and_then(Value::as_array)
+                        .map(Vec::len);
                     let postprocess_outcome =
                         if let Some(plan) = prepared_input.postprocess_plan.as_ref() {
                             Some(infer_image_postprocess_outcome(&client, &image, plan).await)
@@ -301,6 +407,12 @@ where
                     responses[slot_position] =
                         Some(decorate_response_with_slot(response_body, &request_slot));
                     slot_statuses[slot_position] = "complete".to_string();
+                    slot_audit_details = json!({
+                        "slot_index": request_slot.slot_index,
+                        "slot_id": request_slot.slot_id,
+                        "has_url": image_url.is_some(),
+                        "response_data_count": response_data_count,
+                    });
                 }
                 Err(task_error) => {
                     batch_saw_non_retryable_failure |= !task_error.retryable;
@@ -308,6 +420,11 @@ where
                         first_error = Some(task_error.clone());
                     }
                     slot_statuses[slot_position] = "error".to_string();
+                    slot_audit_details = json!({
+                        "slot_index": request_slot.slot_index,
+                        "slot_id": request_slot.slot_id,
+                        "error": task_error.clone(),
+                    });
                     failures[slot_position] =
                         Some(build_failed_slot_value(&request_slot, task_error));
                 }
@@ -356,6 +473,17 @@ where
                     ..TaskArtifactPatch::default()
                 },
             )?;
+            record_image_task_audit_event(
+                workspace_root,
+                &running_snapshot,
+                slot_audit_event,
+                json!({
+                    "slot": slot_audit_details,
+                    "completed_count": images.iter().filter(|value| value.is_some()).count(),
+                    "failed_count": failures.iter().filter(|value| value.is_some()).count(),
+                    "requested_count": requested_count,
+                }),
+            );
             on_update(&running_snapshot);
         }
 
@@ -377,7 +505,20 @@ where
                 "result",
             )
         });
-        return mark_image_task_failed(workspace_root, task_id, task_error, &mut on_update);
+        let failed = mark_image_task_failed(workspace_root, task_id, task_error, &mut on_update)?;
+        record_image_task_audit_event(
+            workspace_root,
+            &failed,
+            "task_failed",
+            json!({
+                "stage": "result",
+                "requested_count": requested_count,
+                "completed_count": 0,
+                "failed_count": failed_slots.len(),
+                "error": failed.last_error.clone(),
+            }),
+        );
+        return Ok(failed);
     }
 
     let latest = load_current_image_task(workspace_root, task_id)?;
@@ -430,6 +571,20 @@ where
             ..TaskArtifactPatch::default()
         },
     )?;
+    record_image_task_audit_event(
+        workspace_root,
+        &completed,
+        if final_status == "partial" {
+            "task_partial"
+        } else {
+            "task_succeeded"
+        },
+        json!({
+            "requested_count": requested_count,
+            "completed_count": completed_images.len(),
+            "failed_count": failed_slots.len(),
+        }),
+    );
     on_update(&completed);
     Ok(completed)
 }

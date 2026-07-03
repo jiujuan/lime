@@ -1,6 +1,7 @@
 mod image_postprocess;
 mod image_references;
 mod image_request;
+mod image_task_audit;
 mod image_task_input;
 mod image_worker;
 mod image_worker_progress;

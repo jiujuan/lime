@@ -8,7 +8,7 @@ export interface ImageProviderMatcherProfile {
 }
 
 const IMAGE_GENERATION_MODEL_PATTERN =
-  /(gpt[-_ ]?images?|qwen[-_ ]?image|imagen|dall-e|dalle|nano[-_ ]?banana|banana|flux|seedream|kontext|recraft|ideogram|sdxl|sd3|stable[-_ ]?diffusion|cogview|glm[-_ ]?image|wanx|midjourney|(?:^|[^a-z0-9])mj(?:$|[^a-z0-9])|(?:^|[^a-z0-9])image[-_ ]?(?:\d|generation|gen|preview|model)(?:$|[^a-z0-9])|text[-_ ]?to[-_ ]?image|picture|drawing|绘图|图像生成|生图)/;
+  /(agnes[-_ ]?image|gpt[-_ ]?images?|qwen[-_ ]?image|imagen|dall-e|dalle|nano[-_ ]?banana|banana|flux|seedream|kontext|recraft|ideogram|sdxl|sd3|stable[-_ ]?diffusion|cogview|glm[-_ ]?image|wanx|midjourney|(?:^|[^a-z0-9])mj(?:$|[^a-z0-9])|(?:^|[^a-z0-9])image[-_ ]?(?:\d|generation|gen|preview|model)(?:$|[^a-z0-9])|text[-_ ]?to[-_ ]?image|picture|drawing|绘图|图像生成|生图)/;
 
 function normalizeText(value?: string | null): string {
   return (value ?? "").trim().toLowerCase();

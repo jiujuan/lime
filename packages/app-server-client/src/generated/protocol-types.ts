@@ -2,283 +2,6 @@
 // Source: lime-rs/crates/app-server-protocol/schema/json/app_server_protocol.schemas.json
 // Run `npm run generate:protocol-types` to regenerate.
 
-export interface PluginArticleWorkspaceContract {
-  enabled: boolean;
-  objects?: PluginArticleWorkspaceObject[];
-  panes?: string[];
-  rendererKinds?: string[];
-}
-
-export interface PluginArticleWorkspaceObject {
-  artifactKind?: null | string;
-  defaultPane: string;
-  kind: string;
-  primary: boolean;
-  title: string;
-}
-
-export interface PluginCloudReleaseDescriptor {
-  appId: string;
-  channel?: null | string;
-  loadedAt: string;
-  manifestHash: string;
-  packageHash: string;
-  packageUrl: string;
-  releaseId?: null | string;
-  signatureRef?: null | string;
-  sourceUri: string;
-  tenantEnablementRef?: null | string;
-  tenantId?: null | string;
-  version: string;
-}
-
-export interface PluginDeleteDataExecutionEvidence {
-  blockedTargets?: PluginDeleteDataTargetEvidence[];
-  blockerCodes?: string[];
-  dataRoot: string;
-  failedTarget?: PluginDeleteDataTargetEvidence | null;
-  generatedAt: string;
-  missingTargets?: PluginDeleteDataTargetEvidence[];
-  postDeleteResidualAudit: PluginDeleteDataPostDeleteResidualAudit;
-  removedTargets?: PluginDeleteDataTargetEvidence[];
-  retainedTargets?: PluginDeleteDataTargetEvidence[];
-  status: string;
-}
-
-export interface PluginDeleteDataPostDeleteResidualAudit {
-  checkedAt: string;
-  checkedTargetCount: number;
-  failedTarget?: PluginDeleteDataTargetEvidence | null;
-  remainingTargetCount: number;
-  remainingTargets?: PluginDeleteDataTargetEvidence[];
-  status: string;
-}
-
-export interface PluginDeleteDataTargetEvidence {
-  action: string;
-  blockerCodes?: string[];
-  error?: null | string;
-  kind: string;
-  reason: string;
-  status: string;
-  value: string;
-}
-
-export interface PluginFetchCloudPackageParams {
-  descriptor: PluginCloudReleaseDescriptor;
-}
-
-export interface PluginHistoryRestoreContract {
-  defaultPane?: null | string;
-  defaultTab?: null | string;
-  enabled: boolean;
-  fallback: string;
-  restoreLayout: boolean;
-  restoreSelection: boolean;
-}
-
-export interface PluginHostFunctionState {
-  blockers?: string[];
-  currentOwner: string;
-  followUps?: string[];
-  key: string;
-  status: string;
-}
-
-export interface PluginHostLifecycleListResponse {
-  issues?: unknown[];
-  snapshots?: PluginHostLifecycleSnapshot[];
-}
-
-export interface PluginHostLifecycleSnapshot {
-  appCenterStatus: string;
-  appId: string;
-  blockers?: string[];
-  displayName: string;
-  followUps?: string[];
-  functions?: PluginHostFunctionState[];
-  generatedAt: string;
-  issueCategories?: PluginReadinessIssueCategorySummary[];
-  primaryIssueCategory?: null | string;
-  profiles?: string[];
-  publishBlocked: boolean;
-  readinessStatus: string;
-  rightSurface: PluginRightSurfaceContract;
-  taskRuntime: PluginTaskRuntimeContract;
-}
-
-export interface PluginInstalledDisabledSetParams {
-  appId: string;
-  disabled: boolean;
-  updatedAt?: null | string;
-}
-
-export interface PluginInstalledListResponse {
-  issues?: unknown[];
-  states?: unknown[];
-}
-
-export interface PluginInstalledSaveParams {
-  state: unknown;
-}
-
-export interface PluginLocalPackageInspectParams {
-  appDir: string;
-}
-
-export interface PluginLocalPackageInspectResponse {
-  appDir: string;
-  inspectedAt: string;
-  manifest: unknown;
-  manifestHash: string;
-  manifestSource: string;
-  packageHash: string;
-  pluginManifest: unknown;
-  sourceKind: string;
-  sourceUri: string;
-}
-
-export interface PluginPackageCacheEntry {
-  appId: string;
-  cachePath: string;
-  cachedAt: string;
-  identity: PluginPackageIdentity;
-  manifestHash: string;
-  manifestSnapshot: unknown;
-  packageHash: string;
-}
-
-export interface PluginPackageIdentity {
-  appId: string;
-  appVersion: string;
-  channel?: null | string;
-  loadedAt: string;
-  manifestHash: string;
-  packageHash: string;
-  releaseId?: null | string;
-  signatureRef?: null | string;
-  sourceKind: string;
-  sourceUri: string;
-  tenantEnablementRef?: null | string;
-  tenantId?: null | string;
-}
-
-export interface PluginRightSurfaceContract {
-  articleWorkspace: PluginArticleWorkspaceContract;
-  defaultActiveTab?: null | string;
-  dock: string;
-  historyRestore: PluginHistoryRestoreContract;
-  physicalDockCount: number;
-  supportedTabs?: string[];
-}
-
-export interface PluginShellPackageMount {
-  kind: string;
-  manifestHash: string;
-  packageHash: string;
-  path: string;
-  readOnly: boolean;
-}
-
-export interface PluginShellPrepareParams {
-  descriptor: unknown;
-}
-
-export interface PluginShellPrepareResponse {
-  appId?: null | string;
-  blockerCodes?: string[];
-  descriptorVersion?: number | null;
-  devShell: boolean;
-  entryKey?: null | string;
-  installMode?: null | string;
-  message?: null | string;
-  packageMount?: PluginShellPackageMount | null;
-  preparedAt: string;
-  shellKind?: null | string;
-  status: string;
-  windowTitle?: null | string;
-}
-
-export interface PluginTaskRuntimeContract {
-  blockers?: string[];
-  contractPath?: null | string;
-  directFilesystemAccess: boolean;
-  directProviderAccess: boolean;
-  enabled: boolean;
-  followUps?: string[];
-  outputArtifactKind?: null | string;
-  packageRootPath?: null | string;
-  sampleRequestPath?: null | string;
-  taskKinds?: string[];
-  workerEntrypoint?: null | string;
-}
-
-export interface PluginUiRuntimeStartParams {
-  appId: string;
-  entryKey?: null | string;
-}
-
-export interface PluginUiRuntimeStatusParams {
-  appId: string;
-}
-
-export interface PluginUiRuntimeStatusResponse {
-  appId: string;
-  baseUrl?: null | string;
-  entryKey?: null | string;
-  entryUrl?: null | string;
-  message?: null | string;
-  pid?: number | null;
-  port?: number | null;
-  route?: null | string;
-  status: string;
-  taskRuntime?: PluginTaskRuntimeContract | null;
-}
-
-export interface PluginUiRuntimeStopParams {
-  appId: string;
-}
-
-export interface PluginUninstallParams {
-  appId: string;
-  confirmationPhrase?: null | string;
-  mode: string;
-}
-
-export interface PluginUninstallRehearsalParams {
-  appId: string;
-  mode: string;
-}
-
-export interface PluginUninstallRehearsalResponse {
-  appId: string;
-  deletedTargetCount: number;
-  generatedAt: string;
-  mode: string;
-  packageHash?: null | string;
-  retainedTargetCount: number;
-  targets?: PluginUninstallRehearsalTarget[];
-  warnings?: string[];
-}
-
-export interface PluginUninstallRehearsalTarget {
-  action: string;
-  kind: string;
-  reason: string;
-  safeToDelete: boolean;
-  value: string;
-}
-
-export interface PluginUninstallResponse {
-  blockerCodes?: string[];
-  deleteEvidence?: PluginDeleteDataExecutionEvidence | null;
-  list: PluginInstalledListResponse;
-  missingTargetCount: number;
-  rehearsal: PluginUninstallRehearsalResponse;
-  removedTargetCount: number;
-  status: string;
-}
-
 export interface AgentAttachment {
   kind: string;
   metadata?: unknown;
@@ -2948,10 +2671,10 @@ export interface ModelTaskRequest {
 }
 
 export type ModelTaskSource =
-  | "plugin"
   | "agent_turn"
   | "automation"
   | "media_task_artifact"
+  | "plugin"
   | "provider_probe";
 
 export interface OpenDeepLinkPayload {
@@ -2965,6 +2688,283 @@ export interface OpenDeepLinkPayload {
 export interface PlatformInfo {
   family: string;
   os: string;
+}
+
+export interface PluginArticleWorkspaceContract {
+  enabled: boolean;
+  objects?: PluginArticleWorkspaceObject[];
+  panes?: string[];
+  rendererKinds?: string[];
+}
+
+export interface PluginArticleWorkspaceObject {
+  artifactKind?: null | string;
+  defaultPane: string;
+  kind: string;
+  primary: boolean;
+  title: string;
+}
+
+export interface PluginCloudReleaseDescriptor {
+  appId: string;
+  channel?: null | string;
+  loadedAt: string;
+  manifestHash: string;
+  packageHash: string;
+  packageUrl: string;
+  releaseId?: null | string;
+  signatureRef?: null | string;
+  sourceUri: string;
+  tenantEnablementRef?: null | string;
+  tenantId?: null | string;
+  version: string;
+}
+
+export interface PluginDeleteDataExecutionEvidence {
+  blockedTargets?: PluginDeleteDataTargetEvidence[];
+  blockerCodes?: string[];
+  dataRoot: string;
+  failedTarget?: PluginDeleteDataTargetEvidence | null;
+  generatedAt: string;
+  missingTargets?: PluginDeleteDataTargetEvidence[];
+  postDeleteResidualAudit: PluginDeleteDataPostDeleteResidualAudit;
+  removedTargets?: PluginDeleteDataTargetEvidence[];
+  retainedTargets?: PluginDeleteDataTargetEvidence[];
+  status: string;
+}
+
+export interface PluginDeleteDataPostDeleteResidualAudit {
+  checkedAt: string;
+  checkedTargetCount: number;
+  failedTarget?: PluginDeleteDataTargetEvidence | null;
+  remainingTargetCount: number;
+  remainingTargets?: PluginDeleteDataTargetEvidence[];
+  status: string;
+}
+
+export interface PluginDeleteDataTargetEvidence {
+  action: string;
+  blockerCodes?: string[];
+  error?: null | string;
+  kind: string;
+  reason: string;
+  status: string;
+  value: string;
+}
+
+export interface PluginFetchCloudPackageParams {
+  descriptor: PluginCloudReleaseDescriptor;
+}
+
+export interface PluginHistoryRestoreContract {
+  defaultPane?: null | string;
+  defaultTab?: null | string;
+  enabled: boolean;
+  fallback: string;
+  restoreLayout: boolean;
+  restoreSelection: boolean;
+}
+
+export interface PluginHostFunctionState {
+  blockers?: string[];
+  currentOwner: string;
+  followUps?: string[];
+  key: string;
+  status: string;
+}
+
+export interface PluginHostLifecycleListResponse {
+  issues?: unknown[];
+  snapshots?: PluginHostLifecycleSnapshot[];
+}
+
+export interface PluginHostLifecycleSnapshot {
+  appCenterStatus: string;
+  appId: string;
+  blockers?: string[];
+  displayName: string;
+  followUps?: string[];
+  functions?: PluginHostFunctionState[];
+  generatedAt: string;
+  issueCategories?: PluginReadinessIssueCategorySummary[];
+  primaryIssueCategory?: null | string;
+  profiles?: string[];
+  publishBlocked: boolean;
+  readinessStatus: string;
+  rightSurface: PluginRightSurfaceContract;
+  taskRuntime: PluginTaskRuntimeContract;
+}
+
+export interface PluginInstalledDisabledSetParams {
+  appId: string;
+  disabled: boolean;
+  updatedAt?: null | string;
+}
+
+export interface PluginInstalledListResponse {
+  issues?: unknown[];
+  states?: unknown[];
+}
+
+export interface PluginInstalledSaveParams {
+  state: unknown;
+}
+
+export interface PluginLocalPackageInspectParams {
+  appDir: string;
+}
+
+export interface PluginLocalPackageInspectResponse {
+  appDir: string;
+  inspectedAt: string;
+  manifest: unknown;
+  manifestHash: string;
+  manifestSource: string;
+  packageHash: string;
+  pluginManifest: unknown;
+  sourceKind: string;
+  sourceUri: string;
+}
+
+export interface PluginPackageCacheEntry {
+  appId: string;
+  cachePath: string;
+  cachedAt: string;
+  identity: PluginPackageIdentity;
+  manifestHash: string;
+  manifestSnapshot: unknown;
+  packageHash: string;
+}
+
+export interface PluginPackageIdentity {
+  appId: string;
+  appVersion: string;
+  channel?: null | string;
+  loadedAt: string;
+  manifestHash: string;
+  packageHash: string;
+  releaseId?: null | string;
+  signatureRef?: null | string;
+  sourceKind: string;
+  sourceUri: string;
+  tenantEnablementRef?: null | string;
+  tenantId?: null | string;
+}
+
+export interface PluginRightSurfaceContract {
+  articleWorkspace: PluginArticleWorkspaceContract;
+  defaultActiveTab?: null | string;
+  dock: string;
+  historyRestore: PluginHistoryRestoreContract;
+  physicalDockCount: number;
+  supportedTabs?: string[];
+}
+
+export interface PluginShellPackageMount {
+  kind: string;
+  manifestHash: string;
+  packageHash: string;
+  path: string;
+  readOnly: boolean;
+}
+
+export interface PluginShellPrepareParams {
+  descriptor: unknown;
+}
+
+export interface PluginShellPrepareResponse {
+  appId?: null | string;
+  blockerCodes?: string[];
+  descriptorVersion?: number | null;
+  devShell: boolean;
+  entryKey?: null | string;
+  installMode?: null | string;
+  message?: null | string;
+  packageMount?: PluginShellPackageMount | null;
+  preparedAt: string;
+  shellKind?: null | string;
+  status: string;
+  windowTitle?: null | string;
+}
+
+export interface PluginTaskRuntimeContract {
+  blockers?: string[];
+  contractPath?: null | string;
+  directFilesystemAccess: boolean;
+  directProviderAccess: boolean;
+  enabled: boolean;
+  followUps?: string[];
+  outputArtifactKind?: null | string;
+  packageRootPath?: null | string;
+  sampleRequestPath?: null | string;
+  taskKinds?: string[];
+  workerEntrypoint?: null | string;
+}
+
+export interface PluginUiRuntimeStartParams {
+  appId: string;
+  entryKey?: null | string;
+}
+
+export interface PluginUiRuntimeStatusParams {
+  appId: string;
+}
+
+export interface PluginUiRuntimeStatusResponse {
+  appId: string;
+  baseUrl?: null | string;
+  entryKey?: null | string;
+  entryUrl?: null | string;
+  message?: null | string;
+  pid?: number | null;
+  port?: number | null;
+  route?: null | string;
+  status: string;
+  taskRuntime?: PluginTaskRuntimeContract | null;
+}
+
+export interface PluginUiRuntimeStopParams {
+  appId: string;
+}
+
+export interface PluginUninstallParams {
+  appId: string;
+  confirmationPhrase?: null | string;
+  mode: string;
+}
+
+export interface PluginUninstallRehearsalParams {
+  appId: string;
+  mode: string;
+}
+
+export interface PluginUninstallRehearsalResponse {
+  appId: string;
+  deletedTargetCount: number;
+  generatedAt: string;
+  mode: string;
+  packageHash?: null | string;
+  retainedTargetCount: number;
+  targets?: PluginUninstallRehearsalTarget[];
+  warnings?: string[];
+}
+
+export interface PluginUninstallRehearsalTarget {
+  action: string;
+  kind: string;
+  reason: string;
+  safeToDelete: boolean;
+  value: string;
+}
+
+export interface PluginUninstallResponse {
+  blockerCodes?: string[];
+  deleteEvidence?: PluginDeleteDataExecutionEvidence | null;
+  list: PluginInstalledListResponse;
+  missingTargetCount: number;
+  rehearsal: PluginUninstallRehearsalResponse;
+  removedTargetCount: number;
+  status: string;
 }
 
 export interface ProjectGitBranchCheckoutParams {
@@ -3936,6 +3936,17 @@ export interface WindowsStartupDiagnosticsResponse {
   webview2Version?: null | string;
 }
 
+export interface WorkflowReadParams {
+  sessionId: string;
+}
+
+export interface WorkflowReadResponse {
+  sessionId: string;
+  workflow: unknown;
+  workflowRuns?: unknown[];
+  workflowSteps?: unknown[];
+}
+
 export interface WorkspaceDeleteParams {
   deleteDirectory?: boolean | null;
   id: string;
@@ -4141,10 +4152,10 @@ export interface jsonRpcResponse {
 
 export type requestId = number | string;
 
+export type AgentSessionCwdFilter = string | string[];
+
 export interface PluginReadinessIssueCategorySummary {
   category: string;
   codes?: string[];
   count: number;
 }
-
-export type AgentSessionCwdFilter = string | string[];

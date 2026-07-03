@@ -287,6 +287,7 @@ fn app_server_method_catalog_keeps_request_and_notification_methods_together() {
             METHOD_AGENT_SESSION_ACTION_REPLAY,
             METHOD_AGENT_SESSION_ACTION_RESPOND,
             METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
+            METHOD_WORKFLOW_READ,
             METHOD_AGENT_SESSION_EVENT,
         ]
     );
@@ -323,6 +324,7 @@ fn app_server_method_catalog_keeps_request_and_notification_methods_together() {
     assert!(is_app_server_request_method(
         METHOD_AGENT_SESSION_TURN_START
     ));
+    assert!(is_app_server_request_method(METHOD_WORKFLOW_READ));
     assert!(!is_app_server_request_method(METHOD_INITIALIZED));
     assert!(is_app_server_notification_method(METHOD_INITIALIZED));
     assert!(is_app_server_notification_method(

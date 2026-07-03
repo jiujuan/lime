@@ -8,8 +8,8 @@ import {
   APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_ARTICLE_ARTIFACT_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_IMAGE_ARTIFACT_ID,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_REMOTE_REJECT_ERROR_CODE,
-  CONTENT_FACTORY_ARTICLE_WORKSPACE_REMOTE_REJECT_TURN_ID,
+  CONTENT_FACTORY_ARTICLE_WORKSPACE_CONTRACT_REJECT_ERROR_CODE,
+  CONTENT_FACTORY_ARTICLE_WORKSPACE_CONTRACT_REJECT_TURN_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_TITLE,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_THREAD_ID,
@@ -213,7 +213,7 @@ export async function runContentFactoryArticleWorkspaceScenario({
   const artifactReadSummary = summarizeContentFactoryArtifactRead(
     artifactRead.result,
   );
-  const remoteRuntimeRejection = await runRemotePluginRuntimeRejectionProbe({
+  const runtimeContractRejection = await runRuntimeContractRejectionProbe({
     page,
     workspace,
     options,
@@ -228,8 +228,8 @@ export async function runContentFactoryArticleWorkspaceScenario({
     contentFactoryArticleWorkspaceWorkerTurnStart: workerTurnStart,
     contentFactoryArticleWorkspaceWorkerHostGenerationFixture:
       workerTurnStart.hostGenerationFixture,
-    contentFactoryArticleWorkspaceRemoteRuntimeRejection:
-      remoteRuntimeRejection,
+    contentFactoryArticleWorkspaceRuntimeContractRejection:
+      runtimeContractRejection,
     contentFactoryArticleWorkspaceActionResultRuntimeEventsAppend:
       summarizeRuntimeEventsAppend(actionResultRuntimeEventsAppend.result),
     contentFactoryArticleWorkspaceRightSurfaceRequest:
@@ -573,6 +573,9 @@ async function waitForContentFactoryArticleEditorOpened(page, options) {
         ),
       );
       const canvas = canvases.find(isVisible) ?? canvases[0] ?? null;
+      const fixtureOnlyNotice = document.querySelector(
+        '[data-testid="workspace-article-editor-fixture-only"]',
+      );
       const bodyText = document.body?.innerText || "";
       const canvasText = canvas?.innerText || "";
       const articleDraftButtons = Array.from(
@@ -583,14 +586,20 @@ async function waitForContentFactoryArticleEditorOpened(page, options) {
       const articleHeaderTitle =
         root?.querySelector("h2")?.textContent?.replace(/\s+/g, " ").trim() ??
         "";
+      const fixtureOnlyArticleHidden =
+        isVisible(fixtureOnlyNotice) &&
+        !canvasText.includes("fixtureOnlyHostGeneration") &&
+        !canvasText.includes("fixturePromptFingerprint");
       const hasArticleDraftObject =
         articleDraftButtons.length > 0 ||
         (articleHeaderTitle.length > 0 &&
-          canvasText.length > 160 &&
-          !canvasText.includes("文章正文生成后会出现在这里"));
+          (fixtureOnlyArticleHidden ||
+            (canvasText.length > 160 &&
+              !canvasText.includes("文章正文生成后会出现在这里"))));
       const hasArticleCanvasContent =
-        canvasText.length > 160 &&
-        !canvasText.includes("文章正文生成后会出现在这里");
+        fixtureOnlyArticleHidden ||
+        (canvasText.length > 160 &&
+          !canvasText.includes("文章正文生成后会出现在这里"));
       return {
         activeSurface: host?.getAttribute("data-surface") ?? null,
         hostVisible: isVisible(host),
@@ -622,9 +631,12 @@ async function waitForContentFactoryArticleEditorOpened(page, options) {
           bodyText.includes("公众号文章草稿") || hasArticleDraftObject,
         hasArticleDraftObject,
         hasArticleCanvasContent,
+        hasFixtureOnlyArticleHidden: fixtureOnlyArticleHidden,
         articleHeaderTitle,
         articleDraftObjectCount: articleDraftButtons.length,
-        hasLoadedDraftStatus: bodyText.includes("已载入产物正文"),
+        hasLoadedDraftStatus:
+          bodyText.includes("已载入产物正文") ||
+          bodyText.includes("测试夹具正文未载入"),
         hasLegacyWorkerTemplateText:
           bodyText.includes("三轮资料检索") ||
           canvasText.includes("先把目标定清楚") ||
@@ -1346,13 +1358,21 @@ async function selectContentFactoryArticleWorkspaceObject(
         const canvas = queryRoot.querySelector(
           '[data-testid="workspace-article-editor-canvas"]',
         );
+        const fixtureOnlyNotice = queryRoot.querySelector(
+          '[data-testid="workspace-article-editor-fixture-only"]',
+        );
         const canvasText = canvas?.textContent ?? "";
+        const fixtureOnlyArticleHidden =
+          isVisible(fixtureOnlyNotice) &&
+          !canvasText.includes("fixtureOnlyHostGeneration") &&
+          !canvasText.includes("fixturePromptFingerprint");
         const alreadySelected =
           objectKind === "articleDraft" &&
           isVisible(root) &&
           isVisible(canvas) &&
-          canvasText.length > 160 &&
-          !canvasText.includes("文章正文生成后会出现在这里");
+          (fixtureOnlyArticleHidden ||
+            (canvasText.length > 160 &&
+              !canvasText.includes("文章正文生成后会出现在这里")));
         const visible = buttonVisible || alreadySelected;
         return {
           candidateCount: buttons.length,
@@ -1404,7 +1424,7 @@ async function selectContentFactoryArticleWorkspaceObject(
   );
 }
 
-async function runRemotePluginRuntimeRejectionProbe({
+async function runRuntimeContractRejectionProbe({
   page,
   workspace,
   options,
@@ -1415,36 +1435,36 @@ async function runRemotePluginRuntimeRejectionProbe({
     APP_SERVER_METHOD_SESSION_TURN_START,
     {
       sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
-      turnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_REMOTE_REJECT_TURN_ID,
+      turnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_CONTRACT_REJECT_TURN_ID,
       input: {
-        text: "尝试运行未授权的远端插件 Article Editor action。",
+        text: "尝试运行 outputArtifactKind 不匹配的 Article Editor action。",
       },
       runtimeOptions: {
         metadata: {
           plugin: {
             source: "right_surface_article_workspace",
-            app_id: "creator-pack",
+            app_id: CONTENT_FACTORY_APP_ID,
             workspace_id: workspace.workspaceId,
             article_workspace_action: {
-              key: "remote_regenerate",
+              key: "contract_mismatch",
               intent: "regenerate",
               risk: "write",
-              task_kind: "creator.generate",
+              task_kind: "content.image.generate",
               output_artifact_kind: "creator.workspace_patch",
-              prompt: "Regenerate remote creator workspace.",
+              prompt: "Regenerate with a mismatched output artifact kind.",
               object: {
-                app_id: "creator-pack",
-                kind: "creatorCanvas",
-                id: "creator-canvas-1",
+                app_id: CONTENT_FACTORY_APP_ID,
+                kind: "imageGenerationSet",
+                id: "image-set-contract-mismatch",
                 session_id: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
-                artifact_ids: ["artifact-remote-creator-1"],
+                artifact_ids: ["artifact-contract-mismatch-1"],
               },
             },
           },
           right_surface: {
             surface_kind: "articleWorkspace",
             source: "article_workspace",
-            action_key: "remote_regenerate",
+            action_key: "contract_mismatch",
           },
         },
       },
@@ -1463,13 +1483,13 @@ async function runRemotePluginRuntimeRejectionProbe({
     payloads.find(
       (payload) =>
         readString(payload?.errorCode, payload?.error_code) ===
-        CONTENT_FACTORY_ARTICLE_WORKSPACE_REMOTE_REJECT_ERROR_CODE,
+        CONTENT_FACTORY_ARTICLE_WORKSPACE_CONTRACT_REJECT_ERROR_CODE,
     ) ?? {};
   const turn =
     response.result?.turn && typeof response.result.turn === "object"
       ? response.result.turn
       : {};
-  const readModelRejection = await waitForRemotePluginRuntimeRejectionReadModel(
+  const readModelRejection = await waitForRuntimeContractRejectionReadModel(
     page,
     options,
     requestLog,
@@ -1504,7 +1524,7 @@ async function runRemotePluginRuntimeRejectionProbe({
   });
 }
 
-async function waitForRemotePluginRuntimeRejectionReadModel(
+async function waitForRuntimeContractRejectionReadModel(
   page,
   options,
   requestLog,
@@ -1521,13 +1541,13 @@ async function waitForRemotePluginRuntimeRejectionReadModel(
       },
       requestLog,
     );
-    const summary = summarizeRemotePluginRuntimeRejectionReadModel(
+    const summary = summarizeRuntimeContractRejectionReadModel(
       readModel.result,
     );
     lastSummary = summary;
     if (
       summary.errorCode ===
-        CONTENT_FACTORY_ARTICLE_WORKSPACE_REMOTE_REJECT_ERROR_CODE &&
+        CONTENT_FACTORY_ARTICLE_WORKSPACE_CONTRACT_REJECT_ERROR_CODE &&
       summary.status === "failed"
     ) {
       return summary;
@@ -1535,7 +1555,7 @@ async function waitForRemotePluginRuntimeRejectionReadModel(
     await sleep(options.intervalMs);
   }
   throw new Error(
-    `远端插件运行拒绝证据未进入 read model: ${JSON.stringify(
+    `Plugin runtime contract 拒绝证据未进入 read model: ${JSON.stringify(
       sanitizeJson(lastSummary),
     )}`,
   );
@@ -2085,7 +2105,7 @@ function summarizeArticleRefRecord(ref) {
   });
 }
 
-function summarizeRemotePluginRuntimeRejectionReadModel(result) {
+function summarizeRuntimeContractRejectionReadModel(result) {
   const detail = asRecord(result?.detail) ?? asRecord(result);
   const threadRead =
     asRecord(detail?.threadRead) ?? asRecord(detail?.thread_read) ?? {};
@@ -2102,7 +2122,7 @@ function summarizeRemotePluginRuntimeRejectionReadModel(result) {
   const rejectionEvidence = workerEvidence.find(
     (evidence) =>
       readString(evidence?.errorCode, evidence?.error_code) ===
-      CONTENT_FACTORY_ARTICLE_WORKSPACE_REMOTE_REJECT_ERROR_CODE,
+      CONTENT_FACTORY_ARTICLE_WORKSPACE_CONTRACT_REJECT_ERROR_CODE,
   );
   return sanitizeJson({
     status: readString(rejectionEvidence?.status),

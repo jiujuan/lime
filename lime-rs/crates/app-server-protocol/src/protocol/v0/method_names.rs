@@ -291,3 +291,4 @@ pub const METHOD_AGENT_SESSION_ACTION_REPLAY: &str = "agentSession/action/replay
 pub const METHOD_AGENT_SESSION_ACTION_RESPOND: &str = "agentSession/action/respond";
 pub const METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND: &str = "agentSession/runtimeEvents/append";
 pub const METHOD_AGENT_SESSION_EVENT: &str = "agentSession/event";
+pub const METHOD_WORKFLOW_READ: &str = "workflow/read";

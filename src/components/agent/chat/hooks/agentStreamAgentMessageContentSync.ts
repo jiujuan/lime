@@ -114,7 +114,7 @@ function upsertAgentMessageContentPart(params: {
   }
 
   const item = params.item;
-  const text = item.text?.trim();
+  const text = item.text.trim();
   if (!text) {
     return params.parts;
   }

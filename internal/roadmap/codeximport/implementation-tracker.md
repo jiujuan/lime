@@ -44,9 +44,9 @@ Codex state_*.sqlite / rollout JSONL
 
 ## 2026-06-19 进度记录：手动选择本地历史目录对齐 FR-02
 
-- `resolved`：导入弹窗新增“选择目录”入口，复用现有 Electron Desktop Host `agent_app_select_directory` current 壳能力，经 `src/lib/api/agentApps.ts -> selectAgentAppDirectory(...)` 进入系统目录选择器；renderer 仍不直接扫描本地文件，也不新增第二套导入命令。
+- `resolved`：导入弹窗新增“选择目录”入口，复用现有 Electron Desktop Host `plugin_select_directory` current 壳能力，经 `src/lib/api/agentApps.ts -> selectPluginDirectory(...)` 进入系统目录选择器；renderer 仍不直接扫描本地文件，也不新增第二套导入命令。
 - `resolved`：用户选择目录后，弹窗会把选中路径写回本地历史数据目录输入框，并立即按该 `sourceRoot` 重新调用 `conversationImport/source/scan`；扫描仍携带 `includeArchived=true`，保持 active + archived 本地历史同一导入主链。
-- `guarded`：`AppSidebar.conversations.test.tsx` 新增回归，覆盖系统目录选择器返回路径后使用该路径重新扫描，并断言目录选择 title 走五语言资源；`AppSidebar.testFixtures.tsx` 补齐 `selectAgentAppDirectory` mock，避免组件测试绕过 API 网关。
+- `guarded`：`AppSidebar.conversations.test.tsx` 新增回归，覆盖系统目录选择器返回路径后使用该路径重新扫描，并断言目录选择 title 走五语言资源；`AppSidebar.testFixtures.tsx` 补齐 `selectPluginDirectory` mock，避免组件测试绕过 API 网关。
 - `i18n`：新增 `navigation.sidebar.importDialog.sourceRoot.dialogTitle`、`action.chooseDirectory`、`error.chooseDirectory`，覆盖 `zh-CN / zh-TW / en-US / ja-JP / ko-KR`。
 - 已通过验证：`npx vitest run "src/components/app-sidebar/conversationImportDialogViewModel.unit.test.ts" "src/components/AppSidebar.conversations.test.tsx" --silent=passed-only --disableConsoleIntercept --testTimeout=30000`，56 tests passed；`npm run i18n:check:json`，五语言 coverage 100%、missing=0、extra=0；`npx eslint "src/components/app-sidebar/AppSidebarConversationImportDialog.tsx" "src/components/app-sidebar/AppSidebarConversationImportThreadList.tsx" "src/components/AppSidebar.conversations.test.tsx" "src/components/AppSidebar.testFixtures.tsx" --max-warnings 0` 通过；`npm run test:contracts` 通过；相关写集 `git diff --check` 通过。
 - `resolved`：导入后的 HTML preview 空白阻塞已关闭。Canvas Workbench HTML 模式在 read model 已有 HTML 内容时优先使用 `srcDoc`，只有内容为空时才回退本地文件 URL；同一 `previewOpenRequest.requestKey` 处理后不再反复把用户手动切换的 Markdown / HTML / Code 预览模式拉回默认模式。2026-06-19 复跑真实 Electron 点击闭环通过，summary `.lime/qc/gui-evidence/codex-import-click-through-fixture/codex-import-click-through-fixture-summary.json` 显示 `ok=true`、`consoleErrors=[]`、`importedFilePreviewArtifactsSummary.openedAllImportedPreviewArtifacts=true`、HTML 项 `htmlPreviewVisible=true` 且 `fallbackSurfaceVisible=false`；通用代码产物工作台 fixture 也通过，证明非导入 artifact workbench 打开路径未被误伤。

@@ -456,16 +456,18 @@ export function sanitizeMessageTextForDisplay(
       ? stripRedundantMarkdownImageAltEchoes(formattedRuntimePeerMessage)
       : formattedRuntimePeerMessage;
 
-  if (!displayMessage) {
+  const sanitizedDisplayMessage = displayMessage;
+
+  if (!sanitizedDisplayMessage) {
     return "";
   }
 
-  if (!containsRuntimeAttachmentPlaceholder(displayMessage)) {
-    return displayMessage;
+  if (!containsRuntimeAttachmentPlaceholder(sanitizedDisplayMessage)) {
+    return sanitizedDisplayMessage;
   }
 
   if (
-    isOnlyRuntimeAttachmentPlaceholderText(displayMessage) &&
+    isOnlyRuntimeAttachmentPlaceholderText(sanitizedDisplayMessage) &&
     ((options.role === "user" && options.hasImages) ||
       options.role === "assistant")
   ) {
@@ -473,7 +475,7 @@ export function sanitizeMessageTextForDisplay(
   }
 
   return collapseDisplayWhitespace(
-    replaceRuntimeAttachmentPlaceholders(displayMessage, "图片"),
+    replaceRuntimeAttachmentPlaceholders(sanitizedDisplayMessage, "图片"),
   );
 }
 

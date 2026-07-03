@@ -12,7 +12,7 @@ type AgentTranslate = TFunction<"agent", undefined>;
 
 interface ImageWorkbenchPreviewMediaProps {
   preview: MessageImageWorkbenchPreview;
-  onSelect: (selection?: MessageImageWorkbenchPreviewSelection) => void;
+  onSelect?: (selection?: MessageImageWorkbenchPreviewSelection) => void;
   t: AgentTranslate;
 }
 
@@ -89,7 +89,16 @@ export function ImageWorkbenchPreviewMedia({
   const aspectClass = resolvePreviewGridAspectClass(preview, totalSlotCount);
 
   if (!isStoryboardGrid && previewImages.length <= 1) {
-    return (
+    const content = (
+      <RenderableTaskImage
+        src={previewImages[0] || preview.imageUrl}
+        alt={preview.prompt || t("agentChat.imageWorkbenchPreview.media.alt")}
+        className="h-full w-full object-cover"
+        renderFallback={(reason) => renderPlaceholder(preview, reason, t)}
+      />
+    );
+
+    return onSelect ? (
       <button
         type="button"
         aria-label={t("agentChat.imageWorkbenchPreview.media.open")}
@@ -103,13 +112,15 @@ export function ImageWorkbenchPreviewMedia({
         data-testid={`image-workbench-message-preview-single-media-${preview.taskId}`}
         className="block aspect-[16/9] w-[358px] max-w-full overflow-hidden rounded-[12px] border-0 bg-slate-50 p-0 text-left"
       >
-        <RenderableTaskImage
-          src={previewImages[0] || preview.imageUrl}
-          alt={preview.prompt || t("agentChat.imageWorkbenchPreview.media.alt")}
-          className="h-full w-full object-cover"
-          renderFallback={(reason) => renderPlaceholder(preview, reason, t)}
-        />
+        {content}
       </button>
+    ) : (
+      <div
+        data-testid={`image-workbench-message-preview-single-media-${preview.taskId}`}
+        className="block aspect-[16/9] w-[358px] max-w-full overflow-hidden rounded-[12px] border-0 bg-slate-50 p-0 text-left"
+      >
+        {content}
+      </div>
     );
   }
 
@@ -131,26 +142,8 @@ export function ImageWorkbenchPreviewMedia({
       {Array.from({ length: visibleCount }, (_, index) => {
         const url = previewImages[index];
         const isLastWithOverflow = extraCount > 0 && index === visibleCount - 1;
-        return (
-          <button
-            type="button"
-            key={`${url || "placeholder"}-${index}`}
-            aria-label={`${t("agentChat.imageWorkbenchPreview.media.open")} ${
-              index + 1
-            }`}
-            onClick={(event) => {
-              event.stopPropagation();
-              onSelect({
-                imageUrl: url || null,
-                imageIndex: index,
-              });
-            }}
-            data-testid={`image-workbench-message-preview-media-${preview.taskId}-${index + 1}`}
-            className={cn(
-              "relative block overflow-hidden rounded-[14px] border-0 bg-slate-50 p-0 text-left",
-              isStoryboardGrid ? "aspect-square" : "aspect-[4/3]",
-            )}
-          >
+        const content = (
+          <>
             {url ? (
               <RenderableTaskImage
                 src={url}
@@ -176,7 +169,40 @@ export function ImageWorkbenchPreviewMedia({
                 +{extraCount}
               </div>
             ) : null}
+          </>
+        );
+        const tileClassName = cn(
+          "relative block overflow-hidden rounded-[14px] border-0 bg-slate-50 p-0 text-left",
+          isStoryboardGrid ? "aspect-square" : "aspect-[4/3]",
+        );
+
+        return onSelect ? (
+          <button
+            type="button"
+            key={`${url || "placeholder"}-${index}`}
+            aria-label={`${t("agentChat.imageWorkbenchPreview.media.open")} ${
+              index + 1
+            }`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onSelect({
+                imageUrl: url || null,
+                imageIndex: index,
+              });
+            }}
+            data-testid={`image-workbench-message-preview-media-${preview.taskId}-${index + 1}`}
+            className={tileClassName}
+          >
+            {content}
           </button>
+        ) : (
+          <div
+            key={`${url || "placeholder"}-${index}`}
+            data-testid={`image-workbench-message-preview-media-${preview.taskId}-${index + 1}`}
+            className={tileClassName}
+          >
+            {content}
+          </div>
         );
       })}
     </div>

@@ -91,6 +91,33 @@ describe("EmptyStateComposerPanel", () => {
     ).not.toContain("当前没有可选插件");
   });
 
+  it("首页空态输入区打开插件面板时应请求加载已安装插件", () => {
+    const onPluginSuggestionsNeeded = vi.fn();
+    const container = renderPanel({
+      isGeneralTheme: true,
+      onPluginSuggestionsNeeded,
+    });
+
+    openPlusMenuPanel(container, "plugins");
+
+    expect(onPluginSuggestionsNeeded).toHaveBeenCalledTimes(1);
+  });
+
+  it("首页空态输入区插件候选加载中时不应提前显示空态", () => {
+    const container = renderPanel({
+      isGeneralTheme: true,
+      pluginSuggestionsLoading: true,
+    });
+
+    openPlusMenuPanel(container, "plugins");
+
+    const pluginsPanel = document.body.querySelector(
+      '[data-testid="inputbar-plus-panel-plugins"]',
+    );
+    expect(pluginsPanel?.textContent).toContain("正在读取已安装插件");
+    expect(pluginsPanel?.textContent).not.toContain("当前没有可选插件");
+  });
+
   it("首页空态输入区选择写文章插件时应写回 @写文章 触发前缀", async () => {
     const container = renderPanel({
       input: "写一篇公众号文章",

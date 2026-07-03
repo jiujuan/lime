@@ -7,11 +7,11 @@
 事实源：
 
 - `internal/roadmap/rightsurface/README.md`
-- `internal/roadmap/agentapp/v3/README.md`
-- `internal/roadmap/agentapp/v3/prd.md`
-- `internal/roadmap/agentapp/v3/architecture.md`
-- `internal/roadmap/agentapp/v3/interface-contracts.md`
-- `internal/roadmap/agentapp/v3/electron-app-server-technical-baseline.md`
+- `internal/roadmap/plugin/README.md`
+- `internal/roadmap/plugin/prd.md`
+- `internal/roadmap/plugin/architecture.md`
+- `internal/roadmap/plugin/interface-contracts.md`
+- `internal/roadmap/plugin/technical-baseline.md`
 - `internal/roadmap/agentworkbench/README.md`
 - `internal/aiprompts/commands.md`
 - `internal/aiprompts/quality-workflow.md`
@@ -63,7 +63,7 @@ Browser 必须进入唯一 Right Surface Dock：
 - 后台 Browser Assist 请求默认进入 pending badge，不抢用户正在使用的 tab。
 - Surface 和 Chat 之间只共享 `payloadRef`、`selection` 和 structured action，不拼隐藏 prompt。
 
-### 3.2 Agent App v3 约束
+### 3.2 Plugin 约束
 
 Browser 的桌面承载必须遵守 Electron-first current 基线：
 
@@ -112,7 +112,7 @@ Browser Runtime 不能成为第二套 runtime：
 - 统一 `WebContentsView` 宿主、Right Surface tab、Browser Assist 工具面和 Evidence Pack。
 - 移除“Canvas 内部浏览器 tab”和“Right Surface 浏览器 tab”长期双轨风险。
 - Browser 能力按 profile/session/action/evidence 分层测试，避免 UI 组件里堆状态机。
-- 后续开放给 Claw、Agent App、MCP tool 和外部连接器时只扩展合同，不直接暴露 DOM 或 Electron IPC。
+- 后续开放给 Claw、Plugin、MCP tool 和外部连接器时只扩展合同，不直接暴露 DOM 或 Electron IPC。
 
 ## 6. 目标与非目标
 
@@ -146,7 +146,7 @@ Browser Runtime 不能成为第二套 runtime：
 | 研究员         | 打开多个动态网页，提取表格和引用来源    | Browser 保留多个 tab；每个结论可回到截图和 URL           |
 | 开发者         | 用 Claw 打开本地页面或线上控制台排查    | 看到页面、console、network 和截图；可复制失败证据        |
 | 设计 / 产品    | 检查网页响应式和视觉状态                | 右侧预览页面，Claw 可截图、比较、生成问题清单            |
-| Agent App 作者 | 在 Workbench App 中请求用户完成网页授权 | 只提交 browser intent，不直接嵌完整网页壳                |
+| Plugin 作者 | 在 Workbench App 中请求用户完成网页授权 | 只提交 browser intent，不直接嵌完整网页壳                |
 | 审核者         | 复盘 Agent 是否正确操作网页             | Evidence Pack 展示 action timeline、截图、来源和人工确认 |
 
 ## 8. 用户故事
@@ -161,7 +161,7 @@ Browser Runtime 不能成为第二套 runtime：
 | US-06 | 作为用户，我希望 Agent 在遇到登录、验证码、权限或提交表单时暂停               | Browser tab 显示人工接管状态；用户完成后可以继续当前 turn                                         |
 | US-07 | 作为 Claw，我需要读取页面结构时，希望得到可验证 facts                         | Browser Runtime 返回 DOM/accessibility/screenshot/network facts，并带 sessionId、turnId、actionId |
 | US-08 | 作为审核者，我打开历史任务时，希望看到浏览器证据                              | `browser_session` 和 `browser_snapshot` 可打开复盘；截图、URL、动作、时间和结果可追溯             |
-| US-09 | 作为 Agent App 作者，我希望请求浏览器授权，不复制浏览器 UI                    | App surface 只能发 Browser intent；宿主负责打开 Right Surface browser 和权限交互                  |
+| US-09 | 作为 Plugin 作者，我希望请求浏览器授权，不复制浏览器 UI                    | App surface 只能发 Browser intent；宿主负责打开 Right Surface browser 和权限交互                  |
 | US-10 | 作为用户，我在 Browser tab 中选中网页内容，希望带回 Claw                      | Surface selection 生成 context chip 或 structured action，不隐式塞整页进 prompt                   |
 
 ## 9. 用户用例矩阵
@@ -693,7 +693,7 @@ CDP 可以作为 Browser Runtime Controller 的观测和控制通道候选，但
 | compat     | CanvasWorkbench 内部 browser panel        | 可作为迁移来源；目标是沉到 Right Surface browser tab   |
 | compat     | DevBridge 浏览器 fallback                 | 只限开发 / 测试夹具，不作为生产成功路径                |
 | deprecated | iframe 承载动态 Browser Runtime           | 只允许低风险静态预览或历史 fixture                     |
-| dead       | `<webview>` 新增主路径                    | 不得作为 Browser Runtime 或 Agent App surface 默认承载 |
+| dead       | `<webview>` 新增主路径                    | 不得作为 Browser Runtime 或 Plugin surface 默认承载 |
 | dead       | BrowserView 新增主路径                    | 已由 `WebContentsView` 取代，不得新增                  |
 | dead       | 旧 Tauri browser wrapper                  | 不得恢复为 current browser owner                       |
 | forbidden  | Tool 直接操作 DOM / Electron IPC          | 必须走 Browser intent、Runtime policy 和 Host bridge   |
@@ -825,7 +825,7 @@ Right Surface browser tab 不直接调用 CDP action。它只暴露可见 sessio
 | 触发条件                                                                           | 拆分动作                                                                        | 不触发时的规则                     |
 | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------- |
 | `electron/embeddedBrowserHost.ts` 超过 800 行，或新的 Host policy 继续膨胀中心文件 | 继续按职责拆分 `contextMenu`、`downloads`、`permissions`、`policies` 等分域模块 | 当前已拆右键 / 下载 / 权限小模块   |
-| Right Surface browser UI 被 Agent App surface 或独立页面复用                       | 抽到 `src/features/embedded-browser/`，Right Surface 保留 thin adapter          | 仅 Right Surface 使用时不抽        |
+| Right Surface browser UI 被 Plugin surface 或独立页面复用                       | 抽到 `src/features/embedded-browser/`，Right Surface 保留 thin adapter          | 仅 Right Surface 使用时不抽        |
 | Browser intent metadata 被三个以上调用方稳定使用                                   | 在 App Server protocol 中增加 typed `BrowserSurfaceIntent`                      | 早期继续走 `metadata`              |
 | Browser action trace 需要进入 EvidencePack / Replay                                | 在 `lime-rs/crates/browser-runtime/src/` 增加 `trace.rs` 或 `evidence.rs`       | 只做可见浏览器时不加 Rust 事实模型 |
 | CanvasWorkbench browser panel 不再被 current flow 使用                             | 删除或改成 Right Surface browser 的 thin wrapper                                | 迁移期不双写新能力                 |
@@ -849,7 +849,7 @@ Right Surface browser tab 不直接调用 CDP action。它只暴露可见 sessio
 | P4   | Browser Assist 可见执行       | `@浏览器` / `mcp__lime-browser__*` 绑定 visible session、pending badge、human takeover                                           | `browserWorkbenchCommand`、`useWorkspaceSendActions`、contracts、GUI smoke |
 | P5   | Observation / Evidence        | screenshot、DOM/accessibility、network、console、download facts，browser_session/snapshot materializer                           | RuntimeCore / Evidence 定向测试                                            |
 | P6   | Replay / History Restore      | 历史打开 browser snapshot、action trace、恢复 Right Surface browser 或 replay viewer                                             | smoke:agent-runtime-current-fixture + Playwright 续测                      |
-| P7   | Agent App / Claw 开放         | Browser intent SDK、surface action、App Workbench browser authorization                                                          | contract + Agent App smoke                                                 |
+| P7   | Plugin / Claw 开放         | Browser intent SDK、surface action、App Workbench browser authorization                                                          | contract + Plugin smoke                                                 |
 
 ## 23. 可追踪验收标准
 
@@ -921,8 +921,8 @@ MVP 状态：已由 `internal/exec-plans/browser-runtime-right-surface-plan.md` 
 - [x] DOM/accessibility/network/console facts 可进入 EvidencePack。
 - [x] Browser action trace 可按 thread / turn / content / executor 查询：`browser_action_index` 输出 join keys、summary ids / executor counts，前端 `filterBrowserActionIndexItems` 可按这些维度过滤。
 - [x] 高风险动作进入 action.required / confirmation / human takeover：`browser-runtime` CDP executor 对点击、输入、表单、上传/下载、脚本等 mutation 动作 fail-closed，不执行页面 mutation，输出 `tool_confirmation / permission_facts / confirmation_request_id`，并进入 `human_controlling / human` evidence。
-- [ ] Agent App 可通过 Browser intent 请求网页授权或受控浏览，不复制浏览器 UI。
-  - 2026-06-25：`AgentAppsPage -> AgentAppRuntimePage -> browserIntentLaunch` 主路径已接通，`lime.browser/open` 的 `requires_agent_task` intent 会转成 `surfaceKind=browser` Right Surface pending request，并只信任宿主 target；完整验收仍需真实网页工作流、GUI/fixture 证据和 Playwright。
+- [ ] Plugin 可通过 Browser intent 请求网页授权或受控浏览，不复制浏览器 UI。
+  - 2026-06-25：`PluginsPage -> PluginRuntimePage -> browserIntentLaunch` 主路径已接通，`lime.browser/open` 的 `requires_agent_task` intent 会转成 `surfaceKind=browser` Right Surface pending request，并只信任宿主 target；完整验收仍需真实网页工作流、GUI/fixture 证据和 Playwright。
 - [ ] Playwright 覆盖至少一个真实网页工作流：打开 URL、Agent observe、人工接管、继续执行、生成 evidence。
 
 ## 24. 测试策略
@@ -957,7 +957,7 @@ MVP 状态：已由 `internal/exec-plans/browser-runtime-right-surface-plan.md` 
 | 路线图          | Browser PRD 对齐点                                                                                    |
 | --------------- | ----------------------------------------------------------------------------------------------------- |
 | Right Surface   | Browser 是 `browser` tab；后台请求走 pending badge；用户焦点优先；不出现第二右栏                      |
-| Agent App v3    | Browser 使用 Electron Desktop Host + `WebContentsView`；App 只能提交 Browser intent；副作用回 Runtime |
+| Plugin v3    | Browser 使用 Electron Desktop Host + `WebContentsView`；App 只能提交 Browser intent；副作用回 Runtime |
 | Agent Workbench | Browser action / snapshot / evidence 进入 Runtime facts；UI 只消费 projection；不复制 runtime client  |
 
 ## 27. 下一刀建议

@@ -28,6 +28,7 @@ use crate::UsageStatsAppDataSource;
 use crate::VoiceAppDataSource;
 use crate::WorkspaceAppDataSource;
 use crate::WorkspaceSkillBindingAppDataSource;
+use agent_protocol::turn_context::TurnOutputSchemaSource;
 use app_server_protocol::AgentInput;
 use app_server_protocol::AgentSession;
 use app_server_protocol::AgentSessionActionScope;
@@ -38,16 +39,16 @@ use app_server_protocol::BusinessObjectRef;
 use app_server_protocol::McpServerLifecycleResponse;
 use app_server_protocol::McpServerStartParams;
 use app_server_protocol::McpServerStatusListResponse;
-use app_server_protocol::ProtocolKind;
 use app_server_protocol::RuntimeOptions;
-use aster::tools::{PermissionCheckResult, Tool, ToolContext, ToolError, ToolResult};
 use async_trait::async_trait;
 use lime_agent::agent_tools::catalog::{
     MEMORY_ADD_NOTE_TOOL_NAME, MEMORY_LIST_TOOL_NAME, MEMORY_READ_TOOL_NAME,
     MEMORY_SEARCH_TOOL_NAME,
 };
-use lime_agent::AsterProviderProtocol;
-use lime_agent::{AgentEvent as RuntimeAgentEvent, AgentToolResult, RequestToolPolicyMode};
+use lime_agent::runtime_facade::{PermissionCheckResult, Tool, ToolContext, ToolError, ToolResult};
+use lime_agent::{
+    AgentEvent as RuntimeAgentEvent, AgentToolResult, ProviderConfig, RequestToolPolicyMode,
+};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -55,6 +56,7 @@ use tempfile::TempDir;
 
 mod image_tools;
 mod tool_inventory;
+mod tool_surface;
 
 #[derive(Default)]
 struct TestRuntimeEventSink {
@@ -327,10 +329,15 @@ fn article_workspace_search_request_event(query: &str) -> RuntimeEvent {
                                     "processMarkdown": "## 检索轮次\n\n这里只能作为对话过程展示。",
                                     "documentText": document_text,
                                     "finalMarkdown": document_text,
-                                    "searchRequests": [
+                                    "workflowKey": "content_article_workflow",
+                                    "hostToolRequests": [
                                         {
-                                            "id": "search-request-1",
+                                            "id": "host-tool-request-1",
+                                            "toolName": "WebSearch",
                                             "query": query,
+                                            "params": {
+                                                "query": query
+                                            },
                                             "purpose": "验证宿主真实检索回填"
                                         }
                                     ]
@@ -564,11 +571,8 @@ async fn runtime_backend_starts_enabled_lime_mcp_servers_before_tool_sync() {
         }),
     ]));
     let app_data_source: Arc<dyn AppDataSource> = data_source.clone();
-    let backend = RuntimeBackend::new();
 
-    backend
-        .start_enabled_lime_mcp_servers_if_needed(app_data_source)
-        .await;
+    mcp_bridges::start_enabled_lime_mcp_servers_if_needed(app_data_source).await;
 
     assert_eq!(
         data_source.started_servers(),
@@ -587,11 +591,8 @@ async fn runtime_backend_mcp_autostart_failure_does_not_block_turn_preflight() {
         .with_fail_start(),
     );
     let app_data_source: Arc<dyn AppDataSource> = data_source.clone();
-    let backend = RuntimeBackend::new();
 
-    backend
-        .start_enabled_lime_mcp_servers_if_needed(app_data_source)
-        .await;
+    mcp_bridges::start_enabled_lime_mcp_servers_if_needed(app_data_source).await;
 
     assert_eq!(data_source.started_servers(), vec!["context7".to_string()]);
 }
@@ -686,12 +687,15 @@ async fn runtime_backend_prepares_content_factory_search_artifact_events_with_re
             "tool.started" | "tool.args" | "tool.result"
         )
     }) {
-        assert_eq!(event.payload["source"], "content_factory_search_requests");
+        assert_eq!(
+            event.payload["source"],
+            "workspace_patch_host_tool_requests"
+        );
         assert_eq!(event.payload["workflowKey"], "content_article_workflow");
         assert_eq!(event.payload["workflow_key"], "content_article_workflow");
         assert_eq!(
             event.payload["metadata"]["source"],
-            "content_factory_search_requests"
+            "workspace_patch_host_tool_requests"
         );
         assert_eq!(
             event.payload["metadata"]["workflowKey"],
@@ -739,8 +743,13 @@ async fn runtime_backend_prepares_content_factory_search_artifact_events_with_re
         patch["objects"][0]["source"]["hostSearchStatus"],
         "completed"
     );
+    assert_eq!(patch["objects"][0]["source"]["hostToolStatus"], "completed");
     assert_eq!(
         patch["objects"][0]["source"]["hostSearchEvidence"],
+        Value::Array(evidence.clone())
+    );
+    assert_eq!(
+        patch["objects"][0]["source"]["hostToolEvidence"],
         Value::Array(evidence.clone())
     );
 }
@@ -832,7 +841,7 @@ async fn runtime_backend_keeps_content_factory_search_artifact_events_closed_on_
         .expect("failed tool event");
     assert_eq!(
         failed_tool_event.payload["source"],
-        "content_factory_search_requests"
+        "workspace_patch_host_tool_requests"
     );
     assert_eq!(
         failed_tool_event.payload["metadata"]["workflowKey"],
@@ -859,8 +868,13 @@ async fn runtime_backend_keeps_content_factory_search_artifact_events_closed_on_
     assert_eq!(evidence[0]["status"], "failed");
     assert_eq!(evidence[0]["summary"], "");
     assert_eq!(patch["objects"][0]["source"]["hostSearchStatus"], "failed");
+    assert_eq!(patch["objects"][0]["source"]["hostToolStatus"], "failed");
     assert_eq!(
         patch["objects"][0]["source"]["hostSearchEvidence"],
+        Value::Array(evidence.clone())
+    );
+    assert_eq!(
+        patch["objects"][0]["source"]["hostToolEvidence"],
         Value::Array(evidence.clone())
     );
     assert_eq!(patch["objects"][0]["status"], "failed");
@@ -1259,7 +1273,7 @@ fn runtime_options_expected_output_schema_flows_to_turn_context() {
     assert_eq!(turn_context.output_schema, Some(output_schema));
     assert_eq!(
         turn_context.output_schema_source,
-        Some(aster::session::TurnOutputSchemaSource::Turn)
+        Some(TurnOutputSchemaSource::Turn)
     );
 }
 
@@ -2109,7 +2123,7 @@ fn session_config_appends_plugin_activation_metadata_to_system_prompt() {
 }
 
 #[test]
-fn session_config_projects_selected_skill_allowed_tools_to_turn_scope() {
+fn session_config_keeps_selected_skill_allowed_tools_inside_aster_skill_runtime() {
     let workspace = TempDir::new().expect("workspace");
     let skill_dir = workspace.path().join(".agents/skills/writer");
     std::fs::create_dir_all(&skill_dir).expect("skill dir");
@@ -2159,10 +2173,12 @@ Use concise language.
         None,
     );
 
+    let prompt = config.system_prompt.expect("system prompt");
+    assert!(prompt.contains("Use concise language."));
     let turn_context = config.turn_context.expect("turn context");
-    assert_eq!(
-        turn_context.metadata["tool_scope"]["allowed_tools"],
-        json!(["Read", "Write"])
+    assert!(
+        turn_context.metadata.get("tool_scope").is_none(),
+        "App Server must not duplicate Aster Skill allowed-tools as a main-turn scope"
     );
 }
 
@@ -3352,25 +3368,4 @@ fn host_turn_config_reasoning_and_thinking_are_preserved() {
         .expect("runtime metadata");
 
     assert_eq!(runtime_metadata["thinkingEnabled"], true);
-}
-
-#[test]
-fn route_protocol_is_projected_to_aster_adapter_protocol() {
-    let config = super::provider_config_with_route_protocol(
-        lime_agent::ProviderConfig {
-            provider_name: "openai".to_string(),
-            provider_selector: Some("fixture-openai".to_string()),
-            model_name: "gpt-4.1".to_string(),
-            api_key: Some("fixture-key".to_string()),
-            base_url: Some("http://127.0.0.1:56599".to_string()),
-            credential_uuid: Some("credential-1".to_string()),
-            reasoning_effort: None,
-            protocol: None,
-            toolshim: false,
-            toolshim_model: None,
-        },
-        super::aster_provider_protocol_from_route(&ProtocolKind::OpenaiResponses),
-    );
-
-    assert_eq!(config.protocol, Some(AsterProviderProtocol::Responses));
 }

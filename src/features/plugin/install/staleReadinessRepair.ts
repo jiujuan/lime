@@ -44,24 +44,60 @@ export function shouldRepairStaleInstalledPluginReadiness(
   );
 }
 
+function isLocalFolderInstalledState(state: InstalledPluginState): boolean {
+  return (
+    state.identity.sourceKind === "local_folder" &&
+    Boolean(state.identity.sourceUri.trim())
+  );
+}
+
+function hasSnapshotIdentityChanged(
+  current: InstalledPluginState,
+  next: InstalledPluginState,
+): boolean {
+  return (
+    current.identity.appVersion !== next.identity.appVersion ||
+    current.identity.packageHash !== next.identity.packageHash ||
+    current.identity.manifestHash !== next.identity.manifestHash
+  );
+}
+
+function preserveUserInstallState(
+  current: InstalledPluginState,
+  next: InstalledPluginState,
+): InstalledPluginState {
+  return {
+    ...next,
+    disabled: current.disabled,
+    installedAt: current.installedAt,
+    installMode: current.installMode,
+  };
+}
+
 export async function repairStaleInstalledPluginReadiness(
   state: InstalledPluginState,
   profile: HostCapabilityProfile,
   deps: RepairStaleInstalledPluginReadinessDeps,
 ): Promise<InstalledPluginState> {
-  if (!shouldRepairStaleInstalledPluginReadiness(state)) {
+  if (!isLocalFolderInstalledState(state)) {
     return state;
   }
+  const shouldRepairReadiness =
+    shouldRepairStaleInstalledPluginReadiness(state);
   const review = await deps.reviewLocalPackage({
     appDir: state.identity.sourceUri,
     profile,
     sourceKind: "local_folder",
   });
+  const snapshotChanged = hasSnapshotIdentityChanged(state, review.state);
+  if (!shouldRepairReadiness && !snapshotChanged) {
+    return state;
+  }
   if (review.state.readiness.status === "blocked") {
     return state;
   }
   return deps.saveInstalledState({
-    state: review.state,
+    state: preserveUserInstallState(state, review.state),
   });
 }
 

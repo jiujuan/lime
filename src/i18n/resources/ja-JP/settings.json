@@ -2589,6 +2589,8 @@
   "settings.providers.modelAdd.catalog.template.alibaba-coding-plan-cn.description": "Alibaba Cloud Bailian 中国リージョンの Claude Code Coding Plan 専用 Anthropic 入口です。",
   "settings.providers.modelAdd.catalog.template.alibaba-coding-plan-global.name": "Alibaba Coding Plan（海外）",
   "settings.providers.modelAdd.catalog.template.alibaba-coding-plan-global.description": "Alibaba Cloud Model Studio 国際リージョンの Claude Code Coding Plan 専用 Anthropic 入口です。",
+  "settings.providers.modelAdd.catalog.template.agnes-image-flash.name": "Agnes",
+  "settings.providers.modelAdd.catalog.template.agnes-image-flash.description": "OpenAI 互換 API を使う Agnes 公式の画像生成エンドポイントです。既定で agnes-image-2.1-flash を使用します。",
   "settings.providers.modelAdd.catalog.template.aihubmix-recommended.name": "AiHubMix",
   "settings.providers.modelAdd.catalog.template.aihubmix-recommended.description": "Claude、OpenAI、Gemini を集約する一般的な中継サービスです。",
   "settings.providers.modelAdd.catalog.template.openrouter-recommended.name": "OpenRouter",

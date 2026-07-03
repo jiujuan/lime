@@ -55,16 +55,16 @@ const loadKnowledgePage = () =>
     default: module.KnowledgePage,
   }));
 const loadPluginLabPage = () =>
-  import("@/features/plugin").then((module) => ({
+  import("@/features/plugin/ui/PluginLabPage").then((module) => ({
     default: module.PluginLabPage,
   }));
 const loadPluginsPage = () =>
-  import("@/features/plugin").then((module) => ({
+  import("@/features/plugin/ui/PluginsPage").then((module) => ({
     default: module.PluginsPage,
   }));
 
 const loadPluginRuntimePage = () =>
-  import("@/features/plugin").then((module) => ({
+  import("@/features/plugin/ui/PluginRuntimePage").then((module) => ({
     default: module.PluginRuntimePage,
   }));
 const loadExpertPlazaPage = () =>
@@ -90,6 +90,14 @@ const PluginRuntimePage = lazy(loadPluginRuntimePage);
 const ExpertPlazaPage = lazy(loadExpertPlazaPage);
 const BrowserRuntimeWorkspace = lazy(loadBrowserRuntimeWorkspace);
 const AgentChatPage = lazy(loadAgentChatPage);
+
+function shouldOpenPluginMarketplace(pageParams: PageParams): boolean {
+  const pluginParams = pageParams as PluginsPageParams;
+
+  return Boolean(
+    pluginParams.query || pluginParams.category || pluginParams.statusFilter,
+  );
+}
 
 interface AppPageContentProps {
   currentPage: Page;
@@ -271,7 +279,10 @@ export function AppPageContent({
     );
   }
 
-  if (activePage === "plugins") {
+  if (
+    activePage === "plugins" &&
+    shouldOpenPluginMarketplace(activePageParams)
+  ) {
     return (
       <div style={columnPageStyle}>
         <PluginMarketplacePage

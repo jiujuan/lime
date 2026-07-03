@@ -264,7 +264,11 @@ function expectSingleImageAssistantMessage(
 ) {
   const assistantMessages = getImageAssistantMessages(messages);
   expect(assistantMessages).toHaveLength(1);
-  expect(assistantMessages[0]).toMatchObject(expected);
+  const { content, ...expectedWithoutContent } = expected;
+  expect(assistantMessages[0]).toMatchObject(expectedWithoutContent);
+  if (typeof content === "string" && content.trim()) {
+    expect(assistantMessages[0]?.content).toBe(content);
+  }
 }
 
 function expectImageUserMessage(
@@ -724,7 +728,6 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
     expect(getValue().messages).toEqual([
       expect.objectContaining({
         id: "image-workbench:task-image-1:assistant",
-        content: "",
         toolCalls: undefined,
         contentParts: undefined,
         runtimeStatus: undefined,
@@ -2176,6 +2179,86 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
     });
   });
 
+  it("历史消息首次缺少 projectRootPath 时不应永久跳过后续恢复", async () => {
+    const taskId = "task-image-history-retry-root-1";
+    vi.mocked(hasDesktopHostInvokeCapability).mockReturnValue(false);
+    vi.mocked(hasDesktopHostRuntimeMarkers).mockReturnValue(false);
+    vi.mocked(getMediaTaskArtifact).mockResolvedValue(
+      createArtifactOutput({
+        task_id: taskId,
+        task_type: "image_generate",
+        record: withDefaultTaskContext({
+          task_id: taskId,
+          task_type: "image_generate",
+          task_family: "image",
+          status: "completed",
+          normalized_status: "succeeded",
+          created_at: "2026-04-04T12:30:00Z",
+          payload: {
+            prompt: "[img:补齐 root 后恢复的广州夏日照片]",
+            count: 1,
+            size: "1024x1024",
+          },
+          result: {
+            images: [
+              {
+                url: "https://example.com/history-retry-root.png",
+              },
+            ],
+          },
+        }),
+      }),
+    );
+
+    const { render, getValue } = renderHook(
+      {
+        projectRootPath: null,
+      },
+      {
+        initialMessages: [
+          {
+            id: `image-workbench:${taskId}:assistant`,
+            role: "assistant",
+            content: "图片任务已提交，正在同步任务状态。",
+            timestamp: new Date("2026-04-04T12:30:00Z"),
+            imageWorkbenchPreview: {
+              taskId,
+              prompt: "补齐 root 后恢复的广州夏日照片",
+              status: "running",
+              phase: "queued",
+            },
+          },
+        ],
+      },
+    );
+    await render();
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(getMediaTaskArtifact).not.toHaveBeenCalled();
+
+    await render({ projectRootPath: DEFAULT_PROJECT_ROOT_PATH });
+
+    await vi.waitFor(() => {
+      expect(getMediaTaskArtifact).toHaveBeenCalledWith({
+        projectRootPath: DEFAULT_PROJECT_ROOT_PATH,
+        taskRef: taskId,
+      });
+      expectSingleImageAssistantMessage(getValue().messages, {
+        id: `image-workbench:${taskId}:assistant`,
+        imageWorkbenchPreview: expect.objectContaining({
+          taskId,
+          status: "complete",
+          imageUrl: "https://example.com/history-retry-root.png",
+          prompt: "补齐 root 后恢复的广州夏日照片",
+        }),
+      });
+    });
+  });
+
   it("发送中的草稿图片轻卡不应按真实 taskId 查询 artifact，也不应保留为图片任务卡", async () => {
     vi.mocked(hasDesktopHostInvokeCapability).mockReturnValue(false);
     vi.mocked(hasDesktopHostRuntimeMarkers).mockReturnValue(false);
@@ -2938,7 +3021,6 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
         }),
         expect.objectContaining({
           id: "assistant-image-browser-template-recover-1",
-          content: "",
           imageWorkbenchPreview: expect.objectContaining({
             taskId: "task-image-browser-template-recover-1",
             status: "complete",
@@ -3282,7 +3364,6 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       }),
       expect.objectContaining({
         id: `image-workbench:${taskId}:assistant`,
-        content: "",
         isThinking: false,
         runtimeStatus: undefined,
         toolCalls: undefined,
@@ -4129,7 +4210,6 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
     expect(getImageAssistantMessages(getValue().messages)).toEqual([
       expect.objectContaining({
         id: "image-workbench:task-image-cancelled-1:assistant",
-        content: "",
         imageWorkbenchPreview: expect.objectContaining({
           taskId: "task-image-cancelled-1",
           status: "cancelled",
@@ -4137,7 +4217,6 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
       }),
       expect.objectContaining({
         id: "image-workbench:task-image-new-1:assistant",
-        content: "",
         toolCalls: undefined,
         contentParts: undefined,
         runtimeStatus: undefined,

@@ -1,13 +1,11 @@
+use crate::aster_runtime_projection::project_aster_subagent_latest_turn;
 use crate::aster_runtime_support::{list_aster_runtime_queued_turns, load_aster_runtime_snapshot};
 use crate::protocol::AgentTokenUsage;
 use crate::session_query::{ensure_subagent_session, read_subagent_session};
 use crate::session_update::persist_session_extension_data;
 use crate::team_runtime_governor::snapshot_team_runtime_session;
 use aster::session::extension_data::{ExtensionData, ExtensionState};
-use aster::session::{
-    require_shared_session_runtime_queue_service, ItemRuntimePayload, QueuedTurnRuntime, Session,
-    SessionRuntimeSnapshot, TurnRuntime, TurnStatus,
-};
+use aster::session::{require_shared_session_runtime_queue_service, QueuedTurnRuntime, Session};
 use chrono::Utc;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default, PartialEq)]
@@ -150,12 +148,21 @@ impl SubagentRuntimeStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct LatestTurnProjection {
-    turn_id: String,
-    status: TurnStatus,
-    duration_ms: Option<u64>,
-    tool_count: usize,
-    result_ref: Option<String>,
+pub(crate) struct SubagentLatestTurnProjection {
+    pub turn_id: String,
+    pub status: SubagentTurnStatus,
+    pub duration_ms: Option<u64>,
+    pub tool_count: usize,
+    pub result_ref: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SubagentTurnStatus {
+    Queued,
+    Running,
+    Completed,
+    Failed,
+    Aborted,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -163,7 +170,7 @@ pub struct SubagentRuntimeStatusInput {
     pub closed: bool,
     pub has_active_turn: bool,
     pub queued_turn_count: usize,
-    pub latest_turn_status: Option<TurnStatus>,
+    pub latest_turn_status: Option<SubagentTurnStatus>,
 }
 
 fn is_zero(value: &usize) -> bool {
@@ -184,13 +191,13 @@ fn looks_like_session_not_found(error: &str) -> bool {
     normalized.contains("not found") || error.contains("不存在")
 }
 
-fn map_turn_status(status: TurnStatus) -> SubagentRuntimeStatusKind {
+fn map_turn_status(status: SubagentTurnStatus) -> SubagentRuntimeStatusKind {
     match status {
-        TurnStatus::Queued => SubagentRuntimeStatusKind::Queued,
-        TurnStatus::Running => SubagentRuntimeStatusKind::Running,
-        TurnStatus::Completed => SubagentRuntimeStatusKind::Completed,
-        TurnStatus::Failed => SubagentRuntimeStatusKind::Failed,
-        TurnStatus::Aborted => SubagentRuntimeStatusKind::Aborted,
+        SubagentTurnStatus::Queued => SubagentRuntimeStatusKind::Queued,
+        SubagentTurnStatus::Running => SubagentRuntimeStatusKind::Running,
+        SubagentTurnStatus::Completed => SubagentRuntimeStatusKind::Completed,
+        SubagentTurnStatus::Failed => SubagentRuntimeStatusKind::Failed,
+        SubagentTurnStatus::Aborted => SubagentRuntimeStatusKind::Aborted,
     }
 }
 
@@ -212,88 +219,6 @@ fn resolve_session_usage(session: &Session) -> Option<AgentTokenUsage> {
         }
         _ => None,
     }
-}
-
-fn resolve_turn_duration_ms(turn: &TurnRuntime) -> Option<u64> {
-    let started_at = turn.started_at.unwrap_or(turn.created_at);
-    let finished_at = turn.completed_at.unwrap_or(turn.updated_at);
-    let duration_ms = finished_at
-        .signed_duration_since(started_at)
-        .num_milliseconds();
-    (duration_ms >= 0).then_some(duration_ms as u64)
-}
-
-fn count_tool_items_for_turn(snapshot: &SessionRuntimeSnapshot, turn_id: &str) -> usize {
-    snapshot
-        .threads
-        .iter()
-        .flat_map(|thread| thread.items.iter())
-        .filter(|item| {
-            item.turn_id == turn_id && matches!(&item.payload, ItemRuntimePayload::ToolCall { .. })
-        })
-        .count()
-}
-
-fn build_runtime_item_ref(
-    session_id: &str,
-    thread_id: &str,
-    turn_id: &str,
-    item_id: &str,
-) -> String {
-    format!("agent-runtime://session/{session_id}/thread/{thread_id}/turn/{turn_id}/item/{item_id}")
-}
-
-fn resolve_worker_result_ref(
-    snapshot: &SessionRuntimeSnapshot,
-    thread_id: &str,
-    turn_id: &str,
-) -> Option<String> {
-    snapshot
-        .threads
-        .iter()
-        .filter(|thread| thread.thread.id == thread_id)
-        .flat_map(|thread| {
-            thread
-                .items
-                .iter()
-                .filter(move |item| {
-                    item.turn_id == turn_id
-                        && matches!(&item.payload, ItemRuntimePayload::AgentMessage { .. })
-                })
-                .map(move |item| (thread.thread.session_id.as_str(), item))
-        })
-        .max_by(|(_, left), (_, right)| {
-            left.sequence
-                .cmp(&right.sequence)
-                .then_with(|| left.updated_at.cmp(&right.updated_at))
-                .then_with(|| left.id.cmp(&right.id))
-        })
-        .map(|(session_id, item)| {
-            build_runtime_item_ref(session_id, &item.thread_id, &item.turn_id, &item.id)
-        })
-}
-
-fn latest_turn_projection(snapshot: &SessionRuntimeSnapshot) -> Option<LatestTurnProjection> {
-    snapshot
-        .threads
-        .iter()
-        .flat_map(|thread| thread.turns.iter())
-        .max_by(|left, right| {
-            left.updated_at
-                .cmp(&right.updated_at)
-                .then_with(|| left.created_at.cmp(&right.created_at))
-                .then_with(|| left.id.cmp(&right.id))
-        })
-        .map(|turn| {
-            let turn_id = turn.id.clone();
-            LatestTurnProjection {
-                tool_count: count_tool_items_for_turn(snapshot, &turn_id),
-                duration_ms: resolve_turn_duration_ms(turn),
-                result_ref: resolve_worker_result_ref(snapshot, &turn.thread_id, &turn_id),
-                turn_id,
-                status: turn.status,
-            }
-        })
 }
 
 pub fn derive_subagent_runtime_status_kind(
@@ -356,7 +281,7 @@ pub async fn load_subagent_runtime_status(
 
     let control_state = SubagentControlState::from_session(&session).unwrap_or_default();
     let latest_turn = match load_aster_runtime_snapshot(session_id).await {
-        Ok(snapshot) => latest_turn_projection(&snapshot),
+        Ok(snapshot) => project_aster_subagent_latest_turn(&snapshot),
         Err(error) => {
             tracing::debug!(
                 "[SubagentControl] 读取 runtime snapshot 失败，按无运行态继续: session_id={}, error={}",
@@ -486,7 +411,7 @@ mod tests {
                 closed: true,
                 has_active_turn: true,
                 queued_turn_count: 2,
-                latest_turn_status: Some(TurnStatus::Running),
+                latest_turn_status: Some(SubagentTurnStatus::Running),
             }),
             SubagentRuntimeStatusKind::Closed
         );
@@ -495,7 +420,7 @@ mod tests {
                 closed: false,
                 has_active_turn: false,
                 queued_turn_count: 0,
-                latest_turn_status: Some(TurnStatus::Completed),
+                latest_turn_status: Some(SubagentTurnStatus::Completed),
             }),
             SubagentRuntimeStatusKind::Completed
         );
@@ -504,83 +429,9 @@ mod tests {
                 closed: false,
                 has_active_turn: false,
                 queued_turn_count: 1,
-                latest_turn_status: Some(TurnStatus::Completed),
+                latest_turn_status: Some(SubagentTurnStatus::Completed),
             }),
             SubagentRuntimeStatusKind::Queued
-        );
-    }
-
-    #[test]
-    fn latest_turn_projection_should_include_duration_tool_count_and_result_ref() {
-        let started_at = Utc::now();
-        let completed_at = started_at + chrono::Duration::milliseconds(1_250);
-        let turn = TurnRuntime {
-            id: "turn-1".to_string(),
-            session_id: "child-1".to_string(),
-            thread_id: "thread-1".to_string(),
-            status: TurnStatus::Completed,
-            input_text: Some("整理结果".to_string()),
-            error_message: None,
-            context_override: None,
-            output_schema_runtime: None,
-            created_at: started_at,
-            started_at: Some(started_at),
-            completed_at: Some(completed_at),
-            updated_at: completed_at,
-        };
-        let tool_item = aster::session::ItemRuntime {
-            id: "item-tool-1".to_string(),
-            thread_id: "thread-1".to_string(),
-            turn_id: "turn-1".to_string(),
-            sequence: 1,
-            status: aster::session::ItemStatus::Completed,
-            started_at,
-            completed_at: Some(completed_at),
-            updated_at: completed_at,
-            payload: ItemRuntimePayload::ToolCall {
-                tool_name: "read_file".to_string(),
-                arguments: None,
-                output: None,
-                success: Some(true),
-                error: None,
-                metadata: None,
-            },
-        };
-        let text_item = aster::session::ItemRuntime {
-            id: "item-text-1".to_string(),
-            thread_id: "thread-1".to_string(),
-            turn_id: "turn-1".to_string(),
-            sequence: 2,
-            status: aster::session::ItemStatus::Completed,
-            started_at,
-            completed_at: Some(completed_at),
-            updated_at: completed_at,
-            payload: ItemRuntimePayload::AgentMessage {
-                text: "完成".to_string(),
-            },
-        };
-        let snapshot = SessionRuntimeSnapshot {
-            session_id: "child-1".to_string(),
-            threads: vec![aster::session::ThreadRuntimeSnapshot {
-                thread: aster::session::ThreadRuntime::new(
-                    "thread-1",
-                    "child-1",
-                    std::path::PathBuf::from("/tmp"),
-                ),
-                turns: vec![turn],
-                items: vec![tool_item, text_item],
-            }],
-        };
-
-        let projection = latest_turn_projection(&snapshot).expect("应存在最新 turn");
-
-        assert_eq!(projection.turn_id, "turn-1");
-        assert_eq!(projection.status, TurnStatus::Completed);
-        assert_eq!(projection.duration_ms, Some(1_250));
-        assert_eq!(projection.tool_count, 1);
-        assert_eq!(
-            projection.result_ref.as_deref(),
-            Some("agent-runtime://session/child-1/thread/thread-1/turn/turn-1/item/item-text-1")
         );
     }
 }

@@ -1,9 +1,14 @@
 use std::fs::{read_dir, read_to_string};
 use std::path::{Path, PathBuf};
 
-const ALLOWED_DIRECT_EVENT_CONVERTER_FILES: &[&str] = &[
+const ALLOWED_EVENT_CONVERTER_FILES: &[&str] = &[
+    "crates/agent/src/aster_runtime_projection.rs",
     "crates/agent/src/event_converter.rs",
-    "crates/agent/src/protocol_projection.rs",
+];
+
+const ALLOWED_RUNTIME_CONVERTER_FILES: &[&str] = &[
+    "crates/agent/src/aster_runtime_projection.rs",
+    "crates/agent/src/event_converter.rs",
 ];
 
 fn collect_rust_files(dir: &Path, files: &mut Vec<PathBuf>) {
@@ -55,20 +60,24 @@ fn production_rust_code_should_not_bypass_protocol_projection() {
             .strip_prefix(&src_tauri_root)
             .expect("相对路径转换失败");
         let relative_path_string = relative_path.to_string_lossy().replace('\\', "/");
-        if ALLOWED_DIRECT_EVENT_CONVERTER_FILES
-            .iter()
-            .any(|allowed| *allowed == relative_path_string)
-        {
-            continue;
-        }
-
         let Ok(content) = read_to_string(&file_path) else {
             continue;
         };
-        if content.contains("event_converter::")
-            || content.contains("convert_agent_event(")
-            || content.contains("convert_turn_runtime(")
-            || content.contains("convert_item_runtime(")
+        let event_converter_allowed = ALLOWED_EVENT_CONVERTER_FILES
+            .iter()
+            .any(|allowed| *allowed == relative_path_string);
+        let runtime_converter_allowed = ALLOWED_RUNTIME_CONVERTER_FILES
+            .iter()
+            .any(|allowed| *allowed == relative_path_string);
+        if !event_converter_allowed
+            && (content.contains("event_converter::") || content.contains("convert_agent_event("))
+        {
+            offenders.push(relative_path_string.clone());
+            continue;
+        }
+        if !runtime_converter_allowed
+            && (content.contains("convert_turn_runtime(")
+                || content.contains("convert_item_runtime("))
         {
             offenders.push(relative_path_string);
         }

@@ -17,6 +17,9 @@ export interface WorkspaceArticleMarkdownChange {
   object: WorkspaceArticleObject;
 }
 
+const INLINE_IMAGE_TASK_MARKER_RE =
+  /(?:lime:image-task-slot:|pending-image-task:\/\/)/;
+
 export function buildWorkspaceArticleEditedDraftKey(
   object: WorkspaceArticleObject,
 ): string {
@@ -36,6 +39,43 @@ export function buildWorkspaceArticleEditedDraftFromChange(
     markdown,
     updatedAt: now().toISOString(),
   };
+}
+
+export function markdownContainsWorkspaceArticleInlineImageTask(
+  markdown: string | null | undefined,
+): boolean {
+  return INLINE_IMAGE_TASK_MARKER_RE.test(markdown ?? "");
+}
+
+export function readWorkspaceArticleObjectMarkdown(
+  object: WorkspaceArticleObject,
+): string {
+  const source = object.source ?? {};
+  return readString(
+    source.documentText,
+    source.finalMarkdown,
+    source.markdown,
+    source.content,
+  );
+}
+
+export function shouldRejectWorkspaceArticleEditedDraftChange(params: {
+  currentDraft: WorkspaceArticleEditedDraft | null;
+  currentMarkdown?: string | null;
+  nextDraft: WorkspaceArticleEditedDraft | null;
+}): boolean {
+  const { currentDraft, nextDraft } = params;
+  if (!nextDraft) {
+    return false;
+  }
+  const currentMarkdown =
+    currentDraft?.objectKey === nextDraft.objectKey
+      ? currentDraft.markdown
+      : (params.currentMarkdown ?? "");
+  if (!markdownContainsWorkspaceArticleInlineImageTask(currentMarkdown)) {
+    return false;
+  }
+  return !markdownContainsWorkspaceArticleInlineImageTask(nextDraft.markdown);
 }
 
 export function applyWorkspaceArticleEditedDraft(

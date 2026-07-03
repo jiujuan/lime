@@ -249,6 +249,7 @@ export function resolveMissingSessionFromTopicsAction(options: {
   currentTurnId: string | null;
   detachedSessionId: string | null | undefined;
   queuedTurnsCount: number;
+  remoteConfirmed?: boolean;
   sessionId: string | null | undefined;
   threadItemsCount: number;
   threadTurnsCount: number;
@@ -279,7 +280,7 @@ export function resolveMissingSessionFromTopicsAction(options: {
     threadTurnsCount: options.threadTurnsCount,
     threadItemsCount: options.threadItemsCount,
     queuedTurnsCount: options.queuedTurnsCount,
-  });
+  }) || options.remoteConfirmed === true;
 
   return shouldVerifyMissingSession
     ? { kind: "verify_remote" }

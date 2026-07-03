@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { InstalledPluginStateListResult } from "@/features/plugin";
+import type { InstalledPluginStateListResult } from "@/features/plugin/install/installedAppState";
 import contentFactoryFixtureData from "@/features/plugin/testing/fixtures/content-factory-app.json";
 import { buildInstalledPluginState } from "@/features/plugin/install/installedAppState";
 import { buildInstalledAppPreview } from "@/features/plugin/install/installedAppPreview";

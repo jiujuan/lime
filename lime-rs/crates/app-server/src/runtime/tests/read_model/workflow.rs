@@ -1,8 +1,12 @@
 use super::*;
+use std::sync::Arc;
 
 #[tokio::test]
-async fn read_session_hides_workflow_facts_from_runtime_events() {
-    let core = RuntimeCore::default();
+async fn read_session_projects_workflow_facts_from_runtime_events() {
+    let event_log_root = tempfile::tempdir().expect("event log root");
+    let event_log_writer =
+        Arc::new(EventLogWriter::new(event_log_root.path()).expect("event log writer"));
+    let core = RuntimeCore::default().with_event_log_writer(event_log_writer);
     core.start_session(AgentSessionStartParams {
         session_id: Some("sess_workflow_read".to_string()),
         thread_id: Some("thread_workflow_read".to_string()),
@@ -129,12 +133,124 @@ async fn read_session_hides_workflow_facts_from_runtime_events() {
         .detail
         .expect("detail");
     let thread_read = &detail["thread_read"];
-    assert!(thread_read.get("workflow_runs").is_none());
-    assert!(thread_read.get("workflowRuns").is_none());
-    assert!(thread_read.get("workflow_steps").is_none());
-    assert!(thread_read.get("workflowSteps").is_none());
+    assert_eq!(
+        thread_read["workflow"]["activeWorkflowRunId"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        thread_read["workflow_runs"][0]["workflowRunId"],
+        "task-article:workflow"
+    );
+    assert_eq!(
+        thread_read["workflowRuns"][0]["workflowKey"],
+        "content_article_workflow"
+    );
+    assert_eq!(thread_read["workflow_runs"][0]["status"], "completed");
+    assert_eq!(thread_read["workflow_runs"][0]["stepCounts"]["total"], 2);
+    assert_eq!(
+        thread_read["workflow_runs"][0]["stepCounts"]["completed"],
+        1
+    );
+    assert_eq!(thread_read["workflow_runs"][0]["stepCounts"]["queued"], 1);
+    assert_eq!(thread_read["workflow_steps"][0]["stepId"], "draft");
+    assert_eq!(thread_read["workflow_steps"][0]["status"], "queued");
+    assert_eq!(thread_read["workflow_steps"][1]["stepId"], "research");
+    assert_eq!(thread_read["workflow_steps"][1]["status"], "completed");
     assert!(detail.get("workflow_runs").is_none());
     assert!(detail.get("workflowRuns").is_none());
     assert!(detail.get("workflow_steps").is_none());
     assert!(detail.get("workflowSteps").is_none());
+}
+
+#[tokio::test]
+async fn workflow_read_returns_current_read_model_from_audit_log() {
+    let event_log_root = tempfile::tempdir().expect("event log root");
+    let event_log_writer =
+        Arc::new(EventLogWriter::new(event_log_root.path()).expect("event log writer"));
+    let core = RuntimeCore::default().with_event_log_writer(event_log_writer);
+    core.start_session(AgentSessionStartParams {
+        session_id: Some("sess_workflow_read_current".to_string()),
+        thread_id: Some("thread_workflow_read_current".to_string()),
+        app_id: "content-factory-app".to_string(),
+        workspace_id: Some("workspace-main".to_string()),
+        business_object_ref: None,
+        locale: None,
+    })
+    .expect("session");
+    core.append_external_runtime_events(
+        "sess_workflow_read_current",
+        None,
+        vec![
+            RuntimeEvent::new(
+                "workflow.run.started",
+                json!({
+                    "workflowRunId": "task-current:workflow",
+                    "workflowKey": "content_article_workflow",
+                    "workflowTitle": "写文章工作流",
+                    "status": "running",
+                    "steps": [{
+                        "stepId": "outline",
+                        "stepTitle": "提纲规划",
+                        "stepIndex": 0,
+                        "stepCount": 1,
+                        "status": "running"
+                    }]
+                }),
+            ),
+            RuntimeEvent::new(
+                "workflow.run.completed",
+                json!({
+                    "workflowRunId": "task-current:workflow",
+                    "workflowKey": "content_article_workflow",
+                    "status": "completed"
+                }),
+            ),
+        ],
+    )
+    .expect("append workflow events");
+
+    let workflow = core
+        .read_workflow_current(WorkflowReadParams {
+            session_id: "sess_workflow_read_current".to_string(),
+        })
+        .await
+        .expect("workflow read");
+
+    assert_eq!(workflow.session_id, "sess_workflow_read_current");
+    assert_eq!(
+        workflow.workflow_runs[0]["workflowRunId"],
+        "task-current:workflow"
+    );
+    assert_eq!(workflow.workflow_runs[0]["status"], "completed");
+    assert_eq!(workflow.workflow_steps[0]["stepId"], "outline");
+
+    let session = core
+        .read_session_current(AgentSessionReadParams {
+            session_id: "sess_workflow_read_current".to_string(),
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .await
+        .expect("current session read");
+    let thread_read = &session.detail.expect("detail")["thread_read"];
+    assert_eq!(
+        thread_read["workflowRuns"][0]["workflowRunId"],
+        "task-current:workflow"
+    );
+}
+
+#[tokio::test]
+async fn workflow_read_fails_closed_when_session_is_missing() {
+    let error = RuntimeCore::default()
+        .read_workflow_current(WorkflowReadParams {
+            session_id: "missing-session".to_string(),
+        })
+        .await
+        .expect_err("missing session should fail");
+
+    assert!(matches!(
+        error,
+        RuntimeCoreError::SessionNotFound(session_id) if session_id == "missing-session"
+    ));
 }

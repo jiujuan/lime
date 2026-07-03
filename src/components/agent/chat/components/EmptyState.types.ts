@@ -86,6 +86,12 @@ export interface EmptyStateProps extends SkillSelectionSourceProps {
   sessionId?: string | null;
   /** 当前输入栏可显式激活的插件候选 */
   pluginSuggestions?: InputbarPluginCapability[];
+  /** 插件候选读取失败信息 */
+  pluginSuggestionsError?: string | null;
+  /** 插件候选是否读取中 */
+  pluginSuggestionsLoading?: boolean;
+  /** 用户显式打开插件候选入口 */
+  onPluginSuggestionsNeeded?: () => void;
   /** 当前 runtime tool surface */
   runtimeToolAvailability?: RuntimeToolAvailability | null;
   /** 当前执行态摘要 */

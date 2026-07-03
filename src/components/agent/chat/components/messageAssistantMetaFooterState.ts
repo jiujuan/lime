@@ -21,6 +21,17 @@ function hasTerminalAssistantRuntimeStatus(message: Message): boolean {
   return shouldRenderAssistantRuntimeStatusPill(message.runtimeStatus);
 }
 
+function hasRenderedImageWorkbenchPreview(message: Message): boolean {
+  const preview = message.imageWorkbenchPreview;
+  if (!preview) {
+    return false;
+  }
+  if (preview.imageUrl?.trim()) {
+    return true;
+  }
+  return Boolean(preview.previewImages?.some((url) => url.trim()));
+}
+
 export interface MessageAssistantMetaFooterState {
   shouldRenderTailRuntimeStatusLine: boolean;
   shouldRenderActiveRuntimeFooterIndicator: boolean;
@@ -97,8 +108,8 @@ export function resolveMessageAssistantMetaFooterState({
   const shouldRenderImageWorkbenchUsageFooter =
     message.role === "assistant" &&
     Boolean(message.imageWorkbenchPreview) &&
-    message.imageWorkbenchPreview?.status === "complete" &&
-    isConversationTailAssistant &&
+    (message.imageWorkbenchPreview?.status === "complete" ||
+      hasRenderedImageWorkbenchPreview(message)) &&
     !message.isThinking &&
     Boolean(message.usage);
   const shouldSuppressAssistantMetaFooter =

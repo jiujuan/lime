@@ -237,7 +237,7 @@
 - 新增 P0 green 计划，按 preflight -> 单场景 -> 8/8 official evidence 推进。
 - 新增本进度追踪文件。
 - 将 Agent Verification Contract 主模板迁入 `internal/exec-plans/templates/agent-verification-contract.md`。
-- 在 `internal/exec-plans/README.md` 增加触发规则：Agent / Runtime / Agent App / Skill / Managed Objective / Harness / GUI 主链改动应先填写合同，并默认低 token。
+- 在 `internal/exec-plans/README.md` 增加触发规则：Agent / Runtime / Plugin / Skill / Managed Objective / Harness / GUI 主链改动应先填写合同，并默认低 token。
 - 新增 `10-example-contract-command-bridge.md`，示范 `budget:tight` 下如何填写低风险 deterministic P0 合同；样例不跑 qcloop、不写 official evidence。
 - 放行 `.gitignore` 中的 `internal/exec-plans/templates/*.md`，确保模板能作为 versioned artifact 纳入仓库。
 - 放行 `.gitignore` 中的 `internal/research/agent/**`，确保本研究目录和计划骨架能作为 versioned artifact 纳入仓库。

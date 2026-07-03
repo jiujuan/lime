@@ -1,5 +1,18 @@
 use super::*;
 
+#[test]
+fn image_task_runner_timeout_keeps_agnes_live_runs_inside_ui_wait_window() {
+    assert_eq!(
+        image_task_runner_timeout_secs(ImageGenerationRequestBodyFormat::AgnesImages),
+        AGNES_IMAGE_TASK_RUNNER_TIMEOUT_SECS
+    );
+    assert_eq!(AGNES_IMAGE_TASK_RUNNER_TIMEOUT_SECS, 120);
+    assert_eq!(
+        image_task_runner_timeout_secs(ImageGenerationRequestBodyFormat::OpenaiImages),
+        IMAGE_TASK_RUNNER_TIMEOUT_SECS
+    );
+}
+
 #[tokio::test]
 async fn execute_image_generation_task_should_advance_task_file_to_succeeded() {
     let temp_dir = tempfile::tempdir().expect("create temp dir");
@@ -153,6 +166,20 @@ async fn execute_image_generation_task_should_advance_task_file_to_succeeded() {
             .and_then(Value::as_str),
         Some("local_lime_service")
     );
+    let audit_log_ref = result
+        .record
+        .attempts
+        .last()
+        .and_then(|attempt| attempt.logs_ref.as_deref())
+        .expect("attempt audit log ref");
+    let audit_log = std::fs::read_to_string(temp_dir.path().join(audit_log_ref))
+        .expect("read attempt audit log");
+    assert!(audit_log.contains("\"event\":\"worker_loaded\""));
+    assert!(audit_log.contains("\"event\":\"request_slot_started\""));
+    assert!(audit_log.contains("\"event\":\"request_slot_succeeded\""));
+    assert!(audit_log.contains("\"event\":\"task_succeeded\""));
+    assert!(audit_log.contains("\"normalized_status\":\"succeeded\""));
+    assert!(!audit_log.contains("test-key"));
 
     server.abort();
 }

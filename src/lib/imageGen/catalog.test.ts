@@ -144,6 +144,27 @@ describe("imageGen/catalog", () => {
     );
   });
 
+  it("Agnes 应作为一等图片 Provider 对齐官方图片接口", () => {
+    const entry = resolveImageCapabilityProviderEntry({
+      id: "agnes",
+      type: "openai",
+      api_host: "https://apihub.agnes-ai.com/v1",
+    });
+
+    expect(entry?.providerKey).toBe("agnes");
+    expect(entry?.transport).toBe("openai_images");
+    expect(entry?.endpointPath).toBe("/v1/images/generations");
+    expect(resolveImageCapabilityModelIds({ id: "agnes", type: "openai" }))
+      .toContain("agnes-image-2.1-flash");
+    expect(
+      resolveImageCapabilityProviderEntry({
+        id: "custom-openai",
+        type: "openai",
+        api_host: "https://apihub.agnes-ai.com/v1",
+      })?.providerKey,
+    ).toBe("agnes");
+  });
+
   it("DashScope 拉取的新 Qwen-Image 模型应进入图片默认模型候选", () => {
     expect(
       resolveImageCapabilityModelIds({

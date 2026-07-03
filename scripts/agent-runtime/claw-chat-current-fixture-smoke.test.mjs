@@ -461,6 +461,11 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("completeMethodUsed");
     expect(content).toContain("imageCommandTaskArtifactTerminal");
     expect(content).toContain("imageCommandTaskArtifactAfterReload");
+    expect(content).toContain("imageCommandTaskAuditLog");
+    expect(content).toContain("EXPECTED_IMAGE_TASK_AUDIT_EVENTS");
+    expect(content).toContain("worker_loaded");
+    expect(content).toContain("request_slot_succeeded");
+    expect(content).toContain("task_succeeded");
     expect(content).toContain("guiImageCommandRestoredAfterReload");
     expect(content).toContain("agentUiPerformanceTracePreReload");
     expect(content).toContain("collectAgentUiPerformanceTraceEvidence");
@@ -475,6 +480,9 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("imageCommandTaskArtifactWritten");
     expect(content).toContain("imageCommandTaskArtifactTerminal");
     expect(content).toContain("imageCommandTaskArtifactSameTaskUpdated");
+    expect(content).toContain("imageCommandTaskAuditLogWritten");
+    expect(content).toContain("imageCommandTaskAuditLogEventSequence");
+    expect(content).toContain("imageCommandTaskAuditLogNoSensitiveTokens");
     expect(content).toContain("imageCommandWorkerUsedFixtureProviderAndModel");
     expect(content).toContain("imageCommandFixtureProvider");
     expect(content).toContain("bodyIncludesModel");
@@ -940,15 +948,15 @@ describe("claw chat current Electron fixture smoke guard", () => {
       'readModel.workerArticleObject?.hostManagedGenerationStatus ===\n        "unavailable"',
     );
     expect(content).toContain(
-      "CONTENT_FACTORY_ARTICLE_WORKSPACE_REMOTE_REJECT_TURN_ID",
+      "CONTENT_FACTORY_ARTICLE_WORKSPACE_CONTRACT_REJECT_TURN_ID",
     );
-    expect(content).toContain("PLUGIN_WORKER_REMOTE_RUNTIME_DISABLED");
-    expect(content).toContain("runRemotePluginRuntimeRejectionProbe");
+    expect(content).toContain("PLUGIN_WORKER_CONTRACT_UNSUPPORTED");
+    expect(content).toContain("runRuntimeContractRejectionProbe");
     expect(content).toContain(
-      "contentFactoryArticleWorkspaceRemoteRuntimeRejection",
+      "contentFactoryArticleWorkspaceRuntimeContractRejection",
     );
     expect(content).toContain(
-      "contentFactoryArticleWorkspaceRemoteRuntimeFailClosed",
+      "contentFactoryArticleWorkspaceRuntimeContractFailClosed",
     );
     expect(content).toContain(
       "contentFactoryArticleWorkspaceStoryboardObjectSelection",

@@ -76,14 +76,23 @@ export const mockTokenUsageDisplay = vi.fn(
   ({
     promptCacheNotice,
     inline,
+    usage,
   }: {
     promptCacheNotice?: {
       label?: string;
     } | null;
     inline?: boolean;
+    usage?: {
+      input_tokens?: number;
+      output_tokens?: number;
+    };
   }) => (
     <div data-testid="token-usage-display" data-inline={inline ? "yes" : "no"}>
-      {promptCacheNotice?.label || "token-usage-display"}
+      {promptCacheNotice?.label ||
+        `${
+          ((usage?.input_tokens ?? 0) + (usage?.output_tokens ?? 0)) /
+          1_000
+        }.0K Tokens`}
     </div>
   ),
 );

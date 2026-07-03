@@ -6,6 +6,7 @@ import {
   hasUserTextMessage,
   isAutoTitlePlaceholder,
   isPreviewDerivedTitle,
+  sanitizeGeneratedAutoTitle,
   shouldGenerateAutoTitle,
 } from "./agentChatAutoTitleViewModel";
 import type { Topic } from "./agentChatShared";
@@ -169,6 +170,33 @@ describe("agentChatAutoTitleViewModel", () => {
       title: "支付页错误定位",
     });
     expect(result[1]).toBe(otherTopic);
+  });
+
+  it("图片任务自动标题入库前保留生成器原文", () => {
+    expect(
+      sanitizeGeneratedAutoTitle(
+        "配图：用 Agnes Generate一张深圳夏day午后的城市照片，真实摄影Style",
+        "user：@配图 用 Agnes 生成一张深圳夏天午后的城市照片，真实摄影风格",
+      ),
+    ).toBe("配图：用 Agnes Generate一张深圳夏day午后的城市照片，真实摄影Style");
+
+    const targetTopic = createTopic("session-1", "新任务");
+    const result = applyGeneratedAutoTitleToTopics(
+      [targetTopic],
+      "session-1",
+      "配图：用 Agnes Generate一张深圳夏day午后的城市照片，真实摄影Style",
+      "user：@配图 用 Agnes 生成一张深圳夏天午后的城市照片，真实摄影风格",
+    );
+
+    expect(result[0]?.title).toBe(
+      "配图：用 Agnes Generate一张深圳夏day午后的城市照片，真实摄影Style",
+    );
+  });
+
+  it("正常英文自动标题不应被图片标题清洗误伤", () => {
+    expect(
+      sanitizeGeneratedAutoTitle("Generate landing page style guide"),
+    ).toBe("Generate landing page style guide");
   });
 
   it("生成标题为空、未命中或标题未变化时应复用原 topics", () => {

@@ -2589,6 +2589,8 @@
   "settings.providers.modelAdd.catalog.template.alibaba-coding-plan-cn.description": "Alibaba Cloud Bailian China Anthropic endpoint dedicated to Claude Code Coding Plan.",
   "settings.providers.modelAdd.catalog.template.alibaba-coding-plan-global.name": "Alibaba Coding Plan (Global)",
   "settings.providers.modelAdd.catalog.template.alibaba-coding-plan-global.description": "Alibaba Cloud Model Studio international Anthropic endpoint dedicated to Claude Code Coding Plan.",
+  "settings.providers.modelAdd.catalog.template.agnes-image-flash.name": "Agnes",
+  "settings.providers.modelAdd.catalog.template.agnes-image-flash.description": "Official Agnes image generation endpoint using the OpenAI-compatible API, defaulting to agnes-image-2.1-flash.",
   "settings.providers.modelAdd.catalog.template.aihubmix-recommended.name": "AiHubMix",
   "settings.providers.modelAdd.catalog.template.aihubmix-recommended.description": "A common relay service that aggregates Claude, OpenAI, and Gemini models.",
   "settings.providers.modelAdd.catalog.template.openrouter-recommended.name": "OpenRouter",

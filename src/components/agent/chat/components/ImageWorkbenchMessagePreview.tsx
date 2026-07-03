@@ -2,10 +2,7 @@ import React from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { Leaf, RotateCcw } from "lucide-react";
-import {
-  emitImageWorkbenchFocus,
-  emitImageWorkbenchTaskAction,
-} from "@/lib/imageWorkbenchEvents";
+import { emitImageWorkbenchTaskAction } from "@/lib/imageWorkbenchEvents";
 import type {
   MessageImageWorkbenchPreview,
   MessageImageWorkbenchPreviewSelection,
@@ -13,6 +10,7 @@ import type {
 import {
   buildImageWorkbenchCaption,
   resolveImageWorkbenchPreviewModelLabel,
+  sanitizeImageWorkbenchPresentationText,
 } from "../utils/imageWorkbenchPresentation";
 import { ImageWorkbenchPreviewMedia } from "./ImageWorkbenchPreviewMedia";
 
@@ -25,6 +23,7 @@ interface ImageWorkbenchMessagePreviewProps {
 }
 
 type AgentTranslate = TFunction<"agent", undefined>;
+type CaptionStatus = Parameters<typeof buildImageWorkbenchCaption>[0]["status"];
 
 function resolveToolLabel(
   preview: MessageImageWorkbenchPreview,
@@ -47,29 +46,45 @@ export const ImageWorkbenchMessagePreview: React.FC<
   const { t } = useTranslation("agent");
   const toolLabel = resolveToolLabel(preview, t);
   const modelLabel = resolveImageWorkbenchPreviewModelLabel(preview);
+  const hasRenderedImage = Boolean(
+    preview.imageUrl || preview.previewImages?.some((url) => url.trim()),
+  );
+  const resolvedCaptionStatus: CaptionStatus =
+    preview.status === "running" && hasRenderedImage
+      ? preview.expectedImageCount &&
+        preview.imageCount &&
+        preview.imageCount < preview.expectedImageCount
+        ? "partial"
+        : "complete"
+      : preview.status;
+  const displayPrompt =
+    sanitizeImageWorkbenchPresentationText(preview.prompt, {
+      languageSource: preview.prompt,
+    }) || "";
   const explicitCaption =
-    preview.status === "running" ? "" : preview.caption?.trim() || "";
+    resolvedCaptionStatus === "running"
+      ? ""
+      : sanitizeImageWorkbenchPresentationText(preview.caption, {
+          languageSource: displayPrompt || preview.prompt,
+        });
   const caption =
     explicitCaption ||
     buildImageWorkbenchCaption({
-      prompt: preview.prompt,
-      status: preview.status,
+      prompt: displayPrompt,
+      status: resolvedCaptionStatus,
       imageCount: preview.imageCount ?? preview.expectedImageCount ?? null,
       statusMessage: preview.statusMessage ?? null,
     });
   const showRetryAction =
     (preview.status === "failed" || preview.status === "cancelled") &&
     preview.retryable !== false;
+  const canOpenPreview = Boolean(onOpen);
 
   const openPreview = (selection?: MessageImageWorkbenchPreviewSelection) => {
-    if (onOpen) {
-      onOpen(preview, selection);
+    if (!onOpen) {
       return;
     }
-    emitImageWorkbenchFocus({
-      projectId: preview.projectId ?? null,
-      contentId: preview.contentId ?? null,
-    });
+    onOpen(preview, selection);
   };
 
   const handleRetry = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -85,9 +100,11 @@ export const ImageWorkbenchMessagePreview: React.FC<
   return (
     <div className="w-full max-w-[800px]">
       <div
-        onClick={() => openPreview()}
+        onClick={canOpenPreview ? () => openPreview() : undefined}
         data-testid={`image-workbench-message-preview-${preview.taskId}`}
-        className="group block w-full cursor-pointer text-left"
+        className={`group block w-full text-left ${
+          canOpenPreview ? "cursor-pointer" : ""
+        }`}
       >
         <div
           data-testid={`image-workbench-message-preview-toolbar-${preview.taskId}`}
@@ -106,7 +123,7 @@ export const ImageWorkbenchMessagePreview: React.FC<
           <ImageWorkbenchPreviewMedia
             preview={preview}
             t={t}
-            onSelect={openPreview}
+            onSelect={canOpenPreview ? openPreview : undefined}
           />
         </div>
         {caption ? (

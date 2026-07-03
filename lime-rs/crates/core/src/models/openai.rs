@@ -1,8 +1,8 @@
 //! OpenAI API 数据模型
 //!
-//! Chat Completion types re-exported from `aster-models` crate (single source of truth).
+//! Chat Completion types re-exported from `agent-protocol` crate.
 //! Image generation types are Lime-specific and defined locally.
-pub use aster_models::openai::*;
+pub use agent_protocol::openai::*;
 
 use serde::{Deserialize, Serialize};
 

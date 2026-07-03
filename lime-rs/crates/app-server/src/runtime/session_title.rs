@@ -46,7 +46,11 @@ pub(crate) fn normalize_title(value: Option<&str>) -> Option<String> {
     if value.is_empty() {
         return None;
     }
-    Some(truncate_chars(value, TITLE_MAX_CHARS))
+    let value = sanitize_title_text(value);
+    if value.is_empty() {
+        return None;
+    }
+    Some(truncate_chars(&value, TITLE_MAX_CHARS))
 }
 
 fn strip_user_message_prefix(value: &str) -> &str {
@@ -59,6 +63,53 @@ fn strip_user_message_prefix(value: &str) -> &str {
 fn is_placeholder_title(value: &str) -> bool {
     let value = value.trim();
     value.is_empty() || PLACEHOLDER_TITLES.iter().any(|title| *title == value)
+}
+
+fn sanitize_title_text(value: &str) -> String {
+    let mut title = value.trim().to_string();
+    title = title
+        .replace("@配图", "配图：")
+        .replace("@封面", "封面：")
+        .replace("@海报", "海报：");
+    title = replace_ascii_case_insensitive(title, "Image Generation", "图片生成");
+    title = replace_ascii_case_insensitive(title, "Generate", "生成");
+    title = replace_ascii_case_insensitive(title, "Style", "风格");
+    for (from, to) in [
+        ("春day", "春天"),
+        ("夏day", "夏天"),
+        ("秋day", "秋天"),
+        ("冬day", "冬天"),
+    ] {
+        title = title.replace(from, to);
+    }
+    normalize_title_spacing(&title)
+}
+
+fn replace_ascii_case_insensitive(value: String, needle: &str, replacement: &str) -> String {
+    let needle_lower = needle.to_ascii_lowercase();
+    let mut result = String::new();
+    let mut remaining = value.as_str();
+    loop {
+        let remaining_lower = remaining.to_ascii_lowercase();
+        let Some(index) = remaining_lower.find(&needle_lower) else {
+            result.push_str(remaining);
+            break;
+        };
+        result.push_str(&remaining[..index]);
+        result.push_str(replacement);
+        remaining = &remaining[index + needle.len()..];
+    }
+    result
+}
+
+fn normalize_title_spacing(value: &str) -> String {
+    let mut title = value.split_whitespace().collect::<Vec<_>>().join(" ");
+    title = title
+        .replace("： ", "：")
+        .replace(" ,", ",")
+        .replace(" ，", "，")
+        .replace(" 。", "。");
+    title.trim().to_string()
 }
 
 fn truncate_chars(value: &str, max_chars: usize) -> String {
@@ -127,6 +178,16 @@ mod tests {
                 }
             })),
             Some("生成项目摘要".to_string())
+        );
+    }
+
+    #[test]
+    fn sanitizes_image_command_title_from_raw_prompt_tokens() {
+        assert_eq!(
+            normalize_title(Some(
+                "@配图 用 Agnes Generate一张深圳夏day午后的城市照片，真实摄影Style"
+            )),
+            Some("配图：用 Agnes 生成一张深圳夏天午后的城市照片，真实摄影风格".to_string())
         );
     }
 }

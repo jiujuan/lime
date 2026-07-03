@@ -558,6 +558,13 @@
       "allowedPaths": []
     },
     {
+      "id": "workspace-use-workflow-legacy-hook-shell",
+      "classification": "dead-candidate",
+      "description": "旧 workspace useWorkflow Hook 已退出生产链路，只允许作为删除候选和退场守卫；真实 Workflow facts 必须来自 App Server Workflow Read Model",
+      "targets": ["src/components/workspace/hooks/useWorkflow.ts"],
+      "allowedPaths": []
+    },
+    {
       "id": "workspace-theme-workbench-runtime-entry",
       "classification": "dead-candidate",
       "description": "已删除的旧工作区主题工作台 runtime 文件路径，当前统一收口到 useWorkspaceGeneralWorkbenchRuntime",
@@ -1982,15 +1989,15 @@
     },
     {
       "id": "content-workflow-legacy-api-gateway",
-      "classification": "dead-candidate",
-      "description": "已退出现役工作区主链的旧 content workflow API 网关",
+      "classification": "dead",
+      "description": "已退出现役工作区主链的旧 content workflow API 网关；Workflow current 事实源为 App Server workflow.* event 与 Workflow Read Model",
       "targets": ["src/lib/api/content-workflow.ts"],
       "allowedPaths": []
     },
     {
       "id": "content-workflow-rust-command-module",
-      "classification": "dead-candidate",
-      "description": "已退出 旧桌面宿主命令注册的旧 content workflow 命令模块",
+      "classification": "dead",
+      "description": "已退出旧桌面宿主命令注册的旧 content workflow 命令模块；不得恢复旧 Tauri command wrapper",
       "targets": ["lime-rs/src/commands/content_workflow_cmd.rs"],
       "allowedPaths": []
     },
@@ -2148,7 +2155,7 @@
     {
       "id": "plugin-center-module-surface",
       "classification": "dead",
-      "description": "已删除的插件中心页面、前端网关、桌面插件命令与文档入口；当前 GUI 不再暴露插件安装、管理或动态插件侧栏入口",
+      "description": "已删除的旧 components/plugins 页面、旧 pluginUI 网关、旧桌面插件命令与文档入口；Plugin current 主链收敛到 src/features/plugin 与 src/lib/api/plugins.ts，不得恢复旧插件中心实现",
       "targets": [
         "src/components/plugins/PluginInstallDialog.tsx",
         "src/components/plugins/PluginItemContextMenu.tsx",
@@ -2157,8 +2164,6 @@
         "src/components/plugins/PluginUninstallDialog.tsx",
         "src/components/plugins/PluginsPage.tsx",
         "src/components/plugins/README.md",
-        "src/lib/api/plugins.ts",
-        "src/lib/api/plugins.test.ts",
         "src/lib/api/pluginUI.ts",
         "src/lib/api/pluginUI.test.ts",
         "lime-rs/src/commands/plugin_cmd.rs",
@@ -2254,8 +2259,8 @@
     },
     {
       "id": "content-workflow-legacy-commands",
-      "classification": "dead-candidate",
-      "description": "已退出工作区现役主链的旧 content workflow 命令边界",
+      "classification": "dead",
+      "description": "已退出工作区现役主链的旧 content workflow 命令边界；新增 Workflow 控制面必须走 App Server current method",
       "commands": [
         "content_workflow_create",
         "content_workflow_get",
@@ -2763,9 +2768,7 @@
         "shouldRenderLocalProcessFallback",
         "shouldRenderProjection ? ("
       ],
-      "includePathPrefixes": [
-        "src/features/plugin/ui/AgentRunHostDrawer.tsx"
-      ],
+      "includePathPrefixes": ["src/features/plugin/ui/AgentRunHostDrawer.tsx"],
       "allowedPaths": []
     },
     {
@@ -3796,6 +3799,21 @@
       ],
       "includePathPrefixes": [
         "src/components/agent/chat/components/Inputbar/components/InputbarWorkflowStatusPanel.tsx"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "workflow-runtime-host-production-usage",
+      "classification": "dead",
+      "description": "WorkflowRuntimeHost 只能作为 Plugin UI 兼容演示 / 测试夹具；生产 AI Workflow 必须进入 App Server workflow.* event 与 Workflow Read Model 主链",
+      "patterns": ["WorkflowRuntimeHost"],
+      "includePathPrefixes": [
+        "src/components/agent",
+        "src/lib/api/agentRuntime",
+        "packages/agent-ui-contracts",
+        "packages/agent-runtime-projection",
+        "packages/agent-runtime-ui",
+        "packages/agent-runtime-client"
       ],
       "allowedPaths": []
     },

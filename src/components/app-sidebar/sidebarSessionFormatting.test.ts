@@ -80,4 +80,24 @@ describe("sidebarSessionFormatting", () => {
       ),
     ).toBe("Untitled conversation");
   });
+
+  it("图片任务历史标题不做前端词典改写", () => {
+    expect(
+      resolveSidebarSessionTitle(
+        buildSession({
+          name: "好啊，先来Generate 深圳夏day午后的城市照片，真实摄影Style。",
+        }),
+        "Untitled conversation",
+      ),
+    ).toBe("好啊，先来Generate 深圳夏day午后的城市照片，真实摄影Style。");
+  });
+
+  it("保留正常英文会话标题", () => {
+    expect(
+      resolveSidebarSessionTitle(
+        buildSession({ name: "Generate landing page style guide" }),
+        "Untitled conversation",
+      ),
+    ).toBe("Generate landing page style guide");
+  });
 });

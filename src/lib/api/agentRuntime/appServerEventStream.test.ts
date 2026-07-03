@@ -36,6 +36,39 @@ describe("appServerEventStream", () => {
     });
   });
 
+  it("reasoning.delta 应保留 App Server metadata 作为 providerMetadata", () => {
+    const payload = projectAppServerAgentEventPayload({
+      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "event-reasoning-visible-summary",
+          sessionId: "session-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          sequence: 11,
+          timestamp: "2026-07-02T10:00:00.000Z",
+          type: "reasoning.delta",
+          payload: {
+            text: "先确认图片的光线和构图。",
+            metadata: {
+              presentation: "visible_process_summary",
+              source: "image_command_workflow",
+            },
+          },
+        },
+      },
+    } as never);
+
+    expect(payload).toMatchObject({
+      type: "reasoning_delta",
+      text: "先确认图片的光线和构图。",
+      providerMetadata: {
+        presentation: "visible_process_summary",
+        source: "image_command_workflow",
+      },
+    });
+  });
+
   it("artifact.snapshot 应保留 sidecar 读取所需 metadata", () => {
     const payload = projectAppServerAgentEventPayload({
       method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
@@ -89,7 +122,7 @@ describe("appServerEventStream", () => {
     });
   });
 
-  it("workflow connector 与 hook 审计事件不进入普通 timeline 投影", () => {
+  it("workflow 审计事件应触发 read model refresh 且不进入普通 item timeline", () => {
     const baseEvent = {
       sessionId: "session-1",
       threadId: "thread-1",
@@ -114,6 +147,8 @@ describe("appServerEventStream", () => {
       "workflow.hook.completed",
       "workflow.run.retrying",
       "workflow.step.retrying",
+      "workflow.run.canceled",
+      "workflow.step.canceled",
     ]) {
       const payload = projectAppServerAgentEventPayload({
         method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
@@ -127,7 +162,25 @@ describe("appServerEventStream", () => {
         },
       } as never);
 
-      expect(payload).toBeNull();
+      expect(payload).toMatchObject({
+        type: "runtime_status",
+        runtime_event_type: type,
+        workflow_run_id: "turn-1:content_article_generate:workflow",
+        step_id: "research",
+        status: {
+          phase: "routing",
+          metadata: {
+            source: "workflow_read_model_refresh",
+            visibility: "diagnostics",
+            persistence: "transient",
+            agentui: {
+              status_kind: "workflow_read_model_refresh",
+              runtime_event_type: type,
+            },
+          },
+        },
+      });
+      expect(payload).not.toHaveProperty("item");
     }
   });
 

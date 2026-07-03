@@ -19,7 +19,7 @@
 | 证据 | 判断 |
 | --- | --- |
 | `packages/agent-ui-contracts/README.md` 定义 runtime event、projection、message parts、timeline、graph、fixtures | facts 契约较完整 |
-| `internal/roadmap/agentruntime/agentui-adoption-gap.md` 记录 Agent Workspace / Agent App projection bridge 和 Host Run view model first-cut | AgentUI 接入不是零基础 |
+| `internal/roadmap/agentruntime/agentui-adoption-gap.md` 记录 Agent Workspace / Plugin projection bridge 和 Host Run view model first-cut | AgentUI 接入不是零基础 |
 | Codex app-server `Thread / Turn / Item` 模型和 stream notifications | Agent Workspace 应对齐 thread/turn/item，而不是自造聊天状态 |
 | AG-UI run/text/tool/state/error/thinking event taxonomy | Agent Workspace 当前 event class 方向正确 |
 | Vercel AI SDK `UIMessage.parts` | 支持按 typed parts 渲染是行业标准 |
@@ -33,7 +33,7 @@
 | Ordered active parts | 3.0 | GUI 实测 reasoning / tool / text 交错渲染 |
 | Missing facts fallback | 3.5 | 缺 artifact/evidence/action 时不能显示假完成 |
 | Replay rebuild | 3.0 | 从 transcript 重建 projection 的 fixture |
-| App / Host 边界 | 3.5 | Agent App / Agent Workspace 不直接解释 `task:*` 或 assistant prose |
+| App / Host 边界 | 3.5 | Plugin / Agent Workspace 不直接解释 `task:*` 或 assistant prose |
 
 ## 4. P0 实测场景
 

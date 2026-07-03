@@ -181,7 +181,7 @@ AgentRunControlSurfaceViewModel
 | 2 | 有局部事实源或局部 chip，无法覆盖完整 run |
 | 3 | P0 只读 run rail 可用，plan / goal / env / source / subagent 可恢复 |
 | 4 | 控制闭环可用，permission/model/goal/steer/diff 下钻稳定，有 GUI evidence |
-| 5 | 可作为桌面 Agent App 标准能力：跨 local/worktree/cloud、subagent、MCP、Skills、artifact/evidence 全部可观察、可控制、可回放 |
+| 5 | 可作为桌面 Plugin 标准能力：跨 local/worktree/cloud、subagent、MCP、Skills、artifact/evidence 全部可观察、可控制、可回放 |
 
 ## 8. 失败模式
 

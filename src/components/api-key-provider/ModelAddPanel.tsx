@@ -36,6 +36,7 @@ import { useModelRegistry } from "@/hooks/useModelRegistry";
 import { getProviderModelAutoFetchCapability } from "@/lib/model/providerModelFetchSupport";
 import {
   dedupeModelIds,
+  AGNES_OPENAI_COMPATIBLE_API_HOST,
   getProviderTypeLabel,
   isSupportedProviderType,
   normalizeKnownProviderApiHost,
@@ -342,6 +343,21 @@ const FEATURED_TEMPLATES: ProviderTemplate[] = [
     billingMode: "coding_plan",
   },
   {
+    id: "agnes-image-flash",
+    name: "Agnes",
+    description:
+      "Agnes 官方图片生成入口，OpenAI 兼容接口，默认使用 agnes-image-2.1-flash。",
+    category: "recommended",
+    type: "openai",
+    apiHost: AGNES_OPENAI_COMPATIBLE_API_HOST,
+    recommended: true,
+    defaultModels: ["agnes-image-2.1-flash"],
+    iconProviderId: "agnes",
+    providerResourceId: "agnes",
+    region: "global",
+    billingMode: "payg",
+  },
+  {
     id: "aihubmix-recommended",
     name: "AiHubMix",
     description: "聚合 Claude、OpenAI、Gemini 的常用中转服务",
@@ -459,6 +475,7 @@ const RESOURCE_PROVIDER_API_HOSTS: Record<string, string> = {
   aihubmix: "https://aihubmix.com",
   alibaba: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/",
   "alibaba-cn": "https://dashscope.aliyuncs.com/compatible-mode/v1/",
+  agnes: AGNES_OPENAI_COMPATIBLE_API_HOST,
   anthropic: "https://api.anthropic.com",
   deepseek: "https://api.deepseek.com",
   "kimi-for-coding": "https://api.kimi.com/coding/",
@@ -478,6 +495,7 @@ const RESOURCE_PROVIDER_API_HOSTS: Record<string, string> = {
 };
 
 const RESOURCE_PROVIDER_DEFAULT_MODELS: Record<string, string[]> = {
+  agnes: ["agnes-image-2.1-flash"],
   sensenova: ["SenseChat-5"],
 };
 

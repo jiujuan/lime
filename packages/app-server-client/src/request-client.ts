@@ -654,6 +654,7 @@ export interface AppServerClient {
     params: protocol.AgentSessionStartParams,
   ): protocol.JsonRpcRequest;
   readSession(params: protocol.AgentSessionReadParams): protocol.JsonRpcRequest;
+  readWorkflow(params: protocol.WorkflowReadParams): protocol.JsonRpcRequest;
   readAgentSessionToolInventory(
     params?: protocol.AgentSessionToolInventoryReadParams,
   ): protocol.JsonRpcRequest;

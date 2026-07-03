@@ -1,6 +1,6 @@
 use super::*;
 use crate::protocol::{AgentEvent as RuntimeAgentEvent, AgentToolResult};
-use aster::session::TurnContextOverride;
+use crate::AgentTurnContext;
 use aster::tools::{PermissionCheckResult, Tool, ToolContext, ToolError, ToolRegistry, ToolResult};
 use async_trait::async_trait;
 use lime_core::config::{
@@ -329,10 +329,10 @@ async fn execute_planned_tool_batch_attaches_policy_metadata_to_permission_denia
             session_id: "session-policy-denied".to_string(),
             working_directory: working_directory.clone(),
             cancel_token: None,
-            turn_context: Some(TurnContextOverride {
+            turn_context: Some(AgentTurnContext {
                 sandbox_policy: Some("workspace-write".to_string()),
                 approval_policy: Some("never".to_string()),
-                ..TurnContextOverride::default()
+                ..AgentTurnContext::default()
             }),
             persisted_execution_policy: None,
             parallelism: 1,
@@ -401,10 +401,10 @@ async fn execute_planned_tool_batch_emits_action_required_for_shell_approval_pol
             session_id: "session-action-required".to_string(),
             working_directory: working_directory.clone(),
             cancel_token: None,
-            turn_context: Some(TurnContextOverride {
+            turn_context: Some(AgentTurnContext {
                 sandbox_policy: Some("workspace-write".to_string()),
                 approval_policy: Some("on_request".to_string()),
-                ..TurnContextOverride::default()
+                ..AgentTurnContext::default()
             }),
             persisted_execution_policy: None,
             parallelism: 1,
@@ -465,10 +465,10 @@ async fn execute_planned_tool_batch_emits_sandbox_blocked_for_read_only_shell_wr
             session_id: "session-sandbox-blocked".to_string(),
             working_directory: working_directory.clone(),
             cancel_token: None,
-            turn_context: Some(TurnContextOverride {
+            turn_context: Some(AgentTurnContext {
                 sandbox_policy: Some("read-only".to_string()),
                 approval_policy: Some("never".to_string()),
-                ..TurnContextOverride::default()
+                ..AgentTurnContext::default()
             }),
             persisted_execution_policy: None,
             parallelism: 1,
@@ -523,10 +523,10 @@ async fn execute_planned_tool_batch_respects_persisted_execution_policy() {
             session_id: "session-persisted-policy".to_string(),
             working_directory: std::env::current_dir().unwrap_or_default(),
             cancel_token: None,
-            turn_context: Some(TurnContextOverride {
+            turn_context: Some(AgentTurnContext {
                 sandbox_policy: Some("workspace-write".to_string()),
                 approval_policy: Some("on_request".to_string()),
-                ..TurnContextOverride::default()
+                ..AgentTurnContext::default()
             }),
             persisted_execution_policy: Some(ConfigToolExecutionPolicyConfig {
                 tool_overrides: HashMap::from([(
@@ -586,10 +586,10 @@ async fn execute_planned_shell_tool_emits_process_output_delta_before_terminal_e
             session_id: "session-process-delta".to_string(),
             working_directory: std::env::current_dir().unwrap_or_default(),
             cancel_token: None,
-            turn_context: Some(TurnContextOverride {
+            turn_context: Some(AgentTurnContext {
                 sandbox_policy: Some("workspace-write".to_string()),
                 approval_policy: Some("never".to_string()),
-                ..TurnContextOverride::default()
+                ..AgentTurnContext::default()
             }),
             persisted_execution_policy: Some(ConfigToolExecutionPolicyConfig {
                 tool_overrides: HashMap::from([(
@@ -750,10 +750,10 @@ async fn execute_planned_shell_live_process_updates_registry() {
             session_id: "session-process-registry".to_string(),
             working_directory: std::env::current_dir().unwrap_or_default(),
             cancel_token: None,
-            turn_context: Some(TurnContextOverride {
+            turn_context: Some(AgentTurnContext {
                 sandbox_policy: Some("workspace-write".to_string()),
                 approval_policy: Some("never".to_string()),
-                ..TurnContextOverride::default()
+                ..AgentTurnContext::default()
             }),
             persisted_execution_policy: Some(ConfigToolExecutionPolicyConfig {
                 tool_overrides: HashMap::from([(
@@ -875,10 +875,10 @@ async fn execute_planned_shell_tool_process_metadata_preserves_failure_exit_code
             session_id: "session-process-failure".to_string(),
             working_directory: std::env::current_dir().unwrap_or_default(),
             cancel_token: None,
-            turn_context: Some(TurnContextOverride {
+            turn_context: Some(AgentTurnContext {
                 sandbox_policy: Some("workspace-write".to_string()),
                 approval_policy: Some("never".to_string()),
-                ..TurnContextOverride::default()
+                ..AgentTurnContext::default()
             }),
             persisted_execution_policy: Some(ConfigToolExecutionPolicyConfig {
                 tool_overrides: HashMap::from([(
@@ -935,10 +935,10 @@ async fn execute_planned_shell_live_process_uses_context_working_directory() {
             session_id: "session-live-process-cwd".to_string(),
             working_directory: working_directory.clone(),
             cancel_token: None,
-            turn_context: Some(TurnContextOverride {
+            turn_context: Some(AgentTurnContext {
                 sandbox_policy: Some("danger-full-access".to_string()),
                 approval_policy: Some("never".to_string()),
-                ..TurnContextOverride::default()
+                ..AgentTurnContext::default()
             }),
             persisted_execution_policy: Some(ConfigToolExecutionPolicyConfig {
                 tool_overrides: HashMap::from([(
@@ -998,10 +998,10 @@ async fn execute_planned_shell_live_process_respects_tool_permission_preflight()
             session_id: "session-live-process-denied".to_string(),
             working_directory: std::env::current_dir().unwrap_or_default(),
             cancel_token: None,
-            turn_context: Some(TurnContextOverride {
+            turn_context: Some(AgentTurnContext {
                 sandbox_policy: Some("danger-full-access".to_string()),
                 approval_policy: Some("never".to_string()),
-                ..TurnContextOverride::default()
+                ..AgentTurnContext::default()
             }),
             persisted_execution_policy: Some(ConfigToolExecutionPolicyConfig {
                 tool_overrides: HashMap::from([(
@@ -1069,11 +1069,11 @@ async fn execute_planned_tool_batch_attaches_workspace_sandbox_context_when_back
             session_id: "session-workspace-sandbox".to_string(),
             working_directory: std::env::current_dir().unwrap_or_default(),
             cancel_token: None,
-            turn_context: Some(TurnContextOverride {
+            turn_context: Some(AgentTurnContext {
                 sandbox_policy: Some("workspace-write".to_string()),
                 approval_policy: Some("never".to_string()),
                 metadata,
-                ..TurnContextOverride::default()
+                ..AgentTurnContext::default()
             }),
             persisted_execution_policy: None,
             parallelism: 1,

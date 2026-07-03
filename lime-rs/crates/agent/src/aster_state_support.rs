@@ -3,8 +3,8 @@
 //! 提供可复用的会话配置构建、项目上下文 Prompt 构建、
 //! Lime Skills 加载与 Agent 身份配置。
 
+use crate::turn_context_configuration::{to_aster_turn_context, AgentTurnContext};
 use aster::agents::{AgentIdentity, SessionConfig};
-use aster::session::TurnContextOverride;
 use aster::skills::{global_registry, load_skills_from_directory, SkillSource};
 use aster::tools::ToolRegistrationConfig;
 use lime_core::app_paths;
@@ -227,7 +227,7 @@ pub struct SessionConfigBuilder {
     system_prompt: Option<String>,
     system_prompt_override: Option<bool>,
     include_context_trace: Option<bool>,
-    turn_context: Option<TurnContextOverride>,
+    turn_context: Option<AgentTurnContext>,
 }
 
 impl SessionConfigBuilder {
@@ -280,12 +280,13 @@ impl SessionConfigBuilder {
         self
     }
 
-    pub fn turn_context(mut self, turn_context: TurnContextOverride) -> Self {
+    pub fn turn_context(mut self, turn_context: AgentTurnContext) -> Self {
         self.turn_context = Some(turn_context);
         self
     }
 
     pub fn build(self) -> SessionConfig {
+        let turn_context = self.turn_context.map(to_aster_turn_context);
         SessionConfig {
             id: self.id,
             thread_id: self.thread_id,
@@ -296,7 +297,7 @@ impl SessionConfigBuilder {
             system_prompt: self.system_prompt,
             system_prompt_override: self.system_prompt_override,
             include_context_trace: self.include_context_trace,
-            turn_context: self.turn_context,
+            turn_context,
         }
     }
 }

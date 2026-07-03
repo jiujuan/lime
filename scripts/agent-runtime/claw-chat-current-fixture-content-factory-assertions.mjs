@@ -23,8 +23,8 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
   const artifactRead = summary.contentFactoryArticleWorkspaceArtifactRead ?? {};
   const storyboardRendererContract =
     readModel.storyboardArtifact?.rendererContract ?? {};
-  const remoteRuntimeRejection =
-    summary.contentFactoryArticleWorkspaceRemoteRuntimeRejection ?? {};
+  const runtimeContractRejection =
+    summary.contentFactoryArticleWorkspaceRuntimeContractRejection ?? {};
 
   return {
     contentFactoryArticleWorkspaceRuntimeEventsAppended:
@@ -290,16 +290,16 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
       storyboardRendererContract.allowedOutputArtifactKinds?.includes(
         "content_factory.workspace_patch",
       ) === true,
-    contentFactoryArticleWorkspaceRemoteRuntimeFailClosed:
+    contentFactoryArticleWorkspaceRuntimeContractFailClosed:
       appServerRequestMethods.includes(APP_SERVER_METHOD_SESSION_TURN_START) &&
-      remoteRuntimeRejection.turnStatus === "accepted" &&
-      remoteRuntimeRejection.appId === "creator-pack" &&
-      remoteRuntimeRejection.errorCode ===
-        "PLUGIN_WORKER_REMOTE_RUNTIME_DISABLED" &&
-      remoteRuntimeRejection.failureCategory === "configuration" &&
-      remoteRuntimeRejection.readModel?.status === "failed" &&
-      remoteRuntimeRejection.readModel?.errorCode ===
-        "PLUGIN_WORKER_REMOTE_RUNTIME_DISABLED",
+      runtimeContractRejection.turnStatus === "accepted" &&
+      runtimeContractRejection.appId === "content-factory-app" &&
+      runtimeContractRejection.errorCode ===
+        "PLUGIN_WORKER_CONTRACT_UNSUPPORTED" &&
+      runtimeContractRejection.failureCategory === "configuration" &&
+      runtimeContractRejection.readModel?.status === "failed" &&
+      runtimeContractRejection.readModel?.errorCode ===
+        "PLUGIN_WORKER_CONTRACT_UNSUPPORTED",
     contentFactoryArticleWorkspaceDoesNotUseModelTurn: backendLedger.every(
       (entry) => entry.kind !== "turnStart",
     ),

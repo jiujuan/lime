@@ -22,7 +22,7 @@
 | AgentUI source-index 对 Codex / Claude team 研究 | team roster、worker notifications、handoff、review 是标准面 |
 | Claude Code `pillLabel.ts` | 后台 task pill 应压缩展示，仅 needs_input / plan_ready 抢注意力 |
 | Codex collaborative tools 线索 | spawn/send/resume/wait/close 是协作动作参考 |
-| Lime subagent projection / team runtime docs | Lime 不是零基础，但 Agent App / Agent Workspace Host 表面仍需补 |
+| Lime subagent projection / team runtime docs | Lime 不是零基础，但 Plugin / Agent Workspace Host 表面仍需补 |
 | `packages/agent-ui-contracts` subagents model | projection state 要包含完整 subagents 字段 |
 
 ## 3. 评分维度

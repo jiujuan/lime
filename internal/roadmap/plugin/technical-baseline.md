@@ -34,7 +34,7 @@ Plugin package
 | iframe-only plugin runtime | `deprecated` | 只允许低风险预览或历史兼容，不作为主路径。 |
 | `<webview>` | `dead for new work` | 不得作为新插件 surface 默认承载。 |
 | BrowserView | `dead for new work` | 不得新增。 |
-| 旧 `agent_app_*` 用户入口 | `deprecated` | 只允许保留历史语义，不能继续扩展根产品。 |
+| 旧 `plugin_*` 用户入口 | `deprecated` | 只允许保留历史语义，不能继续扩展根产品。 |
 | 旧 旧内容工作台 程序 | `dead` | 只允许作为业务参考，不得复用代码、IPC、store、renderer 或打包流程。 |
 
 ## 3. 为什么不能让插件自己包一套壳

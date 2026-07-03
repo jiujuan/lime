@@ -1,4 +1,3 @@
-import type { AgentTokenUsage } from "@/lib/api/agentProtocol";
 import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
 import type {
   ContentPart,
@@ -8,8 +7,14 @@ import type {
   MessageTaskPreview,
 } from "../types";
 import { projectConversationMessagesByRuntimeTurn } from "../utils/conversationTimelineOrdering";
-import { sanitizeContentPartsForDisplay, sanitizeMessageTextForDisplay } from "../utils/messageDisplaySanitizer";
-import { buildImageTaskPreviewFromToolResult, buildTaskPreviewFromToolResult } from "../utils/taskPreviewFromToolResult";
+import {
+  sanitizeContentPartsForDisplay,
+  sanitizeMessageTextForDisplay,
+} from "../utils/messageDisplaySanitizer";
+import {
+  buildImageTaskPreviewFromToolResult,
+  buildTaskPreviewFromToolResult,
+} from "../utils/taskPreviewFromToolResult";
 import {
   extractLimeToolMetadataBlock,
   isToolResultSuccessful,
@@ -41,7 +46,10 @@ import {
   contentPartContainsProcess,
   resolveImageWorkbenchHistoryAssistantIntro,
 } from "./agentChatHistoryProcess";
-import { hydrateFailedRuntimeReadModelMessage, hydrateSessionDetailMessagesFromThreadReadToolCalls } from "./agentChatHistoryReadModel";
+import {
+  hydrateFailedRuntimeReadModelMessage,
+  hydrateSessionDetailMessagesFromThreadReadToolCalls,
+} from "./agentChatHistoryReadModel";
 import { dedupeAdjacentHistoryMessages } from "./agentChatHistorySignatures";
 import { hydrateSessionDetailMessagesFromThreadItems } from "./agentChatHistoryThreadItems";
 import { hydrateSessionDetailMessagesFromTurns } from "./agentChatHistoryTimelineBasics";
@@ -50,47 +58,7 @@ import {
   shouldMergeTimelineProcessMessages,
 } from "./agentChatHistoryTimelineMerge";
 import type { HydrateSessionDetailMessagesOptions } from "./agentChatHistoryTypes";
-
-const normalizeHistoryUsage = (usage: unknown): AgentTokenUsage | undefined => {
-  if (!usage || typeof usage !== "object") {
-    return undefined;
-  }
-
-  const inputTokens = (usage as { input_tokens?: unknown }).input_tokens;
-  const outputTokens = (usage as { output_tokens?: unknown }).output_tokens;
-  const cachedInputTokens = (usage as { cached_input_tokens?: unknown })
-    .cached_input_tokens;
-  const cacheCreationInputTokens = (
-    usage as { cache_creation_input_tokens?: unknown }
-  ).cache_creation_input_tokens;
-  if (
-    typeof inputTokens !== "number" ||
-    typeof outputTokens !== "number" ||
-    !Number.isFinite(inputTokens) ||
-    !Number.isFinite(outputTokens) ||
-    inputTokens < 0 ||
-    outputTokens < 0
-  ) {
-    return undefined;
-  }
-
-  return {
-    input_tokens: inputTokens,
-    output_tokens: outputTokens,
-    cached_input_tokens:
-      typeof cachedInputTokens === "number" &&
-      Number.isFinite(cachedInputTokens) &&
-      cachedInputTokens >= 0
-        ? cachedInputTokens
-        : undefined,
-    cache_creation_input_tokens:
-      typeof cacheCreationInputTokens === "number" &&
-      Number.isFinite(cacheCreationInputTokens) &&
-      cacheCreationInputTokens >= 0
-        ? cacheCreationInputTokens
-        : undefined,
-  };
-};
+import { normalizeHistoryUsage } from "./agentChatHistoryUsage";
 
 export const hydrateSessionDetailMessages = (
   detail: AsterSessionDetail,

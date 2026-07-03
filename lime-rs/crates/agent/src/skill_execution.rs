@@ -3,12 +3,11 @@ use crate::{
     artifact_protocol::{
         extend_unique_artifact_protocol_paths, push_unique_artifact_protocol_path,
     },
-    protocol_projection::project_runtime_event,
-    AsterAgentState, SessionConfigBuilder, WriteArtifactEventEmitter,
+    aster_runtime_projection::project_aster_runtime_event,
+    AgentTurnContext, AsterAgentState, SessionConfigBuilder, WriteArtifactEventEmitter,
 };
 use aster::agents::SessionConfig;
 use aster::conversation::message::Message;
-use aster::session::TurnContextOverride;
 use futures::StreamExt;
 use lime_skills::{ExecutionCallback, LoadedSkillDefinition};
 use serde::{Deserialize, Serialize};
@@ -164,7 +163,7 @@ fn build_user_message(
 fn build_skill_turn_context(
     skill: &LoadedSkillDefinition,
     user_visible_input: Option<&str>,
-) -> Option<TurnContextOverride> {
+) -> Option<AgentTurnContext> {
     let allowed_tools = skill
         .allowed_tools
         .as_ref()
@@ -186,10 +185,10 @@ fn build_skill_turn_context(
         );
     }
 
-    Some(TurnContextOverride {
+    Some(AgentTurnContext {
         user_visible_input_text,
         metadata,
-        ..TurnContextOverride::default()
+        ..AgentTurnContext::default()
     })
 }
 
@@ -215,7 +214,7 @@ fn build_prompt_session_config(
 fn build_step_session_config(
     step_session_id: &str,
     step_system_prompt: String,
-    skill_turn_context: Option<TurnContextOverride>,
+    skill_turn_context: Option<AgentTurnContext>,
 ) -> SessionConfig {
     let mut session_config_builder = SessionConfigBuilder::new(step_session_id)
         .system_prompt(step_system_prompt)
@@ -256,7 +255,7 @@ async fn stream_skill_session(
             while let Some(event_result) = stream.next().await {
                 match event_result {
                     Ok(agent_event) => {
-                        let runtime_events = project_runtime_event(agent_event);
+                        let runtime_events = project_aster_runtime_event(agent_event);
                         for mut runtime_event in runtime_events {
                             let extra_events =
                                 write_artifact_emitter.process_event(&mut runtime_event);

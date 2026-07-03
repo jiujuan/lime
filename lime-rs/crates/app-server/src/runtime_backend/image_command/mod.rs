@@ -5,7 +5,7 @@ use super::request_context::{
 };
 use crate::{AppDataSource, ExecutionRequest, RuntimeCoreError, RuntimeEvent, RuntimeEventSink};
 use app_server_protocol::{MediaTaskArtifactImageCreateParams, MediaTaskArtifactResponse};
-use lime_agent::agent_tools::catalog::LIME_CREATE_IMAGE_TASK_TOOL_NAME;
+use lime_agent::{agent_tools::catalog::LIME_CREATE_IMAGE_TASK_TOOL_NAME, AgentTokenUsage};
 mod presentation;
 
 use serde_json::{json, Value};
@@ -14,7 +14,45 @@ use std::sync::Arc;
 use tokio::time::{timeout, Duration};
 
 const WORKFLOW_SOURCE: &str = "image_command_workflow";
-const PRESENTATION_GENERATION_TIMEOUT: Duration = Duration::from_secs(8);
+// Presentation is part of the user-visible turn. Live text providers can take
+// longer than a few seconds on cold start or queueing, so keep this above the
+// media task handoff fast path budget instead of dropping the assistant lead.
+const PRESENTATION_GENERATION_TIMEOUT: Duration = Duration::from_secs(45);
+const IMAGE_WORKFLOW_STEP_COUNT: usize = 5;
+const IMAGE_WORKFLOW_STEPS: [ImageWorkflowStep; IMAGE_WORKFLOW_STEP_COUNT] = [
+    ImageWorkflowStep {
+        id: "intent",
+        title: "解析图片需求",
+        kind: "agent_task",
+    },
+    ImageWorkflowStep {
+        id: "route",
+        title: "确认图片模型",
+        kind: "tool",
+    },
+    ImageWorkflowStep {
+        id: "create_tasks",
+        title: "创建图片任务",
+        kind: "tool",
+    },
+    ImageWorkflowStep {
+        id: "generate",
+        title: "生成图片",
+        kind: "connector",
+    },
+    ImageWorkflowStep {
+        id: "persist_outputs",
+        title: "保存结果",
+        kind: "storage",
+    },
+];
+
+#[derive(Debug, Clone, Copy)]
+struct ImageWorkflowStep {
+    id: &'static str,
+    title: &'static str,
+    kind: &'static str,
+}
 
 pub(super) async fn handle_image_command_turn_if_present(
     runtime_backend: Option<&super::RuntimeBackend>,
@@ -64,6 +102,10 @@ pub(super) async fn handle_image_command_turn_if_present(
         .await
         {
             Ok(Ok(Some(generated_presentation))) => {
+                let presentation_usage = generated_presentation.usage.clone();
+                if let Some(planning_summary) = generated_presentation.planning_summary.as_deref() {
+                    emit_planning_summary(&intent, planning_summary, sink)?;
+                }
                 if let Some(assistant_intro) = generated_presentation.assistant_intro.as_deref() {
                     emit_assistant_intro(&intent, assistant_intro, sink)?;
                 }
@@ -72,20 +114,23 @@ pub(super) async fn handle_image_command_turn_if_present(
                     intent.presentation,
                     &generated_presentation,
                 );
+                intent.presentation_usage = presentation_usage;
             }
             Ok(Ok(None)) => {
                 emit_presentation_unavailable(&intent, "empty_or_invalid_model_output", sink)?;
             }
             Ok(Err(error)) => {
+                let reason_code = presentation_unavailable_reason_code(&error);
                 tracing::warn!(
                     session_id = %intent.scope.session_id,
                     thread_id = %intent.scope.thread_id,
                     turn_id = %intent.scope.turn_id,
                     workflow_run_id = %workflow_run_id(&intent.scope),
+                    reason_code = reason_code,
                     error = %error,
                     "[RuntimeBackend] ImageCommandWorkflow presentation generation unavailable"
                 );
-                emit_presentation_unavailable(&intent, "presentation_generation_failed", sink)?;
+                emit_presentation_unavailable(&intent, reason_code, sink)?;
             }
             Err(_) => {
                 tracing::warn!(
@@ -103,7 +148,7 @@ pub(super) async fn handle_image_command_turn_if_present(
 
     let tool_call_id = tool_call_id(scope);
     let create_params = intent.clone().into_create_params();
-    emit_workflow_step_started(&intent, "create_task", "创建图片任务", None, sink)?;
+    emit_workflow_step_started(&intent, "create_tasks", "创建图片任务", None, sink)?;
     emit_tool_started(&tool_call_id, &create_params, sink)?;
     match app_data_source
         .create_image_media_task_artifact(create_params)
@@ -111,7 +156,12 @@ pub(super) async fn handle_image_command_turn_if_present(
     {
         Ok(response) => {
             let task_id = response.task_id.clone();
-            emit_task_created(&tool_call_id, response, sink)?;
+            emit_task_created(
+                &tool_call_id,
+                response,
+                intent.presentation_usage.as_ref(),
+                sink,
+            )?;
             tracing::info!(
                 session_id = %intent.scope.session_id,
                 thread_id = %intent.scope.thread_id,
@@ -122,7 +172,7 @@ pub(super) async fn handle_image_command_turn_if_present(
             );
             emit_workflow_step_completed(
                 &intent,
-                "create_task",
+                "create_tasks",
                 "创建图片任务",
                 "task_created",
                 Some(&task_id),
@@ -140,6 +190,17 @@ pub(super) async fn handle_image_command_turn_if_present(
         }
     }
     Ok(true)
+}
+
+fn presentation_unavailable_reason_code(error: &RuntimeCoreError) -> &'static str {
+    let message = error.to_string();
+    if message.contains("presentation_text_model_unavailable") {
+        return "presentation_text_model_unavailable";
+    }
+    if message.contains("presentation_text_route_unavailable") {
+        return "presentation_text_route_unavailable";
+    }
+    "presentation_generation_failed"
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -181,6 +242,7 @@ struct ImageCommandIntent {
     target_output_ref_id: Option<String>,
     reference_images: Vec<String>,
     storyboard_slots: Vec<app_server_protocol::ImageStoryboardSlotInput>,
+    presentation_usage: Option<AgentTokenUsage>,
 }
 
 impl ImageCommandIntent {
@@ -357,6 +419,7 @@ fn parse_image_command_intent(
         ),
         reference_images: string_vec(image_task, &["reference_images", "referenceImages"]),
         storyboard_slots,
+        presentation_usage: None,
     }))
 }
 
@@ -475,20 +538,7 @@ fn emit_workflow_run_started(
     sink: &mut dyn RuntimeEventSink,
 ) -> Result<(), RuntimeCoreError> {
     let mut payload = workflow_audit_payload(intent, "run_started", "running", None);
-    payload["steps"] = json!([
-        {
-            "stepId": "intent",
-            "step_id": "intent",
-            "title": "解析图片需求",
-            "status": "pending"
-        },
-        {
-            "stepId": "create_task",
-            "step_id": "create_task",
-            "title": "创建图片任务",
-            "status": "pending"
-        }
-    ]);
+    payload["steps"] = json!(image_workflow_step_values());
     sink.emit(RuntimeEvent::new("workflow.run.started", payload))
 }
 
@@ -500,10 +550,7 @@ fn emit_workflow_step_started(
     sink: &mut dyn RuntimeEventSink,
 ) -> Result<(), RuntimeCoreError> {
     let mut payload = workflow_audit_payload(intent, "step_started", "running", task_id);
-    payload["stepId"] = json!(step_id);
-    payload["step_id"] = json!(step_id);
-    payload["stepTitle"] = json!(title);
-    payload["step_title"] = json!(title);
+    bind_image_workflow_step_payload(&mut payload, step_id, title, "running");
     sink.emit(RuntimeEvent::new("workflow.step.started", payload))
 }
 
@@ -516,10 +563,7 @@ fn emit_workflow_step_completed(
     sink: &mut dyn RuntimeEventSink,
 ) -> Result<(), RuntimeCoreError> {
     let mut payload = workflow_audit_payload(intent, "step_completed", status, task_id);
-    payload["stepId"] = json!(step_id);
-    payload["step_id"] = json!(step_id);
-    payload["stepTitle"] = json!(title);
-    payload["step_title"] = json!(title);
+    bind_image_workflow_step_payload(&mut payload, step_id, title, status);
     sink.emit(RuntimeEvent::new("workflow.step.completed", payload))
 }
 
@@ -531,6 +575,66 @@ fn emit_workflow_run_completed(
 ) -> Result<(), RuntimeCoreError> {
     let payload = workflow_audit_payload(intent, "run_completed", status, task_id);
     sink.emit(RuntimeEvent::new("workflow.run.completed", payload))
+}
+
+fn image_workflow_step_values() -> Vec<Value> {
+    IMAGE_WORKFLOW_STEPS
+        .iter()
+        .enumerate()
+        .map(|(index, step)| {
+            json!({
+                "id": step.id,
+                "stepId": step.id,
+                "step_id": step.id,
+                "title": step.title,
+                "stepTitle": step.title,
+                "step_title": step.title,
+                "kind": step.kind,
+                "stepKind": step.kind,
+                "step_kind": step.kind,
+                "index": index,
+                "stepIndex": index,
+                "step_index": index,
+                "stepCount": IMAGE_WORKFLOW_STEP_COUNT,
+                "step_count": IMAGE_WORKFLOW_STEP_COUNT,
+                "status": "queued"
+            })
+        })
+        .collect()
+}
+
+fn bind_image_workflow_step_payload(
+    payload: &mut Value,
+    step_id: &str,
+    fallback_title: &str,
+    status: &str,
+) {
+    let (step_index, id, title, kind) = image_workflow_step_by_id(step_id)
+        .map(|(index, step)| (Some(index), step.id, step.title, step.kind))
+        .unwrap_or((None, step_id, fallback_title, "agent_task"));
+    payload["stepId"] = json!(id);
+    payload["step_id"] = json!(id);
+    payload["stepTitle"] = json!(title);
+    payload["step_title"] = json!(title);
+    payload["stepKind"] = json!(kind);
+    payload["step_kind"] = json!(kind);
+    payload["kind"] = json!(kind);
+    payload["stepCount"] = json!(IMAGE_WORKFLOW_STEP_COUNT);
+    payload["step_count"] = json!(IMAGE_WORKFLOW_STEP_COUNT);
+    payload["status"] = json!(status);
+    if let Some(index) = step_index {
+        payload["stepIndex"] = json!(index);
+        payload["step_index"] = json!(index);
+        payload["index"] = json!(index);
+    }
+}
+
+fn image_workflow_step_by_id(step_id: &str) -> Option<(usize, ImageWorkflowStep)> {
+    IMAGE_WORKFLOW_STEPS
+        .iter()
+        .copied()
+        .enumerate()
+        .find(|(_, step)| step.id == step_id)
 }
 
 fn find_value<'a>(value: &'a Value, pointers: &[&str]) -> Option<&'a Value> {
@@ -562,6 +666,15 @@ fn emit_assistant_intro(
     assistant_intro: &str,
     sink: &mut dyn RuntimeEventSink,
 ) -> Result<(), RuntimeCoreError> {
+    let item_id = format!("{}:image-presentation:intro", intent.scope.turn_id);
+    tracing::info!(
+        session_id = %intent.scope.session_id,
+        thread_id = %intent.scope.thread_id,
+        turn_id = %intent.scope.turn_id,
+        workflow_run_id = %workflow_run_id(&intent.scope),
+        intro_chars = assistant_intro.chars().count(),
+        "[RuntimeBackend] ImageCommandWorkflow presentation intro emitted"
+    );
     sink.emit(RuntimeEvent::new(
         "message.delta",
         json!({
@@ -571,8 +684,8 @@ fn emit_assistant_intro(
             "text": assistant_intro,
             "delta": assistant_intro,
             "phase": "final_answer",
-            "itemId": format!("{}:image-presentation:intro", intent.scope.turn_id),
-            "item_id": format!("{}:image-presentation:intro", intent.scope.turn_id),
+            "itemId": item_id.clone(),
+            "item_id": item_id,
             "sessionId": intent.scope.session_id,
             "session_id": intent.scope.session_id,
             "threadId": intent.scope.thread_id,
@@ -583,11 +696,103 @@ fn emit_assistant_intro(
     ))
 }
 
+fn emit_planning_summary(
+    intent: &ImageCommandIntent,
+    planning_summary: &str,
+    sink: &mut dyn RuntimeEventSink,
+) -> Result<(), RuntimeCoreError> {
+    let text = planning_summary.trim();
+    if text.is_empty() {
+        return Ok(());
+    }
+    let reasoning_id = format!("{}:image-presentation:planning", intent.scope.turn_id);
+    let metadata = json!({
+        "source": WORKFLOW_SOURCE,
+        "presentation": "visible_process_summary",
+        "workflowRunId": workflow_run_id(&intent.scope),
+        "workflow_run_id": workflow_run_id(&intent.scope),
+        "redaction": {
+            "policy": "visible_summary_no_hidden_chain_of_thought",
+            "internal_prompt": "omitted"
+        }
+    });
+    tracing::info!(
+        session_id = %intent.scope.session_id,
+        thread_id = %intent.scope.thread_id,
+        turn_id = %intent.scope.turn_id,
+        workflow_run_id = %workflow_run_id(&intent.scope),
+        planning_summary_chars = text.chars().count(),
+        "[RuntimeBackend] ImageCommandWorkflow planning summary emitted"
+    );
+    let common_payload = |extra: Value| {
+        let mut payload = json!({
+            "backend": "runtime",
+            "source": WORKFLOW_SOURCE,
+            "reasoningId": reasoning_id.clone(),
+            "reasoning_id": reasoning_id.clone(),
+            "sessionId": intent.scope.session_id,
+            "session_id": intent.scope.session_id,
+            "threadId": intent.scope.thread_id,
+            "thread_id": intent.scope.thread_id,
+            "turnId": intent.scope.turn_id,
+            "turn_id": intent.scope.turn_id,
+            "metadata": metadata.clone(),
+        });
+        merge_json_object(&mut payload, extra);
+        payload
+    };
+    sink.emit(RuntimeEvent::new(
+        "reasoning.started",
+        common_payload(json!({
+            "status": "in_progress",
+        })),
+    ))?;
+    sink.emit(RuntimeEvent::new(
+        "reasoning.delta",
+        common_payload(json!({
+            "delta": text,
+            "text": text,
+        })),
+    ))?;
+    sink.emit(RuntimeEvent::new(
+        "reasoning.final",
+        common_payload(json!({
+            "status": "completed",
+            "text": text,
+        })),
+    ))?;
+    sink.emit(RuntimeEvent::new(
+        "reasoning.ended",
+        common_payload(json!({
+            "status": "completed",
+        })),
+    ))
+}
+
+fn merge_json_object(target: &mut Value, extra: Value) {
+    let (Some(target), Some(extra)) = (target.as_object_mut(), extra.as_object()) else {
+        return;
+    };
+    for (key, value) in extra {
+        target.insert(key.clone(), value.clone());
+    }
+}
+
 fn emit_presentation_generated(
     intent: &ImageCommandIntent,
     generated: &presentation::GeneratedImageTaskPresentation,
     sink: &mut dyn RuntimeEventSink,
 ) -> Result<(), RuntimeCoreError> {
+    tracing::info!(
+        session_id = %intent.scope.session_id,
+        thread_id = %intent.scope.thread_id,
+        turn_id = %intent.scope.turn_id,
+        workflow_run_id = %workflow_run_id(&intent.scope),
+        has_assistant_intro = generated.assistant_intro.is_some(),
+        has_completion_caption = generated.completion_caption.is_some(),
+        has_usage = generated.usage.is_some(),
+        "[RuntimeBackend] ImageCommandWorkflow presentation event emitted"
+    );
     sink.emit(RuntimeEvent::new(
         "image_task.presentation.generated",
         json!({
@@ -701,6 +906,7 @@ fn emit_tool_started(
 fn emit_task_created(
     tool_call_id: &str,
     response: MediaTaskArtifactResponse,
+    usage: Option<&AgentTokenUsage>,
     sink: &mut dyn RuntimeEventSink,
 ) -> Result<(), RuntimeCoreError> {
     let task_id = response.task_id.clone();
@@ -734,18 +940,19 @@ fn emit_task_created(
             },
         }),
     ))?;
-    sink.emit(RuntimeEvent::new(
-        "turn.completed",
-        json!({
-            "backend": "runtime",
-            "source": WORKFLOW_SOURCE,
-            "status": "task_created",
-            "taskId": task_id,
-            "task_id": task_id,
-            "artifactPath": artifact_path,
-            "artifact_path": artifact_path,
-        }),
-    ))
+    let mut payload = json!({
+        "backend": "runtime",
+        "source": WORKFLOW_SOURCE,
+        "status": "task_created",
+        "taskId": task_id,
+        "task_id": task_id,
+        "artifactPath": artifact_path,
+        "artifact_path": artifact_path,
+    });
+    if let Some(usage) = usage {
+        payload["usage"] = json!(usage);
+    }
+    sink.emit(RuntimeEvent::new("turn.completed", payload))
 }
 
 fn emit_create_failed(
@@ -776,7 +983,7 @@ fn emit_create_failed(
             "turnId": intent.scope.turn_id,
         }),
     ))?;
-    emit_workflow_step_completed(intent, "create_task", "创建图片任务", "failed", None, sink)?;
+    emit_workflow_step_completed(intent, "create_tasks", "创建图片任务", "failed", None, sink)?;
     emit_workflow_run_completed(intent, "create_failed", None, sink)?;
     emit_tool_failed(&tool_call_id, reason_code, message, sink)?;
     emit_turn_completed("create_failed", intent, sink)
@@ -1072,6 +1279,37 @@ mod tests {
             workflow_completed.payload["redaction"]["policy"].as_str(),
             Some("workflow_audit_metadata_only")
         );
+        let workflow_started = sink
+            .events
+            .iter()
+            .find(|event| event.event_type == "workflow.run.started")
+            .expect("workflow run started");
+        assert_eq!(
+            workflow_started.payload["steps"].as_array().unwrap().len(),
+            5
+        );
+        assert_eq!(
+            workflow_started.payload["steps"][0]["status"].as_str(),
+            Some("queued")
+        );
+        assert_eq!(
+            workflow_started.payload["steps"][2]["id"].as_str(),
+            Some("create_tasks")
+        );
+        let create_tasks_started = sink
+            .events
+            .iter()
+            .find(|event| {
+                event.event_type == "workflow.step.started"
+                    && event.payload["stepId"].as_str() == Some("create_tasks")
+            })
+            .expect("create_tasks started");
+        assert_eq!(create_tasks_started.payload["stepIndex"].as_u64(), Some(2));
+        assert_eq!(create_tasks_started.payload["stepCount"].as_u64(), Some(5));
+        assert_eq!(
+            create_tasks_started.payload["stepKind"].as_str(),
+            Some("tool")
+        );
         let tool_result = sink
             .events
             .iter()
@@ -1101,6 +1339,61 @@ mod tests {
             run_snapshot["branches"][0]["branch_id"].as_str(),
             Some("image-command-run-turn-1:branch:1")
         );
+    }
+
+    #[test]
+    fn image_command_task_created_turn_completed_includes_presentation_usage() {
+        let mut sink = TestSink::default();
+        let usage = AgentTokenUsage {
+            input_tokens: 31_000,
+            output_tokens: 0,
+            cached_input_tokens: Some(1_024),
+            cache_creation_input_tokens: None,
+        };
+        let response = MediaTaskArtifactResponse {
+            success: true,
+            task_id: "task-image-usage".to_string(),
+            task_type: "image_generate".to_string(),
+            task_family: "image".to_string(),
+            status: "pending_submit".to_string(),
+            normalized_status: "pending".to_string(),
+            artifact_path: ".lime/tasks/image_generate/task-image-usage.json".to_string(),
+            record: json!({
+                "task_type": "image_generate",
+                "payload": {
+                    "prompt": "从花城汇看广州塔的春天照片"
+                }
+            }),
+            ..MediaTaskArtifactResponse::default()
+        };
+
+        emit_task_created("tool-image-usage", response, Some(&usage), &mut sink)
+            .expect("task created events");
+
+        let turn_completed = sink
+            .events
+            .iter()
+            .find(|event| event.event_type == "turn.completed")
+            .expect("turn completed");
+        assert_eq!(
+            turn_completed.payload["status"].as_str(),
+            Some("task_created")
+        );
+        assert_eq!(
+            turn_completed.payload["usage"]["input_tokens"].as_u64(),
+            Some(31_000)
+        );
+        assert_eq!(
+            turn_completed.payload["usage"]["output_tokens"].as_u64(),
+            Some(0)
+        );
+        assert_eq!(
+            turn_completed.payload["usage"]["cached_input_tokens"].as_u64(),
+            Some(1_024)
+        );
+        assert!(turn_completed.payload["usage"]
+            .get("cache_creation_input_tokens")
+            .is_none());
     }
 
     #[tokio::test]
@@ -1200,6 +1493,22 @@ mod tests {
                 "workflow.run.completed"
             ]
         );
+        let workflow_started = sink
+            .events
+            .iter()
+            .find(|event| event.event_type == "workflow.run.started")
+            .expect("workflow run started");
+        assert_eq!(
+            workflow_started.payload["steps"]
+                .as_array()
+                .expect("workflow steps")
+                .len(),
+            5
+        );
+        assert_eq!(
+            workflow_started.payload["steps"][2]["id"].as_str(),
+            Some("create_tasks")
+        );
         assert_eq!(
             sink.events
                 .iter()
@@ -1260,6 +1569,13 @@ mod tests {
                 "workflow.step.completed",
                 "workflow.run.completed"
             ]
+        );
+        assert!(
+            sink.events
+                .iter()
+                .filter(|event| event.event_type.starts_with("workflow.step."))
+                .all(|event| event.payload["stepId"].as_str() != Some("create_task")),
+            "image workflow uses the current create_tasks step id"
         );
     }
 

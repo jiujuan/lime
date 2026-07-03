@@ -123,6 +123,15 @@ interface BuildWorkspaceEmptyStatePropsParams {
     typeof EmptyState
   >["runtimeToolAvailability"];
   pluginSuggestions?: ComponentProps<typeof EmptyState>["pluginSuggestions"];
+  pluginSuggestionsError?: ComponentProps<
+    typeof EmptyState
+  >["pluginSuggestionsError"];
+  pluginSuggestionsLoading?: ComponentProps<
+    typeof EmptyState
+  >["pluginSuggestionsLoading"];
+  onPluginSuggestionsNeeded?: ComponentProps<
+    typeof EmptyState
+  >["onPluginSuggestionsNeeded"];
   initialInputCapability?: ComponentProps<
     typeof EmptyState
   >["initialInputCapability"];
@@ -229,6 +238,9 @@ export function buildWorkspaceEmptyStateProps({
   sessionId,
   runtimeToolAvailability,
   pluginSuggestions,
+  pluginSuggestionsError,
+  pluginSuggestionsLoading,
+  onPluginSuggestionsNeeded,
   initialInputCapability,
   knowledgePackSelection,
   knowledgePackOptions,
@@ -314,6 +326,9 @@ export function buildWorkspaceEmptyStateProps({
     sessionId,
     runtimeToolAvailability,
     pluginSuggestions,
+    pluginSuggestionsError,
+    pluginSuggestionsLoading,
+    onPluginSuggestionsNeeded,
     initialInputCapability,
     knowledgePackSelection,
     knowledgePackOptions,

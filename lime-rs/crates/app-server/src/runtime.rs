@@ -1,6 +1,7 @@
 mod app_data;
 mod article_workspace_action_projection;
 mod article_workspace_artifact_document_projection;
+mod article_workspace_edited_draft;
 mod article_workspace_projection;
 mod artifact_content;
 mod artifact_document_versions;
@@ -58,6 +59,7 @@ mod projection_store;
 #[cfg(test)]
 mod projection_store_tests;
 mod read_model;
+mod read_model_turn_usage;
 mod right_surface;
 mod service_projection;
 mod session_control;
@@ -79,6 +81,7 @@ mod turn_execution;
 mod turn_input_events;
 mod usage_stats;
 mod voice;
+pub(crate) mod workflow;
 mod workspaces;
 
 use crate::execution_process::ExecutionProcessServer;

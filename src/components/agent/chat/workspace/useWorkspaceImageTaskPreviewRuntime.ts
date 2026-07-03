@@ -15,6 +15,7 @@ import {
   hasDesktopHostInvokeCapability,
   hasDesktopHostRuntimeMarkers,
 } from "@/lib/desktop-runtime";
+import { logAgentDebug } from "@/lib/agentDebug";
 import { resolveAbsoluteWorkspacePath } from "./workspacePath";
 import { buildImageTaskLookupRequest } from "./imageTaskLocator";
 import type { CanvasStateUnion } from "@/components/workspace/canvas/canvasUtils";
@@ -241,6 +242,20 @@ export function useWorkspaceImageTaskPreviewRuntime({
         projectRootPath: runtimeContextRef.current.projectRootPath,
       });
       if (!request) {
+        logAgentDebug(
+          "ImageTaskPreviewRuntime",
+          "artifactLookup.skipped",
+          {
+            reason: "missing_lookup_request",
+            taskId: params.taskId,
+            hasProjectRootPath: Boolean(
+              runtimeContextRef.current.projectRootPath?.trim(),
+            ),
+            taskFilePath: params.taskFilePath || null,
+            artifactPath: params.artifactPath || null,
+          },
+          { level: "warn", throttleMs: 1000 },
+        );
         return null;
       }
 
@@ -262,19 +277,65 @@ export function useWorkspaceImageTaskPreviewRuntime({
           canvasState: runtimeContextRef.current.canvasState,
         });
         if (!snapshot) {
+          logAgentDebug(
+            "ImageTaskPreviewRuntime",
+            "artifactLookup.noSnapshot",
+            {
+              taskId: params.taskId,
+              normalizedStatus: artifact.normalized_status ?? null,
+              status: artifact.status ?? null,
+              taskRef: request.taskRef,
+            },
+            { level: "warn", throttleMs: 1000 },
+          );
           return null;
         }
 
+        logAgentDebug(
+          "ImageTaskPreviewRuntime",
+          "artifactLookup.success",
+          {
+            taskId: params.taskId,
+            status: snapshot.task.status,
+            previewStatus: snapshot.message.imageWorkbenchPreview?.status,
+            outputCount: snapshot.outputs.length,
+            terminal: snapshot.terminal,
+            taskRef: request.taskRef,
+          },
+          { level: "debug", throttleMs: 1000 },
+        );
         return {
           snapshot,
           taskRecord,
         };
-      } catch {
+      } catch (error) {
+        logAgentDebug(
+          "ImageTaskPreviewRuntime",
+          "artifactLookup.failed",
+          {
+            taskId: params.taskId,
+            taskRef: request.taskRef,
+            error,
+          },
+          { level: "warn", throttleMs: 1000 },
+        );
         return null;
       }
     };
 
     const applyLoadedTaskSnapshot = (params: LoadedImageTaskSnapshot) => {
+      logAgentDebug(
+        "ImageTaskPreviewRuntime",
+        "snapshot.apply",
+        {
+          taskId: params.snapshot.taskId,
+          status: params.snapshot.task.status,
+          previewStatus: params.snapshot.message.imageWorkbenchPreview?.status,
+          outputCount: params.snapshot.outputs.length,
+          terminal: params.snapshot.terminal,
+        },
+        { level: "debug", throttleMs: 1000 },
+      );
       setChatMessages((previous) =>
         upsertPreviewMessage(previous, params.snapshot.message),
       );
@@ -634,10 +695,19 @@ export function useWorkspaceImageTaskPreviewRuntime({
       if (taskSeeds.length === 0 || cancelled) {
         return false;
       }
-
-      taskSeeds.forEach((task) => {
-        restoredSeedTaskIds.add(task.taskId);
-      });
+      logAgentDebug(
+        "ImageTaskPreviewRuntime",
+        "messageSeeds.discovered",
+        {
+          seedCount: taskSeeds.length,
+          taskIds: taskSeeds.map((task) => task.taskId),
+          hasProjectRootPath: Boolean(
+            runtimeContextRef.current.projectRootPath?.trim(),
+          ),
+          sessionId: runtimeContextRef.current.sessionId || null,
+        },
+        { level: "debug", throttleMs: 1000 },
+      );
 
       const unresolvedTaskSeeds = taskSeeds.filter(
         (task) =>
@@ -648,6 +718,18 @@ export function useWorkspaceImageTaskPreviewRuntime({
           }),
       );
       if (unresolvedTaskSeeds.length === 0) {
+        taskSeeds.forEach((task) => {
+          restoredSeedTaskIds.add(task.taskId);
+        });
+        logAgentDebug(
+          "ImageTaskPreviewRuntime",
+          "messageSeeds.cacheSatisfied",
+          {
+            seedCount: taskSeeds.length,
+            taskIds: taskSeeds.map((task) => task.taskId),
+          },
+          { level: "debug", throttleMs: 1000 },
+        );
         return true;
       }
 
@@ -678,10 +760,24 @@ export function useWorkspaceImageTaskPreviewRuntime({
           ),
       );
       if (resolvedSnapshots.length === 0) {
+        logAgentDebug(
+          "ImageTaskPreviewRuntime",
+          "messageSeeds.unresolved",
+          {
+            seedCount: taskSeeds.length,
+            unresolvedCount: unresolvedTaskSeeds.length,
+            taskIds: unresolvedTaskSeeds.map((item) => item.taskId),
+            hasProjectRootPath: Boolean(
+              runtimeContextRef.current.projectRootPath?.trim(),
+            ),
+          },
+          { level: "warn", throttleMs: 1000 },
+        );
         return false;
       }
 
       resolvedSnapshots.forEach((item) => {
+        restoredSeedTaskIds.add(item.task.taskId);
         applyLoadedTaskSnapshot(item.loaded);
         if (!item.loaded.snapshot.terminal) {
           trackTaskForPolling({

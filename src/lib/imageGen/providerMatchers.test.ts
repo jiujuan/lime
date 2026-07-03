@@ -50,6 +50,7 @@ describe("imageGen/providerMatchers", () => {
 
   it("应识别 OpenAI 兼容中转返回的图片模型 ID", () => {
     expect(isLikelyImageGenerationModelId("agnes-image-2.1-flash")).toBe(true);
+    expect(isLikelyImageGenerationModelId("agnes-2.0-flash")).toBe(false);
     expect(isLikelyImageGenerationModelId("gpt-images-2")).toBe(true);
     expect(isLikelyImageGenerationModelId("doubao-seedream-4-0")).toBe(true);
     expect(isLikelyImageGenerationModelId("midjourney-v7")).toBe(true);

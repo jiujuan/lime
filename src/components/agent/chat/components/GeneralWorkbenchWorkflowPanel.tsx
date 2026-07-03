@@ -109,8 +109,6 @@ const WORKFLOW_SECTION_BADGE_CLASSNAME =
 const WORKFLOW_NEW_TOPIC_BUTTON_CLASSNAME =
   "inline-flex h-7 shrink-0 items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 text-[11px] font-medium text-slate-500 transition-colors hover:border-slate-300 hover:bg-white hover:text-slate-900";
 
-const WORKFLOW_STEP_LIST_CLASSNAME = "mt-3 flex flex-col gap-2";
-
 const WORKFLOW_TASK_SUMMARY_CLASSNAME =
   "mt-2 rounded-[14px] border border-slate-200 bg-slate-50 px-3 py-2.5";
 
@@ -125,34 +123,6 @@ const TOGGLE_BUTTON_CLASSNAME =
 
 const WORKFLOW_INLINE_LABEL_CLASSNAME =
   "text-[10px] font-semibold text-slate-500";
-
-const WORKFLOW_QUEUE_HEADER_CLASSNAME =
-  "mt-3 flex items-center justify-between text-[10px] font-semibold text-slate-500";
-
-const WORKFLOW_QUEUE_LIST_CLASSNAME = "mt-2 flex flex-col gap-1.5";
-
-function WorkflowQueueRow({
-  $status,
-  className,
-  ...props
-}: React.ComponentPropsWithoutRef<"div"> & {
-  $status: StepStatus;
-}) {
-  return (
-    <div
-      className={cn(
-        "flex items-start gap-2 rounded-xl border px-2.5 py-2",
-        $status === "error" && "border-rose-200/80 bg-rose-50/50",
-        $status === "active" && "border-sky-200/80 bg-sky-50/40",
-        $status === "pending" && "border-slate-200/80 bg-white",
-        $status === "completed" && "border-slate-200/80 bg-slate-50/70",
-        $status === "skipped" && "border-slate-200/80 bg-slate-50/70",
-        className,
-      )}
-      {...props}
-    />
-  );
-}
 
 function createDiv(baseClassName: string) {
   return function ClassedDiv({
@@ -845,9 +815,6 @@ function GeneralWorkbenchWorkflowPanelComponent({
       >
         <div className={WORKFLOW_SECTION_TITLE_CLASSNAME}>
           <span>{t("generalWorkbench.workflow.current.title")}</span>
-          <span className={WORKFLOW_SECTION_BADGE_CLASSNAME}>
-            {workflowCurrentProjection.remainingSteps}
-          </span>
         </div>
         <div
           className={WORKFLOW_TASK_SUMMARY_CLASSNAME}
@@ -885,25 +852,6 @@ function GeneralWorkbenchWorkflowPanelComponent({
               </div>
               <div className="mt-1 text-[11px] leading-5 text-slate-500">
                 {workflowCurrentProjection.workflowSummaryText}
-              </div>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className={WORKFLOW_TASK_SUMMARY_PILL_CLASSNAME}>
-                  {workflowCurrentProjection.workflowProgressLabel}
-                </span>
-                <span className={WORKFLOW_TASK_SUMMARY_PILL_CLASSNAME}>
-                  {workflowCurrentProjection.remainingText}
-                </span>
-                <span className="inline-flex items-center gap-1 text-[10px] text-slate-400">
-                  <span className="inline-flex h-1 w-14 overflow-hidden rounded-full bg-slate-200">
-                    <span
-                      className="h-full rounded-full bg-sky-500/70 transition-[width] duration-200"
-                      style={{
-                        width: `${workflowCurrentProjection.progressBarPercent}%`,
-                      }}
-                    />
-                  </span>
-                  {workflowCurrentProjection.progressPercentLabel}
-                </span>
               </div>
               <div
                 className={WORKFLOW_RESULT_HANDOFF_HINT_CLASSNAME}
@@ -968,52 +916,6 @@ function GeneralWorkbenchWorkflowPanelComponent({
             </div>
           </div>
         </div>
-        {workflowCurrentProjection.queueItems.length > 0 ? (
-          <div className={WORKFLOW_STEP_LIST_CLASSNAME}>
-            <div className={WORKFLOW_QUEUE_HEADER_CLASSNAME}>
-              <span>{t("generalWorkbench.workflow.queue.title")}</span>
-              <span>{workflowCurrentProjection.queueHeaderText}</span>
-            </div>
-            <div className={WORKFLOW_QUEUE_LIST_CLASSNAME}>
-              {workflowCurrentProjection.queueItems.map((item) => (
-                <WorkflowQueueRow
-                  key={item.id}
-                  $status={item.status}
-                  data-testid="workflow-sidebar-step"
-                  data-status={item.status}
-                >
-                  <span
-                    className={cn(
-                      "mt-0.5",
-                      getWorkflowStepIconClassName(item.status),
-                    )}
-                  >
-                    {getStepIcon(item.status)}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 text-[10px] text-slate-400">
-                      <span>{item.indexLabel}</span>
-                    </div>
-                    <div className="mt-0.5 break-words text-[12px] leading-5 text-slate-900">
-                      {item.title}
-                    </div>
-                  </div>
-                  <span className={getStatusBadgeClassName(item.status)}>
-                    {item.statusLabel}
-                  </span>
-                </WorkflowQueueRow>
-              ))}
-            </div>
-          </div>
-        ) : null}
-        {workflowCurrentProjection.completedWorkflowSteps > 0 ? (
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
-            <span className={WORKFLOW_TASK_SUMMARY_PILL_CLASSNAME}>
-              {workflowCurrentProjection.completedCountText}
-            </span>
-            <span>{workflowCurrentProjection.completedHintText}</span>
-          </div>
-        ) : null}
       </section>
 
       <section

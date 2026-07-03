@@ -17,7 +17,7 @@
 export interface PluginHistoryRestoreSnapshot {
   sessionId: string;
   pluginId?: string;
-  activeAgentAppId?: string;
+  activePluginId?: string;
   pluginWorkspace?: PluginSessionWorkspace;
   primaryObjectRef?: PluginObjectRef;
   selectedObjectRef?: PluginObjectRef;
@@ -37,7 +37,7 @@ export interface PluginHistoryRestoreSnapshot {
 
 可降级恢复：
 
-1. `activeAgentAppId`
+1. `activePluginId`
 2. `openedTabs`
 3. `pinnedTabs`
 4. `activeTabId`

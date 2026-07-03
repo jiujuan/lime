@@ -159,7 +159,7 @@ AG-UI 的启发是“事件/状态/展示扩展分离”：
 | `document`    | `document`    | `system_open`                | PDF / Excel / PPT 等暂无文本抽取的二进制文档；右侧渲染 metadata 兜底面 |
 | `binary`      | `document`    | `system_open`                | 不内嵌，给系统打开/定位                    |
 | `markdown/text` | `document`  | `inline`                     | URL / database_record 来源摘要；不按文件路径读取 |
-| `app_shell`   | `document`    | `inline`                     | Agent App shell entry 来源摘要；动作仍由应用工作台承接 |
+| `app_shell`   | `document`    | `inline`                     | Plugin shell entry 来源摘要；动作仍由应用工作台承接 |
 | `unsupported` | `document`    | `unsupported`                | 右侧渲染不可预览原因和来源 metadata          |
 
 ## 质量门槛

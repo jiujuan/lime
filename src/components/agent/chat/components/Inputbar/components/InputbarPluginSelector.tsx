@@ -24,6 +24,21 @@ interface InputbarPluginSelectorProps {
   ) => void;
 }
 
+function resolvePluginSkillOptionKey(
+  plugin: InputbarPluginCapability,
+  skill: InputbarPluginSkillCapability,
+  index: number,
+): string {
+  const trigger = skill.trigger?.trim();
+  const title = skill.title.trim() || skill.skillId;
+  return [
+    plugin.pluginId,
+    skill.skillId,
+    trigger || title,
+    String(index),
+  ].join("::");
+}
+
 export const InputbarPluginSelector: React.FC<InputbarPluginSelectorProps> = ({
   plugins,
   labels,
@@ -97,14 +112,14 @@ export const InputbarPluginSelector: React.FC<InputbarPluginSelectorProps> = ({
             </button>
             {plugin.skills && plugin.skills.length > 0 ? (
               <div className="mb-1 ml-8 mr-1 grid gap-1">
-                {plugin.skills.map((skill) => {
+                {plugin.skills.map((skill, index) => {
                   const skillBlocked =
                     blocked ||
                     skill.disabled === true ||
                     (skill.blockerCodes?.length ?? 0) > 0;
                   return (
                     <button
-                      key={skill.skillId}
+                      key={resolvePluginSkillOptionKey(plugin, skill, index)}
                       type="button"
                       data-testid="inputbar-plugin-skill-option"
                       disabled={skillBlocked}

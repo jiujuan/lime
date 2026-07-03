@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 import {
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_GET,
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_LIST,
@@ -8,6 +9,7 @@ import {
   IMAGE_COMMAND_DONE_TEXT,
   IMAGE_COMMAND_IMAGE_PROMPT,
   IMAGE_COMMAND_PRESENTATION_CAPTION,
+  IMAGE_COMMAND_PRESENTATION_INTRO,
   IMAGE_COMMAND_PROMPT,
   PLAIN_IMAGE_INTENT_IMAGE_PROMPT,
   PLAIN_IMAGE_INTENT_PROMPT,
@@ -34,6 +36,26 @@ import { sanitizeJson, sleep } from "./claw-chat-current-fixture-utils.mjs";
 
 const IMAGE_COMMAND_TERMINAL_STATUS = "succeeded";
 const IMAGE_COMMAND_WORKER_ID = "lime-image-api-worker";
+const IMAGE_COMMAND_TOOL_LABEL = "Image Generation";
+const IMAGE_COMMAND_MODEL_LABEL = "Nanobanana Pro";
+const IMAGE_COMMAND_TOKEN_LABEL = "31.0K Tokens";
+const EXPECTED_IMAGE_TASK_AUDIT_EVENTS = [
+  "worker_loaded",
+  "task_queued",
+  "task_running",
+  "request_slot_started",
+  "request_slot_succeeded",
+  "task_succeeded",
+];
+const IMAGE_TASK_AUDIT_FORBIDDEN_MARKERS = [
+  "Authorization",
+  "Bearer",
+  "api_key",
+  "apikey",
+  "x-api-key",
+  "LOCAL_IMAGE_SERVER_API_KEY",
+  "test-key",
+];
 
 export function resolveImageIntentScenario(scenario) {
   if (scenario === PLAIN_IMAGE_INTENT_SCENARIO) {
@@ -143,12 +165,7 @@ export async function waitForGuiImageCommandCompleted(
   while (Date.now() - startedAt < options.timeoutMs) {
     const snapshot = await evaluatePageSnapshot(
       page,
-      ({
-        prompt,
-        imagePrompt,
-        doneText,
-        createTaskToolName,
-      }) => {
+      ({ prompt, imagePrompt, doneText, createTaskToolName, toolLabel }) => {
         const text = document.body?.innerText || "";
         const textarea = document.querySelector(
           'textarea[name="agent-chat-message"]',
@@ -201,7 +218,10 @@ export async function waitForGuiImageCommandCompleted(
           text.includes(prompt) ||
           (text.includes("@配图") && text.includes(imagePrompt));
         const hasVisibleImageTaskProcess =
-          text.includes("图片生成") || combinedProcessText.includes("图片生成");
+          text.includes("图片生成") ||
+          text.includes(toolLabel) ||
+          combinedProcessText.includes("图片生成") ||
+          combinedProcessText.includes(toolLabel);
         // The current image-task persona suppresses submission-summary chat
         // text, so GUI proof comes from the tool process and task card.
         const hasAssistantSummary =
@@ -249,6 +269,7 @@ export async function waitForGuiImageCommandCompleted(
         imagePrompt: scenarioConfig.imagePrompt,
         doneText: IMAGE_COMMAND_DONE_TEXT,
         createTaskToolName: IMAGE_COMMAND_CREATE_TASK_TOOL_NAME,
+        toolLabel: IMAGE_COMMAND_TOOL_LABEL,
       },
     );
     if (!snapshot) {
@@ -443,6 +464,89 @@ function readTaskArtifactFile(taskPath) {
   return JSON.parse(fs.readFileSync(taskPath, "utf8"));
 }
 
+function hasEventSequence(events, expectedEvents) {
+  let searchFrom = 0;
+  for (const expectedEvent of expectedEvents) {
+    const nextIndex = events.findIndex(
+      (event, index) => index >= searchFrom && event === expectedEvent,
+    );
+    if (nextIndex < 0) {
+      return false;
+    }
+    searchFrom = nextIndex + 1;
+  }
+  return true;
+}
+
+function resolveTaskAuditLogPath(workspaceRoot, logsRef) {
+  if (typeof logsRef !== "string" || logsRef.trim().length === 0) {
+    return null;
+  }
+  return path.isAbsolute(logsRef) ? logsRef : path.join(workspaceRoot, logsRef);
+}
+
+function readImageCommandTaskAuditLog({ workspace, taskPath }) {
+  const record = readTaskArtifactFile(taskPath);
+  const attempts = Array.isArray(record.attempts) ? record.attempts : [];
+  const currentAttemptIndex = resolveCurrentAttemptIndex(record);
+  const currentAttempt =
+    currentAttemptIndex >= 0 ? attempts[currentAttemptIndex] : null;
+  const logsRef = currentAttempt?.logs_ref ?? currentAttempt?.logsRef ?? null;
+  const logsPath = resolveTaskAuditLogPath(workspace.rootPath, logsRef);
+  const exists = Boolean(logsPath && fs.existsSync(logsPath));
+  const rawText = exists ? fs.readFileSync(logsPath, "utf8") : "";
+  const events = [];
+  const taskIds = new Set();
+  let parseError = null;
+
+  if (rawText.trim().length > 0) {
+    for (const line of rawText.trim().split(/\r?\n/)) {
+      if (!line.trim()) {
+        continue;
+      }
+      try {
+        const event = JSON.parse(line);
+        events.push(typeof event?.event === "string" ? event.event : null);
+        if (typeof event?.task_id === "string") {
+          taskIds.add(event.task_id);
+        }
+      } catch (error) {
+        parseError = String(error?.message ?? error);
+      }
+    }
+  }
+
+  const forbiddenMarkerHits = IMAGE_TASK_AUDIT_FORBIDDEN_MARKERS.filter(
+    (marker) => rawText.toLowerCase().includes(marker.toLowerCase()),
+  );
+
+  return sanitizeJson({
+    taskId: record.task_id ?? record.taskId ?? null,
+    attemptId: currentAttempt?.attempt_id ?? currentAttempt?.attemptId ?? null,
+    attemptIndex: currentAttemptIndex >= 0 ? currentAttemptIndex + 1 : null,
+    logsRef,
+    logsRefLooksLikeTaskLog:
+      typeof logsRef === "string" &&
+      logsRef.startsWith(".lime/task-logs/") &&
+      logsRef.endsWith(".jsonl"),
+    logsPath,
+    exists,
+    lineCount:
+      rawText.trim().length > 0 ? rawText.trim().split(/\r?\n/).length : 0,
+    events,
+    expectedEvents: EXPECTED_IMAGE_TASK_AUDIT_EVENTS,
+    hasExpectedEventSequence: hasEventSequence(
+      events,
+      EXPECTED_IMAGE_TASK_AUDIT_EVENTS,
+    ),
+    hasNoSensitiveTokenMarkers: forbiddenMarkerHits.length === 0,
+    forbiddenMarkerHits,
+    allEventTaskIdsMatch:
+      taskIds.size === 1 && taskIds.has(record.task_id ?? record.taskId ?? ""),
+    parseError,
+  });
+}
+
 function resolveCurrentAttemptIndex(record) {
   const attempts = Array.isArray(record.attempts) ? record.attempts : [];
   if (attempts.length === 0) {
@@ -556,7 +660,16 @@ export async function waitForGuiImageCommandTerminal(
   while (Date.now() - startedAt < options.timeoutMs) {
     const snapshot = await evaluatePageSnapshot(
       page,
-      ({ prompt, imagePrompt, doneText, presentationCaption, taskId }) => {
+      ({
+        prompt,
+        imagePrompt,
+        presentationCaption,
+        presentationIntro,
+        taskId,
+        toolLabel,
+        modelLabel,
+        tokenLabel,
+      }) => {
         const text = document.body?.innerText || "";
         const textarea = document.querySelector(
           'textarea[name="agent-chat-message"]',
@@ -583,6 +696,12 @@ export async function waitForGuiImageCommandTerminal(
         const cards = Array.from(document.querySelectorAll(cardSelector));
         const mediaNodes = Array.from(document.querySelectorAll(mediaSelector));
         const cardText = cards.map((card) => card.textContent || "").join("\n");
+        const toolbarSelector = `[data-testid="image-workbench-message-preview-toolbar-${taskId}"]`;
+        const toolbarText = Array.from(
+          document.querySelectorAll(toolbarSelector),
+        )
+          .map((toolbar) => toolbar.textContent || "")
+          .join("\n");
         const hasPreviewImage = cards.some((card) =>
           Boolean(card.querySelector("img")),
         );
@@ -619,7 +738,10 @@ export async function waitForGuiImageCommandTerminal(
           hasPrompt:
             text.includes(prompt) ||
             (text.includes("@配图") && text.includes(imagePrompt)),
-          hasDoneText: text.includes(doneText),
+          hasPresentationIntro: text.includes(presentationIntro),
+          hasToolStripLabel: toolbarText.includes(toolLabel),
+          hasImageModelLabel: toolbarText.includes(modelLabel),
+          hasTokenUsage: text.includes(tokenLabel),
           hasPresentationCaption:
             text.includes(presentationCaption) ||
             cardText.includes(presentationCaption),
@@ -631,6 +753,7 @@ export async function waitForGuiImageCommandTerminal(
           stopButtonVisible,
           cardCount: cards.length,
           mediaCount: mediaNodes.length,
+          toolbarText,
           hasPreviewImage,
           hasLoadedVisiblePreviewImage,
           imageMetrics,
@@ -647,9 +770,12 @@ export async function waitForGuiImageCommandTerminal(
       {
         prompt: scenarioConfig.inputPrompt,
         imagePrompt: scenarioConfig.imagePrompt,
-        doneText: IMAGE_COMMAND_DONE_TEXT,
         presentationCaption: IMAGE_COMMAND_PRESENTATION_CAPTION,
+        presentationIntro: IMAGE_COMMAND_PRESENTATION_INTRO,
         taskId,
+        toolLabel: IMAGE_COMMAND_TOOL_LABEL,
+        modelLabel: IMAGE_COMMAND_MODEL_LABEL,
+        tokenLabel: IMAGE_COMMAND_TOKEN_LABEL,
       },
     );
     if (!snapshot) {
@@ -664,6 +790,10 @@ export async function waitForGuiImageCommandTerminal(
       snapshot.hasPrompt &&
       snapshot.cardCount === 1 &&
       snapshot.mediaCount >= 1 &&
+      snapshot.hasPresentationIntro === true &&
+      snapshot.hasToolStripLabel === true &&
+      snapshot.hasImageModelLabel === true &&
+      snapshot.hasTokenUsage === true &&
       snapshot.hasPreviewImage === true &&
       snapshot.hasLoadedVisiblePreviewImage === true &&
       hasTerminalResultCaption &&
@@ -902,6 +1032,10 @@ export async function runImageCommandScenario({
     taskArtifact: imageTaskArtifact.response,
     workspace,
   });
+  const imageCommandTaskAuditLog = readImageCommandTaskAuditLog({
+    workspace,
+    taskPath: imageCommandTaskArtifactTerminalPatch.taskPath,
+  });
   const guiImageCommandTerminal = await waitForGuiImageCommandTerminal(
     page,
     options,
@@ -955,6 +1089,7 @@ export async function runImageCommandScenario({
     imageCommandTaskArtifact,
     imageCommandTaskArtifactTerminalPatch,
     imageCommandTaskArtifactTerminal,
+    imageCommandTaskAuditLog,
     guiImageCommandCompleted,
     guiImageCommandTerminal,
     agentUiPerformanceTrace: agentUiPerformanceTracePreReload,

@@ -414,4 +414,37 @@ describe("messageListItemProjection content parts", () => {
     expect(projection.rendererRawContent).not.toContain("我先查看关键文件");
     expect(projection.rendererRawContent).not.toContain("file contents");
   });
+
+  it("图片生成消息投影不应在前端语义改写模型文案", () => {
+    const modelLead =
+      "好啊，先来Generate深圳夏day午后的城市照片，阳光明亮，真实摄影Style。";
+    const message: Message = {
+      id: "assistant-image-workbench-model-lead",
+      role: "assistant",
+      content: modelLead,
+      timestamp: new Date("2026-06-02T10:00:00.000Z"),
+      imageWorkbenchPreview: {
+        taskId: "task-shenzhen-summer",
+        prompt: "用 Agnes 生成一张深圳夏天午后的城市照片，真实摄影风格",
+        status: "running",
+        modelName: "agnes-image-2.1-flash",
+      },
+      contentParts: [
+        {
+          type: "text",
+          text: modelLead,
+        },
+      ],
+    };
+
+    const projection = buildProjection(message);
+    const serializedParts = JSON.stringify(projection.rendererContentParts);
+
+    expect(projection.actionContent).toContain("Generate深圳夏day午后");
+    expect(projection.actionContent).toContain("真实摄影Style");
+    expect(projection.rendererContent).toContain("Generate深圳夏day午后");
+    expect(projection.rendererRawContent).toContain("Generate深圳夏day午后");
+    expect(serializedParts).toContain("Generate深圳夏day午后");
+    expect(serializedParts).toContain("真实摄影Style");
+  });
 });

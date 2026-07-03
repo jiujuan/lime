@@ -420,6 +420,7 @@ export interface AgentRuntimeThreadToolCallView {
   output?: string | null;
   output_preview?: string | null;
   structured_content?: unknown;
+  metadata?: Record<string, unknown> | null;
   success?: boolean | null;
   error?: string | null;
   evidence_refs?: string[];

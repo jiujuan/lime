@@ -5,7 +5,6 @@
 //! 旧的本地模型资源目录已下线；模型列表以 Provider 实时接口和用户
 //! 显式配置的 `custom_models` 为准。
 
-use aster::providers::canonical::{maybe_get_canonical_model, CanonicalModel};
 use lime_core::api_host_utils::{
     is_openai_responses_compatible_host, normalize_openai_model_discovery_host,
 };
@@ -18,6 +17,7 @@ use lime_core::models::model_registry::{
     ModelReasoningEffortSupport, ModelRuntimeFeature, ModelSource, ModelStatus, ModelSyncState,
     ModelTaskFamily, ModelTier, ProviderAliasConfig, UserModelPreference,
 };
+use model_provider::canonical::{maybe_get_canonical_model, CanonicalModel};
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};

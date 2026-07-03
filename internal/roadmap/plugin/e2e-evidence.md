@@ -97,7 +97,7 @@ npm run typecheck --workspace @limecore/partner-web
 go test ./services/control-plane-svc/internal/service -run 'TestControlPlaneService.*Plugin'
 go test ./services/control-plane-svc/cmd/migrate ./services/control-plane-svc/internal/repo ./services/control-plane-svc/internal/service ./services/control-plane-svc/internal/controller
 go test ./services/control-plane-svc/internal/repo -run 'TestMySQLSnapshotBulk(PublishPlugin|RollbackPluginEnablements)RestoresMemoryOnPersistFailure'
-go test ./services/control-plane-svc/internal/controller -run 'TestAgentAppRoutesBulkPublishNativePlugin'
+go test ./services/control-plane-svc/internal/controller -run 'TestPluginRoutesBulkPublishNativePlugin'
 go test ./services/control-plane-svc/internal/service ./services/control-plane-svc/internal/controller
 make verify-go-fast
 make verify-web

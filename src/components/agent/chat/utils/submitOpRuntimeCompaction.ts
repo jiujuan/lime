@@ -4,6 +4,7 @@ import type {
   AsterSessionExecutionRuntime,
   AsterSessionExecutionRuntimeRecentTeamSelection,
 } from "@/lib/api/agentRuntime";
+import { isLikelyImageGenerationModelId } from "@/lib/imageGen/providerMatchers";
 import type { SessionModelPreference } from "../hooks/agentChatShared";
 import type { ChatToolPreferences } from "./chatToolPreferences";
 import { normalizeHarnessSessionMode } from "./harnessSessionMode";
@@ -68,6 +69,19 @@ const HARNESS_TEAM_SELECTION_KEYS = [
 
 function normalizeRuntimeIdentifier(value?: string | null): string {
   return value?.trim().toLowerCase() || "";
+}
+
+function selectionLooksImageGenerationOnly(params: {
+  provider?: string | null;
+  model?: string | null;
+}): boolean {
+  const provider = normalizeRuntimeIdentifier(params.provider);
+  const model = normalizeRuntimeIdentifier(params.model);
+  return (
+    provider === "fal" ||
+    provider.includes("fal-ai") ||
+    isLikelyImageGenerationModelId(model)
+  );
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -472,6 +486,44 @@ export interface SubmitOpRuntimeCompactionResult {
   thinkingPreference?: boolean;
 }
 
+function resolveImageOrchestrationProviderConfig(params: {
+  effectiveProviderType: string;
+  effectiveModel: string;
+  syncedSessionModelPreference?: SessionModelPreference | null;
+  executionRuntime?: AsterSessionExecutionRuntime | null;
+}): AsterProviderConfig | undefined {
+  const candidates = [
+    {
+      provider: params.effectiveProviderType.trim(),
+      model: params.effectiveModel.trim(),
+    },
+    {
+      provider: params.syncedSessionModelPreference?.providerType?.trim() || "",
+      model: params.syncedSessionModelPreference?.model?.trim() || "",
+    },
+    {
+      provider: params.executionRuntime?.provider_selector?.trim() || "",
+      model: params.executionRuntime?.model_name?.trim() || "",
+    },
+  ];
+
+  const selection = candidates.find(
+    (candidate) =>
+      candidate.provider &&
+      candidate.model &&
+      !selectionLooksImageGenerationOnly(candidate),
+  );
+  if (!selection) {
+    return undefined;
+  }
+
+  return {
+    provider_id: selection.provider,
+    provider_name: selection.provider,
+    model_name: selection.model,
+  };
+}
+
 export function buildSubmitOpRuntimeCompaction(
   options: BuildSubmitOpRuntimeCompactionOptions,
 ): SubmitOpRuntimeCompactionResult {
@@ -506,22 +558,25 @@ export function buildSubmitOpRuntimeCompaction(
   const normalizedEffectiveModel = normalizeRuntimeIdentifier(effectiveModel);
   const hasEffectiveProviderType = Boolean(normalizedEffectiveProviderType);
   const hasEffectiveModel = Boolean(normalizedEffectiveModel);
-  const shouldSubmitImageOrchestrationProviderConfig = Boolean(
-    hasImageGenerationRouting &&
-    effectiveProviderType.trim() &&
-    effectiveModel.trim(),
+  const effectiveSelectionLooksImageOnly = selectionLooksImageGenerationOnly({
+    provider: effectiveProviderType,
+    model: effectiveModel,
+  });
+  const imageOrchestrationProviderConfig = hasImageGenerationRouting
+    ? resolveImageOrchestrationProviderConfig({
+        effectiveProviderType,
+        effectiveModel,
+        syncedSessionModelPreference,
+        executionRuntime,
+      })
+    : undefined;
+  const shouldSuppressImageOnlyEffectivePreferences = Boolean(
+    hasImageGenerationRouting && effectiveSelectionLooksImageOnly,
   );
-  const imageOrchestrationProviderConfig: AsterProviderConfig | undefined =
-    shouldSubmitImageOrchestrationProviderConfig
-      ? {
-          provider_id: effectiveProviderType.trim(),
-          provider_name: effectiveProviderType.trim(),
-          model_name: effectiveModel.trim(),
-        }
-      : undefined;
   const shouldSubmitProviderPreference =
     hasEffectiveProviderType &&
     hasEffectiveModel &&
+    !shouldSuppressImageOnlyEffectivePreferences &&
     !shouldDeferModelRoutingToBackend &&
     (!syncedProviderSelector ||
       !syncedModelName ||
@@ -531,6 +586,7 @@ export function buildSubmitOpRuntimeCompaction(
   const shouldSubmitModelPreference =
     hasEffectiveProviderType &&
     hasEffectiveModel &&
+    !shouldSuppressImageOnlyEffectivePreferences &&
     !(shouldDeferModelRoutingToBackend && !hasExplicitModelOverride) &&
     (hasExplicitModelOverride ||
       shouldSubmitProviderPreference ||

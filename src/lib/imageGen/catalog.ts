@@ -150,6 +150,21 @@ export const IMAGE_CAPABILITY_CATALOG: ImageCapabilityProviderEntry[] = [
     fallbackPriority: 10,
   },
   {
+    providerKey: "agnes",
+    displayName: "Agnes",
+    match: {
+      providerIds: ["agnes"],
+      providerTypes: ["agnes"],
+      providerIdIncludes: ["agnes"],
+      providerTypeIncludes: ["agnes"],
+      apiHostIncludes: ["agnes-ai.com"],
+    },
+    transport: "openai_images",
+    endpointPath: "/v1/images/generations",
+    models: IMAGE_GEN_MODELS.agnes,
+    fallbackPriority: 18,
+  },
+  {
     providerKey: "fal",
     displayName: "Fal",
     match: {
@@ -298,7 +313,7 @@ export function resolveImageCapabilityProviderEntry(
 
       const score =
         (exactProviderIdMatch ? 100 : 0) +
-        (apiHostMatch ? 80 : 0) +
+        (apiHostMatch ? 140 : 0) +
         (includesProviderIdMatch ? 60 : 0) +
         (exactProviderTypeMatch ? 40 : 0) +
         (includesProviderTypeMatch ? 20 : 0);

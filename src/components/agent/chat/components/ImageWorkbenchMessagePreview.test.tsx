@@ -8,6 +8,7 @@ import { ImageWorkbenchMessagePreview } from "./ImageWorkbenchMessagePreview";
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 const IMAGE_WORKBENCH_TASK_ACTION_EVENT = "lime:image-workbench-task-action";
+const IMAGE_WORKBENCH_FOCUS_EVENT = "lime:image-workbench-focus";
 
 function renderPreview(
   preview: MessageImageWorkbenchPreview,
@@ -77,9 +78,7 @@ describe("ImageWorkbenchMessagePreview", () => {
     expect(container.querySelector("img")?.getAttribute("src")).toBe(
       "data:image/png;base64,aW1hZ2U=",
     );
-    expect(container.querySelector("button")?.getAttribute("aria-label")).toBe(
-      "Open image result",
-    );
+    expect(container.querySelector("button")).toBeNull();
     expect(container.textContent).not.toContain(
       "No prompt provided for this task.",
     );
@@ -91,7 +90,7 @@ describe("ImageWorkbenchMessagePreview", () => {
     expect(container.textContent).not.toContain("当前任务未提供提示词");
   });
 
-  it("falls back to a natural completion caption when the preview has none", () => {
+  it("does not invent a completion caption when the preview has none", () => {
     const { container } = renderPreview({
       taskId: "image-preview-complete-fallback",
       prompt: "从花城汇看广州塔的春天照片",
@@ -106,8 +105,49 @@ describe("ImageWorkbenchMessagePreview", () => {
 
     expect(container.textContent).toContain("Image Generation");
     expect(container.textContent).toContain("Nanobanana Pro");
-    expect(container.textContent).toContain("Done");
-    expect(container.textContent).toContain("从花城汇看广州塔的春天照片");
+    expect(container.textContent).not.toContain("搞定");
+    expect(container.textContent).not.toContain("从花城汇看广州塔的春天照片");
+  });
+
+  it("does not invent completion caption once a running preview already has an image", () => {
+    const { container } = renderPreview({
+      taskId: "image-preview-running-with-image",
+      prompt: "用 Agnes 生成一张深圳夏天午后的城市照片",
+      mode: "generate",
+      status: "running",
+      imageUrl: "data:image/png;base64,aW1hZ2U=",
+      imageCount: 1,
+      expectedImageCount: 1,
+      runtimeContract: {
+        model: "agnes-image-2.1-flash",
+      },
+    });
+
+    expect(container.textContent).toContain("Image Generation");
+    expect(container.textContent).toContain("Agnes Image 2.1 Flash");
+    expect(container.textContent).not.toContain("搞定");
+    expect(container.textContent).not.toContain("深圳夏天");
+  });
+
+  it("keeps explicit completion captions from the backend", () => {
+    const { container } = renderPreview({
+      taskId: "image-preview-polluted-caption",
+      prompt:
+        "用 Agnes Generate一张深圳夏day午后的城市照片，真实摄影Style",
+      mode: "generate",
+      status: "complete",
+      imageUrl: "data:image/png;base64,aW1hZ2U=",
+      imageCount: 1,
+      caption:
+        "搞定，深圳夏day午后的城市照片，真实摄影Style 已经做好了。",
+      runtimeContract: {
+        model: "agnes-image-2.1-flash",
+      },
+    });
+
+    expect(container.textContent).toContain(
+      "搞定，深圳夏day午后的城市照片，真实摄影Style 已经做好了。",
+    );
   });
 
   it("does not show completion caption while the image task is still running", () => {
@@ -127,6 +167,39 @@ describe("ImageWorkbenchMessagePreview", () => {
     expect(container.textContent).toContain("Nanobanana Pro");
     expect(container.textContent).toContain("Generating image");
     expect(container.textContent).not.toContain("完成了");
+  });
+
+  it("does not open the right viewer by default when the chat preview is clicked", () => {
+    const { container } = renderPreview({
+      taskId: "image-preview-readonly",
+      prompt: "从花城汇看广州塔的春天照片",
+      mode: "generate",
+      status: "complete",
+      imageUrl: "data:image/png;base64,aW1hZ2U=",
+      imageCount: 1,
+      projectId: "project-1",
+      contentId: "content-1",
+    });
+
+    const focusListener = vi.fn();
+    window.addEventListener(IMAGE_WORKBENCH_FOCUS_EVENT, focusListener);
+
+    const previewCard = container.querySelector(
+      '[data-testid="image-workbench-message-preview-image-preview-readonly"]',
+    ) as HTMLDivElement | null;
+    const media = container.querySelector(
+      '[data-testid="image-workbench-message-preview-single-media-image-preview-readonly"]',
+    ) as HTMLDivElement | null;
+
+    act(() => {
+      previewCard?.click();
+      media?.click();
+    });
+
+    expect(focusListener).not.toHaveBeenCalled();
+    expect(container.querySelector("button")).toBeNull();
+
+    window.removeEventListener(IMAGE_WORKBENCH_FOCUS_EVENT, focusListener);
   });
 
   it("hides legacy task-card status and source chrome in chat preview", () => {

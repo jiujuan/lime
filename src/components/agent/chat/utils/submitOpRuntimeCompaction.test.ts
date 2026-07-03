@@ -610,6 +610,39 @@ describe("submitOpRuntimeCompaction", () => {
     expect(result.shouldSubmitModelPreference).toBe(false);
   });
 
+  it("图片生成命令不应把 custom Agnes 图片模型当作编排文本模型", () => {
+    const requestMetadata = {
+      harness: {
+        image_command_intent: {
+          image_task: {
+            prompt: "生成一张广州夏天照片",
+            provider_id: "custom-agnes-provider",
+            model: "agnes-image-2.0-flash",
+            runtime_contract: {
+              contract_key: "image_generation",
+              routing_slot: "image_generation_model",
+            },
+          },
+        },
+      },
+    };
+
+    const result = buildSubmitOpRuntimeCompaction({
+      requestMetadata,
+      executionRuntime: null,
+      syncedRecentPreferences: null,
+      syncedSessionModelPreference: null,
+      syncedExecutionStrategy: null,
+      effectiveExecutionStrategy: "react",
+      effectiveProviderType: "custom-agnes-provider",
+      effectiveModel: "agnes-image-2.0-flash",
+    });
+
+    expect(result.providerConfig).toBeUndefined();
+    expect(result.shouldSubmitProviderPreference).toBe(false);
+    expect(result.shouldSubmitModelPreference).toBe(false);
+  });
+
   it("应将 legacy general workbench alias runtime 视为 general_workbench 做裁剪", () => {
     const result = buildSubmitOpRuntimeCompaction({
       requestMetadata: {

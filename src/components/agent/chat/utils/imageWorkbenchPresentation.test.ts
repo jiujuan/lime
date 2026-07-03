@@ -7,12 +7,12 @@ import {
 } from "@/lib/api/skillCatalog";
 import type { MessageImageWorkbenchPreview } from "../types";
 import {
-  buildImageTaskAssistantContent,
   buildImageTaskPresentationContext,
 } from "../workspace/imageTaskPersona";
 import {
   buildImageWorkbenchCaption,
   resolveImageWorkbenchPreviewModelLabel,
+  sanitizeImageWorkbenchPresentationText,
 } from "./imageWorkbenchPresentation";
 
 describe("imageWorkbenchPresentation", () => {
@@ -26,26 +26,57 @@ describe("imageWorkbenchPresentation", () => {
     clearSkillCatalogCache();
   });
 
-  it("图片生成人设在无模型正文时会给出自然起手", () => {
-    const fallback = buildImageTaskAssistantContent({
-      prompt: "一张广州塔，从花城汇看过去的春天的照片",
-      mode: "generate",
-      modelName: "fal-ai/nano-banana-pro",
+  it("完成态没有后端 caption 时不由前端补模板", async () => {
+    await changeLimeLocale("en-US");
+
+    const caption = buildImageWorkbenchCaption({
+      prompt: "用 Agnes 生成一张深圳夏天午后的城市照片",
+      status: "complete",
+      imageCount: 1,
     });
 
-    expect(fallback).toContain("好啊");
-    expect(fallback).toContain("广州塔");
-    expect(fallback).not.toContain(["R", "ibbi"].join(""));
+    expect(caption).toBeNull();
   });
 
-  it("展示层在 task 没有 presentation caption 时会补自然收尾", () => {
+  it("展示层只做空白与中文标点规范化，不改写模型语义", () => {
+    const intro = sanitizeImageWorkbenchPresentationText(
+      "好啊，先来Generate 深圳夏day午后的城市照片 ， 阳光明亮，真实摄影Style。",
+      {
+        languageSource:
+          "Generate 深圳夏day午后的城市照片，阳光明亮，真实摄影Style",
+      },
+    );
+    const caption = sanitizeImageWorkbenchPresentationText(
+      "搞定，深圳夏day午后的城市照片，真实摄影Style 已经做好了。",
+      {
+        languageSource:
+          "Generate 深圳夏day午后的城市照片，阳光明亮，真实摄影Style",
+      },
+    );
+
+    expect(intro).toContain("好啊，先来Generate 深圳夏day午后的城市照片，阳光明亮，真实摄影Style。");
+    expect(caption).toContain("搞定");
+    expect(caption).toContain("深圳夏day午后的城市照片");
+    expect(caption).toContain("真实摄影Style");
+  });
+
+  it("展示层保留后端返回的英文 presentation 文案", () => {
+    expect(
+      sanitizeImageWorkbenchPresentationText(
+        "Sure, the Shenzhen summer photo is ready.",
+        { languageSource: "深圳夏天照片" },
+      ),
+    ).toBe("Sure, the Shenzhen summer photo is ready.");
+  });
+
+  it("presentation context 要求后端生成自然起手和收尾", () => {
     expect(
       buildImageWorkbenchCaption({
         prompt: "一张广州塔，从花城汇看过去的春天的照片",
         status: "complete",
         imageCount: 1,
       }),
-    ).toContain("搞定");
+    ).toBeNull();
 
     const presentation = buildImageTaskPresentationContext({
       prompt: "一张广州塔，从花城汇看过去的春天的照片",
@@ -134,18 +165,6 @@ describe("imageWorkbenchPresentation", () => {
       );
       expect(agent).toHaveProperty(
         "agentChat.imageWorkbenchPresentation.subjectFallback",
-      );
-      expect(agent).toHaveProperty(
-        "agentChat.imageWorkbenchPresentation.intro.generate",
-      );
-      expect(agent).toHaveProperty(
-        "agentChat.imageWorkbenchPresentation.intro.generate.withModel",
-      );
-      expect(agent).toHaveProperty(
-        "agentChat.imageWorkbenchPresentation.caption.complete",
-      );
-      expect(agent).toHaveProperty(
-        "agentChat.imageWorkbenchPresentation.caption.partial",
       );
     }
   });

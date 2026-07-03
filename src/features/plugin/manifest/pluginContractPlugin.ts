@@ -1,6 +1,6 @@
 import {
   buildPluginRightSurfaceContract,
-  type PluginRightSurfaceContract,
+  type PluginRightSurfaceContract as HostPluginRightSurfaceContract,
 } from "@/features/plugin/host";
 import type {
   NormalizedAppEntry,
@@ -31,7 +31,7 @@ import type {
   PluginHookDeclaration,
   PluginManifest,
   PluginRendererKind,
-  PluginRightSurfaceContract,
+  PluginRightSurfaceContract as ManifestPluginRightSurfaceContract,
   PluginUiDeclaration,
 } from "./types";
 
@@ -375,8 +375,8 @@ function pluginUiDeclarationFromPlugin(
 }
 
 function convertAgentRightSurface(
-  contract: PluginRightSurfaceContract,
-): PluginRightSurfaceContract {
+  contract: HostPluginRightSurfaceContract,
+): ManifestPluginRightSurfaceContract {
   return {
     defaultActiveTab: contract.defaultActiveTab ?? undefined,
     supportedTabs: contract.supportedTabs,
@@ -408,7 +408,7 @@ function convertAgentRightSurface(
 
 export function buildPluginRightSurfaceFromPluginManifest(
   manifest: NormalizedAppManifest,
-): PluginRightSurfaceContract {
+): ManifestPluginRightSurfaceContract {
   return convertAgentRightSurface(buildPluginRightSurfaceContract(manifest));
 }
 
