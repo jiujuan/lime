@@ -150,7 +150,7 @@ cargo test --manifest-path "lime-rs/Cargo.toml" -p <crate> <filter>
 
 完整发版默认必须包含 commit / tag / push。不要在验证通过后只汇报“可以提交了”就结束；应主动给出危险操作确认请求。只有用户明确说“只准备、不提交 / 不打 tag / 不推送”时，才允许停在准备态，并在最终汇报中标明不是完整发布。
 
-拿到 git 写操作确认后，必须把 `git add`、`git commit`、`git tag`、`git push` 与远端 tag 复核连续执行到底；不能在 commit 后停下让用户自己打 tag，也不能在 tag 后停下让用户自己 push。若中间失败，先修复或明确阻塞，不要把剩余步骤转交给用户。
+拿到 git 写操作确认后，必须把 `git add`、`git commit`、`git tag`、`git push origin main`、`git push origin <tag>` 与远端 tag 复核连续执行到底；不能在 commit 后停下让用户自己打 tag，也不能在 tag 后停下让用户自己 push。若中间失败，先修复或明确阻塞，不要把剩余步骤转交给用户。
 
 执行任何 git 写操作前，先汇总：
 
@@ -167,10 +167,11 @@ cargo test --manifest-path "lime-rs/Cargo.toml" -p <crate> <filter>
 git add <release-candidate-files>
 git commit -m "Release vX.Y.Z"
 git tag vX.Y.Z
-git push origin main --follow-tags
+git push origin main
+git push origin vX.Y.Z
 ```
 
-确认后不要只执行其中一部分。若 `git add`、`git commit`、`git tag` 或 `git push` 任一步失败，必须修复或明确说明阻塞点；成功后立即复核：
+确认后不要只执行其中一部分。不要依赖 `git push origin main --follow-tags` 作为唯一 tag 推送方式：轻量 tag 不会被 `--follow-tags` 推送，容易造成 main 已发布但远端 release tag 缺失。若 main 已推送但 `git ls-remote --tags origin "refs/tags/vX.Y.Z"` 为空，必须继续执行 `git push origin vX.Y.Z` 并再次复核。若 `git add`、`git commit`、`git tag` 或任一 `git push` 失败，必须修复或明确说明阻塞点；成功后立即复核：
 
 ```bash
 git status --short

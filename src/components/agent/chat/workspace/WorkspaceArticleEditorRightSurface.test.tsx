@@ -511,6 +511,8 @@ describe("WorkspaceArticleEditorRightSurface", () => {
     );
     act(() => {
       button?.click();
+    });
+    act(() => {
       button?.click();
     });
 

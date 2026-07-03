@@ -1,6 +1,7 @@
 use app_server::AppServer;
 use app_server::LocalAppDataSource;
 use app_server::MockBackend;
+use app_server::RuntimeBackend;
 use app_server::RuntimeCore;
 use app_server_protocol::*;
 use lime_core::database::schema::create_tables;
@@ -234,6 +235,127 @@ async fn image_task_complete_rejects_failed_or_cancelled_task() {
         .contains("不能直接写回完成态"));
 }
 
+#[tokio::test]
+async fn image_command_turn_start_creates_task_from_jsonrpc_metadata() {
+    let app = image_command_app_server().await;
+    initialize_server(&app.server, 1, "image-command-jsonrpc-test").await;
+
+    request(
+        &app.server,
+        2,
+        METHOD_AGENT_SESSION_START,
+        json!({
+            "sessionId": "sess-image-command-jsonrpc",
+            "threadId": "thread-image-command-jsonrpc",
+            "appId": "agent-runtime",
+            "workspaceId": "workspace-image-command-jsonrpc"
+        }),
+    )
+    .await;
+
+    let messages = request_with_notifications(
+        &app.server,
+        3,
+        METHOD_AGENT_SESSION_TURN_START,
+        json!({
+            "sessionId": "sess-image-command-jsonrpc",
+            "turnId": "turn-image-command-jsonrpc",
+            "input": {
+                "text": "@配图 E2E 图片命令路由测试，请生成一张青柠插画",
+                "attachments": []
+            },
+            "runtimeOptions": {
+                "stream": true,
+                "metadata": {
+                    "harness": {
+                        "image_command_intent": {
+                            "kind": "image_task",
+                            "image_task": {
+                                "project_root_path": app.workspace_root,
+                                "prompt": "E2E 图片命令路由测试，请生成一张青柠插画",
+                                "raw_text": "@配图 E2E 图片命令路由测试，请生成一张青柠插画",
+                                "mode": "generate",
+                                "count": 1,
+                                "provider_id": "provider-image",
+                                "model": "gpt-image-test",
+                                "executor_mode": "images_api",
+                                "entry_source": "at_image_command"
+                            }
+                        }
+                    }
+                },
+                "hostOptions": {
+                    "asterChatRequest": {
+                        "message": "@配图 E2E 图片命令路由测试，请生成一张青柠插画",
+                        "metadata": {
+                            "harness": {
+                                "image_command_intent": {
+                                    "kind": "image_task",
+                                    "image_task": {
+                                        "project_root_path": app.workspace_root,
+                                        "prompt": "E2E 图片命令路由测试，请生成一张青柠插画",
+                                        "raw_text": "@配图 E2E 图片命令路由测试，请生成一张青柠插画",
+                                        "mode": "generate",
+                                        "count": 1,
+                                        "provider_id": "provider-image",
+                                        "model": "gpt-image-test",
+                                        "executor_mode": "images_api",
+                                        "entry_source": "at_image_command"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "queueIfBusy": true
+        }),
+    )
+    .await;
+
+    let event_types = notification_event_types(&messages);
+    assert!(
+        event_types.contains(&"runtime.status"),
+        "image command should emit accepted status: {event_types:?}"
+    );
+    assert!(
+        event_types.contains(&"image_task.created"),
+        "image command should create task: {event_types:?}"
+    );
+    assert!(
+        event_types.contains(&"tool.result"),
+        "image command should expose tool result: {event_types:?}"
+    );
+    assert!(
+        !event_types.contains(&"routing.decision.made"),
+        "image command must not fall through to ordinary chat routing: {event_types:?}"
+    );
+
+    let tasks = request(
+        &app.server,
+        4,
+        METHOD_MEDIA_TASK_ARTIFACT_LIST,
+        json!({
+            "projectRootPath": app.workspace_root,
+            "taskType": "image_generate",
+            "limit": 20
+        }),
+    )
+    .await;
+    assert_eq!(
+        tasks.pointer("/result/tasks/0/record/payload/prompt"),
+        Some(&json!("E2E 图片命令路由测试，请生成一张青柠插画"))
+    );
+    assert_eq!(
+        tasks.pointer("/result/tasks/0/record/payload/provider_id"),
+        Some(&json!("provider-image"))
+    );
+    assert_eq!(
+        tasks.pointer("/result/tasks/0/record/payload/entry_source"),
+        Some(&json!("at_image_command"))
+    );
+}
+
 async fn initialize_server(server: &AppServer, id: u64, client_name: &str) {
     let initialize = request(
         server,
@@ -252,6 +374,29 @@ async fn initialize_server(server: &AppServer, id: u64, client_name: &str) {
         Some(&json!(PROTOCOL_VERSION)),
     );
     notify(server, METHOD_INITIALIZED, json!({})).await;
+}
+
+async fn image_command_app_server() -> MediaTaskAppServer {
+    let temp = TempDir::new().expect("create image command fixture temp dir");
+    let data_root = temp.path().join("app-server-data");
+    let workspace_root = temp.path().join("workspace").to_string_lossy().to_string();
+    std::fs::create_dir_all(&workspace_root).expect("create workspace root");
+
+    let conn = Connection::open_in_memory().expect("open in-memory product db");
+    create_tables(&conn).expect("create product schema");
+    let db = Arc::new(std::sync::Mutex::new(conn));
+    let app_data_source =
+        LocalAppDataSource::initialize_with_db_and_data_root(db.clone(), data_root)
+            .await
+            .expect("local app data source");
+    let runtime = RuntimeCore::with_backend(Arc::new(RuntimeBackend::with_db(db)))
+        .with_app_data_source(Arc::new(app_data_source));
+
+    MediaTaskAppServer {
+        _temp: temp,
+        workspace_root,
+        server: AppServer::with_runtime(runtime),
+    }
 }
 
 async fn request(server: &AppServer, id: u64, method: &str, params: Value) -> Value {
@@ -278,6 +423,47 @@ async fn request(server: &AppServer, id: u64, method: &str, params: Value) -> Va
     }
     assert_eq!(response.get("id"), Some(&json!(id)));
     response
+}
+
+async fn request_with_notifications(
+    server: &AppServer,
+    id: u64,
+    method: &str,
+    params: Value,
+) -> Vec<Value> {
+    let lines = server
+        .handle_json_line(
+            &json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "method": method,
+                "params": params,
+            })
+            .to_string(),
+        )
+        .await
+        .expect("handle JSON-RPC request");
+    assert!(!lines.is_empty(), "{method} should return a response");
+    let messages = lines
+        .iter()
+        .map(|line| serde_json::from_str::<Value>(line).expect("decode JSON-RPC message"))
+        .collect::<Vec<_>>();
+    let response = messages
+        .iter()
+        .find(|message| message.get("id") == Some(&json!(id)))
+        .unwrap_or_else(|| panic!("{method} should include response id {id}"));
+    if let Some(error) = response.get("error") {
+        panic!("{method} failed: {error}");
+    }
+    messages
+}
+
+fn notification_event_types(messages: &[Value]) -> Vec<&str> {
+    messages
+        .iter()
+        .filter(|message| message.get("method") == Some(&json!(METHOD_AGENT_SESSION_EVENT)))
+        .filter_map(|message| message.pointer("/params/event/type").and_then(Value::as_str))
+        .collect()
 }
 
 async fn request_error(server: &AppServer, id: u64, method: &str, params: Value) -> Value {

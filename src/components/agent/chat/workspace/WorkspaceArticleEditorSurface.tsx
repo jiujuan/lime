@@ -179,7 +179,9 @@ export function WorkspaceArticleEditorSurface({
           </div>
           <div className="article-editor-header-actions flex shrink-0 flex-wrap items-center justify-end gap-2">
             <ArticleStatusBadge status={object.status} />
-            {onOpenPreviewArtifact && previewArtifact && !fixtureOnlyHostGeneration ? (
+            {onOpenPreviewArtifact &&
+            previewArtifact &&
+            !fixtureOnlyHostGeneration ? (
               <button
                 type="button"
                 className="article-editor-preview-button inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-2 text-xs font-medium text-[color:var(--lime-text-strong)] transition hover:bg-[color:var(--lime-surface-hover)]"
