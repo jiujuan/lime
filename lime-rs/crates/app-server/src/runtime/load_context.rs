@@ -2,6 +2,7 @@ use super::projection_repair::ProjectionRepair;
 use super::projection_store::ProjectionReadSession;
 use super::projection_store::ProjectionReadWindow;
 use super::read_model;
+use super::read_model_turn_usage;
 use super::turn_input_events;
 use super::RuntimeCore;
 use super::RuntimeCoreError;
@@ -95,11 +96,17 @@ impl RuntimeCore {
         };
         let workflow_audit_events =
             self.read_workflow_audit_events_for_session(&params.session_id)?;
+        let projection_usage_events = if events.is_empty() && params.history_limit.is_some() {
+            self.read_projection_usage_events_for_session(&params.session_id)?
+        } else {
+            Vec::new()
+        };
         Ok(Some(projection_load_context(
             projection,
             events,
             params,
             workflow_audit_events,
+            projection_usage_events,
         )))
     }
 
@@ -141,6 +148,28 @@ impl RuntimeCore {
             .transpose()
             .map(|events| events.unwrap_or_default())
     }
+
+    fn read_projection_usage_events_for_session(
+        &self,
+        session_id: &str,
+    ) -> Result<Vec<AgentEvent>, RuntimeCoreError> {
+        self.event_log_writer
+            .as_ref()
+            .map(|writer| {
+                writer
+                    .read_session_events(session_id)
+                    .map(|records| {
+                        records
+                            .into_iter()
+                            .map(|record| record.event)
+                            .filter(is_turn_completed_usage_event)
+                            .collect::<Vec<_>>()
+                    })
+                    .map_err(RuntimeCoreError::Backend)
+            })
+            .transpose()
+            .map(|events| events.unwrap_or_default())
+    }
 }
 
 pub(in crate::runtime) fn projection_load_context(
@@ -148,6 +177,7 @@ pub(in crate::runtime) fn projection_load_context(
     events: Vec<AgentEvent>,
     params: &AgentSessionReadParams,
     workflow_audit_events: Vec<AgentEvent>,
+    projection_usage_events: Vec<AgentEvent>,
 ) -> SessionLoadContext {
     let stored = StoredSession {
         session: projection.session.clone(),
@@ -158,7 +188,14 @@ pub(in crate::runtime) fn projection_load_context(
         output_blobs: HashMap::new(),
     };
     let mut detail = if stored.events.is_empty() && params.history_limit.is_some() {
-        projection_summary_detail(&stored, &projection, params, &workflow_audit_events)
+        let mut usage_events = projection_usage_events;
+        usage_events.extend(
+            workflow_audit_events
+                .iter()
+                .filter(|event| is_turn_completed_usage_event(event))
+                .cloned(),
+        );
+        projection_summary_detail(&stored, &projection, params, &usage_events)
     } else {
         read_model::runtime_session_read_detail_with_options(
             &stored,
@@ -196,7 +233,7 @@ fn projection_summary_detail(
     stored: &StoredSession,
     projection: &ProjectionReadSession,
     params: &AgentSessionReadParams,
-    workflow_audit_events: &[AgentEvent],
+    usage_events: &[AgentEvent],
 ) -> serde_json::Value {
     let messages = projection.messages.clone();
     let process_detail = projection_process_detail(stored, projection);
@@ -219,7 +256,10 @@ fn projection_summary_detail(
     let active_action_id = process_thread_read_value(process_thread_read, "active_action_id");
     let model_routing = process_thread_read_value(process_thread_read, "model_routing");
     let service_model_slot = process_thread_read_value(process_thread_read, "service_model_slot");
-    let diagnostics =
+    let latest_turn_id = stored.turns.last().map(|turn| turn.turn_id.as_str());
+    let latest_turn_usage =
+        read_model_turn_usage::latest_usage_for_turn(usage_events, latest_turn_id);
+    let mut diagnostics =
         process_thread_read_value(process_thread_read, "diagnostics").unwrap_or_else(|| {
             json!({
                 "latest_turn_status": stored.turns.last().map(|turn| super::status::agent_turn_status_label(turn.status)),
@@ -231,8 +271,19 @@ fn projection_summary_detail(
                 "patch_count": 0,
             })
         });
-    let runtime_summary = process_thread_read_value(process_thread_read, "runtime_summary")
+    if let Some(usage) = latest_turn_usage.clone() {
+        if let Some(diagnostics_object) = diagnostics.as_object_mut() {
+            diagnostics_object.insert("latest_turn_usage".to_string(), usage);
+        }
+    }
+    let mut runtime_summary = process_thread_read_value(process_thread_read, "runtime_summary")
         .unwrap_or_else(|| json!({}));
+    if let Some(usage) = latest_turn_usage {
+        if let Some(runtime_summary_object) = runtime_summary.as_object_mut() {
+            runtime_summary_object.insert("latestTurnUsage".to_string(), usage);
+        }
+    }
+    let turns = read_model_turn_usage::turns_with_usage(&stored.turns, usage_events);
     let loaded_count = messages.len();
     let messages_count = projection.messages_count;
     let history_limit = params
@@ -249,11 +300,11 @@ fn projection_summary_detail(
         })
     });
     let status = super::status::agent_session_status_label(stored.session.status);
-    let mut thread_read = serde_json::json!({
+    let thread_read = serde_json::json!({
         "session_id": stored.session.session_id,
         "thread_id": stored.session.thread_id,
         "status": status,
-        "turns": stored.turns,
+        "turns": turns.clone(),
         "pending_requests": pending_requests,
         "queued_turns": [],
         "active_turn_id": active_turn_id,
@@ -272,9 +323,6 @@ fn projection_summary_detail(
         "diagnostics": diagnostics,
         "runtime_summary": runtime_summary,
     });
-    let workflow_read_model =
-        read_model::workflow_read_model_from_stored_session(stored, workflow_audit_events);
-    read_model::insert_workflow_read_model_into_thread_read(&mut thread_read, &workflow_read_model);
     let mut detail = serde_json::json!({
         "id": stored.session.session_id,
         "session_id": stored.session.session_id,
@@ -295,7 +343,7 @@ fn projection_summary_detail(
         },
         "history_truncated": loaded_count < messages_count,
         "messages": messages,
-        "turns": stored.turns,
+        "turns": turns,
         "items": items,
         "queued_turns": [],
         "artifacts": artifacts,
@@ -313,6 +361,14 @@ fn projection_summary_detail(
     );
     merge_process_thread_read_value(&mut detail, process_thread_read, "articleWorkspaceActions");
     detail
+}
+
+fn is_turn_completed_usage_event(event: &AgentEvent) -> bool {
+    event.event_type == "turn.completed"
+        && event
+            .payload
+            .get("usage")
+            .is_some_and(serde_json::Value::is_object)
 }
 
 fn projection_process_detail(

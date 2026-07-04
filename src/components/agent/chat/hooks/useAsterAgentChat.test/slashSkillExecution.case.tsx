@@ -627,6 +627,12 @@ describe("useAsterAgentChat slash skill 执行链路", () => {
       });
 
       expect(harness.getValue().sessionId).toBe(createdSessionId);
+      expect(
+        sessionStorage.getItem(`aster_curr_sessionId_${workspaceId}`),
+      ).toBe(JSON.stringify(createdSessionId));
+      expect(localStorage.getItem(`aster_last_sessionId_${workspaceId}`)).toBe(
+        JSON.stringify(createdSessionId),
+      );
       expect(sessionStorage.getItem(`aster_messages_${workspaceId}`)).toBe(
         null,
       );

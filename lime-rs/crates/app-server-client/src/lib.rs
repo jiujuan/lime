@@ -235,8 +235,14 @@ pub use app_server_protocol::WechatChannelAccountListResponse;
 pub use app_server_protocol::WechatConfiguredAccount;
 pub use app_server_protocol::WindowsStartupCheck;
 pub use app_server_protocol::WindowsStartupDiagnosticsResponse;
+pub use app_server_protocol::WorkflowCancelParams;
+pub use app_server_protocol::WorkflowCancelResponse;
 pub use app_server_protocol::WorkflowReadParams;
 pub use app_server_protocol::WorkflowReadResponse;
+pub use app_server_protocol::WorkflowRespondParams;
+pub use app_server_protocol::WorkflowRespondResponse;
+pub use app_server_protocol::WorkflowRetryParams;
+pub use app_server_protocol::WorkflowRetryResponse;
 pub use app_server_protocol::WorkspaceEnsureParams;
 pub use app_server_protocol::WorkspaceEnsureProjectParams;
 pub use app_server_protocol::WorkspaceEnsureProjectResponse;
@@ -410,7 +416,10 @@ pub use app_server_protocol::METHOD_USAGE_STATS_DAILY_TRENDS_LIST;
 pub use app_server_protocol::METHOD_USAGE_STATS_MODEL_RANKING_LIST;
 pub use app_server_protocol::METHOD_USAGE_STATS_READ;
 pub use app_server_protocol::METHOD_WECHAT_CHANNEL_ACCOUNT_LIST;
+pub use app_server_protocol::METHOD_WORKFLOW_CANCEL;
 pub use app_server_protocol::METHOD_WORKFLOW_READ;
+pub use app_server_protocol::METHOD_WORKFLOW_RESPOND;
+pub use app_server_protocol::METHOD_WORKFLOW_RETRY;
 pub use app_server_protocol::METHOD_WORKSPACE_BY_PATH_READ;
 pub use app_server_protocol::METHOD_WORKSPACE_DEFAULT_ENSURE;
 pub use app_server_protocol::METHOD_WORKSPACE_DEFAULT_READ;
@@ -548,6 +557,27 @@ impl AppServerClient {
         params: WorkflowReadParams,
     ) -> Result<JsonRpcRequest, ClientError> {
         self.typed_request(typed::read_workflow(params))
+    }
+
+    pub fn cancel_workflow(
+        &mut self,
+        params: WorkflowCancelParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::cancel_workflow(params))
+    }
+
+    pub fn retry_workflow(
+        &mut self,
+        params: WorkflowRetryParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::retry_workflow(params))
+    }
+
+    pub fn respond_workflow(
+        &mut self,
+        params: WorkflowRespondParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::respond_workflow(params))
     }
 
     pub fn read_agent_session_objective(
@@ -1545,6 +1575,18 @@ pub mod typed {
         TypedRequest::new(METHOD_WORKFLOW_READ, params)
     }
 
+    pub fn cancel_workflow(params: WorkflowCancelParams) -> TypedRequest<WorkflowCancelParams> {
+        TypedRequest::new(METHOD_WORKFLOW_CANCEL, params)
+    }
+
+    pub fn retry_workflow(params: WorkflowRetryParams) -> TypedRequest<WorkflowRetryParams> {
+        TypedRequest::new(METHOD_WORKFLOW_RETRY, params)
+    }
+
+    pub fn respond_workflow(params: WorkflowRespondParams) -> TypedRequest<WorkflowRespondParams> {
+        TypedRequest::new(METHOD_WORKFLOW_RESPOND, params)
+    }
+
     pub fn read_agent_session_objective(
         params: AgentSessionObjectiveReadParams,
     ) -> TypedRequest<AgentSessionObjectiveReadParams> {
@@ -2407,6 +2449,41 @@ mod tests {
         assert_eq!(request.id, RequestId::Integer(2));
         assert_eq!(request.method, METHOD_WORKFLOW_READ);
         assert_eq!(request.params.expect("params")["sessionId"], "sess_1");
+
+        let typed = typed::cancel_workflow(WorkflowCancelParams {
+            session_id: "sess_1".to_string(),
+            workflow_run_id: "run_1".to_string(),
+            step_id: Some("step_1".to_string()),
+            reason_code: Some("user_requested".to_string()),
+            reason: None,
+        });
+
+        assert_eq!(typed.method(), METHOD_WORKFLOW_CANCEL);
+        assert_eq!(typed.params().workflow_run_id, "run_1");
+
+        let typed = typed::retry_workflow(WorkflowRetryParams {
+            session_id: "sess_1".to_string(),
+            workflow_run_id: "run_1".to_string(),
+            step_id: None,
+            reason_code: None,
+            reason: Some("retry".to_string()),
+        });
+
+        assert_eq!(typed.method(), METHOD_WORKFLOW_RETRY);
+        assert_eq!(typed.params().session_id, "sess_1");
+
+        let typed = typed::respond_workflow(WorkflowRespondParams {
+            session_id: "sess_1".to_string(),
+            workflow_run_id: "run_1".to_string(),
+            step_id: Some("approval".to_string()),
+            request_id: Some("ask-1".to_string()),
+            action_type: Some(AgentSessionActionType::AskUser),
+            confirmed: Some(true),
+            response: Some(json!({ "approved": true })),
+        });
+
+        assert_eq!(typed.method(), METHOD_WORKFLOW_RESPOND);
+        assert_eq!(typed.params().step_id.as_deref(), Some("approval"));
     }
 
     #[test]

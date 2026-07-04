@@ -18,9 +18,6 @@ import {
   resolveOutputGridClassName,
   resolveOutputTileAspectClass,
   resolveOutputDisplayIndexForLabel,
-  resolveRuntimeContractBadge,
-  resolveRuntimeContractPolicyLabel,
-  resolveRuntimeContractRegistryLabel,
   resolveSelectedOutputLabel,
   resolveSelectedStoryboardSlot,
   resolveSourceLabel,
@@ -98,17 +95,6 @@ export function ImageTaskViewer({
     selectedTask?.mode,
     t,
   );
-  const runtimeContractBadge = resolveRuntimeContractBadge(
-    selectedTask?.runtimeContract,
-    t,
-  );
-  const runtimeContractRegistryLabel = resolveRuntimeContractRegistryLabel(
-    selectedTask?.runtimeContract,
-    t,
-  );
-  const runtimeContractPolicyLabel = resolveRuntimeContractPolicyLabel(
-    selectedTask?.runtimeContract,
-  );
   const layoutLabel = resolveLayoutLabel(selectedTask?.layoutHint, t);
   const selectedOutputLabel = resolveSelectedOutputLabel({
     selectedIndex: selectedOutputIndex,
@@ -157,10 +143,6 @@ export function ImageTaskViewer({
     outputRef: selectedOutput?.refId,
     prompt: selectedTask?.prompt,
   });
-  const selectedProviderName =
-    selectedOutput?.providerName || selectedTask?.runtimeContract?.providerId;
-  const selectedModelName =
-    selectedOutput?.modelName || selectedTask?.runtimeContract?.model;
   const canContinueEdit = Boolean(followUpCommand && onSeedFollowUpCommand);
   const canRetryTask = Boolean(
     selectedTask?.id && onRetryTask && canRetryImageTask(selectedTask.status),
@@ -199,9 +181,6 @@ export function ImageTaskViewer({
             prompt: output.slotPrompt || output.prompt || prompt,
             slotLabel,
             size: output.size,
-            providerName:
-              output.providerName || selectedTask?.runtimeContract?.providerId,
-            modelName: output.modelName || selectedTask?.runtimeContract?.model,
           },
           sourceContext: buildImageTaskResourceSourceContext({
             taskId: output.taskId || selectedTask?.id,
@@ -417,33 +396,6 @@ export function ImageTaskViewer({
         ) : null}
 
         <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-          {runtimeContractBadge ? (
-            <span
-              data-testid="image-task-viewer-runtime-contract"
-              className={cn(
-                "rounded-full border px-2.5 py-1 font-medium",
-                runtimeContractBadge.tone,
-              )}
-            >
-              {runtimeContractBadge.label}
-            </span>
-          ) : null}
-          {runtimeContractRegistryLabel ? (
-            <span
-              data-testid="image-task-viewer-runtime-contract-registry"
-              className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-medium text-slate-600"
-            >
-              {runtimeContractRegistryLabel}
-            </span>
-          ) : null}
-          {runtimeContractPolicyLabel ? (
-            <span
-              data-testid="image-task-viewer-runtime-contract-policy"
-              className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 font-medium text-amber-800"
-            >
-              {runtimeContractPolicyLabel}
-            </span>
-          ) : null}
           {layoutLabel ? (
             <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 font-medium text-sky-700">
               {layoutLabel}
@@ -457,16 +409,6 @@ export function ImageTaskViewer({
           {selectedStoryboardSlot?.label ? (
             <span className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 font-medium text-violet-700">
               {selectedStoryboardSlot.label}
-            </span>
-          ) : null}
-          {selectedProviderName ? (
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
-              {selectedProviderName}
-            </span>
-          ) : null}
-          {selectedModelName ? (
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
-              {selectedModelName}
             </span>
           ) : null}
           {selectedOutput?.size ? (

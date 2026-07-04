@@ -1,0 +1,56 @@
+{
+  "$defs": {
+    "AgentSessionActionType": {
+      "enum": [
+        "ask_user",
+        "elicitation",
+        "tool_confirmation"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "actionType": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AgentSessionActionType"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "confirmed": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "requestId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "response": true,
+    "sessionId": {
+      "type": "string"
+    },
+    "stepId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "workflowRunId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "sessionId",
+    "workflowRunId"
+  ],
+  "title": "WorkflowRespondParams",
+  "type": "object"
+}

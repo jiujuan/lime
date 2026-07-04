@@ -1,6 +1,9 @@
 import { useCallback, useLayoutEffect, useState } from "react";
-import { buildHomeAgentParams } from "@/lib/workspace/navigation";
-import type { Page, PageParams } from "@/types/page";
+import {
+  buildClawAgentParams,
+  buildHomeAgentParams,
+} from "@/lib/workspace/navigation";
+import type { AgentPageParams, Page, PageParams } from "@/types/page";
 
 const NAVIGATION_RESTORE_STORAGE_KEY = "lime.appNavigation.restore.v1";
 
@@ -96,7 +99,9 @@ function readString(value: unknown): string | undefined {
 }
 
 function readNumber(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
 function pickRestorablePluginParams(params: unknown): PageParams | null {
@@ -114,6 +119,26 @@ function pickRestorablePluginParams(params: unknown): PageParams | null {
     entryKey: readString(params.entryKey),
     launchRequestKey: readNumber(params.launchRequestKey),
   };
+}
+
+function pickRestorableAgentParams(params: unknown): AgentPageParams | null {
+  if (!isRecord(params)) {
+    return null;
+  }
+
+  const initialSessionId = readString(params.initialSessionId);
+  if (!initialSessionId) {
+    return null;
+  }
+
+  return buildClawAgentParams({
+    initialSessionId,
+    projectId: readString(params.projectId),
+    contentId: readString(params.contentId),
+    theme: readString(params.theme),
+    lockTheme:
+      typeof params.lockTheme === "boolean" ? params.lockTheme : undefined,
+  });
 }
 
 function clearRestoredNavigationState(): void {
@@ -142,19 +167,28 @@ function readRestoredNavigationState(): {
       return null;
     }
     const parsed = JSON.parse(raw) as unknown;
-    if (!isRecord(parsed) || parsed.page !== "plugin") {
+    if (!isRecord(parsed)) {
       clearRestoredNavigationState();
       return null;
     }
 
-    const params = pickRestorablePluginParams(parsed.params);
+    const page = parsed.page;
+    if (page !== "plugin" && page !== "agent") {
+      clearRestoredNavigationState();
+      return null;
+    }
+
+    const params =
+      page === "plugin"
+        ? pickRestorablePluginParams(parsed.params)
+        : pickRestorableAgentParams(parsed.params);
     if (!params) {
       clearRestoredNavigationState();
       return null;
     }
 
     return {
-      page: "plugin",
+      page,
       params,
     };
   } catch {
@@ -169,12 +203,12 @@ function persistRestorableNavigation(page: Page, params: PageParams): void {
   }
 
   try {
-    if (page !== "plugin") {
-      clearRestoredNavigationState();
-      return;
-    }
-
-    const restorableParams = pickRestorablePluginParams(params);
+    const restorableParams =
+      page === "plugin"
+        ? pickRestorablePluginParams(params)
+        : page === "agent"
+          ? pickRestorableAgentParams(params)
+          : null;
     if (!restorableParams) {
       clearRestoredNavigationState();
       return;

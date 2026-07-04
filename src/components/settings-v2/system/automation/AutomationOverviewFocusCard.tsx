@@ -17,6 +17,7 @@ export function AutomationOverviewFocusCard({
   onOpenJobDetails,
 }: AutomationOverviewFocusCardProps) {
   const { t } = useTranslation("settings");
+  const translate = t as (key: string) => string;
 
   return (
     <Card
@@ -27,10 +28,10 @@ export function AutomationOverviewFocusCard({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <CardTitle className="text-xl text-slate-900">
-              {t("settings.automation.focus.title")}
+              {translate("settings.automation.focus.title")}
             </CardTitle>
             <p className="mt-1 text-sm leading-6 text-slate-500">
-              {t("settings.automation.focus.description")}
+              {translate("settings.automation.focus.description")}
             </p>
           </div>
         </div>
@@ -38,7 +39,7 @@ export function AutomationOverviewFocusCard({
       <CardContent className="space-y-4">
         {!job ? (
           <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/60 p-6 text-sm leading-6 text-slate-500">
-            {t("settings.automation.focus.empty")}
+            {translate("settings.automation.focus.empty")}
           </div>
         ) : null}
 
@@ -65,7 +66,7 @@ export function AutomationOverviewFocusCard({
                   data-testid="automation-overview-open-job-details"
                   onClick={onOpenJobDetails}
                 >
-                  {t("settings.automation.focus.action.openJobDetails")}
+                  {translate("settings.automation.focus.action.openJobDetails")}
                 </Button>
               ) : null}
             </div>

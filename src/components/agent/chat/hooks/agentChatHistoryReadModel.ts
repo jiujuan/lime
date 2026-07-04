@@ -26,7 +26,7 @@ import {
 } from "./agentChatHistoryPrimitives";
 import { isAuxiliaryHistoryTurn } from "./agentChatHistoryTimelineBasics";
 import { mergeImageWorkbenchPreview } from "./agentChatHistoryProcess";
-import { normalizeHistoryUsage } from "./agentChatHistoryUsage";
+import { resolveSessionDetailTurnUsage } from "./agentChatHistoryUsage";
 
 function isImportedHistorySession(detail: AsterSessionDetail): boolean {
   const runtime = detail.execution_runtime;
@@ -330,54 +330,11 @@ function historyToolCallFromThreadToolCall(
   };
 }
 
-function historyTurnIdFromRecord(value: unknown): string {
-  const record = asHistoryRecord(value);
-  return (
-    readHistoryString(record?.turn_id) ||
-    readHistoryString(record?.turnId) ||
-    readHistoryString(record?.id)
-  );
-}
-
-function historyUsageFromTurnRecord(value: unknown): Message["usage"] {
-  const record = asHistoryRecord(value);
-  return normalizeHistoryUsage(
-    record?.usage ?? record?.token_usage ?? record?.tokenUsage,
-  );
-}
-
-function findTurnUsageInRecords(
-  turns: readonly unknown[],
-  runtimeTurnId: string,
-): Message["usage"] {
-  return [...turns]
-    .reverse()
-    .filter((turn) => {
-      if (!runtimeTurnId) {
-        return true;
-      }
-      return historyTurnIdFromRecord(turn) === runtimeTurnId;
-    })
-    .map(historyUsageFromTurnRecord)
-    .find((usage): usage is NonNullable<Message["usage"]> =>
-      Boolean(usage),
-    );
-}
-
 function resolveThreadReadToolCallUsage(
   detail: AsterSessionDetail,
   runtimeTurnId: string,
 ): Message["usage"] {
-  return (
-    findTurnUsageInRecords(detail.thread_read?.turns || [], runtimeTurnId) ??
-    findTurnUsageInRecords(detail.turns || [], runtimeTurnId) ??
-    normalizeHistoryUsage(
-      asHistoryRecord(detail.thread_read?.diagnostics)?.latest_turn_usage ??
-        asHistoryRecord(detail.thread_read?.diagnostics)?.latestTurnUsage ??
-        asHistoryRecord(detail.thread_read?.runtime_summary)?.latest_turn_usage ??
-        asHistoryRecord(detail.thread_read?.runtime_summary)?.latestTurnUsage,
-    )
-  );
+  return resolveSessionDetailTurnUsage(detail, runtimeTurnId);
 }
 
 export function hydrateSessionDetailMessagesFromThreadReadToolCalls(

@@ -333,6 +333,26 @@ declare module "./appServerClient" {
     ): Promise<
       appServer.AppServerRequestResult<appServer.AppServerAgentSessionActionRespondResponse>
     >;
+    readWorkflow(
+      params: appServer.AppServerWorkflowReadParams,
+    ): Promise<
+      appServer.AppServerRequestResult<appServer.AppServerWorkflowReadResponse>
+    >;
+    cancelWorkflow(
+      params: appServer.AppServerWorkflowCancelParams,
+    ): Promise<
+      appServer.AppServerRequestResult<appServer.AppServerWorkflowCancelResponse>
+    >;
+    retryWorkflow(
+      params: appServer.AppServerWorkflowRetryParams,
+    ): Promise<
+      appServer.AppServerRequestResult<appServer.AppServerWorkflowRetryResponse>
+    >;
+    respondWorkflow(
+      params: appServer.AppServerWorkflowRespondParams,
+    ): Promise<
+      appServer.AppServerRequestResult<appServer.AppServerWorkflowRespondResponse>
+    >;
     replayAction(
       params: appServer.AppServerAgentSessionActionReplayParams,
     ): Promise<
@@ -977,6 +997,26 @@ const APP_SERVER_CLIENT_METHODS: readonly AppServerClientMethodSpec[] = [
   {
     name: "respondAction",
     method: constants.APP_SERVER_METHOD_AGENT_SESSION_ACTION_RESPOND,
+    params: "required",
+  },
+  {
+    name: "readWorkflow",
+    method: constants.APP_SERVER_METHOD_WORKFLOW_READ,
+    params: "required",
+  },
+  {
+    name: "cancelWorkflow",
+    method: constants.APP_SERVER_METHOD_WORKFLOW_CANCEL,
+    params: "required",
+  },
+  {
+    name: "retryWorkflow",
+    method: constants.APP_SERVER_METHOD_WORKFLOW_RETRY,
+    params: "required",
+  },
+  {
+    name: "respondWorkflow",
+    method: constants.APP_SERVER_METHOD_WORKFLOW_RESPOND,
     params: "required",
   },
   {

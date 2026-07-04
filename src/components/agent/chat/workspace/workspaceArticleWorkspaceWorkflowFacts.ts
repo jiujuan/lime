@@ -16,8 +16,15 @@ export interface WorkspaceArticleWorkflowRun {
   eventCount: number | null;
   startedAt: string | null;
   updatedAt: string | null;
+  finishedAt: string | null;
   completedAt: string | null;
   failedAt: string | null;
+  stepCounts: Record<string, unknown> | null;
+  artifactRefs: string[];
+  evidenceRefs: string[];
+  failure: Record<string, unknown> | null;
+  retry: Record<string, unknown> | null;
+  actions: WorkspaceArticleWorkflowAction[];
   steps: WorkspaceArticleWorkflowStep[];
 }
 
@@ -29,6 +36,7 @@ export interface WorkspaceArticleWorkflowStep {
   index: number | null;
   stepCount: number | null;
   status: string | null;
+  attempt: number | null;
   subagent: string | null;
   skillRefs: string[];
   expectedOutput: string | null;
@@ -38,8 +46,25 @@ export interface WorkspaceArticleWorkflowStep {
   eventCount: number | null;
   startedAt: string | null;
   updatedAt: string | null;
+  finishedAt: string | null;
   completedAt: string | null;
   failedAt: string | null;
+  toolCallIds: string[];
+  artifactRefs: string[];
+  evidenceRefs: string[];
+  failure: Record<string, unknown> | null;
+  retry: Record<string, unknown> | null;
+  response: Record<string, unknown> | null;
+  requestId: string | null;
+  agentActionType: string | null;
+}
+
+export interface WorkspaceArticleWorkflowAction {
+  workflowRunId: string;
+  actionType: string;
+  stepId: string | null;
+  requestId: string | null;
+  agentActionType: string | null;
 }
 
 export function readWorkspaceArticleWorkflowRunsFromThreadRead(
@@ -59,13 +84,27 @@ export function readWorkspaceArticleWorkflowRunsFromUnknown(
   if (!record) {
     return [];
   }
+  const workflowRecord = firstRecord(record.workflow) ?? record;
 
   const standaloneSteps = readWorkflowSteps(
-    firstArray(record.workflow_steps, record.workflowSteps),
+    firstArray(
+      workflowRecord.workflow_steps,
+      workflowRecord.workflowSteps,
+      record.workflow_steps,
+      record.workflowSteps,
+    ),
   );
   const stepsByRun = groupStepsByRun(standaloneSteps);
-  const runs = firstArray(record.workflow_runs, record.workflowRuns)
-    .map((item) => readWorkflowRun(item, stepsByRun))
+  const actionsByRun = groupActionsByRun(
+    readWorkflowActions(firstArray(workflowRecord.actions, record.actions)),
+  );
+  const runs = firstArray(
+    workflowRecord.workflow_runs,
+    workflowRecord.workflowRuns,
+    record.workflow_runs,
+    record.workflowRuns,
+  )
+    .map((item) => readWorkflowRun(item, stepsByRun, actionsByRun))
     .filter((item): item is WorkspaceArticleWorkflowRun => Boolean(item));
 
   if (runs.length > 0) {
@@ -89,8 +128,15 @@ export function readWorkspaceArticleWorkflowRunsFromUnknown(
       eventCount: null,
       startedAt: null,
       updatedAt: latestUpdatedAt(steps),
+      finishedAt: null,
       completedAt: null,
       failedAt: null,
+      stepCounts: null,
+      artifactRefs: [],
+      evidenceRefs: [],
+      failure: null,
+      retry: null,
+      actions: actionsByRun.get(workflowRunId) ?? [],
       steps,
     }))
     .sort(compareWorkflowRuns);
@@ -99,6 +145,7 @@ export function readWorkspaceArticleWorkflowRunsFromUnknown(
 function readWorkflowRun(
   value: unknown,
   standaloneStepsByRun: Map<string, WorkspaceArticleWorkflowStep[]>,
+  actionsByRun: Map<string, WorkspaceArticleWorkflowAction[]>,
 ): WorkspaceArticleWorkflowRun | null {
   const record = asRecord(value);
   if (!record) {
@@ -115,6 +162,11 @@ function readWorkflowRun(
   const embeddedSteps = readWorkflowSteps(firstArray(record.steps));
   const standaloneSteps = standaloneStepsByRun.get(workflowRunId) ?? [];
   const steps = mergeWorkflowSteps(embeddedSteps, standaloneSteps);
+  const embeddedActions = readWorkflowActions(firstArray(record.actions));
+  const standaloneActions = actionsByRun.get(workflowRunId) ?? [];
+  const status = readString(record.status) || null;
+  const finishedAt =
+    readString(record.finished_at, record.finishedAt, record.ended_at) || null;
   return {
     workflowRunId,
     workflowKey:
@@ -122,7 +174,7 @@ function readWorkflowRun(
     workflowTitle:
       readString(record.workflow_title, record.workflowTitle, record.title) ||
       null,
-    status: readString(record.status) || null,
+    status,
     appId: readString(record.app_id, record.appId) || null,
     sessionId: readString(record.session_id, record.sessionId) || null,
     workspaceId: readString(record.workspace_id, record.workspaceId) || null,
@@ -137,8 +189,17 @@ function readWorkflowRun(
     eventCount: readNumber(record.event_count, record.eventCount) ?? null,
     startedAt: readString(record.started_at, record.startedAt) || null,
     updatedAt: readString(record.updated_at, record.updatedAt) || null,
+    finishedAt,
     completedAt: readString(record.completed_at, record.completedAt) || null,
-    failedAt: readString(record.failed_at, record.failedAt) || null,
+    failedAt:
+      readString(record.failed_at, record.failedAt) ||
+      (status === "failed" ? finishedAt : null),
+    stepCounts: firstRecord(record.step_counts, record.stepCounts) ?? null,
+    artifactRefs: readStringList(record.artifact_refs, record.artifactRefs),
+    evidenceRefs: readStringList(record.evidence_refs, record.evidenceRefs),
+    failure: firstRecord(record.failure) ?? null,
+    retry: firstRecord(record.retry) ?? null,
+    actions: mergeWorkflowActions(embeddedActions, standaloneActions),
     steps,
   };
 }
@@ -159,6 +220,9 @@ function readWorkflowStep(value: unknown): WorkspaceArticleWorkflowStep | null {
   if (!id) {
     return null;
   }
+  const status = readString(record.status) || null;
+  const finishedAt =
+    readString(record.finished_at, record.finishedAt, record.ended_at) || null;
   return {
     workflowRunId:
       readString(record.workflow_run_id, record.workflowRunId) || "",
@@ -169,7 +233,8 @@ function readWorkflowStep(value: unknown): WorkspaceArticleWorkflowStep | null {
       readNumber(record.step_index, record.stepIndex, record.index) ?? null,
     stepCount:
       readNumber(record.step_count, record.stepCount, record.count) ?? null,
-    status: readString(record.status) || null,
+    status,
+    attempt: readNumber(record.attempt) ?? null,
     subagent:
       readString(record.subagent, record.sub_agent, record.owner) || null,
     skillRefs: readStringList(record.skill_refs, record.skillRefs),
@@ -187,8 +252,20 @@ function readWorkflowStep(value: unknown): WorkspaceArticleWorkflowStep | null {
     eventCount: readNumber(record.event_count, record.eventCount) ?? null,
     startedAt: readString(record.started_at, record.startedAt) || null,
     updatedAt: readString(record.updated_at, record.updatedAt) || null,
+    finishedAt,
     completedAt: readString(record.completed_at, record.completedAt) || null,
-    failedAt: readString(record.failed_at, record.failedAt) || null,
+    failedAt:
+      readString(record.failed_at, record.failedAt) ||
+      (status === "failed" ? finishedAt : null),
+    toolCallIds: readStringList(record.tool_call_ids, record.toolCallIds),
+    artifactRefs: readStringList(record.artifact_refs, record.artifactRefs),
+    evidenceRefs: readStringList(record.evidence_refs, record.evidenceRefs),
+    failure: firstRecord(record.failure) ?? null,
+    retry: firstRecord(record.retry) ?? null,
+    response: firstRecord(record.response) ?? null,
+    requestId: readString(record.request_id, record.requestId) || null,
+    agentActionType:
+      readString(record.agent_action_type, record.agentActionType) || null,
   };
 }
 
@@ -220,6 +297,7 @@ function mergeWorkflowStep(
     index: next.index ?? previous.index,
     stepCount: next.stepCount ?? previous.stepCount,
     status: next.status ?? previous.status,
+    attempt: next.attempt ?? previous.attempt,
     subagent: next.subagent ?? previous.subagent,
     skillRefs: next.skillRefs.length > 0 ? next.skillRefs : previous.skillRefs,
     expectedOutput: next.expectedOutput ?? previous.expectedOutput,
@@ -229,9 +307,74 @@ function mergeWorkflowStep(
     eventCount: next.eventCount ?? previous.eventCount,
     startedAt: next.startedAt ?? previous.startedAt,
     updatedAt: next.updatedAt ?? previous.updatedAt,
+    finishedAt: next.finishedAt ?? previous.finishedAt,
     completedAt: next.completedAt ?? previous.completedAt,
     failedAt: next.failedAt ?? previous.failedAt,
+    toolCallIds:
+      next.toolCallIds.length > 0 ? next.toolCallIds : previous.toolCallIds,
+    artifactRefs:
+      next.artifactRefs.length > 0 ? next.artifactRefs : previous.artifactRefs,
+    evidenceRefs:
+      next.evidenceRefs.length > 0 ? next.evidenceRefs : previous.evidenceRefs,
+    failure: next.failure ?? previous.failure,
+    retry: next.retry ?? previous.retry,
+    response: next.response ?? previous.response,
+    requestId: next.requestId ?? previous.requestId,
+    agentActionType: next.agentActionType ?? previous.agentActionType,
   };
+}
+
+function readWorkflowActions(value: unknown): WorkspaceArticleWorkflowAction[] {
+  return readArray(value)
+    .map(readWorkflowAction)
+    .filter((item): item is WorkspaceArticleWorkflowAction => Boolean(item));
+}
+
+function readWorkflowAction(
+  value: unknown,
+): WorkspaceArticleWorkflowAction | null {
+  const record = asRecord(value);
+  if (!record) {
+    return null;
+  }
+  const workflowRunId = readString(
+    record.workflow_run_id,
+    record.workflowRunId,
+  );
+  const actionType = readString(
+    record.action_type,
+    record.actionType,
+    record.type,
+  );
+  if (!workflowRunId || !actionType) {
+    return null;
+  }
+  return {
+    workflowRunId,
+    actionType,
+    stepId: readString(record.step_id, record.stepId) || null,
+    requestId: readString(record.request_id, record.requestId) || null,
+    agentActionType:
+      readString(record.agent_action_type, record.agentActionType) || null,
+  };
+}
+
+function mergeWorkflowActions(
+  embeddedActions: WorkspaceArticleWorkflowAction[],
+  standaloneActions: WorkspaceArticleWorkflowAction[],
+): WorkspaceArticleWorkflowAction[] {
+  const byKey = new Map<string, WorkspaceArticleWorkflowAction>();
+  for (const action of [...embeddedActions, ...standaloneActions]) {
+    const key = [
+      action.workflowRunId,
+      action.actionType,
+      action.stepId ?? "",
+      action.requestId ?? "",
+      action.agentActionType ?? "",
+    ].join(":");
+    byKey.set(key, action);
+  }
+  return Array.from(byKey.values());
 }
 
 function groupStepsByRun(
@@ -248,6 +391,18 @@ function groupStepsByRun(
   }
   for (const [runId, items] of grouped.entries()) {
     grouped.set(runId, items.sort(compareWorkflowSteps));
+  }
+  return grouped;
+}
+
+function groupActionsByRun(
+  actions: WorkspaceArticleWorkflowAction[],
+): Map<string, WorkspaceArticleWorkflowAction[]> {
+  const grouped = new Map<string, WorkspaceArticleWorkflowAction[]>();
+  for (const action of actions) {
+    const current = grouped.get(action.workflowRunId) ?? [];
+    current.push(action);
+    grouped.set(action.workflowRunId, current);
   }
   return grouped;
 }

@@ -24,6 +24,10 @@ import type {
   LimeRuntimeProfile,
 } from "../types";
 import type { PluginHostBridgeCapabilityRequest } from "./hostBridge";
+import {
+  readWorkflowProjection,
+  type PluginWorkflowReadClient,
+} from "./workflowReadProjection";
 
 export type PluginCapabilityDispatcher = (
   request: PluginHostBridgeCapabilityRequest,
@@ -42,6 +46,7 @@ export interface CreatePluginCapabilityDispatcherOptions {
   boundary?: unknown;
   integrations?: unknown;
   operations?: unknown;
+  workflowClient?: PluginWorkflowReadClient;
 }
 
 export class PluginCapabilityDispatcherError extends Error {
@@ -4252,6 +4257,7 @@ export function createPluginCapabilityDispatcher({
   boundary,
   integrations,
   operations,
+  workflowClient,
 }: CreatePluginCapabilityDispatcherOptions): PluginCapabilityDispatcher {
   return async (request) => {
     if (request.capability === "lime.capabilities") {
@@ -4317,6 +4323,9 @@ export function createPluginCapabilityDispatcher({
     }
     if (request.capability === "lime.connectors") {
       return dispatchConnectors(host, request, resolveSdk);
+    }
+    if (request.capability === "lime.agent" && request.method === "readWorkflow") {
+      return readWorkflowProjection(request, workflowClient);
     }
 
     const sdk = resolveSdk();

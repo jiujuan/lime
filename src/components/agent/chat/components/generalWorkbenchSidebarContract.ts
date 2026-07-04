@@ -19,6 +19,7 @@ import type {
   GeneralWorkbenchAddLinkContextAction,
   GeneralWorkbenchAddTextContextAction,
 } from "./useGeneralWorkbenchContextPanelState";
+import type { WorkspaceWorkflowControlItem } from "../workspace/workspaceWorkflowControls";
 
 export type BranchMode = "topic" | "version";
 
@@ -54,6 +55,11 @@ export interface GeneralWorkbenchSidebarWorkflowContract {
   onViewRunDetail?: (runId: string) => void;
   activeRunDetail?: AgentRun | null;
   activeRunDetailLoading?: boolean;
+  workflowControlItems?: WorkspaceWorkflowControlItem[];
+  workflowControlPendingItemId?: string | null;
+  onTriggerWorkflowControl?: (
+    item: WorkspaceWorkflowControlItem,
+  ) => Promise<void> | void;
 }
 
 export interface GeneralWorkbenchSidebarContextContract {

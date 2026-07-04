@@ -1,4 +1,5 @@
-use crate::credential_bridge::AsterProviderProtocol;
+use crate::credential_bridge::RuntimeProviderProtocol;
+use model_provider::ModelProviderProtocol;
 use serde::{Deserialize, Serialize};
 
 fn normalize_optional_text(value: Option<String>) -> Option<String> {
@@ -33,13 +34,36 @@ impl ProviderContinuationCapability {
 }
 
 pub fn resolve_provider_continuation_capability(
-    protocol: Option<AsterProviderProtocol>,
+    protocol: Option<RuntimeProviderProtocol>,
 ) -> ProviderContinuationCapability {
-    if protocol.is_some_and(AsterProviderProtocol::uses_responses_api) {
+    resolve_provider_continuation_capability_for_model_protocol(
+        model_provider_protocol_from_runtime_protocol(protocol),
+    )
+}
+
+pub fn resolve_provider_continuation_capability_for_model_protocol(
+    protocol: Option<ModelProviderProtocol>,
+) -> ProviderContinuationCapability {
+    if protocol
+        .as_ref()
+        .is_some_and(ModelProviderProtocol::uses_responses_api)
+    {
         return ProviderContinuationCapability::PreviousResponseId;
     }
 
     ProviderContinuationCapability::HistoryReplayOnly
+}
+
+fn model_provider_protocol_from_runtime_protocol(
+    protocol: Option<RuntimeProviderProtocol>,
+) -> Option<ModelProviderProtocol> {
+    match protocol {
+        Some(RuntimeProviderProtocol::Responses) => Some(ModelProviderProtocol::Responses),
+        Some(RuntimeProviderProtocol::ChatCompletions) => {
+            Some(ModelProviderProtocol::ChatCompletions)
+        }
+        None => None,
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -121,10 +145,12 @@ pub trait ProviderContinuationCapable {
 #[cfg(test)]
 mod tests {
     use super::{
-        resolve_provider_continuation_capability, ProviderContinuationCapability,
-        ProviderContinuationState,
+        resolve_provider_continuation_capability,
+        resolve_provider_continuation_capability_for_model_protocol,
+        ProviderContinuationCapability, ProviderContinuationState,
     };
-    use crate::credential_bridge::AsterProviderProtocol;
+    use crate::credential_bridge::RuntimeProviderProtocol;
+    use model_provider::ModelProviderProtocol;
 
     #[test]
     fn test_provider_continuation_state_defaults_to_history_replay_only() {
@@ -172,15 +198,37 @@ mod tests {
     #[test]
     fn test_resolve_provider_continuation_capability_uses_route_protocol_only() {
         assert_eq!(
-            resolve_provider_continuation_capability(Some(AsterProviderProtocol::Responses)),
+            resolve_provider_continuation_capability(Some(RuntimeProviderProtocol::Responses)),
             ProviderContinuationCapability::PreviousResponseId
         );
         assert_eq!(
-            resolve_provider_continuation_capability(Some(AsterProviderProtocol::ChatCompletions)),
+            resolve_provider_continuation_capability(Some(
+                RuntimeProviderProtocol::ChatCompletions
+            )),
             ProviderContinuationCapability::HistoryReplayOnly
         );
         assert_eq!(
             resolve_provider_continuation_capability(None),
+            ProviderContinuationCapability::HistoryReplayOnly
+        );
+    }
+
+    #[test]
+    fn test_resolve_provider_continuation_capability_uses_model_provider_protocol() {
+        assert_eq!(
+            resolve_provider_continuation_capability_for_model_protocol(Some(
+                ModelProviderProtocol::Responses
+            )),
+            ProviderContinuationCapability::PreviousResponseId
+        );
+        assert_eq!(
+            resolve_provider_continuation_capability_for_model_protocol(Some(
+                ModelProviderProtocol::ChatCompletions
+            )),
+            ProviderContinuationCapability::HistoryReplayOnly
+        );
+        assert_eq!(
+            resolve_provider_continuation_capability_for_model_protocol(None),
             ProviderContinuationCapability::HistoryReplayOnly
         );
     }

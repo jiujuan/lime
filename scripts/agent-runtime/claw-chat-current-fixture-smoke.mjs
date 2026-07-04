@@ -10,6 +10,7 @@ import { resolveDevAppServerBinary } from "../lib/electron-dev-sidecar.mjs";
 import {
   APP_SERVER_METHOD_SESSION_LIST,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO,
+  CONTENT_FACTORY_INLINE_IMAGE_ARTICLE_WORKSPACE_SCENARIO,
   DEFAULTS,
   FIXTURE_MODEL,
   FIXTURE_PROVIDER,
@@ -88,7 +89,7 @@ Claw Chat Current Electron Fixture Smoke
   --app-url <url>        可选 renderer dev server，例如 http://127.0.0.1:1420/
   --evidence-dir <path>  证据目录
   --prefix <name>        证据文件前缀
-  --scenario <name>      complete | cancel | cancel-then-continue | plan | goal | image-command | plain-image-intent | web-tools-rendering | mcp-structured-content | skills-runtime | expert-skills-runtime | expert-plaza-skills-runtime | expert-panel-skills-runtime | right-surface-visual-matrix | content-factory-article-workspace，默认 complete
+  --scenario <name>      complete | cancel | cancel-then-continue | plan | goal | image-command | plain-image-intent | web-tools-rendering | mcp-structured-content | skills-runtime | expert-skills-runtime | expert-plaza-skills-runtime | expert-panel-skills-runtime | right-surface-visual-matrix | content-factory-article-workspace | content-factory-inline-image-article-workspace，默认 complete
   --timeout-ms <ms>      总超时，默认 180000
   --interval-ms <ms>     轮询间隔，默认 500
   --keep-temp            保留临时目录便于调试
@@ -167,6 +168,7 @@ function parseArgs(argv) {
     "expert-panel-skills-runtime",
     RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO,
     CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO,
+    CONTENT_FACTORY_INLINE_IMAGE_ARTICLE_WORKSPACE_SCENARIO,
   ];
   if (!allowedScenarios.includes(options.scenario)) {
     throw new Error(`--scenario 只能是 ${allowedScenarios.join("、")}`);
@@ -197,7 +199,10 @@ function resolveScenarioBackendEnv(options, runtimeEnv) {
       APP_SERVER_BACKEND_TIMEOUT_MS: "10000",
     };
   }
-  if (options.scenario === CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO) {
+  if (
+    options.scenario === CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO ||
+    options.scenario === CONTENT_FACTORY_INLINE_IMAGE_ARTICLE_WORKSPACE_SCENARIO
+  ) {
     return {
       APP_SERVER_BACKEND_MODE: "runtime",
       APP_SERVER_BACKEND_COMMAND: "",
@@ -361,6 +366,16 @@ async function run() {
     contentFactoryArticleWorkspaceEditedDraftRestored: null,
     contentFactoryArticleWorkspaceReadModel: null,
     contentFactoryArticleWorkspaceArtifactRead: null,
+    contentFactoryArticleWorkspaceWorkflowRead: null,
+    contentFactoryArticleWorkspaceWorkflowRespond: null,
+    contentFactoryArticleWorkspaceWorkflowCancel: null,
+    contentFactoryArticleWorkspaceWorkflowRetry: null,
+    contentFactoryInlineImageEditedDraftUpdate: null,
+    contentFactoryInlineImageTaskCreated: null,
+    contentFactoryInlineImageTaskSubmittedEvent: null,
+    contentFactoryInlineImageTaskCompleted: null,
+    contentFactoryInlineImageReload: null,
+    contentFactoryInlineImageCanvas: null,
     expertSkillsRuntimeSkill: null,
     expertSkillsRuntimeTurnStart: null,
     expertPlazaSkillsRuntimeCatalog: null,

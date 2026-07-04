@@ -56,6 +56,7 @@ import {
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_COMPLETE,
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE,
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_LIST,
+  APP_SERVER_METHOD_WORKFLOW_READ,
   APP_SERVER_METHOD_WECHAT_CHANNEL_RUNTIME_MODEL_SET,
   APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CONSUME,
   APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS,
@@ -1301,6 +1302,44 @@ describe("App Server API", () => {
               },
               queueIfBusy: true,
               skipPreSubmitResume: true,
+            },
+          }),
+        ],
+      },
+    });
+  });
+
+  it("readWorkflow 应走 App Server current workflow/read 方法", async () => {
+    vi.mocked(safeInvoke).mockResolvedValueOnce({
+      lines: [
+        line({
+          id: 11,
+          result: {
+            sessionId: "session-1",
+            workflow: {
+              threadId: "thread-1",
+              workflowRuns: [],
+              workflowSteps: [],
+              actions: [],
+              updatedAt: "2026-07-04T00:00:00.000Z",
+            },
+          },
+        }),
+      ],
+    });
+
+    const client = new AppServerClient({ initialRequestId: 11 });
+    const result = await client.readWorkflow({ sessionId: "session-1" });
+
+    expect(result.result.workflow.workflowRuns).toEqual([]);
+    expect(safeInvoke).toHaveBeenCalledWith("app_server_handle_json_lines", {
+      request: {
+        lines: [
+          line({
+            id: 11,
+            method: APP_SERVER_METHOD_WORKFLOW_READ,
+            params: {
+              sessionId: "session-1",
             },
           }),
         ],

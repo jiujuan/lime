@@ -1,5 +1,8 @@
 use crate::aster_state::AsterAgentState;
-use crate::direct_text_generation::{run_direct_text_generation, DirectTextGenerationRequest};
+use crate::direct_text_generation::{
+    run_direct_text_generation_with_db, DirectTextGenerationRequest,
+};
+use lime_core::database::DbConnection;
 use serde_json::{json, Map, Value};
 
 pub const HOST_MANAGED_GENERATION_SCHEMA: &str = "lime.plugin.host_managed_generation.v1";
@@ -24,6 +27,7 @@ pub struct HostManagedGenerationItem {
 }
 
 pub struct HostManagedGenerationRunRequest<'a> {
+    pub db: &'a DbConnection,
     pub generation_session_id: String,
     pub worker_request: &'a Value,
     pub plan: &'a HostManagedGenerationPlan,
@@ -79,7 +83,7 @@ pub async fn run_host_managed_generation(
 ) -> Result<HostManagedGenerationRunResult, String> {
     let mut outputs = Vec::new();
     for generation_request in request.plan.requests.iter().take(MAX_GENERATION_REQUESTS) {
-        let generated = run_direct_text_generation(
+        let generated = run_direct_text_generation_with_db(
             agent_state,
             DirectTextGenerationRequest {
                 session_id: format!(
@@ -101,6 +105,7 @@ pub async fn run_host_managed_generation(
                 user_prompt: generation_user_prompt(request.worker_request, generation_request),
                 turn_context: None,
             },
+            request.db,
         )
         .await?;
         let content = truncate_chars(generated.text.trim(), MAX_GENERATED_CHARS);

@@ -76,7 +76,10 @@ function areGeneralWorkbenchSidebarWorkflowPropsEqual(
     previous.creationTaskEvents === next.creationTaskEvents &&
     previous.onViewRunDetail === next.onViewRunDetail &&
     previous.activeRunDetail === next.activeRunDetail &&
-    previous.activeRunDetailLoading === next.activeRunDetailLoading
+    previous.activeRunDetailLoading === next.activeRunDetailLoading &&
+    previous.workflowControlItems === next.workflowControlItems &&
+    previous.workflowControlPendingItemId === next.workflowControlPendingItemId &&
+    previous.onTriggerWorkflowControl === next.onTriggerWorkflowControl
   );
 }
 

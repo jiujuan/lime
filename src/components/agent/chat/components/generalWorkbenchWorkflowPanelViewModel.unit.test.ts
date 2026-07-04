@@ -93,6 +93,7 @@ const t = ((key: string, values?: Record<string, unknown>) => {
     "generalWorkbench.workflow.activity.gate.writeMode": "写作闸门",
     "generalWorkbench.workflow.activity.source.skill": "技能",
     "generalWorkbench.workflow.activity.source.tool": "工具",
+    "generalWorkbench.workflow.activity.source.workflow": "Workflow",
     "generalWorkbench.workflow.activity.status.failed": "失败",
     "generalWorkbench.workflow.activity.status.recorded": "已记录",
     "generalWorkbench.workflow.activity.status.running": "处理中",
@@ -142,6 +143,9 @@ const t = ((key: string, values?: Record<string, unknown>) => {
     "generalWorkbench.workflow.runDetail.revealArtifact": "定位",
     "generalWorkbench.workflow.runDetail.revealArtifactAria":
       "定位产物路径-{{path}}",
+    "generalWorkbench.workflow.runDetail.workflowFailure": "失败原因",
+    "generalWorkbench.workflow.runDetail.workflowRetry": "重试关联",
+    "generalWorkbench.workflow.runDetail.workflowWaitingAction": "等待动作",
     "generalWorkbench.workflow.runDetail.summary.artifactCount":
       "{{count}} 个产物",
     "generalWorkbench.workflow.runDetail.summary.artifactPath": "产物 {{path}}",
@@ -1250,6 +1254,7 @@ describe("generalWorkbenchWorkflowPanelViewModel", () => {
       ],
       summary:
         "结果模板 每日趋势摘要 · 写作闸门 · 工作流 social_content_pipeline_v1 · 产物 content-posts/demo.md",
+      detailRows: [],
       actions: [
         {
           kind: "copy_id",
@@ -1291,5 +1296,71 @@ describe("generalWorkbenchWorkflowPanelViewModel", () => {
         },
       ],
     });
+
+    const workflowRunDetailProjection = buildGeneralWorkbenchRunDetailProjection({
+      activeRunDetail: {
+        id: "workflow-run-1",
+        source: "automation",
+        status: "error",
+      },
+      runMetadataSummary: {
+        workflow: "content_article_workflow",
+        executionId: null,
+        versionId: null,
+        stages: [],
+        artifactPaths: [],
+        curatedTask: null,
+      },
+      runMetadataText: JSON.stringify({
+        source: "workflow/read",
+        workflow_read_model: {
+          workflowRunId: "workflow-run-1",
+          failure: {
+            reasonCode: "worker_output",
+          },
+          retry: {
+            sourceTurnId: "turn-source",
+            rescheduledTurnId: "turn-retry",
+            reasonCode: "manual_retry",
+          },
+          actions: [
+            {
+              actionType: "ask_user",
+              requestId: "request-1",
+              stepId: "approval",
+            },
+          ],
+          steps: [
+            {
+              id: "draft",
+              title: "起草正文",
+              status: "failed",
+              failure: {
+                message: "正文为空",
+              },
+            },
+          ],
+        },
+      }),
+      t,
+    });
+
+    expect(workflowRunDetailProjection.detailRows).toEqual([
+      {
+        key: "workflow-failure",
+        label: "失败原因",
+        value: "worker_output",
+      },
+      {
+        key: "workflow-retry",
+        label: "重试关联",
+        value: "turn-source -> turn-retry · manual_retry",
+      },
+      {
+        key: "workflow-waiting-action",
+        label: "等待动作",
+        value: "ask_user / request-1 / approval",
+      },
+    ]);
   });
 });

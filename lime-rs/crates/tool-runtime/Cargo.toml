@@ -12,5 +12,9 @@ doctest = false
 
 [dependencies]
 agent-protocol.workspace = true
+chrono.workspace = true
+rmcp.workspace = true
+regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+tiktoken-rs.workspace = true

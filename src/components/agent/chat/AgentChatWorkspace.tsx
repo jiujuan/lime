@@ -49,12 +49,14 @@ import { createPreviewArtifact } from "@/lib/artifact/previewArtifact";
 import { useAtomValue, useSetAtom } from "jotai";
 import { generateGeneralWorkbenchPrompt } from "@/lib/workspace/workbenchPrompt";
 import { generateProjectMemoryPrompt } from "@/lib/workspace/workbenchPrompt";
+import { buildClawAgentParams } from "@/lib/workspace/navigation";
 import {
   cancelMediaTaskArtifact,
   createImageGenerationTaskArtifact,
   getMediaTaskArtifact,
 } from "@/lib/api/mediaTasks";
 import { updateAgentRuntimeSession } from "@/lib/api/agentRuntime";
+import { logAgentDebug } from "@/lib/agentDebug";
 import { type Character } from "@/lib/api/projectMemory";
 import { useImageGen } from "@/components/image-gen/useImageGen";
 import { resolveMediaGenerationPreference } from "@/lib/mediaGeneration";
@@ -257,6 +259,8 @@ import {
 import {
   applyWorkspaceArticleInlineImageTaskSyncResult,
   buildWorkspaceArticleInlineImageTaskSync,
+  collectWorkspaceArticleInlineImageTaskRecoveryMarkdowns,
+  collectWorkspaceArticleInlineImageTaskRecoveryMarkdownsFromMessages,
   selectWorkspaceArticleInlineImageTaskIds,
   suppressWorkspaceArticleInlineImageTaskPreviewMessages,
 } from "./workspace/workspaceArticleInlineImageTaskSync";
@@ -2458,6 +2462,27 @@ export function AgentChatWorkspace({
       executionStrategy,
       workspaceId: taskCenterWorkspaceId,
     });
+  const persistTaskCenterMaterializedSessionNavigation = useCallback(
+    (sessionId: string) => {
+      const normalizedSessionId = sessionId.trim();
+      if (!_onNavigate || !normalizedSessionId) {
+        return;
+      }
+
+      _onNavigate(
+        "agent",
+        buildClawAgentParams({
+          ...(taskCenterWorkspaceId
+            ? { projectId: taskCenterWorkspaceId }
+            : {}),
+          initialSessionId: normalizedSessionId,
+          theme: activeTheme,
+          lockTheme,
+        }),
+      );
+    },
+    [_onNavigate, activeTheme, lockTheme, taskCenterWorkspaceId],
+  );
 
   const hasCanvasWorkbenchContent = layoutMode !== "chat";
   const {
@@ -2482,24 +2507,6 @@ export function AgentChatWorkspace({
     isSending,
     queuedTurnCount: queuedTurns.length,
   });
-  const imageTaskPreviewRuntimeEnabled = useMemo(
-    () =>
-      shouldEnableWorkspaceImageTaskPreviewRuntime({
-        shouldDeferWorkspaceAuxiliaryLoads,
-        restoreFromWorkspace: shouldRestoreImageTasksFromWorkspace,
-        messages,
-        imageWorkbenchState: currentImageWorkbenchState,
-        canvasState,
-      }),
-    [
-      canvasState,
-      currentImageWorkbenchState,
-      messages,
-      shouldDeferWorkspaceAuxiliaryLoads,
-      shouldRestoreImageTasksFromWorkspace,
-    ],
-  );
-
   const handleCanvasSelectionTextChange = useCallback((text: string) => {
     const normalized = text.trim().replace(/\s+/g, " ");
     const nextValue =
@@ -2587,6 +2594,9 @@ export function AgentChatWorkspace({
     setTaskCenterDraftSendRequest,
     setTaskCenterDraftTabs,
     setTaskCenterTransitionTopicId,
+    persistMaterializedSessionNavigation:
+      persistTaskCenterMaterializedSessionNavigation,
+    switchMaterializedSession: switchTopic,
     taskCenterDraftSurfaceActiveRef,
     taskCenterDraftTabs,
     taskCenterWorkspaceId,
@@ -2997,7 +3007,10 @@ export function AgentChatWorkspace({
     null,
   );
   const handleArticleWorkspaceImageSlotIntentRef = useRef<
-    ((intent: WorkspaceArticleWorkspaceImageSlotIntent) => void | Promise<void>) | null
+    | ((
+        intent: WorkspaceArticleWorkspaceImageSlotIntent,
+      ) => void | Promise<void>)
+    | null
   >(null);
   const rightSurfacePendingActionsRef = useRef<{
     consumePendingRequestsForSurface?: (
@@ -3673,26 +3686,6 @@ export function AgentChatWorkspace({
       imageWorkbenchGenerationRuntime.ensureProvidersLoaded,
   });
 
-  useWorkspaceImageTaskPreviewRuntime({
-    enabled: imageTaskPreviewRuntimeEnabled,
-    sessionId: imageWorkbenchSessionKey,
-    projectId,
-    contentId,
-    projectRootPath: project?.rootPath || null,
-    restoreFromWorkspace: shouldRestoreImageTasksFromWorkspace,
-    messages,
-    currentImageWorkbenchState,
-    canvasState,
-    setCanvasState,
-    setChatMessages,
-    updateCurrentImageWorkbenchState,
-  });
-  useWorkspaceImageTaskExecutorRuntime({
-    enabled: imageTaskPreviewRuntimeEnabled,
-    projectRootPath: project?.rootPath || null,
-    currentImageWorkbenchState,
-    getImageTask: getMediaTaskArtifact,
-  });
   useWorkspaceVideoTaskPreviewRuntime({
     projectRootPath: project?.rootPath || null,
     messages,
@@ -4516,10 +4509,8 @@ export function AgentChatWorkspace({
   const [activePluginSurfaces, setActivePluginSurfaces] = useState<
     WorkspacePluginSurfaceDescriptor[]
   >([]);
-  const [
-    activePluginSurfaceContainerId,
-    setActivePluginSurfaceContainerId,
-  ] = useState<string | null>(null);
+  const [activePluginSurfaceContainerId, setActivePluginSurfaceContainerId] =
+    useState<string | null>(null);
   const [
     activeObjectCanvasRightSurfaceCandidate,
     setActiveObjectCanvasRightSurfaceCandidate,
@@ -4766,20 +4757,63 @@ export function AgentChatWorkspace({
     baseArticleEditorRightSurface,
     sceneIsPreparingSend,
     sceneIsSending,
-    updateAgentRuntimeSession,
   ]);
   const articleInlineImageTaskSyncResult = useMemo(
     () =>
       buildWorkspaceArticleInlineImageTaskSync({
         articleWorkspace: articleInlineHostMaterializedRightSurface,
-        editedDraft: null,
+        editedDraft: activeArticleEditedDraft,
         imageWorkbenchState: currentImageWorkbenchState,
       }),
     [
+      activeArticleEditedDraft,
       articleInlineHostMaterializedRightSurface,
       currentImageWorkbenchState,
     ],
   );
+  useEffect(() => {
+    const hasInlineRecoverySignal =
+      collectWorkspaceArticleInlineImageTaskRecoveryMarkdowns({
+        articleWorkspace: articleInlineHostMaterializedRightSurface,
+        editedDraft: activeArticleEditedDraft,
+      }).length > 0;
+    const documentInlineTasks = currentImageWorkbenchState.tasks.filter(
+      (task) =>
+        task.applyTarget?.kind === "canvas-insert" &&
+        task.applyTarget.canvasType === "document",
+    );
+    if (
+      !hasInlineRecoverySignal &&
+      documentInlineTasks.length === 0 &&
+      !articleInlineImageTaskSyncResult
+    ) {
+      return;
+    }
+
+    logAgentDebug(
+      "AgentChatWorkspace",
+      "articleInlineImageSync.state",
+      {
+        consumedTaskIds: articleInlineImageTaskSyncResult?.consumedTaskIds ?? [],
+        documentInlineSlotIds: documentInlineTasks.map(
+          (task) =>
+            task.applyTarget?.kind === "canvas-insert"
+              ? task.applyTarget.slotId || null
+              : null,
+        ),
+        hasInlineRecoverySignal,
+        hasSyncResult: Boolean(articleInlineImageTaskSyncResult),
+        outputCount: currentImageWorkbenchState.outputs.length,
+        taskCount: currentImageWorkbenchState.tasks.length,
+      },
+      { level: "debug", throttleMs: 1000 },
+    );
+  }, [
+    activeArticleEditedDraft,
+    articleInlineHostMaterializedRightSurface,
+    articleInlineImageTaskSyncResult,
+    currentImageWorkbenchState,
+  ]);
   const articleEditorRightSurface = useMemo(
     () =>
       applyWorkspaceArticleInlineImageTaskSyncResult(
@@ -4795,11 +4829,120 @@ export function AgentChatWorkspace({
     () =>
       selectWorkspaceArticleInlineImageTaskIds({
         articleWorkspace: articleEditorRightSurface,
-        editedDraft: null,
+        editedDraft: activeArticleEditedDraft,
         imageWorkbenchState: currentImageWorkbenchState,
       }),
-    [articleEditorRightSurface, currentImageWorkbenchState],
+    [
+      activeArticleEditedDraft,
+      articleEditorRightSurface,
+      currentImageWorkbenchState,
+    ],
   );
+  const articleInlineImageTaskRecoveryMarkdowns = useMemo(
+    () => {
+      const markdowns = new Set<string>();
+      collectWorkspaceArticleInlineImageTaskRecoveryMarkdowns({
+        articleWorkspace: articleEditorRightSurface,
+        editedDraft: activeArticleEditedDraft,
+      }).forEach((markdown) => markdowns.add(markdown));
+      collectWorkspaceArticleInlineImageTaskRecoveryMarkdownsFromMessages(
+        sceneDisplayMessages,
+      ).forEach((markdown) => markdowns.add(markdown));
+      return [...markdowns];
+    },
+    [
+      activeArticleEditedDraft,
+      articleEditorRightSurface,
+      sceneDisplayMessages,
+    ],
+  );
+  const shouldRestoreCurrentImageTasksFromWorkspace =
+    shouldRestoreImageTasksFromWorkspace ||
+    articleInlineImageTaskRecoveryMarkdowns.length > 0;
+  const imageTaskPreviewRuntimeEnabled = useMemo(
+    () =>
+      shouldEnableWorkspaceImageTaskPreviewRuntime({
+        shouldDeferWorkspaceAuxiliaryLoads,
+        restoreFromWorkspace: shouldRestoreCurrentImageTasksFromWorkspace,
+        messages,
+        imageWorkbenchState: currentImageWorkbenchState,
+        canvasState,
+        documentMarkdowns: articleInlineImageTaskRecoveryMarkdowns,
+      }),
+    [
+      articleInlineImageTaskRecoveryMarkdowns,
+      canvasState,
+      currentImageWorkbenchState,
+      messages,
+      shouldDeferWorkspaceAuxiliaryLoads,
+      shouldRestoreCurrentImageTasksFromWorkspace,
+    ],
+  );
+  useEffect(() => {
+    const hasInlineRecoverySignal = articleInlineImageTaskRecoveryMarkdowns.some(
+      (markdown) =>
+        markdown.includes("pending-image-task://") ||
+        markdown.includes("lime:image-task-slot:"),
+    );
+    if (
+      !hasInlineRecoverySignal &&
+      !shouldRestoreCurrentImageTasksFromWorkspace &&
+      !imageTaskPreviewRuntimeEnabled
+    ) {
+      return;
+    }
+
+    logAgentDebug(
+      "AgentChatWorkspace",
+      "articleInlineImageRecovery.state",
+      {
+        canvasWorkbenchRootPath: canvasWorkbenchRootPath || null,
+        documentMarkdownCount: articleInlineImageTaskRecoveryMarkdowns.length,
+        hasArticleEditorRightSurface: Boolean(articleEditorRightSurface),
+        hasArticleWorkspaceFromMessageArtifacts: Boolean(
+          articleWorkspaceFromMessageArtifacts,
+        ),
+        hasArticleWorkspaceFromThreadRead: Boolean(articleWorkspaceFromThreadRead),
+        hasInlineRecoverySignal,
+        imageTaskPreviewRuntimeEnabled,
+        sceneDisplayMessagesCount: sceneDisplayMessages.length,
+        shouldDeferWorkspaceAuxiliaryLoads,
+        shouldRestoreCurrentImageTasksFromWorkspace,
+      },
+      { level: "debug", throttleMs: 1000 },
+    );
+  }, [
+    articleEditorRightSurface,
+    articleInlineImageTaskRecoveryMarkdowns,
+    articleWorkspaceFromMessageArtifacts,
+    articleWorkspaceFromThreadRead,
+    canvasWorkbenchRootPath,
+    imageTaskPreviewRuntimeEnabled,
+    sceneDisplayMessages.length,
+    shouldDeferWorkspaceAuxiliaryLoads,
+    shouldRestoreCurrentImageTasksFromWorkspace,
+  ]);
+  useWorkspaceImageTaskPreviewRuntime({
+    enabled: imageTaskPreviewRuntimeEnabled,
+    sessionId: imageWorkbenchSessionKey,
+    projectId,
+    contentId,
+    projectRootPath: canvasWorkbenchRootPath,
+    restoreFromWorkspace: shouldRestoreCurrentImageTasksFromWorkspace,
+    messages,
+    documentMarkdowns: articleInlineImageTaskRecoveryMarkdowns,
+    currentImageWorkbenchState,
+    canvasState,
+    setCanvasState,
+    setChatMessages,
+    updateCurrentImageWorkbenchState,
+  });
+  useWorkspaceImageTaskExecutorRuntime({
+    enabled: imageTaskPreviewRuntimeEnabled,
+    projectRootPath: canvasWorkbenchRootPath,
+    currentImageWorkbenchState,
+    getImageTask: getMediaTaskArtifact,
+  });
   useEffect(() => {
     const syncResult = articleInlineImageTaskSyncResult;
     if (!syncResult || !articleInlineHostMaterializedRightSurface) {
@@ -4813,6 +4956,15 @@ export function AgentChatWorkspace({
     };
     const editedDraft = buildWorkspaceArticleEditedDraftFromChange(change);
     if (!editedDraft) {
+      logAgentDebug(
+        "AgentChatWorkspace",
+        "articleInlineImageSync.persistSkipped",
+        {
+          reason: "missing_edited_draft",
+          consumedTaskIds: syncResult.consumedTaskIds,
+        },
+        { level: "warn", throttleMs: 1000 },
+      );
       return;
     }
 
@@ -4828,8 +4980,33 @@ export function AgentChatWorkspace({
       editedDraft,
     );
     if (!request) {
+      logAgentDebug(
+        "AgentChatWorkspace",
+        "articleInlineImageSync.persistSkipped",
+        {
+          reason: "missing_update_request",
+          consumedTaskIds: syncResult.consumedTaskIds,
+          sessionId: articleInlineHostMaterializedRightSurface.sessionId,
+        },
+        { level: "warn", throttleMs: 1000 },
+      );
       return;
     }
+    logAgentDebug(
+      "AgentChatWorkspace",
+      "articleInlineImageSync.persistStart",
+      {
+        consumedTaskIds: syncResult.consumedTaskIds,
+        markdownIncludesPending: syncResult.markdown.includes(
+          "pending-image-task://",
+        ),
+        markdownIncludesUrl: syncResult.markdown.includes(
+          "lime-fixture-guangzhou-inline.png",
+        ),
+        sessionId: request.session_id,
+      },
+      { level: "debug", throttleMs: 1000 },
+    );
     void updateAgentRuntimeSession(request).catch((error) => {
       console.warn(
         "[AgentChatWorkspace] Article Editor 配图回填写回失败:",
@@ -4839,7 +5016,6 @@ export function AgentChatWorkspace({
   }, [
     articleInlineImageTaskSyncResult,
     articleInlineHostMaterializedRightSurface,
-    updateAgentRuntimeSession,
   ]);
   const sceneDisplayMessagesWithoutArticleInlineImageTasks = useMemo(
     () =>
@@ -4879,17 +5055,13 @@ export function AgentChatWorkspace({
     }
 
     setActivePluginSurfaces((current) =>
-      mergeWorkspacePluginSurfaceDescriptors(
-        current,
-        pendingPluginSurfaces,
-      ),
+      mergeWorkspacePluginSurfaceDescriptors(current, pendingPluginSurfaces),
     );
     setActivePluginSurfaceContainerId((current) =>
       resolveWorkspacePluginSurfaceActiveContainerId({
         activeContainerId: current,
         preferredContainerId:
-          pendingPluginSurfaces[pendingPluginSurfaces.length - 1]
-            ?.containerId,
+          pendingPluginSurfaces[pendingPluginSurfaces.length - 1]?.containerId,
         surfaces: mergeWorkspacePluginSurfaceDescriptors(
           activePluginSurfaces,
           pendingPluginSurfaces,
@@ -5435,7 +5607,7 @@ export function AgentChatWorkspace({
         );
       });
     },
-    [activeArticleEditedDraft, updateAgentRuntimeSession],
+    [activeArticleEditedDraft],
   );
   const handleArticleWorkspaceSelectedObjectChange = useCallback(
     (change: WorkspaceArticleWorkspaceSelectionChange) => {
@@ -5635,6 +5807,12 @@ export function AgentChatWorkspace({
           generalWorkbenchSidebarRuntime.selectedGeneralWorkbenchRunDetail,
         activeRunDetailLoading:
           generalWorkbenchSidebarRuntime.generalWorkbenchRunDetailLoading,
+        workflowControlItems:
+          generalWorkbenchSidebarRuntime.generalWorkbenchWorkflowControlItems,
+        workflowControlPendingItemId:
+          generalWorkbenchSidebarRuntime.generalWorkbenchWorkflowControlPendingItemId,
+        onTriggerWorkflowControl:
+          generalWorkbenchSidebarRuntime.handleTriggerGeneralWorkbenchWorkflowControl,
       }}
       contextWorkspace={contextHarnessRuntime.contextWorkspace}
       onViewContextDetail={handleViewContextDetail}

@@ -1,10 +1,14 @@
+use crate::lime_session_repository::LimeSessionRepository;
 use crate::turn_context_configuration::AgentTurnContext;
 use crate::{
     resolve_request_tool_policy_with_mode, stream_reply_with_policy, AgentEvent, AgentTokenUsage,
     AsterAgentState, RequestToolPolicyMode, SessionConfigBuilder,
 };
+use agent_protocol::SessionId;
 use aster::agents::Agent as AsterAgent;
 use aster::session::{query_session, Session as AsterSession};
+use lime_core::database::DbConnection;
+use thread_store::session_repository::{SessionDetail, SessionRepository};
 
 #[derive(Debug, Clone)]
 pub struct DirectTextGenerationRequest {
@@ -25,6 +29,22 @@ pub struct DirectTextGenerationResult {
 pub async fn run_direct_text_generation(
     agent_state: &AsterAgentState,
     request: DirectTextGenerationRequest,
+) -> Result<DirectTextGenerationResult, String> {
+    run_direct_text_generation_with_optional_db(agent_state, request, None).await
+}
+
+pub async fn run_direct_text_generation_with_db(
+    agent_state: &AsterAgentState,
+    request: DirectTextGenerationRequest,
+    db: &DbConnection,
+) -> Result<DirectTextGenerationResult, String> {
+    run_direct_text_generation_with_optional_db(agent_state, request, Some(db.clone())).await
+}
+
+async fn run_direct_text_generation_with_optional_db(
+    agent_state: &AsterAgentState,
+    request: DirectTextGenerationRequest,
+    repository_db: Option<DbConnection>,
 ) -> Result<DirectTextGenerationResult, String> {
     let session_id = request.session_id.clone();
     let agent_arc = agent_state.get_agent_arc();
@@ -57,13 +77,24 @@ pub async fn run_direct_text_generation(
     .await;
     execution.map_err(|error| error.message)?;
     if usage.is_none() {
-        usage = resolve_session_usage(agent, &session_id).await;
+        let (usage_source, resolved_usage) = match repository_db.as_ref() {
+            Some(db) => (
+                "session_repository",
+                resolve_session_usage_from_repository(db, &session_id),
+            ),
+            None => (
+                "aster_session",
+                resolve_session_usage_from_aster(agent, &session_id).await,
+            ),
+        };
+        usage = resolved_usage;
         match usage.as_ref() {
             Some(usage) => tracing::info!(
                 session_id = %session_id,
+                source = usage_source,
                 input_tokens = usage.input_tokens,
                 output_tokens = usage.output_tokens,
-                "[AsterAgent] direct text generation usage recovered from session stats"
+                "[AsterAgent] direct text generation usage recovered from persisted session stats"
             ),
             None => tracing::info!(
                 session_id = %session_id,
@@ -74,12 +105,36 @@ pub async fn run_direct_text_generation(
     Ok(DirectTextGenerationResult { text, usage })
 }
 
-async fn resolve_session_usage(agent: &AsterAgent, session_id: &str) -> Option<AgentTokenUsage> {
+fn resolve_session_usage_from_repository(
+    db: &DbConnection,
+    session_id: &str,
+) -> Option<AgentTokenUsage> {
+    let repository = LimeSessionRepository::new(db.clone());
+    let session = repository
+        .get_session(&SessionId::new(session_id))
+        .ok()
+        .flatten()?;
+    resolve_usage_from_session_detail(&session)
+}
+
+async fn resolve_session_usage_from_aster(
+    agent: &AsterAgent,
+    session_id: &str,
+) -> Option<AgentTokenUsage> {
     let session = match agent.session_store() {
         Some(store) => store.get_session(session_id, false).await.ok()?,
         None => query_session(session_id, false).await.ok()?,
     };
     resolve_usage_from_session(&session)
+}
+
+fn resolve_usage_from_session_detail(session: &SessionDetail) -> Option<AgentTokenUsage> {
+    resolve_usage_from_token_stats(
+        session.input_tokens,
+        session.output_tokens,
+        session.cached_input_tokens,
+        session.cache_creation_input_tokens,
+    )
 }
 
 fn resolve_usage_from_session(session: &AsterSession) -> Option<AgentTokenUsage> {
@@ -167,6 +222,47 @@ mod tests {
                 input_tokens: 31_000,
                 output_tokens: 0,
                 cached_input_tokens: Some(1_000),
+                cache_creation_input_tokens: None,
+            })
+        );
+    }
+
+    #[test]
+    fn resolve_usage_from_session_detail_reads_repository_token_stats() {
+        let session = SessionDetail {
+            metadata: thread_store::session_repository::SessionMetadata {
+                id: SessionId::new("session-1"),
+                title: "测试会话".to_string(),
+                model: "gpt-5.2".to_string(),
+                session_type: "chat".to_string(),
+                created_at: chrono::Utc::now(),
+                updated_at: chrono::Utc::now(),
+                working_dir: None,
+                user_set_name: false,
+                provider_name: None,
+                extension_data: serde_json::Value::Null,
+            },
+            total_tokens: Some(43),
+            input_tokens: Some(31),
+            output_tokens: Some(12),
+            cached_input_tokens: Some(7),
+            cache_creation_input_tokens: None,
+            accumulated_total_tokens: None,
+            accumulated_input_tokens: None,
+            accumulated_output_tokens: None,
+            message_count: 0,
+            schedule_id: None,
+            recipe_json: None,
+            user_recipe_values_json: None,
+            model_config_json: None,
+        };
+
+        assert_eq!(
+            resolve_usage_from_session_detail(&session),
+            Some(AgentTokenUsage {
+                input_tokens: 31,
+                output_tokens: 12,
+                cached_input_tokens: Some(7),
                 cache_creation_input_tokens: None,
             })
         );

@@ -1,21 +1,32 @@
-//! Aster task board 到 Session todo 展示结构的投影。
-
-use aster::session::{resolve_task_board_state, TaskBoardItem, TaskBoardItemStatus};
+//! Task board 到 Session todo 展示结构的投影。
 
 use super::session_store_types::{
     normalize_optional_nonempty_body, SessionTodoItem, SessionTodoStatus,
 };
-use crate::aster_session_store::LimeSessionStore;
 
-fn map_session_todo_status(status: TaskBoardItemStatus) -> SessionTodoStatus {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum SessionTaskBoardStatusProjection {
+    Pending,
+    InProgress,
+    Completed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct SessionTaskBoardItemProjection {
+    pub subject: String,
+    pub active_form: Option<String>,
+    pub status: SessionTaskBoardStatusProjection,
+}
+
+fn map_session_todo_status(status: SessionTaskBoardStatusProjection) -> SessionTodoStatus {
     match status {
-        TaskBoardItemStatus::Pending => SessionTodoStatus::Pending,
-        TaskBoardItemStatus::InProgress => SessionTodoStatus::InProgress,
-        TaskBoardItemStatus::Completed => SessionTodoStatus::Completed,
+        SessionTaskBoardStatusProjection::Pending => SessionTodoStatus::Pending,
+        SessionTaskBoardStatusProjection::InProgress => SessionTodoStatus::InProgress,
+        SessionTaskBoardStatusProjection::Completed => SessionTodoStatus::Completed,
     }
 }
 
-fn map_session_todo_item(item: TaskBoardItem) -> Option<SessionTodoItem> {
+fn map_session_todo_item(item: SessionTaskBoardItemProjection) -> Option<SessionTodoItem> {
     let content = item.subject.trim().to_string();
     if content.is_empty() {
         return None;
@@ -29,29 +40,11 @@ fn map_session_todo_item(item: TaskBoardItem) -> Option<SessionTodoItem> {
     })
 }
 
-pub(super) fn load_session_todo_items_from_conn(
-    conn: &rusqlite::Connection,
-    session_id: &str,
+pub(super) fn project_session_todo_items(
+    items: Vec<SessionTaskBoardItemProjection>,
 ) -> Vec<SessionTodoItem> {
-    let extension_data = match LimeSessionStore::load_extension_data_from_conn(conn, session_id) {
-        Ok(extension_data) => extension_data,
-        Err(error) => {
-            tracing::warn!(
-                "[SessionStore] 读取 session todo 状态失败: session_id={}, error={}",
-                session_id,
-                error
-            );
-            return Vec::new();
-        }
-    };
-
-    resolve_task_board_state(&extension_data)
-        .map(|task_board| {
-            task_board
-                .items
-                .into_iter()
-                .filter_map(map_session_todo_item)
-                .collect()
-        })
-        .unwrap_or_default()
+    items
+        .into_iter()
+        .filter_map(map_session_todo_item)
+        .collect()
 }

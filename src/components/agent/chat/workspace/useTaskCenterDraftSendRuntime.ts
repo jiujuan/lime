@@ -229,34 +229,64 @@ export function useTaskCenterEmptyStateSendRuntime({
       if (shouldQueueHomeSend) {
         const submittedAt = Date.now();
         const requestId = createTaskCenterDraftSendRequestId();
-        const requestSessionKey = sessionId ?? requestId;
         recordAgentUiPerformanceMetric("homeInput.submit", {
           hasDraftTab: false,
           inputLength: normalizedText.length,
           requestId,
-          sessionId: requestSessionKey,
+          sessionId: sessionId ?? null,
           source: "empty-state",
           workspaceId: taskCenterWorkspaceId,
         });
-        const request: TaskCenterDraftSendRequest = {
-          id: requestId,
-          draftTabId: requestSessionKey,
-          text,
-          images,
-          sendOptions,
-          submittedAt,
-          materializeDraft: false,
-          source: "empty-state",
+        const tracedSendOptions: HandleSendOptions = {
+          ...(sendOptions || {}),
+          skipSessionRestore: true,
+          skipSessionStartHooks: true,
+          skipPreSubmitResume: true,
+          requestMetadata: mergeAgentUiPerformanceTraceMetadata(
+            sendOptions?.requestMetadata,
+            {
+              requestId,
+              sessionId: sessionId ?? null,
+              source: "empty-state",
+              submittedAt,
+              workspaceId: taskCenterWorkspaceId ?? null,
+            },
+          ),
         };
-        setTaskCenterDraftSendRequest(request);
-        setHomePendingPreviewRequest(request);
-        recordAgentUiPerformanceMetric("homeInput.pendingShellApplied", {
-          durationMs: Date.now() - submittedAt,
-          requestId,
-          sessionId: requestSessionKey,
-          source: "empty-state",
-          workspaceId: taskCenterWorkspaceId,
-        });
+        void handleSend(
+          images,
+          undefined,
+          undefined,
+          text,
+          undefined,
+          undefined,
+          tracedSendOptions,
+        ).then(
+          (result) => {
+            recordAgentUiPerformanceMetric("homeInput.sendDispatch.done", {
+              durationMs: Date.now() - submittedAt,
+              requestId,
+              result,
+              sessionId: sessionId ?? null,
+              source: "empty-state",
+              workspaceId: taskCenterWorkspaceId ?? null,
+            });
+            if (result !== true) {
+              setInput(text);
+            }
+          },
+          (error) => {
+            recordAgentUiPerformanceMetric("homeInput.sendDispatch.error", {
+              durationMs: Date.now() - submittedAt,
+              error: error instanceof Error ? error.message : String(error),
+              requestId,
+              sessionId: sessionId ?? null,
+              source: "empty-state",
+              workspaceId: taskCenterWorkspaceId ?? null,
+            });
+            setInput(text);
+          },
+        );
         return;
       }
 

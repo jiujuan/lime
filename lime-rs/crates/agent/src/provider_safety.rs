@@ -7,8 +7,11 @@ use aster::providers::base::{
 use aster::providers::errors::ProviderError;
 use aster::providers::RetryConfig;
 use async_trait::async_trait;
+use model_provider::safety::{
+    normalize_fast_model, normalize_provider_tool_messages, truncate_provider_text,
+    ProviderToolContentProjection, ProviderToolMessageProjection, ProviderToolMessageRole,
+};
 use rmcp::model::Tool;
-use std::collections::HashSet;
 use std::sync::Arc;
 
 pub(crate) fn wrap_provider_with_safety(
@@ -22,73 +25,71 @@ pub(crate) fn wrap_provider_with_safety(
 }
 
 fn normalize_provider_messages(messages: &[Message]) -> Vec<Message> {
-    let mut normalized_messages: Vec<Message> = messages.to_vec();
-    let mut valid_request_ids = HashSet::new();
-    let mut matched_request_ids = HashSet::new();
-    let mut removed_invalid_requests = 0_usize;
-    let mut removed_invalid_responses = 0_usize;
-
-    for message in &mut normalized_messages {
-        let mut next_content = Vec::with_capacity(message.content.len());
-
-        for content in message.content.drain(..) {
-            match &content {
-                MessageContent::ToolRequest(request) => {
-                    if message.role != rmcp::model::Role::Assistant || request.tool_call.is_err() {
-                        removed_invalid_requests += 1;
-                        continue;
-                    }
-                    valid_request_ids.insert(request.id.clone());
-                    next_content.push(content);
-                }
-                MessageContent::FrontendToolRequest(request) => {
-                    if message.role != rmcp::model::Role::Assistant || request.tool_call.is_err() {
-                        removed_invalid_requests += 1;
-                        continue;
-                    }
-                    valid_request_ids.insert(request.id.clone());
-                    next_content.push(content);
-                }
-                MessageContent::ToolResponse(response) => {
-                    if message.role != rmcp::model::Role::User
-                        || !valid_request_ids.contains(&response.id)
-                        || matched_request_ids.contains(&response.id)
-                    {
-                        removed_invalid_responses += 1;
-                        continue;
-                    }
-                    matched_request_ids.insert(response.id.clone());
-                    next_content.push(content);
-                }
-                _ => next_content.push(content),
+    let projections = messages
+        .iter()
+        .map(project_provider_tool_message)
+        .collect::<Vec<_>>();
+    let normalization = normalize_provider_tool_messages(&projections);
+    let normalized_messages = messages
+        .iter()
+        .zip(normalization.messages.iter())
+        .filter_map(|(message, message_normalization)| {
+            let content = message_normalization
+                .retained_content_indices
+                .iter()
+                .filter_map(|content_index| message.content.get(*content_index).cloned())
+                .collect::<Vec<_>>();
+            if content.is_empty() {
+                return None;
             }
-        }
+            let mut normalized = message.clone();
+            normalized.content = content;
+            Some(normalized)
+        })
+        .collect::<Vec<_>>();
 
-        message.content = next_content;
-    }
-
-    normalized_messages.iter_mut().for_each(|message| {
-        message.content.retain(|content| match content {
-            MessageContent::ToolRequest(request) => matched_request_ids.contains(&request.id),
-            MessageContent::FrontendToolRequest(request) => {
-                matched_request_ids.contains(&request.id)
-            }
-            MessageContent::ToolResponse(response) => matched_request_ids.contains(&response.id),
-            _ => true,
-        });
-    });
-
-    normalized_messages.retain(|message| !message.content.is_empty());
-
-    if removed_invalid_requests > 0 || removed_invalid_responses > 0 {
+    if normalization.removed_invalid_requests > 0 || normalization.removed_invalid_responses > 0 {
         tracing::warn!(
-            removed_invalid_requests,
-            removed_invalid_responses,
+            removed_invalid_requests = normalization.removed_invalid_requests,
+            removed_invalid_responses = normalization.removed_invalid_responses,
             "[ProviderSafety] 已在 provider 请求前归一化工具消息链"
         );
     }
 
     normalized_messages
+}
+
+fn project_provider_tool_message(message: &Message) -> ProviderToolMessageProjection {
+    ProviderToolMessageProjection {
+        role: match message.role {
+            rmcp::model::Role::Assistant => ProviderToolMessageRole::Assistant,
+            rmcp::model::Role::User => ProviderToolMessageRole::User,
+        },
+        contents: message
+            .content
+            .iter()
+            .map(project_provider_tool_content)
+            .collect(),
+    }
+}
+
+fn project_provider_tool_content(content: &MessageContent) -> ProviderToolContentProjection {
+    match content {
+        MessageContent::ToolRequest(request) => ProviderToolContentProjection::ToolRequest {
+            id: request.id.clone(),
+            valid: request.tool_call.is_ok(),
+        },
+        MessageContent::FrontendToolRequest(request) => {
+            ProviderToolContentProjection::FrontendToolRequest {
+                id: request.id.clone(),
+                valid: request.tool_call.is_ok(),
+            }
+        }
+        MessageContent::ToolResponse(response) => ProviderToolContentProjection::ToolResponse {
+            id: response.id.clone(),
+        },
+        _ => ProviderToolContentProjection::Other,
+    }
 }
 
 fn normalize_provider_model_config(
@@ -100,7 +101,7 @@ fn normalize_provider_model_config(
     }
 
     let mut normalized = model_config.clone();
-    normalized.fast_model = None;
+    normalized.fast_model = normalize_fast_model(normalized.fast_model, disable_default_fast_model);
     normalized
 }
 
@@ -228,7 +229,7 @@ impl Provider for ProviderSafety {
             .collect::<Vec<_>>()
             .join(" ");
 
-        Ok(aster::utils::safe_truncate(&description, 100))
+        Ok(truncate_provider_text(&description, 100))
     }
 
     fn session_name_generation_execution_strategy(&self) -> SessionNameGenerationExecutionStrategy {

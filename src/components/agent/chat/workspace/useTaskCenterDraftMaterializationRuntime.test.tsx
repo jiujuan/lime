@@ -38,6 +38,8 @@ interface ProbeProps {
     }) => string;
   }) => void;
   onSnapshot: (snapshot: ProbeSnapshot) => void;
+  persistMaterializedSessionNavigation?: ReturnType<typeof vi.fn>;
+  switchMaterializedSession?: ReturnType<typeof vi.fn>;
   upsertTaskCenterOpenTab: ReturnType<typeof vi.fn>;
 }
 
@@ -46,15 +48,16 @@ function Probe({
   initialPendingRequest = null,
   onRuntime,
   onSnapshot,
+  persistMaterializedSessionNavigation = vi.fn(),
+  switchMaterializedSession = vi.fn(),
   upsertTaskCenterOpenTab,
 }: ProbeProps) {
   const [draftTabs, setDraftTabs] = useState<TaskCenterDraftTab[]>([
     initialDraft,
   ]);
-  const [
-    activeDraftTabId,
-    setActiveTaskCenterDraftTabId,
-  ] = useState<string | null>(initialDraft.id);
+  const [activeDraftTabId, setActiveTaskCenterDraftTabId] = useState<
+    string | null
+  >(initialDraft.id);
   const [input, setInput] = useState("残留输入");
   const [homePendingPreviewRequest, setHomePendingPreviewRequest] =
     useState<TaskCenterDraftSendRequest | null>(initialPendingRequest);
@@ -87,6 +90,8 @@ function Probe({
     setTaskCenterDraftSendRequest,
     setTaskCenterDraftTabs: setDraftTabs,
     setTaskCenterTransitionTopicId,
+    persistMaterializedSessionNavigation,
+    switchMaterializedSession,
     taskCenterDraftSurfaceActiveRef: draftSurfaceActiveRef,
     taskCenterDraftTabs: draftTabs,
     taskCenterWorkspaceId: "workspace-test",
@@ -234,17 +239,15 @@ describe("useTaskCenterDraftMaterializationRuntime", () => {
     const createFreshSession = vi.fn(async () => "session-immediate-send");
     const upsertTaskCenterOpenTab = vi.fn();
     const snapshots: ProbeSnapshot[] = [];
-    let runtime:
-      | {
-          materializeTaskCenterDraftTab: (
-            draftTabId: string,
-            options?: { reason?: "send" | "input_warmup"; commit?: boolean },
-          ) => Promise<string | null>;
-          openTaskCenterDraftTab: (options?: {
-            preservePendingSendRequest?: boolean;
-          }) => string;
-        }
-      | null = null;
+    let runtime: {
+      materializeTaskCenterDraftTab: (
+        draftTabId: string,
+        options?: { reason?: "send" | "input_warmup"; commit?: boolean },
+      ) => Promise<string | null>;
+      openTaskCenterDraftTab: (options?: {
+        preservePendingSendRequest?: boolean;
+      }) => string;
+    } | null = null;
 
     await act(async () => {
       root.render(
@@ -280,8 +283,62 @@ describe("useTaskCenterDraftMaterializationRuntime", () => {
     expect(createFreshSession).toHaveBeenCalledWith("新对话", {
       preserveCurrentSnapshot: false,
     });
-    expect(snapshots.at(-1)?.draftTabs.some((tab) => tab.id === draftTabId)).toBe(
-      true,
+    expect(
+      snapshots.at(-1)?.draftTabs.some((tab) => tab.id === draftTabId),
+    ).toBe(true);
+  });
+
+  it("commit materialized 草稿后应切入正式 session 以便刷新恢复", async () => {
+    const createFreshSession = vi.fn(async () => "session-committed-send");
+    const persistMaterializedSessionNavigation = vi.fn();
+    const switchMaterializedSession = vi.fn(async () => "success");
+    const upsertTaskCenterOpenTab = vi.fn();
+    let runtime: {
+      materializeTaskCenterDraftTab: (
+        draftTabId: string,
+        options?: { reason?: "send" | "input_warmup"; commit?: boolean },
+      ) => Promise<string | null>;
+      openTaskCenterDraftTab: (options?: {
+        preservePendingSendRequest?: boolean;
+      }) => string;
+    } | null = null;
+
+    await act(async () => {
+      root.render(
+        <Probe
+          createFreshSession={createFreshSession}
+          onRuntime={(nextRuntime) => {
+            runtime = nextRuntime;
+          }}
+          onSnapshot={() => undefined}
+          persistMaterializedSessionNavigation={
+            persistMaterializedSessionNavigation
+          }
+          switchMaterializedSession={switchMaterializedSession}
+          upsertTaskCenterOpenTab={upsertTaskCenterOpenTab}
+        />,
+      );
+    });
+
+    await act(async () => {
+      const draftTabId =
+        runtime?.openTaskCenterDraftTab({
+          preservePendingSendRequest: true,
+        }) ?? "";
+      await runtime?.materializeTaskCenterDraftTab(draftTabId, {
+        reason: "send",
+      });
+    });
+
+    expect(persistMaterializedSessionNavigation).toHaveBeenCalledWith(
+      "session-committed-send",
+    );
+    expect(switchMaterializedSession).toHaveBeenCalledWith(
+      "session-committed-send",
+      {
+        allowDetachedSession: true,
+        forceRefresh: true,
+      },
     );
   });
 });

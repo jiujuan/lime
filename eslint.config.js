@@ -833,7 +833,7 @@ const contentWorkflowCommandSelectors = [
 ].map((command) => ({
   selector: `CallExpression[callee.name='safeInvoke'][arguments.0.value='${command}'], CallExpression[callee.name='invoke'][arguments.0.value='${command}']`,
   message:
-    "内容工作流命令请统一通过 `src/lib/api/content-workflow.ts` 暴露的网关函数调用，避免继续在其他模块中直接拼接命令名。",
+    "旧 content_workflow_* 命令已下线，禁止恢复旧 content-workflow 网关；Workflow 控制面必须走 App Server current method：workflow/read、workflow/cancel、workflow/retry、workflow/respond。",
 }));
 
 const novelCommandSelectors = [
@@ -1185,7 +1185,6 @@ export default [
       "src/lib/api/a2uiForm.ts",
       "src/lib/api/appUpdate.ts",
       "src/lib/api/asrProvider.ts",
-      "src/lib/api/content-workflow.ts",
       "src/lib/api/screenshotChat.ts",
       "src/lib/api/notification.ts",
       "src/lib/api/novel.ts",

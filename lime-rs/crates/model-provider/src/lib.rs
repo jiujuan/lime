@@ -1,4 +1,7 @@
 pub mod canonical;
+pub mod router;
+pub mod runtime_provider;
+pub mod safety;
 
 use agent_protocol::{ModelId, TurnId};
 use serde::{Deserialize, Serialize};
@@ -12,6 +15,12 @@ pub enum ModelProviderProtocol {
     Responses,
     ChatCompletions,
     Custom(String),
+}
+
+impl ModelProviderProtocol {
+    pub fn uses_responses_api(&self) -> bool {
+        matches!(self, Self::Responses)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

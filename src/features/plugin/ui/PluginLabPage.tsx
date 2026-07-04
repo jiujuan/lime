@@ -42,7 +42,6 @@ import {
   type PluginEntryRuntimeGuardResult,
 } from "../runtime/entryRuntimeGuard";
 import { loadRuntimePackageDescriptor } from "../runtime/runtimePackageLoader";
-import { buildWorkflowRuntimeCapabilityProfile } from "../runtime/workflowRuntimeCapabilityProfile";
 import { UiExtensionHost } from "../runtime/uiExtensionHost";
 import { buildUiRuntimeCapabilityProfile } from "../runtime/uiRuntimeCapabilityProfile";
 import { buildLimeRuntimeProfileForPreview } from "../runtime-profile";
@@ -1001,9 +1000,6 @@ function PluginLabPageWithFixture({
     ? "adapter"
     : null;
   const capabilityProfile = useMemo(() => {
-    if (resolvedFlags.workerRuntimeEnabled) {
-      return buildWorkflowRuntimeCapabilityProfile(resolvedFlags);
-    }
     if (resolvedFlags.uiRuntimeEnabled) {
       return buildUiRuntimeCapabilityProfile(resolvedFlags);
     }

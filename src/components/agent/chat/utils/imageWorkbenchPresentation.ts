@@ -5,6 +5,8 @@ import {
 } from "@/lib/api/skillCatalog";
 import type { MessageImageWorkbenchPreview } from "../types";
 
+type Translate = (key: string, options?: Record<string, unknown>) => string;
+
 function titleCaseModelSegment(value: string): string {
   return value
     .split(/[-_\s]+/)
@@ -136,7 +138,8 @@ function tImageWorkbenchPresentation(
   key: ImageWorkbenchPresentationKey,
   options?: Record<string, unknown>,
 ): string {
-  return getLimeI18n().t(key, {
+  const translate = getLimeI18n().t as Translate;
+  return translate(key, {
     ns: "agent",
     ...(options || {}),
   });

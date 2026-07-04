@@ -1,6 +1,6 @@
 import { resolvePluginHostFlags } from "../featureFlag";
 import type { HostCapabilityProfile } from "../types";
-import { buildWorkflowRuntimeCapabilityProfile } from "./workflowRuntimeCapabilityProfile";
+import { buildUiRuntimeCapabilityProfile } from "./uiRuntimeCapabilityProfile";
 
 export const APP_CENTER_PLUGIN_FLAGS = resolvePluginHostFlags({
   labEnabled: true,
@@ -10,15 +10,15 @@ export const APP_CENTER_PLUGIN_FLAGS = resolvePluginHostFlags({
   cleanupDryRunEnabled: true,
   realAdapterEnabled: true,
   uiRuntimeEnabled: true,
-  workerRuntimeEnabled: true,
+  workerRuntimeEnabled: false,
   cloudBootstrapEnabled: true,
 });
 
 export function buildAppCenterRuntimeCapabilityProfile(): HostCapabilityProfile {
-  return buildWorkflowRuntimeCapabilityProfile({
+  return buildUiRuntimeCapabilityProfile({
     ...APP_CENTER_PLUGIN_FLAGS,
     realAdapterEnabled: true,
     uiRuntimeEnabled: true,
-    workerRuntimeEnabled: true,
+    workerRuntimeEnabled: false,
   });
 }

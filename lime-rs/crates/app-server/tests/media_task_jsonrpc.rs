@@ -1,4 +1,5 @@
 use app_server::AppServer;
+use app_server::EventLogWriter;
 use app_server::LocalAppDataSource;
 use app_server::MockBackend;
 use app_server::RuntimeBackend;
@@ -13,6 +14,7 @@ use tempfile::TempDir;
 
 struct MediaTaskAppServer {
     _temp: TempDir,
+    event_log_writer: Arc<EventLogWriter>,
     workspace_root: String,
     server: AppServer,
 }
@@ -25,6 +27,8 @@ async fn media_task_app_server() -> MediaTaskAppServer {
 
     let conn = Connection::open_in_memory().expect("open in-memory product db");
     create_tables(&conn).expect("create product schema");
+    let event_log_writer =
+        Arc::new(EventLogWriter::new(temp.path().join("events")).expect("event log writer"));
     let app_data_source = LocalAppDataSource::initialize_with_db_and_data_root(
         Arc::new(std::sync::Mutex::new(conn)),
         data_root,
@@ -32,10 +36,12 @@ async fn media_task_app_server() -> MediaTaskAppServer {
     .await
     .expect("local app data source");
     let runtime = RuntimeCore::with_backend(Arc::new(MockBackend))
-        .with_app_data_source(Arc::new(app_data_source));
+        .with_app_data_source(Arc::new(app_data_source))
+        .with_event_log_writer(event_log_writer.clone());
 
     MediaTaskAppServer {
         _temp: temp,
+        event_log_writer,
         workspace_root,
         server: AppServer::with_runtime(runtime),
     }
@@ -330,6 +336,28 @@ async fn image_command_turn_start_creates_task_from_jsonrpc_metadata() {
         !event_types.contains(&"routing.decision.made"),
         "image command must not fall through to ordinary chat routing: {event_types:?}"
     );
+    assert!(
+        !event_types
+            .iter()
+            .any(|event_type| event_type.starts_with("workflow.")),
+        "workflow audit events should stay out of user-visible session stream: {event_types:?}"
+    );
+    let workflow_events = app
+        .event_log_writer
+        .read_session_workflow_audit_events("sess-image-command-jsonrpc")
+        .expect("workflow audit events");
+    let workflow_event_types = workflow_events
+        .iter()
+        .map(|record| record.event.event_type.as_str())
+        .collect::<Vec<_>>();
+    assert!(
+        workflow_event_types.contains(&"workflow.step.completed"),
+        "image command should audit completed workflow steps: {workflow_event_types:?}"
+    );
+    assert!(
+        workflow_event_types.contains(&"workflow.run.completed"),
+        "image command should audit workflow completion before turn terminal: {workflow_event_types:?}"
+    );
 
     let tasks = request(
         &app.server,
@@ -385,15 +413,19 @@ async fn image_command_app_server() -> MediaTaskAppServer {
     let conn = Connection::open_in_memory().expect("open in-memory product db");
     create_tables(&conn).expect("create product schema");
     let db = Arc::new(std::sync::Mutex::new(conn));
+    let event_log_writer =
+        Arc::new(EventLogWriter::new(temp.path().join("events")).expect("event log writer"));
     let app_data_source =
         LocalAppDataSource::initialize_with_db_and_data_root(db.clone(), data_root)
             .await
             .expect("local app data source");
     let runtime = RuntimeCore::with_backend(Arc::new(RuntimeBackend::with_db(db)))
-        .with_app_data_source(Arc::new(app_data_source));
+        .with_app_data_source(Arc::new(app_data_source))
+        .with_event_log_writer(event_log_writer.clone());
 
     MediaTaskAppServer {
         _temp: temp,
+        event_log_writer,
         workspace_root,
         server: AppServer::with_runtime(runtime),
     }

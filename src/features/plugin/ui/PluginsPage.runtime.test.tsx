@@ -237,7 +237,7 @@ describe("PluginsPage runtime launch", () => {
     ).toBeNull();
   });
 
-  it("已安装 App 应支持启动 workflow entry", async () => {
+  it("workflow entry 应 fail closed，避免恢复前端本地 DSL runtime", async () => {
     installedStates.push(
       buildReadyState({
         profile: buildWorkflowRuntimeCapabilityProfile({
@@ -265,7 +265,13 @@ describe("PluginsPage runtime launch", () => {
     expect(
       container.querySelector('[data-testid="plugins-launch-summary"]')
         ?.textContent,
-    ).toContain("workflow:内容工厂:content_factory-workflow-runtime-1");
+    ).toContain("plugin.apps.launch.workflowRequiresCurrentApi");
+    expect(
+      container.querySelector('[data-testid="plugins-mounted-ui"]'),
+    ).toBeNull();
+    expect(toast.error).toHaveBeenCalledWith("plugin.apps.toast.failed", {
+      description: "plugin.apps.launch.workflowRequiresCurrentApi",
+    });
   });
 
   it("从导航进入已安装 App 时应自动打开默认 UI entry", async () => {

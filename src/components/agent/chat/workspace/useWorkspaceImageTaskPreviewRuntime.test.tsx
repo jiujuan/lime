@@ -165,6 +165,9 @@ function renderHook(
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
+  let setMessagesForTest:
+    | React.Dispatch<React.SetStateAction<Message[]>>
+    | null = null;
   let latestValue: {
     messages: Message[];
     imageWorkbenchState: SessionImageWorkbenchState;
@@ -184,6 +187,7 @@ function renderHook(
     const [messages, setMessages] = useState<Message[]>(
       () => options?.initialMessages || [],
     );
+    setMessagesForTest = setMessages;
     const [canvasState, setCanvasState] = useState(currentProps.canvasState);
     const [imageWorkbenchState, setImageWorkbenchState] =
       useState<SessionImageWorkbenchState>(
@@ -234,6 +238,16 @@ function renderHook(
 
   return {
     render,
+    setMessages: async (nextMessages: React.SetStateAction<Message[]>) => {
+      if (!setMessagesForTest) {
+        throw new Error("hook 尚未初始化");
+      }
+      await act(async () => {
+        setMessagesForTest?.(nextMessages);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+    },
     getValue: () => {
       if (!latestValue) {
         throw new Error("hook 尚未初始化");
@@ -2105,6 +2119,541 @@ describe("useWorkspaceImageTaskPreviewRuntime", () => {
     });
     expect(listDirectory).not.toHaveBeenCalled();
     expect(readFilePreview).not.toHaveBeenCalled();
+  });
+
+  it("文章正文有 inline 占位时，应通过媒体任务接口恢复图片任务", async () => {
+    const taskId = "task-image-article-inline-api";
+    vi.mocked(listMediaTaskArtifacts).mockResolvedValueOnce({
+      success: true,
+      workspace_root: DEFAULT_PROJECT_ROOT_PATH,
+      artifact_root: `${DEFAULT_PROJECT_ROOT_PATH}/.lime/tasks`,
+      filters: {
+        task_family: "image",
+        limit: 32,
+      },
+      total: 1,
+      modality_runtime_contracts: EMPTY_MODALITY_RUNTIME_CONTRACT_INDEX,
+      tasks: [
+        createArtifactOutput({
+          task_id: taskId,
+          task_type: "image_generate",
+          record: withDefaultTaskContext({
+            task_id: taskId,
+            task_type: "image_generate",
+            task_family: "image",
+            status: "completed",
+            normalized_status: "succeeded",
+            created_at: "2026-04-04T10:00:00Z",
+            payload: {
+              usage: "document-inline",
+              prompt: "[img:文章内联配图]",
+              count: 1,
+              size: "1024x1024",
+            },
+            relationships: {
+              slot_id: "article-inline-slot",
+            },
+            result: {
+              images: [
+                {
+                  url: "https://example.com/article-inline-restored.png",
+                  slotId: "article-inline-slot",
+                },
+              ],
+            },
+          }),
+        }),
+      ],
+    });
+
+    const { render, getValue } = renderHook({
+      documentMarkdowns: [
+        "# 标题\n\n![文章内联配图](pending-image-task://legacy-inline?status=running)\n<!-- lime:image-task-slot:article-inline-slot -->",
+      ],
+    });
+    await render();
+
+    await vi.waitFor(() => {
+      expect(listMediaTaskArtifacts).toHaveBeenCalledWith({
+        projectRootPath: DEFAULT_PROJECT_ROOT_PATH,
+        taskFamily: "image",
+        limit: 32,
+      });
+    });
+    await vi.waitFor(() => {
+      expect(getValue().imageWorkbenchState.outputs).toEqual([
+        expect.objectContaining({
+          taskId,
+          url: "https://example.com/article-inline-restored.png",
+          slotId: "article-inline-slot",
+        }),
+      ]);
+    });
+    expect(listDirectory).not.toHaveBeenCalled();
+    expect(readFilePreview).not.toHaveBeenCalled();
+  });
+
+  it("文章 inline 占位未被替换时，缺少 document applyTarget 的本地缓存不应阻止 task catalog 恢复", async () => {
+    const taskId = "task-image-article-inline-cache";
+    vi.mocked(listMediaTaskArtifacts).mockResolvedValueOnce({
+      success: true,
+      workspace_root: DEFAULT_PROJECT_ROOT_PATH,
+      artifact_root: `${DEFAULT_PROJECT_ROOT_PATH}/.lime/tasks`,
+      filters: {
+        task_family: "image",
+        limit: 32,
+      },
+      total: 1,
+      modality_runtime_contracts: EMPTY_MODALITY_RUNTIME_CONTRACT_INDEX,
+      tasks: [
+        createArtifactOutput({
+          task_id: taskId,
+          task_type: "image_generate",
+          record: withDefaultTaskContext({
+            task_id: taskId,
+            task_type: "image_generate",
+            task_family: "image",
+            status: "completed",
+            normalized_status: "succeeded",
+            created_at: "2026-04-04T10:00:00Z",
+            payload: {
+              usage: "document-inline",
+              prompt: "[img:缓存恢复文章内联配图]",
+              count: 1,
+              size: "1024x1024",
+            },
+            relationships: {
+              slot_id: "article-inline-cache-slot",
+            },
+            result: {
+              images: [
+                {
+                  url: "https://example.com/article-inline-cache-restored.png",
+                  slotId: "article-inline-cache-slot",
+                },
+              ],
+            },
+          }),
+        }),
+      ],
+    });
+
+    const { render, getValue } = renderHook(
+      {
+        documentMarkdowns: [
+          "# 标题\n\n![缓存恢复文章内联配图](pending-image-task://legacy-inline-cache?status=running)\n<!-- lime:image-task-slot:article-inline-cache-slot -->",
+        ],
+      },
+      {
+        initialMessages: [
+          {
+            id: `image-workbench:${taskId}:assistant`,
+            role: "assistant",
+            content: "图片任务已完成。",
+            timestamp: new Date("2026-04-04T10:00:00Z"),
+            imageWorkbenchPreview: {
+              taskId,
+              prompt: "缓存恢复文章内联配图",
+              status: "complete",
+              imageUrl: "https://example.com/stale-cache-image.png",
+              projectId: DEFAULT_PROJECT_ID,
+              contentId: DEFAULT_CONTENT_ID,
+              imageCount: 1,
+              expectedImageCount: 1,
+            },
+          },
+        ],
+        initialImageWorkbenchState: {
+          ...createInitialSessionImageWorkbenchState(),
+          tasks: [
+            {
+              sessionId: DEFAULT_SESSION_ID,
+              id: taskId,
+              mode: "generate",
+              status: "complete",
+              prompt: "缓存恢复文章内联配图",
+              rawText: "@配图 缓存恢复文章内联配图",
+              expectedCount: 1,
+              outputIds: ["output-cache-stale"],
+              createdAt: Date.now(),
+              hookImageIds: [],
+              applyTarget: null,
+            },
+          ],
+          outputs: [
+            {
+              id: "output-cache-stale",
+              taskId,
+              refId: "output-cache-stale",
+              hookImageId: "hook-output-cache-stale",
+              url: "https://example.com/stale-cache-image.png",
+              prompt: "缓存恢复文章内联配图",
+              createdAt: Date.now(),
+              applyTarget: null,
+            },
+          ],
+        },
+      },
+    );
+    await render();
+
+    await vi.waitFor(() => {
+      expect(listMediaTaskArtifacts).toHaveBeenCalledWith({
+        projectRootPath: DEFAULT_PROJECT_ROOT_PATH,
+        taskFamily: "image",
+        limit: 32,
+      });
+    });
+    await vi.waitFor(() => {
+      expect(getValue().imageWorkbenchState.tasks).toEqual([
+        expect.objectContaining({
+          id: taskId,
+          applyTarget: expect.objectContaining({
+            kind: "canvas-insert",
+            canvasType: "document",
+            slotId: "article-inline-cache-slot",
+          }),
+        }),
+      ]);
+      expect(getValue().imageWorkbenchState.outputs).toEqual([
+        expect.objectContaining({
+          taskId,
+          url: "https://example.com/article-inline-cache-restored.png",
+          slotId: "article-inline-cache-slot",
+        }),
+      ]);
+    });
+  });
+
+  it("文章 inline 缓存任务已有 document applyTarget 时，即使恢复 markdown 暂缺也应继续恢复 task catalog", async () => {
+    const taskId = "task-image-article-inline-cache-target";
+    vi.mocked(listMediaTaskArtifacts).mockResolvedValueOnce({
+      success: true,
+      workspace_root: DEFAULT_PROJECT_ROOT_PATH,
+      artifact_root: `${DEFAULT_PROJECT_ROOT_PATH}/.lime/tasks`,
+      filters: {
+        task_family: "image",
+        limit: 32,
+      },
+      total: 1,
+      modality_runtime_contracts: EMPTY_MODALITY_RUNTIME_CONTRACT_INDEX,
+      tasks: [
+        createArtifactOutput({
+          task_id: taskId,
+          task_type: "image_generate",
+          record: withDefaultTaskContext({
+            task_id: taskId,
+            task_type: "image_generate",
+            task_family: "image",
+            status: "completed",
+            normalized_status: "succeeded",
+            created_at: "2026-04-04T10:00:00Z",
+            payload: {
+              usage: "document-inline",
+              prompt: "[img:缓存命中但正文待替换配图]",
+              count: 1,
+              size: "1024x1024",
+            },
+            relationships: {
+              slot_id: "article-inline-cache-target-slot",
+            },
+            result: {
+              images: [
+                {
+                  url: "https://example.com/article-inline-cache-target-restored.png",
+                  slotId: "article-inline-cache-target-slot",
+                },
+              ],
+            },
+          }),
+        }),
+      ],
+    });
+
+    const { render, getValue } = renderHook(
+      {},
+      {
+        initialMessages: [
+          {
+            id: `image-workbench:${taskId}:assistant`,
+            role: "assistant",
+            content: "图片任务已完成。",
+            timestamp: new Date("2026-04-04T10:00:00Z"),
+            artifacts: [
+              {
+                id: "article-preview-inline-cache-target",
+                type: "document",
+                title: "Inline 配图恢复验证",
+                content:
+                  "# 标题\n\n![缓存命中但正文待替换配图](pending-image-task://legacy-inline-cache-target?status=running)\n<!-- lime:image-task-slot:article-inline-cache-target-slot -->",
+                status: "complete",
+                meta: {
+                  openedFrom: "right_surface_article_workspace",
+                },
+                position: { start: 0, end: 120 },
+                createdAt: 1,
+                updatedAt: 1,
+              },
+            ],
+            imageWorkbenchPreview: {
+              taskId,
+              prompt: "缓存命中但正文待替换配图",
+              status: "complete",
+              imageUrl: "https://example.com/stale-cache-target-image.png",
+              projectId: DEFAULT_PROJECT_ID,
+              contentId: DEFAULT_CONTENT_ID,
+              imageCount: 1,
+              expectedImageCount: 1,
+            },
+          },
+        ],
+        initialImageWorkbenchState: {
+          ...createInitialSessionImageWorkbenchState(),
+          tasks: [
+            {
+              sessionId: DEFAULT_SESSION_ID,
+              id: taskId,
+              mode: "generate",
+              status: "complete",
+              prompt: "缓存命中但正文待替换配图",
+              rawText: "@配图 缓存命中但正文待替换配图",
+              expectedCount: 1,
+              outputIds: ["output-cache-target-stale"],
+              createdAt: Date.now(),
+              hookImageIds: [],
+              applyTarget: {
+                kind: "canvas-insert",
+                canvasType: "document",
+                slotId: "article-inline-cache-target-slot",
+                actionLabel: "插入文稿",
+                dispatchLabel: "正在插入图片",
+              },
+            },
+          ],
+          outputs: [
+            {
+              id: "output-cache-target-stale",
+              taskId,
+              refId: "output-cache-target-stale",
+              hookImageId: "hook-output-cache-target-stale",
+              url: "https://example.com/stale-cache-target-image.png",
+              prompt: "缓存命中但正文待替换配图",
+              createdAt: Date.now(),
+              applyTarget: null,
+            },
+          ],
+        },
+      },
+    );
+    await render();
+
+    await vi.waitFor(() => {
+      expect(listMediaTaskArtifacts).toHaveBeenCalledWith({
+        projectRootPath: DEFAULT_PROJECT_ROOT_PATH,
+        taskFamily: "image",
+        limit: 32,
+      });
+    });
+    await vi.waitFor(() => {
+      expect(getValue().imageWorkbenchState.outputs).toEqual([
+        expect.objectContaining({
+          taskId,
+          url: "https://example.com/article-inline-cache-target-restored.png",
+          slotId: "article-inline-cache-target-slot",
+        }),
+      ]);
+      const articleArtifact = getValue()
+        .messages.flatMap((message) => message.artifacts ?? [])
+        .find(
+          (artifact) => artifact.id === "article-preview-inline-cache-target",
+        );
+      expect(articleArtifact?.content).toContain(
+        "https://example.com/article-inline-cache-target-restored.png",
+      );
+      expect(articleArtifact?.content).not.toContain("pending-image-task://");
+    });
+  });
+
+  it("消息 seed 延迟出现且 taskId 与 task file 不一致时，应继续按 slot_id 恢复真实结果", async () => {
+    const staleTaskId = "content-factory-inline-image-task";
+    const restoredTaskId = "restored-inline-image-task-uuid";
+    const slotId = "article-inline-cache-target-slot";
+    const pendingMarkdown = [
+      "# 标题",
+      "",
+      "![缓存命中但正文待替换配图](pending-image-task://content-factory-inline-image-task?status=running)",
+      `<!-- lime:image-task-slot:${slotId} -->`,
+    ].join("\n");
+
+    vi.mocked(listMediaTaskArtifacts)
+      .mockResolvedValueOnce({
+        success: true,
+        workspace_root: DEFAULT_PROJECT_ROOT_PATH,
+        artifact_root: `${DEFAULT_PROJECT_ROOT_PATH}/.lime/tasks`,
+        filters: {
+          task_family: "image",
+          limit: 32,
+        },
+        total: 0,
+        modality_runtime_contracts: EMPTY_MODALITY_RUNTIME_CONTRACT_INDEX,
+        tasks: [],
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        workspace_root: DEFAULT_PROJECT_ROOT_PATH,
+        artifact_root: `${DEFAULT_PROJECT_ROOT_PATH}/.lime/tasks`,
+        filters: {
+          task_family: "image",
+          limit: 32,
+        },
+        total: 1,
+        modality_runtime_contracts: EMPTY_MODALITY_RUNTIME_CONTRACT_INDEX,
+        tasks: [
+          createArtifactOutput({
+            task_id: restoredTaskId,
+            task_type: "image_generate",
+            record: withDefaultTaskContext({
+              task_id: restoredTaskId,
+              task_type: "image_generate",
+              task_family: "image",
+              status: "completed",
+              normalized_status: "succeeded",
+              created_at: "2026-04-04T10:00:00Z",
+              payload: {
+                usage: "document-inline",
+                prompt: "[img:缓存命中但正文待替换配图]",
+                count: 1,
+                size: "1024x1024",
+              },
+              relationships: {
+                slot_id: slotId,
+              },
+              result: {
+                images: [
+                  {
+                    url: "https://example.com/article-inline-cache-target-restored.png",
+                    slotId,
+                  },
+                ],
+              },
+            }),
+          }),
+        ],
+      });
+
+    const { render, setMessages, getValue } = renderHook(
+      {},
+      {
+        initialMessages: [],
+        initialImageWorkbenchState: {
+          ...createInitialSessionImageWorkbenchState(),
+          tasks: [
+            {
+              sessionId: DEFAULT_SESSION_ID,
+              id: staleTaskId,
+              mode: "generate",
+              status: "complete",
+              prompt: "缓存命中但正文待替换配图",
+              rawText: "@配图 缓存命中但正文待替换配图",
+              expectedCount: 1,
+              outputIds: ["output-cache-target-stale"],
+              createdAt: Date.now(),
+              hookImageIds: [],
+              applyTarget: {
+                kind: "canvas-insert",
+                canvasType: "document",
+                slotId,
+                actionLabel: "插入文稿",
+                dispatchLabel: "正在插入图片",
+              },
+            },
+          ],
+          outputs: [
+            {
+              id: "output-cache-target-stale",
+              taskId: staleTaskId,
+              refId: "output-cache-target-stale",
+              hookImageId: "hook-output-cache-target-stale",
+              url: "https://example.com/stale-cache-target-image.png",
+              prompt: "缓存命中但正文待替换配图",
+              createdAt: Date.now(),
+              applyTarget: null,
+            },
+          ],
+        },
+      },
+    );
+    await render();
+
+    await vi.waitFor(() => {
+      expect(listMediaTaskArtifacts).toHaveBeenCalled();
+    });
+
+    await setMessages([
+      {
+        id: `image-workbench:${staleTaskId}:assistant`,
+        role: "assistant",
+        content: "图片任务已完成。",
+        timestamp: new Date("2026-04-04T10:00:00Z"),
+        artifacts: [
+          {
+            id: "article-preview-inline-cache-target",
+            type: "document",
+            title: "Inline 配图恢复验证",
+            content: pendingMarkdown,
+            status: "complete",
+            meta: {
+              openedFrom: "right_surface_article_workspace",
+            },
+            position: { start: 0, end: pendingMarkdown.length },
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        ],
+        imageWorkbenchPreview: {
+          taskId: staleTaskId,
+          prompt: "缓存命中但正文待替换配图",
+          status: "complete",
+          imageUrl: "https://example.com/stale-cache-target-image.png",
+          projectId: DEFAULT_PROJECT_ID,
+          contentId: DEFAULT_CONTENT_ID,
+          imageCount: 1,
+          expectedImageCount: 1,
+        },
+      },
+    ]);
+    await render({
+      documentMarkdowns: [pendingMarkdown],
+    });
+
+    await vi.waitFor(() => {
+      expect(listMediaTaskArtifacts).toHaveBeenCalledWith({
+        projectRootPath: DEFAULT_PROJECT_ROOT_PATH,
+        taskFamily: "image",
+        limit: 32,
+      });
+      expect(getValue().imageWorkbenchState.outputs).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            taskId: restoredTaskId,
+            url: "https://example.com/article-inline-cache-target-restored.png",
+            slotId,
+          }),
+        ]),
+      );
+      const articleArtifact = getValue()
+        .messages.flatMap((message) => message.artifacts ?? [])
+        .find(
+          (artifact) => artifact.id === "article-preview-inline-cache-target",
+        );
+      expect(articleArtifact?.content).toContain(
+        "https://example.com/article-inline-cache-target-restored.png",
+      );
+      expect(articleArtifact?.content).not.toContain("pending-image-task://");
+      expect(articleArtifact?.content).not.toContain(
+        "https://example.com/stale-cache-target-image.png",
+      );
+    });
   });
 
   it("历史消息已带 taskId 时，应直接按 taskId 走媒体任务接口恢复图片结果", async () => {

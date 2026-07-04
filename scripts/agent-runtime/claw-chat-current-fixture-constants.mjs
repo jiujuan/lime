@@ -97,6 +97,10 @@ export const APP_SERVER_METHOD_SESSION_THREAD_RESUME =
 export const APP_SERVER_METHOD_SESSION_LIST = "agentSession/list";
 export const APP_SERVER_METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND =
   "agentSession/runtimeEvents/append";
+export const APP_SERVER_METHOD_WORKFLOW_READ = "workflow/read";
+export const APP_SERVER_METHOD_WORKFLOW_RESPOND = "workflow/respond";
+export const APP_SERVER_METHOD_WORKFLOW_CANCEL = "workflow/cancel";
+export const APP_SERVER_METHOD_WORKFLOW_RETRY = "workflow/retry";
 export const APP_SERVER_METHOD_ARTIFACT_READ = "artifact/read";
 export const APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE =
   "mediaTaskArtifact/image/create";
@@ -126,6 +130,8 @@ export const RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO =
   "right-surface-visual-matrix";
 export const CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO =
   "content-factory-article-workspace";
+export const CONTENT_FACTORY_INLINE_IMAGE_ARTICLE_WORKSPACE_SCENARIO =
+  "content-factory-inline-image-article-workspace";
 export const NEWS_PROMPT = "整理今天的国际新闻";
 export const CONTINUE_PROMPT = "继续输出";
 export const PLAN_PROMPT = "先给我一个修复计划，不要直接改代码";
@@ -207,6 +213,20 @@ export const CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_ACTION_KEY =
   "worker_dogfood";
 export const CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TURN_ID = `${CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID}-worker-turn`;
 export const CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TASK_ID = `${CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TURN_ID}:${CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_ACTION_KEY}`;
+export const CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RUN_ID = `${CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID}:workflow`;
+export const CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_REVIEW_STEP_ID =
+  "human_review";
+export const CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_REVIEW_REQUEST_ID = `${CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID}:workflow:review`;
+export const CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_RUN_ID = `${CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID}:workflow:respond`;
+export const CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_STEP_ID =
+  "respond_review";
+export const CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_REQUEST_ID = `${CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID}:workflow:respond-review`;
+export const CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_CANCEL_RUN_ID = `${CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID}:workflow:cancel`;
+export const CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_CANCEL_STEP_ID =
+  "cancel_draft";
+export const CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_RUN_ID = `${CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID}:workflow:retry`;
+export const CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_STEP_ID =
+  "retry_draft";
 export const CONTENT_FACTORY_ARTICLE_WORKSPACE_CONTRACT_REJECT_TURN_ID = `${CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID}-contract-reject-turn`;
 export const CONTENT_FACTORY_ARTICLE_WORKSPACE_CONTRACT_REJECT_ERROR_CODE =
   "PLUGIN_WORKER_CONTRACT_UNSUPPORTED";
@@ -214,6 +234,12 @@ export const CONTENT_FACTORY_ARTICLE_WORKSPACE_ARTICLE_ARTIFACT_ID =
   "artifact-article-1";
 export const CONTENT_FACTORY_ARTICLE_WORKSPACE_IMAGE_ARTIFACT_ID =
   "artifact-image-1";
+export const CONTENT_FACTORY_INLINE_IMAGE_SLOT_ID =
+  "article-inline-image-slot-e2e";
+export const CONTENT_FACTORY_INLINE_IMAGE_TASK_PROMPT =
+  "广州夏天午后街景原位配图";
+export const CONTENT_FACTORY_INLINE_IMAGE_URL =
+  "https://example.com/lime-fixture-guangzhou-inline.png";
 export const WEB_TOOLS_SEARCH_TOOL_CALL_ID = `${SESSION_ID}:tool:websearch-rendering`;
 export const WEB_TOOLS_REASONING_FINAL_ID = `${SESSION_ID}:reasoning:web-tools-rendering-final`;
 export const WEB_TOOLS_REASONING_ITEM_ID = `${SESSION_ID}:reasoning:web-tools-rendering`;
@@ -335,6 +361,10 @@ export const CONTENT_FACTORY_ARTICLE_WORKSPACE_ASSERTION_KEYS = [
   "contentFactoryArticleWorkspaceRightSurfaceVisible",
   "contentFactoryArticleWorkspacePageShowsObjects",
   "contentFactoryArticleWorkspaceReadModelProjected",
+  "contentFactoryArticleWorkspaceWorkflowReadModelProjected",
+  "contentFactoryArticleWorkspaceWorkflowRespondProjected",
+  "contentFactoryArticleWorkspaceWorkflowCancelProjected",
+  "contentFactoryArticleWorkspaceWorkflowRetryProjected",
   "contentFactoryArticleWorkspaceArtifactsProjected",
   "contentFactoryArticleWorkspaceRendererArtifactsProjected",
   "contentFactoryArticleWorkspaceArtifactReadContent",

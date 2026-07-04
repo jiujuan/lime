@@ -2,7 +2,7 @@ use super::*;
 use std::sync::Arc;
 
 #[tokio::test]
-async fn read_session_projects_workflow_facts_from_runtime_events() {
+async fn read_session_hides_workflow_facts_from_runtime_events() {
     let event_log_root = tempfile::tempdir().expect("event log root");
     let event_log_writer =
         Arc::new(EventLogWriter::new(event_log_root.path()).expect("event log writer"));
@@ -122,6 +122,33 @@ async fn read_session_projects_workflow_facts_from_runtime_events() {
     )
     .expect("append workflow events");
 
+    let workflow = core
+        .read_workflow_current(WorkflowReadParams {
+            session_id: "sess_workflow_read".to_string(),
+        })
+        .await
+        .expect("workflow read");
+    assert_eq!(
+        workflow.workflow["activeWorkflowRunId"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        workflow.workflow_runs[0]["workflowRunId"],
+        "task-article:workflow"
+    );
+    assert_eq!(
+        workflow.workflow_runs[0]["workflowKey"],
+        "content_article_workflow"
+    );
+    assert_eq!(workflow.workflow_runs[0]["status"], "completed");
+    assert_eq!(workflow.workflow_runs[0]["stepCounts"]["total"], 2);
+    assert_eq!(workflow.workflow_runs[0]["stepCounts"]["completed"], 1);
+    assert_eq!(workflow.workflow_runs[0]["stepCounts"]["queued"], 1);
+    assert_eq!(workflow.workflow_steps[0]["stepId"], "draft");
+    assert_eq!(workflow.workflow_steps[0]["status"], "queued");
+    assert_eq!(workflow.workflow_steps[1]["stepId"], "research");
+    assert_eq!(workflow.workflow_steps[1]["status"], "completed");
+
     let detail = core
         .read_session(AgentSessionReadParams {
             session_id: "sess_workflow_read".to_string(),
@@ -133,29 +160,11 @@ async fn read_session_projects_workflow_facts_from_runtime_events() {
         .detail
         .expect("detail");
     let thread_read = &detail["thread_read"];
-    assert_eq!(
-        thread_read["workflow"]["activeWorkflowRunId"],
-        serde_json::Value::Null
-    );
-    assert_eq!(
-        thread_read["workflow_runs"][0]["workflowRunId"],
-        "task-article:workflow"
-    );
-    assert_eq!(
-        thread_read["workflowRuns"][0]["workflowKey"],
-        "content_article_workflow"
-    );
-    assert_eq!(thread_read["workflow_runs"][0]["status"], "completed");
-    assert_eq!(thread_read["workflow_runs"][0]["stepCounts"]["total"], 2);
-    assert_eq!(
-        thread_read["workflow_runs"][0]["stepCounts"]["completed"],
-        1
-    );
-    assert_eq!(thread_read["workflow_runs"][0]["stepCounts"]["queued"], 1);
-    assert_eq!(thread_read["workflow_steps"][0]["stepId"], "draft");
-    assert_eq!(thread_read["workflow_steps"][0]["status"], "queued");
-    assert_eq!(thread_read["workflow_steps"][1]["stepId"], "research");
-    assert_eq!(thread_read["workflow_steps"][1]["status"], "completed");
+    assert!(thread_read.get("workflow").is_none());
+    assert!(thread_read.get("workflow_runs").is_none());
+    assert!(thread_read.get("workflowRuns").is_none());
+    assert!(thread_read.get("workflow_steps").is_none());
+    assert!(thread_read.get("workflowSteps").is_none());
     assert!(detail.get("workflow_runs").is_none());
     assert!(detail.get("workflowRuns").is_none());
     assert!(detail.get("workflow_steps").is_none());
@@ -234,10 +243,11 @@ async fn workflow_read_returns_current_read_model_from_audit_log() {
         .await
         .expect("current session read");
     let thread_read = &session.detail.expect("detail")["thread_read"];
-    assert_eq!(
-        thread_read["workflowRuns"][0]["workflowRunId"],
-        "task-current:workflow"
-    );
+    assert!(thread_read.get("workflow").is_none());
+    assert!(thread_read.get("workflow_runs").is_none());
+    assert!(thread_read.get("workflowRuns").is_none());
+    assert!(thread_read.get("workflow_steps").is_none());
+    assert!(thread_read.get("workflowSteps").is_none());
 }
 
 #[tokio::test]

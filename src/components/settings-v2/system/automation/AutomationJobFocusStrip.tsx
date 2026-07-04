@@ -11,6 +11,7 @@ export function AutomationJobFocusStrip({
   retiredMessage = null,
 }: AutomationJobFocusStripProps) {
   const { t } = useTranslation("settings");
+  const translate = t as (key: string) => string;
 
   return (
     <div
@@ -19,7 +20,7 @@ export function AutomationJobFocusStrip({
     >
       <div className="flex flex-wrap items-center gap-2">
         <Badge className="border-sky-200 bg-white text-sky-700 hover:bg-white">
-          {t("settings.automation.focus.label")}
+          {translate("settings.automation.focus.label")}
         </Badge>
       </div>
 

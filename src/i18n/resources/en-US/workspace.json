@@ -1113,5 +1113,21 @@
   "workspace.articleEditor.toolbar.heading2": "Heading 2",
   "workspace.articleEditor.toolbar.bulletList": "Bulleted list",
   "workspace.articleEditor.toolbar.orderedList": "Numbered list",
-  "workspace.articleEditor.toolbar.blockquote": "Quote"
+  "workspace.articleEditor.toolbar.blockquote": "Quote",
+  "workspace.articleEditor.workflow.title": "Workflow detail",
+  "workspace.articleEditor.workflow.detail": "{{count}} steps · {{workflow}}",
+  "workspace.articleEditor.workflow.loading": "Reading workflow status...",
+  "workspace.articleEditor.workflow.fallback": "Workflow",
+  "workspace.articleEditor.workflow.attempt": "Attempt {{count}}",
+  "workspace.articleEditor.workflow.failure": "Failed: {{message}}",
+  "workspace.articleEditor.workflow.retry": "Retry: {{value}}",
+  "workspace.articleEditor.workflow.retryLinked": "Retry linked",
+  "workspace.articleEditor.workflow.waitingAction": "Waiting action: {{value}}",
+  "workspace.articleEditor.workflow.status.completed": "Completed",
+  "workspace.articleEditor.workflow.status.failed": "Failed",
+  "workspace.articleEditor.workflow.status.running": "Running",
+  "workspace.articleEditor.workflow.status.retrying": "Retrying",
+  "workspace.articleEditor.workflow.status.success": "Success",
+  "workspace.articleEditor.workflow.status.waiting": "Waiting",
+  "workspace.articleEditor.workflow.status.unknown": "Unknown"
 }

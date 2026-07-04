@@ -3,13 +3,13 @@ members = ["crates/*"]
 exclude = [
   "crates/aster",
   "crates/aster-models",
-  "crates/aster-rust",
+  "vendor/aster-rust",
   "crates/credential",
 ]
 resolver = "2"
 
 [workspace.package]
-version = "1.88.0"
+version = "1.89.0"
 edition = "2021"
 authors = ["coso"]
 repository = "https://github.com/aiclientproxy/lime"
@@ -50,7 +50,9 @@ app-server-transport = { path = "crates/app-server-transport" }
 patch-apply = { path = "crates/patch-apply" }
 voice-core = { path = "crates/voice-core" }
 document-preview = { path = "crates/document-preview" }
-aster = { package = "aster-core", path = "crates/aster-rust/crates/aster" }
+# Aster runtime - vendor dependency
+# 退出条件：Phase 6 完成后移除（compat adapter 全部删除）
+aster = { package = "aster-core", path = "vendor/aster-rust/crates/aster" }
 
 # 序列化
 serde = { version = "1", features = ["derive"] }

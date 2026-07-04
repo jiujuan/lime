@@ -472,6 +472,84 @@ fn projects_workflow_run_and_steps_from_runtime_events() {
     assert_eq!(draft.status, WorkflowStatus::Queued);
 }
 
+#[test]
+fn projects_retry_actions_and_retry_attempts_from_runtime_events() {
+    let events = vec![
+        event(
+            1,
+            "workflow.run.started",
+            json!({
+                "workflowRunId": "task-article:workflow",
+                "workflowKey": "content_article_workflow",
+                "workflowTitle": "内容生产",
+                "status": "running"
+            }),
+        ),
+        event(
+            2,
+            "workflow.step.failed",
+            json!({
+                "workflowRunId": "task-article:workflow",
+                "stepId": "draft",
+                "stepTitle": "正文写作",
+                "attempt": 1,
+                "status": "failed",
+                "failure": {
+                    "reason": "model_error"
+                }
+            }),
+        ),
+    ];
+
+    let read_model = workflow_read_model_from_events(&events);
+
+    assert!(read_model.actions.iter().any(|action| {
+        action.action_type == "retry"
+            && action.workflow_run_id == "task-article:workflow"
+            && action.step_id.as_deref() == Some("draft")
+    }));
+
+    let retry_events = vec![
+        events[0].clone(),
+        events[1].clone(),
+        event(
+            4,
+            "workflow.step.retrying",
+            json!({
+                "workflowRunId": "task-article:workflow",
+                "stepId": "draft",
+                "stepTitle": "正文写作",
+                "attempt": 2,
+                "status": "retrying"
+            }),
+        ),
+        event(
+            5,
+            "workflow.run.retrying",
+            json!({
+                "workflowRunId": "task-article:workflow",
+                "workflowKey": "content_article_workflow",
+                "workflowTitle": "内容生产",
+                "status": "retrying"
+            }),
+        ),
+    ];
+
+    let retrying = workflow_read_model_from_events(&retry_events);
+    let step = retrying
+        .workflow_steps
+        .iter()
+        .find(|step| step.step_id == "draft")
+        .expect("draft step");
+    assert_eq!(step.status, WorkflowStatus::Retrying);
+    assert_eq!(step.attempt, 2);
+    assert!(step.failure.is_none());
+    assert!(step.finished_at.is_none());
+    assert_eq!(retrying.workflow_runs[0].status, WorkflowStatus::Retrying);
+    assert!(retrying.workflow_runs[0].failure.is_none());
+    assert!(retrying.workflow_runs[0].finished_at.is_none());
+}
+
 fn event(sequence: u64, event_type: &str, payload: serde_json::Value) -> AgentEvent {
     AgentEvent {
         event_id: format!("event-{sequence}"),

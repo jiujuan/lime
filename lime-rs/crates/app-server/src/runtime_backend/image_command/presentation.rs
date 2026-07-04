@@ -8,8 +8,8 @@ use crate::runtime_backend::{
 };
 use crate::{ExecutionRequest, RuntimeCoreError};
 use lime_agent::{
-    insert_agent_turn_metadata, run_direct_text_generation, set_agent_turn_user_visible_input_text,
-    AgentTokenUsage, DirectTextGenerationRequest,
+    insert_agent_turn_metadata, run_direct_text_generation_with_db, set_agent_turn_output_schema,
+    set_agent_turn_user_visible_input_text, AgentTokenUsage, DirectTextGenerationRequest,
 };
 use serde_json::{json, Map, Value};
 
@@ -157,6 +157,23 @@ pub(super) async fn generate_image_task_presentation(
             .filter(|value| !value.trim().is_empty())
             .or_else(|| Some(intent.prompt.clone())),
     );
+    set_agent_turn_output_schema(
+        &mut turn_context,
+        json!({
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "planning_summary": { "type": "string" },
+                "assistant_intro": { "type": "string" },
+                "completion_caption": { "type": "string" }
+            },
+            "required": [
+                "planning_summary",
+                "assistant_intro",
+                "completion_caption"
+            ]
+        }),
+    );
     insert_agent_turn_metadata(
         &mut turn_context,
         "lime_runtime".to_string(),
@@ -199,7 +216,7 @@ pub(super) async fn generate_image_task_presentation(
         language = presentation_language.code(),
         "[RuntimeBackend] ImageCommandWorkflow presentation generation started"
     );
-    let generated = run_direct_text_generation(
+    let generated = run_direct_text_generation_with_db(
         &runtime_backend.agent_state,
         DirectTextGenerationRequest {
             session_id: presentation_session_id,
@@ -209,6 +226,7 @@ pub(super) async fn generate_image_task_presentation(
             user_prompt: presentation_user_prompt(intent, presentation_language),
             turn_context: Some(turn_context),
         },
+        &db,
     )
     .await
     .map_err(RuntimeCoreError::Backend)?;

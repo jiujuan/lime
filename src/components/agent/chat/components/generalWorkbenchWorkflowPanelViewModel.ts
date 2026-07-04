@@ -187,9 +187,16 @@ export interface GeneralWorkbenchRunDetailProjection {
   sourceLabel: string;
   badges: string[];
   summary: string;
+  detailRows: GeneralWorkbenchRunDetailFactRow[];
   actions: GeneralWorkbenchRunDetailActionItem[];
   artifactPaths: string[];
   artifacts: GeneralWorkbenchRunDetailArtifactProjection[];
+}
+
+export interface GeneralWorkbenchRunDetailFactRow {
+  key: string;
+  label: string;
+  value: string;
 }
 
 export type GeneralWorkbenchRunDetailActionKind = "copy_id" | "copy_raw";
@@ -1214,6 +1221,9 @@ export function formatActivitySourceLabel(
   if (normalized === "tool") {
     return t("generalWorkbench.workflow.activity.source.tool");
   }
+  if (normalized === "workflow") {
+    return t("generalWorkbench.workflow.activity.source.workflow");
+  }
   return normalized;
 }
 
@@ -1318,6 +1328,213 @@ export function buildGeneralWorkbenchRunDetailActions({
       copyTarget: runMetadataText,
     },
   ];
+}
+
+export function buildGeneralWorkbenchRunDetailFactRows({
+  runMetadataText,
+  t,
+}: {
+  runMetadataText: string;
+  t: GeneralWorkbenchWorkflowPanelTranslate;
+}): GeneralWorkbenchRunDetailFactRow[] {
+  const workflowRecord = readWorkflowMetadataRecord(runMetadataText);
+  if (!workflowRecord) {
+    return [];
+  }
+
+  const rows: GeneralWorkbenchRunDetailFactRow[] = [];
+  const failureValue = readWorkflowFailureValue(workflowRecord);
+  if (failureValue) {
+    rows.push({
+      key: "workflow-failure",
+      label: t("generalWorkbench.workflow.runDetail.workflowFailure"),
+      value: failureValue,
+    });
+  }
+
+  const retryValue = readWorkflowRetryValue(workflowRecord);
+  if (retryValue) {
+    rows.push({
+      key: "workflow-retry",
+      label: t("generalWorkbench.workflow.runDetail.workflowRetry"),
+      value: retryValue,
+    });
+  }
+
+  const waitingActionValue = readWorkflowWaitingActionValue(workflowRecord);
+  if (waitingActionValue) {
+    rows.push({
+      key: "workflow-waiting-action",
+      label: t("generalWorkbench.workflow.runDetail.workflowWaitingAction"),
+      value: waitingActionValue,
+    });
+  }
+
+  return rows;
+}
+
+function readWorkflowMetadataRecord(
+  raw: string,
+): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    return (
+      asPlainRecord(parsed.workflow_read_model) ??
+      asPlainRecord(parsed.workflowReadModel)
+    );
+  } catch {
+    return null;
+  }
+}
+
+function readWorkflowFailureValue(
+  workflowRecord: Record<string, unknown>,
+): string | null {
+  const runFailure = readFailureText(asPlainRecord(workflowRecord.failure));
+  if (runFailure) {
+    return runFailure;
+  }
+
+  const failedStep = readWorkflowStepRecords(workflowRecord).find((step) => {
+    const status = readStringField(step, ["status"])?.toLowerCase();
+    return status === "failed" || status === "failure" || status === "error";
+  });
+  if (!failedStep) {
+    return null;
+  }
+
+  const stepTitle =
+    readStringField(failedStep, ["title", "stepTitle", "step_title", "id"]) ??
+    null;
+  const failureText = readFailureText(asPlainRecord(failedStep.failure));
+  if (!failureText && !stepTitle) {
+    return null;
+  }
+  return [stepTitle, failureText].filter(Boolean).join(": ");
+}
+
+function readWorkflowRetryValue(
+  workflowRecord: Record<string, unknown>,
+): string | null {
+  const retryRecord =
+    asPlainRecord(workflowRecord.retry) ??
+    readWorkflowStepRecords(workflowRecord)
+      .map((step) => asPlainRecord(step.retry))
+      .find((item): item is Record<string, unknown> => Boolean(item));
+  if (!retryRecord) {
+    return null;
+  }
+
+  const sourceTurnId = readStringField(retryRecord, [
+    "sourceTurnId",
+    "source_turn_id",
+  ]);
+  const rescheduledTurnId = readStringField(retryRecord, [
+    "rescheduledTurnId",
+    "rescheduled_turn_id",
+  ]);
+  const reason = readStringField(retryRecord, [
+    "reason",
+    "reasonCode",
+    "reason_code",
+  ]);
+  const linkage =
+    sourceTurnId && rescheduledTurnId
+      ? `${sourceTurnId} -> ${rescheduledTurnId}`
+      : (rescheduledTurnId ?? sourceTurnId);
+  return [linkage, reason].filter(Boolean).join(" · ") || null;
+}
+
+function readWorkflowWaitingActionValue(
+  workflowRecord: Record<string, unknown>,
+): string | null {
+  const actions = readRecordArray(workflowRecord.actions)
+    .map((action) => {
+      const actionType = readStringField(action, [
+        "actionType",
+        "action_type",
+        "type",
+      ]);
+      const requestId = readStringField(action, ["requestId", "request_id"]);
+      const stepId = readStringField(action, ["stepId", "step_id"]);
+      return [actionType, requestId, stepId].filter(Boolean).join(" / ");
+    })
+    .filter((item) => item.length > 0);
+  if (actions.length > 0) {
+    return actions.join(", ");
+  }
+
+  const waitingSteps = readWorkflowStepRecords(workflowRecord)
+    .filter((step) => {
+      const status = readStringField(step, ["status"])?.toLowerCase();
+      return status === "waiting" || status === "waitingaction";
+    })
+    .map((step) => {
+      const title = readStringField(step, ["title", "stepTitle", "step_title"]);
+      const requestId = readStringField(step, ["requestId", "request_id"]);
+      const actionType = readStringField(step, [
+        "agentActionType",
+        "agent_action_type",
+      ]);
+      return [title, actionType, requestId].filter(Boolean).join(" / ");
+    })
+    .filter((item) => item.length > 0);
+  return waitingSteps.join(", ") || null;
+}
+
+function readWorkflowStepRecords(
+  workflowRecord: Record<string, unknown>,
+): Record<string, unknown>[] {
+  return readRecordArray(workflowRecord.steps);
+}
+
+function readFailureText(record: Record<string, unknown> | null): string | null {
+  if (!record) {
+    return null;
+  }
+  return readStringField(record, [
+    "message",
+    "errorMessage",
+    "error_message",
+    "reason",
+    "reasonCode",
+    "reason_code",
+    "code",
+    "category",
+    "failureCategory",
+    "failure_category",
+  ]);
+}
+
+function asPlainRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function readRecordArray(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value)
+    ? value
+        .map(asPlainRecord)
+        .filter((item): item is Record<string, unknown> => Boolean(item))
+    : [];
+}
+
+function readStringField(
+  record: Record<string, unknown>,
+  keys: string[],
+): string | null {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value !== "string") {
+      continue;
+    }
+    const normalized = value.trim();
+    if (normalized) {
+      return normalized;
+    }
+  }
+  return null;
 }
 
 export function buildGeneralWorkbenchActivityArtifactActionGroup({
@@ -1562,6 +1779,10 @@ export function buildGeneralWorkbenchRunDetailProjection({
     summary: buildRunDetailSummaryText({
       runMetadataSummary,
       activeRunStagesLabel,
+      t,
+    }),
+    detailRows: buildGeneralWorkbenchRunDetailFactRows({
+      runMetadataText,
       t,
     }),
     actions: buildGeneralWorkbenchRunDetailActions({

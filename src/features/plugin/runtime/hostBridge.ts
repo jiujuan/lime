@@ -718,6 +718,14 @@ interface PluginTaskSubscription {
   process?: PluginRuntimeProcessView;
 }
 
+interface PluginWorkflowSubscription {
+  subscriptionId: string;
+  sessionId: string;
+  pollIntervalMs: number;
+  timerId?: number;
+  inFlight: boolean;
+}
+
 function collectCssVariableTokens(root: HTMLElement): Record<string, string> {
   const tokens: Record<string, string> = {};
   const appendToken = (name: string, value: string) => {
@@ -928,6 +936,10 @@ export class PluginHostBridge {
     string,
     PluginTaskSubscription
   >();
+  private readonly workflowSubscriptions = new Map<
+    string,
+    PluginWorkflowSubscription
+  >();
   private taskSubscriptionSequence = 0;
   private disposed = false;
 
@@ -1011,6 +1023,9 @@ export class PluginHostBridge {
     );
     for (const subscriptionId of Array.from(this.taskSubscriptions.keys())) {
       this.stopTaskSubscription(subscriptionId);
+    }
+    for (const subscriptionId of Array.from(this.workflowSubscriptions.keys())) {
+      this.stopWorkflowSubscription(subscriptionId);
     }
   }
 
@@ -1447,6 +1462,40 @@ export class PluginHostBridge {
       readString(message.payload, "method");
     const taskId = readTaskIdFromPayload(message.payload);
     const sessionId = readSessionIdFromPayload(message.payload);
+    if (capability === "lime.agent" && topic === "workflow") {
+      if (!sessionId) {
+        throw new PluginHostBridgeActionError(
+          "INVALID_PAYLOAD",
+          "capability:subscribe workflow requires lime.agent payload.sessionId.",
+        );
+      }
+      const subscriptionId =
+        readString(message.payload, "subscriptionId") ??
+        `plugin-subscription-${++this.taskSubscriptionSequence}`;
+      const pollIntervalMs = readPositiveInteger(
+        message.payload.pollIntervalMs,
+        DEFAULT_TASK_SUBSCRIPTION_POLL_INTERVAL_MS,
+        MIN_TASK_SUBSCRIPTION_POLL_INTERVAL_MS,
+        MAX_TASK_SUBSCRIPTION_POLL_INTERVAL_MS,
+      );
+
+      this.stopCapabilitySubscription(subscriptionId);
+      this.workflowSubscriptions.set(subscriptionId, {
+        subscriptionId,
+        sessionId,
+        pollIntervalMs,
+        inFlight: false,
+      });
+      void this.pollWorkflowSubscription(subscriptionId);
+
+      return {
+        subscriptionId,
+        capability,
+        topic: "workflow",
+        sessionId,
+        pollIntervalMs,
+      };
+    }
     if (
       capability !== "lime.agent" ||
       !topic ||
@@ -1455,7 +1504,7 @@ export class PluginHostBridge {
     ) {
       throw new PluginHostBridgeActionError(
         "INVALID_PAYLOAD",
-        "capability:subscribe currently requires lime.agent task payload.taskId.",
+        "capability:subscribe currently requires lime.agent task payload.taskId or workflow payload.sessionId.",
       );
     }
     const subscriptionId =
@@ -1484,7 +1533,7 @@ export class PluginHostBridge {
       message.payload,
     );
 
-    this.stopTaskSubscription(subscriptionId);
+    this.stopCapabilitySubscription(subscriptionId);
     this.taskSubscriptions.set(subscriptionId, {
       subscriptionId,
       taskId,
@@ -1532,7 +1581,7 @@ export class PluginHostBridge {
         "capability:unsubscribe requires payload.subscriptionId.",
       );
     }
-    const unsubscribed = this.stopTaskSubscription(subscriptionId);
+    const unsubscribed = this.stopCapabilitySubscription(subscriptionId);
     return {
       subscriptionId,
       unsubscribed,
@@ -1798,6 +1847,106 @@ export class PluginHostBridge {
     return request;
   }
 
+  private async pollWorkflowSubscription(subscriptionId: string): Promise<void> {
+    const subscription = this.workflowSubscriptions.get(subscriptionId);
+    if (
+      !subscription ||
+      subscription.inFlight ||
+      this.disposed ||
+      !this.dispatchCapability
+    ) {
+      return;
+    }
+    subscription.inFlight = true;
+    try {
+      const result = await this.dispatchCapability(
+        this.buildWorkflowSubscriptionPollRequest(subscription),
+      );
+      this.postToApp("capability:event", {
+        subscriptionId,
+        capability: "lime.agent",
+        topic: "workflow",
+        eventType: "workflow:readModel",
+        sessionId: subscription.sessionId,
+        workflowRead: result,
+        workflow: isRecord(result) ? result.workflow : undefined,
+        workflowRuns: isRecord(result) ? result.workflowRuns : undefined,
+        workflowSteps: isRecord(result) ? result.workflowSteps : undefined,
+        emittedAt: (this.now ?? (() => new Date().toISOString()))(),
+      });
+    } catch (error) {
+      this.postToApp("capability:event", {
+        subscriptionId,
+        capability: "lime.agent",
+        topic: "workflow",
+        eventType: "workflow:error",
+        sessionId: subscription.sessionId,
+        error: this.buildHostErrorPayload(
+          {
+            protocol: PLUGIN_BRIDGE_PROTOCOL,
+            version: PLUGIN_BRIDGE_VERSION,
+            type: "capability:invoke",
+            appId: this.appId,
+            entryKey: this.entryKey,
+          },
+          error,
+        ),
+        emittedAt: (this.now ?? (() => new Date().toISOString()))(),
+      });
+      this.stopWorkflowSubscription(subscriptionId);
+      return;
+    } finally {
+      subscription.inFlight = false;
+    }
+
+    const latest = this.workflowSubscriptions.get(subscriptionId);
+    if (!latest || this.disposed) {
+      return;
+    }
+    latest.timerId = window.setTimeout(() => {
+      void this.pollWorkflowSubscription(subscriptionId);
+    }, latest.pollIntervalMs);
+  }
+
+  private buildWorkflowSubscriptionPollRequest(
+    subscription: PluginWorkflowSubscription,
+  ): PluginHostBridgeCapabilityRequest {
+    const input = {
+      sessionId: subscription.sessionId,
+    };
+    const invokeRequest = buildLimeCapabilityInvokeRequest({
+      capability: "lime.agent",
+      method: "readWorkflow",
+      args: input,
+      requestId: `${subscription.subscriptionId}:workflow:poll`,
+    });
+    const request: PluginHostBridgeCapabilityRequest = {
+      appId: this.appId,
+      capability: "lime.agent",
+      method: "readWorkflow",
+      requestId: `${subscription.subscriptionId}:workflow:poll`,
+      input,
+      invokeRequest,
+      rawPayload: {
+        capability: "lime.agent",
+        method: "readWorkflow",
+        input,
+        subscriptionId: subscription.subscriptionId,
+      },
+    };
+    if (this.entryKey) {
+      request.entryKey = this.entryKey;
+    }
+    return request;
+  }
+
+  private stopCapabilitySubscription(subscriptionId: string): boolean {
+    return (
+      this.stopTaskSubscription(subscriptionId) ||
+      this.stopWorkflowSubscription(subscriptionId)
+    );
+  }
+
   private stopTaskSubscription(subscriptionId: string): boolean {
     const subscription = this.taskSubscriptions.get(subscriptionId);
     if (!subscription) {
@@ -1808,6 +1957,18 @@ export class PluginHostBridge {
     }
     subscription.runtimeEventUnlisten?.();
     this.taskSubscriptions.delete(subscriptionId);
+    return true;
+  }
+
+  private stopWorkflowSubscription(subscriptionId: string): boolean {
+    const subscription = this.workflowSubscriptions.get(subscriptionId);
+    if (!subscription) {
+      return false;
+    }
+    if (subscription.timerId !== undefined) {
+      window.clearTimeout(subscription.timerId);
+    }
+    this.workflowSubscriptions.delete(subscriptionId);
     return true;
   }
 

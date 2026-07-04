@@ -68,6 +68,7 @@ export function buildScenarioAssertions(context) {
     isAnyExpertSkillsRuntimeScenario,
     isCancelThenContinueScenario,
     isContentFactoryArticleWorkspaceScenario,
+    isContentFactoryInlineImageArticleWorkspaceScenario,
     isExpertPanelSkillsRuntimeScenario,
     isExpertPlazaSkillsRuntimeScenario,
     isGoalScenario,
@@ -104,12 +105,42 @@ export function buildScenarioAssertions(context) {
     imageCommandRuntimeContract?.contract_key ??
     imageCommandRuntimeContract?.contractKey;
   const scenarioAssertions = isContentFactoryArticleWorkspaceScenario
-    ? buildContentFactoryArticleWorkspaceScenarioAssertions({
-        appServerRequestMethods,
-        backendLedger,
-        pageText,
-        summary,
-      })
+    ? {
+        ...buildContentFactoryArticleWorkspaceScenarioAssertions({
+          appServerRequestMethods,
+          backendLedger,
+          pageText,
+          summary,
+        }),
+        ...(isContentFactoryInlineImageArticleWorkspaceScenario
+          ? {
+              contentFactoryInlineImageTaskSlotPersisted:
+                summary.contentFactoryInlineImageTaskCreated?.payloadUsage ===
+                  "document-inline" &&
+                summary.contentFactoryInlineImageTaskCreated
+                  ?.relationshipSlotId === "article-inline-image-slot-e2e",
+              contentFactoryInlineImageTaskEventEmitted:
+                summary.contentFactoryInlineImageTaskSubmittedEvent?.emitted ===
+                  true &&
+                summary.contentFactoryInlineImageTaskSubmittedEvent?.slotId ===
+                  "article-inline-image-slot-e2e",
+              contentFactoryInlineImageTaskCompleted:
+                summary.contentFactoryInlineImageTaskCompleted
+                  ?.normalizedStatus === "succeeded" &&
+                summary.contentFactoryInlineImageTaskCompleted
+                  ?.relationshipSlotId === "article-inline-image-slot-e2e" &&
+                summary.contentFactoryInlineImageTaskCompleted
+                  ?.firstImageUrl ===
+                  "https://example.com/lime-fixture-guangzhou-inline.png",
+              contentFactoryInlineImageArticleRestored:
+                summary.contentFactoryInlineImageCanvas?.hasSlotMarker ===
+                  true &&
+                summary.contentFactoryInlineImageCanvas?.hasImageUrl === true &&
+                summary.contentFactoryInlineImageCanvas?.hasPendingProtocol ===
+                  false,
+            }
+          : {}),
+      }
     : isRightSurfaceVisualMatrixScenario
       ? {
           rightSurfaceVisualMatrixRequestedThroughAppServer:

@@ -30,6 +30,14 @@ declare module "*.svg?react" {
   export default ReactComponent;
 }
 
+declare module "react-syntax-highlighter/dist/esm/prism" {
+  export { Prism as default } from "react-syntax-highlighter";
+}
+
+declare module "react-syntax-highlighter/dist/esm/styles/prism" {
+  export * from "react-syntax-highlighter/dist/cjs/styles/prism";
+}
+
 // 全局类型声明
 declare global {
   type NotificationPermission = "default" | "denied" | "granted";

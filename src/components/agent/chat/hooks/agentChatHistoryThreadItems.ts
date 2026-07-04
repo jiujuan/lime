@@ -46,6 +46,7 @@ import {
   readThreadItemText,
 } from "./agentChatHistoryTimelineBasics";
 import { isUpdatePlanToolName } from "../utils/toolNameFamily";
+import { resolveSessionDetailTurnUsage } from "./agentChatHistoryUsage";
 
 function readPlanRevisionId(metadata: unknown): string | null {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
@@ -238,6 +239,7 @@ export function hydrateSessionDetailMessagesFromThreadItems(
       timestamp,
       isThinking: false,
       runtimeTurnId: item.turn_id,
+      usage: resolveSessionDetailTurnUsage(detail, item.turn_id),
     };
     return assistantDraft;
   };

@@ -21,8 +21,8 @@ export function buildWorkflowRuntimeCapabilityProfile(
       ...baseProfile.capabilities,
       "lime.workflow": {
         version: baseProfile.capabilities["lime.workflow"]?.version ?? "0.3.0",
-        enabled: true,
-        implementation: "native",
+        enabled: false,
+        implementation: "none",
       },
       "lime.ui": {
         version: baseProfile.capabilities["lime.ui"]?.version ?? "0.3.0",

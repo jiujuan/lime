@@ -72,7 +72,12 @@ describe("createPluginCapabilityDispatcher unit boundary", () => {
     });
     expect(single).toMatchObject({
       name: "lime.agent",
-      methods: expect.arrayContaining(["startTask", "streamTask", "getTask"]),
+      methods: expect.arrayContaining([
+        "startTask",
+        "streamTask",
+        "getTask",
+        "readWorkflow",
+      ]),
       enabled: true,
     });
 
@@ -199,6 +204,114 @@ describe("createPluginCapabilityDispatcher unit boundary", () => {
       }),
     ).rejects.toMatchObject({
       code: "CAPABILITY_NOT_FOUND",
+    });
+  });
+
+  it("应拒绝 lime.workflow 本地 DSL 方法，避免绕过 App Server workflow current API", async () => {
+    const dispatch = buildDispatcher();
+
+    for (const method of ["start", "checkpoint", "awaitHuman"]) {
+      await expect(
+        dispatch({
+          appId: "content-factory-app",
+          entryKey: "dashboard",
+          capability: "lime.workflow",
+          method,
+          rawPayload: {
+            capability: "lime.workflow",
+            method,
+          },
+        }),
+      ).rejects.toMatchObject({
+        code: "UNSUPPORTED_CAPABILITY",
+      });
+    }
+  });
+
+  it("应通过 lime.agent.readWorkflow 只读投影 App Server workflow read model", async () => {
+    const readWorkflow = vi.fn(async ({ sessionId }: { sessionId: string }) => ({
+      id: 91,
+      result: {
+        sessionId,
+        workflow: {
+          activeWorkflowRunId: "workflow-run-1",
+        },
+        workflowRuns: [
+          {
+            workflowRunId: "workflow-run-1",
+            status: "running",
+          },
+        ],
+        workflowSteps: [
+          {
+            workflowRunId: "workflow-run-1",
+            stepId: "draft",
+            status: "running",
+          },
+        ],
+      },
+      response: { jsonrpc: "2.0", id: 91, result: {} },
+      notifications: [],
+      messages: [],
+    }));
+    const dispatch = buildDispatcher({
+      workflowClient: {
+        readWorkflow,
+      },
+    });
+
+    await expect(
+      dispatch({
+        appId: "content-factory-app",
+        entryKey: "dashboard",
+        capability: "lime.agent",
+        method: "readWorkflow",
+        input: { sessionId: "plugin-session-1" },
+        rawPayload: {
+          capability: "lime.agent",
+          method: "readWorkflow",
+        },
+      }),
+    ).resolves.toMatchObject({
+      appId: "content-factory-app",
+      entryKey: "dashboard",
+      sessionId: "plugin-session-1",
+      source: "app_server_workflow_read",
+      workflow: {
+        activeWorkflowRunId: "workflow-run-1",
+      },
+      workflowRuns: [
+        {
+          workflowRunId: "workflow-run-1",
+          status: "running",
+        },
+      ],
+      workflowSteps: [
+        {
+          workflowRunId: "workflow-run-1",
+          stepId: "draft",
+          status: "running",
+        },
+      ],
+    });
+    expect(readWorkflow).toHaveBeenCalledWith({
+      sessionId: "plugin-session-1",
+    });
+
+    await expect(
+      dispatch({
+        appId: "content-factory-app",
+        entryKey: "dashboard",
+        capability: "lime.agent",
+        method: "readWorkflow",
+        input: {},
+        rawPayload: {
+          capability: "lime.agent",
+          method: "readWorkflow",
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_PAYLOAD",
     });
   });
 

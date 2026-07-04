@@ -307,7 +307,7 @@ describe("PluginsPage", () => {
         key: "content_article_generate",
         kind: "workflow",
         title: "写文章",
-        requiredCapabilities: ["lime.agent", "lime.artifacts", "lime.workflow"],
+        requiredCapabilities: ["lime.agent", "lime.artifacts"],
       },
     ];
     installedStates.push(

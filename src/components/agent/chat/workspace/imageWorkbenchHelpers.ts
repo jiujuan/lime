@@ -193,10 +193,7 @@ export function buildDefaultCanvasImageApplyTarget(params: {
   }
 
   if (params.canvasState.type === "document") {
-    return {
-      kind: "canvas-insert",
-      canvasType: "document",
-      anchorHint: "section_end",
+    return buildDocumentInlineImageApplyTarget({
       sectionTitle: resolveSectionTitleForSelection(
         params.canvasState.content,
         params.selectedText,
@@ -204,16 +201,50 @@ export function buildDefaultCanvasImageApplyTarget(params: {
       anchorText: normalizeSelectionAnchorText(params.selectedText),
       projectId: params.projectId ?? null,
       contentId: params.contentId ?? null,
-      actionLabel: tImageWorkbenchAction(
-        "agentChat.imageWorkbenchAction.apply.documentLabel",
-      ),
-      dispatchLabel: tImageWorkbenchAction(
-        "agentChat.imageWorkbenchAction.apply.documentDispatch",
-      ),
-    };
+    });
   }
 
   return null;
+}
+
+function normalizeDocumentInlineAnchorHint(
+  value?: CanvasImageInsertAnchorHint | string | null,
+): CanvasImageInsertAnchorHint {
+  switch (value) {
+    case "cursor":
+    case "section_end":
+    case "scene_end":
+    case "video_start_frame":
+      return value;
+    default:
+      return "section_end";
+  }
+}
+
+export function buildDocumentInlineImageApplyTarget(params: {
+  slotId?: string | null;
+  anchorHint?: CanvasImageInsertAnchorHint | string | null;
+  sectionTitle?: string | null;
+  anchorText?: string | null;
+  projectId?: string | null;
+  contentId?: string | null;
+}): Extract<ImageWorkbenchApplyTarget, { kind: "canvas-insert" }> {
+  return {
+    kind: "canvas-insert",
+    canvasType: "document",
+    anchorHint: normalizeDocumentInlineAnchorHint(params.anchorHint),
+    slotId: params.slotId ?? null,
+    sectionTitle: params.sectionTitle ?? null,
+    anchorText: params.anchorText ?? null,
+    projectId: params.projectId ?? null,
+    contentId: params.contentId ?? null,
+    actionLabel: tImageWorkbenchAction(
+      "agentChat.imageWorkbenchAction.apply.documentLabel",
+    ),
+    dispatchLabel: tImageWorkbenchAction(
+      "agentChat.imageWorkbenchAction.apply.documentDispatch",
+    ),
+  };
 }
 
 export function resolveScopedImageWorkbenchApplyTarget(params: {

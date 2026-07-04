@@ -87,7 +87,10 @@ const {
   METHOD_AGENT_SESSION_TURN_CANCEL,
   METHOD_AGENT_SESSION_TURN_START,
   METHOD_AGENT_SESSION_UPDATE,
+  METHOD_WORKFLOW_CANCEL,
   METHOD_WORKFLOW_READ,
+  METHOD_WORKFLOW_RESPOND,
+  METHOD_WORKFLOW_RETRY,
   METHOD_ARTIFACT_READ,
   METHOD_AUTOMATION_JOB_CREATE,
   METHOD_AUTOMATION_JOB_DELETE,
@@ -392,6 +395,24 @@ test("builds initialize and caller supplied session start requests", () => {
   const workflow = client.readWorkflow({
     sessionId: "sess_external",
   });
+  const workflowCancel = client.cancelWorkflow({
+    sessionId: "sess_external",
+    workflowRunId: "run_external",
+    reasonCode: "user_requested",
+  });
+  const workflowRetry = client.retryWorkflow({
+    sessionId: "sess_external",
+    workflowRunId: "run_external",
+  });
+  const workflowRespond = client.respondWorkflow({
+    sessionId: "sess_external",
+    workflowRunId: "run_external",
+    stepId: "approval",
+    requestId: "ask-approval-1",
+    actionType: "ask_user",
+    confirmed: true,
+    response: { answer: "approved" },
+  });
 
   assert.equal(initialize.id, 1);
   assert.equal(initialize.method, METHOD_INITIALIZE);
@@ -401,6 +422,14 @@ test("builds initialize and caller supplied session start requests", () => {
   assert.equal(workflow.id, 3);
   assert.equal(workflow.method, METHOD_WORKFLOW_READ);
   assert.equal(workflow.params.sessionId, "sess_external");
+  assert.equal(workflowCancel.id, 4);
+  assert.equal(workflowCancel.method, METHOD_WORKFLOW_CANCEL);
+  assert.equal(workflowCancel.params.workflowRunId, "run_external");
+  assert.equal(workflowRetry.id, 5);
+  assert.equal(workflowRetry.method, METHOD_WORKFLOW_RETRY);
+  assert.equal(workflowRespond.id, 6);
+  assert.equal(workflowRespond.method, METHOD_WORKFLOW_RESPOND);
+  assert.equal(workflowRespond.params.stepId, "approval");
   assert.equal(ERROR_CODES.sessionAlreadyExists, -32013);
   assert.equal(ERROR_CODES.capabilityDenied, -32020);
 });
@@ -2685,6 +2714,9 @@ test("exports app-server method catalog with request and notification kinds", ()
     { method: METHOD_AGENT_SESSION_ACTION_RESPOND, kind: "request" },
     { method: METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND, kind: "request" },
     { method: METHOD_WORKFLOW_READ, kind: "request" },
+    { method: METHOD_WORKFLOW_CANCEL, kind: "request" },
+    { method: METHOD_WORKFLOW_RETRY, kind: "request" },
+    { method: METHOD_WORKFLOW_RESPOND, kind: "request" },
     { method: METHOD_AGENT_SESSION_EVENT, kind: "notification" },
   ]);
   assert.equal(isAppServerRequestMethod(METHOD_INITIALIZE), true);

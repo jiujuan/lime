@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "reason": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "reasonCode": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "sessionId": {
+      "type": "string"
+    },
+    "stepId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "workflowRunId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "sessionId",
+    "workflowRunId"
+  ],
+  "title": "WorkflowCancelParams",
+  "type": "object"
+}

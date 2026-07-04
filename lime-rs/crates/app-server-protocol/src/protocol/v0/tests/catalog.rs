@@ -288,6 +288,9 @@ fn app_server_method_catalog_keeps_request_and_notification_methods_together() {
             METHOD_AGENT_SESSION_ACTION_RESPOND,
             METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
             METHOD_WORKFLOW_READ,
+            METHOD_WORKFLOW_CANCEL,
+            METHOD_WORKFLOW_RETRY,
+            METHOD_WORKFLOW_RESPOND,
             METHOD_AGENT_SESSION_EVENT,
         ]
     );
@@ -325,6 +328,9 @@ fn app_server_method_catalog_keeps_request_and_notification_methods_together() {
         METHOD_AGENT_SESSION_TURN_START
     ));
     assert!(is_app_server_request_method(METHOD_WORKFLOW_READ));
+    assert!(is_app_server_request_method(METHOD_WORKFLOW_CANCEL));
+    assert!(is_app_server_request_method(METHOD_WORKFLOW_RETRY));
+    assert!(is_app_server_request_method(METHOD_WORKFLOW_RESPOND));
     assert!(!is_app_server_request_method(METHOD_INITIALIZED));
     assert!(is_app_server_notification_method(METHOD_INITIALIZED));
     assert!(is_app_server_notification_method(

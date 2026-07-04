@@ -70,7 +70,7 @@ export declare const LIME_CAPABILITY_DEFINITIONS: readonly [{
     readonly group: "agent_runtime";
     readonly stage: "current";
     readonly owner: "agent_runtime";
-    readonly methods: readonly ["startTask", "streamTask", "getTask", "cancelTask", "retryTask", "submitHostResponse", "listTasks"];
+    readonly methods: readonly ["startTask", "streamTask", "getTask", "cancelTask", "retryTask", "submitHostResponse", "listTasks", "readWorkflow"];
     readonly summary: "App-scoped Agent task、流式过程、追问、确认、取消和重试。";
     readonly appResponsibility: "组装业务输入、期望产物、人工确认和写回目标。";
     readonly limeResponsibility: "复用 AgentRuntime、Skills、Tools、Evidence、模型和队列。";
@@ -124,16 +124,13 @@ export declare const LIME_CAPABILITY_DEFINITIONS: readonly [{
     readonly name: "lime.workflow";
     readonly version: "0.3.0";
     readonly group: "agent_runtime";
-    readonly stage: "current";
+    readonly stage: "planned";
     readonly owner: "agent_runtime";
     readonly methods: readonly ["start", "checkpoint", "awaitHuman"];
-    readonly summary: "App workflow、checkpoint、后台任务和人类确认。";
-    readonly appResponsibility: "定义业务步骤、状态机和人工介入点。";
-    readonly limeResponsibility: "托管运行状态、恢复、权限和 Host response。";
-    readonly profile: {
-        readonly mock: "mock";
-        readonly adapter: "mock";
-    };
+    readonly summary: "已退役的 App iframe 本地 workflow DSL 能力；current 控制面走 App Server workflow API。";
+    readonly appResponsibility: "不要在 iframe SDK 内启动本地 workflow，改由 Agent task 或宿主 current API 表达业务步骤。";
+    readonly limeResponsibility: "通过 workflow/read、workflow/cancel、workflow/retry、workflow/respond 托管运行状态、恢复、权限和 Host response。";
+    readonly profile: {};
 }, {
     readonly name: "lime.policy";
     readonly version: "0.3.0";

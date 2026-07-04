@@ -1,4 +1,9 @@
 import type { AgentTokenUsage } from "@/lib/api/agentProtocol";
+import type { AsterSessionDetail } from "@/lib/api/agentRuntime";
+import {
+  asHistoryRecord,
+  readHistoryString,
+} from "./agentChatHistoryPrimitives";
 
 function readNonNegativeNumber(
   record: Record<string, unknown>,
@@ -49,4 +54,53 @@ export function normalizeHistoryUsage(
       "cacheCreationInputTokens",
     ]),
   };
+}
+
+function historyTurnIdFromRecord(value: unknown): string {
+  const record = asHistoryRecord(value);
+  return (
+    readHistoryString(record?.turn_id) ||
+    readHistoryString(record?.turnId) ||
+    readHistoryString(record?.id)
+  );
+}
+
+function historyUsageFromTurnRecord(value: unknown): AgentTokenUsage | undefined {
+  const record = asHistoryRecord(value);
+  return normalizeHistoryUsage(
+    record?.usage ?? record?.token_usage ?? record?.tokenUsage,
+  );
+}
+
+function findTurnUsageInRecords(
+  turns: readonly unknown[],
+  runtimeTurnId?: string | null,
+): AgentTokenUsage | undefined {
+  const normalizedTurnId = runtimeTurnId?.trim() || "";
+  return [...turns]
+    .reverse()
+    .filter((turn) => {
+      if (!normalizedTurnId) {
+        return true;
+      }
+      return historyTurnIdFromRecord(turn) === normalizedTurnId;
+    })
+    .map(historyUsageFromTurnRecord)
+    .find((usage): usage is AgentTokenUsage => Boolean(usage));
+}
+
+export function resolveSessionDetailTurnUsage(
+  detail: AsterSessionDetail,
+  runtimeTurnId?: string | null,
+): AgentTokenUsage | undefined {
+  return (
+    findTurnUsageInRecords(detail.thread_read?.turns || [], runtimeTurnId) ??
+    findTurnUsageInRecords(detail.turns || [], runtimeTurnId) ??
+    normalizeHistoryUsage(
+      asHistoryRecord(detail.thread_read?.diagnostics)?.latest_turn_usage ??
+        asHistoryRecord(detail.thread_read?.diagnostics)?.latestTurnUsage ??
+        asHistoryRecord(detail.thread_read?.runtime_summary)?.latest_turn_usage ??
+        asHistoryRecord(detail.thread_read?.runtime_summary)?.latestTurnUsage,
+    )
+  );
 }

@@ -1,3 +1,4 @@
+use agent_protocol::provider_trace::ProviderTraceStage;
 use agent_protocol::turn_context::TurnOutputSchemaRuntime;
 use lime_core::database::dao::agent_timeline::{AgentThreadItem, AgentThreadTurn};
 use serde::{Deserialize, Serialize};
@@ -10,6 +11,8 @@ use crate::session_execution_runtime::{
     SessionExecutionRuntimeLimitState, SessionExecutionRuntimeRoutingDecision,
     SessionExecutionRuntimeTaskProfile,
 };
+
+pub type AgentActionRequiredScope = agent_protocol::action_required::ActionRequiredScope;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentToolImage {
@@ -205,16 +208,6 @@ pub struct AgentMessage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AgentActionRequiredScope {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub session_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub thread_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub turn_id: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum AgentMessageContent {
     #[serde(rename = "text")]
@@ -271,15 +264,7 @@ pub enum TextDeltaBatchBoundary {
     Provider,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum AgentProviderTraceStage {
-    RequestStarted,
-    FirstEventReceived,
-    FirstTextDeltaReceived,
-    Failed,
-    Canceled,
-}
+pub type AgentProviderTraceStage = ProviderTraceStage;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]

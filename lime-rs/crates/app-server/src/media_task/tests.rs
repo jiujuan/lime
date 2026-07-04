@@ -6,6 +6,39 @@ use app_server_protocol::{
 use serde_json::json;
 
 #[test]
+fn image_create_persists_inline_slot_relationship() {
+    let workspace = tempfile::tempdir().expect("workspace");
+    let created = create_image_generation_task_artifact(
+        MediaTaskArtifactImageCreateParams {
+            project_root_path: workspace.path().to_string_lossy().to_string(),
+            prompt: "生成正文里的广州夏日街景配图".to_string(),
+            count: Some(1),
+            provider_id: Some("fal".to_string()),
+            model: Some("fal-ai/nano-banana-pro".to_string()),
+            executor_mode: Some("images_api".to_string()),
+            usage: Some("document-inline".to_string()),
+            slot_id: Some("article-image-slot-1".to_string()),
+            ..MediaTaskArtifactImageCreateParams::default()
+        },
+        None,
+    )
+    .expect("create inline image task");
+
+    assert_eq!(
+        created.record["payload"]["usage"].as_str(),
+        Some("document-inline")
+    );
+    assert_eq!(
+        created.record["payload"]["slot_id"].as_str(),
+        Some("article-image-slot-1")
+    );
+    assert_eq!(
+        created.record["relationships"]["slot_id"].as_str(),
+        Some("article-image-slot-1")
+    );
+}
+
+#[test]
 fn image_complete_generates_preview_slot_id_when_image_has_no_slot_id() {
     let workspace = tempfile::tempdir().expect("workspace");
     let created = create_image_generation_task_artifact(

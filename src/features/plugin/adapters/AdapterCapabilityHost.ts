@@ -197,7 +197,7 @@ export class AdapterCapabilityHost implements CapabilityHost {
               mode: "retrieval" as const,
             })),
           ),
-          humanReview: entry.kind === "workflow",
+          humanReview: false,
         })
       : null;
     if (agentTask) {
@@ -623,6 +623,17 @@ export class AdapterCapabilityHost implements CapabilityHost {
   }
 
   private assertRunnable(entry: ProjectedEntry): void {
+    if (entry.kind === "workflow") {
+      throw new PluginCapabilityError({
+        code: "WORKFLOW_RUNTIME_DISABLED",
+        message:
+          "Plugin workflow entries require the App Server Workflow API; the local adapter workflow runner is retired.",
+        appId: this.preview.identity.appId,
+        entryKey: entry.key,
+        capability: "lime.workflow",
+      });
+    }
+
     const entryReadiness = this.preview.readiness.entryReadiness.find(
       (item) => item.entryKey === entry.key,
     );

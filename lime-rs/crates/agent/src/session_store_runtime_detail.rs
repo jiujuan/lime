@@ -13,14 +13,15 @@ use super::session_store_subagent_context::{
 };
 use super::session_store_types::SessionDetail;
 use super::{get_session_sync_with_history_page, resolve_session_provider_selector};
-use crate::aster_runtime_projection::{
-    project_aster_message, project_aster_runtime_snapshot,
-    project_aster_session_execution_runtime_session,
-    project_aster_session_execution_runtime_snapshot, project_aster_session_usage,
-};
+use crate::aster_runtime_projection::project_aster_message;
 use crate::aster_runtime_support::load_aster_runtime_snapshot;
+use crate::runtime_snapshot_adapter::project_aster_runtime_snapshot;
 use crate::session_execution_runtime::{
     build_session_execution_runtime, reconcile_session_execution_runtime_permission_fallback,
+};
+use crate::session_execution_runtime_adapter::{
+    project_aster_session_execution_runtime_session,
+    project_aster_session_execution_runtime_snapshot, project_aster_session_usage,
 };
 use crate::session_query::read_session;
 

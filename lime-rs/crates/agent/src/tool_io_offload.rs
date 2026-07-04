@@ -1,21 +1,3 @@
-use aster::context::{
-    analyze_tool_io_text_payload as analyze_text_payload_stats,
-    analyze_tool_io_value_payload as analyze_value_payload_stats,
-    build_tool_io_history_eviction_plan as build_aster_tool_io_history_eviction_plan,
-    build_tool_io_notice_text as build_aster_tool_io_notice_text,
-    build_tool_io_payload_envelope as build_aster_tool_io_payload_envelope,
-    build_tool_io_preview as build_aster_tool_io_preview,
-    estimate_tool_io_tokens as estimate_text_token_count,
-    resolve_tool_io_eviction_policy as resolve_aster_tool_io_eviction_policy,
-    resolve_tool_io_offload_decision as resolve_aster_tool_io_offload_decision,
-    ToolIoEvictionConfig, ToolIoEvictionPolicy,
-    ToolIoHistoryEvictionCandidate as AsterToolIoHistoryEvictionCandidate,
-    ToolIoHistoryMessageAnalysis as AsterToolIoHistoryMessageAnalysis, ToolIoOffloadThresholds,
-    ToolIoOffloadTrigger, ToolIoPayloadStats, ToolIoPreviewConfig,
-    DEFAULT_CONTEXT_WINDOW_KEEP_RECENT_MESSAGES, DEFAULT_CONTEXT_WINDOW_MAX_INPUT_TOKENS,
-    DEFAULT_CONTEXT_WINDOW_TRIGGER_RATIO, DEFAULT_TOOL_IO_PREVIEW_MAX_CHARS,
-    DEFAULT_TOOL_IO_PREVIEW_MAX_LINES, DEFAULT_TOOL_TOKEN_LIMIT_BEFORE_EVICT,
-};
 use lime_core::agent::types::AgentMessage;
 use lime_core::env_compat;
 use serde::Serialize;
@@ -24,6 +6,24 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
+use tool_runtime::tool_io::{
+    analyze_tool_io_text_payload as analyze_text_payload_stats,
+    analyze_tool_io_value_payload as analyze_value_payload_stats,
+    build_tool_io_history_eviction_plan as build_runtime_tool_io_history_eviction_plan,
+    build_tool_io_notice_text as build_runtime_tool_io_notice_text,
+    build_tool_io_payload_envelope as build_runtime_tool_io_payload_envelope,
+    build_tool_io_preview as build_runtime_tool_io_preview,
+    estimate_tool_io_tokens as estimate_text_token_count,
+    resolve_tool_io_eviction_policy as resolve_runtime_tool_io_eviction_policy,
+    resolve_tool_io_offload_decision as resolve_runtime_tool_io_offload_decision,
+    ToolIoEvictionConfig, ToolIoEvictionPolicy,
+    ToolIoHistoryEvictionCandidate as RuntimeToolIoHistoryEvictionCandidate,
+    ToolIoHistoryMessageAnalysis as RuntimeToolIoHistoryMessageAnalysis, ToolIoOffloadThresholds,
+    ToolIoOffloadTrigger, ToolIoPayloadStats, ToolIoPreviewConfig,
+    DEFAULT_CONTEXT_WINDOW_KEEP_RECENT_MESSAGES, DEFAULT_CONTEXT_WINDOW_MAX_INPUT_TOKENS,
+    DEFAULT_CONTEXT_WINDOW_TRIGGER_RATIO, DEFAULT_TOOL_IO_PREVIEW_MAX_CHARS,
+    DEFAULT_TOOL_IO_PREVIEW_MAX_LINES, DEFAULT_TOOL_TOKEN_LIMIT_BEFORE_EVICT,
+};
 
 const TOOL_IO_OFFLOAD_DIR: &str = "harness/tool-io";
 const TOOL_ARGUMENTS_DIR: &str = "inputs";
@@ -215,7 +215,7 @@ pub fn resolve_tool_io_eviction_policy_for_model(model_name: Option<&str>) -> To
         normalize_model_hint(model_name)
     };
 
-    resolve_aster_tool_io_eviction_policy(resolved_model_name, config)
+    resolve_runtime_tool_io_eviction_policy(resolved_model_name, config)
 }
 
 fn resolve_offload_root() -> Result<PathBuf, String> {
@@ -345,7 +345,7 @@ fn resolve_argument_offload_trigger(
     stats: ToolIoPayloadStats,
     policy: ToolIoEvictionPolicy,
 ) -> Option<ToolIoOffloadTrigger> {
-    resolve_aster_tool_io_offload_decision(stats, policy, TOOL_ARGUMENTS_OFFLOAD_THRESHOLDS)
+    resolve_runtime_tool_io_offload_decision(stats, policy, TOOL_ARGUMENTS_OFFLOAD_THRESHOLDS)
         .map(|decision| decision.trigger)
 }
 
@@ -353,7 +353,7 @@ fn resolve_result_offload_trigger(
     stats: ToolIoPayloadStats,
     policy: ToolIoEvictionPolicy,
 ) -> Option<ToolIoOffloadTrigger> {
-    resolve_aster_tool_io_offload_decision(stats, policy, TOOL_RESULT_OFFLOAD_THRESHOLDS)
+    resolve_runtime_tool_io_offload_decision(stats, policy, TOOL_RESULT_OFFLOAD_THRESHOLDS)
         .map(|decision| decision.trigger)
 }
 
@@ -399,8 +399,8 @@ fn offload_tool_arguments_internal(
         Err(_) => return arguments.clone(),
     };
     let stats = analyze_text_payload_stats(&serialized);
-    let preview = build_aster_tool_io_preview(&serialized, TOOL_OFFLOAD_PREVIEW_CONFIG);
-    let payload = build_aster_tool_io_payload_envelope("tool_arguments", arguments.clone());
+    let preview = build_runtime_tool_io_preview(&serialized, TOOL_OFFLOAD_PREVIEW_CONFIG);
+    let payload = build_runtime_tool_io_payload_envelope("tool_arguments", arguments.clone());
     let Ok(root) = resolve_offload_root() else {
         return arguments.clone();
     };
@@ -433,9 +433,9 @@ fn offload_tool_output_internal(
         };
     };
 
-    let preview = build_aster_tool_io_preview(preview_source, TOOL_OFFLOAD_PREVIEW_CONFIG);
+    let preview = build_runtime_tool_io_preview(preview_source, TOOL_OFFLOAD_PREVIEW_CONFIG);
     ToolOutputOffload {
-        output: build_aster_tool_io_notice_text(
+        output: build_runtime_tool_io_notice_text(
             &preview,
             &format!(
                 "[Lime Offload] 完整输出已转存到文件：{}",
@@ -488,7 +488,7 @@ pub fn maybe_offload_tool_result_payload<T: Serialize>(
     offload_tool_output_internal(
         key,
         preview_source,
-        build_aster_tool_io_payload_envelope("tool_result", payload_value),
+        build_runtime_tool_io_payload_envelope("tool_result", payload_value),
         stats,
         metadata,
         "tool_result",
@@ -513,7 +513,10 @@ pub fn maybe_offload_plain_tool_output(
     offload_tool_output_internal(
         key,
         output,
-        build_aster_tool_io_payload_envelope("tool_result_text", Value::String(output.to_string())),
+        build_runtime_tool_io_payload_envelope(
+            "tool_result_text",
+            Value::String(output.to_string()),
+        ),
         stats,
         metadata,
         "tool_result_text",
@@ -529,7 +532,10 @@ pub fn force_offload_plain_tool_output_for_history(
     offload_tool_output_internal(
         key,
         output,
-        build_aster_tool_io_payload_envelope("tool_result_text", Value::String(output.to_string())),
+        build_runtime_tool_io_payload_envelope(
+            "tool_result_text",
+            Value::String(output.to_string()),
+        ),
         analyze_text_payload_stats(output),
         metadata,
         "tool_result_text",
@@ -591,15 +597,15 @@ fn estimate_message_tokens(
     (total_tokens, candidates)
 }
 
-fn build_aster_history_message_analysis(
+fn build_runtime_history_message_analysis(
     total_tokens: usize,
     candidates: &[HistoryEvictionCandidate],
-) -> AsterToolIoHistoryMessageAnalysis {
-    AsterToolIoHistoryMessageAnalysis {
+) -> RuntimeToolIoHistoryMessageAnalysis {
+    RuntimeToolIoHistoryMessageAnalysis {
         total_tokens,
         candidates: candidates
             .iter()
-            .map(|candidate| AsterToolIoHistoryEvictionCandidate {
+            .map(|candidate| RuntimeToolIoHistoryEvictionCandidate {
                 reduction_tokens: candidate.reduction_tokens,
             })
             .collect(),
@@ -630,7 +636,7 @@ pub fn build_history_tool_io_eviction_plan_for_model(
     for message in messages {
         let (tokens, candidates) = estimate_message_tokens(message, policy);
         plan.total_tokens += tokens;
-        analysis.push(build_aster_history_message_analysis(tokens, &candidates));
+        analysis.push(build_runtime_history_message_analysis(tokens, &candidates));
         per_message_candidates.push(candidates);
     }
     plan.projected_tokens = plan.total_tokens;
@@ -639,7 +645,7 @@ pub fn build_history_tool_io_eviction_plan_for_model(
         return plan;
     }
 
-    let framework_plan = build_aster_tool_io_history_eviction_plan(&analysis, policy);
+    let framework_plan = build_runtime_tool_io_history_eviction_plan(&analysis, policy);
     plan.projected_tokens = framework_plan.projected_tokens;
 
     for selection in framework_plan.selections {
@@ -836,7 +842,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_tool_io_eviction_policy_should_use_aster_model_context_limit() {
+    fn resolve_tool_io_eviction_policy_should_use_protocol_model_context_limit() {
         let _lock = env_lock().lock().expect("lock env");
         let policy = resolve_tool_io_eviction_policy_for_model(Some("gpt-4.1"));
         assert_eq!(policy.context_max_input_tokens, 1_000_000);

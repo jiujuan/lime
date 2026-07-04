@@ -16,8 +16,7 @@
       "lime.evidence",
       "lime.knowledge",
       "lime.media",
-      "lime.policy",
-      "lime.workflow"
+      "lime.policy"
     ]
   },
   "distribution": {

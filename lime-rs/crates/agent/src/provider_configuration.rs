@@ -1,6 +1,7 @@
-use crate::{AsterAgentState, AsterProviderProtocol, ProviderConfig};
+use crate::{AsterAgentState, ProviderConfig, RuntimeProviderProtocol};
 use app_server_protocol::ProtocolKind;
 use lime_core::database::DbConnection;
+use model_provider::ModelProviderProtocol;
 
 pub struct ProviderConfigurationRequest<'a> {
     pub db: &'a DbConnection,
@@ -16,7 +17,7 @@ pub async fn configure_provider_for_session(
     agent_state: &AsterAgentState,
     request: ProviderConfigurationRequest<'_>,
 ) -> Result<ProviderConfig, String> {
-    let protocol = aster_provider_protocol_from_route_protocol(request.route_protocol);
+    let protocol = runtime_provider_protocol_from_route_protocol(request.route_protocol);
     if let Some(mut config) = request.direct_provider_config {
         config.protocol = protocol.or(config.protocol);
         agent_state
@@ -25,7 +26,7 @@ pub async fn configure_provider_for_session(
         return Ok(config);
     }
 
-    let aster_config = agent_state
+    let runtime_config = agent_state
         .configure_provider_from_pool(
             request.db,
             request.provider,
@@ -36,42 +37,76 @@ pub async fn configure_provider_for_session(
         )
         .await?;
     Ok(ProviderConfig {
-        provider_name: aster_config.provider_name,
-        provider_selector: aster_config.provider_selector,
-        model_name: aster_config.model_name,
-        api_key: aster_config.api_key,
-        base_url: aster_config.base_url,
-        credential_uuid: Some(aster_config.credential_uuid),
-        reasoning_effort: aster_config.reasoning_effort,
-        protocol: aster_config.protocol,
-        toolshim: aster_config.toolshim,
-        toolshim_model: aster_config.toolshim_model,
+        provider_name: runtime_config.provider_name,
+        provider_selector: runtime_config.provider_selector,
+        model_name: runtime_config.model_name,
+        api_key: runtime_config.api_key,
+        base_url: runtime_config.base_url,
+        credential_uuid: Some(runtime_config.credential_uuid),
+        reasoning_effort: runtime_config.reasoning_effort,
+        protocol: runtime_config.protocol,
+        toolshim: runtime_config.toolshim,
+        toolshim_model: runtime_config.toolshim_model,
     })
 }
 
 pub fn route_protocol_from_provider_config(config: &ProviderConfig) -> Option<ProtocolKind> {
-    route_protocol_from_aster_protocol(config.protocol)
+    route_protocol_from_model_provider_protocol(model_provider_protocol_from_runtime_protocol(
+        config.protocol,
+    ))
 }
 
-fn aster_provider_protocol_from_route_protocol(
+fn runtime_provider_protocol_from_route_protocol(
     protocol: Option<ProtocolKind>,
-) -> Option<AsterProviderProtocol> {
+) -> Option<RuntimeProviderProtocol> {
+    runtime_provider_protocol_from_model_provider_protocol(
+        model_provider_protocol_from_route_protocol(protocol),
+    )
+}
+
+fn model_provider_protocol_from_route_protocol(
+    protocol: Option<ProtocolKind>,
+) -> Option<ModelProviderProtocol> {
     match protocol? {
         ProtocolKind::OpenaiResponses | ProtocolKind::CodexResponses => {
-            Some(AsterProviderProtocol::Responses)
+            Some(ModelProviderProtocol::Responses)
         }
-        ProtocolKind::OpenaiChat => Some(AsterProviderProtocol::ChatCompletions),
+        ProtocolKind::OpenaiChat => Some(ModelProviderProtocol::ChatCompletions),
         _ => None,
     }
 }
 
-fn route_protocol_from_aster_protocol(
-    protocol: Option<AsterProviderProtocol>,
+fn runtime_provider_protocol_from_model_provider_protocol(
+    protocol: Option<ModelProviderProtocol>,
+) -> Option<RuntimeProviderProtocol> {
+    match protocol {
+        Some(ModelProviderProtocol::Responses) => Some(RuntimeProviderProtocol::Responses),
+        Some(ModelProviderProtocol::ChatCompletions) => {
+            Some(RuntimeProviderProtocol::ChatCompletions)
+        }
+        Some(ModelProviderProtocol::Custom(_)) | None => None,
+    }
+}
+
+fn model_provider_protocol_from_runtime_protocol(
+    protocol: Option<RuntimeProviderProtocol>,
+) -> Option<ModelProviderProtocol> {
+    match protocol {
+        Some(RuntimeProviderProtocol::Responses) => Some(ModelProviderProtocol::Responses),
+        Some(RuntimeProviderProtocol::ChatCompletions) => {
+            Some(ModelProviderProtocol::ChatCompletions)
+        }
+        None => None,
+    }
+}
+
+fn route_protocol_from_model_provider_protocol(
+    protocol: Option<ModelProviderProtocol>,
 ) -> Option<ProtocolKind> {
     match protocol {
-        Some(AsterProviderProtocol::Responses) => Some(ProtocolKind::OpenaiResponses),
-        Some(AsterProviderProtocol::ChatCompletions) => Some(ProtocolKind::OpenaiChat),
-        None => None,
+        Some(ModelProviderProtocol::Responses) => Some(ProtocolKind::OpenaiResponses),
+        Some(ModelProviderProtocol::ChatCompletions) => Some(ProtocolKind::OpenaiChat),
+        Some(ModelProviderProtocol::Custom(_)) | None => None,
     }
 }
 
@@ -80,21 +115,41 @@ mod tests {
     use super::*;
 
     #[test]
-    fn route_protocol_is_projected_to_aster_adapter_protocol() {
+    fn route_protocol_is_projected_to_model_provider_protocol() {
         assert_eq!(
-            aster_provider_protocol_from_route_protocol(Some(ProtocolKind::OpenaiResponses)),
-            Some(AsterProviderProtocol::Responses)
+            model_provider_protocol_from_route_protocol(Some(ProtocolKind::OpenaiResponses)),
+            Some(ModelProviderProtocol::Responses)
         );
         assert_eq!(
-            aster_provider_protocol_from_route_protocol(Some(ProtocolKind::CodexResponses)),
-            Some(AsterProviderProtocol::Responses)
+            model_provider_protocol_from_route_protocol(Some(ProtocolKind::CodexResponses)),
+            Some(ModelProviderProtocol::Responses)
         );
         assert_eq!(
-            aster_provider_protocol_from_route_protocol(Some(ProtocolKind::OpenaiChat)),
-            Some(AsterProviderProtocol::ChatCompletions)
+            model_provider_protocol_from_route_protocol(Some(ProtocolKind::OpenaiChat)),
+            Some(ModelProviderProtocol::ChatCompletions)
         );
         assert_eq!(
-            aster_provider_protocol_from_route_protocol(Some(ProtocolKind::AnthropicMessages)),
+            model_provider_protocol_from_route_protocol(Some(ProtocolKind::AnthropicMessages)),
+            None
+        );
+    }
+
+    #[test]
+    fn model_provider_protocol_is_projected_to_runtime_adapter_protocol() {
+        assert_eq!(
+            runtime_provider_protocol_from_route_protocol(Some(ProtocolKind::OpenaiResponses)),
+            Some(RuntimeProviderProtocol::Responses)
+        );
+        assert_eq!(
+            runtime_provider_protocol_from_route_protocol(Some(ProtocolKind::CodexResponses)),
+            Some(RuntimeProviderProtocol::Responses)
+        );
+        assert_eq!(
+            runtime_provider_protocol_from_route_protocol(Some(ProtocolKind::OpenaiChat)),
+            Some(RuntimeProviderProtocol::ChatCompletions)
+        );
+        assert_eq!(
+            runtime_provider_protocol_from_route_protocol(Some(ProtocolKind::AnthropicMessages)),
             None
         );
     }
@@ -109,7 +164,7 @@ mod tests {
             base_url: None,
             credential_uuid: None,
             reasoning_effort: None,
-            protocol: Some(AsterProviderProtocol::Responses),
+            protocol: Some(RuntimeProviderProtocol::Responses),
             toolshim: false,
             toolshim_model: None,
         };
@@ -118,7 +173,7 @@ mod tests {
             Some(ProtocolKind::OpenaiResponses)
         );
 
-        config.protocol = Some(AsterProviderProtocol::ChatCompletions);
+        config.protocol = Some(RuntimeProviderProtocol::ChatCompletions);
         assert_eq!(
             route_protocol_from_provider_config(&config),
             Some(ProtocolKind::OpenaiChat)

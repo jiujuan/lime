@@ -1,3 +1,6 @@
+pub mod ask;
+pub mod turn_executor;
+
 use agent_protocol::{AgentTurnInput, RuntimeSnapshot, SessionId, ThreadId, TurnId};
 use model_provider::ModelRoute;
 use serde::{Deserialize, Serialize};

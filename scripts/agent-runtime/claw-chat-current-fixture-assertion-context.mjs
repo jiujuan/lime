@@ -1,6 +1,7 @@
 import {
   CONTINUE_PROMPT,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO,
+  CONTENT_FACTORY_INLINE_IMAGE_ARTICLE_WORKSPACE_SCENARIO,
   EXPERT_SKILLS_RUNTIME_PANEL_PROMPT,
   EXPERT_SKILLS_RUNTIME_PROMPT,
   EXPERT_SKILLS_RUNTIME_SKILL_REF,
@@ -138,8 +139,11 @@ export function buildAssertionContext({
       options.scenario === "expert-panel-skills-runtime";
     const isRightSurfaceVisualMatrixScenario =
       options.scenario === RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO;
+    const isContentFactoryInlineImageArticleWorkspaceScenario =
+      options.scenario === CONTENT_FACTORY_INLINE_IMAGE_ARTICLE_WORKSPACE_SCENARIO;
     const isContentFactoryArticleWorkspaceScenario =
-      options.scenario === CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO;
+      options.scenario === CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO ||
+      isContentFactoryInlineImageArticleWorkspaceScenario;
     const isAnyExpertSkillsRuntimeScenario =
       isExpertSkillsRuntimeScenario ||
       isExpertPlazaSkillsRuntimeScenario ||
@@ -284,6 +288,7 @@ export function buildAssertionContext({
     isExpertPanelSkillsRuntimeScenario,
     isRightSurfaceVisualMatrixScenario,
     isContentFactoryArticleWorkspaceScenario,
+    isContentFactoryInlineImageArticleWorkspaceScenario,
     isAnyExpertSkillsRuntimeScenario,
     expertRuntimeTurnStartForAssertions,
     asterChatRequest,

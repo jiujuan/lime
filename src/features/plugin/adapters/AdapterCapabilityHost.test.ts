@@ -8,9 +8,24 @@ import { InMemoryPluginCapabilityStore } from "./InMemoryPluginCapabilityStore";
 
 const CONTENT_FACTORY_ENTRY_KEY = "content_factory";
 
-function buildAdapterPreview() {
+function contentFactoryFixtureWithEntryKind(kind: "page" | "workflow") {
+  return {
+    ...contentFactoryFixture,
+    entries: contentFactoryFixture.entries.map((entry) =>
+      entry.key === CONTENT_FACTORY_ENTRY_KEY
+        ? {
+            ...entry,
+            kind,
+            ...(kind === "page" ? { route: "/content-factory" } : {}),
+          }
+        : entry,
+    ),
+  };
+}
+
+function buildAdapterPreview(kind: "page" | "workflow" = "page") {
   return buildInstalledAppPreview({
-    fixture: contentFactoryFixture,
+    fixture: contentFactoryFixtureWithEntryKind(kind),
     profile: buildWorkflowRuntimeCapabilityProfile({
       realAdapterEnabled: true,
     }),
@@ -65,8 +80,26 @@ describe("AdapterCapabilityHost", () => {
     );
   });
 
-  it("workflow entry 应通过 knowledge 与 agent adapter 生成任务 trace", async () => {
-    const preview = buildAdapterPreview();
+  it("workflow entry 应 fail closed 并要求 App Server Workflow API", async () => {
+    const preview = buildAdapterPreview("workflow");
+    const host = new AdapterCapabilityHost({
+      preview,
+      now: () => "2026-05-15T00:00:00.000Z",
+    });
+
+    await expect(host.runEntry(CONTENT_FACTORY_ENTRY_KEY)).rejects.toMatchObject(
+      {
+        code: "WORKFLOW_RUNTIME_DISABLED",
+        capability: "lime.workflow",
+      },
+    );
+    expect(host.getTasks({ entryKey: CONTENT_FACTORY_ENTRY_KEY })).toHaveLength(
+      0,
+    );
+  });
+
+  it("普通 entry 仍可通过 knowledge 与 agent adapter 生成任务 trace", async () => {
+    const preview = buildAdapterPreview("page");
     const host = new AdapterCapabilityHost({
       preview,
       now: () => "2026-05-15T00:00:00.000Z",
@@ -74,49 +107,12 @@ describe("AdapterCapabilityHost", () => {
 
     const result = await host.runEntry(CONTENT_FACTORY_ENTRY_KEY);
 
-    expect(result.knowledge[0]).toMatchObject({
-      query: "内容工厂",
-      records: [],
-      provenance: expect.objectContaining({
-        workflowRunId: result.run.runId,
-      }),
-    });
     expect(result.tasks[0]).toMatchObject({
       taskId: "adapter-task-1",
-      traceId: "adapter-trace-1",
-      status: "succeeded",
-      taskKind: "entry.workflow",
+      taskKind: "entry.page",
       idempotencyKey: `${result.run.runId}:${CONTENT_FACTORY_ENTRY_KEY}`,
-      input: expect.objectContaining({
-        entryKey: CONTENT_FACTORY_ENTRY_KEY,
-        knowledgeRecordIds: [],
-      }),
-      expectedOutput: {
-        artifactKind: "adapter_plugin_artifact",
-        storageKey: `runs/${result.run.runId}`,
-      },
-      humanReview: true,
-      events: [
-        expect.objectContaining({ type: "task:status", status: "running" }),
-        expect.objectContaining({
-          type: "task:completed",
-          status: "succeeded",
-        }),
-      ],
-      provenance: expect.objectContaining({
-        entryKey: CONTENT_FACTORY_ENTRY_KEY,
-        workflowRunId: result.run.runId,
-      }),
+      humanReview: false,
     });
-    expect(result.run.taskIds).toEqual(["adapter-task-1"]);
-    expect(result.artifacts[0].content).toMatchObject({
-      knowledgeRecordIds: [],
-      taskIds: ["adapter-task-1"],
-    });
-    expect(result.evidence[0].refs).toEqual([
-      result.artifacts[0].id,
-      "adapter-task-1",
-    ]);
     expect(
       host.getTasks({ entryKey: CONTENT_FACTORY_ENTRY_KEY }),
     ).toHaveLength(1);

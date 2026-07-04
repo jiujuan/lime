@@ -227,7 +227,10 @@ function expectActionProfile() {
   return expect.objectContaining({
     capabilities: expect.objectContaining({
       "lime.agent": expect.objectContaining({ enabled: true }),
-      "lime.workflow": expect.objectContaining({ enabled: true }),
+      "lime.workflow": expect.objectContaining({
+        enabled: false,
+        implementation: "none",
+      }),
       "lime.storage": expect.objectContaining({ enabled: true }),
       "lime.artifacts": expect.objectContaining({ enabled: true }),
     }),
@@ -917,6 +920,7 @@ describe("PluginMarketplacePage", () => {
       loader,
       actionDeps: {
         submitPluginRegistrationCode,
+        resolveRuntimeContext: runtimeContext,
         dispatchChanged: vi.fn(),
       },
     });
@@ -958,9 +962,14 @@ describe("PluginMarketplacePage", () => {
     });
     await flushEffects(2);
 
-    expect(submitButton?.disabled).toBe(false);
+    const readySubmitButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="plugin-marketplace-registration-submit-research-kit@limecloud"]',
+    );
+    expect(readySubmitButton?.disabled).toBe(false);
     await act(async () => {
-      submitButton?.click();
+      readySubmitButton
+        ?.closest("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
       await Promise.resolve();
     });
     await flushEffects(4);

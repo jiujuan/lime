@@ -205,6 +205,97 @@ describe("workspaceArticleWorkspaceMessageArtifacts", () => {
     expect(nextMessages[0]?.artifacts?.[0]?.updatedAt).toBe(200);
   });
 
+  it("同一篇文章完成 inline 配图回填后，应移除其它消息里的旧 pending 小卡", () => {
+    const pendingMarkdown = [
+      "# 公众号文章草稿",
+      "",
+      "核心观点段落",
+      "",
+      "![广州夏天午后街景原位配图](pending-image-task://content-factory-inline-image-task?status=running)",
+    ].join("\n");
+    const completedMarkdown = [
+      "# 公众号文章草稿",
+      "",
+      "核心观点段落",
+      "",
+      "![广州夏天午后街景原位配图](https://example.com/lime-fixture-guangzhou-inline.png)",
+    ].join("\n");
+    const articleWorkspaceWithPendingImage: WorkspaceArticleWorkspace = {
+      ...articleWorkspace,
+      objects: articleWorkspace.objects.map((object) => ({
+        ...object,
+        source: {
+          ...(object.source ?? {}),
+          documentText: pendingMarkdown,
+          finalMarkdown: pendingMarkdown,
+        },
+      })),
+    };
+    const articleWorkspaceWithCompletedImage: WorkspaceArticleWorkspace = {
+      ...articleWorkspace,
+      objects: articleWorkspace.objects.map((object) => ({
+        ...object,
+        source: {
+          ...(object.source ?? {}),
+          documentText: completedMarkdown,
+          finalMarkdown: completedMarkdown,
+        },
+      })),
+    };
+
+    const firstMessages =
+      attachWorkspaceArticleWorkspacePreviewArtifactToMessages({
+        messages: [
+          createMessage({ id: "user-1", role: "user", content: "写文章" }),
+          createMessage({
+            id: "assistant-1",
+            content: "文章草稿已生成。",
+          }),
+        ],
+        articleWorkspace: articleWorkspaceWithPendingImage,
+        now: 100,
+      });
+    expect(firstMessages[1]?.artifacts?.[0]?.content).toContain(
+      "pending-image-task://",
+    );
+
+    const nextMessages =
+      attachWorkspaceArticleWorkspacePreviewArtifactToMessages({
+        messages: [
+          ...firstMessages,
+          createMessage({
+            id: "assistant-2",
+            content: "图片任务已完成。",
+            timestamp: new Date("2026-06-28T10:01:00.000Z"),
+          }),
+        ],
+        articleWorkspace: articleWorkspaceWithCompletedImage,
+        now: 200,
+      });
+    const allArtifacts = nextMessages.flatMap(
+      (message) => message.artifacts ?? [],
+    );
+    const articlePreviewArtifacts = allArtifacts.filter((artifact) =>
+      isWorkspaceArticleWorkspacePreviewArtifact(artifact),
+    );
+
+    expect(JSON.stringify(allArtifacts)).not.toContain(
+      "pending-image-task://",
+    );
+    expect(articlePreviewArtifacts).toHaveLength(1);
+    expect(articlePreviewArtifacts[0]?.content).toContain(
+      "https://example.com/lime-fixture-guangzhou-inline.png",
+    );
+    expect(nextMessages.find((message) => message.id === "assistant-1"))
+      .toMatchObject({
+        content: "文章草稿已生成。",
+        artifacts: undefined,
+      });
+    expect(
+      nextMessages.find((message) => message.id === "assistant-2")?.artifacts,
+    ).toHaveLength(1);
+  });
+
   it("右侧当前选中非文章对象时，聊天小框仍应展示文章正文产物", () => {
     const workspaceWithStoryboardSelected: WorkspaceArticleWorkspace = {
       ...articleWorkspace,

@@ -190,6 +190,139 @@ describe("imageTaskPreviewRuntimeRecovery", () => {
       isImageWorkbenchTaskSatisfiedByCache({
         imageWorkbenchState: {
           ...createInitialSessionImageWorkbenchState(),
+          tasks: [createTask({ status: "running" })],
+          outputs: [
+            {
+              id: "output-1",
+              taskId: "task-1",
+              refId: "output-1",
+              hookImageId: "hook-output-1",
+              url: "https://cdn.example.com/output-1.png",
+              prompt: "结果图",
+              createdAt: NOW,
+              applyTarget: null,
+            },
+          ],
+        },
+        taskId: "task-1",
+        documentMarkdowns: [
+          "![结果图](pending-image-task://legacy-task?status=running)\n<!-- lime:image-task-slot:article-slot-1 -->",
+        ],
+      }),
+    ).toBe(false);
+
+    expect(
+      isImageWorkbenchTaskSatisfiedByCache({
+        imageWorkbenchState: {
+          ...createInitialSessionImageWorkbenchState(),
+          tasks: [
+            createTask({
+              status: "complete",
+              applyTarget: {
+                kind: "canvas-insert",
+                canvasType: "document",
+                slotId: "article-slot-1",
+                actionLabel: "插入文稿",
+                dispatchLabel: "正在插入图片",
+              },
+            }),
+          ],
+          outputs: [
+            {
+              id: "output-1",
+              taskId: "task-1",
+              refId: "output-1",
+              hookImageId: "hook-output-1",
+              url: "https://cdn.example.com/output-1.png",
+              prompt: "结果图",
+              createdAt: NOW,
+              applyTarget: null,
+            },
+          ],
+        },
+        taskId: "task-1",
+        documentMarkdowns: [
+          "![结果图](pending-image-task://legacy-task?status=running)\n<!-- lime:image-task-slot:article-slot-1 -->",
+        ],
+      }),
+    ).toBe(false);
+
+    expect(
+      isImageWorkbenchTaskSatisfiedByCache({
+        imageWorkbenchState: {
+          ...createInitialSessionImageWorkbenchState(),
+          tasks: [
+            createTask({
+              status: "complete",
+              applyTarget: {
+                kind: "canvas-insert",
+                canvasType: "document",
+                slotId: "article-slot-1",
+                actionLabel: "插入文稿",
+                dispatchLabel: "正在插入图片",
+              },
+            }),
+          ],
+          outputs: [
+            {
+              id: "output-1",
+              taskId: "task-1",
+              refId: "output-1",
+              hookImageId: "hook-output-1",
+              url: "https://cdn.example.com/output-1.png",
+              prompt: "结果图",
+              createdAt: NOW,
+              applyTarget: null,
+            },
+          ],
+        },
+        taskId: "task-1",
+        documentMarkdowns: [
+          "![结果图](https://cdn.example.com/output-1.png)\n<!-- lime:image-task-slot:article-slot-1 -->",
+        ],
+      }),
+    ).toBe(true);
+
+    expect(
+      isImageWorkbenchTaskSatisfiedByCache({
+        imageWorkbenchState: {
+          ...createInitialSessionImageWorkbenchState(),
+          tasks: [
+            createTask({
+              status: "running",
+              applyTarget: {
+                kind: "canvas-insert",
+                canvasType: "document",
+                slotId: "article-slot-1",
+                actionLabel: "插入文稿",
+                dispatchLabel: "正在插入图片",
+              },
+            }),
+          ],
+          outputs: [
+            {
+              id: "output-1",
+              taskId: "task-1",
+              refId: "output-1",
+              hookImageId: "hook-output-1",
+              url: "https://cdn.example.com/output-1.png",
+              prompt: "结果图",
+              createdAt: NOW,
+              applyTarget: null,
+            },
+          ],
+        },
+        taskId: "task-1",
+        documentMarkdowns: [
+          "![结果图](pending-image-task://legacy-task?status=running)\n<!-- lime:image-task-slot:article-slot-1 -->",
+        ],
+      }),
+    ).toBe(false);
+
+    expect(
+      isImageWorkbenchTaskSatisfiedByCache({
+        imageWorkbenchState: {
+          ...createInitialSessionImageWorkbenchState(),
           tasks: [createTask({ status: "error" })],
         },
         taskId: "task-1",
@@ -268,6 +401,47 @@ describe("imageTaskPreviewRuntimeRecovery", () => {
     expect(
       shouldRestoreImageTaskRecord({
         taskRecord: createTaskRecord({
+          payload: {
+            usage: "document-inline",
+          },
+          relationships: {
+            slot_id: "article-inline-slot-1",
+          },
+        }),
+        sessionId: "session-1",
+        contentId: "content-1",
+        documentMarkdowns: [
+          [
+            "# 文章",
+            "",
+            "![广州夏天午后街景](pending-image-task://legacy-task?status=running)",
+            "<!-- lime:image-task-slot:article-inline-slot-1 -->",
+          ].join("\n"),
+        ],
+        now: NOW,
+      }),
+    ).toBe(true);
+    expect(
+      shouldRestoreImageTaskRecord({
+        taskRecord: createTaskRecord({
+          payload: {
+            usage: "document-inline",
+          },
+          relationships: {
+            slot_id: "other-inline-slot",
+          },
+        }),
+        sessionId: "session-1",
+        contentId: "content-1",
+        documentMarkdowns: [
+          "<!-- lime:image-task-slot:article-inline-slot-1 -->",
+        ],
+        now: NOW,
+      }),
+    ).toBe(false);
+    expect(
+      shouldRestoreImageTaskRecord({
+        taskRecord: createTaskRecord({
           normalized_status: "completed",
           updated_at: new Date(NOW - 25 * 60 * 60 * 1000).toISOString(),
           payload: {},
@@ -307,6 +481,32 @@ describe("imageTaskPreviewRuntimeRecovery", () => {
         contentId: "content-1",
       }),
     ).toBe(true);
+    expect(
+      matchesRuntimeEventContext({
+        payload: {
+          task_id: "task-inline",
+          slot_id: "article-inline-slot-1",
+        },
+        sessionId: "session-1",
+        contentId: "content-1",
+        documentMarkdowns: [
+          "<!-- lime:image-task-slot:article-inline-slot-1 -->",
+        ],
+      }),
+    ).toBe(true);
+    expect(
+      matchesRuntimeEventContext({
+        payload: {
+          task_id: "task-inline",
+          slot_id: "other-inline-slot",
+        },
+        sessionId: "session-1",
+        contentId: "content-1",
+        documentMarkdowns: [
+          "<!-- lime:image-task-slot:article-inline-slot-1 -->",
+        ],
+      }),
+    ).toBe(false);
   });
 
   it("应只恢复 terminal 或仍处于活跃窗口内的 loaded snapshot", () => {

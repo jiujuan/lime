@@ -46,6 +46,71 @@ function extractMessageThinkingContent(
   return thinkingText.trim() ? thinkingText : undefined;
 }
 
+function normalizeThinkingTextIdentity(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function collapseExactRepeatedThinkingText(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  for (let repeatCount = 4; repeatCount >= 2; repeatCount -= 1) {
+    if (trimmed.length % repeatCount !== 0) {
+      continue;
+    }
+
+    const chunkLength = trimmed.length / repeatCount;
+    const chunk = trimmed.slice(0, chunkLength);
+    if (!chunk.trim()) {
+      continue;
+    }
+
+    let repeated = true;
+    for (let index = 1; index < repeatCount; index += 1) {
+      if (
+        trimmed.slice(index * chunkLength, (index + 1) * chunkLength) !== chunk
+      ) {
+        repeated = false;
+        break;
+      }
+    }
+
+    if (repeated) {
+      return chunk.trim();
+    }
+  }
+
+  return trimmed;
+}
+
+function dedupeConsecutiveThinkingBlocks(value: string): string {
+  const collapsed = collapseExactRepeatedThinkingText(value);
+  const blocks = collapsed
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+  if (blocks.length <= 1) {
+    return collapsed;
+  }
+
+  const deduped: string[] = [];
+  blocks.forEach((block) => {
+    const previous = deduped[deduped.length - 1];
+    if (
+      previous &&
+      normalizeThinkingTextIdentity(previous) ===
+        normalizeThinkingTextIdentity(block)
+    ) {
+      return;
+    }
+    deduped.push(block);
+  });
+
+  return deduped.join("\n\n");
+}
+
 export function mergeMessageThinkingContent(params: {
   existingMessage: Message;
   nextMessage: Message;
@@ -56,21 +121,26 @@ export function mergeMessageThinkingContent(params: {
   const nextThinking = extractMessageThinkingContent(params.nextMessage);
 
   if (!existingThinking) {
-    return nextThinking;
+    return nextThinking
+      ? dedupeConsecutiveThinkingBlocks(nextThinking)
+      : undefined;
   }
   if (!nextThinking) {
-    return existingThinking;
+    return dedupeConsecutiveThinkingBlocks(existingThinking);
   }
+  const normalizedExistingThinking =
+    dedupeConsecutiveThinkingBlocks(existingThinking);
+  const normalizedNextThinking = dedupeConsecutiveThinkingBlocks(nextThinking);
   if (
-    existingThinking === nextThinking ||
-    existingThinking.includes(nextThinking)
+    normalizedExistingThinking === normalizedNextThinking ||
+    normalizedExistingThinking.includes(normalizedNextThinking)
   ) {
-    return existingThinking;
+    return normalizedExistingThinking;
   }
-  if (nextThinking.includes(existingThinking)) {
-    return nextThinking;
+  if (normalizedNextThinking.includes(normalizedExistingThinking)) {
+    return normalizedNextThinking;
   }
-  return `${existingThinking}\n\n${nextThinking}`;
+  return `${normalizedExistingThinking}\n\n${normalizedNextThinking}`;
 }
 
 export function collectSeedImageTasks(
@@ -120,6 +190,14 @@ function hasDocumentImageTaskRecoverySignal(
   return (
     canvasState?.type === "document" &&
     markdownContainsDocumentImageTaskPlaceholder(canvasState.content)
+  );
+}
+
+function hasDocumentMarkdownImageTaskRecoverySignal(
+  documentMarkdowns?: readonly (string | null | undefined)[],
+): boolean {
+  return (documentMarkdowns || []).some((markdown) =>
+    markdownContainsDocumentImageTaskPlaceholder(markdown),
   );
 }
 
@@ -259,13 +337,15 @@ export function shouldProbeWorkspaceImageTaskCatalog(params: {
   messages?: Message[];
   imageWorkbenchState?: SessionImageWorkbenchState;
   canvasState?: CanvasStateUnion | null;
+  documentMarkdowns?: readonly (string | null | undefined)[];
 }): boolean {
   const messages = params.messages || [];
   return (
     collectSeedImageTasks(messages).length > 0 ||
     Boolean(resolvePendingImageCommandRecoverySignature(messages)) ||
     hasCachedImageWorkbenchTasks(params.imageWorkbenchState) ||
-    hasDocumentImageTaskRecoverySignal(params.canvasState)
+    hasDocumentImageTaskRecoverySignal(params.canvasState) ||
+    hasDocumentMarkdownImageTaskRecoverySignal(params.documentMarkdowns)
   );
 }
 
@@ -275,6 +355,7 @@ export function shouldEnableWorkspaceImageTaskPreviewRuntime(params: {
   messages?: Message[];
   imageWorkbenchState?: SessionImageWorkbenchState;
   canvasState?: CanvasStateUnion | null;
+  documentMarkdowns?: readonly (string | null | undefined)[];
 }): boolean {
   if (!params.shouldDeferWorkspaceAuxiliaryLoads) {
     return true;
@@ -306,5 +387,6 @@ export function shouldEnableWorkspaceImageTaskPreviewRuntime(params: {
     messages,
     imageWorkbenchState,
     canvasState: params.canvasState,
+    documentMarkdowns: params.documentMarkdowns,
   });
 }

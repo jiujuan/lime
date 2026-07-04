@@ -111,6 +111,7 @@ async fn generate_outputs(
     let generated = run_host_managed_generation(
         &runtime_backend.agent_state,
         HostManagedGenerationRunRequest {
+            db: &db,
             generation_session_id,
             worker_request,
             plan,

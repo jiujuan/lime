@@ -105,6 +105,39 @@ describe("agentChatHistory compaction and previews", () => {
     expect(messages[0]?.thinkingContent).toBe("先列提纲，再展开正文");
   });
 
+  it("历史恢复时应去重 reasoning delta 与 final 的同文 thinking", () => {
+    const thinkingText =
+      "采用暖色调，聚焦阳光穿透树叶的光斑与远处高楼轮廓。";
+    const detail: AsterSessionDetail = {
+      id: "session-reasoning-duplicate",
+      created_at: 1,
+      updated_at: 2,
+      messages: [
+        {
+          role: "assistant",
+          timestamp: 1710000100,
+          content: [
+            { type: "reasoning", text: thinkingText } as never,
+            { type: "reasoning", text: thinkingText } as never,
+          ],
+        },
+      ],
+    };
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "session-reasoning-duplicate",
+    );
+
+    expect(messages[0]?.contentParts).toEqual([
+      {
+        type: "thinking",
+        text: thinkingText,
+      },
+    ]);
+    expect(messages[0]?.thinkingContent).toBe(thinkingText);
+  });
+
   it("应在历史恢复时清理 assistant 正文中的工具协议残留", () => {
     const detail: AsterSessionDetail = {
       id: "session-protocol-cleanup",
@@ -276,6 +309,98 @@ describe("agentChatHistory compaction and previews", () => {
       output_tokens: 19000,
       cached_input_tokens: 4000,
       cache_creation_input_tokens: 1200,
+    });
+  });
+
+  it("assistant 消息自身没有 usage 时应从同 turn read model 恢复", () => {
+    const detail: AsterSessionDetail = {
+      id: "session-turn-usage",
+      created_at: 1,
+      updated_at: 2,
+      messages: [
+        {
+          role: "user",
+          timestamp: 1710000299,
+          runtime_turn_id: "turn-image-usage",
+          content: [{ type: "text", text: "@配图 生成深圳夏天照片" } as never],
+        },
+        {
+          role: "assistant",
+          timestamp: 1710000300,
+          runtime_turn_id: "turn-image-usage",
+          content: [
+            {
+              type: "output_text",
+              text: "好的，这就为您生成深圳夏日午后的街头摄影画面。",
+            } as never,
+          ],
+        },
+      ],
+      thread_read: {
+        turns: [
+          {
+            turn_id: "turn-image-usage",
+            status: "completed",
+            usage: {
+              input_tokens: 1175,
+              output_tokens: 112,
+            },
+          } as never,
+        ],
+      } as never,
+    };
+
+    const messages = hydrateSessionDetailMessages(detail, "session-turn-usage");
+
+    expect(messages[1]?.usage).toEqual({
+      input_tokens: 1175,
+      output_tokens: 112,
+      cached_input_tokens: undefined,
+      cache_creation_input_tokens: undefined,
+    });
+  });
+
+  it("thread item 图片任务草稿应从同 turn read model 恢复 token usage", () => {
+    const detail: AsterSessionDetail = {
+      id: "session-thread-item-image-usage",
+      created_at: 1,
+      updated_at: 2,
+      messages: [],
+      turns: [
+        {
+          id: "turn-image-thread-item",
+          status: "completed",
+          usage: {
+            input_tokens: 31000,
+            output_tokens: 119,
+          },
+        } as never,
+      ],
+      items: [
+        {
+          id: "reasoning-1",
+          type: "reasoning",
+          turn_id: "turn-image-thread-item",
+          thread_id: "thread-image",
+          sequence: 1,
+          status: "completed",
+          text: "先确认深圳夏天午后的光线。",
+          started_at: "2026-07-03T10:00:00.000Z",
+          updated_at: "2026-07-03T10:00:00.000Z",
+        } as never,
+      ],
+    };
+
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "session-thread-item-image-usage",
+    );
+
+    expect(messages[0]?.usage).toEqual({
+      input_tokens: 31000,
+      output_tokens: 119,
+      cached_input_tokens: undefined,
+      cache_creation_input_tokens: undefined,
     });
   });
 

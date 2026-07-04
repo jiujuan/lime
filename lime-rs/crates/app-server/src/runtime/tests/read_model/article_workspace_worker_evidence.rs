@@ -116,13 +116,26 @@ async fn article_workspace_worker_evidence_merges_event_metadata_with_patch_evid
         .expect("detail");
     let worker_evidence = &detail["article_workspace"]["workerEvidence"][0];
     assert_eq!(worker_evidence["taskId"], "task-article");
-    assert_eq!(worker_evidence["workflowKey"], "content_article_workflow");
     assert_eq!(worker_evidence["outputObjectCount"], 1);
-    assert_eq!(worker_evidence["skillRefs"][1], "article-image-plan");
-    assert_eq!(worker_evidence["connectorRefs"][0], "web-research");
-    assert_eq!(worker_evidence["hookPolicy"]["prompt"][0], "prompt-submit");
-    assert_eq!(
-        worker_evidence["orchestration"][0]["subagent"],
-        "article-writer"
-    );
+    assert_worker_evidence_audit_fields_hidden(worker_evidence);
+}
+
+fn assert_worker_evidence_audit_fields_hidden(worker_evidence: &serde_json::Value) {
+    for key in [
+        "workflowKey",
+        "subagents",
+        "skillRefs",
+        "cliRefs",
+        "connectorRefs",
+        "hookPolicy",
+        "orchestration",
+        "workerEntrypoint",
+        "inputSummary",
+        "outputSummary",
+    ] {
+        assert!(
+            worker_evidence.get(key).is_none(),
+            "worker evidence must hide audit-only field {key}"
+        );
+    }
 }

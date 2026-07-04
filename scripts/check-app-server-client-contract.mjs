@@ -2835,7 +2835,8 @@ const checks = [
       "detail: Some(detail)",
       "pub(super) fn runtime_session_read_detail_with_options(",
       "pub(super) fn from_params(params: &AgentSessionReadParams) -> Self",
-      "fn runtime_thread_read_from_stored_session(",
+      "fn runtime_thread_read_from_stored_session_with_usage_events(",
+      "fn runtime_events_with_workflow_audit<'a>(",
       "article_workspace: Option<serde_json::Value>",
       '"thread_read": thread_read',
       '"tool_calls": tool_item_projection::tool_calls_from_events(&stored.events)',
@@ -3600,7 +3601,8 @@ const checks = [
       "route_protocol: Some(route_protocol.clone())",
       "route_protocol_from_provider_config",
       "ProtocolKind::OpenaiResponses",
-      "AsterProviderProtocol::Responses",
+      "ModelProviderProtocol::Responses",
+      "RuntimeProviderProtocol::Responses",
       "build_agent_session_config(",
       "AgentSessionConfigurationRequest",
       "SessionConfigBuilder",
@@ -3707,7 +3709,10 @@ const checks = [
   },
   {
     name: "Lime Agent legacy message tool_end is marked as compat projection",
-    file: "lime-rs/crates/agent/src/event_converter.rs",
+    files: [
+      "lime-rs/crates/agent/src/message_content_adapter.rs",
+      "lime-rs/crates/agent/src/event_converter.rs",
+    ],
     snippets: [
       "legacy_message_tool_response_metadata",
       "legacy_message_tool_response",

@@ -380,7 +380,7 @@ Route
 只允许委托、适配、投影，不允许继续长新业务逻辑：
 
 1. Aster provider adapter。
-2. `CredentialBridge -> AsterProviderConfig`。
+2. `CredentialBridge -> RuntimeProviderConfig`。
 3. `runtimeOptions.hostOptions.asterChatRequest.provider_config`。
 4. 旧 session metadata 中的 provider/model 字段。
 5. 前端 `src/lib/api/agentRuntime.ts` compat barrel。
@@ -794,7 +794,7 @@ flowchart TD
 
 要求：
 
-1. `CredentialBridge` 只做 `ResolvedModelRoute/AuthMaterial -> AsterProviderConfig` 投影。
+1. `CredentialBridge` 只做 `ResolvedModelRoute/AuthMaterial -> RuntimeProviderConfig` 投影。
 2. 新 provider 能力不再直接加到 `CredentialBridge`。
 3. `force_responses_api` 被 `ProtocolKind=openai_responses` 替代。
 4. provider continuation 能力从 route/model capability 来，不再靠 provider_name/model_name 启发式。
@@ -802,7 +802,7 @@ flowchart TD
 验收：
 
 1. Aster adapter 可以继续承接当前 Agent 对话执行。
-2. 新 protocol mapper 不需要改 Aster provider factory。
+2. 新 protocol mapper 不需要改 runtime provider factory facade / provider_factory compat adapter。
 3. compat 字段有退出条件。
 
 ## 16. 非功能需求

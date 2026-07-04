@@ -41,6 +41,7 @@ import type {
   GeneralWorkbenchRunMetadataSummary,
 } from "./generalWorkbenchWorkflowData";
 import type { GeneralWorkbenchFollowUpActionPayload } from "./generalWorkbenchSidebarContract";
+import { GeneralWorkbenchWorkflowControlBar } from "./GeneralWorkbenchWorkflowControlBar";
 import {
   buildActivitySectionSummary,
   buildGeneralWorkbenchFollowUpProjection,
@@ -54,6 +55,7 @@ import {
   buildWorkflowResultHandoffText,
   selectLatestReviewFeedbackSignal,
 } from "./generalWorkbenchWorkflowPanelViewModel";
+import type { WorkspaceWorkflowControlItem } from "../workspace/workspaceWorkflowControls";
 
 interface GeneralWorkbenchWorkflowPanelProps {
   isVersionMode: boolean;
@@ -85,6 +87,11 @@ interface GeneralWorkbenchWorkflowPanelProps {
   activeRunDetail?: AgentRun | null;
   activeRunDetailLoading?: boolean;
   activeRunStagesLabel?: string | null;
+  workflowControlItems?: WorkspaceWorkflowControlItem[];
+  workflowControlPendingItemId?: string | null;
+  onTriggerWorkflowControl?: (
+    item: WorkspaceWorkflowControlItem,
+  ) => Promise<void> | void;
   runMetadataText: string;
   runMetadataSummary: GeneralWorkbenchRunMetadataSummary;
   onCopyText: (text: string) => Promise<void> | void;
@@ -726,6 +733,9 @@ function GeneralWorkbenchWorkflowPanelComponent({
   activeRunDetail,
   activeRunDetailLoading = false,
   activeRunStagesLabel,
+  workflowControlItems = [],
+  workflowControlPendingItemId = null,
+  onTriggerWorkflowControl,
   runMetadataText,
   runMetadataSummary,
   onCopyText,
@@ -853,6 +863,12 @@ function GeneralWorkbenchWorkflowPanelComponent({
               <div className="mt-1 text-[11px] leading-5 text-slate-500">
                 {workflowCurrentProjection.workflowSummaryText}
               </div>
+              <GeneralWorkbenchWorkflowControlBar
+                items={workflowControlItems}
+                pendingItemId={workflowControlPendingItemId}
+                onTrigger={onTriggerWorkflowControl}
+                translate={t}
+              />
               <div
                 className={WORKFLOW_RESULT_HANDOFF_HINT_CLASSNAME}
                 data-testid="workflow-sidebar-result-destination-hint"
@@ -1187,6 +1203,15 @@ function GeneralWorkbenchWorkflowPanelComponent({
                   </RunDetailTitleBlock>
                 </RunDetailHeader>
                 <RunDetailSummary>{runDetailProjection.summary}</RunDetailSummary>
+                {runDetailProjection.detailRows.length > 0 ? (
+                  <div className="mt-2 flex flex-col gap-1.5">
+                    {runDetailProjection.detailRows.map((row) => (
+                      <RunDetailRow key={row.key}>
+                        {row.label}：{row.value}
+                      </RunDetailRow>
+                    ))}
+                  </div>
+                ) : null}
                 {followUpProjection.sceneAppReviewBaselineSnapshot ? (
                   <SceneAppReviewBaselineCard
                     snapshot={followUpProjection.sceneAppReviewBaselineSnapshot}

@@ -17,6 +17,11 @@ const POLL_INTERVAL_MS = 1000;
 const TAIL_LINES = 800;
 const MAX_DISPLAY_LINES = 500;
 
+type SettingsTranslate = (
+  key: string,
+  values?: Record<string, unknown>,
+) => string;
+
 function mergeLogEntries(
   inMemoryEntries: LogEntry[],
   persistedEntries: LogEntry[],
@@ -69,7 +74,8 @@ function formatExportLine(entry: LogEntry): string {
 }
 
 export function ChannelLogTailPanel() {
-  const { t, i18n } = useTranslation("settings");
+  const { t: rawT, i18n } = useTranslation("settings");
+  const t = rawT as SettingsTranslate;
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [preset, setPreset] = useState<ChannelLogPreset>("all");
   const [customPattern, setCustomPattern] = useState("");

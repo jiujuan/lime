@@ -1387,9 +1387,9 @@ mod tests {
         provider_selector: Option<String>,
     ) -> Option<SessionExecutionRuntime> {
         let session_projection = session
-            .map(crate::aster_runtime_projection::project_aster_session_execution_runtime_session);
+            .map(crate::session_execution_runtime_adapter::project_aster_session_execution_runtime_session);
         let snapshot_projection = snapshot
-            .map(crate::aster_runtime_projection::project_aster_session_execution_runtime_snapshot);
+            .map(crate::session_execution_runtime_adapter::project_aster_session_execution_runtime_snapshot);
         super::build_session_execution_runtime(
             session_id,
             session_projection.as_ref(),

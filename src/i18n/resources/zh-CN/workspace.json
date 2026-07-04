@@ -1113,5 +1113,21 @@
   "workspace.articleEditor.toolbar.heading2": "二级标题",
   "workspace.articleEditor.toolbar.bulletList": "无序列表",
   "workspace.articleEditor.toolbar.orderedList": "有序列表",
-  "workspace.articleEditor.toolbar.blockquote": "引用"
+  "workspace.articleEditor.toolbar.blockquote": "引用",
+  "workspace.articleEditor.workflow.title": "工作流明细",
+  "workspace.articleEditor.workflow.detail": "{{count}} 个步骤 · {{workflow}}",
+  "workspace.articleEditor.workflow.loading": "正在读取工作流状态...",
+  "workspace.articleEditor.workflow.fallback": "Workflow",
+  "workspace.articleEditor.workflow.attempt": "第 {{count}} 次尝试",
+  "workspace.articleEditor.workflow.failure": "失败：{{message}}",
+  "workspace.articleEditor.workflow.retry": "重试：{{value}}",
+  "workspace.articleEditor.workflow.retryLinked": "已关联重试",
+  "workspace.articleEditor.workflow.waitingAction": "等待动作：{{value}}",
+  "workspace.articleEditor.workflow.status.completed": "已完成",
+  "workspace.articleEditor.workflow.status.failed": "失败",
+  "workspace.articleEditor.workflow.status.running": "处理中",
+  "workspace.articleEditor.workflow.status.retrying": "重试中",
+  "workspace.articleEditor.workflow.status.success": "成功",
+  "workspace.articleEditor.workflow.status.waiting": "等待确认",
+  "workspace.articleEditor.workflow.status.unknown": "未知"
 }

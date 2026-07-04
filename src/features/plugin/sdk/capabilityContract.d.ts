@@ -50,6 +50,15 @@ export type LimeCapabilityInvokeResponse<Value = unknown> =
       ok: false;
       error: LimeCapabilityError;
     };
+export interface LimeAgentWorkflowReadProjection {
+  appId: string;
+  entryKey?: string;
+  sessionId: string;
+  source: "app_server_workflow_read";
+  workflow: unknown;
+  workflowRuns?: unknown[];
+  workflowSteps?: unknown[];
+}
 export interface LimeCapabilityContractMap {
   "lime.ui": {
     toast: {
@@ -236,6 +245,12 @@ export interface LimeCapabilityContractMap {
     listTasks: {
       args: undefined;
       value: PluginTaskRecord[];
+    };
+    readWorkflow: {
+      args: {
+        sessionId: string;
+      };
+      value: LimeAgentWorkflowReadProjection;
     };
   };
   "lime.knowledge": {

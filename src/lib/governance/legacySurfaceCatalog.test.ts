@@ -228,6 +228,45 @@ describe("legacySurfaceCatalog", () => {
     ]);
   });
 
+  it("应封住本地 Plugin workflow runtime profile 的生产回流", () => {
+    const profileMonitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) =>
+        entry.id === "plugin-local-workflow-runtime-profile-production-surface",
+    );
+    const adapterMonitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) =>
+        entry.id === "plugin-adapter-local-workflow-entry-success-runner",
+    );
+
+    expect(profileMonitor).toBeTruthy();
+    expect(profileMonitor?.classification).toBe("dead");
+    expect(profileMonitor?.patterns).toEqual(
+      expect.arrayContaining([
+        "buildWorkflowRuntimeCapabilityProfile",
+        "workerRuntimeEnabled: true",
+        "白名单 workflow DSL",
+      ]),
+    );
+    expect(profileMonitor?.includePathPrefixes).toEqual([
+      "src/features/plugin",
+      "src/i18n/resources",
+    ]);
+    expect(profileMonitor?.allowedPaths).toEqual(
+      expect.arrayContaining([
+        "src/features/plugin/runtime/workflowRuntimeCapabilityProfile.ts",
+        "src/features/plugin/runtime/capabilityDispatcherTestFixtures.ts",
+        "src/features/plugin/ui/PluginsPage.runtime.test.tsx",
+      ]),
+    );
+
+    expect(adapterMonitor).toBeTruthy();
+    expect(adapterMonitor?.classification).toBe("dead");
+    expect(adapterMonitor?.patterns).toEqual([
+      "humanReview: entry.kind === \"workflow\"",
+    ]);
+    expect(adapterMonitor?.allowedPaths).toEqual([]);
+  });
+
   it("应记录已删除的 SceneApp runtime context 历史转发壳", () => {
     const monitor = legacySurfaceCatalogJson.imports.find(
       (entry) => entry.id === "sceneapp-runtime-context-compat-barrel",
@@ -1097,15 +1136,31 @@ describe("legacySurfaceCatalog", () => {
     );
   });
 
-  it("应将旧 workspace useWorkflow Hook 标记为退场守卫", () => {
+  it("应将旧 workspace useWorkflow Hook 标记为已删除 surface", () => {
     const monitor = legacySurfaceCatalogJson.imports.find(
       (entry) => entry.id === "workspace-use-workflow-legacy-hook-shell",
     );
 
     expect(monitor).toBeTruthy();
-    expect(monitor?.classification).toBe("dead-candidate");
+    expect(monitor?.classification).toBe("dead");
     expect(monitor?.targets).toEqual([
       "src/components/workspace/hooks/useWorkflow.ts",
+      "src/components/workspace/hooks/useWorkflow.test.ts",
+    ]);
+    expect(monitor?.allowedPaths).toEqual([]);
+  });
+
+  it("应将前端 WorkflowRuntimeHost DSL 文件标记为已删除 surface", () => {
+    const monitor = legacySurfaceCatalogJson.imports.find(
+      (entry) => entry.id === "workflow-runtime-host-legacy-dsl-files",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.targets).toEqual([
+      "src/features/plugin/runtime/workflowRuntimeHost.ts",
+      "src/features/plugin/runtime/workflowRuntimeHost.test.ts",
+      "src/features/plugin/runtime/runtimePolicy.ts",
     ]);
     expect(monitor?.allowedPaths).toEqual([]);
   });
@@ -3037,6 +3092,7 @@ describe("legacySurfaceCatalog", () => {
     expect(monitor?.patterns).toEqual(["WorkflowRuntimeHost"]);
     expect(monitor?.includePathPrefixes).toEqual([
       "src/components/agent",
+      "src/features/plugin/runtime",
       "src/lib/api/agentRuntime",
       "packages/agent-ui-contracts",
       "packages/agent-runtime-projection",
@@ -3384,7 +3440,8 @@ describe("legacySurfaceCatalog", () => {
       "lime-rs/crates/core/src/database/dao/agent.rs",
       "lime-rs/crates/core/src/database/dao/chat.rs",
       "lime-rs/crates/core/src/database/migration/general_chat_migration.rs",
-      "lime-rs/crates/services/src/aster_session_store/legacy_conversation.rs",
+      "lime-rs/crates/agent/src/aster_session_store/legacy_conversation.rs",
+      "lime-rs/crates/agent/src/aster_session_store_tests.rs",
     ]);
   });
 
@@ -3518,6 +3575,7 @@ describe("legacySurfaceCatalog", () => {
       "lime-rs/crates/app-server/src/runtime/evidence_provider.rs",
       "lime-rs/crates/app-server/src/runtime/file_checkpoint_projection.rs",
       "lime-rs/crates/app-server/src/runtime/output_refs.rs",
+      "lime-rs/crates/app-server/src/runtime/plugin_worker_runtime/tests.rs",
       "lime-rs/crates/app-server/src/runtime/session_hydration.rs",
     ]);
     expect(monitor?.patterns).toEqual([
@@ -3550,6 +3608,7 @@ describe("legacySurfaceCatalog", () => {
       "lime-rs/crates/app-server/src/runtime/artifact_sidecar.rs",
       "lime-rs/crates/app-server/src/runtime/artifact_reader.rs",
       "lime-rs/crates/app-server/src/runtime/plugin_worker_runtime.rs",
+      "lime-rs/crates/app-server/src/runtime/plugin_worker_runtime/response.rs",
       "lime-rs/crates/app-server/src/runtime/event_store.rs",
       "lime-rs/crates/app-server/src/runtime/tests/artifacts.rs",
       "lime-rs/crates/app-server/src/runtime/tests/evidence_exports.rs",

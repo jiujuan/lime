@@ -16,6 +16,7 @@ pub mod ask_bridge;
 mod aster_runtime_projection;
 pub mod aster_runtime_support;
 pub mod aster_session_store;
+// pub mod aster_session_store_adapter; // 已备份，使用主文件的双重实现
 pub mod aster_state;
 pub mod aster_state_support;
 pub mod credential_bridge;
@@ -27,8 +28,10 @@ pub mod filesystem_event_protocol;
 pub mod hooks;
 mod host_managed_generation;
 mod knowledge_builder_skill;
+pub mod lime_session_repository;
 pub mod lsp_bridge;
 pub mod mcp_bridge;
+mod message_content_adapter;
 pub mod native_tools;
 pub mod prompt;
 pub mod protocol;
@@ -43,8 +46,11 @@ pub mod request_tool_policy;
 pub mod runtime_facade;
 pub mod runtime_projection_snapshot;
 pub mod runtime_queue;
+mod runtime_snapshot_adapter;
+mod runtime_timeline_adapter;
 mod session_configuration;
 mod session_execution_runtime;
+mod session_execution_runtime_adapter;
 mod session_query;
 pub mod session_state_snapshot;
 mod session_store;
@@ -52,6 +58,7 @@ mod session_update;
 pub mod skill_execution;
 pub mod subagent_control;
 pub mod subagent_profiles;
+mod subagent_runtime_adapter;
 pub mod subagent_scheduler;
 pub mod team_runtime_governor;
 mod text_normalization;
@@ -71,11 +78,11 @@ pub use aster_state_support::{
     load_workspace_lime_skills, message_helpers, reload_lime_skills, SessionConfigBuilder,
 };
 pub use credential_bridge::{
-    create_aster_provider, AsterProviderConfig, AsterProviderProtocol, CredentialBridge,
-    CredentialBridgeError,
+    CredentialBridge, CredentialBridgeError, RuntimeProviderConfig, RuntimeProviderProtocol,
 };
 pub use direct_text_generation::{
-    run_direct_text_generation, DirectTextGenerationRequest, DirectTextGenerationResult,
+    run_direct_text_generation, run_direct_text_generation_with_db, DirectTextGenerationRequest,
+    DirectTextGenerationResult,
 };
 pub use durable_memory_fs::{
     durable_memory_permission_pattern, is_virtual_memory_path, resolve_durable_memory_root,

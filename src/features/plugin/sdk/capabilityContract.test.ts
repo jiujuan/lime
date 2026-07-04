@@ -132,6 +132,15 @@ describe("P18 typed Capability SDK contract", () => {
     expect(listEnabledLimeCapabilityNamesForMode("adapter")).toEqual(
       expect.arrayContaining(["lime.agent", "lime.storage", "lime.evidence"]),
     );
+    expect(listEnabledLimeCapabilityNamesForMode("adapter")).not.toContain(
+      "lime.workflow",
+    );
+    expect(
+      buildAdapterCapabilityProfile().capabilities["lime.workflow"],
+    ).toMatchObject({
+      enabled: false,
+      implementation: "none",
+    });
   });
 
   it("应构造带 app provenance 的 typed capability invoke envelope", () => {

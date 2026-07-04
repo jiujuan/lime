@@ -158,7 +158,7 @@ describe("PluginLabPage", () => {
     expect(container.textContent).toContain("content_factory");
   });
 
-  it("P15 Lab setup 解决后可完成 install flow 并运行 workflow entry", async () => {
+  it("P15 Lab setup 解决后仍不应本地运行 workflow entry", async () => {
     const container = await renderPage({
       realAdapterEnabled: true,
       workerRuntimeEnabled: true,
@@ -174,8 +174,9 @@ describe("PluginLabPage", () => {
     });
 
     expect(container.textContent).toContain(
-      "plugin.lab.installFlow.launchReady",
+      "plugin.lab.installFlow.status.runtime-blocked",
     );
+    expect(container.textContent).toContain("plugin.lab.installFlow.launchBlocked");
 
     const button = container.querySelector(
       '[data-testid="plugin-run-entry-content_factory"]',
@@ -187,15 +188,12 @@ describe("PluginLabPage", () => {
 
     expect(
       container.querySelector('[data-testid="plugin-run-result"]'),
-    ).not.toBeNull();
+    ).toBeNull();
     expect(
       container.querySelector(
-        '[data-testid="plugin-entry-runtime-guard-allow"]',
+        '[data-testid="plugin-entry-runtime-guard-blocked"]',
       ),
     ).not.toBeNull();
-    expect(container.textContent).toContain(
-      "plugin.lab.installFlow.status.launched",
-    );
     expect(
       container.querySelector(
         '[data-testid="plugin-install-flow-stage-cleanup-preview"]',
@@ -231,9 +229,7 @@ describe("PluginLabPage", () => {
       ),
     ).toHaveLength(2);
     expect(container.textContent).toContain("content-factory-playbook-app");
-    expect(container.textContent).toContain(
-      "plugin.lab.manager.status.launchable",
-    );
+    expect(container.textContent).toContain("plugin.lab.manager.status.blocked");
 
     const launchButton = container.querySelector(
       '[data-testid="plugin-manager-launch-entry-content_factory"]',
@@ -245,20 +241,17 @@ describe("PluginLabPage", () => {
 
     expect(
       container.querySelector(
-        '[data-testid="plugin-entry-runtime-guard-allow"]',
+        '[data-testid="plugin-entry-runtime-guard-blocked"]',
       ),
     ).not.toBeNull();
     expect(
       container.querySelector('[data-testid="plugin-run-result"]'),
-    ).not.toBeNull();
+    ).toBeNull();
     expect(
       container.querySelector(
         '[data-testid="plugin-manager-cleanup-evidence"]',
       ),
-    ).not.toBeNull();
-    expect(container.textContent).toContain(
-      "plugin.lab.manager.evidence.action.launch",
-    );
+    ).toBeNull();
 
     const disableButton = container.querySelector(
       '[data-testid="plugin-manager-disable"]',
@@ -326,9 +319,13 @@ describe("PluginLabPage", () => {
     });
 
     expect(
-      container.querySelector('[data-testid="plugin-run-result"]')
-        ?.textContent,
-    ).toContain("content-factory-playbook-app");
+      container.querySelector('[data-testid="plugin-run-result"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid="plugin-entry-runtime-guard-blocked"]',
+      ),
+    ).not.toBeNull();
 
     const deleteDataButton = container.querySelector(
       '[data-testid="plugin-manager-uninstall-delete-data"]',

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "sessionId": {
+      "type": "string"
+    },
+    "workflow": true,
+    "workflowRuns": {
+      "default": [],
+      "items": true,
+      "type": "array"
+    },
+    "workflowSteps": {
+      "default": [],
+      "items": true,
+      "type": "array"
+    }
+  },
+  "required": [
+    "sessionId",
+    "workflow"
+  ],
+  "title": "WorkflowRespondResponse",
+  "type": "object"
+}

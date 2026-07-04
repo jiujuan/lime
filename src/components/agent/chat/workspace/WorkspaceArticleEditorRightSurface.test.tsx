@@ -5,6 +5,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkspaceArticleEditorRightSurface } from "./WorkspaceArticleEditorRightSurface";
 import type { WorkspaceArticleWorkspace } from "./workspaceArticleWorkspaceModel";
 
+const mockReadWorkflow = vi.hoisted(() => vi.fn());
+
+vi.mock("@/lib/api/appServer", () => ({
+  createAppServerClient: () => ({
+    readWorkflow: mockReadWorkflow,
+  }),
+}));
+
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, options?: Record<string, unknown>) => {
@@ -77,6 +85,21 @@ vi.mock("react-i18next", () => ({
         "workspace.articleEditor.review.detail": `${options?.count ?? 0} 条备注`,
         "workspace.articleEditor.related.title": "关联产物",
         "workspace.articleEditor.related.detail": `${options?.count ?? 0} 个业务对象`,
+        "workspace.articleEditor.workflow.title": "工作流明细",
+        "workspace.articleEditor.workflow.detail": `${options?.count ?? 0} 个步骤 · ${options?.workflow ?? ""}`,
+        "workspace.articleEditor.workflow.loading": "正在读取工作流状态...",
+        "workspace.articleEditor.workflow.fallback": "Workflow",
+        "workspace.articleEditor.workflow.attempt": `第 ${options?.count ?? 0} 次尝试`,
+        "workspace.articleEditor.workflow.failure": `失败：${options?.message ?? ""}`,
+        "workspace.articleEditor.workflow.retry": `重试：${options?.value ?? ""}`,
+        "workspace.articleEditor.workflow.retryLinked": "已关联重试",
+        "workspace.articleEditor.workflow.waitingAction": `等待动作：${options?.value ?? ""}`,
+        "workspace.articleEditor.workflow.status.completed": "已完成",
+        "workspace.articleEditor.workflow.status.failed": "失败",
+        "workspace.articleEditor.workflow.status.running": "处理中",
+        "workspace.articleEditor.workflow.status.retrying": "重试中",
+        "workspace.articleEditor.workflow.status.waiting": "等待确认",
+        "workspace.articleEditor.workflow.status.unknown": "未知",
         "workspace.articleEditor.toolbar.undo": "撤销",
         "workspace.articleEditor.toolbar.redo": "重做",
         "workspace.articleEditor.toolbar.bold": "加粗",
@@ -321,6 +344,15 @@ beforeEach(() => {
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
   window.localStorage.clear();
+  mockReadWorkflow.mockResolvedValue({
+    result: {
+      sessionId: "session-main",
+      workflow: {
+        workflowRuns: [],
+        workflowSteps: [],
+      },
+    },
+  });
 });
 
 function renderSurface({
@@ -449,6 +481,77 @@ describe("WorkspaceArticleEditorRightSurface", () => {
     expect(container.textContent).not.toContain("插件工作流");
     expect(container.textContent).not.toContain("content_article_workflow");
     expect(container.textContent).not.toContain("正文需要保留真实引用来源。");
+  });
+
+  it("应从 workflow/read 渲染 Article Workspace 页面级工作流明细", async () => {
+    mockReadWorkflow.mockResolvedValue({
+      result: {
+        sessionId: "session-main",
+        workflow: {
+          workflowRuns: [
+            {
+              workflowRunId: "workflow-run-1",
+              workflowKey: "content_article_workflow",
+              workflowTitle: "写文章工作流",
+              status: "retrying",
+              sessionId: "session-main",
+              steps: [
+                {
+                  workflowRunId: "workflow-run-1",
+                  stepId: "draft",
+                  title: "正文写作",
+                  status: "failed",
+                  attempt: 2,
+                  failure: {
+                    message: "正文为空",
+                  },
+                  retry: {
+                    rescheduledTurnId: "turn-retry",
+                  },
+                },
+                {
+                  workflowRunId: "workflow-run-1",
+                  stepId: "review",
+                  title: "人工确认",
+                  status: "waiting",
+                  requestId: "request-1",
+                  agentActionType: "ask_user",
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    const container = renderSurface();
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mockReadWorkflow).toHaveBeenCalledWith({
+      sessionId: "session-main",
+    });
+    expect(
+      container.querySelector(
+        '[data-testid="workspace-article-editor-workflow-detail"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelectorAll(
+        '[data-testid="workspace-article-editor-workflow-step"]',
+      ),
+    ).toHaveLength(2);
+    expect(container.textContent).toContain("工作流明细");
+    expect(container.textContent).toContain("写文章工作流");
+    expect(container.textContent).toContain("正文写作");
+    expect(container.textContent).toContain("失败：正文为空");
+    expect(container.textContent).toContain("重试：turn-retry");
+    expect(container.textContent).toContain("第 2 次尝试");
+    expect(container.textContent).toContain("人工确认");
+    expect(container.textContent).toContain("等待动作：ask_user");
   });
 
   it("本地 host generation fixture 不应作为正式文章正文渲染", () => {

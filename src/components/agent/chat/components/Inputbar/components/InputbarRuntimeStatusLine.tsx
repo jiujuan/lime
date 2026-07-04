@@ -221,48 +221,59 @@ export const InputbarRuntimeStatusLine: React.FC<
             )
           : null)
       : null;
-  const segments = [
-    elapsedText,
-    runtime.batchDescriptor
-      ? t("agentChat.inputbar.runtimeStatus.segment.tools" as AgentI18nKey, {
-          countLabel: runtime.batchDescriptor.countLabel,
-        })
-      : null,
-    runtime.pendingRequestCount > 0
-      ? t(
-          "agentChat.inputbar.runtimeStatus.segment.pendingRequests" as AgentI18nKey,
-          {
-            count: runtime.pendingRequestCount,
-          },
-        )
-      : null,
-    runtime.queuedTurnCount > 0
-      ? t(
-          "agentChat.inputbar.runtimeStatus.segment.queuedTurns" as AgentI18nKey,
-          {
-            count: runtime.queuedTurnCount,
-          },
-        )
-      : null,
-    runtime.subtaskStats?.total
-      ? t(
-          "agentChat.inputbar.runtimeStatus.segment.subtasks" as AgentI18nKey,
-          {
-            active: runtime.subtaskStats.active,
-            total: runtime.subtaskStats.total,
-          },
-        )
-      : null,
-    usageSummary,
-    promptCacheMetaText,
-    promptCacheNoticeLabel,
-    canStop && (runtime.status === "running" || runtime.status === "queued")
-      ? t(
-          "agentChat.inputbar.runtimeStatus.segment.canStop" as AgentI18nKey,
-          {},
-        )
-      : null,
-  ].filter(Boolean) as string[];
+  const segments: string[] = [];
+  if (elapsedText) {
+    segments.push(elapsedText);
+  }
+  if (runtime.batchDescriptor) {
+    segments.push(
+      t("agentChat.inputbar.runtimeStatus.segment.tools" as AgentI18nKey, {
+        countLabel: runtime.batchDescriptor.countLabel,
+      }),
+    );
+  }
+  if (runtime.pendingRequestCount > 0) {
+    segments.push(
+      t(
+        "agentChat.inputbar.runtimeStatus.segment.pendingRequests" as AgentI18nKey,
+        {
+          count: runtime.pendingRequestCount,
+        },
+      ),
+    );
+  }
+  if (runtime.queuedTurnCount > 0) {
+    segments.push(
+      t(
+        "agentChat.inputbar.runtimeStatus.segment.queuedTurns" as AgentI18nKey,
+        {
+          count: runtime.queuedTurnCount,
+        },
+      ),
+    );
+  }
+  if (runtime.subtaskStats?.total) {
+    segments.push(
+      t("agentChat.inputbar.runtimeStatus.segment.subtasks" as AgentI18nKey, {
+        active: runtime.subtaskStats.active,
+        total: runtime.subtaskStats.total,
+      }),
+    );
+  }
+  if (usageSummary) {
+    segments.push(usageSummary);
+  }
+  if (promptCacheMetaText) {
+    segments.push(promptCacheMetaText);
+  }
+  if (promptCacheNoticeLabel) {
+    segments.push(promptCacheNoticeLabel);
+  }
+  if (canStop && (runtime.status === "running" || runtime.status === "queued")) {
+    segments.push(
+      t("agentChat.inputbar.runtimeStatus.segment.canStop" as AgentI18nKey, {}),
+    );
+  }
 
   return (
     <div

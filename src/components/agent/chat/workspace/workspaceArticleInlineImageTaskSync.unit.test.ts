@@ -4,10 +4,14 @@ import type { SessionImageWorkbenchState } from "./imageWorkbenchHelpers";
 import {
   applyWorkspaceArticleInlineImageTaskSyncResult,
   buildWorkspaceArticleInlineImageTaskSync,
+  collectWorkspaceArticleInlineImageTaskRecoveryMarkdowns,
+  collectWorkspaceArticleInlineImageTaskRecoveryMarkdownsFromMessages,
   selectWorkspaceArticleInlineImageTaskIds,
   suppressWorkspaceArticleInlineImageTaskPreviewMessages,
+  syncWorkspaceArticleInlineImageTaskMessageArtifacts,
 } from "./workspaceArticleInlineImageTaskSync";
 import { attachWorkspaceArticleWorkspacePreviewArtifactToMessages } from "./workspaceArticleWorkspaceMessageArtifacts";
+import { buildParsedImageTaskSnapshot } from "./imageTaskPreviewRuntimeSnapshot";
 import type { WorkspaceArticleWorkspace } from "./workspaceArticleWorkspaceModel";
 
 const articleWorkspace: WorkspaceArticleWorkspace = {
@@ -132,6 +136,108 @@ describe("workspaceArticleInlineImageTaskSync", () => {
     expect(result?.consumedTaskIds).toEqual(["task-inline"]);
   });
 
+  it("刷新后的 snake_case 正文也应参与 inline 配图恢复", () => {
+    const pendingMarkdown = [
+      "# Inline 配图恢复验证",
+      "",
+      "## 核心观点",
+      "核心观点段落",
+      "",
+      "![广州夏天午后街景](pending-image-task://content-factory-inline-image-task?status=running)",
+      "<!-- lime:image-task-slot:article-image-slot-1 -->",
+    ].join("\n");
+    const refreshedWorkspace: WorkspaceArticleWorkspace = {
+      ...articleWorkspace,
+      objects: [
+        {
+          ...articleWorkspace.objects[0]!,
+          source: {
+            document_text: pendingMarkdown,
+            final_markdown: pendingMarkdown,
+          },
+        },
+      ],
+    };
+
+    expect(
+      collectWorkspaceArticleInlineImageTaskRecoveryMarkdowns({
+        articleWorkspace: refreshedWorkspace,
+        editedDraft: null,
+      }),
+    ).toEqual([pendingMarkdown]);
+
+    const result = buildWorkspaceArticleInlineImageTaskSync({
+      articleWorkspace: refreshedWorkspace,
+      editedDraft: null,
+      imageWorkbenchState: imageWorkbenchState("complete"),
+    });
+
+    expect(result?.markdown).toContain(
+      "![广州夏天午后街景](https://example.com/guangzhou.png)",
+    );
+    expect(result?.markdown).not.toContain("pending-image-task://");
+    expect(result?.consumedTaskIds).toEqual(["task-inline"]);
+  });
+
+  it("存在多个 articleDraft 时应替换实际包含 slot 的文章对象", () => {
+    const secondaryMarkdown = [
+      "# 真实待替换稿",
+      "",
+      "![广州夏天午后街景](pending-image-task://content-factory-inline-image-task?status=running)",
+      "<!-- lime:image-task-slot:article-image-slot-1 -->",
+    ].join("\n");
+    const multiDraftWorkspace: WorkspaceArticleWorkspace = {
+      ...articleWorkspace,
+      objectCount: 2,
+      objects: [
+        {
+          ...articleWorkspace.objects[0],
+          ref: {
+            ...articleWorkspace.objects[0]!.ref,
+            id: "article-preferred-without-slot",
+          },
+          source: {
+            documentText: "# 另一个更完整的旧稿\n\n正文没有 inline slot。",
+            researchRounds: [{ id: "research-1", title: "资料检索" }],
+          },
+        },
+        {
+          ...articleWorkspace.objects[0],
+          ref: {
+            ...articleWorkspace.objects[0]!.ref,
+            id: "article-inline-slot-target",
+          },
+          title: "真实待替换稿",
+          source: {
+            documentText: secondaryMarkdown,
+            finalMarkdown: secondaryMarkdown,
+          },
+        },
+      ],
+    };
+
+    const result = buildWorkspaceArticleInlineImageTaskSync({
+      articleWorkspace: multiDraftWorkspace,
+      editedDraft: null,
+      imageWorkbenchState: imageWorkbenchState("complete"),
+    });
+    const nextWorkspace = applyWorkspaceArticleInlineImageTaskSyncResult(
+      multiDraftWorkspace,
+      result,
+    );
+
+    expect(result?.object.ref.id).toBe("article-inline-slot-target");
+    expect(result?.markdown).toContain(
+      "https://example.com/guangzhou.png",
+    );
+    expect(
+      nextWorkspace?.objects[0]?.source?.documentText,
+    ).not.toContain("https://example.com/guangzhou.png");
+    expect(nextWorkspace?.objects[1]?.source?.documentText).toContain(
+      "https://example.com/guangzhou.png",
+    );
+  });
+
   it("文章没有对应 slot marker 时不应误同步普通 document-inline 任务", () => {
     const result = buildWorkspaceArticleInlineImageTaskSync({
       articleWorkspace: {
@@ -158,6 +264,265 @@ describe("workspaceArticleInlineImageTaskSync", () => {
         imageWorkbenchState: imageWorkbenchState("running"),
       }),
     ).toEqual(["task-inline"]);
+  });
+
+  it("应把文章正文里的 inline 配图占位作为 task catalog 恢复信号", () => {
+    expect(
+      collectWorkspaceArticleInlineImageTaskRecoveryMarkdowns({
+        articleWorkspace: {
+          ...articleWorkspace,
+          objects: articleWorkspace.objects.map((object) => ({
+            ...object,
+            source: {
+              documentText: [
+                "# 标题",
+                "",
+                "![广州夏天午后街景](pending-image-task://task-inline?status=running)",
+                "<!-- lime:image-task-slot:article-image-slot-1 -->",
+              ].join("\n"),
+            },
+          })),
+        },
+        editedDraft: null,
+      }),
+    ).toHaveLength(1);
+  });
+
+  it("应从旧文章 artifact 内容里收集 inline 配图恢复信号", () => {
+    const markdown = [
+      "# 标题",
+      "",
+      "![广州夏天午后街景](pending-image-task://task-inline?status=running)",
+      "<!-- lime:image-task-slot:article-image-slot-1 -->",
+    ].join("\n");
+
+    expect(
+      collectWorkspaceArticleInlineImageTaskRecoveryMarkdownsFromMessages([
+        {
+          id: "assistant-article",
+          role: "assistant",
+          content: "文章草稿已生成。",
+          timestamp: new Date(),
+          artifacts: [
+            {
+              id: "article-preview",
+              type: "document",
+              title: "公众号文章草稿",
+              content: markdown,
+              status: "complete",
+              meta: {
+                openedFrom: "right_surface_article_workspace",
+              },
+              position: { start: 0, end: markdown.length },
+              createdAt: 1,
+              updatedAt: 1,
+            },
+          ],
+        },
+      ]),
+    ).toEqual([markdown]);
+  });
+
+  it("应从文章 artifact 的 workspacePatch 里收集 inline 配图恢复信号", () => {
+    const markdown = [
+      "# 标题",
+      "",
+      "![广州夏天午后街景](pending-image-task://task-inline?status=running)",
+      "<!-- lime:image-task-slot:article-image-slot-1 -->",
+    ].join("\n");
+
+    expect(
+      collectWorkspaceArticleInlineImageTaskRecoveryMarkdownsFromMessages([
+        {
+          id: "assistant-article",
+          role: "assistant",
+          content: "文章草稿已生成。",
+          timestamp: new Date(),
+          artifacts: [
+            {
+              id: "article-preview",
+              type: "document",
+              title: "公众号文章草稿",
+              content: "",
+              status: "complete",
+              meta: {
+                openedFrom: "right_surface_article_workspace",
+                workspacePatch: {
+                  ...articleWorkspace,
+                  objects: articleWorkspace.objects.map((object) => ({
+                    ...object,
+                    source: {
+                      document_text: markdown,
+                      final_markdown: markdown,
+                    },
+                  })),
+                },
+              },
+              position: { start: 0, end: 0 },
+              createdAt: 1,
+              updatedAt: 1,
+            },
+          ],
+        },
+      ]),
+    ).toEqual([markdown]);
+  });
+
+  it("应从文章 artifactDocument blocks 里收集 inline 配图恢复信号", () => {
+    const markdown = [
+      "# 标题",
+      "",
+      "![广州夏天午后街景](pending-image-task://task-inline?status=running)",
+      "<!-- lime:image-task-slot:article-image-slot-1 -->",
+    ].join("\n");
+
+    expect(
+      collectWorkspaceArticleInlineImageTaskRecoveryMarkdownsFromMessages([
+        {
+          id: "assistant-article",
+          role: "assistant",
+          content: "文章草稿已生成。",
+          timestamp: new Date(),
+          artifacts: [
+            {
+              id: "article-preview",
+              type: "document",
+              title: "公众号文章草稿",
+              content: "",
+              status: "complete",
+              meta: {
+                openedFrom: "right_surface_article_workspace",
+                artifactDocument: {
+                  blocks: [
+                    {
+                      id: "body",
+                      type: "rich_text",
+                      contentFormat: "markdown",
+                      markdown,
+                    },
+                  ],
+                },
+              },
+              position: { start: 0, end: 0 },
+              createdAt: 1,
+              updatedAt: 1,
+            },
+          ],
+        },
+      ]),
+    ).toEqual([markdown]);
+  });
+
+  it("应把完成的 inline 图片任务同步回旧文章 artifact 内容和 workspacePatch", () => {
+    const markdown = [
+      "# 标题",
+      "",
+      "![广州夏天午后街景](pending-image-task://legacy-inline-task?status=running)",
+      "<!-- lime:image-task-slot:article-image-slot-1 -->",
+    ].join("\n");
+    const messages: Message[] = [
+      {
+        id: "assistant-article",
+        role: "assistant",
+        content: "文章草稿已生成。",
+        timestamp: new Date(),
+        artifacts: [
+          {
+            id: "article-preview",
+            type: "document",
+            title: "公众号文章草稿",
+            content: markdown,
+            status: "complete",
+            meta: {
+              openedFrom: "right_surface_article_workspace",
+              artifactDocument: {
+                blocks: [
+                  {
+                    id: "body-markdown",
+                    type: "rich_text",
+                    contentFormat: "markdown",
+                    markdown,
+                  },
+                  {
+                    id: "body-content",
+                    type: "rich_text",
+                    contentFormat: "markdown",
+                    content: markdown,
+                  },
+                ],
+              },
+              workspacePatch: {
+                ...articleWorkspace,
+                objects: articleWorkspace.objects.map((object) => ({
+                  ...object,
+                  source: {
+                    documentText: markdown,
+                    finalMarkdown: markdown,
+                  },
+                })),
+              },
+            },
+            position: { start: 0, end: markdown.length },
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        ],
+      },
+    ];
+
+    const nextMessages = syncWorkspaceArticleInlineImageTaskMessageArtifacts(
+      messages,
+      {
+        taskId: "task-inline",
+        taskRecord: {
+          status: "completed",
+          payload: {
+            usage: "document-inline",
+            prompt: "广州夏天午后街景",
+          },
+          relationships: {
+            slot_id: "article-image-slot-1",
+          },
+        },
+        outputs: [
+          {
+            url: "https://example.com/guangzhou.png",
+            prompt: "广州夏天午后街景",
+            slotId: "article-image-slot-1",
+          },
+        ],
+      },
+    );
+
+    const artifact = nextMessages[0]?.artifacts?.[0];
+    expect(artifact?.content).toContain(
+      "https://example.com/guangzhou.png",
+    );
+    expect(artifact?.content).not.toContain("pending-image-task://");
+    const workspacePatch = artifact?.meta.workspacePatch as
+      | WorkspaceArticleWorkspace
+      | undefined;
+    expect(workspacePatch?.objects[0]?.source?.documentText).toContain(
+      "https://example.com/guangzhou.png",
+    );
+    expect(workspacePatch?.objects[0]?.source?.documentText).not.toContain(
+      "pending-image-task://",
+    );
+    const artifactDocument = artifact?.meta.artifactDocument as
+      | { blocks?: Array<{ markdown?: string; content?: string }> }
+      | undefined;
+    expect(artifactDocument?.blocks?.[0]?.markdown).toContain(
+      "https://example.com/guangzhou.png",
+    );
+    expect(artifactDocument?.blocks?.[0]?.markdown).not.toContain(
+      "pending-image-task://",
+    );
+    expect(artifactDocument?.blocks?.[1]?.content).toContain(
+      "https://example.com/guangzhou.png",
+    );
+    expect(artifactDocument?.blocks?.[1]?.content).not.toContain(
+      "pending-image-task://",
+    );
   });
 
   it("应把同步后的 markdown 应用回文章 workspace preview 数据", () => {
@@ -278,5 +643,86 @@ describe("workspaceArticleInlineImageTaskSync", () => {
     expect(displayMessages[0]?.artifacts?.[0]?.content).not.toContain(
       "pending-image-task://",
     );
+  });
+
+  it("刷新恢复时应从 task file relationships.slot_id 重建 Article Workspace 原位替换目标", () => {
+    const snapshot = buildParsedImageTaskSnapshot({
+      taskId: "task-inline-restored",
+      taskType: "image_generate",
+      projectId: "project-main",
+      contentId: "content-main",
+      taskFilePath: ".lime/tasks/image_generate/task-inline-restored.json",
+      artifactPath: ".lime/artifacts/task-inline-restored.json",
+      canvasState: null,
+      taskRecord: {
+        task_id: "task-inline-restored",
+        task_type: "image_generate",
+        task_family: "image",
+        status: "completed",
+        normalized_status: "succeeded",
+        created_at: "2026-07-04T00:00:00.000Z",
+        relationships: {
+          slot_id: "article-image-slot-1",
+        },
+        payload: {
+          usage: "document-inline",
+          prompt: "广州夏天午后街景",
+          anchor_section_title: "核心观点",
+          anchor_text: "核心观点段落",
+          project_id: "project-main",
+          content_id: "content-main",
+        },
+        result: {
+          images: [
+            {
+              url: "https://example.com/guangzhou-restored.png",
+              prompt: "广州夏天午后街景",
+            },
+          ],
+        },
+      },
+    });
+
+    expect(snapshot?.task.applyTarget).toMatchObject({
+      kind: "canvas-insert",
+      canvasType: "document",
+      slotId: "article-image-slot-1",
+      sectionTitle: "核心观点",
+      anchorText: "核心观点段落",
+      projectId: "project-main",
+      contentId: "content-main",
+    });
+
+    const result = buildWorkspaceArticleInlineImageTaskSync({
+      articleWorkspace,
+      editedDraft: {
+        objectKey: "content-factory-app:session-main:articleDraft:article-1",
+        markdown: [
+          "# 标题",
+          "",
+          "## 核心观点",
+          "核心观点段落",
+          "",
+          "![广州夏天午后街景](pending-image-task://task-inline-restored?status=running)",
+          "<!-- lime:image-task-slot:article-image-slot-1 -->",
+        ].join("\n"),
+        updatedAt: "2026-07-04T00:00:00.000Z",
+      },
+      imageWorkbenchState: {
+        active: false,
+        viewport: { x: 0, y: 0, scale: 1 },
+        selectedTaskId: snapshot?.task.id ?? null,
+        selectedOutputId: snapshot?.outputs[0]?.id ?? null,
+        nextOutputIndex: 2,
+        tasks: snapshot ? [snapshot.task] : [],
+        outputs: snapshot?.outputs ?? [],
+      },
+    });
+
+    expect(result?.consumedTaskIds).toEqual(["task-inline-restored"]);
+    expect(result?.markdown).toContain(
+      "![广州夏天午后街景](https://example.com/guangzhou-restored.png)",
+    );
+    expect(result?.markdown).not.toContain("pending-image-task://");
   });
 });

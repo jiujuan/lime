@@ -1,7 +1,10 @@
 import { act, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { buildClawAgentParams } from "@/lib/workspace/navigation";
+import {
+  buildClawAgentParams,
+  buildHomeAgentParams,
+} from "@/lib/workspace/navigation";
 import { useAppNavigation } from "./useAppNavigation";
 
 const NAVIGATION_RESTORE_STORAGE_KEY = "lime.appNavigation.restore.v1";
@@ -179,6 +182,73 @@ describe("useAppNavigation", () => {
     });
   });
 
+  it("agent 历史会话跳转应写入可恢复的最小页面状态", async () => {
+    await renderProbe();
+
+    await act(async () => {
+      latestNavigation?.handleNavigate(
+        "agent",
+        buildClawAgentParams({
+          projectId: "project-history",
+          initialSessionId: "session-history",
+          initialUserPrompt: "这条 prompt 不应被 reload 恢复",
+        }),
+      );
+    });
+    await flushEffects();
+
+    expect(
+      JSON.parse(
+        window.sessionStorage.getItem(NAVIGATION_RESTORE_STORAGE_KEY) ?? "{}",
+      ),
+    ).toEqual({
+      page: "agent",
+      params: {
+        agentEntry: "claw",
+        immersiveHome: false,
+        initialSessionId: "session-history",
+        lockTheme: false,
+        projectId: "project-history",
+        theme: "general",
+      },
+    });
+
+    await remountProbe();
+
+    expect(latestNavigation?.currentPage).toBe("agent");
+    expect(latestNavigation?.pageParams).toEqual({
+      agentEntry: "claw",
+      immersiveHome: false,
+      initialSessionId: "session-history",
+      lockTheme: false,
+      projectId: "project-history",
+      theme: "general",
+    });
+  });
+
+  it("agent 新建首页跳转不应写入 reload 恢复状态", async () => {
+    await renderProbe();
+
+    await act(async () => {
+      latestNavigation?.handleNavigate("plugin", {
+        appId: "content-factory-app",
+      });
+    });
+    await flushEffects();
+    expect(
+      window.sessionStorage.getItem(NAVIGATION_RESTORE_STORAGE_KEY),
+    ).not.toBe(null);
+
+    await act(async () => {
+      latestNavigation?.handleNavigate("agent", buildHomeAgentParams());
+    });
+    await flushEffects();
+
+    expect(window.sessionStorage.getItem(NAVIGATION_RESTORE_STORAGE_KEY)).toBe(
+      null,
+    );
+  });
+
   it("重新挂载时应恢复 plugin 页面和白名单参数", async () => {
     window.sessionStorage.setItem(
       NAVIGATION_RESTORE_STORAGE_KEY,
@@ -304,8 +374,7 @@ describe("useAppNavigation", () => {
     await flushEffects();
 
     const readyCallsAfterFirstNavigation = readyCallCount;
-    const requestIdAfterFirstNavigation =
-      latestNavigation?.navigationRequestId;
+    const requestIdAfterFirstNavigation = latestNavigation?.navigationRequestId;
 
     await act(async () => {
       latestNavigation?.handleNavigate("agent", {

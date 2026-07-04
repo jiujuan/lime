@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import {
   Dialog,
@@ -84,7 +83,10 @@ type AutomationJobFormState = {
 export type AutomationJobDialogInitialValues = Partial<AutomationJobFormState>;
 
 const TEXT_ONLY_DELIVERY_CHANNEL = "telegram";
-type SettingsTranslate = TFunction<"settings">;
+type SettingsTranslate = (
+  key: string,
+  values?: Record<string, unknown>,
+) => string;
 
 function buildAutomationAccessModeCopy(
   t: SettingsTranslate,
@@ -112,7 +114,7 @@ function translateWithValues(
   key: string,
   values: Record<string, string | number | boolean>,
 ): string {
-  const translated = String(t(key as never, values as never));
+  const translated = t(key, values);
   return Object.entries(values).reduce((text, [name, value]) => {
     const replacement = String(value);
     return text
@@ -521,7 +523,8 @@ export function AutomationJobDialog({
   onOpenChange: (open: boolean) => void;
   onSubmit: (payload: AutomationJobDialogSubmit) => Promise<void>;
 }) {
-  const { t } = useTranslation("settings");
+  const { t: rawT } = useTranslation("settings");
+  const t = rawT as SettingsTranslate;
   const [form, setForm] = useState<AutomationJobFormState>(() =>
     createCreateForm(workspaces, initialValues),
   );

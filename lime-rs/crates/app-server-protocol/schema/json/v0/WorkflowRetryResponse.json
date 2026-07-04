@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "rescheduledTurnId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "sessionId": {
+      "type": "string"
+    },
+    "workflow": true,
+    "workflowRuns": {
+      "default": [],
+      "items": true,
+      "type": "array"
+    },
+    "workflowSteps": {
+      "default": [],
+      "items": true,
+      "type": "array"
+    }
+  },
+  "required": [
+    "sessionId",
+    "workflow"
+  ],
+  "title": "WorkflowRetryResponse",
+  "type": "object"
+}

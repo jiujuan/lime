@@ -13,6 +13,7 @@ import {
   type ImageWorkbenchOutput,
   type ImageWorkbenchTask,
 } from "./imageWorkbenchHelpers";
+import { resolveTaskRecordInlineApplyTarget } from "./imageTaskPreviewApplyTarget";
 import { normalizeImageTaskPath } from "./imageTaskLocator";
 import {
   asRecord,
@@ -603,11 +604,16 @@ export function buildParsedImageTaskSnapshot(params: {
       (right.slotIndex ?? Number.MAX_SAFE_INTEGER),
   );
 
-  const applyTarget = resolveScopedImageWorkbenchApplyTarget({
-    canvasState: params.canvasState,
+  const applyTarget = resolveTaskRecordInlineApplyTarget({
+    baseApplyTarget: resolveScopedImageWorkbenchApplyTarget({
+      canvasState: params.canvasState,
+      projectId: params.projectId ?? null,
+      contentId: params.contentId ?? null,
+      requestedTarget: resolveTaskRequestedTarget(params.taskType),
+    }),
+    taskRecord: params.taskRecord,
     projectId: params.projectId ?? null,
     contentId: params.contentId ?? null,
-    requestedTarget: resolveTaskRequestedTarget(params.taskType),
   });
   const createdAtRaw =
     readString(

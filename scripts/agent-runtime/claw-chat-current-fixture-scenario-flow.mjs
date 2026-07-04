@@ -2,6 +2,7 @@ import {
   APP_SERVER_METHOD_SESSION_READ,
   ASSISTANT_DONE_TEXT,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO,
+  CONTENT_FACTORY_INLINE_IMAGE_ARTICLE_WORKSPACE_SCENARIO,
   CONTINUE_DONE_TEXT,
   CONTINUE_PROMPT,
   EXPERT_PANEL_SKILLS_RUNTIME_SCENARIO,
@@ -41,6 +42,7 @@ import {
   WEB_TOOLS_SEARCH_TOOL_CALL_ID,
 } from "./claw-chat-current-fixture-constants.mjs";
 import { runContentFactoryArticleWorkspaceScenario } from "./claw-chat-current-fixture-content-factory-article-workspace.mjs";
+import { runContentFactoryInlineImageArticleWorkspaceScenario } from "./claw-chat-current-fixture-inline-image-article-workspace.mjs";
 import { collectAgentUiPerformanceTraceEvidence } from "./claw-chat-current-fixture-agent-ui-trace.mjs";
 import {
   addExpertSkillsRuntimeSkillFromInfoPanel,
@@ -173,6 +175,21 @@ export async function executeScenarioFlow({
         page,
         options,
         workspace,
+        summary,
+        appServerRequests,
+      }),
+    );
+  } else if (
+    options.scenario === CONTENT_FACTORY_INLINE_IMAGE_ARTICLE_WORKSPACE_SCENARIO
+  ) {
+    logStage("run-content-factory-inline-image-article-workspace");
+    Object.assign(
+      summary,
+      await runContentFactoryInlineImageArticleWorkspaceScenario({
+        page,
+        options,
+        workspace,
+        summary,
         appServerRequests,
       }),
     );

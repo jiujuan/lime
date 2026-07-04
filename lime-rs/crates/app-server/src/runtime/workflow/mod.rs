@@ -1,3 +1,4 @@
+mod control;
 pub(crate) mod definition;
 pub(crate) mod events;
 mod read;

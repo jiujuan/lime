@@ -52,6 +52,8 @@ pub(crate) struct WorkflowRunReadModel {
     pub evidence_refs: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub failure: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry: Option<Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -78,6 +80,14 @@ pub(crate) struct WorkflowStepReadModel {
     pub evidence_refs: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub failure: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_action_type: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub started_at: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -107,6 +117,10 @@ pub(crate) struct WorkflowActionReadModel {
     pub action_type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub step_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_action_type: Option<String>,
 }
 
 pub(crate) fn workflow_read_model_from_events(events: &[AgentEvent]) -> WorkflowReadModel {
@@ -204,12 +218,13 @@ impl WorkflowProjector {
                 increment_step_counts(&mut run.step_counts, step.status);
             }
         }
+        let actions = workflow_actions(&self.runs, &self.steps);
         WorkflowReadModel {
             thread_id: self.thread_id,
             active_workflow_run_id: self.active_workflow_run_id,
             workflow_runs: self.runs.into_values().collect(),
             workflow_steps: self.steps.into_values().collect(),
-            actions: Vec::new(),
+            actions,
             updated_at: self.updated_at,
         }
     }
@@ -242,6 +257,7 @@ fn new_run(
         artifact_refs: string_list_field(&event.payload, &["artifactRefs", "artifact_refs"]),
         evidence_refs: string_list_field(&event.payload, &["evidenceRefs", "evidence_refs"]),
         failure: event.payload.get("failure").cloned(),
+        retry: event.payload.get("retry").cloned(),
     }
 }
 
@@ -268,11 +284,16 @@ fn merge_run(run: &mut WorkflowRunReadModel, event: &AgentEvent, status: Workflo
             .or_else(|| string_field(&event.payload, &["turnId", "turn_id"]))
     });
     run.updated_at = Some(event.timestamp.clone());
-    if status.is_terminal() {
-        run.finished_at = Some(event.timestamp.clone());
-    }
+    run.finished_at = status.is_terminal().then(|| event.timestamp.clone());
     if let Some(failure) = event.payload.get("failure") {
         run.failure = Some(failure.clone());
+    } else if status != WorkflowStatus::Failed {
+        run.failure = None;
+    }
+    if let Some(retry) = event.payload.get("retry") {
+        run.retry = Some(retry.clone());
+    } else if status != WorkflowStatus::Retrying {
+        run.retry = None;
     }
     merge_string_list(
         &mut run.artifact_refs,
@@ -297,7 +318,11 @@ fn new_step(
             .unwrap_or_else(|| step_id.to_string()),
         kind: string_field(&event.payload, &["stepKind", "step_kind", "kind"]),
         status,
-        attempt: 1,
+        attempt: u32_field(
+            &event.payload,
+            &["attempt", "retryAttempt", "retry_attempt"],
+        )
+        .unwrap_or(1),
         index: usize_field(&event.payload, &["stepIndex", "step_index", "index"]),
         step_count: usize_field(&event.payload, &["stepCount", "step_count", "count"]),
         progress_message: string_field(
@@ -308,6 +333,13 @@ fn new_step(
         artifact_refs: string_list_field(&event.payload, &["artifactRefs", "artifact_refs"]),
         evidence_refs: string_list_field(&event.payload, &["evidenceRefs", "evidence_refs"]),
         failure: event.payload.get("failure").cloned(),
+        retry: event.payload.get("retry").cloned(),
+        response: event.payload.get("response").cloned(),
+        request_id: string_field(
+            &event.payload,
+            &["requestId", "request_id", "actionId", "action_id"],
+        ),
+        agent_action_type: string_field(&event.payload, &["actionType", "action_type"]),
         started_at: Some(event.timestamp.clone()),
         updated_at: Some(event.timestamp.clone()),
         finished_at: status.is_terminal().then(|| event.timestamp.clone()),
@@ -340,13 +372,31 @@ fn merge_step_payload(
     step.progress_message =
         string_field(payload, &["progressMessage", "progress_message", "message"])
             .or_else(|| step.progress_message.clone());
-    step.updated_at = Some(event.timestamp.clone());
-    if status.is_terminal() {
-        step.finished_at = Some(event.timestamp.clone());
+    if let Some(attempt) = u32_field(payload, &["attempt", "retryAttempt", "retry_attempt"]) {
+        step.attempt = attempt;
     }
+    step.updated_at = Some(event.timestamp.clone());
+    step.finished_at = status.is_terminal().then(|| event.timestamp.clone());
     if let Some(failure) = payload.get("failure") {
         step.failure = Some(failure.clone());
+    } else if status != WorkflowStatus::Failed {
+        step.failure = None;
     }
+    if let Some(retry) = payload.get("retry") {
+        step.retry = Some(retry.clone());
+    } else if status != WorkflowStatus::Retrying {
+        step.retry = None;
+    }
+    if let Some(response) = payload.get("response") {
+        step.response = Some(response.clone());
+    }
+    step.request_id = string_field(
+        payload,
+        &["requestId", "request_id", "actionId", "action_id"],
+    )
+    .or_else(|| step.request_id.clone());
+    step.agent_action_type = string_field(payload, &["actionType", "action_type"])
+        .or_else(|| step.agent_action_type.clone());
     merge_string_list(
         &mut step.tool_call_ids,
         string_list_field(payload, &["toolCallIds", "tool_call_ids"]),
@@ -380,6 +430,55 @@ fn increment_step_counts(counts: &mut WorkflowStepCounts, status: WorkflowStatus
     }
 }
 
+fn workflow_actions(
+    runs: &BTreeMap<String, WorkflowRunReadModel>,
+    steps: &BTreeMap<(String, String), WorkflowStepReadModel>,
+) -> Vec<WorkflowActionReadModel> {
+    let mut actions = Vec::new();
+    for run in runs.values() {
+        if workflow_status_can_retry(run.status) {
+            actions.push(WorkflowActionReadModel {
+                workflow_run_id: run.workflow_run_id.clone(),
+                action_type: "retry".to_string(),
+                step_id: None,
+                request_id: None,
+                agent_action_type: None,
+            });
+        }
+    }
+    for step in steps.values() {
+        if workflow_status_can_retry(step.status) {
+            actions.push(WorkflowActionReadModel {
+                workflow_run_id: step.workflow_run_id.clone(),
+                action_type: "retry".to_string(),
+                step_id: Some(step.step_id.clone()),
+                request_id: None,
+                agent_action_type: None,
+            });
+        }
+        if step.status == WorkflowStatus::Waiting
+            && step.request_id.is_some()
+            && step.agent_action_type.is_some()
+        {
+            actions.push(WorkflowActionReadModel {
+                workflow_run_id: step.workflow_run_id.clone(),
+                action_type: "respond".to_string(),
+                step_id: Some(step.step_id.clone()),
+                request_id: step.request_id.clone(),
+                agent_action_type: step.agent_action_type.clone(),
+            });
+        }
+    }
+    actions
+}
+
+fn workflow_status_can_retry(status: WorkflowStatus) -> bool {
+    matches!(
+        status,
+        WorkflowStatus::Failed | WorkflowStatus::Canceled | WorkflowStatus::Skipped
+    )
+}
+
 fn string_field(value: &Value, keys: &[&str]) -> Option<String> {
     keys.iter()
         .filter_map(|key| value.get(*key))
@@ -397,6 +496,16 @@ fn usize_field(value: &Value, keys: &[&str]) -> Option<usize> {
                 .as_u64()
                 .and_then(|value| usize::try_from(value).ok()),
             Value::String(value) => value.trim().parse::<usize>().ok(),
+            _ => None,
+        })
+}
+
+fn u32_field(value: &Value, keys: &[&str]) -> Option<u32> {
+    keys.iter()
+        .filter_map(|key| value.get(*key))
+        .find_map(|value| match value {
+            Value::Number(number) => number.as_u64().and_then(|value| u32::try_from(value).ok()),
+            Value::String(value) => value.trim().parse::<u32>().ok(),
             _ => None,
         })
 }

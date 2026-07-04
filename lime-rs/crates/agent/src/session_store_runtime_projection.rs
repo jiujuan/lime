@@ -7,8 +7,8 @@ use lime_core::database::dao::agent_timeline::{
 use std::collections::HashMap;
 
 use super::session_store_types::{SessionDetail, SessionInfo};
-use crate::aster_runtime_projection::RuntimeTimelineSnapshotProjection;
 use crate::protocol::AgentMessage as RuntimeAgentMessage;
+use crate::runtime_snapshot_adapter::RuntimeTimelineSnapshotProjection;
 
 fn sort_runtime_turns(turns: &mut [AgentThreadTurn]) {
     turns.sort_by(|left, right| {

@@ -149,7 +149,7 @@ describe("ImageTaskViewer", () => {
 
     expect(mockOpenResourceManager).toHaveBeenCalledWith(
       expect.objectContaining({
-        sourceLabel: "图片生成",
+        sourceLabel: "Image Generation",
         sourceContext: expect.objectContaining({
           kind: "image_task",
           projectId: "project-1",
@@ -194,7 +194,7 @@ describe("ImageTaskViewer", () => {
     );
   });
 
-  it("输出缺少模型字段时应回退展示任务运行合同模型", () => {
+  it("普通图片查看器不展示运行合同、策略和 provider/model 审计字段", () => {
     const { container } = renderComponent({
       tasks: [
         {
@@ -209,6 +209,10 @@ describe("ImageTaskViewer", () => {
           runtimeContract: {
             providerId: "fal",
             model: "fal-ai/nano-banana-pro-v2",
+            contractKey: "image_generation",
+            routingOutcome: "accepted",
+            limecorePolicyEvaluationStatus: "input_gap",
+            limecorePolicyMissingInputs: ["subject"],
           },
         },
       ],
@@ -226,8 +230,23 @@ describe("ImageTaskViewer", () => {
       selectedOutputId: "output-runtime-model-1",
     });
 
-    expect(container.textContent).toContain("fal");
-    expect(container.textContent).toContain("fal-ai/nano-banana-pro-v2");
+    expect(
+      container.querySelector('[data-testid="image-task-viewer-runtime-contract"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid="image-task-viewer-runtime-contract-registry"]',
+      ),
+    ).toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid="image-task-viewer-runtime-contract-policy"]',
+      ),
+    ).toBeNull();
+    expect(container.textContent).not.toContain("运行合同");
+    expect(container.textContent).not.toContain("LimeCore 策略");
+    expect(container.textContent).not.toContain("fal");
+    expect(container.textContent).not.toContain("fal-ai/nano-banana-pro-v2");
 
     const openButton = container.querySelector(
       '[data-testid="image-task-viewer-open-image"]',
@@ -243,9 +262,9 @@ describe("ImageTaskViewer", () => {
         items: [
           expect.objectContaining({
             id: "output-runtime-model-1",
-            metadata: expect.objectContaining({
-              providerName: "fal",
-              modelName: "fal-ai/nano-banana-pro-v2",
+            metadata: expect.not.objectContaining({
+              providerName: expect.any(String),
+              modelName: expect.any(String),
             }),
           }),
         ],

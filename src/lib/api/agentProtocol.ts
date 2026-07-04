@@ -16,13 +16,13 @@ import type {
 } from "./agentExecutionRuntime";
 import type {
   AsterApprovalPolicy,
-  AsterProviderConfig,
   AgentRuntimeSubmitTurnRequest,
   AgentRuntimeWebSearchMode,
   AsterExecutionStrategy,
   AsterSandboxPolicy,
   AutoContinueRequestPayload,
   ImageInput,
+  RuntimeProviderConfig,
 } from "./agentRuntime/types";
 import { normalizeExecutionStrategyToReact } from "./agentRuntime/executionStrategyCompat";
 
@@ -984,7 +984,7 @@ export type AgentEvent = (
   AgentEventEnvelope;
 
 export interface AgentUserPreferences {
-  providerConfig?: AsterProviderConfig;
+  providerConfig?: RuntimeProviderConfig;
   providerPreference?: string;
   modelPreference?: string;
   reasoningEffort?: string;

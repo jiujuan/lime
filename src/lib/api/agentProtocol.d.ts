@@ -9,13 +9,13 @@ import type {
 } from "./agentExecutionRuntime";
 import type {
   AsterApprovalPolicy,
-  AsterProviderConfig,
   AgentRuntimeSubmitTurnRequest,
   AgentRuntimeWebSearchMode,
   AsterExecutionStrategy,
   AsterSandboxPolicy,
   AutoContinueRequestPayload,
   ImageInput,
+  RuntimeProviderConfig,
 } from "./agentRuntime/types";
 export interface AgentContextTraceStep {
   stage: string;
@@ -798,7 +798,7 @@ export type AgentEvent =
   | AgentEventWarning
   | AgentEventError;
 export interface AgentUserPreferences {
-  providerConfig?: AsterProviderConfig;
+  providerConfig?: RuntimeProviderConfig;
   providerPreference?: string;
   modelPreference?: string;
   reasoningEffort?: string;

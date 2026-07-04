@@ -118,6 +118,7 @@ function mountEmptyStateSendRuntime({
   hasDisplayMessages = false,
   input = "默认输入",
   sessionId = null,
+  sendResult = true,
 }: {
   activeDraftTabId?: string | null;
   agentEntry?: string;
@@ -127,13 +128,14 @@ function mountEmptyStateSendRuntime({
   hasDisplayMessages?: boolean;
   input?: string;
   sessionId?: string | null;
+  sendResult?: boolean;
 } = {}) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
   const setInput = vi.fn();
   const clearMessages = vi.fn();
-  const handleSend = vi.fn(async () => true);
+  const handleSend = vi.fn(async () => sendResult);
   const setTaskCenterDraftTabs = vi.fn();
   const setTaskCenterDraftSendRequest = vi.fn();
   const setHomePendingPreviewRequest = vi.fn();
@@ -424,7 +426,7 @@ describe("useTaskCenterEmptyStateSendRuntime", () => {
     );
   });
 
-  it("Task Center 首页无会话内容时应先排队 non-materialized request", () => {
+  it("Task Center 首页无会话内容时应直接进入普通发送流", async () => {
     const runtime = mountEmptyStateSendRuntime({
       activeDraftTabId: null,
       hasDisplayMessages: false,
@@ -434,20 +436,41 @@ describe("useTaskCenterEmptyStateSendRuntime", () => {
     act(() => {
       runtime.send({ textOverride: "继续拆分 workspace" });
     });
+    await act(async () => {
+      await Promise.resolve();
+    });
 
-    expect(runtime.handleSend).not.toHaveBeenCalled();
-    const request = runtime.setTaskCenterDraftSendRequest.mock.calls[0]?.[0] as
-      | TaskCenterDraftSendRequest
-      | undefined;
-    expect(request).toEqual(
+    expect(runtime.setTaskCenterDraftSendRequest).not.toHaveBeenCalled();
+    expect(runtime.setHomePendingPreviewRequest).not.toHaveBeenCalled();
+    expect(runtime.handleSend).toHaveBeenCalledWith(
+      [],
+      undefined,
+      undefined,
+      "继续拆分 workspace",
+      undefined,
+      undefined,
       expect.objectContaining({
-        materializeDraft: false,
-        source: "empty-state",
-        text: "继续拆分 workspace",
+        skipPreSubmitResume: true,
+        skipSessionRestore: true,
+        skipSessionStartHooks: true,
+        requestMetadata: expect.objectContaining({
+          agentUiPerformanceTrace: expect.objectContaining({
+            sessionId: null,
+            source: "empty-state",
+            workspaceId: "workspace-test",
+          }),
+        }),
       }),
     );
-    expect(request?.draftTabId).toBe(request?.id);
-    expect(runtime.setHomePendingPreviewRequest).toHaveBeenCalledWith(request);
+    expect(recordAgentUiPerformanceMetric).toHaveBeenCalledWith(
+      "homeInput.sendDispatch.done",
+      expect.objectContaining({
+        result: true,
+        sessionId: null,
+        source: "empty-state",
+        workspaceId: "workspace-test",
+      }),
+    );
   });
 
   it("非 Task Center 首屏发送应直接回落到 handleSend", () => {

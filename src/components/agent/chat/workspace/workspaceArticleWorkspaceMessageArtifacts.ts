@@ -1,5 +1,5 @@
 import type { Message } from "../types";
-import type { ArtifactStatus } from "@/lib/artifact/types";
+import type { Artifact, ArtifactStatus } from "@/lib/artifact/types";
 import { upsertMessageArtifact } from "../utils/messageArtifacts";
 import {
   buildWorkspaceArticleWorkspaceFromUnknown,
@@ -165,9 +165,13 @@ export function attachWorkspaceArticleWorkspacePreviewArtifactToMessages({
     return messages;
   }
 
-  const targetMessageIndex = findLastStableAssistantMessageIndex(messages);
+  const messagesWithoutStaleArtifacts =
+    removeStaleArticleWorkspacePreviewArtifacts(messages, artifact);
+  const targetMessageIndex = findLastStableAssistantMessageIndex(
+    messagesWithoutStaleArtifacts,
+  );
   if (targetMessageIndex >= 0) {
-    const nextMessages = [...messages];
+    const nextMessages = [...messagesWithoutStaleArtifacts];
     nextMessages[targetMessageIndex] = upsertMessageArtifact(
       nextMessages[targetMessageIndex],
       artifact,
@@ -176,7 +180,7 @@ export function attachWorkspaceArticleWorkspacePreviewArtifactToMessages({
   }
 
   return [
-    ...messages,
+    ...messagesWithoutStaleArtifacts,
     {
       id: `article-workspace-preview:${artifact.id}`,
       role: "assistant",
@@ -185,6 +189,218 @@ export function attachWorkspaceArticleWorkspacePreviewArtifactToMessages({
       artifacts: [artifact],
     },
   ];
+}
+
+interface ArticleWorkspaceArtifactIdentity {
+  appId: string | null;
+  sessionId: string | null;
+  workspaceId: string | null;
+  objectKind: string | null;
+  objectId: string | null;
+  artifactIds: Set<string>;
+}
+
+function removeStaleArticleWorkspacePreviewArtifacts(
+  messages: readonly Message[],
+  nextArtifact: Artifact,
+): Message[] {
+  const nextIdentity = buildArticleWorkspaceArtifactIdentity(nextArtifact);
+  if (!nextIdentity) {
+    return messages as Message[];
+  }
+
+  let changed = false;
+  const nextMessages: Message[] = [];
+  for (const message of messages) {
+    const artifacts = message.artifacts ?? [];
+    if (artifacts.length === 0) {
+      nextMessages.push(message);
+      continue;
+    }
+
+    const nextArtifacts = artifacts.filter(
+      (artifact) =>
+        !isStaleArticleWorkspacePreviewArtifact(
+          artifact,
+          nextArtifact,
+          nextIdentity,
+        ),
+    );
+    if (nextArtifacts.length === artifacts.length) {
+      nextMessages.push(message);
+      continue;
+    }
+
+    changed = true;
+    if (shouldDropEmptyArticleWorkspacePreviewMessage(message, nextArtifacts)) {
+      continue;
+    }
+    nextMessages.push({
+      ...message,
+      artifacts: nextArtifacts.length > 0 ? nextArtifacts : undefined,
+    });
+  }
+
+  return changed ? nextMessages : (messages as Message[]);
+}
+
+function shouldDropEmptyArticleWorkspacePreviewMessage(
+  message: Message,
+  nextArtifacts: readonly Artifact[],
+): boolean {
+  return (
+    message.role === "assistant" &&
+    message.id.startsWith("article-workspace-preview:") &&
+    message.content.trim().length === 0 &&
+    nextArtifacts.length === 0
+  );
+}
+
+function isStaleArticleWorkspacePreviewArtifact(
+  candidate: Artifact,
+  nextArtifact: Artifact,
+  nextIdentity: ArticleWorkspaceArtifactIdentity,
+): boolean {
+  if (candidate.id === nextArtifact.id) {
+    return true;
+  }
+  if (!isArticleWorkspaceVisibleArtifact(candidate)) {
+    return false;
+  }
+  const candidateIdentity = buildArticleWorkspaceArtifactIdentity(candidate);
+  return candidateIdentity
+    ? isSameArticleWorkspaceArtifactIdentity(candidateIdentity, nextIdentity)
+    : false;
+}
+
+function isArticleWorkspaceVisibleArtifact(artifact: Artifact): boolean {
+  return (
+    readString(artifact.meta.openedFrom, artifact.meta.opened_from) ===
+    "right_surface_article_workspace"
+  );
+}
+
+function buildArticleWorkspaceArtifactIdentity(
+  artifact: Artifact,
+): ArticleWorkspaceArtifactIdentity | null {
+  const articleWorkspace = asRecord(artifact.meta.articleWorkspace);
+  const workspacePatch = asRecord(artifact.meta.workspacePatch);
+  const selectedObjectRef = asRecord(workspacePatch?.selectedObjectRef);
+  const primaryObjectRef = asRecord(workspacePatch?.primaryObjectRef);
+  const objectKind = readString(
+    articleWorkspace?.objectKind,
+    articleWorkspace?.object_kind,
+    selectedObjectRef?.kind,
+    primaryObjectRef?.kind,
+  );
+  const objectId = readString(
+    articleWorkspace?.objectId,
+    articleWorkspace?.object_id,
+    selectedObjectRef?.id,
+    primaryObjectRef?.id,
+  );
+  const appId = readString(
+    articleWorkspace?.appId,
+    articleWorkspace?.app_id,
+    workspacePatch?.appId,
+    workspacePatch?.app_id,
+  );
+  const sessionId = readString(
+    articleWorkspace?.sessionId,
+    articleWorkspace?.session_id,
+    workspacePatch?.sessionId,
+    workspacePatch?.session_id,
+  );
+  const workspaceId = readString(
+    articleWorkspace?.workspaceId,
+    articleWorkspace?.workspace_id,
+    workspacePatch?.workspaceId,
+    workspacePatch?.workspace_id,
+  );
+  const artifactIds = readStringSet(
+    articleWorkspace?.artifactIds,
+    articleWorkspace?.artifact_ids,
+    selectedObjectRef?.artifactIds,
+    selectedObjectRef?.artifact_ids,
+  );
+
+  if (!appId && !sessionId && !objectId && artifactIds.size === 0) {
+    return null;
+  }
+
+  return {
+    appId,
+    sessionId,
+    workspaceId,
+    objectKind,
+    objectId,
+    artifactIds,
+  };
+}
+
+function readStringSet(...values: unknown[]): Set<string> {
+  const result = new Set<string>();
+  for (const value of values) {
+    if (!Array.isArray(value)) {
+      continue;
+    }
+    for (const item of value) {
+      if (typeof item === "string" && item.trim()) {
+        result.add(item.trim());
+      }
+    }
+  }
+  return result;
+}
+
+function isSameArticleWorkspaceArtifactIdentity(
+  left: ArticleWorkspaceArtifactIdentity,
+  right: ArticleWorkspaceArtifactIdentity,
+): boolean {
+  if (
+    left.appId &&
+    right.appId &&
+    left.appId !== right.appId
+  ) {
+    return false;
+  }
+  if (
+    left.sessionId &&
+    right.sessionId &&
+    left.sessionId !== right.sessionId
+  ) {
+    return false;
+  }
+  if (
+    left.workspaceId &&
+    right.workspaceId &&
+    left.workspaceId !== right.workspaceId
+  ) {
+    return false;
+  }
+  if (
+    left.objectKind &&
+    right.objectKind &&
+    left.objectKind !== right.objectKind
+  ) {
+    return false;
+  }
+  if (left.objectId && right.objectId) {
+    return left.objectId === right.objectId;
+  }
+  if (left.artifactIds.size > 0 && right.artifactIds.size > 0) {
+    return hasStringSetIntersection(left.artifactIds, right.artifactIds);
+  }
+  return false;
+}
+
+function hasStringSetIntersection(left: Set<string>, right: Set<string>) {
+  for (const value of left) {
+    if (right.has(value)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function buildArticleWorkspacePreviewArtifact(

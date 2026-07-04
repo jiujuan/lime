@@ -1,9 +1,14 @@
 use aster::conversation::Conversation;
 use aster::session::extension_data::ExtensionData;
 use aster::session::{
-    apply_session_update, create_subagent_session as create_aster_subagent_session,
+    create_subagent_session as create_aster_subagent_session,
     persist_session_extension_data as persist_aster_session_extension_data,
     replace_session_conversation as replace_aster_session_conversation, Session,
+};
+use chrono::Utc;
+use lime_core::database::{
+    agent_session_repository::{self, SessionTokenStatsUpdate},
+    lock_db, DbConnection,
 };
 use std::path::PathBuf;
 
@@ -52,22 +57,26 @@ pub async fn replace_session_conversation(
 
 /// 收口 compaction 后 session token 指标写回边界，避免业务层直接持有 builder 链。
 pub async fn persist_compaction_session_metrics_update(
+    db: &DbConnection,
     session_id: &str,
     update: &CompactionSessionMetricsUpdate,
 ) -> Result<(), String> {
-    apply_session_update(session_id, |session| {
-        // 显式保留已有 schedule_id，避免把保留旧值的行为隐含在 store 的 COALESCE 语义里。
-        session
-            .schedule_id(update.schedule_id.clone())
-            .total_tokens(Some(update.current_window_tokens))
-            .input_tokens(Some(update.current_window_tokens))
-            .output_tokens(Some(0))
-            .cached_input_tokens(update.cached_input_tokens)
-            .cache_creation_input_tokens(update.cache_creation_input_tokens)
-            .accumulated_total_tokens(update.accumulated_total_tokens)
-            .accumulated_input_tokens(update.accumulated_input_tokens)
-            .accumulated_output_tokens(update.accumulated_output_tokens)
-    })
-    .await
+    let conn = lock_db(db)?;
+    agent_session_repository::update_session_token_stats(
+        &conn,
+        session_id,
+        &SessionTokenStatsUpdate {
+            schedule_id: update.schedule_id.clone(),
+            total_tokens: Some(update.current_window_tokens),
+            input_tokens: Some(update.current_window_tokens),
+            output_tokens: Some(0),
+            cached_input_tokens: update.cached_input_tokens,
+            cache_creation_input_tokens: update.cache_creation_input_tokens,
+            accumulated_total_tokens: update.accumulated_total_tokens,
+            accumulated_input_tokens: update.accumulated_input_tokens,
+            accumulated_output_tokens: update.accumulated_output_tokens,
+        },
+        &Utc::now().to_rfc3339(),
+    )
     .map_err(|error| format!("更新压缩后的 token 统计失败: {error}"))
 }

@@ -292,3 +292,6 @@ pub const METHOD_AGENT_SESSION_ACTION_RESPOND: &str = "agentSession/action/respo
 pub const METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND: &str = "agentSession/runtimeEvents/append";
 pub const METHOD_AGENT_SESSION_EVENT: &str = "agentSession/event";
 pub const METHOD_WORKFLOW_READ: &str = "workflow/read";
+pub const METHOD_WORKFLOW_CANCEL: &str = "workflow/cancel";
+pub const METHOD_WORKFLOW_RETRY: &str = "workflow/retry";
+pub const METHOD_WORKFLOW_RESPOND: &str = "workflow/respond";

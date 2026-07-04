@@ -54,6 +54,9 @@ export function buildGeneralWorkbenchSidebarOrchestrationSource({
       onSetBranchStatus: props.onSetBranchStatus,
       onSwitchTopic: props.onSwitchTopic,
       onViewRunDetail: props.onViewRunDetail,
+      onTriggerWorkflowControl: props.onTriggerWorkflowControl,
+      workflowControlItems: props.workflowControlItems,
+      workflowControlPendingItemId: props.workflowControlPendingItemId,
       workflowSteps: props.workflowSteps,
     },
     execLog: {

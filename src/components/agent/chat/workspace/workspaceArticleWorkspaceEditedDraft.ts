@@ -53,7 +53,11 @@ export function readWorkspaceArticleObjectMarkdown(
   const source = object.source ?? {};
   return readString(
     source.documentText,
+    source.document_text,
     source.finalMarkdown,
+    source.final_markdown,
+    source.draftMarkdown,
+    source.draft_markdown,
     source.markdown,
     source.content,
   );

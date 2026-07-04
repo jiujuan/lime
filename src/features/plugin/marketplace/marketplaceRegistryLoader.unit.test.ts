@@ -334,7 +334,10 @@ describe("plugin marketplace registry loader", () => {
       profile: expect.objectContaining({
         capabilities: expect.objectContaining({
           "lime.agent": expect.objectContaining({ enabled: true }),
-          "lime.workflow": expect.objectContaining({ enabled: true }),
+          "lime.workflow": expect.objectContaining({
+            enabled: false,
+            implementation: "none",
+          }),
           "lime.storage": expect.objectContaining({ enabled: true }),
           "lime.artifacts": expect.objectContaining({ enabled: true }),
         }),

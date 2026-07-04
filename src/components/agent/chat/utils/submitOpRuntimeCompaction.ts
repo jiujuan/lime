@@ -1,8 +1,8 @@
 import type {
-  AsterProviderConfig,
   AsterExecutionStrategy,
   AsterSessionExecutionRuntime,
   AsterSessionExecutionRuntimeRecentTeamSelection,
+  RuntimeProviderConfig,
 } from "@/lib/api/agentRuntime";
 import { isLikelyImageGenerationModelId } from "@/lib/imageGen/providerMatchers";
 import type { SessionModelPreference } from "../hooks/agentChatShared";
@@ -476,7 +476,7 @@ export interface BuildSubmitOpRuntimeCompactionOptions {
 
 export interface SubmitOpRuntimeCompactionResult {
   metadata?: Record<string, unknown>;
-  providerConfig?: AsterProviderConfig;
+  providerConfig?: RuntimeProviderConfig;
   shouldSubmitProviderPreference: boolean;
   shouldSubmitModelPreference: boolean;
   shouldSubmitExecutionStrategy: boolean;
@@ -491,7 +491,7 @@ function resolveImageOrchestrationProviderConfig(params: {
   effectiveModel: string;
   syncedSessionModelPreference?: SessionModelPreference | null;
   executionRuntime?: AsterSessionExecutionRuntime | null;
-}): AsterProviderConfig | undefined {
+}): RuntimeProviderConfig | undefined {
   const candidates = [
     {
       provider: params.effectiveProviderType.trim(),

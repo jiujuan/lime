@@ -97,4 +97,108 @@ describe("workspaceArticleWorkspaceWorkflowFacts", () => {
       }),
     ]);
   });
+
+  it("应兼容 workflow/read response 并保留 retry 与 action linkage", () => {
+    const runs = readWorkspaceArticleWorkflowRunsFromUnknown({
+      sessionId: "session-1",
+      rescheduledTurnId: "turn-new",
+      workflow: {
+        workflowRuns: [
+          {
+            workflowRunId: "run-1",
+            workflowKey: "content_article_workflow",
+            title: "写文章工作流",
+            status: "retrying",
+            turnId: "turn-old",
+            updatedAt: "2026-07-04T01:00:00.000Z",
+            retry: {
+              sourceTurnId: "turn-old",
+              rescheduledTurnId: "turn-new",
+            },
+            stepCounts: {
+              total: 2,
+              retrying: 1,
+            },
+          },
+        ],
+        workflowSteps: [
+          {
+            workflowRunId: "run-1",
+            stepId: "draft",
+            title: "正文写作",
+            status: "retrying",
+            attempt: 2,
+            failure: {
+              message: "正文为空",
+            },
+            retry: {
+              sourceTurnId: "turn-old",
+              rescheduledTurnId: "turn-new",
+            },
+          },
+          {
+            workflowRunId: "run-1",
+            stepId: "review",
+            title: "人工确认",
+            status: "waiting",
+            requestId: "request-1",
+            agentActionType: "ask_user",
+          },
+        ],
+        actions: [
+          {
+            workflowRunId: "run-1",
+            actionType: "respond",
+            stepId: "review",
+            requestId: "request-1",
+            agentActionType: "ask_user",
+          },
+        ],
+      },
+    });
+
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toMatchObject({
+      workflowRunId: "run-1",
+      workflowKey: "content_article_workflow",
+      workflowTitle: "写文章工作流",
+      status: "retrying",
+      retry: {
+        sourceTurnId: "turn-old",
+        rescheduledTurnId: "turn-new",
+      },
+      stepCounts: {
+        total: 2,
+        retrying: 1,
+      },
+      actions: [
+        {
+          actionType: "respond",
+          stepId: "review",
+          requestId: "request-1",
+          agentActionType: "ask_user",
+        },
+      ],
+    });
+    expect(runs[0]?.steps).toEqual([
+      expect.objectContaining({
+        id: "draft",
+        status: "retrying",
+        attempt: 2,
+        retry: {
+          sourceTurnId: "turn-old",
+          rescheduledTurnId: "turn-new",
+        },
+        failure: {
+          message: "正文为空",
+        },
+      }),
+      expect.objectContaining({
+        id: "review",
+        status: "waiting",
+        requestId: "request-1",
+        agentActionType: "ask_user",
+      }),
+    ]);
+  });
 });

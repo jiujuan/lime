@@ -262,6 +262,14 @@ export type AppServerAgentSessionActionReplayResponse =
   protocol.AgentSessionActionReplayResponse;
 export type AppServerAgentSessionActionRespondResponse =
   protocol.AgentSessionActionRespondResponse;
+export type AppServerWorkflowReadParams = protocol.WorkflowReadParams;
+export type AppServerWorkflowReadResponse = protocol.WorkflowReadResponse;
+export type AppServerWorkflowCancelParams = protocol.WorkflowCancelParams;
+export type AppServerWorkflowCancelResponse = protocol.WorkflowCancelResponse;
+export type AppServerWorkflowRetryParams = protocol.WorkflowRetryParams;
+export type AppServerWorkflowRetryResponse = protocol.WorkflowRetryResponse;
+export type AppServerWorkflowRespondParams = protocol.WorkflowRespondParams;
+export type AppServerWorkflowRespondResponse = protocol.WorkflowRespondResponse;
 export type AppServerGatewayChannelStatusParams =
   protocol.GatewayChannelStatusParams;
 export type AppServerGatewayChannelStartParams =

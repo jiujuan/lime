@@ -70,8 +70,11 @@ const ASTER_PROVIDER_CONFIGURATION_SNIPPETS = [
   "provider_config_from_pool(",
   "provider_config_with_route_protocol(",
   "AsterProviderProtocol",
+  "RuntimeProviderProtocol",
   "aster_provider_protocol_from_route",
+  "runtime_provider_protocol_from_route",
   "route_protocol_from_aster_protocol",
+  "route_protocol_from_runtime_protocol",
 ];
 
 const ASTER_SKILL_EXECUTION_SNIPPETS = [
@@ -338,10 +341,12 @@ describe("app-server runtime boundary", () => {
 
     expect(agentBoundary).toContain(".configure_provider(");
     expect(agentBoundary).toContain("configure_provider_from_pool(");
-    expect(agentBoundary).toContain("AsterProviderProtocol");
+    expect(agentBoundary).toContain("RuntimeProviderProtocol");
+    expect(agentBoundary).toContain("ModelProviderProtocol");
     expect(agentBoundary).toContain("ProtocolKind");
     expect(agentBoundary).toContain("route_protocol_from_provider_config");
-    expect(agentBoundary).toContain("AsterProviderProtocol::Responses");
+    expect(agentBoundary).toContain("RuntimeProviderProtocol::Responses");
+    expect(agentBoundary).toContain("ModelProviderProtocol::Responses");
     expect(agentBoundary).toContain("ProtocolKind::OpenaiResponses");
     expect(appServerProviderAdapter).toContain("configure_provider_for_session");
     expect(appServerProviderAdapter).toContain("ProviderConfigurationRequest");
@@ -350,7 +355,7 @@ describe("app-server runtime boundary", () => {
     );
     expect(
       offenders,
-      "Aster provider 配置与 AsterProviderProtocol 映射属于 lime-agent provider_configuration 边界；App Server 只能传 route ProtocolKind 并做 façade 接线",
+      "runtime provider 配置与 provider protocol 映射属于 lime-agent provider_configuration 边界；App Server 只能传 route ProtocolKind 并做 façade 接线",
     ).toEqual([]);
   });
 

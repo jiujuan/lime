@@ -664,7 +664,10 @@ pub fn create_image_generation_task_artifact(
             output_path: None,
             artifact_dir: None,
             idempotency_key: Some(build_image_idempotency_key(&params).as_str()),
-            relationships: TaskRelationships::default(),
+            relationships: TaskRelationships {
+                slot_id: normalize_optional_string(params.slot_id.clone()),
+                ..TaskRelationships::default()
+            },
         },
     )
     .map_err(data_error)?;

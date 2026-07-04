@@ -81,9 +81,9 @@ export interface AsterAgentStatus {
 }
 
 /**
- * Aster Provider 配置
+ * Runtime Provider 配置
  */
-export interface AsterProviderConfig {
+export interface RuntimeProviderConfig {
   provider_id?: string;
   provider_name: string;
   model_name: string;
@@ -1305,7 +1305,7 @@ export interface AgentRuntimeReviewDecisionTemplate {
 export type AgentRuntimeWebSearchMode = "disabled" | "auto" | "required";
 
 export interface AgentTurnConfigSnapshot {
-  provider_config?: AsterProviderConfig;
+  provider_config?: RuntimeProviderConfig;
   provider_preference?: string;
   model_preference?: string;
   reasoning_effort?: string;

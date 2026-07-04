@@ -7,6 +7,26 @@ use std::sync::Arc;
 
 const HOST_GENERATED_ARTICLE_MARKDOWN: &str = "# 人才选聘不能只看简历关键词\n\n人才选聘最难的地方，不是筛掉明显不合适的人，而是识别真正能把问题推进的人。\n\n## 先定义岗位要解决的问题\n\n招聘前先写清楚这个岗位未来三个月要交付什么。\n\n## 用任务验证真实能力\n\n面试可以围绕一个小型业务任务展开，让候选人说明拆解思路、取舍依据和风险判断。";
 
+fn assert_worker_evidence_audit_fields_hidden(worker_evidence: &serde_json::Value) {
+    for key in [
+        "workflowKey",
+        "subagents",
+        "skillRefs",
+        "cliRefs",
+        "connectorRefs",
+        "hookPolicy",
+        "orchestration",
+        "workerEntrypoint",
+        "inputSummary",
+        "outputSummary",
+    ] {
+        assert!(
+            worker_evidence.get(key).is_none(),
+            "worker evidence must hide audit-only field {key}"
+        );
+    }
+}
+
 #[tokio::test]
 async fn article_workspace_turn_runs_installed_worker_and_materializes_workspace_patch() {
     let Some(fixture_root) = content_factory_fixture_root() else {
@@ -493,41 +513,7 @@ async fn article_generation_worker_emits_initial_streaming_workspace_snapshot() 
             .unwrap_or_default()
             >= 1
     );
-    assert_eq!(
-        completed_worker_evidence["workflowKey"],
-        "content_article_workflow"
-    );
-    assert!(completed_worker_evidence["subagents"]
-        .as_array()
-        .expect("worker subagents")
-        .iter()
-        .any(|subagent| subagent == "article-writer"));
-    assert!(completed_worker_evidence["skillRefs"]
-        .as_array()
-        .expect("worker skill refs")
-        .iter()
-        .any(|skill| skill == "article-writing"));
-    assert!(completed_worker_evidence["skillRefs"]
-        .as_array()
-        .expect("worker skill refs")
-        .iter()
-        .any(|skill| skill == "article-image-plan"));
-    assert!(completed_worker_evidence["connectorRefs"]
-        .as_array()
-        .expect("worker connector refs")
-        .iter()
-        .any(|connector| connector == "web-research"));
-    assert_eq!(
-        completed_worker_evidence["hookPolicy"]["prompt"][0],
-        "prompt-submit"
-    );
-    assert!(
-        completed_worker_evidence["orchestration"]
-            .as_array()
-            .expect("worker orchestration")
-            .len()
-            >= 5
-    );
+    assert_worker_evidence_audit_fields_hidden(completed_worker_evidence);
     assert!(
         !worker_evidence
             .iter()

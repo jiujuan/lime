@@ -1068,7 +1068,19 @@
     },
     {
       "kind": "request",
+      "method": "workflow/cancel"
+    },
+    {
+      "kind": "request",
       "method": "workflow/read"
+    },
+    {
+      "kind": "request",
+      "method": "workflow/respond"
+    },
+    {
+      "kind": "request",
+      "method": "workflow/retry"
     },
     {
       "kind": "request",
@@ -1710,8 +1722,14 @@
       "WechatRuntimeModelSetResponse",
       "WindowsStartupCheck",
       "WindowsStartupDiagnosticsResponse",
+      "WorkflowCancelParams",
+      "WorkflowCancelResponse",
       "WorkflowReadParams",
       "WorkflowReadResponse",
+      "WorkflowRespondParams",
+      "WorkflowRespondResponse",
+      "WorkflowRetryParams",
+      "WorkflowRetryResponse",
       "WorkspaceDeleteParams",
       "WorkspaceDeleteResponse",
       "WorkspaceEnsureParams",

@@ -87,7 +87,7 @@ describe("UiExtensionHost", () => {
     expect(mounted.sdkBridge.allowedCapabilities).not.toContain("lime.workflow");
     expect(mounted.sdkBridge.blockedCapabilities).toContainEqual({
       capability: "lime.workflow",
-      reason: "runtime-disabled",
+      reason: "current-api-required",
     });
   });
 

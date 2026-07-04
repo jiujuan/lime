@@ -1,20 +1,36 @@
 import { applyDocumentInlineImageTaskSync } from "./workspaceDocumentInlineImageTaskSync";
 import type { Message } from "../types";
+import type { Artifact } from "@/lib/artifact/types";
 import type { SessionImageWorkbenchState } from "./imageWorkbenchHelpers";
 import {
   buildWorkspaceArticleEditedDraftKey,
+  markdownContainsWorkspaceArticleInlineImageTask,
+  readWorkspaceArticleObjectMarkdown,
   type WorkspaceArticleEditedDraft,
 } from "./workspaceArticleWorkspaceEditedDraft";
 import {
+  buildWorkspaceArticleWorkspaceFromUnknown,
   selectWorkspaceArticleDraftObject,
   type WorkspaceArticleObject,
   type WorkspaceArticleWorkspace,
 } from "./workspaceArticleWorkspaceModel";
+import { collectWorkspaceArticlePatchRecordsFromArtifactLike } from "./workspaceArticleWorkspaceMetadata";
 
 export interface WorkspaceArticleInlineImageTaskSyncResult {
   consumedTaskIds: string[];
   markdown: string;
   object: WorkspaceArticleObject;
+}
+
+export interface WorkspaceArticleInlineImageTaskMessageArtifactSyncParams {
+  taskRecord: Record<string, unknown>;
+  taskId: string;
+  outputs: Array<{
+    url?: string | null;
+    prompt?: string | null;
+    slotId?: string | null;
+    slotPrompt?: string | null;
+  }>;
 }
 
 interface BuildWorkspaceArticleInlineImageTaskSyncParams {
@@ -23,13 +39,10 @@ interface BuildWorkspaceArticleInlineImageTaskSyncParams {
   imageWorkbenchState: SessionImageWorkbenchState;
 }
 
-function readString(...values: unknown[]): string {
-  for (const value of values) {
-    if (typeof value === "string" && value.trim()) {
-      return value.trim();
-    }
-  }
-  return "";
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
 function resolveObjectMarkdown(
@@ -42,13 +55,7 @@ function resolveObjectMarkdown(
   ) {
     return editedDraft.markdown;
   }
-  const source = object.source ?? {};
-  return readString(
-    source.documentText,
-    source.finalMarkdown,
-    source.markdown,
-    source.content,
-  );
+  return readWorkspaceArticleObjectMarkdown(object);
 }
 
 function normalizeTaskStatus(status: string): string {
@@ -78,6 +85,37 @@ function hasArticleInlineImageTaskTarget(
   );
 }
 
+function isSameWorkspaceArticleObject(
+  left: WorkspaceArticleObject,
+  right: WorkspaceArticleObject,
+): boolean {
+  return (
+    left.ref.appId === right.ref.appId &&
+    left.ref.sessionId === right.ref.sessionId &&
+    left.ref.kind === right.ref.kind &&
+    left.ref.id === right.ref.id
+  );
+}
+
+function resolveArticleDraftObjectCandidates(
+  articleWorkspace: WorkspaceArticleWorkspace,
+): WorkspaceArticleObject[] {
+  const candidates: WorkspaceArticleObject[] = [];
+  const pushCandidate = (object: WorkspaceArticleObject | null) => {
+    if (!object || object.ref.kind !== "articleDraft") {
+      return;
+    }
+    if (candidates.some((candidate) => isSameWorkspaceArticleObject(candidate, object))) {
+      return;
+    }
+    candidates.push(object);
+  };
+
+  pushCandidate(selectWorkspaceArticleDraftObject(articleWorkspace.objects));
+  articleWorkspace.objects.forEach(pushCandidate);
+  return candidates;
+}
+
 interface WorkspaceArticleInlineImageTaskTarget {
   applyTarget: Extract<
     NonNullable<SessionImageWorkbenchState["tasks"][number]["applyTarget"]>,
@@ -96,50 +134,58 @@ function resolveWorkspaceArticleInlineImageTaskTargets(params: {
   object: WorkspaceArticleObject;
   targets: WorkspaceArticleInlineImageTaskTarget[];
 } | null {
-  const object = params.articleWorkspace
-    ? selectWorkspaceArticleDraftObject(params.articleWorkspace.objects)
-    : null;
-  if (!object) {
+  if (!params.articleWorkspace) {
     return null;
   }
 
-  const initialMarkdown = resolveObjectMarkdown(object, params.editedDraft);
-  if (!initialMarkdown.trim()) {
+  const objectCandidates = resolveArticleDraftObjectCandidates(
+    params.articleWorkspace,
+  );
+  if (objectCandidates.length === 0) {
     return null;
   }
 
-  const targets = params.imageWorkbenchState.tasks
-    .map((task): WorkspaceArticleInlineImageTaskTarget | null => {
-      const applyTarget =
-        task.applyTarget?.kind === "canvas-insert" ? task.applyTarget : null;
-      const slotId = applyTarget?.slotId?.trim();
-      if (
-        !applyTarget ||
-        applyTarget.canvasType !== "document" ||
-        !slotId ||
-        !hasArticleInlineImageTaskTarget(initialMarkdown, task.id, slotId)
-      ) {
-        return null;
-      }
-      return {
-        applyTarget,
-        slotId,
-        task,
-      };
-    })
-    .filter((target): target is WorkspaceArticleInlineImageTaskTarget =>
-      Boolean(target),
-    );
+  for (const object of objectCandidates) {
+    const initialMarkdown = resolveObjectMarkdown(object, params.editedDraft);
+    if (!initialMarkdown.trim()) {
+      continue;
+    }
 
-  if (targets.length === 0) {
-    return null;
+    const targets = params.imageWorkbenchState.tasks
+      .map((task): WorkspaceArticleInlineImageTaskTarget | null => {
+        const applyTarget =
+          task.applyTarget?.kind === "canvas-insert" ? task.applyTarget : null;
+        const slotId = applyTarget?.slotId?.trim();
+        if (
+          !applyTarget ||
+          applyTarget.canvasType !== "document" ||
+          !slotId ||
+          !hasArticleInlineImageTaskTarget(initialMarkdown, task.id, slotId)
+        ) {
+          return null;
+        }
+        return {
+          applyTarget,
+          slotId,
+          task,
+        };
+      })
+      .filter((target): target is WorkspaceArticleInlineImageTaskTarget =>
+        Boolean(target),
+      );
+
+    if (targets.length === 0) {
+      continue;
+    }
+
+    return {
+      initialMarkdown,
+      object,
+      targets,
+    };
   }
 
-  return {
-    initialMarkdown,
-    object,
-    targets,
-  };
+  return null;
 }
 
 export function selectWorkspaceArticleInlineImageTaskIds(params: {
@@ -152,6 +198,279 @@ export function selectWorkspaceArticleInlineImageTaskIds(params: {
       (target) => target.task.id,
     ) ?? []
   );
+}
+
+export function collectWorkspaceArticleInlineImageTaskRecoveryMarkdowns(params: {
+  articleWorkspace: WorkspaceArticleWorkspace | null;
+  editedDraft: WorkspaceArticleEditedDraft | null;
+}): string[] {
+  if (!params.articleWorkspace) {
+    return [];
+  }
+  return params.articleWorkspace.objects
+    .map((object) => resolveObjectMarkdown(object, params.editedDraft))
+    .filter((markdown) =>
+      markdownContainsWorkspaceArticleInlineImageTask(markdown),
+    );
+}
+
+function collectArtifactDocumentInlineImageTaskRecoveryMarkdowns(
+  artifact: Artifact,
+): string[] {
+  const markdowns = new Set<string>();
+  const artifactDocument = asRecord(artifact.meta?.artifactDocument);
+  const blocks = Array.isArray(artifactDocument?.blocks)
+    ? artifactDocument.blocks
+    : [];
+  blocks.forEach((block) => {
+    const blockRecord = asRecord(block);
+    if (!blockRecord) {
+      return;
+    }
+    ["markdown", "content"].forEach((key) => {
+      const markdown = blockRecord[key];
+      if (
+        typeof markdown === "string" &&
+        markdownContainsWorkspaceArticleInlineImageTask(markdown)
+      ) {
+        markdowns.add(markdown);
+      }
+    });
+  });
+  return [...markdowns];
+}
+
+function collectWorkspacePatchInlineImageTaskRecoveryMarkdowns(
+  artifact: Artifact,
+): string[] {
+  const markdowns = new Set<string>();
+  collectWorkspaceArticlePatchRecordsFromArtifactLike(artifact).forEach(
+    (candidate) => {
+      const articleWorkspace = buildWorkspaceArticleWorkspaceFromUnknown(
+        candidate,
+        "threadRead",
+      );
+      collectWorkspaceArticleInlineImageTaskRecoveryMarkdowns({
+        articleWorkspace,
+        editedDraft: articleWorkspace?.editedDraft ?? null,
+      }).forEach((markdown) => markdowns.add(markdown));
+    },
+  );
+  return [...markdowns];
+}
+
+export function collectWorkspaceArticleInlineImageTaskRecoveryMarkdownsFromMessages(
+  messages: readonly Message[],
+): string[] {
+  const markdowns = new Set<string>();
+  messages.forEach((message) => {
+    (message.artifacts ?? []).forEach((artifact) => {
+      const content = artifact.content?.trim();
+      if (
+        content &&
+        markdownContainsWorkspaceArticleInlineImageTask(content)
+      ) {
+        markdowns.add(content);
+      }
+      collectArtifactDocumentInlineImageTaskRecoveryMarkdowns(artifact).forEach(
+        (markdown) => markdowns.add(markdown),
+      );
+      collectWorkspacePatchInlineImageTaskRecoveryMarkdowns(artifact).forEach(
+        (markdown) => markdowns.add(markdown),
+      );
+    });
+  });
+  return [...markdowns];
+}
+
+function syncInlineImageTaskMarkdown(
+  markdown: unknown,
+  params: WorkspaceArticleInlineImageTaskMessageArtifactSyncParams,
+): string | null {
+  if (typeof markdown !== "string" || !markdown.trim()) {
+    return null;
+  }
+  const nextMarkdown = applyDocumentInlineImageTaskSync(markdown, params);
+  return nextMarkdown === markdown ? null : nextMarkdown;
+}
+
+function syncInlineImageTaskWorkspacePatch(
+  value: unknown,
+  params: WorkspaceArticleInlineImageTaskMessageArtifactSyncParams,
+): unknown {
+  const record = asRecord(value);
+  if (!record) {
+    return value;
+  }
+
+  let changed = false;
+  const nextRecord: Record<string, unknown> = { ...record };
+  const objects = Array.isArray(record.objects) ? record.objects : null;
+  if (objects) {
+    const nextObjects = objects.map((object) => {
+      const objectRecord = asRecord(object);
+      const source = asRecord(objectRecord?.source);
+      if (!objectRecord || !source) {
+        return object;
+      }
+
+      let sourceChanged = false;
+      const nextSource: Record<string, unknown> = { ...source };
+      ["documentText", "finalMarkdown", "markdown", "content"].forEach(
+        (key) => {
+          const nextMarkdown = syncInlineImageTaskMarkdown(source[key], params);
+          if (!nextMarkdown) {
+            return;
+          }
+          sourceChanged = true;
+          nextSource[key] = nextMarkdown;
+        },
+      );
+      if (!sourceChanged) {
+        return object;
+      }
+      changed = true;
+      return {
+        ...objectRecord,
+        source: nextSource,
+      };
+    });
+    if (changed) {
+      nextRecord.objects = nextObjects;
+    }
+  }
+
+  const editedDraft = asRecord(record.editedDraft) ?? asRecord(record.edited_draft);
+  if (editedDraft) {
+    let draftChanged = false;
+    const nextEditedDraft: Record<string, unknown> = { ...editedDraft };
+    ["markdown", "documentText", "finalMarkdown"].forEach((key) => {
+      const nextMarkdown = syncInlineImageTaskMarkdown(
+        editedDraft[key],
+        params,
+      );
+      if (!nextMarkdown) {
+        return;
+      }
+      draftChanged = true;
+      nextEditedDraft[key] = nextMarkdown;
+    });
+    if (draftChanged) {
+      changed = true;
+      if (record.editedDraft) {
+        nextRecord.editedDraft = nextEditedDraft;
+      }
+      if (record.edited_draft) {
+        nextRecord.edited_draft = nextEditedDraft;
+      }
+    }
+  }
+
+  return changed ? nextRecord : value;
+}
+
+function syncInlineImageTaskArtifactDocument(
+  value: unknown,
+  params: WorkspaceArticleInlineImageTaskMessageArtifactSyncParams,
+): unknown {
+  const record = asRecord(value);
+  const blocks = Array.isArray(record?.blocks) ? record.blocks : null;
+  if (!record || !blocks) {
+    return value;
+  }
+
+  let changed = false;
+  const nextBlocks = blocks.map((block) => {
+    const blockRecord = asRecord(block);
+    if (!blockRecord) {
+      return block;
+    }
+
+    let blockChanged = false;
+    const nextBlock: Record<string, unknown> = { ...blockRecord };
+    ["markdown", "content"].forEach((key) => {
+      const nextMarkdown = syncInlineImageTaskMarkdown(
+        blockRecord[key],
+        params,
+      );
+      if (!nextMarkdown) {
+        return;
+      }
+      blockChanged = true;
+      nextBlock[key] = nextMarkdown;
+    });
+    if (!blockChanged) {
+      return block;
+    }
+    changed = true;
+    return nextBlock;
+  });
+
+  return changed
+    ? {
+        ...record,
+        blocks: nextBlocks,
+      }
+    : value;
+}
+
+function syncInlineImageTaskArtifact(
+  artifact: Artifact,
+  params: WorkspaceArticleInlineImageTaskMessageArtifactSyncParams,
+): Artifact {
+  const nextContent = syncInlineImageTaskMarkdown(artifact.content, params);
+  const workspacePatch = syncInlineImageTaskWorkspacePatch(
+    artifact.meta.workspacePatch,
+    params,
+  );
+  const artifactDocument = syncInlineImageTaskArtifactDocument(
+    artifact.meta.artifactDocument,
+    params,
+  );
+  const nextMeta =
+    workspacePatch === artifact.meta.workspacePatch &&
+    artifactDocument === artifact.meta.artifactDocument
+      ? artifact.meta
+      : {
+          ...artifact.meta,
+          workspacePatch,
+          artifactDocument,
+        };
+  if (!nextContent && nextMeta === artifact.meta) {
+    return artifact;
+  }
+  return {
+    ...artifact,
+    content: nextContent ?? artifact.content,
+    meta: nextMeta,
+    updatedAt: Date.now(),
+  };
+}
+
+export function syncWorkspaceArticleInlineImageTaskMessageArtifacts(
+  messages: readonly Message[],
+  params: WorkspaceArticleInlineImageTaskMessageArtifactSyncParams,
+): Message[] {
+  let changed = false;
+  const nextMessages = messages.map((message) => {
+    if (!message.artifacts || message.artifacts.length === 0) {
+      return message;
+    }
+    const nextArtifacts = message.artifacts.map((artifact) => {
+      const nextArtifact = syncInlineImageTaskArtifact(artifact, params);
+      if (nextArtifact !== artifact) {
+        changed = true;
+      }
+      return nextArtifact;
+    });
+    return nextArtifacts === message.artifacts
+      ? message
+      : {
+          ...message,
+          artifacts: nextArtifacts,
+        };
+  });
+  return changed ? nextMessages : (messages as Message[]);
 }
 
 export function applyWorkspaceArticleInlineImageTaskSyncResult(

@@ -1,3 +1,8 @@
+pub mod conversation_transcript;
+pub mod session_record;
+pub mod session_repository;
+pub mod subagent_tree;
+
 use agent_protocol::{RuntimeEvent, RuntimeSnapshot, SessionId, ThreadId, TurnId};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

@@ -116,6 +116,10 @@ describe("PluginRuntimePage Host Bridge", () => {
               "lime.agent": expect.objectContaining({
                 enabled: true,
               }),
+              "lime.workflow": expect.objectContaining({
+                enabled: false,
+                implementation: "none",
+              }),
               "lime.skills": expect.objectContaining({
                 enabled: true,
                 implementation: "adapter",
@@ -599,6 +603,104 @@ describe("PluginRuntimePage Host Bridge", () => {
     expect(
       runtimeApiMocks.submitPluginRuntimeHostResponse,
     ).not.toHaveBeenCalled();
+  });
+
+  it("Host Bridge 能把 App Server workflow/read 只读投影给 iframe", async () => {
+    const container = await renderPage();
+    await flush();
+    const frame = getRuntimeFrame(container);
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+
+    await dispatchBridgeMessage(
+      frame,
+      "capability:invoke",
+      {
+        capability: "lime.agent",
+        method: "readWorkflow",
+        input: { sessionId: "plugin-session-1" },
+      },
+      "workflow-read",
+    );
+
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:response",
+        requestId: "workflow-read",
+        payload: expect.objectContaining({
+          ok: true,
+          result: expect.objectContaining({
+            sessionId: "plugin-session-1",
+            source: "app_server_workflow_read",
+            workflow: expect.objectContaining({
+              activeWorkflowRunId: "plugin-workflow-run-1",
+            }),
+            workflowRuns: [
+              expect.objectContaining({
+                workflowRunId: "plugin-workflow-run-1",
+                status: "running",
+              }),
+            ],
+          }),
+        }),
+      }),
+      "http://127.0.0.1:4199",
+    );
+    expect(appServerClientMocks.readWorkflow).toHaveBeenCalledWith({
+      sessionId: "plugin-session-1",
+    });
+  });
+
+  it("Host Bridge 支持 iframe 订阅 workflow read model 首次投影事件", async () => {
+    const container = await renderPage();
+    await flush();
+    const frame = getRuntimeFrame(container);
+    const postMessage = vi.spyOn(frame.contentWindow!, "postMessage");
+
+    await dispatchBridgeMessage(
+      frame,
+      "capability:subscribe",
+      {
+        capability: "lime.agent",
+        topic: "workflow",
+        sessionId: "plugin-session-1",
+        subscriptionId: "workflow-sub-1",
+      },
+      "workflow-subscribe",
+    );
+    await flush();
+
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "host:response",
+        requestId: "workflow-subscribe",
+        payload: expect.objectContaining({
+          subscriptionId: "workflow-sub-1",
+          capability: "lime.agent",
+          topic: "workflow",
+          sessionId: "plugin-session-1",
+        }),
+      }),
+      "http://127.0.0.1:4199",
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "capability:event",
+        payload: expect.objectContaining({
+          subscriptionId: "workflow-sub-1",
+          capability: "lime.agent",
+          topic: "workflow",
+          eventType: "workflow:readModel",
+          sessionId: "plugin-session-1",
+          workflowRead: expect.objectContaining({
+            source: "app_server_workflow_read",
+          }),
+          workflow: expect.objectContaining({
+            activeWorkflowRunId: "plugin-workflow-run-1",
+          }),
+        }),
+      }),
+      "http://127.0.0.1:4199",
+    );
   });
 
   it("Host Bridge 写回 artifact / evidence 时应拒绝未声明 subject", async () => {

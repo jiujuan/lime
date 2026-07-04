@@ -6,9 +6,9 @@
 
 ## 结论
 
-`lime-rs/crates/aster-rust` 当前是嵌套外部 workspace：根 `lime-rs/Cargo.toml` 已 `exclude` 整个目录，但又通过 workspace dependency 暴露其内部 `aster`。这种形态虽然 Cargo 可以解析，但工程语义不好：Aster 既像 vendor，又像 Lime 一等 crate，最终会让 `services`、`app-server`、`agent` 继续直接耦合 Aster 类型，并诱导 Lime 重复实现 Aster 的 provider、tool、session、event 和 store 能力。
+`lime-rs/crates/aster-rust` 已从 current crate 区移出，当前 `dead / forbidden-to-restore`；迁移期 Aster 只允许停留在 `lime-rs/vendor/aster-rust`，并通过 root workspace dependency `aster = { package = "aster-core", path = "vendor/aster-rust/crates/aster" }` 暂时服务 compat adapter。这个状态仍是过渡态：Aster 不能再成为 Lime current runtime 事实源，后续所有 provider、tool、session、event 和 store 能力都必须继续向 Lime-owned crate 收敛。
 
-后续固定方向是：**学习 Codex 的 crate 存放和依赖方式，把 Lime 自己的 runtime 能力拆成平铺的一等 workspace crate；Aster 只作为 `deprecated migration reference`，不再是 current 主链。**
+后续固定方向是：**学习 Codex 的 crate 存放和依赖方式，把 Lime 自己的 runtime 能力拆成平铺的一等 workspace crate；Aster 只作为 `compat vendor / deprecated migration reference`，不再是 current 主链。**
 
 ## Codex 对照
 
@@ -59,18 +59,20 @@ app-server
 - 迁移期的 `lime-agent` facade。
 - 迁移期的 Aster event -> Lime runtime event 转换器。
 - 迁移期的 Aster session / conversation 读取 adapter。
+- `lime-rs/vendor/aster-rust`，只服务仍未迁完的 Aster compat adapter。
 
 退出条件：App Server、RuntimeCore、GUI、evidence、replay、tests 均只消费 Lime 自有协议和 runtime crate 后删除。
 
 ### deprecated
 
-- `lime-rs/crates/aster-rust/**` 作为 current crate 区下的嵌套外部 workspace。
-- 根 workspace 向多个 Lime crate 暴露 `aster`。
-- `services`、`app-server`、`agent` 仍直接依赖 `aster::*`。
+- `lime-agent` 内仍直接引用 Aster DTO / trait 的 provider、execution、tool、session adapter 面。
+- root workspace 仍临时暴露 vendor `aster` 给 `lime-agent` compat feature。
+- `services` / `app-server` 重新直接依赖 `aster::*` 的任何回流；`agent` 内未迁完的 direct Aster 引用继续按 compat/deprecated 面收口。
 - 在 App Server runtime backend 内继续扩展 Aster provider、tool、session、streaming loop。
 
 ### dead
 
+- `lime-rs/crates/aster-rust/**`：已降级到 `vendor`，不得恢复到 current crate 区。
 - 恢复 `lime-rs/src/**` 旧 Tauri command wrapper。
 - 新增 `backend_mode=aster` 或第二套 Aster runtime backend。
 - 为新能力继续复制 Aster `*_skill_launch`、tool registry、session store 或 provider factory。

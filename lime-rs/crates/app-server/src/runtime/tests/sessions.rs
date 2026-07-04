@@ -715,6 +715,108 @@ async fn read_session_current_uses_projection_summary_for_limited_history() {
 }
 
 #[tokio::test]
+async fn read_session_current_projection_summary_projects_turn_usage() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
+    let event_log_writer = Arc::new(EventLogWriter::new(&roots.event_log_root).expect("writer"));
+    let projection_store =
+        Arc::new(ProjectionStore::initialize(&roots.projection_db_path).expect("projection"));
+    let core = RuntimeCore::with_backend(Arc::new(CompletedBackend))
+        .with_event_log_writer(event_log_writer.clone())
+        .with_projection_store(projection_store.clone());
+    core.start_session(AgentSessionStartParams {
+        session_id: Some("sess_projection_usage_read".to_string()),
+        thread_id: Some("thread_projection_usage_read".to_string()),
+        app_id: "agent-chat".to_string(),
+        workspace_id: Some("workspace-current".to_string()),
+        business_object_ref: None,
+        locale: None,
+    })
+    .expect("session");
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: "sess_projection_usage_read".to_string(),
+            turn_id: Some("turn_projection_usage_read".to_string()),
+            input: AgentInput {
+                text: "@配图 画一张深圳夏天的图".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: None,
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("turn");
+    let watermark_before = projection_store
+        .read_watermark("sess_projection_usage_read")
+        .expect("watermark")
+        .expect("watermark")
+        .last_sequence;
+    event_log_writer
+        .append(&AgentEvent {
+            event_id: "evt_projection_usage_terminal".to_string(),
+            sequence: watermark_before + 100,
+            session_id: "sess_projection_usage_read".to_string(),
+            thread_id: Some("thread_projection_usage_read".to_string()),
+            turn_id: Some("turn_projection_usage_read".to_string()),
+            event_type: "turn.completed".to_string(),
+            timestamp: timestamp(),
+            payload: json!({
+                "usage": {
+                    "input_tokens": 1175,
+                    "output_tokens": 112,
+                    "cached_input_tokens": 0
+                }
+            }),
+        })
+        .expect("append usage terminal event");
+
+    let restarted_core = RuntimeCore::default()
+        .with_event_log_writer(event_log_writer)
+        .with_projection_store(projection_store.clone());
+    let read = restarted_core
+        .read_session_current(AgentSessionReadParams {
+            session_id: "sess_projection_usage_read".to_string(),
+            history_limit: Some(1),
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .await
+        .expect("read projection summary");
+    let detail = read.detail.expect("detail");
+    let watermark_after = projection_store
+        .read_watermark("sess_projection_usage_read")
+        .expect("watermark after")
+        .expect("watermark after")
+        .last_sequence;
+
+    assert_eq!(watermark_after, watermark_before);
+    assert_eq!(detail["projection_source"], "runtime.projection_1");
+    assert_eq!(
+        detail["messages"][0]["metadata"]["source"].as_str(),
+        Some("projection_summary")
+    );
+    assert_eq!(
+        detail["turns"][0]["usage"]["input_tokens"].as_u64(),
+        Some(1175)
+    );
+    assert_eq!(
+        detail["thread_read"]["turns"][0]["usage"]["output_tokens"].as_u64(),
+        Some(112)
+    );
+    assert_eq!(
+        detail["thread_read"]["diagnostics"]["latest_turn_usage"]["cached_input_tokens"].as_u64(),
+        Some(0)
+    );
+    assert_eq!(
+        detail["thread_read"]["runtime_summary"]["latestTurnUsage"]["input_tokens"].as_u64(),
+        Some(1175)
+    );
+}
+
+#[tokio::test]
 async fn read_session_current_projection_summary_preserves_process_items() {
     let temp = tempfile::tempdir().expect("tempdir");
     let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");

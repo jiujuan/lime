@@ -1,6 +1,27 @@
 use super::*;
 use serde_json::Value;
 
+fn assert_worker_evidence_audit_fields_hidden(worker_evidence: &Value) {
+    for key in [
+        "workerEntrypoint",
+        "inputSummary",
+        "outputSummary",
+        "workflowKey",
+        "subagents",
+        "skillRefs",
+        "cliRefs",
+        "connectorRefs",
+        "hookPolicy",
+        "runtimeRegistries",
+        "orchestration",
+    ] {
+        assert!(
+            worker_evidence.get(key).is_none(),
+            "worker evidence must hide audit-only field {key}"
+        );
+    }
+}
+
 fn article_workspace_search_snapshot_payload(search_evidence: Value) -> Value {
     let legacy_host_search_evidence = search_evidence.clone();
     let host_tool_evidence = search_evidence.clone();
@@ -893,58 +914,11 @@ async fn read_session_materializes_content_factory_workspace_patch_into_article_
         article_workspace["sourceArtifacts"][0]["artifactRef"],
         "artifact-workspace-patch-1"
     );
-    assert_eq!(
-        article_workspace["workerEvidence"][0]["taskId"],
-        "task-article-1"
-    );
-    assert_eq!(
-        article_workspace["workerEvidence"][0]["status"],
-        "completed"
-    );
-    assert_eq!(
-        article_workspace["workerEvidence"][0]["workerEntrypoint"],
-        "./runtime/content-factory-worker.mjs"
-    );
-    assert_eq!(
-        article_workspace["workerEvidence"][0]["inputSummary"],
-        "prompt=生成文章; inputKeys=topic"
-    );
-    assert_eq!(
-        article_workspace["workerEvidence"][0]["outputSummary"],
-        "2 objects: 公众号文章草稿, 配图组"
-    );
-    assert_eq!(
-        article_workspace["workerEvidence"][0]["outputObjectCount"],
-        2
-    );
-    assert_eq!(
-        article_workspace["workerEvidence"][0]["workflowKey"],
-        "content_article_workflow"
-    );
-    assert_eq!(
-        article_workspace["workerEvidence"][0]["subagents"][1],
-        "article-writer"
-    );
-    assert_eq!(
-        article_workspace["workerEvidence"][0]["skillRefs"][0],
-        "article-research"
-    );
-    assert_eq!(
-        article_workspace["workerEvidence"][0]["cliRefs"][0],
-        "content-factory"
-    );
-    assert_eq!(
-        article_workspace["workerEvidence"][0]["connectorRefs"][1],
-        "web-research"
-    );
-    assert_eq!(
-        article_workspace["workerEvidence"][0]["hookPolicy"]["prompt"][0],
-        "prompt-submit"
-    );
-    assert_eq!(
-        article_workspace["workerEvidence"][0]["orchestration"][1]["subagent"],
-        "article-writer"
-    );
+    let completed_worker_evidence = &article_workspace["workerEvidence"][0];
+    assert_eq!(completed_worker_evidence["taskId"], "task-article-1");
+    assert_eq!(completed_worker_evidence["status"], "completed");
+    assert_eq!(completed_worker_evidence["outputObjectCount"], 2);
+    assert_worker_evidence_audit_fields_hidden(completed_worker_evidence);
     assert_eq!(
         article_workspace["workerEvidence"][1]["taskId"],
         "task-image-1"
@@ -954,10 +928,7 @@ async fn read_session_materializes_content_factory_workspace_patch_into_article_
         article_workspace["workerEvidence"][1]["errorCode"],
         "worker_invalid_json_output"
     );
-    assert_eq!(
-        article_workspace["workerEvidence"][1]["inputSummary"],
-        "prompt=生成图片; inputKeys=topic"
-    );
+    assert_worker_evidence_audit_fields_hidden(&article_workspace["workerEvidence"][1]);
     assert_eq!(
         detail["thread_read"]["article_workspace"],
         detail["article_workspace"]

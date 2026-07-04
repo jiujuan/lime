@@ -7,6 +7,10 @@ use aster::session::{
 };
 use chrono::{DateTime, Utc};
 use std::path::Path;
+use thread_store::conversation_transcript::{
+    count_selected_messages, select_conversation_messages, transcript_item_id,
+    ConversationMessageRecord, ConversationMessageRole,
+};
 use uuid::Uuid;
 
 pub(super) async fn load_runtime_conversation(session_id: &str) -> Result<Option<Conversation>> {
@@ -21,26 +25,8 @@ pub(super) async fn count_runtime_messages(session_id: &str) -> Result<Option<us
         return Ok(None);
     }
 
-    let mut transcript_count = 0usize;
-    let mut projection_count = 0usize;
-    for thread in threads {
-        for item in store.list_items(&thread.id).await? {
-            match item.payload {
-                ItemRuntimePayload::TranscriptMessage { .. } => transcript_count += 1,
-                ItemRuntimePayload::UserMessage { .. }
-                | ItemRuntimePayload::AgentMessage { .. } => {
-                    projection_count += 1;
-                }
-                _ => {}
-            }
-        }
-    }
-
-    Ok(Some(if transcript_count > 0 {
-        transcript_count
-    } else {
-        projection_count
-    }))
+    let records = collect_conversation_records_from_threads(store.as_ref(), threads).await?;
+    Ok(Some(count_selected_messages(&records)))
 }
 
 pub(super) async fn append_runtime_message(
@@ -136,56 +122,85 @@ async fn load_runtime_conversation_from_store(
     session_id: &str,
 ) -> Result<Option<Conversation>> {
     let threads = store.list_threads(session_id).await?;
-    let mut transcript_messages = Vec::new();
-    let mut projection_messages = Vec::new();
-
-    for thread in threads {
-        for item in store.list_items(&thread.id).await? {
-            match item.payload {
-                ItemRuntimePayload::TranscriptMessage {
-                    role,
-                    content,
-                    metadata,
-                    created_timestamp,
-                } => {
-                    let mut message = if role == "assistant" {
-                        Message::assistant()
-                    } else {
-                        Message::user()
-                    };
-                    message.created = created_timestamp;
-                    message.content = content;
-                    message.metadata = metadata;
-                    if !message.content.is_empty() {
-                        transcript_messages.push(message);
-                    }
-                }
-                ItemRuntimePayload::UserMessage { content } => {
-                    if let Some(message) = text_message(Message::user(), content) {
-                        projection_messages.push(message);
-                    }
-                }
-                ItemRuntimePayload::AgentMessage { text } => {
-                    if let Some(message) = text_message(Message::assistant(), text) {
-                        projection_messages.push(message);
-                    }
-                }
-                _ => {}
+    let records = collect_conversation_records_from_threads(store, threads).await?;
+    let messages = select_conversation_messages(records)
+        .into_iter()
+        .filter_map(|record| match conversation_record_to_message(record) {
+            Ok(message) => message,
+            Err(error) => {
+                tracing::warn!(
+                    "[SessionStore] runtime conversation record 转换失败，已跳过: error={}",
+                    error
+                );
+                None
             }
-        }
-    }
-
-    let messages = if transcript_messages.is_empty() {
-        projection_messages
-    } else {
-        transcript_messages
-    };
+        })
+        .collect::<Vec<_>>();
 
     if messages.is_empty() {
         Ok(None)
     } else {
         Ok(Some(Conversation::new_unvalidated(messages)))
     }
+}
+
+async fn collect_conversation_records_from_threads(
+    store: &(impl aster::session::ThreadRuntimeStore + ?Sized),
+    threads: Vec<ThreadRuntime>,
+) -> Result<Vec<ConversationMessageRecord>> {
+    let mut records = Vec::new();
+    for thread in threads {
+        for item in store.list_items(&thread.id).await? {
+            if let Some(record) = conversation_record_from_item(item)? {
+                records.push(record);
+            }
+        }
+    }
+    Ok(records)
+}
+
+fn conversation_record_from_item(item: ItemRuntime) -> Result<Option<ConversationMessageRecord>> {
+    match item.payload {
+        ItemRuntimePayload::TranscriptMessage {
+            role,
+            content,
+            metadata,
+            created_timestamp,
+        } => Ok(Some(ConversationMessageRecord::transcript(
+            ConversationMessageRole::from_role_name(&role),
+            serde_json::to_value(content)?,
+            serde_json::to_value(metadata)?,
+            created_timestamp,
+        ))),
+        ItemRuntimePayload::UserMessage { content } => Ok(
+            ConversationMessageRecord::runtime_projection(ConversationMessageRole::User, content),
+        ),
+        ItemRuntimePayload::AgentMessage { text } => Ok(
+            ConversationMessageRecord::runtime_projection(ConversationMessageRole::Assistant, text),
+        ),
+        _ => Ok(None),
+    }
+}
+
+fn conversation_record_to_message(record: ConversationMessageRecord) -> Result<Option<Message>> {
+    let mut message = match record.role {
+        ConversationMessageRole::User => Message::user(),
+        ConversationMessageRole::Assistant => Message::assistant(),
+    };
+
+    if let Some(created_timestamp) = record.created_timestamp {
+        message.created = created_timestamp;
+    }
+
+    if let Some(content_json) = record.content_json {
+        message.content = serde_json::from_value(content_json)?;
+        if let Some(metadata_json) = record.metadata_json {
+            message.metadata = serde_json::from_value(metadata_json)?;
+        }
+        return Ok((!message.content.is_empty()).then_some(message));
+    }
+
+    Ok(record.text.and_then(|text| text_message(message, text)))
 }
 
 async fn ensure_runtime_turn(
@@ -229,7 +244,7 @@ async fn ensure_runtime_turn(
 fn build_transcript_item(turn: &TurnRuntime, message: &Message, sequence: i64) -> ItemRuntime {
     let now = timestamp_to_utc(message.created).unwrap_or_else(Utc::now);
     ItemRuntime {
-        id: transcript_item_id(turn, message, sequence),
+        id: transcript_item_id(&turn.id, message.id.as_deref(), sequence),
         thread_id: turn.thread_id.clone(),
         turn_id: turn.id.clone(),
         sequence,
@@ -238,7 +253,7 @@ fn build_transcript_item(turn: &TurnRuntime, message: &Message, sequence: i64) -
         completed_at: Some(now),
         updated_at: now,
         payload: ItemRuntimePayload::TranscriptMessage {
-            role: message_role(message),
+            role: message_role(message).as_str().to_string(),
             content: message.content.clone(),
             metadata: message.metadata.clone(),
             created_timestamp: message.created,
@@ -246,21 +261,12 @@ fn build_transcript_item(turn: &TurnRuntime, message: &Message, sequence: i64) -
     }
 }
 
-fn transcript_item_id(turn: &TurnRuntime, message: &Message, sequence: i64) -> String {
-    message
-        .id
-        .as_ref()
-        .filter(|value| !value.trim().is_empty())
-        .map(|id| format!("transcript:{id}"))
-        .unwrap_or_else(|| format!("transcript:{}:{sequence}", turn.id))
-}
-
-fn message_role(message: &Message) -> String {
+fn message_role(message: &Message) -> ConversationMessageRole {
     let role_debug = format!("{:?}", message.role);
     if role_debug.contains("User") {
-        "user".to_string()
+        ConversationMessageRole::User
     } else {
-        "assistant".to_string()
+        ConversationMessageRole::Assistant
     }
 }
 

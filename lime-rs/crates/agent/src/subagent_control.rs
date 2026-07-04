@@ -1,8 +1,8 @@
-use crate::aster_runtime_projection::project_aster_subagent_latest_turn;
 use crate::aster_runtime_support::{list_aster_runtime_queued_turns, load_aster_runtime_snapshot};
 use crate::protocol::AgentTokenUsage;
 use crate::session_query::{ensure_subagent_session, read_subagent_session};
 use crate::session_update::persist_session_extension_data;
+use crate::subagent_runtime_adapter::project_aster_subagent_latest_turn;
 use crate::team_runtime_governor::snapshot_team_runtime_session;
 use aster::session::extension_data::{ExtensionData, ExtensionState};
 use aster::session::{require_shared_session_runtime_queue_service, QueuedTurnRuntime, Session};

@@ -87,6 +87,7 @@ const hoisted = vi.hoisted(() => ({
     readSession: vi.fn(),
     cancelTurn: vi.fn(),
     respondAction: vi.fn(),
+    readWorkflow: vi.fn(),
   },
   projectApiMocks: {
     getOrCreateDefaultProject: vi.fn(),
@@ -380,6 +381,7 @@ export function usePluginRuntimePageTestLifecycle() {
       readSession: appServerClientMocks.readSession,
       cancelTurn: appServerClientMocks.cancelTurn,
       respondAction: appServerClientMocks.respondAction,
+      readWorkflow: appServerClientMocks.readWorkflow,
     });
     appServerClientMocks.startSession.mockImplementation(async (request) => ({
       id: 1,
@@ -462,6 +464,31 @@ export function usePluginRuntimePageTestLifecycle() {
       notifications: [],
       messages: [],
     });
+    appServerClientMocks.readWorkflow.mockImplementation(async (request) => ({
+      id: 6,
+      result: {
+        sessionId: request.sessionId,
+        workflow: {
+          activeWorkflowRunId: "plugin-workflow-run-1",
+        },
+        workflowRuns: [
+          {
+            workflowRunId: "plugin-workflow-run-1",
+            status: "running",
+          },
+        ],
+        workflowSteps: [
+          {
+            workflowRunId: "plugin-workflow-run-1",
+            stepId: "draft",
+            status: "running",
+          },
+        ],
+      },
+      response: { jsonrpc: "2.0", id: 6, result: {} },
+      notifications: [],
+      messages: [],
+    }));
     apiMocks.getPluginCloudCatalog.mockResolvedValue({
       source: "seeded",
       payload: {

@@ -268,6 +268,48 @@ describe("GeneralWorkbenchSidebar", () => {
     expect(taskSectionOrder).toBeTruthy();
   });
 
+  it("Workflow 控制项应在当前进展里渲染并触发回调", () => {
+    const onTriggerWorkflowControl = vi.fn();
+    const workflowControlItem = {
+      id: "workflow-run-1-retry-draft",
+      kind: "retry" as const,
+      workflowRunId: "workflow-run-1",
+      stepId: "draft",
+      requestId: null,
+      actionType: null,
+      labelKey: "generalWorkbench.workflow.control.retry",
+      ariaLabelKey: "generalWorkbench.workflow.control.retryAria",
+      tone: "warning" as const,
+    };
+    const { container } = renderSidebar({
+      workflowControlItems: [workflowControlItem],
+      onTriggerWorkflowControl,
+    });
+
+    const workflowTab = container.querySelector(
+      'button[aria-label="打开当前进展"]',
+    ) as HTMLButtonElement | null;
+    expect(workflowTab).toBeTruthy();
+    if (workflowTab) {
+      act(() => {
+        workflowTab.click();
+      });
+    }
+
+    const retryButton = container.querySelector(
+      '[data-testid="workflow-control-retry"]',
+    ) as HTMLButtonElement | null;
+    expect(retryButton).toBeTruthy();
+    expect(retryButton?.textContent).toContain("重试失败步骤");
+    if (retryButton) {
+      act(() => {
+        retryButton.click();
+      });
+    }
+
+    expect(onTriggerWorkflowControl).toHaveBeenCalledWith(workflowControlItem);
+  });
+
   it("传入折叠回调时应显示折叠按钮并可触发", () => {
     const onRequestCollapse = vi.fn();
     const { container } = renderSidebar({ onRequestCollapse });

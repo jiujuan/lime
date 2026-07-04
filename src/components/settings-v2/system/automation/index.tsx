@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import {
   ArrowRight,
@@ -103,8 +102,13 @@ import type { AutomationWorkspaceTab } from "@/types/page";
 const AUTOMATION_CORE_LOAD_TIMEOUT_MS = 8000;
 const AUTOMATION_AUXILIARY_LOAD_TIMEOUT_MS = 5000;
 
+type SettingsTranslate = (
+  key: string,
+  values?: Record<string, unknown>,
+) => string;
+
 function buildAutomationServiceSkillContextCopy(
-  t: TFunction<"settings">,
+  t: SettingsTranslate,
 ): AutomationServiceSkillContextCopy {
   return {
     defaultTitle: t("settings.automation.tasks.list.badge.serviceSkill"),
@@ -127,7 +131,7 @@ function buildAutomationServiceSkillContextCopy(
 }
 
 function buildAutomationPresentationCopy(
-  t: TFunction<"settings">,
+  t: SettingsTranslate,
   serviceSkillContextCopy: AutomationServiceSkillContextCopy,
 ): AutomationPresentationCopy {
   const accessModeCopy: AutomationAccessModeCopy = {
@@ -310,7 +314,7 @@ type AutomationWorkspaceTemplate = {
 };
 
 function createWorkspaceTemplates(
-  t: TFunction<"settings">,
+  t: SettingsTranslate,
 ): AutomationWorkspaceTemplate[] {
   return [
     {
@@ -428,7 +432,9 @@ export function AutomationSettings({
   onOpenSettings,
   onOpenWorkspace,
 }: AutomationSettingsProps) {
-  const { i18n, t } = useTranslation("settings");
+  const { i18n, t: rawT } = useTranslation("settings");
+  const t = rawT as SettingsTranslate;
+  const translateGlobal = i18n.t as SettingsTranslate;
   const serviceSkillContextCopy = useMemo(
     () => buildAutomationServiceSkillContextCopy(t),
     [t],
@@ -457,7 +463,7 @@ export function AutomationSettings({
           }),
         statusLabel: (status) =>
           String(
-            i18n.t(`agentChat.managedObjective.status.${status}`, {
+            translateGlobal(`agentChat.managedObjective.status.${status}`, {
               ns: "agent",
             }),
           ),

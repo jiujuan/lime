@@ -5,7 +5,7 @@
   "workspaces": [
     "packages/*"
   ],
-  "version": "1.88.0",
+  "version": "1.89.0",
   "description": "AI content workspace for Chinese creators: desktop writing, research, prompt management, knowledge base, and multi-model workflows.",
   "keywords": [
     "ai",
@@ -55,7 +55,7 @@
     "dev": "npm run electron:dev",
     "dev:renderer": "vite",
     "build": "npm run electron:build",
-    "build:renderer": "tsc && vite build",
+    "build:renderer": "tsc --project tsconfig.renderer.json && vite build",
     "build:renderer:electron": "node scripts/electron/build-renderer.mjs",
     "build:renderer:electron:smoke": "node scripts/electron/build-renderer-smoke.mjs",
     "preview": "npm run electron:start",
@@ -75,7 +75,7 @@
     "electron:start": "node scripts/electron/run-preview.mjs",
     "smoke:electron": "npm run electron:build:smoke && node scripts/electron/smoke.mjs",
     "lint": "eslint src --max-warnings 0",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit --project tsconfig.renderer.json && tsc --noEmit --project tsconfig.node.json",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
     "prepare": "husky",
     "test": "node scripts/run-vitest-smart.mjs",

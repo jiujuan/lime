@@ -1,4 +1,5 @@
 import { listDirectory } from "@/lib/api/fileBrowser";
+import { markdownContainsDocumentImageTaskPlaceholder } from "@/components/workspace/document/utils/imageTaskPlaceholder";
 import { resolveAbsoluteWorkspacePath } from "./workspacePath";
 import { IMAGE_TASKS_ROOT_RELATIVE_PATH } from "./imageTaskLocator";
 import type { SessionImageWorkbenchState } from "./imageWorkbenchHelpers";
@@ -67,9 +68,153 @@ export function shouldPreferLoadedImageTaskSnapshot(
   return candidate.snapshot.updatedAt > current.snapshot.updatedAt;
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function documentMarkdownsNeedInlineApplyTarget(
+  documentMarkdowns?: readonly (string | null | undefined)[],
+): boolean {
+  return (documentMarkdowns || []).some((markdown) =>
+    markdownContainsDocumentImageTaskPlaceholder(markdown),
+  );
+}
+
+function cachedTaskHasDocumentInlineApplyTarget(params: {
+  task: SessionImageWorkbenchState["tasks"][number];
+  documentMarkdowns?: readonly (string | null | undefined)[];
+}): boolean {
+  const applyTarget = params.task.applyTarget;
+  if (
+    applyTarget?.kind !== "canvas-insert" ||
+    applyTarget.canvasType !== "document"
+  ) {
+    return false;
+  }
+
+  const slotId = applyTarget.slotId?.trim();
+  if (!slotId) {
+    return false;
+  }
+
+  const slotMarkerPattern = new RegExp(
+    `lime:image-task-slot:\\s*${escapeRegExp(slotId)}`,
+  );
+  return (params.documentMarkdowns || []).some((markdown) =>
+    slotMarkerPattern.test(markdown || ""),
+  );
+}
+
+function documentMarkdownsContainPendingInlineTaskReference(params: {
+  documentMarkdowns?: readonly (string | null | undefined)[];
+  taskId?: string | null;
+  slotId?: string | null;
+}): boolean {
+  const taskId = normalizeTaskRef(params.taskId);
+  const slotId = normalizeTaskRef(params.slotId);
+  const slotMarkerPattern = slotId
+    ? new RegExp(`lime:image-task-slot:\\s*${escapeRegExp(slotId)}`)
+    : null;
+
+  return (params.documentMarkdowns || []).some((markdown) => {
+    const content = markdown || "";
+    if (
+      taskId &&
+      (content.includes(`pending-image-task://${encodeURIComponent(taskId)}`) ||
+        content.includes(`pending-image-task://${taskId}`))
+    ) {
+      return true;
+    }
+    return Boolean(slotMarkerPattern?.test(content)) &&
+      content.includes("pending-image-task://");
+  });
+}
+
+function documentMarkdownsContainImageTaskOutput(params: {
+  documentMarkdowns?: readonly (string | null | undefined)[];
+  outputs: SessionImageWorkbenchState["outputs"];
+}): boolean {
+  const outputUrls = params.outputs
+    .map((output) => output.url?.trim())
+    .filter((url): url is string => Boolean(url));
+  if (outputUrls.length === 0) {
+    return false;
+  }
+  return (params.documentMarkdowns || []).some((markdown) =>
+    outputUrls.some((url) => (markdown || "").includes(url)),
+  );
+}
+
+function documentMarkdownsContainInlineTaskReference(params: {
+  documentMarkdowns?: readonly (string | null | undefined)[];
+  taskId?: string | null;
+  slotId?: string | null;
+}): boolean {
+  const taskId = normalizeTaskRef(params.taskId);
+  const slotId = normalizeTaskRef(params.slotId);
+  if (!taskId && !slotId) {
+    return false;
+  }
+
+  const slotMarkerPattern = slotId
+    ? new RegExp(`lime:image-task-slot:\\s*${escapeRegExp(slotId)}`)
+    : null;
+  return (params.documentMarkdowns || []).some((markdown) => {
+    const content = markdown || "";
+    return (
+      Boolean(slotMarkerPattern?.test(content)) ||
+      Boolean(
+        taskId &&
+          (content.includes(`pending-image-task://${encodeURIComponent(taskId)}`) ||
+            content.includes(`pending-image-task://${taskId}`)),
+      )
+    );
+  });
+}
+
+function taskRecordMatchesDocumentInlineMarkdown(params: {
+  taskRecord: Record<string, unknown>;
+  documentMarkdowns?: readonly (string | null | undefined)[];
+}): boolean {
+  const payload = asRecord(params.taskRecord.payload);
+  const relationships =
+    asRecord(params.taskRecord.relationships) ||
+    asRecord(payload?.relationships);
+  const slotId = readString(
+    [relationships, payload, params.taskRecord],
+    ["slot_id", "slotId"],
+  );
+  return documentMarkdownsContainInlineTaskReference({
+    documentMarkdowns: params.documentMarkdowns,
+    taskId: readString([params.taskRecord], ["task_id", "taskId"]),
+    slotId,
+  });
+}
+
+function eventPayloadMatchesDocumentInlineMarkdown(params: {
+  payload: {
+    task_id?: string;
+    slot_id?: string;
+  };
+  documentMarkdowns?: readonly (string | null | undefined)[];
+}): boolean {
+  return documentMarkdownsContainInlineTaskReference({
+    documentMarkdowns: params.documentMarkdowns,
+    taskId: params.payload.task_id,
+    slotId: params.payload.slot_id,
+  });
+}
+
+function isDocumentInlineReplaceableCachedStatus(
+  task: SessionImageWorkbenchState["tasks"][number],
+): boolean {
+  return task.status === "complete" || task.status === "partial";
+}
+
 export function isImageWorkbenchTaskSatisfiedByCache(params: {
   imageWorkbenchState?: SessionImageWorkbenchState;
   taskId: string;
+  documentMarkdowns?: readonly (string | null | undefined)[];
 }): boolean {
   const imageWorkbenchState = params.imageWorkbenchState;
   if (!imageWorkbenchState) {
@@ -87,10 +232,49 @@ export function isImageWorkbenchTaskSatisfiedByCache(params: {
     (output) => output.taskId === params.taskId,
   );
   if (outputs.length > 0) {
+    if (
+      documentMarkdownsNeedInlineApplyTarget(params.documentMarkdowns)
+    ) {
+      const slotId =
+        task.applyTarget?.kind === "canvas-insert"
+          ? task.applyTarget.slotId
+          : null;
+      if (
+        !isDocumentInlineReplaceableCachedStatus(task) ||
+        !cachedTaskHasDocumentInlineApplyTarget({
+          task,
+          documentMarkdowns: params.documentMarkdowns,
+        }) ||
+        documentMarkdownsContainPendingInlineTaskReference({
+          documentMarkdowns: params.documentMarkdowns,
+          taskId: params.taskId,
+          slotId,
+        }) ||
+        !documentMarkdownsContainImageTaskOutput({
+          documentMarkdowns: params.documentMarkdowns,
+          outputs,
+        })
+      ) {
+        return false;
+      }
+    }
     return true;
   }
 
-  return task.status === "cancelled" || task.status === "error";
+  if (task.status === "cancelled" || task.status === "error") {
+    if (
+      documentMarkdownsNeedInlineApplyTarget(params.documentMarkdowns) &&
+      !cachedTaskHasDocumentInlineApplyTarget({
+        task,
+        documentMarkdowns: params.documentMarkdowns,
+      })
+    ) {
+      return false;
+    }
+    return true;
+  }
+
+  return false;
 }
 
 export { normalizeTaskFamily } from "./imageTaskFamily";
@@ -102,13 +286,16 @@ function normalizeTaskRef(value?: string | null): string | undefined {
 
 export function matchesRuntimeEventContext(params: {
   payload: {
+    task_id?: string;
     session_id?: string;
     project_id?: string;
     content_id?: string;
+    slot_id?: string;
   };
   sessionId?: string | null;
   projectId?: string | null;
   contentId?: string | null;
+  documentMarkdowns?: readonly (string | null | undefined)[];
 }): boolean {
   const normalizedSessionId = normalizeTaskRef(params.sessionId);
   const normalizedProjectId = normalizeTaskRef(params.projectId);
@@ -147,7 +334,13 @@ export function matchesRuntimeEventContext(params: {
   }
 
   if (normalizedSessionId || normalizedContentId) {
-    return matchedScopedContext;
+    return (
+      matchedScopedContext ||
+      eventPayloadMatchesDocumentInlineMarkdown({
+        payload: params.payload,
+        documentMarkdowns: params.documentMarkdowns,
+      })
+    );
   }
 
   return true;
@@ -216,6 +409,7 @@ export function shouldRestoreImageTaskRecord(params: {
   sessionId?: string | null;
   projectId?: string | null;
   contentId?: string | null;
+  documentMarkdowns?: readonly (string | null | undefined)[];
   now?: number;
 }): boolean {
   const taskType =
@@ -274,7 +468,13 @@ export function shouldRestoreImageTaskRecord(params: {
   }
 
   if (normalizedSessionId || normalizedContentId) {
-    return matchedScopedContext;
+    return (
+      matchedScopedContext ||
+      taskRecordMatchesDocumentInlineMarkdown({
+        taskRecord: params.taskRecord,
+        documentMarkdowns: params.documentMarkdowns,
+      })
+    );
   }
   if (normalizedProjectId && metadata.projectId === normalizedProjectId) {
     return true;

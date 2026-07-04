@@ -9,6 +9,9 @@ use super::session_store_subagent_context::{
     should_load_runtime_overlay_for_runtime_detail,
     should_load_subagent_runtime_context_for_runtime_detail,
 };
+use super::session_store_todo_projection::{
+    project_session_todo_items, SessionTaskBoardItemProjection, SessionTaskBoardStatusProjection,
+};
 use super::*;
 use crate::protocol::AgentMessage as RuntimeAgentMessage;
 use crate::subagent_control::SubagentTurnStatus;
@@ -286,6 +289,40 @@ fn should_probe_runtime_overlay_for_empty_limited_history() {
 }
 
 #[test]
+fn project_session_todo_items_should_map_current_task_board_projection() {
+    let items = vec![
+        SessionTaskBoardItemProjection {
+            subject: "  收集事实源  ".to_string(),
+            active_form: Some("  正在读取仓库  ".to_string()),
+            status: SessionTaskBoardStatusProjection::InProgress,
+        },
+        SessionTaskBoardItemProjection {
+            subject: " ".to_string(),
+            active_form: Some("忽略".to_string()),
+            status: SessionTaskBoardStatusProjection::Pending,
+        },
+        SessionTaskBoardItemProjection {
+            subject: "输出结论".to_string(),
+            active_form: None,
+            status: SessionTaskBoardStatusProjection::Completed,
+        },
+    ];
+
+    let projected = project_session_todo_items(items);
+
+    assert_eq!(projected.len(), 2);
+    assert_eq!(projected[0].content, "收集事实源");
+    assert_eq!(
+        projected[0].active_form.as_deref(),
+        Some("  正在读取仓库  ")
+    );
+    assert_eq!(projected[0].status, SessionTodoStatus::InProgress);
+    assert_eq!(projected[1].content, "输出结论");
+    assert_eq!(projected[1].active_form, None);
+    assert_eq!(projected[1].status, SessionTodoStatus::Completed);
+}
+
+#[test]
 fn apply_runtime_snapshot_should_not_regress_aborted_turn_to_running() {
     let mut detail = build_detail_with_turn_status(AgentThreadTurnStatus::Aborted);
     let thread_id = detail.thread_id.clone();
@@ -312,7 +349,7 @@ fn apply_runtime_snapshot_should_not_regress_aborted_turn_to_running() {
     };
 
     let runtime_projection =
-        crate::aster_runtime_projection::project_aster_runtime_snapshot(&snapshot);
+        crate::runtime_snapshot_adapter::project_aster_runtime_snapshot(&snapshot);
     apply_runtime_snapshot(&mut detail, &runtime_projection);
 
     assert_eq!(detail.turns.len(), 1);
@@ -1019,7 +1056,7 @@ fn apply_runtime_usage_fallback_should_fill_latest_assistant_message() {
 
     let applied = apply_runtime_usage_fallback_to_latest_assistant_message(
         &mut messages,
-        crate::aster_runtime_projection::project_aster_session_usage(&session),
+        crate::session_execution_runtime_adapter::project_aster_session_usage(&session),
     );
 
     assert_eq!(
@@ -1065,7 +1102,7 @@ fn apply_runtime_usage_fallback_should_not_override_existing_usage() {
 
     let applied = apply_runtime_usage_fallback_to_latest_assistant_message(
         &mut messages,
-        crate::aster_runtime_projection::project_aster_session_usage(&session),
+        crate::session_execution_runtime_adapter::project_aster_session_usage(&session),
     );
 
     assert!(applied.is_none());

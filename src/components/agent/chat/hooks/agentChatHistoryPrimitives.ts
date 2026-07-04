@@ -66,7 +66,7 @@ export const appendThinkingToHistoryParts = (
   if (lastPart?.type === "thinking") {
     nextParts[nextParts.length - 1] = {
       type: "thinking",
-      text: lastPart.text + text,
+      text: appendTextWithOverlapDetection(lastPart.text, text),
       metadata: lastPart.metadata ?? metadata,
     };
     return nextParts;

@@ -58,7 +58,10 @@ import {
   shouldMergeTimelineProcessMessages,
 } from "./agentChatHistoryTimelineMerge";
 import type { HydrateSessionDetailMessagesOptions } from "./agentChatHistoryTypes";
-import { normalizeHistoryUsage } from "./agentChatHistoryUsage";
+import {
+  normalizeHistoryUsage,
+  resolveSessionDetailTurnUsage,
+} from "./agentChatHistoryUsage";
 
 export const hydrateSessionDetailMessages = (
   detail: AsterSessionDetail,
@@ -331,7 +334,6 @@ export const hydrateSessionDetailMessages = (
       const rawContent = textParts.join("\n").trim();
       let normalizedRole =
         msg.role === "tool" ? "assistant" : (msg.role as "user" | "assistant");
-      const usage = normalizeHistoryUsage(msg.usage);
       const sanitizedRawContent = sanitizeMessageTextForDisplay(rawContent, {
         role: normalizedRole,
         hasImages: images.length > 0,
@@ -365,6 +367,15 @@ export const hydrateSessionDetailMessages = (
         }
       }
 
+      const runtimeTurnId =
+        readHistoryString(msg.runtimeTurnId) ||
+        readHistoryString(msg.runtime_turn_id);
+      const usage =
+        normalizedRole === "assistant"
+          ? normalizeHistoryUsage(msg.usage) ??
+            resolveSessionDetailTurnUsage(detail, runtimeTurnId)
+          : undefined;
+
       if (
         !content &&
         images.length === 0 &&
@@ -375,10 +386,6 @@ export const hydrateSessionDetailMessages = (
       ) {
         return [];
       }
-
-      const runtimeTurnId =
-        readHistoryString(msg.runtimeTurnId) ||
-        readHistoryString(msg.runtime_turn_id);
       const hydratedMessage: Message = {
         id: `${topicId}-${historyAbsoluteStartIndex + index}`,
         role: normalizedRole,
@@ -389,7 +396,7 @@ export const hydrateSessionDetailMessages = (
         toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
         timestamp: messageTimestamp,
         isThinking: false,
-        usage: normalizedRole === "assistant" ? usage : undefined,
+        usage,
         thinkingContent: extractThinkingContentFromParts(sanitizedContentParts),
         imageWorkbenchPreview,
         taskPreview,

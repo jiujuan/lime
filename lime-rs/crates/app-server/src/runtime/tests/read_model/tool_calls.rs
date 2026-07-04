@@ -562,6 +562,87 @@ async fn read_session_projects_turn_completed_usage_into_read_model_turns() {
 }
 
 #[tokio::test]
+async fn read_session_projects_workflow_audit_turn_completed_usage_into_read_model_turns() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let roots = StorageRoots::initialize(temp.path().join("app-server")).expect("roots");
+    let event_log_writer = Arc::new(EventLogWriter::new(&roots.event_log_root).expect("writer"));
+    let core = RuntimeCore::default().with_event_log_writer(event_log_writer.clone());
+    core.start_session(AgentSessionStartParams {
+        session_id: Some("sess_audit_turn_usage_read".to_string()),
+        thread_id: Some("thread_audit_turn_usage_read".to_string()),
+        app_id: "desktop".to_string(),
+        workspace_id: Some("workspace-main".to_string()),
+        business_object_ref: None,
+        locale: None,
+    })
+    .expect("session");
+
+    let turn = core
+        .start_turn(
+            AgentSessionTurnStartParams {
+                session_id: "sess_audit_turn_usage_read".to_string(),
+                turn_id: Some("turn_audit_usage_read".to_string()),
+                input: AgentInput {
+                    text: "@配图 画一张深圳夏天的图".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: None,
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("turn")
+        .response
+        .turn;
+
+    crate::runtime::event_store::append_workflow_audit_runtime_events(
+        Some(event_log_writer.as_ref()),
+        "sess_audit_turn_usage_read",
+        "thread_audit_turn_usage_read",
+        Some(&turn.turn_id),
+        vec![RuntimeEvent::new(
+            "turn.completed",
+            json!({
+                "usage": {
+                    "input_tokens": 1175,
+                    "output_tokens": 112
+                }
+            }),
+        )],
+    )
+    .expect("append workflow audit usage");
+
+    let read = core
+        .read_session(AgentSessionReadParams {
+            session_id: "sess_audit_turn_usage_read".to_string(),
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .expect("read session");
+    let detail = read.detail.expect("session detail");
+
+    assert_eq!(
+        detail["turns"][0]["usage"]["input_tokens"].as_u64(),
+        Some(1175)
+    );
+    assert_eq!(
+        detail["thread_read"]["turns"][0]["usage"]["output_tokens"].as_u64(),
+        Some(112)
+    );
+    assert_eq!(
+        detail["thread_read"]["diagnostics"]["latest_turn_usage"]["input_tokens"].as_u64(),
+        Some(1175)
+    );
+    assert_eq!(
+        detail["thread_read"]["runtime_summary"]["latestTurnUsage"]["output_tokens"].as_u64(),
+        Some(112)
+    );
+}
+
+#[tokio::test]
 async fn read_session_preserves_workspace_patch_host_tool_metadata_on_thread_items() {
     let (core, turn) = start_read_model_test_turn(
         "sess_legacy_tool_metadata",

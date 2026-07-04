@@ -121,22 +121,28 @@ sequenceDiagram
   end
 ```
 
-## 6. Cancel / Retry 流程图
+## 6. Control API 流程图
 
 ```mermaid
 flowchart TD
-  A[用户点击取消或重试] --> B{动作类型}
+  A[用户点击取消、重试或提交等待点输入] --> B{动作类型}
   B -->|取消| C[workflow/cancel]
   B -->|重试 step| D[workflow/retry step]
   B -->|重试 run| E[workflow/retry run]
-  C --> F[查找 open run 和 open step]
-  F --> G[发出 workflow.step.canceled]
-  G --> H[发出 workflow.run.canceled]
-  D --> I[发出 workflow.step.retrying]
-  E --> J[发出 workflow.run.retrying]
-  I --> K[重新调度 step]
-  J --> K
-  K --> L[继续写入 workflow.* events]
+  B -->|响应 waiting step| R[workflow/respond]
+  C --> F[读取 Workflow Read Model]
+  F --> G[查找 non-terminal run 和 step]
+  G --> H[写入 workflow.step.canceled]
+  H --> I[写入 workflow.run.canceled]
+  I --> J[重新读取同源 read model]
+  D --> K[写 workflow.step.retrying]
+  E --> K
+  K --> N[读取 source turn input / runtime options]
+  N --> O[agentSession/turn/start 提交 rescheduledTurnId]
+  O --> P[返回 read model + rescheduledTurnId]
+  R --> L[复用 agentSession/action/respond]
+  L --> Q[写 workflow.step.progress status=running]
+  Q --> J
 ```
 
 ## 7. 状态流转图

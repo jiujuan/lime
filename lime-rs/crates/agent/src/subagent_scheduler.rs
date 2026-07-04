@@ -7,19 +7,25 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
+use agent_protocol::{ModelId, TurnId};
 use aster::agents::context::AgentContext;
 use aster::agents::subagent_scheduler::{
     SchedulerConfig, SchedulerError, SchedulerExecutionResult, SchedulerProgress, SchedulerResult,
     SubAgentExecutor, SubAgentResult, SubAgentScheduler, SubAgentTask,
     TokenUsage as SchedulerTokenUsage,
 };
-use aster::conversation::message::Message;
 use chrono::Utc;
+use model_provider::router::{
+    ContentBlock, Message as ProviderMessage, MessageRole, ProviderRequest,
+};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
-use crate::credential_bridge::{create_aster_provider, AsterProviderConfig, CredentialBridge};
+use crate::credential_bridge::{
+    create_model_runtime_provider, CredentialBridge, RuntimeProviderConfig,
+};
 use lime_core::database::DbConnection;
 
 /// 调度器事件发射器
@@ -182,7 +188,10 @@ impl LimeSubAgentExecutor {
     }
 
     /// 从 API Key Provider 选择凭证
-    async fn select_credential(&self, task: &SubAgentTask) -> SchedulerResult<AsterProviderConfig> {
+    async fn select_credential(
+        &self,
+        task: &SubAgentTask,
+    ) -> SchedulerResult<RuntimeProviderConfig> {
         let model = task.model.as_deref().unwrap_or(&self.default_model);
         let provider_type = &self.default_provider;
 
@@ -205,6 +214,59 @@ impl LimeSubAgentExecutor {
             format!("任务 {} 完成:\n{}...", task.id, truncated)
         }
     }
+
+    fn build_provider_request(
+        &self,
+        task: &SubAgentTask,
+        context: &AgentContext,
+        provider_config: &RuntimeProviderConfig,
+    ) -> ProviderRequest {
+        build_subagent_provider_request(task, context, provider_config)
+    }
+}
+
+fn build_subagent_provider_request(
+    task: &SubAgentTask,
+    context: &AgentContext,
+    provider_config: &RuntimeProviderConfig,
+) -> ProviderRequest {
+    let mut messages = Vec::new();
+
+    if let Some(system_prompt) = context
+        .system_prompt
+        .as_deref()
+        .filter(|prompt| !prompt.is_empty())
+    {
+        messages.push(ProviderMessage {
+            role: MessageRole::System,
+            content: vec![ContentBlock::Text {
+                text: system_prompt.to_string(),
+            }],
+            metadata: Value::Null,
+        });
+    }
+
+    messages.push(ProviderMessage {
+        role: MessageRole::User,
+        content: vec![ContentBlock::Text {
+            text: task.prompt.clone(),
+        }],
+        metadata: Value::Null,
+    });
+
+    ProviderRequest {
+        turn_id: TurnId::new(format!("subagent-{}", task.id)),
+        model: ModelId::new(provider_config.model_name.clone()),
+        messages,
+        stream: false,
+        max_tokens: task
+            .max_tokens
+            .map(|value| value.min(u32::MAX as usize) as u32),
+        temperature: None,
+        tools: None,
+        tool_choice: None,
+        metadata: Value::Null,
+    }
 }
 
 #[async_trait::async_trait]
@@ -220,19 +282,16 @@ impl SubAgentExecutor for LimeSubAgentExecutor {
         let provider_config = self.select_credential(task).await?;
         debug!("使用凭证: {}", provider_config.credential_uuid);
 
-        let provider = create_aster_provider(&provider_config)
+        let runtime_provider = create_model_runtime_provider(&provider_config)
+            .await
+            .map_err(|e| SchedulerError::ProviderError(e.to_string()))?;
+        let provider_request = self.build_provider_request(task, context, &provider_config);
+        let provider_response = runtime_provider
+            .complete(&provider_request)
             .await
             .map_err(|e| SchedulerError::ProviderError(e.to_string()))?;
 
-        let system_prompt = context.system_prompt.clone().unwrap_or_default();
-        let user_message = Message::user().with_text(&task.prompt);
-
-        let (response_msg, usage) = provider
-            .complete(&system_prompt, &[user_message], &[])
-            .await
-            .map_err(|e| SchedulerError::ProviderError(e.to_string()))?;
-
-        let response = response_msg.as_concat_text();
+        let response = provider_response.concat_text();
 
         // 按角色限制结果长度
         let max_len = self.role.max_result_length();
@@ -254,9 +313,9 @@ impl SubAgentExecutor for LimeSubAgentExecutor {
         };
 
         let token_usage = Some(SchedulerTokenUsage {
-            input_tokens: usage.usage.input_tokens.unwrap_or(0) as usize,
-            output_tokens: usage.usage.output_tokens.unwrap_or(0) as usize,
-            total_tokens: usage.usage.total_tokens.unwrap_or(0) as usize,
+            input_tokens: provider_response.usage.input_tokens as usize,
+            output_tokens: provider_response.usage.output_tokens as usize,
+            total_tokens: provider_response.usage.total() as usize,
         });
 
         Ok(SubAgentResult {
@@ -542,6 +601,39 @@ mod tests {
         assert_eq!(SubAgentRole::Explorer.max_result_length(), 2000);
         assert_eq!(SubAgentRole::Planner.max_result_length(), 4000);
         assert_eq!(SubAgentRole::Executor.max_result_length(), 0);
+    }
+
+    #[test]
+    fn test_build_subagent_provider_request_uses_model_provider_dto() {
+        let task = SubAgentTask::new("task-1", "explore", "分析当前模块").with_max_tokens(4096);
+        let context = AgentContext::new().with_system_prompt("你是只读探索 agent");
+        let provider_config = RuntimeProviderConfig {
+            provider_name: "anthropic".to_string(),
+            provider_selector: Some("anthropic".to_string()),
+            model_name: "claude-sonnet-4-20250514".to_string(),
+            api_key: None,
+            base_url: None,
+            credential_uuid: "credential-1".to_string(),
+            reasoning_effort: None,
+            protocol: None,
+            toolshim: false,
+            toolshim_model: None,
+        };
+
+        let request = build_subagent_provider_request(&task, &context, &provider_config);
+
+        assert_eq!(request.turn_id.as_str(), "subagent-task-1");
+        assert_eq!(request.model.as_str(), "claude-sonnet-4-20250514");
+        assert_eq!(request.max_tokens, Some(4096));
+        assert_eq!(request.messages.len(), 2);
+        assert_eq!(request.messages[0].role, MessageRole::System);
+        assert_eq!(request.messages[1].role, MessageRole::User);
+        assert_eq!(
+            request.messages[1].content,
+            vec![ContentBlock::Text {
+                text: "分析当前模块".to_string(),
+            }]
+        );
     }
 
     #[test]

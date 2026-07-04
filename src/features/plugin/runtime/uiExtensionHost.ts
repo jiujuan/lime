@@ -78,7 +78,7 @@ export class UiExtensionHost {
           .map((support) => ({
             capability: support.capability,
             reason: this.isCapabilityRuntimeBlocked(support.capability)
-              ? "runtime-disabled"
+              ? "current-api-required"
               : support.supported
                 ? "disabled"
                 : "unsupported",
@@ -92,7 +92,7 @@ export class UiExtensionHost {
   }
 
   private isCapabilityRuntimeBlocked(capability: string): boolean {
-    return capability === "lime.workflow" && !this.flags.workerRuntimeEnabled;
+    return capability === "lime.workflow";
   }
 
   private assertUiRuntimeEnabled(): void {

@@ -1,9 +1,12 @@
 use aster::session::{
-    collect_subagent_cascade_session_ids as collect_query_subagent_cascade_session_ids,
     query_all_subagent_sessions_with_metadata, query_child_subagent_sessions, query_session,
     query_subagent_parent_session_id, query_subagent_session, Session, SessionType,
 };
 use std::collections::HashSet;
+use thread_store::subagent_tree::{
+    collect_subagent_cascade_session_ids as collect_current_subagent_cascade_session_ids,
+    SubagentSessionTreeNode,
+};
 
 pub(crate) fn ensure_subagent_session(session: &Session) -> Result<(), String> {
     if session.session_type != SessionType::SubAgent {
@@ -90,47 +93,16 @@ pub async fn list_subagent_cascade_session_ids(session_id: &str) -> Result<Vec<S
 }
 
 pub fn collect_subagent_cascade_session_ids(session_id: &str, sessions: &[Session]) -> Vec<String> {
-    collect_query_subagent_cascade_session_ids(session_id, sessions)
+    let nodes = sessions
+        .iter()
+        .filter_map(project_subagent_session_tree_node)
+        .collect::<Vec<_>>();
+    collect_current_subagent_cascade_session_ids(session_id, &nodes)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use chrono::{Duration, Utc};
-
-    #[test]
-    fn collect_subagent_cascade_session_ids_returns_breadth_first_tree() {
-        let now = Utc::now();
-        let child_a = Session {
-            id: "child-a".to_string(),
-            session_type: SessionType::SubAgent,
-            updated_at: now,
-            extension_data: aster::session::SubagentSessionMetadata::new("root")
-                .into_updated_extension_data(&Session::default())
-                .unwrap(),
-            ..Session::default()
-        };
-        let child_b = Session {
-            id: "child-b".to_string(),
-            session_type: SessionType::SubAgent,
-            updated_at: now - Duration::minutes(1),
-            extension_data: aster::session::SubagentSessionMetadata::new("root")
-                .into_updated_extension_data(&Session::default())
-                .unwrap(),
-            ..Session::default()
-        };
-        let grandchild = Session {
-            id: "grandchild".to_string(),
-            session_type: SessionType::SubAgent,
-            updated_at: now - Duration::minutes(2),
-            extension_data: aster::session::SubagentSessionMetadata::new("child-a")
-                .into_updated_extension_data(&Session::default())
-                .unwrap(),
-            ..Session::default()
-        };
-
-        let ids = collect_subagent_cascade_session_ids("root", &[child_a, child_b, grandchild]);
-
-        assert_eq!(ids, vec!["root", "child-a", "child-b", "grandchild"]);
-    }
+fn project_subagent_session_tree_node(session: &Session) -> Option<SubagentSessionTreeNode> {
+    Some(SubagentSessionTreeNode {
+        session_id: session.id.clone(),
+        parent_session_id: query_subagent_parent_session_id(session)?,
+    })
 }

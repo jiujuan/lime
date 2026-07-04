@@ -54,6 +54,9 @@ import {
   type TrackedImageTask,
 } from "./imageTaskPreviewRuntimeRecovery";
 import {
+  syncWorkspaceArticleInlineImageTaskMessageArtifacts,
+} from "./workspaceArticleInlineImageTaskSync";
+import {
   buildPendingImageTaskRecordFromEvent,
   buildPendingImageTaskSnapshotFromEvent,
   type CreationTaskSubmittedPayload,
@@ -75,6 +78,7 @@ interface UseWorkspaceImageTaskPreviewRuntimeParams {
   projectRootPath?: string | null;
   restoreFromWorkspace?: boolean;
   messages?: Message[];
+  documentMarkdowns?: readonly (string | null | undefined)[];
   currentImageWorkbenchState?: SessionImageWorkbenchState;
   canvasState: CanvasStateUnion | null;
   setCanvasState: Dispatch<SetStateAction<CanvasStateUnion | null>>;
@@ -92,8 +96,101 @@ interface ImageTaskPreviewRuntimeContext {
   contentId?: string | null;
   projectRootPath?: string | null;
   messages?: Message[];
+  documentMarkdowns?: readonly (string | null | undefined)[];
   currentImageWorkbenchState?: SessionImageWorkbenchState;
   canvasState: CanvasStateUnion | null;
+}
+
+function hasDocumentInlineCachedSeedTask(params: {
+  imageWorkbenchState?: SessionImageWorkbenchState;
+  taskSeeds: readonly SeedImageTaskRecord[];
+}): boolean {
+  const seedTaskIds = new Set(
+    params.taskSeeds.map((task) => task.taskId).filter(Boolean),
+  );
+  if (seedTaskIds.size === 0) {
+    return false;
+  }
+
+  return (params.imageWorkbenchState?.tasks || []).some((task) => {
+    if (!seedTaskIds.has(task.id)) {
+      return false;
+    }
+    const applyTarget = task.applyTarget;
+    return (
+      applyTarget?.kind === "canvas-insert" &&
+      applyTarget.canvasType === "document"
+    );
+  });
+}
+
+function normalizeCachedTaskRecordStatus(
+  status: SessionImageWorkbenchState["tasks"][number]["status"],
+): string {
+  switch (status) {
+    case "complete":
+      return "completed";
+    case "partial":
+      return "partial";
+    case "error":
+      return "failed";
+    case "cancelled":
+      return "cancelled";
+    default:
+      return "running";
+  }
+}
+
+function syncMessagesWithCachedDocumentInlineSeedTasks(params: {
+  messages: readonly Message[];
+  imageWorkbenchState?: SessionImageWorkbenchState;
+  taskSeeds: readonly SeedImageTaskRecord[];
+}): Message[] {
+  const imageWorkbenchState = params.imageWorkbenchState;
+  if (!imageWorkbenchState) {
+    return params.messages as Message[];
+  }
+
+  const seedTaskIds = new Set(params.taskSeeds.map((task) => task.taskId));
+  return imageWorkbenchState.tasks.reduce((messages, task) => {
+    if (!seedTaskIds.has(task.id)) {
+      return messages;
+    }
+    const applyTarget = task.applyTarget;
+    if (
+      applyTarget?.kind !== "canvas-insert" ||
+      applyTarget.canvasType !== "document"
+    ) {
+      return messages;
+    }
+    const outputs = imageWorkbenchState.outputs.filter(
+      (output) => output.taskId === task.id,
+    );
+    if (outputs.length === 0) {
+      return messages;
+    }
+    return syncWorkspaceArticleInlineImageTaskMessageArtifacts(messages, {
+      taskId: task.id,
+      taskRecord: {
+        status: normalizeCachedTaskRecordStatus(task.status),
+        payload: {
+          usage: "document-inline",
+          prompt: task.prompt,
+          anchor_section_title: applyTarget.sectionTitle ?? undefined,
+          anchor_text: applyTarget.anchorText ?? undefined,
+        },
+        relationships: {
+          slot_id: applyTarget.slotId ?? undefined,
+        },
+      },
+      outputs: outputs.map((output) => ({
+        url: output.url,
+        prompt: output.prompt,
+        slotId: output.slotId,
+        slotPrompt: output.slotPrompt,
+      })),
+    });
+  }, params.messages as Message[]);
 }
 
 export function useWorkspaceImageTaskPreviewRuntime({
@@ -104,6 +201,7 @@ export function useWorkspaceImageTaskPreviewRuntime({
   projectRootPath,
   restoreFromWorkspace = true,
   messages,
+  documentMarkdowns,
   currentImageWorkbenchState,
   canvasState,
   setCanvasState,
@@ -112,6 +210,7 @@ export function useWorkspaceImageTaskPreviewRuntime({
 }: UseWorkspaceImageTaskPreviewRuntimeParams) {
   const effectiveMessages = messages ?? EMPTY_MESSAGES;
   const trackedTasksRef = useRef<Map<string, TrackedImageTask>>(new Map());
+  const restoredSeedTaskIdsRef = useRef<Set<string>>(new Set());
   const restoreSeedMessagesRef = useRef<
     ((seedMessages?: Message[]) => void) | null
   >(null);
@@ -121,9 +220,14 @@ export function useWorkspaceImageTaskPreviewRuntime({
     contentId,
     projectRootPath,
     messages: effectiveMessages,
+    documentMarkdowns,
     currentImageWorkbenchState,
     canvasState,
   });
+  const documentMarkdownRecoverySignature = (documentMarkdowns || [])
+    .map((markdown) => markdown?.trim() || "")
+    .filter(Boolean)
+    .join("\n---lime-document-image-task-recovery---\n");
 
   runtimeContextRef.current = {
     sessionId,
@@ -131,6 +235,7 @@ export function useWorkspaceImageTaskPreviewRuntime({
     contentId,
     projectRootPath,
     messages: effectiveMessages,
+    documentMarkdowns,
     currentImageWorkbenchState,
     canvasState,
   };
@@ -203,21 +308,46 @@ export function useWorkspaceImageTaskPreviewRuntime({
         }
       });
       trackedTasks.clear();
+      restoredSeedTaskIdsRef.current.clear();
       restoreSeedMessagesRef.current = null;
       return;
     }
 
+    const hasInvokeCapability = hasDesktopHostInvokeCapability();
+    const hasRuntimeMarkers = hasDesktopHostRuntimeMarkers();
+    const shouldProbeWorkspaceCatalog = shouldProbeWorkspaceImageTaskCatalog({
+      messages: runtimeContextRef.current.messages,
+      imageWorkbenchState:
+        runtimeContextRef.current.currentImageWorkbenchState,
+      canvasState: runtimeContextRef.current.canvasState,
+      documentMarkdowns: runtimeContextRef.current.documentMarkdowns,
+    });
     const shouldRestoreWorkspaceTaskCatalog =
       restoreFromWorkspace &&
-      (hasDesktopHostInvokeCapability() || hasDesktopHostRuntimeMarkers()) &&
-      shouldProbeWorkspaceImageTaskCatalog({
-        messages: runtimeContextRef.current.messages,
-        imageWorkbenchState:
-          runtimeContextRef.current.currentImageWorkbenchState,
-        canvasState: runtimeContextRef.current.canvasState,
-      });
+      (hasInvokeCapability || hasRuntimeMarkers) &&
+      shouldProbeWorkspaceCatalog;
+    logAgentDebug(
+      "ImageTaskPreviewRuntime",
+      "workspaceCatalog.restoreState",
+      {
+        documentMarkdownCount:
+          runtimeContextRef.current.documentMarkdowns?.length ?? 0,
+        enabled,
+        hasInvokeCapability,
+        hasProjectRootPath: Boolean(
+          runtimeContextRef.current.projectRootPath?.trim(),
+        ),
+        hasRuntimeMarkers,
+        restoreFromWorkspace,
+        sessionId: runtimeContextRef.current.sessionId || null,
+        shouldProbeWorkspaceCatalog,
+        shouldRestoreWorkspaceTaskCatalog,
+      },
+      { level: "debug", throttleMs: 1000 },
+    );
 
     const trackedTasks = trackedTasksRef.current;
+    const restoredSeedTaskIds = restoredSeedTaskIdsRef.current;
     trackedTasks.forEach((trackedTask) => {
       if (trackedTask.timerId !== null) {
         window.clearTimeout(trackedTask.timerId);
@@ -227,8 +357,25 @@ export function useWorkspaceImageTaskPreviewRuntime({
 
     let cancelled = false;
     let unlisten: (() => void) | null = null;
-    const restoredSeedTaskIds = new Set<string>();
     let lastPendingImageCommandRecoverySignature = "";
+    let workspaceCatalogRestoreInFlight = false;
+    let pendingWorkspaceCatalogRestoreAfterInFlight = false;
+    let pendingWorkspaceCatalogRestoreAllowsFileScanFallback = false;
+
+    const hasUnrestoredSeedImageTasks = (seedMessages?: Message[]): boolean =>
+      collectSeedImageTasks(
+        seedMessages || runtimeContextRef.current.messages,
+      ).some((task) => {
+        if (restoredSeedTaskIds.has(task.taskId)) {
+          return false;
+        }
+        return !isImageWorkbenchTaskSatisfiedByCache({
+          imageWorkbenchState:
+            runtimeContextRef.current.currentImageWorkbenchState,
+          taskId: task.taskId,
+          documentMarkdowns: runtimeContextRef.current.documentMarkdowns,
+        });
+      });
 
     const loadTaskSnapshotFromArtifactApi = async (params: {
       taskId: string;
@@ -324,6 +471,7 @@ export function useWorkspaceImageTaskPreviewRuntime({
     };
 
     const applyLoadedTaskSnapshot = (params: LoadedImageTaskSnapshot) => {
+      restoredSeedTaskIds.add(params.snapshot.taskId);
       logAgentDebug(
         "ImageTaskPreviewRuntime",
         "snapshot.apply",
@@ -337,7 +485,14 @@ export function useWorkspaceImageTaskPreviewRuntime({
         { level: "debug", throttleMs: 1000 },
       );
       setChatMessages((previous) =>
-        upsertPreviewMessage(previous, params.snapshot.message),
+        syncWorkspaceArticleInlineImageTaskMessageArtifacts(
+          upsertPreviewMessage(previous, params.snapshot.message),
+          {
+            taskRecord: params.taskRecord,
+            taskId: params.snapshot.taskId,
+            outputs: params.snapshot.outputs,
+          },
+        ),
       );
       updateCurrentImageWorkbenchState((current) =>
         mergeImageTaskSnapshot(current, params.snapshot),
@@ -486,14 +641,18 @@ export function useWorkspaceImageTaskPreviewRuntime({
       }
     };
 
-    const restoreTrackedTasksFromWorkspace = async () => {
+    const restoreTrackedTasksFromWorkspace = async (
+      options: { allowFileScanFallback?: boolean } = {},
+    ): Promise<boolean> => {
       const currentProjectRootPath =
         runtimeContextRef.current.projectRootPath?.trim();
       if (!currentProjectRootPath || cancelled) {
-        return;
+        return false;
       }
 
       let restoredSnapshots: RestoredImageTaskSnapshot[] | null = null;
+      let listedTaskCount = 0;
+      let matchedTaskCount = 0;
 
       try {
         const artifactList = await listMediaTaskArtifacts({
@@ -502,9 +661,10 @@ export function useWorkspaceImageTaskPreviewRuntime({
           limit: IMAGE_TASK_RESTORE_LIMIT * 4,
         });
         if (cancelled) {
-          return;
+          return false;
         }
 
+        listedTaskCount = artifactList.tasks.length;
         restoredSnapshots = artifactList.tasks.reduce<
           RestoredImageTaskSnapshot[]
         >((items, artifact) => {
@@ -518,6 +678,7 @@ export function useWorkspaceImageTaskPreviewRuntime({
               sessionId: runtimeContextRef.current.sessionId,
               projectId: runtimeContextRef.current.projectId,
               contentId: runtimeContextRef.current.contentId,
+              documentMarkdowns: runtimeContextRef.current.documentMarkdowns,
             })
           ) {
             return items;
@@ -541,6 +702,7 @@ export function useWorkspaceImageTaskPreviewRuntime({
             return items;
           }
 
+          matchedTaskCount += 1;
           items.push({
             snapshot,
             taskRecord,
@@ -555,11 +717,14 @@ export function useWorkspaceImageTaskPreviewRuntime({
       }
 
       if (restoredSnapshots === null) {
+        if (options.allowFileScanFallback === false) {
+          return false;
+        }
         const candidatePaths = await collectImageTaskCandidatePaths(
           currentProjectRootPath,
         );
         if (cancelled || candidatePaths.length === 0) {
-          return;
+          return false;
         }
 
         restoredSnapshots = [];
@@ -585,6 +750,7 @@ export function useWorkspaceImageTaskPreviewRuntime({
                 sessionId: runtimeContextRef.current.sessionId,
                 projectId: runtimeContextRef.current.projectId,
                 contentId: runtimeContextRef.current.contentId,
+                documentMarkdowns: runtimeContextRef.current.documentMarkdowns,
               })
             ) {
               continue;
@@ -633,7 +799,17 @@ export function useWorkspaceImageTaskPreviewRuntime({
       }
 
       if (cancelled || restoredSnapshots.length === 0) {
-        return;
+        logAgentDebug(
+          "ImageTaskPreviewRuntime",
+          "workspaceCatalog.restoreEmpty",
+          {
+            listedTaskCount,
+            matchedTaskCount,
+            restoredSnapshotCount: restoredSnapshots?.length ?? 0,
+          },
+          { level: "debug", throttleMs: 1000 },
+        );
+        return false;
       }
 
       const selectedSnapshots = restoredSnapshots
@@ -642,13 +818,36 @@ export function useWorkspaceImageTaskPreviewRuntime({
         )
         .slice(0, IMAGE_TASK_RESTORE_LIMIT)
         .reverse();
+      logAgentDebug(
+        "ImageTaskPreviewRuntime",
+        "workspaceCatalog.restoreSelected",
+        {
+          listedTaskCount,
+          matchedTaskCount,
+          restoredSnapshotCount: restoredSnapshots.length,
+          selectedTaskIds: selectedSnapshots.map((item) => item.snapshot.taskId),
+        },
+        { level: "debug", throttleMs: 1000 },
+      );
+      selectedSnapshots.forEach((item) => {
+        restoredSeedTaskIds.add(item.snapshot.taskId);
+      });
 
       setChatMessages((previous) =>
-        selectedSnapshots.reduce(
-          (messages, item) =>
-            upsertPreviewMessage(messages, item.snapshot.message),
-          previous,
-        ),
+        selectedSnapshots.reduce((messages, item) => {
+          const nextMessages = upsertPreviewMessage(
+            messages,
+            item.snapshot.message,
+          );
+          return syncWorkspaceArticleInlineImageTaskMessageArtifacts(
+            nextMessages,
+            {
+              taskRecord: item.taskRecord,
+              taskId: item.snapshot.taskId,
+              outputs: item.snapshot.outputs,
+            },
+          );
+        }, previous),
       );
       updateCurrentImageWorkbenchState((current) =>
         selectedSnapshots.reduce(
@@ -684,6 +883,41 @@ export function useWorkspaceImageTaskPreviewRuntime({
         });
         scheduleNextPoll(item.snapshot.taskId);
       }
+      return true;
+    };
+
+    const restoreTrackedTasksFromWorkspaceDeduped = async (
+      options: { allowFileScanFallback?: boolean } = {},
+    ) => {
+      if (workspaceCatalogRestoreInFlight) {
+        pendingWorkspaceCatalogRestoreAfterInFlight = true;
+        pendingWorkspaceCatalogRestoreAllowsFileScanFallback =
+          pendingWorkspaceCatalogRestoreAllowsFileScanFallback ||
+          options.allowFileScanFallback !== false;
+        return;
+      }
+
+      workspaceCatalogRestoreInFlight = true;
+      let restoredAny = false;
+      try {
+        restoredAny = await restoreTrackedTasksFromWorkspace(options);
+      } finally {
+        workspaceCatalogRestoreInFlight = false;
+        const pendingAllowsFileScanFallback =
+          pendingWorkspaceCatalogRestoreAllowsFileScanFallback;
+        const shouldRunPendingRestore =
+          pendingWorkspaceCatalogRestoreAfterInFlight &&
+          !cancelled &&
+          !restoredAny &&
+          hasUnrestoredSeedImageTasks();
+        pendingWorkspaceCatalogRestoreAfterInFlight = false;
+        pendingWorkspaceCatalogRestoreAllowsFileScanFallback = false;
+        if (shouldRunPendingRestore) {
+          void restoreTrackedTasksFromWorkspaceDeduped({
+            allowFileScanFallback: pendingAllowsFileScanFallback,
+          });
+        }
+      }
     };
 
     const restoreTrackedTasksFromMessages = async (
@@ -715,22 +949,41 @@ export function useWorkspaceImageTaskPreviewRuntime({
             imageWorkbenchState:
               runtimeContextRef.current.currentImageWorkbenchState,
             taskId: task.taskId,
+            documentMarkdowns: runtimeContextRef.current.documentMarkdowns,
           }),
       );
       if (unresolvedTaskSeeds.length === 0) {
         taskSeeds.forEach((task) => {
           restoredSeedTaskIds.add(task.taskId);
         });
+        const shouldContinueWorkspaceCatalogRestore =
+          shouldRestoreWorkspaceTaskCatalog &&
+          hasDocumentInlineCachedSeedTask({
+            imageWorkbenchState:
+              runtimeContextRef.current.currentImageWorkbenchState,
+            taskSeeds,
+          });
+        if (shouldContinueWorkspaceCatalogRestore) {
+          setChatMessages((previous) =>
+            syncMessagesWithCachedDocumentInlineSeedTasks({
+              messages: previous,
+              imageWorkbenchState:
+                runtimeContextRef.current.currentImageWorkbenchState,
+              taskSeeds,
+            }),
+          );
+        }
         logAgentDebug(
           "ImageTaskPreviewRuntime",
           "messageSeeds.cacheSatisfied",
           {
             seedCount: taskSeeds.length,
             taskIds: taskSeeds.map((task) => task.taskId),
+            shouldContinueWorkspaceCatalogRestore,
           },
           { level: "debug", throttleMs: 1000 },
         );
-        return true;
+        return !shouldContinueWorkspaceCatalogRestore;
       }
 
       const loadedSnapshots = await Promise.all(
@@ -843,6 +1096,7 @@ export function useWorkspaceImageTaskPreviewRuntime({
                 sessionId: runtimeContextRef.current.sessionId,
                 projectId: runtimeContextRef.current.projectId,
                 contentId: runtimeContextRef.current.contentId,
+                documentMarkdowns: runtimeContextRef.current.documentMarkdowns,
               })
             ) {
               return items;
@@ -881,6 +1135,7 @@ export function useWorkspaceImageTaskPreviewRuntime({
                 imageWorkbenchState:
                   runtimeContextRef.current.currentImageWorkbenchState,
                 taskId: item.snapshot.taskId,
+                documentMarkdowns: runtimeContextRef.current.documentMarkdowns,
               }),
           )
           .sort(
@@ -892,13 +1147,25 @@ export function useWorkspaceImageTaskPreviewRuntime({
         if (selectedSnapshots.length === 0) {
           return false;
         }
+        selectedSnapshots.forEach((item) => {
+          restoredSeedTaskIds.add(item.snapshot.taskId);
+        });
 
         setChatMessages((previous) =>
-          selectedSnapshots.reduce(
-            (messages, item) =>
-              upsertPreviewMessage(messages, item.snapshot.message),
-            previous,
-          ),
+          selectedSnapshots.reduce((messages, item) => {
+            const nextMessages = upsertPreviewMessage(
+              messages,
+              item.snapshot.message,
+            );
+            return syncWorkspaceArticleInlineImageTaskMessageArtifacts(
+              nextMessages,
+              {
+                taskRecord: item.taskRecord,
+                taskId: item.snapshot.taskId,
+                outputs: item.snapshot.outputs,
+              },
+            );
+          }, previous),
         );
         updateCurrentImageWorkbenchState((current) =>
           selectedSnapshots.reduce(
@@ -942,9 +1209,19 @@ export function useWorkspaceImageTaskPreviewRuntime({
       if (!restoreFromWorkspace || cancelled) {
         return;
       }
+      if (!hasUnrestoredSeedImageTasks(seedMessages)) {
+        return;
+      }
       void restoreTrackedTasksFromMessages(seedMessages).then(
         (restoredFromMessages) => {
-          if (!restoredFromMessages && !shouldRestoreWorkspaceTaskCatalog) {
+          if (restoredFromMessages) {
+            return;
+          }
+          if (shouldRestoreWorkspaceTaskCatalog) {
+            void restoreTrackedTasksFromWorkspaceDeduped({
+              allowFileScanFallback: false,
+            });
+          } else {
             void restorePendingImageTasksFromCurrentSession();
           }
         },
@@ -968,6 +1245,7 @@ export function useWorkspaceImageTaskPreviewRuntime({
         sessionId: runtimeContextRef.current.sessionId,
         projectId: runtimeContextRef.current.projectId,
         contentId: runtimeContextRef.current.contentId,
+        documentMarkdowns: runtimeContextRef.current.documentMarkdowns,
       });
       if (!matchesRuntimeContext) {
         return;
@@ -1046,7 +1324,7 @@ export function useWorkspaceImageTaskPreviewRuntime({
       void restoreTrackedTasksFromMessages().then((restoredFromMessages) => {
         if (!restoredFromMessages) {
           if (shouldRestoreWorkspaceTaskCatalog) {
-            void restoreTrackedTasksFromWorkspace();
+            void restoreTrackedTasksFromWorkspaceDeduped();
           } else {
             void restorePendingImageTasksFromCurrentSession();
           }
@@ -1069,6 +1347,7 @@ export function useWorkspaceImageTaskPreviewRuntime({
     };
   }, [
     enabled,
+    documentMarkdownRecoverySignature,
     projectRootPath,
     restoreFromWorkspace,
     sessionId,

@@ -28,6 +28,9 @@ type GeneralWorkbenchSidebarWorkflowProps = Pick<
   | "onViewRunDetail"
   | "activeRunDetail"
   | "activeRunDetailLoading"
+  | "workflowControlItems"
+  | "workflowControlPendingItemId"
+  | "onTriggerWorkflowControl"
 >;
 type GeneralWorkbenchSidebarHistoryProps = {
   hasMore?: boolean;
@@ -76,6 +79,9 @@ interface WorkspaceGeneralWorkbenchSidebarProps {
     onViewRunDetail: GeneralWorkbenchSidebarWorkflowProps["onViewRunDetail"];
     activeRunDetail: GeneralWorkbenchSidebarWorkflowProps["activeRunDetail"];
     activeRunDetailLoading: GeneralWorkbenchSidebarWorkflowProps["activeRunDetailLoading"];
+    workflowControlItems: GeneralWorkbenchSidebarWorkflowProps["workflowControlItems"];
+    workflowControlPendingItemId: GeneralWorkbenchSidebarWorkflowProps["workflowControlPendingItemId"];
+    onTriggerWorkflowControl: GeneralWorkbenchSidebarWorkflowProps["onTriggerWorkflowControl"];
   };
   contextWorkspace: ReturnType<typeof useThemeContextWorkspace>;
   onViewContextDetail?: GeneralWorkbenchSidebarProps["onViewContextDetail"];
@@ -140,6 +146,9 @@ export function WorkspaceGeneralWorkbenchSidebar({
       onViewRunDetail={workflow.onViewRunDetail}
       activeRunDetail={workflow.activeRunDetail}
       activeRunDetailLoading={workflow.activeRunDetailLoading}
+      workflowControlItems={workflow.workflowControlItems}
+      workflowControlPendingItemId={workflow.workflowControlPendingItemId}
+      onTriggerWorkflowControl={workflow.onTriggerWorkflowControl}
       contextSearchQuery={contextWorkspace.contextSearchQuery}
       onContextSearchQueryChange={contextWorkspace.setContextSearchQuery}
       contextSearchMode={contextWorkspace.contextSearchMode}

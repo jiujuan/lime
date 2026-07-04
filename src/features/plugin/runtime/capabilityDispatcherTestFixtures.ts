@@ -10,6 +10,7 @@ import { AgentRuntimeCapabilityHost } from "./agentRuntimeCapabilityHost";
 import { createPluginCapabilityDispatcher } from "./capabilityDispatcher";
 import type { PluginHostBridgeCapabilityRequest } from "./hostBridge";
 import { buildWorkflowRuntimeCapabilityProfile } from "./workflowRuntimeCapabilityProfile";
+import type { PluginWorkflowReadClient } from "./workflowReadProjection";
 
 export const FIXED_NOW = "2026-05-15T00:00:00.000Z";
 
@@ -43,6 +44,7 @@ export function buildDispatcher(
     boundary?: unknown;
     integrations?: unknown;
     operations?: unknown;
+    workflowClient?: PluginWorkflowReadClient;
   } = {},
 ) {
   const profile = buildWorkflowRuntimeCapabilityProfile({

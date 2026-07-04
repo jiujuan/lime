@@ -553,7 +553,7 @@ fn worker_evidence_from_event(event: &AgentEvent) -> Option<Value> {
         ],
     );
 
-    Some(json!({
+    let mut worker_evidence = json!({
         "id": format!("{}:workerEvidence", event.event_id),
         "eventId": event.event_id,
         "turnId": worker_string_field(worker_metadata, &["turnId", "turn_id"])
@@ -610,7 +610,9 @@ fn worker_evidence_from_event(event: &AgentEvent) -> Option<Value> {
         "resultSummary": string_field(&event.payload, &["resultSummary", "result_summary"])
             .or_else(|| worker_string_field(worker_metadata, &["resultSummary", "result_summary"])),
         "updatedAt": event.timestamp,
-    }))
+    });
+    sanitize_worker_evidence_for_article_workspace(&mut worker_evidence);
+    Some(worker_evidence)
 }
 
 fn worker_evidence_from_patch(event: &AgentEvent, patch: &Value) -> Vec<Value> {
@@ -652,8 +654,61 @@ fn worker_evidence_item_from_patch(
     object
         .entry("updatedAt".to_string())
         .or_insert_with(|| json!(event.timestamp));
-    Some(Value::Object(object))
+    let mut worker_evidence = Value::Object(object);
+    sanitize_worker_evidence_for_article_workspace(&mut worker_evidence);
+    Some(worker_evidence)
 }
+
+fn sanitize_worker_evidence_for_article_workspace(worker_evidence: &mut Value) {
+    let Some(object) = worker_evidence.as_object_mut() else {
+        return;
+    };
+    for key in WORKER_EVIDENCE_AUDIT_ONLY_KEYS {
+        object.remove(*key);
+    }
+}
+
+const WORKER_EVIDENCE_AUDIT_ONLY_KEYS: &[&str] = &[
+    "workerEntrypoint",
+    "worker_entrypoint",
+    "inputSummary",
+    "input_summary",
+    "outputSummary",
+    "output_summary",
+    "workflowKey",
+    "workflow_key",
+    "subagents",
+    "sub_agents",
+    "skillRefs",
+    "skill_refs",
+    "cliRefs",
+    "cli_refs",
+    "connectorRefs",
+    "connector_refs",
+    "hookPolicy",
+    "hook_policy",
+    "hookRefs",
+    "hook_refs",
+    "runtimeRegistries",
+    "runtime_registries",
+    "orchestration",
+    "workflowSteps",
+    "workflow_steps",
+    "hookKey",
+    "hook_key",
+    "hookEvent",
+    "hook_event",
+    "hookScope",
+    "hook_scope",
+    "hookEntrypoint",
+    "hook_entrypoint",
+    "hookRequired",
+    "hook_required",
+    "reasonCode",
+    "reason_code",
+    "resultSummary",
+    "result_summary",
+];
 
 fn worker_evidence_dedupe_key(worker_evidence: &Value) -> Option<String> {
     let task_id = string_field(worker_evidence, &["taskId", "task_id"])?;

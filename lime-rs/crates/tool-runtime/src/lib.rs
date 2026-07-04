@@ -4,6 +4,10 @@ use serde_json::Value;
 use std::error::Error;
 use std::fmt;
 
+pub mod mcp_notification;
+pub mod tool_io;
+pub mod tool_result;
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ToolDefinition {
     pub name: String,

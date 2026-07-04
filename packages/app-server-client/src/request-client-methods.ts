@@ -1471,6 +1471,24 @@ const REQUEST_CLIENT_METHODS: readonly RequestClientMethodSpec[] = [
     params: "required",
   },
   {
+    name: "cancelWorkflow",
+    method: protocol.METHOD_WORKFLOW_CANCEL,
+    kind: "request",
+    params: "required",
+  },
+  {
+    name: "retryWorkflow",
+    method: protocol.METHOD_WORKFLOW_RETRY,
+    kind: "request",
+    params: "required",
+  },
+  {
+    name: "respondWorkflow",
+    method: protocol.METHOD_WORKFLOW_RESPOND,
+    kind: "request",
+    params: "required",
+  },
+  {
     name: "readAgentSessionToolInventory",
     method: protocol.METHOD_AGENT_SESSION_TOOL_INVENTORY_READ,
     kind: "request",

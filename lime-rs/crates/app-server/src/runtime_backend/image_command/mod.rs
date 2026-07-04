@@ -156,12 +156,8 @@ pub(super) async fn handle_image_command_turn_if_present(
     {
         Ok(response) => {
             let task_id = response.task_id.clone();
-            emit_task_created(
-                &tool_call_id,
-                response,
-                intent.presentation_usage.as_ref(),
-                sink,
-            )?;
+            let artifact_path = response.artifact_path.clone();
+            emit_task_created(&tool_call_id, response, sink)?;
             tracing::info!(
                 session_id = %intent.scope.session_id,
                 thread_id = %intent.scope.thread_id,
@@ -179,6 +175,12 @@ pub(super) async fn handle_image_command_turn_if_present(
                 sink,
             )?;
             emit_workflow_run_completed(&intent, "task_created", Some(&task_id), sink)?;
+            emit_task_created_turn_completed(
+                &task_id,
+                &artifact_path,
+                intent.presentation_usage.as_ref(),
+                sink,
+            )?;
         }
         Err(error) => {
             emit_create_failed(
@@ -906,7 +908,6 @@ fn emit_tool_started(
 fn emit_task_created(
     tool_call_id: &str,
     response: MediaTaskArtifactResponse,
-    usage: Option<&AgentTokenUsage>,
     sink: &mut dyn RuntimeEventSink,
 ) -> Result<(), RuntimeCoreError> {
     let task_id = response.task_id.clone();
@@ -939,7 +940,15 @@ fn emit_task_created(
                 "metadata": result.metadata,
             },
         }),
-    ))?;
+    ))
+}
+
+fn emit_task_created_turn_completed(
+    task_id: &str,
+    artifact_path: &str,
+    usage: Option<&AgentTokenUsage>,
+    sink: &mut dyn RuntimeEventSink,
+) -> Result<(), RuntimeCoreError> {
     let mut payload = json!({
         "backend": "runtime",
         "source": WORKFLOW_SOURCE,
@@ -1367,8 +1376,15 @@ mod tests {
             ..MediaTaskArtifactResponse::default()
         };
 
-        emit_task_created("tool-image-usage", response, Some(&usage), &mut sink)
+        emit_task_created("tool-image-usage", response.clone(), &mut sink)
             .expect("task created events");
+        emit_task_created_turn_completed(
+            response.task_id.as_str(),
+            response.artifact_path.as_str(),
+            Some(&usage),
+            &mut sink,
+        )
+        .expect("task created turn completed");
 
         let turn_completed = sink
             .events

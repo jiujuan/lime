@@ -31,6 +31,19 @@ function buildContentFactoryUiRuntimeFixture(): AppManifest {
   return {
     ...contentFactoryBaseFixture,
     version: "0.3.0",
+    requires: {
+      sdk: "@lime/app-sdk@^0.11.0",
+      capabilities: [
+        "lime.agent",
+        "lime.artifacts",
+        "lime.evidence",
+        "lime.knowledge",
+        "lime.media",
+        "lime.policy",
+        "lime.storage",
+        "lime.ui",
+      ],
+    },
     runtimePackage: {
       ...contentFactoryBaseFixture.runtimePackage,
       ui: {

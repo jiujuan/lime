@@ -1182,6 +1182,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
           resetStreamingRefs();
           hydratedSessionRef.current = newSessionId;
           restoredWorkspaceRef.current = resolvedWorkspaceId || null;
+          persistSessionRestoreCandidate(newSessionId);
 
           markSessionExecutionStrategySynced(
             newSessionId,
@@ -1195,7 +1196,6 @@ export function useAgentSession(options: UseAgentSessionOptions) {
               nextModel,
             );
             persistSessionAccessMode(newSessionId, accessMode);
-            persistSessionRestoreCandidate(newSessionId);
             saveTransient(nextScopedKeys.messagesKey, []);
             saveTransient(nextScopedKeys.turnsKey, []);
             saveTransient(nextScopedKeys.itemsKey, []);
@@ -2631,8 +2631,6 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     if (sessionId) return;
     if (restoredWorkspaceRef.current === resolvedWorkspaceId) return;
 
-    restoredWorkspaceRef.current = resolvedWorkspaceId;
-
     const scopedCandidate = restoreCandidateSessionIdRef.current;
     const targetSessionId = resolveRestorableTopicSessionId(
       scopedCandidate,
@@ -2656,6 +2654,8 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       );
       return;
     }
+
+    restoredWorkspaceRef.current = resolvedWorkspaceId;
 
     let cancelled = false;
     setIsAutoRestoringSession(true);
@@ -2722,11 +2722,15 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       return;
     }
 
+    const restoreCandidateSessionId =
+      restoreCandidateSessionIdRef.current?.trim() || null;
     const missingSessionAction = resolveMissingSessionFromTopicsAction({
       currentTurnId,
       detachedSessionId: detachedSessionIdRef.current,
       queuedTurnsCount: queuedTurns.length,
-      remoteConfirmed: appServerConfirmedSessionIdsRef.current.has(sessionId),
+      remoteConfirmed:
+        appServerConfirmedSessionIdsRef.current.has(sessionId) ||
+        restoreCandidateSessionId === sessionId,
       sessionId,
       threadItemsCount: threadItems.length,
       threadTurnsCount: threadTurns.length,

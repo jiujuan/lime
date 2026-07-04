@@ -33,6 +33,11 @@ describe("plugin SDK public surface", () => {
         expect.objectContaining({ name: "lime.models" }),
         expect.objectContaining({ name: "lime.skills" }),
         expect.objectContaining({ name: "lime.usage" }),
+        expect.objectContaining({
+          name: "lime.workflow",
+          stage: "planned",
+          profile: {},
+        }),
       ]),
     );
     expect(isLimeCapabilityErrorCode("permission_denied")).toBe(true);

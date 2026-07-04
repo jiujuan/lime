@@ -41,6 +41,7 @@ const fixtureSourceFiles = [
   "scripts/agent-runtime/claw-chat-current-fixture-plan-history.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-right-surface-visual.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-content-factory-article-workspace.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-inline-image-article-workspace.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-content-factory-worker-dogfood.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-content-factory-workspace-patches.mjs",
   "scripts/lib/content-factory-host-generation-fixture.mjs",
@@ -894,10 +895,26 @@ describe("claw chat current Electron fixture smoke guard", () => {
     );
 
     expect(content).toContain("content-factory-article-workspace");
+    expect(content).toContain("content-factory-inline-image-article-workspace");
     expect(content).toContain("runContentFactoryArticleWorkspaceScenario");
+    expect(content).toContain(
+      "runContentFactoryInlineImageArticleWorkspaceScenario",
+    );
     expect(content).toContain("pluginInstalled/save");
     expect(content).toContain("agentSession/turn/start");
     expect(content).toContain("agentSession/runtimeEvents/append");
+    expect(content).toContain("workflow/read");
+    expect(content).toContain("workflow/respond");
+    expect(content).toContain("workflow/cancel");
+    expect(content).toContain("workflow/retry");
+    expect(contentFactoryScenario).toContain("workflow.run.started");
+    expect(contentFactoryScenario).toContain("workflow.step.waiting");
+    expect(contentFactoryScenario).toContain(
+      "summarizeContentFactoryWorkflowRead",
+    );
+    expect(contentFactoryScenario).toContain(
+      "summarizeContentFactoryWorkflowControl",
+    );
     expect(content).toContain("artifact/read");
     expect(content).toContain("content_factory.workspace_patch");
     expect(content).toContain("contentFactoryWorkspacePatch");
@@ -936,10 +953,33 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain(
       "contentFactoryArticleWorkspaceWorkerTurnExecuted",
     );
+    expect(content).toContain(
+      "contentFactoryArticleWorkspaceWorkerAuditFactsHidden",
+    );
+    expect(content).toContain(
+      "contentFactoryArticleWorkspaceWorkflowRead",
+    );
+    expect(content).toContain(
+      "contentFactoryArticleWorkspaceWorkflowReadModelProjected",
+    );
+    expect(content).toContain(
+      "contentFactoryArticleWorkspaceWorkflowRespondProjected",
+    );
+    expect(content).toContain(
+      "contentFactoryArticleWorkspaceWorkflowCancelProjected",
+    );
+    expect(content).toContain(
+      "contentFactoryArticleWorkspaceWorkflowRetryProjected",
+    );
     expect(content).toContain("content.article.generate");
     expect(content).toContain(
       "options.scenario === CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO",
     );
+    expect(content).toContain("CONTENT_FACTORY_INLINE_IMAGE_SLOT_ID");
+    expect(content).toContain("contentFactoryInlineImageTaskEventEmitted");
+    expect(content).toContain("contentFactoryInlineImageArticleRestored");
+    expect(content).toContain("mediaTaskArtifact/image/create");
+    expect(content).toContain("mediaTaskArtifact/image/complete");
     expect(content).toContain(
       "readModel.workerArticleObject?.hostManagedGenerationStatus ===",
     );

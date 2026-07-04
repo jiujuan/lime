@@ -435,6 +435,22 @@ describe("commandPolicy", () => {
         request: {
           lines: [
             JSON.stringify({
+              id: "workflow-cancel",
+              method: "workflow/cancel",
+              params: {
+                sessionId: "session-1",
+                workflowRunId: "run-1",
+              },
+            }),
+          ],
+        },
+      }),
+    ).toBe("app-server-read");
+    expect(
+      resolveDevBridgeCommandTimeoutProfile("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
               id: "workflow-read",
               method: "workflow/read",
               params: { sessionId: "session-1" },

@@ -19,3 +19,103 @@ pub static MODEL_CONTEXT_WINDOWS: LazyLock<HashMap<&'static str, usize>> = LazyL
 
     windows
 });
+
+const MODEL_CONTEXT_WINDOW_PATTERNS: &[(&str, usize)] = &[
+    ("gpt-5.2-codex", 400_000),
+    ("gpt-5.2", 400_000),
+    ("gpt-5.1-codex-max", 256_000),
+    ("gpt-5.1-codex-mini", 256_000),
+    ("gpt-4-turbo", 128_000),
+    ("gpt-4.1", 1_000_000),
+    ("gpt-4-1", 1_000_000),
+    ("gpt-4o", 128_000),
+    ("gpt-4", 8_192),
+    ("o4-mini", 200_000),
+    ("o3-mini", 200_000),
+    ("o3", 200_000),
+    ("claude", 200_000),
+    ("gemini-1.5-flash", 1_000_000),
+    ("gemini-1", 128_000),
+    ("gemini-2", 1_000_000),
+    ("gemma-3-27b", 128_000),
+    ("gemma-3-12b", 128_000),
+    ("gemma-3-4b", 128_000),
+    ("gemma-3-1b", 32_000),
+    ("gemma3-27b", 128_000),
+    ("gemma3-12b", 128_000),
+    ("gemma3-4b", 128_000),
+    ("gemma3-1b", 32_000),
+    ("gemma-2-27b", 8_192),
+    ("gemma-2-9b", 8_192),
+    ("gemma-2-2b", 8_192),
+    ("gemma2-", 8_192),
+    ("gemma-7b", 8_192),
+    ("gemma-2b", 8_192),
+    ("gemma1", 8_192),
+    ("gemma", 8_192),
+    ("llama-2-1b", 32_000),
+    ("llama", 128_000),
+    ("qwen3-coder", 262_144),
+    ("qwen2-7b", 128_000),
+    ("qwen2-14b", 128_000),
+    ("qwen2-32b", 131_072),
+    ("qwen2-70b", 262_144),
+    ("qwen2", 128_000),
+    ("qwen3-32b", 131_072),
+    ("grok-4", 256_000),
+    ("grok-code-fast-1", 256_000),
+    ("grok", 131_072),
+    ("kimi-k2", 131_072),
+];
+
+pub fn resolve_model_context_window(model_name: &str) -> Option<usize> {
+    let model_lower = model_name.trim().to_ascii_lowercase();
+    if model_lower.is_empty() {
+        return None;
+    }
+
+    MODEL_CONTEXT_WINDOWS
+        .get(model_lower.as_str())
+        .copied()
+        .or_else(|| {
+            MODEL_CONTEXT_WINDOW_PATTERNS
+                .iter()
+                .find_map(|(pattern, context_window)| {
+                    model_lower.contains(pattern).then_some(*context_window)
+                })
+        })
+}
+
+pub fn resolve_model_context_window_or(model_name: Option<&str>, fallback: usize) -> usize {
+    model_name
+        .and_then(resolve_model_context_window)
+        .filter(|limit| *limit > 0)
+        .unwrap_or(fallback)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_model_context_window_should_use_ordered_patterns() {
+        assert_eq!(
+            resolve_model_context_window("openai/gpt-4.1-mini"),
+            Some(1_000_000)
+        );
+        assert_eq!(resolve_model_context_window("gpt-4"), Some(8_192));
+        assert_eq!(
+            resolve_model_context_window("google/gemma-3-27b-it"),
+            Some(128_000)
+        );
+    }
+
+    #[test]
+    fn resolve_model_context_window_or_should_fallback_for_provider_hint() {
+        assert_eq!(
+            resolve_model_context_window_or(Some("openai"), 170_000),
+            170_000
+        );
+        assert_eq!(resolve_model_context_window_or(None, 170_000), 170_000);
+    }
+}

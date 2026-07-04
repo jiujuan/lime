@@ -3936,11 +3936,59 @@ export interface WindowsStartupDiagnosticsResponse {
   webview2Version?: null | string;
 }
 
+export interface WorkflowCancelParams {
+  reason?: null | string;
+  reasonCode?: null | string;
+  sessionId: string;
+  stepId?: null | string;
+  workflowRunId: string;
+}
+
+export interface WorkflowCancelResponse {
+  sessionId: string;
+  workflow: unknown;
+  workflowRuns?: unknown[];
+  workflowSteps?: unknown[];
+}
+
 export interface WorkflowReadParams {
   sessionId: string;
 }
 
 export interface WorkflowReadResponse {
+  sessionId: string;
+  workflow: unknown;
+  workflowRuns?: unknown[];
+  workflowSteps?: unknown[];
+}
+
+export interface WorkflowRespondParams {
+  actionType?: AgentSessionActionType | null;
+  confirmed?: boolean | null;
+  requestId?: null | string;
+  response?: unknown;
+  sessionId: string;
+  stepId?: null | string;
+  workflowRunId: string;
+}
+
+export interface WorkflowRespondResponse {
+  sessionId: string;
+  workflow: unknown;
+  workflowRuns?: unknown[];
+  workflowSteps?: unknown[];
+}
+
+export interface WorkflowRetryParams {
+  reason?: null | string;
+  reasonCode?: null | string;
+  sessionId: string;
+  stepId?: null | string;
+  workflowRunId: string;
+}
+
+export interface WorkflowRetryResponse {
+  rescheduledTurnId?: null | string;
   sessionId: string;
   workflow: unknown;
   workflowRuns?: unknown[];

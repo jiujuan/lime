@@ -28,6 +28,7 @@ use app_server_protocol::AgentSessionReplayedActionRequired;
 use app_server_protocol::AgentTurn;
 use app_server_protocol::AgentTurnStatus;
 use serde_json::json;
+use std::borrow::Cow;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub(super) struct ReadDetailOptions {
@@ -51,6 +52,7 @@ pub(super) fn runtime_session_read_detail_with_options(
     options: ReadDetailOptions,
     workflow_audit_events: &[AgentEvent],
 ) -> serde_json::Value {
+    let usage_projection_events = runtime_events_with_workflow_audit(stored, workflow_audit_events);
     let article_workspace = article_workspace_projection::article_workspace_from_events(
         &stored.session,
         &stored.events,
@@ -70,11 +72,11 @@ pub(super) fn runtime_session_read_detail_with_options(
             article_workspace,
             &article_workspace_actions,
         );
-    let thread_read = runtime_thread_read_from_stored_session(
+    let thread_read = runtime_thread_read_from_stored_session_with_usage_events(
         stored,
         article_workspace.clone(),
         article_workspace_actions.clone(),
-        workflow_audit_events,
+        &usage_projection_events,
     );
     let queued_turns = queued_turn_snapshots(stored);
     let all_messages = runtime_session_messages(stored);
@@ -92,7 +94,7 @@ pub(super) fn runtime_session_read_detail_with_options(
     let oldest_message_id = messages.first().and_then(message_numeric_id);
     let history_limit = options.history_limit.unwrap_or(messages_count);
     let history_truncated = loaded_count < messages_count;
-    let turns = read_model_turn_usage::turns_with_usage(&stored.turns, &stored.events);
+    let turns = read_model_turn_usage::turns_with_usage(&stored.turns, &usage_projection_events);
     let mut detail = json!({
         "id": stored.session.session_id,
         "session_id": stored.session.session_id,
@@ -492,16 +494,14 @@ fn latest_turn_error_message(stored: &StoredSession, turn_id: Option<&str>) -> O
         .find_map(runtime_error_message_from_event)
 }
 
-fn runtime_thread_read_from_stored_session(
+fn runtime_thread_read_from_stored_session_with_usage_events(
     stored: &StoredSession,
     article_workspace: Option<serde_json::Value>,
     article_workspace_actions: Vec<serde_json::Value>,
-    workflow_audit_events: &[AgentEvent],
+    usage_projection_events: &[AgentEvent],
 ) -> serde_json::Value {
     let coding_activity = coding_activity_projection::coding_activity_from_events(stored);
     let permission_state = permission_state_projection::permission_state_from_events(stored);
-    let workflow_read_model =
-        workflow_read_model_from_stored_session(stored, workflow_audit_events);
     let model_routing = latest_model_routing_from_events(&stored.events);
     let service_model_slot = model_routing
         .as_ref()
@@ -533,9 +533,9 @@ fn runtime_thread_read_from_stored_session(
         .and_then(|summary| summary.get("patch_count"))
         .and_then(serde_json::Value::as_u64)
         .unwrap_or(0);
-    let turns = read_model_turn_usage::turns_with_usage(&stored.turns, &stored.events);
+    let turns = read_model_turn_usage::turns_with_usage(&stored.turns, usage_projection_events);
     let latest_turn_usage =
-        read_model_turn_usage::latest_usage_for_turn(&stored.events, latest_turn_id);
+        read_model_turn_usage::latest_usage_for_turn(usage_projection_events, latest_turn_id);
     let mut thread_read = json!({
         "session_id": stored.session.session_id,
         "thread_id": stored.session.thread_id,
@@ -577,7 +577,6 @@ fn runtime_thread_read_from_stored_session(
             "serviceModelSlot": service_model_slot,
         },
     });
-    insert_workflow_read_model_into_thread_read(&mut thread_read, &workflow_read_model);
     if let Some(article_workspace) = article_workspace {
         if let Some(thread_read_object) = thread_read.as_object_mut() {
             thread_read_object.insert("article_workspace".to_string(), article_workspace.clone());
@@ -599,6 +598,19 @@ fn runtime_thread_read_from_stored_session(
     thread_read
 }
 
+fn runtime_events_with_workflow_audit<'a>(
+    stored: &'a StoredSession,
+    workflow_audit_events: &'a [AgentEvent],
+) -> Cow<'a, [AgentEvent]> {
+    if workflow_audit_events.is_empty() {
+        return Cow::Borrowed(&stored.events);
+    }
+    let mut events = Vec::with_capacity(stored.events.len() + workflow_audit_events.len());
+    events.extend(stored.events.iter().cloned());
+    events.extend(workflow_audit_events.iter().cloned());
+    Cow::Owned(events)
+}
+
 pub(in crate::runtime) fn workflow_read_model_from_stored_session(
     stored: &StoredSession,
     workflow_audit_events: &[AgentEvent],
@@ -610,30 +622,6 @@ pub(in crate::runtime) fn workflow_read_model_from_stored_session(
     events.extend(stored.events.iter().cloned());
     events.extend(workflow_audit_events.iter().cloned());
     workflow_read_model_from_events(&events)
-}
-
-pub(in crate::runtime) fn insert_workflow_read_model_into_thread_read(
-    thread_read: &mut serde_json::Value,
-    workflow_read_model: &WorkflowReadModel,
-) {
-    if workflow_read_model.workflow_runs.is_empty() && workflow_read_model.workflow_steps.is_empty()
-    {
-        return;
-    }
-    let Some(thread_read_object) = thread_read.as_object_mut() else {
-        return;
-    };
-    if let Ok(workflow_value) = serde_json::to_value(workflow_read_model) {
-        thread_read_object.insert("workflow".to_string(), workflow_value);
-    }
-    if let Ok(workflow_runs) = serde_json::to_value(&workflow_read_model.workflow_runs) {
-        thread_read_object.insert("workflow_runs".to_string(), workflow_runs.clone());
-        thread_read_object.insert("workflowRuns".to_string(), workflow_runs);
-    }
-    if let Ok(workflow_steps) = serde_json::to_value(&workflow_read_model.workflow_steps) {
-        thread_read_object.insert("workflow_steps".to_string(), workflow_steps.clone());
-        thread_read_object.insert("workflowSteps".to_string(), workflow_steps);
-    }
 }
 
 fn queued_turn_snapshots(stored: &StoredSession) -> Vec<serde_json::Value> {

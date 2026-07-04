@@ -162,6 +162,80 @@ describe("useAsterAgentChat 首页新会话", () => {
     }
   });
 
+  it("刷新后话题列表暂未包含恢复候选时应先远程校验而不是清空会话", async () => {
+    const workspaceId = "ws-restore-candidate-list-lag";
+    const sessionId = "session-restore-candidate-list-lag";
+    sessionStorage.setItem(
+      `aster_curr_sessionId_${workspaceId}`,
+      JSON.stringify(sessionId),
+    );
+    localStorage.setItem(
+      `aster_last_sessionId_${workspaceId}`,
+      JSON.stringify(sessionId),
+    );
+    mockListAgentRuntimeSessions.mockResolvedValue([
+      {
+        id: "session-existing-other",
+        name: "旧会话",
+        created_at: 1700000000,
+        updated_at: 1700000001,
+        messages_count: 1,
+        workspace_id: workspaceId,
+      },
+    ]);
+    mockGetAgentRuntimeSession.mockResolvedValue({
+      id: sessionId,
+      name: "刷新恢复中的会话",
+      created_at: 1700000100,
+      updated_at: 1700000101,
+      workspace_id: workspaceId,
+      messages: [
+        {
+          role: "user",
+          timestamp: 1700000100,
+          content: [{ type: "text", text: "@配图 画一张深圳夏天的图" }],
+        },
+        {
+          role: "assistant",
+          timestamp: 1700000101,
+          content: [{ type: "text", text: "先确认画面和图片参数。" }],
+        },
+      ],
+      turns: [],
+      items: [],
+      queued_turns: [],
+    });
+
+    const harness = mountHook(workspaceId);
+
+    try {
+      await flushEffects();
+      await flushEffects();
+      await flushEffects();
+
+      expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith(
+        sessionId,
+        expect.objectContaining({ source: "missingSessionVerify" }),
+      );
+      expect(harness.getValue().sessionId).toBe(sessionId);
+      expect(harness.getValue().messages[0]).toMatchObject({
+        role: "user",
+        content: "@配图 画一张深圳夏天的图",
+      });
+      expect(
+        harness.getValue().topics.some((topic) => topic.id === sessionId),
+      ).toBe(true);
+      expect(
+        sessionStorage.getItem(`aster_curr_sessionId_${workspaceId}`),
+      ).toBe(JSON.stringify(sessionId));
+      expect(localStorage.getItem(`aster_last_sessionId_${workspaceId}`)).toBe(
+        JSON.stringify(sessionId),
+      );
+    } finally {
+      harness.unmount();
+    }
+  });
+
   it("加载话题时应后台预热 Agent，但不阻塞话题列表返回", async () => {
     const workspaceId = "ws-topic-lazy-init";
     const sessionId = "session-topic-lazy-init";

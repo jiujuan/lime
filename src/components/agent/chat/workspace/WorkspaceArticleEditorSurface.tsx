@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 import type { Artifact } from "@/lib/artifact/types";
 import { formatDate } from "@/i18n/format";
 import { ArticleTiptapCanvas } from "./ArticleTiptapCanvas";
+import { WorkspaceArticleWorkflowDetailPanel } from "./WorkspaceArticleWorkflowDetailPanel";
 import "./WorkspaceArticleEditorSurface.css";
 import type {
   WorkspaceArticleObject,
@@ -39,6 +40,7 @@ interface WorkspaceArticleEditorSurfaceProps {
   preview: WorkspaceArticleWorkspaceStructuredPreview;
   previewArtifact?: Artifact | null;
   articleWorkspace: WorkspaceArticleWorkspace;
+  workflowReadModelLoading?: boolean;
   selectedObjectKey: string;
   updatedAt?: string | null;
 }
@@ -62,6 +64,7 @@ export function WorkspaceArticleEditorSurface({
   preview,
   previewArtifact,
   articleWorkspace,
+  workflowReadModelLoading = false,
   selectedObjectKey,
   updatedAt,
 }: WorkspaceArticleEditorSurfaceProps) {
@@ -274,6 +277,12 @@ export function WorkspaceArticleEditorSurface({
           }`}
           data-testid="workspace-article-editor-side-panel"
         >
+          <WorkspaceArticleWorkflowDetailPanel
+            loading={workflowReadModelLoading}
+            workflowRuns={articleWorkspace.workflowRuns ?? []}
+            translate={dynamicT}
+          />
+
           {actions.length > 0 ? (
             <ArticleEditorSection
               icon={<PenLine className="h-4 w-4" />}

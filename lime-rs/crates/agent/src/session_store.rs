@@ -23,7 +23,6 @@ use lime_core::workspace::WorkspaceManager;
 use std::time::Instant;
 use uuid::Uuid;
 
-use crate::aster_session_store::LimeSessionStore;
 use crate::execution_strategy_compat::normalize_execution_strategy_to_react;
 #[cfg(test)]
 use crate::protocol::AgentMessageContent as RuntimeAgentMessageContent;
@@ -40,6 +39,8 @@ mod session_store_runtime_detail;
 mod session_store_runtime_projection;
 #[path = "session_store_subagent_context.rs"]
 mod session_store_subagent_context;
+#[path = "session_store_todo_aster_adapter.rs"]
+mod session_store_todo_aster_adapter;
 #[path = "session_store_todo_projection.rs"]
 mod session_store_todo_projection;
 #[path = "session_store_types.rs"]
@@ -66,7 +67,7 @@ use self::session_store_subagent_context::{
 pub use self::session_store_subagent_context::{
     ChildSubagentRuntimeStatus, ChildSubagentSession, SubagentParentContext,
 };
-use self::session_store_todo_projection::load_session_todo_items_from_conn;
+use self::session_store_todo_aster_adapter::load_session_todo_items_from_conn;
 use self::session_store_types::{
     normalize_optional_nonempty_body, normalize_optional_text, CreateSessionRecordInput,
 };
@@ -594,9 +595,8 @@ pub fn update_session_archived_state_sync(
 
 /// 删除会话
 pub async fn delete_session(db: &DbConnection, session_id: &str) -> Result<(), String> {
-    aster::session::SessionStore::delete_session(&LimeSessionStore::new(db.clone()), session_id)
-        .await
-        .map_err(|e| format!("删除会话失败: {e}"))
+    let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
+    agent_session_repository::delete_session(&conn, session_id)
 }
 
 #[cfg(test)]

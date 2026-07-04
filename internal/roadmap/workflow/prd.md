@@ -13,7 +13,7 @@ Lime 已经在多个位置出现 Workflow：
 3. 图片命令复用 workflow audit event 表达生成流程。
 4. Skill catalog 暴露 `execution_mode=workflow` 和 `workflow_steps`。
 5. General Workbench / Article Workspace 能读取某些 `workflow_runs / workflow_steps` 并展示运行过程。
-6. 前端仍有旧 `useWorkflow` Hook 与 `WorkflowRuntimeHost` controlled DSL。
+6. 前端历史上存在旧 `useWorkflow` Hook 与 `WorkflowRuntimeHost` controlled DSL；P6 已将这两条旧实现物理删除，并通过治理目录册防回流。
 
 问题不在于能力缺失，而在于这些能力没有同构合同：
 
@@ -142,5 +142,5 @@ Lime 已经在多个位置出现 Workflow：
 3. GUI 运行详情不从 message 文本推断 workflow 状态。
 4. Evidence summary 能列出 workflow run ids。
 5. Plugin manifest workflow 与 App Server Workflow Definition 有一组 fixture 映射测试。
-6. 旧 `useWorkflow` 不再作为新入口引用。
-7. 前端 `WorkflowRuntimeHost` 不出现在生产 AI workflow 调用链。
+6. 旧 `useWorkflow` 不再作为新入口引用，且旧文件保持删除状态。
+7. 前端 `WorkflowRuntimeHost` 不出现在生产 AI workflow 调用链，且旧 DSL runtime 文件保持删除状态。

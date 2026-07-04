@@ -11,6 +11,10 @@ import { useWorkspaceGeneralWorkbenchSidebarRuntime } from "./useWorkspaceGenera
 const mockExecutionRunGet = vi.hoisted(() => vi.fn());
 const mockExecutionRunListGeneralWorkbenchHistory = vi.hoisted(() => vi.fn());
 const mockSkillGetDetail = vi.hoisted(() => vi.fn());
+const mockReadWorkflow = vi.hoisted(() => vi.fn());
+const mockCancelWorkflow = vi.hoisted(() => vi.fn());
+const mockRetryWorkflow = vi.hoisted(() => vi.fn());
+const mockRespondWorkflow = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/api/executionRun", () => ({
   executionRunGet: mockExecutionRunGet,
@@ -22,6 +26,15 @@ vi.mock("@/lib/api/skill-execution", () => ({
   skillExecutionApi: {
     getSkillDetail: mockSkillGetDetail,
   },
+}));
+
+vi.mock("@/lib/api/appServer", () => ({
+  createAppServerClient: () => ({
+    readWorkflow: mockReadWorkflow,
+    cancelWorkflow: mockCancelWorkflow,
+    retryWorkflow: mockRetryWorkflow,
+    respondWorkflow: mockRespondWorkflow,
+  }),
 }));
 
 interface HookProps {
@@ -116,6 +129,44 @@ describe("useWorkspaceGeneralWorkbenchSidebarRuntime", () => {
     });
     mockExecutionRunGet.mockResolvedValue(null);
     mockSkillGetDetail.mockResolvedValue(null);
+    mockReadWorkflow.mockResolvedValue({
+      result: {
+        sessionId: "session-general-1",
+        workflow: {
+          workflowRuns: [],
+          workflowSteps: [],
+        },
+        workflowRuns: [],
+        workflowSteps: [],
+      },
+    });
+    mockCancelWorkflow.mockResolvedValue({
+      result: {
+        sessionId: "session-general-1",
+        workflow: {
+          workflowRuns: [],
+          workflowSteps: [],
+        },
+      },
+    });
+    mockRetryWorkflow.mockResolvedValue({
+      result: {
+        sessionId: "session-general-1",
+        workflow: {
+          workflowRuns: [],
+          workflowSteps: [],
+        },
+      },
+    });
+    mockRespondWorkflow.mockResolvedValue({
+      result: {
+        sessionId: "session-general-1",
+        workflow: {
+          workflowRuns: [],
+          workflowSteps: [],
+        },
+      },
+    });
   });
 
   afterEach(() => {
@@ -144,6 +195,7 @@ describe("useWorkspaceGeneralWorkbenchSidebarRuntime", () => {
 
       expect(mockExecutionRunListGeneralWorkbenchHistory).not.toHaveBeenCalled();
       expect(mockSkillGetDetail).not.toHaveBeenCalled();
+      expect(mockReadWorkflow).not.toHaveBeenCalled();
       expect(harness.getValue().generalWorkbenchHistoryLoading).toBe(false);
       expect(harness.getValue().generalWorkbenchHistoryHasMore).toBe(false);
     } finally {
@@ -198,6 +250,306 @@ describe("useWorkspaceGeneralWorkbenchSidebarRuntime", () => {
           }),
         ]),
       );
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("应优先用 Workflow Read Model 驱动步骤、活动日志和运行详情", async () => {
+    mockReadWorkflow.mockResolvedValue({
+      result: {
+        sessionId: "session-general-1",
+        workflow: {
+          workflowRuns: [
+            {
+              workflowRunId: "workflow-run-1",
+              workflowKey: "content_article_workflow",
+              workflowTitle: "写文章工作流",
+              status: "failed",
+              sessionId: "session-general-1",
+              startedAt: "2026-03-24T14:00:00.000Z",
+              updatedAt: "2026-03-24T14:01:00.000Z",
+              failedAt: "2026-03-24T14:01:00.000Z",
+              artifactRefs: ["content-posts/demo.md"],
+              failure: {
+                reasonCode: "worker_output",
+              },
+              retry: {
+                sourceTurnId: "turn-source",
+                rescheduledTurnId: "turn-retry",
+              },
+              actions: [
+                {
+                  workflowRunId: "workflow-run-1",
+                  actionType: "ask_user",
+                  stepId: "approval",
+                  requestId: "request-1",
+                },
+              ],
+              steps: [
+                {
+                  workflowRunId: "workflow-run-1",
+                  id: "draft",
+                  title: "起草正文",
+                  index: 0,
+                  status: "failed",
+                  artifactRefs: ["content-posts/demo.md"],
+                  failure: {
+                    message: "正文为空",
+                  },
+                },
+              ],
+            },
+          ],
+          workflowSteps: [],
+        },
+        workflowRuns: [],
+        workflowSteps: [],
+      },
+    });
+
+    const harness = mountHook({
+      sessionId: "session-general-1",
+    });
+
+    try {
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(harness.getValue().generalWorkbenchWorkflowSteps).toEqual([
+        {
+          id: "workflow-run-1-draft",
+          title: "起草正文",
+          status: "error",
+        },
+      ]);
+      expect(harness.getValue().generalWorkbenchActivityLogs).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            runId: "workflow-run-1",
+            source: "workflow",
+            artifactPaths: ["content-posts/demo.md"],
+          }),
+        ]),
+      );
+
+      act(() => {
+        harness
+          .getValue()
+          .handleViewGeneralWorkbenchRunDetail("workflow-run-1");
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(mockExecutionRunGet).not.toHaveBeenCalled();
+      expect(harness.getValue().selectedGeneralWorkbenchRunDetail).toEqual(
+        expect.objectContaining({
+          id: "workflow-run-1",
+          status: "error",
+          session_id: "session-general-1",
+          metadata: expect.stringContaining("workflow_read_model"),
+        }),
+      );
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("应通过 App Server workflow/retry 执行失败步骤控制并刷新 read model", async () => {
+    mockReadWorkflow.mockResolvedValue({
+      result: {
+        sessionId: "session-general-1",
+        workflow: {
+          workflowRuns: [
+            {
+              workflowRunId: "workflow-run-1",
+              workflowKey: "content_article_workflow",
+              workflowTitle: "写文章工作流",
+              status: "failed",
+              sessionId: "session-general-1",
+              steps: [
+                {
+                  workflowRunId: "workflow-run-1",
+                  stepId: "draft",
+                  title: "起草正文",
+                  status: "failed",
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+    mockRetryWorkflow.mockResolvedValue({
+      result: {
+        sessionId: "session-general-1",
+        workflow: {
+          workflowRuns: [
+            {
+              workflowRunId: "workflow-run-1",
+              workflowKey: "content_article_workflow",
+              workflowTitle: "写文章工作流",
+              status: "retrying",
+              sessionId: "session-general-1",
+              steps: [
+                {
+                  workflowRunId: "workflow-run-1",
+                  stepId: "draft",
+                  title: "起草正文",
+                  status: "retrying",
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    const harness = mountHook({
+      sessionId: "session-general-1",
+    });
+
+    try {
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(harness.getValue().generalWorkbenchWorkflowControlItems).toEqual([
+        expect.objectContaining({
+          kind: "retry",
+          workflowRunId: "workflow-run-1",
+          stepId: "draft",
+        }),
+      ]);
+
+      await act(async () => {
+        await harness
+          .getValue()
+          .handleTriggerGeneralWorkbenchWorkflowControl(
+            harness.getValue().generalWorkbenchWorkflowControlItems[0]!,
+          );
+      });
+
+      expect(mockRetryWorkflow).toHaveBeenCalledWith({
+        sessionId: "session-general-1",
+        workflowRunId: "workflow-run-1",
+        stepId: "draft",
+        reasonCode: "user_retry_from_general_workbench",
+        reason: "Retried from General Workbench workflow controls.",
+      });
+      expect(harness.getValue().generalWorkbenchWorkflowSteps).toEqual([
+        {
+          id: "workflow-run-1-draft",
+          title: "起草正文",
+          status: "active",
+        },
+      ]);
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("应通过 App Server workflow/respond 执行等待动作控制", async () => {
+    mockReadWorkflow.mockResolvedValue({
+      result: {
+        sessionId: "session-general-1",
+        workflow: {
+          workflowRuns: [
+            {
+              workflowRunId: "workflow-run-1",
+              workflowKey: "content_article_workflow",
+              workflowTitle: "写文章工作流",
+              status: "waiting",
+              sessionId: "session-general-1",
+              actions: [
+                {
+                  workflowRunId: "workflow-run-1",
+                  actionType: "respond",
+                  stepId: "review",
+                  requestId: "request-1",
+                  agentActionType: "ask_user",
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+    mockRespondWorkflow.mockResolvedValue({
+      result: {
+        sessionId: "session-general-1",
+        workflow: {
+          workflowRuns: [
+            {
+              workflowRunId: "workflow-run-1",
+              workflowKey: "content_article_workflow",
+              workflowTitle: "写文章工作流",
+              status: "running",
+              sessionId: "session-general-1",
+              steps: [
+                {
+                  workflowRunId: "workflow-run-1",
+                  stepId: "review",
+                  title: "人工确认",
+                  status: "running",
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    const harness = mountHook({
+      sessionId: "session-general-1",
+    });
+
+    try {
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      const respondItem =
+        harness.getValue().generalWorkbenchWorkflowControlItems[0];
+      expect(respondItem).toEqual(
+        expect.objectContaining({
+          kind: "respond",
+          workflowRunId: "workflow-run-1",
+          stepId: "review",
+          requestId: "request-1",
+        }),
+      );
+
+      await act(async () => {
+        await harness
+          .getValue()
+          .handleTriggerGeneralWorkbenchWorkflowControl(respondItem!);
+      });
+
+      expect(mockRespondWorkflow).toHaveBeenCalledWith({
+        sessionId: "session-general-1",
+        workflowRunId: "workflow-run-1",
+        stepId: "review",
+        requestId: "request-1",
+        actionType: "ask_user",
+        confirmed: true,
+        response: {
+          decision: "confirmed",
+          source: "general_workbench_sidebar",
+        },
+      });
+      expect(harness.getValue().generalWorkbenchWorkflowControlItems).toEqual([
+        expect.objectContaining({
+          kind: "cancel",
+          workflowRunId: "workflow-run-1",
+          stepId: "review",
+        }),
+      ]);
     } finally {
       harness.unmount();
     }

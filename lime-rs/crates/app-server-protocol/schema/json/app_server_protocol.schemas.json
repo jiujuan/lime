@@ -29831,6 +29831,66 @@
       "title": "WindowsStartupDiagnosticsResponse",
       "type": "object"
     },
+    "WorkflowCancelParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "reason": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "reasonCode": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "stepId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "workflowRunId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId",
+        "workflowRunId"
+      ],
+      "title": "WorkflowCancelParams",
+      "type": "object"
+    },
+    "WorkflowCancelResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        },
+        "workflow": true,
+        "workflowRuns": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        },
+        "workflowSteps": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        }
+      },
+      "required": [
+        "sessionId",
+        "workflow"
+      ],
+      "title": "WorkflowCancelResponse",
+      "type": "object"
+    },
     "WorkflowReadParams": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
@@ -29867,6 +29927,153 @@
         "workflow"
       ],
       "title": "WorkflowReadResponse",
+      "type": "object"
+    },
+    "WorkflowRespondParams": {
+      "$defs": {
+        "AgentSessionActionType": {
+          "enum": [
+            "ask_user",
+            "elicitation",
+            "tool_confirmation"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "actionType": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentSessionActionType"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "confirmed": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "requestId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "response": true,
+        "sessionId": {
+          "type": "string"
+        },
+        "stepId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "workflowRunId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId",
+        "workflowRunId"
+      ],
+      "title": "WorkflowRespondParams",
+      "type": "object"
+    },
+    "WorkflowRespondResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "sessionId": {
+          "type": "string"
+        },
+        "workflow": true,
+        "workflowRuns": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        },
+        "workflowSteps": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        }
+      },
+      "required": [
+        "sessionId",
+        "workflow"
+      ],
+      "title": "WorkflowRespondResponse",
+      "type": "object"
+    },
+    "WorkflowRetryParams": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "reason": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "reasonCode": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "stepId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "workflowRunId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sessionId",
+        "workflowRunId"
+      ],
+      "title": "WorkflowRetryParams",
+      "type": "object"
+    },
+    "WorkflowRetryResponse": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "rescheduledTurnId": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "workflow": true,
+        "workflowRuns": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        },
+        "workflowSteps": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        }
+      },
+      "required": [
+        "sessionId",
+        "workflow"
+      ],
+      "title": "WorkflowRetryResponse",
       "type": "object"
     },
     "WorkspaceDeleteParams": {
@@ -31162,7 +31369,10 @@
               "wechatChannel/login/wait",
               "wechatChannel/probe",
               "wechatChannel/runtimeModel/set",
+              "workflow/cancel",
               "workflow/read",
+              "workflow/respond",
+              "workflow/retry",
               "workspace/byPath/read",
               "workspace/default/ensure",
               "workspace/default/read",

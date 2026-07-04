@@ -1,10 +1,11 @@
 import { Activity, AlertTriangle, Clock3, PauseCircle } from "lucide-react";
-import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AutomationHealthResult, AutomationStatus } from "@/lib/api/automation";
 import { formatDate } from "@/i18n/format";
+
+type Translate = (key: string, options?: Record<string, unknown>) => string;
 
 function formatTime(value?: string | null, locale?: string): string {
   if (!value) {
@@ -24,7 +25,7 @@ function formatTime(value?: string | null, locale?: string): string {
   );
 }
 
-function statusLabel(t: TFunction<"settings">, status?: string | null): string {
+function statusLabel(t: Translate, status?: string | null): string {
   switch (status) {
     case "queued":
       return t("settings.automation.health.status.queued");
@@ -93,6 +94,7 @@ export function AutomationHealthPanel({
   status: AutomationStatus | null;
 }) {
   const { t, i18n } = useTranslation("settings");
+  const translate = t as Translate;
   const locale = i18n.resolvedLanguage || i18n.language;
   const riskyJobs = health?.risky_jobs.slice(0, 6) ?? [];
 
@@ -102,20 +104,20 @@ export function AutomationHealthPanel({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <CardTitle className="text-xl text-slate-900">
-              {t("settings.automation.health.title")}
+              {translate("settings.automation.health.title")}
             </CardTitle>
             <p className="mt-1 text-sm leading-6 text-slate-500">
-              {t("settings.automation.health.description")}
+              {translate("settings.automation.health.description")}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Badge variant={status?.running ? "default" : "outline"}>
               {status?.running
-                ? t("settings.automation.health.polling.running")
-                : t("settings.automation.health.polling.stopped")}
+                ? translate("settings.automation.health.polling.running")
+                : translate("settings.automation.health.polling.stopped")}
             </Badge>
             <Badge variant="outline">
-              {t("settings.automation.health.totalExecutions", {
+              {translate("settings.automation.health.totalExecutions", {
                 count: status?.total_executions ?? 0,
               })}
             </Badge>
@@ -126,39 +128,39 @@ export function AutomationHealthPanel({
         <div className="flex flex-wrap gap-2">
           <SummaryPill
             icon={Activity}
-            label={t("settings.automation.health.summary.enabled")}
+            label={translate("settings.automation.health.summary.enabled")}
             value={health?.enabled_jobs ?? 0}
           />
           <SummaryPill
             icon={Clock3}
-            label={t("settings.automation.health.summary.pending")}
+            label={translate("settings.automation.health.summary.pending")}
             value={health?.pending_jobs ?? 0}
           />
           <SummaryPill
             icon={AlertTriangle}
-            label={t("settings.automation.health.summary.failed24h")}
+            label={translate("settings.automation.health.summary.failed24h")}
             value={health?.failed_last_24h ?? 0}
           />
           <SummaryPill
             icon={PauseCircle}
-            label={t("settings.automation.health.summary.cooldown")}
+            label={translate("settings.automation.health.summary.cooldown")}
             value={health?.cooldown_jobs ?? 0}
           />
         </div>
 
         <div className="flex flex-wrap gap-x-4 gap-y-2 rounded-[20px] border border-slate-200/80 bg-slate-50/70 px-4 py-3 text-sm text-slate-500">
           <span>
-            {t("settings.automation.health.lastPolled", {
+            {translate("settings.automation.health.lastPolled", {
               time: formatTime(status?.last_polled_at, locale),
             })}
           </span>
           <span>
-            {t("settings.automation.health.nextPoll", {
+            {translate("settings.automation.health.nextPoll", {
               time: formatTime(status?.next_poll_at, locale),
             })}
           </span>
           <span>
-            {t("settings.automation.health.lastPollHits", {
+            {translate("settings.automation.health.lastPollHits", {
               count: status?.last_job_count ?? 0,
             })}
           </span>
@@ -177,18 +179,18 @@ export function AutomationHealthPanel({
                       {job.name}
                     </div>
                     <div className="mt-1 text-xs text-slate-500">
-                      {t("settings.automation.health.risk.failureRetry", {
+                      {translate("settings.automation.health.risk.failureRetry", {
                         failures: job.consecutive_failures,
                         retries: job.retry_count,
                       })}
                     </div>
                   </div>
                   <Badge variant={statusVariant(job.status)}>
-                    {statusLabel(t, job.status)}
+                    {statusLabel(translate, job.status)}
                   </Badge>
                 </div>
                 <div className="mt-3 text-xs text-slate-500">
-                  {t("settings.automation.health.risk.cooldownUpdated", {
+                  {translate("settings.automation.health.risk.cooldownUpdated", {
                     cooldown: formatTime(job.auto_disabled_until, locale),
                     updated: formatTime(job.updated_at, locale),
                   })}
@@ -203,7 +205,7 @@ export function AutomationHealthPanel({
           </div>
         ) : (
           <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50/60 p-6 text-sm text-slate-500">
-            {t("settings.automation.health.empty")}
+            {translate("settings.automation.health.empty")}
           </div>
         )}
       </CardContent>

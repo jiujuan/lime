@@ -27,6 +27,9 @@ export interface BuildGeneralWorkbenchWorkflowPanelPropsParams {
   onSwitchTopic: GeneralWorkbenchSidebarWorkflowPanelProps["onSwitchTopic"];
   onViewRunDetail?: GeneralWorkbenchSidebarWorkflowPanelProps["onViewRunDetail"];
   workflowPanelState: GeneralWorkbenchWorkflowPanelState;
+  workflowControlItems?: GeneralWorkbenchSidebarWorkflowPanelProps["workflowControlItems"];
+  workflowControlPendingItemId?: GeneralWorkbenchSidebarWorkflowPanelProps["workflowControlPendingItemId"];
+  onTriggerWorkflowControl?: GeneralWorkbenchSidebarWorkflowPanelProps["onTriggerWorkflowControl"];
   workflowSteps: GeneralWorkbenchSidebarWorkflowPanelProps["workflowSteps"];
 }
 
@@ -47,6 +50,9 @@ export function buildGeneralWorkbenchWorkflowPanelProps({
   onSwitchTopic,
   onViewRunDetail,
   workflowPanelState,
+  workflowControlItems,
+  workflowControlPendingItemId,
+  onTriggerWorkflowControl,
   workflowSteps,
   activeRunDetail,
   activeRunDetailLoading,
@@ -79,6 +85,9 @@ export function buildGeneralWorkbenchWorkflowPanelProps({
     activeRunDetail,
     activeRunDetailLoading,
     activeRunStagesLabel: workflowPanelState.activeRunStagesLabel,
+    workflowControlItems,
+    workflowControlPendingItemId,
+    onTriggerWorkflowControl,
     runMetadataText: workflowPanelState.runMetadataText,
     runMetadataSummary: workflowPanelState.runMetadataSummary,
     onCopyText: writeGeneralWorkbenchClipboardText,

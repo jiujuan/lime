@@ -197,6 +197,13 @@ describe("imageTaskPreviewRuntimeGuards", () => {
     ).toBe(true);
     expect(
       shouldProbeWorkspaceImageTaskCatalog({
+        documentMarkdowns: [
+          "![首图](pending-image-task://task-1?status=running)\n<!-- lime:image-task-slot:hero -->",
+        ],
+      }),
+    ).toBe(true);
+    expect(
+      shouldProbeWorkspaceImageTaskCatalog({
         imageWorkbenchState,
       }),
     ).toBe(true);
@@ -273,9 +280,20 @@ describe("imageTaskPreviewRuntimeGuards", () => {
         ),
       }),
     ).toBe(true);
+    expect(
+      shouldEnableWorkspaceImageTaskPreviewRuntime({
+        shouldDeferWorkspaceAuxiliaryLoads: true,
+        restoreFromWorkspace: true,
+        documentMarkdowns: [
+          "![首图](pending-image-task://task-1?status=running)\n<!-- lime:image-task-slot:hero -->",
+        ],
+      }),
+    ).toBe(true);
   });
 
   it("应合并 message thinking 内容并避免重复追加", () => {
+    const repeatedThinking = "构图将聚焦于阳光穿透绿树洒在高楼间的自然光影。";
+
     expect(
       mergeMessageThinkingContent({
         existingMessage: createMessage({
@@ -306,5 +324,28 @@ describe("imageTaskPreviewRuntimeGuards", () => {
         }),
       }),
     ).toBe("第一步\n\n第三步");
+
+    expect(
+      mergeMessageThinkingContent({
+        existingMessage: createMessage({ role: "assistant" }),
+        nextMessage: createMessage({
+          role: "assistant",
+          contentParts: [
+            {
+              type: "thinking",
+              text: repeatedThinking,
+            },
+            {
+              type: "thinking",
+              text: repeatedThinking,
+            },
+            {
+              type: "thinking",
+              text: repeatedThinking,
+            },
+          ],
+        }),
+      }),
+    ).toBe(repeatedThinking);
   });
 });

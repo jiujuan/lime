@@ -1,5 +1,148 @@
 # 图片能力 v2 进度记录
 
+## 2026-07-04
+
+### Checkpoint：历史图片结果点击后 viewer 不再泄露内部审计字段
+
+背景：
+
+- 用户继续要求真实 Playwright 测试，且右侧普通 UI 不应显示 workflow / task / provider routing / policy 等内部事实；这些事实只应留在 JSONL、task artifact、read model evidence 或专用审计入口。
+- `sess_98203a39383e4f17a4fdbe9962b115bd` 历史恢复已能显示思考、自然引导、图片轻卡、远程图片和 Token，但重新点击 `打开图片结果` 时，右侧 viewer 仍显示 `运行合同`、`LimeCore 策略输入待命中`、provider id、model slug 等内部字段。
+
+已完成：
+
+- `ImageTaskViewer` 普通结果详情不再渲染 runtime contract、model registry、LimeCore policy、provider id 或 model slug。
+- 打开独立资源管理器时也不再把 providerName / modelName 从 runtime contract 透传到普通图片 metadata。
+- 保留用户需要的结果状态、图片预览、输出数量、尺寸、分镜标签、继续重绘 / 保存 / 应用等动作。
+- 审计事实仍保留在 JSONL / task artifact / App Server read model，不进入普通 viewer。
+
+真实 Playwright 验证：
+
+- 会话：`sess_98203a39383e4f17a4fdbe9962b115bd`。
+- Playwright 使用系统 Chrome channel 打开 `http://127.0.0.1:1420/`，通过 `sessionStorage` 恢复目标历史会话；`bridgeHealth.status=ok` 且 `transport=electron-host`，不触发新图片生成、不使用 mock。
+- 点击前断言：
+  - `viewerOpen=false`，右侧 viewer 不自动展开。
+  - `hasGuidance=true`、`hasReasoning=true`、`hasImageGenerationCard=true`、`hasTokenUsage=true`、`hasRemoteImage=true`。
+  - 普通聊天区未命中 `workflow.*`、task path、raw JSON、`Ribbi`、mock worker 等泄露词。
+- 点击 `打开图片结果` 后断言：
+  - `afterViewerOpen=true`、`afterViewerHasImage=true`。
+  - viewer 未命中 `运行合同`、`Runtime contract`、`LimeCore`、`model_registry`、`image_generation 路由`、`custom-*`、`agnes-image-2.1-flash`、workflow、`.lime/tasks`、`.lime/task-logs`。
+  - console error 为 0。
+- 通过证据：
+  - `.lime/qc/gui-evidence/live-image-command/live-real-1783134923350-click-open-after-viewer-fix-1783140911351.json`
+  - `.lime/qc/gui-evidence/live-image-command/live-real-1783134923350-click-open-after-viewer-fix-1783140911351-before-click.png`
+  - `.lime/qc/gui-evidence/live-image-command/live-real-1783134923350-click-open-after-viewer-fix-1783140911351-after-click.png`
+- 收口只读复测证据：
+  - `.lime/qc/gui-evidence/live-image-command/live-real-1783134923350-readonly-recheck-1783142978197.json`
+  - `.lime/qc/gui-evidence/live-image-command/live-real-1783134923350-readonly-recheck-1783142978197-before-click.png`
+  - `.lime/qc/gui-evidence/live-image-command/live-real-1783134923350-readonly-recheck-1783142978197-after-click.png`
+  - 该复测使用 Playwright CLI Chrome channel，通过 `sessionStorage` 恢复既有 live session；只读取历史与点击 `打开图片结果`，不发送新消息、不触发新图片生成。
+- 本轮追加稳定只读复测证据：
+  - `.lime/qc/gui-evidence/live-image-command/live-real-1783134923350-readonly-stable-recheck-1783144937521.json`
+  - `.lime/qc/gui-evidence/live-image-command/live-real-1783134923350-readonly-stable-recheck-1783144937521-before-click.png`
+  - `.lime/qc/gui-evidence/live-image-command/live-real-1783134923350-readonly-stable-recheck-1783144937521-after-click.png`
+  - 该复测使用 Playwright CLI + 系统 Chrome channel，先从最近对话只读打开目标历史，再等待历史 hydrate 稳定；`bridgeHealth.body={"status":"ok","transport":"electron-host"}`。
+  - 断言 `beforeStableWithin30s=true`、`beforeHasNoRunningPlaceholder=true`、`beforeHasTokenUsage=true`，证明历史详情会从短暂 hydrate 态恢复到完成态，而不是需要点击右侧 viewer 才补齐 Token / 完成文案。
+- 修复前问题证据：
+  - `.lime/qc/gui-evidence/live-image-command/live-real-1783134923350-click-open-1783140582042.json`
+
+验证：
+
+- `npx vitest run "src/components/agent/chat/hooks/agentChatHistory.compaction.test.ts" "src/components/agent/chat/hooks/agentChatHistoryReadModel.test.ts" "src/components/agent/chat/hooks/agentChatHistoryLocalMerge.imageTasks.test.ts" "src/components/agent/chat/components/MessageList.imageTasks.test.tsx" "src/components/agent/chat/components/ImageTaskViewer.test.tsx" --silent=passed-only` 通过，41 个测试。
+- `npx eslint "src/components/agent/chat/hooks/agentChatHistoryUsage.ts" "src/components/agent/chat/hooks/agentChatHistoryHydrate.ts" "src/components/agent/chat/hooks/agentChatHistoryThreadItems.ts" "src/components/agent/chat/hooks/agentChatHistoryReadModel.ts" "src/components/agent/chat/hooks/agentChatHistory.compaction.test.ts" "src/components/agent/chat/components/ImageTaskViewer.tsx" "src/components/agent/chat/components/ImageTaskViewer.test.tsx" --max-warnings 0` 通过。
+- `git diff --check -- ...` 针对本轮文件通过。
+- `npm run bridge:health -- --timeout-ms 120000` 通过，`transport=electron-host`。
+- `npm run verify:gui-smoke` 通过；renderer smoke build、Electron host build、App Server sidecar、renderer loaded、app-server initialized、claw workbench shell ready、memory settings ready。
+- `npx tsc --noEmit --project tsconfig.node.json --pretty false` 通过。
+- `npx tsc --noEmit --project tsconfig.renderer.json --pretty false` 通过。本轮补齐 i18next 类型层 `keySeparator=false` 与 `react-syntax-highlighter/dist/esm/*` 子路径声明后，renderer typecheck 不再出现 `t(...)` 返回 `unknown` 或高亮模块声明缺失。
+- `npx eslint "src/vite-env.d.ts" "src/i18n/types.d.ts" --max-warnings 0 --no-warn-ignored` 通过。
+- `npm run test:related -- ...本轮文件` 曾进入过宽相关测试集，被用户中断前暴露 `src/components/agent/chat/index.workbench01.test.tsx` 的 hook timeout / pending preview 断言失败，以及 `src/components/agent/chat/index.test.tsx` 的隐藏草稿首页导航断言失败；这些失败不在图片 viewer / 历史 usage 本轮写集内，且定向图片历史 / viewer 回归已通过，暂按宽范围 related 噪音与既有脏工作树风险登记，不作为本 checkpoint 阻塞。
+
+收口复核：
+
+- 当前工作树非常脏，存在多组并行 Rust / Plugin / workflow 改动和删除；本 checkpoint 只归因本轮触碰的图片历史 usage 与 `ImageTaskViewer` 文件。
+- 扫描本轮产品路径未发现 `Ribbi`；`好啊 / 搞定 / 马上生成` 仅出现在路线图证据、测试 fixture 或后端 presentation 解析测试中，不是前端产品模板拼接。
+- `lime-rs/crates/app-server/src/runtime_backend/image_command/**` 中已无 `ImageCommandIntent::from_scope_only`，对应 dead_code warning 未复现。
+- 只读 Playwright 复测断言 `realBridge=true`、`beforeViewerClosed=true`、`beforeHasGuidance=true`、`beforeHasReasoning=true`、`beforeHasImageGenerationCard=true`、`beforeHasTokenUsage=true`、`beforeHasRemoteImage=true`、`afterViewerOpen=true`、`afterViewerHasImage=true`、`noBeforeLeaks=true`、`noAfterLeaks=true`、`noConsoleErrors=true`。
+- 稳定只读 Playwright 复测额外确认历史详情在 30 秒内从 hydrate 态稳定到完成态，且点击前右侧 viewer 仍关闭、图片轻卡已显示自然后置描述与 `1.3K Tokens`；点击后 viewer 打开并显示远程图片，普通 UI 仍无内部字段泄露。
+
+### Checkpoint：current 工作树收尾验证与 warning 复核
+
+背景：
+
+- 用户继续追问 live 结果是否真实、是否仍有 hard code / mock / warning 残留。
+- 本轮不扩大功能面，只复核当前工作树的图片命令、workflow 专用 read model、App Server binary、bridge 和协议契约。
+
+验证：
+
+- `cargo build --manifest-path "lime-rs/Cargo.toml" -p app-server --bin app-server` 通过，未复现 `ImageCommandIntent::from_scope_only` dead_code warning；当前源码已无 `from_scope_only` 符号。
+- `cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server workflow -- --nocapture` 通过，42 个 workflow 相关测试。
+- `cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server image_command -- --nocapture` 通过，20 个图片命令测试，`media_task_jsonrpc` 中 image command 集成用例同步通过。
+- `cargo fmt --manifest-path "lime-rs/Cargo.toml" --all -- --check` 通过。
+- `npm run bridge:health -- --timeout-ms 120000` 通过，Electron bridge health 为 `status=ok`。
+- `npm run test:contracts` 通过，覆盖 protocol types、App Server client contract、command contracts、harness contracts、modality contracts、scripts governance、Electron release workflow、harness cleanup 和 docs boundary。
+- `git diff --check` 通过。
+
+证据复核：
+
+- 最新 live UI 截图 `.lime/evidence/live-new-image-current-ui.png` 可见：用户 `@配图` 原文、`已完成思考`、模型生成的自然前置文案、`Image Generation | Agnes Image 2.1 Flash` 轻卡、真实图片预览、后置描述和 token footer。
+- 普通 UI 未显示右侧 viewer、raw JSON、任务 ID、task path 或 workflow step；审计信息仍只进入 JSONL / task artifact / evidence / `workflow/read` 专用接口。
+
+### Checkpoint：live Agnes 链路完成态与 workflow audit 终态顺序修复
+
+背景：
+
+- 用户明确要求不要用 mock / fixture 证明图片能力，也不要再通过前端 hard code 拼“寒暄 / 搞定”模板。
+- 本轮真实 Electron + App Server + Agnes Image 2.1 Flash 已经跑通新会话，但暴露出一个后端审计顺序问题：`emit_task_created(...)` 过早发 `turn.completed`，导致后续 `workflow.step.completed` / `workflow.run.completed` 被 runtime 终态保护吞掉，`workflow-events.jsonl` 只停在 `workflow.step.started`。
+- UI 仍必须只展示普通用户需要看的对话结构；workflow、task id、task path、raw JSON 只进入 JSONL / task artifact / evidence，右侧 viewer 不自动展开。
+
+live 结果：
+
+- session：`sess_f2bae36d182648a69b2b108b39c91272`。
+- turn：`201519bb-2610-404b-a8d4-ce3183a4c608`。
+- task：`10d0e8d2-e33b-4123-acb0-2952764e6f7a`。
+- 真实 task artifact：`$HOME/Library/Application Support/lime/projects/Skill Think Keep Audit 20260513/.lime/tasks/image_generate/20260703-225844-2aa1f88a44704870900d9ae2348cf5d7.json`。
+- 真实 worker JSONL：`.lime/task-logs/10d0e8d2-e33b-4123-acb0-2952764e6f7a/attempt_1.jsonl`，事件序列为 `worker_loaded -> task_queued -> task_running -> request_slot_started -> request_slot_succeeded -> task_succeeded`。
+- 真实输出 URL：`https://platform-outputs.agnes-ai.space/images/t2i/ceee908a2a3f43c29b0c16f84e8dca1d.png`。
+- UI 截图证据：`.lime/evidence/live-new-image-current-ui.png`。
+
+UI 验证：
+
+- 对话列表中保留用户 `@配图` 原文、`已完成思考`、模型生成的自然引导、`Image Generation | Agnes Image 2.1 Flash` 轻卡、真实远程图片预览、完成 caption 和 token footer。
+- 普通 UI 未出现 raw JSON、任务 ID、task path、workflow step 或右侧 viewer 自动展开。
+- 前置引导 / 后置 caption 来自 App Server presentation / task payload，不在前端按 prompt 拼模板。
+
+本轮修复：
+
+- `ImageCommandWorkflow` 拆分图片任务创建事件：`emit_task_created(...)` 现在只发 `image_task.created` + `tool.result`。
+- workflow audit 先写 `workflow.step.completed` 和 `workflow.run.completed`，最后再调用 `emit_task_created_turn_completed(...)` 发 `turn.completed`。
+- `media_task_jsonrpc` 测试 harness 接入 `EventLogWriter`，新增断言：
+  - user-visible session stream 不包含 `workflow.*`。
+  - `workflow-events.jsonl` 包含 `workflow.step.completed`。
+  - `workflow-events.jsonl` 包含 `workflow.run.completed`。
+
+验证：
+
+- `npm run bridge:health -- --timeout-ms 120000` 通过。
+- Playwright CLI 通过 CDP 连接真实 Electron `http://127.0.0.1:9223`，完成 live `@配图` 新会话验证，证据见 `.lime/evidence/live-new-image-current-ui.png`。
+- `cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server image_command -- --nocapture` 通过，20 个测试。
+- `cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server --test media_task_jsonrpc image_command -- --nocapture` 通过，1 个测试。
+- `npx vitest run "src/components/agent/chat/workspace/useWorkspaceImageTaskPreviewRuntime.test.tsx" --silent=passed-only` 通过，49 个测试。
+- `npx vitest run "src/components/agent/chat/hooks/agentStreamRuntimeHandler.unit.test.ts" --silent=passed-only` 通过，53 个测试。
+- `npm run test:contracts` 通过。
+- `git diff --check` 通过。
+
+当前分类：
+
+- `current`：`Agent turn -> App Server ImageCommandWorkflow -> mediaTaskArtifact/image/create -> .lime/tasks/image_generate task artifact -> lime-image-api-worker -> imageWorkbenchPreview`。
+- `audit-only`：workflow run / step / provider / model / task path / raw JSON 只进入 workflow JSONL、session JSONL、task artifact 和 evidence。
+- `test-only`：fixture / MockBackend 只作为回归守卫，不能作为图片能力交付证据。
+- `dead`：前端 hard-code 图片寒暄 / 完成文案、renderer mock 图片成功、右侧 workflow 自动展开、普通聊天展示 raw task JSON。
+
+剩余缺口：
+
+- 本轮 current live 链路已达到可交付门槛；后续可继续补更重的 `verify:gui-smoke` / 历史会话 Playwright 续测，但不应再把 mock 路径当作交付证据。
+
 ## 2026-07-03
 
 ### Checkpoint：真实 Electron + runtime + Agnes live 验证通过
@@ -604,3 +747,143 @@ GUI 证据：
 - `npx playwright test --config ".lime/tmp/playwright-agnes-provider.config.cjs" --workers 1 --timeout 60000 --reporter line` 通过，1 个测试。
 - Playwright CLI 使用本机 Chrome channel；仓库默认 Playwright browser cache 未安装，不执行浏览器下载。
 - UI 截图证据：`.lime/qc/agnes-provider-template-ui.png`。
+
+### Checkpoint：历史图片会话刷新恢复与真实 Electron 复测
+
+背景：
+
+- 用户反馈从对话列表打开图片生成历史后，刷新或重新进入会丢回首页，思考、寒暄、图片轻卡和历史内容看起来消失。
+- 用户明确要求不要 mock，必须证明普通 Agent 对话流里的图片生成历史可恢复，JSONL 继续作为审计事实源。
+
+已完成：
+
+- 首页空态普通首发不再创建 `draft-send-*` 非物化 pending preview，避免聊天列表出现临时占位一闪而过。
+- `createFreshSession` 成功后立即持久化 session restore candidate；消息快照等较重持久化仍保留 idle 写入。
+- `useAgentSession` 的 auto-restore 只有拿到真实 target 后才标记 workspace 已恢复；`skipWithoutTarget` 不再阻止后续 topics 更新重试。
+- 当刷新后 topics 列表暂未包含恢复候选时，不再直接清空会话；先走 App Server `missingSessionVerify` 确认，存在则补回 topics 并水合详情。
+- `useAppNavigation` 新增 `agent + initialSessionId` 最小 reload 恢复白名单：从侧栏打开历史会话后刷新仍回到 `claw` 会话页；普通 `new-task` 首页不写入恢复状态。
+
+真实 Electron 验证：
+
+- 通过 CDP 连接现有 Electron：`chromium.connectOverCDP("http://127.0.0.1:9223")`，transport 仍为真实 Electron Host / App Server bridge。
+- 从侧栏点击真实 live 图片会话 `sess_46abe9d4d444440a8fd752eb8f3985c7` 后，聊天区显示：
+  - 用户消息 `@配图 ... 深圳夏天傍晚 ...`
+  - `已完成思考`
+  - 模型生成的引导文字
+  - `Image Generation | Agnes Image 2.1 Flash`
+  - 完成 caption
+- 点击历史会话后刷新页面，仍保留同一会话；未回到 `青柠一下，灵感即来` 首页；console error 为 0。
+- 右侧 viewer 未自动展开；当前可见内容停留在聊天主列表。
+- 截图证据：
+  - `.lime/evidence/electron-click-recent-image-session.png`
+  - `.lime/evidence/electron-history-reload-after-navigation-persist.png`
+
+JSONL 审计：
+
+- 后端事件文件存在：`$HOME/Library/Application Support/lime/app-server/runtime/events/sessions/session_sess_46abe9d4d444440a8fd752eb8f3985c7.jsonl`。
+- 事件链包含 `message.created`、`runtime.status`、`reasoning.started`、`reasoning.delta`、`reasoning.final`、`message.delta`、`image_task.presentation.generated`、`tool.started`、`turn.completed`。
+- JSONL 中保留 session / thread / turn / task 审计字段；聊天 UI 不展示 raw JSON、task path 或 workflow step 细节。
+
+验证：
+
+- `npx vitest run "src/hooks/useAppNavigation.test.tsx"` 通过，13 个测试。
+- `npx vitest run "src/components/AppPageContent.test.tsx" --testNamePattern "agent 页面|pending navigation|newChatAt"` 通过，15 个测试。
+- `npx vitest run "src/components/AppSidebar.conversations.test.tsx" --testNamePattern "点击已有会话|工作区|standalone|workspace-only|initialSessionId|历史会话"` 通过，3 个测试。
+- `npx vitest run "src/components/agent/chat/hooks/useAsterAgentChat.test.tsx" --testNamePattern "刷新后话题列表暂未包含恢复候选|首页新会话|页面刷新恢复"` 通过，19 个测试。
+- `npx vitest run "src/components/agent/chat/hooks/agentSessionState.test.ts"` 通过，22 个测试。
+- `npx vitest run "src/components/agent/chat/workspace/useTaskCenterDraftSendRuntime.unit.test.ts"` 通过，10 个测试。
+- `npx vitest run "src/components/agent/chat/workspace/useWorkspaceSendActions.test.tsx"` 通过，157 个测试。
+- `npx vitest run "src/components/agent/chat/hooks/agentChatHistoryReadModel.test.ts" "src/components/agent/chat/hooks/agentChatHistoryLocalMerge.imageTasks.test.ts"` 通过，2 个测试。
+- `npx vitest run "src/components/agent/chat/AgentChatWorkspace.homePendingPreview.test.ts"` 通过，1 个测试。
+- `npx vitest run "src/components/agent/chat/index.test.tsx" --testNamePattern "隐藏草稿首页输入|草稿首页"` 通过，1 个测试。
+- `npm run bridge:health -- --timeout-ms 120000` 通过。
+- `npm run typecheck` 本轮执行超过 7 分钟无输出后中断，退出码 130；未记录为通过。
+
+### Checkpoint：workflow 审计 facts 不再进入普通会话 read model
+
+背景：
+
+- 图片命令已把 `workflow.*` 事件写入 workflow audit JSONL，但聚合 `smoke:agent-runtime-current-fixture` 暴露普通 Content Factory Article Editor read model 仍带 `thread_read.workflowRuns / workflowSteps`。
+- 普通聊天、历史会话和内容工作区不应显示 workflow run / step 等审计 facts；这些信息只应通过 JSONL / evidence / `workflow/read` 专用接口用于审计和排障。
+
+已完成：
+
+- `runtime_session_read_detail_with_options` 与 projection summary 不再把 workflow read model 注入普通 `thread_read`。
+- `workflow_read_model_from_stored_session` 保持不变；`read_workflow_current` 仍可从 session events + workflow audit events 返回 workflow run / step。
+- Rust 回归改为同时断言：
+  - `read_workflow_current` 能读取 workflow run / step。
+  - `read_session` 与 `read_session_current` 的 `thread_read` 不包含 `workflow`、`workflowRuns`、`workflowSteps`、`workflow_runs`、`workflow_steps`。
+
+验证：
+
+- `cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server read_model::workflow -- --nocapture` 通过，3 个测试。
+- `cargo build --manifest-path "lime-rs/Cargo.toml" -p app-server --bin app-server` 通过，确保 Electron fixture 使用最新 App Server binary。
+- `npm run smoke:claw-chat-current-fixture -- --scenario content-factory-article-workspace --prefix claw-chat-current-fixture-content-factory-article-workspace-regression --timeout-ms 240000` 通过；summary 显示 `workflowRunCount=0`、`workflowStepCount=0`、`workflowUiFactsHidden=true`。
+- `npm run smoke:agent-runtime-current-fixture` 通过；覆盖 Coding Workbench、`@配图` GUI fixture、普通画图意图、cancel-then-continue、Plan history hydrate、Skills Runtime、MCP structuredContent、Expert Skills Runtime、Expert Plaza、Expert Panel 和 Content Factory Article Editor。
+- `cargo fmt --manifest-path "lime-rs/Cargo.toml" --all -- --check` 通过。
+- `git diff --check` 通过。
+
+### Checkpoint：workerEvidence 普通投影剥离编排审计字段
+
+背景：
+
+- 上一刀已隐藏普通 `thread_read.workflowRuns / workflowSteps`，但 Content Factory 的 `article_workspace.workerEvidence` 仍可能携带 `workflowKey / subagents / skillRefs / cliRefs / connectorRefs / hookPolicy / orchestration` 等内部编排字段。
+- 这些字段同样属于审计 / 排障 facts，不应作为普通 Article Editor / 聊天 read model 的 UI 数据源。
+
+已完成：
+
+- `article_workspace_projection` 对事件 metadata 与 workspace patch 里的 `workerEvidence` 统一清洗 audit-only key。
+- 普通 `workerEvidence` 只保留产品状态摘要：任务 ID / 类型、状态、产物引用、产物类型、输出对象数量、失败原因、重试建议等。
+- Content Factory fixture 的 dogfood worker evidence 识别逻辑不再依赖 `workflowKey / orchestration / skillRefs`，改为使用 taskId、status、artifact kind 和 output object count。
+- 新增 fixture 断言 `contentFactoryArticleWorkspaceWorkerAuditFactsHidden`，防止内部编排字段回流普通 read model。
+
+验证：
+
+- `cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server article_workspace_worker_evidence -- --nocapture` 通过，1 个测试。
+- `cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server read_session_materializes_content_factory_workspace_patch_into_article_workspace -- --nocapture` 通过，1 个测试。
+- `cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server article_workspace_turn_runs_installed_worker_and_materializes_workspace_patch -- --nocapture` 通过，1 个测试。
+- `npx vitest run "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs" --silent=passed-only` 通过，23 个测试。
+- `cargo build --manifest-path "lime-rs/Cargo.toml" -p app-server --bin app-server` 通过。
+- `npm run smoke:claw-chat-current-fixture -- --scenario content-factory-article-workspace --prefix claw-chat-current-fixture-content-factory-article-workspace-regression --timeout-ms 240000` 通过；summary 显示 workerDogfoodEvidence 的 `workflowKey=""`、`subagents=[]`、`skillRefs=[]`、`cliRefs=[]`、`connectorRefs=[]`、`hookRefs=[]`、`orchestrationStepCount=0`。
+- `npm run smoke:agent-runtime-current-fixture` 通过；同时覆盖 `@配图` GUI fixture 和普通画图意图 GUI fixture。
+
+### Checkpoint：live `@配图` 历史恢复补齐 Token usage
+
+背景：
+
+- 真实 live 会话 `sess_98203a39383e4f17a4fdbe9962b115bd` 已能从 task file 恢复图片 URL、思考、自然引导、轻卡和结果描述，但页面没有显示 Token。
+- `agentSession/read` 里 usage 已存在于 `turns / thread_read.turns / diagnostics.latest_turn_usage / runtime_summary.latestTurnUsage`，而 `messages[assistant]` 本身没有 `usage`。
+- 前端历史水合优先使用 `thread_items` 恢复 reasoning + image task tool + preview，此路径没有把同 turn usage 写回 assistant message，导致 `TokenUsageDisplay` 不渲染。
+
+已完成：
+
+- 新增 `resolveSessionDetailTurnUsage`，统一从 `thread_read.turns`、`turns`、`thread_read.diagnostics`、`thread_read.runtime_summary` 解析同 turn usage。
+- `hydrateSessionDetailMessages` 在 assistant message 自身缺 usage 时，按 `runtimeTurnId` 从 read model 恢复 usage。
+- `hydrateSessionDetailMessagesFromThreadItems` 创建 assistant draft 时同步写入同 turn usage。
+- `hydrateSessionDetailMessagesFromThreadReadToolCalls` 复用同一个 helper，减少 usage 解析重复逻辑。
+- 未改图片文案模板；用户可见引导、completion caption 仍来自后端 presentation / model output。
+- 普通聊天 UI 仍不显示 task path、raw JSON、workflow run/step、`Image Workbench`、`Ribbi` 等内部字段；右侧 viewer 不自动展开。
+
+真实 live 验证：
+
+- 会话：`sess_98203a39383e4f17a4fdbe9962b115bd`
+- Turn：`ee49454a-f3a1-4ebf-aa7e-b5429d7ced67`
+- 图片 URL：`https://platform-outputs.agnes-ai.space/images/t2i/b5129fcf3ce649539c4a51c91d2237c6.png`
+- Playwright CLI 使用系统 Chrome channel 打开 `http://127.0.0.1:1420/`，通过 `sessionStorage` 恢复目标会话，走真实 DevBridge / App Server read model，不触发新图片生成、不使用 mock。
+- 修复前 evidence：
+  - `.lime/qc/gui-evidence/live-image-command/live-real-1783134923350-playwright-before-fix-dom.json`
+  - `.lime/qc/gui-evidence/live-image-command/live-real-1783134923350-playwright-before-fix.png`
+  - 结果：思考 / 引导 / 图片轻卡 / 图片预览存在，Token 不显示。
+- 修复后 evidence：
+  - `.lime/qc/gui-evidence/live-image-command/live-real-1783134923350-playwright-after-usage-fix-dom.json`
+  - `.lime/qc/gui-evidence/live-image-command/live-real-1783134923350-playwright-after-usage-fix.png`
+  - 结果：`hasGuidance=true`、`hasReasoning=true`、`hasImageGenerationCard=true`、`hasTokenUsage=true`、可见图片数 `2`、控制台 error `0`、内部字段泄露 `[]`、右侧 viewer 词命中 `[]`。
+
+验证：
+
+- `npx vitest run "src/components/agent/chat/hooks/agentChatHistory.compaction.test.ts" "src/components/agent/chat/hooks/agentChatHistoryReadModel.test.ts" "src/components/agent/chat/hooks/agentChatHistoryLocalMerge.imageTasks.test.ts"` 通过，15 个测试。
+- `npx vitest run "src/components/agent/chat/components/MessageList.imageTasks.test.tsx"` 通过，14 个测试。
+- `npx eslint "src/components/agent/chat/hooks/agentChatHistoryUsage.ts" "src/components/agent/chat/hooks/agentChatHistoryHydrate.ts" "src/components/agent/chat/hooks/agentChatHistoryThreadItems.ts" "src/components/agent/chat/hooks/agentChatHistoryReadModel.ts" "src/components/agent/chat/hooks/agentChatHistory.compaction.test.ts" --max-warnings 0` 通过。
+- `npm run smoke:agent-session-history-electron-fixture` 通过；summary 写入 `.lime/qc/gui-evidence/agent-session-history-electron-fixture/agent-session-history-electron-fixture-summary.json`，覆盖 `initialize, agentSession/start, agentSession/read, agentSession/update, agentSession/list`。
+- `npm run bridge:health -- --timeout-ms 120000` 通过。
+- `npm run typecheck -- --pretty false` 运行超过数分钟无输出后中断，退出码 130；本 checkpoint 不记录为通过。

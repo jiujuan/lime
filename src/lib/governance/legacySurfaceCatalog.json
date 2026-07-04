@@ -559,9 +559,23 @@
     },
     {
       "id": "workspace-use-workflow-legacy-hook-shell",
-      "classification": "dead-candidate",
-      "description": "旧 workspace useWorkflow Hook 已退出生产链路，只允许作为删除候选和退场守卫；真实 Workflow facts 必须来自 App Server Workflow Read Model",
-      "targets": ["src/components/workspace/hooks/useWorkflow.ts"],
+      "classification": "dead",
+      "description": "已物理删除的旧 workspace useWorkflow Hook；真实 Workflow facts 必须来自 App Server Workflow Read Model，不得恢复旧 steps Hook",
+      "targets": [
+        "src/components/workspace/hooks/useWorkflow.ts",
+        "src/components/workspace/hooks/useWorkflow.test.ts"
+      ],
+      "allowedPaths": []
+    },
+    {
+      "id": "workflow-runtime-host-legacy-dsl-files",
+      "classification": "dead",
+      "description": "已物理删除的前端 WorkflowRuntimeHost DSL 与 runtimePolicy；Workflow current 执行事实源为 App Server workflow control/read model，不得恢复本地 DSL runtime",
+      "targets": [
+        "src/features/plugin/runtime/workflowRuntimeHost.ts",
+        "src/features/plugin/runtime/workflowRuntimeHost.test.ts",
+        "src/features/plugin/runtime/runtimePolicy.ts"
+      ],
       "allowedPaths": []
     },
     {
@@ -3805,16 +3819,55 @@
     {
       "id": "workflow-runtime-host-production-usage",
       "classification": "dead",
-      "description": "WorkflowRuntimeHost 只能作为 Plugin UI 兼容演示 / 测试夹具；生产 AI Workflow 必须进入 App Server workflow.* event 与 Workflow Read Model 主链",
+      "description": "WorkflowRuntimeHost 已物理删除；生产 AI Workflow 必须进入 App Server workflow control/read model 主链",
       "patterns": ["WorkflowRuntimeHost"],
       "includePathPrefixes": [
         "src/components/agent",
+        "src/features/plugin/runtime",
         "src/lib/api/agentRuntime",
         "packages/agent-ui-contracts",
         "packages/agent-runtime-projection",
         "packages/agent-runtime-ui",
         "packages/agent-runtime-client"
       ],
+      "allowedPaths": []
+    },
+    {
+      "id": "plugin-local-workflow-runtime-profile-production-surface",
+      "classification": "dead",
+      "description": "前端本地 workflow runtime profile 只允许停留在测试夹具；生产 Plugin workflow entry 必须 fail closed 或走 App Server workflow/read|cancel|retry|respond",
+      "patterns": [
+        "buildWorkflowRuntimeCapabilityProfile",
+        "workerRuntimeEnabled: true",
+        "P4.2 controlled workflow runtime",
+        "白名单 workflow DSL",
+        "allow-listed workflow DSL"
+      ],
+      "includePathPrefixes": [
+        "src/features/plugin",
+        "src/i18n/resources"
+      ],
+      "allowedPaths": [
+        "src/features/plugin/runtime/workflowRuntimeCapabilityProfile.ts",
+        "src/features/plugin/runtime/capabilityDispatcherTestFixtures.ts",
+        "src/features/plugin/runtime/agentRuntimeCapabilityHost.test.ts",
+        "src/features/plugin/runtime/entryRuntimeGuard.test.ts",
+        "src/features/plugin/adapters/AdapterCapabilityHost.test.ts",
+        "src/features/plugin/install/labInstallFlow.test.ts",
+        "src/features/plugin/ui/PluginManagerPanel.test.tsx",
+        "src/features/plugin/ui/PluginRuntimePage.testFixtures.tsx",
+        "src/features/plugin/ui/PluginsPage.runtime.test.tsx",
+        "src/features/plugin/ui/PluginsPage.test.tsx",
+        "src/features/plugin/ui/PluginsPage.testFixtures.tsx",
+        "src/features/plugin/ui/PluginsPageViewModel.unit.test.ts"
+      ]
+    },
+    {
+      "id": "plugin-adapter-local-workflow-entry-success-runner",
+      "classification": "dead",
+      "description": "AdapterCapabilityHost 不得在本地对 workflow entry 生成成功 run；workflow entry 必须走 App Server Workflow API 或 fail closed",
+      "patterns": ["humanReview: entry.kind === \"workflow\""],
+      "includePathPrefixes": ["src/features/plugin/adapters/AdapterCapabilityHost.ts"],
       "allowedPaths": []
     },
     {
@@ -5129,7 +5182,8 @@
         "lime-rs/crates/core/src/database/dao/agent.rs",
         "lime-rs/crates/core/src/database/dao/chat.rs",
         "lime-rs/crates/core/src/database/migration/general_chat_migration.rs",
-        "lime-rs/crates/services/src/aster_session_store/legacy_conversation.rs"
+        "lime-rs/crates/agent/src/aster_session_store/legacy_conversation.rs",
+        "lime-rs/crates/agent/src/aster_session_store_tests.rs"
       ]
     },
     {
@@ -5188,6 +5242,7 @@
         "lime-rs/crates/app-server/src/runtime/evidence_provider.rs",
         "lime-rs/crates/app-server/src/runtime/file_checkpoint_projection.rs",
         "lime-rs/crates/app-server/src/runtime/output_refs.rs",
+        "lime-rs/crates/app-server/src/runtime/plugin_worker_runtime/tests.rs",
         "lime-rs/crates/app-server/src/runtime/session_hydration.rs"
       ]
     },
@@ -5201,6 +5256,7 @@
         "lime-rs/crates/app-server/src/runtime/artifact_sidecar.rs",
         "lime-rs/crates/app-server/src/runtime/artifact_reader.rs",
         "lime-rs/crates/app-server/src/runtime/plugin_worker_runtime.rs",
+        "lime-rs/crates/app-server/src/runtime/plugin_worker_runtime/response.rs",
         "lime-rs/crates/app-server/src/runtime/event_store.rs",
         "lime-rs/crates/app-server/src/runtime/tests/artifacts.rs",
         "lime-rs/crates/app-server/src/runtime/tests/evidence_exports.rs"

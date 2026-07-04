@@ -1,5 +1,4 @@
 import { RefreshCw } from "lucide-react";
-import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import type {
   AutomationJobRecord,
@@ -49,14 +48,17 @@ import {
 } from "./managedObjectiveAutomationEvidence";
 import { resolveManagedObjectiveAutomationProjection } from "./managedObjectiveAutomationProjection";
 
-type SettingsTranslate = TFunction<"settings">;
+type SettingsTranslate = (
+  key: string,
+  values?: Record<string, unknown>,
+) => string;
 
 function detailsText(
   t: SettingsTranslate,
   key: string,
   values: Record<string, string | number | boolean> = {},
 ): string {
-  const translated = String(t(key as never, values as never));
+  const translated = t(key, values);
   return Object.entries(values).reduce((text, [name, value]) => {
     const replacement = String(value);
     return text
@@ -511,7 +513,9 @@ export function AutomationJobDetailsDialog({
   onOpenManagedObjectiveReference,
   onRevealManagedObjectiveReference,
 }: AutomationJobDetailsDialogProps) {
-  const { i18n, t } = useTranslation("settings");
+  const { i18n, t: rawT } = useTranslation("settings");
+  const t = rawT as SettingsTranslate;
+  const translateGlobal = i18n.t as SettingsTranslate;
   const presentationCopy = buildDetailsPresentationCopy(t);
   const serviceSkillExecutionCompatLabel = detailsText(
     t,
@@ -600,7 +604,7 @@ export function AutomationJobDetailsDialog({
     ),
     statusLabel: (status) =>
       String(
-        i18n.t(`agentChat.managedObjective.status.${status}`, {
+        translateGlobal(`agentChat.managedObjective.status.${status}`, {
           ns: "agent",
         }),
       ),
