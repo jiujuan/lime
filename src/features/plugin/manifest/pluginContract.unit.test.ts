@@ -263,11 +263,11 @@ describe("Plugin P1 manifest contract", () => {
       schemaVersion: 1,
       id: "content-factory-app",
       displayName: "内容工厂",
-      version: "2.0.0",
+      version: manifest.version,
       provenance: {
         sourceKind: "plugin_manifest",
         sourceId: "content-factory-app",
-        sourceVersion: "2.0.0",
+        sourceVersion: manifest.version,
       },
     });
     expect(contract.ui).toEqual([

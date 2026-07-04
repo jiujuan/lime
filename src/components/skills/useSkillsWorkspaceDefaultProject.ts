@@ -1,19 +1,21 @@
 import { useEffect, useState } from "react";
-import { getOrCreateDefaultProject } from "@/lib/api/project";
+import { getProject } from "@/lib/api/project";
 import type { SkillsWorkspaceView } from "./SkillsWorkspacePageViewModel";
-import type { SkillsWorkspaceDefaultProjectState } from "./SkillsWorkspacePageTypes";
+import type { SkillsWorkspaceProjectState } from "./SkillsWorkspacePageTypes";
 
-export function useSkillsWorkspaceDefaultProject({
+export function useSkillsWorkspaceProject({
   activeView,
+  creationProjectId,
   localSkillsLoading,
 }: {
   activeView: SkillsWorkspaceView;
+  creationProjectId?: string | null;
   localSkillsLoading: boolean;
 }) {
   const [registeredSkillsPanelReady, setRegisteredSkillsPanelReady] =
     useState(false);
-  const [defaultProjectState, setDefaultProjectState] =
-    useState<SkillsWorkspaceDefaultProjectState>({
+  const [currentProjectState, setCurrentProjectState] =
+    useState<SkillsWorkspaceProjectState>({
       id: null,
       rootPath: null,
       pending: false,
@@ -36,10 +38,15 @@ export function useSkillsWorkspaceDefaultProject({
 
   useEffect(() => {
     let cancelled = false;
+    const normalizedProjectId = creationProjectId?.trim() || null;
 
-    const loadDefaultProject = async () => {
-      if (activeView !== "installed" || !registeredSkillsPanelReady) {
-        setDefaultProjectState({
+    const loadCurrentProject = async () => {
+      if (
+        activeView !== "installed" ||
+        !registeredSkillsPanelReady ||
+        !normalizedProjectId
+      ) {
+        setCurrentProjectState({
           id: null,
           rootPath: null,
           pending: false,
@@ -48,17 +55,26 @@ export function useSkillsWorkspaceDefaultProject({
         return;
       }
 
-      setDefaultProjectState((previous) => ({
+      setCurrentProjectState((previous) => ({
         ...previous,
         pending: true,
         error: null,
       }));
       try {
-        const project = await getOrCreateDefaultProject();
+        const project = await getProject(normalizedProjectId);
         if (cancelled) {
           return;
         }
-        setDefaultProjectState({
+        if (!project) {
+          setCurrentProjectState({
+            id: normalizedProjectId,
+            rootPath: null,
+            pending: false,
+            error: "未找到当前项目",
+          });
+          return;
+        }
+        setCurrentProjectState({
           id: project.id,
           rootPath: project.rootPath,
           pending: false,
@@ -68,7 +84,7 @@ export function useSkillsWorkspaceDefaultProject({
         if (cancelled) {
           return;
         }
-        setDefaultProjectState({
+        setCurrentProjectState({
           id: null,
           rootPath: null,
           pending: false,
@@ -77,12 +93,12 @@ export function useSkillsWorkspaceDefaultProject({
       }
     };
 
-    void loadDefaultProject();
+    void loadCurrentProject();
 
     return () => {
       cancelled = true;
     };
-  }, [activeView, registeredSkillsPanelReady]);
+  }, [activeView, creationProjectId, registeredSkillsPanelReady]);
 
-  return { defaultProjectState };
+  return { currentProjectState };
 }

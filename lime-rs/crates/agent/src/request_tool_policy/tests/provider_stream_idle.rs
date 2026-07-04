@@ -1,4 +1,5 @@
 use super::*;
+use aster::conversation::message::Message;
 
 struct IdleThenTextProvider {
     attempts: Arc<AtomicUsize>,
@@ -129,31 +130,22 @@ async fn stream_message_reply_with_policy_should_retry_provider_stream_idle_afte
         .await
         .expect("应配置测试 provider");
 
-    let session_config = aster::agents::SessionConfig {
-        id: session.id.clone(),
-        thread_id: None,
-        turn_id: Some("turn-provider-idle-retry".to_string()),
-        schedule_id: None,
-        max_turns: None,
-        retry_config: None,
-        system_prompt: None,
-        system_prompt_override: None,
-        include_context_trace: None,
-        turn_context: None,
-    };
+    let session_config = test_session_config(&session.id, "turn-provider-idle-retry");
     let policy = resolve_request_tool_policy(Some(true));
     let mut runtime_events = Vec::new();
 
     let reply = stream_message_reply_with_policy_with_options(
         &agent,
-        Message::user().with_text("整理今天的国际新闻"),
+        ReplyInput::text("整理今天的国际新闻").into(),
         None,
         session_config,
         None,
         &policy,
         |event| runtime_events.push(event.clone()),
+        None,
         StreamReplyPolicyExecutionOptions {
             provider_stream_idle_timeout: Some(Duration::from_millis(200)),
+            persist_runtime_status: true,
         },
     )
     .await
@@ -178,18 +170,7 @@ async fn stream_message_reply_with_policy_should_fail_closed_when_provider_strea
         .await
         .expect("应配置测试 provider");
 
-    let session_config = aster::agents::SessionConfig {
-        id: session.id.clone(),
-        thread_id: None,
-        turn_id: Some("turn-provider-idle-before-event".to_string()),
-        schedule_id: None,
-        max_turns: None,
-        retry_config: None,
-        system_prompt: None,
-        system_prompt_override: None,
-        include_context_trace: None,
-        turn_context: None,
-    };
+    let session_config = test_session_config(&session.id, "turn-provider-idle-before-event");
     let policy = resolve_request_tool_policy(Some(false));
     let mut runtime_events = Vec::new();
 
@@ -197,14 +178,16 @@ async fn stream_message_reply_with_policy_should_fail_closed_when_provider_strea
         Duration::from_secs(3),
         stream_message_reply_with_policy_with_options(
             &agent,
-            Message::user().with_text("请回复"),
+            ReplyInput::text("请回复").into(),
             None,
             session_config,
             None,
             &policy,
             |event| runtime_events.push(event.clone()),
+            None,
             StreamReplyPolicyExecutionOptions {
                 provider_stream_idle_timeout: Some(Duration::from_millis(200)),
+                persist_runtime_status: true,
             },
         ),
     )

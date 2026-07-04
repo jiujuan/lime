@@ -3,6 +3,7 @@ import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
 import type { Message, MessageImage } from "../types";
 import type { AssistantDraftState } from "./agentChatShared";
 import type { InputCapabilitySendRoute } from "../skill-selection/inputCapabilitySelection";
+import type { SoulInteractionCopy } from "@/lib/soul/interactionCopy";
 import {
   buildDiagnosticsRuntimeStatusMetadata,
   buildInitialAgentRuntimeStatus,
@@ -56,6 +57,7 @@ interface PrepareAgentStreamSubmitDraftOptions {
   messagePurpose?: Message["purpose"];
   capabilityRoute?: InputCapabilitySendRoute;
   effectiveExecutionStrategy: AsterExecutionStrategy;
+  soulCopy?: SoulInteractionCopy;
   setMessages: Dispatch<SetStateAction<Message[]>>;
   setIsSending: Dispatch<SetStateAction<boolean>>;
 }
@@ -76,6 +78,7 @@ export function prepareAgentStreamSubmitDraft(
     messagePurpose,
     capabilityRoute,
     effectiveExecutionStrategy,
+    soulCopy,
     setMessages,
     setIsSending,
   } = options;
@@ -96,6 +99,7 @@ export function prepareAgentStreamSubmitDraft(
         buildInitialAgentRuntimeStatus({
           executionStrategy: effectiveExecutionStrategy,
           skipUserMessage,
+          soulCopy,
         }),
     purpose: messagePurpose,
     imageWorkbenchPreview: assistantDraft?.imageWorkbenchPreview,

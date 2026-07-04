@@ -56,11 +56,6 @@ impl LimeSessionStore {
         Ok(serde_json::from_str(&extension_data_json).unwrap_or_default())
     }
 
-    pub fn load_extension_data_sync(db: &DbConnection, session_id: &str) -> Result<ExtensionData> {
-        let conn = db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
-        Self::load_extension_data_from_conn(&conn, session_id)
-    }
-
     fn cache_session_metadata(&self, session: &Session) {
         let mut cached = session.clone();
         cached.conversation = None;

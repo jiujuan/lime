@@ -96,7 +96,7 @@ describe("resolveImageWorkbenchCommandRequest", () => {
     );
   });
 
-  it("普通 @配图 不应携带图片工作台旧选择，交由后端图片默认模型补齐", () => {
+  it("普通 @配图 应携带当前图片渠道，避免后端猜默认模型", () => {
     const rawText = "@配图 画一张广州夏天的图";
     const parsedCommand = parseImageWorkbenchCommand(rawText);
 
@@ -118,21 +118,18 @@ describe("resolveImageWorkbenchCommandRequest", () => {
       kind: "image_task",
       image_task: {
         prompt: "画一张广州夏天的图",
+        provider_id: "lime-hub",
+        model: "gpt-image-1",
+        executor_mode: "images_api",
       },
     });
     const imageTask = skillRequest?.requestContext["image_task"] as Record<
       string,
       unknown
     >;
-    expect(imageTask).not.toHaveProperty("provider_id");
-    expect(imageTask).not.toHaveProperty("model");
-    expect(imageTask).not.toHaveProperty("executor_mode");
-    expect(JSON.stringify(skillRequest?.requestContext)).not.toContain(
-      "gpt-image-1",
-    );
-    expect(JSON.stringify(skillRequest?.requestContext)).not.toContain(
-      "lime-hub",
-    );
+    expect(imageTask.provider_id).toBe("lime-hub");
+    expect(imageTask.model).toBe("gpt-image-1");
+    expect(imageTask.executor_mode).toBe("images_api");
   });
 
   it("显式图片模型命令仍应携带目录声明的 provider/model 路由", () => {

@@ -273,8 +273,7 @@ fn read_string_array(value: Option<&Value>) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lime_agent::runtime_facade::{PermissionBehavior, Tool, ToolContext};
-    use lime_agent::tools::LimeSkillTool;
+    use lime_agent::test_support::{lime_skill_tool_permission_decision, ToolPermissionDecision};
     use serde_json::json;
     use tempfile::TempDir;
 
@@ -282,8 +281,20 @@ mod tests {
         super::super::tests::request_for_test("hello", None, Some(metadata))
     }
 
-    fn permission_context(session_id: &str) -> ToolContext {
-        ToolContext::default().with_session_id(session_id)
+    struct SkillToolPermissionProbe;
+
+    impl SkillToolPermissionProbe {
+        async fn check_permissions(
+            &self,
+            params: &Value,
+            session_id: &&str,
+        ) -> ToolPermissionDecision {
+            lime_skill_tool_permission_decision(session_id, params.clone()).await
+        }
+    }
+
+    fn permission_context(session_id: &str) -> &str {
+        session_id
     }
 
     #[test]
@@ -394,7 +405,7 @@ mod tests {
             }
         }));
         let guard = apply_workspace_skill_runtime_enable(&request, session_id);
-        let tool = LimeSkillTool::new();
+        let tool = SkillToolPermissionProbe;
 
         let allowed = tool
             .check_permissions(
@@ -409,8 +420,8 @@ mod tests {
             )
             .await;
 
-        assert_eq!(allowed.behavior, PermissionBehavior::Allow);
-        assert_eq!(denied.behavior, PermissionBehavior::Deny);
+        assert_eq!(allowed, ToolPermissionDecision::Allow);
+        assert_eq!(denied, ToolPermissionDecision::Deny);
 
         drop(guard);
 
@@ -421,7 +432,7 @@ mod tests {
             )
             .await;
 
-        assert_eq!(after_drop.behavior, PermissionBehavior::Deny);
+        assert_eq!(after_drop, ToolPermissionDecision::Deny);
     }
 
     #[tokio::test]
@@ -429,7 +440,7 @@ mod tests {
         let session_id = "app-server-runtime-enable-missing-session";
         let request = request_with_metadata(json!({ "harness": {} }));
         let _guard = apply_workspace_skill_runtime_enable(&request, session_id);
-        let tool = LimeSkillTool::new();
+        let tool = SkillToolPermissionProbe;
 
         let result = tool
             .check_permissions(
@@ -438,7 +449,7 @@ mod tests {
             )
             .await;
 
-        assert_eq!(result.behavior, PermissionBehavior::Deny);
+        assert_eq!(result, ToolPermissionDecision::Deny);
     }
 
     #[tokio::test]
@@ -454,7 +465,7 @@ mod tests {
             })),
         );
         let guard = apply_workspace_skill_runtime_enable(&request, session_id);
-        let tool = LimeSkillTool::new();
+        let tool = SkillToolPermissionProbe;
 
         let allowed = tool
             .check_permissions(
@@ -475,9 +486,9 @@ mod tests {
             )
             .await;
 
-        assert_eq!(allowed.behavior, PermissionBehavior::Allow);
-        assert_eq!(project_alias_allowed.behavior, PermissionBehavior::Allow);
-        assert_eq!(denied.behavior, PermissionBehavior::Deny);
+        assert_eq!(allowed, ToolPermissionDecision::Allow);
+        assert_eq!(project_alias_allowed, ToolPermissionDecision::Allow);
+        assert_eq!(denied, ToolPermissionDecision::Deny);
 
         drop(guard);
 
@@ -487,7 +498,7 @@ mod tests {
                 &permission_context(session_id),
             )
             .await;
-        assert_eq!(after_drop.behavior, PermissionBehavior::Deny);
+        assert_eq!(after_drop, ToolPermissionDecision::Deny);
     }
 
     #[tokio::test]
@@ -512,7 +523,7 @@ mod tests {
             })),
         );
         let guard = apply_workspace_skill_runtime_enable(&request, session_id);
-        let tool = LimeSkillTool::new();
+        let tool = SkillToolPermissionProbe;
 
         let allowed = tool
             .check_permissions(
@@ -533,9 +544,9 @@ mod tests {
             )
             .await;
 
-        assert_eq!(allowed.behavior, PermissionBehavior::Allow);
-        assert_eq!(project_alias_allowed.behavior, PermissionBehavior::Allow);
-        assert_eq!(denied.behavior, PermissionBehavior::Deny);
+        assert_eq!(allowed, ToolPermissionDecision::Allow);
+        assert_eq!(project_alias_allowed, ToolPermissionDecision::Allow);
+        assert_eq!(denied, ToolPermissionDecision::Deny);
 
         drop(guard);
 
@@ -545,7 +556,7 @@ mod tests {
                 &permission_context(session_id),
             )
             .await;
-        assert_eq!(after_drop.behavior, PermissionBehavior::Deny);
+        assert_eq!(after_drop, ToolPermissionDecision::Deny);
     }
 
     #[tokio::test]
@@ -566,7 +577,7 @@ mod tests {
             })),
         );
         let guard = apply_workspace_skill_runtime_enable(&request, session_id);
-        let tool = LimeSkillTool::new();
+        let tool = SkillToolPermissionProbe;
 
         let allowed = tool
             .check_permissions(
@@ -587,9 +598,9 @@ mod tests {
             )
             .await;
 
-        assert_eq!(allowed.behavior, PermissionBehavior::Allow);
-        assert_eq!(project_alias_allowed.behavior, PermissionBehavior::Allow);
-        assert_eq!(denied.behavior, PermissionBehavior::Deny);
+        assert_eq!(allowed, ToolPermissionDecision::Allow);
+        assert_eq!(project_alias_allowed, ToolPermissionDecision::Allow);
+        assert_eq!(denied, ToolPermissionDecision::Deny);
 
         drop(guard);
 
@@ -599,7 +610,7 @@ mod tests {
                 &permission_context(session_id),
             )
             .await;
-        assert_eq!(after_drop.behavior, PermissionBehavior::Deny);
+        assert_eq!(after_drop, ToolPermissionDecision::Deny);
     }
 
     #[tokio::test]
@@ -622,7 +633,7 @@ mod tests {
             })),
         );
         let _guard = apply_workspace_skill_runtime_enable(&request, session_id);
-        let tool = LimeSkillTool::new();
+        let tool = SkillToolPermissionProbe;
 
         let result = tool
             .check_permissions(
@@ -631,7 +642,7 @@ mod tests {
             )
             .await;
 
-        assert_eq!(result.behavior, PermissionBehavior::Deny);
+        assert_eq!(result, ToolPermissionDecision::Deny);
     }
 
     #[tokio::test]
@@ -667,7 +678,7 @@ mod tests {
             })),
         );
         let _guard = apply_workspace_skill_runtime_enable(&request, session_id);
-        let tool = LimeSkillTool::new();
+        let tool = SkillToolPermissionProbe;
 
         let runtime_enabled = tool
             .check_permissions(
@@ -682,8 +693,8 @@ mod tests {
             )
             .await;
 
-        assert_eq!(runtime_enabled.behavior, PermissionBehavior::Allow);
-        assert_eq!(explicit_denied.behavior, PermissionBehavior::Deny);
+        assert_eq!(runtime_enabled, ToolPermissionDecision::Allow);
+        assert_eq!(explicit_denied, ToolPermissionDecision::Deny);
     }
 
     fn write_agent_skill(workspace: &TempDir, name: &str) {

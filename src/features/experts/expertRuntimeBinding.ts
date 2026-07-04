@@ -1,6 +1,7 @@
 import type {
   ExpertCatalogProjectionItem,
   ExpertInstallOverlayRecord,
+  ExpertProfile,
 } from "./types";
 
 export interface BuildExpertRuntimeMetadataOptions {
@@ -78,7 +79,7 @@ export function formatExpertRefList(
 }
 
 export function buildExpertRuntimeMetadata(
-  expert: ExpertCatalogProjectionItem,
+  expert: ExpertProfile | ExpertCatalogProjectionItem,
   options: BuildExpertRuntimeMetadataOptions = {},
 ): ExpertRuntimeMetadata {
   const memoryEnabled = options.overlay?.memoryEnabled ?? true;

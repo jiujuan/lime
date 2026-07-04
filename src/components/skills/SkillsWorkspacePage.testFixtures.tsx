@@ -37,7 +37,7 @@ const hoisted = vi.hoisted(() => ({
     exportLocalSkillPackage: vi.fn(),
     inspectLocalSkillPackage: vi.fn(),
     installLocalSkillPackage: vi.fn(),
-    getOrCreateDefaultProject: vi.fn(),
+    getProject: vi.fn(),
     listRegisteredSkills: vi.fn(),
     listWorkspaceSkillBindings: vi.fn(),
     getAutomationJobs: vi.fn(),
@@ -151,8 +151,7 @@ vi.mock("@/lib/api/project", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/project")>();
   return {
     ...actual,
-    getOrCreateDefaultProject: (...args: unknown[]) =>
-      mocks.getOrCreateDefaultProject(...args),
+    getProject: (...args: unknown[]) => mocks.getProject(...args),
   };
 });
 
@@ -663,8 +662,8 @@ export function useSkillsWorkspacePageTestLifecycle() {
         },
       },
     });
-    mocks.getOrCreateDefaultProject.mockReset();
-    mocks.getOrCreateDefaultProject.mockResolvedValue({
+    mocks.getProject.mockReset();
+    mocks.getProject.mockResolvedValue({
       id: "default-workspace",
       name: "默认工作区",
       workspaceType: "general",

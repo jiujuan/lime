@@ -46,7 +46,7 @@ description: 一个简单的问候技能，用于测试 Skills 集成
 
 当用户请求问候时，使用以下格式回复：
 
-"你好！我是 Lime 助手，很高兴为你服务！"
+"测试问候技能已执行。"
 
 请始终使用中文回复。
 EOF
@@ -79,7 +79,7 @@ cd lime && npm run dev
 3. **预期结果**：
    - AI 应该识别到 `test-greeting` Skill
    - AI 应该调用 Skill 并返回问候语
-   - 响应中应包含 "你好！我是 Lime 助手"
+   - 响应中应包含 "测试问候技能已执行"
 
 ### 场景 3：通过斜杠命令调用 Skill
 
@@ -183,7 +183,35 @@ rm -rf ~/.lime/skills/test-calculator
 
 ## 自动化测试（未来计划）
 
-后续可以使用 Playwright、Electron smoke 或 App Server contract 实现自动化 E2E 测试：
+自动化 E2E 分两层：
+
+1. Gate A 证明 renderer / browser projection 在可控环境下稳定。它可以用普通 Chrome CDP、DOM evaluate、screenshot、显式测试路由或 stream replay，但只能声明“投影没坏”，不能证明真实 Electron 产品链路可交付。
+2. Gate B 证明真实产品入口和运行时边界能工作。本地续测优先复用真实 Electron CDP 会话：先确认 `http://127.0.0.1:9223/json/version` 的 `User-Agent` 包含 `Electron/Lime`，再通过 Playwright `chromium.connectOverCDP("http://127.0.0.1:9223")` 接入已有 Lime 页签。可重复回归优先使用仓库已有 Electron fixture：通过 Playwright `_electron.launch(...)` 启动隔离 Desktop Host、走 GUI 输入框、`app_server_handle_json_lines` 与 App Server JSON-RPC。
+
+CDP 只是观察 / 操作通道，不自动等于 Gate B。普通 Chrome 打开的 `127.0.0.1:1420` 是 Gate A；只有同时证明 Electron 壳、IPC、App Server method、read model 和用户可见状态，才可作为 Gate B。不要照搬外部项目的命令、目录或证据包名。
+
+所有 Skills / Soul / Claw 主链验收都必须证明 current 链路，而不是普通浏览器镜像：
+
+- `window.__LIME_ELECTRON__ === true`
+- `window.electronAPI.invoke` 存在
+- trace 中包含 `transport: "electron-ipc"`
+- trace 中包含 `command: "app_server_handle_json_lines"`
+- JSON-RPC method 至少包含 `agentSession/turn/start`
+
+Soul Style Pack 不是 Agent Skill，不放入 `~/.lime/skills` 或 `SKILL.md`。验证 Soul 风格时使用 `claw-chat-current-fixture-smoke.mjs --scenario soul-style` 或 `lime-playwright-e2e` CDP 真实 Claw 输入框；验证 Agent Skill 时才创建测试 `SKILL.md`。
+
+当前 Soul 风格回归入口：
+
+```bash
+node scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs \
+  --scenario soul-style \
+  --timeout-ms 180000 \
+  --prefix soul-style-smoke
+```
+
+该入口只在 GUI evidence 中保存配置、链路、read model 和 summary-only trace；完整 system prompt / `memory_soul_prompt_context.v2` 正文由 Rust 单测覆盖，不落入 GUI evidence。`APP_SERVER_BACKEND_MODE=external` 只能证明 GUI / read model / current JSON-RPC 主链，不能证明 Soul 最终 prompt；需要证明最终模型请求时，使用 Rust prompt 单测或 `APP_SERVER_BACKEND_MODE=runtime` + 本地 provider fixture，并只保存 `hasInteractionSoul`、`hasMemorySoulSchema`、`profileId`、`stylePackId`、`intensity` 等 marker booleans。
+
+后续可以继续扩展 Playwright、Electron smoke 或 App Server contract：
 
 ```typescript
 // 示例：Playwright E2E 测试
@@ -200,6 +228,6 @@ test('AI should auto-invoke skill based on intent', async ({ page }) => {
   
   // 4. 验证响应
   await expect(page.locator('[data-testid="chat-message"]'))
-    .toContainText('你好！我是 Lime 助手');
+    .toContainText('测试问候技能已执行');
 });
 ```

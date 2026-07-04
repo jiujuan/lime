@@ -2429,6 +2429,35 @@ pub enum MemorySoulArtifactVoiceSource {
     BrandVoice,
 }
 
+/// 全局交互口吻预设
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum MemorySoulStyleProfileId {
+    /// 贱兮兮、轻微吐槽、有执行感
+    #[default]
+    #[serde(alias = "sassy_cute_executor")]
+    CheekySassyExecutor,
+    /// 低压、耐心、稳定陪伴
+    WarmSupportiveCompanion,
+    /// 克制、锋利、短句、有掌控感
+    CoolConfidentOperator,
+    /// 简洁、可信、可审计
+    CalmProfessionalPartner,
+}
+
+/// 全局交互口吻强度
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum MemorySoulStyleIntensity {
+    /// 低强度，默认只做轻量表达约束
+    #[default]
+    Low,
+    /// 中强度，保留更明显的节奏偏好
+    Medium,
+    /// 高强度，后续只允许在评测稳定后开放
+    High,
+}
+
 /// 正式产物创作声线配置
 ///
 /// 该配置只作为 Generation Brief 的显式输入，默认不影响正式产物。
@@ -2469,6 +2498,12 @@ pub struct MemorySoulConfig {
     /// 一句话风格摘要
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
+    /// 交互口吻预设
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub style_profile_id: Option<MemorySoulStyleProfileId>,
+    /// 交互口吻强度
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub style_intensity: Option<MemorySoulStyleIntensity>,
     /// 语气标签
     #[serde(default)]
     pub tone: Vec<String>,
@@ -2792,6 +2827,40 @@ mod unit_tests {
         );
         assert!(config.navigation.enabled_items.is_empty());
         assert!(config.agent.tool_execution.tool_overrides.is_empty());
+    }
+
+    #[test]
+    fn memory_soul_style_profile_accepts_cheeky_sassy_executor() {
+        let yaml = r#"
+memory:
+  soul:
+    enabled: true
+    style_profile_id: cheeky_sassy_executor
+"#;
+
+        let config: Config = serde_yaml::from_str(yaml).expect("style profile id");
+
+        assert_eq!(
+            config.memory.soul.and_then(|soul| soul.style_profile_id),
+            Some(MemorySoulStyleProfileId::CheekySassyExecutor)
+        );
+    }
+
+    #[test]
+    fn memory_soul_style_profile_accepts_legacy_sassy_cute_executor_alias() {
+        let yaml = r#"
+memory:
+  soul:
+    enabled: true
+    style_profile_id: sassy_cute_executor
+"#;
+
+        let config: Config = serde_yaml::from_str(yaml).expect("legacy style profile id");
+
+        assert_eq!(
+            config.memory.soul.and_then(|soul| soul.style_profile_id),
+            Some(MemorySoulStyleProfileId::CheekySassyExecutor)
+        );
     }
 
     #[test]

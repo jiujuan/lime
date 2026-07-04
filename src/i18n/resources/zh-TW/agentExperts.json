@@ -25,6 +25,8 @@
   "agentExperts.sync.seeded": "本機種子目錄",
   "agentExperts.title": "專家廣場",
   "agentExperts.info.title": "專家資訊",
+  "agentExperts.info.profileSwitch.label": "目前專家",
+  "agentExperts.info.profileSwitch.ariaLabel": "切換目前對話的專家",
   "agentExperts.info.sections.overview": "簡介",
   "agentExperts.info.sections.memory": "記憶",
   "agentExperts.info.sections.diary": "日記",
@@ -121,7 +123,5 @@
   "agentExperts.info.skills.evidence.counts": "檢索 {{searchCount}} 次 · 執行 {{invocationCount}} 次",
   "agentExperts.info.skills.evidence.exportedAt": "最近匯出 {{exportedAt}}",
   "agentExperts.info.skills.evidence.latestSkill": "最近技能 {{skillName}}",
-  "agentExperts.info.skills.evidence.knownGaps": "{{count}} 個已知缺口",
-  "agentExperts.actions.continue": "繼續對話",
-  "agentExperts.actions.newThread": "新對話"
+  "agentExperts.info.skills.evidence.knownGaps": "{{count}} 個已知缺口"
 }

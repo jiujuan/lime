@@ -374,6 +374,9 @@ export class ElectronUpdateHost {
     if (process.env.LIME_ELECTRON_ENABLE_DEV_UPDATER === "1") {
       return true;
     }
+    if (isElectronAutomationSession()) {
+      return false;
+    }
     if (process.env.VITE_DEV_SERVER_URL) {
       return false;
     }
@@ -622,6 +625,13 @@ function isDevelopmentPackagedApp(
     return false;
   }
   return execPath.replace(/\\/g, "/").includes(DEV_MAC_APP_PATH_SEGMENT);
+}
+
+function isElectronAutomationSession(): boolean {
+  return (
+    process.env.LIME_ELECTRON_SMOKE === "1" ||
+    process.env.LIME_ELECTRON_E2E === "1"
+  );
 }
 
 function runtimeUpdateFeedUrl(

@@ -1,6 +1,6 @@
 use crate::protocol::{AgentArtifactSignal, AgentEvent as RuntimeAgentEvent, AgentToolResult};
-use aster::providers::errors::ProviderError;
 use lime_core::database::dao::agent_timeline::AgentThreadItemPayload;
+use model_provider::runtime_provider::message_is_non_retryable_provider_rejection;
 use serde_json::{Map, Value};
 use std::collections::HashMap;
 
@@ -50,7 +50,7 @@ pub(crate) fn update_stream_event_diagnostics(
             diagnostics.max_text_delta_chars = diagnostics.max_text_delta_chars.max(char_count);
             if char_count >= STREAM_EVENT_DIAG_WARN_TEXT_DELTA_CHARS {
                 tracing::warn!(
-                    "[AsterAgent][Diag] large text_delta observed: chars={}",
+                    "[AgentRuntime][Diag] large text_delta observed: chars={}",
                     char_count
                 );
             }
@@ -74,7 +74,7 @@ pub(crate) fn update_stream_event_diagnostics(
             }
             if output_chars >= STREAM_EVENT_DIAG_WARN_TOOL_OUTPUT_CHARS {
                 tracing::warn!(
-                    "[AsterAgent][Diag] large tool_end output observed: tool_id={}, output_chars={}, success={}",
+                    "[AgentRuntime][Diag] large tool_end output observed: tool_id={}, output_chars={}, success={}",
                     tool_id,
                     output_chars,
                     result.success
@@ -97,7 +97,7 @@ pub(crate) fn update_stream_event_diagnostics(
                 diagnostics.max_context_trace_steps.max(steps.len());
             if steps.len() >= STREAM_EVENT_DIAG_WARN_CONTEXT_STEPS {
                 tracing::warn!(
-                    "[AsterAgent][Diag] large context_trace observed: steps={}",
+                    "[AgentRuntime][Diag] large context_trace observed: steps={}",
                     steps.len()
                 );
             }
@@ -147,7 +147,7 @@ pub(crate) fn retryable_provider_tail_failure_detail(error_message: &str) -> Opt
     if detail.is_empty() {
         return None;
     }
-    if ProviderError::message_is_non_retryable_provider_rejection(detail) {
+    if message_is_non_retryable_provider_rejection(detail) {
         return None;
     }
     Some(detail)

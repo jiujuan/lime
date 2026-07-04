@@ -77,6 +77,7 @@ internal/exec-plans/*
 !internal/exec-plans/mcp-modernization-progress.md
 !internal/exec-plans/plan-runtime-implementation-progress.md
 !internal/exec-plans/browser-runtime-right-surface-plan.md
+!internal/exec-plans/projectthread-first-plan.md
 internal/roadmap/**
 !internal/roadmap/
 !internal/roadmap/Writing/
@@ -88,6 +89,8 @@ internal/roadmap/browser/**
 !internal/roadmap/thread/**
 !internal/roadmap/plugin/
 !internal/roadmap/plugin/**
+!internal/roadmap/projectthread/
+!internal/roadmap/projectthread/**
 !internal/roadmap/db/
 internal/roadmap/db/**
 !internal/roadmap/db/*.md

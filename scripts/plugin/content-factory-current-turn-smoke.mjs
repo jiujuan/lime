@@ -647,7 +647,7 @@ async function runSmoke(options) {
       {
         clientInfo: {
           name: "content_factory_current_turn_smoke",
-          version: "1.89.0",
+          version: "1.90.0",
         },
         capabilities: {
           eventMethods: [METHOD_AGENT_SESSION_EVENT],

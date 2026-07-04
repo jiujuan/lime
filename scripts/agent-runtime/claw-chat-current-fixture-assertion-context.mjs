@@ -14,13 +14,17 @@ import {
   PLAIN_IMAGE_INTENT_SCENARIO,
   PLAN_PROMPT,
   RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO,
+  SOUL_STYLE_SCENARIO,
   SKILLS_RUNTIME_EXPLICIT_PROMPT,
   SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT,
   SKILLS_RUNTIME_PROMPT,
   WEB_TOOLS_RENDERING_PROMPT,
 } from "./claw-chat-current-fixture-constants.mjs";
 import { EXPERT_PANEL_SKILLS_RUNTIME_UI_SKILL_REF } from "./claw-chat-current-fixture-expert-actions.mjs";
-import { collectTraceRequestMethods } from "./claw-chat-current-fixture-rpc.mjs";
+import {
+  collectTraceRequestMethods,
+  decodeJsonRpcLines,
+} from "./claw-chat-current-fixture-rpc.mjs";
 import {
   readHarnessMetadataFromTurnStart,
   readObjectiveTextFromHarness,
@@ -39,6 +43,19 @@ export function buildAssertionContext({
   workspace,
   options,
 }) {
+    const traceTurnStarts = traceMessages
+      .filter((entry) => entry?.command === "app_server_handle_json_lines")
+      .flatMap((entry) =>
+        decodeJsonRpcLines(entry?.args_preview?.request?.lines)
+          .filter((message) => message?.method === "agentSession/turn/start")
+          .map((message) => ({
+            transport: entry.transport ?? null,
+            status: entry.status ?? null,
+            sessionId: message.params?.sessionId ?? message.params?.session_id,
+            turnId: message.params?.turnId ?? message.params?.turn_id,
+            inputText: message.params?.input?.text ?? null,
+          })),
+      );
     const appServerRequestMethods = Array.from(
       new Set(
         [
@@ -56,6 +73,12 @@ export function buildAssertionContext({
     );
     const newsTurnStart = backendLedger.find(
       (entry) => entry.kind === "turnStart" && entry.inputText === NEWS_PROMPT,
+    );
+    const newsTraceTurnStart = traceTurnStarts.find(
+      (entry) =>
+        entry.inputText === NEWS_PROMPT &&
+        entry.transport === "electron-ipc" &&
+        entry.status === "success",
     );
     const planTurnStart = backendLedger.find(
       (entry) => entry.kind === "turnStart" && entry.inputText === PLAN_PROMPT,
@@ -131,6 +154,7 @@ export function buildAssertionContext({
     const isMcpStructuredContentScenario =
       options.scenario === "mcp-structured-content";
     const isSkillsRuntimeScenario = options.scenario === "skills-runtime";
+    const isSoulStyleScenario = options.scenario === SOUL_STYLE_SCENARIO;
     const isExpertSkillsRuntimeScenario =
       options.scenario === "expert-skills-runtime";
     const isExpertPlazaSkillsRuntimeScenario =
@@ -246,7 +270,9 @@ export function buildAssertionContext({
                     ) === true
                   : isContentFactoryArticleWorkspaceScenario
                     ? true
-                    : newsTurnStart?.inputText === NEWS_PROMPT;
+                    : isSoulStyleScenario
+                      ? newsTraceTurnStart?.inputText === NEWS_PROMPT
+                      : newsTurnStart?.inputText === NEWS_PROMPT;
   return {
     backendLedger,
     traceMessages,
@@ -260,8 +286,10 @@ export function buildAssertionContext({
     options,
     appServerRequestMethods,
     latestTurnStart,
+    traceTurnStarts,
     planImplementationTurnStart,
     newsTurnStart,
+    newsTraceTurnStart,
     planTurnStart,
     goalTurnStart,
     imageCommandTurnStart,
@@ -283,6 +311,7 @@ export function buildAssertionContext({
     isWebToolsRenderingScenario,
     isMcpStructuredContentScenario,
     isSkillsRuntimeScenario,
+    isSoulStyleScenario,
     isExpertSkillsRuntimeScenario,
     isExpertPlazaSkillsRuntimeScenario,
     isExpertPanelSkillsRuntimeScenario,

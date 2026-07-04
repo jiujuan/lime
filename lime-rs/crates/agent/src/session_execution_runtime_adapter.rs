@@ -21,23 +21,12 @@ use crate::session_execution_runtime::{
 use crate::turn_context_configuration::to_agent_turn_context;
 
 pub(crate) fn project_aster_session_usage(session: &AsterSession) -> Option<AgentTokenUsage> {
-    match (session.input_tokens, session.output_tokens) {
-        (Some(input_tokens), Some(output_tokens)) if input_tokens >= 0 && output_tokens >= 0 => {
-            Some(AgentTokenUsage {
-                input_tokens: input_tokens as u32,
-                output_tokens: output_tokens as u32,
-                cached_input_tokens: session
-                    .cached_input_tokens
-                    .filter(|value| *value >= 0)
-                    .map(|value| value as u32),
-                cache_creation_input_tokens: session
-                    .cache_creation_input_tokens
-                    .filter(|value| *value >= 0)
-                    .map(|value| value as u32),
-            })
-        }
-        _ => None,
-    }
+    crate::session_usage_projection::project_token_usage(
+        session.input_tokens,
+        session.output_tokens,
+        session.cached_input_tokens,
+        session.cache_creation_input_tokens,
+    )
 }
 
 pub(crate) fn project_aster_output_schema_runtime(

@@ -39,7 +39,7 @@ pub fn create_ask_callback() -> AskCallback {
                 Ok(user_data) => extract_current_ask_response(&current_request, &user_data),
                 Err(err) => {
                     tracing::warn!(
-                        "[AsterAgent][AskBridge] 用户输入等待失败: prompt='{}', err={}",
+                        "[AgentRuntime][AskBridge] 用户输入等待失败: prompt='{}', err={}",
                         prompt,
                         err
                     );

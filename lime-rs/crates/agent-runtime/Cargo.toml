@@ -13,7 +13,5 @@ doctest = false
 [dependencies]
 agent-protocol.workspace = true
 model-provider.workspace = true
-thread-store.workspace = true
-tool-runtime.workspace = true
 serde.workspace = true
 serde_json.workspace = true

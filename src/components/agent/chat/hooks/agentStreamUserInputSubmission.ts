@@ -154,6 +154,7 @@ export async function submitAgentStreamUserInput(
       setThreadTurns: env.setThreadTurns,
       setCurrentTurnId: env.setCurrentTurnId,
       setExecutionRuntime: env.setExecutionRuntime,
+      soulCopy: env.soulCopy,
     });
   } catch (error) {
     handleAgentStreamSubmitFailure({
@@ -173,6 +174,7 @@ export async function submitAgentStreamUserInput(
       disposeListener,
       removeQueuedTurnState,
       markOptimisticFailure,
+      soulCopy: env.soulCopy,
     });
   }
 }

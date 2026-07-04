@@ -235,7 +235,7 @@ workflow/respond
 | evidence workflow ids | `lime-rs/crates/app-server/src/runtime/evidence_provider.rs` |
 | App Server event stream mapping | `src/lib/api/agentRuntime/appServerEventStream.ts`，workflow event 当前投影为 diagnostics-only `runtime_status` refresh signal，用于触发 current read model 刷新 |
 | renderer workflow control client | `src/lib/api/appServerClientMethods.ts`，暴露 `readWorkflow / cancelWorkflow / retryWorkflow / respondWorkflow`，只走 App Server current method |
-| thread read model 类型 | `src/lib/api/agentRuntime/types.ts`，保留 `workflow / workflow_runs / workflow_steps` facts；projection 不再删除 workflow facts |
+| legacy thread read model 兼容类型 | `src/lib/api/agentRuntime/types.ts`，仅保留 `workflow / workflow_runs / workflow_steps` 旧形状兼容字段；current UI 不从 `agentSession/read` 读取 workflow facts |
 | workflow facts helper | `src/components/agent/chat/workspace/workspaceArticleWorkspaceWorkflowFacts.ts`，Article Workspace current read model adapter；已兼容 `workflow/read` response / `WorkflowReadModel`，后续只补 presentation |
 | Plugin iframe workflow projection | `src/features/plugin/runtime/workflowReadProjection.ts`、`capabilityDispatcher.ts` 与 `hostBridge.ts`，通过 `lime.agent.readWorkflow` / `capability:subscribe topic=workflow` 只读投影 App Server `workflow/read` |
 | Plugin manifest definition source | `src/features/plugin/manifest/types.ts` |

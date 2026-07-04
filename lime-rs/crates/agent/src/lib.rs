@@ -1,7 +1,7 @@
 //! Lime Agent Crate
 //!
 //! 包含 Agent 模块中不依赖主 crate 内部模块的纯逻辑部分。
-//! 深耦合部分（aster_state、aster_agent 流式桥接）留在主 crate。
+//! 深耦合部分（runtime_state、Aster 流式桥接）留在主 crate。
 
 #![allow(clippy::explicit_counter_loop)]
 #![allow(clippy::unnecessary_map_or)]
@@ -14,21 +14,18 @@ pub mod agent_tools;
 pub mod artifact_protocol;
 pub mod ask_bridge;
 mod aster_runtime_projection;
-pub mod aster_runtime_support;
-pub mod aster_session_store;
-// pub mod aster_session_store_adapter; // 已备份，使用主文件的双重实现
-pub mod aster_state;
-pub mod aster_state_support;
-pub mod credential_bridge;
+mod aster_session_store;
+mod credential_bridge;
 mod direct_text_generation;
 pub mod durable_memory_fs;
-pub mod event_converter;
+mod event_converter;
 mod execution_strategy_compat;
 pub mod filesystem_event_protocol;
 pub mod hooks;
 mod host_managed_generation;
 mod knowledge_builder_skill;
 pub mod lime_session_repository;
+mod live_execution_process;
 pub mod lsp_bridge;
 pub mod mcp_bridge;
 mod message_content_adapter;
@@ -40,14 +37,17 @@ pub mod protocol_projection;
 mod provider_configuration;
 pub mod provider_continuation_state;
 pub mod provider_runtime_governor;
-mod provider_safety;
 pub mod queued_turn;
 pub mod request_tool_policy;
 pub mod runtime_facade;
 pub mod runtime_projection_snapshot;
 pub mod runtime_queue;
 mod runtime_snapshot_adapter;
+mod runtime_state;
+mod runtime_state_support;
+mod runtime_support;
 mod runtime_timeline_adapter;
+mod session_config_adapter;
 mod session_configuration;
 mod session_execution_runtime;
 mod session_execution_runtime_adapter;
@@ -55,12 +55,14 @@ mod session_query;
 pub mod session_state_snapshot;
 mod session_store;
 mod session_update;
+mod session_usage_projection;
 pub mod skill_execution;
 pub mod subagent_control;
 pub mod subagent_profiles;
 mod subagent_runtime_adapter;
-pub mod subagent_scheduler;
 pub mod team_runtime_governor;
+#[cfg(any(test, feature = "test-support"))]
+pub mod test_support;
 mod text_normalization;
 pub mod tool_io_offload;
 pub mod tools;
@@ -71,18 +73,8 @@ pub mod turn_state;
 mod write_artifact_events;
 
 pub use ask_bridge::{create_ask_callback, extract_response as extract_ask_response};
-pub use aster_runtime_support::{initialize_aster_runtime, restore_aster_runtime_queued_turns};
-pub use aster_state::{AsterAgentState, ProviderConfig, QueuedTurnTask, RuntimeInterruptMarker};
-pub use aster_state_support::{
-    build_project_system_prompt, create_lime_identity, create_lime_tool_config,
-    load_workspace_lime_skills, message_helpers, reload_lime_skills, SessionConfigBuilder,
-};
-pub use credential_bridge::{
-    CredentialBridge, CredentialBridgeError, RuntimeProviderConfig, RuntimeProviderProtocol,
-};
 pub use direct_text_generation::{
-    run_direct_text_generation, run_direct_text_generation_with_db, DirectTextGenerationRequest,
-    DirectTextGenerationResult,
+    run_direct_text_generation_with_db, DirectTextGenerationRequest, DirectTextGenerationResult,
 };
 pub use durable_memory_fs::{
     durable_memory_permission_pattern, is_virtual_memory_path, resolve_durable_memory_root,
@@ -99,6 +91,7 @@ pub use knowledge_builder_skill::{
     run_knowledge_builder_skill, KnowledgeBuilderSkillRequest, KnowledgeBuilderSkillRunner,
 };
 pub use lime_mcp as mcp;
+pub use live_execution_process::LiveExecutionProcessGateway;
 pub use lsp_bridge::create_lsp_callback;
 pub use prompt::SystemPromptBuilder;
 pub use prompt::{
@@ -121,8 +114,9 @@ pub use protocol::{
 };
 pub use protocol_projection::{project_item_runtime, project_turn_runtime};
 pub use provider_configuration::{
-    configure_provider_for_session, route_protocol_from_provider_config,
-    ProviderConfigurationRequest,
+    configure_model_route_provider_for_session, provider_configuration_from_model_selection,
+    route_protocol_from_session_provider_config, ModelRouteProviderConfiguration,
+    SessionProviderConfig,
 };
 pub use provider_continuation_state::{
     ProviderContinuationCapability, ProviderContinuationCapable, ProviderContinuationState,
@@ -148,6 +142,11 @@ pub use runtime_queue::{
     resume_persisted_runtime_queues_on_startup, resume_runtime_queue_if_needed,
     submit_runtime_turn, RuntimeQueueEventEmitter, RuntimeQueueExecutor,
 };
+pub use runtime_state::{AgentRuntimeState, QueuedTurnTask};
+pub use runtime_state_support::{
+    create_lime_identity, create_lime_tool_config, reload_lime_skills, SessionConfigBuilder,
+};
+pub use runtime_support::initialize_agent_runtime;
 pub use session_configuration::{
     build_agent_session_config, AgentSessionConfig, AgentSessionConfigurationRequest,
 };
@@ -180,8 +179,7 @@ pub use session_store::{
     SessionTodoItem, SessionTodoStatus, SubagentParentContext,
 };
 pub use session_update::{
-    create_subagent_session, persist_compaction_session_metrics_update,
-    persist_session_extension_data, replace_session_conversation, CompactionSessionMetricsUpdate,
+    persist_compaction_session_metrics_update, CompactionSessionMetricsUpdate,
 };
 pub use skill_execution::{
     execute_skill_prompt, execute_skill_workflow, SkillEventEmitter, SkillExecutionError,
@@ -202,9 +200,6 @@ pub use subagent_profiles::{
     SubagentCustomizationState, SubagentProfileSummary, SubagentSkillPromptBlock,
     SubagentSkillSummary, TeamPresetSummary,
 };
-pub use subagent_scheduler::{
-    LimeScheduler, LimeSubAgentExecutor, SchedulerEventEmitter, SubAgentProgressEvent, SubAgentRole,
-};
 pub use team_runtime_governor::{
     acquire_team_runtime_permit, default_team_runtime_parallel_budget,
     normalize_team_runtime_provider_group, preview_team_runtime_wait_snapshot,
@@ -218,7 +213,10 @@ pub use turn_context_configuration::{
     set_agent_turn_user_visible_input_text, AgentTurnContext, AgentTurnContextConfigurationRequest,
     AgentTurnContextOverride,
 };
-pub use turn_execution::{run_agent_turn_with_policy, AgentTurnExecutionRequest};
+pub use turn_execution::{
+    run_agent_turn_with_policy, AgentTurnExecution, AgentTurnExecutionRequest,
+    AgentTurnProviderConfiguration,
+};
 pub use turn_input_envelope::{
     TurnDiagnosticsSnapshot, TurnExecutionProfile, TurnInputEnvelope, TurnInputEnvelopeBuilder,
     TurnMessageHistorySource, TurnPromptAugmentationStage, TurnPromptAugmentationStageKind,

@@ -490,6 +490,38 @@ function renderGroupItemDetails(
     );
   }
 
+  if (item.type === "expert_profile_switch") {
+    const previousExpertId = item.previous_expert_id?.trim();
+    const nextExpertId = item.next_expert_id?.trim();
+    const switchSummary =
+      previousExpertId && nextExpertId
+        ? t("agentChat.threadTimeline.expertProfileSwitch.fromTo", {
+            previous: previousExpertId,
+            next: nextExpertId,
+          })
+        : nextExpertId
+          ? t("agentChat.threadTimeline.expertProfileSwitch.to", {
+              next: nextExpertId,
+            })
+          : item.summary ||
+            t("agentChat.threadTimeline.expertProfileSwitch.description");
+
+    return (
+      <SurfaceCard
+        icon={Sparkles}
+        title={t("agentChat.threadTimeline.expertProfileSwitch.title")}
+        badge={
+          <Badge variant={resolveStatusBadgeVariant(item.status)}>
+            {t("agentChat.threadTimeline.expertProfileSwitch.badge")}
+          </Badge>
+        }
+        timestamp={timestamp}
+      >
+        <div className="text-sm text-muted-foreground">{switchSummary}</div>
+      </SurfaceCard>
+    );
+  }
+
   if (item.type === "warning" || item.type === "error") {
     const displayMessage =
       item.type === "error"

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { MutableRefObject } from "react";
+import { resolveSoulInteractionCopy } from "@/lib/soul/interactionCopy";
 import { buildWaitingAgentRuntimeStatus } from "../utils/agentRuntimeStatus";
 import { resolveAgentStreamSubmitContext } from "./agentStreamSubmitContext";
 
@@ -73,5 +74,35 @@ describe("agentStreamSubmitContext", () => {
 
     expect(result.resolvedWorkspaceId).toBeUndefined();
     expect(result.submitWorkspaceId).toBeUndefined();
+  });
+
+  it("非队列流激活等待态应支持 Soul 交互口吻", async () => {
+    const activateStream = vi.fn();
+    const soulCopy = resolveSoulInteractionCopy({
+      soul: {
+        enabled: true,
+        style_profile_id: "cheeky_sassy_executor",
+        style_intensity: "low",
+      },
+    });
+    const result = await resolveAgentStreamSubmitContext({
+      ensureSession: async () => "session-soul",
+      sessionIdRef: { current: null } as MutableRefObject<string | null>,
+      getWorkspaceIdForSubmit: () => "workspace-1",
+      getSyncedSessionExecutionStrategy: () => "react",
+      effectiveExecutionStrategy: "react",
+      expectingQueue: false,
+      soulCopy,
+      activateStream,
+    });
+
+    expect(result.effectiveWaitingRuntimeStatus).toMatchObject({
+      title: "正在启动处理",
+      detail: expect.stringContaining("进展"),
+    });
+    expect(activateStream).toHaveBeenCalledWith(
+      "session-soul",
+      result.effectiveWaitingRuntimeStatus,
+    );
   });
 });

@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import styled from "styled-components";
-import type { ExpertAgentLaunchMode, Page, PageParams } from "@/types/page";
+import type { Page, PageParams } from "@/types/page";
 import { buildClawAgentParams } from "@/lib/workspace/navigation";
+import {
+  LAST_PROJECT_ID_KEY,
+  loadPersistedProjectId,
+} from "@/components/agent/chat/hooks/agentProjectStorage";
+import { normalizeProjectId } from "@/components/agent/chat/utils/topicProjectResolution";
 import {
   buildExpertRuntimeMetadata,
   buildExpertCatalogProjection,
@@ -24,6 +29,7 @@ import {
 
 interface ExpertPlazaPageProps {
   onNavigate?: (page: Page, params?: PageParams) => void;
+  currentProjectId?: string | null;
 }
 
 const Shell = styled.div.attrs({
@@ -505,7 +511,7 @@ const DetailSide = styled.aside`
 
 const DetailActions = styled.div`
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: 1fr;
   gap: 10px;
   margin-top: 6px;
   border-top: 1px solid
@@ -516,19 +522,9 @@ const DetailActions = styled.div`
     );
   padding-top: 12px;
 
-  @media (max-width: 520px) {
-    grid-template-columns: 1fr;
-  }
 `;
 
 const DetailPrimaryButton = styled(PrimaryButton)`
-  width: 100%;
-  min-height: 44px;
-  padding: 0 18px;
-  font-size: 13px;
-`;
-
-const DetailSecondaryButton = styled(SecondaryButton)`
   width: 100%;
   min-height: 44px;
   padding: 0 18px;
@@ -591,12 +587,21 @@ function findOverlayForExpert(
 function resolveExpertAgentIdentity(
   catalog: ExpertCatalog,
   item: ExpertCatalogProjectionItem,
+  projectId?: string | null,
 ) {
   return {
     tenantId: catalog.tenantId,
+    ...(projectId ? { projectId } : {}),
     expertId: item.id,
     releaseId: item.release.releaseId,
   };
+}
+
+function resolveExpertPlazaProjectId(projectId?: string | null): string | null {
+  return (
+    normalizeProjectId(projectId) ||
+    loadPersistedProjectId(LAST_PROJECT_ID_KEY)
+  );
 }
 
 function buildExpertCatalogEvent(
@@ -624,7 +629,10 @@ function buildExpertCatalogEvent(
   };
 }
 
-export function ExpertPlazaPage({ onNavigate }: ExpertPlazaPageProps) {
+export function ExpertPlazaPage({
+  onNavigate,
+  currentProjectId,
+}: ExpertPlazaPageProps) {
   const { t } = useTranslation("agent");
   const [catalog, setCatalog] = useState<ExpertCatalog>(() =>
     getSeededExpertCatalog(),
@@ -638,6 +646,7 @@ export function ExpertPlazaPage({ onNavigate }: ExpertPlazaPageProps) {
   const [syncedFromCloud, setSyncedFromCloud] = useState(false);
   const [, setInstanceSyncVersion] = useState(0);
   const impressionKeysRef = useRef<Set<string>>(new Set());
+  const projectScopedId = resolveExpertPlazaProjectId(currentProjectId);
 
   useEffect(() => {
     let cancelled = false;
@@ -718,26 +727,25 @@ export function ExpertPlazaPage({ onNavigate }: ExpertPlazaPageProps) {
     }
   };
 
-  const handleStart = (
-    item: ExpertCatalogProjectionItem,
-    launchMode: ExpertAgentLaunchMode = "resume_or_create",
-  ) => {
+  const handleStart = (item: ExpertCatalogProjectionItem) => {
     const nextOverlays = recordExpertLaunch(overlays, item);
     setOverlays(nextOverlays);
-    const identity = resolveExpertAgentIdentity(catalog, item);
-    const existingInstance =
-      launchMode === "resume_or_create"
-        ? findExpertAgentInstance(identity)
-        : null;
-    const shouldResumeExisting = Boolean(existingInstance?.latestSessionId);
+    const identity = resolveExpertAgentIdentity(
+      catalog,
+      item,
+      projectScopedId,
+    );
+    const existingInstance = projectScopedId
+      ? findExpertAgentInstance(identity)
+      : null;
     const event = buildExpertCatalogEvent(
       item,
       catalog,
       "expert_chat_started",
       "expert_plaza",
       {
-        launchMode,
-        reusedSession: String(shouldResumeExisting),
+        launchMode: "new_thread",
+        reusedSession: "false",
       },
     );
     if (event) {
@@ -772,36 +780,24 @@ export function ExpertPlazaPage({ onNavigate }: ExpertPlazaPageProps) {
     onNavigate?.(
       "agent",
       buildClawAgentParams({
-        projectId: "default",
-        ...(shouldResumeExisting ? {} : { initialUserPrompt }),
+        ...(projectScopedId ? { projectId: projectScopedId } : {}),
+        initialUserPrompt,
         initialSessionName: item.title,
-        initialSessionId: existingInstance?.latestSessionId,
-        ...(shouldResumeExisting
-          ? { autoRunInitialPromptOnMount: false }
-          : {
-              autoRunInitialPromptOnMount: true,
-              newChatAt: Date.now(),
-              initialAutoSendRequestMetadata: requestMetadata,
-            }),
+        autoRunInitialPromptOnMount: true,
+        newChatAt: Date.now(),
+        initialAutoSendRequestMetadata: requestMetadata,
         initialRequestMetadata: requestMetadata,
         expertAgentLaunch: {
           ...identity,
           agentInstanceKey: buildExpertAgentInstanceKey(identity),
           catalogVersion: catalog.version,
-          launchMode,
+          launchMode: "new_thread",
           title: item.title,
-          latestSessionId: existingInstance?.latestSessionId,
           skillRefsOverride: existingInstance?.skillRefsOverride,
         },
       }),
     );
   };
-
-  const getStartActionLabel = (item: ExpertCatalogProjectionItem) =>
-    findExpertAgentInstance(resolveExpertAgentIdentity(catalog, item))
-      ?.latestSessionId
-      ? t("agentExperts.actions.continue")
-      : t("agentExperts.actions.start");
 
   const readinessLabel = (item: ExpertCatalogProjectionItem) => {
     if (item.release.readiness?.missingSkillRefs?.length) {
@@ -909,7 +905,7 @@ export function ExpertPlazaPage({ onNavigate }: ExpertPlazaPageProps) {
                     data-testid={`expert-start-${item.id}`}
                     onClick={() => handleStart(item)}
                   >
-                    {getStartActionLabel(item)}
+                    {t("agentExperts.actions.start")}
                   </PrimaryButton>
                   <SecondaryButton
                     type="button"
@@ -985,15 +981,8 @@ export function ExpertPlazaPage({ onNavigate }: ExpertPlazaPageProps) {
                   data-testid={`expert-detail-start-${selected.id}`}
                   onClick={() => handleStart(selected)}
                 >
-                  {getStartActionLabel(selected)}
+                  {t("agentExperts.actions.start")}
                 </DetailPrimaryButton>
-                <DetailSecondaryButton
-                  type="button"
-                  data-testid={`expert-new-thread-${selected.id}`}
-                  onClick={() => handleStart(selected, "new_thread")}
-                >
-                  {t("agentExperts.actions.newThread")}
-                </DetailSecondaryButton>
               </DetailActions>
             </DetailSide>
           </DetailDialog>

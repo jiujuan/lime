@@ -5,6 +5,7 @@ use aster::session_context::{current_action_scope, current_session_id};
 use aster::tools::{PermissionCheckResult, Tool, ToolContext, ToolError, ToolOptions, ToolResult};
 use async_trait::async_trait;
 use serde_json::{json, Map, Value};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -16,8 +17,14 @@ pub trait ImageTaskGateway: Send + Sync {
     ) -> Result<MediaTaskArtifactResponse, String>;
 }
 
-pub fn create_image_tools(gateway: Arc<dyn ImageTaskGateway>) -> Vec<Box<dyn Tool>> {
+pub(crate) fn create_image_tools(gateway: Arc<dyn ImageTaskGateway>) -> Vec<Box<dyn Tool>> {
     vec![Box::new(ImageGenerationTool::new(gateway))]
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NativeToolResultProjection {
+    pub output: Option<String>,
+    pub metadata: HashMap<String, Value>,
 }
 
 #[derive(Clone)]
@@ -376,22 +383,44 @@ fn build_create_params(input: ImageToolInput) -> MediaTaskArtifactImageCreatePar
     }
 }
 
-pub fn image_tool_result_from_response(response: MediaTaskArtifactResponse) -> ToolResult {
+pub fn image_task_tool_result_projection(
+    response: MediaTaskArtifactResponse,
+) -> NativeToolResultProjection {
     let text = serde_json::to_string_pretty(&response).unwrap_or_else(|_| "{}".to_string());
-    let mut result = ToolResult::success(text)
-        .with_metadata("task_id", json!(response.task_id))
-        .with_metadata("task_type", json!(response.task_type))
-        .with_metadata("task_family", json!(response.task_family))
-        .with_metadata("status", json!(response.status))
-        .with_metadata("normalized_status", json!(response.normalized_status))
-        .with_metadata("path", json!(response.path))
-        .with_metadata("artifact_path", json!(response.artifact_path))
-        .with_metadata("reused_existing", json!(response.reused_existing))
-        .with_metadata("record", json!(response.record));
+    let mut metadata = HashMap::from([
+        ("task_id".to_string(), json!(response.task_id)),
+        ("task_type".to_string(), json!(response.task_type)),
+        ("task_family".to_string(), json!(response.task_family)),
+        ("status".to_string(), json!(response.status)),
+        (
+            "normalized_status".to_string(),
+            json!(response.normalized_status),
+        ),
+        ("path".to_string(), json!(response.path)),
+        ("artifact_path".to_string(), json!(response.artifact_path)),
+        (
+            "reused_existing".to_string(),
+            json!(response.reused_existing),
+        ),
+        ("record".to_string(), json!(response.record)),
+    ]);
     if let Some(idempotency_key) = response.idempotency_key {
-        result = result.with_metadata("idempotency_key", json!(idempotency_key));
+        metadata.insert("idempotency_key".to_string(), json!(idempotency_key));
     }
-    result
+    NativeToolResultProjection {
+        output: Some(text),
+        metadata,
+    }
+}
+
+fn image_tool_result_from_response(response: MediaTaskArtifactResponse) -> ToolResult {
+    let projection = image_task_tool_result_projection(response);
+    ToolResult {
+        success: true,
+        output: projection.output,
+        error: None,
+        metadata: projection.metadata,
+    }
 }
 
 fn resolve_project_root_path(params: &Value, context: &ToolContext) -> Result<String, ToolError> {

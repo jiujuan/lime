@@ -1158,7 +1158,7 @@ mod tests {
         );
         assert_eq!(
             structured_output_tool.catalog_source,
-            Some(ToolSourceKind::AsterBuiltin)
+            Some(ToolSourceKind::RuntimeBuiltin)
         );
         assert_eq!(
             structured_output_tool.catalog_lifecycle,

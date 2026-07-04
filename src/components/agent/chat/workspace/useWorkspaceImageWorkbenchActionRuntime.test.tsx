@@ -277,7 +277,7 @@ describe("useWorkspaceImageWorkbenchActionRuntime", () => {
     });
   });
 
-  it("普通输入 resolver 不应把工作台偏好写成图片执行路由", async () => {
+  it("普通输入 resolver 应把当前图片渠道写成图片执行路由", async () => {
     const { render, getValue } = renderHook({
       imageWorkbenchPreferredModelId: "gpt-images-2",
       imageWorkbenchPreferredProviderId:
@@ -309,8 +309,10 @@ describe("useWorkspaceImageWorkbenchActionRuntime", () => {
       string,
       unknown
     >;
-    expect(imageTask).not.toHaveProperty("provider_id");
-    expect(imageTask).not.toHaveProperty("model");
-    expect(imageTask).not.toHaveProperty("executor_mode");
+    expect(imageTask).toMatchObject({
+      provider_id: "custom-f0181b00-35b6-4731-94e2-24f17fd247c9",
+      model: "gpt-images-2",
+      executor_mode: "images_api",
+    });
   });
 });

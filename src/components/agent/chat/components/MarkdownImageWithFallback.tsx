@@ -31,7 +31,11 @@ export function MarkdownImageWithFallback({
 
   if (isUnavailable) {
     return (
-      <span className="my-3 inline-flex" data-testid="markdown-image-block">
+      <span
+        className="my-3 inline-flex"
+        data-markdown-image-src={src}
+        data-testid="markdown-image-block"
+      >
         <ImageUnavailablePlaceholder
           label={unavailableLabel}
           testId="markdown-image-unavailable"
@@ -45,6 +49,7 @@ export function MarkdownImageWithFallback({
       {...props}
       src={src}
       alt={alt ?? ""}
+      data-markdown-image-src={src}
       className={[
         "max-h-[512px] max-w-full cursor-pointer rounded-[10px] border border-border object-contain transition hover:border-ring hover:shadow-[0_10px_24px_rgba(15,23,42,0.08)]",
         className,

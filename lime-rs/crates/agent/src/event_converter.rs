@@ -1,19 +1,15 @@
-//! Aster 事件转换器
+//! Aster 事件转换 adapter
 //!
-//! 将 Aster AgentEvent 转换为 Tauri 可用的事件格式
+//! 将 Aster AgentEvent 转换为 runtime event 格式
 //! 用于前端实时显示流式响应
 
 use agent_protocol::provider_trace::ProviderTraceStage;
 use aster::agents::{AgentEvent, ProviderTraceStage as AsterProviderTraceStage};
 
-pub use crate::protocol::{
-    AgentArtifactSignal as TauriArtifactSnapshot, AgentContextBudget as TauriContextBudget,
-    AgentContextTraceStep as TauriContextTraceStep, AgentEvent as TauriAgentEvent,
-    AgentMessage as TauriMessage, AgentMissingContextFact as TauriMissingContextFact,
-    AgentProviderTraceStage as TauriProviderTraceStage, AgentRetrievalRef as TauriRetrievalRef,
-    AgentRuntimeStatus as TauriRuntimeStatus, AgentTeamMemoryRef as TauriTeamMemoryRef,
-    AgentTokenUsage as TauriTokenUsage, AgentToolProgressPayload as TauriToolProgressPayload,
-    AgentTurnContextSummary as TauriTurnContextSummary,
+use crate::protocol::{
+    AgentContextTraceStep as RuntimeContextTraceStep, AgentEvent as RuntimeAgentEvent,
+    AgentProviderTraceStage as RuntimeProviderTraceStage,
+    AgentToolProgressPayload as RuntimeToolProgressPayload,
 };
 use crate::turn_context_configuration::{to_agent_turn_context, AgentTurnContext};
 use std::collections::HashMap;
@@ -22,14 +18,14 @@ use tool_runtime::mcp_notification::{project_mcp_notification, McpNotificationPr
 fn convert_mcp_notification(
     tool_id: String,
     notification: rmcp::model::ServerNotification,
-) -> Vec<TauriAgentEvent> {
+) -> Vec<RuntimeAgentEvent> {
     project_mcp_notification(tool_id, notification)
         .into_iter()
         .map(|projection| match projection {
             McpNotificationProjection::ToolProgress { tool_id, progress } => {
-                TauriAgentEvent::ToolProgress {
+                RuntimeAgentEvent::ToolProgress {
                     tool_id,
-                    progress: TauriToolProgressPayload {
+                    progress: RuntimeToolProgressPayload {
                         message: progress.message,
                         progress: progress.progress,
                         total: progress.total,
@@ -42,7 +38,7 @@ fn convert_mcp_notification(
                 delta,
                 output_kind,
                 metadata,
-            } => TauriAgentEvent::ToolOutputDelta {
+            } => RuntimeAgentEvent::ToolOutputDelta {
                 tool_id,
                 delta,
                 output_kind,
@@ -78,10 +74,10 @@ fn extract_turn_execution_strategy(turn_context: Option<&AgentTurnContext>) -> O
     .map(|_| "react".to_string())
 }
 
-/// 将 Aster AgentEvent 转换为 TauriAgentEvent 列表
+/// 将 Aster AgentEvent 转换为 RuntimeAgentEvent 列表
 ///
-/// 一个 AgentEvent 可能产生多个 TauriAgentEvent
-pub fn convert_agent_event(event: AgentEvent) -> Vec<TauriAgentEvent> {
+/// 一个 AgentEvent 可能产生多个 RuntimeAgentEvent
+pub(crate) fn convert_agent_event(event: AgentEvent) -> Vec<RuntimeAgentEvent> {
     match event {
         AgentEvent::TurnStarted { turn } => {
             let agent_turn_context = turn.context_override.clone().map(to_agent_turn_context);
@@ -99,7 +95,7 @@ pub fn convert_agent_event(event: AgentEvent) -> Vec<TauriAgentEvent> {
                 || turn.output_schema_runtime.is_some()
                 || context_summary.is_some()
             {
-                Some(TauriAgentEvent::TurnContext {
+                Some(RuntimeAgentEvent::TurnContext {
                     session_id: turn.session_id.clone(),
                     thread_id: turn.thread_id.clone(),
                     turn_id: turn.id.clone(),
@@ -119,8 +115,8 @@ pub fn convert_agent_event(event: AgentEvent) -> Vec<TauriAgentEvent> {
             };
             let thread_id = turn.thread_id.clone();
             let mut events = vec![
-                TauriAgentEvent::ThreadStarted { thread_id },
-                TauriAgentEvent::TurnStarted {
+                RuntimeAgentEvent::ThreadStarted { thread_id },
+                RuntimeAgentEvent::TurnStarted {
                     turn: crate::runtime_timeline_adapter::convert_aster_turn_runtime(turn),
                 },
             ];
@@ -131,19 +127,19 @@ pub fn convert_agent_event(event: AgentEvent) -> Vec<TauriAgentEvent> {
         }
         AgentEvent::ItemStarted { item } => {
             crate::runtime_timeline_adapter::convert_aster_item_runtime(item)
-                .map(|item| TauriAgentEvent::ItemStarted { item })
+                .map(|item| RuntimeAgentEvent::ItemStarted { item })
                 .into_iter()
                 .collect()
         }
         AgentEvent::ItemUpdated { item } => {
             crate::runtime_timeline_adapter::convert_aster_item_runtime(item)
-                .map(|item| TauriAgentEvent::ItemUpdated { item })
+                .map(|item| RuntimeAgentEvent::ItemUpdated { item })
                 .into_iter()
                 .collect()
         }
         AgentEvent::ItemCompleted { item } => {
             crate::runtime_timeline_adapter::convert_aster_item_runtime(item)
-                .map(|item| TauriAgentEvent::ItemCompleted { item })
+                .map(|item| RuntimeAgentEvent::ItemCompleted { item })
                 .into_iter()
                 .collect()
         }
@@ -159,7 +155,7 @@ pub fn convert_agent_event(event: AgentEvent) -> Vec<TauriAgentEvent> {
             delta,
             accumulated_arguments,
             provider,
-        } => vec![TauriAgentEvent::ToolInputDelta {
+        } => vec![RuntimeAgentEvent::ToolInputDelta {
             tool_id,
             tool_name,
             delta,
@@ -167,9 +163,9 @@ pub fn convert_agent_event(event: AgentEvent) -> Vec<TauriAgentEvent> {
             provider,
         }],
         AgentEvent::ModelChange { model, mode } => {
-            vec![TauriAgentEvent::ModelChange { model, mode }]
+            vec![RuntimeAgentEvent::ModelChange { model, mode }]
         }
-        AgentEvent::ProviderTrace { event } => vec![TauriAgentEvent::ProviderTrace {
+        AgentEvent::ProviderTrace { event } => vec![RuntimeAgentEvent::ProviderTrace {
             stage: convert_provider_trace_stage(event.stage),
             provider: event.provider,
             model: event.model,
@@ -185,10 +181,10 @@ pub fn convert_agent_event(event: AgentEvent) -> Vec<TauriAgentEvent> {
             provider_request_id_header: event.provider_request_id_header,
         }],
         AgentEvent::HistoryReplaced(_conversation) => vec![],
-        AgentEvent::ContextTrace { steps } => vec![TauriAgentEvent::ContextTrace {
+        AgentEvent::ContextTrace { steps } => vec![RuntimeAgentEvent::ContextTrace {
             steps: steps
                 .into_iter()
-                .map(|step| TauriContextTraceStep {
+                .map(|step| RuntimeContextTraceStep {
                     stage: step.stage,
                     detail: step.detail,
                 })
@@ -198,7 +194,7 @@ pub fn convert_agent_event(event: AgentEvent) -> Vec<TauriAgentEvent> {
             item_id,
             trigger,
             detail,
-        } => vec![TauriAgentEvent::ContextCompactionStarted {
+        } => vec![RuntimeAgentEvent::ContextCompactionStarted {
             item_id,
             trigger,
             detail,
@@ -207,19 +203,19 @@ pub fn convert_agent_event(event: AgentEvent) -> Vec<TauriAgentEvent> {
             item_id,
             trigger,
             detail,
-        } => vec![TauriAgentEvent::ContextCompactionCompleted {
+        } => vec![RuntimeAgentEvent::ContextCompactionCompleted {
             item_id,
             trigger,
             detail,
         }],
-        AgentEvent::ContextCompactionWarning { message } => vec![TauriAgentEvent::Warning {
+        AgentEvent::ContextCompactionWarning { message } => vec![RuntimeAgentEvent::Warning {
             code: Some("context_compaction_accuracy".to_string()),
             message,
         }],
     }
 }
 
-fn convert_provider_trace_stage(stage: AsterProviderTraceStage) -> TauriProviderTraceStage {
+fn convert_provider_trace_stage(stage: AsterProviderTraceStage) -> RuntimeProviderTraceStage {
     match stage {
         AsterProviderTraceStage::RequestStarted => ProviderTraceStage::RequestStarted,
         AsterProviderTraceStage::FirstEventReceived => ProviderTraceStage::FirstEventReceived,
@@ -237,7 +233,7 @@ mod tests {
     use crate::message_content_adapter::{
         convert_aster_message_to_events, convert_aster_message_to_runtime_message,
     };
-    use crate::protocol::AgentMessageContent as TauriMessageContent;
+    use crate::protocol::AgentMessageContent as RuntimeMessageContent;
     use aster::conversation::message::{
         ActionRequiredData, ActionRequiredScope as AsterActionRequiredScope, Message,
         MessageContent,
@@ -250,10 +246,10 @@ mod tests {
         let events = convert_aster_message_to_events(message);
 
         assert_eq!(events.len(), 2);
-        assert!(matches!(events[0], TauriAgentEvent::Message { .. }));
+        assert!(matches!(events[0], RuntimeAgentEvent::Message { .. }));
         assert!(matches!(
             &events[1],
-            TauriAgentEvent::TextDelta { text } if text == "Hello, world!"
+            RuntimeAgentEvent::TextDelta { text } if text == "Hello, world!"
         ));
     }
 
@@ -282,7 +278,7 @@ mod tests {
         let tauri_message = convert_aster_message_to_runtime_message(&message);
         assert_eq!(tauri_message.content.len(), 1);
         match &tauri_message.content[0] {
-            TauriMessageContent::ActionRequired {
+            RuntimeMessageContent::ActionRequired {
                 id,
                 action_type,
                 data,
@@ -305,7 +301,7 @@ mod tests {
         let events = convert_aster_message_to_events(message);
         assert_eq!(events.len(), 2);
         match &events[1] {
-            TauriAgentEvent::ActionRequired {
+            RuntimeAgentEvent::ActionRequired {
                 request_id,
                 action_type,
                 data,
@@ -336,7 +332,7 @@ mod tests {
 
         assert_eq!(events.len(), 1);
         match &events[0] {
-            TauriAgentEvent::ModelChange { model, mode } => {
+            RuntimeAgentEvent::ModelChange { model, mode } => {
                 assert_eq!(model, "claude-3");
                 assert_eq!(mode, "chat");
             }
@@ -356,7 +352,7 @@ mod tests {
         let events = convert_agent_event(event);
         assert_eq!(events.len(), 1);
         match &events[0] {
-            TauriAgentEvent::ContextTrace { steps } => {
+            RuntimeAgentEvent::ContextTrace { steps } => {
                 assert_eq!(steps.len(), 1);
                 assert_eq!(steps[0].stage, "memory_injection");
                 assert_eq!(steps[0].detail, "query_len=10,injected=2");
@@ -390,7 +386,7 @@ mod tests {
 
         assert_eq!(progress_events.len(), 1);
         match &progress_events[0] {
-            TauriAgentEvent::ToolProgress { tool_id, progress } => {
+            RuntimeAgentEvent::ToolProgress { tool_id, progress } => {
                 assert_eq!(tool_id, "tool-1");
                 assert_eq!(progress.message.as_deref(), Some("正在处理第 2 项"));
                 assert_eq!(progress.progress, Some(2.0));
@@ -431,7 +427,7 @@ mod tests {
 
         assert_eq!(output_events.len(), 1);
         match &output_events[0] {
-            TauriAgentEvent::ToolOutputDelta {
+            RuntimeAgentEvent::ToolOutputDelta {
                 tool_id,
                 delta,
                 output_kind,
@@ -510,7 +506,7 @@ mod tests {
 
         assert_eq!(lifecycle_events.len(), 1);
         match &lifecycle_events[0] {
-            TauriAgentEvent::ToolOutputDelta {
+            RuntimeAgentEvent::ToolOutputDelta {
                 delta, metadata, ..
             } => {
                 assert!(
@@ -548,7 +544,7 @@ mod tests {
 
         assert_eq!(events.len(), 1);
         match &events[0] {
-            TauriAgentEvent::ToolInputDelta {
+            RuntimeAgentEvent::ToolInputDelta {
                 tool_id,
                 tool_name,
                 delta,
@@ -582,7 +578,7 @@ mod tests {
         });
         assert_eq!(started_events.len(), 1);
         match &started_events[0] {
-            TauriAgentEvent::ContextCompactionStarted {
+            RuntimeAgentEvent::ContextCompactionStarted {
                 item_id,
                 trigger,
                 detail,
@@ -601,7 +597,7 @@ mod tests {
         });
         assert_eq!(completed_events.len(), 1);
         match &completed_events[0] {
-            TauriAgentEvent::ContextCompactionCompleted {
+            RuntimeAgentEvent::ContextCompactionCompleted {
                 item_id,
                 trigger,
                 detail,
@@ -619,7 +615,7 @@ mod tests {
         });
         assert_eq!(warning_events.len(), 1);
         match &warning_events[0] {
-            TauriAgentEvent::Warning { code, message } => {
+            RuntimeAgentEvent::Warning { code, message } => {
                 assert_eq!(code.as_deref(), Some("context_compaction_accuracy"));
                 assert_eq!(
                     message,
@@ -643,13 +639,13 @@ mod tests {
 
         assert_eq!(events.len(), 2);
         match &events[0] {
-            TauriAgentEvent::ThreadStarted { thread_id } => {
+            RuntimeAgentEvent::ThreadStarted { thread_id } => {
                 assert_eq!(thread_id, "thread-1");
             }
             _ => panic!("Expected ThreadStarted event"),
         }
         match &events[1] {
-            TauriAgentEvent::TurnStarted { turn } => {
+            RuntimeAgentEvent::TurnStarted { turn } => {
                 assert_eq!(turn.id, "turn-1");
                 assert_eq!(turn.thread_id, "thread-1");
                 assert_eq!(turn.prompt_text, "帮我总结");
@@ -681,7 +677,7 @@ mod tests {
 
         assert_eq!(events.len(), 3);
         match &events[2] {
-            TauriAgentEvent::TurnContext {
+            RuntimeAgentEvent::TurnContext {
                 session_id,
                 thread_id,
                 turn_id,
@@ -725,7 +721,7 @@ mod tests {
 
         assert_eq!(events.len(), 3);
         match &events[2] {
-            TauriAgentEvent::TurnContext {
+            RuntimeAgentEvent::TurnContext {
                 session_id,
                 thread_id,
                 turn_id,
@@ -806,7 +802,7 @@ mod tests {
 
         assert_eq!(events.len(), 3);
         match &events[2] {
-            TauriAgentEvent::TurnContext {
+            RuntimeAgentEvent::TurnContext {
                 session_id,
                 thread_id,
                 turn_id,
@@ -863,7 +859,7 @@ mod tests {
         let tool_end = events
             .iter()
             .find_map(|event| match event {
-                TauriAgentEvent::ToolEnd { result, .. } => Some(result),
+                RuntimeAgentEvent::ToolEnd { result, .. } => Some(result),
                 _ => None,
             })
             .expect("expected tool_end event");
@@ -907,7 +903,7 @@ mod tests {
         let tool_end = events
             .iter()
             .find_map(|event| match event {
-                TauriAgentEvent::ToolEnd { result, .. } => Some(result),
+                RuntimeAgentEvent::ToolEnd { result, .. } => Some(result),
                 _ => None,
             })
             .expect("expected legacy tool_end event");
@@ -944,7 +940,7 @@ mod tests {
         let tool_end = events
             .iter()
             .find_map(|event| match event {
-                TauriAgentEvent::ToolEnd { result, .. } => Some(result),
+                RuntimeAgentEvent::ToolEnd { result, .. } => Some(result),
                 _ => None,
             })
             .expect("expected legacy failed tool_end event");
@@ -969,10 +965,10 @@ mod tests {
         let events = convert_agent_event(AgentEvent::Message(message));
 
         assert!(events.iter().any(
-            |event| matches!(event, TauriAgentEvent::Message { message } if message.id.as_deref() == Some("resp-1"))
+            |event| matches!(event, RuntimeAgentEvent::Message { message } if message.id.as_deref() == Some("resp-1"))
         ));
-        assert!(events
-            .iter()
-            .any(|event| matches!(event, TauriAgentEvent::TextDelta { text } if text == "hello")));
+        assert!(events.iter().any(
+            |event| matches!(event, RuntimeAgentEvent::TextDelta { text } if text == "hello")
+        ));
     }
 }

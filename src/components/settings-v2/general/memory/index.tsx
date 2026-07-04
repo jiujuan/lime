@@ -29,7 +29,12 @@ import {
   type SoulImportResult,
   type SoulImportWarningCode,
 } from "@/lib/soul/soulConfig";
+import type {
+  SoulStyleIntensity,
+  SoulStyleProfileId,
+} from "@/lib/soul/style-profiles";
 import { MemoryStoreStatusPanel } from "./MemoryStoreStatusPanel";
+import { StyleProfileSelector } from "./soul/StyleProfileSelector";
 
 type EmbeddingProviderChoice =
   | "auto"
@@ -457,6 +462,22 @@ export function MemorySettings() {
     window.setTimeout(() => setMessage(null), 2500);
   };
 
+  const handleSoulStyleProfileChange = (
+    styleProfileId: SoulStyleProfileId,
+    styleIntensity: SoulStyleIntensity,
+  ) => {
+    setDraft((previous) => ({
+      ...previous,
+      soul: buildSoulDraftPatch(previous.soul, {
+        enabled: true,
+        style_profile_id: styleProfileId,
+        style_intensity: styleIntensity,
+      }),
+    }));
+    setMessage(memoryT(t, "settings.memory.soul.message.styleProfileUpdated"));
+    window.setTimeout(() => setMessage(null), 2500);
+  };
+
   const handleSoulReset = () => {
     setDraft((previous) => {
       const previousSoul = normalizeSoulConfig(previous.soul);
@@ -466,6 +487,8 @@ export function MemorySettings() {
           enabled: false,
           name: undefined,
           summary: undefined,
+          style_profile_id: undefined,
+          style_intensity: undefined,
           tone: [],
           communication_style: [],
           explanation_depth: undefined,
@@ -508,6 +531,8 @@ export function MemorySettings() {
         soul: normalizeSoulConfig({
           ...soulImportPreview.draft,
           artifact_voice: previousSoul.artifact_voice,
+          style_profile_id: previousSoul.style_profile_id,
+          style_intensity: previousSoul.style_intensity,
         }),
       };
     });
@@ -730,6 +755,12 @@ export function MemorySettings() {
               </div>
             ) : null}
           </div>
+
+          <StyleProfileSelector
+            value={soul.style_profile_id}
+            intensity={soul.style_intensity}
+            onChange={handleSoulStyleProfileChange}
+          />
 
           <div className="mt-5">
             <p className="text-sm font-semibold text-slate-950">

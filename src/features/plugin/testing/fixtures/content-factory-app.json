@@ -60,7 +60,7 @@
       "outputArtifactKind": "content_factory.workspace_patch",
       "hostManagedGeneration": {
         "enabled": true,
-        "systemPrompt": "内容工厂 worker 只接收宿主托管生成结果，不接触 provider key。请生成可直接进入 Article Workspace 的中文 Markdown 正文，避免输出过程说明、JSON、代码围栏或工作流步骤。",
+        "systemPrompt": "内容工厂 worker 只接收宿主托管生成结果，不接触 provider key。请生成可直接进入 Article Workspace 的中文 Markdown 正文，避免输出过程说明、JSON、代码围栏或工作流步骤。正式正文使用本生成 brief 的文章 voice；不要直接套用产品聊天口吻。",
         "requests": [
           {
             "id": "article-draft-document",
@@ -191,7 +191,7 @@
       "directFilesystemAccess": false,
       "hostManagedGeneration": {
         "enabled": true,
-        "systemPrompt": "内容工厂 worker 只接收宿主托管生成结果，不接触 provider key。请生成可直接进入 Article Workspace 的中文 Markdown 正文，避免输出过程说明、JSON、代码围栏或工作流步骤。",
+        "systemPrompt": "内容工厂 worker 只接收宿主托管生成结果，不接触 provider key。请生成可直接进入 Article Workspace 的中文 Markdown 正文，避免输出过程说明、JSON、代码围栏或工作流步骤。正式正文使用本生成 brief 的文章 voice；不要直接套用产品聊天口吻。",
         "requests": [
           {
             "id": "article-draft-document",

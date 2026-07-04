@@ -2472,8 +2472,7 @@ impl Agent {
 
         let session = self.store_get_session(&session_config.id, false).await?;
         self.remember_session_type_hint(session.session_type).await;
-        self.ensure_thread_runtime(&session, &session_config)
-            .await?;
+        self.ensure_thread_runtime(&session, &session_config).await?;
         self.create_turn_runtime(&session, &session_config, input_text)
             .await
     }
@@ -2644,6 +2643,7 @@ impl Agent {
         working_dir: &std::path::Path,
         session_config: &SessionConfig,
         include_context_trace: bool,
+        provider_override: Option<Arc<dyn Provider>>,
     ) -> Result<ReplyContext> {
         let mut context_trace = Vec::new();
         let mut push_trace = |stage: &str, detail: String| {
@@ -2683,7 +2683,10 @@ impl Agent {
         let session_prompt = session_config.system_prompt.as_deref();
         let session_prompt_override = session_config.system_prompt_override.unwrap_or(false);
         let model_config = self
-            .resolve_effective_model_config(session_config.turn_context.as_ref())
+            .resolve_effective_model_config_for_provider(
+                session_config.turn_context.as_ref(),
+                provider_override.as_ref(),
+            )
             .await
             .ok_or_else(|| anyhow!("Provider not set"))?;
         let (tools, toolshim_tools, system_prompt) =
@@ -4143,6 +4146,7 @@ impl Agent {
                 &session.working_dir,
                 &session_config,
                 emit_context_trace,
+                Some(pinned_provider.clone()),
             )
             .await?;
         let ReplyContext {
@@ -7909,6 +7913,7 @@ mod tests {
                 PathBuf::from(".").as_path(),
                 &session_config,
                 false,
+                None,
             )
             .await?;
 
@@ -7957,6 +7962,7 @@ mod tests {
                 PathBuf::from(".").as_path(),
                 &session_config,
                 true,
+                None,
             )
             .await?;
 

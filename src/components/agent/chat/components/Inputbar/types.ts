@@ -15,5 +15,6 @@ export interface InputbarKnowledgePackSelection {
   companionPacks?: Array<{
     name: string;
     activation?: "explicit" | "implicit" | "resolver-driven";
+    runtimeMode?: "persona" | "data";
   }>;
 }

@@ -10,7 +10,7 @@ use crate::RuntimeBackend;
 use crate::RuntimeCore;
 use crate::UnavailableBackend;
 #[cfg(feature = "aster-backend")]
-use crate::{AsterBackend, AsterBackendHost, AsterBackendProcessControlCapabilities};
+use crate::{RuntimeBackendAdapter, RuntimeBackendHost, RuntimeBackendProcessControlCapabilities};
 use lime_core::database::DbConnection;
 use std::sync::Arc;
 use thiserror::Error;
@@ -218,55 +218,55 @@ impl AppServerRuntimeFactory {
     }
 
     #[cfg(feature = "aster-backend")]
-    pub fn aster_runtime_core(host: Arc<dyn AsterBackendHost>) -> RuntimeCore {
-        RuntimeCore::with_backend(Arc::new(AsterBackend::new(host)))
+    pub fn runtime_adapter_core(host: Arc<dyn RuntimeBackendHost>) -> RuntimeCore {
+        RuntimeCore::with_backend(Arc::new(RuntimeBackendAdapter::new(host)))
     }
 
     #[cfg(feature = "aster-backend")]
-    pub fn aster_runtime_core_with_execution_process_server(
-        host: Arc<dyn AsterBackendHost>,
+    pub fn runtime_adapter_core_with_execution_process_server(
+        host: Arc<dyn RuntimeBackendHost>,
         execution_process: ExecutionProcessServer,
     ) -> RuntimeCore {
-        RuntimeCore::with_backend(Arc::new(AsterBackend::new_with_process_control(
+        RuntimeCore::with_backend(Arc::new(RuntimeBackendAdapter::new_with_process_control(
             host,
-            AsterBackendProcessControlCapabilities::shared_execution_process_server(),
+            RuntimeBackendProcessControlCapabilities::shared_execution_process_server(),
         )))
         .with_execution_process_server(execution_process)
     }
 
     #[cfg(feature = "aster-backend")]
-    pub fn aster_runtime_core_with_capability_source(
-        host: Arc<dyn AsterBackendHost>,
+    pub fn runtime_adapter_core_with_capability_source(
+        host: Arc<dyn RuntimeBackendHost>,
         capability_source: Arc<dyn CapabilitySource>,
     ) -> RuntimeCore {
         RuntimeCore::with_backend_and_capability_source(
-            Arc::new(AsterBackend::new(host)),
+            Arc::new(RuntimeBackendAdapter::new(host)),
             capability_source,
         )
     }
 
     #[cfg(feature = "aster-backend")]
-    pub fn aster_runtime_core_with_sources(
-        host: Arc<dyn AsterBackendHost>,
+    pub fn runtime_adapter_core_with_sources(
+        host: Arc<dyn RuntimeBackendHost>,
         capability_source: Arc<dyn CapabilitySource>,
         artifact_content_provider: Arc<dyn ArtifactContentProvider>,
     ) -> RuntimeCore {
         RuntimeCore::with_backend_capability_source_and_artifact_content_provider(
-            Arc::new(AsterBackend::new(host)),
+            Arc::new(RuntimeBackendAdapter::new(host)),
             capability_source,
             artifact_content_provider,
         )
     }
 
     #[cfg(feature = "aster-backend")]
-    pub fn aster_runtime_core_with_sources_and_evidence_export_provider(
-        host: Arc<dyn AsterBackendHost>,
+    pub fn runtime_adapter_core_with_sources_and_evidence_export_provider(
+        host: Arc<dyn RuntimeBackendHost>,
         capability_source: Arc<dyn CapabilitySource>,
         artifact_content_provider: Arc<dyn ArtifactContentProvider>,
         evidence_export_provider: Arc<dyn EvidenceExportProvider>,
     ) -> RuntimeCore {
         RuntimeCore::with_backend_capability_source_artifact_content_provider_and_evidence_export_provider(
-            Arc::new(AsterBackend::new(host)),
+            Arc::new(RuntimeBackendAdapter::new(host)),
             capability_source,
             artifact_content_provider,
             evidence_export_provider,
@@ -274,16 +274,16 @@ impl AppServerRuntimeFactory {
     }
 
     #[cfg(feature = "aster-backend")]
-    pub fn aster_app_server(host: Arc<dyn AsterBackendHost>) -> AppServer {
-        AppServer::with_runtime(Self::aster_runtime_core(host))
+    pub fn runtime_adapter_app_server(host: Arc<dyn RuntimeBackendHost>) -> AppServer {
+        AppServer::with_runtime(Self::runtime_adapter_core(host))
     }
 
     #[cfg(feature = "aster-backend")]
-    pub fn aster_app_server_with_execution_process_server(
-        host: Arc<dyn AsterBackendHost>,
+    pub fn runtime_adapter_app_server_with_execution_process_server(
+        host: Arc<dyn RuntimeBackendHost>,
         execution_process: ExecutionProcessServer,
     ) -> AppServer {
-        AppServer::with_runtime(Self::aster_runtime_core_with_execution_process_server(
+        AppServer::with_runtime(Self::runtime_adapter_core_with_execution_process_server(
             host,
             execution_process,
         ))
@@ -293,20 +293,20 @@ impl AppServerRuntimeFactory {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "aster-backend")]
-    use crate::AsterBackendActionRespondRequest;
-    #[cfg(feature = "aster-backend")]
-    use crate::AsterBackendActionRespondResult;
-    #[cfg(feature = "aster-backend")]
-    use crate::AsterBackendCancelRequest;
-    #[cfg(feature = "aster-backend")]
-    use crate::AsterBackendCancelResult;
-    #[cfg(feature = "aster-backend")]
-    use crate::AsterBackendSubmitRequest;
-    #[cfg(feature = "aster-backend")]
-    use crate::AsterBackendSubmitResult;
     use crate::CapabilityInventoryRecord;
     use crate::CapabilityInventorySource;
+    #[cfg(feature = "aster-backend")]
+    use crate::RuntimeBackendActionRespondRequest;
+    #[cfg(feature = "aster-backend")]
+    use crate::RuntimeBackendActionRespondResult;
+    #[cfg(feature = "aster-backend")]
+    use crate::RuntimeBackendCancelRequest;
+    #[cfg(feature = "aster-backend")]
+    use crate::RuntimeBackendCancelResult;
+    #[cfg(feature = "aster-backend")]
+    use crate::RuntimeBackendSubmitRequest;
+    #[cfg(feature = "aster-backend")]
+    use crate::RuntimeBackendSubmitResult;
     #[cfg(feature = "aster-backend")]
     use crate::RuntimeCoreError;
     #[cfg(feature = "aster-backend")]
@@ -517,38 +517,38 @@ mod tests {
 
     #[cfg(feature = "aster-backend")]
     #[async_trait]
-    impl AsterBackendHost for FactoryProcessControlHost {
+    impl RuntimeBackendHost for FactoryProcessControlHost {
         async fn submit_turn(
             &self,
-            request: AsterBackendSubmitRequest,
-        ) -> Result<AsterBackendSubmitResult, RuntimeCoreError> {
+            request: RuntimeBackendSubmitRequest,
+        ) -> Result<RuntimeBackendSubmitResult, RuntimeCoreError> {
             assert_eq!(
                 request.process_control,
-                AsterBackendProcessControlCapabilities::shared_execution_process_server()
+                RuntimeBackendProcessControlCapabilities::shared_execution_process_server()
             );
-            Ok(AsterBackendSubmitResult::default())
+            Ok(RuntimeBackendSubmitResult::default())
         }
 
         async fn cancel_turn(
             &self,
-            _request: AsterBackendCancelRequest,
-        ) -> Result<AsterBackendCancelResult, RuntimeCoreError> {
-            Ok(AsterBackendCancelResult::default())
+            _request: RuntimeBackendCancelRequest,
+        ) -> Result<RuntimeBackendCancelResult, RuntimeCoreError> {
+            Ok(RuntimeBackendCancelResult::default())
         }
 
         async fn respond_action(
             &self,
-            _request: AsterBackendActionRespondRequest,
-        ) -> Result<AsterBackendActionRespondResult, RuntimeCoreError> {
-            Ok(AsterBackendActionRespondResult::default())
+            _request: RuntimeBackendActionRespondRequest,
+        ) -> Result<RuntimeBackendActionRespondResult, RuntimeCoreError> {
+            Ok(RuntimeBackendActionRespondResult::default())
         }
     }
 
     #[cfg(feature = "aster-backend")]
     #[tokio::test]
-    async fn aster_factory_can_share_execution_process_owner_with_runtime_core() {
+    async fn runtime_factory_can_share_execution_process_owner_with_runtime_core() {
         let execution_process = ExecutionProcessServer::default();
-        let runtime = AppServerRuntimeFactory::aster_runtime_core_with_execution_process_server(
+        let runtime = AppServerRuntimeFactory::runtime_adapter_core_with_execution_process_server(
             Arc::new(FactoryProcessControlHost),
             execution_process.clone(),
         );

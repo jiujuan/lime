@@ -45,7 +45,7 @@ export type InstalledSkillDetailContentState =
 
 export type SkillsWorkspaceTranslate = TFunction<"agent">;
 
-export interface SkillsWorkspaceDefaultProjectState {
+export interface SkillsWorkspaceProjectState {
   id: string | null;
   rootPath: string | null;
   pending: boolean;

@@ -16,9 +16,9 @@ function buildReport({ e2eEntries = [] } = {}) {
     entries: [
       ...e2eEntries,
       {
-        file: "lime-rs/tests/real_web_search.rs",
+        file: "lime-rs/crates/agent/tests/real_web_search.rs",
         layer: "e2e",
-        packageName: "lime",
+        packageName: "lime-agent",
         liveGated: true,
         runnableByDefault: false,
       },
@@ -73,9 +73,9 @@ describe("check-rust-layer-budget", () => {
       buildReport({
         e2eEntries: [
           {
-            file: "lime-rs/tests/live_provider.rs",
+            file: "lime-rs/crates/agent/tests/live_provider.rs",
             layer: "e2e",
-            packageName: "lime",
+            packageName: "lime-agent",
             cargoScope: "workspace",
             testCount: 2,
             ignoredCount: 1,
@@ -90,7 +90,7 @@ describe("check-rust-layer-budget", () => {
       e2eOverBudgetBy: 1,
     });
     expect(renderBudgetResultText(result)).toContain(
-      "- lime-rs/tests/live_provider.rs (lime, runnable tests=1)",
+      "- lime-rs/crates/agent/tests/live_provider.rs (lime-agent, runnable tests=1)",
     );
   });
 });

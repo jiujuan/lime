@@ -69,6 +69,7 @@ describe("installed Plugin plugin projection", () => {
   });
 
   it("应兼容 App Server 返回的 raw Plugin manifest", () => {
+    const expectedManifest = normalizeManifest(parseManifest(contentFactoryFixture));
     const projection = projectPluginRegistryFromInstalledPlugins([
       {
         ...installedContentFactory(),
@@ -79,7 +80,7 @@ describe("installed Plugin plugin projection", () => {
     expect(projection.skippedAppIds).toEqual([]);
     expect(projection.contracts[0]).toMatchObject({
       id: "content-factory-app",
-      version: "2.0.0",
+      version: expectedManifest.version,
       activationEntries: expect.arrayContaining([
         expect.objectContaining({
           key: "content_article_generate",

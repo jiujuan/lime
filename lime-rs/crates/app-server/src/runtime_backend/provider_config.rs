@@ -3,10 +3,7 @@ use super::request_context::RuntimeModelSelection;
 use crate::runtime::memory_prompt::memory_soul_prompt_context_from_config;
 use crate::RuntimeCoreError;
 use crate::RuntimeEvent;
-use app_server_protocol::ProtocolKind;
-use lime_agent::{
-    configure_provider_for_session, AsterAgentState, ProviderConfig, ProviderConfigurationRequest,
-};
+use lime_agent::SessionProviderConfig;
 use lime_core::config::{load_config, ToolExecutionPolicyConfig, WorkspaceSandboxConfig};
 use lime_core::database::{self, DbConnection};
 use serde_json::{json, Value};
@@ -62,7 +59,7 @@ pub(super) fn current_agent_runtime_config_metadata() -> Option<Value> {
 pub(super) fn model_effective_event_from_runtime(
     requested_selection: &RuntimeModelSelection,
     selection: &RuntimeModelSelection,
-    provider_config: &ProviderConfig,
+    provider_config: &SessionProviderConfig,
     service_model_slot: &str,
 ) -> RuntimeEvent {
     let provider_id = provider_config
@@ -136,29 +133,4 @@ pub(super) fn initialize_runtime_database(
         ))
     })?;
     Ok(db)
-}
-
-pub(super) async fn configure_provider_for_route(
-    agent_state: &AsterAgentState,
-    db: &DbConnection,
-    provider: &str,
-    model: &str,
-    session_id: &str,
-    reasoning_effort: Option<String>,
-    route_protocol: &ProtocolKind,
-    direct_provider_config: Option<ProviderConfig>,
-) -> Result<ProviderConfig, String> {
-    configure_provider_for_session(
-        agent_state,
-        ProviderConfigurationRequest {
-            db,
-            session_id,
-            provider,
-            model,
-            reasoning_effort,
-            route_protocol: Some(route_protocol.clone()),
-            direct_provider_config,
-        },
-    )
-    .await
 }

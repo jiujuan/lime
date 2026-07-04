@@ -146,6 +146,10 @@ const t = ((key: string, values?: Record<string, unknown>) => {
     "generalWorkbench.workflow.runDetail.workflowFailure": "失败原因",
     "generalWorkbench.workflow.runDetail.workflowRetry": "重试关联",
     "generalWorkbench.workflow.runDetail.workflowWaitingAction": "等待动作",
+    "generalWorkbench.workflow.runDetail.waitingAction.askUser": "人工确认",
+    "generalWorkbench.workflow.runDetail.waitingAction.elicitation": "补充信息",
+    "generalWorkbench.workflow.runDetail.waitingAction.toolConfirmation":
+      "工具确认",
     "generalWorkbench.workflow.runDetail.summary.artifactCount":
       "{{count}} 个产物",
     "generalWorkbench.workflow.runDetail.summary.artifactPath": "产物 {{path}}",
@@ -1359,7 +1363,57 @@ describe("generalWorkbenchWorkflowPanelViewModel", () => {
       {
         key: "workflow-waiting-action",
         label: "等待动作",
-        value: "ask_user / request-1 / approval",
+        value: "人工确认 / request-1 / approval",
+      },
+    ]);
+  });
+
+  it("应优先用 agentActionType 展示 workflow waiting action 类型", () => {
+    const workflowRunDetailProjection = buildGeneralWorkbenchRunDetailProjection({
+      activeRunDetail: {
+        id: "workflow-run-1",
+        source: "automation",
+        status: "running",
+      },
+      runMetadataSummary: {
+        workflow: "content_article_workflow",
+        executionId: null,
+        versionId: null,
+        stages: [],
+        artifactPaths: [],
+        curatedTask: null,
+      },
+      runMetadataText: JSON.stringify({
+        source: "workflow/read",
+        workflow_read_model: {
+          workflowRunId: "workflow-run-1",
+          actions: [
+            {
+              actionType: "respond",
+              agentActionType: "tool_confirmation",
+              requestId: "request-tool-1",
+              stepId: "approve-tool",
+            },
+          ],
+          steps: [
+            {
+              id: "collect-input",
+              title: "补充信息",
+              status: "waiting_permission",
+              requestId: "request-elicitation-1",
+              agentActionType: "elicitation",
+            },
+          ],
+        },
+      }),
+      t,
+    });
+
+    expect(workflowRunDetailProjection.detailRows).toEqual([
+      {
+        key: "workflow-waiting-action",
+        label: "等待动作",
+        value: "工具确认 / request-tool-1 / approve-tool",
       },
     ]);
   });

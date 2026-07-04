@@ -632,7 +632,7 @@ async fn article_workspace_worker_fails_closed_for_unauthorized_output_artifact_
                 },
                 runtime_options: Some(RuntimeOptions {
                     metadata: Some(article_workspace_action_metadata_with_output_kind(
-                        "creator.workspace_patch",
+                        "other.workspace_patch",
                     )),
                     ..RuntimeOptions::default()
                 }),
@@ -668,7 +668,7 @@ async fn article_workspace_worker_fails_closed_for_unauthorized_output_artifact_
     assert_eq!(accepted.payload["appId"], "content-factory-app");
     assert_eq!(
         accepted.payload["outputArtifactKind"],
-        "creator.workspace_patch"
+        "other.workspace_patch"
     );
 
     let runtime_error = output
@@ -682,7 +682,7 @@ async fn article_workspace_worker_fails_closed_for_unauthorized_output_artifact_
     );
     assert_eq!(
         runtime_error.payload["outputArtifactKind"],
-        "creator.workspace_patch"
+        "other.workspace_patch"
     );
     assert_eq!(runtime_error.payload["failureCategory"], "configuration");
     assert_eq!(runtime_error.payload["retryable"], false);

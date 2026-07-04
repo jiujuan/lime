@@ -112,9 +112,46 @@ const appServerRuntimeFiles = [
   "lime-rs/crates/app-server/src/runtime.rs",
   ...collectRustFiles("lime-rs/crates/app-server/src/runtime"),
 ];
+const appServerRuntimeBackendFiles = [
+  "lime-rs/crates/app-server/src/runtime_backend.rs",
+  ...collectRustFiles("lime-rs/crates/app-server/src/runtime_backend"),
+];
+const appServerRuntimeBackendExecutionChainFiles = [
+  "lime-rs/crates/app-server/src/runtime_backend.rs",
+  "lime-rs/crates/app-server/src/runtime_backend/action_response.rs",
+  "lime-rs/crates/app-server/src/runtime_backend/event_mapper.rs",
+  "lime-rs/crates/app-server/src/runtime_backend/plugin_worker_generation.rs",
+  "lime-rs/crates/app-server/src/runtime_backend/provider_config.rs",
+  "lime-rs/crates/app-server/src/runtime_backend/request_context.rs",
+  "lime-rs/crates/app-server/src/runtime_backend/request_context/session_config.rs",
+  "lime-rs/crates/app-server/src/runtime_backend/request_context/turn_context.rs",
+  "lime-rs/crates/app-server/src/runtime_backend/request_context/workspace_scope.rs",
+  "lime-rs/crates/app-server/src/runtime_backend/tool_events.rs",
+  "lime-rs/crates/app-server/src/runtime_backend/workspace_patch_host_execution.rs",
+  "lime-rs/crates/app-server/src/runtime_backend/initialization_tests.rs",
+  "lime-rs/crates/app-server/src/runtime_backend/tests.rs",
+  "lime-rs/crates/app-server/src/runtime_backend/tests/coding_event_projection.rs",
+  "lime-rs/crates/app-server/src/runtime_backend/tests/model_selection.rs",
+  "lime-rs/crates/app-server/src/runtime_backend/tests/tool_policy_context.rs",
+  "lime-rs/crates/app-server/src/runtime_backend/tests/tool_surface.rs",
+  "lime-rs/crates/app-server/src/runtime_backend/tests/turn_flows.rs",
+  "lime-rs/crates/app-server/src/runtime_backend/tests/workspace_scope_context.rs",
+];
 const appServerProcessorFiles = [
   "lime-rs/crates/app-server/src/processor/mod.rs",
   ...collectRustFiles("lime-rs/crates/app-server/src/processor"),
+];
+const agentRuntimeBoundaryFiles = [
+  "lime-rs/crates/agent/src/lib.rs",
+  "lime-rs/crates/agent/src/runtime_state.rs",
+  "lime-rs/crates/agent/src/runtime_state_support.rs",
+  "lime-rs/crates/agent/src/provider_configuration.rs",
+  "lime-rs/crates/agent/src/session_configuration.rs",
+  "lime-rs/crates/agent/src/turn_context_configuration.rs",
+  "lime-rs/crates/agent/src/agent_tools/workspace_patch_host.rs",
+  "lime-rs/crates/agent/src/host_managed_generation.rs",
+  "lime-rs/crates/agent/src/direct_text_generation.rs",
+  "lime-rs/crates/agent/src/turn_execution.rs",
 ];
 const agentRequestToolPolicyFiles = [
   "lime-rs/crates/agent/src/request_tool_policy.rs",
@@ -530,11 +567,14 @@ const retiredAgentRuntimeCommandManifestFiles = [
   "src/lib/api/agentRuntime/commandManifest.generated.d.ts",
   "scripts/generate-agent-runtime-clients.mjs",
 ];
+const retiredAsterBackendFiles = [
+  "lime-rs/crates/app-server/src/aster_backend.rs",
+];
 const retiredAgentRuntimeLegacyQueueFiles = [
   "lime-rs/crates/core/src/database/agent_runtime_queue_repository.rs",
+  "lime-rs/crates/agent/src/aster_runtime_support.rs",
 ];
 const retiredAgentRuntimeLegacyQueueSurfaceFiles = [
-  "lime-rs/crates/agent/src/aster_runtime_support.rs",
   "lime-rs/crates/core/src/database/mod.rs",
   "src/lib/governance/legacySurfaceCatalog.json",
 ];
@@ -778,7 +818,7 @@ const checks = [
   },
   {
     name: "Rust server initializes capability discovery and dispatches capability/list",
-    file: "lime-rs/crates/app-server/src/processor/mod.rs",
+    files: appServerProcessorFiles,
     snippets: [
       "METHOD_CAPABILITY_LIST => self.handle_capability_list(params)",
       "let params: CapabilityListParams = parse_params(params)?",
@@ -789,7 +829,7 @@ const checks = [
   },
   {
     name: "Rust JSON-RPC router dispatches agentSession/action/respond into RuntimeCore",
-    file: "lime-rs/crates/app-server/src/processor/mod.rs",
+    files: appServerProcessorFiles,
     snippets: [
       "METHOD_AGENT_SESSION_ACTION_RESPOND => self.handle_action_respond(params).await",
       "let params: AgentSessionActionRespondParams = parse_params(params)?",
@@ -799,7 +839,7 @@ const checks = [
   },
   {
     name: "Rust JSON-RPC router dispatches agentSession/action/replay into RuntimeCore",
-    file: "lime-rs/crates/app-server/src/processor/mod.rs",
+    files: appServerProcessorFiles,
     snippets: [
       "METHOD_AGENT_SESSION_ACTION_REPLAY => self.handle_action_replay(params).await",
       "let params: AgentSessionActionReplayParams = parse_params(params)?",
@@ -809,7 +849,7 @@ const checks = [
   },
   {
     name: "Rust JSON-RPC router dispatches artifact/read into RuntimeCore",
-    file: "lime-rs/crates/app-server/src/processor/mod.rs",
+    files: appServerProcessorFiles,
     snippets: [
       "METHOD_ARTIFACT_READ => self.handle_artifact_read(params)",
       "fn handle_artifact_read(",
@@ -821,10 +861,7 @@ const checks = [
   },
   {
     name: "Rust JSON-RPC router dispatches fileSystem read/write into RuntimeCore",
-    files: [
-      "lime-rs/crates/app-server/src/processor/mod.rs",
-      "lime-rs/crates/app-server/src/processor/file.rs",
-    ],
+    files: appServerProcessorFiles,
     snippets: [
       "METHOD_FILE_SYSTEM_LIST_DIRECTORY =>",
       "METHOD_FILE_SYSTEM_READ_FILE_PREVIEW =>",
@@ -848,7 +885,7 @@ const checks = [
   },
   {
     name: "Rust JSON-RPC router dispatches evidence/export into RuntimeCore",
-    file: "lime-rs/crates/app-server/src/processor/mod.rs",
+    files: appServerProcessorFiles,
     snippets: [
       "METHOD_EVIDENCE_EXPORT => self.handle_evidence_export(params)",
       "fn handle_evidence_export(",
@@ -1012,17 +1049,22 @@ const checks = [
     ],
   },
   {
-    name: "Rust Aster backend exposes host port for action responses",
-    file: "lime-rs/crates/app-server/src/aster_backend.rs",
+    name: "Rust App Server keeps retired Aster backend adapter out of current backend",
+    files: [
+      "lime-rs/crates/app-server/src/main.rs",
+      "lime-rs/crates/app-server/src/runtime_backend.rs",
+      "lime-rs/crates/app-server/src/runtime_factory.rs",
+    ],
     snippets: [
-      "pub struct AsterBackendActionRespondRequest",
-      "pub struct AsterBackendActionRespondResult",
-      "async fn respond_action(",
-      "request: AsterBackendActionRespondRequest",
-      "ActionRespondRequest",
-      "action_type: request.action_type",
-      "action_scope: request.action_scope",
-      "aster_backend_action_responses_are_mapped_into_runtime_core_events",
+      "parse_args_rejects_aster_backend_for_standalone_binary",
+      "unsupported app-server backend mode: aster",
+      "RuntimeBackend::with_execution_process_server",
+      "RuntimeBackendAdapter::new(host)",
+    ],
+    absentSnippets: [
+      "AsterBackendActionRespondRequest",
+      "AsterBackendActionRespondResult",
+      "AsterBackend::new(",
     ],
   },
   {
@@ -2801,6 +2843,7 @@ const checks = [
       "lime-rs/crates/app-server-protocol/src/protocol/v0/agent_session.rs",
       "lime-rs/crates/app-server/src/processor/mod.rs",
       "lime-rs/crates/app-server/src/processor/agent_session.rs",
+      "lime-rs/crates/app-server/src/processor/dispatch.rs",
       "lime-rs/crates/app-server/src/runtime.rs",
       "lime-rs/crates/app-server/src/runtime_backend.rs",
       "lime-rs/crates/app-server/src/runtime_backend/tool_inventory.rs",
@@ -3371,37 +3414,26 @@ const checks = [
     ],
   },
   {
-    name: "Rust JSON-RPC aster host test implements action response port",
-    file: "lime-rs/crates/app-server/src/lib.rs",
+    name: "Rust runtime backend initializes current Agent runtime before action responses",
+    file: "lime-rs/crates/app-server/src/runtime_backend/initialization_tests.rs",
     snippets: [
-      "async fn respond_action(",
-      "request: AsterBackendActionRespondRequest",
-      "AsterBackendActionRespondResult::default()",
+      "respond_action_initializes_agent_before_runtime_resume",
+      "ExecutionBackend::respond_action",
+      "ActionRespondRequest",
+      "AgentSessionActionType::AskUser",
+      "assert!(backend.agent_state.is_initialized().await)",
     ],
   },
   {
-    name: "Rust JSON-RPC aster flow smoke covers artifact/read and action/respond",
-    file: "lime-rs/crates/app-server/src/lib.rs",
+    name: "Rust runtime backend flow tests cover current turn and action response events",
+    files: appServerRuntimeBackendFiles,
     snippets: [
-      "struct JsonRpcAsterAgentFlowSmokeHost",
-      "submit_count: AtomicUsize",
-      "action_count: AtomicUsize",
-      "async fn aster_backend_json_rpc_agent_flow_smoke_covers_artifact_read_and_action_response()",
-      "AppServerRuntimeFactory::aster_runtime_core(host.clone()).with_sidecar_store(",
-      "SidecarStore::new(sidecar_root.path())",
-      "AppServer::with_runtime(runtime)",
-      "METHOD_AGENT_SESSION_TURN_START",
-      "METHOD_AGENT_SESSION_EVENT",
-      "METHOD_ARTIFACT_READ",
-      "METHOD_AGENT_SESSION_ACTION_RESPOND",
-      "ArtifactReadParams {",
-      "AgentSessionActionRespondParams {",
-      "AgentSessionActionType::ToolConfirmation",
-      '"artifact.snapshot"',
+      "handle_action_response",
+      "respond_action_emits_resolved_fact_with_action_identity",
       '"action.resolved"',
-      "assert_agent_event_notification(",
-      "assert_eq!(host.submit_count.load(Ordering::SeqCst), 1)",
-      "assert_eq!(host.action_count.load(Ordering::SeqCst), 1)",
+      "run_agent_turn_with_policy",
+      "AgentTurnExecutionRequest",
+      '"turn.completed"',
     ],
   },
   {
@@ -3430,7 +3462,7 @@ const checks = [
       "pub fn mock_runtime_core_with_sources_and_evidence_export_provider(",
       "evidence_export_provider: Arc<dyn EvidenceExportProvider>",
       "with_backend_capability_source_artifact_content_provider_and_evidence_export_provider",
-      "pub fn aster_runtime_core_with_sources_and_evidence_export_provider(",
+      "pub fn runtime_adapter_core_with_sources_and_evidence_export_provider(",
     ],
   },
   {
@@ -3444,10 +3476,14 @@ const checks = [
       "pub fn unavailable_runtime_core_with_capability_source(",
       "pub fn unavailable_app_server_with_capability_source(",
       "factory_builds_unavailable_runtime_with_injected_capability_source",
-      "pub fn aster_runtime_core_with_capability_source(",
-      "pub fn aster_runtime_core_with_sources(",
+      "pub fn runtime_backend_core_with_capability_source(",
+      "pub fn runtime_backend_core_with_db_and_capability_source(",
+      "pub fn runtime_app_server_with_capability_source(",
+      "pub fn runtime_adapter_core_with_capability_source(",
+      "pub fn runtime_adapter_core_with_sources(",
       "artifact_content_provider: Arc<dyn ArtifactContentProvider>",
-      "Arc::new(AsterBackend::new(host))",
+      "Arc::new(RuntimeBackend::with_execution_process_server(",
+      "Arc::new(RuntimeBackendAdapter::new(host))",
     ],
   },
   {
@@ -3572,34 +3608,28 @@ const checks = [
   {
     name: "Standalone App Server current runtime backend delegates Claw Aster execution chain",
     files: [
-      "lime-rs/crates/agent/src/provider_configuration.rs",
-      "lime-rs/crates/agent/src/session_configuration.rs",
-      "lime-rs/crates/agent/src/turn_context_configuration.rs",
-      "lime-rs/crates/agent/src/agent_tools/workspace_patch_host.rs",
-      "lime-rs/crates/agent/src/host_managed_generation.rs",
-      "lime-rs/crates/agent/src/turn_execution.rs",
+      ...agentRuntimeBoundaryFiles,
       "lime-rs/crates/app-server/src/lib.rs",
-      "lime-rs/crates/app-server/src/runtime_backend.rs",
-      "lime-rs/crates/app-server/src/runtime_backend/provider_config.rs",
-      "lime-rs/crates/app-server/src/runtime_backend/request_context.rs",
-      "lime-rs/crates/app-server/src/runtime_backend/tool_events.rs",
-      "lime-rs/crates/app-server/src/runtime_backend/tests.rs",
+      ...appServerRuntimeBackendExecutionChainFiles,
     ],
     snippets: [
       "mod runtime_backend;",
       "pub use runtime_backend::RuntimeBackend",
       "pub struct RuntimeBackend",
       "impl ExecutionBackend for RuntimeBackend",
-      "initialize_aster_runtime(",
+      "init_agent_with_db(",
       "failed to initialize Aster runtime for App Server runtime backend",
-      "AsterAgentState::new()",
+      "AgentRuntimeState::new()",
       "direct_provider_config_from_request",
-      ".configure_provider(config.clone(), request.session_id, request.db)",
-      "configure_provider_from_pool(",
       "configure_provider_for_session(",
+      "create_session_provider_handle(runtime_config)",
+      "install_provider_for_session(&runtime_config).await?",
+      "configure_model_route_provider_for_session_with_provider(",
+      "pub struct SessionProviderConfig",
       "ProviderConfigurationRequest",
-      "route_protocol: Some(route_protocol.clone())",
-      "route_protocol_from_provider_config",
+      "session_provider_config_to_runtime_provider_config(",
+      "config.route_protocol = request.route_protocol.or(config.route_protocol)",
+      "route_protocol_from_session_provider_config",
       "ProtocolKind::OpenaiResponses",
       "ModelProviderProtocol::Responses",
       "RuntimeProviderProtocol::Responses",
@@ -3653,6 +3683,9 @@ const checks = [
       "persist a complete session provider/model default",
     ],
     absentSnippets: [
+      ".configure_provider(",
+      "configure_provider_from_pool(",
+      "impl From<SessionProviderConfig> for StateProviderConfig",
       ".complete(&system, &messages, &[])",
       "message_requires_fresh_web_search",
       "mode_default",
@@ -8209,6 +8242,7 @@ checkAgentRuntimeThinGatewayContracts();
 checkPluginUiRuntimeLifecycleContracts();
 checkRetiredAgentRuntimeMockFiles();
 checkRetiredAgentRuntimeCommandManifestFiles();
+checkRetiredAsterBackendFiles();
 checkRetiredAgentRuntimeLegacyQueueSurface();
 checkRetiredSkillExecutionSurfaceFiles();
 checkRetiredAgentRuntimeToolInventoryMockFiles();
@@ -8468,6 +8502,14 @@ function checkRetiredAgentRuntimeCommandManifestFiles() {
       failures.push(
         `retired Agent Runtime command manifest surface must stay deleted: ${file}`,
       );
+    }
+  }
+}
+
+function checkRetiredAsterBackendFiles() {
+  for (const file of retiredAsterBackendFiles) {
+    if (fs.existsSync(path.join(repoRoot, file))) {
+      failures.push(`retired Aster backend file must stay deleted: ${file}`);
     }
   }
 }

@@ -35,7 +35,7 @@ describe("MessageList image tasks", () => {
       '[data-testid="image-workbench-message-preview-task-1"]',
     ) as HTMLDivElement | null;
 
-    expect(previewCard?.textContent).toContain("Image Generation");
+    expect(previewCard?.textContent).toContain("图片生成");
     expect(previewCard?.textContent).not.toContain("搞定");
     expect(previewCard?.textContent).not.toContain("一颗戴耳机的青柠");
     expect(previewCard?.textContent).not.toContain("已生成");
@@ -83,7 +83,7 @@ describe("MessageList image tasks", () => {
       '[data-testid="image-workbench-message-preview-task-verbose-template"]',
     );
 
-    expect(previewCard?.textContent).toContain("Image Generation");
+    expect(previewCard?.textContent).toContain("图片生成");
     expect(previewCard?.textContent).toContain("Nanobanana Pro");
     expect(container.textContent).not.toContain("任务已创建成功");
     expect(container.textContent).not.toContain("这里是生成详情");
@@ -157,7 +157,7 @@ describe("MessageList image tasks", () => {
     expect(text).toContain("收到，我按花城汇视角来生成广州塔的春天照片。");
     expect(text).not.toContain("先获取下工具参数");
     expect(text).not.toContain("马上生成");
-    expect(text).toContain("Image Generation");
+    expect(text).toContain("图片生成");
     expect(text).toContain("Nanobanana Pro");
     expect(text).not.toContain("我继续改");
     expect(
@@ -234,7 +234,7 @@ describe("MessageList image tasks", () => {
     expect(text).toContain("好啊，我来按花城汇视角做一张广州塔春天照片。");
     expect(text).not.toContain("先获取下工具参数");
     expect(text).not.toContain("马上生成");
-    expect(toolbar?.textContent).toContain("Image Generation");
+    expect(toolbar?.textContent).toContain("图片生成");
     expect(toolbar?.textContent).toContain("Nanobanana Pro");
     expect(toolbar?.className).toContain("bg-[#eef0ec]");
     expect(image?.getAttribute("src")).toBe(
@@ -293,7 +293,7 @@ describe("MessageList image tasks", () => {
     const container = await renderZh(messages);
     const text = container.textContent || "";
 
-    expect(text).toContain("Image Generation");
+    expect(text).toContain("图片生成");
     expect(text).toContain("Nanobanana Pro");
     expect(text).toContain("31.0K Tokens");
     expect(

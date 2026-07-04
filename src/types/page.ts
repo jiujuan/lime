@@ -108,21 +108,25 @@ export interface AgentPageParams {
   initialProjectFileOpenTarget?: AgentProjectFileOpenTarget;
   /** 首页点击触发的新会话标记（时间戳） */
   newChatAt?: number;
-  /** 专家 Agent 入口身份，用于恢复或创建该专家的稳定会话 */
+  /** 专家入口身份，只作为当前 Thread 的 profile / metadata 来源 */
   expertAgentLaunch?: ExpertAgentLaunchParams;
 }
 
-export type ExpertAgentLaunchMode = "resume_or_create" | "new_thread";
+export interface ExpertsPageParams {
+  /** 专家广场启动专家时优先使用的当前项目作用域 */
+  projectId?: string;
+  currentProjectId?: string;
+}
 
 export interface ExpertAgentLaunchParams {
   tenantId: string;
+  projectId?: string;
   expertId: string;
   releaseId: string;
   agentInstanceKey: string;
-  launchMode: ExpertAgentLaunchMode;
+  launchMode: "new_thread";
   catalogVersion?: string;
   title?: string;
-  latestSessionId?: string;
   skillRefsOverride?: string[];
 }
 
@@ -278,6 +282,7 @@ export type PageParams =
   | AgentPageParams
   | AutomationPageParams
   | BrowserRuntimePageParams
+  | ExpertsPageParams
   | ResourcesPageParams
   | SettingsPageParams
   | SkillsPageParams

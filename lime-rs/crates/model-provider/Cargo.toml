@@ -13,7 +13,6 @@ doctest = false
 [dependencies]
 agent-protocol.workspace = true
 anyhow.workspace = true
-async-trait.workspace = true
 once_cell.workspace = true
 regex.workspace = true
 serde.workspace = true

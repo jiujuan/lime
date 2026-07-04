@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360" role="img" aria-label="Article inline image E2E fixture">
+  <rect width="640" height="360" fill="#f6fbf8"/>
+  <rect x="48" y="48" width="544" height="264" rx="24" fill="#dff3e7" stroke="#2f8f5b" stroke-width="6"/>
+  <path d="M96 246h448l-72-86-52 50-78-96-92 118-62-70z" fill="#78c594"/>
+  <circle cx="486" cy="112" r="38" fill="#ffd166"/>
+  <text x="320" y="292" text-anchor="middle" font-family="Arial, sans-serif" font-size="26" font-weight="700" fill="#1f5f43">INLINE IMAGE E2E UNIQUE</text>
+</svg>

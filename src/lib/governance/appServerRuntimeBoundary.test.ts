@@ -1,195 +1,39 @@
-/* global process */
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-
-const REPO_ROOT = process.cwd();
-const APP_SERVER_SRC_DIR = join(REPO_ROOT, "lime-rs/crates/app-server/src");
-const LOCAL_DATA_SOURCE_SKILLS_DIR = join(
+import {
+  AGENT_PROVIDER_CONFIGURATION_BOUNDARY,
+  AGENT_SESSION_CONFIGURATION_BOUNDARY,
+  AGENT_TURN_CONTEXT_CONFIGURATION_BOUNDARY,
+  ALLOWED_ASTER_COUPLING_OWNER_FILES,
+  APP_SERVER_SRC_DIR,
+  ASTER_COUPLING_SNIPPETS,
+  ASTER_EXECUTION_SNIPPETS,
+  ASTER_PROVIDER_CONFIGURATION_SNIPPETS,
+  ASTER_SKILL_EXECUTION_SNIPPETS,
+  IMAGE_COMMAND_MAIN,
+  IMAGE_COMMAND_SPLIT_MODULES,
+  KNOWN_OUT_OF_BOUND_ASTER_BASELINE,
+  KNOWN_OUT_OF_BOUND_ASTER_COUPLING_FILES,
+  KNOWN_OUT_OF_BOUND_ASTER_EXECUTION_FILES,
+  LOCAL_DATA_SOURCE_SKILLS_DIR,
+  PLUGIN_WORKER_TURN_MAIN,
+  PLUGIN_WORKER_TURN_SPLIT_MODULES,
+  PROCESSOR_DISPATCH,
+  PROCESSOR_MAIN,
+  PROCESSOR_SPLIT_MODULES,
+  PROCESSOR_TESTS_MAIN,
   REPO_ROOT,
-  "lime-rs/crates/app-server/src/local_data_source/skills",
-);
-const RUNTIME_BACKEND_REQUEST_CONTEXT_MAIN =
-  "lime-rs/crates/app-server/src/runtime_backend/request_context.rs";
-const RUNTIME_BACKEND_REQUEST_CONTEXT_SPLIT_MODULES = [
-  "lime-rs/crates/app-server/src/runtime_backend/request_context/session_config.rs",
-  "lime-rs/crates/app-server/src/runtime_backend/request_context/turn_context.rs",
-  "lime-rs/crates/app-server/src/runtime_backend/request_context/workspace_scope.rs",
-];
-const AGENT_PROVIDER_CONFIGURATION_BOUNDARY =
-  "lime-rs/crates/agent/src/provider_configuration.rs";
-const AGENT_SESSION_CONFIGURATION_BOUNDARY =
-  "lime-rs/crates/agent/src/session_configuration.rs";
-const AGENT_TURN_CONTEXT_CONFIGURATION_BOUNDARY =
-  "lime-rs/crates/agent/src/turn_context_configuration.rs";
-const RUNTIME_BOUNDARY_ROADMAP =
-  "internal/roadmap/appserver/app-server-aster-runtime-boundary-governance.md";
-const EXTERNAL_BACKEND_SCAN_DIRS = [
-  "electron",
-  "packages/app-server-client",
-  "scripts",
-  "lime-rs/crates/app-server/src",
-  "lime-rs/crates/app-server-daemon/src",
-];
-
-const ALLOWED_ASTER_COUPLING_OWNER_FILES = new Set([
-  "lime-rs/crates/app-server/src/agent_runtime_registry.rs",
-  "lime-rs/crates/app-server/src/runtime_backend.rs",
-  "lime-rs/crates/app-server/src/runtime_backend/action_response.rs",
-  "lime-rs/crates/app-server/src/runtime_backend/image_tools.rs",
-  "lime-rs/crates/app-server/src/runtime_backend/live_execution_process.rs",
-  "lime-rs/crates/app-server/src/runtime_backend/mcp_bridges.rs",
-  "lime-rs/crates/app-server/src/runtime_backend/memory_tools.rs",
-  "lime-rs/crates/app-server/src/runtime_backend/native_tools.rs",
-  "lime-rs/crates/app-server/src/runtime_backend/plugin_worker_generation.rs",
-  "lime-rs/crates/app-server/src/runtime_backend/provider_config.rs",
-  "lime-rs/crates/app-server/src/runtime_backend/tool_inventory.rs",
-]);
-
-const KNOWN_OUT_OF_BOUND_ASTER_COUPLING_FILES = new Set<string>();
-
-const KNOWN_OUT_OF_BOUND_ASTER_EXECUTION_FILES = new Set<string>();
-
-const ASTER_COUPLING_SNIPPETS = [
-  "use aster::",
-  "aster::",
-  "AsterAgentState",
-  "initialize_aster_runtime(",
-];
-
-const ASTER_EXECUTION_SNIPPETS = [
-  "stream_reply_with_policy(",
-  ".configure_provider(",
-  "configure_provider_from_pool(",
-  "provider_config_from_pool(",
-];
-
-const ASTER_PROVIDER_CONFIGURATION_SNIPPETS = [
-  ".configure_provider(",
-  "configure_provider_from_pool(",
-  "provider_config_from_pool(",
-  "provider_config_with_route_protocol(",
-  "AsterProviderProtocol",
-  "RuntimeProviderProtocol",
-  "aster_provider_protocol_from_route",
-  "runtime_provider_protocol_from_route",
-  "route_protocol_from_aster_protocol",
-  "route_protocol_from_runtime_protocol",
-];
-
-const ASTER_SKILL_EXECUTION_SNIPPETS = [
-  "execute_skill_prompt(",
-  "execute_skill_workflow(",
-  "SkillPromptExecution",
-  "SkillWorkflowExecution",
-];
-
-const EXTERNAL_BACKEND_LAUNCH_SNIPPETS = [
-  'APP_SERVER_BACKEND_MODE: "external"',
-  "APP_SERVER_BACKEND_MODE: 'external'",
-  'backendMode: "external"',
-  "backendMode: 'external'",
-  '"--backend", "external"',
-  "'--backend', 'external'",
-  "--backend external",
-];
-
-const ALLOWED_EXTERNAL_BACKEND_LAUNCH_FILES = new Set([
-  "lime-rs/crates/app-server/src/main.rs",
-  "lime-rs/crates/app-server-daemon/src/lib.rs",
-  "packages/app-server-client/tests/client.test.mjs",
-  "scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs",
-  "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs",
-  "scripts/app-server/external-backend-smoke.mjs",
-  "scripts/app-server/packaged-external-backend-failure-smoke.mjs",
-  "scripts/check-app-server-client-contract.mjs",
-  "scripts/check-command-contracts.mjs",
-  "scripts/electron/codex-import-click-through-fixture-smoke.mjs",
-  "scripts/electron/codex-import-click-through-fixture-smoke.test.mjs",
-  "scripts/electron/codex-import-continuation-fixture-smoke.mjs",
-  "scripts/electron/codex-import-continuation-fixture-smoke.test.mjs",
-  "scripts/electron/code-artifact-workbench-fixture-smoke.mjs",
-  "scripts/electron/code-artifact-workbench-fixture-smoke.test.mjs",
-  "scripts/electron/local-history-import-real-sample-visual-audit-smoke.test.mjs",
-  "scripts/electron/session-history-fixture-smoke.test.mjs",
-  "scripts/lib/electron-dev-sidecar.mjs",
-  "scripts/lib/electron-dev-sidecar.test.mjs",
-  "scripts/plugin/runtime-electron-fixture-smoke.mjs",
-  "scripts/plugin/runtime-electron-fixture-smoke.test.mjs",
-  "scripts/plugin/runtime-electron-sdk-fixture-smoke.mjs",
-  "scripts/plugin/runtime-electron-sdk-fixture-smoke.test.mjs",
-  "scripts/plugin/runtime-electron-task-fixture-smoke.mjs",
-  "scripts/plugin/runtime-electron-task-fixture-smoke.test.mjs",
-  "scripts/plugin/runtime-sdk-electron-fixture-smoke.mjs",
-  "scripts/smoke/agent-session-messages-electron-fixture-smoke.mjs",
-  "scripts/smoke/agent-session-messages-electron-fixture-smoke.test.mjs",
-]);
-
-const KNOWN_OUT_OF_BOUND_ASTER_BASELINE: Array<{
-  path: string;
-  snippets: Record<string, number>;
-}> = [];
-
-function collectRustFiles(dir: string): string[] {
-  const files: string[] = [];
-  for (const entry of readdirSync(dir)) {
-    const fullPath = join(dir, entry);
-    const stats = statSync(fullPath);
-    if (stats.isDirectory()) {
-      if (entry === "target") {
-        continue;
-      }
-      files.push(...collectRustFiles(fullPath));
-      continue;
-    }
-    if (fullPath.endsWith(".rs")) {
-      files.push(fullPath);
-    }
-  }
-  return files;
-}
-
-function collectTextFiles(dir: string): string[] {
-  const files: string[] = [];
-  for (const entry of readdirSync(dir)) {
-    const fullPath = join(dir, entry);
-    const stats = statSync(fullPath);
-    if (stats.isDirectory()) {
-      if (
-        entry === "target" ||
-        entry === "node_modules" ||
-        entry === "dist" ||
-        entry === "dist-electron"
-      ) {
-        continue;
-      }
-      files.push(...collectTextFiles(fullPath));
-      continue;
-    }
-    if (/\.(?:cjs|js|mjs|rs|ts|tsx)$/u.test(fullPath)) {
-      files.push(fullPath);
-    }
-  }
-  return files;
-}
-
-function repoRelative(path: string): string {
-  return relative(REPO_ROOT, path).replace(/\\/g, "/");
-}
-
-function productionSource(path: string): string {
-  const relativePath = repoRelative(path);
-  if (relativePath.includes("/tests/") || relativePath.endsWith("/tests.rs")) {
-    return "";
-  }
-  const source = readFileSync(path, "utf8");
-  const testIndex = source.indexOf("#[cfg(test)]");
-  return testIndex >= 0 ? source.slice(0, testIndex) : source;
-}
-
-function countSnippet(source: string, snippet: string): number {
-  return source.split(snippet).length - 1;
-}
+  RUNTIME_BACKEND_REQUEST_CONTEXT_MAIN,
+  RUNTIME_BACKEND_REQUEST_CONTEXT_SPLIT_MODULES,
+  RUNTIME_BACKEND_TESTS_MAIN,
+  RUNTIME_BACKEND_TEST_SPLIT_MODULES,
+  RUNTIME_BOUNDARY_ROADMAP,
+  collectRustFiles,
+  countSnippet,
+  productionSource,
+  repoRelative,
+} from "./appServerRuntimeBoundary.testSupport";
 
 describe("app-server runtime boundary", () => {
   it("App Server 生产代码不应新增未登记的 Aster 直接耦合", () => {
@@ -339,20 +183,24 @@ describe("app-server runtime boundary", () => {
       ),
     );
 
-    expect(agentBoundary).toContain(".configure_provider(");
-    expect(agentBoundary).toContain("configure_provider_from_pool(");
+    expect(agentBoundary).toContain("create_session_provider_handle");
+    expect(agentBoundary).toContain("install_provider_for_session");
     expect(agentBoundary).toContain("RuntimeProviderProtocol");
+    expect(agentBoundary).toContain("SessionProviderConfig");
     expect(agentBoundary).toContain("ModelProviderProtocol");
     expect(agentBoundary).toContain("ProtocolKind");
-    expect(agentBoundary).toContain("route_protocol_from_provider_config");
+    expect(agentBoundary).toContain("route_protocol_from_session_provider_config");
+    expect(agentBoundary).toContain("ModelRouteProviderConfiguration");
+    expect(agentBoundary).toContain("configure_model_route_provider_for_session");
+    expect(agentBoundary).toContain("ProviderConfigurationRequest");
     expect(agentBoundary).toContain("RuntimeProviderProtocol::Responses");
     expect(agentBoundary).toContain("ModelProviderProtocol::Responses");
     expect(agentBoundary).toContain("ProtocolKind::OpenaiResponses");
-    expect(appServerProviderAdapter).toContain("configure_provider_for_session");
-    expect(appServerProviderAdapter).toContain("ProviderConfigurationRequest");
-    expect(appServerProviderAdapter).toContain(
-      "route_protocol: Some(route_protocol.clone())",
-    );
+    expect(agentBoundary).not.toContain(".configure_provider(");
+    expect(agentBoundary).not.toContain("configure_provider_from_pool(");
+    expect(appServerProviderAdapter).not.toContain("configure_provider_for_session");
+    expect(appServerProviderAdapter).not.toContain("ProviderConfigurationRequest");
+    expect(appServerProviderAdapter).not.toContain("configure_provider_for_route");
     expect(
       offenders,
       "runtime provider 配置与 provider protocol 映射属于 lime-agent provider_configuration 边界；App Server 只能传 route ProtocolKind 并做 façade 接线",
@@ -441,23 +289,192 @@ describe("app-server runtime boundary", () => {
     ).toEqual([]);
   });
 
+  it("plugin_worker_turn 主文件必须保持 worker turn 编排职责拆分", () => {
+    const mainSource = readFileSync(join(REPO_ROOT, PLUGIN_WORKER_TURN_MAIN), "utf8");
+    const lineCount = mainSource.split(/\r?\n/u).length;
+    const missingModules = PLUGIN_WORKER_TURN_SPLIT_MODULES.filter(
+      (path) => !existsSync(join(REPO_ROOT, path)),
+    );
+    const returnedResponsibilities = [
+      "fn resolve_plugin_activation_request(",
+      "fn resolve_pane_action_request(",
+      "fn validate_worker_cloud_release_signature(",
+      "fn classify_worker_failure(",
+      "fn worker_progress_events_for_sink(",
+      "fn assistant_message_events_from_worker_events(",
+      "fn json_string(",
+    ].filter((snippet) => mainSource.includes(snippet));
+
+    expect(
+      lineCount,
+      "plugin_worker_turn.rs 超过 800 行前必须继续拆子模块，不能把 worker request / failure / progress / launch gate 职责折回主文件",
+    ).toBeLessThanOrEqual(800);
+    expect(
+      missingModules,
+      "plugin_worker_turn.rs 的职责拆分模块不得被删除或折回主文件",
+    ).toEqual([]);
+    expect(
+      returnedResponsibilities,
+      "plugin worker request 解析、失败分类、progress 投影、launch gate 和 JSON helper 不得回流到 plugin_worker_turn.rs 主文件",
+    ).toEqual([]);
+  });
+
+  it("runtime_backend tests 主文件必须保持测试职责拆分", () => {
+    const mainSource = readFileSync(
+      join(REPO_ROOT, RUNTIME_BACKEND_TESTS_MAIN),
+      "utf8",
+    );
+    const lineCount = mainSource.split(/\r?\n/u).length;
+    const missingModules = RUNTIME_BACKEND_TEST_SPLIT_MODULES.filter(
+      (path) => !existsSync(join(REPO_ROOT, path)),
+    );
+    const returnedTestResponsibilities = [
+      "fn explicit_runtime_preferences_win(",
+      "fn session_config_appends_memory_context_to_system_prompt(",
+      "fn runtime_agent_tool_events_are_mirrored_to_coding_facts(",
+      "async fn runtime_backend_registers_memory_tools_in_agent_registry(",
+      "fn request_working_dir_uses_host_turn_config_absolute_directory(",
+    ].filter((snippet) => mainSource.includes(snippet));
+
+    expect(
+      lineCount,
+      "runtime_backend/tests.rs 只能保留共享 fixture 和模块声明，具体 runtime backend 测试必须留在 tests/ 子模块",
+    ).toBeLessThanOrEqual(800);
+    expect(
+      missingModules,
+      "runtime_backend 测试职责拆分模块不得被删除或折回 tests.rs 主文件",
+    ).toEqual([]);
+    expect(
+      returnedTestResponsibilities,
+      "model selection、session prompt、tool policy、turn flow、coding projection 等测试不得回流到 runtime_backend/tests.rs 主文件",
+    ).toEqual([]);
+  });
+
+  it("image_command 主文件必须保持 @配图 workflow 职责拆分", () => {
+    const mainSource = readFileSync(join(REPO_ROOT, IMAGE_COMMAND_MAIN), "utf8");
+    const lineCount = mainSource.split(/\r?\n/u).length;
+    const missingModules = IMAGE_COMMAND_SPLIT_MODULES.filter(
+      (path) => !existsSync(join(REPO_ROOT, path)),
+    );
+    const returnedResponsibilities = [
+      "struct ImageCommandIntent",
+      "fn parse_image_command_intent(",
+      "fn image_command_metadata(",
+      "fn request_metadata_values(",
+      "#[tokio::test]",
+      "#[test]",
+    ].filter((snippet) => mainSource.includes(snippet));
+
+    expect(
+      lineCount,
+      "runtime_backend/image_command/mod.rs 只能保留 @配图 workflow 编排和事件投影，intent 解析、presentation 和测试必须留在子模块",
+    ).toBeLessThanOrEqual(800);
+    expect(
+      missingModules,
+      "@配图 image_command 职责拆分模块不得被删除或折回 mod.rs 主文件",
+    ).toEqual([]);
+    expect(
+      returnedResponsibilities,
+      "ImageCommandIntent、metadata 解析和内联测试不得回流到 image_command/mod.rs 主文件",
+    ).toEqual([]);
+  });
+
+  it("processor 主文件必须保持 JSON-RPC facade 职责拆分", () => {
+    const mainSource = readFileSync(join(REPO_ROOT, PROCESSOR_MAIN), "utf8");
+    const dispatchSource = readFileSync(
+      join(REPO_ROOT, PROCESSOR_DISPATCH),
+      "utf8",
+    );
+    const testsSource = readFileSync(
+      join(REPO_ROOT, PROCESSOR_TESTS_MAIN),
+      "utf8",
+    );
+    const mainLineCount = mainSource.split(/\r?\n/u).length;
+    const dispatchLineCount = dispatchSource.split(/\r?\n/u).length;
+    const testsLineCount = testsSource.split(/\r?\n/u).length;
+    const missingModules = PROCESSOR_SPLIT_MODULES.filter(
+      (path) => !existsSync(join(REPO_ROOT, path)),
+    );
+    const returnedMainResponsibilities = [
+      "async fn handle_request_inner(",
+      "#[tokio::test]",
+      "METHOD_PROJECT_GIT_STATUS =>",
+      "METHOD_MCP_TOOL_CALL =>",
+      "METHOD_EXECUTION_PROCESS_START =>",
+    ].filter((snippet) => mainSource.includes(snippet));
+    const returnedTestResponsibilities = [
+      "async fn artifact_read_requires_initialized_and_returns_artifact_summaries(",
+      "async fn mcp_runtime_methods_require_initialized_and_fail_closed_without_manager(",
+      "async fn workspace_right_surface_methods_register_and_list_pending_requests(",
+      "async fn execution_process_methods_start_drain_and_report_status(",
+    ].filter((snippet) => testsSource.includes(snippet));
+
+    expect(
+      mainLineCount,
+      "processor/mod.rs 只能保留 processor facade、初始化和共享 helper；分发表和领域测试不得折回主文件",
+    ).toBeLessThanOrEqual(800);
+    expect(
+      dispatchLineCount,
+      "processor/dispatch.rs 只能保留 JSON-RPC method 分发表；超过 800 行前必须继续拆 command group dispatch",
+    ).toBeLessThanOrEqual(800);
+    expect(
+      testsLineCount,
+      "processor/tests.rs 只能保留测试模块声明，具体 JSON-RPC 集成测试必须留在 tests/ 子模块",
+    ).toBeLessThanOrEqual(120);
+    expect(
+      missingModules,
+      "processor 的 dispatch 与测试职责拆分模块不得被删除或折回主文件",
+    ).toEqual([]);
+    expect(
+      returnedMainResponsibilities,
+      "JSON-RPC 分发表、MCP / git / execution process 分派和内联测试不得回流到 processor/mod.rs",
+    ).toEqual([]);
+    expect(
+      returnedTestResponsibilities,
+      "artifact / MCP / right surface / execution process 等 processor 集成测试不得回流到 processor/tests.rs",
+    ).toEqual([]);
+  });
+
   it("App Server 主 turn 执行不应直接调用 Aster streaming loop", () => {
     const runtimeBackend = productionSource(
       join(REPO_ROOT, "lime-rs/crates/app-server/src/runtime_backend.rs"),
+    );
+    const runtimeBackendFull = readFileSync(
+      join(REPO_ROOT, "lime-rs/crates/app-server/src/runtime_backend.rs"),
+      "utf8",
     );
     const agentTurnExecution = readFileSync(
       join(REPO_ROOT, "lime-rs/crates/agent/src/turn_execution.rs"),
       "utf8",
     );
+    const agentProviderConfiguration = readFileSync(
+      join(REPO_ROOT, AGENT_PROVIDER_CONFIGURATION_BOUNDARY),
+      "utf8",
+    );
 
     expect(runtimeBackend).toContain("run_agent_turn_with_policy");
     expect(runtimeBackend).toContain("AgentTurnExecutionRequest");
+    expect(runtimeBackend).toContain("AgentTurnProviderConfiguration");
+    expect(runtimeBackendFull).toContain("provider_configuration_from_runtime");
+    expect(runtimeBackend).not.toContain("ProviderConfigurationRequest");
     expect(runtimeBackend).not.toContain("stream_reply_with_policy(");
+    expect(runtimeBackend).not.toContain("configure_provider_for_route(");
+    expect(runtimeBackend).not.toContain("mark_current_healthy(");
     expect(runtimeBackend).not.toContain("create_cancel_token(");
     expect(runtimeBackend).not.toContain("remove_cancel_token(");
     expect(agentTurnExecution).toContain("stream_reply_with_policy(");
+    expect(agentTurnExecution).toContain(
+      "configure_model_route_provider_for_session_with_provider(",
+    );
+    expect(agentTurnExecution).toContain("ModelRouteProviderConfiguration");
+    expect(agentTurnExecution).toContain("AgentTurnProviderConfiguration");
+    expect(agentTurnExecution).toContain("ConfiguredSessionProvider");
+    expect(agentTurnExecution).not.toContain("mark_healthy(");
     expect(agentTurnExecution).toContain("create_cancel_token(");
     expect(agentTurnExecution).toContain("remove_cancel_token(");
+    expect(agentProviderConfiguration).toContain("create_session_provider_handle");
+    expect(agentProviderConfiguration).toContain("install_provider_for_session");
+    expect(agentProviderConfiguration).not.toContain("mark_healthy(");
   });
 
   it("App Server 不应直接构造 Aster SessionConfig", () => {
@@ -471,8 +488,12 @@ describe("app-server runtime boundary", () => {
           .filter((snippet) => source.includes(snippet))
           .map((snippet) => ({ path, snippet })),
       );
-    const agentBoundary = readFileSync(
+    const agentSessionConfiguration = readFileSync(
       join(REPO_ROOT, AGENT_SESSION_CONFIGURATION_BOUNDARY),
+      "utf8",
+    );
+    const agentSessionConfigAdapter = readFileSync(
+      join(REPO_ROOT, "lime-rs/crates/agent/src/session_config_adapter.rs"),
       "utf8",
     );
     const appServerAdapter = productionSource(
@@ -482,8 +503,11 @@ describe("app-server runtime boundary", () => {
       ),
     );
 
-    expect(agentBoundary).toContain("SessionConfigBuilder");
-    expect(agentBoundary).toContain("aster::agents::SessionConfig");
+    expect(agentSessionConfiguration).toContain("AgentSessionConfigurationRequest");
+    expect(agentSessionConfiguration).toContain("build_agent_session_config");
+    expect(agentSessionConfiguration).not.toContain("aster::agents::SessionConfig");
+    expect(agentSessionConfigAdapter).toContain("to_aster_session_config");
+    expect(agentSessionConfigAdapter).toContain("aster::agents::SessionConfig");
     expect(appServerAdapter).toContain("build_agent_session_config");
     expect(appServerAdapter).toContain("AgentSessionConfigurationRequest");
     expect(
@@ -525,7 +549,8 @@ describe("app-server runtime boundary", () => {
     expect(agentBoundary).toContain("TurnOutputSchemaSource");
     expect(appServerAdapter).toContain("build_agent_turn_context");
     expect(appServerAdapter).toContain("AgentTurnContextConfigurationRequest");
-    expect(imagePresentationAdapter).toContain("set_agent_turn_output_schema");
+    expect(imagePresentationAdapter).toContain("insert_agent_turn_metadata");
+    expect(imagePresentationAdapter).toContain("set_agent_turn_user_visible_input_text");
     expect(
       offenders,
       "Aster TurnContextOverride / TurnOutputSchemaSource 属于 lime-agent turn_context_configuration 边界；App Server 只能准备投影数据并调用 façade",
@@ -602,6 +627,10 @@ describe("app-server runtime boundary", () => {
       join(REPO_ROOT, "lime-rs/crates/agent/src/host_managed_generation.rs"),
       "utf8",
     );
+    const agentDirectTextGeneration = readFileSync(
+      join(REPO_ROOT, "lime-rs/crates/agent/src/direct_text_generation.rs"),
+      "utf8",
+    );
     const adapters = [pluginWorkerAdapter, imagePresentationAdapter].map(({ path, source }) => ({
       path,
       source,
@@ -612,6 +641,7 @@ describe("app-server runtime boundary", () => {
       "SessionConfigBuilder",
       "RuntimeAgentEvent",
       "TextDeltaBatch",
+      "configure_provider_for_route(",
     ];
     const pluginWorkerForbiddenSnippets = [
       "run_direct_text_generation",
@@ -631,11 +661,20 @@ describe("app-server runtime boundary", () => {
     expect(agentHostManagedGeneration).toContain("run_direct_text_generation");
     expect(agentHostManagedGeneration).toContain("DirectTextGenerationRequest");
     expect(agentHostManagedGeneration).toContain("HostManagedGenerationPlan");
+    expect(agentHostManagedGeneration).toContain("provider_configuration");
+    expect(agentDirectTextGeneration).toContain("ModelRouteProviderConfiguration");
+    expect(agentDirectTextGeneration).toContain(
+      "configure_model_route_provider_for_session",
+    );
     expect(pluginWorkerAdapter.source).toContain("run_host_managed_generation");
     expect(pluginWorkerAdapter.source).toContain("HostManagedGenerationPlan");
+    expect(pluginWorkerAdapter.source).toContain("provider_configuration_from_runtime");
     expect(pluginWorkerForbiddenSnippets).toEqual([]);
     expect(imagePresentationAdapter.source).toContain("run_direct_text_generation");
     expect(imagePresentationAdapter.source).toContain("DirectTextGenerationRequest");
+    expect(imagePresentationAdapter.source).toContain(
+      "provider_configuration_from_runtime",
+    );
     expect(
       offenders,
       "plugin worker 只能调用 lime-agent host_managed_generation，image presentation 只能调用 lime-agent direct_text_generation；App Server adapter 不得重新承接禁用工具的模型 streaming loop",
@@ -643,14 +682,17 @@ describe("app-server runtime boundary", () => {
   });
 
   it("App Server native tool adapter 不应重新实现 Aster Tool surface", () => {
+    const nativeToolAdapter = productionSource(
+      join(REPO_ROOT, "lime-rs/crates/app-server/src/runtime_backend/native_tools.rs"),
+    );
     const adapters = [
       {
         path: "lime-rs/crates/app-server/src/runtime_backend/image_tools.rs",
-        requiredSnippets: ["create_agent_image_tools", "ImageTaskGateway"],
+        requiredSnippets: ["image_task_gateway", "ImageTaskGateway"],
       },
       {
         path: "lime-rs/crates/app-server/src/runtime_backend/memory_tools.rs",
-        requiredSnippets: ["create_agent_memory_tools", "MemoryStoreGateway"],
+        requiredSnippets: ["memory_store_gateway", "MemoryStoreGateway"],
       },
     ].map(({ path, requiredSnippets }) => ({
       path,
@@ -686,6 +728,10 @@ describe("app-server runtime boundary", () => {
       offenders,
       "image/memory native tool 的 schema、权限检查和 ToolResult 拼装属于 lime-agent；App Server 只能注入 AppDataSource gateway",
     ).toEqual([]);
+    expect(nativeToolAdapter).toContain("register_memory_store_tools");
+    expect(nativeToolAdapter).toContain("register_image_task_tools");
+    expect(nativeToolAdapter).not.toContain("create_memory_tools");
+    expect(nativeToolAdapter).not.toContain("create_image_tools");
   });
 
   it("App Server tool inventory 不应直接读取 Aster tool registry", () => {
@@ -743,89 +789,6 @@ describe("app-server runtime boundary", () => {
     expect(
       forbiddenSnippets,
       "Aster shell tool registry 和权限预检属于 lime-agent tool_orchestrator；App Server execution_process 只能做 process control / read-model 投影",
-    ).toEqual([]);
-  });
-
-  it("App Server 不应恢复独立 backend_mode=aster", () => {
-    const runtimeFactory = readFileSync(
-      join(REPO_ROOT, "lime-rs/crates/app-server/src/runtime_factory.rs"),
-      "utf8",
-    );
-    const daemonBackend = readFileSync(
-      join(REPO_ROOT, "lime-rs/crates/app-server-daemon/src/backend.rs"),
-      "utf8",
-    );
-    const electronHost = readFileSync(
-      join(REPO_ROOT, "electron/appServerHost.ts"),
-      "utf8",
-    );
-
-    expect(runtimeFactory).toContain('"runtime" => Ok(Self::Runtime)');
-    expect(runtimeFactory).not.toMatch(/["']aster["']\s*=>\s*Ok/u);
-    expect(daemonBackend).toContain(
-      'assert!(SidecarBackendMode::parse("aster").is_err());',
-    );
-    expect(electronHost).not.toContain('normalized === "aster"');
-    expect(electronHost).not.toContain("APP_SERVER_BACKEND_MODE=aster");
-  });
-
-  it("ExternalBackend 只能保留为显式 override 或受控 fixture", () => {
-    const electronHost = readFileSync(
-      join(REPO_ROOT, "electron/appServerHost.ts"),
-      "utf8",
-    );
-    const devSidecar = readFileSync(
-      join(REPO_ROOT, "scripts/lib/electron-dev-sidecar.mjs"),
-      "utf8",
-    );
-    const sidecarTypes = readFileSync(
-      join(REPO_ROOT, "packages/app-server-client/src/sidecar-types.ts"),
-      "utf8",
-    );
-    const sidecarManifest = readFileSync(
-      join(REPO_ROOT, "packages/app-server-client/src/sidecar-manifest.ts"),
-      "utf8",
-    );
-    const appServerMain = readFileSync(
-      join(REPO_ROOT, "lime-rs/crates/app-server/src/main.rs"),
-      "utf8",
-    );
-
-    expect(electronHost).toContain(
-      'resolveRuntimeBackendLaunchOptions("runtime")',
-    );
-    expect(electronHost).toContain('normalized === "external"');
-    expect(electronHost).toContain(
-      "process.env.APP_SERVER_BACKEND_COMMAND?.trim()",
-    );
-    expect(devSidecar).toContain('defaultMode = "runtime"');
-    expect(devSidecar).toContain('requestedMode !== "external"');
-    expect(sidecarTypes).toContain('> = "unavailable";');
-    expect(sidecarManifest).toContain(
-      "backendMode: DEFAULT_STANDALONE_BACKEND_MODE",
-    );
-    expect(appServerMain).toContain(
-      "--backend-command is required when --backend external",
-    );
-
-    const unregistered = EXTERNAL_BACKEND_SCAN_DIRS.flatMap((dir) =>
-      collectTextFiles(join(REPO_ROOT, dir)),
-    )
-      .map((file) => ({
-        path: repoRelative(file),
-        source: readFileSync(file, "utf8"),
-      }))
-      .filter(({ source }) =>
-        EXTERNAL_BACKEND_LAUNCH_SNIPPETS.some((snippet) =>
-          source.includes(snippet),
-        ),
-      )
-      .filter(({ path }) => !ALLOWED_EXTERNAL_BACKEND_LAUNCH_FILES.has(path))
-      .map(({ path }) => path);
-
-    expect(
-      unregistered,
-      "ExternalBackend 是 compat / controlled-fixture 边界，只能出现在 standalone CLI、SDK smoke、fixture 或 dev 显式 override；生产默认必须继续走 AppServerBackendMode::Runtime",
     ).toEqual([]);
   });
 });

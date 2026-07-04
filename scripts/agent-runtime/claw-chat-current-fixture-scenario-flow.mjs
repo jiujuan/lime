@@ -24,6 +24,7 @@ import {
   PLAN_STEPS,
   RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO,
   SESSION_ID,
+  SOUL_STYLE_SCENARIO,
   SKILLS_RUNTIME_EXPLICIT_PROMPT,
   SKILLS_RUNTIME_EXPLICIT_SCENARIO,
   SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT,
@@ -826,7 +827,7 @@ export async function executeScenarioFlow({
         appServerRequests,
         EXPERT_SKILLS_RUNTIME_SCENARIO,
         expertPlazaSkillsRuntimeSessionId,
-    );
+      );
     summary.evidencePackExpertSkillsRuntime =
       evidencePackExpertSkillsRuntime.summary;
 
@@ -1064,7 +1065,8 @@ export async function executeScenarioFlow({
     options.scenario !== "expert-plaza-skills-runtime" &&
     options.scenario !== "expert-panel-skills-runtime" &&
     options.scenario !== RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO &&
-    options.scenario !== CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO
+    options.scenario !== CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO &&
+    options.scenario !== CONTENT_FACTORY_INLINE_IMAGE_ARTICLE_WORKSPACE_SCENARIO
   ) {
     logStage("wait-gui-completed");
     summary.guiCompleted = sanitizeJson(
@@ -1098,11 +1100,13 @@ export async function executeScenarioFlow({
       ).includes("今日国际新闻简要整理"),
     });
 
-    logStage("probe-agent-session-event-read");
-    summary.eventReadProbe = await runEventReadProbe(
-      page,
-      options,
-      appServerRequests,
-    );
+    if (options.scenario !== SOUL_STYLE_SCENARIO) {
+      logStage("probe-agent-session-event-read");
+      summary.eventReadProbe = await runEventReadProbe(
+        page,
+        options,
+        appServerRequests,
+      );
+    }
   }
 }

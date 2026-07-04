@@ -1,7 +1,8 @@
-use crate::aster_state::AsterAgentState;
 use crate::direct_text_generation::{
     run_direct_text_generation_with_db, DirectTextGenerationRequest,
 };
+use crate::provider_configuration::{ModelRouteProviderConfiguration, SessionProviderConfig};
+use crate::runtime_state::AgentRuntimeState;
 use lime_core::database::DbConnection;
 use serde_json::{json, Map, Value};
 
@@ -31,11 +32,14 @@ pub struct HostManagedGenerationRunRequest<'a> {
     pub generation_session_id: String,
     pub worker_request: &'a Value,
     pub plan: &'a HostManagedGenerationPlan,
+    pub system_prompt_context: Option<String>,
+    pub provider_configuration: Option<ModelRouteProviderConfiguration>,
 }
 
 #[derive(Debug, Clone)]
 pub struct HostManagedGenerationRunResult {
     pub outputs: Vec<Value>,
+    pub provider_config: Option<SessionProviderConfig>,
 }
 
 impl HostManagedGenerationPlan {
@@ -78,10 +82,11 @@ impl HostManagedGenerationItem {
 }
 
 pub async fn run_host_managed_generation(
-    agent_state: &AsterAgentState,
+    agent_state: &AgentRuntimeState,
     request: HostManagedGenerationRunRequest<'_>,
 ) -> Result<HostManagedGenerationRunResult, String> {
     let mut outputs = Vec::new();
+    let mut provider_config = None;
     for generation_request in request.plan.requests.iter().take(MAX_GENERATION_REQUESTS) {
         let generated = run_direct_text_generation_with_db(
             agent_state,
@@ -101,13 +106,21 @@ pub async fn run_host_managed_generation(
                         .unwrap_or_else(|| "turn".to_string()),
                     generation_request.id
                 ),
-                system_prompt: generation_system_prompt(request.plan, generation_request),
+                system_prompt: generation_system_prompt(
+                    request.plan,
+                    generation_request,
+                    request.system_prompt_context.as_deref(),
+                ),
                 user_prompt: generation_user_prompt(request.worker_request, generation_request),
                 turn_context: None,
+                provider_configuration: request.provider_configuration.clone(),
             },
             request.db,
         )
         .await?;
+        if provider_config.is_none() {
+            provider_config = generated.provider_config.clone();
+        }
         let content = truncate_chars(generated.text.trim(), MAX_GENERATED_CHARS);
         if content.is_empty() {
             continue;
@@ -122,7 +135,10 @@ pub async fn run_host_managed_generation(
         }));
     }
 
-    Ok(HostManagedGenerationRunResult { outputs })
+    Ok(HostManagedGenerationRunResult {
+        outputs,
+        provider_config,
+    })
 }
 
 pub fn write_host_managed_generation_status(worker_request: &mut Value, payload: Value) {
@@ -164,10 +180,19 @@ pub fn host_managed_generation_session_id(worker_request: &Value) -> String {
 fn generation_system_prompt(
     plan: &HostManagedGenerationPlan,
     request: &HostManagedGenerationItem,
+    system_prompt_context: Option<&str>,
 ) -> String {
     let mut prompt = String::from(
         "你是 Lime App Server 托管的 Plugin 文本生成器。你只为插件 worker 生成受控文本内容，不解释流程，不输出审计说明，不调用工具。",
     );
+    if let Some(system_prompt_context) = system_prompt_context
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        prompt.push_str("\n\n宿主上下文边界：\n");
+        prompt.push_str(system_prompt_context);
+        prompt.push_str("\n\n本次是 host-managed formal artifact generation。Interaction Soul 只能作为边界和风格继承规则的事实源；正式 Markdown 正文使用插件声明或生成 brief 的 voice，不直接套用产品聊天口吻，除非生成 brief 明确要求。");
+    }
     if let Some(system_prompt) = plan.system_prompt.as_deref() {
         prompt.push_str("\n\n插件声明的生成边界：\n");
         prompt.push_str(system_prompt);
@@ -306,5 +331,34 @@ mod tests {
             worker_request["runtime"]["hostManagedGenerationResult"],
             worker_request["hostManagedGeneration"]
         );
+    }
+
+    #[test]
+    fn generation_system_prompt_includes_host_context_as_formal_artifact_boundary() {
+        let plan = HostManagedGenerationPlan {
+            system_prompt: Some("生成中文 Markdown".to_string()),
+            requests: Vec::new(),
+        };
+        let item = HostManagedGenerationItem {
+            id: "article-draft-document".to_string(),
+            kind: Some("markdown_document".to_string()),
+            target_object_kind: Some("articleDraft".to_string()),
+            output_field: Some("documentText".to_string()),
+            instructions: Some("只输出正文".to_string()),
+        };
+
+        let prompt = generation_system_prompt(
+            &plan,
+            &item,
+            Some("## Interaction Soul\n- Style profile: cheeky_sassy_executor\n- Formal artifact voice source: generation_brief_only"),
+        );
+
+        assert!(prompt.contains("宿主上下文边界"));
+        assert!(prompt.contains("## Interaction Soul"));
+        assert!(prompt.contains("Style profile: cheeky_sassy_executor"));
+        assert!(prompt.contains("host-managed formal artifact generation"));
+        assert!(prompt.contains("不直接套用产品聊天口吻"));
+        assert!(prompt.contains("生成中文 Markdown"));
+        assert!(prompt.contains("只输出正文"));
     }
 }

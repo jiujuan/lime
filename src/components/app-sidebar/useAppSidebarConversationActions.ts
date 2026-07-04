@@ -193,7 +193,33 @@ export function useAppSidebarConversationActions({
       requestedNavigationTargetRef,
       onNavigate,
     });
-  }, [onNavigate, projectScopedNavigationProjectId, requestedNavigationTargetRef]);
+  }, [
+    onNavigate,
+    projectScopedNavigationProjectId,
+    requestedNavigationTargetRef,
+  ]);
+
+  const navigateToExperts = useCallback(() => {
+    const targetParams = projectScopedNavigationProjectId
+      ? {
+          currentProjectId: projectScopedNavigationProjectId,
+          projectId: projectScopedNavigationProjectId,
+        }
+      : undefined;
+    navigateIfNeeded({
+      target: {
+        page: "experts",
+        rawParams: targetParams,
+        paramsKey: serializeNavigationParams(targetParams),
+      },
+      requestedNavigationTargetRef,
+      onNavigate,
+    });
+  }, [
+    onNavigate,
+    projectScopedNavigationProjectId,
+    requestedNavigationTargetRef,
+  ]);
 
   const navigateToConversation = useCallback(
     (session: AsterSessionInfo) => {
@@ -414,6 +440,7 @@ export function useAppSidebarConversationActions({
     deleteConversation,
     navigateToConversation,
     navigateToConversationFromSearch,
+    navigateToExperts,
     navigateToHome,
     navigateToNewTask,
     navigateToProjectNewTask,

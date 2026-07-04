@@ -75,18 +75,19 @@ describe("workspaceArticleInlineHostCommandSync", () => {
         result,
       );
 
-    const nextMessages = attachWorkspaceArticleWorkspacePreviewArtifactToMessages({
-      messages: [
-        {
-          id: "assistant-1",
-          role: "assistant",
-          content: "文章草稿已生成。",
-          timestamp: new Date("2026-07-04T00:00:00.000Z"),
-        },
-      ],
-      articleWorkspace: materializedWorkspace,
-      now: 100,
-    });
+    const nextMessages =
+      attachWorkspaceArticleWorkspacePreviewArtifactToMessages({
+        messages: [
+          {
+            id: "assistant-1",
+            role: "assistant",
+            content: "文章草稿已生成。",
+            timestamp: new Date("2026-07-04T00:00:00.000Z"),
+          },
+        ],
+        articleWorkspace: materializedWorkspace,
+        now: 100,
+      });
     const artifact = nextMessages[0]?.artifacts?.[0];
 
     expect(materializedWorkspace?.objects[0]?.source?.documentText).toContain(
@@ -127,6 +128,44 @@ describe("workspaceArticleInlineHostCommandSync", () => {
     expect(result?.imageSlotIntents[0]?.prompt).toBe(
       "一张改写稿配图 edited-marker",
     );
+  });
+
+  it("存在多个 articleDraft 时应物化实际包含 @配图 shortcode 的文章对象", () => {
+    const result = buildWorkspaceArticleInlineHostCommandSync({
+      articleWorkspace: {
+        ...articleWorkspace,
+        objectCount: 2,
+        objects: [
+          {
+            ...articleWorkspace.objects[0]!,
+            ref: {
+              ...articleWorkspace.objects[0]!.ref,
+              id: "article-preferred-without-shortcode",
+              sourceTaskId: "content-factory-worker-task",
+            },
+            source: {
+              documentText: "# 更完整的旧稿\n\n正文没有 shortcode。",
+              researchRounds: [{ id: "research-1", title: "资料检索" }],
+            },
+          },
+          {
+            ...articleWorkspace.objects[0]!,
+            ref: {
+              ...articleWorkspace.objects[0]!.ref,
+              id: "article-inline-shortcode-target",
+            },
+            title: "真实 shortcode 文稿",
+          },
+        ],
+      },
+      editedDraft: null,
+    });
+
+    expect(result?.object.ref.id).toBe("article-inline-shortcode-target");
+    expect(result?.markdown).toContain(
+      "<!-- lime:image-task-slot:article-image-slot-1 -->",
+    );
+    expect(result?.markdown).not.toContain("[@配图");
   });
 
   it("fixture-only 文章不应触发 host command", () => {

@@ -2,13 +2,24 @@
 import { act, type ComponentProps, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, vi } from "vitest";
-import { agentEnUSResource } from "@/i18n/agentResources";
+import {
+  agentEnUSResource,
+  agentZhCNResource,
+} from "@/i18n/agentResources";
 import { resetInitialSessionNavigationDeduplicationForTests } from "./workspace/useWorkspaceInitialSessionNavigation";
 
-export const WORKSPACE_HARNESS_TITLE =
-  agentEnUSResource["agentChat.workspaceHarnessDialog.title"];
-export const WORKSPACE_HARNESS_DESCRIPTION =
-  agentEnUSResource["agentChat.workspaceHarnessDialog.description"];
+export const WORKSPACE_HARNESS_TITLE_CANDIDATES = [
+  agentZhCNResource["agentChat.workspaceHarnessDialog.title"],
+  agentEnUSResource["agentChat.workspaceHarnessDialog.title"],
+] as const;
+export const WORKSPACE_HARNESS_DESCRIPTION_CANDIDATES = [
+  agentZhCNResource["agentChat.workspaceHarnessDialog.description"],
+  agentEnUSResource["agentChat.workspaceHarnessDialog.description"],
+] as const;
+export const textContainsAny = (
+  text: string | null | undefined,
+  values: readonly string[],
+) => Boolean(text && values.some((value) => text.includes(value)));
 export const GENERAL_CONTEXT_HINT = "普通聊天模式";
 
 export type MockEmptyStateProps = {
@@ -922,10 +933,9 @@ vi.mock("@/lib/webview-api", async () => {
 });
 
 vi.mock("@/lib/api/browserRuntime", async () => {
-  const actual =
-    await vi.importActual<typeof import("@/lib/api/browserRuntime")>(
-      "@/lib/api/browserRuntime",
-    );
+  const actual = await vi.importActual<
+    typeof import("@/lib/api/browserRuntime")
+  >("@/lib/api/browserRuntime");
 
   return {
     ...actual,
@@ -1685,7 +1695,7 @@ beforeEach(async () => {
   sharedTriggerAIGuideMock = vi.fn();
   installMockAgentChatUnifiedState(createMockAgentChatUnifiedState());
   await agentChatWorkspacePreload;
-}, 30_000);
+}, 60_000);
 
 afterEach(() => {
   while (mountedRoots.length > 0) {

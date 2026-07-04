@@ -16,7 +16,7 @@ describe("Plugin manifest P0", () => {
       manifestVersion: "0.11",
       appId: "content-factory-app",
       displayName: "内容工厂",
-      version: "2.0.0",
+      version: contentFactoryFixture.version,
       runtimeTargets: ["local"],
       storage: {
         namespace: "content-factory-app",

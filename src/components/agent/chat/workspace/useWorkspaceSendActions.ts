@@ -12,6 +12,7 @@ import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/t
 import { listInstalledPlugins } from "@/lib/api/plugins";
 import { normalizeExecutionStrategyToReact } from "@/lib/api/agentRuntime/executionStrategyCompat";
 import type { ServiceModelsConfig } from "@/lib/api/appConfigTypes";
+import type { SoulInteractionCopy } from "@/lib/soul/interactionCopy";
 import { logAgentDebug } from "@/lib/agentDebug";
 import { recordAgentUiPerformanceMetric } from "@/lib/agentUiPerformanceMetrics";
 import { readGlobalMediaGenerationDefaults } from "@/hooks/useGlobalMediaGenerationDefaults";
@@ -289,6 +290,7 @@ interface UseWorkspaceSendActionsParams {
   workspaceRequestMetadataBase?: Record<string, unknown>;
   savedSoulArtifactVoiceGenerationBrief?: Record<string, unknown> | null;
   soulArtifactVoiceEnabledForTurn?: boolean;
+  soulCopy?: SoulInteractionCopy;
   serviceModels?: ServiceModelsConfig;
   agentResponseLanguage?: string | null;
   resolveServiceModelsBeforeSend?: () => Promise<{
@@ -444,6 +446,7 @@ export function useWorkspaceSendActions({
   workspaceRequestMetadataBase,
   savedSoulArtifactVoiceGenerationBrief,
   soulArtifactVoiceEnabledForTurn,
+  soulCopy,
   serviceModels,
   agentResponseLanguage,
   resolveServiceModelsBeforeSend,
@@ -496,25 +499,32 @@ export function useWorkspaceSendActions({
   const runtimeTeamDispatchPreviewMessages = useMemo(
     () =>
       runtimeTeamDispatchPreview
-        ? buildRuntimeTeamDispatchPreviewMessages(runtimeTeamDispatchPreview)
+        ? buildRuntimeTeamDispatchPreviewMessages(
+            runtimeTeamDispatchPreview,
+            soulCopy,
+          )
         : [],
-    [runtimeTeamDispatchPreview],
+    [runtimeTeamDispatchPreview, soulCopy],
   );
   const resourcePromptRewritePreference =
     serviceModels?.resource_prompt_rewrite;
   const submissionPreviewMessages = useMemo(
     () =>
       messagesCount === 0 && submissionPreview
-        ? buildSubmissionPreviewMessages(submissionPreview)
+        ? buildSubmissionPreviewMessages(submissionPreview, soulCopy)
         : [],
-    [messagesCount, submissionPreview],
+    [messagesCount, soulCopy, submissionPreview],
   );
   const bootstrapDispatchPreviewMessages = useMemo(
     () =>
       bootstrapDispatchPreview
-        ? buildInitialDispatchPreviewMessages(bootstrapDispatchPreview)
+        ? buildInitialDispatchPreviewMessages(
+            bootstrapDispatchPreview,
+            undefined,
+            soulCopy,
+          )
         : [],
-    [bootstrapDispatchPreview],
+    [bootstrapDispatchPreview, soulCopy],
   );
   const displayMessages = useMemo(() => {
     if (runtimeTeamDispatchPreviewMessages.length > 0) {

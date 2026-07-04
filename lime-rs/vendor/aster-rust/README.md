@@ -4,7 +4,7 @@
 
 ## 状态
 
-- **当前角色**：vendor dependency，通过 optional feature 隔离
+- **当前角色**：vendor dependency，服务 `lime-agent` 内剩余 Aster compat adapter
 - **迁移目标**：Phase 6 完成后完全移除
 - **定位**：外部依赖，非 Lime current runtime
 
@@ -13,10 +13,10 @@
 Phase 6 完成后删除此目录，前置条件：
 
 1. ✅ 所有 compat adapter 已删除
-2. ✅ `lime-agent` 的 `compat-aster` feature 已移除
-3. ✅ 所有 production 路径使用 Lime-owned trait（SessionRepository, TurnExecutor, ProviderRouter）
-4. ✅ `cargo check -p lime-agent --no-default-features` 通过
-5. ✅ App Server 不依赖 Aster runtime
+2. ✅ 误导性的假 optional feature 已删除，`lime-agent` manifest 真实表达当前直接依赖
+3. ✅ 所有 production 路径使用 Lime-owned runtime / provider / session owner
+4. ✅ `cargo check -p lime-agent --lib` 通过
+5. ✅ App Server 不直接依赖 Aster runtime
 
 ## 使用限制
 
@@ -43,11 +43,7 @@ aster = { package = "aster-core", path = "vendor/aster-rust/crates/aster" }
 **lime-agent Cargo.toml**：
 ```toml
 [dependencies]
-aster = { workspace = true, optional = true }
-
-[features]
-compat-aster = ["aster"]
-default = ["compat-aster"]
+aster.workspace = true
 ```
 
 ## 迁移进度
@@ -55,18 +51,17 @@ default = ["compat-aster"]
 **Phase 1-2**（已完成）：
 - ✅ Lime-owned trait 已定义（SessionRepository, TurnExecutor, ProviderRouter）
 - ✅ 公共 API 不再暴露 Aster 类型
-- ✅ Optional feature gate 已实施
+- ✅ 假 optional feature gate 已删除，manifest 真实表达当前直接依赖
 
 **Phase 3-4**（进行中）：
 - 🔄 逐步迁移 54 个文件到 Lime-owned trait
-- 🔄 收缩 compat-aster feature 范围
+- 🔄 收缩 `lime-agent` 内剩余 Aster compat adapter
 
 **Phase 5**（当前）：
 - ✅ Aster 已移动到 vendor 区
 
 **Phase 6**（待开始）：
 - ⏸️ 删除所有 compat adapter
-- ⏸️ 移除 compat-aster feature
 - ⏸️ 删除此 vendor 目录
 
 详细进度参考：`../../internal/roadmap/astermigration/`

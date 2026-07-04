@@ -23,7 +23,7 @@
   "agentChat.imageWorkbenchPreview.media.open": "打开图片结果",
   "agentChat.imageWorkbenchPreview.media.previewFailed": "预览失败",
   "agentChat.imageWorkbenchPreview.action.retry": "重试",
-  "agentChat.imageWorkbenchPreview.tool.generation": "Image Generation",
+  "agentChat.imageWorkbenchPreview.tool.generation": "图片生成",
   "agentChat.imageWorkbenchPreview.tool.editing": "图片编辑",
   "agentChat.imageWorkbenchPreview.tool.redraw": "图片重绘",
   "agentChat.imageWorkbenchPreview.placeholder.cancelled": "已取消",

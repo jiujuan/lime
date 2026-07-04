@@ -99,7 +99,7 @@ interface EmptyStateComposerPanelProps {
       planEnabled?: boolean;
       subagentEnabled?: boolean;
     },
-  ) => void;
+  ) => void | boolean | Promise<boolean>;
   isLoading?: boolean;
   disabled?: boolean;
   activeTheme: string;
@@ -354,12 +354,23 @@ export function EmptyStateComposerPanel({
       input: draftInput,
       selection: activePluginSelection,
     });
-    setDraftInput("");
-    onSend(submittedInput, {
+    const result = onSend(submittedInput, {
       goalEnabled: objectiveEnabled,
       planEnabled: taskEnabled,
       subagentEnabled,
     });
+    if (result === false) {
+      return;
+    }
+    if (result && typeof result === "object" && "then" in result) {
+      void result.then((accepted) => {
+        if (accepted !== false) {
+          setDraftInput("");
+        }
+      });
+      return;
+    }
+    setDraftInput("");
   };
 
   const [inputSuggestionIndex, setInputSuggestionIndex] = useState(0);

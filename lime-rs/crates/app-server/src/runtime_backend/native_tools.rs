@@ -2,11 +2,11 @@ use super::image_tools;
 use super::memory_tools;
 use crate::AppDataSource;
 use crate::RuntimeCoreError;
-use lime_agent::AsterAgentState;
+use lime_agent::AgentRuntimeState;
 use std::sync::{Arc, RwLock};
 
 pub(crate) async fn register_current_native_tools_if_available(
-    agent_state: &AsterAgentState,
+    agent_state: &AgentRuntimeState,
     app_data_source: &RwLock<Option<Arc<dyn AppDataSource>>>,
 ) -> Result<(), RuntimeCoreError> {
     let app_data_source = app_data_source
@@ -21,14 +21,13 @@ pub(crate) async fn register_current_native_tools_if_available(
     if !agent_state.is_initialized().await {
         return Ok(());
     }
-    let tools = memory_tools::create_memory_tools(app_data_source.clone())
-        .into_iter()
-        .chain(image_tools::create_image_tools(app_data_source.clone()));
-    for tool in tools {
-        agent_state
-            .register_native_tool(tool)
-            .await
-            .map_err(|error| RuntimeCoreError::Backend(error.to_string()))?;
-    }
+    agent_state
+        .register_memory_store_tools(memory_tools::memory_store_gateway(app_data_source.clone()))
+        .await
+        .map_err(|error| RuntimeCoreError::Backend(error.to_string()))?;
+    agent_state
+        .register_image_task_tools(image_tools::image_task_gateway(app_data_source))
+        .await
+        .map_err(|error| RuntimeCoreError::Backend(error.to_string()))?;
     Ok(())
 }

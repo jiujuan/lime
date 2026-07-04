@@ -10,6 +10,7 @@ export type ExpertAgentInstanceStatus = "active" | "archived";
 
 export interface ExpertAgentInstanceIdentity {
   tenantId: string;
+  projectId?: string | null;
   expertId: string;
   releaseId: string;
 }
@@ -18,7 +19,6 @@ export interface ExpertAgentInstanceRecord extends ExpertAgentInstanceIdentity {
   agentInstanceId: string;
   agentInstanceKey: string;
   catalogVersion?: string;
-  latestSessionId?: string;
   skillRefsOverride?: string[];
   status: ExpertAgentInstanceStatus;
   createdAt: number;
@@ -42,6 +42,23 @@ function normalizeText(value: unknown): string | null {
   }
   const normalized = value.trim();
   return normalized ? normalized : null;
+}
+
+function normalizeProjectScopeId(value: unknown): string | null {
+  const normalized = normalizeText(value);
+  if (!normalized) {
+    return null;
+  }
+  const lower = normalized.toLowerCase();
+  if (
+    lower === "default" ||
+    lower === "workspace-default" ||
+    lower === "__invalid__" ||
+    normalized === "[object Promise]"
+  ) {
+    return null;
+  }
+  return normalized;
 }
 
 function normalizeStringList(value: unknown): string[] | undefined {
@@ -68,7 +85,9 @@ function normalizeTimestamp(value: unknown): number | null {
 export function buildExpertAgentInstanceKey(
   identity: ExpertAgentInstanceIdentity,
 ): string {
-  return [identity.tenantId, identity.expertId, identity.releaseId]
+  const projectId = normalizeProjectScopeId(identity.projectId);
+  return [identity.tenantId, projectId, identity.expertId, identity.releaseId]
+    .filter((item): item is string => Boolean(item))
     .map((item) => item.trim())
     .join(":");
 }
@@ -87,12 +106,18 @@ function normalizeExpertAgentInstanceRecord(
   }
   const record = value as Record<string, unknown>;
   const tenantId = normalizeText(record.tenantId);
+  const projectId = normalizeProjectScopeId(record.projectId);
   const expertId = normalizeText(record.expertId);
   const releaseId = normalizeText(record.releaseId);
   if (!tenantId || !expertId || !releaseId) {
     return null;
   }
-  const identity = { tenantId, expertId, releaseId };
+  const identity = {
+    tenantId,
+    ...(projectId ? { projectId } : {}),
+    expertId,
+    releaseId,
+  };
   const agentInstanceKey = buildExpertAgentInstanceKey(identity);
   const now = Date.now();
   const createdAt = normalizeTimestamp(record.createdAt) ?? now;
@@ -103,7 +128,6 @@ function normalizeExpertAgentInstanceRecord(
       normalizeText(record.agentInstanceId) ?? buildExpertAgentInstanceId(identity),
     agentInstanceKey,
     catalogVersion: normalizeText(record.catalogVersion) ?? undefined,
-    latestSessionId: normalizeText(record.latestSessionId) ?? undefined,
     skillRefsOverride: normalizeStringList(record.skillRefsOverride),
     status:
       record.status === "archived" || record.status === "active"
@@ -163,6 +187,9 @@ export function saveExpertAgentInstances(
 export function findExpertAgentInstance(
   identity: ExpertAgentInstanceIdentity,
 ): ExpertAgentInstanceRecord | null {
+  if (!normalizeProjectScopeId(identity.projectId)) {
+    return null;
+  }
   const key = buildExpertAgentInstanceKey(identity);
   return (
     readExpertAgentInstances().find(
@@ -174,18 +201,19 @@ export function findExpertAgentInstance(
 export function upsertExpertAgentInstance(
   identity: ExpertAgentInstanceIdentity & {
     catalogVersion?: string;
-    latestSessionId?: string | null;
     skillRefsOverride?: string[] | null;
     now?: number;
   },
 ): ExpertAgentInstanceRecord {
   const now = identity.now ?? Date.now();
+  const projectId = normalizeProjectScopeId(identity.projectId);
   const key = buildExpertAgentInstanceKey(identity);
   const current = readExpertAgentInstances();
   const existing = current.find((item) => item.agentInstanceKey === key);
   const record: ExpertAgentInstanceRecord = {
     ...(existing ?? {
       tenantId: identity.tenantId.trim(),
+      ...(projectId ? { projectId } : {}),
       expertId: identity.expertId.trim(),
       releaseId: identity.releaseId.trim(),
       agentInstanceId: buildExpertAgentInstanceId(identity),
@@ -194,8 +222,6 @@ export function upsertExpertAgentInstance(
       createdAt: now,
     }),
     catalogVersion: normalizeText(identity.catalogVersion) ?? existing?.catalogVersion,
-    latestSessionId:
-      normalizeText(identity.latestSessionId) ?? existing?.latestSessionId,
     skillRefsOverride:
       normalizeStringList(identity.skillRefsOverride) ??
       existing?.skillRefsOverride,
@@ -209,24 +235,6 @@ export function upsertExpertAgentInstance(
     ...current.filter((item) => item.agentInstanceKey !== key),
   ]);
   return record;
-}
-
-export function updateExpertAgentInstanceSession(
-  identity: ExpertAgentInstanceIdentity & {
-    catalogVersion?: string;
-    latestSessionId: string;
-    skillRefsOverride?: string[] | null;
-  },
-): ExpertAgentInstanceRecord | null {
-  const latestSessionId = normalizeText(identity.latestSessionId);
-  if (!latestSessionId) {
-    return null;
-  }
-  return upsertExpertAgentInstance({
-    ...identity,
-    latestSessionId,
-    skillRefsOverride: identity.skillRefsOverride,
-  });
 }
 
 export function updateExpertAgentInstanceSkillRefs(
@@ -251,11 +259,11 @@ function normalizeCloudExpertAgentInstance(
   const record = value as Record<string, unknown>;
   return normalizeExpertAgentInstanceRecord({
     tenantId,
+    projectId: record.projectId,
     expertId: record.expertId,
     releaseId: record.releaseId,
     agentInstanceId: record.id,
     catalogVersion: record.catalogVersion,
-    latestSessionId: record.latestSessionId,
     skillRefsOverride: record.skillRefsOverride,
     status: record.status,
     createdAt: record.createdAt,
@@ -341,10 +349,10 @@ export async function syncExpertAgentInstanceToCloud(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
+        projectId: record.projectId,
         expertId: record.expertId,
         releaseId: record.releaseId,
         catalogVersion: record.catalogVersion,
-        latestSessionId: record.latestSessionId,
         skillRefsOverride: record.skillRefsOverride,
       }),
     },

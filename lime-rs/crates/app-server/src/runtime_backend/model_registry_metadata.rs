@@ -1,5 +1,5 @@
 use super::request_context::RuntimeModelSelection;
-use lime_agent::ProviderConfig;
+use lime_agent::SessionProviderConfig;
 use lime_core::database::DbConnection;
 use lime_services::api_key_provider_service::ApiKeyProviderService;
 use lime_services::model_registry_service::ModelRegistryService;
@@ -25,7 +25,7 @@ pub(super) async fn resolve_runtime_model_registry_metadata(
     db: &DbConnection,
     api_key_provider_service: &ApiKeyProviderService,
     selection: &RuntimeModelSelection,
-    direct_provider_config: Option<&ProviderConfig>,
+    direct_provider_config: Option<&SessionProviderConfig>,
 ) -> Result<RuntimeModelRegistryMetadata, String> {
     if direct_provider_config.is_some() {
         return Ok(RuntimeModelRegistryMetadata {
@@ -225,7 +225,7 @@ mod tests {
                 source: "host_options_provider_config",
                 reasoning_effort: None,
             },
-            Some(&ProviderConfig {
+            Some(&SessionProviderConfig {
                 provider_name: "openai".to_string(),
                 provider_selector: Some("fixture-openai".to_string()),
                 model_name: "fixture-model".to_string(),
@@ -233,7 +233,7 @@ mod tests {
                 base_url: Some("http://127.0.0.1:56599".to_string()),
                 credential_uuid: None,
                 reasoning_effort: None,
-                protocol: None,
+                route_protocol: None,
                 toolshim: false,
                 toolshim_model: None,
             }),

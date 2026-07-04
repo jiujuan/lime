@@ -1,28 +1,17 @@
-use super::{RuntimeProviderConfig, RuntimeProviderProtocol};
 use lime_core::database::dao::api_key_provider::{infer_managed_runtime_spec, ApiProviderType};
+use model_provider::runtime_provider::{RuntimeProviderConfig, RuntimeProviderProtocol};
 use model_provider::safety::should_disable_provider_default_fast_model as should_disable_default_fast_model_policy;
-use model_provider::ModelProviderProtocol;
 
 pub(super) fn should_disable_provider_default_fast_model(config: &RuntimeProviderConfig) -> bool {
-    let protocol = model_provider_protocol_from_runtime_protocol(config.protocol);
+    let protocol = config
+        .protocol
+        .map(RuntimeProviderProtocol::to_model_provider_protocol);
     should_disable_default_fast_model_policy(
         &config.provider_name,
         config.provider_selector.as_deref(),
         config.base_url.as_deref(),
         protocol.as_ref(),
     )
-}
-
-fn model_provider_protocol_from_runtime_protocol(
-    protocol: Option<RuntimeProviderProtocol>,
-) -> Option<ModelProviderProtocol> {
-    match protocol {
-        Some(RuntimeProviderProtocol::Responses) => Some(ModelProviderProtocol::Responses),
-        Some(RuntimeProviderProtocol::ChatCompletions) => {
-            Some(ModelProviderProtocol::ChatCompletions)
-        }
-        None => None,
-    }
 }
 
 /// 从 URL 中拆分 host（scheme+authority）和 path 部分

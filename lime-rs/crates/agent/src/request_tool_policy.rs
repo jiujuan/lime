@@ -3,6 +3,7 @@
 //! 该模块沉淀“请求级工具策略（例如联网搜索）”与统一流式执行逻辑，
 //! 供 aster_agent_cmd、scheduler、gateway 等入口复用同一条执行主链。
 
+mod agent_reply_stream;
 pub(crate) mod auto_compaction_projection;
 mod policy_config;
 mod reply_retry;
@@ -14,12 +15,18 @@ mod web_retrieval_process;
 mod web_search_execution_tracker;
 mod web_search_preflight;
 
-use self::auto_compaction_projection::AutoCompactionProjectionState;
+pub(crate) use self::agent_reply_stream::{
+    compat_aster_elicitation_response_message, confirm_aster_tool_action,
+};
+use self::agent_reply_stream::{
+    persist_cancelled_turn_context_marker, stream_agent_reply_once, CompatAsterReplyMessage,
+    ReplyAttemptInput,
+};
 #[cfg(test)]
 use self::auto_compaction_projection::{
-    AutoCompactionEventProjection, AutoCompactionSystemNotificationKind,
-    ASTER_AUTO_COMPACTION_COMPLETE_TEXT, ASTER_AUTO_COMPACTION_DISABLED_TEXT,
-    ASTER_AUTO_COMPACTION_THINKING_TEXT,
+    AutoCompactionEventProjection, AutoCompactionProjectionState,
+    AutoCompactionSystemNotificationKind, ASTER_AUTO_COMPACTION_COMPLETE_TEXT,
+    ASTER_AUTO_COMPACTION_DISABLED_TEXT, ASTER_AUTO_COMPACTION_THINKING_TEXT,
 };
 pub use self::policy_config::{
     merge_system_prompt_with_request_tool_policy,
@@ -28,8 +35,7 @@ pub use self::policy_config::{
     REQUEST_TOOL_POLICY_MARKER,
 };
 use self::reply_retry::{
-    build_empty_final_reply_error_message, resolve_reply_retry_mode,
-    should_synthesize_web_search_after_enough_evidence, ReplyRetryMode,
+    build_empty_final_reply_error_message, resolve_reply_retry_mode, ReplyRetryMode,
 };
 #[cfg(test)]
 use self::reply_retry::{
@@ -38,34 +44,29 @@ use self::reply_retry::{
 };
 use self::runtime_status::{
     build_empty_reply_retry_runtime_status, build_incomplete_tool_batch_continue_runtime_status,
-    build_provider_tail_failure_retry_runtime_status, build_web_retrieval_synthesis_runtime_status,
-    build_web_search_synthesis_runtime_status, emit_runtime_status_with_projection,
+    build_provider_tail_failure_retry_runtime_status, build_web_search_synthesis_runtime_status,
+    emit_runtime_status_with_projection,
 };
 use self::stream_diagnostics::{
     build_output_preserved_reply_fallback, retryable_provider_tail_failure_detail,
     should_downgrade_provider_tail_failure, should_retry_provider_tail_failure,
-    update_stream_event_diagnostics, StreamEventDiagnostics,
+    StreamEventDiagnostics,
 };
-use self::stream_idle::{
-    provider_stream_idle_timeout_message, resolve_provider_stream_idle_timeout,
-};
-use self::stream_text_batcher::{emit_text_delta_batch, TextDeltaBatcher};
-use self::web_retrieval_process::WebRetrievalProcessState;
+use self::stream_idle::resolve_provider_stream_idle_timeout;
+#[cfg(test)]
+use self::stream_text_batcher::TextDeltaBatcher;
 pub use self::web_search_execution_tracker::{ToolAttemptRecord, WebSearchExecutionTracker};
 pub use self::web_search_preflight::{
     execute_web_search_preflight_if_needed, merge_system_prompt_with_web_search_preflight_context,
     PreflightToolExecution, WebSearchPreflightRequest,
 };
-use crate::aster_runtime_projection::{
-    project_aster_auto_compaction_event, project_aster_runtime_event,
-};
-use crate::protocol::{AgentEvent as RuntimeAgentEvent, TextDeltaBatchBoundary};
-use crate::turn_context_configuration::to_agent_turn_context;
+use crate::credential_bridge::SessionProviderHandle;
+#[cfg(test)]
+use crate::protocol::TextDeltaBatchBoundary;
+use crate::protocol::{AgentEvent as RuntimeAgentEvent, AgentRuntimeStatus};
+use crate::session_configuration::AgentSessionConfig;
 use crate::write_artifact_events::WriteArtifactEventEmitter;
-use aster::agents::{Agent, AgentEvent as AsterAgentEvent};
-use aster::conversation::message::Message;
-use aster::session::SessionManager;
-use futures::StreamExt;
+use aster::agents::Agent;
 #[cfg(test)]
 use lime_core::database::dao::agent_timeline::{AgentThreadItem, AgentThreadItemPayload};
 use std::path::Path;
@@ -75,11 +76,11 @@ use tokio_util::sync::CancellationToken;
 pub const WEB_SEARCH_PREFETCH_CONTEXT_MARKER: &str = "【联网预检索上下文】";
 pub const WEB_SEARCH_SYNTHESIS_MARKER: &str = "【预检索后输出要求】";
 
-const EMPTY_REPLY_DIRECT_ANSWER_RETRY_PROMPT: &str = "请继续。你上一条回复没有输出任何内容。不要重复调用工具，直接基于当前上下文给出最终答复；如果当前确实无法继续，请明确说明原因。";
-const INCOMPLETE_TOOL_BATCH_CONTINUE_PROMPT: &str = "请继续。你上一条回复还是中间过程结论，不是最终答复。若仍缺关键证据，请立刻继续下一批必要工具调用；证据足够后直接给出完整结论。不要停在“还需要继续查看/读取/确认”的中间态，也不要重复上一批已经完成的工具。";
-const PROVIDER_TAIL_FAILURE_CONTINUE_PROMPT: &str = "请继续。上一轮模型通道在尾段暂时中断，但当前对话中已有工具结果和部分输出。请基于已经完成的工具结果与上下文直接补齐最终答复；不要重复已经完成的工具调用，除非确实缺少关键证据。";
-const WEB_SEARCH_EMPTY_REPLY_RETRY_PROMPT: &str = "请继续。你已经完成本回合所需的 WebSearch 预检索，现在必须直接给出最终答复，不要再次调用 WebSearch 或 WebFetch。请至少输出：1. 结论摘要；2. 主题归纳；3. 关键信息；4. 如有分歧，说明来源差异。";
-const CANCELLED_TURN_CONTEXT_MARKER: &str =
+const EMPTY_REPLY_DIRECT_ANSWER_RETRY_PROMPT: &str = "请继续。你上一条回复没有输出任何内容。不要重复调用工具，直接基于当前上下文给出最终答复；如果当前确实无法继续，请明确说明原因。输出时继续遵循当前会话的 Interaction Soul 口吻。";
+const INCOMPLETE_TOOL_BATCH_CONTINUE_PROMPT: &str = "请继续。你上一条回复还是中间过程结论，不是最终答复。若仍缺关键证据，请立刻继续下一批必要工具调用；证据足够后直接给出完整结论。不要停在“还需要继续查看/读取/确认”的中间态，也不要重复上一批已经完成的工具。输出时继续遵循当前会话的 Interaction Soul 口吻。";
+const PROVIDER_TAIL_FAILURE_CONTINUE_PROMPT: &str = "请继续。上一轮模型通道在尾段暂时中断，但当前对话中已有工具结果和部分输出。请基于已经完成的工具结果与上下文直接补齐最终答复；不要重复已经完成的工具调用，除非确实缺少关键证据。输出时继续遵循当前会话的 Interaction Soul 口吻。";
+const WEB_SEARCH_EMPTY_REPLY_RETRY_PROMPT: &str = "请继续。你已经完成本回合所需的 WebSearch 预检索，现在必须直接给出最终答复，不要再次调用 WebSearch 或 WebFetch。请至少输出：1. 结论摘要；2. 主题归纳；3. 关键信息；4. 如有分歧，说明来源差异。输出时继续遵循当前会话的 Interaction Soul 口吻。";
+pub(super) const CANCELLED_TURN_CONTEXT_MARKER: &str =
     "上一回合已被用户停止，不要继续回答被停止的请求；等待并仅处理后续用户消息。";
 
 #[derive(Debug, Clone)]
@@ -95,6 +96,37 @@ pub struct StreamReplyExecution {
     pub emitted_any: bool,
     pub attempts_summary: String,
     pub cancelled: bool,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct ReplyInputImage {
+    pub data: String,
+    pub media_type: String,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct ReplyInput {
+    pub text: String,
+    pub images: Vec<ReplyInputImage>,
+    pub agent_only: bool,
+}
+
+impl ReplyInput {
+    pub(crate) fn text(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            images: Vec::new(),
+            agent_only: false,
+        }
+    }
+
+    pub(crate) fn agent_only_text(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            images: Vec::new(),
+            agent_only: true,
+        }
+    }
 }
 
 fn is_reply_cancelled(cancel_token: &Option<CancellationToken>) -> bool {
@@ -116,29 +148,6 @@ fn build_stream_reply_execution(
         emitted_any,
         attempts_summary,
         cancelled,
-    }
-}
-
-fn cancelled_turn_context_marker_message() -> Message {
-    Message::assistant()
-        .with_text(CANCELLED_TURN_CONTEXT_MARKER)
-        .agent_only()
-}
-
-async fn persist_cancelled_turn_context_marker(agent: &Agent, session_id: &str) {
-    let message = cancelled_turn_context_marker_message();
-    let result = if let Some(store) = agent.session_store() {
-        store.add_message(session_id, &message).await
-    } else {
-        SessionManager::add_message(session_id, &message).await
-    };
-
-    if let Err(error) = result {
-        tracing::warn!(
-            "[AsterAgent][ReplyPolicy] 写入取消上下文标记失败，已降级继续: session_id={}, error={}",
-            session_id,
-            error
-        );
     }
 }
 
@@ -178,357 +187,26 @@ fn merge_system_prompt_with_web_search_synthesis_instruction(
     }
 }
 
-fn duplicate_session_config(config: &aster::agents::SessionConfig) -> aster::agents::SessionConfig {
-    aster::agents::SessionConfig {
-        id: config.id.clone(),
-        thread_id: config.thread_id.clone(),
-        turn_id: config.turn_id.clone(),
-        schedule_id: config.schedule_id.clone(),
-        max_turns: config.max_turns,
-        retry_config: config.retry_config.clone(),
-        system_prompt: config.system_prompt.clone(),
-        system_prompt_override: config.system_prompt_override,
-        include_context_trace: config.include_context_trace,
-        turn_context: config.turn_context.clone(),
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 struct StreamReplyPolicyExecutionOptions {
     provider_stream_idle_timeout: Option<Duration>,
+    persist_runtime_status: bool,
 }
 
 impl StreamReplyPolicyExecutionOptions {
     fn from_env() -> Self {
         Self {
             provider_stream_idle_timeout: resolve_provider_stream_idle_timeout(),
-        }
-    }
-}
-
-fn build_provider_stream_idle_timeout_error<F>(
-    timeout: Duration,
-    session_id: &str,
-    emitted_any: &mut bool,
-    diagnostics: &StreamEventDiagnostics,
-    text_delta_batcher: &mut TextDeltaBatcher,
-    on_event: &mut F,
-) -> ReplyAttemptError
-where
-    F: FnMut(&RuntimeAgentEvent),
-{
-    emit_text_delta_batch(
-        text_delta_batcher,
-        TextDeltaBatchBoundary::Provider,
-        emitted_any,
-        on_event,
-    );
-    tracing::warn!(
-        "[AsterAgent][ReplyPolicy] provider stream idle timeout: session_id={}, timeout_ms={}, emitted_any={}, text_deltas={}, tool_ends={}",
-        session_id,
-        timeout.as_millis(),
-        *emitted_any,
-        diagnostics.text_delta_count,
-        diagnostics.tool_end_count
-    );
-    ReplyAttemptError {
-        message: provider_stream_idle_timeout_message(timeout),
-        emitted_any: *emitted_any,
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-async fn stream_agent_reply_once<F>(
-    agent: &Agent,
-    user_message: Message,
-    session_config: aster::agents::SessionConfig,
-    cancel_token: Option<CancellationToken>,
-    stream_idle_timeout: Option<Duration>,
-    request_tool_policy: &RequestToolPolicy,
-    web_search_tracker: &mut WebSearchExecutionTracker,
-    write_artifact_emitter: &mut WriteArtifactEventEmitter,
-    emitted_any: &mut bool,
-    text_chunks: &mut Vec<String>,
-    event_errors: &mut Vec<String>,
-    diagnostics: &mut StreamEventDiagnostics,
-    on_event: &mut F,
-) -> Result<(), ReplyAttemptError>
-where
-    F: FnMut(&RuntimeAgentEvent),
-{
-    let started_at = Instant::now();
-    let mut auto_compaction_projection = AutoCompactionProjectionState;
-    let mut inline_provider_error = None;
-    let mut text_delta_batcher = TextDeltaBatcher::default();
-    let mut web_retrieval_process_state = WebRetrievalProcessState::default();
-    let session_id = session_config.id.clone();
-    let session_config_for_status = duplicate_session_config(&session_config);
-    tracing::info!(
-        "[AsterAgent][TTFT] agent.reply start: session_id={}, message_chars={}",
-        session_id,
-        user_message.as_concat_text().chars().count()
-    );
-    let cancel_probe = cancel_token.clone();
-    let provider_cancel_token = cancel_token
-        .clone()
-        .or_else(|| stream_idle_timeout.map(|_| CancellationToken::new()));
-    let mut stream = agent
-        .reply(user_message, session_config, provider_cancel_token)
-        .await
-        .map_err(|e| ReplyAttemptError {
-            message: format!("Agent error: {e}"),
-            emitted_any: *emitted_any,
-        })?;
-    tracing::info!(
-        "[AsterAgent][TTFT] agent.reply stream created: elapsed_ms={}",
-        started_at.elapsed().as_millis()
-    );
-
-    'stream_loop: loop {
-        let event_result = match (cancel_probe.as_ref(), stream_idle_timeout) {
-            (Some(token), Some(timeout)) => {
-                tokio::select! {
-                    _ = token.cancelled() => None,
-                    next = tokio::time::timeout(timeout, stream.next()) => match next {
-                        Ok(next) => next,
-                        Err(_) => {
-                            return Err(build_provider_stream_idle_timeout_error(
-                                timeout,
-                                &session_id,
-                                emitted_any,
-                                diagnostics,
-                                &mut text_delta_batcher,
-                                on_event,
-                            ));
-                        }
-                    },
-                }
-            }
-            (Some(token), None) => {
-                tokio::select! {
-                    _ = token.cancelled() => None,
-                    next = stream.next() => next,
-                }
-            }
-            (None, Some(timeout)) => match tokio::time::timeout(timeout, stream.next()).await {
-                Ok(next) => next,
-                Err(_) => {
-                    return Err(build_provider_stream_idle_timeout_error(
-                        timeout,
-                        &session_id,
-                        emitted_any,
-                        diagnostics,
-                        &mut text_delta_batcher,
-                        on_event,
-                    ));
-                }
-            },
-            (None, None) => stream.next().await,
-        };
-        let Some(event_result) = event_result else {
-            break;
-        };
-        match event_result {
-            Ok(agent_event) => {
-                let provider_error_for_event = match &agent_event {
-                    AsterAgentEvent::Message(message) => {
-                        extract_inline_agent_provider_error(message)
-                    }
-                    _ => None,
-                };
-                if let Some(provider_error) = provider_error_for_event {
-                    if inline_provider_error.is_none() {
-                        inline_provider_error = Some(provider_error);
-                    }
-                    tracing::warn!(
-                        "[AsterAgent][ReplyPolicy] suppressed inline provider error text from runtime stream: session_id={}",
-                        session_id
-                    );
-                    continue;
-                }
-
-                let runtime_events = project_aster_auto_compaction_event(&agent_event)
-                    .and_then(|event| auto_compaction_projection.project_event(&event))
-                    .unwrap_or_else(|| project_aster_runtime_event(agent_event));
-                for mut runtime_event in runtime_events {
-                    let extra_events = write_artifact_emitter.process_event(&mut runtime_event);
-                    for extra_event in &extra_events {
-                        emit_text_delta_batch(
-                            &mut text_delta_batcher,
-                            TextDeltaBatchBoundary::Provider,
-                            emitted_any,
-                            on_event,
-                        );
-                        update_stream_event_diagnostics(diagnostics, extra_event);
-                        *emitted_any = true;
-                        on_event(extra_event);
-                    }
-
-                    match &runtime_event {
-                        RuntimeAgentEvent::TextDelta { text } => {
-                            if !text.is_empty() {
-                                if diagnostics.text_delta_count == 0 {
-                                    tracing::info!(
-                                        "[AsterAgent][TTFT] first runtime text delta observed in policy stream: elapsed_ms={}, chars={}",
-                                        started_at.elapsed().as_millis(),
-                                        text.chars().count()
-                                    );
-                                }
-                                web_retrieval_process_state.observe_text_delta(text);
-                                text_chunks.push(text.clone());
-                            }
-                        }
-                        RuntimeAgentEvent::Error { message } => {
-                            if !message.trim().is_empty() {
-                                event_errors.push(message.clone());
-                            }
-                        }
-                        RuntimeAgentEvent::ItemStarted { item }
-                        | RuntimeAgentEvent::ItemUpdated { item } => {
-                            web_search_tracker.record_tool_item(request_tool_policy, item, false);
-                            web_retrieval_process_state.observe_tool_item(item, false);
-                        }
-                        RuntimeAgentEvent::ItemCompleted { item } => {
-                            web_search_tracker.record_tool_item(request_tool_policy, item, true);
-                            web_retrieval_process_state.observe_tool_item(item, true);
-                        }
-                        RuntimeAgentEvent::ToolStart {
-                            tool_name, tool_id, ..
-                        } => {
-                            web_search_tracker.record_tool_start(
-                                request_tool_policy,
-                                tool_id,
-                                tool_name,
-                            );
-                            web_retrieval_process_state.observe_tool_start(tool_id, tool_name);
-                        }
-                        RuntimeAgentEvent::ToolEnd { tool_id, result } => {
-                            web_search_tracker.record_tool_end(
-                                request_tool_policy,
-                                tool_id,
-                                result.success,
-                                result.error.as_deref(),
-                            );
-                            web_retrieval_process_state.observe_tool_end(tool_id);
-                        }
-                        _ => {}
-                    }
-                    update_stream_event_diagnostics(diagnostics, &runtime_event);
-                    let should_cutover_to_web_search_synthesis = matches!(
-                        &runtime_event,
-                        RuntimeAgentEvent::ToolEnd { .. } | RuntimeAgentEvent::ItemCompleted { .. }
-                    )
-                        && should_synthesize_web_search_after_enough_evidence(
-                            request_tool_policy,
-                            web_search_tracker,
-                            diagnostics,
-                        );
-                    match runtime_event {
-                        RuntimeAgentEvent::TextDelta { text } => {
-                            if let Some(batch_event) = text_delta_batcher.push(text) {
-                                *emitted_any = true;
-                                on_event(&batch_event);
-                            }
-                        }
-                        other_event => {
-                            emit_text_delta_batch(
-                                &mut text_delta_batcher,
-                                TextDeltaBatchBoundary::Provider,
-                                emitted_any,
-                                on_event,
-                            );
-                            *emitted_any = true;
-                            on_event(&other_event);
-                        }
-                    }
-                    if web_retrieval_process_state.should_emit_synthesis_status() {
-                        web_retrieval_process_state.mark_synthesis_status_emitted();
-                        tracing::info!(
-                            "[AsterAgent][RuntimeStatus] emitting web retrieval synthesis status: session_id={}, completed_web_tools={}",
-                            session_id,
-                            web_retrieval_process_state.observed_completed_count
-                        );
-                        emit_runtime_status_with_projection(
-                            agent,
-                            &session_config_for_status,
-                            build_web_retrieval_synthesis_runtime_status(
-                                web_retrieval_process_state.observed_completed_count,
-                            ),
-                            on_event,
-                        )
-                        .await;
-                    }
-                    if should_cutover_to_web_search_synthesis {
-                        tracing::warn!(
-                            "[AsterAgent][WebSearchSynthesis] cutting over after enough tool evidence: session_id={}, successful={}, completed={}, attempts={}",
-                            session_id,
-                            web_search_tracker
-                                .successful_attempt_count_for_policy(request_tool_policy),
-                            web_search_tracker
-                                .completed_attempt_count_for_policy(request_tool_policy),
-                            web_search_tracker.format_attempts()
-                        );
-                        break 'stream_loop;
-                    }
-                }
-            }
-            Err(e) => {
-                emit_text_delta_batch(
-                    &mut text_delta_batcher,
-                    TextDeltaBatchBoundary::Provider,
-                    emitted_any,
-                    on_event,
-                );
-                return Err(ReplyAttemptError {
-                    message: inline_provider_error.unwrap_or_else(|| format!("Stream error: {e}")),
-                    emitted_any: *emitted_any,
-                });
-            }
+            persist_runtime_status: true,
         }
     }
 
-    emit_text_delta_batch(
-        &mut text_delta_batcher,
-        TextDeltaBatchBoundary::Final,
-        emitted_any,
-        on_event,
-    );
-
-    if let Some(message) = inline_provider_error {
-        return Err(ReplyAttemptError {
-            message,
-            emitted_any: *emitted_any,
-        });
+    pub(crate) fn direct_generation() -> Self {
+        Self {
+            provider_stream_idle_timeout: resolve_provider_stream_idle_timeout(),
+            persist_runtime_status: false,
+        }
     }
-
-    Ok(())
-}
-
-fn extract_inline_agent_provider_error(message: &Message) -> Option<String> {
-    let text = message.as_concat_text();
-    let text = text.trim();
-    if text.is_empty() {
-        return None;
-    }
-    if !text.contains("Ran into this error:") {
-        return None;
-    }
-    if !text.contains("Please retry if you think this is a transient or recoverable error.") {
-        return None;
-    }
-
-    let after_prefix = text.split_once("Ran into this error:")?.1.trim();
-    let detail = after_prefix
-        .split_once("\n\nPlease retry if you think this is a transient or recoverable error.")
-        .map(|(left, _)| left.trim())
-        .unwrap_or(after_prefix)
-        .trim_end_matches('.');
-
-    if detail.is_empty() {
-        return Some("Agent provider execution failed".to_string());
-    }
-
-    Some(format!("Agent provider execution failed: {detail}"))
 }
 
 /// 统一流式执行器：执行可选诊断 preflight + reply 流，并复用统一的策略校验。
@@ -536,7 +214,7 @@ pub async fn stream_reply_with_policy<F>(
     agent: &Agent,
     message_text: &str,
     working_directory: Option<&Path>,
-    session_config: aster::agents::SessionConfig,
+    session_config: AgentSessionConfig,
     cancel_token: Option<CancellationToken>,
     request_tool_policy: &RequestToolPolicy,
     on_event: F,
@@ -546,7 +224,7 @@ where
 {
     stream_message_reply_with_policy(
         agent,
-        Message::user().with_text(message_text),
+        ReplyInput::text(message_text),
         working_directory,
         session_config,
         cancel_token,
@@ -556,11 +234,11 @@ where
     .await
 }
 
-pub async fn stream_message_reply_with_policy<F>(
+pub(crate) async fn stream_message_reply_with_policy<F>(
     agent: &Agent,
-    user_message: Message,
+    input: ReplyInput,
     working_directory: Option<&Path>,
-    session_config: aster::agents::SessionConfig,
+    session_config: AgentSessionConfig,
     cancel_token: Option<CancellationToken>,
     request_tool_policy: &RequestToolPolicy,
     on_event: F,
@@ -570,37 +248,138 @@ where
 {
     stream_message_reply_with_policy_with_options(
         agent,
-        user_message,
+        input.into(),
         working_directory,
         session_config,
         cancel_token,
         request_tool_policy,
         on_event,
+        None,
         StreamReplyPolicyExecutionOptions::from_env(),
     )
     .await
 }
 
+pub(crate) async fn stream_aster_message_reply_with_policy<F>(
+    agent: &Agent,
+    user_message: CompatAsterReplyMessage,
+    working_directory: Option<&Path>,
+    session_config: AgentSessionConfig,
+    cancel_token: Option<CancellationToken>,
+    request_tool_policy: &RequestToolPolicy,
+    on_event: F,
+) -> Result<StreamReplyExecution, ReplyAttemptError>
+where
+    F: FnMut(&RuntimeAgentEvent),
+{
+    stream_message_reply_with_policy_with_options(
+        agent,
+        ReplyAttemptInput::CompatAster(user_message),
+        working_directory,
+        session_config,
+        cancel_token,
+        request_tool_policy,
+        on_event,
+        None,
+        StreamReplyPolicyExecutionOptions::from_env(),
+    )
+    .await
+}
+
+pub(crate) async fn stream_reply_with_policy_and_provider<F>(
+    agent: &Agent,
+    message_text: &str,
+    working_directory: Option<&Path>,
+    session_config: AgentSessionConfig,
+    cancel_token: Option<CancellationToken>,
+    request_tool_policy: &RequestToolPolicy,
+    provider: SessionProviderHandle,
+    on_event: F,
+) -> Result<StreamReplyExecution, ReplyAttemptError>
+where
+    F: FnMut(&RuntimeAgentEvent),
+{
+    stream_message_reply_with_policy_with_options(
+        agent,
+        ReplyInput::text(message_text).into(),
+        working_directory,
+        session_config,
+        cancel_token,
+        request_tool_policy,
+        on_event,
+        Some(provider),
+        StreamReplyPolicyExecutionOptions::from_env(),
+    )
+    .await
+}
+
+pub(crate) async fn stream_reply_with_policy_and_provider_for_direct_generation<F>(
+    agent: &Agent,
+    message_text: &str,
+    working_directory: Option<&Path>,
+    session_config: AgentSessionConfig,
+    cancel_token: Option<CancellationToken>,
+    request_tool_policy: &RequestToolPolicy,
+    provider: SessionProviderHandle,
+    on_event: F,
+) -> Result<StreamReplyExecution, ReplyAttemptError>
+where
+    F: FnMut(&RuntimeAgentEvent),
+{
+    stream_message_reply_with_policy_with_options(
+        agent,
+        ReplyInput::text(message_text).into(),
+        working_directory,
+        session_config,
+        cancel_token,
+        request_tool_policy,
+        on_event,
+        Some(provider),
+        StreamReplyPolicyExecutionOptions::direct_generation(),
+    )
+    .await
+}
+
+async fn maybe_emit_runtime_status_with_projection<F>(
+    agent: &Agent,
+    session_config: &AgentSessionConfig,
+    status: AgentRuntimeStatus,
+    options: &StreamReplyPolicyExecutionOptions,
+    on_event: &mut F,
+) where
+    F: FnMut(&RuntimeAgentEvent),
+{
+    if options.persist_runtime_status {
+        emit_runtime_status_with_projection(agent, session_config, status, on_event).await;
+        return;
+    }
+
+    let event = RuntimeAgentEvent::RuntimeStatus { status };
+    on_event(&event);
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn stream_message_reply_with_policy_with_options<F>(
     agent: &Agent,
-    user_message: Message,
+    user_input: ReplyAttemptInput,
     working_directory: Option<&Path>,
-    mut session_config: aster::agents::SessionConfig,
+    session_config: AgentSessionConfig,
     cancel_token: Option<CancellationToken>,
     request_tool_policy: &RequestToolPolicy,
     mut on_event: F,
+    provider: Option<SessionProviderHandle>,
     options: StreamReplyPolicyExecutionOptions,
 ) -> Result<StreamReplyExecution, ReplyAttemptError>
 where
     F: FnMut(&RuntimeAgentEvent),
 {
+    let mut session_config = session_config;
     let started_at = Instant::now();
-    let message_text = user_message.as_concat_text();
+    let message_text = user_input.as_concat_text();
     let cancel_probe = cancel_token.clone();
     let mut web_search_tracker = WebSearchExecutionTracker::default();
     tracing::info!(
-        "[AsterAgent][TTFT] stream policy start: session_id={}, message_chars={}, search_mode={}",
+        "[AgentRuntime][TTFT] stream policy start: session_id={}, message_chars={}, search_mode={}",
         session_config.id,
         message_text.chars().count(),
         request_tool_policy.search_mode.as_str()
@@ -615,10 +394,7 @@ where
                 message_text: &message_text,
                 working_directory,
                 cancel_token: cancel_token.clone(),
-                turn_context: session_config
-                    .turn_context
-                    .clone()
-                    .map(to_agent_turn_context),
+                turn_context: session_config.turn_context.clone(),
                 policy: request_tool_policy,
             },
             &mut web_search_tracker,
@@ -637,7 +413,7 @@ where
                 on_event(event);
             }
             tracing::info!(
-                "[AsterAgent][TTFT] stream policy preflight complete: session_id={}, events={}, elapsed_ms={}",
+                "[AgentRuntime][TTFT] stream policy preflight complete: session_id={}, events={}, elapsed_ms={}",
                 session_config.id,
                 preflight_execution.events.len(),
                 started_at.elapsed().as_millis()
@@ -662,8 +438,9 @@ where
     let mut diagnostics = StreamEventDiagnostics::default();
     let first_attempt = stream_agent_reply_once(
         agent,
-        user_message,
-        duplicate_session_config(&session_config),
+        provider.clone(),
+        user_input,
+        &session_config,
         cancel_token.clone(),
         options.provider_stream_idle_timeout,
         request_tool_policy,
@@ -677,7 +454,7 @@ where
     )
     .await;
     tracing::info!(
-        "[AsterAgent][TTFT] stream policy first attempt complete: session_id={}, elapsed_ms={}, emitted_any={}, text_deltas={}",
+        "[AgentRuntime][TTFT] stream policy first attempt complete: session_id={}, elapsed_ms={}, emitted_any={}, text_deltas={}",
         session_config.id,
         started_at.elapsed().as_millis(),
         emitted_any,
@@ -686,7 +463,7 @@ where
     if let Err(error) = first_attempt {
         if should_downgrade_provider_tail_failure(&error.message, &diagnostics, emitted_any) {
             tracing::warn!(
-                "[AsterAgent][ReplyPolicy] provider tail failure downgraded after persisted output: tools={}, artifacts={}, saved_site={}",
+                "[AgentRuntime][ReplyPolicy] provider tail failure downgraded after persisted output: tools={}, artifacts={}, saved_site={}",
                 diagnostics.tool_end_count,
                 diagnostics.persisted_artifact_count,
                 diagnostics.saved_site_content_count
@@ -713,24 +490,24 @@ where
             })
         {
             tracing::warn!(
-                "[AsterAgent][ReplyPolicy] retrying after provider tail failure: tools={}, text_deltas={}, error={}",
+                "[AgentRuntime][ReplyPolicy] retrying after provider tail failure: tools={}, text_deltas={}, error={}",
                 diagnostics.tool_end_count,
                 diagnostics.text_delta_count,
                 error_detail
             );
-            emit_runtime_status_with_projection(
+            maybe_emit_runtime_status_with_projection(
                 agent,
                 &session_config,
                 build_provider_tail_failure_retry_runtime_status(error_detail),
+                &options,
                 &mut on_event,
             )
             .await;
             let retry_attempt = stream_agent_reply_once(
                 agent,
-                Message::user()
-                    .with_text(PROVIDER_TAIL_FAILURE_CONTINUE_PROMPT)
-                    .agent_only(),
-                duplicate_session_config(&session_config),
+                provider.clone(),
+                ReplyInput::agent_only_text(PROVIDER_TAIL_FAILURE_CONTINUE_PROMPT).into(),
+                &session_config,
                 cancel_token.clone(),
                 options.provider_stream_idle_timeout,
                 request_tool_policy,
@@ -750,7 +527,7 @@ where
                     emitted_any,
                 ) {
                     tracing::warn!(
-                        "[AsterAgent][ReplyPolicy] provider tail failure downgraded after tail-failure retry with persisted output: tools={}, artifacts={}, saved_site={}",
+                        "[AgentRuntime][ReplyPolicy] provider tail failure downgraded after tail-failure retry with persisted output: tools={}, artifacts={}, saved_site={}",
                         diagnostics.tool_end_count,
                         diagnostics.persisted_artifact_count,
                         diagnostics.saved_site_content_count
@@ -795,16 +572,17 @@ where
     ) {
         ReplyRetryMode::WebSearchSynthesis => {
             tracing::warn!(
-                "[AsterAgent][WebSearchPrefetch] empty final text after preflight, retrying synthesis: session={}, attempts={}",
+                "[AgentRuntime][WebSearchPrefetch] empty final text after preflight, retrying synthesis: session={}, attempts={}",
                 session_config.id,
                 web_search_tracker.format_attempts()
             );
-            emit_runtime_status_with_projection(
+            maybe_emit_runtime_status_with_projection(
                 agent,
                 &session_config,
                 build_web_search_synthesis_runtime_status(
                     preflight_execution.coverage_summary.as_deref(),
                 ),
+                &options,
                 &mut on_event,
             )
             .await;
@@ -814,10 +592,9 @@ where
                 );
             let retry_attempt = stream_agent_reply_once(
                 agent,
-                Message::user()
-                    .with_text(WEB_SEARCH_EMPTY_REPLY_RETRY_PROMPT)
-                    .agent_only(),
-                duplicate_session_config(&session_config),
+                provider.clone(),
+                ReplyInput::agent_only_text(WEB_SEARCH_EMPTY_REPLY_RETRY_PROMPT).into(),
+                &session_config,
                 cancel_token,
                 options.provider_stream_idle_timeout,
                 request_tool_policy,
@@ -834,7 +611,7 @@ where
                 if should_downgrade_provider_tail_failure(&error.message, &diagnostics, emitted_any)
                 {
                     tracing::warn!(
-                        "[AsterAgent][ReplyPolicy] provider tail failure downgraded after retry with persisted output: tools={}, artifacts={}, saved_site={}",
+                        "[AgentRuntime][ReplyPolicy] provider tail failure downgraded after retry with persisted output: tools={}, artifacts={}, saved_site={}",
                         diagnostics.tool_end_count,
                         diagnostics.persisted_artifact_count,
                         diagnostics.saved_site_content_count
@@ -856,22 +633,22 @@ where
         }
         ReplyRetryMode::DirectAnswer => {
             tracing::warn!(
-                "[AsterAgent][ReplyPolicy] empty final text without tool activity, retrying direct answer: session={}",
+                "[AgentRuntime][ReplyPolicy] empty final text without tool activity, retrying direct answer: session={}",
                 session_config.id
             );
-            emit_runtime_status_with_projection(
+            maybe_emit_runtime_status_with_projection(
                 agent,
                 &session_config,
                 build_empty_reply_retry_runtime_status(),
+                &options,
                 &mut on_event,
             )
             .await;
             let retry_attempt = stream_agent_reply_once(
                 agent,
-                Message::user()
-                    .with_text(EMPTY_REPLY_DIRECT_ANSWER_RETRY_PROMPT)
-                    .agent_only(),
-                duplicate_session_config(&session_config),
+                provider.clone(),
+                ReplyInput::agent_only_text(EMPTY_REPLY_DIRECT_ANSWER_RETRY_PROMPT).into(),
+                &session_config,
                 cancel_token,
                 options.provider_stream_idle_timeout,
                 request_tool_policy,
@@ -888,7 +665,7 @@ where
                 if should_downgrade_provider_tail_failure(&error.message, &diagnostics, emitted_any)
                 {
                     tracing::warn!(
-                        "[AsterAgent][ReplyPolicy] provider tail failure downgraded after empty-reply retry with persisted output: tools={}, artifacts={}, saved_site={}",
+                        "[AgentRuntime][ReplyPolicy] provider tail failure downgraded after empty-reply retry with persisted output: tools={}, artifacts={}, saved_site={}",
                         diagnostics.tool_end_count,
                         diagnostics.persisted_artifact_count,
                         diagnostics.saved_site_content_count
@@ -910,23 +687,23 @@ where
         }
         ReplyRetryMode::IntermediateConclusion => {
             tracing::warn!(
-                "[AsterAgent][ReplyPolicy] tool batch ended with intermediate conclusion, retrying continuation: session={}, tools={}",
+                "[AgentRuntime][ReplyPolicy] tool batch ended with intermediate conclusion, retrying continuation: session={}, tools={}",
                 session_config.id,
                 diagnostics.tool_end_count
             );
-            emit_runtime_status_with_projection(
+            maybe_emit_runtime_status_with_projection(
                 agent,
                 &session_config,
                 build_incomplete_tool_batch_continue_runtime_status(),
+                &options,
                 &mut on_event,
             )
             .await;
             let retry_attempt = stream_agent_reply_once(
                 agent,
-                Message::user()
-                    .with_text(INCOMPLETE_TOOL_BATCH_CONTINUE_PROMPT)
-                    .agent_only(),
-                duplicate_session_config(&session_config),
+                provider.clone(),
+                ReplyInput::agent_only_text(INCOMPLETE_TOOL_BATCH_CONTINUE_PROMPT).into(),
+                &session_config,
                 cancel_token,
                 options.provider_stream_idle_timeout,
                 request_tool_policy,
@@ -943,7 +720,7 @@ where
                 if should_downgrade_provider_tail_failure(&error.message, &diagnostics, emitted_any)
                 {
                     tracing::warn!(
-                        "[AsterAgent][ReplyPolicy] provider tail failure downgraded after intermediate-conclusion retry with persisted output: tools={}, artifacts={}, saved_site={}",
+                        "[AgentRuntime][ReplyPolicy] provider tail failure downgraded after intermediate-conclusion retry with persisted output: tools={}, artifacts={}, saved_site={}",
                         diagnostics.tool_end_count,
                         diagnostics.persisted_artifact_count,
                         diagnostics.saved_site_content_count
@@ -987,7 +764,7 @@ where
     }
 
     tracing::info!(
-        "[AsterAgent][Diag] stream summary: elapsed_ms={}, text_deltas={}, tool_starts={}, tool_ends={}, context_traces={}, errors={}, max_text_delta_chars={}, max_tool_output_chars={}, max_context_trace_steps={}",
+        "[AgentRuntime][Diag] stream summary: elapsed_ms={}, text_deltas={}, tool_starts={}, tool_ends={}, context_traces={}, errors={}, max_text_delta_chars={}, max_tool_output_chars={}, max_context_trace_steps={}",
         started_at.elapsed().as_millis(),
         diagnostics.text_delta_count,
         diagnostics.tool_start_count,
@@ -1009,7 +786,7 @@ where
         }
         if let Some(fallback_text) = build_empty_final_reply_fallback(&diagnostics, emitted_any) {
             tracing::warn!(
-                "[AsterAgent][ReplyPolicy] empty final text downgraded to synthesized fallback: emitted_any={}, tool_starts={}, tool_ends={}, attempts={}",
+                "[AgentRuntime][ReplyPolicy] empty final text downgraded to synthesized fallback: emitted_any={}, tool_starts={}, tool_ends={}, attempts={}",
                 emitted_any,
                 diagnostics.tool_start_count,
                 diagnostics.tool_end_count,
@@ -1042,15 +819,21 @@ where
 mod tests {
     use super::*;
     use crate::protocol::AgentToolResult;
+    use crate::request_tool_policy::reply_retry::should_synthesize_web_search_after_enough_evidence;
+    use crate::request_tool_policy::runtime_status::build_web_retrieval_synthesis_runtime_status;
+    use crate::request_tool_policy::stream_diagnostics::update_stream_event_diagnostics;
     use crate::request_tool_policy::stream_text_batcher::TEXT_DELTA_BATCH_BACKLOG_CHARS;
+    use crate::request_tool_policy::web_retrieval_process::WebRetrievalProcessState;
+    use crate::turn_context_configuration::AgentTurnContext;
     mod provider_stream_idle;
+    use aster::conversation::message::Message;
     use aster::conversation::Conversation;
     use aster::providers::base::{Provider, ProviderMetadata, ProviderUsage, Usage};
     use aster::providers::errors::ProviderError;
     use aster::session::{
         ChatHistoryMatch, CommitOptions, CommitReport, MemoryCategory, MemoryHealth, MemoryRecord,
         MemorySearchResult, Session, SessionInsights, SessionStore, SessionType, TokenStatsUpdate,
-        TurnContextOverride, TurnStatus,
+        TurnStatus,
     };
     use async_trait::async_trait;
     use std::collections::HashMap;
@@ -1559,7 +1342,32 @@ mod tests {
         }
     }
 
-    fn build_auto_compaction_disabled_turn_context() -> TurnContextOverride {
+    fn test_session_config(session_id: &str, turn_id: &str) -> AgentSessionConfig {
+        AgentSessionConfig {
+            id: session_id.to_string(),
+            thread_id: None,
+            turn_id: Some(turn_id.to_string()),
+            schedule_id: None,
+            max_turns: None,
+            system_prompt: None,
+            system_prompt_override: None,
+            include_context_trace: None,
+            turn_context: None,
+        }
+    }
+
+    fn test_session_config_with_turn_context(
+        session_id: &str,
+        turn_id: &str,
+        turn_context: AgentTurnContext,
+    ) -> AgentSessionConfig {
+        AgentSessionConfig {
+            turn_context: Some(turn_context),
+            ..test_session_config(session_id, turn_id)
+        }
+    }
+
+    fn build_auto_compaction_disabled_turn_context() -> AgentTurnContext {
         let mut metadata = HashMap::new();
         metadata.insert(
             "lime_runtime".to_string(),
@@ -1567,9 +1375,9 @@ mod tests {
                 "auto_compact": false,
             }),
         );
-        TurnContextOverride {
+        AgentTurnContext {
             metadata,
-            ..TurnContextOverride::default()
+            ..AgentTurnContext::default()
         }
     }
 
@@ -2287,24 +2095,17 @@ mod tests {
             .await
             .expect("应配置测试 provider");
 
-        let session_config = aster::agents::SessionConfig {
-            id: session.id.clone(),
-            thread_id: None,
-            turn_id: Some("turn-auto-compact-disabled".to_string()),
-            schedule_id: None,
-            max_turns: None,
-            retry_config: None,
-            system_prompt: None,
-            system_prompt_override: None,
-            include_context_trace: None,
-            turn_context: Some(build_auto_compaction_disabled_turn_context()),
-        };
+        let session_config = test_session_config_with_turn_context(
+            &session.id,
+            "turn-auto-compact-disabled",
+            build_auto_compaction_disabled_turn_context(),
+        );
         let policy = resolve_request_tool_policy(Some(false));
         let mut runtime_events = Vec::new();
 
         let error = stream_message_reply_with_policy(
             &agent,
-            Message::user().with_text("继续处理"),
+            ReplyInput::text("继续处理"),
             None,
             session_config,
             None,
@@ -2356,24 +2157,13 @@ mod tests {
             .await
             .expect("应配置测试 provider");
 
-        let session_config = aster::agents::SessionConfig {
-            id: session.id.clone(),
-            thread_id: None,
-            turn_id: Some("turn-empty-reply-retry".to_string()),
-            schedule_id: None,
-            max_turns: None,
-            retry_config: None,
-            system_prompt: None,
-            system_prompt_override: None,
-            include_context_trace: None,
-            turn_context: None,
-        };
+        let session_config = test_session_config(&session.id, "turn-empty-reply-retry");
         let policy = resolve_request_tool_policy(Some(false));
         let mut runtime_events = Vec::new();
 
         let reply = stream_message_reply_with_policy(
             &agent,
-            Message::user().with_text("帮我总结一下这个项目"),
+            ReplyInput::text("帮我总结一下这个项目"),
             None,
             session_config,
             None,
@@ -2410,24 +2200,13 @@ mod tests {
             .await
             .expect("应配置测试 provider");
 
-        let session_config = aster::agents::SessionConfig {
-            id: session.id.clone(),
-            thread_id: None,
-            turn_id: Some("turn-provider-tail-retry".to_string()),
-            schedule_id: None,
-            max_turns: None,
-            retry_config: None,
-            system_prompt: None,
-            system_prompt_override: None,
-            include_context_trace: None,
-            turn_context: None,
-        };
+        let session_config = test_session_config(&session.id, "turn-provider-tail-retry");
         let policy = resolve_request_tool_policy(Some(true));
         let mut runtime_events = Vec::new();
 
         let reply = stream_message_reply_with_policy(
             &agent,
-            Message::user().with_text("整理今天的国际新闻"),
+            ReplyInput::text("整理今天的国际新闻"),
             None,
             session_config,
             None,
@@ -2455,18 +2234,7 @@ mod tests {
             .await
             .expect("应配置测试 provider");
 
-        let session_config = aster::agents::SessionConfig {
-            id: session.id.clone(),
-            thread_id: None,
-            turn_id: Some("turn-stream-cancel".to_string()),
-            schedule_id: None,
-            max_turns: None,
-            retry_config: None,
-            system_prompt: None,
-            system_prompt_override: None,
-            include_context_trace: None,
-            turn_context: None,
-        };
+        let session_config = test_session_config(&session.id, "turn-stream-cancel");
         let policy = resolve_request_tool_policy(Some(false));
         let cancel_token = CancellationToken::new();
         let cancel_from_event = cancel_token.clone();
@@ -2475,7 +2243,7 @@ mod tests {
             Duration::from_secs(10),
             stream_message_reply_with_policy(
                 &agent,
-                Message::user().with_text("请流式输出"),
+                ReplyInput::text("请流式输出"),
                 None,
                 session_config,
                 Some(cancel_token),
@@ -2535,24 +2303,13 @@ mod tests {
             .await
             .expect("应配置测试 provider");
 
-        let session_config = aster::agents::SessionConfig {
-            id: session.id.clone(),
-            thread_id: None,
-            turn_id: Some("turn-inline-provider-error".to_string()),
-            schedule_id: None,
-            max_turns: None,
-            retry_config: None,
-            system_prompt: None,
-            system_prompt_override: None,
-            include_context_trace: None,
-            turn_context: None,
-        };
+        let session_config = test_session_config(&session.id, "turn-inline-provider-error");
         let policy = resolve_request_tool_policy(Some(false));
         let mut runtime_events = Vec::new();
 
         let error = stream_message_reply_with_policy(
             &agent,
-            Message::user().with_text("你好，回复1"),
+            ReplyInput::text("你好，回复1"),
             None,
             session_config,
             None,

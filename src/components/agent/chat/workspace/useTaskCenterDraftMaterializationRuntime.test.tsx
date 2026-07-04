@@ -29,6 +29,11 @@ interface ProbeProps {
   createFreshSession: ReturnType<typeof vi.fn>;
   initialPendingRequest?: TaskCenterDraftSendRequest | null;
   onRuntime?: (runtime: {
+    commitMaterializedTaskCenterDraftTab: (
+      draftTabId: string,
+      newSessionId: string,
+      options?: { preserveInput?: boolean; syncRoute?: boolean },
+    ) => void;
     materializeTaskCenterDraftTab: (
       draftTabId: string,
       options?: { reason?: "send" | "input_warmup"; commit?: boolean },
@@ -117,11 +122,14 @@ function Probe({
 
   useEffect(() => {
     onRuntime?.({
+      commitMaterializedTaskCenterDraftTab:
+        runtime.commitMaterializedTaskCenterDraftTab,
       materializeTaskCenterDraftTab: runtime.materializeTaskCenterDraftTab,
       openTaskCenterDraftTab: runtime.openTaskCenterDraftTab,
     });
   }, [
     onRuntime,
+    runtime.commitMaterializedTaskCenterDraftTab,
     runtime.materializeTaskCenterDraftTab,
     runtime.openTaskCenterDraftTab,
   ]);
@@ -240,6 +248,11 @@ describe("useTaskCenterDraftMaterializationRuntime", () => {
     const upsertTaskCenterOpenTab = vi.fn();
     const snapshots: ProbeSnapshot[] = [];
     let runtime: {
+      commitMaterializedTaskCenterDraftTab: (
+        draftTabId: string,
+        newSessionId: string,
+        options?: { preserveInput?: boolean; syncRoute?: boolean },
+      ) => void;
       materializeTaskCenterDraftTab: (
         draftTabId: string,
         options?: { reason?: "send" | "input_warmup"; commit?: boolean },
@@ -340,5 +353,59 @@ describe("useTaskCenterDraftMaterializationRuntime", () => {
         forceRefresh: true,
       },
     );
+  });
+
+  it("内部发送 commit materialized 草稿时不应写路由或触发历史切换", async () => {
+    const createFreshSession = vi.fn(async () => "session-internal-send");
+    const persistMaterializedSessionNavigation = vi.fn();
+    const switchMaterializedSession = vi.fn(async () => "success");
+    const upsertTaskCenterOpenTab = vi.fn();
+    let runtime: {
+      commitMaterializedTaskCenterDraftTab: (
+        draftTabId: string,
+        newSessionId: string,
+        options?: { preserveInput?: boolean; syncRoute?: boolean },
+      ) => void;
+      openTaskCenterDraftTab: (options?: {
+        preservePendingSendRequest?: boolean;
+      }) => string;
+    } | null = null;
+
+    await act(async () => {
+      root.render(
+        <Probe
+          createFreshSession={createFreshSession}
+          onRuntime={(nextRuntime) => {
+            runtime = nextRuntime;
+          }}
+          onSnapshot={() => undefined}
+          persistMaterializedSessionNavigation={
+            persistMaterializedSessionNavigation
+          }
+          switchMaterializedSession={switchMaterializedSession}
+          upsertTaskCenterOpenTab={upsertTaskCenterOpenTab}
+        />,
+      );
+    });
+
+    await act(async () => {
+      const draftTabId =
+        runtime?.openTaskCenterDraftTab({
+          preservePendingSendRequest: true,
+        }) ?? "";
+      runtime?.commitMaterializedTaskCenterDraftTab(
+        draftTabId,
+        "session-internal-send",
+        { syncRoute: false },
+      );
+      await Promise.resolve();
+    });
+
+    expect(upsertTaskCenterOpenTab).toHaveBeenCalledWith(
+      "session-internal-send",
+      "workspace-test",
+    );
+    expect(persistMaterializedSessionNavigation).not.toHaveBeenCalled();
+    expect(switchMaterializedSession).not.toHaveBeenCalled();
   });
 });

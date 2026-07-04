@@ -220,7 +220,7 @@ describe("Plugin v2 package descriptor", () => {
         expect.objectContaining({ code: "MACOS_IDENTITY_MISSING" }),
       ]),
     );
-    expect(plan.deepLinkSchemes).toEqual(["lime-plugin"]);
+    expect(plan.deepLinkSchemes).toEqual(["lime-agent-app"]);
   });
 
   it("standalone native shell config materializer 应把 per-app identity / deep link 写入独立配置", () => {

@@ -1,9 +1,7 @@
 import type { HandleSendOptions } from "../hooks/handleSendTypes";
-import {
-  buildWorkspaceArticleWorkspaceActionRequestMetadata,
-  resolveWorkspaceArticleWorkspaceActionOutputArtifactKind,
-  type WorkspaceArticleWorkspaceActionIntent,
-} from "./workspaceArticleWorkspaceModel";
+import type { WorkspaceArticleWorkspaceActionIntent } from "./workspaceArticleWorkspaceModel";
+import { buildWorkspaceArticleWorkspaceActionRequestMetadata } from "./workspaceArticleWorkspaceActionRequestMetadata";
+import { resolveWorkspaceArticleWorkspaceActionOutputArtifactKind } from "./workspaceArticleWorkspaceActionOutputKind";
 
 export type SubmitWorkspaceArticleEditorAction = (
   prompt: string,
@@ -77,9 +75,9 @@ export async function submitWorkspaceArticleEditorActionIntent({
 
   const sent = await submit(normalizedPrompt, {
     displayContent: normalizedPrompt,
-    requestMetadata: buildWorkspaceArticleWorkspaceActionRequestMetadata(intent),
-    systemPromptOverride:
-      buildWorkspaceArticleEditorActionSystemPrompt(intent),
+    requestMetadata:
+      buildWorkspaceArticleWorkspaceActionRequestMetadata(intent),
+    systemPromptOverride: buildWorkspaceArticleEditorActionSystemPrompt(intent),
     skipSceneCommandRouting: true,
     searchMode: "disabled",
     explicitToolPreferences: true,

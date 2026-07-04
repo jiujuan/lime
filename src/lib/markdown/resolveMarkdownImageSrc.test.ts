@@ -33,4 +33,13 @@ describe("resolveMarkdownImageSrc", () => {
       resolveMarkdownImageSrc("/Users/coso/demo/assets/cover.png#hero"),
     ).toBe("asset:///Users/coso/demo/assets/cover.png#hero");
   });
+
+  it("已解析的 file 图片地址应保持原值", () => {
+    expect(
+      resolveMarkdownImageSrc(
+        "file:///Users/coso/demo/assets/cover.png#hero",
+        "/Users/coso/demo/article.md",
+      ),
+    ).toBe("file:///Users/coso/demo/assets/cover.png#hero");
+  });
 });

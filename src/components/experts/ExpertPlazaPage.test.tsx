@@ -18,13 +18,18 @@ interface MountedContent {
 const mountedContents: MountedContent[] = [];
 const EXPERT_CATALOG_CACHE_STORAGE_KEY = "lime:expert-catalog-cache:v1";
 
-function renderPage(onNavigate = vi.fn()) {
+function renderPage(onNavigate = vi.fn(), currentProjectId?: string | null) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
 
   act(() => {
-    root.render(<ExpertPlazaPage onNavigate={onNavigate} />);
+    root.render(
+      <ExpertPlazaPage
+        onNavigate={onNavigate}
+        currentProjectId={currentProjectId}
+      />,
+    );
   });
 
   mountedContents.push({ container, root });
@@ -136,7 +141,7 @@ describe("ExpertPlazaPage", () => {
 
   it("点击开始对话应进入 Agent 并携带专家 request metadata", async () => {
     const onNavigate = vi.fn();
-    const { container } = renderPage(onNavigate);
+    const { container } = renderPage(onNavigate, "project-current");
     await flushEffects();
 
     const startButton = container.querySelector<HTMLButtonElement>(
@@ -152,7 +157,7 @@ describe("ExpertPlazaPage", () => {
       "agent",
       expect.objectContaining({
         agentEntry: "claw",
-        projectId: "default",
+        projectId: "project-current",
         initialSessionName: "营销策略专家",
         initialUserPrompt:
           expect.stringContaining("请以「营销策略专家」专家身份工作"),
@@ -160,11 +165,12 @@ describe("ExpertPlazaPage", () => {
         newChatAt: expect.any(Number),
         expertAgentLaunch: expect.objectContaining({
           tenantId: "local-seeded",
+          projectId: "project-current",
           expertId: "marketing-strategist",
           releaseId: "rel-marketing-strategist-20260515",
-          launchMode: "resume_or_create",
+          launchMode: "new_thread",
           agentInstanceKey:
-            "local-seeded:marketing-strategist:rel-marketing-strategist-20260515",
+            "local-seeded:project-current:marketing-strategist:rel-marketing-strategist-20260515",
         }),
         initialRequestMetadata: {
           expert: expect.objectContaining({
@@ -194,23 +200,23 @@ describe("ExpertPlazaPage", () => {
     expect(params).not.toHaveProperty("entryBannerMessage");
   });
 
-  it("再次点击已有专家 Agent 时应恢复最近会话且不重复自动发送", async () => {
+  it("再次点击已有专家配置时也应新建当前项目 Thread", async () => {
     upsertExpertAgentInstance({
       tenantId: "local-seeded",
+      projectId: "project-current",
       expertId: "marketing-strategist",
       releaseId: "rel-marketing-strategist-20260515",
-      latestSessionId: "session-expert-1",
       skillRefsOverride: ["service-skill:daily-trend-briefing", "skill:docx"],
       now: 1,
     });
     const onNavigate = vi.fn();
-    const { container } = renderPage(onNavigate);
+    const { container } = renderPage(onNavigate, "project-current");
     await flushEffects();
 
     const startButton = container.querySelector<HTMLButtonElement>(
       '[data-testid="expert-start-marketing-strategist"]',
     );
-    expect(startButton?.textContent).toContain("继续对话");
+    expect(startButton?.textContent).toContain("开始对话");
 
     act(() => {
       startButton?.click();
@@ -219,10 +225,14 @@ describe("ExpertPlazaPage", () => {
     expect(onNavigate).toHaveBeenCalledWith(
       "agent",
       expect.objectContaining({
-        initialSessionId: "session-expert-1",
-        autoRunInitialPromptOnMount: false,
+        projectId: "project-current",
+        initialUserPrompt:
+          expect.stringContaining("请以「营销策略专家」专家身份工作"),
+        autoRunInitialPromptOnMount: true,
+        newChatAt: expect.any(Number),
         expertAgentLaunch: expect.objectContaining({
-          latestSessionId: "session-expert-1",
+          projectId: "project-current",
+          launchMode: "new_thread",
           skillRefsOverride: [
             "service-skill:daily-trend-briefing",
             "skill:docx",
@@ -236,9 +246,31 @@ describe("ExpertPlazaPage", () => {
       }),
     );
     const [, params] = onNavigate.mock.calls[0] || [];
-    expect(params).not.toHaveProperty("initialUserPrompt");
-    expect(params).not.toHaveProperty("newChatAt");
+    expect(params).not.toHaveProperty("initialSessionId");
+    expect(
+      (params as { expertAgentLaunch?: unknown }).expertAgentLaunch,
+    ).not.toHaveProperty("latestSessionId");
     expect(params).not.toHaveProperty("entryBannerMessage");
+  });
+
+  it("没有项目作用域时启动专家不应写入 default 项目", async () => {
+    const onNavigate = vi.fn();
+    const { container } = renderPage(onNavigate);
+    await flushEffects();
+
+    const startButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="expert-start-marketing-strategist"]',
+    );
+
+    act(() => {
+      startButton?.click();
+    });
+
+    const [, params] = onNavigate.mock.calls[0] || [];
+    expect(params).not.toHaveProperty("projectId");
+    expect(
+      (params as { expertAgentLaunch?: unknown }).expertAgentLaunch,
+    ).not.toHaveProperty("projectId");
   });
 
   it("点击添加应把专家写入本地 overlay", async () => {
@@ -291,7 +323,7 @@ describe("ExpertPlazaPage", () => {
     );
   });
 
-  it("详情操作区应并列保留主对话与新对话入口", async () => {
+  it("详情操作区应只保留当前项目新 Thread 入口", async () => {
     const onNavigate = vi.fn();
     const { container } = renderPage(onNavigate);
     await flushEffects();
@@ -309,15 +341,15 @@ describe("ExpertPlazaPage", () => {
       '[data-testid="expert-detail-actions-code-literature"]',
     );
     expect(detailActions?.textContent).toContain("开始对话");
-    expect(detailActions?.textContent).toContain("新对话");
+    expect(detailActions?.textContent).not.toContain("新对话");
 
-    const newThreadButton = container.querySelector<HTMLButtonElement>(
-      '[data-testid="expert-new-thread-code-literature"]',
+    const startButton = container.querySelector<HTMLButtonElement>(
+      '[data-testid="expert-detail-start-code-literature"]',
     );
-    expect(newThreadButton).not.toBeNull();
+    expect(startButton).not.toBeNull();
 
     act(() => {
-      newThreadButton?.click();
+      startButton?.click();
     });
 
     expect(onNavigate).toHaveBeenCalledWith(

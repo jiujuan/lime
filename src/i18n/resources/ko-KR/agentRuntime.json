@@ -23,7 +23,7 @@
   "agentChat.imageWorkbenchPreview.media.open": "이미지 결과 열기",
   "agentChat.imageWorkbenchPreview.media.previewFailed": "미리보기 실패",
   "agentChat.imageWorkbenchPreview.action.retry": "다시 시도",
-  "agentChat.imageWorkbenchPreview.tool.generation": "Image Generation",
+  "agentChat.imageWorkbenchPreview.tool.generation": "이미지 생성",
   "agentChat.imageWorkbenchPreview.tool.editing": "이미지 편집",
   "agentChat.imageWorkbenchPreview.tool.redraw": "이미지 다시 그리기",
   "agentChat.imageWorkbenchPreview.placeholder.cancelled": "취소됨",

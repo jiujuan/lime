@@ -105,7 +105,11 @@ function resolveArticleDraftObjectCandidates(
     if (!object || object.ref.kind !== "articleDraft") {
       return;
     }
-    if (candidates.some((candidate) => isSameWorkspaceArticleObject(candidate, object))) {
+    if (
+      candidates.some((candidate) =>
+        isSameWorkspaceArticleObject(candidate, object),
+      )
+    ) {
       return;
     }
     candidates.push(object);
@@ -264,13 +268,29 @@ export function collectWorkspaceArticleInlineImageTaskRecoveryMarkdownsFromMessa
 ): string[] {
   const markdowns = new Set<string>();
   messages.forEach((message) => {
-    (message.artifacts ?? []).forEach((artifact) => {
-      const content = artifact.content?.trim();
+    const content = message.content?.trim();
+    if (content && markdownContainsWorkspaceArticleInlineImageTask(content)) {
+      markdowns.add(content);
+    }
+    (message.contentParts ?? []).forEach((part) => {
+      if (part.type !== "text" || typeof part.text !== "string") {
+        return;
+      }
+      const partText = part.text.trim();
       if (
-        content &&
-        markdownContainsWorkspaceArticleInlineImageTask(content)
+        partText &&
+        markdownContainsWorkspaceArticleInlineImageTask(partText)
       ) {
-        markdowns.add(content);
+        markdowns.add(partText);
+      }
+    });
+    (message.artifacts ?? []).forEach((artifact) => {
+      const artifactContent = artifact.content?.trim();
+      if (
+        artifactContent &&
+        markdownContainsWorkspaceArticleInlineImageTask(artifactContent)
+      ) {
+        markdowns.add(artifactContent);
       }
       collectArtifactDocumentInlineImageTaskRecoveryMarkdowns(artifact).forEach(
         (markdown) => markdowns.add(markdown),
@@ -340,7 +360,8 @@ function syncInlineImageTaskWorkspacePatch(
     }
   }
 
-  const editedDraft = asRecord(record.editedDraft) ?? asRecord(record.edited_draft);
+  const editedDraft =
+    asRecord(record.editedDraft) ?? asRecord(record.edited_draft);
   if (editedDraft) {
     let draftChanged = false;
     const nextEditedDraft: Record<string, unknown> = { ...editedDraft };
@@ -447,28 +468,72 @@ function syncInlineImageTaskArtifact(
   };
 }
 
+function syncInlineImageTaskContentParts(
+  contentParts: Message["contentParts"] | undefined,
+  params: WorkspaceArticleInlineImageTaskMessageArtifactSyncParams,
+): Message["contentParts"] | undefined {
+  if (!contentParts || contentParts.length === 0) {
+    return contentParts;
+  }
+
+  let changed = false;
+  const nextParts = contentParts.map((part) => {
+    if (part.type !== "text") {
+      return part;
+    }
+    const nextText = syncInlineImageTaskMarkdown(part.text, params);
+    if (!nextText) {
+      return part;
+    }
+    changed = true;
+    return {
+      ...part,
+      text: nextText,
+    };
+  });
+  return changed ? nextParts : contentParts;
+}
+
 export function syncWorkspaceArticleInlineImageTaskMessageArtifacts(
   messages: readonly Message[],
   params: WorkspaceArticleInlineImageTaskMessageArtifactSyncParams,
 ): Message[] {
   let changed = false;
   const nextMessages = messages.map((message) => {
-    if (!message.artifacts || message.artifacts.length === 0) {
+    const nextContent = syncInlineImageTaskMarkdown(message.content, params);
+    const nextContentParts = syncInlineImageTaskContentParts(
+      message.contentParts,
+      params,
+    );
+    const hasArtifacts = Boolean(message.artifacts?.length);
+    if (
+      !hasArtifacts &&
+      !nextContent &&
+      nextContentParts === message.contentParts
+    ) {
       return message;
     }
-    const nextArtifacts = message.artifacts.map((artifact) => {
-      const nextArtifact = syncInlineImageTaskArtifact(artifact, params);
-      if (nextArtifact !== artifact) {
-        changed = true;
-      }
-      return nextArtifact;
-    });
-    return nextArtifacts === message.artifacts
-      ? message
-      : {
-          ...message,
-          artifacts: nextArtifacts,
-        };
+    const nextArtifacts = hasArtifacts
+      ? message.artifacts?.map((artifact) =>
+          syncInlineImageTaskArtifact(artifact, params),
+        )
+      : message.artifacts;
+    const messageChanged =
+      Boolean(nextContent) ||
+      nextContentParts !== message.contentParts ||
+      nextArtifacts?.some(
+        (artifact, index) => artifact !== message.artifacts?.[index],
+      );
+    if (!messageChanged) {
+      return message;
+    }
+    changed = true;
+    return {
+      ...message,
+      content: nextContent ?? message.content,
+      contentParts: nextContentParts,
+      artifacts: nextArtifacts,
+    };
   });
   return changed ? nextMessages : (messages as Message[]);
 }

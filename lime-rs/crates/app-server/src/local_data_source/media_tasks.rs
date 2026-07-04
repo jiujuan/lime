@@ -15,7 +15,9 @@ use app_server_protocol::MediaTaskArtifactResponse;
 use app_server_protocol::MediaTaskArtifactVideoCreateParams;
 use app_server_protocol::{ModelRefSource, ModelTaskRequest};
 use lime_core::config::{Config, ConfigManager};
-use lime_core::database::dao::api_key_provider::ProviderWithKeys;
+use lime_core::database::dao::api_key_provider::{
+    ApiKeyProvider, ApiProviderType, ProviderProtocolFamily, ProviderWithKeys,
+};
 use lime_core::database::DbConnection;
 use lime_core::models::model_registry::EnhancedModelMetadata;
 use lime_services::api_key_provider_service::ApiKeyProviderService;
@@ -89,19 +91,44 @@ pub(crate) async fn assess_image_route(
 
 pub(crate) fn normalize_image_create_params_for_task_submission(
     params: MediaTaskArtifactImageCreateParams,
-) -> Result<MediaTaskArtifactImageCreateParams, String> {
+) -> Result<NormalizedImageCreateParams, String> {
     normalize_image_create_params_with_defaults(params, configured_image_generation_defaults())
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct NormalizedImageCreateParams {
+    pub(crate) params: MediaTaskArtifactImageCreateParams,
+    pub(crate) provider_from_defaults: bool,
+    pub(crate) model_from_defaults: bool,
+}
+
+impl NormalizedImageCreateParams {
+    fn new(
+        params: MediaTaskArtifactImageCreateParams,
+        provider_from_defaults: bool,
+        model_from_defaults: bool,
+    ) -> Self {
+        Self {
+            params,
+            provider_from_defaults,
+            model_from_defaults,
+        }
+    }
 }
 
 fn normalize_image_create_params_with_defaults(
     params: MediaTaskArtifactImageCreateParams,
     defaults: ImageGenerationDefaults,
-) -> Result<MediaTaskArtifactImageCreateParams, String> {
+) -> Result<NormalizedImageCreateParams, String> {
     let mut normalized = params;
+    let explicit_provider_id = normalize_optional_task_field(normalized.provider_id.clone());
+    let explicit_model = normalize_optional_task_field(normalized.model.clone());
+    let provider_from_defaults = explicit_provider_id.is_none() && defaults.provider_id.is_some();
+    let model_from_defaults = explicit_model.is_none() && defaults.model_id.is_some();
+
     normalized.mode = normalize_image_task_mode(normalized.mode);
-    normalized.provider_id =
-        normalize_optional_task_field(normalized.provider_id).or(defaults.provider_id);
-    normalized.model = normalize_optional_task_field(normalized.model).or(defaults.model_id);
+    normalized.provider_id = explicit_provider_id.or(defaults.provider_id);
+    normalized.model = explicit_model.or(defaults.model_id);
     normalized.executor_mode = normalize_image_executor_mode(normalized.executor_mode);
     normalized.outer_model = normalize_optional_task_field(normalized.outer_model);
     normalized.session_id = normalize_optional_task_field(normalized.session_id);
@@ -125,7 +152,222 @@ fn normalize_image_create_params_with_defaults(
         );
     }
 
-    Ok(normalized)
+    Ok(NormalizedImageCreateParams::new(
+        normalized,
+        provider_from_defaults,
+        model_from_defaults,
+    ))
+}
+
+pub(crate) fn resolve_image_provider_for_task_submission(
+    db: &DbConnection,
+    api_key_provider_service: &ApiKeyProviderService,
+    normalized: NormalizedImageCreateParams,
+) -> Result<MediaTaskArtifactImageCreateParams, String> {
+    let mut params = normalized.params;
+    let provider_id = params
+        .provider_id
+        .as_deref()
+        .ok_or_else(image_model_ref_missing_message)?;
+    let model = params
+        .model
+        .as_deref()
+        .ok_or_else(image_model_ref_missing_message)?;
+    let provider = api_key_provider_service
+        .get_provider(db, provider_id)
+        .map_err(|error| format!("读取图片 Provider 失败: {error}"))?;
+
+    if let Some(provider) = provider {
+        validate_image_provider_for_submission(&provider, model)?;
+        return Ok(params);
+    }
+
+    if !normalized.provider_from_defaults && !normalized.model_from_defaults {
+        return Err(format!(
+            "图片 Provider {provider_id} 不存在，请重新选择图片模型后重试。"
+        ));
+    }
+
+    let fallback = select_ready_image_provider_fallback(db, api_key_provider_service)
+        .map_err(|error| format!("读取图片 Provider 失败: {error}"))?
+        .ok_or_else(|| {
+            format!(
+                "默认图片 Provider {provider_id} 不存在，且没有其他已启用且带 API Key 的图片 Provider。请在 设置 -> 媒体生成 -> 图片服务模型 选择可用图片模型后重试。"
+            )
+        })?;
+    params.provider_id = Some(fallback.provider_id);
+    params.model = Some(fallback.model);
+    Ok(params)
+}
+
+fn image_model_ref_missing_message() -> String {
+    "图片生成缺少默认 Provider 或模型，请在 设置 -> 媒体生成 -> 图片服务模型 选择可用图片模型后重试。"
+        .to_string()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ImageProviderFallback {
+    provider_id: String,
+    model: String,
+}
+
+fn select_ready_image_provider_fallback(
+    db: &DbConnection,
+    api_key_provider_service: &ApiKeyProviderService,
+) -> Result<Option<ImageProviderFallback>, String> {
+    let providers = api_key_provider_service.get_all_providers(db)?;
+    Ok(providers
+        .into_iter()
+        .filter(|provider| image_provider_is_ready(&provider))
+        .find_map(|provider| {
+            first_image_model_for_provider(&provider.provider).map(|model| ImageProviderFallback {
+                provider_id: provider.provider.id,
+                model,
+            })
+        }))
+}
+
+fn validate_image_provider_for_submission(
+    provider: &ProviderWithKeys,
+    model: &str,
+) -> Result<(), String> {
+    if !provider.provider.enabled {
+        return Err(format!(
+            "图片 Provider {} 当前未启用，请重新选择图片模型后重试。",
+            provider.provider.id
+        ));
+    }
+    if !provider.api_keys.iter().any(|key| key.enabled) {
+        return Err(format!(
+            "图片 Provider {} 没有可用 API Key，请在设置中启用 API Key 后重试。",
+            provider.provider.id
+        ));
+    }
+    if !image_provider_has_supported_endpoint(&provider.provider, Some(model)) {
+        return Err(format!(
+            "图片 Provider {} 不支持当前图片模型 {}，请重新选择图片模型后重试。",
+            provider.provider.id, model
+        ));
+    }
+    if is_placeholder_provider_host(&provider.provider.api_host) {
+        return Err(format!(
+            "图片 Provider {} 的 API Host 是示例地址，请配置真实地址后重试。",
+            provider.provider.id
+        ));
+    }
+    Ok(())
+}
+
+fn image_provider_is_ready(provider: &ProviderWithKeys) -> bool {
+    provider.provider.enabled
+        && provider.api_keys.iter().any(|key| key.enabled)
+        && !is_placeholder_provider_host(&provider.provider.api_host)
+        && first_image_model_for_provider(&provider.provider).is_some()
+}
+
+fn first_image_model_for_provider(provider: &ApiKeyProvider) -> Option<String> {
+    provider
+        .custom_models
+        .iter()
+        .find_map(|model| {
+            let model = normalize_optional_task_field(Some(model.clone()))?;
+            image_provider_has_supported_endpoint(provider, Some(&model)).then_some(model)
+        })
+        .or_else(|| default_image_model_for_provider(provider))
+}
+
+fn default_image_model_for_provider(provider: &ApiKeyProvider) -> Option<String> {
+    match provider.effective_provider_type() {
+        ApiProviderType::Openai
+        | ApiProviderType::OpenaiResponse
+        | ApiProviderType::Codex
+        | ApiProviderType::NewApi
+        | ApiProviderType::Gateway => Some("gpt-images-2".to_string()),
+        ApiProviderType::Gemini => Some("gemini-2.5-flash-image".to_string()),
+        ApiProviderType::Fal => provider
+            .custom_models
+            .iter()
+            .find_map(|model| normalize_optional_task_field(Some(model.clone()))),
+        _ => None,
+    }
+}
+
+fn image_provider_has_supported_endpoint(
+    provider: &ApiKeyProvider,
+    model_id: Option<&str>,
+) -> bool {
+    if is_zhipu_image_provider(provider) || is_dashscope_image_provider(provider, model_id) {
+        return true;
+    }
+
+    let effective_type = provider.effective_provider_type();
+    let spec = effective_type.runtime_spec();
+    matches!(
+        effective_type,
+        ApiProviderType::Openai
+            | ApiProviderType::OpenaiResponse
+            | ApiProviderType::Codex
+            | ApiProviderType::NewApi
+            | ApiProviderType::Gateway
+            | ApiProviderType::Gemini
+    ) && (spec.protocol_family == ProviderProtocolFamily::OpenAiCompatible
+        || spec.protocol_family == ProviderProtocolFamily::Gemini
+        || matches!(effective_type, ApiProviderType::Codex))
+}
+
+fn is_placeholder_provider_host(api_host: &str) -> bool {
+    let normalized = api_host.trim().to_ascii_lowercase();
+    normalized.is_empty() || normalized.contains("example.invalid")
+}
+
+fn is_zhipu_image_provider(provider: &ApiKeyProvider) -> bool {
+    let provider_id = provider.id.to_ascii_lowercase();
+    let provider_name = provider.name.to_ascii_lowercase();
+    let api_host = provider.api_host.to_ascii_lowercase();
+    let has_zhipu_identity = provider_id.contains("zhipu")
+        || provider_id.contains("bigmodel")
+        || provider_name.contains("zhipu")
+        || provider_name.contains("智谱")
+        || api_host.contains("bigmodel.cn/api/paas");
+    let has_zhipu_model = provider.custom_models.iter().any(|model| {
+        let normalized = model.trim().to_ascii_lowercase();
+        matches!(
+            normalized.as_str(),
+            "glm-image" | "cogview-4-250304" | "cogview-4" | "cogview-3-flash"
+        ) || normalized.contains("cogview")
+            || normalized.contains("glm-image")
+    });
+    has_zhipu_identity || has_zhipu_model
+}
+
+fn is_dashscope_image_provider(provider: &ApiKeyProvider, model_id: Option<&str>) -> bool {
+    let provider_id = provider.id.to_ascii_lowercase();
+    let provider_name = provider.name.to_ascii_lowercase();
+    let api_host = provider.api_host.to_ascii_lowercase();
+    let has_dashscope_identity = provider_id.contains("dashscope")
+        || provider_id.contains("alibaba")
+        || provider_id.contains("qwen")
+        || provider_id.contains("tongyi")
+        || provider_name.contains("dashscope")
+        || provider_name.contains("通义")
+        || provider_name.contains("百炼")
+        || api_host.contains("dashscope.aliyuncs.com")
+        || api_host.contains("dashscope-intl.aliyuncs.com")
+        || api_host.contains("maas.aliyuncs.com");
+    let has_dashscope_image_model = model_id.map(is_dashscope_image_model_id).unwrap_or(false)
+        || provider
+            .custom_models
+            .iter()
+            .any(|model| is_dashscope_image_model_id(model));
+    has_dashscope_identity && has_dashscope_image_model
+}
+
+fn is_dashscope_image_model_id(model_id: &str) -> bool {
+    let normalized = model_id.trim().to_ascii_lowercase();
+    normalized.contains("qwen-image")
+        || normalized.contains("wanx")
+        || normalized.contains("wan2.")
+        || normalized.contains("wan2-")
 }
 
 fn normalize_image_task_mode(value: Option<String>) -> Option<String> {
@@ -374,6 +616,13 @@ fn model_registry_payload(model: &EnhancedModelMetadata) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Utc;
+    use lime_core::database::dao::api_key_provider::{
+        ApiKeyEntry, ApiKeyProvider, ApiProviderType, ProviderGroup,
+    };
+    use lime_core::database::schema::create_tables;
+    use rusqlite::Connection;
+    use std::sync::{Arc, Mutex};
 
     fn image_create_params() -> MediaTaskArtifactImageCreateParams {
         MediaTaskArtifactImageCreateParams {
@@ -418,9 +667,17 @@ mod tests {
         )
         .expect("normalized image params");
 
-        assert_eq!(normalized.provider_id.as_deref(), Some("custom-provider"));
-        assert_eq!(normalized.model.as_deref(), Some("agnes-image-2.0-flash"));
-        assert_eq!(normalized.executor_mode, None);
+        assert_eq!(
+            normalized.params.provider_id.as_deref(),
+            Some("custom-provider")
+        );
+        assert_eq!(
+            normalized.params.model.as_deref(),
+            Some("agnes-image-2.0-flash")
+        );
+        assert_eq!(normalized.params.executor_mode, None);
+        assert!(normalized.provider_from_defaults);
+        assert!(normalized.model_from_defaults);
     }
 
     #[test]
@@ -450,19 +707,27 @@ mod tests {
         )
         .expect("normalized image params");
 
-        assert_eq!(normalized.provider_id.as_deref(), Some("custom-provider"));
-        assert_eq!(normalized.model.as_deref(), Some("agnes-image-2.1-flash"));
-        assert_eq!(normalized.mode, None);
-        assert_eq!(normalized.session_id, None);
-        assert_eq!(normalized.thread_id, None);
-        assert_eq!(normalized.turn_id, None);
-        assert_eq!(normalized.project_id, None);
-        assert_eq!(normalized.routing_slot, None);
-        assert_eq!(normalized.requested_target, None);
-        assert_eq!(normalized.slot_id, None);
-        assert_eq!(normalized.target_output_id, None);
-        assert_eq!(normalized.target_output_ref_id, None);
-        assert_eq!(normalized.outer_model, None);
+        assert_eq!(
+            normalized.params.provider_id.as_deref(),
+            Some("custom-provider")
+        );
+        assert_eq!(
+            normalized.params.model.as_deref(),
+            Some("agnes-image-2.1-flash")
+        );
+        assert_eq!(normalized.params.mode, None);
+        assert_eq!(normalized.params.session_id, None);
+        assert_eq!(normalized.params.thread_id, None);
+        assert_eq!(normalized.params.turn_id, None);
+        assert_eq!(normalized.params.project_id, None);
+        assert_eq!(normalized.params.routing_slot, None);
+        assert_eq!(normalized.params.requested_target, None);
+        assert_eq!(normalized.params.slot_id, None);
+        assert_eq!(normalized.params.target_output_id, None);
+        assert_eq!(normalized.params.target_output_ref_id, None);
+        assert_eq!(normalized.params.outer_model, None);
+        assert!(!normalized.provider_from_defaults);
+        assert!(normalized.model_from_defaults);
     }
 
     #[test]
@@ -491,5 +756,124 @@ mod tests {
                 .expect_err("missing image defaults should fail closed");
 
         assert!(error.contains("图片生成缺少默认 Provider 或模型"));
+    }
+
+    #[test]
+    fn image_task_submission_rejects_missing_explicit_provider_before_task_write() {
+        let db = test_db();
+        let service = ApiKeyProviderService::new();
+        let normalized = NormalizedImageCreateParams::new(
+            MediaTaskArtifactImageCreateParams {
+                provider_id: Some("stale-provider".to_string()),
+                model: Some("gpt-images-2".to_string()),
+                ..image_create_params()
+            },
+            false,
+            false,
+        );
+
+        let error = resolve_image_provider_for_task_submission(&db, &service, normalized)
+            .expect_err("missing explicit provider should fail");
+
+        assert!(error.contains("图片 Provider stale-provider 不存在"));
+    }
+
+    #[test]
+    fn image_task_submission_falls_back_when_default_provider_was_deleted() {
+        let db = test_db();
+        let service = ApiKeyProviderService::new();
+        insert_provider_with_key(
+            &db,
+            "ready-images",
+            "gpt-images-2",
+            "https://images.example/v1",
+        );
+        let normalized = NormalizedImageCreateParams::new(
+            MediaTaskArtifactImageCreateParams {
+                provider_id: Some("deleted-default".to_string()),
+                model: Some("gpt-images-2".to_string()),
+                ..image_create_params()
+            },
+            true,
+            true,
+        );
+
+        let resolved = resolve_image_provider_for_task_submission(&db, &service, normalized)
+            .expect("deleted default provider should fall back to ready image provider");
+
+        assert_eq!(resolved.provider_id.as_deref(), Some("ready-images"));
+        assert_eq!(resolved.model.as_deref(), Some("gpt-images-2"));
+    }
+
+    #[test]
+    fn image_task_submission_rejects_placeholder_provider_host() {
+        let db = test_db();
+        let service = ApiKeyProviderService::new();
+        insert_provider_with_key(
+            &db,
+            "placeholder-images",
+            "gpt-images-2",
+            "https://example.invalid/v1",
+        );
+        let normalized = NormalizedImageCreateParams::new(
+            MediaTaskArtifactImageCreateParams {
+                provider_id: Some("placeholder-images".to_string()),
+                model: Some("gpt-images-2".to_string()),
+                ..image_create_params()
+            },
+            false,
+            false,
+        );
+
+        let error = resolve_image_provider_for_task_submission(&db, &service, normalized)
+            .expect_err("placeholder provider should fail");
+
+        assert!(error.contains("API Host 是示例地址"));
+    }
+
+    fn test_db() -> DbConnection {
+        let conn = Connection::open_in_memory().expect("open in-memory db");
+        create_tables(&conn).expect("create schema");
+        Arc::new(Mutex::new(conn))
+    }
+
+    fn insert_provider_with_key(db: &DbConnection, id: &str, model: &str, api_host: &str) {
+        let now = Utc::now();
+        let provider = ApiKeyProvider {
+            id: id.to_string(),
+            name: id.to_string(),
+            provider_type: ApiProviderType::Openai,
+            api_host: api_host.to_string(),
+            is_system: false,
+            group: ProviderGroup::Custom,
+            enabled: true,
+            sort_order: 1,
+            api_version: None,
+            project: None,
+            location: None,
+            region: None,
+            custom_models: vec![model.to_string()],
+            prompt_cache_mode: None,
+            created_at: now,
+            updated_at: now,
+        };
+        let key = ApiKeyEntry {
+            id: format!("{id}-key"),
+            provider_id: id.to_string(),
+            api_key_encrypted: "encrypted-test-key".to_string(),
+            alias: None,
+            enabled: true,
+            usage_count: 0,
+            error_count: 0,
+            last_used_at: None,
+            created_at: now,
+        };
+        let conn = lime_core::database::lock_db(db).expect("lock db");
+        lime_core::database::dao::api_key_provider::ApiKeyProviderDao::insert_provider(
+            &conn, &provider,
+        )
+        .expect("insert provider");
+        lime_core::database::dao::api_key_provider::ApiKeyProviderDao::insert_api_key(&conn, &key)
+            .expect("insert api key");
     }
 }

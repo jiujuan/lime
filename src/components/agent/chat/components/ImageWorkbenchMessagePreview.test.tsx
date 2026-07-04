@@ -75,6 +75,13 @@ describe("ImageWorkbenchMessagePreview", () => {
         )
         ?.className.toString(),
     ).toContain("bg-[#eef0ec]");
+    expect(
+      container
+        .querySelector(
+          '[data-testid="image-workbench-message-preview-toolbar-image-preview-complete"]',
+        )
+        ?.getAttribute("data-model-id"),
+    ).toBe("fal-ai/nano-banana-pro");
     expect(container.querySelector("img")?.getAttribute("src")).toBe(
       "data:image/png;base64,aW1hZ2U=",
     );

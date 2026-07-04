@@ -2038,7 +2038,7 @@ Extract it into the Agent Skills directory.`,
       });
       expect(harness.getValue().displayMessages[1]).toMatchObject({
         role: "assistant",
-        content: "正在开始处理任务…",
+        content: "任务已进入处理队列…",
         isThinking: true,
       });
     } finally {
@@ -2078,7 +2078,7 @@ Extract it into the Agent Skills directory.`,
       expect(harness.getValue().displayMessages[4]).toMatchObject({
         role: "assistant",
         runtimeStatus: expect.objectContaining({
-          title: "Subagents 已准备好",
+          title: "协作执行已准备好",
         }),
       });
       expect(

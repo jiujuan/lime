@@ -5,6 +5,7 @@ import {
   formatAgentRuntimeStatusSummary,
 } from "../utils/agentRuntimeStatus";
 import { resolveAgentRuntimeErrorPresentation } from "../utils/agentRuntimeErrorPresentation";
+import type { SoulInteractionCopy } from "@/lib/soul/interactionCopy";
 
 export interface AgentStreamErrorToastPlan {
   level: "error" | "warning";
@@ -63,6 +64,7 @@ export function buildAgentStreamFailedAssistantMessagePatch(params: {
   previousContent: string;
   previousContentParts?: Message["contentParts"];
   usage?: Message["usage"];
+  soulCopy?: SoulInteractionCopy;
 }): Pick<Message, "content" | "contentParts" | "isThinking" | "runtimeStatus"> &
   Partial<Pick<Message, "usage">> {
   const partialContent = (
@@ -71,6 +73,7 @@ export function buildAgentStreamFailedAssistantMessagePatch(params: {
   const content = buildFailedAgentMessageContent(
     params.errorMessage,
     partialContent || undefined,
+    params.soulCopy,
   );
   const processParts = (params.previousContentParts || []).filter(
     (part) => part.type !== "text",

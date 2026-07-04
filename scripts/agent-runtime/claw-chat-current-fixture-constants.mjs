@@ -1,5 +1,6 @@
 import path from "node:path";
 import process from "node:process";
+import { pathToFileURL } from "node:url";
 import {
   buildExpertSkillsRuntimeCatalog,
   buildExpertSkillsRuntimeMetadata,
@@ -132,6 +133,7 @@ export const CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO =
   "content-factory-article-workspace";
 export const CONTENT_FACTORY_INLINE_IMAGE_ARTICLE_WORKSPACE_SCENARIO =
   "content-factory-inline-image-article-workspace";
+export const SOUL_STYLE_SCENARIO = "soul-style";
 export const NEWS_PROMPT = "整理今天的国际新闻";
 export const CONTINUE_PROMPT = "继续输出";
 export const PLAN_PROMPT = "先给我一个修复计划，不要直接改代码";
@@ -139,6 +141,8 @@ export const GOAL_PROMPT = "本周完成 Goal E2E 修复";
 export const WEB_TOOLS_RENDERING_PROMPT = "验证网页搜索渲染";
 export const MCP_STRUCTURED_CONTENT_PROMPT = "验证 MCP structuredContent 展示";
 export const ASSISTANT_DONE_TEXT = "CLAW_NEWS_FIXTURE_DONE";
+export const SOUL_STYLE_PROFILE_ID = "cheeky_sassy_executor";
+export const SOUL_STYLE_INTENSITY = "high";
 export const CONTINUE_DONE_TEXT = "CLAW_CONTINUE_FIXTURE_DONE";
 export const PLAN_DONE_TEXT = "CLAW_PLAN_FIXTURE_DONE";
 export const GOAL_DONE_TEXT = "CLAW_GOAL_FIXTURE_DONE";
@@ -238,8 +242,15 @@ export const CONTENT_FACTORY_INLINE_IMAGE_SLOT_ID =
   "article-inline-image-slot-e2e";
 export const CONTENT_FACTORY_INLINE_IMAGE_TASK_PROMPT =
   "广州夏天午后街景原位配图";
-export const CONTENT_FACTORY_INLINE_IMAGE_URL =
-  "https://example.com/lime-fixture-guangzhou-inline.png";
+export const CONTENT_FACTORY_INLINE_IMAGE_FILE_PATH = path.join(
+  process.cwd(),
+  "public",
+  "fixtures",
+  "article-inline-image-e2e.svg",
+);
+export const CONTENT_FACTORY_INLINE_IMAGE_URL = pathToFileURL(
+  CONTENT_FACTORY_INLINE_IMAGE_FILE_PATH,
+).href;
 export const WEB_TOOLS_SEARCH_TOOL_CALL_ID = `${SESSION_ID}:tool:websearch-rendering`;
 export const WEB_TOOLS_REASONING_FINAL_ID = `${SESSION_ID}:reasoning:web-tools-rendering-final`;
 export const WEB_TOOLS_REASONING_ITEM_ID = `${SESSION_ID}:reasoning:web-tools-rendering`;
@@ -329,6 +340,12 @@ export const IMAGE_COMMAND_ASSERTION_KEYS = [
   "imageCommandTaskArtifactReadable",
   "imageCommandTaskArtifactTerminal",
   "imageCommandTaskArtifactSameTaskUpdated",
+  "imageCommandTaskAuditLogWritten",
+  "imageCommandTaskAuditLogEventSequence",
+  "imageCommandTaskAuditLogNoSensitiveTokens",
+  "imageCommandWorkflowAuditReadModelProjected",
+  "imageCommandWorkflowAuditStepsProjected",
+  "imageCommandWorkflowAuditSummaryRedacted",
   "imageCommandWorkerUsedFixtureProviderAndModel",
   "imageCommandWorkflowToolObserved",
   "imageCommandCreateTaskToolObserved",
@@ -359,8 +376,10 @@ export const CONTENT_FACTORY_ARTICLE_WORKSPACE_ASSERTION_KEYS = [
   "contentFactoryArticleWorkspaceRightSurfaceRequested",
   "contentFactoryArticleWorkspaceSessionOpenedFromSidebar",
   "contentFactoryArticleWorkspaceRightSurfaceVisible",
+  "contentFactoryArticleWorkspaceFinalArticleFrameVisible",
   "contentFactoryArticleWorkspacePageShowsObjects",
   "contentFactoryArticleWorkspaceReadModelProjected",
+  "contentFactoryArticleWorkspaceWorkflowFactsHidden",
   "contentFactoryArticleWorkspaceWorkflowReadModelProjected",
   "contentFactoryArticleWorkspaceWorkflowRespondProjected",
   "contentFactoryArticleWorkspaceWorkflowCancelProjected",
@@ -372,6 +391,7 @@ export const CONTENT_FACTORY_ARTICLE_WORKSPACE_ASSERTION_KEYS = [
   "contentFactoryArticleWorkspaceEditedDraftRestored",
   "contentFactoryArticleWorkspaceWorkerFailureEvidence",
   "contentFactoryArticleWorkspaceWorkerTurnExecuted",
+  "contentFactoryArticleWorkspaceWorkerAuditFactsHidden",
   "contentFactoryArticleWorkspaceActionResultPatchProjected",
   "contentFactoryArticleWorkspaceStoryboardRendererContractPreserved",
   "contentFactoryArticleWorkspaceRuntimeContractFailClosed",

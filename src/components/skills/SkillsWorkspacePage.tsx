@@ -43,7 +43,7 @@ import type {
 } from "./SkillsWorkspacePageTypes";
 import { useSkillsWorkspaceCopy } from "./SkillsWorkspacePageCopy";
 import { SkillsWorkspacePageView } from "./SkillsWorkspacePageView";
-import { useSkillsWorkspaceDefaultProject } from "./useSkillsWorkspaceDefaultProject";
+import { useSkillsWorkspaceProject } from "./useSkillsWorkspaceDefaultProject";
 import { useSkillsWorkspaceDetailContent } from "./useSkillsWorkspaceDetailContent";
 import { useSkillsWorkspaceLocalSkillActions } from "./useSkillsWorkspaceLocalSkillActions";
 import { SkillScaffoldDialog } from "./SkillScaffoldDialog";
@@ -142,9 +142,11 @@ export function SkillsWorkspacePage({
   const lastHandledInitialSearchRequestKeyRef = useRef<
     number | string | null
   >(null);
+  const creationProjectId = pageParams?.creationProjectId?.trim() || undefined;
 
-  const { defaultProjectState } = useSkillsWorkspaceDefaultProject({
+  const { currentProjectState } = useSkillsWorkspaceProject({
     activeView,
+    creationProjectId,
     localSkillsLoading,
   });
   const {
@@ -228,7 +230,6 @@ export function SkillsWorkspacePage({
     () => [...recentServiceSkills, ...nonRecentServiceSkills],
     [nonRecentServiceSkills, recentServiceSkills],
   );
-  const creationProjectId = pageParams?.creationProjectId?.trim() || undefined;
   const scaffoldCreationReplay = useMemo(() => {
     if (!pageParams?.initialScaffoldDraft) {
       return undefined;
@@ -500,8 +501,8 @@ export function SkillsWorkspacePage({
   const handleEnableRegisteredSkillRuntime = useCallback(
     (binding: AgentRuntimeWorkspaceSkillBinding) => {
       const params = buildWorkspaceSkillRuntimeLaunchParams({
-        workspaceRoot: defaultProjectState.rootPath,
-        projectId: defaultProjectState.id ?? creationProjectId,
+        workspaceRoot: currentProjectState.rootPath,
+        projectId: creationProjectId,
         binding,
         prompt: t("skills.workspace.runtimeEnable.initialPrompt", {
           name: binding.name || binding.directory,
@@ -522,8 +523,7 @@ export function SkillsWorkspacePage({
     },
     [
       creationProjectId,
-      defaultProjectState.id,
-      defaultProjectState.rootPath,
+      currentProjectState.rootPath,
       onNavigate,
       t,
     ],
@@ -865,7 +865,7 @@ export function SkillsWorkspacePage({
         activeScaffoldDraft={activeScaffoldDraft}
         activeScaffoldTitle={activeScaffoldTitle}
         activeView={activeView}
-        defaultProjectState={defaultProjectState}
+        currentProjectState={currentProjectState}
         detailContentState={detailContentState}
         detailInstalledSkill={detailInstalledSkill}
         detailStoreItem={detailStoreItem}

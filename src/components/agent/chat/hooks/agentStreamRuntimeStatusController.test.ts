@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AgentThreadItem } from "@/lib/api/agentProtocol";
+import { resolveSoulInteractionCopy } from "@/lib/soul/interactionCopy";
 import {
   applyAgentStreamRuntimeStatusToMessages,
   applyAgentStreamRuntimeStatusToThreadItems,
@@ -89,6 +90,27 @@ describe("agentStreamRuntimeStatusController", () => {
       updatedAt: "2026-05-05T10:00:00.000Z",
     });
     expect(plan?.summaryText).toContain("正在启动处理流程");
+  });
+
+  it("provider_trace 首个请求阶段应支持 Soul 等待态口吻", () => {
+    const soulCopy = resolveSoulInteractionCopy({
+      soul: {
+        enabled: true,
+        style_profile_id: "cheeky_sassy_executor",
+        style_intensity: "low",
+      },
+    });
+    const plan = buildAgentStreamProviderTraceRuntimeStatusApplyPlan({
+      executionStrategy: "react",
+      firstRuntimeStatusAt: null,
+      stage: "request_started",
+      updatedAt: "2026-05-05T10:00:00.000Z",
+      soulCopy,
+    });
+
+    expect(plan?.normalizedStatus.title).toBe("正在启动处理");
+    expect(plan?.summaryText).toContain("正在启动处理");
+    expect(plan?.summaryText).not.toMatch(/小活儿|别急|安排/u);
   });
 
   it("provider_trace 非首个等待阶段不应生成运行态计划", () => {

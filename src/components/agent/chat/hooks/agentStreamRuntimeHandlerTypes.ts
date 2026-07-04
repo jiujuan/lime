@@ -14,6 +14,7 @@ import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
 import type { AgentUiPerformanceTraceMetadata } from "./agentStreamPerformanceMetrics";
 import type { AgentStreamReasoningTimelineState } from "./agentStreamReasoningTimeline";
 import type { TextSegmentFinalEligibility } from "./agentStreamTextDeltaLifecycle";
+import type { SoulInteractionCopy } from "@/lib/soul/interactionCopy";
 
 export type MessageParts = NonNullable<Message["contentParts"]>;
 
@@ -138,4 +139,5 @@ export interface HandleTurnStreamEventOptions {
     SetStateAction<AsterSessionExecutionRuntime | null>
   >;
   setIsSending: Dispatch<SetStateAction<boolean>>;
+  soulCopy?: SoulInteractionCopy;
 }

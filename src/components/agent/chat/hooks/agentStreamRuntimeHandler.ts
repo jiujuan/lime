@@ -151,6 +151,7 @@ export function handleTurnStreamEvent({
   setCurrentTurnId,
   setExecutionRuntime,
   setIsSending,
+  soulCopy,
 }: HandleTurnStreamEventOptions): void {
   const {
     activateStream,
@@ -224,6 +225,7 @@ export function handleTurnStreamEvent({
     setThreadItems,
     setThreadTurns,
     surfaceThinkingDeltas,
+    soulCopy,
   });
   const runtimeStateSetters = {
     getThreadItems,
@@ -693,6 +695,7 @@ export function handleTurnStreamEvent({
           firstRuntimeStatusAt: requestState.firstRuntimeStatusAt,
           stage: data.stage,
           updatedAt: new Date().toISOString(),
+          soulCopy,
         });
       if (runtimeStatusPlan) {
         requestState.firstRuntimeStatusAt = Date.now();
@@ -1192,26 +1195,6 @@ export function handleTurnStreamEvent({
       });
       break;
 
-    case "image_task_presentation_unavailable":
-      logAgentDebug(
-        "AgentStream",
-        "imageTask.presentationUnavailable",
-        {
-          reason: data.reason ?? null,
-          status: data.status ?? null,
-          workflowRunId: data.workflow_run_id ?? null,
-          sessionId: data.session_id ?? activeSessionId,
-          threadId: data.thread_id ?? null,
-          turnId: data.turn_id ?? null,
-        },
-        {
-          consoleOnly: true,
-          dedupeKey: `${eventName}:imageTask.presentationUnavailable:${data.workflow_run_id ?? "unknown"}`,
-          throttleMs: 1000,
-        },
-      );
-      break;
-
     case "artifact_snapshot":
       {
         const artifactPlan = buildAgentStreamArtifactSnapshotPreApplyPlan({
@@ -1430,6 +1413,7 @@ export function handleTurnStreamEvent({
                   accumulatedContent: requestState.accumulatedContent,
                   previousContent: msg.content,
                   previousContentParts: msg.contentParts,
+                  soulCopy,
                 }),
               }
             : msg,

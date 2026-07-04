@@ -139,7 +139,7 @@ describe("SkillsWorkspacePage", () => {
     const { container } = renderPage({ initialView: "installed" });
 
     expect(container.textContent).toContain("写作助手");
-    expect(mocks.getOrCreateDefaultProject).not.toHaveBeenCalled();
+    expect(mocks.getProject).not.toHaveBeenCalled();
     expect(mocks.listRegisteredSkills).not.toHaveBeenCalled();
     expect(mocks.listWorkspaceSkillBindings).not.toHaveBeenCalled();
     expect(
@@ -289,6 +289,7 @@ describe("SkillsWorkspacePage", () => {
     try {
       const { container } = renderPage({
         initialView: "installed",
+        creationProjectId: "default-workspace",
         initialScaffoldDraft: {
           target: "project",
           directory: "project-report",
@@ -341,7 +342,7 @@ describe("SkillsWorkspacePage", () => {
     }
   });
 
-  it("用户安装页没有已保存技能时不显示已保存技能空面板，但后台读取 workspace skill binding readiness", async () => {
+  it("用户安装页没有当前项目时不读取 workspace skill binding readiness", async () => {
     vi.useFakeTimers();
     try {
       const { container } = renderPage({ initialView: "installed" });
@@ -359,7 +360,36 @@ describe("SkillsWorkspacePage", () => {
         ),
       ).toBeNull();
       expect(container.textContent).not.toContain("当前项目还没有已保存技能");
-      expect(mocks.getOrCreateDefaultProject).toHaveBeenCalledTimes(1);
+      expect(mocks.getProject).not.toHaveBeenCalled();
+      expect(mocks.listRegisteredSkills).not.toHaveBeenCalled();
+      expect(mocks.listWorkspaceSkillBindings).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("用户安装页有当前项目时按 current project 读取 workspace skill binding readiness", async () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = renderPage({
+        initialView: "installed",
+        creationProjectId: "default-workspace",
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(300);
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(
+        container.querySelector(
+          '[data-testid="workspace-registered-skills-panel"]',
+        ),
+      ).toBeNull();
+      expect(container.textContent).not.toContain("当前项目还没有已保存技能");
+      expect(mocks.getProject).toHaveBeenCalledWith("default-workspace");
       expect(mocks.listRegisteredSkills).toHaveBeenCalledWith({
         workspaceRoot: "/Users/demo/Lime/default-workspace",
       });
@@ -413,7 +443,10 @@ describe("SkillsWorkspacePage", () => {
     vi.useFakeTimers();
     mocks.listRegisteredSkills.mockResolvedValueOnce([savedSkill]);
     try {
-      const { container } = renderPage({ initialView: "installed" });
+      const { container } = renderPage({
+        initialView: "installed",
+        creationProjectId: "default-workspace",
+      });
 
       await act(async () => {
         vi.advanceTimersByTime(300);
@@ -537,6 +570,7 @@ describe("SkillsWorkspacePage", () => {
     try {
       const { container, onNavigate } = renderPage({
         initialView: "installed",
+        creationProjectId: "default-workspace",
       });
 
       await act(async () => {

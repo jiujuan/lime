@@ -1092,6 +1092,7 @@ function assertI18nKeyTypes() {
   i18n.t("settings.hotkeys.catalog.scene.global.title", { ns: "settings" });
   i18n.t("settings.memory.title", { ns: "settings" });
   i18n.t("settings.memory.soul.title", { ns: "settings" });
+  i18n.t("settings.memory.soul.styleProfile.title", { ns: "settings" });
   i18n.t("settings.memory.soul.import.warning.projectRules", {
     ns: "settings",
   });

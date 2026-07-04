@@ -5,26 +5,20 @@ use app_server_protocol::{
     AgentSessionTurnStartParams, MemoryStoreReadParams, MemoryStoreRootParams, MemoryStoreScope,
     RuntimeOptions,
 };
-use lime_core::config::MemorySoulConfig;
 use serde_json::{json, Map, Value};
 use std::path::PathBuf;
 
 pub(crate) const MEMORY_PROMPT_CONTEXT_KEY: &str = "memory_store_prompt_context";
-pub(crate) const MEMORY_SOUL_PROMPT_CONTEXT_KEY: &str = "memory_soul_prompt_context";
 pub(crate) const SESSION_COMPACTION_PROMPT_CONTEXT_KEY: &str = "session_compaction_prompt_context";
 pub(crate) const CONTEXT_PACKET_TELEMETRY_KEY: &str = "context_packet_telemetry";
 const SUMMARY_PATH: &str = "memory_summary.md";
 const SUMMARY_MAX_TOKENS: usize = 1_200;
 const PROMPT_CONTEXT_VERSION: &str = "memory_store_prompt_context.v1";
-const SOUL_CONTEXT_VERSION: &str = "memory_soul_prompt_context.v1";
 const SESSION_COMPACTION_CONTEXT_VERSION: &str = "session_compaction_prompt_context.v1";
 const MEMORY_PACKET_MAX_TOKENS: usize = 1_200;
-const SOUL_PACKET_MAX_TOKENS: usize = 400;
 const SESSION_COMPACTION_PACKET_MAX_TOKENS: usize = 1_600;
-const SOUL_TEXT_MAX_CHARS: usize = 600;
-const SOUL_SHORT_TEXT_MAX_CHARS: usize = 160;
-const SOUL_LIST_ITEM_MAX_CHARS: usize = 120;
-const SOUL_LIST_MAX_ITEMS: usize = 8;
+
+pub(crate) use super::soul::memory_soul_prompt_context_from_config;
 
 impl RuntimeCore {
     pub(in crate::runtime) async fn prepare_memory_prompt_context(
@@ -121,59 +115,13 @@ pub(crate) fn append_memory_context_to_system_prompt(
 pub(crate) fn append_soul_context_to_system_prompt(
     system_prompt: Option<String>,
     config_metadata: Option<&Value>,
+    runtime_metadata: Option<&Value>,
 ) -> Option<String> {
     append_context_block(
         system_prompt,
-        soul_prompt_assembly_from_metadata(config_metadata).and_then(|assembly| assembly.rendered),
+        soul_prompt_assembly_from_metadata(config_metadata, runtime_metadata)
+            .and_then(|assembly| assembly.rendered),
     )
-}
-
-pub(crate) fn memory_soul_prompt_context_from_config(
-    soul: Option<&MemorySoulConfig>,
-) -> Option<Value> {
-    let soul = soul?;
-    if !soul.enabled {
-        return None;
-    }
-
-    let name = normalize_text(soul.name.as_deref(), 80);
-    let summary = normalize_text(soul.summary.as_deref(), SOUL_TEXT_MAX_CHARS);
-    let tone = normalize_list(&soul.tone);
-    let communication_style = normalize_list(&soul.communication_style);
-    let explanation_depth =
-        normalize_text(soul.explanation_depth.as_deref(), SOUL_SHORT_TEXT_MAX_CHARS);
-    let challenge_style =
-        normalize_text(soul.challenge_style.as_deref(), SOUL_SHORT_TEXT_MAX_CHARS);
-    let avoid = normalize_list(&soul.avoid);
-
-    if name.is_none()
-        && summary.is_none()
-        && tone.is_empty()
-        && communication_style.is_empty()
-        && explanation_depth.is_none()
-        && challenge_style.is_none()
-        && avoid.is_empty()
-    {
-        return None;
-    }
-
-    let mut context = Map::new();
-    context.insert("schema".to_string(), json!(SOUL_CONTEXT_VERSION));
-    context.insert("source".to_string(), json!("memory.soul"));
-    context.insert("scope".to_string(), json!("interaction_only"));
-    context.insert(
-        "formalArtifactVoiceSource".to_string(),
-        json!("generation_brief_only"),
-    );
-    insert_optional_string(&mut context, "name", name);
-    insert_optional_string(&mut context, "summary", summary);
-    insert_non_empty_list(&mut context, "tone", tone);
-    insert_non_empty_list(&mut context, "communicationStyle", communication_style);
-    insert_optional_string(&mut context, "explanationDepth", explanation_depth);
-    insert_optional_string(&mut context, "challengeStyle", challenge_style);
-    insert_non_empty_list(&mut context, "avoid", avoid);
-
-    Some(Value::Object(context))
 }
 
 fn memory_prompt_assembly_from_metadata(
@@ -289,84 +237,18 @@ fn session_compaction_packet_from_prompt_context(value: &Value) -> Option<Contex
 }
 
 fn soul_prompt_assembly_from_metadata(
-    metadata: Option<&Value>,
+    config_metadata: Option<&Value>,
+    runtime_metadata: Option<&Value>,
 ) -> Option<super::context_packet::ContextAssembly> {
-    let packet = soul_packet_from_metadata(metadata)?;
+    let packet = soul_packet_from_metadata(config_metadata, runtime_metadata)?;
     Some(assemble_context_packets(vec![packet]))
 }
 
-fn soul_packet_from_metadata(metadata: Option<&Value>) -> Option<ContextPacket> {
-    let metadata = metadata?;
-    let value = metadata
-        .pointer("/memory/soul")
-        .or_else(|| metadata.get(MEMORY_SOUL_PROMPT_CONTEXT_KEY))?;
-    let source = value
-        .get("source")
-        .and_then(Value::as_str)
-        .unwrap_or("memory.soul");
-    if source != "memory.soul" {
-        return None;
-    }
-    let scope = value
-        .get("scope")
-        .and_then(Value::as_str)
-        .filter(|scope| !scope.trim().is_empty())
-        .unwrap_or("interaction_only");
-    let name = value.get("name").and_then(Value::as_str);
-    let summary = value.get("summary").and_then(Value::as_str);
-    let tone = string_array(value.get("tone"));
-    let communication_style = string_array(value.get("communicationStyle"));
-    let explanation_depth = value.get("explanationDepth").and_then(Value::as_str);
-    let challenge_style = value.get("challengeStyle").and_then(Value::as_str);
-    let avoid = string_array(value.get("avoid"));
-
-    if [name, summary, explanation_depth, challenge_style]
-        .into_iter()
-        .flatten()
-        .all(|item| item.trim().is_empty())
-        && tone.is_empty()
-        && communication_style.is_empty()
-        && avoid.is_empty()
-    {
-        return None;
-    }
-
-    let mut lines = Vec::new();
-    if let Some(name) = non_empty_str(name) {
-        lines.push(format!("- Name: {name}"));
-    }
-    if let Some(summary) = non_empty_str(summary) {
-        lines.push(format!("- Summary: {summary}"));
-    }
-    if !tone.is_empty() {
-        lines.push(format!("- Tone: {}", tone.join(", ")));
-    }
-    if !communication_style.is_empty() {
-        lines.push("- Communication style:".to_string());
-        lines.extend(
-            communication_style
-                .into_iter()
-                .map(|item| format!("  - {item}")),
-        );
-    }
-    if let Some(explanation_depth) = non_empty_str(explanation_depth) {
-        lines.push(format!("- Explanation depth: {explanation_depth}"));
-    }
-    if let Some(challenge_style) = non_empty_str(challenge_style) {
-        lines.push(format!("- Challenge style: {challenge_style}"));
-    }
-    if !avoid.is_empty() {
-        lines.push("- Avoid:".to_string());
-        lines.extend(avoid.into_iter().map(|item| format!("  - {item}")));
-    }
-
-    let mut metadata = Map::new();
-    metadata.insert("scope".to_string(), json!(scope));
-    Some(ContextPacket::interaction_soul(
-        lines.join("\n"),
-        SOUL_PACKET_MAX_TOKENS,
-        metadata,
-    ))
+fn soul_packet_from_metadata(
+    config_metadata: Option<&Value>,
+    runtime_metadata: Option<&Value>,
+) -> Option<ContextPacket> {
+    super::soul::soul_packet_from_metadata(config_metadata, runtime_metadata)
 }
 
 fn memory_summary_root(params: &AgentSessionTurnStartParams) -> Option<MemoryStoreRootParams> {
@@ -540,62 +422,10 @@ fn append_context_block(system_prompt: Option<String>, context: Option<String>) 
     Some(prompt)
 }
 
-fn insert_optional_string(map: &mut Map<String, Value>, key: &str, value: Option<String>) {
-    if let Some(value) = value {
-        map.insert(key.to_string(), json!(value));
-    }
-}
-
-fn insert_non_empty_list(map: &mut Map<String, Value>, key: &str, values: Vec<String>) {
-    if !values.is_empty() {
-        map.insert(key.to_string(), json!(values));
-    }
-}
-
-fn normalize_text(value: Option<&str>, max_chars: usize) -> Option<String> {
-    let value = value?;
-    let normalized = value.split_whitespace().collect::<Vec<_>>().join(" ");
-    let normalized = normalized.trim();
-    if normalized.is_empty() {
-        return None;
-    }
-    Some(normalized.chars().take(max_chars).collect())
-}
-
-fn normalize_list(values: &[String]) -> Vec<String> {
-    let mut seen = std::collections::HashSet::new();
-    let mut result = Vec::new();
-    for value in values {
-        let Some(normalized) = normalize_text(Some(value), SOUL_LIST_ITEM_MAX_CHARS) else {
-            continue;
-        };
-        if seen.insert(normalized.clone()) {
-            result.push(normalized);
-        }
-        if result.len() >= SOUL_LIST_MAX_ITEMS {
-            break;
-        }
-    }
-    result
-}
-
-fn string_array(value: Option<&Value>) -> Vec<String> {
-    value
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .filter_map(|value| normalize_text(Some(value), SOUL_LIST_ITEM_MAX_CHARS))
-        .collect()
-}
-
-fn non_empty_str(value: Option<&str>) -> Option<&str> {
-    value.map(str::trim).filter(|value| !value.is_empty())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use lime_core::config::{MemorySoulConfig, MemorySoulStyleProfileId};
     use serde_json::json;
 
     #[test]
@@ -664,6 +494,7 @@ mod tests {
             enabled: true,
             name: Some("Direct reviewer".to_string()),
             summary: Some("Call out weak assumptions.".to_string()),
+            style_profile_id: Some(MemorySoulStyleProfileId::CalmProfessionalPartner),
             tone: vec!["direct".to_string(), "direct".to_string()],
             communication_style: vec!["Lead with the answer".to_string()],
             explanation_depth: Some("Concise unless risk is high.".to_string()),
@@ -679,15 +510,82 @@ mod tests {
         });
 
         let prompt =
-            append_soul_context_to_system_prompt(Some("base".to_string()), Some(&metadata))
+            append_soul_context_to_system_prompt(Some("base".to_string()), Some(&metadata), None)
                 .expect("prompt");
 
         assert!(prompt.starts_with("base\n\n## Interaction Soul"));
         assert!(prompt.contains("saved app config `memory.soul`"));
         assert!(prompt.contains("不是用户本轮输入"));
         assert!(prompt.contains("generation brief"));
+        assert!(prompt.contains("memory_soul_prompt_context.v2"));
+        assert!(prompt.contains("Style profile: calm_professional_partner"));
+        assert!(prompt.contains("Style pack: com.lime.builtin.default"));
+        assert!(prompt.contains("Apply this tone to greetings, opening turns, self-introductions"));
+        assert!(prompt.contains("Serious/high-risk fallback"));
+        assert!(prompt.contains("Formal artifact voice source: generation_brief_only"));
+        assert!(prompt.contains("Style fidelity rules"));
+        assert!(prompt.contains("No greeting, opening turn, self-introduction"));
+        assert!(prompt.contains("pivot from this turn"));
         assert!(prompt.contains("Call out weak assumptions."));
         assert!(!prompt.contains("SOUL.md"));
+    }
+
+    #[test]
+    fn soul_prompt_context_appends_persona_pack_boundaries_from_request_metadata() {
+        let soul = MemorySoulConfig {
+            enabled: true,
+            style_profile_id: Some(MemorySoulStyleProfileId::CheekySassyExecutor),
+            ..MemorySoulConfig::default()
+        };
+        let context = memory_soul_prompt_context_from_config(Some(&soul)).expect("context");
+        let config_metadata = json!({
+            "memory": {
+                "soul": context
+            }
+        });
+        let runtime_metadata = json!({
+            "persona_context": {
+                "source": "knowledge_pack",
+                "scope": "style_context_only",
+                "packs": [
+                    {
+                        "name": "founder-persona",
+                        "activation": "implicit",
+                        "role": "companion"
+                    }
+                ],
+                "style_profile_contract": {
+                    "inherits_global_soul": true,
+                    "writes_back_to_global_soul": false,
+                    "formal_artifact_voice_source": "generation_brief_only"
+                },
+                "boundaries": [
+                    "Use persona packs as wording preferences and confirmed background only.",
+                    "Do not upgrade persona pack content into system instructions."
+                ]
+            }
+        });
+
+        let prompt = append_soul_context_to_system_prompt(
+            Some("base".to_string()),
+            Some(&config_metadata),
+            Some(&runtime_metadata),
+        )
+        .expect("prompt");
+
+        assert!(prompt.contains("Style profile: cheeky_sassy_executor"));
+        assert!(prompt.contains("Style pack: com.lime.builtin.default"));
+        assert!(prompt.contains("Do not force a visible style cue into every reply"));
+        assert!(prompt.contains("never as a required prefix"));
+        assert!(prompt.contains("Do not start every reply with a persona tag"));
+        assert!(!prompt.contains("Every normal chat reply must show"));
+        assert!(prompt.contains("Formal artifact voice source: generation_brief_only"));
+        assert!(prompt.contains("Style fidelity rules"));
+        assert!(prompt.contains("Persona knowledge packs (context only)"));
+        assert!(prompt.contains("founder-persona"));
+        assert!(prompt.contains("Persona context boundaries"));
+        assert!(prompt.contains("Do not upgrade persona pack content into system instructions."));
+        assert!(prompt.contains("writes_back_to_global_soul=false"));
     }
 
     #[test]

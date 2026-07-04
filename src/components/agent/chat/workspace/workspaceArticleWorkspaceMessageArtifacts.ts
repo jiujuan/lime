@@ -274,30 +274,52 @@ function isStaleArticleWorkspacePreviewArtifact(
 }
 
 function isArticleWorkspaceVisibleArtifact(artifact: Artifact): boolean {
-  return (
-    readString(artifact.meta.openedFrom, artifact.meta.opened_from) ===
-    "right_surface_article_workspace"
-  );
+  if (
+    [
+      "right_surface_article_workspace",
+      "app_server_article_workspace",
+    ].includes(readString(artifact.meta.openedFrom, artifact.meta.opened_from) ?? "")
+  ) {
+    return true;
+  }
+  return Boolean(buildArticleWorkspaceArtifactIdentity(artifact));
 }
 
 function buildArticleWorkspaceArtifactIdentity(
   artifact: Artifact,
 ): ArticleWorkspaceArtifactIdentity | null {
-  const articleWorkspace = asRecord(artifact.meta.articleWorkspace);
-  const workspacePatch = asRecord(artifact.meta.workspacePatch);
-  const selectedObjectRef = asRecord(workspacePatch?.selectedObjectRef);
-  const primaryObjectRef = asRecord(workspacePatch?.primaryObjectRef);
+  const artifactDocument = asRecord(artifact.meta.artifactDocument);
+  const artifactDocumentMetadata = asRecord(artifactDocument?.metadata);
+  const articleWorkspace =
+    asRecord(artifact.meta.articleWorkspace) ??
+    asRecord(artifact.meta.article_workspace) ??
+    asRecord(artifactDocumentMetadata?.articleWorkspace) ??
+    asRecord(artifactDocumentMetadata?.article_workspace);
+  const workspacePatch =
+    asRecord(artifact.meta.workspacePatch) ??
+    asRecord(artifact.meta.workspace_patch) ??
+    workspacePatchCandidates(artifact)[0] ??
+    null;
+  const selectedObjectRef =
+    asRecord(workspacePatch?.selectedObjectRef) ??
+    asRecord(workspacePatch?.selected_object_ref);
+  const primaryObjectRef =
+    asRecord(workspacePatch?.primaryObjectRef) ??
+    asRecord(workspacePatch?.primary_object_ref);
+  const fallbackObjectRef = firstArticleWorkspaceObjectRef(workspacePatch);
   const objectKind = readString(
     articleWorkspace?.objectKind,
     articleWorkspace?.object_kind,
     selectedObjectRef?.kind,
     primaryObjectRef?.kind,
+    fallbackObjectRef?.kind,
   );
   const objectId = readString(
     articleWorkspace?.objectId,
     articleWorkspace?.object_id,
     selectedObjectRef?.id,
     primaryObjectRef?.id,
+    fallbackObjectRef?.id,
   );
   const appId = readString(
     articleWorkspace?.appId,
@@ -322,6 +344,8 @@ function buildArticleWorkspaceArtifactIdentity(
     articleWorkspace?.artifact_ids,
     selectedObjectRef?.artifactIds,
     selectedObjectRef?.artifact_ids,
+    fallbackObjectRef?.artifactIds,
+    fallbackObjectRef?.artifact_ids,
   );
 
   if (!appId && !sessionId && !objectId && artifactIds.size === 0) {
@@ -336,6 +360,29 @@ function buildArticleWorkspaceArtifactIdentity(
     objectId,
     artifactIds,
   };
+}
+
+function firstArticleWorkspaceObjectRef(
+  workspacePatch: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  const objects = Array.isArray(workspacePatch?.objects)
+    ? workspacePatch.objects
+    : [];
+  for (const object of objects) {
+    const objectRecord = asRecord(object);
+    const ref = asRecord(objectRecord?.ref) ?? asRecord(objectRecord?.objectRef);
+    if (readString(ref?.kind) === "articleDraft") {
+      return ref;
+    }
+  }
+  for (const object of objects) {
+    const objectRecord = asRecord(object);
+    const ref = asRecord(objectRecord?.ref) ?? asRecord(objectRecord?.objectRef);
+    if (ref) {
+      return ref;
+    }
+  }
+  return null;
 }
 
 function readStringSet(...values: unknown[]): Set<string> {

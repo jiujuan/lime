@@ -25,6 +25,8 @@
   "agentExperts.sync.seeded": "Local seed catalog",
   "agentExperts.title": "Expert Plaza",
   "agentExperts.info.title": "Expert Info",
+  "agentExperts.info.profileSwitch.label": "Current expert",
+  "agentExperts.info.profileSwitch.ariaLabel": "Switch the expert for the current chat",
   "agentExperts.info.sections.overview": "Overview",
   "agentExperts.info.sections.memory": "Memory",
   "agentExperts.info.sections.diary": "Diary",
@@ -121,7 +123,5 @@
   "agentExperts.info.skills.evidence.counts": "{{searchCount}} search(es) · {{invocationCount}} run(s)",
   "agentExperts.info.skills.evidence.exportedAt": "Last exported {{exportedAt}}",
   "agentExperts.info.skills.evidence.latestSkill": "Latest skill {{skillName}}",
-  "agentExperts.info.skills.evidence.knownGaps": "{{count}} known gap(s)",
-  "agentExperts.actions.continue": "Continue Chat",
-  "agentExperts.actions.newThread": "New Chat"
+  "agentExperts.info.skills.evidence.knownGaps": "{{count}} known gap(s)"
 }

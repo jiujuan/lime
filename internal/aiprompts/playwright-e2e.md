@@ -23,7 +23,13 @@
 ## 使用边界
 
 - 优先使用 **Playwright MCP** 做交互验证，不优先编写新的本地 Playwright 测试文件
-- 真实交付验证默认走 Electron Desktop Host；只有做 renderer 镜像、调试或 Playwright MCP 复用浏览器态时，才从 `http://127.0.0.1:1420/` 进入浏览器模式
+- Lime 采用两层证据模型，但只吸收通用思想，不照搬外部项目的命令、目录或证据包名：
+  - Gate A 证明 renderer / browser projection 在可控环境下稳定。典型证据包括普通 Chrome CDP、DOM evaluate、screenshot/crop/diff、显式测试路由、stream replay、事件 fixture。它适合发现 UI 崩、路由坏、DOM 不出现、事件投影不稳定、视觉布局漂移等问题，但只能声明“投影没坏”。
+  - Gate B 证明真实产品入口和运行时边界能工作。Lime 中必须覆盖 Electron Desktop Host、preload/contextBridge、Electron IPC、`app_server_handle_json_lines`、App Server JSON-RPC2、store/config、RuntimeCore/backend/provider/read model 和用户可见状态。它适合声明“真实产品链路能闭环”。
+  - CDP 是两层都可使用的观察 / 操作通道，不自动等于 Gate B。普通 Chrome 打开的 `127.0.0.1:1420` 是 Gate A / `browser mirror`；只有连接到真实 Electron 页签并证明 Electron 壳、IPC、App Server method 和用户可见状态，才可作为 Gate B。
+- 真实交付验证默认走 Electron Desktop Host；如果已有 Electron 以 CDP 调试端口启动，优先用 Playwright `chromium.connectOverCDP("http://127.0.0.1:<port>")` 连接真实 Electron 窗口，再操作 `http://127.0.0.1:1420/?nativeStartup=1` 页签。这是 **本地续测 / 复用当前真实窗口** 的首选方式，不是所有 Electron 自动化的通用首选
+- 新增可重复 CI / fixture 级 Electron 测试时，优先考虑 Playwright 官方 Electron `_electron.launch(...)` 或仓库现有 Electron fixture smoke：它能启动隔离进程、访问 `ElectronApplication`、控制生命周期，更适合确定性回归。CDP attach 只接管既有 Chromium/Electron renderer，Playwright 官方说明其 fidelity 低于 Playwright protocol 连接，因此不应作为需要完整生命周期控制或高级 Playwright 能力的唯一方案
+- 只有没有可用 Electron CDP 端口、只做 renderer 镜像、调试浏览器 fallback，或 Playwright MCP 只能复用浏览器态时，才从普通 Chrome / Chromium 打开 `http://127.0.0.1:1420/`；这种证据必须标记为 `browser mirror`，不能替代真实 Electron CDP / Electron fixture 证据
 - 需要稳定的桌面 Chrome 观感时，优先复用已有 Lime 页签；必须新启 headed 浏览器时，使用固定 profile 的 Chrome 持久化上下文，例如 `channel: 'chrome'` + `launchPersistentContext(userDataDir, { headless: false, viewport: null })`
 - 本地桌面续测不要传 `--no-sandbox` / `--disable-setuid-sandbox`；如需去掉 Chrome 顶部“自动测试软件控制”提示，只能在受控 launcher 中忽略 `--enable-automation`。CI、容器或 Linux sandbox 受限环境例外，但要在结论中说明原因
 - 如果 Playwright 工具当前还在 deferred surface，优先用 `ToolSearch` 的精确选择名，例如 `select:mcp__playwright__browser_click`；不要把 `playwright_browser_click`、`browser click` 之类同义词反复丢给 `ToolSearch`
@@ -32,6 +38,11 @@
 - App Server 调用遵循 JSON-RPC 2.0：请求带 `jsonrpc: "2.0"`、`method`、可选 `params` 与 `id`；响应用同一个 `id` 返回 `result` 或 `error`。排查时优先记录 method、id、result/error，而不是旧命令名
 - Agent 工作区导航成功标准是 current GUI 状态与 App Server read model 对齐，例如输入框可用、会话标题 / turn 内容可见、`agentSession/*` JSON-RPC method 被记录；旧的 renderer 自定义事件或 legacy task-center 事件只能作为 test-only 唤醒辅助，不能当作已进入 current 会话的成功证据
 - 能走真实 Electron Desktop Host 和 App Server 就必须走真实链路；浏览器镜像入口暂不支持的原生壳能力只能使用显式测试夹具，并在结论里标为 `test-only / fixture`，不能作为 GUI 主路径交付证据
+- 通过 Electron CDP 连接真实窗口时，先断言 `window.__LIME_ELECTRON__ === true` 且 `window.electronAPI.invoke` 存在；随后从页面内读取 `localStorage.lime_invoke_trace_buffer_v1`，确认关键动作的 `transport` 为 `electron-ipc`，并能看到 `app_server_handle_json_lines` 中的 current JSON-RPC method。不要只以页面文本或 DevBridge `/health` 成功作为主路径证据
+- `lime_invoke_trace_buffer_v1` 可能包含 `save_config` / provider 配置的脱敏不足字段。汇报和落库 evidence 时只保留 method、transport、status、sessionId、turnId、marker、必要片段；不要粘贴完整 config、API key、token、provider secret 或用户私密 prompt
+- `lime_invoke_trace_buffer_v1` 中的 `agentSession/turn/start` 是 renderer 发给 App Server 的请求预览，只证明前端、Electron IPC 与 App Server JSON-RPC 主链；它不是 Runtime backend 完成 session config / final prompt 拼装后的模型请求。不要用其中的 `runtimeOptions.hostOptions.asterChatRequest.system_prompt` 判断 Soul prompt 是否最终生效
+- `APP_SERVER_BACKEND_MODE=external` 适合证明 GUI、read model、Electron IPC 和 current JSON-RPC 链路，但会绕过 `RuntimeBackend::handle_turn_start` 中的 `session_config_from_request` / session prompt 拼装，因此不能作为 Soul 最终 prompt 注入证据
+- Soul / AI 个性最终 prompt 只能通过 Rust prompt 单测或 `APP_SERVER_BACKEND_MODE=runtime` + 本地 OpenAI-compatible provider fixture 证明；provider fixture evidence 只保存 marker booleans，例如 `hasInteractionSoul`、`hasMemorySoulSchema`、`profileId`、`stylePackId`、`intensity`，不得保存完整 `system_prompt`、provider request / response 或用户私密 prompt
 - `verify:gui-smoke` 内部的 browser runtime 校验默认走无界面浏览器会话；它只证明主链可启动，不替代后续真实页面交互验证
 - 本节基于 Playwright 官方 best practices、Electron 官方 IPC / context isolation 文档和 JSON-RPC 2.0 规范收敛：
   - Playwright：使用 locator 和 web-first assertion，依赖 auto-wait / retry，不用固定 sleep 证明状态达成（官方文档：https://playwright.dev/docs/best-practices）
@@ -51,7 +62,7 @@
 ### 推荐启动命令
 
 ```bash
-npm run electron:dev
+LIME_ELECTRON_REMOTE_DEBUGGING_PORT=9223 npm run electron:dev
 ```
 
 用途：
@@ -59,6 +70,7 @@ npm run electron:dev
 - 启动前端 dev server
 - 启动 Electron Desktop Host 调试环境、preload IPC 与 App Server sidecar
 - 启动 renderer 到 Electron Desktop Host / App Server JSON-RPC2 的桥接链路
+- `LIME_ELECTRON_REMOTE_DEBUGGING_PORT=9223` 只用于本地真实窗口续测，让 Playwright 能通过 CDP 接入同一个 Electron 页签；普通开发可省略该环境变量
 
 ### 桥接健康检查
 
@@ -70,6 +82,7 @@ npm run bridge:health -- --timeout-ms 120000
 
 - 等待 `http://127.0.0.1:3030/health` 就绪
 - 避免 Playwright 进入页面时，前端早于 Electron Desktop Host / App Server bridge 启动而产生 `Failed to fetch` 噪音
+- 如果准备走真实 Electron CDP，还要探测调试端口，例如 `curl -sS http://127.0.0.1:9223/json/version`；返回的 `User-Agent` 应包含 `Electron` / `Lime`，`/json/list` 应能看到 `http://127.0.0.1:1420/?nativeStartup=1` 页签
 
 ### 命令 / bridge 相关定向测试
 
@@ -101,7 +114,54 @@ npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 
 ## 标准续测流程
 
-### 1. 先确认当前浏览器会话是否可复用
+### 1. 先确定本轮 claim boundary
+
+开始前先写清本轮要证明什么：
+
+- 只证明 UI 投影、路由、DOM、截图或事件投影：按 Gate A 执行，证据不得扩张为真实产品链路可用
+- 证明 Claw / Workspace / Soul / Skills / App Server 主路径能交付：按 Gate B 执行，必须进入真实 Electron Desktop Host 或仓库 Electron fixture
+- 证明最终模型请求或 Soul prompt：Gate B 还不够，必须补 runtime backend / provider fixture / Rust prompt 单测证据
+
+结论中必须包含 proof level 和 claim boundary，避免把 deterministic fixture、截图或 renderer trace 误报成真实模型请求或发布门禁通过。
+
+### 2. 优先确认真实 Electron CDP 是否可复用
+
+优先顺序：
+
+1. 探测常用 Electron 调试端口，例如 `9223`：`curl -sS http://127.0.0.1:9223/json/version`
+2. 如果返回 Electron / Lime，使用 Playwright 连接：`chromium.connectOverCDP("http://127.0.0.1:9223")`
+3. 从所有 context pages 中选择 URL 包含 `127.0.0.1:1420` 的页签，并确认：
+   - `window.__LIME_ELECTRON__ === true`
+   - `Boolean(window.electronAPI?.invoke) === true`
+   - `document.querySelector('[data-testid="app-sidebar"], [data-testid="settings-top-header"]')` 可见
+4. 如果当前页在设置 layout，需要先点 `settings-home-button` 回到 Claw 首页，再找 `textarea[name="agent-chat-message"]`
+
+最小脚本骨架：
+
+```js
+import { chromium } from "playwright";
+
+const browser = await chromium.connectOverCDP("http://127.0.0.1:9223");
+const page = browser
+  .contexts()
+  .flatMap((context) => context.pages())
+  .find((candidate) => candidate.url().includes("127.0.0.1:1420"));
+
+if (!page) throw new Error("未找到真实 Electron Lime 页签");
+
+const runtime = await page.evaluate(() => ({
+  electron: window.__LIME_ELECTRON__ === true,
+  hasInvoke: Boolean(window.electronAPI?.invoke),
+  url: location.href,
+}));
+if (!runtime.electron || !runtime.hasInvoke) {
+  throw new Error(`不是真实 Electron Host 页面: ${JSON.stringify(runtime)}`);
+}
+```
+
+CDP 连接成功后优先继续使用这个真实窗口完成业务动作。只有 CDP 不可用、且任务允许 browser mirror 时，才进入下一节。
+
+### 3. 再确认当前浏览器会话是否可复用
 
 优先顺序：
 
@@ -114,7 +174,7 @@ npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 - 继续测试优先复用当前标签页，避免无意义重复建页
 - 如果控制台历史噪音太多，刷新页面重新计数
 
-### 2. 进入页面后先验证加载状态
+### 4. 进入页面后先验证加载状态
 
 推荐动作：
 
@@ -128,7 +188,7 @@ npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 - 默认首页可交互
 - 初始控制台 error 为 0；如果不是 0，先定位是否为 Electron Desktop Host / App Server JSON-RPC2 bridge 缺口
 
-### 3. 交互时优先使用稳定定位
+### 5. 交互时优先使用稳定定位
 
 遵循 Playwright 官方最佳实践。Playwright locator 自带 auto-wait 和 retry，web-first assertion 会等待期望状态达成，因此 E2E 不应靠固定 sleep 证明页面可用：
 
@@ -142,6 +202,61 @@ npm run verify:gui-smoke -- --include-knowledge-product-e2e --reuse-running
 - `button` + 中文名称
 - 页面中明确可见的标题文本
 - 快照里的精确元素引用
+
+### 6. 真实 Claw 回合必须采集 current 主链证据
+
+对 Claw / Workspace / Soul 风格 / Agent runtime 这类主路径，完成发送后必须从真实 Electron 页面的 trace buffer 里取证：
+
+```js
+const trace = await page.evaluate(() =>
+  JSON.parse(localStorage.getItem("lime_invoke_trace_buffer_v1") || "[]"),
+);
+const turnStarts = trace.flatMap((entry) => {
+  if (entry.command !== "app_server_handle_json_lines") return [];
+  return (entry.args_preview?.request?.lines ?? [])
+    .map((line) => JSON.parse(String(line)))
+    .filter((message) => message.method === "agentSession/turn/start")
+    .map((message) => ({
+      transport: entry.transport,
+      status: entry.status,
+      sessionId: message.params?.sessionId,
+      turnId: message.params?.turnId,
+      text: message.params?.input?.text,
+    }));
+});
+```
+
+通过标准：
+
+- 至少一条匹配本轮 marker / prompt 的 `agentSession/turn/start`
+- `transport === "electron-ipc"`
+- `status === "success"`
+- 页面上同一轮出现用户消息和 assistant 输出，且停止按钮已消失
+- `lime_invoke_error_buffer_v1` 本轮无新增错误；如有，必须分类为阻塞 / 非阻塞 / 历史残留
+
+Soul / AI 个性风格测试必须在 Claw 真实输入框中发送，不得只验证 `设置 -> 记忆 -> AI 个性` 控件存在。可临时把 `style_intensity` 提到 `high` 放大差异，但测试结束必须恢复原始 `memory.soul` 配置。
+
+注意：上面的 trace 只证明 current 主链，不证明最终 system prompt。若本轮 claim 是“风格进入最终模型请求”，继续执行下一节。
+
+### 7. Soul 最终 prompt 必须用 runtime 层证据
+
+Soul / AI 个性风格的完整闭环分三段验收：
+
+1. 设置层：`memory.soul.enabled`、`style_profile_id`、`style_intensity` 正确写入配置，且 i18n / UI 控件能恢复状态
+2. 产品链路层：真实 Claw 输入框发送一轮，trace 中有 `electron-ipc`、`app_server_handle_json_lines`、`agentSession/turn/start`，read model 和页面 assistant 输出同轮可见
+3. Runtime prompt 层：Rust prompt 单测或本地 provider fixture 证明最终模型请求含 Soul marker
+
+Runtime prompt 层的允许证据：
+
+- Rust 定向测试覆盖 `session_soul_context`、`soul_prompt_context` 或 `memory_soul_prompt_context.v2`
+- `APP_SERVER_BACKEND_MODE=runtime` 启动本地 OpenAI-compatible provider fixture，捕获 provider request 后只输出 marker booleans
+
+Runtime prompt 层的禁止证据：
+
+- renderer trace 中的 `runtimeOptions.hostOptions.asterChatRequest.system_prompt`
+- `APP_SERVER_BACKEND_MODE=external` 下的 GUI 成功
+- 仅凭 assistant 输出“看起来像某种风格”
+- 保存或粘贴完整 `system_prompt` / provider request / provider response / API key / 用户私密 prompt
 
 ## Lime 推荐续测主路径
 

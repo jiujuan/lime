@@ -4,7 +4,7 @@ use super::model_routing;
 use super::request_context::RuntimeModelSelection;
 use crate::ExecutionRequest;
 use app_server_protocol::{ModelTaskRequest, ResolvedModelRoute};
-use lime_agent::ProviderConfig;
+use lime_agent::SessionProviderConfig;
 use lime_core::database::DbConnection;
 use lime_services::api_key_provider_service::ApiKeyProviderService;
 use serde_json::Value;
@@ -35,7 +35,7 @@ pub(super) async fn resolve_chat_model_route(
     api_key_provider_service: &ApiKeyProviderService,
     request: &ExecutionRequest,
     requested_selection: &RuntimeModelSelection,
-    direct_provider_config: Option<&ProviderConfig>,
+    direct_provider_config: Option<&SessionProviderConfig>,
 ) -> Result<ChatModelRouteResolution, String> {
     let routing_resolution = model_routing::resolve_ready_routing(
         db,
@@ -125,7 +125,7 @@ mod tests {
         let service = ApiKeyProviderService::new();
         let request = request_for_test("hello", None, None);
         let requested_selection = selection("fixture-openai", "fixture-model");
-        let direct_provider_config = ProviderConfig {
+        let direct_provider_config = SessionProviderConfig {
             provider_name: "openai".to_string(),
             provider_selector: Some("fixture-openai".to_string()),
             model_name: "fixture-model".to_string(),
@@ -133,7 +133,7 @@ mod tests {
             base_url: Some("http://127.0.0.1:56599".to_string()),
             credential_uuid: None,
             reasoning_effort: None,
-            protocol: None,
+            route_protocol: None,
             toolshim: false,
             toolshim_model: None,
         };

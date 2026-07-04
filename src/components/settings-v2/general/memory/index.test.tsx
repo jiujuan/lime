@@ -129,6 +129,13 @@ function findTextareaByPlaceholder(
   return textarea as HTMLTextAreaElement;
 }
 
+async function clickElement(element: HTMLElement) {
+  await act(async () => {
+    element.click();
+    await Promise.resolve();
+  });
+}
+
 beforeEach(async () => {
   (
     globalThis as typeof globalThis & {
@@ -600,9 +607,54 @@ describe("MemorySettings", () => {
     );
   });
 
+  it("AI 个性页应展示四种交互口吻并保存用户选择", async () => {
+    const container = renderComponent();
+    await flushEffects();
+    await clickButtonByText(container, "AI personality");
+
+    expect(document.body.textContent).toContain("Cheeky executor");
+    expect(document.body.textContent).toContain("Warm companion");
+    expect(document.body.textContent).toContain("Cool operator");
+    expect(document.body.textContent).toContain("Calm professional");
+
+    const warmProfileButton = container.querySelector(
+      '[data-testid="settings-memory-soul-style-profile-warm_supportive_companion"]',
+    ) as HTMLButtonElement | null;
+    expect(warmProfileButton).toBeInstanceOf(HTMLButtonElement);
+
+    await clickElement(warmProfileButton as HTMLButtonElement);
+
+    expect(document.body.textContent).toContain(
+      "Interaction style updated. Save to take effect.",
+    );
+
+    await clickButtonByText(container, "Save");
+    await flushEffects();
+
+    expect(mockSaveConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        memory: expect.objectContaining({
+          soul: expect.objectContaining({
+            enabled: true,
+            style_profile_id: "warm_supportive_companion",
+            style_intensity: "low",
+            imported_from: "manual",
+            updated_at: expect.any(String),
+          }),
+        }),
+      }),
+    );
+  });
+
   it("SOUL.md 导入必须先预览，再应用到草稿并保存", async () => {
     const container = renderComponent();
     await flushEffects();
+    await clickButtonByText(container, "AI personality");
+    const warmProfileButton = container.querySelector(
+      '[data-testid="settings-memory-soul-style-profile-warm_supportive_companion"]',
+    ) as HTMLButtonElement | null;
+    expect(warmProfileButton).toBeInstanceOf(HTMLButtonElement);
+    await clickElement(warmProfileButton as HTMLButtonElement);
     await clickButtonByText(container, "Advanced");
 
     await act(async () => {
@@ -647,6 +699,8 @@ describe("MemorySettings", () => {
             enabled: true,
             imported_from: "soul_md",
             name: "Engineering Soul",
+            style_profile_id: "warm_supportive_companion",
+            style_intensity: "low",
             summary: expect.stringContaining("Style: direct and pragmatic"),
             communication_style: expect.arrayContaining([
               "Style: direct and pragmatic",

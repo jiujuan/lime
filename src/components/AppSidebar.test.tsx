@@ -14,6 +14,7 @@ import {
 } from "./AppSidebar.testFixtures";
 import type { AgentPageParams } from "./AppSidebar.testFixtures";
 import { LIME_BRAND_LOGO_SRC } from "@/lib/branding";
+import { LAST_PROJECT_ID_KEY } from "@/components/agent/chat/hooks/agentProjectStorage";
 
 describe("AppSidebar navigation", () => {
   beforeEach(resetAppSidebarTest);
@@ -235,6 +236,56 @@ describe("AppSidebar navigation", () => {
     expect(getComputedStyle(menuScroll as Element).flexShrink).toBe("1");
     expect(footerArea).not.toBeNull();
     expect(getComputedStyle(footerArea as Element).paddingBottom).toBe("16px");
+  });
+
+  it("专家入口应继承当前 Agent 工作区项目作用域", async () => {
+    const onNavigate = vi.fn();
+    const container = mountSidebarContainer({
+      currentPage: "agent",
+      currentPageParams: {
+        agentEntry: "claw",
+        projectId: "project-1",
+      } as AgentPageParams,
+      onNavigate,
+    });
+    await flushEffects(2);
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="专家"]')
+        ?.click();
+      await Promise.resolve();
+    });
+
+    expect(onNavigate).toHaveBeenCalledWith("experts", {
+      currentProjectId: "project-1",
+      projectId: "project-1",
+    });
+  });
+
+  it("专家入口没有活跃 Agent 项目时应使用最近项目作用域", async () => {
+    localStorage.setItem(
+      LAST_PROJECT_ID_KEY,
+      JSON.stringify("project-remembered"),
+    );
+    const onNavigate = vi.fn();
+    const container = mountSidebarContainer({
+      currentPage: "settings",
+      onNavigate,
+    });
+    await flushEffects(2);
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="专家"]')
+        ?.click();
+      await Promise.resolve();
+    });
+
+    expect(onNavigate).toHaveBeenCalledWith("experts", {
+      currentProjectId: "project-remembered",
+      projectId: "project-remembered",
+    });
   });
 
   it("Lime 首页入口应保持在左侧栏顶部，并在 macOS 预留系统按钮安全区", async () => {

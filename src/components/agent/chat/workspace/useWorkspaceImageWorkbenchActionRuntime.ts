@@ -805,7 +805,6 @@ export function useWorkspaceImageWorkbenchActionRuntime({
         entrySource: params.applyTarget
           ? "image_workbench_action"
           : "at_image_command",
-        modelRoutingSource: "workbench_selection",
       });
       if (!skillRequest) {
         return false;
@@ -867,7 +866,6 @@ export function useWorkspaceImageWorkbenchActionRuntime({
         projectRootPath: params.projectRootPath ?? projectRootPath,
         contentId,
         requireProjectContext: params.applyTarget != null,
-        modelRoutingSource: "backend_default",
       }),
   };
 }

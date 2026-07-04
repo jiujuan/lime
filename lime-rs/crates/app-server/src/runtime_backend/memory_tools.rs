@@ -5,14 +5,13 @@ use app_server_protocol::{
     MemoryStoreSearchParams, MemoryStoreSearchResponse,
 };
 use async_trait::async_trait;
-use lime_agent::native_tools::{
-    create_memory_tools as create_agent_memory_tools, MemoryStoreGateway,
-};
-use lime_agent::runtime_facade::Tool;
+use lime_agent::native_tools::MemoryStoreGateway;
 use std::sync::Arc;
 
-pub(crate) fn create_memory_tools(app_data_source: Arc<dyn AppDataSource>) -> Vec<Box<dyn Tool>> {
-    create_agent_memory_tools(Arc::new(AppServerMemoryStoreGateway { app_data_source }))
+pub(crate) fn memory_store_gateway(
+    app_data_source: Arc<dyn AppDataSource>,
+) -> Arc<dyn MemoryStoreGateway> {
+    Arc::new(AppServerMemoryStoreGateway { app_data_source })
 }
 
 struct AppServerMemoryStoreGateway {

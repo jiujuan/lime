@@ -17,6 +17,7 @@ import { normalizeProjectId } from "../utils/topicProjectResolution";
 import { normalizeExecutionStrategy } from "./agentChatCoreUtils";
 import { sanitizeMessageTextForPreview } from "../utils/messageDisplaySanitizer";
 import { sanitizeGeneratedAutoTitle } from "./agentChatAutoTitleViewModel";
+import type { SoulInteractionCopy } from "@/lib/soul/interactionCopy";
 
 export type TaskStatus = "draft" | "running" | "waiting" | "done" | "failed";
 export type TaskStatusReason =
@@ -68,6 +69,7 @@ export interface UseAsterAgentChatOptions {
     sessionId: string,
   ) => ChatToolPreferences | null;
   onOpenSubagents?: () => void;
+  soulCopy?: SoulInteractionCopy;
 }
 
 export interface SendMessageObserver {

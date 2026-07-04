@@ -51,7 +51,7 @@ async fn runtime_backend_registers_image_generation_task_native_tool() {
         let conn = db.lock().expect("db lock");
         lime_core::database::schema::create_tables(&conn).expect("schema");
     }
-    lime_agent::initialize_aster_runtime(db.clone()).expect("runtime dirs");
+    lime_agent::initialize_agent_runtime(db.clone()).expect("runtime dirs");
 
     let backend = RuntimeBackend::with_db(db.clone());
     ExecutionBackend::set_app_data_source(&backend, std::sync::Arc::new(NoopAppDataSource))

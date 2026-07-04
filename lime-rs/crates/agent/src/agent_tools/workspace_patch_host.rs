@@ -1,8 +1,8 @@
 use crate::agent_tools::tool_orchestrator::{
     execute_planned_tool_batch, PlannedToolExecution, ToolExecutionBatchInput, ToolExecutionOutcome,
 };
+use crate::AgentRuntimeState;
 use crate::AgentTurnContext;
-use crate::AsterAgentState;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -66,7 +66,7 @@ impl WorkspacePatchHostToolPlan {
 }
 
 pub async fn execute_workspace_patch_host_tool_plan(
-    agent_state: &AsterAgentState,
+    agent_state: &AgentRuntimeState,
     plan: &WorkspacePatchHostToolPlan,
     input: WorkspacePatchHostToolExecutionInput,
 ) -> Result<WorkspacePatchHostToolExecutionResult, String> {

@@ -39,7 +39,6 @@ interface ResolveImageWorkbenchCommandRequestParams {
   applyTarget?: ImageWorkbenchApplyTarget | null;
   entrySource?: string;
   requireProjectContext?: boolean;
-  modelRoutingSource?: "backend_default" | "workbench_selection";
 }
 
 function createSkillInputImageRef(index: number): string {
@@ -207,14 +206,12 @@ export function resolveImageWorkbenchCommandRequest(
   const explicitModelId = normalizeImageTaskSelectionValue(
     parsedCommand.modelId,
   );
-  const shouldUseWorkbenchSelection =
-    params.modelRoutingSource === "workbench_selection";
-  const workbenchProviderId = shouldUseWorkbenchSelection
-    ? normalizeImageTaskSelectionValue(params.imageWorkbenchSelectedProviderId)
-    : undefined;
-  const workbenchModelId = shouldUseWorkbenchSelection
-    ? normalizeImageTaskSelectionValue(params.imageWorkbenchSelectedModelId)
-    : undefined;
+  const workbenchProviderId = normalizeImageTaskSelectionValue(
+    params.imageWorkbenchSelectedProviderId,
+  );
+  const workbenchModelId = normalizeImageTaskSelectionValue(
+    params.imageWorkbenchSelectedModelId,
+  );
   const effectiveProviderId = explicitProviderId || workbenchProviderId;
   const effectiveModelId = explicitModelId || workbenchModelId;
   const hasExplicitRoute =

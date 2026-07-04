@@ -28,6 +28,7 @@ import { useDeveloperFeatureFlags } from "@/hooks/useDeveloperFeatureFlags";
 import { useGlobalMediaGenerationDefaults } from "@/hooks/useGlobalMediaGenerationDefaults";
 import { useServiceModelsConfig } from "@/hooks/useServiceModelsConfig";
 import { useSoulArtifactVoiceGenerationBrief } from "@/hooks/useSoulArtifactVoiceGenerationBrief";
+import { useSoulInteractionCopy } from "@/hooks/useSoulInteractionCopy";
 import { useTrayModelShortcuts } from "./hooks/useTrayModelShortcuts";
 import { SettingsTabs } from "@/types/settings";
 import { type CanvasWorkbenchLayoutMode } from "./components/CanvasWorkbenchLayout";
@@ -779,6 +780,9 @@ export function AgentChatWorkspace({
     useSoulArtifactVoiceGenerationBrief({
       enabled: !shouldDeferWorkspaceAuxiliaryLoads,
     });
+  const soulInteractionCopy = useSoulInteractionCopy({
+    enabled: !shouldDeferWorkspaceAuxiliaryLoads,
+  });
   const [soulArtifactVoiceEnabledForTurn, setSoulArtifactVoiceEnabledForTurn] =
     useState(true);
   useWorkspaceSoulArtifactVoiceTurnRuntime({
@@ -1212,6 +1216,7 @@ export function AgentChatWorkspace({
     getSyncedSessionRecentPreferences,
     onOpenSubagents: handleOpenSubagents,
     clawTraceEnabled,
+    soulCopy: soulInteractionCopy,
   });
   const { workspaceHealthError, setWorkspaceHealthError } =
     useWorkspaceHealthRuntime({
@@ -1224,11 +1229,24 @@ export function AgentChatWorkspace({
       deferredWorkspaceAuxiliaryLoadMs,
     });
   const activeSessionKey = sessionId?.trim() || null;
+  const [
+    threadExpertRequestMetadataOverride,
+    setThreadExpertRequestMetadataOverride,
+  ] = useState<Record<string, unknown> | null>(null);
+  useEffect(() => {
+    setThreadExpertRequestMetadataOverride(null);
+  }, [activeSessionKey, newChatAt]);
+  const handleThreadExpertProfileSwitch = useCallback(
+    (requestMetadata: Record<string, unknown>) => {
+      setThreadExpertRequestMetadataOverride({ ...requestMetadata });
+    },
+    [],
+  );
   const sessionExpertRequestMetadata = useMemo(
     () => resolveSessionExpertRequestMetadata(threadRead),
     [threadRead],
   );
-  const expertPanelRequestMetadata = useMemo(
+  const baseExpertPanelRequestMetadata = useMemo(
     () =>
       resolveExpertPanelRequestMetadata({
         initialAutoSendRequestMetadata,
@@ -1241,6 +1259,8 @@ export function AgentChatWorkspace({
       sessionExpertRequestMetadata,
     ],
   );
+  const expertPanelRequestMetadata =
+    threadExpertRequestMetadataOverride ?? baseExpertPanelRequestMetadata;
   const expertWorkspaceSkillRuntime = useExpertWorkspaceSkillRuntime({
     activeTheme,
     requestMetadata: expertPanelRequestMetadata,
@@ -1271,21 +1291,24 @@ export function AgentChatWorkspace({
     workspaceSkillBindingsRuntime.loading;
   const { expertSkillRefsOverride, handleExpertSkillRefsChange } =
     useWorkspaceExpertAgentLaunchSyncRuntime({
-      expertAgentLaunch,
+      expertAgentLaunch: threadExpertRequestMetadataOverride
+        ? null
+        : expertAgentLaunch,
       expertPanelRequestMetadata,
       pruneWorkspaceSkillRuntimeEnableRefs:
         pruneExpertWorkspaceSkillRuntimeEnableRefs,
-      sessionId,
     });
   const workspaceRequestMetadataWithExpertSkills = useMemo(
     () =>
       resolveWorkspaceRequestMetadataWithExpertSkills({
+        activeRequestMetadata: threadExpertRequestMetadataOverride,
         expertSkillRefsOverride,
         initialAutoSendRequestMetadata,
         initialRequestMetadata,
         sessionRequestMetadata: sessionExpertRequestMetadata,
       }),
     [
+      threadExpertRequestMetadataOverride,
       expertSkillRefsOverride,
       initialAutoSendRequestMetadata,
       initialRequestMetadata,
@@ -2241,6 +2264,7 @@ export function AgentChatWorkspace({
       workspaceRequestMetadataWithExpertSkills ?? undefined,
     savedSoulArtifactVoiceGenerationBrief: soulArtifactVoiceGenerationBrief,
     soulArtifactVoiceEnabledForTurn,
+    soulCopy: soulInteractionCopy,
     serviceModels,
     agentResponseLanguage,
     resolveServiceModelsBeforeSend: shouldDeferWorkspaceAuxiliaryLoads
@@ -2461,6 +2485,7 @@ export function AgentChatWorkspace({
       displayMessagesLength: displayMessages.length,
       executionStrategy,
       workspaceId: taskCenterWorkspaceId,
+      soulCopy: soulInteractionCopy,
     });
   const persistTaskCenterMaterializedSessionNavigation = useCallback(
     (sessionId: string) => {
@@ -4400,6 +4425,7 @@ export function AgentChatWorkspace({
     taskCenterWorkspaceId,
     setTaskCenterDraftTabs,
     setTaskCenterDraftSendRequest,
+    taskCenterDraftSendRequest,
     setHomePendingPreviewRequest,
   });
   const handleNonMaterializedTaskCenterSessionReady = useCallback(
@@ -4424,7 +4450,7 @@ export function AgentChatWorkspace({
     setTaskCenterDraftSendRequest,
     setHomePendingPreviewRequest,
     messagesLength: messages.length,
-    displayMessagesLength: messages.length,
+    displayMessagesLength: displayMessages.length,
     currentSessionId: sessionId,
     materializedSessionIdsRef: taskCenterDraftMaterializedSessionIdsRef,
     materializeDraftTab: materializeTaskCenterDraftTab,
@@ -4794,12 +4820,12 @@ export function AgentChatWorkspace({
       "AgentChatWorkspace",
       "articleInlineImageSync.state",
       {
-        consumedTaskIds: articleInlineImageTaskSyncResult?.consumedTaskIds ?? [],
-        documentInlineSlotIds: documentInlineTasks.map(
-          (task) =>
-            task.applyTarget?.kind === "canvas-insert"
-              ? task.applyTarget.slotId || null
-              : null,
+        consumedTaskIds:
+          articleInlineImageTaskSyncResult?.consumedTaskIds ?? [],
+        documentInlineSlotIds: documentInlineTasks.map((task) =>
+          task.applyTarget?.kind === "canvas-insert"
+            ? task.applyTarget.slotId || null
+            : null,
         ),
         hasInlineRecoverySignal,
         hasSyncResult: Boolean(articleInlineImageTaskSyncResult),
@@ -4838,24 +4864,21 @@ export function AgentChatWorkspace({
       currentImageWorkbenchState,
     ],
   );
-  const articleInlineImageTaskRecoveryMarkdowns = useMemo(
-    () => {
-      const markdowns = new Set<string>();
-      collectWorkspaceArticleInlineImageTaskRecoveryMarkdowns({
-        articleWorkspace: articleEditorRightSurface,
-        editedDraft: activeArticleEditedDraft,
-      }).forEach((markdown) => markdowns.add(markdown));
-      collectWorkspaceArticleInlineImageTaskRecoveryMarkdownsFromMessages(
-        sceneDisplayMessages,
-      ).forEach((markdown) => markdowns.add(markdown));
-      return [...markdowns];
-    },
-    [
-      activeArticleEditedDraft,
-      articleEditorRightSurface,
+  const articleInlineImageTaskRecoveryMarkdowns = useMemo(() => {
+    const markdowns = new Set<string>();
+    collectWorkspaceArticleInlineImageTaskRecoveryMarkdowns({
+      articleWorkspace: articleEditorRightSurface,
+      editedDraft: activeArticleEditedDraft,
+    }).forEach((markdown) => markdowns.add(markdown));
+    collectWorkspaceArticleInlineImageTaskRecoveryMarkdownsFromMessages(
       sceneDisplayMessages,
-    ],
-  );
+    ).forEach((markdown) => markdowns.add(markdown));
+    return [...markdowns];
+  }, [
+    activeArticleEditedDraft,
+    articleEditorRightSurface,
+    sceneDisplayMessages,
+  ]);
   const shouldRestoreCurrentImageTasksFromWorkspace =
     shouldRestoreImageTasksFromWorkspace ||
     articleInlineImageTaskRecoveryMarkdowns.length > 0;
@@ -4879,11 +4902,12 @@ export function AgentChatWorkspace({
     ],
   );
   useEffect(() => {
-    const hasInlineRecoverySignal = articleInlineImageTaskRecoveryMarkdowns.some(
-      (markdown) =>
-        markdown.includes("pending-image-task://") ||
-        markdown.includes("lime:image-task-slot:"),
-    );
+    const hasInlineRecoverySignal =
+      articleInlineImageTaskRecoveryMarkdowns.some(
+        (markdown) =>
+          markdown.includes("pending-image-task://") ||
+          markdown.includes("lime:image-task-slot:"),
+      );
     if (
       !hasInlineRecoverySignal &&
       !shouldRestoreCurrentImageTasksFromWorkspace &&
@@ -4902,7 +4926,9 @@ export function AgentChatWorkspace({
         hasArticleWorkspaceFromMessageArtifacts: Boolean(
           articleWorkspaceFromMessageArtifacts,
         ),
-        hasArticleWorkspaceFromThreadRead: Boolean(articleWorkspaceFromThreadRead),
+        hasArticleWorkspaceFromThreadRead: Boolean(
+          articleWorkspaceFromThreadRead,
+        ),
         hasInlineRecoverySignal,
         imageTaskPreviewRuntimeEnabled,
         sceneDisplayMessagesCount: sceneDisplayMessages.length,
@@ -5000,9 +5026,10 @@ export function AgentChatWorkspace({
         markdownIncludesPending: syncResult.markdown.includes(
           "pending-image-task://",
         ),
-        markdownIncludesUrl: syncResult.markdown.includes(
-          "lime-fixture-guangzhou-inline.png",
-        ),
+        markdownIncludesResolvedImage:
+          /!\[[^\]]*]\((?!pending-image-task:\/\/)(?:https?:\/\/|file:\/\/|asset:\/\/|data:image\/)/i.test(
+            syncResult.markdown,
+          ),
         sessionId: request.session_id,
       },
       { level: "debug", throttleMs: 1000 },
@@ -5643,6 +5670,7 @@ export function AgentChatWorkspace({
         }
         onSkillRefsChange={handleExpertSkillRefsChange}
         onEnableWorkspaceSkillRuntime={handleEnableExpertWorkspaceSkillRuntime}
+        onExpertProfileSwitch={handleThreadExpertProfileSwitch}
         onOpenSkillsManage={
           _onNavigate ? handleOpenSkillsManageFromExpertPanel : undefined
         }

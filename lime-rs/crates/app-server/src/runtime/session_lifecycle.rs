@@ -428,11 +428,8 @@ impl RuntimeCore {
                 "sessionId is required for agentSession/update".to_string(),
             ));
         }
-        if let Some(session) =
-            self.update_runtime_core_session_overview(params.clone(), &normalized_session_id)?
-        {
-            return Ok(AgentSessionUpdateResponse { session });
-        }
+        let runtime_session =
+            self.update_runtime_core_session_overview(params.clone(), &normalized_session_id)?;
         if let Some(projection_store) = self.projection_store.as_ref() {
             if let Some(response) = projection_store
                 .update_session_overview(
@@ -460,6 +457,9 @@ impl RuntimeCore {
             {
                 return Ok(response);
             }
+        }
+        if let Some(session) = runtime_session {
+            return Ok(AgentSessionUpdateResponse { session });
         }
         Err(RuntimeCoreError::SessionNotFound(normalized_session_id))
     }

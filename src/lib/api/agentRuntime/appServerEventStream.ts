@@ -707,27 +707,6 @@ export function projectAppServerAgentEventPayload(
         ...(responsePayload ? { payload: responsePayload } : {}),
       };
     }
-    case "image_task.presentation.unavailable":
-    case "image_task_presentation_unavailable": {
-      const eventPayload = normalizeRecord(payload.payload);
-      const source = eventPayload ?? payload;
-      return {
-        ...basePayload,
-        type: "image_task_presentation_unavailable",
-        status: readString(source, "status"),
-        reason: readString(
-          source,
-          "reason",
-          "reasonCode",
-          "reason_code",
-          "message",
-        ),
-        workflow_run_id: readString(source, "workflow_run_id", "workflowRunId"),
-        session_id: readString(source, "session_id", "sessionId"),
-        thread_id: readString(source, "thread_id", "threadId"),
-        turn_id: readString(source, "turn_id", "turnId"),
-      };
-    }
     case "image_task.parameters.required":
     case "image_task_parameters_required": {
       const missing =
@@ -983,8 +962,8 @@ function projectWorkflowReadModelRefreshPayload(
   const workflowKey = readString(payload, "workflowKey", "workflow_key", "key");
   const stepId = readString(payload, "stepId", "step_id", "id");
   const status = readString(payload, "status");
-  const checkpoints = [workflowRunId, stepId].filter(
-    (value): value is string => Boolean(value),
+  const checkpoints = [workflowRunId, stepId].filter((value): value is string =>
+    Boolean(value),
   );
   const workflowMetadata = {
     sourceType: "runtime_status",

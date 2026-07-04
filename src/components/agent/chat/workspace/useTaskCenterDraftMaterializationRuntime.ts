@@ -209,7 +209,7 @@ export function useTaskCenterDraftMaterializationRuntime({
     (
       draftTabId: string,
       newSessionId: string,
-      options?: { preserveInput?: boolean },
+      options?: { preserveInput?: boolean; syncRoute?: boolean },
     ) => {
       taskCenterDraftSurfaceActiveRef.current = false;
       startTransition(() => {
@@ -225,26 +225,28 @@ export function useTaskCenterDraftMaterializationRuntime({
           options,
         );
       });
-      persistMaterializedSessionNavigation?.(newSessionId);
-      if (switchMaterializedSession) {
-        rememberInitialSessionNavigationStart(newSessionId);
+      if (options?.syncRoute !== false) {
+        persistMaterializedSessionNavigation?.(newSessionId);
+        if (switchMaterializedSession) {
+          rememberInitialSessionNavigationStart(newSessionId);
+        }
+        void switchMaterializedSession?.(newSessionId, {
+          allowDetachedSession: true,
+          forceRefresh: true,
+        }).catch((error) => {
+          logAgentDebug(
+            "AgentChatPage",
+            "taskCenter.draftTab.commit.switchSessionError",
+            {
+              draftTabId,
+              error,
+              newSessionId,
+              workspaceId: taskCenterWorkspaceId,
+            },
+            { level: "error" },
+          );
+        });
       }
-      void switchMaterializedSession?.(newSessionId, {
-        allowDetachedSession: true,
-        forceRefresh: true,
-      }).catch((error) => {
-        logAgentDebug(
-          "AgentChatPage",
-          "taskCenter.draftTab.commit.switchSessionError",
-          {
-            draftTabId,
-            error,
-            newSessionId,
-            workspaceId: taskCenterWorkspaceId,
-          },
-          { level: "error" },
-        );
-      });
     },
     [
       finalizeFreshTaskCenterConversation,

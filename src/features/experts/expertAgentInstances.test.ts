@@ -6,7 +6,6 @@ import {
   refreshExpertAgentInstancesFromCloud,
   readExpertAgentInstances,
   syncExpertAgentInstanceToCloud,
-  updateExpertAgentInstanceSession,
   updateExpertAgentInstanceSkillRefs,
   upsertExpertAgentInstance,
 } from "./expertAgentInstances";
@@ -19,21 +18,22 @@ describe("expertAgentInstances", () => {
     vi.unstubAllGlobals();
   });
 
-  it("应以 tenant/expert/release 生成稳定实例 key 并复用记录", () => {
+  it("应以 tenant/project/expert/release 生成配置 key 并复用记录", () => {
     const identity = {
       tenantId: "tenant-0001",
+      projectId: "project-a",
       expertId: "marketing-strategist",
       releaseId: "rel-1",
     };
 
     const first = upsertExpertAgentInstance({
       ...identity,
-      latestSessionId: "session-a",
+      skillRefsOverride: ["skill:csv"],
       now: 100,
     });
     const second = upsertExpertAgentInstance({
       ...identity,
-      latestSessionId: "session-b",
+      skillRefsOverride: ["skill:xlsx"],
       now: 200,
     });
 
@@ -41,18 +41,49 @@ describe("expertAgentInstances", () => {
       buildExpertAgentInstanceKey(identity),
     );
     expect(second.agentInstanceId).toBe(first.agentInstanceId);
-    expect(findExpertAgentInstance(identity)?.latestSessionId).toBe(
-      "session-b",
-    );
+    expect(findExpertAgentInstance(identity)?.skillRefsOverride).toEqual([
+      "skill:xlsx",
+    ]);
     expect(readExpertAgentInstances()).toHaveLength(1);
   });
 
-  it("应持久化技能覆盖与最近 session", () => {
-    const record = updateExpertAgentInstanceSession({
+  it("不同项目下不应复用同一专家配置", () => {
+    const baseIdentity = {
       tenantId: "tenant-0001",
+      expertId: "marketing-strategist",
+      releaseId: "rel-1",
+    };
+
+    upsertExpertAgentInstance({
+      ...baseIdentity,
+      projectId: "project-a",
+      skillRefsOverride: ["skill:csv"],
+      now: 100,
+    });
+    upsertExpertAgentInstance({
+      ...baseIdentity,
+      projectId: "project-b",
+      skillRefsOverride: ["skill:xlsx"],
+      now: 200,
+    });
+
+    expect(
+      findExpertAgentInstance({ ...baseIdentity, projectId: "project-a" })
+        ?.skillRefsOverride,
+    ).toEqual(["skill:csv"]);
+    expect(
+      findExpertAgentInstance({ ...baseIdentity, projectId: "project-b" })
+        ?.skillRefsOverride,
+    ).toEqual(["skill:xlsx"]);
+    expect(findExpertAgentInstance(baseIdentity)).toBeNull();
+  });
+
+  it("应持久化项目作用域下的技能覆盖", () => {
+    const record = updateExpertAgentInstanceSkillRefs({
+      tenantId: "tenant-0001",
+      projectId: "project-a",
       expertId: "data-analyst",
       releaseId: "rel-data",
-      latestSessionId: "session-data",
       skillRefsOverride: ["skill:csv", "skill:csv"],
     });
 
@@ -60,6 +91,7 @@ describe("expertAgentInstances", () => {
 
     updateExpertAgentInstanceSkillRefs({
       tenantId: "tenant-0001",
+      projectId: "project-a",
       expertId: "data-analyst",
       releaseId: "rel-data",
       skillRefsOverride: ["skill:xlsx"],
@@ -71,9 +103,32 @@ describe("expertAgentInstances", () => {
           "[]",
       )[0],
     ).toMatchObject({
-      latestSessionId: "session-data",
+      projectId: "project-a",
       skillRefsOverride: ["skill:xlsx"],
     });
+  });
+
+  it("读取旧专家实例缓存时应丢弃 latestSessionId", () => {
+    window.localStorage.setItem(
+      expertAgentInstanceStorageKeys.instances,
+      JSON.stringify([
+        {
+          tenantId: "tenant-0001",
+          projectId: "project-a",
+          expertId: "data-analyst",
+          releaseId: "rel-data",
+          latestSessionId: "session-data",
+          status: "active",
+          createdAt: 1,
+          updatedAt: 1,
+          lastStartedAt: 1,
+        },
+      ]),
+    );
+
+    expect(readExpertAgentInstances()[0]).not.toHaveProperty(
+      "latestSessionId",
+    );
   });
 
   it("有云端会话时应同步到 LimeCore 专家 Agent 实例接口", async () => {
@@ -91,12 +146,14 @@ describe("expertAgentInstances", () => {
 
     await syncExpertAgentInstanceToCloud({
       tenantId: "tenant-0001",
+      projectId: "project-a",
       expertId: "marketing-strategist",
       releaseId: "rel-1",
-      agentInstanceId: "expert:tenant-0001:marketing-strategist:rel-1",
-      agentInstanceKey: "tenant-0001:marketing-strategist:rel-1",
+      agentInstanceId:
+        "expert:tenant-0001:project-a:marketing-strategist:rel-1",
+      agentInstanceKey:
+        "tenant-0001:project-a:marketing-strategist:rel-1",
       catalogVersion: "tenant-0001:v1",
-      latestSessionId: "session-1",
       skillRefsOverride: ["skill:docx"],
       status: "active",
       createdAt: 1,
@@ -115,10 +172,10 @@ describe("expertAgentInstances", () => {
       }),
     );
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      projectId: "project-a",
       expertId: "marketing-strategist",
       releaseId: "rel-1",
       catalogVersion: "tenant-0001:v1",
-      latestSessionId: "session-1",
       skillRefsOverride: ["skill:docx"],
     });
   });
@@ -132,9 +189,10 @@ describe("expertAgentInstances", () => {
     window.__LIME_SESSION_TOKEN__ = "session-token";
     upsertExpertAgentInstance({
       tenantId: "tenant-0001",
+      projectId: "project-local",
       expertId: "local-only",
       releaseId: "rel-local",
-      latestSessionId: "session-local",
+      skillRefsOverride: ["skill:local"],
       now: 100,
     });
     const fetchMock = vi.fn(async () => ({
@@ -146,6 +204,7 @@ describe("expertAgentInstances", () => {
             {
               id: "expert-agent-0001",
               tenantId: "tenant-0001",
+              projectId: "project-cloud",
               expertId: "marketing-strategist",
               releaseId: "rel-1",
               catalogVersion: "tenant-0001:v1",
@@ -177,12 +236,13 @@ describe("expertAgentInstances", () => {
       records.find((item) => item.expertId === "marketing-strategist"),
     ).toMatchObject({
       agentInstanceId: "expert-agent-0001",
-      latestSessionId: "session-cloud",
+      projectId: "project-cloud",
       skillRefsOverride: ["skill:docx"],
     });
     expect(records.find((item) => item.expertId === "local-only")).toMatchObject(
       {
-        latestSessionId: "session-local",
+        projectId: "project-local",
+        skillRefsOverride: ["skill:local"],
       },
     );
   });

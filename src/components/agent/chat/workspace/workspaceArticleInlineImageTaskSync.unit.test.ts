@@ -227,12 +227,10 @@ describe("workspaceArticleInlineImageTaskSync", () => {
     );
 
     expect(result?.object.ref.id).toBe("article-inline-slot-target");
-    expect(result?.markdown).toContain(
+    expect(result?.markdown).toContain("https://example.com/guangzhou.png");
+    expect(nextWorkspace?.objects[0]?.source?.documentText).not.toContain(
       "https://example.com/guangzhou.png",
     );
-    expect(
-      nextWorkspace?.objects[0]?.source?.documentText,
-    ).not.toContain("https://example.com/guangzhou.png");
     expect(nextWorkspace?.objects[1]?.source?.documentText).toContain(
       "https://example.com/guangzhou.png",
     );
@@ -495,9 +493,7 @@ describe("workspaceArticleInlineImageTaskSync", () => {
     );
 
     const artifact = nextMessages[0]?.artifacts?.[0];
-    expect(artifact?.content).toContain(
-      "https://example.com/guangzhou.png",
-    );
+    expect(artifact?.content).toContain("https://example.com/guangzhou.png");
     expect(artifact?.content).not.toContain("pending-image-task://");
     const workspacePatch = artifact?.meta.workspacePatch as
       | WorkspaceArticleWorkspace
@@ -521,6 +517,71 @@ describe("workspaceArticleInlineImageTaskSync", () => {
       "https://example.com/guangzhou.png",
     );
     expect(artifactDocument?.blocks?.[1]?.content).not.toContain(
+      "pending-image-task://",
+    );
+  });
+
+  it("应把完成的 inline 图片任务同步回消息正文和 text contentParts", () => {
+    const markdown = [
+      "# 标题",
+      "",
+      "![广州夏天午后街景](pending-image-task://task-inline?status=running)",
+      "<!-- lime:image-task-slot:article-image-slot-1 -->",
+    ].join("\n");
+    const messages: Message[] = [
+      {
+        id: "assistant-content",
+        role: "assistant",
+        content: markdown,
+        contentParts: [
+          {
+            type: "text",
+            text: markdown,
+          },
+        ],
+        timestamp: new Date("2026-07-03T00:00:00.000Z"),
+      },
+    ];
+
+    expect(
+      collectWorkspaceArticleInlineImageTaskRecoveryMarkdownsFromMessages(
+        messages,
+      ),
+    ).toEqual([markdown]);
+
+    const nextMessages = syncWorkspaceArticleInlineImageTaskMessageArtifacts(
+      messages,
+      {
+        taskId: "task-inline",
+        taskRecord: {
+          status: "completed",
+          payload: {
+            usage: "document-inline",
+            prompt: "广州夏天午后街景",
+          },
+          relationships: {
+            slot_id: "article-image-slot-1",
+          },
+        },
+        outputs: [
+          {
+            url: "https://example.com/guangzhou.png",
+            prompt: "广州夏天午后街景",
+            slotId: "article-image-slot-1",
+          },
+        ],
+      },
+    );
+
+    expect(nextMessages[0]?.content).toContain(
+      "https://example.com/guangzhou.png",
+    );
+    expect(nextMessages[0]?.content).not.toContain("pending-image-task://");
+    expect(nextMessages[0]?.contentParts?.[0]).toMatchObject({
+      type: "text",
+      text: expect.stringContaining("https://example.com/guangzhou.png"),
+    });
+    expect(JSON.stringify(nextMessages[0]?.contentParts)).not.toContain(
       "pending-image-task://",
     );
   });

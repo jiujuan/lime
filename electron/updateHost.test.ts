@@ -33,6 +33,8 @@ describe("ElectronUpdateHost", () => {
   beforeEach(() => {
     appState.isPackaged = false;
     delete process.env.LIME_ELECTRON_ENABLE_DEV_UPDATER;
+    delete process.env.LIME_ELECTRON_E2E;
+    delete process.env.LIME_ELECTRON_SMOKE;
     delete process.env.VITE_DEV_SERVER_URL;
     checkForUpdatesMock.mockReset();
     quitAndInstallMock.mockReset();
@@ -55,6 +57,26 @@ describe("ElectronUpdateHost", () => {
   });
 
   it("updater 不可用时自动检查更新应返回本地版本", async () => {
+    const host = new ElectronUpdateHost(vi.fn());
+
+    await expect(
+      host.invoke("check_for_updates", { automatic: true }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        current: "1.60.0",
+        hasUpdate: false,
+        error: null,
+      }),
+    );
+
+    expect(checkForUpdatesMock).not.toHaveBeenCalled();
+    expect(setFeedURLMock).not.toHaveBeenCalled();
+  });
+
+  it("Electron GUI smoke 自动化会话不应触发真实 updater", async () => {
+    appState.isPackaged = true;
+    process.env.LIME_ELECTRON_SMOKE = "1";
+    process.env.LIME_ELECTRON_E2E = "1";
     const host = new ElectronUpdateHost(vi.fn());
 
     await expect(

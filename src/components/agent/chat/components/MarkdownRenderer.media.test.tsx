@@ -32,6 +32,11 @@ describe("MarkdownRenderer media and links", () => {
     expect(
       container.querySelector('[data-testid="markdown-image-unavailable"]'),
     ).not.toBeNull();
+    expect(
+      container
+        .querySelector('[data-testid="markdown-image-block"]')
+        ?.getAttribute("data-markdown-image-src"),
+    ).toBe("https://cdn.example.com/missing.png");
     expect(container.textContent).toContain("图片暂时无法显示");
     expect(container.textContent).not.toContain("image");
   });
@@ -91,6 +96,22 @@ describe("MarkdownRenderer media and links", () => {
     );
     expect(image?.getAttribute("src")).toBe(
       "asset:///Users/coso/.proxycast/projects/default/exports/x-article/google/images/hero.png",
+    );
+  });
+
+  it("file 图片地址应直接用于 markdown 图片渲染", () => {
+    const container = render("![配图](file:///tmp/lime/inline-image.png)", {
+      baseFilePath: "/Users/coso/.lime/projects/default/article.md",
+    });
+
+    const image = container.querySelector("img");
+    expect(image).not.toBeNull();
+    expect(mockConvertLocalFileSrc).not.toHaveBeenCalled();
+    expect(image?.getAttribute("src")).toBe(
+      "file:///tmp/lime/inline-image.png",
+    );
+    expect(image?.getAttribute("data-markdown-image-src")).toBe(
+      "file:///tmp/lime/inline-image.png",
     );
   });
 

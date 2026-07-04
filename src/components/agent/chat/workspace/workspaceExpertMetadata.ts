@@ -1,3 +1,8 @@
+import {
+  buildExpertRuntimeMetadata,
+  type ExpertCatalog,
+  type ExpertProfile,
+} from "@/features/experts";
 import { asRecord } from "./browserAssistArtifact";
 
 export interface ResolveExpertPanelRequestMetadataParams {
@@ -53,15 +58,18 @@ export function mergeExpertSkillRefsIntoRequestMetadata(
 }
 
 export function resolveWorkspaceRequestMetadataWithExpertSkills({
+  activeRequestMetadata,
   expertSkillRefsOverride,
   initialAutoSendRequestMetadata,
   initialRequestMetadata,
   sessionRequestMetadata,
 }: ResolveExpertPanelRequestMetadataParams & {
+  activeRequestMetadata?: Record<string, unknown> | null;
   expertSkillRefsOverride: string[] | null;
 }): Record<string, unknown> | null {
   const metadataWithExpertSkills = mergeExpertSkillRefsIntoRequestMetadata(
-    initialRequestMetadata ??
+    activeRequestMetadata ??
+      initialRequestMetadata ??
       initialAutoSendRequestMetadata ??
       sessionRequestMetadata ??
       null,
@@ -93,8 +101,86 @@ export function shouldAllowDetachedInitialAutoSend(
   const harness = asRecord(metadata?.harness);
   return Boolean(
     asRecord(metadata?.expert) ||
-      asRecord(harness?.expert) ||
-      asRecord(harness?.plugin_activation_intent) ||
-      asRecord(harness?.pluginActivationIntent),
+    asRecord(harness?.expert) ||
+    asRecord(harness?.plugin_activation_intent) ||
+    asRecord(harness?.pluginActivationIntent),
   );
+}
+
+export interface BuildThreadExpertProfileSwitchRequestMetadataParams {
+  currentMetadata?: Record<string, unknown> | null;
+  expert: ExpertProfile;
+  catalog: Pick<ExpertCatalog, "tenantId" | "version">;
+  switchedAt?: string;
+}
+
+function readExpertMetadataString(
+  metadata: Record<string, unknown> | null | undefined,
+  expertKey: string,
+  harnessKey: string,
+): string | undefined {
+  const root = asRecord(metadata);
+  const expert = asRecord(root?.expert);
+  const harnessExpert = asRecord(asRecord(root?.harness)?.expert);
+  const expertValue = expert?.[expertKey];
+  if (typeof expertValue === "string" && expertValue.trim()) {
+    return expertValue.trim();
+  }
+  const harnessValue = harnessExpert?.[harnessKey];
+  return typeof harnessValue === "string" && harnessValue.trim()
+    ? harnessValue.trim()
+    : undefined;
+}
+
+export function buildThreadExpertProfileSwitchRequestMetadata({
+  currentMetadata,
+  expert,
+  catalog,
+  switchedAt,
+}: BuildThreadExpertProfileSwitchRequestMetadataParams): Record<
+  string,
+  unknown
+> {
+  const root = asRecord(currentMetadata);
+  const currentHarness = asRecord(root?.harness);
+  const nextMetadata = buildExpertRuntimeMetadata(expert, {
+    catalogVersion: catalog.version,
+    tenantId: catalog.tenantId,
+  });
+  const previousExpertId = readExpertMetadataString(
+    currentMetadata,
+    "expertId",
+    "expert_id",
+  );
+  const previousReleaseId = readExpertMetadataString(
+    currentMetadata,
+    "releaseId",
+    "release_id",
+  );
+  const roleSwitch: Record<string, unknown> = {
+    kind: "expert_profile_switch",
+    scope: "thread",
+    source: "expert_info_panel",
+    next_expert_id: nextMetadata.expert.expertId,
+    next_release_id: nextMetadata.expert.releaseId,
+  };
+  if (previousExpertId) {
+    roleSwitch.previous_expert_id = previousExpertId;
+  }
+  if (previousReleaseId) {
+    roleSwitch.previous_release_id = previousReleaseId;
+  }
+  if (switchedAt) {
+    roleSwitch.switched_at = switchedAt;
+  }
+
+  return {
+    ...(root ?? {}),
+    expert: nextMetadata.expert,
+    harness: {
+      ...(currentHarness ?? {}),
+      ...nextMetadata.harness,
+      expert_role_switch: roleSwitch,
+    },
+  };
 }

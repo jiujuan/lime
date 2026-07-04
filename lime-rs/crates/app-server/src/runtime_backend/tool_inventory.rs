@@ -7,14 +7,14 @@ use lime_agent::agent_tools::catalog::WorkspaceToolSurface;
 use lime_agent::agent_tools::execution::persisted_tool_execution_policy_from_metadata;
 use lime_agent::agent_tools::inventory::{build_tool_inventory, AgentToolInventoryBuildInput};
 use lime_agent::agent_tools::tool_inventory_runtime_snapshot::read_agent_tool_inventory_runtime_snapshot;
-use lime_agent::AsterAgentState;
+use lime_agent::AgentRuntimeState;
 use lime_core::tool_calling::extract_tool_surface_metadata;
 use lime_mcp::McpToolDefinition;
 use serde_json::{Map, Value};
 use std::sync::Arc;
 
 pub(crate) async fn read_tool_inventory(
-    agent_state: &AsterAgentState,
+    agent_state: &AgentRuntimeState,
     request: ToolInventoryReadRequest,
     config_metadata: Option<Value>,
     app_data_source: Option<Arc<dyn AppDataSource>>,
@@ -219,7 +219,7 @@ mod tests {
         config_metadata: Option<Value>,
     ) -> Value {
         read_tool_inventory(
-            &AsterAgentState::new(),
+            &AgentRuntimeState::new(),
             inventory_request(request_metadata),
             config_metadata,
             None,

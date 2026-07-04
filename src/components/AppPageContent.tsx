@@ -12,6 +12,7 @@ import type {
   PluginsPageParams,
   AutomationPageParams,
   BrowserRuntimePageParams,
+  ExpertsPageParams,
   KnowledgePageParams,
   Page,
   PageParams,
@@ -325,9 +326,15 @@ export function AppPageContent({
   }
 
   if (activePage === "experts") {
+    const expertsPageParams = activePageParams as ExpertsPageParams;
     return (
       <div style={columnPageStyle}>
-        <ExpertPlazaPage onNavigate={onNavigate} />
+        <ExpertPlazaPage
+          onNavigate={onNavigate}
+          currentProjectId={
+            expertsPageParams.currentProjectId ?? expertsPageParams.projectId
+          }
+        />
       </div>
     );
   }

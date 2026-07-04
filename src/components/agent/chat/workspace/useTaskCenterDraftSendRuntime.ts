@@ -24,11 +24,34 @@ import {
   type TaskCenterDraftTab,
 } from "./agentChatWorkspaceHelpers";
 import type { HandleSendOptions } from "../hooks/handleSendTypes";
-import { markTaskCenterDraftTabRunning } from "./taskCenterDraftTabs";
+import {
+  markTaskCenterDraftTabRunning,
+} from "./taskCenterDraftTabs";
+import type { SoulInteractionCopy } from "@/lib/soul/interactionCopy";
+import { logAgentDebug } from "@/lib/agentDebug";
 
 type TaskCenterDraftSendExecutionStrategy = NonNullable<
   TaskCenterDraftSendRequest["sendExecutionStrategy"]
 >;
+
+function isTemporaryDraftSendRequestId(value: string): boolean {
+  return value.startsWith("draft-send-");
+}
+
+function resolveNonMaterializedReadySessionId(
+  request: TaskCenterDraftSendRequest,
+  currentSessionId?: string | null,
+): string | null {
+  const activeSessionId = currentSessionId?.trim();
+  if (activeSessionId) {
+    return activeSessionId;
+  }
+
+  const requestSessionId = request.draftTabId.trim();
+  return requestSessionId && !isTemporaryDraftSendRequestId(requestSessionId)
+    ? requestSessionId
+    : null;
+}
 
 interface UseTaskCenterHomePendingPreviewRuntimeParams {
   homePendingPreviewRequest: TaskCenterDraftSendRequest | null;
@@ -36,6 +59,7 @@ interface UseTaskCenterHomePendingPreviewRuntimeParams {
   displayMessagesLength: number;
   executionStrategy: TaskCenterDraftSendExecutionStrategy;
   workspaceId?: string | null;
+  soulCopy?: SoulInteractionCopy;
 }
 
 interface UseTaskCenterDraftSendDispatchRuntimeParams {
@@ -57,7 +81,7 @@ interface UseTaskCenterDraftSendDispatchRuntimeParams {
   commitMaterializedDraftTab: (
     draftTabId: string,
     newSessionId: string,
-    options?: { preserveInput?: boolean },
+    options?: { preserveInput?: boolean; syncRoute?: boolean },
   ) => void;
   onNonMaterializedSessionReady?: (sessionId: string) => void;
   restoreInput?: (value: string) => void;
@@ -82,6 +106,7 @@ interface UseTaskCenterEmptyStateSendRuntimeParams {
   setTaskCenterDraftSendRequest: Dispatch<
     SetStateAction<TaskCenterDraftSendRequest | null>
   >;
+  taskCenterDraftSendRequest: TaskCenterDraftSendRequest | null;
   setHomePendingPreviewRequest: Dispatch<
     SetStateAction<TaskCenterDraftSendRequest | null>
   >;
@@ -93,6 +118,7 @@ export function useTaskCenterHomePendingPreviewRuntime({
   displayMessagesLength,
   executionStrategy,
   workspaceId,
+  soulCopy,
 }: UseTaskCenterHomePendingPreviewRuntimeParams): {
   homePendingPreviewMessages: Message[];
   isHomePendingPreviewActive: boolean;
@@ -106,12 +132,14 @@ export function useTaskCenterHomePendingPreviewRuntime({
         ? buildHomePendingPreviewMessages(
             homePendingPreviewRequest,
             executionStrategy,
+            soulCopy,
           )
         : [],
     [
       displayMessagesLength,
       executionStrategy,
       homePendingPreviewRequest,
+      soulCopy,
       shouldSuppressTaskCenterDraftContent,
     ],
   );
@@ -163,10 +191,29 @@ export function useTaskCenterEmptyStateSendRuntime({
   taskCenterWorkspaceId,
   setTaskCenterDraftTabs,
   setTaskCenterDraftSendRequest,
+  taskCenterDraftSendRequest,
   setHomePendingPreviewRequest,
 }: UseTaskCenterEmptyStateSendRuntimeParams): InputbarSendHandler {
+  const homeSendInFlightRef = useRef(false);
+
+  useEffect(() => {
+    if (!taskCenterDraftSendRequest) {
+      homeSendInFlightRef.current = false;
+    }
+  }, [taskCenterDraftSendRequest]);
+
   return useCallback<InputbarSendHandler>(
     (payload = {}) => {
+      if (homeSendInFlightRef.current || taskCenterDraftSendRequest) {
+        logAgentDebug("AgentChatPage", "homeInput.submit.blocked", {
+          hasPendingRequest: Boolean(taskCenterDraftSendRequest),
+          homeSendInFlight: homeSendInFlightRef.current,
+          source: "empty-state",
+          workspaceId: taskCenterWorkspaceId,
+        });
+        return false;
+      }
+
       const text = payload.textOverride ?? input;
       const images = payload.images ?? [];
       const sendOptions = payload.sendOptions;
@@ -177,6 +224,7 @@ export function useTaskCenterEmptyStateSendRuntime({
         (agentEntry === "claw" || agentEntry === "new-task") &&
         activeDraftTabId
       ) {
+        homeSendInFlightRef.current = true;
         const submittedAt = Date.now();
         const requestId = createTaskCenterDraftSendRequestId();
         recordAgentUiPerformanceMetric("homeInput.submit", {
@@ -227,16 +275,127 @@ export function useTaskCenterEmptyStateSendRuntime({
         !hasDisplayMessages &&
         (agentEntry === "claw" || agentEntry === "new-task");
       if (shouldQueueHomeSend) {
+        homeSendInFlightRef.current = true;
         const submittedAt = Date.now();
         const requestId = createTaskCenterDraftSendRequestId();
+        const existingSessionId = sessionId?.trim() || null;
         recordAgentUiPerformanceMetric("homeInput.submit", {
           hasDraftTab: false,
           inputLength: normalizedText.length,
           requestId,
-          sessionId: sessionId ?? null,
+          sessionId: existingSessionId,
           source: "empty-state",
           workspaceId: taskCenterWorkspaceId,
         });
+        if (!existingSessionId) {
+          const tracedSendOptions: HandleSendOptions = {
+            ...(sendOptions || {}),
+            skipSessionRestore: true,
+            skipSessionStartHooks: true,
+            skipPreSubmitResume: true,
+            requestMetadata: mergeAgentUiPerformanceTraceMetadata(
+              sendOptions?.requestMetadata,
+              {
+                requestId,
+                sessionId: null,
+                source: "empty-state",
+                submittedAt,
+                workspaceId: taskCenterWorkspaceId ?? null,
+              },
+            ),
+          };
+          const previewRequest: TaskCenterDraftSendRequest = {
+            id: requestId,
+            draftTabId: requestId,
+            text,
+            images,
+            sendOptions: tracedSendOptions,
+            submittedAt,
+            materializeDraft: false,
+            dispatchState: "dispatched",
+            source: "empty-state",
+          };
+          setTaskCenterDraftSendRequest(previewRequest);
+          setHomePendingPreviewRequest(previewRequest);
+          recordAgentUiPerformanceMetric("homeInput.pendingShellApplied", {
+            durationMs: Date.now() - submittedAt,
+            requestId,
+            sessionId: null,
+            source: "empty-state",
+            workspaceId: taskCenterWorkspaceId,
+          });
+          logAgentDebug("AgentChatPage", "homeInput.directDispatch.start", {
+            requestId,
+            source: "empty-state",
+            workspaceId: taskCenterWorkspaceId,
+          });
+          void handleSend(
+            images,
+            undefined,
+            undefined,
+            text,
+            undefined,
+            undefined,
+            tracedSendOptions,
+          ).then(
+            (result) => {
+              recordAgentUiPerformanceMetric("homeInput.sendDispatch.done", {
+                durationMs: Date.now() - submittedAt,
+                requestId,
+                result,
+                sessionId: null,
+                source: "empty-state",
+                workspaceId: taskCenterWorkspaceId ?? null,
+              });
+              logAgentDebug("AgentChatPage", "homeInput.directDispatch.done", {
+                requestId,
+                result,
+                source: "empty-state",
+                workspaceId: taskCenterWorkspaceId,
+              });
+              if (result !== true) {
+                setInput(text);
+                setTaskCenterDraftSendRequest((current) =>
+                  current?.id === requestId ? null : current,
+                );
+                setHomePendingPreviewRequest((current) =>
+                  current?.id === requestId ? null : current,
+                );
+                homeSendInFlightRef.current = false;
+              }
+            },
+            (error) => {
+              recordAgentUiPerformanceMetric("homeInput.sendDispatch.error", {
+                durationMs: Date.now() - submittedAt,
+                error: error instanceof Error ? error.message : String(error),
+                requestId,
+                sessionId: null,
+                source: "empty-state",
+                workspaceId: taskCenterWorkspaceId ?? null,
+              });
+              logAgentDebug(
+                "AgentChatPage",
+                "homeInput.directDispatch.error",
+                {
+                  error,
+                  requestId,
+                  source: "empty-state",
+                  workspaceId: taskCenterWorkspaceId,
+                },
+                { level: "error" },
+              );
+              setInput(text);
+              setTaskCenterDraftSendRequest((current) =>
+                current?.id === requestId ? null : current,
+              );
+              setHomePendingPreviewRequest((current) =>
+                current?.id === requestId ? null : current,
+              );
+              homeSendInFlightRef.current = false;
+            },
+          );
+          return;
+        }
         const tracedSendOptions: HandleSendOptions = {
           ...(sendOptions || {}),
           skipSessionRestore: true,
@@ -246,13 +405,26 @@ export function useTaskCenterEmptyStateSendRuntime({
             sendOptions?.requestMetadata,
             {
               requestId,
-              sessionId: sessionId ?? null,
+              sessionId: existingSessionId,
               source: "empty-state",
               submittedAt,
               workspaceId: taskCenterWorkspaceId ?? null,
             },
           ),
         };
+        const previewRequest: TaskCenterDraftSendRequest = {
+          id: requestId,
+          draftTabId: existingSessionId,
+          text,
+          images,
+          sendOptions: tracedSendOptions,
+          submittedAt,
+          materializeDraft: false,
+          dispatchState: "dispatched",
+          source: "empty-state",
+        };
+        setTaskCenterDraftSendRequest(previewRequest);
+        setHomePendingPreviewRequest(previewRequest);
         void handleSend(
           images,
           undefined,
@@ -267,12 +439,19 @@ export function useTaskCenterEmptyStateSendRuntime({
               durationMs: Date.now() - submittedAt,
               requestId,
               result,
-              sessionId: sessionId ?? null,
+              sessionId: existingSessionId,
               source: "empty-state",
               workspaceId: taskCenterWorkspaceId ?? null,
             });
             if (result !== true) {
               setInput(text);
+              setTaskCenterDraftSendRequest((current) =>
+                current?.id === requestId ? null : current,
+              );
+              setHomePendingPreviewRequest((current) =>
+                current?.id === requestId ? null : current,
+              );
+              homeSendInFlightRef.current = false;
             }
           },
           (error) => {
@@ -280,11 +459,18 @@ export function useTaskCenterEmptyStateSendRuntime({
               durationMs: Date.now() - submittedAt,
               error: error instanceof Error ? error.message : String(error),
               requestId,
-              sessionId: sessionId ?? null,
+              sessionId: existingSessionId,
               source: "empty-state",
               workspaceId: taskCenterWorkspaceId ?? null,
             });
             setInput(text);
+            setTaskCenterDraftSendRequest((current) =>
+              current?.id === requestId ? null : current,
+            );
+            setHomePendingPreviewRequest((current) =>
+              current?.id === requestId ? null : current,
+            );
+            homeSendInFlightRef.current = false;
           },
         );
         return;
@@ -320,6 +506,7 @@ export function useTaskCenterEmptyStateSendRuntime({
       setInput,
       setTaskCenterDraftSendRequest,
       setTaskCenterDraftTabs,
+      taskCenterDraftSendRequest,
       taskCenterWorkspaceId,
       threadItemsLength,
       turnsLength,
@@ -343,9 +530,68 @@ export function useTaskCenterDraftSendDispatchRuntime({
   workspaceId,
 }: UseTaskCenterDraftSendDispatchRuntimeParams): void {
   const messageCountsRef = useRef({ displayMessagesLength, messagesLength });
+  const dispatchedRequestIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     messageCountsRef.current = { displayMessagesLength, messagesLength };
   }, [displayMessagesLength, messagesLength]);
+
+  useEffect(() => {
+    if (
+      !taskCenterDraftSendRequest &&
+      dispatchedRequestIdsRef.current.size > 20
+    ) {
+      dispatchedRequestIdsRef.current.clear();
+    }
+  }, [taskCenterDraftSendRequest]);
+
+  useEffect(() => {
+    if (
+      !taskCenterDraftSendRequest ||
+      taskCenterDraftSendRequest.materializeDraft
+    ) {
+      return;
+    }
+
+    const readySessionId = resolveNonMaterializedReadySessionId(
+      taskCenterDraftSendRequest,
+      currentSessionId,
+    );
+    if (!readySessionId) {
+      return;
+    }
+    if (
+      taskCenterDraftSendRequest.sessionReady &&
+      taskCenterDraftSendRequest.draftTabId === readySessionId
+    ) {
+      return;
+    }
+
+    onNonMaterializedSessionReady?.(readySessionId);
+    setTaskCenterDraftSendRequest((current) =>
+      current?.id === taskCenterDraftSendRequest.id
+        ? {
+            ...current,
+            draftTabId: readySessionId,
+            sessionReady: true,
+          }
+        : current,
+    );
+    setHomePendingPreviewRequest((current) =>
+      current?.id === taskCenterDraftSendRequest.id
+        ? {
+            ...current,
+            draftTabId: readySessionId,
+            sessionReady: true,
+          }
+        : current,
+    );
+  }, [
+    currentSessionId,
+    onNonMaterializedSessionReady,
+    setHomePendingPreviewRequest,
+    setTaskCenterDraftSendRequest,
+    taskCenterDraftSendRequest,
+  ]);
 
   useEffect(() => {
     if (messagesLength === 0 && displayMessagesLength === 0) {
@@ -356,15 +602,14 @@ export function useTaskCenterDraftSendDispatchRuntime({
       if (!current || current.materializeDraft) {
         return current;
       }
-      const readySessionId =
-        currentSessionId?.trim() ||
-        (current.draftTabId.startsWith("draft-send-")
-          ? ""
-          : current.draftTabId.trim());
-      if (!readySessionId && current.draftTabId.startsWith("draft-send-")) {
+      const readySessionId = resolveNonMaterializedReadySessionId(
+        current,
+        currentSessionId,
+      );
+      if (!readySessionId) {
         return current;
       }
-      if (readySessionId) {
+      if (!current.sessionReady || current.draftTabId !== readySessionId) {
         onNonMaterializedSessionReady?.(readySessionId);
       }
       return null;
@@ -385,7 +630,20 @@ export function useTaskCenterDraftSendDispatchRuntime({
     }
 
     const request = taskCenterDraftSendRequest;
-    let cancelled = false;
+    if (request.dispatchState === "dispatched") {
+      return;
+    }
+    if (
+      !request.materializeDraft &&
+      !resolveNonMaterializedReadySessionId(request, currentSessionId)
+    ) {
+      return;
+    }
+    if (dispatchedRequestIdsRef.current.has(request.id)) {
+      return;
+    }
+    dispatchedRequestIdsRef.current.add(request.id);
+
     const clearRequest = (options?: { keepHomePreview?: boolean }) => {
       setTaskCenterDraftSendRequest((current) =>
         current?.id === request.id ? null : current,
@@ -399,147 +657,131 @@ export function useTaskCenterDraftSendDispatchRuntime({
         materializedSessionIdsRef.current.delete(request.draftTabId);
       }
     };
-    const cancel = scheduleAfterNextPaint(() => {
-      void (async () => {
-        if (cancelled) {
-          return;
-        }
-
-        const materializedSessionId = request.materializeDraft
-          ? await materializeDraftTab(request.draftTabId, {
-              reason: "send",
-              commit: false,
-            })
-          : null;
-        if (cancelled) {
-          return;
-        }
-        if (request.materializeDraft && !materializedSessionId) {
-          recordAgentUiPerformanceMetric("homeInput.sendDispatch.error", {
-            durationMs: Date.now() - request.submittedAt,
-            error: "draft_materialize_failed",
-            requestId: request.id,
-            sessionId: request.draftTabId,
-            source: request.source,
-            workspaceId: workspaceId ?? null,
-          });
-          clearRequest();
-          return;
-        }
-
-        const dispatchSessionId = materializedSessionId ?? request.draftTabId;
-        recordAgentUiPerformanceMetric("homeInput.sendDispatch.start", {
-          elapsedMs: Date.now() - request.submittedAt,
-          requestId: request.id,
-          sessionId: dispatchSessionId,
-          source: request.source,
-          workspaceId: workspaceId ?? null,
-        });
-        const tracedSendOptions: HandleSendOptions = {
-          ...(request.sendOptions || {}),
-          // 首页首发代表“创建新对话”，不要先恢复上次会话，否则会把首字链路拖进旧会话 hydration。
-          skipSessionRestore: true,
-          // 同一条快路径也不应同步跑项目启动 hooks 或 submit 前队列恢复扫描。
-          skipSessionStartHooks: true,
-          skipPreSubmitResume: true,
-          requestMetadata: bindInputbarThreadGoalMetadata(
-            mergeAgentUiPerformanceTraceMetadata(
-              request.sendOptions?.requestMetadata,
-              {
-                requestId: request.id,
-                sessionId: dispatchSessionId,
-                source: request.source,
-                submittedAt: request.submittedAt,
-                workspaceId: workspaceId ?? null,
-              },
-            ),
-            dispatchSessionId,
-          ),
-        };
-        const sendPromise = sendRef.current(
-          request.images,
-          undefined,
-          undefined,
-          request.text,
-          request.sendExecutionStrategy,
-          undefined,
-          tracedSendOptions,
-        );
-        void sendPromise.then(
-          (result) => {
-            if (request.materializeDraft && materializedSessionId) {
-              commitMaterializedDraftTab(
-                request.draftTabId,
-                materializedSessionId,
-                { preserveInput: result !== true },
-              );
-            }
-            recordAgentUiPerformanceMetric("homeInput.sendDispatch.done", {
-              durationMs: Date.now() - request.submittedAt,
-              requestId: request.id,
-              result,
-              sessionId: dispatchSessionId,
-              source: request.source,
-              workspaceId: workspaceId ?? null,
-            });
-            if (result !== true && !request.materializeDraft) {
-              restoreInput?.(request.text);
-            }
-            const latestCounts = messageCountsRef.current;
-            clearRequest({
-              keepHomePreview:
-                result === true &&
-                !request.materializeDraft &&
-                latestCounts.messagesLength === 0 &&
-                latestCounts.displayMessagesLength === 0,
-            });
-          },
-          (error) => {
-            if (request.materializeDraft && materializedSessionId) {
-              commitMaterializedDraftTab(
-                request.draftTabId,
-                materializedSessionId,
-                { preserveInput: true },
-              );
-            }
-            recordAgentUiPerformanceMetric("homeInput.sendDispatch.error", {
-              durationMs: Date.now() - request.submittedAt,
-              error: error instanceof Error ? error.message : String(error),
-              requestId: request.id,
-              sessionId: dispatchSessionId,
-              source: request.source,
-              workspaceId: workspaceId ?? null,
-            });
-            if (!request.materializeDraft) {
-              restoreInput?.(request.text);
-            }
-            clearRequest();
-          },
-        );
-      })().catch((error) => {
+    void (async () => {
+      const materializedSessionId = request.materializeDraft
+        ? await materializeDraftTab(request.draftTabId, {
+            reason: "send",
+            commit: false,
+          })
+        : null;
+      if (request.materializeDraft && !materializedSessionId) {
         recordAgentUiPerformanceMetric("homeInput.sendDispatch.error", {
           durationMs: Date.now() - request.submittedAt,
-          error: error instanceof Error ? error.message : String(error),
+          error: "draft_materialize_failed",
           requestId: request.id,
           sessionId: request.draftTabId,
           source: request.source,
           workspaceId: workspaceId ?? null,
         });
-        if (!cancelled) {
+        clearRequest();
+        return;
+      }
+
+      const dispatchSessionId = materializedSessionId ?? request.draftTabId;
+      recordAgentUiPerformanceMetric("homeInput.sendDispatch.start", {
+        elapsedMs: Date.now() - request.submittedAt,
+        requestId: request.id,
+        sessionId: dispatchSessionId,
+        source: request.source,
+        workspaceId: workspaceId ?? null,
+      });
+      const tracedSendOptions: HandleSendOptions = {
+        ...(request.sendOptions || {}),
+        // 首页首发代表“创建新对话”，不要先恢复上次会话，否则会把首字链路拖进旧会话 hydration。
+        skipSessionRestore: true,
+        // 同一条快路径也不应同步跑项目启动 hooks 或 submit 前队列恢复扫描。
+        skipSessionStartHooks: true,
+        skipPreSubmitResume: true,
+        requestMetadata: bindInputbarThreadGoalMetadata(
+          mergeAgentUiPerformanceTraceMetadata(
+            request.sendOptions?.requestMetadata,
+            {
+              requestId: request.id,
+              sessionId: dispatchSessionId,
+              source: request.source,
+              submittedAt: request.submittedAt,
+              workspaceId: workspaceId ?? null,
+            },
+          ),
+          dispatchSessionId,
+        ),
+      };
+      const sendPromise = sendRef.current(
+        request.images,
+        undefined,
+        undefined,
+        request.text,
+        request.sendExecutionStrategy,
+        undefined,
+        tracedSendOptions,
+      );
+      void sendPromise.then(
+        (result) => {
+          if (request.materializeDraft && materializedSessionId) {
+            commitMaterializedDraftTab(
+              request.draftTabId,
+              materializedSessionId,
+              { preserveInput: result !== true, syncRoute: false },
+            );
+          }
+          recordAgentUiPerformanceMetric("homeInput.sendDispatch.done", {
+            durationMs: Date.now() - request.submittedAt,
+            requestId: request.id,
+            result,
+            sessionId: dispatchSessionId,
+            source: request.source,
+            workspaceId: workspaceId ?? null,
+          });
+          if (result !== true && !request.materializeDraft) {
+            restoreInput?.(request.text);
+          }
+          const latestCounts = messageCountsRef.current;
+          clearRequest({
+            keepHomePreview:
+              result === true &&
+              latestCounts.messagesLength === 0 &&
+              latestCounts.displayMessagesLength === 0,
+          });
+        },
+        (error) => {
+          if (request.materializeDraft && materializedSessionId) {
+            commitMaterializedDraftTab(
+              request.draftTabId,
+              materializedSessionId,
+              { preserveInput: true, syncRoute: false },
+            );
+          }
+          recordAgentUiPerformanceMetric("homeInput.sendDispatch.error", {
+            durationMs: Date.now() - request.submittedAt,
+            error: error instanceof Error ? error.message : String(error),
+            requestId: request.id,
+            sessionId: dispatchSessionId,
+            source: request.source,
+            workspaceId: workspaceId ?? null,
+          });
           if (!request.materializeDraft) {
             restoreInput?.(request.text);
           }
           clearRequest();
-        }
+        },
+      );
+    })().catch((error) => {
+      recordAgentUiPerformanceMetric("homeInput.sendDispatch.error", {
+        durationMs: Date.now() - request.submittedAt,
+        error: error instanceof Error ? error.message : String(error),
+        requestId: request.id,
+        sessionId: request.draftTabId,
+        source: request.source,
+        workspaceId: workspaceId ?? null,
       });
+      if (!request.materializeDraft) {
+        restoreInput?.(request.text);
+      }
+      clearRequest();
     });
-
-    return () => {
-      cancelled = true;
-      cancel();
-    };
   }, [
     commitMaterializedDraftTab,
+    currentSessionId,
     materializeDraftTab,
     materializedSessionIdsRef,
     messageCountsRef,

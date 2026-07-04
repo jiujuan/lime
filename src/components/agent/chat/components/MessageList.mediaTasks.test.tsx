@@ -61,7 +61,7 @@ describe("MessageList media tasks", () => {
     );
   });
 
-  it("视频任务消息卡应在聊天区渲染预览并支持打开工作区查看", () => {
+  it("视频任务消息卡应在聊天区渲染预览并支持打开工作区查看", async () => {
     const now = new Date();
     const onOpenMessagePreview = vi.fn();
     const messages: Message[] = [
@@ -86,7 +86,7 @@ describe("MessageList media tasks", () => {
       },
     ];
 
-    const container = render(messages, { onOpenMessagePreview });
+    const container = await renderZh(messages, { onOpenMessagePreview });
     const previewCard = container.querySelector(
       '[data-testid="task-message-preview-task-video-1"]',
     ) as HTMLButtonElement | null;
@@ -114,7 +114,7 @@ describe("MessageList media tasks", () => {
     );
   });
 
-  it("失败的视频任务卡应提供重新生成动作，并通过事件总线下发而不是误触发打开工作区", () => {
+  it("失败的视频任务卡应提供重新生成动作，并通过事件总线下发而不是误触发打开工作区", async () => {
     const now = new Date();
     const onOpenMessagePreview = vi.fn();
     const messages: Message[] = [
@@ -147,7 +147,7 @@ describe("MessageList media tasks", () => {
     };
     window.addEventListener(VIDEO_WORKBENCH_TASK_ACTION_EVENT, handleAction);
 
-    const container = render(messages, { onOpenMessagePreview });
+    const container = await renderZh(messages, { onOpenMessagePreview });
     const actionButton = container.querySelector(
       '[data-testid="task-message-preview-action-task-video-failed-1-retry"]',
     ) as HTMLButtonElement | null;
@@ -169,7 +169,7 @@ describe("MessageList media tasks", () => {
     window.removeEventListener(VIDEO_WORKBENCH_TASK_ACTION_EVENT, handleAction);
   });
 
-  it("进行中的视频任务卡应提供取消动作，并继续保留打开工作区能力", () => {
+  it("进行中的视频任务卡应提供取消动作，并继续保留打开工作区能力", async () => {
     const now = new Date();
     const onOpenMessagePreview = vi.fn();
     const messages: Message[] = [
@@ -203,7 +203,7 @@ describe("MessageList media tasks", () => {
     };
     window.addEventListener(VIDEO_WORKBENCH_TASK_ACTION_EVENT, handleAction);
 
-    const container = render(messages, { onOpenMessagePreview });
+    const container = await renderZh(messages, { onOpenMessagePreview });
     const previewCard = container.querySelector(
       '[data-testid="task-message-preview-task-video-running-action-1"]',
     ) as HTMLButtonElement | null;
@@ -245,7 +245,7 @@ describe("MessageList media tasks", () => {
     window.removeEventListener(VIDEO_WORKBENCH_TASK_ACTION_EVENT, handleAction);
   });
 
-  it("通用任务消息卡应在聊天区渲染预览并支持打开对应产物", () => {
+  it("通用任务消息卡应在聊天区渲染预览并支持打开对应产物", async () => {
     const now = new Date();
     const onOpenMessagePreview = vi.fn();
     const messages: Message[] = [
@@ -268,7 +268,7 @@ describe("MessageList media tasks", () => {
       },
     ];
 
-    const container = render(messages, { onOpenMessagePreview });
+    const container = await renderZh(messages, { onOpenMessagePreview });
     const previewCard = container.querySelector(
       '[data-testid="task-message-preview-task-resource-1"]',
     ) as HTMLButtonElement | null;
@@ -295,7 +295,7 @@ describe("MessageList media tasks", () => {
     );
   });
 
-  it("配音任务消息卡应展示 audio_generate 预览并支持打开运行时文档", () => {
+  it("配音任务消息卡应展示 audio_generate 预览并支持打开运行时文档", async () => {
     const now = new Date();
     const onOpenMessagePreview = vi.fn();
     const messages: Message[] = [
@@ -320,7 +320,7 @@ describe("MessageList media tasks", () => {
       },
     ];
 
-    const container = render(messages, { onOpenMessagePreview });
+    const container = await renderZh(messages, { onOpenMessagePreview });
     const previewCard = container.querySelector(
       '[data-testid="task-message-preview-task-audio-1"]',
     ) as HTMLButtonElement | null;
@@ -348,7 +348,7 @@ describe("MessageList media tasks", () => {
     );
   });
 
-  it("失败的配音任务卡应展示 provider 错误码与原因", () => {
+  it("失败的配音任务卡应展示 provider 错误码与原因", async () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -374,7 +374,7 @@ describe("MessageList media tasks", () => {
       },
     ];
 
-    const container = render(messages);
+    const container = await renderZh(messages);
     const previewCard = container.querySelector(
       '[data-testid="task-message-preview-task-audio-failed-1"]',
     ) as HTMLButtonElement | null;
@@ -387,7 +387,7 @@ describe("MessageList media tasks", () => {
     expect(previewCard?.textContent).toContain("不会回退 legacy TTS");
   });
 
-  it("转写任务消息卡应展示 transcript 路径与 provider 错误", () => {
+  it("转写任务消息卡应展示 transcript 路径与 provider 错误", async () => {
     const now = new Date();
     const onOpenMessagePreview = vi.fn();
     const messages: Message[] = [
@@ -426,7 +426,7 @@ describe("MessageList media tasks", () => {
       },
     ];
 
-    const container = render(messages, { onOpenMessagePreview });
+    const container = await renderZh(messages, { onOpenMessagePreview });
     const previewCard = container.querySelector(
       '[data-testid="task-message-preview-task-transcription-1"]',
     ) as HTMLButtonElement | null;
@@ -457,7 +457,7 @@ describe("MessageList media tasks", () => {
     );
   });
 
-  it("失败的转写任务卡应展示 transcript 错误码与原因", () => {
+  it("失败的转写任务卡应展示 transcript 错误码与原因", async () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -485,7 +485,7 @@ describe("MessageList media tasks", () => {
       },
     ];
 
-    const container = render(messages);
+    const container = await renderZh(messages);
     const previewCard = container.querySelector(
       '[data-testid="task-message-preview-task-transcription-failed-1"]',
     ) as HTMLButtonElement | null;
@@ -651,7 +651,7 @@ describe("MessageList media tasks", () => {
       '[data-testid="image-workbench-message-preview-task-complete-sync-copy"]',
     );
 
-    expect(previewCard?.textContent).toContain("Image Generation");
+    expect(previewCard?.textContent).toContain("图片生成");
     expect(previewCard?.textContent).not.toContain("已生成");
     expect(previewCard?.textContent).not.toContain("可在右侧继续查看与使用");
     expect(previewCard?.textContent).not.toContain("正在同步任务状态");
@@ -916,7 +916,7 @@ describe("MessageList media tasks", () => {
       '[data-testid="image-workbench-message-preview-grid-task-storyboard-preview-1"]',
     ) as HTMLDivElement | null;
 
-    expect(container.textContent).toContain("Image Generation");
+    expect(container.textContent).toContain("图片生成");
     expect(container.textContent).not.toContain(
       "3x3 分镜已经完成，可在右侧继续查看与使用。",
     );

@@ -265,6 +265,22 @@ export interface AgentThreadSubagentActivityItem extends AgentThreadItemBase {
   session_id?: string;
 }
 
+export interface AgentThreadExpertProfileSwitchItem
+  extends AgentThreadItemBase {
+  type: "expert_profile_switch";
+  title?: string;
+  summary?: string;
+  previous_expert_id?: string;
+  previous_release_id?: string;
+  next_expert_id?: string;
+  next_release_id?: string;
+  switched_at?: string;
+  expert_role_switch?: unknown;
+  expert?: unknown;
+  harness_expert?: unknown;
+  metadata?: unknown;
+}
+
 export interface AgentThreadWarningItem extends AgentThreadItemBase {
   type: "warning";
   message: string;
@@ -302,6 +318,7 @@ export type AgentThreadItem =
   | AgentThreadRequestUserInputItem
   | AgentThreadFileArtifactItem
   | AgentThreadSubagentActivityItem
+  | AgentThreadExpertProfileSwitchItem
   | AgentThreadWarningItem
   | AgentThreadContextCompactionItem
   | AgentThreadErrorItem
@@ -529,16 +546,6 @@ export interface AgentEventImageTaskPresentationGenerated {
   thread_id?: string;
   turn_id?: string;
   presentation?: Record<string, unknown>;
-}
-
-export interface AgentEventImageTaskPresentationUnavailable {
-  type: "image_task_presentation_unavailable";
-  status?: string;
-  reason?: string;
-  workflow_run_id?: string;
-  session_id?: string;
-  thread_id?: string;
-  turn_id?: string;
 }
 
 export interface AgentToolProgressPayload {
@@ -947,7 +954,6 @@ export type AgentEvent = (
   | AgentEventToolEnd
   | AgentEventImageTaskCreated
   | AgentEventImageTaskPresentationGenerated
-  | AgentEventImageTaskPresentationUnavailable
   | AgentEventToolProgress
   | AgentEventToolOutputDelta
   | AgentEventToolInputDelta
@@ -1643,30 +1649,6 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
           thread_id: pickStringField(source, "thread_id", "threadId"),
           turn_id: pickStringField(source, "turn_id", "turnId"),
           ...(presentation ? { presentation } : {}),
-        };
-      }
-      case "image_task.presentation.unavailable":
-      case "image_task_presentation_unavailable": {
-        const payload = normalizeRecord(event.payload);
-        const source = payload ?? event;
-        return {
-          type: "image_task_presentation_unavailable",
-          status: pickStringField(source, "status"),
-          reason: pickStringField(
-            source,
-            "reason",
-            "reasonCode",
-            "reason_code",
-            "message",
-          ),
-          workflow_run_id: pickStringField(
-            source,
-            "workflow_run_id",
-            "workflowRunId",
-          ),
-          session_id: pickStringField(source, "session_id", "sessionId"),
-          thread_id: pickStringField(source, "thread_id", "threadId"),
-          turn_id: pickStringField(source, "turn_id", "turnId"),
         };
       }
       case "image_task.parameters.required":

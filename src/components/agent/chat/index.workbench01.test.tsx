@@ -10,14 +10,15 @@ import {
   getIndexTestMocks,
   getSendMessageCall,
   installMockAgentChatUnifiedState,
+  textContainsAny,
   type MockInputbarSendPayload,
   type MockInputbarSendProps,
   mountPage,
   renderPage,
   sharedSendMessageMock,
   waitForElement,
-  WORKSPACE_HARNESS_DESCRIPTION,
-  WORKSPACE_HARNESS_TITLE,
+  WORKSPACE_HARNESS_DESCRIPTION_CANDIDATES,
+  WORKSPACE_HARNESS_TITLE_CANDIDATES,
 } from "./index.testFixtures";
 
 const {
@@ -471,13 +472,23 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     ) as HTMLDivElement | null;
     expect(toolbar?.dataset.showHarnessToggle).toBe("true");
     expect(toolbar?.dataset.harnessToggleLabel).toBe("Harness");
-    expect(document.body.textContent).not.toContain(WORKSPACE_HARNESS_TITLE);
+    expect(
+      textContainsAny(
+        document.body.textContent,
+        WORKSPACE_HARNESS_TITLE_CANDIDATES,
+      ),
+    ).toBe(false);
     expect(document.body.textContent).not.toContain(GENERAL_CONTEXT_HINT);
 
     clickButton(container, "toggle-harness");
     await flushEffects();
 
-    expect(document.body.textContent).toContain(WORKSPACE_HARNESS_TITLE);
+    expect(
+      textContainsAny(
+        document.body.textContent,
+        WORKSPACE_HARNESS_TITLE_CANDIDATES,
+      ),
+    ).toBe(true);
     expect(document.body.textContent).toContain(GENERAL_CONTEXT_HINT);
   });
 
@@ -499,15 +510,30 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     ) as HTMLDivElement | null;
     expect(toolbar?.dataset.showHarnessToggle).toBe("true");
     expect(toolbar?.dataset.harnessToggleLabel).toBe("Harness");
-    expect(document.body.textContent).not.toContain(WORKSPACE_HARNESS_TITLE);
+    expect(
+      textContainsAny(
+        document.body.textContent,
+        WORKSPACE_HARNESS_TITLE_CANDIDATES,
+      ),
+    ).toBe(false);
     expect(document.body.textContent).not.toContain(GENERAL_CONTEXT_HINT);
 
     clickButton(container, "toggle-harness");
     await flushEffects();
 
-    expect(document.body.textContent).toContain(WORKSPACE_HARNESS_TITLE);
+    expect(
+      textContainsAny(
+        document.body.textContent,
+        WORKSPACE_HARNESS_TITLE_CANDIDATES,
+      ),
+    ).toBe(true);
     expect(document.body.textContent).toContain(GENERAL_CONTEXT_HINT);
-    expect(document.body.textContent).toContain(WORKSPACE_HARNESS_DESCRIPTION);
+    expect(
+      textContainsAny(
+        document.body.textContent,
+        WORKSPACE_HARNESS_DESCRIPTION_CANDIDATES,
+      ),
+    ).toBe(true);
   });
 
   it("处理工作台调试信息开关关闭时仍应保留入口，但不触发工具库存读取", async () => {
@@ -527,13 +553,23 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     ) as HTMLDivElement | null;
     expect(toolbar?.dataset.showHarnessToggle).toBe("true");
     expect(toolbar?.dataset.harnessToggleLabel).toBe("Harness");
-    expect(document.body.textContent).not.toContain(WORKSPACE_HARNESS_TITLE);
+    expect(
+      textContainsAny(
+        document.body.textContent,
+        WORKSPACE_HARNESS_TITLE_CANDIDATES,
+      ),
+    ).toBe(false);
     expect(mockGetAgentRuntimeToolInventory).not.toHaveBeenCalled();
 
     clickButton(container, "toggle-harness");
     await flushEffects();
 
-    expect(document.body.textContent).toContain(WORKSPACE_HARNESS_TITLE);
+    expect(
+      textContainsAny(
+        document.body.textContent,
+        WORKSPACE_HARNESS_TITLE_CANDIDATES,
+      ),
+    ).toBe(true);
     expect(mockGetAgentRuntimeToolInventory).not.toHaveBeenCalled();
   });
 

@@ -52,9 +52,12 @@ export async function runWorkspacePatchWorkerDogfoodTurn({
   options,
   workspace,
   requestLog,
+  hostGenerationFixture: providedHostGenerationFixture,
 }) {
   const hostGenerationFixture =
-    await startContentFactoryHostGenerationFixture();
+    providedHostGenerationFixture ??
+    (await startContentFactoryHostGenerationFixture());
+  const ownsHostGenerationFixture = !providedHostGenerationFixture;
   try {
     const response = await invokeAppServerFromPage(
       page,
@@ -108,7 +111,9 @@ export async function runWorkspacePatchWorkerDogfoodTurn({
       readModel,
     });
   } finally {
-    await hostGenerationFixture.close();
+    if (ownsHostGenerationFixture) {
+      await hostGenerationFixture.close();
+    }
   }
 }
 

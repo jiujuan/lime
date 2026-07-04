@@ -21,6 +21,7 @@ import {
 } from "./claw-chat-current-fixture-constants.mjs";
 import { collectAgentUiPerformanceTraceEvidence } from "./claw-chat-current-fixture-agent-ui-trace.mjs";
 import { sendPromptFromGui } from "./claw-chat-current-fixture-gui-actions.mjs";
+import { readImageCommandWorkflowAudit } from "./claw-chat-current-fixture-image-command-workflow-read.mjs";
 import {
   collectReadModelToolCalls,
   readModelLatestTurnStatus,
@@ -37,6 +38,7 @@ import { sanitizeJson, sleep } from "./claw-chat-current-fixture-utils.mjs";
 const IMAGE_COMMAND_TERMINAL_STATUS = "succeeded";
 const IMAGE_COMMAND_WORKER_ID = "lime-image-api-worker";
 const IMAGE_COMMAND_TOOL_LABEL = "Image Generation";
+const IMAGE_COMMAND_TOOL_LABELS = [IMAGE_COMMAND_TOOL_LABEL, "图片生成"];
 const IMAGE_COMMAND_MODEL_LABEL = "Nanobanana Pro";
 const IMAGE_COMMAND_TOKEN_LABEL = "31.0K Tokens";
 const EXPECTED_IMAGE_TASK_AUDIT_EVENTS = [
@@ -666,7 +668,7 @@ export async function waitForGuiImageCommandTerminal(
         presentationCaption,
         presentationIntro,
         taskId,
-        toolLabel,
+        toolLabels,
         modelLabel,
         tokenLabel,
       }) => {
@@ -727,7 +729,10 @@ export async function waitForGuiImageCommandTerminal(
             image.height > 16,
         );
         const hasNaturalCompletionCaption =
-          cardText.includes("搞定") && cardText.includes("已经做好了");
+          (cardText.includes("搞定") || cardText.includes("完成了")) &&
+          (cardText.includes("已经做好了") || cardText.includes("已经生成")) &&
+          !cardText.includes("任务ID") &&
+          !cardText.includes("{task_id}");
         const visiblePendingStatus =
           text.includes("pending_submit") ||
           text.includes("排队中") ||
@@ -739,7 +744,9 @@ export async function waitForGuiImageCommandTerminal(
             text.includes(prompt) ||
             (text.includes("@配图") && text.includes(imagePrompt)),
           hasPresentationIntro: text.includes(presentationIntro),
-          hasToolStripLabel: toolbarText.includes(toolLabel),
+          hasToolStripLabel: toolLabels.some((label) =>
+            toolbarText.includes(label),
+          ),
           hasImageModelLabel: toolbarText.includes(modelLabel),
           hasTokenUsage: text.includes(tokenLabel),
           hasPresentationCaption:
@@ -773,7 +780,7 @@ export async function waitForGuiImageCommandTerminal(
         presentationCaption: IMAGE_COMMAND_PRESENTATION_CAPTION,
         presentationIntro: IMAGE_COMMAND_PRESENTATION_INTRO,
         taskId,
-        toolLabel: IMAGE_COMMAND_TOOL_LABEL,
+        toolLabels: IMAGE_COMMAND_TOOL_LABELS,
         modelLabel: IMAGE_COMMAND_MODEL_LABEL,
         tokenLabel: IMAGE_COMMAND_TOKEN_LABEL,
       },
@@ -1036,6 +1043,12 @@ export async function runImageCommandScenario({
     workspace,
     taskPath: imageCommandTaskArtifactTerminalPatch.taskPath,
   });
+  const imageCommandWorkflowRead = await readImageCommandWorkflowAudit({
+    page,
+    appServerRequests,
+    turnId,
+    taskId: imageCommandTaskArtifactTerminalPatch.taskId,
+  });
   const guiImageCommandTerminal = await waitForGuiImageCommandTerminal(
     page,
     options,
@@ -1090,6 +1103,7 @@ export async function runImageCommandScenario({
     imageCommandTaskArtifactTerminalPatch,
     imageCommandTaskArtifactTerminal,
     imageCommandTaskAuditLog,
+    imageCommandWorkflowRead,
     guiImageCommandCompleted,
     guiImageCommandTerminal,
     agentUiPerformanceTrace: agentUiPerformanceTracePreReload,

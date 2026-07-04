@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import {
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_COMPLETE,
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE,
@@ -6,6 +7,7 @@ import {
   CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_TITLE,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TASK_ID,
+  CONTENT_FACTORY_INLINE_IMAGE_FILE_PATH,
   CONTENT_FACTORY_INLINE_IMAGE_SLOT_ID,
   CONTENT_FACTORY_INLINE_IMAGE_TASK_PROMPT,
   CONTENT_FACTORY_INLINE_IMAGE_URL,
@@ -97,6 +99,12 @@ export async function runContentFactoryInlineImageArticleWorkspaceScenario({
     requestLog: appServerRequests,
   });
   summary.contentFactoryInlineImageReload = restored;
+  const readModel = await waitForInlineImageReadModelReplacement(
+    page,
+    options,
+    appServerRequests,
+  );
+  summary.contentFactoryInlineImageReadModel = readModel;
   const canvas = await waitForInlineImageReplacement(page, options);
   summary.contentFactoryInlineImageCanvas = canvas;
 
@@ -107,6 +115,7 @@ export async function runContentFactoryInlineImageArticleWorkspaceScenario({
     contentFactoryInlineImageTaskSubmittedEvent: submittedEvent,
     contentFactoryInlineImageTaskCompleted:
       summarizeMediaTaskArtifact(completed),
+    contentFactoryInlineImageReadModel: readModel,
     contentFactoryInlineImageReload: restored,
     contentFactoryInlineImageCanvas: canvas,
   });
@@ -170,8 +179,13 @@ function readArticleWorkspaceObjects(result) {
 }
 
 function normalizeArticleObjectRef(object) {
-  const ref =
-    asRecord(object?.ref) ?? asRecord(object?.objectRef) ?? asRecord(object);
+  const ref = mergeRecords(
+    asRecord(object),
+    asRecord(object?.object_ref),
+    asRecord(object?.objectRef),
+    asRecord(object?.ref),
+  );
+  const source = asRecord(object?.source) ?? {};
   if (readString(ref?.kind) !== "articleDraft") {
     return null;
   }
@@ -184,10 +198,16 @@ function normalizeArticleObjectRef(object) {
     artifactIds: readArray(ref.artifactIds, ref.artifact_ids)
       .map((item) => readString(item))
       .filter(Boolean),
-    sourceTurnId:
-      readString(ref.sourceTurnId, ref.source_turn_id) || undefined,
+    sourceTurnId: readString(ref.sourceTurnId, ref.source_turn_id) || undefined,
     sourceTaskId:
-      readString(ref.sourceTaskId, ref.source_task_id) || undefined,
+      readString(
+        ref.sourceTaskId,
+        ref.source_task_id,
+        source.taskId,
+        source.task_id,
+        source.sourceTaskId,
+        source.source_task_id,
+      ) || undefined,
   };
   if (
     !normalized.appId ||
@@ -202,7 +222,20 @@ function normalizeArticleObjectRef(object) {
 
 function readArticleObjectSourceTaskId(object) {
   const source = asRecord(object?.source) ?? {};
-  return readString(source.taskId, source.task_id);
+  const ref = mergeRecords(
+    asRecord(object),
+    asRecord(object?.object_ref),
+    asRecord(object?.objectRef),
+    asRecord(object?.ref),
+  );
+  return readString(
+    ref.sourceTaskId,
+    ref.source_task_id,
+    source.taskId,
+    source.task_id,
+    source.sourceTaskId,
+    source.source_task_id,
+  );
 }
 
 function summarizeArticleWorkspaceRead(result) {
@@ -237,6 +270,7 @@ async function writeInlinePendingEditedDraft({ page, requestLog, objectRef }) {
     APP_SERVER_METHOD_SESSION_UPDATE,
     {
       sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+      articleWorkspaceSelectedObjectRef: objectRef,
       articleWorkspaceEditedDraft: {
         objectKey,
         objectRef,
@@ -293,7 +327,8 @@ async function emitInlineTaskSubmittedEvent({ page, workspace, created }) {
   const result = created?.result ?? {};
   const payload = {
     task_id: readString(result.task_id, result.taskId),
-    task_type: readString(result.task_type, result.taskType) || "image_generate",
+    task_type:
+      readString(result.task_type, result.taskType) || "image_generate",
     task_family: "image",
     status: readString(result.status) || "pending_submit",
     path: readString(result.path, result.artifact_path, result.artifactPath),
@@ -314,17 +349,23 @@ async function emitInlineTaskSubmittedEvent({ page, workspace, created }) {
     anchor_text: INLINE_ANCHOR_TEXT,
   };
   assert(payload.task_id, "inline image fixture 任务事件缺少 task_id");
-  assert(payload.absolute_path, "inline image fixture 任务事件缺少 absolute_path");
-  await page.evaluate(async ({ eventName, payload }) => {
-    const emit = window.electronAPI?.emit;
-    if (typeof emit !== "function") {
-      throw new Error("Electron event emit bridge is unavailable");
-    }
-    await emit(eventName, payload);
-  }, {
-    eventName: "lime://creation_task_submitted",
-    payload,
-  });
+  assert(
+    payload.absolute_path,
+    "inline image fixture 任务事件缺少 absolute_path",
+  );
+  await page.evaluate(
+    async ({ eventName, payload }) => {
+      const emit = window.electronAPI?.emit;
+      if (typeof emit !== "function") {
+        throw new Error("Electron event emit bridge is unavailable");
+      }
+      await emit(eventName, payload);
+    },
+    {
+      eventName: "lime://creation_task_submitted",
+      payload,
+    },
+  );
   return sanitizeJson({
     emitted: true,
     taskId: payload.task_id,
@@ -334,11 +375,20 @@ async function emitInlineTaskSubmittedEvent({ page, workspace, created }) {
   });
 }
 
-async function completeInlineImageTask({ page, workspace, requestLog, created }) {
+async function completeInlineImageTask({
+  page,
+  workspace,
+  requestLog,
+  created,
+}) {
   const taskRef =
     readString(created.result?.artifact_path, created.result?.artifactPath) ||
     readString(created.result?.task_id, created.result?.taskId);
   assert(taskRef, "inline image fixture 创建任务后缺少 taskRef");
+  assert(
+    fs.existsSync(CONTENT_FACTORY_INLINE_IMAGE_FILE_PATH),
+    `inline image fixture 文件不存在: ${CONTENT_FACTORY_INLINE_IMAGE_FILE_PATH}`,
+  );
   return await invokeAppServerFromPage(
     page,
     APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_IMAGE_COMPLETE,
@@ -394,56 +444,229 @@ async function reloadAndOpenInlineArticleWorkspace({
   return sanitizeJson({ reload, renderer, visible, opened });
 }
 
+async function waitForInlineImageReadModelReplacement(
+  page,
+  options,
+  requestLog,
+) {
+  const startedAt = Date.now();
+  let lastSummary = null;
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const read = await invokeAppServerFromPage(
+      page,
+      APP_SERVER_METHOD_SESSION_READ,
+      {
+        sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+        historyLimit: 20,
+      },
+      requestLog,
+    );
+    const summary = summarizeInlineImageReadModel(read.result);
+    lastSummary = summary;
+    if (
+      summary.hasInlineTitle &&
+      summary.hasAnchorText &&
+      summary.hasImageUrl &&
+      !summary.hasPendingProtocol
+    ) {
+      return summary;
+    }
+    await sleep(options.intervalMs);
+  }
+  throw new Error(
+    `inline image fixture read model 未持久化已回填正文: ${JSON.stringify(
+      sanitizeJson(lastSummary),
+    )}`,
+  );
+}
+
+function collectStringValues(value, output = []) {
+  if (typeof value === "string") {
+    output.push(value);
+    return output;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectStringValues(item, output));
+    return output;
+  }
+  if (value && typeof value === "object") {
+    Object.values(value).forEach((item) => collectStringValues(item, output));
+  }
+  return output;
+}
+
+function summarizeInlineImageReadModel(result) {
+  const strings = collectStringValues(result);
+  const targetStrings = strings.filter(
+    (value) =>
+      value.includes("Inline 配图恢复验证") &&
+      value.includes(INLINE_ANCHOR_TEXT) &&
+      value.includes(CONTENT_FACTORY_INLINE_IMAGE_SLOT_ID),
+  );
+  const resolvedTargetStrings = targetStrings.filter(
+    (value) =>
+      value.includes(CONTENT_FACTORY_INLINE_IMAGE_URL) &&
+      !value.includes("pending-image-task://"),
+  );
+  const matchingStrings = (
+    targetStrings.length > 0 ? targetStrings : strings
+  ).filter(
+    (value) =>
+      value.includes("Inline 配图恢复验证") ||
+      value.includes(INLINE_ANCHOR_TEXT) ||
+      value.includes(CONTENT_FACTORY_INLINE_IMAGE_URL) ||
+      value.includes("pending-image-task://") ||
+      value.includes(CONTENT_FACTORY_INLINE_IMAGE_SLOT_ID),
+  );
+  const joined = matchingStrings.join("\n");
+  return sanitizeJson({
+    hasInlineTitle: joined.includes("Inline 配图恢复验证"),
+    hasAnchorText: joined.includes(INLINE_ANCHOR_TEXT),
+    hasImageUrl: resolvedTargetStrings.length > 0,
+    hasPendingProtocol:
+      resolvedTargetStrings.length === 0 &&
+      targetStrings.some((value) => value.includes("pending-image-task://")),
+    globalHasPendingProtocol: strings.some((value) =>
+      value.includes("pending-image-task://"),
+    ),
+    hasSlotMarker: joined.includes(CONTENT_FACTORY_INLINE_IMAGE_SLOT_ID),
+    matchingStringCount: matchingStrings.length,
+    targetStringCount: targetStrings.length,
+    resolvedTargetStringCount: resolvedTargetStrings.length,
+    matchingStrings: matchingStrings.slice(0, 8),
+  });
+}
+
 async function waitForInlineImageReplacement(page, options) {
   const startedAt = Date.now();
   let lastSnapshot = null;
   while (Date.now() - startedAt < options.timeoutMs) {
-    const snapshot = await evaluatePageSnapshot(page, () => {
-      const text = document.body?.innerText || "";
-      const editableText =
-        Array.from(
-          document.querySelectorAll("textarea, [contenteditable='true']"),
+    const snapshot = await evaluatePageSnapshot(
+      page,
+      (expected) => {
+        const expectedImageUrl = expected.imageUrl;
+        const text = document.body?.innerText || "";
+        const editableText =
+          Array.from(
+            document.querySelectorAll("textarea, [contenteditable='true']"),
+          )
+            .map((element) => element.value || element.textContent || "")
+            .join("\n") || text;
+        const images = Array.from(document.querySelectorAll("img")).map(
+          (image) => ({
+            src: image.getAttribute("src") || "",
+            resolvedSrc: image.src || "",
+            alt: image.getAttribute("alt") || "",
+            complete: image.complete,
+            naturalWidth: image.naturalWidth,
+            naturalHeight: image.naturalHeight,
+          }),
+        );
+        const imageDiagnosticSources = Array.from(
+          document.querySelectorAll("[data-markdown-image-src]"),
+        ).map(
+          (element) => element.getAttribute("data-markdown-image-src") || "",
+        );
+        const matchingImages = images.filter(
+          (image) =>
+            (image.src === expectedImageUrl ||
+              image.resolvedSrc === expectedImageUrl) &&
+            image.complete &&
+            image.naturalWidth > 0,
+        );
+        const matchingImageContexts = Array.from(
+          document.querySelectorAll("img"),
         )
-          .map((element) => element.value || element.textContent || "")
-          .join("\n") || text;
-      const images = Array.from(document.querySelectorAll("img")).map(
-        (image) => ({
-          src: image.getAttribute("src") || "",
-          alt: image.getAttribute("alt") || "",
-        }),
-      );
-      return {
-        url: window.location.href,
-        hasArticleWorkspace: text.includes("Article") || text.includes("文章"),
-        hasSlotMarker:
-          editableText.includes("article-inline-image-slot-e2e") ||
-          text.includes("article-inline-image-slot-e2e"),
-        hasPendingProtocol:
-          editableText.includes("pending-image-task://") ||
-          text.includes("pending-image-task://"),
-        hasImageUrl:
-          editableText.includes(
-            "https://example.com/lime-fixture-guangzhou-inline.png",
-          ) ||
-          text.includes("https://example.com/lime-fixture-guangzhou-inline.png") ||
-          images.some((image) =>
-            image.src.includes("lime-fixture-guangzhou-inline.png"),
+          .filter(
+            (image) =>
+              (image.getAttribute("src") === expectedImageUrl ||
+                image.src === expectedImageUrl) &&
+              image.complete &&
+              image.naturalWidth > 0,
+          )
+          .map((image) => {
+            let node = image.parentElement;
+            for (let depth = 0; node && depth < 8; depth += 1) {
+              const contextText = node.innerText || "";
+              if (
+                contextText.includes(expected.anchorText) ||
+                contextText.includes(expected.sectionTitle)
+              ) {
+                return {
+                  depth,
+                  text: contextText.slice(0, 1000),
+                };
+              }
+              node = node.parentElement;
+            }
+            return {
+              depth: null,
+              text: image.parentElement?.innerText?.slice(0, 1000) || "",
+            };
+          });
+        const hasRenderedImageNearAnchor = matchingImageContexts.some(
+          (context) =>
+            context.text.includes(expected.anchorText) ||
+            context.text.includes(expected.sectionTitle),
+        );
+        const expectedUnavailablePlaceholders = Array.from(
+          document.querySelectorAll(
+            '[data-testid="markdown-image-unavailable"]',
           ),
-        imageCount: images.length,
-        matchingImages: images.filter((image) =>
-          image.src.includes("lime-fixture-guangzhou-inline.png"),
-        ),
-        bodyText: text.slice(0, 3000),
-      };
-    });
+        ).filter((element) => {
+          const source =
+            element
+              .closest("[data-markdown-image-src]")
+              ?.getAttribute("data-markdown-image-src") || "";
+          return source === expectedImageUrl;
+        });
+        return {
+          url: window.location.href,
+          hasArticleWorkspace:
+            text.includes("Article") || text.includes("文章"),
+          hasSlotMarker:
+            editableText.includes("article-inline-image-slot-e2e") ||
+            text.includes("article-inline-image-slot-e2e"),
+          hasPendingProtocol:
+            editableText.includes("pending-image-task://") ||
+            text.includes("pending-image-task://"),
+          hasImageUrl:
+            editableText.includes(expectedImageUrl) ||
+            text.includes(expectedImageUrl) ||
+            images.some(
+              (image) =>
+                image.src === expectedImageUrl ||
+                image.resolvedSrc === expectedImageUrl,
+            ) ||
+            imageDiagnosticSources.includes(expectedImageUrl),
+          hasRenderedImage: matchingImages.length > 0,
+          hasRenderedImageNearAnchor,
+          hasUnavailablePlaceholderForExpected:
+            expectedUnavailablePlaceholders.length > 0,
+          imageCount: images.length,
+          matchingImages,
+          matchingImageContexts,
+          imageDiagnosticSources: imageDiagnosticSources.filter(
+            (source) => source === expectedImageUrl,
+          ),
+          bodyText: text.slice(0, 3000),
+        };
+      },
+      {
+        imageUrl: CONTENT_FACTORY_INLINE_IMAGE_URL,
+        anchorText: INLINE_ANCHOR_TEXT,
+        sectionTitle: INLINE_SECTION_TITLE,
+      },
+    );
     if (!snapshot) {
       await sleep(options.intervalMs);
       continue;
     }
     lastSnapshot = snapshot;
     if (
-      snapshot.hasSlotMarker &&
-      snapshot.hasImageUrl &&
+      snapshot.hasRenderedImage &&
+      snapshot.hasRenderedImageNearAnchor &&
+      !snapshot.hasUnavailablePlaceholderForExpected &&
       !snapshot.hasPendingProtocol
     ) {
       return sanitizeJson(snapshot);
@@ -485,6 +708,10 @@ function asRecord(value) {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value
     : null;
+}
+
+function mergeRecords(...records) {
+  return Object.assign({}, ...records.filter(Boolean));
 }
 
 function readArray(...values) {

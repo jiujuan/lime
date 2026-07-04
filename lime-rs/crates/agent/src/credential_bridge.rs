@@ -10,37 +10,31 @@
 use lime_core::database::dao::api_key_provider::ApiProviderType;
 use lime_core::database::DbConnection;
 use lime_core::models::provider_type::is_custom_provider_id;
-use lime_core::models::{
-    runtime_api_key_id_from_credential_uuid, RuntimeCredentialData, RuntimeProviderCredential,
-};
+use lime_core::models::{runtime_api_key_id_from_credential_uuid, RuntimeProviderCredential};
 use lime_services::api_key_provider_service::ApiKeyProviderService;
+use model_provider::runtime_provider::RuntimeProviderConfig;
 
-mod provider_config;
 mod provider_env;
-mod provider_factory;
 mod provider_mapping;
+mod provider_safety;
+mod runtime_config_projection;
+mod runtime_provider_adapter;
 
-pub use provider_config::{RuntimeProviderConfig, RuntimeProviderProtocol};
 #[cfg(test)]
 use provider_env::{
     set_provider_env_vars, should_disable_provider_default_fast_model, split_url_host_and_path,
     OPENAI_CUSTOM_HEADERS_ENV,
 };
-pub(crate) use provider_factory::create_aster_runtime_provider;
-pub use provider_factory::create_model_runtime_provider;
-use provider_mapping::{map_provider_type_to_aster_with_api_type, normalize_provider_selector};
+use runtime_config_projection::runtime_provider_config_from_credential;
+pub(crate) use runtime_provider_adapter::{create_session_provider_handle, SessionProviderHandle};
 
 /// 凭证桥接错误
 #[derive(Debug, Clone)]
-pub enum CredentialBridgeError {
+pub(crate) enum CredentialBridgeError {
     /// 没有可用凭证
     NoCredentials(String),
-    /// 凭证类型不支持
-    UnsupportedCredentialType(String),
     /// Provider 创建失败
     ProviderCreationFailed(String),
-    /// Provider 执行失败
-    ProviderExecutionFailed(String),
     /// 数据库错误
     DatabaseError(String),
 }
@@ -49,9 +43,7 @@ impl std::fmt::Display for CredentialBridgeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::NoCredentials(msg) => write!(f, "没有可用凭证: {msg}"),
-            Self::UnsupportedCredentialType(msg) => write!(f, "不支持的凭证类型: {msg}"),
             Self::ProviderCreationFailed(msg) => write!(f, "Provider 创建失败: {msg}"),
-            Self::ProviderExecutionFailed(msg) => write!(f, "Provider 执行失败: {msg}"),
             Self::DatabaseError(msg) => write!(f, "数据库错误: {msg}"),
         }
     }
@@ -63,8 +55,8 @@ impl std::error::Error for CredentialBridgeError {}
 ///
 /// 负责从 Lime API Key Provider 选择凭证并转换为 runtime provider 配置。
 ///
-/// Aster provider 创建仅保留在 `provider_factory` compat adapter 内。
-pub struct CredentialBridge {
+/// runtime provider 创建仅保留在 `runtime_provider_adapter` compat adapter 内。
+pub(crate) struct CredentialBridge {
     api_key_service: ApiKeyProviderService,
 }
 
@@ -75,7 +67,7 @@ impl Default for CredentialBridge {
 }
 
 impl CredentialBridge {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             api_key_service: ApiKeyProviderService::new(),
         }
@@ -94,7 +86,7 @@ impl CredentialBridge {
     ///
     /// # 返回
     /// 成功时返回 RuntimeProviderConfig，失败时返回错误
-    pub async fn select_and_configure(
+    pub(crate) async fn select_and_configure(
         &self,
         db: &DbConnection,
         provider_type: &str,
@@ -163,68 +155,21 @@ impl CredentialBridge {
             credential.provider_type
         );
 
-        let (provider_name, api_key, base_url) = match &credential.credential {
-            // OpenAI API Key - 根据 provider_type_hint 确定实际的 Provider
-            RuntimeCredentialData::OpenAIKey { api_key, base_url } => {
-                let resolved_api_type = self.resolve_api_provider_type_hint(db, provider_type_hint);
-                let provider =
-                    map_provider_type_to_aster_with_api_type(provider_type_hint, resolved_api_type);
-                tracing::info!(
-                    "[CredentialBridge] OpenAIKey: provider_type_hint={}, resolved_api_type={:?} -> aster_provider={}",
-                    provider_type_hint,
-                    resolved_api_type,
-                    provider
-                );
-                (
-                    provider.to_string(),
-                    Some(api_key.clone()),
-                    base_url.clone(),
-                )
-            }
-
-            // Claude/Anthropic API Key
-            RuntimeCredentialData::ClaudeKey { api_key, base_url }
-            | RuntimeCredentialData::AnthropicKey { api_key, base_url } => (
-                "anthropic".to_string(),
-                Some(api_key.clone()),
-                base_url.clone(),
-            ),
-
-            // Gemini API Key
-            RuntimeCredentialData::GeminiApiKey {
-                api_key, base_url, ..
-            } => (
-                "google".to_string(),
-                Some(api_key.clone()),
-                base_url.clone(),
-            ),
-
-            // Vertex AI
-            RuntimeCredentialData::VertexKey {
-                api_key, base_url, ..
-            } => (
-                "gcpvertexai".to_string(),
-                Some(api_key.clone()),
-                base_url.clone(),
-            ),
-        };
-
-        Ok(RuntimeProviderConfig {
-            provider_name,
-            provider_selector: normalize_provider_selector(Some(provider_type_hint)),
-            model_name: model.to_string(),
-            api_key,
-            base_url,
-            credential_uuid: credential.uuid.clone(),
-            reasoning_effort: None,
-            protocol: None,
-            toolshim: false,
-            toolshim_model: None,
-        })
+        let resolved_api_type = self.resolve_api_provider_type_hint(db, provider_type_hint);
+        Ok(runtime_provider_config_from_credential(
+            credential,
+            model,
+            provider_type_hint,
+            resolved_api_type,
+        ))
     }
 
     /// 记录凭证使用
-    pub fn record_usage(&self, db: &DbConnection, uuid: &str) -> Result<(), CredentialBridgeError> {
+    pub(crate) fn record_usage(
+        &self,
+        db: &DbConnection,
+        uuid: &str,
+    ) -> Result<(), CredentialBridgeError> {
         if let Some(api_key_id) = self.resolve_runtime_api_key_id(uuid) {
             return self
                 .api_key_service
@@ -238,49 +183,12 @@ impl CredentialBridge {
         );
         Ok(())
     }
-
-    /// 标记凭证为健康
-    pub fn mark_healthy(
-        &self,
-        db: &DbConnection,
-        uuid: &str,
-        model: Option<&str>,
-    ) -> Result<(), CredentialBridgeError> {
-        if self.resolve_runtime_api_key_id(uuid).is_some() {
-            return Ok(());
-        }
-
-        let _ = (db, model);
-        tracing::debug!(
-            "[CredentialBridge] 忽略已退役的旧 credential 健康标记: {}",
-            uuid
-        );
-        Ok(())
-    }
-
-    /// 标记凭证为不健康
-    pub fn mark_unhealthy(
-        &self,
-        db: &DbConnection,
-        uuid: &str,
-        error: Option<&str>,
-    ) -> Result<(), CredentialBridgeError> {
-        if self.resolve_runtime_api_key_id(uuid).is_some() {
-            return Ok(());
-        }
-
-        let _ = (db, error);
-        tracing::debug!(
-            "[CredentialBridge] 忽略已退役的旧 credential 失败标记: {}",
-            uuid
-        );
-        Ok(())
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use model_provider::runtime_provider::RuntimeProviderProtocol;
     use std::sync::{Mutex, MutexGuard, OnceLock};
 
     fn env_lock() -> MutexGuard<'static, ()> {

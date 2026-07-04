@@ -2,7 +2,7 @@ use crate::ExecutionRequest;
 use crate::RuntimeCoreError;
 use lime_agent::{
     request_tool_policy_with_additional_required_tools, resolve_request_tool_policy_with_mode,
-    ProviderConfig, RequestToolPolicy, RequestToolPolicyMode,
+    RequestToolPolicy, RequestToolPolicyMode, SessionProviderConfig,
 };
 pub(super) use runtime_core::RuntimeModelSelection;
 use serde::{Deserialize, Serialize};
@@ -350,7 +350,7 @@ pub(super) fn direct_provider_config_from_request(
     host_request: Option<&AsterChatRequestSnapshot>,
     selection: &RuntimeModelSelection,
     reasoning_effort: Option<String>,
-) -> Option<ProviderConfig> {
+) -> Option<SessionProviderConfig> {
     let request = host_request.and_then(host_provider_config)?;
     if request.api_key.is_none() && request.base_url.is_none() {
         return None;
@@ -363,7 +363,7 @@ pub(super) fn direct_provider_config_from_request(
     let model_name =
         non_empty(request.model_name.as_deref()).or_else(|| Some(selection.model.clone()))?;
 
-    Some(ProviderConfig {
+    Some(SessionProviderConfig {
         provider_name,
         provider_selector,
         model_name,
@@ -371,7 +371,7 @@ pub(super) fn direct_provider_config_from_request(
         base_url: request.base_url.clone(),
         credential_uuid: None,
         reasoning_effort,
-        protocol: None,
+        route_protocol: None,
         toolshim: matches!(
             request.tool_call_strategy,
             Some(RuntimeToolCallStrategy::ToolShim)

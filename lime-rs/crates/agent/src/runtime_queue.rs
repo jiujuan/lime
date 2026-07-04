@@ -1,10 +1,10 @@
-use crate::aster_runtime_support::{
-    clear_aster_runtime_queued_turns, enqueue_aster_runtime_turn, list_aster_runtime_queued_turns,
-    prepare_aster_runtime_queue_resumption, queued_turn_event_name_from_runtime,
-    queued_turn_runtime_from_task, queued_turn_snapshot_from_runtime,
-    remove_aster_runtime_queued_turn,
-};
 use crate::protocol::AgentEvent as RuntimeAgentEvent;
+use crate::runtime_support::{
+    clear_runtime_queued_turns, enqueue_runtime_turn, list_runtime_queued_turns,
+    prepare_runtime_queue_resumption, queued_turn_event_name_from_runtime,
+    queued_turn_runtime_from_task, queued_turn_snapshot_from_runtime,
+    remove_runtime_queued_turn_from_store,
+};
 use crate::{QueuedTurnSnapshot, QueuedTurnTask};
 use aster::session::{
     require_shared_session_runtime_queue_service, QueuedTurnRuntime, RuntimeQueueSubmitResult,
@@ -66,7 +66,7 @@ async fn run_runtime_turn_and_continue<C>(
     match result {
         Ok(Ok(())) => {}
         Ok(Err(error)) => {
-            tracing::warn!("[AsterAgent][Queue] 队列任务执行失败: {}", error);
+            tracing::warn!("[AgentRuntime][Queue] 队列任务执行失败: {}", error);
             emit_runtime_queue_event(
                 &emitter,
                 &event_name,
@@ -75,7 +75,7 @@ async fn run_runtime_turn_and_continue<C>(
         }
         Err(error) => {
             let message = runtime_turn_panic_message(error);
-            tracing::error!("[AsterAgent][Queue] {}", message);
+            tracing::error!("[AgentRuntime][Queue] {}", message);
             emit_runtime_queue_event(&emitter, &event_name, RuntimeAgentEvent::Error { message });
         }
     }
@@ -88,7 +88,7 @@ async fn run_runtime_turn_and_continue<C>(
     )
     .await
     {
-        tracing::warn!("[AsterAgent][Queue] 调度下一条排队 turn 失败: {}", error);
+        tracing::warn!("[AgentRuntime][Queue] 调度下一条排队 turn 失败: {}", error);
     }
 }
 
@@ -128,7 +128,7 @@ fn spawn_runtime_turn_task<C>(
                 Ok(runtime) => runtime,
                 Err(error) => {
                     tracing::warn!(
-                        "[AsterAgent][Queue] 创建 runtime turn 专用运行时失败，尝试 current-thread 兜底: {}",
+                        "[AgentRuntime][Queue] 创建 runtime turn 专用运行时失败，尝试 current-thread 兜底: {}",
                         error
                     );
                     match tokio::runtime::Builder::new_current_thread()
@@ -141,7 +141,7 @@ fn spawn_runtime_turn_task<C>(
                             let message = format!(
                                 "创建 runtime turn 专用运行时失败: {error}; current-thread 兜底也失败: {fallback_error}"
                             );
-                            tracing::error!("[AsterAgent][Queue] {}", message);
+                            tracing::error!("[AgentRuntime][Queue] {}", message);
                             emit_runtime_queue_event(
                                 &emitter_for_thread,
                                 &event_name_for_thread,
@@ -152,13 +152,13 @@ fn spawn_runtime_turn_task<C>(
                                 &queued_turn_id,
                             ) {
                                 Ok(true) => tracing::warn!(
-                                    "[AsterAgent][Queue] 已释放无法启动的 runtime turn gate: session_id={}, queued_turn_id={}",
+                                    "[AgentRuntime][Queue] 已释放无法启动的 runtime turn gate: session_id={}, queued_turn_id={}",
                                     session_id,
                                     queued_turn_id
                                 ),
                                 Ok(false) => {}
                                 Err(release_error) => tracing::warn!(
-                                    "[AsterAgent][Queue] 释放无法启动的 runtime turn gate 失败: session_id={}, queued_turn_id={}, error={}",
+                                    "[AgentRuntime][Queue] 释放无法启动的 runtime turn gate 失败: session_id={}, queued_turn_id={}, error={}",
                                     session_id,
                                     queued_turn_id,
                                     release_error
@@ -183,7 +183,7 @@ fn spawn_runtime_turn_task<C>(
 
     if let Err(error) = spawn_result {
         let message = format!("启动 runtime turn 专用线程失败，回退到当前 Tokio runtime: {error}");
-        tracing::error!("[AsterAgent][Queue] {}", message);
+        tracing::error!("[AgentRuntime][Queue] {}", message);
         emit_runtime_queue_event(
             &fallback_emitter,
             &fallback_event_name,
@@ -238,7 +238,7 @@ fn spawn_runtime_turn_task<C>(
             };
             if let Err(release_error) = release_result {
                 tracing::warn!(
-                    "[AsterAgent][Queue] 释放无法启动的 runtime turn gate 失败: session_id={}, queued_turn_id={}, error={}",
+                    "[AgentRuntime][Queue] 释放无法启动的 runtime turn gate 失败: session_id={}, queued_turn_id={}, error={}",
                     fallback_session_id,
                     fallback_queued_turn_id,
                     release_error
@@ -333,10 +333,7 @@ pub async fn resume_runtime_queue_if_needed<C>(
 where
     C: Clone + Send + Sync + 'static,
 {
-    if list_aster_runtime_queued_turns(&session_id)
-        .await?
-        .is_empty()
-    {
+    if list_runtime_queued_turns(&session_id).await?.is_empty() {
         return Ok(false);
     }
 
@@ -390,7 +387,7 @@ where
                 queued_task.payload,
             );
             tracing::info!(
-                "[AsterAgent][Queue] submit_runtime_turn accepted: session_id={}, queued_turn_id={}, result=start_now, resumed_queue={}, skip_pre_submit_resume={}, resume_ms={}, queue_submit_ms={}, total_ms={}",
+                "[AgentRuntime][Queue] submit_runtime_turn accepted: session_id={}, queued_turn_id={}, result=start_now, resumed_queue={}, skip_pre_submit_resume={}, resume_ms={}, queue_submit_ms={}, total_ms={}",
                 session_id,
                 queued_task.queued_turn_id,
                 resumed_queue,
@@ -415,7 +412,7 @@ where
                 },
             );
             tracing::info!(
-                "[AsterAgent][Queue] submit_runtime_turn accepted: session_id={}, queued_turn_id={}, result=enqueued, position={}, resumed_queue={}, skip_pre_submit_resume={}, resume_ms={}, queue_submit_ms={}, total_ms={}",
+                "[AgentRuntime][Queue] submit_runtime_turn accepted: session_id={}, queued_turn_id={}, result=enqueued, position={}, resumed_queue={}, skip_pre_submit_resume={}, resume_ms={}, queue_submit_ms={}, total_ms={}",
                 session_id,
                 queued_turn.queued_turn_id,
                 position,
@@ -434,7 +431,7 @@ pub async fn clear_runtime_queue(
     session_id: &str,
     emitter: RuntimeQueueEventEmitter,
 ) -> Result<Vec<QueuedTurnRuntime>, String> {
-    let cleared = clear_aster_runtime_queued_turns(session_id).await?;
+    let cleared = clear_runtime_queued_turns(session_id).await?;
     if cleared.is_empty() {
         return Ok(cleared);
     }
@@ -460,7 +457,7 @@ pub async fn clear_runtime_queue(
 pub async fn list_runtime_queue_snapshots(
     session_id: &str,
 ) -> Result<Vec<QueuedTurnSnapshot>, String> {
-    Ok(list_aster_runtime_queued_turns(session_id)
+    Ok(list_runtime_queued_turns(session_id)
         .await?
         .iter()
         .enumerate()
@@ -473,7 +470,7 @@ pub async fn remove_runtime_queued_turn(
     queued_turn_id: &str,
     emitter: RuntimeQueueEventEmitter,
 ) -> Result<bool, String> {
-    let queued_turns = list_aster_runtime_queued_turns(session_id).await?;
+    let queued_turns = list_runtime_queued_turns(session_id).await?;
     let Some(existing) = queued_turns
         .into_iter()
         .find(|queued_turn| queued_turn.queued_turn_id == queued_turn_id)
@@ -481,7 +478,7 @@ pub async fn remove_runtime_queued_turn(
         return Ok(false);
     };
 
-    let removed = remove_aster_runtime_queued_turn(queued_turn_id).await?;
+    let removed = remove_runtime_queued_turn_from_store(queued_turn_id).await?;
     let Some(queued_turn) = removed else {
         return Ok(false);
     };
@@ -501,7 +498,7 @@ pub async fn promote_runtime_queued_turn(
     session_id: &str,
     queued_turn_id: &str,
 ) -> Result<bool, String> {
-    let queued_turns = list_aster_runtime_queued_turns(session_id).await?;
+    let queued_turns = list_runtime_queued_turns(session_id).await?;
     if queued_turns.is_empty() {
         return Ok(false);
     }
@@ -532,13 +529,13 @@ pub async fn promote_runtime_queued_turn(
     );
 
     let original_turns = queued_turns;
-    clear_aster_runtime_queued_turns(session_id).await?;
+    clear_runtime_queued_turns(session_id).await?;
 
     for queued_turn in &reordered_turns {
-        if let Err(error) = enqueue_aster_runtime_turn(queued_turn.clone()).await {
-            clear_aster_runtime_queued_turns(session_id).await?;
+        if let Err(error) = enqueue_runtime_turn(queued_turn.clone()).await {
+            clear_runtime_queued_turns(session_id).await?;
             for original_turn in original_turns {
-                enqueue_aster_runtime_turn(original_turn).await?;
+                enqueue_runtime_turn(original_turn).await?;
             }
             return Err(error);
         }
@@ -564,7 +561,7 @@ pub async fn resume_persisted_runtime_queues_on_startup<C>(
 where
     C: Clone + Send + Sync + 'static,
 {
-    let session_ids = prepare_aster_runtime_queue_resumption().await?;
+    let session_ids = prepare_runtime_queue_resumption().await?;
     if session_ids.is_empty() {
         return Ok(0);
     }
@@ -581,7 +578,7 @@ where
         {
             resumed += 1;
             tracing::info!(
-                "[AsterAgent][Queue] 启动阶段已恢复会话排队执行: session_id={}",
+                "[AgentRuntime][Queue] 启动阶段已恢复会话排队执行: session_id={}",
                 session_id
             );
         }

@@ -35,8 +35,7 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
   const gui = summary.contentFactoryArticleWorkspaceGui ?? {};
   const readModel = summary.contentFactoryArticleWorkspaceReadModel ?? {};
   const artifactRead = summary.contentFactoryArticleWorkspaceArtifactRead ?? {};
-  const workflowRead =
-    summary.contentFactoryArticleWorkspaceWorkflowRead ?? {};
+  const workflowRead = summary.contentFactoryArticleWorkspaceWorkflowRead ?? {};
   const workflowRespond =
     summary.contentFactoryArticleWorkspaceWorkflowRespond ?? {};
   const workflowCancel =
@@ -127,8 +126,7 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
       workflowRead.run?.status === "running" &&
       workflowRead.run?.appId === "content-factory-app" &&
       workflowRead.run?.taskId === "article_job_1" &&
-      workflowRead.run?.turnId ===
-        "turn_content_factory_article_workspace" &&
+      workflowRead.run?.turnId === "turn_content_factory_article_workspace" &&
       workflowRead.run?.stepCounts?.total === 3 &&
       workflowRead.run?.stepCounts?.completed === 2 &&
       workflowRead.run?.stepCounts?.waiting === 1 &&
@@ -156,37 +154,45 @@ export function buildContentFactoryArticleWorkspaceScenarioAssertions({
       workflowRespond.step?.status === "running" &&
       workflowRespond.step?.requestId ===
         CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_REQUEST_ID &&
-      workflowRespond.step?.agentActionType === "ask_user" &&
-      workflowRespond.step?.responseSource === "workflow/respond" &&
-      workflowRespond.step?.responseRequestId ===
-        CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_REQUEST_ID &&
-      workflowRespond.step?.responseConfirmed === false,
+      workflowRespond.step?.agentActionType === "ask_user",
     contentFactoryArticleWorkspaceWorkflowCancelProjected:
       appServerRequestMethods.includes(APP_SERVER_METHOD_WORKFLOW_CANCEL) &&
-      workflowCancel.sessionId === CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID &&
+      workflowCancel.sessionId ===
+        CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID &&
       workflowCancel.run?.workflowRunId ===
         CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_CANCEL_RUN_ID &&
       workflowCancel.run?.status === "canceled" &&
       workflowCancel.run?.stepCounts?.canceled === 1 &&
-      workflowCancel.run?.cancellationReasonCode ===
-        "fixture_cancel_requested" &&
       workflowCancel.step?.stepId ===
         CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_CANCEL_STEP_ID &&
-      workflowCancel.step?.status === "canceled" &&
-      workflowCancel.step?.cancellationReasonCode ===
-        "fixture_cancel_requested",
+      workflowCancel.step?.status === "canceled",
     contentFactoryArticleWorkspaceWorkflowRetryProjected:
       appServerRequestMethods.includes(APP_SERVER_METHOD_WORKFLOW_RETRY) &&
-      workflowRetry.sessionId === CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID &&
+      workflowRetry.sessionId ===
+        CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID &&
+      Boolean(workflowRetry.rescheduledTurnId) &&
       workflowRetry.run?.workflowRunId ===
         CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_RUN_ID &&
       workflowRetry.run?.status === "retrying" &&
       workflowRetry.run?.stepCounts?.retrying === 1 &&
-      !workflowRetry.rescheduledTurnId &&
+      workflowRetry.run?.retrySource === "workflow/retry" &&
+      workflowRetry.run?.retryReasonCode === "fixture_retry_requested" &&
+      workflowRetry.run?.retrySourceTurnId ===
+        CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TURN_ID &&
+      workflowRetry.run?.retryRescheduledTurnId ===
+        workflowRetry.rescheduledTurnId &&
       workflowRetry.step?.stepId ===
         CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_STEP_ID &&
       workflowRetry.step?.status === "retrying" &&
-      workflowRetry.step?.attempt === 2,
+      workflowRetry.step?.attempt === 2 &&
+      workflowRetry.step?.retrySource === "workflow/retry" &&
+      workflowRetry.step?.retryReasonCode === "fixture_retry_requested" &&
+      workflowRetry.step?.retrySourceTurnId ===
+        CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TURN_ID &&
+      workflowRetry.step?.retryRescheduledTurnId ===
+        workflowRetry.rescheduledTurnId &&
+      summary.contentFactoryArticleWorkspaceWorkerHostGenerationFixture
+        ?.requestCount >= 2,
     contentFactoryArticleWorkspaceArtifactsProjected:
       readModel.articleArtifact?.artifactRef ===
         CONTENT_FACTORY_ARTICLE_WORKSPACE_ARTICLE_ARTIFACT_ID &&

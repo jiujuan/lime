@@ -14,8 +14,8 @@ use super::session_store_subagent_context::{
 use super::session_store_types::SessionDetail;
 use super::{get_session_sync_with_history_page, resolve_session_provider_selector};
 use crate::aster_runtime_projection::project_aster_message;
-use crate::aster_runtime_support::load_aster_runtime_snapshot;
 use crate::runtime_snapshot_adapter::project_aster_runtime_snapshot;
+use crate::runtime_support::load_runtime_snapshot;
 use crate::session_execution_runtime::{
     build_session_execution_runtime, reconcile_session_execution_runtime_permission_fallback,
 };
@@ -154,7 +154,7 @@ pub async fn get_runtime_session_detail_with_history_page(
         let include_messages = before_message_id.is_none();
         let (session_result, snapshot_result) = tokio::join!(
             read_session(session_id, include_messages, "读取运行态 session 失败"),
-            load_aster_runtime_snapshot(session_id),
+            load_runtime_snapshot(session_id),
         );
         let session = match session_result {
             Ok(session) => Some(session),

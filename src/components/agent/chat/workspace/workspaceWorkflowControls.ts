@@ -6,6 +6,7 @@ import type {
 import type {
   WorkspaceWorkflowAction,
   WorkspaceWorkflowRun,
+  WorkspaceWorkflowStep,
 } from "./workspaceWorkflowReadModel";
 
 export type WorkspaceWorkflowControlKind = "cancel" | "retry" | "respond";
@@ -38,16 +39,25 @@ const CANCELABLE_STATUSES = new Set([
   "waiting",
   "waiting_action",
   "waitingaction",
+  "waiting_permission",
 ]);
 
-const FAILED_STATUSES = new Set([
+const RETRYABLE_STATUSES = new Set([
   "canceled",
   "cancelled",
   "error",
   "failed",
   "failure",
+  "skip",
+  "skipped",
   "timeout",
 ]);
+
+interface WorkflowResponseTarget {
+  stepId: string | null;
+  requestId: string | null;
+  actionType: AppServerWorkflowRespondParams["actionType"];
+}
 
 export function buildWorkspaceWorkflowControlItems(
   workflowRuns: readonly WorkspaceWorkflowRun[],
@@ -58,17 +68,17 @@ export function buildWorkspaceWorkflowControlItems(
   }
 
   const items: WorkspaceWorkflowControlItem[] = [];
-  const responseTarget = resolveWorkflowResponseTarget(run);
-  if (responseTarget) {
+  for (const responseTarget of resolveWorkflowResponseTargets(run)) {
+    const respondCopy = workflowRespondCopyKeys(responseTarget.actionType);
     items.push({
-      id: `workflow-${run.workflowRunId}-respond-${responseTarget.stepId ?? "run"}`,
+      id: `workflow-${run.workflowRunId}-respond-${responseTarget.stepId ?? "run"}-${responseTarget.requestId ?? "request"}`,
       kind: "respond",
       workflowRunId: run.workflowRunId,
       stepId: responseTarget.stepId,
       requestId: responseTarget.requestId,
       actionType: responseTarget.actionType,
-      labelKey: "generalWorkbench.workflow.control.respond",
-      ariaLabelKey: "generalWorkbench.workflow.control.respondAria",
+      labelKey: respondCopy.labelKey,
+      ariaLabelKey: respondCopy.ariaLabelKey,
       tone: "primary",
     });
   }
@@ -175,41 +185,45 @@ export function buildWorkspaceWorkflowRespondParams(
   };
 }
 
-function resolveWorkflowResponseTarget(run: WorkspaceWorkflowRun): {
-  stepId: string | null;
-  requestId: string | null;
-  actionType: AppServerWorkflowRespondParams["actionType"];
-} | null {
-  const action =
-    run.actions.find(isRespondWorkflowAction) ??
-    run.actions.find((item) => Boolean(item.requestId || item.stepId));
-  if (action) {
-    return {
-      stepId: action.stepId,
-      requestId: action.requestId,
-      actionType: normalizeActionType(action.agentActionType),
-    };
-  }
+function resolveWorkflowResponseTargets(
+  run: WorkspaceWorkflowRun,
+): WorkflowResponseTarget[] {
+  const targets: WorkflowResponseTarget[] = [];
+  const seen = new Set<string>();
 
-  const waitingStep = run.steps.find((step) => {
-    const status = normalizeStatus(step.status);
-    return (
-      (status === "waiting" ||
-        status === "waiting_action" ||
-        status === "waitingaction") &&
-      Boolean(step.requestId || step.agentActionType)
+  for (const action of run.actions) {
+    if (!isRespondWorkflowAction(action)) {
+      continue;
+    }
+    pushUniqueResponseTarget(
+      targets,
+      seen,
+      {
+        stepId: action.stepId,
+        requestId: action.requestId,
+        actionType: normalizeActionType(
+          action.agentActionType ?? action.actionType,
+        ),
+      },
     );
-  });
-
-  if (!waitingStep) {
-    return null;
   }
 
-  return {
-    stepId: waitingStep.id,
-    requestId: waitingStep.requestId,
-    actionType: normalizeActionType(waitingStep.agentActionType),
-  };
+  for (const step of run.steps) {
+    if (!isWaitingStepWithResponse(step)) {
+      continue;
+    }
+    pushUniqueResponseTarget(
+      targets,
+      seen,
+      {
+        stepId: step.id,
+        requestId: step.requestId,
+        actionType: normalizeActionType(step.agentActionType),
+      },
+    );
+  }
+
+  return targets;
 }
 
 function resolveWorkflowRetryStep(
@@ -219,7 +233,7 @@ function resolveWorkflowRetryStep(
     return null;
   }
   const failedStep = run.steps.find((step) =>
-    FAILED_STATUSES.has(normalizeStatus(step.status)),
+    RETRYABLE_STATUSES.has(normalizeStatus(step.status)),
   );
   return failedStep ? { id: failedStep.id } : { id: null };
 }
@@ -248,11 +262,11 @@ function isWorkflowCancelable(run: WorkspaceWorkflowRun): boolean {
 
 function isWorkflowFailed(run: WorkspaceWorkflowRun): boolean {
   const runStatus = normalizeStatus(run.status);
-  if (FAILED_STATUSES.has(runStatus)) {
+  if (RETRYABLE_STATUSES.has(runStatus)) {
     return true;
   }
   return run.steps.some((step) =>
-    FAILED_STATUSES.has(normalizeStatus(step.status)),
+    RETRYABLE_STATUSES.has(normalizeStatus(step.status)),
   );
 }
 
@@ -269,6 +283,39 @@ function isRespondWorkflowAction(action: WorkspaceWorkflowAction): boolean {
   );
 }
 
+function isWaitingStepWithResponse(step: WorkspaceWorkflowStep): boolean {
+  return (
+    isWorkflowWaitingStatus(step.status) &&
+    Boolean(step.requestId || step.agentActionType)
+  );
+}
+
+function isWorkflowWaitingStatus(value?: string | null): boolean {
+  const status = normalizeStatus(value);
+  return (
+    status === "waiting" ||
+    status === "waiting_action" ||
+    status === "waitingaction" ||
+    status === "waiting_permission"
+  );
+}
+
+function pushUniqueResponseTarget(
+  targets: WorkflowResponseTarget[],
+  seen: Set<string>,
+  target: WorkflowResponseTarget,
+): void {
+  if (!target.requestId && !target.stepId) {
+    return;
+  }
+  const key = `${target.stepId ?? ""}:${target.requestId ?? ""}:${target.actionType ?? ""}`;
+  if (seen.has(key)) {
+    return;
+  }
+  seen.add(key);
+  targets.push(target);
+}
+
 function normalizeActionType(
   value?: string | null,
 ): AppServerWorkflowRespondParams["actionType"] {
@@ -281,6 +328,28 @@ function normalizeActionType(
     return normalized;
   }
   return "ask_user";
+}
+
+function workflowRespondCopyKeys(
+  actionType: AppServerWorkflowRespondParams["actionType"],
+): Pick<WorkspaceWorkflowControlItem, "labelKey" | "ariaLabelKey"> {
+  if (actionType === "tool_confirmation") {
+    return {
+      labelKey: "generalWorkbench.workflow.control.respondToolConfirmation",
+      ariaLabelKey:
+        "generalWorkbench.workflow.control.respondToolConfirmationAria",
+    };
+  }
+  if (actionType === "elicitation") {
+    return {
+      labelKey: "generalWorkbench.workflow.control.respondElicitation",
+      ariaLabelKey: "generalWorkbench.workflow.control.respondElicitationAria",
+    };
+  }
+  return {
+    labelKey: "generalWorkbench.workflow.control.respond",
+    ariaLabelKey: "generalWorkbench.workflow.control.respondAria",
+  };
 }
 
 function normalizeStatus(value?: string | null): string {

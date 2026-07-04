@@ -64,6 +64,37 @@ export const HeaderText = styled.div`
   min-width: 0;
 `;
 
+export const ProfileSwitchRow = styled.div`
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+`;
+
+export const ProfileSwitchLabel = styled.label`
+  color: var(--lime-text-muted, #6b826b);
+  font-size: 12px;
+  font-weight: 720;
+`;
+
+export const ProfileSwitchSelect = styled.select`
+  min-width: 0;
+  width: 100%;
+  border: 1px solid var(--lime-surface-border-strong, #c7e7d1);
+  border-radius: 8px;
+  background: var(--lime-surface, #ffffff);
+  color: var(--lime-text-strong, #123d2e);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.3;
+  padding: 6px 8px;
+
+  &:focus-visible {
+    outline: 2px solid var(--lime-focus-ring, rgba(16, 185, 129, 0.28));
+    outline-offset: 2px;
+  }
+`;
+
 export const ExpertTitle = styled.h2`
   margin: 0;
   overflow: hidden;

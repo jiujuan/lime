@@ -40,6 +40,7 @@ export function buildCommonAssertions(context) {
     isWebToolsRenderingScenario,
     isMcpStructuredContentScenario,
     isSkillsRuntimeScenario,
+    isSoulStyleScenario,
     isRightSurfaceVisualMatrixScenario,
     isContentFactoryArticleWorkspaceScenario,
     isAnyExpertSkillsRuntimeScenario,
@@ -57,7 +58,8 @@ export function buildCommonAssertions(context) {
   const shouldRequireTextStreamTraceSeparation =
     shouldRequireAgentUiTraceEvidence &&
     !isPlanScenario &&
-    !isImageCommandScenario;
+    !isImageCommandScenario &&
+    !isSoulStyleScenario;
   const agentUiPerformanceTrace = summary.agentUiPerformanceTrace;
   const appServerTraceEvidence = summary.appServerTraceEvidence;
   const commonAssertions = {
@@ -87,6 +89,8 @@ export function buildCommonAssertions(context) {
       : isRightSurfaceVisualMatrixScenario ||
           isContentFactoryArticleWorkspaceScenario
         ? true
+        : isSoulStyleScenario
+          ? summary.textProviderFixtureServer?.requestCount >= 1
         : backendLedger.some((entry) => entry.kind === "turnStart"),
     fixturePromptReachedBackend:
       isRightSurfaceVisualMatrixScenario ||

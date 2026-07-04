@@ -28,13 +28,14 @@ const SETTINGS_TABS = [
   "个人资料",
   "数据统计",
   "外观",
-  "快捷键",
   "记忆",
+  "已归档对话",
   "AI 服务商",
   "服务模型",
   "MCP 服务器",
   "网络搜索",
   "环境变量",
+  "执行策略",
   "连接器",
   "自动化设置",
   "开发者与实验功能",
@@ -747,9 +748,16 @@ async function enterSettings(page, options) {
   await page.waitForTimeout(300);
 
   const opened = await page.evaluate(() => {
-    const settings = [...document.querySelectorAll("button")].find(
-      (button) => button.textContent?.trim() === "设置",
-    );
+    const settings =
+      document.querySelector('[data-testid="app-sidebar-account-model-settings"]') ||
+      [...document.querySelectorAll("button")].find(
+        (button) => button.textContent?.trim() === "模型设置",
+      ) ||
+      [...document.querySelectorAll("button")].find(
+        (button) =>
+          button.textContent?.trim() === "关于" ||
+          button.getAttribute("aria-label") === "关于",
+      );
     if (!settings) {
       return false;
     }

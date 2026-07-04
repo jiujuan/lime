@@ -107,7 +107,7 @@ fn in_memory_db() -> lime_core::database::DbConnection {
         let conn = db.lock().expect("db lock");
         lime_core::database::schema::create_tables(&conn).expect("schema");
     }
-    if let Err(error) = lime_agent::initialize_aster_runtime(db.clone()) {
+    if let Err(error) = lime_agent::initialize_agent_runtime(db.clone()) {
         assert!(
             error.contains("Global session store already set"),
             "runtime dirs: {error}"

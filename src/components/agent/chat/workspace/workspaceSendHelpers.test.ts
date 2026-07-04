@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/types";
+import { resolveSoulInteractionCopy } from "@/lib/soul/interactionCopy";
 import {
   buildGeneralWorkbenchSendBoundaryState,
   buildGeneralWorkbenchResumePromptFromRunState,
@@ -38,9 +39,34 @@ describe("workspaceSendHelpers runtime team preview", () => {
     expect(messages[1]).toMatchObject({
       id: "initial-dispatch:initial-dispatch-1:assistant",
       role: "assistant",
-      content: "正在开始处理任务…",
+      content: "任务已进入处理队列…",
       isThinking: true,
     });
+  });
+
+  it("bootstrap 预览消息应应用 memory.soul 当前交互口吻", () => {
+    const messages = buildInitialDispatchPreviewMessages(
+      {
+        key: "initial-dispatch-soul",
+        prompt: "请开始处理这个任务",
+        images: [],
+      },
+      undefined,
+      resolveSoulInteractionCopy({
+        soul: {
+          enabled: true,
+          style_profile_id: "cheeky_sassy_executor",
+          style_intensity: "low",
+        },
+      }),
+    );
+
+    expect(messages[1]).toMatchObject({
+      role: "assistant",
+      content: expect.stringContaining("已进入队列"),
+      isThinking: true,
+    });
+    expect(messages[1]?.content).not.toMatch(/小活儿|别急|安排/u);
   });
 
   it("工作区首条创作意图不应再包装成旧内容写作 skill", () => {
@@ -736,14 +762,14 @@ describe("workspaceSendHelpers runtime team preview", () => {
     });
 
     expect(messages).toHaveLength(2);
-    expect(messages[1]?.content).toContain("Subagents 如下");
+    expect(messages[1]?.content).toContain("协作分工如下");
     expect(messages[1]?.content).toContain("这些任务会分别展开处理");
     expect(messages[1]?.runtimeStatus).toMatchObject({
-      title: "Subagents 已准备好",
+      title: "协作执行已准备好",
       detail: "分析、执行、验证三段式推进。",
       checkpoints: [
-        "当前 Subagents profile：修复 Subagents profile",
-        "已安排 2 项任务",
+        "当前协作配置：修复 Subagents profile",
+        "已分配 2 项任务",
         "主对话会持续同步关键进展",
       ],
     });
@@ -769,11 +795,45 @@ describe("workspaceSendHelpers runtime team preview", () => {
 
     expect(messages[1]?.isThinking).toBe(true);
     expect(messages[1]?.runtimeStatus).toMatchObject({
-      title: "正在准备 Subagents",
+      title: "正在准备协作执行",
       detail:
-        "系统正在根据当前任务准备 Subagents，会先拆出合适的任务，再把关键进展持续汇总回主对话。",
-      checkpoints: ["确认当前任务目标", "准备 Subagents", "等待任务接手处理"],
+        "系统正在根据当前任务准备协作执行，会先拆出合适的任务，再把关键进展持续汇总回主对话。",
+      checkpoints: ["确认当前任务目标", "准备协作执行", "等待任务接手处理"],
     });
+  });
+
+  it("Subagents 本地预览应应用 memory.soul 当前交互口吻", () => {
+    const messages = buildRuntimeTeamDispatchPreviewMessages(
+      {
+        key: "runtime-team-soul",
+        prompt: "请先拆任务再继续",
+        images: [],
+        baseMessageCount: 0,
+        status: "forming",
+        formationState: {
+          requestId: "runtime-soul-1",
+          status: "forming",
+          label: "排障 Team",
+          summary: "分析、执行两段式推进。",
+          members: [],
+          blueprint: null,
+          updatedAt: Date.now(),
+        },
+      },
+      resolveSoulInteractionCopy({
+        soul: {
+          enabled: true,
+          style_profile_id: "cheeky_sassy_executor",
+          style_intensity: "low",
+        },
+      }),
+    );
+
+    expect(messages[1]).toMatchObject({
+      role: "assistant",
+      content: expect.stringContaining("分工理顺"),
+    });
+    expect(messages[1]?.content).not.toMatch(/小活儿|活儿|小队|Subagents|别急|安排/u);
   });
 
   it("提交预览应生成等待态快照并映射成双消息预览", () => {

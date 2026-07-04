@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
@@ -34,6 +35,10 @@ function isWorkspaceWideRustPath(relPath) {
   );
 }
 
+function isVendoredRustPath(relPath) {
+  return relPath === "lime-rs/vendor" || relPath.startsWith("lime-rs/vendor/");
+}
+
 function findWorkspaceRootForPath(relPath, memberRoots) {
   const roots = Array.from(memberRoots.keys()).sort(
     (a, b) => b.length - a.length,
@@ -48,6 +53,10 @@ function isExcludedSubcrateMetadataPath(relPath, packageRoot) {
     relPath === `${packageRoot}/Cargo.toml` ||
     relPath === `${packageRoot}/Cargo.lock`
   );
+}
+
+function repoPathExists(repoRoot, relPath) {
+  return fs.existsSync(path.join(repoRoot, relPath));
 }
 
 export function expandWithWorkspaceDependents(packageNames, dependencyGraph) {
@@ -114,8 +123,18 @@ export function resolveRustPathSelection(
       continue;
     }
 
+    if (isVendoredRustPath(relPath)) {
+      rustPaths.push(relPath);
+      workspaceReasons.push(`${relPath} (vendored Rust dependency)`);
+      continue;
+    }
+
     const packageRoot = findWorkspaceRootForPath(relPath, memberRoots);
     if (!packageRoot) {
+      if (!repoPathExists(repoRoot, relPath)) {
+        skippedPaths.push(relPath);
+        continue;
+      }
       rustPaths.push(relPath);
       errors.push(
         `${relPath}: 无法映射到 lime-rs workspace crate；请扩大到 --workspace 或手动指定 -p <crate>`,

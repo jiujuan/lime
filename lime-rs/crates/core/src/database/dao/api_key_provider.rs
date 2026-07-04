@@ -64,7 +64,7 @@ pub struct ProviderRuntimeSpec {
     pub auth_header: &'static str,
     pub auth_prefix: Option<&'static str>,
     pub extra_headers: &'static [(&'static str, &'static str)],
-    pub aster_provider_name: &'static str,
+    pub runtime_provider_name: &'static str,
 }
 
 const NO_EXTRA_HEADERS: [(&str, &str); 0] = [];
@@ -81,7 +81,7 @@ impl ApiProviderType {
                     auth_header: "x-api-key",
                     auth_prefix: None,
                     extra_headers: &ANTHROPIC_EXTRA_HEADERS,
-                    aster_provider_name: "anthropic",
+                    runtime_provider_name: "anthropic",
                 }
             }
             ApiProviderType::Gemini => ProviderRuntimeSpec {
@@ -90,7 +90,7 @@ impl ApiProviderType {
                 auth_header: "x-goog-api-key",
                 auth_prefix: None,
                 extra_headers: &NO_EXTRA_HEADERS,
-                aster_provider_name: "google",
+                runtime_provider_name: "google",
             },
             ApiProviderType::AzureOpenai => ProviderRuntimeSpec {
                 protocol_family: ProviderProtocolFamily::AzureOpenai,
@@ -98,7 +98,7 @@ impl ApiProviderType {
                 auth_header: "api-key",
                 auth_prefix: None,
                 extra_headers: &NO_EXTRA_HEADERS,
-                aster_provider_name: "azure",
+                runtime_provider_name: "azure",
             },
             ApiProviderType::Vertexai => ProviderRuntimeSpec {
                 protocol_family: ProviderProtocolFamily::Vertexai,
@@ -106,7 +106,7 @@ impl ApiProviderType {
                 auth_header: "Authorization",
                 auth_prefix: Some("Bearer"),
                 extra_headers: &NO_EXTRA_HEADERS,
-                aster_provider_name: "gcpvertexai",
+                runtime_provider_name: "gcpvertexai",
             },
             ApiProviderType::AwsBedrock => ProviderRuntimeSpec {
                 protocol_family: ProviderProtocolFamily::AwsBedrock,
@@ -114,7 +114,7 @@ impl ApiProviderType {
                 auth_header: "Authorization",
                 auth_prefix: Some("Bearer"),
                 extra_headers: &NO_EXTRA_HEADERS,
-                aster_provider_name: "bedrock",
+                runtime_provider_name: "bedrock",
             },
             ApiProviderType::Ollama => ProviderRuntimeSpec {
                 protocol_family: ProviderProtocolFamily::Ollama,
@@ -122,7 +122,7 @@ impl ApiProviderType {
                 auth_header: "Authorization",
                 auth_prefix: Some("Bearer"),
                 extra_headers: &NO_EXTRA_HEADERS,
-                aster_provider_name: "ollama",
+                runtime_provider_name: "ollama",
             },
             ApiProviderType::Fal => ProviderRuntimeSpec {
                 protocol_family: ProviderProtocolFamily::OpenAiCompatible,
@@ -130,7 +130,7 @@ impl ApiProviderType {
                 auth_header: "Authorization",
                 auth_prefix: Some("Key"),
                 extra_headers: &NO_EXTRA_HEADERS,
-                aster_provider_name: "fal",
+                runtime_provider_name: "fal",
             },
             ApiProviderType::Codex => ProviderRuntimeSpec {
                 protocol_family: ProviderProtocolFamily::Codex,
@@ -138,7 +138,7 @@ impl ApiProviderType {
                 auth_header: "Authorization",
                 auth_prefix: Some("Bearer"),
                 extra_headers: &NO_EXTRA_HEADERS,
-                aster_provider_name: "codex",
+                runtime_provider_name: "codex",
             },
             ApiProviderType::Openai
             | ApiProviderType::OpenaiResponse
@@ -149,7 +149,7 @@ impl ApiProviderType {
                 auth_header: "Authorization",
                 auth_prefix: Some("Bearer"),
                 extra_headers: &NO_EXTRA_HEADERS,
-                aster_provider_name: "openai",
+                runtime_provider_name: "openai",
             },
         }
     }
@@ -193,7 +193,7 @@ pub fn infer_managed_runtime_spec(
             auth_header: "Authorization",
             auth_prefix: Some("Bearer"),
             extra_headers: &ANTHROPIC_EXTRA_HEADERS,
-            aster_provider_name: "anthropic",
+            runtime_provider_name: "anthropic",
         };
     }
 
@@ -519,7 +519,7 @@ mod tests {
             expected_host,
             expected_auth_header,
             expected_auth_prefix,
-            expected_aster_provider,
+            expected_runtime_provider,
         ) in cases
         {
             let spec = provider_type.runtime_spec();
@@ -540,7 +540,7 @@ mod tests {
                 "provider_type={provider_type:?}"
             );
             assert_eq!(
-                spec.aster_provider_name, expected_aster_provider,
+                spec.runtime_provider_name, expected_runtime_provider,
                 "provider_type={provider_type:?}"
             );
         }

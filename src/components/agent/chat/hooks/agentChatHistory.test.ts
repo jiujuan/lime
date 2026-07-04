@@ -12,8 +12,8 @@ import {
 describe("agentChatHistory core hydrate", () => {
   it("追加累计 text_delta 时不应重复吐字", () => {
     expect(
-      appendTextToParts([{ type: "text", text: "你好" }], "你好！我是 Lime"),
-    ).toEqual([{ type: "text", text: "你好！我是 Lime" }]);
+      appendTextToParts([{ type: "text", text: "测试" }], "测试回复已完成"),
+    ).toEqual([{ type: "text", text: "测试回复已完成" }]);
   });
 
   it("历史 output_text 以累计快照存储时应恢复为单份正文", () => {
@@ -26,8 +26,8 @@ describe("agentChatHistory core hydrate", () => {
           role: "assistant",
           timestamp: 1710000201,
           content: [
-            { type: "output_text", text: "你好" } as never,
-            { type: "output_text", text: "你好！我是 Lime 助手。" } as never,
+            { type: "output_text", text: "测试回复" } as never,
+            { type: "output_text", text: "测试回复已完成。" } as never,
           ],
         },
       ],
@@ -38,11 +38,11 @@ describe("agentChatHistory core hydrate", () => {
       "session-cumulative-text",
     );
 
-    expect(messages[0]?.content).toBe("你好！我是 Lime 助手。");
+    expect(messages[0]?.content).toBe("测试回复已完成。");
     expect(messages[0]?.contentParts).toEqual([
       {
         type: "text",
-        text: "你好！我是 Lime 助手。",
+        text: "测试回复已完成。",
       },
     ]);
   });

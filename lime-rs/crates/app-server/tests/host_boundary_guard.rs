@@ -76,7 +76,7 @@ fn app_server_public_backend_contract_must_use_runtime_events() {
         crate_root.join("src/capability.rs"),
         crate_root.join("src/lib.rs"),
         crate_root.join("src/runtime.rs"),
-        crate_root.join("src/aster_backend.rs"),
+        crate_root.join("src/runtime_backend_adapter.rs"),
         crate_root.join("src/runtime_factory.rs"),
     ];
 

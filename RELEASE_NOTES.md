@@ -1,37 +1,37 @@
-## Lime v1.89.0
+## Lime v1.90.0
 
 ### 新功能
 
-- Aster runtime 迁移继续推进：旧 `crates/aster-rust` 迁到 `lime-rs/vendor/aster-rust`，当前 Rust workspace 保留 App Server / Agent 侧事实源，Aster 只作为受控 vendor 兼容依赖。
-- App Server workflow control 面补齐 `workflow/respond`、`workflow/retry`、`workflow/cancel` 协议、schema、client 方法和 runtime control 入口，为工作流暂停、重试、取消和人工响应建立 current JSON-RPC 主链。
-- Article Workspace / General Workbench 新增工作流控制条、详情面板和 read model 投影，支持从聊天工作区查看 workflow 状态、证据和下一步操作。
+- Agent Runtime 迁移继续收口：旧 Aster backend、provider state / factory、router、scheduler 和真实模型专项测试被下线，App Server / Agent current runtime 接管会话配置、运行状态、凭证投影和 live execution process。
+- Article Workspace 和图片工作台补齐内联配图、图片任务、结构化预览、对象 artifact 和操作输出类型，文章编辑与素材生成链路能在工作区内保持更稳定的同步。
+- Soul / 个人风格主线新增内置风格画像、风格指令组合、边界评估、交互文案和记忆设置入口，为后续个性化输出提供 current 事实源。
 
 ### 修复
 
-- 修复 Agent Session / Aster session store 投影、历史压缩、runtime conversation 和 todo / subagent projection 的多处边界，减少旧 Aster 存储与 Lime current session 之间的状态漂移。
-- 修复图片任务预览、文稿内联配图、draft materialization 和任务发送链路的恢复与回填问题，让失败、完成、手动应用和工作区同步状态更一致。
-- 修复 Plugin / Workflow 运行时旧入口漂移，删除旧 `workflowRuntimeHost`、`useWorkflow` 和相关 policy 残留，避免测试或前端入口继续依赖过期 workflow host。
+- 修复 Agent Chat 流式状态、失败恢复、发送上下文、运行时状态提示和会话历史投影的多个边界，减少卡住、误停和恢复后状态不一致的问题。
+- 修复专家广场、专家实例、专家启动同步和工作区右侧面板的 metadata / role switch 投影，让专家 Agent 与工作区入口更一致。
+- 修复 Markdown 图片解析、图片任务预览、Task Center draft materialization / send、文章工作区 edited draft 和 artifact 回填链路，提升图片与文稿混排稳定性。
 
 ### 优化与重构
 
-- Agent 侧拆出 `agent-runtime` ask / turn executor、Aster trait skeleton、session projection、message content adapter、runtime snapshot / timeline adapter 和 subagent adapter，降低中心文件职责。
-- `model-provider`、`thread-store`、`tool-runtime` 继续拆分 provider safety / router、会话记录、工具 IO、MCP notification 和工具结果模型，为后续替换 Aster 内部实现做准备。
-- App Server workflow processor、runtime read model、media task 和 image command presentation 继续收口到 current owner；协议类型和 npm client 同步生成。
+- App Server processor、plugin worker turn、runtime backend tests、image command presentation 和 read model 测试继续按职责拆分，降低中心文件体量并强化 current owner 边界。
+- Agent crate 拆出 runtime state / support、session config adapter、credential bridge runtime projection、request tool policy agent reply stream 和测试支撑模块，删除已迁移的 provider safety / Aster state 残留。
+- Model provider、tool runtime、agent protocol 和 App Server backend boundary 继续收紧，避免旧 Aster / legacy backend 路径重新成为生产事实源。
 
 ### 测试与质量
 
-- 新增 / 更新 workflow control、App Server protocol catalog、media task JSON-RPC、workflow read model、Agent session store、Article Workspace workflow、图片任务预览和 inline image sync 回归。
-- 前端回归覆盖 General Workbench sidebar / workflow panel、Article Workspace 右侧面板、draft send / materialization、Plugin 页面、导航和五语言 i18n 资源。
-- Release workflow skill 更新为单页 release notes 策略：每次发布替换 `RELEASE_NOTES.md` / `RELEASE_NOTES.en.md`，只保留当前版本内容。
+- 新增 / 更新 Agent stream controller、workspace workflow controls、workspace metadata、Soul style profiles、Markdown media、Expert Plaza、Knowledge metadata、Plugin manifest / runtime 和 i18n loader 回归。
+- 补齐 App Server runtime/backend governance、Aster migration boundary、ProjectThread-first boundary、Rust layer budget、Rust test scope 和 Electron release/update host 守卫。
+- 新增 Claw 图片 live smoke、content factory / article inline image fixture、current Electron fixture 断言和 GUI smoke 辅助脚本，发布验证可覆盖图片与工作区主链。
 
 ### 文档
 
-- 更新 Aster migration 主计划、Phase 2 阻塞分析、feature gate、vendor downgrade、冲突解决和本轮执行总结，记录 vendor 迁移与 compat-aster 收口口径。
-- 更新 Workflow PRD / 架构 / 图示 / 实施计划、images v2 progress 和 workflow standardization 执行计划，保持路线图与当前实现一致。
+- 更新 Aster migration 主计划与 vendor downgrade 口径，删除过期 phase / session 文档，把迁移记录收敛到当前路线图。
+- 新增 ProjectThread-first 执行计划与路线图 PRD，更新 Soul 个人风格输出面、风格包安装和风格画像规划。
+- 更新 Playwright E2E、Workflow 标准化、images v2 progress、skills E2E testing、脚本治理和仓库级规则，保持验证流程与 current 主链一致。
 
 ### 其他
 
-- 版本事实源更新到 `1.89.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock` 和 current-turn smoke client。
-- 本版不纳入本地备份文件 `lime-rs/crates/agent/src/aster_session_store_adapter.rs.bak`；该文件仅为冲突处理临时参考。
+- 版本事实源更新到 `1.90.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock` 和 current-turn smoke client。
 
-**完整变更**: `v1.88.0` -> `v1.89.0`
+**完整变更**: `v1.89.0` -> `v1.90.0`

@@ -3669,7 +3669,7 @@ describe("Inputbar", () => {
     expectInputbarSend(onSend, {
       textOverride: "基于运营资料写一段社群预热文案",
       sendOptions: expect.objectContaining({
-        requestMetadata: {
+        requestMetadata: expect.objectContaining({
           knowledge_pack: {
             pack_name: "content-calendar",
             working_dir: "/tmp/lime-project",
@@ -3681,7 +3681,18 @@ describe("Inputbar", () => {
               },
             ],
           },
-        },
+          persona_context: expect.objectContaining({
+            source: "knowledge_pack",
+            scope: "style_context_only",
+            packs: [
+              {
+                name: "founder-persona",
+                activation: "implicit",
+                role: "companion",
+              },
+            ],
+          }),
+        }),
       }),
     });
   });
@@ -3789,7 +3800,7 @@ describe("Inputbar", () => {
     expectInputbarSend(onSend, {
       textOverride: "基于运营资料生成本周计划",
       sendOptions: expect.objectContaining({
-        requestMetadata: {
+        requestMetadata: expect.objectContaining({
           knowledge_pack: {
             pack_name: "content-calendar",
             working_dir: "/tmp/lime-project",
@@ -3805,7 +3816,16 @@ describe("Inputbar", () => {
               },
             ],
           },
-        },
+          persona_context: expect.objectContaining({
+            packs: [
+              {
+                name: "founder-persona",
+                activation: "implicit",
+                role: "companion",
+              },
+            ],
+          }),
+        }),
       }),
     });
   });

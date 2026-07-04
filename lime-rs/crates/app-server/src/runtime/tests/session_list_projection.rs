@@ -266,6 +266,70 @@ async fn update_agent_session_writes_projection_overview() {
 }
 
 #[tokio::test]
+async fn update_agent_session_with_live_runtime_state_also_writes_projection_overview() {
+    let harness = projection_test_core();
+    seed_projected_session(
+        &harness.core,
+        "sess_projection_live_update",
+        "thread_projection_live_update",
+    )
+    .await;
+
+    harness
+        .core
+        .update_session_current(AgentSessionUpdateParams {
+            session_id: "sess_projection_live_update".to_string(),
+            title: Some("Live Runtime Updated Title".to_string()),
+            article_workspace_edited_draft: Some(json!({
+                "objectKey": "content-factory-app:sess_projection_live_update:articleDraft:article-1",
+                "objectRef": {
+                    "appId": "content-factory-app",
+                    "kind": "articleDraft",
+                    "id": "article-1",
+                    "sessionId": "sess_projection_live_update"
+                },
+                "markdown": "# 已回填正文\n\n![正文配图](https://example.com/article-image.png)",
+                "updatedAt": "2026-07-04T10:00:00.000Z"
+            })),
+            ..AgentSessionUpdateParams::default()
+        })
+        .await
+        .expect("update live runtime session");
+
+    let restarted_core = RuntimeCore::default()
+        .with_event_log_writer(harness.event_log_writer)
+        .with_projection_store(harness.projection_store);
+    let detail = restarted_core
+        .read_session_current(AgentSessionReadParams {
+            session_id: "sess_projection_live_update".to_string(),
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .await
+        .expect("read projected live update session");
+    let metadata = detail
+        .session
+        .business_object_ref
+        .as_ref()
+        .and_then(|reference| reference.metadata.as_ref())
+        .expect("projection metadata");
+
+    assert_eq!(
+        detail
+            .session
+            .business_object_ref
+            .as_ref()
+            .and_then(|reference| reference.title.as_deref()),
+        Some("Live Runtime Updated Title")
+    );
+    assert_eq!(
+        metadata["articleWorkspaceEditedDraft"]["markdown"],
+        "# 已回填正文\n\n![正文配图](https://example.com/article-image.png)"
+    );
+}
+
+#[tokio::test]
 async fn archive_many_agent_sessions_archives_projection_sessions() {
     let harness = projection_test_core();
     seed_projected_session(

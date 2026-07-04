@@ -476,6 +476,13 @@ fn project_plugin_package_to_plugin_manifest(
         .unwrap_or_else(|| plugin_id.clone());
 
     manifest.insert(
+        "schemaVersion".to_string(),
+        Value::String(
+            read_string(plugin_manifest, &["schemaVersion"])
+                .unwrap_or_else(|| PLUGIN_PACKAGE_SCHEMA_VERSION.to_string()),
+        ),
+    );
+    manifest.insert(
         "manifestVersion".to_string(),
         Value::String("0.11.0".to_string()),
     );

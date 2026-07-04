@@ -94,6 +94,11 @@ vi.mock("react-i18next", () => ({
         "workspace.articleEditor.workflow.retry": `重试：${options?.value ?? ""}`,
         "workspace.articleEditor.workflow.retryLinked": "已关联重试",
         "workspace.articleEditor.workflow.waitingAction": `等待动作：${options?.value ?? ""}`,
+        "workspace.articleEditor.workflow.waitingAction.askUser": "人工确认",
+        "workspace.articleEditor.workflow.waitingAction.elicitation":
+          "补充信息",
+        "workspace.articleEditor.workflow.waitingAction.toolConfirmation":
+          "工具确认",
         "workspace.articleEditor.workflow.status.completed": "已完成",
         "workspace.articleEditor.workflow.status.failed": "失败",
         "workspace.articleEditor.workflow.status.running": "处理中",
@@ -513,9 +518,9 @@ describe("WorkspaceArticleEditorRightSurface", () => {
                   workflowRunId: "workflow-run-1",
                   stepId: "review",
                   title: "人工确认",
-                  status: "waiting",
+                  status: "waiting_permission",
                   requestId: "request-1",
-                  agentActionType: "ask_user",
+                  agentActionType: "tool_confirmation",
                 },
               ],
             },
@@ -551,7 +556,8 @@ describe("WorkspaceArticleEditorRightSurface", () => {
     expect(container.textContent).toContain("重试：turn-retry");
     expect(container.textContent).toContain("第 2 次尝试");
     expect(container.textContent).toContain("人工确认");
-    expect(container.textContent).toContain("等待动作：ask_user");
+    expect(container.textContent).toContain("等待确认");
+    expect(container.textContent).toContain("等待动作：工具确认 / request-1");
   });
 
   it("本地 host generation fixture 不应作为正式文章正文渲染", () => {

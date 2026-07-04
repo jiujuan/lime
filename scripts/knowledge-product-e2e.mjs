@@ -422,8 +422,20 @@ async function assertNoLeak(page, label) {
 }
 
 async function clickSideNav(page, options, name) {
-  await page
+  const mainNavButton = page
     .locator('[data-testid="app-sidebar-main-nav"]')
+    .getByRole("button", { name, exact: true });
+  if (await mainNavButton.isVisible().catch(() => false)) {
+    await mainNavButton.click({ timeout: options.timeoutMs });
+    return;
+  }
+
+  const accountButton = page.locator(
+    '[data-testid="app-sidebar-account-button"]',
+  );
+  await accountButton.click({ timeout: options.timeoutMs });
+  await page
+    .locator('[data-testid="app-sidebar-account-menu"]')
     .getByRole("button", { name, exact: true })
     .click({ timeout: options.timeoutMs });
 }
@@ -767,13 +779,15 @@ async function run() {
     log("organize-new-material");
     await openKnowledgeOverview(page, options);
     await page
-      .getByRole("button", { name: "整理新资料", exact: true })
-      .first()
+      .locator('[data-testid="knowledge-page-organize-new"]')
       .click({ timeout: options.timeoutMs });
+    await page
+      .locator('[data-testid="knowledge-page-import-view"]')
+      .waitFor({ state: "visible", timeout: options.timeoutMs });
     await waitText(page, options, "整理新资料页", [
       "选择资料用途",
       "添加原始资料",
-      "Lime 开始整理",
+      "带到对话里整理",
       "当前先支持粘贴正文",
       "这里不再设置“默认使用”",
       "没有确认的资料不会自动用于创作",
@@ -791,27 +805,32 @@ async function run() {
       .getByRole("button", { name: "内容运营", exact: true })
       .click({ timeout: options.timeoutMs });
     await page.getByLabel("资料名称").fill("Product E2E 内容运营验收资料");
+    const newMaterialBody = [
+      "# Product E2E 内容运营验收资料",
+      "",
+      "- 栏目：每周二发布选题复盘，每周五发布案例拆解。",
+      "- SOP：选题必须包含目标人群、表达角度、引用素材和风险边界。",
+      "- 边界：没有来源的增长数据必须标记待确认，不能编造成事实。",
+    ].join("\n");
     await page
       .getByLabel("原始资料正文")
-      .fill(
-        [
-          "# Product E2E 内容运营验收资料",
-          "",
-          "- 栏目：每周二发布选题复盘，每周五发布案例拆解。",
-          "- SOP：选题必须包含目标人群、表达角度、引用素材和风险边界。",
-          "- 边界：没有来源的增长数据必须标记待确认，不能编造成事实。",
-        ].join("\n"),
-      );
-    await page
-      .getByRole("button", { name: "Lime 开始整理", exact: true })
-      .click({ timeout: options.timeoutMs });
-    await waitText(page, options, "整理结果", [
-      "Product E2E 内容运营验收资料",
-      "完整资料文档",
-      "需要你确认的内容",
-      "确认可用",
+      .fill(newMaterialBody);
+    await waitText(page, options, "资料进入对话整理预览", [
+      "读取资料正文",
+      "内容已准备好",
+      "将在对话中整理",
     ]);
-    await assertNoLeak(page, "整理结果页");
+    await page
+      .getByRole("button", { name: "去对话里整理", exact: true })
+      .click({ timeout: options.timeoutMs });
+    await page
+      .locator('[data-testid="inputbar-core-container"] textarea')
+      .waitFor({ state: "visible", timeout: options.timeoutMs });
+    await waitText(page, options, "Agent 对话整理预填", [
+      "Product E2E 内容运营验收资料",
+      "每周二发布选题复盘",
+      "标记待确认",
+    ]);
 
     if (consoleErrors.length > 0) {
       throw new Error(
@@ -833,6 +852,7 @@ async function run() {
             "composer-select",
             "agent-save-to-knowledge",
             "organize-new-material",
+            "organize-in-chat-prefill",
           ],
           consoleErrors: consoleErrors.length,
           mockInvokes: mockMessages.length,

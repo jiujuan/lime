@@ -63,7 +63,9 @@ const LOCAL_SKILL: Skill = {
   catalogSource: "user",
 };
 
-function buildCapabilityReportSkillCatalog(skillFilePath = "/tmp/capability-report/SKILL.md") {
+function buildCapabilityReportSkillCatalog(
+  skillFilePath = "/tmp/capability-report/SKILL.md",
+) {
   const title = "Capability Report";
   const summary = "Generate a capability report from repository facts.";
   return {
@@ -284,6 +286,7 @@ function renderPanel(
   options: {
     onSkillRefsChange?: (skillRefs: string[]) => void;
     onEnableWorkspaceSkillRuntime?: (ref: string) => void;
+    onExpertProfileSwitch?: (requestMetadata: Record<string, unknown>) => void;
     onOpenSkillsManage?: (options?: ExpertSkillsManageOptions) => void;
     requestMetadata?: Record<string, unknown>;
     localSkills?: Skill[];
@@ -315,6 +318,7 @@ function renderPanel(
         ]}
         onSkillRefsChange={onSkillRefsChange}
         onEnableWorkspaceSkillRuntime={options.onEnableWorkspaceSkillRuntime}
+        onExpertProfileSwitch={options.onExpertProfileSwitch}
         onOpenSkillsManage={options.onOpenSkillsManage}
       />,
     );
@@ -489,6 +493,51 @@ describe("ExpertInfoPanel", () => {
       "service-skill:daily-trend-briefing",
       "skill:docx",
     ]);
+  });
+
+  it("应在当前 Thread 内切换专家 profile 并产生 role switch metadata", async () => {
+    const onExpertProfileSwitch = vi.fn();
+    const { container } = renderPanel({ onExpertProfileSwitch });
+    await flushEffects();
+
+    const switcher = container.querySelector<HTMLSelectElement>(
+      '[data-testid="expert-profile-switch"] select',
+    );
+    expect(switcher).not.toBeNull();
+
+    act(() => {
+      if (switcher) {
+        switcher.value = "data-analyst";
+        switcher.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+    await flushEffects();
+
+    expect(onExpertProfileSwitch).toHaveBeenCalledTimes(1);
+    expect(onExpertProfileSwitch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expert: expect.objectContaining({
+          expertId: "data-analyst",
+          releaseId: "rel-data-analyst-20260515",
+        }),
+        harness: expect.objectContaining({
+          expert: expect.objectContaining({
+            expert_id: "data-analyst",
+            release_id: "rel-data-analyst-20260515",
+          }),
+          expert_role_switch: expect.objectContaining({
+            kind: "expert_profile_switch",
+            scope: "thread",
+            source: "expert_info_panel",
+            previous_expert_id: "marketing-strategist",
+            next_expert_id: "data-analyst",
+          }),
+        }),
+      }),
+    );
+    expect(
+      JSON.stringify(onExpertProfileSwitch.mock.calls[0]?.[0]),
+    ).not.toContain("sessionId");
   });
 
   it("应从待映射运行准备动作打开技能选择器并补目录映射", async () => {

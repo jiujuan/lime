@@ -15,6 +15,8 @@ use super::{
     RuntimeSessionScope,
 };
 
+const DEFAULT_SESSION_SYSTEM_PROMPT: &str = "你是 Lime 桌面端中的 AI 助手。交互口吻、问候、自我介绍、工具进展和失败恢复由当前会话的 `memory.soul` 上下文控制；如果没有 `memory.soul` 上下文，保持清晰、准确、可执行。";
+
 pub(in crate::runtime_backend) fn session_config_from_request(
     request: &ExecutionRequest,
     host_request: Option<&AsterChatRequestSnapshot>,
@@ -27,8 +29,17 @@ pub(in crate::runtime_backend) fn session_config_from_request(
     let metadata_values = super::super::skill_runtime_enable::request_metadata_values(request);
     let fast_response_tool_surface =
         super::fast_response_tool_surface_for_request(request, request_tool_policy);
+    let runtime_metadata = request
+        .runtime_options
+        .as_ref()
+        .and_then(|options| options.metadata.as_ref())
+        .or(request.metadata.as_ref());
     let system_prompt = if fast_response_tool_surface.uses_light_session_prompt() {
-        Some(request_system_prompt(request))
+        append_soul_context_to_system_prompt(
+            Some(request_system_prompt(request)),
+            config_metadata.as_ref(),
+            runtime_metadata,
+        )
     } else {
         let system_prompt = merge_system_prompt_with_runtime_agents_for_project(
             Some(request_system_prompt(request)),
@@ -48,14 +59,12 @@ pub(in crate::runtime_backend) fn session_config_from_request(
                 system_prompt,
                 &metadata_values,
             );
-        let runtime_metadata = request
-            .runtime_options
-            .as_ref()
-            .and_then(|options| options.metadata.as_ref())
-            .or(request.metadata.as_ref());
         let system_prompt = append_memory_context_to_system_prompt(system_prompt, runtime_metadata);
-        let system_prompt =
-            append_soul_context_to_system_prompt(system_prompt, config_metadata.as_ref());
+        let system_prompt = append_soul_context_to_system_prompt(
+            system_prompt,
+            config_metadata.as_ref(),
+            runtime_metadata,
+        );
         merge_system_prompt_with_request_tool_policy(system_prompt, request_tool_policy)
     };
     let turn_context =
@@ -88,8 +97,5 @@ fn request_system_prompt(request: &ExecutionRequest) -> String {
                 .and_then(Value::as_str)
                 .and_then(|value| non_empty(Some(value)))
         })
-        .unwrap_or_else(|| {
-            "你是 Lime 桌面端里的 AI 助手。请直接完成用户请求，保持回答清晰、准确、可执行。"
-                .to_string()
-        })
+        .unwrap_or_else(|| DEFAULT_SESSION_SYSTEM_PROMPT.to_string())
 }

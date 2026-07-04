@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { BUILT_IN_SOUL_STYLE_PACK } from "@/lib/soul/style-profiles";
 import {
   CORE_NAMESPACES,
   hasBundledNamespace,
@@ -9,6 +10,27 @@ import {
 import { SUPPORTED_LOCALES } from "../locales";
 
 describe("i18n namespace loader", () => {
+  it("Soul 内置风格包文案覆盖所有支持 locale", () => {
+    const resources = loadBundledI18nResources();
+    const requiredKeys = [
+      BUILT_IN_SOUL_STYLE_PACK.nameKey,
+      BUILT_IN_SOUL_STYLE_PACK.descriptionKey,
+      ...BUILT_IN_SOUL_STYLE_PACK.profiles.flatMap((profile) => [
+        profile.nameKey,
+        profile.descriptionKey,
+      ]),
+    ];
+
+    for (const locale of SUPPORTED_LOCALES) {
+      for (const key of requiredKeys) {
+        expect(
+          resources[locale].settings,
+          `${locale}/settings should include ${key}`,
+        ).toHaveProperty(key);
+      }
+    }
+  });
+
   it("普通本地化展示文案不暴露底层来源品牌", () => {
     const resources = loadBundledI18nResources();
     const forbiddenPattern = /\bcodex\b/i;
@@ -1081,6 +1103,9 @@ describe("i18n namespace loader", () => {
       );
       expect(resources[locale].settings).toHaveProperty(
         "settings.memory.soul.title",
+      );
+      expect(resources[locale].settings).toHaveProperty(
+        "settings.memory.soul.styleProfile.title",
       );
       expect(resources[locale].settings).toHaveProperty(
         "settings.memory.soul.import.warning.projectRules",

@@ -2,6 +2,92 @@
 
 ## 2026-07-04
 
+### Checkpoint：live 生成中重复 pending 用户消息收口
+
+背景：
+
+- 用户截图显示同一个 `@配图` prompt 在生成过程中重复出现多份，并伴随多条 `正在准备回复 / 正在生成回复` 状态。
+- 复核 `.lime/qc/gui-evidence/live-image-command/live-real-current-devrenderer-1783179568-summary.json` 后确认：该轮只存在 1 次 `agentSession/turn/start`，且 bridge health 为 `status=ok`；问题不是 mock worker，也不是后端重复发起图片生成，而是首页首发 materialize / pending preview / stream draft 的前端过渡态没有挡住重复触发。
+- 最终完成态截图 `.lime/qc/gui-evidence/live-image-command/live-real-current-devrenderer-1783179568-final.png` 已能显示单条用户消息、思考、自然引导、图片轻卡、真实图片、后置描述和 Token；本 checkpoint 专门收口生成中瞬态重复。
+
+本轮修复：
+
+- `useTaskCenterEmptyStateSendRuntime` 新增首页首发 in-flight guard：已有 `taskCenterDraftSendRequest` 或 React 状态提交前本地 in-flight 尚未释放时，直接返回 `false`，不再重复创建 draft tab、pending preview 或调用发送链路。
+- `AgentChatWorkspace` 把当前 `taskCenterDraftSendRequest` 传入首页发送 runtime，让发送入口以当前 pending request 为事实源。
+- 保留真实 App Server / Agent stream / 图片 workflow 主链；未改后端 JSONL 审计结构，未引入 mock fallback。
+
+验证：
+
+- `npx vitest run "src/components/agent/chat/workspace/useTaskCenterDraftSendRuntime.unit.test.ts" "src/components/agent/chat/workspace/taskCenterSurfaceState.unit.test.ts" "src/components/agent/chat/workspace/agentChatWorkspaceHelpers.unit.test.ts" --silent=passed-only` 通过，45 个测试。
+- `npx tsc --noEmit --project tsconfig.renderer.json --pretty false` 通过。
+- `git diff --check -- "src/components/agent/chat/workspace/useTaskCenterDraftSendRuntime.ts" "src/components/agent/chat/workspace/useTaskCenterDraftSendRuntime.unit.test.ts" "src/components/agent/chat/AgentChatWorkspace.tsx"` 通过。
+- 复验发现第一次 live `live-real-current-dedup-1783181459` 仍会在单次点击下触发多次 `agentSession/turn/start`，生成中 prompt 计数为 `3`；据此继续把 `useTaskCenterDraftSendDispatchRuntime` 改为同一 request id 只派发一次，并让非 materialized 临时 `draft-send-*` 在没有真实 session 前 fail closed 等待。
+- `npm run smoke:claw-image-live -- --allow-live-provider --setup-agnes-from-env --app-url "http://127.0.0.1:1420/" --timeout-ms 300000 --prefix "live-real-current-dedup-fixed-1783182012"` 通过；summary 写入 `.lime/qc/gui-evidence/live-image-command/live-real-current-dedup-fixed-1783182012-summary.json`，final screenshot 为 `live-real-current-dedup-fixed-1783182012-final.png`。
+- fixed live summary 关键断言：`turnStartTraceCount=1`、生成中 `promptOccurrenceCount=1 / imagePromptOccurrenceCount=1`、终态 `promptOccurrenceCount=1 / imagePromptOccurrenceCount=1`、`guiReasoningVisible=true`、`guiAssistantTextVisible=true`、`guiImagePreviewLoaded=true`、`guiRightSurfaceNotAutoOpen=true`、`workflowReadRedacted=true`、`taskAuditJsonlNoSensitiveTokens=true`。
+- live smoke 门禁同步新增 `singleTurnStartTrace`，后续不只检查 UI 重复，也会拦截同一点击多次提交到 App Server 的回归。
+
+当前判断：
+
+- 重复 pending 展示属于 `产品阻塞 / 体验误导`，不是 mock 测试本身。
+- 当前已用真实 Electron + App Server runtime + live Agnes Provider 复跑通过；同一点击只产生 1 次 `agentSession/turn/start`，生成中与终态同一 prompt 均只出现 1 次。
+
+### Checkpoint：live @配图入口产品化、半成功 presentation 事件删除
+
+背景：
+
+- 用户明确要求无兼容包袱，不接受 mock worker、hard-code 图片寒暄 / 完成文案、右侧 viewer 自动展开、普通 UI 泄露 task / workflow / provider 内部字段。
+- 当前主问题不是单个右侧详情，而是 `@配图` 在图片生成前后必须走普通 Agent 对话流：先有模型生成的思考 / 引导，再有 `Image Generation` 任务卡和图片预览，最后有模型生成的后置描述与 Token。
+- 旧 `image_task_presentation_unavailable` 事件会让 presentation 失败后仍继续创建图片任务，造成聊天里只剩轻卡 / 占位的半成功状态；这不再保留为兼容路径。
+
+本轮修复：
+
+- 新增 `npm run smoke:claw-image-live` 真实 Provider live-gated 验收入口，默认 fail-closed，必须 `--allow-live-provider` 或 `LIME_ALLOW_LIVE_PROVIDER_SMOKE=1 / LIME_REAL_API_TEST=1`。
+- live smoke 启动真实 Electron Desktop Host 与 `APP_SERVER_BACKEND_MODE=runtime`，通过 GUI 输入框发送 `@配图`，不走 renderer mock、App Server mock backend、fixture image provider 或 legacy `agent_runtime_*`。
+- live smoke 断言同一产品闭环：
+  - 用户 `@配图` 原文可见。
+  - 思考 / 引导文字可见。
+  - `Image Generation` 图片任务卡可见。
+  - 真实图片 `<img>` 加载完成。
+  - Token 可见。
+  - 输入框恢复、停止按钮消失。
+  - 右侧 viewer 不自动展开。
+  - 普通 UI 不出现 `.lime/tasks`、`.lime/task-logs`、workflow 字段、provider 内部字段、`request_metadata`、`raw_transport_payload`、模板 task id 或 `Ribbi`。
+- live smoke 额外通过 `mediaTaskArtifact/list|get`、`workflow/read`、task audit JSONL 校验后端事实源；workflow summary 必须 redacted，不包含 prompt 或 task path；JSONL 不含 API key / Authorization / Bearer。
+- `claw-image-live-smoke.mjs` 拆成 options / provider / GUI / audit / common helper，主入口降到 334 行，避免继续在超 1000 行脚本里堆业务逻辑。
+- 删除生产协议里的 `image_task_presentation_unavailable` / `image_task.presentation.unavailable` 半成功事件：
+  - 后端 presentation 为空、失败、超时或 runtime 不可用时，改走 `image_task.create_failed -> tool.failed -> turn.completed(create_failed)`。
+  - 不再创建图片任务，不再让前端用轻卡占位伪装完成。
+  - 前端 protocol、App Server event stream、Agent stream handler 均不再解析 / 处理该旧事件。
+  - 新增守卫确认生产源码不再包含旧 unavailable 事件。
+- 收口当前 provider 重构的两个编译断点：
+  - `AsterAgentState::credential_bridge()` 去重，保留单一 current accessor。
+  - `direct_text_generation` 从 `request_tool_policy` 模块引用 provider-aware stream helper，不再要求 crate root 暴露旧 façade。
+
+验证：
+
+- `node --check` 覆盖 live smoke 主入口与拆分 helper，通过。
+- `npx prettier --write ...` 覆盖 live smoke、protocol、event stream、handler、README，通过。
+- `rustfmt --edition 2021` 覆盖本轮 Rust 文件，通过。
+- `npx vitest run "scripts/agent-runtime/claw-image-live-smoke.test.mjs" "src/lib/api/agentProtocol.test.ts" --silent=passed-only` 通过，32 个测试。
+- `cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server runtime_backend::image_command --lib` 通过，19 个图片命令 / presentation 测试。
+- `npm run governance:scripts` 通过；只提示已忽略的本地 `__pycache__` / `.pyc` 缓存，不是本轮新增脚本。
+- `git diff --check -- ...本轮文件` 通过。
+- `rg` 确认 key 原文未落入仓库；旧 `image_task_presentation_unavailable` 只剩负向测试 / guard 字符串，不在生产源码。
+
+未完成 / 阻塞：
+
+- 本轮未实际发起新的 live Provider 图片生成，因为当前 shell 没有 `AGNES_API_KEY` 环境变量；为避免泄漏，不把聊天里出现过的 key 原文写入命令、仓库、日志或 evidence。
+- 下一次 live 验证应在外部安全注入 `AGNES_API_KEY` 后运行：
+  - `npm run smoke:claw-image-live -- --allow-live-provider --setup-agnes-from-env --timeout-ms 300000`
+  - 如当前 UI 默认文本 Provider 未配置，还需同时传 `--text-provider-preference <id> --text-model-preference <model>`，否则会按 fail-closed 暴露文本模型配置缺口。
+
+当前分类：
+
+- `current`：`Agent turn -> ImageCommandWorkflow presentation -> mediaTaskArtifact/list|get -> task JSONL -> workflow/read -> imageWorkbenchPreview`。
+- `audit-only`：workflow run / step、task path、provider routing、raw transport payload、request metadata。
+- `test-only`：deterministic fixture、local image provider fixture、external backend fixture。
+- `dead`：`image_task_presentation_unavailable` 半成功事件、前端 hard-code 图片寒暄 / 完成模板、右侧 workflow 自动展开、普通 UI 展示 raw task JSON。
+
 ### Checkpoint：历史图片结果点击后 viewer 不再泄露内部审计字段
 
 背景：
@@ -887,3 +973,212 @@ JSONL 审计：
 - `npm run smoke:agent-session-history-electron-fixture` 通过；summary 写入 `.lime/qc/gui-evidence/agent-session-history-electron-fixture/agent-session-history-electron-fixture-summary.json`，覆盖 `initialize, agentSession/start, agentSession/read, agentSession/update, agentSession/list`。
 - `npm run bridge:health -- --timeout-ms 120000` 通过。
 - `npm run typecheck -- --pretty false` 运行超过数分钟无输出后中断，退出码 130；本 checkpoint 不记录为通过。
+
+### Checkpoint：presentation schema 循环与 content-factory workspace patch kind 兼容边界
+
+背景：
+
+- live `@配图` 曾出现 `image_task_presentation_unavailable`，原因是图片 presentation 的受控文本生成同时禁用工具面又注入 `output_schema`，Aster 反复按 StructuredOutput 纠偏，最终超时，聊天里只剩轻卡 / 占位，前置思考和引导文字丢失。
+- 内容工厂 Article Workspace action 曾报错：`Plugin worker output artifact kind is unsupported by runtime contract: requested=creator.workspace_patch, declared=content_factory.workspace_patch`。
+- `content_factory.workspace_patch` 是 current canonical kind；`creator.workspace_patch` 只能作为内容工厂历史别名在边界归一，不允许全局放宽 runtime contract。
+- WebSearch 复核采用官方资料方向：JSON-RPC 请求 / 响应继续按 `jsonrpc/method/params/id/result/error` 严格关联；Electron renderer 仍通过 preload 暴露的受控 API 进入 `ipcRenderer.invoke + ipcMain.handle`；GUI 证据优先验证用户可见行为；schema 演进使用显式兼容边界，避免把旧值重新定义成新的全局 truth。
+- Context7 本轮没有可调用工具入口；只复核到仓库已有 `smoke:mcp-context7-live-electron-fixture` 能验证 Context7 MCP 通道，但本问题不依赖 Context7 文档查询。
+
+已完成：
+
+- 图片 presentation 删除 `set_agent_turn_output_schema(...)`，保留 direct text generation + JSON 解析 / sanitize。可见文案仍来自模型生成与 Soul 上下文，不在前端 hard code。
+- `presentation.rs` 测试拆到 `runtime_backend/image_command/presentation/tests.rs`，避免继续膨胀主文件。
+- 前端 `workspaceArticleWorkspaceModel.ts` 只在 `content-factory-app + creator.workspace_patch` 时归一为 `content_factory.workspace_patch`，并把 `article_workspace_action`、`pane_action`、`runtime_authorization` 全部写成 canonical kind。
+- 后端 `plugin_worker_turn.rs` 同样只在 `content-factory-app + creator.workspace_patch` 时归一；其他 app 的 `creator.workspace_patch` 保持原样，未知 kind 仍 fail closed。
+- unauthorized output kind 回归改用 `other.workspace_patch`，避免把受控兼容别名当作非法输入。
+
+真实 live 验证：
+
+- 图片命令 live run：`live-no-output-schema-1783148306356`。
+  - Evidence：`.lime/qc/gui-evidence/live-image-command/live-no-output-schema-1783148306356/`。
+  - UI 可见：`已完成思考`、自然前置引导、`Image Generation | Agnes Image 2.1 Flash`、真实图片、完成 caption、`1.3K Tokens`。
+  - 未出现：`Ribbi`、task path、raw JSON、`image_task_presentation_unavailable`、右侧 viewer 自动展开。
+  - 审计：session JSONL、task artifact、attempt JSONL 均落到本地 App Server / workspace `.lime` 目录。
+- Content Factory contract alias live run：`live-content-factory-contract-alias-1783149749010`。
+  - Evidence：`.lime/qc/gui-evidence/live-content-factory-contract-alias/live-content-factory-contract-alias-1783149749010/`。
+  - 真实链路：Playwright CDP 连接当前 Electron 页面，通过 `window.electronAPI.invoke("app_server_handle_json_lines", { request })` 发送 `agentSession/start -> agentSession/turn/start -> agentSession/read`。
+  - 输入 metadata 故意使用旧 `creator.workspace_patch`。
+  - 结果：session `completed`、turn `completed`、Article Workspace action `regenerate` `completed`、artifact 数 `7`。
+  - 断言：`containsLegacyMismatch=false`、`containsContractMismatch=false`、响应中包含 canonical `content_factory.workspace_patch`。
+
+验证：
+
+- `cargo fmt --manifest-path "lime-rs/Cargo.toml" -p app-server -- --check` 通过。
+- `cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server runtime_backend::image_command::presentation -- --nocapture` 通过。
+- `cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server plugin_worker_turn -- --nocapture` 通过。
+- `cargo build --manifest-path "lime-rs/Cargo.toml" -p app-server` 通过。
+- `npx vitest run "src/components/agent/chat/workspace/workspaceArticleWorkspaceModel.unit.test.ts" "src/components/agent/chat/workspace/workspaceArticleEditorActionDispatch.unit.test.ts" --silent=passed-only` 通过。
+- `node scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs --scenario image-command --prefix images-v2-presentation-no-output-schema --timeout-ms 180000` 通过。
+- `node scripts/check-app-server-client-contract.mjs` 通过，284 个 checks；守卫已更新为 current `SessionProviderConfig -> StateProviderConfig` façade、`.configure_provider(config.clone().into(), ...)` 与 `route_protocol_from_session_provider_config`。
+- `npm run test:contracts` 通过；同时覆盖 protocol types、app-server-client contract、command contract、harness contract、modality contracts、scripts governance、Electron release workflow、harness cleanup report 和 docs boundary。
+
+后续拆分风险：
+
+- `plugin_worker_turn.rs` 与 `workspaceArticleWorkspaceModel.ts` 都已超过 `1000` 行。本轮只做 contract 边界修复，没有继续扩大职责；下一刀应把 plugin worker kind / runtime contract normalization 和 Article Workspace action metadata builder 拆出独立子模块后再继续加业务逻辑。
+
+### Checkpoint：plugin worker 输出契约与 Article Workspace action kind 拆分
+
+背景：
+
+- 上一 checkpoint 已修通 live `@配图` presentation 与 Content Factory `creator.workspace_patch` 历史别名归一。
+- 但 `plugin_worker_turn.rs` 与 `workspaceArticleWorkspaceModel.ts` 仍超过 `1000` 行，继续在主文件里追加契约归一会扩大职责边界。
+
+已完成：
+
+- 新增 `runtime/plugin_worker_output_contract.rs`，集中承接 plugin worker output artifact kind 解析、`content-factory-app + creator.workspace_patch` 到 canonical `content_factory.workspace_patch` 的受控归一，以及 Article Workspace expected output contract。
+- `plugin_worker_turn.rs` 只保留 worker turn 编排，复用新 helper，不再内联 Content Factory output contract 细节。
+- 新增 `workspaceArticleWorkspaceActionOutputKind.ts`，把 Article Workspace action output kind 解析与历史别名归一从 `workspaceArticleWorkspaceModel.ts` 拆出。
+- `workspaceArticleEditorActionDispatch.ts` 改为直接依赖 action output kind helper，避免通过 workspace model 反向承担 action dispatch 细节。
+- 更新 `scripts/check-app-server-client-contract.mjs` 的 provider route contract 断言，从旧 `route_protocol: Some(route_protocol.clone())` 改为 current `config.route_protocol = request.route_protocol.or(config.route_protocol)`，匹配 `SessionProviderConfig` façade 事实源。
+
+验证：
+
+- `cargo fmt --manifest-path "lime-rs/Cargo.toml" -p app-server -- --check` 通过。
+- `npx prettier --check "src/components/agent/chat/workspace/workspaceArticleWorkspaceModel.ts" "src/components/agent/chat/workspace/workspaceArticleEditorActionDispatch.ts" "src/components/agent/chat/workspace/workspaceArticleWorkspaceActionOutputKind.ts"` 通过。
+- `git diff --check -- <touched files>` 通过。
+- `cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server plugin_worker_turn -- --nocapture` 通过，24 个测试。
+- `npx vitest run "src/components/agent/chat/workspace/workspaceArticleWorkspaceModel.unit.test.ts" "src/components/agent/chat/workspace/workspaceArticleEditorActionDispatch.unit.test.ts" --silent=passed-only` 通过，18 个测试。
+- `node scripts/check-app-server-client-contract.mjs` 通过，284 个 checks。
+- `npm run test:contracts` 通过；脚本治理提示本地 ignored `scripts/__pycache__` / `.pyc` 存在，未纳入提交范围。
+- `npm run verify:gui-smoke` 通过；覆盖 renderer build、Electron host build、App Server sidecar 初始化、Claw workbench shell ready 与 memory settings ready。
+
+剩余风险：
+
+- 这刀是无行为变更拆分，没有重新消耗真实图片 Provider 跑 live。上一 checkpoint 的真实 Electron / App Server live evidence 仍是当前产品行为证据。
+- `workspaceArticleWorkspaceModel.ts` 仍超过 `1000` 行，下一刀应继续把 Article Workspace request metadata builder / view model selector 按职责拆出，避免后续 action、viewer、history 逻辑继续堆在单文件内。
+
+### Checkpoint：Article Workspace action metadata builder 拆分
+
+背景：
+
+- 上一 checkpoint 已把 Article Workspace action output kind 归一拆出，但 `workspaceArticleWorkspaceModel.ts` 仍承担 action request metadata builder 与 object artifact id 解析职责。
+- 这两块属于发送协议 / action dispatch 边界，不应继续和 view model / projection 逻辑堆在同一个超大文件里。
+
+已完成：
+
+- 新增 `workspaceArticleWorkspaceActionRequestMetadata.ts`，集中构造 Article Workspace action 的 `plugin.article_workspace_action`、复用 `pane_action` metadata，并继续写入 canonical `content_factory.workspace_patch`。
+- 新增 `workspaceArticleWorkspaceObjectArtifacts.ts`，集中解析对象 artifact ids，覆盖 ref artifact ids、preview artifact id 与 source artifact ids 去重。
+- `workspaceArticleWorkspaceModel.ts` 移除 action request metadata builder 与 artifact id 解析实现，只保留 re-export 兼容现有调用；文件从 `1522` 行降到 `1424` 行。
+- `workspaceArticleEditorActionDispatch.ts` 改为直接依赖 action request metadata helper 与 output kind helper，减少通过 model barrel 反向耦合发送协议。
+- `verify:gui-smoke` 首次重跑时被 `lime-agent` 编译错误阻断：`knowledge_builder_skill.rs` 将 `&&str` 传入需要 `Into<String>` 的 provider/model 参数。该文件本轮前已是脏文件，本轮只做最小解引用修复，避免 Electron smoke / App Server sidecar 构建被阻断。
+
+验证：
+
+- `npx prettier --check "src/components/agent/chat/workspace/workspaceArticleWorkspaceModel.ts" "src/components/agent/chat/workspace/workspaceArticleEditorActionDispatch.ts" "src/components/agent/chat/workspace/workspaceArticleWorkspaceActionRequestMetadata.ts" "src/components/agent/chat/workspace/workspaceArticleWorkspaceObjectArtifacts.ts"` 通过。
+- `git diff --check -- <article workspace touched files>` 通过。
+- `npx vitest run "src/components/agent/chat/workspace/workspaceArticleWorkspaceModel.unit.test.ts" "src/components/agent/chat/workspace/workspaceArticleEditorActionDispatch.unit.test.ts" --silent=passed-only` 通过，18 个测试。
+- `npm run typecheck -- --pretty false` 通过。
+- `npm run test:contracts` 通过；脚本治理仍提示本地 ignored `scripts/__pycache__` / `.pyc` 存在，未纳入提交范围。
+- `cargo fmt --manifest-path "lime-rs/Cargo.toml" -p lime-agent -- --check` 通过。
+- `cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent` 通过。
+- `npm run verify:gui-smoke` 通过；覆盖 renderer build、Electron host build、App Server sidecar 初始化、Claw workbench shell ready 与 memory settings ready。
+
+剩余风险：
+
+- 这刀仍是无行为拆分，没有重新消耗真实图片 Provider 跑 live。上一 checkpoint 的真实 Electron / App Server live evidence 仍是当前产品行为证据。
+- `workspaceArticleWorkspaceModel.ts` 仍超过 `1000` 行，下一刀应继续拆 view model selector、structured preview readers 或 action list resolver，直到 model 文件回到可维护边界。
+
+### Checkpoint：Article Workspace structured preview reader 拆分
+
+背景：
+
+- 上一 checkpoint 后 `workspaceArticleWorkspaceModel.ts` 仍有 `1424` 行，继续触碰 Article Workspace projection 会违反文件体量边界。
+- structured preview 的 reader 只负责把 worker / artifact source 投影成 UI 预览数据，不应和 workspace 聚合、对象选择、action 列表、历史恢复继续堆在同一文件。
+
+已完成：
+
+- 新增 `workspaceArticleWorkspaceStructuredPreview.ts`，集中承接 `buildWorkspaceArticleObjectStructuredPreview`、draft markdown reader、图片 / storyboard / checklist / brief / research / outline / citation / writing plan 等结构化预览读取逻辑。
+- `workspaceArticleWorkspaceModel.ts` 改为复用 structured preview helper，并保留 `buildWorkspaceArticleObjectStructuredPreview` re-export，避免破坏既有调用点。
+- `workspaceArticleWorkspaceModel.ts` 从 `1424` 行降到 `963` 行，回到 `1000` 行以下；新 helper 为 `515` 行，职责单一且不碰 runtime / bridge / image Provider 行为。
+
+验证：
+
+- `npx prettier --check "src/components/agent/chat/workspace/workspaceArticleWorkspaceModel.ts" "src/components/agent/chat/workspace/workspaceArticleWorkspaceStructuredPreview.ts" "internal/roadmap/images/v2/progress.md"` 通过。
+- `git diff --check -- "src/components/agent/chat/workspace/workspaceArticleWorkspaceModel.ts" "src/components/agent/chat/workspace/workspaceArticleWorkspaceStructuredPreview.ts"` 通过。
+- `npx vitest run "src/components/agent/chat/workspace/workspaceArticleWorkspaceModel.unit.test.ts" "src/components/agent/chat/workspace/workspaceArticleEditorActionDispatch.unit.test.ts" --silent=passed-only` 通过，18 个测试。
+- `npm run typecheck -- --pretty false` 通过。
+- `npm run test:contracts` 通过；脚本治理仍提示本地 ignored `scripts/__pycache__` / `.pyc` 存在，未纳入提交范围。
+- `npm run verify:gui-smoke` 通过；覆盖 renderer build、Electron host build、App Server sidecar 初始化、Claw workbench shell ready 与 memory settings ready。
+
+剩余风险：
+
+- 这刀仍是无行为变更拆分，不重新消费 live 图片 Provider；上一 checkpoint 的真实 Electron / App Server / Agnes live evidence 仍作为当前图片产品链路证据。
+- 下一刀如继续触碰用户可见工作台，应优先补 `test:contracts`、`verify:gui-smoke`，必要时再跑显式 live Provider 验收。
+
+### Checkpoint：图片命令 workflow/read 审计投影回归补齐
+
+背景：
+
+- 用户要求图片生成链路的 workflow / task / provider / path 等内部事实只写入 JSONL / task artifact / evidence，普通聊天和右侧 viewer 不展示。
+- 之前 `@配图` fixture 已证明 task artifact 与 worker attempt JSONL 存在，但没有把 App Server `workflow/read` 的 session workflow audit read model 纳入 image-command 场景门禁。
+- `claw-chat-current-fixture-image-command.mjs` 已超过 `1000` 行，本轮不继续向大文件追加 read-model 摘要逻辑。
+
+已完成：
+
+- 新增 `claw-chat-current-fixture-image-command-workflow-read.mjs`，专门读取 `workflow/read` 并投影脱敏摘要。
+- `runImageCommandScenario` 在 task artifact 进入终态后调用 `workflow/read`，summary 新增 `imageCommandWorkflowRead`。
+- 新增 image-command 场景断言：
+  - `imageCommandWorkflowAuditReadModelProjected`：证明 `workflow/read` 返回 `image_command_workflow` completed run、`stepCounts.total=5`、`activeWorkflowRunId=""`。
+  - `imageCommandWorkflowAuditStepsProjected`：证明 `intent / route / create_tasks / generate / persist_outputs` 五个审计步骤被投影，且 `intent / create_tasks` 已完成。
+  - `imageCommandWorkflowAuditSummaryRedacted`：证明 `workflow/read` 摘要不含用户 prompt 或 `.lime/tasks/image_generate` path。
+- `IMAGE_COMMAND_ASSERTION_KEYS` 补入 task audit JSONL 与 workflow audit read model 断言，非 image 场景继续通过 not-applicable 机制隔离。
+- fixture smoke guard 纳入新增 helper 文件，防止未来移除 `workflow/read` 审计验证。
+
+验证：
+
+- `npx prettier --check "scripts/agent-runtime/claw-chat-current-fixture-image-command.mjs" "scripts/agent-runtime/claw-chat-current-fixture-image-command-workflow-read.mjs" "scripts/agent-runtime/claw-chat-current-fixture-scenario-assertions.mjs" "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs" "scripts/agent-runtime/claw-chat-current-fixture-constants.mjs"` 通过。
+- `git diff --check -- "scripts/agent-runtime/claw-chat-current-fixture-image-command.mjs" "scripts/agent-runtime/claw-chat-current-fixture-image-command-workflow-read.mjs" "scripts/agent-runtime/claw-chat-current-fixture-scenario-assertions.mjs" "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs" "scripts/agent-runtime/claw-chat-current-fixture-constants.mjs"` 通过。
+- `npx vitest run "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs" --silent=passed-only` 通过，23 个测试。
+- `npm run smoke:claw-chat-current-fixture -- --scenario image-command --prefix images-v2-workflow-audit-read --timeout-ms 180000` 通过；summary：`.lime/qc/gui-evidence/claw-chat-current-fixture/images-v2-workflow-audit-read-summary.json`。
+- `npm run smoke:claw-chat-current-fixture -- --scenario plain-image-intent --prefix images-v2-workflow-audit-read-plain --timeout-ms 180000` 通过；summary：`.lime/qc/gui-evidence/claw-chat-current-fixture/images-v2-workflow-audit-read-plain-summary.json`。
+- `npm run smoke:agent-runtime-current-fixture` 通过；覆盖 image-command、plain-image-intent、cancel-then-continue、Plan history、Skills Runtime、MCP structuredContent、Expert Skills Runtime、Expert Plaza、Expert Panel 与 Content Factory Article Editor，`liveProviderUsed=false`。
+
+剩余风险：
+
+- 本轮是 deterministic current Electron fixture 回归，不重新消费 live Agnes Provider；live 产品证据仍沿用前面真实 Electron / App Server / Agnes checkpoint。
+- 当前 workflow read model 中只投影 workflow run 与阶段性步骤；真正 worker attempt 事件序列仍以 task artifact 的 `.lime/task-logs/*.jsonl` 为事实源。
+
+### Checkpoint：`@配图` 重复提交与 presentation fail-closed 收口
+
+时间：2026-07-05 00:39:11 CST
+
+背景：
+
+- 用户反馈 `@配图` 在对话列表中图片占位一闪而过、快速完成但实际未完成，且生成前后的普通 Agent 思考 / 引导文字缺失。
+- live 复现确认问题不是 mock：一次 GUI 点击会触发多次 `agentSession/turn/start`，导致同一 prompt 在生成中重复出现。
+- 四文件定向 guard 随后发现生产路径仍保留旧半成功事件 `image_task.presentation.unavailable`；该事件会让 presentation 不可用时继续创建图片任务，形成“没有 Agent 引导却伪装任务成功创建”的旁路。
+
+已完成：
+
+- `useTaskCenterDraftSendRuntime` 增加 materialized draft request in-flight / dispatched request 去重，同一 `requestId` 只允许派发一次。
+- 首页无 session 时先 materialize 真实 draft tab，再进入统一发送链；没有真实 session 的临时 `draft-send-*` fail closed，不直接走普通发送流。
+- 移除 effect cleanup 触发的 `scheduleAfterNextPaint` 重入派发路径，避免 re-render / cleanup 导致重复提交。
+- `claw-image-live-smoke` summary 增加 `turnStartTraceCount`，并补 `singleTurnStartTrace` guard。
+- App Server `ImageCommandWorkflow` 删除旧 `emit_presentation_unavailable` 半成功事件；presentation 返回空、生成错误、超时或 runtime backend 不可用时统一 `image_task.create_failed + workflow.run.completed(create_failed) + turn.completed(create_failed)`，不创建图片 task artifact。
+- Rust image command 单测反转为 fail-closed：runtime backend 缺失时 `create_image_media_task_artifact` 调用数为 `0`，reason code 为 `image_task_presentation_runtime_unavailable`。
+
+验证：
+
+- 失败复现 evidence：`.lime/qc/gui-evidence/live-image-command/live-real-current-dedup-1783181459-summary.json`。
+- 重复提交修复后 live evidence：`.lime/qc/gui-evidence/live-image-command/live-real-current-dedup-fixed-1783182012-summary.json`。
+- 本 checkpoint 重新跑真实 live：`npm run smoke:claw-image-live -- --allow-live-provider --setup-agnes-from-env --app-url "http://127.0.0.1:1420/" --timeout-ms 300000 --prefix "live-real-current-failclosed-1783183079"` 通过；summary：`.lime/qc/gui-evidence/live-image-command/live-real-current-failclosed-1783183079-summary.json`，截图：`.lime/qc/gui-evidence/live-image-command/live-real-current-failclosed-1783183079-final.png`。
+- live summary 关键断言：`usedRealElectron=true`、`usedCurrentAppServerBridge=true`、`turnStartTraceCount=1`、`singleTurnStartTrace=true`、`guiPromptNotDuplicated=true`、`guiReasoningVisible=true`、`guiAssistantTextVisible=true`、`guiImagePreviewLoaded=true`、`guiTokenVisible=true`、`guiRightSurfaceNotAutoOpen=true`、`workflowReadRedacted=true`、`taskAuditJsonlWritten=true`、`taskAuditJsonlNoSensitiveTokens=true`。
+- `cargo fmt --manifest-path "lime-rs/Cargo.toml" -p app-server -- --check` 通过。
+- `cargo check --manifest-path "lime-rs/Cargo.toml" -p app-server` 通过；此前 `NormalizedImageCreateParams` 编译阻塞在当前工作树未复现。
+- `cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server runtime_backend::image_command --lib` 通过，20 个测试。
+- `npx vitest run "scripts/agent-runtime/claw-image-live-smoke.test.mjs" "src/components/agent/chat/workspace/useTaskCenterDraftSendRuntime.unit.test.ts" "src/components/agent/chat/workspace/taskCenterSurfaceState.unit.test.ts" "src/components/agent/chat/workspace/agentChatWorkspaceHelpers.unit.test.ts" --silent=passed-only` 通过，51 个测试。
+- `npx tsc --noEmit --project tsconfig.renderer.json --pretty false` 通过。
+- `npm run verify:gui-smoke` 通过；renderer smoke build、Electron host build、App Server sidecar、renderer loaded、app-server initialized、Claw workbench shell ready、memory settings ready。
+- `git diff --check -- <touched current files>` 通过。
+- `npm run test:contracts` 仍失败在当前脏工作树的大范围 App Server / Agent Runtime / MCP contract 缺口，包括 `processor/mod.rs` 缺 capability / artifact / fileSystem / evidence dispatch、`aster_backend.rs` 已删除、tool inventory current method 缺失、Aster flow smoke 契约缺失和 MCP runtime methods 缺失；这些不是本 checkpoint 的 `@配图` fail-closed / 去重写集直接引入。
+
+剩余风险：
+
+- 旧事件字符串仅保留在 `claw-image-live-smoke.test.mjs` 的负向 guard 中，用于防止生产源码重新出现；生产路径扫描已确认 `mod.rs / agentProtocol.ts / appServerEventStream.ts / agentStreamRuntimeHandler.ts` 不包含旧 `presentation.unavailable` 半成功事件。
+- 本轮没有继续扩大到全量 `npm run verify:local`；当前主风险已由 Rust 定向测试、前端 guard、renderer typecheck、真实 Electron + live Provider smoke，以及 GUI smoke 覆盖。
+- 合并前仍必须单独收口 `test:contracts` 的 App Server / Aster / MCP contract 主线，不能把本 checkpoint 的图片 live / GUI smoke 通过误读为全仓库契约已绿。

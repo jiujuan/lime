@@ -17,7 +17,7 @@
 - Workspace dependency：`aster = { package = "aster-core", path = "vendor/aster-rust/crates/aster" }`
 
 **依赖情况**：
-- `lime-agent`：通过 `aster = { workspace = true, optional = true }` 依赖
+- `lime-agent`：通过 `aster.workspace = true` 直接依赖；这是待清退的真实主链阻塞，不再用假 optional feature 包装
 - 其他 crate：通过 adapter 间接依赖
 
 ## 执行方案
@@ -116,11 +116,11 @@ cargo test --manifest-path "lime-rs/Cargo.toml" --workspace --lib --no-fail-fast
 
 ## 状态
 
-- **当前**：vendor dependency，通过 optional feature 隔离
+- **当前**：vendor dependency，服务 `lime-agent` 剩余 compat adapter
 - **目标**：Phase 6 完成后完全移除
 - **退出条件**：
   1. 所有 compat adapter 已删除
-  2. `lime-agent` 的 `compat-aster` feature 已移除
+  2. `lime-agent` 的假 optional feature 已移除
   3. 所有 production 路径使用 Lime-owned trait
 
 ## 使用限制
@@ -160,7 +160,7 @@ cargo test --manifest-path "lime-rs/Cargo.toml" --workspace --lib --no-fail-fast
 - `not-run`：本轮未跑 `cargo test --workspace --lib --no-fail-fast`，因为当前目标是解除 Phase 5 vendor path 编译断点并封住 vendor 回流守卫，且工作树存在大量并行热区。
 - `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 新增 `Aster vendor dependency 只能停留在 vendor compat 路径`，要求 `lime-rs/crates/aster-rust` 保持 `dead / forbidden-to-restore`，`lime-rs/vendor/aster-rust` 存在，且 root workspace dependency 只指向 vendor 路径。
 - `current`：`lime-rs/crates/**` 继续作为 Lime-owned runtime / service / protocol crate 区。
-- `compat`：`lime-rs/vendor/aster-rust` 只服务 `compat-aster` 迁移 adapter；Phase 6 删除 compat adapter 后必须移除该 vendor dependency。
+- `compat`：`lime-rs/vendor/aster-rust` 只服务 `lime-agent` 剩余 Aster compat adapter；Phase 6 删除 compat adapter 后必须移除该 vendor dependency。
 
 ## 风险评估
 

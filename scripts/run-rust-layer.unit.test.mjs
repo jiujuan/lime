@@ -146,6 +146,39 @@ describe("run-rust-layer unit helpers", () => {
     }
   });
 
+  it("vendored Rust 依赖变更扩大到 workspace", () => {
+    const repoRoot = createFixtureRepo();
+    try {
+      fs.mkdirSync(
+        path.join(repoRoot, "lime-rs/vendor/aster-rust/crates/aster/src"),
+        { recursive: true },
+      );
+      fs.writeFileSync(
+        path.join(
+          repoRoot,
+          "lime-rs/vendor/aster-rust/crates/aster/src/agent.rs",
+        ),
+        "",
+      );
+
+      expect(
+        resolveRustPathSelection(
+          ["lime-rs/vendor/aster-rust/crates/aster/src/agent.rs"],
+          { repoRoot },
+        ),
+      ).toMatchObject({
+        errors: [],
+        rustPaths: ["lime-rs/vendor/aster-rust/crates/aster/src/agent.rs"],
+        workspaceReasons: [
+          "lime-rs/vendor/aster-rust/crates/aster/src/agent.rs (vendored Rust dependency)",
+        ],
+        workspaceWide: true,
+      });
+    } finally {
+      fs.rmSync(repoRoot, { force: true, recursive: true });
+    }
+  });
+
   it("excluded subcrate 路径失败而不是静默空跑", () => {
     const repoRoot = createFixtureRepo();
     try {
@@ -207,6 +240,24 @@ describe("run-rust-layer unit helpers", () => {
       ).toMatchObject({
         rustPaths: [],
         skippedPaths: ["src/components/App.tsx"],
+        packages: [],
+      });
+    } finally {
+      fs.rmSync(repoRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("已删除的 unmanaged root Rust 路径可跳过，避免迁移后阻断 changed scope", () => {
+    const repoRoot = createFixtureRepo();
+    try {
+      expect(
+        resolveRustPathSelection(["lime-rs/tests/deleted_live_test.rs"], {
+          repoRoot,
+        }),
+      ).toMatchObject({
+        errors: [],
+        rustPaths: [],
+        skippedPaths: ["lime-rs/tests/deleted_live_test.rs"],
         packages: [],
       });
     } finally {

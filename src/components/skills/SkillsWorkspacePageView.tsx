@@ -32,7 +32,7 @@ import type {
   InstalledSkillDetailContentState,
   MarketplaceSkillActionState,
   MarketplaceSkillDetailContentState,
-  SkillsWorkspaceDefaultProjectState,
+  SkillsWorkspaceProjectState,
   SkillsWorkspaceViewTab,
 } from "./SkillsWorkspacePageTypes";
 import type { SkillAutoLoadPreferences } from "./skillAutoLoadPreferences";
@@ -51,7 +51,7 @@ interface SkillsWorkspacePageViewProps {
   activeScaffoldDraft: SkillScaffoldDraft | null;
   activeScaffoldTitle: string;
   activeView: SkillsWorkspaceView;
-  defaultProjectState: SkillsWorkspaceDefaultProjectState;
+  currentProjectState: SkillsWorkspaceProjectState;
   detailContentState: MarketplaceSkillDetailContentState | null;
   detailInstalledSkill: Skill | null;
   detailStoreItem: SkillStoreItem | null;
@@ -450,10 +450,10 @@ export function SkillsWorkspacePageView(props: SkillsWorkspacePageViewProps) {
                 data-testid="skills-installed-view"
               >
                 <WorkspaceRegisteredSkillsPanel
-                  workspaceRoot={props.defaultProjectState.rootPath}
-                  workspaceId={props.defaultProjectState.id}
-                  projectPending={props.defaultProjectState.pending}
-                  projectError={props.defaultProjectState.error}
+                  workspaceRoot={props.currentProjectState.rootPath}
+                  workspaceId={props.currentProjectState.id}
+                  projectPending={props.currentProjectState.pending}
+                  projectError={props.currentProjectState.error}
                   refreshSignal={props.registeredSkillsRefreshSignal}
                   onEnableRuntime={props.onEnableRegisteredSkillRuntime}
                   hideWhenEmpty

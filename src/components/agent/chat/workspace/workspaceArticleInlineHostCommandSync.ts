@@ -54,45 +54,86 @@ function resolveObjectMarkdown(
   );
 }
 
+function isSameWorkspaceArticleObject(
+  left: WorkspaceArticleObject,
+  right: WorkspaceArticleObject,
+): boolean {
+  return (
+    left.ref.appId === right.ref.appId &&
+    left.ref.sessionId === right.ref.sessionId &&
+    left.ref.kind === right.ref.kind &&
+    left.ref.id === right.ref.id
+  );
+}
+
+function resolveArticleDraftObjectCandidates(
+  articleWorkspace: WorkspaceArticleWorkspace,
+): WorkspaceArticleObject[] {
+  const candidates: WorkspaceArticleObject[] = [];
+  const pushCandidate = (object: WorkspaceArticleObject | null) => {
+    if (!object || object.ref.kind !== "articleDraft") {
+      return;
+    }
+    if (
+      candidates.some((candidate) =>
+        isSameWorkspaceArticleObject(candidate, object),
+      )
+    ) {
+      return;
+    }
+    candidates.push(object);
+  };
+
+  pushCandidate(selectWorkspaceArticleDraftObject(articleWorkspace.objects));
+  articleWorkspace.objects.forEach(pushCandidate);
+  return candidates;
+}
+
 export function buildWorkspaceArticleInlineHostCommandSync(params: {
   articleWorkspace: WorkspaceArticleWorkspace | null;
   editedDraft: WorkspaceArticleEditedDraft | null;
 }): WorkspaceArticleInlineHostCommandSyncResult | null {
-  const object = params.articleWorkspace
-    ? selectWorkspaceArticleDraftObject(params.articleWorkspace.objects)
-    : null;
-  if (!params.articleWorkspace || !object || object.ref.kind !== "articleDraft") {
+  if (!params.articleWorkspace) {
     return null;
   }
 
-  const markdown = resolveObjectMarkdown(object, params.editedDraft);
-  if (!markdown.trim() || isFixtureOnlyHostGenerationArticle(markdown)) {
-    return null;
-  }
+  for (const object of resolveArticleDraftObjectCandidates(
+    params.articleWorkspace,
+  )) {
+    const markdown = resolveObjectMarkdown(object, params.editedDraft);
+    if (!markdown.trim() || isFixtureOnlyHostGenerationArticle(markdown)) {
+      continue;
+    }
 
-  const parsed = parseInlineHostCommandShortcodes(markdown);
-  if (parsed.requests.length === 0 || parsed.materializedMarkdown === markdown) {
-    return null;
-  }
+    const parsed = parseInlineHostCommandShortcodes(markdown);
+    if (
+      parsed.requests.length === 0 ||
+      parsed.materializedMarkdown === markdown
+    ) {
+      continue;
+    }
 
-  return {
-    imageSlotIntents: parsed.requests.map((request) => ({
-      anchorSectionTitle: request.anchorSectionTitle,
-      anchorText: request.anchorText,
-      articleWorkspace: params.articleWorkspace!,
-      editedMarkdown: parsed.materializedMarkdown,
-      object,
-      prompt: request.prompt,
-      slot: {
-        id: request.slotId,
-        title: request.prompt,
+    return {
+      imageSlotIntents: parsed.requests.map((request) => ({
+        anchorSectionTitle: request.anchorSectionTitle,
+        anchorText: request.anchorText,
+        articleWorkspace: params.articleWorkspace!,
+        editedMarkdown: parsed.materializedMarkdown,
+        object,
         prompt: request.prompt,
-        status: "planned",
-      },
-    })),
-    markdown: parsed.materializedMarkdown,
-    object,
-  };
+        slot: {
+          id: request.slotId,
+          title: request.prompt,
+          prompt: request.prompt,
+          status: "planned",
+        },
+      })),
+      markdown: parsed.materializedMarkdown,
+      object,
+    };
+  }
+
+  return null;
 }
 
 export function applyWorkspaceArticleInlineHostCommandSyncResult(

@@ -86,6 +86,7 @@ const DEFAULT_PROTECTED_PREFIXES = [
   "skills.workspace.marketplace.",
   "skills.workspace.sidebar.",
   "workspace.document.editor.slashCommand.",
+  "workspace.articleEditor.workflow.status.",
   "workspace.articleWorkspace.action.",
   "workspace.articleWorkspace.actionPrompt.",
   "workspace.productProfile.action.",

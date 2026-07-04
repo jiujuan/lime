@@ -3,11 +3,11 @@ use crate::RuntimeCoreError;
 use crate::RuntimeEvent;
 use app_server_protocol::AgentSessionActionType;
 use lime_agent::AgentActionRequiredScope;
-use lime_agent::AsterAgentState;
+use lime_agent::AgentRuntimeState;
 use serde_json::{json, Value};
 
 pub(super) async fn handle_action_response(
-    agent_state: &AsterAgentState,
+    agent_state: &AgentRuntimeState,
     request: &ActionRespondRequest,
 ) -> Result<(), RuntimeCoreError> {
     match request.action_type {

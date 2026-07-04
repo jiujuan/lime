@@ -24,6 +24,7 @@ export function buildNotApplicableAssertions(context) {
     isPlanScenario,
     isRightSurfaceVisualMatrixScenario,
     isSkillsRuntimeScenario,
+    isSoulStyleScenario,
     isWebToolsRenderingScenario,
   } = context;
   if (
@@ -327,7 +328,40 @@ export function buildNotApplicableAssertions(context) {
                     ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
                     ...IMAGE_COMMAND_ASSERTION_KEYS,
                   ]
-                : [
+                : isSoulStyleScenario
+                  ? [
+                      "usedCurrentTurnCancel",
+                      "externalFixtureCancelUsed",
+                      "fixtureCancelReachedBackend",
+                      "guiStopClicked",
+                      "readModelCanceled",
+                      "continuePromptReachedBackend",
+                      "guiContinueInputSubmitted",
+                      "guiContinueCompleted",
+                      "readModelContinueCompleted",
+                      "backendRecordedCancelThenContinue",
+                      "eventReadProbeObserved",
+                      "readModelEventReadAligned",
+                      "readModelToolCallAligned",
+                      "planModeEnabledInGui",
+                      "planPromptReachedBackend",
+                      "planCollaborationModeReachedBackend",
+                      "guiPlanRailVisible",
+                      "guiPlanStepsVisible",
+                      "readModelPlanCompleted",
+                      "proposedPlanVisible",
+                      "goalModeEnabledInGui",
+                      "goalPromptReachedBackend",
+                      "goalObjectiveTextReachedBackend",
+                      "goalManagedObjectiveReachedBackend",
+                      "guiGoalCompleted",
+                      "readModelGoalCompleted",
+                      ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
+                      ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
+                      ...IMAGE_COMMAND_ASSERTION_KEYS,
+                      ...SKILLS_RUNTIME_ASSERTION_KEYS,
+                    ]
+                  : [
                     "usedCurrentTurnCancel",
                     "externalFixtureCancelUsed",
                     "fixtureCancelReachedBackend",

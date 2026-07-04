@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer";
 import { generateKeyPairSync, webcrypto } from "node:crypto";
 import { resolve } from "node:path";
+import process from "node:process";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import type {

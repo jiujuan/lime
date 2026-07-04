@@ -169,6 +169,7 @@ export function checkMcpRuntimeCurrentContracts({ repoRoot, failures }) {
     [
       [
         "lime-rs/crates/app-server/src/processor/mod.rs",
+        "lime-rs/crates/app-server/src/processor/dispatch.rs",
         "lime-rs/crates/app-server/src/processor/mcp.rs",
       ],
       [

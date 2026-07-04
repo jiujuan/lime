@@ -1,5 +1,5 @@
-use crate::aster_runtime_support::{list_aster_runtime_queued_turns, load_aster_runtime_snapshot};
 use crate::protocol::AgentTokenUsage;
+use crate::runtime_support::{list_runtime_queued_turns, load_runtime_snapshot};
 use crate::session_query::{ensure_subagent_session, read_subagent_session};
 use crate::session_update::persist_session_extension_data;
 use crate::subagent_runtime_adapter::project_aster_subagent_latest_turn;
@@ -280,7 +280,7 @@ pub async fn load_subagent_runtime_status(
     };
 
     let control_state = SubagentControlState::from_session(&session).unwrap_or_default();
-    let latest_turn = match load_aster_runtime_snapshot(session_id).await {
+    let latest_turn = match load_runtime_snapshot(session_id).await {
         Ok(snapshot) => project_aster_subagent_latest_turn(&snapshot),
         Err(error) => {
             tracing::debug!(
@@ -292,7 +292,7 @@ pub async fn load_subagent_runtime_status(
         }
     };
 
-    let queued_turn_count = list_aster_runtime_queued_turns(session_id).await?.len();
+    let queued_turn_count = list_runtime_queued_turns(session_id).await?.len();
     let governor_snapshot = snapshot_team_runtime_session(session_id).await;
     let effective_queued_turn_count = queued_turn_count.max(
         governor_snapshot

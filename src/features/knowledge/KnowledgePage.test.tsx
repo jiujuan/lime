@@ -565,6 +565,17 @@ describe("KnowledgePage", () => {
               },
             ],
           }),
+          persona_context: expect.objectContaining({
+            source: "knowledge_pack",
+            scope: "style_context_only",
+            packs: [
+              {
+                name: "founder-personal-ip",
+                activation: "explicit",
+                role: "companion",
+              },
+            ],
+          }),
         },
         initialKnowledgePackSelection: expect.objectContaining({
           packName: "campaign-plan",
@@ -572,6 +583,7 @@ describe("KnowledgePage", () => {
             {
               name: "founder-personal-ip",
               activation: "explicit",
+              runtimeMode: "persona",
             },
           ],
         }),

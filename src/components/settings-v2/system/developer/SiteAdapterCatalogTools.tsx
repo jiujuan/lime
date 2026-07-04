@@ -124,6 +124,15 @@ function toErrorText(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
+function isRetiredSiteAdapterError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message.includes(
+      "is retired until Site Adapter moves to App Server current methods",
+    )
+  );
+}
+
 export function SiteAdapterCatalogTools() {
   const { t } = useTranslation("settings");
   const translateText = useCallback(
@@ -155,6 +164,9 @@ export function SiteAdapterCatalogTools() {
 
   useEffect(() => {
     void loadSiteAdapterCatalog().catch((error) => {
+      if (isRetiredSiteAdapterError(error)) {
+        return;
+      }
       console.error("加载站点脚本目录失败:", error);
       showMessage({
         type: "error",
@@ -169,6 +181,9 @@ export function SiteAdapterCatalogTools() {
   useEffect(() => {
     return subscribeSiteAdapterCatalogChanged(() => {
       void loadSiteAdapterCatalog().catch((error) => {
+        if (isRetiredSiteAdapterError(error)) {
+          return;
+        }
         console.error("刷新站点脚本目录失败:", error);
         showMessage({
           type: "error",
@@ -217,7 +232,9 @@ export function SiteAdapterCatalogTools() {
         }),
       });
     } catch (error) {
-      console.error("刷新站点脚本目录状态失败:", error);
+      if (!isRetiredSiteAdapterError(error)) {
+        console.error("刷新站点脚本目录状态失败:", error);
+      }
       showMessage({
         type: "error",
         text: toErrorText(
@@ -297,7 +314,9 @@ export function SiteAdapterCatalogTools() {
         }),
       });
     } catch (error) {
-      console.error("清空站点脚本目录缓存失败:", error);
+      if (!isRetiredSiteAdapterError(error)) {
+        console.error("清空站点脚本目录缓存失败:", error);
+      }
       showMessage({
         type: "error",
         text: toErrorText(
@@ -337,7 +356,9 @@ export function SiteAdapterCatalogTools() {
         }),
       });
     } catch (error) {
-      console.error("导入外部站点适配器来源失败:", error);
+      if (!isRetiredSiteAdapterError(error)) {
+        console.error("导入外部站点适配器来源失败:", error);
+      }
       showMessage({
         type: "error",
         text: toErrorText(
@@ -471,13 +492,17 @@ export function SiteAdapterCatalogTools() {
               "settings.developer.siteAdapterCatalog.import.descriptionPrefix",
             )}
             <code className="mx-1 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-700">
-              imported
+              {t(
+                "settings.developer.siteAdapterCatalog.import.code.imported",
+              )}
             </code>
             {t(
               "settings.developer.siteAdapterCatalog.import.descriptionMiddle",
             )}
             <code className="mx-1 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-700">
-              navigate / evaluate / map / filter / limit / sort
+              {t(
+                "settings.developer.siteAdapterCatalog.import.code.supportedSubset",
+              )}
             </code>
             {t(
               "settings.developer.siteAdapterCatalog.import.descriptionSuffix",
@@ -525,7 +550,9 @@ export function SiteAdapterCatalogTools() {
               "settings.developer.siteAdapterCatalog.bootstrap.descriptionPrefix",
             )}
             <code className="mx-1 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-700">
-              {"{ siteAdapterCatalog: ... }"}
+              {t(
+                "settings.developer.siteAdapterCatalog.bootstrap.code.wrapper",
+              )}
             </code>
             {t(
               "settings.developer.siteAdapterCatalog.bootstrap.descriptionSuffix",

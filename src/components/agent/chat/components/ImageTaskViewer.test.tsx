@@ -149,7 +149,7 @@ describe("ImageTaskViewer", () => {
 
     expect(mockOpenResourceManager).toHaveBeenCalledWith(
       expect.objectContaining({
-        sourceLabel: "Image Generation",
+        sourceLabel: "图片生成",
         sourceContext: expect.objectContaining({
           kind: "image_task",
           projectId: "project-1",

@@ -1140,6 +1140,48 @@ async fn read_session_materializes_content_factory_workspace_patch_into_article_
         "2026-06-29T10:01:00.000Z"
     );
 
+    core.update_session_current(AgentSessionUpdateParams {
+        session_id: "sess_article_workspace".to_string(),
+        article_workspace_edited_draft: Some(json!({
+            "objectKey": "content-factory-app:sess_article_workspace:articleDraft:article-1",
+            "objectRef": {
+                "appId": "content-factory-app",
+                "kind": "articleDraft",
+                "id": "article-1",
+                "sessionId": "sess_article_workspace",
+                "artifactIds": ["artifact-article-1"],
+                "sourceTurnId": "turn_article_workspace"
+            },
+            "markdown": "# 用户编辑稿\n\n![正文配图](https://example.com/article-image.png)",
+            "updatedAt": "2026-06-29T10:03:00.000Z"
+        })),
+        ..AgentSessionUpdateParams::default()
+    })
+    .await
+    .expect("accept resolved inline image edited article draft");
+
+    let resolved_inline_slot_read = core
+        .read_session(AgentSessionReadParams {
+            session_id: "sess_article_workspace".to_string(),
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .expect("read resolved inline image slot session");
+    let resolved_inline_slot_detail = resolved_inline_slot_read
+        .detail
+        .expect("resolved inline image slot session detail");
+    let resolved_inline_slot_markdown = resolved_inline_slot_detail["article_workspace"]["objects"]
+        [0]["source"]["documentText"]
+        .as_str()
+        .expect("resolved inline slot document text");
+    assert!(resolved_inline_slot_markdown.contains("https://example.com/article-image.png"));
+    assert!(!resolved_inline_slot_markdown.contains("pending-image-task://"));
+    assert_eq!(
+        resolved_inline_slot_detail["article_workspace"]["editedDraft"]["updatedAt"],
+        "2026-06-29T10:03:00.000Z"
+    );
+
     core.start_turn(
         AgentSessionTurnStartParams {
             session_id: "sess_article_workspace".to_string(),

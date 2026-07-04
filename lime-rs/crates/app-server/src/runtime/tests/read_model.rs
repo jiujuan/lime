@@ -236,5 +236,6 @@ mod article_workspace_worker_failure;
 mod artifacts;
 mod imports_items;
 mod messages_diagnostics;
+mod role_switch;
 mod tool_calls;
 mod workflow;

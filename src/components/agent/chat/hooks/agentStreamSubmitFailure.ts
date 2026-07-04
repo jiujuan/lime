@@ -14,6 +14,7 @@ import type {
   StreamRequestState,
 } from "./agentStreamSubmissionLifecycle";
 import type { WorkspacePathMissingState } from "./agentChatShared";
+import type { SoulInteractionCopy } from "@/lib/soul/interactionCopy";
 
 interface StreamObserver {
   onError?: (message: string) => void;
@@ -38,6 +39,7 @@ interface HandleSubmitFailureOptions {
   disposeListener: () => void;
   removeQueuedTurnState: (queuedTurnIds: string[]) => void;
   markOptimisticFailure: (errorMessage: string) => void;
+  soulCopy?: SoulInteractionCopy;
 }
 
 export function handleAgentStreamSubmitFailure(
@@ -60,6 +62,7 @@ export function handleAgentStreamSubmitFailure(
     disposeListener,
     removeQueuedTurnState,
     markOptimisticFailure,
+    soulCopy,
   } = options;
 
   if (requestState.requestLogId && !requestState.requestFinished) {
@@ -100,7 +103,11 @@ export function handleAgentStreamSubmitFailure(
         ? {
             ...updateMessageArtifactsStatus(msg, "error"),
             isThinking: false,
-            content: buildFailedAgentMessageContent(errMsg, msg.content),
+            content: buildFailedAgentMessageContent(
+              errMsg,
+              msg.content,
+              soulCopy,
+            ),
             runtimeStatus: failedRuntimeStatus,
           }
         : msg,

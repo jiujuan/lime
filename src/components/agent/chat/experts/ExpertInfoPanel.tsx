@@ -1,4 +1,4 @@
-import { memo, useMemo, useState, type ReactNode } from "react";
+import { memo, useId, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
   BookOpen,
@@ -20,6 +20,7 @@ import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/t
 import type { ServiceSkillItem } from "@/lib/api/serviceSkills";
 import type { Skill } from "@/lib/api/skills";
 import type { AgentThreadItem } from "../types";
+import { buildThreadExpertProfileSwitchRequestMetadata } from "../workspace/workspaceExpertMetadata";
 import { dedupeExpertSkillRefs } from "./expertSkillRefEditing";
 import {
   ExpertSkillsSection,
@@ -38,6 +39,9 @@ import {
   HeaderText,
   Panel,
   PanelTitle,
+  ProfileSwitchLabel,
+  ProfileSwitchRow,
+  ProfileSwitchSelect,
   Section,
   SectionHeaderRow,
   SectionTitle,
@@ -64,6 +68,7 @@ interface ExpertInfoPanelProps {
   enabledWorkspaceSkillRuntimeCount?: number;
   onSkillRefsChange?: (skillRefs: string[]) => void;
   onEnableWorkspaceSkillRuntime?: (ref: string) => void;
+  onExpertProfileSwitch?: (requestMetadata: Record<string, unknown>) => void;
   onOpenSkillsManage?: (options?: ExpertSkillsManageOptions) => void;
 }
 
@@ -151,6 +156,33 @@ function getCatalogs(): ExpertCatalog[] {
   const cached = readCachedExpertCatalog();
   const seeded = getSeededExpertCatalog();
   return cached ? [cached, seeded] : [seeded];
+}
+
+interface ExpertSwitchOption {
+  id: string;
+  title: string;
+  catalog: ExpertCatalog;
+  profile: ExpertProfile;
+}
+
+function getExpertSwitchOptions(): ExpertSwitchOption[] {
+  const seen = new Set<string>();
+  return getCatalogs().flatMap((catalog) =>
+    catalog.items.flatMap((profile) => {
+      if (seen.has(profile.id)) {
+        return [];
+      }
+      seen.add(profile.id);
+      return [
+        {
+          id: profile.id,
+          title: profile.title,
+          catalog,
+          profile,
+        },
+      ];
+    }),
+  );
 }
 
 function findCatalogExpert(expertId: string): ExpertProfile | null {
@@ -251,13 +283,16 @@ export const ExpertInfoPanel = memo(function ExpertInfoPanel({
   enabledWorkspaceSkillRuntimeCount = 0,
   onSkillRefsChange,
   onEnableWorkspaceSkillRuntime,
+  onExpertProfileSwitch,
   onOpenSkillsManage,
 }: ExpertInfoPanelProps) {
   const { t } = useTranslation("agent");
+  const profileSwitchSelectId = useId();
   const expert = useMemo(
     () => resolveExpertInfo(requestMetadata),
     [requestMetadata],
   );
+  const expertSwitchOptions = useMemo(() => getExpertSwitchOptions(), []);
   const { collapsed, toggle } = useCollapsedSections();
   const baseSkillRefs = useMemo(
     () => dedupeExpertSkillRefs(expert ? expert.skillRefs : []),
@@ -267,6 +302,26 @@ export const ExpertInfoPanel = memo(function ExpertInfoPanel({
   if (!expert) {
     return null;
   }
+
+  const handleExpertProfileSwitch = (nextExpertId: string) => {
+    if (!onExpertProfileSwitch || nextExpertId === expert.id) {
+      return;
+    }
+    const nextOption = expertSwitchOptions.find(
+      (option) => option.id === nextExpertId,
+    );
+    if (!nextOption) {
+      return;
+    }
+    onExpertProfileSwitch(
+      buildThreadExpertProfileSwitchRequestMetadata({
+        currentMetadata: requestMetadata,
+        expert: nextOption.profile,
+        catalog: nextOption.catalog,
+        switchedAt: new Date().toISOString(),
+      }),
+    );
+  };
 
   const renderSection = (
     key: ExpertPanelSectionKey,
@@ -323,6 +378,29 @@ export const ExpertInfoPanel = memo(function ExpertInfoPanel({
           <ExpertSummary>{expert.summary}</ExpertSummary>
         </HeaderText>
       </Header>
+
+      {onExpertProfileSwitch && expertSwitchOptions.length > 1 ? (
+        <ProfileSwitchRow data-testid="expert-profile-switch">
+          <ProfileSwitchLabel htmlFor={profileSwitchSelectId}>
+            {t("agentExperts.info.profileSwitch.label", "当前专家")}
+          </ProfileSwitchLabel>
+          <ProfileSwitchSelect
+            id={profileSwitchSelectId}
+            aria-label={t(
+              "agentExperts.info.profileSwitch.ariaLabel",
+              "切换当前对话的专家",
+            )}
+            value={expert.id}
+            onChange={(event) => handleExpertProfileSwitch(event.target.value)}
+          >
+            {expertSwitchOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.title}
+              </option>
+            ))}
+          </ProfileSwitchSelect>
+        </ProfileSwitchRow>
+      ) : null}
 
       {renderSection(
         "overview",

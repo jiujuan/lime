@@ -1,3 +1,4 @@
+import { startContentFactoryHostGenerationFixture } from "../lib/content-factory-host-generation-fixture.mjs";
 import {
   APP_SERVER_METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND,
   APP_SERVER_METHOD_ARTIFACT_READ,
@@ -19,6 +20,7 @@ import {
   CONTENT_FACTORY_ARTICLE_WORKSPACE_THREAD_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_TURN_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TASK_ID,
+  CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TURN_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_REVIEW_REQUEST_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_REVIEW_STEP_ID,
   CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RUN_ID,
@@ -100,250 +102,261 @@ export async function runContentFactoryArticleWorkspaceScenario({
   workspace,
   appServerRequests,
 }) {
-  const sessionCreation = await createContentFactoryArticleWorkspaceSession(
-    page,
-    workspace,
-    appServerRequests,
-  );
-  const installedStateSave = await saveWorkspacePatchWorkerInstalledState(
-    page,
-    appServerRequests,
-  );
-
-  const runtimeEventsAppend = await appendContentFactoryRuntimeEvents(
-    page,
-    workspace,
-    appServerRequests,
-  );
-  const workerTurnStart = await runWorkspacePatchWorkerDogfoodTurn({
-    page,
-    options,
-    workspace,
-    requestLog: appServerRequests,
-  });
-  const actionResultRuntimeEventsAppend =
-    await appendContentFactoryArticleWorkspaceActionResultRuntimeEvents(
+  const hostGenerationFixture =
+    await startContentFactoryHostGenerationFixture();
+  try {
+    const sessionCreation = await createContentFactoryArticleWorkspaceSession(
       page,
       workspace,
       appServerRequests,
     );
-  const rightSurfaceRequest =
-    await requestContentFactoryArticleWorkspaceSurface(
+    const installedStateSave = await saveWorkspacePatchWorkerInstalledState(
+      page,
+      appServerRequests,
+    );
+
+    const runtimeEventsAppend = await appendContentFactoryRuntimeEvents(
       page,
       workspace,
       appServerRequests,
     );
+    const workerTurnStart = await runWorkspacePatchWorkerDogfoodTurn({
+      page,
+      options,
+      workspace,
+      requestLog: appServerRequests,
+      hostGenerationFixture,
+    });
+    const actionResultRuntimeEventsAppend =
+      await appendContentFactoryArticleWorkspaceActionResultRuntimeEvents(
+        page,
+        workspace,
+        appServerRequests,
+      );
+    const rightSurfaceRequest =
+      await requestContentFactoryArticleWorkspaceSurface(
+        page,
+        workspace,
+        appServerRequests,
+      );
 
-  await notifySessionChanged(page, workspace.workspaceId);
+    await notifySessionChanged(page, workspace.workspaceId);
 
-  const guiSessionVisible = await waitForGuiSessionVisible(
-    page,
-    options,
-    CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_TITLE,
-  );
-  const guiSessionOpened = await openSessionFromSidebar(
-    page,
-    options,
-    appServerRequests,
-    {
-      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
-      title: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_TITLE,
-    },
-  );
-
-  const articleArtifactFrame = await clickContentFactoryArticleArtifactFrame(
-    page,
-    options,
-  );
-  const rightSurface = await waitForContentFactoryArticleEditorOpened(
-    page,
-    options,
-  );
-  const articleObjectSelection = await selectContentFactoryArticleObject(
-    page,
-    options,
-  );
-  const articleCanvasSurface = await waitForContentFactoryArticleCanvasSurface(
-    page,
-    options,
-  );
-  const articleEditedDraftUpdate =
-    await updateContentFactoryArticleWorkspaceEditedDraft(
+    const guiSessionVisible = await waitForGuiSessionVisible(
+      page,
+      options,
+      CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_TITLE,
+    );
+    const guiSessionOpened = await openSessionFromSidebar(
       page,
       options,
       appServerRequests,
-    );
-  const articleEditedDraftReload =
-    await reloadContentFactoryArticleWorkspaceSession(page, options, workspace);
-  const articleEditedDraftSessionReopened = await openSessionFromSidebar(
-    page,
-    options,
-    appServerRequests,
-    {
-      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
-      title: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_TITLE,
-    },
-  );
-  const articleEditedDraftArtifactFrame =
-    await clickContentFactoryArticleArtifactFrame(page, options);
-  const articleEditedDraftRestored =
-    await waitForContentFactoryArticleWorkspaceEditedDraftRestored(
-      page,
-      options,
-    );
-  const storyboardObjectSelection = await selectContentFactoryStoryboardObject(
-    page,
-    options,
-  );
-  const gui = await waitForContentFactoryArticleWorkspaceGui(page, options);
-
-  const readModel = await invokeAppServerFromPage(
-    page,
-    APP_SERVER_METHOD_SESSION_READ,
-    {
-      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
-      historyLimit: 20,
-    },
-    appServerRequests,
-  );
-  const readModelSummary = summarizeContentFactoryArticleWorkspaceReadModel(
-    readModel.result,
-  );
-  const articleArtifactRef =
-    readModelSummary.workerArticleObject?.previewArtifactId ||
-    CONTENT_FACTORY_ARTICLE_WORKSPACE_ARTICLE_ARTIFACT_ID;
-
-  const artifactRead = await invokeAppServerFromPage(
-    page,
-    APP_SERVER_METHOD_ARTIFACT_READ,
-    {
-      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
-      artifactRef: articleArtifactRef,
-      includeContent: true,
-      limit: 1,
-    },
-    appServerRequests,
-  );
-  const artifactReadSummary = summarizeContentFactoryArtifactRead(
-    artifactRead.result,
-  );
-  const workflowRead = await invokeAppServerFromPage(
-    page,
-    APP_SERVER_METHOD_WORKFLOW_READ,
-    {
-      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
-    },
-    appServerRequests,
-  );
-  const workflowReadSummary = summarizeContentFactoryWorkflowRead(
-    workflowRead.result,
-  );
-  const workflowRespond = await invokeAppServerFromPage(
-    page,
-    APP_SERVER_METHOD_WORKFLOW_RESPOND,
-    {
-      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
-      workflowRunId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_RUN_ID,
-      stepId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_STEP_ID,
-      requestId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_REQUEST_ID,
-      confirmed: false,
-      response: {
-        answer: "暂不进入交付检查",
+      {
+        sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+        title: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_TITLE,
       },
-    },
-    appServerRequests,
-  );
-  const workflowRespondSummary = summarizeContentFactoryWorkflowControl(
-    workflowRespond.result,
-    {
-      workflowRunId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_RUN_ID,
-      stepId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_STEP_ID,
-      requestId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_REQUEST_ID,
-    },
-  );
-  const workflowCancel = await invokeAppServerFromPage(
-    page,
-    APP_SERVER_METHOD_WORKFLOW_CANCEL,
-    {
-      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
-      workflowRunId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_CANCEL_RUN_ID,
-      reasonCode: "fixture_cancel_requested",
-      reason: "Electron workflow control fixture",
-    },
-    appServerRequests,
-  );
-  const workflowCancelSummary = summarizeContentFactoryWorkflowControl(
-    workflowCancel.result,
-    {
-      workflowRunId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_CANCEL_RUN_ID,
-      stepId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_CANCEL_STEP_ID,
-    },
-  );
-  const workflowRetry = await invokeAppServerFromPage(
-    page,
-    APP_SERVER_METHOD_WORKFLOW_RETRY,
-    {
-      sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
-      workflowRunId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_RUN_ID,
-      stepId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_STEP_ID,
-      reasonCode: "fixture_retry_requested",
-      reason: "Electron workflow control fixture",
-    },
-    appServerRequests,
-  );
-  const workflowRetrySummary = summarizeContentFactoryWorkflowControl(
-    workflowRetry.result,
-    {
-      workflowRunId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_RUN_ID,
-      stepId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_STEP_ID,
-    },
-  );
-  const runtimeContractRejection = await runRuntimeContractRejectionProbe({
-    page,
-    workspace,
-    options,
-    requestLog: appServerRequests,
-  });
+    );
 
-  return sanitizeJson({
-    contentFactoryArticleWorkspaceSessionCreation: sessionCreation,
-    contentFactoryArticleWorkspaceInstalledStateSave: installedStateSave,
-    contentFactoryArticleWorkspaceRuntimeEventsAppend:
-      summarizeRuntimeEventsAppend(runtimeEventsAppend.result),
-    contentFactoryArticleWorkspaceWorkerTurnStart: workerTurnStart,
-    contentFactoryArticleWorkspaceWorkerHostGenerationFixture:
-      workerTurnStart.hostGenerationFixture,
-    contentFactoryArticleWorkspaceRuntimeContractRejection:
-      runtimeContractRejection,
-    contentFactoryArticleWorkspaceActionResultRuntimeEventsAppend:
-      summarizeRuntimeEventsAppend(actionResultRuntimeEventsAppend.result),
-    contentFactoryArticleWorkspaceRightSurfaceRequest:
-      summarizeRightSurfaceRequest(rightSurfaceRequest.result),
-    guiContentFactoryArticleWorkspaceSessionVisible: guiSessionVisible,
-    guiContentFactoryArticleWorkspaceSessionOpened: guiSessionOpened,
-    contentFactoryArticleWorkspaceArtifactFrame: articleArtifactFrame,
-    contentFactoryArticleWorkspaceRightSurface: rightSurface,
-    contentFactoryArticleWorkspaceArticleObjectSelection:
-      articleObjectSelection,
-    contentFactoryArticleWorkspaceArticleCanvasSurface: articleCanvasSurface,
-    contentFactoryArticleWorkspaceEditedDraftUpdate: articleEditedDraftUpdate,
-    contentFactoryArticleWorkspaceEditedDraftReload: articleEditedDraftReload,
-    contentFactoryArticleWorkspaceEditedDraftSessionReopened:
-      articleEditedDraftSessionReopened,
-    contentFactoryArticleWorkspaceEditedDraftArtifactFrame:
-      articleEditedDraftArtifactFrame,
-    contentFactoryArticleWorkspaceEditedDraftRestored:
-      articleEditedDraftRestored,
-    contentFactoryArticleWorkspaceStoryboardObjectSelection:
-      storyboardObjectSelection,
-    contentFactoryArticleWorkspaceGui: gui,
-    contentFactoryArticleWorkspaceReadModel: readModelSummary,
-    contentFactoryArticleWorkspaceArtifactRead: artifactReadSummary,
-    contentFactoryArticleWorkspaceWorkflowRead: workflowReadSummary,
-    contentFactoryArticleWorkspaceWorkflowRespond: workflowRespondSummary,
-    contentFactoryArticleWorkspaceWorkflowCancel: workflowCancelSummary,
-    contentFactoryArticleWorkspaceWorkflowRetry: workflowRetrySummary,
-  });
+    const articleArtifactFrame = await clickContentFactoryArticleArtifactFrame(
+      page,
+      options,
+    );
+    const rightSurface = await waitForContentFactoryArticleEditorOpened(
+      page,
+      options,
+    );
+    const articleObjectSelection = await selectContentFactoryArticleObject(
+      page,
+      options,
+    );
+    const articleCanvasSurface =
+      await waitForContentFactoryArticleCanvasSurface(page, options);
+    const articleEditedDraftUpdate =
+      await updateContentFactoryArticleWorkspaceEditedDraft(
+        page,
+        options,
+        appServerRequests,
+      );
+    const articleEditedDraftReload =
+      await reloadContentFactoryArticleWorkspaceSession(
+        page,
+        options,
+        workspace,
+      );
+    const articleEditedDraftSessionReopened = await openSessionFromSidebar(
+      page,
+      options,
+      appServerRequests,
+      {
+        sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+        title: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_TITLE,
+      },
+    );
+    const articleEditedDraftArtifactFrame =
+      await clickContentFactoryArticleArtifactFrame(page, options);
+    const articleEditedDraftRestored =
+      await waitForContentFactoryArticleWorkspaceEditedDraftRestored(
+        page,
+        options,
+      );
+    const storyboardObjectSelection =
+      await selectContentFactoryStoryboardObject(page, options);
+    const gui = await waitForContentFactoryArticleWorkspaceGui(page, options);
+
+    const readModel = await invokeAppServerFromPage(
+      page,
+      APP_SERVER_METHOD_SESSION_READ,
+      {
+        sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+        historyLimit: 20,
+      },
+      appServerRequests,
+    );
+    const readModelSummary = summarizeContentFactoryArticleWorkspaceReadModel(
+      readModel.result,
+    );
+    const articleArtifactRef =
+      readModelSummary.workerArticleObject?.previewArtifactId ||
+      CONTENT_FACTORY_ARTICLE_WORKSPACE_ARTICLE_ARTIFACT_ID;
+
+    const artifactRead = await invokeAppServerFromPage(
+      page,
+      APP_SERVER_METHOD_ARTIFACT_READ,
+      {
+        sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+        artifactRef: articleArtifactRef,
+        includeContent: true,
+        limit: 1,
+      },
+      appServerRequests,
+    );
+    const artifactReadSummary = summarizeContentFactoryArtifactRead(
+      artifactRead.result,
+    );
+    const workflowRead = await invokeAppServerFromPage(
+      page,
+      APP_SERVER_METHOD_WORKFLOW_READ,
+      {
+        sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+      },
+      appServerRequests,
+    );
+    const workflowReadSummary = summarizeContentFactoryWorkflowRead(
+      workflowRead.result,
+    );
+    const workflowRespond = await invokeAppServerFromPage(
+      page,
+      APP_SERVER_METHOD_WORKFLOW_RESPOND,
+      {
+        sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+        workflowRunId:
+          CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_RUN_ID,
+        stepId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_STEP_ID,
+        requestId:
+          CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_REQUEST_ID,
+        confirmed: false,
+        response: {
+          answer: "暂不进入交付检查",
+        },
+      },
+      appServerRequests,
+    );
+    const workflowRespondSummary = summarizeContentFactoryWorkflowControl(
+      workflowRespond.result,
+      {
+        workflowRunId:
+          CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_RUN_ID,
+        stepId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_STEP_ID,
+        requestId:
+          CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RESPOND_REQUEST_ID,
+      },
+    );
+    const workflowCancel = await invokeAppServerFromPage(
+      page,
+      APP_SERVER_METHOD_WORKFLOW_CANCEL,
+      {
+        sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+        workflowRunId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_CANCEL_RUN_ID,
+        reasonCode: "fixture_cancel_requested",
+        reason: "Electron workflow control fixture",
+      },
+      appServerRequests,
+    );
+    const workflowCancelSummary = summarizeContentFactoryWorkflowControl(
+      workflowCancel.result,
+      {
+        workflowRunId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_CANCEL_RUN_ID,
+        stepId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_CANCEL_STEP_ID,
+      },
+    );
+    const workflowRetry = await invokeAppServerFromPage(
+      page,
+      APP_SERVER_METHOD_WORKFLOW_RETRY,
+      {
+        sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+        workflowRunId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_RUN_ID,
+        stepId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_STEP_ID,
+        reasonCode: "fixture_retry_requested",
+        reason: "Electron workflow control fixture",
+      },
+      appServerRequests,
+    );
+    const workflowRetrySummary = summarizeContentFactoryWorkflowControl(
+      workflowRetry.result,
+      {
+        workflowRunId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_RUN_ID,
+        stepId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_STEP_ID,
+      },
+    );
+    const runtimeContractRejection = await runRuntimeContractRejectionProbe({
+      page,
+      workspace,
+      options,
+      requestLog: appServerRequests,
+    });
+
+    return sanitizeJson({
+      contentFactoryArticleWorkspaceSessionCreation: sessionCreation,
+      contentFactoryArticleWorkspaceInstalledStateSave: installedStateSave,
+      contentFactoryArticleWorkspaceRuntimeEventsAppend:
+        summarizeRuntimeEventsAppend(runtimeEventsAppend.result),
+      contentFactoryArticleWorkspaceWorkerTurnStart: workerTurnStart,
+      contentFactoryArticleWorkspaceWorkerHostGenerationFixture:
+        hostGenerationFixture.summary(),
+      contentFactoryArticleWorkspaceRuntimeContractRejection:
+        runtimeContractRejection,
+      contentFactoryArticleWorkspaceActionResultRuntimeEventsAppend:
+        summarizeRuntimeEventsAppend(actionResultRuntimeEventsAppend.result),
+      contentFactoryArticleWorkspaceRightSurfaceRequest:
+        summarizeRightSurfaceRequest(rightSurfaceRequest.result),
+      guiContentFactoryArticleWorkspaceSessionVisible: guiSessionVisible,
+      guiContentFactoryArticleWorkspaceSessionOpened: guiSessionOpened,
+      contentFactoryArticleWorkspaceArtifactFrame: articleArtifactFrame,
+      contentFactoryArticleWorkspaceRightSurface: rightSurface,
+      contentFactoryArticleWorkspaceArticleObjectSelection:
+        articleObjectSelection,
+      contentFactoryArticleWorkspaceArticleCanvasSurface: articleCanvasSurface,
+      contentFactoryArticleWorkspaceEditedDraftUpdate: articleEditedDraftUpdate,
+      contentFactoryArticleWorkspaceEditedDraftReload: articleEditedDraftReload,
+      contentFactoryArticleWorkspaceEditedDraftSessionReopened:
+        articleEditedDraftSessionReopened,
+      contentFactoryArticleWorkspaceEditedDraftArtifactFrame:
+        articleEditedDraftArtifactFrame,
+      contentFactoryArticleWorkspaceEditedDraftRestored:
+        articleEditedDraftRestored,
+      contentFactoryArticleWorkspaceStoryboardObjectSelection:
+        storyboardObjectSelection,
+      contentFactoryArticleWorkspaceGui: gui,
+      contentFactoryArticleWorkspaceReadModel: readModelSummary,
+      contentFactoryArticleWorkspaceArtifactRead: artifactReadSummary,
+      contentFactoryArticleWorkspaceWorkflowRead: workflowReadSummary,
+      contentFactoryArticleWorkspaceWorkflowRespond: workflowRespondSummary,
+      contentFactoryArticleWorkspaceWorkflowCancel: workflowCancelSummary,
+      contentFactoryArticleWorkspaceWorkflowRetry: workflowRetrySummary,
+    });
+  } finally {
+    await hostGenerationFixture.close();
+  }
 }
 
 async function reloadContentFactoryArticleWorkspaceSession(
@@ -1065,9 +1078,10 @@ async function appendContentFactoryRuntimeEvents(page, workspace, requestLog) {
             appId: CONTENT_FACTORY_APP_ID,
             sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
             workspaceId: workspace.workspaceId,
+            turnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TURN_ID,
             taskId: "article_retry_job_1",
             taskKind: "content.article.generate",
-            status: "retrying",
+            status: "running",
             sourceKind: "plugin_worker",
             steps: [
               {
@@ -1076,11 +1090,58 @@ async function appendContentFactoryRuntimeEvents(page, workspace, requestLog) {
                 stepTitle: "重试草稿生成",
                 stepIndex: 0,
                 stepCount: 1,
-                status: "retrying",
-                attempt: 2,
-                progressMessage: "等待重试控制验证",
+                status: "failed",
+                attempt: 1,
+                failure: {
+                  source: "fixture",
+                  reasonCode: "fixture_retry_source_failed",
+                  message: "Electron workflow retry source failed",
+                },
+                progressMessage: "等待 workflow/retry 重新调度",
               },
             ],
+          },
+        },
+        {
+          type: "workflow.step.failed",
+          payload: {
+            workflowRunId:
+              CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_RUN_ID,
+            workflowKey: "content_article_workflow",
+            stepId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_STEP_ID,
+            stepTitle: "重试草稿生成",
+            stepIndex: 0,
+            stepCount: 1,
+            turnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TURN_ID,
+            attempt: 1,
+            status: "failed",
+            failure: {
+              source: "fixture",
+              reasonCode: "fixture_retry_source_failed",
+              message: "Electron workflow retry source failed",
+            },
+          },
+        },
+        {
+          type: "workflow.run.failed",
+          payload: {
+            workflowRunId:
+              CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKFLOW_RETRY_RUN_ID,
+            workflowKey: "content_article_workflow",
+            workflowTitle: "内容工厂重试控制验证",
+            appId: CONTENT_FACTORY_APP_ID,
+            sessionId: CONTENT_FACTORY_ARTICLE_WORKSPACE_SESSION_ID,
+            workspaceId: workspace.workspaceId,
+            turnId: CONTENT_FACTORY_ARTICLE_WORKSPACE_WORKER_TURN_ID,
+            taskId: "article_retry_job_1",
+            taskKind: "content.article.generate",
+            status: "failed",
+            sourceKind: "plugin_worker",
+            failure: {
+              source: "fixture",
+              reasonCode: "fixture_retry_source_failed",
+              message: "Electron workflow retry source failed",
+            },
           },
         },
         {
@@ -1702,7 +1763,7 @@ async function runRuntimeContractRejectionProbe({
               intent: "regenerate",
               risk: "write",
               task_kind: "content.image.generate",
-              output_artifact_kind: "creator.workspace_patch",
+              output_artifact_kind: "other.workspace_patch",
               prompt: "Regenerate with a mismatched output artifact kind.",
               object: {
                 app_id: CONTENT_FACTORY_APP_ID,
@@ -2450,10 +2511,7 @@ function summarizeContentFactoryWorkflowRead(result) {
     actionCount: actions.length,
     run: run
       ? {
-          workflowRunId: readString(
-            run.workflowRunId,
-            run.workflow_run_id,
-          ),
+          workflowRunId: readString(run.workflowRunId, run.workflow_run_id),
           workflowKey: readString(run.workflowKey, run.workflow_key),
           title: readString(run.title),
           status: readString(run.status),
@@ -2468,10 +2526,7 @@ function summarizeContentFactoryWorkflowRead(result) {
           stepId: readString(waitingStep.stepId, waitingStep.step_id),
           title: readString(waitingStep.title, waitingStep.stepTitle),
           status: readString(waitingStep.status),
-          requestId: readString(
-            waitingStep.requestId,
-            waitingStep.request_id,
-          ),
+          requestId: readString(waitingStep.requestId, waitingStep.request_id),
           agentActionType: readString(
             waitingStep.agentActionType,
             waitingStep.agent_action_type,
@@ -2547,10 +2602,7 @@ function summarizeContentFactoryWorkflowControl(
     ),
     run: run
       ? {
-          workflowRunId: readString(
-            run.workflowRunId,
-            run.workflow_run_id,
-          ),
+          workflowRunId: readString(run.workflowRunId, run.workflow_run_id),
           status: readString(run.status),
           stepCounts: asRecord(run.stepCounts) ?? asRecord(run.step_counts),
           cancellationReasonCode: readString(
@@ -2558,14 +2610,20 @@ function summarizeContentFactoryWorkflowControl(
             cancellation.reason_code,
           ),
           retrySource: readString(retry.source),
+          retryReasonCode: readString(retry.reasonCode, retry.reason_code),
+          retrySourceTurnId: readString(
+            retry.sourceTurnId,
+            retry.source_turn_id,
+          ),
+          retryRescheduledTurnId: readString(
+            retry.rescheduledTurnId,
+            retry.rescheduled_turn_id,
+          ),
         }
       : null,
     step: step
       ? {
-          workflowRunId: readString(
-            step.workflowRunId,
-            step.workflow_run_id,
-          ),
+          workflowRunId: readString(step.workflowRunId, step.workflow_run_id),
           stepId: readString(step.stepId, step.step_id),
           status: readString(step.status),
           attempt: readNumber(step.attempt),
@@ -2585,6 +2643,15 @@ function summarizeContentFactoryWorkflowControl(
             asRecord(step.cancellation)?.reason_code,
           ),
           retrySource: readString(retry.source),
+          retryReasonCode: readString(retry.reasonCode, retry.reason_code),
+          retrySourceTurnId: readString(
+            retry.sourceTurnId,
+            retry.source_turn_id,
+          ),
+          retryRescheduledTurnId: readString(
+            retry.rescheduledTurnId,
+            retry.rescheduled_turn_id,
+          ),
         }
       : null,
     requestId,

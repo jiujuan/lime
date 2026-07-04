@@ -45,6 +45,7 @@ import {
   recordAgentStreamPerformanceMetric,
   type AgentUiPerformanceTraceMetadata,
 } from "./agentStreamPerformanceMetrics";
+import type { SoulInteractionCopy } from "@/lib/soul/interactionCopy";
 
 type MessageParts = NonNullable<Message["contentParts"]>;
 const STREAM_FIRST_EVENT_TIMEOUT_MS = 12_000;
@@ -214,6 +215,7 @@ interface RegisterAgentStreamTurnEventBindingOptions {
     SetStateAction<AsterSessionExecutionRuntime | null>
   >;
   setIsSending: Dispatch<SetStateAction<boolean>>;
+  soulCopy?: SoulInteractionCopy;
 }
 
 export async function registerAgentStreamTurnEventBinding(
@@ -260,6 +262,7 @@ export async function registerAgentStreamTurnEventBinding(
     setCurrentTurnId,
     setExecutionRuntime,
     setIsSending,
+    soulCopy,
   } = options;
 
   startAgentStreamRequest({
@@ -516,6 +519,7 @@ export async function registerAgentStreamTurnEventBinding(
       setCurrentTurnId,
       setExecutionRuntime,
       setIsSending,
+      soulCopy,
     });
   };
   const dispatchSyntheticError = (message: string) => {
@@ -780,6 +784,7 @@ export async function registerAgentStreamTurnEventBinding(
         setCurrentTurnId,
         setExecutionRuntime,
         setIsSending,
+        soulCopy,
       });
       scheduleInactivityWatchdog();
     },

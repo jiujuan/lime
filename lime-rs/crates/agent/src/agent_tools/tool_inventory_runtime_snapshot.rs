@@ -1,7 +1,7 @@
 use crate::agent_tools::catalog::{build_mcp_extension_surface, mcp_extension_runtime_name};
 use crate::agent_tools::inventory::ExtensionToolInventorySeed;
 use crate::mcp::McpToolDefinition;
-use crate::AsterAgentState;
+use crate::AgentRuntimeState;
 use aster::agents::extension::ExtensionConfig;
 use aster::tools::ToolDefinition;
 use std::collections::{BTreeMap, HashSet};
@@ -18,7 +18,7 @@ pub struct AgentToolInventoryRuntimeSnapshot {
 }
 
 pub async fn read_agent_tool_inventory_runtime_snapshot(
-    agent_state: &AsterAgentState,
+    agent_state: &AgentRuntimeState,
     mcp_tools: &[McpToolDefinition],
 ) -> AgentToolInventoryRuntimeSnapshot {
     let agent_arc = agent_state.get_agent_arc();

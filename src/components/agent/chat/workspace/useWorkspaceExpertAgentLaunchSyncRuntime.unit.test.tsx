@@ -4,7 +4,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   syncExpertAgentInstanceToCloud,
-  updateExpertAgentInstanceSession,
   updateExpertAgentInstanceSkillRefs,
 } from "@/features/experts";
 import type { ExpertAgentLaunchParams } from "@/types/page";
@@ -15,7 +14,6 @@ import {
 
 vi.mock("@/features/experts", () => ({
   syncExpertAgentInstanceToCloud: vi.fn().mockResolvedValue(undefined),
-  updateExpertAgentInstanceSession: vi.fn(() => ({ id: "record-session" })),
   updateExpertAgentInstanceSkillRefs: vi.fn(() => ({ id: "record-skills" })),
 }));
 
@@ -25,10 +23,11 @@ const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
 const expertAgentLaunch: ExpertAgentLaunchParams = {
   tenantId: "tenant-1",
+  projectId: "project-1",
   expertId: "expert-1",
   releaseId: "release-1",
-  agentInstanceKey: "tenant-1:expert-1:release-1",
-  launchMode: "resume_or_create",
+  agentInstanceKey: "tenant-1:project-1:expert-1:release-1",
+  launchMode: "new_thread",
   catalogVersion: "catalog-1",
   skillRefsOverride: ["workspace_skill:daily_brief"],
 };
@@ -45,7 +44,6 @@ function renderHook(props?: Partial<HookProps>) {
     expertAgentLaunch,
     expertPanelRequestMetadata: { expert: { id: "expert-1" } },
     pruneWorkspaceSkillRuntimeEnableRefs: vi.fn(),
-    sessionId: null,
   };
 
   function Probe(currentProps: HookProps) {
@@ -127,6 +125,7 @@ describe("workspace expert agent launch sync runtime", () => {
     ]);
     expect(updateExpertAgentInstanceSkillRefs).toHaveBeenCalledWith({
       tenantId: "tenant-1",
+      projectId: "project-1",
       expertId: "expert-1",
       releaseId: "release-1",
       catalogVersion: "catalog-1",
@@ -134,26 +133,6 @@ describe("workspace expert agent launch sync runtime", () => {
     });
     expect(syncExpertAgentInstanceToCloud).toHaveBeenCalledWith({
       id: "record-skills",
-    });
-  });
-
-  it("sessionId 可用时应同步 latestSessionId，并使用最新 skill refs override", async () => {
-    const { render, getValue } = renderHook();
-
-    await render();
-    await act(async () => {
-      getValue().handleExpertSkillRefsChange(["workspace_skill:writer"]);
-      await Promise.resolve();
-    });
-    await render({ sessionId: " session-1 " });
-
-    expect(updateExpertAgentInstanceSession).toHaveBeenLastCalledWith({
-      tenantId: "tenant-1",
-      expertId: "expert-1",
-      releaseId: "release-1",
-      catalogVersion: "catalog-1",
-      latestSessionId: "session-1",
-      skillRefsOverride: ["workspace_skill:writer"],
     });
   });
 

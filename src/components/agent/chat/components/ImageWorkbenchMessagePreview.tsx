@@ -45,6 +45,11 @@ export const ImageWorkbenchMessagePreview: React.FC<
 > = ({ preview, onOpen }) => {
   const { t } = useTranslation("agent");
   const toolLabel = resolveToolLabel(preview, t);
+  const modelId = (
+    preview.runtimeContract?.model ||
+    preview.modelName ||
+    ""
+  ).trim();
   const modelLabel = resolveImageWorkbenchPreviewModelLabel(preview);
   const hasRenderedImage = Boolean(
     preview.imageUrl || preview.previewImages?.some((url) => url.trim()),
@@ -108,6 +113,7 @@ export const ImageWorkbenchMessagePreview: React.FC<
       >
         <div
           data-testid={`image-workbench-message-preview-toolbar-${preview.taskId}`}
+          data-model-id={modelId}
           className="mb-3 flex min-h-10 w-full max-w-full items-center gap-2 rounded-[10px] border border-[#d9ded6] bg-[#eef0ec] px-4 text-[13px] font-medium leading-5 text-[#435d2e]"
         >
           <Leaf className="h-3.5 w-3.5 shrink-0 fill-[#496631]/15 text-[#496631]" />

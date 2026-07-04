@@ -27,6 +27,7 @@ export type AgentStreamUserInputSendPreparationEnv = Pick<
   | "sessionIdRef"
   | "executionRuntime"
   | "clawTraceEnabled"
+  | "soulCopy"
   | "getWorkspaceIdForSubmit"
   | "activeStreamRef"
   | "getQueuedTurnsCount"
@@ -203,6 +204,7 @@ export function prepareAgentStreamUserInputSend(
     messagePurpose,
     capabilityRoute,
     effectiveExecutionStrategy,
+    soulCopy: env.soulCopy,
     setMessages: env.setMessages,
     setIsSending: env.setIsSending,
   });

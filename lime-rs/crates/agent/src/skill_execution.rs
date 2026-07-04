@@ -3,12 +3,12 @@ use crate::{
     artifact_protocol::{
         extend_unique_artifact_protocol_paths, push_unique_artifact_protocol_path,
     },
-    aster_runtime_projection::project_aster_runtime_event,
-    AgentTurnContext, AsterAgentState, SessionConfigBuilder, WriteArtifactEventEmitter,
+    request_tool_policy::{
+        resolve_request_tool_policy_with_mode, stream_message_reply_with_policy, ReplyInput,
+        ReplyInputImage, RequestToolPolicyMode,
+    },
+    AgentRuntimeState, AgentSessionConfig, AgentTurnContext, SessionConfigBuilder,
 };
-use aster::agents::SessionConfig;
-use aster::conversation::message::Message;
-use futures::StreamExt;
 use lime_skills::{ExecutionCallback, LoadedSkillDefinition};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -44,7 +44,7 @@ pub struct SkillExecutionResult {
 }
 
 pub struct SkillWorkflowExecution<'a> {
-    pub aster_state: &'a AsterAgentState,
+    pub runtime_state: &'a AgentRuntimeState,
     pub skill: &'a LoadedSkillDefinition,
     pub user_input: &'a str,
     pub user_visible_input: Option<&'a str>,
@@ -57,7 +57,7 @@ pub struct SkillWorkflowExecution<'a> {
 }
 
 pub struct SkillPromptExecution<'a> {
-    pub aster_state: &'a AsterAgentState,
+    pub runtime_state: &'a AgentRuntimeState,
     pub skill: &'a LoadedSkillDefinition,
     pub user_input: &'a str,
     pub user_visible_input: Option<&'a str>,
@@ -145,19 +145,23 @@ fn should_hide_execution_input_from_user(
         .unwrap_or(false)
 }
 
-fn build_user_message(
+fn build_reply_input(
     user_input: &str,
     user_visible_input: Option<&str>,
     images: &[SkillInputImage],
-) -> Message {
-    let mut user_message = Message::user().with_text(user_input);
-    for image in images {
-        user_message = user_message.with_image(image.data.clone(), image.media_type.clone());
-    }
+) -> ReplyInput {
+    let mut input = ReplyInput::text(user_input);
+    input.images = images
+        .iter()
+        .map(|image| ReplyInputImage {
+            data: image.data.clone(),
+            media_type: image.media_type.clone(),
+        })
+        .collect();
     if should_hide_execution_input_from_user(user_input, user_visible_input) {
-        user_message = user_message.agent_only();
+        input.agent_only = true;
     }
-    user_message
+    input
 }
 
 fn build_skill_turn_context(
@@ -197,7 +201,7 @@ fn build_prompt_session_config(
     skill: &LoadedSkillDefinition,
     user_visible_input: Option<&str>,
     memory_prompt: Option<&str>,
-) -> SessionConfig {
+) -> AgentSessionConfig {
     let mut session_config_builder = SessionConfigBuilder::new(session_id)
         .system_prompt(build_prompt_system_prompt(
             &skill.markdown_content,
@@ -215,7 +219,7 @@ fn build_step_session_config(
     step_session_id: &str,
     step_system_prompt: String,
     skill_turn_context: Option<AgentTurnContext>,
-) -> SessionConfig {
+) -> AgentSessionConfig {
     let mut session_config_builder = SessionConfigBuilder::new(step_session_id)
         .system_prompt(step_system_prompt)
         .system_prompt_override(true)
@@ -227,62 +231,42 @@ fn build_step_session_config(
 }
 
 async fn stream_skill_session(
-    aster_state: &AsterAgentState,
+    runtime_state: &AgentRuntimeState,
     session_id: &str,
     event_name: &str,
-    session_config: SessionConfig,
-    user_message: Message,
+    session_config: AgentSessionConfig,
+    input: ReplyInput,
     emitter: &SkillEventEmitter,
 ) -> Result<StreamedSkillReply, SkillExecutionError> {
-    let agent_arc = aster_state.get_agent_arc();
+    let agent_arc = runtime_state.get_agent_arc();
     let guard = agent_arc.read().await;
     let agent = guard.as_ref().ok_or_else(|| {
         SkillExecutionError::SessionInitFailed("Agent not initialized".to_string())
     })?;
 
-    let cancel_token = aster_state.create_cancel_token(session_id).await;
-    let stream_result = agent
-        .reply(user_message, session_config, Some(cancel_token.clone()))
-        .await;
-
-    let mut output = String::new();
-    let mut error: Option<String> = None;
+    let cancel_token = runtime_state.create_cancel_token(session_id).await;
     let mut artifact_paths = Vec::new();
-    let mut write_artifact_emitter = WriteArtifactEventEmitter::new(session_id.to_string());
+    let request_tool_policy =
+        resolve_request_tool_policy_with_mode(Some(false), Some(RequestToolPolicyMode::Disabled));
+    let stream_result = stream_message_reply_with_policy(
+        agent,
+        input,
+        None,
+        session_config,
+        Some(cancel_token.clone()),
+        &request_tool_policy,
+        |event| {
+            collect_artifact_path_from_event(&mut artifact_paths, event);
+            emit_skill_event(emitter, event_name, event.clone());
+        },
+    )
+    .await;
 
-    match stream_result {
-        Ok(mut stream) => {
-            while let Some(event_result) = stream.next().await {
-                match event_result {
-                    Ok(agent_event) => {
-                        let runtime_events = project_aster_runtime_event(agent_event);
-                        for mut runtime_event in runtime_events {
-                            let extra_events =
-                                write_artifact_emitter.process_event(&mut runtime_event);
-                            for extra_event in extra_events {
-                                collect_artifact_path_from_event(&mut artifact_paths, &extra_event);
-                                emit_skill_event(emitter, event_name, extra_event);
-                            }
-                            collect_artifact_path_from_event(&mut artifact_paths, &runtime_event);
-                            if let RuntimeAgentEvent::TextDelta { ref text } = runtime_event {
-                                output.push_str(text);
-                            }
-                            emit_skill_event(emitter, event_name, runtime_event);
-                        }
-                    }
-                    Err(stream_error) => {
-                        error = Some(format!("Stream error: {stream_error}"));
-                        break;
-                    }
-                }
-            }
-        }
-        Err(agent_error) => {
-            error = Some(format!("Agent error: {agent_error}"));
-        }
-    }
-
-    aster_state.remove_cancel_token(session_id).await;
+    runtime_state.remove_cancel_token(session_id).await;
+    let (output, error) = match stream_result {
+        Ok(reply) => (reply.text_output, reply.event_errors.last().cloned()),
+        Err(error) => (String::new(), Some(error.message)),
+    };
 
     Ok(StreamedSkillReply {
         output,
@@ -295,7 +279,7 @@ pub async fn execute_skill_workflow(
     request: SkillWorkflowExecution<'_>,
 ) -> Result<SkillExecutionResult, SkillExecutionError> {
     let SkillWorkflowExecution {
-        aster_state,
+        runtime_state,
         skill,
         user_input,
         user_visible_input,
@@ -348,14 +332,14 @@ pub async fn execute_skill_workflow(
             skill_turn_context.clone(),
         );
         let step_input = build_step_input(user_input, &accumulated_context, idx == 0);
-        let user_message = build_user_message(&step_input, user_visible_input, images);
+        let input = build_reply_input(&step_input, user_visible_input, images);
 
         let reply = stream_skill_session(
-            aster_state,
+            runtime_state,
             &step_session_id,
             &event_name,
             session_config,
-            user_message,
+            input,
             &emitter,
         )
         .await?;
@@ -426,7 +410,7 @@ pub async fn execute_skill_prompt(
     request: SkillPromptExecution<'_>,
 ) -> Result<SkillExecutionResult, SkillExecutionError> {
     let SkillPromptExecution {
-        aster_state,
+        runtime_state,
         skill,
         user_input,
         user_visible_input,
@@ -439,13 +423,13 @@ pub async fn execute_skill_prompt(
     let event_name = format!("skill-exec-{execution_id}");
     let session_config =
         build_prompt_session_config(session_id, skill, user_visible_input, memory_prompt);
-    let user_message = build_user_message(user_input, user_visible_input, images);
+    let input = build_reply_input(user_input, user_visible_input, images);
     let reply = stream_skill_session(
-        aster_state,
+        runtime_state,
         session_id,
         &event_name,
         session_config,
-        user_message,
+        input,
         &emitter,
     )
     .await?;
@@ -484,8 +468,8 @@ pub async fn execute_skill_prompt(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_prompt_session_config, build_skill_turn_context, build_step_session_config,
-        build_step_system_prompt, build_user_message,
+        build_prompt_session_config, build_reply_input, build_skill_turn_context,
+        build_step_session_config, build_step_system_prompt,
     };
     use lime_skills::LoadedSkillDefinition;
     use std::collections::HashMap;
@@ -561,23 +545,21 @@ mod tests {
     }
 
     #[test]
-    fn build_user_message_hides_execution_input_when_visible_input_differs() {
-        let message = build_user_message(
+    fn build_reply_input_hides_execution_input_when_visible_input_differs() {
+        let input = build_reply_input(
             "结构化执行输入",
             Some("@analysis 帮我分析一下今天的国际形势"),
             &[],
         );
 
-        assert!(!message.is_user_visible());
-        assert!(message.is_agent_visible());
+        assert!(input.agent_only);
     }
 
     #[test]
-    fn build_user_message_keeps_plain_input_user_visible() {
-        let message = build_user_message("普通用户输入", Some("普通用户输入"), &[]);
+    fn build_reply_input_keeps_plain_input_user_visible() {
+        let input = build_reply_input("普通用户输入", Some("普通用户输入"), &[]);
 
-        assert!(message.is_user_visible());
-        assert!(message.is_agent_visible());
+        assert!(!input.agent_only);
     }
 
     #[test]

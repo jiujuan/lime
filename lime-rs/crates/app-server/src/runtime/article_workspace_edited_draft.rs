@@ -2,6 +2,8 @@ use serde_json::Value;
 
 const INLINE_IMAGE_TASK_SLOT_MARKER: &str = "lime:image-task-slot:";
 const INLINE_IMAGE_TASK_PLACEHOLDER: &str = "pending-image-task://";
+const RESOLVED_IMAGE_URL_PREFIXES: [&str; 5] =
+    ["http://", "https://", "file://", "asset://", "data:image/"];
 
 pub(super) fn metadata_edited_draft<'a>(
     metadata: &'a serde_json::Map<String, Value>,
@@ -33,11 +35,29 @@ pub(super) fn should_reject_edited_draft_update(existing: Option<&Value>, next: 
     };
     contains_inline_image_task_marker(existing_markdown)
         && !contains_inline_image_task_marker(next_markdown)
+        && !contains_resolved_markdown_image(next_markdown)
 }
 
 fn contains_inline_image_task_marker(markdown: &str) -> bool {
     markdown.contains(INLINE_IMAGE_TASK_SLOT_MARKER)
         || markdown.contains(INLINE_IMAGE_TASK_PLACEHOLDER)
+}
+
+fn contains_resolved_markdown_image(markdown: &str) -> bool {
+    markdown.lines().any(|line| {
+        let Some(image_start) = line.find("![") else {
+            return false;
+        };
+        let image = &line[image_start..];
+        let Some(url_start) = image.find("](") else {
+            return false;
+        };
+        let url = &image[url_start + 2..];
+        !url.starts_with(INLINE_IMAGE_TASK_PLACEHOLDER)
+            && RESOLVED_IMAGE_URL_PREFIXES
+                .iter()
+                .any(|prefix| url.starts_with(prefix))
+    })
 }
 
 fn markdown(value: &Value) -> Option<&str> {

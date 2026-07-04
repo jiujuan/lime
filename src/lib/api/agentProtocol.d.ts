@@ -224,6 +224,20 @@ export interface AgentThreadSubagentActivityItem extends AgentThreadItemBase {
   model?: string;
   session_id?: string;
 }
+export interface AgentThreadExpertProfileSwitchItem extends AgentThreadItemBase {
+  type: "expert_profile_switch";
+  title?: string;
+  summary?: string;
+  previous_expert_id?: string;
+  previous_release_id?: string;
+  next_expert_id?: string;
+  next_release_id?: string;
+  switched_at?: string;
+  expert_role_switch?: unknown;
+  expert?: unknown;
+  harness_expert?: unknown;
+  metadata?: unknown;
+}
 export interface AgentThreadWarningItem extends AgentThreadItemBase {
   type: "warning";
   message: string;
@@ -257,6 +271,7 @@ export type AgentThreadItem =
   | AgentThreadRequestUserInputItem
   | AgentThreadFileArtifactItem
   | AgentThreadSubagentActivityItem
+  | AgentThreadExpertProfileSwitchItem
   | AgentThreadWarningItem
   | AgentThreadContextCompactionItem
   | AgentThreadErrorItem
@@ -429,15 +444,6 @@ export interface AgentEventImageTaskPresentationGenerated {
   thread_id?: string;
   turn_id?: string;
   presentation?: Record<string, unknown>;
-}
-export interface AgentEventImageTaskPresentationUnavailable {
-  type: "image_task_presentation_unavailable";
-  status?: string;
-  reason?: string;
-  workflow_run_id?: string;
-  session_id?: string;
-  thread_id?: string;
-  turn_id?: string;
 }
 export interface AgentToolProgressPayload {
   message?: string;
@@ -764,7 +770,6 @@ export type AgentEvent =
   | AgentEventToolEnd
   | AgentEventImageTaskCreated
   | AgentEventImageTaskPresentationGenerated
-  | AgentEventImageTaskPresentationUnavailable
   | AgentEventToolProgress
   | AgentEventToolOutputDelta
   | AgentEventToolInputDelta

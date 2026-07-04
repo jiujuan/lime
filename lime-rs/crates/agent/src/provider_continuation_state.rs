@@ -1,4 +1,4 @@
-use crate::credential_bridge::RuntimeProviderProtocol;
+use model_provider::runtime_provider::RuntimeProviderProtocol;
 use model_provider::ModelProviderProtocol;
 use serde::{Deserialize, Serialize};
 
@@ -37,7 +37,7 @@ pub fn resolve_provider_continuation_capability(
     protocol: Option<RuntimeProviderProtocol>,
 ) -> ProviderContinuationCapability {
     resolve_provider_continuation_capability_for_model_protocol(
-        model_provider_protocol_from_runtime_protocol(protocol),
+        protocol.map(RuntimeProviderProtocol::to_model_provider_protocol),
     )
 }
 
@@ -52,18 +52,6 @@ pub fn resolve_provider_continuation_capability_for_model_protocol(
     }
 
     ProviderContinuationCapability::HistoryReplayOnly
-}
-
-fn model_provider_protocol_from_runtime_protocol(
-    protocol: Option<RuntimeProviderProtocol>,
-) -> Option<ModelProviderProtocol> {
-    match protocol {
-        Some(RuntimeProviderProtocol::Responses) => Some(ModelProviderProtocol::Responses),
-        Some(RuntimeProviderProtocol::ChatCompletions) => {
-            Some(ModelProviderProtocol::ChatCompletions)
-        }
-        None => None,
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -149,7 +137,7 @@ mod tests {
         resolve_provider_continuation_capability_for_model_protocol,
         ProviderContinuationCapability, ProviderContinuationState,
     };
-    use crate::credential_bridge::RuntimeProviderProtocol;
+    use model_provider::runtime_provider::RuntimeProviderProtocol;
     use model_provider::ModelProviderProtocol;
 
     #[test]

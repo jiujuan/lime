@@ -204,6 +204,8 @@ Agent Runtime smoke 与 Service Skill 入口 smoke 已迁到 `scripts/agent-runt
 
 `npm run smoke:claw-chat-current-fixture` 是更重的真实 Electron GUI fixture：通过真实输入框发送“整理今天的国际新闻”，验证用户输入可见、assistant 完成态输出可见、输入框不消失、App Server `agentSession/turn/start` 走 current JSON-RPC、WebSearch 不按关键词强制 required，并使用本地 external backend fixture 代替正式模型后端。修 Agent Runtime / Claw 输入、流式卡住、历史 hydrate 或新闻请求链路时，先跑聚合 guard，再按需要显式跑该入口；修无法停止或停止后无法继续输出时，还必须跑 `--scenario cancel-then-continue`，证明同一 current session 停止后能再次从 GUI 输入“继续输出”并完成第二轮。
 
+`npm run smoke:claw-image-live` 是 `@配图` 真实 Provider live 验收入口：默认 fail-closed，必须显式传 `--allow-live-provider` 或设置 `LIME_ALLOW_LIVE_PROVIDER_SMOKE=1 / LIME_REAL_API_TEST=1`。它启动真实 Electron Desktop Host 与 `APP_SERVER_BACKEND_MODE=runtime`，通过 GUI 输入框发送 `@配图`，验证 Agent 普通对话流里的思考 / 引导文字、`Image Generation` 图片任务卡、真实图片预览、Token 显示、右侧 viewer 不自动展开，以及普通 UI 不暴露 task path、workflow 字段、provider 内部字段或模板 task id。传 `--setup-agnes-from-env` 时只从 `AGNES_API_KEY`（或 `--api-key-env` 指定变量）读取 key，summary 仅记录 `apiKeyConfigured: true`，不记录 key 值。该入口还会经 `mediaTaskArtifact/list|get`、`workflow/read` 与 task audit JSONL 验证后端事实源，确保图片任务只落可审计 JSONL / workflow summary，不靠 mock worker、renderer mock fallback 或右侧 viewer 展示内部 JSON。
+
 新增 Agent Runtime 脚本继续进入 `scripts/agent-runtime/` 或复用现有 Agent Runtime npm scripts；共享实现仍放在 `scripts/lib/`。
 
 ### Plugin 脚本

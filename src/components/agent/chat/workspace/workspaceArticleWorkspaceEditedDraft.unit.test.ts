@@ -101,6 +101,13 @@ describe("workspaceArticleWorkspaceEditedDraft", () => {
       buildWorkspaceArticleEditedDraftUpdateRequest(change, editedDraft),
     ).toEqual({
       session_id: "session-main",
+      article_workspace_selected_object_ref: {
+        appId: "content-factory-app",
+        kind: "articleDraft",
+        id: "article-1",
+        sessionId: "session-main",
+        artifactIds: ["artifact-article-1"],
+      },
       article_workspace_edited_draft: {
         objectKey: buildWorkspaceArticleEditedDraftKey(articleObject),
         objectRef: {
@@ -173,11 +180,35 @@ describe("workspaceArticleWorkspaceEditedDraft", () => {
     ).toBe(true);
   });
 
+  it("已有 inline 配图占位时应接受已解析图片 URL 的回填写回", () => {
+    const currentDraft = {
+      objectKey: "content-factory-app:session-main:articleDraft:article-1",
+      markdown: [
+        "# 标题",
+        "",
+        "![正文配图](pending-image-task://task-inline?status=running&prompt=%E9%85%8D%E5%9B%BE)",
+        "<!-- lime:image-task-slot:article-image-slot-1 -->",
+      ].join("\n"),
+      updatedAt: "2026-06-29T10:00:00.000Z",
+    };
+    const nextDraft = {
+      ...currentDraft,
+      markdown: "# 标题\n\n![正文配图](https://example.com/article-image.png)",
+      updatedAt: "2026-06-29T10:01:00.000Z",
+    };
+
+    expect(
+      shouldRejectWorkspaceArticleEditedDraftChange({
+        currentDraft,
+        nextDraft,
+      }),
+    ).toBe(false);
+  });
+
   it("仍允许带着 inline 配图占位继续编辑正文", () => {
     const currentDraft = {
       objectKey: "content-factory-app:session-main:articleDraft:article-1",
-      markdown:
-        "# 标题\n\n<!-- lime:image-task-slot:article-image-slot-1 -->",
+      markdown: "# 标题\n\n<!-- lime:image-task-slot:article-image-slot-1 -->",
       updatedAt: "2026-06-29T10:00:00.000Z",
     };
     const nextDraft = {

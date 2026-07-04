@@ -21,6 +21,7 @@ import type { ActionRequired, Message, MessageImage } from "../types";
 import type { ChatToolPreferences } from "../utils/chatToolPreferences";
 import type { AgentAccessMode } from "./agentChatStorage";
 import { playToolcallSound, playTypewriterSound } from "./agentChatStorage";
+import type { SoulInteractionCopy } from "@/lib/soul/interactionCopy";
 import type {
   SendMessageOptions,
   SessionModelPreference,
@@ -140,6 +141,7 @@ interface UseAgentStreamOptions {
   refreshSessionReadModel: (targetSessionId?: string) => Promise<boolean>;
   executionRuntime: AsterSessionExecutionRuntime | null;
   clawTraceEnabled?: boolean;
+  soulCopy?: SoulInteractionCopy;
 }
 
 export function useAgentStream(options: UseAgentStreamOptions) {
@@ -177,6 +179,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
     refreshSessionReadModel,
     executionRuntime,
     clawTraceEnabled = false,
+    soulCopy,
   } = options;
 
   const {
@@ -223,6 +226,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
         onWriteFile,
         executionRuntime,
         clawTraceEnabled,
+        soulCopy,
         setActiveStream,
         clearActiveStreamIfMatch,
         setMessages,
@@ -248,6 +252,7 @@ export function useAgentStream(options: UseAgentStreamOptions) {
       ensureSession,
       executionRuntime,
       clawTraceEnabled,
+      soulCopy,
       getWorkspaceIdForSubmit,
       getSyncedSessionModelPreference,
       getSyncedSessionExecutionStrategy,

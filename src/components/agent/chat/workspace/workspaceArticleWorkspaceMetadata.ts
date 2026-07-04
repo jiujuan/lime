@@ -1,5 +1,8 @@
 import { normalizeArtifactProtocolPath } from "@/lib/artifact-protocol";
 
+export const CONTENT_FACTORY_WORKSPACE_PATCH_KIND =
+  "content_factory.workspace_patch";
+
 export function asWorkspaceArticleMetadataRecord(
   value: unknown,
 ): Record<string, unknown> | null {
@@ -87,7 +90,7 @@ export function isWorkspaceArticlePatchArtifactKind(value: unknown): boolean {
   const normalizedKind = readString(value)?.toLowerCase();
   return Boolean(
     normalizedKind &&
-      (normalizedKind === "content_factory.workspace_patch" ||
+      (normalizedKind === CONTENT_FACTORY_WORKSPACE_PATCH_KIND ||
         normalizedKind === "content_factory_workspace_patch" ||
         normalizedKind === "workspace_patch" ||
         normalizedKind.endsWith(".workspace_patch")),

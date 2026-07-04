@@ -25,6 +25,8 @@
   "agentExperts.sync.seeded": "로컬 시드 카탈로그",
   "agentExperts.title": "전문가 광장",
   "agentExperts.info.title": "전문가 정보",
+  "agentExperts.info.profileSwitch.label": "현재 전문가",
+  "agentExperts.info.profileSwitch.ariaLabel": "현재 대화의 전문가 전환",
   "agentExperts.info.sections.overview": "소개",
   "agentExperts.info.sections.memory": "메모리",
   "agentExperts.info.sections.diary": "일지",
@@ -121,7 +123,5 @@
   "agentExperts.info.skills.evidence.counts": "검색 {{searchCount}}회 · 실행 {{invocationCount}}회",
   "agentExperts.info.skills.evidence.exportedAt": "최근 내보내기 {{exportedAt}}",
   "agentExperts.info.skills.evidence.latestSkill": "최근 스킬 {{skillName}}",
-  "agentExperts.info.skills.evidence.knownGaps": "알려진 격차 {{count}}개",
-  "agentExperts.actions.continue": "대화 계속",
-  "agentExperts.actions.newThread": "새 대화"
+  "agentExperts.info.skills.evidence.knownGaps": "알려진 격차 {{count}}개"
 }

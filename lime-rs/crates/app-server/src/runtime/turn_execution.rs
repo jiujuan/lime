@@ -355,6 +355,11 @@ impl RuntimeCore {
                 turn.turn_id.clone(),
                 event_callback,
             );
+            if let Some(event) = super::expert_role_switch::runtime_event_from_request_metadata(
+                request.metadata.as_ref(),
+            ) {
+                sink.emit(event)?;
+            }
             let backend_result = match self.maybe_run_plugin_worker_turn(&request, &mut sink).await
             {
                 Ok(true) => Ok(()),
@@ -377,6 +382,11 @@ impl RuntimeCore {
             events
         } else {
             let mut sink = CollectingRuntimeEventSink::default();
+            if let Some(event) = super::expert_role_switch::runtime_event_from_request_metadata(
+                request.metadata.as_ref(),
+            ) {
+                sink.emit(event)?;
+            }
             let backend_result = match self.maybe_run_plugin_worker_turn(&request, &mut sink).await
             {
                 Ok(true) => Ok(()),

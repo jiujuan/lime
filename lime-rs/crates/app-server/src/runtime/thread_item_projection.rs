@@ -75,6 +75,11 @@ pub(super) fn thread_items_from_events(stored: &StoredSession) -> Vec<Value> {
             "context.compaction.started" | "context.compaction.completed" => {
                 upsert_context_compaction_item(stored, event, &mut context_compaction_items);
             }
+            "expert.profile_switch.completed" => {
+                if let Some(item) = expert_profile_switch_item(stored, event) {
+                    items.push(item);
+                }
+            }
             "subagent.activity" => {
                 upsert_subagent_activity_item(stored, event, &mut subagent_items);
             }
@@ -706,6 +711,73 @@ fn subagent_activity_id(payload: &Value) -> Option<String> {
             "id",
         ],
     )
+}
+
+fn expert_profile_switch_item(stored: &StoredSession, event: &AgentEvent) -> Option<Value> {
+    let role_switch = expert_role_switch_payload(&event.payload)?;
+    let next_expert_id = string_field(&event.payload, &["nextExpertId", "next_expert_id"])
+        .or_else(|| string_field(role_switch, &["nextExpertId", "next_expert_id"]));
+    let previous_expert_id =
+        string_field(&event.payload, &["previousExpertId", "previous_expert_id"])
+            .or_else(|| string_field(role_switch, &["previousExpertId", "previous_expert_id"]));
+    let title = raw_string_field(&event.payload, &["title"])
+        .unwrap_or_else(|| "Expert profile switched".to_string());
+    let summary = match (previous_expert_id.as_deref(), next_expert_id.as_deref()) {
+        (Some(previous), Some(next)) => format!("{previous} -> {next}"),
+        (None, Some(next)) => format!("Switched to {next}"),
+        _ => title.clone(),
+    };
+
+    Some(base_item(
+        stored,
+        event,
+        "expert_profile_switch",
+        "completed",
+        compact_json(json!({
+            "title": title,
+            "summary": summary,
+            "kind": string_field(role_switch, &["kind"]).unwrap_or_else(|| "expert_profile_switch".to_string()),
+            "scope": string_field(role_switch, &["scope"]).unwrap_or_else(|| "thread".to_string()),
+            "source": string_field(role_switch, &["source"])
+                .or_else(|| string_field(&event.payload, &["source"])),
+            "previous_expert_id": previous_expert_id,
+            "previous_release_id": string_field(&event.payload, &["previousReleaseId", "previous_release_id"])
+                .or_else(|| string_field(role_switch, &["previousReleaseId", "previous_release_id"])),
+            "next_expert_id": next_expert_id,
+            "next_release_id": string_field(&event.payload, &["nextReleaseId", "next_release_id"])
+                .or_else(|| string_field(role_switch, &["nextReleaseId", "next_release_id"])),
+            "switched_at": string_field(&event.payload, &["switchedAt", "switched_at"])
+                .or_else(|| string_field(role_switch, &["switchedAt", "switched_at"])),
+            "expert_role_switch": role_switch.clone(),
+            "expert": event.payload.get("expert").cloned(),
+            "harness_expert": event.payload.pointer("/harness/expert").cloned(),
+            "metadata": expert_profile_switch_metadata(event, role_switch),
+        })),
+    ))
+}
+
+fn expert_role_switch_payload(payload: &Value) -> Option<&Value> {
+    payload
+        .get("expert_role_switch")
+        .or_else(|| payload.get("expertRoleSwitch"))
+        .or_else(|| payload.pointer("/metadata/harness/expert_role_switch"))
+        .or_else(|| payload.pointer("/harness/expert_role_switch"))
+}
+
+fn expert_profile_switch_metadata(event: &AgentEvent, role_switch: &Value) -> Value {
+    let mut metadata = event_metadata(event)
+        .as_object()
+        .cloned()
+        .unwrap_or_default();
+    metadata.insert(
+        "harness".to_string(),
+        compact_json(json!({
+            "expert": event.payload.pointer("/harness/expert").cloned(),
+            "expert_role_switch": role_switch.clone(),
+        })),
+    );
+    metadata.insert("source".to_string(), json!("runtime_options.metadata"));
+    Value::Object(metadata)
 }
 
 fn command_string(payload: &Value) -> Option<String> {

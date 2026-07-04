@@ -218,6 +218,51 @@ describe("workspaceArticleWorkspaceModel", () => {
     });
   });
 
+  it("view model 应优先展示 editedDraft 对应的文章对象", () => {
+    const oldArticle = workspacePatch.objects[0]!;
+    const finalArticle = {
+      ...oldArticle,
+      ref: {
+        ...oldArticle.ref,
+        id: "article-final",
+        version: "v3",
+        sourceTaskId: "content-factory-worker-task",
+      },
+      title: "多轮检索后的公众号文章草稿",
+      source: {
+        documentText: "# 多轮检索后的公众号文章草稿\n\n这是完整正文。",
+        finalMarkdown: "# 多轮检索后的公众号文章草稿\n\n这是完整正文。",
+        researchRounds: [
+          { id: "research-1", title: "确认用户目标" },
+          { id: "research-2", title: "整理场景痛点" },
+          { id: "research-3", title: "收敛结构" },
+        ],
+      },
+    };
+    const profile = buildWorkspaceArticleWorkspaceFromThreadRead({
+      thread_id: "thread-main",
+      articleWorkspace: {
+        ...workspacePatch,
+        selectedObjectRef: finalArticle.ref,
+        primaryObjectRef: finalArticle.ref,
+        editedDraft: {
+          objectKey: "content-factory-app:session-main:articleDraft:article-1",
+          markdown: "# Inline 配图恢复验证\n\n核心观点段落",
+          updatedAt: "2026-07-04T00:00:00.000Z",
+        },
+        objects: [oldArticle, workspacePatch.objects[1], finalArticle],
+      },
+    });
+    expect(profile).not.toBeNull();
+
+    const viewModel = buildWorkspaceArticleWorkspaceViewModel(profile!);
+
+    expect(viewModel.selectedObject.ref.id).toBe("article-1");
+    expect(viewModel.selectedPreview.documentText).toContain(
+      "Inline 配图恢复验证",
+    );
+  });
+
   it("应从 Article Editor pending metadata 投影并保留请求来源", () => {
     const profile = buildWorkspaceArticleWorkspaceFromPendingRequests([
       {
@@ -611,6 +656,55 @@ describe("workspaceArticleWorkspaceModel", () => {
         pane_kind: "imageGenerationSet",
         source: "threadRead",
         action_key: "regenerate",
+      },
+    });
+  });
+
+  it("内容工厂 Article Editor action 应把旧 creator workspace patch kind 归一为 current kind", () => {
+    const profile = buildWorkspaceArticleWorkspaceFromThreadRead({
+      thread_id: "thread-main",
+      articleWorkspace: {
+        ...workspacePatch,
+        objects: workspacePatch.objects.map((object) =>
+          object.ref.kind === "imageGenerationSet"
+            ? {
+                ...object,
+                source: {
+                  ...object.source,
+                  outputArtifactKind: "creator.workspace_patch",
+                },
+              }
+            : object,
+        ),
+      },
+    });
+    expect(profile).not.toBeNull();
+    const viewModel = buildWorkspaceArticleWorkspaceViewModel(profile!);
+    const action = viewModel.selectedActions.find(
+      (candidate) => candidate.key === "regenerate",
+    );
+    expect(action).toBeDefined();
+
+    const metadata = buildWorkspaceArticleWorkspaceActionRequestMetadata({
+      action: action!,
+      object: viewModel.selectedObject,
+      articleWorkspace: profile!,
+      prompt: "请重新生成「配图组」",
+    });
+
+    expect(metadata).toMatchObject({
+      plugin: {
+        runtime_authorization: {
+          status: "allowed",
+          reason_code: "local_worker_output_allowed",
+          requested_output_artifact_kind: "content_factory.workspace_patch",
+        },
+        article_workspace_action: {
+          output_artifact_kind: "content_factory.workspace_patch",
+        },
+        pane_action: {
+          output_artifact_kind: "content_factory.workspace_patch",
+        },
       },
     });
   });

@@ -1,8 +1,9 @@
 use super::{
-    backend_error, configure_provider_for_route, direct_provider_config_from_request,
-    initialize_runtime_database, model_route_resolver, request_context,
+    backend_error, current_agent_runtime_config_metadata, direct_provider_config_from_request,
+    initialize_runtime_database, model_route_contract, model_route_resolver, request_context,
     selection_with_effective_reasoning, RuntimeBackend,
 };
+use crate::runtime::memory_prompt::append_soul_context_to_system_prompt;
 use crate::{ExecutionRequest, RuntimeCoreError};
 use lime_agent::{
     host_managed_generation_session_id, run_host_managed_generation,
@@ -64,6 +65,7 @@ async fn generate_outputs(
     plan: &HostManagedGenerationPlan,
 ) -> Result<GeneratedOutputs, RuntimeCoreError> {
     let db = initialize_runtime_database(runtime_backend.db.as_ref())?;
+    runtime_backend.ensure_agent_initialized(&db).await?;
     let requested_selection = request_context::resolve_runtime_model_selection(request)?;
     let effective_requested_selection = selection_with_effective_reasoning(&requested_selection);
     let host_request = request_context::aster_chat_request_from_request(request);
@@ -90,24 +92,14 @@ async fn generate_outputs(
     }
 
     let generation_session_id = host_managed_generation_session_id(worker_request);
-    let provider_config = configure_provider_for_route(
-        &runtime_backend.agent_state,
-        &db,
-        &selection.provider,
-        &selection.model,
-        &generation_session_id,
-        selection.reasoning_effort.clone(),
-        &route_resolution.resolved_route.protocol,
-        direct_provider_config,
-    )
-    .await
-    .map_err(backend_error)?;
-
-    let provider = provider_config
-        .provider_selector
-        .clone()
-        .unwrap_or_else(|| selection.provider.clone());
-    let model = provider_config.model_name.clone();
+    let config_metadata = current_agent_runtime_config_metadata();
+    let runtime_metadata = request
+        .runtime_options
+        .as_ref()
+        .and_then(|options| options.metadata.as_ref())
+        .or(request.metadata.as_ref());
+    let system_prompt_context =
+        append_soul_context_to_system_prompt(None, config_metadata.as_ref(), runtime_metadata);
     let generated = run_host_managed_generation(
         &runtime_backend.agent_state,
         HostManagedGenerationRunRequest {
@@ -115,10 +107,26 @@ async fn generate_outputs(
             generation_session_id,
             worker_request,
             plan,
+            system_prompt_context,
+            provider_configuration: Some(
+                model_route_contract::provider_configuration_from_runtime(
+                    &selection,
+                    &route_resolution.resolved_route,
+                    direct_provider_config,
+                ),
+            ),
         },
     )
     .await
     .map_err(RuntimeCoreError::Backend)?;
+    let provider_config = generated.provider_config.ok_or_else(|| {
+        RuntimeCoreError::Backend("host managed generation provider was not configured".to_string())
+    })?;
+    let provider = provider_config
+        .provider_selector
+        .clone()
+        .unwrap_or_else(|| selection.provider.clone());
+    let model = provider_config.model_name.clone();
 
     Ok(GeneratedOutputs {
         provider,
@@ -209,6 +217,44 @@ mod tests {
         );
     }
 
+    #[test]
+    fn host_generation_system_prompt_context_inherits_soul_from_config_metadata() {
+        let config_metadata = json!({
+            "memory": {
+                "soul": {
+                    "schema": "memory_soul_prompt_context.v2",
+                    "source": "memory.soul",
+                    "scope": "interaction_only",
+                    "styleProfile": {
+                        "id": "cheeky_sassy_executor",
+                        "packId": "com.lime.builtin.default",
+                        "tone": "cheeky_sassy",
+                        "intensity": "low",
+                        "allowedMoves": ["Apply this tone to greetings, opening turns, self-introductions, chat replies, and tool progress."],
+                        "forbiddenMoves": ["Do not invent tool results."],
+                        "seriousModeFallback": "calm_professional_partner"
+                    },
+                    "styleBoundary": {
+                        "formalArtifactVoiceSource": "generation_brief_only",
+                        "fidelityRules": ["Formal artifacts must use explicit Generation Brief voice, not Product Soul."]
+                    }
+                }
+            }
+        });
+
+        let prompt_context =
+            append_soul_context_to_system_prompt(None, Some(&config_metadata), None)
+                .expect("prompt context");
+
+        assert!(prompt_context.contains("## Interaction Soul"));
+        assert!(prompt_context.contains("Style profile: cheeky_sassy_executor"));
+        assert!(prompt_context.contains("Style pack: com.lime.builtin.default"));
+        assert!(prompt_context.contains("Formal artifact voice source: generation_brief_only"));
+        assert!(
+            prompt_context.contains("Formal artifacts must use explicit Generation Brief voice")
+        );
+    }
+
     #[tokio::test]
     async fn prepare_worker_request_injects_host_managed_generation_from_fixture_provider() {
         let generated_markdown = "# 宿主离线生成标题\n\n这里是 localhost fixture 生成的正文。";
@@ -245,8 +291,9 @@ mod tests {
             .expect("prepare worker request");
 
         assert_eq!(
-            worker_request["hostManagedGeneration"]["status"],
-            "completed"
+            worker_request["hostManagedGeneration"]["status"], "completed",
+            "host generation failed: {:?}",
+            worker_request["hostManagedGeneration"]
         );
         assert_eq!(
             worker_request["hostManagedGeneration"]["provider"],

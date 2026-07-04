@@ -99,7 +99,13 @@ function WorkflowStepRow({
     : null;
   const waitingText =
     step.requestId || step.agentActionType
-      ? step.agentActionType ?? step.requestId
+      ? [
+          formatWorkflowActionTypeLabel(step.agentActionType, translate) ??
+            step.agentActionType,
+          step.requestId,
+        ]
+          .filter(Boolean)
+          .join(" / ")
       : null;
 
   return (
@@ -201,7 +207,39 @@ function getStatusIcon(status: string) {
 }
 
 function normalizeStatus(value?: string | null): string {
-  return value?.trim().toLowerCase() ?? "unknown";
+  const normalized = value?.trim().toLowerCase() ?? "unknown";
+  if (
+    normalized === "waiting_action" ||
+    normalized === "waitingaction" ||
+    normalized === "waiting_permission"
+  ) {
+    return "waiting";
+  }
+  return normalized;
+}
+
+function formatWorkflowActionTypeLabel(
+  value: string | null,
+  translate: WorkspaceArticleWorkflowDetailTranslate,
+): string | null {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  if (normalized === "ask_user") {
+    return translate("workspace.articleEditor.workflow.waitingAction.askUser");
+  }
+  if (normalized === "elicitation") {
+    return translate(
+      "workspace.articleEditor.workflow.waitingAction.elicitation",
+    );
+  }
+  if (normalized === "tool_confirmation") {
+    return translate(
+      "workspace.articleEditor.workflow.waitingAction.toolConfirmation",
+    );
+  }
+  return value;
 }
 
 function readRecordString(

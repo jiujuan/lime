@@ -1,8 +1,6 @@
 mod agent_runtime_registry;
 mod agent_ui_event_schema;
 mod agent_ui_sequence_verifier;
-#[cfg(feature = "aster-backend")]
-mod aster_backend;
 mod automation_execution;
 mod backend_event;
 mod capability;
@@ -28,6 +26,8 @@ mod processor;
 mod project_shell;
 mod runtime;
 mod runtime_backend;
+#[cfg(feature = "aster-backend")]
+mod runtime_backend_adapter;
 mod runtime_factory;
 mod skill_registry;
 mod trace_context;
@@ -102,24 +102,6 @@ use app_server_transport::OutgoingMessage;
 use app_server_transport::QueuedOutgoingMessage;
 use app_server_transport::TransportError;
 use app_server_transport::TransportEvent;
-#[cfg(feature = "aster-backend")]
-pub use aster_backend::AsterBackend;
-#[cfg(feature = "aster-backend")]
-pub use aster_backend::AsterBackendActionRespondRequest;
-#[cfg(feature = "aster-backend")]
-pub use aster_backend::AsterBackendActionRespondResult;
-#[cfg(feature = "aster-backend")]
-pub use aster_backend::AsterBackendCancelRequest;
-#[cfg(feature = "aster-backend")]
-pub use aster_backend::AsterBackendCancelResult;
-#[cfg(feature = "aster-backend")]
-pub use aster_backend::AsterBackendHost;
-#[cfg(feature = "aster-backend")]
-pub use aster_backend::AsterBackendProcessControlCapabilities;
-#[cfg(feature = "aster-backend")]
-pub use aster_backend::AsterBackendSubmitRequest;
-#[cfg(feature = "aster-backend")]
-pub use aster_backend::AsterBackendSubmitResult;
 pub use backend_event::runtime_event_type_from_backend_type;
 pub use capability::capability_source_from_app_policy_json;
 pub use capability::AppPolicyCapability;
@@ -215,6 +197,24 @@ pub use runtime::WorkspaceObjectCanvasSnapshotListParams;
 pub use runtime::WorkspaceSkillBindingAppDataSource;
 pub(crate) use runtime::TRACE_EVENT_MAX_FILES_PER_SESSION;
 pub use runtime_backend::RuntimeBackend;
+#[cfg(feature = "aster-backend")]
+pub use runtime_backend_adapter::RuntimeBackendActionRespondRequest;
+#[cfg(feature = "aster-backend")]
+pub use runtime_backend_adapter::RuntimeBackendActionRespondResult;
+#[cfg(feature = "aster-backend")]
+pub use runtime_backend_adapter::RuntimeBackendAdapter;
+#[cfg(feature = "aster-backend")]
+pub use runtime_backend_adapter::RuntimeBackendCancelRequest;
+#[cfg(feature = "aster-backend")]
+pub use runtime_backend_adapter::RuntimeBackendCancelResult;
+#[cfg(feature = "aster-backend")]
+pub use runtime_backend_adapter::RuntimeBackendHost;
+#[cfg(feature = "aster-backend")]
+pub use runtime_backend_adapter::RuntimeBackendProcessControlCapabilities;
+#[cfg(feature = "aster-backend")]
+pub use runtime_backend_adapter::RuntimeBackendSubmitRequest;
+#[cfg(feature = "aster-backend")]
+pub use runtime_backend_adapter::RuntimeBackendSubmitResult;
 pub use runtime_factory::AppServerBackendMode;
 pub use runtime_factory::AppServerRuntimeFactory;
 pub use runtime_factory::UnsupportedBackendMode;
@@ -560,15 +560,15 @@ mod tests {
     use tokio::io::BufReader;
 
     #[cfg(feature = "aster-backend")]
-    struct JsonRpcAsterBackendHost;
+    struct JsonRpcRuntimeBackendHost;
 
     #[cfg(feature = "aster-backend")]
     #[async_trait]
-    impl AsterBackendHost for JsonRpcAsterBackendHost {
+    impl RuntimeBackendHost for JsonRpcRuntimeBackendHost {
         async fn submit_turn(
             &self,
-            request: AsterBackendSubmitRequest,
-        ) -> Result<AsterBackendSubmitResult, RuntimeCoreError> {
+            request: RuntimeBackendSubmitRequest,
+        ) -> Result<RuntimeBackendSubmitResult, RuntimeCoreError> {
             assert_eq!(request.host.client_name.as_deref(), Some("content-studio"));
             assert_eq!(request.session.session_id, "sess_external");
             assert_eq!(request.session.thread_id, "thread_external");
@@ -578,7 +578,7 @@ mod tests {
             assert!(request.queue_if_busy);
             assert!(request.skip_pre_submit_resume);
 
-            Ok(AsterBackendSubmitResult {
+            Ok(RuntimeBackendSubmitResult {
                 events: vec![RuntimeEvent::new(
                     "message.delta",
                     json!({ "text": "accepted:draft" }),
@@ -588,35 +588,35 @@ mod tests {
 
         async fn cancel_turn(
             &self,
-            request: AsterBackendCancelRequest,
-        ) -> Result<AsterBackendCancelResult, RuntimeCoreError> {
+            request: RuntimeBackendCancelRequest,
+        ) -> Result<RuntimeBackendCancelResult, RuntimeCoreError> {
             assert_eq!(request.session.session_id, "sess_external");
-            Ok(AsterBackendCancelResult::default())
+            Ok(RuntimeBackendCancelResult::default())
         }
 
         async fn respond_action(
             &self,
-            request: AsterBackendActionRespondRequest,
-        ) -> Result<AsterBackendActionRespondResult, RuntimeCoreError> {
+            request: RuntimeBackendActionRespondRequest,
+        ) -> Result<RuntimeBackendActionRespondResult, RuntimeCoreError> {
             assert_eq!(request.session.session_id, "sess_external");
-            Ok(AsterBackendActionRespondResult::default())
+            Ok(RuntimeBackendActionRespondResult::default())
         }
     }
 
     #[cfg(feature = "aster-backend")]
     #[derive(Default)]
-    struct JsonRpcAsterAgentFlowSmokeHost {
+    struct JsonRpcAgentFlowSmokeHost {
         submit_count: AtomicUsize,
         action_count: AtomicUsize,
     }
 
     #[cfg(feature = "aster-backend")]
     #[async_trait]
-    impl AsterBackendHost for JsonRpcAsterAgentFlowSmokeHost {
+    impl RuntimeBackendHost for JsonRpcAgentFlowSmokeHost {
         async fn submit_turn(
             &self,
-            request: AsterBackendSubmitRequest,
-        ) -> Result<AsterBackendSubmitResult, RuntimeCoreError> {
+            request: RuntimeBackendSubmitRequest,
+        ) -> Result<RuntimeBackendSubmitResult, RuntimeCoreError> {
             self.submit_count.fetch_add(1, Ordering::SeqCst);
             assert_eq!(request.host.client_name.as_deref(), Some("content-studio"));
             assert_eq!(request.host.client_version.as_deref(), Some("0.1.0"));
@@ -629,7 +629,7 @@ mod tests {
             assert!(request.queue_if_busy);
             assert!(request.skip_pre_submit_resume);
 
-            Ok(AsterBackendSubmitResult {
+            Ok(RuntimeBackendSubmitResult {
                 events: vec![
                     RuntimeEvent::new(
                         "message.delta",
@@ -672,16 +672,16 @@ mod tests {
 
         async fn cancel_turn(
             &self,
-            request: AsterBackendCancelRequest,
-        ) -> Result<AsterBackendCancelResult, RuntimeCoreError> {
+            request: RuntimeBackendCancelRequest,
+        ) -> Result<RuntimeBackendCancelResult, RuntimeCoreError> {
             assert_eq!(request.session.session_id, "sess_flow");
-            Ok(AsterBackendCancelResult::default())
+            Ok(RuntimeBackendCancelResult::default())
         }
 
         async fn respond_action(
             &self,
-            request: AsterBackendActionRespondRequest,
-        ) -> Result<AsterBackendActionRespondResult, RuntimeCoreError> {
+            request: RuntimeBackendActionRespondRequest,
+        ) -> Result<RuntimeBackendActionRespondResult, RuntimeCoreError> {
             self.action_count.fetch_add(1, Ordering::SeqCst);
             assert_eq!(request.host.client_name.as_deref(), Some("content-studio"));
             assert_eq!(request.session.session_id, "sess_flow");
@@ -705,7 +705,7 @@ mod tests {
                 Some("turn_flow")
             );
 
-            Ok(AsterBackendActionRespondResult {
+            Ok(RuntimeBackendActionRespondResult {
                 events: vec![RuntimeEvent::new(
                     "action.resolved",
                     json!({
@@ -1196,8 +1196,10 @@ mod tests {
 
     #[cfg(feature = "aster-backend")]
     #[tokio::test]
-    async fn aster_runtime_factory_flows_through_json_rpc_router() {
-        let server = AppServerRuntimeFactory::aster_app_server(Arc::new(JsonRpcAsterBackendHost));
+    async fn runtime_factory_flows_through_json_rpc_router() {
+        let server = AppServerRuntimeFactory::runtime_adapter_app_server(Arc::new(
+            JsonRpcRuntimeBackendHost,
+        ));
 
         request(
             &server,
@@ -1284,12 +1286,13 @@ mod tests {
 
     #[cfg(feature = "aster-backend")]
     #[tokio::test]
-    async fn aster_backend_json_rpc_agent_flow_smoke_covers_artifact_read_and_action_response() {
-        let host = Arc::new(JsonRpcAsterAgentFlowSmokeHost::default());
+    async fn runtime_backend_json_rpc_agent_flow_smoke_covers_artifact_read_and_action_response() {
+        let host = Arc::new(JsonRpcAgentFlowSmokeHost::default());
         let sidecar_root = tempfile::tempdir().expect("sidecar root");
-        let runtime = AppServerRuntimeFactory::aster_runtime_core(host.clone()).with_sidecar_store(
-            Arc::new(SidecarStore::new(sidecar_root.path()).expect("sidecar store")),
-        );
+        let runtime = AppServerRuntimeFactory::runtime_adapter_core(host.clone())
+            .with_sidecar_store(Arc::new(
+                SidecarStore::new(sidecar_root.path()).expect("sidecar store"),
+            ));
         let server = AppServer::with_runtime(runtime);
 
         request(

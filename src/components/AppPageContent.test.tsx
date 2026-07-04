@@ -352,8 +352,7 @@ describe("AppPageContent", () => {
         releaseId: "expert-release-0001",
         agentInstanceKey:
           "tenant-0001:marketing-strategist:expert-release-0001",
-        launchMode: "resume_or_create",
-        latestSessionId: "session-expert-1",
+        launchMode: "new_thread",
       },
     };
 
@@ -1033,14 +1032,18 @@ describe("AppPageContent", () => {
     });
   });
 
-  it("experts 页面应挂载专家广场并透传导航", async () => {
-    const { container } = renderContent("experts");
+  it("experts 页面应挂载专家广场并透传导航和当前项目作用域", async () => {
+    const { container } = renderContent("experts", {
+      currentProjectId: "project-1",
+      projectId: "project-1",
+    });
     await flushEffects();
 
     expectTestId(container, "expert-plaza-page");
-    expect(latestExpertPlazaProps.value?.onNavigate).toEqual(
-      expect.any(Function),
-    );
+    expect(latestExpertPlazaProps.value).toMatchObject({
+      currentProjectId: "project-1",
+      onNavigate: expect.any(Function),
+    });
   });
 
   it("plugin-lab 页面应渲染 P0 只读实验入口", async () => {

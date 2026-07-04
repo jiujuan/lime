@@ -31,7 +31,7 @@ describe("Plugin projection P0", () => {
     expect(projection.provenance).toMatchObject({
       sourceKind: "plugin",
       appId: "content-factory-app",
-      appVersion: "2.0.0",
+      appVersion: normalized.version,
     });
     expect(projection.knowledgeBindings.map((binding) => binding.key)).toEqual([]);
     expect(projection.artifactTypes.map((artifact) => artifact.key)).toEqual([

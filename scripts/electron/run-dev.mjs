@@ -70,7 +70,14 @@ const watcher =
 
 function startElectron(reason) {
   console.log(`[electron-dev] starting Electron (${reason})`);
-  electron = spawn(electronLaunchPath, ["."], {
+  const electronArgs = ["."];
+  const remoteDebuggingPort = normalizeRemoteDebuggingPort(
+    process.env.LIME_ELECTRON_REMOTE_DEBUGGING_PORT,
+  );
+  if (remoteDebuggingPort) {
+    electronArgs.push(`--remote-debugging-port=${remoteDebuggingPort}`);
+  }
+  electron = spawn(electronLaunchPath, electronArgs, {
     env: {
       ...process.env,
       ...(appServerBin ? { APP_SERVER_BIN: appServerBin } : {}),
@@ -103,6 +110,25 @@ function startElectron(reason) {
     console.error(`[electron-dev] Electron exited (${detail})`);
     shutdown(typeof code === "number" ? code : 1);
   });
+}
+
+function normalizeRemoteDebuggingPort(value) {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (!/^\d+$/.test(trimmed)) {
+    throw new Error(
+      "LIME_ELECTRON_REMOTE_DEBUGGING_PORT must be a numeric TCP port.",
+    );
+  }
+  const port = Number(trimmed);
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+    throw new Error(
+      "LIME_ELECTRON_REMOTE_DEBUGGING_PORT must be between 1 and 65535.",
+    );
+  }
+  return String(port);
 }
 
 function queueAppServerBuild(event) {

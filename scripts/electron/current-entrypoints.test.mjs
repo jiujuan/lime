@@ -291,6 +291,15 @@ describe("Electron current package entrypoints", () => {
     expect(smokeScript).toContain("timed out waiting for renderer/workbench");
   });
 
+  it("dev launcher can expose a guarded Electron CDP port for real GUI续测", () => {
+    const runDev = readFile("scripts/electron/run-dev.mjs");
+
+    expect(runDev).toContain("LIME_ELECTRON_REMOTE_DEBUGGING_PORT");
+    expect(runDev).toContain("--remote-debugging-port=");
+    expect(runDev).toContain("normalizeRemoteDebuggingPort");
+    expect(runDev).toContain("must be between 1 and 65535");
+  });
+
   it("Electron packaged renderer uses relative assets under file URLs", () => {
     const viteConfig = readFile("vite.config.ts");
     const buildRenderer = readFile("scripts/electron/build-renderer.mjs");

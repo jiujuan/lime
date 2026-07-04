@@ -3,9 +3,11 @@ import {
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_GET,
   APP_SERVER_METHOD_MEDIA_TASK_ARTIFACT_LIST,
   APP_SERVER_METHOD_SESSION_TURN_CANCEL,
+  APP_SERVER_METHOD_WORKFLOW_READ,
   APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_LIST,
   APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST,
   CONTINUE_PROMPT,
+  CONTENT_FACTORY_INLINE_IMAGE_URL,
   EVENT_READ_PROBE_TOOL_NAME,
   EVENT_READ_PROBE_TURN_ID,
   EXPERT_SKILLS_RUNTIME_BASE_SKILL_REF,
@@ -20,9 +22,13 @@ import {
   IMAGE_COMMAND_PROMPT,
   IMAGE_FIXTURE_MODEL,
   MCP_STRUCTURED_CONTENT_PROMPT,
+  NEWS_PROMPT,
   PLAN_PROMPT,
   PLAN_STEPS,
   SESSION_ID,
+  SOUL_STYLE_INTENSITY,
+  SOUL_STYLE_PROFILE_ID,
+  SOUL_STYLE_SCENARIO,
   SKILLS_RUNTIME_EXPLICIT_PROMPT,
   SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT,
   SKILLS_RUNTIME_PROMPT,
@@ -64,6 +70,7 @@ export function buildScenarioAssertions(context) {
     goalTurnStart,
     imageCommandHarness,
     imageCommandTurnStart,
+    guiTurnStartReachedBackend,
     hasCancelPhase,
     isAnyExpertSkillsRuntimeScenario,
     isCancelThenContinueScenario,
@@ -77,6 +84,7 @@ export function buildScenarioAssertions(context) {
     isPlanScenario,
     isRightSurfaceVisualMatrixScenario,
     isSkillsRuntimeScenario,
+    isSoulStyleScenario,
     isWebToolsRenderingScenario,
     latestTurnCancel,
     manualEnableRuntimeBinding,
@@ -104,7 +112,34 @@ export function buildScenarioAssertions(context) {
     imageCommandTask?.modalityContractKey ??
     imageCommandRuntimeContract?.contract_key ??
     imageCommandRuntimeContract?.contractKey;
-  const scenarioAssertions = isContentFactoryArticleWorkspaceScenario
+  const scenarioAssertions = isSoulStyleScenario
+    ? {
+        soulStyleConfigEnabled:
+          summary.soulStyleConfig?.enabled === true &&
+          summary.soulStyleConfig?.style_profile_id ===
+            SOUL_STYLE_PROFILE_ID &&
+          summary.soulStyleConfig?.style_intensity === SOUL_STYLE_INTENSITY,
+        soulStylePromptReachedBackend: guiTurnStartReachedBackend === true,
+        soulStyleRuntimeProviderReached:
+          summary.textProviderFixtureServer?.requestCount >= 1,
+        soulStylePromptContextCoveredByRuntime:
+          summary.soulStylePromptContextCoveredByRuntime === true &&
+          summary.soulStylePromptContextMarkers?.hasInteractionSoul === true &&
+          summary.soulStylePromptContextMarkers?.hasMemorySoulSchema === true &&
+          summary.soulStylePromptContextMarkers?.hasProfileId === true &&
+          summary.soulStylePromptContextMarkers?.hasStylePack === true &&
+          summary.soulStylePromptContextMarkers?.hasIntensity === true,
+        soulStyleReadModelCompleted:
+          summary.readModelCompleted?.includesPrompt === true &&
+          (summary.readModelCompleted?.includesAssistantDone === true ||
+            summary.readModelCompleted?.includesAssistantSummary === true),
+        soulStyleGuiCompleted:
+          summary.guiCompleted?.hasPrompt === true &&
+          (summary.guiCompleted?.hasAssistantSummary === true ||
+            summary.guiCompleted?.hasDoneText === true) &&
+          summary.guiCompleted?.stopButtonVisible === false,
+      }
+    : isContentFactoryArticleWorkspaceScenario
     ? {
         ...buildContentFactoryArticleWorkspaceScenarioAssertions({
           appServerRequestMethods,
@@ -130,12 +165,24 @@ export function buildScenarioAssertions(context) {
                 summary.contentFactoryInlineImageTaskCompleted
                   ?.relationshipSlotId === "article-inline-image-slot-e2e" &&
                 summary.contentFactoryInlineImageTaskCompleted
-                  ?.firstImageUrl ===
-                  "https://example.com/lime-fixture-guangzhou-inline.png",
-              contentFactoryInlineImageArticleRestored:
-                summary.contentFactoryInlineImageCanvas?.hasSlotMarker ===
+                  ?.firstImageUrl === CONTENT_FACTORY_INLINE_IMAGE_URL,
+              contentFactoryInlineImageReadModelRestored:
+                summary.contentFactoryInlineImageReadModel?.hasInlineTitle ===
                   true &&
+                summary.contentFactoryInlineImageReadModel?.hasAnchorText ===
+                  true &&
+                summary.contentFactoryInlineImageReadModel?.hasImageUrl ===
+                  true &&
+                summary.contentFactoryInlineImageReadModel
+                  ?.hasPendingProtocol === false,
+              contentFactoryInlineImageArticleRestored:
                 summary.contentFactoryInlineImageCanvas?.hasImageUrl === true &&
+                summary.contentFactoryInlineImageCanvas?.hasRenderedImage ===
+                  true &&
+                summary.contentFactoryInlineImageCanvas
+                  ?.hasRenderedImageNearAnchor === true &&
+                summary.contentFactoryInlineImageCanvas
+                  ?.hasUnavailablePlaceholderForExpected === false &&
                 summary.contentFactoryInlineImageCanvas?.hasPendingProtocol ===
                   false,
             }
@@ -420,6 +467,37 @@ export function buildScenarioAssertions(context) {
                   ) &&
                   summary.imageCommandTaskAuditLog.forbiddenMarkerHits
                     .length === 0,
+                imageCommandWorkflowAuditReadModelProjected:
+                  appServerRequestMethods.includes(
+                    APP_SERVER_METHOD_WORKFLOW_READ,
+                  ) &&
+                  summary.imageCommandWorkflowRead?.sessionId === SESSION_ID &&
+                  summary.imageCommandWorkflowRead?.matchedRun?.workflowKey ===
+                    "image_command_workflow" &&
+                  summary.imageCommandWorkflowRead?.matchedRun?.status ===
+                    "completed" &&
+                  summary.imageCommandWorkflowRead?.matchedRun?.stepCounts
+                    ?.total === 5 &&
+                  summary.imageCommandWorkflowRead?.activeWorkflowRunId === "",
+                imageCommandWorkflowAuditStepsProjected:
+                  summary.imageCommandWorkflowRead?.hasExpectedSteps === true &&
+                  summary.imageCommandWorkflowRead?.matchedStepIds?.includes(
+                    "intent",
+                  ) === true &&
+                  summary.imageCommandWorkflowRead?.matchedStepIds?.includes(
+                    "create_tasks",
+                  ) === true &&
+                  summary.imageCommandWorkflowRead?.completedStepIds?.includes(
+                    "intent",
+                  ) === true &&
+                  summary.imageCommandWorkflowRead?.completedStepIds?.includes(
+                    "create_tasks",
+                  ) === true &&
+                  summary.imageCommandWorkflowRead?.createTasksStep?.status ===
+                    "completed",
+                imageCommandWorkflowAuditSummaryRedacted:
+                  summary.imageCommandWorkflowRead?.containsPrompt === false &&
+                  summary.imageCommandWorkflowRead?.containsTaskPath === false,
                 imageCommandWorkerUsedFixtureProviderAndModel:
                   (summary.imageCommandTaskCreateRequest?.provider_id ??
                     summary.imageCommandTaskCreateRequest?.providerId) ===
@@ -460,8 +538,7 @@ export function buildScenarioAssertions(context) {
                   summary.guiImageCommandTerminal?.mediaCount >= 1 &&
                   summary.guiImageCommandTerminal?.hasPresentationIntro ===
                     true &&
-                  summary.guiImageCommandTerminal?.hasToolStripLabel ===
-                    true &&
+                  summary.guiImageCommandTerminal?.hasToolStripLabel === true &&
                   summary.guiImageCommandTerminal?.hasImageModelLabel ===
                     true &&
                   summary.guiImageCommandTerminal?.hasTokenUsage === true &&

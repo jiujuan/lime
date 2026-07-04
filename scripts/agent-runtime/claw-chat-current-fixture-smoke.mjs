@@ -20,6 +20,9 @@ import {
   PLAIN_IMAGE_INTENT_SCENARIO,
   RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO,
   SESSION_ID,
+  SOUL_STYLE_INTENSITY,
+  SOUL_STYLE_PROFILE_ID,
+  SOUL_STYLE_SCENARIO,
   THREAD_ID,
 } from "./claw-chat-current-fixture-constants.mjs";
 import { buildFixtureAssertionReport } from "./claw-chat-current-fixture-assertions.mjs";
@@ -89,7 +92,7 @@ Claw Chat Current Electron Fixture Smoke
   --app-url <url>        可选 renderer dev server，例如 http://127.0.0.1:1420/
   --evidence-dir <path>  证据目录
   --prefix <name>        证据文件前缀
-  --scenario <name>      complete | cancel | cancel-then-continue | plan | goal | image-command | plain-image-intent | web-tools-rendering | mcp-structured-content | skills-runtime | expert-skills-runtime | expert-plaza-skills-runtime | expert-panel-skills-runtime | right-surface-visual-matrix | content-factory-article-workspace | content-factory-inline-image-article-workspace，默认 complete
+  --scenario <name>      complete | cancel | cancel-then-continue | plan | goal | soul-style | image-command | plain-image-intent | web-tools-rendering | mcp-structured-content | skills-runtime | expert-skills-runtime | expert-plaza-skills-runtime | expert-panel-skills-runtime | right-surface-visual-matrix | content-factory-article-workspace | content-factory-inline-image-article-workspace，默认 complete
   --timeout-ms <ms>      总超时，默认 180000
   --interval-ms <ms>     轮询间隔，默认 500
   --keep-temp            保留临时目录便于调试
@@ -158,6 +161,7 @@ function parseArgs(argv) {
     "cancel-then-continue",
     "plan",
     "goal",
+    SOUL_STYLE_SCENARIO,
     IMAGE_COMMAND_SCENARIO,
     PLAIN_IMAGE_INTENT_SCENARIO,
     "web-tools-rendering",
@@ -183,6 +187,21 @@ function traceEvidenceHasProviderAndClient(evidence) {
   );
 }
 
+function applySoulStyleProviderMarkerSummary(summary, textProviderRequests) {
+  const soulMarkers = textProviderRequests
+    .map((request) => request.bodySummary?.soulMarkers)
+    .filter(
+      (markers) =>
+        markers != null &&
+        Object.values(markers).some((value) => value === true),
+    )
+    .at(-1);
+  summary.soulStylePromptContextCoveredByRuntime =
+    soulMarkers != null &&
+    Object.values(soulMarkers).every((value) => value === true);
+  summary.soulStylePromptContextMarkers = sanitizeJson(soulMarkers ?? null);
+}
+
 function isImageWorkflowScenario(scenario) {
   return (
     scenario === IMAGE_COMMAND_SCENARIO ||
@@ -200,6 +219,7 @@ function resolveScenarioBackendEnv(options, runtimeEnv) {
     };
   }
   if (
+    options.scenario === SOUL_STYLE_SCENARIO ||
     options.scenario === CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO ||
     options.scenario === CONTENT_FACTORY_INLINE_IMAGE_ARTICLE_WORKSPACE_SCENARIO
   ) {
@@ -297,6 +317,8 @@ async function run() {
     rendererSnapshot: null,
     initialize: null,
     imageFixtureProvider: null,
+    soulStyleConfig: null,
+    soulStylePromptContextCoveredByRuntime: false,
     guiWorkspaceBinding: null,
     sessionCreation: null,
     guiWorkspaceNavigation: null,
@@ -409,6 +431,13 @@ async function run() {
   const actionableConsoleErrors = [];
   const agentDebugLogs = [];
   const pageLifecycleEvents = [];
+  const fixtureConfigSoulOverrides =
+    options.scenario === SOUL_STYLE_SCENARIO
+      ? {
+          soulStyleProfileId: SOUL_STYLE_PROFILE_ID,
+          soulStyleIntensity: SOUL_STYLE_INTENSITY,
+        }
+      : {};
   const collectConsoleMessage = (message) => {
     const text = sanitizeText(message.text());
     if (text.includes("[AgentDebug]")) {
@@ -424,7 +453,10 @@ async function run() {
 
   try {
     imageProviderFixtureServer = await startImageProviderFixtureServer();
-    if (isImageWorkflowScenario(options.scenario)) {
+    if (
+      isImageWorkflowScenario(options.scenario) ||
+      options.scenario === SOUL_STYLE_SCENARIO
+    ) {
       textProviderFixtureServer = await startTextProviderFixtureServer();
       summary.textProviderFixtureServer = sanitizeJson({
         baseUrl: textProviderFixtureServer.baseUrl,
@@ -435,6 +467,7 @@ async function run() {
       serverHost: imageProviderFixtureServer.host,
       serverPort: imageProviderFixtureServer.port,
       serverApiKey: LOCAL_IMAGE_SERVER_API_KEY,
+      ...fixtureConfigSoulOverrides,
     });
     summary.imageProviderFixtureServer = sanitizeJson({
       baseUrl: imageProviderFixtureServer.baseUrl,
@@ -529,6 +562,45 @@ async function run() {
     summary.workspaceId = workspace.workspaceId;
     summary.workspace = sanitizeJson(workspace);
 
+    if (options.scenario === SOUL_STYLE_SCENARIO) {
+      logStage("enable-soul-style-config");
+      runtimeEnv.writeFixtureConfig(fixtureConfigSoulOverrides);
+      summary.soulStyleConfig = sanitizeJson(
+        await page.evaluate(
+          async ({ profileId, intensity }) => {
+            const currentConfig = await window.electronAPI.invoke("get_config");
+            const nextConfig = {
+              ...(currentConfig || {}),
+              memory: {
+                ...(currentConfig?.memory || {}),
+                enabled: true,
+                soul: {
+                  ...(currentConfig?.memory?.soul || {}),
+                  enabled: true,
+                  style_profile_id: profileId,
+                  style_intensity: intensity,
+                  imported_from: "manual",
+                },
+              },
+            };
+            await window.electronAPI.invoke("save_config", {
+              config: nextConfig,
+            });
+            window.localStorage.setItem(
+              "lime.app-config.changed-at",
+              String(Date.now()),
+            );
+            window.dispatchEvent(new Event("lime:app-config-changed"));
+            return nextConfig.memory.soul;
+          },
+          {
+            profileId: SOUL_STYLE_PROFILE_ID,
+            intensity: SOUL_STYLE_INTENSITY,
+          },
+        ),
+      );
+    }
+
     logStage("ensure-fixture-image-provider");
     const imageFixtureProvider = await ensureFixtureImageProvider(
       page,
@@ -546,6 +618,7 @@ async function run() {
       serverApiKey: LOCAL_IMAGE_SERVER_API_KEY,
       imageProviderId: imageFixtureProvider.providerId,
       imageModelId: imageFixtureProvider.modelId,
+      ...fixtureConfigSoulOverrides,
     });
     summary.imageFixtureProvider = sanitizeJson({
       ...imageFixtureProvider,
@@ -670,11 +743,15 @@ async function run() {
       requests: imageProviderFixtureServer.requests(),
     });
     if (textProviderFixtureServer) {
+      const textProviderRequests = textProviderFixtureServer.requests();
       summary.textProviderFixtureServer = sanitizeJson({
         baseUrl: textProviderFixtureServer.baseUrl,
         requestCount: textProviderFixtureServer.requestCount(),
-        requests: textProviderFixtureServer.requests(),
+        requests: textProviderRequests,
       });
+      if (options.scenario === SOUL_STYLE_SCENARIO) {
+        applySoulStyleProviderMarkerSummary(summary, textProviderRequests);
+      }
     }
     const assertionReport = buildFixtureAssertionReport({
       backendLedger,
@@ -767,11 +844,15 @@ async function run() {
       });
     }
     if (textProviderFixtureServer) {
+      const textProviderRequests = textProviderFixtureServer.requests();
       summary.textProviderFixtureServer = sanitizeJson({
         baseUrl: textProviderFixtureServer.baseUrl,
         requestCount: textProviderFixtureServer.requestCount(),
-        requests: textProviderFixtureServer.requests(),
+        requests: textProviderRequests,
       });
+      if (options.scenario === SOUL_STYLE_SCENARIO) {
+        applySoulStyleProviderMarkerSummary(summary, textProviderRequests);
+      }
     }
     summary.agentDebugLogs = agentDebugLogs.slice(-200);
     summary.agentStreamDebugLogs = agentDebugLogs

@@ -66,7 +66,7 @@ app-server
 ### deprecated
 
 - `lime-agent` 内仍直接引用 Aster DTO / trait 的 provider、execution、tool、session adapter 面。
-- root workspace 仍临时暴露 vendor `aster` 给 `lime-agent` compat feature。
+- root workspace 仍临时暴露 vendor `aster` 给 `lime-agent` 剩余 compat adapter；假 optional feature 路线已删除，不得恢复。
 - `services` / `app-server` 重新直接依赖 `aster::*` 的任何回流；`agent` 内未迁完的 direct Aster 引用继续按 compat/deprecated 面收口。
 - 在 App Server runtime backend 内继续扩展 Aster provider、tool、session、streaming loop。
 
@@ -89,6 +89,7 @@ app-server
 ## 配套文档
 
 - [./aster-runtime-codex-style-migration-plan.md](./aster-runtime-codex-style-migration-plan.md)：分阶段迁移计划、验收标准和验证入口。
+- [./phase5-vendor-downgrade-plan.md](./phase5-vendor-downgrade-plan.md)：Aster vendor 降级与最终删除退出条件。
 - `internal/roadmap/agentruntime/README.md`：AgentRuntime 主链事实源。
 - `internal/roadmap/appserver/app-server-aster-runtime-boundary-governance.md`：现有 App Server / Aster 边界治理记录。
 - `internal/aiprompts/governance.md`：current / compat / deprecated / dead 分类规则。

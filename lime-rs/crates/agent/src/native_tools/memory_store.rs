@@ -38,7 +38,7 @@ pub trait MemoryStoreGateway: Send + Sync {
     ) -> Result<MemoryStoreAddNoteResponse, String>;
 }
 
-pub fn create_memory_tools(gateway: Arc<dyn MemoryStoreGateway>) -> Vec<Box<dyn Tool>> {
+pub(crate) fn create_memory_tools(gateway: Arc<dyn MemoryStoreGateway>) -> Vec<Box<dyn Tool>> {
     vec![
         Box::new(MemoryListTool::new(gateway.clone())),
         Box::new(MemoryReadTool::new(gateway.clone())),

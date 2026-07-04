@@ -16,7 +16,7 @@ describe("agentTaskRuntime", () => {
         {
           id: "msg-assistant-hello",
           role: "assistant",
-          content: "你好！我是 Lime 助手。",
+          content: "测试回复已完成。",
           timestamp: new Date("2026-04-14T10:00:02.000Z"),
           usage: {
             input_tokens: 2048,

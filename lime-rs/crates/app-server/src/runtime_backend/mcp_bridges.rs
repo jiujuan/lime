@@ -1,13 +1,13 @@
 use crate::AppDataSource;
 use crate::RuntimeCoreError;
 use app_server_protocol::McpServerStartParams;
-use lime_agent::AsterAgentState;
+use lime_agent::AgentRuntimeState;
 use serde_json::Value;
 use std::collections::BTreeSet;
 use std::sync::{Arc, RwLock};
 
 pub(super) async fn sync_mcp_bridges_if_available(
-    agent_state: &AsterAgentState,
+    agent_state: &AgentRuntimeState,
     app_data_source: &RwLock<Option<Arc<dyn AppDataSource>>>,
 ) -> Result<(), RuntimeCoreError> {
     if !agent_state.is_initialized().await {

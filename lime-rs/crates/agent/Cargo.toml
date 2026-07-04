@@ -12,15 +12,14 @@ agent-runtime.workspace = true
 lime-core.workspace = true
 lime-mcp.workspace = true
 lime-services.workspace = true
-lime-providers.workspace = true
 lime-skills.workspace = true
 model-provider.workspace = true
 thread-store.workspace = true
 tool-runtime.workspace = true
 patch-apply.workspace = true
-# Aster runtime compat layer - optional dependency
-# 退出条件：aster_runtime_support 迁移到不依赖 Aster 后移除
-aster = { workspace = true, optional = true }
+# Aster runtime compat layer.
+# 退出条件：current turn executor / provider stream 接管后移除。
+aster.workspace = true
 rmcp.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -40,12 +39,7 @@ async-stream.workspace = true
 url.workspace = true
 
 [features]
-# Compat feature：启用 Aster runtime 兼容层
-# 退出条件：aster_runtime_support 迁移到不依赖 Aster 后删除
-compat-aster = ["aster"]
-
-# Default features：当前保留 compat-aster，确保向后兼容
-default = ["compat-aster"]
+test-support = []
 
 [dev-dependencies]
 tempfile.workspace = true

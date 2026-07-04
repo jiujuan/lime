@@ -514,14 +514,29 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
           }
         : undefined;
 
-    onSend({
+    const sendResult = onSend({
       images: imagesToSend,
       textOverride: effectiveInput,
       sendOptions,
     });
-    clearPendingImages();
-    onClearPathReferences?.();
-    clearSelectedSkill?.();
+    const clearAcceptedSubmissionState = () => {
+      clearPendingImages();
+      onClearPathReferences?.();
+      clearSelectedSkill?.();
+    };
+    if (sendResult === false) {
+      return false;
+    }
+    if (sendResult && typeof sendResult === "object" && "then" in sendResult) {
+      return sendResult.then((accepted) => {
+        if (accepted !== false) {
+          clearAcceptedSubmissionState();
+        }
+        return accepted;
+      });
+    }
+    clearAcceptedSubmissionState();
+    return sendResult;
   };
 
   // Dynamic Placeholder

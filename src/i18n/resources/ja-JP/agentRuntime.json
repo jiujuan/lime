@@ -23,7 +23,7 @@
   "agentChat.imageWorkbenchPreview.media.open": "画像結果を開く",
   "agentChat.imageWorkbenchPreview.media.previewFailed": "プレビュー失敗",
   "agentChat.imageWorkbenchPreview.action.retry": "再試行",
-  "agentChat.imageWorkbenchPreview.tool.generation": "Image Generation",
+  "agentChat.imageWorkbenchPreview.tool.generation": "画像生成",
   "agentChat.imageWorkbenchPreview.tool.editing": "画像編集",
   "agentChat.imageWorkbenchPreview.tool.redraw": "画像再生成",
   "agentChat.imageWorkbenchPreview.placeholder.cancelled": "キャンセル済み",

@@ -19,12 +19,17 @@ export function sanitizeJson(value, depth = 0) {
     return value.slice(0, 50).map((item) => sanitizeJson(item, depth + 1));
   }
   return Object.fromEntries(
-    Object.entries(value).map(([key, item]) => [
-      key,
-      typeof item === "string" && item.length > 4000
-        ? `${item.slice(0, 4000)}... [truncated ${item.length - 4000} chars]`
-        : sanitizeJson(item, depth + 1),
-    ]),
+    Object.entries(value).map(([key, item]) => {
+      if (/^(system_prompt|systemPrompt)$/u.test(key)) {
+        return [key, item ? "[redacted-prompt]" : null];
+      }
+      return [
+        key,
+        typeof item === "string" && item.length > 4000
+          ? `${item.slice(0, 4000)}... [truncated ${item.length - 4000} chars]`
+          : sanitizeJson(item, depth + 1),
+      ];
+    }),
   );
 }
 
@@ -76,6 +81,8 @@ function describeExpectedSession(expectedSessionId) {
 
 export async function waitForInputReady(page, options, constraints = {}) {
   const expectedSessionId = constraints.expectedSessionId ?? null;
+  const allowTaskCenterHomeInput =
+    constraints.allowTaskCenterHomeInput === true;
   const startedAt = Date.now();
   let lastSnapshot = null;
   while (Date.now() - startedAt < options.timeoutMs) {
@@ -169,8 +176,9 @@ export async function waitForInputReady(page, options, constraints = {}) {
       (!expectedSessionId || snapshot.textareaSessionId === expectedSessionId) &&
       !snapshot.mainText.includes("最近对话") &&
       !snapshot.mainText.includes("正在恢复生成会话") &&
-      !isTaskCenterHomeText(snapshot.mainText || "") &&
-      !isTaskCenterHomeText(snapshot.bodyText || "")
+      (allowTaskCenterHomeInput ||
+        (!isTaskCenterHomeText(snapshot.mainText || "") &&
+          !isTaskCenterHomeText(snapshot.bodyText || "")))
     ) {
       return snapshot;
     }
@@ -497,11 +505,15 @@ async function waitForInputbarSubmitEffect(
   prompt,
   options,
   expectedSessionId = null,
+  constraints = {},
 ) {
   const startedAt = Date.now();
   let lastSnapshot = null;
   let firstSubmitEffectSnapshot = null;
-  while (Date.now() - startedAt < Math.min(options.timeoutMs, 10_000)) {
+  const timeoutMs = constraints.requireTurnStart
+    ? Math.min(options.timeoutMs, 120_000)
+    : Math.min(options.timeoutMs, 10_000);
+  while (Date.now() - startedAt < timeoutMs) {
     const snapshot = await sampleInputbarSubmitState(
       page,
       prompt,
@@ -583,6 +595,7 @@ export async function sendPromptFromGui(page, options, prompt, constraints = {})
     prompt,
     options,
     expectedSessionId,
+    constraints,
   );
   return {
     before,

@@ -1,5 +1,6 @@
 use crate::{
-    execute_skill_prompt, execute_skill_workflow, AsterAgentState, SkillEventEmitter,
+    configure_model_route_provider_for_session, execute_skill_prompt, execute_skill_workflow,
+    provider_configuration_from_model_selection, AgentRuntimeState, SkillEventEmitter,
     SkillExecutionError, SkillExecutionResult, SkillPromptExecution, SkillWorkflowExecution,
 };
 use lime_core::database;
@@ -27,13 +28,13 @@ pub struct KnowledgeBuilderSkillRequest<'a> {
 
 #[derive(Default)]
 pub struct KnowledgeBuilderSkillRunner {
-    agent_state: AsterAgentState,
+    agent_state: AgentRuntimeState,
 }
 
 impl KnowledgeBuilderSkillRunner {
     pub fn new() -> Self {
         Self {
-            agent_state: AsterAgentState::new(),
+            agent_state: AgentRuntimeState::new(),
         }
     }
 
@@ -46,7 +47,7 @@ impl KnowledgeBuilderSkillRunner {
 }
 
 pub async fn run_knowledge_builder_skill(
-    agent_state: &AsterAgentState,
+    agent_state: &AgentRuntimeState,
     request: KnowledgeBuilderSkillRequest<'_>,
 ) -> Result<SkillExecutionResult, String> {
     let db = database::init_database()?;
@@ -66,7 +67,7 @@ pub async fn run_knowledge_builder_skill(
 
     if skill.execution_mode == "workflow" {
         execute_skill_workflow(SkillWorkflowExecution {
-            aster_state: agent_state,
+            runtime_state: agent_state,
             skill: &skill,
             user_input: &user_input,
             user_visible_input: Some(request.user_input),
@@ -81,7 +82,7 @@ pub async fn run_knowledge_builder_skill(
         .map_err(map_skill_execution_error)
     } else {
         execute_skill_prompt(SkillPromptExecution {
-            aster_state: agent_state,
+            runtime_state: agent_state,
             skill: &skill,
             user_input: &user_input,
             user_visible_input: Some(request.user_input),
@@ -129,22 +130,24 @@ fn resolve_requested_provider(
 }
 
 async fn configure_builder_provider(
-    agent_state: &AsterAgentState,
+    agent_state: &AgentRuntimeState,
     db: &lime_core::database::DbConnection,
     session_id: &str,
     requested_provider: &str,
     requested_model: &str,
 ) -> Result<(), String> {
-    let mut configure_result = agent_state
-        .configure_provider_from_pool(
-            db,
+    let mut configure_result = configure_model_route_provider_for_session(
+        agent_state,
+        db,
+        session_id,
+        provider_configuration_from_model_selection(
             requested_provider,
             requested_model,
-            session_id,
             None,
             None,
-        )
-        .await;
+        ),
+    )
+    .await;
 
     if configure_result.is_err() {
         tracing::warn!(
@@ -157,16 +160,18 @@ async fn configure_builder_provider(
             if *fallback_provider == requested_provider {
                 continue;
             }
-            match agent_state
-                .configure_provider_from_pool(
-                    db,
-                    fallback_provider,
-                    fallback_model,
-                    session_id,
+            match configure_model_route_provider_for_session(
+                agent_state,
+                db,
+                session_id,
+                provider_configuration_from_model_selection(
+                    *fallback_provider,
+                    *fallback_model,
                     None,
                     None,
-                )
-                .await
+                ),
+            )
+            .await
             {
                 Ok(config) => {
                     tracing::info!(

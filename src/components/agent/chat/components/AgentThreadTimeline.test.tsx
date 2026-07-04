@@ -357,6 +357,29 @@ describe("AgentThreadTimeline", () => {
     expect(container.textContent).not.toContain("jsonrpc");
     expect(container.textContent).not.toContain("agentSession/turn/start");
   });
+  it("应把专家 profile switch 渲染为当前 Thread 内的运行事实", () => {
+    const container = renderTimeline([
+      {
+        ...createBaseItem("expert-profile-switch-1", 2),
+        type: "expert_profile_switch",
+        previous_expert_id: "business-analyst",
+        next_expert_id: "copywriter",
+        metadata: {
+          harness: {
+            expert_role_switch: {
+              kind: "expert_profile_switch",
+              scope: "thread",
+            },
+          },
+        },
+      },
+    ]);
+
+    expect(container.textContent).toContain("专家已切换");
+    expect(container.textContent).toContain("business-analyst -> copywriter");
+    expect(container.textContent).not.toContain("暂未适配");
+    expect(container.textContent).not.toContain("expert_role_switch");
+  });
   it("收到 timeline 聚焦请求时应自动展开并高亮目标项", () => {
     const container = renderTimeline(
       [

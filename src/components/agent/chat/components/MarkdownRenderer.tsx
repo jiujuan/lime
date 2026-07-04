@@ -1,6 +1,6 @@
 import React, { memo } from "react";
 import { useTranslation } from "react-i18next";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -63,6 +63,25 @@ import {
 const STREAMING_LIGHT_RENDER_THRESHOLD = 2_000;
 const STREAMING_LIGHT_RENDER_DEBOUNCE_MS = 48;
 const MARKDOWN_BUNDLE_META_MAX_SIZE = 64 * 1024;
+
+function isLocalImagePreviewUrl(value: string): boolean {
+  return (
+    value.startsWith("file://") ||
+    value.startsWith("asset://") ||
+    value.startsWith("desktop-host://") ||
+    value.startsWith("blob:") ||
+    value.startsWith("data:image/")
+  );
+}
+
+function transformMarkdownUrl(value: string, key: string): string {
+  const normalizedValue = value.trim();
+  if (key === "src" && isLocalImagePreviewUrl(normalizedValue)) {
+    return value;
+  }
+  return defaultUrlTransform(value);
+}
+
 function hasDesktopHostImagePreviewBoundary(): boolean {
   return hasDesktopHostRuntimeMarkers() || hasDesktopHostInvokeCapability();
 }
@@ -610,6 +629,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = memo(
               remarkPlugins={remarkPlugins}
               rehypePlugins={rehypePlugins}
               skipHtml={useLightweightMarkdownRender}
+              urlTransform={transformMarkdownUrl}
               components={{
                 // 使用 pre 组件来处理代码块，以便更好地控制 a2ui 的渲染
                 pre({ children, ...props }: any) {

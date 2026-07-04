@@ -55,7 +55,7 @@ fn log_tool_result_diagnostics(tool_id: &str, diagnostics: &ToolResultDiagnostic
 
     if should_warn {
         tracing::warn!(
-            "[AsterAgent][Diag] tool_end payload summary: tool_id={}, raw_json_bytes={}, output_chars={}, image_count={}, text_truncated={}, images_truncated={}",
+            "[AgentRuntime][Diag] tool_end payload summary: tool_id={}, raw_json_bytes={}, output_chars={}, image_count={}, text_truncated={}, images_truncated={}",
             tool_id,
             raw_json_bytes,
             diagnostics.output_chars,
@@ -65,7 +65,7 @@ fn log_tool_result_diagnostics(tool_id: &str, diagnostics: &ToolResultDiagnostic
         );
     } else {
         tracing::debug!(
-            "[AsterAgent][Diag] tool_end payload summary: tool_id={}, raw_json_bytes={}, output_chars={}, image_count={}",
+            "[AgentRuntime][Diag] tool_end payload summary: tool_id={}, raw_json_bytes={}, output_chars={}, image_count={}",
             tool_id,
             raw_json_bytes,
             diagnostics.output_chars,

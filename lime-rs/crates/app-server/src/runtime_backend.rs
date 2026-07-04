@@ -39,7 +39,10 @@ use crate::RuntimeCoreError;
 use crate::RuntimeEvent;
 use crate::RuntimeEventSink;
 use async_trait::async_trait;
-use lime_agent::{run_agent_turn_with_policy, AgentTurnExecutionRequest, AsterAgentState};
+use lime_agent::{
+    run_agent_turn_with_policy, AgentRuntimeState, AgentTurnExecutionRequest,
+    AgentTurnProviderConfiguration,
+};
 use lime_core::database::DbConnection;
 use lime_services::api_key_provider_service::ApiKeyProviderService;
 use serde_json::{json, Value};
@@ -49,8 +52,8 @@ use std::sync::RwLock;
 mod request_context;
 
 use provider_config::{
-    configure_provider_for_route, current_agent_runtime_config_metadata,
-    initialize_runtime_database, model_effective_event_from_runtime,
+    current_agent_runtime_config_metadata, initialize_runtime_database,
+    model_effective_event_from_runtime,
 };
 use request_context::{
     aster_chat_request_from_request, direct_provider_config_from_request,
@@ -70,7 +73,7 @@ use event_mapper::{
 
 #[derive(Default)]
 pub struct RuntimeBackend {
-    agent_state: AsterAgentState,
+    agent_state: AgentRuntimeState,
     api_key_provider_service: ApiKeyProviderService,
     db: Option<DbConnection>,
     app_data_source: Arc<RwLock<Option<Arc<dyn AppDataSource>>>>,
@@ -102,7 +105,7 @@ impl RuntimeBackend {
         live_execution_process: Option<ExecutionProcessServer>,
     ) -> Self {
         Self {
-            agent_state: AsterAgentState::new(),
+            agent_state: AgentRuntimeState::new(),
             api_key_provider_service: ApiKeyProviderService::new(),
             db,
             app_data_source: Arc::new(RwLock::new(None)),
@@ -116,11 +119,9 @@ impl RuntimeBackend {
         let Some(execution_process) = self.live_execution_process.clone() else {
             return Ok(());
         };
-        let hook = live_execution_process::RuntimeLiveExecutionProcessHook::new(execution_process);
         self.agent_state
-            .with_agent_mut(|agent| agent.set_native_tool_execution_hook(Some(Arc::new(hook))))
+            .install_live_execution_process_gateway(Arc::new(execution_process))
             .await
-            .map(|_| ())
             .map_err(backend_error)
     }
 
@@ -130,6 +131,13 @@ impl RuntimeBackend {
             &self.app_data_source,
         )
         .await
+    }
+
+    async fn ensure_agent_initialized(&self, db: &DbConnection) -> Result<(), RuntimeCoreError> {
+        self.agent_state
+            .init_agent_with_db(db)
+            .await
+            .map_err(backend_error)
     }
 
     async fn handle_turn_start(
@@ -226,24 +234,7 @@ impl RuntimeBackend {
             )));
         }
 
-        let provider_config = configure_provider_for_route(
-            &self.agent_state,
-            &db,
-            &selection.provider,
-            &selection.model,
-            &session_scope.session_id,
-            selection.reasoning_effort.clone(),
-            &route_resolution.resolved_route.protocol,
-            direct_provider_config,
-        )
-        .await
-        .map_err(backend_error)?;
-        sink.emit(model_effective_event_from_runtime(
-            &requested_selection,
-            &selection,
-            &provider_config,
-            route_resolution.service_model_slot(),
-        ))?;
+        self.ensure_agent_initialized(&db).await?;
         self.install_live_execution_process_hook_if_available()
             .await?;
         if !defer_tool_surface && !compact_tool_surface {
@@ -271,6 +262,15 @@ impl RuntimeBackend {
                 input_text: &request.input.text,
                 session_config,
                 request_tool_policy: &request_tool_policy,
+                provider_configuration: Some(AgentTurnProviderConfiguration {
+                    db: &db,
+                    session_id: &session_scope.session_id,
+                    route_configuration: model_route_contract::provider_configuration_from_runtime(
+                        &selection,
+                        &route_resolution.resolved_route,
+                        direct_provider_config,
+                    ),
+                }),
             },
             |event| {
                 if emit_error.is_some() {
@@ -288,11 +288,24 @@ impl RuntimeBackend {
             },
         )
         .await;
-        let execution =
+        let turn_execution =
             execution_result.map_err(|error| RuntimeCoreError::Backend(error.message))?;
+        let provider_config = turn_execution.provider_config.ok_or_else(|| {
+            RuntimeCoreError::Backend(
+                "App Server runtime backend expected provider configuration for main turn"
+                    .to_string(),
+            )
+        })?;
+        let execution = turn_execution.stream;
         if let Some(error) = emit_error {
             return Err(error);
         }
+        sink.emit(model_effective_event_from_runtime(
+            &requested_selection,
+            &selection,
+            &provider_config,
+            route_resolution.service_model_slot(),
+        ))?;
         emit_proposed_plan_parser_flush(&mut proposed_plan_parser, sink)?;
 
         if execution.cancelled {
@@ -313,8 +326,6 @@ impl RuntimeBackend {
             return Ok(());
         }
 
-        self.agent_state
-            .mark_current_healthy(&db, Some(&provider_config.model_name));
         emit_reasoning_finish(&mut reasoning_event_state, "completed", sink)?;
         sink.emit(RuntimeEvent::new(
             "turn.completed",
@@ -385,6 +396,8 @@ impl ExecutionBackend for RuntimeBackend {
         request: ActionRespondRequest,
         sink: &mut dyn RuntimeEventSink,
     ) -> Result<(), RuntimeCoreError> {
+        let db = initialize_runtime_database(self.db.as_ref())?;
+        self.ensure_agent_initialized(&db).await?;
         action_response::handle_action_response(&self.agent_state, &request).await?;
         sink.emit(action_response::action_resolved_event(&request))
     }
@@ -438,5 +451,7 @@ fn backend_error(error: impl std::fmt::Display) -> RuntimeCoreError {
     RuntimeCoreError::Backend(error.to_string())
 }
 
+#[cfg(test)]
+mod initialization_tests;
 #[cfg(test)]
 mod tests;

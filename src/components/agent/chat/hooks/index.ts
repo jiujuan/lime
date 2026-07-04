@@ -5,6 +5,7 @@
  */
 
 import { useAsterAgentChat } from "./useAsterAgentChat";
+import type { SoulInteractionCopy } from "@/lib/soul/interactionCopy";
 export { useArtifactAutoPreviewSync } from "./useArtifactAutoPreviewSync";
 
 export type { Topic } from "./agentChatShared";
@@ -29,6 +30,7 @@ interface UseAgentChatUnifiedOptions {
     sessionId: string,
   ) => import("../utils/chatToolPreferences").ChatToolPreferences | null;
   onOpenSubagents?: () => void;
+  soulCopy?: SoulInteractionCopy;
 }
 
 /**

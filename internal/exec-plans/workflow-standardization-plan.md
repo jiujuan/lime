@@ -1,6 +1,6 @@
 # Workflow 标准化执行计划
 
-> 状态：in_progress
+> 状态：completed
 > 创建日期：2026-07-03
 > 更新时间：2026-07-04
 > 路线图：`internal/roadmap/workflow/README.md`
@@ -94,8 +94,8 @@
 
 任务：
 
-- [ ] App Server event log 增加 workflow projector。
-- [x] session/thread read API 返回 workflow runs 和 steps；`read_session` 会合并普通 runtime events 与 workflow audit log。
+- [x] App Server event log 增加 workflow projector：`workflow_read_model_from_stored_session(...)` 合并 session runtime events 与 workflow audit log，供 `workflow/read` 和 control response 复用。
+- [x] `workflow/read` 返回 workflow runs / steps / actions current read model；`agentSession/read` / `read_session` 隐藏 workflow facts，避免普通 thread read 与 workflow projection 形成双事实源。
 - [x] 前端 `appServerReadModelProjection` 停止删除 workflow facts。
 - [x] `appServerEventStream` 对 workflow events 触发 read model 更新：投影为 diagnostics-only `runtime_status` refresh signal，不进入普通 item timeline。
 
@@ -106,7 +106,7 @@
 
 ### P3：Surface Mapping
 
-状态：in_progress
+状态：completed
 
 任务：
 
@@ -133,7 +133,7 @@
 - [x] 收敛或新增 `workflow/respond`：App Server JSON-RPC、RuntimeCore action respond bridge、Rust client、TS client、schema fixture、processor 和 DevBridge current method profile 已同步；只对能解析到现有 `action.required` 的 waiting step 生效。
 - [x] 补 control API contract tests：覆盖 cancel / retry / respond read model 更新。
 - [x] 实现 `workflow/retry` source turn 级 executor 重调度语义：复用 source turn input / runtime options，通过 current `agentSession/turn/start` 主链提交新 turn。
-- [x] 确认 P4 core 范围只包含 `read/cancel/retry/respond` control API；更多 waiting presentation 归入 P5 UI Projection 后续项。
+- [x] 确认 P4 core 范围只包含 `read/cancel/retry/respond` control API；更多 waiting presentation 已归入 P5 UI Projection 并完成。
 
 退出条件：
 
@@ -143,7 +143,7 @@
 
 ### P5：UI Projection
 
-状态：in_progress
+状态：completed
 
 任务：
 
@@ -153,15 +153,17 @@
 - [x] Article Workspace workflow facts helper 改为 current read model adapter：兼容 `workflow/read` response / `WorkflowReadModel` 的 `workflow.workflowRuns / workflow.workflowSteps / actions`，保留 retry metadata、request/action identity 和 artifact/evidence refs。
 - [x] Article Workspace 自身读取 `workflow/read` 并渲染 step-level failure/retry/waiting/action/attempt；页面级 detail panel 与 Article Workspace projection 共用 current read model facts。
 - [x] Plugin iframe 只订阅 projected workflow events；SDK/profile 本地 `lime.workflow` DSL/runtime 成功路径已封为 disabled/blocked。`lime.agent.readWorkflow` 与 `capability:subscribe topic=workflow` 均只读取 App Server `workflow/read` projection，不开放本地 DSL 或 workflow control。
-- [ ] 图片命令聊天 presentation 与内部 audit facts 分层。
-- [ ] 扩展 `workflow/respond` 更多等待点类型的 GUI presentation。
+- [x] 真实 Electron `content-factory-article-workspace` fixture 覆盖 `workflow/read -> workflow/respond -> workflow/cancel -> workflow/retry` current JSON-RPC 链路，并写入可审计 summary evidence。
+- [x] 图片命令聊天 presentation 与内部 audit facts 分层：模型生成 payload 只保留用户可见 `planning_summary / assistant_intro / completion_caption / result_captions` 等 presentation 合同，workflowRunId / requestId / redaction 等内部 audit facts 不进入 generated presentation payload。
+- [x] 扩展 `workflow/respond` 更多等待点类型的 GUI presentation：General Workbench respond control 按 `ask_user / elicitation / tool_confirmation` 选择不同五语言文案键，并识别 `waiting_permission` waiting step。
 - [x] General Workbench workflow detail rows 用户可见文案补五语言 i18n。
 - [x] Article Workspace workflow detail 用户可见文案补五语言 i18n。
 
 退出条件：
 
-- GUI smoke 覆盖至少一个真实 workflow。
+- 真实 Electron Playwright fixture 已覆盖至少一个真实 workflow：`.lime/qc/gui-evidence/content-factory-article-workspace-workflow-control-20260704-playwright-regenerated-summary.json` 的 `ok=true`，`appServerRequestMethods` 包含 `workflow/read`、`workflow/respond`、`workflow/cancel`、`workflow/retry`。
 - 运行详情可恢复、可解释失败、可触发可用动作。
+- 图片命令聊天 presentation 与 workflow audit facts 分层已有 Rust 定向回归；`workflow/respond` 的 `ask_user / elicitation / tool_confirmation` GUI presentation 已有前端单元回归和五语言 i18n。
 
 ### P6：治理清理
 
@@ -190,12 +192,15 @@
 
 当前 `workflow/read` 说明：
 
-- `workflow/read` 与 `agentSession/read.detail.thread_read.workflow / workflow_runs / workflow_steps` 共用 `workflow_read_model_from_stored_session(...)`，均合并 session runtime events 与 workflow audit log，不保留第二套读取规则。
+- `workflow/read` 使用 `workflow_read_model_from_stored_session(...)` 合并 session runtime events 与 workflow audit log，是 current workflow run / step / action projection 的唯一读取 API；`agentSession/read` / `read_session` 隐藏 workflow fields，避免普通 thread read 与 workflow projection 形成第二套展示事实源。
 - `workflow/read` 只做 read model 读取，不承担 cancel / retry / respond 控制语义。
 - `workflow/cancel` 是 current control 第一刀：只按 `sessionId + workflowRunId + stepId?` 写 workflow audit log 的 `workflow.step.canceled / workflow.run.canceled`，然后复用同一个 read model 返回，不调用旧 turn cancel。
 - `workflow/retry` 是 current control 第二刀：按 `sessionId + workflowRunId + stepId?` 校验可重试的 failed / canceled / skipped run 或 step，写 workflow audit log 的 `workflow.step.retrying / workflow.run.retrying`，提升 step attempt；随后读取 source turn 的 `turn_inputs / turn_runtime_options`，生成 `rescheduledTurnId`，通过 current `agentSession/turn/start` 主链重新提交执行，并在 retry metadata 中记录 `sourceTurnId / rescheduledTurnId`。如果重调度启动失败，会追加 `workflow.step.failed / workflow.run.failed`，避免旧 run 长期卡在 `retrying`。当前语义是 source turn 级重提交，不是原 run / step 原地续跑。
 - `workflow/respond` 是 current control 第三刀：只对 waiting step 生效，必须能从 step 或参数解析到现有 `action.required` 的 `requestId/actionType`，随后复用 `agentSession/action/respond` 提交响应；action respond 成功后写 workflow audit log 的 `workflow.step.progress status=running` 并复用同一个 read model 返回。缺少 action identity 或不处于 waiting 状态时 fail closed。
 - 前端 bridge 只把 `workflow/read / cancel / retry / respond` 识别为 App Server current read profile；没有新增 mock fallback 或 legacy facade。Plugin iframe 侧只新增 `lime.agent.readWorkflow` 和 `capability:subscribe topic=workflow` read-only projection，内部仍调用 App Server `workflow/read`。
+- 真实 Electron workflow control evidence 已落到 `content-factory-article-workspace` current fixture：`workflow/read` 读取 waiting action，`workflow/respond` 将 waiting step 投影回 running，`workflow/cancel` 将 run/step 投影为 canceled，`workflow/retry` 返回 `rescheduledTurnId` 并把 `retrySource=workflow/retry`、`retryReasonCode=fixture_retry_requested`、`sourceTurnId/rescheduledTurnId` linkage 写入 read model；该 fixture 继续禁止 live Provider、App Server mock backend 和 renderer mock fallback。
+- 图片命令 `ImageCommandWorkflow` 的用户可见 presentation 与 workflow audit facts 已分层：presentation generation 使用独立 text-capable model selection 和 `image_task.presentation.generated` 事件输出可见文案，workflow run / step facts 继续写 metadata-only audit log；generated payload 会丢弃模型夹带的 workflowRunId / requestId / redaction 等内部字段。
+- General Workbench `workflow/respond` GUI presentation 已覆盖 `ask_user / elicitation / tool_confirmation`：按钮仍只调用 App Server current `workflow/respond`，但文案按 action type 区分；`waiting_permission` 与 `waiting_action` 同样作为 waiting step 投影。
 
 ## 5. 验证命令
 
@@ -213,7 +218,7 @@ npm run verify:gui-smoke
 
 - 2026-07-03：创建 Workflow 标准化路线图与执行计划。当前只做文档落库，不改运行时代码。主链目标固定为 App Server RuntimeCore + `workflow.*` RuntimeEvent + Workflow Read Model。
 - 2026-07-04：补充代码建议目录。后端 current owner 固定为 `lime-rs/crates/app-server/src/runtime/workflow/**`；第一刀顺序固定为 `status.rs + definition.rs + read_model.rs`，现有 `plugin_worker_workflow*.rs` 只作为 compat source adapter 逐步委托新模块。
-- 2026-07-04：开始代码实现。新增 `runtime/workflow/{mod,definition,status,read_model,tests}.rs`，定义 Workflow Contract、统一状态映射和基础 read model projector；`runtime/read_model.rs` 已把 workflow audit events 合并进 `thread_read.workflow / workflow_runs / workflow_steps`；前端 `appServerReadModelProjection` 已停止删除 workflow facts，并更新单测。验证：`npx vitest run "src/lib/api/agentRuntime/appServerReadModelProjection.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过。Rust 定向测试 `cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server workflow::` 当前被工作树既有删除 `lime-rs/crates/services/src/aster_session_store.rs` 阻塞，错误为 `file not found for module aster_session_store`；未恢复该用户/外部改动。
+- 2026-07-04：开始代码实现。新增 `runtime/workflow/{mod,definition,status,read_model,tests}.rs`，定义 Workflow Contract、统一状态映射和基础 read model projector；`runtime/read_model.rs` 提供 `workflow_read_model_from_stored_session(...)`，让 `workflow/read` 合并 session runtime events 与 workflow audit log；前端 `appServerReadModelProjection` 保持兼容旧 workflow facts，但 current UI 后续改由 `workflow/read` 读取。验证：`npx vitest run "src/lib/api/agentRuntime/appServerReadModelProjection.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过。Rust 定向测试 `cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server workflow::` 当前被工作树既有删除 `lime-rs/crates/services/src/aster_session_store.rs` 阻塞，错误为 `file not found for module aster_session_store`；未恢复该用户/外部改动。
 - 2026-07-04：继续重构和清旧路。新增 `runtime/workflow/events.rs` 并让 `plugin_worker_workflow*.rs` 委托 current 事件 helper；`appServerEventStream` 不再直接吞掉 `workflow.*`，而是投影为 diagnostics-only `runtime_status`，复用现有 runtime sync 触发 `agentSession/read` refresh，避免 workflow audit 进入普通 timeline。`legacySurfaceCatalog.json` 将旧 `content_workflow_*` / `content-workflow.ts` 固定为 `dead`，先将 `useWorkflow` 和 `WorkflowRuntimeHost` 限定为退场对象并补 catalog 单测封住回流。
 - 2026-07-04：按“完成重构后要清理原来的”要求收窄旧前端入口：生产 `AgentChatWorkspace` 不再调用 `src/components/workspace/hooks/useWorkflow.ts`，`useWorkspaceWriteFileAction` 删除旧步骤索引推进分支；legacy catalog 将该 Hook 的 allowed paths 清零并先标为退场候选，P6 退出条件改为最终删除或 catalog-only dead guard。
 - 2026-07-04：完成 P1 source fixtures 与 P3 source mapping 第一刀。新增 `runtime/workflow/source_map.rs`，统一 Plugin manifest、Skill `workflow_steps`、image command builtin workflow、content factory orchestration 与 WorkflowRuntimeHost test-only DSL 到 `WorkflowDefinition / WorkflowStepDefinition`；`plugin_worker_workflow.rs` 删除本地 step parser，改用 current source mapping helper。图片命令 workflow audit 从两步临时事实对齐为五步 current facts，并补 `stepIndex / stepCount / stepKind`。验证：`cargo fmt -p app-server --manifest-path "lime-rs/Cargo.toml"` 通过；`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server workflow:: -- --nocapture` 首轮通过 15 个 Workflow 用例；`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server image_command_workflow_creates_task_from_current_intent_metadata -- --nocapture` 通过。一次 `workflow::` 复跑曾被当前工作树非 Workflow 的 `lime-agent` `TurnContextOverride` 类型分裂阻塞，未扩大范围处理。
@@ -232,4 +237,9 @@ npm run verify:gui-smoke
 - 2026-07-04：完成 P5 Article Workspace 页面级 `workflow/read` detail。`useWorkspaceArticleWorkflowReadModel.ts` 调用 App Server current `workflow/read`，`WorkspaceArticleEditorRightSurface` 将 live workflow runs 合并进 Article Workspace projection，`WorkspaceArticleWorkflowDetailPanel` 展示 step-level failure / retry linkage / waiting action / attempt，并补五语言 i18n。验证：`npx vitest run "src/components/agent/chat/workspace/useWorkspaceArticleWorkflowReadModel.test.tsx" "src/components/agent/chat/workspace/WorkspaceArticleEditorRightSurface.test.tsx" "src/components/agent/chat/workspace/workspaceArticleWorkspaceWorkflowFacts.unit.test.ts" "src/components/agent/chat/workspace/workspaceArticleEditorOrchestrationModel.unit.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过；`WorkspaceArticleEditorRightSurface.test.tsx` 仍有 React act warning，未阻塞通过。
 - 2026-07-04：完成 Plugin SDK/profile 本地 workflow DSL 封口。`src/features/plugin/sdk/capabilityCatalog.ts` 将 `lime.workflow` 降为 `planned` 且 profile 为空；`buildWorkflowRuntimeCapabilityProfile` 返回 disabled/none；`UiExtensionHost` 对 `lime.workflow` 无条件 blocked 为 `current-api-required`；Host Bridge discovery 暴露 disabled/none，`capabilityDispatcher` 对 `start/checkpoint/awaitHuman` 负向 fail closed。旧 `WorkflowRuntimeHost`、`runtimePolicy`、`useWorkflow`、`content_workflow_*` 继续按 `dead / forbidden-to-restore` 处理。验证：`npx vitest run "src/features/plugin/sdk/capabilityContract.test.ts" "src/features/plugin/sdk/publicSdkSurface.test.ts" "src/features/plugin/runtime/capabilityDispatcher.unit.test.ts" "src/features/plugin/runtime/uiExtensionHost.test.ts" "src/features/plugin/ui/PluginRuntimePage.hostBridge.test.tsx" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过。
 - 2026-07-04：完成 Plugin iframe projected workflow events 第一刀。新增 `src/features/plugin/runtime/workflowReadProjection.ts`，`capabilityDispatcher` 支持 `lime.agent.readWorkflow` 只读读取 App Server `workflow/read`，Host Bridge 支持 `capability:subscribe topic=workflow` 并发送 `workflow:readModel` event；`lime.workflow start/checkpoint/awaitHuman` 继续 disabled/blocked，不恢复本地 DSL/runtime。同步 `capabilityCatalog`、`capabilityContract` 和 `.d.ts`。验证：`npm test -- --run "src/features/plugin/runtime/capabilityDispatcher.unit.test.ts" "src/features/plugin/ui/PluginRuntimePage.hostBridge.test.tsx" "src/features/plugin/sdk/capabilityContract.test.ts" "src/features/plugin/sdk/publicSdkSurface.test.ts"` 通过；`npm run test:contracts` 通过；`npm run verify:gui-smoke` 通过；`git diff --check` 通过。`npm run typecheck` 曾在多个并发 tsc 进程下超过可用反馈窗口，已中断，未取得退出码。
-- 2026-07-04：`/subagents` 继续收口 P6 与验证缺口。`hostBridge.ts` 的 workflow subscription poll 去掉 `readWorkflow as never` 类型逃逸；`session_store.rs` 删除会话不再 direct 调 `AgentDao::delete_session`，改走 `agent_session_repository::delete_session` current 边界，并补 `delete_session_should_remove_session_record` 单测；`legacySurfaceCatalog` 同步 `legacy_conversation.rs` 已迁到 `lime-agent`、Plugin worker runtime response/tests 拆分后的 sidecar/generated-content 边界。验证：Plugin/SDK 定向 36 个测试通过；`npm run test:contracts` 通过；`npm run governance:legacy-report` 通过且边界违规 0；`npm run verify:gui-smoke` 通过；`cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent` 通过；`CARGO_TARGET_DIR="/tmp/lime-workflow-target" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-core delete_session_should_remove_session_record -- --nocapture` 通过；`git diff --check` 通过。`tsconfig.node.json` 单独通过；renderer typecheck 多次无诊断输出但被 SIGTERM 143 终止，未宣称通过。真实 workflow GUI smoke 仍待补。
+- 2026-07-04：`/subagents` 继续收口 P6 与验证缺口。`hostBridge.ts` 的 workflow subscription poll 去掉 `readWorkflow as never` 类型逃逸；`session_store.rs` 删除会话不再 direct 调 `AgentDao::delete_session`，改走 `agent_session_repository::delete_session` current 边界，并补 `delete_session_should_remove_session_record` 单测；`legacySurfaceCatalog` 同步 `legacy_conversation.rs` 已迁到 `lime-agent`、Plugin worker runtime response/tests 拆分后的 sidecar/generated-content 边界。验证：Plugin/SDK 定向 36 个测试通过；`npm run test:contracts` 通过；`npm run governance:legacy-report` 通过且边界违规 0；`npm run verify:gui-smoke` 通过；`cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent` 通过；`CARGO_TARGET_DIR="/tmp/lime-workflow-target" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-core delete_session_should_remove_session_record -- --nocapture` 通过；`git diff --check` 通过。`tsconfig.node.json` 单独通过；renderer typecheck 多次无诊断输出但被 SIGTERM 143 终止，未宣称通过。
+- 2026-07-04：补齐真实 workflow GUI smoke。扩展现有 `content-factory-article-workspace` Electron fixture，而不是新增平行脚本：同一场景依次覆盖 `workflow/read -> workflow/respond -> workflow/cancel -> workflow/retry`，并断言生产链路经 Electron preload `app_server_handle_json_lines`、App Server current JSON-RPC、RuntimeCore Workflow Read Model，不回流 `WorkflowRuntimeHost`、旧 Hook、`content_workflow_*` 或 mock fallback。最终通过命令：`npm run smoke:claw-chat-current-fixture -- --scenario content-factory-article-workspace --app-url http://127.0.0.1:1420/ --evidence-dir .lime/qc/gui-evidence --prefix content-factory-article-workspace-workflow-control-20260704-final --timeout-ms 240000`；summary：`.lime/qc/gui-evidence/content-factory-article-workspace-workflow-control-20260704-final-summary.json`，`ok=true`，session=`claw-chat-current-1783148942708-61851`，`appServerRequestMethods` 包含四个 workflow methods，`workflow/retry` 返回 `rescheduledTurnId=turn_0e6700a325a247e88d9a135d391ff3a9`，step attempt=`2`，host generation fixture `requestCount=4`。
+- 2026-07-04：文档收口同步 `internal/roadmap/workflow/README.md`、`implementation-plan.md` 与本执行计划，记录真实 workflow GUI smoke 已完成，并把图片命令 presentation / 更多 respond 等待点归入 P5 收口。随后修正 `scripts/check-app-server-client-contract.mjs` 中 runtime provider façade contract 片段，使守卫跟随 current `SessionProviderConfig`、`.configure_provider(config.clone().into(), ...)` 与 `route_protocol_from_session_provider_config` 命名，不再要求旧 `ProviderConfig / route_protocol_from_provider_config`。验证：`npm run governance:legacy-report` 通过且边界违规 0；`npm run test:contracts` 通过；`git diff --check` 通过。
+- 2026-07-04：完成 P5 剩余两项。图片命令 presentation 边界补 `generated_payload_excludes_workflow_audit_facts` Rust 回归，证明模型输出夹带的 `workflowRunId / requestId / redaction` 不进入 generated presentation payload；General Workbench `workflow/respond` control 按 `ask_user / elicitation / tool_confirmation` 输出不同五语言文案键，并把 `waiting_permission` 纳入 waiting step respond target。随后按子代理盘点继续补齐多 respond action 去重展示、`skipped` retry 投影、非 respond action 不误触发 respond、General Workbench / Article Workspace run detail 类型化等待动作文案和 `waiting_permission` 状态归一。验证：`npx vitest run "src/components/agent/chat/workspace/workspaceWorkflowControls.unit.test.ts" "src/components/agent/chat/components/generalWorkbenchWorkflowPanelViewModel.unit.test.ts" "src/components/agent/chat/workspace/WorkspaceArticleEditorRightSurface.test.tsx" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过；`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server presentation -- --nocapture` 通过；五语言 `agent.json / workspace.json` JSON parse 通过。
+- 2026-07-04：收口复核 P2 / P5 文档口径。当前实现与测试明确为 `workflow/read` 唯一暴露 workflow projection，`agentSession/read` / `read_session` 隐藏 workflow fields；本计划同步移除“thread read 返回 workflow facts”的过期表述，并将 P5 状态改为 completed。下一步只剩路线图归档判定或后续新增交互时补更窄 product smoke，不再有 Workflow 标准化主链代码缺口。
+- 2026-07-04：按用户要求补 Playwright E2E 证据。重新创建 `.lime/qc/gui-evidence` 后运行 `npm run smoke:claw-chat-current-fixture -- --scenario content-factory-article-workspace --evidence-dir .lime/qc/gui-evidence --prefix content-factory-article-workspace-workflow-control-20260704-playwright-regenerated --timeout-ms 240000`，通过真实 Playwright Electron fixture 覆盖 `workflow/read -> workflow/respond -> workflow/cancel -> workflow/retry`。summary：`.lime/qc/gui-evidence/content-factory-article-workspace-workflow-control-20260704-playwright-regenerated-summary.json`，`ok=true`，`noInvokeErrors=true`，`noConsoleErrors=true`，`workflow/retry` 返回 `rescheduledTurnId=turn_09c99f319a694cca8ded970b7999e877`，step attempt=`2`。

@@ -123,6 +123,7 @@ describe("clawTraceRegressionAlertMonitor", () => {
 
   it("开启后只用 compact summary 评估并触发一次通知", async () => {
     const notifier = { notify: vi.fn(() => "sent" as const) };
+    const nowMs = Date.now();
 
     const result = await evaluateClawTraceRegressionAlertMonitor({
       alertEnabled: true,
@@ -144,7 +145,7 @@ describe("clawTraceRegressionAlertMonitor", () => {
         notifier,
       },
       notificationEnabled: true,
-      nowMs: Date.parse("2026-06-27T00:01:00.000Z"),
+      nowMs,
       retention,
       traceEnabled: true,
       trendRecords: [],
@@ -171,7 +172,7 @@ describe("clawTraceRegressionAlertMonitor", () => {
     expect(notifier.notify).toHaveBeenCalledTimes(1);
     expect(notifier.notify).toHaveBeenCalledWith({
       body: "client delta 210",
-      tag: "claw-trace-regression-alert-1782518460000",
+      tag: `claw-trace-regression-alert-${Math.round(nowMs)}`,
       title: "alert warning",
     });
     expect(listClawTraceRegressionAlertChannel()).toHaveLength(1);
@@ -179,6 +180,7 @@ describe("clawTraceRegressionAlertMonitor", () => {
 
   it("相同 fingerprint 不重复通知", async () => {
     const notifier = { notify: vi.fn(() => "sent" as const) };
+    const nowMs = Date.now();
     const input = {
       alertEnabled: true,
       baselineRecords: [
@@ -201,11 +203,11 @@ describe("clawTraceRegressionAlertMonitor", () => {
 
     const first = await evaluateClawTraceRegressionAlertMonitor({
       ...input,
-      nowMs: Date.parse("2026-06-27T00:01:00.000Z"),
+      nowMs,
     });
     const second = await evaluateClawTraceRegressionAlertMonitor({
       ...input,
-      nowMs: Date.parse("2026-06-27T00:02:00.000Z"),
+      nowMs: nowMs + 60_000,
     });
 
     expect(first.dispatch_result?.notification_attempted).toBe(true);

@@ -689,8 +689,9 @@ Phase 1（Trait 骨架）已完成，开始 Phase 2（Adapter 重构）：
 - `completed`：验证公共 API 清理成功，`rg "pub use aster::" runtime_facade.rs lib.rs` 无命中。
 - `verified`：`cargo check -p lime-agent --lib` 编译验证中（后台运行 b7s5puy30）。
 - `strategy`：确认采用方案 A（快速收口 + optional feature gate），不采用方案 B（完整重构 45+ 文件）。
+- `superseded-2026-07-05`：optional feature gate 路线已被废弃；当前事实是 `lime-agent` 仍直接依赖 Aster，必须继续清退主 turn executor / provider stream，而不是用 feature gate 假装可关闭。
 - `documented`：新增 3 份策略文档：`aster-trait-skeleton-fast-track-plan.md`、`phase2-blocking-analysis.md`、`phase2-execution-summary.md`。
-- `next`：等待编译验证通过后，继续 Phase 2 收口：(1) 标记 internal 模块为 compat (2) 引入 optional feature gate (3) 验证 App Server 不启用该 feature。
+- `next-superseded`：等待编译验证通过后，继续 Phase 2 收口：(1) 标记 internal 模块为 compat (2) 引入 optional feature gate (3) 验证 App Server 不启用该 feature。
 
 ## 2026-07-04 进度记录：Phase 2 并行验证与阻塞边界
 
@@ -709,7 +710,8 @@ Phase 1（Trait 骨架）已完成，开始 Phase 2（Adapter 重构）：
 - `verified`：`cargo check -p lime-agent --lib` 编译通过（10.17s），只有 2 个 unused import 警告。
 - `verified`：公共 API 不再暴露 Aster 类型，`rg "pub use aster::" runtime_facade.rs lib.rs` 无命中。
 - `strategy_confirmed`：采用方案 A（快速收口 + optional feature gate + 双重实现 compat），Phase 2 快速收口目标达成。
-- `next`：Phase 2 后续：(1) 清理 unused import 警告 (2) 引入 optional feature gate (3) 标记 compat 文件退出条件 (4) 推进 Phase 5 vendor 降级。
+- `superseded-2026-07-05`：optional feature gate 与双重实现路线已被后续收口废弃；`compat-aster` 已删除，`aster_session_store_adapter.rs.bak` 已删除。
+- `next-superseded`：Phase 2 后续：(1) 清理 unused import 警告 (2) 引入 optional feature gate (3) 标记 compat 文件退出条件 (4) 推进 Phase 5 vendor 降级。
 
 ## 2026-07-04 进度记录：Phase 2 快速收口复核更正
 
@@ -717,7 +719,8 @@ Phase 1（Trait 骨架）已完成，开始 Phase 2（Adapter 重构）：
 - `verified`：本次有效 Rust 验证命令为 `CARGO_TARGET_DIR="/tmp/lime-astermigration-target" cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent --lib`，结果通过但仍有 6 个 warning；后续计划记录不得使用缺少 `--manifest-path "lime-rs/Cargo.toml"` 的根目录 `cargo check -p lime-agent --lib` 作为完成证据。
 - `blocked`：`src/lib/governance/asterMigrationBoundary.test.ts` 当前仍 3 项失败，且全部指向 `aster_session_store.rs`：session record helper 回流、已拆 compat helper 回流、主文件 2456 行超过 1000 行边界。
 - `exit-condition`：Phase 2 priority 1 的退出条件不是“同时实现双 trait 后能编译”，而是 `LimeSessionStore` 的 current 事实源切到 `thread-store::SessionRepository`，Aster `SessionStore` 只保留在明确 adapter 内，且 `aster_session_store` 主文件通过治理守卫。
-- `next`：先修复上述 3 个治理失败和 warning，再继续 optional feature gate 或 vendor 降级；否则会把未拆干净的 compat 主文件提前带入下一阶段。
+- `next-superseded`：先修复上述 3 个治理失败和 warning，再继续 optional feature gate 或 vendor 降级；否则会把未拆干净的 compat 主文件提前带入下一阶段。
+- `superseded-2026-07-05`：optional feature gate 不再作为后续动作；后续只允许真实删除 / 迁移 Aster compat adapter。
 
 ## 2026-07-04 Workflow 执行完成记录
 
@@ -867,7 +870,7 @@ Phase 1（Trait 骨架）已完成，开始 Phase 2（Adapter 重构）：
 
 - `completed`：新增 `model-provider::runtime_provider::RuntimeProvider`，作为已选 provider 的 Lime-owned 补全执行 trait；该模块复用 `model-provider::router::{ProviderRequest, ProviderResponse}` DTO，不新增一套平行请求结构。
 - `completed`：`model-provider::router::ProviderResponse` 增加 `concat_text()`，把响应文本提取逻辑留在 current DTO owner 内，避免调用方重新拼 Aster message。
-- `completed`：`credential_bridge/provider_factory.rs` 新增 `create_model_runtime_provider(...) -> Arc<dyn RuntimeProvider>`，用 `AsterRuntimeProviderAdapter` 把 Aster `Provider` trait、`Message` 和 `ProviderUsage` 映射到 Lime DTO。旧 `create_runtime_provider(...) -> Arc<dyn aster::Provider>` 暂时保留给 `aster_state.update_provider(...)`，只作为 Aster Agent API 卡住的 compat 入口。
+- `completed`：`credential_bridge/provider_factory.rs` 新增 `create_model_runtime_provider(...) -> Arc<dyn RuntimeProvider>`，用 `AsterRuntimeProviderAdapter` 把 Aster `Provider` trait、`Message` 和 `ProviderUsage` 映射到 Lime DTO。旧 `create_runtime_provider(...) -> Arc<dyn aster::Provider>` 已删除；`aster_state.update_provider(...)` 暂时改走 `pub(crate) create_aster_runtime_provider(...)` compat 入口。
 - `completed`：`subagent_scheduler.rs` 不再构造 Aster `Message` 或直接调用 Aster provider `.complete(...)`；现在只构造 `ProviderRequest` 并通过 `create_model_runtime_provider` 执行。
 - `completed`：公开 Aster provider factory 继续收口：旧 `create_runtime_provider(...)` 删除，改为 `credential_bridge/provider_factory.rs` 内的 `pub(crate) create_aster_runtime_provider(...)`，只允许 `aster_state.update_provider(...)` compat 注入使用；crate 根不再 re-export 返回 Aster `Provider` trait 的 factory。
 - `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 新增 `subagent provider 执行必须走 model-provider RuntimeProvider 边界`，禁止 `subagent_scheduler.rs` 回流到 Aster `Message`、Aster `Provider` trait、`create_runtime_provider` 或旧 `provider.complete(&system_prompt, ...)` 调用面。
@@ -885,3 +888,784 @@ Phase 1（Trait 骨架）已完成，开始 Phase 2（Adapter 重构）：
 - `compat`：Aster provider 创建、Aster `Message` 转换和 Aster `ProviderUsage` 映射只允许留在 `credential_bridge/provider_factory.rs`；`provider_safety.rs` 仍因 wrapper 实现 Aster `Provider` trait 保留为 compat。
 - `compat`：`aster_state.rs` 仍被 Aster Agent `update_provider(...)` API 卡住，暂时通过 `pub(crate) create_aster_runtime_provider(...)` 获取 `Arc<dyn aster::Provider>`；退出条件是 Aster Agent provider 注入边界迁到 Lime-owned turn/runtime executor。
 - `next`：继续 provider 组时优先收 `aster_state` / Aster Agent provider 注入边界，或把 `RuntimeProvider` 接入更上层 `agent-runtime::TurnExecutor`，最终让 `create_aster_runtime_provider(...) -> Arc<dyn aster::Provider>` 只剩零调用后删除。
+
+## 2026-07-04 进度记录：aster_state provider 注入面拆入 compat 子模块
+
+- `completed`：新增 `lime-agent/src/aster_state/provider_config.rs`，集中承接 `ProviderConfig`、`ProviderContinuationCapable` 实现、`configure_provider(...)`、`configure_provider_from_pool(...)`、provider health 标记与 provider configured cache 读写。
+- `completed`：`aster_state.rs` 主文件从 1090 行降到 854 行，低于 1000 行硬边界；主文件只保留 Aster Agent state、初始化、tool/MCP/interrupt/session 相关编排，并通过 `pub use provider_config::ProviderConfig` 维持现有调用面。
+- `completed`：`create_aster_runtime_provider(...)` 不再出现在 `aster_state.rs` 主文件，只允许留在 `aster_state/provider_config.rs` 和 `credential_bridge/provider_factory.rs` compat 边界。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 新增 `aster_state provider config / Aster 注入必须留在 compat 子模块`，要求 `aster_state/provider_config.rs` 存在并持有 provider DTO / Aster 注入方法，同时禁止这些定义回流到 `aster_state.rs` 主文件。
+- `guarded`：`PROVIDER_RUNTIME_DTO_FILES` 纳入 `aster_state/provider_config.rs`，继续禁止 `AsterProviderConfig` / `AsterProviderProtocol` 等旧公开 DTO 名称回流。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package lime-agent --package model-provider` 通过。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-runtime-provider" cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent --lib` 通过。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-runtime-provider" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent aster_state --lib` 通过，16 tests passed。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，38 tests passed。
+- `current`：provider request/response DTO 和执行 trait 仍归属 `model-provider`；`aster_state.rs` 不再承接 provider execution 业务。
+- `compat`：Aster Agent `update_provider(...)` 仍需要 `Arc<dyn aster::Provider>`，因此 Aster provider 注入暂时留在 `aster_state/provider_config.rs`；退出条件是 turn/runtime executor 接管 provider 注入后，删除该 compat 子模块中的 Aster factory 调用。
+- `next`：继续 provider 组时优先把 `RuntimeProvider` 接入 `agent-runtime::TurnExecutor` 或上层 Lime-owned executor，让 `AsterAgentState::configure_provider*` 只剩零调用后删除，再清空 `create_aster_runtime_provider(...)`。
+
+## 2026-07-04 进度记录：session provider 配置调用面集中到 provider_configuration
+
+- `completed`：`knowledge_builder_skill.rs` 不再直接调用 `AsterAgentState::configure_provider_from_pool(...)`；首选 provider 和 fallback provider 均改走 `configure_provider_for_session(...)`。
+- `completed`：真实联网测试 `real_codex_tool_events.rs` 改走 `configure_provider_for_session(...)`，测试代码不再绕过 provider configuration facade 直接触碰 Aster Agent provider 注入方法。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 新增 `session provider 配置必须经由 provider_configuration facade`，扫描 `lime-agent/src` 与 `lime-agent/tests`，只允许 `provider_configuration.rs` 直接调用 `AsterAgentState::configure_provider*`。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package lime-agent --package model-provider` 通过。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-runtime-provider" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent knowledge_builder_skill --lib` 通过，0 tests run / 481 filtered；用于编译验证该模块。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-runtime-provider" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent --test real_codex_tool_events --no-run` 通过。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，39 tests passed。
+- `current`：session provider 配置的业务入口收敛到 `provider_configuration` facade；调用方只表达 provider/model/route 需求。
+- `compat`：`provider_configuration.rs` 仍委托 `AsterAgentState::configure_provider*`，因为底层 Aster Agent provider 注入尚未被 Lime-owned executor 替换。退出条件：`agent-runtime::TurnExecutor` 接管 turn provider selection 后，`provider_configuration` 改为构造 Lime-owned runtime provider / route context，不再触碰 `AsterAgentState`。
+- `next`：把 `provider_configuration` 的 request DTO 继续向 `model-provider::ModelRoute` / `RuntimeProvider` owner 收敛，减少 `ProviderConfig` 作为 Aster session 注入 DTO 的外部可见面。
+
+## 2026-07-04 进度记录：SessionProviderConfig current DTO 收口
+
+- `completed`：新增 `lime-agent::SessionProviderConfig`，作为 session provider 配置的 current-facing DTO；它只暴露 App Server 需要的 provider/model/route/toolshim 信息，route 字段使用 `app_server_protocol::ProtocolKind`，不再把 Aster runtime protocol DTO 暴露给 App Server。
+- `completed`：`provider_configuration.rs` 负责 `SessionProviderConfig -> aster_state::ProviderConfig` 的 crate 内转换；`aster_state::ProviderConfig` 和 `AsterAgentState::configure_provider*` 均降为 `pub(crate)` compat 注入面。
+- `completed`：`lime_agent` 根 API 不再 re-export `aster_state::ProviderConfig`，旧 `route_protocol_from_provider_config` 改为 `route_protocol_from_session_provider_config`。
+- `completed`：App Server runtime_backend 的 direct provider 配置面批量迁到 `SessionProviderConfig`：`provider_config.rs`、`request_context.rs`、`model_routing.rs`、`model_registry_metadata.rs`、`model_route_contract.rs`、`model_route_resolver.rs` 和相关测试不再消费 `lime_agent::ProviderConfig`。
+- `completed`：`lime-rs/crates/agent/tests/real_web_search_policy.rs` 与 `lime-rs/crates/agent/tests/real_web_search_preflight_short_input.rs` 改走 `configure_provider_for_session(...)` 并归属 `lime-agent` package；`lime-rs/crates/agent/tests/real_codex_tool_events.rs` 已维持 façade 调用。
+- `completed`：删除零引用的 `provider_configured_cache`、`get_provider_config`、`clear_provider_config`、`is_provider_configured` 和 `mark_current_unhealthy`，缩小 Aster state provider compat surface。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 扩展 session provider 配置守卫到 crate-owned `lime-rs/crates/agent/tests/**`，并新增 App Server 禁用 Aster state `ProviderConfig` public API 的守卫。
+- `guarded`：`src/lib/governance/appServerRuntimeBoundary.test.ts` 更新为要求 `SessionProviderConfig` / `route_protocol_from_session_provider_config`，并同步 image presentation 当前 turn context helper。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package lime-agent --package app-server --package model-provider` 通过。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-runtime-provider" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent provider_configuration --lib` 通过，3 tests passed。
+- `verified`：`CARGO_BUILD_JOBS=2 CARGO_TARGET_DIR="/tmp/lime-astermigration-target-runtime-provider" cargo check --manifest-path "lime-rs/Cargo.toml" -p app-server --lib` 通过。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-runtime-provider" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent --test real_codex_tool_events --no-run` 通过。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" "src/lib/governance/appServerRuntimeBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，61 tests passed。
+- `note`：原 `lime-rs/tests/*.rs` root-level WebSearch live tests 已迁到 `lime-rs/crates/agent/tests/`，`lime-rs/tests/` root orphan 目录按 `dead / forbidden-to-restore` 删除，避免 virtual workspace 根目录下的 orphan integration tests 阻断 Rust changed-scope package 映射。
+- `current`：App Server 和业务/test 调用方只消费 `SessionProviderConfig` / `configure_provider_for_session` façade。
+- `compat`：`provider_configuration.rs` 仍在 crate 内把 session config 转成 Aster state provider config；退出条件仍是 Lime-owned executor 接管 provider selection 和 provider injection。
+- `next`：继续把 `provider_configuration` 的 provider selection/route request 投影到 `model-provider::ModelRoute` 或 `agent-runtime::TurnExecutor`，让 `AsterAgentState::configure_provider*` 归零后删除。
+
+## 2026-07-04 进度记录：主 turn provider 注入下沉到 turn_execution
+
+- `completed`：`lime-agent::AgentTurnExecutionRequest` 增加 `provider_configuration` 输入，`run_agent_turn_with_policy(...)` 在 executor 边界内调用 `configure_provider_for_session(...)`，并通过 `AgentTurnExecution` 返回本回合 `SessionProviderConfig` 与 stream execution 结果。
+- `completed`：`app-server::RuntimeBackend::handle_turn_start` 不再在主 turn 前置调用 `configure_provider_for_route(...)`；App Server 只负责 route selection、native tool / MCP 准备、事件投影，并把 provider/model/route 请求传给 `lime-agent` executor。
+- `completed`：`ProviderConfigurationRequest` 从 App Server 主 turn 调用面移出；App Server 只构造 `AgentTurnProviderConfiguration`，`turn_execution.rs` 内部再转换成 provider façade request，避免 App Server 直接消费 provider configuration DTO。
+- `completed`：provider health side effect 下沉到 `lime-agent::turn_execution` completion 边界；`run_agent_turn_with_policy(...)` 在 stream 成功且未取消时调用 `mark_current_healthy(...)`，App Server 主 turn 不再直接标记 provider 健康。
+- `completed`：`AgentTurnProviderConfiguration` 的 provider/model 输入收敛到 `model-provider::ModelRoute`；App Server 通过 `model_route_contract::model_route_from_runtime(...)` 把 `ResolvedModelRoute` 投影成 Lime-owned provider route，再交给 executor。`route_protocol: ProtocolKind` 暂留为 Aster façade 精确协议 compat 字段。
+- `completed`：`app-server` 新增 `model-provider.workspace = true` 直接依赖，`Cargo.lock` 同步记录 `app-server -> model-provider`；同次 cargo 同步也补齐前序 `agent-runtime -> async-trait / tokio` 锁文件元数据。
+- `guarded`：`src/lib/governance/appServerRuntimeBoundary.test.ts` 扩展主 turn 守卫，要求 App Server 主 turn 使用 `AgentTurnProviderConfiguration`，禁止 `runtime_backend.rs` 回流到 `ProviderConfigurationRequest`、`configure_provider_for_route(`、`mark_current_healthy(`，同时要求 `turn_execution.rs` 持有 `configure_provider_for_session(...)` 和 provider health 标记。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package lime-agent --package app-server --package agent-runtime` 通过。
+- `verified`：`CARGO_BUILD_JOBS=2 CARGO_TARGET_DIR="/tmp/lime-astermigration-turn-execution-agent" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent turn_execution --lib` 通过，0 tests run / 481 filtered；用于编译验证 `turn_execution` 新请求 / 返回结构。
+- `verified`：`CARGO_BUILD_JOBS=2 CARGO_TARGET_DIR="/tmp/lime-astermigration-turn-execution-app-server" cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server model_route_from_runtime_projects_lime_provider_route --lib` 通过，1 test passed。
+- `verified`：`CARGO_BUILD_JOBS=2 CARGO_TARGET_DIR="/tmp/lime-astermigration-turn-execution-app-server" cargo check --manifest-path "lime-rs/Cargo.toml" -p app-server --lib` 通过。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" "src/lib/governance/appServerRuntimeBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，61 tests passed。
+- `verified`：`git diff --check` 覆盖本轮认领写集与 `Cargo.lock` 通过；`rg -n "ProviderConfigurationRequest|configure_provider_for_route\\(|mark_current_healthy\\(" "lime-rs/crates/app-server/src/runtime_backend.rs"` 无命中。
+- `current`：主 turn provider 配置入口继续向 `lime-agent` turn execution 边界收敛；App Server 是 JSON-RPC / route decision / event projection adapter。
+- `compat`：`provider_configuration.rs` 仍委托 `AsterAgentState::configure_provider*`，这是 Aster provider 注入未完成替换前的 compat 面；退出条件是 `agent-runtime::TurnExecutor` 接管 Lime-owned provider selection / provider runtime 注入后删除该委托。
+- `deferred`：`plugin_worker_generation.rs` 与 `image_command/presentation.rs` 仍可暂时通过 App Server provider adapter 配置 provider；它们属于受控文本生成旁路，不是本轮主 Agent turn 切片。下一刀再评估是否批量迁到 `host_managed_generation` / Lime-owned direct generation executor。
+- `next`：批量处理 plugin worker 与 image presentation 旁路，优先把它们迁到 `host_managed_generation` / Lime-owned direct generation executor，目标是让 App Server provider adapter 只剩旁路 compat 或归零。
+
+## 2026-07-04 进度记录：direct generation provider 注入下沉到 lime-agent
+
+- `completed`：新增 `lime-agent::ModelRouteProviderConfiguration` current DTO，App Server 只传 `model-provider::ModelRoute`、reasoning effort、route protocol 与可选 direct provider config，不再直接构造 Aster provider configuration request。
+- `completed`：`lime-agent::direct_text_generation` 接管受控文本生成 provider 配置；`DirectTextGenerationRequest` 增加 `provider_configuration`，执行前在 `lime-agent` 边界内调用 `configure_model_route_provider_for_session(...)`，并通过 `DirectTextGenerationResult.provider_config` 返回本次实际 provider/model。
+- `completed`：`lime-agent::host_managed_generation` 复用 direct text generation executor；plugin worker 的每个 host-managed generation 子请求都在 executor 内配置 provider，不再由 App Server 预先调用 provider adapter。
+- `completed`：App Server `plugin_worker_generation.rs` 与 `image_command/presentation.rs` 批量迁到 `model_route_contract::provider_configuration_from_runtime(...)`；两条旁路不再调用 `configure_provider_for_route(...)`。
+- `completed`：`app-server::runtime_backend::provider_config.rs` 删除 `configure_provider_for_route(...)` façade；该文件只保留 runtime config metadata、database initialization 和 model effective event 投影。
+- `completed`：主 turn 也改用 `provider_configuration_from_runtime(...)` 生成共享 DTO，避免主 turn 与 direct generation 分别拼 route/provider 字段。
+- `guarded`：`src/lib/governance/appServerRuntimeBoundary.test.ts` 明确禁止 App Server provider adapter 出现 `ProviderConfigurationRequest` / `configure_provider_for_session` / `configure_provider_for_route`，并要求 direct generation provider 配置归属 `lime-agent`。
+- `guarded`：App Server 受控文本生成守卫新增 `configure_provider_for_route(` forbidden snippet，并要求 plugin worker / image presentation 只通过 `provider_configuration_from_runtime` 传递 Lime-owned route DTO。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package lime-agent --package app-server --package agent-runtime` 通过。
+- `verified`：`CARGO_BUILD_JOBS=2 CARGO_TARGET_DIR="/tmp/lime-astermigration-direct-generation-app-server" cargo check --manifest-path "lime-rs/Cargo.toml" -p app-server --lib` 通过。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" "src/lib/governance/appServerRuntimeBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，61 tests passed。
+- `verified`：`git diff --check` 覆盖本轮认领写集通过。
+- `verified`：`rg -n "configure_provider_for_route|ProviderConfigurationRequest|configure_provider_for_session" "lime-rs/crates/app-server/src" "lime-rs/crates/agent/src"` 确认 App Server production Rust 不再命中 `configure_provider_for_route` / `ProviderConfigurationRequest`；`ProviderConfigurationRequest` 只剩 `lime-agent` 内部和既有 agent 测试。
+- `blocked-verification`：`CARGO_BUILD_JOBS=2 CARGO_TARGET_DIR="/tmp/lime-astermigration-direct-generation-agent" cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent direct_text_generation --lib` 在依赖编译阶段因 `/System/Volumes/Data` 剩余约 1.3GiB 触发 `No space left on device`，未到代码错误。
+- `blocked-verification`：`CARGO_BUILD_JOBS=2 CARGO_TARGET_DIR="/tmp/lime-astermigration-direct-generation-app-server" cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server prepare_worker_request_injects_host_managed_generation_from_fixture_provider --lib` 同样因磁盘空间不足中断；待清理临时 target 后重跑。
+- `risk`：`image_command/presentation.rs` 当前约 798 行，接近 800 行拆分预警；本轮只做最小接线，下一刀若继续触碰应优先按 route selection / prompt construction / parsing 拆分。
+- `current`：受控 direct generation provider 配置入口收敛到 `lime-agent` executor；App Server 只做 JSON-RPC / route decision / event metadata adapter。
+- `compat`：`provider_configuration.rs` 仍在 executor 内委托 `AsterAgentState::configure_provider*`，退出条件仍是 `agent-runtime::TurnExecutor` / `model-provider::RuntimeProvider` 接管实际 provider runtime 注入。
+- `dead`：App Server `configure_provider_for_route(...)` façade 已从 production Rust 删除；后续不得恢复。
+- `next`：释放临时 Cargo target 空间后重跑 direct generation 定向单测与 governance Vitest；随后继续把 `knowledge_builder_skill` / provider_configuration 内部 request DTO 收到 `ModelRouteProviderConfiguration`，减少 `ProviderConfigurationRequest` 的外部测试暴露面。
+
+## 2026-07-04 进度记录：ProviderConfigurationRequest 内部化
+
+- `completed`：新增 `provider_configuration_from_model_selection(...)`，用于把简单 provider/model selection 投影为 `ModelRouteProviderConfiguration`；调用方不再直接拼 `ProviderConfigurationRequest`。
+- `completed`：`configure_model_route_provider_for_session(...)` 升为公开 current façade；`configure_provider_for_session(...)` 与 `ProviderConfigurationRequest` 降为 `provider_configuration.rs` 内部实现细节。
+- `completed`：`knowledge_builder_skill.rs` 和真实联网测试 `real_codex_tool_events.rs` 改走 `provider_configuration_from_model_selection(...)` + `configure_model_route_provider_for_session(...)`；不再消费内部 request DTO。
+- `completed`：`lime_agent` 根 API 不再 re-export `ProviderConfigurationRequest` / `configure_provider_for_session`；公开调用面只保留 `ModelRouteProviderConfiguration`、`SessionProviderConfig`、`configure_model_route_provider_for_session(...)` 和 route protocol helper。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 新增 `ProviderConfigurationRequest 只能留在 provider_configuration 内部`，扫描 `lime-agent/src` 与 `lime-agent/tests`，禁止调用方重新接触内部 compat request。
+- `guarded`：`ProviderConfigurationRequest` 与 `configure_provider_for_session` 加入 `lime_agent` 根 API 禁止 re-export 清单，防止 public façade 回流到旧 request 形态。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package lime-agent --package app-server --package agent-runtime` 通过。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent provider_configuration --lib` 通过，3 tests passed。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo check --manifest-path "lime-rs/Cargo.toml" -p app-server --lib` 通过。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent direct_text_generation --lib` 通过，4 tests passed；上一段因磁盘空间不足的 direct generation 验证已补跑完成。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server prepare_worker_request_injects_host_managed_generation_from_fixture_provider --lib` 通过，1 test passed；上一段因磁盘空间不足的 plugin worker fixture 验证已补跑完成。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" "src/lib/governance/appServerRuntimeBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，62 tests passed。
+- `verified`：`git diff --check` 覆盖本轮认领写集通过。
+- `verified`：`rg -n "ProviderConfigurationRequest|configure_provider_for_session" "lime-rs/crates/agent/src" "lime-rs/crates/agent/tests" "lime-rs/crates/app-server/src"` 只剩 `lime-rs/crates/agent/src/provider_configuration.rs` 命中。
+- `current`：调用方统一传 `ModelRouteProviderConfiguration`，provider route DTO 继续向 `model-provider::ModelRoute` 收敛。
+- `compat`：`provider_configuration.rs` 内部仍用 `ProviderConfigurationRequest` 调用 `AsterAgentState::configure_provider*`；退出条件是 `agent-runtime::TurnExecutor` / `model-provider::RuntimeProvider` 接管 provider runtime 注入。
+- `dead`：`ProviderConfigurationRequest` 作为 public API 已删除；后续不得在 `lime_agent` 根 API 或调用方恢复。
+- `next`：继续把 `provider_configuration.rs` 内部的 Aster provider 注入委托替换为 Lime-owned runtime provider context；下一刀优先评估 `agent-runtime::TurnExecutor` 接入 `ModelRouteProviderConfiguration`，让 `AsterAgentState::configure_provider*` 调用面继续归零。
+
+## 2026-07-04 进度记录：provider route DTO 上移到 agent-runtime
+
+- `completed`：`agent-runtime::turn_executor` 新增 `TurnProviderConfiguration`，持有 `model-provider::ModelRoute` 与 `reasoning_effort`；该 DTO 成为 provider route / reasoning 的 current owner。
+- `completed`：`TurnProviderConfiguration::from_model_selection(...)` 承接简单 provider/model selection 到 current route DTO 的投影；`lime-agent::provider_configuration_from_model_selection(...)` 不再直接构造 `ModelRoute`。
+- `completed`：`lime-agent::ModelRouteProviderConfiguration` 改为包装 `TurnProviderConfiguration`，只额外保留 Aster compat 所需的 `route_protocol` 与 `direct_provider_config`。
+- `completed`：`app-server::model_route_contract::provider_configuration_from_runtime(...)` 直接构造 `TurnProviderConfiguration`，再交给 `lime-agent` compat provider configuration façade；`app-server` 新增 `agent-runtime.workspace = true` 直接依赖。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 新增 `provider route current DTO 必须归属 agent-runtime`，要求 `TurnProviderConfiguration` 存在于 `agent-runtime`，并要求 `lime-agent::provider_configuration` 只引用该 DTO。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package agent-runtime --package lime-agent --package app-server` 通过。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p agent-runtime turn_executor --lib` 通过，5 tests passed。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent provider_configuration --lib` 通过，3 tests passed。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server model_route_from_runtime_projects_lime_provider_route --lib` 通过，1 test passed。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo check --manifest-path "lime-rs/Cargo.toml" -p app-server --lib` 通过。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" "src/lib/governance/appServerRuntimeBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，63 tests passed。
+- `verified`：`git diff --check` 覆盖本轮认领写集通过。
+- `current`：provider route / reasoning DTO 归属 `agent-runtime`，route 细节继续使用 `model-provider::ModelRoute`。
+- `compat`：`lime-agent::provider_configuration` 仍负责把 current DTO + compat 字段转换为 Aster Agent provider 注入；退出条件是 `agent-runtime::TurnExecutor` 或 `model-provider::RuntimeProvider` 接管实际 provider runtime 注入。
+- `dead`：provider route / reasoning DTO 不再由 `lime-agent::provider_configuration` 自行定义。
+- `next`：继续收 `lime-agent::provider_configuration` 内部 `AsterAgentState::configure_provider*` 委托；优先把 provider runtime creation/result context 接入 `agent-runtime`，让 `aster_state/provider_config.rs` 的 Aster 注入只剩最终 streaming adapter。
+
+## 2026-07-04 进度记录：runtime provider config DTO 上移到 model-provider
+
+- `completed`：`model-provider::runtime_provider` 新增 `RuntimeProviderProtocol` 与 `RuntimeProviderConfig`，和既有 `RuntimeProvider` trait 放在同一个 current owner。
+- `completed`：`lime-agent::credential_bridge/provider_config.rs` 降为 re-export 文件，只导出 `model_provider::runtime_provider::{RuntimeProviderConfig, RuntimeProviderProtocol}`，不再本地定义 DTO。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 新增 `runtime provider config DTO 必须归属 model-provider`，要求 DTO 存在于 `model-provider`，并禁止 `credential_bridge/provider_config.rs` 重新定义本地 DTO。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package model-provider --package lime-agent --package app-server --package agent-runtime` 通过。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p model-provider runtime_provider --lib` 通过，0 tests run / 18 filtered；用于编译验证 runtime provider DTO owner。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent credential_bridge --lib` 通过，19 tests passed。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo check --manifest-path "lime-rs/Cargo.toml" -p app-server --lib` 通过。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" "src/lib/governance/appServerRuntimeBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，64 tests passed。
+- `verified`：`git diff --check` 覆盖本轮认领写集通过。
+- `current`：runtime provider config/protocol DTO 归属 `model-provider`；provider execution trait 与 provider config DTO 已在同一 current crate。
+- `compat`：`lime-agent::credential_bridge` 仍负责 API Key Provider 选择、env var 投影和 Aster provider factory adapter；退出条件是 provider factory/env projection 迁入 current owner 或拆成更窄 vendor adapter。
+- `dead`：`credential_bridge/provider_config.rs` 本地 DTO 定义已删除；后续不得恢复。
+- `next`：继续收 `create_model_runtime_provider(...)` factory façade，把返回 `model-provider::RuntimeProvider` 的 provider factory owner 上移或下沉为 adapter trait 实现，减少 `lime-agent` 对 provider execution current path 的公开承载。
+
+## 2026-07-04 进度记录：runtime provider factory public 面收窄
+
+- `completed`：`create_model_runtime_provider(...)` 从 `lime-agent::credential_bridge` public re-export 收窄为 `pub(crate)`；crate 外不再能把 Aster-backed provider factory 当作 current API 调用。
+- `completed`：`credential_bridge/provider_factory.rs` 中的 `create_model_runtime_provider(...)` 同步降为 `pub(crate)`，只服务 `lime-agent` 内部 SubAgent scheduler 迁移期 provider 执行。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 将 public factory 守卫改为禁止 `pub use provider_factory::create_model_runtime_provider` 与 `pub async fn create_model_runtime_provider(...)`，并要求 factory 只能作为 crate 内 compat adapter 存在。
+- `current`：provider execution trait / DTO 仍以 `model-provider::runtime_provider::{RuntimeProvider, RuntimeProviderConfig, RuntimeProviderProtocol}` 为事实源。
+- `compat`：Aster-backed provider 创建仍在 `lime-agent::credential_bridge::provider_factory` 内部保留，退出条件是 SubAgent 和主 turn 都切到 Lime-owned runtime provider resolver / executor 后删除该 adapter。
+- `dead`：`create_model_runtime_provider(...)` 作为 `lime_agent` 根 API / crate 外公开 factory 已删除；后续不得恢复。
+- `next`：继续把 SubAgent scheduler 的 provider resolver 从 `credential_bridge` 迁到 current runtime owner，目标是让 `lime-agent` 只保留 API key selection adapter，不再承载 provider execution factory。
+
+## 2026-07-04 进度记录：SubAgent provider resolver 切到 current trait
+
+- `completed`：`model-provider::runtime_provider` 新增 `RuntimeProviderResolver` trait；provider 执行 trait、runtime config DTO 和 resolver 抽象归属同一个 current owner，避免 `agent-runtime` 继续膨胀为杂物层。
+- `completed`：`lime-agent::credential_bridge/provider_factory.rs` 新增 `CredentialRuntimeProviderResolver`，作为 Aster-backed compat resolver 实现；`create_model_runtime_provider(...)` 进一步降为模块私有 helper。
+- `completed`：`LimeSubAgentExecutor` 改为持有 `Arc<dyn RuntimeProviderResolver>`，执行任务时调用 `.resolve_provider(&provider_config)`；调度器不再 import 或直接调用 `create_model_runtime_provider(...)`。
+- `completed`：模块私有 helper 从 `create_model_runtime_provider(...)` 改名为 `create_aster_backed_runtime_provider(...)`，避免 Aster-backed adapter 继续占用 current 命名。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 要求 `model-provider` 提供 `RuntimeProviderResolver`，要求 SubAgent scheduler 通过 resolver trait 执行 provider，并禁止 scheduler 回流到 `create_model_runtime_provider(...)` / Aster Provider trait / Aster Message。
+- `guarded`：`create_model_runtime_provider(...)` 全面进入 dead 命名清单；后续不允许以 public、crate-visible 或 private helper 形式恢复。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package model-provider --package lime-agent` 通过。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p model-provider runtime_provider --lib` 通过，0 tests run / 18 filtered；用于编译验证 resolver trait owner。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent subagent_scheduler --lib` 通过，14 tests passed。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，43 tests passed。
+- `current`：SubAgent provider 执行依赖 `model-provider::RuntimeProviderResolver` + `RuntimeProvider`，调用层只组装 Lime-owned `ProviderRequest`。
+- `compat`：`CredentialRuntimeProviderResolver` 内部仍通过 Aster provider adapter 创建执行器；退出条件是 API Key Provider selection / provider env projection 拆成 current resolver 实现，或 runtime provider 原生实现替换 Aster adapter。
+- `dead`：SubAgent scheduler 直接调用 `create_model_runtime_provider(...)` 的路径已删除；`create_model_runtime_provider(...)` 名称本身也已从 production Rust 删除，后续不得恢复。
+- `next`：继续收 `credential_bridge/provider_env.rs` 和 provider factory 的 Aster env / model config projection，把可纯化策略迁到 `model-provider`，最终让 `credential_bridge` 只剩凭证选择 adapter。
+
+## 2026-07-04 进度记录：runtime protocol 映射归属 model-provider
+
+- `completed`：`model-provider::RuntimeProviderProtocol` 新增 `to_model_provider_protocol()`，把 runtime provider protocol 到 `ModelProviderProtocol` 的纯映射收回 DTO owner。
+- `completed`：`credential_bridge/provider_env.rs`、`provider_configuration.rs` 和 `provider_continuation_state.rs` 批量删除本地 `model_provider_protocol_from_runtime_protocol(...)` 重复 helper，统一调用 `RuntimeProviderProtocol::to_model_provider_protocol()`。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 要求 `model-provider` 提供 `to_model_provider_protocol()`，并禁止 provider env / provider configuration / provider continuation 重新定义 runtime protocol 到 model-provider protocol 的本地映射 helper。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package model-provider --package lime-agent` 通过。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p model-provider runtime_provider --lib` 通过，0 tests run / 18 filtered；用于编译验证 DTO owner。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent provider_configuration --lib` 通过，3 tests passed。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent provider_continuation_state --lib` 通过，6 tests passed。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent credential_bridge --lib` 通过，19 tests passed。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，43 tests passed。
+- `current`：runtime protocol 纯映射归属 `model-provider`。
+- `compat`：App Server `ProtocolKind` 到 `ModelProviderProtocol` 的映射仍留在 `provider_configuration.rs`，因为它是 App Server protocol 边界到 provider DTO 的 adapter；退出条件是 route resolver 完全输出 `model-provider::ModelRoute` 后删除该 protocol compat 字段。
+- `dead`：`lime-agent` 内本地 `model_provider_protocol_from_runtime_protocol(...)` helper 已删除；后续不得恢复。
+- `next`：继续收 `credential_bridge` 的 env var side effect 与 Aster `ModelConfig` adapter；可纯化 URL/header projection 才迁入 `model-provider`，实际 env 写入保持 compat adapter 边界直到原生 provider runtime 接管。
+
+## 2026-07-04 进度记录：Aster provider adapter 从 resolver 接线拆出
+
+- `completed`：新增 `lime-agent/src/credential_bridge/aster_provider_adapter.rs`，集中承接 Aster `Provider` trait、Aster message 转换、Aster `ProviderUsage` 映射、`ModelConfig` 构造与 `aster::providers::create(...)`。
+- `completed`：`credential_bridge/provider_factory.rs` 只保留 `CredentialRuntimeProviderResolver` 到 `create_aster_backed_runtime_provider(...)` 的接线，不再直接 import `aster::...`、不再持有 `AsterRuntimeProviderAdapter` 或 message/usage 转换逻辑。
+- `completed`：`credential_bridge.rs` 的 Aster provider re-export 改为来自 `aster_provider_adapter`，并修正文档说明：Aster provider 创建只允许留在该 compat adapter 内。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 要求 `aster_provider_adapter.rs` 存在并在 `credential_bridge.rs` 中注册，同时禁止 `provider_factory.rs` 重新出现 Aster import、`AsterRuntimeProviderAdapter`、`AsterMessage`、`ProviderUsage` 或 `build_aster_completion_input`。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package lime-agent` 通过。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent credential_bridge --lib` 通过，19 tests passed。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent subagent_scheduler --lib` 通过，14 tests passed。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，43 tests passed。
+- `current`：SubAgent / provider execution 调用面仍只依赖 `model-provider::RuntimeProviderResolver` 与 `RuntimeProvider`。
+- `compat`：`aster_provider_adapter.rs` 是当前唯一 Aster provider factory / message adapter 文件；退出条件是原生 runtime provider resolver 接管后删除该文件和 `create_aster_runtime_provider(...)` 调用。
+- `dead`：`provider_factory.rs` 内联 Aster adapter 已删除；后续不得恢复。
+- `next`：继续清 `aster_state/provider_config.rs` 对 `create_aster_runtime_provider(...)` 的调用，或者先把 env var side effect 与 provider model config projection 拆成可替换 adapter trait，最终让 `aster_provider_adapter.rs` 归零。
+
+## 2026-07-04 进度记录：aster_state provider 注入调用点归一
+
+- `completed`：`aster_state/provider_config.rs` 新增 `ProviderConfig::to_runtime_provider_config(...)` 与 `ProviderConfig::from_runtime_provider_config(...)`，消除 `ProviderConfig <-> RuntimeProviderConfig` 的重复字段拼装。
+- `completed`：`configure_provider(...)` 与 `configure_provider_from_pool(...)` 统一调用私有 `inject_aster_provider_for_session(...)`；`create_aster_runtime_provider(...)` 在该 compat 文件内只剩一个真实调用点。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 要求 `aster_state/provider_config.rs` 存在 `inject_aster_provider_for_session`，并计数 `create_aster_runtime_provider(...)` 调用点必须等于 1，防止 Aster provider 注入重新散开。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package lime-agent` 通过。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent aster_state --lib` 通过，16 tests passed。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent provider_configuration --lib` 通过，3 tests passed。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，43 tests passed。
+- `current`：调用方仍走 `configure_model_route_provider_for_session(...)` / `ModelRouteProviderConfiguration` current façade。
+- `compat`：Aster Agent `update_provider(...)` 注入仍存在，但已集中在 `inject_aster_provider_for_session(...)` 一个函数内；退出条件是 turn/runtime executor 原生 provider context 接管后删除该函数和 `create_aster_runtime_provider(...)`。
+- `dead`：`aster_state/provider_config.rs` 内多处直接 Aster provider factory 调用已删除；后续不得恢复。
+- `next`：继续把 `inject_aster_provider_for_session(...)` 的职责替换为 Lime-owned runtime provider context，或先把 `aster_provider_adapter.rs` 的 env / model config side effect 包成可替换 adapter，最终清空 Aster provider 注入。
+
+## 2026-07-04 进度记录：credential_bridge runtime DTO re-export 删除
+
+- `completed`：`lime-agent` 根 API 不再 re-export `RuntimeProviderConfig` / `RuntimeProviderProtocol`；调用方改为直接依赖 `model_provider::runtime_provider` current owner。
+- `completed`：删除 `lime-agent/src/credential_bridge/provider_config.rs`，`credential_bridge` 不再通过本地 re-export 文件承载 runtime provider DTO。
+- `completed`：`provider_configuration.rs`、`provider_continuation_state.rs`、`aster_state.rs`、`aster_state/provider_config.rs`、`subagent_scheduler.rs`、`provider_env.rs`、`provider_factory.rs` 和 `aster_provider_adapter.rs` 批量改为直接 import `model_provider::runtime_provider::{RuntimeProviderConfig, RuntimeProviderProtocol}`。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 要求 `credential_bridge/provider_config.rs` 不存在，并禁止 `credential_bridge` 重新定义或 re-export runtime provider DTO。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package lime-agent --package model-provider` 通过。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent credential_bridge --lib` 通过，19 tests passed。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，43 tests passed。
+- `current`：runtime provider config/protocol DTO 只归属 `model-provider`。
+- `compat`：`credential_bridge` 仍负责 API Key Provider selection 到 `RuntimeProviderConfig` 的 adapter 投影，以及 Aster provider env / factory side effect。
+- `dead`：`credential_bridge/provider_config.rs` 已删除；后续不得恢复。
+- `next`：继续收 `credential_bridge` 对 provider config 的 adapter 投影，优先把 provider selection 输出变成可注入的 current resolver 输入，减少 `credential_bridge` 作为 provider runtime 中心的职责。
+
+## 2026-07-04 进度记录：credential runtime config 投影拆出
+
+- `completed`：新增 `lime-agent/src/credential_bridge/runtime_config_projection.rs`，集中承接 `RuntimeProviderCredential -> model_provider::runtime_provider::RuntimeProviderConfig` 的字段投影。
+- `completed`：`credential_bridge.rs` 主文件不再直接 match `RuntimeCredentialData::*` 或拼 `RuntimeProviderConfig` 字段；主文件只负责选择凭证、解析 custom provider hint、记录 usage/health。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 要求 `runtime_config_projection.rs` 存在，并禁止 `credential_bridge.rs` 重新内联 `RuntimeCredentialData::*` 分支。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package lime-agent` 通过。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent credential_bridge --lib` 通过，19 tests passed。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，43 tests passed。
+- `current`：runtime provider config DTO 仍归属 `model-provider`。
+- `compat`：投影结果仍使用 Aster provider name 映射，因为底层 `aster_provider_adapter.rs` 尚未删除；退出条件是原生 provider resolver 不再需要 Aster provider name。
+- `dead`：`credential_bridge.rs` 内联 credential DTO 投影已删除；后续不得恢复。
+- `next`：继续把 Aster provider name 映射隔离到 `aster_provider_adapter` 或原生 provider resolver，减少 `runtime_config_projection.rs` 对 Aster 命名的依赖。
+
+## 2026-07-04 进度记录：runtime config 投影隐藏 Aster provider 映射命名
+
+- `completed`：`provider_mapping.rs` 增加 `resolve_runtime_provider_name(...)`，作为 runtime config 投影侧的语义入口；底层暂时仍委托 Aster provider name 映射。
+- `completed`：`runtime_config_projection.rs` 不再直接调用 `map_provider_type_to_aster_with_api_type(...)`，改为调用 `resolve_runtime_provider_name(...)`。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 禁止 `runtime_config_projection.rs` 直接调用 `map_provider_type_to_aster(...)` / `map_provider_type_to_aster_with_api_type(...)`，并要求使用 `resolve_runtime_provider_name(...)`。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package lime-agent` 通过。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent credential_bridge --lib` 通过，19 tests passed。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，43 tests passed。
+- `current`：runtime config projection 对外语义是 runtime provider name。
+- `compat`：`resolve_runtime_provider_name(...)` 内部仍使用 Aster provider naming；退出条件是原生 provider resolver 上线后替换该映射或删除该 wrapper。
+- `dead`：runtime config projection 直接依赖 Aster provider mapping 名称已删除；后续不得恢复。
+- `next`：继续把 `resolve_runtime_provider_name(...)` 内部从 Aster provider naming 迁到 model-provider provider catalog / route metadata，最终让 `provider_mapping.rs` 的 Aster 命名只服务 `aster_provider_adapter.rs`。
+
+## 2026-07-04 进度记录：root orphan tests 与 aster_state provider compat 删除
+
+- `completed`：删除 `aster_state/provider_config.rs`；`AsterAgentState` 不再持有 `ProviderConfig` / provider configured cache / Aster provider 注入方法，只保留状态编排与 crate 内 `credential_bridge()` 只读访问。
+- `completed`：`real_web_search_policy.rs` 改走 `run_agent_turn_with_policy(...)` + `AgentTurnProviderConfiguration`；真实主 turn 测试不再手动配置 Aster Agent 全局 provider。
+- `completed`：`real_web_search_preflight_short_input.rs` 改走 `configure_model_route_provider_for_session(...)` / `provider_configuration_from_model_selection(...)` public façade，并改用 `AgentTurnContext` current DTO。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 禁止恢复 `aster_state/provider_config.rs`、`ProviderConfig`、`current_provider_config`、`AsterAgentState::configure_provider*` 旧注入面，以及 `ProviderConfigurationRequest` 调用方。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package lime-agent` 通过。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent provider_configuration --lib` 通过，3 tests passed。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib` 通过，60 tests passed。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent aster_state --lib` 通过，13 tests passed。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p model-provider runtime_provider --lib` 通过，1 test passed。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent --test real_web_search_policy --no-run` 通过。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent --test real_web_search_preflight_short_input --no-run` 通过。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，46 tests passed。
+- `current`：provider 配置调用事实源是 `ModelRouteProviderConfiguration` / `AgentTurnProviderConfiguration` public façade；`AsterAgentState` 只保留 Agent 状态、取消、中断、tool/MCP/session 编排。
+- `compat`：`create_aster_runtime_provider(...)` 仍由 `provider_configuration.rs` 调用，用于给 `Agent::reply_with_provider(...)` 提供 pinned `Arc<dyn aster::Provider>`；由于 `model-provider::RuntimeProvider` 当前只有非流式 `complete(...)`，尚不能承接主 turn 工具/流式 execution。
+- `dead`：`aster_state/provider_config.rs`、`ProviderConfig`、`current_provider_config`、调用方可见 `ProviderConfigurationRequest` 均不得恢复。
+- `next`：为 `model-provider::RuntimeProvider` 增加 current 流式/工具执行抽象或在 `agent-runtime::TurnExecutor` 引入 provider stream context，然后把 `request_tool_policy` 的 pinned provider 从 `Arc<dyn aster::Provider>` 改成 Lime-owned provider trait；完成后删除 `create_aster_runtime_provider(...)` 和 `credential_bridge/aster_provider_adapter.rs` 的 Aster provider factory。
+
+## 2026-07-04 进度记录：session provider handle 收窄 Aster factory 暴露
+
+- `completed`：`credential_bridge::create_aster_runtime_provider(...)` crate-visible factory 删除，替换为 `create_session_provider_handle(...) -> SessionProviderHandle`；调用方不再直接 import Aster factory 名称。
+- `completed`：`provider_configuration.rs` 的 `ConfiguredSessionProvider` 改为持有 `SessionProviderHandle`，只在 `install_provider_for_session(...)` 和当前 Aster reply loop 调用点通过 `aster_provider()` 暂时桥回 `Arc<dyn aster::Provider>`。
+- `completed`：`request_tool_policy::stream_message_reply_with_policy_and_provider(...)` 的参数从裸 `Arc<dyn aster::Provider>` 改为 `SessionProviderHandle`；`turn_execution.rs` 与 `direct_text_generation.rs` 只传 handle，不再自行解包 Aster provider。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 禁止 `pub(crate) use aster_provider_adapter::create_aster_runtime_provider` / `pub(crate) async fn create_aster_runtime_provider(...)` 回流，并要求 `SessionProviderHandle` / `create_session_provider_handle(...)` 存在。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package lime-agent` 通过。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent provider_configuration --lib` 通过，3 tests passed。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib` 通过，60 tests passed。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent aster_state --lib` 通过，13 tests passed。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent --test real_web_search_policy --no-run` 通过。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent --test real_web_search_preflight_short_input --no-run` 通过。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，46 tests passed。
+- `current`：provider 配置与 request_tool_policy 调用面只看到 `SessionProviderHandle`，不再看到 `create_aster_runtime_provider(...)` 或裸 `Arc<dyn aster::Provider>`。
+- `compat`：`SessionProviderHandle::aster_provider()` 仍因 Aster Agent reply loop 需要 `Provider::stream_with_model(...)` 暂时存在；退出条件是 current provider stream/tool delta 抽象接管 `request_tool_policy` 内部 reply loop。
+- `dead`：`create_aster_runtime_provider(...)` 作为 crate-visible session provider factory 已删除；后续不得恢复。
+- `next`：扩展 `model-provider::RuntimeProvider` 的 streaming/tool request 能力，或在 `agent-runtime` 中实现 Lime-owned turn executor，随后把 `stream_message_reply_with_policy_and_provider(...)` 的参数从 `Arc<dyn aster::Provider>` 改为 current provider handle 并删除 `aster_provider()`。
+
+## 2026-07-04 进度记录：SessionProviderHandle 禁止外泄裸 Aster Provider
+
+- `completed`：`SessionProviderHandle::aster_provider()` 删除；handle 改为提供 `reply_stream_with_agent(...)`，裸 `Arc<dyn aster::Provider>` 只留在 `credential_bridge/aster_provider_adapter.rs` 内部。
+- `completed`：`request_tool_policy.rs` 不再 import `aster::providers::base::Provider`，`stream_agent_reply_once(...)` 和 `stream_message_reply_with_policy_with_options(...)` 均只接收 `Option<SessionProviderHandle>`。
+- `completed`：`provider_configuration.rs` 不再调用 `Agent::update_provider(...)`，只解析 `RuntimeProviderConfig` 并创建 `SessionProviderHandle`；旧 Aster session provider config 持久化写回已删除。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 禁止恢复 `SessionProviderHandle::aster_provider()`、`request_tool_policy.rs` 直接持有 `Option<Arc<dyn Provider>>` / `use aster::providers::base::Provider`，并禁止 `provider_configuration.rs` 重新调用 `.update_provider(...)`。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package lime-agent` 通过。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent provider_configuration --lib` 通过，3 tests passed。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent credential_bridge --lib` 通过，30 tests passed。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib` 通过，60 tests passed。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，48 tests passed。
+- `current`：provider 配置调用面只暴露 Lime-owned `SessionProviderHandle`。
+- `compat`：`SessionProviderHandle` 内部仍通过 Aster `Agent::reply_with_provider(...)` 执行主 turn stream；退出条件是 `model-provider` / `agent-runtime` 提供 current stream + tool delta executor 后删除 `aster_provider_adapter.rs`。
+- `dead`：裸 Aster Provider 从 `provider_configuration.rs` / `request_tool_policy.rs` 外泄路径已删除；后续不得恢复。
+- `next`：把 `CredentialRuntimeProviderResolver` 的命名降级为显式 Aster compat，或直接用 `lime-providers` 实现 current `RuntimeProviderResolver` 后删除 `create_aster_backed_runtime_provider(...)`。
+
+## 2026-07-04 进度记录：Aster live provider tests 删除
+
+- `completed`：删除 `lime-rs/crates/agent/tests/real_codex_tool_events.rs`、`real_web_search_policy.rs`、`real_web_search_preflight_short_input.rs`；这些 ignored live tests 依赖 `LIME_REAL_API_TEST` 并把 Aster provider / Aster reply loop 当正向验证，不再作为无用户阶段的迁移证据保留。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 禁止恢复上述文件，并禁止 `lime-rs/crates/agent/tests/**` 出现 `LIME_REAL_API_TEST`、`PROXYCAST_REAL_API_TEST`、`真实联网测试`、`test_real_codex`、`test_real_web_search`。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package lime-agent` 通过。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent provider_configuration --lib` 通过，3 tests passed。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib` 通过，60 tests passed。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent --tests --no-run` 通过，integration test 目标只剩 `legacy_permission_surfaces`、`protocol_fact_source_guard`、`windows_shell_runtime`。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，49 tests passed。
+- `current`：真实 provider / live smoke 后续必须走 App Server / current provider runtime 链。
+- `dead`：`lime-agent` 里的 Aster live provider tests 已删除；后续不得恢复。
+- `next`：继续拆 `credential_bridge/aster_provider_adapter.rs`，优先处理 misleading 的 `CredentialRuntimeProviderResolver` 命名与 `create_aster_backed_runtime_provider(...)`。
+
+## 2026-07-04 进度记录：Aster-backed runtime provider resolver 显式降级
+
+- `completed`：`CredentialRuntimeProviderResolver` 改名为 `AsterCompatRuntimeProviderResolver`，避免把内部仍调用 `create_aster_backed_runtime_provider(...)` 的 resolver 伪装成 current provider runtime。
+- `completed`：`subagent_scheduler.rs` 默认 resolver 改为注入 `AsterCompatRuntimeProviderResolver`；这条路径仍通过 `model-provider::RuntimeProviderResolver` trait 调用，调用方保持 current 抽象。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 要求 `credential_bridge.rs` / `provider_factory.rs` 使用 `AsterCompatRuntimeProviderResolver`，并禁止 `CredentialRuntimeProviderResolver` 命名回流。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package lime-agent` 通过。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent credential_bridge --lib` 通过，30 tests passed。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent subagent_scheduler --lib` 通过，14 tests passed。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，49 tests passed。
+- `current`：调用侧事实源是 `model-provider::RuntimeProviderResolver` / `RuntimeProvider` trait。
+- `compat`：默认 resolver 的具体实现仍是 Aster-backed，且只允许以 `AsterCompat*` 命名出现；退出条件是 `lime-providers` 或 App Server provider runtime 实现 current resolver 后替换并删除该类型。
+- `dead`：`CredentialRuntimeProviderResolver` 作为 current-looking 名称已删除；后续不得恢复。
+- `next`：评估 `lime-providers::{OpenAICustomProvider, ClaudeCustomProvider, CodexProvider}` 是否可直接实现 `RuntimeProvider` 非流式 `complete(...)`，先替换 subagent scheduler 的 resolver，再继续迁主 turn stream。
+
+## 2026-07-04 进度记录：非流式 RuntimeProvider 切到 lime-providers HTTP resolver
+
+- `completed`：`credential_bridge/provider_factory.rs` 改为 `HttpRuntimeProviderResolver`，默认通过 `lime-providers::{OpenAICustomProvider, ClaudeCustomProvider}` 执行 `model-provider::RuntimeProvider::complete(...)`，不再调用 Aster Provider trait。
+- `completed`：`subagent_scheduler.rs` 默认 resolver 从 `AsterCompatRuntimeProviderResolver` 切到 `HttpRuntimeProviderResolver`；SubAgent 非流式 provider execution 主链先脱离 Aster-backed adapter。
+- `completed`：删除 `credential_bridge/aster_provider_adapter.rs` 中的 `create_aster_backed_runtime_provider(...)`、`AsterRuntimeProviderAdapter`、`build_aster_completion_input(...)`、Aster `ProviderUsage -> ProviderResponse` 映射和对应测试；该文件只保留主 turn stream 所需 `SessionProviderHandle` 和 Aster provider handle 创建。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 禁止 `create_aster_backed_runtime_provider`、`AsterCompatRuntimeProviderResolver`、`AsterRuntimeProviderAdapter`、`ProviderUsage`、`build_aster_completion_input`、`.complete(&system_prompt` 回流到 provider factory / credential bridge 主文件。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package lime-agent` 通过。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent credential_bridge --lib` 通过，30 tests passed。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent subagent_scheduler --lib` 通过，14 tests passed。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib` 通过，60 tests passed。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，49 tests passed。
+- `verified`：`git diff --check -- ...` 覆盖本轮 provider / request_tool_policy / governance / roadmap 写集，通过。
+- `current`：非流式 provider resolver 事实源是 `model-provider::RuntimeProvider` + `lime-providers` HTTP implementations。
+- `compat`：主 turn stream 仍需要 `SessionProviderHandle` 内部调用 Aster `Agent::reply_with_provider(...)`；`credential_bridge/provider_safety.rs` 仍是 Aster Provider wrapper。
+- `dead`：Aster-backed 非流式 `RuntimeProvider` adapter 已删除；后续不得恢复。
+- `next`：继续迁主 turn stream：要么给 `model-provider` 增加 stream/tool delta trait 并由 `lime-providers` 实现，要么在 `agent-runtime` 实现 Lime-owned turn executor 后删除 `SessionProviderHandle` / `aster_provider_adapter.rs` / `provider_safety.rs`。
+
+## 2026-07-04 进度记录：Aster SubAgentScheduler adapter 删除
+
+- `completed`：删除 `lime-rs/crates/agent/src/subagent_scheduler.rs`，该文件仅由 `lime-agent` 自身 re-export 和单元测试引用，未发现 App Server、前端或其他 current crate 消费者；保留它会继续把 Aster `SubAgentScheduler` / `SubAgentExecutor` trait 当作现役扩展面。
+- `completed`：`lime-rs/crates/agent/src/lib.rs` 移除 `pub mod subagent_scheduler` 与 `LimeScheduler` / `LimeSubAgentExecutor` / `SchedulerEventEmitter` / `SubAgentProgressEvent` / `SubAgentRole` re-export，crate 根不再公开旧 Aster subagent 调度器适配 API。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 将原“subagent provider 执行”正向守卫改为删除守卫，禁止恢复 `subagent_scheduler.rs`，并禁止 `lime-agent` 根 API 重新导出上述旧类型。
+- `current`：SubAgent / team runtime 后续只能向 App Server / RuntimeCore / `agent-runtime` current turn executor 与 projection 收敛。
+- `dead`：Aster `SubAgentScheduler` adapter、对应 executor wrapper 和进度事件 DTO 已删除；后续不得恢复。
+- `next`：继续迁主 turn stream，优先清 `SessionProviderHandle` / `aster_provider_adapter.rs` / `provider_safety.rs`，或先把 App Server runtime tool bridge 从 `runtime_facade` 的 Aster tool type re-export 迁到 current tool-runtime facade。
+
+## 2026-07-04 进度记录：无消费者 provider_factory 删除
+
+- `completed`：删除 `lime-rs/crates/agent/src/credential_bridge/provider_factory.rs`；删除 `subagent_scheduler.rs` 后该 resolver 只剩自身测试和治理守卫引用，没有 production 调用方。
+- `completed`：`credential_bridge.rs` 移除 `mod provider_factory` 与 `HttpRuntimeProviderResolver` re-export；`lime-agent` 同步移除 `lime-providers.workspace = true` 依赖，避免保留假 current provider execution 依赖。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 将 `provider_factory.rs` 改为删除守卫，禁止恢复 `mod provider_factory`、`provider_factory::` 和 `HttpRuntimeProviderResolver`。
+- `current`：`RuntimeProviderConfig` / `RuntimeProviderProtocol` 仍归属 `model-provider`，只作为 provider 配置 DTO 使用。
+- `compat`：主 turn stream 仍通过 `credential_bridge/aster_provider_adapter.rs::SessionProviderHandle` 调 Aster `Agent::reply_with_provider(...)`。
+- `dead`：无消费者 HTTP `RuntimeProviderResolver`、对应 OpenAI chat 请求转换和响应解析测试已删除；后续不得恢复。
+- `next`：继续向主 turn stream 动刀，目标是删除 `SessionProviderHandle` / `aster_provider_adapter.rs` / `provider_safety.rs`，或先拆 App Server 对 `runtime_facade` Aster tool re-export 的依赖。
+
+## 2026-07-04 进度记录：无消费者 RuntimeProvider execution trait 删除
+
+- `completed`：删除 `model-provider::runtime_provider::{RuntimeProvider, RuntimeProviderResolver}`；删除 `provider_factory.rs` 后这两个 trait 没有 production 实现或调用方，只会制造一条假 current provider execution 主线。
+- `completed`：`model-provider` 移除 `async-trait` 依赖；`runtime_provider.rs` 只保留当前实际消费的 `RuntimeProviderProtocol`、`RuntimeProviderConfig` 和 `message_is_non_retryable_provider_rejection(...)`。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 将 runtime provider 守卫收窄为 config/protocol/retry 判定，并禁止恢复 `pub trait RuntimeProvider`、`pub trait RuntimeProviderResolver`、`async fn complete(...)` 和 `resolve_provider(...)`。
+- `current`：provider 配置 DTO 仍归属 `model-provider`；stream diagnostics 的 provider rejection 判定也继续归属该 crate。
+- `dead`：无消费者 runtime provider execution trait 已删除；后续只有在真实 current executor 落地并有生产调用方时，才允许重新定义执行抽象。
+- `next`：继续清主 turn stream 的 Aster `SessionProviderHandle`，或先把 App Server native tool bridge 从 `runtime_facade` Aster type re-export 迁出。
+
+## 2026-07-04 进度记录：无消费者 ProviderRouter DTO 删除
+
+- `completed`：删除 `model-provider/src/router.rs` 与 `pub mod router`；该模块只剩自身测试引用，曾服务已删除的 subagent provider execution / RuntimeProvider adapter，不再是 current 主链事实源。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 禁止恢复 `model-provider/router.rs`，并禁止 `model-provider` 重新导出 `ProviderRequest` / `ProviderResponse` / `ProviderRouter` / `StreamResponse` / `StreamChunk` 这组无消费者抽象。
+- `current`：`model-provider` 当前保留 canonical model、provider safety、`RuntimeProviderConfig` / `RuntimeProviderProtocol` 与 `ModelRoute` 这些仍有生产消费者的事实源。
+- `dead`：SubAgent provider execution 遗留 DTO 与 router trait 已删除；后续不得为了历史计划恢复。
+- `next`：继续评估主 turn stream：优先迁 `runtime_facade` App Server native tool bridge，或清 `credential_bridge/aster_provider_adapter.rs` 的 Aster Provider wrapper。
+
+## 2026-07-04 进度记录：model-provider 无消费者 catalog 抽象删除
+
+- `completed`：删除 `model-provider::ModelTaskRequest`、`ModelProviderCatalog`、`ModelProviderError`、`ModelProviderResult`；这些定义只在 `model-provider/src/lib.rs` 内自引用，没有生产消费者。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 禁止恢复上述无消费者 catalog 抽象；模型任务契约继续归属 `app-server-protocol` / `runtime-core`，`model-provider` 只保留有消费者的 `ModelRoute` / `ModelProviderProtocol`。
+- `current`：`ModelRoute` 和 `ModelProviderProtocol` 仍被 `agent-runtime` 与 App Server runtime backend 使用。
+- `dead`：`model-provider` 自建 `ModelTaskRequest` / catalog trait 已删除，避免和 App Server protocol 的模型任务 DTO 并存。
+- `next`：继续清 Aster 主 turn stream 或迁出 `runtime_facade` 的 App Server native tool bridge Aster type re-export。
+
+## 2026-07-04 进度记录：agent-runtime 无消费者执行骨架删除
+
+- `completed`：删除 `agent-runtime::AgentRuntime`、`AgentRuntimeCapabilities`、`StartTurnRequest`、`StartTurnAccepted`、`AgentRuntimeError`、`AgentRuntimeResult`，以及 `turn_executor.rs` 中未被生产代码消费的 `TurnExecutor` / `ExecuteTurn*` / `QueueSubagent*` / `HandleAction*` 执行骨架。
+- `completed`：`agent-runtime` 移除 `async-trait`、`thread-store`、`tool-runtime` 和 `tokio` dev-dependency；该 crate 当前只保留真实消费者使用的 `ask` 纯逻辑和 `TurnProviderConfiguration` provider route DTO。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 禁止恢复无实现/无调用方的 `AgentRuntime` / `TurnExecutor` 执行骨架；后续只有在 App Server / RuntimeCore 真实接入生产 executor 时才允许重建。
+- `current`：provider route / reasoning DTO 仍归属 `agent-runtime::turn_executor::TurnProviderConfiguration`。
+- `dead`：空 runtime/executor trait、subagent/action execution DTO 已删除，不再伪装为已迁好的 current runtime。
+- `next`：继续清 Aster 主 turn stream 或迁出 `runtime_facade` 的 App Server native tool bridge Aster type re-export。
+
+## 2026-07-04 进度记录：tool-runtime 无消费者执行骨架删除
+
+- `completed`：删除 `tool-runtime/src/lib.rs` 顶层 `ToolRuntime`、`ToolDefinition`、`ToolInvocation`、`ToolPermissionDecision`、`ToolOutcome*`、`ToolRuntimeError`、`ToolRuntimeResult`；这些定义只在本文件内自引用，没有 production 消费者。
+- `completed`：`tool-runtime` 现在只公开真实被 `lime-agent` 消费的 `mcp_notification`、`tool_io`、`tool_result` 三个 current 工具投影模块。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 禁止恢复无实现/无调用方的 `ToolRuntime` 执行 trait 和配套 DTO，同时要求保留三个真实 current 模块。
+- `current`：MCP notification 投影、tool I/O offload、tool result extraction 仍归属 `tool-runtime`。
+- `dead`：空 ToolRuntime execution trait 和 invocation/outcome DTO 已删除，避免与 App Server native tool bridge / Aster tool facade 并行制造第三套工具运行时语义。
+- `next`：继续迁出 `runtime_facade` 的 App Server native tool bridge Aster type re-export，或继续清 `credential_bridge/aster_provider_adapter.rs` 主 turn stream compat。
+
+## 2026-07-04 进度记录：AsterAgentState interrupt marker 旁路删除
+
+- `completed`：删除 `RuntimeInterruptMarker`、`interrupt_markers` 字段、`record_interrupt_request(...)`、`get_interrupt_marker(...)`、`clear_interrupt_marker(...)` 和对应生命周期测试。
+- `completed`：`create_cancel_token(...)` 不再读取 marker 做预取消；真实取消继续由 `cancel_tokens` / `cancel_session(...)` 承接。
+- `completed`：`lime-agent` 根 API 移除 `RuntimeInterruptMarker` re-export。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 禁止恢复 interrupt marker 结构体、字段和方法，并声明取消事实源只能走 `cancel_tokens` / `cancel_session`。
+- `current`：App Server runtime cancel 仍通过 `AsterAgentState::create_cancel_token(...)`、`cancel_session(...)`、`remove_cancel_token(...)` 驱动正在执行的 turn / skill。
+- `dead`：旧 runtime 诊断 interrupt marker 旁路没有 production 消费者，已删除；后续不得作为 compat 诊断状态恢复。
+- `next`：继续避让当前并行持有的 App Server runtime_backend 热区；可继续收 `aster_state.rs` 内零引用的小面，或等待 runtime_backend 写集释放后迁出 `runtime_facade` 的 Aster tool re-export。
+
+## 2026-07-04 进度记录：AsterAgentState 无消费者 public wrapper 删除
+
+- `completed`：删除 `AsterAgentState::reload_lime_skills(...)`、`with_agent(...)`、`build_project_system_prompt(...)`、`register_mcp_bridge(...)` 和只覆盖 wrapper 的 `test_reload_lime_skills_no_panic`。
+- `current`：Skills reload / project prompt helpers 继续由 `aster_state_support` 直接 re-export；只读 Agent 访问调用方继续使用更明确的 `get_agent_arc(...)`；MCP bridge 生产入口只保留批量 `sync_mcp_bridges(...)`。
+- `compat`：`AsterAgentState` 整体仍是 App Server runtime_backend 的 Aster Agent 承载层，不能整文件删除。
+- `dead`：无消费者 public wrapper 已删除，避免 `AsterAgentState` 继续扩展成杂项 facade。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 禁止恢复上述 wrapper，并要求对应 current owner 保持分离。
+- `next`：继续审 `aster_state.rs` 内 remaining public API；真实消费者存在的 `with_agent_mut(...)`、`get_agent_arc(...)`、native tool/action/cancel/MCP 批量同步路径暂不删除。
+
+## 2026-07-04 进度记录：aster_state_support 零引用 public helper 删除
+
+- `completed`：删除 `aster_state_support::build_project_system_prompt(...)` 和 `message_helpers::{user_text, assistant_text}`，并移除 `aster_state.rs` / `lib.rs` 的 re-export。
+- `current`：`aster_state_support` 只保留仍有消费者的 Skills 加载、Agent identity/tool config 和 `SessionConfigBuilder`。
+- `dead`：项目上下文 prompt wrapper 与消息构造 helper 没有 production 消费者，不应作为 `lime-agent` 根 API 继续暴露。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 禁止恢复这些 helper 和 re-export。
+- `next`：继续把 Aster state/support API 面收缩到真实消费者；`runtime_facade` 和 App Server native tool bridge 等热区等待并行写集释放后再迁。
+
+## 2026-07-04 进度记录：workspace-local skill loader 假入口删除
+
+- `completed`：删除 `aster_state_support::load_workspace_lime_skills(...)` 和 `lime-agent` 根 re-export；搜索结果显示该入口没有 production 消费者。
+- `current`：Skills 注册仍由 `reload_lime_skills(...)` / `init_agent_with_db(...)` 走统一 skill roots 解析；workspace skill 产品入口不应直接暴露 Aster global_registry helper。
+- `dead`：workspace-local skill loader 作为单独 public API 已删除，避免让 App Server 或插件运行时绕过 current runtime enable / skill policy 链。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 禁止恢复 `load_workspace_lime_skills`。
+- `next`：继续清零引用 Aster support API；有真实消费者的 `reload_lime_skills(...)` 暂保留。
+
+## 2026-07-04 进度记录：CredentialBridge no-op provider health API 删除
+
+- `completed`：删除 `CredentialBridge::mark_healthy(...)`、`mark_unhealthy(...)` 和零引用 `CredentialBridgeError::ProviderExecutionFailed`。
+- `completed`：删除 `turn_execution.rs` 中成功 turn 后调用 `mark_healthy(...)` 的 no-op 写回块；该路径对 current runtime API key 只返回 `Ok(())`，对旧 credential 只写 debug 日志，不再作为健康事实源保留。
+- `current`：API key 使用次数仍由 `CredentialBridge::record_usage(...)` 写回；真正 provider health 后续应归属 App Server / model provider current owner，而不是 Aster compat bridge。
+- `dead`：CredentialBridge provider health API 是迁移残留的假 current surface，已删除。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 禁止恢复 no-op health 方法、调用点和相关日志/错误枚举。
+- `next`：继续推进主 turn stream 退场，目标仍是替换 `SessionProviderHandle` / `credential_bridge/aster_provider_adapter.rs` / `provider_safety.rs`；App Server runtime_backend 热区释放前优先做 lime-agent 内部可验证收缩。
+
+## 2026-07-04 进度记录：Aster 命名 runtime state API 退场
+
+- `completed`：`AsterAgentState` 对外类型改为 `AgentRuntimeState`，并同步 `lime-agent` 与 App Server runtime backend 的真实消费者；不保留 `type AsterAgentState = ...` alias。
+- `completed`：`SkillWorkflowExecution` / `SkillPromptExecution` 的 public 字段从 `aster_state` 改为 `runtime_state`，Knowledge Builder skill 调用点同步迁移。
+- `completed`：`aster_state.rs` / `aster_state_support.rs` 文件迁名为 `runtime_state.rs` / `runtime_state_support.rs`；`lime-agent` 根模块声明和 re-export 同步迁到 `runtime_state*`，旧 Aster 命名文件退出构建图。
+- `completed`：删除零引用 `CredentialBridgeError::UnsupportedCredentialType` 和 `LimeSessionStore::load_extension_data_sync(...)`，避免 API 面收缩后留下新的 dead warning。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 禁止恢复 `AsterAgentState`、public `aster_state` 字段、`aster_state.rs` / `aster_state_support.rs` 文件、`credential_bridge` public re-export 和无消费者 extension data helper。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package lime-agent --package app-server --package tool-runtime --package model-provider` 通过。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent --lib` 通过。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo check --manifest-path "lime-rs/Cargo.toml" -p app-server --lib` 通过。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent credential_bridge --lib` 通过，27 tests passed。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent session_store --lib` 通过，58 tests passed。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，51 tests passed。
+- `current`：对外 runtime state 入口是 `AgentRuntimeState`；Skills / session config 支撑入口归属 `runtime_state_support`。
+- `compat`：`AgentRuntimeState` 内部仍持有 Aster `Agent`，并继续承载 App Server 主 turn、native tool、action response、cancel、MCP bridge；退出条件是 current turn executor / provider stream / tool bridge 接管后删除内部 Aster `Agent`。
+- `dead`：`AsterAgentState` public API、`aster_state*` current owner 文件和 public `aster_state` 字段已退场，后续不得恢复。
+- `next`：继续迁出 `runtime_facade` 的 App Server native tool bridge Aster type re-export，或继续向主 turn stream 的 `SessionProviderHandle` / `credential_bridge/aster_provider_adapter.rs` 动刀。
+
+## 2026-07-04 进度记录：App Server AsterBackend public facade 改名
+
+- `completed`：`app-server` feature-gated public facade 从 `AsterBackend*` 改为 `RuntimeBackendAdapter` / `RuntimeBackendHost` / `RuntimeBackend*Request|Result` / `RuntimeBackendProcessControlCapabilities`；不保留旧类型 alias。
+- `completed`：`app-server/src/aster_backend.rs` 物理迁名为 `runtime_backend_adapter.rs`，`lib.rs` re-export 和 `runtime_factory.rs` 调用点同步改为 current 命名。
+- `completed`：host-backed 测试工厂从 `aster_runtime_core(...)` / `aster_app_server(...)` 改为 `runtime_adapter_core(...)` / `runtime_adapter_app_server(...)`，避免和本地 current `runtime_backend_core()` / `runtime_app_server()` 混淆。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 禁止恢复 `AsterBackend*`、`mod aster_backend`、`aster_backend::`、`aster_runtime_core` / `aster_app_server` 和旧文件 `app-server/src/aster_backend.rs`。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package app-server` 通过。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo check --manifest-path "lime-rs/Cargo.toml" -p app-server --lib --features aster-backend` 通过。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，52 tests passed。
+- `current`：App Server public backend adapter 以 `RuntimeBackend*` 命名，仍服务 ExecutionBackend host adapter contract。
+- `compat`：Cargo feature 名 `aster-backend` 和 CLI 负向测试 `--backend aster` 暂保留，前者属于既有 feature gate，后者只验证 standalone binary 拒绝旧模式；退出条件是后续统一 feature 名并同步 Cargo / CI / 测试。
+- `dead`：`AsterBackend*` public facade 和 `aster_backend.rs` current owner 文件已删除；后续不得恢复。
+- `next`：继续处理剩余 `runtime_facade` Aster tool type re-export，或把 `initialize_aster_runtime` / `restore_aster_runtime_queued_turns` 这组根 API 改成 current 命名并保留 Aster 初始化为内部实现细节。
+
+## 2026-07-04 进度记录：Agent runtime 初始化根 API 去 Aster 命名
+
+- `completed`：`lime-agent` 根 API 从 `initialize_aster_runtime(...)` 改为 `initialize_agent_runtime(...)`，App Server `agent_runtime_registry` 和 runtime backend 测试调用点同步迁移。
+- `completed`：`restore_aster_runtime_queued_turns(...)` 没有任何生产消费者；先从 crate 根 re-export 删除，随后删除函数本体，避免继续保留 dead warning。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 禁止 `initialize_aster_runtime` / `restore_aster_runtime_queued_turns` 回流到 `lime-agent` 根 API。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package lime-agent --package app-server` 通过。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent --lib` 通过，无 warning。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo check --manifest-path "lime-rs/Cargo.toml" -p app-server --lib --features aster-backend` 通过。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，52 tests passed。
+- `current`：外部初始化入口是 `initialize_agent_runtime(...)`；Aster 目录 / shared store 初始化只是内部 compat 实现细节。
+- `dead`：`initialize_aster_runtime(...)` public API 与 unused queued-turn restore helper 已退场，后续不得恢复。
+- `next`：继续处理 `runtime_facade` 的 Aster tool type re-export，或继续把 `aster_runtime_support` 内部函数逐步改成 current 命名并压缩到 adapter 边界。
+
+## 2026-07-04 进度记录：runtime_support 内部入口去 Aster 命名
+
+- `completed`：`aster_runtime_support.rs` 物理迁名为 `runtime_support.rs`，`lime-agent` 模块声明和调用方同步改为 `runtime_support`。
+- `completed`：内部 helper 从 `ensure_aster_runtime_dirs` / `require_aster_runtime_store` / `load_aster_runtime_snapshot` / `list_aster_runtime_queued_turns` 等改为 `ensure_runtime_dirs` / `require_runtime_store` / `load_runtime_snapshot` / `list_runtime_queued_turns`；底层 store helper 明确命名为 `remove_runtime_queued_turn_from_store(...)`，避免和对外 queue API 冲突。
+- `completed`：`runtime_state`、`runtime_queue`、`subagent_control`、`session_store_runtime_detail` 的调用点同步迁移到 current helper 名称。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 禁止恢复 `aster_runtime_support.rs` 文件和 `pub mod aster_runtime_support`。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package lime-agent --package app-server` 通过。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent --lib` 通过。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo check --manifest-path "lime-rs/Cargo.toml" -p app-server --lib --features aster-backend` 通过。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，52 tests passed。
+- `current`：Agent runtime support 入口现在是 `runtime_support`；Aster shared runtime store 只作为该模块内部 compat 实现。
+- `dead`：`aster_runtime_support` 模块名和 `*_aster_runtime_*` helper 名已退场，后续不得恢复。
+- `next`：清理剩余 `[AsterAgent]` 日志前缀和面向 App Server 的 `runtime_facade` Aster tool type re-export。
+
+## 2026-07-04 进度记录：运行日志旧 Aster 前缀清理
+
+- `completed`：`lime-agent` 运行日志前缀从 `[AsterAgent]` / `[AsterRuntime]` 清理为 `[AgentRuntime]`，覆盖 ask bridge、direct text generation、provider configuration、runtime state/support、message content adapter、runtime queue 和 request tool policy。
+- `verified`：`rg -n "\\[AsterAgent\\]|\\[AsterRuntime\\]" "lime-rs/crates/agent/src" --glob "*.rs" --glob "!aster_session_store_adapter.rs.bak"` 无命中。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package lime-agent --package app-server` 通过。
+- `verified`：`CARGO_BUILD_JOBS=2 cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent --lib` 通过。
+- `current`：日志面使用 `AgentRuntime` 作为 runtime owner 名称。
+- `dead`：`[AsterAgent]` / `[AsterRuntime]` 运行日志前缀已退场。
+- `next`：继续处理 `runtime_facade` Aster tool type re-export，这是当前 App Server native tool bridge 的最大 public Aster surface。
+
+## 2026-07-04 进度记录：App Server native tool Aster facade 退场
+
+- `completed`：`runtime_facade` 删除 `PermissionBehavior` / `PermissionCheckResult` / `Tool` / `ToolContext` / `ToolError` / `ToolResult` 的 public re-export；外部 crate 不再通过 `lime_agent::runtime_facade` 获取 Aster tool 类型。
+- `completed`：App Server native memory / image tool 注册从 `Vec<Box<dyn Tool>>` 改为 `AgentRuntimeState::register_memory_store_tools(...)` / `register_image_task_tools(...)`，App Server 只传 current gateway，不接触 Aster tool trait。
+- `completed`：image command 的 `tool.result` 事件改用 `lime_agent::native_tools::image_task_tool_result_projection(...)` 的 current projection；`ToolResult` 转换函数只留在 `lime-agent` 内部。
+- `completed`：`lime_agent::native_tools::{image_tasks,memory_store}` 子模块改为私有，只导出 `ImageTaskGateway` / `MemoryStoreGateway` / `NativeToolResultProjection` 等 current API，防止外部绕过 runtime state 直接构造 Aster tool。
+- `completed`：App Server 测试中的 WebSearch fake tool 和 SkillTool 权限断言迁到 `lime_agent::test_support`，测试层也不再直接 import `ToolContext` / `PermissionBehavior` / `ToolResult`。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 禁止恢复 `runtime_facade` 的 Aster tool type re-export，并禁止 `app-server/src/runtime_backend/**`（`live_execution_process.rs` 除外）消费 `runtime_facade::Tool*` / `Permission*` 或 `Box<dyn Tool>`。
+- `current`：App Server 与 native tools 的边界是业务 gateway + `AgentRuntimeState` 注册方法；image command 消费 current result projection。
+- `compat`：`live_execution_process.rs` 仍直接实现 `NativeToolExecutionHook` / 使用 `NativeToolExecutionRequest` / `ToolCallResult`，因为它和 rmcp streaming/control 绑定较深；退出条件是下一刀在 `lime-agent` 内落 current hook adapter 后移除这三个 re-export。
+- `dead`：App Server native tools 生产路径上的 Aster `Tool` / `ToolContext` / `ToolResult` public facade 已退场，后续不得恢复。
+- `next`：处理 `live_execution_process` hook adapter，把 `NativeToolExecutionHook` / `NativeToolExecutionRequest` / `ToolCallResult` 从 App Server 迁回 `lime-agent` 内部。
+
+## 2026-07-04 进度记录：live execution hook 收回 lime-agent 内部 adapter
+
+- `completed`：新增 `lime-agent/src/live_execution_process.rs`，定义 current `LiveExecutionProcessGateway` trait，并在 `lime-agent` 内部把 gateway 适配成 Aster `NativeToolExecutionHook`。
+- `completed`：`AgentRuntimeState::install_live_execution_process_gateway(...)` 成为安装 live execution process 的唯一 public 入口；`set_native_tool_execution_hook(...)` 不再由 App Server 直接调用。
+- `completed`：App Server `runtime_backend/live_execution_process.rs` 降级为 `ExecutionProcessServer` 的 `LiveExecutionProcessGateway` 实现，不再 import `runtime_facade`、`NativeToolExecutionHook`、`NativeToolExecutionRequest`、`ToolCallResult` 或 `rmcp` tool result 类型。
+- `completed`：`runtime_facade` 删除最后三个 Aster agents re-export：`NativeToolExecutionHook` / `NativeToolExecutionRequest` / `ToolCallResult`。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 禁止 `runtime_facade` 重新导出 Aster agents/tool 类型，禁止 App Server `runtime_backend/**` 消费 `runtime_facade::` / Aster hook/tool facade，并要求 Aster live hook 细节只能停留在 `lime-agent/src/live_execution_process.rs`。
+- `current`：跨 crate 边界是 `LiveExecutionProcessGateway` + app-server-protocol execution process DTO；App Server 只拥有 execution process server。
+- `compat`：Aster `NativeToolExecutionHook` 仍存在于 `lime-agent` 内部 adapter，因为当前 turn executor 仍由 Aster Agent 驱动；退出条件是 current turn executor 接管 native tool streaming 后删除该 adapter。
+- `dead`：App Server 直接实现 Aster live hook、直接构造 `NativeToolExecutionRequest` 的路径已退场，后续不得恢复。
+- `next`：继续主 turn stream 退场，优先处理 `AgentSessionConfig = aster::agents::SessionConfig` public alias 或 `SessionProviderHandle` / `credential_bridge/aster_provider_adapter.rs` 主 provider stream compat。
+
+## 2026-07-04 进度记录：AgentSessionConfig public Aster alias 退场
+
+- `completed`：`AgentSessionConfig` 从 `pub type AgentSessionConfig = aster::agents::SessionConfig` 改为 Lime current struct，字段保持 App Server request context 所需语义：`id`、`thread_id`、`turn_id`、`system_prompt`、`include_context_trace`、`turn_context` 等。
+- `completed`：`build_agent_session_config(...)` 现在构建 current DTO；App Server `session_config_from_request(...)` 不再返回 Aster `SessionConfig`。
+- `completed`：`AgentTurnExecutionRequest` 接收 current `AgentSessionConfig`，只在 `run_agent_turn_with_policy(...)` 内部调用 `into_aster_session_config()` 转换后交给 Aster stream 主链。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 禁止恢复 `pub type AgentSessionConfig = aster::agents::SessionConfig`。
+- `current`：App Server request context 与 `lime-agent` 对外 session config 边界使用 Lime DTO；Aster `SessionConfig` 只允许留在 `lime-agent` 内部 turn execution / request_tool_policy compat 主链。
+- `dead`：`AgentSessionConfig` public Aster alias 已退场。
+- `next`：继续压缩 `turn_execution.rs` / `request_tool_policy.rs` 内部 Aster session config 面，或推进 `SessionProviderHandle` / `credential_bridge/aster_provider_adapter.rs` 主 provider stream compat 退场。
+
+## 2026-07-04 进度记录：旧 Aster provider adapter 命名退场
+
+- `completed`：`credential_bridge/aster_provider_adapter.rs` 旧命名 adapter 已退出工作树；主 turn stream 的临时 provider 接线集中在 `credential_bridge/runtime_provider_adapter.rs`。
+- `completed`：`credential_bridge.rs` 只注册 `mod runtime_provider_adapter;`，不再注册 `mod aster_provider_adapter;`；调用侧仍只看到 `SessionProviderHandle` / `create_session_provider_handle(...)`。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 将旧 `aster_provider_adapter.rs` 判为 `dead / forbidden-to-restore`，并要求 `runtime_provider_adapter.rs` 承接 `SessionProviderHandle` / `reply_stream_with_agent(...)`。
+- `current`：provider 配置、direct generation、request tool policy 调用面只消费 Lime-owned `SessionProviderHandle`。
+- `compat`：`runtime_provider_adapter.rs` 内部仍持有 Aster `Provider`、`ModelConfig` 与 `Agent::reply_with_provider(...)`，这是主 turn stream 尚未替换前的唯一 vendor adapter；退出条件是 current turn executor / provider stream 接管后删除该文件和 `credential_bridge/provider_safety.rs`。
+- `dead`：`credential_bridge/aster_provider_adapter.rs` 文件名、`mod aster_provider_adapter;` 和 `create_aster_runtime_provider(...)` crate-visible factory 不得恢复。
+- `next`：继续主 turn stream 退场，优先把 `request_tool_policy.rs` / `turn_execution.rs` 的内部 Aster `SessionConfig` 与 `Agent::reply_with_provider(...)` 替换为 Lime-owned executor；完成后删除 `SessionProviderHandle`、`runtime_provider_adapter.rs`、`credential_bridge/provider_safety.rs` 和 vendor Aster provider 创建。
+
+## 2026-07-04 进度记录：ToolSourceKind AsterBuiltin public DTO 退场
+
+- `completed`：`agent_tools::catalog::ToolSourceKind::AsterBuiltin` 改为 `RuntimeBuiltin`，内置工具 catalog / inventory 断言同步迁移。
+- `completed`：由于当前无外部用户和旧数据兼容约束，旧序列化值 `aster_builtin` 不保留 serde alias；后续工具来源输出只使用 `runtime_builtin`。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 新增 public source DTO 守卫，禁止 `agent_tools/catalog.rs` 与 `agent_tools/inventory.rs` 恢复 `AsterBuiltin` / `aster_builtin`。
+- `current`：工具来源 public DTO 使用 runtime 语义：`RuntimeBuiltin` / `LimeInjected` / `BrowserCompatibility`。
+- `dead`：`AsterBuiltin` 作为 public enum variant 和 `aster_builtin` 作为输出值已退场，后续不得恢复。
+- `next`：继续把主 turn stream 的 Aster execution adapter 压缩到 `runtime_provider_adapter.rs` / `request_tool_policy.rs`，优先处理 `SessionProviderHandle` 与 `Agent::reply_with_provider(...)`。
+
+## 2026-07-04 进度记录：event_converter public Tauri facade 退场
+
+- `completed`：`lime-agent` 根模块从 `pub mod event_converter;` 收窄为 `mod event_converter;`，外部 crate 不再把 Aster event adapter 当 public API 使用。
+- `completed`：`event_converter.rs` 删除 `pub use crate::protocol::{... as Tauri*}` re-export，内部类型改用 `RuntimeAgentEvent` / `RuntimeToolProgressPayload` / `RuntimeProviderTraceStage` 命名。
+- `completed`：`convert_agent_event(...)` 从 `pub fn` 收窄为 `pub(crate) fn`，唯一 production 调用点仍是 `aster_runtime_projection::project_aster_runtime_event(...)`。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 禁止恢复 `pub mod event_converter`、`pub fn convert_agent_event`、`pub use crate::protocol` 和 `Tauri*` facade 别名。
+- `current`：对外 runtime event DTO 仍归属 `protocol` / `agent-protocol`，Aster event 转换只作为 lime-agent 内部 adapter。
+- `dead`：`event_converter` public facade 与 Tauri 命名别名已退场，后续不得恢复。
+- `next`：继续主 turn stream 退场；`event_converter` 后续只允许继续向更小 adapter 拆分或删除，不再作为 public projection owner。
+
+## 2026-07-05 进度记录：SessionConfig 外露面继续收缩
+
+- `completed`：`request_tool_policy` 外层 stream API 从 `aster::agents::SessionConfig` 改为 `AgentSessionConfig`；`turn_execution.rs` / `direct_text_generation.rs` 调用面只传 Lime-owned session config，Aster 转换下沉到 policy 内部 adapter。
+- `completed`：`SessionConfigBuilder::build()` 从返回 Aster `SessionConfig` 改为返回 `AgentSessionConfig`；`skill_execution.rs` 私有 prompt / step session config 也同步改为 current DTO，只在真正调用 Aster `Agent::reply(...)` 前转换。
+- `completed`：`request_tool_policy/runtime_status.rs` crate-visible `emit_runtime_status_with_projection(...)` 不再接收 `&aster::agents::SessionConfig`，改为接收 `&AgentSessionConfig`；Aster DTO 只在该模块内部持久化 runtime item 前短暂转换。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 新增守卫，禁止主执行链调用面、`SessionConfigBuilder`、`request_tool_policy` 外层 stream API 和 runtime status 投影重新暴露 Aster `SessionConfig`。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package lime-agent --package app-server` 通过。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-main" CARGO_BUILD_JOBS=2 cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent --lib` 通过。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，59 tests passed。
+- `current`：App Server request context、turn execution、direct generation、skill execution builder 与 runtime status 投影统一消费 `AgentSessionConfig` / `AgentTurnContext`。
+- `compat`：Aster `SessionConfig` 仍保留在 `session_configuration::into_aster_session_config(...)`、`request_tool_policy::stream_agent_reply_once(...)`、`credential_bridge/runtime_provider_adapter.rs`、`skill_execution.rs` 和 `runtime_state.rs` 的实际 Aster Agent 调用点。
+- `dead`：`SessionConfigBuilder` / policy 外层 API / runtime status crate-visible API 直接暴露 Aster `SessionConfig` 不得恢复。
+- `next`：继续压缩剩余直接 `Agent::reply(...)` 调用点，优先把 skill execution / elicitation response 的 Aster reply 细节收回单一内部 adapter；最终再处理 `SessionProviderHandle` / `runtime_provider_adapter.rs`。
+
+## 2026-07-05 进度记录：散落 Aster direct reply 收回统一 policy adapter
+
+- `completed`：`skill_execution.rs` 不再直接调用 Aster `Agent::reply(...)`、不再手动消费 Aster stream，也不再直接调用 `project_aster_runtime_event(...)` / `WriteArtifactEventEmitter`；skill prompt / workflow 统一走 `request_tool_policy::stream_message_reply_with_policy(...)`，并使用 `RequestToolPolicyMode::Disabled` 保持 Skill 调用不触发请求级搜索策略。
+- `completed`：`runtime_state::submit_elicitation_response(...)` 不再直接 `into_aster_session_config()` 后调用 Aster `Agent::reply(...)` / `StreamExt` 轮询；action response 入口统一走 `stream_message_reply_with_policy(...)`，只保留构造 Aster `ActionRequired` message 这一层 vendor payload adapter。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 新增守卫，禁止 `skill_execution.rs` / `runtime_state.rs` 恢复直接 `.reply(`、`into_aster_session_config`、`StreamExt`、Aster event polling 或直接 Aster projection。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package lime-agent --package app-server` 通过。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-main" CARGO_BUILD_JOBS=2 cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent --lib` 通过。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，61 tests passed。
+- `current`：主 turn、direct generation、skill execution、elicitation response 均通过同一 `request_tool_policy` stream adapter 执行。
+- `compat`：`request_tool_policy::stream_agent_reply_once(...)` 仍是唯一直接 Aster `Agent::reply(...)` adapter；`credential_bridge/runtime_provider_adapter.rs` 仍是唯一 pinned provider `reply_with_provider(...)` adapter。
+- `dead`：skill / action response 各自维护 Aster reply loop 的并行链路不得恢复。
+- `next`：继续处理 `SessionProviderHandle` / `runtime_provider_adapter.rs`，或者先把 `request_tool_policy::stream_agent_reply_once(...)` 的 Aster `SessionConfig` 参数压成更窄的 internal reply request DTO。
+
+## 2026-07-05 进度记录：request_tool_policy Aster stream loop 隔离
+
+- `completed`：新增 `request_tool_policy/agent_reply_stream.rs`，把直接 Aster `Agent::reply(...)` / pinned provider stream、Aster event projection、text batch flush、web retrieval synthesis status 和 inline provider error 过滤集中到单一 adapter 子模块。
+- `completed`：`request_tool_policy.rs` 主文件不再 import `AsterAgentEvent`、`project_aster_runtime_event(...)`、`project_aster_auto_compaction_event(...)` 或 `futures::StreamExt`，只保留策略编排、preflight、retry 和最终校验。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 新增守卫，禁止 `request_tool_policy.rs` 主文件恢复 `.reply(`、Aster event projection、Aster stream polling 或 `aster::agents::SessionConfig` 参数；直接 Aster stream loop 只能暂留在 `agent_reply_stream.rs`。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package lime-agent --package app-server` 通过。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-main" CARGO_BUILD_JOBS=2 cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent --lib` 通过。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，61 tests passed。
+- `current`：主 policy 文件成为 current-facing 策略编排层。
+- `compat`：`agent_reply_stream.rs` 是唯一 Aster Agent reply stream adapter；退出条件是 current turn executor / provider stream 接管后删除该模块。
+- `dead`：`request_tool_policy.rs` 主文件直接维护 Aster stream loop 的形态不得恢复。
+- `next`：继续处理 `SessionProviderHandle` / `credential_bridge/runtime_provider_adapter.rs`，或把 `agent_reply_stream.rs` 的输入进一步压成 Lime-owned reply request DTO，为删除 vendor adapter 做准备。
+
+## 2026-07-05 进度记录：Aster SessionConfig 转换下沉 agent_reply_stream adapter
+
+- `completed`：`request_tool_policy.rs` 不再调用 `into_aster_session_config()`，retry / preflight / runtime status 编排全程持有 Lime-owned `AgentSessionConfig`。
+- `completed`：`stream_agent_reply_once(...)` 改为接收 `&AgentSessionConfig`，只在 `agent_reply_stream.rs` 内部真正调用 Aster `Agent::reply(...)` / pinned provider stream 前转换为 Aster `SessionConfig`。
+- `completed`：删除 `duplicate_session_config(...)` helper，避免策略主文件为了 Aster stream retry 保留 Aster DTO 克隆语义。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 禁止 `request_tool_policy.rs` 主文件重新出现 `into_aster_session_config` 或直接构造 Aster `SessionConfig`，并要求转换只留在 `agent_reply_stream.rs`。
+- `current`：`request_tool_policy.rs` 是 current-facing 策略编排层，输入 / retry 状态 / runtime status 均使用 `AgentSessionConfig`。
+- `compat`：`agent_reply_stream.rs` 仍是唯一 Aster reply stream adapter；退出条件是 current turn executor / provider stream 接管后删除该模块。
+- `dead`：`request_tool_policy.rs` 直接持有 Aster `SessionConfig`、复制 Aster `SessionConfig` 或承担转换职责的形态不得恢复。
+- `next`：继续向 `SessionProviderHandle` / `credential_bridge/runtime_provider_adapter.rs` 动刀，或先在 `agent_reply_stream.rs` 内定义更窄的 internal reply request DTO，直到 Aster reply adapter 可整体替换。
+
+## 2026-07-05 进度记录：AgentSessionConfig DTO 脱离 Aster 转换
+
+- `completed`：新增 `session_config_adapter.rs`，集中承接 `AgentSessionConfig -> aster::agents::SessionConfig` 的唯一构造逻辑。
+- `completed`：`session_configuration.rs` 删除 `into_aster_session_config(...)`，现在只定义 Lime-owned `AgentSessionConfig` / `AgentSessionConfigurationRequest` 与 builder 入口，不再 import 或构造 Aster DTO。
+- `completed`：`request_tool_policy/agent_reply_stream.rs` 与 `request_tool_policy/runtime_status.rs` 改为调用 `to_aster_session_config(...)`，Aster session config 构造只发生在真正需要调用 Aster Agent / runtime item persistence 的 adapter 边界。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 新增守卫，禁止 `session_configuration.rs` 恢复 Aster 依赖，并要求 Aster `SessionConfig` 构造只留在 `session_config_adapter.rs`。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package lime-agent --package app-server` 通过。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-main" CARGO_BUILD_JOBS=2 cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent --lib` 通过。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，63 tests passed。
+- `current`：`AgentSessionConfig` 是纯 Lime DTO，属于 current 调用面。
+- `compat`：`session_config_adapter.rs` 是 Aster SessionConfig 唯一转换 adapter；退出条件是 current turn executor / runtime status persistence 接管后删除。
+- `dead`：在 `AgentSessionConfig` DTO 文件上挂 `into_aster_session_config(...)` 的形态不得恢复。
+- `next`：继续处理 `SessionProviderHandle` / `credential_bridge/runtime_provider_adapter.rs` 的 provider stream compat，减少主 turn 对 Aster provider trait / `reply_with_provider(...)` 的依赖。
+
+## 2026-07-05 进度记录：compat-aster 假 feature 与备份文件删除
+
+- `completed`：删除 `lime-rs/crates/agent/src/aster_session_store_adapter.rs.bak`，旧 workflow 生成备份按 `dead` 处理，不再保留在工作树中误导后续迁移。
+- `completed`：`lime-agent/Cargo.toml` 移除 `compat-aster` feature、`default = ["compat-aster"]` 和 `aster optional = true`；当前主链仍无条件依赖 Aster，因此不再用假 optional feature 掩盖真实退出阻塞。
+- `completed`：`lime-agent/src/lib.rs` 删除 `aster_session_store_adapter` 备份注释，旧 adapter 只允许作为历史 evidence 存在于路线图文本中，不允许回到源码模块图。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 禁止恢复 `.bak` 备份文件、`mod aster_session_store_adapter`、`compat-aster`、`aster optional = true` 和过期 `aster_runtime_support` 退出条件。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package lime-agent` 通过；全量 `--package lime-agent --package app-server` 被并行进程未跟踪的 `app-server/src/runtime_backend/image_command/tests.rs:760` 语法错误挡住，未接管该热区。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-main" CARGO_BUILD_JOBS=2 cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent --lib` 通过。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，64 tests passed。
+- `current`：`lime-agent` manifest 真实表达当前状态：Aster 仍是待清退的直接依赖，退出条件是 current turn executor / provider stream 接管。
+- `dead`：`compat-aster` 作为假可关闭 feature 和 `aster_session_store_adapter.rs.bak` 备份文件已退场。
+- `next`：继续主 turn stream 退场；最值得继续的一刀仍是 `SessionProviderHandle` / `credential_bridge/runtime_provider_adapter.rs` / `credential_bridge/provider_safety.rs`。
+
+## 2026-07-05 进度记录：Aster optional feature 旧路线文档清理
+
+- `completed`：删除 `internal/roadmap/astermigration/optional-feature-gate-plan.md`；该文件仍标记 `ready_to_execute`，且与当前“无兼容包袱、不再假 optional feature”的事实冲突。
+- `completed`：更新 `lime-rs/vendor/aster-rust/README.md`，把 vendor 状态从 “optional feature 隔离” 改为 “服务剩余 Aster compat adapter”，并移除 `compat-aster` 示例。
+- `completed`：更新 `phase5-vendor-downgrade-plan.md` 的当前依赖状态，明确 `lime-agent` 仍通过 `aster.workspace = true` 直接依赖 Aster，这是待清退阻塞而不是可关闭 feature。
+- `current`：活动路线图以本文件和 `README.md` 为事实源；旧 session report 中的 `compat-aster` 文本只作为历史 evidence，不再作为可执行计划。
+- `dead`：`optional-feature-gate-plan.md` 和 “收缩 compat-aster feature 范围” 的路线已删除。
+- `next`：继续主 turn stream 退场，目标不变：删除 `SessionProviderHandle` / `runtime_provider_adapter.rs` / `provider_safety.rs` 前先让 current executor / provider stream 接管。
+
+## 2026-07-05 进度记录：主执行 provider 调用面 Aster Message 下沉
+
+- `completed`：`turn_execution.rs` 不再 import `aster::conversation::message::Message`，provider 分支改为调用 text-oriented `stream_reply_with_policy_and_provider(...)`。
+- `completed`：`direct_text_generation.rs` 不再构造 Aster `Message::user().with_text(...)`，direct generation provider 分支改为调用 text-oriented `stream_reply_with_policy_and_provider_for_direct_generation(...)`。
+- `completed`：`request_tool_policy.rs` 的公开 / crate-visible provider 调用面只接收 `&str` 文本输入；Aster `Message` 构造后续已继续下沉到 `request_tool_policy/agent_reply_stream.rs` adapter。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 新增守卫，禁止 turn/direct generation 调用面恢复 Aster `Message` import、`Message::user().with_text(...)` 或旧 `stream_message_reply_with_policy_and_provider*` API 名称。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package lime-agent` 通过。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-main" CARGO_BUILD_JOBS=2 cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent --lib` 通过。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，65 tests passed。
+- `current`：turn/direct generation 调用面只表达 Lime-owned input text + `AgentSessionConfig` + provider route。
+- `compat`：Aster `Message` 构造当时仍保留在 `request_tool_policy.rs` 内部和 action response / skill 特殊消息边界；该状态已被后续 `agent_reply_stream` adapter 下沉记录取代。
+- `dead`：主执行 provider 调用面直接构造 Aster `Message` 的形态不得恢复。
+- `next`：继续把 `skill_execution` 的 prompt/workflow 普通文本消息改成 text-oriented policy API，只把图片/agent-only 等特殊 payload 留在受控 adapter；或继续处理 `SessionProviderHandle` provider stream。
+
+## 2026-07-05 进度记录：skill reply input Aster Message 下沉
+
+- `completed`：`skill_execution.rs` 删除 `aster::conversation::message::Message` import，`build_user_message(...)` 改为 `build_reply_input(...)`，只构造 Lime-owned `ReplyInput` / `ReplyInputImage`。
+- `completed`：`stream_message_reply_with_policy(...)` 从 public API 收窄为 `pub(crate)`，入口接收 `ReplyInput`，在 `request_tool_policy.rs` 内部转换为 Aster `Message`。
+- `completed`：`runtime_state::submit_elicitation_response(...)` 改走显式 `stream_aster_message_reply_with_policy(...)`，让 action response 的 Aster payload 边界可审计，不再混用普通 current-facing reply API。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 禁止 `skill_execution.rs` 恢复 Aster `Message` import / `Message::user().with_text(...)`，并要求 skill reply 走 `ReplyInput`。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package lime-agent` 通过。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-main" CARGO_BUILD_JOBS=2 cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent --lib` 通过。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，65 tests passed。
+- `current`：turn/direct/skill 普通输入调用面都只表达文本、图片与 Agent-only 标记，不直接构造 Aster conversation DTO。
+- `compat`：Aster `Message` 构造当时集中在 `request_tool_policy.rs` 内部；后续已继续下沉到 `request_tool_policy/agent_reply_stream.rs`。action response 仍需要 Aster `ActionRequired` payload，并通过 `stream_aster_message_reply_with_policy(...)` 显式标记。
+- `dead`：skill execution 自行构造 Aster `Message` / 维护 Aster reply loop 的形态不得恢复。
+- `next`：继续缩小 `request_tool_policy.rs` 内部 Aster Message adapter，或回到 `SessionProviderHandle` / `runtime_provider_adapter.rs` 替换 provider stream。
+
+## 2026-07-05 进度记录：provider stream compat 复核
+
+- `checked`：`SessionProviderHandle` 仍由主 turn 与 direct generation 的 provider route 调用链使用：`provider_configuration.rs -> create_session_provider_handle(...) -> request_tool_policy/agent_reply_stream.rs`。
+- `checked`：`credential_bridge/runtime_provider_adapter.rs` 仍是唯一 `Agent::reply_with_provider(...)` / `aster::providers::create(...)` adapter，不能在 current provider stream 接管前直接删除。
+- `checked`：`credential_bridge/provider_safety.rs` 仍包裹 Aster `Provider` trait，负责工具消息归一化、fast model 禁用与 session name generation 兼容；当前删除会破坏 pinned provider stream。
+- `decision`：本轮不新增“看起来 current”的 provider trait 包装层；在没有 current stream/tool delta provider executor 前，继续把 Aster provider trait 局限在这两个 compat 文件和 `agent_reply_stream.rs`。
+- `compat`：`SessionProviderHandle` / `runtime_provider_adapter.rs` / `provider_safety.rs` 仍是主 turn stream 的最后一组 provider 阻塞。
+- `dead`：重新暴露裸 `Arc<dyn aster::Provider>`、恢复 `create_aster_runtime_provider(...)` 或把 provider factory 移回 `provider_configuration.rs` 均不得恢复。
+- `next`：要删除这组 provider compat，必须先实现 current turn executor / provider stream；短期可继续把 `request_tool_policy.rs` 中 Aster `Message` / retry prompt 构造拆到更窄 adapter，减少最终替换面。
+
+## 2026-07-05 进度记录：request_tool_policy Message 构造下沉 adapter
+
+- `completed`：`request_tool_policy.rs` 不再 import `aster::conversation::message::Message`，也不再直接构造 `Message::user().with_text(...)`；普通首轮输入、provider 输入、retry prompt 均使用 Lime-owned `ReplyInput`。
+- `completed`：`request_tool_policy/agent_reply_stream.rs` 新增 `ReplyAttemptInput` / `CompatAsterReplyMessage`，集中承接 `ReplyInput -> Aster Message` 转换、取消上下文 agent-only marker 持久化和特殊 Aster payload 转接。
+- `completed`：`runtime_state::submit_elicitation_response(...)` 调用 `compat_aster_reply_message(...)` 后再进入 `stream_aster_message_reply_with_policy(...)`，让 `ActionRequired` 这条 Aster payload 成为显式 compat 入口，而不是污染普通 reply API。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 扩展 `request_tool_policy 主文件不得重新承接 Aster reply stream loop` 守卫，禁止主文件恢复 Aster `Message` import、`Message::user().with_text` 或 `Message::user()` 构造。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package lime-agent --check` 通过。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-main" CARGO_BUILD_JOBS=2 cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent --lib` 通过。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，65 tests passed。
+- `current`：`request_tool_policy.rs` 是策略编排层，只持有 Lime-owned `ReplyInput` / `AgentSessionConfig` 和 retry policy。
+- `compat`：`request_tool_policy/agent_reply_stream.rs` 是唯一 Aster reply/message adapter；退出条件是 current turn executor / provider stream 接管后删除该模块。
+- `dead`：`request_tool_policy.rs` 主文件直接构造 Aster user message、保存 Aster cancel marker 或维护 Aster stream loop 的形态不得恢复。
+- `next`：继续主 turn stream 退场，优先实现 current provider stream / turn executor 以删除 `SessionProviderHandle`、`credential_bridge/runtime_provider_adapter.rs`、`credential_bridge/provider_safety.rs` 和 `agent_reply_stream.rs`。
+
+## 2026-07-05 进度记录：Action response Aster payload 下沉 adapter
+
+- `completed`：`runtime_state::submit_elicitation_response(...)` 不再 import `aster::conversation::message::*`，也不再直接构造 `MessageContent::ActionRequired` / `ActionRequiredData::ElicitationResponse`。
+- `completed`：`request_tool_policy/agent_reply_stream.rs` 新增 `compat_aster_elicitation_response_message(...)`，把 Lime-owned `AgentActionRequiredScope` / request id / user data 显式转换成 Aster ActionRequired payload。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 扩展 runtime_state action response 守卫，禁止 `runtime_state.rs` 恢复 Aster conversation message import、`ActionRequiredData::ElicitationResponse`、`MessageContent::ActionRequired` 或 `Message::user()`。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package lime-agent` 通过。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-main" CARGO_BUILD_JOBS=2 cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent --lib` 通过。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-main" CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent request_tool_policy --lib` 通过，61 tests passed。
+- `current`：runtime_state action response 入口只表达 current scope / request id / user data。
+- `compat`：Aster ActionRequired message 构造集中在 `agent_reply_stream.rs` adapter；退出条件是 current action response executor 接管后删除。
+- `dead`：runtime_state 直接构造 Aster conversation message payload 的形态不得恢复。
+
+## 2026-07-05 进度记录：optional feature 旧报告删除
+
+- `completed`：删除 `phase2-execution-summary.md`、`session-2026-07-04-complete-report.md`、`session-2026-07-04-conflict-resolution.md`、`session-2026-07-04-final-summary.md`。这些文件把 `compat-aster` / optional feature gate 写成推荐或已完成策略，已被当前“无兼容包袱、真实删除 Aster compat”路线推翻。
+- `completed`：删除 `phase2-blocking-analysis.md` 与 `aster-trait-skeleton-fast-track-plan.md`。两者仍把 optional feature / 移除 `aster.workspace = true` 前置成可执行路线，且与当前代码实际和无兼容要求冲突。
+- `completed`：更新迁移 README 和 vendor README，active roadmap 只保留当前主计划、vendor 降级计划与最终删除退出条件。
+- `current`：活动迁移事实源只保留 `README.md`、本计划和 `phase5-vendor-downgrade-plan.md`。
+- `dead`：optional feature gate 会话报告不得作为后续执行依据；需要历史证据时只看 git history，不在 active roadmap 目录中保留误导性计划。
+
+## 2026-07-05 进度记录：tool confirmation Aster permission payload 下沉
+
+- `completed`：`runtime_state::confirm_tool_action(...)` 不再 import 或构造 Aster `PermissionConfirmation` / `Permission::AllowOnce` / `Permission::DenyOnce` / `PrincipalType::Tool`，只保留 current action response 入口参数校验和 Agent 状态读取。
+- `completed`：`request_tool_policy/agent_reply_stream.rs` 承接 `confirm_aster_tool_action(...)`，把 tool confirmation 的 Aster permission payload 与 `Agent::handle_confirmation(...)` 调用限制在现有 Aster reply adapter 内。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 扩展 runtime_state action response 守卫，禁止 runtime_state 恢复 Aster permission DTO 构造或直接调用 `.handle_confirmation(...)`。
+- `current`：runtime_state action response 入口只表达 request id、confirmed 和 current action scope / user data。
+- `compat`：Aster action response payload 仍集中在 `agent_reply_stream.rs` adapter；退出条件是 current action response executor 接管后删除该 adapter。
+- `dead`：runtime_state 同时承接状态管理和 Aster action permission DTO 构造的形态不得恢复。
+
+## 2026-07-05 进度记录：direct text generation usage 投影收口
+
+- `completed`：新增 `session_usage_projection.rs`，集中承接 token usage 的纯投影规则，避免 `direct_text_generation` 与 Aster session adapter 重复实现 input/output/cache token 归一化。
+- `completed`：`direct_text_generation.rs` 不再 import Aster `Agent` / `Session` / `query_session`，并删除无 DB `run_direct_text_generation(...)` 入口；direct generation 现在必须走 `run_direct_text_generation_with_db(...)`。
+- `completed`：`session_execution_runtime_adapter::project_aster_session_usage(...)` 复用 `session_usage_projection::project_token_usage(...)`，只保留 Aster session field 读取，不再重复纯投影规则。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 将 `session_usage_projection.rs` 纳入无 Aster 回流文件守卫，并新增 direct text generation 守卫，禁止该 current-facing 执行入口恢复无 DB public API、Aster session usage 查询或重复 token usage helper。
+- `current`：direct text generation 入口只负责 current request、provider route、stream 执行和 repository usage fallback；纯 token usage 投影归属 `session_usage_projection`；调用方必须提供 DB。
+- `dead`：`run_direct_text_generation(...)` 无 DB fallback、`direct_text_generation.rs` 直接 import Aster session API、直接 query Aster session 或重复 token usage 投影的形态不得恢复。
+
+## 2026-07-05 进度记录：session_update public Aster wrapper 退场
+
+- `completed`：删除零外部调用的 `session_update::create_subagent_session(...)` 与 `session_update::replace_session_conversation(...)`，不再通过 `lime_agent` 根 API 暴露 Aster `Session` / `Conversation` wrapper。
+- `completed`：`persist_session_extension_data(...)` 从 public API 收窄为 `pub(crate)`，只供 `session_execution_runtime` 与 `subagent_control` 内部 compat adapter 使用。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 扩展 `session_update` 守卫，禁止恢复 public Aster session / conversation / extension data wrapper 或根 API re-export。
+- `current`：对外只保留 `persist_compaction_session_metrics_update(...)` 与 `CompactionSessionMetricsUpdate` 这组 current repository token stats 写回 API。
+- `compat`：Aster `ExtensionData` 持久化仍留在 crate-internal `session_update` adapter；退出条件是 recent access/preferences/team selection 改成 current repository schema 后删除。
+- `dead`：`session_update` 作为 public Aster session/conversation wrapper 集合的形态不得恢复。

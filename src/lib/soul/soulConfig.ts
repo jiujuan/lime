@@ -2,6 +2,10 @@ import type {
   MemorySoulArtifactVoiceConfig,
   MemorySoulConfig,
 } from "@/lib/api/memoryConfigTypes";
+import {
+  normalizeSoulStyleIntensity,
+  normalizeSoulStyleProfileId,
+} from "./style-profiles";
 
 export type SoulImportWarningCode =
   | "empty"
@@ -31,6 +35,8 @@ export const DEFAULT_SOUL_CONFIG: MemorySoulConfig = {
   enabled: false,
   name: undefined,
   summary: undefined,
+  style_profile_id: undefined,
+  style_intensity: undefined,
   tone: [],
   communication_style: [],
   explanation_depth: undefined,
@@ -133,6 +139,8 @@ export function normalizeSoulConfig(
     enabled: soul.enabled ?? false,
     name: normalizeText(soul.name, 80),
     summary: normalizeText(soul.summary),
+    style_profile_id: normalizeSoulStyleProfileId(soul.style_profile_id),
+    style_intensity: normalizeSoulStyleIntensity(soul.style_intensity),
     tone: normalizeSoulList(soul.tone),
     communication_style: normalizeSoulList(soul.communication_style),
     explanation_depth: normalizeText(soul.explanation_depth, 120),
@@ -190,6 +198,7 @@ export function hasSoulContent(soul?: MemorySoulConfig | null): boolean {
   return Boolean(
     normalized.name ||
     normalized.summary ||
+    normalized.style_profile_id ||
     normalized.explanation_depth ||
     normalized.challenge_style ||
     normalized.tone?.length ||
@@ -304,6 +313,14 @@ export function buildSoulMarkdown(soul?: MemorySoulConfig | null): string {
   }
   if (normalized.tone?.length) {
     lines.push(`- Tone: ${normalized.tone.join(", ")}`);
+  }
+  if (normalized.style_profile_id) {
+    lines.push("", "## Interaction Style Profile");
+    lines.push(`- Style profile: ${normalized.style_profile_id}`);
+    if (normalized.style_intensity) {
+      lines.push(`- Style intensity: ${normalized.style_intensity}`);
+    }
+    lines.push("- Scope: chat interaction and tool narrative only.");
   }
   if (normalized.communication_style?.length) {
     lines.push("", "## Communication Style");

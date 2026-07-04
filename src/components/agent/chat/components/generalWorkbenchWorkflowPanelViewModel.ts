@@ -1361,7 +1361,7 @@ export function buildGeneralWorkbenchRunDetailFactRows({
     });
   }
 
-  const waitingActionValue = readWorkflowWaitingActionValue(workflowRecord);
+  const waitingActionValue = readWorkflowWaitingActionValue(workflowRecord, t);
   if (waitingActionValue) {
     rows.push({
       key: "workflow-waiting-action",
@@ -1447,17 +1447,16 @@ function readWorkflowRetryValue(
 
 function readWorkflowWaitingActionValue(
   workflowRecord: Record<string, unknown>,
+  t: GeneralWorkbenchWorkflowPanelTranslate,
 ): string | null {
   const actions = readRecordArray(workflowRecord.actions)
     .map((action) => {
-      const actionType = readStringField(action, [
-        "actionType",
-        "action_type",
-        "type",
-      ]);
+      const actionType = readWorkflowActionPresentationType(action);
       const requestId = readStringField(action, ["requestId", "request_id"]);
       const stepId = readStringField(action, ["stepId", "step_id"]);
-      return [actionType, requestId, stepId].filter(Boolean).join(" / ");
+      return [formatWorkflowActionTypeLabel(actionType, t), requestId, stepId]
+        .filter(Boolean)
+        .join(" / ");
     })
     .filter((item) => item.length > 0);
   if (actions.length > 0) {
@@ -1467,7 +1466,12 @@ function readWorkflowWaitingActionValue(
   const waitingSteps = readWorkflowStepRecords(workflowRecord)
     .filter((step) => {
       const status = readStringField(step, ["status"])?.toLowerCase();
-      return status === "waiting" || status === "waitingaction";
+      return (
+        status === "waiting" ||
+        status === "waiting_action" ||
+        status === "waitingaction" ||
+        status === "waiting_permission"
+      );
     })
     .map((step) => {
       const title = readStringField(step, ["title", "stepTitle", "step_title"]);
@@ -1476,10 +1480,52 @@ function readWorkflowWaitingActionValue(
         "agentActionType",
         "agent_action_type",
       ]);
-      return [title, actionType, requestId].filter(Boolean).join(" / ");
+      return [title, formatWorkflowActionTypeLabel(actionType, t), requestId]
+        .filter(Boolean)
+        .join(" / ");
     })
     .filter((item) => item.length > 0);
   return waitingSteps.join(", ") || null;
+}
+
+function readWorkflowActionPresentationType(
+  action: Record<string, unknown>,
+): string | null {
+  const agentActionType = readStringField(action, [
+    "agentActionType",
+    "agent_action_type",
+  ]);
+  if (agentActionType) {
+    return agentActionType;
+  }
+  const actionType = readStringField(action, [
+    "actionType",
+    "action_type",
+    "type",
+  ]);
+  return actionType === "respond" ? null : actionType;
+}
+
+function formatWorkflowActionTypeLabel(
+  actionType: string | null,
+  t: GeneralWorkbenchWorkflowPanelTranslate,
+): string | null {
+  if (!actionType) {
+    return null;
+  }
+  const normalized = actionType.trim().toLowerCase();
+  if (normalized === "ask_user") {
+    return t("generalWorkbench.workflow.runDetail.waitingAction.askUser");
+  }
+  if (normalized === "elicitation") {
+    return t("generalWorkbench.workflow.runDetail.waitingAction.elicitation");
+  }
+  if (normalized === "tool_confirmation") {
+    return t(
+      "generalWorkbench.workflow.runDetail.waitingAction.toolConfirmation",
+    );
+  }
+  return actionType;
 }
 
 function readWorkflowStepRecords(

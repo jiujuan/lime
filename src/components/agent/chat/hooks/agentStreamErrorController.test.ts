@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
+import { resolveSoulInteractionCopy } from "@/lib/soul/interactionCopy";
 import type { AgentThreadItem, AgentThreadTurn } from "../types";
 import {
   applyAgentStreamErrorToastPlan,
@@ -69,6 +70,32 @@ describe("agentStreamErrorController", () => {
     expect(patch.content).not.toContain("Insufficient Balance");
     expect(patch.runtimeStatus?.detail).not.toContain("Payment Required");
     expect(patch.runtimeStatus?.detail).not.toContain("Insufficient Balance");
+  });
+
+  it("失败 assistant patch 应支持 Soul 交互口吻", () => {
+    const soulCopy = resolveSoulInteractionCopy({
+      soul: {
+        enabled: true,
+        style_profile_id: "cheeky_sassy_executor",
+        style_intensity: "low",
+        tone: [],
+        communication_style: [],
+        avoid: [],
+        artifact_voice: { enabled: false, evidence_refs: [] },
+        imported_from: "manual",
+      },
+    });
+    const patch = buildAgentStreamFailedAssistantMessagePatch({
+      accumulatedContent: "",
+      errorMessage: "provider failed",
+      previousContent: "",
+      soulCopy,
+    });
+
+    expect(patch.content).toBe("这步没跑顺：provider failed");
+    expect(patch.contentParts).toEqual([
+      { type: "text", text: "这步没跑顺：provider failed" },
+    ]);
   });
 
   it("Provider 402 失败 timeline summary 应使用友好提示", () => {

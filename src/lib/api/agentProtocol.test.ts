@@ -354,7 +354,7 @@ describe("agentProtocol", () => {
     });
   });
 
-  it("应解析 ImageCommandWorkflow presentation unavailable 审计事件", () => {
+  it("不再解析 ImageCommandWorkflow presentation unavailable 旧事件", () => {
     expect(
       parseAgentEvent({
         type: "image_task.presentation.unavailable",
@@ -365,15 +365,7 @@ describe("agentProtocol", () => {
         threadId: "thread-1",
         turnId: "turn-1",
       }),
-    ).toEqual({
-      type: "image_task_presentation_unavailable",
-      status: "unavailable",
-      reason: "policy_filtered",
-      workflow_run_id: "workflow-1",
-      session_id: "session-1",
-      thread_id: "thread-1",
-      turn_id: "turn-1",
-    });
+    ).toBeNull();
   });
 
   it("应解析工具进度与工具输出增量事件", () => {

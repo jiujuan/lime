@@ -99,7 +99,7 @@ agent_runtime_submit_turn
 | --- | --- | --- |
 | Replay / Analysis / Review Markdown 正文级 copy 仍未完全细分 | Evidence `summary.md` 已支持 5 locale，Replay / Analysis / Review Markdown 已接同一套 locale copy 的结构标题与核心标签；facts JSON 仍稳定 | 后续只继续把长段落说明、验证摘要、review checklist 和 fallback 文案细分为 copy 字段，不改变 runtime facts 或命令协议。 |
 | `runtime_evidence_pack_service_tests.rs` 测试 fixture 仍偏大 | 生产 service 已全部低于 800 行，但单测 fixture 文件仍集中承载大量 artifact / telemetry / approval 场景 | 后续只拆测试 fixture builder，不改变 `agent_runtime_export_evidence_pack` current 事实源。 |
-| 独立 fixture JSON 未全部落盘 | 文档里的 fixture 名与测试文件不是一一对应 | 若需要跨仓库标准验收，新增 `lime-rs/tests/fixtures/agentruntime-profile/*.json` 或 docs fixture，并让 Rust 测试读 fixture。 |
+| 独立 fixture JSON 未全部落盘 | 文档里的 fixture 名与测试文件不是一一对应 | 若需要跨仓库标准验收，新增 crate-owned fixture，例如 `lime-rs/crates/app-server/tests/fixtures/agentruntime-profile/*.json` 或 docs fixture，并让 Rust 测试读 fixture。 |
 | legacy GUI diagnostics 仍有非 key-based 文案 | 不影响 AgentRuntime facts，但影响全球本地化完整度 | 另开 i18n cleanup，不把 legacy diagnostics 的全量迁移混入 AgentRuntime current 主链。 |
 | 真实远端恢复 / tool approval Playwright E2E 可继续加强 | GUI smoke 已证明壳和主路径可运行，但人机审批完整交互仍可更强 | 后续用 `lime-playwright-e2e` 补一个最小 approve/deny 和 remote resume 产品场景。 |
 

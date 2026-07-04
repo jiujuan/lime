@@ -25,6 +25,8 @@
   "agentExperts.sync.seeded": "ローカルシードカタログ",
   "agentExperts.title": "専門家広場",
   "agentExperts.info.title": "専門家情報",
+  "agentExperts.info.profileSwitch.label": "現在の専門家",
+  "agentExperts.info.profileSwitch.ariaLabel": "現在の会話の専門家を切り替える",
   "agentExperts.info.sections.overview": "概要",
   "agentExperts.info.sections.memory": "メモリー",
   "agentExperts.info.sections.diary": "日記",
@@ -121,7 +123,5 @@
   "agentExperts.info.skills.evidence.counts": "検索 {{searchCount}} 回 · 実行 {{invocationCount}} 回",
   "agentExperts.info.skills.evidence.exportedAt": "最終エクスポート {{exportedAt}}",
   "agentExperts.info.skills.evidence.latestSkill": "最新スキル {{skillName}}",
-  "agentExperts.info.skills.evidence.knownGaps": "既知の不足 {{count}} 件",
-  "agentExperts.actions.continue": "会話を続ける",
-  "agentExperts.actions.newThread": "新しい会話"
+  "agentExperts.info.skills.evidence.knownGaps": "既知の不足 {{count}} 件"
 }

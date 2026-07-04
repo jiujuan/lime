@@ -7,8 +7,14 @@ impl MediaAppDataSource for LocalAppDataSource {
         &self,
         params: MediaTaskArtifactImageCreateParams,
     ) -> Result<MediaTaskArtifactResponse, RuntimeCoreError> {
-        let params = media_tasks::normalize_image_create_params_for_task_submission(params)
+        let normalized = media_tasks::normalize_image_create_params_for_task_submission(params)
             .map_err(data_error)?;
+        let params = media_tasks::resolve_image_provider_for_task_submission(
+            &self.db,
+            &self.api_key_provider_service,
+            normalized,
+        )
+        .map_err(data_error)?;
         let route_assessment = media_tasks::assess_image_route(
             &self.db,
             &self.api_key_provider_service,

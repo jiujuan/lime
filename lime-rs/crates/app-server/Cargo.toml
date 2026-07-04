@@ -29,6 +29,7 @@ dirs.workspace = true
 flate2.workspace = true
 futures.workspace = true
 agent-protocol.workspace = true
+agent-runtime.workspace = true
 app-server-protocol.workspace = true
 app-server-transport.workspace = true
 lime-core.workspace = true
@@ -39,6 +40,7 @@ lime-knowledge.workspace = true
 lime-browser-runtime.workspace = true
 lime-media-runtime.workspace = true
 lime-mcp.workspace = true
+model-provider.workspace = true
 runtime-core.workspace = true
 lime-skills.workspace = true
 lime-services.workspace = true
@@ -70,4 +72,5 @@ zip.workspace = true
 zstd.workspace = true
 
 [dev-dependencies]
+lime-agent = { workspace = true, features = ["test-support"] }
 serde_json.workspace = true

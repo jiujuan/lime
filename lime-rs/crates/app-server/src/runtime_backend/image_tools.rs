@@ -2,18 +2,20 @@ use crate::AppDataSource;
 use app_server_protocol::{MediaTaskArtifactImageCreateParams, MediaTaskArtifactResponse};
 use async_trait::async_trait;
 use lime_agent::native_tools::{
-    create_image_tools as create_agent_image_tools, image_tool_result_from_response,
-    ImageTaskGateway,
+    image_task_tool_result_projection, ImageTaskGateway, NativeToolResultProjection,
 };
-use lime_agent::runtime_facade::{Tool, ToolResult};
 use std::sync::Arc;
 
-pub(crate) fn create_image_tools(app_data_source: Arc<dyn AppDataSource>) -> Vec<Box<dyn Tool>> {
-    create_agent_image_tools(Arc::new(AppServerImageTaskGateway { app_data_source }))
+pub(crate) fn image_task_gateway(
+    app_data_source: Arc<dyn AppDataSource>,
+) -> Arc<dyn ImageTaskGateway> {
+    Arc::new(AppServerImageTaskGateway { app_data_source })
 }
 
-pub(super) fn tool_result_from_response(response: MediaTaskArtifactResponse) -> ToolResult {
-    image_tool_result_from_response(response)
+pub(super) fn tool_result_from_response(
+    response: MediaTaskArtifactResponse,
+) -> NativeToolResultProjection {
+    image_task_tool_result_projection(response)
 }
 
 struct AppServerImageTaskGateway {
@@ -46,7 +48,6 @@ mod tests {
     use crate::{UsageStatsAppDataSource, VoiceAppDataSource, WorkspaceAppDataSource};
     use app_server_protocol::{MediaTaskArtifactImageCreateParams, MediaTaskArtifactResponse};
     use async_trait::async_trait;
-    use lime_agent::runtime_facade::ToolContext;
     use serde_json::{json, Value};
     use tempfile::TempDir;
 
@@ -85,37 +86,34 @@ mod tests {
     #[tokio::test]
     async fn image_tool_creates_standard_image_task_artifact() {
         let workspace = TempDir::new().expect("workspace");
-        let mut tools = create_image_tools(Arc::new(ImageToolTestDataSource));
-        let tool = tools.pop().expect("image tool");
-        let result = tool
-            .execute(
-                json!({
-                    "project_root_path": workspace.path().to_string_lossy(),
-                    "prompt": "生成一张青柠实验室封面",
-                    "provider_id": "openai",
-                    "model": "gpt-image-2",
-                    "executor_mode": "images_api",
-                    "session_id": "session-image-1",
-                    "thread_id": "thread-image-1",
-                    "turn_id": "turn-image-1",
-                    "content_id": "content-image-1",
-                    "entry_source": "at_image_command",
-                    "modality_contract_key": "image_generation",
-                    "modality": "image",
-                    "routing_slot": "image_generation_model",
-                    "runtime_contract": {
-                        "contract_key": "image_generation",
-                        "routing_slot": "image_generation_model"
-                    },
-                    "usage": "document-inline",
-                    "slot_id": "document-image-slot-1",
-                    "anchor_section_title": "产品愿景",
-                    "anchor_text": "给这一段生成配图"
-                }),
-                &ToolContext::new(workspace.path().to_path_buf()),
-            )
+        let response = image_task_gateway(Arc::new(ImageToolTestDataSource))
+            .create_image_media_task_artifact(MediaTaskArtifactImageCreateParams {
+                project_root_path: workspace.path().to_string_lossy().to_string(),
+                prompt: "生成一张青柠实验室封面".to_string(),
+                provider_id: Some("openai".to_string()),
+                model: Some("gpt-image-2".to_string()),
+                executor_mode: Some("images_api".to_string()),
+                session_id: Some("session-image-1".to_string()),
+                thread_id: Some("thread-image-1".to_string()),
+                turn_id: Some("turn-image-1".to_string()),
+                content_id: Some("content-image-1".to_string()),
+                entry_source: Some("at_image_command".to_string()),
+                modality_contract_key: Some("image_generation".to_string()),
+                modality: Some("image".to_string()),
+                routing_slot: Some("image_generation_model".to_string()),
+                runtime_contract: Some(json!({
+                    "contract_key": "image_generation",
+                    "routing_slot": "image_generation_model"
+                })),
+                usage: Some("document-inline".to_string()),
+                slot_id: Some("document-image-slot-1".to_string()),
+                anchor_section_title: Some("产品愿景".to_string()),
+                anchor_text: Some("给这一段生成配图".to_string()),
+                ..MediaTaskArtifactImageCreateParams::default()
+            })
             .await
-            .expect("image tool should create task artifact");
+            .expect("image task gateway should create task artifact");
+        let result = tool_result_from_response(response);
 
         assert_eq!(
             result.metadata.get("task_type"),

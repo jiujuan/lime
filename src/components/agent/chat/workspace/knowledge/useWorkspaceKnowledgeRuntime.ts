@@ -419,9 +419,7 @@ export function useWorkspaceKnowledgeRuntime({
   const handleStartKnowledgeOrganize = useCallback(() => {
     const workingDir = effectiveProjectRootPath;
     if (!workingDir) {
-      setInput(
-        "请先选择一个项目，然后我会把资料整理成当前项目可复用的项目资料。",
-      );
+      setInput("请先选择一个项目，再整理为当前项目可复用的项目资料。");
       return;
     }
 

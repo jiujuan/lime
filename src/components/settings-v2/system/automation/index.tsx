@@ -468,7 +468,7 @@ export function AutomationSettings({
             }),
           ),
       }),
-      [i18n, t],
+      [t, translateGlobal],
     );
   const workspaceTemplates = useMemo(() => createWorkspaceTemplates(t), [t]);
   const workspaceOnly = mode === "workspace";

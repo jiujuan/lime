@@ -19,6 +19,8 @@ export interface WorkspaceArticleMarkdownChange {
 
 const INLINE_IMAGE_TASK_MARKER_RE =
   /(?:lime:image-task-slot:|pending-image-task:\/\/)/;
+const RESOLVED_MARKDOWN_IMAGE_RE =
+  /!\[[^\]]*]\((?!pending-image-task:\/\/)(?:https?:\/\/|file:\/\/|asset:\/\/|data:image\/)[^)]+\)/i;
 
 export function buildWorkspaceArticleEditedDraftKey(
   object: WorkspaceArticleObject,
@@ -45,6 +47,12 @@ export function markdownContainsWorkspaceArticleInlineImageTask(
   markdown: string | null | undefined,
 ): boolean {
   return INLINE_IMAGE_TASK_MARKER_RE.test(markdown ?? "");
+}
+
+function markdownContainsResolvedWorkspaceArticleImage(
+  markdown: string | null | undefined,
+): boolean {
+  return RESOLVED_MARKDOWN_IMAGE_RE.test(markdown ?? "");
 }
 
 export function readWorkspaceArticleObjectMarkdown(
@@ -79,7 +87,10 @@ export function shouldRejectWorkspaceArticleEditedDraftChange(params: {
   if (!markdownContainsWorkspaceArticleInlineImageTask(currentMarkdown)) {
     return false;
   }
-  return !markdownContainsWorkspaceArticleInlineImageTask(nextDraft.markdown);
+  return (
+    !markdownContainsWorkspaceArticleInlineImageTask(nextDraft.markdown) &&
+    !markdownContainsResolvedWorkspaceArticleImage(nextDraft.markdown)
+  );
 }
 
 export function applyWorkspaceArticleEditedDraft(
@@ -128,7 +139,9 @@ export function readWorkspaceArticleEditedDraftFromUnknown(
   const updatedAt = readString(record.updatedAt, record.updated_at).trim();
   const objectKey =
     readString(record.objectKey, record.object_key).trim() ||
-    readObjectKeyFromRef(asRecord(record.objectRef) ?? asRecord(record.object_ref));
+    readObjectKeyFromRef(
+      asRecord(record.objectRef) ?? asRecord(record.object_ref),
+    );
   if (!objectKey || !markdown) {
     return null;
   }
@@ -149,6 +162,9 @@ export function buildWorkspaceArticleEditedDraftUpdateRequest(
   }
   return {
     session_id: sessionId,
+    article_workspace_selected_object_ref: articleObjectRefToUpdatePayload(
+      change.object.ref,
+    ),
     article_workspace_edited_draft: {
       objectKey: editedDraft.objectKey,
       objectRef: articleObjectRefToUpdatePayload(change.object.ref),

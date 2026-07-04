@@ -68,6 +68,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     initialRuntimeWarmupDeferredDelayMs = initialTopicsDeferredDelayMs,
     getSyncedSessionRecentPreferences,
     onOpenSubagents,
+    soulCopy,
     runtimeAdapter,
     preserveRestoredMessages = false,
   } = options;
@@ -414,6 +415,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     refreshSessionReadModel: session.refreshSessionReadModel,
     executionRuntime: session.executionRuntime,
     clawTraceEnabled,
+    soulCopy,
   });
   detachStreamBindingsRef.current = stream.detachStreamBindings;
   const setChatMessages = session.setMessages;

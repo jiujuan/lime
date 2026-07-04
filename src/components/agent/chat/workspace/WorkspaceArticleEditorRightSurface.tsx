@@ -149,6 +149,10 @@ function resolveArticleEditorObject(
   );
   return (
     findDocumentObjectByKey(articleWorkspace, selectedObjectKey) ??
+    findDocumentObjectByKey(
+      articleWorkspace,
+      articleWorkspace.editedDraft?.objectKey,
+    ) ??
     preferredArticleDraft ??
     findDocumentObjectByRef(
       articleWorkspace,

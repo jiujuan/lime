@@ -381,6 +381,20 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     scopedKeys,
     workspaceId,
   ]);
+  const loadPersistedSessionRestoreCandidate = useCallback(() => {
+    if (disableSessionRestore || !workspaceId?.trim()) {
+      return null;
+    }
+
+    return sanitizeRestoreCandidateSessionId(
+      loadPersisted<string | null>(scopedKeys.persistedSessionKey, null),
+    );
+  }, [
+    disableSessionRestore,
+    sanitizeRestoreCandidateSessionId,
+    scopedKeys,
+    workspaceId,
+  ]);
 
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>(() =>
@@ -465,6 +479,18 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   const restoreCandidateSessionIdRef = useRef<string | null>(
     loadScopedSessionRestoreCandidate(),
   );
+  const bootPersistedRestoreCandidateSessionIdRef = useRef<string | null>(
+    loadPersistedSessionRestoreCandidate(),
+  );
+  const bootPersistedRestoreWorkspaceIdRef = useRef<string | null>(
+    workspaceId?.trim() || null,
+  );
+  const currentRestoreWorkspaceId = workspaceId?.trim() || null;
+  if (bootPersistedRestoreWorkspaceIdRef.current !== currentRestoreWorkspaceId) {
+    bootPersistedRestoreWorkspaceIdRef.current = currentRestoreWorkspaceId;
+    bootPersistedRestoreCandidateSessionIdRef.current =
+      loadPersistedSessionRestoreCandidate();
+  }
 
   sessionIdRef.current = sessionId;
 
@@ -2724,13 +2750,17 @@ export function useAgentSession(options: UseAgentSessionOptions) {
 
     const restoreCandidateSessionId =
       restoreCandidateSessionIdRef.current?.trim() || null;
+    const restoreCandidateMayLagTopics =
+      restoreCandidateSessionId === sessionId &&
+      (bootPersistedRestoreCandidateSessionIdRef.current === sessionId ||
+        topicsListMayBeTruncatedRef.current);
     const missingSessionAction = resolveMissingSessionFromTopicsAction({
       currentTurnId,
       detachedSessionId: detachedSessionIdRef.current,
       queuedTurnsCount: queuedTurns.length,
       remoteConfirmed:
-        appServerConfirmedSessionIdsRef.current.has(sessionId) ||
-        restoreCandidateSessionId === sessionId,
+        appServerConfirmedSessionIdsRef.current.has(sessionId),
+      restoreCandidateMayLagTopics,
       sessionId,
       threadItemsCount: threadItems.length,
       threadTurnsCount: threadTurns.length,

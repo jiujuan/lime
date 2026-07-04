@@ -1,12 +1,15 @@
 use crate::lime_session_repository::LimeSessionRepository;
-use crate::turn_context_configuration::AgentTurnContext;
-use crate::{
-    resolve_request_tool_policy_with_mode, stream_reply_with_policy, AgentEvent, AgentTokenUsage,
-    AsterAgentState, RequestToolPolicyMode, SessionConfigBuilder,
+use crate::provider_configuration::{
+    configure_model_route_provider_for_session_with_provider, ConfiguredSessionProvider,
+    ModelRouteProviderConfiguration, SessionProviderConfig,
 };
+use crate::request_tool_policy::{
+    resolve_request_tool_policy_with_mode, stream_reply_with_policy,
+    stream_reply_with_policy_and_provider_for_direct_generation, RequestToolPolicyMode,
+};
+use crate::turn_context_configuration::AgentTurnContext;
+use crate::{AgentEvent, AgentRuntimeState, AgentTokenUsage, SessionConfigBuilder};
 use agent_protocol::SessionId;
-use aster::agents::Agent as AsterAgent;
-use aster::session::{query_session, Session as AsterSession};
 use lime_core::database::DbConnection;
 use thread_store::session_repository::{SessionDetail, SessionRepository};
 
@@ -18,91 +21,109 @@ pub struct DirectTextGenerationRequest {
     pub system_prompt: String,
     pub user_prompt: String,
     pub turn_context: Option<AgentTurnContext>,
+    pub provider_configuration: Option<ModelRouteProviderConfiguration>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DirectTextGenerationResult {
     pub text: String,
     pub usage: Option<AgentTokenUsage>,
-}
-
-pub async fn run_direct_text_generation(
-    agent_state: &AsterAgentState,
-    request: DirectTextGenerationRequest,
-) -> Result<DirectTextGenerationResult, String> {
-    run_direct_text_generation_with_optional_db(agent_state, request, None).await
+    pub provider_config: Option<SessionProviderConfig>,
 }
 
 pub async fn run_direct_text_generation_with_db(
-    agent_state: &AsterAgentState,
+    agent_state: &AgentRuntimeState,
     request: DirectTextGenerationRequest,
     db: &DbConnection,
 ) -> Result<DirectTextGenerationResult, String> {
-    run_direct_text_generation_with_optional_db(agent_state, request, Some(db.clone())).await
-}
-
-async fn run_direct_text_generation_with_optional_db(
-    agent_state: &AsterAgentState,
-    request: DirectTextGenerationRequest,
-    repository_db: Option<DbConnection>,
-) -> Result<DirectTextGenerationResult, String> {
-    let session_id = request.session_id.clone();
+    let DirectTextGenerationRequest {
+        session_id,
+        thread_id,
+        turn_id,
+        system_prompt,
+        user_prompt,
+        turn_context,
+        provider_configuration,
+    } = request;
+    let configured_provider = match provider_configuration {
+        Some(provider_configuration) => Some(
+            configure_model_route_provider_for_session_with_provider(
+                agent_state,
+                db,
+                &session_id,
+                provider_configuration,
+            )
+            .await?,
+        ),
+        None => None,
+    };
     let agent_arc = agent_state.get_agent_arc();
     let agent_guard = agent_arc.read().await;
     let agent = agent_guard
         .as_ref()
-        .ok_or_else(|| "Aster agent is not initialized".to_string())?;
+        .ok_or_else(|| "Agent runtime is not initialized".to_string())?;
     let request_tool_policy =
         resolve_request_tool_policy_with_mode(Some(false), Some(RequestToolPolicyMode::Disabled));
-    let mut session_config = SessionConfigBuilder::new(request.session_id)
-        .thread_id(request.thread_id)
-        .turn_id(request.turn_id)
-        .system_prompt(request.system_prompt)
+    let mut session_config = SessionConfigBuilder::new(session_id.clone())
+        .thread_id(thread_id)
+        .turn_id(turn_id)
+        .system_prompt(system_prompt)
         .include_context_trace(false);
-    if let Some(turn_context) = request.turn_context {
+    if let Some(turn_context) = turn_context {
         session_config = session_config.turn_context(turn_context);
     }
     let session_config = session_config.build();
     let mut text = String::new();
     let mut usage: Option<AgentTokenUsage> = None;
-    let execution = stream_reply_with_policy(
-        agent,
-        &request.user_prompt,
-        None,
-        session_config,
-        None,
-        &request_tool_policy,
-        |event| collect_model_text(event, &mut text, &mut usage),
-    )
-    .await;
+    let execution = match configured_provider.as_ref() {
+        Some(ConfiguredSessionProvider { provider, .. }) => {
+            stream_reply_with_policy_and_provider_for_direct_generation(
+                agent,
+                &user_prompt,
+                None,
+                session_config,
+                None,
+                &request_tool_policy,
+                provider.clone(),
+                |event| collect_model_text(event, &mut text, &mut usage),
+            )
+            .await
+        }
+        None => {
+            stream_reply_with_policy(
+                agent,
+                &user_prompt,
+                None,
+                session_config,
+                None,
+                &request_tool_policy,
+                |event| collect_model_text(event, &mut text, &mut usage),
+            )
+            .await
+        }
+    };
     execution.map_err(|error| error.message)?;
     if usage.is_none() {
-        let (usage_source, resolved_usage) = match repository_db.as_ref() {
-            Some(db) => (
-                "session_repository",
-                resolve_session_usage_from_repository(db, &session_id),
-            ),
-            None => (
-                "aster_session",
-                resolve_session_usage_from_aster(agent, &session_id).await,
-            ),
-        };
-        usage = resolved_usage;
+        usage = resolve_session_usage_from_repository(db, &session_id);
         match usage.as_ref() {
             Some(usage) => tracing::info!(
                 session_id = %session_id,
-                source = usage_source,
+                source = "session_repository",
                 input_tokens = usage.input_tokens,
                 output_tokens = usage.output_tokens,
-                "[AsterAgent] direct text generation usage recovered from persisted session stats"
+                "[AgentRuntime] direct text generation usage recovered from persisted session stats"
             ),
             None => tracing::info!(
                 session_id = %session_id,
-                "[AsterAgent] direct text generation completed without usage stats"
+                "[AgentRuntime] direct text generation completed without usage stats"
             ),
         }
     }
-    Ok(DirectTextGenerationResult { text, usage })
+    Ok(DirectTextGenerationResult {
+        text,
+        usage,
+        provider_config: configured_provider.map(|configured| configured.config),
+    })
 }
 
 fn resolve_session_usage_from_repository(
@@ -117,56 +138,13 @@ fn resolve_session_usage_from_repository(
     resolve_usage_from_session_detail(&session)
 }
 
-async fn resolve_session_usage_from_aster(
-    agent: &AsterAgent,
-    session_id: &str,
-) -> Option<AgentTokenUsage> {
-    let session = match agent.session_store() {
-        Some(store) => store.get_session(session_id, false).await.ok()?,
-        None => query_session(session_id, false).await.ok()?,
-    };
-    resolve_usage_from_session(&session)
-}
-
 fn resolve_usage_from_session_detail(session: &SessionDetail) -> Option<AgentTokenUsage> {
-    resolve_usage_from_token_stats(
+    crate::session_usage_projection::project_token_usage(
         session.input_tokens,
         session.output_tokens,
         session.cached_input_tokens,
         session.cache_creation_input_tokens,
     )
-}
-
-fn resolve_usage_from_session(session: &AsterSession) -> Option<AgentTokenUsage> {
-    resolve_usage_from_token_stats(
-        session.input_tokens,
-        session.output_tokens,
-        session.cached_input_tokens,
-        session.cache_creation_input_tokens,
-    )
-}
-
-fn resolve_usage_from_token_stats(
-    input_tokens: Option<i32>,
-    output_tokens: Option<i32>,
-    cached_input_tokens: Option<i32>,
-    cache_creation_input_tokens: Option<i32>,
-) -> Option<AgentTokenUsage> {
-    match (input_tokens, output_tokens) {
-        (Some(input_tokens), Some(output_tokens)) if input_tokens >= 0 && output_tokens >= 0 => {
-            Some(AgentTokenUsage {
-                input_tokens: input_tokens as u32,
-                output_tokens: output_tokens as u32,
-                cached_input_tokens: cached_input_tokens
-                    .filter(|value| *value >= 0)
-                    .map(|value| value as u32),
-                cache_creation_input_tokens: cache_creation_input_tokens
-                    .filter(|value| *value >= 0)
-                    .map(|value| value as u32),
-            })
-        }
-        _ => None,
-    }
 }
 
 fn collect_model_text(
@@ -265,31 +243,6 @@ mod tests {
                 cached_input_tokens: Some(7),
                 cache_creation_input_tokens: None,
             })
-        );
-    }
-
-    #[test]
-    fn resolve_usage_from_token_stats_ignores_negative_optional_cache_values() {
-        assert_eq!(
-            resolve_usage_from_token_stats(Some(31_000), Some(0), Some(-1), Some(512)),
-            Some(AgentTokenUsage {
-                input_tokens: 31_000,
-                output_tokens: 0,
-                cached_input_tokens: None,
-                cache_creation_input_tokens: Some(512),
-            })
-        );
-    }
-
-    #[test]
-    fn resolve_usage_from_token_stats_requires_non_negative_input_and_output() {
-        assert_eq!(
-            resolve_usage_from_token_stats(Some(31_000), None, None, None),
-            None
-        );
-        assert_eq!(
-            resolve_usage_from_token_stats(Some(-1), Some(0), None, None),
-            None
         );
     }
 }

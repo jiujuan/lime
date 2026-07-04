@@ -22,6 +22,7 @@ import { runAgentStreamSubmitLifecycle } from "./agentStreamSubmitLifecycleContr
 import { buildAgentStreamSubmitOp } from "./agentStreamSubmitOpController";
 import { resolveAgentStreamSubmitContext } from "./agentStreamSubmitContext";
 import { registerAgentStreamTurnEventBinding } from "./agentStreamTurnEventBinding";
+import type { SoulInteractionCopy } from "@/lib/soul/interactionCopy";
 import {
   extractAgentUiPerformanceTraceMetadata,
   mergeAgentUiPerformanceTraceMetadata,
@@ -123,6 +124,7 @@ interface ExecuteAgentStreamSubmitOptions {
   setExecutionRuntime: Dispatch<
     SetStateAction<AsterSessionExecutionRuntime | null>
   >;
+  soulCopy?: SoulInteractionCopy;
 }
 
 export async function executeAgentStreamSubmit(
@@ -183,6 +185,7 @@ export async function executeAgentStreamSubmit(
     setThreadTurns,
     setCurrentTurnId,
     setExecutionRuntime,
+    soulCopy,
   } = options;
 
   let resolvedRequestMetadata = requestMetadata;
@@ -209,6 +212,7 @@ export async function executeAgentStreamSubmit(
     skipSessionRestore,
     skipSessionStartHooks,
     performanceTrace,
+    soulCopy,
     activateStream: callbacks.activateStream,
   });
   const resolvedActiveSessionId = activeSessionId?.trim();
@@ -293,6 +297,7 @@ export async function executeAgentStreamSubmit(
     setCurrentTurnId,
     setExecutionRuntime,
     setIsSending,
+    soulCopy,
   });
 
   callbacks.registerListener(unlisten);

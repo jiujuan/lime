@@ -868,6 +868,11 @@ export function AppSidebar({
       return;
     }
 
+    if (item.id === "experts") {
+      conversationActions.navigateToExperts();
+      return;
+    }
+
     if (item.id === "skills") {
       conversationActions.navigateToSkills();
       return;

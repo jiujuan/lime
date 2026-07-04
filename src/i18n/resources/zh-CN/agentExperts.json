@@ -25,6 +25,8 @@
   "agentExperts.sync.seeded": "本地种子目录",
   "agentExperts.title": "专家广场",
   "agentExperts.info.title": "专家信息",
+  "agentExperts.info.profileSwitch.label": "当前专家",
+  "agentExperts.info.profileSwitch.ariaLabel": "切换当前对话的专家",
   "agentExperts.info.sections.overview": "简介",
   "agentExperts.info.sections.memory": "记忆",
   "agentExperts.info.sections.diary": "日记",
@@ -121,7 +123,5 @@
   "agentExperts.info.skills.evidence.counts": "检索 {{searchCount}} 次 · 执行 {{invocationCount}} 次",
   "agentExperts.info.skills.evidence.exportedAt": "最近导出 {{exportedAt}}",
   "agentExperts.info.skills.evidence.latestSkill": "最近技能 {{skillName}}",
-  "agentExperts.info.skills.evidence.knownGaps": "{{count}} 个已知缺口",
-  "agentExperts.actions.continue": "继续对话",
-  "agentExperts.actions.newThread": "新对话"
+  "agentExperts.info.skills.evidence.knownGaps": "{{count}} 个已知缺口"
 }

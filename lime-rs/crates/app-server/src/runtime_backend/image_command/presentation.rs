@@ -1,14 +1,14 @@
 use super::{workflow_run_id, ImageCommandIntent};
 use crate::runtime::memory_prompt::append_soul_context_to_system_prompt;
 use crate::runtime_backend::{
-    backend_error, configure_provider_for_route, current_agent_runtime_config_metadata,
-    direct_provider_config_from_request, initialize_runtime_database, model_route_resolver,
+    backend_error, current_agent_runtime_config_metadata, direct_provider_config_from_request,
+    initialize_runtime_database, model_route_contract, model_route_resolver,
     request_context::{self, RuntimeModelSelection},
     selection_with_effective_reasoning,
 };
 use crate::{ExecutionRequest, RuntimeCoreError};
 use lime_agent::{
-    insert_agent_turn_metadata, run_direct_text_generation_with_db, set_agent_turn_output_schema,
+    insert_agent_turn_metadata, run_direct_text_generation_with_db,
     set_agent_turn_user_visible_input_text, AgentTokenUsage, DirectTextGenerationRequest,
 };
 use serde_json::{json, Map, Value};
@@ -73,6 +73,7 @@ pub(super) async fn generate_image_task_presentation(
     intent: &ImageCommandIntent,
 ) -> Result<Option<GeneratedImageTaskPresentation>, RuntimeCoreError> {
     let db = initialize_runtime_database(runtime_backend.db.as_ref())?;
+    runtime_backend.ensure_agent_initialized(&db).await?;
     let requested_selection = resolve_presentation_model_selection(request)?;
     let effective_requested_selection = selection_with_effective_reasoning(&requested_selection);
     let host_request = request_context::aster_chat_request_from_request(request);
@@ -127,18 +128,11 @@ pub(super) async fn generate_image_task_presentation(
     }
 
     let presentation_session_id = presentation_session_id(intent);
-    let provider_config = configure_provider_for_route(
-        &runtime_backend.agent_state,
-        &db,
-        &selection.provider,
-        &selection.model,
-        &presentation_session_id,
-        selection.reasoning_effort.clone(),
-        &route_resolution.resolved_route.protocol,
+    let provider_configuration = model_route_contract::provider_configuration_from_runtime(
+        &selection,
+        &route_resolution.resolved_route,
         direct_provider_config,
-    )
-    .await
-    .map_err(backend_error)?;
+    );
 
     let config_metadata = current_agent_runtime_config_metadata();
     let mut turn_context = request_context::turn_context_from_request(
@@ -157,23 +151,6 @@ pub(super) async fn generate_image_task_presentation(
             .filter(|value| !value.trim().is_empty())
             .or_else(|| Some(intent.prompt.clone())),
     );
-    set_agent_turn_output_schema(
-        &mut turn_context,
-        json!({
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-                "planning_summary": { "type": "string" },
-                "assistant_intro": { "type": "string" },
-                "completion_caption": { "type": "string" }
-            },
-            "required": [
-                "planning_summary",
-                "assistant_intro",
-                "completion_caption"
-            ]
-        }),
-    );
     insert_agent_turn_metadata(
         &mut turn_context,
         "lime_runtime".to_string(),
@@ -191,17 +168,20 @@ pub(super) async fn generate_image_task_presentation(
             "workflow_run_id": workflow_run_id(&intent.scope),
             "mode": intent.mode,
             "entry_source": intent.entry_source,
-            "provider": provider_config
-                .provider_selector
-                .as_deref()
-                .unwrap_or(&selection.provider),
-            "model": provider_config.model_name,
+            "provider": selection.provider,
+            "model": selection.model,
         }),
     );
 
+    let runtime_metadata = request
+        .runtime_options
+        .as_ref()
+        .and_then(|options| options.metadata.as_ref())
+        .or(request.metadata.as_ref());
     let system_prompt = append_soul_context_to_system_prompt(
         Some(presentation_system_prompt()),
         config_metadata.as_ref(),
+        runtime_metadata,
     )
     .unwrap_or_else(presentation_system_prompt);
     let presentation_language =
@@ -225,17 +205,28 @@ pub(super) async fn generate_image_task_presentation(
             system_prompt,
             user_prompt: presentation_user_prompt(intent, presentation_language),
             turn_context: Some(turn_context),
+            provider_configuration: Some(provider_configuration),
         },
         &db,
     )
     .await
     .map_err(RuntimeCoreError::Backend)?;
+    let generated_provider = generated
+        .provider_config
+        .as_ref()
+        .and_then(|config| config.provider_selector.as_deref())
+        .unwrap_or(&selection.provider);
+    let generated_model = generated
+        .provider_config
+        .as_ref()
+        .map(|config| config.model_name.as_str())
+        .unwrap_or(&selection.model);
 
     let raw_text_len = generated.text.chars().count();
     let parsed = parse_generated_presentation(
         &generated.text,
-        &selection.provider,
-        &selection.model,
+        generated_provider,
+        generated_model,
         presentation_language,
     )
     .map(|mut presentation| {
@@ -777,8 +768,8 @@ fn presentation_user_prompt(
             "Write in the same language as the user request.",
             presentation_language.rule(),
             "planning_summary should be one short, user-visible process summary about composition, mood, and constraints. It must not expose hidden chain-of-thought.",
-            "assistant_intro should be warm, brief, and naturally acknowledge the request before generation.",
-            "completion_caption should describe the result as if the image has completed, invite lightweight iteration, and avoid sounding templated.",
+            "assistant_intro should follow the active Interaction Soul when present, stay brief, and naturally acknowledge the request before generation.",
+            "completion_caption should follow the active Interaction Soul when present, describe the result as if the image has completed, invite lightweight iteration, and avoid sounding templated.",
             "Do not mention workflow, task id, files, JSON, tools, internal paths, or runtime details.",
             "Do not mention branded assistant names."
         ],
@@ -796,6 +787,7 @@ fn presentation_system_prompt() -> String {
         "You write concise, natural user-visible copy for Lime image generation turns.\n\
 Return only JSON that matches the requested schema.\n\
 The copy must feel contextual and human, not like a reusable template.\n\
+If an Interaction Soul section is present, apply it to assistant_intro and completion_caption while keeping planning_summary factual and bounded.\n\
 planning_summary is a brief visible process summary, not hidden chain-of-thought. Summarize what visual direction you will use without revealing internal workflow.\n\
 Detect the user's request language and keep both fields in that language. For Chinese requests, use Simplified Chinese and never use English openers such as Sure, Done, or is ready.\n\
 Never reveal internal workflow, task ids, tool names, files, JSON/JSONL, audit details, or runtime implementation.\n\
@@ -805,300 +797,4 @@ Do not include markdown fences.",
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::RuntimeHostContext;
-    use app_server_protocol::{
-        AgentInput, AgentSession, AgentSessionStatus, AgentTurn, AgentTurnStatus, RuntimeOptions,
-    };
-
-    fn request_for_presentation_test(
-        host_options: Option<Value>,
-        metadata: Option<Value>,
-    ) -> ExecutionRequest {
-        ExecutionRequest {
-            host: RuntimeHostContext::default(),
-            session: AgentSession {
-                session_id: "session-1".to_string(),
-                thread_id: "thread-1".to_string(),
-                app_id: "content-studio".to_string(),
-                workspace_id: Some("workspace-main".to_string()),
-                business_object_ref: None,
-                status: AgentSessionStatus::Running,
-                created_at: "2026-07-03T00:00:00.000Z".to_string(),
-                updated_at: "2026-07-03T00:00:00.000Z".to_string(),
-            },
-            turn: AgentTurn {
-                turn_id: "turn-1".to_string(),
-                session_id: "session-1".to_string(),
-                thread_id: "thread-1".to_string(),
-                status: AgentTurnStatus::Accepted,
-                started_at: None,
-                completed_at: None,
-            },
-            input: AgentInput {
-                text: "@配图 画一张深圳夏天的图".to_string(),
-                attachments: Vec::new(),
-            },
-            runtime_options: Some(RuntimeOptions {
-                capability_id: None,
-                stream: true,
-                event_name: None,
-                provider_preference: None,
-                model_preference: None,
-                metadata,
-                queued_turn_id: None,
-                host_options,
-                ..RuntimeOptions::default()
-            }),
-            event_name: None,
-            expected_output: None,
-            structured_output: None,
-            output_schema: None,
-            provider_preference: None,
-            model_preference: None,
-            metadata: None,
-            queued_turn_id: None,
-            queue_if_busy: false,
-            skip_pre_submit_resume: false,
-        }
-    }
-
-    #[test]
-    fn parses_and_normalizes_model_generated_presentation() {
-        let presentation = parse_generated_presentation(
-            r#"{"assistant_intro":"好啊，我来处理这张深圳夏天的画面。","completion_caption":"搞定，深圳夏天的阳光和城市感都放进去了。\n还想更清爽或更电影感，可以继续调。"}"#,
-            "openai",
-            "gpt-4.1",
-            PresentationLanguage::ChineseSimplified,
-        )
-        .expect("presentation");
-
-        assert_eq!(
-            presentation.assistant_intro.as_deref(),
-            Some("好啊，我来处理这张深圳夏天的画面。")
-        );
-        assert_eq!(
-            presentation.payload["result_captions"]["complete"].as_str(),
-            Some("搞定，深圳夏天的阳光和城市感都放进去了。\n还想更清爽或更电影感，可以继续调。")
-        );
-    }
-
-    #[test]
-    fn rejects_internal_or_branded_visible_copy() {
-        let raw = format!(
-            r#"{{"assistant_intro":"{} 马上写入 JSONL。","completion_caption":"workflow 已完成"}}"#,
-            concat!("R", "ibbi")
-        );
-        assert!(parse_generated_presentation(
-            &raw,
-            "openai",
-            "gpt-4.1",
-            PresentationLanguage::ChineseSimplified,
-        )
-        .is_none());
-    }
-
-    #[test]
-    fn merges_generated_fields_without_dropping_contract() {
-        let generated = parse_generated_presentation(
-            r#"{"assistant_intro":"好啊，我来画。","completion_caption":"完成了，可以继续调。"}"#,
-            "openai",
-            "gpt-4.1",
-            PresentationLanguage::ChineseSimplified,
-        )
-        .expect("presentation");
-
-        let merged = merge_generated_presentation(
-            Some(json!({
-                "version": "lime-image-chat-v1",
-                "assistant_intro_request": {
-                    "source": "model_generated_before_tool"
-                }
-            })),
-            &generated,
-        )
-        .expect("merged");
-
-        assert_eq!(merged["version"], "lime-image-chat-v1");
-        assert_eq!(merged["assistant_intro"], "好啊，我来画。");
-    }
-
-    #[test]
-    fn rejects_english_presentation_for_chinese_request() {
-        assert!(parse_generated_presentation(
-            r#"{"assistant_intro":"Sure, let's generate the Shenzhen summer photo.","completion_caption":"Done, the Shenzhen summer photo is ready."}"#,
-            "openai",
-            "gpt-4.1",
-            PresentationLanguage::ChineseSimplified,
-        )
-        .is_none());
-    }
-
-    #[test]
-    fn allows_model_labels_inside_chinese_presentation() {
-        let presentation = parse_generated_presentation(
-            r#"{"assistant_intro":"好啊，用 Agnes Image 2.1 Flash 给你生成这张深圳夏天照片。","completion_caption":"搞定，深圳夏天的城市感和明亮空气已经出来了。"}"#,
-            "openai",
-            "gpt-4.1",
-            PresentationLanguage::ChineseSimplified,
-        )
-        .expect("presentation");
-
-        assert_eq!(
-            presentation.assistant_intro.as_deref(),
-            Some("好啊，用 Agnes Image 2.1 Flash 给你生成这张深圳夏天照片。")
-        );
-        assert_eq!(
-            presentation.completion_caption.as_deref(),
-            Some("搞定，深圳夏天的城市感和明亮空气已经出来了。")
-        );
-    }
-
-    #[test]
-    fn presentation_prompt_carries_language_contract() {
-        assert_eq!(
-            detect_presentation_language("用 Agnes 生成一张深圳夏天照片"),
-            PresentationLanguage::ChineseSimplified
-        );
-        let system_prompt = presentation_system_prompt();
-        assert!(system_prompt.contains("Simplified Chinese"));
-        assert!(system_prompt.contains("Sure"));
-        assert!(system_prompt.contains("Done"));
-    }
-
-    #[test]
-    fn presentation_selection_prefers_text_slot_over_image_runtime_preference() {
-        let mut request = request_for_presentation_test(
-            None,
-            Some(json!({
-                "harness": {
-                    "modelSlots": {
-                        "fast": {
-                            "provider": "openai",
-                            "model": "gpt-4.1-mini"
-                        },
-                        "base": {
-                            "provider": "anthropic",
-                            "model": "claude-sonnet-4"
-                        }
-                    }
-                }
-            })),
-        );
-        let options = request.runtime_options.as_mut().expect("runtime options");
-        options.provider_preference = Some("agnes".to_string());
-        options.model_preference = Some("agnes-image-2.1-flash".to_string());
-        request.provider_preference = options.provider_preference.clone();
-        request.model_preference = options.model_preference.clone();
-
-        let selection = resolve_presentation_model_selection(&request).expect("selection");
-
-        assert_eq!(selection.provider, "openai");
-        assert_eq!(selection.model, "gpt-4.1-mini");
-        assert_eq!(selection.source, "profile_model_slot");
-    }
-
-    #[test]
-    fn presentation_selection_rejects_image_only_host_config() {
-        let request = request_for_presentation_test(
-            Some(json!({
-                "asterChatRequest": {
-                    "provider_config": {
-                        "provider_id": "agnes",
-                        "provider_name": "openai",
-                        "model_name": "agnes-image-2.1-flash",
-                        "api_key": "sk-test",
-                        "base_url": "https://apihub.agnes-ai.com/v1"
-                    },
-                    "provider_preference": "agnes",
-                    "model_preference": "agnes-image-2.1-flash"
-                }
-            })),
-            None,
-        );
-
-        let error = resolve_presentation_model_selection(&request).expect_err("image only");
-
-        assert!(error
-            .to_string()
-            .contains("presentation_text_model_unavailable"));
-    }
-
-    #[test]
-    fn presentation_selection_keeps_agnes_text_model_without_image_word() {
-        let request = request_for_presentation_test(
-            Some(json!({
-                "asterChatRequest": {
-                    "provider_config": {
-                        "provider_id": "custom-agnes-provider",
-                        "provider_name": "openai",
-                        "model_name": "agnes-2.0-flash",
-                        "api_key": "sk-test",
-                        "base_url": "https://apihub.agnes-ai.com/v1"
-                    },
-                    "provider_preference": "custom-agnes-provider",
-                    "model_preference": "agnes-2.0-flash"
-                }
-            })),
-            None,
-        );
-
-        let selection = resolve_presentation_model_selection(&request).expect("selection");
-
-        assert_eq!(selection.provider, "custom-agnes-provider");
-        assert_eq!(selection.model, "agnes-2.0-flash");
-    }
-
-    #[test]
-    fn presentation_selection_skips_image_fast_slot_and_uses_base_slot() {
-        let request = request_for_presentation_test(
-            None,
-            Some(json!({
-                "harness": {
-                    "modelSlots": {
-                        "fast": {
-                            "provider": "agnes",
-                            "model": "agnes-image-2.1-flash"
-                        },
-                        "base": {
-                            "provider": "openai",
-                            "model": "gpt-4.1-mini"
-                        }
-                    }
-                }
-            })),
-        );
-
-        let selection = resolve_presentation_model_selection(&request).expect("selection");
-
-        assert_eq!(selection.provider, "openai");
-        assert_eq!(selection.model, "gpt-4.1-mini");
-    }
-
-    #[test]
-    fn presentation_selection_allows_text_host_direct_config() {
-        let request = request_for_presentation_test(
-            Some(json!({
-                "asterChatRequest": {
-                    "provider_config": {
-                        "provider_id": "fixture-openai",
-                        "provider_name": "openai",
-                        "model_name": "lime-fixture-chat",
-                        "api_key": "sk-test",
-                        "base_url": "http://127.0.0.1:56599"
-                    },
-                    "provider_preference": "fixture-openai",
-                    "model_preference": "lime-fixture-chat"
-                }
-            })),
-            None,
-        );
-
-        let selection = resolve_presentation_model_selection(&request).expect("selection");
-
-        assert_eq!(selection.provider, "fixture-openai");
-        assert_eq!(selection.model, "lime-fixture-chat");
-        assert_eq!(selection.source, "host_options_provider_config");
-    }
-}
+mod tests;

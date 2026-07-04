@@ -825,8 +825,8 @@ describe("workspaceArticleWorkspaceMessageArtifacts", () => {
         now: 200,
       });
 
-    expect(nextMessages[1]?.artifacts).toHaveLength(2);
-    expect(nextMessages[1]?.artifacts?.[1]).toMatchObject({
+    expect(nextMessages[1]?.artifacts).toHaveLength(1);
+    expect(nextMessages[1]?.artifacts?.[0]).toMatchObject({
       title: "公众号文章草稿",
       content: expect.stringContaining("这是小框展开后的正文"),
       meta: expect.objectContaining({
@@ -837,5 +837,127 @@ describe("workspaceArticleWorkspaceMessageArtifacts", () => {
         }),
       }),
     });
+  });
+
+  it("应替换只有 artifactDocument articleWorkspace metadata 的旧文章小框", () => {
+    const messages = [
+      createMessage({
+        id: "assistant-1",
+        content: "文章草稿已生成。",
+        artifacts: [
+          {
+            id: "legacy-article-preview",
+            type: "document",
+            title: "公众号文章草稿",
+            content: "# 公众号文章草稿\n\n旧正文。",
+            status: "complete",
+            meta: {
+              artifactDocument: {
+                artifactId: "artifact-document:content-factory-app:article-1",
+                kind: "article",
+                title: "公众号文章草稿",
+                metadata: {
+                  articleWorkspace: {
+                    appId: "content-factory-app",
+                    sessionId: "session-main",
+                    workspaceId: "workspace-main",
+                    objectKind: "articleDraft",
+                    objectId: "article-1",
+                    artifactIds: ["artifact-article-1"],
+                  },
+                },
+              },
+            },
+            position: { start: 0, end: 0 },
+            createdAt: 100,
+            updatedAt: 100,
+          },
+        ],
+      }),
+    ] satisfies Message[];
+
+    const nextMessages =
+      attachWorkspaceArticleWorkspacePreviewArtifactToMessages({
+        messages,
+        articleWorkspace,
+        now: 200,
+      });
+
+    expect(nextMessages).toHaveLength(1);
+    expect(nextMessages[0]?.artifacts).toHaveLength(1);
+    expect(nextMessages[0]?.artifacts?.[0]?.id).not.toBe(
+      "legacy-article-preview",
+    );
+    expect(nextMessages[0]?.artifacts?.[0]).toMatchObject({
+      content: expect.stringContaining("这是正文。"),
+      meta: expect.objectContaining({
+        openedFrom: "right_surface_article_workspace",
+        articleWorkspace: expect.objectContaining({
+          objectKind: "articleDraft",
+          objectId: "article-1",
+        }),
+      }),
+    });
+  });
+
+  it("应替换 App Server history 投影的旧文章小框", () => {
+    const messages = [
+      createMessage({
+        id: "assistant-1",
+        content: "文章草稿已生成。",
+        artifacts: [
+          {
+            id: "app-server-article-preview",
+            type: "document",
+            title: "公众号文章草稿",
+            content: "# 公众号文章草稿\n\n旧正文。",
+            status: "complete",
+            meta: {
+              openedFrom: "app_server_article_workspace",
+              workspacePatch: {
+                schemaVersion: "article-workspace.v1",
+                appId: "content-factory-app",
+                sessionId: "session-main",
+                workspaceId: "workspace-main",
+                objects: [
+                  {
+                    ref: {
+                      appId: "content-factory-app",
+                      kind: "articleDraft",
+                      id: "article-1",
+                      sessionId: "session-main",
+                      artifactIds: ["artifact-article-1"],
+                    },
+                    title: "公众号文章草稿",
+                    status: "ready",
+                    source: {
+                      documentText: "# 公众号文章草稿\n\n旧正文。",
+                      finalMarkdown: "# 公众号文章草稿\n\n旧正文。",
+                    },
+                  },
+                ],
+              },
+            },
+            position: { start: 0, end: 0 },
+            createdAt: 100,
+            updatedAt: 100,
+          },
+        ],
+      }),
+    ] satisfies Message[];
+
+    const nextMessages =
+      attachWorkspaceArticleWorkspacePreviewArtifactToMessages({
+        messages,
+        articleWorkspace,
+        now: 200,
+      });
+
+    expect(nextMessages).toHaveLength(1);
+    expect(nextMessages[0]?.artifacts).toHaveLength(1);
+    expect(nextMessages[0]?.artifacts?.[0]?.id).not.toBe(
+      "app-server-article-preview",
+    );
+    expect(nextMessages[0]?.artifacts?.[0]?.content).toContain("这是正文。");
   });
 });

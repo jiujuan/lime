@@ -1,16 +1,10 @@
-use aster::conversation::Conversation;
 use aster::session::extension_data::ExtensionData;
-use aster::session::{
-    create_subagent_session as create_aster_subagent_session,
-    persist_session_extension_data as persist_aster_session_extension_data,
-    replace_session_conversation as replace_aster_session_conversation, Session,
-};
+use aster::session::persist_session_extension_data as persist_aster_session_extension_data;
 use chrono::Utc;
 use lime_core::database::{
     agent_session_repository::{self, SessionTokenStatsUpdate},
     lock_db, DbConnection,
 };
-use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompactionSessionMetricsUpdate {
@@ -24,33 +18,12 @@ pub struct CompactionSessionMetricsUpdate {
 }
 
 /// 收口 session extension_data 的持久化边界，避免散落 direct builder 调用。
-pub async fn persist_session_extension_data(
+pub(crate) async fn persist_session_extension_data(
     session_id: &str,
     extension_data: ExtensionData,
     action_label: &str,
 ) -> Result<(), String> {
     persist_aster_session_extension_data(session_id, extension_data)
-        .await
-        .map_err(|error| format!("{action_label}失败: {error}"))
-}
-
-/// 收口 subagent session 创建边界，避免业务层直接持有 create_session 调用。
-pub async fn create_subagent_session(
-    working_dir: PathBuf,
-    session_name: String,
-) -> Result<Session, String> {
-    create_aster_subagent_session(working_dir, session_name)
-        .await
-        .map_err(|error| format!("创建 subagent session 失败: {error}"))
-}
-
-/// 收口 session conversation 整体替换边界，避免业务层直接持有 replace_conversation 调用。
-pub async fn replace_session_conversation(
-    session_id: &str,
-    conversation: &Conversation,
-    action_label: &str,
-) -> Result<(), String> {
-    replace_aster_session_conversation(session_id, conversation)
         .await
         .map_err(|error| format!("{action_label}失败: {error}"))
 }

@@ -532,7 +532,7 @@ describe("AgentChatPage 自动引导", { timeout: 20_000 }, () => {
       }),
       expect.objectContaining({
         role: "assistant",
-        content: "正在开始处理任务…",
+        content: "任务已进入处理队列…",
       }),
     ]);
   });

@@ -51,6 +51,8 @@ import {
   buildWaitingAgentRuntimeStatus,
   formatAgentRuntimeStatusSummary,
 } from "../utils/agentRuntimeStatus";
+import type { SoulInteractionCopy } from "@/lib/soul/interactionCopy";
+import { resolveSoulInteractionCopy } from "@/lib/soul/interactionCopy";
 import { normalizeTeamWorkspaceDisplayValue } from "../utils/teamWorkspaceDisplay";
 import { resolveOemCloudRuntimeContext } from "@/lib/api/oemCloudRuntime";
 import type {
@@ -1132,6 +1134,7 @@ function buildRuntimeTeamMemberPlanLines(
 
 function buildRuntimeTeamAssistantDraft(
   state: TeamWorkspaceRuntimeFormationState | null | undefined,
+  soulCopy: SoulInteractionCopy,
 ): AssistantDraftState | undefined {
   if (!state || state.status !== "formed") {
     return undefined;
@@ -1139,28 +1142,33 @@ function buildRuntimeTeamAssistantDraft(
 
   const teamLabel =
     normalizeTeamWorkspaceDisplayValue(state.label || state.blueprint?.label) ||
-    "当前 Subagents profile";
+    "当前协作配置";
   const summary =
     normalizeTeamWorkspaceDisplayValue(
       state.summary || state.blueprint?.summary,
     ) || "";
   const planLines = buildRuntimeTeamMemberPlanLines(state);
+  const readyCopySections = soulCopy.subagentsReadyContent(teamLabel).split("\n\n");
+  const readyLead = readyCopySections[0] || `已为这项任务准备「${teamLabel}」。`;
+  const readyTail =
+    readyCopySections.slice(1).join("\n\n") ||
+    "这些任务会分别展开处理，关键进展、风险和需确认事项会回到主对话。";
   const contentSections = [
-    `我已经为这项任务准备了「${teamLabel}」。`,
-    summary ? `会先按“${summary}”来推进。` : null,
-    planLines.length > 0 ? `Subagents 如下：\n${planLines.join("\n")}` : null,
-    "接下来这些任务会分别展开处理，再把关键进展、风险和需要你确认的事项汇总给你。",
+    readyLead,
+    summary ? `执行方向：“${summary}”。` : null,
+    planLines.length > 0 ? `协作分工如下：\n${planLines.join("\n")}` : null,
+    readyTail,
   ].filter(Boolean);
 
   const initialRuntimeStatus: AgentRuntimeStatus = {
     phase: "routing",
-    title: "Subagents 已准备好",
+    title: soulCopy.subagentsReadyTitle,
     detail:
       summary ||
-      "已整理好当前任务的 Subagents，接下来会分别展开处理并同步结果。",
+      "已整理好当前任务的协作执行，接下来会分别展开处理并同步结果。",
     checkpoints: [
-      `当前 Subagents profile：${teamLabel}`,
-      `已安排 ${Math.max(state.members.length, 1)} 项任务`,
+      `当前协作配置：${teamLabel}`,
+      `已分配 ${Math.max(state.members.length, 1)} 项任务`,
       "主对话会持续同步关键进展",
     ],
   };
@@ -1170,9 +1178,9 @@ function buildRuntimeTeamAssistantDraft(
     title: "任务开始接手",
     detail:
       summary ||
-      "Subagents 已经确认，这些任务会按各自职责继续处理并回传关键结果。",
+      "协作执行已经确认，这些任务会按各自职责继续处理并回传关键结果。",
     checkpoints: [
-      `当前 Subagents profile：${teamLabel}`,
+      `当前协作配置：${teamLabel}`,
       planLines[0] || "这些任务会分别接手自己的部分",
       "主对话会持续同步关键进展",
     ],
@@ -1187,18 +1195,19 @@ function buildRuntimeTeamAssistantDraft(
 
 export function buildRuntimeTeamDispatchPreviewMessages(
   snapshot: RuntimeTeamDispatchPreviewSnapshot,
+  soulCopy: SoulInteractionCopy = resolveSoulInteractionCopy(),
 ): Message[] {
   const normalizedPrompt = snapshot.prompt.trim();
   const timestamp = new Date();
   const formedAssistantDraft =
     snapshot.status === "formed"
-      ? buildRuntimeTeamAssistantDraft(snapshot.formationState)
+      ? buildRuntimeTeamAssistantDraft(snapshot.formationState, soulCopy)
       : undefined;
   const formedTeamLabel =
     normalizeTeamWorkspaceDisplayValue(
       snapshot.formationState?.label ||
         snapshot.formationState?.blueprint?.label,
-    ) || "当前 Subagents profile";
+    ) || "当前协作配置";
   const formedSummary =
     normalizeTeamWorkspaceDisplayValue(
       snapshot.formationState?.summary ||
@@ -1208,32 +1217,32 @@ export function buildRuntimeTeamDispatchPreviewMessages(
     snapshot.status === "failed"
       ? {
           phase: "failed" as const,
-          title: "Subagents 准备失败",
+          title: "协作执行准备失败",
           detail:
             normalizeTeamWorkspaceDisplayValue(snapshot.failureMessage) ||
-            "这次 Subagents 准备失败，已回退到普通对话发送。",
+            "协作执行准备失败，已回退到普通对话发送。",
         }
       : snapshot.status === "formed"
         ? formedAssistantDraft?.initialRuntimeStatus || {
             phase: "routing" as const,
-            title: "Subagents 已准备好",
+            title: soulCopy.subagentsReadyTitle,
             detail:
               formedSummary ||
-              "已整理好当前任务的 Subagents，接下来会分别展开处理并同步结果。",
+              "已整理好当前任务的协作执行，接下来会分别展开处理并同步结果。",
             checkpoints: [
-              `当前 Subagents profile：${formedTeamLabel}`,
-              "这些任务会按 Subagents 安排开始接手",
+              `当前协作配置：${formedTeamLabel}`,
+              "这些任务会按协作分工开始接手",
               "主对话会持续同步关键进展",
             ],
           }
         : {
             phase: "routing" as const,
-            title: "正在准备 Subagents",
+            title: "正在准备协作执行",
             detail:
-              "系统正在根据当前任务准备 Subagents，会先拆出合适的任务，再把关键进展持续汇总回主对话。",
+              "系统正在根据当前任务准备协作执行，会先拆出合适的任务，再把关键进展持续汇总回主对话。",
             checkpoints: [
               "确认当前任务目标",
-              "准备 Subagents",
+              "准备协作执行",
               "等待任务接手处理",
             ],
           };
@@ -1251,11 +1260,11 @@ export function buildRuntimeTeamDispatchPreviewMessages(
       role: "assistant",
       content:
         snapshot.status === "failed"
-          ? "这次 Subagents 准备失败，已回退到普通执行。"
+          ? "协作执行准备失败，已回退到普通执行。"
           : snapshot.status === "formed"
             ? formedAssistantDraft?.content ||
-              `我已经为这项任务准备了「${formedTeamLabel}」。\n\n接下来这些任务会分别展开处理，再把关键进展和结果汇总给你。`
-            : "我会先准备 Subagents，再把关键进展和结果汇总给你。",
+              soulCopy.subagentsReadyContent(formedTeamLabel)
+            : soulCopy.subagentsPreparingContent,
       timestamp: new Date(timestamp.getTime() + 1),
       isThinking: snapshot.status === "forming",
       runtimeStatus: assistantRuntimeStatus,
@@ -1266,6 +1275,7 @@ export function buildRuntimeTeamDispatchPreviewMessages(
 export function buildInitialDispatchPreviewMessages(
   snapshot: InitialDispatchPreviewSnapshot,
   assistantPreviewText?: string,
+  soulCopy: SoulInteractionCopy = resolveSoulInteractionCopy(),
 ): Message[] {
   const normalizedPrompt = (snapshot.prompt || "").trim();
   const normalizedImages = snapshot.images || [];
@@ -1275,10 +1285,11 @@ export function buildInitialDispatchPreviewMessages(
   }
 
   const timestamp = new Date();
+  const defaultAssistantPreviewText = soulCopy.initialDispatchWaiting;
   const normalizedAssistantPreviewText =
-    assistantPreviewText?.trim() || "正在开始处理任务…";
+    assistantPreviewText?.trim() || defaultAssistantPreviewText;
   const isAssistantThinking =
-    normalizedAssistantPreviewText === "正在开始处理任务…";
+    normalizedAssistantPreviewText === defaultAssistantPreviewText;
 
   return [
     {
@@ -1334,8 +1345,12 @@ export function createSubmissionPreviewSnapshot(
 
 export function buildSubmissionPreviewMessages(
   snapshot: SubmissionPreviewSnapshot,
+  soulCopy: SoulInteractionCopy = resolveSoulInteractionCopy(),
 ): Message[] {
   const timestamp = new Date(snapshot.createdAt);
+  const runtimeStatusSummary =
+    formatAgentRuntimeStatusSummary(snapshot.runtimeStatus) ||
+    soulCopy.initialDispatchWaiting;
 
   return [
     {
@@ -1349,7 +1364,7 @@ export function buildSubmissionPreviewMessages(
     {
       id: `submission-preview:${snapshot.key}:assistant`,
       role: "assistant",
-      content: formatAgentRuntimeStatusSummary(snapshot.runtimeStatus),
+      content: runtimeStatusSummary,
       timestamp: new Date(timestamp.getTime() + 1),
       isThinking: true,
       runtimeStatus: snapshot.runtimeStatus,

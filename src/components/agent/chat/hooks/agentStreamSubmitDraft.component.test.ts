@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Message } from "../types";
+import { resolveSoulInteractionCopy } from "@/lib/soul/interactionCopy";
 import {
   clearAgentUiPerformanceMetrics,
   getAgentUiPerformanceMetrics,
@@ -64,6 +65,46 @@ describe("agentStreamSubmitDraft browser paint boundary", () => {
     expect(assistantMsg.id).toBe("assistant-1");
     expect(assistantMsg.runtimeStatus?.title).toContain("准备");
     expect(isSending).toBe(true);
+  });
+
+  it("普通 assistant 草稿初始运行态应支持 Soul 交互口吻", () => {
+    let messages: Message[] = [];
+    let isSending = false;
+    const soulCopy = resolveSoulInteractionCopy({
+      soul: {
+        enabled: true,
+        style_profile_id: "cheeky_sassy_executor",
+        style_intensity: "low",
+      },
+    });
+
+    prepareAgentStreamSubmitDraft({
+      content: "整理资料",
+      images: [],
+      skipUserMessage: false,
+      expectingQueue: false,
+      assistantMsgId: "assistant-soul",
+      userMsgId: "user-soul",
+      effectiveExecutionStrategy: "react",
+      soulCopy,
+      setMessages: createStateSetter(
+        () => messages,
+        (value) => {
+          messages = value;
+        },
+      ),
+      setIsSending: createStateSetter(
+        () => isSending,
+        (value) => {
+          isSending = value;
+        },
+      ),
+    });
+
+    expect(messages[1]?.runtimeStatus).toMatchObject({
+      title: "正在看需求",
+      detail: expect.stringMatching(/别让流程.*抢戏/u),
+    });
   });
 
   it("队列态应只注入 assistant draft，并保留自定义初始内容", () => {

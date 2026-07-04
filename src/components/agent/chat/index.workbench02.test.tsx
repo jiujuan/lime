@@ -6,6 +6,7 @@ import {
   flushEffects,
   getIndexTestMocks,
   installMockAgentChatUnifiedState,
+  textContainsAny,
   type MockInputbarSendProps,
   mountPage,
   observedWorkspaceIds,
@@ -13,7 +14,7 @@ import {
   sharedSendMessageMock,
   sharedSwitchTopicMock,
   sharedTriggerAIGuideMock,
-  WORKSPACE_HARNESS_TITLE,
+  WORKSPACE_HARNESS_TITLE_CANDIDATES,
 } from "./index.testFixtures";
 
 const {
@@ -392,7 +393,12 @@ describe("AgentChatPage 通用工作台", { timeout: 20_000 }, () => {
     clickButton(container, "toggle-harness");
     await flushEffects();
 
-    expect(document.body.textContent).toContain(WORKSPACE_HARNESS_TITLE);
+    expect(
+      textContainsAny(
+        document.body.textContent,
+        WORKSPACE_HARNESS_TITLE_CANDIDATES,
+      ),
+    ).toBe(true);
     expect(document.body.textContent).not.toContain("已激活技能");
     expect(
       document.body.querySelector('button[aria-label="跳转到已激活技能"]'),

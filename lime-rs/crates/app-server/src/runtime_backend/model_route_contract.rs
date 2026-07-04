@@ -4,12 +4,19 @@ use crate::model_route_assembly::{
 };
 use crate::model_task_contract::{build_model_task_request, ModelTaskRequestInput};
 use crate::ExecutionRequest;
+use agent_protocol::ModelId;
+use agent_runtime::turn_executor::TurnProviderConfiguration;
 use app_server_protocol::{
-    ModelRefSource, ModelTaskKind, ModelTaskRequest, ModelTaskSource, ResolvedModelRoute,
+    CapabilitySnapshot, ModelRefSource, ModelTaskKind, ModelTaskRequest, ModelTaskSource,
+    ProtocolKind, ResolvedModelRoute,
 };
-use lime_agent::{route_protocol_from_provider_config, ProviderConfig};
+use lime_agent::{
+    route_protocol_from_session_provider_config, ModelRouteProviderConfiguration,
+    SessionProviderConfig,
+};
 use lime_core::database::dao::api_key_provider::ProviderWithKeys;
-use serde_json::Value;
+use model_provider::{ModelProviderProtocol, ModelRoute};
+use serde_json::{json, Value};
 
 pub(super) fn chat_task_request_from_runtime(
     request: &ExecutionRequest,
@@ -66,7 +73,7 @@ pub(super) fn resolved_route_from_runtime(
     selection: &RuntimeModelSelection,
     routing_payload: &Value,
     provider: Option<&ProviderWithKeys>,
-    direct_provider_config: Option<&ProviderConfig>,
+    direct_provider_config: Option<&SessionProviderConfig>,
 ) -> ResolvedModelRoute {
     resolved_route_from_task(
         task_request,
@@ -82,6 +89,39 @@ pub(super) fn resolved_route_from_runtime(
     )
 }
 
+pub(super) fn model_route_from_runtime(
+    selection: &RuntimeModelSelection,
+    resolved_route: &ResolvedModelRoute,
+) -> ModelRoute {
+    let service_model_slot = resolved_route.decision.service_model_slot.clone();
+    ModelRoute {
+        provider: selection.provider.clone(),
+        model: ModelId::new(selection.model.clone()),
+        protocol: model_provider_protocol_from_route_protocol(&resolved_route.protocol),
+        capabilities: model_route_capabilities(&resolved_route.capability_snapshot),
+        metadata: json!({
+            "source": selection.source,
+            "serviceModelSlot": service_model_slot.clone(),
+            "service_model_slot": service_model_slot,
+        }),
+    }
+}
+
+pub(super) fn provider_configuration_from_runtime(
+    selection: &RuntimeModelSelection,
+    resolved_route: &ResolvedModelRoute,
+    direct_provider_config: Option<SessionProviderConfig>,
+) -> ModelRouteProviderConfiguration {
+    ModelRouteProviderConfiguration {
+        turn_provider: TurnProviderConfiguration {
+            route: model_route_from_runtime(selection, resolved_route),
+            reasoning_effort: selection.reasoning_effort.clone(),
+        },
+        route_protocol: Some(resolved_route.protocol.clone()),
+        direct_provider_config,
+    }
+}
+
 fn model_ref_source(source: &str) -> ModelRefSource {
     match source {
         "runtime_options" => ModelRefSource::RuntimeOptions,
@@ -90,6 +130,54 @@ fn model_ref_source(source: &str) -> ModelRefSource {
         "session_default" => ModelRefSource::SessionDefault,
         "direct_provider_config" => ModelRefSource::DirectProviderConfig,
         _ => ModelRefSource::Explicit,
+    }
+}
+
+fn model_provider_protocol_from_route_protocol(protocol: &ProtocolKind) -> ModelProviderProtocol {
+    match protocol {
+        ProtocolKind::OpenaiResponses | ProtocolKind::CodexResponses => {
+            ModelProviderProtocol::Responses
+        }
+        ProtocolKind::OpenaiChat => ModelProviderProtocol::ChatCompletions,
+        other => ModelProviderProtocol::Custom(route_protocol_name(other).to_string()),
+    }
+}
+
+fn route_protocol_name(protocol: &ProtocolKind) -> &'static str {
+    match protocol {
+        ProtocolKind::OpenaiChat => "openai_chat",
+        ProtocolKind::OpenaiResponses => "openai_responses",
+        ProtocolKind::OpenaiImages => "openai_images",
+        ProtocolKind::AnthropicMessages => "anthropic_messages",
+        ProtocolKind::GeminiGenerateContent => "gemini_generate_content",
+        ProtocolKind::OllamaChat => "ollama_chat",
+        ProtocolKind::Fal => "fal",
+        ProtocolKind::BedrockConverse => "bedrock_converse",
+        ProtocolKind::VertexGemini => "vertex_gemini",
+        ProtocolKind::CodexResponses => "codex_responses",
+        ProtocolKind::Unknown => "unknown",
+    }
+}
+
+fn model_route_capabilities(capability_snapshot: &CapabilitySnapshot) -> Vec<String> {
+    let mut capabilities = capability_snapshot.runtime_features.clone();
+    let model_capabilities = &capability_snapshot.capabilities;
+    push_capability(&mut capabilities, "vision", model_capabilities.vision);
+    push_capability(&mut capabilities, "tools", model_capabilities.tools);
+    push_capability(&mut capabilities, "streaming", model_capabilities.streaming);
+    push_capability(&mut capabilities, "json_mode", model_capabilities.json_mode);
+    push_capability(
+        &mut capabilities,
+        "function_calling",
+        model_capabilities.function_calling,
+    );
+    push_capability(&mut capabilities, "reasoning", model_capabilities.reasoning);
+    capabilities
+}
+
+fn push_capability(capabilities: &mut Vec<String>, capability: &str, enabled: bool) {
+    if enabled {
+        push_unique(capabilities, capability.to_string());
     }
 }
 
@@ -106,7 +194,7 @@ fn non_empty(value: Option<&str>) -> Option<String> {
         .map(ToString::to_string)
 }
 
-fn direct_route_config(config: &ProviderConfig) -> DirectRouteConfig<'_> {
+fn direct_route_config(config: &SessionProviderConfig) -> DirectRouteConfig<'_> {
     DirectRouteConfig {
         provider_name: &config.provider_name,
         api_key_present: config
@@ -115,7 +203,7 @@ fn direct_route_config(config: &ProviderConfig) -> DirectRouteConfig<'_> {
             .is_some_and(|key| !key.trim().is_empty()),
         base_url: config.base_url.as_deref(),
         credential_ref: config.credential_uuid.as_deref(),
-        protocol: route_protocol_from_provider_config(config),
+        protocol: route_protocol_from_session_provider_config(config),
         toolshim: config.toolshim,
         toolshim_model: config.toolshim_model.as_deref(),
     }
@@ -289,5 +377,72 @@ mod tests {
 
         assert!(route.failure.is_none());
         assert!(route.decision.capability_gap.is_none());
+    }
+
+    #[test]
+    fn model_route_from_runtime_projects_lime_provider_route() {
+        let selection = RuntimeModelSelection {
+            provider: "openai".to_string(),
+            model: "gpt-4.1".to_string(),
+            source: "runtime_options",
+            reasoning_effort: None,
+        };
+        let task_request = build_model_task_request(ModelTaskRequestInput {
+            task_kind: ModelTaskKind::Chat,
+            source: ModelTaskSource::AgentTurn,
+            provider_id: Some(selection.provider.clone()),
+            model_id: Some(selection.model.clone()),
+            model_ref_source: ModelRefSource::RuntimeOptions,
+            modality_contract_key: Some("chat".to_string()),
+            routing_slot: Some("coding".to_string()),
+            task_families: vec!["chat".to_string()],
+            input_modalities: vec!["text".to_string()],
+            output_modalities: vec!["text".to_string()],
+            runtime_features: vec!["streaming".to_string()],
+            capabilities: vec!["tools".to_string(), "streaming".to_string()],
+            session_id: None,
+            thread_id: None,
+            turn_id: None,
+            content_id: None,
+            trace_id: None,
+        });
+        let routing_payload = json!({
+            "providerReadiness": {
+                "ready": true,
+                "status": "ready"
+            },
+            "serviceModelSlot": "coding",
+            "modelRegistry": {
+                "source": "api",
+                "reasonCode": "matched",
+                "modelCapabilities": {
+                    "capabilities": {
+                        "vision": false,
+                        "tools": true,
+                        "streaming": true
+                    },
+                    "taskFamilies": ["chat"],
+                    "inputModalities": ["text"],
+                    "outputModalities": ["text"],
+                    "runtimeFeatures": ["streaming"]
+                }
+            }
+        });
+        let resolved_route =
+            resolved_route_from_runtime(&task_request, &selection, &routing_payload, None, None);
+        let model_route = model_route_from_runtime(&selection, &resolved_route);
+
+        assert_eq!(model_route.provider, "openai");
+        assert_eq!(model_route.model.as_str(), "gpt-4.1");
+        assert_eq!(model_route.protocol, ModelProviderProtocol::ChatCompletions);
+        assert!(model_route.capabilities.contains(&"tools".to_string()));
+        assert!(model_route.capabilities.contains(&"streaming".to_string()));
+        assert_eq!(
+            model_route
+                .metadata
+                .get("serviceModelSlot")
+                .and_then(Value::as_str),
+            Some("coding")
+        );
     }
 }

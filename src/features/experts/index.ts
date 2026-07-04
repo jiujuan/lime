@@ -25,7 +25,6 @@ export {
   readExpertAgentInstances,
   saveExpertAgentInstances,
   syncExpertAgentInstanceToCloud,
-  updateExpertAgentInstanceSession,
   updateExpertAgentInstanceSkillRefs,
   upsertExpertAgentInstance,
 } from "./expertAgentInstances";

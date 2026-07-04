@@ -83,6 +83,8 @@ function writeFixtureConfig(configPath, overrides = {}) {
   const serverApiKey = overrides.serverApiKey ?? LOCAL_IMAGE_SERVER_API_KEY;
   const imageProviderId = String(overrides.imageProviderId ?? "").trim();
   const imageModelId = String(overrides.imageModelId ?? "").trim();
+  const soulStyleProfileId = String(overrides.soulStyleProfileId ?? "").trim();
+  const soulStyleIntensity = String(overrides.soulStyleIntensity ?? "").trim();
   const imageDefaults = ["      allowFallback: false"];
   if (imageProviderId) {
     imageDefaults.push(`      preferredProviderId: ${imageProviderId}`);
@@ -102,6 +104,17 @@ function writeFixtureConfig(configPath, overrides = {}) {
       "  media_defaults:",
       "    image:",
       ...imageDefaults,
+      ...(soulStyleProfileId
+        ? [
+            "memory:",
+            "  enabled: true",
+            "  soul:",
+            "    enabled: true",
+            `    style_profile_id: ${soulStyleProfileId}`,
+            `    style_intensity: ${soulStyleIntensity || "low"}`,
+            "    imported_from: manual",
+          ]
+        : []),
       "",
     ].join("\n"),
   );
@@ -112,6 +125,7 @@ export function createTempRuntimeEnv() {
     path.join(os.tmpdir(), "claw-chat-current-fixture-"),
   );
   const home = path.join(tempRoot, "home");
+  const xdgConfigHome = path.join(tempRoot, "xdg-config");
   const xdgDataHome = path.join(tempRoot, "xdg-data");
   const localAppData = path.join(tempRoot, "local-app-data");
   const roamingAppData = path.join(tempRoot, "roaming-app-data");
@@ -123,6 +137,7 @@ export function createTempRuntimeEnv() {
 
   for (const dir of [
     home,
+    xdgConfigHome,
     xdgDataHome,
     localAppData,
     roamingAppData,
@@ -131,7 +146,8 @@ export function createTempRuntimeEnv() {
   ]) {
     fs.mkdirSync(dir, { recursive: true });
   }
-  const configPath = path.join(home, ".config", "lime", "config.yaml");
+  const configPath = path.join(xdgConfigHome, "lime", "config.yaml");
+  const homeConfigPath = path.join(home, ".config", "lime", "config.yaml");
   const macConfigPath = path.join(
     home,
     "Library",
@@ -140,6 +156,7 @@ export function createTempRuntimeEnv() {
     "config.yaml",
   );
   writeFixtureConfig(configPath);
+  writeFixtureConfig(homeConfigPath);
   writeFixtureConfig(macConfigPath);
   fs.writeFileSync(backendLedgerPath, "");
   writeFixtureBackend(backendPath);
@@ -152,13 +169,16 @@ export function createTempRuntimeEnv() {
     cancelSignalPath,
     configPath,
     macConfigPath,
+    homeConfigPath,
     writeFixtureConfig: (overrides = {}) => {
       writeFixtureConfig(configPath, overrides);
+      writeFixtureConfig(homeConfigPath, overrides);
       writeFixtureConfig(macConfigPath, overrides);
     },
     env: {
       ...process.env,
       HOME: home,
+      XDG_CONFIG_HOME: xdgConfigHome,
       XDG_DATA_HOME: xdgDataHome,
       APPDATA: roamingAppData,
       LOCALAPPDATA: localAppData,
@@ -275,7 +295,15 @@ function fixtureTextForChatRequest(body) {
   ) {
     return presentationText;
   }
-  return presentationText;
+  if (serialized.includes(NEWS_PROMPT)) {
+    return [
+      "今日国际新闻简要整理：",
+      "全球市场继续关注能源、供应链和主要经济体政策变化。",
+      "国际组织呼吁各方保持沟通，降低地区冲突外溢风险。",
+      ASSISTANT_DONE_TEXT,
+    ].join("\n");
+  }
+  return ASSISTANT_DONE_TEXT;
 }
 
 function previewText(value, maxLength = 260) {
@@ -326,20 +354,35 @@ function summarizeChatCompletionRequestBody(body) {
   return {
     stream: parsed.stream ?? null,
     messageCount: messages.length,
+    model: parsed.model ?? null,
     responseFormatType:
       parsed.response_format?.type ?? parsed.responseFormat?.type ?? null,
     toolChoice: parsed.tool_choice ?? parsed.toolChoice ?? null,
+    soulMarkers: summarizeSoulPromptMarkers(serialized),
     bodyIncludesPresentationContract:
       serialized.includes("image_task_presentation.v1") ||
       serialized.includes(
         "Generate user-visible copy for one image generation turn.",
       ) ||
       serialized.includes("image_command_presentation"),
-    bodyPreview: previewText(serialized, 400),
     messages: messages.slice(-4).map((message) => ({
       role: message?.role ?? null,
-      contentPreview: previewText(readChatContentText(message?.content), 320),
+      contentLength: readChatContentText(message?.content).length,
     })),
+  };
+}
+
+function summarizeSoulPromptMarkers(serialized) {
+  return {
+    hasInteractionSoul: serialized.includes("## Interaction Soul"),
+    hasMemorySoulSchema: serialized.includes("memory_soul_prompt_context.v2"),
+    hasSavedConfigSource: serialized.includes("saved app config `memory.soul`"),
+    hasProfileId: serialized.includes("Style profile: cheeky_sassy_executor"),
+    hasStylePack: serialized.includes("Style pack: com.lime.builtin.default"),
+    hasIntensity: serialized.includes("Style intensity: high"),
+    hasResponseContract: serialized.includes("Response contract"),
+    hasAllowedStyleMoves: serialized.includes("Allowed style moves"),
+    hasForbiddenStyleMoves: serialized.includes("Forbidden style moves"),
   };
 }
 

@@ -197,6 +197,25 @@ describe("knowledgeMetadata", () => {
         source: "knowledge_page",
         packs: [{ name: "founder-persona", activation: "implicit" }],
       }),
+      persona_context: {
+        source: "knowledge_pack",
+        scope: "style_context_only",
+        packs: [
+          {
+            name: "founder-persona",
+            activation: "implicit",
+            role: "companion",
+          },
+        ],
+        style_profile_contract: {
+          inherits_global_soul: true,
+          writes_back_to_global_soul: false,
+          formal_artifact_voice_source: "generation_brief_only",
+        },
+        boundaries: expect.arrayContaining([
+          expect.stringContaining("Soul Style Profile resolver"),
+        ]),
+      },
     });
   });
 
@@ -221,7 +240,13 @@ describe("knowledgeMetadata", () => {
           }),
         ],
       }),
-    ).toEqual([{ name: "founder-persona", activation: "implicit" }]);
+    ).toEqual([
+      {
+        name: "founder-persona",
+        activation: "implicit",
+        runtimeMode: "persona",
+      },
+    ]);
   });
 
   it("应允许在默认 persona 之外显式追加多个 data pack", () => {
@@ -248,8 +273,16 @@ describe("knowledgeMetadata", () => {
         ],
       }),
     ).toEqual([
-      { name: "founder-persona", activation: "implicit" },
-      { name: "launch-plan", activation: "explicit" },
+      {
+        name: "founder-persona",
+        activation: "implicit",
+        runtimeMode: "persona",
+      },
+      {
+        name: "launch-plan",
+        activation: "explicit",
+        runtimeMode: "data",
+      },
     ]);
   });
 

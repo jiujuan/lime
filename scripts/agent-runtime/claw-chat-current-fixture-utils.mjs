@@ -86,7 +86,14 @@ export function sanitizeJson(value, depth = 0) {
     return Object.fromEntries(
       Object.entries(value)
         .slice(0, 180)
-        .map(([key, item]) => [key, sanitizeJson(item, depth + 1)]),
+        .map(([key, item]) => [
+          key,
+          /^(system_prompt|systemPrompt)$/u.test(key)
+            ? item
+              ? "[redacted-prompt]"
+              : null
+            : sanitizeJson(item, depth + 1),
+        ]),
     );
   }
   return sanitizeText(String(value));

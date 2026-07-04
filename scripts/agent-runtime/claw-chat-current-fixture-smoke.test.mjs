@@ -37,6 +37,7 @@ const fixtureSourceFiles = [
   "scripts/agent-runtime/claw-chat-current-fixture-gui-tool-waits.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-gui-web-tools-waits.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-image-command.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-image-command-workflow-read.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-skills-workspace.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-plan-history.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-right-surface-visual.mjs",
@@ -91,6 +92,13 @@ function readExpertActionsScript() {
 function readGuiActionsScript() {
   return fs.readFileSync(
     "scripts/agent-runtime/claw-chat-current-fixture-gui-actions.mjs",
+    "utf8",
+  );
+}
+
+function readFixtureUtilsScript() {
+  return fs.readFileSync(
+    "scripts/agent-runtime/claw-chat-current-fixture-utils.mjs",
     "utf8",
   );
 }
@@ -331,6 +339,48 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain('"web_search"');
   });
 
+  it("covers Soul style config through the real Electron fixture without exposing prompt payload", () => {
+    const content = readSmokeScript();
+
+    expect(content).toContain("soul-style");
+    expect(content).toContain("SOUL_STYLE_SCENARIO");
+    expect(content).toContain("SOUL_STYLE_PROFILE_ID");
+    expect(content).toContain("SOUL_STYLE_INTENSITY");
+    expect(content).toContain("enable-soul-style-config");
+    expect(content).toContain("soulStyleConfig");
+    expect(content).toContain("soulStyleConfigEnabled");
+    expect(content).toContain("soulStylePromptReachedBackend");
+    expect(content).toContain("soulStyleRuntimeProviderReached");
+    expect(content).toContain("soulStylePromptContextCoveredByRuntime");
+    expect(content).toContain("soulStylePromptContextMarkers");
+    expect(content).toContain("applySoulStyleProviderMarkerSummary");
+    expect(content).toContain("summarizeSoulPromptMarkers");
+    expect(content).toContain("hasInteractionSoul");
+    expect(content).toContain("hasMemorySoulSchema");
+    expect(content).toContain("hasProfileId");
+    expect(content).toContain("hasStylePack");
+    expect(content).toContain("hasIntensity");
+    expect(content).toContain("soulStyleReadModelCompleted");
+    expect(content).toContain("soulStyleGuiCompleted");
+    expect(content).toContain("!isSoulStyleScenario");
+    expect(content).toContain('options.scenario === SOUL_STYLE_SCENARIO');
+    expect(content).toContain('options.scenario !== SOUL_STYLE_SCENARIO');
+    expect(content).toContain('APP_SERVER_BACKEND_MODE: "runtime"');
+    expect(readGuiActionsScript()).toContain(
+      "/^(system_prompt|systemPrompt)$/u",
+    );
+    expect(readFixtureUtilsScript()).toContain(
+      "/^(system_prompt|systemPrompt)$/u",
+    );
+    expect(readGuiActionsScript()).toContain("[redacted-prompt]");
+    expect(readFixtureUtilsScript()).toContain("[redacted-prompt]");
+    expect(content).not.toContain("soulStyleContextReachedBackend");
+    expect(content).not.toContain("includesMemorySoulPromptContext");
+    expect(content).not.toContain("requestContains");
+    expect(content).not.toContain("bodyPreview");
+    expect(content).not.toContain("contentPreview");
+  });
+
   it("covers web tool WebSearch/WebFetch rendering in the real Electron fixture", () => {
     const content = readSmokeScript();
 
@@ -484,6 +534,14 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("imageCommandTaskAuditLogWritten");
     expect(content).toContain("imageCommandTaskAuditLogEventSequence");
     expect(content).toContain("imageCommandTaskAuditLogNoSensitiveTokens");
+    expect(content).toContain("readImageCommandWorkflowAudit");
+    expect(content).toContain("APP_SERVER_METHOD_WORKFLOW_READ");
+    expect(content).toContain("workflow/read");
+    expect(content).toContain("imageCommandWorkflowRead");
+    expect(content).toContain("imageCommandWorkflowAuditReadModelProjected");
+    expect(content).toContain("imageCommandWorkflowAuditStepsProjected");
+    expect(content).toContain("imageCommandWorkflowAuditSummaryRedacted");
+    expect(content).toContain("image-command-run-${turnId}");
     expect(content).toContain("imageCommandWorkerUsedFixtureProviderAndModel");
     expect(content).toContain("imageCommandFixtureProvider");
     expect(content).toContain("bodyIncludesModel");
@@ -956,9 +1014,7 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain(
       "contentFactoryArticleWorkspaceWorkerAuditFactsHidden",
     );
-    expect(content).toContain(
-      "contentFactoryArticleWorkspaceWorkflowRead",
-    );
+    expect(content).toContain("contentFactoryArticleWorkspaceWorkflowRead");
     expect(content).toContain(
       "contentFactoryArticleWorkspaceWorkflowReadModelProjected",
     );
@@ -974,6 +1030,9 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("content.article.generate");
     expect(content).toContain(
       "options.scenario === CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO",
+    );
+    expect(content).toContain(
+      "options.scenario !== CONTENT_FACTORY_INLINE_IMAGE_ARTICLE_WORKSPACE_SCENARIO",
     );
     expect(content).toContain("CONTENT_FACTORY_INLINE_IMAGE_SLOT_ID");
     expect(content).toContain("contentFactoryInlineImageTaskEventEmitted");

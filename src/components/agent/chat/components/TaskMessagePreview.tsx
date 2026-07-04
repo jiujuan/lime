@@ -13,6 +13,12 @@ import {
 import { emitVideoWorkbenchTaskAction } from "@/lib/videoWorkbenchEvents";
 import { cn } from "@/lib/utils";
 import type { MessageTaskPreview } from "../types";
+import { resolveRequiredAgentChatCopy } from "../utils/agentChatCopy";
+import {
+  resolveGenericTaskStatusMessage,
+  resolveTaskPreviewArtifactErrorCode,
+  resolveVideoTaskStatusMessage,
+} from "../utils/taskPreviewCopy";
 import {
   countTranscriptSpeakers,
   formatTranscriptSegmentRange,
@@ -24,44 +30,14 @@ interface TaskMessagePreviewProps {
 }
 
 function resolveTaskLabel(preview: MessageTaskPreview): string {
-  switch (preview.kind) {
-    case "audio_generate":
-      return "配音生成";
-    case "video_generate":
-      return "视频生成";
-    case "broadcast_generate":
-      return "播报整理";
-    case "modal_resource_search":
-      return "素材检索";
-    case "transcription_generate":
-      return "内容转写";
-    case "url_parse":
-      return "链接解析";
-    case "typesetting":
-      return "排版优化";
-  }
-
-  const exhaustiveCheck: never = preview;
-  return exhaustiveCheck;
+  return resolveCardCopy(`taskLabel.${preview.kind}`);
 }
 
 function resolveStatusLabel(preview: MessageTaskPreview): string {
-  switch (preview.status) {
-    case "complete":
-      return "已完成";
-    case "partial":
-      return "部分完成";
-    case "failed":
-      return "执行失败";
-    case "cancelled":
-      return "已取消";
-    case "running":
-    default:
-      if ((preview.phase || "").trim().toLowerCase() === "queued") {
-        return "排队中";
-      }
-      return "执行中";
+  if ((preview.phase || "").trim().toLowerCase() === "queued") {
+    return resolveCardCopy("status.queued");
   }
+  return resolveCardCopy(`status.${preview.status}`);
 }
 
 function resolveStatusTone(preview: MessageTaskPreview): string {
@@ -87,50 +63,14 @@ function resolveDescription(preview: MessageTaskPreview): string {
   }
 
   if (preview.kind === "video_generate") {
-    switch (preview.status) {
-      case "complete":
-        return "视频已经生成完成，打开查看即可继续预览和管理任务。";
-      case "partial":
-        return "任务返回了部分结果，打开查看可继续确认可用片段。";
-      case "failed":
-        return "这次没有拿到可用视频结果，请调整参数后重试。";
-      case "cancelled":
-        return "任务已经取消，当前不会继续生成新的结果。";
-      case "running":
-      default:
-        return "任务已提交到异步队列，工作区会继续同步最新生成状态。";
-    }
+    return resolveVideoTaskStatusMessage({
+      status: preview.status,
+      phase: preview.phase,
+      hasVideoUrl: Boolean(preview.videoUrl?.trim()),
+    });
   }
 
-  if (preview.kind === "audio_generate") {
-    switch (preview.status) {
-      case "complete":
-      case "partial":
-        return preview.audioUrl?.trim()
-          ? "音频结果已同步，打开查看即可继续预览与管理任务。"
-          : "配音任务已完成，正在同步音频结果。";
-      case "failed":
-        return "配音生成失败，请调整文本、音色或模型后重试。";
-      case "cancelled":
-        return "配音任务已经取消，当前不会继续生成音频。";
-      case "running":
-      default:
-        return "配音任务已写入统一 audio_task/audio_output 协议，工作区会继续同步结果。";
-    }
-  }
-
-  switch (preview.status) {
-    case "complete":
-    case "partial":
-      return "任务结果已同步，打开查看即可继续处理。";
-    case "failed":
-      return "任务执行失败，请调整输入后重试。";
-    case "cancelled":
-      return "任务已经取消，当前不会继续执行。";
-    case "running":
-    default:
-      return "任务已进入统一执行主链，工作区会继续同步最新状态。";
-  }
+  return resolveGenericTaskStatusMessage(preview.kind, preview.status);
 }
 
 function formatDurationLabel(durationSeconds?: number): string | null {
@@ -141,7 +81,9 @@ function formatDurationLabel(durationSeconds?: number): string | null {
   ) {
     return null;
   }
-  return `${durationSeconds} 秒`;
+  return resolveRequiredAgentChatCopy("taskPreview.duration.seconds", {
+    seconds: Math.max(1, Math.round(durationSeconds)),
+  });
 }
 
 function formatProgressLabel(progress?: number | null): string | null {
@@ -153,6 +95,13 @@ function formatProgressLabel(progress?: number | null): string | null {
     return null;
   }
   return `${Math.max(0, Math.min(100, Math.round(progress)))}%`;
+}
+
+function resolveCardCopy(
+  key: string,
+  values: Record<string, unknown> = {},
+): string {
+  return resolveRequiredAgentChatCopy(`taskPreview.card.${key}`, values);
 }
 
 function buildMetaItems(preview: MessageTaskPreview): string[] {
@@ -180,7 +129,7 @@ function buildMetaItems(preview: MessageTaskPreview): string[] {
       preview.kind === "transcription_generate") &&
     preview.errorCode?.trim()
   ) {
-    items.push(`错误码: ${preview.errorCode.trim()}`);
+    items.push(resolveTaskPreviewArtifactErrorCode(preview.errorCode.trim()));
   }
   if (preview.kind === "transcription_generate") {
     if (preview.language?.trim()) {
@@ -190,10 +139,18 @@ function buildMetaItems(preview: MessageTaskPreview): string[] {
       items.push(preview.outputFormat.trim());
     }
     if (preview.transcriptSegments && preview.transcriptSegments.length > 0) {
-      items.push(`${preview.transcriptSegments.length} 段时间轴`);
+      items.push(
+        resolveCardCopy("meta.timelineSegments", {
+          count: preview.transcriptSegments.length,
+        }),
+      );
       const speakerCount = countTranscriptSpeakers(preview.transcriptSegments);
       if (speakerCount > 0) {
-        items.push(`${speakerCount} 位说话人`);
+        items.push(
+          resolveCardCopy("meta.speakers", {
+            count: speakerCount,
+          }),
+        );
       }
     }
   }
@@ -230,7 +187,7 @@ function renderGenericTaskMedia(
         <div className="flex items-center justify-between gap-2">
           <Volume2 className="h-5 w-5" />
           <span className="rounded-full border border-sky-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-sky-700">
-            audio
+            {resolveCardCopy("mediaBadge.audio")}
           </span>
         </div>
         {playableAudioUrl ? (
@@ -238,7 +195,7 @@ function renderGenericTaskMedia(
             controls
             src={playableAudioUrl}
             className="h-7 w-full"
-            aria-label="配音任务音频预览"
+            aria-label={resolveCardCopy("audioPreviewAria")}
           />
         ) : (
           <div className="flex items-end gap-1 text-sky-400">
@@ -278,7 +235,7 @@ function renderGenericTaskMedia(
           >
             <img
               src={candidate.thumbnailUrl}
-              alt={candidate.name || "素材候选"}
+              alt={candidate.name || resolveCardCopy("alt.resourceCandidate")}
               className="h-full w-full object-cover"
             />
           </div>
@@ -313,7 +270,9 @@ function renderTaskFailureDetails(
   return (
     <div className="rounded-2xl border border-rose-100 bg-rose-50/80 px-3 py-2 text-xs leading-5 text-rose-700">
       {errorCode ? (
-        <div className="font-semibold">错误码：{errorCode}</div>
+        <div className="font-semibold">
+          {resolveTaskPreviewArtifactErrorCode(errorCode)}
+        </div>
       ) : null}
       {errorMessage ? <div>{errorMessage}</div> : null}
     </div>
@@ -334,7 +293,7 @@ function renderTranscriptionSegmentSummary(
   return (
     <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
       <div className="mb-1.5 text-[11px] font-semibold text-slate-500">
-        时间轴预览
+        {resolveCardCopy("timelinePreviewTitle")}
       </div>
       <div className="space-y-1.5">
         {preview.transcriptSegments.slice(0, 2).map((segment) => (
@@ -366,7 +325,7 @@ function renderVideoTaskPreview(
       ? [
           {
             key: "cancel" as const,
-            label: "取消任务",
+            label: resolveCardCopy("action.cancel"),
           },
         ]
       : (preview.status === "failed" || preview.status === "cancelled") &&
@@ -374,7 +333,7 @@ function renderVideoTaskPreview(
         ? [
             {
               key: "retry" as const,
-              label: "重新生成",
+              label: resolveCardCopy("action.retry"),
             },
           ]
         : [];
@@ -408,7 +367,7 @@ function renderVideoTaskPreview(
               </span>
             </div>
             <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-500">
-              <span>打开查看</span>
+              <span>{resolveCardCopy("action.open")}</span>
               <ArrowUpRight className="h-3.5 w-3.5" />
             </span>
           </div>
@@ -418,7 +377,7 @@ function renderVideoTaskPreview(
               {preview.thumbnailUrl ? (
                 <img
                   src={preview.thumbnailUrl}
-                  alt={preview.prompt || "视频任务封面"}
+                  alt={preview.prompt || resolveCardCopy("alt.videoCover")}
                   className="aspect-[16/10] h-full w-full object-cover"
                 />
               ) : (
@@ -431,7 +390,7 @@ function renderVideoTaskPreview(
                     )}
                     <span className="text-sm font-medium">
                       {preview.videoUrl
-                        ? "已同步视频结果"
+                        ? resolveCardCopy("videoResultSynced")
                         : resolveStatusLabel(preview)}
                     </span>
                   </div>
@@ -442,7 +401,7 @@ function renderVideoTaskPreview(
             <div className="flex min-w-0 flex-col gap-3 py-1">
               <div className="space-y-1.5">
                 <div className="line-clamp-2 text-sm font-semibold leading-6 text-slate-900">
-                  {preview.prompt || "视频任务"}
+                  {preview.prompt || resolveCardCopy("fallbackTitle.video")}
                 </div>
                 <p className="text-sm leading-6 text-slate-600">
                   {resolveDescription(preview)}
@@ -464,7 +423,9 @@ function renderVideoTaskPreview(
 
               {preview.providerId?.trim() ? (
                 <div className="text-xs text-slate-500">
-                  服务商: {preview.providerId.trim()}
+                  {resolveCardCopy("provider", {
+                    provider: preview.providerId.trim(),
+                  })}
                 </div>
               ) : null}
             </div>
@@ -539,7 +500,7 @@ function renderGenericTaskPreview(
             </span>
           </div>
           <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-500">
-            <span>打开查看</span>
+            <span>{resolveCardCopy("action.open")}</span>
             <ArrowUpRight className="h-3.5 w-3.5" />
           </span>
         </div>
@@ -575,7 +536,9 @@ function renderGenericTaskPreview(
 
             {preview.artifactPath?.trim() ? (
               <div className="truncate text-xs text-slate-500">
-                任务文件: {preview.artifactPath.trim()}
+                {resolveCardCopy("artifactPath", {
+                  path: preview.artifactPath.trim(),
+                })}
               </div>
             ) : null}
 
@@ -583,14 +546,18 @@ function renderGenericTaskPreview(
               preview.kind === "transcription_generate") &&
             preview.taskFilePath?.trim() ? (
               <div className="truncate text-xs text-slate-500">
-                源任务: {preview.taskFilePath.trim()}
+                {resolveCardCopy("sourceTaskPath", {
+                  path: preview.taskFilePath.trim(),
+                })}
               </div>
             ) : null}
 
             {preview.kind === "transcription_generate" &&
             preview.transcriptPath?.trim() ? (
               <div className="truncate text-xs text-slate-500">
-                转写结果: {preview.transcriptPath.trim()}
+                {resolveCardCopy("transcriptPath", {
+                  path: preview.transcriptPath.trim(),
+                })}
               </div>
             ) : null}
           </div>

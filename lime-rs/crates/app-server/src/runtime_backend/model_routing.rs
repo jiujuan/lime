@@ -1,7 +1,7 @@
 use super::model_registry_metadata::RuntimeModelRegistryMetadata;
 use super::request_context::RuntimeModelSelection;
 use crate::ExecutionRequest;
-use lime_agent::ProviderConfig;
+use lime_agent::SessionProviderConfig;
 use lime_core::database::dao::api_key_provider::{ApiProviderType, ProviderWithKeys};
 use lime_core::database::DbConnection;
 use lime_core::models::provider_type::is_custom_provider_id;
@@ -28,7 +28,7 @@ pub(super) fn resolve_ready_routing(
     service: &ApiKeyProviderService,
     request: &ExecutionRequest,
     selection: &RuntimeModelSelection,
-    direct_provider_config: Option<&ProviderConfig>,
+    direct_provider_config: Option<&SessionProviderConfig>,
 ) -> Result<RoutingResolution, String> {
     let metadata_values = metadata_candidates(request);
     resolve_ready_model_routing(&metadata_values, selection, |candidate| {
@@ -40,7 +40,7 @@ pub(super) fn resolve_provider_readiness(
     db: &DbConnection,
     service: &ApiKeyProviderService,
     selection: &RuntimeModelSelection,
-    direct_provider_config: Option<&ProviderConfig>,
+    direct_provider_config: Option<&SessionProviderConfig>,
 ) -> Result<ProviderReadiness, String> {
     if direct_provider_config.is_some() {
         return Ok(ProviderReadiness::direct_request_ready());
