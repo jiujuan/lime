@@ -15,6 +15,7 @@ use serde_json::{json, Map, Value};
 
 const PRESENTATION_SCHEMA_VERSION: &str = "image_task_presentation.v1";
 const PRESENTATION_SOURCE: &str = "model_generated";
+const PRESENTATION_SOURCE_METADATA: &str = "metadata_provided";
 const MAX_PLANNING_SUMMARY_CHARS: usize = 160;
 const MAX_INTRO_CHARS: usize = 180;
 const MAX_CAPTION_CHARS: usize = 220;
@@ -262,6 +263,25 @@ pub(super) async fn generate_image_task_presentation(
     Ok(parsed)
 }
 
+pub(super) fn normalize_existing_presentation(
+    intent: &ImageCommandIntent,
+) -> Option<GeneratedImageTaskPresentation> {
+    let existing = intent.presentation.as_ref()?;
+    let presentation_language =
+        detect_presentation_language(intent.raw_text.as_deref().unwrap_or(&intent.prompt));
+    let provider = string_field(existing, &["provider", "providerId", "provider_id"])
+        .or_else(|| intent.provider_id.clone());
+    let model = string_field(existing, &["model", "modelName", "model_name"])
+        .or_else(|| intent.model.clone());
+    normalize_presentation_value(
+        existing,
+        provider.as_deref(),
+        model.as_deref(),
+        presentation_language,
+        PRESENTATION_SOURCE_METADATA,
+    )
+}
+
 fn resolve_presentation_model_selection(
     request: &ExecutionRequest,
 ) -> Result<RuntimeModelSelection, RuntimeCoreError> {
@@ -448,6 +468,22 @@ fn parse_generated_presentation(
     expected_language: PresentationLanguage,
 ) -> Option<GeneratedImageTaskPresentation> {
     let value = parse_json_object(raw_text)?;
+    normalize_presentation_value(
+        &value,
+        Some(provider),
+        Some(model),
+        expected_language,
+        PRESENTATION_SOURCE,
+    )
+}
+
+fn normalize_presentation_value(
+    value: &Value,
+    provider: Option<&str>,
+    model: Option<&str>,
+    expected_language: PresentationLanguage,
+    source: &str,
+) -> Option<GeneratedImageTaskPresentation> {
     let assistant_intro = sanitize_user_visible_copy(
         string_field(&value, &["assistant_intro", "assistantIntro", "intro"]).as_deref(),
         MAX_INTRO_CHARS,
@@ -488,9 +524,13 @@ fn parse_generated_presentation(
 
     let mut payload = Map::new();
     payload.insert("schema".to_string(), json!(PRESENTATION_SCHEMA_VERSION));
-    payload.insert("source".to_string(), json!(PRESENTATION_SOURCE));
-    payload.insert("provider".to_string(), json!(provider));
-    payload.insert("model".to_string(), json!(model));
+    payload.insert("source".to_string(), json!(source));
+    if let Some(provider) = provider {
+        payload.insert("provider".to_string(), json!(provider));
+    }
+    if let Some(model) = model {
+        payload.insert("model".to_string(), json!(model));
+    }
     payload.insert("language".to_string(), json!(expected_language.code()));
     if let Some(planning_summary) = planning_summary.as_ref() {
         payload.insert("planning_summary".to_string(), json!(planning_summary));

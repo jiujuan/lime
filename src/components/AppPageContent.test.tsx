@@ -24,9 +24,6 @@ const latestKnowledgePageProps = vi.hoisted(() => ({
 const latestPluginsProps = vi.hoisted(() => ({
   value: null as Record<string, unknown> | null,
 }));
-const latestPluginMarketplaceProps = vi.hoisted(() => ({
-  value: null as Record<string, unknown> | null,
-}));
 const latestExpertPlazaProps = vi.hoisted(() => ({
   value: null as Record<string, unknown> | null,
 }));
@@ -36,7 +33,6 @@ const latestSettingsPageProps = vi.hoisted(() => ({
 const pluginLabLifecycle = vi.hoisted(() => ({ mounts: 0 }));
 const pluginsLifecycle = vi.hoisted(() => ({ mounts: 0 }));
 const pluginRuntimeLifecycle = vi.hoisted(() => ({ mounts: 0 }));
-const pluginMarketplaceLifecycle = vi.hoisted(() => ({ mounts: 0 }));
 vi.mock("./agent/chat", () => ({
   AgentChatPage: (props: Record<string, unknown>) => {
     latestAgentChatProps.value = props;
@@ -79,17 +75,6 @@ vi.mock("@/features/knowledge", () => ({
   KnowledgePage: (props: Record<string, unknown>) => {
     latestKnowledgePageProps.value = props;
     return <div data-testid="knowledge-page" />;
-  },
-}));
-
-vi.mock("@/features/plugin", () => ({
-  PluginMarketplacePage: (props: Record<string, unknown>) => {
-    latestPluginMarketplaceProps.value = props;
-    useEffect(() => {
-      pluginMarketplaceLifecycle.mounts += 1;
-    }, []);
-
-    return <div data-testid="plugin-marketplace-page" />;
   },
 }));
 
@@ -217,12 +202,10 @@ describe("AppPageContent", () => {
     agentChatLifecycle.unmounts = 0;
     latestSkillsWorkspaceProps.value = null;
     latestKnowledgePageProps.value = null;
-    latestPluginMarketplaceProps.value = null;
     latestExpertPlazaProps.value = null;
     latestSettingsPageProps.value = null;
     pluginLabLifecycle.mounts = 0;
     pluginsLifecycle.mounts = 0;
-    pluginMarketplaceLifecycle.mounts = 0;
   });
 
   afterEach(() => {
@@ -1054,16 +1037,16 @@ describe("AppPageContent", () => {
     expect(pluginLabLifecycle.mounts).toBe(1);
   });
 
-  it("plugins 页面应渲染 current 插件中心入口", async () => {
+  it("plugins 页面带筛选参数时仍应渲染正式 Plugins 管理入口", async () => {
     const { container } = renderContent("plugins", {
       query: "research",
       statusFilter: "installable",
     });
     await flushEffects();
 
-    expectTestId(container, "plugin-marketplace-page");
-    expect(pluginMarketplaceLifecycle.mounts).toBe(1);
-    expect(latestPluginMarketplaceProps.value).toMatchObject({
+    expectTestId(container, "plugins-page");
+    expect(pluginsLifecycle.mounts).toBe(1);
+    expect(latestPluginsProps.value).toMatchObject({
       pageParams: {
         query: "research",
         statusFilter: "installable",

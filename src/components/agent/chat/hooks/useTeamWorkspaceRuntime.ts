@@ -30,11 +30,15 @@ import {
   pruneInactiveSessionRecord,
   reconcileActiveLiveRuntimeBySessionId,
 } from "../team-workspace-runtime/runtimeStateReconciler";
+import { buildRestoredTeamFactsProjection } from "../team-workspace-runtime/restoredTeamFactsProjection";
+import { conversationProjectionStore } from "../projection/conversationProjectionStore";
 
 const EVENT_ACTIVITY_REFRESH_DEBOUNCE_MS = 240;
 
 interface UseTeamWorkspaceRuntimeOptions {
   currentSessionId?: string | null;
+  currentThreadId?: string | null;
+  currentTurnId?: string | null;
   currentSessionRuntimeStatus?: TeamWorkspaceRuntimeStatus;
   currentSessionLatestTurnStatus?: TeamWorkspaceRuntimeStatus;
   currentSessionQueuedTurnCount?: number;
@@ -120,6 +124,8 @@ export function useTeamWorkspaceRuntime(
 ): UseTeamWorkspaceRuntimeResult {
   const {
     currentSessionId,
+    currentThreadId,
+    currentTurnId,
     currentSessionRuntimeStatus,
     currentSessionLatestTurnStatus,
     currentSessionQueuedTurnCount = 0,
@@ -163,6 +169,7 @@ export function useTeamWorkspaceRuntime(
   const toolNameBySessionIdRef = useRef<Record<string, Record<string, string>>>(
     {},
   );
+  const restoredTeamFactsFingerprintRef = useRef<string | null>(null);
 
   const activeSnapshots = useMemo(
     () =>
@@ -209,6 +216,43 @@ export function useTeamWorkspaceRuntime(
     activeSnapshotByIdRef.current = activeSnapshotById;
     baseFingerprintByIdRef.current = baseFingerprintById;
   }, [activeSnapshotById, baseFingerprintById]);
+
+  useEffect(() => {
+    const projection = buildRestoredTeamFactsProjection({
+      currentSessionId,
+      currentThreadId,
+      currentTurnId,
+      currentSessionRuntimeStatus,
+      currentSessionLatestTurnStatus,
+      currentSessionQueuedTurnCount,
+      childSubagentSessions,
+      subagentParentContext,
+    });
+
+    if (!projection.fingerprint) {
+      restoredTeamFactsFingerprintRef.current = null;
+      return;
+    }
+
+    if (restoredTeamFactsFingerprintRef.current === projection.fingerprint) {
+      return;
+    }
+
+    restoredTeamFactsFingerprintRef.current = projection.fingerprint;
+    conversationProjectionStore.recordAgentUiProjectionEvents(
+      projection.events,
+    );
+  }, [
+    activeSessionKey,
+    childSubagentSessions,
+    currentSessionId,
+    currentSessionLatestTurnStatus,
+    currentSessionQueuedTurnCount,
+    currentSessionRuntimeStatus,
+    currentThreadId,
+    currentTurnId,
+    subagentParentContext,
+  ]);
 
   useEffect(() => {
     liveRuntimeBySessionIdRef.current = liveRuntimeBySessionId;

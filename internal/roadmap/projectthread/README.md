@@ -68,27 +68,34 @@ Lime 当前主链没有完全踩 Yi-One 的坑：`agentSession` 协议和 memory
 
 ## 4. 当前分类
 
-| Surface                                                     | 分类         | 判断                                                                                                                                                  |
-| ----------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| App Server `agentSession/start/read/turn/start`             | `current`    | 会话协议以 `sessionId / threadId / workspaceId / businessObjectRef` 为核心，继续作为主链。                                                            |
-| workspace scoped memory store                               | `current`    | 默认读取 workspace memory，缺 workspace 才退到 global，符合 Project-first。                                                                           |
-| Thread timeline / runtime event / read model                | `current`    | active timeline 写入权已向 runtime event / thread store 收敛。                                                                                        |
-| 顶层“新建任务”入口                                          | `current`    | 用户先进入任务 / 对话，符合 Thread-first。                                                                                                            |
-| `businessObjectRef.metadata.expert` / `harness.expert`      | `current`    | 可以作为当前 session 的业务元数据、提示上下文和 UI 展示来源。                                                                                         |
-| `harness.expert_role_switch`                                | `current`    | 当前 Thread 内专家 profile 切换的 metadata fact，已投影为 App Server runtime event、thread item 与 evidence。                                         |
-| 专家广场                                                    | `compat`     | 可以保留为能力发现和模板库，但不得成为默认工作流第一分类。                                                                                            |
-| 专家实例 skill override 配置                                | `current`    | 只作为 project scoped profile 配置，不保存最近会话。                                                                                                  |
-| Skills 工作台                                               | `compat`     | 作为能力管理是合理的；运行时必须注入当前 Thread，不得创建 Skill 私有会话体系。                                                                        |
-| `workspace_skill_runtime_enable`                            | `current`    | Skills 工作台试运行 workspace skill 时，只允许使用 current project 解析 workspace root，并通过 Agent current turn metadata 注入，不自动创建默认项目。 |
-| 插件 / App Center                                           | `compat`     | 插件可以有独立 UI，但 Agent 任务必须绑定 current session / thread / evidence。                                                                        |
-| subagent / team session                                     | `compat`     | 允许 child session，但必须挂 parent thread lineage，不得进入独立聊天列表。                                                                            |
-| Browser profile / runtime session                           | `compat`     | 只能是工具运行环境或 right surface，不得成为用户任务第一分类。                                                                                        |
-| Automation / workflow job                                   | `compat`     | 可以后台运行，但输出、证据和继续动作必须回到 Project / Thread。                                                                                       |
-| 专家入口硬编码默认项目                                      | `deprecated` | 会弱化真实项目上下文，应迁到当前 project 或显式选择。                                                                                                 |
-| `expertAgentInstances.latestSessionId` / `resume_or_create` | `dead`       | 会把专家恢复成 Thread 之上的稳定会话，已禁止恢复。                                                                                                    |
-| Skills 工作台自动 `getOrCreateDefaultProject`               | `dead`       | 会把 Skill 管理页变成默认项目孤岛；已改为无 current project 时不读取 workspace binding、不发起运行。                                                  |
-| 每 Agent / Expert 独立长期记忆                              | `dead`       | 不允许新增、恢复或包装成兼容层。                                                                                                                      |
-| “先选 Agent，再创建项目 / Session”的默认流程                | `dead`       | 与 Codex 对齐目标冲突。                                                                                                                               |
+| Surface                                                     | 分类         | 判断                                                                                                                                                   |
+| ----------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| App Server `agentSession/start/read/turn/start`             | `current`    | 会话协议以 `sessionId / threadId / workspaceId / businessObjectRef` 为核心，继续作为主链。                                                             |
+| workspace scoped memory store                               | `current`    | 默认读取 workspace memory，缺 workspace 才退到 global，符合 Project-first。                                                                            |
+| Thread timeline / runtime event / read model                | `current`    | active timeline 写入权已向 runtime event / thread store 收敛。                                                                                         |
+| 顶层“新建任务”入口                                          | `current`    | 用户先进入任务 / 对话，符合 Thread-first。                                                                                                             |
+| `businessObjectRef.metadata.expert` / `harness.expert`      | `current`    | 可以作为当前 session 的业务元数据、提示上下文和 UI 展示来源。                                                                                          |
+| `harness.expert_role_switch`                                | `current`    | 当前 Thread 内专家 profile 切换的 metadata fact，已投影为 App Server runtime event、thread item 与 evidence。                                          |
+| 专家广场                                                    | `compat`     | 可以保留为能力发现和模板库，但不得成为默认工作流第一分类。                                                                                             |
+| 专家实例 skill override 配置                                | `current`    | 只作为 project scoped profile 配置，不保存最近会话。                                                                                                   |
+| Skills 工作台                                               | `compat`     | 作为能力管理是合理的；运行时必须注入当前 Thread，不得创建 Skill 私有会话体系。                                                                         |
+| `workspace_skill_runtime_enable`                            | `current`    | Skills 工作台试运行 workspace skill 时，只允许使用 current project 解析 workspace root，并通过 Agent current turn metadata 注入，不自动创建默认项目。  |
+| 插件 / App Center                                           | `compat`     | 插件可以有独立 UI，但 Agent 任务必须绑定 current session / thread / evidence。                                                                         |
+| 插件 `lime.agent.startTask` App Server runtime host         | `current`    | 只允许显式 `workspaceId/projectId/sessionId` 驱动；缺 Project/Thread workspace 时 fail closed，不再自动创建默认项目。                                  |
+| 插件 `agent-runtime/tasks/` 本地 task 投影缓存              | `compat`     | 只用于刷新后恢复 task projection；长期事实源仍必须回到 App Server session/thread/turn/evidence。                                                       |
+| subagent / team session                                     | `compat`     | 允许 child session 作为执行上下文，但必须挂 parent thread lineage，不得进入独立聊天列表。                                                              |
+| subagent parent context / Team projection                   | `current`    | `parent_session_id / created_from_turn_id / team_preset_id / sibling_subagent_sessions` 必须回到 parent Thread 的 timeline、team facts 和 projection。 |
+| Evidence Pack `team_facts`                                  | `current`    | App Server `evidence/export` 汇总 Team facts，证明 roster、handoff、worker notification、review lane 可从 parent session/thread/turn 导出。            |
+| Browser profile / runtime session                           | `compat`     | 只能是工具运行环境或 right surface，不得成为用户任务第一分类。                                                                                         |
+| Automation / workflow job                                   | `compat`     | 可以后台运行，但输出、证据和继续动作必须回到 Project / Thread。                                                                                        |
+| Thread 内 service skill automation draft                    | `current`    | 从 Agent Workspace 当前 Thread 里创建 workflow job；创建前必须物化 session/thread，并把 `session_id / thread_id` 写入 `agent_turn` payload。           |
+| Automation 顶层页无 Thread lineage 的创建入口               | `dead`       | 顶层 Automation 页只能管理/查看；没有 current session/thread 时不得创建可运行 job。                                                                    |
+| 专家入口硬编码默认项目                                      | `deprecated` | 会弱化真实项目上下文，应迁到当前 project 或显式选择。                                                                                                  |
+| `expertAgentInstances.latestSessionId` / `resume_or_create` | `dead`       | 会把专家恢复成 Thread 之上的稳定会话，已禁止恢复。                                                                                                     |
+| Skills 工作台自动 `getOrCreateDefaultProject`               | `dead`       | 会把 Skill 管理页变成默认项目孤岛；已改为无 current project 时不读取 workspace binding、不发起运行。                                                   |
+| 插件 Agent task 自动 `getOrCreateDefaultProject`            | `dead`       | 会把插件运行页变成默认项目孤岛；已改为调用方必须显式传入 current project/workspace。                                                                   |
+| 每 Agent / Expert 独立长期记忆                              | `dead`       | 不允许新增、恢复或包装成兼容层。                                                                                                                       |
+| “先选 Agent，再创建项目 / Session”的默认流程                | `dead`       | 与 Codex 对齐目标冲突。                                                                                                                                |
 
 ## 5. 产品原则
 
@@ -173,7 +180,7 @@ Agent / Expert / Skill / Plugin 的正确位置是：
 1. 切换专家或 Skill 只能生成 role switch / profile change / tool enable 等 thread facts。
 2. 子代理必须有 parent session / parent turn lineage。
 3. 插件 Agent 任务必须复用 `agentSession/start`、`agentSession/turn/start`、`agentSession/read` 和 evidence/export 主链。
-4. 自动化任务输出必须能生成 session / thread / evidence ref，不能只留在 job 私有历史。
+4. 自动化任务输出必须显式绑定 session / thread / evidence ref，不能只留在 job 私有历史，也不能用 job id 自动拼出私有 session / thread；没有 current Thread lineage 的顶层页面不得创建 job。
 
 ### 6.4 记忆约束
 
@@ -215,16 +222,17 @@ Agent / Expert / Skill / Plugin 的正确位置是：
 2. 同一 Thread 内可切换专家并保留上下文。
 3. Thread read model 能展示 role switch / expert profile facts。
 
-### P2：Skills / 插件 / Browser 入口 Thread 化
+### P2：Skills / 插件 / Browser / Automation 入口 Thread 化
 
 目标：所有能力入口都回到当前 Thread。
 
 工作项：
 
 1. Skills 从“运行入口”收敛为 tool / context / workflow 能力注入；无 current project 时不自动创建默认项目。
-2. 插件 Agent task 默认绑定已有 session；没有 session 时在当前 project 下创建 Thread。
+2. 插件 Agent task 默认绑定已有 session；没有 session 但有当前 project 时创建 project-scoped Thread，缺 project 时 fail closed。
 3. Browser profile 只作为 execution environment，不再暗示独立任务容器。
-4. Right Surface 操作都能回写 current thread item / artifact / evidence。
+4. Automation / workflow job 只能从 current Thread lineage 创建或绑定；顶层管理页缺 lineage 时不得创建可运行 job。
+5. Right Surface 操作都能回写 current thread item / artifact / evidence。
 
 退出条件：
 
@@ -245,6 +253,7 @@ Agent / Expert / Skill / Plugin 的正确位置是：
 
 1. Agent Workspace P0 `multi-agent-team` evidence 证明 team facts 可见、可恢复、可导出。
 2. 没有独立的“子 Agent 会话历史列表”绕开 parent thread。
+3. 已完成恢复第一刀：parent `childSubagentSessions` / child `subagentParentContext.sibling_subagent_sessions` 会回补同构 Agent UI Team facts projection，并绑定 parent session / thread / turn。
 
 ## 8. P0 回归场景
 
@@ -285,15 +294,15 @@ npm run test:rust:related -- lime-rs/crates/app-server lime-rs/crates/core
 | 文档完成 | 本路线图存在，且明确 Project / Thread-first 事实源、current / compat / deprecated / dead 分类和 P0 场景。 |
 | P0 完成  | 守卫阻止 Agent-first schema、memory root、命令或 mock fallback 回流。                                     |
 | P1 完成  | 专家入口不再制造项目孤岛，同一 Thread 内可切换专家 metadata，role switch 已进入 thread item / evidence。  |
-| P2 完成  | Skills / 插件 / Browser 能力运行事实都回到 current Thread。                                               |
+| P2 完成  | Skills / 插件 / Browser / Automation 能力运行事实都回到 current Thread。Automation 已有 fixture Gate B 证据，Managed Objective completion audit 已闭环。 |
 | P3 完成  | 多 Agent 团队能力只作为执行层事实出现，可见、可恢复、可导出。                                             |
 
 ## 11. 下一刀
 
-下一刀优先进入 P2 能力入口 Thread 化盘点：
+P3-B 的 `multi-agent-team` fixture 已通过真实 Electron 单项 smoke；P2 的 Skills、插件、Browser right surface 和 Automation 真实入口也已各有 Gate B fixture 证据。Managed Objective completion audit 已由真实 workspace SkillTool invocation + artifact 产出打到 pass，下一刀不再围绕 Automation 补洞，应优先处理 `agent-runtime/tasks/` compat task projection cache 的长期事实源归属，或把 Team GUI 恢复并入更重 GUI smoke。
 
-1. 盘点 Skills 运行入口是否只注入当前 Thread 的 tool/context/workflow。
-2. 盘点插件 Agent task 是否复用 current session target，缺 project 时是否 fail closed。
-3. 盘点 Browser / Automation 输出是否能回写 Project / Thread / Evidence。
+1. Automation：`npm run smoke:managed-objective-automation -- --timeout-ms 180000` 已通过 ProjectThread Gate B 和 Managed Objective completion audit；证据 `.lime/qc/managed-objective-automation-smoke.json` 显示 `status: "pass"`、`projectThreadStatus: "pass"`、`completionAuditStatus: "pass"`、latest run `status: "success"`、Evidence Pack `latestTurnStatus: "completed"`、`workspaceSkillToolCallCount: 1`、`artifactCount: 1`、`decision: "completed"`。
+2. Browser：`right-surface-visual-matrix` 已通过 `npm run smoke:claw-chat-current-fixture -- --scenario right-surface-visual-matrix --timeout-ms 180000`；证据在 `.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-summary.json`，五类 right surface 均通过 App Server pending -> toolbar -> right surface 打开，`pendingAfterClicks.count = 0`。
+3. P3-B：多 Agent 团队已有真实 Electron 单项 smoke 证据，可继续把重开 Thread 后的 Team 状态恢复并入更重 GUI smoke，但不再阻塞 P3-B 当前闭环。
 
-这一步直接服务主线：P1 已封住专家 Agent-first 回流，下一步把 Lime 的其他多能力入口继续压回 Codex 式 Project / Thread-first 产品结构。
+这一步直接服务主线：P1 已封住专家 Agent-first 回流；P2 已完成 Skills、插件、Browser、Automation 的第一批入口收口、后端 evidence/export 证据、真实 fixture Gate B 和 Managed Objective audit 闭环；P3-A 已封住子代理 parent thread lineage，P3-B 后端 `team_facts`、前端恢复第一刀和真实 `multi-agent-team` Electron smoke 均已证明团队事实能回到 parent Thread。剩余高杠杆问题集中在 compat task projection cache 与更重 GUI 恢复验证，不再是 Automation completion audit。

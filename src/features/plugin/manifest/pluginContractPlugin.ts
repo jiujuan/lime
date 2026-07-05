@@ -16,6 +16,7 @@ import {
 } from "./pluginContractComponents";
 import {
   isRecord,
+  readBoolean,
   readRecords,
   readString,
   readStringArray,
@@ -122,24 +123,113 @@ function connectorKindFromToolProvider(
   return "api";
 }
 
-function connectorsFromPluginToolRefs(
+function normalizeConnectorKind(
+  kind: string | undefined,
+): PluginConnectorDeclaration["kind"] {
+  if (kind && ["account", "api", "data_source", "external_app"].includes(kind)) {
+    return kind as PluginConnectorDeclaration["kind"];
+  }
+  return "api";
+}
+
+function connectorFromRecord(
+  record: Record<string, unknown>,
+): PluginConnectorDeclaration | null {
+  const id = readString(record.id) ?? readString(record.key);
+  if (!id) {
+    return null;
+  }
+  const providerKind = connectorKindFromToolProvider(readString(record.provider));
+  const taskKinds = uniqueStrings([
+    ...readStringArray(record.taskKinds),
+    ...readStringArray(record.task_kinds),
+    ...readStringArray(record.capabilities),
+  ]);
+  return {
+    id,
+    title: readString(record.title) ?? id,
+    description: readString(record.description),
+    kind: normalizeConnectorKind(readString(record.kind) ?? providerKind),
+    taskKinds,
+    path: readString(record.path),
+    required: readBoolean(record.required, false),
+  };
+}
+
+function connectorFromToolRef(
+  tool: NormalizedAppManifest["toolRefs"][number],
+): PluginConnectorDeclaration | null {
+  const kind = connectorKindFromToolProvider(tool.provider);
+  if (!kind) {
+    return null;
+  }
+  return {
+    id: tool.key,
+    title: tool.title ?? tool.key,
+    description: tool.description,
+    kind,
+    taskKinds: readStringArray(tool.capabilities),
+    path: tool.path,
+    required: tool.required ?? false,
+  };
+}
+
+function mergeConnectorsById(
+  connectors: PluginConnectorDeclaration[],
+): PluginConnectorDeclaration[] {
+  const merged = new Map<string, PluginConnectorDeclaration>();
+  for (const connector of connectors) {
+    const existing = merged.get(connector.id);
+    if (!existing) {
+      merged.set(connector.id, connector);
+      continue;
+    }
+    const taskKinds = uniqueStrings([
+      ...(existing.taskKinds ?? []),
+      ...(connector.taskKinds ?? []),
+    ]);
+    merged.set(connector.id, {
+      ...existing,
+      ...Object.fromEntries(
+        Object.entries(connector).filter(([, value]) =>
+          hasDefinedValue(value),
+        ),
+      ),
+      taskKinds,
+    });
+  }
+  return Array.from(merged.values());
+}
+
+function connectorsFromPlugin(
   manifest: NormalizedAppManifest,
 ): PluginConnectorDeclaration[] {
-  return (manifest.toolRefs ?? []).flatMap((tool) => {
+  const agentRuntime = isRecord(manifest.agentRuntime)
+    ? manifest.agentRuntime
+    : undefined;
+  const runtimeConnectors = isRecord(agentRuntime?.connectors)
+    ? agentRuntime.connectors
+    : undefined;
+  const declaredConnectors = [
+    ...readRecords(manifest.connectors, "connectors"),
+    ...readRecords(
+      runtimeConnectors?.connectors,
+      "agentRuntime.connectors.connectors",
+    ),
+    ...readRecords(runtimeConnectors?.items, "agentRuntime.connectors.items"),
+  ].flatMap((record) => {
+    const connector = connectorFromRecord(record);
+    return connector ? [connector] : [];
+  });
+  const toolConnectors = (manifest.toolRefs ?? []).flatMap((tool) => {
     const kind = connectorKindFromToolProvider(tool.provider);
     if (!kind) {
       return [];
     }
-    return [
-      {
-        id: tool.key,
-        title: tool.title ?? tool.key,
-        description: tool.description,
-        kind,
-        required: tool.required ?? false,
-      },
-    ];
+    const connector = connectorFromToolRef(tool);
+    return connector ? [connector] : [];
   });
+  return mergeConnectorsById([...declaredConnectors, ...toolConnectors]);
 }
 
 function clisFromPlugin(
@@ -484,7 +574,7 @@ export function buildPluginManifestFromPluginManifest(
         required: workflow.required ?? false,
       };
     }),
-    connectors: connectorsFromPluginToolRefs(manifest),
+    connectors: connectorsFromPlugin(manifest),
     clis: clisFromPlugin(manifest),
     hooks: hooksFromPlugin(manifest),
     artifactRenderers: artifactRenderersFromPlugin(manifest),

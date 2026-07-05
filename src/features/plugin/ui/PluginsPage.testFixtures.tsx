@@ -159,9 +159,6 @@ vi.mock("react-i18next", () => ({
       if (key === "plugin.apps.launch.workflowCompleted") {
         return `workflow:${String(params?.title)}:${String(params?.runId)}`;
       }
-      if (key === "plugin.apps.launch.entryCompleted") {
-        return `entry:${String(params?.title)}:${String(params?.runId)}`;
-      }
       if (key === "plugin.apps.launch.shellLaunched") {
         return `shell:${String(params?.title)}:${String(params?.target)}`;
       }
@@ -196,10 +193,8 @@ vi.mock("react-i18next", () => ({
 vi.mock("@/lib/api/plugins", () => ({
   PLUGINS_CHANGED_EVENT: "lime:plugins-changed",
   getPluginCloudCatalog: hoistedMocks.apiMocks.getPluginCloudCatalog,
-  installCloudPluginRelease:
-    hoistedMocks.apiMocks.installCloudPluginRelease,
-  installLocalPluginPackage:
-    hoistedMocks.apiMocks.installLocalPluginPackage,
+  installCloudPluginRelease: hoistedMocks.apiMocks.installCloudPluginRelease,
+  installLocalPluginPackage: hoistedMocks.apiMocks.installLocalPluginPackage,
   launchPluginShell: hoistedMocks.apiMocks.launchPluginShell,
   listPluginHostLifecycleSnapshots:
     hoistedMocks.apiMocks.listPluginHostLifecycleSnapshots,
@@ -208,15 +203,12 @@ vi.mock("@/lib/api/plugins", () => ({
   reviewCloudPluginRelease: hoistedMocks.apiMocks.reviewCloudPluginRelease,
   reviewLocalPluginPackage: hoistedMocks.apiMocks.reviewLocalPluginPackage,
   saveInstalledPluginState: hoistedMocks.apiMocks.saveInstalledPluginState,
-  selectLocalPluginDirectory:
-    hoistedMocks.apiMocks.selectLocalPluginDirectory,
+  selectLocalPluginDirectory: hoistedMocks.apiMocks.selectLocalPluginDirectory,
   setPluginDisabled: hoistedMocks.apiMocks.setPluginDisabled,
   submitPluginRegistrationCode:
     hoistedMocks.apiMocks.submitPluginRegistrationCode,
   uninstallPlugin: hoistedMocks.apiMocks.uninstallPlugin,
-  buildPluginHostLifecycleForInstalledState: (
-    state: InstalledPluginState,
-  ) => ({
+  buildPluginHostLifecycleForInstalledState: (state: InstalledPluginState) => ({
     appId: state.appId,
     displayName: state.projection.app.displayName ?? state.appId,
     profiles: state.manifest.profiles ?? [],
@@ -354,9 +346,7 @@ export function buildStandaloneState(): InstalledPluginState {
 export async function renderPage(
   pageParams?: Parameters<typeof PluginsPage>[0]["pageParams"],
   onNavigate?: Parameters<typeof PluginsPage>[0]["onNavigate"],
-  rightSurfaceTarget?: Parameters<
-    typeof PluginsPage
-  >[0]["rightSurfaceTarget"],
+  rightSurfaceTarget?: Parameters<typeof PluginsPage>[0]["rightSurfaceTarget"],
   rightSurfaceTargets?: Parameters<
     typeof PluginsPage
   >[0]["rightSurfaceTargets"],

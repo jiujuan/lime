@@ -222,57 +222,6 @@ fn imported_request_with_session_metadata(metadata: Value) -> ExecutionRequest {
     request
 }
 
-fn article_workspace_search_request_event(query: &str) -> RuntimeEvent {
-    let document_text = "# 公众号文章草稿\n\n这是检索完成后才应该进入正式文章产物框的正文第一段，不能在工具检索前提前显示。这里继续补充对流程的说明，确保正式文章不是一个空占位，而是带有明确观点、读者对象和交付目标的可编辑正文。\n\n第二段继续展开核心观点，确保正式文章快照可以按前缀逐步流式输出。它会说明检索证据如何回填到文章产物，为什么过程信息留在对话流，而最终正文进入小产物卡和右侧编辑器。\n\n第三段补充引用和行动建议，让最后一个快照包含完整正文。这里还会覆盖发布检查、配图规划、标题复核和后续编辑动作，确保测试能稳定验证多段文章流式输出。";
-    RuntimeEvent::new(
-        "artifact.snapshot",
-        json!({
-            "artifact": {
-                "artifactId": "artifact-article-workspace",
-                "kind": "content_factory.workspace_patch",
-                "metadata": {
-                    "contentFactoryWorkspacePatch": {
-                        "schemaVersion": 1,
-                        "appId": "content-factory-app",
-                        "sessionId": "session-1",
-                        "objects": [
-                            {
-                                "ref": {
-                                    "appId": "content-factory-app",
-                                    "kind": "articleDraft",
-                                    "id": "article-draft-1",
-                                    "sessionId": "session-1"
-                                },
-                                "title": "公众号文章草稿",
-                                "status": "ready",
-                                "source": {
-                                    "taskKind": "content.article.generate",
-                                    "taskId": "task-article-draft-1",
-                                    "processMarkdown": "## 检索轮次\n\n这里只能作为对话过程展示。",
-                                    "documentText": document_text,
-                                    "finalMarkdown": document_text,
-                                    "workflowKey": "content_article_workflow",
-                                    "hostToolRequests": [
-                                        {
-                                            "id": "host-tool-request-1",
-                                            "toolName": "WebSearch",
-                                            "query": query,
-                                            "params": {
-                                                "query": query
-                                            },
-                                            "purpose": "验证宿主真实检索回填"
-                                        }
-                                    ]
-                                }
-                            }
-                        ]
-                    }
-                }
-            }
-        }),
-    )
-}
-
 fn article_workspace_snapshot_event_without_search() -> RuntimeEvent {
     RuntimeEvent::new(
         "artifact.snapshot",

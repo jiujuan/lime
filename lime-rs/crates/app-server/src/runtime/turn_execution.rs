@@ -37,6 +37,36 @@ impl RuntimeEventSink for CollectingRuntimeEventSink {
     }
 }
 
+struct TerminalDeferringRuntimeEventSink<'a> {
+    inner: &'a mut dyn RuntimeEventSink,
+    defer_turn_completed: bool,
+    deferred_turn_completed: &'a mut Vec<RuntimeEvent>,
+}
+
+impl<'a> TerminalDeferringRuntimeEventSink<'a> {
+    fn new(
+        inner: &'a mut dyn RuntimeEventSink,
+        defer_turn_completed: bool,
+        deferred_turn_completed: &'a mut Vec<RuntimeEvent>,
+    ) -> Self {
+        Self {
+            inner,
+            defer_turn_completed,
+            deferred_turn_completed,
+        }
+    }
+}
+
+impl RuntimeEventSink for TerminalDeferringRuntimeEventSink<'_> {
+    fn emit(&mut self, event: RuntimeEvent) -> Result<(), RuntimeCoreError> {
+        if self.defer_turn_completed && event.event_type == "turn.completed" {
+            self.deferred_turn_completed.push(event);
+            return Ok(());
+        }
+        self.inner.emit(event)
+    }
+}
+
 pub(in crate::runtime) struct AppendingRuntimeEventSink<'a> {
     state: Arc<Mutex<RuntimeCoreState>>,
     file_checkpoint_snapshot_store: Arc<dyn FileCheckpointSnapshotStore>,
@@ -102,6 +132,9 @@ impl<'a> AppendingRuntimeEventSink<'a> {
 
 impl RuntimeEventSink for AppendingRuntimeEventSink<'_> {
     fn emit(&mut self, event: RuntimeEvent) -> Result<(), RuntimeCoreError> {
+        if self.is_duplicate_accepted_event(&event) {
+            return Ok(());
+        }
         let mut events = append_runtime_events_to_state(
             &self.state,
             self.file_checkpoint_snapshot_store.as_ref(),
@@ -120,6 +153,16 @@ impl RuntimeEventSink for AppendingRuntimeEventSink<'_> {
             self.events.push(event);
         }
         Ok(())
+    }
+}
+
+impl AppendingRuntimeEventSink<'_> {
+    fn is_duplicate_accepted_event(&self, event: &RuntimeEvent) -> bool {
+        event.event_type == "turn.accepted"
+            && self
+                .events
+                .iter()
+                .any(|existing| existing.event_type == "turn.accepted")
     }
 }
 
@@ -355,16 +398,39 @@ impl RuntimeCore {
                 turn.turn_id.clone(),
                 event_callback,
             );
+            sink.emit(RuntimeEvent::new(
+                "turn.accepted",
+                json!({
+                    "backend": "app_server",
+                    "source": "agentSession/turn/start",
+                }),
+            ))?;
             if let Some(event) = super::expert_role_switch::runtime_event_from_request_metadata(
                 request.metadata.as_ref(),
             ) {
                 sink.emit(event)?;
             }
-            let backend_result = match self.maybe_run_plugin_worker_turn(&request, &mut sink).await
-            {
-                Ok(true) => Ok(()),
-                Ok(false) => self.backend.start_turn(request, &mut sink).await,
-                Err(error) => Err(error),
+            let materialize_plugin_activation =
+                self.should_materialize_plugin_activation_turn(&request);
+            let mut deferred_turn_completed = Vec::new();
+            let backend_result = {
+                let mut backend_sink = TerminalDeferringRuntimeEventSink::new(
+                    &mut sink,
+                    materialize_plugin_activation,
+                    &mut deferred_turn_completed,
+                );
+                match self
+                    .maybe_run_plugin_worker_turn(&request, &mut backend_sink)
+                    .await
+                {
+                    Ok(true) => Ok(()),
+                    Ok(false) => {
+                        self.backend
+                            .start_turn(request.clone(), &mut backend_sink)
+                            .await
+                    }
+                    Err(error) => Err(error),
+                }
             };
             if let Err(error) = backend_result {
                 if sink.emitted_count() > 0 {
@@ -378,6 +444,18 @@ impl RuntimeCore {
                 }
                 return Err(error);
             }
+            if materialize_plugin_activation {
+                if let Err(error) = self
+                    .maybe_materialize_plugin_activation_artifacts(&request, &mut sink)
+                    .await
+                {
+                    sink.emit_failure(&error)?;
+                    return Err(error);
+                }
+            }
+            for event in deferred_turn_completed {
+                sink.emit(event)?;
+            }
             let events = sink.into_events();
             events
         } else {
@@ -387,11 +465,27 @@ impl RuntimeCore {
             ) {
                 sink.emit(event)?;
             }
-            let backend_result = match self.maybe_run_plugin_worker_turn(&request, &mut sink).await
-            {
-                Ok(true) => Ok(()),
-                Ok(false) => self.backend.start_turn(request, &mut sink).await,
-                Err(error) => Err(error),
+            let materialize_plugin_activation =
+                self.should_materialize_plugin_activation_turn(&request);
+            let mut deferred_turn_completed = Vec::new();
+            let backend_result = {
+                let mut backend_sink = TerminalDeferringRuntimeEventSink::new(
+                    &mut sink,
+                    materialize_plugin_activation,
+                    &mut deferred_turn_completed,
+                );
+                match self
+                    .maybe_run_plugin_worker_turn(&request, &mut backend_sink)
+                    .await
+                {
+                    Ok(true) => Ok(()),
+                    Ok(false) => {
+                        self.backend
+                            .start_turn(request.clone(), &mut backend_sink)
+                            .await
+                    }
+                    Err(error) => Err(error),
+                }
             };
             if let Err(error) = backend_result {
                 if sink.emitted_count() > 0 {
@@ -417,6 +511,31 @@ impl RuntimeCore {
                     );
                 }
                 return Err(error);
+            }
+            if materialize_plugin_activation {
+                if let Err(error) = self
+                    .maybe_materialize_plugin_activation_artifacts(&request, &mut sink)
+                    .await
+                {
+                    sink.emit_failure(&error)?;
+                    if let Err(append_error) = self.append_runtime_events(
+                        &session.session_id,
+                        &session.thread_id,
+                        Some(&turn.turn_id),
+                        sink.into_events(),
+                    ) {
+                        self.rollback_started_turn(
+                            &session.session_id,
+                            &turn.turn_id,
+                            previous_session,
+                        );
+                        return Err(append_error);
+                    }
+                    return Err(error);
+                }
+            }
+            for event in deferred_turn_completed {
+                sink.emit(event)?;
             }
             match self.append_runtime_events(
                 &session.session_id,

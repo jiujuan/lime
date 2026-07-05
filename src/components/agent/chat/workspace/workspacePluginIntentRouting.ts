@@ -110,7 +110,10 @@ function findRuntimeWorkflow(
     workflowKey?: string;
   },
 ) {
-  return manifest.workflows.find((workflow) => {
+  const workflows = Array.isArray(manifest.workflows)
+    ? manifest.workflows
+    : [];
+  return workflows.find((workflow) => {
     if (params.workflowKey && workflow.key === params.workflowKey) {
       return true;
     }
@@ -350,8 +353,8 @@ function readIntentDeclarations(
   return fallbackIntent ? [fallbackIntent] : [];
 }
 
-function entryPhrases(entries: NormalizedAppEntry[]): string[] {
-  return entries
+function entryPhrases(entries: NormalizedAppEntry[] | undefined): string[] {
+  return (Array.isArray(entries) ? entries : [])
     .flatMap((entry) => [entry.title, entry.description])
     .map((value) => value?.trim())
     .filter((value): value is string => Boolean(value));

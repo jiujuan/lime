@@ -36,6 +36,17 @@ pub(super) fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<ServerInfo>("ServerInfo"),
         typed_schema::<PlatformInfo>("PlatformInfo"),
         typed_schema::<ServerCapabilities>("ServerCapabilities"),
+        typed_schema::<AppServerMethodKind>("AppServerMethodKind"),
+        typed_schema::<AppServerMethodSpec>("AppServerMethodSpec"),
+        typed_schema::<AppServerRequestSerializationScope>("AppServerRequestSerializationScope"),
+        typed_schema::<AppServerRequestSerializationScopeSpec>(
+            "AppServerRequestSerializationScopeSpec",
+        ),
+        typed_schema::<AppServerRequestMethod>("AppServerRequestMethod"),
+        typed_schema::<AppServerClientRequest>("AppServerClientRequest"),
+        typed_schema::<AppServerNotificationMethod>("AppServerNotificationMethod"),
+        typed_schema::<ClientNotification>("ClientNotification"),
+        typed_schema::<ServerNotification>("ServerNotification"),
         typed_schema::<CapabilityListParams>("CapabilityListParams"),
         typed_schema::<CapabilityListResponse>("CapabilityListResponse"),
         typed_schema::<CapabilityDescriptor>("CapabilityDescriptor"),
@@ -711,6 +722,21 @@ pub(super) fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<AgentSessionRuntimeEventInput>("AgentSessionRuntimeEventInput"),
         typed_schema::<AgentSessionRuntimeEventAppendResponse>(
             "AgentSessionRuntimeEventAppendResponse",
+        ),
+        typed_schema::<AgentSessionRuntimeEventNotification>(
+            "AgentSessionRuntimeEventNotification",
+        ),
+        typed_schema::<AgentSessionMessageCreatedNotification>(
+            "AgentSessionMessageCreatedNotification",
+        ),
+        typed_schema::<AgentSessionTurnLifecycleNotification>(
+            "AgentSessionTurnLifecycleNotification",
+        ),
+        typed_schema::<AgentSessionAgentMessageDeltaNotification>(
+            "AgentSessionAgentMessageDeltaNotification",
+        ),
+        typed_schema::<AgentSessionItemLifecycleNotification>(
+            "AgentSessionItemLifecycleNotification",
         ),
         typed_schema::<WorkflowReadParams>("WorkflowReadParams"),
         typed_schema::<WorkflowReadResponse>("WorkflowReadResponse"),

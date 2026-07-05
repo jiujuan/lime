@@ -674,23 +674,21 @@ fn agent_session_event_notification_matches_protocol_fixture_shape() {
     let value = serde_json::to_value(JsonRpcNotification::new(
         METHOD_AGENT_SESSION_EVENT,
         Some(
-            serde_json::to_value(AgentSessionEventParams {
-                event: AgentEvent {
-                    event_id: "evt_1".to_string(),
-                    sequence: 1,
-                    session_id: "sess_1".to_string(),
-                    thread_id: Some("thread_1".to_string()),
-                    turn_id: Some("turn_1".to_string()),
-                    event_type: "turn.started".to_string(),
-                    timestamp: "2026-06-04T00:00:00Z".to_string(),
-                    payload: json!({
-                        "status": "running",
-                        "delta": {
-                            "text": "hello"
-                        }
-                    }),
-                },
-            })
+            serde_json::to_value(AgentSessionEventParams::from_event(AgentEvent {
+                event_id: "evt_1".to_string(),
+                sequence: 1,
+                session_id: "sess_1".to_string(),
+                thread_id: Some("thread_1".to_string()),
+                turn_id: Some("turn_1".to_string()),
+                event_type: "turn.started".to_string(),
+                timestamp: "2026-06-04T00:00:00Z".to_string(),
+                payload: json!({
+                    "status": "running",
+                    "delta": {
+                        "text": "hello"
+                    }
+                }),
+            }))
             .expect("serialize params"),
         ),
     ))
@@ -714,6 +712,18 @@ fn agent_session_event_notification_matches_protocol_fixture_shape() {
                         "delta": {
                             "text": "hello"
                         }
+                    }
+                },
+                "typedEvent": {
+                    "method": "turn/started",
+                    "params": {
+                        "eventId": "evt_1",
+                        "sequence": 1,
+                        "sessionId": "sess_1",
+                        "threadId": "thread_1",
+                        "turnId": "turn_1",
+                        "timestamp": "2026-06-04T00:00:00Z",
+                        "status": "running"
                     }
                 }
             }

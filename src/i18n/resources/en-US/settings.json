@@ -2265,6 +2265,7 @@
   "settings.automation.jobDialog.validation.nameRequired": "Flow name is required.",
   "settings.automation.jobDialog.validation.promptRequired": "Starting prompt is required.",
   "settings.automation.jobDialog.validation.saveFailed": "Failed to save ongoing flow.",
+  "settings.automation.jobDialog.validation.threadLineageRequired": "Create ongoing flows from a current project thread first.",
   "settings.automation.jobDialog.validation.timeoutPositive": "Timeout must be a positive integer.",
   "settings.automation.jobDialog.validation.workspaceRequired": "Choose a workspace.",
   "settings.automation.jobDialog.workspace.none": "None selected",

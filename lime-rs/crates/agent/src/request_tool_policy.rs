@@ -4,6 +4,8 @@
 //! 供 aster_agent_cmd、scheduler、gateway 等入口复用同一条执行主链。
 
 mod agent_reply_stream;
+mod aster_event_adapter;
+mod aster_reply_adapter;
 pub(crate) mod auto_compaction_projection;
 mod policy_config;
 mod reply_retry;
@@ -15,13 +17,17 @@ mod web_retrieval_process;
 mod web_search_execution_tracker;
 mod web_search_preflight;
 
-pub(crate) use self::agent_reply_stream::{
-    compat_aster_elicitation_response_message, confirm_aster_tool_action,
+use self::agent_reply_stream::stream_agent_reply_once;
+#[cfg(test)]
+pub(crate) use self::aster_reply_adapter::stream_message_reply_with_policy;
+pub use self::aster_reply_adapter::stream_reply_with_policy;
+pub(crate) use self::aster_reply_adapter::{
+    action_required_response_input, stream_runtime_action_required_response_with_policy,
+    stream_runtime_message_reply_with_policy, stream_runtime_reply_with_configured_provider,
+    stream_runtime_reply_with_configured_provider_for_direct_generation,
+    stream_runtime_reply_with_policy, submit_runtime_tool_action_confirmation,
 };
-use self::agent_reply_stream::{
-    persist_cancelled_turn_context_marker, stream_agent_reply_once, CompatAsterReplyMessage,
-    ReplyAttemptInput,
-};
+use self::aster_reply_adapter::{AsterReplyRuntimeHost, ReplyAttemptInput};
 #[cfg(test)]
 use self::auto_compaction_projection::{
     AutoCompactionEventProjection, AutoCompactionProjectionState,
@@ -45,7 +51,6 @@ use self::reply_retry::{
 use self::runtime_status::{
     build_empty_reply_retry_runtime_status, build_incomplete_tool_batch_continue_runtime_status,
     build_provider_tail_failure_retry_runtime_status, build_web_search_synthesis_runtime_status,
-    emit_runtime_status_with_projection,
 };
 use self::stream_diagnostics::{
     build_output_preserved_reply_fallback, retryable_provider_tail_failure_detail,
@@ -55,18 +60,17 @@ use self::stream_diagnostics::{
 use self::stream_idle::resolve_provider_stream_idle_timeout;
 #[cfg(test)]
 use self::stream_text_batcher::TextDeltaBatcher;
-pub use self::web_search_execution_tracker::{ToolAttemptRecord, WebSearchExecutionTracker};
-pub use self::web_search_preflight::{
+pub use self::web_search_execution_tracker::WebSearchExecutionTracker;
+pub(crate) use self::web_search_preflight::PreflightToolExecution;
+use self::web_search_preflight::{
     execute_web_search_preflight_if_needed, merge_system_prompt_with_web_search_preflight_context,
-    PreflightToolExecution, WebSearchPreflightRequest,
+    WebSearchPreflightRequest,
 };
-use crate::credential_bridge::SessionProviderHandle;
 #[cfg(test)]
 use crate::protocol::TextDeltaBatchBoundary;
 use crate::protocol::{AgentEvent as RuntimeAgentEvent, AgentRuntimeStatus};
 use crate::session_configuration::AgentSessionConfig;
 use crate::write_artifact_events::WriteArtifactEventEmitter;
-use aster::agents::Agent;
 #[cfg(test)]
 use lime_core::database::dao::agent_timeline::{AgentThreadItem, AgentThreadItemPayload};
 use std::path::Path;
@@ -201,7 +205,7 @@ impl StreamReplyPolicyExecutionOptions {
         }
     }
 
-    pub(crate) fn direct_generation() -> Self {
+    fn direct_generation() -> Self {
         Self {
             provider_stream_idle_timeout: resolve_provider_stream_idle_timeout(),
             persist_runtime_status: false,
@@ -209,139 +213,8 @@ impl StreamReplyPolicyExecutionOptions {
     }
 }
 
-/// 统一流式执行器：执行可选诊断 preflight + reply 流，并复用统一的策略校验。
-pub async fn stream_reply_with_policy<F>(
-    agent: &Agent,
-    message_text: &str,
-    working_directory: Option<&Path>,
-    session_config: AgentSessionConfig,
-    cancel_token: Option<CancellationToken>,
-    request_tool_policy: &RequestToolPolicy,
-    on_event: F,
-) -> Result<StreamReplyExecution, ReplyAttemptError>
-where
-    F: FnMut(&RuntimeAgentEvent),
-{
-    stream_message_reply_with_policy(
-        agent,
-        ReplyInput::text(message_text),
-        working_directory,
-        session_config,
-        cancel_token,
-        request_tool_policy,
-        on_event,
-    )
-    .await
-}
-
-pub(crate) async fn stream_message_reply_with_policy<F>(
-    agent: &Agent,
-    input: ReplyInput,
-    working_directory: Option<&Path>,
-    session_config: AgentSessionConfig,
-    cancel_token: Option<CancellationToken>,
-    request_tool_policy: &RequestToolPolicy,
-    on_event: F,
-) -> Result<StreamReplyExecution, ReplyAttemptError>
-where
-    F: FnMut(&RuntimeAgentEvent),
-{
-    stream_message_reply_with_policy_with_options(
-        agent,
-        input.into(),
-        working_directory,
-        session_config,
-        cancel_token,
-        request_tool_policy,
-        on_event,
-        None,
-        StreamReplyPolicyExecutionOptions::from_env(),
-    )
-    .await
-}
-
-pub(crate) async fn stream_aster_message_reply_with_policy<F>(
-    agent: &Agent,
-    user_message: CompatAsterReplyMessage,
-    working_directory: Option<&Path>,
-    session_config: AgentSessionConfig,
-    cancel_token: Option<CancellationToken>,
-    request_tool_policy: &RequestToolPolicy,
-    on_event: F,
-) -> Result<StreamReplyExecution, ReplyAttemptError>
-where
-    F: FnMut(&RuntimeAgentEvent),
-{
-    stream_message_reply_with_policy_with_options(
-        agent,
-        ReplyAttemptInput::CompatAster(user_message),
-        working_directory,
-        session_config,
-        cancel_token,
-        request_tool_policy,
-        on_event,
-        None,
-        StreamReplyPolicyExecutionOptions::from_env(),
-    )
-    .await
-}
-
-pub(crate) async fn stream_reply_with_policy_and_provider<F>(
-    agent: &Agent,
-    message_text: &str,
-    working_directory: Option<&Path>,
-    session_config: AgentSessionConfig,
-    cancel_token: Option<CancellationToken>,
-    request_tool_policy: &RequestToolPolicy,
-    provider: SessionProviderHandle,
-    on_event: F,
-) -> Result<StreamReplyExecution, ReplyAttemptError>
-where
-    F: FnMut(&RuntimeAgentEvent),
-{
-    stream_message_reply_with_policy_with_options(
-        agent,
-        ReplyInput::text(message_text).into(),
-        working_directory,
-        session_config,
-        cancel_token,
-        request_tool_policy,
-        on_event,
-        Some(provider),
-        StreamReplyPolicyExecutionOptions::from_env(),
-    )
-    .await
-}
-
-pub(crate) async fn stream_reply_with_policy_and_provider_for_direct_generation<F>(
-    agent: &Agent,
-    message_text: &str,
-    working_directory: Option<&Path>,
-    session_config: AgentSessionConfig,
-    cancel_token: Option<CancellationToken>,
-    request_tool_policy: &RequestToolPolicy,
-    provider: SessionProviderHandle,
-    on_event: F,
-) -> Result<StreamReplyExecution, ReplyAttemptError>
-where
-    F: FnMut(&RuntimeAgentEvent),
-{
-    stream_message_reply_with_policy_with_options(
-        agent,
-        ReplyInput::text(message_text).into(),
-        working_directory,
-        session_config,
-        cancel_token,
-        request_tool_policy,
-        on_event,
-        Some(provider),
-        StreamReplyPolicyExecutionOptions::direct_generation(),
-    )
-    .await
-}
-
-async fn maybe_emit_runtime_status_with_projection<F>(
-    agent: &Agent,
+async fn maybe_emit_runtime_status<F>(
+    host: &AsterReplyRuntimeHost<'_>,
     session_config: &AgentSessionConfig,
     status: AgentRuntimeStatus,
     options: &StreamReplyPolicyExecutionOptions,
@@ -350,7 +223,8 @@ async fn maybe_emit_runtime_status_with_projection<F>(
     F: FnMut(&RuntimeAgentEvent),
 {
     if options.persist_runtime_status {
-        emit_runtime_status_with_projection(agent, session_config, status, on_event).await;
+        host.emit_runtime_status(session_config, status, on_event)
+            .await;
         return;
     }
 
@@ -360,14 +234,13 @@ async fn maybe_emit_runtime_status_with_projection<F>(
 
 #[allow(clippy::too_many_arguments)]
 async fn stream_message_reply_with_policy_with_options<F>(
-    agent: &Agent,
+    reply_host: &AsterReplyRuntimeHost<'_>,
     user_input: ReplyAttemptInput,
     working_directory: Option<&Path>,
     session_config: AgentSessionConfig,
     cancel_token: Option<CancellationToken>,
     request_tool_policy: &RequestToolPolicy,
     mut on_event: F,
-    provider: Option<SessionProviderHandle>,
     options: StreamReplyPolicyExecutionOptions,
 ) -> Result<StreamReplyExecution, ReplyAttemptError>
 where
@@ -389,7 +262,7 @@ where
     let preflight = if request_tool_policy.requires_web_search() {
         execute_web_search_preflight_if_needed(
             WebSearchPreflightRequest {
-                agent,
+                host: reply_host,
                 session_id: &session_config.id,
                 message_text: &message_text,
                 working_directory,
@@ -437,8 +310,7 @@ where
     let mut event_errors: Vec<String> = Vec::new();
     let mut diagnostics = StreamEventDiagnostics::default();
     let first_attempt = stream_agent_reply_once(
-        agent,
-        provider.clone(),
+        &reply_host,
         user_input,
         &session_config,
         cancel_token.clone(),
@@ -495,8 +367,8 @@ where
                 diagnostics.text_delta_count,
                 error_detail
             );
-            maybe_emit_runtime_status_with_projection(
-                agent,
+            maybe_emit_runtime_status(
+                &reply_host,
                 &session_config,
                 build_provider_tail_failure_retry_runtime_status(error_detail),
                 &options,
@@ -504,8 +376,7 @@ where
             )
             .await;
             let retry_attempt = stream_agent_reply_once(
-                agent,
-                provider.clone(),
+                &reply_host,
                 ReplyInput::agent_only_text(PROVIDER_TAIL_FAILURE_CONTINUE_PROMPT).into(),
                 &session_config,
                 cancel_token.clone(),
@@ -552,7 +423,9 @@ where
     }
 
     if is_reply_cancelled(&cancel_probe) {
-        persist_cancelled_turn_context_marker(agent, &session_config.id).await;
+        reply_host
+            .persist_cancelled_turn_context_marker(&session_config.id)
+            .await;
         return Ok(build_stream_reply_execution(
             text_chunks.join(""),
             event_errors,
@@ -576,8 +449,8 @@ where
                 session_config.id,
                 web_search_tracker.format_attempts()
             );
-            maybe_emit_runtime_status_with_projection(
-                agent,
+            maybe_emit_runtime_status(
+                &reply_host,
                 &session_config,
                 build_web_search_synthesis_runtime_status(
                     preflight_execution.coverage_summary.as_deref(),
@@ -591,8 +464,7 @@ where
                     session_config.system_prompt.take(),
                 );
             let retry_attempt = stream_agent_reply_once(
-                agent,
-                provider.clone(),
+                &reply_host,
                 ReplyInput::agent_only_text(WEB_SEARCH_EMPTY_REPLY_RETRY_PROMPT).into(),
                 &session_config,
                 cancel_token,
@@ -636,8 +508,8 @@ where
                 "[AgentRuntime][ReplyPolicy] empty final text without tool activity, retrying direct answer: session={}",
                 session_config.id
             );
-            maybe_emit_runtime_status_with_projection(
-                agent,
+            maybe_emit_runtime_status(
+                &reply_host,
                 &session_config,
                 build_empty_reply_retry_runtime_status(),
                 &options,
@@ -645,8 +517,7 @@ where
             )
             .await;
             let retry_attempt = stream_agent_reply_once(
-                agent,
-                provider.clone(),
+                &reply_host,
                 ReplyInput::agent_only_text(EMPTY_REPLY_DIRECT_ANSWER_RETRY_PROMPT).into(),
                 &session_config,
                 cancel_token,
@@ -691,8 +562,8 @@ where
                 session_config.id,
                 diagnostics.tool_end_count
             );
-            maybe_emit_runtime_status_with_projection(
-                agent,
+            maybe_emit_runtime_status(
+                &reply_host,
                 &session_config,
                 build_incomplete_tool_batch_continue_runtime_status(),
                 &options,
@@ -700,8 +571,7 @@ where
             )
             .await;
             let retry_attempt = stream_agent_reply_once(
-                agent,
-                provider.clone(),
+                &reply_host,
                 ReplyInput::agent_only_text(INCOMPLETE_TOOL_BATCH_CONTINUE_PROMPT).into(),
                 &session_config,
                 cancel_token,
@@ -744,7 +614,9 @@ where
     }
 
     if is_reply_cancelled(&cancel_probe) {
-        persist_cancelled_turn_context_marker(agent, &session_config.id).await;
+        reply_host
+            .persist_cancelled_turn_context_marker(&session_config.id)
+            .await;
         return Ok(build_stream_reply_execution(
             text_chunks.join(""),
             event_errors,
@@ -826,6 +698,7 @@ mod tests {
     use crate::request_tool_policy::web_retrieval_process::WebRetrievalProcessState;
     use crate::turn_context_configuration::AgentTurnContext;
     mod provider_stream_idle;
+    use aster::agents::Agent;
     use aster::conversation::message::Message;
     use aster::conversation::Conversation;
     use aster::providers::base::{Provider, ProviderMetadata, ProviderUsage, Usage};

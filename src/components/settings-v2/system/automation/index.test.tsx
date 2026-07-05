@@ -77,6 +77,7 @@ vi.mock("./AutomationJobDialog", () => ({
     open: boolean;
     mode: "create" | "edit";
     initialValues?: Record<string, unknown> | null;
+    threadLineage?: { sessionId?: string | null; threadId?: string | null };
   }) => {
     mockAutomationJobDialog(props);
     const payloadKind =
@@ -381,9 +382,34 @@ describe("AutomationSettings", () => {
     ).not.toBeNull();
   });
 
-  it("workspace 模式点击模板后应打开 Agent 任务预填弹窗", async () => {
+  it("workspace 模式缺少 Thread lineage 时点击模板应 fail closed", async () => {
     const container = await renderSettings({
       mode: "workspace",
+    });
+
+    const templateButton = container.querySelector(
+      "[data-testid='automation-template-daily-brief']",
+    ) as HTMLButtonElement | null;
+
+    expect(templateButton).not.toBeNull();
+
+    await clickElement(templateButton);
+
+    expect(toast.error).toHaveBeenCalledWith(
+      "请先从当前项目对话中创建持续流程",
+    );
+    expect(
+      container.querySelector("[data-testid='automation-job-dialog']"),
+    ).toBeNull();
+  });
+
+  it("workspace 模式带 Thread lineage 时点击模板应打开 Agent 任务预填弹窗", async () => {
+    const container = await renderSettings({
+      mode: "workspace",
+      threadLineage: {
+        sessionId: "session-automation-1",
+        threadId: "thread-automation-1",
+      },
     });
 
     const templateButton = container.querySelector(
@@ -398,6 +424,14 @@ describe("AutomationSettings", () => {
       container.querySelector("[data-testid='automation-job-dialog']")
         ?.textContent,
     ).toBe("create:agent_turn:cron");
+    expect(mockAutomationJobDialog).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        threadLineage: {
+          sessionId: "session-automation-1",
+          threadId: "thread-automation-1",
+        },
+      }),
+    );
   });
 
   it("workspace 模式应支持从页面参数直接落到概览 tab", async () => {
@@ -495,6 +529,8 @@ describe("AutomationSettings", () => {
         payload: {
           kind: "agent_turn",
           prompt: "[技能任务] 每日趋势摘要",
+          session_id: "session-service-skill-1",
+          thread_id: "thread-service-skill-1",
           system_prompt: null,
           web_search: false,
           content_id: "content-service-skill-1",
@@ -603,6 +639,8 @@ describe("AutomationSettings", () => {
         payload: {
           kind: "agent_turn",
           prompt: "继续推进每日目标摘要。",
+          session_id: "session-managed-objective-1",
+          thread_id: "thread-managed-objective-1",
           system_prompt: null,
           web_search: false,
           request_metadata: {
@@ -678,6 +716,8 @@ describe("AutomationSettings", () => {
         payload: {
           kind: "agent_turn",
           prompt: "[技能任务] 账号跟踪",
+          session_id: "session-service-skill-compat-1",
+          thread_id: "thread-service-skill-compat-1",
           system_prompt: null,
           web_search: false,
           content_id: "content-service-skill-compat-1",

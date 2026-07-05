@@ -29,7 +29,6 @@ impl RuntimeEventSink for TestSink {
 #[derive(Default)]
 struct ImageCommandTestDataSource {
     params: Mutex<Vec<MediaTaskArtifactImageCreateParams>>,
-    create_error: Mutex<Option<String>>,
 }
 
 impl SessionAppDataSource for ImageCommandTestDataSource {}
@@ -60,9 +59,6 @@ impl MediaAppDataSource for ImageCommandTestDataSource {
             .lock()
             .expect("params lock")
             .push(params.clone());
-        if let Some(message) = self.create_error.lock().expect("error lock").take() {
-            return Err(RuntimeCoreError::Backend(message));
-        }
         crate::media_task::create_image_generation_task_artifact(params, None)
             .map_err(RuntimeCoreError::Backend)
     }
@@ -165,8 +161,7 @@ async fn image_command_workflow_fails_closed_without_runtime_presentation() {
         ]
     );
     assert!(
-        sink
-            .events
+        sink.events
             .iter()
             .any(|event| event.event_type == "image_task.create_failed"),
         "presentation failure must block image task creation"
@@ -242,14 +237,8 @@ async fn image_command_workflow_fails_closed_without_runtime_presentation() {
                 && event.payload["stepId"].as_str() == Some("create_tasks")
         })
         .expect("create_tasks failed");
-    assert_eq!(
-        create_tasks_failed.payload["stepIndex"].as_u64(),
-        Some(2)
-    );
-    assert_eq!(
-        create_tasks_failed.payload["stepCount"].as_u64(),
-        Some(5)
-    );
+    assert_eq!(create_tasks_failed.payload["stepIndex"].as_u64(), Some(2));
+    assert_eq!(create_tasks_failed.payload["stepCount"].as_u64(), Some(5));
     assert_eq!(
         create_tasks_failed.payload["stepKind"].as_str(),
         Some("tool")
@@ -279,7 +268,91 @@ async fn image_command_workflow_fails_closed_without_runtime_presentation() {
 }
 
 #[tokio::test]
-async fn image_command_workflow_create_failure_emits_tool_started_before_failed() {
+async fn image_command_workflow_uses_existing_presentation_without_runtime_backend() {
+    let workspace = TempDir::new().expect("workspace");
+    let request = request_with_metadata(json!({
+        "harness": {
+            "projectRoot": workspace.path().to_string_lossy(),
+            "image_command_intent": {
+                "kind": "image_command",
+                "image_task": {
+                    "prompt": "画一张广州夏天的图",
+                    "mode": "generate",
+                    "provider_id": "openai",
+                    "model": "gpt-image-2",
+                    "entry_source": "at_image_command",
+                    "presentation": {
+                        "assistant_intro": "好啊，我来按广州夏天的明亮街景处理。",
+                        "planning_summary": "用强日光、绿树和城市高楼组织画面。",
+                        "completion_caption": "完成了，广州夏天的通透感和城市层次已经出来。"
+                    }
+                }
+            }
+        }
+    }));
+    let scope = RuntimeSessionScope {
+        session_id: "session-1".to_string(),
+        thread_id: "thread-1".to_string(),
+        turn_id: "turn-1".to_string(),
+        workspace_id: None,
+    };
+    let data_source = Arc::new(ImageCommandTestDataSource::default());
+    let mut sink = TestSink::default();
+
+    let handled = handle_image_command_turn_if_present(
+        None,
+        &request,
+        &scope,
+        Some(data_source.clone()),
+        &mut sink,
+    )
+    .await
+    .expect("workflow should use existing presentation");
+
+    assert!(handled);
+    assert_eq!(data_source.params.lock().expect("params lock").len(), 1);
+    let event_types = sink
+        .events
+        .iter()
+        .map(|event| event.event_type.as_str())
+        .collect::<Vec<_>>();
+    assert!(event_types.contains(&"reasoning.started"));
+    assert!(event_types.contains(&"message.delta"));
+    assert!(event_types.contains(&"image_task.presentation.generated"));
+    assert!(event_types.contains(&"image_task.created"));
+    assert!(event_types.contains(&"tool.result"));
+    assert!(event_types.contains(&"turn.completed"));
+    assert!(
+        !event_types.contains(&"image_task.presentation.unavailable"),
+        "old presentation unavailable event must stay dead"
+    );
+    assert!(
+        !event_types.contains(&"image_task.create_failed"),
+        "existing presentation should not fail closed before task creation"
+    );
+    let presentation_event = sink
+        .events
+        .iter()
+        .find(|event| event.event_type == "image_task.presentation.generated")
+        .expect("presentation event");
+    assert_eq!(
+        presentation_event.payload["presentation"]["source"].as_str(),
+        Some("metadata_provided")
+    );
+    let stored = data_source.params.lock().expect("params lock");
+    assert_eq!(
+        stored[0]
+            .presentation
+            .as_ref()
+            .and_then(|value| value.pointer("/assistant_intro"))
+            .and_then(Value::as_str),
+        Some("好啊，我来按广州夏天的明亮街景处理。")
+    );
+}
+
+#[tokio::test]
+async fn image_command_workflow_runtime_presentation_unavailable_emits_tool_started_before_failed()
+{
     let workspace = TempDir::new().expect("workspace");
     let request = request_with_metadata(json!({
         "harness": {
@@ -303,8 +376,6 @@ async fn image_command_workflow_create_failure_emits_tool_started_before_failed(
         workspace_id: None,
     };
     let data_source = Arc::new(ImageCommandTestDataSource::default());
-    *data_source.create_error.lock().expect("error lock") =
-        Some("fixture create failure".to_string());
     let mut sink = TestSink::default();
 
     let handled = handle_image_command_turn_if_present(
@@ -315,7 +386,7 @@ async fn image_command_workflow_create_failure_emits_tool_started_before_failed(
         &mut sink,
     )
     .await
-    .expect("workflow should handle create failure");
+    .expect("workflow should fail closed when presentation runtime is unavailable");
 
     assert!(handled);
     assert_eq!(data_source.params.lock().expect("params lock").len(), 0);

@@ -1,29 +1,79 @@
 use crate::agent_tools::catalog::{build_mcp_extension_surface, mcp_extension_runtime_name};
-use crate::agent_tools::inventory::ExtensionToolInventorySeed;
+use crate::agent_tools::inventory::{
+    build_tool_inventory, AgentToolInventoryBuildInput, AgentToolInventorySnapshot,
+    ExtensionToolInventorySeed,
+};
+use crate::agent_tools::tool_inventory_runtime_adapter::read_agent_tool_inventory_runtime_seed;
 use crate::mcp::McpToolDefinition;
 use crate::AgentRuntimeState;
 use aster::agents::extension::ExtensionConfig;
 use aster::tools::ToolDefinition;
+use lime_core::config::ToolExecutionPolicyConfig as ConfigToolExecutionPolicyConfig;
 use std::collections::{BTreeMap, HashSet};
 
 #[derive(Debug, Clone)]
-pub struct AgentToolInventoryRuntimeSnapshot {
-    pub agent_initialized: bool,
+pub struct AgentToolInventoryReadInput {
+    pub surface: crate::agent_tools::catalog::WorkspaceToolSurface,
+    pub caller: String,
     pub warnings: Vec<String>,
-    pub registry_definitions: Vec<ToolDefinition>,
-    pub current_surface_tool_names: Vec<String>,
-    pub extension_configs: Vec<ExtensionConfig>,
-    pub visible_extension_tools: Vec<ExtensionToolInventorySeed>,
-    pub searchable_extension_tools: Vec<ExtensionToolInventorySeed>,
+    pub persisted_execution_policy: Option<ConfigToolExecutionPolicyConfig>,
+    pub request_metadata: Option<serde_json::Value>,
+    pub mcp_server_names: Vec<String>,
+    pub mcp_tools: Vec<McpToolDefinition>,
+    pub resource_helpers_supported: bool,
 }
 
-pub async fn read_agent_tool_inventory_runtime_snapshot(
+struct AgentToolInventoryRuntimeSnapshot {
+    agent_initialized: bool,
+    warnings: Vec<String>,
+    registry_definitions: Vec<ToolDefinition>,
+    current_surface_tool_names: Vec<String>,
+    extension_configs: Vec<ExtensionConfig>,
+    visible_extension_tools: Vec<ExtensionToolInventorySeed>,
+    searchable_extension_tools: Vec<ExtensionToolInventorySeed>,
+}
+
+pub async fn read_agent_tool_inventory(
+    agent_state: &AgentRuntimeState,
+    input: AgentToolInventoryReadInput,
+) -> AgentToolInventorySnapshot {
+    let AgentToolInventoryReadInput {
+        surface,
+        caller,
+        mut warnings,
+        persisted_execution_policy,
+        request_metadata,
+        mcp_server_names,
+        mcp_tools,
+        resource_helpers_supported,
+    } = input;
+    let runtime_snapshot =
+        read_agent_tool_inventory_runtime_snapshot(agent_state, &mcp_tools).await;
+    warnings.extend(runtime_snapshot.warnings);
+
+    build_tool_inventory(AgentToolInventoryBuildInput {
+        surface,
+        caller,
+        agent_initialized: runtime_snapshot.agent_initialized,
+        warnings,
+        persisted_execution_policy,
+        request_metadata,
+        mcp_server_names,
+        mcp_tools,
+        registry_definitions: runtime_snapshot.registry_definitions,
+        resource_helpers_supported,
+        current_surface_tool_names: runtime_snapshot.current_surface_tool_names,
+        extension_configs: runtime_snapshot.extension_configs,
+        visible_extension_tools: runtime_snapshot.visible_extension_tools,
+        searchable_extension_tools: runtime_snapshot.searchable_extension_tools,
+    })
+}
+
+async fn read_agent_tool_inventory_runtime_snapshot(
     agent_state: &AgentRuntimeState,
     mcp_tools: &[McpToolDefinition],
 ) -> AgentToolInventoryRuntimeSnapshot {
-    let agent_arc = agent_state.get_agent_arc();
-    let guard = agent_arc.read().await;
-    let Some(agent) = guard.as_ref() else {
+    let Some(mut seed) = read_agent_tool_inventory_runtime_seed(agent_state).await else {
         let mut extension_configs = Vec::new();
         let mut visible_extension_tools = Vec::new();
         let mut searchable_extension_tools = Vec::new();
@@ -43,45 +93,21 @@ pub async fn read_agent_tool_inventory_runtime_snapshot(
             searchable_extension_tools,
         };
     };
-
-    let registry_definitions = {
-        let registry = agent.tool_registry().read().await;
-        registry.get_definitions()
-    };
-    let current_surface_tool_names = registry_definitions
-        .iter()
-        .map(|definition| definition.name.clone())
-        .collect::<Vec<_>>();
-    let mut extension_configs = agent.get_extension_configs().await;
-    let mut visible_extension_tools = agent
-        .list_tools(None)
-        .await
-        .into_iter()
-        .map(|tool| ExtensionToolInventorySeed {
-            name: tool.name.to_string(),
-            description: tool
-                .description
-                .as_ref()
-                .map(|description| description.to_string())
-                .unwrap_or_default(),
-        })
-        .collect::<Vec<_>>();
-    let mut searchable_extension_tools = visible_extension_tools.clone();
     merge_mcp_extension_projection(
-        &mut extension_configs,
-        &mut visible_extension_tools,
-        &mut searchable_extension_tools,
+        &mut seed.extension_configs,
+        &mut seed.visible_extension_tools,
+        &mut seed.searchable_extension_tools,
         mcp_tools,
     );
 
     AgentToolInventoryRuntimeSnapshot {
         agent_initialized: true,
         warnings: Vec::new(),
-        registry_definitions,
-        current_surface_tool_names,
-        extension_configs,
-        visible_extension_tools,
-        searchable_extension_tools,
+        registry_definitions: seed.registry_definitions,
+        current_surface_tool_names: seed.current_surface_tool_names,
+        extension_configs: seed.extension_configs,
+        visible_extension_tools: seed.visible_extension_tools,
+        searchable_extension_tools: seed.searchable_extension_tools,
     }
 }
 

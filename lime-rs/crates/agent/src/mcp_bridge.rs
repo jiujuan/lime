@@ -1,11 +1,13 @@
-//! MCP 桥接客户端
+//! MCP 桥接运行时边界
 //!
 //! 实现 Aster 的 McpClientTrait，将工具调用转发到
 //! Lime 已有的 MCP RunningService，避免重复启动进程。
 
+use aster::agents::extension::ExtensionConfig;
 use aster::agents::mcp_client::{Error as McpError, McpClientTrait};
+use aster::agents::Agent;
 use aster::session_context::{current_session_id, SESSION_ID_HEADER};
-use lime_mcp::client::LimeMcpClient;
+use lime_mcp::{client::LimeMcpClient, McpBridgeSnapshot};
 use rmcp::model::{
     CallToolRequest, CallToolRequestParam, CallToolResult, CancelledNotification,
     CancelledNotificationMethod, CancelledNotificationParam, ClientRequest, GetPromptRequest,
@@ -17,10 +19,86 @@ use rmcp::model::{
 use rmcp::service::{PeerRequestOptions, RunningService, ServiceError};
 use rmcp::RoleClient;
 use serde_json::Value;
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
+
+pub(crate) struct McpBridgeRuntimeRegistry {
+    registered_bridge_names: RwLock<HashSet<String>>,
+}
+
+impl McpBridgeRuntimeRegistry {
+    pub(crate) fn new() -> Self {
+        Self {
+            registered_bridge_names: RwLock::new(HashSet::new()),
+        }
+    }
+
+    pub(crate) async fn sync(&self, agent: &Agent, snapshots: Vec<McpBridgeSnapshot>) -> usize {
+        let mut active_bridge_names = HashSet::new();
+        for snapshot in snapshots {
+            let extension_name =
+                crate::agent_tools::catalog::mcp_extension_runtime_name(&snapshot.server_name);
+            let surface = crate::agent_tools::catalog::build_mcp_extension_surface(
+                &extension_name,
+                snapshot.description.clone(),
+                &snapshot.tools,
+            );
+            if !surface.has_tools() {
+                continue;
+            }
+
+            let bridge_name = surface.extension_name.clone();
+            let client: Arc<Mutex<Box<dyn McpClientTrait>>> =
+                Arc::new(Mutex::new(Box::new(McpBridgeClient::new(
+                    snapshot.server_name.clone(),
+                    snapshot.running_service,
+                    snapshot.handler,
+                    snapshot.server_info.clone(),
+                ))));
+            let config = ExtensionConfig::Builtin {
+                name: bridge_name.clone(),
+                display_name: Some(snapshot.server_name.clone()),
+                description: surface.description,
+                timeout: None,
+                bundled: Some(false),
+                available_tools: surface.available_tools,
+                deferred_loading: surface.deferred_loading,
+                always_expose_tools: surface.always_expose_tools,
+                allowed_caller: surface.allowed_caller,
+            };
+
+            agent
+                .extension_manager
+                .add_client(
+                    bridge_name.clone(),
+                    config,
+                    client,
+                    snapshot.server_info,
+                    None,
+                )
+                .await;
+            active_bridge_names.insert(bridge_name);
+        }
+
+        let previous_bridge_names = self.registered_bridge_names.read().await.clone();
+        for stale_name in previous_bridge_names.difference(&active_bridge_names) {
+            if let Err(error) = agent.remove_extension(stale_name).await {
+                tracing::warn!(
+                    extension_name = %stale_name,
+                    error = %error,
+                    "[AgentRuntime] 清理过期 MCP bridge 失败"
+                );
+            }
+        }
+
+        let bridge_count = active_bridge_names.len();
+        *self.registered_bridge_names.write().await = active_bridge_names;
+        bridge_count
+    }
+}
 
 /// MCP 桥接客户端
 ///

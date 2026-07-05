@@ -37,7 +37,7 @@ function textDelta(
 }
 
 describe("agentStreamTextDeltaLifecycle", () => {
-  it("process boundary 后仅允许显式 final_answer 和无 scope legacy delta 进入 final overlay", () => {
+  it("process boundary 后仅允许显式 final_answer 进入 final overlay", () => {
     const requestState = createRequestState({
       hasFinalAnswerRequiredProcessBoundary: true,
     });
@@ -59,10 +59,10 @@ describe("agentStreamTextDeltaLifecycle", () => {
         event: textDelta(),
         requestState,
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 
-  it("process boundary 后带 itemId 的 legacy delta 必须被 suppress", () => {
+  it("process boundary 后 legacy delta 必须被 suppress", () => {
     const requestState = createRequestState({
       hasFinalAnswerRequiredProcessBoundary: true,
     });
@@ -78,7 +78,7 @@ describe("agentStreamTextDeltaLifecycle", () => {
         event: textDelta(),
         requestState,
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       shouldSuppressLegacyTextDeltaAfterProcessBoundary({
         event: textDelta({ phase: "final_answer" }),
@@ -133,22 +133,44 @@ describe("agentStreamTextDeltaLifecycle", () => {
 
     clearActiveTextSegmentState(requestState);
     noteActiveFinalTextSegment({
+      event: textDelta(),
+      requestState,
+    });
+    expect(shouldCommitActiveTextSegmentAsFinal(requestState)).toBe(false);
+
+    clearActiveTextSegmentState(requestState);
+    noteActiveFinalTextSegment({
       event: textDelta({ phase: "final_answer" }),
       requestState,
     });
     expect(shouldCommitActiveTextSegmentAsFinal(requestState)).toBe(true);
   });
 
-  it("完成态应只取 process boundary 后的 legacy final 正文", () => {
+  it("完成态只从显式 final_answer active segment 截取最终正文", () => {
     const requestState = createRequestState({
       accumulatedContent: "工具前导语。最终正文。",
       activeTextSegmentStartOffset: "工具前导语。".length,
+      activeTextSegmentFinalEligibility: "explicit_final",
       hasFinalAnswerRequiredProcessBoundary: true,
       hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary: true,
     });
 
     expect(resolveAccumulatedFinalContentForCompletion(requestState)).toBe(
       "最终正文。",
+    );
+  });
+
+  it("完成态不得从 legacy_unphased active segment 猜测最终正文", () => {
+    const requestState = createRequestState({
+      accumulatedContent: "工具前导语。旧格式晚到文本。",
+      activeTextSegmentStartOffset: "工具前导语。".length,
+      activeTextSegmentFinalEligibility: "legacy_unphased",
+      hasFinalAnswerRequiredProcessBoundary: true,
+      hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary: true,
+    });
+
+    expect(resolveAccumulatedFinalContentForCompletion(requestState)).toBe(
+      "工具前导语。旧格式晚到文本。",
     );
   });
 

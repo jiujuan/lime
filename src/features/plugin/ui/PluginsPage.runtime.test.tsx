@@ -33,8 +33,6 @@ describe("PluginsPage runtime launch", () => {
     const container = await renderPage(undefined, onNavigate);
     await flush();
 
-    await openAppDetail(container);
-
     const rightSurfaceButton = container.querySelector(
       '[data-testid="plugins-launch-target-right-surface"]',
     ) as HTMLButtonElement | null;
@@ -43,6 +41,8 @@ describe("PluginsPage runtime launch", () => {
       await Promise.resolve();
     });
     await flush();
+
+    await openAppDetail(container);
 
     const launchButton = container.querySelector(
       '[data-testid="plugins-launch-entry-dashboard"]',
@@ -90,8 +90,6 @@ describe("PluginsPage runtime launch", () => {
     );
     await flush();
 
-    await openAppDetail(container);
-
     const rightSurfaceButton = container.querySelector(
       '[data-testid="plugins-launch-target-right-surface"]',
     ) as HTMLButtonElement | null;
@@ -101,6 +99,8 @@ describe("PluginsPage runtime launch", () => {
       await Promise.resolve();
     });
     await flush();
+
+    await openAppDetail(container);
 
     const launchButton = container.querySelector(
       '[data-testid="plugins-launch-entry-dashboard"]',
@@ -237,7 +237,7 @@ describe("PluginsPage runtime launch", () => {
     ).toBeNull();
   });
 
-  it("workflow entry 应 fail closed，避免恢复前端本地 DSL runtime", async () => {
+  it("workflow entry 应进入 Agent current 主链，避免恢复前端本地 DSL runtime", async () => {
     installedStates.push(
       buildReadyState({
         profile: buildWorkflowRuntimeCapabilityProfile({
@@ -247,7 +247,8 @@ describe("PluginsPage runtime launch", () => {
         }),
       }),
     );
-    const container = await renderPage();
+    const onNavigate = vi.fn();
+    const container = await renderPage(undefined, onNavigate);
     await flush();
 
     await openAppDetail(container);
@@ -262,16 +263,21 @@ describe("PluginsPage runtime launch", () => {
     });
     await flush();
 
-    expect(
-      container.querySelector('[data-testid="plugins-launch-summary"]')
-        ?.textContent,
-    ).toContain("plugin.apps.launch.workflowRequiresCurrentApi");
+    expect(onNavigate).toHaveBeenCalledWith(
+      "agent",
+      expect.objectContaining({
+        agentEntry: "new-task",
+        initialUserPrompt: "@内容工厂 ",
+        autoRunInitialPromptOnMount: false,
+      }),
+    );
     expect(
       container.querySelector('[data-testid="plugins-mounted-ui"]'),
     ).toBeNull();
-    expect(toast.error).toHaveBeenCalledWith("plugin.apps.toast.failed", {
-      description: "plugin.apps.launch.workflowRequiresCurrentApi",
-    });
+    expect(toast.error).not.toHaveBeenCalledWith(
+      "plugin.apps.toast.failed",
+      expect.anything(),
+    );
   });
 
   it("从导航进入已安装 App 时应自动打开默认 UI entry", async () => {

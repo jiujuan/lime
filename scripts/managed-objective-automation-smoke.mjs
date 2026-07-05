@@ -21,6 +21,7 @@ import {
 } from "./lib/live-provider-smoke-gate.mjs";
 import {
   buildAutomationFixtureMarkdown,
+  buildAutomationFixtureScriptedResponses,
   buildAutomationJobRequest,
   buildAutomationSmokeEvidence,
   fixtureChatRequestCount,
@@ -58,6 +59,7 @@ async function invokeAppServerJsonRpc(
     "app_server_handle_json_lines",
     {
       request: {
+        timeoutMs,
         lines: [
           JSON.stringify({
             jsonrpc: "2.0",
@@ -219,6 +221,36 @@ async function resolveWorkspaceRoot(options, workspace, workspaceId) {
   return ensuredRoot;
 }
 
+async function createAutomationThreadLineage(options, workspaceId) {
+  const response = await invokeAppServerJsonRpc(options, "agentSession/start", {
+    appId: "desktop",
+    workspaceId,
+    businessObjectRef: {
+      kind: "automation_job",
+      id: `managed-objective-automation-smoke:${Date.now()}`,
+      title: "Managed Objective automation smoke",
+      metadata: {
+        source: "smoke:managed-objective-automation",
+        harness: {
+          automation_job: {
+            source: "managed_objective_automation_smoke",
+            scope: "thread",
+          },
+        },
+      },
+    },
+  });
+  const sessionId = String(
+    response?.session?.sessionId || response?.session?.session_id || "",
+  ).trim();
+  const threadId = String(
+    response?.session?.threadId || response?.session?.thread_id || "",
+  ).trim();
+  assertSmoke(sessionId, "agentSession/start 未返回 automation sessionId");
+  assertSmoke(threadId, "agentSession/start 未返回 automation threadId");
+  return { session_id: sessionId, thread_id: threadId };
+}
+
 async function waitForRuntimeFixtureCompletion(
   options,
   sessionId,
@@ -252,20 +284,14 @@ async function runSmoke(options) {
   console.log(`${LOG_PREFIX} stage=health`);
   const health = await waitForHealth(options);
 
-  console.log(`${LOG_PREFIX} stage=fixture-provider`);
   if (options.allowLiveProvider) {
     assertLiveProviderSmokeAllowed({
       allowed: options.allowLiveProvider,
       scriptName: "smoke:managed-objective-automation",
     });
   }
-  const fixture = await startOpenAiCompatibleFixtureServer({
-    content: buildAutomationFixtureMarkdown(),
-  });
-  console.log(
-    `${LOG_PREFIX} provider=localhost-fixture baseUrl=${fixture.baseUrl}`,
-  );
 
+  let fixture = null;
   try {
     console.log(`${LOG_PREFIX} stage=workspace`);
     const workspace = await invokeDevBridge(
@@ -292,6 +318,25 @@ async function runSmoke(options) {
       `${LOG_PREFIX} workspace-skill=${skillBinding.skillName} directory=${skillBinding.skillDirectory}`,
     );
 
+    console.log(`${LOG_PREFIX} stage=fixture-provider`);
+    fixture = await startOpenAiCompatibleFixtureServer({
+      content: buildAutomationFixtureMarkdown(),
+      deferScriptedToolCallsUntilAvailable: true,
+      scriptedResponses: buildAutomationFixtureScriptedResponses(skillBinding),
+    });
+    console.log(
+      `${LOG_PREFIX} provider=localhost-fixture baseUrl=${fixture.baseUrl}`,
+    );
+
+    console.log(`${LOG_PREFIX} stage=create-thread-lineage`);
+    const threadLineage = await createAutomationThreadLineage(
+      options,
+      workspaceId,
+    );
+    console.log(
+      `${LOG_PREFIX} lineage session=${threadLineage.session_id} thread=${threadLineage.thread_id}`,
+    );
+
     console.log(`${LOG_PREFIX} stage=create-automation-job`);
     const jobWrite = await invokeAppServerJsonRpc(
       options,
@@ -301,6 +346,7 @@ async function runSmoke(options) {
           workspaceId,
           skillBinding,
           fixture.provider,
+          threadLineage,
         ),
       },
     );
@@ -377,17 +423,33 @@ async function runSmoke(options) {
       fixtureRequests: fixture.requests,
     });
 
-    for (const [key, value] of Object.entries(evidence.assertions)) {
+    for (const [key, value] of Object.entries(
+      evidence.projectThreadAssertions,
+    )) {
       assertSmoke(value, `assertion failed: ${key}`);
     }
     assertSmoke(
-      evidence.status === "pass",
-      "managed objective automation smoke evidence 未通过全部断言",
+      evidence.projectThreadStatus === "pass",
+      "managed objective automation smoke ProjectThread evidence 未通过",
     );
+    if (evidence.completionAuditStatus !== "pass") {
+      const failedCompletionAssertions = Object.entries(
+        evidence.completionAuditAssertions,
+      )
+        .filter(([, value]) => !value)
+        .map(([key]) => key);
+      const failedCompletionSummary =
+        failedCompletionAssertions.join(",") || "none";
+      console.warn(
+        `${LOG_PREFIX} completion-audit-status=${evidence.completionAuditStatus} failed=${failedCompletionSummary}`,
+      );
+    }
 
     return evidence;
   } finally {
-    await fixture.close();
+    if (fixture) {
+      await fixture.close();
+    }
   }
 }
 
@@ -402,9 +464,15 @@ async function main() {
     console.log(JSON.stringify(evidence, null, 2));
   }
 
-  console.log(
-    `${LOG_PREFIX} pass job=${evidence.automation.jobId} session=${evidence.runtime.sessionId} fixtureRequests=${evidence.fixture.chatCompletionRequestCount}`,
-  );
+  const statusSummary = [
+    `projectThread=${evidence.projectThreadStatus}`,
+    `status=${evidence.status}`,
+    `completionAudit=${evidence.completionAuditStatus}`,
+    `job=${evidence.automation.jobId}`,
+    `session=${evidence.runtime.sessionId}`,
+    `fixtureRequests=${evidence.fixture.chatCompletionRequestCount}`,
+  ].join(" ");
+  console.log(`${LOG_PREFIX} ${statusSummary}`);
 }
 
 main().catch((error) => {

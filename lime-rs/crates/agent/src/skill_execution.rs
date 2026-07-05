@@ -4,8 +4,8 @@ use crate::{
         extend_unique_artifact_protocol_paths, push_unique_artifact_protocol_path,
     },
     request_tool_policy::{
-        resolve_request_tool_policy_with_mode, stream_message_reply_with_policy, ReplyInput,
-        ReplyInputImage, RequestToolPolicyMode,
+        resolve_request_tool_policy_with_mode, stream_runtime_message_reply_with_policy,
+        ReplyInput, ReplyInputImage, RequestToolPolicyMode,
     },
     AgentRuntimeState, AgentSessionConfig, AgentTurnContext, SessionConfigBuilder,
 };
@@ -238,18 +238,12 @@ async fn stream_skill_session(
     input: ReplyInput,
     emitter: &SkillEventEmitter,
 ) -> Result<StreamedSkillReply, SkillExecutionError> {
-    let agent_arc = runtime_state.get_agent_arc();
-    let guard = agent_arc.read().await;
-    let agent = guard.as_ref().ok_or_else(|| {
-        SkillExecutionError::SessionInitFailed("Agent not initialized".to_string())
-    })?;
-
     let cancel_token = runtime_state.create_cancel_token(session_id).await;
     let mut artifact_paths = Vec::new();
     let request_tool_policy =
         resolve_request_tool_policy_with_mode(Some(false), Some(RequestToolPolicyMode::Disabled));
-    let stream_result = stream_message_reply_with_policy(
-        agent,
+    let stream_result = stream_runtime_message_reply_with_policy(
+        runtime_state,
         input,
         None,
         session_config,
@@ -265,6 +259,9 @@ async fn stream_skill_session(
     runtime_state.remove_cancel_token(session_id).await;
     let (output, error) = match stream_result {
         Ok(reply) => (reply.text_output, reply.event_errors.last().cloned()),
+        Err(error) if !error.emitted_any && error.message == "Agent runtime is not initialized" => {
+            return Err(SkillExecutionError::SessionInitFailed(error.message));
+        }
         Err(error) => (String::new(), Some(error.message)),
     };
 

@@ -3,7 +3,8 @@ use super::super::plugin_worker_orchestration::{
     PluginWorkerOrchestrationOverrides,
 };
 use super::super::plugin_worker_output_contract::{
-    expected_output_contract, plugin_output_artifact_kind, WORKSPACE_PATCH_KIND,
+    expected_output_contract, plugin_output_artifact_kind, CONTENT_FACTORY_APP_ID,
+    WORKSPACE_PATCH_KIND,
 };
 use super::super::plugin_worker_workflow::{
     build_plugin_worker_workflow_context, PluginWorkerWorkflowContext,
@@ -16,8 +17,7 @@ use super::json_helpers::{json_string, json_string_array, json_string_from_optio
 use super::{
     PaneActionWorkerRejection, PaneActionWorkerTurn, PaneActionWorkerTurnResolution,
     PluginHookDeclaration, DEFAULT_ARTICLE_WORKSPACE_TASK_KIND, HOOK_REQUEST_SCHEMA,
-    PANE_ACTION_SOURCE, PLUGIN_ACTIVATION_SOURCE, WORKER_OUTPUT_UNAUTHORIZED,
-    WORKER_REQUEST_INVALID, WORKER_REQUEST_SCHEMA,
+    PANE_ACTION_SOURCE, WORKER_OUTPUT_UNAUTHORIZED, WORKER_REQUEST_INVALID, WORKER_REQUEST_SCHEMA,
 };
 use serde_json::{json, Value};
 
@@ -35,106 +35,126 @@ impl PaneActionWorkerTurn {
     pub(super) fn resolve_from_execution_request(
         request: &ExecutionRequest,
     ) -> PaneActionWorkerTurnResolution {
-        match Self::resolve_plugin_activation_request(request) {
+        match Self::resolve_pane_action_request(request) {
             PaneActionWorkerTurnResolution::Ignore => {
-                match Self::resolve_pane_action_request(request) {
-                    PaneActionWorkerTurnResolution::Ignore => {
-                        Self::resolve_article_workspace_action_request(request)
-                    }
-                    resolution => resolution,
-                }
+                Self::resolve_article_workspace_action_request(request)
             }
             resolution => resolution,
         }
     }
 
-    fn resolve_plugin_activation_request(
-        request: &ExecutionRequest,
-    ) -> PaneActionWorkerTurnResolution {
-        let Some(metadata) = request.metadata.as_ref() else {
-            return PaneActionWorkerTurnResolution::Ignore;
-        };
-        let Some(activation) = plugin_activation_value(metadata) else {
-            return PaneActionWorkerTurnResolution::Ignore;
-        };
-        let Some(plugin_id) = json_string(activation, &["plugin_id", "pluginId"]) else {
-            return PaneActionWorkerTurnResolution::Ignore;
-        };
-        let app_id =
-            json_string(activation, &["active_plugin_id", "activePluginId"]).unwrap_or(plugin_id);
-        let prompt =
-            json_string(activation, &["body"]).unwrap_or_else(|| request.input.text.clone());
-        if prompt.trim().is_empty() {
-            return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
-                request,
-                activation,
-                None,
-                WORKER_REQUEST_INVALID,
-                "Plugin activation prompt is missing.",
-            ));
+    pub(super) fn from_plugin_activation_request(request: &ExecutionRequest) -> Option<Self> {
+        let metadata = request.metadata.as_ref()?;
+        let activation = metadata
+            .pointer("/harness/plugin_activation")
+            .or_else(|| metadata.pointer("/harness/pluginActivation"))
+            .or_else(|| metadata.get("plugin_activation"))
+            .or_else(|| metadata.get("pluginActivation"))?;
+        let app_id = json_string(activation, &["active_plugin_id", "activePluginId"])
+            .or_else(|| json_string(activation, &["plugin_id", "pluginId"]))?;
+        if app_id != CONTENT_FACTORY_APP_ID {
+            return None;
         }
-        let requested_output_artifact_kind =
-            json_string(activation, &["output_artifact_kind", "outputArtifactKind"]);
-        let Some(output_artifact_kind) =
-            plugin_output_artifact_kind(app_id.as_str(), requested_output_artifact_kind.clone())
-        else {
-            return PaneActionWorkerTurnResolution::Reject(worker_rejection_from_values(
-                request,
-                activation,
-                None,
-                WORKER_OUTPUT_UNAUTHORIZED,
-                format!(
-                    "Plugin worker output artifact kind is not authorized: {}",
-                    requested_output_artifact_kind
-                        .as_deref()
-                        .unwrap_or("<missing>")
-                ),
-            ));
-        };
+
+        let workflow_contract = activation
+            .get("workflow_contract")
+            .or_else(|| activation.get("workflowContract"));
+        let task_kind = json_string(activation, &["task_kind", "taskKind"])
+            .or_else(|| json_string_from_optional_value(workflow_contract, &["taskKind"]))
+            .or_else(|| json_string_from_optional_value(workflow_contract, &["task_kind"]))
+            .unwrap_or_else(|| "content.article.generate".to_string());
+        let output_artifact_kind = plugin_output_artifact_kind(
+            app_id.as_str(),
+            json_string(activation, &["output_artifact_kind", "outputArtifactKind"])
+                .or_else(|| {
+                    json_string_from_optional_value(workflow_contract, &["outputArtifactKind"])
+                })
+                .or_else(|| {
+                    json_string_from_optional_value(workflow_contract, &["output_artifact_kind"])
+                })
+                .or_else(|| Some(WORKSPACE_PATCH_KIND.to_string())),
+        )?;
+        if output_artifact_kind.as_deref() != Some(WORKSPACE_PATCH_KIND) {
+            return None;
+        }
+        let active_entry_key = json_string(activation, &["active_entry_key", "activeEntryKey"]);
+        if active_entry_key.as_deref() != Some("content_factory")
+            && !matches!(
+                task_kind.as_str(),
+                "content.article.generate" | "content.factory.generate"
+            )
+        {
+            return None;
+        }
+
+        let prompt = json_string(activation, &["body"])
+            .unwrap_or_else(|| request.input.text.clone())
+            .trim()
+            .to_string();
+        if prompt.is_empty() {
+            return None;
+        }
+        let surface_kind = json_string(activation, &["right_surface", "rightSurface"])
+            .or_else(|| json_string_from_optional_value(workflow_contract, &["rightSurface"]))
+            .or_else(|| json_string_from_optional_value(workflow_contract, &["right_surface"]))
+            .unwrap_or_else(|| "articleWorkspace".to_string());
         let selected_object_ref = activation
             .get("selected_object_ref")
             .or_else(|| activation.get("selectedObjectRef"))
             .filter(|value| value.is_object())
             .cloned();
-        let selected_object_kind = selected_object_ref
-            .as_ref()
-            .and_then(|object| json_string(object, &["object_kind", "objectKind"]));
-        let source_artifact_ids = selected_object_ref
-            .as_ref()
-            .map(|object| json_string_array(object, &["artifact_ids", "artifactIds"]))
-            .unwrap_or_default();
-        let workflow_key = json_string(activation, &["workflow_key", "workflowKey"]);
-        PaneActionWorkerTurnResolution::Run(Self {
+        let workflow_key = json_string(activation, &["workflow_key", "workflowKey"])
+            .or_else(|| json_string_from_optional_value(workflow_contract, &["key"]))
+            .or_else(|| json_string_from_optional_value(workflow_contract, &["workflow_key"]))
+            .or_else(|| json_string_from_optional_value(workflow_contract, &["workflowKey"]));
+        let hook_policy = workflow_contract
+            .and_then(|contract| {
+                contract
+                    .get("hook_policy")
+                    .or_else(|| contract.get("hookPolicy"))
+            })
+            .filter(|value| value.is_object())
+            .cloned();
+        let orchestration = workflow_contract
+            .and_then(|contract| {
+                contract
+                    .get("steps")
+                    .or_else(|| contract.get("orchestration"))
+            })
+            .filter(|value| value.is_array())
+            .cloned();
+
+        Some(Self {
             app_id,
             action_key: json_string(activation, &["intent_key", "intentKey"])
                 .or_else(|| Some("plugin-activation".to_string())),
-            action_intent: Some("plugin_activation".to_string()),
+            action_intent: json_string(activation, &["intent_key", "intentKey"]),
             action_risk: Some("write".to_string()),
             prompt,
             source_object_ref: selected_object_ref,
-            source_artifact_ids,
-            source: PLUGIN_ACTIVATION_SOURCE.to_string(),
-            surface_kind: json_string(activation, &["right_surface", "rightSurface"])
-                .or_else(|| Some("articleWorkspace".to_string())),
-            pane_kind: selected_object_kind.or_else(|| Some("articleDraft".to_string())),
+            source_artifact_ids: Vec::new(),
+            source: "plugin_activation".to_string(),
+            surface_kind: Some(surface_kind),
+            pane_kind: Some("articleDraft".to_string()),
             output_artifact_kind,
-            task_kind: json_string(activation, &["task_kind", "taskKind"])
-                .unwrap_or_else(|| DEFAULT_ARTICLE_WORKSPACE_TASK_KIND.to_string()),
+            task_kind,
             workflow_key,
-            hook_policy: activation
-                .get("hook_policy")
-                .or_else(|| activation.get("hookPolicy"))
-                .filter(|value| value.is_object())
-                .cloned(),
-            subagents: string_list_field(activation, &["subagents", "sub_agents"]),
-            skill_refs: string_list_field(activation, &["skillRefs", "skill_refs"]),
-            cli_refs: string_list_field(activation, &["cliRefs", "cli_refs"]),
-            connector_refs: string_list_field(activation, &["connectorRefs", "connector_refs"]),
-            orchestration: activation
-                .get("orchestration")
-                .filter(|value| value.is_array())
-                .cloned(),
-            workspace_id: request.session.workspace_id.clone(),
+            hook_policy,
+            subagents: workflow_contract
+                .map(|contract| string_list_field(contract, &["subagents", "sub_agents"]))
+                .unwrap_or_default(),
+            skill_refs: workflow_contract
+                .map(|contract| string_list_field(contract, &["skillRefs", "skill_refs"]))
+                .unwrap_or_default(),
+            cli_refs: workflow_contract
+                .map(|contract| string_list_field(contract, &["cliRefs", "cli_refs"]))
+                .unwrap_or_default(),
+            connector_refs: workflow_contract
+                .map(|contract| string_list_field(contract, &["connectorRefs", "connector_refs"]))
+                .unwrap_or_default(),
+            orchestration,
+            workspace_id: json_string(activation, &["workspace_id", "workspaceId"])
+                .or_else(|| request.session.workspace_id.clone()),
         })
     }
 
@@ -717,14 +737,6 @@ fn right_surface_string(metadata: &Value, path: &[&str]) -> Option<String> {
         .get("right_surface")
         .or_else(|| metadata.get("rightSurface"))
         .and_then(|right_surface| json_string(right_surface, path))
-}
-
-fn plugin_activation_value(metadata: &Value) -> Option<&Value> {
-    metadata
-        .pointer("/harness/plugin_activation")
-        .or_else(|| metadata.pointer("/harness/pluginActivation"))
-        .or_else(|| metadata.get("plugin_activation"))
-        .or_else(|| metadata.get("pluginActivation"))
 }
 
 pub(super) fn validate_worker_turn_runtime_contract(

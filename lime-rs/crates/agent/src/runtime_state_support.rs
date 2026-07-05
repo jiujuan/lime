@@ -6,7 +6,9 @@
 use crate::session_configuration::AgentSessionConfig;
 use crate::turn_context_configuration::AgentTurnContext;
 use aster::agents::AgentIdentity;
-use aster::skills::{global_registry, load_skills_from_directory, SkillSource};
+use aster::skills::{
+    global_registry, load_skill_from_file, load_skills_from_directory, SkillSource,
+};
 use aster::tools::ToolRegistrationConfig;
 use lime_core::app_paths;
 use std::path::{Path, PathBuf};
@@ -16,8 +18,38 @@ pub fn reload_lime_skills() {
     load_lime_skills();
 }
 
+pub fn register_lime_project_skill_from_directory(
+    directory: &str,
+    skill_dir: &Path,
+) -> Result<String, String> {
+    let directory = directory.trim();
+    if directory.is_empty() {
+        return Err("workspace skill directory is required".to_string());
+    }
+
+    let skill_file = skill_dir.join("SKILL.md");
+    let skill_name = format!("project:{directory}");
+    let skill = load_skill_from_file(&skill_name, &skill_file, SkillSource::Project)?;
+    let registry = global_registry();
+    let mut registry_guard = registry.write().map_err(|error| error.to_string())?;
+    registry_guard.register(skill);
+    Ok(skill_name)
+}
+
+pub fn is_lime_skill_registered(skill_name: &str) -> bool {
+    let skill_name = skill_name.trim();
+    if skill_name.is_empty() {
+        return false;
+    }
+    let registry = global_registry();
+    registry
+        .read()
+        .map(|registry_guard| registry_guard.find(skill_name).is_some())
+        .unwrap_or(false)
+}
+
 /// 创建 Lime 专属的 Agent 身份配置
-pub fn create_lime_identity() -> AgentIdentity {
+pub(crate) fn create_lime_identity() -> AgentIdentity {
     AgentIdentity::new("Lime AI")
         .with_language("Chinese")
         .with_description("Lime 桌面端中的 AI 运行时，负责按会话上下文完成用户请求。")
@@ -27,10 +59,10 @@ pub fn create_lime_identity() -> AgentIdentity {
 /// 创建 Lime 的工具注册配置
 ///
 /// 启用 Ask/LSP 回调，确保 ask/lsp 工具在 Agent 初始化时可用。
-pub fn create_lime_tool_config() -> ToolRegistrationConfig {
+pub(crate) fn create_lime_tool_config() -> ToolRegistrationConfig {
     ToolRegistrationConfig::new()
-        .with_ask_callback(crate::create_ask_callback())
-        .with_lsp_callback(crate::create_lsp_callback())
+        .with_ask_callback(crate::ask_bridge::create_ask_callback())
+        .with_lsp_callback(crate::lsp_bridge::create_lsp_callback())
 }
 
 /// 加载 Lime Skills 到 aster-rust 的 global_registry
@@ -112,9 +144,13 @@ fn register_lime_skills_from_dir(skills_dir: &Path, source: SkillSource) -> Vec<
 
 #[cfg(test)]
 mod tests {
-    use super::assign_lime_skill_root_sources;
+    use super::{
+        assign_lime_skill_root_sources, is_lime_skill_registered,
+        register_lime_project_skill_from_directory,
+    };
     use aster::skills::{parse_allowed_tools, SkillSource};
     use std::path::Path;
+    use tempfile::TempDir;
 
     #[test]
     fn assign_lime_skill_root_sources_should_mark_project_root() {
@@ -160,6 +196,29 @@ mod tests {
                 (user_claude_root, SkillSource::User),
             ]
         );
+    }
+
+    #[test]
+    fn register_lime_project_skill_from_directory_registers_project_namespace() {
+        let workspace = TempDir::new().expect("workspace");
+        let skill_dir = workspace
+            .path()
+            .join(".agents")
+            .join("skills")
+            .join("runtime-enable-fixture");
+        std::fs::create_dir_all(&skill_dir).expect("skill dir");
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: Runtime Enable Fixture\ndescription: Test skill.\n---\n\n# Fixture\n",
+        )
+        .expect("skill file");
+
+        let skill_name =
+            register_lime_project_skill_from_directory("runtime-enable-fixture", &skill_dir)
+                .expect("register skill");
+
+        assert_eq!(skill_name, "project:runtime-enable-fixture");
+        assert!(is_lime_skill_registered("project:runtime-enable-fixture"));
     }
 
     #[test]

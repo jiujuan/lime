@@ -4,12 +4,12 @@ use lime_core::database::dao::agent_timeline::{AgentThreadItem, AgentThreadItemP
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ToolAttemptRecord {
-    pub tool_id: String,
-    pub tool_name: String,
-    pub success: Option<bool>,
-    pub error: Option<String>,
-    pub observed_item_lifecycle: bool,
+pub(crate) struct ToolAttemptRecord {
+    pub(crate) tool_id: String,
+    pub(crate) tool_name: String,
+    pub(crate) success: Option<bool>,
+    pub(crate) error: Option<String>,
+    pub(crate) observed_item_lifecycle: bool,
 }
 
 #[derive(Debug, Default)]

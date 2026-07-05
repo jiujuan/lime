@@ -391,6 +391,7 @@ import {
   resolveRuntimeWorkspaceId,
   resolveTaskPreviewArtifact,
   resolveVideoCanvasStatusFromPreview,
+  shouldAutoRefreshWorkspaceRightSurfacePending,
   shouldBuildFullThreadTimeline,
   type TaskCenterDraftTab,
 } from "./workspace/agentChatWorkspaceHelpers";
@@ -1510,6 +1511,8 @@ export function AgentChatWorkspace({
   ]);
   const teamSessionRuntime = useWorkspaceTeamSessionRuntime({
     sessionId,
+    threadId: threadRead?.thread_id ?? sessionId,
+    currentTurnId,
     topics,
     turns,
     queuedTurnCount: queuedTurns.length,
@@ -1719,12 +1722,18 @@ export function AgentChatWorkspace({
     () =>
       needsFullThreadTimeline
         ? buildRealSubagentTimelineItems({
-            threadId: sessionId,
+            threadId: threadRead?.thread_id ?? sessionId,
             turns,
             childSessions: childSubagentSessions,
           })
         : [],
-    [childSubagentSessions, needsFullThreadTimeline, sessionId, turns],
+    [
+      childSubagentSessions,
+      needsFullThreadTimeline,
+      sessionId,
+      threadRead?.thread_id,
+      turns,
+    ],
   );
   const effectiveThreadItems = useMemo(
     () =>
@@ -1767,6 +1776,9 @@ export function AgentChatWorkspace({
       creationMode,
       projectId,
       contentId,
+      sessionId,
+      threadId: threadRead?.thread_id ?? sessionId,
+      ensureSessionForThreadLineage: ensureSession,
       input,
       chatToolPreferences: effectiveChatToolPreferences,
       creationReplay: initialCreationReplay,
@@ -4556,19 +4568,25 @@ export function AgentChatWorkspace({
     workspacePluginRuntimeContext.context.status === "active"
       ? workspacePluginRuntimeContext.context.activationContext
       : null;
+  const rightSurfacePendingSessionId = sessionId || sceneSessionId;
   const shouldAutoRefreshRightSurfacePending =
-    sceneIsSending ||
-    sceneIsPreparingSend ||
-    sceneLayoutMode !== "chat" ||
-    manualRightSurface !== null ||
-    Boolean(activePluginActivationContext);
+    shouldAutoRefreshWorkspaceRightSurfacePending({
+      sessionId: rightSurfacePendingSessionId,
+      workspaceId: runtimeWorkspaceId,
+      workspaceRoot: canvasWorkbenchRootPath,
+      sceneIsSending,
+      sceneIsPreparingSend,
+      sceneLayoutMode,
+      manualRightSurfaceActive: manualRightSurface !== null,
+      pluginActivationActive: Boolean(activePluginActivationContext),
+    });
   const rightSurfaceAppServerPendingRuntime =
     useWorkspaceRightSurfacePendingRuntime({
       enabled: true,
       autoRefreshEnabled: shouldAutoRefreshRightSurfacePending,
       workspaceId: runtimeWorkspaceId,
       workspaceRoot: canvasWorkbenchRootPath,
-      sessionId: sessionId || sceneSessionId,
+      sessionId: rightSurfacePendingSessionId,
       pluginActivationContext: activePluginActivationContext,
       pluginContracts: workspacePluginRuntimeContext.context.contracts,
     });
@@ -5243,15 +5261,10 @@ export function AgentChatWorkspace({
     [],
   );
   const handleToggleRightSurfaceObjectCanvas = useCallback(() => {
-    if (
-      !objectCanvasRightSurfaceAvailable &&
-      !articleEditorRightSurfaceAvailable
-    ) {
+    if (!objectCanvasRightSurfaceAvailable) {
       return;
     }
-    const targetSurface = articleEditorRightSurfaceAvailable
-      ? "articleWorkspace"
-      : "objectCanvas";
+    const targetSurface = "objectCanvas";
     const shouldOpenObjectCanvas = manualRightSurface !== targetSurface;
     setHarnessPanelVisible(false);
     setExpertInfoPanelCollapsed(true);
@@ -5259,29 +5272,16 @@ export function AgentChatWorkspace({
     setActiveObjectCanvasRightSurfaceCandidate(
       shouldOpenObjectCanvas ? objectCanvasRightSurfaceCandidate : null,
     );
-    setActiveArticleWorkspace(
-      shouldOpenObjectCanvas && articleEditorRightSurface
-        ? articleEditorRightSurface
-        : null,
-    );
+    setActiveArticleWorkspace(null);
     setManualRightSurface(shouldOpenObjectCanvas ? targetSurface : null);
     if (shouldOpenObjectCanvas) {
       void refreshRightSurfacePendingRequests();
       void consumePendingRequestsForSurface(targetSurface);
-      if (targetSurface !== "objectCanvas") {
-        void consumePendingRequestsForSurface("objectCanvas");
-      }
     } else {
       void dismissPendingRequestsForSurface(
         targetSurface,
         "user_closed_surface",
       );
-      if (targetSurface !== "objectCanvas") {
-        void dismissPendingRequestsForSurface(
-          "objectCanvas",
-          "user_closed_surface",
-        );
-      }
     }
   }, [
     consumePendingRequestsForSurface,
@@ -5290,8 +5290,6 @@ export function AgentChatWorkspace({
     objectCanvasRightSurfaceAvailable,
     objectCanvasRightSurfaceCandidate,
     refreshRightSurfacePendingRequests,
-    articleEditorRightSurface,
-    articleEditorRightSurfaceAvailable,
     setHarnessPanelVisible,
   ]);
   const handleToggleRightSurfaceHarness = useCallback(() => {
@@ -5433,11 +5431,7 @@ export function AgentChatWorkspace({
 
     add("workbench", sceneLayoutMode !== "chat");
     add("appSurface", pluginSurfaceRightSurfaceAvailable);
-    add("articleWorkspace", articleEditorRightSurfaceAvailable);
-    add(
-      "objectCanvas",
-      objectCanvasRightSurfaceAvailable && !articleEditorRightSurfaceAvailable,
-    );
+    add("objectCanvas", objectCanvasRightSurfaceAvailable);
     add("expertInfo", hasExpertInfoPanel);
     add("files", filesRightSurfaceAvailable);
     add("shell", shellRightSurfaceAvailable);
@@ -5459,7 +5453,6 @@ export function AgentChatWorkspace({
     hasExpertInfoPanel,
     manualRightSurface,
     objectCanvasRightSurfaceAvailable,
-    articleEditorRightSurfaceAvailable,
     rightSurfaceHarnessEnabled,
     rightSurfaceTraceAvailable,
     sceneLayoutMode,
@@ -6155,6 +6148,9 @@ export function AgentChatWorkspace({
         workspaces={workspaceServiceSkillEntryActions.automationWorkspaces}
         initialValues={
           workspaceServiceSkillEntryActions.automationDialogInitialValues
+        }
+        threadLineage={
+          workspaceServiceSkillEntryActions.automationThreadLineage
         }
         saving={workspaceServiceSkillEntryActions.automationJobSaving}
         onOpenChange={

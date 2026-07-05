@@ -95,6 +95,8 @@ describe("useWorkspaceTeamSessionRuntime", () => {
 
   it("存在运行态任务时应暴露 runtime sessions 语义并显示 Subagents runtime", async () => {
     const harness = renderHook({
+      threadId: "thread-1",
+      currentTurnId: "turn-1",
       childSubagentSessions: [
         {
           id: "task-1",
@@ -115,6 +117,13 @@ describe("useWorkspaceTeamSessionRuntime", () => {
       hasRuntimeSessions: true,
       subagentsRuntimeVisible: true,
     });
+    expect(mockUseTeamWorkspaceRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({
+        currentSessionId: "session-1",
+        currentThreadId: "thread-1",
+        currentTurnId: "turn-1",
+      }),
+    );
   });
 
   it("只有 subagent 开关开启时也应展示 Subagents runtime，但不应伪造 runtime sessions", async () => {

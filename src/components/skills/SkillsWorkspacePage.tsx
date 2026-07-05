@@ -43,7 +43,7 @@ import type {
 } from "./SkillsWorkspacePageTypes";
 import { useSkillsWorkspaceCopy } from "./SkillsWorkspacePageCopy";
 import { SkillsWorkspacePageView } from "./SkillsWorkspacePageView";
-import { useSkillsWorkspaceProject } from "./useSkillsWorkspaceDefaultProject";
+import { useSkillsWorkspaceProject } from "./useSkillsWorkspaceProject";
 import { useSkillsWorkspaceDetailContent } from "./useSkillsWorkspaceDetailContent";
 import { useSkillsWorkspaceLocalSkillActions } from "./useSkillsWorkspaceLocalSkillActions";
 import { SkillScaffoldDialog } from "./SkillScaffoldDialog";
@@ -109,10 +109,8 @@ export function SkillsWorkspacePage({
   const [scaffoldDialogDraft, setScaffoldDialogDraft] =
     useState<SkillScaffoldDraft | null>(null);
   const [scaffoldCreating, setScaffoldCreating] = useState(false);
-  const [
-    registeredSkillsRefreshSignal,
-    setRegisteredSkillsRefreshSignal,
-  ] = useState(0);
+  const [registeredSkillsRefreshSignal, setRegisteredSkillsRefreshSignal] =
+    useState(0);
   const [localPackageDialogOpen, setLocalPackageDialogOpen] = useState(false);
   const [localPackageSourcePath, setLocalPackageSourcePath] = useState<
     string | null
@@ -139,9 +137,9 @@ export function SkillsWorkspacePage({
   const lastHandledSkillPackageRequestKeyRef = useRef<number | string | null>(
     null,
   );
-  const lastHandledInitialSearchRequestKeyRef = useRef<
-    number | string | null
-  >(null);
+  const lastHandledInitialSearchRequestKeyRef = useRef<number | string | null>(
+    null,
+  );
   const creationProjectId = pageParams?.creationProjectId?.trim() || undefined;
 
   const { currentProjectState } = useSkillsWorkspaceProject({
@@ -165,7 +163,8 @@ export function SkillsWorkspacePage({
   } = useSkillsWorkspaceLocalSkillActions({
     detailInstalledSkillDirectory,
     highlightedInstalledSkillDirectory,
-    optimisticInstalledSkillDirectory: optimisticInstalledSkill?.directory ?? null,
+    optimisticInstalledSkillDirectory:
+      optimisticInstalledSkill?.directory ?? null,
     refreshLocalSkills,
     setDetailInstalledSkillDirectory,
     setHighlightedInstalledSkillDirectory,
@@ -521,12 +520,7 @@ export function SkillsWorkspacePage({
 
       onNavigate("agent", params);
     },
-    [
-      creationProjectId,
-      currentProjectState.rootPath,
-      onNavigate,
-      t,
-    ],
+    [creationProjectId, currentProjectState.rootPath, onNavigate, t],
   );
 
   const handleBringScaffoldToCreation = useCallback(

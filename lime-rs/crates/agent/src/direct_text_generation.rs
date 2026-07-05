@@ -1,11 +1,12 @@
 use crate::lime_session_repository::LimeSessionRepository;
 use crate::provider_configuration::{
-    configure_model_route_provider_for_session_with_provider, ConfiguredSessionProvider,
-    ModelRouteProviderConfiguration, SessionProviderConfig,
+    configure_model_route_provider_for_session_with_provider, ModelRouteProviderConfiguration,
+    SessionProviderConfig,
 };
 use crate::request_tool_policy::{
-    resolve_request_tool_policy_with_mode, stream_reply_with_policy,
-    stream_reply_with_policy_and_provider_for_direct_generation, RequestToolPolicyMode,
+    resolve_request_tool_policy_with_mode,
+    stream_runtime_reply_with_configured_provider_for_direct_generation,
+    stream_runtime_reply_with_policy, RequestToolPolicyMode,
 };
 use crate::turn_context_configuration::AgentTurnContext;
 use crate::{AgentEvent, AgentRuntimeState, AgentTokenUsage, SessionConfigBuilder};
@@ -57,11 +58,6 @@ pub async fn run_direct_text_generation_with_db(
         ),
         None => None,
     };
-    let agent_arc = agent_state.get_agent_arc();
-    let agent_guard = agent_arc.read().await;
-    let agent = agent_guard
-        .as_ref()
-        .ok_or_else(|| "Agent runtime is not initialized".to_string())?;
     let request_tool_policy =
         resolve_request_tool_policy_with_mode(Some(false), Some(RequestToolPolicyMode::Disabled));
     let mut session_config = SessionConfigBuilder::new(session_id.clone())
@@ -76,22 +72,22 @@ pub async fn run_direct_text_generation_with_db(
     let mut text = String::new();
     let mut usage: Option<AgentTokenUsage> = None;
     let execution = match configured_provider.as_ref() {
-        Some(ConfiguredSessionProvider { provider, .. }) => {
-            stream_reply_with_policy_and_provider_for_direct_generation(
-                agent,
+        Some(configured_provider) => {
+            stream_runtime_reply_with_configured_provider_for_direct_generation(
+                agent_state,
                 &user_prompt,
                 None,
                 session_config,
                 None,
                 &request_tool_policy,
-                provider.clone(),
+                configured_provider,
                 |event| collect_model_text(event, &mut text, &mut usage),
             )
             .await
         }
         None => {
-            stream_reply_with_policy(
-                agent,
+            stream_runtime_reply_with_policy(
+                agent_state,
                 &user_prompt,
                 None,
                 session_config,
@@ -122,7 +118,7 @@ pub async fn run_direct_text_generation_with_db(
     Ok(DirectTextGenerationResult {
         text,
         usage,
-        provider_config: configured_provider.map(|configured| configured.config),
+        provider_config: configured_provider.map(|configured| configured.into_config()),
     })
 }
 

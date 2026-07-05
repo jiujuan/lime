@@ -258,6 +258,58 @@ describe("workspacePluginIntentRouting", () => {
     });
   });
 
+  it("兼容旧安装态缺少 workflows 时仍应解析 activationEntries", () => {
+    const manifest = {
+      ...contentFactoryManifest,
+      workflows: undefined,
+      entries: undefined,
+      activationEntries: [
+        {
+          key: "content_article_generate",
+          title: "写文章",
+          aliases: ["@写文章", "@写作"],
+          taskKind: "content.article.generate",
+          workflowKey: "content_article_workflow",
+          outputArtifactKind: "content_factory.workspace_patch",
+          rightSurface: "articleWorkspace",
+          defaultObjectKind: "articleDraft",
+        },
+      ],
+      agentRuntime: {
+        activationEntries: [
+          {
+            key: "content_article_generate",
+            title: "写文章",
+            aliases: ["@写文章"],
+            taskKind: "content.article.generate",
+            workflow: "content_article_workflow",
+          },
+        ],
+        tasks: [{ kind: "content.article.generate" }],
+      },
+    } as unknown as typeof contentFactoryManifest;
+
+    const match = resolveWorkspacePluginIntent("@写文章 写一篇公众号文章", [
+      {
+        appId: manifest.appId,
+        appName: manifest.displayName,
+        manifest,
+      },
+    ]);
+
+    expect(match).toMatchObject({
+      appId: "content-factory-app",
+      intentKey: "content_article_generate",
+      taskKind: "content.article.generate",
+      workflowKey: "content_article_workflow",
+      outputArtifactKind: "content_factory.workspace_patch",
+      rightSurface: "articleWorkspace",
+      expectedObjects: ["articleDraft"],
+      matchedPhrase: "@写文章",
+      source: "plugin_manifest_intent",
+    });
+  });
+
   it("禁用的 Plugin 不应命中 intent", () => {
     expect(
       resolveWorkspacePluginIntent("用创作工作台生成文章", [

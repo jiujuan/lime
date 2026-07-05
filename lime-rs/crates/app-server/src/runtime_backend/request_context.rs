@@ -377,6 +377,7 @@ pub(super) fn direct_provider_config_from_request(
             Some(RuntimeToolCallStrategy::ToolShim)
         ),
         toolshim_model: request.toolshim_model.clone(),
+        model_capabilities: request.model_capabilities.clone(),
     })
 }
 
@@ -666,6 +667,8 @@ struct ConfigureProviderRequest {
     tool_call_strategy: Option<RuntimeToolCallStrategy>,
     #[serde(default, alias = "toolshimModel")]
     toolshim_model: Option<String>,
+    #[serde(default, alias = "modelCapabilities")]
+    model_capabilities: Option<Value>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

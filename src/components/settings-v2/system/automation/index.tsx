@@ -66,6 +66,7 @@ import {
   AutomationJobDialogSubmit,
   type AutomationJobDialogInitialValues,
 } from "./AutomationJobDialog";
+import type { AutomationThreadLineage } from "./automationThreadLineage";
 import {
   type AutomationServiceSkillContextCopy,
   resolveServiceSkillAutomationContext,
@@ -392,6 +393,7 @@ interface AutomationSettingsProps {
   mode?: AutomationSettingsMode;
   initialSelectedJobId?: string;
   initialWorkspaceTab?: AutomationWorkspaceTab;
+  threadLineage?: AutomationThreadLineage | null;
   onOpenSettings?: () => void;
   onOpenWorkspace?: () => void;
 }
@@ -429,6 +431,7 @@ export function AutomationSettings({
   mode = "full",
   initialSelectedJobId,
   initialWorkspaceTab,
+  threadLineage,
   onOpenSettings,
   onOpenWorkspace,
 }: AutomationSettingsProps) {
@@ -1154,6 +1157,12 @@ export function AutomationSettings({
   function openCreateDialog(
     initialValues?: AutomationJobDialogInitialValues | null,
   ) {
+    if (!threadLineage?.sessionId?.trim() || !threadLineage.threadId?.trim()) {
+      toast.error(
+        t("settings.automation.jobDialog.validation.threadLineageRequired"),
+      );
+      return;
+    }
     setDialogMode("create");
     setDialogInitialValues(initialValues ?? null);
     setDialogOpen(true);
@@ -2015,6 +2024,7 @@ export function AutomationSettings({
         job={dialogMode === "edit" ? selectedJob : null}
         workspaces={workspaces}
         initialValues={dialogMode === "create" ? dialogInitialValues : null}
+        threadLineage={threadLineage}
         saving={jobSaving}
         onOpenChange={handleDialogOpenChange}
         onSubmit={handleSubmitJob}

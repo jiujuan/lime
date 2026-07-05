@@ -276,7 +276,7 @@ pub struct AgentToolInventorySnapshot {
 }
 
 #[derive(Debug, Clone)]
-pub struct AgentToolInventoryBuildInput {
+pub(crate) struct AgentToolInventoryBuildInput {
     pub surface: WorkspaceToolSurface,
     pub caller: String,
     pub agent_initialized: bool,
@@ -293,7 +293,9 @@ pub struct AgentToolInventoryBuildInput {
     pub searchable_extension_tools: Vec<ExtensionToolInventorySeed>,
 }
 
-pub fn build_tool_inventory(input: AgentToolInventoryBuildInput) -> AgentToolInventorySnapshot {
+pub(crate) fn build_tool_inventory(
+    input: AgentToolInventoryBuildInput,
+) -> AgentToolInventorySnapshot {
     let AgentToolInventoryBuildInput {
         surface,
         caller,

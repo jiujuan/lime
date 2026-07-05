@@ -13,13 +13,14 @@ use aster::conversation::message::ActionRequiredScope;
 use aster::session_context::{current_action_scope, current_session_id};
 use aster::tools::ask::AskRequest;
 use aster::tools::AskCallback;
+#[cfg(test)]
 use serde_json::Value;
 use std::time::Duration;
 
 const DEFAULT_ASK_TIMEOUT_SECS: u64 = 300;
 
 /// 创建 AskTool 回调
-pub fn create_ask_callback() -> AskCallback {
+pub(crate) fn create_ask_callback() -> AskCallback {
     std::sync::Arc::new(|request: AskRequest| {
         Box::pin(async move {
             let current_request = project_ask_request(&request);
@@ -87,7 +88,8 @@ fn resolve_action_scope() -> ActionRequiredScope {
 }
 
 /// 从前端回传的 user_data 中提取 AskTool 可消费的结构化答案。
-pub fn extract_response(request: &AskRequest, user_data: &Value) -> Option<Value> {
+#[cfg(test)]
+fn extract_response(request: &AskRequest, user_data: &Value) -> Option<Value> {
     extract_current_ask_response(&project_ask_request(request), user_data)
 }
 

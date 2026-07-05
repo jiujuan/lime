@@ -2265,6 +2265,7 @@
   "settings.automation.jobDialog.validation.nameRequired": "フロー名は必須です。",
   "settings.automation.jobDialog.validation.promptRequired": "開始プロンプトは必須です。",
   "settings.automation.jobDialog.validation.saveFailed": "継続フローの保存に失敗しました。",
+  "settings.automation.jobDialog.validation.threadLineageRequired": "まず現在のプロジェクトスレッドから継続フローを作成してください。",
   "settings.automation.jobDialog.validation.timeoutPositive": "タイムアウトは正の整数である必要があります。",
   "settings.automation.jobDialog.validation.workspaceRequired": "所属先を選択してください。",
   "settings.automation.jobDialog.workspace.none": "未選択",

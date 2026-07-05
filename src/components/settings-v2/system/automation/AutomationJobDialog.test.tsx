@@ -36,6 +36,7 @@ async function renderDialog(props: {
   mode?: "create" | "edit";
   initialValues?: Record<string, unknown>;
   jobOverride?: Record<string, unknown>;
+  threadLineage?: { sessionId: string; threadId: string } | null;
 }) {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -59,6 +60,8 @@ async function renderDialog(props: {
                 payload: {
                   kind: "agent_turn",
                   prompt: "请输出今日摘要",
+                  session_id: "session-job-1",
+                  thread_id: "thread-job-1",
                   system_prompt: null,
                   web_search: false,
                   content_id: null,
@@ -98,6 +101,7 @@ async function renderDialog(props: {
           } as any,
         ]}
         initialValues={props.initialValues as any}
+        threadLineage={props.threadLineage ?? null}
         saving={false}
         onOpenChange={vi.fn()}
         onSubmit={props.onSubmit}
@@ -167,6 +171,8 @@ describe("AutomationJobDialog", () => {
         payload: {
           kind: "agent_turn",
           prompt: "生成趋势摘要",
+          session_id: "session-job-1",
+          thread_id: "thread-job-1",
           system_prompt: "请保持简洁",
           web_search: false,
           content_id: "content-1",
@@ -205,6 +211,8 @@ describe("AutomationJobDialog", () => {
         payload: {
           kind: "agent_turn",
           prompt: "生成趋势摘要",
+          session_id: "session-job-1",
+          thread_id: "thread-job-1",
           system_prompt: "请保持简洁",
           web_search: false,
           content_id: "content-1",
@@ -272,6 +280,8 @@ describe("AutomationJobDialog", () => {
         payload: {
           kind: "agent_turn",
           prompt: "整理结构化结果",
+          session_id: "session-job-1",
+          thread_id: "thread-job-1",
           system_prompt: null,
           web_search: false,
           content_id: null,
@@ -331,6 +341,10 @@ describe("AutomationJobDialog", () => {
           "请总结最近一个周期内的关键进展、异常和待办，输出一份简洁的中文摘要。",
         delivery_mode: "none",
       },
+      threadLineage: {
+        sessionId: "session-create-1",
+        threadId: "thread-create-1",
+      },
     });
 
     expect(
@@ -362,6 +376,8 @@ describe("AutomationJobDialog", () => {
           kind: "agent_turn",
           prompt:
             "请总结最近一个周期内的关键进展、异常和待办，输出一份简洁的中文摘要。",
+          session_id: "session-create-1",
+          thread_id: "thread-create-1",
         }),
       }),
     });

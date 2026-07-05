@@ -8,6 +8,7 @@ import {
   type PluginActivationMentionParseResult,
   type PluginContract,
   type PluginObjectRef,
+  type PluginRegistryItem,
 } from "@/features/plugin";
 import type { HandleSendOptions } from "../hooks/handleSendTypes";
 import { asRecord } from "./commands/skillSlotUtils";
@@ -46,6 +47,45 @@ interface WorkspacePluginActivationParseResolution {
   contracts: readonly PluginContract[];
 }
 
+function canActivateLocalPluginChatTurnWithReadinessBlockers(
+  state: InstalledPluginState | undefined,
+): boolean {
+  if (!state || state.disabled === true) {
+    return false;
+  }
+  const sourceKind = state.identity?.sourceKind;
+  if (sourceKind !== "local_folder" && sourceKind !== "local_archive") {
+    return false;
+  }
+  const blockers = state.readiness?.blockers ?? [];
+  return (
+    state.readiness?.status === "blocked" &&
+    blockers.length > 0 &&
+    blockers.every((issue) => issue.code === "CAPABILITY_MISSING")
+  );
+}
+
+function chatActivationRegistryItems(params: {
+  registry: readonly PluginRegistryItem[];
+  installedPlugins: readonly InstalledPluginState[];
+}): PluginRegistryItem[] {
+  return params.registry.map((item) => {
+    const state = params.installedPlugins.find(
+      (candidate) => candidate.appId === item.pluginId,
+    );
+    if (!canActivateLocalPluginChatTurnWithReadinessBlockers(state)) {
+      return item;
+    }
+    return {
+      ...item,
+      activationState: "activatable",
+      capabilityStates: item.capabilityStates.includes("activatable")
+        ? item.capabilityStates
+        : [...item.capabilityStates, "activatable"],
+    };
+  });
+}
+
 function resolvePluginActivationParseResult(params: {
   text: string;
   sessionId: string;
@@ -60,7 +100,10 @@ function resolvePluginActivationParseResult(params: {
       text: params.text,
       catalog: buildPluginActivationMentionCatalog({
         contracts,
-        registryItems: projection.registry,
+        registryItems: chatActivationRegistryItems({
+          registry: projection.registry,
+          installedPlugins: params.installedPlugins,
+        }),
       }),
       sessionId: params.sessionId,
       source: "user",
@@ -225,6 +268,11 @@ function pluginActivationMetadata(
       expected_objects: intent?.expectedObjects,
       matched_phrase: intent?.matchedPhrase,
       workflow_key: workflow?.key,
+      workflow_contract: buildActivationWorkflowContract({
+        workflow,
+        intent,
+        expectedObjects: context.expectedObjects,
+      }),
       workflow,
       subagents,
       skill_refs: skillRefs,
@@ -302,6 +350,7 @@ function runtimeReadinessItemRecord(
     reason_codes: item.reasonCodes,
     source: item.source,
     kind: item.kind,
+    task_kinds: item.taskKinds,
     event: item.event,
     entrypoint: item.entrypoint,
   };
@@ -350,7 +399,10 @@ function resolveActivationWorkflow(
   if (!manifest || (!intentKey && !taskKind && !workflowKey)) {
     return undefined;
   }
-  return manifest.workflows.find(
+  const workflows = Array.isArray(manifest.workflows)
+    ? manifest.workflows
+    : [];
+  return workflows.find(
     (workflow) =>
       (workflowKey ? workflow.key === workflowKey : false) ||
       (intentKey
@@ -359,6 +411,71 @@ function resolveActivationWorkflow(
         : false) ||
       (taskKind ? workflow.taskKind === taskKind : false),
   );
+}
+
+function buildActivationWorkflowContract(params: {
+  workflow: WorkspacePluginIntentMatch["manifest"]["workflows"][number] | undefined;
+  intent: WorkspacePluginIntentMatch | undefined;
+  expectedObjects: readonly string[] | undefined;
+}) {
+  const workflow = params.workflow;
+  const intent = params.intent;
+  if (!workflow && !intent) {
+    return undefined;
+  }
+  const workflowRecord = asRecord(workflow);
+  const steps = Array.isArray(workflow?.steps)
+    ? workflow.steps
+        .map((step) => {
+          const record = asRecord(step);
+          if (!record) {
+            return null;
+          }
+          const id = readString(record, ["id"]);
+          const title = readString(record, ["title"]);
+          const subagent = readString(record, ["subagent"]);
+          const expectedOutput = readString(record, [
+            "expectedOutput",
+            "expected_output",
+          ]);
+          const skillRefs = readStringArray(record, [
+            "skillRefs",
+            "skill_refs",
+          ]);
+          if (!id && !title && !subagent && !expectedOutput && !skillRefs) {
+            return null;
+          }
+          return {
+            id,
+            title,
+            subagent,
+            skill_refs: skillRefs,
+            expected_output: expectedOutput,
+          };
+        })
+        .filter(Boolean)
+    : undefined;
+  return {
+    key: workflow?.key ?? intent?.workflowKey,
+    title: workflow?.title,
+    task_kind: workflow?.taskKind ?? intent?.taskKind,
+    output_artifact_kind:
+      workflow?.outputArtifactKind ?? intent?.outputArtifactKind,
+    right_surface: intent?.rightSurface,
+    expected_objects:
+      intent?.expectedObjects?.length
+        ? intent.expectedObjects
+        : params.expectedObjects,
+    connector_refs: readStringArray(workflowRecord ?? {}, [
+      "connectorRefs",
+      "connector_refs",
+    ]),
+    cli_refs: readStringArray(workflowRecord ?? {}, ["cliRefs", "cli_refs"]),
+    hook_policy:
+      asRecord(workflowRecord?.hookPolicy) ??
+      asRecord(workflowRecord?.hook_policy),
+    steps,
+  };
 }
 
 function resolveActivationSubagents(
@@ -559,15 +676,6 @@ export function mergePluginActivationSendOptions(params: {
       intentSystemPrompt && previousSystemPrompt
         ? `${previousSystemPrompt}\n\n${intentSystemPrompt}`
         : intentSystemPrompt || params.sendOptions?.systemPromptOverride,
-    ...(shouldUseArticleActivationAssistantDraft(params.resolution)
-      ? {
-          assistantDraft: {
-            ...(params.sendOptions?.assistantDraft || {}),
-            content: params.sendOptions?.assistantDraft?.content ?? "",
-            fallbackContent: "",
-          },
-        }
-      : {}),
     requestMetadata: {
       ...previousRequestMetadata,
       harness: {
@@ -576,13 +684,4 @@ export function mergePluginActivationSendOptions(params: {
       },
     },
   };
-}
-
-function shouldUseArticleActivationAssistantDraft(
-  resolution: WorkspacePluginActivationResolution,
-): boolean {
-  return (
-    resolution.status === "matched" &&
-    resolution.intentMatch?.rightSurface === "articleWorkspace"
-  );
 }

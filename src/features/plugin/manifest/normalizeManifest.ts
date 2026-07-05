@@ -199,6 +199,7 @@ export function normalizeManifest(
     policies: manifest.policies ?? [],
     services: manifest.services ?? [],
     workflows: normalizeWorkflows(manifest),
+    connectors: manifest.connectors ?? [],
     subagents: manifest.subagents ?? [],
     skillRefs: manifest.skillRefs ?? [],
     toolRefs: manifest.toolRefs ?? [],

@@ -1,11 +1,5 @@
-use crate::aster_runtime_projection::project_aster_runtime_event;
-use crate::protocol::{
-    build_diagnostics_runtime_status_metadata, AgentEvent as RuntimeAgentEvent, AgentRuntimeStatus,
-};
-use crate::session_config_adapter::to_aster_session_config;
-use crate::session_configuration::AgentSessionConfig;
+use crate::protocol::{build_diagnostics_runtime_status_metadata, AgentRuntimeStatus};
 use crate::turn_context_configuration::AgentTurnContext;
-use aster::agents::Agent;
 
 pub(crate) fn build_empty_reply_retry_runtime_status() -> AgentRuntimeStatus {
     AgentRuntimeStatus {
@@ -102,44 +96,7 @@ pub(crate) fn build_web_retrieval_synthesis_runtime_status(
     }
 }
 
-pub(crate) async fn emit_runtime_status_with_projection<F>(
-    agent: &Agent,
-    session_config: &AgentSessionConfig,
-    mut status: AgentRuntimeStatus,
-    on_event: &mut F,
-) where
-    F: FnMut(&RuntimeAgentEvent),
-{
-    apply_soul_style_to_runtime_status(&mut status, session_config.turn_context.as_ref());
-    let aster_session_config = to_aster_session_config(session_config.clone());
-    match agent
-        .upsert_runtime_status_item(
-            &aster_session_config,
-            status.phase.clone(),
-            status.title.clone(),
-            status.detail.clone(),
-            status.checkpoints.clone(),
-        )
-        .await
-    {
-        Ok(agent_event) => {
-            for event in project_aster_runtime_event(agent_event) {
-                on_event(&event);
-            }
-        }
-        Err(error) => {
-            tracing::warn!(
-                "[AgentRuntime][RuntimeStatus] 写入 runtime item 失败，降级仅发 transient 事件: {}",
-                error
-            );
-        }
-    }
-
-    let event = RuntimeAgentEvent::RuntimeStatus { status };
-    on_event(&event);
-}
-
-fn apply_soul_style_to_runtime_status(
+pub(crate) fn apply_soul_style_to_runtime_status(
     status: &mut AgentRuntimeStatus,
     turn_context: Option<&AgentTurnContext>,
 ) {

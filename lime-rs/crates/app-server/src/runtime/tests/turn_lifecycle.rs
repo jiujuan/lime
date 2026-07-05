@@ -1,6 +1,48 @@
 use super::support::*;
 use super::*;
 
+struct StreamingCallbackOrderBackend {
+    observed_events: Arc<Mutex<Vec<String>>>,
+}
+
+#[async_trait]
+impl ExecutionBackend for StreamingCallbackOrderBackend {
+    async fn start_turn(
+        &self,
+        _request: ExecutionRequest,
+        sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        let observed_events = self
+            .observed_events
+            .lock()
+            .expect("observed events mutex poisoned")
+            .clone();
+        assert_eq!(
+            observed_events,
+            vec!["message.created".to_string(), "turn.accepted".to_string()],
+            "streaming turn/start must publish input and accepted lifecycle before backend progress"
+        );
+        sink.emit(RuntimeEvent::new("turn.started", json!({})))?;
+        sink.emit(RuntimeEvent::new("turn.completed", json!({})))
+    }
+
+    async fn cancel_turn(
+        &self,
+        _request: CancelExecutionRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+
+    async fn respond_action(
+        &self,
+        _request: ActionRespondRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+}
+
 #[test]
 fn capability_list_with_unknown_session_id_returns_session_not_found() {
     let core = RuntimeCore::default();
@@ -70,6 +112,66 @@ async fn mock_backend_emits_public_runtime_event() {
     assert_eq!(events[1].event_type, "turn.accepted");
     assert_eq!(events[1].payload["backend"], "mock");
     assert_eq!(events[1].payload["clientName"], "test-client");
+}
+
+#[tokio::test]
+async fn streaming_turn_start_emits_lifecycle_before_backend_progress() {
+    let observed_events = Arc::new(Mutex::new(Vec::new()));
+    let core = RuntimeCore::with_backend(Arc::new(StreamingCallbackOrderBackend {
+        observed_events: observed_events.clone(),
+    }));
+    let session = core
+        .start_session(AgentSessionStartParams {
+            session_id: Some("sess_streaming_lifecycle".to_string()),
+            thread_id: Some("thread_streaming_lifecycle".to_string()),
+            app_id: "content-studio".to_string(),
+            workspace_id: Some("default".to_string()),
+            business_object_ref: None,
+            locale: None,
+        })
+        .expect("session")
+        .session;
+
+    let mut callback = |event: AgentEvent| {
+        observed_events
+            .lock()
+            .expect("observed events mutex poisoned")
+            .push(event.event_type.clone());
+        Ok(())
+    };
+
+    let output = core
+        .start_turn_with_event_callback(
+            AgentSessionTurnStartParams {
+                session_id: session.session_id.clone(),
+                turn_id: Some("turn_streaming_lifecycle".to_string()),
+                input: AgentInput {
+                    text: "hello streaming".to_string(),
+                    attachments: Vec::new(),
+                },
+                runtime_options: None,
+                queue_if_busy: false,
+                skip_pre_submit_resume: false,
+            },
+            RuntimeHostContext::default(),
+            &mut callback,
+        )
+        .await
+        .expect("streaming turn");
+
+    assert_eq!(output.response.turn.status, AgentTurnStatus::Completed);
+    assert_eq!(
+        observed_events
+            .lock()
+            .expect("observed events mutex poisoned")
+            .as_slice(),
+        [
+            "message.created",
+            "turn.accepted",
+            "turn.started",
+            "turn.completed"
+        ]
+    );
 }
 
 #[tokio::test]

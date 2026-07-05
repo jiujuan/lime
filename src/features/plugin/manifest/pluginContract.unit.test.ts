@@ -389,7 +389,39 @@ describe("Plugin P1 manifest contract", () => {
         }),
       ]),
     );
-    expect(contract.connectors).toEqual([]);
+    expect(contract.connectors).toEqual([
+      expect.objectContaining({
+        id: "lime-knowledge",
+        title: "Lime Knowledge",
+        description: "读取用户提供素材、历史上下文和可引用知识来源。",
+        kind: "data_source",
+        taskKinds: ["content.article.generate"],
+        path: "connectors/connectors.json",
+        required: false,
+      }),
+      expect.objectContaining({
+        id: "web-research",
+        title: "Web Research",
+        description: "为资料检索阶段提供公开资料搜索和引用确认。",
+        kind: "api",
+        taskKinds: ["content.article.generate"],
+        path: "connectors/connectors.json",
+        required: false,
+      }),
+      expect.objectContaining({
+        id: "media-generation",
+        title: "Media Generation",
+        description:
+          "后续图片生成和视频分镜执行器接入点；当前样板包只声明规划与缓存合同。",
+        kind: "api",
+        taskKinds: [
+          "content.image.generate",
+          "content.video.storyboard.generate",
+        ],
+        path: "connectors/connectors.json",
+        required: false,
+      }),
+    ]);
     expect(contract.artifactRenderers).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

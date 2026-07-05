@@ -51,7 +51,6 @@ const WORKER_PACKAGE_SIGNATURE_UNVERIFIED: &str = "PLUGIN_WORKER_PACKAGE_SIGNATU
 const WORKER_OUTPUT_UNAUTHORIZED: &str = "PLUGIN_WORKER_OUTPUT_UNAUTHORIZED";
 const WORKER_REQUEST_INVALID: &str = "PLUGIN_WORKER_REQUEST_INVALID";
 const PANE_ACTION_SOURCE: &str = "right_surface_pane_action";
-const PLUGIN_ACTIVATION_SOURCE: &str = "plugin_activation_context";
 const HOOK_REQUEST_SCHEMA: &str = "lime.plugin.hook-request.v1";
 
 #[derive(Debug, Clone)]
@@ -108,6 +107,135 @@ struct PaneActionWorkerRejection {
 }
 
 impl RuntimeCore {
+    pub(in crate::runtime) fn should_materialize_plugin_activation_turn(
+        &self,
+        request: &ExecutionRequest,
+    ) -> bool {
+        PaneActionWorkerTurn::from_plugin_activation_request(request).is_some()
+    }
+
+    pub(in crate::runtime) async fn maybe_materialize_plugin_activation_artifacts(
+        &self,
+        request: &ExecutionRequest,
+        sink: &mut dyn RuntimeEventSink,
+    ) -> Result<bool, RuntimeCoreError> {
+        let Some(worker_turn) = PaneActionWorkerTurn::from_plugin_activation_request(request)
+        else {
+            return Ok(false);
+        };
+        let Some(installed_state) = self
+            .find_plugin_installed_state_for_worker(worker_turn.app_id.as_str())
+            .await?
+        else {
+            return Ok(false);
+        };
+
+        if let Err(error) =
+            validate_worker_turn_launch_preconditions(&installed_state, &worker_turn)
+        {
+            return Err(RuntimeCoreError::Backend(error.to_string()));
+        }
+
+        let package_root = resolve_plugin_runtime_dir(&installed_state)?;
+        let workflow_context = worker_turn.workflow_context(request, &installed_state);
+        if let Some(context) = workflow_context.as_ref() {
+            self.append_workflow_audit_runtime_events(request, workflow_started_events(context))?;
+        }
+        let prompt_hook_events = self.run_worker_hook_lifecycle_events(
+            package_root.as_path(),
+            &installed_state,
+            &worker_turn,
+            request,
+            "prompt",
+            "prompt.submit",
+            None,
+        );
+        if let Some(context) = workflow_context.as_ref() {
+            self.append_workflow_audit_runtime_events(
+                request,
+                workflow_hook_completed_events_from_worker_hook_events(
+                    context,
+                    &prompt_hook_events,
+                )
+                .map_err(RuntimeCoreError::Backend)?,
+            )?;
+        }
+
+        if worker_turn.should_emit_initial_workspace_snapshot() {
+            let task_id = worker_turn.task_id(request.turn.turn_id.as_str());
+            sink.emit(initial_workspace_patch_snapshot(
+                WorkspacePatchStreamingSnapshot {
+                    app_id: worker_turn.app_id.as_str(),
+                    locale: runtime_locale(request).as_deref(),
+                    prompt: worker_turn.prompt.as_str(),
+                    process_markdown: None,
+                    session_id: request.session.session_id.as_str(),
+                    surface_kind: worker_turn.surface_kind.as_deref(),
+                    task_id: task_id.as_str(),
+                    task_kind: worker_turn.task_kind.as_str(),
+                    turn_id: request.turn.turn_id.as_str(),
+                    workspace_id: worker_turn.workspace_id.as_deref(),
+                },
+            ))?;
+        }
+
+        let events = match self
+            .run_pane_action_worker_turn(
+                request,
+                &worker_turn,
+                &installed_state,
+                workflow_context.as_ref(),
+                sink,
+            )
+            .await
+        {
+            Ok(events) => events,
+            Err(error) => {
+                if let Some(context) = workflow_context.as_ref() {
+                    let failure = classify_worker_failure(error.to_string().as_str());
+                    let payload = worker_turn.failure_payload(
+                        request.turn.turn_id.as_str(),
+                        &failure,
+                        "failed",
+                    );
+                    self.append_workflow_audit_runtime_events(
+                        request,
+                        workflow_failed_events(context, &payload),
+                    )?;
+                }
+                return Err(error);
+            }
+        };
+        let completion_context = worker_completion_context(&events);
+        for event in events
+            .into_iter()
+            .filter(|event| !is_incomplete_workspace_patch_snapshot(event))
+        {
+            sink.emit(event)?;
+        }
+        let task_hook_events = self.run_worker_hook_lifecycle_events(
+            package_root.as_path(),
+            &installed_state,
+            &worker_turn,
+            request,
+            "task",
+            "task.complete",
+            Some(completion_context.clone()),
+        );
+        if let Some(context) = workflow_context.as_ref() {
+            self.append_workflow_audit_runtime_events(
+                request,
+                workflow_hook_completed_events_from_worker_hook_events(context, &task_hook_events)
+                    .map_err(RuntimeCoreError::Backend)?,
+            )?;
+            self.append_workflow_audit_runtime_events(
+                request,
+                workflow_completed_events(context, &completion_context),
+            )?;
+        }
+        Ok(true)
+    }
+
     pub(in crate::runtime) async fn maybe_run_plugin_worker_turn(
         &self,
         request: &ExecutionRequest,

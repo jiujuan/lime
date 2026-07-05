@@ -82,8 +82,12 @@ interface SkillsWorkspacePageViewProps {
   replacingSkillDirectory: string | null;
   revealingSkillDirectory: string | null;
   uninstallingSkillDirectory: string | null;
-  findInstalledMarketplaceLocalSkill: (item: SkillStoreItem) => Skill | undefined;
-  getMarketplaceSkillActionLabel: (state: MarketplaceSkillActionState) => string;
+  findInstalledMarketplaceLocalSkill: (
+    item: SkillStoreItem,
+  ) => Skill | undefined;
+  getMarketplaceSkillActionLabel: (
+    state: MarketplaceSkillActionState,
+  ) => string;
   onActiveViewChange: (view: SkillsWorkspaceView) => void;
   onBringScaffoldToCreation: (draft: SkillScaffoldDraft) => void;
   onEnableRegisteredSkillRuntime: (
@@ -116,7 +120,8 @@ export function SkillsWorkspacePageView(props: SkillsWorkspacePageViewProps) {
   const { t, i18n } = useTranslation("agent");
 
   const cardProps = {
-    findInstalledMarketplaceLocalSkill: props.findInstalledMarketplaceLocalSkill,
+    findInstalledMarketplaceLocalSkill:
+      props.findInstalledMarketplaceLocalSkill,
     getMarketplaceSkillActionLabel: props.getMarketplaceSkillActionLabel,
     onDetailOpen: props.onMarketplaceSkillDetailOpen,
     onPrimaryAction: props.onMarketplaceSkillPrimaryAction,
@@ -489,7 +494,9 @@ export function SkillsWorkspacePageView(props: SkillsWorkspacePageViewProps) {
                             exportingSkillDirectory={
                               props.exportingSkillDirectory
                             }
-                            renamingSkillDirectory={props.renamingSkillDirectory}
+                            renamingSkillDirectory={
+                              props.renamingSkillDirectory
+                            }
                             replacingSkillDirectory={
                               props.replacingSkillDirectory
                             }

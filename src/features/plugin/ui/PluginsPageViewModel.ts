@@ -1,6 +1,4 @@
-import {
-  buildPluginHostLifecycleForInstalledState,
-} from "@/lib/api/plugins";
+import { buildPluginHostLifecycleForInstalledState } from "@/lib/api/plugins";
 import {
   buildCloudPluginSourceState,
   type PluginSourceState,
@@ -66,11 +64,7 @@ export interface AppCenterItem {
   canReviewCloud: boolean;
 }
 
-export type AppCenterHostLifecycleTone =
-  | "emerald"
-  | "amber"
-  | "rose"
-  | "slate";
+export type AppCenterHostLifecycleTone = "emerald" | "amber" | "rose" | "slate";
 
 export interface AppCenterHostLifecycleSummary {
   status: PluginHostFunctionStatus;
@@ -136,6 +130,10 @@ function buildAppNameIcon(title: string): string {
 
 function isDirectAssetSrc(value: string): boolean {
   return /^(?:https?:|data:|blob:|asset:)/i.test(value);
+}
+
+function isLocalFileUrl(value: string): boolean {
+  return /^file:/i.test(value);
 }
 
 function isRelativeIconPath(value: string): boolean {
@@ -234,7 +232,12 @@ function resolveConvertedLocalIconSrc(
     return undefined;
   }
   const converted = normalizeOptionalText(convertLocalFileSrc(path));
-  if (!converted || converted === path || isAbsoluteLocalIconPath(converted)) {
+  if (
+    !converted ||
+    converted === path ||
+    isAbsoluteLocalIconPath(converted) ||
+    isLocalFileUrl(converted)
+  ) {
     return undefined;
   }
   return converted;
@@ -257,6 +260,9 @@ export function resolveAppIconSrc(params: {
   }
   if (isDirectAssetSrc(candidate)) {
     return candidate;
+  }
+  if (isLocalFileUrl(candidate)) {
+    return buildAppNameIcon(params.title);
   }
   if (isAbsoluteLocalIconPath(candidate)) {
     return (
@@ -348,7 +354,7 @@ function getStatusKind(params: {
   if (
     installedState &&
     cloudApp &&
-      cloudApp.version !== installedState.identity.appVersion
+    cloudApp.version !== installedState.identity.appVersion
   ) {
     return "update";
   }
@@ -416,7 +422,7 @@ export function buildAppCenterItems(params: {
           : undefined);
       const registrationBlocked = Boolean(
         cloudApp?.registrationRequired &&
-          cloudApp.registrationState !== "active",
+        cloudApp.registrationState !== "active",
       );
       const statusKind = getStatusKind({
         installedState,
@@ -560,8 +566,8 @@ export function getDefaultEntry(item: AppCenterItem): ProjectedEntry | null {
 export function hasCloudUpdate(item: AppCenterItem): boolean {
   return Boolean(
     item.installedVersion &&
-      item.cloudVersion &&
-      item.installedVersion !== item.cloudVersion,
+    item.cloudVersion &&
+    item.installedVersion !== item.cloudVersion,
   );
 }
 

@@ -1156,6 +1156,104 @@
     }
   ],
   "protocolVersion": "appserver.v0",
+  "requestSerializationScopes": [
+    {
+      "method": "agentSession/queuedTurn/promote",
+      "scope": "thread"
+    },
+    {
+      "method": "agentSession/queuedTurn/remove",
+      "scope": "thread"
+    },
+    {
+      "method": "agentSession/thread/resume",
+      "scope": "thread"
+    },
+    {
+      "method": "agentSession/turn/cancel",
+      "scope": "thread"
+    },
+    {
+      "method": "agentSession/turn/start",
+      "scope": "thread"
+    },
+    {
+      "method": "browserSession/action/execute",
+      "scope": "browserSession"
+    },
+    {
+      "method": "browserSession/close",
+      "scope": "browserSession"
+    },
+    {
+      "method": "browserSession/open",
+      "scope": "browserSession"
+    },
+    {
+      "method": "browserSession/read",
+      "scope": "browserSession"
+    },
+    {
+      "method": "executionProcess/interrupt",
+      "scope": "executionProcess"
+    },
+    {
+      "method": "executionProcess/start",
+      "scope": "executionProcess"
+    },
+    {
+      "method": "executionProcess/terminate",
+      "scope": "executionProcess"
+    },
+    {
+      "method": "executionProcess/writeStdin",
+      "scope": "executionProcess"
+    },
+    {
+      "method": "fileSystem/createDirectory",
+      "scope": "fileSystemMutation"
+    },
+    {
+      "method": "fileSystem/createFile",
+      "scope": "fileSystemMutation"
+    },
+    {
+      "method": "fileSystem/deleteFile",
+      "scope": "fileSystemMutation"
+    },
+    {
+      "method": "fileSystem/renameFile",
+      "scope": "fileSystemMutation"
+    },
+    {
+      "method": "mcpResource/subscribe",
+      "scope": "mcpResourceSubscription"
+    },
+    {
+      "method": "mcpResource/unsubscribe",
+      "scope": "mcpResourceSubscription"
+    },
+    {
+      "method": "mcpServer/oauth/login",
+      "scope": "mcpOauth"
+    },
+    {
+      "method": "projectShell/session/kill",
+      "scope": "projectShellSession"
+    },
+    {
+      "method": "projectShell/session/resize",
+      "scope": "projectShellSession"
+    },
+    {
+      "method": "projectShell/session/start",
+      "scope": "projectShellSession"
+    },
+    {
+      "method": "projectShell/session/write",
+      "scope": "projectShellSession"
+    }
+  ],
   "schemas": {
     "jsonrpc": [
       "JsonRpcError",
@@ -1177,6 +1275,7 @@
       "AgentSessionActionRespondResponse",
       "AgentSessionActionScope",
       "AgentSessionActionType",
+      "AgentSessionAgentMessageDeltaNotification",
       "AgentSessionAnalysisHandoffExportParams",
       "AgentSessionAnalysisHandoffExportResponse",
       "AgentSessionArchiveManyParams",
@@ -1199,8 +1298,10 @@
       "AgentSessionHandoffArtifact",
       "AgentSessionHandoffBundleExportParams",
       "AgentSessionHandoffBundleExportResponse",
+      "AgentSessionItemLifecycleNotification",
       "AgentSessionListParams",
       "AgentSessionListResponse",
+      "AgentSessionMessageCreatedNotification",
       "AgentSessionObjectiveAuditParams",
       "AgentSessionObjectiveAuditResponse",
       "AgentSessionObjectiveClearParams",
@@ -1230,6 +1331,7 @@
       "AgentSessionRuntimeEventAppendParams",
       "AgentSessionRuntimeEventAppendResponse",
       "AgentSessionRuntimeEventInput",
+      "AgentSessionRuntimeEventNotification",
       "AgentSessionStartParams",
       "AgentSessionStartResponse",
       "AgentSessionStatus",
@@ -1239,12 +1341,20 @@
       "AgentSessionToolInventoryReadResponse",
       "AgentSessionTurnCancelParams",
       "AgentSessionTurnCancelResponse",
+      "AgentSessionTurnLifecycleNotification",
       "AgentSessionTurnStartParams",
       "AgentSessionTurnStartResponse",
       "AgentSessionUpdateParams",
       "AgentSessionUpdateResponse",
       "AgentTurn",
       "AgentTurnStatus",
+      "AppServerClientRequest",
+      "AppServerMethodKind",
+      "AppServerMethodSpec",
+      "AppServerNotificationMethod",
+      "AppServerRequestMethod",
+      "AppServerRequestSerializationScope",
+      "AppServerRequestSerializationScopeSpec",
       "ArtifactContentStatus",
       "ArtifactReadParams",
       "ArtifactReadResponse",
@@ -1295,6 +1405,7 @@
       "ChannelProbeResponse",
       "ClientCapabilities",
       "ClientInfo",
+      "ClientNotification",
       "ConnectCallbackSendParams",
       "ConnectCallbackSendResponse",
       "ConnectCallbackStatus",
@@ -1625,6 +1736,7 @@
       "ServerCapabilities",
       "ServerDiagnosticsResponse",
       "ServerInfo",
+      "ServerNotification",
       "SessionFileEntry",
       "SessionFileEntryResponse",
       "SessionFileGetOrCreateParams",

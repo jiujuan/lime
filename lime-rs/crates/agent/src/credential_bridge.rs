@@ -16,7 +16,6 @@ use model_provider::runtime_provider::RuntimeProviderConfig;
 
 mod provider_env;
 mod provider_mapping;
-mod provider_safety;
 mod runtime_config_projection;
 mod runtime_provider_adapter;
 
@@ -26,7 +25,9 @@ use provider_env::{
     OPENAI_CUSTOM_HEADERS_ENV,
 };
 use runtime_config_projection::runtime_provider_config_from_credential;
-pub(crate) use runtime_provider_adapter::{create_session_provider_handle, SessionProviderHandle};
+pub(crate) use runtime_provider_adapter::{
+    create_configured_reply_provider, ConfiguredReplyProvider,
+};
 
 /// 凭证桥接错误
 #[derive(Debug, Clone)]

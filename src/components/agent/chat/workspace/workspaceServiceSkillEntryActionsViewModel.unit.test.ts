@@ -77,6 +77,8 @@ function createAutomationJobRequest(): AutomationJobRequest {
     payload: {
       kind: "agent_turn",
       prompt: "自动化 prompt",
+      session_id: "session-dialog-1",
+      thread_id: "thread-dialog-1",
       system_prompt: "",
       web_search: false,
     },
@@ -296,6 +298,10 @@ describe("workspaceServiceSkillEntryActionsViewModel", () => {
       slotValues,
       input: "  请重点看最近 30 天  ",
       workspaceId: "project-1",
+      threadLineage: {
+        sessionId: "session-current",
+        threadId: "thread-current",
+      },
     });
 
     expect(state.pendingAutomation).toMatchObject({
@@ -345,6 +351,10 @@ describe("workspaceServiceSkillEntryActionsViewModel", () => {
       slotValues,
       input: "请重点看最近 30 天",
       workspaceId: "project-1",
+      threadLineage: {
+        sessionId: "session-current",
+        threadId: "thread-current",
+      },
     });
     const request = createAutomationJobRequest();
 
@@ -372,6 +382,8 @@ describe("workspaceServiceSkillEntryActionsViewModel", () => {
     expect(plan.automationContentId).toBe("content-current");
     expect(plan.request.payload).toMatchObject({
       kind: "agent_turn",
+      session_id: "session-current",
+      thread_id: "thread-current",
       content_id: "content-current",
       request_metadata: {
         service_skill: expect.objectContaining({

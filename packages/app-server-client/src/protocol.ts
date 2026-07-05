@@ -1,9 +1,17 @@
 // @generated types re-export — 从 Rust JSON Schema 自动生成的类型定义
 // 新代码优先从这里导入类型；手写类型逐步迁移后将删除
+import {
+  GENERATED_APP_SERVER_METHODS,
+  GENERATED_APP_SERVER_REQUEST_SERIALIZATION_SCOPES,
+  METHOD_AGENT_SESSION_EVENT,
+  METHOD_AGENT_SESSION_TURN_START,
+  METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED,
+} from "./generated/protocol-types.js";
 import type {
   ConversationImportSourceClient as GeneratedConversationImportSourceClient,
   ConversationImportSourceStatus as GeneratedConversationImportSourceStatus,
   ConversationImportThreadStatus as GeneratedConversationImportThreadStatus,
+  GeneratedAppServerRequestSerializationScope,
   WorkspaceRightSurfacePendingChangedParams as GeneratedWorkspaceRightSurfacePendingChangedParams,
 } from "./generated/protocol-types.js";
 export * from "./generated/protocol-types.js";
@@ -22,375 +30,6 @@ export const JSONRPC_VERSION = "2.0";
 export const PROTOCOL_VERSION = "appserver.v0";
 export const SERVER_NAME = "app-server";
 
-export const METHOD_INITIALIZE = "initialize";
-export const METHOD_INITIALIZED = "initialized";
-export const METHOD_CAPABILITY_LIST = "capability/list";
-export const METHOD_ARTIFACT_READ = "artifact/read";
-export const METHOD_FILE_SYSTEM_LIST_DIRECTORY = "fileSystem/listDirectory";
-export const METHOD_FILE_SYSTEM_READ_FILE_PREVIEW =
-  "fileSystem/readFilePreview";
-export const METHOD_FILE_SYSTEM_CREATE_FILE = "fileSystem/createFile";
-export const METHOD_FILE_SYSTEM_CREATE_DIRECTORY = "fileSystem/createDirectory";
-export const METHOD_FILE_SYSTEM_RENAME_FILE = "fileSystem/renameFile";
-export const METHOD_FILE_SYSTEM_DELETE_FILE = "fileSystem/deleteFile";
-export const METHOD_PROJECT_GIT_STATUS = "projectGit/status";
-export const METHOD_PROJECT_GIT_DIFF = "projectGit/diff";
-export const METHOD_PROJECT_GIT_COMMITS_LIST = "projectGit/commits/list";
-export const METHOD_PROJECT_GIT_BRANCH_CHECKOUT = "projectGit/branch/checkout";
-export const METHOD_PROJECT_GIT_BRANCH_CREATE = "projectGit/branch/create";
-export const METHOD_PROJECT_GIT_WORKTREE_CREATE = "projectGit/worktree/create";
-export const METHOD_PROJECT_SHELL_SESSION_START = "projectShell/session/start";
-export const METHOD_PROJECT_SHELL_SESSION_WRITE = "projectShell/session/write";
-export const METHOD_PROJECT_SHELL_SESSION_RESIZE =
-  "projectShell/session/resize";
-export const METHOD_PROJECT_SHELL_SESSION_KILL = "projectShell/session/kill";
-export const METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS =
-  "projectShell/session/drainEvents";
-export const METHOD_EXECUTION_PROCESS_START = "executionProcess/start";
-export const METHOD_EXECUTION_PROCESS_WRITE_STDIN =
-  "executionProcess/writeStdin";
-export const METHOD_EXECUTION_PROCESS_INTERRUPT = "executionProcess/interrupt";
-export const METHOD_EXECUTION_PROCESS_TERMINATE = "executionProcess/terminate";
-export const METHOD_EXECUTION_PROCESS_STATUS = "executionProcess/status";
-export const METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT =
-  "executionProcess/drainOutput";
-export const METHOD_EVIDENCE_EXPORT = "evidence/export";
-export const METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT =
-  "agentSession/handoffBundle/export";
-export const METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT =
-  "agentSession/replayCase/export";
-export const METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT =
-  "agentSession/analysisHandoff/export";
-export const METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT =
-  "agentSession/reviewDecisionTemplate/export";
-export const METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE =
-  "agentSession/reviewDecision/save";
-export const METHOD_AGENT_SESSION_LIST = "agentSession/list";
-export const METHOD_AGENT_SESSION_UPDATE = "agentSession/update";
-export const METHOD_AGENT_SESSION_ARCHIVE_MANY = "agentSession/archiveMany";
-export const METHOD_AGENT_SESSION_DELETE = "agentSession/delete";
-export const METHOD_AGENT_SESSION_OBJECTIVE_READ =
-  "agentSession/objective/read";
-export const METHOD_AGENT_SESSION_OBJECTIVE_SET = "agentSession/objective/set";
-export const METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE =
-  "agentSession/objective/status/update";
-export const METHOD_AGENT_SESSION_OBJECTIVE_CLEAR =
-  "agentSession/objective/clear";
-export const METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE =
-  "agentSession/objective/continue";
-export const METHOD_AGENT_SESSION_OBJECTIVE_AUDIT =
-  "agentSession/objective/audit";
-export const METHOD_AGENT_SESSION_COMPACT = "agentSession/compact";
-export const METHOD_AGENT_SESSION_THREAD_RESUME = "agentSession/thread/resume";
-export const METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE =
-  "agentSession/queuedTurn/remove";
-export const METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE =
-  "agentSession/queuedTurn/promote";
-export const METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST =
-  "agentSession/fileCheckpoint/list";
-export const METHOD_AGENT_SESSION_FILE_CHECKPOINT_GET =
-  "agentSession/fileCheckpoint/get";
-export const METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF =
-  "agentSession/fileCheckpoint/diff";
-export const METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE =
-  "agentSession/fileCheckpoint/restore";
-export const METHOD_SESSION_FILE_GET_OR_CREATE = "sessionFile/getOrCreate";
-export const METHOD_SESSION_FILE_UPDATE_META = "sessionFile/updateMeta";
-export const METHOD_SESSION_FILE_SAVE = "sessionFile/save";
-export const METHOD_SESSION_FILE_READ = "sessionFile/read";
-export const METHOD_SESSION_FILE_RESOLVE_PATH = "sessionFile/resolvePath";
-export const METHOD_SESSION_FILE_DELETE = "sessionFile/delete";
-export const METHOD_SESSION_FILE_LIST = "sessionFile/list";
-export const METHOD_WORKSPACE_LIST = "workspace/list";
-export const METHOD_WORKSPACE_READ = "workspace/read";
-export const METHOD_WORKSPACE_UPDATE = "workspace/update";
-export const METHOD_WORKSPACE_DELETE = "workspace/delete";
-export const METHOD_WORKSPACE_ENSURE = "workspace/ensure";
-export const METHOD_WORKSPACE_BY_PATH_READ = "workspace/byPath/read";
-export const METHOD_WORKSPACE_DEFAULT_READ = "workspace/default/read";
-export const METHOD_WORKSPACE_DEFAULT_ENSURE = "workspace/default/ensure";
-export const METHOD_WORKSPACE_PROJECTS_ROOT_READ =
-  "workspace/projectsRoot/read";
-export const METHOD_WORKSPACE_PROJECT_PATH_RESOLVE =
-  "workspace/projectPath/resolve";
-export const METHOD_WORKSPACE_ENSURE_READY = "workspace/ensureReady";
-export const METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST =
-  "workspaceRightSurface/request";
-export const METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_LIST =
-  "workspaceRightSurface/pending/list";
-export const METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CONSUME =
-  "workspaceRightSurface/pending/consume";
-export const METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS =
-  "workspaceRightSurface/pending/dismiss";
-export const METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED =
-  "workspaceRightSurface/pendingChanged";
-export const METHOD_BROWSER_SESSION_TARGET_LIST = "browserSession/target/list";
-export const METHOD_BROWSER_SESSION_OPEN = "browserSession/open";
-export const METHOD_BROWSER_SESSION_READ = "browserSession/read";
-export const METHOD_BROWSER_SESSION_CLOSE = "browserSession/close";
-export const METHOD_BROWSER_SESSION_EVENT_LIST = "browserSession/event/list";
-export const METHOD_BROWSER_SESSION_ACTION_EXECUTE =
-  "browserSession/action/execute";
-export const METHOD_SKILL_LIST = "skill/list";
-export const METHOD_SKILL_READ = "skill/read";
-export const METHOD_SKILL_MANAGEMENT_LIST = "skillManagement/list";
-export const METHOD_SKILL_MANAGEMENT_INSTALL = "skillManagement/install";
-export const METHOD_SKILL_MANAGEMENT_UNINSTALL = "skillManagement/uninstall";
-export const METHOD_SKILL_REPOSITORY_LIST = "skillRepository/list";
-export const METHOD_SKILL_REPOSITORY_SAVE = "skillRepository/save";
-export const METHOD_SKILL_REPOSITORY_DELETE = "skillRepository/delete";
-export const METHOD_SKILL_CACHE_REFRESH = "skillCache/refresh";
-export const METHOD_SKILL_INSTALLED_DIRECTORIES_LIST =
-  "skillInstalledDirectories/list";
-export const METHOD_SKILL_LOCAL_INSPECT = "skillLocal/inspect";
-export const METHOD_SKILL_LOCAL_DETAIL_INSPECT = "skillLocal/detail/inspect";
-export const METHOD_SKILL_LOCAL_SCAFFOLD_CREATE = "skillLocal/scaffold/create";
-export const METHOD_SKILL_LOCAL_IMPORT = "skillLocal/import";
-export const METHOD_SKILL_LOCAL_RENAME = "skillLocal/rename";
-export const METHOD_SKILL_REMOTE_INSPECT = "skillRemote/inspect";
-export const METHOD_SKILL_PACKAGE_LOCAL_INSPECT = "skillPackage/local/inspect";
-export const METHOD_SKILL_PACKAGE_LOCAL_INSTALL = "skillPackage/local/install";
-export const METHOD_SKILL_PACKAGE_LOCAL_REPLACE = "skillPackage/local/replace";
-export const METHOD_SKILL_PACKAGE_EXPORT = "skillPackage/export";
-export const METHOD_SKILL_MARKETPLACE_INSTALL = "skillMarketplace/install";
-export const METHOD_SKILL_PACKAGE_DOWNLOAD_INSTALL =
-  "skillPackage/download/install";
-export const METHOD_WORKSPACE_SKILL_BINDINGS_LIST =
-  "workspaceSkillBindings/list";
-export const METHOD_WORKSPACE_REGISTERED_SKILLS_LIST =
-  "workspaceRegisteredSkills/list";
-export const METHOD_PLUGIN_LOCAL_PACKAGE_INSPECT =
-  "pluginLocalPackage/inspect";
-export const METHOD_PLUGIN_PACKAGE_FETCH_CLOUD =
-  "pluginPackage/fetchCloud";
-export const METHOD_PLUGIN_INSTALLED_SAVE = "pluginInstalled/save";
-export const METHOD_PLUGIN_INSTALLED_LIST = "pluginInstalled/list";
-export const METHOD_PLUGIN_INSTALLED_DISABLED_SET =
-  "pluginInstalled/disabled/set";
-export const METHOD_PLUGIN_INSTALLED_UNINSTALL_REHEARSAL =
-  "pluginInstalled/uninstall/rehearsal";
-export const METHOD_PLUGIN_INSTALLED_UNINSTALL =
-  "pluginInstalled/uninstall";
-export const METHOD_PLUGIN_HOST_LIFECYCLE_LIST =
-  "pluginHostLifecycle/list";
-export const METHOD_PLUGIN_SHELL_PREPARE = "pluginShell/prepare";
-export const METHOD_PLUGIN_UI_RUNTIME_START = "pluginUiRuntime/start";
-export const METHOD_PLUGIN_UI_RUNTIME_STATUS = "pluginUiRuntime/status";
-export const METHOD_PLUGIN_UI_RUNTIME_STOP = "pluginUiRuntime/stop";
-export const METHOD_KNOWLEDGE_PACK_LIST = "knowledgePack/list";
-export const METHOD_KNOWLEDGE_PACK_READ = "knowledgePack/read";
-export const METHOD_KNOWLEDGE_SOURCE_IMPORT = "knowledgePack/source/import";
-export const METHOD_KNOWLEDGE_PACK_COMPILE = "knowledgePack/compile";
-export const METHOD_KNOWLEDGE_PACK_DEFAULT_SET = "knowledgePack/default/set";
-export const METHOD_KNOWLEDGE_PACK_STATUS_UPDATE =
-  "knowledgePack/status/update";
-export const METHOD_KNOWLEDGE_CONTEXT_RESOLVE = "knowledgeContext/resolve";
-export const METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE =
-  "knowledgeContextRun/validate";
-export const METHOD_AUTOMATION_SCHEDULER_CONFIG_READ =
-  "automationScheduler/config/read";
-export const METHOD_AUTOMATION_SCHEDULER_CONFIG_UPDATE =
-  "automationScheduler/config/update";
-export const METHOD_AUTOMATION_SCHEDULER_STATUS = "automationScheduler/status";
-export const METHOD_AUTOMATION_JOB_LIST = "automationJob/list";
-export const METHOD_AUTOMATION_JOB_READ = "automationJob/read";
-export const METHOD_AUTOMATION_JOB_CREATE = "automationJob/create";
-export const METHOD_AUTOMATION_JOB_UPDATE = "automationJob/update";
-export const METHOD_AUTOMATION_JOB_DELETE = "automationJob/delete";
-export const METHOD_AUTOMATION_JOB_RUN_NOW = "automationJob/runNow";
-export const METHOD_AUTOMATION_JOB_HEALTH = "automationJob/health";
-export const METHOD_AUTOMATION_JOB_RUN_HISTORY = "automationJob/runHistory";
-export const METHOD_AUTOMATION_SCHEDULE_PREVIEW = "automationSchedule/preview";
-export const METHOD_AUTOMATION_SCHEDULE_VALIDATE =
-  "automationSchedule/validate";
-export const METHOD_MCP_SERVER_LIST = "mcpServer/list";
-export const METHOD_MCP_SERVER_STATUS_LIST = "mcpServerStatus/list";
-export const METHOD_MCP_SERVER_CREATE = "mcpServer/create";
-export const METHOD_MCP_SERVER_UPDATE = "mcpServer/update";
-export const METHOD_MCP_SERVER_DELETE = "mcpServer/delete";
-export const METHOD_MCP_SERVER_ENABLED_SET = "mcpServer/enabled/set";
-export const METHOD_MCP_SERVER_IMPORT_FROM_APP = "mcpServer/importFromApp";
-export const METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE = "mcpServer/syncAllToLive";
-export const METHOD_MCP_SERVER_OAUTH_LOGIN = "mcpServer/oauth/login";
-export const METHOD_MCP_SERVER_START = "mcpServer/start";
-export const METHOD_MCP_SERVER_STOP = "mcpServer/stop";
-export const METHOD_MCP_TOOL_LIST = "mcpTool/list";
-export const METHOD_MCP_TOOL_LIST_FOR_CONTEXT = "mcpTool/listForContext";
-export const METHOD_MCP_TOOL_SEARCH = "mcpTool/search";
-export const METHOD_MCP_TOOL_CALL = "mcpTool/call";
-export const METHOD_MCP_TOOL_CALL_WITH_CALLER = "mcpTool/callWithCaller";
-export const METHOD_MCP_PROMPT_LIST = "mcpPrompt/list";
-export const METHOD_MCP_PROMPT_GET = "mcpPrompt/get";
-export const METHOD_MCP_RESOURCE_LIST = "mcpResource/list";
-export const METHOD_MCP_RESOURCE_READ = "mcpResource/read";
-export const METHOD_MCP_RESOURCE_SUBSCRIBE = "mcpResource/subscribe";
-export const METHOD_MCP_RESOURCE_UNSUBSCRIBE = "mcpResource/unsubscribe";
-export const METHOD_PROJECT_MEMORY_READ = "projectMemory/read";
-export const METHOD_MEMORY_STORE_LIST = "memoryStore/list";
-export const METHOD_MEMORY_STORE_READ = "memoryStore/read";
-export const METHOD_MEMORY_STORE_SEARCH = "memoryStore/search";
-export const METHOD_MEMORY_STORE_ADD_NOTE = "memoryStore/addNote";
-export const METHOD_MEMORY_STORE_CONSOLIDATE = "memoryStore/consolidate";
-export const METHOD_MEMORY_STORE_REVIEW_LIST = "memoryStore/review/list";
-export const METHOD_MEMORY_STORE_REVIEW_RESOLVE = "memoryStore/review/resolve";
-export const METHOD_MEMORY_STORE_HEALTH = "memoryStore/health";
-export const METHOD_MEMORY_STORE_RESET = "memoryStore/reset";
-export const METHOD_MEMORY_STORE_INDEX_REBUILD = "memoryStore/index/rebuild";
-export const METHOD_LOG_LIST = "log/list";
-export const METHOD_LOG_PERSISTED_TAIL = "log/persistedTail";
-export const METHOD_LOG_CLEAR = "log/clear";
-export const METHOD_LOG_DIAGNOSTIC_HISTORY_CLEAR =
-  "log/diagnosticHistory/clear";
-export const METHOD_DIAGNOSTICS_LOG_STORAGE_READ =
-  "diagnostics/logStorage/read";
-export const METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT =
-  "diagnostics/supportBundle/export";
-export const METHOD_DIAGNOSTICS_SERVER_READ = "diagnostics/server/read";
-export const METHOD_DIAGNOSTICS_WINDOWS_STARTUP_READ =
-  "diagnostics/windowsStartup/read";
-export const METHOD_DIAGNOSTICS_TRACE_LIST = "diagnostics/trace/list";
-export const METHOD_DIAGNOSTICS_TRACE_READ = "diagnostics/trace/read";
-export const METHOD_DIAGNOSTICS_TRACE_EXPORT = "diagnostics/trace/export";
-export const METHOD_GATEWAY_CHANNEL_START = "gatewayChannel/start";
-export const METHOD_GATEWAY_CHANNEL_STOP = "gatewayChannel/stop";
-export const METHOD_GATEWAY_CHANNEL_STATUS = "gatewayChannel/status";
-export const METHOD_TELEGRAM_CHANNEL_PROBE = "telegramChannel/probe";
-export const METHOD_FEISHU_CHANNEL_PROBE = "feishuChannel/probe";
-export const METHOD_DISCORD_CHANNEL_PROBE = "discordChannel/probe";
-export const METHOD_WECHAT_CHANNEL_PROBE = "wechatChannel/probe";
-export const METHOD_WECHAT_CHANNEL_LOGIN_START = "wechatChannel/login/start";
-export const METHOD_WECHAT_CHANNEL_LOGIN_WAIT = "wechatChannel/login/wait";
-export const METHOD_WECHAT_CHANNEL_ACCOUNT_LIST = "wechatChannel/accounts/list";
-export const METHOD_WECHAT_CHANNEL_ACCOUNT_REMOVE =
-  "wechatChannel/account/remove";
-export const METHOD_WECHAT_CHANNEL_RUNTIME_MODEL_SET =
-  "wechatChannel/runtimeModel/set";
-export const METHOD_GATEWAY_TUNNEL_PROBE = "gatewayTunnel/probe";
-export const METHOD_GATEWAY_TUNNEL_CLOUDFLARED_DETECT =
-  "gatewayTunnel/cloudflared/detect";
-export const METHOD_GATEWAY_TUNNEL_CLOUDFLARED_INSTALL =
-  "gatewayTunnel/cloudflared/install";
-export const METHOD_GATEWAY_TUNNEL_CREATE = "gatewayTunnel/create";
-export const METHOD_GATEWAY_TUNNEL_START = "gatewayTunnel/start";
-export const METHOD_GATEWAY_TUNNEL_STOP = "gatewayTunnel/stop";
-export const METHOD_GATEWAY_TUNNEL_RESTART = "gatewayTunnel/restart";
-export const METHOD_GATEWAY_TUNNEL_STATUS = "gatewayTunnel/status";
-export const METHOD_GATEWAY_TUNNEL_SYNC_WEBHOOK_URL =
-  "gatewayTunnel/syncWebhookUrl";
-export const METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE =
-  "mediaTaskArtifact/image/create";
-export const METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE =
-  "mediaTaskArtifact/audio/create";
-export const METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE =
-  "mediaTaskArtifact/video/create";
-export const METHOD_MEDIA_TASK_ARTIFACT_IMAGE_COMPLETE =
-  "mediaTaskArtifact/image/complete";
-export const METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE =
-  "mediaTaskArtifact/audio/complete";
-export const METHOD_MEDIA_TASK_ARTIFACT_GET = "mediaTaskArtifact/get";
-export const METHOD_MEDIA_TASK_ARTIFACT_LIST = "mediaTaskArtifact/list";
-export const METHOD_MEDIA_TASK_ARTIFACT_CANCEL = "mediaTaskArtifact/cancel";
-export const METHOD_GALLERY_MATERIAL_GET = "galleryMaterial/get";
-export const METHOD_GALLERY_MATERIAL_METADATA_CREATE =
-  "galleryMaterialMetadata/create";
-export const METHOD_GALLERY_MATERIAL_METADATA_GET =
-  "galleryMaterialMetadata/get";
-export const METHOD_GALLERY_MATERIAL_METADATA_UPDATE =
-  "galleryMaterialMetadata/update";
-export const METHOD_GALLERY_MATERIAL_METADATA_DELETE =
-  "galleryMaterialMetadata/delete";
-export const METHOD_GALLERY_MATERIAL_LIST_BY_IMAGE_CATEGORY =
-  "galleryMaterial/listByImageCategory";
-export const METHOD_GALLERY_MATERIAL_LIST_BY_LAYOUT_CATEGORY =
-  "galleryMaterial/listByLayoutCategory";
-export const METHOD_GALLERY_MATERIAL_LIST_BY_MOOD =
-  "galleryMaterial/listByMood";
-export const METHOD_PROJECT_MATERIAL_LIST = "projectMaterial/list";
-export const METHOD_PROJECT_MATERIAL_GET = "projectMaterial/get";
-export const METHOD_PROJECT_MATERIAL_COUNT = "projectMaterial/count";
-export const METHOD_PROJECT_MATERIAL_UPLOAD = "projectMaterial/upload";
-export const METHOD_PROJECT_MATERIAL_IMPORT_FROM_URL =
-  "projectMaterial/importFromUrl";
-export const METHOD_PROJECT_MATERIAL_UPDATE = "projectMaterial/update";
-export const METHOD_PROJECT_MATERIAL_DELETE = "projectMaterial/delete";
-export const METHOD_PROJECT_MATERIAL_CONTENT = "projectMaterial/content";
-export const METHOD_VOICE_ASR_CREDENTIAL_LIST = "voiceAsrCredential/list";
-export const METHOD_VOICE_ASR_CREDENTIAL_CREATE = "voiceAsrCredential/create";
-export const METHOD_VOICE_ASR_CREDENTIAL_UPDATE = "voiceAsrCredential/update";
-export const METHOD_VOICE_ASR_CREDENTIAL_DELETE = "voiceAsrCredential/delete";
-export const METHOD_VOICE_ASR_CREDENTIAL_DEFAULT_SET =
-  "voiceAsrCredential/default/set";
-export const METHOD_VOICE_ASR_CREDENTIAL_TEST = "voiceAsrCredential/test";
-export const METHOD_VOICE_INSTRUCTION_LIST = "voiceInstruction/list";
-export const METHOD_VOICE_INSTRUCTION_SAVE = "voiceInstruction/save";
-export const METHOD_VOICE_INSTRUCTION_DELETE = "voiceInstruction/delete";
-export const METHOD_VOICE_MODEL_DEFAULT_SET = "voiceModel/default/set";
-export const METHOD_VOICE_MODEL_TEST_TRANSCRIBE_FILE =
-  "voiceModel/testTranscribeFile";
-export const METHOD_USAGE_STATS_READ = "usageStats/read";
-export const METHOD_USAGE_STATS_MODEL_RANKING_LIST =
-  "usageStats/modelRanking/list";
-export const METHOD_USAGE_STATS_DAILY_TRENDS_LIST =
-  "usageStats/dailyTrends/list";
-export const METHOD_AGENT_SESSION_START = "agentSession/start";
-export const METHOD_AGENT_SESSION_READ = "agentSession/read";
-export const METHOD_AGENT_SESSION_TOOL_INVENTORY_READ =
-  "agentSession/toolInventory/read";
-export const METHOD_AGENT_SESSION_TURN_START = "agentSession/turn/start";
-export const METHOD_AGENT_SESSION_TURN_CANCEL = "agentSession/turn/cancel";
-export const METHOD_AGENT_SESSION_ACTION_REPLAY = "agentSession/action/replay";
-export const METHOD_AGENT_SESSION_ACTION_RESPOND =
-  "agentSession/action/respond";
-export const METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND =
-  "agentSession/runtimeEvents/append";
-export const METHOD_AGENT_SESSION_EVENT = "agentSession/event";
-export const METHOD_WORKFLOW_READ = "workflow/read";
-export const METHOD_WORKFLOW_CANCEL = "workflow/cancel";
-export const METHOD_WORKFLOW_RETRY = "workflow/retry";
-export const METHOD_WORKFLOW_RESPOND = "workflow/respond";
-export const METHOD_MODEL_LIST = "model/list";
-export const METHOD_MODEL_PREFERENCES_LIST = "modelPreferences/list";
-export const METHOD_MODEL_SYNC_STATE_READ = "modelSyncState/read";
-export const METHOD_MODEL_PROVIDER_LIST = "modelProvider/list";
-export const METHOD_MODEL_PROVIDER_CATALOG_LIST = "modelProvider/catalog/list";
-export const METHOD_MODEL_PROVIDER_READ = "modelProvider/read";
-export const METHOD_MODEL_PROVIDER_CREATE = "modelProvider/create";
-export const METHOD_MODEL_PROVIDER_UPDATE = "modelProvider/update";
-export const METHOD_MODEL_PROVIDER_DELETE = "modelProvider/delete";
-export const METHOD_MODEL_PROVIDER_SORT_ORDERS_UPDATE =
-  "modelProvider/sortOrders/update";
-export const METHOD_MODEL_PROVIDER_CONFIG_EXPORT = "modelProviderConfig/export";
-export const METHOD_MODEL_PROVIDER_CONFIG_IMPORT = "modelProviderConfig/import";
-export const METHOD_MODEL_PROVIDER_TEST_CONNECTION =
-  "modelProvider/testConnection";
-export const METHOD_MODEL_PROVIDER_TEST_CHAT = "modelProvider/testChat";
-export const METHOD_MODEL_PROVIDER_FETCH_MODELS = "modelProvider/fetchModels";
-export const METHOD_MODEL_PROVIDER_KEY_CREATE = "modelProviderKey/create";
-export const METHOD_MODEL_PROVIDER_KEY_UPDATE = "modelProviderKey/update";
-export const METHOD_MODEL_PROVIDER_KEY_DELETE = "modelProviderKey/delete";
-export const METHOD_MODEL_PROVIDER_KEY_NEXT = "modelProviderKey/next";
-export const METHOD_MODEL_PROVIDER_KEY_USAGE_RECORD =
-  "modelProviderKey/usage/record";
-export const METHOD_MODEL_PROVIDER_KEY_ERROR_RECORD =
-  "modelProviderKey/error/record";
-export const METHOD_MODEL_PROVIDER_UI_STATE_READ = "modelProviderUiState/read";
-export const METHOD_MODEL_PROVIDER_UI_STATE_WRITE =
-  "modelProviderUiState/write";
-export const METHOD_MODEL_PROVIDER_ALIAS_READ = "modelProviderAlias/read";
-export const METHOD_MODEL_PROVIDER_ALIAS_LIST = "modelProviderAlias/list";
-export const METHOD_CONNECT_DEEP_LINK_RESOLVE = "connectDeepLink/resolve";
-export const METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE =
-  "connectOpenDeepLink/resolve";
-export const METHOD_CONNECT_RELAY_API_KEY_SAVE = "connectRelayApiKey/save";
-export const METHOD_CONNECT_CALLBACK_SEND = "connectCallback/send";
-export const METHOD_CONVERSATION_IMPORT_SOURCE_SCAN =
-  "conversationImport/source/scan";
-export const METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW =
-  "conversationImport/thread/preview";
-export const METHOD_CONVERSATION_IMPORT_THREAD_COMMIT =
-  "conversationImport/thread/commit";
-export const METHOD_CONVERSATION_IMPORT_THREAD_RUNTIME_EVENTS_READ =
-  "conversationImport/thread/runtimeEvents/read";
 export const CONVERSATION_IMPORT_SOURCE_CLIENTS = [
   "codex",
   "claude_code",
@@ -414,309 +53,19 @@ export type AppServerMethodSpec = {
   kind: AppServerMethodKind;
 };
 
-export const APP_SERVER_METHODS = [
-  { method: METHOD_INITIALIZE, kind: "request" },
-  { method: METHOD_INITIALIZED, kind: "notification" },
-  { method: METHOD_CAPABILITY_LIST, kind: "request" },
-  { method: METHOD_ARTIFACT_READ, kind: "request" },
-  { method: METHOD_FILE_SYSTEM_LIST_DIRECTORY, kind: "request" },
-  { method: METHOD_FILE_SYSTEM_READ_FILE_PREVIEW, kind: "request" },
-  { method: METHOD_FILE_SYSTEM_CREATE_FILE, kind: "request" },
-  { method: METHOD_FILE_SYSTEM_CREATE_DIRECTORY, kind: "request" },
-  { method: METHOD_FILE_SYSTEM_RENAME_FILE, kind: "request" },
-  { method: METHOD_FILE_SYSTEM_DELETE_FILE, kind: "request" },
-  { method: METHOD_PROJECT_GIT_STATUS, kind: "request" },
-  { method: METHOD_PROJECT_GIT_DIFF, kind: "request" },
-  { method: METHOD_PROJECT_GIT_COMMITS_LIST, kind: "request" },
-  { method: METHOD_PROJECT_GIT_BRANCH_CHECKOUT, kind: "request" },
-  { method: METHOD_PROJECT_GIT_BRANCH_CREATE, kind: "request" },
-  { method: METHOD_PROJECT_GIT_WORKTREE_CREATE, kind: "request" },
-  { method: METHOD_PROJECT_SHELL_SESSION_START, kind: "request" },
-  { method: METHOD_PROJECT_SHELL_SESSION_WRITE, kind: "request" },
-  { method: METHOD_PROJECT_SHELL_SESSION_RESIZE, kind: "request" },
-  { method: METHOD_PROJECT_SHELL_SESSION_KILL, kind: "request" },
-  { method: METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS, kind: "request" },
-  { method: METHOD_EXECUTION_PROCESS_START, kind: "request" },
-  { method: METHOD_EXECUTION_PROCESS_WRITE_STDIN, kind: "request" },
-  { method: METHOD_EXECUTION_PROCESS_INTERRUPT, kind: "request" },
-  { method: METHOD_EXECUTION_PROCESS_TERMINATE, kind: "request" },
-  { method: METHOD_EXECUTION_PROCESS_STATUS, kind: "request" },
-  { method: METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT, kind: "request" },
-  { method: METHOD_EVIDENCE_EXPORT, kind: "request" },
-  { method: METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT, kind: "request" },
-  { method: METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT, kind: "request" },
-  { method: METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT, kind: "request" },
-  {
-    method: METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
-    kind: "request",
-  },
-  { method: METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE, kind: "request" },
-  { method: METHOD_AGENT_SESSION_LIST, kind: "request" },
-  { method: METHOD_AGENT_SESSION_UPDATE, kind: "request" },
-  { method: METHOD_AGENT_SESSION_ARCHIVE_MANY, kind: "request" },
-  { method: METHOD_AGENT_SESSION_DELETE, kind: "request" },
-  { method: METHOD_AGENT_SESSION_OBJECTIVE_READ, kind: "request" },
-  { method: METHOD_AGENT_SESSION_OBJECTIVE_SET, kind: "request" },
-  {
-    method: METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE,
-    kind: "request",
-  },
-  { method: METHOD_AGENT_SESSION_OBJECTIVE_CLEAR, kind: "request" },
-  { method: METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE, kind: "request" },
-  { method: METHOD_AGENT_SESSION_OBJECTIVE_AUDIT, kind: "request" },
-  { method: METHOD_AGENT_SESSION_COMPACT, kind: "request" },
-  { method: METHOD_AGENT_SESSION_THREAD_RESUME, kind: "request" },
-  { method: METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE, kind: "request" },
-  { method: METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE, kind: "request" },
-  { method: METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST, kind: "request" },
-  { method: METHOD_AGENT_SESSION_FILE_CHECKPOINT_GET, kind: "request" },
-  { method: METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF, kind: "request" },
-  { method: METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE, kind: "request" },
-  { method: METHOD_SESSION_FILE_GET_OR_CREATE, kind: "request" },
-  { method: METHOD_SESSION_FILE_UPDATE_META, kind: "request" },
-  { method: METHOD_SESSION_FILE_SAVE, kind: "request" },
-  { method: METHOD_SESSION_FILE_READ, kind: "request" },
-  { method: METHOD_SESSION_FILE_RESOLVE_PATH, kind: "request" },
-  { method: METHOD_SESSION_FILE_DELETE, kind: "request" },
-  { method: METHOD_SESSION_FILE_LIST, kind: "request" },
-  { method: METHOD_WORKSPACE_LIST, kind: "request" },
-  { method: METHOD_WORKSPACE_READ, kind: "request" },
-  { method: METHOD_WORKSPACE_UPDATE, kind: "request" },
-  { method: METHOD_WORKSPACE_DELETE, kind: "request" },
-  { method: METHOD_WORKSPACE_ENSURE, kind: "request" },
-  { method: METHOD_WORKSPACE_BY_PATH_READ, kind: "request" },
-  { method: METHOD_WORKSPACE_DEFAULT_READ, kind: "request" },
-  { method: METHOD_WORKSPACE_DEFAULT_ENSURE, kind: "request" },
-  { method: METHOD_WORKSPACE_PROJECTS_ROOT_READ, kind: "request" },
-  { method: METHOD_WORKSPACE_PROJECT_PATH_RESOLVE, kind: "request" },
-  { method: METHOD_WORKSPACE_ENSURE_READY, kind: "request" },
-  { method: METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST, kind: "request" },
-  { method: METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_LIST, kind: "request" },
-  { method: METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CONSUME, kind: "request" },
-  { method: METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS, kind: "request" },
-  {
-    method: METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED,
-    kind: "notification",
-  },
-  { method: METHOD_BROWSER_SESSION_TARGET_LIST, kind: "request" },
-  { method: METHOD_BROWSER_SESSION_OPEN, kind: "request" },
-  { method: METHOD_BROWSER_SESSION_READ, kind: "request" },
-  { method: METHOD_BROWSER_SESSION_CLOSE, kind: "request" },
-  { method: METHOD_BROWSER_SESSION_EVENT_LIST, kind: "request" },
-  { method: METHOD_BROWSER_SESSION_ACTION_EXECUTE, kind: "request" },
-  { method: METHOD_SKILL_LIST, kind: "request" },
-  { method: METHOD_SKILL_READ, kind: "request" },
-  { method: METHOD_SKILL_MANAGEMENT_LIST, kind: "request" },
-  { method: METHOD_SKILL_MANAGEMENT_INSTALL, kind: "request" },
-  { method: METHOD_SKILL_MANAGEMENT_UNINSTALL, kind: "request" },
-  { method: METHOD_SKILL_REPOSITORY_LIST, kind: "request" },
-  { method: METHOD_SKILL_REPOSITORY_SAVE, kind: "request" },
-  { method: METHOD_SKILL_REPOSITORY_DELETE, kind: "request" },
-  { method: METHOD_SKILL_CACHE_REFRESH, kind: "request" },
-  { method: METHOD_SKILL_INSTALLED_DIRECTORIES_LIST, kind: "request" },
-  { method: METHOD_SKILL_LOCAL_INSPECT, kind: "request" },
-  { method: METHOD_SKILL_LOCAL_DETAIL_INSPECT, kind: "request" },
-  { method: METHOD_SKILL_LOCAL_SCAFFOLD_CREATE, kind: "request" },
-  { method: METHOD_SKILL_LOCAL_IMPORT, kind: "request" },
-  { method: METHOD_SKILL_LOCAL_RENAME, kind: "request" },
-  { method: METHOD_SKILL_REMOTE_INSPECT, kind: "request" },
-  { method: METHOD_SKILL_PACKAGE_LOCAL_INSPECT, kind: "request" },
-  { method: METHOD_SKILL_PACKAGE_LOCAL_INSTALL, kind: "request" },
-  { method: METHOD_SKILL_PACKAGE_LOCAL_REPLACE, kind: "request" },
-  { method: METHOD_SKILL_PACKAGE_EXPORT, kind: "request" },
-  { method: METHOD_SKILL_MARKETPLACE_INSTALL, kind: "request" },
-  { method: METHOD_SKILL_PACKAGE_DOWNLOAD_INSTALL, kind: "request" },
-  { method: METHOD_GATEWAY_CHANNEL_START, kind: "request" },
-  { method: METHOD_GATEWAY_CHANNEL_STOP, kind: "request" },
-  { method: METHOD_GATEWAY_CHANNEL_STATUS, kind: "request" },
-  { method: METHOD_TELEGRAM_CHANNEL_PROBE, kind: "request" },
-  { method: METHOD_FEISHU_CHANNEL_PROBE, kind: "request" },
-  { method: METHOD_DISCORD_CHANNEL_PROBE, kind: "request" },
-  { method: METHOD_WECHAT_CHANNEL_PROBE, kind: "request" },
-  { method: METHOD_WECHAT_CHANNEL_LOGIN_START, kind: "request" },
-  { method: METHOD_WECHAT_CHANNEL_LOGIN_WAIT, kind: "request" },
-  { method: METHOD_WECHAT_CHANNEL_ACCOUNT_LIST, kind: "request" },
-  { method: METHOD_WECHAT_CHANNEL_ACCOUNT_REMOVE, kind: "request" },
-  { method: METHOD_WECHAT_CHANNEL_RUNTIME_MODEL_SET, kind: "request" },
-  { method: METHOD_GATEWAY_TUNNEL_PROBE, kind: "request" },
-  { method: METHOD_GATEWAY_TUNNEL_CLOUDFLARED_DETECT, kind: "request" },
-  { method: METHOD_GATEWAY_TUNNEL_CLOUDFLARED_INSTALL, kind: "request" },
-  { method: METHOD_GATEWAY_TUNNEL_CREATE, kind: "request" },
-  { method: METHOD_GATEWAY_TUNNEL_START, kind: "request" },
-  { method: METHOD_GATEWAY_TUNNEL_STOP, kind: "request" },
-  { method: METHOD_GATEWAY_TUNNEL_RESTART, kind: "request" },
-  { method: METHOD_GATEWAY_TUNNEL_STATUS, kind: "request" },
-  { method: METHOD_GATEWAY_TUNNEL_SYNC_WEBHOOK_URL, kind: "request" },
-  { method: METHOD_WORKSPACE_SKILL_BINDINGS_LIST, kind: "request" },
-  { method: METHOD_WORKSPACE_REGISTERED_SKILLS_LIST, kind: "request" },
-  { method: METHOD_PLUGIN_LOCAL_PACKAGE_INSPECT, kind: "request" },
-  { method: METHOD_PLUGIN_PACKAGE_FETCH_CLOUD, kind: "request" },
-  { method: METHOD_PLUGIN_INSTALLED_SAVE, kind: "request" },
-  { method: METHOD_PLUGIN_INSTALLED_LIST, kind: "request" },
-  { method: METHOD_PLUGIN_INSTALLED_DISABLED_SET, kind: "request" },
-  {
-    method: METHOD_PLUGIN_INSTALLED_UNINSTALL_REHEARSAL,
-    kind: "request",
-  },
-  { method: METHOD_PLUGIN_INSTALLED_UNINSTALL, kind: "request" },
-  { method: METHOD_PLUGIN_HOST_LIFECYCLE_LIST, kind: "request" },
-  { method: METHOD_PLUGIN_SHELL_PREPARE, kind: "request" },
-  { method: METHOD_PLUGIN_UI_RUNTIME_START, kind: "request" },
-  { method: METHOD_PLUGIN_UI_RUNTIME_STATUS, kind: "request" },
-  { method: METHOD_PLUGIN_UI_RUNTIME_STOP, kind: "request" },
-  { method: METHOD_KNOWLEDGE_PACK_LIST, kind: "request" },
-  { method: METHOD_KNOWLEDGE_PACK_READ, kind: "request" },
-  { method: METHOD_KNOWLEDGE_SOURCE_IMPORT, kind: "request" },
-  { method: METHOD_KNOWLEDGE_PACK_COMPILE, kind: "request" },
-  { method: METHOD_KNOWLEDGE_PACK_DEFAULT_SET, kind: "request" },
-  { method: METHOD_KNOWLEDGE_PACK_STATUS_UPDATE, kind: "request" },
-  { method: METHOD_KNOWLEDGE_CONTEXT_RESOLVE, kind: "request" },
-  { method: METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE, kind: "request" },
-  { method: METHOD_AUTOMATION_SCHEDULER_CONFIG_READ, kind: "request" },
-  { method: METHOD_AUTOMATION_SCHEDULER_CONFIG_UPDATE, kind: "request" },
-  { method: METHOD_AUTOMATION_SCHEDULER_STATUS, kind: "request" },
-  { method: METHOD_AUTOMATION_JOB_LIST, kind: "request" },
-  { method: METHOD_AUTOMATION_JOB_READ, kind: "request" },
-  { method: METHOD_AUTOMATION_JOB_CREATE, kind: "request" },
-  { method: METHOD_AUTOMATION_JOB_UPDATE, kind: "request" },
-  { method: METHOD_AUTOMATION_JOB_DELETE, kind: "request" },
-  { method: METHOD_AUTOMATION_JOB_RUN_NOW, kind: "request" },
-  { method: METHOD_AUTOMATION_JOB_HEALTH, kind: "request" },
-  { method: METHOD_AUTOMATION_JOB_RUN_HISTORY, kind: "request" },
-  { method: METHOD_AUTOMATION_SCHEDULE_PREVIEW, kind: "request" },
-  { method: METHOD_AUTOMATION_SCHEDULE_VALIDATE, kind: "request" },
-  { method: METHOD_MCP_SERVER_LIST, kind: "request" },
-  { method: METHOD_MCP_SERVER_STATUS_LIST, kind: "request" },
-  { method: METHOD_MCP_SERVER_CREATE, kind: "request" },
-  { method: METHOD_MCP_SERVER_UPDATE, kind: "request" },
-  { method: METHOD_MCP_SERVER_DELETE, kind: "request" },
-  { method: METHOD_MCP_SERVER_ENABLED_SET, kind: "request" },
-  { method: METHOD_MCP_SERVER_IMPORT_FROM_APP, kind: "request" },
-  { method: METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE, kind: "request" },
-  { method: METHOD_MCP_SERVER_OAUTH_LOGIN, kind: "request" },
-  { method: METHOD_MCP_SERVER_START, kind: "request" },
-  { method: METHOD_MCP_SERVER_STOP, kind: "request" },
-  { method: METHOD_MCP_TOOL_LIST, kind: "request" },
-  { method: METHOD_MCP_TOOL_LIST_FOR_CONTEXT, kind: "request" },
-  { method: METHOD_MCP_TOOL_SEARCH, kind: "request" },
-  { method: METHOD_MCP_TOOL_CALL, kind: "request" },
-  { method: METHOD_MCP_TOOL_CALL_WITH_CALLER, kind: "request" },
-  { method: METHOD_MCP_PROMPT_LIST, kind: "request" },
-  { method: METHOD_MCP_PROMPT_GET, kind: "request" },
-  { method: METHOD_MCP_RESOURCE_LIST, kind: "request" },
-  { method: METHOD_MCP_RESOURCE_READ, kind: "request" },
-  { method: METHOD_MCP_RESOURCE_SUBSCRIBE, kind: "request" },
-  { method: METHOD_MCP_RESOURCE_UNSUBSCRIBE, kind: "request" },
-  { method: METHOD_PROJECT_MEMORY_READ, kind: "request" },
-  { method: METHOD_MEMORY_STORE_LIST, kind: "request" },
-  { method: METHOD_MEMORY_STORE_READ, kind: "request" },
-  { method: METHOD_MEMORY_STORE_SEARCH, kind: "request" },
-  { method: METHOD_MEMORY_STORE_ADD_NOTE, kind: "request" },
-  { method: METHOD_MEMORY_STORE_CONSOLIDATE, kind: "request" },
-  { method: METHOD_MEMORY_STORE_REVIEW_LIST, kind: "request" },
-  { method: METHOD_MEMORY_STORE_REVIEW_RESOLVE, kind: "request" },
-  { method: METHOD_MEMORY_STORE_HEALTH, kind: "request" },
-  { method: METHOD_MEMORY_STORE_RESET, kind: "request" },
-  { method: METHOD_MEMORY_STORE_INDEX_REBUILD, kind: "request" },
-  { method: METHOD_LOG_LIST, kind: "request" },
-  { method: METHOD_LOG_PERSISTED_TAIL, kind: "request" },
-  { method: METHOD_LOG_CLEAR, kind: "request" },
-  { method: METHOD_LOG_DIAGNOSTIC_HISTORY_CLEAR, kind: "request" },
-  { method: METHOD_DIAGNOSTICS_LOG_STORAGE_READ, kind: "request" },
-  { method: METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT, kind: "request" },
-  { method: METHOD_DIAGNOSTICS_SERVER_READ, kind: "request" },
-  { method: METHOD_DIAGNOSTICS_WINDOWS_STARTUP_READ, kind: "request" },
-  { method: METHOD_DIAGNOSTICS_TRACE_LIST, kind: "request" },
-  { method: METHOD_DIAGNOSTICS_TRACE_READ, kind: "request" },
-  { method: METHOD_DIAGNOSTICS_TRACE_EXPORT, kind: "request" },
-  { method: METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE, kind: "request" },
-  { method: METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE, kind: "request" },
-  { method: METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE, kind: "request" },
-  { method: METHOD_MEDIA_TASK_ARTIFACT_IMAGE_COMPLETE, kind: "request" },
-  { method: METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE, kind: "request" },
-  { method: METHOD_MEDIA_TASK_ARTIFACT_GET, kind: "request" },
-  { method: METHOD_MEDIA_TASK_ARTIFACT_LIST, kind: "request" },
-  { method: METHOD_MEDIA_TASK_ARTIFACT_CANCEL, kind: "request" },
-  { method: METHOD_GALLERY_MATERIAL_GET, kind: "request" },
-  { method: METHOD_GALLERY_MATERIAL_METADATA_CREATE, kind: "request" },
-  { method: METHOD_GALLERY_MATERIAL_METADATA_GET, kind: "request" },
-  { method: METHOD_GALLERY_MATERIAL_METADATA_UPDATE, kind: "request" },
-  { method: METHOD_GALLERY_MATERIAL_METADATA_DELETE, kind: "request" },
-  { method: METHOD_GALLERY_MATERIAL_LIST_BY_IMAGE_CATEGORY, kind: "request" },
-  { method: METHOD_GALLERY_MATERIAL_LIST_BY_LAYOUT_CATEGORY, kind: "request" },
-  { method: METHOD_GALLERY_MATERIAL_LIST_BY_MOOD, kind: "request" },
-  { method: METHOD_PROJECT_MATERIAL_LIST, kind: "request" },
-  { method: METHOD_PROJECT_MATERIAL_GET, kind: "request" },
-  { method: METHOD_PROJECT_MATERIAL_COUNT, kind: "request" },
-  { method: METHOD_PROJECT_MATERIAL_UPLOAD, kind: "request" },
-  { method: METHOD_PROJECT_MATERIAL_IMPORT_FROM_URL, kind: "request" },
-  { method: METHOD_PROJECT_MATERIAL_UPDATE, kind: "request" },
-  { method: METHOD_PROJECT_MATERIAL_DELETE, kind: "request" },
-  { method: METHOD_PROJECT_MATERIAL_CONTENT, kind: "request" },
-  { method: METHOD_VOICE_ASR_CREDENTIAL_LIST, kind: "request" },
-  { method: METHOD_VOICE_ASR_CREDENTIAL_CREATE, kind: "request" },
-  { method: METHOD_VOICE_ASR_CREDENTIAL_UPDATE, kind: "request" },
-  { method: METHOD_VOICE_ASR_CREDENTIAL_DELETE, kind: "request" },
-  { method: METHOD_VOICE_ASR_CREDENTIAL_DEFAULT_SET, kind: "request" },
-  { method: METHOD_VOICE_ASR_CREDENTIAL_TEST, kind: "request" },
-  { method: METHOD_VOICE_INSTRUCTION_LIST, kind: "request" },
-  { method: METHOD_VOICE_INSTRUCTION_SAVE, kind: "request" },
-  { method: METHOD_VOICE_INSTRUCTION_DELETE, kind: "request" },
-  { method: METHOD_VOICE_MODEL_DEFAULT_SET, kind: "request" },
-  { method: METHOD_VOICE_MODEL_TEST_TRANSCRIBE_FILE, kind: "request" },
-  { method: METHOD_USAGE_STATS_READ, kind: "request" },
-  { method: METHOD_USAGE_STATS_MODEL_RANKING_LIST, kind: "request" },
-  { method: METHOD_USAGE_STATS_DAILY_TRENDS_LIST, kind: "request" },
-  { method: METHOD_MODEL_LIST, kind: "request" },
-  { method: METHOD_MODEL_PREFERENCES_LIST, kind: "request" },
-  { method: METHOD_MODEL_SYNC_STATE_READ, kind: "request" },
-  { method: METHOD_MODEL_PROVIDER_LIST, kind: "request" },
-  { method: METHOD_MODEL_PROVIDER_CATALOG_LIST, kind: "request" },
-  { method: METHOD_MODEL_PROVIDER_READ, kind: "request" },
-  { method: METHOD_MODEL_PROVIDER_CREATE, kind: "request" },
-  { method: METHOD_MODEL_PROVIDER_UPDATE, kind: "request" },
-  { method: METHOD_MODEL_PROVIDER_DELETE, kind: "request" },
-  { method: METHOD_MODEL_PROVIDER_SORT_ORDERS_UPDATE, kind: "request" },
-  { method: METHOD_MODEL_PROVIDER_CONFIG_EXPORT, kind: "request" },
-  { method: METHOD_MODEL_PROVIDER_CONFIG_IMPORT, kind: "request" },
-  { method: METHOD_MODEL_PROVIDER_TEST_CONNECTION, kind: "request" },
-  { method: METHOD_MODEL_PROVIDER_TEST_CHAT, kind: "request" },
-  { method: METHOD_MODEL_PROVIDER_FETCH_MODELS, kind: "request" },
-  { method: METHOD_MODEL_PROVIDER_KEY_CREATE, kind: "request" },
-  { method: METHOD_MODEL_PROVIDER_KEY_UPDATE, kind: "request" },
-  { method: METHOD_MODEL_PROVIDER_KEY_DELETE, kind: "request" },
-  { method: METHOD_MODEL_PROVIDER_KEY_NEXT, kind: "request" },
-  { method: METHOD_MODEL_PROVIDER_KEY_USAGE_RECORD, kind: "request" },
-  { method: METHOD_MODEL_PROVIDER_KEY_ERROR_RECORD, kind: "request" },
-  { method: METHOD_MODEL_PROVIDER_UI_STATE_READ, kind: "request" },
-  { method: METHOD_MODEL_PROVIDER_UI_STATE_WRITE, kind: "request" },
-  { method: METHOD_MODEL_PROVIDER_ALIAS_READ, kind: "request" },
-  { method: METHOD_MODEL_PROVIDER_ALIAS_LIST, kind: "request" },
-  { method: METHOD_CONNECT_DEEP_LINK_RESOLVE, kind: "request" },
-  { method: METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE, kind: "request" },
-  { method: METHOD_CONNECT_RELAY_API_KEY_SAVE, kind: "request" },
-  { method: METHOD_CONNECT_CALLBACK_SEND, kind: "request" },
-  { method: METHOD_CONVERSATION_IMPORT_SOURCE_SCAN, kind: "request" },
-  { method: METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW, kind: "request" },
-  { method: METHOD_CONVERSATION_IMPORT_THREAD_COMMIT, kind: "request" },
-  {
-    method: METHOD_CONVERSATION_IMPORT_THREAD_RUNTIME_EVENTS_READ,
-    kind: "request",
-  },
-  { method: METHOD_AGENT_SESSION_START, kind: "request" },
-  { method: METHOD_AGENT_SESSION_READ, kind: "request" },
-  { method: METHOD_AGENT_SESSION_TURN_START, kind: "request" },
-  { method: METHOD_AGENT_SESSION_TOOL_INVENTORY_READ, kind: "request" },
-  { method: METHOD_AGENT_SESSION_TURN_CANCEL, kind: "request" },
-  { method: METHOD_AGENT_SESSION_ACTION_REPLAY, kind: "request" },
-  { method: METHOD_AGENT_SESSION_ACTION_RESPOND, kind: "request" },
-  { method: METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND, kind: "request" },
-  { method: METHOD_WORKFLOW_READ, kind: "request" },
-  { method: METHOD_WORKFLOW_CANCEL, kind: "request" },
-  { method: METHOD_WORKFLOW_RETRY, kind: "request" },
-  { method: METHOD_WORKFLOW_RESPOND, kind: "request" },
-  { method: METHOD_AGENT_SESSION_EVENT, kind: "notification" },
-] as const satisfies readonly AppServerMethodSpec[];
+export const APP_SERVER_METHODS =
+  GENERATED_APP_SERVER_METHODS satisfies readonly AppServerMethodSpec[];
+
+export type AppServerRequestSerializationScope =
+  GeneratedAppServerRequestSerializationScope;
+
+export type AppServerRequestSerializationScopeSpec = {
+  method: string;
+  scope: AppServerRequestSerializationScope;
+};
+
+export const APP_SERVER_REQUEST_SERIALIZATION_SCOPES =
+  GENERATED_APP_SERVER_REQUEST_SERIALIZATION_SCOPES satisfies readonly AppServerRequestSerializationScopeSpec[];
 
 export const ERROR_CODES = {
   parseError: -32700,
@@ -1292,6 +641,11 @@ export type AgentSessionTurnStartParams = {
   skipPreSubmitResume?: boolean;
 };
 
+export type AgentSessionTurnStartRequest = JsonRpcRequest & {
+  method: typeof METHOD_AGENT_SESSION_TURN_START;
+  params: AgentSessionTurnStartParams;
+};
+
 export type AgentSessionTurnCancelParams = {
   sessionId: string;
   turnId: string;
@@ -1388,6 +742,72 @@ export type AgentEvent = {
   timestamp: string;
   payload: unknown;
 };
+
+export type AgentSessionRuntimeEventBase = {
+  eventId: string;
+  sequence: number;
+  sessionId: string;
+  threadId?: string;
+  turnId?: string;
+  timestamp: string;
+};
+
+export type AgentSessionMessageCreatedNotification =
+  AgentSessionRuntimeEventBase & {
+    role?: string;
+    text?: string;
+    input?: AgentInput;
+  };
+
+export type AgentSessionTurnLifecycleNotification =
+  AgentSessionRuntimeEventBase & {
+    status: AgentTurnStatus;
+  };
+
+export type AgentSessionAgentMessageDeltaNotification =
+  AgentSessionRuntimeEventBase & {
+    itemId: string;
+    delta: string;
+    phase?: string;
+    source?: string;
+  };
+
+export type AgentSessionItemLifecycleNotification =
+  AgentSessionRuntimeEventBase & {
+    itemId: string;
+    itemType?: string;
+    status?: string;
+  };
+
+export type AgentSessionRuntimeEventNotification =
+  | {
+      method: "message/created";
+      params: AgentSessionMessageCreatedNotification;
+    }
+  | {
+      method: "turn/accepted";
+      params: AgentSessionTurnLifecycleNotification;
+    }
+  | {
+      method: "turn/started";
+      params: AgentSessionTurnLifecycleNotification;
+    }
+  | {
+      method: "turn/completed";
+      params: AgentSessionTurnLifecycleNotification;
+    }
+  | {
+      method: "item/agentMessage/delta";
+      params: AgentSessionAgentMessageDeltaNotification;
+    }
+  | {
+      method: "item/started";
+      params: AgentSessionItemLifecycleNotification;
+    }
+  | {
+      method: "item/completed";
+      params: AgentSessionItemLifecycleNotification;
+    };
 
 export type AgentSessionStartResponse = {
   session: AgentSession;
@@ -3420,6 +2840,7 @@ export type AgentSessionActionRespondResponse = Record<string, never>;
 
 export type AgentSessionEventParams = {
   event: AgentEvent;
+  typedEvent?: AgentSessionRuntimeEventNotification;
 };
 
 export type AgentSessionEventNotification = JsonRpcNotification & {
@@ -3692,6 +3113,7 @@ export type ProtocolSchemaGroup = "jsonrpc" | "v0";
 export type AppServerProtocolSchemaManifest = {
   protocolVersion: string;
   methods: AppServerMethodSpec[];
+  requestSerializationScopes: AppServerRequestSerializationScopeSpec[];
   jsonRpc: {
     version: string;
     sendsJsonRpcVersionField: boolean;
@@ -3733,6 +3155,14 @@ export function isAppServerNotificationMethod(method: string): boolean {
   );
 }
 
+export function getAppServerRequestSerializationScope(
+  method: string,
+): AppServerRequestSerializationScope | undefined {
+  return APP_SERVER_REQUEST_SERIALIZATION_SCOPES.find(
+    (spec) => spec.method === method,
+  )?.scope;
+}
+
 export function encodeMessage(message: JsonRpcMessage): string {
   return `${JSON.stringify(message)}\n`;
 }
@@ -3755,6 +3185,41 @@ export function isJsonRpcNotification(
   return "method" in message && !("id" in message);
 }
 
+export function isJsonRpcRequest(
+  message: JsonRpcMessage,
+): message is JsonRpcRequest {
+  return "method" in message && "id" in message;
+}
+
+export function isAgentSessionTurnStartRequest(
+  message: JsonRpcMessage,
+): message is AgentSessionTurnStartRequest {
+  return Boolean(agentSessionTurnStartRequest(message));
+}
+
+export function agentSessionTurnStartRequest(
+  message: JsonRpcMessage,
+): AgentSessionTurnStartRequest | undefined {
+  if (
+    !isJsonRpcRequest(message) ||
+    message.method !== METHOD_AGENT_SESSION_TURN_START
+  ) {
+    return undefined;
+  }
+  const params = message.params as
+    | Partial<AgentSessionTurnStartParams>
+    | undefined;
+  if (
+    !params ||
+    typeof params.sessionId !== "string" ||
+    !params.input ||
+    typeof (params.input as Partial<AgentInput>).text !== "string"
+  ) {
+    return undefined;
+  }
+  return message as AgentSessionTurnStartRequest;
+}
+
 export function isAgentSessionEventNotification(
   message: JsonRpcMessage,
 ): message is AgentSessionEventNotification {
@@ -3775,6 +3240,12 @@ export function agentSessionEventNotification(
     return undefined;
   }
   return message as AgentSessionEventNotification;
+}
+
+export function agentSessionRuntimeEventNotification(
+  message: JsonRpcMessage,
+): AgentSessionRuntimeEventNotification | undefined {
+  return agentSessionEventNotification(message)?.params.typedEvent;
 }
 
 export function isWorkspaceRightSurfacePendingChangedNotification(

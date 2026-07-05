@@ -47,10 +47,6 @@ const loadSkillsWorkspacePage = () =>
   import("./skills").then((module) => ({
     default: module.SkillsWorkspacePage,
   }));
-const loadPluginMarketplacePage = () =>
-  import("@/features/plugin").then((module) => ({
-    default: module.PluginMarketplacePage,
-  }));
 const loadKnowledgePage = () =>
   import("@/features/knowledge").then((module) => ({
     default: module.KnowledgePage,
@@ -83,7 +79,6 @@ const loadAgentChatPage = () =>
 
 const ResourcesPage = lazy(loadResourcesPage);
 const SkillsWorkspacePage = lazy(loadSkillsWorkspacePage);
-const PluginMarketplacePage = lazy(loadPluginMarketplacePage);
 const KnowledgePage = lazy(loadKnowledgePage);
 const PluginLabPage = lazy(loadPluginLabPage);
 const PluginsPage = lazy(loadPluginsPage);
@@ -91,14 +86,6 @@ const PluginRuntimePage = lazy(loadPluginRuntimePage);
 const ExpertPlazaPage = lazy(loadExpertPlazaPage);
 const BrowserRuntimeWorkspace = lazy(loadBrowserRuntimeWorkspace);
 const AgentChatPage = lazy(loadAgentChatPage);
-
-function shouldOpenPluginMarketplace(pageParams: PageParams): boolean {
-  const pluginParams = pageParams as PluginsPageParams;
-
-  return Boolean(
-    pluginParams.query || pluginParams.category || pluginParams.statusFilter,
-  );
-}
 
 interface AppPageContentProps {
   currentPage: Page;
@@ -275,20 +262,6 @@ export function AppPageContent({
         <SkillsWorkspacePage
           onNavigate={onNavigate}
           pageParams={activePageParams as SkillsPageParams}
-        />
-      </div>
-    );
-  }
-
-  if (
-    activePage === "plugins" &&
-    shouldOpenPluginMarketplace(activePageParams)
-  ) {
-    return (
-      <div style={columnPageStyle}>
-        <PluginMarketplacePage
-          onNavigate={onNavigate}
-          pageParams={activePageParams as PluginsPageParams}
         />
       </div>
     );

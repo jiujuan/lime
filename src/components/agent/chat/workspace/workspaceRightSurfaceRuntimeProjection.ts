@@ -97,7 +97,7 @@ export function buildWorkspaceRightSurfaceRuntimeAvailableSurfaces({
   appSurfaceAvailable = false,
   hasExpertInfoPanel,
   objectCanvasAvailable,
-  articleWorkspaceAvailable = objectCanvasAvailable,
+  articleWorkspaceAvailable = false,
   shellAvailable,
   showHarnessToggle,
   traceAvailable = false,

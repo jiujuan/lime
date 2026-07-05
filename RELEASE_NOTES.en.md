@@ -1,39 +1,42 @@
-## Lime v1.90.0
+## Lime v1.91.0
 
 <sub>The Simplified Chinese release notes are the primary version. This English page is a companion for international readers.</sub>
 
 ### New Features
 
-- Continued converging the Agent Runtime migration: retired the old Aster backend, provider state / factories, router, scheduler, and live-provider specialty tests while App Server / Agent current runtime now owns session configuration, runtime state, credential projection, and live execution process handling.
-- Expanded Article Workspace and image workbench support for inline images, image tasks, structured previews, object artifacts, and action-output kinds so writing and media generation stay synchronized inside the workspace.
-- Added current Soul / personal-style foundations: built-in style profiles, style directive composition, boundary evaluation, interaction copy, and the memory-settings entry point for personalized output.
+- Added typed notification projection to the App Server `agentSession` event path, covering `message/created`, `turn/*`, `item/*`, and assistant message deltas with regenerated protocol schemas and npm client types.
+- Consolidated App Center into the current Plugins page: the old marketplace page is retired, while installed state, cloud state, capability lists, activation entries, subagents / skills, permissions, and version summaries now share one app detail surface.
+- Plugin activation can now route into the Agent workspace with project context, turning workflow / runtime entries into `@` trigger prompts instead of continuing through the old adapter mock execution path.
+- Agent Turn automation now carries session / thread lineage so jobs created from a workspace stay bound to the originating conversation context.
 
 ### Fixes
 
-- Fixed Agent Chat streaming status, failure recovery, send context, runtime status hints, and session-history projection boundaries to reduce stuck states, stale terminal events, and inconsistent recovery.
-- Fixed Expert Plaza, expert instances, expert launch synchronization, and workspace right-surface metadata / role-switch projections so expert Agents and workspace entry points stay aligned.
-- Fixed Markdown image resolution, image-task preview, Task Center draft materialization / send, article edited-draft sync, and artifact writeback paths for more stable mixed text and image workflows.
+- Fixed Agent Runtime boundaries around typed deltas, turn lifecycle events, runtime status, web-search preflight, credential provider bridge, and session recovery projection to reduce stream ordering, stale terminal state, and context-loss risks.
+- Fixed restored team facts, workspace team runtime, subagent timelines, right-surface readiness, and service-skill entry action projections.
+- Fixed plugin install / uninstall flows for destructive-data confirmation, dry-run gating, manifest normalization, source versions, capability tags, and detail summaries.
+- Fixed Claw current fixture waits, right-surface visual assertions, scenario assertion split, and multi-agent team fixture coverage.
 
 ### Improvements and Refactors
 
-- Split App Server processor code, plugin worker turns, runtime backend tests, image-command presentation, and read-model tests by responsibility to reduce central-file size and sharpen current-owner boundaries.
-- Split Agent crate runtime state / support, session config adapters, credential bridge runtime projection, request-tool-policy reply streams, and test support while removing migrated provider-safety / Aster-state leftovers.
-- Tightened model provider, tool runtime, agent protocol, and App Server backend boundaries so retired Aster / legacy backend paths cannot drift back into production truth.
+- Split `tool-runtime` ownership for execution policy, execution rules, shell planning, tool batch plan / outcome, and policy service so App Server no longer reads plain shell argv text through the `lime-agent` Aster adapter.
+- Refactored App Server protocol / client request and notification methods, catalog data, schema export, and generated types around the current JSON-RPC contract.
+- Continued shrinking Aster residuals in `lime-agent` by moving tool inventory, workspace patching, event / reply handling, session store, and subagent profiles behind narrower adapter boundaries.
+- Removed the old plugin marketplace page and route branch; Skills workspace project resolution now uses the current project hook to avoid parallel UI entry points.
 
 ### Tests and Quality
 
-- Added or updated regressions for Agent stream controllers, workspace workflow controls, workspace metadata, Soul style profiles, Markdown media, Expert Plaza, Knowledge metadata, Plugin manifest / runtime, and i18n loading.
-- Added governance coverage for App Server runtime/backend boundaries, Aster migration boundaries, ProjectThread-first boundaries, Rust layer budgets, Rust test scope, and Electron release/update host behavior.
-- Added Claw image live smoke coverage, content-factory / article inline-image fixtures, current Electron fixture assertions, and GUI smoke helpers so release validation covers image and workspace main paths.
+- Added App Server event notification, protocol schema, plugin task evidence, team facts, provider telemetry, turn lifecycle, and media task JSON-RPC regressions.
+- Added or updated regressions for workspace plugin activation, intent routing, runtime readiness, service-skill actions, team session runtime, restored team facts, automation thread lineage, and plugin UI flows.
+- Updated current fixture smoke coverage, OpenAI-compatible fixture server tests, managed-objective automation smoke helpers, MCP contract guards, App Server client contract checks, and governance boundaries.
+- Kept five-language i18n resources in sync for App Center, automation, and Agent workspace copy.
 
 ### Documentation
 
-- Updated the Aster migration main plan and vendor-downgrade policy, removed obsolete phase / session documents, and consolidated migration records around the current roadmap.
-- Added the ProjectThread-first execution plan and roadmap PRD, and updated Soul personal-style output surfaces, style-pack installation, and style-profile planning.
-- Updated Playwright E2E, Workflow standardization, images v2 progress, skills E2E testing, script governance, and repository-level rules to match the current validation flow.
+- Added the `2026-07-05 Aster migration reality check`, recalibrating the exit-condition progress estimate to about `69%` and explicitly rejecting the previous `99%` or no-Aster-dependency completion framing.
+- Updated the Aster migration main plan, ProjectThread-first execution plan / PRD, tech-debt tracker, and workflow reference to match the current implementation.
 
 ### Other
 
-- Bumped version facts to `1.90.0` across the root app, CLI npm package, Rust workspace, `lime-rs/Cargo.lock`, and the current-turn smoke client.
+- Bumped version facts to `1.91.0` across the root app, CLI npm package, Rust workspace, `lime-rs/Cargo.lock`, and the current-turn smoke client.
 
-**Full changes**: `v1.89.0` -> `v1.90.0`
+**Full changes**: `v1.90.0` -> `v1.91.0`

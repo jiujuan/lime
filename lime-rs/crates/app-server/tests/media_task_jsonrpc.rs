@@ -278,45 +278,23 @@ async fn image_command_turn_start_creates_task_from_jsonrpc_metadata() {
             },
             "runtimeOptions": {
                 "stream": true,
-                "metadata": {
-                    "harness": {
-                        "image_command_intent": {
-                            "kind": "image_task",
-                            "image_task": {
-                                "project_root_path": app.workspace_root,
-                                "prompt": "E2E 图片命令路由测试，请生成一张青柠插画",
-                                "raw_text": "@配图 E2E 图片命令路由测试，请生成一张青柠插画",
-                                "mode": "generate",
-                                "count": 1,
-                                "provider_id": "provider-image",
-                                "model": "gpt-image-test",
-                                "executor_mode": "images_api",
-                                "entry_source": "at_image_command"
-                            }
-                        }
-                    }
-                },
+                "metadata": image_command_metadata(
+                    &app.workspace_root,
+                    "E2E 图片命令路由测试，请生成一张青柠插画",
+                    "@配图 E2E 图片命令路由测试，请生成一张青柠插画",
+                    "provider-image",
+                    "gpt-image-test",
+                ),
                 "hostOptions": {
                     "asterChatRequest": {
                         "message": "@配图 E2E 图片命令路由测试，请生成一张青柠插画",
-                        "metadata": {
-                            "harness": {
-                                "image_command_intent": {
-                                    "kind": "image_task",
-                                    "image_task": {
-                                        "project_root_path": app.workspace_root,
-                                        "prompt": "E2E 图片命令路由测试，请生成一张青柠插画",
-                                        "raw_text": "@配图 E2E 图片命令路由测试，请生成一张青柠插画",
-                                        "mode": "generate",
-                                        "count": 1,
-                                        "provider_id": "provider-image",
-                                        "model": "gpt-image-test",
-                                        "executor_mode": "images_api",
-                                        "entry_source": "at_image_command"
-                                    }
-                                }
-                            }
-                        }
+                        "metadata": image_command_metadata(
+                            &app.workspace_root,
+                            "E2E 图片命令路由测试，请生成一张青柠插画",
+                            "@配图 E2E 图片命令路由测试，请生成一张青柠插画",
+                            "provider-image",
+                            "gpt-image-test",
+                        )
                     }
                 }
             },
@@ -329,6 +307,10 @@ async fn image_command_turn_start_creates_task_from_jsonrpc_metadata() {
     assert!(
         event_types.contains(&"runtime.status"),
         "image command should emit accepted status: {event_types:?}"
+    );
+    assert!(
+        event_types.contains(&"image_task.presentation.generated"),
+        "image command should surface provided presentation before creating task: {event_types:?}"
     );
     assert!(
         event_types.contains(&"image_task.created"),
@@ -519,7 +501,12 @@ fn image_command_metadata(
                     "provider_id": provider_id,
                     "model": model,
                     "executor_mode": "images_api",
-                    "entry_source": "at_image_command"
+                    "entry_source": "at_image_command",
+                    "presentation": {
+                        "assistant_intro": "好啊，我来按青柠插画的清爽方向处理。",
+                        "planning_summary": "用明亮绿色、简洁构图和轻盈质感组织画面。",
+                        "completion_caption": "完成了，青柠插画的清爽层次已经生成。"
+                    }
                 }
             }
         }

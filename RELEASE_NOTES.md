@@ -1,37 +1,40 @@
-## Lime v1.90.0
+## Lime v1.91.0
 
 ### 新功能
 
-- Agent Runtime 迁移继续收口：旧 Aster backend、provider state / factory、router、scheduler 和真实模型专项测试被下线，App Server / Agent current runtime 接管会话配置、运行状态、凭证投影和 live execution process。
-- Article Workspace 和图片工作台补齐内联配图、图片任务、结构化预览、对象 artifact 和操作输出类型，文章编辑与素材生成链路能在工作区内保持更稳定的同步。
-- Soul / 个人风格主线新增内置风格画像、风格指令组合、边界评估、交互文案和记忆设置入口，为后续个性化输出提供 current 事实源。
+- App Server `agentSession` 事件链新增 typed notification 投影，覆盖 `message/created`、`turn/*`、`item/*` 和 assistant message delta，协议 schema 与 npm client 同步生成可直接消费的类型。
+- 应用中心收口到 current Plugins 页面：插件市场旧页面下线，安装态、云端态、能力清单、activation entries、subagents / skills、权限与版本摘要统一在应用详情中呈现。
+- 插件 activation 支持带 project context 跳转 Agent 工作区，workflow / runtime entry 可转成 `@` 触发提示，避免继续走旧 adapter mock 执行路径。
+- 自动化 Agent Turn 任务新增 session / thread lineage 约束，创建自动化时会绑定来源会话和线程，避免脱离当前工作区上下文执行。
 
 ### 修复
 
-- 修复 Agent Chat 流式状态、失败恢复、发送上下文、运行时状态提示和会话历史投影的多个边界，减少卡住、误停和恢复后状态不一致的问题。
-- 修复专家广场、专家实例、专家启动同步和工作区右侧面板的 metadata / role switch 投影，让专家 Agent 与工作区入口更一致。
-- 修复 Markdown 图片解析、图片任务预览、Task Center draft materialization / send、文章工作区 edited draft 和 artifact 回填链路，提升图片与文稿混排稳定性。
+- 修复 Agent Runtime typed delta、turn lifecycle、runtime status、web search preflight、credential provider bridge 和会话恢复投影的多个边界，降低流式输出错序、误停和上下文丢失风险。
+- 修复团队 / 子代理恢复事实、workspace team runtime、subagent timeline、右侧 surface readiness 和 service skill entry action 的投影一致性。
+- 修复插件安装 / 卸载流程中的删除数据确认、dry-run gate、manifest normalization、source version、能力标签和详情摘要展示。
+- 修复 Claw current fixture 的 read model 等待、右侧 surface 视觉断言、场景断言拆分和多 Agent 团队 fixture 覆盖。
 
 ### 优化与重构
 
-- App Server processor、plugin worker turn、runtime backend tests、image command presentation 和 read model 测试继续按职责拆分，降低中心文件体量并强化 current owner 边界。
-- Agent crate 拆出 runtime state / support、session config adapter、credential bridge runtime projection、request tool policy agent reply stream 和测试支撑模块，删除已迁移的 provider safety / Aster state 残留。
-- Model provider、tool runtime、agent protocol 和 App Server backend boundary 继续收紧，避免旧 Aster / legacy backend 路径重新成为生产事实源。
+- `tool-runtime` 拆出 execution policy、execution rules、shell planning、tool batch plan / outcome 与 policy service，App Server 不再经 `lime-agent` Aster adapter 消费纯 shell 文本提取。
+- App Server protocol / client 重构 request / notification 方法、catalog、schema export 与 generated types，让 JSON-RPC current contract 更接近单一事实源。
+- `lime-agent` 继续收缩 Aster residual，把 tool inventory、workspace patch、event / reply、session store 和 subagent profile 迁移到更窄的 adapter 边界。
+- 删除旧插件市场页面和路由分支，Skills 工作区默认项目选择改为 current project hook，减少并行 UI 入口。
 
 ### 测试与质量
 
-- 新增 / 更新 Agent stream controller、workspace workflow controls、workspace metadata、Soul style profiles、Markdown media、Expert Plaza、Knowledge metadata、Plugin manifest / runtime 和 i18n loader 回归。
-- 补齐 App Server runtime/backend governance、Aster migration boundary、ProjectThread-first boundary、Rust layer budget、Rust test scope 和 Electron release/update host 守卫。
-- 新增 Claw 图片 live smoke、content factory / article inline image fixture、current Electron fixture 断言和 GUI smoke 辅助脚本，发布验证可覆盖图片与工作区主链。
+- 新增 App Server event notification、protocol schema、plugin task evidence、team facts、provider telemetry、turn lifecycle 和 media task JSON-RPC 回归。
+- 新增 / 更新 workspace plugin activation、intent routing、runtime readiness、service skill actions、team session runtime、restored team facts、automation thread lineage 和插件 UI 回归。
+- 更新 current fixture smoke、OpenAI compatible fixture server、managed objective automation smoke、MCP contract guard、App Server client contract 和 governance boundary 覆盖。
+- 继续维护五语言 i18n 资源，覆盖应用中心、自动化和 Agent 工作区新增文案。
 
 ### 文档
 
-- 更新 Aster migration 主计划与 vendor downgrade 口径，删除过期 phase / session 文档，把迁移记录收敛到当前路线图。
-- 新增 ProjectThread-first 执行计划与路线图 PRD，更新 Soul 个人风格输出面、风格包安装和风格画像规划。
-- 更新 Playwright E2E、Workflow 标准化、images v2 progress、skills E2E testing、脚本治理和仓库级规则，保持验证流程与 current 主链一致。
+- 新增 `2026-07-05 Aster 迁移进度现实校准`，把整体退出条件口径校准到约 `69%`，明确不能再按 `99%` 或无 Aster 依赖完成态汇报。
+- 更新 Aster migration 主计划、ProjectThread-first 执行计划 / PRD、技术债追踪和 workflow reference，保持路线图与 current 实现一致。
 
 ### 其他
 
-- 版本事实源更新到 `1.90.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock` 和 current-turn smoke client。
+- 版本事实源更新到 `1.91.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock` 和 current-turn smoke client。
 
-**完整变更**: `v1.89.0` -> `v1.90.0`
+**完整变更**: `v1.90.0` -> `v1.91.0`

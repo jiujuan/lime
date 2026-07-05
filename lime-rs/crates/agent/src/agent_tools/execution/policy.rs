@@ -6,75 +6,17 @@ use crate::agent_tools::catalog::{
 };
 use aster::permission::{ParameterRestriction, PermissionScope, RestrictionType, ToolPermission};
 use lime_core::config::ToolExecutionPolicyConfig as ConfigToolExecutionPolicyConfig;
-use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+pub use tool_runtime::execution_policy::{
+    ToolExecutionPolicy, ToolExecutionPolicyResolution, ToolExecutionPolicySource,
+    ToolExecutionRestrictionProfile, ToolExecutionSandboxProfile, ToolExecutionWarningPolicy,
+};
+pub use tool_runtime::execution_policy_service::ToolExecutionResolverInput;
 
 const DURABLE_MEMORY_PATH_PATTERN: &str = r"^/memories(?:/.*)?$";
 const SAFE_HTTPS_URL_PATTERN: &str = r"^https://[^\s]+$";
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ToolExecutionWarningPolicy {
-    None,
-    ShellCommandRisk,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ToolExecutionRestrictionProfile {
-    None,
-    WorkspacePathRequired,
-    WorkspacePathOptional,
-    WorkspaceAbsolutePathRequired,
-    WorkspaceShellCommand,
-    AnalyzeImageInput,
-    SafeHttpsUrlRequired,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ToolExecutionSandboxProfile {
-    None,
-    WorkspaceCommand,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ToolExecutionPolicySource {
-    Default,
-    Persisted,
-    Organization,
-    User,
-    Runtime,
-    Request,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ToolExecutionPolicy {
-    pub warning_policy: ToolExecutionWarningPolicy,
-    pub restriction_profile: ToolExecutionRestrictionProfile,
-    pub sandbox_profile: ToolExecutionSandboxProfile,
-}
-
-impl Default for ToolExecutionPolicy {
-    fn default() -> Self {
-        Self {
-            warning_policy: ToolExecutionWarningPolicy::None,
-            restriction_profile: ToolExecutionRestrictionProfile::None,
-            sandbox_profile: ToolExecutionSandboxProfile::None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ToolExecutionPolicyResolution {
-    pub policy: ToolExecutionPolicy,
-    pub warning_policy_source: ToolExecutionPolicySource,
-    pub restriction_profile_source: ToolExecutionPolicySource,
-    pub sandbox_profile_source: ToolExecutionPolicySource,
-}
 
 #[derive(Debug, Clone, Copy)]
 pub struct WorkspaceExecutionPermissionInput<'a> {
@@ -93,12 +35,6 @@ struct WorkspacePermissionPatterns {
     analyze_image_path_pattern: String,
     safe_https_url_pattern: String,
     shell_allow_pattern: String,
-}
-
-#[derive(Debug, Clone, Copy, Default)]
-pub struct ToolExecutionResolverInput<'a> {
-    pub persisted_policy: Option<&'a ConfigToolExecutionPolicyConfig>,
-    pub request_metadata: Option<&'a JsonValue>,
 }
 
 pub fn tool_execution_policy(tool_name: &str) -> ToolExecutionPolicy {

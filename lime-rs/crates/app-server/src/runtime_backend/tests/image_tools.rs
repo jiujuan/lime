@@ -66,12 +66,11 @@ async fn runtime_backend_registers_image_generation_task_native_tool() {
         .await
         .expect("current native tools should register");
 
-    let agent_arc = backend.agent_state.get_agent_arc();
-    let agent_guard = agent_arc.read().await;
-    let agent = agent_guard.as_ref().expect("agent");
-    let registry = agent.tool_registry().read().await;
     assert!(
-        registry.contains_native(LIME_CREATE_IMAGE_TASK_TOOL_NAME),
+        backend
+            .agent_state
+            .contains_native_tool(LIME_CREATE_IMAGE_TASK_TOOL_NAME)
+            .await,
         "{LIME_CREATE_IMAGE_TASK_TOOL_NAME} should be registered as the current image task native tool"
     );
 }

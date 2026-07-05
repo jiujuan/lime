@@ -89,9 +89,6 @@ const hoisted = vi.hoisted(() => ({
     respondAction: vi.fn(),
     readWorkflow: vi.fn(),
   },
-  projectApiMocks: {
-    getOrCreateDefaultProject: vi.fn(),
-  },
   toastMocks: {
     toast: vi.fn(),
     error: vi.fn(),
@@ -131,8 +128,7 @@ const hoisted = vi.hoisted(() => ({
       "plugin.apps.runtime.agentRun.metric.cost": "费用",
       "plugin.apps.runtime.agentRun.metric.skills": "Skills",
       "plugin.apps.runtime.agentRun.facts.confirmations": "待确认",
-      "plugin.apps.runtime.agentRun.facts.confirmations.empty":
-        "暂无待确认项",
+      "plugin.apps.runtime.agentRun.facts.confirmations.empty": "暂无待确认项",
       "plugin.apps.runtime.agentRun.facts.confirmations.itemFallback":
         "待确认事项",
       "plugin.apps.runtime.agentRun.facts.artifacts": "交付物",
@@ -141,8 +137,7 @@ const hoisted = vi.hoisted(() => ({
         "交付物已生成",
       "plugin.apps.runtime.agentRun.facts.evidence": "证据",
       "plugin.apps.runtime.agentRun.facts.evidence.empty": "暂无证据",
-      "plugin.apps.runtime.agentRun.facts.evidence.itemFallback":
-        "证据已记录",
+      "plugin.apps.runtime.agentRun.facts.evidence.itemFallback": "证据已记录",
       "plugin.apps.runtime.agentRun.timeline.running":
         "运行中，点击折叠或展开过程",
       "plugin.apps.runtime.agentRun.timeline.collapsed":
@@ -178,21 +173,15 @@ vi.mock("@/lib/api/plugins", () => ({
 }));
 
 vi.mock("@/lib/api/pluginRuntime", () => ({
-  startPluginRuntimeTask:
-    hoisted.runtimeApiMocks.startPluginRuntimeTask,
+  startPluginRuntimeTask: hoisted.runtimeApiMocks.startPluginRuntimeTask,
   getPluginRuntimeTask: hoisted.runtimeApiMocks.getPluginRuntimeTask,
-  cancelPluginRuntimeTask:
-    hoisted.runtimeApiMocks.cancelPluginRuntimeTask,
+  cancelPluginRuntimeTask: hoisted.runtimeApiMocks.cancelPluginRuntimeTask,
   submitPluginRuntimeHostResponse:
     hoisted.runtimeApiMocks.submitPluginRuntimeHostResponse,
 }));
 
 vi.mock("@/lib/api/appServer", () => ({
   createAppServerClient: hoisted.appServerClientMocks.createAppServerClient,
-}));
-
-vi.mock("@/lib/api/project", () => ({
-  getOrCreateDefaultProject: hoisted.projectApiMocks.getOrCreateDefaultProject,
 }));
 
 vi.mock("react-i18next", () => ({
@@ -293,6 +282,7 @@ export async function renderPage(state = buildReadyState()) {
         pageParams={{
           appId: state.appId,
           entryKey: "dashboard",
+          projectId: "workspace-1",
           launchRequestKey: 1,
         }}
       />,
@@ -497,9 +487,6 @@ export function usePluginRuntimePageTestLifecycle() {
         generatedAt: "2026-05-15T00:00:00.000Z",
         apps: [],
       },
-    });
-    hoisted.projectApiMocks.getOrCreateDefaultProject.mockResolvedValue({
-      id: "workspace-1",
     });
     runtimeApiMocks.startPluginRuntimeTask.mockImplementation(
       async (request) => {

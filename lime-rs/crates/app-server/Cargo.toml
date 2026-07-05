@@ -14,10 +14,6 @@ name = "app_server"
 path = "src/lib.rs"
 doctest = false
 
-[features]
-default = []
-aster-backend = []
-
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
@@ -63,6 +59,7 @@ tempfile.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
+tool-runtime.workspace = true
 tracing.workspace = true
 tracing-opentelemetry.workspace = true
 tracing-subscriber = { version = "0.3", default-features = false, features = ["registry", "std"] }
@@ -72,5 +69,4 @@ zip.workspace = true
 zstd.workspace = true
 
 [dev-dependencies]
-lime-agent = { workspace = true, features = ["test-support"] }
 serde_json.workspace = true

@@ -4,6 +4,8 @@
 创建时间：2026-07-03  
 主目标：按 Codex 风格把 Lime Agent Runtime 收敛为一等 workspace crate 分层，停止把 `aster-rust` 当作 Lime current 运行时事实源。
 
+最新现实校准：2026-07-05 复核后，tool execution policy DTO、shell/network execution rules、persisted/runtime policy service、tool batch plan/outcome DTO 与 shell command planning helper 已迁入 `tool-runtime`，App Server 对纯 shell argv 文本提取已直接消费 `tool-runtime`，整体目标完成度约 `69%`，不能按 `99%` 或“无 Aster 依赖完成态”口径汇报。`app-server` / `services` / `server` / `scheduler` 等 direct Aster 依赖已基本迁出，但 root workspace 与 `lime-agent` 仍直接依赖 vendored Aster，Phase 6 删除条件尚未满足。详见 [2026-07-05-progress-reality-check.md](./2026-07-05-progress-reality-check.md)。
+
 ## 结论
 
 `lime-rs/crates/aster-rust` 已从 current crate 区移出，当前 `dead / forbidden-to-restore`；迁移期 Aster 只允许停留在 `lime-rs/vendor/aster-rust`，并通过 root workspace dependency `aster = { package = "aster-core", path = "vendor/aster-rust/crates/aster" }` 暂时服务 compat adapter。这个状态仍是过渡态：Aster 不能再成为 Lime current runtime 事实源，后续所有 provider、tool、session、event 和 store 能力都必须继续向 Lime-owned crate 收敛。
@@ -90,6 +92,7 @@ app-server
 
 - [./aster-runtime-codex-style-migration-plan.md](./aster-runtime-codex-style-migration-plan.md)：分阶段迁移计划、验收标准和验证入口。
 - [./phase5-vendor-downgrade-plan.md](./phase5-vendor-downgrade-plan.md)：Aster vendor 降级与最终删除退出条件。
+- [./2026-07-05-progress-reality-check.md](./2026-07-05-progress-reality-check.md)：按退出条件重算进度，纠正 `99%` / “无 Aster 依赖完成态”误判。
 - `internal/roadmap/agentruntime/README.md`：AgentRuntime 主链事实源。
 - `internal/roadmap/appserver/app-server-aster-runtime-boundary-governance.md`：现有 App Server / Aster 边界治理记录。
 - `internal/aiprompts/governance.md`：current / compat / deprecated / dead 分类规则。

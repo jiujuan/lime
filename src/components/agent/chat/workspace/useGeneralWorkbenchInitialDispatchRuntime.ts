@@ -25,6 +25,65 @@ import { isCanvasStateEmpty } from "./generalWorkbenchHelpers";
 import { getDefaultGuidePromptByTheme } from "../utils/defaultGuidePrompt";
 import type { WorkspaceHandleSend } from "./useWorkspaceSendActions";
 
+const INITIAL_AUTO_SEND_CLAIM_TTL_MS = 30_000;
+const claimedInitialAutoSendKeys = new Map<string, number>();
+
+function pruneInitialAutoSendClaims(now: number): void {
+  for (const [key, claimedAt] of claimedInitialAutoSendKeys.entries()) {
+    if (now - claimedAt > INITIAL_AUTO_SEND_CLAIM_TTL_MS) {
+      claimedInitialAutoSendKeys.delete(key);
+    }
+  }
+}
+
+function readNestedString(
+  value: unknown,
+  path: readonly string[],
+): string | null {
+  let cursor = value;
+  for (const key of path) {
+    if (!cursor || typeof cursor !== "object" || Array.isArray(cursor)) {
+      return null;
+    }
+    cursor = (cursor as Record<string, unknown>)[key];
+  }
+  return typeof cursor === "string" && cursor.trim() ? cursor.trim() : null;
+}
+
+function buildInitialAutoSendClaimKey(params: {
+  initialDispatchKey: string;
+  initialAutoSendRequestMetadata?: Record<string, unknown>;
+}): string {
+  const launchRequestId =
+    readNestedString(params.initialAutoSendRequestMetadata, [
+      "harness",
+      "plugin_activation_intent",
+      "launch_request_id",
+    ]) ??
+    readNestedString(params.initialAutoSendRequestMetadata, [
+      "harness",
+      "skill_launch",
+      "request_id",
+    ]);
+  return launchRequestId
+    ? `${params.initialDispatchKey}::${launchRequestId}`
+    : params.initialDispatchKey;
+}
+
+function claimInitialAutoSend(key: string): boolean {
+  const now = Date.now();
+  pruneInitialAutoSendClaims(now);
+  if (claimedInitialAutoSendKeys.has(key)) {
+    return false;
+  }
+  claimedInitialAutoSendKeys.set(key, now);
+  return true;
+}
+
+function releaseInitialAutoSendClaim(key: string): void {
+  claimedInitialAutoSendKeys.delete(key);
+}
+
 interface UseGeneralWorkbenchInitialDispatchRuntimeParams {
   activeTheme: string;
   autoRunInitialPromptOnMount: boolean;
@@ -175,7 +234,8 @@ export function useGeneralWorkbenchInitialDispatchRuntime({
       return;
     }
 
-    const pendingInitialPrompt = (initialUserPrompt || "").trim();
+    const pendingInitialPromptText = initialUserPrompt || "";
+    const pendingInitialPrompt = pendingInitialPromptText.trim();
     const pendingInitialImages = initialUserImages || [];
     if (
       !isThemeWorkbench ||
@@ -198,7 +258,9 @@ export function useGeneralWorkbenchInitialDispatchRuntime({
 
     hydratedPromptSignatureRef.current = initialDispatchKey;
     hasTriggeredGuideRef.current = true;
-    setInput((previous) => previous.trim() || pendingInitialPrompt);
+    setInput((previous) =>
+      previous.trim() ? previous : pendingInitialPromptText,
+    );
     setGeneralWorkbenchEntryPrompt({
       kind: "initial_prompt",
       signature: initialDispatchKey,
@@ -478,7 +540,8 @@ export function useGeneralWorkbenchInitialAutoGuideRuntime({
     }
 
     const canvasEmpty = isCanvasStateEmpty(canvasState);
-    const pendingInitialPrompt = (initialUserPrompt || "").trim();
+    const pendingInitialPromptText = initialUserPrompt || "";
+    const pendingInitialPrompt = pendingInitialPromptText.trim();
     const pendingInitialImages = initialUserImages || [];
     const defaultGuidePrompt =
       contentId && canvasEmpty && !isThemeWorkbench
@@ -512,6 +575,14 @@ export function useGeneralWorkbenchInitialAutoGuideRuntime({
         return;
       }
 
+      const claimKey = buildInitialAutoSendClaimKey({
+        initialDispatchKey,
+        initialAutoSendRequestMetadata,
+      });
+      if (!claimInitialAutoSend(claimKey)) {
+        return;
+      }
+
       let disposed = false;
       consumedInitialPromptRef.current = initialDispatchKey;
       hasTriggeredGuideRef.current = true;
@@ -533,11 +604,15 @@ export function useGeneralWorkbenchInitialAutoGuideRuntime({
               }
             : undefined,
         );
-        if (disposed) {
+        if (!started) {
+          releaseInitialAutoSendClaim(claimKey);
+          if (disposed) {
+            return;
+          }
+          consumedInitialPromptRef.current = null;
           return;
         }
-        if (!started) {
-          consumedInitialPromptRef.current = null;
+        if (disposed) {
           return;
         }
         onInitialUserPromptConsumed?.();
@@ -607,7 +682,8 @@ export function useGeneralWorkbenchInitialAutoGuideRuntime({
   ]);
 
   useEffect(() => {
-    const pendingInitialPrompt = (initialUserPrompt || "").trim();
+    const pendingInitialPromptText = initialUserPrompt || "";
+    const pendingInitialPrompt = pendingInitialPromptText.trim();
     const pendingInitialImages = initialUserImages || [];
 
     if (
@@ -626,11 +702,21 @@ export function useGeneralWorkbenchInitialAutoGuideRuntime({
 
     if (!autoRunInitialPromptOnMount) {
       hasTriggeredGuideRef.current = true;
-      setInput((previous) => previous.trim() || pendingInitialPrompt);
+      setInput((previous) =>
+        previous.trim() ? previous : pendingInitialPromptText,
+      );
       return;
     }
 
     if (!projectId && !initialAutoSendAllowsDetachedSession) {
+      return;
+    }
+
+    const claimKey = buildInitialAutoSendClaimKey({
+      initialDispatchKey,
+      initialAutoSendRequestMetadata,
+    });
+    if (!claimInitialAutoSend(claimKey)) {
       return;
     }
 
@@ -652,11 +738,15 @@ export function useGeneralWorkbenchInitialAutoGuideRuntime({
           skipSessionRestore: true,
         },
       );
-      if (disposed) {
+      if (!started) {
+        releaseInitialAutoSendClaim(claimKey);
+        if (disposed) {
+          return;
+        }
+        consumedInitialPromptRef.current = null;
         return;
       }
-      if (!started) {
-        consumedInitialPromptRef.current = null;
+      if (disposed) {
         return;
       }
       onInitialUserPromptConsumed?.();

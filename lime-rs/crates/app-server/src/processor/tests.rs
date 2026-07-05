@@ -4,6 +4,7 @@ mod tests_support;
 
 mod artifact;
 mod capability;
+mod event_notifications;
 mod evidence;
 mod execution_process;
 mod file;

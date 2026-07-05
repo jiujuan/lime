@@ -38,8 +38,5 @@ anyhow.workspace = true
 async-stream.workspace = true
 url.workspace = true
 
-[features]
-test-support = []
-
 [dev-dependencies]
 tempfile.workspace = true

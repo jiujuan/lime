@@ -195,7 +195,10 @@ export interface PluginWorkflowDeclaration {
 export interface PluginConnectorDeclaration {
   id: string;
   title: string;
+  description?: string;
   kind: PluginConnectorKind;
+  taskKinds?: string[];
+  path?: string;
   required?: boolean;
 }
 

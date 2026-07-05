@@ -4188,18 +4188,16 @@ mod tests {
         let notification = JsonRpcNotification::new(
             METHOD_AGENT_SESSION_EVENT,
             Some(
-                serde_json::to_value(AgentSessionEventParams {
-                    event: AgentEvent {
-                        event_id: "evt_1".to_string(),
-                        sequence: 1,
-                        session_id: "sess_1".to_string(),
-                        thread_id: Some("thread_1".to_string()),
-                        turn_id: Some("turn_1".to_string()),
-                        event_type: "turn.started".to_string(),
-                        timestamp: "2026-06-04T00:00:00Z".to_string(),
-                        payload: json!({ "status": "running" }),
-                    },
-                })
+                serde_json::to_value(AgentSessionEventParams::from_event(AgentEvent {
+                    event_id: "evt_1".to_string(),
+                    sequence: 1,
+                    session_id: "sess_1".to_string(),
+                    thread_id: Some("thread_1".to_string()),
+                    turn_id: Some("turn_1".to_string()),
+                    event_type: "turn.started".to_string(),
+                    timestamp: "2026-06-04T00:00:00Z".to_string(),
+                    payload: json!({ "status": "running" }),
+                }))
                 .expect("params"),
             ),
         );

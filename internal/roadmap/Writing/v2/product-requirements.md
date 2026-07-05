@@ -1,17 +1,28 @@
 # Writing v2 产品需求
 
-更新时间：2026-07-03
-状态：Draft + host tool evidence contract added + inline host command shortcode contract added
+更新时间：2026-07-05
+状态：Draft + ordinary Agent turn orchestration current-turn verified + Electron/CDP real desktop baseline verified + host tool evidence contract added + inline host command shortcode contract added
 
 ## 1. 背景
 
 Writing v1 已经把内容工厂写文章链路的产品形态收敛到 Lime Plugin Package v1：用户可以通过 `@写文章` 激活内容工厂插件形态，最终目标是产出 `ArtifactFrame(articleArtifacts)`，并在右侧 Article Editor 中继续编辑文章。
 
-截至 2026-07-02，Writing v2 仍是产品需求和工程规划：已有 Worker 接口规范、前端 Article Editor / Workspace UI、以及 test-only fixture smoke；没有真实 LLM 集成 Worker。`src/features/plugin/testing/fixtures` 只能用于测试和审计证据，不能作为 production current 实现。
+截至 2026-07-05，Writing v2 已经有 Worker 接口规范、前端 Article Editor / Workspace UI、外部内容工厂包、App Server current-turn fixture 证据、host tool evidence 证据和真实 Electron/CDP baseline 证据；最新后端修复已让普通 `@写文章` current-turn smoke 从 `artifact.snapshot=0` 恢复到 `artifactSnapshotCount=7`，CDP baseline 也已证明 `agentSession/turn/start` 经 `electron-ipc` 进入真实桌面并展示文章产物。但 Electron/CDP product acceptance、live Provider production flow 和远程安装签名闭环仍未完成。`src/features/plugin/testing/fixtures` 只能用于测试和审计证据，不能作为 production current 实现；真实产品完成不能依赖 mock worker、fixture provider 或右侧 worker fast path。
 
 当前最大缺口不在右侧栏宽度，而在流式产物、执行卡片和审计边界：用户发起写作后，界面不能只出现一个最终文章卡，也不能把内部 workflow 流程轨塞到右侧。用户面需要的是资料检索 / 网络搜索这类必要过程以可展开执行卡片出现，文章正文按段落持续进入同一个产物框；完整 workflow 步骤只作为后台 JSONL 审计记录留存。
 
-v2 要解决的问题是：写文章这类长任务必须由内容工厂 Plugin worker / 插件包在生成期输出增量产物，并由宿主把 workflow 过程写入可审计 JSONL，而不是靠 fixture 最终 response 一次性投影，也不是把内容工厂写作逻辑内置到 App Server 宿主里，更不是把 workflow 步骤列表塞进右侧编辑器。
+v2 要解决的问题是：写文章这类长任务必须先保留普通 Agent 对话体验，再由内容工厂 Plugin / workflow contract 编排产物和审计。用户需要看到自然引导、思考 / 工具过程、文章产物和完成总结；宿主把 workflow 过程写入可审计 JSONL，而不是靠 fixture 最终 response 一次性投影，也不是把内容工厂写作逻辑内置到 App Server 宿主里，更不是把 workflow 步骤列表塞进右侧编辑器。
+
+## 1.1 2026-07-05 最新主线校正
+
+- `@写文章` 的首发回合必须走普通 `agentSession/turn/start`，不能由 Plugin worker 或右侧 pane/action fast path 接管。
+- 内容工厂插件负责声明 `workflow_contract`、host tool request、artifact/workspace patch 合同和 shortcode 合同；普通 Agent turn 负责对话节奏、自然说明和编排执行。
+- 生成前必须有自然引导 / 思考 / 工具过程。占位框不能一闪而过，也不能在 artifact 未生成时把 turn 标记成完成。
+- App Server 必须在最终 `turn.completed` 前完成内容工厂 `artifact.snapshot` materialization；terminal 后再补 artifact 会被事件存储丢弃，历史恢复也会丢产物。
+- 当前实现策略是暂存普通 backend 的 `turn.completed`，在 terminal 前完成内容工厂 artifact / host tool timeline / JSONL audit 后再封口；这保持普通 Agent 对话主链，不新增右侧 worker 首发分支。
+- 聊天区不得显示 raw JSON、`.lime/artifacts/content-factory/workspace-patch.json` 文件卡、内部 workflow step 列表或固定模板文案。
+- 右侧 Article Workspace 不自动打开；只有用户点击文章产物或显式打开动作才进入右侧。
+- 审计只写 `workflow-events.jsonl`，并保持 metadata-only 脱敏；未来审计读取 JSONL，不从 UI 偷读内部 payload。
 
 ## 2. 当前问题诊断
 
@@ -25,7 +36,7 @@ v2 要解决的问题是：写文章这类长任务必须由内容工厂 Plugin 
 
 ## 3. 目的
 
-1. 用户输入 `@写文章` 后，尽快看到资料检索 / 网络搜索执行卡片和同一个文章产物框开始按段落增长，而不是等待最终长回复。
+1. 用户输入 `@写文章` 后，先看到普通 Agent 的自然引导和过程说明，再看到资料检索 / 网络搜索执行卡片和同一个文章产物框开始按段落增长，而不是等待最终长回复或假完成。
 2. 右侧 Article Editor 只承载文章编辑体验，不展示 workflow step / task card / 流程轨。
 3. App Server 和 worker 保持生成期增量事件合同：partial snapshot 由 producer 发出，最终 snapshot 只负责完成态和历史恢复。
 4. workflow run / step / tool / connector / hook / evidence 事件进入 append-only JSONL，用于未来审计、排障和质量复盘。
@@ -44,7 +55,7 @@ v2 要解决的问题是：写文章这类长任务必须由内容工厂 Plugin 
 ## 5. 产品原则
 
 1. **主链可解释**：用户面需要可展开执行卡片和文章产物持续增长，不需要右侧 workflow 步骤 UI。
-2. **Producer 真流式**：正文 partial 必须由内容工厂 Plugin worker 在生成期发出，App Server 不用最终正文回切伪流式，也不承接内容工厂领域写作逻辑。
+2. **普通 turn 真编排**：`@写文章` 必须走普通 Agent turn；正文 partial 可以来自内容工厂插件包、host-managed generation 或受控后处理，但不能绕过对话流，也不能由最终正文回切伪流式。
 3. **稳定引用**：所有 partial 使用稳定 `artifactRef` 和递增 `streamSequence` 更新同一个文章 artifact。
 4. **审计分离**：workflow run、step、tool、connector、hook、evidence、耗时和失败码只追加到 JSONL audit log。
 5. **恢复聚焦产物**：普通历史恢复只恢复消息、ArtifactFrame 和右侧 Article Editor；审计回放另走后台工具。
@@ -54,7 +65,7 @@ v2 要解决的问题是：写文章这类长任务必须由内容工厂 Plugin 
 
 | 编号     | 用户故事                                                  | 验收                                                                        |
 | -------- | --------------------------------------------------------- | --------------------------------------------------------------------------- |
-| W2-US-01 | 作为用户，我输入 `@写文章` 后，希望立刻看到文章开始生成。 | 发送后尽快出现资料检索 / 网络搜索执行卡片和同一个文章产物框，并开始接收段落级 partial。 |
+| W2-US-01 | 作为用户，我输入 `@写文章` 后，希望先看到 Agent 正在接手和思考，再看到文章开始生成。 | 发送后出现自然引导、资料检索 / 网络搜索执行卡片和同一个文章产物框，并开始接收段落级 partial。 |
 | W2-US-02 | 作为用户，我希望右侧专注文章编辑。                        | 右侧 Article Editor 不显示 workflow 步骤、任务卡或流程轨。                  |
 | W2-US-03 | 作为用户，我希望正文不是突然整篇出现。                    | draft 期间通过分段 snapshot / artifact delta 更新同一 `ArtifactFrame`。     |
 | W2-US-04 | 作为用户，我从历史打开会话时，希望看到文章和编辑稿。      | 历史恢复包含最终文章、ArtifactFrame 和右侧 Article Editor，不恢复步骤列表。 |
@@ -68,8 +79,8 @@ v2 要解决的问题是：写文章这类长任务必须由内容工厂 Plugin 
 
 1. 用户输入 `@写文章 帮我写一篇关于 AI Agent 工作流的公众号文章`。
 2. 输入栏命中内容工厂插件 activation entry。
-3. 发送后 App Server 建立后台 audit context，并准备接收 worker progress / artifact partial。
-4. worker 在生成期按段落输出同一 article artifact 的 partial snapshot。
+3. 发送后进入普通 Agent turn，Agent 先自然说明将按内容工厂流程编排。
+4. App Server 建立后台 audit context，并在 `turn.completed` 前 materialize 同一 article artifact 的段落级 partial snapshot。
 5. 聊天区同一个 `ArtifactFrame(articleArtifacts)` 持续增长，不新增多个文章卡。
 6. WebSearch / connector / strategy / review / image-plan 等过程写入 workflow JSONL，不进入右侧。
 7. final snapshot 到来后，聊天区文章产物进入完成态。
@@ -103,11 +114,11 @@ v2 要解决的问题是：写文章这类长任务必须由内容工厂 Plugin 
 
 ### 8.1 Workflow audit context 创建
 
-- `@写文章` 命中 installed plugin activation entry 后，App Server 可以在 turn accepted 阶段创建后台 `workflowAuditRun`。
+- `@写文章` 命中 installed plugin activation entry 后，App Server 可以在 turn accepted 阶段创建后台 `workflowAuditRun`，但该动作不能替代普通 Agent turn。
 - `workflowAuditRun.workflowKey` 必须来自插件 manifest，例如 `content_article_workflow`。
 - `workflowAuditRun.steps` 只用于审计和执行约束，不用于右侧 UI 展示。
 - App Server 不允许内置内容工厂步骤 fallback；插件未声明 workflow key 或 steps 时，可以只记录最小 audit context，不能用宿主业务默认值补齐。
-- audit context 创建失败不能阻塞文章 artifact 流式输出，但必须记录 fail-closed 审计错误，不能回退普通聊天长文。
+- audit context 创建失败不能阻塞普通 Agent 对话，但必须记录 fail-closed 审计错误，不能回退成无内容工厂产物的普通长文假完成。
 
 ### 8.2 Step 状态机
 
@@ -210,8 +221,8 @@ type WorkflowStepExecutionResult = {
 ### 8.5 ArtifactFrame 和 Article Editor
 
 - `ArtifactFrame` 继续作为最终文章产物框。
-- 文章正文必须在生成期通过段落级 `artifact.snapshot` partial 或 artifact delta 增量进入同一个 artifact read model。
-- 普通 assistant message 不承载整篇文章。
+- 文章正文必须在最终 `turn.completed` 前通过段落级 `artifact.snapshot` partial 或 artifact delta 增量进入同一个 artifact read model。
+- 普通 assistant message 可以承载寒暄、思考摘要、过程说明和完成总结，但不承载整篇文章正文。
 - 右侧 Article Editor 读取同一份 articleDraft object。
 - 右侧 Article Editor 不展示 workflow step、task card 或流程轨。
 - Article Editor 的继续改写、补充搜索、生成配图等动作绑定 `articleDraftRef`；审计层可在服务端关联 `workflowAuditRunId`，但不把该字段变成右侧 UI 依赖。
@@ -279,6 +290,7 @@ type HostCommandRequest = {
 | 维度     | 要求                                                                                                          |
 | -------- | ------------------------------------------------------------------------------------------------------------- |
 | 首屏反馈 | turn accepted 后尽快出现文章产物框或首个段落 partial。                                                        |
+| 对话体验 | `@写文章` 必须保留普通 Agent 的自然引导、过程说明和完成总结，不允许只显示 artifact 占位或 raw JSON。           |
 | 过程延迟 | artifact partial 从 producer 到 UI 的可见延迟目标 < 1s。                                                      |
 | 持久化   | artifact refs / workspace patch 必须可被 `agentSession/read` 恢复；workflow 事件必须可从 JSONL 审计日志读取。 |
 | 可审计   | 每个 step 记录 executor、输入摘要、输出摘要、耗时、失败码和 retry attempt，并追加到 JSONL。                   |
@@ -296,9 +308,11 @@ flowchart LR
   Composer --> Activation[Plugin Activation Resolver]
   Activation --> AppServer[App Server JSON-RPC]
   AppServer --> Audit[Workflow Audit Writer]
-  AppServer --> Worker[Content Factory Worker]
+  AppServer --> Agent[Regular Agent Turn]
+  AppServer --> Worker[Content Factory Worker / Contract Runtime]
   AppServer --> Tools[Host Tools / Connectors]
-  Worker --> ArtifactStore[Artifact Store]
+  Agent --> ArtifactStore[Artifact Store]
+  Worker --> ArtifactStore
   Tools --> Evidence[Tool Evidence]
   Worker --> Audit
   Tools --> Audit
@@ -317,7 +331,8 @@ flowchart TD
   Declaration --> AuditWriter[Workflow Audit Writer]
   AuditWriter --> Jsonl[workflow-events.jsonl]
 
-  Worker[Content Factory Worker] --> Partial[paragraph artifact.snapshot partial]
+  Agent[Regular Agent Turn] --> Partial[paragraph artifact.snapshot partial]
+  Worker[Content Factory Worker / Contract Runtime] --> Partial
   Worker --> AuditWriter
   ToolRuntime[Host Tool Runtime] --> EvidenceStore[Evidence Store]
   ToolRuntime --> AuditWriter
@@ -340,14 +355,14 @@ flowchart TD
   B -- 是 --> D[解析 activation entry]
   D --> E[App Server 建立 audit context]
   E --> F[append workflow.run.started 到 JSONL]
-  F --> G[worker 生成段落 partial]
-  G --> H[artifact.snapshot worker_delta]
+  F --> G[普通 Agent 按内容工厂合同编排]
+  G --> H[artifact.snapshot content_factory.workspace_patch]
   H --> I[ArtifactFrame 更新同一文章]
   I --> J{还有段落?}
   J -- 是 --> G
   J -- 否 --> K[final artifact.snapshot complete]
   K --> L[append workflow.run.completed 到 JSONL]
-  L --> M[右侧 Article Editor 打开 / 恢复文章]
+  L --> M[文章产物完成，右侧等待用户点击打开]
 ```
 
 ### 11.2 长步骤进度流程
@@ -499,10 +514,10 @@ JSONL 约束：
 
 ### P0：真实产物流式
 
-- 内容工厂 worker 在生成期间输出段落级 `artifact.snapshot` partial。
+- 普通 Agent turn 在内容工厂 `workflow_contract` 约束下生成或触发段落级 `artifact.snapshot` partial。
 - partial 使用稳定 `artifactRef` / path 和递增 `streamSequence`。
 - App Server 对 worker 输出的 `artifact.snapshot` partial 做通用 pass-through，不再用最终正文二次切片。
-- 内容工厂正文生成、标题、大纲、引用组织等领域逻辑必须留在内容工厂 Plugin worker / 插件包内，不新增 `runtime_backend/content_factory_*` 这类宿主模块。
+- 内容工厂正文生成、标题、大纲、引用组织等领域逻辑必须来自内容工厂 Plugin / workflow contract / host-managed generation 边界；宿主不能新增 `runtime_backend/content_factory_*` 模板模块。
 - final snapshot 标记 `complete=true`、`writePhase=persisted`、`contentStatus=complete`。
 
 ### P1：JSONL audit writer
@@ -527,8 +542,8 @@ JSONL 约束：
 
 ## 15. 验收标准
 
-- `@写文章` 发送后，同一个文章 `ArtifactFrame` 开始接收段落级 partial，而不是最终一次性出现。
-- App Server 不再对最终正文做二次切片；partial 必须来自内容工厂 Plugin worker 生成期。
+- `@写文章` 发送后，普通 Agent 先给出自然引导，同一个文章 `ArtifactFrame` 在 turn completed 前接收段落级 partial，而不是最终一次性出现。
+- App Server 不再对最终正文做二次切片；partial 必须来自内容工厂合同约束下的普通 turn / host-managed generation / worker 生成期事实。
 - `ArtifactFrame` 不显示普通 assistant 长文 fallback。
 - 右侧 Article Editor 只读取同一 articleDraft，不显示 workflow step、task card 或流程轨。
 - workflow run / step / tool / connector / hook / evidence 事件写入 JSONL，可用于内部审计回放。
@@ -541,6 +556,7 @@ JSONL 约束：
 | 风险                          | 处理                                                                  |
 | ----------------------------- | --------------------------------------------------------------------- |
 | 最终正文回切伪流式            | 验收明确 partial 必须来自内容工厂 Plugin worker 生成期。           |
+| worker / mock 抢跑普通对话    | `plugin_activation` 不触发 pane/action worker；fixture 只能用于测试，真实验收必须走普通 Agent turn。 |
 | workflow 步骤挤占右侧写作体验 | 右侧 Article Editor 明确禁止展示 workflow step / task card / 流程轨。 |
 | JSONL 被误当 UI read model    | `workflow-events.jsonl` 只供审计、排障和质量复盘读取。                |
 | 旧 worker 一次性输出继续存在  | 兼容只读恢复可以保留，新运行必须产生 artifact partial。               |
@@ -549,7 +565,7 @@ JSONL 约束：
 
 ## 17. 开放问题
 
-1. JSONL retention、压缩、脱敏和导出策略如何定义？
+1. JSONL retention、压缩、脱敏和导出策略已有当前实现；后续开放点是 product 运维默认值、观测告警和审计工具入口。
 2. `workflow.artifact.delta` 与现有 `artifact.snapshot` 的兼容投影边界如何命名？
 3. 用户取消 workflow 时，已完成的 articleDraft 是否保留为草稿？
 4. 插件 manifest 中 workflow step 的最小字段是否需要沉淀到 `internal/tech/plugin/` 标准文档？
@@ -562,3 +578,22 @@ JSONL 约束：
 - workflow run / step / tool / connector / hook / evidence 只写 JSONL，用于未来审计、排障和质量复盘。
 - 用户面以 `ArtifactFrame` 段落级流式和最终 Article Editor 为主。
 - App Server 不应通过最终正文回切来制造流式；真实 partial 必须由内容工厂 Plugin worker 在生成期发出。
+
+## 19. 2026-07-05 决策补充
+
+本轮再次修正执行边界：内容工厂是编排合同，不是 `@写文章` 首发回合的对话替代品。
+
+- `@写文章` 必须走普通 Agent turn，保留寒暄、思考、工具过程和自然总结。
+- `plugin_activation.workflow_contract` 约束本轮生成目标、工具请求、artifact kind、right surface 和 expected objects。
+- 右侧 worker fast path 只服务用户显式右侧动作，不服务 `@写文章` 首发。
+- 后端必须在 `turn.completed` 前补齐 `artifact.snapshot` 和 read model；该缺口曾在 `.lime/qc/content-factory-current-turn-debug/content-factory-current-turn-debug-host-generation-2026-07-05T03-29-33-481Z.failure.json` 中失败，错误 `expected paragraph-level artifact snapshots, got 0`，现已由 terminal deferring + plugin activation materialization 修复。
+- 下一刀做 Electron/CDP Gate B product acceptance，确认聊天排版、右侧不自动打开、历史恢复和 raw JSON / 文件卡隐藏。
+
+## 20. 2026-07-05 Electron/CDP 证据分级
+
+本轮补充一条验收规则：不能把“真实 Electron 里能生成文章”直接等同于“产品体验完成”。
+
+- Gate B baseline 已有证据：`.lime/qc/gui-evidence/writing/writing-cdp-WRITING_CDP_1783188149738-summary.json` 和 `.lime/qc/gui-evidence/writing/writing-cdp-WRITING_CDP_1783188149738-turn-start-trace.json` 证明真实 Electron/CDP、`electron-ipc`、`app_server_handle_json_lines`、`agentSession/turn/start`、`content_article_workflow` activation metadata、自然过程捕获和文章产物正文可见。
+- Gate B acceptance 仍未完成：同一脚本主动点击了“打开文档”，所以不能证明右侧 Article Workspace 不自动打开；脚本也没有形成历史恢复、执行卡片在文章产物前可见、raw JSON / `.lime/artifacts/content-factory/workspace-patch.json` 文件卡隐藏的负向断言。
+- 后续 CDP 脚本必须先记录发送前 trace / error baseline，再只检查新增 trace；必须在点击文章产物前断言右侧未打开，点击后再验证 Article Editor；最后从历史列表重新打开同一 session，确认文章仍可恢复。
+- 任何 live Provider 或远程安装证据都不能替代 Gate B acceptance；如果 GUI 投影仍缺自然引导、执行卡片、文章产物或历史恢复，生产 provider 成功也不能标记产品完成。

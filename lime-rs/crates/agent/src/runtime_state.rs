@@ -25,7 +25,7 @@
 use aster::agents::Agent;
 #[cfg(test)]
 use aster::skills::{global_registry, load_skills_from_directory, SkillSource};
-use aster::tools::{create_shared_history, EditTool, Tool, WriteTool};
+use aster::tools::Tool;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -37,34 +37,12 @@ use crate::protocol::AgentActionRequiredScope;
 #[cfg(test)]
 use crate::queued_turn::QueuedTurnSnapshot;
 use crate::request_tool_policy::{
-    compat_aster_elicitation_response_message, confirm_aster_tool_action,
-    resolve_request_tool_policy_with_mode, stream_aster_message_reply_with_policy,
+    action_required_response_input, resolve_request_tool_policy_with_mode,
+    stream_runtime_action_required_response_with_policy, submit_runtime_tool_action_confirmation,
     RequestToolPolicyMode,
 };
 use lime_core::database::DbConnection;
 use lime_mcp::McpBridgeSnapshot;
-use std::collections::HashSet;
-
-async fn configure_lime_native_tool_overlay(agent: &mut Agent) {
-    agent.add_tool_inspector(Box::new(
-        crate::agent_tools::tool_policy_inspector::WorkspaceToolPolicyInspector::new(),
-    ));
-    // Aster 默认工具池由 Agent::with_tool_config -> register_all_tools 注册。
-    // 这里只覆盖 Lime 需要改变策略或收口事实源的工具，不重复接管 Aster 默认工具。
-    let shared_history = create_shared_history();
-    let registry_arc = agent.tool_registry().clone();
-    let mut registry = registry_arc.write().await;
-    registry.register(Box::new(
-        WriteTool::new(shared_history.clone()).with_require_read_before_overwrite(false),
-    ));
-    registry.register(Box::new(
-        EditTool::new(shared_history).with_require_read_before_edit(false),
-    ));
-    registry.register(Box::new(crate::tools::ApplyPatchTool));
-    registry.register(Box::new(crate::tools::SkillSearchTool));
-    // 覆盖默认 SkillTool，避免通用对话默认暴露全部本地 Skills。
-    registry.register(Box::new(crate::tools::LimeSkillTool::new()));
-}
 
 /// 会话级 turn 排队任务
 #[derive(Debug, Clone)]
@@ -105,8 +83,8 @@ pub struct AgentRuntimeState {
     credential_bridge: CredentialBridge,
     /// Agent 初始化状态缓存（避免每次都获取锁）
     initialized_cache: Arc<AtomicBool>,
-    /// 已同步到 Aster extension manager 的 MCP bridge extension 名称。
-    registered_mcp_bridges: Arc<RwLock<HashSet<String>>>,
+    /// MCP bridge 运行时注册边界。
+    mcp_bridge_registry: Arc<crate::mcp_bridge::McpBridgeRuntimeRegistry>,
 }
 
 impl Clone for AgentRuntimeState {
@@ -116,7 +94,7 @@ impl Clone for AgentRuntimeState {
             cancel_tokens: self.cancel_tokens.clone(),
             credential_bridge: CredentialBridge::new(),
             initialized_cache: self.initialized_cache.clone(),
-            registered_mcp_bridges: self.registered_mcp_bridges.clone(),
+            mcp_bridge_registry: self.mcp_bridge_registry.clone(),
         }
     }
 }
@@ -135,7 +113,7 @@ impl AgentRuntimeState {
             cancel_tokens: Arc::new(RwLock::new(std::collections::HashMap::new())),
             credential_bridge: CredentialBridge::new(),
             initialized_cache: Arc::new(AtomicBool::new(false)),
-            registered_mcp_bridges: Arc::new(RwLock::new(HashSet::new())),
+            mcp_bridge_registry: Arc::new(crate::mcp_bridge::McpBridgeRuntimeRegistry::new()),
         }
     }
 
@@ -168,7 +146,7 @@ impl AgentRuntimeState {
             tracing::info!("[AgentRuntime] 创建 LimeSessionStore 成功");
 
             // 创建 Agent（启用 Ask/LSP 回调）并注入 SessionStore
-            let tool_config = crate::create_lime_tool_config();
+            let tool_config = crate::runtime_state_support::create_lime_tool_config();
             let runtime_store = crate::runtime_support::require_runtime_store()?;
             let mut agent = Agent::with_tool_config(tool_config)
                 .with_session_store(session_store)
@@ -182,12 +160,12 @@ impl AgentRuntimeState {
             );
 
             // 使用异步方法设置 Lime 专属身份
-            let identity = crate::create_lime_identity();
+            let identity = crate::runtime_state_support::create_lime_identity();
             agent.set_identity(identity).await;
-            configure_lime_native_tool_overlay(&mut agent).await;
+            crate::native_tools::configure_lime_native_tool_overlay(&mut agent).await;
 
             // 加载 Lime Skills 到 aster-rust 的 global_registry
-            crate::reload_lime_skills();
+            crate::runtime_state_support::reload_lime_skills();
 
             *agent_guard = Some(agent);
 
@@ -205,22 +183,10 @@ impl AgentRuntimeState {
         Ok(())
     }
 
-    /// 获取 Agent 的可变引用并执行同步操作
-    pub async fn with_agent_mut<F, R>(&self, f: F) -> Result<R, String>
-    where
-        F: FnOnce(&mut Agent) -> R,
-    {
-        let mut guard = self.agent.write().await;
-        match guard.as_mut() {
-            Some(agent) => Ok(f(agent)),
-            None => Err("Agent not initialized".to_string()),
-        }
-    }
-
     /// 获取 Agent 的 Arc 引用
     ///
     /// 用于需要长期持有 Agent 引用的场景
-    pub fn get_agent_arc(&self) -> Arc<RwLock<Option<Agent>>> {
+    pub(crate) fn get_agent_arc(&self) -> Arc<RwLock<Option<Agent>>> {
         self.agent.clone()
     }
 
@@ -228,15 +194,24 @@ impl AgentRuntimeState {
         &self.credential_bridge
     }
 
+    pub async fn contains_native_tool(&self, tool_name: &str) -> bool {
+        let registry = {
+            let agent_guard = self.agent.read().await;
+            let Some(agent) = agent_guard.as_ref() else {
+                return false;
+            };
+            crate::native_tools::runtime_native_tool_registry(agent)
+        };
+        registry.contains_native(tool_name).await
+    }
+
     pub(crate) async fn register_native_tool(&self, tool: Box<dyn Tool>) -> Result<(), String> {
-        let tool_name = tool.name().to_string();
-        let registry_arc = {
+        let registry = {
             let agent_guard = self.agent.read().await;
             let agent = agent_guard.as_ref().ok_or("Agent not initialized")?;
-            agent.tool_registry().clone()
+            crate::native_tools::runtime_native_tool_registry(agent)
         };
-        let mut registry = registry_arc.write().await;
-        registry.register(tool);
+        let tool_name = registry.register(tool).await;
         tracing::info!("[AgentRuntime] Native tool registered: {}", tool_name);
         Ok(())
     }
@@ -268,10 +243,12 @@ impl AgentRuntimeState {
         &self,
         gateway: Arc<dyn crate::live_execution_process::LiveExecutionProcessGateway>,
     ) -> Result<(), String> {
-        let hook = crate::live_execution_process::RuntimeLiveExecutionProcessHook::new(gateway);
-        self.with_agent_mut(|agent| agent.set_native_tool_execution_hook(Some(Arc::new(hook))))
-            .await
-            .map(|_| ())
+        let mut agent_guard = self.agent.write().await;
+        let Some(agent) = agent_guard.as_mut() else {
+            return Err("Agent not initialized".to_string());
+        };
+        crate::live_execution_process::install_runtime_live_execution_process_hook(agent, gateway);
+        Ok(())
     }
 
     /// 创建新的取消令牌
@@ -316,25 +293,19 @@ impl AgentRuntimeState {
             return Err("request_id 不能为空".to_string());
         }
 
-        let message = compat_aster_elicitation_response_message(
-            trimmed_request_id.to_string(),
-            user_data,
-            action_scope,
-        );
+        let response =
+            action_required_response_input(trimmed_request_id.to_string(), user_data, action_scope);
         let session_config = SessionConfigBuilder::new(trimmed_session_id)
             .include_context_trace(true)
             .build();
 
-        let agent_arc = self.get_agent_arc();
-        let guard = agent_arc.read().await;
-        let agent = guard.as_ref().ok_or("Agent not initialized")?;
         let request_tool_policy = resolve_request_tool_policy_with_mode(
             Some(false),
             Some(RequestToolPolicyMode::Disabled),
         );
-        let stream = stream_aster_message_reply_with_policy(
-            agent,
-            message,
+        let stream = stream_runtime_action_required_response_with_policy(
+            self,
+            response,
             None,
             session_config,
             None,
@@ -366,10 +337,9 @@ impl AgentRuntimeState {
             return Err("request_id 不能为空".to_string());
         }
 
-        let agent_arc = self.get_agent_arc();
-        let guard = agent_arc.read().await;
-        let agent = guard.as_ref().ok_or("Agent not initialized")?;
-        confirm_aster_tool_action(agent, trimmed_request_id.to_string(), confirmed).await;
+        submit_runtime_tool_action_confirmation(self, trimmed_request_id.to_string(), confirmed)
+            .await
+            .map_err(|error| error.message)?;
 
         Ok(())
     }
@@ -380,67 +350,7 @@ impl AgentRuntimeState {
             return Ok(());
         };
 
-        let mut active_bridge_names = HashSet::new();
-        for snapshot in snapshots {
-            let extension_name =
-                crate::agent_tools::catalog::mcp_extension_runtime_name(&snapshot.server_name);
-            let surface = crate::agent_tools::catalog::build_mcp_extension_surface(
-                &extension_name,
-                snapshot.description.clone(),
-                &snapshot.tools,
-            );
-            if !surface.has_tools() {
-                continue;
-            }
-            let bridge_name = surface.extension_name.clone();
-
-            let client: Arc<
-                tokio::sync::Mutex<Box<dyn aster::agents::mcp_client::McpClientTrait>>,
-            > = Arc::new(tokio::sync::Mutex::new(Box::new(
-                crate::mcp_bridge::McpBridgeClient::new(
-                    snapshot.server_name.clone(),
-                    snapshot.running_service,
-                    snapshot.handler,
-                    snapshot.server_info.clone(),
-                ),
-            )));
-            let config = aster::agents::extension::ExtensionConfig::Builtin {
-                name: bridge_name.clone(),
-                display_name: Some(snapshot.server_name.clone()),
-                description: surface.description,
-                timeout: None,
-                bundled: Some(false),
-                available_tools: surface.available_tools,
-                deferred_loading: surface.deferred_loading,
-                always_expose_tools: surface.always_expose_tools,
-                allowed_caller: surface.allowed_caller,
-            };
-            agent
-                .extension_manager
-                .add_client(
-                    bridge_name.clone(),
-                    config,
-                    client,
-                    snapshot.server_info,
-                    None,
-                )
-                .await;
-            active_bridge_names.insert(bridge_name);
-        }
-
-        let previous_bridge_names = self.registered_mcp_bridges.read().await.clone();
-        for stale_name in previous_bridge_names.difference(&active_bridge_names) {
-            if let Err(error) = agent.remove_extension(stale_name).await {
-                tracing::warn!(
-                    extension_name = %stale_name,
-                    error = %error,
-                    "[AgentRuntime] 清理过期 MCP bridge 失败"
-                );
-            }
-        }
-
-        let bridge_count = active_bridge_names.len();
-        *self.registered_mcp_bridges.write().await = active_bridge_names;
+        let bridge_count = self.mcp_bridge_registry.sync(agent, snapshots).await;
         tracing::info!(bridge_count, "[AgentRuntime] MCP bridge 同步完成");
         Ok(())
     }

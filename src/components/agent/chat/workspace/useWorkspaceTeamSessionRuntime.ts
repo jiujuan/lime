@@ -16,6 +16,8 @@ interface WorkspaceSessionTopicSummary {
 
 interface UseWorkspaceTeamSessionRuntimeParams {
   sessionId?: string | null;
+  threadId?: string | null;
+  currentTurnId?: string | null;
   topics: WorkspaceSessionTopicSummary[];
   turns: Array<{ status: string }>;
   queuedTurnCount: number;
@@ -27,6 +29,8 @@ interface UseWorkspaceTeamSessionRuntimeParams {
 
 export function useWorkspaceTeamSessionRuntime({
   sessionId,
+  threadId,
+  currentTurnId,
   topics,
   turns,
   queuedTurnCount,
@@ -60,6 +64,8 @@ export function useWorkspaceTeamSessionRuntime({
 
   const liveTeamWorkspaceRuntime = useTeamWorkspaceRuntime({
     currentSessionId: sessionId,
+    currentThreadId: threadId,
+    currentTurnId,
     currentSessionRuntimeStatus,
     currentSessionLatestTurnStatus,
     currentSessionQueuedTurnCount: queuedTurnCount,

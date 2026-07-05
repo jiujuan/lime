@@ -9,7 +9,7 @@ use app_server_protocol::{
     ExecutionProcessSnapshot, ExecutionProcessStartParams, ExecutionProcessStartResponse,
     ExecutionProcessStatus, ExecutionProcessStatusResponse,
 };
-use aster::agents::{NativeToolExecutionHook, NativeToolExecutionRequest, ToolCallResult};
+use aster::agents::{Agent, NativeToolExecutionHook, NativeToolExecutionRequest, ToolCallResult};
 use async_trait::async_trait;
 use futures::channel::mpsc::{unbounded, UnboundedSender};
 use futures::FutureExt;
@@ -81,6 +81,14 @@ impl RuntimeLiveExecutionProcessHook {
     pub(crate) fn new(gateway: Arc<dyn LiveExecutionProcessGateway>) -> Self {
         Self { gateway }
     }
+}
+
+pub(crate) fn install_runtime_live_execution_process_hook(
+    agent: &mut Agent,
+    gateway: Arc<dyn LiveExecutionProcessGateway>,
+) {
+    let hook = RuntimeLiveExecutionProcessHook::new(gateway);
+    agent.set_native_tool_execution_hook(Some(Arc::new(hook)));
 }
 
 impl NativeToolExecutionHook for RuntimeLiveExecutionProcessHook {
@@ -561,14 +569,19 @@ mod tests {
     use std::sync::Mutex;
 
     use super::*;
+    use aster::tools::ToolContext;
+
     use crate::runtime_facade::with_agent_turn_context;
-    use crate::test_support::native_tool_context;
     use crate::AgentTurnContext;
 
     #[derive(Default)]
     struct TestLiveExecutionProcessGateway {
         output: Mutex<VecDeque<ExecutionProcessOutputDelta>>,
         snapshot: Mutex<Option<ExecutionProcessSnapshot>>,
+    }
+
+    fn native_tool_context(working_directory: PathBuf) -> ToolContext {
+        ToolContext::new(working_directory)
     }
 
     #[async_trait]

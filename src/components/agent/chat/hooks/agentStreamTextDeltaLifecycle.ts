@@ -52,9 +52,6 @@ export function shouldRouteTextDeltaToFinalOverlay(params: {
   if (eligibility === "explicit_final") {
     return true;
   }
-  if (isUnscopedLegacyFinalFallbackEligibility(eligibility)) {
-    return true;
-  }
   if (isLegacyFinalFallbackEligibility(eligibility)) {
     return !params.requestState.hasFinalAnswerRequiredProcessBoundary;
   }
@@ -69,10 +66,7 @@ export function shouldSuppressLegacyTextDeltaAfterProcessBoundary(params: {
     return false;
   }
   const eligibility = resolveTextSegmentFinalEligibility(params.event);
-  return (
-    isLegacyFinalFallbackEligibility(eligibility) &&
-    !isUnscopedLegacyFinalFallbackEligibility(eligibility)
-  );
+  return isLegacyFinalFallbackEligibility(eligibility);
 }
 
 export function noteActiveFinalTextSegment(params: {
@@ -97,11 +91,7 @@ export function shouldCommitActiveTextSegmentAsFinal(
       : !requestState.hasFinalAnswerRequiredProcessBoundary;
   }
   if (eligibility === "legacy_unphased") {
-    return (
-      !requestState.hasFinalAnswerRequiredProcessBoundary ||
-      requestState.hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary ===
-        true
-    );
+    return !requestState.hasFinalAnswerRequiredProcessBoundary;
   }
   return !requestState.hasFinalAnswerRequiredProcessBoundary;
 }
@@ -139,7 +129,8 @@ export function resolveAccumulatedFinalContentForCompletion(
   if (
     !requestState.hasFinalAnswerRequiredProcessBoundary ||
     requestState.hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary !==
-      true
+      true ||
+    requestState.activeTextSegmentFinalEligibility !== "explicit_final"
   ) {
     return content;
   }

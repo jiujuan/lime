@@ -1,11 +1,11 @@
 # 内容工厂插件重新梳理
 
-更新时间：2026-07-03
-状态：Draft + App Server current-turn host tool evidence verified + inline host command shortcode contract added
+更新时间：2026-07-05
+状态：Draft + ordinary Agent turn orchestration current-turn verified + Electron/CDP real desktop baseline verified + App Server current-turn host tool evidence verified + inline host command shortcode contract added
 
 ## 1. 结论
 
-当前 Image #1 的问题不是文章卡本身错误，而是内容工厂插件的优势没有进入用户可感知的主链：用户只看到一张最终文章卡，感受不到插件已经完成资料检索、选题策划、正文写作、审稿校对和配图规划。
+当前 Image #1 的问题不是文章卡本身错误，也不只是右侧面板错误，而是内容工厂插件的优势没有进入用户可感知的普通 Agent 主链：用户只看到占位框一闪而过、假完成或 JSON / 文件卡，感受不到 Agent 正在寒暄、思考、检索、写作、审稿和规划配图。
 
 参考 Image #2，Writing v2 的目标应调整为：
 
@@ -15,6 +15,15 @@
 - 完整 workflow run / step / tool / connector / hook 明细继续进入后台 `workflow-events.jsonl`，用于审计、排障和质量复盘。
 
 也就是说，过程不能被简化到完全不可见；但可见过程必须是用户可理解的工具 / 资料卡，不是内部 workflow 面板。
+
+2026-07-05 主线校正：
+
+- `@写文章` 必须走普通 Agent 对话流程，不走右侧 worker fast path，也不能用 mock/fixture 抢跑生成。
+- 内容工厂的作用是提供 `workflow_contract`、host tool / artifact / shortcode 合同和包内执行能力；首发回合由普通 Agent turn 编排并对用户自然说明。
+- 聊天区应包含自然引导文字、可展开执行卡片、同一文章产物框和完成后的自然总结；文案不能写死成模板，也不能出现特定品牌称呼。
+- 右侧 Article Workspace 不自动打开；只有点击文章产物或显式动作才打开。
+- raw `workspace-patch.json`、内部 JSON、workflow step 列表只进入审计或 read model，不作为普通聊天消息展示。
+- CDP 验收必须区分 baseline 和 product acceptance：baseline 证明真实 Electron turn/start 与文章产物可见；product acceptance 才证明右侧不自动打开、历史恢复、执行卡片顺序和 raw JSON 隐藏。
 
 ## 2. 产品结构
 
@@ -34,14 +43,14 @@
 ## 3. 主流程
 
 1. 用户输入 `@写文章 ...`。
-2. Lime 命中内容工厂插件 activation entry，创建后台 workflow audit context。
-3. 插件 worker 输出 `workflow.connector.requested`，仅用于审计。
-4. 插件 worker 在 `articleDraft.source.hostToolRequests[]` 暴露资料检索请求，宿主把它转成聊天主链里的工具卡。
-5. 宿主执行 `WebSearch`，工具卡展示参数、结果摘要和来源；完整结果回填 `hostSearchEvidence`，并追加 `workflow.connector.completed` 到 JSONL。
-6. 宿主托管生成正文，worker 消费 `hostManagedGeneration.outputs[]`。
-7. worker 可以在正文中输出 `[@配图 ...]` shortcode；宿主解析为 `hostCommandRequests[]`，首批只自动执行 `@配图`，并复用 `image_command_intent` 生成 document-inline 图片任务。
-8. worker 输出段落级 `artifact.snapshot` partial，同一个文章产物框持续增长。
-9. final snapshot 封口，右侧 Article Workspace 打开 `articleDraft`，并保留图片组、视频分镜、交付清单入口。
+2. Lime 命中内容工厂插件 activation entry，把 `workflow_contract` 写入本轮 metadata。
+3. 本轮进入普通 `agentSession/turn/start`，Agent 先输出自然引导、说明将按内容工厂流程编排，不直接宣布完成。
+4. App Server 为本轮创建后台 workflow audit context；workflow run / step / connector 只写 `workflow-events.jsonl`。
+5. 内容工厂合同在 `articleDraft.source.hostToolRequests[]` 暴露资料检索请求，宿主把它转成聊天主链里的工具卡。
+6. 宿主执行 `WebSearch`，工具卡展示参数、结果摘要和来源；完整结果回填 `hostSearchEvidence`，并追加 `workflow.connector.completed` 到 JSONL。
+7. Agent / 宿主按内容工厂合同生成正文，产物以同一 `content_factory.workspace_patch` 的段落级 `artifact.snapshot` 增长。
+8. 正文中的 `[@配图 ...]` shortcode 由宿主解析为 `hostCommandRequests[]`，首批只自动执行 `@配图`，并复用 `image_command_intent` 生成 document-inline 图片任务。
+9. final snapshot 在 `turn.completed` 前封口；聊天区显示文章完成状态和自然总结，右侧 Article Workspace 等待用户点击打开。
 
 ## 4. 插件包合同
 
@@ -55,6 +64,8 @@
 - shortcode 只能作为结构化命令占位输出，不能要求宿主用裸正则替换 Markdown；宿主会跳过代码块、inline code、链接和图片 alt，并为每篇文章最多自动处理 `3` 个 `@配图`。
 - `workflow.connector.requested` / `workflow.connector.completed` 仍是 audit-only，不能直接作为普通 UI 的流程轨。
 - `content.article.generate` / `content.factory.generate` 缺少宿主托管正文时必须 fail closed，不用模板正文伪造成功。
+- `plugin_activation` 不能直接触发右侧 pane/action worker；右侧 worker 只响应显式 pane action。
+- `workflow_contract` 由 manifest / workflow 派生，不能把参考图文案或固定文章模板硬编码到宿主。
 
 ## 5. 禁止项
 
@@ -72,6 +83,7 @@
 - 正文中的 `[@配图 ...]` 会物化为稳定 slot marker，通过 `image_command_intent.image_task` 生成 document-inline 图片任务，并在 running / completed 状态回填 pending 占位或真实图片。
 - Article Workspace 仍只恢复文章和后续产物，不恢复 workflow 流程轨。
 - `workflow-events.jsonl` 继续输出 metadata-only 审计摘要，不暴露 raw prompt / provider config / 正文结果。
+- App Server current-turn smoke 必须证明普通 Agent turn 里有 `message.delta`、host tool timeline、段落级 `artifact.snapshot` 和最终 read model；不能只证明 worker 包本地运行。
 
 ## 7. 已验证证据
 
@@ -84,6 +96,12 @@
 - `.lime/qc/gui-evidence/plugins/content-factory-current-turn-smoke-cloud-release-host-generation-2026-07-03T12-32-45-939Z.json`
 - `.lime/qc/gui-evidence/plugins/content-factory-current-turn-smoke-cloud-release-host-generation-2026-07-03T12-32-45-939Z.workflow-events.jsonl`
 
-## 8. 下一刀
+## 8. 最新验证与下一刀
 
-下一步优先验证 GUI production 安装运行时，`hostToolRequests -> WebSearch tool card -> article artifact -> Article Workspace` 是否能形成 Image #2 这类中间主链。如果真实 GUI 仍只显示文章卡，再补宿主端 timeline 投影或 grouping，而不是继续在插件包里绕开事件合同。
+App Server current 普通 turn 已修到：`plugin_activation -> 普通 Agent turn -> 内容工厂 artifact/materialization -> JSONL audit -> turn.completed`。下一步不再继续证明 worker fixture，而是把 Electron/CDP Gate B baseline 升级为 product acceptance，真实走 `@写文章` 并验证自然引导、执行卡片、文章产物、右侧不自动打开和历史恢复。
+
+2026-07-05 更新：当前实现方向已经落到 RuntimeCore terminal 顺序修复，而不是新增一个内容工厂专用 UI 分支。普通 Agent backend 发出的 `turn.completed` 会被暂存，内容工厂 activation 后处理在 terminal 前补齐 article artifact、host tool timeline 和 JSONL audit；完成后再封口。验收仍以真实 current-turn smoke / Electron CDP 为准，不能把测试 fixture worker 或静态 mock 当成用户链路完成证据。
+
+2026-07-05 后端验证已通过：`content-factory-current-turn-debug-host-generation-2026-07-05T04-19-07-937Z.json` 显示普通 current turn 中有 `message.delta`、`7` 个 `artifact.snapshot`、`3` 组 `tool.started -> tool.args -> tool.result`，`workflow-events.jsonl` 有 `16` 条 metadata-only audit 事件，最终 `turn.completed` 位于 artifact / tool 事件之后。下一刀是把 Electron/CDP baseline 升级为 product acceptance，验证真实桌面 GUI 的聊天排版、右侧不自动打开、历史恢复和 raw JSON / 文件卡隐藏。
+
+2026-07-05 Electron/CDP baseline 已有真实桌面证据：`.lime/qc/gui-evidence/writing/writing-cdp-WRITING_CDP_1783188149738-summary.json` 显示 `usedElectronCdp=true`、`usedRealElectron=true`、`turnStartViaElectronIpc=true`、`writingActivationMetadataPresent=true`、`articleArtifactFrameVisible=true`、`articleArtifactHasBody=true`、`processOrGuidanceCaptured=true`、`noInvokeErrors=true`；同名 `turn-start-trace.json` 记录 `app_server_handle_json_lines`、`electron-ipc`、`content_article_workflow` 和真实 session / turn id。该证据不能替代最终验收，因为脚本主动打开了 Article Editor，且没有覆盖历史恢复和 raw JSON / 文件卡负向断言。

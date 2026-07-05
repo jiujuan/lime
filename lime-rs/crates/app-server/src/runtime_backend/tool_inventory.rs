@@ -5,8 +5,7 @@ use app_server_protocol::McpServerStatusListResponse;
 use app_server_protocol::McpToolListResponse;
 use lime_agent::agent_tools::catalog::WorkspaceToolSurface;
 use lime_agent::agent_tools::execution::persisted_tool_execution_policy_from_metadata;
-use lime_agent::agent_tools::inventory::{build_tool_inventory, AgentToolInventoryBuildInput};
-use lime_agent::agent_tools::tool_inventory_runtime_snapshot::read_agent_tool_inventory_runtime_snapshot;
+use lime_agent::agent_tools::{read_agent_tool_inventory, AgentToolInventoryReadInput};
 use lime_agent::AgentRuntimeState;
 use lime_core::tool_calling::extract_tool_surface_metadata;
 use lime_mcp::McpToolDefinition;
@@ -31,32 +30,24 @@ pub(crate) async fn read_tool_inventory(
         persisted_tool_execution_policy_from_metadata(request_metadata.as_ref());
 
     let mcp_snapshot = read_mcp_inventory_snapshot(app_data_source).await;
-    let mut warnings = mcp_snapshot.warnings;
-
-    let runtime_snapshot =
-        read_agent_tool_inventory_runtime_snapshot(agent_state, &mcp_snapshot.tools).await;
-    warnings.extend(runtime_snapshot.warnings);
-
-    serde_json::to_value(build_tool_inventory(AgentToolInventoryBuildInput {
-        surface: WorkspaceToolSurface {
-            workbench: request.workbench,
-            browser_assist: request.browser_assist,
+    let inventory = read_agent_tool_inventory(
+        agent_state,
+        AgentToolInventoryReadInput {
+            surface: WorkspaceToolSurface {
+                workbench: request.workbench,
+                browser_assist: request.browser_assist,
+            },
+            caller,
+            warnings: mcp_snapshot.warnings,
+            persisted_execution_policy,
+            request_metadata,
+            mcp_server_names: mcp_snapshot.server_names,
+            mcp_tools: mcp_snapshot.tools,
+            resource_helpers_supported: mcp_snapshot.resource_helpers_supported,
         },
-        caller,
-        agent_initialized: runtime_snapshot.agent_initialized,
-        warnings,
-        persisted_execution_policy,
-        request_metadata,
-        mcp_server_names: mcp_snapshot.server_names,
-        mcp_tools: mcp_snapshot.tools,
-        registry_definitions: runtime_snapshot.registry_definitions,
-        resource_helpers_supported: mcp_snapshot.resource_helpers_supported,
-        current_surface_tool_names: runtime_snapshot.current_surface_tool_names,
-        extension_configs: runtime_snapshot.extension_configs,
-        visible_extension_tools: runtime_snapshot.visible_extension_tools,
-        searchable_extension_tools: runtime_snapshot.searchable_extension_tools,
-    }))
-    .map_err(|error| RuntimeCoreError::Backend(error.to_string()))
+    )
+    .await;
+    serde_json::to_value(inventory).map_err(|error| RuntimeCoreError::Backend(error.to_string()))
 }
 
 #[derive(Debug, Default)]

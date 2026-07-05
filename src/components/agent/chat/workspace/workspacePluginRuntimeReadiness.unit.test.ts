@@ -72,7 +72,7 @@ describe("workspacePluginRuntimeReadiness", () => {
       pluginId: "content-factory-app",
       activePluginUiId: "content-factory-app",
       workflowKey: "content_article_workflow",
-      status: "declared",
+      status: "ready",
       connectorRefs: ["lime-knowledge", "web-research", "media-generation"],
       hookRefs: ["prompt-submit", "task-complete"],
       cliRefs: ["content-factory"],
@@ -100,9 +100,11 @@ describe("workspacePluginRuntimeReadiness", () => {
       expect.arrayContaining([
         expect.objectContaining({
           id: "web-research",
-          status: "declared",
-          source: "runtime_registry",
-          reasonCodes: ["PLUGIN_RUNTIME_REGISTRY_DECLARED"],
+          status: "ready",
+          source: "manifest_declaration",
+          reasonCodes: [],
+          kind: "api",
+          taskKinds: ["content.article.generate"],
         }),
       ]),
     );

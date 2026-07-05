@@ -478,6 +478,25 @@ fn validate_automation_payload(payload: &Value) -> Result<(), RuntimeCoreError> 
                     "自动化任务内容不能为空".to_string(),
                 ));
             }
+            for field in ["session_id", "thread_id"] {
+                let value = payload
+                    .get(field)
+                    .or_else(|| {
+                        if field == "session_id" {
+                            payload.get("sessionId")
+                        } else {
+                            payload.get("threadId")
+                        }
+                    })
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty());
+                if value.is_none() {
+                    return Err(RuntimeCoreError::Backend(format!(
+                        "自动化任务 agent_turn payload 必须显式绑定 {field}"
+                    )));
+                }
+            }
             if let Some(content_id) = payload
                 .get("content_id")
                 .or_else(|| payload.get("contentId"))
@@ -562,4 +581,33 @@ fn validate_automation_managed_objective_metadata(
 
 fn preview_next_automation_run(schedule: &TaskSchedule) -> Result<Option<String>, String> {
     Ok(next_run_for_automation_schedule(schedule, Utc::now())?.map(|value| value.to_rfc3339()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_agent_turn_payload_requires_thread_lineage() {
+        let payload = json!({
+            "kind": "agent_turn",
+            "prompt": "生成摘要",
+            "session_id": "session-job-1"
+        });
+
+        let error = validate_automation_payload(&payload).expect_err("should reject");
+        assert!(error.to_string().contains("thread_id"));
+    }
+
+    #[test]
+    fn validate_agent_turn_payload_accepts_explicit_thread_lineage() {
+        let payload = json!({
+            "kind": "agent_turn",
+            "prompt": "生成摘要",
+            "session_id": "session-job-1",
+            "thread_id": "thread-job-1"
+        });
+
+        validate_automation_payload(&payload).expect("valid automation payload");
+    }
 }

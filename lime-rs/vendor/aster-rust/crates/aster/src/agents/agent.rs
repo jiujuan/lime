@@ -2472,7 +2472,8 @@ impl Agent {
 
         let session = self.store_get_session(&session_config.id, false).await?;
         self.remember_session_type_hint(session.session_type).await;
-        self.ensure_thread_runtime(&session, &session_config).await?;
+        self.ensure_thread_runtime(&session, &session_config)
+            .await?;
         self.create_turn_runtime(&session, &session_config, input_text)
             .await
     }

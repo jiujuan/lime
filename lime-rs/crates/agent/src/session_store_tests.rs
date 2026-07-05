@@ -463,7 +463,10 @@ fn build_child_subagent_session_summaries_should_filter_and_sort_by_updated_at_d
                 Some("planner"),
                 Some("turn-2"),
             ),
-        ],
+        ]
+        .iter()
+        .filter_map(project_aster_subagent_session)
+        .collect(),
     );
 
     assert_eq!(summaries.len(), 2);
@@ -490,33 +493,36 @@ fn build_child_subagent_session_summary_should_merge_customization_state() {
         Some("Image #1"),
         Some("turn-9"),
     );
-    session.extension_data = SubagentCustomizationState {
-        blueprint_role_id: Some("runtime-explorer".to_string()),
-        blueprint_role_label: Some("分析".to_string()),
-        profile_id: Some("code-explorer".to_string()),
-        profile_name: Some("代码分析员".to_string()),
-        role_key: Some("explorer".to_string()),
-        team_preset_id: Some("code-triage-team".to_string()),
-        theme: Some("engineering".to_string()),
-        output_contract: Some("输出证据、影响面与建议。".to_string()),
-        system_overlay: None,
-        skill_ids: vec!["repo-exploration".to_string()],
-        skills: vec![SubagentSkillSummary {
-            id: "repo-exploration".to_string(),
-            name: "仓库探索".to_string(),
-            description: Some("优先读事实源".to_string()),
-            source: Some("builtin".to_string()),
-            directory: None,
-        }],
-        hooks: None,
-        allowed_tools: Vec::new(),
-        disallowed_tools: Vec::new(),
-    }
-    .into_updated_extension_data(&session)
+    session.extension_data = updated_extension_data_for_subagent_customization(
+        SubagentCustomizationState {
+            blueprint_role_id: Some("runtime-explorer".to_string()),
+            blueprint_role_label: Some("分析".to_string()),
+            profile_id: Some("code-explorer".to_string()),
+            profile_name: Some("代码分析员".to_string()),
+            role_key: Some("explorer".to_string()),
+            team_preset_id: Some("code-triage-team".to_string()),
+            theme: Some("engineering".to_string()),
+            output_contract: Some("输出证据、影响面与建议。".to_string()),
+            system_overlay: None,
+            skill_ids: vec!["repo-exploration".to_string()],
+            skills: vec![SubagentSkillSummary {
+                id: "repo-exploration".to_string(),
+                name: "仓库探索".to_string(),
+                description: Some("优先读事实源".to_string()),
+                source: Some("builtin".to_string()),
+                directory: None,
+            }],
+            allowed_tools: Vec::new(),
+            disallowed_tools: Vec::new(),
+        },
+        &session,
+    )
     .expect("merge customization");
 
-    let summary =
-        build_child_subagent_session_summary(None, session).expect("child summary should exist");
+    let summary = build_child_subagent_session_summary(
+        None,
+        project_aster_subagent_session(&session).expect("child summary should exist"),
+    );
 
     assert_eq!(
         summary.blueprint_role_id.as_deref(),
@@ -527,6 +533,7 @@ fn build_child_subagent_session_summary_should_merge_customization_state() {
     assert_eq!(summary.profile_name.as_deref(), Some("代码分析员"));
     assert_eq!(summary.role_key.as_deref(), Some("explorer"));
     assert_eq!(summary.team_preset_id.as_deref(), Some("code-triage-team"));
+    assert_eq!(summary.created_from_turn_id.as_deref(), Some("turn-9"));
     assert_eq!(summary.theme.as_deref(), Some("engineering"));
     assert_eq!(
         summary.output_contract.as_deref(),
@@ -549,12 +556,6 @@ fn build_subagent_parent_context_should_keep_parent_name_and_filter_current_sess
         Some("Image #1"),
         Some("turn-2"),
     );
-    let parent_session = AsterSession {
-        id: "parent-1".to_string(),
-        name: "主线程会话".to_string(),
-        session_type: AsterSessionType::User,
-        ..AsterSession::default()
-    };
     let sibling_subagent_sessions = build_child_subagent_session_summaries(
         None,
         vec![
@@ -576,14 +577,18 @@ fn build_subagent_parent_context_should_keep_parent_name_and_filter_current_sess
                 Some("Image #2"),
                 Some("turn-2"),
             ),
-        ],
+        ]
+        .iter()
+        .filter_map(project_aster_subagent_session)
+        .collect(),
     );
-    let projection =
-        SubagentPresentationProjection::from_session(&session).expect("parent projection");
+    let projection = project_aster_subagent_session(&session)
+        .expect("parent projection")
+        .presentation;
 
     let context = build_subagent_parent_context(
         "child-current",
-        Some(&parent_session),
+        Some("主线程会话".to_string()),
         projection,
         sibling_subagent_sessions,
     );
@@ -612,39 +617,44 @@ fn build_subagent_parent_context_should_merge_customization_projection() {
         Some("Image #1"),
         Some("turn-9"),
     );
-    session.extension_data = SubagentCustomizationState {
-        blueprint_role_id: Some("runtime-explorer".to_string()),
-        blueprint_role_label: Some("分析".to_string()),
-        profile_id: Some("code-explorer".to_string()),
-        profile_name: Some("代码分析员".to_string()),
-        role_key: Some("explorer".to_string()),
-        team_preset_id: Some("code-triage-team".to_string()),
-        theme: Some("engineering".to_string()),
-        output_contract: Some("输出证据、影响面与建议。".to_string()),
-        system_overlay: None,
-        skill_ids: vec!["repo-exploration".to_string()],
-        skills: vec![SubagentSkillSummary {
-            id: "repo-exploration".to_string(),
-            name: "仓库探索".to_string(),
-            description: Some("优先读事实源".to_string()),
-            source: Some("builtin".to_string()),
-            directory: None,
-        }],
-        hooks: None,
-        allowed_tools: Vec::new(),
-        disallowed_tools: Vec::new(),
-    }
-    .into_updated_extension_data(&session)
+    session.extension_data = updated_extension_data_for_subagent_customization(
+        SubagentCustomizationState {
+            blueprint_role_id: Some("runtime-explorer".to_string()),
+            blueprint_role_label: Some("分析".to_string()),
+            profile_id: Some("code-explorer".to_string()),
+            profile_name: Some("代码分析员".to_string()),
+            role_key: Some("explorer".to_string()),
+            team_preset_id: Some("code-triage-team".to_string()),
+            theme: Some("engineering".to_string()),
+            output_contract: Some("输出证据、影响面与建议。".to_string()),
+            system_overlay: None,
+            skill_ids: vec!["repo-exploration".to_string()],
+            skills: vec![SubagentSkillSummary {
+                id: "repo-exploration".to_string(),
+                name: "仓库探索".to_string(),
+                description: Some("优先读事实源".to_string()),
+                source: Some("builtin".to_string()),
+                directory: None,
+            }],
+            allowed_tools: Vec::new(),
+            disallowed_tools: Vec::new(),
+        },
+        &session,
+    )
     .expect("merge customization");
 
     let context = build_subagent_parent_context(
         "child-customized",
         None,
-        SubagentPresentationProjection::from_session(&session)
-            .expect("parent projection should exist"),
+        project_aster_subagent_session(&session)
+            .expect("parent projection should exist")
+            .presentation,
         Vec::new(),
     );
 
+    assert_eq!(context.parent_session_id, "parent-1");
+    assert_eq!(context.parent_session_name, "父会话");
+    assert_eq!(context.created_from_turn_id.as_deref(), Some("turn-9"));
     assert_eq!(
         context.blueprint_role_id.as_deref(),
         Some("runtime-explorer")
@@ -1610,40 +1620,6 @@ fn update_session_working_dir_sync_should_refresh_workspace_binding() {
 }
 
 #[test]
-fn update_session_provider_config_sync_should_persist_provider_and_model_config() {
-    let db = create_test_db();
-    insert_test_session_with_message(
-        &db,
-        "session-provider-config",
-        "/tmp/lime-workspace-provider-config",
-        "切换模型",
-    );
-
-    update_session_provider_config_sync(
-        &db,
-        "session-provider-config",
-        Some("openai"),
-        Some("gpt-5.4-mini"),
-    )
-    .expect("update provider config");
-
-    let conn = db.lock().expect("lock db");
-    let (provider_name, model_name, model_config_json): (Option<String>, String, Option<String>) =
-        conn.query_row(
-            "SELECT provider_name, model, model_config_json FROM agent_sessions WHERE id = ?",
-            ["session-provider-config"],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-        )
-        .expect("query session provider config");
-
-    assert_eq!(provider_name.as_deref(), Some("openai"));
-    assert_eq!(model_name, "gpt-5.4-mini");
-    assert!(model_config_json
-        .as_deref()
-        .is_some_and(|value| value.contains("\"model_name\":\"gpt-5.4-mini\"")));
-}
-
-#[test]
 fn rename_session_sync_should_update_session_title() {
     let db = create_test_db();
     insert_test_session_with_message(&db, "session-rename", "/tmp/lime-workspace-5", "原始消息");
@@ -1652,82 +1628,4 @@ fn rename_session_sync_should_update_session_title() {
 
     let session = get_session_sync(&db, "session-rename").expect("get session");
     assert_eq!(session.name, "新的会话标题");
-}
-
-#[test]
-fn list_title_preview_messages_sync_should_not_read_legacy_agent_messages() {
-    let db = create_test_db();
-    create_session_record_sync(
-        &db,
-        CreateSessionRecordInput {
-            session_id: Some("session-title".to_string()),
-            title: Some("测试标题".to_string()),
-            model: Some("agent:test".to_string()),
-            execution_strategy: Some("react".to_string()),
-            ..CreateSessionRecordInput::default()
-        },
-    )
-    .expect("create session");
-
-    let conn = db.lock().expect("lock db");
-    insert_legacy_agent_message(
-        &conn,
-        "session-title",
-        &AgentMessage {
-            role: "system".to_string(),
-            content: MessageContent::Text("忽略这条系统消息".to_string()),
-            timestamp: "2026-03-18T08:00:00Z".to_string(),
-            tool_calls: None,
-            tool_call_id: None,
-            reasoning_content: None,
-            usage: None,
-        },
-    )
-    .expect("add system message");
-    insert_legacy_agent_message(
-        &conn,
-        "session-title",
-        &AgentMessage {
-            role: "user".to_string(),
-            content: MessageContent::Text("第一条用户消息".to_string()),
-            timestamp: "2026-03-18T08:01:00Z".to_string(),
-            tool_calls: None,
-            tool_call_id: None,
-            reasoning_content: None,
-            usage: None,
-        },
-    )
-    .expect("add user message");
-    insert_legacy_agent_message(
-        &conn,
-        "session-title",
-        &AgentMessage {
-            role: "assistant".to_string(),
-            content: MessageContent::Text("第一条助手消息".to_string()),
-            timestamp: "2026-03-18T08:02:00Z".to_string(),
-            tool_calls: None,
-            tool_call_id: None,
-            reasoning_content: None,
-            usage: None,
-        },
-    )
-    .expect("add assistant message");
-    insert_legacy_agent_message(
-        &conn,
-        "session-title",
-        &AgentMessage {
-            role: "tool".to_string(),
-            content: MessageContent::Text("忽略工具输出".to_string()),
-            timestamp: "2026-03-18T08:03:00Z".to_string(),
-            tool_calls: None,
-            tool_call_id: Some("tool-1".to_string()),
-            reasoning_content: None,
-            usage: None,
-        },
-    )
-    .expect("add tool message");
-    drop(conn);
-
-    let preview = list_title_preview_messages_sync(&db, "session-title", 4).expect("load preview");
-    assert!(preview.is_empty());
 }

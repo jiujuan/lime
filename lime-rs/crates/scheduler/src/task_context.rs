@@ -5,9 +5,9 @@
 
 use crate::types::ScheduledTask;
 use agent_protocol::turn_context::{TurnContextOverride, TurnOutputSchemaSource};
-use lime_agent::merge_system_prompt_with_runtime_agents_for_project;
-use lime_agent::request_tool_policy::{
-    merge_system_prompt_with_request_tool_policy, resolve_request_tool_policy_with_mode,
+use lime_agent::{
+    merge_system_prompt_with_request_tool_policy,
+    merge_system_prompt_with_runtime_agents_for_project, resolve_request_tool_policy_with_mode,
     RequestToolPolicy, RequestToolPolicyMode,
 };
 use serde_json::{json, Value};
@@ -483,7 +483,7 @@ fn bounded_metadata_value(value: &Value) -> Option<Value> {
 mod tests {
     use super::*;
     use chrono::Utc;
-    use lime_agent::request_tool_policy::REQUEST_TOOL_POLICY_MARKER;
+    use lime_agent::REQUEST_TOOL_POLICY_MARKER;
     use lime_agent::RUNTIME_AGENTS_PROMPT_MARKER;
     use std::fs;
     use tempfile::TempDir;

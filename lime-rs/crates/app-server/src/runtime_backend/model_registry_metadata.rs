@@ -27,7 +27,8 @@ pub(super) async fn resolve_runtime_model_registry_metadata(
     selection: &RuntimeModelSelection,
     direct_provider_config: Option<&SessionProviderConfig>,
 ) -> Result<RuntimeModelRegistryMetadata, String> {
-    if direct_provider_config.is_some() {
+    if let Some(config) = direct_provider_config {
+        let model_capabilities = config.model_capabilities.clone();
         return Ok(RuntimeModelRegistryMetadata {
             payload: json!({
                 "source": "direct_provider_config",
@@ -43,8 +44,8 @@ pub(super) async fn resolve_runtime_model_registry_metadata(
                 "matchedModelId": null,
                 "matched_model_id": null,
                 "model": null,
-                "modelCapabilities": null,
-                "model_capabilities": null,
+                "modelCapabilities": model_capabilities.clone(),
+                "model_capabilities": model_capabilities,
                 "modelAlias": null,
                 "model_alias": null,
                 "reasoning": null,
@@ -236,6 +237,7 @@ mod tests {
                 route_protocol: None,
                 toolshim: false,
                 toolshim_model: None,
+                model_capabilities: None,
             }),
         )
         .await

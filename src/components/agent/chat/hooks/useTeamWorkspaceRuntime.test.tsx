@@ -7,6 +7,7 @@ import { useTeamWorkspaceRuntime } from "./useTeamWorkspaceRuntime";
 import {
   clearAgentUiProjectionEvents,
   conversationProjectionStore,
+  selectAgentUiProjectionEventsBySurfaceForScope,
   selectAgentUiProjectionEventsByTypeForScope,
 } from "../projection/conversationProjectionStore";
 
@@ -180,6 +181,63 @@ describe("useTeamWorkspaceRuntime", () => {
     expect(latestValue?.activityRefreshVersionBySessionId["child-1"] ?? 0).toBe(
       1,
     );
+  });
+
+  it("恢复 parent thread 时应从 childSubagentSessions 回补 Team facts projection，且重复渲染不重复记录", async () => {
+    const { render } = await renderHookProbe({
+      currentThreadId: "thread-parent",
+      currentTurnId: "turn-parent",
+      childSubagentSessions: [
+        {
+          id: "child-1",
+          name: "研究员",
+          created_at: 1_710_000_000,
+          updated_at: 1_710_000_100,
+          session_type: "sub_agent",
+          runtime_status: "running",
+          latest_turn_status: "running",
+          task_summary: "整理竞品与数据来源",
+          role_hint: "explorer",
+          created_from_turn_id: "turn-parent",
+        },
+      ],
+    });
+
+    const restoredRosterEvents = selectAgentUiProjectionEventsBySurfaceForScope(
+      conversationProjectionStore.getSnapshot(),
+      "team_roster",
+      { sessionId: "parent-1", threadId: "thread-parent" },
+    );
+    expect(restoredRosterEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "agent.changed",
+          taskId: "child-1",
+          agentId: "child-1",
+          parentSessionId: "parent-1",
+          turnId: "turn-parent",
+          runtimeEntity: "subagent_turn",
+          runtimeStatus: "running",
+        }),
+        expect.objectContaining({
+          type: "team.changed",
+          taskId: "child-1",
+          parentSessionId: "parent-1",
+          turnId: "turn-parent",
+        }),
+      ]),
+    );
+    const eventCountAfterRestore =
+      conversationProjectionStore.getSnapshot().agentUi.events.length;
+
+    await render({
+      currentThreadId: "thread-parent",
+      currentTurnId: "turn-parent",
+    });
+
+    expect(
+      conversationProjectionStore.getSnapshot().agentUi.events,
+    ).toHaveLength(eventCountAfterRestore);
   });
 
   it("注入自定义 eventSource 时，不应再直接依赖默认 safeListen", async () => {

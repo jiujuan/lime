@@ -224,6 +224,8 @@ describe("AutomationJobDetailsDialog", () => {
         payload: {
           kind: "agent_turn",
           prompt: "请生成摘要",
+          session_id: "session-agent-1",
+          thread_id: "thread-agent-1",
           system_prompt: null,
           web_search: false,
           content_id: null,
@@ -276,6 +278,8 @@ describe("AutomationJobDetailsDialog", () => {
         payload: {
           kind: "agent_turn",
           prompt: "Continue the managed objective.",
+          session_id: "session-objective-1",
+          thread_id: "thread-objective-1",
           system_prompt: null,
           web_search: false,
           content_id: null,
@@ -373,6 +377,8 @@ describe("AutomationJobDetailsDialog", () => {
         payload: {
           kind: "agent_turn",
           prompt: "Continue the managed objective.",
+          session_id: "session-objective-1",
+          thread_id: "thread-objective-1",
           system_prompt: null,
           web_search: false,
           content_id: null,
@@ -445,6 +451,8 @@ describe("AutomationJobDetailsDialog", () => {
         payload: {
           kind: "agent_turn",
           prompt: "Continue the managed objective.",
+          session_id: "session-objective-1",
+          thread_id: "thread-objective-1",
           system_prompt: null,
           web_search: false,
           content_id: null,

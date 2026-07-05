@@ -1,19 +1,19 @@
-use aster::session::{resolve_subagent_session_metadata, Session as AsterSession};
 use chrono::{DateTime, Utc};
 use lime_core::database::dao::agent_timeline::{AgentThreadItemStatus, AgentThreadTurnStatus};
 use lime_core::database::DbConnection;
 use lime_core::workspace::WorkspaceManager;
 use std::path::Path;
 
-use super::session_store_types::{
-    normalize_optional_nonempty_body, normalize_optional_text, SessionDetail,
+use super::session_store_subagent_aster_adapter::{
+    load_child_subagent_session_projections, read_session_name_projection,
+    read_subagent_session_projection,
 };
-use crate::session_query::{list_child_subagent_sessions, read_session};
+use super::session_store_types::{normalize_optional_text, SessionDetail};
 use crate::subagent_control::SubagentRuntimeStatusKind;
 #[cfg(test)]
 use crate::subagent_control::SubagentTurnStatus;
 use crate::subagent_control::{load_subagent_runtime_status, SubagentRuntimeStatus};
-use crate::subagent_profiles::{SubagentCustomizationState, SubagentSkillSummary};
+use crate::subagent_profiles::SubagentSkillSummary;
 
 const RUNTIME_OVERLAY_ACTIVE_WINDOW_SECS: i64 = 30 * 60;
 
@@ -279,15 +279,6 @@ fn resolve_workspace_id_by_working_dir(
     }
 }
 
-fn resolve_subagent_model_name(session: &AsterSession) -> Option<String> {
-    session
-        .model_config
-        .as_ref()
-        .map(|config| config.model_name.trim().to_string())
-        .filter(|value| !value.is_empty())
-        .or_else(|| normalize_optional_text(session.provider_name.clone()))
-}
-
 fn map_child_subagent_runtime_status(
     status: SubagentRuntimeStatusKind,
 ) -> Option<ChildSubagentRuntimeStatus> {
@@ -338,46 +329,37 @@ pub(crate) fn resolve_child_subagent_runtime_status_from_turns(
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct SubagentPresentationProjection {
-    parent_session_id: String,
-    task_summary: Option<String>,
-    role_hint: Option<String>,
-    origin_tool: Option<String>,
-    created_from_turn_id: Option<String>,
-    blueprint_role_id: Option<String>,
-    blueprint_role_label: Option<String>,
-    profile_id: Option<String>,
-    profile_name: Option<String>,
-    role_key: Option<String>,
-    team_preset_id: Option<String>,
-    theme: Option<String>,
-    output_contract: Option<String>,
-    skill_ids: Vec<String>,
-    skills: Vec<SubagentSkillSummary>,
+    pub(crate) parent_session_id: String,
+    pub(crate) task_summary: Option<String>,
+    pub(crate) role_hint: Option<String>,
+    pub(crate) origin_tool: Option<String>,
+    pub(crate) created_from_turn_id: Option<String>,
+    pub(crate) blueprint_role_id: Option<String>,
+    pub(crate) blueprint_role_label: Option<String>,
+    pub(crate) profile_id: Option<String>,
+    pub(crate) profile_name: Option<String>,
+    pub(crate) role_key: Option<String>,
+    pub(crate) team_preset_id: Option<String>,
+    pub(crate) theme: Option<String>,
+    pub(crate) output_contract: Option<String>,
+    pub(crate) skill_ids: Vec<String>,
+    pub(crate) skills: Vec<SubagentSkillSummary>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct SubagentSessionProjection {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) created_at: i64,
+    pub(crate) updated_at: i64,
+    pub(crate) session_type: String,
+    pub(crate) model: Option<String>,
+    pub(crate) provider_name: Option<String>,
+    pub(crate) working_dir: Option<String>,
+    pub(crate) presentation: SubagentPresentationProjection,
 }
 
 impl SubagentPresentationProjection {
-    pub(crate) fn from_session(session: &AsterSession) -> Option<Self> {
-        let metadata = resolve_subagent_session_metadata(&session.extension_data)?;
-        let customization = SubagentCustomizationState::from_session(session).unwrap_or_default();
-        Some(Self {
-            parent_session_id: metadata.parent_session_id,
-            task_summary: normalize_optional_nonempty_body(metadata.task_summary),
-            role_hint: normalize_optional_text(metadata.role_hint),
-            origin_tool: normalize_optional_text(Some(metadata.origin_tool)),
-            created_from_turn_id: normalize_optional_text(metadata.created_from_turn_id),
-            blueprint_role_id: customization.blueprint_role_id,
-            blueprint_role_label: customization.blueprint_role_label,
-            profile_id: customization.profile_id,
-            profile_name: customization.profile_name,
-            role_key: customization.role_key,
-            team_preset_id: customization.team_preset_id,
-            theme: customization.theme,
-            output_contract: customization.output_contract,
-            skill_ids: customization.skill_ids,
-            skills: customization.skills,
-        })
-    }
-
     fn apply_to_child_summary(self, summary: &mut ChildSubagentSession) {
         summary.task_summary = self.task_summary;
         summary.role_hint = self.role_hint;
@@ -438,31 +420,25 @@ fn filter_sibling_subagent_sessions(
 
 pub(crate) fn build_child_subagent_session_summary(
     db: Option<&DbConnection>,
-    session: AsterSession,
-) -> Option<ChildSubagentSession> {
-    let projection = SubagentPresentationProjection::from_session(&session)?;
-    let working_dir =
-        normalize_optional_text(Some(session.working_dir.to_string_lossy().to_string()));
+    session: SubagentSessionProjection,
+) -> ChildSubagentSession {
+    let working_dir = normalize_optional_text(session.working_dir);
     let workspace_id =
         db.and_then(|conn| resolve_workspace_id_by_working_dir(conn, working_dir.as_deref()));
-    let model = resolve_subagent_model_name(&session);
-    let provider_name = normalize_optional_text(session.provider_name.clone());
-    let name = normalize_optional_text(Some(session.name.clone()))
-        .unwrap_or_else(|| "子代理会话".to_string());
 
     let mut summary = ChildSubagentSession::new_base(
         session.id,
-        name,
-        session.created_at.timestamp(),
-        session.updated_at.timestamp(),
-        session.session_type.to_string(),
-        model,
-        provider_name,
+        session.name,
+        session.created_at,
+        session.updated_at,
+        session.session_type,
+        session.model,
+        session.provider_name,
         working_dir,
         workspace_id,
     );
-    projection.apply_to_child_summary(&mut summary);
-    Some(summary)
+    session.presentation.apply_to_child_summary(&mut summary);
+    summary
 }
 
 pub(crate) fn apply_runtime_status_to_child_subagent_session(
@@ -486,11 +462,11 @@ pub(crate) fn apply_runtime_status_to_child_subagent_session(
 
 pub(crate) fn build_child_subagent_session_summaries(
     db: Option<&DbConnection>,
-    sessions: Vec<AsterSession>,
+    sessions: Vec<SubagentSessionProjection>,
 ) -> Vec<ChildSubagentSession> {
     let mut summaries = sessions
         .into_iter()
-        .filter_map(|session| build_child_subagent_session_summary(db, session))
+        .map(|session| build_child_subagent_session_summary(db, session))
         .collect::<Vec<_>>();
 
     summaries.sort_by(|left, right| {
@@ -504,12 +480,12 @@ pub(crate) fn build_child_subagent_session_summaries(
 
 pub(crate) fn build_subagent_parent_context(
     current_session_id: &str,
-    parent_session: Option<&AsterSession>,
+    parent_session_name: Option<String>,
     projection: SubagentPresentationProjection,
     sibling_subagent_sessions: Vec<ChildSubagentSession>,
 ) -> SubagentParentContext {
-    let parent_session_name = parent_session
-        .and_then(|session| normalize_optional_text(Some(session.name.clone())))
+    let parent_session_name = parent_session_name
+        .and_then(|name| normalize_optional_text(Some(name)))
         .unwrap_or_else(|| "父会话".to_string());
 
     projection.into_parent_context(
@@ -523,8 +499,7 @@ pub(crate) async fn load_child_subagent_sessions(
     db: &DbConnection,
     session_id: &str,
 ) -> Result<Vec<ChildSubagentSession>, String> {
-    let sessions =
-        list_child_subagent_sessions(session_id, "读取 child subagent sessions 失败").await?;
+    let sessions = load_child_subagent_session_projections(session_id).await?;
     let mut summaries = build_child_subagent_session_summaries(Some(db), sessions);
     for summary in &mut summaries {
         match load_subagent_runtime_status(&summary.id).await {
@@ -544,26 +519,31 @@ pub(crate) async fn load_child_subagent_sessions(
 pub(crate) async fn load_subagent_parent_context(
     db: &DbConnection,
     session_id: &str,
-    current_session: Option<&AsterSession>,
+    current_session: Option<SubagentSessionProjection>,
 ) -> Result<Option<SubagentParentContext>, String> {
     let current_session_owned;
     let current_session = match current_session {
         Some(session) => session,
         None => {
             current_session_owned =
-                read_session(session_id, false, "读取当前 subagent session 失败").await?;
-            &current_session_owned
+                read_subagent_session_projection(session_id, "读取当前 subagent session 失败")
+                    .await?;
+            let Some(current_session) = current_session_owned else {
+                return Ok(None);
+            };
+            current_session
         }
     };
-    let Some(projection) = SubagentPresentationProjection::from_session(current_session) else {
-        return Ok(None);
-    };
+    let projection = current_session.presentation;
     let parent_session_id = projection.parent_session_id.clone();
 
-    let parent_session = match read_session(&parent_session_id, false, "读取 parent session 失败")
-        .await
+    let parent_session_name = match read_session_name_projection(
+        &parent_session_id,
+        "读取 parent session 失败",
+    )
+    .await
     {
-        Ok(session) => Some(session),
+        Ok(name) => name,
         Err(error) => {
             tracing::warn!(
                 "[SessionStore] 读取 parent session 失败，已降级为匿名父会话: session_id={}, parent_session_id={}, error={}",
@@ -591,7 +571,7 @@ pub(crate) async fn load_subagent_parent_context(
 
     Ok(Some(build_subagent_parent_context(
         session_id,
-        parent_session.as_ref(),
+        parent_session_name,
         projection,
         sibling_subagent_sessions,
     )))

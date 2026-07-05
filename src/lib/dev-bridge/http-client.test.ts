@@ -719,15 +719,15 @@ describe("http-client", () => {
     expect(resolveBridgeRequestTimeoutMs("plugin_runtime_start_task")).toBe(
       60000,
     );
-    expect(
-      resolveBridgeRequestTimeoutMs("plugin_inspect_local_package"),
-    ).toBe(1800);
+    expect(resolveBridgeRequestTimeoutMs("plugin_inspect_local_package")).toBe(
+      1800,
+    );
     expect(resolveBridgeRequestTimeoutMs("plugin_select_directory")).toBe(
       600000,
     );
-    expect(
-      resolveBridgeRequestTimeoutMs("plugin_get_ui_runtime_status"),
-    ).toBe(5000);
+    expect(resolveBridgeRequestTimeoutMs("plugin_get_ui_runtime_status")).toBe(
+      5000,
+    );
     expect(resolveBridgeRequestTimeoutMs("open_external_url")).toBe(5000);
     expect(resolveBridgeRequestTimeoutMs("execute_skill")).toBe(1800);
     expect(
@@ -738,6 +738,19 @@ describe("http-client", () => {
               id: 1,
               method: "agentSession/turn/start",
               params: {},
+            }),
+          ],
+        },
+      }),
+    ).toBe(150000);
+    expect(
+      resolveBridgeRequestTimeoutMs("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
+              id: "automation-run-now",
+              method: "automationJob/runNow",
+              params: { id: "job-1" },
             }),
           ],
         },
@@ -767,6 +780,19 @@ describe("http-client", () => {
               id: 2,
               method: "workspace/default/ensure",
               params: {},
+            }),
+          ],
+        },
+      }),
+    ).toBe(30000);
+    expect(
+      resolveBridgeRequestTimeoutMs("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
+              id: "automation-history",
+              method: "automationJob/runHistory",
+              params: { id: "job-1" },
             }),
           ],
         },

@@ -43,9 +43,7 @@ describe("PluginsPage", () => {
         '[data-testid="plugins-list-row-content-factory-app"]',
       ),
     ).not.toBeNull();
-    expect(apiMocks.listPluginHostLifecycleSnapshots).toHaveBeenCalledTimes(
-      1,
-    );
+    expect(apiMocks.listPluginHostLifecycleSnapshots).toHaveBeenCalledTimes(1);
     const fallbackIcon = container.querySelector(
       '[data-testid="plugins-icon-content-factory-app"] img',
     ) as HTMLImageElement | null;
@@ -61,9 +59,7 @@ describe("PluginsPage", () => {
     expect(
       container.querySelector('[data-testid="plugins-detail"]'),
     ).toBeNull();
-    expect(container.textContent).toContain(
-      "plugin.apps.center.source.cloud",
-    );
+    expect(container.textContent).toContain("plugin.apps.center.source.cloud");
     expect(container.textContent).toContain(
       "plugin.apps.center.status.installable",
     );
@@ -296,7 +292,7 @@ describe("PluginsPage", () => {
     expect(decodeURIComponent(fallbackSrc)).toContain("内容工厂");
   });
 
-  it("详情主按钮应阻断 workflow-only 本地 DSL 并提示 current API", async () => {
+  it("详情主按钮应把 workflow 入口发送到 Agent current 主链", async () => {
     const manifest = structuredClone(contentFactoryFixture) as AppManifest;
     manifest.runtimePackage = {
       ...manifest.runtimePackage,
@@ -321,7 +317,8 @@ describe("PluginsPage", () => {
       }),
     );
 
-    const container = await renderPage();
+    const onNavigate = vi.fn();
+    const container = await renderPage(undefined, onNavigate);
     await flush();
 
     await openAppDetail(container);
@@ -339,15 +336,17 @@ describe("PluginsPage", () => {
     });
     await flush();
 
-    const launchSummary = container.querySelector(
-      '[data-testid="plugins-launch-summary"]',
+    expect(onNavigate).toHaveBeenCalledWith(
+      "agent",
+      expect.objectContaining({
+        agentEntry: "new-task",
+        initialUserPrompt: "@写文章 ",
+        autoRunInitialPromptOnMount: false,
+      }),
     );
-    expect(launchSummary?.getAttribute("role")).toBe("status");
-    expect(launchSummary?.className).not.toContain("sr-only");
-    expect(launchSummary?.textContent).toContain(
-      "plugin.apps.launch.workflowRequiresCurrentApi",
-    );
-    expect(launchSummary?.textContent).not.toContain("workflow:写文章:");
+    expect(
+      container.querySelector('[data-testid="plugins-launch-summary"]'),
+    ).toBeNull();
   });
 
   it("应用中心应展示 Plugin 宿主状态和 Right Surface 合同", async () => {
@@ -597,7 +596,7 @@ describe("PluginsPage", () => {
     ).toBeNull();
   });
 
-  it("详情弹窗应支持关闭并回到卡片列表", async () => {
+  it("详情页面应支持返回卡片列表且不能渲染弹窗语义", async () => {
     const container = await renderPage();
     await flush();
 
@@ -605,7 +604,7 @@ describe("PluginsPage", () => {
 
     expect(
       container.querySelector('[data-testid="plugins-detail-overlay"]'),
-    ).not.toBeNull();
+    ).toBeNull();
     expect(
       container.querySelector('[data-testid="plugins-detail"]'),
     ).not.toBeNull();
@@ -613,19 +612,22 @@ describe("PluginsPage", () => {
       container
         .querySelector('[data-testid="plugins-detail"]')
         ?.getAttribute("role"),
-    ).toBe("dialog");
+    ).not.toBe("dialog");
     expect(
-      container.querySelector('[data-testid="plugins-list"]')?.className,
-    ).toContain("lg:grid-cols-3");
+      container
+        .querySelector('[data-testid="plugins-detail"]')
+        ?.getAttribute("aria-modal"),
+    ).toBeNull();
+    expect(container.querySelector('[data-testid="plugins-list"]')).toBeNull();
 
     const closeDetail = container.querySelector(
       '[data-testid="plugins-close-detail"]',
     ) as HTMLButtonElement | null;
     expect(closeDetail?.getAttribute("aria-label")).toBe(
-      "plugin.apps.center.detail.close",
+      "plugin.apps.center.detail.backToList",
     );
     expect(closeDetail?.textContent).toContain(
-      "plugin.apps.center.detail.close",
+      "plugin.apps.center.detail.backToList",
     );
 
     await act(async () => {
@@ -645,6 +647,99 @@ describe("PluginsPage", () => {
         '[data-testid="plugins-list-row-content-factory-app"]',
       ),
     ).not.toBeNull();
+  });
+
+  it("详情应按本地 manifest 展示两个 Agent 入口、子智能体和技能", async () => {
+    installedStates.push(buildReadyState());
+    const onNavigate = vi.fn();
+    const container = await renderPage(undefined, onNavigate);
+    await flush();
+
+    await openAppDetail(container);
+
+    expect(
+      container.querySelector('[data-testid="plugins-search"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="plugins-status-filter-all"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-testid="plugins-launch-target-policy"]'),
+    ).toBeNull();
+    const agents = container.querySelector(
+      '[data-testid="plugins-detail-agents"]',
+    );
+    expect(agents?.textContent).toContain("plugin.apps.center.detail.agents");
+    expect(
+      container.querySelectorAll('[data-testid^="plugins-detail-agent-"]'),
+    ).toHaveLength(2);
+    expect(
+      container.querySelector(
+        '[data-testid="plugins-detail-agent-content_article_generate"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid="plugins-detail-agent-content_factory_generate"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid="plugins-detail-subagent-content-researcher"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelector(
+        '[data-testid="plugins-detail-skill-article-writing"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="plugins-detail-summary"]'),
+    ).not.toBeNull();
+
+    const articleAgent = container.querySelector(
+      '[data-testid="plugins-detail-agent-content_article_generate"]',
+    ) as HTMLButtonElement | null;
+    expect(articleAgent?.tagName).toBe("BUTTON");
+    await act(async () => {
+      articleAgent?.click();
+      await Promise.resolve();
+    });
+    expect(onNavigate).toHaveBeenCalledWith(
+      "agent",
+      expect.objectContaining({
+        initialUserPrompt: "@写文章 ",
+        autoRunInitialPromptOnMount: false,
+      }),
+    );
+  });
+
+  it("详情应兼容旧安装态缺少权限和能力数组", async () => {
+    const installed = buildReadyState();
+    delete (installed.manifest as Partial<AppManifest>).permissions;
+    delete (
+      installed.projection as {
+        requiredCapabilities?: unknown;
+      }
+    ).requiredCapabilities;
+    installedStates.push(installed);
+
+    const container = await renderPage();
+    await flush();
+
+    await openAppDetail(container);
+
+    expect(
+      container.querySelector('[data-testid="plugins-detail"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-testid="plugins-detail-authorizations"]')
+        ?.textContent,
+    ).toContain("plugin.apps.center.detail.noAuthorizations");
+    expect(
+      container.querySelector('[data-testid="plugins-detail-summary"]')
+        ?.textContent,
+    ).toContain("plugin.apps.center.detail.summary.capabilityCount:0");
   });
 
   it("取消选择本地目录时不应生成安装审查或写入 repository", async () => {
@@ -794,6 +889,16 @@ describe("PluginsPage", () => {
     );
     expect(apiMocks.installCloudPluginRelease).not.toHaveBeenCalled();
 
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-testid="plugins-close-detail"]',
+        )
+        ?.click();
+      await Promise.resolve();
+    });
+    await flush();
+
     expect(
       container.querySelector(
         '[data-testid="plugins-source-state-content-factory-app"]',
@@ -905,9 +1010,7 @@ describe("PluginsPage", () => {
     const container = await renderPage();
     await flush();
 
-    expect(container.textContent).toContain(
-      "plugin.apps.center.status.update",
-    );
+    expect(container.textContent).toContain("plugin.apps.center.status.update");
     const updateButton = container.querySelector(
       '[data-testid="plugins-update-cloud-content-factory-app"]',
     ) as HTMLButtonElement | null;
@@ -1306,12 +1409,9 @@ describe("PluginsPage", () => {
     await flush();
 
     expect(apiMocks.uninstallPlugin).not.toHaveBeenCalled();
-    const appRowAfterDeleteDataBlocked = container.querySelector(
-      '[data-testid="plugins-list-row-content-factory-app"]',
-    );
-    expect(appRowAfterDeleteDataBlocked?.textContent).toContain(
-      "plugin.apps.center.status.installed",
-    );
+    expect(
+      container.querySelector('[data-testid="plugins-detail"]')?.textContent,
+    ).toContain("plugin.apps.center.status.installed");
 
     await act(async () => {
       switchKeepDataButton?.click();

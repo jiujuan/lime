@@ -1,3 +1,9 @@
+pub mod execution_policy;
+pub mod execution_policy_service;
+pub mod execution_process;
+pub mod execution_rules;
 pub mod mcp_notification;
+pub mod shell;
+pub mod tool_batch;
 pub mod tool_io;
 pub mod tool_result;

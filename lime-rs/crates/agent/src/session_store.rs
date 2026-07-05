@@ -3,7 +3,6 @@
 //! 提供会话创建、列表查询、详情查询能力。
 //! 数据事实源收敛到 lime_core::database::agent_session_repository + Lime 数据库。
 
-use aster::model::ModelConfig;
 use aster::session::{ExtensionState, Session as AsterSession};
 #[cfg(test)]
 use chrono::DateTime;
@@ -37,6 +36,8 @@ mod session_store_message_projection;
 mod session_store_runtime_detail;
 #[path = "session_store_runtime_projection.rs"]
 mod session_store_runtime_projection;
+#[path = "session_store_subagent_aster_adapter.rs"]
+mod session_store_subagent_aster_adapter;
 #[path = "session_store_subagent_context.rs"]
 mod session_store_subagent_context;
 #[path = "session_store_todo_aster_adapter.rs"]
@@ -55,6 +56,8 @@ pub use self::session_store_runtime_detail::{
     get_runtime_session_detail_with_history_page, get_runtime_session_detail_with_history_window,
 };
 use self::session_store_runtime_projection::build_runtime_session_info;
+#[cfg(test)]
+use self::session_store_subagent_aster_adapter::project_aster_subagent_session;
 
 #[cfg(test)]
 use self::session_store_subagent_context::{
@@ -62,7 +65,7 @@ use self::session_store_subagent_context::{
     build_child_subagent_session_summary, build_subagent_parent_context,
     resolve_child_subagent_runtime_status_from_turns, should_load_runtime_overlay,
     should_load_runtime_overlay_at, should_load_subagent_runtime_context,
-    ChildSubagentRuntimeTurnProjection, SubagentPresentationProjection,
+    ChildSubagentRuntimeTurnProjection,
 };
 pub use self::session_store_subagent_context::{
     ChildSubagentRuntimeStatus, ChildSubagentSession, SubagentParentContext,
@@ -72,13 +75,14 @@ use self::session_store_types::{
     normalize_optional_nonempty_body, normalize_optional_text, CreateSessionRecordInput,
 };
 pub use self::session_store_types::{
-    PersistedSessionMetadata, SessionDetail, SessionInfo, SessionTitlePreviewMessage,
-    SessionTodoItem, SessionTodoStatus,
+    PersistedSessionMetadata, SessionDetail, SessionInfo, SessionTodoItem, SessionTodoStatus,
 };
 #[cfg(test)]
 use crate::subagent_control::SubagentRuntimeStatusKind;
 #[cfg(test)]
 use crate::subagent_profiles::{SubagentCustomizationState, SubagentSkillSummary};
+#[cfg(test)]
+use crate::subagent_profiles_aster_adapter::updated_extension_data_for_subagent_customization;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct SessionProviderRoutingState {
@@ -253,17 +257,6 @@ pub fn get_persisted_session_metadata_sync(
             execution_strategy: metadata.execution_strategy,
         }),
     )
-}
-
-pub fn list_title_preview_messages_sync(
-    db: &DbConnection,
-    session_id: &str,
-    limit: usize,
-) -> Result<Vec<SessionTitlePreviewMessage>, String> {
-    let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
-    let _ = (session_id, limit);
-    drop(conn);
-    Ok(Vec::new())
 }
 
 /// 获取会话详情
@@ -540,43 +533,6 @@ pub fn update_session_execution_strategy_sync(
         &conn,
         session_id,
         &normalized_execution_strategy,
-    )?;
-    Ok(())
-}
-
-pub fn update_session_provider_config_sync(
-    db: &DbConnection,
-    session_id: &str,
-    provider_name: Option<&str>,
-    model_name: Option<&str>,
-) -> Result<(), String> {
-    let normalized_provider_name = provider_name
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
-    let normalized_model_name = model_name.map(str::trim).filter(|value| !value.is_empty());
-
-    if normalized_provider_name.is_none() && normalized_model_name.is_none() {
-        return Ok(());
-    }
-
-    let model_config_json = normalized_model_name
-        .map(ModelConfig::new)
-        .transpose()
-        .map_err(|error| format!("构建 model_config 失败: {error}"))?
-        .as_ref()
-        .map(serde_json::to_string)
-        .transpose()
-        .map_err(|error| format!("序列化 model_config 失败: {error}"))?;
-    let conn = db.lock().map_err(|e| format!("数据库锁定失败: {e}"))?;
-    let now = Utc::now().to_rfc3339();
-
-    agent_session_repository::update_session_provider_config(
-        &conn,
-        session_id,
-        normalized_provider_name,
-        normalized_model_name,
-        model_config_json.as_deref(),
-        &now,
     )?;
     Ok(())
 }

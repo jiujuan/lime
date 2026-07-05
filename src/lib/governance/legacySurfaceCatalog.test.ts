@@ -74,6 +74,53 @@ describe("legacySurfaceCatalog", () => {
     ]);
   });
 
+  it("应记录已删除的旧 PluginMarketplacePage 页面和详情弹窗 surface", () => {
+    const monitor = legacySurfaceCatalogJson.imports.find(
+      (entry) => entry.id === "plugin-marketplace-page-legacy-ui-surface",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.targets).toEqual([
+      "src/features/plugin/PluginMarketplacePage.tsx",
+      "src/features/plugin/PluginMarketplacePage.test.tsx",
+      "src/features/plugin/PluginMarketplacePage.visibleBlockers.test.tsx",
+      "src/features/plugin/PluginMarketplacePageNavigation.ts",
+      "src/features/plugin/PluginMarketplaceDetailPanel.tsx",
+      "src/features/plugin/PluginMarketplaceHistorySessionPanel.tsx",
+      "src/features/plugin/PluginMarketplaceRegistrationPanel.tsx",
+      "src/features/plugin/PluginMarketplaceRegistrationPanelModel.ts",
+      "src/features/plugin/PluginMarketplaceSkillPanel.tsx",
+    ]);
+  });
+
+  it("应记录已删除的旧 PluginMarketplacePage 专属 i18n key", () => {
+    const monitor = legacySurfaceCatalogJson.frontendText.find(
+      (entry) => entry.id === "plugin-marketplace-page-legacy-i18n-keys",
+    );
+
+    expect(monitor).toBeTruthy();
+    expect(monitor?.classification).toBe("dead");
+    expect(monitor?.includePathPrefixes).toEqual(["src/i18n/resources"]);
+    expect(monitor?.allowedPaths).toEqual([]);
+    expect(monitor?.patterns).toEqual(
+      expect.arrayContaining([
+        "plugin.marketplace.action.detail",
+        "plugin.marketplace.action.disable",
+        "plugin.marketplace.action.uninstallKeepData",
+        "plugin.marketplace.detailActionTitle",
+        "plugin.marketplace.detail.",
+        "plugin.marketplace.openActionTitle",
+        "plugin.marketplace.historyActionTitle",
+        "plugin.marketplace.historySelection.",
+        "plugin.marketplace.management.",
+        "plugin.marketplace.registration.",
+        "plugin.marketplace.history.entryBanner",
+      ]),
+    );
+  });
+
   it("应为 AgentUI 标准防回流提供机械守卫", () => {
     const treeMonitor = legacySurfaceCatalogJson.frontendText.find(
       (entry) => entry.id === "agent-ui-nonstandard-tree-terminology",
@@ -262,7 +309,7 @@ describe("legacySurfaceCatalog", () => {
     expect(adapterMonitor).toBeTruthy();
     expect(adapterMonitor?.classification).toBe("dead");
     expect(adapterMonitor?.patterns).toEqual([
-      "humanReview: entry.kind === \"workflow\"",
+      'humanReview: entry.kind === "workflow"',
     ]);
     expect(adapterMonitor?.allowedPaths).toEqual([]);
   });
@@ -4010,7 +4057,7 @@ describe("legacySurfaceCatalog", () => {
     expect(monitor?.classification).toBe("dead");
     expect(monitor?.patterns).toEqual(
       expect.arrayContaining([
-        "\"productProfile\"",
+        '"productProfile"',
         "productProfileAvailable",
         "productProfileEnabled",
         "PluginProductProfile",

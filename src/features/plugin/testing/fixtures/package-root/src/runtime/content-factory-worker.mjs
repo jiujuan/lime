@@ -1214,13 +1214,17 @@ if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
-  const request = await readStdinJson();
-  for (const event of buildContentFactoryWorkerProgressEvents(request)) {
-    process.stdout.write(`${JSON.stringify(event)}\n`);
-  }
-  const response = handleContentFactoryWorkerRequest(request);
-  process.stdout.write(`${JSON.stringify(response)}\n`);
-  if (response.status !== "completed") {
+  try {
+    const request = await readStdinJson();
+    for (const event of buildContentFactoryWorkerProgressEvents(request)) {
+      process.stdout.write(`${JSON.stringify(event)}\n`);
+    }
+    const response = handleContentFactoryWorkerRequest(request);
+    process.stdout.write(`${JSON.stringify(response)}\n`);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.stack || error.message : String(error);
+    process.stderr.write(`${message}\n`);
     process.exitCode = 1;
   }
 }

@@ -308,6 +308,16 @@ export interface ToolRefDeclaration {
   required?: boolean;
 }
 
+export interface ConnectorDeclaration {
+  id: string;
+  title?: string;
+  description?: string;
+  kind?: string;
+  taskKinds?: string[];
+  path?: string;
+  required?: boolean;
+}
+
 export interface ComponentPathsDeclaration {
   agents?: string;
   skills?: string;
@@ -465,6 +475,7 @@ export interface AppManifest {
   policies?: PolicyDeclaration[];
   services?: ServiceDeclaration[];
   workflows?: WorkflowDeclaration[];
+  connectors?: ConnectorDeclaration[];
   subagents?: SubagentDeclaration[];
   skillRefs?: SkillRefDeclaration[];
   toolRefs?: ToolRefDeclaration[];
@@ -563,6 +574,7 @@ export interface NormalizedAppManifest {
   policies: PolicyDeclaration[];
   services: ServiceDeclaration[];
   workflows: WorkflowDeclaration[];
+  connectors: ConnectorDeclaration[];
   subagents: SubagentDeclaration[];
   skillRefs: SkillRefDeclaration[];
   toolRefs: ToolRefDeclaration[];

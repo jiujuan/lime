@@ -100,8 +100,11 @@ fn test_tool_policy_rule_catalog_uses_registered_canonical_tool_names() {
 
 #[test]
 fn test_shell_command_classifier_reports_highest_risk_segment() {
-    let rule_match = super::rules::classify_shell_command("git status && rm -rf target/tmp")
-        .expect("shell command should match a policy rule");
+    let rule_match = tool_runtime::execution_rules::classify_shell_command_with_rules(
+        "git status && rm -rf target/tmp",
+        &[],
+    )
+    .expect("shell command should match a policy rule");
 
     assert_eq!(rule_match.rule_id, "destructive_remove");
     assert_eq!(rule_match.risk_level.label(), "high");
@@ -110,10 +113,14 @@ fn test_shell_command_classifier_reports_highest_risk_segment() {
 
 #[test]
 fn test_shell_command_classifier_does_not_treat_file_paths_as_rm_flags() {
-    assert!(super::rules::classify_shell_command("rm feature.txt").is_none());
+    assert!(
+        tool_runtime::execution_rules::classify_shell_command_with_rules("rm feature.txt", &[])
+            .is_none()
+    );
 
-    let rule_match = super::rules::classify_shell_command("rm -Rf target/tmp")
-        .expect("recursive force remove should match policy rule");
+    let rule_match =
+        tool_runtime::execution_rules::classify_shell_command_with_rules("rm -Rf target/tmp", &[])
+            .expect("recursive force remove should match policy rule");
     assert_eq!(rule_match.rule_id, "destructive_remove");
 }
 

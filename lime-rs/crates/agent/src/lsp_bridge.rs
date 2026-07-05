@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 /// 创建 LSP 回调
-pub fn create_lsp_callback() -> LspCallback {
+pub(crate) fn create_lsp_callback() -> LspCallback {
     std::sync::Arc::new(
         |operation: LspOperation, path: PathBuf, position: Option<Position>| {
             Box::pin(async move { execute_lsp(operation, path, position).await })

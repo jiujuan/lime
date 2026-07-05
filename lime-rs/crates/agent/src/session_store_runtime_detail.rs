@@ -6,6 +6,7 @@ use std::time::Instant;
 use super::session_store_runtime_projection::{
     apply_runtime_snapshot, apply_runtime_usage_fallback_to_latest_assistant_message,
 };
+use super::session_store_subagent_aster_adapter::project_aster_subagent_session;
 use super::session_store_subagent_context::{
     load_child_subagent_sessions, load_subagent_parent_context,
     should_load_runtime_overlay_for_runtime_detail,
@@ -257,7 +258,8 @@ pub async fn get_runtime_session_detail_with_history_page(
 
     let parent_context_started_at = Instant::now();
     if load_subagent_runtime_context {
-        match load_subagent_parent_context(db, session_id, session.as_ref()).await {
+        let current_subagent_session = session.as_ref().and_then(project_aster_subagent_session);
+        match load_subagent_parent_context(db, session_id, current_subagent_session).await {
             Ok(subagent_parent_context) => {
                 detail.subagent_parent_context = subagent_parent_context;
             }

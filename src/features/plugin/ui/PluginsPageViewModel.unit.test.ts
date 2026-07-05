@@ -104,9 +104,7 @@ function buildCloudApp(
   };
 }
 
-function buildManifest(
-  overrides: Partial<AppManifest> = {},
-): AppManifest {
+function buildManifest(overrides: Partial<AppManifest> = {}): AppManifest {
   return {
     ...(contentFactoryFixture as AppManifest),
     ...overrides,
@@ -367,6 +365,21 @@ describe("PluginsPageViewModel", () => {
       }),
     ).toBe("https://lime.local/icon.png");
     expect(
+      decodeURIComponent(
+        resolveAppIconSrc({
+          title: "本地文件图标",
+          installedState: buildReadyState({
+            manifest: buildManifest({
+              presentation: {
+                icon: "./assets/icon.svg",
+              },
+            }),
+          }),
+          convertLocalFileSrc: (path) => `file://${path}`,
+        }),
+      ),
+    ).toContain("本地文件图标");
+    expect(
       resolveAppIconSrc({
         title: "Cloud",
         cloudApp: buildCloudApp({
@@ -551,9 +564,7 @@ describe("PluginsPageViewModel", () => {
     })[0]!;
 
     expect(item.hostLifecycle?.appCenterStatus).toBe("blocked");
-    expect(item.hostLifecycle?.blockers).toEqual([
-      "SERVER_HOST_GATE_BLOCKED",
-    ]);
+    expect(item.hostLifecycle?.blockers).toEqual(["SERVER_HOST_GATE_BLOCKED"]);
     expect(item.statusKind).toBe("partial");
     expect(isPrimaryActionDisabled(item, null)).toBe(true);
   });

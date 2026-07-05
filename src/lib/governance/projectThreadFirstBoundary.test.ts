@@ -1,8 +1,9 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join, relative } from "node:path";
+import { cwd } from "node:process";
 import { describe, expect, it } from "vitest";
 
-const REPO_ROOT = process.cwd();
+const REPO_ROOT = cwd();
 
 const PROJECT_THREAD_SCHEMA_NAME_PATTERN =
   /^(?:AgentSession|MemoryStore|SessionFile|Workspace|ConversationImportThread|ImportedThread)/u;
@@ -60,7 +61,7 @@ const FORBIDDEN_EXPERT_STABLE_SESSION_PATTERNS = [
 ] as const;
 
 const SKILL_THREAD_FIRST_SURFACE_FILES = [
-  "src/components/skills/useSkillsWorkspaceDefaultProject.ts",
+  "src/components/skills/useSkillsWorkspaceProject.ts",
   "src/components/skills/SkillsWorkspacePage.tsx",
   "src/components/skills/workspaceSkillRuntimeLaunch.ts",
   "src/components/agent/chat/workspace/useInitialPendingServiceSkillLaunchRuntime.ts",
@@ -74,6 +75,50 @@ const FORBIDDEN_SKILL_FIRST_RUNTIME_PATTERNS = [
   "execute_skill",
   "skillSessionId",
   "skill_session_id",
+] as const;
+
+const PLUGIN_THREAD_FIRST_SURFACE_FILES = [
+  "src/features/plugin/runtime/agentRuntimeCapabilityHost.ts",
+  "src/features/plugin/runtime/agentRuntimeAppServerClient.ts",
+  "src/features/plugin/runtime/capabilityDispatcher.ts",
+  "src/features/plugin/ui/PluginRuntimePage.tsx",
+  "src/features/plugin/ui/PluginsPage.tsx",
+  "src/components/agent/chat/workspace/workspacePluginActivation.ts",
+  "src/components/agent/chat/workspace/workspacePluginRuntimeContext.ts",
+];
+
+const FORBIDDEN_PLUGIN_FIRST_RUNTIME_PATTERNS = [
+  "getOrCreateDefaultProject",
+  "defaultProject",
+] as const;
+
+const AUTOMATION_THREAD_FIRST_SURFACE_FILES = [
+  "lime-rs/crates/app-server/src/automation_execution.rs",
+  "lime-rs/crates/app-server/src/local_data_source/automation.rs",
+  "src/lib/api/automation.ts",
+] as const;
+
+const FORBIDDEN_AUTOMATION_FIRST_RUNTIME_PATTERNS = [
+  "automation-session-",
+  "automation-thread-",
+] as const;
+
+const SUBAGENT_THREAD_FIRST_SURFACE_FILES = [
+  "lime-rs/crates/agent/src/session_store_subagent_context.rs",
+  "lime-rs/crates/app-server/src/runtime/evidence_provider.rs",
+  "lime-rs/crates/app-server/src/runtime/tests/evidence_exports/team_facts.rs",
+  "src/components/agent/chat/AgentChatWorkspace.tsx",
+  "src/components/agent/chat/utils/subagentTimeline.ts",
+  "src/components/agent/chat/projection/subagentStatusProjection.ts",
+  "src/components/agent/chat/projection/teamControlProjection.ts",
+  "src/components/agent/chat/team-workspace-runtime/restoredTeamFactsProjection.ts",
+] as const;
+
+const FORBIDDEN_SUBAGENT_FIRST_HISTORY_PATTERNS = [
+  "subagentHistory",
+  "subagent_history",
+  "childSubagentHistory",
+  "subagentSessionHistory",
 ] as const;
 
 function repoPath(path: string): string {
@@ -217,5 +262,172 @@ describe("Project / Thread-first boundary", () => {
       hits,
       "Skills 只能作为当前 Project / Thread 的 tool/context/workflow 注入；不得自动创建默认项目、恢复 Skill 私有 session 或暴露独立 executeSkill 运行入口",
     ).toEqual([]);
+  });
+
+  it("插件 Agent task 入口不得恢复默认项目孤岛", () => {
+    const hits = PLUGIN_THREAD_FIRST_SURFACE_FILES.flatMap((file) => {
+      const source = readFileSync(repoPath(file), "utf8");
+      return FORBIDDEN_PLUGIN_FIRST_RUNTIME_PATTERNS.flatMap((pattern) =>
+        source.includes(pattern) ? [`${file}: ${pattern}`] : [],
+      );
+    });
+
+    expect(
+      hits,
+      "插件可以有管理 / 预览 surface，但 lime.agent task 必须携带 current Project / Thread workspace；不得自动创建默认项目或恢复 Plugin-first project fallback",
+    ).toEqual([]);
+  });
+
+  it("Automation job 不得把 job id 拼成私有 session / thread fallback", () => {
+    const hits = AUTOMATION_THREAD_FIRST_SURFACE_FILES.flatMap((file) => {
+      const source = readFileSync(repoPath(file), "utf8");
+      return FORBIDDEN_AUTOMATION_FIRST_RUNTIME_PATTERNS.flatMap((pattern) =>
+        source.includes(pattern) ? [`${file}: ${pattern}`] : [],
+      );
+    });
+
+    expect(
+      hits,
+      "Automation / Workflow 可以是项目级配置，但运行产物必须显式绑定 Project / Thread lineage；不得用 job id 自动拼出能力私有 session 或 thread",
+    ).toEqual([]);
+  });
+
+  it("Automation agent_turn API 类型必须要求显式 session / thread lineage", () => {
+    const source = readFileSync(repoPath("src/lib/api/automation.ts"), "utf8");
+
+    expect(source).toContain("session_id: string;");
+    expect(source).toContain("thread_id: string;");
+    expect(source).not.toContain("session_id?:");
+    expect(source).not.toContain("thread_id?:");
+  });
+
+  it("Thread 内 service skill automation 创建链必须写入当前 session / thread lineage", () => {
+    const workspaceSource = readFileSync(
+      repoPath("src/components/agent/chat/AgentChatWorkspace.tsx"),
+      "utf8",
+    );
+    const actionSource = readFileSync(
+      repoPath(
+        "src/components/agent/chat/workspace/useWorkspaceServiceSkillEntryActions.ts",
+      ),
+      "utf8",
+    );
+    const viewModelSource = readFileSync(
+      repoPath(
+        "src/components/agent/chat/workspace/workspaceServiceSkillEntryActionsViewModel.ts",
+      ),
+      "utf8",
+    );
+
+    expect(workspaceSource).toContain(
+      "threadId: threadRead?.thread_id ?? sessionId",
+    );
+    expect(workspaceSource).toContain("threadLineage={");
+    expect(actionSource).toContain("ensureSessionForThreadLineage");
+    expect(actionSource).toContain("normalizeAutomationThreadLineage");
+    expect(viewModelSource).toContain(
+      "threadLineage: ServiceSkillAutomationThreadLineage",
+    );
+    expect(viewModelSource).toContain(
+      "session_id: pendingAutomation.threadLineage.sessionId",
+    );
+    expect(viewModelSource).toContain(
+      "thread_id: pendingAutomation.threadLineage.threadId",
+    );
+  });
+
+  it("子代理和 Team facts 必须挂在 parent thread，不得恢复独立子代理历史入口", () => {
+    const hits = SUBAGENT_THREAD_FIRST_SURFACE_FILES.flatMap((file) => {
+      const source = readFileSync(repoPath(file), "utf8");
+      return FORBIDDEN_SUBAGENT_FIRST_HISTORY_PATTERNS.flatMap((pattern) =>
+        source.includes(pattern) ? [`${file}: ${pattern}`] : [],
+      );
+    });
+
+    expect(
+      hits,
+      "子代理 / Team 只能作为 parent Thread 的执行层事实；不得恢复独立子代理历史列表或子代理会话一级入口",
+    ).toEqual([]);
+
+    const rustContextSource = readFileSync(
+      repoPath("lime-rs/crates/agent/src/session_store_subagent_context.rs"),
+      "utf8",
+    );
+    const evidenceProviderSource = readFileSync(
+      repoPath("lime-rs/crates/app-server/src/runtime/evidence_provider.rs"),
+      "utf8",
+    );
+    const teamFactsEvidenceTestSource = readFileSync(
+      repoPath(
+        "lime-rs/crates/app-server/src/runtime/tests/evidence_exports/team_facts.rs",
+      ),
+      "utf8",
+    );
+    const workspaceSource = readFileSync(
+      repoPath("src/components/agent/chat/AgentChatWorkspace.tsx"),
+      "utf8",
+    );
+    const timelineSource = readFileSync(
+      repoPath("src/components/agent/chat/utils/subagentTimeline.ts"),
+      "utf8",
+    );
+    const subagentProjectionSource = readFileSync(
+      repoPath(
+        "src/components/agent/chat/projection/subagentStatusProjection.ts",
+      ),
+      "utf8",
+    );
+    const teamControlSource = readFileSync(
+      repoPath("src/components/agent/chat/projection/teamControlProjection.ts"),
+      "utf8",
+    );
+    const restoredTeamFactsProjectionSource = readFileSync(
+      repoPath(
+        "src/components/agent/chat/team-workspace-runtime/restoredTeamFactsProjection.ts",
+      ),
+      "utf8",
+    );
+
+    expect(rustContextSource).toContain("pub parent_session_id: String");
+    expect(rustContextSource).toContain(
+      "pub created_from_turn_id: Option<String>",
+    );
+    expect(rustContextSource).toContain("pub team_preset_id: Option<String>");
+    expect(rustContextSource).toContain(
+      "pub sibling_subagent_sessions: Vec<ChildSubagentSession>",
+    );
+    expect(evidenceProviderSource).toContain('"team_facts": team_facts');
+    expect(evidenceProviderSource).toContain("fn team_facts_summary");
+    expect(teamFactsEvidenceTestSource).toContain(
+      "export_evidence_pack_includes_multi_agent_team_facts",
+    );
+    expect(teamFactsEvidenceTestSource).toContain("parentSessionIds");
+    expect(workspaceSource).toContain(
+      "threadId: threadRead?.thread_id ?? sessionId",
+    );
+    expect(timelineSource).toContain(
+      "if (!resolvedThreadId || childSessions.length === 0 || turns.length === 0)",
+    );
+    expect(timelineSource).toContain("thread_id: resolvedThreadId");
+    expect(timelineSource).toContain("created_from_turn_id?.trim()");
+    expect(subagentProjectionSource).toContain(
+      "parent_session_id: event.parent_session_id",
+    );
+    expect(teamControlSource).toContain(
+      "threadId: definedString(context.threadId)",
+    );
+    expect(teamControlSource).toContain("parentSessionId: sessionId");
+    expect(restoredTeamFactsProjectionSource).toContain(
+      "buildRestoredTeamFactsProjection",
+    );
+    expect(restoredTeamFactsProjectionSource).toContain(
+      "root_session_id: parentSessionId",
+    );
+    expect(restoredTeamFactsProjectionSource).toContain(
+      "threadId: parentThreadId",
+    );
+    expect(restoredTeamFactsProjectionSource).toContain(
+      "parent_session_id: parentSessionId",
+    );
   });
 });

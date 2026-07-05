@@ -1,5 +1,6 @@
 use crate::generated_schema_tree;
 use crate::AppServerMethodKind;
+use crate::AppServerRequestSerializationScope;
 use crate::JsonRpcError;
 use crate::JsonRpcErrorResponse;
 use crate::JsonRpcMessage;
@@ -8,6 +9,7 @@ use crate::JsonRpcRequest;
 use crate::JsonRpcResponse;
 use crate::RequestId;
 use crate::APP_SERVER_METHODS;
+use crate::APP_SERVER_REQUEST_SERIALIZATION_SCOPES;
 use crate::PROTOCOL_VERSION;
 use serde_json::json;
 use serde_json::Map;
@@ -43,11 +45,32 @@ pub fn protocol_fixture_manifest() -> Value {
                 })
             })
             .collect::<Vec<_>>(),
+        "requestSerializationScopes": APP_SERVER_REQUEST_SERIALIZATION_SCOPES
+            .iter()
+            .map(|spec| {
+                json!({
+                    "method": spec.method,
+                    "scope": request_serialization_scope_name(spec.scope),
+                })
+            })
+            .collect::<Vec<_>>(),
         "schemas": {
             "jsonrpc": crate::JSONRPC_SCHEMA_TYPE_NAMES,
             "v0": crate::V0_SCHEMA_TYPE_NAMES
         }
     })
+}
+
+fn request_serialization_scope_name(scope: AppServerRequestSerializationScope) -> &'static str {
+    match scope {
+        AppServerRequestSerializationScope::Thread => "thread",
+        AppServerRequestSerializationScope::ExecutionProcess => "executionProcess",
+        AppServerRequestSerializationScope::ProjectShellSession => "projectShellSession",
+        AppServerRequestSerializationScope::McpOauth => "mcpOauth",
+        AppServerRequestSerializationScope::McpResourceSubscription => "mcpResourceSubscription",
+        AppServerRequestSerializationScope::BrowserSession => "browserSession",
+        AppServerRequestSerializationScope::FileSystemMutation => "fileSystemMutation",
+    }
 }
 
 pub fn generated_fixture_tree() -> BTreeMap<PathBuf, Vec<u8>> {
@@ -283,6 +306,13 @@ mod tests {
                 .iter()
                 .filter(|method| method.kind == AppServerMethodKind::Request)
                 .count()
+        );
+        assert_eq!(
+            manifest["requestSerializationScopes"]
+                .as_array()
+                .expect("requestSerializationScopes")
+                .len(),
+            APP_SERVER_REQUEST_SERIALIZATION_SCOPES.len()
         );
     }
 

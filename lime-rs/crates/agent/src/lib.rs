@@ -12,7 +12,7 @@
 
 pub mod agent_tools;
 pub mod artifact_protocol;
-pub mod ask_bridge;
+mod ask_bridge;
 mod aster_runtime_projection;
 mod aster_session_store;
 mod credential_bridge;
@@ -26,7 +26,7 @@ mod host_managed_generation;
 mod knowledge_builder_skill;
 pub mod lime_session_repository;
 mod live_execution_process;
-pub mod lsp_bridge;
+mod lsp_bridge;
 pub mod mcp_bridge;
 mod message_content_adapter;
 pub mod native_tools;
@@ -38,8 +38,8 @@ mod provider_configuration;
 pub mod provider_continuation_state;
 pub mod provider_runtime_governor;
 pub mod queued_turn;
-pub mod request_tool_policy;
-pub mod runtime_facade;
+mod request_tool_policy;
+mod runtime_facade;
 pub mod runtime_projection_snapshot;
 pub mod runtime_queue;
 mod runtime_snapshot_adapter;
@@ -54,15 +54,13 @@ mod session_execution_runtime_adapter;
 mod session_query;
 pub mod session_state_snapshot;
 mod session_store;
-mod session_update;
 mod session_usage_projection;
 pub mod skill_execution;
-pub mod subagent_control;
-pub mod subagent_profiles;
+mod subagent_control;
+mod subagent_profiles;
+mod subagent_profiles_aster_adapter;
 mod subagent_runtime_adapter;
 pub mod team_runtime_governor;
-#[cfg(any(test, feature = "test-support"))]
-pub mod test_support;
 mod text_normalization;
 pub mod tool_io_offload;
 pub mod tools;
@@ -72,7 +70,6 @@ pub mod turn_input_envelope;
 pub mod turn_state;
 mod write_artifact_events;
 
-pub use ask_bridge::{create_ask_callback, extract_response as extract_ask_response};
 pub use direct_text_generation::{
     run_direct_text_generation_with_db, DirectTextGenerationRequest, DirectTextGenerationResult,
 };
@@ -92,7 +89,6 @@ pub use knowledge_builder_skill::{
 };
 pub use lime_mcp as mcp;
 pub use live_execution_process::LiveExecutionProcessGateway;
-pub use lsp_bridge::create_lsp_callback;
 pub use prompt::SystemPromptBuilder;
 pub use prompt::{
     budget_limit_prompt, build_runtime_agents_prompt, build_runtime_agents_prompt_for_project,
@@ -114,7 +110,6 @@ pub use protocol::{
 };
 pub use protocol_projection::{project_item_runtime, project_turn_runtime};
 pub use provider_configuration::{
-    configure_model_route_provider_for_session, provider_configuration_from_model_selection,
     route_protocol_from_session_provider_config, ModelRouteProviderConfiguration,
     SessionProviderConfig,
 };
@@ -128,12 +123,11 @@ pub use provider_runtime_governor::{
 };
 pub use queued_turn::QueuedTurnSnapshot;
 pub use request_tool_policy::{
-    execute_web_search_preflight_if_needed, merge_system_prompt_with_request_tool_policy,
-    merge_system_prompt_with_web_search_preflight_context,
+    merge_system_prompt_with_request_tool_policy,
     request_tool_policy_with_additional_required_tools, resolve_request_tool_policy,
     resolve_request_tool_policy_with_mode, stream_reply_with_policy, ReplyAttemptError,
     RequestToolPolicy, RequestToolPolicyMode, StreamReplyExecution, WebSearchExecutionTracker,
-    WebSearchPreflightRequest, REQUEST_TOOL_POLICY_MARKER,
+    REQUEST_TOOL_POLICY_MARKER,
 };
 pub use runtime_projection_snapshot::RuntimeProjectionSnapshot;
 pub use runtime_queue::{
@@ -144,16 +138,16 @@ pub use runtime_queue::{
 };
 pub use runtime_state::{AgentRuntimeState, QueuedTurnTask};
 pub use runtime_state_support::{
-    create_lime_identity, create_lime_tool_config, reload_lime_skills, SessionConfigBuilder,
+    is_lime_skill_registered, register_lime_project_skill_from_directory, reload_lime_skills,
+    SessionConfigBuilder,
 };
 pub use runtime_support::initialize_agent_runtime;
 pub use session_configuration::{
     build_agent_session_config, AgentSessionConfig, AgentSessionConfigurationRequest,
 };
 pub use session_execution_runtime::{
-    apply_usage_to_cost_state, detect_runtime_limit_event, persist_session_recent_access_mode,
-    persist_session_recent_preferences, persist_session_recent_team_selection,
-    SessionExecutionRuntime, SessionExecutionRuntimeAccessMode, SessionExecutionRuntimeCostState,
+    apply_usage_to_cost_state, detect_runtime_limit_event, SessionExecutionRuntime,
+    SessionExecutionRuntimeAccessMode, SessionExecutionRuntimeCostState,
     SessionExecutionRuntimeLimitEvent, SessionExecutionRuntimeLimitState,
     SessionExecutionRuntimeOemPolicy, SessionExecutionRuntimePermissionState,
     SessionExecutionRuntimePreferences, SessionExecutionRuntimeRecentTeamRole,
@@ -161,44 +155,22 @@ pub use session_execution_runtime::{
     SessionExecutionRuntimeSource, SessionExecutionRuntimeSummary,
     SessionExecutionRuntimeTaskProfile,
 };
-pub use session_query::{
-    collect_subagent_cascade_session_ids, list_child_subagent_sessions,
-    list_subagent_cascade_session_ids, list_subagent_status_scope_session_ids, read_session,
-};
 pub use session_state_snapshot::SessionStateSnapshot;
 pub use session_store::{
     count_session_messages_sync, create_session_sync, create_session_with_id_sync, delete_session,
     get_persisted_session_metadata_sync, get_runtime_session_detail,
     get_runtime_session_detail_with_history_limit, get_runtime_session_detail_with_history_page,
     get_runtime_session_detail_with_history_window, get_session_sync,
-    get_session_sync_with_full_timeline_without_messages, list_sessions_sync,
-    list_title_preview_messages_sync, rename_session_sync, update_session_archived_state_sync,
-    update_session_execution_strategy_sync, update_session_provider_config_sync,
+    get_session_sync_with_full_timeline_without_messages, list_sessions_sync, rename_session_sync,
+    update_session_archived_state_sync, update_session_execution_strategy_sync,
     update_session_working_dir_sync, ChildSubagentRuntimeStatus, ChildSubagentSession,
-    PersistedSessionMetadata, SessionDetail, SessionInfo, SessionTitlePreviewMessage,
-    SessionTodoItem, SessionTodoStatus, SubagentParentContext,
-};
-pub use session_update::{
-    persist_compaction_session_metrics_update, CompactionSessionMetricsUpdate,
+    PersistedSessionMetadata, SessionDetail, SessionInfo, SessionTodoItem, SessionTodoStatus,
+    SubagentParentContext,
 };
 pub use skill_execution::{
     execute_skill_prompt, execute_skill_workflow, SkillEventEmitter, SkillExecutionError,
     SkillExecutionResult, SkillInputImage, SkillPromptExecution, SkillWorkflowExecution,
     StepResult,
-};
-pub use subagent_control::{
-    derive_subagent_runtime_status_kind, load_subagent_runtime_status, read_subagent_control_state,
-    write_subagent_control_state, SubagentControlState, SubagentRuntimeStatus,
-    SubagentRuntimeStatusInput, SubagentRuntimeStatusKind,
-};
-pub use subagent_profiles::{
-    build_subagent_customization_prompt, builtin_profile_descriptor_by_id,
-    builtin_profile_name_by_id, builtin_skill_descriptor_by_id,
-    builtin_team_preset_descriptor_by_id, builtin_team_preset_label_by_id,
-    summarize_builtin_profile, summarize_builtin_skill, summarize_builtin_team_preset,
-    BuiltinProfileDescriptor, BuiltinSkillDescriptor, BuiltinTeamPresetDescriptor,
-    SubagentCustomizationState, SubagentProfileSummary, SubagentSkillPromptBlock,
-    SubagentSkillSummary, TeamPresetSummary,
 };
 pub use team_runtime_governor::{
     acquire_team_runtime_permit, default_team_runtime_parallel_budget,

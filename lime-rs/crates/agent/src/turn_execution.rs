@@ -1,11 +1,11 @@
 use crate::protocol::AgentEvent as RuntimeAgentEvent;
 use crate::provider_configuration::{
-    configure_model_route_provider_for_session_with_provider, ConfiguredSessionProvider,
-    ModelRouteProviderConfiguration, SessionProviderConfig,
+    configure_model_route_provider_for_session_with_provider, ModelRouteProviderConfiguration,
+    SessionProviderConfig,
 };
 use crate::request_tool_policy::{
-    stream_reply_with_policy, stream_reply_with_policy_and_provider, ReplyAttemptError,
-    RequestToolPolicy, StreamReplyExecution,
+    stream_runtime_reply_with_configured_provider, stream_runtime_reply_with_policy,
+    ReplyAttemptError, RequestToolPolicy, StreamReplyExecution,
 };
 use crate::runtime_state::AgentRuntimeState;
 use crate::AgentSessionConfig;
@@ -55,31 +55,25 @@ where
     } else {
         None
     };
-    let agent_arc = agent_state.get_agent_arc();
-    let agent_guard = agent_arc.read().await;
-    let agent = agent_guard.as_ref().ok_or_else(|| ReplyAttemptError {
-        message: "Lime agent runtime failed to initialize Aster agent".to_string(),
-        emitted_any: false,
-    })?;
     let cancel_token = agent_state.create_cancel_token(request.session_id).await;
     let session_config = request.session_config;
     let execution = match configured_provider.as_ref() {
-        Some(ConfiguredSessionProvider { provider, .. }) => {
-            stream_reply_with_policy_and_provider(
-                agent,
+        Some(configured_provider) => {
+            stream_runtime_reply_with_configured_provider(
+                agent_state,
                 request.input_text,
                 None,
                 session_config,
                 Some(cancel_token),
                 request.request_tool_policy,
-                provider.clone(),
+                configured_provider,
                 on_event,
             )
             .await
         }
         None => {
-            stream_reply_with_policy(
-                agent,
+            stream_runtime_reply_with_policy(
+                agent_state,
                 request.input_text,
                 None,
                 session_config,
@@ -94,6 +88,6 @@ where
     let stream = execution?;
     Ok(AgentTurnExecution {
         stream,
-        provider_config: configured_provider.map(|configured| configured.config),
+        provider_config: configured_provider.map(|configured| configured.into_config()),
     })
 }

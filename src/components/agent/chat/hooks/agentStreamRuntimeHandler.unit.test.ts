@@ -3933,7 +3933,6 @@ describe("agentStreamRuntimeHandler", () => {
       data: {
         type: "text_delta",
         text: "我",
-        itemId: "legacy-unphased-after-search",
         sequence: 3,
         turn_id: "turn-live-search",
       } as AgentEvent,

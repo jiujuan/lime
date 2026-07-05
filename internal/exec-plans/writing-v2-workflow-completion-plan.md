@@ -1,19 +1,32 @@
 # Writing v2 Workflow 完成计划
 
-更新时间：2026-07-03
+更新时间：2026-07-05
 状态：Active
 路线图：`internal/roadmap/Writing/v2/`
 
 ## 目标
 
-把 `@写文章` 从“一次性 worker 输出后集中投影”升级为段落级产物流式 + 后台 workflow JSONL 审计。最终完成态必须满足：
+把 `@写文章` 从“一次性 worker 输出后集中投影 / fixture 假完成”升级为“内容工厂 workflow contract 编排 + 普通 Agent 对话流 + 段落级 article artifact + 后台 workflow JSONL 审计”。最终完成态必须满足：
 
 - 流程由内容工厂插件 manifest / activation request 声明，Lime 宿主不硬编码内容工厂业务步骤。
-- 正文生成、标题、大纲、引用组织等内容工厂领域逻辑必须留在内容工厂 Plugin worker / 插件包内，不新增 App Server 宿主 `content_factory_*` 业务模块。
+- `@写文章` 首发必须走普通 Agent turn，保留自然引导、思考 / 工具过程和自然总结；Plugin worker / pane action 不能绕过普通对话。
+- 正文生成、标题、大纲、引用组织等内容工厂领域逻辑必须来自内容工厂 Plugin / workflow contract / host-managed generation 边界，不新增 App Server 宿主 `content_factory_*` 模板模块。
 - workflow run / step / tool / connector / hook / evidence 只写入 append-only JSONL 审计日志，不进入普通用户 UI。
 - `agentSession/read` 只恢复 artifact / workspace patch / Article Editor，不返回 UI-facing workflow run / step 列表。
 - WebSearch / connector / hook / artifact delta 后续进入同一个 workflow audit stream。
 - 最终文章仍进入 `ArtifactFrame(articleArtifacts)` 与右侧 Article Editor，不回退普通 assistant 长文。
+- 右侧 Article Workspace 不自动打开；只有用户点击文章产物或显式动作才打开。
+
+## 2026-07-05 当前校正
+
+最新修复说明主缺口已经从“普通 Agent turn 是否正确承接内容工厂产物”推进到“真实桌面 GUI 是否正确投影这条链路”：
+
+- 已关闭失败：后端 current-turn smoke 曾在 `.lime/qc/content-factory-current-turn-debug/content-factory-current-turn-debug-host-generation-2026-07-05T03-29-33-481Z.failure.json` 失败，错误为 `expected paragraph-level artifact snapshots, got 0`。
+- 修复结论：`plugin_activation` 已进入普通 Agent backend；RuntimeCore 现在暂存 backend 的 `turn.completed`，在 terminal 前 materialize `content_factory.workspace_patch` artifact、host tool timeline 和 workflow audit，再封口完成态。
+- 验证证据：`npm run smoke:content-factory-current-turn:host-generation -- --timeout-ms 180000 --evidence-dir ".lime/qc/content-factory-current-turn-debug" --prefix "content-factory-current-turn-debug"` 已通过，证据为 `.lime/qc/content-factory-current-turn-debug/content-factory-current-turn-debug-host-generation-2026-07-05T04-19-07-937Z.json` 和同名 `.workflow-events.jsonl`。
+- 关键指标：普通事件 `35` 条，`artifactSnapshotCount=7`，`streamingDocumentLengths=5`，`hostToolEventCount=9`，read model host tool call `3` 个，`workflow-events.jsonl` 写入 `16` 条 metadata-only audit 事件，最终 `turn.completed` 位于 artifact / tool 事件之后。
+- 当前实现进展：RuntimeCore 已新增 terminal deferring sink，`content-factory-app` 的 `plugin_activation` 会派生成后处理用 `PaneActionWorkerTurn`，在普通 Agent backend 返回后、`turn.completed` 落库前执行内容工厂 artifact materialization 与 audit 写入；旧单测的“不得 materialize worker artifacts”断言已改为“普通 backend 先接收请求，artifact snapshot 与 workflow JSONL 必须在 terminal 前出现”。Rust 定向测试、App Server current-turn smoke 和 Electron/CDP baseline 已通过，剩余 Electron/CDP product acceptance。
+- Electron/CDP baseline：`.lime/qc/gui-evidence/writing/writing-cdp-WRITING_CDP_1783188149738-summary.json` 证明真实 Electron/CDP、bridge health、`electron-ipc -> app_server_handle_json_lines`、`agentSession/turn/start`、`content_article_workflow` activation metadata、自然过程捕获、文章产物正文可见且无新增 invoke errors；`.lime/qc/gui-evidence/writing/writing-cdp-WRITING_CDP_1783188149738-turn-start-trace.json` 保留 session / turn 取证。该脚本主动打开了 Article Editor，不证明右侧不自动打开，也未完成历史恢复。
 
 ## 当前事实源
 
@@ -64,6 +77,7 @@
 - [x] Hook lifecycle 复制 / 转换为 `workflow.hook.completed` audit-only 事件，继续不进入普通 UI / read model / workerEvidence。
 - [x] 外部真实内容工厂 Plugin worker 已能以段落级 `artifact.snapshot` 输出 draft 正文增量。
 - [x] 上述真实 package worker 增量通过 Lime current App Server local_folder 运行路径进入 artifact read model。
+- [x] `@写文章` 普通 Agent turn 通过 App Server current-turn host-generation smoke：普通 backend 先输出自然对话 / provider delta，后处理在 terminal 前补齐 `7` 个 artifact snapshot、`3` 组 host tool event 和 `16` 条 workflow JSONL audit。
 - [ ] 上述真实 package worker 增量通过 Lime 远程 / GUI production 安装运行路径进入 artifact read model。
 - [x] retry 绑定 workflow run / step，并进入 JSONL audit log。
 - [x] cancel 绑定当前未完成 workflow run / step，并进入 JSONL audit log。
@@ -72,9 +86,9 @@
 
 ## 下一刀
 
-1. 发布 / 部署 LimeCore 签名契约变更，配置 production Plugin signature trust roots，使用 `content-factory-app` 的 `npm run release:sign` 生成真实 release `signatureProof`，重新发布 signed release，并复走 Lime 远程 / GUI production 安装运行闭环；不能在客户端绕过。
-2. 用 `.lime/qc/gui-evidence/agent-apps/content-factory-production-evidence-template-2026-07-03/` 中的四份模板采集 production catalog / bootstrap trust roots / fetchCloud / GUI evidence，再跑 `npm run plugin:content-factory-signed-release-gate -- --evidence-dir .lime/qc/gui-evidence/agent-apps/content-factory-production-evidence-template-2026-07-03 --check` 作为 production preflight；结果会写回同目录 `content-factory-signed-release-gate.result.json`。当前 result 仍 blocked，因为模板内 package / manifest hash 仍为占位值。
-3. 补真实 live Provider / 远程 GUI production 条件下的 host-managed generation 证据；受控 provider current-turn smoke 已完成，但不能替代生产凭证 / GUI 链路。
+1. 把 Electron/CDP Gate B baseline 升级为 product acceptance：真实跑 `@写文章`，在点击文章产物前断言右侧不自动打开，确认聊天自然引导 / 执行卡 / 文章产物顺序、raw JSON / `.lime/artifacts/content-factory/workspace-patch.json` 文件卡隐藏；点击文章产物后再断言 Article Editor 打开；最后从历史重新进入同一 session，确认文章仍可恢复。
+2. 再补真实 live Provider / 远程 GUI production 条件下的 host-managed generation 证据；受控 provider current-turn smoke 通过后才能进入这一步，不能反过来用生产目标掩盖 GUI 投影断裂。
+3. 发布 / 部署 LimeCore 签名契约变更，配置 production Plugin signature trust roots，使用 `content-factory-app` 的 `npm run release:sign` 生成真实 release `signatureProof`，重新发布 signed release，并复走 Lime 远程 / GUI production 安装运行闭环；不能在客户端绕过。
 4. 建模真实 resume audit；当前 worker 没有 resume lifecycle 入口，`agentSession/thread/resume` 已先按 fail-closed 守卫，后续必须先补插件 worker resume contract，再写 `workflow.*resum*` audit。
 5. `src/features/agent-app/**` 与宿主内容工厂硬编码 demo 已退出 current 写集；后续拆分工作应回到 Plugin / App Center current 页面与 runtime surface，不再围绕旧 `AgentAppLabPage.tsx` 或旧 demo 文件续命。
 
@@ -89,6 +103,9 @@
 - `npm run smoke:content-factory-package -- --timeout-ms 180000`
 - `npm run smoke:content-factory-current-turn -- --timeout-ms 180000`
 - `npm run smoke:content-factory-current-turn:host-generation -- --timeout-ms 180000`
+- `npm run smoke:content-factory-current-turn:host-generation -- --timeout-ms 180000 --evidence-dir ".lime/qc/content-factory-current-turn-debug" --prefix "content-factory-current-turn-debug"`
+- Electron/CDP Gate B baseline evidence：`.lime/qc/gui-evidence/writing/writing-cdp-WRITING_CDP_1783188149738-summary.json`、`.lime/qc/gui-evidence/writing/writing-cdp-WRITING_CDP_1783188149738-turn-start-trace.json`
+- Electron/CDP Gate B product acceptance evidence：待补，必须覆盖右侧不自动打开、执行卡片顺序、raw JSON / 文件卡隐藏和历史恢复
 - `npm run smoke:content-factory-current-turn:cloud-release -- --timeout-ms 180000`
 - `npm run smoke:content-factory-current-turn:cloud-release-host-generation -- --timeout-ms 180000`
 - `npm test` / `npm run validate:app`（`src/features/plugin/testing/fixtures/package-root`）
@@ -105,6 +122,8 @@
 
 ## 进度日志
 
+- 2026-07-05：补写 Electron/CDP Gate B baseline 证据分级。最新真实桌面证据 `.lime/qc/gui-evidence/writing/writing-cdp-WRITING_CDP_1783188149738-summary.json` 显示 `usedElectronCdp=true`、`usedRealElectron=true`、`bridgeHealthChecked=true`、`turnStartViaElectronIpc=true`、`writingActivationMetadataPresent=true`、`articleArtifactFrameVisible=true`、`articleArtifactHasBody=true`、`processOrGuidanceCaptured=true`、`noInvokeErrors=true`；同名 `turn-start-trace.json` 记录 `app_server_handle_json_lines`、`electron-ipc`、`content_article_workflow`、session `sess_986a1c6327914bd58233cebfa50a530e` 和 turn `a337d0fa-f791-43eb-bb34-0380b005b8b7`。该证据只标记 baseline：脚本主动点击了“打开文档”，所以不能证明右侧不自动打开；也没有覆盖历史恢复和 raw JSON / 文件卡隐藏的负向断言。下一刀必须做 product acceptance，而不是继续堆 worker fixture。
+- 2026-07-05：修复普通 `@写文章` turn 的内容工厂 materialization 顺序。RuntimeCore 新增 terminal deferring sink，对内容工厂 `plugin_activation` 暂存普通 backend 发出的 `turn.completed`，先派生后处理 `PaneActionWorkerTurn` 执行 article artifact materialization、host tool enrichment 与 `workflow-events.jsonl` audit 写入，再重新 emit terminal。`plugin_activation` 仍进入普通 Agent backend，`maybe_run_plugin_worker_turn` 不接管首发，右侧 pane/action worker 只响应显式右侧动作。同步把旧单测“不得 materialize worker artifacts”改成“普通 backend 先接收请求，artifact snapshot 与 workflow JSONL 必须在 terminal 前出现”。验证：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server plugin_activation_turn_uses_regular_agent_backend --lib`、`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server plugin_worker_turn --lib`、`npm run smoke:content-factory-current-turn:host-generation -- --timeout-ms 180000 --evidence-dir ".lime/qc/content-factory-current-turn-debug" --prefix "content-factory-current-turn-debug"`。最新 smoke evidence：`.lime/qc/content-factory-current-turn-debug/content-factory-current-turn-debug-host-generation-2026-07-05T04-19-07-937Z.json`，显示普通事件 `35` 条、`artifactSnapshotCount=7`、`streamingDocumentLengths=5`、`hostToolEventCount=9`、read model host tool call `3` 个，后台 `workflow-events.jsonl` 写入 `16` 条 metadata-only audit 事件；该证据仍使用本地 OpenAI-compatible fixture，不等同于真实 live Provider / Electron GUI production 完成。
 - 2026-07-03：接入 `workflow-events.jsonl` compaction 自动触发策略。`EventLogWriter::append_workflow_audit_events(...)` 在 audit 写入成功后执行 `compact_session_workflow_audit_events_if_needed(...)`，active audit 超过 `1024` 条时归档旧记录并保留最近 `512` 条；archive 文件按 sequence 范围确定并覆盖写入，新增幂等守卫防止 compaction 重试把同一批旧 audit 重复追加到 Evidence Pack；compaction 失败只写 `tracing::warn!`，不会让已落盘 audit 写入回滚或把 housekeeping 失败投影到普通 turn。`event_log.rs` 接近 `800` 行预警后已把同文件单测拆到 `runtime/event_log/tests.rs`，实现文件降到约 `490` 行。验证：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package app-server`、`npm run test:rust:unit -- -p app-server event_log -- --nocapture`、`npm run test:rust:unit -- -p app-server export_evidence_summarizes_workflow_audit_jsonl_metadata_only -- --nocapture`。
 - 2026-07-03：补 `workflow-events.jsonl` retention / archive compaction 本地 API。`EventLogWriter::compact_session_workflow_audit_events(session_id, retain_recent)` 会把 active `workflow-events.jsonl` 的旧记录归档到同目录 `workflow-events.archive.<first_seq>-<last_seq>.jsonl`，active 文件只保留最近 N 条；`read_session_workflow_audit_events(...)` 和 `evidence/export` 聚合读取 archive + active，归档后 Evidence Pack 摘要不丢 workflow audit 元数据。`retain_recent=0` fail closed，不允许误清空 audit；`clear_session(...)` 同步删除 active 与 archive，避免压缩后会话清理仍能读到历史 audit。当前剩余缺口只剩自动触发阈值 / 运维策略接入，不再是存储格式或导出能力缺口。验证：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package app-server`、`npm run test:rust:unit -- -p app-server compact_workflow_audit -- --nocapture`、`npm run test:rust:unit -- -p app-server clear_session_removes_session_event_log -- --nocapture`、`npm run test:rust:unit -- -p app-server export_evidence_summarizes_workflow_audit_jsonl_metadata_only -- --nocapture`。
 - 2026-07-03：补 P2 resume audit fail-closed 守卫。`agentSession/thread/resume` 仍只负责恢复 App Server queued turn，不代表插件 worker workflow resume；新增 `queue_resume_audit` Rust 守卫，先写入既有 `workflow.run.started / workflow.run.completed` audit-only JSONL，再执行 queued turn resume，断言普通 session JSONL 不出现 `workflow.*`，`workflow-events.jsonl` 不新增任何 `workflow.*resum*` 事件。真实 resume audit 仍 blocked，退出条件是插件 worker contract 提供可恢复 run / step lifecycle，并能绑定既有 `workflowRunId + stepId` 后再写 metadata-only audit。验证：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package app-server`、`npm run test:rust:unit -- -p app-server resume_queued_turn_does_not_write_workflow_resume_audit_without_worker_lifecycle -- --nocapture`。

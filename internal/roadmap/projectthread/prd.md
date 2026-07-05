@@ -93,15 +93,16 @@ Project / Workspace
 
 ## 7. 用户故事
 
-| 编号  | 用户故事                                                                             | 验收口径                                                                   |
-| ----- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
-| PT-01 | 作为用户，我在一个项目里写商业计划书，希望先让商业专家分析，再让文案专家润色。       | 两轮发生在同一 Thread，第二轮能看到第一轮结论。                            |
-| PT-02 | 作为用户，我从专家广场点一个专家，希望它处理当前项目，而不是进入默认项目孤岛。       | 新会话绑定当前 project / workspace；没有当前项目时要求显式选择或创建。     |
-| PT-03 | 作为用户，我在当前对话里启用一个 Skill，希望它接着当前上下文工作。                   | Skill 作为 tool/context/workflow 注入当前 turn，不创建私有 session。       |
-| PT-04 | 作为插件用户，我从插件 UI 发起 Agent 任务，希望结果回到当前对话和证据包。            | 插件任务携带 current sessionId；缺失时在当前 project 下创建 session。      |
-| PT-05 | 作为开发者，我让子代理处理代码审查，希望它的结果能追溯到父对话。                     | child session / subagent turn 有 parent session / turn lineage。           |
-| PT-06 | 作为用户，我关闭 Lime 后重新打开，希望所有专家、插件、浏览器操作都能从项目历史恢复。 | session list / thread read / evidence 能恢复关键状态，不依赖入口私有缓存。 |
-| PT-07 | 作为维护者，我不希望未来有人给每个专家加一套长期记忆。                               | 治理测试禁止 agent/expert scoped memory root。                             |
+| 编号  | 用户故事                                                                             | 验收口径                                                                      |
+| ----- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| PT-01 | 作为用户，我在一个项目里写商业计划书，希望先让商业专家分析，再让文案专家润色。       | 两轮发生在同一 Thread，第二轮能看到第一轮结论。                               |
+| PT-02 | 作为用户，我从专家广场点一个专家，希望它处理当前项目，而不是进入默认项目孤岛。       | 新会话绑定当前 project / workspace；没有当前项目时要求显式选择或创建。        |
+| PT-03 | 作为用户，我在当前对话里启用一个 Skill，希望它接着当前上下文工作。                   | Skill 作为 tool/context/workflow 注入当前 turn，不创建私有 session。          |
+| PT-04 | 作为插件用户，我从插件 UI 发起 Agent 任务，希望结果回到当前对话和证据包。            | 插件任务携带 current sessionId；缺失时在当前 project 下创建 session。         |
+| PT-05 | 作为开发者，我让子代理处理代码审查，希望它的结果能追溯到父对话。                     | child session / subagent turn 有 parent session / turn lineage。              |
+| PT-06 | 作为用户，我关闭 Lime 后重新打开，希望所有专家、插件、浏览器操作都能从项目历史恢复。 | session list / thread read / evidence 能恢复关键状态，不依赖入口私有缓存。    |
+| PT-07 | 作为维护者，我不希望未来有人给每个专家加一套长期记忆。                               | 治理测试禁止 agent/expert scoped memory root。                                |
+| PT-08 | 作为用户，我在当前对话里把一个 Skill 变成定时 workflow，希望它继续服务当前项目。     | workflow job 创建前物化当前 Thread，payload 显式携带 `session_id/thread_id`。 |
 
 ## 8. 用户用例
 
@@ -137,23 +138,36 @@ Project / Workspace
 
 ### UC-04：插件发起 Agent 任务
 
-| 字段     | 内容                                                                                                     |
-| -------- | -------------------------------------------------------------------------------------------------------- |
-| 参与者   | 插件 UI、Plugin runtime adapter、App Server agentSession                                                 |
-| 前置条件 | 插件拥有 Agent capability。                                                                              |
-| 主流程   | 插件提交任务 -> adapter 读取 current session target -> 调用 `agentSession/turn/start`。                  |
-| 结果     | 插件任务输出进入当前 Thread / artifact / evidence。                                                      |
-| 失败处理 | 没有 current session target 时，adapter fail closed 或在当前 project 下创建 Thread，不伪造私有 session。 |
+| 字段     | 内容                                                                                                                                                      |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 参与者   | 插件 UI、Plugin runtime adapter、App Server agentSession                                                                                                  |
+| 前置条件 | 插件拥有 Agent capability。                                                                                                                               |
+| 主流程   | 插件提交任务 -> adapter 读取 current session target；没有 session 但有 current project 时先创建 project-scoped Thread，再调用 `agentSession/turn/start`。 |
+| 结果     | 插件任务输出进入当前 Thread / artifact / evidence。                                                                                                       |
+| 失败处理 | 没有 current session target 且没有 current project 时，adapter fail closed；不得自动创建默认项目或伪造私有 session。                                      |
 
 ### UC-05：自动化任务回到 Project / Thread
 
-| 字段     | 内容                                                                                     |
-| -------- | ---------------------------------------------------------------------------------------- |
-| 参与者   | Automation job、RuntimeCore、Evidence service、用户                                      |
-| 前置条件 | 用户创建了一个定时或后台 workflow。                                                      |
-| 主流程   | job 执行 -> 生成 workflow facts -> 输出 artifact / evidence refs -> 用户从项目历史打开。 |
-| 结果     | job 不只停留在 automation 页面；它能回到 Project / Thread 的历史和证据。                 |
-| 失败处理 | job failed 时生成可恢复 incident / evidence summary。                                    |
+| 字段     | 内容                                                                                                                                                           |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 参与者   | Automation job、RuntimeCore、Evidence service、用户                                                                                                            |
+| 前置条件 | 用户从 Project / Thread 创建或绑定了一个定时或后台 workflow；创建请求已有显式 session / thread lineage。                                                       |
+| 主流程   | job 执行 -> 复用显式 session / thread lineage -> 生成 workflow facts -> 输出 artifact / evidence refs -> 用户从项目历史打开。                                  |
+| 结果     | job 不只停留在 automation 页面；它能回到 Project / Thread 的历史和证据。                                                                                       |
+| 失败处理 | 缺少 session / thread lineage 时 fail closed，顶层 Automation 页不得打开创建入口；job failed 时生成可恢复 incident / evidence summary。                        |
+| 当前实现 | Thread 内 service skill automation draft 已在创建前物化 session/thread，并把 lineage 写入 `agent_turn` payload；顶层 Automation 管理页仍只作为 compat 管理面。 |
+
+### UC-06：子代理作为 parent Thread 执行层
+
+| 字段     | 内容                                                                                                                                                               |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 参与者   | 用户、主 Agent、子代理 / Team runtime、Agent UI projection、Evidence service                                                                                       |
+| 前置条件 | 用户在某个 Project / Thread 中触发分工、handoff、review lane 或 worker notification。                                                                              |
+| 主流程   | 主 Agent 创建 child session -> child session 保存 `parent_session_id / created_from_turn_id` -> Team 状态投影为 parent Thread 的 timeline / team facts / handoff。 |
+| 结果     | 用户看到的是当前 Thread 的执行层状态，而不是一个新的子 Agent 历史列表；重开 Thread 后仍能从 parent read model / projection 恢复。                                  |
+| 失败处理 | 缺少 parent thread 或 parent turn 时，不生成独立子代理 timeline item；运行态可降级显示，但不得把 child session 提升为产品第一分类。                                |
+| 当前实现 | `SubagentParentContext` 保留 parent lineage、team preset 和 sibling sessions；Workspace timeline 使用 parent `threadRead.thread_id` 合成 child activity items。    |
+| 后端证据 | App Server `evidence/export` 已生成 `observability_summary.team_facts`，覆盖 roster、handoff、worker notification、review lane 和 parent session/thread/turn。     |
 
 ## 9. 产品信息架构
 
@@ -376,7 +390,7 @@ flowchart LR
 | FR-09 | Skills 运行统一注入当前 Thread。              | Skill tool events 进入 thread items / evidence；Skills 工作台无 current project 时 fail closed，不自动创建默认项目。 |
 | FR-10 | 插件 Agent task 复用 current session target。 | 缺 session 时 project scoped create，缺 project 时 fail closed。                                                     |
 | FR-11 | Browser Runtime 作为 execution environment。  | 浏览器操作轨迹回到当前 Thread。                                                                                      |
-| FR-12 | Automation 输出回到 Project / Thread。        | job 结果可从项目历史和 Evidence Pack 找回。                                                                          |
+| FR-12 | Automation 输出回到 Project / Thread。        | Thread 内创建请求必须显式携带 `session_id / thread_id`；`smoke:managed-objective-automation` 的 `projectThreadStatus` 已证明 job run、runtime completion 和 Evidence Pack 回到同一 Project / Thread，`completionAuditStatus` 已证明真实 SkillTool invocation / artifact 产出。 |
 
 ## 13. 数据与状态要求
 
@@ -387,6 +401,7 @@ flowchart LR
 | `Turn`                    | 执行单元         | 拥有 input、runtime options、model route、tool policy。       |
 | `Item`                    | 渲染 / 证据单元  | 表达 message、tool、artifact、role switch、workflow event。   |
 | `Expert / Skill / Plugin` | 能力元数据       | 只能挂在 session / turn / item / evidence metadata。          |
+| `Subagent / Team`         | 执行层事实       | child session 必须有 parent session / turn lineage。          |
 | `Memory`                  | workspace/global | 不按 Agent / Expert / Skill / Plugin 拆 root。                |
 
 ## 14. 成功指标
@@ -399,6 +414,7 @@ flowchart LR
 | Agent-first schema 回流      | 0。                                                                                   |
 | 同 Thread 切换专家上下文保留 | P1 后必须有 GUI / fixture evidence。                                                  |
 | Evidence join 完整度         | 关键能力入口都能导出 source metadata、runtime events、artifact refs。                 |
+| Team facts 可追溯率          | 子代理 roster、worker notification、handoff、review lane 均可回到 parent Thread。     |
 
 ## 15. 风险与处理
 
@@ -422,26 +438,26 @@ flowchart LR
 
 1. 从专家广场进入当前项目并完成一轮 turn。
 2. 同一 Thread 内切换专家并继续工作。
-3. 插件触发 Agent task 后能在 Thread / Evidence 中看到结果。
-4. Browser 操作轨迹能回到当前 Thread。
-5. Automation 输出能从项目历史找回。
+3. 插件触发 Agent task 后能在 Thread / Evidence 中看到结果；`content-factory-article-workspace` 真实 Electron fixture 已覆盖插件 worker turn、runtime events、Right Surface、read model 和 artifact 投影。
+4. Browser 操作轨迹能回到当前 Thread；后端 Evidence Pack 已有 `export_evidence_pack_includes_browser_session_and_snapshot_artifacts` 定向证据，`right-surface-visual-matrix` 真实 Electron fixture 已证明 Browser right surface 可通过 App Server pending request 打开并消费完成。
+5. Automation 输出能从项目历史找回；`npm run smoke:managed-objective-automation -- --timeout-ms 180000` 已写出 `.lime/qc/managed-objective-automation-smoke.json`，其中 `status: "pass"`、`projectThreadStatus: "pass"`、`completionAuditStatus: "pass"`、latest run `status: "success"`、Evidence Pack `latestTurnStatus: "completed"`、`decision: "completed"`、`workspaceSkillToolCallCount: 1`、`artifactCount: 1`。该证据证明 App Server `agentSession/turn/start` + `workspace_skill_runtime_enable` + SkillTool + `evidence/export` current 链路已闭环。
+6. 子代理 Team facts 能从 parent Thread 恢复并导出 Evidence Pack；后端 `team_facts` 已有定向验证，前端恢复第一刀已能从 parent read model 回补 Team facts projection，`multi-agent-team` 真实 Electron 单项 smoke 已验证 GUI 用户触发路径、read model 和 evidence/export。
 
 ## 17. 与现有路线图关系
 
-| 路线图                      | 关系                                                                      |
-| --------------------------- | ------------------------------------------------------------------------- |
-| `thread/README.md`          | 负责 live timeline 写入权和 session refresh 合并策略。                    |
-| `memory/README.md`          | 负责 workspace/global memory store 和 context packet。                    |
-| `agent-workspace/README.md` | 负责 GUI 证据和能力评分。                                                 |
-| `zuanjia/`                  | 负责专家广场和专家 profile 能力；本 PRD 约束它不能成为 Agent-first 主线。 |
-| `workflow/`                 | 负责 workflow 标准化；本 PRD 要求 workflow 输出回到 Project / Thread。    |
-| `plugin/`                   | 负责插件平台；本 PRD 要求插件 Agent task 复用 current session。           |
+| 路线图                      | 关系                                                                                                    |
+| --------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `thread/README.md`          | 负责 live timeline 写入权和 session refresh 合并策略。                                                  |
+| `memory/README.md`          | 负责 workspace/global memory store 和 context packet。                                                  |
+| `agent-workspace/README.md` | 负责 GUI 证据和能力评分。                                                                               |
+| `zuanjia/`                  | 负责专家广场和专家 profile 能力；本 PRD 约束它不能成为 Agent-first 主线。                               |
+| `workflow/`                 | 负责 workflow 标准化；本 PRD 要求 workflow 输出回到 Project / Thread。                                  |
+| `plugin/`                   | 负责插件平台；本 PRD 要求插件 Agent task 复用 current session，或在显式 current project 下创建 Thread。 |
 
 ## 18. 下一步建议
 
-下一步不应先做大规模 UI 改版，而是进入 P2 的能力入口 Thread 化盘点：
+下一步不应先做大规模 UI 改版；P3 的多 Agent 团队真实 fixture、P2 Skills 工作台、插件内容工厂、Browser right surface 和 Automation ProjectThread + completion audit 均已有单项 smoke / fixture 证据。后续应把剩余工作切到插件 task compat cache 的长期事实源归属，或补更重 GUI 恢复验证。
 
-1. Skills 运行只作为当前 Thread 的 tool/context/workflow 注入。
-2. 插件 Agent task 复用 current session target，缺 project 时 fail closed。
-3. Browser profile 只作为 execution environment，操作轨迹回到当前 Thread。
-4. Automation / Workflow 输出回写 Project / Thread / Evidence。
+1. 处理 `agent-runtime/tasks/` compat task projection cache 的长期事实源归属，优先评估是否下沉到 App Server read model。
+2. 继续把已完成的 Team GUI 恢复第一刀并入更重的 GUI smoke，证明重开 Thread 后 Team 状态从 parent read model / projection 恢复。
+3. Browser 后续只在真实浏览器操作语义扩大时补更细场景；当前 `right-surface-visual-matrix` Gate B 证据不再阻塞 P2。

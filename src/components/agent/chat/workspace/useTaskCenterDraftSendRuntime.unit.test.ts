@@ -84,11 +84,11 @@ function mountDraftSendRuntime({
     const materializedSessionIdsRef = useRef(new Map<string, string>());
     const sendRef = useRef(send);
 
-    useEffect(() => {
-      if (rerenderAfterMount && renderTick === 0) {
-        setRenderTick(1);
-      }
-    }, [renderTick, rerenderAfterMount]);
+	    useEffect(() => {
+	      if (rerenderAfterMount && renderTick === 0) {
+	        setRenderTick(1);
+	      }
+	    }, [renderTick]);
 
     useTaskCenterDraftSendDispatchRuntime({
       taskCenterDraftSendRequest,

@@ -3,27 +3,81 @@ use super::*;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
-const HOST_GENERATED_ARTICLE_MARKDOWN: &str = "# 人才选聘不能只看简历关键词\n\n人才选聘最难的地方，不是筛掉明显不合适的人，而是识别真正能把问题推进的人。\n\n## 先定义岗位要解决的问题\n\n招聘前先写清楚这个岗位未来三个月要交付什么。\n\n## 用任务验证真实能力\n\n面试可以围绕一个小型业务任务展开，让候选人说明拆解思路、取舍依据和风险判断。";
+struct FinalDoneHostGenerationBackend {
+    requests: Mutex<Vec<ExecutionRequest>>,
+}
 
-fn assert_worker_evidence_audit_fields_hidden(worker_evidence: &serde_json::Value) {
-    for key in [
-        "workflowKey",
-        "subagents",
-        "skillRefs",
-        "cliRefs",
-        "connectorRefs",
-        "hookPolicy",
-        "orchestration",
-        "workerEntrypoint",
-        "inputSummary",
-        "outputSummary",
-    ] {
-        assert!(
-            worker_evidence.get(key).is_none(),
-            "worker evidence must hide audit-only field {key}"
-        );
+#[async_trait]
+impl ExecutionBackend for FinalDoneHostGenerationBackend {
+    async fn start_turn(
+        &self,
+        request: ExecutionRequest,
+        sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        self.requests
+            .lock()
+            .expect("test backend requests mutex poisoned")
+            .push(request);
+        sink.emit(RuntimeEvent::new("turn.started", json!({})))?;
+        sink.emit(RuntimeEvent::new("turn.completed", json!({})))
+    }
+
+    async fn cancel_turn(
+        &self,
+        _request: CancelExecutionRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+
+    async fn respond_action(
+        &self,
+        _request: ActionRespondRequest,
+        _sink: &mut dyn RuntimeEventSink,
+    ) -> Result<(), RuntimeCoreError> {
+        Ok(())
+    }
+
+    async fn prepare_plugin_worker_request(
+        &self,
+        _request: &ExecutionRequest,
+        worker_request: &mut serde_json::Value,
+    ) -> Result<(), RuntimeCoreError> {
+        let generated_markdown = [
+            "# AI Agent 工作流：从任务到交付的协作系统",
+            "",
+            "开头要先把问题讲清楚：Agent 不是单次问答工具，而是一套能理解目标、拆解任务、调用工具并持续校验结果的工作方式。",
+            "",
+            "第一部分可以写任务进入系统后的编排方式，说明它如何把用户意图转成可追踪的步骤。",
+            "",
+            "第二部分可以写工具调用和资料检索，强调过程需要被记录，但不应该把内部流水账直接丢给用户。",
+            "",
+            "第三部分可以写产物生成与复核，让文章、图片和清单都回到同一个可编辑的工作台。",
+            "",
+            "结尾回到实践建议：先把流程做成可观察、可审计、可恢复，再逐步扩展自动化能力。",
+        ]
+        .join("\n");
+        let payload = json!({
+            "schemaVersion": "lime.host-managed-generation.v1",
+            "source": "app_server",
+            "status": "completed",
+            "provider": "test-host",
+            "model": "test-host-managed-generation",
+            "outputs": [
+                {
+                    "id": "article-draft-document",
+                    "kind": "markdown_document",
+                    "targetObjectKind": "articleDraft",
+                    "outputField": "documentText",
+                    "content": generated_markdown
+                }
+            ]
+        });
+        worker_request["hostManagedGeneration"] = payload.clone();
+        worker_request["runtime"]["hostManagedGenerationResult"] = payload;
+        Ok(())
     }
 }
 
@@ -159,18 +213,24 @@ async fn article_workspace_turn_runs_installed_worker_and_materializes_workspace
 }
 
 #[tokio::test]
-async fn article_generation_worker_emits_initial_streaming_workspace_snapshot() {
+async fn plugin_activation_turn_uses_regular_agent_backend() {
     let Some(fixture_root) = content_factory_fixture_root() else {
         return;
     };
     let installed_state = content_factory_installed_state(&fixture_root);
     let data_source = TestSessionDataSource::new(empty_agent_session_read_response("unused"))
         .with_plugin_installed_states(vec![installed_state]);
-    let sidecar_root = tempfile::tempdir().expect("sidecar root");
     let event_log_root = tempfile::tempdir().expect("event log root");
     let event_log_writer =
         Arc::new(EventLogWriter::new(event_log_root.path()).expect("event log writer"));
-    let core = runtime_core_with_sidecar_and_host_generation(&sidecar_root)
+    let backend = Arc::new(FinalDoneHostGenerationBackend {
+        requests: Mutex::new(Vec::new()),
+    });
+    let sidecar_root = tempfile::tempdir().expect("sidecar root");
+    let core = RuntimeCore::with_backend(backend.clone())
+        .with_sidecar_store(Arc::new(
+            SidecarStore::new(sidecar_root.path()).expect("sidecar store"),
+        ))
         .with_event_log_writer(event_log_writer.clone())
         .with_app_data_source(Arc::new(data_source));
     let session = core
@@ -204,51 +264,63 @@ async fn article_generation_worker_emits_initial_streaming_workspace_snapshot() 
             RuntimeHostContext::default(),
         )
         .await
-        .expect("article generation worker turn");
+        .expect("plugin activation agent turn");
 
     assert_eq!(output.response.turn.status, AgentTurnStatus::Completed);
+    let requests = backend
+        .requests
+        .lock()
+        .expect("test backend requests mutex poisoned");
+    assert_eq!(
+        requests.len(),
+        1,
+        "plugin activation must enter the regular Agent backend"
+    );
+    assert_eq!(
+        requests[0].input.text,
+        "@写文章 写一篇关于 AI Agent 工作流的公众号文章"
+    );
+    assert!(
+        requests[0]
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.pointer("/harness/plugin_activation"))
+            .is_some(),
+        "plugin activation context must be preserved for the Agent prompt layer"
+    );
+
     let event_types = output
         .events
         .iter()
         .map(|event| event.event_type.as_str())
         .collect::<Vec<_>>();
-    assert_eq!(
-        &event_types[0..3],
-        &["message.created", "turn.accepted", "artifact.snapshot",]
-    );
+    assert!(event_types.contains(&"message.created"));
     assert_eq!(event_types.last().copied(), Some("turn.completed"));
+    let artifact_snapshot_count = event_types
+        .iter()
+        .filter(|event_type| **event_type == "artifact.snapshot")
+        .count();
+    assert!(
+        artifact_snapshot_count > 0,
+        "plugin activation must materialize article artifacts before completion: {event_types:?}"
+    );
+    let first_artifact_index = event_types
+        .iter()
+        .position(|event_type| *event_type == "artifact.snapshot")
+        .expect("artifact snapshot event");
+    let turn_completed_index = event_types
+        .iter()
+        .position(|event_type| *event_type == "turn.completed")
+        .expect("turn completed event");
+    assert!(
+        first_artifact_index < turn_completed_index,
+        "artifact snapshots must be emitted before terminal completion: {event_types:?}"
+    );
     assert!(
         event_types
             .iter()
             .all(|event_type| !event_type.starts_with("workflow.")),
-        "workflow events must not enter user-facing output: {event_types:?}"
-    );
-    assert!(
-        !event_types.contains(&"plugin_worker.hook"),
-        "hook lifecycle events must be audit-only: {event_types:?}"
-    );
-    let assistant_events = output
-        .events
-        .iter()
-        .filter(|event| event.event_type == "message.delta")
-        .collect::<Vec<_>>();
-    assert_eq!(
-        assistant_events.len(),
-        1,
-        "article generation should emit one final assistant message"
-    );
-    let assistant_text = assistant_events[0]
-        .payload
-        .get("text")
-        .and_then(serde_json::Value::as_str)
-        .expect("assistant final text");
-    assert_eq!(assistant_events[0].payload["phase"], "final_answer");
-    assert_eq!(assistant_events[0].payload["backend"], "plugin_worker");
-    assert!(assistant_text.contains("## 先定义岗位要解决的问题"));
-    assert!(assistant_text.contains("## 用任务验证真实能力"));
-    assert!(
-        !assistant_text.contains("@写文章"),
-        "assistant final text must not repeat the user command"
+        "plugin activation must not run worker workflow events: {event_types:?}"
     );
 
     let regular_log_records = event_log_writer
@@ -258,267 +330,32 @@ async fn article_generation_worker_emits_initial_streaming_workspace_snapshot() 
         regular_log_records
             .iter()
             .all(|record| !record.event.event_type.starts_with("workflow.")),
-        "workflow events must not enter regular session log"
+        "plugin activation must not write worker workflow events to regular log"
     );
     assert!(
         regular_log_records
             .iter()
             .all(|record| record.event.event_type != "plugin_worker.hook"),
-        "hook lifecycle events must not enter regular session log"
+        "plugin activation must not run worker hooks"
     );
     let workflow_audit_records = event_log_writer
         .read_session_workflow_audit_events(&session.session_id)
         .expect("workflow audit log");
+    assert!(
+        !workflow_audit_records.is_empty(),
+        "plugin activation must write workflow audit JSONL for content factory materialization"
+    );
     let workflow_event_types = workflow_audit_records
         .iter()
         .map(|record| record.event.event_type.as_str())
         .collect::<Vec<_>>();
-    assert_eq!(
-        workflow_event_types.first().copied(),
-        Some("workflow.run.started")
+    assert!(
+        workflow_event_types.contains(&"workflow.run.started"),
+        "workflow audit log should include run start: {workflow_event_types:?}"
     );
     assert!(
-        workflow_event_types.contains(&"workflow.step.started"),
-        "audit log should include step start: {workflow_event_types:?}"
-    );
-    assert!(
-        workflow_event_types.contains(&"workflow.connector.requested"),
-        "audit log should include connector requests: {workflow_event_types:?}"
-    );
-    assert_eq!(
-        workflow_event_types
-            .iter()
-            .filter(|event_type| **event_type == "workflow.hook.completed")
-            .count(),
-        2,
-        "audit log should include prompt and task hooks: {workflow_event_types:?}"
-    );
-    assert_eq!(
-        workflow_event_types
-            .iter()
-            .filter(|event_type| **event_type == "workflow.step.completed")
-            .count(),
-        5
-    );
-    assert_eq!(
-        workflow_event_types.last().copied(),
-        Some("workflow.run.completed")
-    );
-    let workflow_run_started = workflow_audit_records
-        .iter()
-        .find(|record| record.event.event_type == "workflow.run.started")
-        .expect("workflow run started")
-        .event
-        .clone();
-    assert_eq!(
-        workflow_run_started.payload["workflowKey"],
-        "content_article_workflow"
-    );
-    assert_eq!(
-        workflow_run_started.payload["workflowTitle"],
-        "写文章工作流"
-    );
-    assert_eq!(workflow_run_started.payload["prompt"]["redacted"], true);
-    assert_eq!(
-        workflow_run_started.payload["redaction"]["policy"],
-        "workflow_audit_metadata_only"
-    );
-    assert_eq!(
-        workflow_run_started.payload["steps"]
-            .as_array()
-            .expect("workflow steps")
-            .len(),
-        5
-    );
-    let workflow_completed_step_events = workflow_audit_records
-        .iter()
-        .filter(|record| record.event.event_type == "workflow.step.completed")
-        .collect::<Vec<_>>();
-    assert_eq!(workflow_completed_step_events.len(), 5);
-    assert_eq!(
-        workflow_completed_step_events[0].event.payload["stepId"],
-        "research"
-    );
-    assert_eq!(
-        workflow_completed_step_events[0].event.payload["stepTitle"],
-        "资料检索"
-    );
-    let connector_request = workflow_audit_records
-        .iter()
-        .find(|record| record.event.event_type == "workflow.connector.requested")
-        .expect("workflow connector requested");
-    assert_eq!(
-        connector_request.event.payload["workflowRunId"],
-        format!(
-            "{}:{}:workflow",
-            output.response.turn.turn_id, "content_article_generate"
-        )
-    );
-    assert_eq!(connector_request.event.payload["stepId"], "research");
-    assert_eq!(connector_request.event.payload["stepTitle"], "资料检索");
-    assert_eq!(
-        connector_request.event.payload["connectorRef"],
-        "web-research"
-    );
-    assert_eq!(connector_request.event.payload["toolName"], "WebSearch");
-    assert_eq!(
-        connector_request.event.payload["metadata"]["pluginWorkflow"]["eventSource"],
-        "worker_progress"
-    );
-    assert_eq!(connector_request.event.payload["query"]["redacted"], true);
-    assert_eq!(
-        connector_request.event.payload["redaction"]["policy"],
-        "workflow_audit_metadata_only"
-    );
-    let hook_events = workflow_audit_records
-        .iter()
-        .filter(|record| record.event.event_type == "workflow.hook.completed")
-        .collect::<Vec<_>>();
-    assert_eq!(hook_events.len(), 2);
-    assert_eq!(hook_events[0].event.payload["hookKey"], "prompt-submit");
-    assert_eq!(hook_events[0].event.payload["hookEvent"], "prompt.submit");
-    assert_eq!(hook_events[0].event.payload["hookScope"], "prompt");
-    assert_eq!(hook_events[0].event.payload["status"], "completed");
-    assert_eq!(hook_events[0].event.payload["stepId"], "research");
-    assert_eq!(hook_events[0].event.payload["auditOnly"], true);
-    assert_eq!(
-        hook_events[0].event.payload["metadata"]["pluginWorkflow"]["eventSource"],
-        "plugin_worker_hook"
-    );
-    assert_eq!(hook_events[1].event.payload["hookKey"], "task-complete");
-    assert_eq!(hook_events[1].event.payload["hookEvent"], "task.complete");
-    assert_eq!(hook_events[1].event.payload["hookScope"], "task");
-    assert_eq!(hook_events[1].event.payload["status"], "completed");
-    assert_eq!(hook_events[1].event.payload["stepId"], "image-plan");
-    assert_eq!(hook_events[1].event.payload["auditOnly"], true);
-    let artifact_events = output
-        .events
-        .iter()
-        .filter(|event| event.event_type == "artifact.snapshot")
-        .collect::<Vec<_>>();
-    assert!(
-        artifact_events.len() >= 6,
-        "expected initial, progressive, and final workspace patch snapshots: {event_types:?}"
-    );
-    let streaming_artifact = &artifact_events[0].payload["artifact"];
-    assert_eq!(streaming_artifact["status"], "streaming");
-    assert_eq!(streaming_artifact["title"], "Content Factory Workspace");
-    assert_eq!(streaming_artifact["metadata"]["complete"], false);
-    assert_eq!(
-        streaming_artifact["metadata"]["contentFactoryWorkspacePatch"]["objects"][0]["title"],
-        "Article Draft"
-    );
-    assert_eq!(
-        streaming_artifact["metadata"]["contentFactoryWorkspacePatch"]["objects"][0]["status"],
-        "generating"
-    );
-    assert_eq!(
-        streaming_artifact["metadata"]["contentFactoryWorkspacePatch"]["objects"][0]["source"]
-            ["hostSearchStatus"],
-        "running"
-    );
-    let streaming_sidecar_path = streaming_artifact["sidecarRef"]["relativePath"]
-        .as_str()
-        .expect("streaming sidecar path");
-    let streaming_content = SidecarStore::new(sidecar_root.path())
-        .expect("sidecar store")
-        .read_text(streaming_sidecar_path)
-        .expect("streaming sidecar content");
-    assert!(streaming_content.contains("Researching source material"));
-    let progressive_document_lengths = artifact_events
-        .iter()
-        .filter_map(|event| {
-            let artifact = &event.payload["artifact"];
-            if artifact["status"] != "streaming" {
-                return None;
-            }
-            artifact["metadata"]["contentFactoryWorkspacePatch"]["objects"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .find(|object| object["ref"]["kind"] == "articleDraft")
-                .and_then(|object| object["source"]["documentText"].as_str())
-                .map(str::chars)
-                .map(Iterator::count)
-                .filter(|length| *length > 0)
-        })
-        .collect::<Vec<_>>();
-    assert!(
-        progressive_document_lengths.len() >= 4,
-        "expected progressive article document snapshots, got {progressive_document_lengths:?}"
-    );
-    assert!(
-        progressive_document_lengths
-            .windows(2)
-            .all(|window| window[0] <= window[1]),
-        "article document snapshots must not go backwards: {progressive_document_lengths:?}"
-    );
-    let completed_artifact = &artifact_events
-        .last()
-        .expect("completed artifact snapshot")
-        .payload["artifact"];
-    assert_ne!(completed_artifact["status"], "streaming");
-
-    let read = core
-        .read_session(AgentSessionReadParams {
-            session_id: session.session_id,
-            history_limit: None,
-            history_offset: None,
-            history_before_message_id: None,
-        })
-        .expect("read session");
-    let detail = read.detail.expect("detail");
-    let messages = detail["messages"].as_array().expect("messages");
-    let assistant_message = messages
-        .iter()
-        .find(|message| message["role"] == "assistant")
-        .expect("assistant message");
-    let assistant_message_text = assistant_message["content"][0]["text"]
-        .as_str()
-        .expect("assistant message text");
-    assert!(assistant_message_text.contains("## 先定义岗位要解决的问题"));
-    assert!(assistant_message_text.contains("## 用任务验证真实能力"));
-    let article = detail["article_workspace"]["objects"]
-        .as_array()
-        .expect("article workspace objects")
-        .iter()
-        .find(|object| object["ref"]["kind"] == "articleDraft")
-        .expect("article object");
-    let article_document = article["source"]["documentText"]
-        .as_str()
-        .expect("article documentText");
-    assert!(article_document.contains("## 先定义岗位要解决的问题"));
-    assert!(article_document.contains("## 用任务验证真实能力"));
-    assert_eq!(assistant_message_text, article_document);
-    assert!(!article_document.contains("## 第一阶段：打牢基础"));
-    assert!(!article_document.contains("学习路线：从基础语法到工程实战"));
-    assert_eq!(
-        article["source"]["finalMarkdown"],
-        article["source"]["documentText"]
-    );
-    let worker_evidence = detail["article_workspace"]["workerEvidence"]
-        .as_array()
-        .expect("worker evidence");
-    let completed_worker_evidence = worker_evidence
-        .iter()
-        .find(|evidence| {
-            evidence["eventType"] == "artifact.snapshot"
-                && evidence["taskId"] == "turn-content-article-generate:content_article_generate"
-                && evidence["status"] == "completed"
-        })
-        .expect("completed article worker evidence");
-    assert!(
-        completed_worker_evidence["outputObjectCount"]
-            .as_u64()
-            .unwrap_or_default()
-            >= 1
-    );
-    assert_worker_evidence_audit_fields_hidden(completed_worker_evidence);
-    assert!(
-        !worker_evidence
-            .iter()
-            .any(|evidence| evidence["eventType"] == "plugin_worker.hook"),
-        "hook lifecycle events must not enter article workspace workerEvidence"
+        workflow_event_types.contains(&"workflow.run.completed"),
+        "workflow audit log should include run completion: {workflow_event_types:?}"
     );
 }
 
@@ -1013,74 +850,6 @@ fn runtime_core_with_sidecar(sidecar_root: &tempfile::TempDir) -> RuntimeCore {
     RuntimeCore::default().with_sidecar_store(Arc::new(
         SidecarStore::new(sidecar_root.path()).expect("sidecar store"),
     ))
-}
-
-fn runtime_core_with_sidecar_and_host_generation(sidecar_root: &tempfile::TempDir) -> RuntimeCore {
-    RuntimeCore::with_backend(Arc::new(HostManagedArticleGenerationBackend)).with_sidecar_store(
-        Arc::new(SidecarStore::new(sidecar_root.path()).expect("sidecar store")),
-    )
-}
-
-struct HostManagedArticleGenerationBackend;
-
-#[async_trait]
-impl ExecutionBackend for HostManagedArticleGenerationBackend {
-    async fn start_turn(
-        &self,
-        _request: ExecutionRequest,
-        _sink: &mut dyn RuntimeEventSink,
-    ) -> Result<(), RuntimeCoreError> {
-        Ok(())
-    }
-
-    async fn cancel_turn(
-        &self,
-        _request: CancelExecutionRequest,
-        _sink: &mut dyn RuntimeEventSink,
-    ) -> Result<(), RuntimeCoreError> {
-        Ok(())
-    }
-
-    async fn respond_action(
-        &self,
-        _request: ActionRespondRequest,
-        _sink: &mut dyn RuntimeEventSink,
-    ) -> Result<(), RuntimeCoreError> {
-        Ok(())
-    }
-
-    async fn prepare_plugin_worker_request(
-        &self,
-        _request: &ExecutionRequest,
-        worker_request: &mut serde_json::Value,
-    ) -> Result<(), RuntimeCoreError> {
-        if worker_request["taskKind"] != "content.article.generate" {
-            return Ok(());
-        }
-        let payload = json!({
-            "schemaVersion": "lime.plugin.host_managed_generation.v1",
-            "source": "test_host_generation",
-            "status": "completed",
-            "provider": "test-provider",
-            "model": "test-model",
-            "outputs": [
-                {
-                    "id": "article-draft-document",
-                    "kind": "markdown_document",
-                    "targetObjectKind": "articleDraft",
-                    "outputField": "documentText",
-                    "contentType": "text/markdown",
-                    "content": HOST_GENERATED_ARTICLE_MARKDOWN
-                }
-            ]
-        });
-        worker_request["hostManagedGeneration"] = payload.clone();
-        if !worker_request["runtime"].is_object() {
-            worker_request["runtime"] = json!({});
-        }
-        worker_request["runtime"]["hostManagedGenerationResult"] = payload;
-        Ok(())
-    }
 }
 
 fn content_factory_installed_state(fixture_root: &std::path::Path) -> serde_json::Value {

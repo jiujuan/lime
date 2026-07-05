@@ -79,6 +79,23 @@
       "allowedPaths": []
     },
     {
+      "id": "plugin-marketplace-page-legacy-ui-surface",
+      "classification": "dead",
+      "description": "已删除的旧 PluginMarketplacePage 页面、详情弹窗和历史/注册侧栏；插件中心 current 入口只允许收敛到 src/features/plugin/ui/PluginsPage.tsx 的内嵌详情页，不得恢复旧页面壳或旧详情弹窗",
+      "targets": [
+        "src/features/plugin/PluginMarketplacePage.tsx",
+        "src/features/plugin/PluginMarketplacePage.test.tsx",
+        "src/features/plugin/PluginMarketplacePage.visibleBlockers.test.tsx",
+        "src/features/plugin/PluginMarketplacePageNavigation.ts",
+        "src/features/plugin/PluginMarketplaceDetailPanel.tsx",
+        "src/features/plugin/PluginMarketplaceHistorySessionPanel.tsx",
+        "src/features/plugin/PluginMarketplaceRegistrationPanel.tsx",
+        "src/features/plugin/PluginMarketplaceRegistrationPanelModel.ts",
+        "src/features/plugin/PluginMarketplaceSkillPanel.tsx"
+      ],
+      "allowedPaths": []
+    },
+    {
       "id": "sceneapp-runtime-context-compat-barrel",
       "classification": "dead",
       "description": "已删除的 SceneApp runtime context 历史转发壳；历史 sceneapp_execution_summary 只读类型收敛到 src/lib/agent/legacySceneAppExecutionSummary.ts",
@@ -2706,6 +2723,29 @@
   ],
   "frontendText": [
     {
+      "id": "plugin-marketplace-page-legacy-i18n-keys",
+      "classification": "dead",
+      "description": "旧 PluginMarketplacePage 专属详情/历史/注册/管理文案已被 current plugin.apps.center.* 详情页取代；五语言资源不得恢复旧页面 key",
+      "patterns": [
+        "plugin.marketplace.action.detail",
+        "plugin.marketplace.action.disable",
+        "plugin.marketplace.action.uninstallKeepData",
+        "plugin.marketplace.detailActionTitle",
+        "plugin.marketplace.detail.",
+        "plugin.marketplace.openActionTitle",
+        "plugin.marketplace.historyActionTitle",
+        "plugin.marketplace.historySelection.",
+        "plugin.marketplace.management.",
+        "plugin.marketplace.registration.",
+        "plugin.marketplace.history.entryBanner",
+        "plugin.marketplace.skillActionTitle",
+        "plugin.marketplace.writeActionTitle",
+        "plugin.marketplace.readOnlyAction"
+      ],
+      "includePathPrefixes": ["src/i18n/resources"],
+      "allowedPaths": []
+    },
+    {
       "id": "frontend-provider-pool-api-key-old-imports",
       "classification": "dead-candidate",
       "description": "前端不得继续 import 旧 provider-pool/api-key 路径；API Key Provider 当前目录为 src/components/api-key-provider",
@@ -3843,10 +3883,7 @@
         "白名单 workflow DSL",
         "allow-listed workflow DSL"
       ],
-      "includePathPrefixes": [
-        "src/features/plugin",
-        "src/i18n/resources"
-      ],
+      "includePathPrefixes": ["src/features/plugin", "src/i18n/resources"],
       "allowedPaths": [
         "src/features/plugin/runtime/workflowRuntimeCapabilityProfile.ts",
         "src/features/plugin/runtime/capabilityDispatcherTestFixtures.ts",
@@ -3867,7 +3904,9 @@
       "classification": "dead",
       "description": "AdapterCapabilityHost 不得在本地对 workflow entry 生成成功 run；workflow entry 必须走 App Server Workflow API 或 fail closed",
       "patterns": ["humanReview: entry.kind === \"workflow\""],
-      "includePathPrefixes": ["src/features/plugin/adapters/AdapterCapabilityHost.ts"],
+      "includePathPrefixes": [
+        "src/features/plugin/adapters/AdapterCapabilityHost.ts"
+      ],
       "allowedPaths": []
     },
     {

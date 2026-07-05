@@ -230,17 +230,145 @@ npm run test:rust:related -- lime-rs/crates/app-server lime-rs/crates/core
   - 未完成但非代码失败：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server runtime::tests::read_model::` 等待 `lime-rs/target` artifact 锁超过数分钟；进程盘点显示已有其它 Cargo 测试 / 构建占用同一 target，本轮中断该额外模块级验证。
 - P2-A 已完成 Skills 工作台 runtime 入口收口：
   - 盘点结论：Skills 管理 / 发现页属于 `compat`；实际运行事实源是 `buildHomeAgentParams(...)` -> `AgentChatPage` -> `agentSession/turn/start`，通过 `harness.workspace_skill_runtime_enable` 注入 current turn。
-  - 删除 Skill-first 默认项目行为：`useSkillsWorkspaceDefaultProject` 不再调用 `getOrCreateDefaultProject()`，改为只读取导航层传入的 `creationProjectId` 对应 project；无 current project 时不读取 workspace registered skills / bindings，不发起 workspace skill runtime enable。
+  - 删除 Skill-first 默认项目行为：`useSkillsWorkspaceProject` 不再调用 `getOrCreateDefaultProject()`，改为只读取导航层传入的 `creationProjectId` 对应 project；无 current project 时不读取 workspace registered skills / bindings，不发起 workspace skill runtime enable。
   - `SkillsWorkspacePage` 试运行已保存 workspace skill 时，`projectId` 固定使用 current `creationProjectId`，不再用默认项目兜底。
   - `skillExecutionApi` 继续只保留 `skill/list` / `skill/read` 详情读取，不暴露独立 `executeSkill`。
   - `projectThreadFirstBoundary.test.ts` 新增 Skills 回流守卫，禁止 `getOrCreateDefaultProject`、`executeSkill`、`execute_skill`、`skillSessionId`、`skill_session_id` 回到 Skills runtime surface。
 - P2-A 体量风险记录：`SkillsWorkspacePage.tsx` 约 `962` 行，已接近 `1000` 行硬边界。本轮只改 ProjectThread 接线；下一次继续改 Skills 工作台业务逻辑时，应优先把 project scope/runtime enable 接线抽到单独子模块或 hook，避免中心文件继续膨胀。
 - P2-A 验证记录：
   - 通过：`npx vitest run "src/components/skills/SkillsWorkspacePage.test.tsx" "src/components/skills/workspaceSkillRuntimeLaunch.test.ts" "src/lib/governance/projectThreadFirstBoundary.test.ts"`，3 个文件 / 21 个测试通过。
+- P2-B 插件 Agent task current Thread 化第一刀：
+  - 盘点结论：插件 / App Center 管理和 UI runtime page 仍属于 `compat` surface；`lime.agent.startTask` 的 current 事实源是 `AgentRuntimeCapabilityHost` -> App Server `agentSession/start` / `agentSession/turn/start`。
+  - 删除 Plugin-first 默认项目行为：`AgentRuntimeCapabilityHost` 不再导入或调用 `getOrCreateDefaultProject()`；缺显式 `workspaceId/projectId/sessionId` 时 fail closed，不自动创建默认项目。
+  - `PluginRuntimePage` 只把页面参数中的显式 `projectId` 作为 workspace 注入 Host；`PluginsPage` 打开 runtime page 时透传已有 `pageParams.projectId`，没有项目态则不制造 project。
+  - `agent-runtime/tasks/` 本地 storage 只判为 `compat` task projection cache，用于刷新后恢复任务面板；长期事实源仍必须回到 App Server session/thread/turn/evidence，后续若它继续承担列表 truth，应收口到 App Server read model。
+  - `projectThreadFirstBoundary.test.ts` 新增插件回流守卫，禁止 `getOrCreateDefaultProject` / `defaultProject` 回到插件 Agent task runtime surface。
+- P2-C Browser / Automation 盘点与 Automation 后端收口：
+  - Browser 初步分类：`BrowserRuntimePageParams`、`BrowserRuntimeWorkspace`、Browser Assist / Site Skill 导航已能携带 `projectId / contentId / initialSessionId`，当前风险低于 Automation；仍需后续用 evidence/export 证明 Browser run 产物进入 current Thread。
+  - Automation 分类：Automation job 管理页和 Scheduler 设置暂判为 `compat` surface；App Server `automationJob/runNow` -> `agentSession/start` / `agentSession/turn/start` 是 current 执行事实源。
+  - 删除 Automation job-id 私有 Thread fallback：`build_automation_run_start` 不再用 `automation-session-${job.id}` / `automation-thread-${job.id}` 拼接隐式 session / thread，`agent_turn` payload 必须显式提供 `session_id` 和 `thread_id`。
+  - 创建 / 更新校验同步 fail closed：`validate_automation_payload` 对 `agent_turn` 要求 `session_id / thread_id` 非空，避免写入之后必定不能运行的 job。
+  - TS API 类型补齐 `AgentTurnAutomationPayload.session_id / thread_id`，为后续 Thread 内创建 workflow job 留出显式 lineage 字段，不新增 Automation-first 分类。
+  - `projectThreadFirstBoundary.test.ts` 新增 Automation 回流守卫，禁止 `automation-session-` / `automation-thread-` fallback 字符串回到 current surface。
+  - 体量风险记录：`automation_execution.rs` 约 `923` 行，已超过 `800` 行预警线；本轮只删 fallback 和补 guard。下一次继续改 Automation execution，应优先抽出 lineage / runtime-options 子模块，避免中心文件继续膨胀。
+- P2-C 验证记录：
+  - 通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server automation_execution`，4 个自动化执行测试通过。
+  - 通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server validate_agent_turn_payload`，2 个自动化写入边界测试通过。
+  - 通过：`npx vitest run "src/lib/governance/projectThreadFirstBoundary.test.ts"`，1 个文件 / 7 个测试通过。
+  - 通过：`npm run typecheck`。
+  - 通过：`rustfmt --edition 2021 --check "lime-rs/crates/app-server/src/automation_execution.rs" "lime-rs/crates/app-server/src/local_data_source/automation.rs"`。
+- P2-C 前端创建入口收口：
+  - `AgentTurnAutomationPayload.session_id / thread_id` 改为必填；同步 `src/lib/api/automation.d.ts`，防止 TS API 类型继续表达可选 lineage。
+  - 新增 `automationThreadLineage.ts`，把 lineage 归一化和 `agent_turn` payload 构造从 `AutomationJobDialog.tsx` 拆出，避免继续向 1500 行巨型组件堆业务逻辑。
+  - `AutomationJobDialog` 创建/编辑 payload 时必须从 `threadLineage` 或现有 job payload 取得显式 session/thread；缺失时使用五语言本地化错误 fail closed。
+  - `AutomationSettings` 的创建入口在没有 `threadLineage` 时直接 toast 并拒绝打开弹窗；`AutomationPageParams` 预留 `sessionId / threadId / projectId` 显式传递通道。
+  - `projectThreadFirstBoundary.test.ts` 扩展 Automation 类型守卫，禁止 `AgentTurnAutomationPayload` 的 session/thread 字段退回 optional。
+- P2-C 前端验证记录：
+  - 通过：`npx vitest run "src/components/settings-v2/system/automation/automationThreadLineage.unit.test.ts" "src/components/settings-v2/system/automation/AutomationJobDialog.test.tsx" "src/components/settings-v2/system/automation/index.test.tsx"`，3 个文件 / 29 个测试通过。
+  - 通过：`npm run typecheck`。
+- P2-C Thread 内 workflow / automation 创建链收口：
+  - 盘点结论：聊天工作区内的 service skill automation draft 是 `current` 创建入口；顶层 Automation 管理页和 Scheduler 仍是 `compat` 管理面，不承担无 Thread lineage 的创建。
+  - `AgentChatWorkspace` 将当前 `sessionId` 和 `threadRead.thread_id` 作为 `threadLineage` 传入 service skill automation actions 和 `AutomationJobDialog`；当前实现中旧 session 命名仍兼容承载 thread id，后续命名拆分另行收口。
+  - `useWorkspaceServiceSkillEntryActions` 在创建本地自动化任务前调用 `ensureSessionForThreadLineage` 物化当前 Thread；无法得到 session/thread 时 fail closed，不再依赖后端 job-id fallback。
+  - `buildServiceSkillAutomationSetupState` 将 lineage 挂到 pending automation，`buildServiceSkillAutomationSubmitRequest` 在提交前把 `session_id / thread_id` 写入 `agent_turn` payload，防止测试或内部调用绕过 Dialog lineage 构造。
+  - `projectThreadFirstBoundary.test.ts` 增加 Thread 内 service skill automation 创建链守卫，要求前端 current 路径必须显式传入、归一化并写入 session/thread lineage。
+- P2-C Thread 内创建链验证记录：
+  - 通过：`npx vitest run "src/components/agent/chat/workspace/workspaceServiceSkillEntryActionsViewModel.unit.test.ts" "src/components/agent/chat/workspace/useWorkspaceServiceSkillEntryActions.test.tsx" "src/components/settings-v2/system/automation/automationThreadLineage.unit.test.ts" "src/components/settings-v2/system/automation/AutomationJobDialog.test.tsx" "src/lib/governance/projectThreadFirstBoundary.test.ts"`，5 个文件 / 41 个测试通过。
+  - 通过：`npm run typecheck`。
+- P2-C Automation 执行 lineage 证据补强：
+  - `run_now_executes_agent_turn_and_persists_run_state` 增加断言：`ExecutionRequest.session.session_id / thread_id`、`workspace_id`、`businessObjectRef(kind=automation_job,id=job-1)`、runtime metadata、JSON-RPC response 和 `AgentRun.metadata.threadId` 均来自 job payload 的显式 lineage。
+  - 同一测试继续调用 `export_evidence(session_id, turn_id, include_evidence_pack=true)`，断言导出的 session/thread、message.delta 事件和 Evidence Pack turn count 均来自 automation job 执行链。
+  - 该测试证明 Automation job 执行不再停留在 job 私有历史，至少会进入 App Server current session / thread / turn / evidence export 链；后续剩余是从真实 GUI/fixture 入口触发同一证据形状。
+- P2-C Automation 执行验证记录：
+  - 通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server automation_execution`，4 个自动化执行测试通过。
+- P2-D Skills evidence/export 证据复核：
+  - 盘点结论：Skills runtime enable 的 current 链路已经具备后端导出证据。前端 `workspace_skill_runtime_enable` harness metadata 进入 App Server `skill_runtime_enable` gate，SkillTool 结果 metadata 被 `runtime/evidence_provider/observability.rs` 汇总为 `skill_invocations`，completion audit 写入 `workspaceSkillToolCallCount` 与 `requiredEvidence.workspaceSkillToolCall`。
+  - 复用既有 Rust 测试 `export_evidence_records_skill_invocation_from_tool_metadata`，该测试通过 `export_evidence(session_id, turn_id, include_evidence_pack=true)` 证明 workspace skill invocation 能进入 Evidence Pack，而不是停留在 Skills 工作台或私有 skill history。
+- P2-D Skills evidence/export 验证记录：
+  - 通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server export_evidence_records_skill_invocation_from_tool_metadata`，1 个 evidence export 定向测试通过。
+- P2-D Skills GUI / fixture 真实触发验证：
+  - 通过：`npm run smoke:claw-chat-current-fixture -- --scenario skills-runtime`，真实 Electron fixture 通过。
+  - 该场景覆盖普通 Skills prompt、显式 Skills prompt，以及用户从 Skills 工作台已保存技能面板点击“试用一次”的手动启用路径。
+  - 断言通过：`manualEnableSkillsRuntimeMetadataReachedBackend`、`manualEnableSkillsRuntimeLaunchedFromSkillsWorkspace`、`manualEnableSkillsRuntimeUsedAgentSession`、`evidenceManualEnableWorkspaceRuntimeEnableObserved`、`evidencePackManualEnableSkillSearchObserved`、`evidencePackManualEnableSkillInvocationObserved`。
+  - Evidence Pack 显示手动启用路径使用 `skillGateMode: "workspace_runtime_enable"`，`skillGateWorkspaceRuntimeEnable: true`，allowlist 为 `project:capability-report`；read model 中同一 session 的 turn 以 `completed` 终态收口。
+- P2-E 插件 Agent task evidence/export 证据补强：
+  - 前端 current host 入口已由 `AgentRuntimeCapabilityHost` 覆盖：`lime.agent.startTask/getTask/cancelTask/submitHostResponse` 均携带 `sessionId / turnId`，task snapshot 会保留 `evidence:recorded` 和 `artifact:created` refs。
+  - 新增 App Server evidence export 测试 `export_evidence_pack_includes_plugin_agent_task_events_and_refs`：构造 current session/turn，追加 `plugin_task_worker` runtime event 和插件 artifact，导出 Evidence Pack 后断言 event、artifact、session/thread/turn lineage 均可追溯。
+  - 该测试证明插件 Agent task 输出不会只停留在 `agent-runtime/tasks/` compat cache；后端 Evidence Pack 至少能通过 current session/thread/turn 导出插件 task 事件和 artifact refs。
+- P2-E 插件验证记录：
+  - 通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server export_evidence_pack_includes_plugin_agent_task_events_and_refs`，1 个 evidence export 定向测试通过。
+  - 通过：`npx vitest run "src/features/plugin/runtime/agentRuntimeCapabilityHost.test.ts"`，1 个文件 / 10 个测试通过。
+- P2-E 插件真实 Electron fixture 验证：
+  - 通过：`npm run smoke:claw-chat-current-fixture -- --scenario content-factory-article-workspace --timeout-ms 240000`。
+  - 该场景复用已安装 `content-factory-app` 插件 fixture，覆盖插件 worker 发起 `agentSession/turn/start`、runtime events append、Right Surface 请求、Article Workspace read model、artifact read、workflow respond/cancel/retry 和插件 worker 失败证据。
+  - 断言通过：`contentFactoryArticleWorkspaceWorkerTurnExecuted`、`contentFactoryArticleWorkspaceRuntimeEventsAppended`、`contentFactoryArticleWorkspaceReadModelProjected`、`contentFactoryArticleWorkspaceRightSurfaceVisible`、`contentFactoryArticleWorkspaceArtifactsProjected`、`contentFactoryArticleWorkspaceWorkerFailureEvidence`、`contentFactoryArticleWorkspaceDoesNotUseModelTurn` 等。
+  - 证据显示插件 worker 任务以 `content.article.generate` 完成并产出 `content_factory.workspace_patch`，read model 的 `workerDogfoodEvidence`、article object、artifact refs 均绑定同一 Article Workspace session；该场景不走普通模型 turn，避免把插件 worker 执行误报成 Agent-first 对话。
+  - 仍保留后续项：`agent-runtime/tasks/` 本地 storage 目前仍是 compat task projection cache，是否下沉到 App Server read model 需要单独设计，不作为本轮 P2-E GUI 触发门槛。
+- P2-F Browser evidence/export 证据复核：
+  - 盘点结论：Browser Runtime 后端 Evidence Pack 已有专门导出测试，覆盖 browser session、snapshot artifact、action index、threadId、turnId、evidence refs 与 browser file artifacts。
+  - 该测试证明 Browser 操作轨迹可以按 current session/thread/turn 导出；后续真实 right surface 入口已由 `right-surface-visual-matrix` Gate B fixture 补齐。
+- P2-F Browser evidence/export 验证记录：
+  - 通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server export_evidence_pack_includes_browser_session_and_snapshot_artifacts`，1 个 Browser evidence export 定向测试通过。
+- P2-F Browser right surface 真实入口 Gate B 闭环：
+  - 通过：`npm run smoke:claw-chat-current-fixture -- --scenario right-surface-visual-matrix --timeout-ms 180000`。
+  - 证据：`.lime/qc/gui-evidence/claw-chat-current-fixture/claw-chat-current-fixture-summary.json`，`ok: true`，`scenario: right-surface-visual-matrix`。
+  - 该场景证明 App Server pending requests 可以驱动真实 Electron toolbar 打开 `files / objectCanvas / expertInfo / browser / appSurface` 五类右侧面板；Browser surface 可见并显示 `fixture-browser-session`，`pendingAfterClicks.count = 0`。
+  - 断言通过：`rightSurfaceVisualMatrixRequestedThroughAppServer`、`rightSurfaceVisualMatrixBrowserSurfaceVisible`、`rightSurfaceVisualMatrixAppSurfaceVisible`、`rightSurfaceVisualMatrixAppSurfaceMultiInstanceTabs`、`rightSurfaceVisualMatrixSurfacesMutuallyExclusive`、`rightSurfaceVisualMatrixPendingConsumeKeepsSurfaceOpen`、`rightSurfaceVisualMatrixDoesNotUseModelTurn` 等。
+- P3-A 子代理 parent thread lineage 第一刀：
+  - 盘点结论：`subagent / team session` 仍是 `compat` 执行上下文；`SubagentParentContext`、真实 child session timeline item、`subagent_status_changed` / `team_control_projection` 的 Agent UI events 是 `current` parent Thread facts。
+  - `AgentChatWorkspace` 合成真实子代理 timeline item 时，`threadId` 改为优先使用 `threadRead.thread_id`，再回落当前 `sessionId`，避免 Project/Thread 拆分后把 child activity 错挂到 session 旧命名。
+  - `subagentTimeline` 单测补断言：真实 child session item 必须写入 parent `thread_id`；缺 parent thread 或 parent turn 时不得生成独立子代理历史项。
+  - `agentUiEventProjection` 单测补断言：Team control 和 subagent status events 必须继承 parent thread / turn context，并保留 `parentSessionId`、team counters、handoff / worker notification 等 projection facts。
+  - Rust `session_store_tests` 补 lineage 断言：child summary 和 parent context 必须保留 `created_from_turn_id`、`team_preset_id`、`parent_session_id` 与 parent name。
+  - `projectThreadFirstBoundary.test.ts` 增加 P3 守卫，禁止 `subagentHistory` / `subagent_history` / `childSubagentHistory` / `subagentSessionHistory` 这类独立子代理历史入口回流，并要求 current P3 surface 保留 parent context、parent thread timeline、subagent status projection 和 team control projection 接线。
+- P3-A 验证记录：
+  - 通过：`npx vitest run "src/components/agent/chat/utils/subagentTimeline.test.ts" "src/components/agent/chat/projection/agentUiEventProjection.test.ts" "src/lib/governance/projectThreadFirstBoundary.test.ts"`，3 个文件 / 34 个测试通过。
+  - 通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent subagent`，14 个相关 Rust 测试通过。
+- P3-B Team facts evidence/export 第一刀：
+  - 盘点结论：App Server `evidence/export` 的 Basic Evidence Pack 是 P3 后端证据 current owner；前端 Agent UI projection 和 child session 兼容上下文不能替代后端导出事实。
+  - `runtime/evidence_provider.rs` 增加 `team_facts` observability summary，从现有 `AgentEvent` 汇总 `team.changed / task.changed / agent.* / agent.handoff / worker.notification / subagent.activity`，输出 parent session、child session、thread、turn、handoff、worker notification、review lane、team phase 和 source event ids。
+  - 新增 `runtime/tests/evidence_exports/team_facts.rs`，构造 parent session/thread/turn 下的 team roster、task capsule、handoff、worker notification、review lane 和 worker result artifact，导出 Evidence Pack 后断言 raw events、artifact 和 `observability_summary.team_facts` 均可追溯到同一 parent Thread。
+  - `projectThreadFirstBoundary.test.ts` 扩展 P3 守卫，要求 current P3 surface 包含 App Server `team_facts` evidence summary 和对应 evidence export 测试，防止多 Agent 团队事实只停留在前端 projection。
+- P3-B Team facts GUI 恢复第一刀：
+  - 新增 `restoredTeamFactsProjection`，从 parent `childSubagentSessions` / child `subagentParentContext.sibling_subagent_sessions` 构造同构 `subagent_status_changed` Agent UI projection events，让重开 Thread 后 roster、handoff、worker notification 等 Team facts 仍绑定 parent session / thread / turn。
+  - `useTeamWorkspaceRuntime` 接入恢复投影并用 fingerprint 去重，避免每次 render 重复灌 Agent UI projection store；`useWorkspaceTeamSessionRuntime` 和 `AgentChatWorkspace` 只透传已有 `threadRead.thread_id` / `currentTurnId`，不新增 session-first schema。
+  - `projectThreadFirstBoundary.test.ts` 把恢复投影 helper 纳入 P3 守卫，要求恢复链继续写 `root_session_id: parentSessionId`、`parent_session_id: parentSessionId` 和 `threadId: parentThreadId`。
+- P3-B 后端 evidence 验证记录：
+  - 通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server export_evidence_pack_includes_multi_agent_team_facts`，1 个 Team facts evidence/export 定向测试通过。
+- P3-B GUI 恢复验证记录：
+  - 通过：`npx vitest run "src/components/agent/chat/team-workspace-runtime/restoredTeamFactsProjection.unit.test.ts" "src/components/agent/chat/hooks/useTeamWorkspaceRuntime.test.tsx" "src/components/agent/chat/workspace/useWorkspaceTeamSessionRuntime.test.tsx"`，3 个文件 / 13 个测试通过。
+  - 通过：`npx vitest run "src/lib/governance/projectThreadFirstBoundary.test.ts"`，P3 回流守卫通过。
+- P3-B 真实 `multi-agent-team` fixture / 用户触发链：
+  - 新增 `scripts/agent-runtime/multi-agent-team-fixture-scenario.mjs`，在现有 Claw current Electron fixture backend 中通过真实 GUI prompt 触发 `subagent_status_changed`、`team.changed`、`task.changed`、`agent.handoff`、`agent.completed`、`worker.notification` 与 `artifact.snapshot`。
+  - `claw-chat-current-fixture-smoke.mjs --scenario multi-agent-team` 已接入 GUI 发送、read model 完成等待和 App Server `evidence/export`，断言 Team facts 绑定 parent `sessionId / threadId / turnId`，且不出现 `subagentHistory / subagentSessionHistory` 这类 Agent-first 历史字段。
+  - 聚合入口 `npm run smoke:agent-runtime-current-fixture` 已纳入 `Claw Multi-Agent Team parent Thread Evidence Pack Electron fixture`，后续主回归会覆盖该场景。
+- P3-B fixture guard 验证记录：
+  - 通过：`node --check "scripts/agent-runtime/multi-agent-team-fixture-scenario.mjs"` 等相关 fixture 脚本语法检查。
+  - 通过：`npx vitest run "scripts/agent-runtime/claw-chat-current-fixture-smoke.test.mjs" "scripts/agent-runtime/current-fixture-regression-smoke.test.mjs" --silent=passed-only --disableConsoleIntercept`，2 个脚本守卫文件 / 36 个测试通过。
+- P3-B 真实 Electron 单项 smoke 验证记录：
+  - 通过：`npm run smoke:claw-chat-current-fixture -- --scenario multi-agent-team`，真实 Electron fixture 通过。
+  - 断言通过：`multiAgentTeamPromptReachedBackend`、`guiMultiAgentTeamInputSubmitted`、`guiMultiAgentTeamCompleted`、`readModelMultiAgentTeamCompleted`、`readModelMultiAgentTeamFactsObserved`、`evidencePackMultiAgentTeamExported`、`evidencePackMultiAgentTeamParentThreadBound`、`evidencePackMultiAgentTeamHandoffObserved`、`evidencePackMultiAgentTeamWorkerNotificationObserved`、`evidencePackMultiAgentTeamReviewLaneObserved`、`multiAgentTeamNoAgentFirstHistory`。
+  - GUI 证据显示同一 Thread 中可见“多 Agent 团队已回到同一主线程”，并渲染 worker result artifact；read model 显示 `latestTurnStatus: completed`，包含 team summary 和 subagent status facts，且未出现 `subagentHistory / subagent_history / subagentSessionHistory`。
+- P2-G Automation 真实 fixture Gate B + completion audit 闭环：
+  - `smoke:managed-objective-automation` 现在先通过 App Server `agentSession/start` 物化 Automation owner session/thread，再把显式 `session_id / thread_id` 写入 `automationJob/create` 的 `agent_turn` payload；`buildAutomationJobRequest` 缺 lineage 时 fail closed。
+  - Automation smoke evidence 继续分成两层：`projectThreadStatus` 证明 Project / Thread lineage、run history、runtime completion 和 `evidence/export`；`status / completionAuditStatus` 代表 Managed Objective completion audit。本轮已用真实 workspace SkillTool invocation 和 artifact 证据把两层同时打到 pass。
+  - 通过：`npm run smoke:managed-objective-automation -- --timeout-ms 180000`。
+  - 证据：`.lime/qc/managed-objective-automation-smoke.json`，`status: "pass"`，`projectThreadStatus: "pass"`，`completionAuditStatus: "pass"`。
+  - 本次 run：job `5191581f-9ad1-4660-9839-d282982146f1`，session `sess_88310f2436aa4211b8a2d2b9833b3c0b`，thread `thread_49be303af03c42568830569c120ac0f3`；latest run `status: "success"`，Evidence Pack `latestTurnStatus: "completed"`、`turnCount: 1`、`pendingRequestCount: 0`、`knownGaps: []`。
+  - ProjectThread 断言通过：`jobPayloadHasExplicitLineage`、`runSessionMatchesJobPayload`、`ownerRunMatchesJob`、`managedObjectiveProjected`、`ownerRunHasAuditInputs`、`evidencePackExported`、`evidencePackSessionScopeMatchesRun`、`evidencePackThreadScopeMatchesJobPayload`、`runtimeTurnCompleted`、`evidencePackTurnCompleted`、`fixtureReceivedChatCompletion`。
+  - Completion audit 断言通过：`ownerAuditInputReady`、`workspaceSkillToolCallRecorded`、`artifactRecorded`、`completionAuditCompleted` 均为 `true`；`decision: "completed"`，`workspaceSkillToolCallCount: 1`，`artifactCount: 1`，`requiredEvidence.workspaceSkillToolCall: true`，`requiredEvidence.artifactOrTimeline: true`，`ownerAuditStatuses: ["audit_input_ready"]`。
+  - 主链证明：Automation owner job 经 App Server `agentSession/turn/start` 进入 current Runtime；`workspace_skill_runtime_enable` 在当前 session scope 注册并裁剪 `project:managed-objective-automation-smoke-report`；SkillTool 结果由 `payload.result.structuredContent` / `payload.message.content[].structuredContent` 进入 `evidence/export` 的 `skill_invocations` 与 completion audit，不依赖 mock 或旧 `agent_runtime_*`。
+- P2-G Automation smoke 分层验证记录：
+  - 通过：`node --check "scripts/managed-objective-automation-smoke.mjs"`。
+  - 通过：`node --check "scripts/lib/managed-objective-automation-smoke-support.mjs"`。
+  - 通过：`node --check "scripts/lib/openai-compatible-fixture-server.mjs"`。
+  - 通过：`npx vitest run "scripts/lib/managed-objective-automation-smoke-support.test.mjs" "src/features/capability-drafts/workspaceSkillAgentAutomationDraft.test.ts" --silent=passed-only --disableConsoleIntercept`，2 个文件 / 15 个测试通过。
+  - 通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent register_lime_project_skill_from_directory_registers_project_namespace`。
+  - 通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server apply_runtime_enable_registers_workspace_skill_source`。
+  - 通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server export_evidence_marks_completed_with_workspace_skill_and_artifact`。
+  - 通过：`cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server export_evidence_records_skill_invocation_from_tool_metadata`。
 
 ## 未完成缺口
 
 1. session / memory schema 的基础 Agent-first 主索引守卫已补；后续若新增 protocol schema 目录或 session identity owner，必须同步纳入该守卫。
-2. Skills 工作台 runtime 入口已完成第一刀：无 current project 不再自动创建默认项目；仍需用 evidence/export 定向证明真实 Skill tool invocation 可追溯到 session / thread / turn。
-3. 插件 / Browser / Automation 尚未逐入口验证运行事实回到 current Thread。
-4. 子代理 lineage 和 team facts 尚未纳入本计划的 P3 验收证据。
+2. `agent-runtime/tasks/` 本地 storage 目前仍是插件 task projection 的 compat cache；长期是否下沉到 App Server read model 需要单独设计。

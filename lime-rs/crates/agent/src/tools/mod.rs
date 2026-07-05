@@ -13,6 +13,7 @@ pub use browser_tool::{BrowserAction, BrowserTool, BrowserToolError, BrowserTool
 pub use skill_search_tool::SkillSearchTool;
 pub use skill_tool_gate::{
     add_skill_tool_session_allowed_capabilities, clear_skill_tool_session_access,
-    set_skill_tool_session_access, set_skill_tool_session_allowed_skill_sources,
-    set_skill_tool_session_allowed_skills, LimeSkillTool, SkillToolSessionSkillSource,
+    is_skill_tool_session_skill_allowed, set_skill_tool_session_access,
+    set_skill_tool_session_allowed_skill_sources, set_skill_tool_session_allowed_skills,
+    LimeSkillTool, SkillToolSessionSkillSource,
 };

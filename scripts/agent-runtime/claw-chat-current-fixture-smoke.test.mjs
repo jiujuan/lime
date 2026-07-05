@@ -3,6 +3,10 @@ import { describe, expect, it } from "vitest";
 import { CONTENT_FACTORY_ARTICLE_WORKSPACE_ASSERTION_KEYS } from "./claw-chat-current-fixture-constants.mjs";
 import { isRightSurfaceSnapshotReady } from "./claw-chat-current-fixture-right-surface-visual.mjs";
 import {
+  MULTI_AGENT_TEAM_PROMPT,
+  summarizeMultiAgentTeamEvidenceExport,
+} from "./multi-agent-team-fixture-scenario.mjs";
+import {
   createExpertSkillsRuntimeFixtureScenario,
   createManualEnableSkillsRuntimeFixtureScenario,
   createSkillsRuntimeFixtureScenario,
@@ -31,6 +35,7 @@ const fixtureSourceFiles = [
   "scripts/agent-runtime/claw-chat-current-fixture-agent-ui-trace.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-read-model-core.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-read-model-waits.mjs",
+  "scripts/agent-runtime/multi-agent-team-fixture-scenario.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-session.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-gui-completion-waits.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-gui-input-modes.mjs",
@@ -363,8 +368,8 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("soulStyleReadModelCompleted");
     expect(content).toContain("soulStyleGuiCompleted");
     expect(content).toContain("!isSoulStyleScenario");
-    expect(content).toContain('options.scenario === SOUL_STYLE_SCENARIO');
-    expect(content).toContain('options.scenario !== SOUL_STYLE_SCENARIO');
+    expect(content).toContain("options.scenario === SOUL_STYLE_SCENARIO");
+    expect(content).toContain("options.scenario !== SOUL_STYLE_SCENARIO");
     expect(content).toContain('APP_SERVER_BACKEND_MODE: "runtime"');
     expect(readGuiActionsScript()).toContain(
       "/^(system_prompt|systemPrompt)$/u",
@@ -870,6 +875,8 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("create-right-surface-visual-expert-session");
     expect(content).toContain("run-right-surface-visual-matrix");
     expect(content).toContain("workspaceRightSurface/request");
+    expect(content).toContain('origin: "runtime"');
+    expect(content).not.toContain("fixture:right-surface-visual-matrix");
     expect(content).toContain("workspaceRightSurface/pending/list");
     expect(content).toContain("task-center-files-toggle");
     expect(content).toContain("task-center-object-canvas-toggle");
@@ -897,7 +904,7 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("browserView: false");
     expect(content).toContain("rightSurfaceVisualMatrixHostsFillRightSide");
     expect(content).toContain(
-      "rightSurfaceVisualMatrixArticleWorkspaceRailVisible",
+      "rightSurfaceVisualMatrixObjectCanvasRailVisible",
     );
     expect(content).toContain("rightSurfaceVisualMatrixBrowserSurfaceVisible");
     expect(content).toContain("rightSurfaceVisualMatrixAppSurfaceVisible");
@@ -1518,6 +1525,127 @@ describe("claw chat current Electron fixture smoke guard", () => {
       searchQuery: SKILLS_RUNTIME_QUERY,
       invocationSkillName: SKILLS_RUNTIME_SKILL_NAME,
     });
+  });
+
+  it("covers multi-agent Team facts as parent Thread Evidence Pack data instead of Agent-first history", () => {
+    const content = readSmokeScript();
+    const scenarioContent = fs.readFileSync(
+      "scripts/agent-runtime/multi-agent-team-fixture-scenario.mjs",
+      "utf8",
+    );
+    const regressionContent = readCurrentFixtureRegressionSmokeScript();
+
+    expect(content).toContain("multi-agent-team");
+    expect(content).toContain("MULTI_AGENT_TEAM_SCENARIO");
+    expect(content).toContain(MULTI_AGENT_TEAM_PROMPT);
+    expect(content).toContain("renderMultiAgentTeamBackendEvents");
+    expect(content).toContain("summarizeMultiAgentTeamEvidenceExport");
+    expect(content).toContain("send-multi-agent-team-prompt-from-gui");
+    expect(content).toContain("wait-gui-multi-agent-team-completed");
+    expect(content).toContain("wait-read-model-multi-agent-team-completed");
+    expect(content).toContain("export-multi-agent-team-evidence-pack");
+    expect(content).toContain("evidencePackMultiAgentTeam");
+    expect(content).toContain("readModelMultiAgentTeamCompleted");
+    expect(content).toContain("multiAgentTeamPromptReachedBackend");
+    expect(content).toContain("guiMultiAgentTeamInputSubmitted");
+    expect(content).toContain("guiMultiAgentTeamCompleted");
+    expect(content).toContain("readModelMultiAgentTeamCompleted");
+    expect(content).toContain("readModelMultiAgentTeamFactsObserved");
+    expect(content).toContain("evidencePackMultiAgentTeamExported");
+    expect(content).toContain("evidencePackMultiAgentTeamParentThreadBound");
+    expect(content).toContain("evidencePackMultiAgentTeamHandoffObserved");
+    expect(content).toContain(
+      "evidencePackMultiAgentTeamWorkerNotificationObserved",
+    );
+    expect(content).toContain("evidencePackMultiAgentTeamReviewLaneObserved");
+    expect(content).toContain("multiAgentTeamNoAgentFirstHistory");
+    expect(scenarioContent).toContain('type: "subagent_status_changed"');
+    expect(scenarioContent).toContain('type: "team.changed"');
+    expect(scenarioContent).toContain('type: "task.changed"');
+    expect(scenarioContent).toContain('type: "agent.handoff"');
+    expect(scenarioContent).toContain('type: "agent.completed"');
+    expect(scenarioContent).toContain('type: "worker.notification"');
+    expect(scenarioContent).toContain('type: "artifact.snapshot"');
+    expect(scenarioContent).toContain("parentSessionId");
+    expect(scenarioContent).toContain("currentThreadId()");
+    expect(scenarioContent).toContain("currentTurnId()");
+    expect(scenarioContent).toContain("parent_thread");
+    expect(scenarioContent).toContain("review_lane");
+    expect(scenarioContent).toContain("parentSessionIds");
+    expect(scenarioContent).toContain("threadIds");
+    expect(scenarioContent).toContain("turnIds");
+    expect(scenarioContent).toContain("handoffIds");
+    expect(scenarioContent).toContain("workerNotificationIds");
+    expect(scenarioContent).toContain("reviewIds");
+    expect(regressionContent).toContain(
+      "Claw Multi-Agent Team parent Thread Evidence Pack Electron fixture",
+    );
+    expect(regressionContent).toContain('"multi-agent-team"');
+    expect(regressionContent).toContain(
+      "claw-chat-current-fixture-multi-agent-team-regression",
+    );
+    expect(regressionContent).toContain(
+      "Multi-Agent Team parent Thread Evidence Pack Electron fixture",
+    );
+
+    const summary = summarizeMultiAgentTeamEvidenceExport(
+      {
+        evidencePack: {
+          observabilitySummary: {
+            team_facts: {
+              status: "exported",
+              parentSessionIds: ["sess-team"],
+              childSessionIds: [
+                "fixture-team-child-researcher",
+                "fixture-team-child-reviewer",
+              ],
+              threadIds: ["thread-team"],
+              turnIds: ["turn-team"],
+              handoffIds: ["sess-team:handoff:fixture-team-child-researcher"],
+              workerNotificationIds: [
+                "fixture-team-child-researcher:completed",
+              ],
+              reviewIds: ["fixture-team-review-1"],
+              teamPhases: ["running", "queued", "completed"],
+              handoffCount: 1,
+              workerNotificationCount: 1,
+              reviewLaneCount: 1,
+            },
+          },
+        },
+        events: [
+          { eventType: "subagent_status_changed" },
+          { eventType: "team.changed" },
+          { eventType: "worker.notification" },
+        ],
+        artifacts: [{ artifactRef: "fixture-team-worker-result" }],
+      },
+      {
+        sessionId: "sess-team",
+        threadId: "thread-team",
+        turnId: "turn-team",
+      },
+    );
+
+    expect(summary.exported).toBe(true);
+    expect(summary.includesParentSession).toBe(true);
+    expect(summary.includesThread).toBe(true);
+    expect(summary.includesTurn).toBe(true);
+    expect(summary.includesResearcher).toBe(true);
+    expect(summary.includesReviewer).toBe(true);
+    expect(summary.includesHandoff).toBe(true);
+    expect(summary.includesWorkerNotification).toBe(true);
+    expect(summary.includesReview).toBe(true);
+    expect(summary.includesRunningPhase).toBe(true);
+    expect(summary.includesQueuedPhase).toBe(true);
+    expect(summary.includesCompletedPhase).toBe(true);
+    expect(summary.hasSubagentStatusEvent).toBe(true);
+    expect(summary.hasTeamChangedEvent).toBe(true);
+    expect(summary.hasWorkerNotificationEvent).toBe(true);
+    expect(summary.hasWorkerResultArtifact).toBe(true);
+    expect(summary.forbiddenAgentFirstHistory).toBe(false);
+    expect(scenarioContent).not.toContain("subagentSessionHistory:");
+    expect(scenarioContent).not.toContain("childSubagentHistory:");
   });
 
   it("does not use live providers, App Server mock backend, renderer mocks, or legacy commands", () => {

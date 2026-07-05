@@ -39,8 +39,11 @@ function contractContentIncludes(content, snippet) {
     /^this\.client\.([A-Za-z0-9_]+)\(params\)$/u,
   );
   if (dynamicClientCall) {
+    const clientMethodName = dynamicClientCall[1];
     return (
-      content.includes(`clientMethod: "${dynamicClientCall[1]}"`) &&
+      (content.includes(`clientMethod: "${clientMethodName}"`) ||
+        content.includes(`name: "${clientMethodName}"`)) &&
+      content.includes("APP_SERVER_REQUEST_CLIENT_METHODS") &&
       content.includes("client[spec.clientMethod](...clientArgs)")
     );
   }
@@ -48,6 +51,8 @@ function contractContentIncludes(content, snippet) {
   return false;
 }
 const appServerClientIndexFile = "packages/app-server-client/src/index.ts";
+const appServerGeneratedProtocolFile =
+  "packages/app-server-client/src/generated/protocol-types.ts";
 const appServerClientSplitSourceFiles = [
   appServerClientIndexFile,
   "packages/app-server-client/src/request-client.ts",
@@ -86,6 +91,17 @@ function expandContractFiles(files) {
       }),
     ),
   ];
+}
+
+function requiredContractContent(files, content) {
+  if (!files.includes("packages/app-server-client/src/protocol.ts")) {
+    return content;
+  }
+  const generatedPath = path.join(repoRoot, appServerGeneratedProtocolFile);
+  if (!fs.existsSync(generatedPath)) {
+    return content;
+  }
+  return `${content}\n${fs.readFileSync(generatedPath, "utf8")}`;
 }
 
 function collectRustFiles(relativeDir) {
@@ -609,6 +625,10 @@ const checks = [
       "pub enum AppServerMethodKind",
       "pub struct AppServerMethodSpec",
       "pub const APP_SERVER_METHODS: &[AppServerMethodSpec]",
+      "pub enum AppServerRequestSerializationScope",
+      "pub struct AppServerRequestSerializationScopeSpec",
+      "pub const APP_SERVER_REQUEST_SERIALIZATION_SCOPES",
+      "pub fn app_server_request_serialization_scope",
       "pub fn is_app_server_request_method(method: &str) -> bool",
       "pub fn is_app_server_notification_method(method: &str) -> bool",
       "pub const CAPABILITY_DENIED: i64 = -32020",
@@ -628,6 +648,8 @@ const checks = [
       "pub include_protocol_types: bool",
       "fn jsonrpc_schemas() -> Vec<GeneratedJsonSchema>",
       "fn v0_schemas() -> Vec<GeneratedJsonSchema>",
+      'typed_schema::<AppServerRequestSerializationScope>("AppServerRequestSerializationScope")',
+      'typed_schema::<AppServerRequestSerializationScopeSpec>("AppServerRequestSerializationScopeSpec")',
       'typed_schema::<AgentSessionTurnStartParams>("AgentSessionTurnStartParams")',
       'PathBuf::from("json")',
       '.join("v0")',
@@ -714,7 +736,7 @@ const checks = [
       "pub event_name: Option<String>",
       "pub action_scope: Option<AgentSessionActionScope>",
       "pub struct AgentSessionActionRespondResponse",
-      "method!(METHOD_AGENT_SESSION_ACTION_RESPOND, Request)",
+      "method: METHOD_AGENT_SESSION_ACTION_RESPOND,",
       "agent_session_action_respond_request_matches_protocol_fixture_shape",
     ],
   },
@@ -728,7 +750,7 @@ const checks = [
       "pub struct AgentSessionReplayedActionRequired",
       "pub struct AgentSessionActionReplayResponse",
       "pub action: Option<AgentSessionReplayedActionRequired>",
-      "method!(METHOD_AGENT_SESSION_ACTION_REPLAY, Request)",
+      "method: METHOD_AGENT_SESSION_ACTION_REPLAY,",
       "agent_session_action_replay_request_matches_protocol_fixture_shape",
     ],
   },
@@ -751,7 +773,7 @@ const checks = [
       "pub metadata: Option<serde_json::Value>",
       "pub struct ArtifactReadResponse",
       "pub artifacts: Vec<ArtifactSummary>",
-      "method!(METHOD_ARTIFACT_READ, Request)",
+      "method: METHOD_ARTIFACT_READ,",
       "artifact_read_request_matches_protocol_fixture_shape",
       "artifact_summary_content_status_matches_protocol_fixture_shape",
     ],
@@ -774,10 +796,10 @@ const checks = [
       "pub struct FileSystemDeleteFileParams",
       "pub recursive: Option<bool>",
       "pub struct FileSystemMutationResponse",
-      "method!(METHOD_FILE_SYSTEM_CREATE_FILE, Request)",
-      "method!(METHOD_FILE_SYSTEM_CREATE_DIRECTORY, Request)",
-      "method!(METHOD_FILE_SYSTEM_RENAME_FILE, Request)",
-      "method!(METHOD_FILE_SYSTEM_DELETE_FILE, Request)",
+      "method: METHOD_FILE_SYSTEM_CREATE_FILE,",
+      "method: METHOD_FILE_SYSTEM_CREATE_DIRECTORY,",
+      "method: METHOD_FILE_SYSTEM_RENAME_FILE,",
+      "method: METHOD_FILE_SYSTEM_DELETE_FILE,",
       "app_server_method_catalog_keeps_request_and_notification_methods_together",
     ],
   },
@@ -805,7 +827,7 @@ const checks = [
       "pub completion_audit_summary: Option<serde_json::Value>",
       "pub struct EvidencePackArtifact",
       "pub relative_path: String",
-      "method!(METHOD_EVIDENCE_EXPORT, Request)",
+      "method: METHOD_EVIDENCE_EXPORT,",
       "evidence_export_request_matches_protocol_fixture_shape",
       "evidence_export_response_matches_protocol_fixture_shape",
     ],
@@ -1243,24 +1265,24 @@ const checks = [
       "pub struct MemoryStoreReviewResolveResponse",
       "pub struct MemoryStoreHealthResponse",
       "pub struct MemoryStoreResetResponse",
-      "method!(METHOD_PLUGIN_INSTALLED_LIST, Request)",
-      "method!(METHOD_PLUGIN_UI_RUNTIME_START, Request)",
-      "method!(METHOD_PLUGIN_UI_RUNTIME_STATUS, Request)",
-      "method!(METHOD_PLUGIN_UI_RUNTIME_STOP, Request)",
-      "method!(METHOD_KNOWLEDGE_PACK_LIST, Request)",
-      "method!(METHOD_KNOWLEDGE_PACK_READ, Request)",
-      "method!(METHOD_AUTOMATION_JOB_LIST, Request)",
-      "method!(METHOD_PROJECT_MEMORY_READ, Request)",
-      "method!(METHOD_MEMORY_STORE_LIST, Request)",
-      "method!(METHOD_MEMORY_STORE_READ, Request)",
-      "method!(METHOD_MEMORY_STORE_SEARCH, Request)",
-      "method!(METHOD_MEMORY_STORE_ADD_NOTE, Request)",
-      "method!(METHOD_MEMORY_STORE_CONSOLIDATE, Request)",
-      "method!(METHOD_MEMORY_STORE_REVIEW_LIST, Request)",
-      "method!(METHOD_MEMORY_STORE_REVIEW_RESOLVE, Request)",
-      "method!(METHOD_MEMORY_STORE_HEALTH, Request)",
-      "method!(METHOD_MEMORY_STORE_RESET, Request)",
-      "method!(METHOD_MEMORY_STORE_INDEX_REBUILD, Request)",
+      "method: METHOD_PLUGIN_INSTALLED_LIST,",
+      "method: METHOD_PLUGIN_UI_RUNTIME_START,",
+      "method: METHOD_PLUGIN_UI_RUNTIME_STATUS,",
+      "method: METHOD_PLUGIN_UI_RUNTIME_STOP,",
+      "method: METHOD_KNOWLEDGE_PACK_LIST,",
+      "method: METHOD_KNOWLEDGE_PACK_READ,",
+      "method: METHOD_AUTOMATION_JOB_LIST,",
+      "method: METHOD_PROJECT_MEMORY_READ,",
+      "method: METHOD_MEMORY_STORE_LIST,",
+      "method: METHOD_MEMORY_STORE_READ,",
+      "method: METHOD_MEMORY_STORE_SEARCH,",
+      "method: METHOD_MEMORY_STORE_ADD_NOTE,",
+      "method: METHOD_MEMORY_STORE_CONSOLIDATE,",
+      "method: METHOD_MEMORY_STORE_REVIEW_LIST,",
+      "method: METHOD_MEMORY_STORE_REVIEW_RESOLVE,",
+      "method: METHOD_MEMORY_STORE_HEALTH,",
+      "method: METHOD_MEMORY_STORE_RESET,",
+      "method: METHOD_MEMORY_STORE_INDEX_REBUILD,",
       "PluginInstalledListResponse",
       "PluginUiRuntimeStartParams",
       "PluginUiRuntimeStatusParams",
@@ -1716,29 +1738,6 @@ const checks = [
       "resolveMemoryStoreReviewNote(",
       "healthMemoryStore(params: protocol.MemoryStoreRootParams): protocol.JsonRpcRequest",
       "resetMemoryStore(params: protocol.MemoryStoreResetParams): protocol.JsonRpcRequest",
-      '{ name: "listPluginInstalled", clientMethod: "listPluginInstalled", method: protocol.METHOD_PLUGIN_INSTALLED_LIST',
-      '{ name: "startPluginUiRuntime", clientMethod: "startPluginUiRuntime", method: protocol.METHOD_PLUGIN_UI_RUNTIME_START',
-      '{ name: "getPluginUiRuntimeStatus", clientMethod: "getPluginUiRuntimeStatus", method: protocol.METHOD_PLUGIN_UI_RUNTIME_STATUS',
-      '{ name: "stopPluginUiRuntime", clientMethod: "stopPluginUiRuntime", method: protocol.METHOD_PLUGIN_UI_RUNTIME_STOP',
-      '{ name: "listKnowledgePacks", clientMethod: "listKnowledgePacks", method: protocol.METHOD_KNOWLEDGE_PACK_LIST',
-      '{ name: "readKnowledgePack", clientMethod: "readKnowledgePack", method: protocol.METHOD_KNOWLEDGE_PACK_READ',
-      '{ name: "importKnowledgeSource", clientMethod: "importKnowledgeSource", method: protocol.METHOD_KNOWLEDGE_SOURCE_IMPORT',
-      '{ name: "compileKnowledgePack", clientMethod: "compileKnowledgePack", method: protocol.METHOD_KNOWLEDGE_PACK_COMPILE',
-      '{ name: "setDefaultKnowledgePack", clientMethod: "setDefaultKnowledgePack", method: protocol.METHOD_KNOWLEDGE_PACK_DEFAULT_SET',
-      '{ name: "updateKnowledgePackStatus", clientMethod: "updateKnowledgePackStatus", method: protocol.METHOD_KNOWLEDGE_PACK_STATUS_UPDATE',
-      '{ name: "resolveKnowledgeContext", clientMethod: "resolveKnowledgeContext", method: protocol.METHOD_KNOWLEDGE_CONTEXT_RESOLVE',
-      '{ name: "validateKnowledgeContextRun", clientMethod: "validateKnowledgeContextRun", method: protocol.METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE',
-      '{ name: "listAutomationJobs", clientMethod: "listAutomationJobs", method: protocol.METHOD_AUTOMATION_JOB_LIST',
-      '{ name: "readProjectMemory", clientMethod: "readProjectMemory", method: protocol.METHOD_PROJECT_MEMORY_READ',
-      '{ name: "listMemoryStore", clientMethod: "listMemoryStore", method: protocol.METHOD_MEMORY_STORE_LIST',
-      '{ name: "readMemoryStore", clientMethod: "readMemoryStore", method: protocol.METHOD_MEMORY_STORE_READ',
-      '{ name: "searchMemoryStore", clientMethod: "searchMemoryStore", method: protocol.METHOD_MEMORY_STORE_SEARCH',
-      '{ name: "addMemoryStoreNote", clientMethod: "addMemoryStoreNote", method: protocol.METHOD_MEMORY_STORE_ADD_NOTE',
-      '{ name: "consolidateMemoryStore", clientMethod: "consolidateMemoryStore", method: protocol.METHOD_MEMORY_STORE_CONSOLIDATE',
-      '{ name: "listMemoryStoreReviewNotes", clientMethod: "listMemoryStoreReviewNotes", method: protocol.METHOD_MEMORY_STORE_REVIEW_LIST',
-      '{ name: "resolveMemoryStoreReviewNote", clientMethod: "resolveMemoryStoreReviewNote", method: protocol.METHOD_MEMORY_STORE_REVIEW_RESOLVE',
-      '{ name: "healthMemoryStore", clientMethod: "healthMemoryStore", method: protocol.METHOD_MEMORY_STORE_HEALTH',
-      '{ name: "resetMemoryStore", clientMethod: "resetMemoryStore", method: protocol.METHOD_MEMORY_STORE_RESET',
       "builds app data surface requests with current methods",
       "assert.equal(installed.method, METHOD_PLUGIN_INSTALLED_LIST)",
       "assert.equal(runtimeStart.method, METHOD_PLUGIN_UI_RUNTIME_START)",
@@ -1850,11 +1849,11 @@ const checks = [
       "pub struct WorkspaceRightSurfacePendingConsumeResponse",
       "pub struct WorkspaceRightSurfacePendingDismissResponse",
       "pub struct WorkspaceRightSurfacePendingChangedParams",
-      "method!(METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST, Request)",
-      "method!(METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_LIST, Request)",
-      "method!(METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CONSUME, Request)",
-      "method!(METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS, Request)",
-      "method!(METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED, Notification)",
+      "method: METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST,",
+      "method: METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_LIST,",
+      "method: METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CONSUME,",
+      "method: METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS,",
+      "method: METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED,",
       "request_workspace_right_surface(",
       "list_workspace_right_surface_pending(",
       "consume_workspace_right_surface_pending(",
@@ -1946,12 +1945,12 @@ const checks = [
       "pub struct BrowserSessionState",
       "pub struct BrowserSessionEventListResponse",
       "pub struct BrowserSessionActionExecuteResponse",
-      "method!(METHOD_BROWSER_SESSION_TARGET_LIST, Request)",
-      "method!(METHOD_BROWSER_SESSION_OPEN, Request)",
-      "method!(METHOD_BROWSER_SESSION_READ, Request)",
-      "method!(METHOD_BROWSER_SESSION_CLOSE, Request)",
-      "method!(METHOD_BROWSER_SESSION_EVENT_LIST, Request)",
-      "method!(METHOD_BROWSER_SESSION_ACTION_EXECUTE, Request)",
+      "method: METHOD_BROWSER_SESSION_TARGET_LIST,",
+      "method: METHOD_BROWSER_SESSION_OPEN,",
+      "method: METHOD_BROWSER_SESSION_READ,",
+      "method: METHOD_BROWSER_SESSION_CLOSE,",
+      "method: METHOD_BROWSER_SESSION_EVENT_LIST,",
+      "method: METHOD_BROWSER_SESSION_ACTION_EXECUTE,",
       "lime-browser-runtime.workspace = true",
       "browser_runtime: Arc<BrowserRuntimeManager>",
       "list_browser_session_targets(",
@@ -2855,7 +2854,7 @@ const checks = [
     ],
     snippets: [
       'METHOD_AGENT_SESSION_TOOL_INVENTORY_READ: &str = "agentSession/toolInventory/read"',
-      "method!(METHOD_AGENT_SESSION_TOOL_INVENTORY_READ, Request)",
+      "method: METHOD_AGENT_SESSION_TOOL_INVENTORY_READ,",
       "pub struct AgentSessionToolInventoryReadParams",
       "pub struct AgentSessionToolInventoryReadResponse",
       "METHOD_AGENT_SESSION_TOOL_INVENTORY_READ =>",
@@ -2939,6 +2938,7 @@ const checks = [
   {
     name: "Agent tool orchestrator owns planned tool execution events",
     files: [
+      "lime-rs/crates/tool-runtime/src/tool_batch.rs",
       "lime-rs/crates/agent/src/agent_tools/mod.rs",
       "lime-rs/crates/agent/src/agent_tools/tool_orchestrator.rs",
       "lime-rs/crates/agent/src/agent_tools/tool_orchestrator/tests.rs",
@@ -3609,6 +3609,8 @@ const checks = [
     name: "Standalone App Server current runtime backend delegates Claw Aster execution chain",
     files: [
       ...agentRuntimeBoundaryFiles,
+      ...agentRequestToolPolicyFiles,
+      "lime-rs/crates/agent/src/agent_tools/tool_orchestrator.rs",
       "lime-rs/crates/app-server/src/lib.rs",
       ...appServerRuntimeBackendExecutionChainFiles,
     ],
@@ -3622,8 +3624,8 @@ const checks = [
       "AgentRuntimeState::new()",
       "direct_provider_config_from_request",
       "configure_provider_for_session(",
-      "create_session_provider_handle(runtime_config)",
       "install_provider_for_session(&runtime_config).await?",
+      "create_configured_reply_provider(runtime_config)",
       "configure_model_route_provider_for_session_with_provider(",
       "pub struct SessionProviderConfig",
       "ProviderConfigurationRequest",
@@ -3647,6 +3649,7 @@ const checks = [
       "HostManagedGenerationPlan",
       "run_agent_turn_with_policy",
       "AgentTurnExecutionRequest",
+      "stream_runtime_reply_with_policy(",
       "stream_reply_with_policy(",
       "runtime_events_from_agent_event",
       "runtime_event_type_for_agent_event",
@@ -4009,11 +4012,17 @@ const checks = [
     name: "TypeScript protocol exposes typed capability/list contract",
     file: "packages/app-server-client/src/protocol.ts",
     snippets: [
-      'export const METHOD_CAPABILITY_LIST = "capability/list"',
+      "GENERATED_APP_SERVER_METHODS,",
+      "GENERATED_APP_SERVER_REQUEST_SERIALIZATION_SCOPES,",
       'export type AppServerMethodKind = "request" | "notification"',
       "export type AppServerMethodSpec = {",
-      "export const APP_SERVER_METHODS = [",
-      '{ method: METHOD_INITIALIZED, kind: "notification" }',
+      "export const APP_SERVER_METHODS =",
+      "GENERATED_APP_SERVER_METHODS satisfies readonly AppServerMethodSpec[]",
+      "export type AppServerRequestSerializationScope =",
+      "export type AppServerRequestSerializationScopeSpec = {",
+      "export const APP_SERVER_REQUEST_SERIALIZATION_SCOPES =",
+      "GENERATED_APP_SERVER_REQUEST_SERIALIZATION_SCOPES satisfies readonly AppServerRequestSerializationScopeSpec[]",
+      "export function getAppServerRequestSerializationScope(",
       "export function isAppServerRequestMethod(method: string): boolean",
       "export function isAppServerNotificationMethod(method: string): boolean",
       "capabilityDenied: -32020",
@@ -4025,11 +4034,35 @@ const checks = [
       "limit?: number",
       "export type CapabilityDescriptor = {",
       "nextCursor?: string",
+      "requestSerializationScopes: AppServerRequestSerializationScopeSpec[]",
     ],
     absentSnippets: [
+      'export const METHOD_INITIALIZE = "initialize"',
+      'export const METHOD_CAPABILITY_LIST = "capability/list"',
       "DEFAULT_LISTEN_URL",
       "DEFAULT_RELEASE_MANIFEST_NAME",
       "DEFAULT_PROTOCOL_SCHEMA_MANIFEST_NAME",
+    ],
+  },
+  {
+    name: "Generated TypeScript protocol exposes Rust-owned method constants and tagged messages",
+    file: "packages/app-server-client/src/generated/protocol-types.ts",
+    snippets: [
+      'export const METHOD_INITIALIZE = "initialize";',
+      'export const METHOD_CAPABILITY_LIST = "capability/list";',
+      "export type AppServerClientRequest =",
+      'method: "initialize";',
+      'method: "agentSession/turn/start";',
+      "export type ClientNotification =",
+      'method: "initialized";',
+      "export type ServerNotification =",
+      'method: "agentSession/event";',
+      'method: "workspaceRightSurface/pendingChanged";',
+    ],
+    absentSnippets: [
+      "export interface AppServerClientRequest",
+      "method: AppServerRequestMethod;",
+      "export type AppServerNotification =",
     ],
   },
   {
@@ -4037,6 +4070,7 @@ const checks = [
     file: "packages/app-server-client/src/index.ts",
     snippets: [
       'export * from "./protocol.js"',
+      'export * from "./request-client-methods.js"',
       'from "./protocol.js"',
       "METHOD_CAPABILITY_LIST",
       "export class AppServerRequestError extends Error",
@@ -4099,7 +4133,6 @@ const checks = [
     snippets: [
       "export const METHOD_AGENT_SESSION_ACTION_RESPOND =",
       '"agentSession/action/respond"',
-      '{ method: METHOD_AGENT_SESSION_ACTION_RESPOND, kind: "request" }',
       "export type AgentSessionActionType =",
       '"tool_confirmation"',
       '"ask_user"',
@@ -4115,7 +4148,6 @@ const checks = [
     snippets: [
       "export const METHOD_AGENT_SESSION_ACTION_REPLAY =",
       '"agentSession/action/replay"',
-      '{ method: METHOD_AGENT_SESSION_ACTION_REPLAY, kind: "request" }',
       "export type AgentSessionActionReplayParams = {",
       "export type AgentSessionReplayedActionRequired = {",
       'type: "action_required"',
@@ -4148,7 +4180,6 @@ const checks = [
     file: "packages/app-server-client/src/protocol.ts",
     snippets: [
       'export const METHOD_ARTIFACT_READ = "artifact/read"',
-      '{ method: METHOD_ARTIFACT_READ, kind: "request" }',
       "export type ArtifactReadParams = {",
       "artifactRef?: string",
       "includeContent?: boolean",
@@ -4170,12 +4201,6 @@ const checks = [
       '"fileSystem/createDirectory"',
       '"fileSystem/renameFile"',
       '"fileSystem/deleteFile"',
-      '{ method: METHOD_FILE_SYSTEM_LIST_DIRECTORY, kind: "request" }',
-      '{ method: METHOD_FILE_SYSTEM_READ_FILE_PREVIEW, kind: "request" }',
-      '{ method: METHOD_FILE_SYSTEM_CREATE_FILE, kind: "request" }',
-      '{ method: METHOD_FILE_SYSTEM_CREATE_DIRECTORY, kind: "request" }',
-      '{ method: METHOD_FILE_SYSTEM_RENAME_FILE, kind: "request" }',
-      '{ method: METHOD_FILE_SYSTEM_DELETE_FILE, kind: "request" }',
       "export type FileSystemListDirectoryParams = {",
       "export type FileSystemReadFilePreviewParams = {",
       "maxSize?: number",
@@ -4238,7 +4263,6 @@ const checks = [
     file: "packages/app-server-client/src/protocol.ts",
     snippets: [
       'export const METHOD_EVIDENCE_EXPORT = "evidence/export"',
-      '{ method: METHOD_EVIDENCE_EXPORT, kind: "request" }',
       "export type EvidenceExportParams = {",
       "includeEvents?: boolean",
       "includeArtifacts?: boolean",
@@ -4291,10 +4315,6 @@ const checks = [
       '"agentSession/reviewDecisionTemplate/export"',
       "export const METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE =",
       '"agentSession/reviewDecision/save"',
-      '{ method: METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT, kind: "request" }',
-      '{ method: METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT, kind: "request" }',
-      "method: METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT",
-      '{ method: METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE, kind: "request" }',
       "export type AgentSessionReplayCaseExportParams = {",
       "export type AgentSessionReplayCaseExportResponse = {",
       "export type AgentSessionAnalysisHandoffExportParams = {",
@@ -4332,7 +4352,6 @@ const checks = [
     file: "packages/app-server-client/src/protocol.ts",
     snippets: [
       'export const METHOD_AGENT_SESSION_UPDATE = "agentSession/update"',
-      '{ method: METHOD_AGENT_SESSION_UPDATE, kind: "request" }',
       "export type AgentSessionUpdateParams = {",
       "sessionId: string",
       "providerSelector?: string",
@@ -4362,7 +4381,6 @@ const checks = [
     file: "packages/app-server-client/src/protocol.ts",
     snippets: [
       'export const METHOD_AGENT_SESSION_ARCHIVE_MANY = "agentSession/archiveMany"',
-      '{ method: METHOD_AGENT_SESSION_ARCHIVE_MANY, kind: "request" }',
       "export type AgentSessionArchiveManyParams = {",
       "sessionIds?: string[]",
       "export type AgentSessionArchiveManyResponse = {",
@@ -4384,7 +4402,6 @@ const checks = [
     file: "packages/app-server-client/src/protocol.ts",
     snippets: [
       'export const METHOD_AGENT_SESSION_DELETE = "agentSession/delete"',
-      '{ method: METHOD_AGENT_SESSION_DELETE, kind: "request" }',
       "export type AgentSessionDeleteParams = {",
       "sessionId: string",
       "export type AgentSessionDeleteResponse = {",
@@ -4412,10 +4429,6 @@ const checks = [
       '"agentSession/objective/status/update"',
       "export const METHOD_AGENT_SESSION_OBJECTIVE_CLEAR =",
       '"agentSession/objective/clear"',
-      '{ method: METHOD_AGENT_SESSION_OBJECTIVE_READ, kind: "request" }',
-      '{ method: METHOD_AGENT_SESSION_OBJECTIVE_SET, kind: "request" }',
-      "method: METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE",
-      '{ method: METHOD_AGENT_SESSION_OBJECTIVE_CLEAR, kind: "request" }',
       "export type AgentSessionObjectiveReadParams = {",
       "export type AgentSessionObjectiveSetParams = {",
       "export type AgentSessionObjectiveStatusUpdateParams = {",
@@ -4451,13 +4464,35 @@ const checks = [
     ],
   },
   {
+    name: "TypeScript connection methods derive from request client protocol specs",
+    file: "packages/app-server-client/src/connection-methods.ts",
+    snippets: [
+      "APP_SERVER_REQUEST_CLIENT_METHODS.filter(",
+      "CONNECTION_CLIENT_METHOD_EXCLUSIONS",
+      'spec.kind === "request"',
+      "clientMethod: spec.name",
+      "method: spec.method",
+      "params: spec.params",
+    ],
+    absentSnippets: ["method: protocol.METHOD_"],
+  },
+  {
+    name: "TypeScript request client exposes the single wrapper protocol spec",
+    file: "packages/app-server-client/src/request-client-methods.ts",
+    snippets: [
+      "export type AppServerRequestClientMethodSpec",
+      "export const APP_SERVER_REQUEST_CLIENT_METHODS",
+      "installAppServerRequestClientMethods(",
+    ],
+  },
+  {
     name: "TypeScript capability/list tests lock helper and connection shape",
     file: "packages/app-server-client/tests/client.test.mjs",
     snippets: [
       "APP_SERVER_METHODS",
       "METHOD_CAPABILITY_LIST",
       "builds capability list requests with empty params",
-      "exports app-server method catalog with request and notification kinds",
+      "exports app-server method catalog from checked-in Rust manifest",
       "METHOD_AGENT_SESSION_UPDATE",
       "METHOD_AGENT_SESSION_DELETE",
       "assert.equal(updateSession.method, METHOD_AGENT_SESSION_UPDATE)",
@@ -8202,14 +8237,15 @@ for (const check of checks) {
   const content = existingFiles
     .map((file) => fs.readFileSync(path.join(repoRoot, file), "utf8"))
     .join("\n");
+  const requiredContent = requiredContractContent(existingFiles, content);
   for (const snippet of check.snippets) {
-    if (!contractContentIncludes(content, snippet)) {
+    if (!contractContentIncludes(requiredContent, snippet)) {
       failures.push(
         `${check.name}: missing ${JSON.stringify(snippet)} in ${location}`,
       );
     }
   }
-  const normalizedContent = normalizeContractSnippet(content);
+  const normalizedContent = normalizeContractSnippet(requiredContent);
   for (const snippet of check.normalizedSnippets ?? []) {
     if (!normalizedContent.includes(normalizeContractSnippet(snippet))) {
       failures.push(

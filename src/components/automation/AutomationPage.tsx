@@ -18,6 +18,10 @@ export function AutomationPage({
           mode="workspace"
           initialSelectedJobId={pageParams?.selectedJobId}
           initialWorkspaceTab={pageParams?.workspaceTab}
+          threadLineage={{
+            sessionId: pageParams?.sessionId,
+            threadId: pageParams?.threadId,
+          }}
           onOpenSettings={() =>
             onNavigate?.("settings", { tab: SettingsTabs.Automation })
           }

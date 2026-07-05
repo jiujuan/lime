@@ -193,7 +193,7 @@ export function buildWorkspaceSkillAgentAutomationRequestMetadata(input: {
           : {}),
       },
       workspace_skill_runtime_enable: {
-        source: "agent_envelope_scheduled_run",
+        source: "manual_session_enable",
         approval: "manual",
         workspace_root: workspaceRoot,
         bindings: [

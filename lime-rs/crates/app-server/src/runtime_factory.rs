@@ -9,7 +9,6 @@ use crate::MockBackend;
 use crate::RuntimeBackend;
 use crate::RuntimeCore;
 use crate::UnavailableBackend;
-#[cfg(feature = "aster-backend")]
 use crate::{RuntimeBackendAdapter, RuntimeBackendHost, RuntimeBackendProcessControlCapabilities};
 use lime_core::database::DbConnection;
 use std::sync::Arc;
@@ -216,13 +215,9 @@ impl AppServerRuntimeFactory {
             capability_source,
         ))
     }
-
-    #[cfg(feature = "aster-backend")]
     pub fn runtime_adapter_core(host: Arc<dyn RuntimeBackendHost>) -> RuntimeCore {
         RuntimeCore::with_backend(Arc::new(RuntimeBackendAdapter::new(host)))
     }
-
-    #[cfg(feature = "aster-backend")]
     pub fn runtime_adapter_core_with_execution_process_server(
         host: Arc<dyn RuntimeBackendHost>,
         execution_process: ExecutionProcessServer,
@@ -233,8 +228,6 @@ impl AppServerRuntimeFactory {
         )))
         .with_execution_process_server(execution_process)
     }
-
-    #[cfg(feature = "aster-backend")]
     pub fn runtime_adapter_core_with_capability_source(
         host: Arc<dyn RuntimeBackendHost>,
         capability_source: Arc<dyn CapabilitySource>,
@@ -244,8 +237,6 @@ impl AppServerRuntimeFactory {
             capability_source,
         )
     }
-
-    #[cfg(feature = "aster-backend")]
     pub fn runtime_adapter_core_with_sources(
         host: Arc<dyn RuntimeBackendHost>,
         capability_source: Arc<dyn CapabilitySource>,
@@ -257,8 +248,6 @@ impl AppServerRuntimeFactory {
             artifact_content_provider,
         )
     }
-
-    #[cfg(feature = "aster-backend")]
     pub fn runtime_adapter_core_with_sources_and_evidence_export_provider(
         host: Arc<dyn RuntimeBackendHost>,
         capability_source: Arc<dyn CapabilitySource>,
@@ -272,13 +261,9 @@ impl AppServerRuntimeFactory {
             evidence_export_provider,
         )
     }
-
-    #[cfg(feature = "aster-backend")]
     pub fn runtime_adapter_app_server(host: Arc<dyn RuntimeBackendHost>) -> AppServer {
         AppServer::with_runtime(Self::runtime_adapter_core(host))
     }
-
-    #[cfg(feature = "aster-backend")]
     pub fn runtime_adapter_app_server_with_execution_process_server(
         host: Arc<dyn RuntimeBackendHost>,
         execution_process: ExecutionProcessServer,
@@ -295,31 +280,19 @@ mod tests {
     use super::*;
     use crate::CapabilityInventoryRecord;
     use crate::CapabilityInventorySource;
-    #[cfg(feature = "aster-backend")]
     use crate::RuntimeBackendActionRespondRequest;
-    #[cfg(feature = "aster-backend")]
     use crate::RuntimeBackendActionRespondResult;
-    #[cfg(feature = "aster-backend")]
     use crate::RuntimeBackendCancelRequest;
-    #[cfg(feature = "aster-backend")]
     use crate::RuntimeBackendCancelResult;
-    #[cfg(feature = "aster-backend")]
     use crate::RuntimeBackendSubmitRequest;
-    #[cfg(feature = "aster-backend")]
     use crate::RuntimeBackendSubmitResult;
-    #[cfg(feature = "aster-backend")]
     use crate::RuntimeCoreError;
-    #[cfg(feature = "aster-backend")]
     use crate::RuntimeHostContext;
-    #[cfg(feature = "aster-backend")]
     use app_server_protocol::AgentInput;
-    #[cfg(feature = "aster-backend")]
     use app_server_protocol::AgentSessionStartParams;
-    #[cfg(feature = "aster-backend")]
     use app_server_protocol::AgentSessionTurnStartParams;
     use app_server_protocol::CapabilityDescriptor;
     use app_server_protocol::CapabilityListParams;
-    #[cfg(feature = "aster-backend")]
     use async_trait::async_trait;
 
     #[test]
@@ -511,11 +484,7 @@ mod tests {
         assert_eq!(matched.capabilities[0].id, "content.draft.generate");
         assert!(unmatched.capabilities.is_empty());
     }
-
-    #[cfg(feature = "aster-backend")]
     struct FactoryProcessControlHost;
-
-    #[cfg(feature = "aster-backend")]
     #[async_trait]
     impl RuntimeBackendHost for FactoryProcessControlHost {
         async fn submit_turn(
@@ -543,8 +512,6 @@ mod tests {
             Ok(RuntimeBackendActionRespondResult::default())
         }
     }
-
-    #[cfg(feature = "aster-backend")]
     #[tokio::test]
     async fn runtime_factory_can_share_execution_process_owner_with_runtime_core() {
         let execution_process = ExecutionProcessServer::default();

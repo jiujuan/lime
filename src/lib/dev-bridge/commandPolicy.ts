@@ -7,6 +7,7 @@ export type DevBridgeCommandTimeoutProfile =
   | "agent-session-patch"
   | "agent-session-create"
   | "app-server-turn-start"
+  | "app-server-long-running"
   | "app-server-read"
   | "agent-runtime"
   | "plugin-installed-write"
@@ -72,9 +73,7 @@ const devBridgePluginUiRuntimeStartCommands = new Set([
   "plugin_start_ui_runtime",
 ]);
 
-const devBridgePluginPackageCommands = new Set([
-  "pluginLocalPackage/inspect",
-]);
+const devBridgePluginPackageCommands = new Set(["pluginLocalPackage/inspect"]);
 
 const electronHostLayeredDesignProjectCommands = new Set([
   "save_layered_design_project_export",
@@ -116,6 +115,7 @@ const APP_SERVER_AGENT_SESSION_LIST_METHOD = "agentSession/list";
 const APP_SERVER_AGENT_TURN_START_METHOD = "agentSession/turn/start";
 const APP_SERVER_PLUGIN_UI_RUNTIME_START_METHOD = "pluginUiRuntime/start";
 const APP_SERVER_KNOWLEDGE_COMPILE_METHOD = "knowledgePack/compile";
+const APP_SERVER_LONG_RUNNING_METHODS = new Set(["automationJob/runNow"]);
 const APP_SERVER_PLUGIN_INSTALLED_WRITE_METHODS = new Set([
   "pluginInstalled/save",
 ]);
@@ -169,7 +169,19 @@ const APP_SERVER_CURRENT_METHODS = new Set([
   "knowledgePack/status/update",
   "knowledgeContext/resolve",
   "knowledgeContextRun/validate",
+  "automationScheduler/config/read",
+  "automationScheduler/config/update",
+  "automationScheduler/status",
   "automationJob/list",
+  "automationJob/read",
+  "automationJob/create",
+  "automationJob/update",
+  "automationJob/delete",
+  "automationJob/runNow",
+  "automationJob/health",
+  "automationJob/runHistory",
+  "automationSchedule/preview",
+  "automationSchedule/validate",
   "projectMemory/read",
   "gatewayChannel/status",
   "wechatChannel/accounts/list",
@@ -323,6 +335,9 @@ export function resolveDevBridgeCommandTimeoutProfile(
   if (isAppServerPluginUiRuntimeStartCommand(command, args)) {
     return "plugin-ui-runtime-start";
   }
+  if (isAppServerLongRunningCommand(command, args)) {
+    return "app-server-long-running";
+  }
   if (isAppServerAgentSessionListCommand(command, args)) {
     return "agent-session-list";
   }
@@ -425,6 +440,18 @@ function isAppServerKnowledgeCompileCommand(
   }
   return extractAppServerJsonLines(args).some((line) =>
     jsonRpcLineHasMethod(line, APP_SERVER_KNOWLEDGE_COMPILE_METHOD),
+  );
+}
+
+function isAppServerLongRunningCommand(
+  command: string,
+  args: unknown,
+): boolean {
+  if (command !== APP_SERVER_HANDLE_JSON_LINES_COMMAND) {
+    return false;
+  }
+  return extractAppServerJsonLines(args).some((line) =>
+    jsonRpcLineHasAnyMethod(line, APP_SERVER_LONG_RUNNING_METHODS),
   );
 }
 

@@ -1,5 +1,4 @@
 export * from "./sdk";
-export { PluginMarketplacePage } from "./PluginMarketplacePage";
 export {
   buildPluginContractFromPluginManifest,
   buildPluginManifestFromPluginManifest,

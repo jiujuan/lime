@@ -1,5 +1,6 @@
 export * from "./protocol.js";
 export * from "./request-client.js";
+export * from "./request-client-methods.js";
 export * from "./connection.js";
 export * from "./agent-runtime.js";
 export * from "./sidecar.js";

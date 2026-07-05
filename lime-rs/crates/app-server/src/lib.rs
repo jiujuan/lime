@@ -26,7 +26,6 @@ mod processor;
 mod project_shell;
 mod runtime;
 mod runtime_backend;
-#[cfg(feature = "aster-backend")]
 mod runtime_backend_adapter;
 mod runtime_factory;
 mod skill_registry;
@@ -197,23 +196,14 @@ pub use runtime::WorkspaceObjectCanvasSnapshotListParams;
 pub use runtime::WorkspaceSkillBindingAppDataSource;
 pub(crate) use runtime::TRACE_EVENT_MAX_FILES_PER_SESSION;
 pub use runtime_backend::RuntimeBackend;
-#[cfg(feature = "aster-backend")]
 pub use runtime_backend_adapter::RuntimeBackendActionRespondRequest;
-#[cfg(feature = "aster-backend")]
 pub use runtime_backend_adapter::RuntimeBackendActionRespondResult;
-#[cfg(feature = "aster-backend")]
 pub use runtime_backend_adapter::RuntimeBackendAdapter;
-#[cfg(feature = "aster-backend")]
 pub use runtime_backend_adapter::RuntimeBackendCancelRequest;
-#[cfg(feature = "aster-backend")]
 pub use runtime_backend_adapter::RuntimeBackendCancelResult;
-#[cfg(feature = "aster-backend")]
 pub use runtime_backend_adapter::RuntimeBackendHost;
-#[cfg(feature = "aster-backend")]
 pub use runtime_backend_adapter::RuntimeBackendProcessControlCapabilities;
-#[cfg(feature = "aster-backend")]
 pub use runtime_backend_adapter::RuntimeBackendSubmitRequest;
-#[cfg(feature = "aster-backend")]
 pub use runtime_backend_adapter::RuntimeBackendSubmitResult;
 pub use runtime_factory::AppServerBackendMode;
 pub use runtime_factory::AppServerRuntimeFactory;
@@ -533,36 +523,25 @@ fn is_streaming_turn_start_request(message: &JsonRpcMessage) -> bool {
 mod tests {
     use super::*;
     use app_server_protocol::AgentInput;
-    #[cfg(feature = "aster-backend")]
     use app_server_protocol::AgentSessionActionRespondParams;
-    #[cfg(feature = "aster-backend")]
     use app_server_protocol::AgentSessionActionScope;
-    #[cfg(feature = "aster-backend")]
     use app_server_protocol::AgentSessionActionType;
     use app_server_protocol::AgentSessionTurnStartParams;
-    #[cfg(feature = "aster-backend")]
     use app_server_protocol::ArtifactReadParams;
     use app_server_protocol::ClientCapabilities;
     use app_server_protocol::ClientInfo;
     use app_server_protocol::InitializeParams;
     use app_server_protocol::RequestId;
     use app_server_protocol::METHOD_AGENT_SESSION_LIST;
-    #[cfg(feature = "aster-backend")]
     use async_trait::async_trait;
     use serde_json::json;
-    #[cfg(feature = "aster-backend")]
     use std::sync::atomic::AtomicUsize;
-    #[cfg(feature = "aster-backend")]
     use std::sync::atomic::Ordering;
     use std::sync::Arc;
     use tokio::io::AsyncBufReadExt;
     use tokio::io::AsyncWriteExt;
     use tokio::io::BufReader;
-
-    #[cfg(feature = "aster-backend")]
     struct JsonRpcRuntimeBackendHost;
-
-    #[cfg(feature = "aster-backend")]
     #[async_trait]
     impl RuntimeBackendHost for JsonRpcRuntimeBackendHost {
         async fn submit_turn(
@@ -602,15 +581,11 @@ mod tests {
             Ok(RuntimeBackendActionRespondResult::default())
         }
     }
-
-    #[cfg(feature = "aster-backend")]
     #[derive(Default)]
     struct JsonRpcAgentFlowSmokeHost {
         submit_count: AtomicUsize,
         action_count: AtomicUsize,
     }
-
-    #[cfg(feature = "aster-backend")]
     #[async_trait]
     impl RuntimeBackendHost for JsonRpcAgentFlowSmokeHost {
         async fn submit_turn(
@@ -1193,8 +1168,6 @@ mod tests {
             other => panic!("expected notification, got {other:?}"),
         }
     }
-
-    #[cfg(feature = "aster-backend")]
     #[tokio::test]
     async fn runtime_factory_flows_through_json_rpc_router() {
         let server = AppServerRuntimeFactory::runtime_adapter_app_server(Arc::new(
@@ -1260,7 +1233,7 @@ mod tests {
             .await
             .expect("turn start");
 
-        assert_eq!(messages.len(), 2);
+        assert_eq!(messages.len(), 3);
         match &messages[0] {
             JsonRpcMessage::Response(response) => {
                 assert_eq!(response.result["turn"]["status"], "accepted");
@@ -1269,6 +1242,21 @@ mod tests {
             other => panic!("expected response, got {other:?}"),
         }
         match &messages[1] {
+            JsonRpcMessage::Notification(notification) => {
+                assert_eq!(notification.method, METHOD_AGENT_SESSION_EVENT);
+                assert_eq!(
+                    notification.params.as_ref().expect("params")["event"]["type"],
+                    "message.created"
+                );
+                assert_eq!(
+                    notification.params.as_ref().expect("params")["event"]["payload"]["input"]
+                        ["text"],
+                    "draft"
+                );
+            }
+            other => panic!("expected notification, got {other:?}"),
+        }
+        match &messages[2] {
             JsonRpcMessage::Notification(notification) => {
                 assert_eq!(notification.method, METHOD_AGENT_SESSION_EVENT);
                 assert_eq!(
@@ -1283,8 +1271,6 @@ mod tests {
             other => panic!("expected notification, got {other:?}"),
         }
     }
-
-    #[cfg(feature = "aster-backend")]
     #[tokio::test]
     async fn runtime_backend_json_rpc_agent_flow_smoke_covers_artifact_read_and_action_response() {
         let host = Arc::new(JsonRpcAgentFlowSmokeHost::default());
@@ -1898,9 +1884,8 @@ mod tests {
         )
         .await;
 
-        assert_scoped_agent_event_notification(
-            &next_json_message_with_timeout(&mut output_lines, std::time::Duration::from_secs(10))
-                .await,
+        assert_next_scoped_agent_event_notification(
+            &mut output_lines,
             "sess_external_stream_stdio",
             "thread_external_stream_stdio",
             "message.created",
@@ -1918,25 +1903,26 @@ mod tests {
                 "role": "user",
                 "visibility": "user_visible",
             }),
-        );
-        assert_scoped_agent_event_notification(
-            &next_json_message_with_timeout(&mut output_lines, std::time::Duration::from_secs(10))
-                .await,
+        )
+        .await;
+        assert_next_scoped_agent_event_notification(
+            &mut output_lines,
             "sess_external_stream_stdio",
             "thread_external_stream_stdio",
             "message.delta",
             "turn_external_stream_stdio",
             json!({ "chunk": 1, "text": "hello" }),
-        );
-        assert_scoped_agent_event_notification(
-            &next_json_message_with_timeout(&mut output_lines, std::time::Duration::from_secs(10))
-                .await,
+        )
+        .await;
+        assert_next_scoped_agent_event_notification(
+            &mut output_lines,
             "sess_external_stream_stdio",
             "thread_external_stream_stdio",
             "message.delta",
             "turn_external_stream_stdio",
             json!({ "chunk": 2, "text": "world" }),
-        );
+        )
+        .await;
         match next_json_message_with_timeout(&mut output_lines, std::time::Duration::from_secs(10))
             .await
         {
@@ -2102,9 +2088,8 @@ mod tests {
 
         std::fs::write(&trigger_path, b"continue").expect("release backend output");
 
-        assert_scoped_agent_event_notification(
-            &next_json_message_with_timeout(&mut output_lines, std::time::Duration::from_secs(10))
-                .await,
+        assert_next_scoped_agent_event_notification(
+            &mut output_lines,
             "sess_external_wait_stdio",
             "thread_external_wait_stdio",
             "message.created",
@@ -2122,16 +2107,17 @@ mod tests {
                 "role": "user",
                 "visibility": "user_visible",
             }),
-        );
-        assert_scoped_agent_event_notification(
-            &next_json_message_with_timeout(&mut output_lines, std::time::Duration::from_secs(10))
-                .await,
+        )
+        .await;
+        assert_next_scoped_agent_event_notification(
+            &mut output_lines,
             "sess_external_wait_stdio",
             "thread_external_wait_stdio",
             "message.delta",
             "turn_external_wait_stdio",
             json!({ "text": "late first output" }),
-        );
+        )
+        .await;
         match next_json_message_with_timeout(&mut output_lines, std::time::Duration::from_secs(10))
             .await
         {
@@ -2247,9 +2233,8 @@ mod tests {
         )
         .await;
 
-        assert_scoped_agent_event_notification(
-            &next_json_message_with_timeout(&mut output_lines, std::time::Duration::from_secs(10))
-                .await,
+        assert_next_scoped_agent_event_notification(
+            &mut output_lines,
             "sess_external_stream_fail_stdio",
             "thread_external_stream_fail_stdio",
             "message.created",
@@ -2267,16 +2252,17 @@ mod tests {
                 "role": "user",
                 "visibility": "user_visible",
             }),
-        );
-        assert_scoped_agent_event_notification(
-            &next_json_message_with_timeout(&mut output_lines, std::time::Duration::from_secs(10))
-                .await,
+        )
+        .await;
+        assert_next_scoped_agent_event_notification(
+            &mut output_lines,
             "sess_external_stream_fail_stdio",
             "thread_external_stream_fail_stdio",
             "message.delta",
             "turn_external_stream_fail_stdio",
             json!({ "chunk": 1, "text": "partial" }),
-        );
+        )
+        .await;
         match next_json_message_with_timeout(&mut output_lines, std::time::Duration::from_secs(10))
             .await
         {
@@ -2334,10 +2320,24 @@ mod tests {
                     "turn_external_stream_fail_stdio"
                 );
                 let events = response.result["events"].as_array().expect("events");
-                assert_eq!(events[0]["type"], "message.created");
-                assert_eq!(events[1]["type"], "message.delta");
-                assert_eq!(events[2]["type"], "turn.failed");
-                assert!(events[2]["payload"]["message"]
+                let message_created_index = events
+                    .iter()
+                    .position(|event| event["type"] == "message.created")
+                    .expect("message.created event");
+                let message_delta_index = events
+                    .iter()
+                    .position(|event| event["type"] == "message.delta")
+                    .expect("message.delta event");
+                let turn_failed_index = events
+                    .iter()
+                    .position(|event| event["type"] == "turn.failed")
+                    .expect("turn.failed event");
+                assert!(
+                    message_created_index < message_delta_index
+                        && message_delta_index < turn_failed_index,
+                    "stored event order should preserve created -> delta -> failed: {events:?}"
+                );
+                assert!(events[turn_failed_index]["payload"]["message"]
                     .as_str()
                     .expect("evidence failure message")
                     .contains("external backend crashed after partial output"));
@@ -2423,8 +2423,43 @@ mod tests {
             .expect("output line");
         decode_message(&line).expect("decode")
     }
-
-    #[cfg(feature = "aster-backend")]
+    async fn assert_next_scoped_agent_event_notification(
+        lines: &mut tokio::io::Lines<BufReader<tokio::io::DuplexStream>>,
+        expected_session_id: &str,
+        expected_thread_id: &str,
+        expected_type: &str,
+        expected_turn_id: &str,
+        expected_payload: serde_json::Value,
+    ) {
+        for _ in 0..8 {
+            let message =
+                next_json_message_with_timeout(lines, std::time::Duration::from_secs(10)).await;
+            let JsonRpcMessage::Notification(notification) = &message else {
+                panic!("expected agent event notification {expected_type}, got {message:?}");
+            };
+            if notification.method != METHOD_AGENT_SESSION_EVENT {
+                panic!("expected agentSession/event notification {expected_type}, got {message:?}");
+            }
+            let event_type = notification
+                .params
+                .as_ref()
+                .and_then(|params| params.pointer("/event/type"))
+                .and_then(serde_json::Value::as_str);
+            if event_type != Some(expected_type) {
+                continue;
+            }
+            assert_scoped_agent_event_notification(
+                &message,
+                expected_session_id,
+                expected_thread_id,
+                expected_type,
+                expected_turn_id,
+                expected_payload,
+            );
+            return;
+        }
+        panic!("expected agent event notification {expected_type}");
+    }
     fn assert_agent_event_notification(
         message: &JsonRpcMessage,
         expected_type: &str,
@@ -2440,8 +2475,6 @@ mod tests {
             expected_payload,
         );
     }
-
-    #[cfg(feature = "aster-backend")]
     fn agent_event_notification<'a>(
         messages: &'a [JsonRpcMessage],
         expected_type: &str,

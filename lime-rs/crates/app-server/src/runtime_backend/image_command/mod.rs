@@ -94,7 +94,9 @@ pub(super) async fn handle_image_command_turn_if_present(
         return Ok(true);
     };
 
-    if let Some(runtime_backend) = runtime_backend {
+    if let Some(existing_presentation) = presentation::normalize_existing_presentation(&intent) {
+        apply_generated_presentation(&mut intent, existing_presentation, sink)?;
+    } else if let Some(runtime_backend) = runtime_backend {
         match timeout(
             PRESENTATION_GENERATION_TIMEOUT,
             presentation::generate_image_task_presentation(runtime_backend, request, &intent),
@@ -102,19 +104,7 @@ pub(super) async fn handle_image_command_turn_if_present(
         .await
         {
             Ok(Ok(Some(generated_presentation))) => {
-                let presentation_usage = generated_presentation.usage.clone();
-                if let Some(planning_summary) = generated_presentation.planning_summary.as_deref() {
-                    emit_planning_summary(&intent, planning_summary, sink)?;
-                }
-                if let Some(assistant_intro) = generated_presentation.assistant_intro.as_deref() {
-                    emit_assistant_intro(&intent, assistant_intro, sink)?;
-                }
-                emit_presentation_generated(&intent, &generated_presentation, sink)?;
-                intent.presentation = presentation::merge_generated_presentation(
-                    intent.presentation,
-                    &generated_presentation,
-                );
-                intent.presentation_usage = presentation_usage;
+                apply_generated_presentation(&mut intent, generated_presentation, sink)?;
             }
             Ok(Ok(None)) => {
                 emit_create_failed(
@@ -214,6 +204,27 @@ pub(super) async fn handle_image_command_turn_if_present(
         }
     }
     Ok(true)
+}
+
+fn apply_generated_presentation(
+    intent: &mut ImageCommandIntent,
+    generated_presentation: presentation::GeneratedImageTaskPresentation,
+    sink: &mut dyn RuntimeEventSink,
+) -> Result<(), RuntimeCoreError> {
+    let presentation_usage = generated_presentation.usage.clone();
+    if let Some(planning_summary) = generated_presentation.planning_summary.as_deref() {
+        emit_planning_summary(intent, planning_summary, sink)?;
+    }
+    if let Some(assistant_intro) = generated_presentation.assistant_intro.as_deref() {
+        emit_assistant_intro(intent, assistant_intro, sink)?;
+    }
+    emit_presentation_generated(intent, &generated_presentation, sink)?;
+    intent.presentation = presentation::merge_generated_presentation(
+        intent.presentation.take(),
+        &generated_presentation,
+    );
+    intent.presentation_usage = presentation_usage;
+    Ok(())
 }
 
 fn presentation_failure_reason_code(error: &RuntimeCoreError) -> &'static str {

@@ -2719,7 +2719,7 @@ Extract it into the Agent Skills directory.`,
     }
   });
 
-  it("写文章 dispatch 应显式保留空 fallbackContent，避免 completion 回退通用文案", async () => {
+  it("写文章 dispatch 不应注入空 assistantDraft 抢占普通 Agent 输出", async () => {
     const harness = mountHook({
       input: "@写文章 写一篇公众号文章",
     });
@@ -2738,10 +2738,7 @@ Extract it into the Agent Skills directory.`,
       });
 
       const sendOptions = mockSendMessage.mock.calls[0]?.[8];
-      expect(sendOptions?.assistantDraft).toMatchObject({
-        content: "",
-        fallbackContent: "",
-      });
+      expect(sendOptions?.assistantDraft).toBeUndefined();
     } finally {
       harness.unmount();
     }

@@ -48,6 +48,15 @@ pub(super) fn classify_worker_failure(error_message: &str) -> WorkerFailureProje
                 false,
                 "resolve_runtime_blocker",
             )
+        } else if lower.contains("host_managed_generation_required")
+            || lower.contains("host_generation_unavailable")
+        {
+            (
+                "PLUGIN_WORKER_HOST_GENERATION_UNAVAILABLE",
+                "host_generation_unavailable",
+                false,
+                "configure_host_generation",
+            )
         } else if lower.contains("unsupported")
             || lower.contains("direct provider")
             || lower.contains("direct filesystem")

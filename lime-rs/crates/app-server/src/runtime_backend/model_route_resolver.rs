@@ -136,6 +136,7 @@ mod tests {
             route_protocol: None,
             toolshim: false,
             toolshim_model: None,
+            model_capabilities: None,
         };
 
         let route = resolve_chat_model_route(
@@ -167,6 +168,70 @@ mod tests {
             Some("direct_provider_config_not_in_registry")
         );
         assert!(route.not_possible_payload.is_none());
+    }
+
+    #[tokio::test]
+    async fn direct_provider_config_can_declare_fixture_tool_capabilities() {
+        let db = test_db();
+        let service = ApiKeyProviderService::new();
+        let request = request_for_test("hello", None, None);
+        let requested_selection = selection("fixture-openai", "fixture-model");
+        let direct_provider_config = SessionProviderConfig {
+            provider_name: "openai".to_string(),
+            provider_selector: Some("fixture-openai".to_string()),
+            model_name: "fixture-model".to_string(),
+            api_key: Some("fixture-key".to_string()),
+            base_url: Some("http://127.0.0.1:56599".to_string()),
+            credential_uuid: None,
+            reasoning_effort: None,
+            route_protocol: None,
+            toolshim: false,
+            toolshim_model: None,
+            model_capabilities: Some(json!({
+                "capabilities": {
+                    "tools": true,
+                    "streaming": true,
+                    "jsonMode": true,
+                    "functionCalling": true
+                },
+                "taskFamilies": ["chat"],
+                "inputModalities": ["text"],
+                "outputModalities": ["text"],
+                "runtimeFeatures": ["streaming", "tool_calling"]
+            })),
+        };
+
+        let route = resolve_chat_model_route(
+            &db,
+            &service,
+            &request,
+            &requested_selection,
+            Some(&direct_provider_config),
+        )
+        .await
+        .expect("route");
+
+        assert!(route.resolved_route.failure.is_none());
+        assert!(route.resolved_route.capability_snapshot.capabilities.tools);
+        assert!(
+            route
+                .resolved_route
+                .capability_snapshot
+                .capabilities
+                .function_calling
+        );
+        assert!(route
+            .resolved_route
+            .capability_snapshot
+            .runtime_features
+            .contains(&"tool_calling".to_string()));
+        assert_eq!(
+            route
+                .decision_payload
+                .pointer("/modelRegistry/modelCapabilities/capabilities/tools")
+                .and_then(|value| value.as_bool()),
+            Some(true)
+        );
     }
 
     #[tokio::test]

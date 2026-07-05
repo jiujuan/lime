@@ -139,6 +139,7 @@ fn model_effective_event_records_selected_model_and_reasoning_policy() {
         route_protocol: None,
         toolshim: false,
         toolshim_model: None,
+        model_capabilities: None,
     };
 
     let event =
@@ -178,6 +179,7 @@ fn model_effective_event_records_requested_and_effective_reasoning_separately() 
         route_protocol: None,
         toolshim: false,
         toolshim_model: None,
+        model_capabilities: None,
     };
 
     let event = model_effective_event_from_runtime(

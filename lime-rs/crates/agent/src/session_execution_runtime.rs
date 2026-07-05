@@ -1,8 +1,5 @@
-use crate::session_query::read_session;
-use crate::session_update::persist_session_extension_data;
 use agent_protocol::turn_context::TurnOutputSchemaRuntime;
-use aster::session::extension_data::{ExtensionData, ExtensionState};
-use aster::session::Session;
+use aster::session::ExtensionState;
 use lime_core::database::dao::agent_timeline::{AgentThreadItem, AgentThreadItemPayload};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
@@ -103,17 +100,6 @@ impl SessionExecutionRuntimeAccessMode {
             _ => None,
         }
     }
-
-    fn write_extension_data(self, extension_data: &mut ExtensionData) -> Result<(), String> {
-        <Self as ExtensionState>::to_extension_data(&self, extension_data)
-            .map_err(|error| error.to_string())
-    }
-
-    fn into_updated_extension_data(self, session: &Session) -> Result<ExtensionData, String> {
-        let mut extension_data = session.extension_data.clone();
-        self.write_extension_data(&mut extension_data)?;
-        Ok(extension_data)
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -130,19 +116,6 @@ pub struct SessionExecutionRuntimePreferences {
 impl ExtensionState for SessionExecutionRuntimePreferences {
     const EXTENSION_NAME: &'static str = "lime_recent_preferences";
     const VERSION: &'static str = "v0";
-}
-
-impl SessionExecutionRuntimePreferences {
-    fn to_extension_data(&self, extension_data: &mut ExtensionData) -> Result<(), String> {
-        <Self as ExtensionState>::to_extension_data(self, extension_data)
-            .map_err(|error| error.to_string())
-    }
-
-    fn into_updated_extension_data(self, session: &Session) -> Result<ExtensionData, String> {
-        let mut extension_data = session.extension_data.clone();
-        self.to_extension_data(&mut extension_data)?;
-        Ok(extension_data)
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -256,17 +229,6 @@ impl SessionExecutionRuntimeRecentTeamSelection {
         }
 
         Some(normalized)
-    }
-
-    fn to_extension_data(&self, extension_data: &mut ExtensionData) -> Result<(), String> {
-        <Self as ExtensionState>::to_extension_data(self, extension_data)
-            .map_err(|error| error.to_string())
-    }
-
-    fn into_updated_extension_data(self, session: &Session) -> Result<ExtensionData, String> {
-        let mut extension_data = session.extension_data.clone();
-        self.to_extension_data(&mut extension_data)?;
-        Ok(extension_data)
     }
 }
 
@@ -1123,43 +1085,6 @@ fn extract_runtime_summary_from_metadata(
     Some(summary)
 }
 
-pub async fn persist_session_recent_access_mode(
-    session_id: &str,
-    recent_access_mode: SessionExecutionRuntimeAccessMode,
-) -> Result<(), String> {
-    let session = read_session(session_id, false, "读取会话 recent_access_mode 失败").await?;
-    let extension_data = recent_access_mode.into_updated_extension_data(&session)?;
-    persist_session_extension_data(session_id, extension_data, "持久化会话 recent_access_mode")
-        .await?;
-    Ok(())
-}
-
-pub async fn persist_session_recent_preferences(
-    session_id: &str,
-    preferences: SessionExecutionRuntimePreferences,
-) -> Result<(), String> {
-    let session = read_session(session_id, false, "读取会话 recent_preferences 失败").await?;
-    let extension_data = preferences.into_updated_extension_data(&session)?;
-    persist_session_extension_data(session_id, extension_data, "持久化会话 recent_preferences")
-        .await?;
-    Ok(())
-}
-
-pub async fn persist_session_recent_team_selection(
-    session_id: &str,
-    recent_team_selection: SessionExecutionRuntimeRecentTeamSelection,
-) -> Result<(), String> {
-    let session = read_session(session_id, false, "读取会话 recent_team_selection 失败").await?;
-    let extension_data = recent_team_selection.into_updated_extension_data(&session)?;
-    persist_session_extension_data(
-        session_id,
-        extension_data,
-        "持久化会话 recent_team_selection",
-    )
-    .await?;
-    Ok(())
-}
-
 pub(crate) fn build_session_execution_runtime(
     session_id: &str,
     session: Option<&SessionExecutionRuntimeSessionProjection>,
@@ -1366,11 +1291,10 @@ mod tests {
         SessionExecutionRuntimeRoutingDecision, SessionExecutionRuntimeSource,
     };
     use aster::model::ModelConfig;
-    use aster::session::ExtensionState;
     use aster::session::{
-        Session, SessionRuntimeSnapshot, ThreadRuntime, ThreadRuntimeSnapshot, TurnContextOverride,
-        TurnOutputSchemaRuntime, TurnOutputSchemaSource, TurnOutputSchemaStrategy, TurnRuntime,
-        TurnStatus,
+        ExtensionData, ExtensionState, Session, SessionRuntimeSnapshot, ThreadRuntime,
+        ThreadRuntimeSnapshot, TurnContextOverride, TurnOutputSchemaRuntime,
+        TurnOutputSchemaSource, TurnOutputSchemaStrategy, TurnRuntime, TurnStatus,
     };
     use chrono::{Duration, Utc};
     use lime_core::database::dao::agent_timeline::{
@@ -2183,16 +2107,20 @@ mod tests {
 
     #[test]
     fn falls_back_to_session_extension_data_recent_preferences() {
-        let session = Session {
-            id: "session-4".to_string(),
-            extension_data: SessionExecutionRuntimePreferences {
+        let mut extension_data = ExtensionData::default();
+        <SessionExecutionRuntimePreferences as ExtensionState>::to_extension_data(
+            &SessionExecutionRuntimePreferences {
                 web_search: Some(false),
                 thinking: Some(true),
                 task: true,
                 subagent: false,
-            }
-            .into_updated_extension_data(&Session::default())
-            .expect("extension data"),
+            },
+            &mut extension_data,
+        )
+        .expect("extension data");
+        let session = Session {
+            id: "session-4".to_string(),
+            extension_data,
             ..Session::default()
         };
 
@@ -2214,9 +2142,9 @@ mod tests {
 
     #[test]
     fn falls_back_to_session_extension_data_recent_team_selection() {
-        let session = Session {
-            id: "session-6".to_string(),
-            extension_data: SessionExecutionRuntimeRecentTeamSelection {
+        let mut extension_data = ExtensionData::default();
+        <SessionExecutionRuntimeRecentTeamSelection as ExtensionState>::to_extension_data(
+            &SessionExecutionRuntimeRecentTeamSelection {
                 disabled: true,
                 theme: Some("general".to_string()),
                 preferred_team_preset_id: None,
@@ -2226,9 +2154,13 @@ mod tests {
                 selected_team_description: None,
                 selected_team_summary: None,
                 selected_team_roles: None,
-            }
-            .into_updated_extension_data(&Session::default())
-            .expect("extension data"),
+            },
+            &mut extension_data,
+        )
+        .expect("extension data");
+        let session = Session {
+            id: "session-6".to_string(),
+            extension_data,
             ..Session::default()
         };
 

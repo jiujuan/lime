@@ -8,7 +8,7 @@
  * 规则（参照 internal/refactor/progressive-refactor-plan.md R-10）：
  *   1. 生成物头部 // @generated 标记，棘轮按生成代码豁免
  *   2. 生成后 git diff --exit-code 检查漂移（CI 守卫）
- *   3. 只生成类型定义，不生成方法常量和 helper 函数（这些保持手写）
+ *   3. 方法常量、方法 catalog 和协议类型都从 Rust schema / manifest 生成
  *
  * 用法：
  *   node scripts/generate-protocol-types.mjs          # 生成
@@ -23,6 +23,14 @@ const REPO_ROOT = process.cwd();
 const SCHEMA_BUNDLE_PATH = path.join(
   REPO_ROOT,
   "lime-rs/crates/app-server-protocol/schema/json/app_server_protocol.schemas.json",
+);
+const SCHEMA_MANIFEST_PATH = path.join(
+  REPO_ROOT,
+  "lime-rs/crates/app-server-protocol/schema/json/manifest.json",
+);
+const METHOD_NAMES_PATH = path.join(
+  REPO_ROOT,
+  "lime-rs/crates/app-server-protocol/src/protocol/v0/method_names.rs",
 );
 const OUTPUT_DIR = path.join(
   REPO_ROOT,
@@ -64,6 +72,9 @@ function schemaToTs(schema, indent = 0) {
     const ref = schema["$ref"];
     // #/$defs/TypeName → TypeName
     const name = ref.replace(/^#\/\$defs\//, "");
+    if (name === "RequestId") {
+      return "number | string";
+    }
     return name;
   }
 
@@ -168,6 +179,8 @@ function generateTypes() {
   console.log("📖 读取 JSON Schema bundle...");
   const bundleRaw = fs.readFileSync(SCHEMA_BUNDLE_PATH, "utf8");
   const bundle = JSON.parse(bundleRaw);
+  const manifestRaw = fs.readFileSync(SCHEMA_MANIFEST_PATH, "utf8");
+  const manifest = JSON.parse(manifestRaw);
   globalDefs = collectSchemaDefinitions(bundle);
 
   const defNames = Object.keys(globalDefs);
@@ -212,7 +225,38 @@ function generateTypes() {
   console.log(`   生成 ${generated} 个类型，失败 ${failed} 个`);
 
   // 组装最终输出
-  const output = GENERATED_HEADER + typeBlocks.join("\n\n") + "\n";
+  const requestSerializationScopes = manifest.requestSerializationScopes ?? [];
+  const methodConstants = collectMethodConstants(manifest.methods);
+  const methodConstantsBlock = methodConstants
+    .map(([name, value]) => `export const ${name} = ${JSON.stringify(value)};`)
+    .join("\n");
+  const methodCatalogBlock = [
+    methodConstantsBlock,
+    `export const GENERATED_APP_SERVER_METHODS = ${JSON.stringify(
+      manifest.methods,
+      null,
+      2,
+    )} as const;`,
+    `export type GeneratedAppServerMethodSpec = (typeof GENERATED_APP_SERVER_METHODS)[number];`,
+    `export type GeneratedAppServerMethodKind = GeneratedAppServerMethodSpec["kind"];`,
+  ].join("\n\n");
+  const requestSerializationScopeCatalogBlock = [
+    `export const GENERATED_APP_SERVER_REQUEST_SERIALIZATION_SCOPES = ${JSON.stringify(
+      requestSerializationScopes,
+      null,
+      2,
+    )} as const;`,
+    `export type GeneratedAppServerRequestSerializationScopeSpec = (typeof GENERATED_APP_SERVER_REQUEST_SERIALIZATION_SCOPES)[number];`,
+    `export type GeneratedAppServerRequestSerializationScope = GeneratedAppServerRequestSerializationScopeSpec["scope"];`,
+  ].join("\n\n");
+  const output =
+    GENERATED_HEADER +
+    methodCatalogBlock +
+    "\n\n" +
+    requestSerializationScopeCatalogBlock +
+    "\n\n" +
+    typeBlocks.join("\n\n") +
+    "\n";
 
   // 确保输出目录存在
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
@@ -220,6 +264,25 @@ function generateTypes() {
   formatGeneratedOutput();
   const formattedLength = fs.readFileSync(OUTPUT_PATH, "utf8").length;
   console.log(`✅ 已写入 ${OUTPUT_PATH} (${formattedLength} bytes)`);
+}
+
+function collectMethodConstants(methods) {
+  const source = fs.readFileSync(METHOD_NAMES_PATH, "utf8");
+  const entries = [
+    ...source.matchAll(
+      /pub const\s+(METHOD_[A-Z0-9_]+):\s*&str\s*=\s*"([^"]+)";/g,
+    ),
+  ].map((match) => [match[1], match[2]]);
+  const byMethod = new Map(entries.map(([name, value]) => [value, name]));
+  const missing = methods
+    .map(({ method }) => method)
+    .filter((method) => !byMethod.has(method));
+  if (missing.length > 0) {
+    throw new Error(
+      `method_names.rs missing constants for manifest methods: ${missing.join(", ")}`,
+    );
+  }
+  return methods.map(({ method }) => [byMethod.get(method), method]);
 }
 
 function formatGeneratedOutput() {

@@ -167,7 +167,10 @@ function normalizeConnector(
   return {
     id: requireString(record, "id"),
     title: requireString(record, "title"),
+    description: readString(record.description),
     kind: kind as PluginConnectorDeclaration["kind"],
+    taskKinds: readStringArray(record.taskKinds ?? record.task_kinds),
+    path: readString(record.path),
     required: readBoolean(record.required, false),
   };
 }

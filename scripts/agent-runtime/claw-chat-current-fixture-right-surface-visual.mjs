@@ -134,61 +134,83 @@ export async function runRightSurfaceVisualMatrix({
     ),
   };
 
-  const captures = {
-    files: await clickAndAssertRightSurface(page, options, {
-      surfaceKind: "files",
-      toggleTestId: "task-center-files-toggle",
-      rootTestId: RIGHT_SURFACE_ROOTS.files,
-    }),
+  const pendingBeforeClicks = await listRightSurfacePending(
+    page,
+    appServerRequests,
+    {
+      workspace,
+      sessionId,
+    },
+  );
+  const toolbarBeforeClicks = await captureRightSurfaceToolbarDiagnostics(page);
+
+  let captures;
+  try {
+    captures = {
+      files: await clickAndAssertRightSurface(page, options, {
+        surfaceKind: "files",
+        toggleTestId: "task-center-files-toggle",
+        rootTestId: RIGHT_SURFACE_ROOTS.files,
+      }),
     objectCanvas: await clickAndAssertRightSurface(page, options, {
       surfaceKind: "objectCanvas",
-      activeSurfaceKind: "articleWorkspace",
       toggleTestId: "task-center-object-canvas-toggle",
       rootTestId: RIGHT_SURFACE_ROOTS.objectCanvas,
     }),
-    expertInfo: await clickAndAssertRightSurface(page, options, {
-      surfaceKind: "expertInfo",
-      toggleTestId: "task-center-expert-info-toggle",
-      rootTestId: RIGHT_SURFACE_ROOTS.expertInfo,
-    }),
-    browser: await clickAndAssertRightSurface(page, options, {
-      surfaceKind: "browser",
-      toggleTestId: "task-center-browser-toggle",
-      rootTestId: RIGHT_SURFACE_ROOTS.browser,
-      screenshotName: "right-surface-browser",
-    }),
-    appSurface: await clickAndAssertRightSurface(page, options, {
-      surfaceKind: "appSurface",
-      toggleTestId: "workspace-right-surface-tab-appSurface",
-      rootTestId: RIGHT_SURFACE_ROOTS.appSurface,
-    }),
-  };
-
-  const pendingAfterClicks = await invokeAppServerFromPage(
-    page,
-    APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_LIST,
-    {
-      workspaceId: workspace.workspaceId,
-      workspaceRoot: workspace.rootPath,
+      expertInfo: await clickAndAssertRightSurface(page, options, {
+        surfaceKind: "expertInfo",
+        toggleTestId: "task-center-expert-info-toggle",
+        rootTestId: RIGHT_SURFACE_ROOTS.expertInfo,
+      }),
+      browser: await clickAndAssertRightSurface(page, options, {
+        surfaceKind: "browser",
+        toggleTestId: "task-center-browser-toggle",
+        rootTestId: RIGHT_SURFACE_ROOTS.browser,
+        screenshotName: "right-surface-browser",
+      }),
+      appSurface: await clickAndAssertRightSurface(page, options, {
+        surfaceKind: "appSurface",
+        toggleTestId: "workspace-right-surface-tab-appSurface",
+        rootTestId: RIGHT_SURFACE_ROOTS.appSurface,
+      }),
+    };
+  } catch (error) {
+    const toolbarAfterFailure =
+      await captureRightSurfaceToolbarDiagnostics(page).catch((diagnosticError) => ({
+        error:
+          diagnosticError instanceof Error
+            ? diagnosticError.message
+            : String(diagnosticError),
+      }));
+    const diagnostic = sanitizeJson({
+      requests: summarizeRightSurfaceRequests(requests),
+      pendingBeforeClicks: summarizePendingList(pendingBeforeClicks.result),
+      toolbarBeforeClicks,
+      toolbarAfterFailure,
+    });
+    const message = error instanceof Error ? error.message : String(error);
+    return sanitizeJson({
       sessionId,
-      limit: 20,
-    },
+      error: message,
+      ...diagnostic,
+      captures: {},
+    });
+  }
+
+  const pendingAfterClicks = await listRightSurfacePending(
+    page,
     appServerRequests,
+    {
+      workspace,
+      sessionId,
+    },
   );
 
   return sanitizeJson({
     sessionId,
-    requests: {
-      files: summarizeRightSurfaceRequest(requests.files),
-      objectCanvas: summarizeRightSurfaceRequest(requests.objectCanvas),
-      browser: summarizeRightSurfaceRequest(requests.browser),
-      appSurfaceContentFactory: summarizeRightSurfaceRequest(
-        requests.appSurfaceContentFactory,
-      ),
-      appSurfacePromptLab: summarizeRightSurfaceRequest(
-        requests.appSurfacePromptLab,
-      ),
-    },
+    requests: summarizeRightSurfaceRequests(requests),
+    pendingBeforeClicks: summarizePendingList(pendingBeforeClicks.result),
+    toolbarBeforeClicks,
     captures,
     pendingAfterClicks: summarizePendingList(pendingAfterClicks.result),
   });
@@ -207,7 +229,7 @@ async function requestRightSurfacePending(
       workspaceRoot: workspace.rootPath,
       sessionId,
       surfaceKind,
-      origin: "fixture:right-surface-visual-matrix",
+      origin: "runtime",
       priority: "normal",
       candidateId,
       ttlMs: 120_000,
@@ -215,6 +237,128 @@ async function requestRightSurfacePending(
     },
     appServerRequests,
   );
+}
+
+async function listRightSurfacePending(
+  page,
+  appServerRequests,
+  { workspace, sessionId },
+) {
+  return await invokeAppServerFromPage(
+    page,
+    APP_SERVER_METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_LIST,
+    {
+      workspaceId: workspace.workspaceId,
+      workspaceRoot: workspace.rootPath,
+      sessionId,
+      limit: 20,
+    },
+    appServerRequests,
+  );
+}
+
+async function captureRightSurfaceToolbarDiagnostics(page) {
+  return await page.evaluate(() => {
+    const toggleByKind = {
+      appSurface: "workspace-right-surface-tab-appSurface",
+      browser: "task-center-browser-toggle",
+      expertInfo: "task-center-expert-info-toggle",
+      files: "task-center-files-toggle",
+      objectCanvas: "task-center-object-canvas-toggle",
+      shell: "task-center-shell-toggle",
+      trace: "task-center-trace-toggle",
+      workbench: "task-center-workbench-toggle",
+    };
+    const toolbar = document.querySelector(
+      '[data-testid="task-center-utility-toolbar"]',
+    );
+    const panelGroup = document.querySelector(
+      '[data-testid="task-center-tool-group-panels"]',
+    );
+    const host = document.querySelector(
+      '[data-testid="workspace-right-surface-host"]',
+    );
+
+    return {
+      electron: window.__LIME_ELECTRON__ === true,
+      hasElectronInvoke: Boolean(window.electronAPI?.invoke),
+      hasElectronSupportsCommand:
+        typeof window.electronAPI?.supportsCommand === "function",
+      appServerCommandAvailable:
+        typeof window.electronAPI?.supportsCommand === "function"
+          ? window.electronAPI.supportsCommand("app_server_handle_json_lines")
+          : null,
+      toolbar: visibleInfo(toolbar),
+      panelGroup: visibleInfo(panelGroup),
+      activeSurface: host?.getAttribute("data-surface") ?? null,
+      toggles: Object.fromEntries(
+        Object.entries(toggleByKind).map(([kind, testId]) => {
+          const element = document.querySelector(`[data-testid="${testId}"]`);
+          const button =
+            element instanceof HTMLButtonElement
+              ? element
+              : element?.closest("button");
+          return [
+            kind,
+            {
+              ...visibleInfo(element),
+              disabled:
+                button instanceof HTMLButtonElement
+                  ? button.disabled ||
+                    button.getAttribute("aria-disabled") === "true"
+                  : null,
+              ariaExpanded: button?.getAttribute("aria-expanded") ?? null,
+              title: button?.getAttribute("title") ?? "",
+              text: (button?.textContent ?? "").trim().slice(0, 80),
+            },
+          ];
+        }),
+      ),
+      panelButtonKinds: Array.from(
+        document.querySelectorAll(
+          '[data-testid="task-center-tool-group-panels"] [data-testid]',
+        ),
+      ).map((element) => {
+        const testId = element.getAttribute("data-testid") ?? "";
+        return testId
+          .replace(/^task-center-/, "")
+          .replace(/^workspace-right-surface-tab-/, "surface-tab-")
+          .replace(/-toggle$/, "");
+      }),
+      bodyTextSample: (document.body?.innerText ?? "").slice(0, 1000),
+    };
+
+    function visibleInfo(node) {
+      const rect = node?.getBoundingClientRect();
+      const style = node ? window.getComputedStyle(node) : null;
+      return {
+        exists: Boolean(node),
+        visible: Boolean(
+          node &&
+            rect &&
+            rect.width > 8 &&
+            rect.height > 8 &&
+            style?.display !== "none" &&
+            style?.visibility !== "hidden" &&
+            Number(style?.opacity ?? "1") > 0,
+        ),
+        rect: rect ? rectToJson(rect) : null,
+      };
+    }
+
+    function rectToJson(rect) {
+      return {
+        x: Math.round(rect.x),
+        y: Math.round(rect.y),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+        top: Math.round(rect.top),
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
+        bottom: Math.round(rect.bottom),
+      };
+    }
+  });
 }
 
 export async function clickAndAssertRightSurface(
@@ -631,6 +775,20 @@ function summarizeRightSurfaceRequest(invocation) {
     candidateId: pending.candidateId ?? null,
     origin: pending.origin ?? null,
   });
+}
+
+function summarizeRightSurfaceRequests(requests) {
+  return {
+    files: summarizeRightSurfaceRequest(requests.files),
+    objectCanvas: summarizeRightSurfaceRequest(requests.objectCanvas),
+    browser: summarizeRightSurfaceRequest(requests.browser),
+    appSurfaceContentFactory: summarizeRightSurfaceRequest(
+      requests.appSurfaceContentFactory,
+    ),
+    appSurfacePromptLab: summarizeRightSurfaceRequest(
+      requests.appSurfacePromptLab,
+    ),
+  };
 }
 
 function summarizePendingList(result) {

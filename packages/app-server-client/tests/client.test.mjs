@@ -30,6 +30,8 @@ execFileSync(
 
 const {
   APP_SERVER_METHODS,
+  APP_SERVER_REQUEST_CLIENT_METHODS,
+  APP_SERVER_REQUEST_SERIALIZATION_SCOPES,
   AppServerAgentEventRouter,
   AppServerAgentRuntimeClient,
   AppServerSidecarLifecycle,
@@ -43,6 +45,7 @@ const {
   AppServerRequestError,
   DEFAULT_STANDALONE_BACKEND_MODE,
   createAgentRuntimeClient,
+  getAppServerRequestSerializationScope,
   METHOD_PLUGIN_INSTALLED_DISABLED_SET,
   METHOD_PLUGIN_INSTALLED_LIST,
   METHOD_PLUGIN_INSTALLED_SAVE,
@@ -334,7 +337,9 @@ const {
   assertCompatibleProtocolSchemaManifest,
   assertSha256,
   assertSidecarFileSha256,
+  agentSessionRuntimeEventNotification,
   agentSessionEventNotification,
+  agentSessionTurnStartRequest,
   connectAppServerSidecar,
   decodeMessage,
   defaultReleaseManifestPath,
@@ -346,6 +351,7 @@ const {
   isAppServerNotificationMethod,
   isAppServerRequestMethod,
   isAgentSessionEventNotification,
+  isAgentSessionTurnStartRequest,
   isWorkspaceRightSurfacePendingChangedNotification,
   readReleaseManifest,
   readProtocolSchemaManifest,
@@ -2406,658 +2412,79 @@ test("builds evidence export requests with optional scope flags and runtime expo
   });
 });
 
-test("exports app-server method catalog with request and notification kinds", () => {
-  assert.deepEqual(APP_SERVER_METHODS, [
-    { method: METHOD_INITIALIZE, kind: "request" },
-    { method: METHOD_INITIALIZED, kind: "notification" },
-    { method: METHOD_CAPABILITY_LIST, kind: "request" },
-    { method: METHOD_ARTIFACT_READ, kind: "request" },
-    { method: METHOD_FILE_SYSTEM_LIST_DIRECTORY, kind: "request" },
-    { method: METHOD_FILE_SYSTEM_READ_FILE_PREVIEW, kind: "request" },
-    { method: METHOD_FILE_SYSTEM_CREATE_FILE, kind: "request" },
-    { method: METHOD_FILE_SYSTEM_CREATE_DIRECTORY, kind: "request" },
-    { method: METHOD_FILE_SYSTEM_RENAME_FILE, kind: "request" },
-    { method: METHOD_FILE_SYSTEM_DELETE_FILE, kind: "request" },
-    { method: METHOD_PROJECT_GIT_STATUS, kind: "request" },
-    { method: METHOD_PROJECT_GIT_DIFF, kind: "request" },
-    { method: METHOD_PROJECT_GIT_COMMITS_LIST, kind: "request" },
-    { method: METHOD_PROJECT_GIT_BRANCH_CHECKOUT, kind: "request" },
-    { method: METHOD_PROJECT_GIT_BRANCH_CREATE, kind: "request" },
-    { method: METHOD_PROJECT_GIT_WORKTREE_CREATE, kind: "request" },
-    { method: METHOD_PROJECT_SHELL_SESSION_START, kind: "request" },
-    { method: METHOD_PROJECT_SHELL_SESSION_WRITE, kind: "request" },
-    { method: METHOD_PROJECT_SHELL_SESSION_RESIZE, kind: "request" },
-    { method: METHOD_PROJECT_SHELL_SESSION_KILL, kind: "request" },
-    { method: METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS, kind: "request" },
-    { method: METHOD_EXECUTION_PROCESS_START, kind: "request" },
-    { method: METHOD_EXECUTION_PROCESS_WRITE_STDIN, kind: "request" },
-    { method: METHOD_EXECUTION_PROCESS_INTERRUPT, kind: "request" },
-    { method: METHOD_EXECUTION_PROCESS_TERMINATE, kind: "request" },
-    { method: METHOD_EXECUTION_PROCESS_STATUS, kind: "request" },
-    { method: METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT, kind: "request" },
-    { method: METHOD_EVIDENCE_EXPORT, kind: "request" },
-    { method: METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT, kind: "request" },
-    { method: METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT, kind: "request" },
-    { method: METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT, kind: "request" },
-    {
-      method: METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
-      kind: "request",
-    },
-    { method: METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE, kind: "request" },
-    { method: METHOD_AGENT_SESSION_LIST, kind: "request" },
-    { method: METHOD_AGENT_SESSION_UPDATE, kind: "request" },
-    { method: METHOD_AGENT_SESSION_ARCHIVE_MANY, kind: "request" },
-    { method: METHOD_AGENT_SESSION_DELETE, kind: "request" },
-    { method: METHOD_AGENT_SESSION_OBJECTIVE_READ, kind: "request" },
-    { method: METHOD_AGENT_SESSION_OBJECTIVE_SET, kind: "request" },
-    {
-      method: METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE,
-      kind: "request",
-    },
-    { method: METHOD_AGENT_SESSION_OBJECTIVE_CLEAR, kind: "request" },
-    { method: METHOD_AGENT_SESSION_OBJECTIVE_CONTINUE, kind: "request" },
-    { method: METHOD_AGENT_SESSION_OBJECTIVE_AUDIT, kind: "request" },
-    { method: METHOD_AGENT_SESSION_COMPACT, kind: "request" },
-    { method: METHOD_AGENT_SESSION_THREAD_RESUME, kind: "request" },
-    { method: METHOD_AGENT_SESSION_QUEUED_TURN_REMOVE, kind: "request" },
-    { method: METHOD_AGENT_SESSION_QUEUED_TURN_PROMOTE, kind: "request" },
-    { method: METHOD_AGENT_SESSION_FILE_CHECKPOINT_LIST, kind: "request" },
-    { method: METHOD_AGENT_SESSION_FILE_CHECKPOINT_GET, kind: "request" },
-    { method: METHOD_AGENT_SESSION_FILE_CHECKPOINT_DIFF, kind: "request" },
-    { method: METHOD_AGENT_SESSION_FILE_CHECKPOINT_RESTORE, kind: "request" },
-    { method: METHOD_SESSION_FILE_GET_OR_CREATE, kind: "request" },
-    { method: METHOD_SESSION_FILE_UPDATE_META, kind: "request" },
-    { method: METHOD_SESSION_FILE_SAVE, kind: "request" },
-    { method: METHOD_SESSION_FILE_READ, kind: "request" },
-    { method: METHOD_SESSION_FILE_RESOLVE_PATH, kind: "request" },
-    { method: METHOD_SESSION_FILE_DELETE, kind: "request" },
-    { method: METHOD_SESSION_FILE_LIST, kind: "request" },
-    { method: METHOD_WORKSPACE_LIST, kind: "request" },
-    { method: METHOD_WORKSPACE_READ, kind: "request" },
-    { method: METHOD_WORKSPACE_UPDATE, kind: "request" },
-    { method: METHOD_WORKSPACE_DELETE, kind: "request" },
-    { method: METHOD_WORKSPACE_ENSURE, kind: "request" },
-    { method: METHOD_WORKSPACE_BY_PATH_READ, kind: "request" },
-    { method: METHOD_WORKSPACE_DEFAULT_READ, kind: "request" },
-    { method: METHOD_WORKSPACE_DEFAULT_ENSURE, kind: "request" },
-    { method: METHOD_WORKSPACE_PROJECTS_ROOT_READ, kind: "request" },
-    { method: METHOD_WORKSPACE_PROJECT_PATH_RESOLVE, kind: "request" },
-    { method: METHOD_WORKSPACE_ENSURE_READY, kind: "request" },
-    { method: METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST, kind: "request" },
-    { method: METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_LIST, kind: "request" },
-    {
-      method: METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CONSUME,
-      kind: "request",
-    },
-    {
-      method: METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS,
-      kind: "request",
-    },
-    {
-      method: METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED,
-      kind: "notification",
-    },
-    { method: METHOD_BROWSER_SESSION_TARGET_LIST, kind: "request" },
-    { method: METHOD_BROWSER_SESSION_OPEN, kind: "request" },
-    { method: METHOD_BROWSER_SESSION_READ, kind: "request" },
-    { method: METHOD_BROWSER_SESSION_CLOSE, kind: "request" },
-    { method: METHOD_BROWSER_SESSION_EVENT_LIST, kind: "request" },
-    { method: METHOD_BROWSER_SESSION_ACTION_EXECUTE, kind: "request" },
-    { method: METHOD_SKILL_LIST, kind: "request" },
-    { method: METHOD_SKILL_READ, kind: "request" },
-    { method: METHOD_SKILL_MANAGEMENT_LIST, kind: "request" },
-    { method: METHOD_SKILL_MANAGEMENT_INSTALL, kind: "request" },
-    { method: METHOD_SKILL_MANAGEMENT_UNINSTALL, kind: "request" },
-    { method: METHOD_SKILL_REPOSITORY_LIST, kind: "request" },
-    { method: METHOD_SKILL_REPOSITORY_SAVE, kind: "request" },
-    { method: METHOD_SKILL_REPOSITORY_DELETE, kind: "request" },
-    { method: METHOD_SKILL_CACHE_REFRESH, kind: "request" },
-    { method: METHOD_SKILL_INSTALLED_DIRECTORIES_LIST, kind: "request" },
-    { method: METHOD_SKILL_LOCAL_INSPECT, kind: "request" },
-    { method: METHOD_SKILL_LOCAL_DETAIL_INSPECT, kind: "request" },
-    { method: METHOD_SKILL_LOCAL_SCAFFOLD_CREATE, kind: "request" },
-    { method: METHOD_SKILL_LOCAL_IMPORT, kind: "request" },
-    { method: METHOD_SKILL_LOCAL_RENAME, kind: "request" },
-    { method: METHOD_SKILL_REMOTE_INSPECT, kind: "request" },
-    { method: METHOD_SKILL_PACKAGE_LOCAL_INSPECT, kind: "request" },
-    { method: METHOD_SKILL_PACKAGE_LOCAL_INSTALL, kind: "request" },
-    { method: METHOD_SKILL_PACKAGE_LOCAL_REPLACE, kind: "request" },
-    { method: METHOD_SKILL_PACKAGE_EXPORT, kind: "request" },
-    { method: METHOD_SKILL_MARKETPLACE_INSTALL, kind: "request" },
-    { method: METHOD_SKILL_PACKAGE_DOWNLOAD_INSTALL, kind: "request" },
-    { method: METHOD_GATEWAY_CHANNEL_START, kind: "request" },
-    { method: METHOD_GATEWAY_CHANNEL_STOP, kind: "request" },
-    { method: METHOD_GATEWAY_CHANNEL_STATUS, kind: "request" },
-    { method: METHOD_TELEGRAM_CHANNEL_PROBE, kind: "request" },
-    { method: METHOD_FEISHU_CHANNEL_PROBE, kind: "request" },
-    { method: METHOD_DISCORD_CHANNEL_PROBE, kind: "request" },
-    { method: METHOD_WECHAT_CHANNEL_PROBE, kind: "request" },
-    { method: METHOD_WECHAT_CHANNEL_LOGIN_START, kind: "request" },
-    { method: METHOD_WECHAT_CHANNEL_LOGIN_WAIT, kind: "request" },
-    { method: METHOD_WECHAT_CHANNEL_ACCOUNT_LIST, kind: "request" },
-    { method: METHOD_WECHAT_CHANNEL_ACCOUNT_REMOVE, kind: "request" },
-    { method: METHOD_WECHAT_CHANNEL_RUNTIME_MODEL_SET, kind: "request" },
-    { method: METHOD_GATEWAY_TUNNEL_PROBE, kind: "request" },
-    { method: METHOD_GATEWAY_TUNNEL_CLOUDFLARED_DETECT, kind: "request" },
-    { method: METHOD_GATEWAY_TUNNEL_CLOUDFLARED_INSTALL, kind: "request" },
-    { method: METHOD_GATEWAY_TUNNEL_CREATE, kind: "request" },
-    { method: METHOD_GATEWAY_TUNNEL_START, kind: "request" },
-    { method: METHOD_GATEWAY_TUNNEL_STOP, kind: "request" },
-    { method: METHOD_GATEWAY_TUNNEL_RESTART, kind: "request" },
-    { method: METHOD_GATEWAY_TUNNEL_STATUS, kind: "request" },
-    { method: METHOD_GATEWAY_TUNNEL_SYNC_WEBHOOK_URL, kind: "request" },
-    { method: METHOD_WORKSPACE_SKILL_BINDINGS_LIST, kind: "request" },
-    { method: METHOD_WORKSPACE_REGISTERED_SKILLS_LIST, kind: "request" },
-    { method: METHOD_PLUGIN_LOCAL_PACKAGE_INSPECT, kind: "request" },
-    { method: METHOD_PLUGIN_PACKAGE_FETCH_CLOUD, kind: "request" },
-    { method: METHOD_PLUGIN_INSTALLED_SAVE, kind: "request" },
-    { method: METHOD_PLUGIN_INSTALLED_LIST, kind: "request" },
-    { method: METHOD_PLUGIN_INSTALLED_DISABLED_SET, kind: "request" },
-    { method: METHOD_PLUGIN_INSTALLED_UNINSTALL_REHEARSAL, kind: "request" },
-    { method: METHOD_PLUGIN_INSTALLED_UNINSTALL, kind: "request" },
-    { method: METHOD_PLUGIN_HOST_LIFECYCLE_LIST, kind: "request" },
-    { method: METHOD_PLUGIN_SHELL_PREPARE, kind: "request" },
-    { method: METHOD_PLUGIN_UI_RUNTIME_START, kind: "request" },
-    { method: METHOD_PLUGIN_UI_RUNTIME_STATUS, kind: "request" },
-    { method: METHOD_PLUGIN_UI_RUNTIME_STOP, kind: "request" },
-    { method: METHOD_KNOWLEDGE_PACK_LIST, kind: "request" },
-    { method: METHOD_KNOWLEDGE_PACK_READ, kind: "request" },
-    { method: METHOD_KNOWLEDGE_SOURCE_IMPORT, kind: "request" },
-    { method: METHOD_KNOWLEDGE_PACK_COMPILE, kind: "request" },
-    { method: METHOD_KNOWLEDGE_PACK_DEFAULT_SET, kind: "request" },
-    { method: METHOD_KNOWLEDGE_PACK_STATUS_UPDATE, kind: "request" },
-    { method: METHOD_KNOWLEDGE_CONTEXT_RESOLVE, kind: "request" },
-    { method: METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE, kind: "request" },
-    { method: METHOD_AUTOMATION_SCHEDULER_CONFIG_READ, kind: "request" },
-    { method: METHOD_AUTOMATION_SCHEDULER_CONFIG_UPDATE, kind: "request" },
-    { method: METHOD_AUTOMATION_SCHEDULER_STATUS, kind: "request" },
-    { method: METHOD_AUTOMATION_JOB_LIST, kind: "request" },
-    { method: METHOD_AUTOMATION_JOB_READ, kind: "request" },
-    { method: METHOD_AUTOMATION_JOB_CREATE, kind: "request" },
-    { method: METHOD_AUTOMATION_JOB_UPDATE, kind: "request" },
-    { method: METHOD_AUTOMATION_JOB_DELETE, kind: "request" },
-    { method: METHOD_AUTOMATION_JOB_RUN_NOW, kind: "request" },
-    { method: METHOD_AUTOMATION_JOB_HEALTH, kind: "request" },
-    { method: METHOD_AUTOMATION_JOB_RUN_HISTORY, kind: "request" },
-    { method: METHOD_AUTOMATION_SCHEDULE_PREVIEW, kind: "request" },
-    { method: METHOD_AUTOMATION_SCHEDULE_VALIDATE, kind: "request" },
-    { method: METHOD_MCP_SERVER_LIST, kind: "request" },
-    { method: METHOD_MCP_SERVER_STATUS_LIST, kind: "request" },
-    { method: METHOD_MCP_SERVER_CREATE, kind: "request" },
-    { method: METHOD_MCP_SERVER_UPDATE, kind: "request" },
-    { method: METHOD_MCP_SERVER_DELETE, kind: "request" },
-    { method: METHOD_MCP_SERVER_ENABLED_SET, kind: "request" },
-    { method: METHOD_MCP_SERVER_IMPORT_FROM_APP, kind: "request" },
-    { method: METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE, kind: "request" },
-    { method: METHOD_MCP_SERVER_OAUTH_LOGIN, kind: "request" },
-    { method: METHOD_MCP_SERVER_START, kind: "request" },
-    { method: METHOD_MCP_SERVER_STOP, kind: "request" },
-    { method: METHOD_MCP_TOOL_LIST, kind: "request" },
-    { method: METHOD_MCP_TOOL_LIST_FOR_CONTEXT, kind: "request" },
-    { method: METHOD_MCP_TOOL_SEARCH, kind: "request" },
-    { method: METHOD_MCP_TOOL_CALL, kind: "request" },
-    { method: METHOD_MCP_TOOL_CALL_WITH_CALLER, kind: "request" },
-    { method: METHOD_MCP_PROMPT_LIST, kind: "request" },
-    { method: METHOD_MCP_PROMPT_GET, kind: "request" },
-    { method: METHOD_MCP_RESOURCE_LIST, kind: "request" },
-    { method: METHOD_MCP_RESOURCE_READ, kind: "request" },
-    { method: METHOD_MCP_RESOURCE_SUBSCRIBE, kind: "request" },
-    { method: METHOD_MCP_RESOURCE_UNSUBSCRIBE, kind: "request" },
-    { method: METHOD_PROJECT_MEMORY_READ, kind: "request" },
-    { method: METHOD_MEMORY_STORE_LIST, kind: "request" },
-    { method: METHOD_MEMORY_STORE_READ, kind: "request" },
-    { method: METHOD_MEMORY_STORE_SEARCH, kind: "request" },
-    { method: METHOD_MEMORY_STORE_ADD_NOTE, kind: "request" },
-    { method: METHOD_MEMORY_STORE_CONSOLIDATE, kind: "request" },
-    { method: METHOD_MEMORY_STORE_REVIEW_LIST, kind: "request" },
-    { method: METHOD_MEMORY_STORE_REVIEW_RESOLVE, kind: "request" },
-    { method: METHOD_MEMORY_STORE_HEALTH, kind: "request" },
-    { method: METHOD_MEMORY_STORE_RESET, kind: "request" },
-    { method: METHOD_MEMORY_STORE_INDEX_REBUILD, kind: "request" },
-    { method: METHOD_LOG_LIST, kind: "request" },
-    { method: METHOD_LOG_PERSISTED_TAIL, kind: "request" },
-    { method: METHOD_LOG_CLEAR, kind: "request" },
-    { method: METHOD_LOG_DIAGNOSTIC_HISTORY_CLEAR, kind: "request" },
-    { method: METHOD_DIAGNOSTICS_LOG_STORAGE_READ, kind: "request" },
-    { method: METHOD_DIAGNOSTICS_SUPPORT_BUNDLE_EXPORT, kind: "request" },
-    { method: METHOD_DIAGNOSTICS_SERVER_READ, kind: "request" },
-    { method: METHOD_DIAGNOSTICS_WINDOWS_STARTUP_READ, kind: "request" },
-    { method: METHOD_DIAGNOSTICS_TRACE_LIST, kind: "request" },
-    { method: METHOD_DIAGNOSTICS_TRACE_READ, kind: "request" },
-    { method: METHOD_DIAGNOSTICS_TRACE_EXPORT, kind: "request" },
-    { method: METHOD_MEDIA_TASK_ARTIFACT_IMAGE_CREATE, kind: "request" },
-    { method: METHOD_MEDIA_TASK_ARTIFACT_AUDIO_CREATE, kind: "request" },
-    { method: METHOD_MEDIA_TASK_ARTIFACT_VIDEO_CREATE, kind: "request" },
-    { method: METHOD_MEDIA_TASK_ARTIFACT_IMAGE_COMPLETE, kind: "request" },
-    { method: METHOD_MEDIA_TASK_ARTIFACT_AUDIO_COMPLETE, kind: "request" },
-    { method: METHOD_MEDIA_TASK_ARTIFACT_GET, kind: "request" },
-    { method: METHOD_MEDIA_TASK_ARTIFACT_LIST, kind: "request" },
-    { method: METHOD_MEDIA_TASK_ARTIFACT_CANCEL, kind: "request" },
-    { method: METHOD_GALLERY_MATERIAL_GET, kind: "request" },
-    { method: METHOD_GALLERY_MATERIAL_METADATA_CREATE, kind: "request" },
-    { method: METHOD_GALLERY_MATERIAL_METADATA_GET, kind: "request" },
-    { method: METHOD_GALLERY_MATERIAL_METADATA_UPDATE, kind: "request" },
-    { method: METHOD_GALLERY_MATERIAL_METADATA_DELETE, kind: "request" },
-    {
-      method: METHOD_GALLERY_MATERIAL_LIST_BY_IMAGE_CATEGORY,
-      kind: "request",
-    },
-    {
-      method: METHOD_GALLERY_MATERIAL_LIST_BY_LAYOUT_CATEGORY,
-      kind: "request",
-    },
-    { method: METHOD_GALLERY_MATERIAL_LIST_BY_MOOD, kind: "request" },
-    { method: METHOD_PROJECT_MATERIAL_LIST, kind: "request" },
-    { method: METHOD_PROJECT_MATERIAL_GET, kind: "request" },
-    { method: METHOD_PROJECT_MATERIAL_COUNT, kind: "request" },
-    { method: METHOD_PROJECT_MATERIAL_UPLOAD, kind: "request" },
-    { method: METHOD_PROJECT_MATERIAL_IMPORT_FROM_URL, kind: "request" },
-    { method: METHOD_PROJECT_MATERIAL_UPDATE, kind: "request" },
-    { method: METHOD_PROJECT_MATERIAL_DELETE, kind: "request" },
-    { method: METHOD_PROJECT_MATERIAL_CONTENT, kind: "request" },
-    { method: METHOD_VOICE_ASR_CREDENTIAL_LIST, kind: "request" },
-    { method: METHOD_VOICE_ASR_CREDENTIAL_CREATE, kind: "request" },
-    { method: METHOD_VOICE_ASR_CREDENTIAL_UPDATE, kind: "request" },
-    { method: METHOD_VOICE_ASR_CREDENTIAL_DELETE, kind: "request" },
-    { method: METHOD_VOICE_ASR_CREDENTIAL_DEFAULT_SET, kind: "request" },
-    { method: METHOD_VOICE_ASR_CREDENTIAL_TEST, kind: "request" },
-    { method: METHOD_VOICE_INSTRUCTION_LIST, kind: "request" },
-    { method: METHOD_VOICE_INSTRUCTION_SAVE, kind: "request" },
-    { method: METHOD_VOICE_INSTRUCTION_DELETE, kind: "request" },
-    { method: METHOD_VOICE_MODEL_DEFAULT_SET, kind: "request" },
-    { method: METHOD_VOICE_MODEL_TEST_TRANSCRIBE_FILE, kind: "request" },
-    { method: METHOD_USAGE_STATS_READ, kind: "request" },
-    { method: METHOD_USAGE_STATS_MODEL_RANKING_LIST, kind: "request" },
-    { method: METHOD_USAGE_STATS_DAILY_TRENDS_LIST, kind: "request" },
-    { method: METHOD_MODEL_LIST, kind: "request" },
-    { method: METHOD_MODEL_PREFERENCES_LIST, kind: "request" },
-    { method: METHOD_MODEL_SYNC_STATE_READ, kind: "request" },
-    { method: METHOD_MODEL_PROVIDER_LIST, kind: "request" },
-    { method: METHOD_MODEL_PROVIDER_CATALOG_LIST, kind: "request" },
-    { method: METHOD_MODEL_PROVIDER_READ, kind: "request" },
-    { method: METHOD_MODEL_PROVIDER_CREATE, kind: "request" },
-    { method: METHOD_MODEL_PROVIDER_UPDATE, kind: "request" },
-    { method: METHOD_MODEL_PROVIDER_DELETE, kind: "request" },
-    { method: METHOD_MODEL_PROVIDER_SORT_ORDERS_UPDATE, kind: "request" },
-    { method: METHOD_MODEL_PROVIDER_CONFIG_EXPORT, kind: "request" },
-    { method: METHOD_MODEL_PROVIDER_CONFIG_IMPORT, kind: "request" },
-    { method: METHOD_MODEL_PROVIDER_TEST_CONNECTION, kind: "request" },
-    { method: METHOD_MODEL_PROVIDER_TEST_CHAT, kind: "request" },
-    { method: METHOD_MODEL_PROVIDER_FETCH_MODELS, kind: "request" },
-    { method: METHOD_MODEL_PROVIDER_KEY_CREATE, kind: "request" },
-    { method: METHOD_MODEL_PROVIDER_KEY_UPDATE, kind: "request" },
-    { method: METHOD_MODEL_PROVIDER_KEY_DELETE, kind: "request" },
-    { method: METHOD_MODEL_PROVIDER_KEY_NEXT, kind: "request" },
-    { method: METHOD_MODEL_PROVIDER_KEY_USAGE_RECORD, kind: "request" },
-    { method: METHOD_MODEL_PROVIDER_KEY_ERROR_RECORD, kind: "request" },
-    { method: METHOD_MODEL_PROVIDER_UI_STATE_READ, kind: "request" },
-    { method: METHOD_MODEL_PROVIDER_UI_STATE_WRITE, kind: "request" },
-    { method: METHOD_MODEL_PROVIDER_ALIAS_READ, kind: "request" },
-    { method: METHOD_MODEL_PROVIDER_ALIAS_LIST, kind: "request" },
-    { method: METHOD_CONNECT_DEEP_LINK_RESOLVE, kind: "request" },
-    { method: METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE, kind: "request" },
-    { method: METHOD_CONNECT_RELAY_API_KEY_SAVE, kind: "request" },
-    { method: METHOD_CONNECT_CALLBACK_SEND, kind: "request" },
-    { method: METHOD_CONVERSATION_IMPORT_SOURCE_SCAN, kind: "request" },
-    { method: METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW, kind: "request" },
-    { method: METHOD_CONVERSATION_IMPORT_THREAD_COMMIT, kind: "request" },
-    {
-      method: METHOD_CONVERSATION_IMPORT_THREAD_RUNTIME_EVENTS_READ,
-      kind: "request",
-    },
-    { method: METHOD_AGENT_SESSION_START, kind: "request" },
-    { method: METHOD_AGENT_SESSION_READ, kind: "request" },
-    { method: METHOD_AGENT_SESSION_TURN_START, kind: "request" },
-    { method: METHOD_AGENT_SESSION_TOOL_INVENTORY_READ, kind: "request" },
-    { method: METHOD_AGENT_SESSION_TURN_CANCEL, kind: "request" },
-    { method: METHOD_AGENT_SESSION_ACTION_REPLAY, kind: "request" },
-    { method: METHOD_AGENT_SESSION_ACTION_RESPOND, kind: "request" },
-    { method: METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND, kind: "request" },
-    { method: METHOD_WORKFLOW_READ, kind: "request" },
-    { method: METHOD_WORKFLOW_CANCEL, kind: "request" },
-    { method: METHOD_WORKFLOW_RETRY, kind: "request" },
-    { method: METHOD_WORKFLOW_RESPOND, kind: "request" },
-    { method: METHOD_AGENT_SESSION_EVENT, kind: "notification" },
-  ]);
+test("exports app-server method catalog from checked-in Rust manifest", () => {
+  const manifest = require(
+    join(
+      repoRoot,
+      "lime-rs",
+      "crates",
+      "app-server-protocol",
+      "schema",
+      "json",
+      "manifest.json",
+    ),
+  );
+  assert.deepEqual(APP_SERVER_METHODS, manifest.methods);
+  assert.deepEqual(
+    APP_SERVER_REQUEST_SERIALIZATION_SCOPES,
+    manifest.requestSerializationScopes,
+  );
   assert.equal(isAppServerRequestMethod(METHOD_INITIALIZE), true);
   assert.equal(isAppServerRequestMethod(METHOD_ARTIFACT_READ), true);
-  assert.equal(
-    isAppServerRequestMethod(METHOD_FILE_SYSTEM_LIST_DIRECTORY),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_FILE_SYSTEM_READ_FILE_PREVIEW),
-    true,
-  );
-  assert.equal(isAppServerRequestMethod(METHOD_FILE_SYSTEM_CREATE_FILE), true);
-  assert.equal(
-    isAppServerRequestMethod(METHOD_FILE_SYSTEM_CREATE_DIRECTORY),
-    true,
-  );
-  assert.equal(isAppServerRequestMethod(METHOD_FILE_SYSTEM_RENAME_FILE), true);
-  assert.equal(isAppServerRequestMethod(METHOD_FILE_SYSTEM_DELETE_FILE), true);
-  assert.equal(isAppServerRequestMethod(METHOD_PROJECT_GIT_STATUS), true);
-  assert.equal(isAppServerRequestMethod(METHOD_PROJECT_GIT_DIFF), true);
-  assert.equal(isAppServerRequestMethod(METHOD_PROJECT_GIT_COMMITS_LIST), true);
-  assert.equal(
-    isAppServerRequestMethod(METHOD_PROJECT_GIT_BRANCH_CHECKOUT),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_PROJECT_GIT_BRANCH_CREATE),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_PROJECT_GIT_WORKTREE_CREATE),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_PROJECT_SHELL_SESSION_START),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_PROJECT_SHELL_SESSION_WRITE),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_PROJECT_SHELL_SESSION_RESIZE),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_PROJECT_SHELL_SESSION_KILL),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_PROJECT_SHELL_SESSION_DRAIN_EVENTS),
-    true,
-  );
-  assert.equal(isAppServerRequestMethod(METHOD_EXECUTION_PROCESS_START), true);
-  assert.equal(
-    isAppServerRequestMethod(METHOD_EXECUTION_PROCESS_WRITE_STDIN),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_EXECUTION_PROCESS_INTERRUPT),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_EXECUTION_PROCESS_TERMINATE),
-    true,
-  );
-  assert.equal(isAppServerRequestMethod(METHOD_EXECUTION_PROCESS_STATUS), true);
-  assert.equal(
-    isAppServerRequestMethod(METHOD_EXECUTION_PROCESS_DRAIN_OUTPUT),
-    true,
-  );
-  assert.equal(isAppServerRequestMethod(METHOD_EVIDENCE_EXPORT), true);
-  assert.equal(
-    isAppServerRequestMethod(METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(
-      METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
-    ),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE),
-    true,
-  );
-  assert.equal(isAppServerRequestMethod(METHOD_AGENT_SESSION_UPDATE), true);
-  assert.equal(
-    isAppServerRequestMethod(METHOD_AGENT_SESSION_ARCHIVE_MANY),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_AGENT_SESSION_OBJECTIVE_READ),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_AGENT_SESSION_OBJECTIVE_SET),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_AGENT_SESSION_OBJECTIVE_STATUS_UPDATE),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_AGENT_SESSION_OBJECTIVE_CLEAR),
-    true,
-  );
-  assert.equal(isAppServerRequestMethod(METHOD_WORKSPACE_LIST), true);
-  assert.equal(
-    isAppServerRequestMethod(METHOD_WORKSPACE_RIGHT_SURFACE_REQUEST),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_LIST),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CONSUME),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_DISMISS),
-    true,
-  );
+  assert.equal(isAppServerRequestMethod(METHOD_AGENT_SESSION_TURN_START), true);
   assert.equal(
     isAppServerRequestMethod(METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED),
     false,
   );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_BROWSER_SESSION_TARGET_LIST),
-    true,
-  );
-  assert.equal(isAppServerRequestMethod(METHOD_BROWSER_SESSION_OPEN), true);
-  assert.equal(isAppServerRequestMethod(METHOD_BROWSER_SESSION_READ), true);
-  assert.equal(isAppServerRequestMethod(METHOD_BROWSER_SESSION_CLOSE), true);
-  assert.equal(
-    isAppServerRequestMethod(METHOD_BROWSER_SESSION_EVENT_LIST),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_BROWSER_SESSION_ACTION_EXECUTE),
-    true,
-  );
-  assert.equal(isAppServerRequestMethod(METHOD_SKILL_LIST), true);
-  assert.equal(
-    isAppServerRequestMethod(METHOD_WORKSPACE_SKILL_BINDINGS_LIST),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_WORKSPACE_REGISTERED_SKILLS_LIST),
-    true,
-  );
-  assert.equal(isAppServerRequestMethod(METHOD_PLUGIN_INSTALLED_LIST), true);
-  assert.equal(
-    isAppServerRequestMethod(METHOD_PLUGIN_LOCAL_PACKAGE_INSPECT),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_PLUGIN_PACKAGE_FETCH_CLOUD),
-    true,
-  );
-  assert.equal(isAppServerRequestMethod(METHOD_PLUGIN_INSTALLED_SAVE), true);
-  assert.equal(
-    isAppServerRequestMethod(METHOD_PLUGIN_INSTALLED_DISABLED_SET),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_PLUGIN_INSTALLED_UNINSTALL_REHEARSAL),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_PLUGIN_INSTALLED_UNINSTALL),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_PLUGIN_HOST_LIFECYCLE_LIST),
-    true,
-  );
-  assert.equal(isAppServerRequestMethod(METHOD_PLUGIN_SHELL_PREPARE), true);
-  assert.equal(
-    isAppServerRequestMethod(METHOD_PLUGIN_UI_RUNTIME_START),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_PLUGIN_UI_RUNTIME_STATUS),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_PLUGIN_UI_RUNTIME_STOP),
-    true,
-  );
-  assert.equal(isAppServerRequestMethod(METHOD_KNOWLEDGE_PACK_LIST), true);
-  assert.equal(isAppServerRequestMethod(METHOD_KNOWLEDGE_PACK_READ), true);
-  assert.equal(isAppServerRequestMethod(METHOD_KNOWLEDGE_SOURCE_IMPORT), true);
-  assert.equal(isAppServerRequestMethod(METHOD_KNOWLEDGE_PACK_COMPILE), true);
-  assert.equal(
-    isAppServerRequestMethod(METHOD_KNOWLEDGE_PACK_DEFAULT_SET),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_KNOWLEDGE_PACK_STATUS_UPDATE),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_KNOWLEDGE_CONTEXT_RESOLVE),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_KNOWLEDGE_CONTEXT_RUN_VALIDATE),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_AUTOMATION_SCHEDULER_CONFIG_READ),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_AUTOMATION_SCHEDULER_CONFIG_UPDATE),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_AUTOMATION_SCHEDULER_STATUS),
-    true,
-  );
-  assert.equal(isAppServerRequestMethod(METHOD_AUTOMATION_JOB_LIST), true);
-  assert.equal(isAppServerRequestMethod(METHOD_AUTOMATION_JOB_READ), true);
-  assert.equal(isAppServerRequestMethod(METHOD_AUTOMATION_JOB_CREATE), true);
-  assert.equal(isAppServerRequestMethod(METHOD_AUTOMATION_JOB_UPDATE), true);
-  assert.equal(isAppServerRequestMethod(METHOD_AUTOMATION_JOB_DELETE), true);
-  assert.equal(isAppServerRequestMethod(METHOD_AUTOMATION_JOB_RUN_NOW), true);
-  assert.equal(isAppServerRequestMethod(METHOD_AUTOMATION_JOB_HEALTH), true);
-  assert.equal(
-    isAppServerRequestMethod(METHOD_AUTOMATION_JOB_RUN_HISTORY),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_AUTOMATION_SCHEDULE_PREVIEW),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_AUTOMATION_SCHEDULE_VALIDATE),
-    true,
-  );
-  assert.equal(isAppServerRequestMethod(METHOD_MCP_SERVER_LIST), true);
-  assert.equal(isAppServerRequestMethod(METHOD_MCP_SERVER_STATUS_LIST), true);
-  assert.equal(isAppServerRequestMethod(METHOD_MCP_SERVER_CREATE), true);
-  assert.equal(isAppServerRequestMethod(METHOD_MCP_SERVER_UPDATE), true);
-  assert.equal(isAppServerRequestMethod(METHOD_MCP_SERVER_DELETE), true);
-  assert.equal(isAppServerRequestMethod(METHOD_MCP_SERVER_ENABLED_SET), true);
-  assert.equal(
-    isAppServerRequestMethod(METHOD_MCP_SERVER_IMPORT_FROM_APP),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_MCP_SERVER_SYNC_ALL_TO_LIVE),
-    true,
-  );
-  assert.equal(isAppServerRequestMethod(METHOD_MCP_SERVER_OAUTH_LOGIN), true);
-  assert.equal(isAppServerRequestMethod(METHOD_MCP_SERVER_START), true);
-  assert.equal(isAppServerRequestMethod(METHOD_MCP_SERVER_STOP), true);
-  assert.equal(isAppServerRequestMethod(METHOD_MCP_TOOL_LIST), true);
-  assert.equal(
-    isAppServerRequestMethod(METHOD_MCP_TOOL_LIST_FOR_CONTEXT),
-    true,
-  );
-  assert.equal(isAppServerRequestMethod(METHOD_MCP_TOOL_SEARCH), true);
-  assert.equal(isAppServerRequestMethod(METHOD_MCP_TOOL_CALL), true);
-  assert.equal(
-    isAppServerRequestMethod(METHOD_MCP_TOOL_CALL_WITH_CALLER),
-    true,
-  );
-  assert.equal(isAppServerRequestMethod(METHOD_MCP_PROMPT_LIST), true);
-  assert.equal(isAppServerRequestMethod(METHOD_MCP_PROMPT_GET), true);
-  assert.equal(isAppServerRequestMethod(METHOD_MCP_RESOURCE_LIST), true);
-  assert.equal(isAppServerRequestMethod(METHOD_MCP_RESOURCE_READ), true);
-  assert.equal(isAppServerRequestMethod(METHOD_MCP_RESOURCE_SUBSCRIBE), true);
-  assert.equal(isAppServerRequestMethod(METHOD_MCP_RESOURCE_UNSUBSCRIBE), true);
-  assert.equal(isAppServerRequestMethod(METHOD_PROJECT_MEMORY_READ), true);
-  assert.equal(
-    isAppServerRequestMethod(METHOD_CONNECT_DEEP_LINK_RESOLVE),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_CONNECT_RELAY_API_KEY_SAVE),
-    true,
-  );
-  assert.equal(isAppServerRequestMethod(METHOD_CONNECT_CALLBACK_SEND), true);
-  assert.equal(
-    isAppServerRequestMethod(METHOD_CONVERSATION_IMPORT_SOURCE_SCAN),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_CONVERSATION_IMPORT_THREAD_PREVIEW),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_CONVERSATION_IMPORT_THREAD_COMMIT),
-    true,
-  );
-  assert.equal(isAppServerRequestMethod(METHOD_VOICE_INSTRUCTION_LIST), true);
-  assert.equal(isAppServerRequestMethod(METHOD_VOICE_INSTRUCTION_SAVE), true);
-  assert.equal(isAppServerRequestMethod(METHOD_VOICE_INSTRUCTION_DELETE), true);
-  assert.equal(isAppServerRequestMethod(METHOD_VOICE_MODEL_DEFAULT_SET), true);
-  assert.equal(
-    isAppServerRequestMethod(METHOD_VOICE_MODEL_TEST_TRANSCRIBE_FILE),
-    true,
-  );
-  assert.equal(isAppServerRequestMethod(METHOD_AGENT_SESSION_TURN_START), true);
-  assert.equal(
-    isAppServerRequestMethod(METHOD_AGENT_SESSION_ACTION_RESPOND),
-    true,
-  );
-  assert.equal(
-    isAppServerRequestMethod(METHOD_AGENT_SESSION_RUNTIME_EVENTS_APPEND),
-    true,
-  );
-  assert.equal(isAppServerRequestMethod(METHOD_INITIALIZED), false);
+  assert.equal(isAppServerRequestMethod(METHOD_AGENT_SESSION_EVENT), false);
   assert.equal(isAppServerNotificationMethod(METHOD_INITIALIZED), true);
   assert.equal(isAppServerNotificationMethod(METHOD_AGENT_SESSION_EVENT), true);
-  assert.equal(
-    isAppServerNotificationMethod(
-      METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED,
-    ),
-    true,
-  );
   assert.equal(
     isAppServerNotificationMethod(METHOD_AGENT_SESSION_START),
     false,
   );
+  assert.equal(
+    getAppServerRequestSerializationScope(METHOD_AGENT_SESSION_TURN_START),
+    "thread",
+  );
+  assert.equal(
+    getAppServerRequestSerializationScope(METHOD_EXECUTION_PROCESS_START),
+    "executionProcess",
+  );
+  assert.equal(
+    getAppServerRequestSerializationScope(METHOD_PROJECT_SHELL_SESSION_START),
+    "projectShellSession",
+  );
+  assert.equal(
+    getAppServerRequestSerializationScope(METHOD_MCP_SERVER_OAUTH_LOGIN),
+    "mcpOauth",
+  );
+  assert.equal(
+    getAppServerRequestSerializationScope(METHOD_BROWSER_SESSION_OPEN),
+    "browserSession",
+  );
+  assert.equal(
+    getAppServerRequestSerializationScope(METHOD_FILE_SYSTEM_DELETE_FILE),
+    "fileSystemMutation",
+  );
+  assert.equal(
+    getAppServerRequestSerializationScope(METHOD_ARTIFACT_READ),
+    undefined,
+  );
+});
+
+test("request client wrapper specs are backed by the generated method catalog", () => {
+  const methodKinds = new Map(
+    APP_SERVER_METHODS.map(({ method, kind }) => [method, kind]),
+  );
+
+  for (const spec of APP_SERVER_REQUEST_CLIENT_METHODS) {
+    assert.equal(
+      methodKinds.get(spec.method),
+      spec.kind,
+      `${spec.name} must use a generated ${spec.kind} method`,
+    );
+  }
 });
 
 test("parses workspace right surface pending changed notifications", () => {
@@ -3167,6 +2594,16 @@ test("builds turn start requests with runtime queue flags", () => {
   assert.equal(turn.params.skipPreSubmitResume, true);
   assert.equal(turn.params.runtimeOptions.capabilityId, "draft.write");
   assert.equal(turn.params.runtimeOptions.hostOptions.adapter, "desktop");
+  assert.equal(isAgentSessionTurnStartRequest(turn), true);
+  assert.equal(agentSessionTurnStartRequest(turn)?.params.input.text, "draft");
+  assert.equal(
+    agentSessionTurnStartRequest({
+      id: 2,
+      method: "other/request",
+      params: {},
+    }),
+    undefined,
+  );
 });
 
 test("connection wraps request response flow and keeps async notifications", async () => {
@@ -4678,6 +4115,20 @@ test("routes agent session event notifications for renderer projection", async (
     method: METHOD_AGENT_SESSION_EVENT,
     params: {
       event,
+      typedEvent: {
+        method: "item/agentMessage/delta",
+        params: {
+          eventId: "evt-1",
+          sequence: 1,
+          sessionId: "sess_external",
+          threadId: "thread_external",
+          turnId: "turn_external",
+          timestamp: "2026-06-04T00:00:00Z",
+          itemId: "agent-message-final",
+          delta: "delta",
+          phase: "final_answer",
+        },
+      },
     },
   };
   const routed = [];
@@ -4693,6 +4144,14 @@ test("routes agent session event notifications for renderer projection", async (
   assert.equal(
     agentSessionEventNotification(notification)?.params.event.payload.text,
     "delta",
+  );
+  assert.equal(
+    agentSessionRuntimeEventNotification(notification)?.method,
+    "item/agentMessage/delta",
+  );
+  assert.equal(
+    agentSessionRuntimeEventNotification(notification)?.params.itemId,
+    "agent-message-final",
   );
   assert.equal(await router.dispatch(notification), true);
   unsubscribe();

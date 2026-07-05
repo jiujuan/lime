@@ -18,7 +18,6 @@ export type Page =
   | "agent"
   | "experts"
   | "skills"
-  | "plugins"
   | "plugin"
   | "plugins"
   | "plugin-lab"
@@ -198,6 +197,7 @@ export interface PluginsPageParams {
   query?: string;
   category?: string;
   selectedPluginId?: string;
+  projectId?: string;
   launchPluginEntryKey?: string;
   launchRequestKey?: number;
   statusFilter?:
@@ -211,8 +211,11 @@ export interface PluginsPageParams {
 export interface PluginPageParams {
   appId?: string;
   entryKey?: string;
+  projectId?: string;
   launchRequestKey?: number;
-  rightSurfaceTarget?: import("@/features/plugin/ui/pluginRightSurfaceLaunch").PluginRightSurfaceLaunchTarget | null;
+  rightSurfaceTarget?:
+    | import("@/features/plugin/ui/pluginRightSurfaceLaunch").PluginRightSurfaceLaunchTarget
+    | null;
 }
 
 export interface KnowledgePageParams {
@@ -233,6 +236,9 @@ export type AutomationWorkspaceTab = "tasks" | "overview";
 export interface AutomationPageParams {
   selectedJobId?: string;
   workspaceTab?: AutomationWorkspaceTab;
+  projectId?: string;
+  sessionId?: string;
+  threadId?: string;
 }
 
 export interface BrowserRuntimePageParams {

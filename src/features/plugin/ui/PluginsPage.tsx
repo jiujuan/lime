@@ -41,8 +41,6 @@ import {
   type PluginInstallReviewResult,
   type PluginUninstallRehearsalResult,
 } from "@/lib/api/plugins";
-import { InMemoryPluginCapabilityStore } from "../adapters/InMemoryPluginCapabilityStore";
-import { AdapterCapabilityHost } from "../adapters/AdapterCapabilityHost";
 import { buildCleanupPlan } from "../install/cleanupPlan";
 import { buildLimeRuntimeProfileForInstalledState } from "../runtime-profile";
 import { resolveShellLaunchDescriptorForInstalledEntry } from "../shell";
@@ -98,6 +96,7 @@ import {
   buildAppCenterRuntimeCapabilityProfile,
 } from "../runtime/appCenterRuntimeProfile";
 import type {
+  AgentPageParams,
   PluginPageParams,
   PluginsPageParams,
   Page,
@@ -238,6 +237,337 @@ function applyAppIconFallback(
   }
 }
 
+type DetailDeclaration = {
+  key: string;
+  title: string;
+  description?: string;
+  meta?: string;
+  aliases?: string[];
+  required?: boolean;
+  taskKind?: string;
+  workflowKey?: string;
+  outputArtifactKind?: string;
+  rightSurface?: string;
+  expectedObjects?: string[];
+};
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function readText(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function readTextArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.flatMap((item) => {
+        const text = readText(item);
+        return text ? [text] : [];
+      })
+    : [];
+}
+
+function readRecordArray(value: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const records: Record<string, unknown>[] = [];
+  for (const item of value) {
+    const record = asRecord(item);
+    if (record) {
+      records.push(record);
+    }
+  }
+  return records;
+}
+
+function detailDeclarationFromRecord(
+  entry: Record<string, unknown>,
+  fallback: DetailDeclaration | undefined,
+  fallbackTitle: string,
+): DetailDeclaration {
+  const key = readText(entry.key) ?? fallback?.key ?? "";
+  const aliases = readTextArray(entry.aliases);
+  const taskKind =
+    readText(entry.taskKind) ?? readText(entry.task_kind) ?? fallback?.taskKind;
+  const workflowKey =
+    readText(entry.workflowKey) ??
+    readText(entry.workflow_key) ??
+    readText(entry.workflow) ??
+    fallback?.workflowKey;
+  const outputArtifactKind =
+    readText(entry.outputArtifactKind) ??
+    readText(entry.output_artifact_kind) ??
+    fallback?.outputArtifactKind;
+  const rightSurface =
+    readText(entry.rightSurface) ??
+    readText(entry.right_surface) ??
+    fallback?.rightSurface;
+  const expectedObjects = readTextArray(
+    entry.expectedObjects ?? entry.expected_objects,
+  );
+  const defaultObjectKind =
+    readText(entry.defaultObjectKind) ?? readText(entry.default_object_kind);
+  const mergedExpectedObjects =
+    expectedObjects.length > 0
+      ? expectedObjects
+      : fallback?.expectedObjects?.length
+        ? fallback.expectedObjects
+        : defaultObjectKind
+          ? [defaultObjectKind]
+          : undefined;
+
+  return {
+    key,
+    title:
+      readText(entry.title) ??
+      fallback?.title ??
+      taskKind ??
+      key ??
+      fallbackTitle,
+    description: readText(entry.description) ?? fallback?.description,
+    meta: taskKind ?? outputArtifactKind ?? fallback?.meta,
+    aliases: aliases.length > 0 ? aliases : fallback?.aliases,
+    taskKind,
+    workflowKey,
+    outputArtifactKind,
+    rightSurface,
+    expectedObjects: mergedExpectedObjects,
+  };
+}
+
+function uniqueDetailDeclarations(
+  declarations: DetailDeclaration[],
+): DetailDeclaration[] {
+  const seen = new Set<string>();
+  const result: DetailDeclaration[] = [];
+  for (const declaration of declarations) {
+    if (!declaration.key || seen.has(declaration.key)) {
+      continue;
+    }
+    seen.add(declaration.key);
+    result.push(declaration);
+  }
+  return result;
+}
+
+function normalizeActivationLookupKey(value: string | undefined): string {
+  return (value ?? "").toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/g, "");
+}
+
+function activationDeclarationMatchesProjectedEntry(
+  declaration: DetailDeclaration,
+  entry: ProjectedEntry,
+): boolean {
+  const declarationKeys = [
+    declaration.key,
+    declaration.title,
+    declaration.taskKind,
+    declaration.workflowKey,
+  ].map(normalizeActivationLookupKey);
+  const entryKeys = [entry.key, entry.title, entry.route].map(
+    normalizeActivationLookupKey,
+  );
+  return declarationKeys.some(
+    (left) =>
+      left &&
+      entryKeys.some(
+        (right) => right && (left === right || left.includes(right)),
+      ),
+  );
+}
+
+function buildDetailActivationEntriesFromState(params: {
+  state?: InstalledPluginState;
+  fallbackTitle: string;
+}): DetailDeclaration[] {
+  const manifest = params.state?.manifest;
+  const runtime = asRecord(manifest?.agentRuntime);
+  const manifestActivationRecords = readRecordArray(
+    manifest?.activationEntries,
+  );
+  const manifestActivationByKey = new Map<string, DetailDeclaration>();
+  for (const entry of manifestActivationRecords) {
+    const declaration = detailDeclarationFromRecord(
+      entry,
+      undefined,
+      params.fallbackTitle,
+    );
+    if (declaration.key) {
+      manifestActivationByKey.set(declaration.key, declaration);
+    }
+  }
+  const runtimeRecords = [
+    ...readRecordArray(runtime?.activationEntries),
+    ...readRecordArray(runtime?.intents),
+  ];
+  const declaredRecords =
+    runtimeRecords.length > 0 ? runtimeRecords : manifestActivationRecords;
+  const declared = declaredRecords.map<DetailDeclaration>((entry) => {
+    const key = readText(entry.key);
+    return detailDeclarationFromRecord(
+      entry,
+      key ? manifestActivationByKey.get(key) : undefined,
+      params.fallbackTitle,
+    );
+  });
+  return uniqueDetailDeclarations(declared);
+}
+
+function buildDetailActivationEntries(
+  item: AppCenterItem,
+): DetailDeclaration[] {
+  const runtimeDeclared = buildDetailActivationEntriesFromState({
+    state: item.installedState,
+    fallbackTitle: item.title,
+  });
+  const projected = item.entries.map<DetailDeclaration>((entry) => ({
+    key: entry.key,
+    title: entry.title,
+    description: entry.description,
+    meta: entry.kind,
+  }));
+  return runtimeDeclared.length > 0
+    ? runtimeDeclared
+    : uniqueDetailDeclarations(projected);
+}
+
+function resolveActivationDeclarationForProjectedEntry(params: {
+  state: InstalledPluginState;
+  entry: ProjectedEntry;
+}): DetailDeclaration {
+  const declarations = buildDetailActivationEntriesFromState({
+    state: params.state,
+    fallbackTitle: params.entry.title,
+  });
+  return (
+    declarations.find((declaration) =>
+      activationDeclarationMatchesProjectedEntry(declaration, params.entry),
+    ) ?? {
+      key: params.entry.key,
+      title: params.entry.title,
+      description: params.entry.description,
+      meta: params.entry.kind,
+    }
+  );
+}
+
+function activationMentionTrigger(declaration: DetailDeclaration): string {
+  const alias = declaration.aliases?.find((item) => item.trim())?.trim();
+  const raw = alias || declaration.title || declaration.key;
+  return raw.startsWith("@") ? raw : `@${raw}`;
+}
+
+function hasAgentActivationRoute(declaration: DetailDeclaration): boolean {
+  return Boolean(
+    declaration.taskKind ||
+    declaration.workflowKey ||
+    declaration.outputArtifactKind ||
+    declaration.rightSurface ||
+    declaration.aliases?.some((item) => item.trim()),
+  );
+}
+
+function buildPluginActivationAgentParams(params: {
+  state: InstalledPluginState;
+  declaration: DetailDeclaration;
+  projectId?: string;
+}): AgentPageParams {
+  const trigger = activationMentionTrigger(params.declaration);
+  const launchRequestId = Date.now();
+  return {
+    agentEntry: "new-task",
+    ...(params.projectId ? { projectId: params.projectId } : {}),
+    initialUserPrompt: `${trigger} `,
+    initialSessionName: params.declaration.title,
+    autoRunInitialPromptOnMount: false,
+    newChatAt: launchRequestId,
+    immersiveHome: false,
+  };
+}
+
+function buildDetailSubagents(item: AppCenterItem): DetailDeclaration[] {
+  return uniqueDetailDeclarations(
+    (item.installedState?.manifest.subagents ?? []).map((subagent) => ({
+      key: subagent.id,
+      title: subagent.title ?? subagent.id,
+      description: subagent.description,
+      meta: subagent.activation,
+      required: subagent.required,
+      aliases: readTextArray(subagent.skills),
+    })),
+  );
+}
+
+function buildDetailSkills(item: AppCenterItem): DetailDeclaration[] {
+  return uniqueDetailDeclarations(
+    (item.installedState?.manifest.skillRefs ?? []).map((skill) => ({
+      key: skill.id,
+      title: skill.title ?? skill.id,
+      description: skill.description,
+      meta: skill.activation,
+      required: skill.required,
+    })),
+  );
+}
+
+function getDetailCategory(item: AppCenterItem): string | undefined {
+  const manifest = item.installedState?.manifest;
+  const manifestInterface = asRecord(manifest?.interface);
+  return (
+    readText(manifest?.presentation?.category) ??
+    readText(manifestInterface?.category) ??
+    readText(manifest?.appType)
+  );
+}
+
+function getDetailDeveloper(item: AppCenterItem): string | undefined {
+  const manifest = item.installedState?.manifest;
+  const distribution = asRecord(manifest?.distribution);
+  const presentation = asRecord(manifest?.presentation);
+  const publisher = asRecord(presentation?.publisher);
+  const cloudPresentation = asRecord(item.cloudApp?.presentation);
+  const cloudPublisher = asRecord(cloudPresentation?.publisher);
+  return (
+    readText(distribution?.publisher) ??
+    readText(publisher?.name) ??
+    readText(cloudPublisher?.name)
+  );
+}
+
+function getDetailCapabilityCount(item: AppCenterItem): number {
+  return (
+    item.installedState?.projection.requiredCapabilities?.length ??
+    Object.keys(item.cloudApp?.capabilityRequirements ?? {}).length
+  );
+}
+
+function buildDetailTags(item: AppCenterItem): string[] {
+  const manifest = item.installedState?.manifest;
+  const manifestRecord = asRecord(manifest);
+  const manifestInterface = asRecord(manifest?.interface);
+  const manifestRequires = asRecord(manifest?.requires);
+  const manifestRequiredCapabilities = asRecord(manifestRequires?.capabilities);
+  return Array.from(
+    new Set([
+      ...readTextArray(manifestInterface?.capabilities),
+      ...Object.keys(manifestRequiredCapabilities ?? {}),
+      ...readTextArray(manifestRecord?.capabilities),
+    ]),
+  ).slice(0, 6);
+}
+
+function getDetailPermissions(item: AppCenterItem) {
+  return item.installedState?.manifest.permissions ?? [];
+}
+
+function getDetailCommonEntries(item: AppCenterItem) {
+  return item.entries ?? [];
+}
+
 export function PluginsPage({
   onNavigate,
   pageParams,
@@ -252,7 +582,6 @@ export function PluginsPage({
   const { t } = useTranslation("agent");
   const dynamicT = t as PluginDynamicTranslation;
   const profile = useMemo(buildProfile, []);
-  const adapterStore = useMemo(() => new InMemoryPluginCapabilityStore(), []);
   const [installed, setInstalled] = useState<InstalledPluginState[]>([]);
   const [hostLifecycleSnapshots, setHostLifecycleSnapshots] = useState<
     PluginHostLifecycleSnapshot[] | null
@@ -267,9 +596,7 @@ export function PluginsPage({
     Record<string, string>
   >({});
   const [launchSummary, setLaunchSummary] = useState<string | null>(null);
-  const [mountedUi, setMountedUi] = useState<PluginUiMountResult | null>(
-    null,
-  );
+  const [mountedUi, setMountedUi] = useState<PluginUiMountResult | null>(null);
   const [installReview, setInstallReview] =
     useState<PluginInstallReviewResult | null>(null);
   const [uninstallPreview, setUninstallPreview] =
@@ -281,10 +608,9 @@ export function PluginsPage({
   const [searchQuery, setSearchQuery] = useState(
     () => pageParams?.query?.trim() ?? "",
   );
-  const [statusFilter, setStatusFilter] =
-    useState<AppCenterStatusFilter>(() =>
-      normalizeStatusFilter(pageParams?.statusFilter),
-    );
+  const [statusFilter, setStatusFilter] = useState<AppCenterStatusFilter>(() =>
+    normalizeStatusFilter(pageParams?.statusFilter),
+  );
   const [sourceFilter, setSourceFilter] =
     useState<AppCenterSourceFilter>("all");
   const [launchTargetMode, setLaunchTargetMode] =
@@ -725,6 +1051,35 @@ export function PluginsPage({
     toast.success(t("plugin.apps.toast.uninstalled"));
   }
 
+  const handleLaunchActivationDeclaration = useCallback(
+    (state: InstalledPluginState, declaration: DetailDeclaration) => {
+      const launchGate = buildPluginLifecycleLaunchGate(state);
+      if (!launchGate.allowed) {
+        return;
+      }
+      const params = buildPluginActivationAgentParams({
+        state,
+        declaration,
+        projectId: pageParams?.projectId?.trim() || undefined,
+      });
+      if (!onNavigate) {
+        const summary = t("plugin.apps.launch.agentRouteUnavailable", {
+          title: declaration.title,
+        });
+        setMountedUi(null);
+        setLaunchSummary(summary);
+        toast.error(t("plugin.apps.toast.failed"), {
+          description: summary,
+        });
+        return;
+      }
+      setMountedUi(null);
+      setLaunchSummary(null);
+      onNavigate("agent", params);
+    },
+    [onNavigate, pageParams?.projectId, t],
+  );
+
   const handleLaunchEntry = useCallback(
     async (state: InstalledPluginState, entry: ProjectedEntry) => {
       const launchGate = buildPluginLifecycleLaunchGate(state);
@@ -821,6 +1176,9 @@ export function PluginsPage({
             const runtimeParams: PluginPageParams = {
               appId: state.appId,
               entryKey: entry.key,
+              ...(pageParams?.projectId?.trim()
+                ? { projectId: pageParams.projectId.trim() }
+                : {}),
               launchRequestKey: Date.now(),
               rightSurfaceTarget: launchTargetPolicy.rightSurfaceTarget,
             };
@@ -841,36 +1199,30 @@ export function PluginsPage({
           return;
         }
 
-        if (entry.kind === "workflow") {
-          const summary = t("plugin.apps.launch.workflowRequiresCurrentApi", {
-            title: entry.title,
-          });
-          setMountedUi(null);
-          setLaunchSummary(summary);
-          toast.error(t("plugin.apps.toast.failed"), {
-            description: summary,
-          });
+        const activationDeclaration =
+          resolveActivationDeclarationForProjectedEntry({ state, entry });
+        if (
+          entry.kind === "workflow" ||
+          hasAgentActivationRoute(activationDeclaration)
+        ) {
+          handleLaunchActivationDeclaration(state, activationDeclaration);
           return;
         }
-        const host = new AdapterCapabilityHost({
-          preview,
-          realAdapterEnabled: true,
-          store: adapterStore,
-        });
-        const result = await host.runEntry(entry.key);
         setMountedUi(null);
-        setLaunchSummary(
-          t("plugin.apps.launch.entryCompleted", {
-            title: entry.title,
-            runId: result.run.runId,
-          }),
-        );
+        const summary = t("plugin.apps.launch.entryRouteUnavailable", {
+          title: entry.title,
+        });
+        setLaunchSummary(summary);
+        toast.error(t("plugin.apps.toast.failed"), {
+          description: summary,
+        });
       });
     },
     [
-      adapterStore,
+      handleLaunchActivationDeclaration,
       launchTargetPolicy.rightSurfaceTarget,
       onNavigate,
+      pageParams?.projectId,
       runBusy,
       t,
       uninstallDescriptor,
@@ -1163,596 +1515,823 @@ export function PluginsPage({
     >
       <div className="min-h-0 flex-1 overflow-auto bg-[color:var(--lime-surface)] px-5 pb-10 pt-10">
         <div className="mx-auto flex w-full max-w-[1040px] flex-col gap-8">
-          <header className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-            <div className="min-w-0">
-              <h1 className="text-[28px] font-semibold text-[color:var(--lime-text-strong)]">
-                {t("plugin.apps.center.title")}
-              </h1>
-              <p className="mt-2 max-w-xl text-sm leading-6 text-[color:var(--lime-text-muted)]">
-                {t("plugin.apps.center.description")}
-              </p>
-              {issueCount > 0 ? (
-                <p
-                  className="mt-2 text-sm font-medium text-amber-700"
-                  data-testid="plugins-load-issues"
-                >
-                  {t("plugin.apps.installed.issues", { count: issueCount })}
-                </p>
-              ) : null}
-            </div>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <label className="relative w-full sm:w-[360px]">
-                <Search
-                  className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[color:var(--lime-text-muted)]"
-                  size={18}
-                />
-                <input
-                  className="h-9 w-full rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] pl-10 pr-4 text-sm font-semibold text-[color:var(--lime-text-strong)] shadow-none outline-none transition placeholder:text-[color:var(--lime-text-muted)] focus:border-[color:var(--lime-surface-border-strong)]"
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  onInput={(event) => setSearchQuery(event.currentTarget.value)}
-                  placeholder={t("plugin.apps.center.searchPlaceholder")}
-                  data-testid="plugins-search"
-                />
-              </label>
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  className="inline-flex h-9 items-center gap-2 rounded-full bg-[color:var(--lime-text-strong)] px-5 text-sm font-semibold text-[color:var(--lime-surface)] shadow-none transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={Boolean(busyAction)}
-                  onClick={() => void handleInstallLocal()}
-                  data-testid="plugins-install-local"
-                >
-                  <FolderOpen size={16} />
-                  {t("plugin.apps.center.installLocal")}
-                </button>
-                <button
-                  type="button"
-                  className="inline-flex h-9 items-center gap-2 rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-4 text-sm font-semibold text-[color:var(--lime-text-strong)] shadow-none transition hover:bg-[color:var(--lime-surface-hover)] disabled:cursor-not-allowed disabled:opacity-60"
-                  onClick={() => void refresh()}
-                  disabled={loading}
-                  data-testid="plugins-refresh"
-                >
-                  <RefreshCw size={16} />
-                  {t("plugin.apps.center.refresh")}
-                </button>
-              </div>
-            </div>
-          </header>
+          {selectedItem ? null : (
+            <>
+              <header className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0">
+                  <h1 className="text-[28px] font-semibold text-[color:var(--lime-text-strong)]">
+                    {t("plugin.apps.center.title")}
+                  </h1>
+                  <p className="mt-2 max-w-xl text-sm leading-6 text-[color:var(--lime-text-muted)]">
+                    {t("plugin.apps.center.description")}
+                  </p>
+                  {issueCount > 0 ? (
+                    <p
+                      className="mt-2 text-sm font-medium text-amber-700"
+                      data-testid="plugins-load-issues"
+                    >
+                      {t("plugin.apps.installed.issues", { count: issueCount })}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <label className="relative w-full sm:w-[360px]">
+                    <Search
+                      className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[color:var(--lime-text-muted)]"
+                      size={18}
+                    />
+                    <input
+                      className="h-9 w-full rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] pl-10 pr-4 text-sm font-semibold text-[color:var(--lime-text-strong)] shadow-none outline-none transition placeholder:text-[color:var(--lime-text-muted)] focus:border-[color:var(--lime-surface-border-strong)]"
+                      value={searchQuery}
+                      onChange={(event) => setSearchQuery(event.target.value)}
+                      onInput={(event) =>
+                        setSearchQuery(event.currentTarget.value)
+                      }
+                      placeholder={t("plugin.apps.center.searchPlaceholder")}
+                      data-testid="plugins-search"
+                    />
+                  </label>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      className="inline-flex h-9 items-center gap-2 rounded-full bg-[color:var(--lime-text-strong)] px-5 text-sm font-semibold text-[color:var(--lime-surface)] shadow-none transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={Boolean(busyAction)}
+                      onClick={() => void handleInstallLocal()}
+                      data-testid="plugins-install-local"
+                    >
+                      <FolderOpen size={16} />
+                      {t("plugin.apps.center.installLocal")}
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex h-9 items-center gap-2 rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-4 text-sm font-semibold text-[color:var(--lime-text-strong)] shadow-none transition hover:bg-[color:var(--lime-surface-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+                      onClick={() => void refresh()}
+                      disabled={loading}
+                      data-testid="plugins-refresh"
+                    >
+                      <RefreshCw size={16} />
+                      {t("plugin.apps.center.refresh")}
+                    </button>
+                  </div>
+                </div>
+              </header>
 
-          <section className="flex flex-wrap items-center gap-5">
-            {(["all", "installed", "installable", "attention"] as const).map(
-              (filter) => (
-                <button
-                  key={filter}
-                  type="button"
-                  className={`inline-flex h-8 items-center gap-2 rounded-full text-base font-semibold transition ${
-                    statusFilter === filter
-                      ? "text-[color:var(--lime-text-strong)]"
-                      : "text-[color:var(--lime-text-muted)] hover:text-[color:var(--lime-text-strong)]"
-                  }`}
-                  onClick={() => setStatusFilter(filter)}
-                  data-testid={`plugins-status-filter-${filter}`}
-                >
-                  {t(`plugin.apps.center.filter.${filter}`)}
-                  <span className="text-xs text-[color:var(--lime-text-muted)]">
-                    {filterCounts[filter]}
-                  </span>
-                </button>
-              ),
-            )}
-          </section>
-
-          <section className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-[color:var(--lime-text-muted)]">
-              <div className="flex flex-wrap items-center gap-3">
-                <span>{t("plugin.apps.center.source.label")}：</span>
-                {(["all", "cloud", "local"] as const).map((filter) => (
+              <section className="flex flex-wrap items-center gap-5">
+                {(
+                  ["all", "installed", "installable", "attention"] as const
+                ).map((filter) => (
                   <button
                     key={filter}
                     type="button"
-                    className={`h-8 rounded-lg border px-3 text-xs font-semibold transition ${
-                      sourceFilter === filter
-                        ? "border-[color:var(--lime-surface-border-strong)] bg-[color:var(--lime-surface-hover)] text-[color:var(--lime-text-strong)]"
-                        : "border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] text-[color:var(--lime-text)] hover:bg-[color:var(--lime-surface-hover)]"
+                    className={`inline-flex h-8 items-center gap-2 rounded-full text-base font-semibold transition ${
+                      statusFilter === filter
+                        ? "text-[color:var(--lime-text-strong)]"
+                        : "text-[color:var(--lime-text-muted)] hover:text-[color:var(--lime-text-strong)]"
                     }`}
-                    onClick={() => setSourceFilter(filter)}
-                    data-testid={`plugins-source-filter-${filter}`}
+                    onClick={() => setStatusFilter(filter)}
+                    data-testid={`plugins-status-filter-${filter}`}
                   >
-                    {t(`plugin.apps.center.source.${filter}`)}
+                    {t(`plugin.apps.center.filter.${filter}`)}
+                    <span className="text-xs text-[color:var(--lime-text-muted)]">
+                      {filterCounts[filter]}
+                    </span>
                   </button>
                 ))}
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <span>{t("plugin.apps.center.status.label")}：</span>
-                <button
-                  type="button"
-                  className={`font-semibold ${
-                    statusFilter === "all"
-                      ? "text-[color:var(--lime-text-strong)]"
-                      : "text-[color:var(--lime-text-muted)]"
-                  }`}
-                  onClick={() => setStatusFilter("all")}
-                >
-                  {t("plugin.apps.center.status.all")}
-                </button>
-                <span className="text-slate-300">/</span>
-                <button
-                  type="button"
-                  className="font-medium text-[color:var(--lime-text-muted)] hover:text-[color:var(--lime-text-strong)]"
-                  onClick={() => setStatusFilter("attention")}
-                >
-                  {t("plugin.apps.center.status.updateShort")}
-                </button>
-                <span className="text-slate-300">/</span>
-                <button
-                  type="button"
-                  className="font-medium text-[color:var(--lime-text-muted)] hover:text-[color:var(--lime-text-strong)]"
-                  onClick={() => setStatusFilter("attention")}
-                >
-                  {t("plugin.apps.center.status.authorizationShort")}
-                </button>
-              </div>
-              <div className="text-[color:var(--lime-text-muted)]">
-                {t("plugin.apps.center.sort.label")}：
-                <span className="ml-2 font-medium text-[color:var(--lime-text)]">
-                  {t("plugin.apps.center.sort.recent")}
-                </span>
-              </div>
-            </div>
-            <PluginLaunchTargetControl
-              policy={launchTargetPolicy}
-              selectedTargetId={selectedRightSurfaceTargetId}
-              onModeChange={setLaunchTargetMode}
-              onSelectedTargetIdChange={setSelectedRightSurfaceTargetId}
-            />
-            <main className="min-w-0">
-              <div
-                className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
-                data-testid="plugins-list"
-              >
-                {pagedItems.map((item) => {
-                  const selectedRow = selectedItem?.appId === item.appId;
-                  const defaultEntry = getDefaultEntry(item);
-                  const hostSummary = buildAppCenterHostLifecycleSummary(item);
-                  return (
-                    <div
-                      key={item.appId}
-                      className={`group flex min-h-[188px] flex-col rounded-[10px] border bg-[color:var(--lime-surface)] p-4 text-left shadow-sm shadow-[color:var(--lime-shadow-color)] transition hover:border-[color:var(--lime-surface-border-strong)] hover:bg-[color:var(--lime-surface-hover)] hover:shadow-md ${
-                        selectedRow
-                          ? "border-emerald-300 ring-1 ring-emerald-200"
-                          : "border-[color:var(--lime-surface-border)]"
+              </section>
+
+              <section className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-[color:var(--lime-text-muted)]">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span>{t("plugin.apps.center.source.label")}：</span>
+                    {(["all", "cloud", "local"] as const).map((filter) => (
+                      <button
+                        key={filter}
+                        type="button"
+                        className={`h-8 rounded-lg border px-3 text-xs font-semibold transition ${
+                          sourceFilter === filter
+                            ? "border-[color:var(--lime-surface-border-strong)] bg-[color:var(--lime-surface-hover)] text-[color:var(--lime-text-strong)]"
+                            : "border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] text-[color:var(--lime-text)] hover:bg-[color:var(--lime-surface-hover)]"
+                        }`}
+                        onClick={() => setSourceFilter(filter)}
+                        data-testid={`plugins-source-filter-${filter}`}
+                      >
+                        {t(`plugin.apps.center.source.${filter}`)}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span>{t("plugin.apps.center.status.label")}：</span>
+                    <button
+                      type="button"
+                      className={`font-semibold ${
+                        statusFilter === "all"
+                          ? "text-[color:var(--lime-text-strong)]"
+                          : "text-[color:var(--lime-text-muted)]"
                       }`}
-                      data-testid={`plugins-list-row-${item.appId}`}
+                      onClick={() => setStatusFilter("all")}
                     >
-                      <div className="flex min-w-0 items-start gap-3">
-                        {renderAppIcon(item)}
-                        <div className="min-w-0 flex-1">
-                          <div className="flex min-w-0 items-start justify-between gap-3">
-                            <h2 className="min-w-0 truncate text-sm font-semibold text-[color:var(--lime-text-strong)]">
-                              {item.title}
-                            </h2>
-                            <span
-                              className={`shrink-0 rounded-md border px-2 py-0.5 text-xs font-semibold ${appCenterStatusClass(
-                                item.statusKind,
-                              )}`}
-                            >
-                              {t(
-                                `plugin.apps.center.status.${item.statusKind}`,
-                              )}
-                            </span>
-                          </div>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            <span
-                              className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-medium ${appCenterSourceClass(
-                                item.sourceKind,
-                              )}`}
-                            >
-                              {t(
-                                `plugin.apps.center.source.${item.sourceKind}`,
-                              )}
-                            </span>
-                            {item.sourceState ? (
-                              <>
+                      {t("plugin.apps.center.status.all")}
+                    </button>
+                    <span className="text-slate-300">/</span>
+                    <button
+                      type="button"
+                      className="font-medium text-[color:var(--lime-text-muted)] hover:text-[color:var(--lime-text-strong)]"
+                      onClick={() => setStatusFilter("attention")}
+                    >
+                      {t("plugin.apps.center.status.updateShort")}
+                    </button>
+                    <span className="text-slate-300">/</span>
+                    <button
+                      type="button"
+                      className="font-medium text-[color:var(--lime-text-muted)] hover:text-[color:var(--lime-text-strong)]"
+                      onClick={() => setStatusFilter("attention")}
+                    >
+                      {t("plugin.apps.center.status.authorizationShort")}
+                    </button>
+                  </div>
+                  <div className="text-[color:var(--lime-text-muted)]">
+                    {t("plugin.apps.center.sort.label")}：
+                    <span className="ml-2 font-medium text-[color:var(--lime-text)]">
+                      {t("plugin.apps.center.sort.recent")}
+                    </span>
+                  </div>
+                </div>
+                <PluginLaunchTargetControl
+                  policy={launchTargetPolicy}
+                  selectedTargetId={selectedRightSurfaceTargetId}
+                  onModeChange={setLaunchTargetMode}
+                  onSelectedTargetIdChange={setSelectedRightSurfaceTargetId}
+                />
+                <main className="min-w-0">
+                  <div
+                    className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
+                    data-testid="plugins-list"
+                  >
+                    {pagedItems.map((item) => {
+                      const selectedRow = false;
+                      const defaultEntry = getDefaultEntry(item);
+                      const hostSummary =
+                        buildAppCenterHostLifecycleSummary(item);
+                      return (
+                        <div
+                          key={item.appId}
+                          className={`group flex min-h-[188px] flex-col rounded-[10px] border bg-[color:var(--lime-surface)] p-4 text-left shadow-sm shadow-[color:var(--lime-shadow-color)] transition hover:border-[color:var(--lime-surface-border-strong)] hover:bg-[color:var(--lime-surface-hover)] hover:shadow-md ${
+                            selectedRow
+                              ? "border-emerald-300 ring-1 ring-emerald-200"
+                              : "border-[color:var(--lime-surface-border)]"
+                          }`}
+                          data-testid={`plugins-list-row-${item.appId}`}
+                        >
+                          <div className="flex min-w-0 items-start gap-3">
+                            {renderAppIcon(item)}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex min-w-0 items-start justify-between gap-3">
+                                <h2 className="min-w-0 truncate text-sm font-semibold text-[color:var(--lime-text-strong)]">
+                                  {item.title}
+                                </h2>
                                 <span
-                                  className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-600"
-                                  data-testid={`plugins-source-state-${item.appId}`}
-                                >
-                                  {t(item.sourceState.labelKey)}
-                                </span>
-                              </>
-                            ) : null}
-                          </div>
-                          {hostSummary ? (
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              <span
-                                className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-medium ${hostLifecycleClass(
-                                  hostSummary.tone,
-                                )}`}
-                                data-testid={`plugins-host-status-${item.appId}`}
-                              >
-                                {dynamicT(hostSummary.labelKey)}
-                              </span>
-                              {hostSummary.articleWorkspaceEnabled ? (
-                                <span
-                                  className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-600"
-                                  data-testid={`plugins-host-article-workspace-${item.appId}`}
+                                  className={`shrink-0 rounded-md border px-2 py-0.5 text-xs font-semibold ${appCenterStatusClass(
+                                    item.statusKind,
+                                  )}`}
                                 >
                                   {t(
-                                    "plugin.apps.center.host.articleWorkspace",
-                                    {
-                                      count: hostSummary.productObjectCount,
-                                    },
+                                    `plugin.apps.center.status.${item.statusKind}`,
                                   )}
+                                </span>
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                <span
+                                  className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-medium ${appCenterSourceClass(
+                                    item.sourceKind,
+                                  )}`}
+                                >
+                                  {t(
+                                    `plugin.apps.center.source.${item.sourceKind}`,
+                                  )}
+                                </span>
+                                {item.sourceState ? (
+                                  <>
+                                    <span
+                                      className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-600"
+                                      data-testid={`plugins-source-state-${item.appId}`}
+                                    >
+                                      {t(item.sourceState.labelKey)}
+                                    </span>
+                                  </>
+                                ) : null}
+                              </div>
+                              {hostSummary ? (
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <span
+                                    className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-medium ${hostLifecycleClass(
+                                      hostSummary.tone,
+                                    )}`}
+                                    data-testid={`plugins-host-status-${item.appId}`}
+                                  >
+                                    {dynamicT(hostSummary.labelKey)}
+                                  </span>
+                                  {hostSummary.articleWorkspaceEnabled ? (
+                                    <span
+                                      className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-600"
+                                      data-testid={`plugins-host-article-workspace-${item.appId}`}
+                                    >
+                                      {t(
+                                        "plugin.apps.center.host.articleWorkspace",
+                                        {
+                                          count: hostSummary.productObjectCount,
+                                        },
+                                      )}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+
+                          <p className="mt-3 line-clamp-2 min-h-[40px] text-sm leading-5 text-[color:var(--lime-text-muted)]">
+                            {item.description ||
+                              t("plugin.apps.center.descriptionFallback")}
+                          </p>
+                          {item.installedState ? (
+                            <span
+                              className="sr-only"
+                              data-testid={`plugins-installed-${item.appId}`}
+                            />
+                          ) : null}
+                          {item.registrationBlocked ? (
+                            <span
+                              className="sr-only"
+                              data-testid={`plugins-registration-${item.appId}`}
+                            />
+                          ) : null}
+
+                          <div className="mt-3 border-t border-[color:var(--lime-surface-border)] pt-3">
+                            <div className="text-xs text-[color:var(--lime-text-muted)]">
+                              <span className="font-medium text-[color:var(--lime-text)]">
+                                {item.installedVersion
+                                  ? t("plugin.apps.center.version.current", {
+                                      version: item.installedVersion,
+                                    })
+                                  : (item.cloudVersion ?? "-")}
+                              </span>
+                              {item.installedVersion &&
+                              item.cloudVersion &&
+                              item.installedVersion !== item.cloudVersion ? (
+                                <span className="mt-1 block text-amber-700">
+                                  {t("plugin.apps.center.version.cloud", {
+                                    version: item.cloudVersion,
+                                  })}
                                 </span>
                               ) : null}
                             </div>
-                          ) : null}
-                        </div>
-                      </div>
+                          </div>
 
-                      <p className="mt-3 line-clamp-2 min-h-[40px] text-sm leading-5 text-[color:var(--lime-text-muted)]">
-                        {item.description ||
-                          t("plugin.apps.center.descriptionFallback")}
-                      </p>
-                      {item.installedState ? (
-                        <span
-                          className="sr-only"
-                          data-testid={`plugins-installed-${item.appId}`}
-                        />
-                      ) : null}
-                      {item.registrationBlocked ? (
-                        <span
-                          className="sr-only"
-                          data-testid={`plugins-registration-${item.appId}`}
-                        />
-                      ) : null}
-
-                      <div className="mt-3 border-t border-[color:var(--lime-surface-border)] pt-3">
-                        <div className="text-xs text-[color:var(--lime-text-muted)]">
-                          <span className="font-medium text-[color:var(--lime-text)]">
-                            {item.installedVersion
-                              ? t("plugin.apps.center.version.current", {
-                                  version: item.installedVersion,
-                                })
-                              : (item.cloudVersion ?? "-")}
-                          </span>
-                          {item.installedVersion &&
-                          item.cloudVersion &&
-                          item.installedVersion !== item.cloudVersion ? (
-                            <span className="mt-1 block text-amber-700">
-                              {t("plugin.apps.center.version.cloud", {
-                                version: item.cloudVersion,
-                              })}
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-
-                      <div className="mt-auto flex items-center gap-2 pt-3">
-                        <button
-                          type="button"
-                          className="inline-flex h-8 flex-1 min-w-0 items-center justify-center gap-2 rounded-full bg-[color:var(--lime-text-strong)] px-3 text-xs font-semibold text-[color:var(--lime-surface)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={isPrimaryActionDisabled(item, busyAction)}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void handlePrimaryAction(item);
-                          }}
-                          data-testid={
-                            !item.installedState && item.cloudApp
-                              ? `plugins-install-cloud-${item.appId}`
-                              : canOneClickUpdate(item)
-                                ? `plugins-update-cloud-${item.appId}`
-                                : undefined
-                          }
-                        >
-                          {canOneClickUpdate(item) ? (
-                            <RefreshCw size={14} />
-                          ) : defaultEntry && item.installedState ? (
-                            <PlayCircle size={14} />
-                          ) : (
-                            <ShieldCheck size={14} />
-                          )}
-                          {t(getActionLabelKey(item))}
-                        </button>
-                        <button
-                          type="button"
-                          className="inline-flex h-8 shrink-0 items-center justify-center rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 text-xs font-semibold text-[color:var(--lime-text)] transition hover:bg-[color:var(--lime-surface-hover)]"
-                          onClick={() => openDetail(item.appId)}
-                          data-testid={`plugins-open-detail-${item.appId}`}
-                        >
-                          {t("plugin.apps.center.action.details")}
-                        </button>
-                      </div>
-
-                      {item.installedState &&
-                      item.cloudApp &&
-                      hasCloudUpdate(item) ? (
-                        <button
-                          type="button"
-                          className="mt-2 inline-flex h-8 w-full items-center justify-center rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 text-xs font-semibold text-[color:var(--lime-text)] transition hover:bg-[color:var(--lime-surface-hover)] disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={
-                            canOneClickUpdate(item)
-                              ? isPrimaryActionDisabled(item, busyAction) ||
-                                !defaultEntry
-                              : isCloudActionDisabled(item, busyAction)
-                          }
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            if (
-                              canOneClickUpdate(item) &&
-                              item.installedState &&
-                              defaultEntry
-                            ) {
-                              void handleLaunchEntry(
-                                item.installedState,
-                                defaultEntry,
-                              );
-                              return;
-                            }
-                            void handleCloudAction(item);
-                          }}
-                          data-testid={
-                            canOneClickUpdate(item)
-                              ? `plugins-launch-installed-${item.appId}`
-                              : `plugins-install-cloud-${item.appId}`
-                          }
-                        >
-                          {canOneClickUpdate(item)
-                            ? t("plugin.apps.center.action.open")
-                            : t(getCloudActionLabelKey(item))}
-                        </button>
-                      ) : null}
-                    </div>
-                  );
-                })}
-                {pagedItems.length === 0 ? (
-                  <div className="col-span-full flex min-h-[260px] items-center justify-center rounded-lg border border-dashed border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] px-4 py-8 text-center">
-                    <div>
-                      <p className="text-sm font-semibold text-[color:var(--lime-text-strong)]">
-                        {appItems.length === 0
-                          ? t("plugin.apps.center.empty.noApps")
-                          : t("plugin.apps.center.empty.noMatches")}
-                      </p>
-                      <p className="mt-2 text-sm text-[color:var(--lime-text-muted)]">
-                        {t("plugin.apps.center.empty.helper")}
-                      </p>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[color:var(--lime-surface-border)] pt-4">
-                <p className="text-xs text-[color:var(--lime-text-muted)]">
-                  {t("plugin.apps.center.pagination.summary", {
-                    page: currentPage,
-                    total: totalPages,
-                    count: filteredItems.length,
-                  })}
-                </p>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    className="inline-flex h-8 items-center gap-1 rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-4 text-sm font-medium text-[color:var(--lime-text)] transition hover:bg-[color:var(--lime-surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={currentPage <= 1}
-                    onClick={() =>
-                      setCurrentPage((page) => Math.max(1, page - 1))
-                    }
-                    data-testid="plugins-pagination-prev"
-                  >
-                    <ChevronLeft size={14} />
-                    {t("plugin.apps.center.pagination.previous")}
-                  </button>
-                  <button
-                    type="button"
-                    className="inline-flex h-8 items-center gap-1 rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-4 text-sm font-medium text-[color:var(--lime-text)] transition hover:bg-[color:var(--lime-surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={currentPage >= totalPages}
-                    onClick={() =>
-                      setCurrentPage((page) => Math.min(totalPages, page + 1))
-                    }
-                    data-testid="plugins-pagination-next"
-                  >
-                    {t("plugin.apps.center.pagination.next")}
-                    <ChevronRight size={14} />
-                  </button>
-                </div>
-              </div>
-            </main>
-          </section>
-
-          {selectedItem ? (
-            <div
-              className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4"
-              data-testid="plugins-detail-overlay"
-              onClick={closeDetail}
-            >
-              <section
-                role="dialog"
-                aria-modal="true"
-                className="lime-workbench-surface-scope flex max-h-[calc(100vh-3rem)] min-h-[420px] w-full max-w-[920px] flex-col overflow-hidden rounded-[18px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] text-[color:var(--lime-text)] shadow-2xl shadow-slate-950/20"
-                data-testid="plugins-detail"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
-                  <div className="space-y-4">
-                    <div className="flex items-start gap-4">
-                      {renderAppIcon(
-                        selectedItem,
-                        "size-20 shrink-0",
-                        `plugins-detail-icon-${selectedItem.appId}`,
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-semibold text-[color:var(--lime-text-muted)]">
-                          {t("plugin.apps.center.detail.title")}
-                        </p>
-                        <h2 className="mt-2 text-[22px] font-semibold text-[color:var(--lime-text-strong)]">
-                          {selectedItem.title}
-                        </h2>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <span
-                            className={`rounded-md border px-2.5 py-1 text-sm font-medium ${appCenterSourceClass(
-                              selectedItem.sourceKind,
-                            )}`}
-                          >
-                            {t(
-                              `plugin.apps.center.source.${selectedItem.sourceKind}`,
-                            )}
-                          </span>
-                          <span
-                            className={`rounded-md border px-2.5 py-1 text-sm font-medium ${appCenterStatusClass(
-                              selectedItem.statusKind,
-                            )}`}
-                          >
-                            {t(
-                              `plugin.apps.center.status.${selectedItem.statusKind}`,
-                            )}
-                          </span>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        className="inline-flex h-9 shrink-0 items-center justify-center rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 text-sm font-medium text-[color:var(--lime-text-muted)] shadow-none transition hover:bg-[color:var(--lime-surface-hover)] hover:text-[color:var(--lime-text-strong)]"
-                        aria-label={t("plugin.apps.center.detail.close")}
-                        title={t("plugin.apps.center.detail.close")}
-                        onClick={closeDetail}
-                        data-testid="plugins-close-detail"
-                      >
-                        <span>{t("plugin.apps.center.detail.close")}</span>
-                        <X className="ml-1.5" size={14} />
-                      </button>
-                    </div>
-                    <p className="text-sm leading-6 text-[color:var(--lime-text-muted)]">
-                      {selectedItem.description ||
-                        t("plugin.apps.center.descriptionFallback")}
-                    </p>
-                    <button
-                      type="button"
-                      className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-full bg-[color:var(--lime-text-strong)] px-3 text-sm font-semibold text-[color:var(--lime-surface)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 disabled:opacity-100"
-                      disabled={isPrimaryActionDisabled(
-                        selectedItem,
-                        busyAction,
-                      )}
-                      onClick={() => void handlePrimaryAction(selectedItem)}
-                      data-testid={`plugins-detail-primary-action-${selectedItem.appId}`}
-                    >
-                      {canOneClickUpdate(selectedItem) ? (
-                        <RefreshCw size={16} />
-                      ) : (
-                        <PlayCircle size={16} />
-                      )}
-                      {t(getDetailActionLabelKey(selectedItem))}
-                    </button>
-                    {selectedItem.installedState &&
-                    selectedItem.cloudApp &&
-                    hasCloudUpdate(selectedItem) ? (
-                      <button
-                        type="button"
-                        className="inline-flex h-10 w-full items-center justify-center rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 text-sm font-semibold text-[color:var(--lime-text)] transition hover:bg-[color:var(--lime-surface-hover)] disabled:cursor-not-allowed disabled:opacity-60"
-                        disabled={
-                          canOneClickUpdate(selectedItem)
-                            ? isPrimaryActionDisabled(
-                                selectedItem,
+                          <div className="mt-auto flex items-center gap-2 pt-3">
+                            <button
+                              type="button"
+                              className="inline-flex h-8 flex-1 min-w-0 items-center justify-center gap-2 rounded-full bg-[color:var(--lime-text-strong)] px-3 text-xs font-semibold text-[color:var(--lime-surface)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                              disabled={isPrimaryActionDisabled(
+                                item,
                                 busyAction,
-                              ) || !getDefaultEntry(selectedItem)
-                            : isCloudActionDisabled(selectedItem, busyAction)
-                        }
-                        onClick={() => {
-                          if (canOneClickUpdate(selectedItem)) {
-                            const entry = getDefaultEntry(selectedItem);
-                            if (selectedItem.installedState && entry) {
-                              void handleLaunchEntry(
-                                selectedItem.installedState,
-                                entry,
-                              );
-                              return;
-                            }
-                          }
-                          void handleCloudAction(selectedItem);
-                        }}
-                        data-testid={
-                          canOneClickUpdate(selectedItem)
-                            ? `plugins-launch-installed-${selectedItem.appId}`
-                            : `plugins-install-cloud-${selectedItem.appId}`
-                        }
-                      >
-                        {canOneClickUpdate(selectedItem)
-                          ? t("plugin.apps.center.action.open")
-                          : t("plugin.apps.center.action.update")}
-                      </button>
+                              )}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void handlePrimaryAction(item);
+                              }}
+                              data-testid={
+                                !item.installedState && item.cloudApp
+                                  ? `plugins-install-cloud-${item.appId}`
+                                  : canOneClickUpdate(item)
+                                    ? `plugins-update-cloud-${item.appId}`
+                                    : undefined
+                              }
+                            >
+                              {canOneClickUpdate(item) ? (
+                                <RefreshCw size={14} />
+                              ) : defaultEntry && item.installedState ? (
+                                <PlayCircle size={14} />
+                              ) : (
+                                <ShieldCheck size={14} />
+                              )}
+                              {t(getActionLabelKey(item))}
+                            </button>
+                            <button
+                              type="button"
+                              className="inline-flex h-8 shrink-0 items-center justify-center rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 text-xs font-semibold text-[color:var(--lime-text)] transition hover:bg-[color:var(--lime-surface-hover)]"
+                              onClick={() => openDetail(item.appId)}
+                              data-testid={`plugins-open-detail-${item.appId}`}
+                            >
+                              {t("plugin.apps.center.action.details")}
+                            </button>
+                          </div>
+
+                          {item.installedState &&
+                          item.cloudApp &&
+                          hasCloudUpdate(item) ? (
+                            <button
+                              type="button"
+                              className="mt-2 inline-flex h-8 w-full items-center justify-center rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 text-xs font-semibold text-[color:var(--lime-text)] transition hover:bg-[color:var(--lime-surface-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+                              disabled={
+                                canOneClickUpdate(item)
+                                  ? isPrimaryActionDisabled(item, busyAction) ||
+                                    !defaultEntry
+                                  : isCloudActionDisabled(item, busyAction)
+                              }
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                if (
+                                  canOneClickUpdate(item) &&
+                                  item.installedState &&
+                                  defaultEntry
+                                ) {
+                                  void handleLaunchEntry(
+                                    item.installedState,
+                                    defaultEntry,
+                                  );
+                                  return;
+                                }
+                                void handleCloudAction(item);
+                              }}
+                              data-testid={
+                                canOneClickUpdate(item)
+                                  ? `plugins-launch-installed-${item.appId}`
+                                  : `plugins-install-cloud-${item.appId}`
+                              }
+                            >
+                              {canOneClickUpdate(item)
+                                ? t("plugin.apps.center.action.open")
+                                : t(getCloudActionLabelKey(item))}
+                            </button>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                    {pagedItems.length === 0 ? (
+                      <div className="col-span-full flex min-h-[260px] items-center justify-center rounded-lg border border-dashed border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] px-4 py-8 text-center">
+                        <div>
+                          <p className="text-sm font-semibold text-[color:var(--lime-text-strong)]">
+                            {appItems.length === 0
+                              ? t("plugin.apps.center.empty.noApps")
+                              : t("plugin.apps.center.empty.noMatches")}
+                          </p>
+                          <p className="mt-2 text-sm text-[color:var(--lime-text-muted)]">
+                            {t("plugin.apps.center.empty.helper")}
+                          </p>
+                        </div>
+                      </div>
                     ) : null}
                   </div>
 
-                  {selectedItem.registrationBlocked && selectedItem.cloudApp
-                    ? renderRegistrationForm(selectedItem.cloudApp)
-                    : null}
-
-                  {(() => {
-                    const hostSummary =
-                      buildAppCenterHostLifecycleSummary(selectedItem);
-                    if (!hostSummary) {
-                      return null;
-                    }
-                    return (
-                      <section
-                        className="space-y-3 rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] p-3"
-                        data-testid="plugins-host-lifecycle"
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[color:var(--lime-surface-border)] pt-4">
+                    <p className="text-xs text-[color:var(--lime-text-muted)]">
+                      {t("plugin.apps.center.pagination.summary", {
+                        page: currentPage,
+                        total: totalPages,
+                        count: filteredItems.length,
+                      })}
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        className="inline-flex h-8 items-center gap-1 rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-4 text-sm font-medium text-[color:var(--lime-text)] transition hover:bg-[color:var(--lime-surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={currentPage <= 1}
+                        onClick={() =>
+                          setCurrentPage((page) => Math.max(1, page - 1))
+                        }
+                        data-testid="plugins-pagination-prev"
                       >
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 text-sm font-semibold text-[color:var(--lime-text-strong)]">
-                            <ShieldCheck size={16} />
-                            {t("plugin.apps.center.host.title")}
-                          </div>
-                          <span
-                            className={`rounded-md border px-2.5 py-1 text-xs font-medium ${hostLifecycleClass(
-                              hostSummary.tone,
-                            )}`}
-                            data-testid={`plugins-detail-host-status-${selectedItem.appId}`}
-                          >
-                            {dynamicT(hostSummary.labelKey)}
-                          </span>
+                        <ChevronLeft size={14} />
+                        {t("plugin.apps.center.pagination.previous")}
+                      </button>
+                      <button
+                        type="button"
+                        className="inline-flex h-8 items-center gap-1 rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-4 text-sm font-medium text-[color:var(--lime-text)] transition hover:bg-[color:var(--lime-surface-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={currentPage >= totalPages}
+                        onClick={() =>
+                          setCurrentPage((page) =>
+                            Math.min(totalPages, page + 1),
+                          )
+                        }
+                        data-testid="plugins-pagination-next"
+                      >
+                        {t("plugin.apps.center.pagination.next")}
+                        <ChevronRight size={14} />
+                      </button>
+                    </div>
+                  </div>
+                </main>
+              </section>
+            </>
+          )}
+
+          {selectedItem ? (
+            <main
+              className="mt-5 grid items-start gap-6 xl:grid-cols-[minmax(0,760px)_280px]"
+              data-testid="plugins-detail"
+            >
+              <div className="min-w-0 space-y-5">
+                <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-[color:var(--lime-text-muted)]">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span>{t("plugin.apps.center.title")}</span>
+                    <ChevronRight size={14} />
+                    <span className="truncate font-medium text-[color:var(--lime-text-strong)]">
+                      {selectedItem.title}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 text-xs font-semibold text-[color:var(--lime-text)] transition hover:bg-[color:var(--lime-surface-hover)]"
+                    aria-label={t("plugin.apps.center.detail.backToList")}
+                    title={t("plugin.apps.center.detail.backToList")}
+                    onClick={closeDetail}
+                    data-testid="plugins-close-detail"
+                  >
+                    <ChevronLeft size={14} />
+                    {t("plugin.apps.center.detail.backToList")}
+                  </button>
+                </div>
+
+                <section className="space-y-4">
+                  <div className="flex items-start gap-4">
+                    {renderAppIcon(
+                      selectedItem,
+                      "size-20 shrink-0",
+                      `plugins-detail-icon-${selectedItem.appId}`,
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-[color:var(--lime-text-muted)]">
+                        {t("plugin.apps.center.detail.title")}
+                      </p>
+                      <h2 className="mt-2 text-[22px] font-semibold text-[color:var(--lime-text-strong)]">
+                        {selectedItem.title}
+                      </h2>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <span
+                          className={`rounded-md border px-2.5 py-1 text-sm font-medium ${appCenterSourceClass(
+                            selectedItem.sourceKind,
+                          )}`}
+                        >
+                          {t(
+                            `plugin.apps.center.source.${selectedItem.sourceKind}`,
+                          )}
+                        </span>
+                        <span
+                          className={`rounded-md border px-2.5 py-1 text-sm font-medium ${appCenterStatusClass(
+                            selectedItem.statusKind,
+                          )}`}
+                        >
+                          {t(
+                            `plugin.apps.center.status.${selectedItem.statusKind}`,
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-sm leading-6 text-[color:var(--lime-text-muted)]">
+                    {selectedItem.description ||
+                      t("plugin.apps.center.descriptionFallback")}
+                  </p>
+                  <button
+                    type="button"
+                    className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-full bg-[color:var(--lime-text-strong)] px-3 text-sm font-semibold text-[color:var(--lime-surface)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 disabled:opacity-100"
+                    disabled={isPrimaryActionDisabled(selectedItem, busyAction)}
+                    onClick={() => void handlePrimaryAction(selectedItem)}
+                    data-testid={`plugins-detail-primary-action-${selectedItem.appId}`}
+                  >
+                    {canOneClickUpdate(selectedItem) ? (
+                      <RefreshCw size={16} />
+                    ) : (
+                      <PlayCircle size={16} />
+                    )}
+                    {t(getDetailActionLabelKey(selectedItem))}
+                  </button>
+                  {selectedItem.installedState &&
+                  selectedItem.cloudApp &&
+                  hasCloudUpdate(selectedItem) ? (
+                    <button
+                      type="button"
+                      className="inline-flex h-10 w-full items-center justify-center rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 text-sm font-semibold text-[color:var(--lime-text)] transition hover:bg-[color:var(--lime-surface-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={
+                        canOneClickUpdate(selectedItem)
+                          ? isPrimaryActionDisabled(selectedItem, busyAction) ||
+                            !getDefaultEntry(selectedItem)
+                          : isCloudActionDisabled(selectedItem, busyAction)
+                      }
+                      onClick={() => {
+                        if (canOneClickUpdate(selectedItem)) {
+                          const entry = getDefaultEntry(selectedItem);
+                          if (selectedItem.installedState && entry) {
+                            void handleLaunchEntry(
+                              selectedItem.installedState,
+                              entry,
+                            );
+                            return;
+                          }
+                        }
+                        void handleCloudAction(selectedItem);
+                      }}
+                      data-testid={
+                        canOneClickUpdate(selectedItem)
+                          ? `plugins-launch-installed-${selectedItem.appId}`
+                          : `plugins-install-cloud-${selectedItem.appId}`
+                      }
+                    >
+                      {canOneClickUpdate(selectedItem)
+                        ? t("plugin.apps.center.action.open")
+                        : t("plugin.apps.center.action.update")}
+                    </button>
+                  ) : null}
+                </section>
+
+                {selectedItem.registrationBlocked && selectedItem.cloudApp
+                  ? renderRegistrationForm(selectedItem.cloudApp)
+                  : null}
+
+                {(() => {
+                  const hostSummary =
+                    buildAppCenterHostLifecycleSummary(selectedItem);
+                  if (!hostSummary) {
+                    return null;
+                  }
+                  return (
+                    <section
+                      className="space-y-3 rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] p-3"
+                      data-testid="plugins-host-lifecycle"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-[color:var(--lime-text-strong)]">
+                          <ShieldCheck size={16} />
+                          {t("plugin.apps.center.host.title")}
                         </div>
-                        <div className="grid gap-2 text-xs text-[color:var(--lime-text-muted)] sm:grid-cols-2">
-                          <div className="rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 py-2">
-                            {t("plugin.apps.center.host.rightSurface", {
-                              tabs: hostSummary.supportedTabCount,
-                              tab: hostSummary.defaultTab ?? "-",
+                        <span
+                          className={`rounded-md border px-2.5 py-1 text-xs font-medium ${hostLifecycleClass(
+                            hostSummary.tone,
+                          )}`}
+                          data-testid={`plugins-detail-host-status-${selectedItem.appId}`}
+                        >
+                          {dynamicT(hostSummary.labelKey)}
+                        </span>
+                      </div>
+                      <div className="grid gap-2 text-xs text-[color:var(--lime-text-muted)] sm:grid-cols-2">
+                        <div className="rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 py-2">
+                          {t("plugin.apps.center.host.rightSurface", {
+                            tabs: hostSummary.supportedTabCount,
+                            tab: hostSummary.defaultTab ?? "-",
+                          })}
+                        </div>
+                        <div className="rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 py-2">
+                          {t(
+                            hostSummary.blockerCount > 0
+                              ? "plugin.apps.center.host.blockers"
+                              : "plugin.apps.center.host.noBlockers",
+                            {
+                              count: hostSummary.blockerCount,
+                            },
+                          )}
+                        </div>
+                        {hostSummary.articleWorkspaceEnabled ? (
+                          <div className="rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 py-2 sm:col-span-2">
+                            {t("plugin.apps.center.host.articleWorkspace", {
+                              count: hostSummary.productObjectCount,
                             })}
                           </div>
-                          <div className="rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 py-2">
-                            {t(
-                              hostSummary.blockerCount > 0
-                                ? "plugin.apps.center.host.blockers"
-                                : "plugin.apps.center.host.noBlockers",
-                              {
-                                count: hostSummary.blockerCount,
-                              },
-                            )}
-                          </div>
-                          {hostSummary.articleWorkspaceEnabled ? (
-                            <div className="rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 py-2 sm:col-span-2">
-                              {t("plugin.apps.center.host.articleWorkspace", {
-                                count: hostSummary.productObjectCount,
-                              })}
-                            </div>
-                          ) : null}
-                        </div>
-                        <PluginReadinessIssueSummary
-                          summary={hostSummary}
-                          appId={selectedItem.appId}
-                        />
-                      </section>
-                    );
-                  })()}
-
-                  {selectedItem.installedState ? (
-                    <section className="space-y-3">
-                      <div className="flex items-center gap-2 text-sm font-semibold text-[color:var(--lime-text-strong)]">
-                        <Layers3 size={16} />
-                        {t("plugin.apps.center.detail.commonEntries")}
+                        ) : null}
                       </div>
-                      {selectedItem.entries.length > 0 ? (
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          {selectedItem.entries.slice(0, 5).map((entry) => (
+                      <PluginReadinessIssueSummary
+                        summary={hostSummary}
+                        appId={selectedItem.appId}
+                      />
+                    </section>
+                  );
+                })()}
+
+                {(() => {
+                  const activationEntries =
+                    buildDetailActivationEntries(selectedItem);
+                  if (activationEntries.length === 0) {
+                    return null;
+                  }
+                  return (
+                    <section
+                      className="space-y-3"
+                      data-testid="plugins-detail-agents"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <h3 className="text-sm font-semibold text-[color:var(--lime-text-strong)]">
+                          {t("plugin.apps.center.detail.agents")}
+                        </h3>
+                        <span className="text-xs text-[color:var(--lime-text-muted)]">
+                          {activationEntries.length}
+                        </span>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {activationEntries.map((entry) => (
+                          <button
+                            key={entry.key}
+                            type="button"
+                            className="rounded-[12px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 py-3 text-left transition hover:border-[color:var(--lime-surface-border-strong)] hover:bg-[color:var(--lime-surface-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={
+                              !selectedItem.installedState ||
+                              selectedItem.installedState.disabled ||
+                              Boolean(busyAction)
+                            }
+                            onClick={() => {
+                              if (!selectedItem.installedState) {
+                                return;
+                              }
+                              handleLaunchActivationDeclaration(
+                                selectedItem.installedState,
+                                entry,
+                              );
+                            }}
+                            data-testid={`plugins-detail-agent-${entry.key}`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-[color:var(--lime-text-strong)]">
+                                  {entry.title}
+                                </p>
+                                {entry.meta ? (
+                                  <p className="mt-1 truncate text-xs text-[color:var(--lime-text-muted)]">
+                                    {entry.meta}
+                                  </p>
+                                ) : null}
+                              </div>
+                              <PlayCircle
+                                className="shrink-0 text-emerald-600"
+                                size={16}
+                              />
+                            </div>
+                            {entry.aliases?.length ? (
+                              <div className="mt-3 flex flex-wrap gap-1.5">
+                                {entry.aliases.map((alias) => (
+                                  <span
+                                    key={alias}
+                                    className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700"
+                                  >
+                                    {alias}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+                  );
+                })()}
+
+                {(() => {
+                  const subagents = buildDetailSubagents(selectedItem);
+                  if (subagents.length === 0) {
+                    return null;
+                  }
+                  return (
+                    <section
+                      className="space-y-3"
+                      data-testid="plugins-detail-subagents"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <h3 className="text-sm font-semibold text-[color:var(--lime-text-strong)]">
+                          {t("plugin.apps.center.detail.subagents")}
+                        </h3>
+                        <span className="text-xs text-[color:var(--lime-text-muted)]">
+                          {subagents.length}
+                        </span>
+                      </div>
+                      <div className="space-y-2">
+                        {subagents.map((subagent) => (
+                          <div
+                            key={subagent.key}
+                            className="rounded-[12px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 py-3"
+                            data-testid={`plugins-detail-subagent-${subagent.key}`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-[color:var(--lime-text-strong)]">
+                                  {subagent.title}
+                                </p>
+                                {subagent.description ? (
+                                  <p className="mt-1 line-clamp-2 text-xs leading-5 text-[color:var(--lime-text-muted)]">
+                                    {subagent.description}
+                                  </p>
+                                ) : null}
+                              </div>
+                              {subagent.required ? (
+                                <span className="shrink-0 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                                  {t("plugin.apps.center.detail.required")}
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  );
+                })()}
+
+                <section
+                  className="space-y-3"
+                  data-testid="plugins-detail-authorizations"
+                >
+                  <h3 className="text-sm font-semibold text-[color:var(--lime-text-strong)]">
+                    {t("plugin.apps.center.detail.authorizations")}
+                  </h3>
+                  {getDetailPermissions(selectedItem).length ? (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {getDetailPermissions(selectedItem).map((permission) => (
+                        <div
+                          key={permission.key}
+                          className="rounded-[12px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 py-3"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-[color:var(--lime-text-strong)]">
+                                {permission.key}
+                              </p>
+                              {permission.reason ? (
+                                <p className="mt-1 line-clamp-2 text-xs leading-5 text-[color:var(--lime-text-muted)]">
+                                  {permission.reason}
+                                </p>
+                              ) : null}
+                            </div>
+                            <span
+                              className={`shrink-0 rounded-md border px-2 py-0.5 text-xs font-medium ${
+                                permission.required
+                                  ? "border-amber-200 bg-amber-50 text-amber-700"
+                                  : "border-slate-200 bg-slate-50 text-slate-600"
+                              }`}
+                            >
+                              {permission.required
+                                ? t("plugin.apps.center.detail.required")
+                                : t("plugin.apps.center.detail.optional")}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-[12px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] px-3 py-3 text-sm text-[color:var(--lime-text-muted)]">
+                      {selectedItem.registrationBlocked
+                        ? t("plugin.apps.center.detail.authorizationRequired")
+                        : t("plugin.apps.center.detail.noAuthorizations")}
+                    </div>
+                  )}
+                </section>
+
+                {(() => {
+                  const skills = buildDetailSkills(selectedItem);
+                  if (skills.length === 0) {
+                    return null;
+                  }
+                  return (
+                    <section
+                      className="space-y-3"
+                      data-testid="plugins-detail-skills"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <h3 className="text-sm font-semibold text-[color:var(--lime-text-strong)]">
+                          {t("plugin.apps.center.detail.skills")}
+                        </h3>
+                        <span className="text-xs text-[color:var(--lime-text-muted)]">
+                          {skills.length}
+                        </span>
+                      </div>
+                      <div className="space-y-2">
+                        {skills.map((skill) => (
+                          <div
+                            key={skill.key}
+                            className="rounded-[12px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 py-3"
+                            data-testid={`plugins-detail-skill-${skill.key}`}
+                          >
+                            <span className="min-w-0">
+                              <span className="block truncate text-sm font-semibold text-[color:var(--lime-text-strong)]">
+                                {skill.title}
+                              </span>
+                              {skill.description ? (
+                                <span className="mt-1 block line-clamp-2 text-xs leading-5 text-[color:var(--lime-text-muted)]">
+                                  {skill.description}
+                                </span>
+                              ) : null}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  );
+                })()}
+
+                {selectedItem.installedState ? (
+                  <section className="space-y-3">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-[color:var(--lime-text-strong)]">
+                      <Layers3 size={16} />
+                      {t("plugin.apps.center.detail.commonEntries")}
+                    </div>
+                    {getDetailCommonEntries(selectedItem).length > 0 ? (
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {getDetailCommonEntries(selectedItem)
+                          .slice(0, 5)
+                          .map((entry) => (
                             <button
                               key={entry.key}
                               type="button"
@@ -1787,351 +2366,406 @@ export function PluginsPage({
                               />
                             </button>
                           ))}
-                        </div>
-                      ) : (
-                        <p className="rounded-lg border border-dashed border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] p-4 text-sm text-[color:var(--lime-text-muted)]">
-                          {t("plugin.apps.center.detail.noEntries")}
-                        </p>
-                      )}
-                    </section>
-                  ) : null}
-
-                  {mountedUi && mountedUi.appId === selectedItem.appId ? (
-                    <section
-                      className="sr-only"
-                      data-testid="plugins-mounted-ui"
-                    >
-                      {t("plugin.apps.surface.title", {
-                        title: mountedUi.title,
-                      })}
-                      {mountedUi.route ?? mountedUi.entryKey}
-                    </section>
-                  ) : null}
-
-                  {launchSummary ? (
-                    <div
-                      role="status"
-                      className="rounded-lg border border-[color:var(--lime-info-border)] bg-[color:var(--lime-info-soft)] px-4 py-3 text-sm font-medium text-[color:var(--lime-text-strong)]"
-                      data-testid="plugins-launch-summary"
-                    >
-                      {launchSummary}
-                    </div>
-                  ) : null}
-
-                  {selected ? (
-                    <section
-                      className="space-y-3 rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] p-3"
-                      data-testid="plugins-lifecycle-actions"
-                    >
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        <button
-                          type="button"
-                          className="inline-flex items-center justify-center gap-2 rounded-full border border-amber-200 bg-[color:var(--lime-surface)] px-3 py-2 text-xs font-medium text-amber-700 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={selected.disabled || Boolean(busyAction)}
-                          onClick={() => void handleSetDisabled(selected, true)}
-                          data-testid="plugins-disable"
-                        >
-                          <Ban size={16} />
-                          {t("plugin.apps.action.disable")}
-                        </button>
-                        <button
-                          type="button"
-                          className="inline-flex items-center justify-center gap-2 rounded-full border border-emerald-200 bg-[color:var(--lime-surface)] px-3 py-2 text-xs font-medium text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={!selected.disabled || Boolean(busyAction)}
-                          onClick={() =>
-                            void handleSetDisabled(selected, false)
-                          }
-                          data-testid="plugins-enable"
-                        >
-                          <CheckCircle2 size={16} />
-                          {t("plugin.apps.action.enable")}
-                        </button>
-                        <button
-                          type="button"
-                          className="rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 py-2 text-left text-xs font-medium text-[color:var(--lime-text)] transition hover:bg-[color:var(--lime-surface-hover)] disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={Boolean(busyAction)}
-                          onClick={() =>
-                            void handlePreviewUninstall(selected, "keep-data")
-                          }
-                          data-testid="plugins-uninstall-keep-data"
-                        >
-                          <span className="inline-flex items-center gap-2">
-                            <Archive size={16} />
-                            {t("plugin.apps.action.uninstallKeepData")}
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          className="rounded-full border border-rose-200 bg-[color:var(--lime-surface)] px-3 py-2 text-left text-xs font-medium text-rose-800 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={Boolean(busyAction)}
-                          onClick={() =>
-                            void handlePreviewUninstall(selected, "delete-data")
-                          }
-                          data-testid="plugins-uninstall-delete-data"
-                        >
-                          <span className="inline-flex items-center gap-2">
-                            <Archive size={16} />
-                            {t("plugin.apps.action.uninstallDeleteData")}
-                          </span>
-                        </button>
                       </div>
-                      {uninstallPreview ? (
-                        <div
-                          className="rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] p-3"
-                          data-testid="plugins-uninstall-preview"
-                        >
-                          <p className="text-sm font-semibold text-[color:var(--lime-text-strong)]">
-                            {t("plugin.apps.uninstallPreview.title")}
-                          </p>
-                          <p className="mt-2 text-sm text-[color:var(--lime-text-muted)]">
-                            {t("plugin.apps.uninstallPreview.summary", {
-                              deleted: uninstallPreview.deletedTargetCount,
-                              retained: uninstallPreview.retainedTargetCount,
-                            })}
-                          </p>
-                          {activeUninstallDescriptor ? (
-                            <div
-                              className="mt-3 space-y-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3"
-                              data-testid="plugins-cleanup-evidence"
-                            >
-                              <p className="text-sm text-emerald-800">
-                                {t("plugin.lab.manager.evidence.summary", {
-                                  deleted:
-                                    activeUninstallDescriptor.cleanupEvidence
-                                      .deletedTargetCount,
-                                  retained:
-                                    activeUninstallDescriptor.cleanupEvidence
-                                      .retainedTargetCount,
-                                })}
-                              </p>
-                              <pre
-                                className="max-h-44 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-slate-950 p-3 text-xs leading-5 text-emerald-50"
-                                data-testid="plugins-cleanup-evidence-json"
-                              >
-                                {JSON.stringify(
-                                  activeUninstallDescriptor.cleanupEvidence,
-                                  null,
-                                  2,
-                                )}
-                              </pre>
-                              <div
-                                className="grid gap-2 sm:grid-cols-2"
-                                data-testid="plugins-residual-audit"
-                              >
-                                <span className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs text-amber-700">
-                                  {t(
-                                    "plugin.lab.manager.evidence.residual.pendingDeletion",
-                                    {
-                                      count:
-                                        activeUninstallDescriptor.residualAudit
-                                          .pendingDeletionCount,
-                                    },
-                                  )}
-                                </span>
-                              </div>
-                            </div>
-                          ) : null}
-                          {activeUninstallDescriptor?.mode === "delete-data" ? (
-                            <div
-                              className="mt-3 space-y-3 rounded-lg border border-rose-200 bg-rose-50 p-3"
-                              data-testid="plugins-delete-data-confirmation"
-                            >
-                              <div className="space-y-1">
-                                <p className="text-sm font-semibold text-rose-900">
-                                  {t(
-                                    "plugin.apps.uninstallPreview.deleteDataGate.title",
-                                  )}
-                                </p>
-                                <p className="text-sm text-rose-800">
-                                  {t(
-                                    "plugin.apps.uninstallPreview.deleteDataGate.description",
-                                  )}
-                                </p>
-                                {deleteDataExecutionBlocked ? (
-                                  <div
-                                    className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2"
-                                    data-testid="plugins-delete-data-current-phase-gate"
-                                  >
-                                    <p className="text-xs text-amber-800">
-                                      {t(
-                                        "plugin.apps.uninstallPreview.deleteDataGate.dryRunOnly",
-                                      )}
-                                    </p>
-                                    <button
-                                      type="button"
-                                      className="inline-flex items-center gap-2 rounded-full border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                      disabled={Boolean(busyAction)}
-                                      onClick={() =>
-                                        void handlePreviewUninstall(
-                                          selected,
-                                          "keep-data",
-                                        )
-                                      }
-                                      data-testid="plugins-uninstall-switch-keep-data"
-                                    >
-                                      <Archive size={14} />
-                                      {t(
-                                        "plugin.apps.action.uninstallKeepData",
-                                      )}
-                                    </button>
-                                  </div>
-                                ) : null}
-                              </div>
-                              <div className="rounded-lg border border-rose-200 bg-[color:var(--lime-surface)] px-3 py-2">
-                                <span className="text-xs font-medium text-rose-700">
-                                  {t(
-                                    "plugin.apps.uninstallPreview.deleteDataGate.phraseLabel",
-                                  )}
-                                </span>
-                                <code
-                                  className="mt-1 block break-all rounded-md bg-slate-950 px-2 py-1.5 text-xs text-rose-50"
-                                  data-testid="plugins-delete-data-confirmation-phrase"
-                                >
-                                  {deleteDataConfirmationPhrase}
-                                </code>
-                              </div>
-                              <input
-                                value={deleteDataConfirmationInput}
-                                onChange={(event) =>
-                                  setDeleteDataConfirmationInput(
-                                    event.target.value,
-                                  )
-                                }
-                                className="w-full rounded-full border border-rose-200 bg-[color:var(--lime-surface)] px-3 py-2 text-sm text-[color:var(--lime-text-strong)] outline-none transition placeholder:text-[color:var(--lime-text-muted)] focus:border-rose-400 focus:ring-2 focus:ring-rose-100"
-                                placeholder={t(
-                                  "plugin.apps.uninstallPreview.deleteDataGate.inputPlaceholder",
-                                )}
-                                aria-label={t(
-                                  "plugin.apps.uninstallPreview.deleteDataGate.inputLabel",
-                                )}
-                                disabled={deleteDataExecutionBlocked}
-                                data-testid="plugins-delete-data-confirmation-input"
-                              />
-                              <p
-                                className={`text-xs ${
-                                  deleteDataExecutionBlocked
-                                    ? "text-amber-700"
-                                    : deleteDataConfirmationMatches
-                                      ? "text-emerald-700"
-                                      : "text-rose-700"
-                                }`}
-                                data-testid="plugins-delete-data-confirmation-status"
-                              >
-                                {deleteDataExecutionBlocked
-                                  ? t(
-                                      "plugin.apps.uninstallPreview.deleteDataGate.dryRunOnly",
-                                    )
-                                  : deleteDataConfirmationMatches
-                                    ? t(
-                                        "plugin.apps.uninstallPreview.deleteDataGate.ready",
-                                      )
-                                    : t(
-                                        "plugin.apps.uninstallPreview.deleteDataGate.mismatch",
-                                      )}
-                              </p>
-                            </div>
-                          ) : null}
-                          <button
-                            type="button"
-                            className="mt-3 inline-flex items-center gap-2 rounded-full bg-rose-700 px-3 py-2 text-xs font-medium text-white transition hover:bg-rose-800 disabled:cursor-not-allowed disabled:opacity-60"
-                            disabled={
-                              Boolean(busyAction) ||
-                              deleteDataExecutionBlocked ||
-                              !deleteDataConfirmationMatches
-                            }
-                            onClick={() => void handleConfirmUninstall()}
-                            data-testid="plugins-uninstall-confirm"
-                          >
-                            <Archive size={16} />
-                            {deleteDataExecutionBlocked
-                              ? t("plugin.apps.action.deleteDataUnavailable")
-                              : t("plugin.apps.action.confirmUninstall")}
-                          </button>
-                        </div>
-                      ) : null}
-                    </section>
-                  ) : null}
+                    ) : (
+                      <p className="rounded-lg border border-dashed border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] p-4 text-sm text-[color:var(--lime-text-muted)]">
+                        {t("plugin.apps.center.detail.noEntries")}
+                      </p>
+                    )}
+                  </section>
+                ) : null}
 
-                  <section>
-                    <button
-                      type="button"
-                      className="flex w-full items-center justify-between gap-3 rounded-[10px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 py-3 text-left text-sm font-semibold text-[color:var(--lime-text-strong)] transition hover:bg-[color:var(--lime-surface-hover)]"
-                      onClick={() => setMoreInfoOpen((open) => !open)}
-                      data-testid="plugins-more-info"
-                    >
-                      {t("plugin.apps.center.detail.moreInfo")}
-                      <span className="text-xs font-medium text-[color:var(--lime-text-muted)]">
-                        {moreInfoOpen
-                          ? t("plugin.apps.center.detail.collapse")
-                          : t("plugin.apps.center.detail.expand")}
-                      </span>
-                    </button>
-                    {moreInfoOpen ? (
-                      <div
-                        className="mt-2 space-y-3 rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] p-3 text-xs text-[color:var(--lime-text-muted)]"
-                        data-testid="plugins-more-info-content"
+                {mountedUi && mountedUi.appId === selectedItem.appId ? (
+                  <section className="sr-only" data-testid="plugins-mounted-ui">
+                    {t("plugin.apps.surface.title", {
+                      title: mountedUi.title,
+                    })}
+                    {mountedUi.route ?? mountedUi.entryKey}
+                  </section>
+                ) : null}
+
+                {launchSummary ? (
+                  <div
+                    role="status"
+                    className="rounded-lg border border-[color:var(--lime-info-border)] bg-[color:var(--lime-info-soft)] px-4 py-3 text-sm font-medium text-[color:var(--lime-text-strong)]"
+                    data-testid="plugins-launch-summary"
+                  >
+                    {launchSummary}
+                  </div>
+                ) : null}
+
+                {selected ? (
+                  <section
+                    className="space-y-3 rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] p-3"
+                    data-testid="plugins-lifecycle-actions"
+                  >
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <button
+                        type="button"
+                        className="inline-flex items-center justify-center gap-2 rounded-full border border-amber-200 bg-[color:var(--lime-surface)] px-3 py-2 text-xs font-medium text-amber-700 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={selected.disabled || Boolean(busyAction)}
+                        onClick={() => void handleSetDisabled(selected, true)}
+                        data-testid="plugins-disable"
                       >
-                        <p className="break-all">
-                          {t("plugin.apps.center.detail.appId")}:{" "}
-                          {selectedItem.appId}
+                        <Ban size={16} />
+                        {t("plugin.apps.action.disable")}
+                      </button>
+                      <button
+                        type="button"
+                        className="inline-flex items-center justify-center gap-2 rounded-full border border-emerald-200 bg-[color:var(--lime-surface)] px-3 py-2 text-xs font-medium text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={!selected.disabled || Boolean(busyAction)}
+                        onClick={() => void handleSetDisabled(selected, false)}
+                        data-testid="plugins-enable"
+                      >
+                        <CheckCircle2 size={16} />
+                        {t("plugin.apps.action.enable")}
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 py-2 text-left text-xs font-medium text-[color:var(--lime-text)] transition hover:bg-[color:var(--lime-surface-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={Boolean(busyAction)}
+                        onClick={() =>
+                          void handlePreviewUninstall(selected, "keep-data")
+                        }
+                        data-testid="plugins-uninstall-keep-data"
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <Archive size={16} />
+                          {t("plugin.apps.action.uninstallKeepData")}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-full border border-rose-200 bg-[color:var(--lime-surface)] px-3 py-2 text-left text-xs font-medium text-rose-800 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={Boolean(busyAction)}
+                        onClick={() =>
+                          void handlePreviewUninstall(selected, "delete-data")
+                        }
+                        data-testid="plugins-uninstall-delete-data"
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <Archive size={16} />
+                          {t("plugin.apps.action.uninstallDeleteData")}
+                        </span>
+                      </button>
+                    </div>
+                    {uninstallPreview ? (
+                      <div
+                        className="rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] p-3"
+                        data-testid="plugins-uninstall-preview"
+                      >
+                        <p className="text-sm font-semibold text-[color:var(--lime-text-strong)]">
+                          {t("plugin.apps.uninstallPreview.title")}
                         </p>
-                        <div className="rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] p-3">
-                          <p className="text-sm font-semibold text-[color:var(--lime-text-strong)]">
-                            {t("plugin.apps.center.detail.sourceVersion")}
-                          </p>
-                          <div className="mt-3 grid gap-2 text-sm text-[color:var(--lime-text-muted)]">
-                            <div className="flex items-center justify-between gap-3">
-                              <span>
+                        <p className="mt-2 text-sm text-[color:var(--lime-text-muted)]">
+                          {t("plugin.apps.uninstallPreview.summary", {
+                            deleted: uninstallPreview.deletedTargetCount,
+                            retained: uninstallPreview.retainedTargetCount,
+                          })}
+                        </p>
+                        {activeUninstallDescriptor ? (
+                          <div
+                            className="mt-3 space-y-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3"
+                            data-testid="plugins-cleanup-evidence"
+                          >
+                            <p className="text-sm text-emerald-800">
+                              {t("plugin.lab.manager.evidence.summary", {
+                                deleted:
+                                  activeUninstallDescriptor.cleanupEvidence
+                                    .deletedTargetCount,
+                                retained:
+                                  activeUninstallDescriptor.cleanupEvidence
+                                    .retainedTargetCount,
+                              })}
+                            </p>
+                            <pre
+                              className="max-h-44 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-slate-950 p-3 text-xs leading-5 text-emerald-50"
+                              data-testid="plugins-cleanup-evidence-json"
+                            >
+                              {JSON.stringify(
+                                activeUninstallDescriptor.cleanupEvidence,
+                                null,
+                                2,
+                              )}
+                            </pre>
+                            <div
+                              className="grid gap-2 sm:grid-cols-2"
+                              data-testid="plugins-residual-audit"
+                            >
+                              <span className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs text-amber-700">
                                 {t(
-                                  "plugin.apps.center.detail.installedVersion",
+                                  "plugin.lab.manager.evidence.residual.pendingDeletion",
+                                  {
+                                    count:
+                                      activeUninstallDescriptor.residualAudit
+                                        .pendingDeletionCount,
+                                  },
                                 )}
-                              </span>
-                              <span className="font-medium text-[color:var(--lime-text-strong)]">
-                                {selectedItem.installedVersion ?? "-"}
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between gap-3">
-                              <span>
-                                {t("plugin.apps.center.detail.cloudVersion")}
-                              </span>
-                              <span className="font-medium text-[color:var(--lime-text-strong)]">
-                                {selectedItem.cloudVersion ?? "-"}
                               </span>
                             </div>
                           </div>
-                        </div>
-                        {selectedItem.installedState ? (
-                          <>
-                            <p className="break-all">
-                              {t("plugin.apps.installReview.source", {
-                                kind: selectedItem.installedState.identity
-                                  .sourceKind,
-                              })}
-                            </p>
-                            <p className="break-all">
-                              {selectedItem.installedState.identity.sourceUri}
-                            </p>
-                            <p className="break-all">
-                              {t("plugin.apps.installReview.hashes", {
-                                packageHash:
-                                  selectedItem.installedState.identity
-                                    .packageHash,
-                                manifestHash:
-                                  selectedItem.installedState.identity
-                                    .manifestHash,
-                              })}
-                            </p>
-                          </>
                         ) : null}
-                        {selectedItem.sourceState?.reason ? (
-                          <p>{selectedItem.sourceState.reason}</p>
+                        {activeUninstallDescriptor?.mode === "delete-data" ? (
+                          <div
+                            className="mt-3 space-y-3 rounded-lg border border-rose-200 bg-rose-50 p-3"
+                            data-testid="plugins-delete-data-confirmation"
+                          >
+                            <div className="space-y-1">
+                              <p className="text-sm font-semibold text-rose-900">
+                                {t(
+                                  "plugin.apps.uninstallPreview.deleteDataGate.title",
+                                )}
+                              </p>
+                              <p className="text-sm text-rose-800">
+                                {t(
+                                  "plugin.apps.uninstallPreview.deleteDataGate.description",
+                                )}
+                              </p>
+                              {deleteDataExecutionBlocked ? (
+                                <div
+                                  className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2"
+                                  data-testid="plugins-delete-data-current-phase-gate"
+                                >
+                                  <p className="text-xs text-amber-800">
+                                    {t(
+                                      "plugin.apps.uninstallPreview.deleteDataGate.dryRunOnly",
+                                    )}
+                                  </p>
+                                  <button
+                                    type="button"
+                                    className="inline-flex items-center gap-2 rounded-full border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                    disabled={Boolean(busyAction)}
+                                    onClick={() =>
+                                      void handlePreviewUninstall(
+                                        selected,
+                                        "keep-data",
+                                      )
+                                    }
+                                    data-testid="plugins-uninstall-switch-keep-data"
+                                  >
+                                    <Archive size={14} />
+                                    {t("plugin.apps.action.uninstallKeepData")}
+                                  </button>
+                                </div>
+                              ) : null}
+                            </div>
+                            <div className="rounded-lg border border-rose-200 bg-[color:var(--lime-surface)] px-3 py-2">
+                              <span className="text-xs font-medium text-rose-700">
+                                {t(
+                                  "plugin.apps.uninstallPreview.deleteDataGate.phraseLabel",
+                                )}
+                              </span>
+                              <code
+                                className="mt-1 block break-all rounded-md bg-slate-950 px-2 py-1.5 text-xs text-rose-50"
+                                data-testid="plugins-delete-data-confirmation-phrase"
+                              >
+                                {deleteDataConfirmationPhrase}
+                              </code>
+                            </div>
+                            <input
+                              value={deleteDataConfirmationInput}
+                              onChange={(event) =>
+                                setDeleteDataConfirmationInput(
+                                  event.target.value,
+                                )
+                              }
+                              className="w-full rounded-full border border-rose-200 bg-[color:var(--lime-surface)] px-3 py-2 text-sm text-[color:var(--lime-text-strong)] outline-none transition placeholder:text-[color:var(--lime-text-muted)] focus:border-rose-400 focus:ring-2 focus:ring-rose-100"
+                              placeholder={t(
+                                "plugin.apps.uninstallPreview.deleteDataGate.inputPlaceholder",
+                              )}
+                              aria-label={t(
+                                "plugin.apps.uninstallPreview.deleteDataGate.inputLabel",
+                              )}
+                              disabled={deleteDataExecutionBlocked}
+                              data-testid="plugins-delete-data-confirmation-input"
+                            />
+                            <p
+                              className={`text-xs ${
+                                deleteDataExecutionBlocked
+                                  ? "text-amber-700"
+                                  : deleteDataConfirmationMatches
+                                    ? "text-emerald-700"
+                                    : "text-rose-700"
+                              }`}
+                              data-testid="plugins-delete-data-confirmation-status"
+                            >
+                              {deleteDataExecutionBlocked
+                                ? t(
+                                    "plugin.apps.uninstallPreview.deleteDataGate.dryRunOnly",
+                                  )
+                                : deleteDataConfirmationMatches
+                                  ? t(
+                                      "plugin.apps.uninstallPreview.deleteDataGate.ready",
+                                    )
+                                  : t(
+                                      "plugin.apps.uninstallPreview.deleteDataGate.mismatch",
+                                    )}
+                            </p>
+                          </div>
                         ) : null}
+                        <button
+                          type="button"
+                          className="mt-3 inline-flex items-center gap-2 rounded-full bg-rose-700 px-3 py-2 text-xs font-medium text-white transition hover:bg-rose-800 disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={
+                            Boolean(busyAction) ||
+                            deleteDataExecutionBlocked ||
+                            !deleteDataConfirmationMatches
+                          }
+                          onClick={() => void handleConfirmUninstall()}
+                          data-testid="plugins-uninstall-confirm"
+                        >
+                          <Archive size={16} />
+                          {deleteDataExecutionBlocked
+                            ? t("plugin.apps.action.deleteDataUnavailable")
+                            : t("plugin.apps.action.confirmUninstall")}
+                        </button>
                       </div>
                     ) : null}
                   </section>
-                </div>
-              </section>
-            </div>
+                ) : null}
+
+                <section>
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between gap-3 rounded-[10px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-3 py-3 text-left text-sm font-semibold text-[color:var(--lime-text-strong)] transition hover:bg-[color:var(--lime-surface-hover)]"
+                    onClick={() => setMoreInfoOpen((open) => !open)}
+                    data-testid="plugins-more-info"
+                  >
+                    {t("plugin.apps.center.detail.moreInfo")}
+                    <span className="text-xs font-medium text-[color:var(--lime-text-muted)]">
+                      {moreInfoOpen
+                        ? t("plugin.apps.center.detail.collapse")
+                        : t("plugin.apps.center.detail.expand")}
+                    </span>
+                  </button>
+                  {moreInfoOpen ? (
+                    <div
+                      className="mt-2 space-y-3 rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface-soft)] p-3 text-xs text-[color:var(--lime-text-muted)]"
+                      data-testid="plugins-more-info-content"
+                    >
+                      <p className="break-all">
+                        {t("plugin.apps.center.detail.appId")}:{" "}
+                        {selectedItem.appId}
+                      </p>
+                      <div className="rounded-lg border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] p-3">
+                        <p className="text-sm font-semibold text-[color:var(--lime-text-strong)]">
+                          {t("plugin.apps.center.detail.sourceVersion")}
+                        </p>
+                        <div className="mt-3 grid gap-2 text-sm text-[color:var(--lime-text-muted)]">
+                          <div className="flex items-center justify-between gap-3">
+                            <span>
+                              {t("plugin.apps.center.detail.installedVersion")}
+                            </span>
+                            <span className="font-medium text-[color:var(--lime-text-strong)]">
+                              {selectedItem.installedVersion ?? "-"}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-3">
+                            <span>
+                              {t("plugin.apps.center.detail.cloudVersion")}
+                            </span>
+                            <span className="font-medium text-[color:var(--lime-text-strong)]">
+                              {selectedItem.cloudVersion ?? "-"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      {selectedItem.installedState ? (
+                        <>
+                          <p className="break-all">
+                            {t("plugin.apps.installReview.source", {
+                              kind: selectedItem.installedState.identity
+                                .sourceKind,
+                            })}
+                          </p>
+                          <p className="break-all">
+                            {selectedItem.installedState.identity.sourceUri}
+                          </p>
+                          <p className="break-all">
+                            {t("plugin.apps.installReview.hashes", {
+                              packageHash:
+                                selectedItem.installedState.identity
+                                  .packageHash,
+                              manifestHash:
+                                selectedItem.installedState.identity
+                                  .manifestHash,
+                            })}
+                          </p>
+                        </>
+                      ) : null}
+                      {selectedItem.sourceState?.reason ? (
+                        <p>{selectedItem.sourceState.reason}</p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </section>
+              </div>
+              <aside
+                className="sticky top-4 space-y-1 rounded-[16px] border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] p-4 text-sm shadow-sm shadow-[color:var(--lime-shadow-color)]"
+                data-testid="plugins-detail-summary"
+              >
+                {[
+                  [
+                    t("plugin.apps.center.detail.summary.category"),
+                    getDetailCategory(selectedItem) ??
+                      t(`plugin.apps.center.source.${selectedItem.sourceKind}`),
+                  ],
+                  [
+                    t("plugin.apps.center.detail.summary.version"),
+                    selectedItem.installedVersion ??
+                      selectedItem.cloudVersion ??
+                      "-",
+                  ],
+                  [
+                    t("plugin.apps.center.detail.summary.source"),
+                    t(`plugin.apps.center.source.${selectedItem.sourceKind}`),
+                  ],
+                  [
+                    t("plugin.apps.center.detail.summary.installedAt"),
+                    selectedItem.installedState?.installedAt ?? "-",
+                  ],
+                  [
+                    t("plugin.apps.center.detail.summary.capabilities"),
+                    t("plugin.apps.center.detail.summary.capabilityCount", {
+                      count: getDetailCapabilityCount(selectedItem),
+                    }),
+                  ],
+                  [
+                    t("plugin.apps.center.detail.summary.developer"),
+                    getDetailDeveloper(selectedItem) ?? "-",
+                  ],
+                ].map(([label, value]) => (
+                  <div
+                    key={label}
+                    className="flex items-start justify-between gap-4 border-b border-[color:var(--lime-surface-border)] py-2 last:border-b-0"
+                  >
+                    <span className="text-xs text-[color:var(--lime-text-muted)]">
+                      {label}
+                    </span>
+                    <span className="max-w-[150px] text-right text-xs font-semibold text-[color:var(--lime-text-strong)]">
+                      {value}
+                    </span>
+                  </div>
+                ))}
+                {buildDetailTags(selectedItem).length ? (
+                  <div className="pt-3">
+                    <p className="text-xs text-[color:var(--lime-text-muted)]">
+                      {t("plugin.apps.center.detail.summary.tags")}
+                    </p>
+                    <div className="mt-2 flex flex-wrap justify-end gap-1.5">
+                      {buildDetailTags(selectedItem).map((tag) => (
+                        <span
+                          key={tag}
+                          className="rounded-md bg-[color:var(--lime-surface-soft)] px-2 py-0.5 text-xs font-medium text-[color:var(--lime-text-muted)]"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </aside>
+            </main>
           ) : null}
 
           {renderInstallReviewDialog()}

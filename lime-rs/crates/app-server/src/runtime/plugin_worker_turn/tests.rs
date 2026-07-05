@@ -342,7 +342,7 @@ fn article_workspace_worker_request_resolves_manifest_workflow_defaults() {
 }
 
 #[test]
-fn extracts_content_factory_plugin_activation_worker_turn() {
+fn ignores_content_factory_plugin_activation_for_agent_turn() {
     let request = execution_request(json!({
         "harness": {
             "plugin_activation": {
@@ -369,33 +369,14 @@ fn extracts_content_factory_plugin_activation_worker_turn() {
         }
     }));
 
-    let worker_turn = PaneActionWorkerTurn::from_execution_request(&request).expect("worker turn");
-
-    assert_eq!(worker_turn.app_id, WORKER_APP_ID);
-    assert_eq!(
-        worker_turn.action_key.as_deref(),
-        Some("content_article_generate")
-    );
-    assert_eq!(
-        worker_turn.action_intent.as_deref(),
-        Some("plugin_activation")
-    );
-    assert_eq!(worker_turn.source, PLUGIN_ACTIVATION_SOURCE);
-    assert_eq!(worker_turn.task_kind, "content.article.generate");
-    assert_eq!(worker_turn.prompt, "写一篇公众号文章");
-    assert_eq!(
-        worker_turn.surface_kind.as_deref(),
-        Some("articleWorkspace")
-    );
-    assert_eq!(worker_turn.pane_kind.as_deref(), Some("articleDraft"));
-    assert_eq!(
-        worker_turn.output_artifact_kind.as_deref(),
-        Some(WORKSPACE_PATCH_KIND)
+    assert!(
+        PaneActionWorkerTurn::from_execution_request(&request).is_none(),
+        "plugin activation is Agent context, not a worker turn"
     );
 }
 
 #[test]
-fn extracts_generic_plugin_activation_worker_turn() {
+fn ignores_generic_plugin_activation_for_agent_turn() {
     let request = execution_request(json!({
         "harness": {
             "plugin_activation": {
@@ -410,12 +391,9 @@ fn extracts_generic_plugin_activation_worker_turn() {
         }
     }));
 
-    let worker_turn = PaneActionWorkerTurn::from_execution_request(&request).expect("worker turn");
-
-    assert_eq!(worker_turn.app_id, "other-plugin");
-    assert_eq!(
-        worker_turn.output_artifact_kind.as_deref(),
-        Some("other.workspace_patch")
+    assert!(
+        PaneActionWorkerTurn::from_execution_request(&request).is_none(),
+        "plugin activation should not bypass the normal Agent backend"
     );
 }
 
@@ -593,6 +571,16 @@ fn classifies_worker_failures_for_retry_projection() {
     assert_eq!(unsupported.category, "configuration");
     assert!(!unsupported.retryable);
     assert_eq!(unsupported.retry_advice, "fix_runtime_contract");
+
+    let host_generation =
+        classify_worker_failure("Plugin worker did not complete: HOST_MANAGED_GENERATION_REQUIRED");
+    assert_eq!(
+        host_generation.error_code,
+        "PLUGIN_WORKER_HOST_GENERATION_UNAVAILABLE"
+    );
+    assert_eq!(host_generation.category, "host_generation_unavailable");
+    assert!(!host_generation.retryable);
+    assert_eq!(host_generation.retry_advice, "configure_host_generation");
 
     let retryable = classify_worker_failure("Plugin worker did not complete: WORKER_RETRYABLE");
     assert_eq!(retryable.error_code, "PLUGIN_WORKER_RETRYABLE_FAILURE");

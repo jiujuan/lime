@@ -561,6 +561,140 @@ async fn export_evidence_records_skill_invocation_from_tool_metadata() {
 }
 
 #[tokio::test]
+async fn export_evidence_marks_completed_with_workspace_skill_and_artifact() {
+    let core = RuntimeCore::default();
+    core.start_session(AgentSessionStartParams {
+        session_id: Some("sess_skill_completion_evidence".to_string()),
+        thread_id: Some("thread_skill_completion_evidence".to_string()),
+        app_id: "agent-runtime".to_string(),
+        workspace_id: Some("workspace-main".to_string()),
+        business_object_ref: None,
+        locale: None,
+    })
+    .expect("session");
+    core.start_turn(
+        AgentSessionTurnStartParams {
+            session_id: "sess_skill_completion_evidence".to_string(),
+            turn_id: Some("turn_skill_completion_evidence".to_string()),
+            input: AgentInput {
+                text: "运行 workspace skill 并生成报告".to_string(),
+                attachments: Vec::new(),
+            },
+            runtime_options: None,
+            queue_if_busy: false,
+            skip_pre_submit_resume: false,
+        },
+        RuntimeHostContext::default(),
+    )
+    .await
+    .expect("turn");
+    core.append_external_runtime_events(
+        "sess_skill_completion_evidence",
+        Some("turn_skill_completion_evidence"),
+        vec![
+            RuntimeEvent::new(
+                "tool.started",
+                json!({
+                    "toolCallId": "skill-call-completion-1",
+                    "toolName": "Skill",
+                    "arguments": {
+                        "skill": "project:capability-report"
+                    }
+                }),
+            ),
+            RuntimeEvent::new(
+                "tool.result",
+                json!({
+                    "toolCallId": "skill-call-completion-1",
+                    "toolName": "Skill",
+                    "outputPreview": "报告已生成",
+                    "success": true,
+                    "metadata": {
+                        "canonical": false,
+                        "compat": true,
+                        "source": "legacy_message_tool_response",
+                        "sourceType": "tool_end"
+                    },
+                    "structuredContent": {
+                        "tool_family": "skill",
+                        "skill_name": "project:capability-report",
+                        "workspace_skill_runtime_enable": {
+                            "source": "manual_session_enable",
+                            "approval": "manual",
+                            "authorization_scope": "session",
+                            "workspace_root": "/tmp/workspace",
+                            "directory": "capability-report",
+                            "skill": "project:capability-report"
+                        }
+                    }
+                }),
+            ),
+            RuntimeEvent::new(
+                "artifact.snapshot",
+                json!({
+                    "artifactId": "artifact-managed-objective-report",
+                    "path": "reports/managed-objective-automation-smoke.md",
+                    "title": "Managed Objective Automation Smoke Report"
+                }),
+            ),
+            RuntimeEvent::new("turn.completed", json!({})),
+        ],
+    )
+    .expect("append skill completion evidence events");
+
+    let response = core
+        .export_evidence(EvidenceExportParams {
+            session_id: "sess_skill_completion_evidence".to_string(),
+            turn_id: Some("turn_skill_completion_evidence".to_string()),
+            include_events: Some(true),
+            include_artifacts: Some(true),
+            include_evidence_pack: Some(true),
+        })
+        .await
+        .expect("export evidence");
+
+    let evidence_pack = response.evidence_pack.expect("evidence pack");
+    assert_eq!(
+        evidence_pack.latest_turn_status.as_deref(),
+        Some("completed")
+    );
+    assert_eq!(evidence_pack.recent_artifact_count, 1);
+    let audit = evidence_pack
+        .completion_audit_summary
+        .as_ref()
+        .expect("completion audit");
+    assert_eq!(
+        audit.get("decision").and_then(serde_json::Value::as_str),
+        Some("completed")
+    );
+    assert!(audit
+        .get("ownerAuditStatuses")
+        .and_then(serde_json::Value::as_array)
+        .is_some_and(|statuses| statuses
+            .iter()
+            .any(|status| status.as_str() == Some("audit_input_ready"))));
+    assert_eq!(
+        audit
+            .get("workspaceSkillToolCallCount")
+            .and_then(serde_json::Value::as_u64),
+        Some(1)
+    );
+    assert_eq!(
+        audit
+            .get("artifactCount")
+            .and_then(serde_json::Value::as_u64),
+        Some(1)
+    );
+    assert_eq!(
+        audit
+            .get("requiredEvidence")
+            .and_then(|value| value.get("workspaceSkillToolCall"))
+            .and_then(serde_json::Value::as_bool),
+        Some(true)
+    );
+}
+
+#[tokio::test]
 async fn export_evidence_can_skip_injected_evidence_pack_provider() {
     let provider = Arc::new(TestEvidenceExportProvider::default());
     let core = RuntimeCore::with_backend_capability_source_artifact_content_provider_and_evidence_export_provider(

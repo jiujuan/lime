@@ -101,7 +101,7 @@ Lime 的图片生成入口首先是一条自然对话体验。用户要看到的
 - presentation generator 必须带全局 SOUL，但只返回结构化 JSON，不调用工具、不创建 task。
 - 前端只渲染 `assistant_intro` / `completion_caption` / `result_captions.*`，没有字段时 fail closed，不生成模板文案。
 - 禁止输出内部词：workflow、task id、`.lime/tasks`、artifact path、JSON / JSONL、tool 名称、运行时细节和品牌化助手名。
-- `image_task.presentation.generated` / `image_task.presentation.unavailable` 只作为 JSONL/read model 审计事件，不进入右侧 viewer。
+- `image_task.presentation.generated` 只作为 JSONL/read model 审计事件，不进入右侧 viewer；presentation 不可用必须 fail closed 为 `image_task.create_failed`，不得继续创建图片任务。
 
 ### 2. 右侧区域：不展示 workflow
 

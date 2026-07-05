@@ -32,6 +32,8 @@ function createAutomationJob(
     payload: {
       kind: "agent_turn",
       prompt: "生成简报",
+      session_id: "session-1",
+      thread_id: "thread-1",
       web_search: false,
     },
     delivery: {

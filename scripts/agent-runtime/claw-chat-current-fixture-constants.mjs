@@ -32,6 +32,15 @@ import {
   SKILLS_RUNTIME_SKILL_NAME,
   summarizeSkillsRuntimeEvidenceExport,
 } from "./skills-runtime-fixture-scenario.mjs";
+import {
+  MULTI_AGENT_TEAM_ASSERTION_KEYS,
+  MULTI_AGENT_TEAM_DONE_TEXT,
+  MULTI_AGENT_TEAM_PROMPT,
+  MULTI_AGENT_TEAM_SCENARIO,
+  MULTI_AGENT_TEAM_SUMMARY_TEXT,
+  renderMultiAgentTeamBackendEvents,
+  summarizeMultiAgentTeamEvidenceExport,
+} from "./multi-agent-team-fixture-scenario.mjs";
 
 export {
   buildExpertSkillsRuntimeCatalog,
@@ -63,6 +72,13 @@ export {
   SKILLS_RUNTIME_QUERY,
   SKILLS_RUNTIME_SKILL_NAME,
   summarizeSkillsRuntimeEvidenceExport,
+  MULTI_AGENT_TEAM_ASSERTION_KEYS,
+  MULTI_AGENT_TEAM_DONE_TEXT,
+  MULTI_AGENT_TEAM_PROMPT,
+  MULTI_AGENT_TEAM_SCENARIO,
+  MULTI_AGENT_TEAM_SUMMARY_TEXT,
+  renderMultiAgentTeamBackendEvents,
+  summarizeMultiAgentTeamEvidenceExport,
 };
 
 export const DEFAULTS = {

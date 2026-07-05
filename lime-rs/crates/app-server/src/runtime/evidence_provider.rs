@@ -74,19 +74,8 @@ fn basic_evidence_pack_summary(request: &EvidencePackRequest) -> EvidencePackSum
         .iter()
         .filter(|turn| agent_turn_is_active(turn.status))
         .count();
-    let completion_decision = if pending_request_count > 0 {
-        "needs_input"
-    } else if running_turn_count > 0 || queued_turn_count > 0 {
-        "in_progress"
-    } else if matches!(
-        request.session.status,
-        AgentSessionStatus::Failed | AgentSessionStatus::Canceled
-    ) {
-        "failed"
-    } else {
-        "verifying"
-    };
-    let known_gaps = if request.artifacts.is_empty() {
+    let has_artifacts = !request.artifacts.is_empty();
+    let known_gaps = if !has_artifacts {
         vec!["no_recent_artifacts".to_string()]
     } else {
         Vec::new()
@@ -138,11 +127,31 @@ fn basic_evidence_pack_summary(request: &EvidencePackRequest) -> EvidencePackSum
     let skill_searches = skill_searches_summary(&request.events);
     let mcp_tool_results = mcp_tool_results_summary(&request.events);
     let mcp_resource_reads = mcp_resource_reads_summary(&request.events);
+    let team_facts = team_facts_summary(&request.events);
     let workflow_audit = workflow_audit_summary(&request.workflow_audit_events);
     let workspace_skill_tool_call_count = skill_invocations
         .as_array()
         .map(Vec::len)
         .unwrap_or_default();
+    let owner_audit_statuses = if !request.turns.is_empty() && !request.events.is_empty() {
+        vec!["audit_input_ready"]
+    } else {
+        Vec::new()
+    };
+    let completion_decision = if pending_request_count > 0 {
+        "needs_input"
+    } else if running_turn_count > 0 || queued_turn_count > 0 {
+        "in_progress"
+    } else if matches!(
+        request.session.status,
+        AgentSessionStatus::Failed | AgentSessionStatus::Canceled
+    ) {
+        "failed"
+    } else if workspace_skill_tool_call_count > 0 && has_artifacts {
+        "completed"
+    } else {
+        "verifying"
+    };
 
     let mut observability_summary = json!({
         "schema_version": "runtime-evidence-pack.v1",
@@ -156,6 +165,7 @@ fn basic_evidence_pack_summary(request: &EvidencePackRequest) -> EvidencePackSum
         "skill_searches": skill_searches,
         "mcp_tool_results": mcp_tool_results,
         "mcp_resource_reads": mcp_resource_reads,
+        "team_facts": team_facts,
         "workflow_audit": workflow_audit,
     });
     if browser_action_index.is_some() || browser_file_evidence.is_some() {
@@ -211,18 +221,173 @@ fn basic_evidence_pack_summary(request: &EvidencePackRequest) -> EvidencePackSum
             "pendingRequestCount": pending_request_count,
             "queuedTurnCount": queued_turn_count,
             "runningTurnCount": running_turn_count,
+            "ownerAuditStatuses": owner_audit_statuses,
             "workspaceSkillToolCallCount": workspace_skill_tool_call_count,
             "artifactCount": request.artifacts.len(),
             "turnCount": request.turns.len(),
             "requiredEvidence": {
                 "workspaceSkillToolCall": workspace_skill_tool_call_count > 0,
-                "artifactOrTimeline": !request.artifacts.is_empty() || !request.events.is_empty()
+                "artifactOrTimeline": has_artifacts || !request.events.is_empty()
             },
             "notes": [
                 "App Server current evidence/export generated a basic audit summary without Desktop legacy evidence writer."
             ],
         })),
         artifacts: evidence_artifacts,
+    }
+}
+
+#[derive(Debug, Default)]
+struct TeamFactsSummary {
+    event_type_breakdown: BTreeMap<String, usize>,
+    parent_session_ids: Vec<String>,
+    child_session_ids: Vec<String>,
+    thread_ids: Vec<String>,
+    turn_ids: Vec<String>,
+    handoff_ids: Vec<String>,
+    worker_notification_ids: Vec<String>,
+    review_ids: Vec<String>,
+    work_item_ids: Vec<String>,
+    team_phases: Vec<String>,
+    source_event_ids: Vec<String>,
+    team_event_count: usize,
+    task_event_count: usize,
+    agent_event_count: usize,
+    handoff_count: usize,
+    worker_notification_count: usize,
+    review_lane_count: usize,
+}
+
+fn team_facts_summary(events: &[AgentEvent]) -> Value {
+    let mut summary = TeamFactsSummary::default();
+    for event in events {
+        if !is_team_fact_event(event) {
+            continue;
+        }
+
+        *summary
+            .event_type_breakdown
+            .entry(event.event_type.clone())
+            .or_default() += 1;
+        push_unique(&mut summary.source_event_ids, event.event_id.clone());
+        if let Some(thread_id) = event.thread_id.as_deref() {
+            push_unique(&mut summary.thread_ids, thread_id.to_string());
+        }
+        if let Some(turn_id) = event.turn_id.as_deref() {
+            push_unique(&mut summary.turn_ids, turn_id.to_string());
+        }
+
+        match event.event_type.as_str() {
+            "team.changed" => summary.team_event_count += 1,
+            "task.changed" => summary.task_event_count += 1,
+            "agent.changed" | "agent.spawned" | "agent.completed" => {
+                summary.agent_event_count += 1;
+            }
+            "agent.handoff" => summary.handoff_count += 1,
+            "worker.notification" => summary.worker_notification_count += 1,
+            _ => {}
+        }
+
+        collect_team_fact_strings(
+            &mut summary.parent_session_ids,
+            event,
+            &["parentSessionId", "parent_session_id"],
+        );
+        collect_team_fact_strings(
+            &mut summary.child_session_ids,
+            event,
+            &[
+                "childSessionId",
+                "child_session_id",
+                "agentId",
+                "agent_id",
+                "taskId",
+                "task_id",
+            ],
+        );
+        collect_team_fact_strings(
+            &mut summary.handoff_ids,
+            event,
+            &["handoffId", "handoff_id"],
+        );
+        collect_team_fact_strings(
+            &mut summary.worker_notification_ids,
+            event,
+            &["workerNotificationId", "worker_notification_id"],
+        );
+        collect_team_fact_strings(&mut summary.review_ids, event, &["reviewId", "review_id"]);
+        collect_team_fact_strings(
+            &mut summary.work_item_ids,
+            event,
+            &["workItemId", "work_item_id"],
+        );
+        collect_team_fact_strings(
+            &mut summary.team_phases,
+            event,
+            &["teamPhase", "team_phase"],
+        );
+
+        if event
+            .payload
+            .get("surface")
+            .and_then(Value::as_str)
+            .is_some_and(|surface| surface == "review_lane")
+            || event
+                .payload
+                .get("reviewId")
+                .or_else(|| event.payload.get("review_id"))
+                .is_some()
+        {
+            summary.review_lane_count += 1;
+        }
+    }
+
+    let event_count = summary.event_type_breakdown.values().sum::<usize>();
+    json!({
+        "schemaVersion": "team-facts-summary.v1",
+        "status": if event_count == 0 { "missing" } else { "exported" },
+        "eventCount": event_count,
+        "eventTypeBreakdown": summary.event_type_breakdown,
+        "teamEventCount": summary.team_event_count,
+        "taskEventCount": summary.task_event_count,
+        "agentEventCount": summary.agent_event_count,
+        "handoffCount": summary.handoff_count,
+        "workerNotificationCount": summary.worker_notification_count,
+        "reviewLaneCount": summary.review_lane_count,
+        "parentSessionIds": summary.parent_session_ids,
+        "childSessionIds": summary.child_session_ids,
+        "threadIds": summary.thread_ids,
+        "turnIds": summary.turn_ids,
+        "handoffIds": summary.handoff_ids,
+        "workerNotificationIds": summary.worker_notification_ids,
+        "reviewIds": summary.review_ids,
+        "workItemIds": summary.work_item_ids,
+        "teamPhases": summary.team_phases,
+        "sourceEventIds": summary.source_event_ids,
+    })
+}
+
+fn is_team_fact_event(event: &AgentEvent) -> bool {
+    matches!(
+        event.event_type.as_str(),
+        "team.changed"
+            | "task.changed"
+            | "agent.changed"
+            | "agent.spawned"
+            | "agent.completed"
+            | "agent.handoff"
+            | "worker.notification"
+            | "subagent.activity"
+    )
+}
+
+fn collect_team_fact_strings(target: &mut Vec<String>, event: &AgentEvent, keys: &[&str]) {
+    push_value_strings(target, &event.payload, keys);
+    if let Some(metadata) = event.payload.get("metadata") {
+        push_value_strings(target, metadata, keys);
+    }
+    if let Some(payload) = event.payload.get("payload") {
+        push_value_strings(target, payload, keys);
     }
 }
 

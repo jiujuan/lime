@@ -211,6 +211,38 @@ export function shouldBuildFullThreadTimeline({
   return layoutMode !== "chat" || harnessPanelVisible;
 }
 
+export function shouldAutoRefreshWorkspaceRightSurfacePending({
+  sessionId,
+  workspaceId,
+  workspaceRoot,
+  sceneIsSending,
+  sceneIsPreparingSend,
+  sceneLayoutMode,
+  manualRightSurfaceActive,
+  pluginActivationActive,
+}: {
+  sessionId?: string | null;
+  workspaceId?: string | null;
+  workspaceRoot?: string | null;
+  sceneIsSending: boolean;
+  sceneIsPreparingSend: boolean;
+  sceneLayoutMode: string;
+  manualRightSurfaceActive: boolean;
+  pluginActivationActive: boolean;
+}): boolean {
+  const hasPendingListScope = Boolean(
+    sessionId?.trim() || workspaceId?.trim() || workspaceRoot?.trim(),
+  );
+  return (
+    hasPendingListScope ||
+    sceneIsSending ||
+    sceneIsPreparingSend ||
+    sceneLayoutMode !== "chat" ||
+    manualRightSurfaceActive ||
+    pluginActivationActive
+  );
+}
+
 export function shouldSuppressTaskCenterDraftContentForLayout({
   draftSurfaceActive,
   draftSendInFlight,

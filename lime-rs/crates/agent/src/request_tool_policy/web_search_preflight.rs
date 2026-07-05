@@ -1,4 +1,5 @@
 use super::policy_config::normalize_tool_name;
+use super::AsterReplyRuntimeHost;
 use super::{RequestToolPolicy, WebSearchExecutionTracker, WEB_SEARCH_PREFETCH_CONTEXT_MARKER};
 use crate::agent_tools::tool_orchestrator::{
     execute_planned_tool_batch, rewrite_tool_terminal_event, PlannedToolExecution,
@@ -6,7 +7,6 @@ use crate::agent_tools::tool_orchestrator::{
 };
 use crate::protocol::AgentEvent as RuntimeAgentEvent;
 use crate::turn_context_configuration::AgentTurnContext;
-use aster::agents::Agent;
 use lime_core::env_compat;
 use regex::Regex;
 use serde_json::Value;
@@ -25,28 +25,26 @@ const NEWS_PREFLIGHT_CONTEXT_CHAR_LIMIT: usize = 6_000;
 const NEWS_PREFLIGHT_RESULT_LINES: usize = 18;
 
 #[derive(Debug, Clone)]
-pub struct PreflightToolExecution {
-    pub events: Vec<RuntimeAgentEvent>,
-    pub planned_queries: Vec<String>,
-    pub system_prompt_appendix: Option<String>,
-    pub coverage_summary: Option<String>,
+pub(crate) struct PreflightToolExecution {
+    pub(crate) events: Vec<RuntimeAgentEvent>,
+    pub(crate) system_prompt_appendix: Option<String>,
+    pub(crate) coverage_summary: Option<String>,
 }
 
-pub struct WebSearchPreflightRequest<'a> {
-    pub agent: &'a Agent,
-    pub session_id: &'a str,
-    pub message_text: &'a str,
-    pub working_directory: Option<&'a Path>,
-    pub cancel_token: Option<CancellationToken>,
-    pub turn_context: Option<AgentTurnContext>,
-    pub policy: &'a RequestToolPolicy,
+pub(crate) struct WebSearchPreflightRequest<'request, 'agent> {
+    pub(crate) host: &'request AsterReplyRuntimeHost<'agent>,
+    pub(crate) session_id: &'request str,
+    pub(crate) message_text: &'request str,
+    pub(crate) working_directory: Option<&'request Path>,
+    pub(crate) cancel_token: Option<CancellationToken>,
+    pub(crate) turn_context: Option<AgentTurnContext>,
+    pub(crate) policy: &'request RequestToolPolicy,
 }
 
 impl PreflightToolExecution {
     pub(crate) fn none() -> Self {
         Self {
             events: Vec::new(),
-            planned_queries: Vec::new(),
             system_prompt_appendix: None,
             coverage_summary: None,
         }
@@ -72,7 +70,7 @@ pub(crate) struct PreflightSearchOutcome {
     error: Option<String>,
 }
 
-pub fn merge_system_prompt_with_web_search_preflight_context(
+pub(crate) fn merge_system_prompt_with_web_search_preflight_context(
     base_prompt: Option<String>,
     appendix: Option<String>,
 ) -> Option<String> {
@@ -311,8 +309,8 @@ fn build_preflight_prompt_appendix(
 /// - 统一生成 tool_start/tool_end 事件，供前端 harness 展示。
 /// - 将预检索结果压缩注入 system prompt，帮助模型做更深的事实整合。
 /// - 若本回合被明确要求必须先搜索，且预检索全部失败，则由上层中断本次回答。
-pub async fn execute_web_search_preflight_if_needed(
-    request: WebSearchPreflightRequest<'_>,
+pub(crate) async fn execute_web_search_preflight_if_needed(
+    request: WebSearchPreflightRequest<'_, '_>,
     tracker: &mut WebSearchExecutionTracker,
 ) -> Result<PreflightToolExecution, String> {
     execute_web_search_preflight_if_needed_with_enabled(
@@ -324,12 +322,12 @@ pub async fn execute_web_search_preflight_if_needed(
 }
 
 pub(crate) async fn execute_web_search_preflight_if_needed_with_enabled(
-    request: WebSearchPreflightRequest<'_>,
+    request: WebSearchPreflightRequest<'_, '_>,
     tracker: &mut WebSearchExecutionTracker,
     preflight_enabled: bool,
 ) -> Result<PreflightToolExecution, String> {
     let WebSearchPreflightRequest {
-        agent,
+        host,
         session_id,
         message_text,
         working_directory,
@@ -342,7 +340,7 @@ pub(crate) async fn execute_web_search_preflight_if_needed_with_enabled(
         return Ok(PreflightToolExecution::none());
     }
 
-    let registry_arc = agent.tool_registry().clone();
+    let registry_arc = host.tool_registry();
     let registry = registry_arc.read().await;
     let available_tools = registry.get_definitions();
     let preflight_tool = available_tools
@@ -487,7 +485,6 @@ pub(crate) async fn execute_web_search_preflight_if_needed_with_enabled(
     } else {
         Ok(PreflightToolExecution {
             events,
-            planned_queries: planned_query_texts,
             system_prompt_appendix,
             coverage_summary,
         })

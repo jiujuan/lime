@@ -525,6 +525,11 @@ describe("agentUiEventProjection", () => {
   });
 
   it("应把 Team controls adapter 投影到 work board 与标准 control 语义", () => {
+    const teamThreadContext = {
+      ...baseContext,
+      threadId: "thread-team-1",
+      turnId: "turn-parent-1",
+    };
     const events = buildAgentUiTeamControlProjectionEvents(
       {
         action: "resume",
@@ -533,15 +538,20 @@ describe("agentUiEventProjection", () => {
         affectedSessionIds: ["child-1"],
         cascadeSessionIds: ["child-2"],
       },
-      baseContext,
+      teamThreadContext,
     );
 
     expect(events).toHaveLength(3);
+    expect(events.every((event) => event.threadId === "thread-team-1")).toBe(
+      true,
+    );
     expect(events[0]).toMatchObject({
       type: "team.changed",
       sourceType: "team_control_projection",
       sequence: 10,
       sessionId: "session-team-1",
+      threadId: "thread-team-1",
+      turnId: "turn-parent-1",
       owner: "team",
       scope: "team",
       phase: "acting",
@@ -582,6 +592,8 @@ describe("agentUiEventProjection", () => {
       sourceType: "team_control_projection",
       sequence: 12,
       sessionId: "session-team-1",
+      threadId: "thread-team-1",
+      turnId: "turn-parent-1",
       taskId: "child-1",
       agentId: "child-1",
       handoffId: "session-team-1:handoff:child-1",
@@ -1051,14 +1063,19 @@ describe("agentUiEventProjection", () => {
         queue_reason: "provider_busy",
         retryable_overload: true,
       },
-      baseContext,
+      { ...baseContext, threadId: "thread-1", turnId: "turn-parent-1" },
     );
     expect(runningSubagentEvents).toHaveLength(6);
+    expect(
+      runningSubagentEvents.every((event) => event.threadId === "thread-1"),
+    ).toBe(true);
     expect(runningSubagentEvents[0]).toMatchObject({
       type: "agent.changed",
       taskId: "child-1",
       agentId: "child-1",
       parentSessionId: "session-1",
+      threadId: "thread-1",
+      turnId: "turn-parent-1",
       owner: "agent",
       scope: "agent",
       phase: "acting",

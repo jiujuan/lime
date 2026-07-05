@@ -268,11 +268,14 @@ function projectPluginMarketplaceItemConnectors(
           {
             id,
             title: readString(record.title) ?? id,
+            description: readString(record.description),
             kind: ["account", "api", "data_source", "external_app"].includes(
               kind,
             )
               ? (kind as PluginConnectorDeclaration["kind"])
               : "api",
+            taskKinds: readStringArray(record.capabilities),
+            path: readString(record.path),
             required: record.required === true,
           },
         ];
@@ -291,11 +294,16 @@ function projectPluginMarketplaceItemConnectors(
         {
           id,
           title: readString(record.title) ?? id,
+          description: readString(record.description),
           kind: ["account", "api", "data_source", "external_app"].includes(
             kind ?? "",
           )
             ? (kind as PluginConnectorDeclaration["kind"])
             : "api",
+          taskKinds: readStringArray(
+            record.taskKinds ?? record.task_kinds ?? record.capabilities,
+          ),
+          path: readString(record.path),
           required: record.required === true,
         },
       ];

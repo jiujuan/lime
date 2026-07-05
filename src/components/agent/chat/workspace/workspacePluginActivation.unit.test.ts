@@ -317,6 +317,48 @@ describe("workspacePluginActivation", () => {
     });
   });
 
+  it("本地包 capability readiness blocked 时 @写文章 仍应进入普通 Agent turn", () => {
+    const base = createInstalledContentFactory();
+    const resolution = resolveWorkspacePluginActivation({
+      text: "@写文章 写一篇公众号文章",
+      sessionId: "session-write-article-readiness-blocked",
+      installedPlugins: [
+        createInstalledContentFactory({
+          identity: {
+            ...base.identity,
+            sourceKind: "local_folder",
+            sourceUri: "/tmp/content-factory-app",
+          },
+          readiness: {
+            ...base.readiness,
+            status: "blocked",
+            blockers: [
+              {
+                code: "CAPABILITY_MISSING",
+                severity: "blocker",
+                message: "lime.agent is not available.",
+                capability: "lime.agent",
+              },
+            ],
+          },
+        }),
+      ],
+    });
+
+    expect(resolution).toMatchObject({
+      status: "matched",
+      trigger: "@写文章",
+      context: {
+        pluginId: "content-factory-app",
+        activeEntryKey: "content_article_generate",
+      },
+      runtimeReadiness: {
+        status: "blocked",
+        blockerCodes: expect.arrayContaining(["CAPABILITY_MISSING"]),
+      },
+    });
+  });
+
   it("@写作 应作为已安装内容工厂文章入口别名", () => {
     const resolution = resolveWorkspacePluginActivation({
       text: "@写作 要求:你帮我写一篇关于登山的文章",
@@ -371,6 +413,40 @@ describe("workspacePluginActivation", () => {
           task_kind: "content.article.generate",
           intent_workflow_key: "content_article_workflow",
           workflow_key: "content_article_workflow",
+          workflow_contract: expect.objectContaining({
+            key: "content_article_workflow",
+            title: "写文章工作流",
+            task_kind: "content.article.generate",
+            output_artifact_kind: "content_factory.workspace_patch",
+            right_surface: "articleWorkspace",
+            expected_objects: ["articleDraft"],
+            connector_refs: [
+              "lime-knowledge",
+              "web-research",
+              "media-generation",
+            ],
+            cli_refs: ["content-factory"],
+            hook_policy: {
+              prompt: ["prompt-submit"],
+              task: ["task-complete"],
+            },
+            steps: expect.arrayContaining([
+              expect.objectContaining({
+                id: "research",
+                title: "资料检索",
+                subagent: "content-researcher",
+                skill_refs: ["article-research"],
+                expected_output: "写作依据和素材摘要",
+              }),
+              expect.objectContaining({
+                id: "draft",
+                title: "正文写作",
+                subagent: "article-writer",
+                skill_refs: ["article-writing"],
+                expected_output: "articleDraft",
+              }),
+            ]),
+          }),
           workflow: expect.objectContaining({
             key: "content_article_workflow",
             steps: expect.arrayContaining([
@@ -407,7 +483,7 @@ describe("workspacePluginActivation", () => {
           runtime_readiness: {
             plugin_id: "content-factory-app",
             workflow_key: "content_article_workflow",
-            status: "declared",
+            status: "ready",
             connector_refs: [
               "lime-knowledge",
               "web-research",
@@ -418,8 +494,9 @@ describe("workspacePluginActivation", () => {
             connectors: expect.arrayContaining([
               expect.objectContaining({
                 id: "web-research",
-                status: "declared",
-                source: "runtime_registry",
+                status: "ready",
+                source: "manifest_declaration",
+                task_kinds: ["content.article.generate"],
               }),
             ]),
             hooks: expect.arrayContaining([
@@ -464,7 +541,7 @@ describe("workspacePluginActivation", () => {
         plugin_runtime_readiness: {
           plugin_id: "content-factory-app",
           workflow_key: "content_article_workflow",
-          status: "declared",
+          status: "ready",
         },
       },
     });
@@ -473,6 +550,58 @@ describe("workspacePluginActivation", () => {
         plugin_activation_intent: {
           intent_key: "content_article_generate",
           workflow_key: "content_article_workflow",
+        },
+      },
+    });
+  });
+
+  it("兼容旧安装态缺少 workflows 时合并 @写文章 发送参数不应崩溃", () => {
+    const base = createInstalledContentFactory();
+    const resolution = resolveWorkspacePluginActivation({
+      text: "@写文章 写一篇公众号文章",
+      sessionId: "session-write-article-legacy",
+      installedPlugins: [
+        createInstalledContentFactory({
+          manifest: {
+            ...base.manifest,
+            workflows: undefined,
+          } as unknown as InstalledPluginState["manifest"],
+        }),
+      ],
+    });
+
+    expect(resolution).toMatchObject({
+      status: "matched",
+      context: {
+        pluginId: "content-factory-app",
+        activeEntryKey: "content_article_generate",
+      },
+      intentMatch: {
+        intentKey: "content_article_generate",
+        taskKind: "content.article.generate",
+        workflowKey: "content_article_workflow",
+      },
+    });
+
+    expect(() =>
+      mergePluginActivationSendOptions({
+        sendOptions: { requestMetadata: { harness: { theme: "general" } } },
+        resolution: resolution!,
+      }),
+    ).not.toThrow();
+
+    const sendOptions = mergePluginActivationSendOptions({
+      sendOptions: { requestMetadata: { harness: { theme: "general" } } },
+      resolution: resolution!,
+    });
+    expect(sendOptions?.requestMetadata).toMatchObject({
+      harness: {
+        plugin_activation: {
+          plugin_id: "content-factory-app",
+          entry_workflow_key: "content_article_workflow",
+          intent_key: "content_article_generate",
+          intent_workflow_key: "content_article_workflow",
+          task_kind: "content.article.generate",
         },
       },
     });

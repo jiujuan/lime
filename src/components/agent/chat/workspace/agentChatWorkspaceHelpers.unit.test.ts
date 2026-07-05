@@ -6,6 +6,7 @@ import {
   resolveRuntimeWorkspaceId,
   resolveTaskCenterHomeSurfaceState,
   shouldBuildFullThreadTimeline,
+  shouldAutoRefreshWorkspaceRightSurfacePending,
   shouldSuppressTaskCenterDraftContentForLayout,
   shouldAutoRecoverWorkspacePathMissing,
 } from "./agentChatWorkspaceHelpers";
@@ -230,6 +231,55 @@ describe("shouldBuildFullThreadTimeline", () => {
         layoutMode: "chat",
       }),
     ).toBe(false);
+  });
+});
+
+describe("shouldAutoRefreshWorkspaceRightSurfacePending", () => {
+  const baseParams = {
+    sessionId: null,
+    workspaceId: null,
+    workspaceRoot: null,
+    sceneIsSending: false,
+    sceneIsPreparingSend: false,
+    sceneLayoutMode: "chat",
+    manualRightSurfaceActive: false,
+    pluginActivationActive: false,
+  };
+
+  it("有 workspace scope 时即使空会话也应刷新 right surface pending", () => {
+    expect(
+      shouldAutoRefreshWorkspaceRightSurfacePending({
+        ...baseParams,
+        workspaceId: "workspace-1",
+      }),
+    ).toBe(true);
+    expect(
+      shouldAutoRefreshWorkspaceRightSurfacePending({
+        ...baseParams,
+        workspaceRoot: "/tmp/project",
+      }),
+    ).toBe(true);
+  });
+
+  it("没有 session 和 workspace scope 时默认不刷新", () => {
+    expect(shouldAutoRefreshWorkspaceRightSurfacePending(baseParams)).toBe(
+      false,
+    );
+  });
+
+  it("无 scope 但有运行中或手动 surface 信号时仍允许刷新", () => {
+    expect(
+      shouldAutoRefreshWorkspaceRightSurfacePending({
+        ...baseParams,
+        sceneIsPreparingSend: true,
+      }),
+    ).toBe(true);
+    expect(
+      shouldAutoRefreshWorkspaceRightSurfacePending({
+        ...baseParams,
+        manualRightSurfaceActive: true,
+      }),
+    ).toBe(true);
   });
 });
 

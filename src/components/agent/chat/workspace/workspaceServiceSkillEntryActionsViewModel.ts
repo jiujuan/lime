@@ -12,9 +12,7 @@ import {
   buildServiceSkillAutomationInitialValues,
 } from "../service-skills/automationDraft";
 import { resolveServiceSkillLaunchPrefill } from "../service-skills/serviceSkillLaunchPrefill";
-import {
-  isServiceSkillExecutableAsSiteAdapter,
-} from "../service-skills/siteCapabilityBinding";
+import { isServiceSkillExecutableAsSiteAdapter } from "../service-skills/siteCapabilityBinding";
 import type {
   RecordServiceSkillUsageInput,
   ServiceSkillHomeItem,
@@ -47,7 +45,13 @@ export interface PendingServiceSkillAutomationLaunch {
   prompt: string;
   slotValues: ServiceSkillSlotValues;
   userInput?: string;
+  threadLineage: ServiceSkillAutomationThreadLineage;
   usage: RecordServiceSkillUsageInput;
+}
+
+export interface ServiceSkillAutomationThreadLineage {
+  sessionId: string;
+  threadId: string;
 }
 
 export interface ServiceSkillAutomationSetupState {
@@ -78,6 +82,7 @@ export interface BuildServiceSkillAutomationSetupStateInput {
   slotValues: ServiceSkillSlotValues;
   input: string;
   workspaceId: string;
+  threadLineage: ServiceSkillAutomationThreadLineage;
 }
 
 export interface ShouldCreateServiceSkillAutomationContentInput {
@@ -118,9 +123,7 @@ export function normalizeWorkspaceServiceSkillOptionalText(
   return normalized ? normalized : undefined;
 }
 
-export function siteSkillRequiresProject(
-  skill: ServiceSkillHomeItem,
-): boolean {
+export function siteSkillRequiresProject(skill: ServiceSkillHomeItem): boolean {
   if (!isServiceSkillExecutableAsSiteAdapter(skill)) {
     return false;
   }
@@ -191,6 +194,7 @@ export function buildServiceSkillAutomationSetupState({
   slotValues,
   input,
   workspaceId,
+  threadLineage,
 }: BuildServiceSkillAutomationSetupStateInput): ServiceSkillAutomationSetupState {
   const userInput = normalizeWorkspaceServiceSkillOptionalText(input);
   const prompt = composeServiceSkillPrompt({
@@ -211,6 +215,7 @@ export function buildServiceSkillAutomationSetupState({
       prompt,
       slotValues,
       userInput,
+      threadLineage,
       usage: {
         skillId: skill.id,
         runnerType: skill.runnerType,
@@ -249,6 +254,8 @@ export function buildServiceSkillAutomationSubmitRequest({
       ...request,
       payload: {
         ...request.payload,
+        session_id: pendingAutomation.threadLineage.sessionId,
+        thread_id: pendingAutomation.threadLineage.threadId,
         ...buildServiceSkillAutomationAgentTurnPayloadContext({
           skill: pendingAutomation.skill,
           slotValues: pendingAutomation.slotValues,

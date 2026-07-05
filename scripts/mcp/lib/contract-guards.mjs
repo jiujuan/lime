@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 
 const appServerClientIndexFile = "packages/app-server-client/src/index.ts";
+const appServerGeneratedProtocolFile =
+  "packages/app-server-client/src/generated/protocol-types.ts";
 const appServerClientSplitSourceFiles = [
   appServerClientIndexFile,
   "packages/app-server-client/src/request-client.ts",
@@ -45,6 +47,17 @@ function expandContractFiles(files) {
       ),
     ),
   ];
+}
+
+function requiredContractContent(repoRoot, files, content) {
+  if (!files.includes("packages/app-server-client/src/protocol.ts")) {
+    return content;
+  }
+  const generatedPath = path.join(repoRoot, appServerGeneratedProtocolFile);
+  if (!fs.existsSync(generatedPath)) {
+    return content;
+  }
+  return `${content}\n${fs.readFileSync(generatedPath, "utf8")}`;
 }
 
 export function checkMcpRuntimeCurrentContracts({ repoRoot, failures }) {
@@ -477,9 +490,10 @@ export function checkMcpRuntimeCurrentContracts({ repoRoot, failures }) {
     const content = paths
       .map((item) => fs.readFileSync(path.join(repoRoot, item), "utf8"))
       .join("\n");
+    const requiredContent = requiredContractContent(repoRoot, paths, content);
     const location = paths.join(", ");
     for (const snippet of snippets) {
-      if (!contractContentIncludes(content, snippet)) {
+      if (!contractContentIncludes(requiredContent, snippet)) {
         failures.push(
           `MCP runtime current contract: missing ${JSON.stringify(
             snippet,

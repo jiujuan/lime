@@ -1,23 +1,21 @@
 use crate::protocol::AgentTokenUsage;
 use crate::runtime_support::{list_runtime_queued_turns, load_runtime_snapshot};
-use crate::session_query::{ensure_subagent_session, read_subagent_session};
-use crate::session_update::persist_session_extension_data;
+use crate::session_query::read_subagent_session;
 use crate::subagent_runtime_adapter::project_aster_subagent_latest_turn;
 use crate::team_runtime_governor::snapshot_team_runtime_session;
 use aster::session::extension_data::{ExtensionData, ExtensionState};
-use aster::session::{require_shared_session_runtime_queue_service, QueuedTurnRuntime, Session};
+use aster::session::{require_shared_session_runtime_queue_service, Session};
+#[cfg(test)]
 use chrono::Utc;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default, PartialEq)]
-pub struct SubagentControlState {
+struct SubagentControlState {
     #[serde(default)]
-    pub closed: bool,
+    closed: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub closed_at: Option<String>,
+    closed_at: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub closed_reason: Option<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub stashed_queued_turns: Vec<QueuedTurnRuntime>,
+    closed_reason: Option<String>,
 }
 
 impl ExtensionState for SubagentControlState {
@@ -26,45 +24,36 @@ impl ExtensionState for SubagentControlState {
 }
 
 impl SubagentControlState {
-    pub fn from_extension_data(extension_data: &ExtensionData) -> Option<Self> {
+    fn from_extension_data(extension_data: &ExtensionData) -> Option<Self> {
         <Self as ExtensionState>::from_extension_data(extension_data)
     }
 
-    pub fn from_session(session: &Session) -> Option<Self> {
+    fn from_session(session: &Session) -> Option<Self> {
         Self::from_extension_data(&session.extension_data)
     }
 
-    pub fn to_extension_data(&self, extension_data: &mut ExtensionData) -> Result<(), String> {
+    #[cfg(test)]
+    fn to_extension_data(&self, extension_data: &mut ExtensionData) -> Result<(), String> {
         <Self as ExtensionState>::to_extension_data(self, extension_data)
             .map_err(|error| error.to_string())
     }
 
-    pub fn into_updated_extension_data(self, session: &Session) -> Result<ExtensionData, String> {
-        let mut extension_data = session.extension_data.clone();
-        self.to_extension_data(&mut extension_data)?;
-        Ok(extension_data)
-    }
-
-    pub fn closed(reason: Option<String>, stashed_queued_turns: Vec<QueuedTurnRuntime>) -> Self {
+    #[cfg(test)]
+    fn closed(reason: Option<String>) -> Self {
+        let closed_reason = reason
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
         Self {
             closed: true,
             closed_at: Some(Utc::now().to_rfc3339()),
-            closed_reason: normalize_optional_text(reason),
-            stashed_queued_turns,
+            closed_reason,
         }
-    }
-
-    pub fn opened(mut self) -> Self {
-        self.closed = false;
-        self.closed_at = None;
-        self.closed_reason = None;
-        self
     }
 }
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum SubagentRuntimeStatusKind {
+pub(crate) enum SubagentRuntimeStatusKind {
     Idle,
     Queued,
     Running,
@@ -76,7 +65,7 @@ pub enum SubagentRuntimeStatusKind {
 }
 
 impl SubagentRuntimeStatusKind {
-    pub fn is_final(self) -> bool {
+    pub(crate) fn is_final(self) -> bool {
         matches!(
             self,
             Self::Completed | Self::Failed | Self::Aborted | Self::Closed | Self::NotFound
@@ -85,7 +74,7 @@ impl SubagentRuntimeStatusKind {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
-pub struct SubagentRuntimeStatus {
+pub(crate) struct SubagentRuntimeStatus {
     pub session_id: String,
     pub kind: SubagentRuntimeStatusKind,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -157,7 +146,7 @@ pub(crate) struct SubagentLatestTurnProjection {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SubagentTurnStatus {
+pub(crate) enum SubagentTurnStatus {
     Queued,
     Running,
     Completed,
@@ -166,24 +155,15 @@ pub enum SubagentTurnStatus {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SubagentRuntimeStatusInput {
-    pub closed: bool,
-    pub has_active_turn: bool,
-    pub queued_turn_count: usize,
-    pub latest_turn_status: Option<SubagentTurnStatus>,
+struct SubagentRuntimeStatusInput {
+    closed: bool,
+    has_active_turn: bool,
+    queued_turn_count: usize,
+    latest_turn_status: Option<SubagentTurnStatus>,
 }
 
 fn is_zero(value: &usize) -> bool {
     *value == 0
-}
-
-fn normalize_optional_text(value: Option<String>) -> Option<String> {
-    let trimmed = value?.trim().to_string();
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed)
-    }
 }
 
 fn looks_like_session_not_found(error: &str) -> bool {
@@ -221,7 +201,7 @@ fn resolve_session_usage(session: &Session) -> Option<AgentTokenUsage> {
     }
 }
 
-pub fn derive_subagent_runtime_status_kind(
+fn derive_subagent_runtime_status_kind(
     input: SubagentRuntimeStatusInput,
 ) -> SubagentRuntimeStatusKind {
     if input.closed {
@@ -242,30 +222,7 @@ pub fn derive_subagent_runtime_status_kind(
         .unwrap_or(SubagentRuntimeStatusKind::Idle)
 }
 
-pub async fn read_subagent_control_state(
-    session_id: &str,
-) -> Result<(Session, SubagentControlState), String> {
-    let session = read_subagent_session(session_id, "读取 subagent session 失败").await?;
-    Ok((
-        session.clone(),
-        SubagentControlState::from_session(&session).unwrap_or_default(),
-    ))
-}
-
-pub async fn write_subagent_control_state(
-    session: &Session,
-    control_state: &SubagentControlState,
-) -> Result<(), String> {
-    ensure_subagent_session(session)?;
-    let extension_data = control_state
-        .clone()
-        .into_updated_extension_data(session)
-        .map_err(|error| format!("写入 subagent control state 失败: {error}"))?;
-    persist_session_extension_data(&session.id, extension_data, "持久化 subagent control state")
-        .await
-}
-
-pub async fn load_subagent_runtime_status(
+pub(crate) async fn load_subagent_runtime_status(
     session_id: &str,
 ) -> Result<SubagentRuntimeStatus, String> {
     let session = match read_subagent_session(session_id, "读取 subagent session 失败").await {
@@ -383,19 +340,7 @@ mod tests {
 
     #[test]
     fn subagent_control_state_roundtrip() {
-        let state = SubagentControlState::closed(
-            Some("manual_close".to_string()),
-            vec![QueuedTurnRuntime {
-                queued_turn_id: "queued-1".to_string(),
-                session_id: "child-1".to_string(),
-                message_preview: "preview".to_string(),
-                message_text: "message".to_string(),
-                created_at: 1,
-                image_count: 0,
-                payload: serde_json::json!({ "message": "test" }),
-                metadata: std::collections::HashMap::new(),
-            }],
-        );
+        let state = SubagentControlState::closed(Some("manual_close".to_string()));
 
         let mut extension_data = ExtensionData::default();
         state.to_extension_data(&mut extension_data).unwrap();

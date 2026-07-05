@@ -32,6 +32,7 @@ export interface WorkspacePluginRuntimeReadinessItem {
   reasonCodes: string[];
   source: "workflow_ref" | "manifest_declaration" | "runtime_registry";
   kind?: string;
+  taskKinds?: string[];
   event?: string;
   entrypoint?: string;
 }
@@ -80,7 +81,10 @@ function workflowForActivation(
     "workflowKey" | "taskKind" | "intentKey"
   >,
 ): PluginWorkflowDeclaration | undefined {
-  return contract.workflows.find((workflow) => {
+  const workflows = Array.isArray(contract.workflows)
+    ? contract.workflows
+    : [];
+  return workflows.find((workflow) => {
     if (params.workflowKey && workflow.key === params.workflowKey) {
       return true;
     }
@@ -288,6 +292,7 @@ function buildConnectorItems(params: {
           ? "runtime_registry"
           : "workflow_ref",
       kind: declaration?.kind,
+      taskKinds: declaration?.taskKinds,
     };
   });
 }
@@ -488,6 +493,7 @@ function readReadinessItems(
               ) as WorkspacePluginRuntimeReadinessItem["source"])
             : "workflow_ref",
         kind: readString(record.kind),
+        taskKinds: readStringArray(record.taskKinds ?? record.task_kinds),
         event: readString(record.event),
         entrypoint: readString(record.entrypoint),
       },

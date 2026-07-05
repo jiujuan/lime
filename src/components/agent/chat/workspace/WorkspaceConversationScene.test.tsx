@@ -37,6 +37,7 @@ vi.mock("../components/TaskCenterUtilityToolbar", () => ({
   TaskCenterUtilityToolbar: ({
     onToggleShellPanel,
     onToggleObjectCanvasPanel,
+    onToggleBrowserPanel,
     onToggleFilesPanel,
     showHarnessToggle,
     harnessPanelVisible,
@@ -48,6 +49,7 @@ vi.mock("../components/TaskCenterUtilityToolbar", () => ({
   }: {
     onToggleShellPanel?: () => void;
     onToggleObjectCanvasPanel?: () => void;
+    onToggleBrowserPanel?: () => void;
     onToggleFilesPanel?: () => void;
     showHarnessToggle?: boolean;
     harnessPanelVisible?: boolean;
@@ -66,6 +68,7 @@ vi.mock("../components/TaskCenterUtilityToolbar", () => ({
     const props = {
       onToggleShellPanel,
       onToggleObjectCanvasPanel,
+      onToggleBrowserPanel,
       onToggleFilesPanel,
       showHarnessToggle,
       harnessPanelVisible,
@@ -84,6 +87,9 @@ vi.mock("../components/TaskCenterUtilityToolbar", () => ({
     );
     const objectCanvasLauncher = rightSurfaceLaunchers?.find(
       (launcher) => launcher.kind === "objectCanvas",
+    );
+    const browserLauncher = rightSurfaceLaunchers?.find(
+      (launcher) => launcher.kind === "browser",
     );
     return (
       <>
@@ -116,6 +122,18 @@ vi.mock("../components/TaskCenterUtilityToolbar", () => ({
             onClick={onToggleFilesPanel}
           >
             files
+          </button>
+        ) : null}
+        {onToggleBrowserPanel ? (
+          <button
+            type="button"
+            data-testid="task-center-browser-toggle-stub"
+            data-expanded={browserLauncher?.active ? "true" : "false"}
+            data-disabled={browserLauncher?.disabled ? "true" : "false"}
+            data-pending-count={String(browserLauncher?.pendingCount ?? 0)}
+            onClick={onToggleBrowserPanel}
+          >
+            browser
           </button>
         ) : null}
         {showHarnessToggle ? (
@@ -812,6 +830,48 @@ describe("WorkspaceConversationScene", () => {
     });
 
     expect(onToggleRightSurfaceObjectCanvas).toHaveBeenCalledTimes(1);
+  });
+
+  it("任务中心场景应把浏览器 surface 入口透传给统一工具栏", () => {
+    const onToggleRightSurfaceBrowser = vi.fn();
+    const rightSurfaceLaunchers: WorkspaceRightSurfaceLauncherProjection[] = [
+      {
+        kind: "browser",
+        active: true,
+        disabled: false,
+        pendingCount: 1,
+        collapseTarget: "topToolbar",
+      },
+    ];
+    const container = renderScene({
+      navbarVisible: true,
+      navbarChrome: "workspace-compact",
+      navbarContextVariant: "task-center",
+      taskCenterTabsNode: <div data-testid="task-center-tabs-stub">tabs</div>,
+      rightSurfaceBrowserOpen: true,
+      onToggleRightSurfaceBrowser,
+      rightSurfaceLaunchers,
+    });
+
+    expect(mockTaskCenterUtilityToolbar).toHaveBeenCalledWith(
+      expect.objectContaining({
+        onToggleBrowserPanel: onToggleRightSurfaceBrowser,
+        rightSurfaceLaunchers,
+      }),
+    );
+
+    const browserToggle = container.querySelector<HTMLButtonElement>(
+      '[data-testid="task-center-browser-toggle-stub"]',
+    );
+    expect(browserToggle?.getAttribute("data-expanded")).toBe("true");
+    expect(browserToggle?.getAttribute("data-disabled")).toBe("false");
+    expect(browserToggle?.getAttribute("data-pending-count")).toBe("1");
+
+    act(() => {
+      browserToggle?.click();
+    });
+
+    expect(onToggleRightSurfaceBrowser).toHaveBeenCalledTimes(1);
   });
 
   it("右侧 Surface 内容应透传给主区域并由内层承载区渲染", () => {

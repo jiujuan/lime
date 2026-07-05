@@ -135,6 +135,8 @@ export function createAgentTurnJob(
     payload: {
       kind: "agent_turn",
       prompt: "请输出日报摘要",
+      session_id: "session-agent-1",
+      thread_id: "thread-agent-1",
       system_prompt: null,
       web_search: false,
     },
@@ -195,7 +197,9 @@ export function createAutomationHealth(
   };
 }
 
-export function createAutomationRun(overrides: Partial<AgentRun> = {}): AgentRun {
+export function createAutomationRun(
+  overrides: Partial<AgentRun> = {},
+): AgentRun {
   return {
     id: "run-browser-1",
     source: "automation",
@@ -336,6 +340,8 @@ export function setupSceneAppAutomationMocks(mocks: AutomationMockSetters) {
     payload: {
       kind: "agent_turn",
       prompt: "请执行 SceneApp 自动化任务。",
+      session_id: "session-sceneapp-1",
+      thread_id: "thread-sceneapp-1",
       system_prompt: null,
       web_search: false,
       request_metadata: {
@@ -416,6 +422,8 @@ export function setupManagedObjectiveAutomationMocks(
     payload: {
       kind: "agent_turn",
       prompt: "请继续推进目标。",
+      session_id: "session-managed-objective-1",
+      thread_id: "thread-managed-objective-1",
       system_prompt: null,
       web_search: false,
       request_metadata: {

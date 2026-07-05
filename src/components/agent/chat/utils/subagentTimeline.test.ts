@@ -46,6 +46,7 @@ describe("subagentTimeline", () => {
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({
       id: "real:subagent:child-1",
+      thread_id: "thread-1",
       turn_id: "turn-2",
       type: "subagent_activity",
       status: "in_progress",
@@ -97,9 +98,50 @@ describe("subagentTimeline", () => {
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({
       id: "real:subagent:child-2",
+      thread_id: "thread-1",
       turn_id: "turn-1",
       status: "completed",
       session_id: "child-2",
     });
+  });
+
+  it("缺少 parent thread 或 parent turn 时不得生成独立子代理历史项", () => {
+    const childSessions = [
+      {
+        id: "child-orphan",
+        name: "Orphan #1",
+        created_at: Date.parse("2026-03-18T10:01:05Z") / 1000,
+        updated_at: Date.parse("2026-03-18T10:01:10Z") / 1000,
+        session_type: "sub_agent",
+        created_from_turn_id: "turn-missing",
+        runtime_status: "running" as const,
+      },
+    ];
+
+    expect(
+      buildRealSubagentTimelineItems({
+        threadId: null,
+        turns: [
+          {
+            id: "turn-1",
+            thread_id: "thread-1",
+            prompt_text: "父线程",
+            status: "running",
+            started_at: "2026-03-18T10:01:00Z",
+            created_at: "2026-03-18T10:01:00Z",
+            updated_at: "2026-03-18T10:01:20Z",
+          },
+        ],
+        childSessions,
+      }),
+    ).toEqual([]);
+
+    expect(
+      buildRealSubagentTimelineItems({
+        threadId: "thread-1",
+        turns: [],
+        childSessions,
+      }),
+    ).toEqual([]);
   });
 });

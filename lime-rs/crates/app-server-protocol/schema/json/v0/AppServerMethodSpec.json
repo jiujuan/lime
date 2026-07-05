@@ -1,0 +1,26 @@
+{
+  "$defs": {
+    "AppServerMethodKind": {
+      "enum": [
+        "notification",
+        "request"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "kind": {
+      "$ref": "#/$defs/AppServerMethodKind"
+    },
+    "method": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind",
+    "method"
+  ],
+  "title": "AppServerMethodSpec",
+  "type": "object"
+}

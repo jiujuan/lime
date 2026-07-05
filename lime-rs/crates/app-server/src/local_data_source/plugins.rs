@@ -60,9 +60,9 @@ fn list_plugin_installed_state_from_data_root(
             continue;
         }
         match read_plugin_installed_state_path(&path) {
-            Ok(Some(state)) => states.push(plugin_packages::migrate_seeded_plugin_installed_state(
-                state,
-            )),
+            Ok(Some(state)) => states.push(
+                plugin_packages::migrate_plugin_installed_state_for_runtime(state),
+            ),
             Ok(None) => {}
             Err(error) => issues.push(plugin_persistence_issue(
                 "PARSE_FAILED",
@@ -123,7 +123,7 @@ fn plugin_persistence_issue(
 pub(crate) fn save_plugin_installed_state(
     params: PluginInstalledSaveParams,
 ) -> Result<Value, String> {
-    let state = plugin_packages::migrate_seeded_plugin_installed_state(params.state);
+    let state = plugin_packages::migrate_plugin_installed_state_for_runtime(params.state);
     let app_id = read_state_app_id(&state)?;
     validate_plugin_id_for_storage(&app_id)?;
     plugin_packages::materialize_seeded_plugin_runtime_package(&state)?;
@@ -662,7 +662,7 @@ mod tests {
 
     #[test]
     fn save_plugin_installed_state_migrates_seeded_content_factory_release_evidence() {
-        let state = plugin_packages::migrate_seeded_plugin_installed_state(
+        let state = plugin_packages::migrate_plugin_installed_state_for_runtime(
             seeded_content_factory_state_without_release_evidence(),
         );
 
@@ -798,7 +798,7 @@ mod tests {
             "setup": {}
         });
 
-        let migrated = plugin_packages::migrate_seeded_plugin_installed_state(state.clone());
+        let migrated = plugin_packages::migrate_plugin_installed_state_for_runtime(state.clone());
         plugin_packages::materialize_seeded_plugin_runtime_package_from_data_root(
             &state, data_root,
         )

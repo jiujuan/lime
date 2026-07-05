@@ -8,13 +8,13 @@ pub(super) fn skill_invocations_summary(events: &[AgentEvent]) -> Value {
     let mut invocations = Vec::new();
     let mut seen = HashSet::new();
     for event in events {
-        let Some(metadata) = tool_result_metadata_from_event(event) else {
+        let Some(metadata) = skill_invocation_metadata_from_event(event) else {
             continue;
         };
-        if !metadata_marks_skill_invocation(metadata) {
+        if !metadata_marks_skill_invocation(&metadata) {
             continue;
         }
-        let skill_name = metadata_map_string(metadata, &["skill_name", "skillName"])
+        let skill_name = metadata_map_string(&metadata, &["skill_name", "skillName"])
             .or_else(|| tool_skill_name_from_event(event))
             .unwrap_or_else(|| "unknown".to_string());
         let tool_call_id = tool_call_id_from_event(event);
@@ -60,6 +60,27 @@ pub(super) fn skill_invocations_summary(events: &[AgentEvent]) -> Value {
         invocations.push(Value::Object(invocation));
     }
     Value::Array(invocations)
+}
+
+fn skill_invocation_metadata_from_event(event: &AgentEvent) -> Option<Map<String, Value>> {
+    let mut metadata = Map::new();
+    if let Some(raw_metadata) = tool_result_metadata_from_event(event) {
+        metadata.extend(
+            raw_metadata
+                .iter()
+                .map(|(key, value)| (key.clone(), value.clone())),
+        );
+    }
+    if let Some(structured_content) =
+        tool_structured_content_from_event(event).and_then(Value::as_object)
+    {
+        metadata.extend(
+            structured_content
+                .iter()
+                .map(|(key, value)| (key.clone(), value.clone())),
+        );
+    }
+    (!metadata.is_empty()).then_some(metadata)
 }
 
 pub(super) fn skill_searches_summary(events: &[AgentEvent]) -> Value {

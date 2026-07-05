@@ -35,11 +35,15 @@ import {
   MCP_STRUCTURED_CONTENT_RESULT,
   MCP_STRUCTURED_CONTENT_TOOL_CALL_ID,
   MCP_STRUCTURED_CONTENT_TOOL_NAME,
+  MULTI_AGENT_TEAM_DONE_TEXT,
+  MULTI_AGENT_TEAM_PROMPT,
+  MULTI_AGENT_TEAM_SUMMARY_TEXT,
   NEWS_PROMPT,
   PLAN_DONE_TEXT,
   PLAN_PROMPT,
   PLAN_STEPS,
   PROPOSED_PLAN_BLOCK,
+  renderMultiAgentTeamBackendEvents,
   renderSkillsRuntimeBackendEvents,
   SKILLS_RUNTIME_DONE_TEXT,
   SKILLS_RUNTIME_EXPLICIT_DONE_TEXT,
@@ -588,6 +592,7 @@ export function writeFixtureBackend(backendPath) {
       ...EXPERT_PANEL_SKILLS_RUNTIME_SCENARIO,
       promptFlagName: "isExpertPanelSkillsRuntimePrompt",
     });
+  const multiAgentTeamBackendEvents = renderMultiAgentTeamBackendEvents();
   fs.writeFileSync(
     backendPath,
     `#!/usr/bin/env node
@@ -683,6 +688,7 @@ if (input.kind === "turnStart") {
   const isGoalPrompt = inputText.includes("${GOAL_PROMPT}");
   const isWebToolsRenderingPrompt = inputText.includes("${WEB_TOOLS_RENDERING_PROMPT}");
   const isMcpStructuredContentPrompt = inputText.includes("${MCP_STRUCTURED_CONTENT_PROMPT}");
+  const isMultiAgentTeamPrompt = inputText.includes("${MULTI_AGENT_TEAM_PROMPT}");
   const isManualEnableSkillsRuntimePrompt = inputText.includes("${SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT}");
   const isExpertPanelSkillsRuntimePrompt = inputText.includes("${EXPERT_SKILLS_RUNTIME_PANEL_PROMPT}");
   const isExpertSkillsRuntimePrompt =
@@ -705,22 +711,25 @@ if (input.kind === "turnStart") {
             ? "${WEB_TOOLS_RENDERING_DONE_TEXT}"
             : isMcpStructuredContentPrompt
               ? "${MCP_STRUCTURED_CONTENT_DONE_TEXT}"
-              : isSkillsRuntimePrompt
-                ? "${SKILLS_RUNTIME_DONE_TEXT}"
-                : isExplicitSkillsRuntimePrompt
-                  ? "${SKILLS_RUNTIME_EXPLICIT_DONE_TEXT}"
-                  : isManualEnableSkillsRuntimePrompt
-                    ? "${SKILLS_RUNTIME_MANUAL_ENABLE_DONE_TEXT}"
-                    : isExpertSkillsRuntimePrompt
-                      ? "${EXPERT_SKILLS_RUNTIME_DONE_TEXT}"
-                      : isExpertPanelSkillsRuntimePrompt
-                        ? "${EXPERT_SKILLS_RUNTIME_PANEL_DONE_TEXT}"
-                        : "${ASSISTANT_DONE_TEXT}";
+              : isMultiAgentTeamPrompt
+                ? "${MULTI_AGENT_TEAM_DONE_TEXT}"
+                : isSkillsRuntimePrompt
+                  ? "${SKILLS_RUNTIME_DONE_TEXT}"
+                  : isExplicitSkillsRuntimePrompt
+                    ? "${SKILLS_RUNTIME_EXPLICIT_DONE_TEXT}"
+                    : isManualEnableSkillsRuntimePrompt
+                      ? "${SKILLS_RUNTIME_MANUAL_ENABLE_DONE_TEXT}"
+                      : isExpertSkillsRuntimePrompt
+                        ? "${EXPERT_SKILLS_RUNTIME_DONE_TEXT}"
+                        : isExpertPanelSkillsRuntimePrompt
+                          ? "${EXPERT_SKILLS_RUNTIME_PANEL_DONE_TEXT}"
+                          : "${ASSISTANT_DONE_TEXT}";
   const hasProcessPrelude =
     isEventReadProbe ||
     isPlanPrompt ||
     isWebToolsRenderingPrompt ||
     isMcpStructuredContentPrompt ||
+    isMultiAgentTeamPrompt ||
     isSkillsRuntimePrompt ||
     isExplicitSkillsRuntimePrompt ||
     isManualEnableSkillsRuntimePrompt ||
@@ -785,17 +794,19 @@ if (input.kind === "turnStart") {
             ? "我先联网核实目标页面来源。\\n"
             : isMcpStructuredContentPrompt
               ? "我先调用 MCP docs 诊断工具，并只把用户答案放在 structuredContent。\\n"
-              : isSkillsRuntimePrompt
-                ? "我先搜索 Skills metadata，再按需加载单个 SKILL.md。\\n"
-                : isExplicitSkillsRuntimePrompt
-                  ? "我识别到显式 Skill 提及，仍先检索 metadata，再按需加载单个 SKILL.md。\\n"
-                  : isManualEnableSkillsRuntimePrompt
-                    ? "我识别到本轮手动启用的 workspace Skill，仍先核对 metadata，再按需加载单个 SKILL.md。\\n"
-                    : isExpertSkillsRuntimePrompt
-                      ? "我识别到专家绑定的 skillRefs，但仍先通过 skill_search 选择，再按需加载单个 SKILL.md。\\n"
-                      : isExpertPanelSkillsRuntimePrompt
-                        ? "我识别到右侧专家面板更新后的 skillRefs，并继续通过 skill_search 选择单个 Skill。\\n"
-                        : "以下是今日国际新闻简要整理：\\n";
+              : isMultiAgentTeamPrompt
+                ? "我会在当前主线程内编排多 Agent 团队，不创建新的顶层历史分类。\\n"
+                : isSkillsRuntimePrompt
+                  ? "我先搜索 Skills metadata，再按需加载单个 SKILL.md。\\n"
+                  : isExplicitSkillsRuntimePrompt
+                    ? "我识别到显式 Skill 提及，仍先检索 metadata，再按需加载单个 SKILL.md。\\n"
+                    : isManualEnableSkillsRuntimePrompt
+                      ? "我识别到本轮手动启用的 workspace Skill，仍先核对 metadata，再按需加载单个 SKILL.md。\\n"
+                      : isExpertSkillsRuntimePrompt
+                        ? "我识别到专家绑定的 skillRefs，但仍先通过 skill_search 选择，再按需加载单个 SKILL.md。\\n"
+                        : isExpertPanelSkillsRuntimePrompt
+                          ? "我识别到右侧专家面板更新后的 skillRefs，并继续通过 skill_search 选择单个 Skill。\\n"
+                          : "以下是今日国际新闻简要整理：\\n";
   const initialEvents = [
     {
       type: "provider.request.started",
@@ -830,17 +841,19 @@ if (input.kind === "turnStart") {
         : isWebToolsRenderingPrompt
           ? ${JSON.stringify(webToolsRenderingFixtureText)}
           : isMcpStructuredContentPrompt
-            ? "MCP structuredContent 展示验证完成。\\n"
-            : isSkillsRuntimePrompt
-              ? ${JSON.stringify(SKILLS_RUNTIME_SCENARIO.fixtureText)}
-              : isExplicitSkillsRuntimePrompt
-                ? ${JSON.stringify(SKILLS_RUNTIME_EXPLICIT_SCENARIO.fixtureText)}
-                : isManualEnableSkillsRuntimePrompt
-                  ? ${JSON.stringify(SKILLS_RUNTIME_MANUAL_ENABLE_SCENARIO.fixtureText)}
-                  : isExpertSkillsRuntimePrompt
-                    ? ${JSON.stringify(EXPERT_SKILLS_RUNTIME_SCENARIO.fixtureText)}
-                    : isExpertPanelSkillsRuntimePrompt
-                      ? ${JSON.stringify(EXPERT_PANEL_SKILLS_RUNTIME_SCENARIO.fixtureText)}
+          ? "MCP structuredContent 展示验证完成。\\n"
+            : isMultiAgentTeamPrompt
+              ? "${MULTI_AGENT_TEAM_SUMMARY_TEXT}：研究、撰写、复核都记录为 parent Thread 的团队事实，子代理只作为当前回合执行上下文。\\n"
+              : isSkillsRuntimePrompt
+                ? ${JSON.stringify(SKILLS_RUNTIME_SCENARIO.fixtureText)}
+                : isExplicitSkillsRuntimePrompt
+                  ? ${JSON.stringify(SKILLS_RUNTIME_EXPLICIT_SCENARIO.fixtureText)}
+                  : isManualEnableSkillsRuntimePrompt
+                    ? ${JSON.stringify(SKILLS_RUNTIME_MANUAL_ENABLE_SCENARIO.fixtureText)}
+                    : isExpertSkillsRuntimePrompt
+                      ? ${JSON.stringify(EXPERT_SKILLS_RUNTIME_SCENARIO.fixtureText)}
+                      : isExpertPanelSkillsRuntimePrompt
+                        ? ${JSON.stringify(EXPERT_PANEL_SKILLS_RUNTIME_SCENARIO.fixtureText)}
         : "1. 多国外交议题持续升温，地区安全与经贸协商仍是焦点。\\n2. 全球市场继续关注能源、供应链和主要央行政策变化。\\n3. 国际组织呼吁在气候、粮食与人道援助议题上保持协调。\\n";
   const shouldWaitForCancel =
     (process.env.CLAW_CHAT_FIXTURE_SCENARIO === "cancel" ||
@@ -1151,6 +1164,7 @@ if (input.kind === "turnStart") {
 ${skillsRuntimeBackendEvents}
 ${explicitSkillsRuntimeBackendEvents}
 ${manualEnableSkillsRuntimeBackendEvents}
+${multiAgentTeamBackendEvents}
   if (isExpertSkillsRuntimePrompt) {
     emitEvents([
       {

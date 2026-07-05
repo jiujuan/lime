@@ -378,6 +378,19 @@ describe("commandPolicy", () => {
         request: {
           lines: [
             JSON.stringify({
+              id: "automation-run-now",
+              method: "automationJob/runNow",
+              params: { id: "job-1" },
+            }),
+          ],
+        },
+      }),
+    ).toBe("app-server-long-running");
+    expect(
+      resolveDevBridgeCommandTimeoutProfile("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
               id: 6,
               method: "workspace/default/ensure",
               params: {},
@@ -425,6 +438,19 @@ describe("commandPolicy", () => {
               id: 5,
               method: "agentSession/read",
               params: {},
+            }),
+          ],
+        },
+      }),
+    ).toBe("app-server-read");
+    expect(
+      resolveDevBridgeCommandTimeoutProfile("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
+              id: "automation-create",
+              method: "automationJob/create",
+              params: { request: { name: "job" } },
             }),
           ],
         },

@@ -19,6 +19,9 @@ import {
   GOAL_PROMPT,
   IMAGE_COMMAND_DONE_TEXT,
   MCP_STRUCTURED_CONTENT_DONE_TEXT,
+  MULTI_AGENT_TEAM_DONE_TEXT,
+  MULTI_AGENT_TEAM_PROMPT,
+  MULTI_AGENT_TEAM_SUMMARY_TEXT,
   NEWS_PROMPT,
   PLAN_DONE_TEXT,
   PLAN_PROMPT,
@@ -39,6 +42,7 @@ export function buildCommonAssertions(context) {
     isImageCommandScenario,
     isWebToolsRenderingScenario,
     isMcpStructuredContentScenario,
+    isMultiAgentTeamScenario,
     isSkillsRuntimeScenario,
     isSoulStyleScenario,
     isRightSurfaceVisualMatrixScenario,
@@ -91,7 +95,7 @@ export function buildCommonAssertions(context) {
         ? true
         : isSoulStyleScenario
           ? summary.textProviderFixtureServer?.requestCount >= 1
-        : backendLedger.some((entry) => entry.kind === "turnStart"),
+          : backendLedger.some((entry) => entry.kind === "turnStart"),
     fixturePromptReachedBackend:
       isRightSurfaceVisualMatrixScenario ||
       isContentFactoryArticleWorkspaceScenario
@@ -134,20 +138,22 @@ export function buildCommonAssertions(context) {
                     : isMcpStructuredContentScenario
                       ? summary.guiMcpStructuredContentCompleted?.hasPrompt ===
                         true
-                      : isSkillsRuntimeScenario
-                        ? summary.guiSkillsRuntimeCompleted?.hasPrompt ===
-                            true &&
-                          summary.guiExplicitSkillsRuntimeCompleted
-                            ?.hasPrompt === true &&
-                          summary.guiManualEnableSkillsRuntimeCompleted
-                            ?.hasPrompt === true
-                        : isAnyExpertSkillsRuntimeScenario
-                          ? isExpertPanelSkillsRuntimeScenario
-                            ? summary.guiExpertPanelSkillsRuntimeCompleted
-                                ?.hasPrompt === true
-                            : summary.guiExpertSkillsRuntimeCompleted
-                                ?.hasPrompt === true
-                          : summary.guiCompleted?.hasPrompt === true,
+                      : isMultiAgentTeamScenario
+                        ? summary.guiMultiAgentTeamCompleted?.hasPrompt === true
+                        : isSkillsRuntimeScenario
+                          ? summary.guiSkillsRuntimeCompleted?.hasPrompt ===
+                              true &&
+                            summary.guiExplicitSkillsRuntimeCompleted
+                              ?.hasPrompt === true &&
+                            summary.guiManualEnableSkillsRuntimeCompleted
+                              ?.hasPrompt === true
+                          : isAnyExpertSkillsRuntimeScenario
+                            ? isExpertPanelSkillsRuntimeScenario
+                              ? summary.guiExpertPanelSkillsRuntimeCompleted
+                                  ?.hasPrompt === true
+                              : summary.guiExpertSkillsRuntimeCompleted
+                                  ?.hasPrompt === true
+                            : summary.guiCompleted?.hasPrompt === true,
     guiAssistantOutputVisible: isCancelOnlyScenario
       ? summary.guiCanceled?.hasStoppedCopy === true
       : isCancelThenContinueScenario
@@ -189,32 +195,37 @@ export function buildCommonAssertions(context) {
                     : isMcpStructuredContentScenario
                       ? summary.guiMcpStructuredContentCompleted
                           ?.hasStructuredAnswer === true
-                      : isSkillsRuntimeScenario
-                        ? summary.guiSkillsRuntimeCompleted
+                      : isMultiAgentTeamScenario
+                        ? summary.guiMultiAgentTeamCompleted
                             ?.hasAssistantSummary === true ||
-                          summary.guiSkillsRuntimeCompleted?.hasDoneText ===
-                            true ||
-                          summary.guiExplicitSkillsRuntimeCompleted
-                            ?.hasAssistantSummary === true ||
-                          summary.guiExplicitSkillsRuntimeCompleted
-                            ?.hasDoneText === true ||
-                          summary.guiManualEnableSkillsRuntimeCompleted
-                            ?.hasAssistantSummary === true ||
-                          summary.guiManualEnableSkillsRuntimeCompleted
-                            ?.hasDoneText === true
-                        : isAnyExpertSkillsRuntimeScenario
-                          ? isExpertPanelSkillsRuntimeScenario
-                            ? summary.guiExpertPanelSkillsRuntimeCompleted
-                                ?.hasAssistantSummary === true ||
-                              summary.guiExpertPanelSkillsRuntimeCompleted
-                                ?.hasDoneText === true
-                            : summary.guiExpertSkillsRuntimeCompleted
-                                ?.hasAssistantSummary === true ||
-                              summary.guiExpertSkillsRuntimeCompleted
-                                ?.hasDoneText === true
-                          : summary.guiCompleted?.hasAssistantSummary ===
+                          summary.guiMultiAgentTeamCompleted?.hasDoneText ===
+                            true
+                        : isSkillsRuntimeScenario
+                          ? summary.guiSkillsRuntimeCompleted
+                              ?.hasAssistantSummary === true ||
+                            summary.guiSkillsRuntimeCompleted?.hasDoneText ===
                               true ||
-                            summary.guiCompleted?.hasDoneText === true,
+                            summary.guiExplicitSkillsRuntimeCompleted
+                              ?.hasAssistantSummary === true ||
+                            summary.guiExplicitSkillsRuntimeCompleted
+                              ?.hasDoneText === true ||
+                            summary.guiManualEnableSkillsRuntimeCompleted
+                              ?.hasAssistantSummary === true ||
+                            summary.guiManualEnableSkillsRuntimeCompleted
+                              ?.hasDoneText === true
+                          : isAnyExpertSkillsRuntimeScenario
+                            ? isExpertPanelSkillsRuntimeScenario
+                              ? summary.guiExpertPanelSkillsRuntimeCompleted
+                                  ?.hasAssistantSummary === true ||
+                                summary.guiExpertPanelSkillsRuntimeCompleted
+                                  ?.hasDoneText === true
+                              : summary.guiExpertSkillsRuntimeCompleted
+                                  ?.hasAssistantSummary === true ||
+                                summary.guiExpertSkillsRuntimeCompleted
+                                  ?.hasDoneText === true
+                            : summary.guiCompleted?.hasAssistantSummary ===
+                                true ||
+                              summary.guiCompleted?.hasDoneText === true,
     guiInputRemainsReady: isCancelOnlyScenario
       ? summary.guiCanceled?.textareaVisible === true &&
         summary.guiCanceled?.textareaDisabled === false
@@ -247,31 +258,36 @@ export function buildCommonAssertions(context) {
                           ?.textareaVisible === true &&
                         summary.guiMcpStructuredContentCompleted
                           ?.textareaDisabled === false
-                      : isSkillsRuntimeScenario
-                        ? summary.guiSkillsRuntimeCompleted?.textareaVisible ===
-                            true &&
-                          summary.guiSkillsRuntimeCompleted
-                            ?.textareaDisabled === false &&
-                          summary.guiExplicitSkillsRuntimeCompleted
+                      : isMultiAgentTeamScenario
+                        ? summary.guiMultiAgentTeamCompleted
                             ?.textareaVisible === true &&
-                          summary.guiExplicitSkillsRuntimeCompleted
-                            ?.textareaDisabled === false &&
-                          summary.guiManualEnableSkillsRuntimeCompleted
-                            ?.textareaVisible === true &&
-                          summary.guiManualEnableSkillsRuntimeCompleted
+                          summary.guiMultiAgentTeamCompleted
                             ?.textareaDisabled === false
-                        : isAnyExpertSkillsRuntimeScenario
-                          ? isExpertPanelSkillsRuntimeScenario
-                            ? summary.guiExpertPanelSkillsRuntimeCompleted
-                                ?.textareaVisible === true &&
-                              summary.guiExpertPanelSkillsRuntimeCompleted
-                                ?.textareaDisabled === false
-                            : summary.guiExpertSkillsRuntimeCompleted
-                                ?.textareaVisible === true &&
-                              summary.guiExpertSkillsRuntimeCompleted
-                                ?.textareaDisabled === false
-                          : summary.guiCompleted?.textareaVisible === true &&
-                            summary.guiCompleted?.textareaDisabled === false,
+                        : isSkillsRuntimeScenario
+                          ? summary.guiSkillsRuntimeCompleted
+                              ?.textareaVisible === true &&
+                            summary.guiSkillsRuntimeCompleted
+                              ?.textareaDisabled === false &&
+                            summary.guiExplicitSkillsRuntimeCompleted
+                              ?.textareaVisible === true &&
+                            summary.guiExplicitSkillsRuntimeCompleted
+                              ?.textareaDisabled === false &&
+                            summary.guiManualEnableSkillsRuntimeCompleted
+                              ?.textareaVisible === true &&
+                            summary.guiManualEnableSkillsRuntimeCompleted
+                              ?.textareaDisabled === false
+                          : isAnyExpertSkillsRuntimeScenario
+                            ? isExpertPanelSkillsRuntimeScenario
+                              ? summary.guiExpertPanelSkillsRuntimeCompleted
+                                  ?.textareaVisible === true &&
+                                summary.guiExpertPanelSkillsRuntimeCompleted
+                                  ?.textareaDisabled === false
+                              : summary.guiExpertSkillsRuntimeCompleted
+                                  ?.textareaVisible === true &&
+                                summary.guiExpertSkillsRuntimeCompleted
+                                  ?.textareaDisabled === false
+                            : summary.guiCompleted?.textareaVisible === true &&
+                              summary.guiCompleted?.textareaDisabled === false,
     guiNotStuckStreaming: isCancelOnlyScenario
       ? summary.guiCanceled?.stopButtonVisible === false
       : isCancelThenContinueScenario
@@ -293,20 +309,23 @@ export function buildCommonAssertions(context) {
                     : isMcpStructuredContentScenario
                       ? summary.guiMcpStructuredContentCompleted
                           ?.stopButtonVisible === false
-                      : isSkillsRuntimeScenario
-                        ? summary.guiSkillsRuntimeCompleted
-                            ?.stopButtonVisible === false &&
-                          summary.guiExplicitSkillsRuntimeCompleted
-                            ?.stopButtonVisible === false &&
-                          summary.guiManualEnableSkillsRuntimeCompleted
+                      : isMultiAgentTeamScenario
+                        ? summary.guiMultiAgentTeamCompleted
                             ?.stopButtonVisible === false
-                        : isAnyExpertSkillsRuntimeScenario
-                          ? isExpertPanelSkillsRuntimeScenario
-                            ? summary.guiExpertPanelSkillsRuntimeCompleted
-                                ?.stopButtonVisible === false
-                            : summary.guiExpertSkillsRuntimeCompleted
-                                ?.stopButtonVisible === false
-                          : summary.guiCompleted?.stopButtonVisible === false,
+                        : isSkillsRuntimeScenario
+                          ? summary.guiSkillsRuntimeCompleted
+                              ?.stopButtonVisible === false &&
+                            summary.guiExplicitSkillsRuntimeCompleted
+                              ?.stopButtonVisible === false &&
+                            summary.guiManualEnableSkillsRuntimeCompleted
+                              ?.stopButtonVisible === false
+                          : isAnyExpertSkillsRuntimeScenario
+                            ? isExpertPanelSkillsRuntimeScenario
+                              ? summary.guiExpertPanelSkillsRuntimeCompleted
+                                  ?.stopButtonVisible === false
+                              : summary.guiExpertSkillsRuntimeCompleted
+                                  ?.stopButtonVisible === false
+                            : summary.guiCompleted?.stopButtonVisible === false,
     pageMentionsPromptAndAssistant: isCancelOnlyScenario
       ? pageText.includes(NEWS_PROMPT) &&
         (pageText.includes("已停止") ||
@@ -322,7 +341,7 @@ export function buildCommonAssertions(context) {
           ? summary.rightSurfaceVisualMatrix?.captures?.files?.stable
               ?.activeSurface === "files" &&
             summary.rightSurfaceVisualMatrix?.captures?.objectCanvas?.stable
-              ?.activeSurface === "articleWorkspace" &&
+              ?.activeSurface === "objectCanvas" &&
             summary.rightSurfaceVisualMatrix?.captures?.expertInfo?.stable
               ?.activeSurface === "expertInfo" &&
             summary.rightSurfaceVisualMatrix?.captures?.browser?.stable
@@ -378,44 +397,48 @@ export function buildCommonAssertions(context) {
                           ?.hasStructuredAnswer === true &&
                         summary.guiMcpStructuredContentCompleted
                           ?.envelopeVisible === false
-                      : isSkillsRuntimeScenario
-                        ? summary.guiSkillsRuntimeCompleted?.hasPrompt ===
-                            true &&
-                          (summary.guiSkillsRuntimeCompleted
-                            ?.hasAssistantSummary === true ||
-                            summary.guiSkillsRuntimeCompleted?.hasDoneText ===
-                              true) &&
-                          summary.guiExplicitSkillsRuntimeCompleted
-                            ?.hasPrompt === true &&
-                          (summary.guiExplicitSkillsRuntimeCompleted
-                            ?.hasAssistantSummary === true ||
+                      : isMultiAgentTeamScenario
+                        ? pageText.includes(MULTI_AGENT_TEAM_PROMPT) &&
+                          (pageText.includes(MULTI_AGENT_TEAM_SUMMARY_TEXT) ||
+                            pageText.includes(MULTI_AGENT_TEAM_DONE_TEXT))
+                        : isSkillsRuntimeScenario
+                          ? summary.guiSkillsRuntimeCompleted?.hasPrompt ===
+                              true &&
+                            (summary.guiSkillsRuntimeCompleted
+                              ?.hasAssistantSummary === true ||
+                              summary.guiSkillsRuntimeCompleted?.hasDoneText ===
+                                true) &&
                             summary.guiExplicitSkillsRuntimeCompleted
-                              ?.hasDoneText === true) &&
-                          summary.guiManualEnableSkillsRuntimeCompleted
-                            ?.hasPrompt === true &&
-                          (summary.guiManualEnableSkillsRuntimeCompleted
-                            ?.hasAssistantSummary === true ||
+                              ?.hasPrompt === true &&
+                            (summary.guiExplicitSkillsRuntimeCompleted
+                              ?.hasAssistantSummary === true ||
+                              summary.guiExplicitSkillsRuntimeCompleted
+                                ?.hasDoneText === true) &&
                             summary.guiManualEnableSkillsRuntimeCompleted
-                              ?.hasDoneText === true)
-                        : isAnyExpertSkillsRuntimeScenario
-                          ? isExpertPanelSkillsRuntimeScenario
-                            ? summary.guiExpertPanelSkillsRuntimeCompleted
-                                ?.hasPrompt === true &&
-                              (summary.guiExpertPanelSkillsRuntimeCompleted
-                                ?.hasAssistantSummary === true ||
-                                summary.guiExpertPanelSkillsRuntimeCompleted
-                                  ?.hasDoneText === true) &&
-                              pageText.includes(EXPERT_SKILLS_RUNTIME_TITLE)
-                            : summary.guiExpertSkillsRuntimeCompleted
-                                ?.hasPrompt === true &&
-                              (summary.guiExpertSkillsRuntimeCompleted
-                                ?.hasAssistantSummary === true ||
-                                summary.guiExpertSkillsRuntimeCompleted
-                                  ?.hasDoneText === true) &&
-                              pageText.includes(EXPERT_SKILLS_RUNTIME_TITLE)
-                          : pageText.includes(NEWS_PROMPT) &&
-                            (pageText.includes("今日国际新闻简要整理") ||
-                              pageText.includes(ASSISTANT_DONE_TEXT)),
+                              ?.hasPrompt === true &&
+                            (summary.guiManualEnableSkillsRuntimeCompleted
+                              ?.hasAssistantSummary === true ||
+                              summary.guiManualEnableSkillsRuntimeCompleted
+                                ?.hasDoneText === true)
+                          : isAnyExpertSkillsRuntimeScenario
+                            ? isExpertPanelSkillsRuntimeScenario
+                              ? summary.guiExpertPanelSkillsRuntimeCompleted
+                                  ?.hasPrompt === true &&
+                                (summary.guiExpertPanelSkillsRuntimeCompleted
+                                  ?.hasAssistantSummary === true ||
+                                  summary.guiExpertPanelSkillsRuntimeCompleted
+                                    ?.hasDoneText === true) &&
+                                pageText.includes(EXPERT_SKILLS_RUNTIME_TITLE)
+                              : summary.guiExpertSkillsRuntimeCompleted
+                                  ?.hasPrompt === true &&
+                                (summary.guiExpertSkillsRuntimeCompleted
+                                  ?.hasAssistantSummary === true ||
+                                  summary.guiExpertSkillsRuntimeCompleted
+                                    ?.hasDoneText === true) &&
+                                pageText.includes(EXPERT_SKILLS_RUNTIME_TITLE)
+                            : pageText.includes(NEWS_PROMPT) &&
+                              (pageText.includes("今日国际新闻简要整理") ||
+                                pageText.includes(ASSISTANT_DONE_TEXT)),
     noInvokeErrors: !errorRaw,
     noConsoleErrors: actionableConsoleErrors.length === 0,
     agentUiPerformanceTraceEvidenceAvailable:

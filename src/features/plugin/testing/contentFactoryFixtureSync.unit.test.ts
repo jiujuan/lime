@@ -89,6 +89,17 @@ describe("contentFactoryFixtureSync", () => {
         }>;
       };
     }>("app.workbench.yaml");
+    const connectorRegistry = JSON.parse(
+      readFileSync(resolve(packageRoot, "connectors/connectors.json"), "utf8"),
+    ) as {
+      connectors: Array<{
+        id: string;
+        title?: string;
+        description?: string;
+        kind?: string;
+        taskKinds?: string[];
+      }>;
+    };
 
     const runtimeWorkflow = runtimeAgentRuntime.workflows.find(
       (workflow) => workflow.key === "content_article_workflow",
@@ -145,6 +156,15 @@ describe("contentFactoryFixtureSync", () => {
         skills: step.skillRefs,
       })),
     );
+    expect(
+      manifest.connectors?.map((connector) => ({
+        id: connector.id,
+        title: connector.title,
+        description: connector.description,
+        kind: connector.kind,
+        taskKinds: connector.taskKinds,
+      })),
+    ).toEqual(connectorRegistry.connectors);
 
     const runtimeWorkbenchTask = workbench.workbench.workbenchTasks.find(
       (task) => task.kind === "content.article.generate",

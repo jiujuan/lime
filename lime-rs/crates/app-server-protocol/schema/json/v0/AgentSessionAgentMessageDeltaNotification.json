@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "delta": {
+      "type": "string"
+    },
+    "eventId": {
+      "type": "string"
+    },
+    "itemId": {
+      "type": "string"
+    },
+    "phase": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "sequence": {
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "sessionId": {
+      "type": "string"
+    },
+    "source": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "threadId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "timestamp": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": [
+        "null",
+        "string"
+      ]
+    }
+  },
+  "required": [
+    "delta",
+    "eventId",
+    "itemId",
+    "sequence",
+    "sessionId",
+    "timestamp"
+  ],
+  "title": "AgentSessionAgentMessageDeltaNotification",
+  "type": "object"
+}

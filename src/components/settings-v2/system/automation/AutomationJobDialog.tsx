@@ -27,7 +27,6 @@ import {
   AutomationJobRequest,
   AutomationOutputFormat,
   AutomationOutputSchema,
-  AutomationPayload,
   BrowserSessionAutomationPayload,
   TaskSchedule,
   UpdateAutomationJobRequest,
@@ -45,6 +44,11 @@ import {
   omitLegacyAutomationAccessModeMetadata,
   resolveAgentTurnAutomationAccessMode,
 } from "./automationAccessMode";
+import {
+  buildAgentTurnAutomationPayload,
+  normalizeAutomationThreadLineage,
+  type AutomationThreadLineage,
+} from "./automationThreadLineage";
 
 export type AutomationJobDialogSubmit =
   | { mode: "create"; request: AutomationJobRequest }
@@ -58,7 +62,7 @@ type AutomationJobFormState = {
   enabled: boolean;
   workspace_id: string;
   execution_mode: AutomationExecutionMode;
-  payload_kind: AutomationPayload["kind"];
+  payload_kind: AutomationJobRecord["payload"]["kind"];
   schedule_kind: ScheduleKind;
   every_secs: string;
   cron_expr: string;
@@ -510,6 +514,7 @@ export function AutomationJobDialog({
   job,
   workspaces,
   initialValues,
+  threadLineage,
   saving,
   onOpenChange,
   onSubmit,
@@ -519,6 +524,7 @@ export function AutomationJobDialog({
   job?: AutomationJobRecord | null;
   workspaces: Project[];
   initialValues?: AutomationJobDialogInitialValues | null;
+  threadLineage?: AutomationThreadLineage | null;
   saving: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (payload: AutomationJobDialogSubmit) => Promise<void>;
@@ -583,6 +589,17 @@ export function AutomationJobDialog({
       buildAutomationAccessModeOptions(buildAutomationAccessModeCopy(t)) ?? [],
     [t],
   );
+  const effectiveThreadLineage = useMemo(() => {
+    if (mode === "edit" && job?.payload.kind === "agent_turn") {
+      return (
+        normalizeAutomationThreadLineage({
+          sessionId: job.payload.session_id,
+          threadId: job.payload.thread_id,
+        }) ?? normalizeAutomationThreadLineage(threadLineage)
+      );
+    }
+    return normalizeAutomationThreadLineage(threadLineage);
+  }, [job, mode, threadLineage]);
 
   async function handleSubmit() {
     try {
@@ -612,18 +629,21 @@ export function AutomationJobDialog({
       const runtimePolicies = createRuntimePoliciesFromAccessMode(
         form.agent_access_mode,
       );
-      const payload: AutomationPayload = {
-        kind: "agent_turn",
-        prompt: form.prompt.trim(),
-        system_prompt: form.system_prompt.trim() || null,
-        web_search: form.web_search,
-        content_id: form.agent_content_id.trim() || null,
-        approval_policy: runtimePolicies.approvalPolicy,
-        sandbox_policy: runtimePolicies.sandboxPolicy,
-        request_metadata: omitLegacyAutomationAccessModeMetadata(
+      const payload = buildAgentTurnAutomationPayload({
+        prompt: form.prompt,
+        systemPrompt: form.system_prompt,
+        webSearch: form.web_search,
+        contentId: form.agent_content_id,
+        approvalPolicy: runtimePolicies.approvalPolicy,
+        sandboxPolicy: runtimePolicies.sandboxPolicy,
+        requestMetadata: omitLegacyAutomationAccessModeMetadata(
           form.agent_request_metadata,
         ),
-      };
+        lineage: effectiveThreadLineage,
+        missingLineageMessage: t(
+          "settings.automation.jobDialog.validation.threadLineageRequired",
+        ),
+      });
       const timeout_secs = form.timeout_secs.trim()
         ? Number(form.timeout_secs)
         : null;

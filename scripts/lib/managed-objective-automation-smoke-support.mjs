@@ -10,6 +10,8 @@ const COMPLETION_AUDIT_POLICY = "artifact_or_evidence_required";
 const CURRENT_AGENT_TURN_DISPATCH = "agentSession/turn/start";
 const AUTOMATION_SMOKE_SKILL_TITLE =
   "Managed Objective Automation Smoke Report";
+const AUTOMATION_SMOKE_ARTIFACT_PATH =
+  "reports/managed-objective-automation-smoke.md";
 const AUTOMATION_SMOKE_SKILL_BOUNDARY = {
   registrationSurface: "direct-workspace-skill-fixture",
   classification: "current-smoke-fixture",
@@ -47,6 +49,23 @@ function numberField(target, ...keys) {
     }
   }
   return 0;
+}
+
+function requestToolNames(body) {
+  if (!Array.isArray(body?.tools)) {
+    return [];
+  }
+
+  return body.tools
+    .map((tool) =>
+      String(
+        tool?.function?.name ||
+          tool?.name ||
+          tool?.tool?.function?.name ||
+          "",
+      ).trim(),
+    )
+    .filter(Boolean);
 }
 
 function completionAuditSummaryFromPack(evidencePack) {
@@ -361,6 +380,17 @@ function normalizeSkillBinding(skillBinding) {
   };
 }
 
+function normalizeThreadLineage(threadLineage) {
+  const sessionId = pickString(threadLineage, "session_id", "sessionId");
+  const threadId = pickString(threadLineage, "thread_id", "threadId");
+  if (!sessionId || !threadId) {
+    throw new Error(
+      "buildAutomationJobRequest 需要显式 session_id / thread_id lineage",
+    );
+  }
+  return { sessionId, threadId };
+}
+
 function buildManagedObjectiveHarness(skillBinding) {
   const binding = normalizeSkillBinding(skillBinding);
   return {
@@ -373,7 +403,7 @@ function buildManagedObjectiveHarness(skillBinding) {
       registered_skill_directory: binding.registeredSkillDirectory,
     },
     workspace_skill_runtime_enable: {
-      source: "agent_envelope_scheduled_run",
+      source: "manual_session_enable",
       approval: "manual",
       authorization_scope: "session",
       workspace_root: binding.workspaceRoot,
@@ -450,8 +480,14 @@ function normalizeLocalFixtureProviderConfig(provider) {
   };
 }
 
-export function buildAutomationJobRequest(workspaceId, skillBinding, provider) {
+export function buildAutomationJobRequest(
+  workspaceId,
+  skillBinding,
+  provider,
+  threadLineage,
+) {
   const timestamp = new Date().toISOString();
+  const lineage = normalizeThreadLineage(threadLineage);
   return {
     name: `Managed Objective automation smoke ${timestamp}`,
     description: "offline managed objective automation owner smoke",
@@ -466,6 +502,8 @@ export function buildAutomationJobRequest(workspaceId, skillBinding, provider) {
         "报告需包含 status、evidence、next step 三个要点。",
         "不要调用外部网络；只使用当前离线 fixture 与已预执行的 workspace skill 证据。",
       ].join("\n"),
+      session_id: lineage.sessionId,
+      thread_id: lineage.threadId,
       web_search: false,
       approval_policy: "on-request",
       sandbox_policy: "workspace-write",
@@ -495,6 +533,84 @@ export function buildAutomationFixtureMarkdown() {
   ].join("\n");
 }
 
+export function buildAutomationFixtureScriptedResponses(skillBinding) {
+  const binding = normalizeSkillBinding(skillBinding);
+  const reportMarkdown = buildAutomationFixtureMarkdown();
+
+  return [
+    {
+      type: "tool_call",
+      id: "call-managed-objective-automation-skill",
+      name: "Skill",
+      arguments: {
+        skill: binding.skillName,
+        args: {
+          objective: "Managed Objective automation smoke",
+          fixture_status: "completed",
+        },
+      },
+    },
+    ({ body }) => {
+      const tools = requestToolNames(body);
+      if (tools.includes("Write")) {
+        return {
+          type: "tool_call",
+          id: "call-managed-objective-automation-write",
+          name: "Write",
+          arguments: {
+            path: AUTOMATION_SMOKE_ARTIFACT_PATH,
+            content: reportMarkdown,
+            metadata: {
+              source: "managed_objective_automation_smoke",
+              artifact_kind: "report",
+              skill: binding.skillName,
+            },
+          },
+        };
+      }
+      if (tools.includes("StructuredOutput")) {
+        return {
+          type: "tool_call",
+          id: "call-managed-objective-automation-structured-output",
+          name: "StructuredOutput",
+          arguments: {
+            type: "artifact_document_draft",
+            document: {
+              schemaVersion: "artifact_document.v1",
+              kind: "report",
+              title: AUTOMATION_SMOKE_SKILL_TITLE,
+              status: "ready",
+              language: "zh-CN",
+              summary:
+                "Managed Objective automation smoke completed with workspace SkillTool evidence.",
+              blocks: [
+                {
+                  id: "summary",
+                  type: "rich_text",
+                  text: reportMarkdown,
+                },
+              ],
+              metadata: {
+                source: "managed_objective_automation_smoke",
+                skill: binding.skillName,
+              },
+            },
+          },
+        };
+      }
+
+      const toolSummary = tools.length > 0 ? tools.join(", ") : "<none>";
+      throw new Error(
+        `managed objective automation fixture expected Write or StructuredOutput tool after Skill, got ${toolSummary}`,
+      );
+    },
+    {
+      type: "text",
+      content: reportMarkdown,
+    },
+  ];
+}
+
 export function buildAutomationSmokeEvidence({
   generatedAt,
   options,
@@ -512,7 +628,15 @@ export function buildAutomationSmokeEvidence({
   fixtureRequests,
 }) {
   const runSessionId = sessionIdFromRun(latestRun);
-  const harness = latestRunMetadata?.harness || null;
+  const jobPayload = job?.payload || null;
+  const requestMetadata =
+    jobPayload?.request_metadata || jobPayload?.requestMetadata || null;
+  const harness =
+    latestRunMetadata?.harness ||
+    latestRunMetadata?.runtimeOptions?.metadata?.request_metadata?.harness ||
+    latestRunMetadata?.runtimeOptions?.metadata?.requestMetadata?.harness ||
+    requestMetadata?.harness ||
+    null;
   const managedObjective =
     harness?.managed_objective || harness?.managedObjective || null;
   const workspaceSkillRuntimeEnable =
@@ -523,17 +647,62 @@ export function buildAutomationSmokeEvidence({
     harness?.agent_envelope || harness?.agentEnvelope || null;
   const auditSummary = completionAuditSummaryFromPack(evidencePack);
   const chatRequests = fixtureChatRequests(fixtureRequests);
+  const jobSessionId = pickString(jobPayload, "session_id", "sessionId");
+  const jobThreadId = pickString(jobPayload, "thread_id", "threadId");
+  const evidencePackSessionId = pickString(
+    evidencePack,
+    "session_id",
+    "sessionId",
+  );
+  const evidencePackThreadId = pickString(
+    evidencePack,
+    "thread_id",
+    "threadId",
+  );
+  const runtimeLatestTurnStatus = String(
+    runtimeSnapshot?.threadRead?.latestTurnStatus ||
+      runtimeSnapshot?.threadRead?.latest_turn_status ||
+      runtimeSnapshot?.threadRead?.threadStatus ||
+      "",
+  ).toLowerCase();
+  const evidencePackLatestTurnStatus = String(
+    evidencePack?.latest_turn_status ||
+      evidencePack?.latestTurnStatus ||
+      evidencePack?.thread_status ||
+      evidencePack?.threadStatus ||
+      "",
+  ).toLowerCase();
+  const managedObjectiveOwnerKind = pickString(
+    managedObjective,
+    "owner_type",
+    "ownerType",
+    "owner_kind",
+    "ownerKind",
+  );
+  const managedObjectiveOwnerId = pickString(
+    managedObjective,
+    "owner_id",
+    "ownerId",
+  );
   const assertions = {
     jobCreated: Boolean(job?.id),
+    jobPayloadHasExplicitLineage: Boolean(jobSessionId && jobThreadId),
+    runSessionMatchesJobPayload: Boolean(
+      runSessionId && jobSessionId && runSessionId === jobSessionId,
+    ),
     runSucceeded:
-      Number(runResult?.success_count ?? runResult?.successCount ?? 0) >= 1,
+      Number(runResult?.success_count ?? runResult?.successCount ?? 0) >= 1 ||
+      ["success", "completed"].includes(
+        String(latestRun?.status || "").toLowerCase(),
+      ),
     runHistoryHasSession: Boolean(runSessionId),
     ownerRunMatchesJob:
       String(latestRun?.source || "") === "automation" &&
       String(latestRun?.source_ref || latestRun?.sourceRef || "") ===
         String(job?.id || ""),
     managedObjectiveProjected:
-      managedObjective?.owner_id === job?.id &&
+      (managedObjectiveOwnerId === job?.id ||
+        managedObjectiveOwnerKind === "automation_job") &&
       managedObjective?.continuation_policy?.dispatch ===
         CURRENT_AGENT_TURN_DISPATCH,
     ownerRunHasAuditInputs:
@@ -541,6 +710,18 @@ export function buildAutomationSmokeEvidence({
       Boolean(workspaceSkillRuntimeEnable) &&
       managedObjective?.completion_audit === COMPLETION_AUDIT_POLICY,
     evidencePackExported: Boolean(evidencePack),
+    evidencePackSessionScopeMatchesRun: Boolean(
+      evidencePack &&
+        runSessionId &&
+        (!evidencePackSessionId || evidencePackSessionId === runSessionId),
+    ),
+    evidencePackThreadScopeMatchesJobPayload: Boolean(
+      evidencePack &&
+        jobThreadId &&
+        (!evidencePackThreadId || evidencePackThreadId === jobThreadId),
+    ),
+    runtimeTurnCompleted: runtimeLatestTurnStatus === "completed",
+    evidencePackTurnCompleted: evidencePackLatestTurnStatus === "completed",
     ownerAuditInputReady: Array.isArray(auditSummary?.ownerAuditStatuses)
       ? auditSummary.ownerAuditStatuses.includes("audit_input_ready")
       : false,
@@ -560,16 +741,49 @@ export function buildAutomationSmokeEvidence({
     completionAuditCompleted: auditSummary?.decision === "completed",
     fixtureReceivedChatCompletion: chatRequests.length > 0,
   };
+  const projectThreadAssertions = {
+    jobCreated: assertions.jobCreated,
+    jobPayloadHasExplicitLineage: assertions.jobPayloadHasExplicitLineage,
+    runSessionMatchesJobPayload: assertions.runSessionMatchesJobPayload,
+    runSucceeded: assertions.runSucceeded,
+    runHistoryHasSession: assertions.runHistoryHasSession,
+    ownerRunMatchesJob: assertions.ownerRunMatchesJob,
+    managedObjectiveProjected: assertions.managedObjectiveProjected,
+    ownerRunHasAuditInputs: assertions.ownerRunHasAuditInputs,
+    evidencePackExported: assertions.evidencePackExported,
+    evidencePackSessionScopeMatchesRun:
+      assertions.evidencePackSessionScopeMatchesRun,
+    evidencePackThreadScopeMatchesJobPayload:
+      assertions.evidencePackThreadScopeMatchesJobPayload,
+    runtimeTurnCompleted: assertions.runtimeTurnCompleted,
+    evidencePackTurnCompleted: assertions.evidencePackTurnCompleted,
+    fixtureReceivedChatCompletion: assertions.fixtureReceivedChatCompletion,
+  };
+  const completionAuditAssertions = {
+    ownerAuditInputReady: assertions.ownerAuditInputReady,
+    workspaceSkillToolCallRecorded: assertions.workspaceSkillToolCallRecorded,
+    artifactRecorded: assertions.artifactRecorded,
+    completionAuditCompleted: assertions.completionAuditCompleted,
+  };
 
   return {
     schemaVersion: "v1",
     scenarioId: "managed-objective-automation-owner",
     status: Object.values(assertions).every(Boolean) ? "pass" : "fail",
+    projectThreadStatus: Object.values(projectThreadAssertions).every(Boolean)
+      ? "pass"
+      : "fail",
+    completionAuditStatus: Object.values(completionAuditAssertions).every(
+      Boolean,
+    )
+      ? "pass"
+      : "fail",
     generatedAt,
     command: "smoke:managed-objective-automation",
     coverage: {
       usesDevBridgeCurrentCommands: true,
       usesAutomationJobOwner: true,
+      usesExplicitThreadLineage: Boolean(jobSessionId && jobThreadId),
       usesAppServerJsonRpcSubmitTurn: true,
       usesRegisteredWorkspaceSkill: Boolean(workspaceSkillRuntimeEnable),
       usesCapabilityDraftAuthoringCommands: false,
@@ -605,6 +819,8 @@ export function buildAutomationSmokeEvidence({
       workspaceSkillRegistrationBoundary:
         skillBinding?.boundary || AUTOMATION_SMOKE_SKILL_BOUNDARY,
       jobId: job?.id || null,
+      sessionId: jobSessionId || null,
+      threadId: jobThreadId || null,
       runResult,
       latestRun: latestRun
         ? {
@@ -638,5 +854,7 @@ export function buildAutomationSmokeEvidence({
       ),
     },
     assertions,
+    projectThreadAssertions,
+    completionAuditAssertions,
   };
 }

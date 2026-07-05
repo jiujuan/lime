@@ -1,9 +1,7 @@
 use crate::agent_tools::execution::{
     decide_tool_execution, persisted_tool_execution_policy_from_metadata,
-    start_local_execution_process, tool_execution_policy_metadata, ExecutionOutputDelta,
-    ExecutionProcessSnapshot, LocalExecutionProcessControlHandle, LocalExecutionRequest,
-    ToolExecutionDecision, ToolExecutionDecisionInput, ToolExecutionDecisionKind,
-    ToolExecutionResolverInput,
+    tool_execution_policy_metadata, ToolExecutionDecision, ToolExecutionDecisionInput,
+    ToolExecutionDecisionKind, ToolExecutionResolverInput,
 };
 use crate::protocol::{AgentEvent as RuntimeAgentEvent, AgentToolResult};
 use crate::turn_context_configuration::{to_aster_turn_context, AgentTurnContext};
@@ -17,31 +15,18 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
+use tool_runtime::execution_process::{
+    start_local_execution_process, ExecutionOutputDelta, ExecutionProcessSnapshot,
+    ExecutionProcessStatus, LocalExecutionProcessControlHandle, LocalExecutionRequest,
+};
+use tool_runtime::shell::{
+    is_shell_tool_name, param_string, process_id_for_tool, shell_command_for_tool,
+    SHELL_COMMAND_PARAM_KEYS, WORKING_DIRECTORY_PARAM_KEYS,
+};
+pub use tool_runtime::tool_batch::{PlannedToolExecution, ToolTerminalEventUpdate};
 
-#[derive(Debug, Clone)]
-pub struct PlannedToolExecution {
-    pub tool_name: String,
-    pub tool_id: String,
-    pub arguments: Option<String>,
-    pub params: Value,
-}
-
-#[derive(Debug, Clone)]
-pub struct ToolExecutionOutcome {
-    pub tool_name: String,
-    pub tool_id: String,
-    pub success: bool,
-    pub output: String,
-    pub error: Option<String>,
-    pub metadata: Option<HashMap<String, Value>>,
-    pub stream_events: Vec<RuntimeAgentEvent>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ToolExecutionBatch {
-    pub events: Vec<RuntimeAgentEvent>,
-    pub outcomes: Vec<ToolExecutionOutcome>,
-}
+pub type ToolExecutionOutcome = tool_runtime::tool_batch::ToolExecutionOutcome<RuntimeAgentEvent>;
+pub type ToolExecutionBatch = tool_runtime::tool_batch::ToolExecutionBatch<RuntimeAgentEvent>;
 
 #[derive(Clone)]
 pub struct ToolExecutionBatchInput {
@@ -67,27 +52,6 @@ pub trait LiveExecutionProcessRegistry: Send + Sync {
     fn record_live_process_output(&self, delta: ExecutionOutputDelta) -> Result<(), String>;
 
     fn finish_live_process(&self, snapshot: ExecutionProcessSnapshot) -> Result<(), String>;
-}
-
-#[derive(Debug, Clone)]
-pub struct ToolTerminalEventUpdate {
-    pub tool_id: String,
-    pub success: bool,
-    pub output: String,
-    pub error: Option<String>,
-    pub metadata: Option<HashMap<String, Value>>,
-}
-
-impl ToolTerminalEventUpdate {
-    pub fn from_outcome(outcome: &ToolExecutionOutcome) -> Self {
-        Self {
-            tool_id: outcome.tool_id.clone(),
-            success: outcome.success,
-            output: outcome.output.clone(),
-            error: outcome.error.clone(),
-            metadata: outcome.metadata.clone(),
-        }
-    }
 }
 
 pub async fn execute_planned_tool_batch(
@@ -187,25 +151,12 @@ pub fn rewrite_tool_terminal_event(
     false
 }
 
-fn process_id_for_tool(tool_id: &str) -> String {
-    format!("process-{tool_id}")
-}
-
 pub fn canonical_shell_tool_name(tool_name: &str) -> Option<&'static str> {
     match crate::agent_tools::catalog::tool_catalog_entry(tool_name).map(|entry| entry.name) {
         Some("Bash") => Some("Bash"),
         Some("PowerShell") => Some("PowerShell"),
         _ => None,
     }
-}
-
-pub fn shell_command_text_from_argv(command: &[String]) -> String {
-    command
-        .iter()
-        .skip_while(|part| shell_wrapper_part(part))
-        .map(String::as_str)
-        .collect::<Vec<_>>()
-        .join(" ")
 }
 
 pub async fn check_shell_tool_permissions(
@@ -229,43 +180,6 @@ pub async fn check_shell_tool_permissions(
         .await
         .map(|_| ())
         .map_err(|error| error.to_string())
-}
-
-fn shell_wrapper_part(part: &str) -> bool {
-    matches!(
-        part,
-        "sh" | "bash"
-            | "zsh"
-            | "cmd"
-            | "cmd.exe"
-            | "powershell"
-            | "powershell.exe"
-            | "pwsh"
-            | "pwsh.exe"
-            | "-c"
-            | "/C"
-            | "/c"
-            | "/D"
-            | "/S"
-            | "-NoProfile"
-            | "-NonInteractive"
-            | "-Command"
-    )
-}
-
-fn is_shell_tool_name(tool_name: &str) -> bool {
-    matches!(
-        normalized_tool_name(tool_name).as_str(),
-        "bash" | "powershell" | "bashtool" | "powershelltool" | "shellcommand" | "execcommand"
-    )
-}
-
-fn normalized_tool_name(tool_name: &str) -> String {
-    tool_name
-        .chars()
-        .filter(|character| character.is_ascii_alphanumeric())
-        .map(|character| character.to_ascii_lowercase())
-        .collect()
 }
 
 async fn execute_planned_tool(
@@ -387,7 +301,7 @@ async fn execute_live_shell_process(
             };
         }
     };
-    let Some(command) = param_string(&params, &["command", "cmd", "script"]) else {
+    let Some(command) = param_string(&params, SHELL_COMMAND_PARAM_KEYS) else {
         metadata.insert(
             "executionSurface".to_string(),
             json!("registry_fallback_missing_command"),
@@ -519,11 +433,7 @@ async fn execute_live_shell_process(
     metadata.insert("cwd".to_string(), json!(cwd.to_string_lossy().to_string()));
     let output = final_snapshot.retained_output;
     let exit_code = final_snapshot.exit_code.unwrap_or(-1);
-    let success = exit_code == 0
-        && matches!(
-            final_snapshot.status,
-            crate::agent_tools::execution::ExecutionProcessStatus::Exited
-        );
+    let success = exit_code == 0 && matches!(final_snapshot.status, ExecutionProcessStatus::Exited);
 
     ToolExecutionOutcome {
         tool_name: planned.tool_name,
@@ -618,42 +528,7 @@ fn can_start_live_shell_process(
     {
         return false;
     }
-    param_string(&planned.params, &["command", "cmd", "script"]).is_some()
-}
-
-fn shell_command_for_tool(tool_name: &str, command: &str) -> Vec<String> {
-    if normalized_tool_name(tool_name).contains("powershell") {
-        return powershell_command(command);
-    }
-    default_shell_command(command)
-}
-
-fn default_shell_command(command: &str) -> Vec<String> {
-    if cfg!(windows) {
-        vec![
-            "cmd".to_string(),
-            "/D".to_string(),
-            "/S".to_string(),
-            "/C".to_string(),
-            command.to_string(),
-        ]
-    } else {
-        vec!["sh".to_string(), "-c".to_string(), command.to_string()]
-    }
-}
-
-fn powershell_command(command: &str) -> Vec<String> {
-    if cfg!(windows) {
-        vec![
-            "powershell.exe".to_string(),
-            "-NoProfile".to_string(),
-            "-NonInteractive".to_string(),
-            "-Command".to_string(),
-            command.to_string(),
-        ]
-    } else {
-        default_shell_command(command)
-    }
+    param_string(&planned.params, SHELL_COMMAND_PARAM_KEYS).is_some()
 }
 
 async fn execute_registry_tool_after_live_process_skip(
@@ -856,13 +731,11 @@ fn policy_error_metadata(
     metadata.insert("arch".to_string(), json!(std::env::consts::ARCH));
     metadata.insert(
         "cwd".to_string(),
-        json!(
-            param_string(&planned.params, &["cwd", "workingDir", "working_dir"])
-                .unwrap_or_else(|| working_directory.to_string_lossy().to_string())
-        ),
+        json!(param_string(&planned.params, WORKING_DIRECTORY_PARAM_KEYS)
+            .unwrap_or_else(|| working_directory.to_string_lossy().to_string())),
     );
 
-    if let Some(command) = param_string(&planned.params, &["command", "cmd", "script"]) {
+    if let Some(command) = param_string(&planned.params, SHELL_COMMAND_PARAM_KEYS) {
         metadata.insert("command".to_string(), json!(command));
     }
     if let Some(approval_policy) = turn_context.and_then(|context| context.approval_policy.clone())
@@ -916,16 +789,6 @@ fn looks_like_sandbox_block(reason: &str) -> bool {
         && (normalized.contains("block")
             || normalized.contains("denied")
             || normalized.contains("not permitted"))
-}
-
-fn param_string(value: &Value, keys: &[&str]) -> Option<String> {
-    let object = value.as_object()?;
-    keys.iter()
-        .filter_map(|key| object.get(*key))
-        .find_map(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
 }
 
 fn turn_context_metadata_value(turn_context: Option<&AgentTurnContext>) -> Option<Value> {

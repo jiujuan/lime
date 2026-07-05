@@ -22,6 +22,7 @@ const mockToastSuccess = vi.fn();
 const mockToastError = vi.fn();
 const mockToastInfo = vi.fn();
 const mockToastLoading = vi.fn();
+const mockEnsureSessionForThreadLineage = vi.fn();
 
 vi.mock("sonner", () => ({
   toast: {
@@ -30,6 +31,12 @@ vi.mock("sonner", () => ({
     info: (...args: unknown[]) => mockToastInfo(...args),
     loading: (...args: unknown[]) => mockToastLoading(...args),
   },
+}));
+
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (key: string) => key,
+  }),
 }));
 
 vi.mock("@/lib/api/automation", () => ({
@@ -258,6 +265,9 @@ function renderHook(props?: Partial<HookProps>) {
     creationMode: "guided",
     projectId: "project-1",
     contentId: "content-current",
+    sessionId: "session-current",
+    threadId: "thread-current",
+    ensureSessionForThreadLineage: mockEnsureSessionForThreadLineage,
     input: "请结合当前上下文继续",
     chatToolPreferences: DEFAULT_CHAT_TOOL_PREFERENCES,
     onNavigate: vi.fn(),
@@ -322,6 +332,8 @@ beforeEach(() => {
   mockToastInfo.mockReset();
   mockToastLoading.mockReset();
   mockToastLoading.mockImplementation(() => "toast-loading");
+  mockEnsureSessionForThreadLineage.mockReset();
+  mockEnsureSessionForThreadLineage.mockResolvedValue("session-ensured");
 });
 
 afterEach(() => {
@@ -880,6 +892,8 @@ describe("useWorkspaceServiceSkillEntryActions", () => {
           payload: {
             kind: "agent_turn",
             prompt: "自动化 prompt",
+            session_id: "session-current",
+            thread_id: "thread-current",
             system_prompt: "",
             web_search: false,
           },
@@ -900,6 +914,8 @@ describe("useWorkspaceServiceSkillEntryActions", () => {
         execution_mode: "skill",
         payload: expect.objectContaining({
           kind: "agent_turn",
+          session_id: "session-current",
+          thread_id: "thread-current",
           content_id: "content-current",
           request_metadata: expect.objectContaining({
             service_skill: expect.objectContaining({
@@ -939,6 +955,7 @@ describe("useWorkspaceServiceSkillEntryActions", () => {
         }),
       }),
     );
+    expect(mockEnsureSessionForThreadLineage).not.toHaveBeenCalled();
     expect(mockRecordServiceSkillAutomationLink).toHaveBeenCalledWith({
       skillId: "daily-trend-briefing",
       jobId: "automation-job-1",
@@ -977,6 +994,77 @@ describe("useWorkspaceServiceSkillEntryActions", () => {
         initialCreationMode: "guided",
         initialUserPrompt: expect.stringContaining("[技能任务] 每日趋势摘要"),
         autoRunInitialPromptOnMount: true,
+      }),
+    );
+  });
+
+  it("本地自动化型技能缺少当前 session 时应先物化 Thread 再创建任务", async () => {
+    const { render, getValue } = renderHook({
+      sessionId: null,
+      threadId: null,
+      contentId: null,
+    });
+    await render();
+
+    await act(async () => {
+      await getValue().handleServiceSkillAutomationSetup(
+        createScheduledServiceSkill(),
+        {
+          platform: "x",
+          industry_keywords: "AI Agent，创作者工具",
+          schedule_time: "每天 09:00",
+        },
+      );
+    });
+
+    expect(mockEnsureSessionForThreadLineage).toHaveBeenCalledTimes(1);
+    expect(getValue().automationDialogOpen).toBe(true);
+
+    await act(async () => {
+      await getValue().handleAutomationDialogSubmit({
+        mode: "create",
+        request: {
+          name: "每日趋势摘要｜定时执行",
+          description: "围绕指定平台与关键词输出趋势摘要。",
+          workspace_id: "project-1",
+          execution_mode: "skill",
+          schedule: {
+            kind: "cron",
+            expr: "00 09 * * *",
+            tz: "Asia/Shanghai",
+          },
+          payload: {
+            kind: "agent_turn",
+            prompt: "自动化 prompt",
+            session_id: "session-ensured",
+            thread_id: "session-ensured",
+            system_prompt: "",
+            web_search: false,
+          },
+          delivery: {
+            mode: "none",
+            best_effort: true,
+            output_schema: "text",
+            output_format: "text",
+          },
+        },
+      });
+    });
+
+    expect(mockCreateContent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        project_id: "project-1",
+      }),
+    );
+    expect(mockCreateAutomationJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspace_id: "project-1",
+        payload: expect.objectContaining({
+          kind: "agent_turn",
+          session_id: "session-ensured",
+          thread_id: "session-ensured",
+          content_id: "content-created-by-service-skill",
+        }),
       }),
     );
   });

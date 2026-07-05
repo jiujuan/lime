@@ -358,3 +358,72 @@ fn app_server_method_catalog_keeps_request_and_notification_methods_together() {
         METHOD_AGENT_SESSION_START
     ));
 }
+
+#[test]
+fn app_server_request_serialization_scope_covers_high_risk_methods() {
+    for spec in APP_SERVER_REQUEST_SERIALIZATION_SCOPES {
+        assert!(
+            is_app_server_request_method(spec.method),
+            "serialization scope must point at a request method: {}",
+            spec.method
+        );
+        assert!(
+            !is_app_server_notification_method(spec.method),
+            "serialization scope cannot point at a notification method: {}",
+            spec.method
+        );
+    }
+
+    assert_eq!(
+        app_server_request_serialization_scope(METHOD_AGENT_SESSION_TURN_START),
+        Some(AppServerRequestSerializationScope::Thread)
+    );
+    assert_eq!(
+        app_server_request_serialization_scope(METHOD_AGENT_SESSION_TURN_CANCEL),
+        Some(AppServerRequestSerializationScope::Thread)
+    );
+    assert_eq!(
+        app_server_request_serialization_scope(METHOD_AGENT_SESSION_THREAD_RESUME),
+        Some(AppServerRequestSerializationScope::Thread)
+    );
+    assert_eq!(
+        app_server_request_serialization_scope(METHOD_EXECUTION_PROCESS_START),
+        Some(AppServerRequestSerializationScope::ExecutionProcess)
+    );
+    assert_eq!(
+        app_server_request_serialization_scope(METHOD_EXECUTION_PROCESS_TERMINATE),
+        Some(AppServerRequestSerializationScope::ExecutionProcess)
+    );
+    assert_eq!(
+        app_server_request_serialization_scope(METHOD_PROJECT_SHELL_SESSION_START),
+        Some(AppServerRequestSerializationScope::ProjectShellSession)
+    );
+    assert_eq!(
+        app_server_request_serialization_scope(METHOD_PROJECT_SHELL_SESSION_KILL),
+        Some(AppServerRequestSerializationScope::ProjectShellSession)
+    );
+    assert_eq!(
+        app_server_request_serialization_scope(METHOD_MCP_SERVER_OAUTH_LOGIN),
+        Some(AppServerRequestSerializationScope::McpOauth)
+    );
+    assert_eq!(
+        app_server_request_serialization_scope(METHOD_MCP_RESOURCE_SUBSCRIBE),
+        Some(AppServerRequestSerializationScope::McpResourceSubscription)
+    );
+    assert_eq!(
+        app_server_request_serialization_scope(METHOD_BROWSER_SESSION_ACTION_EXECUTE),
+        Some(AppServerRequestSerializationScope::BrowserSession)
+    );
+    assert_eq!(
+        app_server_request_serialization_scope(METHOD_FILE_SYSTEM_DELETE_FILE),
+        Some(AppServerRequestSerializationScope::FileSystemMutation)
+    );
+    assert_eq!(
+        app_server_request_serialization_scope(METHOD_CAPABILITY_LIST),
+        None
+    );
+    assert_eq!(
+        app_server_request_serialization_scope(METHOD_AGENT_SESSION_EVENT),
+        None
+    );
+}

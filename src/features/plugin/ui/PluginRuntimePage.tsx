@@ -171,9 +171,7 @@ function buildPreviewFromInstalledState(state: InstalledPluginState) {
   };
 }
 
-function buildRuntimeReadinessFromInstalledState(
-  state: InstalledPluginState,
-) {
+function buildRuntimeReadinessFromInstalledState(state: InstalledPluginState) {
   return checkReadiness({
     manifest: state.manifest,
     projection: state.projection,
@@ -577,6 +575,7 @@ export function PluginRuntimePage({
   const displayName = selected
     ? resolveInstalledPluginDisplayName(selected)
     : t("plugin.apps.runtime.unavailable");
+  const currentProjectId = pageParams?.projectId?.trim() || undefined;
   const selectedCloudApp = useMemo(
     () => cloudApps.find((app) => app.appId === selected?.appId),
     [cloudApps, selected?.appId],
@@ -596,9 +595,10 @@ export function PluginRuntimePage({
       appVersion: selected.identity.appVersion,
       packageHash: selected.identity.packageHash,
       manifestHash: selected.identity.manifestHash,
+      ...(currentProjectId ? { workspaceId: currentProjectId } : {}),
       ...createDefaultPluginRuntimeHostOptions(),
     });
-  }, [selected]);
+  }, [currentProjectId, selected]);
   const hostBridgeCapabilities = useMemo(
     () => (selected ? resolveHostBridgeCapabilities(selected) : undefined),
     [selected],
@@ -751,9 +751,7 @@ export function PluginRuntimePage({
         entryKey: activeEntry.key,
       });
       if (status.status !== "running" || !status.entryUrl) {
-        throw new Error(
-          status.message ?? t("plugin.apps.runtime.openFailed"),
-        );
+        throw new Error(status.message ?? t("plugin.apps.runtime.openFailed"));
       }
       setRuntime(status);
     } catch (error) {
@@ -797,31 +795,28 @@ export function PluginRuntimePage({
     setAppInfoOpen(false);
   }, [agentRunStorageKey]);
 
-  const openAgentRunUi = useCallback(
-    (request: PluginHostAgentRunUiRequest) => {
-      const now = new Date().toISOString();
-      const mode = request.mode ?? "drawer";
-      setAgentRunUi((previous) => {
-        if (
-          !previous &&
-          matchesDismissedAgentRun(dismissedAgentRunRef.current, request)
-        ) {
-          return null;
-        }
-        dismissedAgentRunRef.current = null;
-        const next = mergeAgentRunUiState(previous, request, now, mode);
-        persistAgentRunUi(agentRunStorageKeyRef.current, next);
-        return next;
-      });
-      return {
-        opened: true as const,
-        surface: "host_agent_run" as const,
-        mode,
-        taskId: request.taskId,
-      };
-    },
-    [],
-  );
+  const openAgentRunUi = useCallback((request: PluginHostAgentRunUiRequest) => {
+    const now = new Date().toISOString();
+    const mode = request.mode ?? "drawer";
+    setAgentRunUi((previous) => {
+      if (
+        !previous &&
+        matchesDismissedAgentRun(dismissedAgentRunRef.current, request)
+      ) {
+        return null;
+      }
+      dismissedAgentRunRef.current = null;
+      const next = mergeAgentRunUiState(previous, request, now, mode);
+      persistAgentRunUi(agentRunStorageKeyRef.current, next);
+      return next;
+    });
+    return {
+      opened: true as const,
+      surface: "host_agent_run" as const,
+      mode,
+      taskId: request.taskId,
+    };
+  }, []);
 
   const updateAgentRunUi = useCallback(
     (request: PluginHostAgentRunUiRequest) => {
@@ -852,9 +847,7 @@ export function PluginRuntimePage({
   );
 
   const closeAgentRunUi = useCallback(
-    (
-      request: Pick<PluginHostAgentRunUiRequest, "taskId" | "bridgeAction">,
-    ) => {
+    (request: Pick<PluginHostAgentRunUiRequest, "taskId" | "bridgeAction">) => {
       const requestKey = buildAgentRunDismissalKey(request);
       setAgentRunUi((previous) => {
         if (!previous) {

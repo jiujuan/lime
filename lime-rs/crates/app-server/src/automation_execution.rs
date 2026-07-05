@@ -192,10 +192,8 @@ pub fn build_automation_run_start(
     let prompt = string_field(payload, &["prompt"])
         .ok_or_else(|| RuntimeCoreError::Backend("自动化任务内容不能为空".to_string()))?;
     let run_id = format!("automation-run-{}", Uuid::new_v4());
-    let session_id = string_field(payload, &["session_id", "sessionId"])
-        .unwrap_or_else(|| format!("automation-session-{}", job.id));
-    let thread_id = string_field(payload, &["thread_id", "threadId"])
-        .unwrap_or_else(|| format!("automation-thread-{}", job.id));
+    let session_id = required_agent_turn_payload_field(payload, &["session_id", "sessionId"])?;
+    let thread_id = required_agent_turn_payload_field(payload, &["thread_id", "threadId"])?;
     let turn_id =
         string_field(payload, &["turn_id", "turnId"]).unwrap_or_else(|| format!("turn-{run_id}"));
     let started_at = Utc::now().to_rfc3339();
@@ -582,6 +580,18 @@ fn string_field(map: &serde_json::Map<String, Value>, keys: &[&str]) -> Option<S
         .map(ToOwned::to_owned)
 }
 
+fn required_agent_turn_payload_field(
+    map: &serde_json::Map<String, Value>,
+    keys: &[&str],
+) -> Result<String, RuntimeCoreError> {
+    string_field(map, keys).ok_or_else(|| {
+        RuntimeCoreError::Backend(format!(
+            "自动化任务 agent_turn payload 必须显式绑定 {}",
+            keys[0]
+        ))
+    })
+}
+
 fn json_pointer_string_value(value: &Value, pointers: &[&str]) -> Option<String> {
     pointers.iter().find_map(|pointer| {
         value
@@ -635,6 +645,7 @@ mod tests {
     use crate::LocalAppDataSource;
     use crate::RuntimeEvent;
     use crate::RuntimeEventSink;
+    use app_server_protocol::EvidenceExportParams;
     use lime_core::config::AutomationExecutionMode;
     use lime_core::config::DeliveryConfig;
     use lime_core::database;
@@ -717,6 +728,8 @@ mod tests {
         let job = sample_job(json!({
             "kind": "agent_turn",
             "prompt": "生成摘要",
+            "session_id": "session-job-1",
+            "thread_id": "thread-job-1",
             "provider": "openai",
             "model": "gpt-4.1",
             "system_prompt": "请求级提示",
@@ -741,6 +754,8 @@ mod tests {
         let host_options = start.runtime_options.host_options.expect("host options");
 
         assert_eq!(start.prompt, "生成摘要");
+        assert_eq!(start.session_id, "session-job-1");
+        assert_eq!(start.thread_id, "thread-job-1");
         assert_eq!(
             start.runtime_options.provider_preference.as_deref(),
             Some("openai")
@@ -798,6 +813,18 @@ mod tests {
         assert!(error.to_string().contains("browser_session"));
     }
 
+    #[test]
+    fn rejects_agent_turn_payload_without_thread_lineage() {
+        let job = sample_job(json!({
+            "kind": "agent_turn",
+            "prompt": "生成摘要",
+            "session_id": "session-job-1"
+        }));
+
+        let error = build_automation_run_start(job).expect_err("should reject");
+        assert!(error.to_string().contains("thread_id"));
+    }
+
     #[tokio::test]
     async fn run_now_executes_agent_turn_and_persists_run_state() {
         let temp = tempfile::tempdir().expect("temp dir");
@@ -809,6 +836,8 @@ mod tests {
         let job = sample_job(json!({
             "kind": "agent_turn",
             "prompt": "生成今日摘要",
+            "session_id": "session-job-1",
+            "thread_id": "thread-job-1",
             "provider": "openai",
             "model": "gpt-4.1",
             "system_prompt": "请求级提示",
@@ -858,9 +887,44 @@ mod tests {
             .expect("test backend requests mutex poisoned");
         assert_eq!(requests.len(), 1);
         let request = &requests[0];
+        assert_eq!(request.session.session_id, "session-job-1");
+        assert_eq!(request.session.thread_id, "thread-job-1");
+        assert_eq!(request.session.workspace_id.as_deref(), Some("workspace-1"));
+        assert_eq!(
+            request
+                .session
+                .business_object_ref
+                .as_ref()
+                .map(|value| value.kind.as_str()),
+            Some("automation_job")
+        );
+        assert_eq!(
+            request
+                .session
+                .business_object_ref
+                .as_ref()
+                .map(|value| value.id.as_str()),
+            Some("job-1")
+        );
         assert_eq!(request.input.text, "生成今日摘要");
         assert_eq!(request.provider_preference.as_deref(), Some("openai"));
         assert_eq!(request.model_preference.as_deref(), Some("gpt-4.1"));
+        assert_eq!(
+            request
+                .metadata
+                .as_ref()
+                .and_then(|value| value.pointer("/harness/automation_job/session_id"))
+                .and_then(Value::as_str),
+            Some("session-job-1")
+        );
+        assert_eq!(
+            request
+                .metadata
+                .as_ref()
+                .and_then(|value| value.pointer("/harness/automation_job/thread_id"))
+                .and_then(Value::as_str),
+            Some("thread-job-1")
+        );
         assert_eq!(
             request
                 .runtime_options
@@ -903,6 +967,39 @@ mod tests {
                 .and_then(Value::as_str),
             Some("job-1")
         );
+        assert_eq!(
+            response.result.get("session_id").and_then(Value::as_str),
+            Some("session-job-1")
+        );
+        assert_eq!(
+            response.result.get("thread_id").and_then(Value::as_str),
+            Some("thread-job-1")
+        );
+        let response_turn_id = response
+            .result
+            .get("turn_id")
+            .and_then(Value::as_str)
+            .expect("response turn_id")
+            .to_string();
+        let evidence_response = core
+            .export_evidence(EvidenceExportParams {
+                session_id: "session-job-1".to_string(),
+                turn_id: Some(response_turn_id.clone()),
+                include_events: Some(true),
+                include_artifacts: Some(true),
+                include_evidence_pack: Some(true),
+            })
+            .await
+            .expect("export automation evidence");
+        assert_eq!(evidence_response.session.session_id, "session-job-1");
+        assert_eq!(evidence_response.session.thread_id, "thread-job-1");
+        assert!(evidence_response.events.iter().any(|event| {
+            event.event_type == "message.delta"
+                && event.thread_id.as_deref() == Some("thread-job-1")
+                && event.turn_id.as_deref() == Some(response_turn_id.as_str())
+        }));
+        let evidence_pack = evidence_response.evidence_pack.expect("evidence pack");
+        assert_eq!(evidence_pack.turn_count, 1);
 
         let conn = database::lock_db(&db).expect("lock db");
         let updated_job = AutomationJobDao::get(&conn, "job-1")
@@ -915,9 +1012,17 @@ mod tests {
             .expect("list runs");
         assert_eq!(runs.len(), 1);
         assert_eq!(runs[0].status, AgentRunStatus::Success);
+        assert_eq!(runs[0].session_id.as_deref(), Some("session-job-1"));
+        let run_metadata: Value = serde_json::from_str(
+            runs[0]
+                .metadata
+                .as_deref()
+                .expect("automation run metadata"),
+        )
+        .expect("parse automation run metadata");
         assert_eq!(
-            runs[0].session_id.as_deref(),
-            Some("automation-session-job-1")
+            run_metadata.get("threadId").and_then(Value::as_str),
+            Some("thread-job-1")
         );
     }
 }

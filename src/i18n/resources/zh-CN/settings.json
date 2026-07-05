@@ -2265,6 +2265,7 @@
   "settings.automation.jobDialog.validation.nameRequired": "流程名称不能为空",
   "settings.automation.jobDialog.validation.promptRequired": "启动提示不能为空",
   "settings.automation.jobDialog.validation.saveFailed": "保存持续流程失败",
+  "settings.automation.jobDialog.validation.threadLineageRequired": "请先从当前项目对话中创建持续流程",
   "settings.automation.jobDialog.validation.timeoutPositive": "超时时间必须为正整数",
   "settings.automation.jobDialog.validation.workspaceRequired": "请选择归属位置",
   "settings.automation.jobDialog.workspace.none": "未选择",

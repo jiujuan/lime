@@ -183,7 +183,7 @@ describe("app-server runtime boundary", () => {
       ),
     );
 
-    expect(agentBoundary).toContain("create_session_provider_handle");
+    expect(agentBoundary).toContain("create_configured_reply_provider");
     expect(agentBoundary).toContain("install_provider_for_session");
     expect(agentBoundary).toContain("RuntimeProviderProtocol");
     expect(agentBoundary).toContain("SessionProviderConfig");
@@ -462,17 +462,21 @@ describe("app-server runtime boundary", () => {
     expect(runtimeBackend).not.toContain("mark_current_healthy(");
     expect(runtimeBackend).not.toContain("create_cancel_token(");
     expect(runtimeBackend).not.toContain("remove_cancel_token(");
-    expect(agentTurnExecution).toContain("stream_reply_with_policy(");
+    expect(agentTurnExecution).toContain("stream_runtime_reply_with_policy(");
+    expect(agentTurnExecution).toContain(
+      "stream_runtime_reply_with_configured_provider(",
+    );
     expect(agentTurnExecution).toContain(
       "configure_model_route_provider_for_session_with_provider(",
     );
     expect(agentTurnExecution).toContain("ModelRouteProviderConfiguration");
     expect(agentTurnExecution).toContain("AgentTurnProviderConfiguration");
-    expect(agentTurnExecution).toContain("ConfiguredSessionProvider");
+    expect(agentTurnExecution).toContain("let configured_provider");
+    expect(agentTurnExecution).toContain("configured_provider.map(|configured| configured.into_config())");
     expect(agentTurnExecution).not.toContain("mark_healthy(");
     expect(agentTurnExecution).toContain("create_cancel_token(");
     expect(agentTurnExecution).toContain("remove_cancel_token(");
-    expect(agentProviderConfiguration).toContain("create_session_provider_handle");
+    expect(agentProviderConfiguration).toContain("create_configured_reply_provider");
     expect(agentProviderConfiguration).toContain("install_provider_for_session");
     expect(agentProviderConfiguration).not.toContain("mark_healthy(");
   });
@@ -754,11 +758,18 @@ describe("app-server runtime boundary", () => {
       "build_mcp_extension_surface",
     ].filter((snippet) => appServerAdapter.includes(snippet));
 
-    expect(agentBoundary).toContain("read_agent_tool_inventory_runtime_snapshot");
-    expect(agentBoundary).toContain("tool_registry()");
-    expect(agentBoundary).toContain("get_extension_configs()");
-    expect(agentBoundary).toContain(".list_tools(");
-    expect(appServerAdapter).toContain("read_agent_tool_inventory_runtime_snapshot");
+    expect(agentBoundary).toContain("read_agent_tool_inventory");
+    expect(agentBoundary).not.toContain("pub struct AgentToolInventoryRuntimeSnapshot");
+    expect(agentBoundary).not.toContain(
+      "pub async fn read_agent_tool_inventory_runtime_snapshot",
+    );
+    expect(appServerAdapter).toContain(
+      "use lime_agent::agent_tools::{read_agent_tool_inventory, AgentToolInventoryReadInput};",
+    );
+    expect(appServerAdapter).toContain("read_agent_tool_inventory");
+    expect(appServerAdapter).toContain("AgentToolInventoryReadInput");
+    expect(appServerAdapter).not.toContain("build_tool_inventory");
+    expect(appServerAdapter).not.toContain("AgentToolInventoryBuildInput");
     expect(
       forbiddenSnippets,
       "Aster tool registry / extension snapshot 语义属于 lime-agent agent_tools::inventory；App Server tool_inventory 只能合并 AppDataSource MCP snapshot 并投影 read-model",

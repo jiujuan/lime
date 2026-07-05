@@ -92,12 +92,6 @@ pub struct PersistedSessionMetadata {
     pub execution_strategy: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SessionTitlePreviewMessage {
-    pub role: String,
-    pub content: String,
-}
-
 pub(super) fn normalize_optional_text(value: Option<String>) -> Option<String> {
     let trimmed = value?.trim().to_string();
     if trimmed.is_empty() {

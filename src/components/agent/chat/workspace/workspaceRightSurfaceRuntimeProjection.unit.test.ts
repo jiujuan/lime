@@ -68,6 +68,7 @@ describe("workspaceRightSurfaceRuntimeProjection", () => {
           filesAvailable: true,
           hasExpertInfoPanel: true,
           objectCanvasAvailable: true,
+          articleWorkspaceAvailable: true,
           shellAvailable: true,
           showHarnessToggle: true,
           traceAvailable: true,
@@ -211,7 +212,7 @@ describe("workspaceRightSurfaceRuntimeProjection", () => {
       launchers.find((launcher) => launcher.kind === "articleWorkspace"),
     ).toMatchObject({
       active: false,
-      disabled: false,
+      disabled: true,
       pendingCount: 0,
     });
     expect(

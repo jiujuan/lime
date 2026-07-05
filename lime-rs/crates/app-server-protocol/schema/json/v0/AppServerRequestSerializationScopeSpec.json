@@ -1,0 +1,31 @@
+{
+  "$defs": {
+    "AppServerRequestSerializationScope": {
+      "enum": [
+        "browserSession",
+        "executionProcess",
+        "fileSystemMutation",
+        "mcpOauth",
+        "mcpResourceSubscription",
+        "projectShellSession",
+        "thread"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "method": {
+      "type": "string"
+    },
+    "scope": {
+      "$ref": "#/$defs/AppServerRequestSerializationScope"
+    }
+  },
+  "required": [
+    "method",
+    "scope"
+  ],
+  "title": "AppServerRequestSerializationScopeSpec",
+  "type": "object"
+}

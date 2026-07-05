@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   buildContentFactoryWorkerProgressEvents,
   buildContentFactoryWorkspacePatch,
   handleContentFactoryWorkerRequest,
   runContentFactoryTask,
 } from "../src/runtime/content-factory-worker.mjs";
+
+const WORKER_ENTRYPOINT = fileURLToPath(
+  new URL("../src/runtime/content-factory-worker.mjs", import.meta.url),
+);
 
 const HOST_GENERATED_MARKDOWN = [
   "# 宿主生成标题",
@@ -37,6 +43,38 @@ function withHostManagedGeneration(request) {
         },
       ],
     },
+  };
+}
+
+function hostManagedGenerationRequiredRequest() {
+  return {
+    schemaVersion: "content-factory.worker-request.v1",
+    appId: "content-factory-app",
+    sessionId: "session-cli-host-managed-missing",
+    workspaceId: "workspace-main",
+    turnId: "turn-cli-host-managed-missing",
+    taskId: "task-cli-host-managed-missing",
+    taskKind: "content.article.generate",
+    prompt: "写一篇关于内容工厂插件化写文章的公众号文章",
+    expectedOutput: {
+      artifactKind: "content_factory.workspace_patch",
+    },
+    runtime: {
+      outputArtifactKind: "content_factory.workspace_patch",
+      directProviderAccess: false,
+      directFilesystemAccess: false,
+      hostManagedGeneration: {
+        enabled: true,
+        requests: [
+          {
+            id: "article-draft-document",
+            targetObjectKind: "articleDraft",
+            outputField: "documentText",
+          },
+        ],
+      },
+    },
+    requestedAt: "2026-06-28T00:00:00.000Z",
   };
 }
 
@@ -416,6 +454,24 @@ test("content.factory.generate host request fails closed without generated artic
   assert.equal(response.status, "failed");
   assert.equal(response.error?.code, "HOST_MANAGED_GENERATION_REQUIRED");
   assert.deepEqual(response.artifacts, []);
+});
+
+test("worker CLI exits successfully for protocol-level failed response", () => {
+  const result = spawnSync(process.execPath, [WORKER_ENTRYPOINT], {
+    input: JSON.stringify(hostManagedGenerationRequiredRequest()),
+    encoding: "utf8",
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, "");
+  const lines = result.stdout
+    .trim()
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0].status, "failed");
+  assert.equal(lines[0].error?.code, "HOST_MANAGED_GENERATION_REQUIRED");
 });
 
 test("content.image.generate selects image grid as the primary surface", () => {

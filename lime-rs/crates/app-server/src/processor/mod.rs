@@ -47,6 +47,7 @@ use app_server_protocol::ArtifactReadParams;
 use app_server_protocol::CapabilityListParams;
 use app_server_protocol::ChannelProbeParams;
 use app_server_protocol::ClientInfo;
+use app_server_protocol::ClientNotification;
 use app_server_protocol::EvidenceExportParams;
 use app_server_protocol::InitializeParams;
 use app_server_protocol::InitializeResponse;
@@ -58,10 +59,8 @@ use app_server_protocol::PlatformInfo;
 // ProjectGit* 类型已移至 processor/project_git.rs
 use app_server_protocol::ServerCapabilities;
 use app_server_protocol::ServerInfo;
+use app_server_protocol::ServerNotification;
 use app_server_protocol::UsageStatsRangeParams;
-use app_server_protocol::METHOD_AGENT_SESSION_EVENT;
-use app_server_protocol::METHOD_INITIALIZED;
-use app_server_protocol::METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED;
 use app_server_protocol::PROTOCOL_VERSION;
 use app_server_protocol::SERVER_NAME;
 use serde::de::DeserializeOwned;
@@ -137,7 +136,7 @@ impl RequestProcessor {
     }
 
     pub fn handle_notification(&self, notification: JsonRpcNotification) {
-        if notification.method != METHOD_INITIALIZED {
+        if ClientNotification::try_from(notification) != Ok(ClientNotification::Initialized) {
             return;
         }
 
@@ -516,16 +515,9 @@ impl RequestProcessor {
 }
 
 pub fn event_notification_jsonrpc(event: AgentEvent) -> Result<JsonRpcMessage, JsonRpcError> {
-    let params = serde_json::to_value(AgentSessionEventParams { event }).map_err(|error| {
-        JsonRpcError::new(
-            error_codes::RUNTIME_ERROR,
-            format!("failed to serialize event notification: {error}"),
-        )
-    })?;
-    Ok(JsonRpcMessage::Notification(JsonRpcNotification::new(
-        METHOD_AGENT_SESSION_EVENT,
-        Some(params),
-    )))
+    Ok(JsonRpcMessage::Notification(
+        ServerNotification::AgentSessionEvent(AgentSessionEventParams::from_event(event)).into(),
+    ))
 }
 
 pub(super) fn parse_params<T>(params: Option<serde_json::Value>) -> Result<T, JsonRpcError>
@@ -588,23 +580,13 @@ pub(super) fn dispatch_result_with_events(
 pub(super) fn workspace_right_surface_pending_changed_notification(
     params: app_server_protocol::WorkspaceRightSurfacePendingChangedParams,
 ) -> Result<JsonRpcNotification, JsonRpcError> {
-    let params = serde_json::to_value(params).map_err(|error| {
-        JsonRpcError::new(
-            error_codes::RUNTIME_ERROR,
-            format!("failed to serialize workspace right surface notification: {error}"),
-        )
-    })?;
-    Ok(JsonRpcNotification::new(
-        METHOD_WORKSPACE_RIGHT_SURFACE_PENDING_CHANGED,
-        Some(params),
-    ))
+    Ok(ServerNotification::WorkspaceRightSurfacePendingChanged(params).into())
 }
 
 fn event_notification(event: AgentEvent) -> Result<JsonRpcMessage, AppServerError> {
-    Ok(JsonRpcMessage::Notification(JsonRpcNotification::new(
-        METHOD_AGENT_SESSION_EVENT,
-        Some(serde_json::to_value(AgentSessionEventParams { event })?),
-    )))
+    Ok(JsonRpcMessage::Notification(
+        ServerNotification::AgentSessionEvent(AgentSessionEventParams::from_event(event)).into(),
+    ))
 }
 
 pub(super) fn to_jsonrpc_error(error: RuntimeCoreError) -> JsonRpcError {

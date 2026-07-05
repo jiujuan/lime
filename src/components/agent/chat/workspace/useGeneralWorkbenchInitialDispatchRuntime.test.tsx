@@ -16,11 +16,15 @@ interface HarnessProps {
   autoRunInitialPromptOnMount?: boolean;
   contentId?: string;
   enableAutoGuide?: boolean;
+  handleSend?: ReturnType<typeof vi.fn>;
+  initialAutoSendAllowsDetachedSession?: boolean;
+  initialAutoSendRequestMetadata?: Record<string, unknown>;
   initialUserPrompt?: string;
   isSending?: boolean;
   isThemeWorkbench?: boolean;
   messagesLength?: number;
   queuedTurnsLength?: number;
+  projectId?: string | null;
   shouldUseCompactGeneralWorkbench?: boolean;
   onInitialUserPromptConsumed?: () => void;
 }
@@ -40,11 +44,15 @@ function Harness({
   autoRunInitialPromptOnMount = false,
   contentId,
   enableAutoGuide = false,
+  handleSend: handleSendOverride,
+  initialAutoSendAllowsDetachedSession = false,
+  initialAutoSendRequestMetadata = { source: "test" },
   initialUserPrompt,
   isSending = false,
   isThemeWorkbench = false,
   messagesLength = 0,
   queuedTurnsLength = 0,
+  projectId = "project-1",
   shouldUseCompactGeneralWorkbench = false,
   onInitialUserPromptConsumed = () => undefined,
 }: HarnessProps) {
@@ -52,7 +60,8 @@ function Harness({
   const [soulArtifactVoiceEnabledForTurn, setSoulArtifactVoiceEnabledForTurn] =
     useState(false);
   const triggerAIGuideRef = useRef(() => undefined);
-  const handleSend = useRef(vi.fn(async () => true)).current;
+  const fallbackHandleSend = useRef(vi.fn(async () => true)).current;
+  const handleSend = handleSendOverride ?? fallbackHandleSend;
   const runtime = useGeneralWorkbenchInitialDispatchRuntime({
     activeTheme: "general",
     autoRunInitialPromptOnMount,
@@ -81,8 +90,8 @@ function Harness({
     handleSend,
     hasProject: true,
     hasTriggeredGuideRef: runtime.hasTriggeredGuideRef,
-    initialAutoSendAllowsDetachedSession: false,
-    initialAutoSendRequestMetadata: { source: "test" },
+    initialAutoSendAllowsDetachedSession,
+    initialAutoSendRequestMetadata,
     initialDispatchKey: runtime.initialDispatchKey,
     initialUserPrompt,
     isSending,
@@ -90,7 +99,7 @@ function Harness({
     mappedTheme: "general",
     messagesLength,
     onInitialUserPromptConsumed,
-    projectId: "project-1",
+    projectId,
     sessionId: "session-1",
     setInput,
     shouldSkipGeneralWorkbenchAutoGuideWithoutPrompt: false,
@@ -114,6 +123,17 @@ function renderHarness(props?: HarnessProps): LatestState {
     root.render(<Harness {...props} />);
   });
   return readLatestState();
+}
+
+function renderDualHarness(props: HarnessProps): void {
+  act(() => {
+    root.render(
+      <>
+        <Harness {...props} />
+        <Harness {...props} />
+      </>,
+    );
+  });
 }
 
 function readLatestState(): LatestState {
@@ -237,5 +257,46 @@ describe("useGeneralWorkbenchInitialDispatchRuntime", () => {
     const { handleSend, input } = readLatestState();
     expect(input).toBe("先列一个计划");
     expect(handleSend).not.toHaveBeenCalled();
+  });
+
+  it("不自动发送的 @ 命令预填应保留尾部分隔空格", async () => {
+    renderHarness({
+      enableAutoGuide: true,
+      initialUserPrompt: "@写文章 ",
+    });
+    await flushEffects();
+
+    const { handleSend, input } = readLatestState();
+    expect(input).toBe("@写文章 ");
+    expect(handleSend).not.toHaveBeenCalled();
+  });
+
+  it("detached 初始自动发送在多实例重挂时应只启动一次", async () => {
+    const handleSend = vi.fn(async () => true);
+    const onInitialUserPromptConsumed = vi.fn();
+
+    renderDualHarness({
+      autoRunInitialPromptOnMount: true,
+      enableAutoGuide: true,
+      handleSend,
+      initialAutoSendAllowsDetachedSession: true,
+      initialAutoSendRequestMetadata: {
+        harness: {
+          plugin_activation_intent: {
+            launch_request_id: "launch-1",
+            plugin_id: "content-factory-app",
+          },
+        },
+      },
+      initialUserPrompt: "@写文章 ",
+      onInitialUserPromptConsumed,
+      projectId: null,
+    });
+    await flushEffects();
+
+    expect(handleSend).toHaveBeenCalledTimes(1);
+    const sendCalls = handleSend.mock.calls as unknown as unknown[][];
+    expect(sendCalls[0]?.[3]).toBe("@写文章");
+    expect(onInitialUserPromptConsumed).toHaveBeenCalledTimes(1);
   });
 });

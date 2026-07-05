@@ -15,8 +15,19 @@ impl RequestProcessor {
         request: JsonRpcRequest,
         event_callback: Option<&mut (dyn FnMut(JsonRpcMessage) + Send)>,
     ) -> Result<Vec<JsonRpcMessage>, AppServerError> {
-        let JsonRpcRequest { id, method, params } = request;
-        let result = match method.as_str() {
+        let request_id = request.id.clone();
+        let request = match AppServerClientRequest::try_from(request) {
+            Ok(request) => request,
+            Err(error) => {
+                return Ok(vec![JsonRpcMessage::Error(JsonRpcErrorResponse {
+                    id: request_id,
+                    error: JsonRpcError::new(error_codes::METHOD_NOT_FOUND, error),
+                })]);
+            }
+        };
+        let (id, method, params) = request.into_jsonrpc_parts();
+        let method = method.as_str();
+        let result = match method {
             METHOD_INITIALIZE => self.initialize(params).map(RpcDispatch::single),
             METHOD_CAPABILITY_LIST => self.handle_capability_list(params),
             METHOD_ARTIFACT_READ => self.handle_artifact_read(params),

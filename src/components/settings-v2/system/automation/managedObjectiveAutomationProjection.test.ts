@@ -17,6 +17,8 @@ function buildAgentTurnJob(
     payload: {
       kind: "agent_turn",
       prompt: "继续推进目标",
+      session_id: "session-objective-1",
+      thread_id: "thread-objective-1",
       system_prompt: null,
       web_search: false,
       request_metadata: requestMetadata,

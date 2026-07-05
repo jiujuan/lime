@@ -1,5 +1,6 @@
-use crate::agent_tools::tool_orchestrator::{
-    execute_planned_tool_batch, PlannedToolExecution, ToolExecutionBatchInput, ToolExecutionOutcome,
+use crate::agent_tools::tool_orchestrator::{PlannedToolExecution, ToolExecutionOutcome};
+use crate::agent_tools::workspace_patch_runtime_adapter::{
+    execute_workspace_patch_runtime_tool_batch, WorkspacePatchRuntimeToolBatchInput,
 };
 use crate::AgentRuntimeState;
 use crate::AgentTurnContext;
@@ -70,30 +71,17 @@ pub async fn execute_workspace_patch_host_tool_plan(
     plan: &WorkspacePatchHostToolPlan,
     input: WorkspacePatchHostToolExecutionInput,
 ) -> Result<WorkspacePatchHostToolExecutionResult, String> {
-    let registry = {
-        let agent_arc = agent_state.get_agent_arc();
-        let agent_guard = agent_arc.read().await;
-        let agent = agent_guard.as_ref().ok_or_else(|| {
-            "Aster agent is not initialized for workspace patch host tool execution".to_string()
-        })?;
-        agent.tool_registry().clone()
-    };
-    let batch = execute_planned_tool_batch(
-        ToolExecutionBatchInput {
-            registry,
+    let batch = execute_workspace_patch_runtime_tool_batch(
+        agent_state,
+        WorkspacePatchRuntimeToolBatchInput {
             session_id: input.session_id,
             working_directory: input.working_directory,
-            cancel_token: None,
             turn_context: input.turn_context,
-            persisted_execution_policy: None,
             parallelism: input.parallelism,
-            auto_mode: true,
-            bypass_restrictions: false,
-            live_process_registry: None,
         },
         plan.planned_tools(),
     )
-    .await;
+    .await?;
     let host_tool_evidence =
         build_workspace_patch_host_tool_evidence(&plan.requests, batch.outcomes.as_slice());
 
@@ -490,7 +478,9 @@ fn sanitize_tool_id(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent_tools::tool_orchestrator::ToolExecutionOutcome;
     use serde_json::json;
+    use std::collections::HashMap;
 
     #[test]
     fn reads_host_tool_requests_from_workspace_patch_source() {
@@ -553,5 +543,143 @@ mod tests {
             plan.requests[0].workflow_key.as_deref(),
             Some(LEGACY_ARTICLE_WORKFLOW_KEY)
         );
+    }
+
+    #[test]
+    fn workspace_patch_host_evidence_updates_article_search_fields_on_success() {
+        let mut patch = article_workspace_patch_with_host_search_request();
+        let plan = WorkspacePatchHostToolPlan::from_patch(&patch).expect("host tool plan");
+        let evidence = build_workspace_patch_host_tool_evidence(
+            &plan.requests,
+            &[tool_outcome(
+                &plan.requests[0],
+                true,
+                "session=session-1 query=Lime 写文章 result=found",
+                None,
+            )],
+        );
+
+        update_workspace_patch_with_host_tool_evidence(&mut patch, &evidence);
+
+        let source = &patch["objects"][0]["source"];
+        let search_evidence = source["searchEvidence"]
+            .as_array()
+            .expect("search evidence");
+        assert_eq!(search_evidence.len(), 1);
+        assert_eq!(search_evidence[0]["tool"], "WebSearch");
+        assert_eq!(search_evidence[0]["status"], "completed");
+        assert_eq!(
+            search_evidence[0]["summary"],
+            "session=session-1 query=Lime 写文章 result=found"
+        );
+        assert_eq!(source["hostSearchStatus"], "completed");
+        assert_eq!(source["hostToolStatus"], "completed");
+        assert_eq!(
+            source["hostSearchEvidence"],
+            Value::Array(search_evidence.clone())
+        );
+        assert_eq!(
+            source["hostToolEvidence"],
+            Value::Array(search_evidence.clone())
+        );
+    }
+
+    #[test]
+    fn workspace_patch_host_evidence_marks_article_failed_on_tool_failure() {
+        let mut patch = article_workspace_patch_with_host_search_request();
+        let plan = WorkspacePatchHostToolPlan::from_patch(&patch).expect("host tool plan");
+        let evidence = build_workspace_patch_host_tool_evidence(
+            &plan.requests,
+            &[tool_outcome(
+                &plan.requests[0],
+                false,
+                "",
+                Some("web search unavailable"),
+            )],
+        );
+
+        update_workspace_patch_with_host_tool_evidence(&mut patch, &evidence);
+
+        let source = &patch["objects"][0]["source"];
+        let search_evidence = source["searchEvidence"]
+            .as_array()
+            .expect("search evidence");
+        assert_eq!(search_evidence.len(), 1);
+        assert_eq!(search_evidence[0]["tool"], "WebSearch");
+        assert_eq!(search_evidence[0]["status"], "failed");
+        assert_eq!(search_evidence[0]["summary"], "");
+        assert_eq!(source["hostSearchStatus"], "failed");
+        assert_eq!(source["hostToolStatus"], "failed");
+        assert_eq!(
+            source["hostSearchEvidence"],
+            Value::Array(search_evidence.clone())
+        );
+        assert_eq!(
+            source["hostToolEvidence"],
+            Value::Array(search_evidence.clone())
+        );
+        assert_eq!(patch["objects"][0]["status"], "failed");
+        assert_eq!(
+            patch["objects"][0]["summary"],
+            "检索失败，文章草稿未达到可交付状态"
+        );
+    }
+
+    fn article_workspace_patch_with_host_search_request() -> Value {
+        json!({
+            "schemaVersion": 1,
+            "appId": "content-factory-app",
+            "sessionId": "session-1",
+            "objects": [
+                {
+                    "ref": {
+                        "appId": "content-factory-app",
+                        "kind": "articleDraft",
+                        "id": "article-draft-1",
+                        "sessionId": "session-1"
+                    },
+                    "title": "公众号文章草稿",
+                    "status": "ready",
+                    "source": {
+                        "taskKind": "content.article.generate",
+                        "taskId": "task-article-draft-1",
+                        "documentText": "# 草稿\n\n正文。",
+                        "finalMarkdown": "# 草稿\n\n正文。",
+                        "workflowKey": "content_article_workflow",
+                        "hostToolRequests": [
+                            {
+                                "id": "host-tool-request-1",
+                                "toolName": "WebSearch",
+                                "query": "Lime 写文章",
+                                "params": {
+                                    "query": "Lime 写文章"
+                                },
+                                "purpose": "验证宿主真实检索回填"
+                            }
+                        ]
+                    }
+                }
+            ]
+        })
+    }
+
+    fn tool_outcome(
+        request: &WorkspacePatchHostToolRequest,
+        success: bool,
+        output: &str,
+        error: Option<&str>,
+    ) -> ToolExecutionOutcome {
+        ToolExecutionOutcome {
+            tool_name: request.tool_name.clone(),
+            tool_id: request.tool_id.clone(),
+            success,
+            output: output.to_string(),
+            error: error.map(ToString::to_string),
+            metadata: Some(HashMap::from([(
+                "source".to_string(),
+                json!("fixed_web_search"),
+            )])),
+            stream_events: Vec::new(),
+        }
     }
 }

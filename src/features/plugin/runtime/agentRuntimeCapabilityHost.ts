@@ -6,7 +6,6 @@ import type {
   PluginRuntimeTaskSnapshot,
 } from "@/lib/api/pluginRuntime";
 import type { AgentRuntimeRespondActionRequest } from "@/lib/api/agentRuntime/types";
-import { getOrCreateDefaultProject } from "@/lib/api/project";
 import type {
   PluginTaskLookup,
   CapabilityHost,
@@ -29,9 +28,7 @@ import type {
   PluginUninstallResult,
   AppCleanupPlan,
 } from "../types";
-import {
-  createPluginRuntimeCapabilityApiFromClient,
-} from "./agentRuntimeClientApi";
+import { createPluginRuntimeCapabilityApiFromClient } from "./agentRuntimeClientApi";
 import {
   createFailClosedPluginRuntimeCapabilityApi,
   type PluginRuntimeCapabilityApi,
@@ -127,6 +124,12 @@ function runtimeTaskStorageKey(taskId: string): string {
 
 function createRuntimeTaskId(): string {
   return `plugin-task-${Date.now()}`;
+}
+
+async function rejectMissingWorkspaceId(): Promise<string> {
+  throw new Error(
+    "Plugin Agent task requires an existing sessionId or explicit Project/Thread workspaceId; default project creation is disabled.",
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -769,9 +772,7 @@ function buildTaskRecord(
   };
 }
 
-function readRuntimeRequest(
-  input: PluginTaskRequest,
-): RuntimeAgentTaskRequest {
+function readRuntimeRequest(input: PluginTaskRequest): RuntimeAgentTaskRequest {
   return input as RuntimeAgentTaskRequest;
 }
 
@@ -828,7 +829,7 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
   private readonly packageHash: string;
   private readonly manifestHash: string;
   private readonly workspaceId?: string;
-  private readonly workspaceIdResolver: () => Promise<string>;
+  private readonly workspaceIdResolver?: () => Promise<string>;
   private readonly api: PluginRuntimeCapabilityApi;
   private readonly ensureSession?: AgentRuntimeSessionResolver;
   private readonly now: () => string;
@@ -841,9 +842,7 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
     this.packageHash = options.packageHash ?? "";
     this.manifestHash = options.manifestHash ?? "";
     this.workspaceId = options.workspaceId;
-    this.workspaceIdResolver =
-      options.workspaceIdResolver ??
-      (async () => (await getOrCreateDefaultProject()).id);
+    this.workspaceIdResolver = options.workspaceIdResolver;
     this.now = options.now ?? (() => new Date().toISOString());
     this.ensureSession = options.ensureSession;
     this.api =
@@ -918,11 +917,26 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
   private async resolveWorkspaceId(
     request: RuntimeAgentTaskRequest,
   ): Promise<string> {
-    return (
-      normalizeString(request.workspaceId) ??
-      normalizeString(this.workspaceId) ??
-      (await this.workspaceIdResolver())
-    );
+    const workspaceId =
+      normalizeString(request.workspaceId) ?? normalizeString(this.workspaceId);
+    if (workspaceId) {
+      return workspaceId;
+    }
+    if (this.workspaceIdResolver) {
+      return this.workspaceIdResolver();
+    }
+    return rejectMissingWorkspaceId();
+  }
+
+  private async resolveOptionalWorkspaceId(
+    request: RuntimeAgentTaskRequest,
+  ): Promise<string | undefined> {
+    const workspaceId =
+      normalizeString(request.workspaceId) ?? normalizeString(this.workspaceId);
+    if (workspaceId) {
+      return workspaceId;
+    }
+    return this.workspaceIdResolver?.();
   }
 
   private async startRuntimeTask(
@@ -931,9 +945,7 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
     retry?: { retryOfTaskId: string; retryAttempt: number; sessionId?: string },
   ): Promise<PluginTaskRecord> {
     const runtimeRequest = readRuntimeRequest(input);
-    const taskKind =
-      normalizeString(runtimeRequest.taskKind) ?? "plugin.task";
-    const workspaceId = await this.resolveWorkspaceId(runtimeRequest);
+    const taskKind = normalizeString(runtimeRequest.taskKind) ?? "plugin.task";
     const requiredCapabilities = normalizeList(
       runtimeRequest.requiredCapabilities,
     );
@@ -943,6 +955,10 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
     ]);
     const requestedSessionId =
       normalizeString(runtimeRequest.sessionId) ?? retry?.sessionId;
+    const resolvedWorkspaceId = requestedSessionId
+      ? await this.resolveOptionalWorkspaceId(runtimeRequest)
+      : await this.resolveWorkspaceId(runtimeRequest);
+    const workspaceId = resolvedWorkspaceId ?? "";
     const metadata = {
       ...(runtimeRequest.metadata ?? {}),
       plugin_host_bridge: {
@@ -973,7 +989,7 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
     const result = await this.api.startTask({
       appId: this.appId,
       entryKey,
-      workspaceId,
+      ...(resolvedWorkspaceId ? { workspaceId: resolvedWorkspaceId } : {}),
       sessionId,
       taskId,
       taskKind,
@@ -1063,10 +1079,15 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
     snapshot: PluginRuntimeTaskSnapshot,
   ): Promise<RuntimeTaskState> {
     const taskKind = normalizeString(lookup.taskKind) ?? "plugin.task";
+    const sessionId = normalizeString(lookup.sessionId) ?? snapshot.sessionId;
     const workspaceId =
       normalizeString(lookup.workspaceId) ??
       normalizeString(this.workspaceId) ??
-      (await this.workspaceIdResolver());
+      (this.workspaceIdResolver
+        ? await this.workspaceIdResolver()
+        : sessionId
+          ? ""
+          : await rejectMissingWorkspaceId());
     return {
       appId: snapshot.appId || this.appId,
       appVersion: this.appVersion,
@@ -1075,7 +1096,7 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
       entryKey,
       taskId: lookup.taskId,
       traceId: normalizeString(lookup.traceId) ?? lookup.taskId,
-      sessionId: normalizeString(lookup.sessionId) ?? snapshot.sessionId,
+      sessionId,
       turnId:
         normalizeString(lookup.turnId) ??
         readLatestTurnId(snapshot.threadRead) ??

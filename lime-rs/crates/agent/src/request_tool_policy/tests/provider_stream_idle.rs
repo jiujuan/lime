@@ -133,16 +133,16 @@ async fn stream_message_reply_with_policy_should_retry_provider_stream_idle_afte
     let session_config = test_session_config(&session.id, "turn-provider-idle-retry");
     let policy = resolve_request_tool_policy(Some(true));
     let mut runtime_events = Vec::new();
+    let reply_host = AsterReplyRuntimeHost::new(&agent);
 
     let reply = stream_message_reply_with_policy_with_options(
-        &agent,
+        &reply_host,
         ReplyInput::text("整理今天的国际新闻").into(),
         None,
         session_config,
         None,
         &policy,
         |event| runtime_events.push(event.clone()),
-        None,
         StreamReplyPolicyExecutionOptions {
             provider_stream_idle_timeout: Some(Duration::from_millis(200)),
             persist_runtime_status: true,
@@ -173,18 +173,18 @@ async fn stream_message_reply_with_policy_should_fail_closed_when_provider_strea
     let session_config = test_session_config(&session.id, "turn-provider-idle-before-event");
     let policy = resolve_request_tool_policy(Some(false));
     let mut runtime_events = Vec::new();
+    let reply_host = AsterReplyRuntimeHost::new(&agent);
 
     let error = tokio::time::timeout(
         Duration::from_secs(3),
         stream_message_reply_with_policy_with_options(
-            &agent,
+            &reply_host,
             ReplyInput::text("请回复").into(),
             None,
             session_config,
             None,
             &policy,
             |event| runtime_events.push(event.clone()),
-            None,
             StreamReplyPolicyExecutionOptions {
                 provider_stream_idle_timeout: Some(Duration::from_millis(200)),
                 persist_runtime_status: true,

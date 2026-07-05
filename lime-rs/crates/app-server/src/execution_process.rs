@@ -6,22 +6,24 @@ use app_server_protocol::{
     ExecutionProcessWriteStdinParams,
 };
 use lime_agent::agent_tools::execution::{
-    decide_tool_execution, start_local_execution_process,
-    ExecutionOutputDelta as AgentExecutionOutputDelta,
-    ExecutionOutputKind as AgentExecutionOutputKind,
-    ExecutionProcessSnapshot as AgentExecutionProcessSnapshot,
-    ExecutionProcessStatus as AgentExecutionProcessStatus, LocalExecutionProcessControlHandle,
-    LocalExecutionRequest, ToolExecutionDecisionInput, ToolExecutionDecisionKind,
+    decide_tool_execution, ToolExecutionDecisionInput, ToolExecutionDecisionKind,
     ToolExecutionResolverInput,
 };
 use lime_agent::agent_tools::tool_orchestrator::{
-    canonical_shell_tool_name, check_shell_tool_permissions, shell_command_text_from_argv,
-    LiveExecutionProcessRegistry,
+    canonical_shell_tool_name, check_shell_tool_permissions, LiveExecutionProcessRegistry,
 };
 use serde_json::json;
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use tool_runtime::execution_process::{
+    start_local_execution_process, ExecutionOutputDelta as RuntimeExecutionOutputDelta,
+    ExecutionOutputKind as RuntimeExecutionOutputKind,
+    ExecutionProcessSnapshot as RuntimeExecutionProcessSnapshot,
+    ExecutionProcessStatus as RuntimeExecutionProcessStatus, LocalExecutionProcessControlHandle,
+    LocalExecutionRequest,
+};
+use tool_runtime::shell::shell_command_text_from_argv;
 
 const DEFAULT_DRAIN_LIMIT: usize = 128;
 const MAX_DRAIN_LIMIT: usize = 1024;
@@ -72,7 +74,7 @@ impl ExecutionProcessServer {
     pub fn register_process_handle(
         &self,
         handle: LocalExecutionProcessControlHandle,
-        snapshot: AgentExecutionProcessSnapshot,
+        snapshot: RuntimeExecutionProcessSnapshot,
     ) -> Result<(), ExecutionProcessError> {
         if handle.process_id() != snapshot.process_id {
             return Err(ExecutionProcessError::Control(format!(
@@ -106,7 +108,7 @@ impl ExecutionProcessServer {
 
     pub fn record_process_output(
         &self,
-        delta: AgentExecutionOutputDelta,
+        delta: RuntimeExecutionOutputDelta,
     ) -> Result<(), ExecutionProcessError> {
         let mut state = self.inner.lock().map_err(|_| ExecutionProcessError::Lock)?;
         if !state.processes.contains_key(&delta.process_id) {
@@ -118,7 +120,7 @@ impl ExecutionProcessServer {
 
     pub fn finish_process(
         &self,
-        snapshot: AgentExecutionProcessSnapshot,
+        snapshot: RuntimeExecutionProcessSnapshot,
     ) -> Result<(), ExecutionProcessError> {
         let process_id = snapshot.process_id.clone();
         let snapshot = map_snapshot(snapshot);
@@ -371,18 +373,18 @@ impl LiveExecutionProcessRegistry for ExecutionProcessServer {
     fn register_live_process(
         &self,
         handle: LocalExecutionProcessControlHandle,
-        snapshot: AgentExecutionProcessSnapshot,
+        snapshot: RuntimeExecutionProcessSnapshot,
     ) -> Result<(), String> {
         self.register_process_handle(handle, snapshot)
             .map_err(|error| error.to_string())
     }
 
-    fn record_live_process_output(&self, delta: AgentExecutionOutputDelta) -> Result<(), String> {
+    fn record_live_process_output(&self, delta: RuntimeExecutionOutputDelta) -> Result<(), String> {
         self.record_process_output(delta)
             .map_err(|error| error.to_string())
     }
 
-    fn finish_live_process(&self, snapshot: AgentExecutionProcessSnapshot) -> Result<(), String> {
+    fn finish_live_process(&self, snapshot: RuntimeExecutionProcessSnapshot) -> Result<(), String> {
         self.finish_process(snapshot)
             .map_err(|error| error.to_string())
     }
@@ -400,7 +402,7 @@ fn push_output(state: &mut ExecutionProcessState, delta: ExecutionProcessOutputD
     }
 }
 
-fn map_snapshot(snapshot: AgentExecutionProcessSnapshot) -> ExecutionProcessSnapshot {
+fn map_snapshot(snapshot: RuntimeExecutionProcessSnapshot) -> ExecutionProcessSnapshot {
     ExecutionProcessSnapshot {
         process_id: snapshot.process_id,
         tool_id: snapshot.tool_id,
@@ -416,7 +418,7 @@ fn map_snapshot(snapshot: AgentExecutionProcessSnapshot) -> ExecutionProcessSnap
     }
 }
 
-fn map_delta(delta: AgentExecutionOutputDelta) -> ExecutionProcessOutputDelta {
+fn map_delta(delta: RuntimeExecutionOutputDelta) -> ExecutionProcessOutputDelta {
     ExecutionProcessOutputDelta {
         process_id: delta.process_id,
         tool_id: delta.tool_id,
@@ -429,22 +431,22 @@ fn map_delta(delta: AgentExecutionOutputDelta) -> ExecutionProcessOutputDelta {
     }
 }
 
-fn map_status(status: AgentExecutionProcessStatus) -> ExecutionProcessStatus {
+fn map_status(status: RuntimeExecutionProcessStatus) -> ExecutionProcessStatus {
     match status {
-        AgentExecutionProcessStatus::Starting => ExecutionProcessStatus::Starting,
-        AgentExecutionProcessStatus::Running => ExecutionProcessStatus::Running,
-        AgentExecutionProcessStatus::Exited => ExecutionProcessStatus::Exited,
-        AgentExecutionProcessStatus::Interrupted => ExecutionProcessStatus::Interrupted,
-        AgentExecutionProcessStatus::Terminated => ExecutionProcessStatus::Terminated,
-        AgentExecutionProcessStatus::Failed => ExecutionProcessStatus::Failed,
+        RuntimeExecutionProcessStatus::Starting => ExecutionProcessStatus::Starting,
+        RuntimeExecutionProcessStatus::Running => ExecutionProcessStatus::Running,
+        RuntimeExecutionProcessStatus::Exited => ExecutionProcessStatus::Exited,
+        RuntimeExecutionProcessStatus::Interrupted => ExecutionProcessStatus::Interrupted,
+        RuntimeExecutionProcessStatus::Terminated => ExecutionProcessStatus::Terminated,
+        RuntimeExecutionProcessStatus::Failed => ExecutionProcessStatus::Failed,
     }
 }
 
-fn map_output_kind(kind: AgentExecutionOutputKind) -> ExecutionProcessOutputKind {
+fn map_output_kind(kind: RuntimeExecutionOutputKind) -> ExecutionProcessOutputKind {
     match kind {
-        AgentExecutionOutputKind::Stdout => ExecutionProcessOutputKind::Stdout,
-        AgentExecutionOutputKind::Stderr => ExecutionProcessOutputKind::Stderr,
-        AgentExecutionOutputKind::Combined => ExecutionProcessOutputKind::Combined,
+        RuntimeExecutionOutputKind::Stdout => ExecutionProcessOutputKind::Stdout,
+        RuntimeExecutionOutputKind::Stderr => ExecutionProcessOutputKind::Stderr,
+        RuntimeExecutionOutputKind::Combined => ExecutionProcessOutputKind::Combined,
     }
 }
 

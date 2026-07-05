@@ -52,6 +52,83 @@ describe("AgentRuntimeCapabilityHost", () => {
     );
   });
 
+  it("没有显式 Project/Thread workspace 时不得自动创建默认项目", async () => {
+    const api = {
+      startTask: vi.fn(),
+      getTask: vi.fn(),
+      cancelTask: vi.fn(),
+      submitHostResponse: vi.fn(),
+    };
+    const host = new AgentRuntimeCapabilityHost({
+      delegate: buildDelegateHost(),
+      appId: "content-factory-app",
+      appVersion: "0.3.0",
+      packageHash: "package-hash-1",
+      manifestHash: "manifest-hash-1",
+      api,
+      now: () => "2026-05-15T00:00:03.000Z",
+    });
+    const sdk = host.createSdkContext(CONTENT_FACTORY_ENTRY_KEY);
+
+    await expect(
+      sdk.agent.startTask({
+        title: "缺少 Project/Thread workspace",
+        taskKind: "content.copy.generate",
+        input: { projectId: "project-1" },
+      }),
+    ).rejects.toThrow(
+      "Plugin Agent task requires an existing sessionId or explicit Project/Thread workspaceId",
+    );
+    expect(api.startTask).not.toHaveBeenCalled();
+  });
+
+  it("已有 sessionId 时复用当前 Thread，不要求默认项目 resolver", async () => {
+    const api = {
+      startTask: vi.fn(async (request) => ({
+        appId: request.appId,
+        entryKey: request.entryKey,
+        taskId: request.taskId ?? "plugin-task-current-thread",
+        traceId: "plugin-trace-current-thread",
+        taskKind: request.taskKind,
+        sessionId: request.sessionId ?? "session-current",
+        turnId: "turn-current",
+        eventName: `plugin_runtime:${request.appId}:plugin-task-current-thread`,
+        status: "accepted" as const,
+        submittedAt: "2026-05-15T00:00:00.000Z",
+      })),
+      getTask: vi.fn(),
+      cancelTask: vi.fn(),
+      submitHostResponse: vi.fn(),
+    };
+    const host = new AgentRuntimeCapabilityHost({
+      delegate: buildDelegateHost(),
+      appId: "content-factory-app",
+      appVersion: "0.3.0",
+      packageHash: "package-hash-1",
+      manifestHash: "manifest-hash-1",
+      api,
+      now: () => "2026-05-15T00:00:03.000Z",
+    });
+    const sdk = host.createSdkContext(CONTENT_FACTORY_ENTRY_KEY);
+
+    const started = await sdk.agent.startTask({
+      title: "复用当前 Thread",
+      taskKind: "content.copy.generate",
+      sessionId: "session-current",
+      input: { projectId: "project-1" },
+    });
+
+    expect(api.startTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: "session-current",
+      }),
+    );
+    expect(started).toMatchObject({
+      sessionId: "session-current",
+      turnId: "turn-current",
+    });
+  });
+
   it("可以直接注入标准 AgentRuntimeClient 驱动 lime.agent task", async () => {
     const runtimeClient: Pick<
       AgentRuntimeClient,
@@ -301,8 +378,7 @@ describe("AgentRuntimeCapabilityHost", () => {
       prompt: "基于项目知识生成内容场景",
       taskId: "plugin-requested-task",
       turnId: "plugin-requested-turn",
-      eventName:
-        "plugin_runtime:content-factory-app:plugin-requested-task",
+      eventName: "plugin_runtime:content-factory-app:plugin-requested-task",
       taskKind: "content.scenario_planning",
       input: { projectId: "project-1" },
       expectedOutput: { artifactKind: "content_table" },
@@ -357,8 +433,7 @@ describe("AgentRuntimeCapabilityHost", () => {
         workspaceId: "workspace-1",
         taskId: "plugin-requested-task",
         turnId: "plugin-requested-turn",
-        eventName:
-          "plugin_runtime:content-factory-app:plugin-requested-task",
+        eventName: "plugin_runtime:content-factory-app:plugin-requested-task",
         taskKind: "content.scenario_planning",
         capabilityHints: ["image_generation"],
         humanReview: true,
@@ -560,8 +635,7 @@ describe("AgentRuntimeCapabilityHost", () => {
       delegate
         .getStorageEntries({ appId: "content-factory-app" })
         .some(
-          (entry) =>
-            entry.key === "agent-runtime/tasks/plugin-task-persisted",
+          (entry) => entry.key === "agent-runtime/tasks/plugin-task-persisted",
         ),
     ).toBe(true);
 
@@ -575,7 +649,9 @@ describe("AgentRuntimeCapabilityHost", () => {
       api,
       now: () => "2026-05-15T00:00:04.000Z",
     });
-    const reloadedSdk = reloadedHost.createSdkContext(CONTENT_FACTORY_ENTRY_KEY);
+    const reloadedSdk = reloadedHost.createSdkContext(
+      CONTENT_FACTORY_ENTRY_KEY,
+    );
     const restored = await reloadedSdk.agent.getTask(started.taskId);
     const listed = await reloadedSdk.agent.listTasks();
     const hostResponse = await reloadedSdk.agent.submitHostResponse({

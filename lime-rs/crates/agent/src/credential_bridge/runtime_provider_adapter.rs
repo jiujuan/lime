@@ -1,29 +1,39 @@
 use super::provider_env::{set_provider_env_vars, should_disable_provider_default_fast_model};
-use super::provider_safety::wrap_provider_with_safety;
 use super::CredentialBridgeError;
 use aster::agents::{Agent, AgentEvent as AsterAgentEvent};
-use aster::conversation::message::Message as AsterMessage;
+use aster::conversation::message::{Message, MessageContent};
 use aster::model::ModelConfig;
-use aster::providers::base::Provider;
+use aster::providers::base::{
+    LeadWorkerProviderTrait, MessageStream, Provider, ProviderMetadata, ProviderUsage,
+    SessionNameGenerationExecutionStrategy,
+};
+use aster::providers::errors::ProviderError;
+use aster::providers::RetryConfig;
+use async_trait::async_trait;
 use futures::stream::BoxStream;
 use model_provider::runtime_provider::RuntimeProviderConfig;
+use model_provider::safety::{
+    normalize_fast_model, normalize_provider_tool_messages, truncate_provider_text,
+    ProviderToolContentProjection, ProviderToolMessageProjection, ProviderToolMessageRole,
+};
+use rmcp::model::Tool;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
-/// 迁移期 session provider handle。
+/// 当前回合配置好的 reply provider。
 ///
-/// runtime provider trait 只在本 adapter 内部暴露；调用方只持有 handle，
+/// Aster Provider trait 只在本 adapter 内部暴露；调用方只持有回合级 provider，
 /// 等 current runtime provider stream 接管后替换这里的内部实现。
 #[derive(Clone)]
-pub(crate) struct SessionProviderHandle {
+pub(crate) struct ConfiguredReplyProvider {
     provider: Arc<dyn Provider>,
 }
 
-impl SessionProviderHandle {
-    pub(crate) async fn reply_stream_with_agent<'a>(
+impl ConfiguredReplyProvider {
+    pub(crate) async fn stream_reply_with_agent<'a>(
         &self,
         agent: &'a Agent,
-        user_message: AsterMessage,
+        user_message: Message,
         session_config: aster::agents::SessionConfig,
         cancel_token: Option<CancellationToken>,
     ) -> anyhow::Result<BoxStream<'a, anyhow::Result<AsterAgentEvent>>> {
@@ -38,12 +48,12 @@ impl SessionProviderHandle {
     }
 }
 
-pub(crate) async fn create_session_provider_handle(
+pub(crate) async fn create_configured_reply_provider(
     config: &RuntimeProviderConfig,
-) -> Result<SessionProviderHandle, CredentialBridgeError> {
+) -> Result<ConfiguredReplyProvider, CredentialBridgeError> {
     create_runtime_provider_handle_inner(config)
         .await
-        .map(|provider| SessionProviderHandle { provider })
+        .map(|provider| ConfiguredReplyProvider { provider })
 }
 
 /// RuntimeProviderConfig 到 runtime provider 的迁移期 adapter。
@@ -90,10 +100,251 @@ fn build_provider_model_config(
         })
 }
 
+fn wrap_provider_with_safety(
+    provider: Arc<dyn Provider>,
+    disable_default_fast_model: bool,
+) -> Arc<dyn Provider> {
+    Arc::new(ProviderSafety {
+        inner: provider,
+        disable_default_fast_model,
+    })
+}
+
+fn normalize_provider_messages(messages: &[Message]) -> Vec<Message> {
+    let projections = messages
+        .iter()
+        .map(project_provider_tool_message)
+        .collect::<Vec<_>>();
+    let normalization = normalize_provider_tool_messages(&projections);
+    let normalized_messages = messages
+        .iter()
+        .zip(normalization.messages.iter())
+        .filter_map(|(message, message_normalization)| {
+            let content = message_normalization
+                .retained_content_indices
+                .iter()
+                .filter_map(|content_index| message.content.get(*content_index).cloned())
+                .collect::<Vec<_>>();
+            if content.is_empty() {
+                return None;
+            }
+            let mut normalized = message.clone();
+            normalized.content = content;
+            Some(normalized)
+        })
+        .collect::<Vec<_>>();
+
+    if normalization.removed_invalid_requests > 0 || normalization.removed_invalid_responses > 0 {
+        tracing::warn!(
+            removed_invalid_requests = normalization.removed_invalid_requests,
+            removed_invalid_responses = normalization.removed_invalid_responses,
+            "[ProviderSafety] 已在 provider 请求前归一化工具消息链"
+        );
+    }
+
+    normalized_messages
+}
+
+fn project_provider_tool_message(message: &Message) -> ProviderToolMessageProjection {
+    ProviderToolMessageProjection {
+        role: match message.role {
+            rmcp::model::Role::Assistant => ProviderToolMessageRole::Assistant,
+            rmcp::model::Role::User => ProviderToolMessageRole::User,
+        },
+        contents: message
+            .content
+            .iter()
+            .map(project_provider_tool_content)
+            .collect(),
+    }
+}
+
+fn project_provider_tool_content(content: &MessageContent) -> ProviderToolContentProjection {
+    match content {
+        MessageContent::ToolRequest(request) => ProviderToolContentProjection::ToolRequest {
+            id: request.id.clone(),
+            valid: request.tool_call.is_ok(),
+        },
+        MessageContent::FrontendToolRequest(request) => {
+            ProviderToolContentProjection::FrontendToolRequest {
+                id: request.id.clone(),
+                valid: request.tool_call.is_ok(),
+            }
+        }
+        MessageContent::ToolResponse(response) => ProviderToolContentProjection::ToolResponse {
+            id: response.id.clone(),
+        },
+        _ => ProviderToolContentProjection::Other,
+    }
+}
+
+fn normalize_provider_model_config(
+    model_config: &ModelConfig,
+    disable_default_fast_model: bool,
+) -> ModelConfig {
+    if !disable_default_fast_model || model_config.fast_model.is_none() {
+        return model_config.clone();
+    }
+
+    let mut normalized = model_config.clone();
+    normalized.fast_model = normalize_fast_model(normalized.fast_model, disable_default_fast_model);
+    normalized
+}
+
+struct ProviderSafety {
+    inner: Arc<dyn Provider>,
+    disable_default_fast_model: bool,
+}
+
+#[async_trait]
+impl Provider for ProviderSafety {
+    fn metadata() -> ProviderMetadata
+    where
+        Self: Sized,
+    {
+        ProviderMetadata::empty()
+    }
+
+    fn get_name(&self) -> &str {
+        self.inner.get_name()
+    }
+
+    async fn complete_with_model(
+        &self,
+        model_config: &ModelConfig,
+        system: &str,
+        messages: &[Message],
+        tools: &[Tool],
+    ) -> Result<(Message, ProviderUsage), ProviderError> {
+        let normalized_messages = normalize_provider_messages(messages);
+        let normalized_model_config =
+            normalize_provider_model_config(model_config, self.disable_default_fast_model);
+        self.inner
+            .complete_with_model(
+                &normalized_model_config,
+                system,
+                &normalized_messages,
+                tools,
+            )
+            .await
+    }
+
+    fn get_model_config(&self) -> ModelConfig {
+        normalize_provider_model_config(
+            &self.inner.get_model_config(),
+            self.disable_default_fast_model,
+        )
+    }
+
+    fn retry_config(&self) -> RetryConfig {
+        self.inner.retry_config()
+    }
+
+    async fn fetch_supported_models(&self) -> Result<Option<Vec<String>>, ProviderError> {
+        self.inner.fetch_supported_models().await
+    }
+
+    async fn fetch_recommended_models(&self) -> Result<Option<Vec<String>>, ProviderError> {
+        self.inner.fetch_recommended_models().await
+    }
+
+    async fn map_to_canonical_model(
+        &self,
+        provider_model: &str,
+    ) -> Result<Option<String>, ProviderError> {
+        self.inner.map_to_canonical_model(provider_model).await
+    }
+
+    fn supports_embeddings(&self) -> bool {
+        self.inner.supports_embeddings()
+    }
+
+    async fn supports_cache_control(&self) -> bool {
+        self.inner.supports_cache_control().await
+    }
+
+    async fn create_embeddings(&self, texts: Vec<String>) -> Result<Vec<Vec<f32>>, ProviderError> {
+        self.inner.create_embeddings(texts).await
+    }
+
+    fn as_lead_worker(&self) -> Option<&dyn LeadWorkerProviderTrait> {
+        self.inner.as_lead_worker()
+    }
+
+    async fn stream(
+        &self,
+        system: &str,
+        messages: &[Message],
+        tools: &[Tool],
+    ) -> Result<MessageStream, ProviderError> {
+        let normalized_messages = normalize_provider_messages(messages);
+        self.inner.stream(system, &normalized_messages, tools).await
+    }
+
+    fn supports_streaming(&self) -> bool {
+        self.inner.supports_streaming()
+    }
+
+    fn get_active_model_name(&self) -> String {
+        self.inner.get_active_model_name()
+    }
+
+    async fn generate_session_name(
+        &self,
+        messages: &aster::conversation::Conversation,
+    ) -> Result<String, ProviderError> {
+        if !self.disable_default_fast_model {
+            return self.inner.generate_session_name(messages).await;
+        }
+
+        let context = self.get_initial_user_messages(messages);
+        let prompt = self.create_session_name_prompt(&context);
+        let message = Message::user().with_text(&prompt);
+        let result = self
+            .complete_fast(
+                "Reply with only a description in four words or less",
+                &[message],
+                &[],
+            )
+            .await?;
+
+        let description = result
+            .0
+            .as_concat_text()
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        Ok(truncate_provider_text(&description, 100))
+    }
+
+    fn session_name_generation_execution_strategy(&self) -> SessionNameGenerationExecutionStrategy {
+        self.inner.session_name_generation_execution_strategy()
+    }
+
+    async fn configure_oauth(&self) -> Result<(), ProviderError> {
+        self.inner.configure_oauth().await
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::build_provider_model_config;
+    use super::{
+        build_provider_model_config, normalize_provider_messages, normalize_provider_model_config,
+        wrap_provider_with_safety,
+    };
+    use aster::conversation::message::{Message, MessageContent};
+    use aster::conversation::Conversation;
+    use aster::model::ModelConfig;
+    use aster::providers::base::{
+        Provider, ProviderMetadata, ProviderUsage, SessionNameGenerationExecutionStrategy, Usage,
+    };
+    use aster::providers::errors::ProviderError;
+    use async_trait::async_trait;
     use model_provider::runtime_provider::{RuntimeProviderConfig, RuntimeProviderProtocol};
+    use rmcp::model::{CallToolRequestParam, CallToolResult, ErrorCode, ErrorData, Tool};
+    use rmcp::object;
+    use std::sync::{Arc, Mutex};
 
     #[test]
     fn test_build_provider_model_config_applies_toolshim_override() {
@@ -115,5 +366,329 @@ mod tests {
         assert!(model_config.toolshim);
         assert_eq!(model_config.toolshim_model.as_deref(), Some("gpt-4o-mini"));
         assert_eq!(model_config.reasoning_effort.as_deref(), Some("high"));
+    }
+
+    fn valid_tool_response() -> CallToolResult {
+        CallToolResult {
+            content: vec![],
+            structured_content: None,
+            is_error: Some(false),
+            meta: None,
+        }
+    }
+
+    fn invalid_tool_call_error(message: &str) -> ErrorData {
+        ErrorData {
+            code: ErrorCode::INTERNAL_ERROR,
+            message: std::borrow::Cow::Owned(message.to_string()),
+            data: None,
+        }
+    }
+
+    #[test]
+    fn normalize_provider_messages_should_preserve_valid_tool_chain() {
+        let messages = vec![
+            Message::user().with_text("帮我读一下项目结构"),
+            Message::assistant()
+                .with_text("我先检查目录。")
+                .with_tool_request(
+                    "tool-1",
+                    Ok(CallToolRequestParam {
+                        name: "read_dir".into(),
+                        arguments: Some(object!({"path": "."})),
+                    }),
+                ),
+            Message::user().with_tool_response("tool-1", Ok(valid_tool_response())),
+            Message::assistant().with_text("目录读取完成。"),
+        ];
+
+        let normalized = normalize_provider_messages(&messages);
+
+        assert_eq!(normalized, messages);
+    }
+
+    #[test]
+    fn normalize_provider_model_config_should_strip_fast_model_when_disabled() {
+        let model_config = ModelConfig::new("glm-5")
+            .expect("create model config")
+            .with_fast("gpt-4o-mini".to_string());
+
+        let normalized = normalize_provider_model_config(&model_config, true);
+
+        assert_eq!(normalized.model_name, "glm-5");
+        assert_eq!(normalized.fast_model, None);
+    }
+
+    #[test]
+    fn normalize_provider_model_config_should_preserve_fast_model_when_allowed() {
+        let model_config = ModelConfig::new("gpt-4o")
+            .expect("create model config")
+            .with_fast("gpt-4o-mini".to_string());
+
+        let normalized = normalize_provider_model_config(&model_config, false);
+
+        assert_eq!(normalized.fast_model.as_deref(), Some("gpt-4o-mini"));
+    }
+
+    #[derive(Clone)]
+    struct RecordingProvider {
+        model_config: ModelConfig,
+        seen_models: Arc<Mutex<Vec<String>>>,
+    }
+
+    #[async_trait]
+    impl Provider for RecordingProvider {
+        fn metadata() -> ProviderMetadata
+        where
+            Self: Sized,
+        {
+            ProviderMetadata::empty()
+        }
+
+        fn get_name(&self) -> &str {
+            "recording"
+        }
+
+        async fn complete_with_model(
+            &self,
+            model_config: &ModelConfig,
+            _system: &str,
+            _messages: &[Message],
+            _tools: &[Tool],
+        ) -> Result<(Message, ProviderUsage), ProviderError> {
+            self.seen_models
+                .lock()
+                .expect("record model config")
+                .push(model_config.model_name.clone());
+            Ok((
+                Message::assistant().with_text("ok"),
+                ProviderUsage::new(model_config.model_name.clone(), Usage::default()),
+            ))
+        }
+
+        fn get_model_config(&self) -> ModelConfig {
+            self.model_config.clone()
+        }
+    }
+
+    #[derive(Clone)]
+    struct SessionNamingProvider {
+        model_config: ModelConfig,
+    }
+
+    #[async_trait]
+    impl Provider for SessionNamingProvider {
+        fn metadata() -> ProviderMetadata
+        where
+            Self: Sized,
+        {
+            ProviderMetadata::empty()
+        }
+
+        fn get_name(&self) -> &str {
+            "session-naming"
+        }
+
+        async fn complete_with_model(
+            &self,
+            model_config: &ModelConfig,
+            _system: &str,
+            _messages: &[Message],
+            _tools: &[Tool],
+        ) -> Result<(Message, ProviderUsage), ProviderError> {
+            Ok((
+                Message::assistant().with_text("ok"),
+                ProviderUsage::new(model_config.model_name.clone(), Usage::default()),
+            ))
+        }
+
+        fn get_model_config(&self) -> ModelConfig {
+            self.model_config.clone()
+        }
+
+        async fn generate_session_name(
+            &self,
+            _messages: &aster::conversation::Conversation,
+        ) -> Result<String, ProviderError> {
+            Ok("wrapped-title".to_string())
+        }
+
+        fn session_name_generation_execution_strategy(
+            &self,
+        ) -> SessionNameGenerationExecutionStrategy {
+            SessionNameGenerationExecutionStrategy::AfterReply
+        }
+    }
+
+    #[tokio::test]
+    async fn wrap_provider_with_safety_should_disable_fast_model_for_complete_fast() {
+        let seen_models = Arc::new(Mutex::new(Vec::new()));
+        let provider = Arc::new(RecordingProvider {
+            model_config: ModelConfig::new("glm-5")
+                .expect("create model config")
+                .with_fast("gpt-4o-mini".to_string()),
+            seen_models: seen_models.clone(),
+        });
+
+        let wrapped = wrap_provider_with_safety(provider, true);
+        let messages = [Message::user().with_text("hi")];
+        let result = wrapped.complete_fast("", &messages, &[]);
+
+        assert!(result.await.is_ok());
+        assert_eq!(
+            seen_models.lock().expect("read seen models").as_slice(),
+            ["glm-5"]
+        );
+        assert_eq!(wrapped.get_model_config().fast_model, None);
+    }
+
+    #[tokio::test]
+    async fn wrap_provider_with_safety_should_preserve_fast_model_when_not_disabled() {
+        let seen_models = Arc::new(Mutex::new(Vec::new()));
+        let provider = Arc::new(RecordingProvider {
+            model_config: ModelConfig::new("gpt-4o")
+                .expect("create model config")
+                .with_fast("gpt-4o-mini".to_string()),
+            seen_models: seen_models.clone(),
+        });
+
+        let wrapped = wrap_provider_with_safety(provider, false);
+        let messages = [Message::user().with_text("hi")];
+        let result = wrapped.complete_fast("", &messages, &[]);
+
+        assert!(result.await.is_ok());
+        assert_eq!(
+            seen_models.lock().expect("read seen models").as_slice(),
+            ["gpt-4o-mini"]
+        );
+        assert_eq!(
+            wrapped.get_model_config().fast_model.as_deref(),
+            Some("gpt-4o-mini")
+        );
+    }
+
+    #[tokio::test]
+    async fn wrap_provider_with_safety_should_forward_session_name_generation() {
+        let provider = Arc::new(SessionNamingProvider {
+            model_config: ModelConfig::new("deepseek-r1:latest").expect("create model config"),
+        });
+        let wrapped = wrap_provider_with_safety(provider, false);
+        let messages =
+            Conversation::new(vec![Message::user().with_text("你好")]).expect("conversation");
+
+        let generated = wrapped
+            .generate_session_name(&messages)
+            .await
+            .expect("generate session name");
+
+        assert_eq!(generated, "wrapped-title");
+    }
+
+    #[tokio::test]
+    async fn wrap_provider_with_safety_should_disable_fast_model_for_session_name_generation() {
+        let seen_models = Arc::new(Mutex::new(Vec::new()));
+        let provider = Arc::new(RecordingProvider {
+            model_config: ModelConfig::new("glm-5")
+                .expect("create model config")
+                .with_fast("gpt-4o-mini".to_string()),
+            seen_models: seen_models.clone(),
+        });
+        let wrapped = wrap_provider_with_safety(provider, true);
+        let messages = Conversation::new(vec![Message::user().with_text("你好，帮我画一张图")])
+            .expect("conversation");
+
+        let generated = wrapped
+            .generate_session_name(&messages)
+            .await
+            .expect("generate session name");
+
+        assert_eq!(generated, "ok");
+        assert_eq!(
+            seen_models.lock().expect("read seen models").as_slice(),
+            ["glm-5"]
+        );
+    }
+
+    #[test]
+    fn wrap_provider_with_safety_should_forward_session_name_strategy() {
+        let provider = Arc::new(SessionNamingProvider {
+            model_config: ModelConfig::new("deepseek-r1:latest").expect("create model config"),
+        });
+        let wrapped = wrap_provider_with_safety(provider, false);
+
+        assert_eq!(
+            wrapped.session_name_generation_execution_strategy(),
+            SessionNameGenerationExecutionStrategy::AfterReply
+        );
+    }
+
+    #[test]
+    fn normalize_provider_messages_should_remove_orphan_tool_response() {
+        let messages = vec![
+            Message::user().with_text("继续"),
+            Message::user().with_tool_response("orphan-tool", Ok(valid_tool_response())),
+            Message::assistant().with_text("我继续整理。"),
+        ];
+
+        let normalized = normalize_provider_messages(&messages);
+
+        assert_eq!(normalized.len(), 2);
+        assert!(normalized.iter().all(|message| {
+            message
+                .content
+                .iter()
+                .all(|content| !matches!(content, MessageContent::ToolResponse(_)))
+        }));
+    }
+
+    #[test]
+    fn normalize_provider_messages_should_drop_invalid_tool_request_and_following_response() {
+        let messages = vec![
+            Message::assistant()
+                .with_text("我先尝试调用工具。")
+                .with_tool_request(
+                    "broken-tool",
+                    Err(invalid_tool_call_error("工具参数解析失败")),
+                ),
+            Message::user().with_tool_response("broken-tool", Ok(valid_tool_response())),
+            Message::assistant().with_text("工具失败后我继续主线程编排。"),
+        ];
+
+        let normalized = normalize_provider_messages(&messages);
+
+        assert_eq!(normalized.len(), 2);
+        assert_eq!(normalized[0].as_concat_text(), "我先尝试调用工具。");
+        assert_eq!(
+            normalized[1].as_concat_text(),
+            "工具失败后我继续主线程编排。"
+        );
+        assert!(normalized.iter().all(|message| {
+            message.content.iter().all(|content| {
+                !matches!(
+                    content,
+                    MessageContent::ToolRequest(_) | MessageContent::ToolResponse(_)
+                )
+            })
+        }));
+    }
+
+    #[test]
+    fn normalize_provider_messages_should_drop_invalid_frontend_tool_request_and_response() {
+        let messages = vec![
+            Message::assistant()
+                .with_text("我先打开确认框。")
+                .with_frontend_tool_request(
+                    "frontend-tool",
+                    Err(invalid_tool_call_error("frontend 参数解析失败")),
+                ),
+            Message::user().with_tool_response("frontend-tool", Ok(valid_tool_response())),
+            Message::assistant().with_text("继续。"),
+        ];
+
+        let normalized = normalize_provider_messages(&messages);
+
+        assert_eq!(normalized.len(), 2);
+        assert_eq!(normalized[0].as_concat_text(), "我先打开确认框。");
+        assert_eq!(normalized[1].as_concat_text(), "继续。");
     }
 }

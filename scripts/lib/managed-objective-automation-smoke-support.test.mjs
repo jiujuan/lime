@@ -5,6 +5,7 @@ import path from "node:path";
 
 import {
   buildAutomationFixtureMarkdown,
+  buildAutomationFixtureScriptedResponses,
   buildAutomationJobRequest,
   buildAutomationSmokeEvidence,
   buildCapabilityDraftRequest,
@@ -38,7 +39,23 @@ describe("managed-objective-automation-smoke-support", () => {
       model_name: "lime-fixture-chat",
       api_key: "fixture-key",
       base_url: "http://127.0.0.1:34567",
+      tool_call_strategy: "native",
+      model_capabilities: {
+        capabilities: {
+          tools: true,
+          streaming: true,
+          functionCalling: true,
+        },
+        taskFamilies: ["chat"],
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        runtimeFeatures: ["streaming", "tool_calling"],
+      },
     },
+  };
+  const threadLineage = {
+    session_id: "session-smoke-1",
+    thread_id: "thread-smoke-1",
   };
 
   it("应构造默认离线 automation job，不携带真实 Provider 偏好", () => {
@@ -46,12 +63,15 @@ describe("managed-objective-automation-smoke-support", () => {
       "workspace-1",
       skillBinding,
       fixtureProvider,
+      threadLineage,
     );
     const serialized = JSON.stringify(request);
     const metadata = request.payload.request_metadata;
 
     expect(request.workspace_id).toBe("workspace-1");
     expect(request.payload.kind).toBe("agent_turn");
+    expect(request.payload.session_id).toBe("session-smoke-1");
+    expect(request.payload.thread_id).toBe("thread-smoke-1");
     expect(request.payload.sandbox_policy).toBe("workspace-write");
     expect(request.payload.provider_config).toMatchObject({
       provider_id: "fixture-openai",
@@ -59,6 +79,15 @@ describe("managed-objective-automation-smoke-support", () => {
       model_name: "lime-fixture-chat",
       api_key: "fixture-key",
       base_url: "http://127.0.0.1:34567",
+      tool_call_strategy: "native",
+      model_capabilities: {
+        capabilities: {
+          tools: true,
+          streaming: true,
+          functionCalling: true,
+        },
+        runtimeFeatures: ["streaming", "tool_calling"],
+      },
     });
     expect(metadata.artifact_mode).toBe("draft");
     expect(metadata.artifact_kind).toBe("report");
@@ -94,15 +123,30 @@ describe("managed-objective-automation-smoke-support", () => {
     expect(serialized).not.toMatch(/provider_preference|model_preference/);
   });
 
+  it("默认 automation job 缺少 thread lineage 时应失败", () => {
+    expect(() =>
+      buildAutomationJobRequest(
+        "workspace-1",
+        skillBinding,
+        fixtureProvider,
+      ),
+    ).toThrow(/session_id \/ thread_id lineage/);
+  });
+
   it("默认 automation job 应拒绝非 localhost provider_config", () => {
     expect(() =>
-      buildAutomationJobRequest("workspace-1", skillBinding, {
-        ...fixtureProvider,
-        providerConfig: {
-          ...fixtureProvider.providerConfig,
-          base_url: "https://api.deepseek.com",
+      buildAutomationJobRequest(
+        "workspace-1",
+        skillBinding,
+        {
+          ...fixtureProvider,
+          providerConfig: {
+            ...fixtureProvider.providerConfig,
+            base_url: "https://api.deepseek.com",
+          },
         },
-      }),
+        threadLineage,
+      ),
     ).toThrow(/localhost fixture provider_config/);
   });
 
@@ -215,6 +259,36 @@ describe("managed-objective-automation-smoke-support", () => {
     expect(markdown).not.toContain("MO_AUTOMATION_OK");
   });
 
+  it("fixture scripted responses 应先调用 SkillTool，再写入报告 artifact", async () => {
+    const responses = buildAutomationFixtureScriptedResponses(skillBinding);
+
+    expect(responses[0]).toMatchObject({
+      type: "tool_call",
+      name: "Skill",
+      arguments: {
+        skill: "project:capability-automation-smoke",
+      },
+    });
+    const writeResponse = await responses[1]({
+      body: {
+        tools: [
+          { type: "function", function: { name: "Write" } },
+          { type: "function", function: { name: "StructuredOutput" } },
+        ],
+      },
+    });
+    expect(writeResponse).toMatchObject({
+      type: "tool_call",
+      name: "Write",
+      arguments: {
+        path: "reports/managed-objective-automation-smoke.md",
+      },
+    });
+    expect(writeResponse.arguments.content).toContain(
+      "# Managed Objective Automation Smoke Report",
+    );
+  });
+
   it("应从 fixture 请求与 owner run 构造通过证据", () => {
     const evidence = buildAutomationSmokeEvidence({
       generatedAt: "2026-05-26T00:00:00.000Z",
@@ -235,7 +309,14 @@ describe("managed-objective-automation-smoke-support", () => {
         },
       },
       providerSessionId: "provider-session-1",
-      job: { id: "job-1" },
+      job: {
+        id: "job-1",
+        payload: {
+          kind: "agent_turn",
+          session_id: "session-1",
+          thread_id: "thread-1",
+        },
+      },
       runResult: { success_count: 1 },
       latestRun: {
         id: "run-1",
@@ -270,11 +351,14 @@ describe("managed-objective-automation-smoke-support", () => {
         threadRead: {
           turnCount: 1,
           threadStatus: "completed",
+          latestTurnStatus: "completed",
         },
         fixtureChatRequestCount: 1,
       },
       evidencePack: {
         sessionId: "session-1",
+        threadId: "thread-1",
+        latestTurnStatus: "completed",
         recentArtifactCount: 1,
         completionAuditSummary: {
           decision: "completed",
@@ -297,15 +381,26 @@ describe("managed-objective-automation-smoke-support", () => {
     });
 
     expect(evidence.status).toBe("pass");
+    expect(evidence.projectThreadStatus).toBe("pass");
+    expect(evidence.completionAuditStatus).toBe("pass");
     expect(evidence.coverage.avoidsLiveProviderByDefault).toBe(true);
     expect(evidence.coverage.usesRegisteredWorkspaceSkill).toBe(true);
+    expect(evidence.coverage.usesExplicitThreadLineage).toBe(true);
+    expect(evidence.assertions.jobPayloadHasExplicitLineage).toBe(true);
+    expect(evidence.assertions.runSessionMatchesJobPayload).toBe(true);
+    expect(evidence.projectThreadAssertions).toMatchObject({
+      evidencePackSessionScopeMatchesRun: true,
+      evidencePackThreadScopeMatchesJobPayload: true,
+      runtimeTurnCompleted: true,
+      evidencePackTurnCompleted: true,
+    });
     expect(evidence.assertions.completionAuditCompleted).toBe(true);
     expect(evidence.provider.baseUrl).toMatch(/^http:\/\/127\.0\.0\.1:/);
     expect(evidence.fixture.chatCompletionRequestCount).toBe(1);
     expect(fixtureChatRequestCount([{ path: "/v1/models" }])).toBe(0);
   });
 
-  it("completion audit 未完成时应失败，避免把模型回复误判为目标完成", () => {
+  it("completion audit 未完成时保留全量失败，但 ProjectThread lineage 可单独通过", () => {
     const evidence = buildAutomationSmokeEvidence({
       generatedAt: "2026-05-26T00:00:00.000Z",
       options: {
@@ -325,7 +420,14 @@ describe("managed-objective-automation-smoke-support", () => {
         },
       },
       providerSessionId: "provider-session-1",
-      job: { id: "job-1" },
+      job: {
+        id: "job-1",
+        payload: {
+          kind: "agent_turn",
+          session_id: "session-1",
+          thread_id: "thread-1",
+        },
+      },
       runResult: { success_count: 1 },
       latestRun: {
         id: "run-1",
@@ -360,11 +462,12 @@ describe("managed-objective-automation-smoke-support", () => {
         threadRead: {
           turnCount: 1,
           threadStatus: "completed",
+          latestTurnStatus: "completed",
         },
         fixtureChatRequestCount: 1,
       },
       evidencePack: {
-        sessionId: "session-1",
+        latestTurnStatus: "completed",
         completionAuditSummary: {
           decision: "verifying",
           ownerAuditStatuses: ["audit_input_ready"],
@@ -381,8 +484,21 @@ describe("managed-objective-automation-smoke-support", () => {
     });
 
     expect(evidence.status).toBe("fail");
+    expect(evidence.projectThreadStatus).toBe("pass");
+    expect(evidence.completionAuditStatus).toBe("fail");
+    expect(evidence.projectThreadAssertions).toMatchObject({
+      jobPayloadHasExplicitLineage: true,
+      runSessionMatchesJobPayload: true,
+      evidencePackSessionScopeMatchesRun: true,
+      evidencePackThreadScopeMatchesJobPayload: true,
+      runtimeTurnCompleted: true,
+      evidencePackTurnCompleted: true,
+    });
     expect(evidence.assertions.completionAuditCompleted).toBe(false);
-    expect(evidence.assertions.workspaceSkillToolCallRecorded).toBe(false);
-    expect(evidence.assertions.artifactRecorded).toBe(false);
+    expect(evidence.completionAuditAssertions).toMatchObject({
+      workspaceSkillToolCallRecorded: false,
+      artifactRecorded: false,
+      completionAuditCompleted: false,
+    });
   });
 });

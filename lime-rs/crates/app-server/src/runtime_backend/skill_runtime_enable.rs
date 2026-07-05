@@ -1,4 +1,5 @@
 use crate::ExecutionRequest;
+use lime_agent::register_lime_project_skill_from_directory;
 use lime_agent::tools::{
     clear_skill_tool_session_access, set_skill_tool_session_allowed_skill_sources,
     set_skill_tool_session_allowed_skills, SkillToolSessionSkillSource,
@@ -28,6 +29,7 @@ pub(super) fn apply_workspace_skill_runtime_enable(
 
     let sources = workspace_skill_runtime_enable_sources(request);
     if !sources.is_empty() {
+        register_workspace_skill_runtime_sources(&sources);
         set_skill_tool_session_allowed_skill_sources(session_id, sources);
     } else {
         let skill_names = selected_agent_skill_names_from_request(request);
@@ -37,6 +39,22 @@ pub(super) fn apply_workspace_skill_runtime_enable(
     }
 
     guard
+}
+
+fn register_workspace_skill_runtime_sources(sources: &[SkillToolSessionSkillSource]) {
+    for source in sources {
+        if let Err(error) = register_lime_project_skill_from_directory(
+            &source.directory,
+            Path::new(&source.registered_skill_directory),
+        ) {
+            tracing::warn!(
+                skill = %source.skill_name,
+                registered_skill_directory = %source.registered_skill_directory,
+                "[AgentRuntime] workspace skill runtime enable 注册 Skill 失败: {}",
+                error
+            );
+        }
+    }
 }
 
 pub(super) fn clear_workspace_skill_runtime_enable(session_id: &str) -> SkillRuntimeEnableGuard {
@@ -273,7 +291,8 @@ fn read_string_array(value: Option<&Value>) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lime_agent::test_support::{lime_skill_tool_permission_decision, ToolPermissionDecision};
+    use lime_agent::is_lime_skill_registered;
+    use lime_agent::tools::is_skill_tool_session_skill_allowed;
     use serde_json::json;
     use tempfile::TempDir;
 
@@ -281,20 +300,8 @@ mod tests {
         super::super::tests::request_for_test("hello", None, Some(metadata))
     }
 
-    struct SkillToolPermissionProbe;
-
-    impl SkillToolPermissionProbe {
-        async fn check_permissions(
-            &self,
-            params: &Value,
-            session_id: &&str,
-        ) -> ToolPermissionDecision {
-            lime_skill_tool_permission_decision(session_id, params.clone()).await
-        }
-    }
-
-    fn permission_context(session_id: &str) -> &str {
-        session_id
+    fn is_skill_allowed(session_id: &str, skill_name: &str) -> bool {
+        is_skill_tool_session_skill_allowed(session_id, skill_name)
     }
 
     #[test]
@@ -405,34 +412,59 @@ mod tests {
             }
         }));
         let guard = apply_workspace_skill_runtime_enable(&request, session_id);
-        let tool = SkillToolPermissionProbe;
 
-        let allowed = tool
-            .check_permissions(
-                &json!({ "skill": "project:capability-report" }),
-                &permission_context(session_id),
-            )
-            .await;
-        let denied = tool
-            .check_permissions(
-                &json!({ "skill": "project:other-skill" }),
-                &permission_context(session_id),
-            )
-            .await;
-
-        assert_eq!(allowed, ToolPermissionDecision::Allow);
-        assert_eq!(denied, ToolPermissionDecision::Deny);
+        assert!(is_skill_allowed(session_id, "project:capability-report"));
+        assert!(!is_skill_allowed(session_id, "project:other-skill"));
 
         drop(guard);
 
-        let after_drop = tool
-            .check_permissions(
-                &json!({ "skill": "project:capability-report" }),
-                &permission_context(session_id),
-            )
-            .await;
+        assert!(!is_skill_allowed(session_id, "project:capability-report"));
+    }
 
-        assert_eq!(after_drop, ToolPermissionDecision::Deny);
+    #[tokio::test]
+    async fn apply_runtime_enable_registers_workspace_skill_source() {
+        let workspace = TempDir::new().expect("workspace");
+        let skill_name = "runtime-enable-registers-skill";
+        write_agent_skill(&workspace, skill_name);
+        let skill_dir = workspace
+            .path()
+            .join(".agents")
+            .join("skills")
+            .join(skill_name);
+        let session_id = "app-server-runtime-enable-registers-source-session";
+        let request = request_with_metadata(json!({
+            "harness": {
+                "workspace_skill_runtime_enable": {
+                    "source": "manual_session_enable",
+                    "approval": "manual",
+                    "workspace_root": workspace.path().to_string_lossy().to_string(),
+                    "bindings": [
+                        {
+                            "directory": skill_name,
+                            "skill": format!("project:{skill_name}"),
+                            "registered_skill_directory": skill_dir.to_string_lossy().to_string(),
+                            "source_draft_id": "capdraft-registers-source",
+                            "source_verification_report_id": "capver-registers-source"
+                        }
+                    ]
+                }
+            }
+        }));
+
+        let guard = apply_workspace_skill_runtime_enable(&request, session_id);
+
+        assert!(is_skill_allowed(
+            session_id,
+            &format!("project:{skill_name}")
+        ));
+        assert!(is_lime_skill_registered(&format!("project:{skill_name}")));
+
+        drop(guard);
+
+        assert!(!is_skill_allowed(
+            session_id,
+            &format!("project:{skill_name}")
+        ));
     }
 
     #[tokio::test]
@@ -440,16 +472,8 @@ mod tests {
         let session_id = "app-server-runtime-enable-missing-session";
         let request = request_with_metadata(json!({ "harness": {} }));
         let _guard = apply_workspace_skill_runtime_enable(&request, session_id);
-        let tool = SkillToolPermissionProbe;
 
-        let result = tool
-            .check_permissions(
-                &json!({ "skill": "project:capability-report" }),
-                &permission_context(session_id),
-            )
-            .await;
-
-        assert_eq!(result, ToolPermissionDecision::Deny);
+        assert!(!is_skill_allowed(session_id, "project:capability-report"));
     }
 
     #[tokio::test]
@@ -465,40 +489,14 @@ mod tests {
             })),
         );
         let guard = apply_workspace_skill_runtime_enable(&request, session_id);
-        let tool = SkillToolPermissionProbe;
 
-        let allowed = tool
-            .check_permissions(
-                &json!({ "skill": "writer" }),
-                &permission_context(session_id),
-            )
-            .await;
-        let project_alias_allowed = tool
-            .check_permissions(
-                &json!({ "skill": "project:writer" }),
-                &permission_context(session_id),
-            )
-            .await;
-        let denied = tool
-            .check_permissions(
-                &json!({ "skill": "project:other" }),
-                &permission_context(session_id),
-            )
-            .await;
-
-        assert_eq!(allowed, ToolPermissionDecision::Allow);
-        assert_eq!(project_alias_allowed, ToolPermissionDecision::Allow);
-        assert_eq!(denied, ToolPermissionDecision::Deny);
+        assert!(is_skill_allowed(session_id, "writer"));
+        assert!(is_skill_allowed(session_id, "project:writer"));
+        assert!(!is_skill_allowed(session_id, "project:other"));
 
         drop(guard);
 
-        let after_drop = tool
-            .check_permissions(
-                &json!({ "skill": "writer" }),
-                &permission_context(session_id),
-            )
-            .await;
-        assert_eq!(after_drop, ToolPermissionDecision::Deny);
+        assert!(!is_skill_allowed(session_id, "writer"));
     }
 
     #[tokio::test]
@@ -523,40 +521,14 @@ mod tests {
             })),
         );
         let guard = apply_workspace_skill_runtime_enable(&request, session_id);
-        let tool = SkillToolPermissionProbe;
 
-        let allowed = tool
-            .check_permissions(
-                &json!({ "skill": "writer" }),
-                &permission_context(session_id),
-            )
-            .await;
-        let project_alias_allowed = tool
-            .check_permissions(
-                &json!({ "skill": "project:writer" }),
-                &permission_context(session_id),
-            )
-            .await;
-        let denied = tool
-            .check_permissions(
-                &json!({ "skill": "project:other" }),
-                &permission_context(session_id),
-            )
-            .await;
-
-        assert_eq!(allowed, ToolPermissionDecision::Allow);
-        assert_eq!(project_alias_allowed, ToolPermissionDecision::Allow);
-        assert_eq!(denied, ToolPermissionDecision::Deny);
+        assert!(is_skill_allowed(session_id, "writer"));
+        assert!(is_skill_allowed(session_id, "project:writer"));
+        assert!(!is_skill_allowed(session_id, "project:other"));
 
         drop(guard);
 
-        let after_drop = tool
-            .check_permissions(
-                &json!({ "skill": "writer" }),
-                &permission_context(session_id),
-            )
-            .await;
-        assert_eq!(after_drop, ToolPermissionDecision::Deny);
+        assert!(!is_skill_allowed(session_id, "writer"));
     }
 
     #[tokio::test]
@@ -577,40 +549,14 @@ mod tests {
             })),
         );
         let guard = apply_workspace_skill_runtime_enable(&request, session_id);
-        let tool = SkillToolPermissionProbe;
 
-        let allowed = tool
-            .check_permissions(
-                &json!({ "skill": "writer" }),
-                &permission_context(session_id),
-            )
-            .await;
-        let project_alias_allowed = tool
-            .check_permissions(
-                &json!({ "skill": "project:writer" }),
-                &permission_context(session_id),
-            )
-            .await;
-        let denied = tool
-            .check_permissions(
-                &json!({ "skill": "project:other" }),
-                &permission_context(session_id),
-            )
-            .await;
-
-        assert_eq!(allowed, ToolPermissionDecision::Allow);
-        assert_eq!(project_alias_allowed, ToolPermissionDecision::Allow);
-        assert_eq!(denied, ToolPermissionDecision::Deny);
+        assert!(is_skill_allowed(session_id, "writer"));
+        assert!(is_skill_allowed(session_id, "project:writer"));
+        assert!(!is_skill_allowed(session_id, "project:other"));
 
         drop(guard);
 
-        let after_drop = tool
-            .check_permissions(
-                &json!({ "skill": "writer" }),
-                &permission_context(session_id),
-            )
-            .await;
-        assert_eq!(after_drop, ToolPermissionDecision::Deny);
+        assert!(!is_skill_allowed(session_id, "writer"));
     }
 
     #[tokio::test]
@@ -633,16 +579,8 @@ mod tests {
             })),
         );
         let _guard = apply_workspace_skill_runtime_enable(&request, session_id);
-        let tool = SkillToolPermissionProbe;
 
-        let result = tool
-            .check_permissions(
-                &json!({ "skill": "writer" }),
-                &permission_context(session_id),
-            )
-            .await;
-
-        assert_eq!(result, ToolPermissionDecision::Deny);
+        assert!(!is_skill_allowed(session_id, "writer"));
     }
 
     #[tokio::test]
@@ -678,23 +616,9 @@ mod tests {
             })),
         );
         let _guard = apply_workspace_skill_runtime_enable(&request, session_id);
-        let tool = SkillToolPermissionProbe;
 
-        let runtime_enabled = tool
-            .check_permissions(
-                &json!({ "skill": "project:capability-report" }),
-                &permission_context(session_id),
-            )
-            .await;
-        let explicit_denied = tool
-            .check_permissions(
-                &json!({ "skill": "writer" }),
-                &permission_context(session_id),
-            )
-            .await;
-
-        assert_eq!(runtime_enabled, ToolPermissionDecision::Allow);
-        assert_eq!(explicit_denied, ToolPermissionDecision::Deny);
+        assert!(is_skill_allowed(session_id, "project:capability-report"));
+        assert!(!is_skill_allowed(session_id, "writer"));
     }
 
     fn write_agent_skill(workspace: &TempDir, name: &str) {

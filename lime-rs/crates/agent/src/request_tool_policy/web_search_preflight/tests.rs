@@ -1,5 +1,6 @@
 use super::*;
 use crate::request_tool_policy::{resolve_request_tool_policy_with_mode, RequestToolPolicyMode};
+use aster::agents::Agent;
 use aster::tools::{PermissionCheckResult, Tool, ToolContext, ToolError, ToolResult};
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -179,6 +180,7 @@ fn preflight_search_outcome_should_require_usable_link() {
 #[tokio::test]
 async fn web_search_preflight_uses_turn_context_for_permission_check() {
     let agent = Agent::new();
+    let host = AsterReplyRuntimeHost::new(&agent);
     {
         let registry_arc = agent.tool_registry().clone();
         let mut registry = registry_arc.write().await;
@@ -197,7 +199,7 @@ async fn web_search_preflight_uses_turn_context_for_permission_check() {
 
     let execution = execute_web_search_preflight_if_needed_with_enabled(
         WebSearchPreflightRequest {
-            agent: &agent,
+            host: &host,
             session_id: "session-web-preflight-permission",
             message_text: "继续",
             working_directory: None,
