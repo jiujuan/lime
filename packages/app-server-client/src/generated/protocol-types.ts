@@ -249,6 +249,7 @@ export const METHOD_PLUGIN_INSTALLED_SAVE = "pluginInstalled/save";
 export const METHOD_PLUGIN_INSTALLED_UNINSTALL = "pluginInstalled/uninstall";
 export const METHOD_PLUGIN_INSTALLED_UNINSTALL_REHEARSAL =
   "pluginInstalled/uninstall/rehearsal";
+export const METHOD_PLUGIN_LOCAL_PACKAGE_EXPORT = "pluginLocalPackage/export";
 export const METHOD_PLUGIN_LOCAL_PACKAGE_INSPECT = "pluginLocalPackage/inspect";
 export const METHOD_PLUGIN_PACKAGE_FETCH_CLOUD = "pluginPackage/fetchCloud";
 export const METHOD_PLUGIN_SHELL_PREPARE = "pluginShell/prepare";
@@ -1120,6 +1121,10 @@ export const GENERATED_APP_SERVER_METHODS = [
   {
     kind: "request",
     method: "pluginInstalled/uninstall/rehearsal",
+  },
+  {
+    kind: "request",
+    method: "pluginLocalPackage/export",
   },
   {
     kind: "request",
@@ -3089,6 +3094,11 @@ export type AppServerClientRequest =
     }
   | {
       id: number | string;
+      method: "pluginLocalPackage/export";
+      params?: unknown;
+    }
+  | {
+      id: number | string;
       method: "pluginPackage/fetchCloud";
       params?: unknown;
     }
@@ -3902,6 +3912,7 @@ export type AppServerRequestMethod =
   | "pluginInstalled/save"
   | "pluginInstalled/uninstall"
   | "pluginInstalled/uninstall/rehearsal"
+  | "pluginLocalPackage/export"
   | "pluginLocalPackage/inspect"
   | "pluginPackage/fetchCloud"
   | "pluginShell/prepare"
@@ -5831,18 +5842,28 @@ export interface ModelCapabilitiesInfo {
 
 export interface ModelInfo {
   aliasSource?: null | string;
+  applyPatchToolType?: null | string;
+  autoCompactTokenLimit?: number | null;
   canonicalModelId?: null | string;
   capabilities?: ModelCapabilitiesInfo;
+  contextWindow?: number | null;
   createdAt: number;
+  defaultReasoningLevel?: null | string;
+  defaultReasoningSummary?: null | string;
+  defaultServiceTier?: null | string;
+  defaultVerbosity?: null | string;
   deploymentSource: string;
   description?: null | string;
   displayName: string;
+  effectiveContextWindowPercent?: number | null;
+  experimentalSupportedTools?: string[];
   family?: null | string;
   id: string;
   inputModalities?: string[];
   isLatest?: boolean;
   limits: unknown;
   managementPlane: string;
+  maxContextWindow?: number | null;
   outputModalities?: string[];
   pricing?: unknown;
   providerId: string;
@@ -5850,11 +5871,24 @@ export interface ModelInfo {
   providerName: string;
   releaseDate?: null | string;
   runtimeFeatures?: string[];
+  serviceTiers?: unknown[];
+  shellType?: null | string;
   source: string;
   status: string;
+  supportVerbosity?: boolean;
+  supportedReasoningLevels?: unknown[];
+  supportsImageDetailOriginal?: boolean;
+  supportsParallelToolCalls?: boolean;
+  supportsReasoningSummaries?: boolean;
+  supportsSearchTool?: boolean;
   taskFamilies?: string[];
   tier: string;
+  toolMode?: null | string;
+  truncationPolicy?: unknown;
   updatedAt: number;
+  useResponsesLite?: boolean;
+  visibility?: null | string;
+  webSearchToolType?: null | string;
 }
 
 export interface ModelListParams {
@@ -6245,6 +6279,26 @@ export interface PluginInstalledListResponse {
 
 export interface PluginInstalledSaveParams {
   state: unknown;
+}
+
+export interface PluginLocalPackageExportParams {
+  appDir: string;
+}
+
+export interface PluginLocalPackageExportResponse {
+  appDir: string;
+  contentType: string;
+  exportedAt: string;
+  fileCount: number;
+  manifest: unknown;
+  manifestHash: string;
+  manifestSource: string;
+  packageBase64: string;
+  packageHash: string;
+  pluginManifest: unknown;
+  sizeBytes: number;
+  sourceKind: string;
+  sourceUri: string;
 }
 
 export interface PluginLocalPackageInspectParams {
@@ -6697,10 +6751,8 @@ export interface ResolvedModelRoute {
   endpoint: EndpointInfo;
   failure?: RouteFailure | null;
   framing: FramingKind;
-  model?: ModelInfo | null;
   modelRef: ModelRef;
   protocol: ProtocolKind;
-  provider?: ProviderInfo | null;
   transport: TransportKind;
 }
 

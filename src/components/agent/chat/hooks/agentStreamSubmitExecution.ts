@@ -8,6 +8,18 @@ import type {
   QueuedTurnSnapshot,
 } from "@/lib/api/agentRuntime";
 import { setAgentRuntimeObjective } from "@/lib/api/agentRuntime";
+import { modelRegistryApi } from "@/lib/api/modelRegistry";
+import type { ModelCapabilitySummary } from "@/lib/model/inferModelCapabilities";
+import {
+  buildModelCapabilitySendGateInput,
+  evaluateModelInputCapability,
+  mergeModelInputCapabilityGateMetadata,
+  resolveModelCapabilitySummaryForSelection,
+} from "@/lib/model/modelCapabilitySendGate";
+import {
+  mergeModelRequestPolicyMetadata,
+  resolveModelRequestPolicyMetadataForSelection,
+} from "@/lib/model/modelRequestPolicyMetadata";
 import type {
   AssistantDraftState,
   SendMessageObserver,
@@ -125,6 +137,40 @@ interface ExecuteAgentStreamSubmitOptions {
     SetStateAction<AsterSessionExecutionRuntime | null>
   >;
   soulCopy?: SoulInteractionCopy;
+}
+
+async function resolveSubmitModelPolicy(options: {
+  images: readonly MessageImage[];
+  providerType: string;
+  model: string;
+}): Promise<{
+  modelCapabilitySummary: ModelCapabilitySummary | null | undefined;
+  modelRequestPolicyMetadata: ReturnType<
+    typeof resolveModelRequestPolicyMetadataForSelection
+  >;
+}> {
+  try {
+    const models = await modelRegistryApi.getModelRegistry();
+    const selection = {
+      models,
+      providerType: options.providerType,
+      model: options.model,
+    };
+
+    return {
+      modelCapabilitySummary:
+        options.images.length === 0
+          ? undefined
+          : resolveModelCapabilitySummaryForSelection(selection),
+      modelRequestPolicyMetadata:
+        resolveModelRequestPolicyMetadataForSelection(selection),
+    };
+  } catch {
+    return {
+      modelCapabilitySummary: options.images.length === 0 ? undefined : null,
+      modelRequestPolicyMetadata: undefined,
+    };
+  }
 }
 
 export async function executeAgentStreamSubmit(
@@ -313,6 +359,56 @@ export async function executeAgentStreamSubmit(
     },
     requestState,
     submit: async () => {
+      const { modelCapabilitySummary, modelRequestPolicyMetadata } =
+        await resolveSubmitModelPolicy({
+          images,
+          providerType: effectiveProviderType,
+          model: effectiveModel,
+        });
+      resolvedRequestMetadata = mergeModelRequestPolicyMetadata(
+        resolvedRequestMetadata,
+        modelRequestPolicyMetadata,
+      );
+      if (modelCapabilitySummary !== undefined) {
+        resolvedRequestMetadata = mergeModelInputCapabilityGateMetadata(
+          resolvedRequestMetadata,
+          evaluateModelInputCapability(
+            modelCapabilitySummary,
+            buildModelCapabilitySendGateInput({
+              text: content,
+              imageCount: images.length,
+            }),
+          ),
+        );
+      }
+      const submitOp = buildAgentStreamSubmitOp({
+        content,
+        images,
+        activeSessionId: resolvedActiveSessionId,
+        eventName,
+        submitWorkspaceId,
+        requestTurnId,
+        systemPrompt,
+        skipPreSubmitResume,
+        requestMetadata: resolvedRequestMetadata,
+        executionRuntime,
+        syncedRecentPreferences,
+        syncedSessionModelPreference,
+        syncedExecutionStrategy,
+        effectiveExecutionStrategy,
+        effectiveAccessMode,
+        effectiveProviderType,
+        effectiveModel,
+        modelOverride,
+        reasoningEffort,
+        webSearch,
+        searchMode,
+        thinking,
+        explicitToolPreferences,
+        autoContinue,
+        modelCapabilitySummary,
+      });
+
       if (managedObjectiveText) {
         try {
           await setAgentRuntimeObjective({
@@ -325,34 +421,7 @@ export async function executeAgentStreamSubmit(
           console.warn("[AgentStream] 写入追求目标失败，继续发送消息:", error);
         }
       }
-      await runtime.submitOp(
-        buildAgentStreamSubmitOp({
-          content,
-          images,
-          activeSessionId: resolvedActiveSessionId,
-          eventName,
-          submitWorkspaceId,
-          requestTurnId,
-          systemPrompt,
-          skipPreSubmitResume,
-          requestMetadata: resolvedRequestMetadata,
-          executionRuntime,
-          syncedRecentPreferences,
-          syncedSessionModelPreference,
-          syncedExecutionStrategy,
-          effectiveExecutionStrategy,
-          effectiveAccessMode,
-          effectiveProviderType,
-          effectiveModel,
-          modelOverride,
-          reasoningEffort,
-          webSearch,
-          searchMode,
-          thinking,
-          explicitToolPreferences,
-          autoContinue,
-        }),
-      );
+      await runtime.submitOp(submitOp);
     },
   });
 }

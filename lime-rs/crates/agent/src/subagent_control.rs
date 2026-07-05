@@ -1,12 +1,19 @@
 use crate::protocol::AgentTokenUsage;
-use crate::runtime_support::{list_runtime_queued_turns, load_runtime_snapshot};
+use crate::runtime_support::{list_runtime_queued_turns, load_runtime_snapshot_overlay};
 use crate::session_query::read_subagent_session;
-use crate::subagent_runtime_adapter::project_aster_subagent_latest_turn;
 use crate::team_runtime_governor::snapshot_team_runtime_session;
 use aster::session::extension_data::{ExtensionData, ExtensionState};
 use aster::session::{require_shared_session_runtime_queue_service, Session};
 #[cfg(test)]
 use chrono::Utc;
+
+pub(crate) type SubagentRuntimeStatus =
+    agent_runtime::session_execution::SubagentRuntimeStatus<AgentTokenUsage>;
+pub(crate) type SubagentRuntimeStatusKind =
+    agent_runtime::session_execution::SubagentRuntimeStatusKind;
+pub(crate) type SubagentLatestTurnProjection =
+    agent_runtime::session_execution::SubagentLatestTurnProjection;
+pub(crate) type SubagentTurnStatus = agent_runtime::session_execution::SubagentTurnStatus;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default, PartialEq)]
 struct SubagentControlState {
@@ -51,119 +58,12 @@ impl SubagentControlState {
     }
 }
 
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum SubagentRuntimeStatusKind {
-    Idle,
-    Queued,
-    Running,
-    Completed,
-    Failed,
-    Aborted,
-    Closed,
-    NotFound,
-}
-
-impl SubagentRuntimeStatusKind {
-    pub(crate) fn is_final(self) -> bool {
-        matches!(
-            self,
-            Self::Completed | Self::Failed | Self::Aborted | Self::Closed | Self::NotFound
-        )
-    }
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
-pub(crate) struct SubagentRuntimeStatus {
-    pub session_id: String,
-    pub kind: SubagentRuntimeStatusKind,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub latest_turn_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub latest_turn_status: Option<SubagentRuntimeStatusKind>,
-    #[serde(default, skip_serializing_if = "is_zero")]
-    pub queued_turn_count: usize,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub team_phase: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub team_parallel_budget: Option<usize>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub team_active_count: Option<usize>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub team_queued_count: Option<usize>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provider_concurrency_group: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provider_parallel_budget: Option<usize>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub queue_reason: Option<String>,
-    #[serde(default)]
-    pub retryable_overload: bool,
-    #[serde(default)]
-    pub closed: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub usage: Option<AgentTokenUsage>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub duration_ms: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tool_count: Option<usize>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub result_ref: Option<String>,
-}
-
-impl SubagentRuntimeStatus {
-    fn not_found(session_id: &str) -> Self {
-        Self {
-            session_id: session_id.to_string(),
-            kind: SubagentRuntimeStatusKind::NotFound,
-            latest_turn_id: None,
-            latest_turn_status: None,
-            queued_turn_count: 0,
-            team_phase: None,
-            team_parallel_budget: None,
-            team_active_count: None,
-            team_queued_count: None,
-            provider_concurrency_group: None,
-            provider_parallel_budget: None,
-            queue_reason: None,
-            retryable_overload: false,
-            closed: false,
-            usage: None,
-            duration_ms: None,
-            tool_count: None,
-            result_ref: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct SubagentLatestTurnProjection {
-    pub turn_id: String,
-    pub status: SubagentTurnStatus,
-    pub duration_ms: Option<u64>,
-    pub tool_count: usize,
-    pub result_ref: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum SubagentTurnStatus {
-    Queued,
-    Running,
-    Completed,
-    Failed,
-    Aborted,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct SubagentRuntimeStatusInput {
     closed: bool,
     has_active_turn: bool,
     queued_turn_count: usize,
     latest_turn_status: Option<SubagentTurnStatus>,
-}
-
-fn is_zero(value: &usize) -> bool {
-    *value == 0
 }
 
 fn looks_like_session_not_found(error: &str) -> bool {
@@ -237,11 +137,15 @@ pub(crate) async fn load_subagent_runtime_status(
     };
 
     let control_state = SubagentControlState::from_session(&session).unwrap_or_default();
-    let latest_turn = match load_runtime_snapshot(session_id).await {
-        Ok(snapshot) => project_aster_subagent_latest_turn(&snapshot),
+    let latest_turn: Option<SubagentLatestTurnProjection> = match load_runtime_snapshot_overlay(
+        session_id,
+    )
+    .await
+    {
+        Ok(overlay) => overlay.subagent_latest_turn,
         Err(error) => {
             tracing::debug!(
-                "[SubagentControl] 读取 runtime snapshot 失败，按无运行态继续: session_id={}, error={}",
+                "[SubagentControl] 读取 runtime snapshot overlay 失败，按无运行态继续: session_id={}, error={}",
                 session_id,
                 error
             );

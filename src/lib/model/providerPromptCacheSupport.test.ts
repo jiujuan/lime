@@ -67,6 +67,27 @@ describe("providerPromptCacheSupport", () => {
     ).toBe("automatic");
   });
 
+  it("未知 anthropic-compatible Host 即使路径像 Anthropic 也应默认显式缓存", () => {
+    const apiHost = "https://example.com/anthropic";
+
+    expect(isKnownAutomaticAnthropicCompatibleHost(apiHost)).toBe(false);
+    expect(
+      getProviderPromptCacheMode("anthropic-compatible", null, apiHost),
+    ).toBe("explicit_only");
+    expect(
+      resolvePromptCacheSupportNotice({
+        providerType: "custom-provider-id",
+        configuredProviderType: "anthropic-compatible",
+        configuredApiHost: apiHost,
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        label: "未声明自动缓存",
+        source: "configured_provider",
+      }),
+    );
+  });
+
   it("仅有 anthropic-compatible 选择器时应回退提示", () => {
     expect(
       resolvePromptCacheSupportNotice({

@@ -660,6 +660,22 @@ describe("http-client", () => {
         request: {
           lines: [
             JSON.stringify({
+              id: "local-package-export",
+              method: "pluginLocalPackage/export",
+              params: {
+                appDir:
+                  "/Users/coso/Documents/dev/ai/limecloud/content-factory-app",
+              },
+            }),
+          ],
+        },
+      }),
+    ).toBe(240000);
+    expect(
+      resolveBridgeRequestTimeoutMs("app_server_handle_json_lines", {
+        request: {
+          lines: [
+            JSON.stringify({
               id: "installed-save",
               method: "pluginInstalled/save",
               params: { state: { appId: "content-factory-app" } },

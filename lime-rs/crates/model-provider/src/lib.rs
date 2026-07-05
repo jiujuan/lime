@@ -1,4 +1,5 @@
 pub mod canonical;
+pub mod provider_stream;
 pub mod runtime_provider;
 pub mod safety;
 

@@ -764,6 +764,10 @@
     },
     {
       "kind": "request",
+      "method": "pluginLocalPackage/export"
+    },
+    {
+      "kind": "request",
       "method": "pluginLocalPackage/inspect"
     },
     {
@@ -1663,6 +1667,8 @@
       "PluginInstalledDisabledSetParams",
       "PluginInstalledListResponse",
       "PluginInstalledSaveParams",
+      "PluginLocalPackageExportParams",
+      "PluginLocalPackageExportResponse",
       "PluginLocalPackageInspectParams",
       "PluginLocalPackageInspectResponse",
       "PluginPackageCacheEntry",

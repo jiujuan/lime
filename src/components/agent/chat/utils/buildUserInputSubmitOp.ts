@@ -1,4 +1,9 @@
 import type { AgentUserInputOp } from "@/lib/api/agentProtocol";
+import type { ModelCapabilitySummary } from "@/lib/model/inferModelCapabilities";
+import {
+  assertModelInputCapabilityAllowed,
+  buildModelCapabilitySendGateInput,
+} from "@/lib/model/modelCapabilitySendGate";
 import type {
   AsterExecutionStrategy,
   AsterSessionExecutionRuntime,
@@ -51,6 +56,7 @@ export interface BuildUserInputSubmitOpOptions {
   thinking?: boolean;
   explicitToolPreferences?: boolean;
   autoContinue?: AutoContinueRequestPayload;
+  modelCapabilitySummary?: ModelCapabilitySummary | null;
 }
 
 export function buildUserInputSubmitOp(
@@ -82,10 +88,22 @@ export function buildUserInputSubmitOp(
     thinking,
     explicitToolPreferences,
     autoContinue,
+    modelCapabilitySummary,
   } = options;
   const normalizedEffectiveExecutionStrategy = normalizeExecutionStrategy(
     effectiveExecutionStrategy,
   );
+
+  if (modelCapabilitySummary !== undefined) {
+    assertModelInputCapabilityAllowed(
+      modelCapabilitySummary,
+      buildModelCapabilitySendGateInput({
+        text: content,
+        imageCount: images.length,
+      }),
+      { failClosedOnUnknown: true },
+    );
+  }
 
   const compaction = buildSubmitOpRuntimeCompaction({
     requestMetadata,

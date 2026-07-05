@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MutableRefObject } from "react";
 import type { AsterSessionExecutionRuntime } from "@/lib/api/agentRuntime";
-import type { Message } from "../types";
+import type { ModelCapabilitySummary } from "@/lib/model/inferModelCapabilities";
+import type { Message, MessageImage } from "../types";
 import {
   prepareAgentStreamUserInputSend,
   resolvePreparedSendExpectingQueue,
@@ -14,6 +15,45 @@ function createStateSetter<T>(getValue: () => T, setValue: (value: T) => void) {
     setValue(
       typeof next === "function" ? (next as (prev: T) => T)(getValue()) : next,
     );
+  };
+}
+
+function createModelCapabilitySummary(
+  inputModalities: ModelCapabilitySummary["input_modalities"],
+): ModelCapabilitySummary {
+  const supportsMediaInput = inputModalities.some((modality) =>
+    ["image", "audio", "video", "file"].includes(modality),
+  );
+
+  return {
+    capabilities: {
+      vision: inputModalities.includes("image"),
+      tools: true,
+      streaming: true,
+      json_mode: true,
+      function_calling: true,
+      reasoning: false,
+    },
+    task_families: inputModalities.includes("image")
+      ? ["chat", "vision_understanding"]
+      : ["chat"],
+    input_modalities: inputModalities,
+    output_modalities: ["text"],
+    runtime_features: ["streaming", "tool_calling"],
+    supports_tools: true,
+    supports_reasoning: false,
+    supports_prompt_cache: false,
+    supports_media_input: supportsMediaInput,
+    supports_media_output: false,
+    context_length: 128000,
+    max_output_tokens: 4096,
+  };
+}
+
+function createImageAttachment(): MessageImage {
+  return {
+    data: "data:image/png;base64,fixture",
+    mediaType: "image/png",
   };
 }
 
@@ -295,6 +335,108 @@ describe("agentStreamUserInputSendPreparation", () => {
     expect(result.requestMetadata).toBeUndefined();
     expect(result.assistantMsg.requestMetadata).toBeUndefined();
     expect(result.userMsg?.requestMetadata).toBeUndefined();
+  });
+
+  it("已解析模型能力时应把纯文本发送 gate 写入 harness metadata", () => {
+    vi.spyOn(crypto, "randomUUID")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000401")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000402");
+
+    const result = prepareAgentStreamUserInputSend({
+      content: "继续分析项目结构",
+      images: [],
+      skipUserMessage: false,
+      options: {
+        modelCapabilitySummary: createModelCapabilitySummary(["text"]),
+      },
+      env: createEnv(),
+    });
+
+    expect(result.modelInputCapabilityGate).toMatchObject({
+      status: "allowed",
+      requiredInputModalities: ["text"],
+      missingInputModalities: [],
+      reason: null,
+    });
+    expect(result.requestMetadata).toMatchObject({
+      harness: {
+        model_input_capability_gate: {
+          status: "allowed",
+          requiredInputModalities: ["text"],
+          supportedInputModalities: ["text"],
+        },
+      },
+    });
+  });
+
+  it("图片输入遇到 text-only 模型时应记录 blocked gate 且保留既有 metadata", () => {
+    vi.spyOn(crypto, "randomUUID")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000411")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000412");
+
+    const result = prepareAgentStreamUserInputSend({
+      content: "描述这张图",
+      images: [createImageAttachment()],
+      skipUserMessage: false,
+      options: {
+        requestMetadata: {
+          source: "test",
+          harness: {
+            existing_signal: true,
+          },
+        },
+        modelCapabilitySummary: createModelCapabilitySummary(["text"]),
+      },
+      env: createEnv(),
+    });
+
+    expect(result.modelInputCapabilityGate).toMatchObject({
+      status: "blocked",
+      requiredInputModalities: ["text", "image"],
+      supportedInputModalities: ["text"],
+      missingInputModalities: ["image"],
+      requiresMediaInput: true,
+      reason: "missing_input_modalities",
+    });
+    expect(result.requestMetadata).toMatchObject({
+      source: "test",
+      harness: {
+        existing_signal: true,
+        model_input_capability_gate: {
+          status: "blocked",
+          missingInputModalities: ["image"],
+        },
+      },
+    });
+  });
+
+  it("图片输入缺少模型能力 summary 时应记录 unknown gate 交给后续边界决策", () => {
+    vi.spyOn(crypto, "randomUUID")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000421")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000422");
+
+    const result = prepareAgentStreamUserInputSend({
+      content: "分析这张图",
+      images: [createImageAttachment()],
+      skipUserMessage: false,
+      env: createEnv(),
+    });
+
+    expect(result.modelInputCapabilityGate).toMatchObject({
+      status: "unknown",
+      requiredInputModalities: ["text", "image"],
+      missingInputModalities: ["text", "image"],
+      requiresMediaInput: true,
+      reason: "missing_capability_summary",
+    });
+    expect(result.requestMetadata).toMatchObject({
+      harness: {
+        model_input_capability_gate: {
+          status: "unknown",
+          reason: "missing_capability_summary",
+        },
+      },
+    });
   });
 
   it("displayContent 应透传给用户消息草稿", () => {

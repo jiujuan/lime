@@ -1,5 +1,8 @@
 import type {
+  AgentEvent,
   AgentEventMessage,
+  AgentEventReasoningEnded,
+  AgentEventReasoningStarted,
   AgentEventTextDelta,
   AgentEventTextDeltaBatch,
   AgentEventThinkingDelta,
@@ -15,6 +18,45 @@ import {
   buildAgentUiReasoningDeltaEvent,
   buildAgentUiTextDeltaEvent,
 } from "@limecloud/agent-runtime-projection";
+
+type ConversationProjectionEvent = Extract<
+  AgentEvent,
+  {
+    type:
+      | "message"
+      | "text_delta"
+      | "text_delta_batch"
+      | "thinking_delta"
+      | "reasoning_delta"
+      | "reasoning_final"
+      | "reasoning_started"
+      | "reasoning_ended";
+  }
+>;
+
+export function buildConversationProjectionEvents(
+  event: ConversationProjectionEvent,
+  context: AgentUiProjectionContext,
+): AgentUiProjectionEvent[] {
+  switch (event.type) {
+    case "message":
+      return [buildMessageSnapshotEvent(event, context)];
+    case "text_delta":
+    case "text_delta_batch":
+      return [buildTextDeltaEvent(event, context)];
+    case "thinking_delta":
+    case "reasoning_delta":
+    case "reasoning_final":
+      return [buildThinkingDeltaEvent(event, context)];
+    case "reasoning_started":
+    case "reasoning_ended":
+      return buildReasoningLifecycleEvents(event, context);
+    default: {
+      const exhaustive: never = event;
+      return exhaustive;
+    }
+  }
+}
 
 export function buildMessageSnapshotEvent(
   event: AgentEventMessage,
@@ -65,4 +107,11 @@ export function buildThinkingDeltaEvent(
     },
     context,
   );
+}
+
+export function buildReasoningLifecycleEvents(
+  _event: AgentEventReasoningStarted | AgentEventReasoningEnded,
+  _context: AgentUiProjectionContext,
+): AgentUiProjectionEvent[] {
+  return [];
 }

@@ -9,7 +9,7 @@ use crate::subprocess::{
     configure_command_for_gui, wrap_cmd_command_for_utf8, wrap_powershell_command_for_utf8,
 };
 
-pub(crate) fn build_platform_shell_command(command: &str) -> Command {
+pub fn build_platform_shell_command(command: &str) -> Command {
     #[cfg(target_os = "windows")]
     {
         if let Some(executable_path) = detect_powershell_executable() {
@@ -29,7 +29,7 @@ pub(crate) fn build_platform_shell_command(command: &str) -> Command {
     }
 }
 
-pub(crate) fn detect_powershell_executable() -> Option<PathBuf> {
+pub fn detect_powershell_executable() -> Option<PathBuf> {
     let from_path = which::which("pwsh")
         .ok()
         .or_else(|| which::which("powershell").ok())

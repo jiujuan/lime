@@ -163,10 +163,50 @@ fn article_workspace_action_from_metadata(
 }
 
 fn article_workspace_action_result_artifacts(stored: &StoredSession, turn_id: &str) -> Vec<Value> {
-    artifact_projection::artifact_summaries_for_turn(&stored.events, Some(turn_id))
+    let events = stored
+        .events
+        .iter()
+        .filter(|event| event_belongs_to_action_turn(event, turn_id))
+        .cloned()
+        .collect::<Vec<_>>();
+    artifact_projection::artifact_summaries_for_turn(&events, None)
         .into_iter()
         .filter_map(|summary| serde_json::to_value(summary).ok())
         .collect()
+}
+
+fn event_belongs_to_action_turn(event: &AgentEvent, turn_id: &str) -> bool {
+    event.turn_id.as_deref() == Some(turn_id)
+        || string_field(&event.payload, &["turnId", "turn_id"]).as_deref() == Some(turn_id)
+        || event
+            .payload
+            .get("artifact")
+            .and_then(|artifact| string_field(artifact, &["turnId", "turn_id"]))
+            .as_deref()
+            == Some(turn_id)
+        || event
+            .payload
+            .get("metadata")
+            .and_then(|metadata| {
+                metadata
+                    .get("pluginWorker")
+                    .or_else(|| metadata.get("plugin_worker"))
+            })
+            .and_then(|plugin_worker| string_field(plugin_worker, &["turnId", "turn_id"]))
+            .as_deref()
+            == Some(turn_id)
+        || event
+            .payload
+            .get("artifact")
+            .and_then(|artifact| artifact.get("metadata"))
+            .and_then(|metadata| {
+                metadata
+                    .get("pluginWorker")
+                    .or_else(|| metadata.get("plugin_worker"))
+            })
+            .and_then(|plugin_worker| string_field(plugin_worker, &["turnId", "turn_id"]))
+            .as_deref()
+            == Some(turn_id)
 }
 
 fn article_workspace_action_error(stored: &StoredSession, turn_id: &str) -> Option<Value> {

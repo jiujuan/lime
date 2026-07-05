@@ -130,6 +130,155 @@ describe("modelRegistry API", () => {
     expect(first).not.toBe(second);
   });
 
+  it("model/list 应把 App Server Codex policy 字段归一到 registry metadata", async () => {
+    resolveAppServerRequest({
+      models: [
+        createModelInfo({
+          toolMode: "code-mode-only",
+          supportsSearchTool: true,
+          webSearchToolType: "text_and_image",
+          supportsImageDetailOriginal: true,
+          contextWindow: 200_000,
+          maxContextWindow: 300_000,
+          autoCompactTokenLimit: 250_000,
+          effectiveContextWindowPercent: 80,
+          visibility: "list",
+          serviceTiers: [
+            {
+              id: "default",
+              name: "Default",
+              description: "Standard routing",
+            },
+            {
+              id: "flex",
+              name: "Flex",
+              description: "Lower priority routing",
+            },
+          ],
+          defaultServiceTier: "flex",
+          supportsParallelToolCalls: true,
+          defaultReasoningLevel: "medium",
+          supportedReasoningLevels: [
+            { effort: "low", description: "Fast" },
+            { effort: "high", description: "Deep" },
+          ],
+          supportsReasoningSummaries: true,
+          defaultReasoningSummary: "concise",
+          supportVerbosity: true,
+          defaultVerbosity: "high",
+          inputModalities: ["text", "image", "pdf", "future-modal"],
+          useResponsesLite: true,
+          truncationPolicy: {
+            mode: "tokens",
+            limit: 4096,
+          },
+          shellType: "unified-exec",
+          applyPatchToolType: "freeform",
+          experimentalSupportedTools: ["workspace-patch", "mcp_browser"],
+          tier: "max",
+          status: "preview",
+        }),
+      ],
+    });
+
+    await expect(getModelRegistry()).resolves.toEqual([
+      expect.objectContaining({
+        execution_policy: {
+          tool_mode: "code_mode_only",
+          supports_search_tool: true,
+          web_search_tool_type: "text_and_image",
+          search_content_modalities: ["text", "image"],
+          supports_image_detail_original: true,
+          allowed_image_detail_values: ["auto", "low", "high", "original"],
+          default_image_detail: "high",
+        },
+        context_policy: {
+          context_window: 200_000,
+          max_context_window: 300_000,
+          resolved_context_window: 200_000,
+          effective_context_window_percent: 80,
+          model_context_window: 160_000,
+          auto_compact_token_limit: 180_000,
+        },
+        picker_policy: {
+          visibility: "list",
+          show_in_picker: true,
+          service_tiers: [
+            {
+              id: "default",
+              name: "Default",
+              description: "Standard routing",
+            },
+            {
+              id: "flex",
+              name: "Flex",
+              description: "Lower priority routing",
+            },
+          ],
+          supported_service_tier_ids: ["default", "flex"],
+          default_service_tier: "flex",
+        },
+        tool_call_policy: {
+          supports_parallel_tool_calls: true,
+          parallel_tool_calls: true,
+        },
+        reasoning_policy: {
+          supports_reasoning_summaries: true,
+          default_reasoning_level: "medium",
+          supported_reasoning_levels: [
+            { effort: "low", description: "Fast" },
+            { effort: "high", description: "Deep" },
+          ],
+          supported_reasoning_efforts: ["low", "high"],
+          can_set_reasoning_effort: true,
+        },
+        reasoning_output_policy: {
+          default_reasoning_summary: "concise",
+          support_verbosity: true,
+          default_verbosity: "high",
+          can_set_verbosity: true,
+        },
+        input_modality_policy: {
+          input_modalities: ["text", "image", "pdf"],
+          send_gate_modalities: ["text", "image", "file"],
+          unknown_input_modalities: ["future_modal"],
+          supports_text_input: true,
+          supports_media_input: true,
+          supports_image_input: true,
+          source: "explicit",
+        },
+        responses_policy: {
+          use_responses_lite: true,
+          request_mode: "responses_lite",
+          instructions_location: "input_prefix",
+          tools_location: "input_prefix",
+          reasoning_context: "all_turns",
+          parallel_tool_calls_allowed: false,
+          requires_responses_lite_header: true,
+        },
+        truncation_policy: {
+          mode: "tokens",
+          limit: 4096,
+          truncation_policy: {
+            mode: "tokens",
+            limit: 4096,
+          },
+        },
+        native_tool_policy: {
+          shell_type: "unified_exec",
+          shell_tool_enabled: true,
+          preferred_shell_surface: "unified_exec",
+          apply_patch_tool_type: "freeform",
+          apply_patch_tool_enabled: true,
+          experimental_supported_tools: ["mcp_browser", "workspace_patch"],
+        },
+      }),
+    ]);
+
+    expectAppServerRequest(1, "model/list", {});
+    expect(safeInvoke).not.toHaveBeenCalled();
+  });
+
   it("getProviderAliasConfig 应复用已加载的全量别名配置", async () => {
     resolveAppServerRequest({
       configs: {

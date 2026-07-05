@@ -27,7 +27,6 @@ pub(crate) use self::aster_reply_adapter::{
     stream_runtime_reply_with_configured_provider_for_direct_generation,
     stream_runtime_reply_with_policy, submit_runtime_tool_action_confirmation,
 };
-use self::aster_reply_adapter::{AsterReplyRuntimeHost, ReplyAttemptInput};
 #[cfg(test)]
 use self::auto_compaction_projection::{
     AutoCompactionEventProjection, AutoCompactionProjectionState,
@@ -69,8 +68,16 @@ use self::web_search_preflight::{
 #[cfg(test)]
 use crate::protocol::TextDeltaBatchBoundary;
 use crate::protocol::{AgentEvent as RuntimeAgentEvent, AgentRuntimeStatus};
-use crate::session_configuration::AgentSessionConfig;
 use crate::write_artifact_events::WriteArtifactEventEmitter;
+pub use agent_runtime::reply_execution::{
+    RuntimeReplyAttemptError as ReplyAttemptError, RuntimeReplyExecution as StreamReplyExecution,
+};
+use agent_runtime::reply_host::RuntimeReplyPolicyHost;
+use agent_runtime::reply_input::RuntimeReplyAttemptInput as ReplyAttemptInput;
+pub(crate) use agent_runtime::reply_input::{
+    RuntimeReplyInput as ReplyInput, RuntimeReplyInputImage as ReplyInputImage,
+};
+use agent_runtime::session_config::AgentSessionConfig;
 #[cfg(test)]
 use lime_core::database::dao::agent_timeline::{AgentThreadItem, AgentThreadItemPayload};
 use std::path::Path;
@@ -87,52 +94,6 @@ const WEB_SEARCH_EMPTY_REPLY_RETRY_PROMPT: &str = "请继续。你已经完成�
 pub(super) const CANCELLED_TURN_CONTEXT_MARKER: &str =
     "上一回合已被用户停止，不要继续回答被停止的请求；等待并仅处理后续用户消息。";
 
-#[derive(Debug, Clone)]
-pub struct ReplyAttemptError {
-    pub message: String,
-    pub emitted_any: bool,
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct StreamReplyExecution {
-    pub text_output: String,
-    pub event_errors: Vec<String>,
-    pub emitted_any: bool,
-    pub attempts_summary: String,
-    pub cancelled: bool,
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct ReplyInputImage {
-    pub data: String,
-    pub media_type: String,
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct ReplyInput {
-    pub text: String,
-    pub images: Vec<ReplyInputImage>,
-    pub agent_only: bool,
-}
-
-impl ReplyInput {
-    pub(crate) fn text(text: impl Into<String>) -> Self {
-        Self {
-            text: text.into(),
-            images: Vec::new(),
-            agent_only: false,
-        }
-    }
-
-    pub(crate) fn agent_only_text(text: impl Into<String>) -> Self {
-        Self {
-            text: text.into(),
-            images: Vec::new(),
-            agent_only: true,
-        }
-    }
-}
-
 fn is_reply_cancelled(cancel_token: &Option<CancellationToken>) -> bool {
     cancel_token
         .as_ref()
@@ -146,13 +107,13 @@ fn build_stream_reply_execution(
     attempts_summary: String,
     cancelled: bool,
 ) -> StreamReplyExecution {
-    StreamReplyExecution {
+    StreamReplyExecution::new(
         text_output,
         event_errors,
         emitted_any,
         attempts_summary,
         cancelled,
-    }
+    )
 }
 
 fn build_empty_final_reply_fallback(
@@ -214,13 +175,13 @@ impl StreamReplyPolicyExecutionOptions {
 }
 
 async fn maybe_emit_runtime_status<F>(
-    host: &AsterReplyRuntimeHost<'_>,
+    host: &impl RuntimeReplyPolicyHost<RuntimeAgentEvent, AgentRuntimeStatus>,
     session_config: &AgentSessionConfig,
     status: AgentRuntimeStatus,
     options: &StreamReplyPolicyExecutionOptions,
     on_event: &mut F,
 ) where
-    F: FnMut(&RuntimeAgentEvent),
+    F: FnMut(&RuntimeAgentEvent) + Send,
 {
     if options.persist_runtime_status {
         host.emit_runtime_status(session_config, status, on_event)
@@ -234,7 +195,7 @@ async fn maybe_emit_runtime_status<F>(
 
 #[allow(clippy::too_many_arguments)]
 async fn stream_message_reply_with_policy_with_options<F>(
-    reply_host: &AsterReplyRuntimeHost<'_>,
+    reply_host: &impl RuntimeReplyPolicyHost<RuntimeAgentEvent, AgentRuntimeStatus>,
     user_input: ReplyAttemptInput,
     working_directory: Option<&Path>,
     session_config: AgentSessionConfig,
@@ -244,7 +205,7 @@ async fn stream_message_reply_with_policy_with_options<F>(
     options: StreamReplyPolicyExecutionOptions,
 ) -> Result<StreamReplyExecution, ReplyAttemptError>
 where
-    F: FnMut(&RuntimeAgentEvent),
+    F: FnMut(&RuntimeAgentEvent) + Send,
 {
     let mut session_config = session_config;
     let started_at = Instant::now();
@@ -262,7 +223,6 @@ where
     let preflight = if request_tool_policy.requires_web_search() {
         execute_web_search_preflight_if_needed(
             WebSearchPreflightRequest {
-                host: reply_host,
                 session_id: &session_config.id,
                 message_text: &message_text,
                 working_directory,
@@ -310,7 +270,7 @@ where
     let mut event_errors: Vec<String> = Vec::new();
     let mut diagnostics = StreamEventDiagnostics::default();
     let first_attempt = stream_agent_reply_once(
-        &reply_host,
+        reply_host,
         user_input,
         &session_config,
         cancel_token.clone(),
@@ -368,7 +328,7 @@ where
                 error_detail
             );
             maybe_emit_runtime_status(
-                &reply_host,
+                reply_host,
                 &session_config,
                 build_provider_tail_failure_retry_runtime_status(error_detail),
                 &options,
@@ -376,7 +336,7 @@ where
             )
             .await;
             let retry_attempt = stream_agent_reply_once(
-                &reply_host,
+                reply_host,
                 ReplyInput::agent_only_text(PROVIDER_TAIL_FAILURE_CONTINUE_PROMPT).into(),
                 &session_config,
                 cancel_token.clone(),
@@ -450,7 +410,7 @@ where
                 web_search_tracker.format_attempts()
             );
             maybe_emit_runtime_status(
-                &reply_host,
+                reply_host,
                 &session_config,
                 build_web_search_synthesis_runtime_status(
                     preflight_execution.coverage_summary.as_deref(),
@@ -464,7 +424,7 @@ where
                     session_config.system_prompt.take(),
                 );
             let retry_attempt = stream_agent_reply_once(
-                &reply_host,
+                reply_host,
                 ReplyInput::agent_only_text(WEB_SEARCH_EMPTY_REPLY_RETRY_PROMPT).into(),
                 &session_config,
                 cancel_token,
@@ -509,7 +469,7 @@ where
                 session_config.id
             );
             maybe_emit_runtime_status(
-                &reply_host,
+                reply_host,
                 &session_config,
                 build_empty_reply_retry_runtime_status(),
                 &options,
@@ -517,7 +477,7 @@ where
             )
             .await;
             let retry_attempt = stream_agent_reply_once(
-                &reply_host,
+                reply_host,
                 ReplyInput::agent_only_text(EMPTY_REPLY_DIRECT_ANSWER_RETRY_PROMPT).into(),
                 &session_config,
                 cancel_token,
@@ -563,7 +523,7 @@ where
                 diagnostics.tool_end_count
             );
             maybe_emit_runtime_status(
-                &reply_host,
+                reply_host,
                 &session_config,
                 build_incomplete_tool_batch_continue_runtime_status(),
                 &options,
@@ -571,7 +531,7 @@ where
             )
             .await;
             let retry_attempt = stream_agent_reply_once(
-                &reply_host,
+                reply_host,
                 ReplyInput::agent_only_text(INCOMPLETE_TOOL_BATCH_CONTINUE_PROMPT).into(),
                 &session_config,
                 cancel_token,

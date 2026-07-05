@@ -3,9 +3,8 @@
 //! This compat module keeps Aster runtime snapshot / item DTOs out of
 //! `subagent_control` and session-store presentation code.
 
+use agent_runtime::session_execution::{SubagentLatestTurnProjection, SubagentTurnStatus};
 use aster::session::{ItemRuntimePayload, SessionRuntimeSnapshot, TurnRuntime};
-
-use crate::subagent_control::{SubagentLatestTurnProjection, SubagentTurnStatus};
 
 pub(crate) fn project_aster_subagent_latest_turn(
     snapshot: &SessionRuntimeSnapshot,
@@ -104,7 +103,7 @@ fn resolve_aster_worker_result_ref(
 #[cfg(test)]
 mod tests {
     use super::project_aster_subagent_latest_turn;
-    use crate::subagent_control::SubagentTurnStatus;
+    use agent_runtime::session_execution::SubagentTurnStatus;
     use aster::session::{
         ItemRuntime, ItemRuntimePayload, ItemStatus, SessionRuntimeSnapshot, ThreadRuntime,
         ThreadRuntimeSnapshot, TurnRuntime, TurnStatus,

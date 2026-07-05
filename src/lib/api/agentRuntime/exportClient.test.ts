@@ -444,6 +444,73 @@ describe("agentRuntime exportClient", () => {
     );
   });
 
+  it("analysis / replay / review current 收到其它 session 的制品路径时应 fail closed", async () => {
+    const appServerClient = appServerClientMock();
+    vi.mocked(appServerClient.exportAnalysisHandoff).mockResolvedValueOnce(
+      malformedAppServerResult({
+        ...analysisHandoffOutput,
+        evidence_pack_relative_root:
+          ".lime/harness/sessions/session-other/evidence",
+      }),
+    );
+    vi.mocked(appServerClient.exportReplayCase).mockResolvedValueOnce(
+      malformedAppServerResult({
+        ...replayCaseOutput,
+        replayRelativeRoot: ".lime/harness/sessions/session-other/replay",
+      }),
+    );
+    vi.mocked(
+      appServerClient.exportReviewDecisionTemplate,
+    ).mockResolvedValueOnce(
+      malformedAppServerResult({
+        ...reviewDecisionTemplateOutput,
+        sessionId: "session-other",
+      }),
+    );
+    vi.mocked(appServerClient.saveReviewDecision).mockResolvedValueOnce(
+      malformedAppServerResult({
+        ...reviewDecisionTemplateOutput,
+        analysisAbsoluteRoot:
+          "/tmp/workspace/.lime/harness/sessions/session-other/analysis",
+      }),
+    );
+    const client = createExportClient({
+      appServerClient,
+    });
+
+    await expect(
+      client.exportAgentRuntimeAnalysisHandoff("session-analysis"),
+    ).rejects.toThrow(
+      "agentSession/analysisHandoff/export did not return evidencePackRelativeRoot under the requested session",
+    );
+    await expect(
+      client.exportAgentRuntimeReplayCase("session-replay"),
+    ).rejects.toThrow(
+      "agentSession/replayCase/export did not return replayRelativeRoot under the requested session",
+    );
+    await expect(
+      client.exportAgentRuntimeReviewDecisionTemplate("session-review"),
+    ).rejects.toThrow(
+      "agentSession/reviewDecisionTemplate/export returned export for a different session",
+    );
+    await expect(
+      client.saveAgentRuntimeReviewDecision({
+        session_id: "session-review",
+        decision_status: "accepted",
+        decision_summary: "确认可以合入。",
+        chosen_fix_strategy: "保留最小 current 边界。",
+        risk_level: "medium",
+        risk_tags: ["runtime"],
+        human_reviewer: "Lime Maintainer",
+        followup_actions: [],
+        regression_requirements: [],
+        notes: "",
+      }),
+    ).rejects.toThrow(
+      "agentSession/reviewDecision/save did not return analysisAbsoluteRoot under the requested session",
+    );
+  });
+
   it("exportAgentRuntimeEvidencePack 应走 App Server evidence/export，不回退 legacy command", async () => {
     const appServerClient = appServerClientMock();
     const client = createExportClient({

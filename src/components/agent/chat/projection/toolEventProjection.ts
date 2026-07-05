@@ -1,4 +1,5 @@
 import type {
+  AgentEvent,
   AgentEventToolEnd,
   AgentEventToolInputDelta,
   AgentEventToolOutputDelta,
@@ -16,6 +17,40 @@ import {
   buildAgentUiToolProgressEvent,
   buildAgentUiToolStartEvents,
 } from "@limecloud/agent-runtime-projection";
+
+type ToolProjectionEvent = Extract<
+  AgentEvent,
+  {
+    type:
+      | "tool_start"
+      | "tool_end"
+      | "tool_progress"
+      | "tool_output_delta"
+      | "tool_input_delta";
+  }
+>;
+
+export function buildToolProjectionEvents(
+  event: ToolProjectionEvent,
+  context: AgentUiProjectionContext,
+): AgentUiProjectionEvent[] {
+  switch (event.type) {
+    case "tool_start":
+      return buildToolStartEvents(event, context);
+    case "tool_end":
+      return buildToolEndEvents(event, context);
+    case "tool_progress":
+      return [buildToolProgressEvent(event, context)];
+    case "tool_output_delta":
+      return [buildToolOutputDeltaEvent(event, context)];
+    case "tool_input_delta":
+      return [buildToolInputDeltaEvent(event, context)];
+    default: {
+      const exhaustive: never = event;
+      return exhaustive;
+    }
+  }
+}
 
 export function buildToolStartEvents(
   event: AgentEventToolStart,

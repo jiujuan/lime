@@ -1,4 +1,6 @@
+use super::event_store;
 use super::status::{agent_turn_blocks_queue_resume, agent_turn_is_active};
+use super::workflow::events::{WORKFLOW_RUN_RESUMING, WORKFLOW_STEP_RESUMING};
 use super::*;
 use app_server_protocol::*;
 use serde_json::json;
@@ -51,6 +53,121 @@ fn validate_runtime_resume_contract(
         }
     }
     Ok(())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct WorkflowResumeAuditBinding {
+    workflow_run_id: String,
+    workflow_key: String,
+    step_id: String,
+    action_id: String,
+    decision: String,
+}
+
+fn workflow_resume_audit_events_from_contract(
+    contract: Option<&RuntimeResumeContract>,
+    queued_turn_id: &str,
+) -> Vec<RuntimeEvent> {
+    let Some(contract) = contract else {
+        return Vec::new();
+    };
+    let mut seen = HashSet::new();
+    let mut events = Vec::new();
+    for decision in &contract.decisions {
+        let Some(metadata) = decision.metadata.as_ref() else {
+            continue;
+        };
+        let Some(binding) = workflow_resume_binding_from_metadata(metadata, decision) else {
+            continue;
+        };
+        if !seen.insert(binding.clone()) {
+            continue;
+        }
+        let base_payload = json!({
+            "workflowRunId": binding.workflow_run_id,
+            "workflowKey": binding.workflow_key,
+            "stepId": binding.step_id,
+            "actionId": binding.action_id,
+            "decision": binding.decision,
+            "status": "resuming",
+            "resumeMode": contract.resume_mode,
+            "runtimeId": contract.runtime_id,
+            "contractTurnId": contract.turn_id,
+            "queuedTurnId": queued_turn_id,
+            "schemaVersion": contract.schema_version,
+            "source": "agentSession/thread/resume",
+        });
+        events.push(RuntimeEvent::new(
+            WORKFLOW_STEP_RESUMING,
+            base_payload.clone(),
+        ));
+        events.push(RuntimeEvent::new(WORKFLOW_RUN_RESUMING, base_payload));
+    }
+    events
+}
+
+fn workflow_resume_binding_from_metadata(
+    metadata: &Value,
+    decision: &RuntimeResumeActionDecision,
+) -> Option<WorkflowResumeAuditBinding> {
+    let action_id = decision.action_id.trim();
+    let decision_value = decision.decision.trim();
+    if action_id.is_empty() || decision_value.is_empty() {
+        return None;
+    }
+    for candidate in workflow_resume_metadata_candidates(metadata) {
+        let Some(workflow_run_id) = string_field(
+            candidate,
+            &["workflowRunId", "workflow_run_id", "runId", "run_id"],
+        ) else {
+            continue;
+        };
+        let Some(workflow_key) = string_field(
+            candidate,
+            &["workflowKey", "workflow_key", "key", "workflow"],
+        ) else {
+            continue;
+        };
+        let Some(step_id) = string_field(candidate, &["stepId", "step_id", "id"]) else {
+            continue;
+        };
+        return Some(WorkflowResumeAuditBinding {
+            workflow_run_id,
+            workflow_key,
+            step_id,
+            action_id: action_id.to_string(),
+            decision: decision_value.to_string(),
+        });
+    }
+    None
+}
+
+fn workflow_resume_metadata_candidates(metadata: &Value) -> Vec<&Value> {
+    let mut candidates = vec![metadata];
+    for key in [
+        "workflowResume",
+        "workflow_resume",
+        "workflowResumeLifecycle",
+        "workflow_resume_lifecycle",
+        "workerLifecycle",
+        "worker_lifecycle",
+        "pluginWorkflow",
+        "plugin_workflow",
+    ] {
+        if let Some(candidate) = metadata.get(key) {
+            candidates.push(candidate);
+        }
+    }
+    candidates
+}
+
+fn string_field(value: &Value, keys: &[&str]) -> Option<String> {
+    keys.iter()
+        .filter_map(|key| value.get(*key))
+        .find_map(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
 }
 
 fn normalize_session_control_id(value: &str, message: &str) -> Result<String, RuntimeCoreError> {
@@ -202,13 +319,18 @@ impl RuntimeCore {
             let runtime_options = stored.turn_runtime_options.remove(&turn.turn_id);
             (index, turn, input, runtime_options)
         };
+        let queued_turn_id = queued.1.turn_id.clone();
+        let workflow_resume_audit_events = workflow_resume_audit_events_from_contract(
+            params.resume_contract.as_ref(),
+            &queued_turn_id,
+        );
         let mut resumed_runtime_options = queued.3.clone().unwrap_or_default();
-        resumed_runtime_options.queued_turn_id = Some(queued.1.turn_id.clone());
+        resumed_runtime_options.queued_turn_id = Some(queued_turn_id.clone());
         let output = match self
             .start_turn(
                 AgentSessionTurnStartParams {
                     session_id: session_id.clone(),
-                    turn_id: Some(queued.1.turn_id.clone()),
+                    turn_id: Some(queued_turn_id.clone()),
                     input: queued.2.clone(),
                     runtime_options: Some(resumed_runtime_options),
                     queue_if_busy: false,
@@ -231,6 +353,13 @@ impl RuntimeCore {
             }
         };
         let (session, turns) = self.session_snapshot(&session_id)?;
+        event_store::append_workflow_audit_runtime_events(
+            self.event_log_writer.as_deref(),
+            &session.session_id,
+            &session.thread_id,
+            Some(&queued_turn_id),
+            workflow_resume_audit_events,
+        )?;
 
         Ok(RuntimeCoreOutput {
             response: AgentSessionThreadResumeResponse {

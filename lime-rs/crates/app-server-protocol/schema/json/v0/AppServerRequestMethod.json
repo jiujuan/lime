@@ -187,6 +187,7 @@
     "pluginInstalled/save",
     "pluginInstalled/uninstall",
     "pluginInstalled/uninstall/rehearsal",
+    "pluginLocalPackage/export",
     "pluginLocalPackage/inspect",
     "pluginPackage/fetchCloud",
     "pluginShell/prepare",

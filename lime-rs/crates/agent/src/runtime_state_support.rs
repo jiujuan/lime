@@ -3,8 +3,8 @@
 //! 提供可复用的会话配置构建、项目上下文 Prompt 构建、
 //! Lime Skills 加载与 Agent 身份配置。
 
-use crate::session_configuration::AgentSessionConfig;
-use crate::turn_context_configuration::AgentTurnContext;
+#[cfg(test)]
+use agent_runtime::session_config::SessionConfigBuilder;
 use aster::agents::AgentIdentity;
 use aster::skills::{
     global_registry, load_skill_from_file, load_skills_from_directory, SkillSource,
@@ -245,89 +245,6 @@ mod tests {
         assert_eq!(config.thread_id.as_deref(), Some("thread-1"));
         assert_eq!(config.turn_id.as_deref(), Some("turn-1"));
         assert_eq!(config.schedule_id.as_deref(), Some("schedule-1"));
-    }
-}
-
-/// 会话配置构建器
-pub struct SessionConfigBuilder {
-    id: String,
-    thread_id: Option<String>,
-    turn_id: Option<String>,
-    schedule_id: Option<String>,
-    max_turns: Option<u32>,
-    system_prompt: Option<String>,
-    system_prompt_override: Option<bool>,
-    include_context_trace: Option<bool>,
-    turn_context: Option<AgentTurnContext>,
-}
-
-impl SessionConfigBuilder {
-    pub fn new(id: impl Into<String>) -> Self {
-        Self {
-            id: id.into(),
-            thread_id: None,
-            turn_id: None,
-            schedule_id: None,
-            max_turns: None,
-            system_prompt: None,
-            system_prompt_override: None,
-            include_context_trace: None,
-            turn_context: None,
-        }
-    }
-
-    pub fn thread_id(mut self, thread_id: impl Into<String>) -> Self {
-        self.thread_id = Some(thread_id.into());
-        self
-    }
-
-    pub fn turn_id(mut self, turn_id: impl Into<String>) -> Self {
-        self.turn_id = Some(turn_id.into());
-        self
-    }
-
-    pub fn schedule_id(mut self, schedule_id: impl Into<String>) -> Self {
-        self.schedule_id = Some(schedule_id.into());
-        self
-    }
-
-    pub fn max_turns(mut self, turns: u32) -> Self {
-        self.max_turns = Some(turns);
-        self
-    }
-
-    pub fn system_prompt(mut self, prompt: impl Into<String>) -> Self {
-        self.system_prompt = Some(prompt.into());
-        self
-    }
-
-    pub fn system_prompt_override(mut self, enabled: bool) -> Self {
-        self.system_prompt_override = Some(enabled);
-        self
-    }
-
-    pub fn include_context_trace(mut self, include: bool) -> Self {
-        self.include_context_trace = Some(include);
-        self
-    }
-
-    pub fn turn_context(mut self, turn_context: AgentTurnContext) -> Self {
-        self.turn_context = Some(turn_context);
-        self
-    }
-
-    pub fn build(self) -> AgentSessionConfig {
-        AgentSessionConfig::from_builder_parts(
-            self.id,
-            self.thread_id,
-            self.turn_id,
-            self.schedule_id,
-            self.max_turns,
-            self.system_prompt,
-            self.system_prompt_override,
-            self.include_context_trace,
-            self.turn_context,
-        )
     }
 }
 

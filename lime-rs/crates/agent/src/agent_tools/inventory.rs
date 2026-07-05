@@ -10,14 +10,14 @@ use crate::agent_tools::execution::{
     ToolExecutionWarningPolicy,
 };
 use crate::mcp::McpToolDefinition;
-use aster::agents::extension::ExtensionConfig;
-use aster::tools::ToolDefinition;
 use lime_core::config::ToolExecutionPolicyConfig as ConfigToolExecutionPolicyConfig;
 use lime_core::tool_calling::{
     extract_tool_surface_metadata, tool_matches_caller, tool_visible_in_context,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashSet};
+use tool_runtime::tool_definition::RuntimeToolDefinition;
+use tool_runtime::tool_extension::RuntimeExtensionConfig;
 
 fn extract_harness_object(
     request_metadata: Option<&serde_json::Value>,
@@ -285,10 +285,10 @@ pub(crate) struct AgentToolInventoryBuildInput {
     pub request_metadata: Option<serde_json::Value>,
     pub mcp_server_names: Vec<String>,
     pub mcp_tools: Vec<McpToolDefinition>,
-    pub registry_definitions: Vec<ToolDefinition>,
+    pub registry_definitions: Vec<RuntimeToolDefinition>,
     pub resource_helpers_supported: bool,
     pub current_surface_tool_names: Vec<String>,
-    pub extension_configs: Vec<ExtensionConfig>,
+    pub extension_configs: Vec<RuntimeExtensionConfig>,
     pub visible_extension_tools: Vec<ExtensionToolInventorySeed>,
     pub searchable_extension_tools: Vec<ExtensionToolInventorySeed>,
 }
@@ -466,7 +466,7 @@ pub(crate) fn build_tool_inventory(
 }
 
 fn build_registry_inventory(
-    definitions: &[ToolDefinition],
+    definitions: &[RuntimeToolDefinition],
     caller: &str,
     execution_policy_input: ToolExecutionResolverInput<'_>,
     lock_service_skill_launch_to_site_tools: bool,
@@ -529,7 +529,7 @@ fn build_registry_inventory(
 }
 
 fn build_extension_surface_inventory(
-    configs: &[ExtensionConfig],
+    configs: &[RuntimeExtensionConfig],
     visible_extension_tools: &[ExtensionToolInventorySeed],
     searchable_extension_tools: &[ExtensionToolInventorySeed],
     mcp_server_lookup: &HashSet<String>,
@@ -546,7 +546,7 @@ fn build_extension_surface_inventory(
     let mut result = configs
         .iter()
         .map(|config| {
-            let extension_name = config.name();
+            let extension_name = config.name.clone();
             let available_tools = extension_available_tools(config);
             let always_expose_tools = extension_always_expose_tools(config);
             let loaded_tools = prefixed_tool_names(
@@ -562,8 +562,8 @@ fn build_extension_surface_inventory(
                 extension_name: extension_name.clone(),
                 description: extension_description(config),
                 source_kind: extension_source_kind(&extension_name, mcp_server_lookup),
-                deferred_loading: config.deferred_loading(),
-                allowed_caller: config.allowed_caller().map(ToString::to_string),
+                deferred_loading: config.deferred_loading,
+                allowed_caller: config.allowed_caller.clone(),
                 available_tools,
                 always_expose_tools,
                 loaded_tools,
@@ -577,7 +577,7 @@ fn build_extension_surface_inventory(
 }
 
 fn build_extension_tool_inventory(
-    configs: &[ExtensionConfig],
+    configs: &[RuntimeExtensionConfig],
     visible_extension_tools: &[ExtensionToolInventorySeed],
     searchable_extension_tools: &[ExtensionToolInventorySeed],
     caller: &str,
@@ -787,52 +787,22 @@ fn build_runtime_tool_inventory(
     result
 }
 
-fn extension_available_tools(config: &ExtensionConfig) -> Vec<String> {
-    match config {
-        ExtensionConfig::Sse { .. } => Vec::new(),
-        ExtensionConfig::StreamableHttp {
-            available_tools, ..
-        }
-        | ExtensionConfig::Stdio {
-            available_tools, ..
-        }
-        | ExtensionConfig::Builtin {
-            available_tools, ..
-        }
-        | ExtensionConfig::Platform {
-            available_tools, ..
-        }
-        | ExtensionConfig::InlinePython {
-            available_tools, ..
-        }
-        | ExtensionConfig::Frontend {
-            available_tools, ..
-        } => {
-            let mut tools = available_tools.clone();
-            tools.sort();
-            tools.dedup();
-            tools
-        }
-    }
-}
-
-fn extension_always_expose_tools(config: &ExtensionConfig) -> Vec<String> {
-    let mut tools = config.always_expose_tools().to_vec();
+fn extension_available_tools(config: &RuntimeExtensionConfig) -> Vec<String> {
+    let mut tools = config.available_tools.clone();
     tools.sort();
     tools.dedup();
     tools
 }
 
-fn extension_description(config: &ExtensionConfig) -> String {
-    match config {
-        ExtensionConfig::Sse { description, .. }
-        | ExtensionConfig::StreamableHttp { description, .. }
-        | ExtensionConfig::Stdio { description, .. }
-        | ExtensionConfig::Builtin { description, .. }
-        | ExtensionConfig::Platform { description, .. }
-        | ExtensionConfig::InlinePython { description, .. }
-        | ExtensionConfig::Frontend { description, .. } => description.clone(),
-    }
+fn extension_always_expose_tools(config: &RuntimeExtensionConfig) -> Vec<String> {
+    let mut tools = config.always_expose_tools.clone();
+    tools.sort();
+    tools.dedup();
+    tools
+}
+
+fn extension_description(config: &RuntimeExtensionConfig) -> String {
+    config.description.clone()
 }
 
 fn extension_source_kind(
@@ -861,14 +831,14 @@ fn prefixed_tool_names<'a>(
 }
 
 pub fn resolve_extension_tool_runtime_status(
-    configs: &[ExtensionConfig],
+    configs: &[RuntimeExtensionConfig],
     visible_tool_names: &HashSet<String>,
     tool_name: &str,
 ) -> ExtensionToolRuntimeStatus {
     let matched = configs
         .iter()
         .filter_map(|config| {
-            let extension_name = config.name();
+            let extension_name = config.name.clone();
             tool_name
                 .strip_prefix(extension_name.as_str())
                 .and_then(|rest| rest.strip_prefix("__"))
@@ -885,12 +855,12 @@ pub fn resolve_extension_tool_runtime_status(
         };
     };
 
-    if !config.deferred_loading() || config.is_tool_exposed_by_default(&inner_tool_name) {
+    if !config.deferred_loading || config.is_tool_exposed_by_default(&inner_tool_name) {
         return ExtensionToolRuntimeStatus {
             status: "visible",
             deferred_loading: false,
             extension_name: Some(extension_name),
-            allowed_caller: config.allowed_caller().map(ToString::to_string),
+            allowed_caller: config.allowed_caller.clone(),
         };
     }
 
@@ -899,14 +869,14 @@ pub fn resolve_extension_tool_runtime_status(
             status: "loaded",
             deferred_loading: false,
             extension_name: Some(extension_name),
-            allowed_caller: config.allowed_caller().map(ToString::to_string),
+            allowed_caller: config.allowed_caller.clone(),
         }
     } else {
         ExtensionToolRuntimeStatus {
             status: "deferred",
             deferred_loading: true,
             extension_name: Some(extension_name),
-            allowed_caller: config.allowed_caller().map(ToString::to_string),
+            allowed_caller: config.allowed_caller.clone(),
         }
     }
 }
@@ -931,28 +901,29 @@ mod tests {
         deferred_loading: bool,
         always_expose_tools: Vec<&str>,
         allowed_caller: Option<&str>,
-    ) -> ExtensionConfig {
-        ExtensionConfig::Builtin {
-            name: name.to_string(),
-            display_name: Some(name.to_string()),
-            description: format!("{name} tools"),
-            timeout: None,
-            bundled: Some(false),
-            available_tools: available_tools
+    ) -> RuntimeExtensionConfig {
+        RuntimeExtensionConfig::new(
+            name,
+            format!("{name} tools"),
+            available_tools
                 .into_iter()
                 .map(|item| item.to_string())
                 .collect(),
             deferred_loading,
-            always_expose_tools: always_expose_tools
+            always_expose_tools
                 .into_iter()
                 .map(|item| item.to_string())
                 .collect(),
-            allowed_caller: allowed_caller.map(ToString::to_string),
-        }
+            allowed_caller.map(ToString::to_string),
+        )
     }
 
-    fn definition(name: &str, description: &str, schema: serde_json::Value) -> ToolDefinition {
-        ToolDefinition::new(name, description, schema)
+    fn definition(
+        name: &str,
+        description: &str,
+        schema: serde_json::Value,
+    ) -> RuntimeToolDefinition {
+        RuntimeToolDefinition::new(name, description, schema)
     }
 
     fn seed(name: &str, description: &str) -> ExtensionToolInventorySeed {

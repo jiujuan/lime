@@ -12,6 +12,7 @@ use app_server_protocol::PluginUninstallRehearsalTarget;
 use app_server_protocol::PluginUninstallResponse;
 
 use chrono::Utc;
+pub(crate) use plugin_packages::export_plugin_local_package;
 pub(crate) use plugin_packages::fetch_plugin_cloud_package;
 pub(crate) use plugin_packages::inspect_plugin_local_package;
 use serde_json::json;

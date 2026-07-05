@@ -62,9 +62,9 @@ pub fn param_string(value: &Value, keys: &[&str]) -> Option<String> {
     let object = value.as_object()?;
     keys.iter()
         .filter_map(|key| object.get(*key))
-        .find_map(Value::as_str)
+        .filter_map(Value::as_str)
         .map(str::trim)
-        .filter(|value| !value.is_empty())
+        .find(|value| !value.is_empty())
         .map(ToOwned::to_owned)
 }
 
@@ -140,7 +140,10 @@ mod tests {
             "script": "ignored",
         });
 
-        assert_eq!(param_string(&value, SHELL_COMMAND_PARAM_KEYS), None);
+        assert_eq!(
+            param_string(&value, SHELL_COMMAND_PARAM_KEYS),
+            Some("cargo test".to_string())
+        );
         assert_eq!(
             param_string(&json!({ "cmd": " cargo test " }), SHELL_COMMAND_PARAM_KEYS),
             Some("cargo test".to_string()),

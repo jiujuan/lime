@@ -22,6 +22,11 @@ import {
   buildAgentUiTeamControlProjectionEvents,
 } from "./teamControlProjection";
 
+type ThreadItemProjectionEvent = Extract<
+  AgentEvent,
+  { type: "item_started" | "item_updated" | "item_completed" }
+>;
+
 function buildThreadItemBase(
   sourceType: AgentEvent["type"],
   item: AgentThreadItem,
@@ -144,4 +149,11 @@ export function buildThreadItemEvents(
     ...buildTaskOwnerChangeProjectionEvents(sourceType, item, context),
   );
   return events;
+}
+
+export function buildThreadItemProjectionEvents(
+  event: ThreadItemProjectionEvent,
+  context: AgentUiProjectionContext,
+): AgentUiProjectionEvent[] {
+  return buildThreadItemEvents(event.type, event.item, context);
 }

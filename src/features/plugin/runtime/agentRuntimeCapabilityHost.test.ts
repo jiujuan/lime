@@ -421,6 +421,9 @@ describe("AgentRuntimeCapabilityHost", () => {
       actionType: "ask_user",
       response: "补充项目定位：高客单价咨询服务。",
       userData: { segment: "consulting" },
+      workflowRunId: "workflow-run-1",
+      workflowKey: "content_article_workflow",
+      stepId: "draft",
     });
     const cancelled = await sdk.agent.cancelTask(started.taskId);
     const retried = await sdk.agent.retryTask(started.taskId);
@@ -532,6 +535,18 @@ describe("AgentRuntimeCapabilityHost", () => {
         confirmed: true,
         response: "补充项目定位：高客单价咨询服务。",
         user_data: { segment: "consulting" },
+        metadata: expect.objectContaining({
+          workflowResume: {
+            workflowRunId: "workflow-run-1",
+            workflowKey: "content_article_workflow",
+            stepId: "draft",
+          },
+          plugin_runtime: expect.objectContaining({
+            app_id: "content-factory-app",
+            task_id: "plugin-task-1",
+            source: "plugin_host_bridge",
+          }),
+        }),
         action_scope: expect.objectContaining({
           session_id: "session-1",
           turn_id: "turn-1",

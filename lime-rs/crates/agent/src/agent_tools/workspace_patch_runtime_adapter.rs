@@ -3,6 +3,7 @@ use super::tool_orchestrator::{
 };
 use crate::{AgentRuntimeState, AgentTurnContext};
 use std::path::PathBuf;
+use tool_runtime::web_search::runtime_web_search_executor_handle;
 
 pub(super) struct WorkspacePatchRuntimeToolBatchInput {
     pub(super) session_id: String,
@@ -12,22 +13,13 @@ pub(super) struct WorkspacePatchRuntimeToolBatchInput {
 }
 
 pub(super) async fn execute_workspace_patch_runtime_tool_batch(
-    agent_state: &AgentRuntimeState,
+    _agent_state: &AgentRuntimeState,
     input: WorkspacePatchRuntimeToolBatchInput,
     planned_tools: Vec<PlannedToolExecution>,
 ) -> Result<ToolExecutionBatch, String> {
-    let registry = {
-        let agent_arc = agent_state.get_agent_arc();
-        let agent_guard = agent_arc.read().await;
-        let agent = agent_guard.as_ref().ok_or_else(|| {
-            "Aster agent is not initialized for workspace patch host tool execution".to_string()
-        })?;
-        agent.tool_registry().clone()
-    };
-
     Ok(execute_planned_tool_batch(
         ToolExecutionBatchInput {
-            registry,
+            executor: runtime_web_search_executor_handle(),
             session_id: input.session_id,
             working_directory: input.working_directory,
             cancel_token: None,

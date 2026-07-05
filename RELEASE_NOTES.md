@@ -1,40 +1,40 @@
-## Lime v1.91.0
+## Lime v1.92.0
 
 ### 新功能
 
-- App Server `agentSession` 事件链新增 typed notification 投影，覆盖 `message/created`、`turn/*`、`item/*` 和 assistant message delta，协议 schema 与 npm client 同步生成可直接消费的类型。
-- 应用中心收口到 current Plugins 页面：插件市场旧页面下线，安装态、云端态、能力清单、activation entries、subagents / skills、权限与版本摘要统一在应用详情中呈现。
-- 插件 activation 支持带 project context 跳转 Agent 工作区，workflow / runtime entry 可转成 `@` 触发提示，避免继续走旧 adapter mock 执行路径。
-- 自动化 Agent Turn 任务新增 session / thread lineage 约束，创建自动化时会绑定来源会话和线程，避免脱离当前工作区上下文执行。
+- 新增模型能力与发送策略事实源，覆盖上下文窗口、输入模态、原生工具、tool call、reasoning、responses、truncation、Prompt Cache 与发送门禁，前端模型选择和 App Server 协议使用同一套投影。
+- 插件本地包支持 App Server `pluginLocalPackage/export`，并新增插件发布工作台、发布复核、提交状态面板和 OEM Cloud 发布 API，补齐从本地插件到云端发布审核的产品闭环。
+- 内容工厂补齐 production readiness / preflight / evidence bundle / release evidence 脚本链路，支持生产证据收集、签名校验、云端证据读取和可审计发布报告。
+- Agent chat 增强 action、artifact、context、diagnostic、queue、routing、runtime lifecycle、subagent status、thread item 和 tool event 投影，工作台可从会话制品更稳定地打开文章工作区。
 
 ### 修复
 
-- 修复 Agent Runtime typed delta、turn lifecycle、runtime status、web search preflight、credential provider bridge 和会话恢复投影的多个边界，降低流式输出错序、误停和上下文丢失风险。
-- 修复团队 / 子代理恢复事实、workspace team runtime、subagent timeline、右侧 surface readiness 和 service skill entry action 的投影一致性。
-- 修复插件安装 / 卸载流程中的删除数据确认、dry-run gate、manifest normalization、source version、能力标签和详情摘要展示。
-- 修复 Claw current fixture 的 read model 等待、右侧 surface 视觉断言、场景断言拆分和多 Agent 团队 fixture 覆盖。
+- 修复 Agent Runtime 终态事件、terminal turn guard、stream 指标和用户输入提交边界，降低旧 turn 终态误停新流、输入状态残留和会话恢复错配风险。
+- 修复 App Server evidence export 的 request telemetry 关联、thread item 消息投影、artifact projection 和 workflow queue / resume 审计输出。
+- 修复模型能力识别与 Provider 列表读取边界，避免 Prompt Cache、输入模态、reasoning、native tool 和 truncation 能力在 UI、协议和运行时之间漂移。
+- 修复插件能力 host、runtime client API、插件页面摘要和内容工厂 SDK 回归，减少发布前检查与应用中心展示不一致。
 
 ### 优化与重构
 
-- `tool-runtime` 拆出 execution policy、execution rules、shell planning、tool batch plan / outcome 与 policy service，App Server 不再经 `lime-agent` Aster adapter 消费纯 shell 文本提取。
-- App Server protocol / client 重构 request / notification 方法、catalog、schema export 与 generated types，让 JSON-RPC current contract 更接近单一事实源。
-- `lime-agent` 继续收缩 Aster residual，把 tool inventory、workspace patch、event / reply、session store 和 subagent profile 迁移到更窄的 adapter 边界。
-- 删除旧插件市场页面和路由分支，Skills 工作区默认项目选择改为 current project hook，减少并行 UI 入口。
+- 新增 `tool-runtime` current crate，把 shell / PowerShell 执行、路径防护、命令语义、子进程、Web Search / Web Fetch 和 tool extension 从 vendor Aster 残留中抽离出来。
+- 拆分 `agent-runtime` 与 `lime-agent` 的 reply、session config、recent settings、runtime payload、model request policy 和 session execution runtime，中心文件只保留接线。
+- App Server protocol / npm client 同步新增模型能力字段、插件本地包导出 schema 和 request method，删除过时的 `ResolvedModelRoute` schema 形状。
+- 继续收缩旧 Tauri wrapper / Aster cleanup 文档与 vendor tool 实现，删除已失效的快速清理队列和旧 inventory 文档。
 
 ### 测试与质量
 
-- 新增 App Server event notification、protocol schema、plugin task evidence、team facts、provider telemetry、turn lifecycle 和 media task JSON-RPC 回归。
-- 新增 / 更新 workspace plugin activation、intent routing、runtime readiness、service skill actions、team session runtime、restored team facts、automation thread lineage 和插件 UI 回归。
-- 更新 current fixture smoke、OpenAI compatible fixture server、managed objective automation smoke、MCP contract guard、App Server client contract 和 governance boundary 覆盖。
-- 继续维护五语言 i18n 资源，覆盖应用中心、自动化和 Agent 工作区新增文案。
+- 新增模型策略与能力边界治理测试，覆盖 Codex / OpenCode policy origin、model execution / native tool / responses / reasoning / truncation / picker / modality 等 current boundary。
+- 新增 Agent UI 投影、runtime export、projection 单测、terminal turn guard、artifact open、App Server event stream / evidence export / thread client / model registry 和插件发布 API 回归。
+- 更新 App Server protocol schema fixtures、generated TypeScript protocol types、App Server client contract、harness contracts 和 current entrypoint guard。
+- 新增内容工厂生产 readiness、preflight、release evidence、signature verifier、workflow evidence、turn start trace 与 signed release gate 测试。
 
 ### 文档
 
-- 新增 `2026-07-05 Aster 迁移进度现实校准`，把整体退出条件口径校准到约 `69%`，明确不能再按 `99%` 或无 Aster 依赖完成态汇报。
-- 更新 Aster migration 主计划、ProjectThread-first 执行计划 / PRD、技术债追踪和 workflow reference，保持路线图与 current 实现一致。
+- 更新 Writing v2、内容工厂插件重构、产品需求、Aster migration 和长期治理路线图，明确插件发布、生产证据、模型能力策略和 Aster residual 收口的当前主线。
+- 新增 Aster capability intake 策略 / 执行计划、长期治理文档和插件发布中心 PRD / server plan。
 
 ### 其他
 
-- 版本事实源更新到 `1.91.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock` 和 current-turn smoke client。
+- 版本事实源更新到 `1.92.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock`、`lime-rs/vendor/aster-rust/Cargo.lock` 和 current-turn smoke client。
 
-**完整变更**: `v1.90.0` -> `v1.91.0`
+**完整变更**: `v1.91.0` -> `v1.92.0`

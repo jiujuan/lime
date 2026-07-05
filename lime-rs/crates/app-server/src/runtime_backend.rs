@@ -305,6 +305,7 @@ impl RuntimeBackend {
             &selection,
             &provider_config,
             route_resolution.service_model_slot(),
+            &route_resolution.resolved_route.capability_snapshot,
         ))?;
         emit_proposed_plan_parser_flush(&mut proposed_plan_parser, sink)?;
 

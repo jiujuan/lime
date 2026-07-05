@@ -4,7 +4,9 @@
 创建时间：2026-07-03  
 主目标：按 Codex 风格把 Lime Agent Runtime 收敛为一等 workspace crate 分层，停止把 `aster-rust` 当作 Lime current 运行时事实源。
 
-最新现实校准：2026-07-05 复核后，tool execution policy DTO、shell/network execution rules、persisted/runtime policy service、tool batch plan/outcome DTO 与 shell command planning helper 已迁入 `tool-runtime`，App Server 对纯 shell argv 文本提取已直接消费 `tool-runtime`，整体目标完成度约 `69%`，不能按 `99%` 或“无 Aster 依赖完成态”口径汇报。`app-server` / `services` / `server` / `scheduler` 等 direct Aster 依赖已基本迁出，但 root workspace 与 `lime-agent` 仍直接依赖 vendored Aster，Phase 6 删除条件尚未满足。详见 [2026-07-05-progress-reality-check.md](./2026-07-05-progress-reality-check.md)。
+最新现实校准：2026-07-06 复核后，整体目标完成度按退出条件口径约 `89%`，不能按 `99%` 或“无 Aster 依赖完成态”汇报。`tool-runtime` 已接收 tool execution policy、shell/network policy、shell parser / read-target preflight / concurrency analysis、command semantics、process decode、platform shell runtime、tool definition / extension DTO、WebSearch / WebFetch current executor 等能力；`agent-runtime` 已接收 reply input 与 reply stream envelope；`model-provider` 的 provider stream handle metadata 已进入 `provider_trace` 后端 / 前端 / metrics 主链。
+
+本轮校准的关键变化是：`agent_tools/tool_orchestrator/aster_registry_adapter.rs` 已删除，`tool_orchestrator` 工具批执行不再依赖 Aster `ToolRegistry` / `ToolContext` / `SandboxConfig`。但 root workspace 仍有 vendored `aster` dependency，`lime-agent` 仍有 `aster.workspace = true`；provider/reply loop、Aster `Agent::reply` / `Message` / provider trait、session store / subagent adapter、Aster reply loop 内 native tool registry 与 WebFetch/WebSearch `Tool` trait 注册壳仍是 Phase 6 blocker。详见 [2026-07-05-progress-reality-check.md](./2026-07-05-progress-reality-check.md)。
 
 ## 结论
 
@@ -44,7 +46,7 @@ app-server
 - `agent-protocol`：稳定 DTO、event、action、thread read、tool call、artifact、evidence 引用，不依赖 Aster。
 - `model-provider`：模型路由、provider 请求、能力描述、流式响应归一化，不把 Aster provider 类型外泄。
 - `thread-store`：session、thread、turn、message、checkpoint、artifact 持久化，不实现 Aster trait 作为公共边界。
-- `tool-runtime`：工具注册、权限检查、执行结果、host tool bridge、MCP bridge，不让 App Server 直接构造 Aster tool registry。
+- `tool-runtime`：工具定义 DTO、工具注册、权限检查、shell parser / read-target preflight / concurrency analysis、shell command exit semantics、process output decode、Windows no-window / UTF-8 wrapper、platform shell runtime、执行结果、host tool bridge、MCP bridge，不让 App Server 直接构造 Aster tool registry。
 - `agent-runtime`：turn orchestration、queue、subagent、action response、runtime event stream，作为 App Server 的唯一执行入口。
 - `app-server`：JSON-RPC、session/read model、artifact/evidence/data-source 投影和受控 adapter，不拥有 Aster 运行语义。
 
@@ -62,6 +64,7 @@ app-server
 - 迁移期的 Aster event -> Lime runtime event 转换器。
 - 迁移期的 Aster session / conversation 读取 adapter。
 - `lime-rs/vendor/aster-rust`，只服务仍未迁完的 Aster compat adapter。
+- Aster reply loop 内的 native tool registry / WebFetch / WebSearch `Tool` trait adapter，只服务尚未迁出的 `Agent::reply` 工具调用面。
 
 退出条件：App Server、RuntimeCore、GUI、evidence、replay、tests 均只消费 Lime 自有协议和 runtime crate 后删除。
 
@@ -78,6 +81,12 @@ app-server
 - 恢复 `lime-rs/src/**` 旧 Tauri command wrapper。
 - 新增 `backend_mode=aster` 或第二套 Aster runtime backend。
 - 为新能力继续复制 Aster `*_skill_launch`、tool registry、session store 或 provider factory。
+- 在 vendored Aster 中恢复 `tools/path_guard.rs`、`tools/command_semantics.rs`、`src/subprocess.rs`、`tools/shell_runtime.rs`、shell analysis / read-target preflight public re-export，或为已迁到 `tool-runtime` 的 shell/path/command/process runtime 逻辑继续提供 Aster public wrapper。
+- 在 vendored Aster 中恢复仅服务 subprocess helper 的 `encoding_rs` direct dependency；process output decode 只能归属 `tool-runtime::subprocess`。
+- 在 `tool_orchestrator` 中为了 shell permission preflight 临时注册 Aster `BashTool` / `PowerShellTool`，或重新调用 Aster `check_tool_permissions`。
+- 在 `tool_orchestrator` shell permission preflight 中为了 policy metadata 分类重新构造 Aster `ToolError`。
+- 恢复 `agent_tools/tool_orchestrator/aster_registry_adapter.rs`，或在主 `tool_orchestrator.rs` 重新直接 import / 构造 Aster `ToolRegistry` / `ToolContext` / `ToolError` / `SandboxConfig` / `SandboxType` / `with_turn_context`。
+- 在 vendored BashTool property tests 中恢复 shell permission 行为测试；permission 行为必须在 `tool-runtime` current tests 覆盖。
 
 ## 迁移原则
 
@@ -91,6 +100,8 @@ app-server
 ## 配套文档
 
 - [./aster-runtime-codex-style-migration-plan.md](./aster-runtime-codex-style-migration-plan.md)：分阶段迁移计划、验收标准和验证入口。
+- [./aster-capability-intake-strategy.md](./aster-capability-intake-strategy.md)：Aster 有价值能力的接收矩阵，明确“接收能力但不续命 Aster 事实源”的分类口径。
+- [./aster-capability-intake-execution-plan.md](./aster-capability-intake-execution-plan.md)：按能力接收矩阵执行迁移的批次计划、写集边界、退出条件和进度日志。
 - [./phase5-vendor-downgrade-plan.md](./phase5-vendor-downgrade-plan.md)：Aster vendor 降级与最终删除退出条件。
 - [./2026-07-05-progress-reality-check.md](./2026-07-05-progress-reality-check.md)：按退出条件重算进度，纠正 `99%` / “无 Aster 依赖完成态”误判。
 - `internal/roadmap/agentruntime/README.md`：AgentRuntime 主链事实源。

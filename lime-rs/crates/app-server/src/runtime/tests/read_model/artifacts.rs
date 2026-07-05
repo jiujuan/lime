@@ -280,7 +280,7 @@ fn article_workspace_search_snapshot_payload(search_evidence: Value) -> Value {
 }
 
 #[tokio::test]
-async fn read_session_projects_runtime_events_into_thread_read_artifacts() {
+async fn read_session_keeps_workspace_patch_in_thread_read_artifacts_only() {
     let core = RuntimeCore::default();
     core.start_session(AgentSessionStartParams {
         session_id: Some("sess_thread_read_artifacts".to_string()),
@@ -350,8 +350,14 @@ async fn read_session_projects_runtime_events_into_thread_read_artifacts() {
         .as_array()
         .expect("thread read artifacts");
 
+    assert!(
+        detail["artifacts"]
+            .as_array()
+            .expect("user visible artifacts")
+            .is_empty(),
+        "top-level user visible artifacts should hide internal workspace patches"
+    );
     assert_eq!(artifacts.len(), 1);
-    assert_eq!(detail["artifacts"], detail["thread_read"]["artifacts"]);
     assert_eq!(artifacts[0]["artifactRef"], "artifact-content-batch");
     assert_eq!(artifacts[0]["path"], ".lime/artifacts/content-batch.json");
     assert_eq!(artifacts[0]["kind"], "content_factory.workspace_patch");
@@ -362,6 +368,37 @@ async fn read_session_projects_runtime_events_into_thread_read_artifacts() {
     );
     assert!(artifacts[0]["content"].is_null());
     assert_eq!(artifacts[0]["contentStatus"], "notRequested");
+
+    let artifact_read = core
+        .read_artifacts(ArtifactReadParams {
+            session_id: "sess_thread_read_artifacts".to_string(),
+            turn_id: Some("turn_thread_read_artifacts".to_string()),
+            artifact_ref: Some("artifact-content-batch".to_string()),
+            include_content: Some(false),
+            cursor: None,
+            limit: Some(1),
+        })
+        .expect("read internal workspace patch artifact");
+    assert_eq!(artifact_read.artifacts.len(), 1);
+    assert_eq!(
+        artifact_read.artifacts[0].artifact_ref,
+        "artifact-content-batch"
+    );
+    assert_eq!(
+        artifact_read.artifacts[0].path.as_deref(),
+        Some(".lime/artifacts/content-batch.json")
+    );
+    assert_eq!(
+        artifact_read.artifacts[0].kind.as_deref(),
+        Some("content_factory.workspace_patch")
+    );
+    assert_eq!(
+        artifact_read.artifacts[0]
+            .metadata
+            .as_ref()
+            .expect("workspace patch metadata")["contentFactoryWorkspacePatch"]["kind"],
+        "content_batch"
+    );
 }
 
 #[tokio::test]
@@ -471,6 +508,21 @@ async fn article_workspace_artifact_documents_merge_version_history_across_turns
     let artifacts = detail["thread_read"]["artifacts"]
         .as_array()
         .expect("thread read artifacts");
+    assert!(
+        !detail["artifacts"]
+            .as_array()
+            .expect("user visible artifacts")
+            .iter()
+            .any(|artifact| artifact["kind"] == "content_factory.workspace_patch"),
+        "workspace patch must stay out of top-level user-visible artifacts"
+    );
+    assert!(
+        artifacts.iter().any(
+            |artifact| artifact["artifactRef"] == "artifact-workspace-patch-v1"
+                && artifact["kind"] == "content_factory.workspace_patch"
+        ),
+        "thread read artifacts must keep workspace patch for Article Editor projection"
+    );
     let article_artifact = artifacts
         .iter()
         .find(|artifact| artifact["artifactRef"] == "artifact-article-1")

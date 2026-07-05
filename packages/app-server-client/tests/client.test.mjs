@@ -52,6 +52,7 @@ const {
   METHOD_PLUGIN_INSTALLED_UNINSTALL,
   METHOD_PLUGIN_INSTALLED_UNINSTALL_REHEARSAL,
   METHOD_PLUGIN_HOST_LIFECYCLE_LIST,
+  METHOD_PLUGIN_LOCAL_PACKAGE_EXPORT,
   METHOD_PLUGIN_LOCAL_PACKAGE_INSPECT,
   METHOD_PLUGIN_PACKAGE_FETCH_CLOUD,
   METHOD_PLUGIN_SHELL_PREPARE,
@@ -986,6 +987,9 @@ test("builds app data surface requests with current methods", () => {
 
   const installed = client.listPluginInstalled();
   const hostLifecycle = client.listPluginHostLifecycle();
+  const exportedPluginPackage = client.exportPluginLocalPackage({
+    appDir: "/tmp/content-factory-app",
+  });
   const runtimeStart = client.startPluginUiRuntime({
     appId: "content-factory-app",
     entryKey: "dashboard",
@@ -1375,6 +1379,13 @@ test("builds app data surface requests with current methods", () => {
   assert.deepEqual(installed.params, {});
   assert.equal(hostLifecycle.method, METHOD_PLUGIN_HOST_LIFECYCLE_LIST);
   assert.deepEqual(hostLifecycle.params, {});
+  assert.equal(
+    exportedPluginPackage.method,
+    METHOD_PLUGIN_LOCAL_PACKAGE_EXPORT,
+  );
+  assert.deepEqual(exportedPluginPackage.params, {
+    appDir: "/tmp/content-factory-app",
+  });
   assert.equal(runtimeStart.method, METHOD_PLUGIN_UI_RUNTIME_START);
   assert.deepEqual(runtimeStart.params, {
     appId: "content-factory-app",

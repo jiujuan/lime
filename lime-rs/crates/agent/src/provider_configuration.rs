@@ -291,6 +291,54 @@ mod tests {
     }
 
     #[test]
+    fn non_openai_route_protocols_do_not_invent_runtime_adapter_protocol() {
+        for protocol in [
+            ProtocolKind::OpenaiImages,
+            ProtocolKind::AnthropicMessages,
+            ProtocolKind::GeminiGenerateContent,
+            ProtocolKind::OllamaChat,
+            ProtocolKind::Fal,
+            ProtocolKind::BedrockConverse,
+            ProtocolKind::VertexGemini,
+            ProtocolKind::Unknown,
+        ] {
+            assert_eq!(
+                runtime_provider_protocol_from_route_protocol(Some(protocol.clone())),
+                None,
+                "{protocol:?} must stay route metadata until a matching runtime adapter exists"
+            );
+        }
+    }
+
+    #[test]
+    fn direct_provider_config_preserves_non_openai_route_metadata_only() {
+        let config = SessionProviderConfig {
+            provider_name: "anthropic".to_string(),
+            provider_selector: Some("anthropic".to_string()),
+            model_name: "claude-sonnet-4-5".to_string(),
+            api_key: Some("sk-test".to_string()),
+            base_url: Some("https://api.anthropic.com".to_string()),
+            credential_uuid: Some("credential-anthropic".to_string()),
+            reasoning_effort: Some("medium".to_string()),
+            route_protocol: Some(ProtocolKind::AnthropicMessages),
+            toolshim: false,
+            toolshim_model: None,
+            model_capabilities: None,
+        };
+
+        let runtime_config =
+            session_provider_config_to_runtime_provider_config(&config, "session-a");
+
+        assert_eq!(runtime_config.provider_name, "anthropic");
+        assert_eq!(runtime_config.model_name, "claude-sonnet-4-5");
+        assert_eq!(runtime_config.protocol, None);
+        assert_eq!(
+            route_protocol_from_session_provider_config(&config),
+            Some(ProtocolKind::AnthropicMessages)
+        );
+    }
+
+    #[test]
     fn provider_config_protocol_projects_to_route_protocol() {
         let mut config = SessionProviderConfig {
             provider_name: "openai".to_string(),

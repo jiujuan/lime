@@ -113,6 +113,7 @@ import {
   shouldSuppressLegacyTextDeltaAfterProcessBoundary,
   type TextDeltaAgentEvent,
 } from "./agentStreamTextDeltaLifecycle";
+import { shouldApplyAgentStreamTerminalEvent } from "./agentStreamTerminalTurnGuard";
 
 function normalizeOptionalText(value?: string | null): string | null {
   const normalized = value?.trim();
@@ -459,6 +460,36 @@ export function handleTurnStreamEvent({
     }
     return true;
   };
+  const shouldApplyTerminalEvent = (
+    terminalType: "turn_completed" | "turn_canceled" | "turn_failed",
+    terminalTurnId?: string | null,
+  ): boolean => {
+    const shouldApply = shouldApplyAgentStreamTerminalEvent({
+      activeTextSegmentTurnId: requestState.activeTextSegmentTurnId,
+      currentTurnId: requestState.currentTurnId,
+      queuedTurnId: requestState.queuedTurnId,
+      terminalTurnId,
+    });
+    if (!shouldApply) {
+      logAgentDebug(
+        "AgentStream",
+        "staleTerminalIgnored",
+        {
+          activeTextSegmentTurnId: requestState.activeTextSegmentTurnId ?? null,
+          currentTurnId: requestState.currentTurnId ?? null,
+          eventName,
+          queuedTurnId: requestState.queuedTurnId ?? null,
+          sessionId: activeSessionId,
+          terminalTurnId: terminalTurnId ?? null,
+          terminalType,
+        },
+        {
+          dedupeKey: `${eventName}:staleTerminalIgnored:${terminalType}:${terminalTurnId ?? "unknown"}`,
+        },
+      );
+    }
+    return shouldApply;
+  };
 
   switch (data.type) {
     case "message":
@@ -554,6 +585,9 @@ export function handleTurnStreamEvent({
       break;
 
     case "turn_completed": {
+      if (!shouldApplyTerminalEvent(data.type, data.turn.id)) {
+        break;
+      }
       clearQueuedDraftCleanupTimer();
       flushPendingTextRender();
       clearOptimisticItem();
@@ -574,6 +608,9 @@ export function handleTurnStreamEvent({
     }
 
     case "turn_canceled": {
+      if (!shouldApplyTerminalEvent(data.type, data.turn.id)) {
+        break;
+      }
       clearQueuedDraftCleanupTimer();
       flushPendingTextRender();
       clearOptimisticItem();
@@ -589,6 +626,9 @@ export function handleTurnStreamEvent({
     }
 
     case "turn_failed": {
+      if (!shouldApplyTerminalEvent(data.type, data.turn.id)) {
+        break;
+      }
       clearQueuedDraftCleanupTimer();
       activateStream();
       flushPendingTextRender();

@@ -1,3 +1,4 @@
+use super::aster_event_adapter::RuntimeEventProjector;
 use super::runtime_status::apply_soul_style_to_runtime_status;
 use super::{
     stream_message_reply_with_policy_with_options, ReplyAttemptError, ReplyInput,
@@ -6,30 +7,34 @@ use super::{
 };
 use crate::aster_runtime_projection::project_aster_runtime_event;
 use crate::credential_bridge::ConfiguredReplyProvider;
+use crate::model_request_policy::runtime_reply_model_request_policy_from_turn_context;
 use crate::protocol::{AgentEvent as RuntimeAgentEvent, AgentRuntimeStatus};
 use crate::provider_configuration::ConfiguredSessionProvider;
 use crate::runtime_state::AgentRuntimeState;
 use crate::session_config_adapter::to_aster_session_config;
-use crate::session_configuration::AgentSessionConfig;
 use agent_protocol::action_required::ActionRequiredScope as RuntimeActionRequiredScope;
+use agent_runtime::reply_host::{
+    RuntimeReplyPolicyHost, RuntimeReplyStartError, RuntimeReplyStartResult, RuntimeReplyStreamHost,
+};
+use agent_runtime::reply_input::{
+    RuntimeActionRequiredResponseInput as ActionRequiredResponseInput,
+    RuntimeReplyAttemptInput as ReplyAttemptInput,
+};
+use agent_runtime::reply_stream::RuntimeReplyStreamEvent;
+use agent_runtime::session_config::AgentSessionConfig;
 use aster::agents::{Agent, AgentEvent as AsterAgentEvent};
 use aster::conversation::message::{
     ActionRequired, ActionRequiredData, ActionRequiredScope, Message, MessageContent,
 };
 use aster::permission::{Permission, PermissionConfirmation, PrincipalType};
 use aster::session::SessionManager;
-use aster::tools::ToolRegistry;
-use futures::stream::BoxStream;
+use futures::future::BoxFuture;
+use futures::stream::{BoxStream, StreamExt};
+use model_provider::provider_stream::{
+    RuntimeProviderBackend, RuntimeReplyProviderHandle, RuntimeReplyStreamRequest,
+};
 use std::path::Path;
-use std::sync::Arc;
-use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
-
-pub(crate) struct ActionRequiredResponseInput {
-    pub(crate) request_id: String,
-    pub(crate) user_data: serde_json::Value,
-    pub(crate) scope: Option<RuntimeActionRequiredScope>,
-}
 
 pub(super) struct AsterReplyRuntimeHost<'a> {
     agent: &'a Agent,
@@ -55,8 +60,10 @@ impl<'a> AsterReplyRuntimeHost<'a> {
         self.provider.is_some()
     }
 
-    pub(super) fn tool_registry(&self) -> Arc<RwLock<ToolRegistry>> {
-        self.agent.tool_registry().clone()
+    pub(super) fn provider_handle(&self) -> Option<&RuntimeReplyProviderHandle> {
+        self.provider
+            .as_ref()
+            .map(ConfiguredReplyProvider::runtime_handle)
     }
 
     pub(super) async fn start_reply_stream(
@@ -65,7 +72,13 @@ impl<'a> AsterReplyRuntimeHost<'a> {
         session_config: AgentSessionConfig,
         cancel_token: Option<CancellationToken>,
         emitted_any: bool,
-    ) -> Result<(BoxStream<'a, anyhow::Result<AsterAgentEvent>>, usize), ReplyAttemptError> {
+    ) -> Result<
+        (
+            BoxStream<'a, anyhow::Result<RuntimeReplyStreamEvent<RuntimeAgentEvent>>>,
+            usize,
+        ),
+        ReplyAttemptError,
+    > {
         start_aster_reply_stream(
             self.agent,
             self.provider.as_ref(),
@@ -83,7 +96,7 @@ impl<'a> AsterReplyRuntimeHost<'a> {
         mut status: AgentRuntimeStatus,
         on_event: &mut F,
     ) where
-        F: FnMut(&RuntimeAgentEvent),
+        F: FnMut(&RuntimeAgentEvent) + Send,
     {
         apply_soul_style_to_runtime_status(&mut status, session_config.turn_context.as_ref());
         let aster_session_config = to_aster_session_config(session_config.clone());
@@ -120,16 +133,68 @@ impl<'a> AsterReplyRuntimeHost<'a> {
     }
 }
 
+impl RuntimeReplyStreamHost<RuntimeAgentEvent> for AsterReplyRuntimeHost<'_> {
+    fn uses_pinned_provider(&self) -> bool {
+        AsterReplyRuntimeHost::uses_pinned_provider(self)
+    }
+
+    fn provider_handle(&self) -> Option<&RuntimeReplyProviderHandle> {
+        AsterReplyRuntimeHost::provider_handle(self)
+    }
+
+    fn start_reply_stream<'a>(
+        &'a self,
+        user_input: ReplyAttemptInput,
+        session_config: AgentSessionConfig,
+        cancel_token: Option<CancellationToken>,
+        emitted_any: bool,
+    ) -> BoxFuture<'a, RuntimeReplyStartResult<'a, RuntimeAgentEvent>> {
+        Box::pin(async move {
+            AsterReplyRuntimeHost::start_reply_stream(
+                self,
+                user_input,
+                session_config,
+                cancel_token,
+                emitted_any,
+            )
+            .await
+            .map_err(|error| RuntimeReplyStartError::new(error.message, error.emitted_any))
+        })
+    }
+}
+
+impl RuntimeReplyPolicyHost<RuntimeAgentEvent, AgentRuntimeStatus> for AsterReplyRuntimeHost<'_> {
+    fn emit_runtime_status<'a, F>(
+        &'a self,
+        session_config: &'a AgentSessionConfig,
+        status: AgentRuntimeStatus,
+        on_event: &'a mut F,
+    ) -> BoxFuture<'a, ()>
+    where
+        F: FnMut(&RuntimeAgentEvent) + Send + 'a,
+    {
+        Box::pin(async move {
+            AsterReplyRuntimeHost::emit_runtime_status(self, session_config, status, on_event)
+                .await;
+        })
+    }
+
+    fn persist_cancelled_turn_context_marker<'a>(
+        &'a self,
+        session_id: &'a str,
+    ) -> BoxFuture<'a, ()> {
+        Box::pin(async move {
+            AsterReplyRuntimeHost::persist_cancelled_turn_context_marker(self, session_id).await;
+        })
+    }
+}
+
 pub(crate) fn action_required_response_input(
     request_id: impl Into<String>,
     user_data: serde_json::Value,
     scope: Option<RuntimeActionRequiredScope>,
 ) -> ActionRequiredResponseInput {
-    ActionRequiredResponseInput {
-        request_id: request_id.into(),
-        user_data,
-        scope,
-    }
+    ActionRequiredResponseInput::new(request_id, user_data, scope)
 }
 
 pub(crate) async fn stream_runtime_reply_with_policy<F>(
@@ -142,7 +207,7 @@ pub(crate) async fn stream_runtime_reply_with_policy<F>(
     on_event: F,
 ) -> Result<StreamReplyExecution, ReplyAttemptError>
 where
-    F: FnMut(&RuntimeAgentEvent),
+    F: FnMut(&RuntimeAgentEvent) + Send,
 {
     let agent_arc = agent_state.get_agent_arc();
     let agent_guard = agent_arc.read().await;
@@ -171,7 +236,7 @@ pub(crate) async fn stream_runtime_message_reply_with_policy<F>(
     on_event: F,
 ) -> Result<StreamReplyExecution, ReplyAttemptError>
 where
-    F: FnMut(&RuntimeAgentEvent),
+    F: FnMut(&RuntimeAgentEvent) + Send,
 {
     let agent_arc = agent_state.get_agent_arc();
     let agent_guard = agent_arc.read().await;
@@ -201,7 +266,7 @@ pub(crate) async fn stream_runtime_reply_with_configured_provider<F>(
     on_event: F,
 ) -> Result<StreamReplyExecution, ReplyAttemptError>
 where
-    F: FnMut(&RuntimeAgentEvent),
+    F: FnMut(&RuntimeAgentEvent) + Send,
 {
     let agent_arc = agent_state.get_agent_arc();
     let agent_guard = agent_arc.read().await;
@@ -232,7 +297,7 @@ pub(crate) async fn stream_runtime_reply_with_configured_provider_for_direct_gen
     on_event: F,
 ) -> Result<StreamReplyExecution, ReplyAttemptError>
 where
-    F: FnMut(&RuntimeAgentEvent),
+    F: FnMut(&RuntimeAgentEvent) + Send,
 {
     let agent_arc = agent_state.get_agent_arc();
     let agent_guard = agent_arc.read().await;
@@ -262,7 +327,7 @@ pub(crate) async fn stream_runtime_action_required_response_with_policy<F>(
     on_event: F,
 ) -> Result<StreamReplyExecution, ReplyAttemptError>
 where
-    F: FnMut(&RuntimeAgentEvent),
+    F: FnMut(&RuntimeAgentEvent) + Send,
 {
     let agent_arc = agent_state.get_agent_arc();
     let agent_guard = agent_arc.read().await;
@@ -313,7 +378,7 @@ pub async fn stream_reply_with_policy<F>(
     on_event: F,
 ) -> Result<StreamReplyExecution, ReplyAttemptError>
 where
-    F: FnMut(&RuntimeAgentEvent),
+    F: FnMut(&RuntimeAgentEvent) + Send,
 {
     stream_message_reply_with_policy(
         agent,
@@ -337,7 +402,7 @@ pub(crate) async fn stream_message_reply_with_policy<F>(
     on_event: F,
 ) -> Result<StreamReplyExecution, ReplyAttemptError>
 where
-    F: FnMut(&RuntimeAgentEvent),
+    F: FnMut(&RuntimeAgentEvent) + Send,
 {
     let reply_host = AsterReplyRuntimeHost::new(agent);
     stream_message_reply_with_policy_with_options(
@@ -363,7 +428,7 @@ async fn stream_action_required_response_with_policy<F>(
     on_event: F,
 ) -> Result<StreamReplyExecution, ReplyAttemptError>
 where
-    F: FnMut(&RuntimeAgentEvent),
+    F: FnMut(&RuntimeAgentEvent) + Send,
 {
     let reply_host = AsterReplyRuntimeHost::new(agent);
     stream_message_reply_with_policy_with_options(
@@ -390,7 +455,7 @@ async fn stream_reply_with_policy_and_configured_provider<F>(
     on_event: F,
 ) -> Result<StreamReplyExecution, ReplyAttemptError>
 where
-    F: FnMut(&RuntimeAgentEvent),
+    F: FnMut(&RuntimeAgentEvent) + Send,
 {
     let reply_host =
         AsterReplyRuntimeHost::with_reply_provider(agent, configured_provider.reply_provider());
@@ -418,7 +483,7 @@ async fn stream_reply_with_policy_and_configured_provider_for_direct_generation<
     on_event: F,
 ) -> Result<StreamReplyExecution, ReplyAttemptError>
 where
-    F: FnMut(&RuntimeAgentEvent),
+    F: FnMut(&RuntimeAgentEvent) + Send,
 {
     let reply_host =
         AsterReplyRuntimeHost::with_reply_provider(agent, configured_provider.reply_provider());
@@ -435,29 +500,6 @@ where
     .await
 }
 
-pub(super) enum ReplyAttemptInput {
-    Current(ReplyInput),
-    ActionRequiredResponse(ActionRequiredResponseInput),
-}
-
-impl ReplyAttemptInput {
-    pub(super) fn as_concat_text(&self) -> String {
-        match self {
-            Self::Current(input) => input.text.clone(),
-            Self::ActionRequiredResponse(_) => String::new(),
-        }
-    }
-
-    fn into_aster_message(self) -> Message {
-        match self {
-            Self::Current(input) => build_aster_user_message(input),
-            Self::ActionRequiredResponse(input) => {
-                build_aster_action_required_response_message(input)
-            }
-        }
-    }
-}
-
 async fn start_aster_reply_stream<'a>(
     agent: &'a Agent,
     provider: Option<&ConfiguredReplyProvider>,
@@ -465,14 +507,52 @@ async fn start_aster_reply_stream<'a>(
     session_config: AgentSessionConfig,
     cancel_token: Option<CancellationToken>,
     emitted_any: bool,
-) -> Result<(BoxStream<'a, anyhow::Result<AsterAgentEvent>>, usize), ReplyAttemptError> {
+) -> Result<
+    (
+        BoxStream<'a, anyhow::Result<RuntimeReplyStreamEvent<RuntimeAgentEvent>>>,
+        usize,
+    ),
+    ReplyAttemptError,
+> {
+    let session_id = session_config.id.clone();
+    let input_kind = user_input.runtime_input_kind();
+    let model_request_policy =
+        runtime_reply_model_request_policy_from_turn_context(session_config.turn_context.as_ref());
     let aster_session_config = to_aster_session_config(session_config);
-    let user_message = user_input.into_aster_message();
+    let user_message = build_aster_reply_attempt_message(user_input);
     let message_chars = user_message.as_concat_text().chars().count();
+    let stream_request = RuntimeReplyStreamRequest::new(
+        session_id,
+        input_kind,
+        message_chars,
+        provider.map(|provider| provider.runtime_handle().clone()),
+    )
+    .with_model_request_policy(model_request_policy);
+    tracing::debug!(
+        provider_backend = ?stream_request.provider_backend(),
+        provider_name = ?stream_request.provider_name(),
+        model_name = ?stream_request.model_name(),
+        use_responses_lite = ?stream_request.model_request_policy.as_ref().map(|policy| policy.use_responses_lite()),
+        reasoning_context = ?stream_request.model_request_policy.as_ref().and_then(|policy| policy.reasoning_context()),
+        parallel_tool_calls = ?stream_request.model_request_policy.as_ref().and_then(|policy| policy.parallel_tool_calls()),
+        requires_responses_lite_header = ?stream_request.model_request_policy.as_ref().map(|policy| policy.requires_responses_lite_header()),
+        input_kind = ?stream_request.input_kind,
+        message_chars = stream_request.message_chars,
+        "[AgentRuntime][ReplyPolicy] prepared provider reply stream request"
+    );
+    if let Some(error) = unsupported_aster_compat_wire_shape_error(&stream_request, emitted_any) {
+        return Err(error);
+    }
     let stream_result = match provider {
         Some(provider) => {
             provider
-                .stream_reply_with_agent(agent, user_message, aster_session_config, cancel_token)
+                .stream_reply_with_agent(
+                    &stream_request,
+                    agent,
+                    user_message,
+                    aster_session_config,
+                    cancel_token,
+                )
                 .await
         }
         None => {
@@ -483,17 +563,58 @@ async fn start_aster_reply_stream<'a>(
     };
 
     stream_result
-        .map(|stream| (stream, message_chars))
+        .map(|stream| (project_aster_reply_stream(stream), message_chars))
         .map_err(|error| ReplyAttemptError {
             message: format!("Agent error: {error}"),
             emitted_any,
         })
 }
 
-impl From<ReplyInput> for ReplyAttemptInput {
-    fn from(input: ReplyInput) -> Self {
-        Self::Current(input)
+fn unsupported_aster_compat_wire_shape_error(
+    stream_request: &RuntimeReplyStreamRequest,
+    emitted_any: bool,
+) -> Option<ReplyAttemptError> {
+    let wire_shape = stream_request.provider_request_wire_shape();
+    if !wire_shape.requires_responses_lite_wire_support() {
+        return None;
     }
+    if stream_request.provider_backend() == Some(RuntimeProviderBackend::Current) {
+        return None;
+    }
+
+    tracing::warn!(
+        provider_backend = ?stream_request.provider_backend(),
+        provider_name = ?stream_request.provider_name(),
+        model_name = ?stream_request.model_name(),
+        use_responses_lite = wire_shape.use_responses_lite,
+        reasoning_context = ?wire_shape.reasoning_context,
+        headers = ?wire_shape.headers,
+        "[AgentRuntime][ReplyPolicy] Aster compat backend cannot safely apply Responses Lite request policy"
+    );
+    Some(ReplyAttemptError {
+        message: "Provider request policy requires Responses Lite wire support, but the current Aster compat backend does not apply the required header/reasoning payload yet; refusing to stream instead of silently dropping the policy.".to_string(),
+        emitted_any,
+    })
+}
+
+fn project_aster_reply_stream<'a>(
+    stream: BoxStream<'a, anyhow::Result<AsterAgentEvent>>,
+) -> BoxStream<'a, anyhow::Result<RuntimeReplyStreamEvent<RuntimeAgentEvent>>> {
+    Box::pin(async_stream::try_stream! {
+        let mut stream = stream;
+        let mut runtime_event_projector = RuntimeEventProjector::new();
+        while let Some(event_result) = stream.next().await {
+            let agent_event = event_result?;
+            if let Some(provider_error) = extract_inline_agent_provider_error(&agent_event) {
+                yield RuntimeReplyStreamEvent::SuppressedInlineProviderError(provider_error);
+                continue;
+            }
+
+            for runtime_event in runtime_event_projector.project(agent_event) {
+                yield RuntimeReplyStreamEvent::Event(runtime_event);
+            }
+        }
+    })
 }
 
 fn build_aster_user_message(input: ReplyInput) -> Message {
@@ -505,6 +626,15 @@ fn build_aster_user_message(input: ReplyInput) -> Message {
         message = message.agent_only();
     }
     message
+}
+
+fn build_aster_reply_attempt_message(input: ReplyAttemptInput) -> Message {
+    match input {
+        ReplyAttemptInput::Current(input) => build_aster_user_message(input),
+        ReplyAttemptInput::ActionRequiredResponse(input) => {
+            build_aster_action_required_response_message(input)
+        }
+    }
 }
 
 fn build_aster_action_required_response_message(input: ActionRequiredResponseInput) -> Message {
@@ -574,7 +704,7 @@ async fn persist_cancelled_turn_context_marker(agent: &Agent, session_id: &str) 
     }
 }
 
-pub(super) fn extract_inline_agent_provider_error(event: &AsterAgentEvent) -> Option<String> {
+fn extract_inline_agent_provider_error(event: &AsterAgentEvent) -> Option<String> {
     let AsterAgentEvent::Message(message) = event else {
         return None;
     };

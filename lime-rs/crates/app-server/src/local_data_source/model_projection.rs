@@ -27,6 +27,32 @@ pub(super) fn model_info_from_value(value: &Value) -> ModelInfo {
         },
         task_families: string_vec_field(value, "task_families"),
         input_modalities: string_vec_field(value, "input_modalities"),
+        tool_mode: string_field(value, "tool_mode"),
+        supports_search_tool: bool_field(Some(value), "supports_search_tool").unwrap_or(false),
+        web_search_tool_type: string_field(value, "web_search_tool_type"),
+        supports_image_detail_original: bool_field(Some(value), "supports_image_detail_original")
+            .unwrap_or(false),
+        context_window: i64_field(value, "context_window"),
+        max_context_window: i64_field(value, "max_context_window"),
+        auto_compact_token_limit: i64_field(value, "auto_compact_token_limit"),
+        effective_context_window_percent: i64_field(value, "effective_context_window_percent"),
+        visibility: string_field(value, "visibility"),
+        service_tiers: value_vec_field(value, "service_tiers"),
+        default_service_tier: string_field(value, "default_service_tier"),
+        supports_parallel_tool_calls: bool_field(Some(value), "supports_parallel_tool_calls")
+            .unwrap_or(false),
+        default_reasoning_level: string_field(value, "default_reasoning_level"),
+        supported_reasoning_levels: value_vec_field(value, "supported_reasoning_levels"),
+        supports_reasoning_summaries: bool_field(Some(value), "supports_reasoning_summaries")
+            .unwrap_or(false),
+        default_reasoning_summary: string_field(value, "default_reasoning_summary"),
+        support_verbosity: bool_field(Some(value), "support_verbosity").unwrap_or(false),
+        default_verbosity: string_field(value, "default_verbosity"),
+        use_responses_lite: bool_field(Some(value), "use_responses_lite").unwrap_or(false),
+        truncation_policy: field_value(value, "truncation_policy").cloned(),
+        shell_type: string_field(value, "shell_type"),
+        apply_patch_tool_type: string_field(value, "apply_patch_tool_type"),
+        experimental_supported_tools: string_vec_field(value, "experimental_supported_tools"),
         output_modalities: string_vec_field(value, "output_modalities"),
         runtime_features: string_vec_field(value, "runtime_features"),
         deployment_source: string_field(value, "deployment_source")
@@ -144,6 +170,13 @@ fn string_vec_field(value: &Value, key: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
+fn value_vec_field(value: &Value, key: &str) -> Vec<Value> {
+    field_value(value, key)
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+}
+
 fn to_camel_case(key: &str) -> String {
     let mut result = String::new();
     let mut uppercase_next = false;
@@ -158,4 +191,80 @@ fn to_camel_case(key: &str) -> String {
         }
     }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::model_info_from_value;
+
+    #[test]
+    fn model_info_from_value_preserves_extended_policy_fields() {
+        let value = serde_json::json!({
+            "id": "gpt-5-codex",
+            "providerId": "openai",
+            "displayName": "GPT-5 Codex",
+            "providerName": "OpenAI",
+            "toolMode": "responses",
+            "supportsSearchTool": true,
+            "webSearchToolType": "web_search_preview",
+            "supportsImageDetailOriginal": true,
+            "contextWindow": 272000,
+            "maxContextWindow": 400000,
+            "autoCompactTokenLimit": 180000,
+            "effectiveContextWindowPercent": 90,
+            "visibility": "public",
+            "serviceTiers": [{"id": "default"}],
+            "defaultServiceTier": "default",
+            "supportsParallelToolCalls": true,
+            "defaultReasoningLevel": "medium",
+            "supportedReasoningLevels": ["low", "medium", "high"],
+            "supportsReasoningSummaries": true,
+            "defaultReasoningSummary": "auto",
+            "supportVerbosity": true,
+            "defaultVerbosity": "medium",
+            "useResponsesLite": true,
+            "truncationPolicy": {"type": "auto"},
+            "shellType": "bash",
+            "applyPatchToolType": "apply_patch",
+            "experimentalSupportedTools": ["web_search"],
+            "deploymentSource": "user_cloud",
+            "managementPlane": "local_settings",
+            "status": "active",
+            "source": "local",
+            "pricing": null,
+            "limits": {},
+            "createdAt": 1,
+            "updatedAt": 2
+        });
+
+        let info = model_info_from_value(&value);
+
+        assert_eq!(info.provider_id, "openai");
+        assert_eq!(info.tool_mode.as_deref(), Some("responses"));
+        assert!(info.supports_search_tool);
+        assert_eq!(
+            info.web_search_tool_type.as_deref(),
+            Some("web_search_preview")
+        );
+        assert!(info.supports_image_detail_original);
+        assert_eq!(info.context_window, Some(272000));
+        assert_eq!(info.max_context_window, Some(400000));
+        assert_eq!(info.auto_compact_token_limit, Some(180000));
+        assert_eq!(info.effective_context_window_percent, Some(90));
+        assert_eq!(info.visibility.as_deref(), Some("public"));
+        assert_eq!(info.service_tiers.len(), 1);
+        assert_eq!(info.default_service_tier.as_deref(), Some("default"));
+        assert!(info.supports_parallel_tool_calls);
+        assert_eq!(info.default_reasoning_level.as_deref(), Some("medium"));
+        assert_eq!(info.supported_reasoning_levels.len(), 3);
+        assert!(info.supports_reasoning_summaries);
+        assert_eq!(info.default_reasoning_summary.as_deref(), Some("auto"));
+        assert!(info.support_verbosity);
+        assert_eq!(info.default_verbosity.as_deref(), Some("medium"));
+        assert!(info.use_responses_lite);
+        assert!(info.truncation_policy.is_some());
+        assert_eq!(info.shell_type.as_deref(), Some("bash"));
+        assert_eq!(info.apply_patch_tool_type.as_deref(), Some("apply_patch"));
+        assert_eq!(info.experimental_supported_tools, vec!["web_search"]);
+    }
 }

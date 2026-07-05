@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { changeLimeLocale } from "@/i18n/createI18n";
+import { MODEL_INPUT_CAPABILITY_GAP_ERROR_PREFIX } from "@/lib/model/modelCapabilitySendGate";
 
 import { resolveAgentRuntimeErrorPresentation } from "./agentRuntimeErrorPresentation";
 
@@ -79,6 +80,21 @@ describe("agentRuntimeErrorPresentation", () => {
         "运行时返回内部错误，已保留详情用于排查。请稍后重试，或检查服务商与工具连接状态。",
       toastMessage:
         "运行时返回内部错误，已保留详情用于排查。请稍后重试，或检查服务商与工具连接状态。",
+    });
+  });
+
+  it("模型输入模态 capability gap 应转换为本地化提示", async () => {
+    await changeLimeLocale("zh-CN");
+
+    expect(
+      resolveAgentRuntimeErrorPresentation(
+        `${MODEL_INPUT_CAPABILITY_GAP_ERROR_PREFIX}:missing_input_modalities:image`,
+      ),
+    ).toEqual({
+      displayMessage:
+        "当前模型不支持本次输入的媒体类型，请切换到支持图片或文件输入的模型后再发送。",
+      toastMessage:
+        "当前模型不支持本次输入的媒体类型，请切换到支持图片或文件输入的模型后再发送。",
     });
   });
 

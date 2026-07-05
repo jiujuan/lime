@@ -1,4 +1,5 @@
 import type {
+  AgentEvent,
   AgentEventQueueAdded,
   AgentEventQueueCleared,
   AgentEventQueueRemoved,
@@ -13,10 +14,35 @@ import {
   buildAgentUiQueueLifecycleEvents,
 } from "@limecloud/agent-runtime-projection";
 
+type QueueProjectionEvent = Extract<
+  AgentEvent,
+  {
+    type: "queue_added" | "queue_removed" | "queue_started" | "queue_cleared";
+  }
+>;
+
 type QueueLifecycleEvent =
   | AgentEventQueueRemoved
   | AgentEventQueueStarted
   | AgentEventQueueCleared;
+
+export function buildQueueProjectionEvents(
+  event: QueueProjectionEvent,
+  context: AgentUiProjectionContext,
+): AgentUiProjectionEvent[] {
+  switch (event.type) {
+    case "queue_added":
+      return buildQueueAddedEvents(event, context);
+    case "queue_removed":
+    case "queue_started":
+    case "queue_cleared":
+      return buildQueueLifecycleEvents(event, context);
+    default: {
+      const exhaustive: never = event;
+      return exhaustive;
+    }
+  }
+}
 
 export function buildQueueAddedEvents(
   event: AgentEventQueueAdded,

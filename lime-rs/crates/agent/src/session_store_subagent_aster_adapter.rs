@@ -18,11 +18,34 @@ fn resolve_subagent_model_name(session: &AsterSession) -> Option<String> {
         .or_else(|| normalize_optional_text(session.provider_name.clone()))
 }
 
+fn build_subagent_presentation_projection(
+    session: &AsterSession,
+) -> Option<SubagentPresentationProjection> {
+    let metadata = resolve_subagent_session_metadata(&session.extension_data)?;
+    let customization = subagent_customization_from_session(session).unwrap_or_default();
+    Some(SubagentPresentationProjection {
+        parent_session_id: metadata.parent_session_id,
+        task_summary: normalize_optional_nonempty_body(metadata.task_summary),
+        role_hint: normalize_optional_text(metadata.role_hint),
+        origin_tool: normalize_optional_text(Some(metadata.origin_tool)),
+        created_from_turn_id: normalize_optional_text(metadata.created_from_turn_id),
+        blueprint_role_id: customization.blueprint_role_id,
+        blueprint_role_label: customization.blueprint_role_label,
+        profile_id: customization.profile_id,
+        profile_name: customization.profile_name,
+        role_key: customization.role_key,
+        team_preset_id: customization.team_preset_id,
+        theme: customization.theme,
+        output_contract: customization.output_contract,
+        skill_ids: customization.skill_ids,
+        skills: customization.skills,
+    })
+}
+
 pub(super) fn project_aster_subagent_session(
     session: &AsterSession,
 ) -> Option<SubagentSessionProjection> {
-    let metadata = resolve_subagent_session_metadata(&session.extension_data)?;
-    let customization = subagent_customization_from_session(session).unwrap_or_default();
+    let presentation = build_subagent_presentation_projection(session)?;
     Some(SubagentSessionProjection {
         id: session.id.clone(),
         name: normalize_optional_text(Some(session.name.clone()))
@@ -35,23 +58,7 @@ pub(super) fn project_aster_subagent_session(
         working_dir: normalize_optional_text(Some(
             session.working_dir.to_string_lossy().to_string(),
         )),
-        presentation: SubagentPresentationProjection {
-            parent_session_id: metadata.parent_session_id,
-            task_summary: normalize_optional_nonempty_body(metadata.task_summary),
-            role_hint: normalize_optional_text(metadata.role_hint),
-            origin_tool: normalize_optional_text(Some(metadata.origin_tool)),
-            created_from_turn_id: normalize_optional_text(metadata.created_from_turn_id),
-            blueprint_role_id: customization.blueprint_role_id,
-            blueprint_role_label: customization.blueprint_role_label,
-            profile_id: customization.profile_id,
-            profile_name: customization.profile_name,
-            role_key: customization.role_key,
-            team_preset_id: customization.team_preset_id,
-            theme: customization.theme,
-            output_contract: customization.output_contract,
-            skill_ids: customization.skill_ids,
-            skills: customization.skills,
-        },
+        presentation,
     })
 }
 

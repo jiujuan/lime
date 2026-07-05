@@ -22,6 +22,7 @@ function parseArgs(argv) {
     fetchCloud: "",
     guiEvidence: "",
     output: "",
+    preflight: "",
     writeTemplateDir: "",
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -38,6 +39,9 @@ function parseArgs(argv) {
       index += 1;
     } else if (arg === "--fetch-cloud" && next) {
       options.fetchCloud = next;
+      index += 1;
+    } else if (arg === "--preflight" && next) {
+      options.preflight = next;
       index += 1;
     } else if (arg === "--gui-evidence" && next) {
       options.guiEvidence = next;
@@ -75,19 +79,22 @@ function printHelp() {
 Options:
   --catalog <path>              Production client/plugins or catalog JSON.
   --bootstrap <path>            Production bootstrap JSON with signature trust roots.
+  --preflight <path>            Production preflight JSON from real .lapp + App Server inspect.
   --fetch-cloud <path>          pluginPackage/fetchCloud/package verification evidence JSON.
   --gui-evidence <path>         Real Lime Desktop GUI install/run evidence JSON.
-  --evidence-dir <dir>          Read the four production evidence template JSON files from one directory.
+  --evidence-dir <dir>          Read the five production evidence template JSON files from one directory.
   --expected-version <version>  Expected content-factory-app version.
   --content-factory-dir <dir>   Optional package dir used only to read package.json version.
   --output <path>               Write gate JSON. Defaults to <evidence-dir>/content-factory-signed-release-gate.result.json when --evidence-dir is used.
   --write-template-dir <dir>    Write production evidence JSON templates and exit.
   --check                       Exit non-zero unless production evidence is ready.
 
-Ready requires signed cloud_release catalog metadata, matching bootstrap trust root,
-verified fetchCloud hashes/signature, GUI Article Workspace evidence, workflow-events.jsonl,
-and live Provider hostManagedGeneration. Fixture cloud releases, localhost provider
-fixtures, signature_missing/not_configured, and host_generation_unavailable stay blocked.`);
+Ready requires production preflight from the real .lapp package, signed cloud_release
+catalog metadata, matching bootstrap trust root, verified fetchCloud hashes/signature,
+GUI Article Workspace evidence, workflow-events.jsonl, live Provider hostManagedGeneration,
+and real workflow resume lifecycle metadata/audit events. Fixture cloud releases,
+localhost provider fixtures, signature_missing/not_configured, host_generation_unavailable,
+and missing workflowResume lifecycle evidence stay blocked.`);
 }
 
 function readPackageVersion(packageDir) {
@@ -148,6 +155,9 @@ async function main() {
     guiEvidence:
       readOptionalJsonFile(options.guiEvidence) ??
       evidenceDir?.evidence.guiEvidence,
+    preflight:
+      readOptionalJsonFile(options.preflight) ??
+      evidenceDir?.evidence.preflight,
   });
   if (outputPath) {
     writeJsonFile(outputPath, result);
@@ -162,6 +172,11 @@ async function main() {
         .join(",")}`,
     );
   }
+  console.log(
+    `[content-factory-signed-release-gate] preflight=${result.preflight.status} publishReadiness=${
+      result.preflight.publishReadinessConfigured ? "configured" : "missing"
+    }`,
+  );
   if (evidenceDir) {
     console.log(
       `[content-factory-signed-release-gate] evidenceDir=${evidenceDir.dir}`,

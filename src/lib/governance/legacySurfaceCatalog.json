@@ -5494,39 +5494,27 @@
     },
     {
       "id": "rust-agent-session-get-direct-read",
-      "classification": "deprecated",
-      "description": "session get_session 直读只允许统一 session_query helper 持有",
+      "classification": "dead-candidate",
+      "description": "已零引用的 session get_session 直读回流",
       "patterns": ["SessionManager::get_session("],
       "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
-      "allowedPaths": [
-        "lime-rs/crates/agent/src/session_query.rs",
-        "lime-rs/crates/aster-rust/crates/aster/src/session/query.rs",
-        "lime-rs/crates/aster-rust/crates/aster/src/session/subagent.rs"
-      ]
+      "allowedPaths": []
     },
     {
       "id": "rust-agent-subagent-child-session-direct-read",
-      "classification": "deprecated",
-      "description": "subagent child session 列表直读只允许统一 session_query helper 持有",
+      "classification": "dead-candidate",
+      "description": "已零引用的 subagent child session 列表直读回流",
       "patterns": ["list_subagent_child_sessions("],
       "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
-      "allowedPaths": [
-        "lime-rs/crates/agent/src/session_query.rs",
-        "lime-rs/crates/aster-rust/crates/aster/src/session/query.rs",
-        "lime-rs/crates/aster-rust/crates/aster/src/session/subagent.rs"
-      ]
+      "allowedPaths": []
     },
     {
       "id": "rust-agent-subagent-session-list-direct-read",
-      "classification": "deprecated",
-      "description": "subagent 全量 session 列表直读只允许统一 session_query helper 持有",
+      "classification": "dead-candidate",
+      "description": "已零引用的 subagent 全量 session 列表直读回流",
       "patterns": ["list_subagent_sessions_with_metadata("],
       "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
-      "allowedPaths": [
-        "lime-rs/crates/agent/src/session_query.rs",
-        "lime-rs/crates/aster-rust/crates/aster/src/session/query.rs",
-        "lime-rs/crates/aster-rust/crates/aster/src/session/subagent.rs"
-      ]
+      "allowedPaths": []
     },
     {
       "id": "rust-agent-subagent-metadata-direct-read",
@@ -5555,14 +5543,11 @@
     },
     {
       "id": "rust-agent-session-update-direct-call",
-      "classification": "deprecated",
-      "description": "session update_session 直写只允许统一 session_update helper 持有",
+      "classification": "dead-candidate",
+      "description": "已零引用的 session update_session 直写回流",
       "patterns": ["SessionManager::update_session("],
       "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
-      "allowedPaths": [
-        "lime-rs/crates/agent/src/session_update.rs",
-        "lime-rs/crates/aster-rust/crates/aster/src/session/update.rs"
-      ]
+      "allowedPaths": []
     },
     {
       "id": "rust-agent-session-compaction-metrics-direct-update",
@@ -5577,25 +5562,19 @@
     },
     {
       "id": "rust-agent-session-replace-conversation-direct-update",
-      "classification": "deprecated",
-      "description": "session conversation 直写 replace_conversation 只允许统一 session_update helper 持有",
+      "classification": "dead-candidate",
+      "description": "已零引用的 session conversation 直写 replace_conversation 回流",
       "patterns": ["SessionManager::replace_conversation("],
       "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
-      "allowedPaths": [
-        "lime-rs/crates/agent/src/session_update.rs",
-        "lime-rs/crates/aster-rust/crates/aster/src/session/update.rs"
-      ]
+      "allowedPaths": []
     },
     {
       "id": "rust-agent-session-create-direct-update",
-      "classification": "deprecated",
-      "description": "session create_session 直写只允许统一 session_update helper 持有",
+      "classification": "dead-candidate",
+      "description": "已零引用的 session create_session 直写回流",
       "patterns": ["SessionManager::create_session("],
       "includePathPrefixes": ["lime-rs/src", "lime-rs/crates"],
-      "allowedPaths": [
-        "lime-rs/crates/agent/src/session_update.rs",
-        "lime-rs/crates/aster-rust/crates/aster/src/session/update.rs"
-      ]
+      "allowedPaths": []
     },
     {
       "id": "rust-agent-session-delete-direct-update",

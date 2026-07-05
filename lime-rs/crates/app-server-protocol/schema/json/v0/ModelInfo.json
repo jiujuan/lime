@@ -41,6 +41,19 @@
         "string"
       ]
     },
+    "applyPatchToolType": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "autoCompactTokenLimit": {
+      "format": "int64",
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
     "canonicalModelId": {
       "type": [
         "null",
@@ -58,9 +71,40 @@
         "vision": false
       }
     },
+    "contextWindow": {
+      "format": "int64",
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
     "createdAt": {
       "format": "int64",
       "type": "integer"
+    },
+    "defaultReasoningLevel": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "defaultReasoningSummary": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "defaultServiceTier": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "defaultVerbosity": {
+      "type": [
+        "null",
+        "string"
+      ]
     },
     "deploymentSource": {
       "type": "string"
@@ -73,6 +117,20 @@
     },
     "displayName": {
       "type": "string"
+    },
+    "effectiveContextWindowPercent": {
+      "format": "int64",
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "experimentalSupportedTools": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
     },
     "family": {
       "type": [
@@ -97,6 +155,13 @@
     "limits": true,
     "managementPlane": {
       "type": "string"
+    },
+    "maxContextWindow": {
+      "format": "int64",
+      "type": [
+        "integer",
+        "null"
+      ]
     },
     "outputModalities": {
       "default": [],
@@ -131,11 +196,47 @@
       },
       "type": "array"
     },
+    "serviceTiers": {
+      "default": [],
+      "items": true,
+      "type": "array"
+    },
+    "shellType": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
     "source": {
       "type": "string"
     },
     "status": {
       "type": "string"
+    },
+    "supportVerbosity": {
+      "default": false,
+      "type": "boolean"
+    },
+    "supportedReasoningLevels": {
+      "default": [],
+      "items": true,
+      "type": "array"
+    },
+    "supportsImageDetailOriginal": {
+      "default": false,
+      "type": "boolean"
+    },
+    "supportsParallelToolCalls": {
+      "default": false,
+      "type": "boolean"
+    },
+    "supportsReasoningSummaries": {
+      "default": false,
+      "type": "boolean"
+    },
+    "supportsSearchTool": {
+      "default": false,
+      "type": "boolean"
     },
     "taskFamilies": {
       "default": [],
@@ -147,9 +248,32 @@
     "tier": {
       "type": "string"
     },
+    "toolMode": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "truncationPolicy": true,
     "updatedAt": {
       "format": "int64",
       "type": "integer"
+    },
+    "useResponsesLite": {
+      "default": false,
+      "type": "boolean"
+    },
+    "visibility": {
+      "type": [
+        "null",
+        "string"
+      ]
+    },
+    "webSearchToolType": {
+      "type": [
+        "null",
+        "string"
+      ]
     }
   },
   "required": [

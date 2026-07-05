@@ -179,6 +179,10 @@ pub(crate) fn convert_agent_event(event: AgentEvent) -> Vec<RuntimeAgentEvent> {
             cancel_reason: event.cancel_reason,
             provider_request_id: event.provider_request_id,
             provider_request_id_header: event.provider_request_id_header,
+            runtime_provider_backend: None,
+            runtime_provider_selector: None,
+            runtime_provider_protocol: None,
+            runtime_provider_active_model: None,
         }],
         AgentEvent::HistoryReplaced(_conversation) => vec![],
         AgentEvent::ContextTrace { steps } => vec![RuntimeAgentEvent::ContextTrace {

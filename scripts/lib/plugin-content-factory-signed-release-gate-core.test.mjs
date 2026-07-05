@@ -20,6 +20,19 @@ const SIGNATURE_PROOF = {
   signature: "base64-signature",
   signedAt: "2026-07-03T00:00:00.000Z",
 };
+const READY_RELEASE_ID = "prod";
+const READY_SIGNATURE_REF = `sigstore:content-factory-app@2.2.2:${READY_RELEASE_ID}`;
+const TEST_PUBLIC_KEY_PEM = [
+  "-----BEGIN PUBLIC KEY-----",
+  "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwdDX0Ptde31EvvL9din4",
+  "unewddOxzgn2d2EDv7SR/45RJlh6z0gSUfhz2Qh/HZo9KTHqwdQlZFxfYczBQLsv",
+  "DFldL4LZ5sfIBETomBupaO4oU7cjslPpAr9lvP2ojG2rt0H3Mep/3wxPAHwXLio/",
+  "rWsrQIP2zsCryE5ooIO2cLLQQ6CENHA+xciS73Deu3M2Hg+3ZQkqEPDyUrNtMcj3",
+  "uBxgZyY3ka11IfvyrZe0leJLM1/w/1l9IR+m83cSxMDV7ZgbN/qt25bioe0qPxmY",
+  "xQDRZ1/GyfKqNntotmYJUEjpTx60G3RDvx75XH00hX+2AQrQ3eIu+2xQ/UeJ5gw1",
+  "uwIDAQAB",
+  "-----END PUBLIC KEY-----",
+].join("\n");
 
 const READY_CATALOG = {
   apps: [
@@ -31,7 +44,8 @@ const READY_CATALOG = {
           "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         packageHash:
           "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        signatureRef: "sigstore:content-factory-app@2.2.2:prod",
+        releaseId: READY_RELEASE_ID,
+        signatureRef: READY_SIGNATURE_REF,
         sourceKind: "cloud_release",
         sourceUri:
           "https://updates.limeai.run/plugins/content-factory-app/prod/content-factory-app-2.2.2.lapp",
@@ -48,6 +62,7 @@ const READY_BOOTSTRAP = {
       appIds: ["content-factory-app"],
       notBefore: "2026-01-01T00:00:00.000Z",
       notAfter: "2027-01-01T00:00:00.000Z",
+      publicKey: TEST_PUBLIC_KEY_PEM,
       publicKeyId: "content-factory-prod-root-2026",
       revoked: false,
     },
@@ -63,15 +78,123 @@ const READY_FETCH_CLOUD = {
   status: "ready",
 };
 
+const READY_PREFLIGHT = {
+  schemaVersion: 1,
+  appId: "content-factory-app",
+  expectedVersion: "2.2.2",
+  status: "ready",
+  ready: true,
+  package: {
+    appId: "content-factory-app",
+    exists: true,
+    manifestHash:
+      "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    missingEntries: [],
+    packageHash:
+      "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    validZip: true,
+    version: "2.2.2",
+  },
+  appServerInspect: {
+    manifestHash:
+      "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    packageHash:
+      "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    present: true,
+    sourceKind: "local_folder",
+  },
+  signature: {
+    algorithm: "Ed25519",
+    appSignatureYamlPresent: true,
+    payloadHash:
+      "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    payloadHashValid: true,
+    publicKeyId: "content-factory-prod-root-2026",
+    schemaVersion: "plugin-cloud-release-signature/v1",
+    signatureCryptographicVerificationStatus: "verified",
+    signaturePayloadHashMatched: true,
+    signaturePresent: true,
+    signatureRef: READY_SIGNATURE_REF,
+    signedAt: "2026-07-03T00:00:00.000Z",
+    trustRootPresent: true,
+    trustRootPublicKeyPresent: true,
+    trustRootPublicKeyId: "content-factory-prod-root-2026",
+  },
+  catalog: {
+    manifestHash:
+      "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    packageHash:
+      "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    packageUrl:
+      "https://updates.limeai.run/plugins/content-factory-app/prod/content-factory-app-2.2.2.lapp",
+    present: true,
+    releaseId: READY_RELEASE_ID,
+    signatureProofPresent: true,
+    signatureRef: READY_SIGNATURE_REF,
+    sourceKind: "cloud_release",
+    version: "2.2.2",
+  },
+  bootstrap: {
+    present: true,
+    trustRootCount: 1,
+  },
+  fetchCloud: {
+    manifestHashMatched: true,
+    packageHashMatched: true,
+    packageVerificationStatus: "verified",
+    present: true,
+    ready: true,
+    signatureVerificationStatus: "verified",
+    sourceKind: "cloud_release",
+    status: "ready",
+  },
+  publishReadiness: {
+    configured: false,
+    requirements: [
+      {
+        configured: false,
+        env: ["PLUGIN_SIGNING_PRIVATE_KEY_PEM"],
+        key: "signingPrivateKey",
+      },
+    ],
+  },
+  signingCommand:
+    "PLUGIN_SIGNING_PRIVATE_KEY_PEM=$PRIVATE_KEY_PEM npm run release:sign -- --package-url <https-url>",
+  missingRequirements: [],
+};
+
 const READY_GUI_EVIDENCE = {
   assertions: {
     articleDraftDocumentPresent: true,
     contentFactoryArticleWorkspaceWorkflowFactsHidden: true,
     liveProviderUsed: true,
+    turnStartViaElectronIpc: true,
   },
   eventLogs: {
     workflowJsonl:
       "/tmp/lime-runtime/events/sessions/session_prod/workflow-events.jsonl",
+    workflowResumeEvents: [
+      {
+        eventType: "workflow.step.resuming",
+        payload: {
+          actionId: "article-draft-review",
+          decision: "approved",
+          stepId: "draft",
+          workflowKey: "content_article_workflow",
+          workflowRunId: "turn_prod:content-article",
+        },
+      },
+      {
+        eventType: "workflow.run.resuming",
+        payload: {
+          actionId: "article-draft-review",
+          decision: "approved",
+          stepId: "draft",
+          workflowKey: "content_article_workflow",
+          workflowRunId: "turn_prod:content-article",
+        },
+      },
+    ],
   },
   installedState: {
     sourceKind: "cloud_release",
@@ -83,8 +206,44 @@ const READY_GUI_EVIDENCE = {
   readModel: {
     hostManagedGenerationStatus: "completed",
   },
+  runtimeActionResponse: {
+    actionId: "article-draft-review",
+    confirmed: true,
+    metadata: {
+      workflowResume: {
+        stepId: "draft",
+        workflowKey: "content_article_workflow",
+        workflowRunId: "turn_prod:content-article",
+      },
+    },
+  },
+  runtimeResumeContract: {
+    decisions: [
+      {
+        actionId: "article-draft-review",
+        decision: "approved",
+        metadata: {
+          workflowResume: {
+            stepId: "draft",
+            workflowKey: "content_article_workflow",
+            workflowRunId: "turn_prod:content-article",
+          },
+        },
+      },
+    ],
+    resumeMode: "selected-actions",
+    runtimeId: "content-factory-plugin",
+  },
   signatureVerificationStatus: "verified",
   status: "passed",
+  trace: {
+    appServerHandleJsonLinesSeen: true,
+    appServerMethodsSeen: [
+      "agentSession/turn/start",
+      "agentSession/read",
+      "evidence/export",
+    ],
+  },
 };
 
 describe("content factory signed release gate", () => {
@@ -97,6 +256,7 @@ describe("content factory signed release gate", () => {
       ready: false,
       status: "blocked",
       missingRequirements: expect.arrayContaining([
+        expect.objectContaining({ code: "production_preflight_missing" }),
         expect.objectContaining({ code: "production_catalog_missing" }),
         expect.objectContaining({ code: "production_trust_roots_missing" }),
         expect.objectContaining({
@@ -136,6 +296,7 @@ describe("content factory signed release gate", () => {
           requestCount: 1,
         },
       },
+      preflight: READY_PREFLIGHT,
     });
 
     expect(result).toMatchObject({
@@ -149,6 +310,49 @@ describe("content factory signed release gate", () => {
         }),
       ]),
     });
+  });
+
+  it("不会把 hostGenerationFixture: null 的 live GUI evidence 误判为 fixture", () => {
+    const result = buildContentFactorySignedReleaseGate({
+      bootstrap: READY_BOOTSTRAP,
+      catalog: READY_CATALOG,
+      expectedVersion: "2.2.2",
+      fetchCloud: READY_FETCH_CLOUD,
+      guiEvidence: {
+        ...READY_GUI_EVIDENCE,
+        eventLogs: {
+          ...READY_GUI_EVIDENCE.eventLogs,
+          workflowJsonl:
+            "/tmp/lime-runtime/events/sessions/session_prod/workflow-events.jsonl",
+        },
+        hostGenerationFixture: null,
+        installedState: {
+          sourceKind: "local_folder",
+        },
+        signatureVerificationStatus: null,
+      },
+      preflight: READY_PREFLIGHT,
+    });
+
+    expect(result.guiEvidence).toMatchObject({
+      fixtureLike: false,
+      liveProviderUsed: true,
+    });
+    expect(result.missingRequirements).toEqual(
+      expect.not.arrayContaining([
+        expect.objectContaining({
+          code: "production_host_generation_not_live",
+        }),
+      ]),
+    );
+    expect(result.missingRequirements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "production_gui_not_cloud_release" }),
+        expect.objectContaining({
+          code: "production_gui_signature_not_verified",
+        }),
+      ]),
+    );
   });
 
   it("拒绝 production evidence 模板占位值", () => {
@@ -179,6 +383,7 @@ describe("content factory signed release gate", () => {
       expectedVersion: "2.2.2",
       fetchCloud: READY_FETCH_CLOUD,
       guiEvidence: READY_GUI_EVIDENCE,
+      preflight: READY_PREFLIGHT,
     });
 
     expect(result).toMatchObject({
@@ -201,6 +406,53 @@ describe("content factory signed release gate", () => {
     });
   });
 
+  it("拒绝 production evidence 中包含 Provider key 或 bearer token", () => {
+    const result = buildContentFactorySignedReleaseGate({
+      bootstrap: READY_BOOTSTRAP,
+      catalog: READY_CATALOG,
+      expectedVersion: "2.2.2",
+      fetchCloud: READY_FETCH_CLOUD,
+      guiEvidence: {
+        ...READY_GUI_EVIDENCE,
+        providerEvidence: {
+          authorization: "Bearer live-production-token-value",
+          liveProviderUsed: true,
+          productionRoute: true,
+        },
+        runtimeActionResponse: {
+          ...READY_GUI_EVIDENCE.runtimeActionResponse,
+          metadata: {
+            ...READY_GUI_EVIDENCE.runtimeActionResponse.metadata,
+            apiKey: "sk-production-secret-value",
+          },
+        },
+      },
+      preflight: READY_PREFLIGHT,
+    });
+
+    expect(result).toMatchObject({
+      ready: false,
+      status: "blocked",
+      missingRequirements: expect.arrayContaining([
+        expect.objectContaining({
+          code: "production_secret_values_present",
+        }),
+      ]),
+      secretScan: {
+        guiEvidence: expect.arrayContaining([
+          expect.stringContaining("providerEvidence.authorization"),
+          expect.stringContaining("runtimeActionResponse.metadata.apiKey"),
+        ]),
+      },
+    });
+    expect(JSON.stringify(result.missingRequirements)).not.toContain(
+      "sk-production-secret-value",
+    );
+    expect(JSON.stringify(result.missingRequirements)).not.toContain(
+      "live-production-token-value",
+    );
+  });
+
   it("接受 production signed release + trust root + live Provider GUI evidence", () => {
     const result = buildContentFactorySignedReleaseGate({
       bootstrap: READY_BOOTSTRAP,
@@ -208,6 +460,7 @@ describe("content factory signed release gate", () => {
       expectedVersion: "2.2.2",
       fetchCloud: READY_FETCH_CLOUD,
       guiEvidence: READY_GUI_EVIDENCE,
+      preflight: READY_PREFLIGHT,
     });
 
     expect(result).toMatchObject({
@@ -222,12 +475,418 @@ describe("content factory signed release gate", () => {
       guiEvidence: {
         liveProviderUsed: true,
         ready: true,
+        workflowResumeLifecycle: {
+          auditEventsPresent: true,
+          contractMetadataPresent: true,
+          workflowRunId: "turn_prod:content-article",
+        },
       },
       missingRequirements: [],
     });
   });
 
-  it("生成 production evidence 模板时覆盖 gate 所需四类输入", () => {
+  it("拒绝 remote sourceKind，production catalog 必须是 cloud_release", () => {
+    const catalog = {
+      apps: [
+        {
+          ...READY_CATALOG.apps[0],
+          identity: {
+            ...READY_CATALOG.apps[0].identity,
+            sourceKind: "remote",
+          },
+        },
+      ],
+    };
+
+    const result = buildContentFactorySignedReleaseGate({
+      bootstrap: READY_BOOTSTRAP,
+      catalog,
+      expectedVersion: "2.2.2",
+      fetchCloud: READY_FETCH_CLOUD,
+      guiEvidence: READY_GUI_EVIDENCE,
+      preflight: READY_PREFLIGHT,
+    });
+
+    expect(result).toMatchObject({
+      ready: false,
+      status: "blocked",
+      catalog: {
+        sourceKind: "remote",
+        sourceKindReady: false,
+      },
+      missingRequirements: expect.arrayContaining([
+        expect.objectContaining({
+          code: "production_catalog_not_cloud_release",
+        }),
+      ]),
+    });
+  });
+
+  it("拒绝缺少 publicKey 的匹配 bootstrap trust root", () => {
+    const result = buildContentFactorySignedReleaseGate({
+      bootstrap: {
+        pluginSignatureTrustRoots: [
+          {
+            ...READY_BOOTSTRAP.pluginSignatureTrustRoots[0],
+            publicKey: "",
+          },
+        ],
+      },
+      catalog: READY_CATALOG,
+      expectedVersion: "2.2.2",
+      fetchCloud: READY_FETCH_CLOUD,
+      guiEvidence: READY_GUI_EVIDENCE,
+      preflight: READY_PREFLIGHT,
+    });
+
+    expect(result).toMatchObject({
+      ready: false,
+      status: "blocked",
+      bootstrap: {
+        matchingTrustRoot: true,
+        matchingTrustRootPublicKeyPresent: false,
+        ready: false,
+      },
+      missingRequirements: expect.arrayContaining([
+        expect.objectContaining({
+          code: "production_signature_trust_root_public_key_missing",
+        }),
+      ]),
+    });
+  });
+
+  it("拒绝 blocked production preflight 即使其他 production evidence ready", () => {
+    const result = buildContentFactorySignedReleaseGate({
+      bootstrap: READY_BOOTSTRAP,
+      catalog: READY_CATALOG,
+      expectedVersion: "2.2.2",
+      fetchCloud: READY_FETCH_CLOUD,
+      guiEvidence: READY_GUI_EVIDENCE,
+      preflight: {
+        ...READY_PREFLIGHT,
+        missingRequirements: [
+          {
+            code: "production_app_signature_yaml_missing",
+            detail: "app.signature.yaml is required.",
+          },
+        ],
+        ready: false,
+        status: "blocked",
+      },
+    });
+
+    expect(result).toMatchObject({
+      ready: false,
+      status: "blocked",
+      missingRequirements: expect.arrayContaining([
+        expect.objectContaining({ code: "production_preflight_not_ready" }),
+      ]),
+      preflight: {
+        missingRequirementCodes: ["production_app_signature_yaml_missing"],
+        ready: false,
+      },
+    });
+  });
+
+  it("拒绝 preflight 与 catalog 的 packageHash / manifestHash 不一致", () => {
+    const result = buildContentFactorySignedReleaseGate({
+      bootstrap: READY_BOOTSTRAP,
+      catalog: READY_CATALOG,
+      expectedVersion: "2.2.2",
+      fetchCloud: READY_FETCH_CLOUD,
+      guiEvidence: READY_GUI_EVIDENCE,
+      preflight: {
+        ...READY_PREFLIGHT,
+        package: {
+          ...READY_PREFLIGHT.package,
+          manifestHash:
+            "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          packageHash:
+            "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      ready: false,
+      status: "blocked",
+      missingRequirements: expect.arrayContaining([
+        expect.objectContaining({
+          code: "production_preflight_catalog_package_hash_mismatch",
+        }),
+        expect.objectContaining({
+          code: "production_preflight_catalog_manifest_hash_mismatch",
+        }),
+      ]),
+    });
+  });
+
+  it("拒绝 ready preflight 与 production catalog 的签名 proof 不一致", () => {
+    const driftedProof = {
+      algorithm: "RSA-PSS-SHA256",
+      payloadHash:
+        "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      publicKeyId: "content-factory-prod-root-rotated",
+      signature: "DRIFTED_SIGNATURE_SHOULD_NOT_LEAK",
+      signedAt: "2026-07-04T00:00:00.000Z",
+    };
+    const result = buildContentFactorySignedReleaseGate({
+      bootstrap: {
+        pluginSignatureTrustRoots: [
+          {
+            ...READY_BOOTSTRAP.pluginSignatureTrustRoots[0],
+            algorithm: driftedProof.algorithm,
+            publicKeyId: driftedProof.publicKeyId,
+          },
+        ],
+      },
+      catalog: {
+        apps: [
+          {
+            ...READY_CATALOG.apps[0],
+            identity: {
+              ...READY_CATALOG.apps[0].identity,
+              signatureRef: "sigstore:content-factory-app@2.2.2:rotated",
+            },
+            signatureProof: driftedProof,
+          },
+        ],
+      },
+      expectedVersion: "2.2.2",
+      fetchCloud: READY_FETCH_CLOUD,
+      guiEvidence: READY_GUI_EVIDENCE,
+      preflight: READY_PREFLIGHT,
+    });
+
+    expect(result).toMatchObject({
+      ready: false,
+      status: "blocked",
+      missingRequirements: expect.arrayContaining([
+        expect.objectContaining({
+          code: "production_signature_catalog_signature_ref_mismatch",
+        }),
+        expect.objectContaining({
+          code: "production_signature_catalog_public_key_id_mismatch",
+        }),
+        expect.objectContaining({
+          code: "production_signature_catalog_algorithm_mismatch",
+        }),
+        expect.objectContaining({
+          code: "production_signature_catalog_payload_hash_mismatch",
+        }),
+        expect.objectContaining({
+          code: "production_signature_catalog_signed_at_mismatch",
+        }),
+      ]),
+    });
+    expect(JSON.stringify(result)).not.toContain(
+      "DRIFTED_SIGNATURE_SHOULD_NOT_LEAK",
+    );
+  });
+
+  it("拒绝 production catalog 缺 releaseId 或 signatureRef 未绑定 releaseId", () => {
+    const withoutReleaseId = buildContentFactorySignedReleaseGate({
+      bootstrap: READY_BOOTSTRAP,
+      catalog: {
+        apps: [
+          {
+            ...READY_CATALOG.apps[0],
+            identity: {
+              ...READY_CATALOG.apps[0].identity,
+              releaseId: undefined,
+              signatureRef: "sigstore:content-factory-app@2.2.2",
+            },
+          },
+        ],
+      },
+      expectedVersion: "2.2.2",
+      fetchCloud: READY_FETCH_CLOUD,
+      guiEvidence: READY_GUI_EVIDENCE,
+      preflight: READY_PREFLIGHT,
+    });
+
+    expect(withoutReleaseId).toMatchObject({
+      ready: false,
+      status: "blocked",
+      missingRequirements: expect.arrayContaining([
+        expect.objectContaining({
+          code: "production_release_id_missing",
+        }),
+        expect.objectContaining({
+          code: "production_signature_catalog_signature_ref_mismatch",
+        }),
+      ]),
+    });
+
+    const mismatch = buildContentFactorySignedReleaseGate({
+      bootstrap: READY_BOOTSTRAP,
+      catalog: {
+        apps: [
+          {
+            ...READY_CATALOG.apps[0],
+            identity: {
+              ...READY_CATALOG.apps[0].identity,
+              releaseId: READY_RELEASE_ID,
+              signatureRef: "sigstore:content-factory-app@2.2.2",
+            },
+          },
+        ],
+      },
+      expectedVersion: "2.2.2",
+      fetchCloud: READY_FETCH_CLOUD,
+      guiEvidence: READY_GUI_EVIDENCE,
+      preflight: READY_PREFLIGHT,
+    });
+
+    expect(mismatch.missingRequirements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "production_signature_ref_release_id_mismatch",
+        }),
+      ]),
+    );
+  });
+
+  it("拒绝没有 Electron IPC turn/start 的 GUI evidence", () => {
+    const result = buildContentFactorySignedReleaseGate({
+      bootstrap: READY_BOOTSTRAP,
+      catalog: READY_CATALOG,
+      expectedVersion: "2.2.2",
+      fetchCloud: READY_FETCH_CLOUD,
+      guiEvidence: {
+        ...READY_GUI_EVIDENCE,
+        assertions: {
+          ...READY_GUI_EVIDENCE.assertions,
+          turnStartViaElectronIpc: false,
+        },
+        trace: {
+          ...READY_GUI_EVIDENCE.trace,
+          appServerHandleJsonLinesSeen: false,
+        },
+      },
+      preflight: READY_PREFLIGHT,
+    });
+
+    expect(result).toMatchObject({
+      ready: false,
+      status: "blocked",
+      missingRequirements: expect.arrayContaining([
+        expect.objectContaining({
+          code: "production_gui_turn_start_not_electron_ipc",
+        }),
+        expect.objectContaining({
+          code: "production_gui_app_server_json_rpc_missing",
+        }),
+      ]),
+    });
+  });
+
+  it("拒绝缺少真实 resume lifecycle metadata 的 production GUI evidence", () => {
+    const {
+      runtimeActionResponse,
+      runtimeResumeContract,
+      ...guiEvidenceWithoutLifecycleMetadata
+    } = READY_GUI_EVIDENCE;
+    const result = buildContentFactorySignedReleaseGate({
+      bootstrap: READY_BOOTSTRAP,
+      catalog: READY_CATALOG,
+      expectedVersion: "2.2.2",
+      fetchCloud: READY_FETCH_CLOUD,
+      guiEvidence: {
+        ...guiEvidenceWithoutLifecycleMetadata,
+        eventLogs: {
+          workflowJsonl:
+            "/tmp/lime-runtime/events/sessions/session_prod/workflow-events.jsonl",
+        },
+      },
+      preflight: READY_PREFLIGHT,
+    });
+
+    expect(result).toMatchObject({
+      ready: false,
+      status: "blocked",
+      missingRequirements: expect.arrayContaining([
+        expect.objectContaining({
+          code: "production_workflow_resume_lifecycle_missing",
+        }),
+      ]),
+      guiEvidence: {
+        workflowResumeLifecycle: {
+          auditEventsPresent: false,
+          contractMetadataPresent: false,
+        },
+      },
+    });
+  });
+
+  it("接受 runtime action response 的 workflowResume metadata 作为真实 lifecycle 证据", () => {
+    const { runtimeResumeContract, ...guiEvidenceWithActionResponse } =
+      READY_GUI_EVIDENCE;
+    const result = buildContentFactorySignedReleaseGate({
+      bootstrap: READY_BOOTSTRAP,
+      catalog: READY_CATALOG,
+      expectedVersion: "2.2.2",
+      fetchCloud: READY_FETCH_CLOUD,
+      guiEvidence: guiEvidenceWithActionResponse,
+      preflight: READY_PREFLIGHT,
+    });
+
+    expect(result).toMatchObject({
+      ready: true,
+      guiEvidence: {
+        workflowResumeLifecycle: {
+          auditEventsPresent: true,
+          contractMetadataPresent: true,
+          workflowRunId: "turn_prod:content-article",
+        },
+      },
+      missingRequirements: [],
+    });
+  });
+
+  it("多条 resume metadata 同时存在时选择匹配 audit 事件的 lifecycle", () => {
+    const result = buildContentFactorySignedReleaseGate({
+      bootstrap: READY_BOOTSTRAP,
+      catalog: READY_CATALOG,
+      expectedVersion: "2.2.2",
+      fetchCloud: READY_FETCH_CLOUD,
+      guiEvidence: {
+        ...READY_GUI_EVIDENCE,
+        runtimeResumeContract: {
+          decisions: [
+            {
+              actionId: "stale-review-action",
+              decision: "approved",
+              metadata: {
+                workflowResume: {
+                  stepId: "review",
+                  workflowKey: "content_article_workflow",
+                  workflowRunId: "turn_prod:stale",
+                },
+              },
+            },
+          ],
+        },
+      },
+      preflight: READY_PREFLIGHT,
+    });
+
+    expect(result).toMatchObject({
+      ready: true,
+      guiEvidence: {
+        workflowResumeLifecycle: {
+          actionId: "article-draft-review",
+          auditEventsPresent: true,
+          contractMetadataPresent: true,
+          stepId: "draft",
+          workflowRunId: "turn_prod:content-article",
+        },
+      },
+      missingRequirements: [],
+    });
+  });
+
+  it("生成 production evidence 模板时覆盖 gate 所需五类输入", () => {
     const template = buildContentFactorySignedReleaseEvidenceTemplate({
       expectedVersion: "2.2.2",
     });
@@ -250,10 +909,28 @@ describe("content factory signed release gate", () => {
         sourceKind: "cloud_release",
         signatureVerificationStatus: "verified",
       },
+      preflight: {
+        appServerInspect: {
+          present: true,
+        },
+        package: {
+          manifestHash: expect.any(String),
+          packageHash: expect.any(String),
+        },
+        signature: {
+          appSignatureYamlPresent: true,
+          trustRootPresent: true,
+        },
+      },
       guiEvidence: {
         assertions: {
           contentFactoryArticleWorkspaceWorkflowFactsHidden: true,
           liveProviderUsed: true,
+          turnStartViaElectronIpc: true,
+          workflowResumeLifecyclePresent: true,
+        },
+        trace: {
+          appServerHandleJsonLinesSeen: true,
         },
       },
     });
@@ -270,9 +947,7 @@ describe("content factory signed release gate", () => {
     const result = spawnSync(
       process.execPath,
       [
-        path.resolve(
-          "scripts/plugin/content-factory-signed-release-gate.mjs",
-        ),
+        path.resolve("scripts/plugin/content-factory-signed-release-gate.mjs"),
         "--expected-version",
         "2.2.2",
         "--output",
@@ -298,9 +973,7 @@ describe("content factory signed release gate", () => {
     const result = spawnSync(
       process.execPath,
       [
-        path.resolve(
-          "scripts/plugin/content-factory-signed-release-gate.mjs",
-        ),
+        path.resolve("scripts/plugin/content-factory-signed-release-gate.mjs"),
         "--expected-version",
         "2.2.2",
         "--write-template-dir",
@@ -314,6 +987,7 @@ describe("content factory signed release gate", () => {
     for (const fileName of [
       "content-factory-production-catalog.template.json",
       "content-factory-production-bootstrap.template.json",
+      "content-factory-production-preflight.template.json",
       "content-factory-fetch-cloud-evidence.template.json",
       "content-factory-gui-evidence.template.json",
       "content-factory-signed-release-gate.template.json",
@@ -351,26 +1025,28 @@ describe("content factory signed release gate", () => {
     );
     const catalogPath = path.join(outputDir, "catalog.json");
     const bootstrapPath = path.join(outputDir, "bootstrap.json");
+    const preflightPath = path.join(outputDir, "preflight.json");
     const fetchCloudPath = path.join(outputDir, "fetch-cloud.json");
     const guiEvidencePath = path.join(outputDir, "gui.json");
     const outputPath = path.join(outputDir, "gate.json");
     writeJsonFile(catalogPath, READY_CATALOG);
     writeJsonFile(bootstrapPath, READY_BOOTSTRAP);
+    writeJsonFile(preflightPath, READY_PREFLIGHT);
     writeJsonFile(fetchCloudPath, READY_FETCH_CLOUD);
     writeJsonFile(guiEvidencePath, READY_GUI_EVIDENCE);
 
     const result = spawnSync(
       process.execPath,
       [
-        path.resolve(
-          "scripts/plugin/content-factory-signed-release-gate.mjs",
-        ),
+        path.resolve("scripts/plugin/content-factory-signed-release-gate.mjs"),
         "--catalog",
         catalogPath,
         "--bootstrap",
         bootstrapPath,
         "--fetch-cloud",
         fetchCloudPath,
+        "--preflight",
+        preflightPath,
         "--gui-evidence",
         guiEvidencePath,
         "--expected-version",
@@ -421,6 +1097,13 @@ describe("content factory signed release gate", () => {
     writeJsonFile(
       path.join(
         outputDir,
+        CONTENT_FACTORY_SIGNED_RELEASE_GATE_TEMPLATE_FILE_NAMES.preflight,
+      ),
+      READY_PREFLIGHT,
+    );
+    writeJsonFile(
+      path.join(
+        outputDir,
         CONTENT_FACTORY_SIGNED_RELEASE_GATE_TEMPLATE_FILE_NAMES.guiEvidence,
       ),
       READY_GUI_EVIDENCE,
@@ -429,9 +1112,7 @@ describe("content factory signed release gate", () => {
     const result = spawnSync(
       process.execPath,
       [
-        path.resolve(
-          "scripts/plugin/content-factory-signed-release-gate.mjs",
-        ),
+        path.resolve("scripts/plugin/content-factory-signed-release-gate.mjs"),
         "--evidence-dir",
         outputDir,
         "--expected-version",

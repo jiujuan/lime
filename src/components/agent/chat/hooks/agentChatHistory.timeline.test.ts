@@ -483,7 +483,7 @@ describe("agentChatHistory timeline fallback", () => {
     });
   });
 
-  it("Article Editor artifact summary 不应恢复成中间产物消息", () => {
+  it("历史应恢复文章 artifact document 且隐藏 workspace patch", () => {
     const detail: AsterSessionDetail = {
       id: "session-article-workspace-artifacts",
       thread_id: "session-article-workspace-artifacts-thread",
@@ -506,6 +506,20 @@ describe("agentChatHistory timeline fallback", () => {
           metadata: {
             openedFrom: "app_server_article_workspace",
             artifactSchema: "artifact_document.v1",
+            previewText: "历史恢复文章正文",
+            artifactDocument: {
+              id: "artifact-document:content-factory-app:artifact-article-1",
+              title: "公众号文章草稿",
+              blocks: [
+                {
+                  type: "rich_text",
+                  content: "历史恢复文章正文",
+                },
+              ],
+              metadata: {
+                currentVersionNo: 1,
+              },
+            },
             articleWorkspace: {
               appId: "content-factory-app",
               sessionId: "session-article-workspace-artifacts",
@@ -600,12 +614,37 @@ describe("agentChatHistory timeline fallback", () => {
       } as never,
     } as AsterSessionDetail & { artifacts: unknown[] };
 
-    expect(
-      hydrateSessionDetailMessages(
-        detail,
-        "session-article-workspace-artifacts",
-      ),
-    ).toEqual([]);
+    const messages = hydrateSessionDetailMessages(
+      detail,
+      "session-article-workspace-artifacts",
+    );
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({
+      id: "session-article-workspace-artifacts-app-server-artifacts",
+      role: "assistant",
+      content: "已生成产物，可在工作台查看。",
+      artifacts: [
+        {
+          id: "artifact-article-1",
+          type: "document",
+          title: "公众号文章草稿",
+          status: "complete",
+          content: "历史恢复文章正文",
+          meta: {
+            openedFrom: "app_server_article_workspace",
+            artifactSchema: "artifact_document.v1",
+            previewText: "历史恢复文章正文",
+            filePath: ".lime/artifacts/article-workspace/article.artifact.json",
+            artifactPath:
+              ".lime/artifacts/article-workspace/article.artifact.json",
+            appServerArtifactSessionId: "session-article-workspace-artifacts",
+          },
+        },
+      ],
+    });
+    expect(messages[0]?.artifacts).toHaveLength(1);
+    expect(messages[0]?.artifacts?.[0]?.id).toBe("artifact-article-1");
   });
 
   it("历史恢复不应把 commentary 阶段消息合并进最终正文", () => {

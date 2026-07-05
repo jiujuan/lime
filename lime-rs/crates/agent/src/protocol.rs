@@ -409,6 +409,14 @@ pub enum AgentEvent {
         provider_request_id: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         provider_request_id_header: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        runtime_provider_backend: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        runtime_provider_selector: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        runtime_provider_protocol: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        runtime_provider_active_model: Option<String>,
     },
 
     #[serde(rename = "context_trace")]

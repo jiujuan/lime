@@ -1,4 +1,5 @@
 import type {
+  AgentEvent,
   AgentEventCostEstimated,
   AgentEventCostRecorded,
   AgentEventWarning,
@@ -11,6 +12,30 @@ import {
   buildAgentUiCostMetricEvent,
   buildAgentUiWarningEvent,
 } from "@limecloud/agent-runtime-projection";
+
+type DiagnosticProjectionEvent = Extract<
+  AgentEvent,
+  {
+    type: "warning" | "cost_estimated" | "cost_recorded";
+  }
+>;
+
+export function buildDiagnosticProjectionEvents(
+  event: DiagnosticProjectionEvent,
+  context: AgentUiProjectionContext,
+): AgentUiProjectionEvent[] {
+  switch (event.type) {
+    case "warning":
+      return [buildWarningEvent(event, context)];
+    case "cost_estimated":
+    case "cost_recorded":
+      return [buildCostMetricEvent(event, context)];
+    default: {
+      const exhaustive: never = event;
+      return exhaustive;
+    }
+  }
+}
 
 export function buildWarningEvent(
   event: AgentEventWarning,

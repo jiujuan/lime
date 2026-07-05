@@ -1,3 +1,4 @@
+mod agent_message;
 mod plan;
 
 use super::raw_string_field;
@@ -22,25 +23,25 @@ pub(super) fn thread_items_from_events(stored: &StoredSession) -> Vec<Value> {
     for event in &stored.events {
         match event.event_type.as_str() {
             "message.delta" | "message.delta_batch" | "message.batch" => {
-                if let Some(item) = agent_message_item(stored, event) {
-                    if let Some(stable_item_id) = agent_message_payload_id(event) {
+                if let Some(item) = agent_message::item_from_delta(stored, event) {
+                    if let Some(stable_item_id) = agent_message::payload_id(event) {
                         if let Some(existing_index) =
                             agent_message_item_by_id.get(&stable_item_id).copied()
                         {
-                            merge_agent_message_item(&mut items[existing_index], &item);
+                            agent_message::merge_item(&mut items[existing_index], &item);
                             continue;
                         }
                         agent_message_item_by_id.insert(stable_item_id, items.len());
                         items.push(item);
                         continue;
                     }
-                    if is_imported_agent_message_event(event) {
+                    if agent_message::is_imported_event(event) {
                         items.push(item);
                         continue;
                     }
                     if let Some(turn_id) = event.turn_id.as_deref() {
                         if let Some(existing_index) = last_text_item_by_turn.get(turn_id).copied() {
-                            merge_agent_message_item(&mut items[existing_index], &item);
+                            agent_message::merge_item(&mut items[existing_index], &item);
                             continue;
                         }
                         last_text_item_by_turn.insert(turn_id.to_string(), items.len());
@@ -54,7 +55,7 @@ pub(super) fn thread_items_from_events(stored: &StoredSession) -> Vec<Value> {
                 }
             }
             "item.started" | "item.updated" | "item.completed" => {
-                if upsert_agent_message_item_from_item_event(
+                if agent_message::upsert_from_item_event(
                     stored,
                     event,
                     &mut items,
@@ -183,49 +184,6 @@ fn item_timestamp(item: &Value) -> String {
 
 fn item_id(item: &Value) -> String {
     string_field(item, &["id"]).unwrap_or_default()
-}
-
-fn is_imported_agent_message_event(event: &AgentEvent) -> bool {
-    event
-        .payload
-        .get("imported")
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
-        || string_field(&event.payload, &["sourceClient", "source_client"])
-            .is_some_and(|value| !value.trim().is_empty())
-}
-
-fn agent_message_payload_id(event: &AgentEvent) -> Option<String> {
-    raw_string_field(
-        &event.payload,
-        &["id", "itemId", "item_id", "messageId", "message_id"],
-    )
-    .map(|value| value.trim().to_string())
-    .filter(|value| !value.is_empty())
-}
-
-fn upsert_agent_message_item_from_item_event(
-    stored: &StoredSession,
-    event: &AgentEvent,
-    items: &mut Vec<Value>,
-    agent_message_item_by_id: &mut HashMap<String, usize>,
-) -> bool {
-    let Some(next) = agent_message_item_from_item_event(stored, event) else {
-        return false;
-    };
-    let Some(item_id) = string_field(&next, &["id"]) else {
-        return true;
-    };
-    if let Some(existing_index) = agent_message_item_by_id.get(&item_id).copied() {
-        merge_agent_message_item(&mut items[existing_index], &next);
-        return true;
-    }
-    if next.get("text").and_then(Value::as_str).is_none() {
-        return true;
-    }
-    agent_message_item_by_id.insert(item_id, items.len());
-    items.push(next);
-    true
 }
 
 fn upsert_command_item(
@@ -829,205 +787,6 @@ fn command_string(payload: &Value) -> Option<String> {
     })
 }
 
-fn agent_message_item(stored: &StoredSession, event: &AgentEvent) -> Option<Value> {
-    let text = agent_message_text_from_payload(&event.payload)?;
-    let text = text.trim();
-    if text.is_empty() {
-        return None;
-    }
-    let phase = raw_string_field(&event.payload, &["phase", "messagePhase", "message_phase"])
-        .unwrap_or_else(|| "final".to_string());
-    Some(base_item(
-        stored,
-        event,
-        "agent_message",
-        &agent_message_status_from_delta_event(event),
-        json!({
-            "id": raw_string_field(
-                &event.payload,
-                &["id", "itemId", "item_id", "messageId", "message_id"],
-            ),
-            "text": text,
-            "phase": phase,
-            "metadata": event_metadata(event),
-        }),
-    ))
-}
-
-fn agent_message_item_from_item_event(stored: &StoredSession, event: &AgentEvent) -> Option<Value> {
-    let item = event.payload.get("item").unwrap_or(&event.payload);
-    let payload = item.get("payload").unwrap_or(item);
-    let item_type = string_field(payload, &["type", "kind"])
-        .or_else(|| string_field(item, &["type", "kind"]))?;
-    let role = string_field(payload, &["role"]).or_else(|| string_field(item, &["role"]));
-    if !is_agent_message_item_type(&item_type, role.as_deref()) {
-        return None;
-    }
-    let item_id = string_field(
-        item,
-        &["id", "itemId", "item_id", "messageId", "message_id"],
-    )
-    .or_else(|| {
-        string_field(
-            payload,
-            &["id", "itemId", "item_id", "messageId", "message_id"],
-        )
-    })?;
-    let text = agent_message_text_from_payload(payload)
-        .or_else(|| agent_message_text_from_payload(item))
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty());
-    let phase = raw_string_field(payload, &["phase", "messagePhase", "message_phase"])
-        .or_else(|| raw_string_field(item, &["phase", "messagePhase", "message_phase"]))
-        .unwrap_or_else(|| "final".to_string());
-    let status = string_field(item, &["status"])
-        .or_else(|| string_field(payload, &["status"]))
-        .map(|status| normalize_agent_message_status(&status))
-        .unwrap_or_else(|| {
-            if event.event_type == "item.completed" {
-                "completed".to_string()
-            } else {
-                "in_progress".to_string()
-            }
-        });
-
-    Some(base_item(
-        stored,
-        event,
-        "agent_message",
-        &status,
-        compact_json(json!({
-            "id": item_id,
-            "text": text,
-            "phase": phase,
-            "metadata": event_metadata(event),
-        })),
-    ))
-}
-
-fn agent_message_status_from_delta_event(event: &AgentEvent) -> String {
-    string_field(&event.payload, &["status"])
-        .map(|status| normalize_agent_message_status(&status))
-        .unwrap_or_else(|| {
-            if agent_message_payload_id(event).is_some() && !is_imported_agent_message_event(event)
-            {
-                "in_progress".to_string()
-            } else {
-                "completed".to_string()
-            }
-        })
-}
-
-fn is_agent_message_item_type(item_type: &str, role: Option<&str>) -> bool {
-    let normalized = item_type
-        .trim()
-        .replace('-', "_")
-        .replace(' ', "_")
-        .to_ascii_lowercase();
-    matches!(
-        normalized.as_str(),
-        "agent_message" | "agentmessage" | "assistant_message" | "assistantmessage"
-    ) || (normalized == "message"
-        && role.is_some_and(|role| role.trim().eq_ignore_ascii_case("assistant")))
-}
-
-fn normalize_agent_message_status(status: &str) -> String {
-    match status.trim() {
-        "running" | "pending" | "started" | "inProgress" | "in_progress" => {
-            "in_progress".to_string()
-        }
-        "completed" | "succeeded" | "success" => "completed".to_string(),
-        "failed" | "error" => "failed".to_string(),
-        _ => "in_progress".to_string(),
-    }
-}
-
-fn agent_message_text_from_payload(payload: &Value) -> Option<String> {
-    if let Some(text) = payload
-        .as_str()
-        .map(str::to_string)
-        .filter(|text| !text.is_empty())
-    {
-        return Some(text);
-    }
-    raw_string_field(
-        payload,
-        &[
-            "text",
-            "delta",
-            "content",
-            "message",
-            "outputText",
-            "output_text",
-        ],
-    )
-    .or_else(|| {
-        payload
-            .get("content")
-            .and_then(|content| raw_string_field(content, &["text", "message"]))
-    })
-    .or_else(|| {
-        for key in ["deltas", "messages", "items", "parts", "content"] {
-            let Some(values) = payload.get(key).and_then(Value::as_array) else {
-                continue;
-            };
-            let text = values
-                .iter()
-                .filter_map(agent_message_text_from_payload)
-                .collect::<String>();
-            if !text.is_empty() {
-                return Some(text);
-            }
-        }
-        None
-    })
-}
-
-fn merge_agent_message_item(existing: &mut Value, next: &Value) {
-    let Some(existing_object) = existing.as_object_mut() else {
-        return;
-    };
-    let next_source_event_type = next
-        .pointer("/metadata/source_event_type")
-        .and_then(Value::as_str);
-    if let Some(next_text) = next.get("text").and_then(Value::as_str) {
-        if let Some(existing_text) = existing_object.get_mut("text") {
-            let merged = if next_source_event_type == Some("item.completed") {
-                next_text.to_string()
-            } else {
-                format!(
-                    "{}{}",
-                    existing_text.as_str().unwrap_or_default(),
-                    next_text
-                )
-            };
-            *existing_text = Value::String(merged);
-        } else {
-            existing_object.insert("text".to_string(), Value::String(next_text.to_string()));
-        }
-    }
-    if let Some(status) = next.get("status").and_then(Value::as_str) {
-        let existing_is_completed = existing_object
-            .get("status")
-            .and_then(Value::as_str)
-            .is_some_and(|value| value == "completed");
-        if !existing_is_completed || status == "completed" {
-            existing_object.insert("status".to_string(), Value::String(status.to_string()));
-        }
-    }
-    if let Some(started_at) = next.get("started_at").cloned() {
-        existing_object
-            .entry("started_at".to_string())
-            .or_insert(started_at);
-    }
-    if let Some(updated_at) = next.get("updated_at").cloned() {
-        existing_object.insert("updated_at".to_string(), updated_at);
-    }
-    if let Some(completed_at) = next.get("completed_at").cloned() {
-        existing_object.insert("completed_at".to_string(), completed_at);
-    }
-}
-
 fn reasoning_item(stored: &StoredSession, event: &AgentEvent) -> Option<Value> {
     let text = raw_string_field(
         &event.payload,
@@ -1605,5 +1364,65 @@ mod tests {
         assert_eq!(items[0]["type"], "agent_message");
         assert_eq!(items[0]["status"], "completed");
         assert_eq!(items[0]["text"], "final answer");
+    }
+
+    #[test]
+    fn item_updated_agent_message_cumulative_text_replaces_delta_prefix() {
+        let stored = stored_session(vec![
+            agent_event(
+                "evt-agent-delta-1",
+                1,
+                "message.delta",
+                json!({
+                    "itemId": "agent-final-1",
+                    "text": "写作",
+                    "phase": "final_answer"
+                }),
+            ),
+            agent_event(
+                "evt-agent-update-1",
+                2,
+                "item.updated",
+                json!({
+                    "item": {
+                        "id": "agent-final-1",
+                        "type": "agent_message",
+                        "text": "写作思路：",
+                        "status": "in_progress"
+                    }
+                }),
+            ),
+            agent_event(
+                "evt-agent-delta-2",
+                3,
+                "message.delta",
+                json!({
+                    "itemId": "agent-final-1",
+                    "text": "先用",
+                    "phase": "final_answer"
+                }),
+            ),
+            agent_event(
+                "evt-agent-update-2",
+                4,
+                "item.updated",
+                json!({
+                    "item": {
+                        "id": "agent-final-1",
+                        "type": "agent_message",
+                        "text": "写作思路：先用两句话自然说明写作思路。",
+                        "status": "in_progress"
+                    }
+                }),
+            ),
+        ]);
+
+        let items = thread_items_from_events(&stored);
+
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["id"], "agent-final-1");
+        assert_eq!(items[0]["type"], "agent_message");
+        assert_eq!(items[0]["status"], "in_progress");
+        assert_eq!(items[0]["text"], "写作思路：先用两句话自然说明写作思路。");
     }
 }

@@ -5,25 +5,28 @@ use app_server_protocol::{
     ExecutionProcessStartResponse, ExecutionProcessStatus, ExecutionProcessStatusResponse,
     ExecutionProcessWriteStdinParams,
 };
-use lime_agent::agent_tools::execution::{
-    decide_tool_execution, ToolExecutionDecisionInput, ToolExecutionDecisionKind,
-    ToolExecutionResolverInput,
-};
-use lime_agent::agent_tools::tool_orchestrator::{
-    canonical_shell_tool_name, check_shell_tool_permissions, LiveExecutionProcessRegistry,
-};
 use serde_json::json;
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use tool_runtime::execution_decision::{
+    decide_tool_execution, ToolExecutionDecisionInput, ToolExecutionDecisionKind,
+    ToolExecutionPolicyDecisionOptions,
+};
+use tool_runtime::execution_policy::{
+    ToolExecutionPolicy, ToolExecutionRestrictionProfile, ToolExecutionSandboxProfile,
+    ToolExecutionWarningPolicy,
+};
+use tool_runtime::execution_policy_service::ToolExecutionResolverInput;
 use tool_runtime::execution_process::{
     start_local_execution_process, ExecutionOutputDelta as RuntimeExecutionOutputDelta,
     ExecutionOutputKind as RuntimeExecutionOutputKind,
     ExecutionProcessSnapshot as RuntimeExecutionProcessSnapshot,
-    ExecutionProcessStatus as RuntimeExecutionProcessStatus, LocalExecutionProcessControlHandle,
-    LocalExecutionRequest,
+    ExecutionProcessStatus as RuntimeExecutionProcessStatus, LiveExecutionProcessRegistry,
+    LocalExecutionProcessControlHandle, LocalExecutionRequest,
 };
-use tool_runtime::shell::shell_command_text_from_argv;
+use tool_runtime::shell::{is_shell_tool_name, shell_command_text_from_argv};
+use tool_runtime::shell_permission::check_shell_command_permission;
 
 const DEFAULT_DRAIN_LIMIT: usize = 128;
 const MAX_DRAIN_LIMIT: usize = 1024;
@@ -145,20 +148,23 @@ impl ExecutionProcessServer {
         let canonical_tool_name = canonical_shell_tool_name(&params.tool_name)
             .ok_or(ExecutionProcessError::UnsupportedTool)?;
         let command_text = shell_command_text_from_argv(&params.command);
-        let decision = decide_tool_execution(ToolExecutionDecisionInput {
-            tool_name: canonical_tool_name,
-            params: &json!({ "command": command_text }),
-            working_directory: &working_directory,
-            surface: "execution_process",
-            auto_mode: false,
-            bypass_restrictions: false,
-            approval_policy: params.approval_policy.as_deref(),
-            requested_sandbox_policy: params.sandbox_policy.as_deref(),
-            resolver_input: ToolExecutionResolverInput {
-                persisted_policy: None,
-                request_metadata: params.runtime_metadata.as_ref(),
+        let decision = decide_tool_execution(
+            ToolExecutionDecisionInput {
+                tool_name: canonical_tool_name,
+                params: &json!({ "command": command_text }),
+                working_directory: &working_directory,
+                surface: "execution_process",
+                auto_mode: false,
+                bypass_restrictions: false,
+                approval_policy: params.approval_policy.as_deref(),
+                requested_sandbox_policy: params.sandbox_policy.as_deref(),
+                resolver_input: ToolExecutionResolverInput {
+                    persisted_policy: None,
+                    request_metadata: params.runtime_metadata.as_ref(),
+                },
             },
-        });
+            app_server_tool_execution_policy_options(),
+        );
         match decision.kind {
             ToolExecutionDecisionKind::Allow => {}
             ToolExecutionDecisionKind::RequiresApproval
@@ -173,12 +179,11 @@ impl ExecutionProcessServer {
         if decision.requires_sandboxed_execution() {
             return Err(ExecutionProcessError::SandboxRequired);
         }
-        check_shell_tool_permissions(
+        validate_shell_execution_process_command(
             canonical_tool_name,
             &command_text,
-            working_directory.clone(),
+            &working_directory,
         )
-        .await
         .map_err(ExecutionProcessError::Policy)?;
 
         {
@@ -388,6 +393,55 @@ impl LiveExecutionProcessRegistry for ExecutionProcessServer {
         self.finish_process(snapshot)
             .map_err(|error| error.to_string())
     }
+}
+
+fn canonical_shell_tool_name(tool_name: &str) -> Option<&'static str> {
+    if !is_shell_tool_name(tool_name) {
+        return None;
+    }
+    if normalized_tool_name(tool_name).contains("powershell") {
+        return Some("PowerShell");
+    }
+    Some("Bash")
+}
+
+fn app_server_tool_execution_policy_options() -> ToolExecutionPolicyDecisionOptions {
+    ToolExecutionPolicyDecisionOptions {
+        default_policy_for_tool: app_server_default_tool_execution_policy,
+        tool_names_match: app_server_tool_names_match,
+    }
+}
+
+fn app_server_default_tool_execution_policy(tool_name: &str) -> ToolExecutionPolicy {
+    if canonical_shell_tool_name(tool_name).is_some() {
+        return ToolExecutionPolicy {
+            warning_policy: ToolExecutionWarningPolicy::ShellCommandRisk,
+            restriction_profile: ToolExecutionRestrictionProfile::WorkspaceShellCommand,
+            sandbox_profile: ToolExecutionSandboxProfile::WorkspaceCommand,
+        };
+    }
+    ToolExecutionPolicy::default()
+}
+
+fn app_server_tool_names_match(left: &str, right: &str) -> bool {
+    normalized_tool_name(left) == normalized_tool_name(right)
+}
+
+fn validate_shell_execution_process_command(
+    tool_name: &str,
+    command_text: &str,
+    working_directory: &PathBuf,
+) -> Result<(), String> {
+    check_shell_command_permission(tool_name, command_text, working_directory)
+        .into_result_without_confirmation()
+}
+
+fn normalized_tool_name(tool_name: &str) -> String {
+    tool_name
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .map(|character| character.to_ascii_lowercase())
+        .collect()
 }
 
 fn push_output(state: &mut ExecutionProcessState, delta: ExecutionProcessOutputDelta) {

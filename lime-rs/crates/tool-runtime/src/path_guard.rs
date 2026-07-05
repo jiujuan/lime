@@ -35,43 +35,29 @@ pub fn evaluate_path_mutations(
     let normalized_cwd = normalize_path_lexically(cwd);
     let protected_git_root = normalized_cwd.join(".git");
     let home_dir = dirs::home_dir().map(|path| normalize_path_lexically(&path));
-
     let mut protected_paths = Vec::new();
     let mut outside_workspace_paths = Vec::new();
     let mut dynamic_paths = Vec::new();
 
     for candidate in candidates {
         let raw = candidate.raw_path.trim();
-        if raw.is_empty() {
+        if raw.is_empty() || is_safe_sink_path(raw) {
             continue;
         }
-
-        if is_safe_sink_path(raw) {
-            continue;
-        }
-
         if path_looks_dynamic(raw) {
             dynamic_paths.push(raw.to_string());
             continue;
         }
-
         let Some(resolved_path) = resolve_candidate_path(raw, &normalized_cwd, home_dir.as_deref())
         else {
             continue;
         };
-
-        if is_protected_path(
-            &resolved_path,
-            &normalized_cwd,
-            &protected_git_root,
-            home_dir.as_deref(),
-        ) {
+        if is_protected_path(&resolved_path, &protected_git_root, home_dir.as_deref()) {
             if !protected_paths.contains(&resolved_path) {
                 protected_paths.push(resolved_path);
             }
             continue;
         }
-
         if !path_within(&resolved_path, &normalized_cwd)
             && !outside_workspace_paths.contains(&resolved_path)
         {
@@ -88,8 +74,18 @@ pub fn evaluate_path_mutations(
     if !dynamic_paths.is_empty() {
         return Some(PathGuardFinding::DynamicPaths(dynamic_paths));
     }
-
     None
+}
+
+pub fn resolve_static_path_candidate(raw: &str, cwd: &Path) -> Option<PathBuf> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() || is_safe_sink_path(trimmed) || path_looks_dynamic(trimmed) {
+        return None;
+    }
+
+    let normalized_cwd = normalize_path_lexically(cwd);
+    let home_dir = dirs::home_dir().map(|path| normalize_path_lexically(&path));
+    resolve_candidate_path(trimmed, &normalized_cwd, home_dir.as_deref())
 }
 
 pub fn summarize_paths(paths: &[PathBuf]) -> String {
@@ -105,17 +101,6 @@ pub fn summarize_raw_paths(paths: &[String]) -> String {
     paths.iter().take(3).cloned().collect::<Vec<_>>().join(", ")
 }
 
-pub fn resolve_static_path_candidate(raw: &str, cwd: &Path) -> Option<PathBuf> {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() || is_safe_sink_path(trimmed) || path_looks_dynamic(trimmed) {
-        return None;
-    }
-
-    let normalized_cwd = normalize_path_lexically(cwd);
-    let home_dir = dirs::home_dir().map(|path| normalize_path_lexically(&path));
-    resolve_candidate_path(trimmed, &normalized_cwd, home_dir.as_deref())
-}
-
 fn path_looks_dynamic(raw: &str) -> bool {
     let trimmed = raw.trim();
     trimmed.contains('$')
@@ -128,7 +113,7 @@ fn path_looks_dynamic(raw: &str) -> bool {
         || trimmed.contains('`')
         || trimmed.contains("$(")
         || trimmed.contains("${")
-        || trimmed.contains("%")
+        || trimmed.contains('%')
 }
 
 fn is_safe_sink_path(raw: &str) -> bool {
@@ -147,11 +132,9 @@ fn resolve_candidate_path(raw: &str, cwd: &Path, home_dir: Option<&Path>) -> Opt
         .trim()
         .trim_matches(|ch| matches!(ch, '"' | '\'' | '`'))
         .trim_end_matches(|ch: char| matches!(ch, ',' | ';' | ')' | '('));
-
     if cleaned.is_empty() {
         return None;
     }
-
     let expanded = if cleaned == "~" || cleaned.starts_with("~/") || cleaned.starts_with("~\\") {
         let home = home_dir?;
         let suffix = cleaned.trim_start_matches('~');
@@ -159,20 +142,17 @@ fn resolve_candidate_path(raw: &str, cwd: &Path, home_dir: Option<&Path>) -> Opt
     } else {
         PathBuf::from(cleaned)
     };
-
     let resolved = if expanded.is_absolute() {
         expanded
     } else {
         cwd.join(expanded)
     };
-
     Some(normalize_path_lexically(&resolved))
 }
 
 fn normalize_path_lexically(path: &Path) -> PathBuf {
     let mut normalized = PathBuf::new();
     let is_absolute = path.is_absolute();
-
     for component in path.components() {
         match component {
             Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
@@ -186,7 +166,6 @@ fn normalize_path_lexically(path: &Path) -> PathBuf {
             Component::Normal(part) => normalized.push(part),
         }
     }
-
     normalized
 }
 
@@ -194,26 +173,16 @@ fn path_within(path: &Path, cwd: &Path) -> bool {
     path == cwd || path.starts_with(cwd)
 }
 
-fn is_protected_path(
-    path: &Path,
-    _cwd: &Path,
-    protected_git_root: &Path,
-    home_dir: Option<&Path>,
-) -> bool {
+fn is_protected_path(path: &Path, protected_git_root: &Path, home_dir: Option<&Path>) -> bool {
     if path == Path::new("/") {
         return true;
     }
-
-    if let Some(home) = home_dir {
-        if path == home {
-            return true;
-        }
+    if home_dir.is_some_and(|home| path == home) {
+        return true;
     }
-
     if path == protected_git_root || path.starts_with(protected_git_root) {
         return true;
     }
-
     #[cfg(not(target_os = "windows"))]
     {
         for protected_prefix in [
@@ -236,7 +205,6 @@ fn is_protected_path(
             }
         }
     }
-
     #[cfg(target_os = "windows")]
     {
         for protected_prefix in [
@@ -250,7 +218,6 @@ fn is_protected_path(
             }
         }
     }
-
     false
 }
 

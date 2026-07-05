@@ -16,9 +16,9 @@ use crate::config::Config;
 use crate::conversation::message::{Message, MessageContent};
 use crate::model::ModelConfig;
 use crate::providers::base::ConfigKey;
-use crate::subprocess::configure_command_no_window;
 use rmcp::model::Role;
 use rmcp::model::Tool;
+use tool_runtime::subprocess::configure_command_no_window;
 
 pub const GEMINI_CLI_DEFAULT_MODEL: &str = "gemini-2.5-pro";
 pub const GEMINI_CLI_KNOWN_MODELS: &[&str] = &[

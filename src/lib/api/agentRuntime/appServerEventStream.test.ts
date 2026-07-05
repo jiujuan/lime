@@ -69,6 +69,48 @@ describe("appServerEventStream", () => {
     });
   });
 
+  it("provider trace 应透传 runtime provider handle metadata", () => {
+    const payload = projectAppServerAgentEventPayload({
+      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "event-provider-trace",
+          sessionId: "session-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          sequence: 12,
+          timestamp: "2026-07-05T10:00:00.000Z",
+          type: "provider.first_text_delta.received",
+          payload: {
+            stage: "first_text_delta_received",
+            provider: "openai",
+            model: "gpt-5.3-codex",
+            attempt: 1,
+            elapsed_ms: 1400,
+            text_chars: 12,
+            status: "running",
+            runtime_provider_backend: "aster_compat",
+            runtime_provider_selector: "codex",
+            runtime_provider_protocol: "responses",
+            runtime_provider_active_model: "gpt-5.3-codex",
+          },
+        },
+      },
+    } as never);
+
+    expect(payload).toMatchObject({
+      type: "provider_trace",
+      runtime_event_type: "provider.first_text_delta.received",
+      stage: "first_text_delta_received",
+      provider: "openai",
+      model: "gpt-5.3-codex",
+      runtime_provider_backend: "aster_compat",
+      runtime_provider_selector: "codex",
+      runtime_provider_protocol: "responses",
+      runtime_provider_active_model: "gpt-5.3-codex",
+    });
+  });
+
   it("artifact.snapshot 应保留 sidecar 读取所需 metadata", () => {
     const payload = projectAppServerAgentEventPayload({
       method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,

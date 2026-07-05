@@ -628,7 +628,7 @@ fn accepts_verified_cloud_release_signature_evidence_for_worker() {
 }
 
 #[test]
-fn accepts_optional_seeded_cloud_release_signature_warning_for_worker() {
+fn rejects_optional_seeded_cloud_release_signature_warning_for_worker() {
     let installed_state = json!({
         "schemaVersion": "plugin.installed-state.v1",
         "appId": "content-factory-app",
@@ -651,8 +651,12 @@ fn accepts_optional_seeded_cloud_release_signature_warning_for_worker() {
         }
     });
 
-    validate_worker_cloud_release_signature(&installed_state)
-        .expect("optional seeded signature warning should not block worker");
+    let error = validate_worker_cloud_release_signature(&installed_state)
+        .expect_err("optional seeded signature warning must not launch worker");
+    let message = error.to_string();
+    assert!(message.contains("signature policy is not required"));
+    assert!(message.contains("signature is not verified"));
+    assert!(message.contains("release evidence is not ready"));
 }
 
 #[test]

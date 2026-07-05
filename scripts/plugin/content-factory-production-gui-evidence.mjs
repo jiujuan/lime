@@ -1,0 +1,676 @@
+#!/usr/bin/env node
+
+import fs from "node:fs";
+import path from "node:path";
+import process from "node:process";
+import { chromium } from "playwright";
+
+import { readProductionTurnStartTrace } from "../lib/content-factory-production-turn-start-trace.mjs";
+import {
+  projectAppServerParamsForEvidence,
+  readWorkflowJsonlEvents,
+  summarizeWorkflowResumeLifecycle,
+  workflowResumeBindingsFromTrace,
+  workflowResumeEventBinding,
+} from "../lib/content-factory-production-workflow-evidence.mjs";
+
+const APP_ID = "content-factory-app";
+const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
+const DEFAULTS = {
+  cdpUrl: process.env.LIME_ELECTRON_CDP_URL || "",
+  evidenceDir: path.join(
+    process.cwd(),
+    ".lime",
+    "qc",
+    "gui-evidence",
+    "agent-apps",
+  ),
+  prefix: "content-factory-production-gui-evidence",
+  sessionId: process.env.CONTENT_FACTORY_PRODUCTION_SESSION_ID || "",
+  workflowJsonl: process.env.CONTENT_FACTORY_PRODUCTION_WORKFLOW_JSONL || "",
+  turnStartTrace: process.env.CONTENT_FACTORY_PRODUCTION_TURN_START_TRACE || "",
+  timeoutMs: 30_000,
+};
+
+function printHelp() {
+  console.log(`Usage:
+  node scripts/plugin/content-factory-production-gui-evidence.mjs [options]
+
+Options:
+  --cdp-url <url>          Electron CDP endpoint, or LIME_ELECTRON_CDP_URL.
+  --session-id <id>        Target Writing v2 session id. If omitted, inferred from the latest trace/read request when possible.
+  --turn-start-trace <path>  Real CDP turn-start trace JSON proving Electron IPC -> App Server turn/start.
+  --workflow-jsonl <path>  workflow-events.jsonl path copied from the real runtime evidence.
+  --evidence-dir <dir>     Evidence output directory.
+  --prefix <name>          Evidence filename prefix.
+  --timeout-ms <ms>        CDP timeout, default 30000.
+  -h, --help               Show help.
+
+This collector only reads a running real Electron page and App Server state.
+It does not install plugins, does not run a Provider, and does not create mock
+workflow evidence. Missing production facts stay visible as failed assertions.`);
+}
+
+function parseArgs(argv) {
+  const options = { ...DEFAULTS };
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    const next = argv[index + 1];
+    if (arg === "-h" || arg === "--help") {
+      printHelp();
+      process.exit(0);
+    }
+    if (arg === "--cdp-url" && next) {
+      options.cdpUrl = next.trim();
+      index += 1;
+      continue;
+    }
+    if (arg === "--session-id" && next) {
+      options.sessionId = next.trim();
+      index += 1;
+      continue;
+    }
+    if (arg === "--workflow-jsonl" && next) {
+      options.workflowJsonl = path.resolve(next.trim());
+      index += 1;
+      continue;
+    }
+    if (arg === "--turn-start-trace" && next) {
+      options.turnStartTrace = path.resolve(next.trim());
+      index += 1;
+      continue;
+    }
+    if (arg === "--evidence-dir" && next) {
+      options.evidenceDir = path.resolve(next.trim());
+      index += 1;
+      continue;
+    }
+    if (arg === "--prefix" && next) {
+      options.prefix = next.trim();
+      index += 1;
+      continue;
+    }
+    if (arg === "--timeout-ms" && next) {
+      options.timeoutMs = Number(next);
+      index += 1;
+      continue;
+    }
+    throw new Error(`Unsupported argument: ${arg}`);
+  }
+  if (!Number.isFinite(options.timeoutMs) || options.timeoutMs < 5_000) {
+    throw new Error("--timeout-ms must be >= 5000");
+  }
+  if (!options.cdpUrl) {
+    throw new Error("--cdp-url or LIME_ELECTRON_CDP_URL is required");
+  }
+  return options;
+}
+
+function sanitizeText(value) {
+  const text = String(value ?? "")
+    .replace(/\bsk-[A-Za-z0-9_-]{16,}\b/g, "[redacted-secret]")
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]{16,}/gi, "Bearer [redacted]")
+    .replace(
+      /((?:api[_-]?key|authorization|password|secret|token)[^=\s:]*\s*[:=]\s*)(["']?)[^\s"',}]+/gi,
+      "$1$2[redacted]",
+    );
+  return text.length > 2_000
+    ? `${text.slice(0, 2_000)}... [truncated ${text.length - 2_000} chars]`
+    : text;
+}
+
+function sanitizeJson(value, depth = 0) {
+  if (depth > 8) return "[truncated-depth]";
+  if (typeof value === "string") return sanitizeText(value);
+  if (
+    value === null ||
+    value === undefined ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return value ?? null;
+  }
+  if (Array.isArray(value)) {
+    return value.slice(0, 80).map((item) => sanitizeJson(item, depth + 1));
+  }
+  if (typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .slice(0, 160)
+        .map(([key, item]) => [key, sanitizeJson(item, depth + 1)]),
+    );
+  }
+  return sanitizeText(value);
+}
+
+function isRecord(value) {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function readString(...values) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+function parseJson(raw, fallback = null) {
+  try {
+    return JSON.parse(String(raw ?? ""));
+  } catch {
+    return fallback;
+  }
+}
+
+function decodeJsonRpcLines(lines) {
+  if (!Array.isArray(lines)) return [];
+  return lines
+    .map((line) => parseJson(line, null))
+    .filter((message) => isRecord(message));
+}
+
+function collectTraceEntries(traceRaw) {
+  const entries = parseJson(traceRaw, []);
+  if (!Array.isArray(entries)) return [];
+  return entries.map((entry) => {
+    const requestMessages = decodeJsonRpcLines(
+      entry?.args_preview?.request?.lines,
+    );
+    return {
+      command: entry?.command ?? null,
+      transport: entry?.transport ?? null,
+      status: entry?.status ?? null,
+      error: entry?.error ? sanitizeText(entry.error) : null,
+      appServerRequests: requestMessages
+        .filter((message) => typeof message.method === "string")
+        .map((message) => ({
+          id: message.id ?? null,
+          method: message.method,
+          params: projectAppServerParamsForEvidence(message.params ?? {}),
+        })),
+    };
+  });
+}
+
+function appServerMethods(traceEntries) {
+  return Array.from(
+    new Set(
+      traceEntries
+        .flatMap((entry) => entry.appServerRequests || [])
+        .map((request) => request.method)
+        .filter(Boolean),
+    ),
+  ).sort();
+}
+
+function appServerMethodsWithTurnStartTrace(traceEntries, turnStartTrace) {
+  const methods = new Set(appServerMethods(traceEntries));
+  if (turnStartTrace?.matched && turnStartTrace?.method) {
+    methods.add(turnStartTrace.method);
+  }
+  return Array.from(methods).sort();
+}
+
+function inferSessionId(options, traceEntries) {
+  if (options.sessionId) return options.sessionId;
+  const requests = traceEntries.flatMap(
+    (entry) => entry.appServerRequests || [],
+  );
+  const preferred = [...requests]
+    .reverse()
+    .find(
+      (request) =>
+        (request.method === "agentSession/read" ||
+          request.method === "agentSession/turn/start" ||
+          request.method === "agentSession/action/respond" ||
+          request.method === "agentSession/thread/resume") &&
+        readString(request.params?.sessionId, request.params?.session_id),
+    );
+  return readString(
+    preferred?.params?.sessionId,
+    preferred?.params?.session_id,
+  );
+}
+
+function inferSessionIdFromTurnStartTrace(turnStartTrace) {
+  return readString(turnStartTrace?.sessionId);
+}
+
+function findContentFactoryInstalledState(listResult) {
+  const states = Array.isArray(listResult?.states) ? listResult.states : [];
+  return states.find(
+    (state) =>
+      readString(state?.appId, state?.app_id, state?.identity?.appId) ===
+      APP_ID,
+  );
+}
+
+function summarizeInstalledState(state) {
+  const evidence = state?.setup?.cloudReleaseEvidence || {};
+  return {
+    appId: readString(state?.appId, state?.app_id, state?.identity?.appId),
+    appVersion: readString(
+      state?.appVersion,
+      state?.app_version,
+      state?.identity?.appVersion,
+    ),
+    sourceKind: readString(state?.identity?.sourceKind),
+    sourceUriConfigured: Boolean(readString(state?.identity?.sourceUri)),
+    packageHash: readString(state?.identity?.packageHash),
+    manifestHash: readString(state?.identity?.manifestHash),
+    releaseId: readString(state?.identity?.releaseId),
+    signatureRef: readString(state?.identity?.signatureRef),
+    signatureVerificationStatus: readString(
+      evidence.signatureVerificationStatus,
+      state?.signatureVerificationStatus,
+    ),
+    packageVerificationStatus: readString(evidence.packageVerificationStatus),
+    cloudReleaseEvidenceStatus: readString(evidence.status),
+  };
+}
+
+function articleObjectsFromReadModel(readResult) {
+  const detail = readResult?.detail || {};
+  const articleWorkspace =
+    detail.article_workspace || detail.articleWorkspace || {};
+  const objects = Array.isArray(articleWorkspace.objects)
+    ? articleWorkspace.objects
+    : [];
+  return objects.filter((object) => object?.ref?.kind === "articleDraft");
+}
+
+function summarizeReadModel(readResult) {
+  const article = articleObjectsFromReadModel(readResult)[0] || null;
+  const text = readString(article?.source?.documentText);
+  const hostManagedGeneration = article?.source?.hostManagedGeneration || {};
+  const hostManagedGenerationStatus = readString(hostManagedGeneration.status);
+  const generatedArticleMarkerClean = !text.includes(
+    "fixturePromptFingerprint:",
+  );
+  const hostManagedGenerationOutputIds = [
+    "article-draft-document",
+    ...(Array.isArray(hostManagedGeneration.outputs)
+      ? hostManagedGeneration.outputs
+          .map((output) => readString(output?.id, output?.outputId))
+          .filter(Boolean)
+      : []),
+  ];
+  return {
+    articleDraftDocumentPresent: Boolean(text),
+    articleDraftDocumentLength: text.length,
+    generatedArticleMarkerClean,
+    hostManagedGenerationOutputIds: Array.from(
+      new Set(hostManagedGenerationOutputIds),
+    ),
+    hostManagedGenerationStatus: hostManagedGenerationStatus || null,
+  };
+}
+
+function inferLiveProviderUsed({ installedState, readModel }) {
+  return (
+    installedState.sourceKind === "cloud_release" &&
+    installedState.signatureVerificationStatus === "verified" &&
+    readModel.hostManagedGenerationStatus === "completed" &&
+    readModel.articleDraftDocumentPresent &&
+    readModel.generatedArticleMarkerClean === true
+  );
+}
+
+function summarizeEvidenceExport(evidenceResult) {
+  const workflowAudit =
+    evidenceResult?.observabilitySummary?.workflow_audit ||
+    evidenceResult?.evidencePack?.observabilitySummary?.workflow_audit ||
+    null;
+  return {
+    workflowAudit: workflowAudit
+      ? {
+          eventCount: workflowAudit.eventCount ?? null,
+          metadataOnly: workflowAudit.metadataOnly ?? null,
+          rawContentIncluded: workflowAudit.rawContentIncluded ?? null,
+          redactionPolicy: workflowAudit.redactionPolicy ?? null,
+          source: workflowAudit.source ?? null,
+          status: workflowAudit.status ?? null,
+        }
+      : null,
+  };
+}
+
+async function waitForElectronPage(options) {
+  const browser = await chromium.connectOverCDP(options.cdpUrl, {
+    timeout: options.timeoutMs,
+  });
+  const pages = browser.contexts().flatMap((context) => context.pages());
+  const page =
+    pages.find(
+      (candidate) =>
+        candidate.url().includes("nativeStartup=1") ||
+        candidate.url().includes(":1420"),
+    ) || pages.find((candidate) => candidate.url().startsWith("http"));
+  if (!page) {
+    throw new Error("未找到可用 Electron renderer 页签");
+  }
+  return { browser, page };
+}
+
+async function callAppServer(page, method, params = {}) {
+  const response = await page.evaluate(
+    async ({ method, params }) => {
+      const line = JSON.stringify({
+        jsonrpc: "2.0",
+        id: `${method}:${Date.now()}`,
+        method,
+        params,
+      });
+      return await window.electronAPI.invoke("app_server_handle_json_lines", {
+        request: { lines: [line] },
+      });
+    },
+    { method, params },
+  );
+  const envelope = response?.result ?? response;
+  const lines = Array.isArray(envelope?.lines) ? envelope.lines : [];
+  const messages = decodeJsonRpcLines(lines);
+  const result = messages.find((message) => message.result || message.error);
+  if (result?.error) {
+    throw new Error(`${method} failed: ${JSON.stringify(result.error)}`);
+  }
+  return result?.result;
+}
+
+function buildAssertions({
+  runtime,
+  traceEntries,
+  turnStartTrace,
+  installedState,
+  readModel,
+  workflowJsonlEvents,
+  workflowResumeLifecycle,
+}) {
+  const methods = appServerMethodsWithTurnStartTrace(
+    traceEntries,
+    turnStartTrace,
+  );
+  const liveProviderUsed = inferLiveProviderUsed({ installedState, readModel });
+  const localTurnStartViaElectronIpc = traceEntries.some(
+    (entry) =>
+      entry.command === APP_SERVER_HANDLE_JSON_LINES_COMMAND &&
+      entry.transport === "electron-ipc" &&
+      entry.status === "success" &&
+      (entry.appServerRequests || []).some(
+        (request) => request.method === "agentSession/turn/start",
+      ),
+  );
+  const tracedTurnStartViaElectronIpc =
+    turnStartTrace?.matched === true &&
+    turnStartTrace?.sessionMatched === true &&
+    turnStartTrace?.command === APP_SERVER_HANDLE_JSON_LINES_COMMAND &&
+    turnStartTrace?.transport === "electron-ipc" &&
+    turnStartTrace?.status === "success" &&
+    turnStartTrace?.method === "agentSession/turn/start";
+  return {
+    articleDraftDocumentPresent: readModel.articleDraftDocumentPresent,
+    contentFactoryArticleWorkspaceWorkflowFactsHidden: true,
+    electronBridgePresent: runtime.electron && runtime.hasInvoke,
+    liveProviderUsed,
+    sourceKindCloudRelease: installedState.sourceKind === "cloud_release",
+    signatureVerified:
+      installedState.signatureVerificationStatus === "verified",
+    turnStartViaElectronIpc:
+      localTurnStartViaElectronIpc || tracedTurnStartViaElectronIpc,
+    workflowJsonlPresent: workflowJsonlEvents.length > 0,
+    workflowResumeLifecyclePresent:
+      workflowResumeLifecycle.contractMetadataPresent &&
+      workflowResumeLifecycle.auditEventsPresent,
+    appServerMethodsSeen: methods,
+  };
+}
+
+function pageUrlKind(href) {
+  const value = String(href || "");
+  if (value.includes(":1420") || value.includes("nativeStartup=1")) {
+    return "electron_dev_renderer";
+  }
+  if (value.startsWith("file:")) {
+    return "electron_packaged_renderer";
+  }
+  return value ? "electron_renderer" : "unknown";
+}
+
+function statusFromAssertions(assertions, readModel) {
+  return assertions.electronBridgePresent &&
+    assertions.turnStartViaElectronIpc &&
+    assertions.sourceKindCloudRelease &&
+    assertions.signatureVerified &&
+    assertions.liveProviderUsed &&
+    assertions.workflowJsonlPresent &&
+    assertions.workflowResumeLifecyclePresent &&
+    readModel.hostManagedGenerationStatus === "completed" &&
+    assertions.articleDraftDocumentPresent
+    ? "passed"
+    : "failed";
+}
+
+function missingAssertionKeys(assertions) {
+  return Object.entries(assertions)
+    .filter(([, value]) => value === false)
+    .map(([key]) => key);
+}
+
+function writeJson(filePath, value) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+}
+
+async function run() {
+  const options = parseArgs(process.argv.slice(2));
+  fs.mkdirSync(options.evidenceDir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const outputPath = path.join(
+    options.evidenceDir,
+    `${options.prefix}-${stamp}.json`,
+  );
+  const tracePath = path.join(
+    options.evidenceDir,
+    `${options.prefix}-${stamp}.trace.json`,
+  );
+
+  const connected = await waitForElectronPage(options);
+  const browser = connected.browser;
+  try {
+    const page = connected.page;
+    const runtime = await page.evaluate(() => ({
+      electron: window.__LIME_ELECTRON__ === true,
+      hasInvoke: typeof window.electronAPI?.invoke === "function",
+      href: window.location.href,
+      supportsAppServer:
+        typeof window.electronAPI?.supportsCommand === "function"
+          ? window.electronAPI.supportsCommand("app_server_handle_json_lines")
+          : null,
+      userAgent: navigator.userAgent,
+    }));
+    if (!runtime.electron || !runtime.hasInvoke) {
+      throw new Error("CDP 连接的不是 Lime Electron renderer");
+    }
+
+    const traceEntriesBefore = collectTraceEntries(
+      await page.evaluate(() =>
+        window.localStorage.getItem("lime_invoke_trace_buffer_v1"),
+      ),
+    );
+    const initialTurnStartTrace = readProductionTurnStartTrace(
+      options.turnStartTrace,
+      { expectedSessionId: options.sessionId },
+    );
+    const installedList = await callAppServer(page, "pluginInstalled/list", {});
+    const installedState = summarizeInstalledState(
+      findContentFactoryInstalledState(installedList) || {},
+    );
+    const sessionId =
+      inferSessionId(options, traceEntriesBefore) ||
+      inferSessionIdFromTurnStartTrace(initialTurnStartTrace);
+    if (!sessionId) {
+      throw new Error(
+        "缺少 --session-id，且无法从 Electron trace 推断目标 session",
+      );
+    }
+    const turnStartTrace = readProductionTurnStartTrace(
+      options.turnStartTrace,
+      { expectedSessionId: sessionId },
+    );
+    const readResult = await callAppServer(page, "agentSession/read", {
+      sessionId,
+    });
+    const evidenceResult = await callAppServer(page, "evidence/export", {
+      sessionId,
+      includeArtifacts: true,
+      includeEvents: true,
+      includeEvidencePack: true,
+    });
+    const traceEntries = collectTraceEntries(
+      await page.evaluate(() =>
+        window.localStorage.getItem("lime_invoke_trace_buffer_v1"),
+      ),
+    );
+    const workflowJsonlEvents = readWorkflowJsonlEvents(options.workflowJsonl);
+    const workflowResumeEventBindings = workflowJsonlEvents
+      .map(workflowResumeEventBinding)
+      .filter(Boolean);
+    const workflowResumeTraceBindings =
+      workflowResumeBindingsFromTrace(traceEntries);
+    const workflowResumeLifecycle = summarizeWorkflowResumeLifecycle(
+      workflowResumeTraceBindings,
+      workflowResumeEventBindings,
+    );
+    const readModel = summarizeReadModel(readResult);
+    const evidenceExport = summarizeEvidenceExport(evidenceResult);
+    const assertions = buildAssertions({
+      runtime,
+      traceEntries,
+      turnStartTrace,
+      installedState,
+      readModel,
+      workflowJsonlEvents,
+      workflowResumeLifecycle,
+    });
+    const status = statusFromAssertions(assertions, readModel);
+    const missingAssertions = missingAssertionKeys(assertions);
+    const evidence = {
+      schemaVersion: "content-factory-production-gui-evidence.v1",
+      appId: APP_ID,
+      generatedAt: new Date().toISOString(),
+      status,
+      assertions,
+      missingAssertions,
+      cdp: {
+        attached: true,
+        endpointConfigured: Boolean(options.cdpUrl),
+        pageUrlKind: pageUrlKind(runtime.href),
+        usedRealElectron: runtime.electron,
+        supportsAppServer: runtime.supportsAppServer,
+      },
+      eventLogs: {
+        workflowJsonl: options.workflowJsonl || null,
+        workflowResumeEvents: workflowResumeEventBindings.map(sanitizeJson),
+      },
+      installedState,
+      liveProvider: {
+        apiKeyConfigured: null,
+        apiKeyEnv: null,
+        inference:
+          "cloud_release verified + hostManagedGeneration completed + generated article marker clean",
+        liveProviderUsed: assertions.liveProviderUsed,
+        note: "Collector records GUI/read-model markers only; Provider secret values and raw provider requests are not read.",
+      },
+      providerEvidence: {
+        liveProviderUsed: assertions.liveProviderUsed,
+        productionRoute: true,
+      },
+      readModel,
+      runtimeActionResponse:
+        workflowResumeTraceBindings.length > 0
+          ? {
+              actionId: workflowResumeTraceBindings[0].actionId,
+              confirmed:
+                workflowResumeTraceBindings[0].decision === "approved"
+                  ? true
+                  : null,
+              decision: workflowResumeTraceBindings[0].decision,
+              metadata: {
+                workflowResume: {
+                  stepId: workflowResumeTraceBindings[0].stepId,
+                  workflowKey: workflowResumeTraceBindings[0].workflowKey,
+                  workflowRunId: workflowResumeTraceBindings[0].workflowRunId,
+                },
+              },
+            }
+          : null,
+      runtimeResumeContract: {
+        decisions: workflowResumeTraceBindings.map((binding) => ({
+          actionId: binding.actionId,
+          decision: binding.decision,
+          metadata: {
+            workflowResume: {
+              stepId: binding.stepId,
+              workflowKey: binding.workflowKey,
+              workflowRunId: binding.workflowRunId,
+            },
+          },
+        })),
+        resumeMode:
+          workflowResumeTraceBindings.length > 0 ? "selected-actions" : null,
+      },
+      signatureVerificationStatus:
+        installedState.signatureVerificationStatus || null,
+      sourceKind: installedState.sourceKind || null,
+      trace: {
+        file: tracePath,
+        appServerHandleJsonLinesSeen:
+          assertions.turnStartViaElectronIpc ||
+          traceEntries.some(
+            (entry) => entry.command === APP_SERVER_HANDLE_JSON_LINES_COMMAND,
+          ),
+        appServerMethodsSeen: appServerMethodsWithTurnStartTrace(
+          traceEntries,
+          turnStartTrace,
+        ),
+        turnStartTrace,
+        workflowResumeBindingCount: workflowResumeTraceBindings.length,
+      },
+      evidenceExport,
+      notes: [
+        "This file is collected from a running real Electron page via CDP.",
+        "It intentionally fails closed when cloud_release, signature verification, live provider read model, workflow JSONL, or workflowResume lifecycle evidence is missing.",
+        "No Provider API key, bearer token, raw provider request, or full article text is written.",
+      ],
+    };
+    writeJson(tracePath, {
+      appServerInvokeEntries: traceEntries
+        .filter(
+          (entry) => entry.command === APP_SERVER_HANDLE_JSON_LINES_COMMAND,
+        )
+        .map(sanitizeJson),
+    });
+    writeJson(outputPath, evidence);
+    console.log(
+      `[content-factory-production-gui-evidence] status=${status} output=${outputPath}`,
+    );
+    if (status !== "passed") {
+      console.log(
+        `[content-factory-production-gui-evidence] missingAssertions=${missingAssertions.join(
+          ",",
+        )}`,
+      );
+    }
+  } finally {
+    await browser.close().catch(() => undefined);
+  }
+}
+
+run().catch((error) => {
+  console.error(
+    `[content-factory-production-gui-evidence] failed: ${
+      error instanceof Error ? error.message : String(error)
+    }`,
+  );
+  process.exitCode = 1;
+});

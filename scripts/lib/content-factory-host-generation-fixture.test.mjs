@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildContentFactoryHostGenerationFixtureMarkdown,
   contentFactoryHostGenerationAsterChatRequest,
+  contentFactoryLiveHostGenerationAsterChatRequest,
 } from "./content-factory-host-generation-fixture.mjs";
 
 function providerBody(prompt) {
@@ -74,5 +75,31 @@ describe("content factory host generation fixture", () => {
       provider_preference: "fixture-openai",
       model_preference: "lime-fixture-chat",
     });
+  });
+
+  it("生成 live Direct provider request 时使用显式 provider config", () => {
+    const request = contentFactoryLiveHostGenerationAsterChatRequest({
+      providerId: "agnes",
+      providerName: "openai",
+      model: "agnes-chat-live",
+      apiKey: "sk-live-secret",
+      baseUrl: "https://apihub.agnes-ai.com/v1",
+    });
+
+    expect(request).toMatchObject({
+      provider_config: {
+        provider_id: "agnes",
+        provider_name: "openai",
+        model_name: "agnes-chat-live",
+        api_key: "sk-live-secret",
+        base_url: "https://apihub.agnes-ai.com/v1",
+        tool_call_strategy: "native",
+      },
+      provider_preference: "agnes",
+      model_preference: "agnes-chat-live",
+      reasoning_effort: "low",
+    });
+    expect(JSON.stringify(request)).not.toContain("fixture-openai");
+    expect(JSON.stringify(request)).not.toContain("lime-fixture-chat");
   });
 });

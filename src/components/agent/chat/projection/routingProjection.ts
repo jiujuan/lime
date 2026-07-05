@@ -36,6 +36,13 @@ export type AgentUiRoutingProjectionEvent =
   | LimitStateEvent
   | LimitEvent;
 
+export function buildRoutingProjectionEvents(
+  event: AgentUiRoutingProjectionEvent,
+  context: AgentUiProjectionContext,
+): AgentUiProjectionEvent[] {
+  return [buildRoutingProjectionEvent(event, context)];
+}
+
 export function buildRoutingProjectionEvent(
   event: AgentUiRoutingProjectionEvent,
   context: AgentUiProjectionContext,

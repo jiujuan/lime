@@ -340,6 +340,12 @@ declare module "./connection.js" {
     ): Promise<
       AppServerRequestResult<protocol.PluginLocalPackageInspectResponse>
     >;
+    exportPluginLocalPackage(
+      params: protocol.PluginLocalPackageExportParams,
+      options?: AppServerRequestOptions,
+    ): Promise<
+      AppServerRequestResult<protocol.PluginLocalPackageExportResponse>
+    >;
     fetchPluginCloudPackage(
       params: protocol.PluginFetchCloudPackageParams,
       options?: AppServerRequestOptions,

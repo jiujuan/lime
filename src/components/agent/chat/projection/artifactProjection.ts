@@ -1,4 +1,5 @@
 import type {
+  AgentEvent,
   AgentEventArtifactSnapshot,
   AgentEventContextTrace,
 } from "@/lib/api/agentProtocol";
@@ -10,6 +11,35 @@ import {
   buildAgentUiArtifactSnapshotEvent,
   buildAgentUiContextTraceEvent,
 } from "@limecloud/agent-runtime-projection";
+import {
+  buildRequestedFixExecutionEventsFromArtifact,
+} from "./evidenceProjection";
+
+type ArtifactProjectionEvent = Extract<
+  AgentEvent,
+  {
+    type: "artifact_snapshot" | "context_trace";
+  }
+>;
+
+export function buildArtifactProjectionEvents(
+  event: ArtifactProjectionEvent,
+  context: AgentUiProjectionContext,
+): AgentUiProjectionEvent[] {
+  switch (event.type) {
+    case "artifact_snapshot":
+      return [
+        buildArtifactEvent(event, context),
+        ...buildRequestedFixExecutionEventsFromArtifact(event, context),
+      ];
+    case "context_trace":
+      return [buildContextTraceEvent(event, context)];
+    default: {
+      const exhaustive: never = event;
+      return exhaustive;
+    }
+  }
+}
 
 export function buildArtifactEvent(
   event: AgentEventArtifactSnapshot,

@@ -20,6 +20,7 @@ import type {
 } from "@/features/plugin/types";
 import {
   getPluginCloudCatalog,
+  exportLocalPluginPackage,
   installCloudPluginRelease,
   installLocalPluginPackage,
   launchPluginShell,
@@ -499,14 +500,11 @@ describe("plugins API", () => {
       "pluginLocalPackage/inspect",
       { appDir: LOCAL_APP_DIR },
     );
-    expect(appServerRequestMock).toHaveBeenCalledWith(
-      "pluginInstalled/save",
-      {
-        state: expect.objectContaining({
-          appId: "content-factory-app",
-        }),
-      },
-    );
+    expect(appServerRequestMock).toHaveBeenCalledWith("pluginInstalled/save", {
+      state: expect.objectContaining({
+        appId: "content-factory-app",
+      }),
+    });
     expect(safeInvoke).not.toHaveBeenCalledWith(
       "plugin_inspect_local_package",
       expect.anything(),
@@ -619,6 +617,84 @@ describe("plugins API", () => {
     );
   });
 
+  it("导出本地 Plugin 发布包应通过 App Server pluginLocalPackage/export", async () => {
+    appServerRequestMock.mockResolvedValueOnce({
+      result: {
+        sourceKind: "local_folder",
+        sourceUri: LOCAL_APP_DIR,
+        appDir: LOCAL_APP_DIR,
+        manifestSource: "plugin_json",
+        pluginManifest: LOCAL_PLUGIN_MANIFEST,
+        manifest: contentFactoryFixture,
+        manifestHash: MANIFEST_HASH,
+        packageHash: PACKAGE_HASH,
+        sizeBytes: 2,
+        fileCount: 1,
+        contentType: "application/zip",
+        packageBase64: "aGk=",
+        exportedAt: "2026-07-05T00:00:00.000Z",
+      },
+    });
+
+    await expect(
+      exportLocalPluginPackage({ appDir: LOCAL_APP_DIR }),
+    ).resolves.toMatchObject({
+      appDir: LOCAL_APP_DIR,
+      packageHash: PACKAGE_HASH,
+      manifestHash: MANIFEST_HASH,
+      contentType: "application/zip",
+      packageBase64: "aGk=",
+    });
+    expect(appServerRequestMock).toHaveBeenCalledWith(
+      "pluginLocalPackage/export",
+      { appDir: LOCAL_APP_DIR },
+    );
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "plugin_inspect_local_package",
+      expect.anything(),
+    );
+  });
+
+  it("导出本地 Plugin 发布包返回非 package export 时应 fail closed", async () => {
+    appServerRequestMock.mockResolvedValueOnce({ result: { success: true } });
+
+    await expect(
+      exportLocalPluginPackage({ appDir: LOCAL_APP_DIR }),
+    ).rejects.toThrow("pluginLocalPackage/export did not return appDir");
+    expect(appServerRequestMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("导出本地 Plugin 发布包缺少 packageBase64 时应 fail closed", async () => {
+    appServerRequestMock.mockResolvedValueOnce({
+      result: {
+        sourceKind: "local_folder",
+        sourceUri: LOCAL_APP_DIR,
+        appDir: LOCAL_APP_DIR,
+        manifestSource: "plugin_json",
+        pluginManifest: LOCAL_PLUGIN_MANIFEST,
+        manifest: contentFactoryFixture,
+        manifestHash: MANIFEST_HASH,
+        packageHash: PACKAGE_HASH,
+        sizeBytes: 2,
+        fileCount: 1,
+        contentType: "application/zip",
+        exportedAt: "2026-07-05T00:00:00.000Z",
+      },
+    });
+
+    await expect(
+      exportLocalPluginPackage({ appDir: LOCAL_APP_DIR }),
+    ).rejects.toThrow("pluginLocalPackage/export did not return packageBase64");
+    expect(appServerRequestMock).toHaveBeenCalledWith(
+      "pluginLocalPackage/export",
+      { appDir: LOCAL_APP_DIR },
+    );
+    expect(safeInvoke).not.toHaveBeenCalledWith(
+      "plugin_inspect_local_package",
+      expect.anything(),
+    );
+  });
+
   it("Plugin package / install 命令遇到 diagnostic facade 时应 fail closed", async () => {
     appServerRequestMock.mockResolvedValueOnce({
       diagnostic: {
@@ -670,6 +746,8 @@ describe("plugins API", () => {
       await reviewCloudPluginRelease({
         app: buildCloudApp(),
         packageManifest: contentFactoryFixture,
+        actualPackageHash: PACKAGE_HASH,
+        actualManifestHash: MANIFEST_HASH,
       })
     ).state;
     appServerRequestMock.mockResolvedValueOnce({ result: { success: true } });
@@ -677,12 +755,9 @@ describe("plugins API", () => {
     await expect(saveInstalledPluginState({ state })).rejects.toThrow(
       "pluginInstalled/save did not return appId",
     );
-    expect(appServerRequestMock).toHaveBeenCalledWith(
-      "pluginInstalled/save",
-      {
-        state,
-      },
-    );
+    expect(appServerRequestMock).toHaveBeenCalledWith("pluginInstalled/save", {
+      state,
+    });
     expect(safeInvoke).not.toHaveBeenCalledWith(
       "plugin_save_installed_state",
       expect.anything(),
@@ -836,10 +911,28 @@ describe("plugins API", () => {
     expect(safeInvoke).not.toHaveBeenCalled();
   });
 
+  it("审查 Cloud release 时显式 manifest 缺少实际 hash 证据必须阻断", async () => {
+    await expect(
+      reviewCloudPluginRelease({
+        app: buildCloudApp(),
+        packageManifest: contentFactoryFixture,
+        signatureVerificationStatus: "verified",
+      }),
+    ).rejects.toThrow(
+      "requires actual packageHash and manifestHash evidence before install review",
+    );
+    expect(appServerRequestMock).not.toHaveBeenCalledWith(
+      "pluginInstalled/save",
+      expect.anything(),
+    );
+  });
+
   it("审查 Cloud release 时应从 verified package 生成 review 而不是写入 repository", async () => {
     const result = await reviewCloudPluginRelease({
       app: buildCloudApp(),
       packageManifest: contentFactoryFixture,
+      actualPackageHash: PACKAGE_HASH,
+      actualManifestHash: MANIFEST_HASH,
       profile: buildWorkflowRuntimeCapabilityProfile({
         realAdapterEnabled: true,
         uiRuntimeEnabled: true,
@@ -862,18 +955,17 @@ describe("plugins API", () => {
       manifestHash: MANIFEST_HASH,
       packageVerificationStatus: "verified",
       releaseEvidence: {
-        status: "warning",
+        status: "ready",
         sourceKind: "explicit_manifest",
         catalogSource: "remote",
-        packageHashMatched: null,
-        manifestHashMatched: null,
+        packageHashMatched: true,
+        manifestHashMatched: true,
         signatureVerificationStatus: "verified",
-        warningCodes: ["package_hash_unverified", "manifest_hash_unverified"],
+        warningCodes: [],
       },
       sourceState: {
-        kind: "release-evidence-warning",
+        kind: "cloud-discovered",
         canReview: true,
-        reason: "MANIFEST_HASH_UNVERIFIED, PACKAGE_HASH_UNVERIFIED",
       },
     });
     expect(result.state).toMatchObject({
@@ -1061,6 +1153,26 @@ describe("plugins API", () => {
     );
   });
 
+  it("直接安装 remote Cloud release 时缺少可信根必须 fail closed", async () => {
+    const { app } = await buildSignedCloudApp();
+
+    await expect(
+      installCloudPluginRelease({
+        app,
+        packageManifest: contentFactoryFixture,
+        actualPackageHash: PACKAGE_HASH,
+        actualManifestHash: MANIFEST_HASH,
+        catalogSource: "remote",
+        signatureTrustRoots: [],
+        signatureCrypto: webcrypto as unknown as Crypto,
+      }),
+    ).rejects.toThrow("did not pass release evidence gates");
+    expect(appServerRequestMock).not.toHaveBeenCalledWith(
+      "pluginInstalled/save",
+      expect.anything(),
+    );
+  });
+
   it("无云端上下文且无 bootstrap 时 Plugin 云目录应返回空目录", async () => {
     const catalog = await getPluginCloudCatalog();
 
@@ -1106,6 +1218,7 @@ describe("plugins API", () => {
         packageManifest: contentFactoryFixture,
         actualPackageHash:
           "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        actualManifestHash: MANIFEST_HASH,
       }),
     ).rejects.toThrow("Plugin package hash does not match package identity");
     expect(safeInvoke).not.toHaveBeenCalled();
@@ -1375,9 +1488,7 @@ describe("plugins API", () => {
       },
     );
     expect(safeInvoke).not.toHaveBeenCalledWith("plugin_start_ui_runtime");
-    expect(safeInvoke).not.toHaveBeenCalledWith(
-      "plugin_get_ui_runtime_status",
-    );
+    expect(safeInvoke).not.toHaveBeenCalledWith("plugin_get_ui_runtime_status");
     expect(safeInvoke).not.toHaveBeenCalledWith("plugin_stop_ui_runtime");
   });
 
@@ -1603,9 +1714,7 @@ describe("plugins API", () => {
 
     await expect(
       selectPluginDirectory({ title: "选择应用目录" }),
-    ).rejects.toThrow(
-      "plugin_select_directory did not return selected path",
-    );
+    ).rejects.toThrow("plugin_select_directory did not return selected path");
   });
 
   it("Plugin Shell launch 网关应通过 current 命令提交 descriptor", async () => {

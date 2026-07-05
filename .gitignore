@@ -80,6 +80,8 @@ internal/exec-plans/*
 !internal/exec-plans/projectthread-first-plan.md
 internal/roadmap/**
 !internal/roadmap/
+!internal/roadmap/long-term/
+!internal/roadmap/long-term/*.md
 !internal/roadmap/Writing/
 !internal/roadmap/Writing/**
 !internal/roadmap/browser/

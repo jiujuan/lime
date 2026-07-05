@@ -8,10 +8,20 @@ import type { AgentRuntimeEvidencePack } from "./types";
 export function projectAppServerEvidenceExportToRuntimeEvidencePack(
   response: AppServerEvidenceExportResponse,
 ): AgentRuntimeEvidencePack {
+  assertNonEmptyString(
+    response.session.sessionId,
+    "App Server evidence/export did not return session.sessionId",
+  );
+  assertNonEmptyString(
+    response.session.threadId,
+    "App Server evidence/export did not return session.threadId",
+  );
+
   const evidencePack = response.evidencePack;
   if (!evidencePack) {
     throw new Error("App Server evidence/export did not return evidencePack");
   }
+  assertEvidencePackSummary(evidencePack);
 
   return normalizeEvidencePack({
     sessionId: response.session.sessionId,
@@ -33,6 +43,55 @@ export function projectAppServerEvidenceExportToRuntimeEvidencePack(
     completionAuditSummary: evidencePack.completionAuditSummary,
     artifacts: evidencePack.artifacts,
   });
+}
+
+function assertEvidencePackSummary(
+  evidencePack: AppServerEvidencePackSummary,
+): void {
+  assertNonEmptyString(
+    evidencePack.packRelativeRoot,
+    "App Server evidence/export did not return evidencePack.packRelativeRoot",
+  );
+  assertNonEmptyString(
+    evidencePack.exportedAt,
+    "App Server evidence/export did not return evidencePack.exportedAt",
+  );
+  assertNonEmptyString(
+    evidencePack.threadStatus,
+    "App Server evidence/export did not return evidencePack.threadStatus",
+  );
+  assertFiniteNumber(
+    evidencePack.turnCount,
+    "App Server evidence/export did not return evidencePack.turnCount",
+  );
+  assertFiniteNumber(
+    evidencePack.itemCount,
+    "App Server evidence/export did not return evidencePack.itemCount",
+  );
+  assertFiniteNumber(
+    evidencePack.pendingRequestCount,
+    "App Server evidence/export did not return evidencePack.pendingRequestCount",
+  );
+  assertFiniteNumber(
+    evidencePack.queuedTurnCount,
+    "App Server evidence/export did not return evidencePack.queuedTurnCount",
+  );
+  assertFiniteNumber(
+    evidencePack.recentArtifactCount,
+    "App Server evidence/export did not return evidencePack.recentArtifactCount",
+  );
+}
+
+function assertNonEmptyString(value: unknown, message: string): void {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(message);
+  }
+}
+
+function assertFiniteNumber(value: unknown, message: string): void {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(message);
+  }
 }
 
 function deriveWorkspaceRoot(

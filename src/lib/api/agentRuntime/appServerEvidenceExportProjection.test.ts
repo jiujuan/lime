@@ -260,4 +260,104 @@ describe("appServerEvidenceExportProjection", () => {
       }),
     ).toThrow("App Server evidence/export did not return evidencePack");
   });
+
+  it("缺少 session / thread 关联时应 fail closed", () => {
+    expect(() =>
+      projectAppServerEvidenceExportToRuntimeEvidencePack({
+        ...evidenceExportResponse(),
+        session: {
+          ...evidenceExportResponse().session,
+          sessionId: "",
+        },
+      }),
+    ).toThrow("App Server evidence/export did not return session.sessionId");
+
+    expect(() =>
+      projectAppServerEvidenceExportToRuntimeEvidencePack({
+        ...evidenceExportResponse(),
+        session: {
+          ...evidenceExportResponse().session,
+          threadId: "",
+        },
+      }),
+    ).toThrow("App Server evidence/export did not return session.threadId");
+  });
+
+  it("缺少 evidence pack summary 关键字段时应 fail closed", () => {
+    expect(() =>
+      projectAppServerEvidenceExportToRuntimeEvidencePack(
+        evidenceExportResponse({
+          packRelativeRoot: "",
+        }),
+      ),
+    ).toThrow(
+      "App Server evidence/export did not return evidencePack.packRelativeRoot",
+    );
+
+    expect(() =>
+      projectAppServerEvidenceExportToRuntimeEvidencePack(
+        evidenceExportResponse({
+          exportedAt: "",
+        }),
+      ),
+    ).toThrow("App Server evidence/export did not return evidencePack.exportedAt");
+
+    expect(() =>
+      projectAppServerEvidenceExportToRuntimeEvidencePack(
+        evidenceExportResponse({
+          threadStatus: "",
+        }),
+      ),
+    ).toThrow(
+      "App Server evidence/export did not return evidencePack.threadStatus",
+    );
+  });
+
+  it("缺少 evidence pack runtime 计数时应 fail closed", () => {
+    expect(() =>
+      projectAppServerEvidenceExportToRuntimeEvidencePack(
+        evidenceExportResponse({
+          turnCount: Number.NaN,
+        }),
+      ),
+    ).toThrow("App Server evidence/export did not return evidencePack.turnCount");
+
+    expect(() =>
+      projectAppServerEvidenceExportToRuntimeEvidencePack(
+        evidenceExportResponse({
+          itemCount: Number.POSITIVE_INFINITY,
+        }),
+      ),
+    ).toThrow("App Server evidence/export did not return evidencePack.itemCount");
+
+    expect(() =>
+      projectAppServerEvidenceExportToRuntimeEvidencePack(
+        evidenceExportResponse({
+          pendingRequestCount: undefined,
+        }),
+      ),
+    ).toThrow(
+      "App Server evidence/export did not return evidencePack.pendingRequestCount",
+    );
+
+    expect(() =>
+      projectAppServerEvidenceExportToRuntimeEvidencePack(
+        evidenceExportResponse({
+          queuedTurnCount: undefined,
+        }),
+      ),
+    ).toThrow(
+      "App Server evidence/export did not return evidencePack.queuedTurnCount",
+    );
+
+    expect(() =>
+      projectAppServerEvidenceExportToRuntimeEvidencePack(
+        evidenceExportResponse({
+          recentArtifactCount: undefined,
+        }),
+      ),
+    ).toThrow(
+      "App Server evidence/export did not return evidencePack.recentArtifactCount",
+    );
+  });
 });

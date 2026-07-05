@@ -2,6 +2,7 @@ import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { EnhancedModelMetadata } from "@/lib/types/modelRegistry";
 import { InputbarVisionCapabilityNotice } from "./InputbarVisionCapabilityNotice";
 
 const mockUseConfiguredProviders = vi.fn();
@@ -47,6 +48,66 @@ vi.mock("@/lib/model/visionModelResolver", () => ({
 
 const mountedRoots: Array<{ root: Root; container: HTMLDivElement }> = [];
 
+function createModel(
+  overrides: Partial<EnhancedModelMetadata>,
+): EnhancedModelMetadata {
+  return {
+    id: "gpt-4.1",
+    provider_id: "openai",
+    provider_name: "OpenAI",
+    display_name: "GPT 4.1",
+    family: null,
+    tier: "pro",
+    capabilities: {
+      vision: false,
+      tools: true,
+      streaming: true,
+      json_mode: true,
+      function_calling: true,
+      reasoning: false,
+    },
+    task_families: ["chat"],
+    input_modalities: ["text"],
+    output_modalities: ["text"],
+    runtime_features: ["streaming", "tool_calling"],
+    limits: {
+      context_length: 128000,
+      max_output_tokens: 4096,
+      requests_per_minute: null,
+      tokens_per_minute: null,
+    },
+    pricing: null,
+    status: "active",
+    release_date: null,
+    is_latest: true,
+    description: null,
+    source: "api",
+    created_at: 0,
+    updated_at: 0,
+    ...overrides,
+  };
+}
+
+function createVisionModel(
+  overrides: Partial<EnhancedModelMetadata> = {},
+): EnhancedModelMetadata {
+  return createModel({
+    id: "gpt-4.1-vision",
+    display_name: "GPT 4.1 Vision",
+    capabilities: {
+      vision: true,
+      tools: true,
+      streaming: true,
+      json_mode: true,
+      function_calling: true,
+      reasoning: false,
+    },
+    task_families: ["chat", "vision_understanding"],
+    input_modalities: ["text", "image"],
+    ...overrides,
+  });
+}
+
 beforeEach(() => {
   (
     globalThis as typeof globalThis & {
@@ -68,7 +129,10 @@ beforeEach(() => {
     loading: false,
   });
   mockUseProviderModels.mockReturnValue({
-    models: [{ id: "gpt-4.1" }, { id: "gpt-4.1-vision" }],
+    models: [
+      createVisionModel({ id: "gpt-4.1", display_name: "GPT 4.1" }),
+      createVisionModel(),
+    ],
     loading: false,
     error: null,
     modelIds: ["gpt-4.1", "gpt-4.1-vision"],
@@ -176,18 +240,41 @@ describe("InputbarVisionCapabilityNotice", () => {
   });
 
   it("当前模型不支持多模态时应展示推荐模型提示", () => {
+    const onPolicyChange = vi.fn();
+    mockUseProviderModels.mockReturnValue({
+      models: [createModel({ id: "gpt-4.1" }), createVisionModel()],
+      loading: false,
+      error: null,
+      modelIds: ["gpt-4.1", "gpt-4.1-vision"],
+    });
     mockResolveVisionModel.mockReturnValue({
       reason: "switched",
       targetModelId: "gpt-4.1-vision",
     });
 
-    const container = renderNotice();
+    const container = renderNotice({ onPolicyChange });
 
     expect(container.textContent).toContain("gpt-4.1 不支持多模态图片理解");
     expect(container.textContent).toContain("gpt-4.1-vision");
+    expect(onPolicyChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        canSubmit: false,
+        failClosedAtSubmit: true,
+        missingInputModalities: ["image"],
+        reason: "missing_input_modalities",
+        shouldDisableComposer: true,
+        status: "blocked",
+      }),
+    );
   });
 
   it("当前 Provider 没有可用多模态模型时应展示 Provider 级提示", () => {
+    mockUseProviderModels.mockReturnValue({
+      models: [createModel({ id: "gpt-4.1" })],
+      loading: false,
+      error: null,
+      modelIds: ["gpt-4.1"],
+    });
     mockResolveVisionModel.mockReturnValue({
       reason: "no_vision_model",
       targetModelId: "",

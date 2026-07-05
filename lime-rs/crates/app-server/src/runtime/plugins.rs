@@ -10,6 +10,8 @@ use app_server_protocol::PluginFetchCloudPackageParams;
 use app_server_protocol::PluginInstalledDisabledSetParams;
 use app_server_protocol::PluginInstalledListResponse;
 use app_server_protocol::PluginInstalledSaveParams;
+use app_server_protocol::PluginLocalPackageExportParams;
+use app_server_protocol::PluginLocalPackageExportResponse;
 use app_server_protocol::PluginLocalPackageInspectParams;
 use app_server_protocol::PluginLocalPackageInspectResponse;
 use app_server_protocol::PluginPackageCacheEntry;
@@ -80,6 +82,15 @@ impl RuntimeCore {
     ) -> Result<PluginLocalPackageInspectResponse, RuntimeCoreError> {
         self.app_data_source
             .inspect_plugin_local_package(params)
+            .await
+    }
+
+    pub async fn export_plugin_local_package(
+        &self,
+        params: PluginLocalPackageExportParams,
+    ) -> Result<PluginLocalPackageExportResponse, RuntimeCoreError> {
+        self.app_data_source
+            .export_plugin_local_package(params)
             .await
     }
 

@@ -17,6 +17,12 @@ import {
 } from "../utils/fastResponseRouting";
 import { normalizeExecutionStrategy } from "./agentChatCoreUtils";
 import { ensureAgentUiPerformanceTraceMetadata } from "./agentStreamPerformanceMetrics";
+import {
+  buildModelCapabilitySendGateInput,
+  evaluateModelInputCapability,
+  mergeModelInputCapabilityGateMetadata,
+  type ModelCapabilitySendGateResult,
+} from "@/lib/model/modelCapabilitySendGate";
 
 export type AgentStreamUserInputSendPreparationEnv = Pick<
   AgentStreamPreparedSendEnv,
@@ -70,6 +76,7 @@ export interface PreparedAgentStreamUserInputSend {
   syncedSessionModelPreference: SessionModelPreference | null;
   observer?: SendMessageObserver;
   requestMetadata?: Record<string, unknown>;
+  modelInputCapabilityGate?: ModelCapabilitySendGateResult;
   assistantDraft?: AssistantDraftState;
   skillRequest?: SendMessageOptions["skillRequest"];
   explicitToolPreferences?: boolean;
@@ -106,6 +113,17 @@ export function resolvePreparedSendExpectingQueue(options: {
 
   const currentSessionId = options.currentSessionId?.trim();
   return !currentSessionId || activeStreamSessionId !== currentSessionId;
+}
+
+function shouldProjectModelInputCapabilityGate(
+  gate: ModelCapabilitySendGateResult,
+  summary: SendMessageOptions["modelCapabilitySummary"],
+): boolean {
+  if (gate.requiredInputModalities.length === 0) {
+    return false;
+  }
+
+  return Boolean(summary) || gate.requiresMediaInput;
 }
 
 export function prepareAgentStreamUserInputSend(
@@ -158,7 +176,7 @@ export function prepareAgentStreamUserInputSend(
     syncedSessionModelPreference?.model?.trim() ||
     "";
   const observer = sendOptions?.observer;
-  const requestMetadata = ensureAgentUiPerformanceTraceMetadata(
+  const baseRequestMetadata = ensureAgentUiPerformanceTraceMetadata(
     sendOptions?.requestMetadata,
     {
       enabled: env.clawTraceEnabled,
@@ -167,6 +185,25 @@ export function prepareAgentStreamUserInputSend(
       submittedAt: Date.now(),
       workspaceId: env.getWorkspaceIdForSubmit(),
     },
+  );
+  const modelCapabilityGateInput = buildModelCapabilitySendGateInput({
+    text: content,
+    imageCount: images.length,
+  });
+  const modelInputCapabilityGate = evaluateModelInputCapability(
+    sendOptions?.modelCapabilitySummary,
+    modelCapabilityGateInput,
+  );
+  const projectedModelInputCapabilityGate =
+    shouldProjectModelInputCapabilityGate(
+      modelInputCapabilityGate,
+      sendOptions?.modelCapabilitySummary,
+    )
+      ? modelInputCapabilityGate
+      : undefined;
+  const requestMetadata = mergeModelInputCapabilityGateMetadata(
+    baseRequestMetadata,
+    projectedModelInputCapabilityGate,
   );
   const runtimeStatusPresentation =
     resolveAgentRuntimeStatusPresentation(requestMetadata);
@@ -226,6 +263,7 @@ export function prepareAgentStreamUserInputSend(
     syncedSessionModelPreference,
     observer,
     requestMetadata,
+    modelInputCapabilityGate: projectedModelInputCapabilityGate,
     assistantDraft,
     skillRequest,
     explicitToolPreferences,

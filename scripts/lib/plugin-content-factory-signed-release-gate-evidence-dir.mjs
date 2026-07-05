@@ -27,6 +27,7 @@ export function readContentFactorySignedReleaseEvidenceDir(dirPath) {
     catalog: path.join(dir, fileNames.catalog),
     fetchCloud: path.join(dir, fileNames.fetchCloud),
     guiEvidence: path.join(dir, fileNames.guiEvidence),
+    preflight: path.join(dir, fileNames.preflight),
     result: path.join(
       dir,
       CONTENT_FACTORY_SIGNED_RELEASE_GATE_RESULT_FILE_NAME,
@@ -41,6 +42,7 @@ export function readContentFactorySignedReleaseEvidenceDir(dirPath) {
       catalog: readOptionalJsonFile(files.catalog),
       fetchCloud: readOptionalJsonFile(files.fetchCloud),
       guiEvidence: readOptionalJsonFile(files.guiEvidence),
+      preflight: readOptionalJsonFile(files.preflight),
     },
   };
 }

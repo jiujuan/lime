@@ -26,9 +26,10 @@ impl WorkflowStatus {
 
 pub(crate) fn workflow_status_from_event_type(event_type: &str) -> Option<WorkflowStatus> {
     match event_type {
-        events::WORKFLOW_RUN_STARTED | events::WORKFLOW_STEP_STARTED => {
-            Some(WorkflowStatus::Running)
-        }
+        events::WORKFLOW_RUN_STARTED
+        | events::WORKFLOW_RUN_RESUMING
+        | events::WORKFLOW_STEP_STARTED
+        | events::WORKFLOW_STEP_RESUMING => Some(WorkflowStatus::Running),
         events::WORKFLOW_RUN_RETRYING | events::WORKFLOW_STEP_RETRYING => {
             Some(WorkflowStatus::Retrying)
         }

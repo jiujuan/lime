@@ -6,19 +6,37 @@
 use agent_protocol::turn_context::{
     TurnOutputSchemaRuntime, TurnOutputSchemaSource, TurnOutputSchemaStrategy,
 };
-use aster::session::{
-    ExtensionState, Session as AsterSession, SessionRuntimeSnapshot, TurnRuntime,
+use agent_runtime::session_recent::{
+    extract_recent_access_mode_from_metadata, extract_recent_harness_context_from_metadata,
+    RecentHarnessContext, SessionExecutionRuntimeAccessMode,
+    SessionExecutionRuntimeRecentTeamSelection,
 };
+use aster::session::{ExtensionData, Session as AsterSession, SessionRuntimeSnapshot, TurnRuntime};
+use serde::de::DeserializeOwned;
 
 use crate::protocol::AgentTokenUsage;
 use crate::session_execution_runtime::{
-    extract_recent_access_mode_from_metadata, extract_recent_harness_context_from_metadata,
-    normalize_optional_text, RecentHarnessContext, SessionExecutionRuntimeAccessMode,
-    SessionExecutionRuntimePreferences, SessionExecutionRuntimeRecentTeamSelection,
-    SessionExecutionRuntimeSessionProjection, SessionExecutionRuntimeSnapshotProjection,
-    SessionExecutionRuntimeTurnProjection,
+    normalize_optional_text, SessionExecutionRuntimeSessionProjection,
+    SessionExecutionRuntimeSnapshotProjection, SessionExecutionRuntimeTurnProjection,
 };
 use crate::turn_context_configuration::to_agent_turn_context;
+
+const RECENT_ACCESS_MODE_EXTENSION_NAME: &str = "lime_recent_access_mode";
+const RECENT_PREFERENCES_EXTENSION_NAME: &str = "lime_recent_preferences";
+const RECENT_TEAM_SELECTION_EXTENSION_NAME: &str = "lime_recent_team_selection";
+const RECENT_EXTENSION_VERSION: &str = "v0";
+
+fn read_session_runtime_extension_state<T>(
+    extension_data: &ExtensionData,
+    extension_name: &str,
+) -> Option<T>
+where
+    T: DeserializeOwned,
+{
+    extension_data
+        .get_extension_state(extension_name, RECENT_EXTENSION_VERSION)
+        .and_then(|value| serde_json::from_value(value.clone()).ok())
+}
 
 pub(crate) fn project_aster_session_usage(session: &AsterSession) -> Option<AgentTokenUsage> {
     crate::session_usage_projection::project_token_usage(
@@ -58,19 +76,21 @@ pub(crate) fn project_aster_session_execution_runtime_session(
             .as_ref()
             .and_then(|config| normalize_optional_text(Some(config.model_name.clone()))),
         usage: project_aster_session_usage(session),
-        recent_access_mode:
-            <SessionExecutionRuntimeAccessMode as ExtensionState>::from_extension_data(
-                &session.extension_data,
-            ),
-        recent_preferences:
-            <SessionExecutionRuntimePreferences as ExtensionState>::from_extension_data(
-                &session.extension_data,
-            ),
-        recent_team_selection:
-            <SessionExecutionRuntimeRecentTeamSelection as ExtensionState>::from_extension_data(
-                &session.extension_data,
-            )
-            .and_then(SessionExecutionRuntimeRecentTeamSelection::normalize),
+        recent_access_mode: read_session_runtime_extension_state(
+            &session.extension_data,
+            RECENT_ACCESS_MODE_EXTENSION_NAME,
+        ),
+        recent_preferences: read_session_runtime_extension_state(
+            &session.extension_data,
+            RECENT_PREFERENCES_EXTENSION_NAME,
+        ),
+        recent_team_selection: read_session_runtime_extension_state::<
+            SessionExecutionRuntimeRecentTeamSelection,
+        >(
+            &session.extension_data,
+            RECENT_TEAM_SELECTION_EXTENSION_NAME,
+        )
+        .and_then(SessionExecutionRuntimeRecentTeamSelection::normalize),
     }
 }
 

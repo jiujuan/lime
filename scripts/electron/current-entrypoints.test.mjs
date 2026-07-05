@@ -2,8 +2,16 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
+const bundledElectronRuntimePackages = new Set([
+  "@limecloud/app-server-client",
+]);
+
+function readPackageJson() {
+  return JSON.parse(fs.readFileSync("package.json", "utf8"));
+}
+
 function readPackageScripts() {
-  return JSON.parse(fs.readFileSync("package.json", "utf8")).scripts ?? {};
+  return readPackageJson().scripts ?? {};
 }
 
 function readFile(filePath) {
@@ -77,6 +85,46 @@ function expectNoElectronRuntimeEsmImport(content, label) {
   expect(runtimeImportLines, label).toEqual([]);
 }
 
+function barePackageName(specifier) {
+  if (
+    specifier.startsWith(".") ||
+    specifier.startsWith("/") ||
+    specifier.startsWith("#") ||
+    specifier.startsWith("node:") ||
+    specifier === "electron"
+  ) {
+    return null;
+  }
+  if (specifier.startsWith("@")) {
+    return specifier.split("/").slice(0, 2).join("/");
+  }
+  return specifier.split("/")[0] ?? null;
+}
+
+function collectRuntimeBareImports(filePath) {
+  const content = readFile(filePath);
+  const imports = new Set();
+  const importFromPattern =
+    /^\s*import\s+(?!type\b)[^;]*?\s+from\s+["']([^"']+)["']/gm;
+  const sideEffectImportPattern = /^\s*import\s+["']([^"']+)["']/gm;
+  const requirePattern = /\brequire\(\s*["']([^"']+)["']\s*\)/g;
+
+  for (const pattern of [
+    importFromPattern,
+    sideEffectImportPattern,
+    requirePattern,
+  ]) {
+    for (const match of content.matchAll(pattern)) {
+      const packageName = barePackageName(match[1]);
+      if (packageName) {
+        imports.add(packageName);
+      }
+    }
+  }
+
+  return [...imports].sort();
+}
+
 function listFiles(root, predicate = () => true) {
   const entries = fs.readdirSync(root, { withFileTypes: true });
   const files = [];
@@ -123,6 +171,19 @@ function currentElectronEntrypointFiles() {
       /\.(ya?ml|json|md|mjs|js|ts|tsx)$/i.test(filePath),
     ),
   ];
+}
+
+function electronProductionSourceFiles() {
+  return listFiles("electron", (filePath) => {
+    const normalized = filePath.replace(/\\/g, "/");
+    return (
+      /\.(?:mjs|js|ts)$/i.test(normalized) &&
+      !normalized.endsWith(".d.ts") &&
+      !normalized.endsWith(".test.ts") &&
+      !normalized.endsWith(".test.mjs") &&
+      !normalized.endsWith(".test.js")
+    );
+  });
 }
 
 describe("Electron current package entrypoints", () => {
@@ -220,6 +281,30 @@ describe("Electron current package entrypoints", () => {
     expect(runtime).toContain("createRequire(import.meta.url)");
     expect(runtime).toContain('requireElectron("electron")');
     expectNoElectronRuntimeEsmImport(runtime, "electron/electronRuntime.ts");
+  });
+
+  it("Electron production runtime bare imports stay in packaged dependencies", () => {
+    const packageJson = readPackageJson();
+    const runtimeDependencies = new Set(
+      Object.keys(packageJson.dependencies ?? {}),
+    );
+    const missing = [];
+
+    for (const filePath of electronProductionSourceFiles()) {
+      for (const packageName of collectRuntimeBareImports(filePath)) {
+        if (
+          !runtimeDependencies.has(packageName) &&
+          !bundledElectronRuntimePackages.has(packageName)
+        ) {
+          missing.push(`${filePath}: ${packageName}`);
+        }
+      }
+    }
+
+    expect(
+      missing,
+      "Forge package uses prune=true, so Electron production runtime imports must be root dependencies.",
+    ).toEqual([]);
   });
 
   it("legacy verify-gui-smoke script delegates to Electron smoke", () => {

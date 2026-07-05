@@ -309,6 +309,48 @@ mod tests {
     }
 
     #[test]
+    fn capability_snapshot_ignores_picker_and_catalog_metadata() {
+        let snapshot = capability_snapshot_from_model_capabilities(&json!({
+            "displayName": "Vision Pro",
+            "providerName": "Provider UI Name",
+            "tier": "max",
+            "status": "active",
+            "source": "models.dev",
+            "releaseDate": "2026-07-05",
+            "isLatest": true,
+            "pricing": {
+                "inputPerMillion": 1.0,
+                "outputPerMillion": 2.0
+            },
+            "deploymentSource": "oem_cloud",
+            "managementPlane": "oem_control_plane",
+            "aliasSource": "official",
+            "capabilities": {
+                "vision": false,
+                "tools": false,
+                "streaming": true,
+                "jsonMode": false,
+                "functionCalling": false,
+                "reasoning": false
+            },
+            "taskFamilies": ["chat"],
+            "inputModalities": ["text"],
+            "outputModalities": ["text"],
+            "runtimeFeatures": ["streaming"]
+        }));
+
+        assert_eq!(snapshot.task_families, vec!["chat".to_string()]);
+        assert_eq!(snapshot.input_modalities, vec!["text".to_string()]);
+        assert_eq!(snapshot.output_modalities, vec!["text".to_string()]);
+        assert_eq!(snapshot.runtime_features, vec!["streaming".to_string()]);
+        assert!(!snapshot.capabilities.vision);
+        assert!(!snapshot.capabilities.tools);
+        assert!(!snapshot.capabilities.reasoning);
+        assert_eq!(snapshot.source, None);
+        assert_eq!(snapshot.reason_code, None);
+    }
+
+    #[test]
     fn route_capability_gap_reports_first_missing_requirement() {
         let request = build_model_task_request(ModelTaskRequestInput {
             task_kind: ModelTaskKind::ImageGenerate,

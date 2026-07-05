@@ -6,10 +6,10 @@ use crate::agent_tools::inventory::{
 use crate::agent_tools::tool_inventory_runtime_adapter::read_agent_tool_inventory_runtime_seed;
 use crate::mcp::McpToolDefinition;
 use crate::AgentRuntimeState;
-use aster::agents::extension::ExtensionConfig;
-use aster::tools::ToolDefinition;
 use lime_core::config::ToolExecutionPolicyConfig as ConfigToolExecutionPolicyConfig;
 use std::collections::{BTreeMap, HashSet};
+use tool_runtime::tool_definition::RuntimeToolDefinition;
+use tool_runtime::tool_extension::RuntimeExtensionConfig;
 
 #[derive(Debug, Clone)]
 pub struct AgentToolInventoryReadInput {
@@ -26,9 +26,9 @@ pub struct AgentToolInventoryReadInput {
 struct AgentToolInventoryRuntimeSnapshot {
     agent_initialized: bool,
     warnings: Vec<String>,
-    registry_definitions: Vec<ToolDefinition>,
+    registry_definitions: Vec<RuntimeToolDefinition>,
     current_surface_tool_names: Vec<String>,
-    extension_configs: Vec<ExtensionConfig>,
+    extension_configs: Vec<RuntimeExtensionConfig>,
     visible_extension_tools: Vec<ExtensionToolInventorySeed>,
     searchable_extension_tools: Vec<ExtensionToolInventorySeed>,
 }
@@ -112,7 +112,7 @@ async fn read_agent_tool_inventory_runtime_snapshot(
 }
 
 fn merge_mcp_extension_projection(
-    extension_configs: &mut Vec<ExtensionConfig>,
+    extension_configs: &mut Vec<RuntimeExtensionConfig>,
     visible_extension_tools: &mut Vec<ExtensionToolInventorySeed>,
     searchable_extension_tools: &mut Vec<ExtensionToolInventorySeed>,
     mcp_tools: &[McpToolDefinition],
@@ -123,7 +123,7 @@ fn merge_mcp_extension_projection(
 
     let mut existing_extensions = extension_configs
         .iter()
-        .map(|config| config.name())
+        .map(|config| config.name.clone())
         .collect::<HashSet<_>>();
     let mut tools_by_extension: BTreeMap<String, Vec<McpToolDefinition>> = BTreeMap::new();
     for tool in mcp_tools {
@@ -161,17 +161,14 @@ fn merge_mcp_extension_projection(
             continue;
         }
         let bridge_name = surface.extension_name.clone();
-        extension_configs.push(ExtensionConfig::Builtin {
-            name: bridge_name.clone(),
-            display_name: Some(server_name.to_string()),
-            description: surface.description,
-            timeout: None,
-            bundled: Some(false),
-            available_tools: surface.available_tools,
-            deferred_loading: surface.deferred_loading,
-            always_expose_tools: surface.always_expose_tools,
-            allowed_caller: surface.allowed_caller,
-        });
+        extension_configs.push(RuntimeExtensionConfig::new(
+            bridge_name.clone(),
+            surface.description,
+            surface.available_tools,
+            surface.deferred_loading,
+            surface.always_expose_tools,
+            surface.allowed_caller,
+        ));
         existing_extensions.insert(bridge_name);
     }
 

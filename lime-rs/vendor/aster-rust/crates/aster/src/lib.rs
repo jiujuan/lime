@@ -63,7 +63,6 @@ pub mod session_context;
 pub mod skills;
 pub mod slash_commands;
 pub mod streaming;
-pub mod subprocess;
 pub mod telemetry;
 pub mod teleport;
 pub mod token_counter;

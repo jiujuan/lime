@@ -23,10 +23,15 @@ const DIRECT_ASTER_DEPENDENCY_MIGRATED_CRATES = [
 const DIRECT_ASTER_DEPENDENCY_MIGRATED_FILES = [
   "lime-rs/crates/agent-protocol/src/action_required.rs",
   "lime-rs/crates/services/src/model_registry_service.rs",
+  "lime-rs/crates/agent-runtime/src/session_execution.rs",
+  "lime-rs/crates/agent-runtime/src/session_recent.rs",
   "lime-rs/crates/agent/src/protocol_context_projection.rs",
   "lime-rs/crates/agent/src/protocol_projection.rs",
+  "lime-rs/crates/agent-runtime/src/reply_execution.rs",
   "lime-rs/crates/agent/src/request_tool_policy/auto_compaction_projection.rs",
+  "lime-rs/crates/agent-runtime/src/session_config.rs",
   "lime-rs/crates/agent/src/runtime_projection_snapshot.rs",
+  "lime-rs/crates/agent/src/session_execution_runtime.rs",
   "lime-rs/crates/agent/src/session_store_message_projection.rs",
   "lime-rs/crates/agent/src/session_store_runtime_projection.rs",
   "lime-rs/crates/agent/src/session_store_todo_projection.rs",
@@ -35,11 +40,25 @@ const DIRECT_ASTER_DEPENDENCY_MIGRATED_FILES = [
   "lime-rs/crates/agent/src/tool_io_offload.rs",
   "lime-rs/crates/agent/src/turn_input_envelope.rs",
   "lime-rs/crates/tool-runtime/src/execution_process.rs",
+  "lime-rs/crates/tool-runtime/src/execution_decision.rs",
+  "lime-rs/crates/tool-runtime/src/sandbox.rs",
+  "lime-rs/crates/tool-runtime/src/path_guard.rs",
   "lime-rs/crates/tool-runtime/src/shell.rs",
+  "lime-rs/crates/tool-runtime/src/shell_analysis.rs",
+  "lime-rs/crates/tool-runtime/src/shell_analysis/bash.rs",
+  "lime-rs/crates/tool-runtime/src/shell_analysis/common.rs",
+  "lime-rs/crates/tool-runtime/src/shell_analysis/powershell.rs",
+  "lime-rs/crates/tool-runtime/src/shell_permission.rs",
   "lime-rs/crates/tool-runtime/src/execution_rules.rs",
   "lime-rs/crates/tool-runtime/src/mcp_notification.rs",
   "lime-rs/crates/tool-runtime/src/tool_batch.rs",
+  "lime-rs/crates/tool-runtime/src/tool_definition.rs",
+  "lime-rs/crates/tool-runtime/src/tool_extension.rs",
   "lime-rs/crates/tool-runtime/src/tool_result.rs",
+  "lime-rs/crates/tool-runtime/src/web_fetch.rs",
+  "lime-rs/crates/tool-runtime/src/web_fetch/content.rs",
+  "lime-rs/crates/tool-runtime/src/web_search.rs",
+  "lime-rs/crates/tool-runtime/src/web_search/support.rs",
 ];
 
 const PROTOCOL_PROJECTION_FORBIDDEN_RUNTIME_DTO_SNIPPETS = [
@@ -72,6 +91,8 @@ const SESSION_EXECUTION_RUNTIME_FORBIDDEN_PUBLIC_EXTENSION_WRITE_SNIPPETS = [
 ];
 
 const SUBAGENT_CONTROL_FORBIDDEN_PRODUCTION_RUNTIME_DTO_SNIPPETS = [
+  "load_runtime_snapshot(",
+  "project_aster_subagent_latest_turn",
   "SessionRuntimeSnapshot",
   "ThreadRuntimeSnapshot",
   " TurnRuntime,",
@@ -125,6 +146,7 @@ const LIME_AGENT_FORBIDDEN_PUBLIC_ASTER_HELPER_SNIPPETS = [
   "pub mod request_tool_policy;",
   "pub mod ask_bridge;",
   "pub mod lsp_bridge;",
+  "pub mod mcp_bridge;",
   "create_lime_identity, create_lime_tool_config",
   "pub fn create_lime_identity",
   "pub fn create_lime_tool_config",
@@ -143,6 +165,7 @@ const AGENT_TURN_CONTEXT_MIGRATED_FILES = [
   "lime-rs/crates/agent/src/session_configuration.rs",
   "lime-rs/crates/agent/src/skill_execution.rs",
   "lime-rs/crates/agent/src/tools/skill_search_tool.rs",
+  "lime-rs/crates/agent/src/turn_context_configuration.rs",
 ];
 
 const APP_SERVER_FORBIDDEN_TURN_CONTEXT_SNIPPETS = [
@@ -314,6 +337,153 @@ const APP_SERVER_FORBIDDEN_ASTER_BACKEND_FILES = [
   "lime-rs/crates/app-server/src/aster_backend.rs",
 ];
 
+const VENDORED_ASTER_SHELL_PERMISSION_FORBIDDEN_SNIPPETS = [
+  "static SHELL_ENV_ASSIGN_RE",
+  "static BASH_WRITE_REDIRECTION_RE",
+  "static BASH_SED_IN_PLACE_RE",
+  "static POWERSHELL_WRITE_REDIRECTION_RE",
+  "fn split_shell_segments(",
+  "fn extract_bash_command_words(",
+  "fn extract_bash_read_targets(",
+  "fn collect_bash_read_path_candidates(",
+  "fn is_known_read_only_bash_command(",
+  "fn tokenize_shell_words(",
+  "fn normalize_command_words(",
+  "fn split_powershell_segments(",
+  "fn extract_powershell_command_words(",
+  "fn extract_powershell_read_targets(",
+  "fn collect_powershell_read_path_candidates(",
+  "fn is_known_read_only_powershell_command(",
+  "fn tokenize_powershell_words(",
+  "fn normalize_powershell_words(",
+  "fn is_forced_git_clean_words(",
+  "validate_bash_command_paths(command",
+  "fn validate_bash_command_paths(",
+  "fn collect_bash_path_candidates(",
+  "fn extract_rm_targets(",
+  "fn extract_tee_targets(",
+  "fn extract_dd_output_targets(",
+  "fn extract_sed_in_place_targets(",
+  "pub struct SafetyCheckResult",
+  "struct SafetyCheckResult",
+  "pub fn check_command_safety(",
+  "fn check_command_safety(",
+  "pub fn is_dangerous_command(",
+  "pub fn has_warning(",
+  "with_dangerous_commands(",
+  "add_dangerous_commands(",
+  "with_warning_patterns(",
+  "default_dangerous_commands(",
+  "default_warning_patterns(",
+  "default_dangerous_patterns(",
+  "default_warning_patterns(",
+  "fn detect_high_risk_powershell_reason(",
+  "fn detect_mutating_powershell_warning(",
+  "let safety_result = self.check_command_safety(command);",
+  "validate_powershell_command_paths(&input.command",
+  "fn validate_powershell_command_paths(",
+  "fn collect_powershell_path_candidates(",
+  "fn extract_powershell_write_targets(",
+  "let safety_result = self.check_command_safety(&input.command);",
+];
+
+const VENDORED_ASTER_PATH_GUARD_FORBIDDEN_SNIPPETS = [
+  "pub mod path_guard;",
+  "tools/path_guard.rs",
+  "pub use tool_runtime::path_guard",
+  "use std::path::{Component, Path, PathBuf};",
+  "fn path_looks_dynamic(",
+  "fn is_safe_sink_path(",
+  "fn resolve_candidate_path(",
+  "fn normalize_path_lexically(",
+  "fn path_within(",
+  "fn is_protected_path(",
+  "#[cfg(test)]",
+];
+
+const VENDORED_ASTER_SHELL_ANALYSIS_WRAPPER_FORBIDDEN_SNIPPETS = [
+  "pub mod command_semantics;",
+  "pub use command_semantics::{",
+  "tools/command_semantics.rs",
+  "pub struct CommandInterpretation",
+  "pub fn interpret_bash_command_result(",
+  "pub fn interpret_powershell_command_result(",
+  "pub use tool_runtime::shell_analysis::{",
+  "pub use tool_runtime::shell_analysis::is_bash_command_concurrency_safe;",
+  "pub use tool_runtime::shell_analysis::is_powershell_command_concurrency_safe;",
+  "pub use bash::{preflight_bash_read_targets",
+  "pub use powershell_tool::{preflight_powershell_read_targets",
+  "pub fn preflight_bash_read_targets(",
+  "pub fn preflight_powershell_read_targets(",
+];
+
+const VENDORED_ASTER_PROCESS_RUNTIME_FORBIDDEN_SNIPPETS = [
+  "pub mod subprocess;",
+  "mod shell_runtime;",
+  "crate::subprocess",
+  "super::shell_runtime",
+  "encoding_rs =",
+  "pub use tool_runtime::subprocess",
+  "pub use tool_runtime::shell_runtime",
+];
+
+const VENDORED_ASTER_WEB_TOOL_FORBIDDEN_SNIPPETS = [
+  "mod web_fetch_content;",
+  "tools/web_fetch_content.rs",
+  "use reqwest::",
+  "use scraper::",
+  "use lru::",
+  "LruCache",
+  "Client::builder",
+  "MAX_RESPONSE_SIZE",
+  "MAX_WEB_FETCH_REDIRECTS",
+  "WEB_FETCH_CACHE_TTL",
+  "WEB_SEARCH_CACHE_TTL",
+  "SearchProviderStrategy",
+  "SearchOrchestrator",
+  "MultiSearchEngineConfig",
+  "MultiSearchEngineEntry",
+  "CachedContent",
+  "CachedSearchResults",
+  "fn fetch_url",
+  "fn check_domain_safety",
+  "fn is_private_ip",
+  "fn prepare_response_content",
+  "fn html_to_markdown",
+  "fn normalize_response_body",
+  "fn search_with_tavily",
+  "fn search_with_multi_search_engine",
+  "fn search_with_duckduckgo",
+  "fn search_with_bing",
+  "fn search_with_google",
+  "fn normalize_search_result_url",
+  "fn extract_results_from_search_html",
+  "fn deduplicate_results",
+];
+
+const TOOL_ORCHESTRATOR_FORBIDDEN_DIRECT_ASTER_REGISTRY_SNIPPETS = [
+  "mod aster_registry_adapter;",
+  "runtime_tool_executor_from_aster_registry",
+  "use aster::sandbox",
+  "use aster::tools",
+  "ToolContext::",
+  "ToolError::",
+  "ToolRegistry::",
+  "Arc<RwLock<ToolRegistry>>",
+  "AsterToolContextInput",
+  "AsterToolExecutionContext",
+  "AsterToolExecutionRequest",
+  "AsterWorkspaceSandboxInput",
+  "to_aster_turn_context",
+  "aster::session_context::with_turn_context",
+  "with_turn_context(",
+  "fn workspace_sandbox_config(",
+  "SandboxType::",
+  "SandboxConfig::",
+  "impl From<ToolError>",
+  "registry.execute(",
+];
+
 const CREDENTIAL_BRIDGE_FORBIDDEN_PUBLIC_API_SNIPPETS = [
   "pub enum CredentialBridgeError",
   "pub struct CredentialBridge",
@@ -367,6 +537,34 @@ const MODEL_RUNTIME_PROVIDER_CONFIG_REQUIRED_SNIPPETS = [
   "pub struct RuntimeProviderConfig",
   "pub protocol: Option<RuntimeProviderProtocol>",
   "pub fn message_is_non_retryable_provider_rejection",
+];
+
+const MODEL_PROVIDER_STREAM_CONTRACT_REQUIRED_SNIPPETS = [
+  "pub enum RuntimeProviderBackend",
+  "pub fn as_wire_str(self) -> &'static str",
+  "pub enum RuntimeReplyInputKind",
+  "pub struct RuntimeReplyProviderHandle",
+  "pub struct RuntimeReplyStreamRequest",
+  "RuntimeProviderBackend::AsterCompat",
+];
+
+const CONFIGURED_REPLY_PROVIDER_REQUIRED_CURRENT_HANDLE_SNIPPETS = [
+  "RuntimeReplyProviderHandle",
+  "RuntimeReplyProviderCapabilities",
+  "RuntimeReplyStreamRequest",
+  "RuntimeProviderBackend::AsterCompat",
+  "backend: CompatAsterReplyProviderBackend",
+  "struct CompatAsterReplyProviderBackend",
+  "pub(crate) fn runtime_handle(&self) -> &RuntimeReplyProviderHandle",
+  "stream_request: &RuntimeReplyStreamRequest",
+  "debug_assert_eq!(stream_request.provider.as_ref(), Some(&self.handle));",
+];
+
+const PROVIDER_TRACE_RUNTIME_PROVIDER_METADATA_REQUIRED_SNIPPETS = [
+  "runtime_provider_backend",
+  "runtime_provider_selector",
+  "runtime_provider_protocol",
+  "runtime_provider_active_model",
 ];
 
 const MODEL_RUNTIME_PROVIDER_FORBIDDEN_DEAD_EXECUTION_SNIPPETS = [
@@ -504,15 +702,20 @@ const AGENT_REPLY_STREAM_FORBIDDEN_ASTER_MESSAGE_ADAPTER_SNIPPETS = [
 ];
 
 const AGENT_REPLY_STREAM_FORBIDDEN_ASTER_EVENT_PROJECTION_SNIPPETS = [
+  "RuntimeEventProjector",
+  "AsterAgentEvent",
   "project_aster_runtime_event",
   "project_aster_auto_compaction_event",
   "AutoCompactionProjectionState",
   "use crate::aster_runtime_projection",
+  "extract_inline_agent_provider_error",
+  "runtime_event_projector.project",
 ];
 
 const AGENT_REPLY_STREAM_FORBIDDEN_ASTER_REPLY_CREATION_SNIPPETS = [
   "ConfiguredReplyProvider",
   "use aster::agents::Agent",
+  "AsterReplyRuntimeHost",
   "agent: &Agent",
   "host.agent()",
   "to_aster_session_config",
@@ -536,6 +739,9 @@ const WEB_SEARCH_PREFLIGHT_FORBIDDEN_ASTER_AGENT_SNIPPETS = [
   "agent: &'a Agent",
   "agent.tool_registry()",
   "WebSearchPreflightRequest { agent",
+  "AsterReplyRuntimeHost",
+  "host.tool_registry()",
+  "runtime_tool_executor_from_aster_registry",
 ];
 
 const REQUEST_TOOL_POLICY_RUNTIME_STATUS_FORBIDDEN_ASTER_SESSION_CONFIG_SNIPPETS =
@@ -799,6 +1005,26 @@ const TOOL_RUNTIME_FORBIDDEN_DEAD_EXECUTION_SNIPPETS = [
   "fn list_tools(",
   "fn check_permission(",
   "fn invoke(",
+];
+
+const TOOL_INVENTORY_FORBIDDEN_ASTER_TOOL_DEFINITION_SNIPPETS = [
+  "use aster::tools::ToolDefinition",
+  "Vec<ToolDefinition>",
+  "&[ToolDefinition]",
+  ") -> ToolDefinition",
+  " ToolDefinition::new(",
+];
+
+const TOOL_INVENTORY_FORBIDDEN_ASTER_EXTENSION_CONFIG_SNIPPETS = [
+  "use aster::agents::extension::ExtensionConfig",
+  "Vec<ExtensionConfig>",
+  "&[ExtensionConfig]",
+  ") -> ExtensionConfig",
+  " ExtensionConfig::",
+  ".name()",
+  ".deferred_loading()",
+  ".always_expose_tools()",
+  ".allowed_caller()",
 ];
 
 const LIME_AGENT_TEST_SUPPORT_FORBIDDEN_SNIPPETS = [
@@ -1589,6 +1815,135 @@ describe("aster migration boundary", () => {
     ).toEqual([]);
   });
 
+  it("provider reply stream handle contract 必须归属 model-provider", () => {
+    const modelProviderLibPath = "lime-rs/crates/model-provider/src/lib.rs";
+    const providerStreamPath =
+      "lime-rs/crates/model-provider/src/provider_stream.rs";
+    const runtimeProviderAdapterPath =
+      "lime-rs/crates/agent/src/credential_bridge/runtime_provider_adapter.rs";
+    const asterReplyAdapterPath =
+      "lime-rs/crates/agent/src/request_tool_policy/aster_reply_adapter.rs";
+    const agentReplyStreamPath =
+      "lime-rs/crates/agent/src/request_tool_policy/agent_reply_stream.rs";
+    const agentProtocolPath = "lime-rs/crates/agent/src/protocol.rs";
+    const appServerToolEventsPath =
+      "lime-rs/crates/app-server/src/runtime_backend/tool_events.rs";
+    const frontendAgentProtocolPath = "src/lib/api/agentProtocol.ts";
+    const frontendAppServerEventStreamPath =
+      "src/lib/api/agentRuntime/appServerEventStream.ts";
+    const frontendMetricsPath =
+      "src/components/agent/chat/hooks/agentStreamRuntimeMetricsController.ts";
+    const frontendTurnBindingPath =
+      "src/components/agent/chat/hooks/agentStreamTurnEventBinding.ts";
+    const modelProviderLibSource = readFileSync(
+      join(REPO_ROOT, modelProviderLibPath),
+      "utf8",
+    );
+    const providerStreamSource = readFileSync(
+      join(REPO_ROOT, providerStreamPath),
+      "utf8",
+    );
+    const runtimeProviderAdapterSource = readFileSync(
+      join(REPO_ROOT, runtimeProviderAdapterPath),
+      "utf8",
+    );
+    const asterReplyAdapterSource = readFileSync(
+      join(REPO_ROOT, asterReplyAdapterPath),
+      "utf8",
+    );
+    const agentReplyStreamSource = readFileSync(
+      join(REPO_ROOT, agentReplyStreamPath),
+      "utf8",
+    );
+    const agentProtocolSource = readFileSync(
+      join(REPO_ROOT, agentProtocolPath),
+      "utf8",
+    );
+    const appServerToolEventsSource = readFileSync(
+      join(REPO_ROOT, appServerToolEventsPath),
+      "utf8",
+    );
+    const frontendAgentProtocolSource = readFileSync(
+      join(REPO_ROOT, frontendAgentProtocolPath),
+      "utf8",
+    );
+    const frontendAppServerEventStreamSource = readFileSync(
+      join(REPO_ROOT, frontendAppServerEventStreamPath),
+      "utf8",
+    );
+    const frontendMetricsSource = readFileSync(
+      join(REPO_ROOT, frontendMetricsPath),
+      "utf8",
+    );
+    const frontendTurnBindingSource = readFileSync(
+      join(REPO_ROOT, frontendTurnBindingPath),
+      "utf8",
+    );
+
+    expect(modelProviderLibSource).toContain("pub mod provider_stream;");
+    expect(
+      MODEL_PROVIDER_STREAM_CONTRACT_REQUIRED_SNIPPETS.filter(
+        (snippet) => !providerStreamSource.includes(snippet),
+      ),
+      "provider stream current contract 必须在 model-provider 中定义，不能继续由 Aster Provider trait 充当公开 handle",
+    ).toEqual([]);
+    expect(
+      FORBIDDEN_ASTER_SNIPPETS.filter((snippet) =>
+        providerStreamSource.includes(snippet),
+      ).map((snippet) => `${providerStreamPath}: ${snippet}`),
+      "model-provider provider_stream contract 不得引入 Aster 类型",
+    ).toEqual([]);
+    expect(
+      CONFIGURED_REPLY_PROVIDER_REQUIRED_CURRENT_HANDLE_SNIPPETS.filter(
+        (snippet) => !runtimeProviderAdapterSource.includes(snippet),
+      ),
+      "ConfiguredReplyProvider 必须同时持有 current provider handle；Aster Provider trait 只能作为内部 compat backend",
+    ).toEqual([]);
+    const configuredReplyProviderStruct =
+      runtimeProviderAdapterSource.match(
+        /pub\(crate\) struct ConfiguredReplyProvider \{[\s\S]*?\n\}/,
+      )?.[0] ?? "";
+    expect(configuredReplyProviderStruct).toContain(
+      "handle: RuntimeReplyProviderHandle",
+    );
+    expect(configuredReplyProviderStruct).toContain(
+      "backend: CompatAsterReplyProviderBackend",
+    );
+    expect(
+      configuredReplyProviderStruct.includes("Arc<dyn Provider>"),
+      "ConfiguredReplyProvider 只能持有 current handle + 私有 compat backend，不能直接保存 Aster Provider trait object",
+    ).toBe(false);
+    expect(asterReplyAdapterSource).toContain("RuntimeReplyStreamRequest");
+    expect(asterReplyAdapterSource).toContain(".stream_reply_with_agent(");
+    expect(asterReplyAdapterSource).toContain("&stream_request");
+    expect(asterReplyAdapterSource).toContain("provider_handle(&self)");
+    expect(agentReplyStreamSource).toContain(
+      "enrich_provider_trace_with_runtime_provider",
+    );
+    expect(agentReplyStreamSource).toContain("host.provider_handle()");
+    expect(
+      PROVIDER_TRACE_RUNTIME_PROVIDER_METADATA_REQUIRED_SNIPPETS.filter(
+        (snippet) =>
+          !agentProtocolSource.includes(snippet) ||
+          !agentReplyStreamSource.includes(snippet) ||
+          !appServerToolEventsSource.includes(snippet) ||
+          !frontendAgentProtocolSource.includes(snippet) ||
+          !frontendAppServerEventStreamSource.includes(snippet),
+      ),
+      "current provider handle metadata 必须进入 provider_trace 主链，不能只停在后端 debug log",
+    ).toEqual([]);
+    expect(frontendMetricsSource).toContain("runtimeProviderBackend");
+    expect(frontendMetricsSource).toContain("runtimeProviderSelector");
+    expect(frontendMetricsSource).toContain("runtimeProviderProtocol");
+    expect(frontendMetricsSource).toContain("runtimeProviderActiveModel");
+    expect(frontendTurnBindingSource).toContain(
+      "data.runtime_provider_backend",
+    );
+    expect(frontendTurnBindingSource).toContain(
+      "data.runtime_provider_selector",
+    );
+  });
+
   it("Aster subagent scheduler adapter 不得恢复", () => {
     const deletedPath = "lime-rs/crates/agent/src/subagent_scheduler.rs";
     const limeAgentLibPath = "lime-rs/crates/agent/src/lib.rs";
@@ -1884,12 +2239,48 @@ describe("aster migration boundary", () => {
       join(REPO_ROOT, "lime-rs/crates/agent/src/session_configuration.rs"),
       "utf8",
     );
+    const agentRuntimeLibSource = readFileSync(
+      join(REPO_ROOT, "lime-rs/crates/agent-runtime/src/lib.rs"),
+      "utf8",
+    );
+    const agentRuntimeSessionConfigSource = readFileSync(
+      join(REPO_ROOT, "lime-rs/crates/agent-runtime/src/session_config.rs"),
+      "utf8",
+    );
 
     expect(
       leaks,
       "Aster SessionConfig 构造必须集中在 session_config_adapter.rs；AgentSessionConfig DTO 文件和策略主文件不得直接依赖 Aster SessionConfig",
     ).toEqual([]);
     expect(adapterSource).toContain("pub(crate) fn to_aster_session_config");
+    expect(adapterSource).toContain(
+      "use agent_runtime::session_config::AgentSessionConfig",
+    );
+    expect(agentRuntimeLibSource).toContain("pub mod session_config;");
+    expect(agentRuntimeSessionConfigSource).toContain(
+      "pub struct AgentSessionConfig",
+    );
+    expect(agentRuntimeSessionConfigSource).toContain(
+      "pub struct AgentSessionConfigurationRequest",
+    );
+    expect(agentRuntimeSessionConfigSource).toContain(
+      "pub struct SessionConfigBuilder",
+    );
+    expect(
+      FORBIDDEN_ASTER_SNIPPETS.filter((snippet) =>
+        agentRuntimeSessionConfigSource.includes(snippet),
+      ),
+      "AgentSessionConfig / SessionConfigBuilder current owner 是 agent-runtime，不得直接依赖 Aster",
+    ).toEqual([]);
+    expect(sessionConfigurationSource).toContain(
+      "pub use agent_runtime::session_config::{",
+    );
+    expect(
+      sessionConfigurationSource.includes("pub struct AgentSessionConfig"),
+    ).toBe(false);
+    expect(
+      sessionConfigurationSource.includes("pub struct SessionConfigBuilder"),
+    ).toBe(false);
     expect(sessionConfigurationSource.includes("aster::")).toBe(false);
   });
 
@@ -1903,6 +2294,15 @@ describe("aster migration boundary", () => {
       "lime-rs/crates/agent/src/request_tool_policy/aster_event_adapter.rs";
     const webSearchPreflightPath =
       "lime-rs/crates/agent/src/request_tool_policy/web_search_preflight.rs";
+    const agentRuntimeLibPath = "lime-rs/crates/agent-runtime/src/lib.rs";
+    const agentRuntimeReplyInputPath =
+      "lime-rs/crates/agent-runtime/src/reply_input.rs";
+    const agentRuntimeReplyHostPath =
+      "lime-rs/crates/agent-runtime/src/reply_host.rs";
+    const agentRuntimeReplyExecutionPath =
+      "lime-rs/crates/agent-runtime/src/reply_execution.rs";
+    const agentRuntimeReplyStreamPath =
+      "lime-rs/crates/agent-runtime/src/reply_stream.rs";
     const mainSource = readFileSync(join(REPO_ROOT, mainPath), "utf8");
     const mainProductionSource = mainSource.split(
       "\n#[cfg(test)]\nmod tests",
@@ -1918,6 +2318,26 @@ describe("aster migration boundary", () => {
     );
     const webSearchPreflightSource = readFileSync(
       join(REPO_ROOT, webSearchPreflightPath),
+      "utf8",
+    );
+    const agentRuntimeLibSource = readFileSync(
+      join(REPO_ROOT, agentRuntimeLibPath),
+      "utf8",
+    );
+    const agentRuntimeReplyInputSource = readFileSync(
+      join(REPO_ROOT, agentRuntimeReplyInputPath),
+      "utf8",
+    );
+    const agentRuntimeReplyHostSource = readFileSync(
+      join(REPO_ROOT, agentRuntimeReplyHostPath),
+      "utf8",
+    );
+    const agentRuntimeReplyExecutionSource = readFileSync(
+      join(REPO_ROOT, agentRuntimeReplyExecutionPath),
+      "utf8",
+    );
+    const agentRuntimeReplyStreamSource = readFileSync(
+      join(REPO_ROOT, agentRuntimeReplyStreamPath),
       "utf8",
     );
     const leaks =
@@ -1967,15 +2387,15 @@ describe("aster migration boundary", () => {
     ).toEqual([]);
     expect(
       innerSignatureLeaks,
-      "request_tool_policy 私有 stream 执行器必须接收 AsterReplyRuntimeHost；裸 Agent / provider handle 只能在入口边界立即收进 host",
+      "request_tool_policy 私有 stream 执行器必须接收 RuntimeReplyPolicyHost；裸 Agent / provider handle 只能在入口边界立即收进 host",
     ).toEqual([]);
     expect(
       streamAdapterLeaks,
-      "agent_reply_stream 只能保留流控和 Aster event projection；Aster message/action/cancel marker 构造必须下沉到 aster_reply_adapter",
+      "agent_reply_stream 只能保留 current RuntimeAgentEvent 流控；Aster message/action/cancel marker 构造必须下沉到 aster_reply_adapter",
     ).toEqual([]);
     expect(
       eventProjectionLeaks,
-      "agent_reply_stream 不得直接承接 Aster event projection；Aster event -> RuntimeEvent 必须下沉到 aster_event_adapter",
+      "agent_reply_stream 不得直接承接 Aster event projection；Aster event -> RuntimeEvent 必须收回到 aster_reply_adapter / aster_event_adapter compat 边界",
     ).toEqual([]);
     expect(
       replyCreationLeaks,
@@ -1987,16 +2407,126 @@ describe("aster migration boundary", () => {
     ).toEqual([]);
     expect(
       preflightAgentLeaks,
-      "web_search_preflight 不得重新直接持有裸 Aster Agent；预检索只能通过 AsterReplyRuntimeHost adapter 访问工具 registry",
+      "web_search_preflight 不得重新持有 Aster host / registry；预检索必须直接使用 tool-runtime current WebSearch executor",
     ).toEqual([]);
     expect(mainSource).toContain("mod agent_reply_stream;");
     expect(mainSource).toContain("mod aster_event_adapter;");
     expect(mainSource).toContain("mod aster_reply_adapter;");
+    expect(mainSource).toContain("agent_runtime::reply_input::{");
+    expect(mainSource).toContain(
+      "agent_runtime::session_config::AgentSessionConfig",
+    );
+    expect(mainSource).not.toContain("AsterReplyRuntimeHost");
+    expect(mainSource).not.toContain("struct ReplyInputImage");
+    expect(mainSource).not.toContain("struct ReplyInput");
+    expect(mainSource).not.toContain("struct ReplyAttemptError");
+    expect(mainSource).not.toContain("struct StreamReplyExecution");
+    expect(mainSource).toContain("agent_runtime::reply_execution::{");
+    expect(mainSource).toContain("persist_cancelled_turn_context_marker");
     expect(adapterSource).toContain("session_config: &AgentSessionConfig");
-    expect(adapterSource).toContain("host: &AsterReplyRuntimeHost");
+    expect(adapterSource).toContain(
+      "agent_runtime::session_config::AgentSessionConfig",
+    );
+    expect(adapterSource).toContain("host: &impl RuntimeReplyPolicyHost");
+    expect(adapterSource).toContain("RuntimeReplyPolicyHost");
+    expect(adapterSource).not.toContain("trait RuntimeReplyPolicyHost");
     expect(adapterSource).toContain(".start_reply_stream(");
+    expect(adapterSource).toContain(
+      "agent_runtime::reply_input::RuntimeReplyAttemptInput as ReplyAttemptInput",
+    );
+    expect(adapterSource).toContain(
+      "agent_runtime::reply_stream::RuntimeReplyStreamEvent",
+    );
+    expect(adapterSource).toContain("RuntimeReplyStreamEvent");
     expect(adapterSource.includes("ConfiguredReplyProvider")).toBe(false);
+    expect(agentRuntimeLibSource).toContain("pub mod reply_input;");
+    expect(agentRuntimeLibSource).toContain("pub mod reply_host;");
+    expect(agentRuntimeLibSource).toContain("pub mod reply_execution;");
+    expect(agentRuntimeLibSource).toContain("pub mod reply_stream;");
+    expect(agentRuntimeReplyHostSource).toContain(
+      "pub trait RuntimeReplyStreamHost<E>",
+    );
+    expect(agentRuntimeReplyHostSource).toContain(
+      "pub trait RuntimeReplyPolicyHost<E, S>",
+    );
+    expect(agentRuntimeReplyHostSource).toContain("fn emit_runtime_status");
+    expect(agentRuntimeReplyHostSource).toContain(
+      "persist_cancelled_turn_context_marker",
+    );
+    expect(agentRuntimeReplyHostSource).toContain(
+      "pub struct RuntimeReplyStartError",
+    );
+    expect(agentRuntimeReplyHostSource).toContain("RuntimeReplyAttemptInput");
+    expect(agentRuntimeReplyHostSource).toContain("AgentSessionConfig");
+    expect(
+      FORBIDDEN_ASTER_SNIPPETS.filter((snippet) =>
+        agentRuntimeReplyHostSource.includes(snippet),
+      ),
+      "agent-runtime reply_host contract 不得引入 Aster 类型",
+    ).toEqual([]);
+    expect(agentRuntimeReplyInputSource).toContain(
+      "pub struct RuntimeReplyInput",
+    );
+    expect(agentRuntimeReplyInputSource).toContain(
+      "pub struct RuntimeReplyInputImage",
+    );
+    expect(agentRuntimeReplyInputSource).toContain(
+      "pub struct RuntimeActionRequiredResponseInput",
+    );
+    expect(agentRuntimeReplyInputSource).toContain(
+      "pub enum RuntimeReplyAttemptInput",
+    );
+    expect(agentRuntimeReplyInputSource).toContain("runtime_input_kind");
+    expect(agentRuntimeReplyInputSource).not.toContain("aster::");
+    expect(agentRuntimeReplyExecutionSource).toContain(
+      "pub struct RuntimeReplyAttemptError",
+    );
+    expect(agentRuntimeReplyExecutionSource).toContain(
+      "pub struct RuntimeReplyExecution",
+    );
+    expect(agentRuntimeReplyExecutionSource).toContain("emitted_any");
+    expect(agentRuntimeReplyExecutionSource).toContain("attempts_summary");
+    expect(agentRuntimeReplyExecutionSource).not.toContain("aster::");
+    expect(agentRuntimeReplyStreamSource).toContain(
+      "pub enum RuntimeReplyStreamEvent<E>",
+    );
+    expect(agentRuntimeReplyStreamSource).toContain(
+      "SuppressedInlineProviderError(String)",
+    );
+    expect(agentRuntimeReplyStreamSource).not.toContain("aster::");
     expect(asterReplyAdapterSource).toContain("struct AsterReplyRuntimeHost");
+    expect(asterReplyAdapterSource).toContain(
+      "impl RuntimeReplyStreamHost<RuntimeAgentEvent> for AsterReplyRuntimeHost",
+    );
+    expect(asterReplyAdapterSource).toContain(
+      "impl RuntimeReplyPolicyHost<RuntimeAgentEvent, AgentRuntimeStatus> for AsterReplyRuntimeHost",
+    );
+    expect(asterReplyAdapterSource).toContain(
+      "agent_runtime::reply_stream::RuntimeReplyStreamEvent",
+    );
+    expect(asterReplyAdapterSource).toContain(
+      "RuntimeActionRequiredResponseInput as ActionRequiredResponseInput",
+    );
+    expect(asterReplyAdapterSource).toContain(
+      "RuntimeReplyAttemptInput as ReplyAttemptInput",
+    );
+    expect(asterReplyAdapterSource).toContain("RuntimeReplyStreamEvent");
+    expect(asterReplyAdapterSource).not.toContain(
+      "struct ActionRequiredResponseInput",
+    );
+    expect(asterReplyAdapterSource).not.toContain("enum ReplyAttemptInput");
+    expect(asterReplyAdapterSource).not.toContain(
+      "impl From<ReplyInput> for ReplyAttemptInput",
+    );
+    expect(asterReplyAdapterSource).not.toContain(
+      "enum RuntimeReplyStreamEvent",
+    );
+    expect(asterReplyAdapterSource).toContain("project_aster_reply_stream");
+    expect(asterReplyAdapterSource).toContain("RuntimeEventProjector::new");
+    expect(asterReplyAdapterSource).toContain("SuppressedInlineProviderError");
+    expect(asterReplyAdapterSource).toContain(
+      "extract_inline_agent_provider_error",
+    );
     expect(asterReplyAdapterSource).toContain(
       "stream_runtime_reply_with_policy",
     );
@@ -2009,7 +2539,10 @@ describe("aster migration boundary", () => {
     expect(asterReplyAdapterSource).toContain("with_reply_provider");
     expect(asterReplyAdapterSource).toContain("uses_pinned_provider");
     expect(asterReplyAdapterSource).toContain("emit_runtime_status");
-    expect(asterReplyAdapterSource).toContain("tool_registry");
+    expect(asterReplyAdapterSource).toContain(
+      "persist_cancelled_turn_context_marker",
+    );
+    expect(asterReplyAdapterSource).not.toContain("tool_registry");
     expect(asterReplyAdapterSource).toContain("start_aster_reply_stream");
     expect(asterReplyAdapterSource).toContain("to_aster_session_config");
     expect(asterReplyAdapterSource).toContain(".reply(");
@@ -2023,9 +2556,9 @@ describe("aster migration boundary", () => {
     );
     expect(asterEventAdapterSource).toContain("AutoCompactionProjectionState");
     expect(webSearchPreflightSource).toContain(
-      "host: &'request AsterReplyRuntimeHost<'agent>",
+      "runtime_web_search_executor_handle",
     );
-    expect(webSearchPreflightSource).toContain("host.tool_registry()");
+    expect(webSearchPreflightSource).toContain("WEB_SEARCH_TOOL_NAME");
   });
 
   it("request_tool_policy 模块路径和内部 attempt record 不得重新公开", () => {
@@ -2146,14 +2679,26 @@ describe("aster migration boundary", () => {
     const leaks = forbiddenHostSnippets
       .filter((snippet) => hostSource.includes(snippet))
       .map((snippet) => `${hostPath}: ${snippet}`);
+    const forbiddenAdapterSnippets = [
+      "get_agent_arc()",
+      "tool_registry()",
+      "runtime_tool_executor_from_aster_registry",
+      "Aster agent is not initialized",
+    ];
+    const adapterLeaks = forbiddenAdapterSnippets
+      .filter((snippet) => adapterSource.includes(snippet))
+      .map((snippet) => `${adapterPath}: ${snippet}`);
 
     expect(
       leaks,
-      "workspace_patch_host 只应处理 host tool plan/evidence；Aster Agent registry 读取必须集中到 workspace_patch_runtime_adapter",
+      "workspace_patch_host 只应处理 host tool plan/evidence；WebSearch 执行必须走 current runtime adapter",
+    ).toEqual([]);
+    expect(
+      adapterLeaks,
+      "workspace_patch_runtime_adapter 不得再为 WebSearch 读取 Aster Agent registry；应直接使用 tool-runtime current executor",
     ).toEqual([]);
     expect(hostSource).toContain("execute_workspace_patch_runtime_tool_batch");
-    expect(adapterSource).toContain("get_agent_arc()");
-    expect(adapterSource).toContain("tool_registry()");
+    expect(adapterSource).toContain("runtime_web_search_executor_handle");
     expect(adapterSource).toContain("execute_planned_tool_batch");
     expect(adapterSource).toContain("ToolExecutionBatchInput");
   });
@@ -2234,6 +2779,8 @@ describe("aster migration boundary", () => {
     expect(mcpBridgeSource).toContain(
       "pub(crate) struct McpBridgeRuntimeRegistry",
     );
+    expect(mcpBridgeSource).not.toContain("pub struct McpBridgeClient");
+    expect(mcpBridgeSource).not.toContain("pub fn new(\n        name: String");
     expect(mcpBridgeSource).toContain("ExtensionConfig::Builtin");
     expect(mcpBridgeSource).toContain("McpBridgeClient::new(");
   });
@@ -2552,12 +3099,37 @@ describe("aster migration boundary", () => {
       "lime-rs/crates/tool-runtime/src/execution_policy_service.rs";
     const executionProcessPath =
       "lime-rs/crates/tool-runtime/src/execution_process.rs";
+    const executionDecisionPath =
+      "lime-rs/crates/tool-runtime/src/execution_decision.rs";
     const executionRulesPath =
       "lime-rs/crates/tool-runtime/src/execution_rules.rs";
+    const sandboxPath = "lime-rs/crates/tool-runtime/src/sandbox.rs";
     const shellPath = "lime-rs/crates/tool-runtime/src/shell.rs";
+    const shellAnalysisPath =
+      "lime-rs/crates/tool-runtime/src/shell_analysis.rs";
+    const shellPermissionPath =
+      "lime-rs/crates/tool-runtime/src/shell_permission.rs";
+    const shellRuntimePath = "lime-rs/crates/tool-runtime/src/shell_runtime.rs";
+    const subprocessPath = "lime-rs/crates/tool-runtime/src/subprocess.rs";
+    const pathGuardPath = "lime-rs/crates/tool-runtime/src/path_guard.rs";
     const toolBatchPath = "lime-rs/crates/tool-runtime/src/tool_batch.rs";
+    const toolExecutorPath = "lime-rs/crates/tool-runtime/src/tool_executor.rs";
+    const toolDefinitionPath =
+      "lime-rs/crates/tool-runtime/src/tool_definition.rs";
+    const toolExtensionPath =
+      "lime-rs/crates/tool-runtime/src/tool_extension.rs";
+    const webFetchPath = "lime-rs/crates/tool-runtime/src/web_fetch.rs";
+    const webFetchContentPath =
+      "lime-rs/crates/tool-runtime/src/web_fetch/content.rs";
+    const webSearchPath = "lime-rs/crates/tool-runtime/src/web_search.rs";
+    const webSearchSupportPath =
+      "lime-rs/crates/tool-runtime/src/web_search/support.rs";
+    const agentDecisionPath =
+      "lime-rs/crates/agent/src/agent_tools/execution/decision.rs";
     const agentPolicyPath =
       "lime-rs/crates/agent/src/agent_tools/execution/policy.rs";
+    const agentSandboxPath =
+      "lime-rs/crates/agent/src/agent_tools/execution/sandbox.rs";
     const agentPolicyServicePath =
       "lime-rs/crates/agent/src/agent_tools/execution/service.rs";
     const agentExecutionProcessPath =
@@ -2566,6 +3138,8 @@ describe("aster migration boundary", () => {
       "lime-rs/crates/agent/src/agent_tools/execution/rules.rs";
     const agentToolOrchestratorPath =
       "lime-rs/crates/agent/src/agent_tools/tool_orchestrator.rs";
+    const agentToolOrchestratorAdapterPath =
+      "lime-rs/crates/agent/src/agent_tools/tool_orchestrator/aster_registry_adapter.rs";
     const appServerCargoPath = "lime-rs/crates/app-server/Cargo.toml";
     const appServerExecutionProcessPath =
       "lime-rs/crates/app-server/src/execution_process.rs";
@@ -2586,10 +3160,71 @@ describe("aster migration boundary", () => {
       join(REPO_ROOT, executionProcessPath),
       "utf8",
     );
+    const executionDecisionSource = readFileSync(
+      join(REPO_ROOT, executionDecisionPath),
+      "utf8",
+    );
     const shellSource = readFileSync(join(REPO_ROOT, shellPath), "utf8");
-    const toolBatchSource = readFileSync(join(REPO_ROOT, toolBatchPath), "utf8");
+    const shellAnalysisSource = readFileSync(
+      join(REPO_ROOT, shellAnalysisPath),
+      "utf8",
+    );
+    const sandboxSource = readFileSync(join(REPO_ROOT, sandboxPath), "utf8");
+    const shellPermissionSource = readFileSync(
+      join(REPO_ROOT, shellPermissionPath),
+      "utf8",
+    );
+    const shellRuntimeSource = readFileSync(
+      join(REPO_ROOT, shellRuntimePath),
+      "utf8",
+    );
+    const subprocessSource = readFileSync(
+      join(REPO_ROOT, subprocessPath),
+      "utf8",
+    );
+    const pathGuardSource = readFileSync(
+      join(REPO_ROOT, pathGuardPath),
+      "utf8",
+    );
+    const toolBatchSource = readFileSync(
+      join(REPO_ROOT, toolBatchPath),
+      "utf8",
+    );
+    const toolExecutorSource = readFileSync(
+      join(REPO_ROOT, toolExecutorPath),
+      "utf8",
+    );
+    const toolDefinitionSource = readFileSync(
+      join(REPO_ROOT, toolDefinitionPath),
+      "utf8",
+    );
+    const toolExtensionSource = readFileSync(
+      join(REPO_ROOT, toolExtensionPath),
+      "utf8",
+    );
+    const webFetchSource = readFileSync(join(REPO_ROOT, webFetchPath), "utf8");
+    const webFetchContentSource = readFileSync(
+      join(REPO_ROOT, webFetchContentPath),
+      "utf8",
+    );
+    const webSearchSource = readFileSync(
+      join(REPO_ROOT, webSearchPath),
+      "utf8",
+    );
+    const webSearchSupportSource = readFileSync(
+      join(REPO_ROOT, webSearchSupportPath),
+      "utf8",
+    );
+    const agentDecisionSource = readFileSync(
+      join(REPO_ROOT, agentDecisionPath),
+      "utf8",
+    );
     const agentPolicySource = readFileSync(
       join(REPO_ROOT, agentPolicyPath),
+      "utf8",
+    );
+    const agentSandboxSource = readFileSync(
+      join(REPO_ROOT, agentSandboxPath),
       "utf8",
     );
     const agentPolicyServiceSource = readFileSync(
@@ -2645,6 +3280,27 @@ describe("aster migration boundary", () => {
     ]
       .filter((snippet) => agentRulesSource.includes(snippet))
       .map((snippet) => `${agentRulesPath}: ${snippet}`);
+    const agentDecisionLeaks = [
+      "pub enum ToolExecutionDecisionKind",
+      "pub struct ToolExecutionDecision {",
+      "pub struct ToolExecutionDecisionInput",
+      "fn insert_sandbox_backend_metadata",
+      "fn should_require_approval",
+    ]
+      .filter((snippet) => agentDecisionSource.includes(snippet))
+      .map((snippet) => `${agentDecisionPath}: ${snippet}`);
+    const agentSandboxLeaks = [
+      "pub enum RequestedSandboxPolicy",
+      "pub enum SandboxBackendPlatform",
+      "pub enum SandboxBackend",
+      "pub enum SandboxBackendStatus",
+      "pub struct SandboxBackendPlan",
+      "pub fn evaluate_sandbox",
+      "pub fn plan_sandbox_backend",
+      "fn shell_segment_is_read_only",
+    ]
+      .filter((snippet) => agentSandboxSource.includes(snippet))
+      .map((snippet) => `${agentSandboxPath}: ${snippet}`);
     const agentPolicyServiceLeaks = [
       "struct RuntimeExecutionPolicyLayer",
       "struct ToolExecutionPolicyOverride",
@@ -2661,6 +3317,19 @@ describe("aster migration boundary", () => {
     ]
       .filter((snippet) => agentPolicyServiceSource.includes(snippet))
       .map((snippet) => `${agentPolicyServicePath}: ${snippet}`);
+    const agentWorkspacePermissionBuilderLeaks = [
+      "WorkspaceExecutionPermissionInput",
+      "build_workspace_execution_permissions",
+      "build_workspace_shell_allow_pattern",
+      "should_auto_approve_tool_warnings",
+      "ToolPermissionManager",
+      "ParameterRestriction",
+      "RestrictionType",
+      "PermissionScope",
+      "ToolPermission",
+    ]
+      .filter((snippet) => agentPolicySource.includes(snippet))
+      .map((snippet) => `${agentPolicyPath}: ${snippet}`);
     const agentToolBatchDtoLeaks = [
       "pub struct PlannedToolExecution {",
       "pub struct ToolExecutionOutcome {",
@@ -2683,6 +3352,23 @@ describe("aster migration boundary", () => {
     ]
       .filter((snippet) => agentToolOrchestratorSource.includes(snippet))
       .map((snippet) => `${agentToolOrchestratorPath}: ${snippet}`);
+    const agentToolShellPermissionLeaks = [
+      "BashTool",
+      "PowerShellTool",
+      "registry.register(Box::new(BashTool::new()))",
+      "registry.register(Box::new(PowerShellTool::new()))",
+      ".check_tool_permissions(&planned.tool_name",
+      ".check_tool_permissions(\n            canonical_tool_name",
+      "ToolError::permission_denied(reason)",
+      "let error = ToolError::permission_denied",
+      "fn classify_policy_error(error: &ToolError)",
+    ]
+      .filter((snippet) => agentToolOrchestratorSource.includes(snippet))
+      .map((snippet) => `${agentToolOrchestratorPath}: ${snippet}`);
+    const agentToolRegistryAdapterLeaks =
+      TOOL_ORCHESTRATOR_FORBIDDEN_DIRECT_ASTER_REGISTRY_SNIPPETS.filter(
+        (snippet) => agentToolOrchestratorSource.includes(snippet),
+      ).map((snippet) => `${agentToolOrchestratorPath}: ${snippet}`);
     const agentExecutionProcessLeaks = [
       "pub enum ExecutionProcessStatus",
       "pub enum ExecutionOutputKind",
@@ -2700,10 +3386,12 @@ describe("aster migration boundary", () => {
     const appServerShellHelperLeaks = [
       "shell_command_text_from_argv,\n    LiveExecutionProcessRegistry",
       "agent_tools::tool_orchestrator::{\n    canonical_shell_tool_name, check_shell_tool_permissions, shell_command_text_from_argv",
+      "lime_agent::agent_tools::tool_orchestrator",
     ]
       .filter((snippet) => appServerExecutionProcessSource.includes(snippet))
       .map((snippet) => `${appServerExecutionProcessPath}: ${snippet}`);
     const appServerExecutionProcessLeaks = [
+      "lime_agent::agent_tools::execution::{",
       "start_local_execution_process,\n    ExecutionOutputDelta as AgentExecutionOutputDelta",
       "ExecutionProcessSnapshot as AgentExecutionProcessSnapshot",
       "ExecutionProcessStatus as AgentExecutionProcessStatus",
@@ -2714,14 +3402,26 @@ describe("aster migration boundary", () => {
       .map((snippet) => `${appServerExecutionProcessPath}: ${snippet}`);
 
     expect(source).toContain("pub mod execution_process;");
+    expect(source).toContain("pub mod execution_decision;");
     expect(source).toContain("pub mod execution_rules;");
     expect(source).toContain("pub mod execution_policy;");
     expect(source).toContain("pub mod execution_policy_service;");
     expect(source).toContain("pub mod mcp_notification;");
+    expect(source).toContain("pub mod sandbox;");
+    expect(source).toContain("pub mod path_guard;");
     expect(source).toContain("pub mod shell;");
+    expect(source).toContain("pub mod shell_analysis;");
+    expect(source).toContain("pub mod shell_permission;");
+    expect(source).toContain("pub mod shell_runtime;");
+    expect(source).toContain("pub mod subprocess;");
     expect(source).toContain("pub mod tool_batch;");
+    expect(source).toContain("pub mod tool_executor;");
+    expect(source).toContain("pub mod tool_definition;");
+    expect(source).toContain("pub mod tool_extension;");
     expect(source).toContain("pub mod tool_io;");
     expect(source).toContain("pub mod tool_result;");
+    expect(source).toContain("pub mod web_fetch;");
+    expect(source).toContain("pub mod web_search;");
     expect(executionPolicySource).toContain(
       "pub enum ToolExecutionWarningPolicy",
     );
@@ -2746,11 +3446,26 @@ describe("aster migration boundary", () => {
     expect(executionPolicyServiceSource).toContain(
       "fn convert_shell_command_rules",
     );
+    expect(executionDecisionSource).toContain("pub fn decide_tool_execution");
+    expect(executionDecisionSource).toContain(
+      "pub struct ToolExecutionDecisionInput",
+    );
+    expect(sandboxSource).toContain("pub fn plan_sandbox_backend");
+    expect(sandboxSource).toContain("pub fn evaluate_sandbox");
     expect(executionProcessSource).toContain("pub enum ExecutionProcessStatus");
     expect(executionProcessSource).toContain("pub struct ExecutionOutputDelta");
-    expect(executionProcessSource).toContain("pub struct ExecutionProcessSnapshot");
-    expect(executionProcessSource).toContain("pub struct LocalExecutionRequest");
-    expect(executionProcessSource).toContain("pub fn start_local_execution_process");
+    expect(executionProcessSource).toContain(
+      "pub struct ExecutionProcessSnapshot",
+    );
+    expect(executionProcessSource).toContain(
+      "pub struct LocalExecutionRequest",
+    );
+    expect(executionProcessSource).toContain(
+      "pub trait LiveExecutionProcessRegistry",
+    );
+    expect(executionProcessSource).toContain(
+      "pub fn start_local_execution_process",
+    );
     expect(executionRulesSource).toContain("pub enum ShellCommandRiskLevel");
     expect(executionRulesSource).toContain("pub struct ShellCommandRule {");
     expect(executionRulesSource).toContain("pub struct NetworkRule {");
@@ -2762,17 +3477,126 @@ describe("aster migration boundary", () => {
     expect(shellSource).toContain("pub fn shell_command_for_tool");
     expect(shellSource).toContain("pub fn is_shell_tool_name");
     expect(shellSource).toContain("pub fn param_string");
+    expect(shellPermissionSource).toContain(
+      "pub fn check_shell_command_permission",
+    );
+    expect(shellPermissionSource).toContain(
+      "pub fn check_bash_command_permission",
+    );
+    expect(shellPermissionSource).toContain(
+      "pub fn check_powershell_command_permission",
+    );
+    expect(shellPermissionSource).toContain("use crate::path_guard::{");
+    expect(shellPermissionSource).toContain("use crate::shell_analysis::{");
+    expect(shellAnalysisSource).toContain("mod bash;");
+    expect(shellAnalysisSource).toContain("mod common;");
+    expect(shellAnalysisSource).toContain("mod powershell;");
+    expect(shellAnalysisSource).toContain(
+      "pub fn is_bash_command_concurrency_safe(",
+    );
+    expect(shellAnalysisSource).toContain("pub fn missing_bash_read_targets(");
+    expect(shellAnalysisSource).toContain(
+      "pub fn is_powershell_command_concurrency_safe(",
+    );
+    expect(shellAnalysisSource).toContain(
+      "pub fn missing_powershell_read_targets(",
+    );
+    expect(shellRuntimeSource).toContain("pub fn build_platform_shell_command");
+    expect(shellRuntimeSource).toContain("pub fn detect_powershell_executable");
+    expect(shellRuntimeSource).toContain(
+      "fn strip_windows_powershell_command_wrapper",
+    );
+    expect(subprocessSource).toContain("pub fn configure_command_no_window");
+    expect(subprocessSource).toContain("pub fn configure_command_for_gui");
+    expect(subprocessSource).toContain(
+      "pub fn wrap_powershell_command_for_utf8",
+    );
+    expect(subprocessSource).toContain("pub fn decode_process_output");
+    expect(subprocessSource).toContain("pub fn summarize_decoded_with");
+    expect(pathGuardSource).toContain("pub fn evaluate_path_mutations");
+    expect(pathGuardSource).toContain("pub fn resolve_static_path_candidate");
+    expect(pathGuardSource).toContain("fn normalize_path_lexically");
+    expect(pathGuardSource).toContain("fn is_protected_path");
     expect(appServerCargoSource).toContain("tool-runtime.workspace = true");
     expect(appServerExecutionProcessSource).toContain(
-      "use tool_runtime::shell::shell_command_text_from_argv;",
+      "use tool_runtime::shell::{is_shell_tool_name, shell_command_text_from_argv};",
     );
     expect(appServerExecutionProcessSource).toContain(
       "use tool_runtime::execution_process::{",
+    );
+    expect(appServerExecutionProcessSource).toContain(
+      "use tool_runtime::shell_permission::check_shell_command_permission;",
     );
     expect(toolBatchSource).toContain("pub struct PlannedToolExecution");
     expect(toolBatchSource).toContain("pub struct ToolExecutionOutcome");
     expect(toolBatchSource).toContain("pub struct ToolExecutionBatch");
     expect(toolBatchSource).toContain("pub struct ToolTerminalEventUpdate");
+    expect(toolExecutorSource).toContain(
+      "pub struct RuntimeToolExecutionContextInput",
+    );
+    expect(toolExecutorSource).toContain(
+      "pub struct RuntimeToolExecutionContext",
+    );
+    expect(toolExecutorSource).toContain(
+      "pub struct RuntimeWorkspaceSandboxInput",
+    );
+    expect(toolExecutorSource).toContain(
+      "pub struct RuntimeToolExecutionRequest",
+    );
+    expect(toolExecutorSource).toContain("pub type RuntimeToolTurnContext");
+    expect(toolExecutorSource).toContain(
+      "pub trait RuntimeToolExecutor: Send + Sync",
+    );
+    expect(toolExecutorSource).toContain(
+      "pub struct RuntimeToolExecutorHandle",
+    );
+    expect(toolExecutorSource).toContain(
+      "pub struct RuntimeToolExecutionResult",
+    );
+    expect(toolExecutorSource).toContain(
+      "pub struct RuntimeToolExecutionError",
+    );
+    expect(toolExecutorSource).toContain("pub enum RuntimeToolPolicyErrorKind");
+    expect(toolExecutorSource).toContain("pub fn classification(&self)");
+    expect(toolDefinitionSource).toContain("pub struct RuntimeToolDefinition");
+    expect(toolDefinitionSource).toContain("pub fn new(");
+    expect(toolExtensionSource).toContain("pub struct RuntimeExtensionConfig");
+    expect(toolExtensionSource).toContain("pub fn is_tool_exposed_by_default");
+    expect(webFetchSource).toContain("pub struct RuntimeWebFetchExecutor");
+    expect(webFetchSource).toContain(
+      "impl RuntimeToolExecutor for RuntimeWebFetchExecutor",
+    );
+    expect(webFetchSource).toContain(
+      "pub fn runtime_web_fetch_executor_handle",
+    );
+    expect(webFetchSource).toContain("pub fn web_fetch_tool_definition");
+    expect(webFetchSource).toContain('include!("web_fetch/content.rs");');
+    expect(webFetchSource).not.toContain("aster::");
+    expect(webFetchSource).not.toContain("use aster::");
+    expect(webFetchContentSource).toContain("pub struct WebFetchInput");
+    expect(webFetchContentSource).toContain("fn check_web_fetch_url_safety");
+    expect(webFetchContentSource).toContain("fn html_to_markdown");
+    expect(webFetchContentSource).toContain("fn dynamic_filter_content");
+    expect(webFetchContentSource).not.toContain("aster::");
+    expect(webFetchContentSource).not.toContain("use aster::");
+    expect(webSearchSource).toContain("pub struct RuntimeWebSearchExecutor");
+    expect(webSearchSource).toContain(
+      "impl RuntimeToolExecutor for RuntimeWebSearchExecutor",
+    );
+    expect(webSearchSource).toContain(
+      "pub fn runtime_web_search_executor_handle",
+    );
+    expect(webSearchSource).toContain("pub fn web_search_tool_definition");
+    expect(webSearchSource).toContain('include!("web_search/support.rs");');
+    expect(webSearchSource).not.toContain("aster::");
+    expect(webSearchSource).not.toContain("use aster::");
+    expect(webSearchSupportSource).toContain("pub struct WebSearchInput");
+    expect(webSearchSupportSource).toContain("struct SearchRuntimeConfig");
+    expect(webSearchSupportSource).toContain(
+      "fn extract_results_from_search_html",
+    );
+    expect(webSearchSupportSource).not.toContain("aster::");
+    expect(webSearchSupportSource).not.toContain("use aster::");
     expect(agentPolicySource).toContain(
       "pub use tool_runtime::execution_policy::{",
     );
@@ -2785,6 +3609,10 @@ describe("aster migration boundary", () => {
     expect(agentRulesSource).toContain(
       "pub use tool_runtime::execution_rules::{",
     );
+    expect(agentDecisionSource).toContain(
+      "decide_tool_execution as decide_tool_execution_with_options",
+    );
+    expect(agentSandboxSource.trim()).toBe("pub use tool_runtime::sandbox::*;");
     expect(agentExecutionProcessSource.trim()).toBe(
       "pub use tool_runtime::execution_process::*;",
     );
@@ -2794,20 +3622,78 @@ describe("aster migration boundary", () => {
     expect(agentToolOrchestratorSource).toContain(
       "use tool_runtime::execution_process::{",
     );
+    expect(agentToolOrchestratorSource).toContain("use tool_runtime::shell::{");
     expect(agentToolOrchestratorSource).toContain(
-      "use tool_runtime::shell::{",
+      "use tool_runtime::shell_permission::{check_shell_command_permission, ShellPermissionDecision};",
+    );
+    expect(agentToolOrchestratorSource).toContain(
+      "RuntimeToolExecutionContext, RuntimeToolExecutionContextInput, RuntimeToolExecutionRequest,",
+    );
+    expect(agentToolOrchestratorSource).toContain(
+      "RuntimeToolExecutorHandle, RuntimeToolPolicyErrorKind, RuntimeWorkspaceSandboxInput,",
+    );
+    expect(agentToolOrchestratorSource).toContain(
+      "pub executor: RuntimeToolExecutorHandle",
+    );
+    expect(agentToolOrchestratorSource).toContain(
+      "RuntimeToolPolicyErrorKind::PermissionDenied(reason.clone())",
+    );
+    expect(agentToolOrchestratorSource).toContain(
+      "RuntimeWorkspaceSandboxInput::from_policy_metadata(&policy_decision.metadata)",
+    );
+    expect(agentToolOrchestratorSource).toContain(
+      "let context = RuntimeToolExecutionContext::new(RuntimeToolExecutionContextInput",
+    );
+    expect(agentToolOrchestratorSource).toContain(
+      "RuntimeToolExecutionRequest {",
+    );
+    expect(agentToolOrchestratorSource).toContain(
+      "let classification = error?.classification()?;",
+    );
+    expect(agentToolOrchestratorSource).not.toContain(
+      "runtime_tool_executor_from_aster_registry",
+    );
+    expect(agentToolOrchestratorSource).not.toContain(
+      "pub registry: AsterToolRegistryAdapter",
+    );
+    expect(agentToolOrchestratorSource).not.toContain(
+      "AsterToolRegistryAdapter",
+    );
+    expect(agentToolOrchestratorSource).not.toContain(
+      "enum ToolPolicyErrorKind",
+    );
+    expect(agentToolOrchestratorSource).not.toContain(
+      "AsterToolPolicyErrorKind",
+    );
+    expect(existsSync(join(REPO_ROOT, agentToolOrchestratorAdapterPath))).toBe(
+      false,
+    );
+    expect(agentToolOrchestratorSource).not.toContain(
+      "mod aster_registry_adapter;",
     );
     expect(
       agentDtoLeaks,
-      "Tool execution policy DTO owner 必须是 tool-runtime current crate；lime-agent 只能保留 Aster permission adapter / resolver glue",
+      "Tool execution policy DTO owner 必须是 tool-runtime current crate；lime-agent 只能保留 resolver glue，不得恢复 Aster permission builder",
     ).toEqual([]);
     expect(
       agentRuleDtoLeaks,
       "Shell/network execution rule DTO 与分类器必须归属 tool-runtime current crate；lime-agent rules.rs 只能保留 catalog 默认策略表与 re-export",
     ).toEqual([]);
     expect(
+      agentDecisionLeaks,
+      "Tool execution decision / sandbox backend decision 必须归属 tool-runtime current crate；lime-agent decision.rs 只能注入 agent catalog options",
+    ).toEqual([]);
+    expect(
+      agentSandboxLeaks,
+      "Workspace sandbox policy 纯逻辑必须归属 tool-runtime current crate；lime-agent sandbox.rs 只能作为迁移期 re-export",
+    ).toEqual([]);
+    expect(
       agentPolicyServiceLeaks,
       "Tool execution persisted/runtime policy 解析必须归属 tool-runtime current crate；lime-agent service.rs 只能注入默认策略表和 tool name matcher",
+    ).toEqual([]);
+    expect(
+      agentWorkspacePermissionBuilderLeaks,
+      "Workspace execution permission builder 没有 production 消费者且曾依赖 Aster permission manager；不得在 lime-agent policy.rs 恢复这条 dead surface",
     ).toEqual([]);
     expect(
       agentToolBatchDtoLeaks,
@@ -2815,7 +3701,15 @@ describe("aster migration boundary", () => {
     ).toEqual([]);
     expect(
       agentToolShellHelperLeaks,
-      "Shell command planning / 参数抽取 helper 必须归属 tool-runtime current crate；lime-agent tool_orchestrator.rs 只能调用 current helper 并保留 Aster registry adapter",
+      "Shell command planning / 参数抽取 helper 必须归属 tool-runtime current crate；lime-agent tool_orchestrator.rs 只能调用 current helper，不能恢复 Aster registry adapter",
+    ).toEqual([]);
+    expect(
+      agentToolShellPermissionLeaks,
+      "Shell permission preflight 必须直接使用 tool-runtime current owner；tool_orchestrator.rs 不得为了权限检查临时注册 Aster BashTool/PowerShellTool、调用 Aster check_tool_permissions，或构造 Aster ToolError 做 policy metadata 分类",
+    ).toEqual([]);
+    expect(
+      agentToolRegistryAdapterLeaks,
+      "tool_orchestrator Aster registry adapter 已删除；主 tool_orchestrator.rs 不得重新直接依赖 Aster registry / ToolContext / ToolError / workspace sandbox / session_context",
     ).toEqual([]);
     expect(
       agentExecutionProcessLeaks,
@@ -2832,6 +3726,277 @@ describe("aster migration boundary", () => {
     expect(
       leaks,
       "tool-runtime 只保留真实消费的工具投影模块；无实现/无调用方的 ToolRuntime 执行 trait 和 DTO 不得恢复",
+    ).toEqual([]);
+  });
+
+  it("tool inventory runtime DTO 必须使用 tool-runtime current owner", () => {
+    const inventoryPath = "lime-rs/crates/agent/src/agent_tools/inventory.rs";
+    const snapshotPath =
+      "lime-rs/crates/agent/src/agent_tools/tool_inventory_runtime_snapshot.rs";
+    const adapterPath =
+      "lime-rs/crates/agent/src/agent_tools/tool_inventory_runtime_adapter.rs";
+    const inventorySource = readFileSync(
+      join(REPO_ROOT, inventoryPath),
+      "utf8",
+    );
+    const snapshotSource = readFileSync(join(REPO_ROOT, snapshotPath), "utf8");
+    const adapterSource = readFileSync(join(REPO_ROOT, adapterPath), "utf8");
+    const projectionSource = [
+      `${inventoryPath}\n${inventorySource}`,
+      `${snapshotPath}\n${snapshotSource}`,
+    ].join("\n");
+    const definitionLeaks =
+      TOOL_INVENTORY_FORBIDDEN_ASTER_TOOL_DEFINITION_SNIPPETS.filter(
+        (snippet) => projectionSource.includes(snippet),
+      );
+    const extensionLeaks =
+      TOOL_INVENTORY_FORBIDDEN_ASTER_EXTENSION_CONFIG_SNIPPETS.filter(
+        (snippet) => projectionSource.includes(snippet),
+      );
+
+    expect(inventorySource).toContain(
+      "use tool_runtime::tool_definition::RuntimeToolDefinition;",
+    );
+    expect(inventorySource).toContain(
+      "use tool_runtime::tool_extension::RuntimeExtensionConfig;",
+    );
+    expect(snapshotSource).toContain(
+      "use tool_runtime::tool_definition::RuntimeToolDefinition;",
+    );
+    expect(snapshotSource).toContain(
+      "use tool_runtime::tool_extension::RuntimeExtensionConfig;",
+    );
+    expect(adapterSource).toContain(
+      "use tool_runtime::tool_definition::RuntimeToolDefinition;",
+    );
+    expect(adapterSource).toContain(
+      "use tool_runtime::tool_extension::RuntimeExtensionConfig;",
+    );
+    expect(adapterSource).toContain(".get_definitions()");
+    expect(adapterSource).toContain("RuntimeToolDefinition::new(");
+    expect(adapterSource).toContain("project_aster_extension_config");
+    expect(adapterSource).toContain("AsterExtensionConfig::Builtin");
+    expect(adapterSource).toContain("RuntimeExtensionConfig::new(");
+    expect(
+      definitionLeaks.map(
+        (snippet) => `tool inventory Aster definition DTO leak: ${snippet}`,
+      ),
+      "ToolDefinition 已迁为 tool-runtime current DTO；Aster registry DTO 只能在 runtime adapter 读取边界转换一次",
+    ).toEqual([]);
+    expect(
+      extensionLeaks.map(
+        (snippet) => `tool inventory Aster extension DTO leak: ${snippet}`,
+      ),
+      "ExtensionConfig 已迁为 tool-runtime current DTO；Aster extension config 只能在 runtime adapter 读取边界转换一次",
+    ).toEqual([]);
+  });
+
+  it("vendored Aster shell permission 只允许内部调用 tool-runtime current owner", () => {
+    const asterCargoPath = "lime-rs/vendor/aster-rust/crates/aster/Cargo.toml";
+    const asterLibPath = "lime-rs/vendor/aster-rust/crates/aster/src/lib.rs";
+    const toolsModPath =
+      "lime-rs/vendor/aster-rust/crates/aster/src/tools/mod.rs";
+    const bashPath = "lime-rs/vendor/aster-rust/crates/aster/src/tools/bash.rs";
+    const powershellPath =
+      "lime-rs/vendor/aster-rust/crates/aster/src/tools/powershell_tool.rs";
+    const taskPath = "lime-rs/vendor/aster-rust/crates/aster/src/tools/task.rs";
+    const pathGuardPath =
+      "lime-rs/vendor/aster-rust/crates/aster/src/tools/path_guard.rs";
+    const commandSemanticsPath =
+      "lime-rs/vendor/aster-rust/crates/aster/src/tools/command_semantics.rs";
+    const subprocessPath =
+      "lime-rs/vendor/aster-rust/crates/aster/src/subprocess.rs";
+    const shellRuntimePath =
+      "lime-rs/vendor/aster-rust/crates/aster/src/tools/shell_runtime.rs";
+    const bashPropertyTestsPath =
+      "lime-rs/vendor/aster-rust/crates/aster/tests/bash_tool_property_tests.rs";
+    const cargoSource = readFileSync(join(REPO_ROOT, asterCargoPath), "utf8");
+    const asterLibSource = readFileSync(join(REPO_ROOT, asterLibPath), "utf8");
+    const toolsModSource = readFileSync(join(REPO_ROOT, toolsModPath), "utf8");
+    const bashSource = readFileSync(join(REPO_ROOT, bashPath), "utf8");
+    const powershellSource = readFileSync(
+      join(REPO_ROOT, powershellPath),
+      "utf8",
+    );
+    const taskSource = readFileSync(join(REPO_ROOT, taskPath), "utf8");
+    const bashPropertyTestsSource = readFileSync(
+      join(REPO_ROOT, bashPropertyTestsPath),
+      "utf8",
+    );
+    const productionSource = [
+      `${toolsModPath}\n${toolsModSource.split("#[cfg(test)]")[0] ?? toolsModSource}`,
+      `${bashPath}\n${bashSource.split("#[cfg(test)]")[0] ?? bashSource}`,
+      `${powershellPath}\n${
+        powershellSource.split("#[cfg(test)]")[0] ?? powershellSource
+      }`,
+      `${taskPath}\n${taskSource.split("#[cfg(test)]")[0] ?? taskSource}`,
+    ].join("\n");
+    const vendorSource = collectTextFiles(
+      join(REPO_ROOT, "lime-rs/vendor/aster-rust/crates/aster/src"),
+    )
+      .map((file) => {
+        const relativePath = repoRelative(file);
+        const source = readFileSync(file, "utf8");
+        return `${relativePath}\n${source}`;
+      })
+      .join("\n");
+    const leaks = VENDORED_ASTER_SHELL_PERMISSION_FORBIDDEN_SNIPPETS.filter(
+      (snippet) => productionSource.includes(snippet),
+    );
+    const wrapperLeaks =
+      VENDORED_ASTER_SHELL_ANALYSIS_WRAPPER_FORBIDDEN_SNIPPETS.filter(
+        (snippet) => productionSource.includes(snippet),
+      );
+    const pathGuardLeaks = existsSync(join(REPO_ROOT, pathGuardPath))
+      ? VENDORED_ASTER_PATH_GUARD_FORBIDDEN_SNIPPETS.filter((snippet) =>
+          readFileSync(join(REPO_ROOT, pathGuardPath), "utf8").includes(
+            snippet,
+          ),
+        )
+      : [];
+    const processRuntimeLeaks =
+      VENDORED_ASTER_PROCESS_RUNTIME_FORBIDDEN_SNIPPETS.filter((snippet) =>
+        `${cargoSource}\n${asterLibSource}\n${toolsModSource}\n${vendorSource}`.includes(
+          snippet,
+        ),
+      );
+
+    expect(cargoSource).toContain(
+      'tool-runtime = { path = "../../../../crates/tool-runtime" }',
+    );
+    expect(cargoSource).not.toContain("encoding_rs =");
+    expect(asterLibSource).not.toContain("pub mod subprocess;");
+    expect(bashSource).toContain(
+      "use tool_runtime::shell_permission::{check_bash_command_permission, ShellPermissionDecision};",
+    );
+    expect(bashSource).toContain(
+      "use tool_runtime::shell_runtime::build_platform_shell_command;",
+    );
+    expect(bashSource).toContain(
+      "use tool_runtime::subprocess::{decode_process_output, summarize_decoded_with};",
+    );
+    expect(bashSource).not.toContain("is_bash_command_concurrency_safe");
+    expect(bashSource).toContain("missing_bash_read_targets(command, cwd)");
+    expect(bashSource).toContain(
+      "match check_bash_command_permission(command, &context.working_directory)",
+    );
+    expect(powershellSource).toContain(
+      "use tool_runtime::shell_runtime::detect_powershell_executable;",
+    );
+    expect(powershellSource).toContain(
+      "configure_command_for_gui, decode_process_output, summarize_decoded_with,",
+    );
+    expect(powershellSource).not.toContain(
+      "is_powershell_command_concurrency_safe",
+    );
+    expect(powershellSource).toContain(
+      "missing_powershell_read_targets(command, cwd)",
+    );
+    expect(powershellSource).toContain("detect_blocked_sleep_pattern");
+    expect(powershellSource).toContain("check_powershell_command_permission");
+    expect(powershellSource).toContain(
+      "match check_powershell_command_permission(&input.command, &context.working_directory)",
+    );
+    expect(taskSource).toContain(
+      "use tool_runtime::shell_runtime::build_platform_shell_command;",
+    );
+    expect(taskSource).toContain("use tool_runtime::subprocess::{");
+    expect(taskSource).toContain("configure_command_for_gui");
+    expect(taskSource).toContain("decode_process_output");
+    expect(taskSource).toContain("wrap_powershell_command_for_utf8");
+    expect(toolsModSource).not.toContain("pub mod path_guard;");
+    expect(toolsModSource).not.toContain("mod shell_runtime;");
+    expect(existsSync(join(REPO_ROOT, pathGuardPath))).toBe(false);
+    expect(
+      existsSync(join(REPO_ROOT, commandSemanticsPath)),
+      "vendored Aster 不得恢复 tools/command_semantics.rs；shell command exit semantics current owner 是 tool-runtime::command_semantics",
+    ).toBe(false);
+    expect(
+      existsSync(join(REPO_ROOT, subprocessPath)),
+      "vendored Aster 不得恢复 src/subprocess.rs；进程输出解码、Windows no-window 与 UTF-8 wrapper current owner 是 tool-runtime::subprocess",
+    ).toBe(false);
+    expect(
+      existsSync(join(REPO_ROOT, shellRuntimePath)),
+      "vendored Aster 不得恢复 tools/shell_runtime.rs；平台 shell command 构造与 PowerShell runtime 探测 current owner 是 tool-runtime::shell_runtime",
+    ).toBe(false);
+    expect(
+      wrapperLeaks.map(
+        (snippet) => `vendored shell analysis wrapper: ${snippet}`,
+      ),
+      "shell analysis / read-target preflight 已迁到 tool-runtime；vendored Aster 不得继续公开包装这些已迁 API",
+    ).toEqual([]);
+    expect(
+      productionSource.includes("pub use tool_runtime::"),
+      "vendored Aster 不得用 pub use 把 tool-runtime current API 重新伪装成 Aster public surface",
+    ).toBe(false);
+    expect(
+      toolsModSource.includes("pub use bash::{preflight_bash_read_targets"),
+      "Bash read-target preflight 是 Aster tool 内部执行细节，外部必须直接依赖 tool-runtime current owner",
+    ).toBe(false);
+    expect(
+      toolsModSource.includes(
+        "pub use powershell_tool::{preflight_powershell_read_targets",
+      ),
+      "PowerShell read-target preflight 是 Aster tool 内部执行细节，外部必须直接依赖 tool-runtime current owner",
+    ).toBe(false);
+    expect(
+      leaks.map((snippet) => `vendored shell permission duplicate: ${snippet}`),
+      "Bash/PowerShell permission 纯规则已迁到 tool-runtime；vendored Aster 只能在现有工具内部调用 current owner，不能继续维护第二份安全判断事实源",
+    ).toEqual([]);
+    expect(
+      pathGuardLeaks.map(
+        (snippet) => `vendored path_guard duplicate: ${snippet}`,
+      ),
+      "路径候选解析与保护目录判断已迁到 tool-runtime；vendored Aster 不得保留 path_guard wrapper 或重复实现",
+    ).toEqual([]);
+    expect(
+      processRuntimeLeaks.map(
+        (snippet) => `vendored process runtime duplicate: ${snippet}`,
+      ),
+      "进程输出解码、Windows no-window / UTF-8 wrapper 与平台 shell runtime 已迁到 tool-runtime；vendored Aster 只能内部调用 current owner，不得恢复第二份 helper 或依赖 encoding_rs",
+    ).toEqual([]);
+    expect(bashPropertyTestsSource).toContain(
+      "Permission rules live in `tool-runtime::shell_permission`",
+    );
+    expect(
+      [
+        "prop_permission_check_blocks_dangerous",
+        "prop_permission_check_allows_safe",
+        "prop_permission_check_asks_for_warning",
+        "arb_dangerous_command",
+        "arb_warning_command",
+        "tool.check_permissions(&params, &context).await",
+      ].filter((snippet) => bashPropertyTestsSource.includes(snippet)),
+      "BashTool vendor property tests 不得继续把已迁 shell permission 规则包装成 Aster 行为；permission 行为必须在 tool-runtime current tests 覆盖",
+    ).toEqual([]);
+  });
+
+  it("vendored Aster web tools 只能委托 tool-runtime current owner", () => {
+    const toolsModPath =
+      "lime-rs/vendor/aster-rust/crates/aster/src/tools/mod.rs";
+    const webPath = "lime-rs/vendor/aster-rust/crates/aster/src/tools/web.rs";
+    const webFetchContentPath =
+      "lime-rs/vendor/aster-rust/crates/aster/src/tools/web_fetch_content.rs";
+    const toolsModSource = readFileSync(join(REPO_ROOT, toolsModPath), "utf8");
+    const webSource = readFileSync(join(REPO_ROOT, webPath), "utf8");
+    const productionSource = `${toolsModPath}\n${toolsModSource.split("#[cfg(test)]")[0] ?? toolsModSource}\n${webPath}\n${webSource.split("#[cfg(test)]")[0] ?? webSource}`;
+    const webLineCount = webSource.split(/\r?\n/u).length;
+    const leaks = VENDORED_ASTER_WEB_TOOL_FORBIDDEN_SNIPPETS.filter((snippet) =>
+      productionSource.includes(snippet),
+    );
+
+    expect(webLineCount).toBeLessThan(800);
+    expect(existsSync(join(REPO_ROOT, webFetchContentPath))).toBe(false);
+    expect(toolsModSource).not.toContain("mod web_fetch_content;");
+    expect(webSource).toContain("use tool_runtime::web_fetch::{");
+    expect(webSource).toContain("runtime_web_fetch_executor_handle");
+    expect(webSource).toContain("runtime_web_search_executor_handle");
+    expect(webSource).toContain("execute_current_tool(");
+    expect(webSource).toContain("WebFetchTool");
+    expect(webSource).toContain("WebSearchTool");
+    expect(
+      leaks.map((snippet) => `vendored web tool duplicate: ${snippet}`),
+      "WebFetch/WebSearch 执行逻辑已迁到 tool-runtime；vendored Aster 只能保留 Tool trait adapter，不得恢复抓取、搜索 provider、缓存或内容清洗重复实现",
     ).toEqual([]);
   });
 
@@ -3427,6 +4592,18 @@ describe("aster migration boundary", () => {
   });
 
   it("已迁工具编排文件不得重新使用 Aster turn context DTO", () => {
+    const turnContextConfigurationPath =
+      "lime-rs/crates/agent/src/turn_context_configuration.rs";
+    const turnContextAsterAdapterPath =
+      "lime-rs/crates/agent/src/turn_context_configuration/aster_adapter.rs";
+    const turnContextConfigurationSource = readFileSync(
+      join(REPO_ROOT, turnContextConfigurationPath),
+      "utf8",
+    );
+    const turnContextAsterAdapterSource = readFileSync(
+      join(REPO_ROOT, turnContextAsterAdapterPath),
+      "utf8",
+    );
     const forbiddenSnippets = [
       "use aster::session::TurnContextOverride",
       "aster::session::TurnContextOverride",
@@ -3444,6 +4621,17 @@ describe("aster migration boundary", () => {
       leaks,
       "工具编排 public 输入必须使用 AgentTurnContext；Aster turn context 只能在真正调用 Aster registry 前局部转换",
     ).toEqual([]);
+    expect(turnContextConfigurationSource).not.toContain("aster::");
+    expect(turnContextConfigurationSource).toContain("mod aster_adapter;");
+    expect(turnContextConfigurationSource).toContain(
+      "pub(crate) use aster_adapter::{to_agent_turn_context, to_aster_turn_context};",
+    );
+    expect(turnContextAsterAdapterSource).toContain(
+      "aster::session::TurnContextOverride",
+    );
+    expect(turnContextAsterAdapterSource).toContain(
+      "aster::session::TurnOutputSchemaSource",
+    );
   });
 
   it("protocol_projection 不得重新公开 Aster runtime timeline DTO", () => {
@@ -3471,6 +4659,97 @@ describe("aster migration boundary", () => {
     expect(
       leaks,
       "session_execution_runtime production builder 只能接 Lime projection DTO；Aster snapshot / turn DTO 只能留在 adapter 或测试 fixture",
+    ).toEqual([]);
+  });
+
+  it("session execution projection contract 必须归属 agent-runtime current owner", () => {
+    const currentOwnerPath =
+      "lime-rs/crates/agent-runtime/src/session_execution.rs";
+    const runtimeBuilderPath =
+      "lime-rs/crates/agent/src/session_execution_runtime.rs";
+    const runtimeSnapshotAdapterPath =
+      "lime-rs/crates/agent/src/runtime_snapshot_adapter.rs";
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const runtimeBuilderSource = readFileSync(
+      join(REPO_ROOT, runtimeBuilderPath),
+      "utf8",
+    );
+    const runtimeSnapshotAdapterSource = readFileSync(
+      join(REPO_ROOT, runtimeSnapshotAdapterPath),
+      "utf8",
+    );
+
+    expect(currentOwnerSource).toContain(
+      "pub struct SessionExecutionRuntimeSessionProjection<Usage>",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub struct SessionExecutionRuntimeSnapshotProjection<Context>",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub struct SessionExecutionRuntimeTurnProjection<Context>",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub struct RuntimeTimelineSnapshotProjection<Turn, Item>",
+    );
+    expect(currentOwnerSource).toContain("pub enum SubagentRuntimeStatusKind");
+    expect(currentOwnerSource).toContain(
+      "pub struct SubagentRuntimeStatus<Usage>",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub struct SubagentLatestTurnProjection",
+    );
+    expect(currentOwnerSource).toContain("pub enum SubagentTurnStatus");
+    expect(currentOwnerSource).toContain(
+      "pub struct SessionRuntimeSnapshotOverlay<ExecutionSnapshot, TimelineSnapshot>",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub subagent_latest_turn: Option<SubagentLatestTurnProjection>",
+    );
+    expect(currentOwnerSource).not.toContain("aster::");
+    expect(runtimeBuilderSource).toContain(
+      "agent_runtime::session_execution::SessionExecutionRuntimeSessionProjection",
+    );
+    expect(runtimeBuilderSource).toContain(
+      "agent_runtime::session_execution::SessionExecutionRuntimeSnapshotProjection",
+    );
+    expect(runtimeBuilderSource).not.toContain(
+      "pub(crate) struct SessionExecutionRuntimeSessionProjection",
+    );
+    expect(runtimeBuilderSource).not.toContain(
+      "pub(crate) struct SessionExecutionRuntimeSnapshotProjection",
+    );
+    expect(runtimeBuilderSource).not.toContain(
+      "pub(crate) struct SessionExecutionRuntimeTurnProjection",
+    );
+    expect(runtimeSnapshotAdapterSource).toContain(
+      "agent_runtime::session_execution::RuntimeTimelineSnapshotProjection",
+    );
+    expect(runtimeSnapshotAdapterSource).not.toContain(
+      "pub(crate) struct RuntimeTimelineSnapshotProjection",
+    );
+  });
+
+  it("session runtime detail 只能消费 current runtime snapshot overlay", () => {
+    const filePath = "lime-rs/crates/agent/src/session_store_runtime_detail.rs";
+    const source = readFileSync(join(REPO_ROOT, filePath), "utf8");
+    const forbiddenSnippets = [
+      "use crate::runtime_snapshot_adapter::project_aster_runtime_snapshot",
+      "project_aster_runtime_snapshot(",
+      "project_aster_session_execution_runtime_snapshot",
+      "load_runtime_snapshot(",
+      "SessionRuntimeSnapshot",
+    ];
+    const leaks = forbiddenSnippets
+      .filter((snippet) => source.includes(snippet))
+      .map((snippet) => `${filePath}: ${snippet}`);
+
+    expect(source).toContain("load_runtime_snapshot_overlay");
+    expect(
+      leaks,
+      "session_store_runtime_detail 必须消费 runtime_support 投影后的 current overlay；Aster snapshot DTO 和投影函数只能留在 runtime_support / compat adapter",
     ).toEqual([]);
   });
 
@@ -3502,13 +4781,30 @@ describe("aster migration boundary", () => {
 
   it("subagent_control production 不得重新消费 Aster runtime snapshot / turn/item DTO", () => {
     const filePath = "lime-rs/crates/agent/src/subagent_control.rs";
+    const currentOwnerPath =
+      "lime-rs/crates/agent-runtime/src/session_execution.rs";
     const source = readFileSync(join(REPO_ROOT, filePath), "utf8");
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
     const productionSource = source.split("#[cfg(test)]")[0] ?? source;
     const leaks =
       SUBAGENT_CONTROL_FORBIDDEN_PRODUCTION_RUNTIME_DTO_SNIPPETS.filter(
         (snippet) => productionSource.includes(snippet),
       ).map((snippet) => `${filePath}: ${snippet}`);
 
+    expect(currentOwnerSource).toContain(
+      "pub struct SubagentLatestTurnProjection",
+    );
+    expect(currentOwnerSource).toContain("pub enum SubagentTurnStatus");
+    expect(source).toContain("load_runtime_snapshot_overlay");
+    expect(source).toContain(
+      "agent_runtime::session_execution::SubagentRuntimeStatus<AgentTokenUsage>",
+    );
+    expect(source).toContain(
+      "agent_runtime::session_execution::SubagentLatestTurnProjection",
+    );
     expect(
       leaks,
       "subagent_control production 只能消费 Lime SubagentTurnStatus / SubagentLatestTurnProjection；Aster runtime snapshot / turn/item DTO 只能留在 adapter 边界",
@@ -3549,6 +4845,7 @@ describe("aster migration boundary", () => {
     const adapterPath =
       "lime-rs/crates/agent/src/session_store_subagent_aster_adapter.rs";
     const source = readFileSync(join(REPO_ROOT, filePath), "utf8");
+    const adapterSource = readFileSync(join(REPO_ROOT, adapterPath), "utf8");
     const leaks =
       SESSION_STORE_SUBAGENT_CONTEXT_FORBIDDEN_RUNTIME_DTO_SNIPPETS.filter(
         (snippet) => source.includes(snippet),
@@ -3562,8 +4859,9 @@ describe("aster migration boundary", () => {
       leaks,
       "session_store_subagent_context 的测试 helper 只能使用 Lime current turn projection；Aster runtime snapshot/turn DTO 只能留在 adapter 边界",
     ).toEqual([]);
-    expect(readFileSync(join(REPO_ROOT, adapterPath), "utf8")).toContain(
-      "resolve_subagent_session_metadata",
+    expect(adapterSource).toContain("project_aster_subagent_session");
+    expect(adapterSource).toContain(
+      "fn resolve_subagent_model_name(session: &AsterSession)",
     );
     expect(
       directAsterLeaks,

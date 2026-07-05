@@ -218,6 +218,9 @@ export interface AppServerClient {
   inspectPluginLocalPackage(
     params: protocol.PluginLocalPackageInspectParams,
   ): protocol.JsonRpcRequest;
+  exportPluginLocalPackage(
+    params: protocol.PluginLocalPackageExportParams,
+  ): protocol.JsonRpcRequest;
   fetchPluginCloudPackage(
     params: protocol.PluginFetchCloudPackageParams,
   ): protocol.JsonRpcRequest;

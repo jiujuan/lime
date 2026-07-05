@@ -114,6 +114,22 @@ function normalizeString(value: string | undefined): string | undefined {
   return normalized ? normalized : undefined;
 }
 
+function buildWorkflowResumeMetadata(
+  input: PluginTaskHostResponseRequest,
+): Record<string, string> | null {
+  const workflowRunId = normalizeString(input.workflowRunId);
+  const workflowKey = normalizeString(input.workflowKey);
+  const stepId = normalizeString(input.stepId);
+  if (!workflowRunId || !workflowKey || !stepId) {
+    return null;
+  }
+  return {
+    workflowRunId,
+    workflowKey,
+    stepId,
+  };
+}
+
 function normalizeList(values: string[] | undefined): string[] {
   return (values ?? []).map((value) => value.trim()).filter(Boolean);
 }
@@ -1177,6 +1193,7 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
     if (input.actionScope?.turnId || state.turnId) {
       actionScope.turn_id = input.actionScope?.turnId ?? state.turnId;
     }
+    const workflowResume = buildWorkflowResumeMetadata(input);
     const runtimeRequest: AgentRuntimeRespondActionRequest = {
       session_id: state.sessionId,
       request_id: input.requestId,
@@ -1184,6 +1201,7 @@ export class AgentRuntimeCapabilityHost implements CapabilityHost {
       confirmed: input.confirmed ?? true,
       metadata: {
         ...(input.metadata ?? {}),
+        ...(workflowResume ? { workflowResume } : {}),
         plugin_runtime: {
           app_id: state.appId,
           entry_key: state.entryKey,

@@ -3,9 +3,9 @@
 use super::{dispatch_result, parse_params, to_jsonrpc_error, RequestProcessor, RpcDispatch};
 use app_server_protocol::{
     JsonRpcError, PluginFetchCloudPackageParams, PluginInstalledDisabledSetParams,
-    PluginInstalledSaveParams, PluginLocalPackageInspectParams, PluginShellPrepareParams,
-    PluginUiRuntimeStartParams, PluginUiRuntimeStatusParams, PluginUiRuntimeStopParams,
-    PluginUninstallParams, PluginUninstallRehearsalParams,
+    PluginInstalledSaveParams, PluginLocalPackageExportParams, PluginLocalPackageInspectParams,
+    PluginShellPrepareParams, PluginUiRuntimeStartParams, PluginUiRuntimeStatusParams,
+    PluginUiRuntimeStopParams, PluginUninstallParams, PluginUninstallRehearsalParams,
 };
 
 impl RequestProcessor {
@@ -30,6 +30,20 @@ impl RequestProcessor {
         let response = self
             .runtime
             .inspect_plugin_local_package(params)
+            .await
+            .map_err(to_jsonrpc_error)?;
+        dispatch_result(response)
+    }
+
+    pub(super) async fn handle_plugin_local_package_export_impl(
+        &self,
+        params: Option<serde_json::Value>,
+    ) -> Result<RpcDispatch, JsonRpcError> {
+        self.ensure_initialized()?;
+        let params: PluginLocalPackageExportParams = parse_params(params)?;
+        let response = self
+            .runtime
+            .export_plugin_local_package(params)
             .await
             .map_err(to_jsonrpc_error)?;
         dispatch_result(response)

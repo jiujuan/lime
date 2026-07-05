@@ -577,6 +577,60 @@ describe("agentRuntime threadClient", () => {
     expect(appServerClient.resumeAgentSessionThread).not.toHaveBeenCalled();
   });
 
+  it("resume contract 应透传 workflowResume metadata 给 App Server current", async () => {
+    const appServerClient = appServerClientMock();
+    const client = createThreadClient({
+      appServerClient,
+      isAppServerTurnLifecycleAvailable: () => true,
+    });
+
+    await expect(
+      client.resumeAgentRuntimeThread({
+        session_id: "session-1",
+        turn_id: "turn-queued-1",
+        open_action_ids: ["article-draft-review"],
+        decisions: [
+          {
+            actionId: "article-draft-review",
+            decision: "approved",
+            metadata: {
+              workflowResume: {
+                workflowRunId: "turn-queued-1:content-article",
+                workflowKey: "content_article_workflow",
+                stepId: "draft",
+              },
+            },
+          },
+        ],
+      }),
+    ).resolves.toBe(true);
+
+    expect(appServerClient.resumeAgentSessionThread).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      resumeContract: expect.objectContaining({
+        schemaVersion: "lime-runtime-resume-contract/v0.1",
+        runtimeId: "app-server",
+        sessionId: "session-1",
+        turnId: "turn-queued-1",
+        resumeMode: "selected-actions",
+        openActionIds: ["article-draft-review"],
+        decisions: [
+          expect.objectContaining({
+            actionId: "article-draft-review",
+            decision: "approved",
+            metadata: {
+              workflowResume: {
+                workflowRunId: "turn-queued-1:content-article",
+                workflowKey: "content_article_workflow",
+                stepId: "draft",
+              },
+            },
+          }),
+        ],
+      }),
+    });
+  });
+
   it("replay current 收到假成功或缺字段结果时应 fail closed", async () => {
     const appServerClient = appServerClientMock();
     vi.mocked(appServerClient.replayAction).mockResolvedValueOnce(

@@ -166,6 +166,39 @@ export function contentFactoryHostGenerationAsterChatRequest(baseUrl) {
   };
 }
 
+export function contentFactoryLiveHostGenerationAsterChatRequest({
+  providerId,
+  providerName = "openai",
+  model,
+  apiKey,
+  baseUrl = "",
+  reasoningEffort = "low",
+}) {
+  const normalizedProviderId = normalizeText(providerId);
+  const normalizedProviderName = normalizeText(providerName) || "openai";
+  const normalizedModel = normalizeText(model);
+  const normalizedApiKey = normalizeText(apiKey);
+  const normalizedBaseUrl = normalizeText(baseUrl);
+  if (!normalizedProviderId || !normalizedModel || !normalizedApiKey) {
+    throw new Error(
+      "live host generation requires providerId, model, and apiKey",
+    );
+  }
+  return {
+    provider_config: {
+      provider_id: normalizedProviderId,
+      provider_name: normalizedProviderName,
+      model_name: normalizedModel,
+      api_key: normalizedApiKey,
+      ...(normalizedBaseUrl ? { base_url: normalizedBaseUrl } : {}),
+      tool_call_strategy: "native",
+    },
+    provider_preference: normalizedProviderId,
+    model_preference: normalizedModel,
+    reasoning_effort: normalizeText(reasoningEffort) || "low",
+  };
+}
+
 export async function startContentFactoryHostGenerationFixture() {
   const responses = [];
   const fixture = await startOpenAiCompatibleFixtureServer({

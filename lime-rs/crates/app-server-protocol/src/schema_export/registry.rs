@@ -418,6 +418,8 @@ pub(super) fn v0_schemas() -> Vec<GeneratedJsonSchema> {
         typed_schema::<BrowserSessionActionExecuteResponse>("BrowserSessionActionExecuteResponse"),
         typed_schema::<PluginLocalPackageInspectParams>("PluginLocalPackageInspectParams"),
         typed_schema::<PluginLocalPackageInspectResponse>("PluginLocalPackageInspectResponse"),
+        typed_schema::<PluginLocalPackageExportParams>("PluginLocalPackageExportParams"),
+        typed_schema::<PluginLocalPackageExportResponse>("PluginLocalPackageExportResponse"),
         typed_schema::<PluginFetchCloudPackageParams>("PluginFetchCloudPackageParams"),
         typed_schema::<PluginCloudReleaseDescriptor>("PluginCloudReleaseDescriptor"),
         typed_schema::<PluginPackageCacheEntry>("PluginPackageCacheEntry"),

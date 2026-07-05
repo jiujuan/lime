@@ -822,6 +822,34 @@ description: 正文写作技能
     }
 
     #[test]
+    fn inspect_local_package_rejects_unsupported_schema_version() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        write_minimal_plugin_package(temp.path(), r#"{ "runtime": "./app.runtime.yaml" }"#)
+            .expect("write plugin package");
+        fs::write(
+            temp.path().join("plugin.json"),
+            r#"{
+  "schemaVersion": "lime.plugin.package.v0",
+  "id": "content-factory-app",
+  "version": "2.0.0",
+  "displayName": "内容工厂",
+  "contributions": { "runtime": "./app.runtime.yaml" }
+}"#,
+        )
+        .expect("write unsupported plugin manifest");
+
+        let error = inspect_plugin_local_package(PluginLocalPackageInspectParams {
+            app_dir: temp.path().to_string_lossy().to_string(),
+        })
+        .expect_err("unsupported plugin package schema must be rejected");
+
+        assert!(
+            error.contains("schemaVersion 必须是 lime.plugin.package.v1"),
+            "{error}"
+        );
+    }
+
+    #[test]
     fn inspect_local_package_rejects_contribution_path_escape() {
         let temp = tempfile::tempdir().expect("tempdir");
         write_minimal_plugin_package(temp.path(), r#"{ "runtime": "../app.runtime.yaml" }"#)

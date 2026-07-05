@@ -17,9 +17,9 @@ use crate::config::search_path::SearchPaths;
 use crate::config::{AsterMode, Config};
 use crate::conversation::message::{Message, MessageContent};
 use crate::model::ModelConfig;
-use crate::subprocess::configure_command_no_window;
 use rmcp::model::Role;
 use rmcp::model::Tool;
+use tool_runtime::subprocess::configure_command_no_window;
 
 pub const CODEX_DEFAULT_MODEL: &str = "gpt-5.3-codex";
 pub const CODEX_KNOWN_MODELS: &[&str] = &["gpt-5.3-codex", "gpt-5.2-codex", "gpt-5.2"];

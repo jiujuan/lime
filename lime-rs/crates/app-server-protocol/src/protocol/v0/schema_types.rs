@@ -308,6 +308,8 @@ pub const V0_SCHEMA_TYPE_NAMES: &[&str] = &[
     "BrowserSessionActionExecuteResponse",
     "PluginLocalPackageInspectParams",
     "PluginLocalPackageInspectResponse",
+    "PluginLocalPackageExportParams",
+    "PluginLocalPackageExportResponse",
     "PluginFetchCloudPackageParams",
     "PluginCloudReleaseDescriptor",
     "PluginPackageCacheEntry",

@@ -17,7 +17,6 @@ import {
 import {
   isWorkspaceArticlePatchArtifactKind,
   readWorkspaceArticlePatchRecordFromMetadata,
-  readWorkspaceArticleRecordFromMetadata,
 } from "../workspace/workspaceArticleWorkspaceMetadata";
 
 type HistoryArtifactSummary = {
@@ -61,6 +60,9 @@ function historyArtifactTypeFromSummary(
     return normalizedExplicit as ArtifactType;
   }
   if (normalizedExplicit === "markdown" || normalizedExplicit === "text") {
+    return "document";
+  }
+  if (normalizedExplicit === "artifact_document") {
     return "document";
   }
   const extension = fileNameFromHistoryPath(path)
@@ -133,7 +135,7 @@ function historyArtifactFromSummary(params: {
 }): Artifact | null {
   const { sessionIdFallback, summary } = params;
   const metadata = asHistoryRecord(summary.metadata);
-  if (isArticleWorkspaceArtifactSummary(summary, metadata)) {
+  if (isHiddenWorkspacePatchArtifactSummary(summary, metadata)) {
     return null;
   }
   const path =
@@ -213,7 +215,7 @@ function historyArtifactFromSummary(params: {
   };
 }
 
-function isArticleWorkspaceArtifactSummary(
+function isHiddenWorkspacePatchArtifactSummary(
   summary: HistoryArtifactSummary,
   metadata: Record<string, unknown> | null,
 ): boolean {
@@ -221,38 +223,38 @@ function isArticleWorkspaceArtifactSummary(
   if (isWorkspaceArticlePatchArtifactKind(summaryKind)) {
     return true;
   }
+  const path =
+    readHistoryString(summary.path) ||
+    readHistoryMetadataString(metadata, [
+      "filePath",
+      "file_path",
+      "path",
+      "artifactPath",
+      "artifact_path",
+    ]);
+  if (isWorkspacePatchPath(path)) {
+    return true;
+  }
   if (!metadata) {
     return false;
   }
-  const articleWorkspaceCompat =
-    readWorkspaceArticleRecordFromMetadata(metadata);
-  const artifactDocument =
-    asHistoryRecord(metadata.artifactDocument) ??
-    asHistoryRecord(metadata.artifact_document);
-  const artifactDocumentMetadata = asHistoryRecord(artifactDocument?.metadata);
-  const artifactDocumentArticleWorkspace =
-    readWorkspaceArticleRecordFromMetadata(artifactDocumentMetadata);
   const workspacePatch = readWorkspaceArticlePatchRecordFromMetadata(metadata);
-  const openedFrom = readHistoryMetadataString(metadata, [
-    "openedFrom",
-    "opened_from",
-  ]);
-  const artifactSchema = readHistoryMetadataString(metadata, [
-    "artifactSchema",
-    "artifact_schema",
-  ]);
   const artifactKind = readHistoryMetadataString(metadata, [
     "artifactKind",
     "artifact_kind",
     "kind",
   ]);
   return (
-    Boolean(articleWorkspaceCompat || artifactDocumentArticleWorkspace) ||
-    Boolean(workspacePatch) ||
-    openedFrom === "app_server_article_workspace" ||
-    isWorkspaceArticlePatchArtifactKind(artifactKind) ||
-    (artifactSchema === "artifact_document.v1" &&
-      Boolean(articleWorkspaceCompat || artifactDocumentArticleWorkspace))
+    Boolean(workspacePatch) || isWorkspaceArticlePatchArtifactKind(artifactKind)
+  );
+}
+
+function isWorkspacePatchPath(path: string): boolean {
+  const normalized = path.trim().replaceAll("\\", "/").toLowerCase();
+  return (
+    normalized.endsWith("/workspace-patch.json") ||
+    normalized.endsWith("content-factory-workspace-patch.json") ||
+    normalized.includes("/content-factory/workspace-patch.json")
   );
 }
 

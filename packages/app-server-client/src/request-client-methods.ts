@@ -464,6 +464,12 @@ export const APP_SERVER_REQUEST_CLIENT_METHODS: readonly AppServerRequestClientM
       params: "required",
     },
     {
+      name: "exportPluginLocalPackage",
+      method: protocol.METHOD_PLUGIN_LOCAL_PACKAGE_EXPORT,
+      kind: "request",
+      params: "required",
+    },
+    {
       name: "fetchPluginCloudPackage",
       method: protocol.METHOD_PLUGIN_PACKAGE_FETCH_CLOUD,
       kind: "request",

@@ -30,6 +30,10 @@ export interface AgentStreamProviderTraceMetricContextParams {
   model?: string | null;
   provider?: string | null;
   retryable?: boolean | null;
+  runtimeProviderActiveModel?: string | null;
+  runtimeProviderBackend?: string | null;
+  runtimeProviderProtocol?: string | null;
+  runtimeProviderSelector?: string | null;
   runtimeEventType?: string | null;
   stage: string;
   status?: string | null;
@@ -117,6 +121,10 @@ export function buildAgentStreamProviderTraceMetricContext(
     providerWaitMs:
       params.stage === "first_text_delta_received" ? elapsedMs : null,
     retryable: params.retryable ?? null,
+    runtimeProviderActiveModel: params.runtimeProviderActiveModel ?? null,
+    runtimeProviderBackend: params.runtimeProviderBackend ?? null,
+    runtimeProviderProtocol: params.runtimeProviderProtocol ?? null,
+    runtimeProviderSelector: params.runtimeProviderSelector ?? null,
     runtimeEventType: params.runtimeEventType ?? null,
     sessionId: params.activeSessionId,
     stage: params.stage,

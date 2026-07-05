@@ -63,12 +63,10 @@ use crate::tool_inspection::ToolInspectionManager;
 use crate::tool_inspection::ToolInspector;
 use crate::tool_monitor::RepetitionInspector;
 use crate::tools::{
-    current_surface_tool_gates, is_bash_command_concurrency_safe,
-    is_powershell_command_concurrency_safe, register_all_tools,
-    should_register_current_surface_tool, AgentControlToolConfig, AskTool, CronCreateTool,
-    CronDeleteTool, CronListTool, CurrentSurfaceToolGates, SharedFileReadHistory,
-    SpawnAgentRequest, SpawnAgentResponse, ToolContext, ToolRegistrationConfig, ToolRegistry,
-    DEFAULT_ASK_TIMEOUT_SECS,
+    current_surface_tool_gates, register_all_tools, should_register_current_surface_tool,
+    AgentControlToolConfig, AskTool, CronCreateTool, CronDeleteTool, CronListTool,
+    CurrentSurfaceToolGates, SharedFileReadHistory, SpawnAgentRequest, SpawnAgentResponse,
+    ToolContext, ToolRegistrationConfig, ToolRegistry, DEFAULT_ASK_TIMEOUT_SECS,
 };
 use crate::user_message_manager::UserMessageManager;
 use crate::utils::is_token_cancelled;
@@ -81,6 +79,9 @@ use serde::Deserialize;
 use serde_json::Value;
 use tokio::sync::{mpsc, Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
+use tool_runtime::shell_analysis::{
+    is_bash_command_concurrency_safe, is_powershell_command_concurrency_safe,
+};
 use tracing::{debug, error, info, instrument, warn};
 
 fn should_log_provider_failure_as_error(error: &ProviderError) -> bool {

@@ -144,6 +144,53 @@ describe("PluginsPage", () => {
     ).toContain("min-h-[188px]");
   });
 
+  it("应从应用中心打开内置发布工作台", async () => {
+    const container = await renderPage();
+    await flush();
+
+    expect(
+      container.querySelector('[data-testid="plugin-publish-workbench"]'),
+    ).toBeNull();
+
+    await act(async () => {
+      (
+        container.querySelector(
+          '[data-testid="plugins-open-publish"]',
+        ) as HTMLButtonElement
+      )?.click();
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(
+      container.querySelector('[data-testid="plugin-publish-workbench"]'),
+    ).not.toBeNull();
+  });
+
+  it("应从应用中心打开平台发布审核工作台", async () => {
+    const container = await renderPage();
+    await flush();
+
+    expect(
+      container.querySelector('[data-testid="plugin-review-workbench"]'),
+    ).toBeNull();
+
+    await act(async () => {
+      (
+        container.querySelector(
+          '[data-testid="plugins-open-release-review"]',
+        ) as HTMLButtonElement
+      )?.click();
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(
+      container.querySelector('[data-testid="plugin-review-workbench"]'),
+    ).not.toBeNull();
+    expect(apiMocks.listPluginReleaseSubmissions).toHaveBeenCalledTimes(1);
+  });
+
   it("已安装筛选应展示本地已安装应用", async () => {
     installedStates.push(buildReadyState());
     const container = await renderPage({ statusFilter: "installed" });

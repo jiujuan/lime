@@ -3522,6 +3522,109 @@ describe("agentStreamRuntimeHandler", () => {
     expect(disposeListener).toHaveBeenCalledTimes(1);
   });
 
+  it("同一 stream 名下旧 turn_completed 晚到时不应清理新 turn", () => {
+    let messages: Message[] = [
+      {
+        id: "assistant-current-turn",
+        role: "assistant",
+        content: "新请求正在输出",
+        timestamp: new Date("2026-06-07T10:00:00.000Z"),
+        isThinking: true,
+      },
+    ];
+    const requestState = {
+      accumulatedContent: "新请求正在输出",
+      activeTextSegmentTurnId: "turn-current",
+      currentTurnId: "turn-current",
+      queuedTurnId: null,
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+    };
+    const clearActiveStreamIfMatch = vi.fn(() => true);
+    const clearOptimisticItem = vi.fn();
+    const clearOptimisticTurn = vi.fn();
+    const disposeListener = vi.fn();
+    const setCurrentTurnId = vi.fn();
+    const setIsSending = vi.fn();
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const setThreadItems = vi.fn();
+    const setThreadTurns = vi.fn();
+
+    handleTurnStreamEvent({
+      data: {
+        type: "turn_completed",
+        text: "旧请求完成",
+        turn: {
+          id: "turn-old",
+          thread_id: "thread-test",
+          prompt_text: "old",
+          status: "completed",
+          started_at: "2026-06-07T10:00:00.000Z",
+          completed_at: "2026-06-07T10:00:01.000Z",
+          created_at: "2026-06-07T10:00:00.000Z",
+          updated_at: "2026-06-07T10:00:01.000Z",
+        },
+      } as AgentEvent,
+      requestState,
+      callbacks: {
+        activateStream: () => {},
+        isStreamActivated: () => true,
+        clearOptimisticItem,
+        clearOptimisticTurn,
+        disposeListener,
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch,
+        upsertQueuedTurn: () => {},
+        removeQueuedTurnState: () => {},
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+        appendThinkingToParts: (parts) => parts,
+      },
+      eventName: "agent-runtime-reused-stream",
+      pendingTurnKey: "pending-turn",
+      pendingItemKey: "pending-item",
+      assistantMsgId: "assistant-current-turn",
+      activeSessionId: "session-1",
+      resolvedWorkspaceId: "workspace-1",
+      effectiveExecutionStrategy: "react",
+      content: "新请求",
+      runtime: {} as never,
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      setMessages: setMessages as never,
+      setPendingActions: vi.fn() as never,
+      setThreadItems: setThreadItems as never,
+      setThreadTurns: setThreadTurns as never,
+      setCurrentTurnId: setCurrentTurnId as never,
+      setExecutionRuntime: vi.fn() as never,
+      setIsSending: setIsSending as never,
+    });
+
+    expect(clearActiveStreamIfMatch).not.toHaveBeenCalled();
+    expect(clearOptimisticItem).not.toHaveBeenCalled();
+    expect(clearOptimisticTurn).not.toHaveBeenCalled();
+    expect(disposeListener).not.toHaveBeenCalled();
+    expect(setCurrentTurnId).not.toHaveBeenCalled();
+    expect(setIsSending).not.toHaveBeenCalled();
+    expect(setMessages).not.toHaveBeenCalled();
+    expect(setThreadItems).not.toHaveBeenCalled();
+    expect(setThreadTurns).not.toHaveBeenCalled();
+    expect(messages[0]).toMatchObject({
+      content: "新请求正在输出",
+      isThinking: true,
+    });
+    expect(requestState.currentTurnId).toBe("turn-current");
+    expect(requestState.accumulatedContent).toBe("新请求正在输出");
+  });
+
   it("收到完整 message 快照事件时应立即预填首屏文本", () => {
     let messages: Message[] = [
       {

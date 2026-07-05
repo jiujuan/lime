@@ -48,6 +48,60 @@ export const IMAGE_COMMAND_SPLIT_MODULES = [
   "lime-rs/crates/app-server/src/runtime_backend/image_command/presentation.rs",
   "lime-rs/crates/app-server/src/runtime_backend/image_command/tests.rs",
 ];
+export const RUNTIME_CORE_MAIN = "lime-rs/crates/app-server/src/runtime.rs";
+export const RUNTIME_CORE_OWNER_MODULES = [
+  "lime-rs/crates/app-server/src/runtime/context_compaction.rs",
+  "lime-rs/crates/app-server/src/runtime/model_providers.rs",
+  "lime-rs/crates/app-server/src/runtime/read_model.rs",
+  "lime-rs/crates/app-server/src/runtime/session_control.rs",
+  "lime-rs/crates/app-server/src/runtime/session_lifecycle.rs",
+  "lime-rs/crates/app-server/src/runtime/thread_item_projection.rs",
+  "lime-rs/crates/app-server/src/runtime/tool_item_projection.rs",
+  "lime-rs/crates/app-server/src/runtime/turn_execution.rs",
+];
+export const RUNTIME_READ_MODEL_MAIN =
+  "lime-rs/crates/app-server/src/runtime/read_model.rs";
+export const RUNTIME_READ_MODEL_OWNER_MODULES = [
+  "lime-rs/crates/app-server/src/runtime/artifact_projection.rs",
+  "lime-rs/crates/app-server/src/runtime/coding_activity_projection.rs",
+  "lime-rs/crates/app-server/src/runtime/file_checkpoint_projection.rs",
+  "lime-rs/crates/app-server/src/runtime/permission_state_projection.rs",
+  "lime-rs/crates/app-server/src/runtime/read_model/messages.rs",
+  "lime-rs/crates/app-server/src/runtime/read_model_turn_usage.rs",
+  "lime-rs/crates/app-server/src/runtime/tool_item_projection.rs",
+  "lime-rs/crates/app-server/src/runtime/workflow/read_model.rs",
+];
+export const RUNTIME_THREAD_ITEM_PROJECTION_MAIN =
+  "lime-rs/crates/app-server/src/runtime/thread_item_projection.rs";
+export const RUNTIME_THREAD_ITEM_PROJECTION_OWNER_MODULES = [
+  "lime-rs/crates/app-server/src/runtime/thread_item_projection/agent_message.rs",
+  "lime-rs/crates/app-server/src/runtime/thread_item_projection/plan.rs",
+];
+export const RUNTIME_BACKEND_MAIN =
+  "lime-rs/crates/app-server/src/runtime_backend.rs";
+export const RUNTIME_BACKEND_OWNER_MODULES = [
+  "lime-rs/crates/app-server/src/runtime_backend/model_capability.rs",
+  "lime-rs/crates/app-server/src/runtime_backend/model_routing.rs",
+  "lime-rs/crates/app-server/src/runtime_backend/provider_config.rs",
+  "lime-rs/crates/app-server/src/runtime_backend/request_context.rs",
+  "lime-rs/crates/app-server/src/runtime_backend/tool_inventory.rs",
+];
+export const AGENT_SESSION_EXECUTION_RUNTIME_MAIN =
+  "lime-rs/crates/agent/src/session_execution_runtime.rs";
+export const AGENT_SESSION_EXECUTION_RUNTIME_OWNER_MODULES = [
+  "lime-rs/crates/agent/src/agent_tools/execution.rs",
+  "lime-rs/crates/agent/src/agent_tools/tool_inventory_runtime_snapshot.rs",
+  "lime-rs/crates/agent/src/provider_configuration.rs",
+  "lime-rs/crates/agent/src/session_execution_runtime/recent_context.rs",
+  "lime-rs/crates/agent/src/session_execution_runtime/recent_settings.rs",
+  "lime-rs/crates/agent/src/session_execution_runtime/runtime_payload.rs",
+  "lime-rs/crates/agent/src/session_execution_runtime/tests.rs",
+  "lime-rs/crates/agent/src/session_execution_runtime/tests/recent_settings.rs",
+  "lime-rs/crates/agent/src/session_execution_runtime/tests/runtime_payload.rs",
+  "lime-rs/crates/agent/src/session_execution_runtime_adapter.rs",
+  "lime-rs/crates/agent/src/turn_context_configuration.rs",
+  "lime-rs/crates/agent/src/turn_input_envelope.rs",
+];
 export const PROCESSOR_MAIN = "lime-rs/crates/app-server/src/processor/mod.rs";
 export const PROCESSOR_DISPATCH =
   "lime-rs/crates/app-server/src/processor/dispatch.rs";

@@ -4,33 +4,35 @@ use crate::agent_tools::execution::{
     ToolExecutionDecisionKind, ToolExecutionResolverInput,
 };
 use crate::protocol::{AgentEvent as RuntimeAgentEvent, AgentToolResult};
-use crate::turn_context_configuration::{to_aster_turn_context, AgentTurnContext};
-use aster::sandbox::{SandboxConfig, SandboxType};
-use aster::tools::{BashTool, PowerShellTool, ToolContext, ToolError, ToolRegistry};
+use crate::turn_context_configuration::AgentTurnContext;
 use futures::{stream, StreamExt};
 use lime_core::config::ToolExecutionPolicyConfig as ConfigToolExecutionPolicyConfig;
 use serde_json::{json, Map as JsonMap, Value};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tool_runtime::execution_process::{
-    start_local_execution_process, ExecutionOutputDelta, ExecutionProcessSnapshot,
-    ExecutionProcessStatus, LocalExecutionProcessControlHandle, LocalExecutionRequest,
+    start_local_execution_process, ExecutionProcessStatus, LiveExecutionProcessRegistry,
+    LocalExecutionRequest,
 };
 use tool_runtime::shell::{
     is_shell_tool_name, param_string, process_id_for_tool, shell_command_for_tool,
     SHELL_COMMAND_PARAM_KEYS, WORKING_DIRECTORY_PARAM_KEYS,
 };
+use tool_runtime::shell_permission::{check_shell_command_permission, ShellPermissionDecision};
 pub use tool_runtime::tool_batch::{PlannedToolExecution, ToolTerminalEventUpdate};
+use tool_runtime::tool_executor::{
+    RuntimeToolExecutionContext, RuntimeToolExecutionContextInput, RuntimeToolExecutionRequest,
+    RuntimeToolExecutorHandle, RuntimeToolPolicyErrorKind, RuntimeWorkspaceSandboxInput,
+};
 
 pub type ToolExecutionOutcome = tool_runtime::tool_batch::ToolExecutionOutcome<RuntimeAgentEvent>;
 pub type ToolExecutionBatch = tool_runtime::tool_batch::ToolExecutionBatch<RuntimeAgentEvent>;
 
 #[derive(Clone)]
 pub struct ToolExecutionBatchInput {
-    pub registry: Arc<RwLock<ToolRegistry>>,
+    pub executor: RuntimeToolExecutorHandle,
     pub session_id: String,
     pub working_directory: PathBuf,
     pub cancel_token: Option<CancellationToken>,
@@ -40,18 +42,6 @@ pub struct ToolExecutionBatchInput {
     pub auto_mode: bool,
     pub bypass_restrictions: bool,
     pub live_process_registry: Option<Arc<dyn LiveExecutionProcessRegistry>>,
-}
-
-pub trait LiveExecutionProcessRegistry: Send + Sync {
-    fn register_live_process(
-        &self,
-        handle: LocalExecutionProcessControlHandle,
-        snapshot: ExecutionProcessSnapshot,
-    ) -> Result<(), String>;
-
-    fn record_live_process_output(&self, delta: ExecutionOutputDelta) -> Result<(), String>;
-
-    fn finish_live_process(&self, snapshot: ExecutionProcessSnapshot) -> Result<(), String>;
 }
 
 pub async fn execute_planned_tool_batch(
@@ -166,20 +156,8 @@ pub async fn check_shell_tool_permissions(
 ) -> Result<(), String> {
     let canonical_tool_name = canonical_shell_tool_name(tool_name)
         .ok_or_else(|| format!("Unsupported shell tool: {tool_name}"))?;
-    let mut registry = ToolRegistry::new();
-    registry.register(Box::new(BashTool::new()));
-    registry.register(Box::new(PowerShellTool::new()));
-    let tool_context = ToolContext::new(working_directory);
-    registry
-        .check_tool_permissions(
-            canonical_tool_name,
-            json!({ "command": command_text }),
-            &tool_context,
-            None,
-        )
-        .await
-        .map(|_| ())
-        .map_err(|error| error.to_string())
+    check_shell_command_permission(canonical_tool_name, command_text, &working_directory)
+        .into_result_without_confirmation()
 }
 
 async fn execute_planned_tool(
@@ -200,118 +178,85 @@ async fn execute_planned_tool(
         }
     }
 
-    let mut context =
-        ToolContext::new(input.working_directory.clone()).with_session_id(input.session_id.clone());
-    if let Some(token) = input.cancel_token.clone() {
-        context = context.with_cancellation_token(token);
-    }
-    if should_attach_workspace_sandbox(&policy_decision) {
-        context = context.with_workspace_sandbox(workspace_sandbox_config(
-            &policy_decision,
-            &input.working_directory,
-        ));
+    let workspace_sandbox = should_attach_workspace_sandbox(&policy_decision)
+        .then(|| RuntimeWorkspaceSandboxInput::from_policy_metadata(&policy_decision.metadata));
+    let context = RuntimeToolExecutionContext::new(RuntimeToolExecutionContextInput {
+        working_directory: input.working_directory.clone(),
+        session_id: input.session_id.clone(),
+        cancel_token: input.cancel_token.clone(),
+        workspace_sandbox,
+    });
+
+    let mut metadata = policy_decision.metadata.clone();
+    if let Some(outcome) = shell_permission_error_outcome(&input, &planned, &context, &mut metadata)
+    {
+        return outcome;
     }
 
     if can_start_live_shell_process(&planned, &policy_decision, &context) {
-        let mut metadata = policy_decision.metadata;
-        return execute_live_shell_process(input, planned, context, &mut metadata).await;
+        return execute_live_shell_process(&input, planned, context, &mut metadata).await;
     }
 
-    let aster_turn_context = input.turn_context.clone().map(to_aster_turn_context);
-    let result = aster::session_context::with_turn_context(aster_turn_context, async {
-        let registry = input.registry.read().await;
-        registry
-            .execute(&planned.tool_name, planned.params.clone(), &context, None)
-            .await
+    execute_registry_tool(&input, planned, &context, &mut metadata).await
+}
+
+fn shell_permission_error_outcome(
+    input: &ToolExecutionBatchInput,
+    planned: &PlannedToolExecution,
+    context: &RuntimeToolExecutionContext,
+    metadata: &mut HashMap<String, Value>,
+) -> Option<ToolExecutionOutcome> {
+    if !is_shell_tool_name(&planned.tool_name) {
+        return None;
+    }
+    let command = param_string(&planned.params, SHELL_COMMAND_PARAM_KEYS)?;
+    let reason = match check_shell_command_permission(
+        &planned.tool_name,
+        &command,
+        context.working_directory(),
+    ) {
+        ShellPermissionDecision::Allow => return None,
+        ShellPermissionDecision::Deny(reason)
+        | ShellPermissionDecision::RequiresConfirmation(reason) => reason,
+    };
+    let policy_error = RuntimeToolPolicyErrorKind::PermissionDenied(reason.clone());
+    let error_metadata = policy_error_metadata(
+        planned,
+        context.working_directory(),
+        input.turn_context.as_ref(),
+        input.persisted_execution_policy.as_ref(),
+        Some(&policy_error),
+    )
+    .unwrap_or_default();
+    metadata.extend(error_metadata);
+
+    Some(ToolExecutionOutcome {
+        tool_name: planned.tool_name.clone(),
+        tool_id: planned.tool_id.clone(),
+        success: false,
+        output: String::new(),
+        error: Some(format!("执行工具失败: {reason}")),
+        metadata: Some(metadata.clone()),
+        stream_events: Vec::new(),
     })
-    .await;
-
-    match result {
-        Ok(tool_result) => {
-            let mut metadata = policy_decision.metadata;
-            metadata.extend(tool_result.metadata);
-            let output = tool_result.output.unwrap_or_default();
-            ToolExecutionOutcome {
-                tool_name: planned.tool_name,
-                tool_id: planned.tool_id,
-                success: tool_result.success,
-                output,
-                error: tool_result.error,
-                metadata: if metadata.is_empty() {
-                    None
-                } else {
-                    Some(metadata)
-                },
-                stream_events: Vec::new(),
-            }
-        }
-        Err(error) => {
-            let metadata = policy_error_metadata(
-                &planned,
-                &input.working_directory,
-                input.turn_context.as_ref(),
-                input.persisted_execution_policy.as_ref(),
-                &error,
-            );
-            ToolExecutionOutcome {
-                tool_name: planned.tool_name,
-                tool_id: planned.tool_id,
-                success: false,
-                output: String::new(),
-                error: Some(format!("执行工具失败: {error}")),
-                metadata,
-                stream_events: Vec::new(),
-            }
-        }
-    }
 }
 
 async fn execute_live_shell_process(
-    input: ToolExecutionBatchInput,
+    input: &ToolExecutionBatchInput,
     planned: PlannedToolExecution,
-    context: ToolContext,
+    context: RuntimeToolExecutionContext,
     metadata: &mut HashMap<String, Value>,
 ) -> ToolExecutionOutcome {
-    let permission_result = {
-        let registry = input.registry.read().await;
-        registry
-            .check_tool_permissions(&planned.tool_name, planned.params.clone(), &context, None)
-            .await
-    };
-    let params = match permission_result {
-        Ok(params) => params,
-        Err(error) => {
-            let error_metadata = policy_error_metadata(
-                &planned,
-                &input.working_directory,
-                input.turn_context.as_ref(),
-                input.persisted_execution_policy.as_ref(),
-                &error,
-            )
-            .unwrap_or_default();
-            metadata.extend(error_metadata);
-            return ToolExecutionOutcome {
-                tool_name: planned.tool_name,
-                tool_id: planned.tool_id,
-                success: false,
-                output: String::new(),
-                error: Some(format!("执行工具失败: {error}")),
-                metadata: Some(metadata.clone()),
-                stream_events: Vec::new(),
-            };
-        }
-    };
-    let Some(command) = param_string(&params, SHELL_COMMAND_PARAM_KEYS) else {
+    let Some(command) = param_string(&planned.params, SHELL_COMMAND_PARAM_KEYS) else {
         metadata.insert(
             "executionSurface".to_string(),
             json!("registry_fallback_missing_command"),
         );
-        return execute_registry_tool_after_live_process_skip(input, planned, context, metadata)
-            .await;
+        return execute_registry_tool(input, planned, &context, metadata).await;
     };
 
-    let cwd = context.working_directory.clone();
-    let mut env = context.environment.clone();
+    let cwd = context.working_directory().clone();
+    let mut env = context.environment().clone();
     env.insert("ASTER_TERMINAL".to_string(), "1".to_string());
     let request = LocalExecutionRequest {
         process_id: process_id_for_tool(&planned.tool_id),
@@ -334,10 +279,7 @@ async fn execute_live_shell_process(
                 "liveProcessStartError".to_string(),
                 json!(error.to_string()),
             );
-            return execute_registry_tool_after_live_process_skip(
-                input, planned, context, metadata,
-            )
-            .await;
+            return execute_registry_tool(input, planned, &context, metadata).await;
         }
     };
 
@@ -509,12 +451,12 @@ fn live_process_lifecycle_event(
 fn can_start_live_shell_process(
     planned: &PlannedToolExecution,
     decision: &ToolExecutionDecision,
-    context: &ToolContext,
+    context: &RuntimeToolExecutionContext,
 ) -> bool {
     if !is_shell_tool_name(&planned.tool_name) {
         return false;
     }
-    if context.workspace_sandbox.is_some() {
+    if context.has_workspace_sandbox() {
         return false;
     }
     if decision.requires_sandboxed_execution() {
@@ -531,20 +473,21 @@ fn can_start_live_shell_process(
     param_string(&planned.params, SHELL_COMMAND_PARAM_KEYS).is_some()
 }
 
-async fn execute_registry_tool_after_live_process_skip(
-    input: ToolExecutionBatchInput,
+async fn execute_registry_tool(
+    input: &ToolExecutionBatchInput,
     planned: PlannedToolExecution,
-    context: ToolContext,
+    context: &RuntimeToolExecutionContext,
     metadata: &mut HashMap<String, Value>,
 ) -> ToolExecutionOutcome {
-    let aster_turn_context = input.turn_context.clone().map(to_aster_turn_context);
-    let result = aster::session_context::with_turn_context(aster_turn_context, async {
-        let registry = input.registry.read().await;
-        registry
-            .execute(&planned.tool_name, planned.params.clone(), &context, None)
-            .await
-    })
-    .await;
+    let result = input
+        .executor
+        .execute(RuntimeToolExecutionRequest {
+            tool_name: &planned.tool_name,
+            params: &planned.params,
+            context,
+            turn_context: input.turn_context.as_ref(),
+        })
+        .await;
 
     match result {
         Ok(tool_result) => {
@@ -553,59 +496,36 @@ async fn execute_registry_tool_after_live_process_skip(
                 tool_name: planned.tool_name,
                 tool_id: planned.tool_id,
                 success: tool_result.success,
-                output: tool_result.output.unwrap_or_default(),
+                output: tool_result.output,
                 error: tool_result.error,
                 metadata: Some(metadata.clone()),
                 stream_events: Vec::new(),
             }
         }
-        Err(error) => ToolExecutionOutcome {
-            tool_name: planned.tool_name,
-            tool_id: planned.tool_id,
-            success: false,
-            output: String::new(),
-            error: Some(format!("执行工具失败: {error}")),
-            metadata: Some(metadata.clone()),
-            stream_events: Vec::new(),
-        },
+        Err(error) => {
+            let outcome_metadata = policy_error_metadata(
+                &planned,
+                &input.working_directory,
+                input.turn_context.as_ref(),
+                input.persisted_execution_policy.as_ref(),
+                error.policy_kind(),
+            )
+            .or_else(|| Some(metadata.clone()));
+            ToolExecutionOutcome {
+                tool_name: planned.tool_name,
+                tool_id: planned.tool_id,
+                success: false,
+                output: String::new(),
+                error: Some(format!("执行工具失败: {}", error.message())),
+                metadata: outcome_metadata,
+                stream_events: Vec::new(),
+            }
+        }
     }
 }
 
 fn should_attach_workspace_sandbox(decision: &ToolExecutionDecision) -> bool {
     decision.workspace_sandbox_backend_enforced()
-}
-
-fn workspace_sandbox_config(
-    decision: &ToolExecutionDecision,
-    working_directory: &PathBuf,
-) -> SandboxConfig {
-    let sandbox_type = match decision
-        .metadata
-        .get("sandboxBackend")
-        .and_then(Value::as_str)
-    {
-        Some("seatbelt") => SandboxType::Seatbelt,
-        Some("linux_sandbox") => SandboxType::Bubblewrap,
-        Some("restricted_token") => SandboxType::RestrictedToken,
-        _ => SandboxType::None,
-    };
-    let requested_policy = decision
-        .metadata
-        .get("requestedSandboxPolicy")
-        .and_then(Value::as_str)
-        .unwrap_or("workspace-write");
-    let mut config = SandboxConfig::default();
-    config.enabled = sandbox_type != SandboxType::None;
-    config.sandbox_type = sandbox_type;
-    config.network_access = true;
-    if requested_policy != "read-only" {
-        config.writable_paths.push(working_directory.clone());
-    }
-    config.read_only_paths.push(working_directory.clone());
-    config
-        .environment_variables
-        .insert("ASTER_WORKSPACE_SANDBOX".to_string(), "1".to_string());
-    config
 }
 
 fn preflight_tool_execution_decision(
@@ -704,9 +624,9 @@ fn policy_error_metadata(
     working_directory: &PathBuf,
     turn_context: Option<&AgentTurnContext>,
     persisted_execution_policy: Option<&ConfigToolExecutionPolicyConfig>,
-    error: &ToolError,
+    error: Option<&RuntimeToolPolicyErrorKind>,
 ) -> Option<HashMap<String, Value>> {
-    let classification = classify_policy_error(error)?;
+    let classification = error?.classification()?;
     let request_metadata = turn_context_metadata_value(turn_context);
     let metadata_persisted_policy =
         persisted_tool_execution_policy_from_metadata(request_metadata.as_ref());
@@ -747,48 +667,6 @@ fn policy_error_metadata(
     }
 
     Some(metadata)
-}
-
-#[derive(Debug, Clone, Copy)]
-struct PolicyErrorClassification<'a> {
-    event_class: &'static str,
-    failure_category: &'static str,
-    reason_code: &'static str,
-    reason: &'a str,
-}
-
-fn classify_policy_error(error: &ToolError) -> Option<PolicyErrorClassification<'_>> {
-    match error {
-        ToolError::PermissionDenied(reason) => Some(PolicyErrorClassification {
-            event_class: "permission.denied",
-            failure_category: "permission_denied",
-            reason_code: "permission_denied",
-            reason,
-        }),
-        ToolError::SafetyCheckFailed(reason) => Some(PolicyErrorClassification {
-            event_class: "permission.denied",
-            failure_category: "policy_denied",
-            reason_code: "safety_check_failed",
-            reason,
-        }),
-        ToolError::ExecutionFailed(reason) if looks_like_sandbox_block(reason) => {
-            Some(PolicyErrorClassification {
-                event_class: "sandbox.blocked",
-                failure_category: "sandbox_blocked",
-                reason_code: "sandbox_blocked",
-                reason,
-            })
-        }
-        _ => None,
-    }
-}
-
-fn looks_like_sandbox_block(reason: &str) -> bool {
-    let normalized = reason.to_ascii_lowercase();
-    normalized.contains("sandbox")
-        && (normalized.contains("block")
-            || normalized.contains("denied")
-            || normalized.contains("not permitted"))
 }
 
 fn turn_context_metadata_value(turn_context: Option<&AgentTurnContext>) -> Option<Value> {

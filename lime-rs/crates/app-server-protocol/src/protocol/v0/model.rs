@@ -97,6 +97,52 @@ pub struct ModelInfo {
     pub task_families: Vec<String>,
     #[serde(default)]
     pub input_modalities: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_mode: Option<String>,
+    #[serde(default)]
+    pub supports_search_tool: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub web_search_tool_type: Option<String>,
+    #[serde(default)]
+    pub supports_image_detail_original: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_window: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_context_window: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto_compact_token_limit: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effective_context_window_percent: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visibility: Option<String>,
+    #[serde(default)]
+    pub service_tiers: Vec<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_service_tier: Option<String>,
+    #[serde(default)]
+    pub supports_parallel_tool_calls: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_reasoning_level: Option<String>,
+    #[serde(default)]
+    pub supported_reasoning_levels: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub supports_reasoning_summaries: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_reasoning_summary: Option<String>,
+    #[serde(default)]
+    pub support_verbosity: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_verbosity: Option<String>,
+    #[serde(default)]
+    pub use_responses_lite: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub truncation_policy: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shell_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub apply_patch_tool_type: Option<String>,
+    #[serde(default)]
+    pub experimental_supported_tools: Vec<String>,
     #[serde(default)]
     pub output_modalities: Vec<String>,
     #[serde(default)]
@@ -388,10 +434,6 @@ pub struct RouteFailure {
 #[serde(rename_all = "camelCase")]
 pub struct ResolvedModelRoute {
     pub model_ref: ModelRef,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provider: Option<ProviderInfo>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub model: Option<ModelInfo>,
     pub protocol: ProtocolKind,
     pub endpoint: EndpointInfo,
     pub auth: AuthMaterialRef,

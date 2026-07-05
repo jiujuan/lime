@@ -19,8 +19,10 @@ const recordProvenance = {
   sourceKind: "plugin",
   appId: "content-factory-app",
   appVersion: "1.0.0",
-  packageHash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  manifestHash: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  packageHash:
+    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  manifestHash:
+    "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   entryKey: "content_factory",
   workflowRunId: "content-factory-run-1",
   workspaceId: "workspace-1",
@@ -38,10 +40,13 @@ function buildTaskRecord(
     title: overrides.title ?? "生成内容批次",
     prompt: overrides.prompt ?? "基于项目知识生成内容批次",
     taskKind: overrides.taskKind ?? "content.copy.generate",
-    idempotencyKey: overrides.idempotencyKey ?? "content-factory:batch:project-1",
+    idempotencyKey:
+      overrides.idempotencyKey ?? "content-factory:batch:project-1",
     input: overrides.input,
     expectedOutput: overrides.expectedOutput,
-    knowledge: overrides.knowledge ?? [{ key: "project_knowledge", required: true }],
+    knowledge: overrides.knowledge ?? [
+      { key: "project_knowledge", required: true },
+    ],
     tools: overrides.tools ?? ["lime.capability.research.search"],
     files: overrides.files ?? [],
     secrets: overrides.secrets ?? [],
@@ -251,6 +256,9 @@ describe("P18.5 content factory SDK regression", () => {
         ),
         actionType: "ask_user",
         response: "目标用户：内容运营负责人。",
+        workflowRunId: recordProvenance.workflowRunId,
+        workflowKey: "content_article_workflow",
+        stepId: "draft",
       },
       { requestId: "req-content-host-response" },
     );
@@ -324,5 +332,18 @@ describe("P18.5 content factory SDK regression", () => {
     expect(requests.every((request) => request.provenance === provenance)).toBe(
       true,
     );
+    expect(
+      requests.find(
+        (request) =>
+          request.capability === "lime.agent" &&
+          request.method === "submitHostResponse",
+      ),
+    ).toMatchObject({
+      args: {
+        workflowRunId: "content-factory-run-1",
+        workflowKey: "content_article_workflow",
+        stepId: "draft",
+      },
+    });
   });
 });

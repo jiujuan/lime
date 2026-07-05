@@ -1,4 +1,5 @@
 import i18n from "i18next";
+import { MODEL_INPUT_CAPABILITY_GAP_ERROR_PREFIX } from "@/lib/model/modelCapabilitySendGate";
 
 const DEFAULT_RUNTIME_ERROR_MESSAGE = "执行链路返回失败，请查看详情后重试。";
 
@@ -19,6 +20,9 @@ const PROVIDER_UNAVAILABLE_ERROR_MESSAGE =
 
 const INTERNAL_RUNTIME_ERROR_MESSAGE =
   "运行时返回内部错误，已保留详情用于排查。请稍后重试，或检查服务商与工具连接状态。";
+
+const MODEL_INPUT_CAPABILITY_GAP_ERROR_MESSAGE =
+  "当前模型不支持本次输入的媒体类型，请切换到支持图片或文件输入的模型后再发送。";
 
 function normalizeRuntimeErrorMessage(errorMessage: string): string {
   const normalized = errorMessage.trim();
@@ -142,12 +146,30 @@ function isLikelyInternalRuntimeTransportError(message: string): boolean {
   );
 }
 
+function isModelInputCapabilityGapError(message: string): boolean {
+  return (
+    message === MODEL_INPUT_CAPABILITY_GAP_ERROR_PREFIX ||
+    message.startsWith(`${MODEL_INPUT_CAPABILITY_GAP_ERROR_PREFIX}:`)
+  );
+}
+
 export function resolveAgentRuntimeErrorPresentation(errorMessage: string): {
   displayMessage: string;
   toastMessage: string;
 } {
   const normalizedMessage = normalizeRuntimeErrorMessage(errorMessage);
   const lowerMessage = normalizedMessage.toLowerCase();
+
+  if (isModelInputCapabilityGapError(lowerMessage)) {
+    const message = readAgentRuntimeCopy(
+      "agentChat.runtimeError.modelInputCapabilityGap",
+      MODEL_INPUT_CAPABILITY_GAP_ERROR_MESSAGE,
+    );
+    return {
+      displayMessage: message,
+      toastMessage: message,
+    };
+  }
 
   if (isLikelyProviderSessionExpiredError(lowerMessage)) {
     return {

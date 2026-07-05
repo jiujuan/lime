@@ -142,8 +142,14 @@ fn model_effective_event_records_selected_model_and_reasoning_policy() {
         model_capabilities: None,
     };
 
-    let event =
-        model_effective_event_from_runtime(&selection, &selection, &provider_config, "coding");
+    let snapshot = reasoning_capability_snapshot(&["low", "medium", "high", "max", "xhigh"]);
+    let event = model_effective_event_from_runtime(
+        &selection,
+        &selection,
+        &provider_config,
+        "coding",
+        &snapshot,
+    );
 
     assert_eq!(event.event_type, "model.effective");
     assert_eq!(event.payload["model"]["providerId"], "openai-main");
@@ -182,11 +188,13 @@ fn model_effective_event_records_requested_and_effective_reasoning_separately() 
         model_capabilities: None,
     };
 
+    let snapshot = reasoning_capability_snapshot(&["low", "medium", "high", "max", "xhigh"]);
     let event = model_effective_event_from_runtime(
         &requested_selection,
         &effective_selection,
         &provider_config,
         "fast",
+        &snapshot,
     );
 
     assert_eq!(event.payload["reasoning"]["requestedLevel"], "minimal");
@@ -197,6 +205,80 @@ fn model_effective_event_records_requested_and_effective_reasoning_separately() 
     );
     assert_eq!(event.payload["requestedReasoningEffort"], "minimal");
     assert_eq!(event.payload["effectiveReasoningEffort"], "low");
+}
+
+#[test]
+fn model_effective_event_uses_route_capability_snapshot_over_model_slug() {
+    let selection = RuntimeModelSelection {
+        provider: "openai".to_string(),
+        model: "gpt-codex".to_string(),
+        source: "runtime_options",
+        reasoning_effort: Some("high".to_string()),
+    };
+    let provider_config = SessionProviderConfig {
+        provider_name: "openai".to_string(),
+        provider_selector: Some("relay-openai".to_string()),
+        model_name: "gpt-codex".to_string(),
+        api_key: Some("sk-test".to_string()),
+        base_url: Some("https://api.example.test/v1".to_string()),
+        credential_uuid: None,
+        reasoning_effort: Some("high".to_string()),
+        route_protocol: None,
+        toolshim: false,
+        toolshim_model: None,
+        model_capabilities: None,
+    };
+    let snapshot = no_reasoning_capability_snapshot();
+
+    let event = model_effective_event_from_runtime(
+        &selection,
+        &selection,
+        &provider_config,
+        "coding",
+        &snapshot,
+    );
+
+    assert_eq!(event.payload["reasoning"]["supported"], false);
+    assert_eq!(event.payload["reasoning"]["requestedLevel"], "high");
+    assert!(event.payload["reasoning"].get("effectiveLevel").is_none());
+    assert_eq!(
+        event.payload["reasoning"]["downgradeReason"],
+        "selected model does not support reasoning"
+    );
+}
+
+fn reasoning_capability_snapshot(levels: &[&str]) -> app_server_protocol::CapabilitySnapshot {
+    app_server_protocol::CapabilitySnapshot {
+        runtime_features: vec!["streaming".to_string(), "reasoning".to_string()],
+        capabilities: app_server_protocol::ModelCapabilitiesInfo {
+            tools: true,
+            streaming: true,
+            reasoning: true,
+            reasoning_effort: Some(json!({
+                "supported": true,
+                "levels": levels,
+            })),
+            ..Default::default()
+        },
+        ..Default::default()
+    }
+}
+
+fn no_reasoning_capability_snapshot() -> app_server_protocol::CapabilitySnapshot {
+    app_server_protocol::CapabilitySnapshot {
+        runtime_features: vec!["streaming".to_string()],
+        capabilities: app_server_protocol::ModelCapabilitiesInfo {
+            tools: true,
+            streaming: true,
+            reasoning: false,
+            reasoning_effort: Some(json!({
+                "supported": false,
+                "levels": [],
+            })),
+            ..Default::default()
+        },
+        ..Default::default()
+    }
 }
 
 #[test]

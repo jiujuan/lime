@@ -25,8 +25,8 @@ use uuid::Uuid;
 
 use super::context::ToolContext;
 use super::error::ToolError;
-use super::shell_runtime::build_platform_shell_command;
-use crate::subprocess::{
+use tool_runtime::shell_runtime::build_platform_shell_command;
+use tool_runtime::subprocess::{
     configure_command_for_gui, decode_process_output, wrap_powershell_command_for_utf8,
 };
 

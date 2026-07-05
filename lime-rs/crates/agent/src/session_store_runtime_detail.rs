@@ -15,14 +15,12 @@ use super::session_store_subagent_context::{
 use super::session_store_types::SessionDetail;
 use super::{get_session_sync_with_history_page, resolve_session_provider_selector};
 use crate::aster_runtime_projection::project_aster_message;
-use crate::runtime_snapshot_adapter::project_aster_runtime_snapshot;
-use crate::runtime_support::load_runtime_snapshot;
+use crate::runtime_support::load_runtime_snapshot_overlay;
 use crate::session_execution_runtime::{
     build_session_execution_runtime, reconcile_session_execution_runtime_permission_fallback,
 };
 use crate::session_execution_runtime_adapter::{
-    project_aster_session_execution_runtime_session,
-    project_aster_session_execution_runtime_snapshot, project_aster_session_usage,
+    project_aster_session_execution_runtime_session, project_aster_session_usage,
 };
 use crate::session_query::read_session;
 
@@ -153,9 +151,9 @@ pub async fn get_runtime_session_detail_with_history_page(
     let overlay_started_at = Instant::now();
     let (session, runtime_snapshot) = if load_runtime_overlay {
         let include_messages = before_message_id.is_none();
-        let (session_result, snapshot_result) = tokio::join!(
+        let (session_result, overlay_result) = tokio::join!(
             read_session(session_id, include_messages, "读取运行态 session 失败"),
-            load_runtime_snapshot(session_id),
+            load_runtime_snapshot_overlay(session_id),
         );
         let session = match session_result {
             Ok(session) => Some(session),
@@ -168,18 +166,18 @@ pub async fn get_runtime_session_detail_with_history_page(
                 None
             }
         };
-        let snapshot = match snapshot_result {
-            Ok(snapshot) => Some(snapshot),
+        let overlay = match overlay_result {
+            Ok(overlay) => Some(overlay),
             Err(error) => {
                 tracing::warn!(
-                    "[SessionStore] 读取 Aster runtime snapshot 失败: session_id={}, error={}",
+                    "[SessionStore] 读取 runtime snapshot overlay 失败: session_id={}, error={}",
                     session_id,
                     error
                 );
                 None
             }
         };
-        (session, snapshot)
+        (session, overlay)
     } else {
         (None, None)
     };
@@ -208,22 +206,20 @@ pub async fn get_runtime_session_detail_with_history_page(
     let execution_runtime_session = session
         .as_ref()
         .map(project_aster_session_execution_runtime_session);
-    let execution_runtime_snapshot = runtime_snapshot
-        .as_ref()
-        .map(project_aster_session_execution_runtime_snapshot);
     detail.execution_runtime = build_session_execution_runtime(
         session_id,
         execution_runtime_session.as_ref(),
         detail.execution_strategy.clone(),
-        execution_runtime_snapshot.as_ref(),
+        runtime_snapshot
+            .as_ref()
+            .map(|overlay| &overlay.execution_snapshot),
         session.as_ref().and_then(resolve_session_provider_selector),
     );
     let execution_runtime_ms = execution_runtime_started_at.elapsed().as_millis();
 
     let apply_snapshot_started_at = Instant::now();
-    if let Some(snapshot) = runtime_snapshot.as_ref() {
-        let projected_snapshot = project_aster_runtime_snapshot(snapshot);
-        apply_runtime_snapshot(&mut detail, &projected_snapshot);
+    if let Some(overlay) = runtime_snapshot.as_ref() {
+        apply_runtime_snapshot(&mut detail, &overlay.timeline_snapshot);
     }
     if let Some(runtime) = detail.execution_runtime.as_mut() {
         reconcile_session_execution_runtime_permission_fallback(

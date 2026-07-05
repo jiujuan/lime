@@ -32,9 +32,14 @@ import {
 } from "./content-factory-current-turn-fixtures.mjs";
 import {
   contentFactoryHostGenerationAsterChatRequest,
+  contentFactoryLiveHostGenerationAsterChatRequest,
   startContentFactoryHostGenerationFixture,
 } from "../lib/content-factory-host-generation-fixture.mjs";
 import { localAppServerBinaryPath } from "../lib/electron-dev-sidecar.mjs";
+import {
+  assertLiveProviderSmokeAllowed,
+  liveProviderSmokeAllowed,
+} from "../lib/live-provider-smoke-gate.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -88,6 +93,28 @@ const DEFAULTS = {
   timeoutMs: DEFAULT_TIMEOUT_MS,
   hostGenerationFixture: false,
   cloudReleaseFixture: false,
+  allowLiveProvider: liveProviderSmokeAllowed(),
+  liveProvider: false,
+  liveProviderId:
+    process.env.CONTENT_FACTORY_LIVE_PROVIDER ||
+    process.env.LIME_AGENT_QC_PROVIDER ||
+    process.env.LIME_E2E_PROVIDER ||
+    process.env.LIME_DEFAULT_PROVIDER ||
+    "",
+  liveProviderName: process.env.CONTENT_FACTORY_LIVE_PROVIDER_NAME || "openai",
+  liveModel:
+    process.env.CONTENT_FACTORY_LIVE_MODEL ||
+    process.env.LIME_AGENT_QC_MODEL ||
+    process.env.LIME_E2E_MODEL ||
+    process.env.LIME_DEFAULT_MODEL ||
+    "",
+  liveBaseUrl:
+    process.env.CONTENT_FACTORY_LIVE_BASE_URL ||
+    process.env.LIME_AGENT_QC_BASE_URL ||
+    process.env.LIME_E2E_BASE_URL ||
+    process.env.LIME_DEFAULT_BASE_URL ||
+    "",
+  liveApiKeyEnv: process.env.CONTENT_FACTORY_LIVE_API_KEY_ENV || "",
 };
 
 function printHelp() {
@@ -101,8 +128,18 @@ Options:
   --prefix <name>              evidence filename prefix
   --timeout-ms <ms>            timeout, default 120000
   --host-generation-fixture    use a local OpenAI-compatible SSE fixture and require host generation completed
+  --allow-live-provider        allow real Provider calls for host generation
+  --live-provider              use real Provider config from env/options and require host generation completed
+  --live-provider-id <id>      provider id for --live-provider
+  --live-provider-name <name>  runtime provider name, default openai
+  --live-model <model>         model name for --live-provider
+  --live-base-url <url>        optional OpenAI-compatible base URL for --live-provider
+  --live-api-key-env <name>    env var that holds the live Provider API key
   --cloud-release-fixture      save as verified cloud_release and materialize the package cache
   -h, --help                   print help
+
+Live Provider opt-in:
+  --allow-live-provider or LIME_ALLOW_LIVE_PROVIDER_SMOKE=1 / LIME_REAL_API_TEST=1
 `);
 }
 
@@ -144,6 +181,39 @@ function parseArgs(argv) {
       options.hostGenerationFixture = true;
       continue;
     }
+    if (arg === "--allow-live-provider") {
+      options.allowLiveProvider = true;
+      continue;
+    }
+    if (arg === "--live-provider") {
+      options.liveProvider = true;
+      continue;
+    }
+    if (arg === "--live-provider-id" && next) {
+      options.liveProviderId = next.trim();
+      index += 1;
+      continue;
+    }
+    if (arg === "--live-provider-name" && next) {
+      options.liveProviderName = next.trim();
+      index += 1;
+      continue;
+    }
+    if (arg === "--live-model" && next) {
+      options.liveModel = next.trim();
+      index += 1;
+      continue;
+    }
+    if (arg === "--live-base-url" && next) {
+      options.liveBaseUrl = next.trim();
+      index += 1;
+      continue;
+    }
+    if (arg === "--live-api-key-env" && next) {
+      options.liveApiKeyEnv = next.trim();
+      index += 1;
+      continue;
+    }
     if (arg === "--cloud-release-fixture") {
       options.cloudReleaseFixture = true;
       continue;
@@ -152,6 +222,27 @@ function parseArgs(argv) {
   }
   if (!Number.isFinite(options.timeoutMs) || options.timeoutMs < 30_000) {
     throw new Error("--timeout-ms must be >= 30000");
+  }
+  if (options.hostGenerationFixture && options.liveProvider) {
+    throw new Error(
+      "--host-generation-fixture and --live-provider are mutually exclusive",
+    );
+  }
+  if (options.liveProvider) {
+    assertLiveProviderSmokeAllowed({
+      allowed: options.allowLiveProvider,
+      scriptName: "content-factory-current-turn-smoke",
+    });
+    if (!options.liveProviderId || !options.liveModel) {
+      throw new Error(
+        "--live-provider requires --live-provider-id and --live-model",
+      );
+    }
+    if (!options.liveApiKeyEnv || !process.env[options.liveApiKeyEnv]?.trim()) {
+      throw new Error(
+        "--live-provider requires --live-api-key-env pointing to a configured environment variable",
+      );
+    }
   }
   return options;
 }
@@ -202,7 +293,12 @@ function pluginActivationMetadata(sessionId, workspaceId) {
   };
 }
 
-function turnRuntimeOptions({ sessionId, workspaceId, fixtureBaseUrl }) {
+function turnRuntimeOptions({
+  sessionId,
+  workspaceId,
+  fixtureBaseUrl,
+  liveAsterChatRequest,
+}) {
   const runtimeOptions = {
     stream: true,
     metadata: pluginActivationMetadata(sessionId, workspaceId),
@@ -212,8 +308,36 @@ function turnRuntimeOptions({ sessionId, workspaceId, fixtureBaseUrl }) {
       asterChatRequest:
         contentFactoryHostGenerationAsterChatRequest(fixtureBaseUrl),
     };
+  } else if (liveAsterChatRequest) {
+    runtimeOptions.hostOptions = {
+      asterChatRequest: liveAsterChatRequest,
+    };
   }
   return runtimeOptions;
+}
+
+function buildLiveHostGeneration(options) {
+  if (!options.liveProvider) return null;
+  const apiKey = process.env[options.liveApiKeyEnv]?.trim();
+  const asterChatRequest = contentFactoryLiveHostGenerationAsterChatRequest({
+    providerId: options.liveProviderId,
+    providerName: options.liveProviderName,
+    model: options.liveModel,
+    apiKey,
+    baseUrl: options.liveBaseUrl,
+  });
+  return {
+    asterChatRequest,
+    summary: {
+      provider: options.liveProviderId,
+      providerName: options.liveProviderName,
+      model: options.liveModel,
+      baseUrlConfigured: Boolean(options.liveBaseUrl),
+      apiKeyEnv: options.liveApiKeyEnv,
+      apiKeyConfigured: true,
+      liveProviderUsed: true,
+    },
+  };
 }
 
 function stringField(value, pathSegments) {
@@ -311,12 +435,13 @@ function assertCurrentTurnEvents(events, expectations = {}) {
   );
   const streamingHostToolRequestCounts = artifactEvents
     .filter((event) => artifactFromEvent(event)?.status === "streaming")
-    .map((event) =>
-      hostToolRequestsFromArticle(
-        articleFromWorkspacePatch(
-          workspacePatchFromArtifact(artifactFromEvent(event)),
-        ),
-      ).length,
+    .map(
+      (event) =>
+        hostToolRequestsFromArticle(
+          articleFromWorkspacePatch(
+            workspacePatchFromArtifact(artifactFromEvent(event)),
+          ),
+        ).length,
     )
     .filter((count) => count >= MIN_HOST_TOOL_REQUEST_COUNT);
   assert(
@@ -356,10 +481,17 @@ function assertCurrentTurnEvents(events, expectations = {}) {
       hostGenerationStatus === "completed",
       `hostManagedGeneration.status must be completed, got ${hostGenerationStatus}`,
     );
-    assert(
-      finalArticle.source.documentText.includes("fixturePromptFingerprint:"),
-      "final article must use prompt-derived host generation fixture Markdown",
-    );
+    if (expectations.hostGenerationFixture) {
+      assert(
+        finalArticle.source.documentText.includes("fixturePromptFingerprint:"),
+        "final article must use prompt-derived host generation fixture Markdown",
+      );
+    } else {
+      assert(
+        !finalArticle.source.documentText.includes("fixturePromptFingerprint:"),
+        "live host generation must not include fixturePromptFingerprint",
+      );
+    }
   }
   return {
     eventTypes: types,
@@ -415,10 +547,17 @@ function assertReadModel(readResult, expectations = {}) {
       hostGenerationStatus === "completed",
       `read model hostManagedGeneration.status must be completed, got ${hostGenerationStatus}`,
     );
-    assert(
-      article.source.documentText.includes("fixturePromptFingerprint:"),
-      "read model article must use prompt-derived host generation fixture Markdown",
-    );
+    if (expectations.hostGenerationFixture) {
+      assert(
+        article.source.documentText.includes("fixturePromptFingerprint:"),
+        "read model article must use prompt-derived host generation fixture Markdown",
+      );
+    } else {
+      assert(
+        !article.source.documentText.includes("fixturePromptFingerprint:"),
+        "live read model article must not include fixturePromptFingerprint",
+      );
+    }
   }
   const workerEvidence = Array.isArray(articleWorkspace.workerEvidence)
     ? articleWorkspace.workerEvidence
@@ -552,6 +691,10 @@ function sanitizeText(value) {
       /((?:api[_-]?key|authorization|password|secret|session|token)[^=\s]*=)(["']?)[^\s"']+/gi,
       "$1$2[redacted]",
     )
+    .replace(
+      /(["']?(?:api[_-]?key|authorization|password|secret|token)["']?\s*:\s*["'])(?:\\.|[^"'\\])*?(["'])/gi,
+      "$1[redacted]$2",
+    )
     .replace(/(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, "$1[redacted]");
   return text.length > 4000
     ? `${text.slice(0, 4000)}... [truncated ${text.length - 4000} chars]`
@@ -586,12 +729,145 @@ function sanitizeJson(value, depth = 0) {
   return sanitizeText(String(value));
 }
 
+function summarizeSmokeOptions(options) {
+  return {
+    cloudReleaseFixture: Boolean(options.cloudReleaseFixture),
+    contentFactoryDir: options.contentFactoryDir,
+    evidenceDir: options.evidenceDir,
+    hostGenerationFixture: Boolean(options.hostGenerationFixture),
+    liveProvider: options.liveProvider
+      ? {
+          apiKeyConfigured: Boolean(
+            options.liveApiKeyEnv && process.env[options.liveApiKeyEnv]?.trim(),
+          ),
+          apiKeyEnv: options.liveApiKeyEnv || null,
+          baseUrlConfigured: Boolean(options.liveBaseUrl),
+          model: options.liveModel || null,
+          provider: options.liveProviderId || null,
+          providerName: options.liveProviderName || null,
+        }
+      : { liveProviderUsed: false },
+    timeoutMs: options.timeoutMs,
+  };
+}
+
+function summarizeInstalledStateForDiagnostics(installedState) {
+  if (!installedState) return null;
+  const cloudReleaseEvidence = installedState.setup?.cloudReleaseEvidence || {};
+  return {
+    appId: installedState.appId || null,
+    evidenceStatus: cloudReleaseEvidence.status || null,
+    installMode: installedState.installMode || null,
+    manifestHash: installedState.identity?.manifestHash || null,
+    packageHash: installedState.identity?.packageHash || null,
+    packageVerificationStatus:
+      cloudReleaseEvidence.packageVerificationStatus || null,
+    releaseId: installedState.identity?.releaseId || null,
+    signaturePolicy: cloudReleaseEvidence.signaturePolicy || null,
+    signatureRef: installedState.identity?.signatureRef || null,
+    signatureVerificationStatus:
+      cloudReleaseEvidence.signatureVerificationStatus || null,
+    sourceKind: installedState.identity?.sourceKind || null,
+    sourceUri: installedState.identity?.sourceUri || null,
+  };
+}
+
+function markDiagnosticStage(diagnostics, stage, detail = {}) {
+  diagnostics.stage = stage;
+  diagnostics.stages.push({
+    at: new Date().toISOString(),
+    detail: sanitizeJson(detail),
+    stage,
+  });
+}
+
+function compactEventRecord(record) {
+  return {
+    eventId: record?.eventId || record?.event_id || record?.id || null,
+    status: record?.payload?.status || record?.status || null,
+    turnId:
+      record?.turnId || record?.turn_id || record?.payload?.turnId || null,
+    type: eventRecordType(record),
+  };
+}
+
+function summarizeJsonlRecords(records) {
+  const types = records.map(eventRecordType).filter(Boolean);
+  const typeBreakdown = {};
+  for (const type of types) {
+    typeBreakdown[type] = (typeBreakdown[type] || 0) + 1;
+  }
+  return {
+    count: records.length,
+    tail: records.slice(-20).map(compactEventRecord),
+    typeBreakdown,
+  };
+}
+
+async function readJsonlSummaryForDiagnostics(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) {
+    return { exists: false, path: filePath || null };
+  }
+  try {
+    const records = await readJsonl(filePath);
+    return {
+      exists: true,
+      path: filePath,
+      ...summarizeJsonlRecords(records),
+    };
+  } catch (error) {
+    return {
+      error: sanitizeText(
+        error instanceof Error ? error.message : String(error),
+      ),
+      exists: true,
+      path: filePath,
+    };
+  }
+}
+
 async function copyIfExists(sourcePath, targetPath) {
   if (!fs.existsSync(sourcePath)) {
     return null;
   }
   await writeFile(targetPath, await readFile(sourcePath, "utf8"), "utf8");
   return targetPath;
+}
+
+async function copyDiagnosticJsonl(sourcePath, targetPath) {
+  if (!sourcePath) return null;
+  try {
+    return await copyIfExists(sourcePath, targetPath);
+  } catch (error) {
+    return `copy_failed:${sanitizeText(
+      error instanceof Error ? error.message : String(error),
+    )}`;
+  }
+}
+
+async function collectFailureDiagnostics({
+  diagnostics,
+  regularJsonlFailurePath,
+  workflowJsonlFailurePath,
+}) {
+  const regularPath = diagnostics.eventLogPaths?.regular || "";
+  const workflowPath = diagnostics.eventLogPaths?.workflow || "";
+  const [regular, workflow, regularJsonlEvidence, workflowJsonlEvidence] =
+    await Promise.all([
+      readJsonlSummaryForDiagnostics(regularPath),
+      readJsonlSummaryForDiagnostics(workflowPath),
+      copyDiagnosticJsonl(regularPath, regularJsonlFailurePath),
+      copyDiagnosticJsonl(workflowPath, workflowJsonlFailurePath),
+    ]);
+  return {
+    ...diagnostics,
+    eventLogs: {
+      regular,
+      regularJsonlEvidence,
+      workflow,
+      workflowJsonlEvidence,
+    },
+  };
 }
 
 async function runSmoke(options) {
@@ -630,14 +906,48 @@ async function runSmoke(options) {
     options.evidenceDir,
     `${evidencePrefix}-${stamp}.workflow-events.jsonl`,
   );
+  const failureRegularJsonlEvidencePath = path.join(
+    options.evidenceDir,
+    `${evidencePrefix}-${stamp}.failure.events.jsonl`,
+  );
+  const failureWorkflowJsonlEvidencePath = path.join(
+    options.evidenceDir,
+    `${evidencePrefix}-${stamp}.failure.workflow-events.jsonl`,
+  );
 
   const hostGenerationFixture = options.hostGenerationFixture
     ? await startContentFactoryHostGenerationFixture()
     : null;
-  const backendMode = hostGenerationFixture ? "runtime" : "unavailable";
+  const liveHostGeneration = buildLiveHostGeneration(options);
+  const hostGenerationEnabled = Boolean(
+    hostGenerationFixture || liveHostGeneration,
+  );
+  const backendMode = hostGenerationEnabled ? "runtime" : "unavailable";
+  const diagnostics = {
+    backendMode,
+    contentFactory: null,
+    eventLogPaths: null,
+    hostGeneration: {
+      enabled: hostGenerationEnabled,
+      fixture: Boolean(hostGenerationFixture),
+      liveProvider: liveHostGeneration
+        ? liveHostGeneration.summary
+        : { liveProviderUsed: false },
+    },
+    installedState: null,
+    options: summarizeSmokeOptions(options),
+    packageCachePath: null,
+    session: null,
+    stage: "initialized",
+    stages: [],
+  };
   let connected;
 
   try {
+    markDiagnosticStage(diagnostics, "sidecar.connect.start", {
+      backendMode,
+      binaryPath,
+    });
     connected = await connectAppServerSidecar(
       {
         ...stdioSidecar(binaryPath, undefined, runtimeEnv.appServerDataDir),
@@ -647,7 +957,7 @@ async function runSmoke(options) {
       {
         clientInfo: {
           name: "content_factory_current_turn_smoke",
-          version: "1.91.0",
+          version: "1.92.0",
         },
         capabilities: {
           eventMethods: [METHOD_AGENT_SESSION_EVENT],
@@ -660,8 +970,14 @@ async function runSmoke(options) {
         env: runtimeEnv.env,
       },
     );
+    markDiagnosticStage(diagnostics, "sidecar.connect.done", {
+      protocolVersion: connected.initializeResponse.serverInfo.protocolVersion,
+    });
 
     const connection = connected.connection;
+    markDiagnosticStage(diagnostics, "pluginPackage.inspect.start", {
+      appDir: options.contentFactoryDir,
+    });
     const inspect = await connection.inspectPluginLocalPackage(
       { appDir: options.contentFactoryDir },
       { timeoutMs: Math.min(options.timeoutMs, 30_000) },
@@ -675,7 +991,26 @@ async function runSmoke(options) {
       ]) === WORKER_ENTRY,
       "runtimePackage.worker.entrypoint mismatch",
     );
+    diagnostics.contentFactory = {
+      appId:
+        stringField(inspect.result.pluginManifest, ["appId"]) ||
+        stringField(inspect.result.manifest, ["appId"]) ||
+        APP_ID,
+      manifestHash: inspect.result.manifestHash,
+      packageHash: inspect.result.packageHash,
+      sourceKind: inspect.result.sourceKind || null,
+      version: stringField(inspect.result.pluginManifest, ["version"]),
+      workerEntrypoint: WORKER_ENTRY,
+    };
+    markDiagnosticStage(
+      diagnostics,
+      "pluginPackage.inspect.done",
+      diagnostics.contentFactory,
+    );
 
+    markDiagnosticStage(diagnostics, "pluginInstalled.save.prepare", {
+      cloudReleaseFixture: Boolean(options.cloudReleaseFixture),
+    });
     const cloudRelease = options.cloudReleaseFixture
       ? await buildCloudReleaseFixture(inspect.result)
       : null;
@@ -686,9 +1021,17 @@ async function runSmoke(options) {
           packageHash: inspect.result.packageHash,
         })
       : null;
+    diagnostics.packageCachePath = packageCachePath;
     const installedState = cloudRelease
       ? buildCloudReleaseInstalledState(inspect.result, cloudRelease)
       : buildInstalledState(inspect.result);
+    diagnostics.installedState =
+      summarizeInstalledStateForDiagnostics(installedState);
+    markDiagnosticStage(
+      diagnostics,
+      "pluginInstalled.save.start",
+      diagnostics.installedState,
+    );
     const save = await connection.savePluginInstalled(
       { state: installedState },
       { timeoutMs: Math.min(options.timeoutMs, 30_000) },
@@ -697,11 +1040,44 @@ async function runSmoke(options) {
       save.result?.appId === APP_ID,
       "installed state save appId mismatch",
     );
+    markDiagnosticStage(diagnostics, "pluginInstalled.save.done", {
+      savedAppId: save.result.appId,
+      sourceKind: installedState.identity.sourceKind,
+    });
 
     const sessionId = `session_content_factory_current_${Date.now()}`;
     const threadId = `thread_content_factory_current_${Date.now()}`;
     const turnId = `turn_content_factory_current_${Date.now()}`;
     const workspaceId = "workspace-content-factory-current-smoke";
+    diagnostics.session = {
+      sessionId,
+      threadId,
+      turnId,
+      workspaceId,
+    };
+    const safeSession = safeFileStem(sessionId);
+    diagnostics.eventLogPaths = {
+      regular: path.join(
+        runtimeEnv.appServerDataDir,
+        "runtime",
+        "events",
+        "sessions",
+        `session_${safeSession}.jsonl`,
+      ),
+      workflow: path.join(
+        runtimeEnv.appServerDataDir,
+        "runtime",
+        "events",
+        "sessions",
+        `session_${safeSession}`,
+        "workflow-events.jsonl",
+      ),
+    };
+    markDiagnosticStage(diagnostics, "agentSession.start.start", {
+      sessionId,
+      threadId,
+      workspaceId,
+    });
     const session = await connection.startSession(
       {
         sessionId,
@@ -716,7 +1092,16 @@ async function runSmoke(options) {
       session.result.session.sessionId === sessionId,
       "session id mismatch",
     );
+    markDiagnosticStage(diagnostics, "agentSession.start.done", {
+      sessionId,
+    });
 
+    markDiagnosticStage(diagnostics, "agentSession.turn.start.dispatch", {
+      hostGenerationEnabled,
+      liveProviderUsed: Boolean(liveHostGeneration),
+      sourceKind: installedState.identity.sourceKind,
+      turnId,
+    });
     const turn = await connection.startTurn(
       {
         sessionId,
@@ -728,6 +1113,7 @@ async function runSmoke(options) {
           sessionId,
           workspaceId,
           fixtureBaseUrl: hostGenerationFixture?.baseUrl,
+          liveAsterChatRequest: liveHostGeneration?.asterChatRequest,
         }),
         queueIfBusy: false,
         skipPreSubmitResume: false,
@@ -736,6 +1122,11 @@ async function runSmoke(options) {
     );
     assert(turn.result.turn.turnId === turnId, "turn id mismatch");
     assert(turn.result.turn.status === "completed", "turn status mismatch");
+    markDiagnosticStage(diagnostics, "agentSession.turn.start.done", {
+      notificationCount: turn.notifications?.length || 0,
+      status: turn.result.turn.status,
+      turnId,
+    });
 
     const notifications = await collectUntilTurnCompleted(
       connection,
@@ -747,7 +1138,8 @@ async function runSmoke(options) {
       (event) => event.turnId === turnId || event.turn_id === turnId,
     );
     const eventSummary = assertCurrentTurnEvents(events, {
-      hostGenerationCompleted: Boolean(hostGenerationFixture),
+      hostGenerationCompleted: hostGenerationEnabled,
+      hostGenerationFixture: Boolean(hostGenerationFixture),
     });
 
     const read = await connection.readSession(
@@ -755,7 +1147,8 @@ async function runSmoke(options) {
       { timeoutMs: 30_000 },
     );
     const readSummary = assertReadModel(read.result, {
-      hostGenerationCompleted: Boolean(hostGenerationFixture),
+      hostGenerationCompleted: hostGenerationEnabled,
+      hostGenerationFixture: Boolean(hostGenerationFixture),
     });
 
     const artifacts = await connection.readArtifacts(
@@ -790,22 +1183,8 @@ async function runSmoke(options) {
       evidenceExport.result,
     );
 
-    const safeSession = safeFileStem(sessionId);
-    const regularEventPath = path.join(
-      runtimeEnv.appServerDataDir,
-      "runtime",
-      "events",
-      "sessions",
-      `session_${safeSession}.jsonl`,
-    );
-    const workflowEventPath = path.join(
-      runtimeEnv.appServerDataDir,
-      "runtime",
-      "events",
-      "sessions",
-      `session_${safeSession}`,
-      "workflow-events.jsonl",
-    );
+    const regularEventPath = diagnostics.eventLogPaths.regular;
+    const workflowEventPath = diagnostics.eventLogPaths.workflow;
     const regularRecords = await readJsonl(regularEventPath);
     const workflowRecords = await readJsonl(workflowEventPath);
     const eventLogSummary = assertEventLogs({
@@ -885,6 +1264,31 @@ async function runSmoke(options) {
             expectedStatus: "completed",
           }
         : null,
+      liveProvider: liveHostGeneration
+        ? {
+            ...liveHostGeneration.summary,
+            expectedStatus: "completed",
+          }
+        : {
+            liveProviderUsed: false,
+          },
+      providerEvidence: liveHostGeneration
+        ? {
+            productionRoute: true,
+            liveProviderUsed: true,
+            provider: options.liveProviderId,
+            model: options.liveModel,
+            baseUrlConfigured: Boolean(options.liveBaseUrl),
+          }
+        : {
+            productionRoute: false,
+            liveProviderUsed: false,
+          },
+      assertions: {
+        articleDraftDocumentPresent: true,
+        contentFactoryArticleWorkspaceWorkflowFactsHidden: true,
+        liveProviderUsed: Boolean(liveHostGeneration),
+      },
       cloudReleaseFixture: cloudRelease
         ? {
             sourceKind: "cloud_release",
@@ -912,7 +1316,9 @@ async function runSmoke(options) {
           : "This smoke proves the external local_folder package enters App Server current agentSession/turn/start.",
         hostGenerationFixture
           ? "hostGenerationFixture uses a local OpenAI-compatible SSE provider to prove hostManagedGeneration completed without real provider credentials."
-          : "backendMode=unavailable intentionally does not prove live host-managed LLM generation.",
+          : liveHostGeneration
+            ? "liveProvider uses an explicit Direct provider config from environment variables; API keys are not written to evidence."
+            : "backendMode=unavailable intentionally does not prove live host-managed LLM generation.",
         cloudRelease
           ? "cloudReleaseFixture is local release evidence only; it does not replace production LimeCore signatureProof and trust root delivery."
           : null,
@@ -929,6 +1335,14 @@ async function runSmoke(options) {
       options.evidenceDir,
       `${evidencePrefix}-${stamp}.failure.json`,
     );
+    markDiagnosticStage(diagnostics, "failed", {
+      message: error instanceof Error ? error.message : String(error),
+    });
+    const failureDiagnostics = await collectFailureDiagnostics({
+      diagnostics,
+      regularJsonlFailurePath: failureRegularJsonlEvidencePath,
+      workflowJsonlFailurePath: failureWorkflowJsonlEvidencePath,
+    });
     await writeFile(
       failurePath,
       `${JSON.stringify(
@@ -937,19 +1351,25 @@ async function runSmoke(options) {
           status: "failed",
           generatedAt: new Date().toISOString(),
           error: {
-            message: error instanceof Error ? error.message : String(error),
-            stack: error instanceof Error ? error.stack : "",
+            message: sanitizeText(
+              error instanceof Error ? error.message : String(error),
+            ),
+            stack: sanitizeText(error instanceof Error ? error.stack : ""),
           },
           appServer: {
             binaryPath,
             dataDir: runtimeEnv.appServerDataDir,
             preferredDataDir: runtimeEnv.preferredDataDir,
             tempRoot: runtimeEnv.tempRoot,
-            stderrTail: (connected?.sidecar.stderrLines ?? [])
+            stdoutTail: (connected?.sidecar?.stdoutLines ?? [])
+              .slice(-40)
+              .map(sanitizeText),
+            stderrTail: (connected?.sidecar?.stderrLines ?? [])
               .slice(-40)
               .map(sanitizeText),
           },
           contentFactoryDir: options.contentFactoryDir,
+          diagnostics: sanitizeJson(failureDiagnostics),
         },
         null,
         2,

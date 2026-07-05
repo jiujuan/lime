@@ -44,8 +44,7 @@ pub(super) fn validate_worker_cloud_release_signature(
     };
 
     let mut issues = Vec::new();
-    let signature_policy = json_string(evidence, &["signaturePolicy", "signature_policy"])
-        .unwrap_or_else(|| "required".to_string());
+    let signature_policy = json_string(evidence, &["signaturePolicy", "signature_policy"]);
     let signature_status = json_string(
         evidence,
         &[
@@ -54,9 +53,11 @@ pub(super) fn validate_worker_cloud_release_signature(
         ],
     )
     .unwrap_or_else(|| "not_configured".to_string());
-    let signature_required = signature_policy == "required";
-    if signature_required && signature_status != "verified" {
-        issues.push("required signature is not verified");
+    if signature_policy.as_deref() != Some("required") {
+        issues.push("signature policy is not required");
+    }
+    if signature_status != "verified" {
+        issues.push("signature is not verified");
     }
     if evidence
         .get("packageHashMatched")
@@ -84,10 +85,8 @@ pub(super) fn validate_worker_cloud_release_signature(
         issues.push("package verification is not verified");
     }
     let evidence_status = json_string(evidence, &["status"]).unwrap_or_else(|| "blocked".into());
-    if evidence_status == "blocked" {
-        issues.push("release evidence is blocked");
-    } else if signature_required && evidence_status != "ready" {
-        issues.push("required-signature release evidence is not ready");
+    if evidence_status != "ready" {
+        issues.push("release evidence is not ready");
     }
 
     if issues.is_empty() {

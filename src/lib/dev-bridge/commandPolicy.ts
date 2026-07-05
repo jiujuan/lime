@@ -73,7 +73,10 @@ const devBridgePluginUiRuntimeStartCommands = new Set([
   "plugin_start_ui_runtime",
 ]);
 
-const devBridgePluginPackageCommands = new Set(["pluginLocalPackage/inspect"]);
+const devBridgePluginPackageCommands = new Set([
+  "pluginLocalPackage/inspect",
+  "pluginLocalPackage/export",
+]);
 
 const electronHostLayeredDesignProjectCommands = new Set([
   "save_layered_design_project_export",
@@ -153,6 +156,7 @@ const APP_SERVER_CURRENT_METHODS = new Set([
   "workspaceSkillBindings/list",
   "workspaceRegisteredSkills/list",
   "pluginLocalPackage/inspect",
+  "pluginLocalPackage/export",
   "pluginPackage/fetchCloud",
   "pluginInstalled/save",
   "pluginInstalled/list",
@@ -475,7 +479,8 @@ function isAppServerPluginPackageInspectCommand(
     return false;
   }
   return extractAppServerJsonLines(args).some((line) =>
-    jsonRpcLineHasMethod(line, "pluginLocalPackage/inspect"),
+    jsonRpcLineHasMethod(line, "pluginLocalPackage/inspect") ||
+    jsonRpcLineHasMethod(line, "pluginLocalPackage/export"),
   );
 }
 

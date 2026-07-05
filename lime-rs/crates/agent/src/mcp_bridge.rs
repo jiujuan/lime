@@ -104,10 +104,7 @@ impl McpBridgeRuntimeRegistry {
 ///
 /// 持有 Lime 的 rmcp RunningService 引用，
 /// 将 Aster 的工具调用转发到已有的 MCP 连接。
-#[allow(dead_code)]
-pub struct McpBridgeClient {
-    /// 服务器名称
-    name: String,
+struct McpBridgeClient {
     /// Lime 的 rmcp RunningService
     service: Arc<RunningService<RoleClient, LimeMcpClient>>,
     /// Lime MCP 客户端处理器
@@ -119,14 +116,13 @@ pub struct McpBridgeClient {
 }
 
 impl McpBridgeClient {
-    pub fn new(
-        name: String,
+    fn new(
+        _name: String,
         service: Arc<RunningService<RoleClient, LimeMcpClient>>,
         handler: Arc<LimeMcpClient>,
         server_info: Option<InitializeResult>,
     ) -> Self {
         Self {
-            name,
             service,
             handler,
             server_info,

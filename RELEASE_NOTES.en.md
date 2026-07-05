@@ -1,42 +1,42 @@
-## Lime v1.91.0
+## Lime v1.92.0
 
 <sub>The Simplified Chinese release notes are the primary version. This English page is a companion for international readers.</sub>
 
 ### New Features
 
-- Added typed notification projection to the App Server `agentSession` event path, covering `message/created`, `turn/*`, `item/*`, and assistant message deltas with regenerated protocol schemas and npm client types.
-- Consolidated App Center into the current Plugins page: the old marketplace page is retired, while installed state, cloud state, capability lists, activation entries, subagents / skills, permissions, and version summaries now share one app detail surface.
-- Plugin activation can now route into the Agent workspace with project context, turning workflow / runtime entries into `@` trigger prompts instead of continuing through the old adapter mock execution path.
-- Agent Turn automation now carries session / thread lineage so jobs created from a workspace stay bound to the originating conversation context.
+- Added a shared model capability and send-policy fact source covering context windows, input modalities, native tools, tool calls, reasoning, responses, truncation, Prompt Cache, and send gates across the model picker and App Server protocol.
+- Added App Server `pluginLocalPackage/export`, plus plugin publishing workbench, release review, submission status, and OEM Cloud publishing API surfaces to close the local-to-cloud plugin release loop.
+- Added production readiness, preflight, evidence bundle, release evidence, signing verification, cloud evidence fetch, and auditable report scripts for the Content Factory release path.
+- Expanded Agent chat projections for actions, artifacts, context, diagnostics, queues, routing, runtime lifecycle, subagent status, thread items, and tool events, including more reliable article workspace artifact opening.
 
 ### Fixes
 
-- Fixed Agent Runtime boundaries around typed deltas, turn lifecycle events, runtime status, web-search preflight, credential provider bridge, and session recovery projection to reduce stream ordering, stale terminal state, and context-loss risks.
-- Fixed restored team facts, workspace team runtime, subagent timelines, right-surface readiness, and service-skill entry action projections.
-- Fixed plugin install / uninstall flows for destructive-data confirmation, dry-run gating, manifest normalization, source versions, capability tags, and detail summaries.
-- Fixed Claw current fixture waits, right-surface visual assertions, scenario assertion split, and multi-agent team fixture coverage.
+- Fixed Agent Runtime terminal events, terminal turn guard, stream metrics, and user input submission boundaries to reduce stale terminal events, stuck input state, and session recovery mismatches.
+- Fixed App Server evidence export request telemetry linkage, thread item message projection, artifact projection, and workflow queue / resume audit output.
+- Fixed model capability detection and provider model list boundaries so Prompt Cache, input modality, reasoning, native tool, and truncation support stay consistent across UI, protocol, and runtime.
+- Fixed plugin capability host, runtime client API, Plugins page summaries, and Content Factory SDK regressions to keep publishing checks aligned with App Center presentation.
 
 ### Improvements and Refactors
 
-- Split `tool-runtime` ownership for execution policy, execution rules, shell planning, tool batch plan / outcome, and policy service so App Server no longer reads plain shell argv text through the `lime-agent` Aster adapter.
-- Refactored App Server protocol / client request and notification methods, catalog data, schema export, and generated types around the current JSON-RPC contract.
-- Continued shrinking Aster residuals in `lime-agent` by moving tool inventory, workspace patching, event / reply handling, session store, and subagent profiles behind narrower adapter boundaries.
-- Removed the old plugin marketplace page and route branch; Skills workspace project resolution now uses the current project hook to avoid parallel UI entry points.
+- Added the current `tool-runtime` crate and moved shell / PowerShell execution, path guarding, command semantics, subprocess handling, Web Search / Web Fetch, and tool extensions out of vendor Aster residuals.
+- Split `agent-runtime` and `lime-agent` reply handling, session config, recent settings, runtime payload, model request policy, and session execution runtime modules so central files only dispatch.
+- Regenerated App Server protocol and npm client surfaces for model capability fields, plugin local package export schemas, and request methods, while removing the obsolete `ResolvedModelRoute` schema shape.
+- Continued retiring old Tauri wrapper / Aster cleanup artifacts and vendor tool implementations, including obsolete cleanup queues and inventory documents.
 
 ### Tests and Quality
 
-- Added App Server event notification, protocol schema, plugin task evidence, team facts, provider telemetry, turn lifecycle, and media task JSON-RPC regressions.
-- Added or updated regressions for workspace plugin activation, intent routing, runtime readiness, service-skill actions, team session runtime, restored team facts, automation thread lineage, and plugin UI flows.
-- Updated current fixture smoke coverage, OpenAI-compatible fixture server tests, managed-objective automation smoke helpers, MCP contract guards, App Server client contract checks, and governance boundaries.
-- Kept five-language i18n resources in sync for App Center, automation, and Agent workspace copy.
+- Added model strategy and capability governance tests covering Codex / OpenCode policy origins and current boundaries for model execution, native tools, responses, reasoning, truncation, picker, and modality.
+- Added regressions for Agent UI projections, runtime export, projection units, terminal turn guard, artifact opening, App Server event stream / evidence export / thread client / model registry, and plugin publishing APIs.
+- Updated App Server protocol schema fixtures, generated TypeScript protocol types, App Server client contract checks, harness contracts, and current entrypoint guards.
+- Added Content Factory production readiness, preflight, release evidence, signature verifier, workflow evidence, turn-start trace, and signed release gate tests.
 
 ### Documentation
 
-- Added the `2026-07-05 Aster migration reality check`, recalibrating the exit-condition progress estimate to about `69%` and explicitly rejecting the previous `99%` or no-Aster-dependency completion framing.
-- Updated the Aster migration main plan, ProjectThread-first execution plan / PRD, tech-debt tracker, and workflow reference to match the current implementation.
+- Updated Writing v2, Content Factory plugin reframing, product requirements, Aster migration, and long-term governance roadmaps around plugin publishing, production evidence, model capability policy, and Aster residual retirement.
+- Added Aster capability intake strategy / execution plans, long-term governance notes, and plugin publishing center PRD / server plan.
 
 ### Other
 
-- Bumped version facts to `1.91.0` across the root app, CLI npm package, Rust workspace, `lime-rs/Cargo.lock`, and the current-turn smoke client.
+- Bumped version facts to `1.92.0` across the root app, CLI npm package, Rust workspace, `lime-rs/Cargo.lock`, `lime-rs/vendor/aster-rust/Cargo.lock`, and the current-turn smoke client.
 
-**Full changes**: `v1.90.0` -> `v1.91.0`
+**Full changes**: `v1.91.0` -> `v1.92.0`

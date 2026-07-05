@@ -11,6 +11,10 @@ use aster::providers::errors::ProviderError;
 use aster::providers::RetryConfig;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
+use model_provider::provider_stream::{
+    RuntimeProviderBackend, RuntimeReplyProviderCapabilities, RuntimeReplyProviderHandle,
+    RuntimeReplyStreamRequest,
+};
 use model_provider::runtime_provider::RuntimeProviderConfig;
 use model_provider::safety::{
     normalize_fast_model, normalize_provider_tool_messages, truncate_provider_text,
@@ -26,11 +30,95 @@ use tokio_util::sync::CancellationToken;
 /// 等 current runtime provider stream 接管后替换这里的内部实现。
 #[derive(Clone)]
 pub(crate) struct ConfiguredReplyProvider {
-    provider: Arc<dyn Provider>,
+    handle: RuntimeReplyProviderHandle,
+    backend: CompatAsterReplyProviderBackend,
 }
 
 impl ConfiguredReplyProvider {
+    pub(crate) fn runtime_handle(&self) -> &RuntimeReplyProviderHandle {
+        &self.handle
+    }
+
     pub(crate) async fn stream_reply_with_agent<'a>(
+        &self,
+        stream_request: &RuntimeReplyStreamRequest,
+        agent: &'a Agent,
+        user_message: Message,
+        session_config: aster::agents::SessionConfig,
+        cancel_token: Option<CancellationToken>,
+    ) -> anyhow::Result<BoxStream<'a, anyhow::Result<AsterAgentEvent>>> {
+        debug_assert_eq!(stream_request.provider.as_ref(), Some(&self.handle));
+        tracing::debug!(
+            session_id = %stream_request.session_id,
+            input_kind = ?stream_request.input_kind,
+            message_chars = stream_request.message_chars,
+            provider_backend = ?stream_request.provider_backend(),
+            provider_name = ?stream_request.provider_name(),
+            model_name = ?stream_request.model_name(),
+            "[CredentialBridge] streaming reply with configured runtime provider"
+        );
+        self.backend
+            .stream_reply_with_agent(agent, user_message, session_config, cancel_token)
+            .await
+    }
+}
+
+pub(crate) async fn create_configured_reply_provider(
+    config: &RuntimeProviderConfig,
+) -> Result<ConfiguredReplyProvider, CredentialBridgeError> {
+    let backend = CompatAsterReplyProviderBackend::from_config(config).await?;
+    let capabilities = backend.capabilities();
+    let handle =
+        RuntimeReplyProviderHandle::from_config(config, RuntimeProviderBackend::AsterCompat)
+            .with_capabilities(capabilities);
+
+    Ok(ConfiguredReplyProvider { handle, backend })
+}
+
+/// RuntimeProviderConfig 到 Aster provider trait object 的迁移期 backend。
+///
+/// 裸 Aster Provider 只允许停留在这里；外层只传递 RuntimeReplyProviderHandle。
+#[derive(Clone)]
+struct CompatAsterReplyProviderBackend {
+    inner: Arc<dyn Provider>,
+}
+
+impl CompatAsterReplyProviderBackend {
+    async fn from_config(config: &RuntimeProviderConfig) -> Result<Self, CredentialBridgeError> {
+        let disable_default_fast_model = should_disable_provider_default_fast_model(config);
+
+        if disable_default_fast_model {
+            tracing::info!(
+                provider_name = %config.provider_name,
+                provider_selector = ?config.provider_selector,
+                model_name = %config.model_name,
+                "[CredentialBridge] 检测到 OpenAI 兼容非 OpenAI provider，已禁用默认 fast_model"
+            );
+        }
+
+        set_provider_env_vars(config);
+
+        let model_config = build_provider_model_config(config)?;
+
+        aster::providers::create(&config.provider_name, model_config)
+            .await
+            .map(|provider| Self {
+                inner: wrap_provider_with_safety(provider, disable_default_fast_model),
+            })
+            .map_err(|e| {
+                CredentialBridgeError::ProviderCreationFailed(format!("创建 Provider 失败: {e}"))
+            })
+    }
+
+    fn capabilities(&self) -> RuntimeReplyProviderCapabilities {
+        RuntimeReplyProviderCapabilities {
+            supports_streaming: self.inner.supports_streaming(),
+            supports_embeddings: self.inner.supports_embeddings(),
+            active_model_name: Some(self.inner.get_active_model_name()),
+        }
+    }
+
+    async fn stream_reply_with_agent<'a>(
         &self,
         agent: &'a Agent,
         user_message: Message,
@@ -42,47 +130,10 @@ impl ConfiguredReplyProvider {
                 user_message,
                 session_config,
                 cancel_token,
-                self.provider.clone(),
+                self.inner.clone(),
             )
             .await
     }
-}
-
-pub(crate) async fn create_configured_reply_provider(
-    config: &RuntimeProviderConfig,
-) -> Result<ConfiguredReplyProvider, CredentialBridgeError> {
-    create_runtime_provider_handle_inner(config)
-        .await
-        .map(|provider| ConfiguredReplyProvider { provider })
-}
-
-/// RuntimeProviderConfig 到 runtime provider 的迁移期 adapter。
-///
-/// 设置环境变量并调用 aster::providers::create。
-async fn create_runtime_provider_handle_inner(
-    config: &RuntimeProviderConfig,
-) -> Result<Arc<dyn Provider>, CredentialBridgeError> {
-    let disable_default_fast_model = should_disable_provider_default_fast_model(config);
-
-    if disable_default_fast_model {
-        tracing::info!(
-            provider_name = %config.provider_name,
-            provider_selector = ?config.provider_selector,
-            model_name = %config.model_name,
-            "[CredentialBridge] 检测到 OpenAI 兼容非 OpenAI provider，已禁用默认 fast_model"
-        );
-    }
-
-    set_provider_env_vars(config);
-
-    let model_config = build_provider_model_config(config)?;
-
-    aster::providers::create(&config.provider_name, model_config)
-        .await
-        .map(|provider| wrap_provider_with_safety(provider, disable_default_fast_model))
-        .map_err(|e| {
-            CredentialBridgeError::ProviderCreationFailed(format!("创建 Provider 失败: {e}"))
-        })
 }
 
 fn build_provider_model_config(

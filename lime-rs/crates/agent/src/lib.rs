@@ -27,8 +27,9 @@ mod knowledge_builder_skill;
 pub mod lime_session_repository;
 mod live_execution_process;
 mod lsp_bridge;
-pub mod mcp_bridge;
+mod mcp_bridge;
 mod message_content_adapter;
+mod model_request_policy;
 pub mod native_tools;
 pub mod prompt;
 pub mod protocol;
@@ -89,6 +90,14 @@ pub use knowledge_builder_skill::{
 };
 pub use lime_mcp as mcp;
 pub use live_execution_process::LiveExecutionProcessGateway;
+pub use model_request_policy::{
+    model_request_policy_from_metadata, model_request_policy_from_turn_context,
+    runtime_reply_model_request_policy_from_metadata,
+    runtime_reply_model_request_policy_from_snapshot,
+    runtime_reply_model_request_policy_from_turn_context, ModelNativeToolPolicySnapshot,
+    ModelRequestPolicySnapshot, ModelResponsesPolicySnapshot, ModelToolCallPolicySnapshot,
+    ModelTruncationPolicySnapshot,
+};
 pub use prompt::SystemPromptBuilder;
 pub use prompt::{
     budget_limit_prompt, build_runtime_agents_prompt, build_runtime_agents_prompt_for_project,
@@ -139,11 +148,11 @@ pub use runtime_queue::{
 pub use runtime_state::{AgentRuntimeState, QueuedTurnTask};
 pub use runtime_state_support::{
     is_lime_skill_registered, register_lime_project_skill_from_directory, reload_lime_skills,
-    SessionConfigBuilder,
 };
 pub use runtime_support::initialize_agent_runtime;
 pub use session_configuration::{
     build_agent_session_config, AgentSessionConfig, AgentSessionConfigurationRequest,
+    SessionConfigBuilder,
 };
 pub use session_execution_runtime::{
     apply_usage_to_cost_state, detect_runtime_limit_event, SessionExecutionRuntime,

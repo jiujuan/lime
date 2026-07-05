@@ -3060,6 +3060,25 @@
           "$ref": "#/$defs/RequestId"
         },
         "method": {
+          "const": "pluginLocalPackage/export",
+          "type": "string"
+        },
+        "params": {
+          "default": null
+        }
+      },
+      "required": [
+        "id",
+        "method"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId"
+        },
+        "method": {
           "const": "pluginPackage/fetchCloud",
           "type": "string"
         },

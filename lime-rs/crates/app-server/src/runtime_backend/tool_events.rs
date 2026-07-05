@@ -263,6 +263,10 @@ mod tests {
             cancel_reason: None,
             provider_request_id: Some("req-provider-1".to_string()),
             provider_request_id_header: Some("x-request-id".to_string()),
+            runtime_provider_backend: Some("aster_compat".to_string()),
+            runtime_provider_selector: Some("codex".to_string()),
+            runtime_provider_protocol: Some("responses".to_string()),
+            runtime_provider_active_model: Some("gpt-4.1".to_string()),
         })
         .expect("provider trace should emit");
 
@@ -275,6 +279,16 @@ mod tests {
         assert_eq!(
             events[0].payload["provider_request_id_header"],
             "x-request-id"
+        );
+        assert_eq!(
+            events[0].payload["runtime_provider_backend"],
+            "aster_compat"
+        );
+        assert_eq!(events[0].payload["runtime_provider_selector"], "codex");
+        assert_eq!(events[0].payload["runtime_provider_protocol"], "responses");
+        assert_eq!(
+            events[0].payload["runtime_provider_active_model"],
+            "gpt-4.1"
         );
         assert_eq!(events[0].payload["elapsed_ms"], json!(1234));
         assert_eq!(events[0].payload["text_chars"], json!(8));

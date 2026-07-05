@@ -92,8 +92,6 @@ mod tests {
                 routing_slot: Some("image_generation_model".to_string()),
                 source: ModelRefSource::Task,
             },
-            provider: None,
-            model: None,
             protocol: ProtocolKind::OpenaiImages,
             endpoint: EndpointInfo {
                 kind: EndpointKind::OpenaiCompatible,

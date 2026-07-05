@@ -197,6 +197,7 @@
   ],
   "appServerPluginMethods": [
     "pluginLocalPackage/inspect",
+    "pluginLocalPackage/export",
     "pluginPackage/fetchCloud",
     "pluginInstalled/save",
     "pluginInstalled/list",

@@ -18,6 +18,7 @@ import { normalizeExecutionStrategy } from "./agentChatCoreUtils";
 import { sanitizeMessageTextForPreview } from "../utils/messageDisplaySanitizer";
 import { sanitizeGeneratedAutoTitle } from "./agentChatAutoTitleViewModel";
 import type { SoulInteractionCopy } from "@/lib/soul/interactionCopy";
+import type { ModelCapabilitySummary } from "@/lib/model/inferModelCapabilities";
 
 export type TaskStatus = "draft" | "running" | "waiting" | "done" | "failed";
 export type TaskStatusReason =
@@ -102,6 +103,7 @@ export interface SendMessageOptions {
   skillRequest?: SlashSkillRequest;
   providerOverride?: string;
   modelOverride?: string;
+  modelCapabilitySummary?: ModelCapabilitySummary | null;
   reasoningEffort?: string;
   systemPromptOverride?: string;
   searchMode?: AgentRuntimeWebSearchMode;

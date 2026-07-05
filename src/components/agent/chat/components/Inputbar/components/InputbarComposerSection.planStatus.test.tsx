@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatInputAdapter } from "@/components/input-kit/adapters/types";
 import { agentZhCNResource } from "@/i18n/agentResources";
+import type { MessageImage } from "../../../types";
 import { InputbarComposerSection } from "./InputbarComposerSection";
 import {
   buildInputbarComposerSectionCopy,
@@ -19,12 +20,34 @@ import {
 } from "../inputbarWorkflowCopy";
 import type { SkillSelectionProps } from "../../../skill-selection/skillSelectionBindings";
 
+const visionNoticeMockState = vi.hoisted(() => ({
+  policy: {
+    canSubmit: true,
+    failClosedAtSubmit: false,
+    missingInputModalities: [],
+    reason: null,
+    requiredInputModalities: [],
+    shouldDisableComposer: false,
+    shouldWarn: false,
+    status: "enabled",
+  },
+}));
+
 vi.mock("./InputbarCore", () => ({
   InputbarCore: (props: {
+    disabled?: boolean;
     leftExtra?: React.ReactNode;
+    onSend?: () => void;
+    topExtra?: React.ReactNode;
     trailingMeta?: React.ReactNode;
   }) => (
-    <div data-testid="inputbar-core">
+    <div data-testid="inputbar-core" data-disabled={String(props.disabled)}>
+      <button
+        type="button"
+        data-testid="mock-send"
+        onClick={() => props.onSend?.()}
+      />
+      <div data-testid="top-extra">{props.topExtra}</div>
       <div data-testid="left-extra">{props.leftExtra}</div>
       <div data-testid="trailing-meta">{props.trailingMeta}</div>
     </div>
@@ -44,6 +67,27 @@ vi.mock("./InputbarModelExtra", () => ({
 vi.mock("./InputbarWorkflowStatusPanel", () => ({
   InputbarWorkflowStatusPanel: () => null,
 }));
+
+vi.mock("./InputbarVisionCapabilityNotice", async () => {
+  const ReactModule = await import("react");
+
+  return {
+    InputbarVisionCapabilityNotice: (props: {
+      hasPendingImages?: boolean;
+      onPolicyChange?: (policy: typeof visionNoticeMockState.policy) => void;
+    }) => {
+      ReactModule.useEffect(() => {
+        props.onPolicyChange?.(visionNoticeMockState.policy);
+      }, [props.onPolicyChange]);
+
+      return props.hasPendingImages
+        ? ReactModule.createElement("div", {
+            "data-testid": "mock-vision-notice",
+          })
+        : null;
+    },
+  };
+});
 
 vi.mock("../../../skill-selection/CharacterMention", () => ({
   CharacterMention: () => null,
@@ -115,6 +159,16 @@ beforeEach(() => {
       IS_REACT_ACT_ENVIRONMENT?: boolean;
     }
   ).IS_REACT_ACT_ENVIRONMENT = true;
+  visionNoticeMockState.policy = {
+    canSubmit: true,
+    failClosedAtSubmit: false,
+    missingInputModalities: [],
+    reason: null,
+    requiredInputModalities: [],
+    shouldDisableComposer: false,
+    shouldWarn: false,
+    status: "enabled",
+  };
 });
 
 function renderComposerSection(
@@ -164,11 +218,7 @@ function renderComposerSection(
   ) => {
     act(() => {
       root.render(
-        <InputbarComposerSection
-          {...defaultProps}
-          {...props}
-          {...nextProps}
-        />,
+        <InputbarComposerSection {...defaultProps} {...props} {...nextProps} />,
       );
     });
   };
@@ -229,5 +279,48 @@ describe("InputbarComposerSection plan status", () => {
     expect(
       container.querySelector('[data-testid="inputbar-plan-mode-context"]'),
     ).toBeNull();
+  });
+
+  it("图片能力 policy 阻断时应禁用输入框并拦截发送", () => {
+    visionNoticeMockState.policy = {
+      canSubmit: false,
+      failClosedAtSubmit: true,
+      missingInputModalities: ["image"],
+      reason: "missing_input_modalities",
+      requiredInputModalities: ["image"],
+      shouldDisableComposer: true,
+      shouldWarn: true,
+      status: "blocked",
+    };
+    const image: MessageImage = {
+      data: "aW1hZ2U=",
+      mediaType: "image/png",
+    };
+    const inputAdapter = createInputAdapter();
+    inputAdapter.state.attachments = [image];
+    const onSend = vi.fn();
+
+    const { container } = renderComposerSection({
+      inputAdapter,
+      onSend,
+      pendingImages: [image],
+    });
+
+    expect(
+      container.querySelector('[data-testid="mock-vision-notice"]'),
+    ).toBeTruthy();
+    expect(
+      container
+        .querySelector('[data-testid="inputbar-core"]')
+        ?.getAttribute("data-disabled"),
+    ).toBe("true");
+
+    act(() => {
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="mock-send"]')
+        ?.click();
+    });
+
+    expect(onSend).not.toHaveBeenCalled();
   });
 });

@@ -1,9 +1,32 @@
-import fs from "node:fs";
-import path from "node:path";
+import { APP_ID } from "./plugin-content-factory-signed-release-gate-constants.mjs";
+import {
+  appendFetchCloudRequirements,
+  summarizeFetchCloud,
+} from "./plugin-content-factory-signed-release-gate-fetch-cloud.mjs";
+import {
+  appendPreflightRequirements,
+  summarizePreflight,
+} from "./plugin-content-factory-signed-release-gate-preflight.mjs";
+import {
+  appendPlaceholderRequirement,
+  appendSecretScanRequirement,
+  summarizePlaceholders,
+  summarizeSecretScan,
+} from "./plugin-content-factory-signed-release-gate-safety.mjs";
 
-import { contentFactorySignedReleasePlaceholderSamples } from "./plugin-content-factory-signed-release-gate-placeholders.mjs";
+export {
+  CONTENT_FACTORY_SIGNED_RELEASE_GATE_RESULT_FILE_NAME,
+  CONTENT_FACTORY_SIGNED_RELEASE_GATE_TEMPLATE_FILE_NAMES,
+} from "./plugin-content-factory-signed-release-gate-constants.mjs";
+export {
+  readOptionalJsonFile,
+  writeJsonFile,
+} from "./plugin-content-factory-signed-release-gate-io.mjs";
+export {
+  buildContentFactorySignedReleaseEvidenceTemplate,
+  writeContentFactorySignedReleaseEvidenceTemplateDir,
+} from "./plugin-content-factory-signed-release-gate-template.mjs";
 
-const APP_ID = "content-factory-app";
 const HASH_RE = /^sha256:[a-f0-9]{64}$/i;
 const SUPPORTED_SIGNATURE_ALGORITHMS = new Set([
   "RSASSA-PKCS1-v1_5-SHA256",
@@ -11,15 +34,6 @@ const SUPPORTED_SIGNATURE_ALGORITHMS = new Set([
   "ECDSA-P256-SHA256",
   "Ed25519",
 ]);
-export const CONTENT_FACTORY_SIGNED_RELEASE_GATE_TEMPLATE_FILE_NAMES = {
-  bootstrap: "content-factory-production-bootstrap.template.json",
-  catalog: "content-factory-production-catalog.template.json",
-  fetchCloud: "content-factory-fetch-cloud-evidence.template.json",
-  guiEvidence: "content-factory-gui-evidence.template.json",
-  readme: "content-factory-signed-release-gate.template.json",
-};
-export const CONTENT_FACTORY_SIGNED_RELEASE_GATE_RESULT_FILE_NAME =
-  "content-factory-signed-release-gate.result.json";
 
 function valueAtPath(root, parts) {
   let current = root;
@@ -70,6 +84,24 @@ function firstArrayAtPaths(root, paths) {
     if (Array.isArray(value)) return value;
   }
   return [];
+}
+
+function stringField(root, keys) {
+  for (const key of keys) {
+    const value = root?.[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+function signatureRefMatchesReleaseId(signatureRef, releaseId) {
+  const signatureRefText = String(signatureRef || "").trim();
+  const releaseIdText = String(releaseId || "").trim();
+  return Boolean(
+    signatureRefText &&
+    releaseIdText &&
+    signatureRefText.endsWith(`:${releaseIdText}`),
+  );
 }
 
 function visit(root, fn, seen = new Set()) {
@@ -132,6 +164,18 @@ function isFixtureText(value) {
   return /fixture|localhost|127\.0\.0\.1|hostGenerationFixture|cloudReleaseFixture/i.test(
     String(value || ""),
   );
+}
+
+function stringValuesContainFixtureText(root, seen = new Set()) {
+  if (typeof root === "string") {
+    return isFixtureText(root);
+  }
+  if (!root || typeof root !== "object" || seen.has(root)) {
+    return false;
+  }
+  seen.add(root);
+  const values = Array.isArray(root) ? root : Object.values(root);
+  return values.some((value) => stringValuesContainFixtureText(value, seen));
 }
 
 function packageUrlIsProductionHttps(value) {
@@ -249,7 +293,7 @@ function summarizeCatalog(catalog, expectedVersion, appId) {
     signatureProof,
     signatureRef: signatureRef || null,
     sourceKind: sourceKind || null,
-    sourceKindReady: sourceKind === "cloud_release" || sourceKind === "remote",
+    sourceKindReady: sourceKind === "cloud_release",
     version: version || null,
     versionMatches: expectedVersion
       ? version === expectedVersion
@@ -288,6 +332,17 @@ function trustRootMatches(root, signatureProof, appId) {
   );
 }
 
+function trustRootPublicKeyPresent(root) {
+  return Boolean(
+    firstStringAtPaths(root, [
+      ["publicKey"],
+      ["public_key"],
+      ["publicKeyPem"],
+      ["public_key_pem"],
+    ]),
+  );
+}
+
 function summarizeBootstrap(bootstrap, signatureProof, appId) {
   const directTrustRoots = firstArrayAtPaths(bootstrap || {}, [
     ["pluginSignatureTrustRoots"],
@@ -307,77 +362,269 @@ function summarizeBootstrap(bootstrap, signatureProof, appId) {
   const matchingTrustRoot = trustRoots.find((root) =>
     trustRootMatches(root, signatureProof, appId),
   );
+  const matchingTrustRootPublicKeyPresent =
+    Boolean(matchingTrustRoot) && trustRootPublicKeyPresent(matchingTrustRoot);
   return {
     matchingTrustRoot: Boolean(matchingTrustRoot),
-    ready: trustRoots.length > 0 && Boolean(matchingTrustRoot),
-    trustRootCount: trustRoots.length,
-  };
-}
-
-function summarizeFetchCloud(fetchCloud) {
-  const sourceKind = firstStringAtPaths(fetchCloud || {}, [
-    ["sourceKind"],
-    ["source_kind"],
-    ["identity", "sourceKind"],
-    ["identity", "source_kind"],
-    ["installedState", "sourceKind"],
-    ["installed_state", "source_kind"],
-    ["cloudReleaseFixture", "sourceKind"],
-  ]);
-  const status = firstStringAtPaths(fetchCloud || {}, [
-    ["status"],
-    ["evidenceStatus"],
-    ["evidence_status"],
-    ["cloudReleaseEvidence", "status"],
-    ["setup", "cloudReleaseEvidence", "status"],
-    ["cloudReleaseFixture", "evidenceStatus"],
-  ]);
-  const signatureVerificationStatus = firstStringAtPaths(fetchCloud || {}, [
-    ["signatureVerificationStatus"],
-    ["signature_verification_status"],
-    ["cloudReleaseEvidence", "signatureVerificationStatus"],
-    ["setup", "cloudReleaseEvidence", "signatureVerificationStatus"],
-    ["cloudReleaseFixture", "signatureVerificationStatus"],
-  ]);
-  const packageVerificationStatus = firstStringAtPaths(fetchCloud || {}, [
-    ["packageVerificationStatus"],
-    ["package_verification_status"],
-    ["cloudReleaseEvidence", "packageVerificationStatus"],
-    ["setup", "cloudReleaseEvidence", "packageVerificationStatus"],
-    ["cloudReleaseFixture", "packageVerificationStatus"],
-  ]);
-  const packageHashMatched = firstOptionalBoolAtPaths(fetchCloud || {}, [
-    ["packageHashMatched"],
-    ["package_hash_matched"],
-    ["cloudReleaseEvidence", "packageHashMatched"],
-    ["setup", "cloudReleaseEvidence", "packageHashMatched"],
-  ]);
-  const manifestHashMatched = firstOptionalBoolAtPaths(fetchCloud || {}, [
-    ["manifestHashMatched"],
-    ["manifest_hash_matched"],
-    ["cloudReleaseEvidence", "manifestHashMatched"],
-    ["setup", "cloudReleaseEvidence", "manifestHashMatched"],
-  ]);
-  return {
-    fixtureLike: isFixtureText(JSON.stringify(fetchCloud || {})),
-    manifestHashMatched: manifestHashMatched === true,
-    packageHashMatched: packageHashMatched === true,
-    packageVerificationStatus: packageVerificationStatus || null,
+    matchingTrustRootPublicKeyPresent,
     ready:
-      sourceKind === "cloud_release" &&
-      status === "ready" &&
-      signatureVerificationStatus === "verified" &&
-      packageVerificationStatus === "verified" &&
-      packageHashMatched === true &&
-      manifestHashMatched === true,
-    signatureVerificationStatus: signatureVerificationStatus || null,
-    sourceKind: sourceKind || null,
-    status: status || "missing",
+      trustRoots.length > 0 &&
+      Boolean(matchingTrustRoot) &&
+      matchingTrustRootPublicKeyPresent,
+    trustRootCount: trustRoots.length,
   };
 }
 
 function acceptedStatus(status) {
   return new Set(["ready", "passed", "success", "ok", "completed"]).has(status);
+}
+
+function workflowResumeCandidates(metadata) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return [];
+  }
+  return [
+    metadata,
+    metadata.workflowResume,
+    metadata.workflow_resume,
+    metadata.workflowResumeLifecycle,
+    metadata.workflow_resume_lifecycle,
+    metadata.workerLifecycle,
+    metadata.worker_lifecycle,
+    metadata.pluginWorkflow,
+    metadata.plugin_workflow,
+  ].filter(
+    (value) => value && typeof value === "object" && !Array.isArray(value),
+  );
+}
+
+function workflowResumeContractBindingFromObject(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const actionId = stringField(value, ["actionId", "action_id"]);
+  const decision = stringField(value, ["decision"]);
+  if (!value.metadata || typeof value.metadata !== "object") {
+    return null;
+  }
+  for (const candidate of workflowResumeCandidates(value.metadata)) {
+    const workflowRunId = stringField(candidate, [
+      "workflowRunId",
+      "workflow_run_id",
+      "runId",
+      "run_id",
+    ]);
+    const workflowKey = stringField(candidate, [
+      "workflowKey",
+      "workflow_key",
+      "key",
+      "workflow",
+    ]);
+    const stepId = stringField(candidate, ["stepId", "step_id", "id"]);
+    if (workflowRunId && workflowKey && stepId) {
+      return {
+        actionId: actionId || null,
+        decision: decision || null,
+        stepId,
+        workflowKey,
+        workflowRunId,
+      };
+    }
+  }
+  return null;
+}
+
+function workflowResumeActionResponseBindingFromObject(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const actionId = stringField(value, [
+    "actionId",
+    "action_id",
+    "requestId",
+    "request_id",
+  ]);
+  const confirmed = value.confirmed ?? value.approved;
+  const explicitDecision = stringField(value, ["decision"]);
+  const decision =
+    explicitDecision ||
+    (confirmed === true ? "approved" : confirmed === false ? "rejected" : "");
+  if (!value.metadata || typeof value.metadata !== "object") {
+    return null;
+  }
+  for (const candidate of workflowResumeCandidates(value.metadata)) {
+    const workflowRunId = stringField(candidate, [
+      "workflowRunId",
+      "workflow_run_id",
+      "runId",
+      "run_id",
+    ]);
+    const workflowKey = stringField(candidate, [
+      "workflowKey",
+      "workflow_key",
+      "key",
+      "workflow",
+    ]);
+    const stepId = stringField(candidate, ["stepId", "step_id", "id"]);
+    if (workflowRunId && workflowKey && stepId) {
+      return {
+        actionId: actionId || null,
+        decision: decision || null,
+        stepId,
+        workflowKey,
+        workflowRunId,
+      };
+    }
+  }
+  return null;
+}
+
+function eventTypeFromRecord(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return "";
+  }
+  return (
+    stringField(value, ["eventType", "event_type", "type", "kind"]) ||
+    stringField(value.event, ["eventType", "event_type", "type", "kind"])
+  );
+}
+
+function eventPayloadFromRecord(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  if (value.payload && typeof value.payload === "object") return value.payload;
+  if (value.event?.payload && typeof value.event.payload === "object") {
+    return value.event.payload;
+  }
+  return value;
+}
+
+function workflowResumeEventBinding(value) {
+  const eventType = eventTypeFromRecord(value);
+  if (
+    eventType !== "workflow.step.resuming" &&
+    eventType !== "workflow.run.resuming"
+  ) {
+    return null;
+  }
+  const payload = eventPayloadFromRecord(value);
+  const workflowRunId = stringField(payload, [
+    "workflowRunId",
+    "workflow_run_id",
+    "runId",
+    "run_id",
+  ]);
+  const workflowKey = stringField(payload, [
+    "workflowKey",
+    "workflow_key",
+    "key",
+    "workflow",
+  ]);
+  const stepId = stringField(payload, ["stepId", "step_id", "id"]);
+  const actionId = stringField(payload, ["actionId", "action_id"]);
+  const decision = stringField(payload, ["decision"]);
+  if (!workflowRunId || !workflowKey || !stepId || !actionId || !decision) {
+    return null;
+  }
+  return {
+    actionId,
+    decision,
+    eventType,
+    stepId,
+    workflowKey,
+    workflowRunId,
+  };
+}
+
+function collectWorkflowResumeEventBindings(root) {
+  const bindings = [];
+  const seen = new Set();
+  function walk(value) {
+    if (!value || typeof value !== "object" || seen.has(value)) return;
+    seen.add(value);
+    const binding = workflowResumeEventBinding(value);
+    if (binding) bindings.push(binding);
+    const values = Array.isArray(value) ? value : Object.values(value);
+    for (const item of values) {
+      walk(item);
+    }
+  }
+  walk(root);
+  return bindings;
+}
+
+function collectWorkflowResumeMetadataBindings(root) {
+  const bindings = [];
+  const seen = new Set();
+  function walk(value) {
+    if (!value || typeof value !== "object" || seen.has(value)) return;
+    seen.add(value);
+    for (const binding of [
+      workflowResumeContractBindingFromObject(value),
+      workflowResumeActionResponseBindingFromObject(value),
+    ]) {
+      if (binding?.actionId && binding?.decision) bindings.push(binding);
+    }
+    const values = Array.isArray(value) ? value : Object.values(value);
+    for (const item of values) {
+      walk(item);
+    }
+  }
+  walk(root);
+  return bindings;
+}
+
+function workflowResumeEventBindingsForContract(
+  contractBinding,
+  eventBindings,
+) {
+  if (!contractBinding) return [];
+  return eventBindings.filter(
+    (binding) =>
+      binding.actionId === contractBinding.actionId &&
+      binding.decision === contractBinding.decision &&
+      binding.stepId === contractBinding.stepId &&
+      binding.workflowKey === contractBinding.workflowKey &&
+      binding.workflowRunId === contractBinding.workflowRunId,
+  );
+}
+
+function workflowResumeAuditEventsPresent(bindings) {
+  const hasStepResuming = bindings.some(
+    (binding) => binding.eventType === "workflow.step.resuming",
+  );
+  const hasRunResuming = bindings.some(
+    (binding) => binding.eventType === "workflow.run.resuming",
+  );
+  return hasStepResuming && hasRunResuming;
+}
+
+function summarizeWorkflowResumeLifecycle(guiEvidence) {
+  const contractBindings = collectWorkflowResumeMetadataBindings(guiEvidence);
+  const eventBindings = collectWorkflowResumeEventBindings(guiEvidence);
+  const matchedContractBinding =
+    contractBindings.find((binding) =>
+      workflowResumeAuditEventsPresent(
+        workflowResumeEventBindingsForContract(binding, eventBindings),
+      ),
+    ) || contractBindings[0];
+  const matchingEventBindings = workflowResumeEventBindingsForContract(
+    matchedContractBinding,
+    eventBindings,
+  );
+  const auditEventsPresent = workflowResumeAuditEventsPresent(
+    matchingEventBindings,
+  );
+  return {
+    actionId: matchedContractBinding?.actionId || null,
+    auditEventsPresent,
+    contractMetadataPresent: contractBindings.length > 0,
+    decision: matchedContractBinding?.decision || null,
+    stepId: matchedContractBinding?.stepId || null,
+    workflowKey: matchedContractBinding?.workflowKey || null,
+    workflowRunId: matchedContractBinding?.workflowRunId || null,
+  };
 }
 
 function summarizeGuiEvidence(guiEvidence) {
@@ -436,9 +683,32 @@ function summarizeGuiEvidence(guiEvidence) {
       ["providerEvidence", "productionRoute"],
     ]) &&
       !json.includes("hostGenerationFixture"));
+  const turnStartViaElectronIpc = firstBoolAtPaths(guiEvidence || {}, [
+    ["assertions", "turnStartViaElectronIpc"],
+    ["runtime", "turnStartViaElectronIpc"],
+    ["trace", "turnStartViaElectronIpc"],
+  ]);
+  const appServerHandleJsonLinesSeen = firstBoolAtPaths(guiEvidence || {}, [
+    ["trace", "appServerHandleJsonLinesSeen"],
+    ["assertions", "appServerHandleJsonLinesSeen"],
+  ]);
+  const hostGenerationFixture = firstObjectAtPaths(guiEvidence || {}, [
+    ["hostGenerationFixture"],
+    ["host_generation_fixture"],
+  ]);
+  const cloudReleaseFixture = firstObjectAtPaths(guiEvidence || {}, [
+    ["cloudReleaseFixture"],
+    ["cloud_release_fixture"],
+  ]);
+  const fixtureLike = Boolean(
+    hostGenerationFixture ||
+    cloudReleaseFixture ||
+    stringValuesContainFixtureText(guiEvidence || {}),
+  );
+  const workflowResumeLifecycle = summarizeWorkflowResumeLifecycle(guiEvidence);
   return {
     articleDraftDocumentPresent,
-    fixtureLike: isFixtureText(json),
+    fixtureLike,
     hostManagedGenerationStatus: hostManagedGenerationStatus || null,
     liveProviderUsed,
     ready:
@@ -449,44 +719,26 @@ function summarizeGuiEvidence(guiEvidence) {
       articleDraftDocumentPresent &&
       workflowFactsHidden &&
       workflowJsonlPresent &&
+      workflowResumeLifecycle.contractMetadataPresent &&
+      workflowResumeLifecycle.auditEventsPresent &&
       liveProviderUsed &&
-      !isFixtureText(json),
+      turnStartViaElectronIpc &&
+      appServerHandleJsonLinesSeen &&
+      !fixtureLike,
+    appServerHandleJsonLinesSeen,
     signatureVerificationStatus: signatureVerificationStatus || null,
     sourceKind: sourceKind || null,
     status: status || "missing",
     statusReady: acceptedStatus(status),
+    turnStartViaElectronIpc,
     workflowFactsHidden,
     workflowJsonlPresent,
+    workflowResumeLifecycle,
   };
 }
 
 function add(missingRequirements, code, detail) {
   missingRequirements.push({ code, detail });
-}
-
-function summarizePlaceholders(input) {
-  return {
-    bootstrap: contentFactorySignedReleasePlaceholderSamples(input.bootstrap),
-    catalog: contentFactorySignedReleasePlaceholderSamples(input.catalog),
-    fetchCloud: contentFactorySignedReleasePlaceholderSamples(input.fetchCloud),
-    guiEvidence: contentFactorySignedReleasePlaceholderSamples(
-      input.guiEvidence,
-    ),
-  };
-}
-
-function addPlaceholderRequirement(missingRequirements, placeholders) {
-  const surfaces = Object.entries(placeholders)
-    .filter(([, samples]) => samples.length > 0)
-    .map(([surface]) => surface);
-  if (surfaces.length === 0) {
-    return;
-  }
-  add(
-    missingRequirements,
-    "production_placeholder_values_present",
-    `Production evidence still contains template placeholder values in: ${surfaces.join(", ")}.`,
-  );
 }
 
 export function buildContentFactorySignedReleaseGate(input = {}) {
@@ -500,9 +752,25 @@ export function buildContentFactorySignedReleaseGate(input = {}) {
   );
   const fetchCloud = summarizeFetchCloud(input.fetchCloud || {});
   const guiEvidence = summarizeGuiEvidence(input.guiEvidence || {});
+  const preflight = summarizePreflight(
+    input.preflight || null,
+    expectedVersion,
+  );
   const placeholders = summarizePlaceholders(input);
+  const secretScan = summarizeSecretScan(input);
   const missingRequirements = [];
-  addPlaceholderRequirement(missingRequirements, placeholders);
+  appendPlaceholderRequirement(missingRequirements, placeholders);
+  appendSecretScanRequirement(missingRequirements, secretScan);
+  appendPreflightRequirements(missingRequirements, preflight, catalog);
+  appendFetchCloudRequirements(
+    missingRequirements,
+    input.fetchCloud,
+    fetchCloud,
+    catalog,
+    preflight,
+  );
+  const { packageUrl: _fetchCloudPackageUrl, ...fetchCloudSummary } =
+    fetchCloud;
 
   if (!catalog.appFound)
     add(
@@ -519,8 +787,8 @@ export function buildContentFactorySignedReleaseGate(input = {}) {
   if (!catalog.sourceKindReady)
     add(
       missingRequirements,
-      "production_catalog_not_remote_release",
-      "Catalog sourceKind must be cloud_release/remote.",
+      "production_catalog_not_cloud_release",
+      "Catalog sourceKind must be cloud_release.",
     );
   if (!catalog.packageUrlProductionHttps)
     add(
@@ -545,6 +813,22 @@ export function buildContentFactorySignedReleaseGate(input = {}) {
       missingRequirements,
       "production_signature_ref_missing",
       "Catalog identity must include signatureRef.",
+    );
+  if (!catalog.releaseId)
+    add(
+      missingRequirements,
+      "production_release_id_missing",
+      "Catalog identity must include releaseId so signatureRef and signature payload are bound to a concrete release.",
+    );
+  if (
+    catalog.releaseId &&
+    catalog.signatureRef &&
+    !signatureRefMatchesReleaseId(catalog.signatureRef, catalog.releaseId)
+  )
+    add(
+      missingRequirements,
+      "production_signature_ref_release_id_mismatch",
+      "Catalog signatureRef must end with :<releaseId>.",
     );
   if (!catalog.signatureProof.present)
     add(
@@ -573,23 +857,14 @@ export function buildContentFactorySignedReleaseGate(input = {}) {
       "production_signature_trust_root_missing",
       "Bootstrap trust roots must match signatureProof publicKeyId/algorithm/appId/time window.",
     );
-  if (!input.fetchCloud)
+  if (
+    bootstrap.matchingTrustRoot &&
+    !bootstrap.matchingTrustRootPublicKeyPresent
+  )
     add(
       missingRequirements,
-      "production_fetch_cloud_evidence_missing",
-      "pluginPackage/fetchCloud or package verification evidence is required.",
-    );
-  if (input.fetchCloud && !fetchCloud.ready)
-    add(
-      missingRequirements,
-      "production_release_evidence_not_ready",
-      "fetchCloud evidence must prove cloud_release, verified hashes, verified signature, and ready status.",
-    );
-  if (fetchCloud.fixtureLike)
-    add(
-      missingRequirements,
-      "fixture_cloud_release_not_allowed",
-      "Fixture cloud_release evidence is not production evidence.",
+      "production_signature_trust_root_public_key_missing",
+      "Bootstrap matching trust root must include a verifier publicKey.",
     );
   if (!input.guiEvidence)
     add(
@@ -648,11 +923,33 @@ export function buildContentFactorySignedReleaseGate(input = {}) {
       "production_workflow_jsonl_missing",
       "GUI evidence must point to workflow-events.jsonl audit output.",
     );
+  if (
+    input.guiEvidence &&
+    (!guiEvidence.workflowResumeLifecycle.contractMetadataPresent ||
+      !guiEvidence.workflowResumeLifecycle.auditEventsPresent)
+  )
+    add(
+      missingRequirements,
+      "production_workflow_resume_lifecycle_missing",
+      "GUI evidence must prove runtime response/resume decision metadata with workflowResume and workflow.step/run.resuming audit events.",
+    );
   if (input.guiEvidence && !guiEvidence.workflowFactsHidden)
     add(
       missingRequirements,
       "production_workflow_facts_visible",
       "Right-side Article Editor must not display workflow steps.",
+    );
+  if (input.guiEvidence && !guiEvidence.turnStartViaElectronIpc)
+    add(
+      missingRequirements,
+      "production_gui_turn_start_not_electron_ipc",
+      "GUI evidence must prove agentSession/turn/start went through Electron IPC.",
+    );
+  if (input.guiEvidence && !guiEvidence.appServerHandleJsonLinesSeen)
+    add(
+      missingRequirements,
+      "production_gui_app_server_json_rpc_missing",
+      "GUI evidence must prove app_server_handle_json_lines was used for current App Server JSON-RPC.",
     );
   if (input.guiEvidence && !guiEvidence.articleDraftDocumentPresent)
     add(
@@ -664,6 +961,7 @@ export function buildContentFactorySignedReleaseGate(input = {}) {
   const ready =
     missingRequirements.length === 0 &&
     catalog.signatureProof.present &&
+    preflight.ready &&
     bootstrap.ready &&
     fetchCloud.ready &&
     guiEvidence.ready;
@@ -674,187 +972,13 @@ export function buildContentFactorySignedReleaseGate(input = {}) {
     ready,
     status: ready ? "ready" : "blocked",
     catalog,
+    preflight,
     bootstrap,
-    fetchCloud,
+    fetchCloud: fetchCloudSummary,
     guiEvidence,
     placeholders,
+    secretScan,
     missingRequirements,
-    note: "This gate accepts only production signed cloud_release + trust roots + fetchCloud verification + GUI live Provider evidence. Localhost fixtures remain blocked.",
+    note: "This gate accepts only production preflight + signed cloud_release + trust roots + fetchCloud verification + GUI live Provider evidence + workflow resume lifecycle metadata/audit evidence. Localhost fixtures remain blocked.",
   };
-}
-
-export function buildContentFactorySignedReleaseEvidenceTemplate(input = {}) {
-  const appId = input.appId || APP_ID;
-  const expectedVersion = input.expectedVersion || "REPLACE_WITH_VERSION";
-  const packageHash =
-    input.packageHash || "sha256:REPLACE_WITH_64_HEX_PRODUCTION_PACKAGE_HASH";
-  const manifestHash =
-    input.manifestHash || "sha256:REPLACE_WITH_64_HEX_PRODUCTION_MANIFEST_HASH";
-  const publicKeyId =
-    input.publicKeyId || "REPLACE_WITH_PRODUCTION_TRUST_ROOT_PUBLIC_KEY_ID";
-  const algorithm = input.algorithm || "Ed25519";
-  const packageUrl =
-    input.packageUrl ||
-    `https://updates.limeai.run/plugins/${appId}/prod/${appId}-${expectedVersion}.lapp`;
-  const workflowJsonl =
-    input.workflowJsonl ||
-    "/path/to/lime/runtime/events/sessions/session_<id>/workflow-events.jsonl";
-  const catalog = {
-    apps: [
-      {
-        appId,
-        appVersion: expectedVersion,
-        identity: {
-          appId,
-          appVersion: expectedVersion,
-          manifestHash,
-          packageHash,
-          signatureRef: `sigstore:${appId}@${expectedVersion}:prod`,
-          sourceKind: "cloud_release",
-          sourceUri: packageUrl,
-        },
-        packageUrl,
-        signatureProof: {
-          algorithm,
-          payloadHash: "sha256:REPLACE_WITH_64_HEX_CANONICAL_PAYLOAD_HASH",
-          publicKeyId,
-          signature: "REPLACE_WITH_BASE64_SIGNATURE",
-          signedAt: "2026-07-03T00:00:00.000Z",
-        },
-      },
-    ],
-  };
-  const bootstrap = {
-    pluginSignatureTrustRoots: [
-      {
-        algorithm,
-        appIds: [appId],
-        notAfter: "2027-01-01T00:00:00.000Z",
-        notBefore: "2026-01-01T00:00:00.000Z",
-        publicKeyId,
-        publicKeyPem:
-          "-----BEGIN PUBLIC KEY-----\\nREPLACE_WITH_PUBLIC_KEY\\n-----END PUBLIC KEY-----",
-        revoked: false,
-      },
-    ],
-  };
-  const fetchCloud = {
-    appId,
-    manifestHashMatched: true,
-    packageHashMatched: true,
-    packageVerificationStatus: "verified",
-    signatureVerificationStatus: "verified",
-    sourceKind: "cloud_release",
-    status: "ready",
-  };
-  const guiEvidence = {
-    appId,
-    assertions: {
-      articleDraftDocumentPresent: true,
-      contentFactoryArticleWorkspaceWorkflowFactsHidden: true,
-      liveProviderUsed: true,
-    },
-    eventLogs: {
-      workflowJsonl,
-    },
-    installedState: {
-      sourceKind: "cloud_release",
-    },
-    providerEvidence: {
-      liveProviderUsed: true,
-      productionRoute: true,
-    },
-    readModel: {
-      hostManagedGenerationOutputIds: ["article-draft-document"],
-      hostManagedGenerationStatus: "completed",
-    },
-    signatureVerificationStatus: "verified",
-    status: "passed",
-  };
-  return {
-    schemaVersion: "content-factory-signed-release-evidence-template.v1",
-    appId,
-    expectedVersion,
-    files: CONTENT_FACTORY_SIGNED_RELEASE_GATE_TEMPLATE_FILE_NAMES,
-    catalog,
-    bootstrap,
-    fetchCloud,
-    guiEvidence,
-    command: [
-      "npm run plugin:content-factory-signed-release-gate --",
-      "--evidence-dir .",
-      `--expected-version ${expectedVersion}`,
-      "--check",
-    ].join(" "),
-    forbiddenMarkers: [
-      "fixture",
-      "cloudReleaseFixture",
-      "hostGenerationFixture",
-      "localhost",
-      "127.0.0.1",
-      "signature_missing",
-      "not_configured",
-      "host_generation_unavailable",
-    ],
-    note: "Fill these files from production LimeCore catalog/bootstrap, App Server fetchCloud verification, and real Lime Desktop GUI evidence. Do not paste private signing keys or Provider API keys.",
-  };
-}
-
-export function writeContentFactorySignedReleaseEvidenceTemplateDir(
-  dirPath,
-  input = {},
-) {
-  const template = buildContentFactorySignedReleaseEvidenceTemplate(input);
-  const resolvedDir = path.resolve(process.cwd(), dirPath);
-  fs.mkdirSync(resolvedDir, { recursive: true });
-  const command = [
-    "npm run plugin:content-factory-signed-release-gate --",
-    `--evidence-dir ${resolvedDir}`,
-    `--expected-version ${template.expectedVersion}`,
-    "--check",
-  ].join(" ");
-  const outputs = {
-    [CONTENT_FACTORY_SIGNED_RELEASE_GATE_TEMPLATE_FILE_NAMES.catalog]:
-      template.catalog,
-    [CONTENT_FACTORY_SIGNED_RELEASE_GATE_TEMPLATE_FILE_NAMES.bootstrap]:
-      template.bootstrap,
-    [CONTENT_FACTORY_SIGNED_RELEASE_GATE_TEMPLATE_FILE_NAMES.fetchCloud]:
-      template.fetchCloud,
-    [CONTENT_FACTORY_SIGNED_RELEASE_GATE_TEMPLATE_FILE_NAMES.guiEvidence]:
-      template.guiEvidence,
-    [CONTENT_FACTORY_SIGNED_RELEASE_GATE_TEMPLATE_FILE_NAMES.readme]: {
-      schemaVersion: template.schemaVersion,
-      appId: template.appId,
-      expectedVersion: template.expectedVersion,
-      command,
-      files: template.files,
-      resultFile: CONTENT_FACTORY_SIGNED_RELEASE_GATE_RESULT_FILE_NAME,
-      forbiddenMarkers: template.forbiddenMarkers,
-      note: template.note,
-    },
-  };
-  const written = [];
-  for (const [fileName, value] of Object.entries(outputs)) {
-    const filePath = path.join(resolvedDir, fileName);
-    fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-    written.push(filePath);
-  }
-  return {
-    dir: resolvedDir,
-    files: written,
-    template,
-  };
-}
-
-export function readOptionalJsonFile(filePath) {
-  if (!filePath) return null;
-  const resolvedPath = path.resolve(process.cwd(), filePath);
-  if (!fs.existsSync(resolvedPath)) return null;
-  return JSON.parse(fs.readFileSync(resolvedPath, "utf8"));
-}
-
-export function writeJsonFile(filePath, value) {
-  const resolvedPath = path.resolve(process.cwd(), filePath);
-  fs.mkdirSync(path.dirname(resolvedPath), { recursive: true });
-  fs.writeFileSync(resolvedPath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }

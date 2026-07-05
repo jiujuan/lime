@@ -5,7 +5,13 @@
 
 use crate::aster_session_store::LimeSessionStore;
 use crate::queued_turn::QueuedTurnSnapshot;
+use crate::runtime_snapshot_adapter::{
+    project_aster_runtime_snapshot, RuntimeTimelineSnapshotProjection,
+};
 use crate::runtime_state::QueuedTurnTask;
+use crate::session_execution_runtime::SessionExecutionRuntimeSnapshotProjection;
+use crate::session_execution_runtime_adapter::project_aster_session_execution_runtime_snapshot;
+use crate::subagent_runtime_adapter::project_aster_subagent_latest_turn;
 use aster::session::{
     initialize_shared_session_runtime_with_root, load_shared_session_runtime_snapshot,
     require_shared_session_runtime_store, QueuedTurnRuntime, SessionRuntimeSnapshot,
@@ -22,6 +28,12 @@ use std::sync::{Arc, OnceLock};
 const QUEUED_TURN_EVENT_NAME_METADATA_KEY: &str = "event_name";
 const DEFAULT_QUEUE_EVENT_NAME: &str = "agent_stream";
 static ASTER_RUNTIME_ROOT: OnceLock<Result<PathBuf, String>> = OnceLock::new();
+
+pub(crate) type RuntimeSessionSnapshotOverlay =
+    agent_runtime::session_execution::SessionRuntimeSnapshotOverlay<
+        SessionExecutionRuntimeSnapshotProjection,
+        RuntimeTimelineSnapshotProjection,
+    >;
 
 pub(crate) fn ensure_runtime_dirs() -> Result<PathBuf, String> {
     ASTER_RUNTIME_ROOT
@@ -145,6 +157,18 @@ pub(crate) async fn load_runtime_snapshot(
     load_shared_session_runtime_snapshot(session_id)
         .await
         .map_err(|error| format!("读取 runtime snapshot 失败: {error}"))
+}
+
+/// 读取会话 runtime snapshot 并立即投影为 Lime current read model。
+pub(crate) async fn load_runtime_snapshot_overlay(
+    session_id: &str,
+) -> Result<RuntimeSessionSnapshotOverlay, String> {
+    let snapshot = load_runtime_snapshot(session_id).await?;
+    Ok(RuntimeSessionSnapshotOverlay {
+        execution_snapshot: project_aster_session_execution_runtime_snapshot(&snapshot),
+        timeline_snapshot: project_aster_runtime_snapshot(&snapshot),
+        subagent_latest_turn: project_aster_subagent_latest_turn(&snapshot),
+    })
 }
 
 pub(crate) async fn list_runtime_queued_turns(

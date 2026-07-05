@@ -105,6 +105,68 @@ pub(super) fn stored_artifact_summaries_for_turn(
     summaries
 }
 
+pub(super) fn stored_user_visible_artifact_summaries_for_turn(
+    stored: &StoredSession,
+    turn_id: Option<&str>,
+) -> Vec<ArtifactSummary> {
+    stored_artifact_summaries_for_turn(stored, turn_id)
+        .into_iter()
+        .filter(is_user_visible_artifact_summary)
+        .collect()
+}
+
+fn is_user_visible_artifact_summary(summary: &ArtifactSummary) -> bool {
+    !is_workspace_patch_artifact_summary(summary)
+}
+
+fn is_workspace_patch_artifact_summary(summary: &ArtifactSummary) -> bool {
+    summary.kind.as_deref().is_some_and(is_workspace_patch_kind)
+        || summary.path.as_deref().is_some_and(is_workspace_patch_path)
+        || summary
+            .metadata
+            .as_ref()
+            .is_some_and(metadata_contains_workspace_patch)
+}
+
+fn is_workspace_patch_kind(kind: &str) -> bool {
+    matches!(
+        kind.trim().replace('-', "_").to_ascii_lowercase().as_str(),
+        "content_factory.workspace_patch" | "workspace_patch"
+    )
+}
+
+fn is_workspace_patch_path(path: &str) -> bool {
+    let normalized = path.trim().replace('\\', "/").to_ascii_lowercase();
+    normalized.ends_with("/workspace-patch.json")
+        || normalized.ends_with("content-factory-workspace-patch.json")
+        || normalized.contains("/content-factory/workspace-patch.json")
+}
+
+fn metadata_contains_workspace_patch(metadata: &Value) -> bool {
+    let Some(metadata) = metadata.as_object() else {
+        return false;
+    };
+    if metadata.contains_key("contentFactoryWorkspacePatch")
+        || metadata.contains_key("content_factory_workspace_patch")
+        || metadata.contains_key("workspacePatch")
+        || metadata.contains_key("workspace_patch")
+    {
+        return true;
+    }
+    string_from_metadata(
+        metadata,
+        &[
+            "artifactKind",
+            "artifact_kind",
+            "outputArtifactKind",
+            "output_artifact_kind",
+            "kind",
+        ],
+    )
+    .as_deref()
+    .is_some_and(is_workspace_patch_kind)
+}
+
 pub(super) fn artifact_summaries_from_event(event: &AgentEvent) -> Vec<ArtifactSummary> {
     let mut summaries =
         article_workspace_artifact_document_projection::artifact_summaries_from_event(event);

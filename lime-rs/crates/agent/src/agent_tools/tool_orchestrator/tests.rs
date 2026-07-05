@@ -1,8 +1,6 @@
 use super::*;
 use crate::protocol::{AgentEvent as RuntimeAgentEvent, AgentToolResult};
 use crate::AgentTurnContext;
-use aster::tools::{PermissionCheckResult, Tool, ToolContext, ToolError, ToolRegistry, ToolResult};
-use async_trait::async_trait;
 use lime_core::config::{
     ToolExecutionOverrideConfig as ConfigToolExecutionOverrideConfig,
     ToolExecutionPolicyConfig as ConfigToolExecutionPolicyConfig,
@@ -12,155 +10,86 @@ use lime_core::config::{
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use tokio::sync::RwLock;
 use tokio::time::Duration;
+use tool_runtime::execution_process::{
+    ExecutionOutputDelta, ExecutionProcessSnapshot, LiveExecutionProcessRegistry,
+    LocalExecutionProcessControlHandle,
+};
+use tool_runtime::tool_executor::{
+    RuntimeToolExecutionError, RuntimeToolExecutionFuture, RuntimeToolExecutionRequest,
+    RuntimeToolExecutionResult, RuntimeToolExecutor, RuntimeToolExecutorHandle,
+    RuntimeToolPolicyErrorKind,
+};
 
-struct EchoTool;
+struct TestToolExecutor;
 
-#[async_trait]
-impl Tool for EchoTool {
-    fn name(&self) -> &str {
-        "Echo"
-    }
-
-    fn description(&self) -> &str {
-        "测试工具"
-    }
-
-    fn input_schema(&self) -> Value {
-        json!({
-            "type": "object",
-            "properties": {
-                "text": { "type": "string" }
-            }
-        })
-    }
-
-    async fn execute(&self, params: Value, context: &ToolContext) -> Result<ToolResult, ToolError> {
-        let text = params
-            .get("text")
-            .and_then(Value::as_str)
-            .unwrap_or_default();
-        Ok(ToolResult::success(format!(
-            "{}:{}",
-            context.session_id, text
-        )))
+impl RuntimeToolExecutor for TestToolExecutor {
+    fn execute<'a>(
+        &'a self,
+        request: RuntimeToolExecutionRequest<'a>,
+    ) -> RuntimeToolExecutionFuture<'a> {
+        Box::pin(async move { execute_test_tool(request).await })
     }
 }
 
-struct DeniedShellTool;
-
-#[async_trait]
-impl Tool for DeniedShellTool {
-    fn name(&self) -> &str {
-        "Bash"
-    }
-
-    fn description(&self) -> &str {
-        "拒绝执行命令"
-    }
-
-    fn input_schema(&self) -> Value {
-        json!({
-            "type": "object",
-            "properties": {
-                "command": { "type": "string" }
-            }
-        })
-    }
-
-    async fn check_permissions(
-        &self,
-        _params: &Value,
-        _context: &ToolContext,
-    ) -> PermissionCheckResult {
-        PermissionCheckResult::deny("policy denied this command")
-    }
-
-    async fn execute(
-        &self,
-        _params: Value,
-        _context: &ToolContext,
-    ) -> Result<ToolResult, ToolError> {
-        Ok(ToolResult::success("should not execute"))
-    }
+fn test_tool_executor() -> RuntimeToolExecutorHandle {
+    RuntimeToolExecutorHandle::new(Arc::new(TestToolExecutor))
 }
 
-struct AllowShellTool;
-
-#[async_trait]
-impl Tool for AllowShellTool {
-    fn name(&self) -> &str {
-        "Bash"
-    }
-
-    fn description(&self) -> &str {
-        "测试 shell 工具"
-    }
-
-    fn input_schema(&self) -> Value {
-        json!({
-            "type": "object",
-            "properties": {
-                "command": { "type": "string" }
-            }
-        })
-    }
-
-    async fn execute(&self, params: Value, context: &ToolContext) -> Result<ToolResult, ToolError> {
-        let command = params
-            .get("command")
-            .and_then(Value::as_str)
-            .unwrap_or_default();
-        Ok(
-            ToolResult::success(format!("{}:{}", context.session_id, command)).with_metadata(
-                "contextWorkspaceSandbox",
-                json!(context.workspace_sandbox.is_some()),
-            ),
-        )
-    }
-}
-
-struct DelayEchoTool;
-
-#[async_trait]
-impl Tool for DelayEchoTool {
-    fn name(&self) -> &str {
-        "DelayEcho"
-    }
-
-    fn description(&self) -> &str {
-        "按参数延迟后回显"
-    }
-
-    fn input_schema(&self) -> Value {
-        json!({
-            "type": "object",
-            "properties": {
-                "text": { "type": "string" },
-                "delayMs": { "type": "integer" }
-            }
-        })
-    }
-
-    async fn execute(
-        &self,
-        params: Value,
-        _context: &ToolContext,
-    ) -> Result<ToolResult, ToolError> {
-        let delay_ms = params
-            .get("delayMs")
-            .and_then(Value::as_u64)
-            .unwrap_or_default();
-        if delay_ms > 0 {
-            tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+async fn execute_test_tool(
+    request: RuntimeToolExecutionRequest<'_>,
+) -> Result<RuntimeToolExecutionResult, RuntimeToolExecutionError> {
+    let output = match request.tool_name {
+        "Echo" => {
+            let text = request
+                .params
+                .get("text")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            format!("{}:{text}", request.context.session_id())
         }
-        let text = params
-            .get("text")
-            .and_then(Value::as_str)
-            .unwrap_or_default();
-        Ok(ToolResult::success(text.to_string()))
-    }
+        "DelayEcho" => {
+            let delay_ms = request
+                .params
+                .get("delayMs")
+                .and_then(Value::as_u64)
+                .unwrap_or_default();
+            if delay_ms > 0 {
+                tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+            }
+            request
+                .params
+                .get("text")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string()
+        }
+        "Bash" | "BashTool" => {
+            let command = request
+                .params
+                .get("command")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            format!("{}:{command}", request.context.session_id())
+        }
+        other => {
+            let reason = format!("unsupported test tool: {other}");
+            return Err(RuntimeToolExecutionError::new(
+                reason.clone(),
+                Some(RuntimeToolPolicyErrorKind::ExecutionFailed(reason)),
+            ));
+        }
+    };
+
+    Ok(RuntimeToolExecutionResult::new(
+        true,
+        output,
+        None,
+        HashMap::from([(
+            "contextWorkspaceSandbox".to_string(),
+            json!(request.context.has_workspace_sandbox()),
+        )]),
+    ))
 }
 
 #[derive(Default)]
@@ -206,16 +135,27 @@ impl LiveExecutionProcessRegistry for RecordingLiveProcessRegistry {
 }
 
 #[tokio::test]
-async fn execute_planned_tool_batch_emits_tool_start_and_terminal_events() {
-    let registry = Arc::new(RwLock::new(ToolRegistry::new()));
-    {
-        let mut registry = registry.write().await;
-        registry.register(Box::new(EchoTool));
-    }
+async fn check_shell_tool_permissions_uses_tool_runtime_permission_owner() {
+    let cwd = std::env::current_dir().unwrap_or_default();
 
+    let denied = check_shell_tool_permissions("Bash", "rm -rf /", cwd.clone()).await;
+    assert!(
+        denied
+            .as_ref()
+            .err()
+            .is_some_and(|reason| reason.contains("dangerous pattern")),
+        "expected current shell permission denial, got {denied:?}"
+    );
+
+    let allowed = check_shell_tool_permissions("BashTool", "echo ok", cwd).await;
+    assert!(allowed.is_ok());
+}
+
+#[tokio::test]
+async fn execute_planned_tool_batch_emits_tool_start_and_terminal_events() {
     let batch = execute_planned_tool_batch(
         ToolExecutionBatchInput {
-            registry,
+            executor: test_tool_executor(),
             session_id: "session-tool-batch".to_string(),
             working_directory: std::env::current_dir().unwrap_or_default(),
             cancel_token: None,
@@ -252,15 +192,9 @@ async fn execute_planned_tool_batch_emits_tool_start_and_terminal_events() {
 
 #[tokio::test]
 async fn execute_planned_tool_batch_preserves_input_order_when_parallel() {
-    let registry = Arc::new(RwLock::new(ToolRegistry::new()));
-    {
-        let mut registry = registry.write().await;
-        registry.register(Box::new(DelayEchoTool));
-    }
-
     let batch = execute_planned_tool_batch(
         ToolExecutionBatchInput {
-            registry,
+            executor: test_tool_executor(),
             session_id: "session-tool-order".to_string(),
             working_directory: std::env::current_dir().unwrap_or_default(),
             cancel_token: None,
@@ -316,16 +250,10 @@ async fn execute_planned_tool_batch_preserves_input_order_when_parallel() {
 
 #[tokio::test]
 async fn execute_planned_tool_batch_attaches_policy_metadata_to_permission_denial() {
-    let registry = Arc::new(RwLock::new(ToolRegistry::new()));
-    {
-        let mut registry = registry.write().await;
-        registry.register(Box::new(DeniedShellTool));
-    }
-
     let working_directory = std::env::current_dir().unwrap_or_default();
     let batch = execute_planned_tool_batch(
         ToolExecutionBatchInput {
-            registry,
+            executor: test_tool_executor(),
             session_id: "session-policy-denied".to_string(),
             working_directory: working_directory.clone(),
             cancel_token: None,
@@ -388,16 +316,10 @@ async fn execute_planned_tool_batch_attaches_policy_metadata_to_permission_denia
 
 #[tokio::test]
 async fn execute_planned_tool_batch_emits_action_required_for_shell_approval_policy() {
-    let registry = Arc::new(RwLock::new(ToolRegistry::new()));
-    {
-        let mut registry = registry.write().await;
-        registry.register(Box::new(AllowShellTool));
-    }
-
     let working_directory = std::env::current_dir().unwrap_or_default();
     let batch = execute_planned_tool_batch(
         ToolExecutionBatchInput {
-            registry,
+            executor: test_tool_executor(),
             session_id: "session-action-required".to_string(),
             working_directory: working_directory.clone(),
             cancel_token: None,
@@ -452,16 +374,10 @@ async fn execute_planned_tool_batch_emits_action_required_for_shell_approval_pol
 
 #[tokio::test]
 async fn execute_planned_tool_batch_emits_sandbox_blocked_for_read_only_shell_write() {
-    let registry = Arc::new(RwLock::new(ToolRegistry::new()));
-    {
-        let mut registry = registry.write().await;
-        registry.register(Box::new(EchoTool));
-    }
-
     let working_directory = std::env::current_dir().unwrap_or_default();
     let batch = execute_planned_tool_batch(
         ToolExecutionBatchInput {
-            registry,
+            executor: test_tool_executor(),
             session_id: "session-sandbox-blocked".to_string(),
             working_directory: working_directory.clone(),
             cancel_token: None,
@@ -511,15 +427,9 @@ async fn execute_planned_tool_batch_emits_sandbox_blocked_for_read_only_shell_wr
 
 #[tokio::test]
 async fn execute_planned_tool_batch_respects_persisted_execution_policy() {
-    let registry = Arc::new(RwLock::new(ToolRegistry::new()));
-    {
-        let mut registry = registry.write().await;
-        registry.register(Box::new(AllowShellTool));
-    }
-
     let batch = execute_planned_tool_batch(
         ToolExecutionBatchInput {
-            registry,
+            executor: test_tool_executor(),
             session_id: "session-persisted-policy".to_string(),
             working_directory: std::env::current_dir().unwrap_or_default(),
             cancel_token: None,
@@ -574,15 +484,9 @@ async fn execute_planned_tool_batch_respects_persisted_execution_policy() {
 
 #[tokio::test]
 async fn execute_planned_shell_tool_emits_process_output_delta_before_terminal_event() {
-    let registry = Arc::new(RwLock::new(ToolRegistry::new()));
-    {
-        let mut registry = registry.write().await;
-        registry.register(Box::new(AllowShellTool));
-    }
-
     let batch = execute_planned_tool_batch(
         ToolExecutionBatchInput {
-            registry,
+            executor: test_tool_executor(),
             session_id: "session-process-delta".to_string(),
             working_directory: std::env::current_dir().unwrap_or_default(),
             cancel_token: None,
@@ -737,16 +641,11 @@ async fn execute_planned_shell_tool_emits_process_output_delta_before_terminal_e
 
 #[tokio::test]
 async fn execute_planned_shell_live_process_updates_registry() {
-    let registry = Arc::new(RwLock::new(ToolRegistry::new()));
-    {
-        let mut registry = registry.write().await;
-        registry.register(Box::new(AllowShellTool));
-    }
     let live_registry = Arc::new(RecordingLiveProcessRegistry::default());
 
     let batch = execute_planned_tool_batch(
         ToolExecutionBatchInput {
-            registry,
+            executor: test_tool_executor(),
             session_id: "session-process-registry".to_string(),
             working_directory: std::env::current_dir().unwrap_or_default(),
             cancel_token: None,
@@ -863,15 +762,9 @@ async fn execute_planned_shell_live_process_updates_registry() {
 
 #[tokio::test]
 async fn execute_planned_shell_tool_process_metadata_preserves_failure_exit_code() {
-    let registry = Arc::new(RwLock::new(ToolRegistry::new()));
-    {
-        let mut registry = registry.write().await;
-        registry.register(Box::new(AllowShellTool));
-    }
-
     let batch = execute_planned_tool_batch(
         ToolExecutionBatchInput {
-            registry,
+            executor: test_tool_executor(),
             session_id: "session-process-failure".to_string(),
             working_directory: std::env::current_dir().unwrap_or_default(),
             cancel_token: None,
@@ -921,17 +814,11 @@ async fn execute_planned_shell_tool_process_metadata_preserves_failure_exit_code
 
 #[tokio::test]
 async fn execute_planned_shell_live_process_uses_context_working_directory() {
-    let registry = Arc::new(RwLock::new(ToolRegistry::new()));
-    {
-        let mut registry = registry.write().await;
-        registry.register(Box::new(AllowShellTool));
-    }
-
     let working_directory = std::env::current_dir().unwrap_or_default();
     let requested_cwd = std::env::temp_dir();
     let batch = execute_planned_tool_batch(
         ToolExecutionBatchInput {
-            registry,
+            executor: test_tool_executor(),
             session_id: "session-live-process-cwd".to_string(),
             working_directory: working_directory.clone(),
             cancel_token: None,
@@ -986,15 +873,9 @@ async fn execute_planned_shell_live_process_uses_context_working_directory() {
 
 #[tokio::test]
 async fn execute_planned_shell_live_process_respects_tool_permission_preflight() {
-    let registry = Arc::new(RwLock::new(ToolRegistry::new()));
-    {
-        let mut registry = registry.write().await;
-        registry.register(Box::new(DeniedShellTool));
-    }
-
     let batch = execute_planned_tool_batch(
         ToolExecutionBatchInput {
-            registry,
+            executor: test_tool_executor(),
             session_id: "session-live-process-denied".to_string(),
             working_directory: std::env::current_dir().unwrap_or_default(),
             cancel_token: None,
@@ -1022,11 +903,8 @@ async fn execute_planned_shell_live_process_respects_tool_permission_preflight()
         vec![PlannedToolExecution {
             tool_name: "Bash".to_string(),
             tool_id: "tool-live-process-denied".to_string(),
-            arguments: Some(format!(
-                r#"{{"command":"{}"}}"#,
-                live_shell_output_command()
-            )),
-            params: json!({ "command": live_shell_output_command() }),
+            arguments: Some(r#"{"command":"rm -rf /"}"#.to_string()),
+            params: json!({ "command": "rm -rf /" }),
         }],
     )
     .await;
@@ -1049,12 +927,6 @@ async fn execute_planned_shell_live_process_respects_tool_permission_preflight()
 
 #[tokio::test]
 async fn execute_planned_tool_batch_attaches_workspace_sandbox_context_when_backend_ready() {
-    let registry = Arc::new(RwLock::new(ToolRegistry::new()));
-    {
-        let mut registry = registry.write().await;
-        registry.register(Box::new(AllowShellTool));
-    }
-
     let mut metadata = HashMap::new();
     metadata.insert(
         "workspaceSandbox".to_string(),
@@ -1065,7 +937,7 @@ async fn execute_planned_tool_batch_attaches_workspace_sandbox_context_when_back
     );
     let batch = execute_planned_tool_batch(
         ToolExecutionBatchInput {
-            registry,
+            executor: test_tool_executor(),
             session_id: "session-workspace-sandbox".to_string(),
             working_directory: std::env::current_dir().unwrap_or_default(),
             cancel_token: None,
@@ -1105,36 +977,6 @@ async fn execute_planned_tool_batch_attaches_workspace_sandbox_context_when_back
     } else {
         assert_ne!(metadata.get("contextWorkspaceSandbox"), Some(&json!(true)));
     }
-}
-
-#[test]
-fn workspace_sandbox_config_maps_restricted_token_backend() {
-    let decision = ToolExecutionDecision {
-        kind: ToolExecutionDecisionKind::Allow,
-        reason_code: "allowed".to_string(),
-        reason: "allowed".to_string(),
-        policy_resolution: crate::agent_tools::execution::ToolExecutionPolicyResolution {
-            policy: crate::agent_tools::execution::ToolExecutionPolicy::default(),
-            warning_policy_source:
-                crate::agent_tools::execution::ToolExecutionPolicySource::Default,
-            restriction_profile_source:
-                crate::agent_tools::execution::ToolExecutionPolicySource::Default,
-            sandbox_profile_source:
-                crate::agent_tools::execution::ToolExecutionPolicySource::Default,
-        },
-        metadata: HashMap::from([
-            ("sandboxBackend".to_string(), json!("restricted_token")),
-            (
-                "requestedSandboxPolicy".to_string(),
-                json!("workspace-write"),
-            ),
-        ]),
-    };
-
-    let config = workspace_sandbox_config(&decision, &PathBuf::from("/tmp/workspace"));
-
-    assert!(config.enabled);
-    assert_eq!(config.sandbox_type, SandboxType::RestrictedToken);
 }
 
 fn live_shell_output_command() -> &'static str {

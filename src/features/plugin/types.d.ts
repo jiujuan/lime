@@ -920,6 +920,9 @@ export interface PluginTaskHostResponseRequest {
     confirmed?: boolean;
     response?: string;
     userData?: unknown;
+    workflowRunId?: string;
+    workflowKey?: string;
+    stepId?: string;
     metadata?: Record<string, unknown>;
     actionScope?: {
         sessionId?: string;

@@ -24,6 +24,54 @@ import {
 import { buildPermissionChangedEvent } from "./permissionProjection";
 import { buildTeamChangedFromRuntimeStatusEvent } from "./subagentStatusProjection";
 
+type AgentEventRuntimeLifecycle = Extract<
+  AgentEvent,
+  {
+    type:
+      | "thread_started"
+      | "turn_started"
+      | "turn_completed"
+      | "turn_canceled"
+      | "turn_failed"
+      | "error"
+      | "runtime_status"
+      | "model_change"
+      | "model_effective"
+      | "task_profile_resolved";
+  }
+>;
+
+export function buildRuntimeLifecycleEvents(
+  event: AgentEventRuntimeLifecycle,
+  context: AgentUiProjectionContext,
+): AgentUiProjectionEvent[] {
+  switch (event.type) {
+    case "thread_started":
+      return [buildThreadStartedEvent(event, context)];
+    case "turn_started":
+      return [buildTurnStartedEvent(event, context)];
+    case "turn_completed":
+      return [buildRunFinishedEvent(event, context)];
+    case "turn_canceled":
+      return [buildRunCanceledEvent(event, context)];
+    case "turn_failed":
+    case "error":
+      return [buildRunFailedEvent(event, context)];
+    case "runtime_status":
+      return buildRuntimeStatusEvents(event, context);
+    case "model_change":
+      return [buildModelChangeEvent(event, context)];
+    case "model_effective":
+      return [buildModelEffectiveEvent(event, context)];
+    case "task_profile_resolved":
+      return [buildTaskProfileResolvedEvent(event, context)];
+    default: {
+      const exhaustive: never = event;
+      return exhaustive;
+    }
+  }
+}
+
 export function buildThreadStartedEvent(
   event: Extract<AgentEvent, { type: "thread_started" }>,
   context: AgentUiProjectionContext,

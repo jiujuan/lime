@@ -4,53 +4,34 @@ import type {
   AgentUiProjectionEvent,
 } from "@limecloud/agent-ui-contracts";
 import {
-  buildActionRequiredEvent,
-  buildActionResolvedEvent,
+  buildActionProjectionEvents,
 } from "./actionProjection";
 import {
-  buildArtifactEvent,
-  buildContextTraceEvent,
+  buildArtifactProjectionEvents,
 } from "./artifactProjection";
 import {
-  buildRequestedFixExecutionEventsFromArtifact,
-} from "./evidenceProjection";
-import {
-  buildMessageSnapshotEvent,
-  buildTextDeltaEvent,
-  buildThinkingDeltaEvent,
+  buildConversationProjectionEvents,
 } from "./conversationEventProjection";
 import { buildTurnContextEvents } from "./contextProjection";
 import {
-  buildCostMetricEvent,
-  buildWarningEvent,
+  buildDiagnosticProjectionEvents,
 } from "./diagnosticProjection";
 import { sequenceProjectionEvents as sequenceEvents } from "./projectionBase";
 import {
-  buildQueueAddedEvents,
-  buildQueueLifecycleEvents,
+  buildQueueProjectionEvents,
 } from "./queueProjection";
-import { buildRoutingProjectionEvent } from "./routingProjection";
+import { buildRoutingProjectionEvents } from "./routingProjection";
 import {
-  buildModelEffectiveEvent,
-  buildModelChangeEvent,
-  buildRunCanceledEvent,
-  buildRunFailedEvent,
-  buildRunFinishedEvent,
-  buildRuntimeStatusEvents,
-  buildTaskProfileResolvedEvent,
-  buildThreadStartedEvent,
-  buildTurnStartedEvent,
+  buildRuntimeLifecycleEvents,
 } from "./runtimeLifecycleProjection";
 import {
-  buildSubagentStatusChangedEvents,
+  buildSubagentProjectionEvents,
 } from "./subagentStatusProjection";
-import { buildThreadItemEvents } from "./threadItemProjection";
 import {
-  buildToolEndEvents,
-  buildToolInputDeltaEvent,
-  buildToolOutputDeltaEvent,
-  buildToolProgressEvent,
-  buildToolStartEvents,
+  buildThreadItemProjectionEvents,
+} from "./threadItemProjection";
+import {
+  buildToolProjectionEvents,
 } from "./toolEventProjection";
 
 export type {
@@ -117,76 +98,73 @@ export function buildAgentUiProjectionEvents(
   const events: AgentUiProjectionEvent[] = (() => {
     switch (event.type) {
       case "thread_started":
-        return [buildThreadStartedEvent(event, context)];
+        return buildRuntimeLifecycleEvents(event, context);
       case "turn_started":
-        return [buildTurnStartedEvent(event, context)];
+        return buildRuntimeLifecycleEvents(event, context);
       case "item_started":
       case "item_updated":
       case "item_completed":
-        return buildThreadItemEvents(event.type, event.item, context);
+        return buildThreadItemProjectionEvents(event, context);
       case "turn_completed":
-        return [buildRunFinishedEvent(event, context)];
+        return buildRuntimeLifecycleEvents(event, context);
       case "turn_canceled":
-        return [buildRunCanceledEvent(event, context)];
+        return buildRuntimeLifecycleEvents(event, context);
       case "turn_failed":
       case "error":
-        return [buildRunFailedEvent(event, context)];
+        return buildRuntimeLifecycleEvents(event, context);
       case "message":
-        return [buildMessageSnapshotEvent(event, context)];
+        return buildConversationProjectionEvents(event, context);
       case "text_delta":
       case "text_delta_batch":
-        return [buildTextDeltaEvent(event, context)];
+        return buildConversationProjectionEvents(event, context);
       case "thinking_delta":
       case "reasoning_delta":
       case "reasoning_final":
-        return [buildThinkingDeltaEvent(event, context)];
+        return buildConversationProjectionEvents(event, context);
       case "reasoning_started":
       case "reasoning_ended":
-        return [];
+        return buildConversationProjectionEvents(event, context);
       case "runtime_status":
-        return buildRuntimeStatusEvents(event, context);
+        return buildRuntimeLifecycleEvents(event, context);
       case "tool_start":
-        return buildToolStartEvents(event, context);
+        return buildToolProjectionEvents(event, context);
       case "tool_end":
-        return buildToolEndEvents(event, context);
+        return buildToolProjectionEvents(event, context);
       case "tool_progress":
-        return [buildToolProgressEvent(event, context)];
+        return buildToolProjectionEvents(event, context);
       case "tool_output_delta":
-        return [buildToolOutputDeltaEvent(event, context)];
+        return buildToolProjectionEvents(event, context);
       case "tool_input_delta":
-        return [buildToolInputDeltaEvent(event, context)];
+        return buildToolProjectionEvents(event, context);
       case "artifact_snapshot":
-        return [
-          buildArtifactEvent(event, context),
-          ...buildRequestedFixExecutionEventsFromArtifact(event, context),
-        ];
+        return buildArtifactProjectionEvents(event, context);
       case "action_required":
-        return [buildActionRequiredEvent(event, context)];
+        return buildActionProjectionEvents(event, context);
       case "action_resolved":
-        return [buildActionResolvedEvent(event, context)];
+        return buildActionProjectionEvents(event, context);
       case "context_trace":
-        return [buildContextTraceEvent(event, context)];
+        return buildArtifactProjectionEvents(event, context);
       case "turn_context":
         return buildTurnContextEvents(event, context);
       case "queue_added":
-        return buildQueueAddedEvents(event, context);
+        return buildQueueProjectionEvents(event, context);
       case "queue_removed":
       case "queue_started":
       case "queue_cleared":
-        return buildQueueLifecycleEvents(event, context);
+        return buildQueueProjectionEvents(event, context);
       case "subagent_status_changed":
-        return buildSubagentStatusChangedEvents(event, context);
+        return buildSubagentProjectionEvents(event, context);
       case "model_change":
-        return [buildModelChangeEvent(event, context)];
+        return buildRuntimeLifecycleEvents(event, context);
       case "model_effective":
-        return [buildModelEffectiveEvent(event, context)];
+        return buildRuntimeLifecycleEvents(event, context);
       case "task_profile_resolved":
-        return [buildTaskProfileResolvedEvent(event, context)];
+        return buildRuntimeLifecycleEvents(event, context);
       case "warning":
-        return [buildWarningEvent(event, context)];
+        return buildDiagnosticProjectionEvents(event, context);
       case "cost_estimated":
       case "cost_recorded":
-        return [buildCostMetricEvent(event, context)];
+        return buildDiagnosticProjectionEvents(event, context);
       case "candidate_set_resolved":
       case "routing_decision_made":
       case "routing_fallback_applied":
@@ -197,7 +175,7 @@ export function buildAgentUiProjectionEvents(
       case "rate_limit_hit":
       case "quota_low":
       case "quota_blocked":
-        return [buildRoutingProjectionEvent(event, context)];
+        return buildRoutingProjectionEvents(event, context);
       default:
         return [];
     }

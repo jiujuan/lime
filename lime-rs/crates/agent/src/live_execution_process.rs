@@ -26,7 +26,10 @@ use crate::agent_tools::execution::{
     ToolExecutionResolverInput,
 };
 use crate::runtime_facade::current_agent_turn_context;
-use crate::{agent_turn_approval_policy, agent_turn_context_metadata, agent_turn_sandbox_policy};
+use crate::{
+    agent_turn_approval_policy, agent_turn_context_metadata, agent_turn_sandbox_policy,
+    model_request_policy_from_turn_context,
+};
 
 const PROCESS_ID_PREFIX: &str = "process-";
 const DRAIN_LIMIT: u16 = 128;
@@ -73,6 +76,7 @@ struct PreparedLiveExecution {
     approval_policy: Option<String>,
     sandbox_policy: Option<String>,
     runtime_metadata: Option<Value>,
+    output_drain_max_bytes: u64,
     env: HashMap<String, String>,
     cancellation_token: Option<CancellationToken>,
 }
@@ -139,6 +143,10 @@ fn prepare_live_execution(
         .filter(|value| !value.is_empty())?
         .to_string();
     let turn_context = current_agent_turn_context();
+    if !live_execution_shell_enabled(turn_context.as_ref()) {
+        return None;
+    }
+    let output_drain_max_bytes = live_execution_output_drain_max_bytes(turn_context.as_ref());
     let runtime_metadata = agent_turn_context_metadata(turn_context.as_ref());
     let approval_policy = agent_turn_approval_policy(turn_context.as_ref());
     let sandbox_policy = agent_turn_sandbox_policy(turn_context.as_ref());
@@ -182,9 +190,25 @@ fn prepare_live_execution(
         approval_policy,
         sandbox_policy,
         runtime_metadata,
+        output_drain_max_bytes,
         env,
         cancellation_token: request.context.cancellation_token,
     })
+}
+
+fn live_execution_shell_enabled(turn_context: Option<&crate::AgentTurnContext>) -> bool {
+    model_request_policy_from_turn_context(turn_context)
+        .and_then(|policy| policy.native_tool_policy)
+        .map(|policy| policy.shell_tool_enabled)
+        .unwrap_or(true)
+}
+
+fn live_execution_output_drain_max_bytes(turn_context: Option<&crate::AgentTurnContext>) -> u64 {
+    model_request_policy_from_turn_context(turn_context)
+        .and_then(|policy| policy.truncation_policy)
+        .and_then(|policy| (policy.mode == "bytes").then_some(policy.limit))
+        .filter(|limit| *limit > 0)
+        .unwrap_or(DRAIN_MAX_BYTES)
 }
 
 async fn run_live_execution_process(
@@ -261,7 +285,7 @@ fn drain_process_output(
             process_id: Some(prepared.process_id.clone()),
             after_sequence,
             limit: Some(DRAIN_LIMIT),
-            max_bytes: Some(DRAIN_MAX_BYTES),
+            max_bytes: Some(prepared.output_drain_max_bytes),
         })
         .map_err(execution_error)?;
     for delta in response.deltas {
@@ -576,6 +600,7 @@ mod tests {
 
     #[derive(Default)]
     struct TestLiveExecutionProcessGateway {
+        drain_params: Mutex<Vec<ExecutionProcessDrainOutputParams>>,
         output: Mutex<VecDeque<ExecutionProcessOutputDelta>>,
         snapshot: Mutex<Option<ExecutionProcessSnapshot>>,
     }
@@ -651,8 +676,12 @@ mod tests {
 
         fn drain_output(
             &self,
-            _params: ExecutionProcessDrainOutputParams,
+            params: ExecutionProcessDrainOutputParams,
         ) -> Result<ExecutionProcessDrainOutputResponse, String> {
+            self.drain_params
+                .lock()
+                .expect("drain params lock")
+                .push(params);
             let mut output = self.output.lock().expect("output lock");
             Ok(ExecutionProcessDrainOutputResponse {
                 deltas: output.drain(..).collect(),
@@ -721,6 +750,114 @@ mod tests {
             params: json!({ "command": "sleep 1", "background": true }),
             context: native_tool_context(PathBuf::from(".")),
         });
+
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn hook_applies_bytes_truncation_policy_to_live_process_drain() {
+        let gateway = Arc::new(TestLiveExecutionProcessGateway::default());
+        let hook = RuntimeLiveExecutionProcessHook::new(gateway.clone());
+        let turn_context = AgentTurnContext {
+            approval_policy: Some("never".to_string()),
+            sandbox_policy: Some("danger-full-access".to_string()),
+            metadata: HashMap::from([(
+                "runtime_options".to_string(),
+                json!({
+                    "harness": {
+                        "model_request_policy": {
+                            "truncation_policy": {
+                                "mode": "bytes",
+                                "limit": 2048
+                            }
+                        }
+                    }
+                }),
+            )]),
+            ..AgentTurnContext::default()
+        };
+
+        let tool_call = with_agent_turn_context(Some(turn_context), async {
+            hook.execute_native_tool(NativeToolExecutionRequest {
+                tool_name: "Bash".to_string(),
+                tool_id: "tool-truncation-policy".to_string(),
+                params: json!({ "command": "printf live-process" }),
+                context: native_tool_context(std::env::current_dir().unwrap_or_default()),
+            })
+        })
+        .await
+        .expect("bash should be handled by live execution hook");
+
+        let result = tool_call.result.await.expect("tool result should succeed");
+        assert_eq!(result.is_error, Some(false));
+
+        let drain_params = gateway.drain_params.lock().expect("drain params lock");
+        assert!(
+            drain_params
+                .iter()
+                .any(|params| params.max_bytes == Some(2048)),
+            "expected live process drain to use model bytes truncation policy, got {drain_params:?}"
+        );
+    }
+
+    #[test]
+    fn live_execution_output_drain_max_bytes_keeps_default_for_token_policy() {
+        let turn_context = AgentTurnContext {
+            metadata: HashMap::from([(
+                "runtime_options".to_string(),
+                json!({
+                    "harness": {
+                        "model_request_policy": {
+                            "truncation_policy": {
+                                "mode": "tokens",
+                                "limit": 2048
+                            }
+                        }
+                    }
+                }),
+            )]),
+            ..AgentTurnContext::default()
+        };
+
+        assert_eq!(
+            live_execution_output_drain_max_bytes(Some(&turn_context)),
+            DRAIN_MAX_BYTES
+        );
+    }
+
+    #[tokio::test]
+    async fn hook_respects_native_tool_policy_disabling_shell() {
+        let hook = RuntimeLiveExecutionProcessHook::new(Arc::new(
+            TestLiveExecutionProcessGateway::default(),
+        ));
+        let turn_context = AgentTurnContext {
+            approval_policy: Some("never".to_string()),
+            sandbox_policy: Some("danger-full-access".to_string()),
+            metadata: HashMap::from([(
+                "runtime_options".to_string(),
+                json!({
+                    "harness": {
+                        "model_request_policy": {
+                            "native_tool_policy": {
+                                "shell_type": "disabled",
+                                "shell_tool_enabled": false
+                            }
+                        }
+                    }
+                }),
+            )]),
+            ..AgentTurnContext::default()
+        };
+
+        let result = with_agent_turn_context(Some(turn_context), async {
+            hook.execute_native_tool(NativeToolExecutionRequest {
+                tool_name: "Bash".to_string(),
+                tool_id: "tool-shell-disabled".to_string(),
+                params: json!({ "command": "printf should-not-run" }),
+                context: native_tool_context(std::env::current_dir().unwrap_or_default()),
+            })
+        })
+        .await;
 
         assert!(result.is_none());
     }

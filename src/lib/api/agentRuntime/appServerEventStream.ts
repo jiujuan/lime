@@ -543,6 +543,26 @@ export function projectAppServerAgentEventPayload(
           "provider_request_id",
           "providerRequestId",
         ),
+        runtime_provider_backend: readString(
+          payload,
+          "runtime_provider_backend",
+          "runtimeProviderBackend",
+        ),
+        runtime_provider_selector: readString(
+          payload,
+          "runtime_provider_selector",
+          "runtimeProviderSelector",
+        ),
+        runtime_provider_protocol: readString(
+          payload,
+          "runtime_provider_protocol",
+          "runtimeProviderProtocol",
+        ),
+        runtime_provider_active_model: readString(
+          payload,
+          "runtime_provider_active_model",
+          "runtimeProviderActiveModel",
+        ),
         provider_request_id_header: readString(
           payload,
           "provider_request_id_header",

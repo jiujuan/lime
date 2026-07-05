@@ -218,6 +218,8 @@ use app_server_protocol::PluginFetchCloudPackageParams;
 use app_server_protocol::PluginInstalledDisabledSetParams;
 use app_server_protocol::PluginInstalledListResponse;
 use app_server_protocol::PluginInstalledSaveParams;
+use app_server_protocol::PluginLocalPackageExportParams;
+use app_server_protocol::PluginLocalPackageExportResponse;
 use app_server_protocol::PluginLocalPackageInspectParams;
 use app_server_protocol::PluginLocalPackageInspectResponse;
 use app_server_protocol::PluginPackageCacheEntry;

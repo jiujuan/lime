@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { FolderOpen } from "lucide-react";
 import type { ChatInputAdapter } from "@/components/input-kit/adapters/types";
 import type { Character } from "@/lib/api/projectMemory";
@@ -13,6 +13,7 @@ import { SkillSelector } from "../../../skill-selection/SkillSelector";
 import { InputbarWorkflowStatusPanel } from "./InputbarWorkflowStatusPanel";
 import { InputbarModelExtra } from "./InputbarModelExtra";
 import { InputbarVisionCapabilityNotice } from "./InputbarVisionCapabilityNotice";
+import type { ModelInputSendPolicy } from "@/lib/model/modelInputSendPolicy";
 import { InputbarAccessModeSelect } from "./InputbarAccessModeSelect";
 import { InputbarModeStatusChip } from "./InputbarModeStatusChip";
 import { InputbarObjectiveInlinePanel } from "./InputbarObjectiveInlinePanel";
@@ -202,6 +203,8 @@ export const InputbarComposerSection: React.FC<
   inputbarCopy,
   workflowPanelCopy,
 }) => {
+  const [visionCapabilityPolicy, setVisionCapabilityPolicy] =
+    useState<ModelInputSendPolicy | null>(null);
   const showSkillSelector = isGeneralResearchTheme(activeTheme);
   const currentPendingImages =
     (inputAdapter.state.attachments as MessageImage[] | undefined) ||
@@ -222,6 +225,22 @@ export const InputbarComposerSection: React.FC<
     currentPendingImages.length > 0 &&
     Boolean(resolvedProviderType?.trim()) &&
     Boolean(resolvedModel?.trim());
+  const isVisionSendBlocked =
+    shouldShowVisionNotice &&
+    visionCapabilityPolicy?.shouldDisableComposer === true;
+  const inputbarDisabled =
+    Boolean(inputAdapter.state.disabled) || isVisionSendBlocked;
+  const handleSend = useCallback(() => {
+    if (isVisionSendBlocked) {
+      return;
+    }
+    onSend();
+  }, [isVisionSendBlocked, onSend]);
+  useEffect(() => {
+    if (!shouldShowVisionNotice) {
+      setVisionCapabilityPolicy(null);
+    }
+  }, [shouldShowVisionNotice]);
   const activeKnowledgeStatusControl =
     knowledgePackSelection?.enabled &&
     knowledgePackSelection.packName.trim() &&
@@ -260,6 +279,7 @@ export const InputbarComposerSection: React.FC<
             providerType={resolvedProviderType}
             model={resolvedModel}
             hasPendingImages={currentPendingImages.length > 0}
+            onPolicyChange={setVisionCapabilityPolicy}
           />
         ) : null}
       </>
@@ -495,10 +515,10 @@ export const InputbarComposerSection: React.FC<
         textareaRef={textareaRef}
         text={inputAdapter.state.text}
         setText={inputAdapter.actions.setText}
-        onSend={onSend}
+        onSend={handleSend}
         onStop={inputAdapter.actions.stop}
         isLoading={inputAdapter.state.isSending}
-        disabled={inputAdapter.state.disabled}
+        disabled={inputbarDisabled}
         sessionId={sessionId}
         onToolClick={handleToolAction}
         activeTools={activeTools}

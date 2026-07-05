@@ -15,8 +15,8 @@ use crate::config::base::CursorAgentCommand;
 use crate::config::search_path::SearchPaths;
 use crate::conversation::message::{Message, MessageContent};
 use crate::model::ModelConfig;
-use crate::subprocess::configure_command_no_window;
 use rmcp::model::Tool;
+use tool_runtime::subprocess::configure_command_no_window;
 
 pub const CURSOR_AGENT_DEFAULT_MODEL: &str = "auto";
 pub const CURSOR_AGENT_KNOWN_MODELS: &[&str] = &["auto", "gpt-5", "opus-4.1", "sonnet-4"];

@@ -550,6 +550,44 @@ fn projects_retry_actions_and_retry_attempts_from_runtime_events() {
     assert!(retrying.workflow_runs[0].finished_at.is_none());
 }
 
+#[test]
+fn projects_resume_events_as_running_workflow_state() {
+    let events = vec![
+        event(
+            1,
+            "workflow.step.resuming",
+            json!({
+                "workflowRunId": "task-article:workflow",
+                "workflowKey": "content_article_workflow",
+                "stepId": "draft",
+                "stepTitle": "正文写作",
+                "status": "resuming"
+            }),
+        ),
+        event(
+            2,
+            "workflow.run.resuming",
+            json!({
+                "workflowRunId": "task-article:workflow",
+                "workflowKey": "content_article_workflow",
+                "workflowTitle": "内容生产",
+                "status": "resuming"
+            }),
+        ),
+    ];
+
+    let read_model = workflow_read_model_from_events(&events);
+
+    assert_eq!(
+        read_model.active_workflow_run_id.as_deref(),
+        Some("task-article:workflow")
+    );
+    assert_eq!(read_model.workflow_runs[0].status, WorkflowStatus::Running);
+    assert!(read_model.workflow_runs[0].finished_at.is_none());
+    assert_eq!(read_model.workflow_steps[0].status, WorkflowStatus::Running);
+    assert!(read_model.workflow_steps[0].finished_at.is_none());
+}
+
 fn event(sequence: u64, event_type: &str, payload: serde_json::Value) -> AgentEvent {
     AgentEvent {
         event_id: format!("event-{sequence}"),

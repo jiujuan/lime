@@ -133,6 +133,44 @@ function hasRuntimeExportBaseFields(
   );
 }
 
+function readRequiredString(
+  record: Record<string, unknown>,
+  camelKey: string,
+  snakeKey?: string,
+): string {
+  const value = readField(record, camelKey, snakeKey);
+  return typeof value === "string" ? value : "";
+}
+
+function assertRuntimeExportSessionCorrelation(
+  command: string,
+  value: Record<string, unknown>,
+  expectedSessionId: string,
+  rootFields: ReadonlyArray<readonly [string, string]>,
+): void {
+  const actualSessionId = readRequiredString(value, "sessionId", "session_id");
+  if (actualSessionId !== expectedSessionId) {
+    throw new Error(`${command} returned export for a different session`);
+  }
+
+  const sessionPathToken = `.lime/harness/sessions/${expectedSessionId}`;
+  for (const [camelKey, snakeKey] of rootFields) {
+    const root = readRequiredString(value, camelKey, snakeKey)
+      .replace(/\\/g, "/")
+      .replace(/\/+$/u, "");
+    if (
+      root !== sessionPathToken &&
+      !root.endsWith(`/${sessionPathToken}`) &&
+      !root.startsWith(`${sessionPathToken}/`) &&
+      !root.includes(`/${sessionPathToken}/`)
+    ) {
+      throw new Error(
+        `${command} did not return ${camelKey} under the requested session`,
+      );
+    }
+  }
+}
+
 function isHandoffBundle(value: unknown): boolean {
   return (
     hasRuntimeExportBaseFields(value, [
@@ -291,6 +329,15 @@ export function createExportClient({
       isHandoffBundle,
       "runtime handoff bundle",
     );
+    assertRuntimeExportSessionCorrelation(
+      APP_SERVER_METHOD_AGENT_SESSION_HANDOFF_BUNDLE_EXPORT,
+      result,
+      normalizedSessionId,
+      [
+        ["bundleRelativeRoot", "bundle_relative_root"],
+        ["bundleAbsoluteRoot", "bundle_absolute_root"],
+      ],
+    );
     return normalizeHandoffBundle(result);
   }
 
@@ -313,6 +360,18 @@ export function createExportClient({
       isAnalysisHandoff,
       "runtime analysis handoff",
     );
+    assertRuntimeExportSessionCorrelation(
+      APP_SERVER_METHOD_AGENT_SESSION_ANALYSIS_HANDOFF_EXPORT,
+      result,
+      normalizedSessionId,
+      [
+        ["analysisRelativeRoot", "analysis_relative_root"],
+        ["analysisAbsoluteRoot", "analysis_absolute_root"],
+        ["handoffBundleRelativeRoot", "handoff_bundle_relative_root"],
+        ["evidencePackRelativeRoot", "evidence_pack_relative_root"],
+        ["replayCaseRelativeRoot", "replay_case_relative_root"],
+      ],
+    );
     return normalizeAnalysisHandoff(result);
   }
 
@@ -334,6 +393,20 @@ export function createExportClient({
       result,
       isReviewDecisionTemplate,
       "runtime review decision template",
+    );
+    assertRuntimeExportSessionCorrelation(
+      APP_SERVER_METHOD_AGENT_SESSION_REVIEW_DECISION_TEMPLATE_EXPORT,
+      result,
+      normalizedSessionId,
+      [
+        ["reviewRelativeRoot", "review_relative_root"],
+        ["reviewAbsoluteRoot", "review_absolute_root"],
+        ["analysisRelativeRoot", "analysis_relative_root"],
+        ["analysisAbsoluteRoot", "analysis_absolute_root"],
+        ["handoffBundleRelativeRoot", "handoff_bundle_relative_root"],
+        ["evidencePackRelativeRoot", "evidence_pack_relative_root"],
+        ["replayCaseRelativeRoot", "replay_case_relative_root"],
+      ],
     );
     return normalizeReviewDecisionTemplate(result);
   }
@@ -365,6 +438,20 @@ export function createExportClient({
       result,
       isReviewDecisionTemplate,
       "runtime review decision template",
+    );
+    assertRuntimeExportSessionCorrelation(
+      APP_SERVER_METHOD_AGENT_SESSION_REVIEW_DECISION_SAVE,
+      result,
+      normalizedSessionId,
+      [
+        ["reviewRelativeRoot", "review_relative_root"],
+        ["reviewAbsoluteRoot", "review_absolute_root"],
+        ["analysisRelativeRoot", "analysis_relative_root"],
+        ["analysisAbsoluteRoot", "analysis_absolute_root"],
+        ["handoffBundleRelativeRoot", "handoff_bundle_relative_root"],
+        ["evidencePackRelativeRoot", "evidence_pack_relative_root"],
+        ["replayCaseRelativeRoot", "replay_case_relative_root"],
+      ],
     );
     return normalizeReviewDecisionTemplate(result);
   }
@@ -404,6 +491,17 @@ export function createExportClient({
       result,
       isReplayCase,
       "runtime replay case",
+    );
+    assertRuntimeExportSessionCorrelation(
+      APP_SERVER_METHOD_AGENT_SESSION_REPLAY_CASE_EXPORT,
+      result,
+      normalizedSessionId,
+      [
+        ["replayRelativeRoot", "replay_relative_root"],
+        ["replayAbsoluteRoot", "replay_absolute_root"],
+        ["handoffBundleRelativeRoot", "handoff_bundle_relative_root"],
+        ["evidencePackRelativeRoot", "evidence_pack_relative_root"],
+      ],
     );
     return normalizeReplayCase(result);
   }

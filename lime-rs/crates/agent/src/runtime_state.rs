@@ -369,7 +369,7 @@ impl AgentRuntimeState {
     }
 }
 
-pub use crate::runtime_state_support::SessionConfigBuilder;
+pub use agent_runtime::session_config::SessionConfigBuilder;
 
 #[cfg(test)]
 mod tests {

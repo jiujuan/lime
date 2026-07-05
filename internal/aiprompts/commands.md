@@ -140,7 +140,7 @@ Connect deep link 已切到 Electron Desktop Host URL bridge 与 App Server JSON
 同理，聊天运行时初始化的 `aster_agent_init` 在浏览器 DevBridge 模式下也不能再被放进 `mockPriorityCommands`。只要桥接在线，它就必须优先读取后端真实 `provider_name / model_name`，让聊天入口拿到当前运行时模型。
 进一步地，围绕运行时模型解析的真相入口：`aster_agent_init`、`get_default_provider`、`model/list`、`modelProvider/list`、`modelProvider/catalog/list`、`modelProvider/fetchModels`、`modelProviderAlias/read`、`modelProviderAlias/list`、`get_model_registry_provider_ids`，在浏览器 DevBridge 模式下如果桥接失败，必须直接抛错，不能再通过 `safeInvoke` 静默退回 mock；否则前端会把“后端未连上 / 命令失败”误显示成假的 Provider / 模型列表。旧 `get_provider_pool_overview` 属于凭证池命令面，已随凭证池退役，不得重新作为运行时模型解析事实源。
 同时要明确，`aster_agent_init` 只负责初始化 Agent，并不保证已经完成 Provider 配置；当它未返回 `provider_name / model_name` 时，前端不得把本地硬编码默认值当作真实模型，而应继续回退到 `get_default_provider` + 已配置 Provider/模型注册表解析链，拿到当前工作区真正可用的 `provider/model`。
-同一条约束也适用于 Prompt Cache 能力判断：运行时与前端都不得因为某个自定义 Provider “长得像 Anthropic 协议”就推断它支持官方 Anthropic Automatic Prompt Caching。当前事实源必须继续按 ProviderType 判断：`anthropic` 走自动缓存能力，`anthropic-compatible` 只保留显式 `cache_control` 语义；若上游没有实现 Automatic Prompt Cache，`cached_input_tokens` 为空不能直接归因到 Lime 没发字段。
+同一条约束也适用于 Prompt Cache 能力判断：运行时与前端都不得因为某个自定义 Provider “长得像 Anthropic 协议”就推断它支持官方 Anthropic Automatic Prompt Caching。当前事实源是 Provider 类型 + Provider 持久化声明 + 已知官方 Anthropic-compatible host catalog：`anthropic` 走 automatic；普通 `anthropic-compatible` 默认只保留显式 `cache_control` 语义；只有 Provider 记录显式声明 `prompt_cache_mode=automatic`，或命中 `anthropicCompatiblePromptCacheCatalog.json` 中的官方兼容端点，才可按 automatic 处理。若上游没有实现 Automatic Prompt Cache，`cached_input_tokens` 为空不能直接归因到 Lime 没发字段。
 
 文档导出链路同样遵循这条路径。当前主入口为 `src/lib/api/document-export.ts`，统一承接：
 
@@ -211,6 +211,7 @@ AI 图层化设计扁平图 OCR 分析同样继续走 current `LayeredDesignDocu
 Plugin current 安装 / package / UI runtime 主链不得在页面或 feature island 里直接 `safeInvoke` / `invoke`。应用中心的 package、installed lifecycle、uninstall 与 UI runtime 生命周期统一经由 `src/lib/api/plugins.ts -> AppServerClient.request(...)` 进入 App Server JSON-RPC：
 
 - `pluginLocalPackage/inspect`
+- `pluginLocalPackage/export`
 - `pluginPackage/fetchCloud`
 - `pluginInstalled/save`
 - `pluginInstalled/list`

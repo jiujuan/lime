@@ -5,7 +5,7 @@
   "workspaces": [
     "packages/*"
   ],
-  "version": "1.91.0",
+  "version": "1.92.0",
   "description": "AI content workspace for Chinese creators: desktop writing, research, prompt management, knowledge base, and multi-model workflows.",
   "keywords": [
     "ai",
@@ -243,6 +243,11 @@
     "plugin:connector-production-delivery-gate": "node scripts/plugin/connector-production-delivery-gate.mjs",
     "plugin:connector-production-webhook-delivery": "node scripts/plugin/connector-production-webhook-delivery.mjs",
     "plugin:content-factory-signed-release-gate": "node scripts/plugin/content-factory-signed-release-gate.mjs",
+    "plugin:content-factory-production-evidence-bundle": "node scripts/plugin/content-factory-production-evidence-bundle.mjs",
+    "plugin:content-factory-production-gui-evidence": "node scripts/plugin/content-factory-production-gui-evidence.mjs",
+    "plugin:content-factory-production-preflight": "node scripts/plugin/content-factory-production-preflight.mjs",
+    "plugin:content-factory-production-readiness-pipeline": "node scripts/plugin/content-factory-production-readiness-pipeline.mjs",
+    "plugin:content-factory-production-readiness-report": "node scripts/plugin/content-factory-production-readiness-report.mjs",
     "smoke:content-factory-package": "node scripts/plugin/content-factory-package-smoke.mjs",
     "smoke:content-factory-current-turn": "node scripts/plugin/content-factory-current-turn-smoke.mjs --host-generation-fixture",
     "smoke:content-factory-current-turn:host-generation": "node scripts/plugin/content-factory-current-turn-smoke.mjs --host-generation-fixture",
@@ -328,6 +333,7 @@
     "tippy.js": "^6.3.7",
     "tone": "^15.1.22",
     "turndown": "^7.2.2",
+    "yaml": "^2.8.3",
     "zustand": "^5.0.10"
   },
   "devDependencies": {
@@ -369,7 +375,6 @@
     "typescript": "^5.6.3",
     "vite": "^5.4.21",
     "vite-plugin-svgr": "^4.5.0",
-    "vitest": "^3.2.4",
-    "yaml": "^2.8.3"
+    "vitest": "^3.2.4"
   }
 }

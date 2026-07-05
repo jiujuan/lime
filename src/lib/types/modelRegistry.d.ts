@@ -3,6 +3,16 @@
  *
  * 基于多协议模型运行时的目录管理方式，定义增强的模型元数据结构
  */
+import type { ModelContextPolicy } from "@/lib/model/modelContextPolicy";
+import type { ModelExecutionPolicy } from "@/lib/model/modelExecutionPolicy";
+import type { ModelInputModalityPolicy } from "@/lib/model/modelInputModalityPolicy";
+import type { ModelNativeToolPolicy } from "@/lib/model/modelNativeToolPolicy";
+import type { ModelPickerPolicy } from "@/lib/model/modelPickerPolicy";
+import type { ModelReasoningOutputPolicy } from "@/lib/model/modelReasoningOutputPolicy";
+import type { ModelReasoningPolicy } from "@/lib/model/modelReasoningPolicy";
+import type { ModelResponsesPolicy } from "@/lib/model/modelResponsesPolicy";
+import type { ModelToolCallPolicy } from "@/lib/model/modelToolCallPolicy";
+import type { ModelTruncationPolicy } from "@/lib/model/modelTruncationPolicy";
 /** 模型能力 */
 export interface ModelCapabilities {
   /** 是否支持视觉输入 */
@@ -142,6 +152,26 @@ export interface EnhancedModelMetadata {
   tier: ModelTier;
   /** 模型能力 */
   capabilities: ModelCapabilities;
+  /** 运行时执行策略；缺少后端字段时按 fail-closed policy 处理 */
+  execution_policy?: ModelExecutionPolicy;
+  /** 上下文窗口与自动压缩策略 */
+  context_policy?: ModelContextPolicy;
+  /** 模型选择器展示与服务等级策略 */
+  picker_policy?: ModelPickerPolicy;
+  /** 工具调用并发策略 */
+  tool_call_policy?: ModelToolCallPolicy;
+  /** 推理强度与摘要支持策略 */
+  reasoning_policy?: ModelReasoningPolicy;
+  /** 推理摘要输出与 verbosity 策略 */
+  reasoning_output_policy?: ModelReasoningOutputPolicy;
+  /** 输入模态发送门禁策略 */
+  input_modality_policy?: ModelInputModalityPolicy;
+  /** Responses API 请求形态策略 */
+  responses_policy?: ModelResponsesPolicy;
+  /** 工具输出截断策略 */
+  truncation_policy?: ModelTruncationPolicy;
+  /** Codex 原生工具 surface 策略 */
+  native_tool_policy?: ModelNativeToolPolicy;
   /** 任务族 */
   task_families?: ModelTaskFamily[];
   /** 输入模态 */

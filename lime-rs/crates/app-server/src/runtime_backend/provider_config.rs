@@ -3,6 +3,7 @@ use super::request_context::RuntimeModelSelection;
 use crate::runtime::memory_prompt::memory_soul_prompt_context_from_config;
 use crate::RuntimeCoreError;
 use crate::RuntimeEvent;
+use app_server_protocol::CapabilitySnapshot;
 use lime_agent::SessionProviderConfig;
 use lime_core::config::{load_config, ToolExecutionPolicyConfig, WorkspaceSandboxConfig};
 use lime_core::database::{self, DbConnection};
@@ -61,6 +62,7 @@ pub(super) fn model_effective_event_from_runtime(
     selection: &RuntimeModelSelection,
     provider_config: &SessionProviderConfig,
     service_model_slot: &str,
+    capability_snapshot: &CapabilitySnapshot,
 ) -> RuntimeEvent {
     let provider_id = provider_config
         .provider_selector
@@ -69,7 +71,8 @@ pub(super) fn model_effective_event_from_runtime(
         .to_string();
     let model_ref =
         model_capability::ModelRef::new(provider_id.clone(), provider_config.model_name.clone());
-    let capability = model_capability::resolve_basic_model_capability(model_ref);
+    let capability =
+        model_capability::resolve_model_capability(model_ref, Some(capability_snapshot));
     let requested_reasoning_effort = requested_selection.reasoning_effort.as_deref();
     let effective_reasoning_effort = provider_config
         .reasoning_effort

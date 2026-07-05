@@ -1,8 +1,32 @@
 import { describe, expect, it } from "vitest";
 import { createSubmitTurnRequestFromAgentOp } from "@/lib/api/agentProtocol";
+import type { ModelCapabilitySummary } from "@/lib/model/inferModelCapabilities";
+import { MODEL_INPUT_CAPABILITY_GAP_ERROR_PREFIX } from "@/lib/model/modelCapabilitySendGate";
 import { buildUserInputSubmitOp } from "./buildUserInputSubmitOp";
 
 describe("buildUserInputSubmitOp", () => {
+  const textOnlyModelCapabilitySummary: ModelCapabilitySummary = {
+    capabilities: {
+      vision: false,
+      tools: true,
+      streaming: true,
+      json_mode: true,
+      function_calling: true,
+      reasoning: false,
+    },
+    task_families: ["chat"],
+    input_modalities: ["text"],
+    output_modalities: ["text"],
+    runtime_features: ["streaming", "tool_calling"],
+    supports_tools: true,
+    supports_reasoning: false,
+    supports_prompt_cache: false,
+    supports_media_input: false,
+    supports_media_output: false,
+    context_length: 128000,
+    max_output_tokens: 4096,
+  };
+
   it("应构造最小 user_input op，并裁掉 steady-state 字段", () => {
     const op = buildUserInputSubmitOp({
       content: "继续生成社媒初稿",
@@ -178,6 +202,28 @@ describe("buildUserInputSubmitOp", () => {
         run_title: "发布确认",
       },
     });
+  });
+
+  it("图片输入不满足 selected model capability 时应在 submit op 边界 fail closed", () => {
+    expect(() =>
+      buildUserInputSubmitOp({
+        content: "描述这张图",
+        images: [
+          {
+            data: "base64-image",
+            mediaType: "image/png",
+          },
+        ],
+        sessionId: "session-image-1",
+        eventName: "aster_stream_image",
+        turnId: "turn-image-1",
+        effectiveExecutionStrategy: "react",
+        effectiveAccessMode: "current",
+        effectiveProviderType: "openai",
+        effectiveModel: "gpt-4.1-text",
+        modelCapabilitySummary: textOnlyModelCapabilitySummary,
+      }),
+    ).toThrow(`${MODEL_INPUT_CAPABILITY_GAP_ERROR_PREFIX}:`);
   });
 
   it("中途切换模型但会话尚未同步时应在 submit payload 带上当前模型", () => {

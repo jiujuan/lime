@@ -1,7 +1,3 @@
-use super::aster_event_adapter::RuntimeEventProjector;
-use super::aster_reply_adapter::{
-    extract_inline_agent_provider_error, AsterReplyRuntimeHost, ReplyAttemptInput,
-};
 use super::policy_config::RequestToolPolicy;
 use super::runtime_status::build_web_retrieval_synthesis_runtime_status;
 use super::stream_diagnostics::{update_stream_event_diagnostics, StreamEventDiagnostics};
@@ -11,9 +7,14 @@ use super::web_retrieval_process::WebRetrievalProcessState;
 use super::web_search_execution_tracker::WebSearchExecutionTracker;
 use super::{ReplyAttemptError, RuntimeAgentEvent};
 use crate::protocol::TextDeltaBatchBoundary;
-use crate::session_configuration::AgentSessionConfig;
 use crate::write_artifact_events::WriteArtifactEventEmitter;
+use agent_runtime::reply_host::{RuntimeReplyPolicyHost, RuntimeReplyStartError};
+use agent_runtime::reply_input::RuntimeReplyAttemptInput as ReplyAttemptInput;
+use agent_runtime::reply_stream::RuntimeReplyStreamEvent;
+use agent_runtime::session_config::AgentSessionConfig;
 use futures::StreamExt;
+use model_provider::provider_stream::RuntimeReplyProviderHandle;
+use model_provider::ModelProviderProtocol;
 use std::time::{Duration, Instant};
 use tokio_util::sync::CancellationToken;
 
@@ -26,7 +27,7 @@ fn build_provider_stream_idle_timeout_error<F>(
     on_event: &mut F,
 ) -> ReplyAttemptError
 where
-    F: FnMut(&RuntimeAgentEvent),
+    F: FnMut(&RuntimeAgentEvent) + Send,
 {
     emit_text_delta_batch(
         text_delta_batcher,
@@ -48,9 +49,16 @@ where
     }
 }
 
+fn reply_attempt_error_from_runtime(error: RuntimeReplyStartError) -> ReplyAttemptError {
+    ReplyAttemptError {
+        message: error.message,
+        emitted_any: error.emitted_any,
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn stream_agent_reply_once<F>(
-    host: &AsterReplyRuntimeHost<'_>,
+    host: &impl RuntimeReplyPolicyHost<RuntimeAgentEvent, crate::protocol::AgentRuntimeStatus>,
     user_input: ReplyAttemptInput,
     session_config: &AgentSessionConfig,
     cancel_token: Option<CancellationToken>,
@@ -65,10 +73,9 @@ pub(super) async fn stream_agent_reply_once<F>(
     on_event: &mut F,
 ) -> Result<(), ReplyAttemptError>
 where
-    F: FnMut(&RuntimeAgentEvent),
+    F: FnMut(&RuntimeAgentEvent) + Send,
 {
     let started_at = Instant::now();
-    let mut runtime_event_projector = RuntimeEventProjector::new();
     let mut inline_provider_error = None;
     let mut text_delta_batcher = TextDeltaBatcher::default();
     let mut web_retrieval_process_state = WebRetrievalProcessState::default();
@@ -85,7 +92,8 @@ where
             provider_cancel_token,
             *emitted_any,
         )
-        .await?;
+        .await
+        .map_err(reply_attempt_error_from_runtime)?;
     tracing::info!(
         "[AgentRuntime][TTFT] agent.reply start: session_id={}, message_chars={}, pinned_provider={}",
         session_id,
@@ -142,20 +150,26 @@ where
             break;
         };
         match event_result {
-            Ok(agent_event) => {
-                if let Some(provider_error) = extract_inline_agent_provider_error(&agent_event) {
-                    if inline_provider_error.is_none() {
-                        inline_provider_error = Some(provider_error);
+            Ok(stream_event) => {
+                let runtime_events = match stream_event {
+                    RuntimeReplyStreamEvent::SuppressedInlineProviderError(provider_error) => {
+                        if inline_provider_error.is_none() {
+                            inline_provider_error = Some(provider_error);
+                        }
+                        tracing::warn!(
+                            "[AgentRuntime][ReplyPolicy] suppressed inline provider error text from runtime stream: session_id={}",
+                            session_id
+                        );
+                        continue;
                     }
-                    tracing::warn!(
-                        "[AgentRuntime][ReplyPolicy] suppressed inline provider error text from runtime stream: session_id={}",
-                        session_id
-                    );
-                    continue;
-                }
+                    RuntimeReplyStreamEvent::Event(runtime_event) => vec![runtime_event],
+                };
 
-                let runtime_events = runtime_event_projector.project(agent_event);
                 for mut runtime_event in runtime_events {
+                    enrich_provider_trace_with_runtime_provider(
+                        &mut runtime_event,
+                        host.provider_handle(),
+                    );
                     let extra_events = write_artifact_emitter.process_event(&mut runtime_event);
                     for extra_event in &extra_events {
                         emit_text_delta_batch(
@@ -183,6 +197,7 @@ where
                                 text_chunks.push(text.clone());
                             }
                         }
+
                         RuntimeAgentEvent::Error { message } => {
                             if !message.trim().is_empty() {
                                 event_errors.push(message.clone());
@@ -306,4 +321,48 @@ where
     }
 
     Ok(())
+}
+
+fn enrich_provider_trace_with_runtime_provider(
+    event: &mut RuntimeAgentEvent,
+    provider: Option<&RuntimeReplyProviderHandle>,
+) {
+    let Some(provider) = provider else {
+        return;
+    };
+    let RuntimeAgentEvent::ProviderTrace {
+        provider: trace_provider,
+        model,
+        runtime_provider_backend,
+        runtime_provider_selector,
+        runtime_provider_protocol,
+        runtime_provider_active_model,
+        ..
+    } = event
+    else {
+        return;
+    };
+
+    if trace_provider.trim().is_empty() {
+        *trace_provider = provider.identity.provider_name.clone();
+    }
+    if model.trim().is_empty() {
+        *model = provider.identity.model_name.clone();
+    }
+    *runtime_provider_backend = Some(provider.backend.as_wire_str().to_string());
+    *runtime_provider_selector = provider.identity.provider_selector.clone();
+    *runtime_provider_protocol = provider
+        .identity
+        .protocol
+        .as_ref()
+        .map(provider_protocol_wire_value);
+    *runtime_provider_active_model = provider.capabilities.active_model_name.clone();
+}
+
+fn provider_protocol_wire_value(protocol: &ModelProviderProtocol) -> String {
+    match protocol {
+        ModelProviderProtocol::Responses => "responses".to_string(),
+        ModelProviderProtocol::ChatCompletions => "chat_completions".to_string(),
+        ModelProviderProtocol::Custom(value) => value.clone(),
+    }
 }

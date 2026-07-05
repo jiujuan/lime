@@ -39,7 +39,6 @@ use crate::config::search_path::SearchPaths;
 use crate::config::{get_all_extensions, Config};
 use crate::oauth::oauth_flow;
 use crate::prompt_template;
-use crate::subprocess::configure_command_no_window;
 use rmcp::model::{
     CallToolRequestParam, Content, ErrorCode, ErrorData, GetPromptResult, Prompt, Resource,
     ResourceContents, ServerInfo, Tool,
@@ -47,6 +46,7 @@ use rmcp::model::{
 use rmcp::transport::auth::AuthClient;
 use schemars::_private::NoSerialize;
 use serde_json::Value;
+use tool_runtime::subprocess::configure_command_no_window;
 
 type McpClientBox = Arc<Mutex<Box<dyn McpClientTrait>>>;
 

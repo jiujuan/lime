@@ -1,3 +1,4 @@
+use app_server_protocol::CapabilitySnapshot;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -107,6 +108,50 @@ pub fn resolve_basic_model_capability(model: ModelRef) -> ModelCapability {
     }
 }
 
+pub fn resolve_model_capability(
+    model: ModelRef,
+    capability_snapshot: Option<&CapabilitySnapshot>,
+) -> ModelCapability {
+    match capability_snapshot {
+        Some(snapshot) => resolve_model_capability_from_snapshot(model, snapshot),
+        None => resolve_basic_model_capability(model),
+    }
+}
+
+pub fn resolve_model_capability_from_snapshot(
+    model: ModelRef,
+    snapshot: &CapabilitySnapshot,
+) -> ModelCapability {
+    let explicit_reasoning_support =
+        reasoning_effort_supported(snapshot.capabilities.reasoning_effort.as_ref());
+    let supports_reasoning = explicit_reasoning_support.unwrap_or_else(|| {
+        snapshot.capabilities.reasoning
+            || has_case_insensitive_value(&snapshot.runtime_features, "reasoning")
+            || has_case_insensitive_value(&snapshot.task_families, "reasoning")
+    });
+    let supported_reasoning_levels = if supports_reasoning {
+        reasoning_levels_from_snapshot(snapshot).unwrap_or_else(standard_reasoning_levels)
+    } else {
+        Vec::new()
+    };
+    let supports_tool_calling = snapshot.capabilities.tools
+        || snapshot.capabilities.function_calling
+        || has_case_insensitive_value(&snapshot.runtime_features, "tool_calling")
+        || has_case_insensitive_value(&snapshot.runtime_features, "tools");
+    let supports_tool_streaming = snapshot.capabilities.streaming
+        || has_case_insensitive_value(&snapshot.runtime_features, "streaming");
+
+    ModelCapability {
+        model,
+        supports_tool_calling,
+        supports_tool_streaming,
+        supports_reasoning,
+        supports_reasoning_summary: supports_reasoning,
+        supported_reasoning_levels,
+        plan_strategy: PlanStrategy::Hybrid,
+    }
+}
+
 pub fn resolve_reasoning_policy(
     capability: &ModelCapability,
     requested_level: Option<ReasoningLevel>,
@@ -202,6 +247,39 @@ fn normalized_identifier(value: &str) -> String {
 
 fn contains_any(value: &str, needles: &[&str]) -> bool {
     needles.iter().any(|needle| value.contains(needle))
+}
+
+fn has_case_insensitive_value(values: &[String], expected: &str) -> bool {
+    values
+        .iter()
+        .any(|value| value.trim().eq_ignore_ascii_case(expected))
+}
+
+fn reasoning_effort_supported(value: Option<&Value>) -> Option<bool> {
+    match value? {
+        Value::Object(object) => object.get("supported").and_then(Value::as_bool),
+        Value::Bool(value) => Some(*value),
+        _ => None,
+    }
+}
+
+fn reasoning_levels_from_snapshot(snapshot: &CapabilitySnapshot) -> Option<Vec<ReasoningLevel>> {
+    let value = snapshot.capabilities.reasoning_effort.as_ref()?;
+    let levels_value = match value {
+        Value::Array(_) => Some(value),
+        Value::Object(object) => object
+            .get("levels")
+            .or_else(|| object.get("supportedLevels"))
+            .or_else(|| object.get("supported_levels")),
+        _ => None,
+    }?;
+    let levels = levels_value
+        .as_array()?
+        .iter()
+        .filter_map(|level| level.as_str().and_then(reasoning_level_from_str))
+        .collect::<Vec<_>>();
+
+    (!levels.is_empty()).then_some(levels)
 }
 
 fn has_token_prefix(value: &str, prefixes: &[&str]) -> bool {
@@ -319,6 +397,62 @@ mod tests {
             policy.downgrade_reason.as_deref(),
             Some("selected model does not support reasoning")
         );
+    }
+
+    #[test]
+    fn capability_snapshot_declares_reasoning_for_plain_custom_model() {
+        let snapshot = CapabilitySnapshot {
+            runtime_features: vec!["reasoning".to_string(), "streaming".to_string()],
+            capabilities: app_server_protocol::ModelCapabilitiesInfo {
+                tools: true,
+                streaming: true,
+                reasoning: true,
+                reasoning_effort: Some(json!({
+                    "supported": true,
+                    "levels": ["low", "high"],
+                })),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let capability = resolve_model_capability(
+            ModelRef::new("custom-provider", "plain-chat"),
+            Some(&snapshot),
+        );
+        let policy = resolve_reasoning_policy(&capability, Some(ReasoningLevel::High));
+
+        assert!(capability.supports_reasoning);
+        assert_eq!(
+            capability.supported_reasoning_levels,
+            vec![ReasoningLevel::Low, ReasoningLevel::High]
+        );
+        assert!(policy.supported);
+        assert_eq!(policy.effective_level, Some(ReasoningLevel::High));
+    }
+
+    #[test]
+    fn capability_snapshot_can_disable_reasoning_for_reasoning_named_model() {
+        let snapshot = CapabilitySnapshot {
+            runtime_features: vec!["streaming".to_string()],
+            capabilities: app_server_protocol::ModelCapabilitiesInfo {
+                tools: true,
+                streaming: true,
+                reasoning: false,
+                reasoning_effort: Some(json!({
+                    "supported": false,
+                    "levels": [],
+                })),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let capability =
+            resolve_model_capability(ModelRef::new("openai", "gpt-codex"), Some(&snapshot));
+        let policy = resolve_reasoning_policy(&capability, Some(ReasoningLevel::High));
+
+        assert!(!capability.supports_reasoning);
+        assert!(!policy.supported);
+        assert_eq!(policy.effective_level, None);
     }
 
     #[test]

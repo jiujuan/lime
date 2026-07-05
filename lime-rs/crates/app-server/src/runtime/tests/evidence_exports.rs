@@ -11,4 +11,5 @@ mod coding_snapshot;
 mod handoff_review;
 mod plugin_task;
 mod provider_telemetry;
+mod request_telemetry;
 mod team_facts;

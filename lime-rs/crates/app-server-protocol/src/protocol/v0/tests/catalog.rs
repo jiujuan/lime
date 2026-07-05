@@ -168,6 +168,7 @@ fn app_server_method_catalog_keeps_request_and_notification_methods_together() {
             METHOD_BROWSER_SESSION_EVENT_LIST,
             METHOD_BROWSER_SESSION_ACTION_EXECUTE,
             METHOD_PLUGIN_LOCAL_PACKAGE_INSPECT,
+            METHOD_PLUGIN_LOCAL_PACKAGE_EXPORT,
             METHOD_PLUGIN_PACKAGE_FETCH_CLOUD,
             METHOD_PLUGIN_INSTALLED_SAVE,
             METHOD_PLUGIN_INSTALLED_LIST,

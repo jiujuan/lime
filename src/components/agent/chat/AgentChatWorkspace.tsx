@@ -228,17 +228,12 @@ import { WorkspaceArticleEditorRightSurface } from "./workspace/WorkspaceArticle
 import { submitWorkspaceArticleEditorActionIntent } from "./workspace/workspaceArticleEditorActionDispatch";
 import {
   buildWorkspaceArticleWorkspaceFromThreadRead,
-  buildWorkspaceArticleWorkspaceFromUnknown,
   hasWorkspaceArticleFinalDocument,
   hasWorkspaceArticleWorkspaceThreadReadMetadata,
   type WorkspaceArticleWorkspaceActionIntent,
   type WorkspaceArticleWorkspaceImageSlotIntent,
   type WorkspaceArticleWorkspace,
 } from "./workspace/workspaceArticleWorkspaceModel";
-import {
-  readWorkspaceArticlePatchRecordFromMetadata,
-  readWorkspaceArticleRecordFromMetadata,
-} from "./workspace/workspaceArticleWorkspaceMetadata";
 import {
   attachWorkspaceArticleWorkspacePreviewArtifactToMessages,
   buildWorkspaceArticleWorkspaceFromMessageArtifacts,
@@ -396,6 +391,7 @@ import {
   type TaskCenterDraftTab,
 } from "./workspace/agentChatWorkspaceHelpers";
 import { SCENEAPP_QUICK_REVIEW_ACTIONS } from "@/lib/agent/legacySceneAppExecutionSummary";
+import { buildArticleWorkspaceForArtifactOpen } from "./workspace/workspaceArticleWorkspaceArtifactOpen";
 
 export type {
   AgentChatWorkspaceProps,
@@ -407,49 +403,6 @@ const LEGACY_WORKFLOW_STEP_INDEX = 0;
 const ignoreLegacyWorkflowStepClick = (index: number) => {
   void index;
 };
-
-function readRecord(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
-
-function buildArticleWorkspaceForArtifactOpen(
-  artifact: Artifact,
-  currentArticleWorkspace: WorkspaceArticleWorkspace | null,
-): WorkspaceArticleWorkspace | null {
-  const metadata = readRecord(artifact.meta);
-  if (!metadata) {
-    return null;
-  }
-  const openedFrom =
-    typeof metadata.openedFrom === "string" ? metadata.openedFrom : "";
-  const articleWorkspace = readWorkspaceArticleRecordFromMetadata(metadata);
-  const workspacePatch = readWorkspaceArticlePatchRecordFromMetadata(metadata);
-  const artifactDocument = readRecord(metadata.artifactDocument);
-  const artifactDocumentMetadata = readRecord(artifactDocument?.metadata);
-  const artifactDocumentArticleWorkspace =
-    readWorkspaceArticleRecordFromMetadata(artifactDocumentMetadata);
-  const isArticleWorkspaceArtifact =
-    openedFrom === "right_surface_article_workspace" ||
-    Boolean(articleWorkspace || artifactDocumentArticleWorkspace);
-  if (!isArticleWorkspaceArtifact) {
-    return null;
-  }
-
-  const workspaceFromArtifact = buildWorkspaceArticleWorkspaceFromUnknown(
-    workspacePatch ?? articleWorkspace ?? artifactDocumentArticleWorkspace,
-    "threadRead",
-  );
-  if (workspaceFromArtifact) {
-    return workspaceFromArtifact;
-  }
-
-  if (currentArticleWorkspace) {
-    return currentArticleWorkspace;
-  }
-  return null;
-}
 
 export function AgentChatWorkspace({
   onNavigate: _onNavigate,

@@ -1,4 +1,5 @@
 import type {
+  AgentEvent,
   AgentEventActionRequired,
   AgentEventActionResolved,
 } from "@/lib/api/agentProtocol";
@@ -10,6 +11,27 @@ import {
   buildAgentUiActionRequiredEvent,
   buildAgentUiActionResolvedEvent,
 } from "@limecloud/agent-runtime-projection";
+
+type ActionProjectionEvent = Extract<
+  AgentEvent,
+  { type: "action_required" | "action_resolved" }
+>;
+
+export function buildActionProjectionEvents(
+  event: ActionProjectionEvent,
+  context: AgentUiProjectionContext,
+): AgentUiProjectionEvent[] {
+  switch (event.type) {
+    case "action_required":
+      return [buildActionRequiredEvent(event, context)];
+    case "action_resolved":
+      return [buildActionResolvedEvent(event, context)];
+    default: {
+      const exhaustive: never = event;
+      return exhaustive;
+    }
+  }
+}
 
 export function buildActionRequiredEvent(
   event: AgentEventActionRequired,

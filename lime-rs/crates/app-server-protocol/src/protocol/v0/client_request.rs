@@ -233,6 +233,7 @@ app_server_client_request_definitions! {
     BrowserSessionEventList => "browserSession/event/list",
     BrowserSessionActionExecute => "browserSession/action/execute",
     PluginLocalPackageInspect => "pluginLocalPackage/inspect",
+    PluginLocalPackageExport => "pluginLocalPackage/export",
     PluginPackageFetchCloud => "pluginPackage/fetchCloud",
     PluginInstalledSave => "pluginInstalled/save",
     PluginInstalledList => "pluginInstalled/list",

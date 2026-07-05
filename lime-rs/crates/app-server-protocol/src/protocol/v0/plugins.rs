@@ -23,6 +23,30 @@ pub struct PluginLocalPackageInspectResponse {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+pub struct PluginLocalPackageExportParams {
+    pub app_dir: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginLocalPackageExportResponse {
+    pub source_kind: String,
+    pub source_uri: String,
+    pub app_dir: String,
+    pub manifest_source: String,
+    pub plugin_manifest: serde_json::Value,
+    pub manifest: serde_json::Value,
+    pub manifest_hash: String,
+    pub package_hash: String,
+    pub size_bytes: u64,
+    pub file_count: usize,
+    pub content_type: String,
+    pub package_base64: String,
+    pub exported_at: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct PluginFetchCloudPackageParams {
     pub descriptor: PluginCloudReleaseDescriptor,
 }

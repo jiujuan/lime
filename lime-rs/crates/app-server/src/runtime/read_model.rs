@@ -1,3 +1,5 @@
+mod messages;
+
 use super::article_workspace_action_projection;
 use super::article_workspace_projection;
 use super::artifact_projection;
@@ -13,13 +15,10 @@ use super::status::agent_turn_is_active;
 use super::status::agent_turn_status_label;
 use super::string_field;
 use super::thread_item_projection;
-use super::timestamp_seconds;
 use super::tool_item_projection;
-use super::turn_input_events;
 use super::workflow::read_model::{workflow_read_model_from_events, WorkflowReadModel};
 use super::StoredSession;
 use app_server_protocol::AgentEvent;
-use app_server_protocol::AgentInput;
 use app_server_protocol::AgentSession;
 use app_server_protocol::AgentSessionActionScope;
 use app_server_protocol::AgentSessionActionType;
@@ -29,6 +28,8 @@ use app_server_protocol::AgentTurn;
 use app_server_protocol::AgentTurnStatus;
 use serde_json::json;
 use std::borrow::Cow;
+
+pub(super) use messages::runtime_session_messages;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub(super) struct ReadDetailOptions {
@@ -79,7 +80,7 @@ pub(super) fn runtime_session_read_detail_with_options(
         &usage_projection_events,
     );
     let queued_turns = queued_turn_snapshots(stored);
-    let all_messages = runtime_session_messages(stored);
+    let all_messages = messages::runtime_session_messages(stored);
     let messages_count = all_messages.len();
     let (messages, cursor_start_index) = apply_history_window(all_messages, options);
     let mut items = thread_item_projection::thread_items_from_events(stored);
@@ -91,7 +92,7 @@ pub(super) fn runtime_session_read_detail_with_options(
     items.extend(runtime_error_items_from_events(stored));
     sort_read_detail_items(&mut items);
     let loaded_count = messages.len();
-    let oldest_message_id = messages.first().and_then(message_numeric_id);
+    let oldest_message_id = messages.first().and_then(messages::message_numeric_id);
     let history_limit = options.history_limit.unwrap_or(messages_count);
     let history_truncated = loaded_count < messages_count;
     let turns = read_model_turn_usage::turns_with_usage(&stored.turns, &usage_projection_events);
@@ -118,7 +119,7 @@ pub(super) fn runtime_session_read_detail_with_options(
         "turns": turns,
         "items": items,
         "queued_turns": queued_turns,
-        "artifacts": artifact_projection::stored_artifact_summaries_for_turn(stored, None),
+        "artifacts": artifact_projection::stored_user_visible_artifact_summaries_for_turn(stored, None),
         "outputs": output_refs::read_model_outputs(stored.output_blobs.values(), None),
         "thread_read": thread_read,
     });
@@ -139,7 +140,7 @@ fn apply_history_window(
         messages
             .into_iter()
             .filter(|message| {
-                message_numeric_id(message)
+                messages::message_numeric_id(message)
                     .map(|id| id < before_message_id)
                     .unwrap_or(true)
             })
@@ -154,14 +155,6 @@ fn apply_history_window(
     let end = available.saturating_sub(options.history_offset.min(available));
     let start = end.saturating_sub(limit);
     (messages.drain(start..end).collect(), start)
-}
-
-fn message_numeric_id(message: &serde_json::Value) -> Option<i64> {
-    message.get("id").and_then(|value| match value {
-        serde_json::Value::Number(number) => number.as_i64(),
-        serde_json::Value::String(value) => value.parse::<i64>().ok(),
-        _ => None,
-    })
 }
 
 fn session_archived_at(session: &AgentSession) -> Option<String> {
@@ -199,193 +192,6 @@ fn item_timestamp(item: &serde_json::Value) -> String {
 
 fn item_id(item: &serde_json::Value) -> String {
     string_field(item, &["id"]).unwrap_or_default()
-}
-
-pub(super) fn runtime_session_messages(stored: &StoredSession) -> Vec<serde_json::Value> {
-    let mut messages = Vec::new();
-    for turn in &stored.turns {
-        let input = stored
-            .turn_inputs
-            .get(&turn.turn_id)
-            .cloned()
-            .or_else(|| turn_input_from_events(&stored.events, &turn.turn_id));
-        if let Some(input) = input.as_ref() {
-            if let Some(message) = runtime_user_message_from_turn(turn, input) {
-                messages.push(message);
-            }
-        }
-        if let Some(message) = runtime_assistant_message_from_events(turn, &stored.events) {
-            messages.push(message);
-        }
-    }
-    messages
-}
-
-fn turn_input_from_events(
-    events: &[app_server_protocol::AgentEvent],
-    turn_id: &str,
-) -> Option<app_server_protocol::AgentInput> {
-    events
-        .iter()
-        .find(|event| {
-            event.turn_id.as_deref() == Some(turn_id)
-                && turn_input_events::is_turn_input_event(event)
-        })
-        .and_then(|event| event.payload.get("input"))
-        .and_then(|value| serde_json::from_value(value.clone()).ok())
-        .or_else(|| {
-            events
-                .iter()
-                .find(|event| {
-                    event.turn_id.as_deref() == Some(turn_id)
-                        && turn_input_events::is_turn_input_event(event)
-                })
-                .and_then(|event| {
-                    event
-                        .payload
-                        .get("content")
-                        .and_then(|content| content.get("text").or_else(|| content.get("message")))
-                        .and_then(serde_json::Value::as_str)
-                        .map(str::to_string)
-                        .filter(|text| !text.trim().is_empty())
-                        .map(|text| app_server_protocol::AgentInput {
-                            text,
-                            attachments: event
-                                .payload
-                                .get("attachments")
-                                .and_then(|value| serde_json::from_value(value.clone()).ok())
-                                .unwrap_or_default(),
-                        })
-                })
-        })
-}
-
-fn runtime_user_message_from_turn(
-    turn: &AgentTurn,
-    input: &AgentInput,
-) -> Option<serde_json::Value> {
-    let text = input.text.trim();
-    if text.is_empty() && input.attachments.is_empty() {
-        return None;
-    }
-    let mut content = Vec::new();
-    if !text.is_empty() {
-        content.push(json!({
-            "type": "text",
-            "text": text,
-        }));
-    }
-    for attachment in &input.attachments {
-        content.push(json!({
-            "type": attachment.kind,
-            "uri": attachment.uri,
-            "metadata": attachment.metadata,
-        }));
-    }
-
-    Some(json!({
-        "id": format!("{}:user", turn.turn_id),
-        "role": "user",
-        "runtimeTurnId": turn.turn_id,
-        "runtime_turn_id": turn.turn_id,
-        "content": content,
-        "attachments": input.attachments,
-        "timestamp": timestamp_seconds(turn.started_at.as_deref()),
-    }))
-}
-
-fn runtime_assistant_message_from_events(
-    turn: &AgentTurn,
-    events: &[AgentEvent],
-) -> Option<serde_json::Value> {
-    let mut text = String::new();
-    let mut timestamp_value: Option<&str> = None;
-    for event in events.iter().filter(|event| {
-        event.turn_id.as_deref() == Some(turn.turn_id.as_str())
-            && is_assistant_message_event_type(&event.event_type)
-            && should_use_message_delta_as_final_text(event)
-    }) {
-        if let Some(delta) = assistant_message_text_from_payload(&event.payload) {
-            text.push_str(&delta);
-            timestamp_value = Some(event.timestamp.as_str());
-        }
-    }
-    let text = text.trim();
-    if text.is_empty() {
-        return None;
-    }
-
-    Some(json!({
-        "id": format!("{}:assistant", turn.turn_id),
-        "role": "assistant",
-        "runtimeTurnId": turn.turn_id,
-        "runtime_turn_id": turn.turn_id,
-        "content": [
-            {
-                "type": "text",
-                "text": text,
-            }
-        ],
-        "timestamp": timestamp_seconds(timestamp_value.or(turn.completed_at.as_deref())),
-    }))
-}
-
-fn should_use_message_delta_as_final_text(event: &AgentEvent) -> bool {
-    match raw_string_field(&event.payload, &["phase", "messagePhase", "message_phase"]) {
-        None => true,
-        Some(phase) => {
-            let normalized = phase.trim().to_ascii_lowercase();
-            normalized == "final" || normalized == "final_answer"
-        }
-    }
-}
-
-fn is_assistant_message_event_type(event_type: &str) -> bool {
-    matches!(
-        event_type,
-        "message.delta" | "message.delta_batch" | "message.batch"
-    )
-}
-
-fn assistant_message_text_from_payload(payload: &serde_json::Value) -> Option<String> {
-    if let Some(text) = payload
-        .as_str()
-        .map(str::to_string)
-        .filter(|text| !text.is_empty())
-    {
-        return Some(text);
-    }
-    raw_string_field(
-        payload,
-        &[
-            "text",
-            "delta",
-            "content",
-            "message",
-            "outputText",
-            "output_text",
-        ],
-    )
-    .or_else(|| {
-        payload
-            .get("content")
-            .and_then(|content| raw_string_field(content, &["text", "message"]))
-    })
-    .or_else(|| {
-        for key in ["deltas", "messages", "items", "parts", "content"] {
-            let Some(values) = payload.get(key).and_then(serde_json::Value::as_array) else {
-                continue;
-            };
-            let text = values
-                .iter()
-                .filter_map(assistant_message_text_from_payload)
-                .collect::<String>();
-            if !text.is_empty() {
-                return Some(text);
-            }
-        }
-        None
-    })
 }
 
 fn runtime_warning_items_from_events(stored: &StoredSession) -> Vec<serde_json::Value> {
@@ -643,7 +449,7 @@ fn queued_turn_snapshot(
         .turn_inputs
         .get(&turn.turn_id)
         .cloned()
-        .or_else(|| turn_input_from_events(&stored.events, &turn.turn_id));
+        .or_else(|| messages::turn_input_from_events(&stored.events, &turn.turn_id));
     let message_text = input
         .as_ref()
         .map(|input| input.text.trim().to_string())

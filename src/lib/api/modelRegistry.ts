@@ -5,6 +5,46 @@
  */
 
 import { AppServerClient } from "@/lib/api/appServer";
+import {
+  buildModelContextPolicy,
+  type ModelContextPolicyInput,
+} from "@/lib/model/modelContextPolicy";
+import {
+  buildModelExecutionPolicy,
+  type ModelExecutionPolicyInput,
+} from "@/lib/model/modelExecutionPolicy";
+import {
+  buildModelInputModalityPolicy,
+  type ModelInputModalityPolicyInput,
+} from "@/lib/model/modelInputModalityPolicy";
+import {
+  buildModelNativeToolPolicy,
+  type ModelNativeToolPolicyInput,
+} from "@/lib/model/modelNativeToolPolicy";
+import {
+  buildModelPickerPolicy,
+  type ModelPickerPolicyInput,
+} from "@/lib/model/modelPickerPolicy";
+import {
+  buildModelReasoningOutputPolicy,
+  type ModelReasoningOutputPolicyInput,
+} from "@/lib/model/modelReasoningOutputPolicy";
+import {
+  buildModelReasoningPolicy,
+  type ModelReasoningPolicyInput,
+} from "@/lib/model/modelReasoningPolicy";
+import {
+  buildModelResponsesPolicy,
+  type ModelResponsesPolicyInput,
+} from "@/lib/model/modelResponsesPolicy";
+import {
+  buildModelToolCallPolicy,
+  type ModelToolCallPolicyInput,
+} from "@/lib/model/modelToolCallPolicy";
+import {
+  buildModelTruncationPolicy,
+  type ModelTruncationPolicyInput,
+} from "@/lib/model/modelTruncationPolicy";
 import type {
   EnhancedModelMetadata,
   ModelSyncState,
@@ -70,6 +110,32 @@ function toSnakeModelInfo(model: ModelInfo): EnhancedModelMetadata {
           | EnhancedModelMetadata["capabilities"]["reasoning_effort"]
           | undefined) ?? null,
     },
+    execution_policy: buildModelExecutionPolicy(
+      model as ModelExecutionPolicyInput,
+    ),
+    context_policy: buildModelContextPolicy(model as ModelContextPolicyInput),
+    picker_policy: buildModelPickerPolicy(model as ModelPickerPolicyInput),
+    tool_call_policy: buildModelToolCallPolicy(
+      model as ModelToolCallPolicyInput,
+    ),
+    reasoning_policy: buildModelReasoningPolicy(
+      model as ModelReasoningPolicyInput,
+    ),
+    reasoning_output_policy: buildModelReasoningOutputPolicy(
+      model as ModelReasoningOutputPolicyInput,
+    ),
+    input_modality_policy: buildModelInputModalityPolicy(
+      model as ModelInputModalityPolicyInput,
+    ),
+    responses_policy: buildModelResponsesPolicy(
+      model as ModelResponsesPolicyInput,
+    ),
+    truncation_policy: buildModelTruncationPolicy(
+      model as ModelTruncationPolicyInput,
+    ),
+    native_tool_policy: buildModelNativeToolPolicy(
+      model as ModelNativeToolPolicyInput,
+    ),
     task_families: (model.taskFamilies ??
       []) as EnhancedModelMetadata["task_families"],
     input_modalities: (model.inputModalities ??

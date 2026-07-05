@@ -142,6 +142,8 @@ function main() {
     "src/components/agent/chat/utils/harnessRequestMetadata.ts";
   const executionRuntimePath =
     "src/components/agent/chat/utils/sessionExecutionRuntime.ts";
+  const executionRuntimeProjectionPath =
+    "src/components/agent/chat/projection/sessionExecutionRuntimeProjection.ts";
   // 旧 backend `lime-rs/src/commands/aster_agent_cmd/run_metadata/request_metadata.rs`
   // 已随 `lime-rs/src/**` 整目录在 2026-06-10 删除；harness metadata 的 backend 事实源
   // 现在落在 `lime-rs/crates/agent/src/session_execution_runtime.rs` 等 crate 模块，
@@ -149,6 +151,9 @@ function main() {
 
   const harnessMetadataSource = readSource(harnessMetadataPath);
   const executionRuntimeSource = readSource(executionRuntimePath);
+  const executionRuntimeProjectionSource = readSource(
+    executionRuntimeProjectionPath,
+  );
 
   const legacyKeysBlock = extractBalancedBlock(
     harnessMetadataSource,
@@ -262,9 +267,9 @@ function main() {
 
   requiredRuntimeFields.forEach((field) => {
     assertIncludes(
-      executionRuntimeSource,
+      executionRuntimeProjectionSource,
       field,
-      `[harness-contracts] execution runtime 缺少字段: ${field}`,
+      `[harness-contracts] execution runtime projection 缺少字段: ${field}`,
       failures,
     );
   });
@@ -291,6 +296,7 @@ function main() {
   console.log("[harness-contracts] 检查文件:");
   console.log(`- ${harnessMetadataPath}`);
   console.log(`- ${executionRuntimePath}`);
+  console.log(`- ${executionRuntimeProjectionPath}`);
 
   if (failures.length > 0) {
     console.error("\n[harness-contracts] 发现契约漂移：");

@@ -93,6 +93,40 @@ interface InferModelTaxonomyParams {
   aliasSource?: ModelAliasSource | null;
 }
 
+type ModelTaxonomyInput = Pick<
+  EnhancedModelMetadata,
+  | "id"
+  | "provider_id"
+  | "family"
+  | "description"
+  | "capabilities"
+  | "task_families"
+  | "input_modalities"
+  | "output_modalities"
+  | "runtime_features"
+  | "deployment_source"
+  | "management_plane"
+  | "source"
+  | "provider_model_id"
+  | "canonical_model_id"
+  | "alias_source"
+>;
+
+export interface ModelCapabilitySummary {
+  capabilities: ModelCapabilities;
+  task_families: ModelTaskFamily[];
+  input_modalities: ModelModality[];
+  output_modalities: ModelModality[];
+  runtime_features: ModelRuntimeFeature[];
+  supports_tools: boolean;
+  supports_reasoning: boolean;
+  supports_prompt_cache: boolean;
+  supports_media_input: boolean;
+  supports_media_output: boolean;
+  context_length: number | null;
+  max_output_tokens: number | null;
+}
+
 function normalize(value?: string | null): string {
   return (value || "").trim().toLowerCase();
 }
@@ -592,165 +626,85 @@ export function inferModelCapabilities(
 }
 
 export function getModelTaskFamilies(
-  model: Pick<
-    EnhancedModelMetadata,
-    | "id"
-    | "provider_id"
-    | "family"
-    | "description"
-    | "capabilities"
-    | "task_families"
-    | "input_modalities"
-    | "output_modalities"
-    | "runtime_features"
-    | "deployment_source"
-    | "management_plane"
-    | "source"
-    | "provider_model_id"
-    | "canonical_model_id"
-    | "alias_source"
-  >,
+  model: ModelTaxonomyInput,
 ): ModelTaskFamily[] {
-  return inferModelTaskFamilies({
-    modelId: model.id,
-    providerId: model.provider_id,
-    family: model.family,
-    description: model.description,
-    capabilities: model.capabilities,
-    explicitTaskFamilies: model.task_families,
-    explicitInputModalities: model.input_modalities,
-    explicitOutputModalities: model.output_modalities,
-    explicitRuntimeFeatures: model.runtime_features,
-    deploymentSource: model.deployment_source,
-    managementPlane: model.management_plane,
-    source: model.source,
-    providerModelId: model.provider_model_id,
-    canonicalModelId: model.canonical_model_id,
-    aliasSource: model.alias_source,
-  });
+  return inferModelTaskFamilies(modelToTaxonomyParams(model));
 }
 
 export function modelSupportsTaskFamily(
-  model: Parameters<typeof getModelTaskFamilies>[0],
+  model: ModelTaxonomyInput,
   family: ModelTaskFamily,
 ): boolean {
   return getModelTaskFamilies(model).includes(family);
 }
 
 export function getModelInputModalities(
-  model: Parameters<typeof getModelTaskFamilies>[0],
+  model: ModelTaxonomyInput,
 ): ModelModality[] {
-  return inferInputModalities({
-    modelId: model.id,
-    providerId: model.provider_id,
-    family: model.family,
-    description: model.description,
-    capabilities: model.capabilities,
-    explicitTaskFamilies: model.task_families,
-    explicitInputModalities: model.input_modalities,
-    explicitOutputModalities: model.output_modalities,
-    explicitRuntimeFeatures: model.runtime_features,
-    deploymentSource: model.deployment_source,
-    managementPlane: model.management_plane,
-    source: model.source,
-    providerModelId: model.provider_model_id,
-    canonicalModelId: model.canonical_model_id,
-    aliasSource: model.alias_source,
-  });
+  return inferInputModalities(modelToTaxonomyParams(model));
 }
 
 export function getModelOutputModalities(
-  model: Parameters<typeof getModelTaskFamilies>[0],
+  model: ModelTaxonomyInput,
 ): ModelModality[] {
-  return inferOutputModalities({
-    modelId: model.id,
-    providerId: model.provider_id,
-    family: model.family,
-    description: model.description,
-    capabilities: model.capabilities,
-    explicitTaskFamilies: model.task_families,
-    explicitInputModalities: model.input_modalities,
-    explicitOutputModalities: model.output_modalities,
-    explicitRuntimeFeatures: model.runtime_features,
-    deploymentSource: model.deployment_source,
-    managementPlane: model.management_plane,
-    source: model.source,
-    providerModelId: model.provider_model_id,
-    canonicalModelId: model.canonical_model_id,
-    aliasSource: model.alias_source,
-  });
+  return inferOutputModalities(modelToTaxonomyParams(model));
 }
 
 export function getModelRuntimeFeatures(
-  model: Parameters<typeof getModelTaskFamilies>[0],
+  model: ModelTaxonomyInput,
 ): ModelRuntimeFeature[] {
-  return inferRuntimeFeatures({
-    modelId: model.id,
-    providerId: model.provider_id,
-    family: model.family,
-    description: model.description,
-    capabilities: model.capabilities,
-    explicitTaskFamilies: model.task_families,
-    explicitInputModalities: model.input_modalities,
-    explicitOutputModalities: model.output_modalities,
-    explicitRuntimeFeatures: model.runtime_features,
-    deploymentSource: model.deployment_source,
-    managementPlane: model.management_plane,
-    source: model.source,
-    providerModelId: model.provider_model_id,
-    canonicalModelId: model.canonical_model_id,
-    aliasSource: model.alias_source,
-  });
+  return inferRuntimeFeatures(modelToTaxonomyParams(model));
 }
 
 export function getModelDeploymentSource(
-  model: Parameters<typeof getModelTaskFamilies>[0],
+  model: ModelTaxonomyInput,
 ): ModelDeploymentSource {
-  return inferModelDeploymentSource({
-    modelId: model.id,
-    providerId: model.provider_id,
-    family: model.family,
-    description: model.description,
-    capabilities: model.capabilities,
-    explicitTaskFamilies: model.task_families,
-    explicitInputModalities: model.input_modalities,
-    explicitOutputModalities: model.output_modalities,
-    explicitRuntimeFeatures: model.runtime_features,
-    deploymentSource: model.deployment_source,
-    managementPlane: model.management_plane,
-    source: model.source,
-    providerModelId: model.provider_model_id,
-    canonicalModelId: model.canonical_model_id,
-    aliasSource: model.alias_source,
-  });
+  return inferModelDeploymentSource(modelToTaxonomyParams(model));
 }
 
 export function getModelManagementPlane(
-  model: Parameters<typeof getModelTaskFamilies>[0],
+  model: ModelTaxonomyInput,
 ): ModelManagementPlane {
-  return inferModelManagementPlane({
-    modelId: model.id,
-    providerId: model.provider_id,
-    family: model.family,
-    description: model.description,
-    capabilities: model.capabilities,
-    explicitTaskFamilies: model.task_families,
-    explicitInputModalities: model.input_modalities,
-    explicitOutputModalities: model.output_modalities,
-    explicitRuntimeFeatures: model.runtime_features,
-    deploymentSource: model.deployment_source,
-    managementPlane: model.management_plane,
-    source: model.source,
-    providerModelId: model.provider_model_id,
-    canonicalModelId: model.canonical_model_id,
-    aliasSource: model.alias_source,
-  });
+  return inferModelManagementPlane(modelToTaxonomyParams(model));
 }
 
 export function getModelAliasSource(
-  model: Parameters<typeof getModelTaskFamilies>[0],
+  model: ModelTaxonomyInput,
 ): ModelAliasSource | null {
-  return inferModelAliasSource({
+  return inferModelAliasSource(modelToTaxonomyParams(model));
+}
+
+export function getModelCapabilitySummary(
+  model: ModelTaxonomyInput &
+    Pick<EnhancedModelMetadata, "limits">,
+): ModelCapabilitySummary {
+  const task_families = getModelTaskFamilies(model);
+  const input_modalities = getModelInputModalities(model);
+  const output_modalities = getModelOutputModalities(model);
+  const runtime_features = getModelRuntimeFeatures(model);
+  const capabilities = inferModelCapabilities(modelToTaxonomyParams(model));
+
+  return {
+    capabilities,
+    task_families,
+    input_modalities,
+    output_modalities,
+    runtime_features,
+    supports_tools: capabilities.tools || runtime_features.includes("tool_calling"),
+    supports_reasoning:
+      capabilities.reasoning ||
+      task_families.includes("reasoning") ||
+      runtime_features.includes("reasoning"),
+    supports_prompt_cache: runtime_features.includes("prompt_cache"),
+    supports_media_input: input_modalities.some(isMediaModality),
+    supports_media_output: output_modalities.some(isMediaModality),
+    context_length: model.limits.context_length,
+    max_output_tokens: model.limits.max_output_tokens,
+  };
+}
+
+function modelToTaxonomyParams(model: ModelTaxonomyInput): InferModelTaxonomyParams {
+  return {
     modelId: model.id,
     providerId: model.provider_id,
     family: model.family,
@@ -766,5 +720,9 @@ export function getModelAliasSource(
     providerModelId: model.provider_model_id,
     canonicalModelId: model.canonical_model_id,
     aliasSource: model.alias_source,
-  });
+  };
+}
+
+function isMediaModality(modality: ModelModality): boolean {
+  return modality === "image" || modality === "audio" || modality === "video";
 }

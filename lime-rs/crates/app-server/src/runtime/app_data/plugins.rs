@@ -17,6 +17,13 @@ pub trait PluginDataSource: Send + Sync {
         Err(unavailable("pluginLocalPackage/inspect"))
     }
 
+    async fn export_plugin_local_package(
+        &self,
+        _params: PluginLocalPackageExportParams,
+    ) -> Result<PluginLocalPackageExportResponse, RuntimeCoreError> {
+        Err(unavailable("pluginLocalPackage/export"))
+    }
+
     async fn fetch_plugin_cloud_package(
         &self,
         _params: PluginFetchCloudPackageParams,

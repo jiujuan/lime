@@ -88,8 +88,6 @@ pub fn resolved_route_from_task(
             routing_slot: task_request.routing_slot.clone(),
             source: selection.model_ref_source.clone(),
         }),
-        provider: None,
-        model: None,
         protocol: protocol.clone(),
         endpoint: endpoint_info(provider, direct_config.as_ref()),
         auth: auth_ref(&selection, provider, direct_config.as_ref()),
@@ -644,6 +642,96 @@ mod tests {
     }
 
     #[test]
+    fn resolved_route_does_not_project_picker_dtos_as_execution_facts() {
+        let task_request = build_model_task_request(ModelTaskRequestInput {
+            task_kind: ModelTaskKind::Chat,
+            source: ModelTaskSource::AgentTurn,
+            provider_id: Some("openai".to_string()),
+            model_id: Some("gpt-4.1".to_string()),
+            model_ref_source: ModelRefSource::Explicit,
+            modality_contract_key: Some("chat".to_string()),
+            routing_slot: Some("coding".to_string()),
+            task_families: vec!["chat".to_string()],
+            input_modalities: vec!["text".to_string()],
+            output_modalities: vec!["text".to_string()],
+            runtime_features: vec!["streaming".to_string()],
+            capabilities: vec!["streaming".to_string()],
+            session_id: None,
+            thread_id: None,
+            turn_id: None,
+            content_id: None,
+            trace_id: None,
+        });
+        let provider = ModelRouteProvider {
+            provider_id: "openai",
+            provider_type: Cow::Borrowed("openai"),
+            base_url: Some("https://api.openai.com/v1"),
+            api_version: None,
+            project: None,
+            location: None,
+            region: None,
+            credential_ref: Some("runtime-api-key-openai".to_string()),
+            auth_header: "Authorization",
+            auth_prefix: Some("Bearer"),
+            prompt_cache_mode: None,
+        };
+
+        let route = resolved_route_from_task(
+            &task_request,
+            ModelRouteSelection {
+                provider_id: "openai",
+                model_id: "gpt-4.1",
+                model_ref_source: ModelRefSource::Explicit,
+                reasoning_effort: None,
+            },
+            &json!({
+                "providerReadiness": {
+                    "ready": true,
+                    "status": "ready"
+                },
+                "routingMode": "profile_slot",
+                "decisionSource": "runtime_selection",
+                "decisionReason": "explicit_model",
+                "modelRegistry": {
+                    "displayName": "GPT 4.1",
+                    "providerName": "OpenAI",
+                    "tier": "pro",
+                    "status": "active",
+                    "pricing": {
+                        "inputPerMillion": 2.0,
+                        "outputPerMillion": 8.0
+                    },
+                    "modelCapabilities": {
+                        "taskFamilies": ["chat"],
+                        "inputModalities": ["text"],
+                        "outputModalities": ["text"],
+                        "runtimeFeatures": ["streaming"],
+                        "capabilities": {
+                            "streaming": true
+                        }
+                    }
+                }
+            }),
+            Some(&provider),
+            None,
+        );
+
+        assert_eq!(route.model_ref.model_id, "gpt-4.1");
+        assert_eq!(
+            route.endpoint.base_url.as_deref(),
+            Some("https://api.openai.com/v1")
+        );
+        assert_eq!(
+            route.auth.credential_ref.as_deref(),
+            Some("runtime-api-key-openai")
+        );
+        assert_eq!(
+            route.capability_snapshot.task_families,
+            vec!["chat".to_string()]
+        );
+    }
+
+    #[test]
     fn image_task_route_uses_openai_images_protocol_for_images_api_feature() {
         let task_request = build_model_task_request(ModelTaskRequestInput {
             task_kind: ModelTaskKind::ImageGenerate,
@@ -921,8 +1009,6 @@ mod tests {
         });
         let route = ResolvedModelRoute {
             model_ref: task_request.model_ref.clone().expect("model ref"),
-            provider: None,
-            model: None,
             protocol: ProtocolKind::OpenaiChat,
             endpoint: EndpointInfo {
                 kind: EndpointKind::ProviderBaseUrl,

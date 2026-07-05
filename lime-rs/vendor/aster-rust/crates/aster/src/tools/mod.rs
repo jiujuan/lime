@@ -21,7 +21,6 @@ pub mod context;
 pub mod error;
 pub mod hooks;
 pub mod registry;
-mod shell_runtime;
 pub mod task;
 
 // Tool implementations
@@ -29,14 +28,12 @@ mod agent_control;
 mod analyze_image;
 pub mod ask;
 pub mod bash;
-pub mod command_semantics;
 pub mod config_tool;
 pub mod cron_tools;
 pub mod file;
 pub mod lsp;
 pub mod mcp_resource_tools;
 pub mod notebook_edit_tool;
-pub mod path_guard;
 mod peer_address_surface;
 pub mod plan_mode_tool;
 pub mod plan_tool;
@@ -52,7 +49,6 @@ pub mod team_tools;
 pub mod tool_search_tool;
 mod view_image;
 pub mod web;
-mod web_fetch_content;
 mod workflow_integration;
 pub mod workflow_tool;
 pub mod worktree_tools;
@@ -87,13 +83,7 @@ pub use task::{
 };
 
 // Tool implementations
-pub use bash::{
-    is_bash_command_concurrency_safe, preflight_bash_read_targets, BashTool, SafetyCheckResult,
-    SandboxConfig, MAX_OUTPUT_LENGTH,
-};
-pub use command_semantics::{
-    interpret_bash_command_result, interpret_powershell_command_result, CommandInterpretation,
-};
+pub use bash::{BashTool, SandboxConfig, MAX_OUTPUT_LENGTH};
 pub use config_tool::ConfigTool;
 pub use cron_tools::{CronCreateTool, CronDeleteTool, CronListTool};
 pub use sleep_tool::SleepTool;
@@ -134,9 +124,7 @@ pub use crate::skills::SkillTool;
 pub use notebook_edit_tool::{NotebookCell, NotebookContent, NotebookEditInput, NotebookEditTool};
 pub use plan_mode_tool::{EnterPlanModeTool, ExitPlanModeTool, PlanModeState, SavedPlan};
 pub use plan_tool::{UpdatePlanTool, UPDATE_PLAN_TOOL_NAME};
-pub use powershell_tool::{
-    is_powershell_command_concurrency_safe, preflight_powershell_read_targets, PowerShellTool,
-};
+pub use powershell_tool::PowerShellTool;
 pub use remote_trigger_tool::{RemoteTriggerTool, REMOTE_TRIGGER_GATE_ENV};
 pub use send_user_message_tool::{SendUserMessageTool, SEND_USER_MESSAGE_TOOL_NAME};
 pub use task_list_tools::{

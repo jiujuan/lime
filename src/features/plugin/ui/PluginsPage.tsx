@@ -19,6 +19,7 @@ import {
   RefreshCw,
   Search,
   ShieldCheck,
+  UploadCloud,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -89,6 +90,8 @@ import {
 import { PluginLaunchTargetControl } from "./PluginLaunchTargetControl";
 import { PluginReadinessIssueSummary } from "./PluginReadinessIssueSummary";
 import { PluginReleaseEvidenceSummary } from "./PluginReleaseEvidenceSummary";
+import { PluginReleaseReviewWorkbench } from "../publish/PluginReleaseReviewWorkbench";
+import { PluginPublishWorkbench } from "../publish/PluginPublishWorkbench";
 import { UiExtensionHost } from "../runtime/uiExtensionHost";
 import { evaluatePluginEntryRuntimeGuard } from "../runtime/entryRuntimeGuard";
 import {
@@ -613,6 +616,9 @@ export function PluginsPage({
   );
   const [sourceFilter, setSourceFilter] =
     useState<AppCenterSourceFilter>("all");
+  const [publishWorkbenchOpen, setPublishWorkbenchOpen] = useState(false);
+  const [releaseReviewWorkbenchOpen, setReleaseReviewWorkbenchOpen] =
+    useState(false);
   const [launchTargetMode, setLaunchTargetMode] =
     useState<PluginLaunchTargetMode>("standalone");
   const [selectedRightSurfaceTargetId, setSelectedRightSurfaceTargetId] =
@@ -770,6 +776,13 @@ export function PluginsPage({
 
   useEffect(() => {
     void refresh();
+  }, [refresh]);
+
+  const handlePluginPublishStateChanged = useCallback(() => {
+    dispatchPluginsChanged();
+    void refresh().catch((error) => {
+      console.warn("[plugins] refresh after publish state change failed", error);
+    });
   }, [refresh]);
 
   useEffect(() => {
@@ -1554,6 +1567,36 @@ export function PluginsPage({
                   <div className="flex gap-3">
                     <button
                       type="button"
+                      className="inline-flex h-9 items-center gap-2 rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-4 text-sm font-semibold text-[color:var(--lime-text-strong)] shadow-none transition hover:bg-[color:var(--lime-surface-hover)]"
+                      onClick={() => {
+                        const nextOpen = !publishWorkbenchOpen;
+                        setPublishWorkbenchOpen(nextOpen);
+                        if (nextOpen) {
+                          setReleaseReviewWorkbenchOpen(false);
+                        }
+                      }}
+                      data-testid="plugins-open-publish"
+                    >
+                      <UploadCloud size={16} />
+                      {t("plugin.apps.center.publish")}
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex h-9 items-center gap-2 rounded-full border border-[color:var(--lime-surface-border)] bg-[color:var(--lime-surface)] px-4 text-sm font-semibold text-[color:var(--lime-text-strong)] shadow-none transition hover:bg-[color:var(--lime-surface-hover)]"
+                      onClick={() => {
+                        const nextOpen = !releaseReviewWorkbenchOpen;
+                        setReleaseReviewWorkbenchOpen(nextOpen);
+                        if (nextOpen) {
+                          setPublishWorkbenchOpen(false);
+                        }
+                      }}
+                      data-testid="plugins-open-release-review"
+                    >
+                      <ShieldCheck size={16} />
+                      {t("plugin.apps.center.review")}
+                    </button>
+                    <button
+                      type="button"
                       className="inline-flex h-9 items-center gap-2 rounded-full bg-[color:var(--lime-text-strong)] px-5 text-sm font-semibold text-[color:var(--lime-surface)] shadow-none transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                       disabled={Boolean(busyAction)}
                       onClick={() => void handleInstallLocal()}
@@ -1575,6 +1618,20 @@ export function PluginsPage({
                   </div>
                 </div>
               </header>
+
+              {publishWorkbenchOpen ? (
+                <PluginPublishWorkbench
+                  profile={profile}
+                  onClose={() => setPublishWorkbenchOpen(false)}
+                  onSubmissionCreated={handlePluginPublishStateChanged}
+                />
+              ) : null}
+              {releaseReviewWorkbenchOpen ? (
+                <PluginReleaseReviewWorkbench
+                  onClose={() => setReleaseReviewWorkbenchOpen(false)}
+                  onPublished={handlePluginPublishStateChanged}
+                />
+              ) : null}
 
               <section className="flex flex-wrap items-center gap-5">
                 {(

@@ -361,6 +361,8 @@ pub enum AppServerRequestMethod {
     BrowserSessionActionExecute,
     #[serde(rename = "pluginLocalPackage/inspect")]
     PluginLocalPackageInspect,
+    #[serde(rename = "pluginLocalPackage/export")]
+    PluginLocalPackageExport,
     #[serde(rename = "pluginPackage/fetchCloud")]
     PluginPackageFetchCloud,
     #[serde(rename = "pluginInstalled/save")]
@@ -782,6 +784,7 @@ impl AppServerRequestMethod {
             Self::BrowserSessionEventList => METHOD_BROWSER_SESSION_EVENT_LIST,
             Self::BrowserSessionActionExecute => METHOD_BROWSER_SESSION_ACTION_EXECUTE,
             Self::PluginLocalPackageInspect => METHOD_PLUGIN_LOCAL_PACKAGE_INSPECT,
+            Self::PluginLocalPackageExport => METHOD_PLUGIN_LOCAL_PACKAGE_EXPORT,
             Self::PluginPackageFetchCloud => METHOD_PLUGIN_PACKAGE_FETCH_CLOUD,
             Self::PluginInstalledSave => METHOD_PLUGIN_INSTALLED_SAVE,
             Self::PluginInstalledList => METHOD_PLUGIN_INSTALLED_LIST,
@@ -1094,6 +1097,7 @@ impl AppServerRequestMethod {
             METHOD_BROWSER_SESSION_EVENT_LIST => Some(Self::BrowserSessionEventList),
             METHOD_BROWSER_SESSION_ACTION_EXECUTE => Some(Self::BrowserSessionActionExecute),
             METHOD_PLUGIN_LOCAL_PACKAGE_INSPECT => Some(Self::PluginLocalPackageInspect),
+            METHOD_PLUGIN_LOCAL_PACKAGE_EXPORT => Some(Self::PluginLocalPackageExport),
             METHOD_PLUGIN_PACKAGE_FETCH_CLOUD => Some(Self::PluginPackageFetchCloud),
             METHOD_PLUGIN_INSTALLED_SAVE => Some(Self::PluginInstalledSave),
             METHOD_PLUGIN_INSTALLED_LIST => Some(Self::PluginInstalledList),
@@ -1912,6 +1916,10 @@ pub const APP_SERVER_METHODS: &[AppServerMethodSpec] = &[
     },
     AppServerMethodSpec {
         method: METHOD_PLUGIN_LOCAL_PACKAGE_INSPECT,
+        kind: AppServerMethodKind::Request,
+    },
+    AppServerMethodSpec {
+        method: METHOD_PLUGIN_LOCAL_PACKAGE_EXPORT,
         kind: AppServerMethodKind::Request,
     },
     AppServerMethodSpec {

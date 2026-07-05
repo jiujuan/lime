@@ -1240,11 +1240,7 @@ export interface PluginKnowledgeSearchResult {
   provenance: PluginProvenance;
 }
 
-export type PluginTaskStatus =
-  | "running"
-  | "succeeded"
-  | "cancelled"
-  | "failed";
+export type PluginTaskStatus = "running" | "succeeded" | "cancelled" | "failed";
 
 export interface PluginTaskTraceEvent {
   at: string;
@@ -1437,6 +1433,9 @@ export interface PluginTaskHostResponseRequest {
   confirmed?: boolean;
   response?: string;
   userData?: unknown;
+  workflowRunId?: string;
+  workflowKey?: string;
+  stepId?: string;
   metadata?: Record<string, unknown>;
   actionScope?: {
     sessionId?: string;

@@ -1,5 +1,4 @@
 use super::policy_config::normalize_tool_name;
-use super::AsterReplyRuntimeHost;
 use super::{RequestToolPolicy, WebSearchExecutionTracker, WEB_SEARCH_PREFETCH_CONTEXT_MARKER};
 use crate::agent_tools::tool_orchestrator::{
     execute_planned_tool_batch, rewrite_tool_terminal_event, PlannedToolExecution,
@@ -13,6 +12,7 @@ use serde_json::Value;
 use std::collections::HashSet;
 use std::path::Path;
 use tokio_util::sync::CancellationToken;
+use tool_runtime::web_search::{runtime_web_search_executor_handle, WEB_SEARCH_TOOL_NAME};
 use uuid::Uuid;
 
 const WEB_SEARCH_PREFLIGHT_ENABLED_ENV_KEYS: &[&str] = &[
@@ -31,8 +31,7 @@ pub(crate) struct PreflightToolExecution {
     pub(crate) coverage_summary: Option<String>,
 }
 
-pub(crate) struct WebSearchPreflightRequest<'request, 'agent> {
-    pub(crate) host: &'request AsterReplyRuntimeHost<'agent>,
+pub(crate) struct WebSearchPreflightRequest<'request> {
     pub(crate) session_id: &'request str,
     pub(crate) message_text: &'request str,
     pub(crate) working_directory: Option<&'request Path>,
@@ -310,7 +309,7 @@ fn build_preflight_prompt_appendix(
 /// - 将预检索结果压缩注入 system prompt，帮助模型做更深的事实整合。
 /// - 若本回合被明确要求必须先搜索，且预检索全部失败，则由上层中断本次回答。
 pub(crate) async fn execute_web_search_preflight_if_needed(
-    request: WebSearchPreflightRequest<'_, '_>,
+    request: WebSearchPreflightRequest<'_>,
     tracker: &mut WebSearchExecutionTracker,
 ) -> Result<PreflightToolExecution, String> {
     execute_web_search_preflight_if_needed_with_enabled(
@@ -322,12 +321,11 @@ pub(crate) async fn execute_web_search_preflight_if_needed(
 }
 
 pub(crate) async fn execute_web_search_preflight_if_needed_with_enabled(
-    request: WebSearchPreflightRequest<'_, '_>,
+    request: WebSearchPreflightRequest<'_>,
     tracker: &mut WebSearchExecutionTracker,
     preflight_enabled: bool,
 ) -> Result<PreflightToolExecution, String> {
     let WebSearchPreflightRequest {
-        host,
         session_id,
         message_text,
         working_directory,
@@ -340,28 +338,15 @@ pub(crate) async fn execute_web_search_preflight_if_needed_with_enabled(
         return Ok(PreflightToolExecution::none());
     }
 
-    let registry_arc = host.tool_registry();
-    let registry = registry_arc.read().await;
-    let available_tools = registry.get_definitions();
-    let preflight_tool = available_tools
-        .iter()
-        .find(|definition| {
-            policy.matches_any_required_tool(&definition.name)
-                && normalize_tool_name(&definition.name).contains("websearch")
-        })
-        .ok_or_else(|| {
-            format!(
-                "联网搜索已开启，但未找到可执行的必需工具定义。required_tools={}, available_tools={}",
-                policy.required_tools.join(", "),
-                available_tools
-                    .iter()
-                    .map(|definition| definition.name.clone())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )
-        })?;
-    let preflight_tool_name = preflight_tool.name.clone();
-    drop(registry);
+    if !policy.matches_any_required_tool(WEB_SEARCH_TOOL_NAME)
+        || !normalize_tool_name(WEB_SEARCH_TOOL_NAME).contains("websearch")
+    {
+        return Err(format!(
+            "联网搜索已开启，但当前请求未要求 current WebSearch 工具。required_tools={}",
+            policy.required_tools.join(", ")
+        ));
+    }
+    let preflight_tool_name = WEB_SEARCH_TOOL_NAME.to_string();
 
     let planned_queries = build_preflight_queries(message_text, policy)
         .into_iter()
@@ -387,7 +372,7 @@ pub(crate) async fn execute_web_search_preflight_if_needed_with_enabled(
 
     let execution_batch = execute_planned_tool_batch(
         ToolExecutionBatchInput {
-            registry: registry_arc,
+            executor: runtime_web_search_executor_handle(),
             session_id: session_id.to_string(),
             working_directory,
             cancel_token,

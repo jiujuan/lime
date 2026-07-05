@@ -265,8 +265,7 @@ export interface AgentThreadSubagentActivityItem extends AgentThreadItemBase {
   session_id?: string;
 }
 
-export interface AgentThreadExpertProfileSwitchItem
-  extends AgentThreadItemBase {
+export interface AgentThreadExpertProfileSwitchItem extends AgentThreadItemBase {
   type: "expert_profile_switch";
   title?: string;
   summary?: string;
@@ -453,6 +452,10 @@ export interface AgentEventProviderTrace {
   cancel_reason?: string;
   provider_request_id?: string;
   provider_request_id_header?: string;
+  runtime_provider_backend?: string;
+  runtime_provider_selector?: string;
+  runtime_provider_protocol?: string;
+  runtime_provider_active_model?: string;
   runtime_event_type?: string;
 }
 
@@ -1309,6 +1312,26 @@ function normalizeProviderTraceEvent(
       source,
       "provider_request_id_header",
       "providerRequestIdHeader",
+    ),
+    runtime_provider_backend: pickStringField(
+      source,
+      "runtime_provider_backend",
+      "runtimeProviderBackend",
+    ),
+    runtime_provider_selector: pickStringField(
+      source,
+      "runtime_provider_selector",
+      "runtimeProviderSelector",
+    ),
+    runtime_provider_protocol: pickStringField(
+      source,
+      "runtime_provider_protocol",
+      "runtimeProviderProtocol",
+    ),
+    runtime_provider_active_model: pickStringField(
+      source,
+      "runtime_provider_active_model",
+      "runtimeProviderActiveModel",
     ),
     runtime_event_type: pickStringField(source, "runtime_event_type") ?? type,
   };

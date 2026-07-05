@@ -382,6 +382,18 @@ impl LocalExecutionRequest {
     }
 }
 
+pub trait LiveExecutionProcessRegistry: Send + Sync {
+    fn register_live_process(
+        &self,
+        handle: LocalExecutionProcessControlHandle,
+        snapshot: ExecutionProcessSnapshot,
+    ) -> Result<(), String>;
+
+    fn record_live_process_output(&self, delta: ExecutionOutputDelta) -> Result<(), String>;
+
+    fn finish_live_process(&self, snapshot: ExecutionProcessSnapshot) -> Result<(), String>;
+}
+
 #[derive(Debug)]
 pub struct LocalExecutionProcessHandle {
     process_id: String,

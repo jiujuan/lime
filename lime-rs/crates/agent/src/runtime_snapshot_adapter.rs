@@ -8,12 +8,11 @@ use lime_core::database::dao::agent_timeline::{AgentThreadItem, AgentThreadTurn}
 
 use crate::protocol_projection::{project_item_runtime, project_turn_runtime};
 
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct RuntimeTimelineSnapshotProjection {
-    pub thread_id: Option<String>,
-    pub turns: Vec<AgentThreadTurn>,
-    pub items: Vec<AgentThreadItem>,
-}
+pub(crate) type RuntimeTimelineSnapshotProjection =
+    agent_runtime::session_execution::RuntimeTimelineSnapshotProjection<
+        AgentThreadTurn,
+        AgentThreadItem,
+    >;
 
 pub(crate) fn project_aster_runtime_snapshot(
     snapshot: &SessionRuntimeSnapshot,

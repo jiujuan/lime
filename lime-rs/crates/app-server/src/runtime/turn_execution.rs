@@ -1,9 +1,11 @@
 use super::event_store::{append_runtime_events_to_state, append_workflow_audit_runtime_events};
 use super::plugin_worker_workflow_cancel::workflow_cancel_events_from_audit_records;
 use super::status::{agent_turn_is_active, agent_turn_is_terminal};
+use super::workflow::events::{WORKFLOW_RUN_RESUMING, WORKFLOW_STEP_RESUMING};
 use super::*;
 use app_server_protocol::*;
 use serde_json::json;
+use serde_json::Value;
 use std::sync::{Arc, Mutex};
 
 #[derive(Default)]
@@ -35,6 +37,98 @@ impl RuntimeEventSink for CollectingRuntimeEventSink {
         self.events.push(event);
         Ok(())
     }
+}
+
+fn workflow_resume_audit_events_from_action_response(
+    params: &AgentSessionActionRespondParams,
+) -> Vec<RuntimeEvent> {
+    let Some(metadata) = params.metadata.as_ref() else {
+        return Vec::new();
+    };
+    let Some(binding) = workflow_resume_binding_from_action_metadata(metadata) else {
+        return Vec::new();
+    };
+    let decision = if params.confirmed {
+        "approved"
+    } else {
+        "rejected"
+    };
+    let base_payload = json!({
+        "workflowRunId": binding.workflow_run_id,
+        "workflowKey": binding.workflow_key,
+        "stepId": binding.step_id,
+        "actionId": params.request_id,
+        "decision": decision,
+        "status": "resuming",
+        "source": "agentSession/action/respond",
+    });
+    vec![
+        RuntimeEvent::new(WORKFLOW_STEP_RESUMING, base_payload.clone()),
+        RuntimeEvent::new(WORKFLOW_RUN_RESUMING, base_payload),
+    ]
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct WorkflowResumeActionBinding {
+    workflow_run_id: String,
+    workflow_key: String,
+    step_id: String,
+}
+
+fn workflow_resume_binding_from_action_metadata(
+    metadata: &Value,
+) -> Option<WorkflowResumeActionBinding> {
+    for candidate in workflow_resume_action_metadata_candidates(metadata) {
+        let Some(workflow_run_id) = string_field(
+            candidate,
+            &["workflowRunId", "workflow_run_id", "runId", "run_id"],
+        ) else {
+            continue;
+        };
+        let Some(workflow_key) = string_field(
+            candidate,
+            &["workflowKey", "workflow_key", "key", "workflow"],
+        ) else {
+            continue;
+        };
+        let Some(step_id) = string_field(candidate, &["stepId", "step_id", "id"]) else {
+            continue;
+        };
+        return Some(WorkflowResumeActionBinding {
+            workflow_run_id,
+            workflow_key,
+            step_id,
+        });
+    }
+    None
+}
+
+fn workflow_resume_action_metadata_candidates(metadata: &Value) -> Vec<&Value> {
+    let mut candidates = vec![metadata];
+    for key in [
+        "workflowResume",
+        "workflow_resume",
+        "workflowResumeLifecycle",
+        "workflow_resume_lifecycle",
+        "workerLifecycle",
+        "worker_lifecycle",
+        "pluginWorkflow",
+        "plugin_workflow",
+    ] {
+        if let Some(candidate) = metadata.get(key) {
+            candidates.push(candidate);
+        }
+    }
+    candidates
+}
+
+fn string_field(value: &Value, keys: &[&str]) -> Option<String> {
+    keys.iter()
+        .filter_map(|key| value.get(*key))
+        .find_map(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
 }
 
 struct TerminalDeferringRuntimeEventSink<'a> {
@@ -678,6 +772,8 @@ impl RuntimeCore {
         params: AgentSessionActionRespondParams,
         host: RuntimeHostContext,
     ) -> Result<RuntimeCoreOutput<AgentSessionActionRespondResponse>, RuntimeCoreError> {
+        let workflow_resume_audit_events =
+            workflow_resume_audit_events_from_action_response(&params);
         let action_turn_id = params
             .action_scope
             .as_ref()
@@ -750,6 +846,13 @@ impl RuntimeCore {
             &session.thread_id,
             turn_snapshot.as_ref().map(|turn| turn.turn_id.as_str()),
             sink.into_events(),
+        )?;
+        append_workflow_audit_runtime_events(
+            self.event_log_writer.as_deref(),
+            &session.session_id,
+            &session.thread_id,
+            turn_snapshot.as_ref().map(|turn| turn.turn_id.as_str()),
+            workflow_resume_audit_events,
         )?;
 
         Ok(RuntimeCoreOutput {

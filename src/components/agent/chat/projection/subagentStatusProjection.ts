@@ -1,4 +1,5 @@
 import type {
+  AgentEvent,
   AgentEventRuntimeStatus,
   AgentEventSubagentStatusChanged,
 } from "@/lib/api/agentProtocol";
@@ -10,6 +11,18 @@ import {
   buildAgentUiSubagentStatusChangedEvents,
   buildAgentUiRuntimeTeamChangedEvent,
 } from "@limecloud/agent-runtime-projection";
+
+type SubagentProjectionEvent = Extract<
+  AgentEvent,
+  { type: "subagent_status_changed" }
+>;
+
+export function buildSubagentProjectionEvents(
+  event: SubagentProjectionEvent,
+  context: AgentUiProjectionContext,
+): AgentUiProjectionEvent[] {
+  return buildSubagentStatusChangedEvents(event, context);
+}
 
 export function buildTeamChangedFromRuntimeStatusEvent(
   event: AgentEventRuntimeStatus,

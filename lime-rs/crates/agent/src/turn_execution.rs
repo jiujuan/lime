@@ -36,7 +36,7 @@ pub async fn run_agent_turn_with_policy<F>(
     on_event: F,
 ) -> Result<AgentTurnExecution, ReplyAttemptError>
 where
-    F: FnMut(&RuntimeAgentEvent),
+    F: FnMut(&RuntimeAgentEvent) + Send,
 {
     let configured_provider = if let Some(provider_configuration) = request.provider_configuration {
         Some(

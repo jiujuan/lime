@@ -134,6 +134,14 @@ const hoistedMocks = vi.hoisted(() => ({
     saveInstalledPluginState: vi.fn(),
     previewPluginUninstall: vi.fn(),
     requestWorkspaceRightSurface: vi.fn(),
+    listPluginReleaseSubmissions: vi.fn(),
+    listClientPluginReleaseSubmissions: vi.fn(),
+    approvePluginReleaseSubmission: vi.fn(),
+    rejectPluginReleaseSubmission: vi.fn(),
+    createClientPluginPackageUploadSession: vi.fn(),
+    uploadClientPluginPackageContent: vi.fn(),
+    completeClientPluginPackageUploadSession: vi.fn(),
+    createClientPluginReleaseSubmission: vi.fn(),
     setPluginDisabled: vi.fn(),
     submitPluginRegistrationCode: vi.fn(),
     uninstallPlugin: vi.fn(),
@@ -248,6 +256,39 @@ vi.mock("@/lib/api/workspaceRightSurface", () => ({
 
 vi.mock("@/lib/api/fileSystem", () => ({
   convertLocalFileSrc: (path: string) => `asset://${path}`,
+}));
+
+vi.mock("@/lib/api/oemCloudPluginPublish", () => ({
+  listPluginReleaseSubmissions:
+    hoistedMocks.apiMocks.listPluginReleaseSubmissions,
+  listClientPluginReleaseSubmissions:
+    hoistedMocks.apiMocks.listClientPluginReleaseSubmissions,
+  approvePluginReleaseSubmission:
+    hoistedMocks.apiMocks.approvePluginReleaseSubmission,
+  rejectPluginReleaseSubmission:
+    hoistedMocks.apiMocks.rejectPluginReleaseSubmission,
+  createClientPluginPackageUploadSession:
+    hoistedMocks.apiMocks.createClientPluginPackageUploadSession,
+  uploadClientPluginPackageContent:
+    hoistedMocks.apiMocks.uploadClientPluginPackageContent,
+  completeClientPluginPackageUploadSession:
+    hoistedMocks.apiMocks.completeClientPluginPackageUploadSession,
+  createClientPluginReleaseSubmission:
+    hoistedMocks.apiMocks.createClientPluginReleaseSubmission,
+  summarizePluginPublishPreflight: (response: {
+    valid: boolean;
+    blockers: unknown[];
+    warnings?: unknown[];
+    targetImpact?: Array<{ action: string }>;
+  }) => ({
+    valid: response.valid,
+    blockerCount: response.blockers.length,
+    warningCount: response.warnings?.length ?? 0,
+    targetCount: response.targetImpact?.length ?? 0,
+    updatedTargetCount:
+      response.targetImpact?.filter((item) => item.action === "updated")
+        .length ?? 0,
+  }),
 }));
 
 interface MountedPage {
@@ -560,6 +601,35 @@ function setupDefaultApiMocks() {
       metadata: {},
     },
   });
+  apiMocks.listPluginReleaseSubmissions.mockResolvedValue({ items: [] });
+  apiMocks.listClientPluginReleaseSubmissions.mockResolvedValue({ items: [] });
+  apiMocks.approvePluginReleaseSubmission.mockImplementation(
+    async (submissionId: string) => ({
+      submission: {
+        id: submissionId,
+        status: "published",
+      },
+    }),
+  );
+  apiMocks.rejectPluginReleaseSubmission.mockImplementation(
+    async (submissionId: string, payload: { reason: string }) => ({
+      id: submissionId,
+      status: "rejected",
+      reviewNotes: payload.reason,
+    }),
+  );
+  apiMocks.createClientPluginPackageUploadSession.mockRejectedValue(
+    new Error("upload session mock not configured"),
+  );
+  apiMocks.uploadClientPluginPackageContent.mockRejectedValue(
+    new Error("upload content mock not configured"),
+  );
+  apiMocks.completeClientPluginPackageUploadSession.mockRejectedValue(
+    new Error("complete upload mock not configured"),
+  );
+  apiMocks.createClientPluginReleaseSubmission.mockRejectedValue(
+    new Error("release submission mock not configured"),
+  );
   apiMocks.selectLocalPluginDirectory.mockResolvedValue(LOCAL_APP_DIR);
   apiMocks.reviewLocalPluginPackage.mockImplementation(async () =>
     buildReviewResult(buildReadyState()),

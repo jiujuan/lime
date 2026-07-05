@@ -277,6 +277,13 @@ describe("createPluginRuntimeCapabilityApiFromClient", () => {
         action_type: "ask_user",
         confirmed: true,
         response: "继续执行",
+        metadata: {
+          workflowResume: {
+            workflowRunId: "content-factory-run-1",
+            workflowKey: "content_article_workflow",
+            stepId: "draft",
+          },
+        },
         action_scope: {
           session_id: "session-1",
           thread_id: "thread-1",
@@ -298,6 +305,13 @@ describe("createPluginRuntimeCapabilityApiFromClient", () => {
       actionType: "ask_user",
       confirmed: true,
       response: "继续执行",
+      metadata: {
+        workflowResume: {
+          workflowRunId: "content-factory-run-1",
+          workflowKey: "content_article_workflow",
+          stepId: "draft",
+        },
+      },
       actionScope: {
         sessionId: "session-1",
         threadId: "thread-1",

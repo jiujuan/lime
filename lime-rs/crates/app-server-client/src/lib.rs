@@ -191,6 +191,8 @@ pub use app_server_protocol::PluginFetchCloudPackageParams;
 pub use app_server_protocol::PluginInstalledDisabledSetParams;
 pub use app_server_protocol::PluginInstalledListResponse;
 pub use app_server_protocol::PluginInstalledSaveParams;
+pub use app_server_protocol::PluginLocalPackageExportParams;
+pub use app_server_protocol::PluginLocalPackageExportResponse;
 pub use app_server_protocol::PluginLocalPackageInspectParams;
 pub use app_server_protocol::PluginShellPrepareParams;
 pub use app_server_protocol::PluginShellPrepareResponse;
@@ -395,6 +397,7 @@ pub use app_server_protocol::METHOD_PLUGIN_INSTALLED_LIST;
 pub use app_server_protocol::METHOD_PLUGIN_INSTALLED_SAVE;
 pub use app_server_protocol::METHOD_PLUGIN_INSTALLED_UNINSTALL;
 pub use app_server_protocol::METHOD_PLUGIN_INSTALLED_UNINSTALL_REHEARSAL;
+pub use app_server_protocol::METHOD_PLUGIN_LOCAL_PACKAGE_EXPORT;
 pub use app_server_protocol::METHOD_PLUGIN_LOCAL_PACKAGE_INSPECT;
 pub use app_server_protocol::METHOD_PLUGIN_PACKAGE_FETCH_CLOUD;
 pub use app_server_protocol::METHOD_PLUGIN_SHELL_PREPARE;
@@ -919,6 +922,13 @@ impl AppServerClient {
         params: PluginLocalPackageInspectParams,
     ) -> Result<JsonRpcRequest, ClientError> {
         self.typed_request(typed::inspect_plugin_local_package(params))
+    }
+
+    pub fn export_plugin_local_package(
+        &mut self,
+        params: PluginLocalPackageExportParams,
+    ) -> Result<JsonRpcRequest, ClientError> {
+        self.typed_request(typed::export_plugin_local_package(params))
     }
 
     pub fn fetch_plugin_cloud_package(
@@ -1872,6 +1882,12 @@ pub mod typed {
         params: PluginLocalPackageInspectParams,
     ) -> TypedRequest<PluginLocalPackageInspectParams> {
         TypedRequest::new(METHOD_PLUGIN_LOCAL_PACKAGE_INSPECT, params)
+    }
+
+    pub fn export_plugin_local_package(
+        params: PluginLocalPackageExportParams,
+    ) -> TypedRequest<PluginLocalPackageExportParams> {
+        TypedRequest::new(METHOD_PLUGIN_LOCAL_PACKAGE_EXPORT, params)
     }
 
     pub fn fetch_plugin_cloud_package(

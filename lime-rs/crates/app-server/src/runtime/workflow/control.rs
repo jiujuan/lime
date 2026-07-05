@@ -284,8 +284,11 @@ impl RuntimeCore {
                 user_data: target.response_user_data(),
                 metadata: Some(json!({
                     "source": "workflow/respond",
-                    "workflowRunId": target.workflow_run_id.clone(),
-                    "stepId": step.step_id.clone(),
+                    "workflowResume": {
+                        "workflowRunId": target.workflow_run_id.clone(),
+                        "workflowKey": run.workflow_key.clone(),
+                        "stepId": step.step_id.clone(),
+                    },
                 })),
                 event_name: None,
                 action_scope,

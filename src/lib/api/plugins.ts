@@ -63,6 +63,7 @@ import {
   METHOD_PLUGIN_INSTALLED_SAVE,
   METHOD_PLUGIN_INSTALLED_UNINSTALL,
   METHOD_PLUGIN_INSTALLED_UNINSTALL_REHEARSAL,
+  METHOD_PLUGIN_LOCAL_PACKAGE_EXPORT,
   METHOD_PLUGIN_LOCAL_PACKAGE_INSPECT,
   METHOD_PLUGIN_PACKAGE_FETCH_CLOUD,
   METHOD_PLUGIN_SHELL_PREPARE,
@@ -72,6 +73,8 @@ import {
   type PluginFetchCloudPackageParams,
   type PluginInstalledListResponse,
   type PluginInstalledSaveParams,
+  type PluginLocalPackageExportParams,
+  type PluginLocalPackageExportResponse,
   type PluginLocalPackageInspectParams,
   type PluginLocalPackageInspectResponse,
   type PluginPackageCacheEntry as AppServerPluginPackageCacheEntry,
@@ -98,6 +101,22 @@ export interface PluginLocalPackageInspection {
   manifestHash: string;
   packageHash: string;
   inspectedAt: string;
+}
+
+export interface PluginLocalPackageExport {
+  sourceKind: "local_folder";
+  sourceUri: string;
+  appDir: string;
+  manifestSource: "plugin_json" | string;
+  pluginManifest: unknown;
+  manifest: AppManifest;
+  manifestHash: string;
+  packageHash: string;
+  sizeBytes: number;
+  fileCount: number;
+  contentType: string;
+  packageBase64: string;
+  exportedAt: string;
 }
 
 export interface PluginInstalledStateSaveRequest {
@@ -458,6 +477,38 @@ function assertPluginLocalPackageInspectionResult(
   }
 }
 
+function assertPluginLocalPackageExportResult(
+  command: string,
+  result: unknown,
+): asserts result is PluginLocalPackageExport {
+  assertPluginRecord(command, result);
+  assertNonEmptyStringField(command, result, "appDir");
+  assertNonEmptyStringField(command, result, "sourceUri");
+  assertNonEmptyStringField(command, result, "manifestSource");
+  assertNonEmptyStringField(command, result, "manifestHash");
+  assertNonEmptyStringField(command, result, "packageHash");
+  assertNonEmptyStringField(command, result, "contentType");
+  assertNonEmptyStringField(command, result, "packageBase64");
+  assertNonEmptyStringField(command, result, "exportedAt");
+  if (result.manifestSource !== "plugin_json") {
+    throw new Error(`${command} returned unsupported manifestSource`);
+  }
+  if (!isRecord(result.pluginManifest)) {
+    throw new Error(`${command} did not return pluginManifest`);
+  }
+  if (!isRecord(result.manifest)) {
+    throw new Error(`${command} did not return manifest`);
+  }
+  if (
+    typeof result.sizeBytes !== "number" ||
+    result.sizeBytes <= 0 ||
+    typeof result.fileCount !== "number" ||
+    result.fileCount <= 0
+  ) {
+    throw new Error(`${command} did not return package size metadata`);
+  }
+}
+
 function assertPluginPackageCacheEntryResult(
   command: string,
   result: unknown,
@@ -761,6 +812,20 @@ export async function inspectLocalPluginPackage(
   return result as PluginLocalPackageInspection;
 }
 
+export async function exportLocalPluginPackage(params: {
+  appDir: string;
+}): Promise<PluginLocalPackageExport> {
+  const result = await requestPluginAppServer<PluginLocalPackageExportResponse>(
+    METHOD_PLUGIN_LOCAL_PACKAGE_EXPORT,
+    { appDir: params.appDir } satisfies PluginLocalPackageExportParams,
+  );
+  assertPluginLocalPackageExportResult(
+    METHOD_PLUGIN_LOCAL_PACKAGE_EXPORT,
+    result,
+  );
+  return result as PluginLocalPackageExport;
+}
+
 export async function selectLocalPluginDirectory(
   options: SelectLocalPluginDirectoryOptions = {},
 ): Promise<string | null> {
@@ -1010,6 +1075,11 @@ export async function resolveCloudReleasePackageManifest(
   });
 
   if (params.packageManifest != null) {
+    if (!params.actualPackageHash || !params.actualManifestHash) {
+      throw new PluginCloudBootstrapError(
+        `Cloud release ${params.app.appId}@${params.app.version} requires actual packageHash and manifestHash evidence before install review.`,
+      );
+    }
     return {
       descriptor,
       packageManifest: params.packageManifest,

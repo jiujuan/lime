@@ -14,6 +14,13 @@ impl PluginDataSource for LocalAppDataSource {
         plugins::inspect_plugin_local_package(params).map_err(data_error)
     }
 
+    async fn export_plugin_local_package(
+        &self,
+        params: PluginLocalPackageExportParams,
+    ) -> Result<PluginLocalPackageExportResponse, RuntimeCoreError> {
+        plugins::export_plugin_local_package(params).map_err(data_error)
+    }
+
     async fn fetch_plugin_cloud_package(
         &self,
         params: PluginFetchCloudPackageParams,

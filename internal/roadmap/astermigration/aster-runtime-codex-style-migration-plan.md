@@ -18,12 +18,12 @@
 
 ## 2026-07-05 现实校准：当前不是 99%
 
-- `checked`：对照 `README.md` 主目标、上方成功标准、`/Users/coso/Documents/dev/rust/codex/codex-rs` workspace 布局和 Cargo Workspaces 语义后，当前整体目标完成度按退出条件约为 `65%`，不能继续按 `99%` 或“无 Aster 依赖完成态”口径汇报。
-- `evidence`：`lime-rs/Cargo.toml` 仍有 `aster = { package = "aster-core", path = "vendor/aster-rust/crates/aster" }`；`lime-rs/crates/agent/Cargo.toml` 仍有 `aster.workspace = true`；`lime-rs/vendor/aster-rust` 仍存在，约 `13M` / `676` 个文件。
-- `evidence`：`lime-rs/crates/**` 仍有约 `233` 处 `use aster::` / `aster::` / `aster_models::` 文本命中，集中在约 `57` 个 Rust 文件；排除测试文件后，`lime-agent/src` 生产路径仍约 `207` 处命中。
-- `completed`：Codex 风格的一等 crate 骨架、非 agent crate 的 direct Aster dependency 收口、App Server direct Aster 构造回流守卫、多个 public wrapper / 旧 feature / test-support surface 删除已经完成。
+- `checked`：对照 `README.md` 主目标、上方成功标准、`/Users/coso/Documents/dev/rust/codex/codex-rs` workspace 布局和 Cargo Workspaces 语义后，当前整体目标完成度按退出条件约为 `78%`，不能继续按 `99%` 或“无 Aster 依赖完成态”口径汇报。
+- `evidence`：`lime-rs/Cargo.toml` 仍有 `aster = { package = "aster-core", path = "vendor/aster-rust/crates/aster" }`；`lime-rs/crates/agent/Cargo.toml` 仍有 `aster.workspace = true`；`lime-rs/vendor/aster-rust` 仍存在，约 `13M` / `672` 个文件。
+- `evidence`：`lime-rs/crates/**` 仍有约 `225` 处 `use aster::` / `aster::` / `aster_models::` 文本命中，集中在 `lime-agent`；排除测试目录后，`lime-agent/src` 生产路径仍约 `213` 处命中。
+- `completed`：Codex 风格的一等 crate 骨架、非 agent crate 的 direct Aster dependency 收口、App Server direct Aster 构造回流守卫、多个 public wrapper / 旧 feature / test-support surface 删除，以及 `tool_orchestrator` shell permission preflight 和主编排层 direct Aster registry execution 细节隔离已经完成。
 - `blocking`：Phase 6 删除条件未满足；主阻塞仍是 `lime-agent` 内部 Aster reply/provider/tool/session adapters 与 root vendored Aster dependency。
-- `next`：继续主执行链退场，优先处理 `request_tool_policy/aster_reply_adapter.rs`、`credential_bridge/runtime_provider_adapter.rs`、`agent_tools` / `native_tools` registry adapter 和 `aster_session_store`；目标是让 current provider stream / turn executor / tool runtime / thread store 接管后删除 adapter，而不是继续集中 Aster 壳。
+- `next`：继续主执行链退场，优先处理 `request_tool_policy/aster_reply_adapter.rs`、`credential_bridge/runtime_provider_adapter.rs`、`agent_tools` / `native_tools` registry execution adapter 和 `aster_session_store`；目标是让 current provider stream / turn executor / tool runtime / thread store 接管后删除 adapter，而不是继续集中 Aster 壳。
 
 ## 2026-07-03 进度记录：Codex 风格 runtime crate 骨架
 
@@ -2185,10 +2185,10 @@ Phase 1（Trait 骨架）已完成，开始 Phase 2（Adapter 重构）：
 ## 2026-07-05 进度记录：tool execution policy DTO 迁入 tool-runtime
 
 - `completed`：新增 `tool-runtime::execution_policy`，承接 `ToolExecutionWarningPolicy`、`ToolExecutionRestrictionProfile`、`ToolExecutionSandboxProfile`、`ToolExecutionPolicySource`、`ToolExecutionPolicy` 与 `ToolExecutionPolicyResolution` 这组工具执行策略 DTO。
-- `completed`：`lime-agent::agent_tools::execution::policy` 删除上述 DTO 本地定义，改为 re-export `tool_runtime::execution_policy::{...}`；现有 resolver / permission adapter 行为不变，避免把 Aster permission adapter 误搬进 current crate。
+- `completed`：`lime-agent::agent_tools::execution::policy` 删除上述 DTO 本地定义，改为 re-export `tool_runtime::execution_policy::{...}`。当时暂未处理的 workspace permission builder 已在后续“删除 dead workspace permission builder surface”批次确认无生产消费者并删除。
 - `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 要求 `tool-runtime/src/lib.rs` 暴露 `execution_policy`，要求 DTO 定义只存在于 `tool-runtime/src/execution_policy.rs`，并禁止 `lime-agent` 重新定义这组 DTO。
 - `current`：工具执行策略 DTO 归属 `tool-runtime` current crate，可被 App Server / agent / future tool executor 复用。
-- `compat`：`lime-agent::agent_tools::execution::policy` 仍保留 Aster `ToolPermission` / `ParameterRestriction` adapter、catalog glue 和 resolver service；退出条件是 resolver/service 与 permission plane 继续迁入 `tool-runtime` current 接口后删除 Aster permission adapter。
+- `superseded`：当时 `lime-agent::agent_tools::execution::policy` 仍保留 workspace permission builder；最新状态见后续“删除 dead workspace permission builder surface”，该 surface 已按 `dead` 删除，`policy.rs` 只保留 resolver glue。
 - `dead`：在 `lime-agent` 重新定义 tool execution policy DTO 的形态不得恢复。
 - `next`：继续迁 tool execution policy resolver/service 或 `tool_orchestrator.rs` 执行核心；优先把不依赖 Aster `ToolContext` / `ToolRegistry` 的纯策略继续下沉到 `tool-runtime`。
 
@@ -2205,7 +2205,7 @@ Phase 1（Trait 骨架）已完成，开始 Phase 2（Adapter 重构）：
 - `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，78 tests passed。
 - `blocked-verification`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-main" CARGO_BUILD_JOBS=2 cargo check --manifest-path "lime-rs/Cargo.toml" -p lime-agent --lib` 被并行脏写集 `app-server-protocol/src/schema_export/registry.rs` 阻断：`AppServerNotification` 不在 scope。本轮未接管该文件，避免夹写。
 - `current`：shell/network execution rule DTO 与分类器归属 `tool-runtime` current crate，可被后续 tool executor / App Server / agent 共享。
-- `compat`：`lime-agent::agent_tools::execution::rules` 仍保留 agent catalog 绑定的默认策略表；`policy.rs` / `service.rs` 仍负责 Aster `ToolPermission` adapter、persisted/runtime policy config 转换与 metadata 拼装。退出条件是 resolver/service 与 permission plane 继续迁入 `tool-runtime` current 接口后删除 Aster permission adapter。
+- `superseded`：当时 `policy.rs` 仍保留 workspace permission builder；最新状态见后续“删除 dead workspace permission builder surface”，该 surface 已按 `dead` 删除。`rules.rs` 仍只保留 agent catalog 默认策略表。
 - `dead`：在 `lime-agent` 重新定义 shell/network execution rule DTO、重新实现 classifier，或让 current classifier 依赖 Aster tool catalog 的形态不得恢复。
 - `progress`：本刀后整体目标完成度约 `67%`。根 `lime-rs/Cargo.toml` 的 `aster = { package = "aster-core", path = "vendor/aster-rust/crates/aster" }`、`lime-agent` 的 `aster.workspace = true` 与 `lime-rs/vendor/aster-rust` 仍未满足删除条件，不能宣称完成。
 - `next`：继续 tool/runtime 面收口，优先迁 `ToolExecutionPolicyService` 中不依赖 Aster 的 persisted/runtime policy config 转换和 metadata 解析，或推进 `tool_orchestrator.rs` 的 Aster `ToolContext` / `ToolRegistry` 执行核心向 `tool-runtime` current 接口收敛。
@@ -2213,7 +2213,7 @@ Phase 1（Trait 骨架）已完成，开始 Phase 2（Adapter 重构）：
 ## 2026-07-05 进度记录：tool execution policy service 迁入 tool-runtime
 
 - `completed`：新增 `tool-runtime::execution_policy_service`，承接 `ToolExecutionResolverInput`、`ToolExecutionPolicyService`、`ToolExecutionPolicyServiceOptions`、persisted/runtime policy layer 解析、metadata 生成、shell/network rule config 转换与 `persisted_policy_from_metadata(...)`。
-- `completed`：`lime-agent::agent_tools::execution::service` 从完整实现降为薄 wrapper，只注入 `default_tool_execution_policy(...)` 和 `tool_catalog_names_match(...)`。agent 本地仍只拥有 catalog 绑定默认策略表与 Aster permission adapter，不再拥有 persisted/runtime policy 解析实现。
+- `completed`：`lime-agent::agent_tools::execution::service` 从完整实现降为薄 wrapper，只注入 `default_tool_execution_policy(...)` 和 `tool_catalog_names_match(...)`。agent 本地不再拥有 persisted/runtime policy 解析实现；当时未处理的 workspace permission builder 已在后续批次删除。
 - `completed`：`lime-agent::agent_tools::execution::policy` 的 `ToolExecutionResolverInput` 改为 re-export `tool_runtime::execution_policy_service::ToolExecutionResolverInput`。
 - `completed`：`tool-runtime` 增加 `lime-core.workspace = true`，用于消费已有 current config DTO；没有把 Aster 类型引入 `tool-runtime`。
 - `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 要求 `tool-runtime/src/lib.rs` 暴露 `execution_policy_service`，要求 policy service owner 在 `tool-runtime/src/execution_policy_service.rs`，并禁止 `lime-agent/src/agent_tools/execution/service.rs` 重新定义 runtime/persisted policy layer、config conversion、metadata parsing helper。
@@ -2225,10 +2225,10 @@ Phase 1（Trait 骨架）已完成，开始 Phase 2（Adapter 重构）：
 - `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，78 tests passed。
 - `verified`：`git diff --check -- <本刀写集>` 通过。
 - `current`：tool execution policy DTO、shell/network rule DTO、classifier、persisted/runtime policy resolver 和 metadata 生成归属 `tool-runtime` current crate。
-- `compat`：`lime-agent::agent_tools::execution::rules` 仍保留 agent catalog 默认策略表；`lime-agent::agent_tools::execution::policy` 仍保留 Aster `ToolPermission` / `ParameterRestriction` adapter 和 workspace permission construction。退出条件是 permission plane / native tool execution 继续迁到 `tool-runtime` current 接口后删除 Aster permission adapter。
+- `superseded`：当时 `policy.rs` 仍保留 Aster `ToolPermission` / `ParameterRestriction` 和 workspace permission construction；最新状态见后续“删除 dead workspace permission builder surface”，该 surface 已按 `dead` 删除。`rules.rs` 仍保留 agent catalog 默认策略表。
 - `dead`：在 `lime-agent` 重新定义 policy service、runtime policy layer、config conversion helper、shell/network classifier 或 tool execution policy DTO 的形态不得恢复。
 - `progress`：本刀后整体目标完成度约 `68%`。根 `lime-rs/Cargo.toml` 的 vendored `aster` dependency、`lime-agent` 的 `aster.workspace = true` 与 `lime-rs/vendor/aster-rust` 仍未满足删除条件。
-- `next`：继续 tool/runtime 面收口，优先推进 `tool_orchestrator.rs` 的 Aster `ToolContext` / `ToolRegistry` 执行核心向 `tool-runtime` current 接口收敛，或把 Aster permission adapter 的 workspace permission DTO 下沉到 `tool-runtime` 后删除 `lime-agent` 本地 policy adapter。
+- `next`：继续 tool/runtime 面收口，优先推进 `tool_orchestrator.rs` 的 Aster `ToolContext` / `ToolRegistry` 执行核心向 `tool-runtime` current 接口收敛；workspace permission builder 已在后续批次确认无生产消费者并删除，不再作为迁移目标。
 
 ## 2026-07-05 进度记录：tool batch DTO 迁入 tool-runtime
 
@@ -2267,3 +2267,203 @@ Phase 1（Trait 骨架）已完成，开始 Phase 2（Adapter 重构）：
 - `dead`：在 `lime-agent` 重新定义 shell command planning helper、通过 `lime-agent` re-export 让 App Server 消费纯 shell helper 的形态不得恢复。
 - `progress`：本刀收掉了一个非 Aster helper 的假归属和一个 App Server -> agent compat re-export 消费点；整体目标完成度约 `69%`。根 `lime-rs/Cargo.toml` 的 vendored `aster` dependency、`lime-agent` 的 `aster.workspace = true` 与 `lime-rs/vendor/aster-rust` 仍未满足删除条件。
 - `next`：继续 tool/runtime 面收口，优先把 live process event metadata / policy error metadata 等不依赖 Aster registry 的逻辑迁入 `tool-runtime`，同时准备 current tool executor 接口替换 Aster `ToolRegistry` / `ToolContext` 执行边界。
+
+## 2026-07-05 进度记录：local execution process supervisor 迁入 tool-runtime
+
+- `completed`：新增 `tool-runtime::execution_process`，承接 `ExecutionProcessStatus`、`ExecutionOutputDelta`、`ExecutionProcessSnapshot`、`LocalExecutionRequest`、`LocalExecutionProcessControlHandle` 与 `start_local_execution_process(...)` 等本地执行进程 supervisor 类型和启动函数。
+- `completed`：`lime-agent::agent_tools::execution::process` 收缩为 `pub use tool_runtime::execution_process::*;`，不再本地定义 supervisor；`tool_orchestrator.rs` 直接从 `tool_runtime::execution_process` 导入本地执行进程类型。
+- `completed`：`app-server::execution_process` 对本地执行进程 supervisor 的消费改为直接依赖 `tool-runtime`，不再经 `lime-agent::agent_tools::execution::process` 兼容 re-export 获取。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 要求 `tool-runtime/src/lib.rs` 暴露 `execution_process`，要求 supervisor 定义存在于 `tool-runtime/src/execution_process.rs`，禁止 `lime-agent` 重新定义 supervisor，并禁止 App Server 经 `lime-agent` re-export 消费 supervisor。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package tool-runtime --package lime-agent --package app-server` 通过。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-process" CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p tool-runtime execution_process --lib` 通过，6 tests passed。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-process" CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent tool_orchestrator --lib` 通过，14 tests passed。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-process" CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p app-server execution_process --lib` 通过，8 tests passed。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，78 tests passed。
+- `verified`：`git diff --check -- <process supervisor 写集>` 通过。
+- `current`：local execution process supervisor 归属 `tool-runtime` current crate；App Server 直接消费 current owner。
+- `compat`：`lime-agent::agent_tools::execution::process` 只剩迁移期 re-export；退出条件是内部调用也全部直接走 `tool_runtime::execution_process` 后删除该 re-export 文件。
+- `dead`：在 `lime-agent` 重新定义本地执行进程 supervisor，或 App Server 经 `lime-agent` 兼容 re-export 消费 supervisor 的形态不得恢复。
+- `risk`：`tool-runtime/src/execution_process.rs` 约 `910` 行，已处于 Rust 文件体量预警区。后续退出条件：按 manager / local process / output buffer / tests 拆分，避免把新业务继续堆到单文件。
+- `progress`：该批继续把 App Server 与工具执行进程从 `lime-agent` compat 面剥离，但 Aster registry execution adapter 未删除；整体目标完成度仍按约 `69%` 口径汇报。
+- `next`：继续 tool/runtime 面收口，优先处理 Aster `ToolRegistry` / `ToolContext` 执行边界，或删除已确认无生产消费者的 Aster permission builder surface。
+
+## 2026-07-05 进度记录：删除 dead workspace permission builder surface
+
+- `completed`：复核 `build_workspace_execution_permissions(...)`、`WorkspaceExecutionPermissionInput`、`build_workspace_shell_allow_pattern(...)` 与 `should_auto_approve_tool_warnings(...)` 后确认只有 `agent_tools/execution/tests.rs` 引用，production 代码无消费者。
+- `completed`：直接删除 `lime-agent::agent_tools::execution::policy` 中旧 workspace permission builder、Aster `ToolPermission` / `ParameterRestriction` / `PermissionScope` import、路径 pattern builder 和对应测试；没有把这条 dead surface 迁成 `tool-runtime` 新壳。
+- `completed`：`lime-agent::agent_tools::execution::policy` 收缩为 42 行，只保留 current policy DTO re-export、resolver metadata helper 与 persisted policy metadata helper。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 增加 workspace permission builder 回流守卫，禁止 `policy.rs` 恢复 `WorkspaceExecutionPermissionInput`、`build_workspace_execution_permissions`、`build_workspace_shell_allow_pattern`、`should_auto_approve_tool_warnings`、`ToolPermissionManager`、`ParameterRestriction`、`RestrictionType`、`PermissionScope` 或 `ToolPermission`。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package tool-runtime --package lime-agent` 通过。
+- `verified`：`rg -n "build_workspace_execution_permissions|WorkspaceExecutionPermissionInput|build_workspace_shell_allow_pattern|should_auto_approve_tool_warnings|ToolPermissionManager|execution_permission" "lime-rs/crates/agent/src/agent_tools/execution" "lime-rs/crates/tool-runtime/src"` 无命中。
+- `verified`：`rg -n "use aster::|aster::|use aster_models::|aster_models::" "lime-rs/crates/agent/src/agent_tools/execution/policy.rs" "lime-rs/crates/agent/src/agent_tools/execution/tests.rs" "lime-rs/crates/tool-runtime/src"` 无命中。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，78 tests passed。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-permission-cleanup-tool" CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p tool-runtime execution_policy --lib` 通过，5 tests passed。
+- `blocked-verification`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-permission-cleanup-agent" CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent execution --lib` 在编译 vendored `aster-core` 时因磁盘只剩约 `463MiB` 失败：`No space left on device`，未到测试执行阶段。复用 `/tmp/lime-astermigration-target-process` 重跑同样因写 rmeta 空间不足失败。该结果不是代码编译错误，但再次证明 `lime-agent` 仍会编译 `vendor/aster-rust`，Phase 6 未完成。
+- `current`：tool execution policy DTO / resolver / metadata 仍归属 `tool-runtime` + thin `lime-agent` glue；没有新增未消费的 permission DTO。
+- `dead`：旧 workspace permission builder、Aster permission manager 正向测试证据和无生产消费者的 permission adapter surface 已删除，不得恢复。
+- `progress`：该批删除一块已确认无生产消费者的 Aster permission surface，并把最新整体目标完成度更新为约 `70%`。删除 root `aster` dependency、`lime-agent` 的 `aster.workspace = true` 和 `vendor/aster-rust` 仍未满足条件。
+- `next`：继续处理真实 blocker：`tool_orchestrator.rs` 的 Aster `ToolRegistry` / `ToolContext`、`request_tool_policy/aster_reply_adapter.rs`、`credential_bridge/runtime_provider_adapter.rs` 与 session store adapters。
+
+## 2026-07-05 进度记录：vendored Aster shell/path 安全重复实现清理
+
+- `completed`：新增 `tool-runtime::shell_analysis`，并按体量边界拆成 `shell_analysis/{bash,powershell,common}.rs`，承接 Bash/PowerShell shell parser、read-target preflight、WSL mount detector、PowerShell sleep detector、concurrency-safe 判定、mutation/write target candidate 收集与 high-risk / mutating warning helper。
+- `completed`：`tool-runtime::shell_permission` 删除本地 shell parser / mutation candidate / mutating warning 重复实现，改为调用 `tool_runtime::shell_analysis` + `tool_runtime::path_guard`。`shell_permission.rs` 从 900+ 行收缩到约 322 行，避免继续膨胀中心文件。
+- `completed`：vendored Aster `tools/bash.rs` / `tools/powershell_tool.rs` 删除旧 `SafetyCheckResult`、`check_command_safety`、dangerous/warning pattern 配置 API、写路径 validator、shell parser、read-target candidate collector、concurrency-safe 判定和 PowerShell sleep detector 本地实现。
+- `completed`：继续清理已迁代码残留：删除 vendored Aster `tools/path_guard.rs` 空壳，移除 `tools/mod.rs` 中 shell analysis / read-target preflight public re-export，Bash/PowerShell 的 read-target preflight 降为文件内部函数，vendor 内重复的 concurrency-safe 测试删除；Aster Agent 内部并发分组直接调用 `tool_runtime::shell_analysis`。
+- `completed`：vendored Aster Bash/PowerShell 现在只保留 Aster `Tool` 执行入口、`ToolResult` metadata 映射、后台任务/沙箱执行包装，以及对 `tool_runtime::shell_permission` / `tool_runtime::shell_analysis` 的内部调用。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 将 `tool-runtime/src/shell_analysis.rs` 纳入已迁文件守卫，要求 `tool-runtime` 暴露 `shell_analysis`，禁止 vendored Aster 恢复 shell/path public wrapper、`tools/path_guard.rs` 空壳、旧 parser、path candidate collector、`SafetyCheckResult` 与写路径 validator。
+- `verified`：`cargo fmt --manifest-path "lime-rs/Cargo.toml" --package tool-runtime -- --check` 通过。
+- `verified`：`rustfmt --edition 2021 --check "lime-rs/vendor/aster-rust/crates/aster/src/tools/mod.rs" "lime-rs/vendor/aster-rust/crates/aster/src/tools/bash.rs" "lime-rs/vendor/aster-rust/crates/aster/src/tools/powershell_tool.rs" "lime-rs/vendor/aster-rust/crates/aster/src/agents/agent.rs"` 通过。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-current-tool" CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p tool-runtime --lib` 通过，66 tests passed。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-current-app" CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/vendor/aster-rust/Cargo.toml" -p aster-core --test bash_tool_property_tests --no-run` 通过。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-vendor-clean" CARGO_BUILD_JOBS=2 cargo check --manifest-path "lime-rs/Cargo.toml" -p aster-core --lib` 通过，0 warning。
+- `verified`：`npx prettier --check "src/lib/governance/asterMigrationBoundary.test.ts"` 通过。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，80 tests passed。
+- `verified`：`rg -n "SHELL_ENV_ASSIGN_RE|BASH_WRITE_REDIRECTION_RE|BASH_SED_IN_PLACE_RE|POWERSHELL_WRITE_REDIRECTION_RE|split_shell_segments|extract_bash_command_words|extract_bash_read_targets|collect_bash_read_path_candidates|is_known_read_only_bash_command|tokenize_shell_words|normalize_command_words|split_powershell_segments|extract_powershell_command_words|extract_powershell_read_targets|collect_powershell_read_path_candidates|is_known_read_only_powershell_command|tokenize_powershell_words|normalize_powershell_words|is_forced_git_clean_words" "lime-rs/vendor/aster-rust/crates/aster/src/tools/bash.rs" "lime-rs/vendor/aster-rust/crates/aster/src/tools/powershell_tool.rs"` 无命中。
+- `verified`：`rg -n "pub use tool_runtime|pub mod path_guard|pub fn preflight_bash_read_targets|pub fn preflight_powershell_read_targets|is_bash_command_concurrency_safe|is_powershell_command_concurrency_safe|tools::path_guard|aster::tools::path_guard" "lime-rs/vendor/aster-rust/crates/aster/src"` 只剩 `agents/agent.rs` 内部直接使用 `tool_runtime::shell_analysis` 做并发分组。
+- `current`：path guard、shell permission、shell analysis 归属 `tool-runtime` current crate。
+- `compat`：vendored Aster Bash/PowerShell tool 本体仍作为 Aster `ToolRegistry` 执行 adapter 存在；退出条件是 current tool runtime executor 接管 Aster `ToolRegistry` / `ToolContext` 后删除这些 vendored tool entry 或整个 vendored dependency。
+- `dead`：vendored Aster 中恢复第二份 shell/path safety parser、旧 safety API、写路径 validator、read-target collector、concurrency-safe 判定、`tools/path_guard.rs` 空壳或 shell analysis public re-export 的形态不得恢复。
+- `progress`：该批把“已经迁出的代码”从 vendored Aster 中清理掉，而不是只把 current owner 加到旁边；后续补刀又删除了已迁 API 的 vendor public wrapper。整体目标完成度更新为约 `74%`；root `aster` dependency、`lime-agent` 的 `aster.workspace = true`、`tool_orchestrator` Aster registry adapter 与 provider/session adapters 仍是 Phase 6 blocker。
+- `next`：继续删除 `lime-agent` direct Aster dependency 的主阻塞链，优先处理 `tool_orchestrator.rs` 的 Aster `ToolRegistry` / `ToolContext` 执行边界，或转向 `request_tool_policy/aster_reply_adapter.rs` 与 `credential_bridge/runtime_provider_adapter.rs` 的 provider/reply loop 退场。
+
+## 2026-07-05 进度记录：tool inventory registry definition DTO 迁入 tool-runtime
+
+- `completed`：新增 `tool-runtime::tool_definition::RuntimeToolDefinition`，承接 tool inventory 需要的 `name` / `description` / `input_schema` registry definition DTO。该 DTO 不依赖 Aster，也不恢复此前已删除的 `ToolRuntime` 执行骨架。
+- `completed`：`lime-agent::agent_tools::inventory` 与 `tool_inventory_runtime_snapshot` 的 `registry_definitions` 从 Aster `ToolDefinition` 改为 `RuntimeToolDefinition`；inventory projection 只消费 current DTO 做 catalog mapping、caller visibility、resource helper gating 和 runtime inventory 合并。
+- `completed`：`tool_inventory_runtime_adapter` 作为唯一 Aster registry 读取边界，从 `agent.tool_registry().read().await.get_definitions()` 读取后立即转换成 `RuntimeToolDefinition`。Aster `ToolDefinition` 不再进入 inventory build input 或 snapshot DTO。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 将 `tool-runtime/src/tool_definition.rs` 纳入已迁文件守卫，要求 `tool-runtime/src/lib.rs` 暴露 `tool_definition`，并新增 inventory DTO 边界守卫，禁止 `inventory.rs` / `tool_inventory_runtime_snapshot.rs` 恢复 `aster::tools::ToolDefinition`、`Vec<ToolDefinition>` 或 `ToolDefinition::new(...)` 测试 helper。
+- `verified`：`rustfmt --edition 2021 --check "lime-rs/crates/tool-runtime/src/tool_definition.rs" "lime-rs/crates/tool-runtime/src/lib.rs" "lime-rs/crates/agent/src/agent_tools/inventory.rs" "lime-rs/crates/agent/src/agent_tools/tool_inventory_runtime_snapshot.rs" "lime-rs/crates/agent/src/agent_tools/tool_inventory_runtime_adapter.rs"` 通过。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-current-tool" CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p tool-runtime --lib` 通过，66 tests passed。
+- `verified`：`npx prettier --check "src/lib/governance/asterMigrationBoundary.test.ts"` 通过。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，80 tests passed。
+- `verified`：`rg -n "use aster::tools::ToolDefinition|Vec<ToolDefinition>|&\\[ToolDefinition\\]|\\) -> ToolDefinition| ToolDefinition::new\\(" "lime-rs/crates/agent/src/agent_tools/inventory.rs" "lime-rs/crates/agent/src/agent_tools/tool_inventory_runtime_snapshot.rs" "lime-rs/crates/agent/src/agent_tools/tool_inventory_runtime_adapter.rs"` 无命中。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-agent-inventory" CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent agent_tools::inventory --lib` 通过，13 tests passed；仅有既有 `agent_tools/execution/tests.rs` 未用 import warning，非本刀写集。
+- `current`：tool inventory registry definition DTO 归属 `tool-runtime` current crate。
+- `compat`：Aster `ToolRegistry` / `ToolContext` / `ToolError` 执行 adapter、`ExtensionConfig` extension projection 和 `list_tools(None)` 仍保留在 `lime-agent` 的受控 adapter 内。退出条件是 current tool runtime 提供 registry + extension read model 和 executor 后删除这些 Aster DTO / registry 读取。
+- `dead`：让 `inventory.rs` / `tool_inventory_runtime_snapshot.rs` 重新持有 Aster `ToolDefinition` DTO，或把 Aster DTO 从 adapter 继续向 App Server / inventory projection 外泄的形态不得恢复。
+- `progress`：本批减少 Aster public DTO 扩散，但尚未删除 `lime-agent` 的 Aster dependency；整体目标完成度更新为约 `72%`。root `aster` dependency、`lime-agent` 的 `aster.workspace = true`、`tool_orchestrator` Aster registry execution adapter 与 provider/session adapters 仍是 Phase 6 blocker。
+- `next`：继续 tool/runtime 面收口，优先迁 `ExtensionConfig` projection DTO 或直接攻 `tool_orchestrator.rs` 的 Aster `ToolRegistry` / `ToolContext` 执行边界；如果回到主 turn stream，则处理 `request_tool_policy/aster_reply_adapter.rs` 与 `credential_bridge/runtime_provider_adapter.rs` 的 provider/reply loop 退场。
+
+## 2026-07-05 进度记录：tool inventory extension config DTO 迁入 tool-runtime
+
+- `completed`：新增 `tool-runtime::tool_extension::RuntimeExtensionConfig`，承接 inventory 需要的 extension name、description、available tools、deferred loading、always expose tools 与 allowed caller projection。该 DTO 不依赖 Aster，也不包含 extension transport / command / execution 行为。
+- `completed`：`lime-agent::agent_tools::inventory` 与 `tool_inventory_runtime_snapshot` 的 `extension_configs` 从 Aster `ExtensionConfig` 改为 `RuntimeExtensionConfig`；inventory projection 不再匹配 Aster extension enum 变体，也不再调用 `config.name()` / `deferred_loading()` / `allowed_caller()` 等 Aster helper。
+- `completed`：`tool_inventory_runtime_adapter` 作为唯一 Aster extension 读取边界，把 `agent.get_extension_configs().await` 产物通过 `project_aster_extension_config(...)` 转换为 `RuntimeExtensionConfig`。Aster `ExtensionConfig` 只以 `AsterExtensionConfig` 别名留在该 adapter 内。
+- `completed`：MCP bridge synthetic extension projection 从构造 Aster `ExtensionConfig::Builtin` 改为直接构造 `RuntimeExtensionConfig`，避免为了 inventory 展示继续制造 Aster DTO。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 将 `tool-runtime/src/tool_extension.rs` 纳入已迁文件守卫，要求 `tool-runtime/src/lib.rs` 暴露 `tool_extension`，并扩展 inventory DTO 守卫，禁止 `inventory.rs` / `tool_inventory_runtime_snapshot.rs` 恢复 Aster `ExtensionConfig`、Aster helper 调用或 enum 变体匹配。
+- `verified`：`rustfmt --edition 2021 --check "lime-rs/crates/tool-runtime/src/tool_extension.rs" "lime-rs/crates/tool-runtime/src/tool_definition.rs" "lime-rs/crates/tool-runtime/src/lib.rs" "lime-rs/crates/agent/src/agent_tools/inventory.rs" "lime-rs/crates/agent/src/agent_tools/tool_inventory_runtime_snapshot.rs" "lime-rs/crates/agent/src/agent_tools/tool_inventory_runtime_adapter.rs"` 通过。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-current-tool" CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p tool-runtime --lib` 通过，66 tests passed。
+- `verified`：`npx prettier --check "src/lib/governance/asterMigrationBoundary.test.ts"` 通过。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，80 tests passed。
+- `verified`：`rg -n "use aster::agents::extension::ExtensionConfig|Vec<ExtensionConfig>|&\\[ExtensionConfig\\]|\\) -> ExtensionConfig| ExtensionConfig::|\\.name\\(\\)|deferred_loading\\(\\)|always_expose_tools\\(\\)|allowed_caller\\(\\)" "lime-rs/crates/agent/src/agent_tools/inventory.rs" "lime-rs/crates/agent/src/agent_tools/tool_inventory_runtime_snapshot.rs" "lime-rs/crates/agent/src/agent_tools/tool_inventory_runtime_adapter.rs"` 仅剩 adapter 的 `use aster::agents::extension::ExtensionConfig as AsterExtensionConfig;`，符合唯一兼容转换点。
+- `blocked-verification`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-agent-inventory" CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent agent_tools::inventory --lib` 被并行脏写集 `session_execution_runtime` 拆分阻断：`runtime_payload.rs` 中 `apply_usage_to_cost_state` / `detect_runtime_limit_event` 为 `pub(super)` 导致 `lib.rs` re-export 私有函数，`tests/runtime_payload.rs` 通过 `super` 导入 `SessionExecutionRuntimeCostState` / `SessionExecutionRuntimeLimitEvent` 失败。该错误不在本刀 tool inventory DTO 写集内，未接管该热区避免夹写。
+- `current`：tool inventory registry definition DTO 与 extension config DTO 归属 `tool-runtime` current crate。
+- `compat`：Aster `ToolRegistry` / `ToolContext` / `ToolError` 执行 adapter、Aster extension manager 读取、`list_tools(None)` 仍保留在 `lime-agent` adapter 内。退出条件是 current tool runtime 提供 registry + extension read model 和 executor 后删除这些 Aster DTO / registry / extension 读取。
+- `dead`：让 `inventory.rs` / `tool_inventory_runtime_snapshot.rs` 重新持有 Aster `ExtensionConfig` DTO，或为了 MCP bridge synthetic extension 构造 Aster `ExtensionConfig::Builtin` 的形态不得恢复。
+- `progress`：本批继续减少 Aster DTO 扩散，但尚未删除 `lime-agent` 的 Aster dependency；整体目标完成度更新为约 `73%`。root `aster` dependency、`lime-agent` 的 `aster.workspace = true`、`tool_orchestrator` Aster registry execution adapter 与 provider/session adapters 仍是 Phase 6 blocker。
+- `next`：继续 tool/runtime 面收口时应直接处理 `tool_orchestrator.rs` 的 Aster `ToolRegistry` / `ToolContext` 执行边界，而不是继续只做 DTO 收口；或者回到主 turn stream 的 `request_tool_policy/aster_reply_adapter.rs` 与 `credential_bridge/runtime_provider_adapter.rs` 退场。
+
+## 2026-07-05 进度记录：tool_orchestrator shell permission preflight 迁出 Aster registry
+
+- `completed`：`lime-agent::agent_tools::tool_orchestrator::check_shell_tool_permissions(...)` 不再为 shell 权限检查临时创建 Aster `ToolRegistry`，也不再注册 Aster `BashTool` / `PowerShellTool`；该入口改为解析 canonical shell tool name 后直接调用 `tool_runtime::shell_permission::check_shell_command_permission(...)`。
+- `completed`：`execute_planned_tool(...)` 在构造 `ToolContext` 后、进入 live process 或 Aster registry adapter 前统一执行 shell permission preflight。这样 live-process 路径和 registry fallback 路径都由 `tool-runtime::shell_permission` 决策，不再依赖 Aster `check_tool_permissions` 才能拒绝危险命令。
+- `completed`：`execute_live_shell_process(...)` 删除 Aster `registry.check_tool_permissions(&planned.tool_name, ...)` 前置步骤，直接使用 `planned.params` 中的 command。缺失 command 仍保持原 registry fallback 行为，危险 command 则在进入 fallback 前被 current shell permission owner 拦截。
+- `completed`：删除测试专用 `DeniedShellTool` 和 Aster `PermissionCheckResult` 依赖，改用真实危险命令 `rm -rf /` 验证 permission preflight；新增 `check_shell_tool_permissions_uses_tool_runtime_permission_owner`，证明 `BashTool` alias 也走 current owner。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 扩展 tool runtime 守卫，禁止 `tool_orchestrator.rs` 恢复 Aster `BashTool` / `PowerShellTool` import、临时注册或 Aster `.check_tool_permissions(...)` shell preflight；同时要求该文件直接 import `tool_runtime::shell_permission::{check_shell_command_permission, ShellPermissionDecision}`。
+- `verified`：`rustfmt --edition 2021 "lime-rs/crates/agent/src/agent_tools/tool_orchestrator.rs" "lime-rs/crates/agent/src/agent_tools/tool_orchestrator/tests.rs"` 通过。
+- `verified`：`rustfmt --edition 2021 --check "lime-rs/crates/agent/src/agent_tools/tool_orchestrator.rs" "lime-rs/crates/agent/src/agent_tools/tool_orchestrator/tests.rs"` 通过。
+- `verified`：`npx prettier --check "src/lib/governance/asterMigrationBoundary.test.ts"` 通过。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，80 tests passed。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-tool-orchestrator" CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent agent_tools::tool_orchestrator --lib` 通过，15 tests passed；仅有并行写集 `agent_tools/execution/tests.rs` 的 `WorkspaceToolSurface` 未用 import warning，非本刀写集。
+- `current`：shell permission preflight 归属 `tool-runtime::shell_permission` current crate。
+- `compat`：`tool_orchestrator.rs` 仍保留 Aster `ToolRegistry` / `ToolContext` / `ToolError` / sandbox adapter 与 `RuntimeAgentEvent` 映射。退出条件是 current tool runtime executor 接管 registry、tool context、tool error classification 和 batch execution 后删除 Aster execution adapter。
+- `dead`：为了 shell permission preflight 临时注册 Aster `BashTool` / `PowerShellTool`，或调用 Aster `check_tool_permissions` 的形态不得恢复。
+- `progress`：本批收掉了 `tool_orchestrator` 中一个真实 Aster 执行前置依赖，但没有删除 Aster registry execution adapter；整体目标完成度保守更新为约 `75%`。root `aster` dependency、`lime-agent` 的 `aster.workspace = true`、provider/reply loop 与 session store adapters 仍是 Phase 6 blocker。
+- `next`：继续同一主线时应优先把 Aster `ToolError` policy classification 和 registry execution adapter 拆成更窄的 adapter，或让 `tool-runtime` 接管 current tool executor；若切回主 turn stream，则处理 `request_tool_policy/aster_reply_adapter.rs` 与 `credential_bridge/runtime_provider_adapter.rs` 退场。不要再只做 DTO 小项。
+
+## 2026-07-05 进度记录：vendored BashTool permission property tests 清理
+
+- `completed`：删除 `lime-rs/vendor/aster-rust/crates/aster/tests/bash_tool_property_tests.rs` 中三组 shell permission property tests：危险命令拒绝、安全命令允许、warning 命令确认。这些规则已由 `tool-runtime::shell_permission` current owner 覆盖，继续留在 vendored Aster 测试里会把已迁能力包装成 Aster 行为。
+- `completed`：保留 BashTool 自身的 output truncation property tests；该行为仍属于现存 Aster BashTool adapter，不与 `tool-runtime::shell_permission` 重复。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 增加 vendor BashTool property test 守卫，要求文件声明 permission rules 归属 `tool-runtime::shell_permission`，并禁止恢复 `prop_permission_check_*`、permission command generators 或 `tool.check_permissions(...)` 属性测试。
+- `verified`：`rustfmt --edition 2021 "lime-rs/vendor/aster-rust/crates/aster/tests/bash_tool_property_tests.rs"` 通过。
+- `verified`：`npx prettier --check "src/lib/governance/asterMigrationBoundary.test.ts"` 通过。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，80 tests passed。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-vendor-clean" CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/vendor/aster-rust/Cargo.toml" -p aster-core --test bash_tool_property_tests` 通过，3 tests passed。
+- `current`：shell permission 行为测试归属 `tool-runtime::shell_permission` current crate。
+- `compat`：Aster BashTool output truncation 和工具执行 adapter 仍留在 vendored Aster；退出条件是 current tool executor 接管 BashTool 或整个 vendored dependency 删除。
+- `dead`：在 vendored Aster 测试中恢复 shell permission property tests 的形态不得恢复。
+- `progress`：本批继续把“已经迁出的代码/测试证据”从 vendor 中清理掉，整体目标完成度仍按约 `75%` 口径；该清理不是 Phase 6 完成证据，因为 root `aster` dependency 和 `lime-agent` direct dependency 仍存在。
+- `next`：继续主阻塞链，不再围绕已迁 shell permission 做更多 vendor 测试；下一刀应处理 `ToolError` / `ToolRegistry` 执行 adapter 或 provider/reply loop。
+
+## 2026-07-05 进度记录：tool_orchestrator policy error classification 收窄 Aster ToolError
+
+- `completed`：新增本地 `ToolPolicyErrorKind`，让 `policy_error_metadata(...)` 和 `classify_policy_error(...)` 不再直接接收或匹配 Aster `ToolError`。Aster `ToolError` 只在 Aster registry adapter 失败边界通过 `ToolPolicyErrorKind::from_aster_tool_error(...)` 转换一次。
+- `completed`：`shell_permission_error_outcome(...)` 不再为了生成 policy metadata 构造 Aster `ToolError::permission_denied(...)`，改为直接传入 `ToolPolicyErrorKind::PermissionDenied(reason.as_str())`。shell permission 的 current owner 保持为 `tool-runtime::shell_permission`。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 增加守卫，要求 `tool_orchestrator.rs` 存在 `ToolPolicyErrorKind` 转换边界，并禁止恢复 `ToolError::permission_denied(reason)`、`let error = ToolError::permission_denied` 或 `fn classify_policy_error(error: &ToolError)`。
+- `verified`：`rustfmt --edition 2021 "lime-rs/crates/agent/src/agent_tools/tool_orchestrator.rs" "lime-rs/crates/agent/src/agent_tools/tool_orchestrator/tests.rs"` 通过。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-tool-orchestrator" CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent agent_tools::tool_orchestrator --lib` 通过，15 tests passed；仍有并行写集 `agent_tools/execution/tests.rs` 的 `WorkspaceToolSurface` 未用 import warning，非本刀写集。
+- `current`：policy error metadata 分类输入归属 `tool_orchestrator` 本地 current projection，shell permission reason 直接来自 `tool-runtime::shell_permission`。
+- `compat`：Aster `ToolError` 仍保留在 `ToolRegistry` execution adapter 边界和测试 fake tool trait 实现中；退出条件是 current tool executor / error type 接管 registry execution 后删除。
+- `dead`：shell permission preflight 为了 policy metadata 构造 Aster `ToolError`，或让 classification 函数重新直接匹配 `&ToolError` 的形态不得恢复。
+- `progress`：本批继续缩小 `tool_orchestrator` 对 Aster `ToolError` 的依赖面，但未删除 `ToolRegistry` / `ToolContext` 执行 adapter；整体目标完成度仍保守按约 `75%`。
+- `next`：下一刀应把 Aster registry execution adapter 拆成更窄模块，或者进入 provider/reply loop 退场；不要再把新行为挂回 `ToolError`。
+
+## 2026-07-05 进度记录：vendored Aster command semantics 副本清理
+
+- `completed`：新增 `tool-runtime::command_semantics`，承接 shell command exit semantics：`rg` / `grep` no-match、`diff` difference、`test` false、PowerShell `robocopy` 成功区间等非零退出码解释。该 owner 不依赖 Aster，和 Codex 风格 current tool/runtime crate 分层一致。
+- `completed`：vendored Aster `BashTool` / `PowerShellTool` 改为内部调用 `tool_runtime::command_semantics::{interpret_bash_command_result, interpret_powershell_command_result}`，只保留 Aster `ToolResult` 映射和工具执行 adapter。
+- `completed`：删除 `lime-rs/vendor/aster-rust/crates/aster/src/tools/command_semantics.rs`，并移除 `tools/mod.rs` 对 `command_semantics` 的 public module / re-export。Aster 不再对外伪装为 shell command exit semantics 的事实源。
+- `completed`：同步 vendor Bash 单测口径：`rm -rf ../../` 现在验证 current `tool-runtime::shell_permission` 的 dangerous-pattern 分类，不再假设一定落到 path guard 的 protected-path 文案。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 扩展 vendor shell 守卫，禁止恢复 `tools/command_semantics.rs`、`pub mod command_semantics`、`pub use command_semantics`、`CommandInterpretation` 和 command semantics public wrapper。
+- `verified`：`rustfmt --edition 2021 --check "lime-rs/crates/tool-runtime/src/lib.rs" "lime-rs/crates/tool-runtime/src/command_semantics.rs" "lime-rs/vendor/aster-rust/crates/aster/src/tools/bash.rs" "lime-rs/vendor/aster-rust/crates/aster/src/tools/powershell_tool.rs" "lime-rs/vendor/aster-rust/crates/aster/src/tools/mod.rs"` 通过。
+- `verified`：`npx prettier --check "src/lib/governance/asterMigrationBoundary.test.ts"` 通过。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，80 tests passed。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-command-semantics" CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p tool-runtime command_semantics --lib` 通过，8 tests passed / 66 filtered out。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-vendor-command-semantics" CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/vendor/aster-rust/Cargo.toml" -p aster-core tools::powershell_tool --lib` 通过，15 tests passed / 4486 filtered out。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-vendor-command-semantics" CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/vendor/aster-rust/Cargo.toml" -p aster-core tools::bash --lib` 初次失败于过时文案断言；同步测试口径后重跑通过，35 tests passed / 4466 filtered out。
+- `current`：shell command exit semantics 归属 `tool-runtime::command_semantics` current crate。
+- `compat`：vendored Aster Bash/PowerShell tool 本体仍作为 Aster `ToolRegistry` execution adapter 存在；退出条件是 current tool executor 接管 registry / context / result mapping 后删除这些 vendor tool entry 或整个 vendored dependency。
+- `dead`：vendored Aster 恢复 `tools/command_semantics.rs` 或公开 re-export command semantics 的形态不得恢复。
+- `progress`：本批继续把已迁能力从 vendor Aster 中物理删掉，避免“迁了但旧实现继续当垃圾堆”。整体目标完成度保守更新为约 `76%`；root `aster` dependency、`lime-agent` 的 `aster.workspace = true`、`tool_orchestrator` Aster registry execution adapter、provider/reply loop 与 session store adapters 仍是 Phase 6 blocker。
+- `next`：继续主阻塞链，优先拆 `tool_orchestrator` 的 Aster registry execution adapter 到唯一 compat 模块，随后以 current tool executor / result type 接管；或切到 `request_tool_policy/aster_reply_adapter.rs` 与 `credential_bridge/runtime_provider_adapter.rs` 的 provider/reply loop 退场。不要继续围绕已迁 shell helper 做小修小补。
+
+## 2026-07-05 进度记录：tool_orchestrator Aster registry execution 细节隔离
+
+- `completed`：新增 `lime-agent::agent_tools::tool_orchestrator::aster_registry_adapter`，把 Aster `ToolRegistry`、`ToolContext`、`ToolError`、`SandboxConfig` / `SandboxType`、workspace sandbox config 映射和 `aster::session_context::with_turn_context` 集中到唯一 compat adapter。
+- `completed`：`tool_orchestrator.rs` 主编排层不再直接 import `aster::sandbox`、`aster::tools::{ToolContext, ToolError, ToolRegistry}`、`to_aster_turn_context` 或 `aster::session_context::with_turn_context`；主文件只消费 `AsterToolRegistryAdapter` / `AsterToolExecutionContext` / `AsterToolPolicyErrorKind` 等窄 adapter 类型。
+- `completed`：`workspace_patch_runtime_adapter.rs` 与 `request_tool_policy/web_search_preflight.rs` 的 batch input 构造改为把原 Aster registry 转成 `AsterToolRegistryAdapter`，避免向 `ToolExecutionBatchInput` 继续扩散原始 Aster registry 类型。
+- `completed`：registry execution error 路径改为从 adapter error 暴露的 `AsterToolPolicyErrorKind` 生成 policy metadata；同时避免在 error 分支用 `std::mem::take(metadata)` 产生隐式副作用。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 增加主 `tool_orchestrator.rs` direct Aster registry/sandbox/session 细节禁用守卫，并要求 `tool_orchestrator/aster_registry_adapter.rs` 成为唯一允许触碰 Aster registry execution 细节的 compat adapter。
+- `verified`：`rustfmt --edition 2021 "lime-rs/crates/agent/src/agent_tools/tool_orchestrator.rs" "lime-rs/crates/agent/src/agent_tools/tool_orchestrator/aster_registry_adapter.rs" "lime-rs/crates/agent/src/agent_tools/tool_orchestrator/tests.rs" "lime-rs/crates/agent/src/agent_tools/workspace_patch_runtime_adapter.rs" "lime-rs/crates/agent/src/request_tool_policy/web_search_preflight.rs"` 通过。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-tool-orchestrator" CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p lime-agent agent_tools::tool_orchestrator --lib` 通过，15 tests passed；仅有并行写集 `agent_tools/execution/tests.rs` 的 `WorkspaceToolSurface` 未用 import warning，非本刀写集。
+- `verified`：`npx prettier --check "src/lib/governance/asterMigrationBoundary.test.ts"` 通过。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，80 tests passed。
+- `current`：tool execution batch DTO、shell permission / shell planning / local process supervisor 继续归属 `tool-runtime` current crate；`tool_orchestrator.rs` 主文件只保留调度、live process 接线和 RuntimeAgentEvent 映射。
+- `compat`：Aster registry execution adapter 仍存在于 `tool_orchestrator/aster_registry_adapter.rs`，服务现有 Aster `ToolRegistry` 执行入口。退出条件是 current `tool-runtime` executor 接管 registry、tool context、tool result 和 tool error type 后删除该 adapter。
+- `dead`：主 `tool_orchestrator.rs` 重新直接 import 或构造 Aster `ToolRegistry` / `ToolContext` / `ToolError` / `SandboxConfig` / `SandboxType` / `with_turn_context` 的形态不得恢复。
+- `progress`：本批没有删除 root `aster` dependency 或 `lime-agent` 的 `aster.workspace = true`，但把真实执行链的 Aster 细节从主编排层收进唯一退场点；整体目标完成度保守更新为约 `77%`。
+- `next`：继续主阻塞链，下一刀应让 `tool-runtime` 提供 current tool executor / result / error 类型以替换 `AsterToolRegistryAdapter`，或转入 `request_tool_policy/aster_reply_adapter.rs` 与 `credential_bridge/runtime_provider_adapter.rs` 的 provider/reply loop 退场。
+
+## 2026-07-05 进度记录：vendored Aster subprocess / shell_runtime 副本清理
+
+- `completed`：新增 `tool-runtime::subprocess`，承接 process output decode、Windows no-window flag、PowerShell / CMD UTF-8 wrapper 与 decode summary。该 owner 不依赖 Aster，符合 Codex 风格 current tool/runtime crate 分层。
+- `completed`：新增 `tool-runtime::shell_runtime`，承接 platform shell command 构造、PowerShell runtime 探测、Windows known-path fallback 与 nested PowerShell `-Command` wrapper stripping。
+- `completed`：vendored Aster `BashTool`、`PowerShellTool`、`TaskManager`、CLI provider 和 extension manager 改为内部调用 `tool_runtime::subprocess` / `tool_runtime::shell_runtime`，只保留现存 Aster `ToolResult` 映射、任务管理和 provider compat 行为。
+- `completed`：删除 `lime-rs/vendor/aster-rust/crates/aster/src/subprocess.rs` 与 `lime-rs/vendor/aster-rust/crates/aster/src/tools/shell_runtime.rs`；移除 vendor `lib.rs` 的 `pub mod subprocess;`、`tools/mod.rs` 的 `mod shell_runtime;` 和 vendor `Cargo.toml` 中仅服务 subprocess helper 的 `encoding_rs = "0.8"` direct dependency。
+- `guarded`：`src/lib/governance/asterMigrationBoundary.test.ts` 要求 `tool-runtime` 暴露 `subprocess` / `shell_runtime` current owner，并禁止 vendored Aster 恢复 `src/subprocess.rs`、`tools/shell_runtime.rs`、`pub mod subprocess;`、`mod shell_runtime;`、`crate::subprocess`、`super::shell_runtime`、`encoding_rs =` 或把 `tool_runtime::{subprocess,shell_runtime}` 重新 `pub use` 成 Aster public surface。
+- `verified`：`rg -n "crate::subprocess|super::shell_runtime|mod shell_runtime|pub mod subprocess|encoding_rs" "lime-rs/vendor/aster-rust/crates/aster/src" "lime-rs/vendor/aster-rust/crates/aster/Cargo.toml"` 无命中。
+- `verified`：`rustfmt --edition 2021 "lime-rs/crates/tool-runtime/src/lib.rs" "lime-rs/crates/tool-runtime/src/subprocess.rs" "lime-rs/crates/tool-runtime/src/shell_runtime.rs" "lime-rs/vendor/aster-rust/crates/aster/src/tools/bash.rs" "lime-rs/vendor/aster-rust/crates/aster/src/tools/powershell_tool.rs" "lime-rs/vendor/aster-rust/crates/aster/src/tools/task.rs" "lime-rs/vendor/aster-rust/crates/aster/src/tools/mod.rs" "lime-rs/vendor/aster-rust/crates/aster/src/providers/cursor_agent.rs" "lime-rs/vendor/aster-rust/crates/aster/src/providers/gemini_cli.rs" "lime-rs/vendor/aster-rust/crates/aster/src/providers/claude_code.rs" "lime-rs/vendor/aster-rust/crates/aster/src/providers/codex.rs" "lime-rs/vendor/aster-rust/crates/aster/src/agents/extension_manager.rs" "lime-rs/vendor/aster-rust/crates/aster/src/lib.rs"` 通过。
+- `verified`：`npx prettier --check "src/lib/governance/asterMigrationBoundary.test.ts"` 通过。
+- `verified`：`npx vitest run "src/lib/governance/asterMigrationBoundary.test.ts" --silent=passed-only --disableConsoleIntercept --testTimeout=30000` 通过，80 tests passed。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-shell-runtime" CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p tool-runtime shell_runtime --lib` 通过，6 tests passed / 79 filtered out。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-shell-runtime" CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/Cargo.toml" -p tool-runtime subprocess --lib` 通过，5 tests passed / 80 filtered out。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-vendor-shell-runtime" CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/vendor/aster-rust/Cargo.toml" -p aster-core tools::bash --lib` 通过，35 tests passed / 4455 filtered out。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-vendor-shell-runtime" CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/vendor/aster-rust/Cargo.toml" -p aster-core tools::powershell_tool --lib` 通过，15 tests passed / 4475 filtered out。
+- `verified`：`CARGO_TARGET_DIR="/tmp/lime-astermigration-target-vendor-shell-runtime" CARGO_BUILD_JOBS=2 cargo test --manifest-path "lime-rs/vendor/aster-rust/Cargo.toml" -p aster-core tools::task --lib` 通过，55 tests passed / 4435 filtered out。
+- `current`：process output decode、Windows no-window / UTF-8 wrapper、platform shell command construction 与 PowerShell runtime detection 归属 `tool-runtime::{subprocess,shell_runtime}` current crate。
+- `compat`：vendored Aster Bash/PowerShell/Task/provider/extension manager 仍作为 Aster registry / provider compat 执行入口存在；退出条件是 current tool executor / provider runner 接管后删除这些 vendor entry 或整个 vendored dependency。
+- `dead`：vendored Aster 恢复 `src/subprocess.rs`、`tools/shell_runtime.rs`、`encoding_rs` direct dependency 或公开 re-export process runtime helper 的形态不得恢复。
+- `progress`：本批继续把已迁 process / shell runtime helper 从 vendor Aster 中物理删掉，避免“迁了但旧实现继续当垃圾”。整体目标完成度保守更新为约 `78%`；root `aster` dependency、`lime-agent` 的 `aster.workspace = true`、`tool_orchestrator` Aster registry execution adapter、provider/reply loop 与 session store adapters 仍是 Phase 6 blocker。
+- `next`：下一刀不应继续围绕已迁 shell helper 做小修小补；应回到主阻塞链，让 `tool-runtime` 提供 current tool executor / result / error 类型以替换 `AsterToolRegistryAdapter`，或转入 `request_tool_policy/aster_reply_adapter.rs` 与 `credential_bridge/runtime_provider_adapter.rs` 的 provider/reply loop 退场。

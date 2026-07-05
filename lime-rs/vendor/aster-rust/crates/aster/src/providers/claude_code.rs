@@ -16,8 +16,8 @@ use crate::config::search_path::SearchPaths;
 use crate::config::{AsterMode, Config};
 use crate::conversation::message::{Message, MessageContent};
 use crate::model::ModelConfig;
-use crate::subprocess::configure_command_no_window;
 use rmcp::model::Tool;
+use tool_runtime::subprocess::configure_command_no_window;
 
 pub const CLAUDE_CODE_DEFAULT_MODEL: &str = "claude-sonnet-4-20250514";
 pub const CLAUDE_CODE_KNOWN_MODELS: &[&str] = &["sonnet", "opus"];

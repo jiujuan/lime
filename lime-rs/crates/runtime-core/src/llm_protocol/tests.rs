@@ -14,8 +14,6 @@ fn route(protocol: ProtocolKind) -> ResolvedModelRoute {
             routing_slot: Some("coding".to_string()),
             source: ModelRefSource::Explicit,
         },
-        provider: None,
-        model: None,
         protocol,
         endpoint: EndpointInfo::default(),
         auth: AuthMaterialRef::default(),

@@ -242,6 +242,9 @@ importers:
       turndown:
         specifier: ^7.2.2
         version: 7.2.2
+      yaml:
+        specifier: ^2.8.3
+        version: 2.8.3
       zustand:
         specifier: ^5.0.10
         version: 5.0.11(@types/react@18.3.27)(react@18.3.1)(use-sync-external-store@1.6.0(react@18.3.1))
@@ -363,9 +366,6 @@ importers:
       vitest:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.3)(jsdom@22.1.0(canvas@2.11.2(encoding@0.1.13)))(terser@5.48.0)
-      yaml:
-        specifier: ^2.8.3
-        version: 2.8.3
 
   packages/agent-app-runtime: {}
 

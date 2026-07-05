@@ -1,72 +1,5 @@
 use super::*;
 use crate::request_tool_policy::{resolve_request_tool_policy_with_mode, RequestToolPolicyMode};
-use aster::agents::Agent;
-use aster::tools::{PermissionCheckResult, Tool, ToolContext, ToolError, ToolResult};
-use async_trait::async_trait;
-use std::collections::HashMap;
-
-struct TurnContextGatedWebSearchTool;
-
-#[async_trait]
-impl Tool for TurnContextGatedWebSearchTool {
-    fn name(&self) -> &str {
-        "WebSearch"
-    }
-
-    fn description(&self) -> &str {
-        "测试用 WebSearch 工具"
-    }
-
-    fn input_schema(&self) -> serde_json::Value {
-        serde_json::json!({
-            "type": "object",
-            "properties": {
-                "query": { "type": "string" }
-            },
-            "required": ["query"]
-        })
-    }
-
-    async fn check_permissions(
-        &self,
-        _params: &serde_json::Value,
-        _context: &ToolContext,
-    ) -> PermissionCheckResult {
-        let allowed = aster::session_context::current_turn_context()
-            .as_ref()
-            .is_some_and(|turn_context| {
-                ["web_search_enabled", "webSearchEnabled"]
-                    .iter()
-                    .any(|key| {
-                        turn_context
-                            .metadata
-                            .get(*key)
-                            .and_then(serde_json::Value::as_bool)
-                            .unwrap_or(false)
-                    })
-            });
-
-        if allowed {
-            PermissionCheckResult::allow()
-        } else {
-            PermissionCheckResult::ask("WebSearch 需要联网确认。")
-        }
-    }
-
-    async fn execute(
-        &self,
-        params: serde_json::Value,
-        _context: &ToolContext,
-    ) -> Result<ToolResult, ToolError> {
-        let query = params
-            .get("query")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or_default();
-        Ok(ToolResult::success(format!(
-            "预检索测试结果：https://example.com/search?q={query}"
-        )))
-    }
-}
 
 #[test]
 fn auto_web_search_should_not_run_preflight_from_message_keywords() {
@@ -178,51 +111,28 @@ fn preflight_search_outcome_should_require_usable_link() {
 }
 
 #[tokio::test]
-async fn web_search_preflight_uses_turn_context_for_permission_check() {
-    let agent = Agent::new();
-    let host = AsterReplyRuntimeHost::new(&agent);
-    {
-        let registry_arc = agent.tool_registry().clone();
-        let mut registry = registry_arc.write().await;
-        registry.register(Box::new(TurnContextGatedWebSearchTool));
-    }
-
-    let policy =
+async fn web_search_preflight_fails_before_network_when_current_tool_is_not_required() {
+    let mut policy =
         resolve_request_tool_policy_with_mode(Some(true), Some(RequestToolPolicyMode::Required));
-    let mut metadata = HashMap::new();
-    metadata.insert("webSearchEnabled".to_string(), serde_json::json!(true));
-    let turn_context = crate::turn_context_configuration::AgentTurnContext {
-        metadata,
-        ..crate::turn_context_configuration::AgentTurnContext::default()
-    };
+    policy.required_tools = vec!["WebFetch".to_string()];
     let mut tracker = WebSearchExecutionTracker::default();
 
-    let execution = execute_web_search_preflight_if_needed_with_enabled(
+    let error = execute_web_search_preflight_if_needed_with_enabled(
         WebSearchPreflightRequest {
-            host: &host,
             session_id: "session-web-preflight-permission",
             message_text: "继续",
             working_directory: None,
             cancel_token: None,
-            turn_context: Some(turn_context),
+            turn_context: None,
             policy: &policy,
         },
         &mut tracker,
         true,
     )
     .await
-    .expect("预调用应继承 turn context 并免确认执行");
+    .expect_err("preflight should require current WebSearch tool");
 
-    assert!(execution
-        .system_prompt_appendix
-        .as_deref()
-        .unwrap_or_default()
-        .contains("预检索测试结果"));
-    assert!(execution.events.iter().any(|event| matches!(
-        event,
-        RuntimeAgentEvent::ToolEnd { result, .. } if result.success
-    )));
-    assert!(tracker.validate_web_search_requirement(&policy).is_ok());
+    assert!(error.contains("current WebSearch"));
 }
 
 #[test]

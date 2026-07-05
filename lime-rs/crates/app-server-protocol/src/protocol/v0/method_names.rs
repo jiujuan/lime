@@ -170,6 +170,7 @@ pub const METHOD_BROWSER_SESSION_CLOSE: &str = "browserSession/close";
 pub const METHOD_BROWSER_SESSION_EVENT_LIST: &str = "browserSession/event/list";
 pub const METHOD_BROWSER_SESSION_ACTION_EXECUTE: &str = "browserSession/action/execute";
 pub const METHOD_PLUGIN_LOCAL_PACKAGE_INSPECT: &str = "pluginLocalPackage/inspect";
+pub const METHOD_PLUGIN_LOCAL_PACKAGE_EXPORT: &str = "pluginLocalPackage/export";
 pub const METHOD_PLUGIN_PACKAGE_FETCH_CLOUD: &str = "pluginPackage/fetchCloud";
 pub const METHOD_PLUGIN_INSTALLED_SAVE: &str = "pluginInstalled/save";
 pub const METHOD_PLUGIN_INSTALLED_LIST: &str = "pluginInstalled/list";

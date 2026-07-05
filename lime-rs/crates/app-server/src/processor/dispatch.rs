@@ -412,6 +412,9 @@ impl RequestProcessor {
             METHOD_PLUGIN_LOCAL_PACKAGE_INSPECT => {
                 self.handle_plugin_local_package_inspect_impl(params).await
             }
+            METHOD_PLUGIN_LOCAL_PACKAGE_EXPORT => {
+                self.handle_plugin_local_package_export_impl(params).await
+            }
             METHOD_PLUGIN_PACKAGE_FETCH_CLOUD => {
                 self.handle_plugin_package_fetch_cloud_impl(params).await
             }

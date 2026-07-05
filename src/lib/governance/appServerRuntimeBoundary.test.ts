@@ -13,6 +13,8 @@ import {
   ASTER_SKILL_EXECUTION_SNIPPETS,
   IMAGE_COMMAND_MAIN,
   IMAGE_COMMAND_SPLIT_MODULES,
+  AGENT_SESSION_EXECUTION_RUNTIME_MAIN,
+  AGENT_SESSION_EXECUTION_RUNTIME_OWNER_MODULES,
   KNOWN_OUT_OF_BOUND_ASTER_BASELINE,
   KNOWN_OUT_OF_BOUND_ASTER_COUPLING_FILES,
   KNOWN_OUT_OF_BOUND_ASTER_EXECUTION_FILES,
@@ -24,11 +26,19 @@ import {
   PROCESSOR_SPLIT_MODULES,
   PROCESSOR_TESTS_MAIN,
   REPO_ROOT,
+  RUNTIME_BACKEND_MAIN,
+  RUNTIME_BACKEND_OWNER_MODULES,
   RUNTIME_BACKEND_REQUEST_CONTEXT_MAIN,
   RUNTIME_BACKEND_REQUEST_CONTEXT_SPLIT_MODULES,
   RUNTIME_BACKEND_TESTS_MAIN,
   RUNTIME_BACKEND_TEST_SPLIT_MODULES,
   RUNTIME_BOUNDARY_ROADMAP,
+  RUNTIME_CORE_MAIN,
+  RUNTIME_CORE_OWNER_MODULES,
+  RUNTIME_READ_MODEL_MAIN,
+  RUNTIME_READ_MODEL_OWNER_MODULES,
+  RUNTIME_THREAD_ITEM_PROJECTION_MAIN,
+  RUNTIME_THREAD_ITEM_PROJECTION_OWNER_MODULES,
   collectRustFiles,
   countSnippet,
   productionSource,
@@ -435,6 +445,170 @@ describe("app-server runtime boundary", () => {
     ).toEqual([]);
   });
 
+  it("P1-4 core runtime owner 主文件不得继续承接 turn/model/tool/context domain 逻辑", () => {
+    const runtimeCore = readFileSync(join(REPO_ROOT, RUNTIME_CORE_MAIN), "utf8");
+    const runtimeBackend = readFileSync(
+      join(REPO_ROOT, RUNTIME_BACKEND_MAIN),
+      "utf8",
+    );
+    const dispatchSource = readFileSync(
+      join(REPO_ROOT, PROCESSOR_DISPATCH),
+      "utf8",
+    );
+    const readModel = readFileSync(
+      join(REPO_ROOT, RUNTIME_READ_MODEL_MAIN),
+      "utf8",
+    );
+    const threadItemProjection = readFileSync(
+      join(REPO_ROOT, RUNTIME_THREAD_ITEM_PROJECTION_MAIN),
+      "utf8",
+    );
+    const agentSessionRuntime = readFileSync(
+      join(REPO_ROOT, AGENT_SESSION_EXECUTION_RUNTIME_MAIN),
+      "utf8",
+    );
+    const missingModules = [
+      ...RUNTIME_CORE_OWNER_MODULES,
+      ...RUNTIME_BACKEND_OWNER_MODULES,
+      ...RUNTIME_READ_MODEL_OWNER_MODULES,
+      ...RUNTIME_THREAD_ITEM_PROJECTION_OWNER_MODULES,
+      ...AGENT_SESSION_EXECUTION_RUNTIME_OWNER_MODULES,
+    ].filter((path) => !existsSync(join(REPO_ROOT, path)));
+
+    const returnedRuntimeCoreResponsibilities = [
+      "fn build_session_context_compaction(",
+      "fn stored_session_to_overview(",
+      "fn validate_runtime_resume_contract(",
+      "fn runtime_session_read_detail_with_options(",
+      "fn tool_items_from_events(",
+    ].filter((snippet) => runtimeCore.includes(snippet));
+    const returnedRuntimeBackendResponsibilities = [
+      "fn resolve_runtime_model_selection(",
+      "fn resolve_basic_model_capability(",
+      "fn routing_decision_payload(",
+      "fn read_agent_tool_inventory(",
+      "fn build_agent_turn_context(",
+      "fn build_agent_session_config(",
+    ].filter((snippet) => runtimeBackend.includes(snippet));
+    const returnedReadModelResponsibilities = [
+      "fn stored_artifact_summaries_for_turn(",
+      "fn stored_user_visible_artifact_summaries_for_turn(",
+      "fn tool_items_from_events(",
+      "fn tool_calls_from_events(",
+      "fn workflow_read_model_from_events(",
+      "fn coding_activity_from_events(",
+      "fn file_artifact_items_from_events(",
+      "fn permission_state_from_events(",
+      "fn turns_with_usage(",
+    ].filter((snippet) => readModel.includes(snippet));
+    const returnedThreadProjectionResponsibilities = [
+      "fn item_from_delta(",
+      "fn upsert_from_item_event(",
+      "fn plan_item(",
+      "fn plan_metadata(",
+      "fn merge_cumulative_text(",
+    ].filter((snippet) => threadItemProjection.includes(snippet));
+    const returnedAgentSessionRuntimeResponsibilities = [
+      "fn project_aster_session_execution_runtime_session(",
+      "fn project_aster_session_execution_runtime_snapshot(",
+      "fn build_agent_turn_context(",
+      "fn read_agent_tool_inventory(",
+      "fn configure_model_route_provider_for_session(",
+      "fn resolve_tool_execution_policy(",
+      "pub(crate) fn extract_recent_harness_context_from_metadata(",
+      "fn extract_recent_preferences_from_metadata(",
+      "pub(crate) fn extract_recent_access_mode_from_metadata(",
+      "fn extract_recent_team_selection_from_metadata(",
+      "fn extract_task_profile_from_metadata(",
+      "fn extract_routing_decision_from_metadata(",
+      "fn extract_runtime_summary_from_metadata(",
+      "fn apply_usage_to_cost_state(",
+      "fn detect_runtime_limit_event(",
+      "fn calculate_estimated_total_cost(",
+    ].filter((snippet) => agentSessionRuntime.includes(snippet));
+    const returnedAgentSessionRuntimeTestResponsibilities = [
+      "fn keeps_recent_preferences_from_latest_turn_metadata(",
+      "fn extracts_task_routing_and_limit_state_from_lime_runtime_metadata(",
+      "fn apply_usage_to_cost_state_should_calculate_estimated_total_cost(",
+    ].filter((snippet) => agentSessionRuntime.includes(snippet));
+
+    expect(
+      runtimeCore.split(/\r?\n/u).length,
+      "runtime.rs 只能作为 RuntimeCore facade / state wiring；新增 session/turn/model/tool/context 逻辑必须进入 runtime/* domain 模块",
+    ).toBeLessThanOrEqual(720);
+    expect(
+      runtimeBackend.split(/\r?\n/u).length,
+      "runtime_backend.rs 只能保留 ExecutionBackend 编排；model/provider/tool/context 细节必须进入 runtime_backend/* domain 模块",
+    ).toBeLessThanOrEqual(480);
+    expect(
+      dispatchSource.split(/\r?\n/u).length,
+      "processor/dispatch.rs 只能保留 JSON-RPC method 分发表；新增 command group 必须先进 processor/* handler 模块",
+    ).toBeLessThanOrEqual(800);
+    expect(
+      readModel.split(/\r?\n/u).length,
+      "read_model.rs 已拆出 messages owner，新增 artifact/tool/workflow/coding/session runtime/message 投影必须先进 owner 模块",
+    ).toBeLessThanOrEqual(840);
+    expect(
+      threadItemProjection.split(/\r?\n/u).length,
+      "thread_item_projection.rs 已超过 1000 行，新增 Item 类型投影必须先进 thread_item_projection/* 子模块",
+    ).toBeLessThanOrEqual(1445);
+    expect(
+      agentSessionRuntime.split(/\r?\n/u).length,
+      "session_execution_runtime.rs 已拆出 recent_context / recent_settings / runtime_payload / tests owner，新增 provider/tool/turn/context 投影必须先进 lime-agent domain 模块",
+    ).toBeLessThanOrEqual(660);
+    expect(
+      missingModules,
+      "P1-4 owner 模块不得被删除或折回中心文件；新增 turn/model/tool/context 能力必须沿这些 owner 扩展",
+    ).toEqual([]);
+    expect(
+      returnedRuntimeCoreResponsibilities,
+      "RuntimeCore 主文件不得重新承接 session lifecycle、turn execution、read model 或 tool projection 细节",
+    ).toEqual([]);
+    expect(
+      returnedRuntimeBackendResponsibilities,
+      "runtime_backend 主文件不得重新承接 model routing、provider config、tool inventory 或 turn context 细节",
+    ).toEqual([]);
+    expect(
+      returnedReadModelResponsibilities,
+      "read_model.rs 不得回收 artifact/tool/workflow/coding/usage/permission 等已拆 owner 的函数定义",
+    ).toEqual([]);
+    expect(
+      returnedThreadProjectionResponsibilities,
+      "thread_item_projection.rs 不得回收 agent_message / plan 等已拆 Item 投影函数定义",
+    ).toEqual([]);
+    expect(
+      returnedAgentSessionRuntimeResponsibilities,
+      "session_execution_runtime.rs 不得回收 provider/tool/turn context/adapter/recent context/recent settings/runtime payload owner 的函数定义",
+    ).toEqual([]);
+    expect(
+      returnedAgentSessionRuntimeTestResponsibilities,
+      "session_execution_runtime.rs 不得回收 recent settings / runtime payload 测试职责；新增测试必须进入 session_execution_runtime/tests* owner",
+    ).toEqual([]);
+  });
+
+  it("P1-5 UI execution runtime projection owner 不得折回 utils facade", () => {
+    const utilsPath =
+      "src/components/agent/chat/utils/sessionExecutionRuntime.ts";
+    const projectionPath =
+      "src/components/agent/chat/projection/sessionExecutionRuntimeProjection.ts";
+    const utilsSource = readFileSync(join(REPO_ROOT, utilsPath), "utf8");
+    const projectionSource = readFileSync(join(REPO_ROOT, projectionPath), "utf8");
+    const projectionHelpers = [
+      "function mergeExecutionRuntime(",
+      "export function applyTurnContextExecutionRuntime(",
+      "export function applyModelChangeExecutionRuntime(",
+    ];
+
+    expect(existsSync(join(REPO_ROOT, projectionPath))).toBe(true);
+    expect(utilsSource.split(/\r?\n/u).length).toBeLessThanOrEqual(390);
+    expect(
+      projectionHelpers.filter((snippet) => utilsSource.includes(snippet)),
+    ).toEqual([]);
+    expect(
+      projectionHelpers.filter((snippet) => !projectionSource.includes(snippet)),
+    ).toEqual([]);
+  });
+
   it("App Server 主 turn 执行不应直接调用 Aster streaming loop", () => {
     const runtimeBackend = productionSource(
       join(REPO_ROOT, "lime-rs/crates/app-server/src/runtime_backend.rs"),
@@ -575,6 +749,13 @@ describe("app-server runtime boundary", () => {
       ),
       "utf8",
     );
+    const agentRuntimeAdapter = readFileSync(
+      join(
+        REPO_ROOT,
+        "lime-rs/crates/agent/src/agent_tools/workspace_patch_runtime_adapter.rs",
+      ),
+      "utf8",
+    );
 
     expect(agentBoundary).toContain("WorkspacePatchHostToolPlan");
     expect(agentBoundary).toContain("hostToolRequests");
@@ -583,7 +764,10 @@ describe("app-server runtime boundary", () => {
       "update_workspace_patch_with_host_tool_evidence",
     );
     expect(agentBoundary).toContain("execute_workspace_patch_host_tool_plan");
-    expect(agentBoundary).toContain("execute_planned_tool_batch");
+    expect(agentBoundary).toContain("execute_workspace_patch_runtime_tool_batch");
+    expect(agentRuntimeAdapter).toContain("execute_planned_tool_batch");
+    expect(agentRuntimeAdapter).toContain("ToolExecutionBatchInput");
+    expect(agentRuntimeAdapter).toContain("agent.tool_registry().clone()");
     expect(appServerAdapter).toContain("WorkspacePatchHostToolPlan::from_patch");
     expect(appServerAdapter).toContain(
       "update_workspace_patch_with_host_tool_evidence",
@@ -784,6 +968,10 @@ describe("app-server runtime boundary", () => {
       join(REPO_ROOT, "lime-rs/crates/agent/src/agent_tools/tool_orchestrator.rs"),
       "utf8",
     );
+    const toolRuntimeShellPermission = readFileSync(
+      join(REPO_ROOT, "lime-rs/crates/tool-runtime/src/shell_permission.rs"),
+      "utf8",
+    );
     const forbiddenSnippets = [
       "BashTool",
       "PowerShellTool",
@@ -796,10 +984,15 @@ describe("app-server runtime boundary", () => {
     expect(agentToolOrchestrator).toContain("check_shell_tool_permissions");
     expect(agentToolOrchestrator).toContain("BashTool");
     expect(agentToolOrchestrator).toContain("PowerShellTool");
-    expect(appServerExecutionProcess).toContain("check_shell_tool_permissions");
+    expect(toolRuntimeShellPermission).toContain("check_shell_command_permission");
+    expect(toolRuntimeShellPermission).toContain("check_bash_command_permission");
+    expect(toolRuntimeShellPermission).toContain("check_powershell_command_permission");
+    expect(appServerExecutionProcess).toContain("check_shell_command_permission");
+    expect(appServerExecutionProcess).toContain("decide_tool_execution");
+    expect(appServerExecutionProcess).not.toContain("check_shell_tool_permissions");
     expect(
       forbiddenSnippets,
-      "Aster shell tool registry 和权限预检属于 lime-agent tool_orchestrator；App Server execution_process 只能做 process control / read-model 投影",
+      "Aster shell tool registry 属于 lime-agent tool_orchestrator；shell permission 属于 tool-runtime；App Server execution_process 只能做 process control / read-model 投影和委托预检",
     ).toEqual([]);
   });
 });

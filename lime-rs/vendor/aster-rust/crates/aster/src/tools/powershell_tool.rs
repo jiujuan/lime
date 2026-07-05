@@ -4,23 +4,11 @@
 //! - PowerShell
 
 use super::base::{PermissionCheckResult, Tool};
-use super::command_semantics::interpret_powershell_command_result;
 use super::context::{ToolContext, ToolOptions, ToolResult};
 use super::error::ToolError;
-use super::path_guard::{
-    evaluate_path_mutations, resolve_static_path_candidate, summarize_paths, summarize_raw_paths,
-    PathGuardFinding, PathMutationCandidate, PathMutationKind,
-};
-use super::shell_runtime::detect_powershell_executable;
 use super::task::{TaskManager, TaskShell};
 use crate::sandbox::{execute_in_sandbox_with_options, ExecutorOptions, ExecutorResult};
-use crate::subprocess::{
-    configure_command_for_gui, decode_process_output, summarize_decoded_with,
-    wrap_powershell_command_for_utf8,
-};
 use async_trait::async_trait;
-use once_cell::sync::Lazy;
-use regex::Regex;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
@@ -28,6 +16,19 @@ use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::process::Command;
+use tool_runtime::command_semantics::interpret_powershell_command_result;
+use tool_runtime::shell_analysis::{
+    command_references_wsl_drive_mount, detect_blocked_sleep_pattern,
+    missing_powershell_read_targets,
+};
+use tool_runtime::shell_permission::{
+    check_powershell_command_permission, ShellPermissionDecision,
+};
+use tool_runtime::shell_runtime::detect_powershell_executable;
+use tool_runtime::subprocess::{
+    configure_command_for_gui, decode_process_output, summarize_decoded_with,
+    wrap_powershell_command_for_utf8,
+};
 use tracing::{debug, warn};
 
 const POWERSHELL_TOOL_NAME: &str = "PowerShell";
@@ -35,30 +36,6 @@ const POWERSHELL_TOOL_DESCRIPTION: &str = "Executes a given PowerShell command w
 const DEFAULT_TIMEOUT_MS: u64 = 300_000;
 const MAX_TIMEOUT_MS: u64 = 1_800_000;
 const MAX_OUTPUT_LENGTH: usize = 128 * 1024;
-
-static POWERSHELL_WRITE_REDIRECTION_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(
-        r#"(?x)
-        (?:^|[\s;(])
-        (?:\d+)?(?:>>?|>\|)
-        \s*
-        (?P<target>'[^']*'|"[^"]*"|[^\s;&|()]+)
-    "#,
-    )
-    .expect("valid powershell write redirection regex")
-});
-static POWERSHELL_SYMLINK_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(
-        r#"(?ix)
-        \b(?:new-item|ni)\b
-        [^\n;|&]*
-        (?:-itemtype|-type|-it(?:emtype)?|-ty(?:pe)?)
-        \s*(?::|=|\s)\s*
-        ['"]?(symboliclink|junction|hardlink)
-    "#,
-    )
-    .expect("valid powershell symlink regex")
-});
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -76,41 +53,6 @@ struct PowerShellToolInput {
 pub struct PowerShellTool {
     task_manager: Arc<TaskManager>,
     executable_path: Option<PathBuf>,
-    dangerous_patterns: Vec<Regex>,
-    warning_patterns: Vec<Regex>,
-}
-
-#[derive(Debug, Clone)]
-struct SafetyCheckResult {
-    safe: bool,
-    reason: Option<String>,
-    warning: Option<String>,
-}
-
-impl SafetyCheckResult {
-    fn safe() -> Self {
-        Self {
-            safe: true,
-            reason: None,
-            warning: None,
-        }
-    }
-
-    fn deny(reason: impl Into<String>) -> Self {
-        Self {
-            safe: false,
-            reason: Some(reason.into()),
-            warning: None,
-        }
-    }
-
-    fn warn(message: impl Into<String>) -> Self {
-        Self {
-            safe: true,
-            reason: None,
-            warning: Some(message.into()),
-        }
-    }
 }
 
 impl PowerShellTool {
@@ -122,8 +64,6 @@ impl PowerShellTool {
         Self {
             task_manager,
             executable_path: detect_powershell_executable(),
-            dangerous_patterns: default_dangerous_patterns(),
-            warning_patterns: default_warning_patterns(),
         }
     }
 
@@ -135,8 +75,6 @@ impl PowerShellTool {
         Self {
             task_manager,
             executable_path,
-            dangerous_patterns: default_dangerous_patterns(),
-            warning_patterns: default_warning_patterns(),
         }
     }
 
@@ -236,41 +174,6 @@ impl PowerShellTool {
         }
 
         output
-    }
-
-    fn check_command_safety(&self, command: &str) -> SafetyCheckResult {
-        let command_trimmed = command.trim();
-        if command_trimmed.is_empty() {
-            return SafetyCheckResult::deny("Command cannot be empty");
-        }
-
-        if let Some(reason) = detect_high_risk_powershell_reason(command_trimmed) {
-            return SafetyCheckResult::deny(reason);
-        }
-
-        for pattern in &self.dangerous_patterns {
-            if pattern.is_match(command_trimmed) {
-                return SafetyCheckResult::deny(format!(
-                    "Command contains dangerous PowerShell pattern: {}",
-                    pattern.as_str()
-                ));
-            }
-        }
-
-        for pattern in &self.warning_patterns {
-            if pattern.is_match(command_trimmed) {
-                return SafetyCheckResult::warn(format!(
-                    "Command matches warning pattern: {}",
-                    pattern.as_str()
-                ));
-            }
-        }
-
-        if let Some(warning) = detect_mutating_powershell_warning(command_trimmed) {
-            return SafetyCheckResult::warn(warning);
-        }
-
-        SafetyCheckResult::safe()
     }
 
     async fn execute_foreground(
@@ -524,619 +427,6 @@ impl Default for PowerShellTool {
     }
 }
 
-fn default_dangerous_patterns() -> Vec<Regex> {
-    [
-        r"(?i)\b(format-volume|clear-disk|diskpart|stop-computer|restart-computer)\b",
-        r"(?i)\bremove-item\b.+\b(recurse|force)\b.+\b([a-z]:\\|/)\b",
-    ]
-    .iter()
-    .filter_map(|pattern| Regex::new(pattern).ok())
-    .collect()
-}
-
-fn default_warning_patterns() -> Vec<Regex> {
-    [
-        r"(?i)\b(remove-item|clear-content|stop-process|set-executionpolicy)\b",
-        r"(?i)\b(invoke-expression|iex)\b",
-        r"(?i)\bstart-process\b.+\b-verb\s+runas\b",
-        r"(?i)\bgit\s+push\s+.*(--force|-f)\b",
-    ]
-    .iter()
-    .filter_map(|pattern| Regex::new(pattern).ok())
-    .collect()
-}
-
-fn split_powershell_segments(command: &str) -> Vec<&str> {
-    let mut segments = Vec::new();
-    let mut start = 0usize;
-    let mut in_single = false;
-    let mut in_double = false;
-    let mut chars = command.char_indices().peekable();
-
-    while let Some((index, ch)) = chars.next() {
-        match ch {
-            '\'' if !in_double => in_single = !in_single,
-            '"' if !in_single => in_double = !in_double,
-            ';' | '\n' if !in_single && !in_double => {
-                let segment = command[start..index].trim();
-                if !segment.is_empty() {
-                    segments.push(segment);
-                }
-                start = index + ch.len_utf8();
-            }
-            '&' if !in_single && !in_double => {
-                if let Some((next_index, next_char)) = chars.peek().copied() {
-                    if next_char == '&' {
-                        let segment = command[start..index].trim();
-                        if !segment.is_empty() {
-                            segments.push(segment);
-                        }
-                        let _ = chars.next();
-                        start = next_index + next_char.len_utf8();
-                    }
-                }
-            }
-            '|' if !in_single && !in_double => {
-                let segment = command[start..index].trim();
-                if !segment.is_empty() {
-                    segments.push(segment);
-                }
-                if let Some((next_index, next_char)) = chars.peek().copied() {
-                    if next_char == '|' {
-                        let _ = chars.next();
-                        start = next_index + next_char.len_utf8();
-                    } else {
-                        start = index + ch.len_utf8();
-                    }
-                } else {
-                    start = index + ch.len_utf8();
-                }
-            }
-            _ => {}
-        }
-    }
-
-    let rest = command[start..].trim();
-    if !rest.is_empty() {
-        segments.push(rest);
-    }
-
-    segments
-}
-
-fn normalize_powershell_word(word: &str) -> String {
-    word.trim_matches(|ch| matches!(ch, '"' | '\'' | '`' | '(' | ')' | ','))
-        .to_ascii_lowercase()
-}
-
-fn resolve_powershell_alias(word: &str) -> &str {
-    match word {
-        "rm" | "del" | "erase" | "ri" => "remove-item",
-        "mv" | "move" | "mi" => "move-item",
-        "cp" | "copy" | "cpi" => "copy-item",
-        "ren" | "rni" => "rename-item",
-        "ni" | "mkdir" | "md" => "new-item",
-        "sc" => "set-content",
-        "ac" => "add-content",
-        "tee" => "tee-object",
-        "iwr" => "invoke-webrequest",
-        "irm" => "invoke-restmethod",
-        "cat" | "gc" | "type" => "get-content",
-        "ls" | "dir" | "gci" => "get-childitem",
-        "sls" => "select-string",
-        "sl" | "cd" | "chdir" => "set-location",
-        _ => word,
-    }
-}
-
-fn extract_powershell_command_words(segment: &str) -> Vec<String> {
-    let raw_words = segment
-        .split_whitespace()
-        .map(normalize_powershell_word)
-        .filter(|word| !word.is_empty())
-        .collect::<Vec<_>>();
-
-    let mut index = 0usize;
-    while index < raw_words.len() {
-        let word = raw_words[index].as_str();
-        if matches!(word, "&" | "." | "powershell" | "pwsh") {
-            index += 1;
-            continue;
-        }
-        break;
-    }
-
-    raw_words
-        .into_iter()
-        .skip(index)
-        .map(|word| resolve_powershell_alias(&word).to_string())
-        .collect()
-}
-
-fn is_safe_powershell_sink(target: &str) -> bool {
-    let normalized = normalize_powershell_word(target);
-    matches!(
-        normalized.as_str(),
-        "$null" | "nul" | "null:" | "[system.io.stream]::null" | "&1" | "&2"
-    )
-}
-
-fn has_powershell_write_redirection(command: &str) -> bool {
-    POWERSHELL_WRITE_REDIRECTION_RE
-        .captures_iter(command)
-        .any(|captures| {
-            let Some(target) = captures.name("target") else {
-                return false;
-            };
-            !is_safe_powershell_sink(target.as_str())
-        })
-}
-
-fn is_mutating_powershell_cmdlet(name: &str) -> bool {
-    matches!(
-        name,
-        "set-content"
-            | "add-content"
-            | "clear-content"
-            | "remove-item"
-            | "copy-item"
-            | "move-item"
-            | "rename-item"
-            | "new-item"
-            | "out-file"
-            | "tee-object"
-            | "export-csv"
-            | "export-clixml"
-            | "expand-archive"
-    )
-}
-
-fn detect_high_risk_powershell_reason(command: &str) -> Option<String> {
-    if POWERSHELL_SYMLINK_RE.is_match(command) {
-        return Some(
-            "Blocked: creating symbolic links or junctions is not allowed in PowerShell tool."
-                .to_string(),
-        );
-    }
-
-    for segment in split_powershell_segments(command) {
-        let words = extract_powershell_command_words(segment);
-        if words.is_empty() || words[0] != "git" {
-            continue;
-        }
-
-        let subcommand = words.get(1).map(String::as_str).unwrap_or("");
-        match subcommand {
-            "reset" if words.iter().any(|word| word == "--hard") => {
-                return Some(
-                    "Blocked: `git reset --hard` is a destructive repository operation."
-                        .to_string(),
-                );
-            }
-            "clean" if is_forced_git_clean_words(&words) => {
-                return Some(
-                    "Blocked: forced `git clean` may permanently remove untracked files."
-                        .to_string(),
-                );
-            }
-            "push" if words.iter().any(|word| word == "--force" || word == "-f") => {
-                return Some(
-                    "Blocked: force-pushing git history requires explicit manual confirmation."
-                        .to_string(),
-                );
-            }
-            _ => {}
-        }
-    }
-
-    None
-}
-
-fn detect_mutating_powershell_warning(command: &str) -> Option<String> {
-    if has_powershell_write_redirection(command) {
-        return Some("Command writes to files via PowerShell redirection".to_string());
-    }
-
-    for segment in split_powershell_segments(command) {
-        let words = extract_powershell_command_words(segment);
-        if words.is_empty() {
-            continue;
-        }
-
-        let command_name = words[0].as_str();
-        if matches!(command_name, "invoke-webrequest" | "invoke-restmethod")
-            && words
-                .iter()
-                .any(|word| word == "-outfile" || word == "-literalpath" || word == "-path")
-        {
-            return Some(format!(
-                "Command may persist downloaded content via `{command_name}`"
-            ));
-        }
-
-        if is_mutating_powershell_cmdlet(command_name) {
-            return Some(format!(
-                "Command may modify files or project state via `{command_name}`"
-            ));
-        }
-
-        if command_name == "git" {
-            let subcommand = words.get(1).map(String::as_str).unwrap_or("");
-            if matches!(
-                subcommand,
-                "add"
-                    | "am"
-                    | "apply"
-                    | "branch"
-                    | "checkout"
-                    | "cherry-pick"
-                    | "clean"
-                    | "commit"
-                    | "merge"
-                    | "mv"
-                    | "pull"
-                    | "push"
-                    | "rebase"
-                    | "reset"
-                    | "restore"
-                    | "revert"
-                    | "rm"
-                    | "stash"
-                    | "switch"
-                    | "tag"
-            ) {
-                return Some(format!(
-                    "Command modifies repository state via `git {subcommand}`"
-                ));
-            }
-        }
-    }
-
-    None
-}
-
-fn is_forced_git_clean_words(words: &[String]) -> bool {
-    let has_force = words
-        .iter()
-        .any(|word| word.starts_with('-') && word.contains('f'));
-    let has_scope = words.iter().any(|word| {
-        word.starts_with('-') && (word.contains('d') || word.contains('x') || word.contains('X'))
-    });
-    has_force && has_scope
-}
-
-fn validate_powershell_command_paths(command: &str, cwd: &Path) -> Option<PermissionCheckResult> {
-    let candidates = collect_powershell_path_candidates(command);
-    match evaluate_path_mutations(&candidates, cwd)? {
-        PathGuardFinding::ProtectedPaths(paths) => Some(PermissionCheckResult::deny(format!(
-            "Blocked: PowerShell command targets protected path(s): {}",
-            summarize_paths(&paths)
-        ))),
-        PathGuardFinding::OutsideWorkspace(paths) => Some(PermissionCheckResult::ask(format!(
-            "PowerShell command modifies path(s) outside the current working directory: {}. Do you want to proceed?",
-            summarize_paths(&paths)
-        ))),
-        PathGuardFinding::DynamicPaths(paths) => Some(PermissionCheckResult::ask(format!(
-            "PowerShell command uses path expression(s) that cannot be validated safely: {}. Do you want to proceed?",
-            summarize_raw_paths(&paths)
-        ))),
-    }
-}
-
-fn collect_powershell_path_candidates(command: &str) -> Vec<PathMutationCandidate> {
-    let mut candidates = POWERSHELL_WRITE_REDIRECTION_RE
-        .captures_iter(command)
-        .filter_map(|captures| captures.name("target"))
-        .map(|target| PathMutationCandidate::new(target.as_str(), PathMutationKind::Write))
-        .collect::<Vec<_>>();
-
-    for segment in split_powershell_segments(command) {
-        let raw_words = tokenize_powershell_words(segment);
-        if raw_words.is_empty() {
-            continue;
-        }
-        let normalized_words = normalize_powershell_words(&raw_words);
-        let Some(command_name) = normalized_words.first().map(String::as_str) else {
-            continue;
-        };
-
-        match command_name {
-            "set-content" | "add-content" | "clear-content" | "remove-item" | "copy-item"
-            | "move-item" | "rename-item" | "new-item" | "out-file" | "tee-object"
-            | "export-csv" | "export-clixml" | "invoke-webrequest" | "invoke-restmethod" => {
-                let kind = if command_name == "remove-item" {
-                    PathMutationKind::Remove
-                } else {
-                    PathMutationKind::Write
-                };
-                for path in extract_powershell_write_targets(&raw_words, command_name) {
-                    candidates.push(PathMutationCandidate::new(path, kind));
-                }
-            }
-            _ => {}
-        }
-    }
-
-    candidates
-}
-
-fn tokenize_powershell_words(segment: &str) -> Vec<String> {
-    let mut words = Vec::new();
-    let mut current = String::new();
-    let mut in_single = false;
-    let mut in_double = false;
-    let mut escaped = false;
-
-    for ch in segment.chars() {
-        if escaped {
-            current.push(ch);
-            escaped = false;
-            continue;
-        }
-
-        match ch {
-            '`' if !in_single => {
-                escaped = true;
-            }
-            '\'' if !in_double => {
-                in_single = !in_single;
-            }
-            '"' if !in_single => {
-                in_double = !in_double;
-            }
-            ch if ch.is_whitespace() && !in_single && !in_double => {
-                if !current.is_empty() {
-                    words.push(std::mem::take(&mut current));
-                }
-            }
-            _ => current.push(ch),
-        }
-    }
-
-    if !current.is_empty() {
-        words.push(current);
-    }
-
-    words
-}
-
-fn normalize_powershell_words(raw_words: &[String]) -> Vec<String> {
-    let mut normalized = raw_words
-        .iter()
-        .map(|word| resolve_powershell_alias(&normalize_powershell_word(word)).to_string())
-        .filter(|word| !word.is_empty())
-        .collect::<Vec<_>>();
-
-    while let Some(word) = normalized.first() {
-        if matches!(word.as_str(), "&" | "." | "powershell" | "pwsh") {
-            normalized.remove(0);
-            continue;
-        }
-        break;
-    }
-
-    normalized
-}
-
-fn extract_powershell_write_targets(raw_words: &[String], command_name: &str) -> Vec<String> {
-    if raw_words.len() <= 1 {
-        return Vec::new();
-    }
-
-    let mut named_targets = Vec::new();
-    let mut positional_targets = Vec::new();
-    let mut index = 1usize;
-    let mut after_double_dash = false;
-    let path_params = [
-        "-path",
-        "-literalpath",
-        "-destination",
-        "-filepath",
-        "-outfile",
-        "-pspath",
-        "-lp",
-    ];
-
-    while index < raw_words.len() {
-        let word = &raw_words[index];
-        let normalized = normalize_powershell_word(word);
-
-        if !after_double_dash && word == "--" {
-            after_double_dash = true;
-            index += 1;
-            continue;
-        }
-
-        if !after_double_dash && normalized.starts_with('-') {
-            if let Some((param, value)) = normalized.split_once(':') {
-                if path_params.contains(&param) && !value.is_empty() {
-                    named_targets.push(value.to_string());
-                }
-                index += 1;
-                continue;
-            }
-
-            if path_params.contains(&normalized.as_str()) {
-                if let Some(next) = raw_words.get(index + 1) {
-                    named_targets.push(next.clone());
-                    index += 2;
-                    continue;
-                }
-            }
-
-            index += 1;
-            continue;
-        }
-
-        positional_targets.push(word.clone());
-        index += 1;
-    }
-
-    if !named_targets.is_empty() {
-        return named_targets;
-    }
-
-    match command_name {
-        "set-content" | "add-content" | "clear-content" | "remove-item" | "rename-item"
-        | "new-item" | "out-file" | "tee-object" | "export-csv" | "export-clixml" => {
-            positional_targets.into_iter().take(1).collect()
-        }
-        "copy-item" | "move-item" => positional_targets.into_iter().skip(1).take(1).collect(),
-        "invoke-webrequest" | "invoke-restmethod" => Vec::new(),
-        _ => Vec::new(),
-    }
-}
-
-fn extract_powershell_read_targets(raw_words: &[String], command_name: &str) -> Vec<String> {
-    if raw_words.len() <= 1 {
-        return Vec::new();
-    }
-
-    let mut named_targets = Vec::new();
-    let mut positional_targets = Vec::new();
-    let mut index = 1usize;
-    let mut after_double_dash = false;
-    let path_params = ["-path", "-literalpath", "-lp"];
-
-    while index < raw_words.len() {
-        let word = &raw_words[index];
-        let normalized = normalize_powershell_word(word);
-
-        if !after_double_dash && word == "--" {
-            after_double_dash = true;
-            index += 1;
-            continue;
-        }
-
-        if !after_double_dash && normalized.starts_with('-') {
-            if let Some((param, value)) = normalized.split_once(':') {
-                if path_params.contains(&param) && !value.is_empty() {
-                    named_targets.push(value.to_string());
-                }
-                index += 1;
-                continue;
-            }
-
-            if path_params.contains(&normalized.as_str()) {
-                if let Some(next) = raw_words.get(index + 1) {
-                    named_targets.push(next.clone());
-                    index += 2;
-                    continue;
-                }
-            }
-
-            index += 1;
-            continue;
-        }
-
-        positional_targets.push(word.clone());
-        index += 1;
-    }
-
-    if !named_targets.is_empty() {
-        return named_targets;
-    }
-
-    match command_name {
-        "get-content" | "get-childitem" => positional_targets.into_iter().rev().take(1).collect(),
-        "select-string" if positional_targets.len() >= 2 => {
-            positional_targets.into_iter().rev().take(1).collect()
-        }
-        _ => Vec::new(),
-    }
-}
-
-fn collect_powershell_read_path_candidates(command: &str) -> Vec<String> {
-    let mut candidates = Vec::new();
-
-    for segment in split_powershell_segments(command) {
-        let raw_words = tokenize_powershell_words(segment);
-        if raw_words.is_empty() {
-            continue;
-        }
-
-        let normalized_words = normalize_powershell_words(&raw_words);
-        if normalized_words.is_empty() {
-            continue;
-        }
-
-        let command_name = normalized_words[0].as_str();
-        candidates.extend(extract_powershell_read_targets(&raw_words, command_name));
-    }
-
-    candidates
-}
-
-fn is_known_read_only_powershell_command(command_name: &str, words: &[String]) -> bool {
-    match command_name {
-        "get-content" | "get-childitem" | "select-string" | "get-item" | "resolve-path"
-        | "split-path" | "test-path" | "measure-object" | "select-object" | "sort-object"
-        | "where-object" | "format-table" | "format-list" => true,
-        "git" => matches!(
-            words.get(1).map(String::as_str).unwrap_or(""),
-            "status" | "diff" | "show" | "log" | "rev-parse" | "ls-files" | "grep" | "blame"
-        ),
-        _ => false,
-    }
-}
-
-pub fn is_powershell_command_concurrency_safe(command: &str) -> bool {
-    let trimmed = command.trim();
-    if trimmed.is_empty() {
-        return false;
-    }
-
-    if has_powershell_write_redirection(trimmed) {
-        return false;
-    }
-
-    let mut saw_segment = false;
-    for segment in split_powershell_segments(trimmed) {
-        let words = extract_powershell_command_words(segment);
-        if words.is_empty() {
-            continue;
-        }
-        saw_segment = true;
-
-        let command_name = words[0].as_str();
-        if is_mutating_powershell_cmdlet(command_name) {
-            return false;
-        }
-        if command_name == "git"
-            && matches!(
-                words.get(1).map(String::as_str).unwrap_or(""),
-                "add"
-                    | "am"
-                    | "apply"
-                    | "branch"
-                    | "checkout"
-                    | "cherry-pick"
-                    | "clean"
-                    | "commit"
-                    | "merge"
-                    | "mv"
-                    | "pull"
-                    | "push"
-                    | "rebase"
-                    | "reset"
-                    | "restore"
-                    | "revert"
-                    | "rm"
-                    | "stash"
-                    | "switch"
-                    | "tag"
-            )
-        {
-            return false;
-        }
-        if !is_known_read_only_powershell_command(command_name, &words) {
-            return false;
-        }
-    }
-
-    saw_segment
-}
-
 fn build_missing_read_target_result(paths: &[PathBuf]) -> ToolResult {
     let path_values = paths
         .iter()
@@ -1157,14 +447,6 @@ fn build_missing_read_target_result(paths: &[PathBuf]) -> ToolResult {
     ToolResult::error(message)
         .with_metadata("preflight_check", json!("missing_read_target"))
         .with_metadata("missing_paths", json!(path_values))
-}
-
-fn command_references_wsl_drive_mount(command: &str) -> bool {
-    static WSL_DRIVE_MOUNT_RE: Lazy<Regex> = Lazy::new(|| {
-        Regex::new(r#"(?i)(^|[\s'"(=:/])/(?:mnt|run/desktop/mnt/host)/[a-z](?:/|$)"#)
-            .expect("valid WSL drive mount regex")
-    });
-    WSL_DRIVE_MOUNT_RE.is_match(command)
 }
 
 fn build_windows_wsl_drive_mount_result(command: &str) -> ToolResult {
@@ -1188,44 +470,9 @@ fn preflight_windows_wsl_drive_mount(command: &str) -> Option<ToolResult> {
     preflight_windows_wsl_drive_mount_for(command, cfg!(target_os = "windows"))
 }
 
-pub fn preflight_powershell_read_targets(command: &str, cwd: &Path) -> Option<ToolResult> {
-    let mut missing_paths = Vec::new();
-
-    for raw_path in collect_powershell_read_path_candidates(command) {
-        let Some(resolved_path) = resolve_static_path_candidate(&raw_path, cwd) else {
-            continue;
-        };
-        if resolved_path.exists() || missing_paths.contains(&resolved_path) {
-            continue;
-        }
-        missing_paths.push(resolved_path);
-    }
-
+fn preflight_powershell_read_targets(command: &str, cwd: &Path) -> Option<ToolResult> {
+    let missing_paths = missing_powershell_read_targets(command, cwd);
     (!missing_paths.is_empty()).then(|| build_missing_read_target_result(&missing_paths))
-}
-
-fn detect_blocked_sleep_pattern(command: &str) -> Option<String> {
-    let trimmed = command.trim();
-    let first = trimmed.split([';', '|', '&', '\r', '\n']).next()?.trim();
-    let captures = Regex::new(r"(?i)^(?:start-sleep|sleep)(?:\s+-s(?:econds)?)?\s+(\d+)\s*$")
-        .ok()?
-        .captures(first)?;
-    let secs = captures.get(1)?.as_str().parse::<u64>().ok()?;
-    if secs < 2 {
-        return None;
-    }
-
-    let rest = trimmed
-        .get(first.len()..)
-        .unwrap_or("")
-        .trim_start_matches(|ch: char| ch.is_whitespace() || ch == ';' || ch == '|' || ch == '&')
-        .trim();
-
-    if rest.is_empty() {
-        Some(format!("standalone Start-Sleep {secs}"))
-    } else {
-        Some(format!("Start-Sleep {secs} followed by: {rest}"))
-    }
 }
 
 fn dynamic_description() -> String {
@@ -1307,37 +554,19 @@ impl Tool for PowerShellTool {
             Err(_) => return PermissionCheckResult::deny("Invalid PowerShell input"),
         };
 
-        if detect_blocked_sleep_pattern(&input.command).is_some()
-            && !input.run_in_background.unwrap_or(false)
+        if input.run_in_background.unwrap_or(false)
+            && detect_blocked_sleep_pattern(&input.command).is_some()
         {
-            return PermissionCheckResult::deny(
-                "Blocked: long Start-Sleep commands should use the Sleep tool or run_in_background.",
-            );
+            return PermissionCheckResult::allow();
         }
 
-        let safety_result = self.check_command_safety(&input.command);
-        if !safety_result.safe {
-            return PermissionCheckResult::deny(
-                safety_result
-                    .reason
-                    .unwrap_or_else(|| "PowerShell command blocked by safety check".to_string()),
-            );
+        match check_powershell_command_permission(&input.command, &context.working_directory) {
+            ShellPermissionDecision::Allow => PermissionCheckResult::allow(),
+            ShellPermissionDecision::Deny(reason) => PermissionCheckResult::deny(reason),
+            ShellPermissionDecision::RequiresConfirmation(message) => {
+                PermissionCheckResult::ask(message)
+            }
         }
-
-        if let Some(path_result) =
-            validate_powershell_command_paths(&input.command, &context.working_directory)
-        {
-            return path_result;
-        }
-
-        if let Some(warning) = safety_result.warning {
-            return PermissionCheckResult::ask(format!(
-                "PowerShell command may be dangerous: {}. Do you want to proceed?",
-                warning
-            ));
-        }
-
-        PermissionCheckResult::allow()
     }
 
     async fn execute(&self, params: Value, context: &ToolContext) -> Result<ToolResult, ToolError> {
@@ -1613,21 +842,6 @@ mod tests {
     }
 
     #[test]
-    fn test_is_powershell_command_concurrency_safe_for_read_only_pipeline() {
-        assert!(is_powershell_command_concurrency_safe(
-            "Get-ChildItem src | Select-Object -First 5"
-        ));
-    }
-
-    #[test]
-    fn test_is_powershell_command_concurrency_safe_rejects_mutation() {
-        assert!(!is_powershell_command_concurrency_safe(
-            "Set-Content notes.txt 'hello'"
-        ));
-        assert!(!is_powershell_command_concurrency_safe("git checkout main"));
-    }
-
-    #[test]
     fn test_powershell_tool_options() {
         let tool = PowerShellTool::with_executable_path(Arc::new(TaskManager::new()), None);
         let options = tool.options();
@@ -1645,14 +859,5 @@ mod tests {
         let tool = PowerShellTool::with_executable_path(Arc::new(TaskManager::new()), None);
         let result = tool.format_output_with_message("", "", 1, Some("No matches found"));
         assert_eq!(result, "No matches found");
-    }
-
-    #[test]
-    fn test_collect_powershell_path_candidates_pure_env_assign_segment_does_not_panic() {
-        // Regression: bash 端同款 panic 模式（normalize 跳完前缀后为空时索引 [0]）。
-        // PowerShell 这边以 `$p = '...'` 开头的赋值段做等价覆盖。
-        let command = "$p = 'C:/Users/coso/.yansu-agent'; if (Test-Path $p) { Get-ChildItem $p }";
-        let candidates = collect_powershell_path_candidates(command);
-        assert!(candidates.is_empty());
     }
 }
