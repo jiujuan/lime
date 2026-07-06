@@ -260,6 +260,7 @@
   "agentChat.toolCall.processSummary.generic.searchFirstWithSubject": "先搜尋 {{subject}}",
   "agentChat.toolCall.processSummary.generic.searched": "已取得搜尋結果",
   "agentChat.toolCall.processSummary.generic.searchedWithSubject": "已搜尋 {{subject}}",
+  "agentChat.toolCall.processSummary.generic.completed": "已完成這一步",
   "agentChat.toolCall.processSummary.generic.stepStartFirst": "先發起這一步",
   "agentChat.toolCall.processSummary.generic.stepStarted": "已發起這一步",
   "agentChat.toolCall.processSummary.generic.subtaskDelegated": "已把任務拆給子任務繼續處理",

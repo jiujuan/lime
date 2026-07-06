@@ -4,6 +4,8 @@ use serde_json::Value;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
+use super::runtime_capabilities::build_plugin_runtime_capabilities;
+
 const PLUGIN_PACKAGE_SCHEMA_VERSION: &str = "lime.plugin.package.v1";
 
 const RUNTIME_CONTRIBUTION_FIELD: &str = "runtime";
@@ -597,6 +599,11 @@ fn project_plugin_package_to_plugin_manifest(
             "retention": "ask"
         }),
     );
+    if let Some(runtime_capabilities) =
+        build_plugin_runtime_capabilities(&Value::Object(manifest.clone()))
+    {
+        manifest.insert("runtimeCapabilities".to_string(), runtime_capabilities);
+    }
 
     Ok(Value::Object(manifest))
 }

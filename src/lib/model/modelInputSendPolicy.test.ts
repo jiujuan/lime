@@ -81,7 +81,7 @@ describe("modelInputSendPolicy", () => {
     });
   });
 
-  it("媒体输入缺少模型 summary 时按最终 submit fail-closed 策略禁用", () => {
+  it("媒体输入缺少模型 summary 时默认按 fail-closed 策略禁用", () => {
     const gate = evaluateModelInputCapability(
       null,
       buildModelCapabilitySendGateInput({
@@ -120,7 +120,7 @@ describe("modelInputSendPolicy", () => {
     });
   });
 
-  it("可显式让 unknown media 先警告，交给 submit 边界最终兜底", () => {
+  it("可显式让 unknown media 先警告并继续提交", () => {
     const gate = evaluateModelInputCapability(
       null,
       buildModelCapabilitySendGateInput({

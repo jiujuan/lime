@@ -1,8 +1,47 @@
 import { describe, expect, it } from "vitest";
 
+import { limeI18nResources } from "@/i18n/createI18n";
+import { SUPPORTED_LOCALES } from "@/i18n/locales";
 import type { AgentToolCallState } from "@/lib/api/agentProtocol";
 
 import { summarizeStreamingToolBatch } from "./toolBatchGrouping";
+
+const TOOL_BATCH_COPY_KEYS = [
+  "agentChat.toolBatch.separator.clause",
+  "agentChat.toolBatch.webSearch.fallback.searchAndFetch",
+  "agentChat.toolBatch.webSearch.fallback.searchOnly",
+  "agentChat.toolBatch.webSearch.latestHint",
+  "agentChat.toolBatch.webSearch.title.running.singleWithHint",
+  "agentChat.toolBatch.webSearch.title.completed.singleWithHint",
+  "agentChat.toolBatch.webSearch.title.running.searchAndFetch",
+  "agentChat.toolBatch.webSearch.title.completed.searchAndFetch",
+  "agentChat.toolBatch.webSearch.title.running.searchOnly",
+  "agentChat.toolBatch.webSearch.title.completed.searchOnly",
+  "agentChat.toolBatch.webSearch.count.searchAndFetch",
+  "agentChat.toolBatch.webSearch.count.searchOnly",
+  "agentChat.toolBatch.webSearch.rawDetail.running.searchAndFetch",
+  "agentChat.toolBatch.webSearch.rawDetail.running.searchOnly",
+  "agentChat.toolBatch.webSearch.rawDetail.completed.searchAndFetch",
+  "agentChat.toolBatch.webSearch.rawDetail.completed.searchOnly",
+  "agentChat.toolBatch.exploration.title.mixed",
+  "agentChat.toolBatch.exploration.title.read",
+  "agentChat.toolBatch.exploration.title.search",
+  "agentChat.toolBatch.exploration.title.list",
+  "agentChat.toolBatch.exploration.detail.read",
+  "agentChat.toolBatch.exploration.detail.search",
+  "agentChat.toolBatch.exploration.detail.list",
+  "agentChat.toolBatch.exploration.latestHint",
+  "agentChat.toolBatch.exploration.count.read",
+  "agentChat.toolBatch.exploration.count.search",
+  "agentChat.toolBatch.exploration.count.list",
+  "agentChat.toolBatch.exploration.count.steps",
+  "agentChat.toolBatch.exploration.rawDetail",
+  "agentChat.toolBatch.browser.title",
+  "agentChat.toolBatch.browser.fallbackLine",
+  "agentChat.toolBatch.browser.latestHint",
+  "agentChat.toolBatch.browser.count",
+  "agentChat.toolBatch.browser.rawDetail",
+] as const;
 
 function createToolCall(
   name: string,
@@ -23,6 +62,14 @@ function createToolCall(
 }
 
 describe("toolBatchGrouping", () => {
+  it("工具批次 copy key 应覆盖所有 current locale", () => {
+    for (const locale of SUPPORTED_LOCALES) {
+      for (const key of TOOL_BATCH_COPY_KEYS) {
+        expect(limeI18nResources[locale].agent).toHaveProperty(key);
+      }
+    }
+  });
+
   it("应把 MCP 搜索与读取归入探索批次", () => {
     const summary = summarizeStreamingToolBatch([
       createToolCall("mcp__github__search_code", {
@@ -156,6 +203,90 @@ describe("toolBatchGrouping", () => {
     );
   });
 
+  it("应优先使用 tool_process_facts.operationKind 聚合未知工具批次", () => {
+    const summary = summarizeStreamingToolBatch([
+      {
+        ...createToolCall("RuntimeProvidedTool"),
+        metadata: {
+          tool_process_facts: {
+            source: "runtime_facts",
+            toolName: "RuntimeProvidedTool",
+            operationKind: "web_search",
+            subject: "Soul output surface",
+          },
+        },
+      },
+      {
+        ...createToolCall("RuntimeFetchTool"),
+        metadata: {
+          tool_process_facts: {
+            source: "runtime_facts",
+            toolName: "RuntimeFetchTool",
+            operation_kind: "web_fetch",
+            subject: "https://example.com/soul",
+          },
+        },
+      },
+    ]);
+
+    expect(summary).toEqual(
+      expect.objectContaining({
+        kind: "web_search",
+        title: "已搜索网页 1 次，读取网页 1 次",
+        countLabel: "搜 1 / 读 1",
+      }),
+    );
+    expect(summary?.supportingLines).toEqual(
+      expect.arrayContaining(["Soul output surface", "example.com/soul"]),
+    );
+  });
+
+  it("应把工具生命周期 Soul metadata 透传到批次 descriptor", () => {
+    const summary = summarizeStreamingToolBatch([
+      {
+        ...createToolCall("web_search", {
+          query: "Lime Soul tool lifecycle",
+        }),
+        metadata: {
+          soul_lifecycle: {
+            surface: "tool_lifecycle",
+            phase: "after_tool_success",
+            status: "completed",
+            styleLevel: "L2",
+            riskLevel: "normal",
+            toneVariant: "cheeky_sassy",
+            profileId: "cheeky_sassy_executor",
+            packId: "com.lime.soul.cheeky-sassy-executor",
+          },
+          soul_surface: "tool_lifecycle",
+          soul_phase: "after_tool_success",
+          style_level: "L2",
+          risk_level: "normal",
+          tone_variant: "cheeky_sassy",
+          profile_id: "cheeky_sassy_executor",
+          pack_id: "com.lime.soul.cheeky-sassy-executor",
+        },
+      },
+    ]);
+
+    expect(summary).toEqual(
+      expect.objectContaining({
+        kind: "web_search",
+        soulLifecycle: expect.objectContaining({
+          phase: "after_tool_success",
+          surface: "tool_lifecycle",
+        }),
+        soulSurface: "tool_lifecycle",
+        soulPhase: "after_tool_success",
+        styleLevel: "L2",
+        riskLevel: "normal",
+        toneVariant: "cheeky_sassy",
+        profileId: "cheeky_sassy_executor",
+        packId: "com.lime.soul.cheeky-sassy-executor",
+      }),
+    );
+  });
+
   it("单条 WebSearch 也应生成网页搜索摘要", () => {
     const summary = summarizeStreamingToolBatch([
       createToolCall("web_search", {
@@ -280,10 +411,7 @@ describe("toolBatchGrouping", () => {
       }),
     );
     expect(summary?.supportingLines).toEqual(
-      expect.arrayContaining([
-        "today world news Reuters",
-        "reuters.com/world",
-      ]),
+      expect.arrayContaining(["today world news Reuters", "reuters.com/world"]),
     );
   });
 

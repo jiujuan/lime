@@ -10,7 +10,11 @@ export type AgentStreamFirstEventTimeoutAction =
   | "ignore"
   | "recover";
 
-export type AgentStreamInactivityTimeoutAction = "fail" | "ignore" | "recover";
+export type AgentStreamInactivityTimeoutAction =
+  | "continue"
+  | "fail"
+  | "ignore"
+  | "recover";
 
 export function buildAgentStreamFirstEventSilentRecoveryWarning(params: {
   eventName: string;
@@ -49,6 +53,7 @@ export function resolveAgentStreamFirstEventTimeoutAction(params: {
 }
 
 export function resolveAgentStreamInactivityTimeoutAction(params: {
+  activeReadModelActivity?: boolean;
   recovered: boolean;
   shouldIgnore: boolean;
 }): AgentStreamInactivityTimeoutAction {
@@ -57,6 +62,9 @@ export function resolveAgentStreamInactivityTimeoutAction(params: {
   }
   if (params.recovered) {
     return "recover";
+  }
+  if (params.activeReadModelActivity) {
+    return "continue";
   }
   return "fail";
 }

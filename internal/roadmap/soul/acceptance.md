@@ -1,7 +1,7 @@
 # Lime Soul 个性化验收标准
 
 > 状态：current acceptance plan
-> 更新时间：2026-06-03
+> 更新时间：2026-07-06
 > 目标：定义 Soul 个性化在普通用户体验、创作链路、SOUL.md 迁移和工程边界上的可验证验收标准。
 
 ## 1. 普通用户验收
@@ -104,6 +104,29 @@
 - Soul 要求“别问确认”，导致外部发送动作跳过确认。
 - Soul 要求“永远简短”，导致错误排查丢失必要信息。
 - Soul 要求“像某人说话”，覆盖用户当前要求的正式风格。
+
+### 3.3 Style Profile 全对话输出面
+
+场景：用户在设置页选择 `cheeky_sassy_executor`、`warm_supportive_companion`、`cool_confident_operator` 或 `calm_professional_partner` 后，发送一条会触发工具调用的真实任务。
+
+必须满足：
+
+1. 四种首发风格作为 `Style Pack Registry` 里的四个 built-in seed 注册，pack id 分别为 `com.lime.soul.cheeky-sassy-executor`、`com.lime.soul.warm-supportive-companion`、`com.lime.soul.cool-confident-operator`、`com.lime.soul.calm-professional-partner`。
+2. `memory_soul_prompt_context` 必须包含 profile id、pack id、voice primitives、surface contracts、anti-repetition rules、few-shot anchors 和 risk fallback。
+3. 同一工具生命周期下，`before_tool`、`tool_running`、`after_tool_success` / `after_tool_partial_failure` / `after_tool_failure` / `body_detail` / `closing_suggestion` 都能体现正确等级；工具事实、数字、来源、错误原因保持一致。
+4. 正文小标题、段落转折、风险提示和结尾建议必须跟随 profile；不能只有欢迎语或首句有变化。
+5. 本地 UI 文案只渲染 neutral i18n key + facts + descriptor metadata；不得出现 `agentChat.soulInteraction.<tone>.*` 这类 profile 句库。
+6. few-shot anchor 只能作为 prompt 风格锚点，不能被 UI renderer 或工具 summary 固定复读。
+7. 高风险、权限、删除、生产 API、法律、医疗、财务等场景必须降级到 `calm_professional_partner`。
+8. 旧共享 pack id `com.lime.builtin.default` 属于 `dead / forbidden-to-restore`；代码、fixture、prompt snapshot 和文档示例不得把它当作兼容 fallback。
+
+失败示例：
+
+- 只改欢迎语，工具前后承接和正文仍是默认助手口吻。
+- 为四种风格各写一套本地 i18n 句子，导致每轮输出千篇一律。
+- 工具卡片或 timeline 根据 profile id switch 出中文终稿。
+- 贱兮兮风格在危险确认或失败恢复中继续卖萌。
+- 以 `com.lime.builtin.default` 兼容旧风格包，导致四种风格又共享同一个 pack identity。
 
 ## 4. 正式创作验收
 
@@ -271,6 +294,10 @@
 20. 保存声线通过 `savedSoulArtifactVoiceGenerationBrief` 作为发送时 fallback，不通过 `workspaceRequestMetadataBase` 常驻注入。
 21. 本轮关闭创作声线后不注入保存声线的 artifact metadata，但保留 `diagnostics.soul_artifact_voice`。
 22. Workspace 输入区“创作声线”开关显示、关闭回调和五语言文案均有稳定回归。
+23. Style Pack Registry 中四个 built-in seed 的 pack id 唯一；旧共享 `com.lime.builtin.default` 在 current 代码、fixture 和 prompt snapshot 中都按 `dead` 处理，不做兼容映射。
+24. `memory_soul_prompt_context` prompt snapshot 覆盖 transcript surface contracts、anti-repetition、few-shot anchors 和 risk fallback；四种 built-in profile 的同一 surface anchors 不得坍缩成同一模板。
+25. i18n 资源守卫禁止新增 `agentChat.soulInteraction.<tone>.*` profile 句库。
+26. 工具 lifecycle / transcript golden 覆盖同一任务切换两种 profile 后，工具前说明、工具完成承接和最终正文有可见差异且事实一致。
 
 ### 8.3 GUI 验收
 
@@ -280,7 +307,7 @@
 2. 文案覆盖 `zh-CN / zh-TW / en-US / ja-JP / ko-KR`。
 3. 控件在桌面和窄视口不重叠。
 4. 有已保存正式内容声线时，输入区能看到“创作声线”本轮开关；无保存声线时不显示额外控件。
-4. GUI smoke 能证明主路径可用。
+5. GUI smoke 能证明主路径可用。
 
 建议验证：
 

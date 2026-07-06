@@ -383,6 +383,10 @@ describe("Electron current package entrypoints", () => {
     expect(runDev).toContain("--remote-debugging-port=");
     expect(runDev).toContain("normalizeRemoteDebuggingPort");
     expect(runDev).toContain("must be between 1 and 65535");
+    expect(runDev).toContain("resolveElectronDevLaunchEnv");
+    expect(runDev).toContain("ELECTRON_E2E_USER_DATA_DIR");
+    expect(runDev).toContain("LIME_ELECTRON_E2E");
+    expect(runDev).toContain("LIME_ELECTRON_DEV_HTTP_BRIDGE");
   });
 
   it("Electron packaged renderer uses relative assets under file URLs", () => {

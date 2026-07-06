@@ -25,6 +25,7 @@ import type { AsterSessionExecutionRuntime } from "@/lib/api/agentRuntime";
 import { CreationReplaySurfaceBanner } from "../components/CreationReplaySurfaceBanner";
 import { EmptyState } from "../components/EmptyState";
 import type { InputbarSendHandler } from "../components/Inputbar/inputbarSendPayload";
+import type { InterruptedInputRestoreRequest } from "../hooks/agentStreamInputRestoreTypes";
 import { MessageList } from "../components/MessageList";
 import { WorkspaceMainArea } from "./WorkspaceMainArea";
 import { WorkspacePendingA2UIPanel } from "./WorkspacePendingA2UIPanel";
@@ -292,6 +293,8 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
   onAddPathReferences?: ComponentProps<
     typeof EmptyState
   >["onAddPathReferences"];
+  inputRestoreRequest?: InterruptedInputRestoreRequest | null;
+  onInputRestoreRequestHandled?: (requestId: string) => void;
   onImportPathReferenceAsKnowledge?: ComponentProps<
     typeof EmptyState
   >["onImportPathReferenceAsKnowledge"];
@@ -342,6 +345,7 @@ interface WorkspaceConversationSceneProps extends WorkspaceMainAreaProps {
   input: ComponentProps<typeof EmptyState>["input"];
   setInput: ComponentProps<typeof EmptyState>["setInput"];
   onSendMessage: InputbarSendHandler;
+  onStopSending?: ComponentProps<typeof EmptyState>["onStop"];
   emptyStateIsLoading?: ComponentProps<typeof EmptyState>["isLoading"];
   emptyStateDisabled?: ComponentProps<typeof EmptyState>["disabled"];
   providerType: ComponentProps<typeof EmptyState>["providerType"];
@@ -566,6 +570,7 @@ export function WorkspaceConversationScene({
   input,
   setInput,
   onSendMessage,
+  onStopSending,
   emptyStateIsLoading = false,
   emptyStateDisabled = false,
   providerType,
@@ -692,6 +697,7 @@ export function WorkspaceConversationScene({
     input,
     setInput,
     onSendMessage,
+    onStopSending,
     isLoading: emptyStateIsLoading,
     disabled: emptyStateDisabled,
     providerType,

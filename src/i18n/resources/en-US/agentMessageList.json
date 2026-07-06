@@ -260,6 +260,7 @@
   "agentChat.toolCall.processSummary.generic.searchFirstWithSubject": "Searching {{subject}} first",
   "agentChat.toolCall.processSummary.generic.searched": "Search results received",
   "agentChat.toolCall.processSummary.generic.searchedWithSubject": "Searched {{subject}}",
+  "agentChat.toolCall.processSummary.generic.completed": "Step completed",
   "agentChat.toolCall.processSummary.generic.stepStartFirst": "Starting this step first",
   "agentChat.toolCall.processSummary.generic.stepStarted": "This step was started",
   "agentChat.toolCall.processSummary.generic.subtaskDelegated": "Task delegated to a subtask",

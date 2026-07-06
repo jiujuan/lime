@@ -21,16 +21,7 @@ function slugifyAppId(value: string): string {
 
 function normalizeManifestVersion(
   version: string,
-):
-  | "0.2"
-  | "0.3"
-  | "0.5"
-  | "0.6"
-  | "0.7"
-  | "0.8"
-  | "0.9"
-  | "0.10"
-  | "0.11" {
+): "0.2" | "0.3" | "0.5" | "0.6" | "0.7" | "0.8" | "0.9" | "0.10" | "0.11" {
   if (version.startsWith("0.11")) {
     return "0.11";
   }
@@ -137,15 +128,17 @@ function readRuntimeWorkflows(agentRuntime: unknown): WorkflowDeclaration[] {
 
 function normalizeWorkflows(manifest: AppManifest): WorkflowDeclaration[] {
   const seen = new Set<string>();
-  return [...(manifest.workflows ?? []), ...readRuntimeWorkflows(manifest.agentRuntime)]
-    .filter((workflow) => {
-      const key = typeof workflow.key === "string" ? workflow.key.trim() : "";
-      if (!key || seen.has(key)) {
-        return false;
-      }
-      seen.add(key);
-      return true;
-    });
+  return [
+    ...(manifest.workflows ?? []),
+    ...readRuntimeWorkflows(manifest.agentRuntime),
+  ].filter((workflow) => {
+    const key = typeof workflow.key === "string" ? workflow.key.trim() : "";
+    if (!key || seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
 }
 
 export function normalizeManifest(
@@ -217,6 +210,7 @@ export function normalizeManifest(
     workbench: manifest.workbench,
     distribution: manifest.distribution,
     presentation: manifest.presentation,
+    runtimeCapabilities: manifest.runtimeCapabilities,
     componentPaths: manifest.componentPaths,
     interface: manifest.interface,
     activationEntries: manifest.activationEntries,

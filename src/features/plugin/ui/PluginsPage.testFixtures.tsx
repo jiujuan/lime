@@ -135,6 +135,7 @@ const hoistedMocks = vi.hoisted(() => ({
     previewPluginUninstall: vi.fn(),
     requestWorkspaceRightSurface: vi.fn(),
     listPluginReleaseSubmissions: vi.fn(),
+    listPlatformPluginAuditLogs: vi.fn(),
     listClientPluginReleaseSubmissions: vi.fn(),
     approvePluginReleaseSubmission: vi.fn(),
     rejectPluginReleaseSubmission: vi.fn(),
@@ -261,6 +262,8 @@ vi.mock("@/lib/api/fileSystem", () => ({
 vi.mock("@/lib/api/oemCloudPluginPublish", () => ({
   listPluginReleaseSubmissions:
     hoistedMocks.apiMocks.listPluginReleaseSubmissions,
+  listPlatformPluginAuditLogs:
+    hoistedMocks.apiMocks.listPlatformPluginAuditLogs,
   listClientPluginReleaseSubmissions:
     hoistedMocks.apiMocks.listClientPluginReleaseSubmissions,
   approvePluginReleaseSubmission:
@@ -602,6 +605,7 @@ function setupDefaultApiMocks() {
     },
   });
   apiMocks.listPluginReleaseSubmissions.mockResolvedValue({ items: [] });
+  apiMocks.listPlatformPluginAuditLogs.mockResolvedValue({ items: [] });
   apiMocks.listClientPluginReleaseSubmissions.mockResolvedValue({ items: [] });
   apiMocks.approvePluginReleaseSubmission.mockImplementation(
     async (submissionId: string) => ({

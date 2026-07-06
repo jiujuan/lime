@@ -168,6 +168,30 @@ function uiPartForEvent(
   event: AgentRuntimeExecutionEvent,
 ): UIMessagePart | undefined {
   const eventClass = event.eventClass ?? "";
+  if (eventClass === "plan.delta" || eventClass === "plan.final") {
+    const text =
+      payloadString(event, "text", "delta", "message", "content") ??
+      payloadPlanText(event) ??
+      event.detail ??
+      event.title;
+    return {
+      type: "plan",
+      partId: event.id,
+      messageId:
+        typeof event.payload?.messageId === "string"
+          ? event.payload.messageId
+          : event.id,
+      role: "assistant",
+      text,
+      state:
+        eventClass === "plan.final" || event.status === "completed"
+          ? "final"
+          : "streaming",
+      sourceEventId: event.id,
+      createdAt: event.createdAt,
+      refs: eventRefs(event),
+    };
+  }
   if (
     event.kind === "model" ||
     eventClass === "model.delta" ||
@@ -182,9 +206,9 @@ function uiPartForEvent(
           : event.id,
       role: "assistant",
       text:
-        typeof event.payload?.text === "string"
-          ? event.payload.text
-          : event.detail ?? event.title,
+        payloadString(event, "text", "delta", "message", "content") ??
+        event.detail ??
+        event.title,
       state:
         eventClass === "model.completed" || event.status === "completed"
           ? "final"
@@ -262,6 +286,49 @@ function uiPartForEvent(
   return undefined;
 }
 
+function payloadPlanText(event: AgentRuntimeExecutionEvent): string | undefined {
+  const payload = event.payload;
+  if (!isRecord(payload)) return undefined;
+  const plan = payload.plan;
+  if (typeof plan === "string" && plan.trim()) {
+    return plan;
+  }
+  if (!Array.isArray(plan)) {
+    return undefined;
+  }
+
+  const lines = plan
+    .map((item) => {
+      if (typeof item === "string") {
+        return item.trim();
+      }
+      if (!isRecord(item)) {
+        return "";
+      }
+      const step =
+        readPlanItemString(item, "step") ??
+        readPlanItemString(item, "title") ??
+        readPlanItemString(item, "text") ??
+        readPlanItemString(item, "content");
+      const status = readPlanItemString(item, "status");
+      if (!step) {
+        return "";
+      }
+      return status ? `- [${status}] ${step}` : `- ${step}`;
+    })
+    .filter(Boolean);
+
+  return lines.length ? lines.join("\n") : undefined;
+}
+
+function readPlanItemString(
+  record: Record<string, unknown>,
+  key: string,
+): string | undefined {
+  const value = record[key];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
 function messageScopeKey(event: AgentRuntimeExecutionEvent): string {
   return [
     event.runtimeId,
@@ -280,7 +347,10 @@ function messagePartGroupKey(
   part: UIMessagePart,
 ): string | null {
   const eventClass = event.eventClass ?? "";
-  if (part.type === "text" && eventClass === "model.delta") {
+  if (
+    part.type === "text" &&
+    (eventClass === "model.delta" || eventClass === "model.completed")
+  ) {
     return `stream:text:${messageScopeKey(event)}`;
   }
   if (part.type === "reasoning" && eventClass.startsWith("reasoning.")) {
@@ -293,9 +363,20 @@ function mergeStreamText(current = "", next = ""): string {
   if (!current) return next;
   if (!next) return current;
   if (next.startsWith(current)) return next;
+  if (isWhitespaceInsensitivePrefix(current, next)) return next;
   const needsSpace =
     /[A-Za-z0-9`)]$/.test(current) && /^[A-Za-z0-9`(]/.test(next);
   return `${current}${needsSpace ? " " : ""}${next}`;
+}
+
+function isWhitespaceInsensitivePrefix(current: string, next: string): boolean {
+  const compactCurrent = current.replace(/\s+/g, "");
+  const compactNext = next.replace(/\s+/g, "");
+  return (
+    compactCurrent.length > 0 &&
+    compactNext.length >= compactCurrent.length &&
+    compactNext.startsWith(compactCurrent)
+  );
 }
 
 function mergeMessagePart(current: UIMessagePart, next: UIMessagePart): UIMessagePart {
@@ -319,7 +400,70 @@ function collectMessageParts(
     appendMessagePart(parts, groups, event);
   });
 
-  return parts;
+  return materializeProposedPlanParts(parts);
+}
+
+const PROPOSED_PLAN_BLOCK_PATTERN =
+  /<proposed_plan\b[^>]*>([\s\S]*?)<\/proposed_plan>/gi;
+
+function materializeProposedPlanParts(
+  parts: readonly UIMessagePart[],
+): UIMessagePart[] {
+  return parts.flatMap((part) => materializeProposedPlanPart(part));
+}
+
+function materializeProposedPlanPart(part: UIMessagePart): UIMessagePart[] {
+  if (part.type !== "text" || !part.text?.includes("<proposed_plan")) {
+    return [part];
+  }
+
+  const result: UIMessagePart[] = [];
+  let cursor = 0;
+  let planIndex = 0;
+  PROPOSED_PLAN_BLOCK_PATTERN.lastIndex = 0;
+
+  for (
+    let match = PROPOSED_PLAN_BLOCK_PATTERN.exec(part.text);
+    match;
+    match = PROPOSED_PLAN_BLOCK_PATTERN.exec(part.text)
+  ) {
+    const before = part.text.slice(cursor, match.index);
+    appendTextSegmentPart(result, part, before, planIndex);
+    const planText = match[1]?.trim();
+    if (planText) {
+      result.push({
+        ...part,
+        type: "plan",
+        partId: `${part.partId}:proposed-plan:${planIndex}`,
+        text: planText,
+      });
+      planIndex += 1;
+    }
+    cursor = match.index + match[0].length;
+  }
+
+  if (planIndex === 0) {
+    return [part];
+  }
+
+  appendTextSegmentPart(result, part, part.text.slice(cursor), planIndex);
+  return result;
+}
+
+function appendTextSegmentPart(
+  result: UIMessagePart[],
+  source: UIMessagePart,
+  text: string,
+  segmentIndex: number,
+): void {
+  if (!text.trim()) {
+    return;
+  }
+  result.push({
+    ...source,
+    partId: `${source.partId}:text:${segmentIndex}`,
+    text,
+  });
 }
 
 function appendMessagePart(
@@ -567,9 +711,10 @@ function buildStateSnapshot<TEvent extends AgentRuntimeExecutionEvent>(
     eventCount: number;
   },
 ): AgentUiProjectionState<TEvent> {
+  const messages = materializeProposedPlanParts(input.messages);
   return {
     runtime: { ...input.runtime },
-    messages: input.messages.map(cloneMessagePart),
+    messages: messages.map(cloneMessagePart),
     timeline: input.timeline.map(cloneTimelineEntry),
     graph: Array.from(input.graphNodes.values()).map(cloneGraphNode),
     tools: input.tools,

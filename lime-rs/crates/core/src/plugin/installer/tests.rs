@@ -234,6 +234,29 @@ mod installer_tests {
     }
 
     #[test]
+    fn test_installer_rebases_system_cache_temp_dir_to_system_temp() {
+        let Some(cache_dir) = dirs::cache_dir() else {
+            return;
+        };
+        if PluginInstaller::default_temp_dir().starts_with(&cache_dir) {
+            return;
+        }
+        let temp_dir = TempDir::new().unwrap();
+        let plugins_dir = temp_dir.path().join("plugins");
+        let cache_temp_dir = cache_dir.join("plugin-installer-test");
+        let db_path = temp_dir.path().join("test.db");
+
+        let installer = PluginInstaller::from_paths(plugins_dir, cache_temp_dir, &db_path).unwrap();
+
+        assert_eq!(
+            installer.temp_dir(),
+            PluginInstaller::default_temp_dir().join("plugin-installer-test")
+        );
+        assert!(installer.temp_dir().starts_with(std::env::temp_dir()));
+        assert!(!installer.temp_dir().starts_with(cache_dir));
+    }
+
+    #[test]
     fn test_installer_list_installed_empty() {
         let temp_dir = TempDir::new().unwrap();
         let plugins_dir = temp_dir.path().join("plugins");

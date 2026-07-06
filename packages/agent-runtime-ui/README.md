@@ -113,7 +113,7 @@ const replay = replayAppServerFacts({
 | Tool group | `state.tools` | projection 负责 tool lifecycle 解释。 |
 | Tool calls | `state.toolCalls` | projection 负责工具调用、事件分组与 MCP 归并。 |
 | MCP surface | `state.mcp` | projection 负责 MCP server / tool 归类与状态汇总。 |
-| Subagents | `state.subagents` | projection 负责子代理线程、委派调用、活动摘要和隔离摘要。 |
+| Subagents | `state.subagents` | projection 负责子代理线程、委派调用、活动摘要、隔离摘要和协作 facts。 |
 | Artifact refs | `state.artifacts` | 宿主负责打开 artifact workspace 或详情页。 |
 | Evidence refs | `state.evidence` | 宿主负责打开 evidence pack、review 或 replay。 |
 | Runtime summary | `state.readModel` | projection/read model 负责计数；宿主负责显示文案。 |
@@ -258,6 +258,8 @@ src/index.ts           -> barrel exports only
 | `data-thread-id` / `data-subagent-id` / `data-parent-thread-id` | Subagents | 子代理线程身份和父子关系。 |
 | `data-delegation-action` / `data-target-thread-ids` | Subagents | 委派调用类型和目标线程。 |
 | `data-activity-kind` / `data-source-event-id` | Subagents | 活动分类和来源事件。 |
+| `data-collaboration-facts` / `data-collaboration-surface` / `data-collaboration-phase` / `data-collaboration-kind` / `data-collaboration-source` | Subagents | 协作 facts、surface、phase、kind 和来源事件，供 smoke / snapshot / 样式消费。 |
+| `data-soul-style-level` / `data-soul-risk-level` / `data-soul-tone-variant` / `data-soul-profile-id` / `data-soul-pack-id` | Subagents | 协作事件的 Soul style metadata；只作为 descriptor contract，不是 profile-specific 文案。 |
 | `data-event-class` | runtime fact cards | `tool.*`、`handoff.*`、`review.*` 等事件族。 |
 | `data-ref-kind` / `data-ref-id` / `data-source-event-id` | artifact / evidence refs | 引用类型、引用 id 和来源事件。 |
 
@@ -346,7 +348,7 @@ import { SubagentsView } from "@limecloud/agent-runtime-ui";
 />;
 ```
 
-`SubagentsView` 只读取 `state.subagents`。如果业务组件需要自定义子代理布局，也应消费同一个模型，而不是重新过滤 `state.graph` 或 `state.readModel.visibleEvents`。
+`SubagentsView` 只读取 `state.subagents`。如果业务组件需要自定义子代理布局，也应消费同一个模型，而不是重新过滤 `state.graph` 或 `state.readModel.visibleEvents`。协作执行的 Soul metadata 必须来自 `state.subagents.*.collaboration`，不得从标题、中文状态或局部 UI state 反推。
 
 ## Testing
 

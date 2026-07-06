@@ -76,6 +76,7 @@
   "agentChat.inputbar.core.suggestion.acceptKey": "Tab",
   "agentChat.inputbar.core.textarea.expand": "展開輸入框",
   "agentChat.inputbar.core.textarea.collapse": "收合輸入框",
+  "agentChat.inputbar.core.action.running": "正在輸出",
   "agentChat.inputbar.core.action.defer": "稍後處理",
   "agentChat.inputbar.core.action.stop": "停止",
   "agentChat.inputbar.core.action.send": "傳送",

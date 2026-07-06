@@ -1,16 +1,8 @@
-export type SoulStyleProfileId =
-  | "cheeky_sassy_executor"
-  | "warm_supportive_companion"
-  | "cool_confident_operator"
-  | "calm_professional_partner";
+export type SoulStyleProfileId = string;
 
 export type SoulStyleIntensity = "low" | "medium" | "high";
 
-export type SoulStyleTone =
-  | "cheeky_sassy"
-  | "warm_supportive"
-  | "cool_confident"
-  | "calm_professional";
+export type SoulStyleTone = string;
 
 export type SoulStyleProfileScope =
   | "chat_interaction"
@@ -18,10 +10,30 @@ export type SoulStyleProfileScope =
   | "companion"
   | "artifact_voice";
 
+export type SoulStyleSurfaceContract =
+  | "before_tool"
+  | "tool_running"
+  | "after_tool_success"
+  | "after_tool_partial_failure"
+  | "after_tool_failure"
+  | "body_detail"
+  | "closing_suggestion";
+
 export type SoulStylePackSource =
   | "built_in"
   | "local_import"
   | "cloud_download";
+
+export interface SoulStyleFewShotAnchor {
+  surface: SoulStyleSurfaceContract;
+  intent: string;
+  example: string;
+}
+
+export interface SoulStyleRiskFallback {
+  profileId: SoulStyleProfileId;
+  triggers: string[];
+}
 
 export interface SoulStyleProfile {
   id: SoulStyleProfileId;
@@ -31,10 +43,16 @@ export interface SoulStyleProfile {
   tone: SoulStyleTone;
   intensity: SoulStyleIntensity;
   scopes: SoulStyleProfileScope[];
+  responseContract: string[];
+  voicePrimitives: string[];
+  surfaceContracts: Partial<Record<SoulStyleSurfaceContract, string[]>>;
   allowedMoves: string[];
   forbiddenMoves: string[];
+  antiRepetitionRules: string[];
+  fewShotAnchors: SoulStyleFewShotAnchor[];
   defaultUseCases: string[];
-  seriousModeFallback: "calm_professional_partner";
+  riskFallback: SoulStyleRiskFallback;
+  seriousModeFallback: SoulStyleProfileId;
 }
 
 export interface SoulStylePackManifest {
@@ -88,9 +106,15 @@ export interface SoulStyleDirectives {
   tone: SoulStyleTone;
   intensity: SoulStyleIntensity;
   scopes: SoulStyleProfileScope[];
+  responseContract: string[];
+  voicePrimitives: string[];
+  surfaceContracts: Partial<Record<SoulStyleSurfaceContract, string[]>>;
   allowedMoves: string[];
   forbiddenMoves: string[];
+  antiRepetitionRules: string[];
+  fewShotAnchors: SoulStyleFewShotAnchor[];
   defaultUseCases: string[];
-  seriousModeFallback: "calm_professional_partner";
+  riskFallback: SoulStyleRiskFallback;
+  seriousModeFallback: SoulStyleProfileId;
   promptLines: string[];
 }

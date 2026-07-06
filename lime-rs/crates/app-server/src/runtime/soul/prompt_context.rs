@@ -9,7 +9,7 @@ const SOUL_TEXT_MAX_CHARS: usize = 600;
 const SOUL_SHORT_TEXT_MAX_CHARS: usize = 160;
 const SOUL_LIST_ITEM_MAX_CHARS: usize = 120;
 const SOUL_LIST_MAX_ITEMS: usize = 8;
-const SOUL_PACKET_MAX_TOKENS: usize = 650;
+const SOUL_PACKET_MAX_TOKENS: usize = 1400;
 
 pub(crate) fn memory_soul_prompt_context_from_config(
     soul: Option<&MemorySoulConfig>,
@@ -120,9 +120,9 @@ pub(crate) fn soul_packet_from_metadata(
     if let Some(summary) = non_empty_str(summary) {
         lines.push(format!("- Summary: {summary}"));
     }
-    append_style_profile_lines(style_profile, &mut lines);
-    append_persona_context_lines(runtime_metadata, &mut lines);
     append_style_boundary_lines(style_boundary, &mut lines);
+    append_persona_context_lines(runtime_metadata, &mut lines);
+    append_style_profile_lines(style_profile, &mut lines);
     if !tone.is_empty() {
         lines.push(format!("- Tone: {}", tone.join(", ")));
     }
@@ -276,6 +276,16 @@ fn append_style_profile_lines(style_profile: Option<&Value>, lines: &mut Vec<Str
     );
     append_named_list(
         lines,
+        "Voice primitives",
+        string_array(style_profile.get("voicePrimitives")),
+    );
+    append_named_list(
+        lines,
+        "Surface contracts",
+        string_array(style_profile.get("surfaceContracts")),
+    );
+    append_named_list(
+        lines,
         "Allowed style moves",
         string_array(style_profile.get("allowedMoves")),
     );
@@ -283,6 +293,16 @@ fn append_style_profile_lines(style_profile: Option<&Value>, lines: &mut Vec<Str
         lines,
         "Forbidden style moves",
         string_array(style_profile.get("forbiddenMoves")),
+    );
+    append_named_list(
+        lines,
+        "Anti-repetition rules",
+        string_array(style_profile.get("antiRepetitionRules")),
+    );
+    append_named_list(
+        lines,
+        "Few-shot anchors",
+        string_array(style_profile.get("fewShotAnchors")),
     );
     if let Some(fallback) = non_empty_str(
         style_profile
@@ -292,6 +312,14 @@ fn append_style_profile_lines(style_profile: Option<&Value>, lines: &mut Vec<Str
         lines.push(format!(
             "- Serious/high-risk fallback: {fallback}; use it for permission, deletion, production API, medical, legal, financial, or safety-sensitive turns."
         ));
+    }
+    if let Some(risk_fallback) = style_profile.get("riskFallback") {
+        let fallback = non_empty_str(risk_fallback.get("profileId").and_then(Value::as_str));
+        let triggers = string_array(risk_fallback.get("triggers"));
+        if let Some(fallback) = fallback {
+            lines.push(format!("- Risk fallback profile: {fallback}"));
+        }
+        append_named_list(lines, "Risk fallback triggers", triggers);
     }
 }
 

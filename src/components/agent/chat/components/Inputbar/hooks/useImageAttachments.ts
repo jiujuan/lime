@@ -21,9 +21,7 @@ export function useImageAttachments() {
   const { t } = useTranslation("agent");
   const copy = useMemo(
     () =>
-      buildInputbarImageAttachmentsCopy((key, values) =>
-        t(key, values ?? {}),
-      ),
+      buildInputbarImageAttachmentsCopy((key, values) => t(key, values ?? {})),
     [t],
   );
   const [pendingImages, setPendingImages] = useState<MessageImage[]>([]);
@@ -152,6 +150,7 @@ export function useImageAttachments() {
     handleDrop,
     handleRemoveImage,
     clearPendingImages,
+    replacePendingImages: setPendingImagesSnapshot,
     openFileDialog,
   };
 }

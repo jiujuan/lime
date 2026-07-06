@@ -82,6 +82,27 @@ describe("resolveTaskCenterDraftSurfaceState", () => {
     expect(state.shouldSuppressTaskCenterDraftContent).toBe(false);
   });
 
+  it("new-task 草稿发送中也不应被首页空态压制", () => {
+    const draftTab = createDraftTab("draft-new-task");
+    const state = resolveTaskCenterDraftSurfaceState({
+      agentEntry: "new-task",
+      isTaskCenterEntry: true,
+      activeDraftTabId: draftTab.id,
+      draftTabs: [draftTab],
+      draftSurfaceActive: false,
+      draftSendRequest: createDraftSendRequest({ draftTabId: draftTab.id }),
+      displayMessageCount: 0,
+      threadItemCount: 0,
+      hasPendingA2UIForm: false,
+      isPreparingSend: false,
+      isSending: true,
+      queuedTurnCount: 0,
+    });
+
+    expect(state.isTaskCenterDraftSendInFlight).toBe(true);
+    expect(state.shouldSuppressTaskCenterDraftContent).toBe(false);
+  });
+
   it("草稿 surface 标志滞留但已有会话活动时不应压制内容", () => {
     const state = resolveTaskCenterDraftSurfaceState({
       agentEntry: "claw",

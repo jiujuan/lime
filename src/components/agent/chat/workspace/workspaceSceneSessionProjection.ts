@@ -47,6 +47,37 @@ export interface WorkspaceSceneSessionProjection<
   sceneIsSending: boolean;
 }
 
+function readRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function normalizeStatus(value: unknown): string | null {
+  return typeof value === "string" ? value.trim().toLowerCase() || null : null;
+}
+
+export function hasRunningThreadReadActivity(threadRead: unknown): boolean {
+  const record = readRecord(threadRead);
+  if (!record) {
+    return false;
+  }
+  if (
+    normalizeStatus(record.status) === "running" ||
+    normalizeStatus(record.profile_status) === "running"
+  ) {
+    return true;
+  }
+  if (
+    typeof record.active_turn_id === "string" &&
+    record.active_turn_id.trim()
+  ) {
+    return true;
+  }
+  const turns = Array.isArray(record.turns) ? record.turns : [];
+  return turns.some((turn) => normalizeStatus(readRecord(turn)?.status) === "running");
+}
+
 export function resolveWorkspaceSceneSessionProjection<
   TMessage,
   TTurn,
@@ -118,6 +149,6 @@ export function resolveWorkspaceSceneSessionProjection<
     sceneSubmittedActionsInFlight: submittedActionsInFlight,
     sceneQueuedTurns: queuedTurns,
     sceneIsPreparingSend: isPreparingSend || isTaskCenterDraftSendPending,
-    sceneIsSending: isSending,
+    sceneIsSending: isSending || hasRunningThreadReadActivity(threadRead),
   };
 }

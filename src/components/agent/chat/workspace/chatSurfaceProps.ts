@@ -44,6 +44,7 @@ interface BuildWorkspaceEmptyStatePropsParams {
   input: ComponentProps<typeof EmptyState>["input"];
   setInput: ComponentProps<typeof EmptyState>["setInput"];
   onSendMessage: InputbarSendHandler;
+  onStopSending?: ComponentProps<typeof EmptyState>["onStop"];
   isLoading: ComponentProps<typeof EmptyState>["isLoading"];
   disabled: ComponentProps<typeof EmptyState>["disabled"];
   providerType: ComponentProps<typeof EmptyState>["providerType"];
@@ -192,6 +193,7 @@ export function buildWorkspaceEmptyStateProps({
   input,
   setInput,
   onSendMessage,
+  onStopSending,
   isLoading,
   disabled,
   providerType,
@@ -274,6 +276,7 @@ export function buildWorkspaceEmptyStateProps({
     input,
     setInput,
     onSend: handleEmptyStateSend,
+    onStop: onStopSending,
     isLoading,
     disabled,
     providerType,

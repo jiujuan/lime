@@ -219,20 +219,43 @@ describe("EmptyStateComposerPanel", () => {
     const textarea = container.querySelector(
       "textarea",
     ) as HTMLTextAreaElement | null;
-    const pendingButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("稍后处理"),
+    const runningButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("正在输出"),
     ) as HTMLButtonElement | undefined;
 
     expect(textarea?.disabled).toBe(true);
-    expect(pendingButton).toBeTruthy();
-    expect(pendingButton?.disabled).toBe(true);
+    expect(runningButton).toBeTruthy();
+    expect(runningButton?.disabled).toBe(true);
     expect(container.querySelector('button[title="发送"]')).toBeNull();
 
     act(() => {
-      pendingButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      runningButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
     expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("运行中应把空态停止按钮接到 onStop", () => {
+    const onStop = vi.fn();
+    const container = renderPanel({
+      input: "请帮我梳理首页首次发送链路",
+      isLoading: true,
+      disabled: true,
+      onStop,
+    });
+
+    const stopButton = container.querySelector(
+      'button[title="停止"]',
+    ) as HTMLButtonElement | null;
+
+    expect(stopButton).toBeTruthy();
+    expect(stopButton?.disabled).toBe(false);
+
+    act(() => {
+      stopButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(onStop).toHaveBeenCalledTimes(1);
   });
 
   it("有待发送图片时应显示预览并支持删除", () => {

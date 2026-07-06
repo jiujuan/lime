@@ -245,6 +245,8 @@ Claw / Aster 原完整执行链是 Agent 对话 runtime 的 current 参考实现
 
 这条边界参考 `/Users/coso/Documents/dev/rust/codex/codex-rs`：Codex app-server 只把 JSON-RPC `turn/start` 投影成 core `Op::UserInput` 并交给 `ThreadManager / CodexThread`，模型采样、tool router、审批 / 沙箱与执行循环都在 core / exec-server 边界。Lime 后续应按同样分层收敛，不能把 `AppServerBackendMode::Runtime` 理解成 App Server 顶层继续复制 Aster turn loop 的许可。
 
+Agent 命令和运行时边界必须执行 Codex-first：除多模型 / 多模态 provider capability、media part、模型能力矩阵和 provider lowering 可参考 opencode 外，turn start/read/resume、Thread / Turn / Item、tool lifecycle、MCP、Skills、Multi-Agent、Plan hydrate、history hydrate、projection 和测试 fixture 都默认按 Codex 的 app-server/core/TUI 分层重构。Lime 旧命名或旧 `agent_runtime_*` / `Aster` surface 只能作为迁移残留或 retired guard，不得继续定义新命令、新网关或新 UI 状态机。
+
 App Server 初始化 Agent runtime 时只能通过 `lime-rs/crates/app-server/src/agent_runtime_registry.rs` 触发 `lime_agent` runtime 初始化；LocalAppDataSource、命令处理与其他数据源层不得直接 import `lime_agent::initialize_aster_runtime`。Skill 安装、导入、卸载或脚手架创建后需要刷新运行时 Skill registry 时，LocalAppDataSource 只能通知 `lime-rs/crates/app-server/src/skill_registry.rs`。`local_data_source/skills/**` 不得直接 import `lime_agent::AsterAgentState` 或调用 `lime_agent::reload_lime_skills`；这类调用属于 runtime / skill registry 边界，不属于数据源层职责。
 
 Knowledge Builder 的真实 Skill prompt / workflow 执行边界已下沉到 `lime-rs/crates/agent/src/knowledge_builder_skill.rs`。App Server 侧 `lime-rs/crates/app-server/src/runtime_backend/knowledge_builder_runtime.rs` 只允许做 `KnowledgeBuilderRuntimePlan -> KnowledgeBuilderSkillRequest -> KnowledgeBuilderRuntimeExecution` 投影和 adapter 接线，不得重新直接 import 或调用 `execute_skill_prompt`、`execute_skill_workflow`、`SkillPromptExecution`、`SkillWorkflowExecution`。后续若要统一到 `agentSession/turn/start`，应继续向 RuntimeCore / lime-agent 主链收敛，而不是在 App Server 新增平行 Skill 执行器。

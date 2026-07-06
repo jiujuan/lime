@@ -1,4 +1,5 @@
 import type {
+  AgentUiCollaborationFactsView,
   AgentRuntimeExecutionEvent,
   AgentUiSubagentActivityView,
   AgentUiSubagentDelegationView,
@@ -38,6 +39,32 @@ function defaultActivityMeta(activity: AgentUiSubagentActivityView) {
   return `${activity.kind} / ${activity.status}`;
 }
 
+function readFactString(
+  facts: Record<string, unknown> | undefined,
+  key: string,
+): string | undefined {
+  const value = facts?.[key];
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function collaborationDataAttributes(
+  collaboration: AgentUiCollaborationFactsView | undefined,
+) {
+  const facts = collaboration?.collaborationFacts;
+  return {
+    "data-collaboration-facts": facts ? "yes" : undefined,
+    "data-collaboration-surface": collaboration?.collaborationSurface,
+    "data-collaboration-phase": collaboration?.collaborationPhase,
+    "data-collaboration-kind": readFactString(facts, "collaborationKind"),
+    "data-collaboration-source": readFactString(facts, "source"),
+    "data-soul-style-level": collaboration?.styleLevel,
+    "data-soul-risk-level": collaboration?.riskLevel,
+    "data-soul-tone-variant": collaboration?.toneVariant,
+    "data-soul-profile-id": collaboration?.profileId,
+    "data-soul-pack-id": collaboration?.packId,
+  };
+}
+
 export function SubagentThreadList({
   threads = [],
   empty,
@@ -62,6 +89,7 @@ export function SubagentThreadList({
           data-parent-thread-id={thread.parentThreadId}
           data-task-id={thread.taskId}
           data-subagent-status={thread.status}
+          {...collaborationDataAttributes(thread.collaboration)}
         >
           <div>
             <small>{threadMeta(thread)}</small>
@@ -98,6 +126,7 @@ export function SubagentDelegationList({
           data-delegation-action={delegation.action}
           data-parent-thread-id={delegation.parentThreadId}
           data-target-thread-ids={delegation.targetThreadIds.join(" ")}
+          {...collaborationDataAttributes(delegation.collaboration)}
         >
           <small>{delegation.status}</small>
           <strong>{delegationTitle(delegation)}</strong>
@@ -128,6 +157,7 @@ export function SubagentActivityList({
           data-thread-id={activity.threadId}
           data-activity-kind={activity.kind}
           data-source-event-id={activity.sourceEventId}
+          {...collaborationDataAttributes(activity.collaboration)}
         >
           <small>{activityMeta(activity)}</small>
           <strong>{activityTitle(activity)}</strong>

@@ -9,15 +9,51 @@ struct ToolLifecycleState {
 
 #[derive(Default)]
 struct ToolState {
-    pending_action_id: Option<String>,
-    denied: bool,
     owner: ToolOwner,
+    gate: ToolGateState,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 struct ToolOwner {
     assistant_owner_id: Option<String>,
     item_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ToolLifecycleSnapshot {
+    tool_call_id: String,
+    owner: ToolOwner,
+    gate: ToolGateState,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ToolGateState {
+    Open,
+    PendingApproval(ToolApprovalAction),
+    Blocked(ToolBlockDecision),
+}
+
+impl Default for ToolGateState {
+    fn default() -> Self {
+        Self::Open
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ToolApprovalAction {
+    action_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ToolBlockDecision {
+    source: ToolBlockSource,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ToolBlockSource {
+    Approval,
+    Permission,
+    Sandbox,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -104,9 +140,8 @@ impl ToolLifecycleState {
                     self.tools.insert(
                         tool_call_id,
                         ToolState {
-                            pending_action_id: None,
-                            denied: false,
                             owner: ToolOwner::from_event(event),
+                            gate: ToolGateState::Open,
                         },
                     );
                 }
@@ -119,17 +154,38 @@ impl ToolLifecycleState {
             "action.required" => {
                 if let Some(tool_call_id) = explicit_tool_call_id(event) {
                     if let Some(tool) = self.tools.get_mut(&tool_call_id) {
-                        tool.pending_action_id = action_id(event);
+                        tool.gate = ToolGateState::PendingApproval(ToolApprovalAction {
+                            action_id: action_id(event),
+                        });
                     }
                 }
             }
             event_class if is_action_terminal_event_class(event_class) => {
                 if let Some(tool_call_id) = explicit_tool_call_id(event) {
                     if let Some(tool) = self.tools.get_mut(&tool_call_id) {
-                        if tool.pending_action_id.as_deref() == action_id(event).as_deref() {
-                            tool.pending_action_id = None;
-                            tool.denied = action_denies_tool(event);
+                        let action_id = action_id(event);
+                        if tool.pending_approval_action_id() == action_id.as_deref() {
+                            tool.gate = if action_denies_tool(event) {
+                                ToolGateState::Blocked(ToolBlockDecision {
+                                    source: ToolBlockSource::Approval,
+                                })
+                            } else {
+                                ToolGateState::Open
+                            };
                         }
+                    }
+                }
+            }
+            "permission.denied" | "sandbox.blocked" => {
+                if let Some(tool_call_id) = explicit_tool_call_id(event) {
+                    if let Some(tool) = self.tools.get_mut(&tool_call_id) {
+                        let event_class = normalize_event_class(&event.event_type);
+                        tool.gate = ToolGateState::Blocked(ToolBlockDecision {
+                            source: match event_class {
+                                "permission.denied" => ToolBlockSource::Permission,
+                                _ => ToolBlockSource::Sandbox,
+                            },
+                        });
                     }
                 }
             }
@@ -141,19 +197,22 @@ impl ToolLifecycleState {
         let mut violations = Vec::new();
         let event_class = normalize_event_class(&event.event_type);
         match event_class {
-            "tool.args" | "tool.args.delta" => {
+            "tool.args" | "tool.args.delta" | "tool.input.delta" | "tool.progress" => {
                 if let Some(tool_call_id) = tool_call_id(event) {
-                    if let Some(tool) = self.tools.get(&tool_call_id) {
+                    if let Some(snapshot) = self.tool_snapshot(&tool_call_id) {
                         validate_tool_owner(
                             &mut violations,
                             event,
-                            &tool_call_id,
-                            tool,
+                            &snapshot,
                             OwnerRequirement::ExplicitOnly,
                         );
                     } else {
                         violations.push(ToolLifecycleViolation {
-                            code: "tool_args_without_start",
+                            code: if event_class == "tool.progress" {
+                                "tool_progress_without_start"
+                            } else {
+                                "tool_args_without_start"
+                            },
                             event_id: event.event_id.clone(),
                             tool_call_id: Some(tool_call_id),
                         });
@@ -162,20 +221,21 @@ impl ToolLifecycleState {
             }
             "tool.output.delta" => {
                 if let Some(tool_call_id) = tool_call_id(event) {
-                    if let Some(tool) = self.tools.get(&tool_call_id) {
+                    if let Some(snapshot) = self.tool_snapshot(&tool_call_id) {
                         validate_tool_owner(
                             &mut violations,
                             event,
-                            &tool_call_id,
-                            tool,
+                            &snapshot,
                             OwnerRequirement::ExplicitOnly,
                         );
-                        if tool.pending_action_id.is_some() {
+                        if snapshot.pending_approval_action_id().is_some() {
                             violations.push(ToolLifecycleViolation {
                                 code: "tool_output_before_action_resolved",
                                 event_id: event.event_id.clone(),
-                                tool_call_id: Some(tool_call_id),
+                                tool_call_id: Some(snapshot.tool_call_id.clone()),
                             });
+                        } else if let Some(code) = snapshot.output_blocked_violation_code() {
+                            violations.push(snapshot.violation(event, code));
                         }
                     } else {
                         violations.push(ToolLifecycleViolation {
@@ -188,45 +248,39 @@ impl ToolLifecycleState {
             }
             "tool.result" => {
                 if let Some(tool_call_id) = tool_call_id(event) {
-                    if let Some(tool) = self.tools.get(&tool_call_id) {
+                    if let Some(snapshot) = self.tool_snapshot(&tool_call_id) {
                         validate_tool_owner(
                             &mut violations,
                             event,
-                            &tool_call_id,
-                            tool,
+                            &snapshot,
                             OwnerRequirement::RequiredForTerminal,
                         );
-                        if tool.pending_action_id.is_some() {
+                        if snapshot.pending_approval_action_id().is_some() {
                             violations.push(ToolLifecycleViolation {
                                 code: "tool_result_before_action_resolved",
                                 event_id: event.event_id.clone(),
-                                tool_call_id: Some(tool_call_id),
+                                tool_call_id: Some(snapshot.tool_call_id.clone()),
                             });
-                        } else if tool.denied {
-                            violations.push(ToolLifecycleViolation {
-                                code: "tool_result_after_action_denied",
-                                event_id: event.event_id.clone(),
-                                tool_call_id: Some(tool_call_id),
-                            });
+                        } else if let Some(code) = snapshot.result_blocked_violation_code() {
+                            violations.push(snapshot.violation(event, code));
                         }
                     }
                 }
             }
             "tool.failed" => {
                 if let Some(tool_call_id) = tool_call_id(event) {
-                    if let Some(tool) = self.tools.get(&tool_call_id) {
+                    if let Some(snapshot) = self.tool_snapshot(&tool_call_id) {
                         validate_tool_owner(
                             &mut violations,
                             event,
-                            &tool_call_id,
-                            tool,
+                            &snapshot,
                             OwnerRequirement::RequiredForTerminal,
                         );
-                        if tool.pending_action_id.is_some() {
+                        if snapshot.pending_approval_action_id().is_some() {
                             violations.push(ToolLifecycleViolation {
                                 code: "tool_failed_before_action_resolved",
                                 event_id: event.event_id.clone(),
-                                tool_call_id: Some(tool_call_id),
+                                tool_call_id: Some(snapshot.tool_call_id.clone()),
                             });
                         }
                     }
@@ -234,12 +288,11 @@ impl ToolLifecycleState {
             }
             "permission.denied" | "sandbox.blocked" | "action.required" => {
                 if let Some(tool_call_id) = explicit_tool_call_id(event) {
-                    if let Some(tool) = self.tools.get(&tool_call_id) {
+                    if let Some(snapshot) = self.tool_snapshot(&tool_call_id) {
                         validate_tool_owner(
                             &mut violations,
                             event,
-                            &tool_call_id,
-                            tool,
+                            &snapshot,
                             OwnerRequirement::ExplicitOnly,
                         );
                     } else {
@@ -255,6 +308,12 @@ impl ToolLifecycleState {
         }
         violations
     }
+
+    fn tool_snapshot(&self, tool_call_id: &str) -> Option<ToolLifecycleSnapshot> {
+        self.tools
+            .get(tool_call_id)
+            .map(|tool| tool.snapshot(tool_call_id))
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -267,6 +326,62 @@ struct ActiveToolCandidate {
 enum OwnerRequirement {
     ExplicitOnly,
     RequiredForTerminal,
+}
+
+impl ToolState {
+    fn snapshot(&self, tool_call_id: &str) -> ToolLifecycleSnapshot {
+        ToolLifecycleSnapshot {
+            tool_call_id: tool_call_id.to_string(),
+            owner: self.owner.clone(),
+            gate: self.gate.clone(),
+        }
+    }
+
+    fn pending_approval_action_id(&self) -> Option<&str> {
+        match &self.gate {
+            ToolGateState::PendingApproval(action) => action.action_id.as_deref(),
+            _ => None,
+        }
+    }
+}
+
+impl ToolLifecycleSnapshot {
+    fn pending_approval_action_id(&self) -> Option<&str> {
+        match &self.gate {
+            ToolGateState::PendingApproval(action) => action.action_id.as_deref(),
+            _ => None,
+        }
+    }
+
+    fn output_blocked_violation_code(&self) -> Option<&'static str> {
+        match &self.gate {
+            ToolGateState::Blocked(block) => Some(match block.source {
+                ToolBlockSource::Approval => "tool_output_after_action_denied",
+                ToolBlockSource::Permission => "tool_output_after_permission_denied",
+                ToolBlockSource::Sandbox => "tool_output_after_sandbox_blocked",
+            }),
+            _ => None,
+        }
+    }
+
+    fn result_blocked_violation_code(&self) -> Option<&'static str> {
+        match &self.gate {
+            ToolGateState::Blocked(block) => Some(match block.source {
+                ToolBlockSource::Approval => "tool_result_after_action_denied",
+                ToolBlockSource::Permission => "tool_result_after_permission_denied",
+                ToolBlockSource::Sandbox => "tool_result_after_sandbox_blocked",
+            }),
+            _ => None,
+        }
+    }
+
+    fn violation(&self, event: &AgentEvent, code: &'static str) -> ToolLifecycleViolation {
+        ToolLifecycleViolation {
+            code,
+            event_id: event.event_id.clone(),
+            tool_call_id: Some(self.tool_call_id.clone()),
+        }
+    }
 }
 
 impl ToolOwner {
@@ -318,12 +433,11 @@ impl ToolOwner {
 fn validate_tool_owner(
     violations: &mut Vec<ToolLifecycleViolation>,
     event: &AgentEvent,
-    tool_call_id: &str,
-    tool: &ToolState,
+    snapshot: &ToolLifecycleSnapshot,
     requirement: OwnerRequirement,
 ) {
     let event_owner = ToolOwner::from_event(event);
-    if tool.owner.is_empty() {
+    if snapshot.owner.is_empty() {
         return;
     }
     if event_owner.is_empty() {
@@ -331,16 +445,16 @@ fn validate_tool_owner(
             violations.push(ToolLifecycleViolation {
                 code: "tool_terminal_missing_owner",
                 event_id: event.event_id.clone(),
-                tool_call_id: Some(tool_call_id.to_string()),
+                tool_call_id: Some(snapshot.tool_call_id.clone()),
             });
         }
         return;
     }
-    if !tool.owner.matches(&event_owner) {
+    if !snapshot.owner.matches(&event_owner) {
         violations.push(ToolLifecycleViolation {
             code: "tool_event_owner_mismatch",
             event_id: event.event_id.clone(),
-            tool_call_id: Some(tool_call_id.to_string()),
+            tool_call_id: Some(snapshot.tool_call_id.clone()),
         });
     }
 }
@@ -354,6 +468,7 @@ fn normalize_event_class(event_type: &str) -> &str {
         "tool_args" => "tool.args",
         "tool_args_delta" => "tool.args.delta",
         "tool_output_delta" => "tool.output.delta",
+        "tool_input_delta" => "tool.input.delta",
         value => value,
     }
 }
@@ -639,344 +754,5 @@ fn format_violation(violation: &ToolLifecycleViolation) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    fn event(event_id: &str, event_type: &str, payload: Value) -> AgentEvent {
-        AgentEvent {
-            event_id: event_id.to_string(),
-            sequence: 1,
-            session_id: "sess_test".to_string(),
-            thread_id: Some("thread_test".to_string()),
-            turn_id: Some("turn_test".to_string()),
-            event_type: event_type.to_string(),
-            timestamp: "2026-06-13T00:00:00.000Z".to_string(),
-            payload,
-        }
-    }
-
-    #[test]
-    fn rejects_tool_args_without_active_tool() {
-        let candidate = event(
-            "evt_args",
-            "tool.args",
-            json!({ "toolCallId": "tool_1", "args": {} }),
-        );
-
-        let error = validate_tool_lifecycle_event(&[], &candidate)
-            .expect_err("tool args without active tool should fail");
-        assert!(error.contains("tool_args_without_start"));
-    }
-
-    #[test]
-    fn allows_tool_args_between_start_and_result() {
-        let existing = vec![event(
-            "evt_start",
-            "tool.started",
-            json!({ "toolCallId": "tool_1" }),
-        )];
-        let candidate = event(
-            "evt_args",
-            "tool.args.delta",
-            json!({ "toolCallId": "tool_1", "delta": "{}" }),
-        );
-
-        validate_tool_lifecycle_event(&existing, &candidate).expect("active tool args");
-    }
-
-    #[test]
-    fn rejects_policy_event_for_inactive_tool() {
-        let existing = vec![
-            event(
-                "evt_start",
-                "tool.started",
-                json!({ "toolCallId": "tool_1" }),
-            ),
-            event(
-                "evt_result",
-                "tool.result",
-                json!({ "toolCallId": "tool_1" }),
-            ),
-        ];
-        let candidate = event(
-            "evt_sandbox",
-            "sandbox.blocked",
-            json!({ "toolCallId": "tool_1", "reasonCode": "sandbox_denied" }),
-        );
-
-        let error = validate_tool_lifecycle_event(&existing, &candidate)
-            .expect_err("policy event for completed tool should fail");
-        assert!(error.contains("tool_policy_event_without_active_tool"));
-    }
-
-    #[test]
-    fn rejects_tool_output_before_action_resolution() {
-        let existing = vec![
-            event(
-                "evt_start",
-                "tool.started",
-                json!({ "toolCallId": "tool_1" }),
-            ),
-            event(
-                "evt_action",
-                "action.required",
-                json!({
-                    "actionId": "action_1",
-                    "toolCallId": "tool_1"
-                }),
-            ),
-        ];
-        let candidate = event(
-            "evt_output",
-            "tool.output.delta",
-            json!({ "toolCallId": "tool_1", "delta": "running" }),
-        );
-
-        let error = validate_tool_lifecycle_event(&existing, &candidate)
-            .expect_err("tool output before approval should fail");
-        assert!(error.contains("tool_output_before_action_resolved"));
-    }
-
-    #[test]
-    fn allows_tool_result_after_action_resolution() {
-        let existing = vec![
-            event(
-                "evt_start",
-                "tool.started",
-                json!({ "toolCallId": "tool_1" }),
-            ),
-            event(
-                "evt_action",
-                "action.required",
-                json!({
-                    "actionId": "action_1",
-                    "toolCallId": "tool_1"
-                }),
-            ),
-            event(
-                "evt_action_resolved",
-                "action.resolved",
-                json!({
-                    "actionId": "action_1",
-                    "toolCallId": "tool_1",
-                    "decision": "approve"
-                }),
-            ),
-        ];
-        let candidate = event(
-            "evt_result",
-            "tool.result",
-            json!({ "toolCallId": "tool_1", "output": "ok" }),
-        );
-
-        validate_tool_lifecycle_event(&existing, &candidate)
-            .expect("approved tool result should pass");
-    }
-
-    #[test]
-    fn rejects_tool_result_after_action_denial() {
-        let existing = vec![
-            event(
-                "evt_start",
-                "tool.started",
-                json!({ "toolCallId": "tool_1" }),
-            ),
-            event(
-                "evt_action",
-                "action.required",
-                json!({
-                    "actionId": "action_1",
-                    "toolCallId": "tool_1"
-                }),
-            ),
-            event(
-                "evt_action_denied",
-                "action.canceled",
-                json!({
-                    "actionId": "action_1",
-                    "toolCallId": "tool_1"
-                }),
-            ),
-        ];
-        let candidate = event(
-            "evt_result",
-            "tool.result",
-            json!({ "toolCallId": "tool_1", "output": "should not run" }),
-        );
-
-        let error = validate_tool_lifecycle_event(&existing, &candidate)
-            .expect_err("denied tool result should fail");
-        assert!(error.contains("tool_result_after_action_denied"));
-    }
-
-    #[test]
-    fn allows_tool_result_with_matching_owner() {
-        let existing = vec![event(
-            "evt_start",
-            "tool.started",
-            json!({
-                "toolCallId": "tool_1",
-                "messageId": "assistant_1",
-                "itemId": "item_1"
-            }),
-        )];
-        let candidate = event(
-            "evt_result",
-            "tool.result",
-            json!({
-                "toolCallId": "tool_1",
-                "assistantMessageId": "assistant_1",
-                "itemId": "item_1",
-                "output": "ok"
-            }),
-        );
-
-        validate_tool_lifecycle_event(&existing, &candidate)
-            .expect("matching tool owner should pass");
-    }
-
-    #[test]
-    fn rejects_tool_result_owner_mismatch() {
-        let existing = vec![event(
-            "evt_start",
-            "tool.started",
-            json!({
-                "toolCallId": "tool_1",
-                "messageId": "assistant_1"
-            }),
-        )];
-        let candidate = event(
-            "evt_result",
-            "tool.result",
-            json!({
-                "toolCallId": "tool_1",
-                "messageId": "assistant_2",
-                "output": "wrong owner"
-            }),
-        );
-
-        let error = validate_tool_lifecycle_event(&existing, &candidate)
-            .expect_err("mismatched tool owner should fail");
-        assert!(error.contains("tool_event_owner_mismatch"));
-    }
-
-    #[test]
-    fn rejects_tool_result_missing_owner_when_start_has_owner() {
-        let existing = vec![event(
-            "evt_start",
-            "tool.started",
-            json!({
-                "toolCallId": "tool_1",
-                "messageId": "assistant_1"
-            }),
-        )];
-        let candidate = event(
-            "evt_result",
-            "tool.result",
-            json!({ "toolCallId": "tool_1", "output": "missing owner" }),
-        );
-
-        let error = validate_tool_lifecycle_event(&existing, &candidate)
-            .expect_err("owned tool terminal without owner should fail");
-        assert!(error.contains("tool_terminal_missing_owner"));
-    }
-
-    #[test]
-    fn rejects_tool_output_owner_mismatch() {
-        let existing = vec![event(
-            "evt_start",
-            "tool.started",
-            json!({
-                "toolCallId": "tool_1",
-                "itemId": "item_1"
-            }),
-        )];
-        let candidate = event(
-            "evt_output",
-            "tool.output.delta",
-            json!({
-                "toolCallId": "tool_1",
-                "itemId": "item_2",
-                "delta": "wrong owner"
-            }),
-        );
-
-        let error = validate_tool_lifecycle_event(&existing, &candidate)
-            .expect_err("mismatched output owner should fail");
-        assert!(error.contains("tool_event_owner_mismatch"));
-    }
-
-    #[test]
-    fn normalizes_action_required_with_matching_active_tool() {
-        let existing = vec![event(
-            "evt_start",
-            "tool.started",
-            json!({
-                "toolCallId": "tool_shell",
-                "toolName": "Bash",
-                "arguments": {
-                    "command": "npm test"
-                }
-            }),
-        )];
-
-        let normalized = normalize_policy_event_payload(
-            &existing,
-            Some("turn_test"),
-            "action.required",
-            json!({
-                "requestId": "approval_1",
-                "actionType": "tool_confirmation",
-                "data": {
-                    "tool_name": "Bash",
-                    "arguments": {
-                        "command": "npm test"
-                    }
-                }
-            }),
-        );
-
-        assert_eq!(normalized["actionId"].as_str(), Some("approval_1"));
-        assert_eq!(normalized["requestId"].as_str(), Some("approval_1"));
-        assert_eq!(normalized["toolCallId"].as_str(), Some("tool_shell"));
-        assert_eq!(normalized["actionKind"].as_str(), Some("approve-tool"));
-    }
-
-    #[test]
-    fn normalizes_action_resolved_from_previous_action_required_tool() {
-        let existing = vec![
-            event(
-                "evt_start",
-                "tool.started",
-                json!({ "toolCallId": "tool_shell", "toolName": "Bash" }),
-            ),
-            event(
-                "evt_action",
-                "action.required",
-                json!({
-                    "actionId": "approval_1",
-                    "requestId": "approval_1",
-                    "toolCallId": "tool_shell",
-                    "actionType": "tool_confirmation"
-                }),
-            ),
-        ];
-
-        let normalized = normalize_policy_event_payload(
-            &existing,
-            Some("turn_test"),
-            "action.resolved",
-            json!({
-                "requestId": "approval_1",
-                "actionType": "tool_confirmation",
-                "decision": "approve"
-            }),
-        );
-        let candidate = event("evt_resolved", "action.resolved", normalized);
-
-        assert_eq!(candidate.payload["toolCallId"].as_str(), Some("tool_shell"));
-        validate_tool_lifecycle_event(&existing, &candidate)
-            .expect("resolved action with inferred tool id should pass");
-    }
-}
+#[path = "tool_lifecycle_tests.rs"]
+mod tests;

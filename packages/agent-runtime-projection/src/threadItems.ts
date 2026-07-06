@@ -20,6 +20,9 @@ import {
   readStringField,
   truncateText,
 } from "./normalization.js";
+import {
+  extractAgentUiToolLifecyclePayloadMetadata,
+} from "./toolLifecycleMetadata.js";
 
 export interface AgentUiThreadItemProjectionInput {
   id: string;
@@ -404,6 +407,7 @@ export function buildAgentUiThreadItemEvent(
           outputPreview: truncateText(item.output),
           errorPreview: truncateText(item.error),
           metadataKeys: metadataKeys(item.metadata),
+          ...extractAgentUiToolLifecyclePayloadMetadata(item.metadata),
         },
         refs: extractArtifactRefs(item.metadata),
       };

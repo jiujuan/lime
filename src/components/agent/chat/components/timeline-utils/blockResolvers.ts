@@ -1,9 +1,28 @@
-import type { ActionRequired, AgentThreadItem, AgentThreadTurn } from "../../types";
+import type {
+  ActionRequired,
+  AgentThreadItem,
+  AgentThreadTurn,
+} from "../../types";
 import type { AgentThreadOrderedBlock } from "../../utils/agentThreadGrouping";
-import { hasAnyPrefix, shortenInlineText } from "./textFormatting";
+import { shortenInlineText } from "./textFormatting";
 import { parseAIResponse } from "@/components/workspace/a2ui/parser";
-import { resolveReasoningDisplayText, resolveTurnSummaryDisplayText } from "./displayTextResolvers";
+import {
+  resolveReasoningDisplayText,
+  resolveTurnSummaryDisplayText,
+} from "./displayTextResolvers";
 import { shouldHideTurnSummaryFromConversation } from "../../utils/turnSummaryPresentation";
+import {
+  resolveTimelineAlertFallback,
+  resolveTimelineApprovalFallback,
+  resolveTimelineContextCompactionParts,
+  resolveTimelinePlanTitle,
+  resolveTimelinePreviewLine,
+  resolveTimelineProcessMixLabel,
+  resolveTimelineReasoningTitle,
+  resolveTimelineSubagentFallback,
+  resolveTimelineTechnicalSummary,
+  resolveTimelineTurnSummaryTitle,
+} from "./timelineCopy";
 
 export function isThinkingTimelineItem(
   item: AgentThreadItem,
@@ -35,21 +54,13 @@ export function extractCompactThinkingParts(
   >,
 ) {
   if (item.type === "context_compaction") {
-    const title =
-      item.stage === "completed" || item.status === "completed"
-        ? "压了上下文"
-        : "正在压上下文";
-    const detail =
-      item.detail?.trim() ||
-      (item.stage === "completed" || item.status === "completed"
-        ? "把前面的对话压成摘要了，后面接着做。"
-        : "在把前面的对话压成摘要，马上继续。");
+    const { title, detail } = resolveTimelineContextCompactionParts(item);
     return { title, detail };
   }
 
   if (item.type === "plan") {
     return {
-      title: item.status === "in_progress" ? "还在排步骤" : "定了这些步骤",
+      title: resolveTimelinePlanTitle(item.status),
       detail: item.text.trim(),
     };
   }
@@ -62,10 +73,7 @@ export function extractCompactThinkingParts(
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter(Boolean);
-    const [
-      title = item.status === "in_progress" ? "思考中" : "已完成思考",
-      ...rest
-    ] = lines;
+    const [title = resolveTimelineReasoningTitle(item.status), ...rest] = lines;
     const detail = [rest.join("\n").trim(), bodyText]
       .filter(Boolean)
       .join("\n\n");
@@ -89,7 +97,7 @@ export function extractCompactThinkingParts(
     }
 
     return {
-      title: item.status === "in_progress" ? "处理中" : "当前进展",
+      title: resolveTimelineTurnSummaryTitle(item.status),
       detail: shouldHideTurnSummaryFromConversation(item) ? "" : displayText,
     };
   }
@@ -100,10 +108,12 @@ export function extractCompactThinkingParts(
 export function resolveCompactTechnicalSummary(
   block: AgentThreadOrderedBlock,
 ): string {
-  return `处理了 ${block.items.length} 个步骤`;
+  return resolveTimelineTechnicalSummary(block.items.length);
 }
 
-export function resolveActiveBlockIndex(blocks: AgentThreadOrderedBlock[]): number {
+export function resolveActiveBlockIndex(
+  blocks: AgentThreadOrderedBlock[],
+): number {
   for (let index = blocks.length - 1; index >= 0; index -= 1) {
     if (blocks[index]?.status === "in_progress") {
       return index;
@@ -260,55 +270,12 @@ function normalizeBlockPreviewLine(
   kind: AgentThreadOrderedBlock["kind"],
   line: string,
 ): string {
-  const trimmed = line.trim();
-  if (!trimmed) {
-    return line;
-  }
-
-  if (
-    kind === "artifact" &&
-    !hasAnyPrefix(trimmed, [
-      "看了 ",
-      "读了 ",
-      "写了 ",
-      "改了 ",
-      "动了 ",
-      "产出了 ",
-    ])
-  ) {
-    return `产出了 ${trimmed}`;
-  }
-
-  if (
-    kind === "approval" &&
-    !hasAnyPrefix(trimmed, [
-      "等你补充：",
-      "等你确认：",
-      "等你补充信息",
-      "等你确认这一步",
-    ])
-  ) {
-    return `等你确认：${trimmed}`;
-  }
-
-  if (
-    kind === "alert" &&
-    !hasAnyPrefix(trimmed, ["收到提醒：", "碰到错误："])
-  ) {
-    return `收到提醒：${trimmed}`;
-  }
-
-  if (
-    kind === "subagent" &&
-    !hasAnyPrefix(trimmed, ["分给子任务", "子任务", "分给协作成员", "协作成员"])
-  ) {
-    return `分给子任务处理 ${trimmed}`;
-  }
-
-  return trimmed;
+  return resolveTimelinePreviewLine(kind, line);
 }
 
-export function resolveBlockSummaryLines(block: AgentThreadOrderedBlock): string[] {
+export function resolveBlockSummaryLines(
+  block: AgentThreadOrderedBlock,
+): string[] {
   const isTurnSummaryOnlyBlock =
     block.items.length > 0 &&
     block.items.every((item) => item.type === "turn_summary");
@@ -321,7 +288,7 @@ export function resolveBlockSummaryLines(block: AgentThreadOrderedBlock): string
     .map((line) => shortenInlineText(line, 92) || line);
 
   if (isTurnSummaryOnlyBlock) {
-    const headline = block.status === "in_progress" ? "处理中" : "当前进展";
+    const headline = resolveTimelineTurnSummaryTitle(block.status);
     if (normalizedPreviewLines.length > 0) {
       return [
         headline,
@@ -333,7 +300,7 @@ export function resolveBlockSummaryLines(block: AgentThreadOrderedBlock): string
   }
 
   if (isThinkingOnlyBlock) {
-    const headline = block.status === "in_progress" ? "思考中" : "已完成思考";
+    const headline = resolveTimelineReasoningTitle(block.status);
     if (normalizedPreviewLines.length > 0) {
       return [
         headline,
@@ -353,15 +320,15 @@ export function resolveBlockSummaryLines(block: AgentThreadOrderedBlock): string
   }
 
   if (block.kind === "approval") {
-    return [block.status === "completed" ? "这一步已经确认" : "等你确认这一步"];
+    return [resolveTimelineApprovalFallback(block.status)];
   }
 
   if (block.kind === "alert") {
-    return [block.status === "failed" ? "碰到错误" : "收到提醒"];
+    return [resolveTimelineAlertFallback(block.status)];
   }
 
   if (block.kind === "subagent") {
-    return [block.status === "completed" ? "子任务已完成" : "子任务处理中"];
+    return [resolveTimelineSubagentFallback(block.status)];
   }
 
   if (block.kind === "other") {
@@ -371,7 +338,9 @@ export function resolveBlockSummaryLines(block: AgentThreadOrderedBlock): string
   return [block.title];
 }
 
-export function resolveProcessMixLabel(block: AgentThreadOrderedBlock): string | null {
+export function resolveProcessMixLabel(
+  block: AgentThreadOrderedBlock,
+): string | null {
   if (block.kind !== "process" || block.items.length <= 1) {
     return null;
   }
@@ -383,15 +352,7 @@ export function resolveProcessMixLabel(block: AgentThreadOrderedBlock): string |
     isThinkingTimelineItem(item),
   ).length;
 
-  const parts: string[] = [];
-  if (toolCount > 0) {
-    parts.push(`${toolCount} 个工具步骤`);
-  }
-  if (thinkingCount > 0) {
-    parts.push(`${thinkingCount} 条思路`);
-  }
-
-  return parts.length > 0 ? parts.join("，") : null;
+  return resolveTimelineProcessMixLabel({ thinkingCount, toolCount });
 }
 
 function findLatestPendingAction(

@@ -3,6 +3,12 @@ import { describe, expect, it } from "vitest";
 import { CONTENT_FACTORY_ARTICLE_WORKSPACE_ASSERTION_KEYS } from "./claw-chat-current-fixture-constants.mjs";
 import { isRightSurfaceSnapshotReady } from "./claw-chat-current-fixture-right-surface-visual.mjs";
 import {
+  buildSoulStyleTranscriptGoldenReport,
+  SOUL_STYLE_TRANSCRIPT_GOLDENS,
+  SOUL_STYLE_TRANSCRIPT_SURFACES,
+} from "./claw-chat-current-fixture-soul-style-transcript-golden.mjs";
+import { SOUL_STYLE_FIXTURE_PROFILE_IDS } from "./claw-chat-current-fixture-soul-style.mjs";
+import {
   MULTI_AGENT_TEAM_PROMPT,
   summarizeMultiAgentTeamEvidenceExport,
 } from "./multi-agent-team-fixture-scenario.mjs";
@@ -44,6 +50,7 @@ const fixtureSourceFiles = [
   "scripts/agent-runtime/claw-chat-current-fixture-image-command.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-image-command-workflow-read.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-skills-workspace.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-inputbar-rich-restore.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-plan-history.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-right-surface-visual.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-content-factory-article-workspace.mjs",
@@ -54,6 +61,8 @@ const fixtureSourceFiles = [
   "scripts/agent-runtime/claw-chat-current-fixture-scenario-flow.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-common-assertions.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-scenario-assertions.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-soul-style-transcript-golden.mjs",
+  "scripts/agent-runtime/claw-chat-current-fixture-soul-style.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-content-factory-assertions.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-not-applicable-assertions.mjs",
   "scripts/agent-runtime/claw-chat-current-fixture-assertion-context.mjs",
@@ -302,6 +311,62 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("停止后的同一会话已经可以继续输出");
   });
 
+  it("covers Inputbar rich draft restore after an output-free cancel", () => {
+    const content = readSmokeScript();
+    const regressionContent = readCurrentFixtureRegressionSmokeScript();
+
+    expect(content).toContain("inputbar-rich-restore");
+    expect(content).toContain("INPUTBAR_RICH_RESTORE_PROMPT");
+    expect(content).toContain("runInputbarRichRestoreScenario");
+    expect(content).toContain("ensureUserVisibleCapabilityReportSkill");
+    expect(content).toContain("application/x-lime-path-reference");
+    expect(content).toContain("DataTransfer");
+    expect(content).toContain("DragEvent");
+    expect(content).toContain("inputbar-path-reference-chip");
+    expect(content).toContain("input-skill-badge");
+    expect(content).toContain("RICH_RESTORE_IMAGE_BASE64");
+    expect(content).toContain("attachFixtureImage");
+    expect(content).toContain("dropPathReference");
+    expect(content).toContain("selectCapabilityReportSkill");
+    expect(content).toContain("sendPromptFromGui");
+    expect(content).toContain("waitForBackendLedgerTurnStart");
+    expect(content).toContain("waitForStopButtonVisibleAndClick");
+    expect(content).toContain("waitForInputbarRichRestoreReadModelCanceled");
+    expect(content).toContain("provider.first_event.received");
+    expect(content).toContain("turn.canceled");
+    expect(content).toContain("CLAW_INPUTBAR_RICH_RESTORE_DONE");
+    expect(content).toContain("INPUTBAR_RICH_RESTORE_FORBIDDEN_ASSISTANT_TEXT");
+    expect(content).toContain("inputbarRichRestoreDraftPrepared");
+    expect(content).toContain("inputbarRichRestoreInputSubmitted");
+    expect(content).toContain("inputbarRichRestoreBackendInputSummaryReached");
+    expect(content).toContain("inputbarRichRestoreUsedCurrentTurnCancel");
+    expect(content).toContain("inputbarRichRestoreGuiCanceled");
+    expect(content).toContain("inputbarRichRestoreTextRestored");
+    expect(content).toContain("inputbarRichRestoreImageRestored");
+    expect(content).toContain("inputbarRichRestorePathRestored");
+    expect(content).toContain("inputbarRichRestoreSkillRestored");
+    expect(content).toContain("inputbarRichRestoreNoVisibleAssistantOutput");
+    expect(content).toContain("inputbarRichRestoreReadModelCanceled");
+    expect(content).toContain("INPUTBAR_RICH_RESTORE_ASSERTION_KEYS");
+    expect(content).toContain("shouldUseTextProviderFixture");
+    expect(content).toContain("modelProvider/fetchModels");
+    expect(content).toContain("customModels: []");
+    expect(content).toContain('["/models", "/v1/models"]');
+    expect(content).toContain('input_modalities: ["text", "image"]');
+    expect(content).toContain("fixtureModelInputModalities");
+    expect(content).toContain("options.scenario !== INPUTBAR_RICH_RESTORE_SCENARIO");
+    expect(regressionContent).toContain(
+      "Claw Inputbar rich draft restore output-free cancel Electron fixture",
+    );
+    expect(regressionContent).toContain('"inputbar-rich-restore"');
+    expect(regressionContent).toContain(
+      "claw-chat-current-fixture-inputbar-rich-restore-regression",
+    );
+    expect(regressionContent).toContain(
+      "Inputbar rich draft restore output-free cancel Electron fixture",
+    );
+  });
+
   it("covers Plan mode revisioned thread item and history hydrate in the real Electron fixture", () => {
     const content = readSmokeScript();
 
@@ -349,8 +414,13 @@ describe("claw chat current Electron fixture smoke guard", () => {
 
     expect(content).toContain("soul-style");
     expect(content).toContain("SOUL_STYLE_SCENARIO");
-    expect(content).toContain("SOUL_STYLE_PROFILE_ID");
-    expect(content).toContain("SOUL_STYLE_INTENSITY");
+    expect(content).toContain("--soul-style-profile");
+    expect(content).toContain("--soul-style-intensity");
+    expect(content).toContain("SOUL_STYLE_FIXTURE_PROFILES");
+    expect(content).toContain("createSoulStyleFixtureSelection");
+    expect(content).toContain("buildSoulStyleFixtureAssistantText");
+    expect(content).toContain("resolveSoulStyleFixtureExpectedTexts");
+    expect(content).toContain("soulStyleExpectation");
     expect(content).toContain("enable-soul-style-config");
     expect(content).toContain("soulStyleConfig");
     expect(content).toContain("soulStyleConfigEnabled");
@@ -365,6 +435,12 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).toContain("hasProfileId");
     expect(content).toContain("hasStylePack");
     expect(content).toContain("hasIntensity");
+    expect(content).toContain("hasToolLifecycleSurfaceContracts");
+    expect(content).toContain("closing_suggestion:");
+    expect(content).toContain("buildSoulStyleScenarioAssertions");
+    expect(content).toContain("soulStyleTranscriptMatchesExpectedProfile");
+    expect(content).toContain("SOUL_STYLE_TRANSCRIPT_GOLDENS");
+    expect(content).toContain("buildSoulStyleTranscriptGoldenReport");
     expect(content).toContain("soulStyleReadModelCompleted");
     expect(content).toContain("soulStyleGuiCompleted");
     expect(content).toContain("!isSoulStyleScenario");
@@ -384,6 +460,32 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(content).not.toContain("requestContains");
     expect(content).not.toContain("bodyPreview");
     expect(content).not.toContain("contentPreview");
+    expect(content).not.toContain("SOUL_STYLE_PROFILE_ID");
+    expect(content).not.toContain("SOUL_STYLE_PACK_ID");
+    expect(content).not.toContain("SOUL_STYLE_INTENSITY");
+  });
+
+  it("locks Soul transcript golden to four different styles over the same facts", () => {
+    const report = buildSoulStyleTranscriptGoldenReport();
+
+    expect(report.profiles).toEqual([
+      "cheeky_sassy_executor",
+      "warm_supportive_companion",
+      "cool_confident_operator",
+      "calm_professional_partner",
+    ]);
+    expect(SOUL_STYLE_FIXTURE_PROFILE_IDS).toEqual(report.profiles);
+    expect(report.surfaces).toEqual(SOUL_STYLE_TRANSCRIPT_SURFACES);
+    expect(SOUL_STYLE_TRANSCRIPT_GOLDENS).toHaveLength(4);
+
+    for (const check of report.checks) {
+      expect(check.textCount, `${check.surface} text count`).toBe(4);
+      expect(check.uniqueTextCount, `${check.surface} style collapse`).toBe(4);
+      expect(check.factSignatureCount, `${check.surface} fact drift`).toBe(1);
+      expect(check.missingFactsByProfile, `${check.surface} missing facts`).toEqual(
+        {},
+      );
+    }
   });
 
   it("covers web tool WebSearch/WebFetch rendering in the real Electron fixture", () => {
@@ -669,9 +771,9 @@ describe("claw chat current Electron fixture smoke guard", () => {
     expect(sessionContent).toContain("lime:skill-catalog-changed");
     expect(sessionContent).toContain('source: "manual_override"');
     expect(sessionContent).toContain("window.__LIME_OEM_CLOUD__?.tenantId");
-    expect(sessionContent).toContain(
-      "buildExpertPanelWorkspaceSkillCatalog(options.workspaceSkill, { tenantId })",
-    );
+    expect(sessionContent).toContain("buildExpertPanelWorkspaceSkillCatalog");
+    expect(sessionContent).toContain("options.workspaceSkill");
+    expect(sessionContent).toContain("tenantId");
     expect(sessionContent).toContain("EXPERT_SKILLS_RUNTIME_TENANT_ID");
     expect(scenarioContent).toContain("EXPERT_SKILLS_RUNTIME_TENANT_ID");
     expect(expertRuntimeContent).toContain(

@@ -191,7 +191,16 @@ describe("agentStreamFlowControl", () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(refreshSessionReadModel).toHaveBeenCalledWith("session-1");
-    expect(queuedTurns).toEqual([]);
+    expect(queuedTurns).toEqual([
+      {
+        queued_turn_id: "queued-1",
+        message_preview: "preview",
+        message_text: "text",
+        created_at: 1,
+        image_count: 0,
+        position: 1,
+      },
+    ]);
     expect(threadItems).toEqual([]);
     expect(threadTurns).toEqual([]);
     expect(currentTurnId).toBeNull();
@@ -310,6 +319,101 @@ describe("agentStreamFlowControl", () => {
     await Promise.resolve();
 
     expect(refreshSessionReadModel).toHaveBeenCalledWith("session-1");
+  });
+
+  it("stopActiveAgentStream 应把 output-free 中断输入恢复为富输入请求", async () => {
+    const image = {
+      data: "image-data",
+      mediaType: "image/png",
+    };
+    const pathReference = {
+      id: "file:/tmp/report.md",
+      path: "/tmp/report.md",
+      name: "report.md",
+      isDir: false,
+      source: "file_manager" as const,
+    };
+    let activeStream: ActiveStreamState | null = {
+      assistantMsgId: "assistant-thinking",
+      eventName: "stream-restore",
+      sessionId: "session-1",
+      turnId: "turn-runtime-1",
+      submittedDraft: {
+        text: "继续生成提纲",
+        images: [image],
+        pathReferences: [pathReference],
+        inputCapabilityRoute: {
+          kind: "installed_skill",
+          skillKey: "draft",
+          skillName: "起草",
+        },
+      },
+    };
+    const onRestoreInterruptedInput = vi.fn();
+
+    await stopActiveAgentStream({
+      activeStream,
+      sessionIdRef: { current: "session-1" },
+      runtime: {
+        interruptTurn: vi.fn(async () => true),
+      } as never,
+      removeStreamListener: vi.fn(),
+      refreshSessionReadModel: vi.fn(async () => true),
+      setQueuedTurns: createStateSetter(
+        () => [] as QueuedTurnSnapshot[],
+        () => undefined,
+      ),
+      setThreadItems: createStateSetter(
+        () => [] as AgentThreadItem[],
+        () => undefined,
+      ),
+      setThreadTurns: createStateSetter(
+        () => [] as AgentThreadTurn[],
+        () => undefined,
+      ),
+      setCurrentTurnId: createStateSetter(
+        () => null as string | null,
+        () => undefined,
+      ),
+      setMessages: createStateSetter(
+        () => [] as Message[],
+        () => undefined,
+      ),
+      getMessages: () => [
+        {
+          id: "assistant-thinking",
+          role: "assistant",
+          content: "",
+          timestamp: new Date("2026-03-29T00:00:00.000Z"),
+          contentParts: [{ type: "thinking", text: "正在思考" }],
+        },
+      ],
+      setActiveStream: (next) => {
+        activeStream = next;
+      },
+      onRestoreInterruptedInput,
+      notify: {
+        info: vi.fn(),
+        error: vi.fn(),
+      },
+    });
+
+    expect(activeStream).toBeNull();
+    expect(onRestoreInterruptedInput).toHaveBeenCalledWith({
+      requestId: expect.any(String),
+      reason: "thinking_only_cancelled_turn",
+      draft: {
+        text: "继续生成提纲",
+        images: [image],
+        pathReferences: [pathReference],
+        textElements: [],
+        inputCapabilityRoute: {
+          kind: "installed_skill",
+          skillKey: "draft",
+          skillName: "起草",
+        },
+      },
+    });
   });
 
   it("settleInterruptedMessageProcess 应把运行中工具标记为本轮已中止", () => {

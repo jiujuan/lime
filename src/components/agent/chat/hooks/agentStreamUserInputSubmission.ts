@@ -36,6 +36,7 @@ export async function submitAgentStreamUserInput(
     systemPrompt,
     requestMetadata,
     assistantDraft,
+    submittedDraft,
     skipSessionRestore,
     skipSessionStartHooks,
     skipPreSubmitResume,
@@ -51,6 +52,7 @@ export async function submitAgentStreamUserInput(
     content,
     expectingQueue,
     runtimeStatusPresentation,
+    submittedDraft,
     initialThreadId:
       env.sessionIdRef.current || `local-thread:${assistantMsgId}`,
     listenerMapRef: env.listenerMapRef,

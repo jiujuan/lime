@@ -15,6 +15,7 @@ import {
   resolveAgentRuntimeStatusPresentation,
   type AgentRuntimeStatusPresentation,
 } from "../utils/fastResponseRouting";
+import type { InterruptedInputDraftSnapshot } from "./agentStreamInputRestoreTypes";
 import { normalizeExecutionStrategy } from "./agentChatCoreUtils";
 import { ensureAgentUiPerformanceTraceMetadata } from "./agentStreamPerformanceMetrics";
 import {
@@ -89,6 +90,7 @@ export interface PreparedAgentStreamUserInputSend {
   userMsg: Message | null;
   assistantMsg: Message;
   runtimeStatusPresentation?: AgentRuntimeStatusPresentation;
+  submittedDraft?: InterruptedInputDraftSnapshot | null;
 }
 
 export function resolvePreparedSendExpectingQueue(options: {
@@ -124,6 +126,125 @@ function shouldProjectModelInputCapabilityGate(
   }
 
   return Boolean(summary) || gate.requiresMediaInput;
+}
+
+interface SendModelPreferenceCandidate {
+  providerType?: string | null;
+  model?: string | null;
+}
+
+function normalizeSendModelPreferenceValue(value?: string | null): string {
+  return (value || "").trim();
+}
+
+function normalizeProviderIdentity(value?: string | null): string {
+  return normalizeSendModelPreferenceValue(value).toLowerCase();
+}
+
+function toCompleteSendModelPreference(
+  candidate: SendModelPreferenceCandidate,
+): SessionModelPreference | null {
+  const providerType = normalizeSendModelPreferenceValue(
+    candidate.providerType,
+  );
+  const model = normalizeSendModelPreferenceValue(candidate.model);
+  return providerType && model ? { providerType, model } : null;
+}
+
+function resolveModelForProvider(
+  providerType: string,
+  candidates: SendModelPreferenceCandidate[],
+): string {
+  const normalizedProvider = normalizeProviderIdentity(providerType);
+  if (!normalizedProvider) {
+    return "";
+  }
+
+  for (const candidate of candidates) {
+    if (
+      normalizeProviderIdentity(candidate.providerType) !== normalizedProvider
+    ) {
+      continue;
+    }
+    const model = normalizeSendModelPreferenceValue(candidate.model);
+    if (model) {
+      return model;
+    }
+  }
+
+  return "";
+}
+
+function resolvePreparedSendModelPreference(options: {
+  providerOverride?: string | null;
+  modelOverride?: string | null;
+  currentProviderType?: string | null;
+  currentModel?: string | null;
+  runtimeProviderType?: string | null;
+  runtimeModel?: string | null;
+  syncedSessionModelPreference?: SessionModelPreference | null;
+}): SessionModelPreference | null {
+  const providerOverride = normalizeSendModelPreferenceValue(
+    options.providerOverride,
+  );
+  const modelOverride = normalizeSendModelPreferenceValue(
+    options.modelOverride,
+  );
+  const currentCandidate: SendModelPreferenceCandidate = {
+    providerType: options.currentProviderType,
+    model: options.currentModel,
+  };
+  const runtimeCandidate: SendModelPreferenceCandidate = {
+    providerType: options.runtimeProviderType,
+    model: options.runtimeModel,
+  };
+  const syncedCandidate: SendModelPreferenceCandidate | null =
+    options.syncedSessionModelPreference
+      ? {
+          providerType: options.syncedSessionModelPreference.providerType,
+          model: options.syncedSessionModelPreference.model,
+        }
+      : null;
+  const fallbackCandidates = [
+    currentCandidate,
+    runtimeCandidate,
+    syncedCandidate,
+  ].filter(
+    (candidate): candidate is SendModelPreferenceCandidate =>
+      candidate !== null,
+  );
+
+  if (providerOverride && modelOverride) {
+    return { providerType: providerOverride, model: modelOverride };
+  }
+
+  if (providerOverride) {
+    const matchedModel = resolveModelForProvider(
+      providerOverride,
+      fallbackCandidates,
+    );
+    return matchedModel
+      ? { providerType: providerOverride, model: matchedModel }
+      : null;
+  }
+
+  if (modelOverride) {
+    const providerType = normalizeSendModelPreferenceValue(
+      options.currentProviderType ||
+        options.runtimeProviderType ||
+        syncedCandidate?.providerType,
+    );
+    return providerType ? { providerType, model: modelOverride } : null;
+  }
+
+  for (const candidate of fallbackCandidates) {
+    const completePreference = toCompleteSendModelPreference(candidate);
+    if (completePreference) {
+      return completePreference;
+    }
+  }
+
+  return null;
 }
 
 export function prepareAgentStreamUserInputSend(
@@ -163,18 +284,17 @@ export function prepareAgentStreamUserInputSend(
     env.executionRuntime?.provider_name?.trim() ||
     "";
   const runtimeModel = env.executionRuntime?.model_name?.trim() || "";
-  const effectiveProviderType =
-    resolvedProviderOverride ||
-    currentProviderType ||
-    runtimeProviderType ||
-    syncedSessionModelPreference?.providerType?.trim() ||
-    "";
-  const effectiveModel =
-    resolvedModelOverride ||
-    currentModel ||
-    runtimeModel ||
-    syncedSessionModelPreference?.model?.trim() ||
-    "";
+  const resolvedModelPreference = resolvePreparedSendModelPreference({
+    providerOverride: resolvedProviderOverride,
+    modelOverride: resolvedModelOverride,
+    currentProviderType,
+    currentModel,
+    runtimeProviderType,
+    runtimeModel,
+    syncedSessionModelPreference,
+  });
+  const effectiveProviderType = resolvedModelPreference?.providerType ?? "";
+  const effectiveModel = resolvedModelPreference?.model ?? "";
   const observer = sendOptions?.observer;
   const baseRequestMetadata = ensureAgentUiPerformanceTraceMetadata(
     sendOptions?.requestMetadata,
@@ -218,6 +338,12 @@ export function prepareAgentStreamUserInputSend(
   const resolvedSystemPrompt =
     sendOptions?.systemPromptOverride?.trim() || systemPrompt;
   const displayContent = sendOptions?.displayContent;
+  const submittedDraft: InterruptedInputDraftSnapshot =
+    sendOptions?.inputRestoreDraft ?? {
+      text: displayContent ?? content,
+      images,
+      inputCapabilityRoute: capabilityRoute,
+    };
   const skillRequest = sendOptions?.skillRequest;
   const expectingQueue = resolvePreparedSendExpectingQueue({
     activeStreamSessionId: env.activeStreamRef.current?.sessionId,
@@ -276,5 +402,6 @@ export function prepareAgentStreamUserInputSend(
     userMsg,
     assistantMsg,
     runtimeStatusPresentation,
+    submittedDraft,
   };
 }

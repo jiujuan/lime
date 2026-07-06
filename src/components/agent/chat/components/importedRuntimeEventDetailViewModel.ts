@@ -264,6 +264,22 @@ function nestedRecord(
   return isRecord(value) ? value : null;
 }
 
+function firstNestedRecord(
+  record: Record<string, unknown> | null | undefined,
+  keys: string[],
+): Record<string, unknown> | null {
+  if (!record) {
+    return null;
+  }
+  for (const key of keys) {
+    const value = nestedRecord(record, key);
+    if (value) {
+      return value;
+    }
+  }
+  return null;
+}
+
 function recordValue(
   record: Record<string, unknown> | null | undefined,
   keys: string[],
@@ -372,10 +388,14 @@ function resolveKind(params: {
   eventType: string;
   sourceEventType: string | null;
   toolName: string | null;
+  record: Record<string, unknown> | null;
 }): ImportedRuntimeEventKind {
   const eventType = params.eventType;
   const sourceEventType = params.sourceEventType ?? "";
   const toolName = params.toolName ?? "";
+  if (hasCollaborationFacts(params.record)) {
+    return "collaboration";
+  }
   if (
     sourceEventType.startsWith("mcp_tool_call") ||
     toolName.startsWith("mcp__")
@@ -445,6 +465,27 @@ function resolveKind(params: {
   return "event";
 }
 
+function hasCollaborationFacts(
+  record: Record<string, unknown> | null,
+): boolean {
+  if (!record) {
+    return false;
+  }
+  const facts = firstNestedRecord(record, [
+    "collaborationFacts",
+    "collaboration_facts",
+  ]);
+  return Boolean(
+    facts ||
+      recordString(record, [
+        "collaborationSurface",
+        "collaboration_surface",
+        "collaborationPhase",
+        "collaboration_phase",
+      ]),
+  );
+}
+
 const KIND_TITLES: Record<
   ImportedRuntimeEventKind,
   ImportedRuntimeEventLocalizedText
@@ -495,7 +536,7 @@ function buildSemanticDisplay(eventType: string, payload: unknown) {
     "name",
     "tool",
   ]);
-  const kind = resolveKind({ eventType, sourceEventType, toolName });
+  const kind = resolveKind({ eventType, sourceEventType, toolName, record });
   const status = normalizeStatus(
     recordString(record, ["status", "statusLabel", "status_label"]),
     recordValue(record, ["success"]),
@@ -670,21 +711,97 @@ function buildKindSpecificFacts(params: {
         ),
       ];
     case "collaboration":
-      return [
-        fact(
-          "reasoningEffort",
-          "reasoningEffort",
-          "思考强度",
-          recordString(record, ["reasoningEffort", "reasoning_effort"]),
-        ),
-        fact(
-          "statusLabel",
-          "statusLabel",
-          "状态标签",
-          recordString(record, ["statusLabel", "status_label"]),
-          96,
-        ),
-      ];
+      {
+        const collaborationFacts = firstNestedRecord(record, [
+          "collaborationFacts",
+          "collaboration_facts",
+        ]);
+        return [
+          fact(
+            "collaborationSurface",
+            "collaborationSurface",
+            "协作面",
+            recordString(record, [
+              "collaborationSurface",
+              "collaboration_surface",
+            ]) ??
+              recordString(collaborationFacts, [
+                "collaborationSurface",
+                "collaboration_surface",
+              ]),
+          ),
+          fact(
+            "collaborationPhase",
+            "collaborationPhase",
+            "协作阶段",
+            recordString(record, [
+              "collaborationPhase",
+              "collaboration_phase",
+            ]) ??
+              recordString(collaborationFacts, [
+                "collaborationPhase",
+                "collaboration_phase",
+              ]),
+          ),
+          fact(
+            "collaborationKind",
+            "collaborationKind",
+            "协作类型",
+            recordString(collaborationFacts, [
+              "collaborationKind",
+              "collaboration_kind",
+            ]),
+          ),
+          fact(
+            "styleLevel",
+            "styleLevel",
+            "风格等级",
+            recordString(record, ["styleLevel", "style_level"]) ??
+              recordString(collaborationFacts, ["styleLevel", "style_level"]),
+          ),
+          fact(
+            "riskLevel",
+            "riskLevel",
+            "风险等级",
+            recordString(record, ["riskLevel", "risk_level"]) ??
+              recordString(collaborationFacts, ["riskLevel", "risk_level"]),
+          ),
+          fact(
+            "profileId",
+            "profileId",
+            "风格 Profile",
+            recordString(record, ["profileId", "profile_id"]) ??
+              recordString(collaborationFacts, ["profileId", "profile_id"]),
+          ),
+          fact(
+            "packId",
+            "packId",
+            "风格包",
+            recordString(record, ["packId", "pack_id"]) ??
+              recordString(collaborationFacts, ["packId", "pack_id"]),
+          ),
+          fact(
+            "toneVariant",
+            "toneVariant",
+            "口吻变体",
+            recordString(record, ["toneVariant", "tone_variant"]) ??
+              recordString(collaborationFacts, ["toneVariant", "tone_variant"]),
+          ),
+          fact(
+            "reasoningEffort",
+            "reasoningEffort",
+            "思考强度",
+            recordString(record, ["reasoningEffort", "reasoning_effort"]),
+          ),
+          fact(
+            "statusLabel",
+            "statusLabel",
+            "状态标签",
+            recordString(record, ["statusLabel", "status_label"]),
+            96,
+          ),
+        ];
+      }
     case "web_search":
       return [
         fact("query", "query", "查询", recordString(record, ["query"])),

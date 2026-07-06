@@ -94,7 +94,7 @@ export interface AgentRuntimeAdapter {
     turnId?: string,
     eventName?: string,
   ): Promise<boolean>;
-  resumeThread(sessionId: string): Promise<boolean>;
+  resumeThread(sessionId: string, turnId?: string): Promise<boolean>;
   promoteQueuedTurn(sessionId: string, queuedTurnId: string): Promise<boolean>;
   removeQueuedTurn(sessionId: string, queuedTurnId: string): Promise<boolean>;
   respondToAction(request: AgentRuntimeActionResponse): Promise<void>;
@@ -266,9 +266,10 @@ export function createAgentRuntimeAdapter({
         ...(eventName ? { event_name: eventName } : {}),
       });
     },
-    async resumeThread(sessionId) {
+    async resumeThread(sessionId, turnId) {
       return client.resumeAgentRuntimeThread({
         session_id: sessionId,
+        ...(turnId ? { turn_id: turnId } : {}),
       });
     },
     async promoteQueuedTurn(sessionId, queuedTurnId) {

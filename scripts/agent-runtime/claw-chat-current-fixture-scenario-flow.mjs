@@ -15,6 +15,7 @@ import {
   GOAL_DONE_TEXT,
   GOAL_PROMPT,
   IMAGE_COMMAND_SCENARIO,
+  INPUTBAR_RICH_RESTORE_SCENARIO,
   MCP_STRUCTURED_CONTENT_DONE_TEXT,
   MCP_STRUCTURED_CONTENT_PROMPT,
   MULTI_AGENT_TEAM_DONE_TEXT,
@@ -62,6 +63,7 @@ import {
   enableGoalModeFromGui,
   enablePlanModeFromGui,
 } from "./claw-chat-current-fixture-gui-input-modes.mjs";
+import { runInputbarRichRestoreScenario } from "./claw-chat-current-fixture-inputbar-rich-restore.mjs";
 import {
   waitForGuiChatCanceled,
   waitForGuiChatCompleted,
@@ -113,6 +115,7 @@ import {
   waitForBackendLedgerTurnStart,
   waitForBackendLedgerTurnStartContaining,
 } from "./claw-chat-current-fixture-backend-ledger.mjs";
+import { resolveSoulStyleFixtureExpectedTexts } from "./claw-chat-current-fixture-soul-style.mjs";
 import { logStage, sanitizeJson } from "./claw-chat-current-fixture-utils.mjs";
 
 function summarizeThreadItemsForProbe(items) {
@@ -238,6 +241,18 @@ export async function executeScenarioFlow({
         workspace,
         appServerRequests,
         sessionId: EXPERT_SKILLS_RUNTIME_SESSION_ID,
+      }),
+    );
+  } else if (options.scenario === INPUTBAR_RICH_RESTORE_SCENARIO) {
+    logStage("run-inputbar-rich-restore");
+    Object.assign(
+      summary,
+      await runInputbarRichRestoreScenario({
+        page,
+        options,
+        summary,
+        appServerRequests,
+        runtimeEnv,
       }),
     );
   } else if (options.scenario === "plan") {
@@ -942,12 +957,21 @@ export async function executeScenarioFlow({
         ),
       );
 
-      if (
-        summary.guiExpertPanelSkillsRuntimeSessionReady?.textareaVisible !==
-          true ||
-        summary.guiExpertPanelSkillsRuntimeSessionReady?.textareaDisabled ===
-          true
-      ) {
+      const expertPanelReadySnapshot =
+        summary.guiExpertPanelSkillsRuntimeSessionReady ?? {};
+      const expertPanelInputMatchesSession =
+        expertPanelReadySnapshot.textareaVisible === true &&
+        expertPanelReadySnapshot.textareaDisabled === false &&
+        expertPanelReadySnapshot.textareaSessionId ===
+          expertPlazaSkillsRuntimeSessionId;
+      const expertPanelFallbackInputReady =
+        expertPanelReadySnapshot.fallbackTextareaVisible === true &&
+        expertPanelReadySnapshot.fallbackTextareaDisabled === false;
+      let expertPanelFollowupConstraints = expertPanelInputMatchesSession
+        ? { expectedSessionId: expertPlazaSkillsRuntimeSessionId }
+        : {};
+
+      if (!expertPanelInputMatchesSession && !expertPanelFallbackInputReady) {
         logStage("reopen-expert-panel-skills-runtime-session");
         summary.guiExpertPanelSkillsRuntimeSessionReopened = sanitizeJson(
           await openSessionFromSidebar(page, options, appServerRequests, {
@@ -955,11 +979,20 @@ export async function executeScenarioFlow({
             title: "请以「代码文学专家」专家身份工作。",
           }),
         );
+        expertPanelFollowupConstraints = {
+          expectedSessionId: expertPlazaSkillsRuntimeSessionId,
+        };
       } else {
         summary.guiExpertPanelSkillsRuntimeSessionReopened = sanitizeJson({
           skipped: true,
-          reason: "expert panel session input already ready",
+          reason: expertPanelInputMatchesSession
+            ? "expert panel session input already ready"
+            : "expert panel current page input ready without session marker",
           sessionId: expertPlazaSkillsRuntimeSessionId,
+          textareaSessionId:
+            expertPanelReadySnapshot.textareaSessionId ??
+            expertPanelReadySnapshot.fallbackTextareaSessionId ??
+            null,
         });
       }
 
@@ -969,7 +1002,7 @@ export async function executeScenarioFlow({
           page,
           options,
           EXPERT_SKILLS_RUNTIME_PANEL_PROMPT,
-          { expectedSessionId: expertPlazaSkillsRuntimeSessionId },
+          expertPanelFollowupConstraints,
         ),
       );
 
@@ -1153,12 +1186,24 @@ export async function executeScenarioFlow({
     options.scenario !== "expert-plaza-skills-runtime" &&
     options.scenario !== "expert-panel-skills-runtime" &&
     options.scenario !== RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO &&
+    options.scenario !== INPUTBAR_RICH_RESTORE_SCENARIO &&
     options.scenario !== CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO &&
     options.scenario !== CONTENT_FACTORY_INLINE_IMAGE_ARTICLE_WORKSPACE_SCENARIO
   ) {
+    const soulStyleExpectedTexts =
+      options.scenario === SOUL_STYLE_SCENARIO
+        ? resolveSoulStyleFixtureExpectedTexts(summary.soulStyleExpectation)
+        : null;
+    const defaultSummaryText = "今日国际新闻简要整理";
+    const summaryText =
+      soulStyleExpectedTexts?.summaryText ?? defaultSummaryText;
     logStage("wait-gui-completed");
     summary.guiCompleted = sanitizeJson(
-      await waitForGuiChatCompleted(page, options),
+      await waitForGuiChatCompleted(
+        page,
+        options,
+        soulStyleExpectedTexts ?? undefined,
+      ),
     );
 
     logStage("wait-read-model-completed");
@@ -1166,6 +1211,9 @@ export async function executeScenarioFlow({
       page,
       options,
       appServerRequests,
+      {
+        summaryText,
+      },
     );
     summary.readModelCompleted = sanitizeJson({
       detailItemCount: Array.isArray(readModelCompleted?.detail?.items)
@@ -1185,7 +1233,7 @@ export async function executeScenarioFlow({
       ),
       includesAssistantSummary: JSON.stringify(
         readModelCompleted || {},
-      ).includes("今日国际新闻简要整理"),
+      ).includes(summaryText),
     });
 
     if (options.scenario !== SOUL_STYLE_SCENARIO) {

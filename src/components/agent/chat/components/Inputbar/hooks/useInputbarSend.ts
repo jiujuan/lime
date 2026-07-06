@@ -105,6 +105,12 @@ export function useInputbarSend({
       : hasPathReferences
         ? "请查看这些文件或文件夹。"
         : undefined;
+    const inputRestoreDraft = {
+      text: submittedInput.trim() ? submittedInput : "",
+      images: pendingImages,
+      pathReferences,
+      inputCapabilityRoute: capabilityDispatch.capabilityRoute,
+    };
     const sendOptions =
       capabilityDispatch.capabilityRoute ||
       capabilityDispatch.displayContent ||
@@ -113,6 +119,7 @@ export function useInputbarSend({
             ...(capabilityDispatch.capabilityRoute
               ? { capabilityRoute: capabilityDispatch.capabilityRoute }
               : {}),
+            inputRestoreDraft,
             ...(capabilityDispatch.displayContent || submittedInput.trim()
               ? {
                   displayContent:

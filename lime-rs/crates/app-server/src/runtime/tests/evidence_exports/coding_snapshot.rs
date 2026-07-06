@@ -40,6 +40,23 @@ async fn export_evidence_pack_includes_coding_snapshot_artifacts() {
                 }),
             ),
             RuntimeEvent::new(
+                "action.required",
+                json!({
+                    "toolCallId": "tool_snapshot_evidence",
+                    "actionId": "action_snapshot_evidence",
+                    "requestId": "action_snapshot_evidence",
+                    "kind": "tool_confirmation",
+                    "evidenceRefs": ["evidence://snapshot-evidence/action"]
+                }),
+            ),
+            RuntimeEvent::new(
+                "action.resolved",
+                json!({
+                    "actionId": "action_snapshot_evidence",
+                    "decision": "approved"
+                }),
+            ),
+            RuntimeEvent::new(
                 "tool.result",
                 json!({
                     "toolCallId": "tool_snapshot_evidence",
@@ -149,21 +166,6 @@ async fn export_evidence_pack_includes_coding_snapshot_artifacts() {
                 }),
             ),
             RuntimeEvent::new(
-                "action.required",
-                json!({
-                    "actionId": "action_snapshot_evidence",
-                    "kind": "tool_confirmation",
-                    "evidenceRefs": ["evidence://snapshot-evidence/action"]
-                }),
-            ),
-            RuntimeEvent::new(
-                "action.resolved",
-                json!({
-                    "actionId": "action_snapshot_evidence",
-                    "decision": "approved"
-                }),
-            ),
-            RuntimeEvent::new(
                 "message.delta",
                 json!({
                     "text": "继续修复",
@@ -209,6 +211,15 @@ async fn export_evidence_pack_includes_coding_snapshot_artifacts() {
         })
         .map(|event| event.event_id.clone())
         .expect("recovery event id");
+    let action_resolved = response
+        .events
+        .iter()
+        .find(|event| event.event_type == "action.resolved")
+        .expect("action resolved event");
+    assert_eq!(
+        action_resolved.payload["toolCallId"],
+        "tool_snapshot_evidence"
+    );
     let evidence_pack = response.evidence_pack.expect("evidence pack");
     assert!(evidence_pack.artifacts.iter().any(|artifact| {
         artifact.kind == "tool_output_snapshot"
@@ -279,6 +290,16 @@ async fn export_evidence_pack_includes_coding_snapshot_artifacts() {
         coding_summary,
         "evidenceRefs",
         "evidence://snapshot-evidence/recovery",
+    );
+    assert_json_array_contains(
+        coding_summary,
+        "actionRequestIds",
+        "action_snapshot_evidence",
+    );
+    assert_json_array_contains(
+        coding_summary,
+        "actionToolCallIds",
+        "tool_snapshot_evidence",
     );
     assert_json_array_contains(coding_summary, "sourceEventIds", &file_changed_event_id);
     assert_json_array_contains(coding_summary, "sourceEventIds", &recovery_event_id);

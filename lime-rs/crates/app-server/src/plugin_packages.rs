@@ -3,6 +3,7 @@ mod package;
 mod package_export;
 mod paths;
 mod plugin_manifest;
+mod runtime_capabilities;
 mod seeded;
 
 pub(crate) use installed_state::migrate_plugin_installed_state_for_runtime;

@@ -6,6 +6,7 @@ import type {
 } from "@limecloud/agent-ui-contracts";
 
 import { buildAgentUiProjectionBase } from "./envelope.js";
+import { buildAgentUiCollaborationPayloadMetadata } from "./collaborationFacts.js";
 import { compactProjectionFields, definedString } from "./normalization.js";
 import {
   buildSubagentProjectionPayload,
@@ -32,6 +33,7 @@ export interface AgentUiSubagentStatusChangedProjectionInput
   duration_ms?: number;
   tool_count?: number;
   result_ref?: string | null;
+  metadata?: unknown;
 }
 
 export function resolveAgentUiSubagentStatusHandoffStatus(
@@ -123,6 +125,41 @@ export function buildAgentUiSubagentStatusChangedEvents(
     topology,
     ...facts,
   };
+  const sourceType = input.sourceType ?? "subagent_status_changed";
+  const buildCollaborationPayload = ({
+    payload: eventPayload,
+    collaborationKind,
+    surface,
+    phase: eventPhase,
+    status,
+    handoffId,
+  }: {
+    payload: Record<string, unknown>;
+    collaborationKind: string;
+    surface: string;
+    phase: AgentUiPhase;
+    status?: string | null;
+    handoffId?: string | null;
+  }): Record<string, unknown> =>
+    compactProjectionFields({
+      ...eventPayload,
+      ...buildAgentUiCollaborationPayloadMetadata({
+        sourceType,
+        collaborationKind,
+        surface,
+        phase: eventPhase,
+        status: status ?? input.status,
+        runtimeEntity: facts.runtimeEntity,
+        runtimeStatus: facts.runtimeStatus,
+        latestTurnStatus: facts.latestTurnStatus,
+        taskId: input.session_id,
+        agentId: input.session_id,
+        parentSessionId,
+        transcriptRef,
+        handoffId,
+        metadata: input.metadata,
+      }),
+    });
   const events: AgentUiProjectionEvent[] = [
     {
       ...shared,
@@ -132,10 +169,15 @@ export function buildAgentUiSubagentStatusChangedEvents(
       phase,
       surface: "team_roster",
       persistence: "snapshot",
-      payload: {
-        agentEvent: "subagent_status_changed",
-        ...payload,
-      },
+      payload: buildCollaborationPayload({
+        payload: {
+          agentEvent: "subagent_status_changed",
+          ...payload,
+        },
+        collaborationKind: "subagent_status",
+        surface: "team_roster",
+        phase,
+      }),
     },
     {
       ...shared,
@@ -146,10 +188,15 @@ export function buildAgentUiSubagentStatusChangedEvents(
       surface: "task_capsule",
       persistence: "snapshot",
       control: resolveSubagentStatusControl(input.status),
-      payload: {
-        taskEvent: "subagent_status_changed",
-        ...payload,
-      },
+      payload: buildCollaborationPayload({
+        payload: {
+          taskEvent: "subagent_status_changed",
+          ...payload,
+        },
+        collaborationKind: "subagent_task",
+        surface: "task_capsule",
+        phase,
+      }),
     },
     {
       ...shared,
@@ -159,10 +206,15 @@ export function buildAgentUiSubagentStatusChangedEvents(
       phase,
       surface: "team_roster",
       persistence: "snapshot",
-      payload: {
-        teamEvent: "teammate_status_changed",
-        ...payload,
-      },
+      payload: buildCollaborationPayload({
+        payload: {
+          teamEvent: "teammate_status_changed",
+          ...payload,
+        },
+        collaborationKind: "team_status",
+        surface: "team_roster",
+        phase,
+      }),
     },
     {
       ...shared,
@@ -174,11 +226,16 @@ export function buildAgentUiSubagentStatusChangedEvents(
       persistence: "snapshot",
       control: "open_detail",
       transcriptRef,
-      payload: {
-        agentEvent: "teammate_transcript_ref",
-        transcriptRef,
-        ...payload,
-      },
+      payload: buildCollaborationPayload({
+        payload: {
+          agentEvent: "teammate_transcript_ref",
+          transcriptRef,
+          ...payload,
+        },
+        collaborationKind: "teammate_transcript",
+        surface: "teammate_transcript",
+        phase,
+      }),
     },
   ];
 
@@ -192,11 +249,16 @@ export function buildAgentUiSubagentStatusChangedEvents(
       surface: "delegation_graph",
       persistence: "snapshot",
       control: "delegate",
-      payload: {
-        agentEvent: "subagent_active",
-        spawnSource: "subagent_status_changed",
-        ...payload,
-      },
+      payload: buildCollaborationPayload({
+        payload: {
+          agentEvent: "subagent_active",
+          spawnSource: "subagent_status_changed",
+          ...payload,
+        },
+        collaborationKind: "delegation",
+        surface: "delegation_graph",
+        phase,
+      }),
     });
   }
 
@@ -220,10 +282,15 @@ export function buildAgentUiSubagentStatusChangedEvents(
         phase,
         surface: "delegation_graph",
         persistence: "archive",
-        payload: {
-          agentEvent: terminalEvent,
-          ...payload,
-        },
+        payload: buildCollaborationPayload({
+          payload: {
+            agentEvent: terminalEvent,
+            ...payload,
+          },
+          collaborationKind: "delegation_terminal",
+          surface: "delegation_graph",
+          phase,
+        }),
       },
       {
         ...shared,
@@ -236,43 +303,57 @@ export function buildAgentUiSubagentStatusChangedEvents(
         phase,
         surface: "worker_notifications",
         persistence: "archive",
-        payload: {
-          notificationKind: terminalEvent,
-          ...payload,
-          ...workerPayload,
-        },
+        payload: buildCollaborationPayload({
+          payload: {
+            notificationKind: terminalEvent,
+            ...payload,
+            ...workerPayload,
+          },
+          collaborationKind: terminalEvent,
+          surface: "worker_notifications",
+          phase,
+        }),
       },
     );
   }
 
   if (handoffStatus && parentSessionId) {
     const resultRef = definedString(input.result_ref);
+    const handoffId = `${parentSessionId}:handoff:${input.session_id}`;
+    const handoffPhase = normalizeAgentUiSubagentHandoffPhase(handoffStatus);
     events.push({
       ...shared,
       type: "agent.handoff",
-      handoffId: `${parentSessionId}:handoff:${input.session_id}`,
+      handoffId,
       transcriptRef,
       owner: "agent",
       scope: "agent",
-      phase: normalizeAgentUiSubagentHandoffPhase(handoffStatus),
+      phase: handoffPhase,
       surface: "handoff_lane",
       persistence: isSubagentTerminalStatus(input.status)
         ? "archive"
         : "snapshot",
       control: "open_detail",
       topology: "specialist_handoff",
-      payload: compactProjectionFields({
-        handoffEvent: "specialist_handoff",
+      payload: buildCollaborationPayload({
+        payload: compactProjectionFields({
+          handoffEvent: "specialist_handoff",
+          status: handoffStatus,
+          sourceStatus: input.status,
+          from: parentSessionId,
+          to: input.session_id,
+          reason: "subagent_status_changed",
+          resumeTarget: `agent-runtime://session/${input.session_id}`,
+          contextBoundary: "subagent_session",
+          transcriptRef,
+          latestTurnId: input.latest_turn_id,
+          resultRef,
+        }),
+        collaborationKind: "specialist_handoff",
+        surface: "handoff_lane",
+        phase: handoffPhase,
         status: handoffStatus,
-        sourceStatus: input.status,
-        from: parentSessionId,
-        to: input.session_id,
-        reason: "subagent_status_changed",
-        resumeTarget: `agent-runtime://session/${input.session_id}`,
-        contextBoundary: "subagent_session",
-        transcriptRef,
-        latestTurnId: input.latest_turn_id,
-        resultRef,
+        handoffId,
       }),
     });
   }

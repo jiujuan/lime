@@ -10,7 +10,7 @@ use lime_core::database::{self, DbConnection};
 use serde_json::{json, Value};
 use std::sync::Arc;
 
-pub(super) fn current_agent_runtime_config_metadata() -> Option<Value> {
+pub(crate) fn current_agent_runtime_config_metadata() -> Option<Value> {
     let config = match load_config() {
         Ok(config) => config,
         Err(error) => {

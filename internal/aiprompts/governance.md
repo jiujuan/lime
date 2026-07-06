@@ -15,6 +15,8 @@
 
 **同一种能力，在同一时期只能存在一个继续演进的事实源。**
 
+Agent 相关治理的最高事实源是 Codex-first：除多模型 / 多模态的 provider、capability、media part、模型能力矩阵和 provider lowering 参考 opencode 外，其余 Agent runtime、Thread / Turn / Item、App Server、状态机、工具生命周期、MCP、Skills、Multi-Agent、history hydrate、projection、TUI/GUI 测试护栏和命名，默认按 `/Users/coso/Documents/dev/rust/codex` 的架构方式收敛。Lime 当前不合理命名、旧 `Aster` 语义、`agent_runtime_*` 命令或多轮迭代残留不能作为 current 事实源续命；它们必须被标成 `compat` / `deprecated` / `dead`，并在护栏齐备后替换或删除。
+
 其余实现必须被明确归类。
 
 生产路径不能 mock。mock 只允许作为测试夹具、契约守卫或已标明测试场景的本地 fixture；如果生产入口需要靠 `defaultMocks`、`mockPriorityCommands`、`invokeMockOnly`、renderer mock fallback 或 App Server mock backend 才能跑通，该入口应判为阻塞缺口，而不是可交付降级。

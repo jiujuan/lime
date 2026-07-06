@@ -9,6 +9,7 @@ use crate::agent_tools::execution::{
     ToolExecutionResolverInput, ToolExecutionRestrictionProfile, ToolExecutionSandboxProfile,
     ToolExecutionWarningPolicy,
 };
+use crate::agent_tools::native_tool_policy_gate::NativeToolPolicyGate;
 use crate::mcp::McpToolDefinition;
 use lime_core::config::ToolExecutionPolicyConfig as ConfigToolExecutionPolicyConfig;
 use lime_core::tool_calling::{
@@ -319,6 +320,8 @@ pub(crate) fn build_tool_inventory(
     };
     let lock_service_skill_launch_to_site_tools =
         should_lock_service_skill_launch_to_site_tools(request_metadata.as_ref());
+    let native_tool_policy_gate =
+        NativeToolPolicyGate::from_request_metadata(request_metadata.as_ref());
 
     let mut mcp_servers = mcp_server_names
         .into_iter()
@@ -333,6 +336,7 @@ pub(crate) fn build_tool_inventory(
 
     let mut default_allowed_tools = workspace_default_allowed_tool_names(surface)
         .into_iter()
+        .filter(|name| native_tool_policy_gate.allows_tool_name(name))
         .map(ToString::to_string)
         .collect::<Vec<_>>();
     default_allowed_tools.sort();
@@ -342,6 +346,7 @@ pub(crate) fn build_tool_inventory(
         .filter(|entry| {
             !lock_service_skill_launch_to_site_tools || entry.name != BROWSER_RUNTIME_TOOL_PREFIX
         })
+        .filter(|entry| native_tool_policy_gate.allows_catalog_entry(entry))
         .map(|entry| {
             let resolution =
                 resolve_tool_execution_policy_resolution(entry.name, execution_policy_input);
@@ -370,6 +375,7 @@ pub(crate) fn build_tool_inventory(
         execution_policy_input,
         lock_service_skill_launch_to_site_tools,
         resource_helpers_supported,
+        &native_tool_policy_gate,
     );
     let extension_surfaces = build_extension_surface_inventory(
         &extension_configs,
@@ -393,6 +399,7 @@ pub(crate) fn build_tool_inventory(
         &current_surface_tool_names,
         &extension_tools,
         &mcp_tools,
+        &native_tool_policy_gate,
     );
 
     let counts = ToolInventoryCounts {
@@ -471,6 +478,7 @@ fn build_registry_inventory(
     execution_policy_input: ToolExecutionResolverInput<'_>,
     lock_service_skill_launch_to_site_tools: bool,
     resource_helpers_supported: bool,
+    native_tool_policy_gate: &NativeToolPolicyGate,
 ) -> Vec<RuntimeRegistryToolInventoryEntry> {
     let mut result = definitions
         .iter()
@@ -478,6 +486,7 @@ fn build_registry_inventory(
             !lock_service_skill_launch_to_site_tools
                 || !definition.name.starts_with(BROWSER_RUNTIME_TOOL_PREFIX)
         })
+        .filter(|definition| native_tool_policy_gate.allows_tool_name(&definition.name))
         .map(|definition| {
             let metadata =
                 extract_tool_surface_metadata(&definition.name, &definition.input_schema);
@@ -681,6 +690,7 @@ fn build_runtime_tool_inventory(
     current_surface_tool_names: &HashSet<String>,
     extension_tools: &[RuntimeExtensionToolInventoryEntry],
     mcp_tools: &[McpToolInventoryEntry],
+    native_tool_policy_gate: &NativeToolPolicyGate,
 ) -> Vec<RuntimeToolInventoryEntry> {
     let mut result = Vec::new();
     let mcp_output_schema_tool_names = mcp_tools
@@ -690,6 +700,9 @@ fn build_runtime_tool_inventory(
         .collect::<HashSet<_>>();
 
     for entry in registry_tools {
+        if !native_tool_policy_gate.allows_tool_name(&entry.name) {
+            continue;
+        }
         insert_runtime_tool_entry(
             &mut result,
             RuntimeToolInventoryEntry {
@@ -720,6 +733,9 @@ fn build_runtime_tool_inventory(
     }
 
     for entry in extension_tools {
+        if !native_tool_policy_gate.allows_tool_name(&entry.name) {
+            continue;
+        }
         let catalog_entry = tool_catalog_entry(&entry.name);
         let source_kind = entry.source_kind;
         insert_runtime_tool_entry(
@@ -750,6 +766,9 @@ fn build_runtime_tool_inventory(
     }
 
     for entry in mcp_tools {
+        if !native_tool_policy_gate.allows_tool_name(&entry.name) {
+            continue;
+        }
         let catalog_entry = tool_catalog_entry(&entry.name);
         insert_runtime_tool_entry(
             &mut result,
@@ -885,8 +904,8 @@ pub fn resolve_extension_tool_runtime_status(
 mod tests {
     use super::*;
     use crate::agent_tools::catalog::{
-        MEMORY_ADD_NOTE_TOOL_NAME, MEMORY_LIST_TOOL_NAME, MEMORY_READ_TOOL_NAME,
-        MEMORY_SEARCH_TOOL_NAME, SKILL_SEARCH_TOOL_NAME,
+        APPLY_PATCH_TOOL_NAME, MEMORY_ADD_NOTE_TOOL_NAME, MEMORY_LIST_TOOL_NAME,
+        MEMORY_READ_TOOL_NAME, MEMORY_SEARCH_TOOL_NAME, SKILL_SEARCH_TOOL_NAME,
     };
     use lime_core::config::{
         ToolExecutionOverrideConfig as ConfigToolExecutionOverrideConfig,
@@ -1256,6 +1275,91 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn test_build_tool_inventory_gates_native_shell_and_apply_patch_by_request_policy() {
+        let inventory = build_tool_inventory(AgentToolInventoryBuildInput {
+            surface: WorkspaceToolSurface::core(),
+            caller: "assistant".to_string(),
+            agent_initialized: true,
+            warnings: Vec::new(),
+            persisted_execution_policy: None,
+            request_metadata: Some(json!({
+                "harness": {
+                    "model_request_policy": {
+                        "native_tool_policy": {
+                            "shell_type": "disabled",
+                            "shell_tool_enabled": false,
+                            "apply_patch_tool_enabled": false
+                        }
+                    }
+                }
+            })),
+            mcp_server_names: Vec::new(),
+            mcp_tools: Vec::new(),
+            registry_definitions: vec![
+                definition("Read", "read file", json!({ "type": "object" })),
+                definition("Bash", "workspace bash", json!({ "type": "object" })),
+                definition(
+                    "PowerShell",
+                    "workspace powershell",
+                    json!({ "type": "object" }),
+                ),
+                definition(
+                    "apply_patch",
+                    "workspace patch",
+                    json!({ "type": "object" }),
+                ),
+            ],
+            resource_helpers_supported: false,
+            current_surface_tool_names: vec![
+                "Read".to_string(),
+                "Bash".to_string(),
+                "PowerShell".to_string(),
+                "apply_patch".to_string(),
+            ],
+            extension_configs: Vec::new(),
+            visible_extension_tools: Vec::new(),
+            searchable_extension_tools: Vec::new(),
+        });
+
+        for blocked_tool_name in ["Bash", "PowerShell", APPLY_PATCH_TOOL_NAME] {
+            assert!(
+                !inventory
+                    .catalog_tools
+                    .iter()
+                    .any(|entry| entry.name == blocked_tool_name),
+                "{blocked_tool_name} should be hidden from catalog inventory"
+            );
+            assert!(
+                !inventory
+                    .registry_tools
+                    .iter()
+                    .any(|entry| entry.name == blocked_tool_name),
+                "{blocked_tool_name} should be hidden from registry inventory"
+            );
+            assert!(
+                !inventory
+                    .runtime_tools
+                    .iter()
+                    .any(|entry| entry.name == blocked_tool_name),
+                "{blocked_tool_name} should be hidden from runtime inventory"
+            );
+        }
+
+        assert!(inventory
+            .catalog_tools
+            .iter()
+            .any(|entry| entry.name == "Read"));
+        assert!(inventory
+            .registry_tools
+            .iter()
+            .any(|entry| entry.name == "Read"));
+        assert!(inventory
+            .runtime_tools
+            .iter()
+            .any(|entry| entry.name == "Read"));
     }
 
     #[test]

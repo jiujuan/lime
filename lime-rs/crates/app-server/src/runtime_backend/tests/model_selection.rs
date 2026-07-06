@@ -296,6 +296,189 @@ fn runtime_options_metadata_reasoning_flows_to_selection_and_turn_context() {
 }
 
 #[test]
+fn model_request_policy_reasoning_default_flows_to_selection_and_turn_context() {
+    let mut request = request_for_test(
+        "hello",
+        None,
+        Some(json!({
+            "harness": {
+                "model_request_policy": {
+                    "reasoning_policy": {
+                        "supports_reasoning_summaries": true,
+                        "default_reasoning_level": "high"
+                    }
+                }
+            }
+        })),
+    );
+    let options = request.runtime_options.as_mut().expect("runtime options");
+    options.provider_preference = Some("openai".to_string());
+    options.model_preference = Some("gpt-4.1".to_string());
+
+    let selection = selection_from_explicit_preferences(&request).expect("selection");
+    assert_eq!(selection.reasoning_effort.as_deref(), Some("high"));
+
+    let scope = session_scope_from_request(&request).expect("scope");
+    let turn_context =
+        turn_context_from_request(&request, None, &scope, &selection, None).expect("turn context");
+
+    assert_eq!(turn_context.effort.as_deref(), Some("high"));
+}
+
+#[test]
+fn explicit_reasoning_effort_wins_over_model_request_policy_default() {
+    let mut request = request_for_test(
+        "hello",
+        None,
+        Some(json!({
+            "harness": {
+                "reasoning_effort": "low",
+                "model_request_policy": {
+                    "reasoning_policy": {
+                        "supports_reasoning_summaries": true,
+                        "default_reasoning_level": "high"
+                    }
+                }
+            }
+        })),
+    );
+    let options = request.runtime_options.as_mut().expect("runtime options");
+    options.provider_preference = Some("openai".to_string());
+    options.model_preference = Some("gpt-4.1".to_string());
+
+    let selection = selection_from_explicit_preferences(&request).expect("selection");
+
+    assert_eq!(selection.reasoning_effort.as_deref(), Some("low"));
+}
+
+#[test]
+fn model_request_policy_context_flows_to_lime_runtime_metadata() {
+    let mut request = request_for_test(
+        "hello",
+        None,
+        Some(json!({
+            "harness": {
+                "model_request_policy": {
+                    "context_policy": {
+                        "context_window": 100000,
+                        "max_context_window": 400000,
+                        "auto_compact_token_limit": 95000,
+                        "effective_context_window_percent": 50
+                    }
+                }
+            }
+        })),
+    );
+    let options = request.runtime_options.as_mut().expect("runtime options");
+    options.provider_preference = Some("openai".to_string());
+    options.model_preference = Some("gpt-4.1".to_string());
+
+    let selection = selection_from_explicit_preferences(&request).expect("selection");
+    let scope = session_scope_from_request(&request).expect("scope");
+    let turn_context =
+        turn_context_from_request(&request, None, &scope, &selection, None).expect("turn context");
+    let runtime = turn_context
+        .metadata
+        .get("lime_runtime")
+        .expect("lime_runtime metadata");
+
+    assert_eq!(
+        runtime
+            .pointer("/context_policy/source")
+            .and_then(Value::as_str),
+        Some("model_request_policy")
+    );
+    assert_eq!(
+        runtime
+            .pointer("/context_policy/resolved_context_window")
+            .and_then(Value::as_i64),
+        Some(100_000)
+    );
+    assert_eq!(
+        runtime
+            .pointer("/context_policy/model_context_window")
+            .and_then(Value::as_i64),
+        Some(50_000)
+    );
+    assert_eq!(
+        runtime
+            .pointer("/context_policy/auto_compact_token_limit")
+            .and_then(Value::as_i64),
+        Some(90_000)
+    );
+    assert_eq!(
+        runtime.get("model_context_window").and_then(Value::as_i64),
+        Some(50_000)
+    );
+    assert_eq!(
+        runtime
+            .get("auto_compact_token_limit")
+            .and_then(Value::as_i64),
+        Some(90_000)
+    );
+}
+
+#[test]
+fn fast_response_lime_runtime_keeps_context_policy_and_auto_compact_override() {
+    let mut request = request_for_test(
+        "只回答一个字：好",
+        None,
+        Some(json!({
+            "harness": {
+                "fast_response_routing": {
+                    "mode": "auto",
+                    "service_model_slot": "responsive_chat"
+                },
+                "model_request_policy": {
+                    "context_policy": {
+                        "resolved_context_window": 200000,
+                        "model_context_window": 120000,
+                        "auto_compact_token_limit": 150000
+                    }
+                }
+            }
+        })),
+    );
+    let options = request.runtime_options.as_mut().expect("runtime options");
+    options.provider_preference = Some("openai".to_string());
+    options.model_preference = Some("gpt-4.1".to_string());
+
+    let selection = selection_from_explicit_preferences(&request).expect("selection");
+    let scope = session_scope_from_request(&request).expect("scope");
+    let turn_context =
+        turn_context_from_request(&request, None, &scope, &selection, None).expect("turn context");
+    let runtime = turn_context
+        .metadata
+        .get("lime_runtime")
+        .expect("lime_runtime metadata");
+
+    assert_eq!(
+        runtime.get("auto_compact").and_then(Value::as_bool),
+        Some(false)
+    );
+    assert_eq!(
+        runtime.get("tool_surface").and_then(Value::as_str),
+        Some("compact_tools")
+    );
+    assert_eq!(
+        runtime
+            .pointer("/context_policy/source")
+            .and_then(Value::as_str),
+        Some("model_request_policy")
+    );
+    assert_eq!(
+        runtime.get("model_context_window").and_then(Value::as_i64),
+        Some(120_000)
+    );
+    assert_eq!(
+        runtime
+            .get("auto_compact_token_limit")
+            .and_then(Value::as_i64),
+        Some(150_000)
+    );
+}
+
+#[test]
 fn valid_w3c_trace_context_flows_to_turn_context_metadata() {
     let mut request = request_for_test(
         "hello",

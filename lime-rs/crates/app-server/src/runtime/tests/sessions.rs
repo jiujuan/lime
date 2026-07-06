@@ -118,7 +118,14 @@ async fn compact_agent_session_injects_next_turn_session_context_packet() {
             },
             runtime_options: Some(RuntimeOptions {
                 metadata: Some(json!({
-                    "system_prompt": "base prompt"
+                    "system_prompt": "base prompt",
+                    "harness": {
+                        "model_request_policy": {
+                            "context_policy": {
+                                "context_window": 8000
+                            }
+                        }
+                    }
                 })),
                 ..RuntimeOptions::default()
             }),
@@ -152,6 +159,19 @@ async fn compact_agent_session_injects_next_turn_session_context_packet() {
         .as_str()
         .expect("summary")
         .contains("Turn completed."));
+    assert_eq!(compaction_context["packetTokenBudget"].as_u64(), Some(720));
+    assert_eq!(
+        compaction_context["contextBudgetPolicy"]["source"].as_str(),
+        Some("model_request_policy")
+    );
+    assert_eq!(
+        compaction_context["contextBudgetPolicy"]["modelContextWindow"].as_u64(),
+        Some(7600)
+    );
+    assert_eq!(
+        compaction_context["contextBudgetPolicy"]["autoCompactTokenLimit"].as_u64(),
+        Some(7200)
+    );
     let telemetry = metadata
         .get(crate::runtime::memory_prompt::CONTEXT_PACKET_TELEMETRY_KEY)
         .expect("context telemetry");
@@ -164,6 +184,7 @@ async fn compact_agent_session_injects_next_turn_session_context_packet() {
         telemetry["packets"][0]["source"].as_str(),
         Some("session.compaction")
     );
+    assert_eq!(telemetry["packets"][0]["tokenBudget"].as_u64(), Some(720));
 
     let prompt = crate::runtime::memory_prompt::append_memory_context_to_system_prompt(
         Some("base prompt".to_string()),

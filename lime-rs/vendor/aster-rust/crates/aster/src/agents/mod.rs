@@ -12,6 +12,7 @@ mod large_response_handler;
 pub mod mcp_client;
 pub mod moim;
 pub mod platform_tools;
+mod prompt_input_modalities;
 pub mod prompt_manager;
 mod provider_trace;
 mod reply_parts;

@@ -37,6 +37,7 @@ import {
 } from "../../../skill-selection/inputCapabilitySelection";
 import type { InputbarKnowledgePackSelection } from "../types";
 import type { InputbarSendHandler } from "../inputbarSendPayload";
+import type { InterruptedInputRestoreRequest } from "../../../hooks/agentStreamInputRestoreTypes";
 import type { AgentInitialInputCapabilityParams } from "@/types/page";
 import {
   buildCuratedTaskLaunchPrompt,
@@ -98,6 +99,8 @@ interface UseInputbarControllerParams {
   pathReferences?: MessagePathReference[];
   onAddPathReferences?: (references: MessagePathReference[]) => void;
   onClearPathReferences?: () => void;
+  inputRestoreRequest?: InterruptedInputRestoreRequest | null;
+  onInputRestoreRequestHandled?: (requestId: string) => void;
 }
 
 export function useInputbarController({
@@ -130,6 +133,8 @@ export function useInputbarController({
   pathReferences = [],
   onAddPathReferences,
   onClearPathReferences,
+  inputRestoreRequest = null,
+  onInputRestoreRequestHandled,
   skills,
   serviceSkills,
   serviceSkillGroups,
@@ -169,6 +174,7 @@ export function useInputbarController({
     handleDrop: handleImageDrop,
     handleRemoveImage,
     clearPendingImages,
+    replacePendingImages,
     openFileDialog,
   } = useImageAttachments();
   const handleDrop = useCallback(
@@ -261,6 +267,39 @@ export function useInputbarController({
       route,
     });
   }, [initialInputCapability]);
+
+  useEffect(() => {
+    if (!inputRestoreRequest) {
+      return;
+    }
+
+    const { draft, requestId } = inputRestoreRequest;
+    const restoredPathReferences = [...(draft.pathReferences ?? [])];
+    setInput(draft.text);
+    replacePendingImages([...(draft.images ?? [])]);
+    onClearPathReferences?.();
+    if (restoredPathReferences.length > 0) {
+      onAddPathReferences?.(restoredPathReferences);
+    }
+    setActivePluginSelection(null);
+    setActiveCapability(
+      draft.inputCapabilityRoute
+        ? resolveInputCapabilitySelectionFromRoute({
+            route: draft.inputCapabilityRoute,
+            skills,
+          })
+        : null,
+    );
+    onInputRestoreRequestHandled?.(requestId);
+  }, [
+    inputRestoreRequest,
+    onAddPathReferences,
+    onClearPathReferences,
+    onInputRestoreRequestHandled,
+    replacePendingImages,
+    setInput,
+    skills,
+  ]);
 
   useEffect(() => {
     if (!initialInputCapabilitySignature) {

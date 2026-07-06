@@ -181,6 +181,8 @@ export function handleTurnStreamEvent({
     sessionId: activeSessionId,
     runId: eventName,
     messageId: assistantMsgId,
+  }, {
+    soulCopy,
   });
   if (projectionEvents.length > 0) {
     requestState.agentUiEventSequence =

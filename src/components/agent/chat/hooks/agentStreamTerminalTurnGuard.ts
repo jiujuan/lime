@@ -11,7 +11,7 @@ export function shouldApplyAgentStreamTerminalEvent(params: {
 }): boolean {
   const terminalTurnId = normalizeTurnId(params.terminalTurnId);
   if (!terminalTurnId) {
-    return true;
+    return false;
   }
 
   const activeTextSegmentTurnId = normalizeTurnId(
@@ -19,17 +19,16 @@ export function shouldApplyAgentStreamTerminalEvent(params: {
   );
   const currentTurnId = normalizeTurnId(params.currentTurnId);
   const queuedTurnId = normalizeTurnId(params.queuedTurnId);
-  const comparableTurnIds = [activeTextSegmentTurnId, currentTurnId].filter(
+  const activeTurnIds = [activeTextSegmentTurnId, currentTurnId].filter(
     (turnId): turnId is string => Boolean(turnId),
   );
-  const allowedTurnIds = [
-    activeTextSegmentTurnId,
-    currentTurnId,
-    queuedTurnId,
-  ].filter((turnId): turnId is string => Boolean(turnId));
 
-  if (comparableTurnIds.length > 0) {
-    return allowedTurnIds.includes(terminalTurnId);
+  if (activeTurnIds.length > 0) {
+    return activeTurnIds.includes(terminalTurnId);
+  }
+
+  if (queuedTurnId) {
+    return queuedTurnId === terminalTurnId;
   }
 
   return true;

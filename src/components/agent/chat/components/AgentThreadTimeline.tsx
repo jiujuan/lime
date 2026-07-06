@@ -40,6 +40,7 @@ import {
 } from "./AgentThreadTimelineItemRenderers";
 import {
   resolveActiveBlockIndex,
+  resolveCollaborationOpenSubagentLabel,
   resolveFocusBlockIndex,
   resolveExpandedBlockIndexes,
   resolveBlockSummaryLines,
@@ -115,8 +116,7 @@ function TimelineBlockCard({
   focusedItemId?: string | null;
   focusRequestKey?: number;
 }) {
-  const { t } = useTranslation("agent");
-  const openSubagentLabel = t("agentChat.threadTimeline.openSubagent");
+  const openSubagentLabel = resolveCollaborationOpenSubagentLabel();
   const dataTestId = `agent-thread-block:${index + 1}:${block.kind}`;
   const summaryLines = resolveBlockSummaryLines(block);
   const headline = summaryLines[0] || block.title;

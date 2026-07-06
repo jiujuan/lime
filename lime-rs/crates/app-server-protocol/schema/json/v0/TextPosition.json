@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "column": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "line": {
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "column",
+    "line"
+  ],
+  "title": "TextPosition",
+  "type": "object"
+}

@@ -9,17 +9,17 @@ use aster::conversation::message::{
     SystemNotificationType as AsterSystemNotificationType,
 };
 
-use crate::protocol::{AgentEvent as RuntimeAgentEvent, AgentMessage as RuntimeAgentMessage};
+use crate::protocol::AgentEvent as RuntimeAgentEvent;
 use crate::request_tool_policy::auto_compaction_projection::{
     AutoCompactionEventProjection, AutoCompactionSystemNotificationKind,
 };
+use crate::turn_context_configuration::AgentTurnContext;
 
-pub(crate) fn project_aster_runtime_event(event: AsterAgentEvent) -> Vec<RuntimeAgentEvent> {
-    crate::event_converter::convert_agent_event(event)
-}
-
-pub(crate) fn project_aster_message(message: &AsterMessage) -> RuntimeAgentMessage {
-    crate::message_content_adapter::convert_aster_message_to_runtime_message(message)
+pub(crate) fn project_aster_runtime_event_with_turn_context(
+    event: AsterAgentEvent,
+    active_turn_context: Option<&AgentTurnContext>,
+) -> Vec<RuntimeAgentEvent> {
+    crate::event_converter::convert_agent_event_with_turn_context(event, active_turn_context)
 }
 
 pub(crate) fn project_aster_auto_compaction_event(

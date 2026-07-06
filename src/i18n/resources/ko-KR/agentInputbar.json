@@ -76,6 +76,7 @@
   "agentChat.inputbar.core.suggestion.acceptKey": "Tab",
   "agentChat.inputbar.core.textarea.expand": "입력창 펼치기",
   "agentChat.inputbar.core.textarea.collapse": "입력창 접기",
+  "agentChat.inputbar.core.action.running": "출력 중",
   "agentChat.inputbar.core.action.defer": "나중에 처리",
   "agentChat.inputbar.core.action.stop": "중지",
   "agentChat.inputbar.core.action.send": "전송",

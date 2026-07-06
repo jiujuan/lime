@@ -2025,22 +2025,13 @@ Extract it into the Agent Skills directory.`,
     }
   });
 
-  it("无真实消息时应透传 bootstrap 预览消息", () => {
+  it("无真实消息时不再展示 bootstrap 启动预览消息", () => {
     const harness = mountHook({
       bootstrapDispatchPreview: createBootstrapDispatchSnapshot(),
     });
 
     try {
-      expect(harness.getValue().displayMessages).toHaveLength(2);
-      expect(harness.getValue().displayMessages[0]).toMatchObject({
-        role: "user",
-        content: "请开始处理这个任务",
-      });
-      expect(harness.getValue().displayMessages[1]).toMatchObject({
-        role: "assistant",
-        content: "任务已进入处理队列…",
-        isThinking: true,
-      });
+      expect(harness.getValue().displayMessages).toEqual([]);
     } finally {
       harness.unmount();
     }
@@ -2116,16 +2107,10 @@ Extract it into the Agent Skills directory.`,
         await Promise.resolve();
       });
 
-      expect(harness.getValue().displayMessages).toHaveLength(2);
+      expect(harness.getValue().displayMessages).toHaveLength(1);
       expect(harness.getValue().displayMessages[0]).toMatchObject({
         role: "user",
         content: "帮我找一下今天的新闻",
-      });
-      expect(harness.getValue().displayMessages[1]).toMatchObject({
-        role: "assistant",
-        runtimeStatus: expect.objectContaining({
-          title: "正在启动处理流程",
-        }),
       });
 
       await act(async () => {
@@ -2163,16 +2148,10 @@ Extract it into the Agent Skills directory.`,
         await Promise.resolve();
       });
 
-      expect(harness.getValue().displayMessages).toHaveLength(2);
+      expect(harness.getValue().displayMessages).toHaveLength(1);
       expect(harness.getValue().displayMessages[0]).toMatchObject({
         role: "user",
         content: "帮我整理一下今天的重要新闻",
-      });
-      expect(harness.getValue().displayMessages[1]).toMatchObject({
-        role: "assistant",
-        runtimeStatus: expect.objectContaining({
-          title: "正在启动处理流程",
-        }),
       });
       expect(mockSendMessage).toHaveBeenCalledTimes(1);
       expect(mockSendMessage.mock.calls[0]?.[0]).toBe(
@@ -2264,7 +2243,7 @@ Extract it into the Agent Skills directory.`,
 
       expect(await secondSendPromise).toBe(false);
       expect(mockSendMessage).toHaveBeenCalledTimes(1);
-      expect(harness.getValue().displayMessages).toHaveLength(2);
+      expect(harness.getValue().displayMessages).toHaveLength(1);
       expect(harness.getValue().displayMessages[0]).toMatchObject({
         role: "user",
         content: "帮我生成一版首页插图方案",
@@ -3097,16 +3076,10 @@ Extract it into the Agent Skills directory.`,
         await Promise.resolve();
       });
 
-      expect(harness.getValue().displayMessages).toHaveLength(2);
+      expect(harness.getValue().displayMessages).toHaveLength(1);
       expect(harness.getValue().displayMessages[0]).toMatchObject({
         role: "user",
         content: "@配图 生成 一张春日咖啡馆插画",
-      });
-      expect(harness.getValue().displayMessages[1]).toMatchObject({
-        role: "assistant",
-        runtimeStatus: expect.objectContaining({
-          title: "正在启动处理流程",
-        }),
       });
       expect(mockSendMessage).not.toHaveBeenCalled();
 

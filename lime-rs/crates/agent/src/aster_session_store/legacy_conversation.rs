@@ -1,44 +1,30 @@
 use anyhow::Result;
 use aster::conversation::message::{Message, MessageContent, MessageMetadata};
 use aster::conversation::Conversation;
+use thread_store::conversation_transcript::ConversationMessageRole;
+use thread_store::legacy_conversation::{
+    project_legacy_conversation_message_record, LegacyConversationMessageRecord,
+};
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct PersistedConversationMessageRecord {
-    content: Vec<MessageContent>,
-    #[serde(default = "persisted_visibility_default_true")]
-    user_visible: bool,
-    #[serde(default = "persisted_visibility_default_true")]
-    agent_visible: bool,
-}
-
-fn persisted_visibility_default_true() -> bool {
-    true
-}
+#[cfg(test)]
+use thread_store::legacy_conversation::serialize_persisted_legacy_message_content_record;
 
 #[cfg(test)]
 pub(super) fn serialize_persisted_message_content(message: &Message) -> Result<String> {
-    serde_json::to_string(&PersistedConversationMessageRecord {
-        content: message.content.clone(),
-        user_visible: message.metadata.user_visible,
-        agent_visible: message.metadata.agent_visible,
-    })
-    .map_err(|e| anyhow::anyhow!("序列化消息内容失败: {e}"))
-}
+    let content = message
+        .content
+        .iter()
+        .cloned()
+        .map(serde_json::to_value)
+        .collect::<serde_json::Result<Vec<_>>>()
+        .map_err(|e| anyhow::anyhow!("序列化消息内容失败: {e}"))?;
 
-fn deserialize_persisted_message_content(
-    content_json: &str,
-) -> Option<PersistedConversationMessageRecord> {
-    if let Ok(record) = serde_json::from_str::<PersistedConversationMessageRecord>(content_json) {
-        return Some(record);
-    }
-
-    let content: Vec<MessageContent> = serde_json::from_str(content_json).ok()?;
-    Some(PersistedConversationMessageRecord {
+    serialize_persisted_legacy_message_content_record(
         content,
-        user_visible: true,
-        agent_visible: true,
-    })
+        message.metadata.user_visible,
+        message.metadata.agent_visible,
+    )
+    .map_err(|e| anyhow::anyhow!("序列化消息内容失败: {e}"))
 }
 
 /// 从旧消息表读取迁移输入；运行期产品读回不得直接返回此结果。
@@ -71,26 +57,27 @@ pub(super) fn load_for_migration(
         })?
         .filter_map(|r| r.ok())
         .filter_map(|(role, content_json)| {
-            let persisted = deserialize_persisted_message_content(&content_json)?;
-
-            let mut message = if role == "assistant" {
-                Message::assistant()
-            } else {
-                Message::user()
-            };
-
-            for content in persisted.content {
-                message = message.with_content(content);
-            }
-
-            message = message.with_metadata(MessageMetadata {
-                user_visible: persisted.user_visible,
-                agent_visible: persisted.agent_visible,
-            });
-
-            Some(message)
+            let record = project_legacy_conversation_message_record(&role, &content_json)?;
+            message_from_legacy_record(record)
         })
         .collect();
 
     Ok(Conversation::new_unvalidated(messages))
+}
+
+fn message_from_legacy_record(record: LegacyConversationMessageRecord) -> Option<Message> {
+    let mut message = match record.role {
+        ConversationMessageRole::Assistant => Message::assistant(),
+        ConversationMessageRole::User => Message::user(),
+    };
+
+    for content_value in record.content {
+        let content = serde_json::from_value::<MessageContent>(content_value).ok()?;
+        message = message.with_content(content);
+    }
+
+    Some(message.with_metadata(MessageMetadata {
+        user_visible: record.user_visible,
+        agent_visible: record.agent_visible,
+    }))
 }

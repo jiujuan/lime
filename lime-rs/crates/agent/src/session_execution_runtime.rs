@@ -21,10 +21,6 @@ pub(crate) type SessionExecutionRuntimeSnapshotProjection =
     agent_runtime::session_execution::SessionExecutionRuntimeSnapshotProjection<
         crate::turn_context_configuration::AgentTurnContext,
     >;
-pub(crate) type SessionExecutionRuntimeTurnProjection =
-    agent_runtime::session_execution::SessionExecutionRuntimeTurnProjection<
-        crate::turn_context_configuration::AgentTurnContext,
-    >;
 use runtime_payload::{
     extract_cost_state_from_metadata, extract_limit_event_from_metadata,
     extract_limit_state_from_metadata, extract_oem_policy_from_metadata,
@@ -354,6 +350,14 @@ fn extract_execution_strategy_from_metadata(
     .map(|_| "react".to_string())
 }
 
+fn active_context_tokens_from_session(
+    session: Option<&SessionExecutionRuntimeSessionProjection>,
+) -> Option<u32> {
+    session
+        .and_then(|value| value.usage.as_ref())
+        .map(|usage| usage.input_tokens)
+}
+
 pub(crate) fn build_session_execution_runtime(
     session_id: &str,
     session: Option<&SessionExecutionRuntimeSessionProjection>,
@@ -408,7 +412,10 @@ pub(crate) fn build_session_execution_runtime(
             runtime.latest_turn_status = Some(latest_turn.status.clone());
             let turn_context = latest_turn.context.as_ref();
             runtime.context_summary =
-                crate::protocol_projection::project_turn_context_summary(turn_context);
+                crate::protocol_projection::project_turn_context_summary_with_active_context_tokens(
+                    turn_context,
+                    active_context_tokens_from_session(session),
+                );
             runtime.execution_strategy = turn_context
                 .and_then(|value| extract_execution_strategy_from_metadata(&value.metadata))
                 .or(runtime.execution_strategy);

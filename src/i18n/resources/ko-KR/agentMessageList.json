@@ -260,6 +260,7 @@
   "agentChat.toolCall.processSummary.generic.searchFirstWithSubject": "먼저 {{subject}} 검색",
   "agentChat.toolCall.processSummary.generic.searched": "검색 결과 확보됨",
   "agentChat.toolCall.processSummary.generic.searchedWithSubject": "{{subject}} 검색됨",
+  "agentChat.toolCall.processSummary.generic.completed": "이 단계가 완료되었습니다",
   "agentChat.toolCall.processSummary.generic.stepStartFirst": "먼저 이 단계 시작",
   "agentChat.toolCall.processSummary.generic.stepStarted": "이 단계 시작됨",
   "agentChat.toolCall.processSummary.generic.subtaskDelegated": "작업을 하위 작업으로 위임함",

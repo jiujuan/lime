@@ -78,6 +78,7 @@ export const METHOD_BROWSER_SESSION_OPEN = "browserSession/open";
 export const METHOD_BROWSER_SESSION_READ = "browserSession/read";
 export const METHOD_BROWSER_SESSION_TARGET_LIST = "browserSession/target/list";
 export const METHOD_CAPABILITY_LIST = "capability/list";
+export const METHOD_CONFIG_WARNING = "configWarning";
 export const METHOD_CONNECT_CALLBACK_SEND = "connectCallback/send";
 export const METHOD_CONNECT_DEEP_LINK_RESOLVE = "connectDeepLink/resolve";
 export const METHOD_CONNECT_OPEN_DEEP_LINK_RESOLVE =
@@ -581,6 +582,10 @@ export const GENERATED_APP_SERVER_METHODS = [
   {
     kind: "request",
     method: "capability/list",
+  },
+  {
+    kind: "notification",
+    method: "configWarning",
   },
   {
     kind: "request",
@@ -3722,6 +3727,7 @@ export interface AppServerMethodSpec {
 
 export type AppServerNotificationMethod =
   | "agentSession/event"
+  | "configWarning"
   | "initialized"
   | "workspaceRightSurface/pendingChanged";
 
@@ -4326,6 +4332,13 @@ export interface ClientInfo {
 export type ClientNotification = {
   method: "initialized";
 };
+
+export interface ConfigWarningNotification {
+  details?: null | string;
+  path?: null | string;
+  range?: TextRange | null;
+  summary: string;
+}
 
 export interface ConnectCallbackSendParams {
   apiKey: string;
@@ -6875,6 +6888,10 @@ export interface ServerInfo {
 
 export type ServerNotification =
   | {
+      method: "configWarning";
+      params: ConfigWarningNotification;
+    }
+  | {
       method: "agentSession/event";
       params: AgentSessionEventParams;
     }
@@ -7169,6 +7186,16 @@ export interface SupportBundleExportResponse {
 export interface SupportBundleTraceExportSelection {
   sessionId: string;
   traceId: string;
+}
+
+export interface TextPosition {
+  column: number;
+  line: number;
+}
+
+export interface TextRange {
+  end: TextPosition;
+  start: TextPosition;
 }
 
 export type TransportKind = "http" | "local_process" | "sidecar";

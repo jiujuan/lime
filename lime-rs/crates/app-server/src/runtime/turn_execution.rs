@@ -283,7 +283,7 @@ impl RuntimeCore {
         &self,
         mut params: AgentSessionTurnStartParams,
         host: RuntimeHostContext,
-        event_callback: Option<&mut RuntimeEventCallback<'_>>,
+        mut event_callback: Option<&mut RuntimeEventCallback<'_>>,
         enable_auto_continuation: bool,
     ) -> Result<RuntimeCoreOutput<AgentSessionTurnStartResponse>, RuntimeCoreError> {
         self.ensure_current_session_hydrated(&params.session_id)
@@ -295,6 +295,14 @@ impl RuntimeCore {
                     defaults,
                     params.runtime_options.take(),
                 ));
+        }
+        let pre_turn_events = self
+            .maybe_auto_compact_before_turn(&params.session_id, params.runtime_options.as_ref())
+            .await?;
+        if let Some(callback) = event_callback.as_deref_mut() {
+            for event in pre_turn_events.iter().cloned() {
+                callback(event)?;
+            }
         }
         self.prepare_memory_prompt_context(&mut params).await;
         self.prepare_session_compaction_prompt_context(&mut params);
@@ -478,7 +486,7 @@ impl RuntimeCore {
             skip_pre_submit_resume: params.skip_pre_submit_resume,
         };
 
-        let events = if let Some(event_callback) = event_callback {
+        let backend_events = if let Some(event_callback) = event_callback {
             let mut sink = AppendingRuntimeEventSink::new(
                 self.state.clone(),
                 self.file_checkpoint_snapshot_store.clone(),
@@ -648,6 +656,8 @@ impl RuntimeCore {
                 }
             }
         };
+        let mut events = pre_turn_events;
+        events.extend(backend_events);
         let response_turn = self
             .stored_turn(&session.session_id, &turn.turn_id)?
             .unwrap_or(turn);

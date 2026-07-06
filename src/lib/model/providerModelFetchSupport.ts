@@ -8,8 +8,52 @@ const LOCAL_OPENAI_LIKE_PROVIDER_IDS = new Set([
   "ovms",
 ]);
 
+const LIME_MANAGED_HOST_SUFFIXES = ["limeai.run", "lime.ai"];
+const LIME_TENANT_PARAM = "lime_tenant_id";
+
 function normalize(value?: string | null): string {
   return (value || "").trim().toLowerCase();
+}
+
+function parseApiHostUrl(apiHost?: string | null): URL | null {
+  const host = (apiHost || "").trim();
+  if (!host) {
+    return null;
+  }
+
+  try {
+    return new URL(host);
+  } catch {
+    try {
+      return new URL(`https://${host}`);
+    } catch {
+      return null;
+    }
+  }
+}
+
+function isLimeManagedHost(hostname: string): boolean {
+  const host = hostname.trim().replace(/\.+$/, "").toLowerCase();
+  return LIME_MANAGED_HOST_SUFFIXES.some(
+    (suffix) => host === suffix || host.endsWith(`.${suffix}`),
+  );
+}
+
+function normalizeLimeTenantId(value: string | null): string | null {
+  const tenantId = (value || "").trim();
+  if (!tenantId) {
+    return null;
+  }
+  return /^[A-Za-z0-9_-]+$/.test(tenantId) ? tenantId : null;
+}
+
+function getLimeTenantId(url: URL): string | null {
+  return (
+    normalizeLimeTenantId(url.searchParams.get(LIME_TENANT_PARAM)) ??
+    normalizeLimeTenantId(
+      new URLSearchParams(url.hash.replace(/^#/, "")).get(LIME_TENANT_PARAM),
+    )
+  );
 }
 
 function isLikelyLocalHost(apiHost?: string | null): boolean {
@@ -24,6 +68,17 @@ function isLikelyLocalHost(apiHost?: string | null): boolean {
     host.includes("://0.0.0.0") ||
     host.includes("://host.docker.internal")
   );
+}
+
+export function isManagedLimeHubTenantModelEndpoint(input: {
+  apiHost?: string | null;
+}): boolean {
+  const url = parseApiHostUrl(input.apiHost);
+  if (!url) {
+    return false;
+  }
+
+  return isLimeManagedHost(url.hostname) && Boolean(getLimeTenantId(url));
 }
 
 interface ProviderModelAutoFetchCapability {
@@ -41,6 +96,7 @@ export function getProviderModelAutoFetchCapability(input: {
   const providerId = normalize(input.providerId);
   const providerType = normalize(input.providerType) as ProviderType | "";
   const localHost = isLikelyLocalHost(input.apiHost);
+  const managedLimeHubTenant = isManagedLimeHubTenantModelEndpoint(input);
 
   if (isFalImageProviderLike(input)) {
     return {
@@ -59,7 +115,9 @@ export function getProviderModelAutoFetchCapability(input: {
       return {
         supported: true,
         requiresApiKey:
-          !LOCAL_OPENAI_LIKE_PROVIDER_IDS.has(providerId) && !localHost,
+          !LOCAL_OPENAI_LIKE_PROVIDER_IDS.has(providerId) &&
+          !localHost &&
+          !managedLimeHubTenant,
         requiresLiveModelTruth: true,
       };
     case "anthropic":

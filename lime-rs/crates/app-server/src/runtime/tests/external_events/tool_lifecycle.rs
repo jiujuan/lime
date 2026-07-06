@@ -223,6 +223,161 @@ async fn append_external_runtime_events_allows_tool_args_between_start_and_resul
 }
 
 #[tokio::test]
+async fn append_external_runtime_events_enriches_tool_process_soul_metadata() {
+    let (core, session_id, turn_id) = runtime_with_active_turn(
+        "sess_tool_process_soul_metadata",
+        "thread_tool_process_soul_metadata",
+        "turn_tool_process_soul_metadata",
+    )
+    .await;
+
+    let appended = core
+        .append_external_runtime_events(
+            &session_id,
+            Some(&turn_id),
+            vec![
+                RuntimeEvent::new(
+                    "tool.started",
+                    json!({
+                        "toolCallId": "tool_external_fetch",
+                        "toolName": "WebFetch",
+                        "arguments": { "url": "https://example.com/a" },
+                        "metadata": {
+                            "soul_lifecycle": {
+                                "profileId": "cool_confident_operator",
+                                "packId": "com.lime.soul.cool-confident-operator",
+                                "toneVariant": "cool_confident"
+                            }
+                        }
+                    }),
+                ),
+                RuntimeEvent::new(
+                    "tool.progress",
+                    json!({
+                        "toolCallId": "tool_external_fetch",
+                        "message": "reading response"
+                    }),
+                ),
+                RuntimeEvent::new(
+                    "tool.output.delta",
+                    json!({
+                        "toolCallId": "tool_external_fetch",
+                        "delta": "partial output"
+                    }),
+                ),
+                RuntimeEvent::new(
+                    "tool.result",
+                    json!({
+                        "toolCallId": "tool_external_fetch",
+                        "result": {
+                            "success": true,
+                            "output": "ok",
+                            "metadata": { "source": "external_fixture" }
+                        }
+                    }),
+                ),
+            ],
+        )
+        .expect("external tool lifecycle should append");
+
+    assert_eq!(appended.len(), 4);
+    assert_eq!(
+        appended[0].payload["metadata"]["tool_process_summary"]["pre"]["key"],
+        "toolCall.processSummary.generic.fetchFirstWithSubject"
+    );
+    assert_eq!(
+        appended[0].payload["metadata"]["tool_process_facts"]["phase"],
+        "before_tool"
+    );
+    assert_eq!(
+        appended[1].payload["metadata"]["soul_lifecycle"]["phase"],
+        "tool_progress"
+    );
+    assert_eq!(
+        appended[1].payload["metadata"]["soul_lifecycle"]["profileId"].as_str(),
+        Some("cool_confident_operator")
+    );
+    assert_eq!(
+        appended[1].payload["metadata"]["soul_lifecycle"]["packId"].as_str(),
+        Some("com.lime.soul.cool-confident-operator")
+    );
+    assert_eq!(
+        appended[1].payload["metadata"]["soul_lifecycle"]["toneVariant"].as_str(),
+        Some("cool_confident")
+    );
+    assert_eq!(
+        appended[1].payload["metadata"]["tool_process_facts"]["status"],
+        "progress"
+    );
+    assert_eq!(
+        appended[2].payload["metadata"]["tool_process_facts"]["status"],
+        "output_delta"
+    );
+    assert_eq!(
+        appended[3].payload["result"]["metadata"]["tool_process_summary"]["completed"]["key"],
+        "toolCall.processSummary.generic.fetchedWithSubject"
+    );
+    assert_eq!(
+        appended[3].payload["result"]["metadata"]["tool_process_facts"]["subject"],
+        "https://example.com/a"
+    );
+    assert_eq!(
+        appended[3].payload["result"]["metadata"]["tool_process_facts"]["profileId"].as_str(),
+        Some("cool_confident_operator")
+    );
+    assert_eq!(
+        appended[3].payload["result"]["metadata"]["soul_phase"],
+        "after_tool_success"
+    );
+}
+
+#[tokio::test]
+async fn append_external_runtime_events_rejects_tool_progress_without_started_tool() {
+    let (core, session_id, turn_id) = runtime_with_active_turn(
+        "sess_tool_progress_lifecycle",
+        "thread_tool_progress_lifecycle",
+        "turn_tool_progress_lifecycle",
+    )
+    .await;
+    let before = core
+        .read_session(AgentSessionReadParams {
+            session_id: session_id.clone(),
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .expect("read before");
+    let before_event_count = core
+        .events_for_session(&session_id)
+        .expect("events before")
+        .len();
+
+    let error = core
+        .append_external_runtime_events(
+            &session_id,
+            Some(&turn_id),
+            vec![RuntimeEvent::new(
+                "tool.progress",
+                json!({
+                    "toolCallId": "tool_without_start",
+                    "message": "orphan progress"
+                }),
+            )],
+        )
+        .expect_err("tool.progress without tool.started must fail closed");
+
+    match error {
+        RuntimeCoreError::Backend(message) => {
+            assert!(message.contains("agent runtime tool lifecycle validation failed"));
+            assert!(message.contains("tool_progress_without_start"));
+        }
+        other => panic!("expected backend tool lifecycle validation error, got {other:?}"),
+    }
+
+    assert_runtime_state_unchanged(&core, &session_id, &before, before_event_count);
+}
+
+#[tokio::test]
 async fn append_external_runtime_events_rejects_batch_atomically_before_storage() {
     let (core, session_id, turn_id) = runtime_with_active_turn(
         "sess_batch_atomic_lifecycle",
@@ -338,4 +493,91 @@ async fn append_external_runtime_events_rejects_sandbox_blocked_for_inactive_too
     }
 
     assert_runtime_state_unchanged(&core, &session_id, &before, before_event_count);
+}
+
+#[tokio::test]
+async fn append_external_runtime_events_rejects_tool_result_after_sandbox_blocked() {
+    let (core, session_id, turn_id) = runtime_with_active_turn(
+        "sess_sandbox_blocks_result",
+        "thread_sandbox_blocks_result",
+        "turn_sandbox_blocks_result",
+    )
+    .await;
+
+    core.append_external_runtime_events(
+        &session_id,
+        Some(&turn_id),
+        vec![
+            RuntimeEvent::new(
+                "tool.started",
+                json!({
+                    "toolCallId": "tool_sandbox_blocked",
+                    "toolName": "Shell"
+                }),
+            ),
+            RuntimeEvent::new(
+                "sandbox.blocked",
+                json!({
+                    "toolCallId": "tool_sandbox_blocked",
+                    "reasonCode": "network_disabled"
+                }),
+            ),
+        ],
+    )
+    .expect("active tool sandbox block should append");
+    let before = core
+        .read_session(AgentSessionReadParams {
+            session_id: session_id.clone(),
+            history_limit: None,
+            history_offset: None,
+            history_before_message_id: None,
+        })
+        .expect("read before");
+    let before_event_count = core
+        .events_for_session(&session_id)
+        .expect("events before")
+        .len();
+
+    let error = core
+        .append_external_runtime_events(
+            &session_id,
+            Some(&turn_id),
+            vec![RuntimeEvent::new(
+                "tool.result",
+                json!({
+                    "toolCallId": "tool_sandbox_blocked",
+                    "toolName": "Shell",
+                    "output": "should not be stored"
+                }),
+            )],
+        )
+        .expect_err("tool.result after sandbox.blocked must fail closed");
+
+    match error {
+        RuntimeCoreError::Backend(message) => {
+            assert!(message.contains("agent runtime tool lifecycle validation failed"));
+            assert!(message.contains("tool_result_after_sandbox_blocked"));
+        }
+        other => panic!("expected backend tool lifecycle validation error, got {other:?}"),
+    }
+
+    assert_runtime_state_unchanged(&core, &session_id, &before, before_event_count);
+
+    let appended = core
+        .append_external_runtime_events(
+            &session_id,
+            Some(&turn_id),
+            vec![RuntimeEvent::new(
+                "tool.failed",
+                json!({
+                    "toolCallId": "tool_sandbox_blocked",
+                    "toolName": "Shell",
+                    "failureCategory": "sandbox_blocked"
+                }),
+            )],
+        )
+        .expect("sandbox blocked tool can still close as failed");
+
+    assert_eq!(appended.len(), 1);
+    assert_eq!(appended[0].event_type, "tool.failed");
 }

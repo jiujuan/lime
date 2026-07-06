@@ -1,3 +1,7 @@
+import calmProfessionalPartnerPack from "./packs/calm-professional-partner.json";
+import cheekySassyExecutorPack from "./packs/cheeky-sassy-executor.json";
+import coolConfidentOperatorPack from "./packs/cool-confident-operator.json";
+import warmSupportiveCompanionPack from "./packs/warm-supportive-companion.json";
 import type {
   SoulStylePackManifest,
   SoulStyleProfile,
@@ -8,140 +12,164 @@ export const DEFAULT_SOUL_STYLE_PROFILE_ID: SoulStyleProfileId =
   "cheeky_sassy_executor";
 export const SERIOUS_SOUL_STYLE_PROFILE_ID: SoulStyleProfileId =
   "calm_professional_partner";
-export const BUILT_IN_SOUL_STYLE_PACK_ID = "com.lime.builtin.default";
 
-export const BUILT_IN_SOUL_STYLE_PROFILES: readonly SoulStyleProfile[] = [
-  {
-    id: "cheeky_sassy_executor",
-    packId: BUILT_IN_SOUL_STYLE_PACK_ID,
-    nameKey: "settings.memory.soul.styleProfile.cheekySassyExecutor.title",
-    descriptionKey:
-      "settings.memory.soul.styleProfile.cheekySassyExecutor.description",
-    tone: "cheeky_sassy",
-    intensity: "low",
-    scopes: ["chat_interaction", "tool_narrative", "companion"],
-    allowedMoves: [
-      "Use cheeky, lightly teasing phrasing when reporting progress, but vary it by scene.",
-      "Make brief task-level jokes about uncertainty, tools, or busywork only when it helps and never at the user's expense.",
-      "Keep execution-oriented summaries concise and useful.",
-      "Let the voice show through rhythm, small opinions, and specific wording instead of a fixed prefix.",
-    ],
-    forbiddenMoves: [
-      "Do not mock, shame, or belittle the user.",
-      "Do not use playful phrasing in high-risk, permission, payment, medical, legal, or financial contexts.",
-      "Do not invent tool results or add facts that are not in the runtime evidence.",
-      "Do not force a visible style cue into every reply.",
-      "Do not repeat catchphrases, cheap memes, vulgar jokes, or fixed openers.",
-    ],
-    defaultUseCases: [
-      "daily_tasks",
-      "tool_progress",
-      "image_generation",
-      "lightweight_research",
-    ],
-    seriousModeFallback: "calm_professional_partner",
-  },
-  {
-    id: "warm_supportive_companion",
-    packId: BUILT_IN_SOUL_STYLE_PACK_ID,
-    nameKey: "settings.memory.soul.styleProfile.warmSupportiveCompanion.title",
-    descriptionKey:
-      "settings.memory.soul.styleProfile.warmSupportiveCompanion.description",
-    tone: "warm_supportive",
-    intensity: "low",
-    scopes: ["chat_interaction", "tool_narrative", "companion"],
-    allowedMoves: [
-      "Use patient, low-pressure wording.",
-      "Acknowledge uncertainty without making the answer vague.",
-      "Offer the next small step when the user is blocked.",
-      "Keep warmth situational instead of adding a comforting phrase to every reply.",
-    ],
-    forbiddenMoves: [
-      "Do not force a gentle cue into every reply.",
-      "Do not over-comfort or add generic encouragement.",
-      "Do not slow down direct execution with unnecessary emotional framing.",
-      "Do not diagnose the user's mental state.",
-    ],
-    defaultUseCases: ["writing_block", "review", "planning", "reflection"],
-    seriousModeFallback: "calm_professional_partner",
-  },
-  {
-    id: "cool_confident_operator",
-    packId: BUILT_IN_SOUL_STYLE_PACK_ID,
-    nameKey: "settings.memory.soul.styleProfile.coolConfidentOperator.title",
-    descriptionKey:
-      "settings.memory.soul.styleProfile.coolConfidentOperator.description",
-    tone: "cool_confident",
-    intensity: "low",
-    scopes: ["chat_interaction", "tool_narrative", "companion"],
-    allowedMoves: [
-      "Use crisp, confident, action-oriented phrasing.",
-      "Prefer short sentences and direct next steps.",
-      "Sound composed under pressure without becoming cold or dismissive.",
-      "Make progress feel controlled and decisive when summarizing tool results.",
-    ],
-    forbiddenMoves: [
-      "Do not command, intimidate, or talk down to the user.",
-      "Do not turn confidence into arrogance or vague bravado.",
-      "Do not reduce useful detail just to sound cool.",
-      "Do not use this tone in high-risk, permission, payment, medical, legal, or financial contexts.",
-    ],
-    defaultUseCases: [
-      "fast_execution",
-      "task_push",
-      "tool_result_handoff",
-      "review_summary",
-    ],
-    seriousModeFallback: "calm_professional_partner",
-  },
-  {
-    id: "calm_professional_partner",
-    packId: BUILT_IN_SOUL_STYLE_PACK_ID,
-    nameKey: "settings.memory.soul.styleProfile.calmProfessionalPartner.title",
-    descriptionKey:
-      "settings.memory.soul.styleProfile.calmProfessionalPartner.description",
-    tone: "calm_professional",
-    intensity: "low",
-    scopes: ["chat_interaction", "tool_narrative", "companion"],
-    allowedMoves: [
-      "Lead with the answer and the operational next step.",
-      "Separate facts, assumptions, and recommendations.",
-      "Keep risk, failure, and permission handling explicit.",
-    ],
-    forbiddenMoves: [
-      "Do not use teasing, cute phrasing, or performative familiarity.",
-      "Do not reduce information density for personality.",
-      "Do not hide uncertainty behind confident wording.",
-    ],
-    defaultUseCases: [
-      "coding",
-      "research",
-      "high_risk",
-      "failure_recovery",
-      "audit",
-    ],
-    seriousModeFallback: "calm_professional_partner",
-  },
-];
+const BUILT_IN_SOUL_STYLE_PACK_MANIFESTS = [
+  cheekySassyExecutorPack,
+  warmSupportiveCompanionPack,
+  coolConfidentOperatorPack,
+  calmProfessionalPartnerPack,
+] as const;
 
-export const BUILT_IN_SOUL_STYLE_PACK: SoulStylePackManifest = {
-  id: BUILT_IN_SOUL_STYLE_PACK_ID,
-  version: "1.0.0",
-  source: "built_in",
-  nameKey: "settings.memory.soul.stylePack.builtIn.title",
-  descriptionKey: "settings.memory.soul.stylePack.builtIn.description",
-  profiles: BUILT_IN_SOUL_STYLE_PROFILES,
-  compatibility: {
-    schemaVersion: 1,
-  },
-};
+function toSoulStylePackManifest(manifest: unknown): SoulStylePackManifest {
+  assertSoulStylePackManifest(manifest);
+  return manifest;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function assertString(value: unknown, path: string): asserts value is string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`Invalid Soul style pack manifest: ${path}`);
+  }
+}
+
+function assertStringArray(
+  value: unknown,
+  path: string,
+): asserts value is string[] {
+  if (
+    !Array.isArray(value) ||
+    value.some((item) => typeof item !== "string" || item.trim().length === 0)
+  ) {
+    throw new Error(`Invalid Soul style pack manifest: ${path}`);
+  }
+}
+
+function assertSoulStylePackManifest(
+  value: unknown,
+): asserts value is SoulStylePackManifest {
+  if (!isRecord(value)) {
+    throw new Error("Invalid Soul style pack manifest: root");
+  }
+
+  assertString(value.id, "id");
+  assertString(value.version, "version");
+  if (value.source !== "built_in") {
+    throw new Error("Invalid Soul style pack manifest: source");
+  }
+  assertString(value.nameKey, "nameKey");
+  assertString(value.descriptionKey, "descriptionKey");
+
+  const compatibility = value.compatibility;
+  if (!isRecord(compatibility) || compatibility.schemaVersion !== 1) {
+    throw new Error("Invalid Soul style pack manifest: compatibility");
+  }
+
+  if (!Array.isArray(value.profiles) || value.profiles.length === 0) {
+    throw new Error("Invalid Soul style pack manifest: profiles");
+  }
+
+  for (const [index, profile] of value.profiles.entries()) {
+    const profilePath = `profiles[${index}]`;
+    if (!isRecord(profile)) {
+      throw new Error(`Invalid Soul style pack manifest: ${profilePath}`);
+    }
+    assertString(profile.id, `${profilePath}.id`);
+    assertString(profile.packId, `${profilePath}.packId`);
+    if (profile.packId !== value.id) {
+      throw new Error(
+        `Invalid Soul style pack manifest: ${profilePath}.packId`,
+      );
+    }
+    assertString(profile.nameKey, `${profilePath}.nameKey`);
+    assertString(profile.descriptionKey, `${profilePath}.descriptionKey`);
+    assertString(profile.tone, `${profilePath}.tone`);
+    if (
+      profile.intensity !== "low" &&
+      profile.intensity !== "medium" &&
+      profile.intensity !== "high"
+    ) {
+      throw new Error(
+        `Invalid Soul style pack manifest: ${profilePath}.intensity`,
+      );
+    }
+    assertStringArray(profile.scopes, `${profilePath}.scopes`);
+    assertStringArray(
+      profile.responseContract,
+      `${profilePath}.responseContract`,
+    );
+    assertStringArray(
+      profile.voicePrimitives,
+      `${profilePath}.voicePrimitives`,
+    );
+    assertStringArray(profile.allowedMoves, `${profilePath}.allowedMoves`);
+    assertStringArray(profile.forbiddenMoves, `${profilePath}.forbiddenMoves`);
+    assertStringArray(
+      profile.antiRepetitionRules,
+      `${profilePath}.antiRepetitionRules`,
+    );
+    assertStringArray(
+      profile.defaultUseCases,
+      `${profilePath}.defaultUseCases`,
+    );
+    if (!isRecord(profile.surfaceContracts)) {
+      throw new Error(
+        `Invalid Soul style pack manifest: ${profilePath}.surfaceContracts`,
+      );
+    }
+    if (!Array.isArray(profile.fewShotAnchors)) {
+      throw new Error(
+        `Invalid Soul style pack manifest: ${profilePath}.fewShotAnchors`,
+      );
+    }
+    if (!isRecord(profile.riskFallback)) {
+      throw new Error(
+        `Invalid Soul style pack manifest: ${profilePath}.riskFallback`,
+      );
+    }
+    assertString(
+      profile.riskFallback.profileId,
+      `${profilePath}.riskFallback.profileId`,
+    );
+    assertStringArray(
+      profile.riskFallback.triggers,
+      `${profilePath}.riskFallback.triggers`,
+    );
+    assertString(
+      profile.seriousModeFallback,
+      `${profilePath}.seriousModeFallback`,
+    );
+  }
+}
+
+export const BUILT_IN_SOUL_STYLE_PACKS: readonly SoulStylePackManifest[] =
+  BUILT_IN_SOUL_STYLE_PACK_MANIFESTS.map((manifest) =>
+    toSoulStylePackManifest(manifest),
+  );
+
+export const BUILT_IN_SOUL_STYLE_PROFILES: readonly SoulStyleProfile[] =
+  BUILT_IN_SOUL_STYLE_PACKS.flatMap((pack) => pack.profiles);
+
+export const BUILT_IN_SOUL_STYLE_PACK_IDS: Readonly<
+  Record<SoulStyleProfileId, string>
+> = Object.freeze(
+  Object.fromEntries(
+    BUILT_IN_SOUL_STYLE_PROFILES.map((profile) => [profile.id, profile.packId]),
+  ),
+);
+
+const BUILT_IN_SOUL_STYLE_PROFILE_BY_ID = new Map(
+  BUILT_IN_SOUL_STYLE_PROFILES.map((profile) => [profile.id, profile]),
+);
 
 export function getBuiltInSoulStyleProfile(
   profileId: SoulStyleProfileId,
 ): SoulStyleProfile {
   return (
-    BUILT_IN_SOUL_STYLE_PACK.profiles.find(
-      (profile) => profile.id === profileId,
-    ) ?? BUILT_IN_SOUL_STYLE_PACK.profiles[0]
+    BUILT_IN_SOUL_STYLE_PROFILE_BY_ID.get(profileId) ??
+    BUILT_IN_SOUL_STYLE_PROFILE_BY_ID.get(DEFAULT_SOUL_STYLE_PROFILE_ID) ??
+    BUILT_IN_SOUL_STYLE_PROFILES[0]
   );
 }

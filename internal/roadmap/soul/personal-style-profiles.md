@@ -1,7 +1,7 @@
 # Soul 可切换交互口吻 Style Profiles
 
-> 状态：current planning source；四风格 / 风格包扩展待实现同步
-> 更新时间：2026-07-04
+> 状态：current planning source；四风格 / 风格包扩展持续同步
+> 更新时间：2026-07-06
 > 目标：把 Ribbi 式“有固定人格的助手口吻”收敛为 Soul 下的可切换 Style Profile 能力，不新增 PersonalStyle 平行系统，不训练小模型作为首版依赖。
 
 ## 1. 背景
@@ -23,7 +23,7 @@
 
 1. 提供 4 种可切换的交互风格，覆盖贱兮兮执行、温柔陪伴、拽酷行动、专业严肃四类主场景。
 2. 通过 Prompt / 模板 / 规则 / guard 实现，不先训练小模型。
-3. 把风格应用在聊天交互、工具状态总结、缺参数追问、失败解释等互动层。
+3. 把风格应用在聊天交互、工具调用前后、工具状态总结、正文转折、缺参数追问、失败解释和结尾建议等互动层。
 4. 保持工具结果、资料事实、正式 artifact 与 Soul 口吻的边界清晰。
 5. 为后续自定义风格、导入 `SOUL.md`、persona pack 联动和评测闭环预留一致抽象。
 
@@ -38,24 +38,35 @@
 
 ## 3. 收益
 
-| 受益方 | 收益 |
-| --- | --- |
-| 普通用户 | Lime 更像一个固定伙伴，而不是每次随机换语气的通用助手。 |
-| 创作者 | 可在创作前期用轻松或温柔风格陪伴，但正式产物仍由 Generation Brief 管控声线。 |
+| 受益方     | 收益                                                                           |
+| ---------- | ------------------------------------------------------------------------------ |
+| 普通用户   | Lime 更像一个固定伙伴，而不是每次随机换语气的通用助手。                        |
+| 创作者     | 可在创作前期用轻松或温柔风格陪伴，但正式产物仍由 Generation Brief 管控声线。   |
 | 品牌运营者 | 后续可把品牌人格沉淀为 Style Profile 或 Brand Voice，而不是散落在临时 prompt。 |
-| 开发者 | 口吻层与工具事实分离，便于测试、回放和治理，不需要为了语气上本地小模型。 |
-| 产品 | 形成可配置、可解释、可评测的交互人格体系，提高产品辨识度。 |
+| 开发者     | 口吻层与工具事实分离，便于测试、回放和治理，不需要为了语气上本地小模型。       |
+| 产品       | 形成可配置、可解释、可评测的交互人格体系，提高产品辨识度。                     |
 
 ## 4. 四种首发风格
 
-首版内置 1 个本地 `built_in` Style Pack，包含 4 个 Style Profile，默认推荐“贱兮兮执行官”，但用户必须可以切换。
+首版内置 4 个本地 `built_in` Style Pack seed，每个 seed 对应 1 个 Style Profile，统一注册到 `Style Pack Registry`，默认推荐“贱兮兮执行官”，但用户必须可以切换。
 
-| id | 名称 | 定位 | 适用场景 | 禁忌 |
-| --- | --- | --- | --- | --- |
-| `cheeky_sassy_executor` | 贱兮兮执行官 | 贱兮兮、轻微吐槽、有执行感 | 日常任务、工具执行、图片生成、资料抓取、轻量总结 | 不嘲讽用户本人，不阴阳怪气，不在严肃场景卖萌，不靠低俗梗 |
-| `warm_supportive_companion` | 温柔陪伴型助理 | 低压、耐心、稳定陪伴 | 写作卡壳、复盘、计划整理、情绪敏感任务 | 不过度鸡汤，不拖慢执行，不替用户做心理诊断 |
-| `cool_confident_operator` | 拽酷行动派 | 克制、锋利、短句、有掌控感 | 快节奏执行、任务推进、复盘结论、工具结果承接 | 不装腔、不冷暴力、不把拽酷变成轻蔑或命令用户 |
-| `calm_professional_partner` | 冷静专业型搭档 | 简洁、可信、可审计 | 代码、研究、法律/医疗/财务等高风险话题、失败恢复 | 不装熟，不使用调侃，不为了人设牺牲信息密度 |
+首发 pack id 固定为：
+
+| pack id                                   | profile id                  |
+| ----------------------------------------- | --------------------------- |
+| `com.lime.soul.cheeky-sassy-executor`     | `cheeky_sassy_executor`     |
+| `com.lime.soul.warm-supportive-companion` | `warm_supportive_companion` |
+| `com.lime.soul.cool-confident-operator`   | `cool_confident_operator`   |
+| `com.lime.soul.calm-professional-partner` | `calm_professional_partner` |
+
+这四个 pack 是 registry seed，不是 UI / i18n 里的四套固定句库。后续新增或替换风格只能新增 manifest seed 或 installed pack，不能在工具卡片、timeline、等待态组件里写 `switch(profileId)` 生成终稿文案。
+
+| id                          | 名称           | 定位                       | 适用场景                                         | 禁忌                                                     |
+| --------------------------- | -------------- | -------------------------- | ------------------------------------------------ | -------------------------------------------------------- |
+| `cheeky_sassy_executor`     | 贱兮兮执行官   | 贱兮兮、轻微吐槽、有执行感 | 日常任务、工具执行、图片生成、资料抓取、轻量总结 | 不嘲讽用户本人，不阴阳怪气，不在严肃场景卖萌，不靠低俗梗 |
+| `warm_supportive_companion` | 温柔陪伴型助理 | 低压、耐心、稳定陪伴       | 写作卡壳、复盘、计划整理、情绪敏感任务           | 不过度鸡汤，不拖慢执行，不替用户做心理诊断               |
+| `cool_confident_operator`   | 拽酷行动派     | 克制、锋利、短句、有掌控感 | 快节奏执行、任务推进、复盘结论、工具结果承接     | 不装腔、不冷暴力、不把拽酷变成轻蔑或命令用户             |
+| `calm_professional_partner` | 冷静专业型搭档 | 简洁、可信、可审计         | 代码、研究、法律/医疗/财务等高风险话题、失败恢复 | 不装熟，不使用调侃，不为了人设牺牲信息密度               |
 
 ### 4.1 风格示例
 
@@ -168,62 +179,92 @@ type SoulStyleProfileId =
   | "cheeky_sassy_executor"
   | "warm_supportive_companion"
   | "cool_confident_operator"
-  | "calm_professional_partner"
+  | "calm_professional_partner";
 
 type SoulStyleProfile = {
-  id: SoulStyleProfileId
-  packId: string
-  nameKey: string
-  descriptionKey: string
-  tone: "cheeky_sassy" | "warm_supportive" | "cool_confident" | "calm_professional"
-  intensity: "low" | "medium" | "high"
-  scope: "chat_interaction" | "tool_narrative" | "companion" | "artifact_voice"
-  allowedMoves: string[]
-  forbiddenMoves: string[]
-  defaultUseCases: string[]
-  seriousModeFallback: "calm_professional_partner"
-}
+  id: SoulStyleProfileId;
+  packId: string;
+  nameKey: string;
+  descriptionKey: string;
+  tone:
+    | "cheeky_sassy"
+    | "warm_supportive"
+    | "cool_confident"
+    | "calm_professional";
+  intensity: "low" | "medium" | "high";
+  scope: "chat_interaction" | "tool_narrative" | "companion" | "artifact_voice";
+  voicePrimitives: string[];
+  surfaceContracts: Partial<
+    Record<
+      | "before_tool"
+      | "tool_running"
+      | "after_tool_success"
+      | "after_tool_partial_failure"
+      | "after_tool_failure"
+      | "body_detail"
+      | "closing_suggestion",
+      string[]
+    >
+  >;
+  allowedMoves: string[];
+  forbiddenMoves: string[];
+  antiRepetitionRules: string[];
+  fewShotAnchors: Array<{
+    surface: string;
+    intent: string;
+    example: string;
+  }>;
+  defaultUseCases: string[];
+  riskFallback: {
+    profileId: "calm_professional_partner";
+    triggers: string[];
+  };
+  seriousModeFallback: "calm_professional_partner";
+};
 ```
 
 首版推荐固定：
 
 1. `intensity=low` 作为默认值。
 2. `artifact_voice` 不对 Product Soul 默认开放。
-3. 自定义 profile 只能保存配置，不直接成为系统指令。
-4. persona pack 只能作为资料输入，不绕过 Style Resolver 和 guard。
+3. `voicePrimitives` 和 `surfaceContracts` 是风格合同，必须进入 prompt context；它们不能被 UI 当固定句子渲染。
+4. `fewShotAnchors` 是少量风格锚点，帮助模型理解节奏；验收必须防止模型把示例变成固定开场白。
+5. 自定义 profile 只能保存配置，不直接成为系统指令。
+6. persona pack 只能作为资料输入，不绕过 Style Resolver 和 guard。
 
 ### 7.1 Style Pack 抽象边界
 
-未来风格可能从 Cloud 下载，但首版只把内置风格按“本地风格包”组织，避免过早实现安装器、市场和远程同步。建议抽象如下：
+未来风格可能从 Cloud 下载，但首版只把内置风格按“本地 registry seed”组织，避免过早实现安装器、市场和远程同步。建议抽象如下：
 
 ```ts
-type SoulStylePackSource = "built_in" | "local_import" | "cloud_download"
+type SoulStylePackSource = "built_in" | "local_import" | "cloud_download";
 
 type SoulStylePackManifest = {
-  id: string
-  version: string
-  source: SoulStylePackSource
-  nameKey: string
-  descriptionKey: string
-  profiles: SoulStyleProfile[]
+  id: string;
+  version: string;
+  source: SoulStylePackSource;
+  nameKey: string;
+  descriptionKey: string;
+  profiles: SoulStyleProfile[];
   compatibility: {
-    minAppVersion?: string
-    schemaVersion: 1
-  }
+    minAppVersion?: string;
+    schemaVersion: 1;
+  };
   integrity?: {
-    signature?: string
-    digest?: string
-  }
-}
+    signature?: string;
+    digest?: string;
+  };
+};
 ```
 
 KISS / YAGNI 约束：
 
-1. 当前只实现 `built_in` 风格包，等价于把 4 个内置 profile 放进一个本地 manifest。
+1. 当前只实现 `built_in` registry seed：四个 seed pack 由同一个 `Style Resolver` 读取。
 2. `local_import` / `cloud_download` 只作为后续来源类型，不在首版实现下载、缓存、更新、账号同步或市场。
 3. Cloud 风格包只能是签名 JSON manifest + i18n key / 文案资源，不允许远程代码、脚本、动态 system prompt 或工具权限。
 4. 下载后的 profile 必须进入同一个 `Style Resolver`、`Directive Composer`、`Boundary Guard`，不得绕过 Soul。
 5. 风格包不能携带事实、用户资料、工具结果或创作正文；它只描述“怎么说”。
+6. i18n 不承载 profile 句库；本地 UI 只渲染 neutral key + facts + style metadata。
 
 风格包安装、目录、manifest、安全校验、状态机和未来 Cloud 下载规范独立维护在：
 
@@ -240,8 +281,8 @@ src/lib/soul/
   soulConfig.ts                         # current：Soul 配置归一化、SOUL.md 导入导出、Generation Brief 显式声线
   style-profiles/
     types.ts                            # current：SoulStyleProfile、StyleProfileContext、StyleBoundaryResult
-    builtInProfiles.ts                  # current：内置风格包 registry，用户可见名称只放 i18n key
-    stylePackManifest.ts                # deferred：Cloud / local import manifest schema，只定义边界，不做下载器
+    packs/*.json                        # current：四个 built_in Style Pack seed manifest，承载风格规则、surface contract 和 few-shot anchors
+    builtInProfiles.ts                  # current：registry loader + manifest 校验，用户可见名称只放 i18n key
     resolveStyleProfile.ts              # current：根据配置、会话覆盖和风险场景解析最终风格
     composeStyleDirectives.ts           # current：把 profile 转成 prompt context / UI 过程文案约束
     evaluateStyleBoundary.ts            # current：正式 artifact、高风险、危险操作、工具事实保真边界
@@ -320,14 +361,14 @@ lime-rs/crates/personal-style/         # dead：不得新增
 
 首版采用“Registry + Strategy + Resolver + Guard + Adapter”的组合，但实现上保持纯函数和数据驱动，避免为了模式而模式化。
 
-| 模式 | 在本能力中的作用 | KISS 约束 |
-| --- | --- | --- |
-| Registry | `builtInProfiles.ts` 统一登记内置风格包和首发四种风格。 | 只登记静态配置，不做动态插件系统。 |
-| Manifest | `stylePackManifest.ts` 定义未来风格包 manifest shape。 | 只定义数据契约，不实现 Cloud 下载、签名校验或市场。 |
-| Strategy | 每个 profile 提供同一组 `allowedMoves / forbiddenMoves / fallback`。 | 不为每个风格建 class，使用 typed object 即可。 |
-| Resolver | `resolveStyleProfile` 统一处理默认风格、用户选择、会话覆盖和严肃降级。 | 所有调用点只拿最终结果，不重复判断。 |
-| Guard / Policy | `evaluateStyleBoundary` 判断 artifact 旁路、高风险降级、危险操作确认和事实保真。 | 首版只做可解释规则，不引入第二个模型评审。 |
-| Adapter | UI、App Server config、prompt context 各自通过 adapter 读写稳定 DTO。 | adapter 只做字段映射，不承载业务策略。 |
+| 模式           | 在本能力中的作用                                                                 | KISS 约束                                                                                           |
+| -------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Registry       | `builtInProfiles.ts` 只加载 `packs/*.json` 并做 manifest 校验。                  | 不承载四套 profile 大对象；组件不得 switch profile id 写终稿文案。                                  |
+| Manifest       | `packs/*.json` 是四个内置 Style Pack seed 的当前数据契约。                       | Cloud 下载、签名校验或市场仍 deferred；manifest 承载规则和 few-shot，不承载 i18n 句库。             |
+| Strategy       | 每个 profile 提供同一组 `allowedMoves / forbiddenMoves / fallback`。             | 不为每个风格建 class，使用 typed object 即可。                                                      |
+| Resolver       | `resolveStyleProfile` 统一处理默认风格、用户选择、会话覆盖和严肃降级。           | 所有调用点只拿最终结果，不重复判断。                                                                |
+| Guard / Policy | `evaluateStyleBoundary` 判断 artifact 旁路、高风险降级、危险操作确认和事实保真。 | 首版只做可解释规则，不引入第二个模型评审。                                                          |
+| Adapter        | UI、App Server config、prompt context 各自通过 adapter 读写稳定 DTO。            | adapter 只做字段映射，不承载业务策略。                                                              |
 
 模块依赖方向固定为：
 
@@ -349,8 +390,8 @@ Settings UI / Chat UI
 原则落地：
 
 1. **KISS**：首版不训练小模型、不引入二次改写服务，不做动态 marketplace；用静态 profile、prompt context 和规则 guard 先跑通闭环。
-2. **YAGNI**：只做一个内置风格包、四种内置风格、一个默认值、一个严肃降级；Cloud 下载只定义 manifest 边界，不实现安装和市场。
-3. **DRY**：风格 ID、默认值、禁忌、降级策略只在 registry / resolver 定义一次；UI、prompt 和测试共享同一输出。
+2. **YAGNI**：只做四个 built-in Style Pack seed、一个默认值、一个严肃降级；Cloud 下载和安装市场仍 deferred。
+3. **DRY**：风格规则、禁忌、surface contract 和 few-shot 只写在 pack manifest；registry / resolver 只负责加载、校验和解析。
 4. **SOLID**：catalog 负责定义，resolver 负责选择，composer 负责生成 prompt context，guard 负责边界判断，UI 负责展示和配置。
 5. **可测试性**：核心逻辑全部是纯函数单测；React 测试只覆盖选择器渲染、保存接线和 i18n key。
 
@@ -361,7 +402,7 @@ flowchart LR
   User[用户输入] --> Runtime[Agent Runtime / App Server]
   Runtime --> Facts[可靠草稿 / 工具事实 / 状态事件]
   Config[MemorySoulConfig / Style Profile ID] --> Resolver[Style Resolver]
-  BuiltInPack[Built-in Style Pack\n4 profiles] --> Registry[Style Pack Registry]
+  BuiltInPack[4 built-in Style Pack seeds\n1 profile per seed] --> Registry[Style Pack Registry]
   CloudPack[Cloud / Local Style Pack\nDeferred source] -. 未来下载 / 导入 .-> Registry
   Registry --> Resolver
   Persona[Persona Knowledge Pack metadata] --> Adapter[persona_context Adapter]
@@ -436,15 +477,15 @@ flowchart TD
 
 ## 13. 与现有 Soul / Memory / Knowledge 的关系
 
-| 能力 | 分类 | 说明 |
-| --- | --- | --- |
-| Soul `memory.soul` 配置 | `current` | 全局人格和声线配置事实源。 |
-| Style Profile | `current` | Soul 下的可切换交互口吻预设。 |
-| Persona Knowledge Pack | `current` | 人设资料和品牌资料，只通过 `persona_context` 作为 evidence/context 引用，不升级为指令。 |
-| Generation Brief | `current` | 正式 artifact 声线事实源。 |
-| `SOUL.md` | `current` | 作为高级导入 / 导出和可移植编辑格式，不是运行时事实源。 |
-| 独立 `personalstyle` 路线图 / Runtime | `dead` | 不再建立，避免与 Soul 平行。 |
-| 小模型 LoRA 口吻层 | `deferred` | 只有 prompt/template 评测不稳定时再进入独立评估，不作为首版。 |
+| 能力                                  | 分类       | 说明                                                                                    |
+| ------------------------------------- | ---------- | --------------------------------------------------------------------------------------- |
+| Soul `memory.soul` 配置               | `current`  | 全局人格和声线配置事实源。                                                              |
+| Style Profile                         | `current`  | Soul 下的可切换交互口吻预设。                                                           |
+| Persona Knowledge Pack                | `current`  | 人设资料和品牌资料，只通过 `persona_context` 作为 evidence/context 引用，不升级为指令。 |
+| Generation Brief                      | `current`  | 正式 artifact 声线事实源。                                                              |
+| `SOUL.md`                             | `current`  | 作为高级导入 / 导出和可移植编辑格式，不是运行时事实源。                                 |
+| 独立 `personalstyle` 路线图 / Runtime | `dead`     | 不再建立，避免与 Soul 平行。                                                            |
+| 小模型 LoRA 口吻层                    | `deferred` | 只有 prompt/template 评测不稳定时再进入独立评估，不作为首版。                           |
 
 事实源声明：
 
@@ -455,26 +496,26 @@ flowchart TD
 这次收敛不是“欢迎语修补”，而是把所有可能让用户感知到助手口吻的输出面按事实源统一分类。判断标准：
 
 1. 会被模型直接说给用户听的内容，必须看到 `memory.soul` / `Interaction Soul`。
-2. 会写入用户可见时间线的 runtime status，应从当前 turn context 读取 Soul profile 后做薄适配。
+2. 会写入用户可见时间线的 runtime status 只能保持 neutral diagnostics copy；不得从当前 turn context 读取 Soul profile 后按 profile id 改固定标题。
 3. 前端发送前的临时 preview 不能伪装成有固定口吻的 assistant 回复，只能使用中性系统状态文案。
 4. 正式 artifact 正文不直接套 Product Soul，但必须看到 `formalArtifactVoiceSource=generation_brief_only` 边界。
 
-| 输出面 | current owner | 分类 | 约束 |
-| --- | --- | --- | --- |
-| 普通 Claw 对话 | `runtime_backend/request_context/session_config.rs` | `current` | full session prompt 追加 `Interaction Soul`，再合并 memory / tools / policy。 |
-| fast-response / direct answer | `session_config.rs` light prompt branch | `current` | 可跳过重型 memory、runtime agents、skills body，但不能跳过 Soul。 |
-| Aster identity 底座 | `lime-rs/crates/agent/src/aster_state_support.rs` | `current` | 只保留产品身份和硬边界，不写固定“专业友好助手”口吻。 |
-| 图片命令用户可见展示 | `runtime_backend/image_command/presentation.rs` | `current` | `assistant_intro` / `completion_caption` 受 Interaction Soul 约束，隐藏 workflow / task id / JSON。 |
+| 输出面                         | current owner                                                                           | 分类      | 约束                                                                                                                        |
+| ------------------------------ | --------------------------------------------------------------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------- |
+| 普通 Claw 对话                 | `runtime_backend/request_context/session_config.rs`                                     | `current` | full session prompt 追加 `Interaction Soul`，再合并 memory / tools / policy。                                               |
+| fast-response / direct answer  | `session_config.rs` light prompt branch                                                 | `current` | 可跳过重型 memory、runtime agents、skills body，但不能跳过 Soul。                                                           |
+| Aster identity 底座            | `lime-rs/crates/agent/src/aster_state_support.rs`                                       | `current` | 只保留产品身份和硬边界，不写固定“专业友好助手”口吻。                                                                        |
+| 图片命令用户可见展示           | `runtime_backend/image_command/presentation.rs`                                         | `current` | `assistant_intro` / `completion_caption` 受 Interaction Soul 约束，隐藏 workflow / task id / JSON。                         |
 | Plugin host-managed generation | `runtime_backend/plugin_worker_generation.rs` + `lime-agent/host_managed_generation.rs` | `current` | App Server 注入 Soul 边界；lime-agent 只消费宿主上下文，不反向依赖 Soul 渲染；正式 Markdown 正文走 Generation Brief voice。 |
-| retry / continuation prompts | `lime-agent/request_tool_policy.rs` | `current` | agent-only 续跑提示保留原 session prompt，并显式要求继续遵循 Interaction Soul。 |
-| runtime status / 工具进度 | `lime-agent/request_tool_policy/runtime_status.rs` | `current` | 统一在 emit 边界读取 turn context 的 `config.memory.soul.styleProfile`，只改用户可见短状态，不改工具事实。 |
-| 前端发送前 preview | `workspaceSendHelpers.ts` / `homePendingPreview.ts` / `agentRuntimeStatus.ts` | `current` | 只能是中性系统状态；不得写“我会 / 我已经 / 我是 Lime 助手”等伪 assistant 口吻。 |
-| `SOUL.md` 导入导出 | `src/lib/soul/soulConfig.ts` | `current` | 作为高级可移植编辑格式，运行时事实源仍是 `memory.soul`。 |
-| 旧固定欢迎语样例 | `internal/testing/**`、测试 fixtures | `dead` | 不再作为验收标准；可替换为中性测试输出。 |
+| retry / continuation prompts   | `lime-agent/request_tool_policy.rs`                                                     | `current` | agent-only 续跑提示保留原 session prompt，并显式要求继续遵循 Interaction Soul。                                             |
+| runtime status / 工具进度      | `lime-agent/request_tool_policy/runtime_status.rs`                                      | `current` | 只保留 neutral diagnostics status；旧的 profile-specific title rewrite 已删除，风格表达进入 prompt / lifecycle facts / collaboration facts。 |
+| 前端发送前 preview             | `workspaceSendHelpers.ts` / `homePendingPreview.ts` / `agentRuntimeStatus.ts`           | `current` | 只能是中性系统状态；不得写“我会 / 我已经 / 我是 Lime 助手”等伪 assistant 口吻。                                             |
+| `SOUL.md` 导入导出             | `src/lib/soul/soulConfig.ts`                                                            | `current` | 作为高级可移植编辑格式，运行时事实源仍是 `memory.soul`。                                                                    |
+| 旧固定欢迎语样例               | `internal/testing/**`、测试 fixtures                                                    | `dead`    | 不再作为验收标准；可替换为中性测试输出。                                                                                    |
 
 ### 14.1 current / compat / dead 边界
 
-`current`：`memory.soul`、`runtime/soul/**`、`append_soul_context_to_system_prompt`、`StyleProfileSelector`、内置 Style Pack、四种内置 profile、runtime status 薄适配、真实 Electron Claw 验证。
+`current`：`memory.soul`、`runtime/soul/**`、`append_soul_context_to_system_prompt`、`StyleProfileSelector`、内置 Style Pack、四种内置 profile、neutral runtime status、真实 Electron Claw 验证。
 
 `compat`：无首版保留项。当前没有真实用户和历史数据包袱，不为旧 assistant 文本、旧 runtime status 或旧口吻样例保留兼容归一化。
 
@@ -501,14 +542,14 @@ flowchart TD
 
 ### 15.1 核心指标
 
-| 指标 | 目标 |
-| --- | --- |
-| 风格一致性 | 同类任务连续 20 条回复不明显漂移。 |
-| 事实保真 | 角色化回复不得新增工具事实或可靠草稿中没有的信息。 |
-| 冒犯风险 | 贱兮兮风格只能吐槽任务、工具或抽象情况，不得攻击用户本人；拽酷风格不能轻蔑或命令用户。 |
-| 严肃降级 | 高风险场景必须切换到冷静专业型。 |
-| 长度控制 | 改写后长度不超过可靠草稿约 `1.5x`，除非用户要求解释。 |
-| 可切换性 | 同一工具事件能稳定产出四种不同风格。 |
+| 指标       | 目标                                                                                   |
+| ---------- | -------------------------------------------------------------------------------------- |
+| 风格一致性 | 同类任务连续 20 条回复不明显漂移。                                                     |
+| 事实保真   | 角色化回复不得新增工具事实或可靠草稿中没有的信息。                                     |
+| 冒犯风险   | 贱兮兮风格只能吐槽任务、工具或抽象情况，不得攻击用户本人；拽酷风格不能轻蔑或命令用户。 |
+| 严肃降级   | 高风险场景必须切换到冷静专业型。                                                       |
+| 长度控制   | 改写后长度不超过可靠草稿约 `1.5x`，除非用户要求解释。                                  |
+| 可切换性   | 同一工具事件能稳定产出四种不同风格。                                                   |
 
 ### 15.2 测试场景
 
@@ -532,15 +573,15 @@ flowchart TD
 
 ## 16. 分阶段路线
 
-| 阶段 | 目标 | 主产物 |
-| --- | --- | --- |
-| Phase 0 | 固定 Style Profile 是 Soul 子能力 | 已完成：本文档 |
-| Phase 1 | 独立 Style Profile 模块 | 规划更新：`src/lib/soul/style-profiles/**`、纯函数测试、内置 Style Pack、四种内置 profile registry |
-| Phase 2 | 设置页切换与会话级覆盖 | 已完成：`memory.soul` 配置扩展、UI 切换、五语言文案 |
-| Phase 3 | Runtime prompt context 接入 | 已完成：`runtime/soul/**`、`memory_soul_prompt_context.v2`，不改 read model 事实源；prompt 正文只由 Rust 单测取证 |
-| Phase 4 | Safety / Fidelity Guard | 已完成首版：正式 artifact 旁路、高风险降级指令、禁忌和事实保真 prompt guard |
-| Phase 5 | Persona Pack 联动 | 已完成：Knowledge persona pack 生成 `persona_context`，Soul prompt 只渲染 pack 引用、边界和不写回契约 |
-| Phase 6 | 评估是否需要小模型 | 仅当 prompt-only 在真实 Claw 与 transcript golden 中不稳定时再做 LoRA/QLoRA 对照 |
+| 阶段    | 目标                              | 主产物                                                                                                            |
+| ------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Phase 0 | 固定 Style Profile 是 Soul 子能力 | 已完成：本文档                                                                                                    |
+| Phase 1 | 独立 Style Profile 模块           | 规划更新：`src/lib/soul/style-profiles/**`、纯函数测试、内置 Style Pack、四种内置 profile registry                |
+| Phase 2 | 设置页切换与会话级覆盖            | 已完成：`memory.soul` 配置扩展、UI 切换、五语言文案                                                               |
+| Phase 3 | Runtime prompt context 接入       | 已完成：`runtime/soul/**`、`memory_soul_prompt_context.v2`，不改 read model 事实源；prompt 正文只由 Rust 单测取证 |
+| Phase 4 | Safety / Fidelity Guard           | 已完成首版：正式 artifact 旁路、高风险降级指令、禁忌和事实保真 prompt guard                                       |
+| Phase 5 | Persona Pack 联动                 | 已完成：Knowledge persona pack 生成 `persona_context`，Soul prompt 只渲染 pack 引用、边界和不写回契约             |
+| Phase 6 | 评估是否需要小模型                | 仅当 prompt-only 在真实 Claw 与 transcript golden 中不稳定时再做 LoRA/QLoRA 对照                                  |
 
 ## 17. 当前必须避免的误区
 

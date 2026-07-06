@@ -22,6 +22,13 @@ test("subagent status helper builds running team and handoff events", () => {
       provider_parallel_budget: 4,
       queue_reason: "provider_busy",
       retryable_overload: true,
+      metadata: {
+        soul_lifecycle: {
+          toneVariant: "cool_confident",
+          profileId: "cool_confident_operator",
+          packId: "com.lime.soul.cool-confident-operator",
+        },
+      },
     },
     {
       sessionId: "session-1",
@@ -92,8 +99,34 @@ test("subagent status helper builds running team and handoff events", () => {
       retryableOverload: true,
     },
   );
+  assert.deepEqual(events[0].payload?.collaborationFacts, {
+    source: "projection_facts",
+    surface: "collaboration",
+    collaborationSurface: "team_roster",
+    collaborationPhase: "acting",
+    collaborationKind: "subagent_status",
+    sourceType: "subagent_status_changed",
+    status: "running",
+    runtimeEntity: "subagent_turn",
+    runtimeStatus: "running",
+    latestTurnStatus: "queued",
+    taskId: "child-1",
+    agentId: "child-1",
+    parentSessionId: "session-1",
+    transcriptRef: "child-1:turn-child-1",
+    styleLevel: "L1",
+    riskLevel: "normal",
+    toneVariant: "cool_confident",
+    profileId: "cool_confident_operator",
+    packId: "com.lime.soul.cool-confident-operator",
+  });
   assert.equal(events[1].type, "task.changed");
   assert.equal(events[1].control, "stop");
+  assert.equal(events[1].payload?.collaborationSurface, "task_capsule");
+  assert.equal(
+    events[1].payload?.collaborationFacts?.collaborationKind,
+    "subagent_task",
+  );
   assert.equal(events[2].topology, "parallel_workers");
   assert.equal(events[3].surface, "teammate_transcript");
   assert.equal(events[3].transcriptRef, "child-1:turn-child-1");
@@ -103,17 +136,40 @@ test("subagent status helper builds running team and handoff events", () => {
   assert.equal(events[5].handoffId, "session-1:handoff:child-1");
   assert.equal(events[5].phase, "accepted");
   assert.equal(events[5].topology, "specialist_handoff");
-  assert.deepEqual(events[5].payload, {
-    handoffEvent: "specialist_handoff",
+  assert.equal(events[5].payload?.handoffEvent, "specialist_handoff");
+  assert.equal(events[5].payload?.status, "accepted");
+  assert.equal(events[5].payload?.sourceStatus, "running");
+  assert.equal(events[5].payload?.from, "session-1");
+  assert.equal(events[5].payload?.to, "child-1");
+  assert.equal(events[5].payload?.reason, "subagent_status_changed");
+  assert.equal(
+    events[5].payload?.resumeTarget,
+    "agent-runtime://session/child-1",
+  );
+  assert.equal(events[5].payload?.contextBoundary, "subagent_session");
+  assert.equal(events[5].payload?.transcriptRef, "child-1:turn-child-1");
+  assert.equal(events[5].payload?.latestTurnId, "turn-child-1");
+  assert.deepEqual(events[5].payload?.collaborationFacts, {
+    source: "projection_facts",
+    surface: "collaboration",
+    collaborationSurface: "handoff_lane",
+    collaborationPhase: "accepted",
+    collaborationKind: "specialist_handoff",
+    sourceType: "subagent_status_changed",
     status: "accepted",
-    sourceStatus: "running",
-    from: "session-1",
-    to: "child-1",
-    reason: "subagent_status_changed",
-    resumeTarget: "agent-runtime://session/child-1",
-    contextBoundary: "subagent_session",
+    runtimeEntity: "subagent_turn",
+    runtimeStatus: "running",
+    latestTurnStatus: "queued",
+    taskId: "child-1",
+    agentId: "child-1",
+    parentSessionId: "session-1",
     transcriptRef: "child-1:turn-child-1",
-    latestTurnId: "turn-child-1",
+    handoffId: "session-1:handoff:child-1",
+    styleLevel: "L1",
+    riskLevel: "normal",
+    toneVariant: "cool_confident",
+    profileId: "cool_confident_operator",
+    packId: "com.lime.soul.cool-confident-operator",
   });
 });
 
@@ -150,23 +206,38 @@ test("subagent status helper builds completed worker notification events", () =>
     cacheCreationInputTokens: 7,
     totalTokens: 152,
   });
-  assert.deepEqual(events[5].payload, {
-    notificationKind: "worker_completed",
+  assert.equal(events[5].payload?.notificationKind, "worker_completed");
+  assert.equal(events[5].payload?.status, "completed");
+  assert.equal(events[5].payload?.childSessionId, "child-1");
+  assert.equal(events[5].payload?.parentSessionId, "session-1");
+  assert.equal(events[5].payload?.latestTurnId, "turn-child-done");
+  assert.equal(events[5].payload?.transcriptRef, "child-1:turn-child-done");
+  assert.deepEqual(events[5].payload?.workerUsage, {
+    inputTokens: 120,
+    outputTokens: 32,
+    cachedInputTokens: 5,
+    cacheCreationInputTokens: 7,
+    totalTokens: 152,
+  });
+  assert.equal(events[5].payload?.durationMs, 12345);
+  assert.equal(events[5].payload?.toolCount, 4);
+  assert.equal(events[5].payload?.resultRef, "artifact://worker-result-1");
+  assert.deepEqual(events[5].payload?.collaborationFacts, {
+    source: "projection_facts",
+    surface: "collaboration",
+    collaborationSurface: "worker_notifications",
+    collaborationPhase: "completed",
+    collaborationKind: "worker_completed",
+    sourceType: "subagent_status_changed",
     status: "completed",
-    childSessionId: "child-1",
+    runtimeEntity: "subagent_turn",
+    runtimeStatus: "completed",
+    taskId: "child-1",
+    agentId: "child-1",
     parentSessionId: "session-1",
-    latestTurnId: "turn-child-done",
     transcriptRef: "child-1:turn-child-done",
-    workerUsage: {
-      inputTokens: 120,
-      outputTokens: 32,
-      cachedInputTokens: 5,
-      cacheCreationInputTokens: 7,
-      totalTokens: 152,
-    },
-    durationMs: 12345,
-    toolCount: 4,
-    resultRef: "artifact://worker-result-1",
+    styleLevel: "L1",
+    riskLevel: "normal",
   });
   assert.equal(events[6].type, "agent.handoff");
   assert.equal(events[6].phase, "reconciling");

@@ -93,6 +93,47 @@ impl ConversationMessageRecord {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum RuntimeConversationItemSource {
+    TranscriptMessage {
+        role: ConversationMessageRole,
+        content_json: Value,
+        metadata_json: Value,
+        created_timestamp: i64,
+    },
+    UserMessage {
+        text: String,
+    },
+    AgentMessage {
+        text: String,
+    },
+}
+
+pub fn project_runtime_conversation_record(
+    source: RuntimeConversationItemSource,
+) -> Option<ConversationMessageRecord> {
+    match source {
+        RuntimeConversationItemSource::TranscriptMessage {
+            role,
+            content_json,
+            metadata_json,
+            created_timestamp,
+        } => Some(ConversationMessageRecord::transcript(
+            role,
+            content_json,
+            metadata_json,
+            created_timestamp,
+        )),
+        RuntimeConversationItemSource::UserMessage { text } => {
+            ConversationMessageRecord::runtime_projection(ConversationMessageRole::User, text)
+        }
+        RuntimeConversationItemSource::AgentMessage { text } => {
+            ConversationMessageRecord::runtime_projection(ConversationMessageRole::Assistant, text)
+        }
+    }
+}
+
 pub fn count_selected_messages(records: &[ConversationMessageRecord]) -> usize {
     let transcript_count = records
         .iter()
@@ -159,8 +200,9 @@ pub fn transcript_item_id(turn_id: &str, message_id: Option<&str>, sequence: i64
 #[cfg(test)]
 mod tests {
     use super::{
-        count_selected_messages, select_conversation_messages, transcript_item_id,
-        truncate_before_timestamp, ConversationMessageRecord, ConversationMessageRole,
+        count_selected_messages, project_runtime_conversation_record, select_conversation_messages,
+        transcript_item_id, truncate_before_timestamp, ConversationMessageRecord,
+        ConversationMessageRole, ConversationMessageSource, RuntimeConversationItemSource,
     };
 
     fn transcript(created_timestamp: i64) -> ConversationMessageRecord {
@@ -209,6 +251,37 @@ mod tests {
         assert_eq!(selected.len(), 1);
         assert_eq!(selected[0].text.as_deref(), Some("reply"));
         assert_eq!(count_selected_messages(&selected), 1);
+    }
+
+    #[test]
+    fn project_runtime_conversation_record_should_keep_item_selection_rules_current() {
+        let transcript =
+            project_runtime_conversation_record(RuntimeConversationItemSource::TranscriptMessage {
+                role: ConversationMessageRole::Assistant,
+                content_json: serde_json::json!([{ "type": "text", "text": "reply" }]),
+                metadata_json: serde_json::json!({ "agentVisible": true }),
+                created_timestamp: 42,
+            })
+            .expect("transcript record");
+        let user_projection =
+            project_runtime_conversation_record(RuntimeConversationItemSource::UserMessage {
+                text: "  hello  ".to_string(),
+            })
+            .expect("user projection");
+        let empty_projection =
+            project_runtime_conversation_record(RuntimeConversationItemSource::AgentMessage {
+                text: " ".to_string(),
+            });
+
+        assert_eq!(transcript.source, ConversationMessageSource::Transcript);
+        assert_eq!(transcript.role, ConversationMessageRole::Assistant);
+        assert_eq!(transcript.created_timestamp, Some(42));
+        assert_eq!(
+            user_projection.source,
+            ConversationMessageSource::RuntimeProjection
+        );
+        assert_eq!(user_projection.text.as_deref(), Some("hello"));
+        assert!(empty_projection.is_none());
     }
 
     #[test]

@@ -60,12 +60,14 @@ export const InputbarVisionCapabilityNotice: React.FC<
     },
   );
 
+  const capabilityInspectionPending = providersLoading || modelsLoading;
+
   const policy = useMemo<ModelInputSendPolicy>(() => {
     const gateInput = buildModelCapabilitySendGateInput({
       imageCount: shouldInspectCapability ? 1 : 0,
     });
     const summary =
-      !providersLoading && !modelsLoading && selectedProvider && model.trim()
+      !capabilityInspectionPending && selectedProvider && model.trim()
         ? resolveModelCapabilitySummaryForSelection({
             models,
             providerType,
@@ -75,13 +77,15 @@ export const InputbarVisionCapabilityNotice: React.FC<
 
     return buildModelInputSendPolicy(
       evaluateModelInputCapability(summary, gateInput),
+      {
+        failClosedOnUnknownMedia: !capabilityInspectionPending,
+      },
     );
   }, [
+    capabilityInspectionPending,
     model,
     models,
-    modelsLoading,
     providerType,
-    providersLoading,
     selectedProvider,
     shouldInspectCapability,
   ]);
@@ -90,8 +94,7 @@ export const InputbarVisionCapabilityNotice: React.FC<
     if (
       !shouldInspectCapability ||
       !model.trim() ||
-      providersLoading ||
-      modelsLoading ||
+      capabilityInspectionPending ||
       !selectedProvider
     ) {
       return null;
@@ -115,10 +118,9 @@ export const InputbarVisionCapabilityNotice: React.FC<
       ? `当前模型 ${model} 不支持多模态图片理解，建议切换到 ${suggestedModel} 后再发送图片`
       : `当前模型 ${model} 不支持多模态图片理解，请切换到支持多模态的模型后再发送图片`;
   }, [
+    capabilityInspectionPending,
     model,
     models,
-    modelsLoading,
-    providersLoading,
     selectedProvider,
     shouldInspectCapability,
   ]);

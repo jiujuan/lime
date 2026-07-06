@@ -1,4 +1,8 @@
-import type { ActionRequired, AgentThreadItem, AgentThreadTurn } from "../../types";
+import type {
+  ActionRequired,
+  AgentThreadItem,
+  AgentThreadTurn,
+} from "../../types";
 import {
   isPendingRuntimeActionConfirmation,
   isRuntimeActionConfirmationRequestId,
@@ -7,6 +11,16 @@ import {
   isSubmittedRuntimeActionConfirmation,
 } from "../../utils/runtimeActionConfirmation";
 import { resolveAgentRuntimeErrorPresentation } from "../../utils/agentRuntimeErrorPresentation";
+import {
+  resolveTimelineConfirmedStatusLabel,
+  resolveTimelineItemStatusLabel,
+  resolveTimelinePausedDetail,
+  resolveTimelinePausedStatusLabel,
+  resolveTimelinePendingActionDetail,
+  resolveTimelinePendingStatusLabel,
+  resolveTimelineRuntimeConfirmationPendingDetail,
+  resolveTimelineRuntimeConfirmationSubmittedDetail,
+} from "./timelineCopy";
 
 function findLatestPendingAction(
   actionRequests: ActionRequired[] | undefined,
@@ -25,7 +39,9 @@ function findLatestPendingAction(
   return null;
 }
 
-export function resolveUserFacingErrorMessage(errorMessage?: string | null): string {
+export function resolveUserFacingErrorMessage(
+  errorMessage?: string | null,
+): string {
   const normalized = errorMessage?.trim();
   if (!normalized) {
     return "";
@@ -44,17 +60,16 @@ export function resolveThreadInlineStatusHint(params: {
   if (pendingAction) {
     return {
       tone: "warning" as const,
-      label: "待处理",
+      label: resolveTimelinePendingStatusLabel(),
       detail:
-        pendingAction.prompt?.trim() ||
-        "当前阶段在等待你确认，完成后会继续后续处理。",
+        pendingAction.prompt?.trim() || resolveTimelinePendingActionDetail(),
     };
   }
 
   if (params.runtimeConfirmationPrompt?.trim()) {
     return {
       tone: "warning" as const,
-      label: "待处理",
+      label: resolveTimelinePendingStatusLabel(),
       detail: params.runtimeConfirmationPrompt.trim(),
     };
   }
@@ -64,15 +79,15 @@ export function resolveThreadInlineStatusHint(params: {
       if (params.hasSubmittedRuntimeConfirmation) {
         return {
           tone: "neutral" as const,
-          label: "已确认",
-          detail: "已收到运行时权限确认，正在继续处理当前任务。",
+          label: resolveTimelineConfirmedStatusLabel(),
+          detail: resolveTimelineRuntimeConfirmationSubmittedDetail(),
         };
       }
 
       return {
         tone: "warning" as const,
-        label: "待处理",
-        detail: "当前阶段在等待你确认运行时权限。",
+        label: resolveTimelinePendingStatusLabel(),
+        detail: resolveTimelineRuntimeConfirmationPendingDetail(),
       };
     }
   }
@@ -80,17 +95,16 @@ export function resolveThreadInlineStatusHint(params: {
   if (params.turn.status === "aborted") {
     return {
       tone: "neutral" as const,
-      label: "已暂停",
+      label: resolveTimelinePausedStatusLabel(),
       detail:
-        params.turn.error_message?.trim() ||
-        "当前阶段已暂停，你可以处理后继续下一步。",
+        params.turn.error_message?.trim() || resolveTimelinePausedDetail(),
     };
   }
 
   if (params.turn.status === "failed" && params.turn.error_message?.trim()) {
     return {
       tone: "error" as const,
-      label: "失败",
+      label: resolveTimelineItemStatusLabel("failed"),
       detail: resolveUserFacingErrorMessage(params.turn.error_message),
     };
   }
@@ -106,7 +120,10 @@ export function resolvePendingRuntimeConfirmationPrompt(params: {
   for (let index = actionRequests.length - 1; index >= 0; index -= 1) {
     const actionRequest = actionRequests[index];
     if (isPendingRuntimeActionConfirmation(actionRequest)) {
-      return actionRequest.prompt?.trim() || "当前阶段在等待你确认运行时权限。";
+      return (
+        actionRequest.prompt?.trim() ||
+        resolveTimelineRuntimeConfirmationPendingDetail()
+      );
     }
   }
 
@@ -116,7 +133,9 @@ export function resolvePendingRuntimeConfirmationPrompt(params: {
       isRuntimeActionConfirmationThreadItem(item) &&
       item.status !== "completed"
     ) {
-      return item.prompt?.trim() || "当前阶段在等待你确认运行时权限。";
+      return (
+        item.prompt?.trim() || resolveTimelineRuntimeConfirmationPendingDetail()
+      );
     }
   }
 

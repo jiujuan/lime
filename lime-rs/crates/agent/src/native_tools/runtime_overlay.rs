@@ -2,6 +2,7 @@ use aster::agents::Agent;
 use aster::tools::{create_shared_history, EditTool, Tool, ToolRegistry, WriteTool};
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tool_runtime::native_overlay::{runtime_native_tool_overlay_tools, RuntimeNativeToolOverlay};
 
 pub(crate) struct RuntimeNativeToolRegistry {
     registry: Arc<RwLock<ToolRegistry>>,
@@ -36,14 +37,29 @@ pub(crate) async fn configure_lime_native_tool_overlay(agent: &mut Agent) {
     let shared_history = create_shared_history();
     let registry_handle = runtime_native_tool_registry(agent);
     let mut registry = registry_handle.registry.write().await;
-    registry.register(Box::new(
-        WriteTool::new(shared_history.clone()).with_require_read_before_overwrite(false),
-    ));
-    registry.register(Box::new(
-        EditTool::new(shared_history).with_require_read_before_edit(false),
-    ));
-    registry.register(Box::new(crate::tools::ApplyPatchTool));
-    registry.register(Box::new(crate::tools::SkillSearchTool));
-    // 覆盖默认 SkillTool，避免通用对话默认暴露全部本地 Skills。
-    registry.register(Box::new(crate::tools::LimeSkillTool::new()));
+    for overlay_tool in runtime_native_tool_overlay_tools() {
+        match overlay_tool {
+            RuntimeNativeToolOverlay::Write => {
+                registry.register(Box::new(
+                    WriteTool::new(shared_history.clone())
+                        .with_require_read_before_overwrite(false),
+                ));
+            }
+            RuntimeNativeToolOverlay::Edit => {
+                registry.register(Box::new(
+                    EditTool::new(shared_history.clone()).with_require_read_before_edit(false),
+                ));
+            }
+            RuntimeNativeToolOverlay::ApplyPatch => {
+                registry.register(Box::new(crate::tools::ApplyPatchTool));
+            }
+            RuntimeNativeToolOverlay::SkillSearch => {
+                registry.register(Box::new(crate::tools::SkillSearchTool));
+            }
+            // 覆盖默认 SkillTool，避免通用对话默认暴露全部本地 Skills。
+            RuntimeNativeToolOverlay::Skill => {
+                registry.register(Box::new(crate::tools::LimeSkillTool::new()));
+            }
+        }
+    }
 }

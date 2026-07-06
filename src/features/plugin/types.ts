@@ -308,6 +308,55 @@ export interface ToolRefDeclaration {
   required?: boolean;
 }
 
+export interface PluginPromptInjectionPolicy {
+  mode: string;
+  source: string;
+}
+
+export interface PluginRuntimeSkillCapability {
+  id: string;
+  title?: string;
+  description?: string;
+  path?: string;
+  activation?: string;
+  required?: boolean;
+  promptInjectionPolicy: PluginPromptInjectionPolicy;
+}
+
+export interface PluginRuntimeToolBinding {
+  key: string;
+  title?: string;
+  provider: string;
+  bindingKind: string;
+  path?: string;
+  capabilities: string[];
+  required?: boolean;
+}
+
+export interface PluginRuntimeMcpBinding {
+  serverId: string;
+  toolKey: string;
+  provider: string;
+  required?: boolean;
+}
+
+export interface PluginRuntimeWorkflowBinding {
+  workflowKey: string;
+  taskKind?: string;
+  skillIds: string[];
+  toolKeys: string[];
+}
+
+export interface PluginRuntimeCapabilities {
+  schemaVersion: string;
+  pluginId: string;
+  version?: string;
+  skills: PluginRuntimeSkillCapability[];
+  tools: PluginRuntimeToolBinding[];
+  mcpBindings: PluginRuntimeMcpBinding[];
+  workflowBindings: PluginRuntimeWorkflowBinding[];
+}
+
 export interface ConnectorDeclaration {
   id: string;
   title?: string;
@@ -490,6 +539,7 @@ export interface AppManifest {
   workbench?: WorkbenchDeclaration;
   distribution?: PluginDistributionDeclaration;
   presentation?: PluginPresentation;
+  runtimeCapabilities?: PluginRuntimeCapabilities;
   componentPaths?: ComponentPathsDeclaration;
   interface?: unknown;
   activationEntries?: unknown[];
@@ -589,6 +639,7 @@ export interface NormalizedAppManifest {
   workbench?: WorkbenchDeclaration;
   distribution?: PluginDistributionDeclaration;
   presentation?: PluginPresentation;
+  runtimeCapabilities?: PluginRuntimeCapabilities;
   componentPaths?: ComponentPathsDeclaration;
   interface?: unknown;
   activationEntries?: unknown[];
@@ -907,14 +958,20 @@ export interface WorkflowProjection {
 
 export interface SkillRequirementProjection {
   id: string;
+  title?: string;
+  description?: string;
   standard?: string;
   activation?: string;
   required: boolean;
+  promptInjectionPolicy?: PluginPromptInjectionPolicy;
 }
 
 export interface ToolRequirementProjection {
   key: string;
+  title?: string;
+  description?: string;
   provider?: string;
+  bindingKind?: string;
   capabilities: string[];
   required: boolean;
 }
@@ -972,6 +1029,7 @@ export interface PluginProjection {
   ui?: UiDeclaration;
   lifecycle: LifecycleDeclaration;
   install: PluginInstallProjection;
+  runtimeCapabilities?: PluginRuntimeCapabilities;
   readinessHints: ReadinessHint[];
   provenance: PluginProvenance;
 }

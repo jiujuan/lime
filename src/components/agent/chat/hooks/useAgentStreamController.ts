@@ -6,6 +6,7 @@ import {
   type MutableRefObject,
 } from "react";
 import type { ActiveStreamState } from "./agentStreamSubmissionLifecycle";
+import { rememberLocallyStartedAgentStreamBinding } from "./agentStreamResumeBinding";
 
 interface UseAgentStreamControllerOptions {
   currentAssistantMsgIdRef: MutableRefObject<string | null>;
@@ -28,6 +29,7 @@ export function useAgentStreamController(
   const setActiveStream = useCallback(
     (nextActive: ActiveStreamState | null) => {
       activeStreamRef.current = nextActive;
+      rememberLocallyStartedAgentStreamBinding(nextActive);
       currentAssistantMsgIdRef.current = nextActive?.assistantMsgId ?? null;
       currentStreamingSessionIdRef.current = nextActive?.sessionId ?? null;
       currentStreamingEventNameRef.current = nextActive?.eventName ?? null;

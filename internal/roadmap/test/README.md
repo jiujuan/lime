@@ -1,5 +1,9 @@
 # Lime 测试分层路线图
 
+## 专题路线图
+
+- [Clawstream 全链路护栏与旧实现清理](./clawstream/README.md)：绑定 `internal/research/refactor/v1` 的 Thread / Turn / Item 主线，覆盖 Claw 输入到输出的 streaming fixture、projection、GUI evidence 与旧 fallback 清理。
+
 ## 背景
 
 当前 `npm test` 同时承载纯单元、React/jsdom 组件、DevBridge/Tauri 契约、脚本集成和少量 live-gated 测试。按当前工作区实测，前端完整 Vitest 分批跑完约 `306.95s`，Rust 后端 `cargo test --manifest-path "lime-rs/Cargo.toml"` 约 `11.00s`。这说明 Lime 的主要反馈瓶颈在前端测试分层，而不是 Rust 后端。

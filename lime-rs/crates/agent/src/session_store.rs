@@ -3,7 +3,6 @@
 //! 提供会话创建、列表查询、详情查询能力。
 //! 数据事实源收敛到 lime_core::database::agent_session_repository + Lime 数据库。
 
-use aster::session::{ExtensionState, Session as AsterSession};
 #[cfg(test)]
 use chrono::DateTime;
 use chrono::Utc;
@@ -32,18 +31,20 @@ mod session_store_history_visibility;
 #[cfg(test)]
 #[path = "session_store_message_projection.rs"]
 mod session_store_message_projection;
+#[path = "session_store_provider_routing.rs"]
+mod session_store_provider_routing;
 #[path = "session_store_runtime_detail.rs"]
 mod session_store_runtime_detail;
 #[path = "session_store_runtime_projection.rs"]
 mod session_store_runtime_projection;
-#[path = "session_store_subagent_aster_adapter.rs"]
-mod session_store_subagent_aster_adapter;
 #[path = "session_store_subagent_context.rs"]
 mod session_store_subagent_context;
+#[path = "session_store_subagent_projection.rs"]
+mod session_store_subagent_projection;
+#[path = "session_store_subagent_query.rs"]
+mod session_store_subagent_query;
 #[path = "session_store_todo_aster_adapter.rs"]
 mod session_store_todo_aster_adapter;
-#[path = "session_store_todo_projection.rs"]
-mod session_store_todo_projection;
 #[path = "session_store_types.rs"]
 mod session_store_types;
 
@@ -56,8 +57,6 @@ pub use self::session_store_runtime_detail::{
     get_runtime_session_detail_with_history_page, get_runtime_session_detail_with_history_window,
 };
 use self::session_store_runtime_projection::build_runtime_session_info;
-#[cfg(test)]
-use self::session_store_subagent_aster_adapter::project_aster_subagent_session;
 
 #[cfg(test)]
 use self::session_store_subagent_context::{
@@ -80,24 +79,7 @@ pub use self::session_store_types::{
 #[cfg(test)]
 use crate::subagent_control::SubagentRuntimeStatusKind;
 #[cfg(test)]
-use crate::subagent_profiles::{SubagentCustomizationState, SubagentSkillSummary};
-#[cfg(test)]
-use crate::subagent_profiles_aster_adapter::updated_extension_data_for_subagent_customization;
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-struct SessionProviderRoutingState {
-    provider_selector: String,
-}
-
-impl ExtensionState for SessionProviderRoutingState {
-    const EXTENSION_NAME: &'static str = "lime_provider_routing";
-    const VERSION: &'static str = "v0";
-}
-
-fn resolve_session_provider_selector(session: &AsterSession) -> Option<String> {
-    SessionProviderRoutingState::from_extension_data(&session.extension_data)
-        .and_then(|state| normalize_optional_text(Some(state.provider_selector)))
-}
+use crate::subagent_profiles::SubagentSkillSummary;
 
 /// 解析会话 working_dir（优先入参，其次 workspace_id）
 fn resolve_session_working_dir(

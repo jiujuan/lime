@@ -5,6 +5,7 @@ export * from "./artifactEvents.js";
 export * from "./coding.js";
 export * from "./contextEvents.js";
 export * from "./conversationEvents.js";
+export * from "./collaborationFacts.js";
 export * from "./diagnosticEvents.js";
 export * from "./envelope.js";
 export * from "./eventStore.js";

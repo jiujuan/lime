@@ -20,6 +20,7 @@ use tokio::time::timeout;
 mod artifacts;
 mod capabilities;
 mod coding_events;
+mod context_auto_compaction;
 mod evidence_exports;
 mod external_events;
 mod gateway_runner;

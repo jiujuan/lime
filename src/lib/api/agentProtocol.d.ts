@@ -734,6 +734,7 @@ export interface AgentEventSubagentStatusChanged {
   duration_ms?: number;
   tool_count?: number;
   result_ref?: string;
+  metadata?: Record<string, unknown>;
 }
 export interface AgentEventMessage {
   type: "message";

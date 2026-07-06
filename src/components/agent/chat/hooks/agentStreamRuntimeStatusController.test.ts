@@ -92,7 +92,7 @@ describe("agentStreamRuntimeStatusController", () => {
     expect(plan?.summaryText).toContain("正在启动处理流程");
   });
 
-  it("provider_trace 首个请求阶段应支持 Soul 等待态口吻", () => {
+  it("provider_trace 首个请求阶段应保持 neutral 文案并携带 Soul metadata", () => {
     const soulCopy = resolveSoulInteractionCopy({
       soul: {
         enabled: true,
@@ -108,8 +108,19 @@ describe("agentStreamRuntimeStatusController", () => {
       soulCopy,
     });
 
-    expect(plan?.normalizedStatus.title).toBe("正在启动处理");
-    expect(plan?.summaryText).toContain("正在启动处理");
+    expect(plan?.normalizedStatus).toMatchObject({
+      title: "正在启动处理流程",
+      metadata: {
+        soul_surface: "waiting_runtime_status",
+        soul_phase: "routing",
+        style_level: "L1",
+        risk_level: "normal",
+        tone_variant: "cheeky_sassy",
+        profile_id: "cheeky_sassy_executor",
+        pack_id: "com.lime.soul.cheeky-sassy-executor",
+      },
+    });
+    expect(plan?.summaryText).toContain("正在启动处理流程");
     expect(plan?.summaryText).not.toMatch(/小活儿|别急|安排/u);
   });
 

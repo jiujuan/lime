@@ -20,6 +20,38 @@ const DIRECT_ASTER_DEPENDENCY_MIGRATED_CRATES = [
   "services",
 ];
 
+const DELETED_ASTER_VENDOR_PUBLIC_MODULES = [
+  "aster_apps",
+  "auto_reply",
+  "background",
+  "blueprint",
+  "checkpoint",
+  "chrome",
+  "chrome_mcp",
+  "codesign",
+  "core",
+  "diagnostics",
+  "git",
+  "github",
+  "heartbeat",
+  "logging",
+  "lsp",
+  "map",
+  "memory",
+  "notifications",
+  "observability",
+  "plugins",
+  "prompt",
+  "ratelimit",
+  "recipe_deeplink",
+  "rewind",
+  "search",
+  "telemetry",
+  "teleport",
+  "tracing",
+  "updater",
+];
+
 const DIRECT_ASTER_DEPENDENCY_MIGRATED_FILES = [
   "lime-rs/crates/agent-protocol/src/action_required.rs",
   "lime-rs/crates/services/src/model_registry_service.rs",
@@ -32,13 +64,21 @@ const DIRECT_ASTER_DEPENDENCY_MIGRATED_FILES = [
   "lime-rs/crates/agent-runtime/src/session_config.rs",
   "lime-rs/crates/agent/src/runtime_projection_snapshot.rs",
   "lime-rs/crates/agent/src/session_execution_runtime.rs",
+  "lime-rs/crates/agent/src/session_store_provider_routing.rs",
+  "lime-rs/crates/agent/src/session_record_sql.rs",
   "lime-rs/crates/agent/src/session_store_message_projection.rs",
   "lime-rs/crates/agent/src/session_store_runtime_projection.rs",
-  "lime-rs/crates/agent/src/session_store_todo_projection.rs",
+  "lime-rs/crates/agent/src/session_store_subagent_projection.rs",
+  "lime-rs/crates/agent/src/session_store_subagent_query.rs",
+  "lime-rs/crates/thread-store/src/task_board.rs",
+  "lime-rs/crates/agent/src/session_execution_runtime_query.rs",
   "lime-rs/crates/agent/src/session_configuration.rs",
   "lime-rs/crates/agent/src/session_usage_projection.rs",
+  "lime-rs/crates/agent-runtime/src/runtime_conversation.rs",
   "lime-rs/crates/agent/src/tool_io_offload.rs",
   "lime-rs/crates/agent/src/turn_input_envelope.rs",
+  "lime-rs/crates/agent-runtime/src/runtime_queue.rs",
+  "lime-rs/crates/agent-runtime/src/runtime_timeline.rs",
   "lime-rs/crates/tool-runtime/src/execution_process.rs",
   "lime-rs/crates/tool-runtime/src/execution_decision.rs",
   "lime-rs/crates/tool-runtime/src/sandbox.rs",
@@ -55,6 +95,7 @@ const DIRECT_ASTER_DEPENDENCY_MIGRATED_FILES = [
   "lime-rs/crates/tool-runtime/src/tool_definition.rs",
   "lime-rs/crates/tool-runtime/src/tool_extension.rs",
   "lime-rs/crates/tool-runtime/src/tool_result.rs",
+  "lime-rs/crates/tool-runtime/src/apply_patch.rs",
   "lime-rs/crates/tool-runtime/src/web_fetch.rs",
   "lime-rs/crates/tool-runtime/src/web_fetch/content.rs",
   "lime-rs/crates/tool-runtime/src/web_search.rs",
@@ -90,9 +131,29 @@ const SESSION_EXECUTION_RUNTIME_FORBIDDEN_PUBLIC_EXTENSION_WRITE_SNIPPETS = [
   "persist_session_extension_data",
 ];
 
+const SESSION_EXECUTION_RUNTIME_ADAPTER_FORBIDDEN_CURRENT_RULE_SNIPPETS = [
+  "use serde::de::DeserializeOwned",
+  "fn read_session_runtime_extension_state",
+  "serde_json::from_value",
+  "SessionExecutionRuntimeRecentTeamSelection::normalize",
+  "fn project_aster_session_usage",
+  "session_usage_projection::project_token_usage(",
+  "fn resolve_latest_aster_turn",
+  "fn project_aster_execution_runtime_turn",
+  "fn project_recent_access_mode_from_aster_snapshot",
+  "fn project_recent_harness_context_from_aster_snapshot",
+  "fn recent_harness_context_is_complete",
+  "fn recent_harness_context_is_empty",
+  "extract_recent_access_mode_from_metadata",
+  "extract_recent_harness_context_from_metadata",
+  ".max_by(|left, right|",
+  ".max_by_key(|(updated_at",
+];
+
 const SUBAGENT_CONTROL_FORBIDDEN_PRODUCTION_RUNTIME_DTO_SNIPPETS = [
   "load_runtime_snapshot(",
   "project_aster_subagent_latest_turn",
+  "require_shared_session_runtime_queue_service",
   "SessionRuntimeSnapshot",
   "ThreadRuntimeSnapshot",
   " TurnRuntime,",
@@ -140,6 +201,76 @@ const SESSION_STORE_SUBAGENT_CONTEXT_FORBIDDEN_DIRECT_ASTER_SNIPPETS = [
   "resolve_subagent_session_metadata",
   "SubagentPresentationProjection::from_session",
   "Session as AsterSession",
+];
+
+const SESSION_STORE_SUBAGENT_ADAPTER_FORBIDDEN_METADATA_RULE_SNIPPETS = [
+  "resolve_subagent_session_metadata",
+  "subagent_customization_from_session",
+  "SubagentPresentationProjection {",
+  "normalize_optional_nonempty_body",
+  "SubagentCustomizationState",
+  "query_child_subagent_sessions",
+  "query_session",
+  "read_subagent_session_projection",
+  "read_session_name_projection",
+  "load_child_subagent_session_projections",
+];
+
+const SESSION_STORE_FORBIDDEN_ASTER_PROVIDER_ROUTING_SNIPPETS = [
+  "ExtensionState",
+  "SessionProviderRoutingState",
+  "AsterSession",
+  "use aster::session",
+  "from_extension_data(&session.extension_data)",
+];
+
+const SESSION_STORE_RUNTIME_DETAIL_FORBIDDEN_PROVIDER_ROUTING_SNIPPETS = [
+  "resolve_session_provider_selector",
+  "from_extension_data",
+  "session.extension_data",
+];
+
+const SESSION_STORE_RUNTIME_DETAIL_FORBIDDEN_SESSION_ADAPTER_SNIPPETS = [
+  "project_aster_session_execution_runtime_session",
+  "project_aster_subagent_session",
+];
+
+const SESSION_EXECUTION_RUNTIME_QUERY_FORBIDDEN_ASTER_SNIPPETS = [
+  "use aster::",
+  "aster::",
+  "Session as AsterSession",
+  "ExtensionData",
+  "get_extension_state",
+];
+
+const SESSION_STORE_RUNTIME_DETAIL_FORBIDDEN_CONVERSATION_SNIPPETS = [
+  "read_session(",
+  "project_aster_runtime_conversation_window",
+  "project_aster_message",
+  "conversation.messages()",
+  ".messages()",
+  "is_user_visible()",
+  "&aster::session::Session",
+  "aster::conversation",
+];
+
+const SUBAGENT_RUNTIME_ADAPTER_FORBIDDEN_CURRENT_RULE_SNIPPETS = [
+  "fn resolve_aster_turn_duration_ms",
+  "fn count_aster_tool_items_for_turn",
+  "fn build_runtime_item_ref",
+  "fn resolve_aster_worker_result_ref",
+  "SubagentRuntimeItemKind::ToolCall",
+  "SubagentRuntimeItemKind::AgentMessage",
+  "SubagentRuntimeItemKind::Other",
+  ".max_by(|left, right|",
+  "signed_duration_since",
+];
+
+const RUNTIME_QUEUE_FORBIDDEN_PRODUCTION_ASTER_QUEUE_SNIPPETS = [
+  "use aster::session",
+  "require_shared_session_runtime_queue_service",
+  "SessionRuntimeQueueService",
+  "QueuedTurnRuntime",
 ];
 
 const LIME_AGENT_FORBIDDEN_PUBLIC_ASTER_HELPER_SNIPPETS = [
@@ -1116,6 +1247,8 @@ const SUBAGENT_PROFILES_FORBIDDEN_PUBLIC_ASTER_SURFACE_SNIPPETS = [
   "use aster::session::Session",
   "FrontmatterHooks",
   "ExtensionData",
+  "mod subagent_profiles_aster_adapter;",
+  "subagent_profiles_aster_adapter",
   "pub fn from_extension_data",
   "pub fn from_session",
   "pub fn to_extension_data",
@@ -1205,12 +1338,186 @@ const ASTER_SESSION_STORE_FORBIDDEN_SPLIT_HELPERS = [
 const ASTER_SESSION_STORE_TRAIT_ADAPTER_FILE =
   "lime-rs/crates/agent/src/aster_session_store/aster_trait.rs";
 
+const ASTER_SESSION_PROJECTION_FORBIDDEN_ROW_SQL_SNIPPETS = [
+  "fn map_session_listing_row",
+  "fn load_listed_sessions",
+  "query_map(",
+  "row.get(",
+];
+
+const ASTER_SESSION_TRAIT_FORBIDDEN_RECORD_PROJECTION_SNIPPETS = [
+  "resolve_session_type_name",
+  "parse_optional_json(",
+  "system_prompt",
+  "SESSION_RECORD_SELECT_COLUMNS",
+  "FROM agent_sessions",
+  'format!("SELECT',
+  ".prepare(&sql)",
+  ".query_row(",
+  "map_session_record_row",
+  "query_row([id], |row|",
+  "row.get::<_, String>",
+];
+
+const ASTER_SESSION_TRAIT_FORBIDDEN_DIRECT_RECORD_SQL_SNIPPETS = [
+  "conn.execute(",
+  "DELETE FROM agent_sessions",
+  "UPDATE agent_sessions SET updated_at",
+];
+
+const ASTER_SESSION_TRAIT_FORBIDDEN_RETIRED_BULK_METHOD_SNIPPETS = [
+  "async fn export_session",
+  "async fn import_session",
+  "async fn copy_session",
+  "async fn truncate_conversation",
+  "export_session 已退役",
+  "import_session 已退役",
+  "copy_session 已退役",
+  "truncate_conversation 已退役",
+  "serde_json::to_string_pretty(&session)",
+  "serde_json::from_str(json)",
+  "self.create_session(\n                session.working_dir.clone()",
+  "self.get_session(session_id, true)",
+  "truncate_runtime_conversation",
+];
+
+const ASTER_SESSION_STORE_FORBIDDEN_DIRECT_RECORD_HELPERS = [
+  "conn.execute(",
+  "INSERT INTO agent_sessions",
+  "SELECT 1 FROM agent_sessions",
+  "SELECT working_dir FROM agent_sessions",
+  "SELECT extension_data_json FROM agent_sessions",
+  "WorkspaceManager::get_default_root_path_from_conn",
+  "resolve_default_project_dir",
+  "fn resolve_session_working_dir",
+  "fn normalize_working_dir",
+];
+
+const THREAD_SESSION_REPOSITORY_FORBIDDEN_DIRECT_METADATA_SQL_SNIPPETS = [
+  "conn.execute(",
+  "UPDATE agent_sessions SET title",
+  "UPDATE agent_sessions SET user_set_name",
+  "UPDATE agent_sessions SET working_dir",
+  "UPDATE agent_sessions SET extension_data_json",
+  "DELETE FROM agent_sessions",
+];
+
+const THREAD_SESSION_REPOSITORY_FORBIDDEN_DIRECT_READ_ROW_SNIPPETS = [
+  "SESSION_RECORD_SELECT_COLUMNS",
+  "map_session_record_row",
+  'format!("SELECT',
+  ".prepare(&sql)",
+  ".query_row(",
+  ".query_map(",
+  "filter_map(|r| r.ok())",
+];
+
+const SESSION_RECORD_SQL_FORBIDDEN_SILENT_ROW_ERROR_SNIPPETS = [
+  "filter_map(|row| row.ok())",
+  "filter_map(|r| r.ok())",
+];
+
+const ASTER_SESSION_TRAIT_FORBIDDEN_INSIGHTS_SQL_SNIPPETS = [
+  "SELECT COUNT(*) FROM agent_sessions",
+  "SUM(COALESCE(accumulated_total_tokens, total_tokens, 0))",
+  "total_sessions as usize",
+];
+
+const ASTER_SESSION_TRAIT_FORBIDDEN_TOKEN_STATS_SQL_SNIPPETS = [
+  "UPDATE agent_sessions SET\n                total_tokens = COALESCE",
+  "schedule_id = COALESCE(?9, schedule_id)",
+  "当前 store 边界把 None 视为",
+  "rusqlite::params![\n                stats.total_tokens",
+];
+
+const ASTER_SESSION_TRAIT_FORBIDDEN_PROVIDER_CONFIG_SQL_SNIPPETS = [
+  "provider_name = COALESCE(?1, provider_name)",
+  "model_config_json = CASE WHEN ?3 IS NULL THEN model_config_json ELSE ?3 END",
+  "provider/model_config 走",
+  "normalize_optional_text(provider_name",
+  "config.model_name.trim().to_string()",
+];
+
+const ASTER_SESSION_TRAIT_FORBIDDEN_METADATA_SQL_SNIPPETS = [
+  "UPDATE agent_sessions SET title",
+  "user_set_name = ?2",
+  "UPDATE agent_sessions SET working_dir",
+  "UPDATE agent_sessions SET session_type",
+  "rusqlite::params![name",
+  "rusqlite::params![working_dir.to_string_lossy",
+  "rusqlite::params![session_type.to_string",
+];
+
+const ASTER_SESSION_TRAIT_FORBIDDEN_EXTENSION_DATA_SQL_SNIPPETS = [
+  "UPDATE agent_sessions SET extension_data_json",
+  "extension_data_json = ?1",
+  "rusqlite::params![extension_data_json",
+];
+
+const ASTER_SESSION_TRAIT_FORBIDDEN_RECIPE_SQL_SNIPPETS = [
+  "recipe_json = ?1",
+  "user_recipe_values_json = ?2",
+  "recipe 走“直接覆盖”语义",
+  "rusqlite::params![recipe_json",
+];
+
 const ASTER_RUNTIME_CONVERSATION_FORBIDDEN_TRANSCRIPT_HELPERS = [
   "fn transcript_item_id",
   "let mut transcript_count",
   "let mut projection_count",
   "let mut transcript_messages",
   "let mut projection_messages",
+  "ConversationMessageRecord::transcript",
+  "ConversationMessageRecord::runtime_projection",
+];
+
+const ASTER_HISTORY_SEARCH_FORBIDDEN_CURRENT_RULE_SNIPPETS = [
+  "fn runtime_message_role",
+  "let normalized_query = normalized_query.to_ascii_lowercase()",
+  ".to_ascii_lowercase().contains",
+  "relevance_score: 1.0",
+  "unwrap_or(session.updated_at)",
+];
+
+const SESSION_TODO_ASTER_ADAPTER_FORBIDDEN_CURRENT_RULE_SNIPPETS = [
+  "SessionTaskBoardItemProjection",
+  "SessionTaskBoardStatusProjection",
+  "fn map_session_todo_status",
+  "fn map_session_todo_item",
+  "normalize_optional_nonempty_body",
+  "subject.trim().to_string()",
+  "content.trim().is_empty()",
+];
+
+const ASTER_MEMORY_STUB_FORBIDDEN_CURRENT_RULE_SNIPPETS = [
+  "LimeSessionStore: memory subsystem disabled",
+  "LimeSessionStore: memory commit skipped",
+  "messages_scanned: 0",
+  "memories_created: 0",
+  "memories_merged: 0",
+  "source_start_ts: None",
+  "MemoryStats::default",
+];
+
+const ASTER_LEGACY_CONVERSATION_FORBIDDEN_CURRENT_RULE_SNIPPETS = [
+  "struct PersistedConversationMessageRecord",
+  "persisted_visibility_default_true",
+  'serde(default = "persisted_visibility_default_true")',
+  "serde_json::from_str::<PersistedConversationMessageRecord>",
+  "let content: Vec<MessageContent> = serde_json::from_str",
+  'role == "assistant"',
+  "user_visible: true",
+  "agent_visible: true",
+];
+
+const RUNTIME_CONVERSATION_CALLSITE_FORBIDDEN_ASTER_PAYLOAD_SNIPPETS = [
+  "ItemRuntimePayload::TranscriptMessage",
+  "ItemRuntimePayload::UserMessage",
+  "ItemRuntimePayload::AgentMessage",
+  "RuntimeConversationItemSource::TranscriptMessage",
+  "RuntimeConversationItemSource::UserMessage",
+  "RuntimeConversationItemSource::AgentMessage",
+  "project_runtime_conversation_record",
 ];
 
 const EVENT_CONVERTER_FORBIDDEN_PROVIDER_TRACE_STAGE_SNIPPETS = [
@@ -1301,6 +1608,58 @@ const EVENT_CONVERTER_FORBIDDEN_RUNTIME_TIMELINE_ADAPTER_SNIPPETS = [
   "normalize_legacy_turn_summary_text",
 ];
 
+const RUNTIME_SNAPSHOT_ADAPTER_FORBIDDEN_TIMELINE_RULE_SNIPPETS = [
+  "project_runtime_timeline_snapshot(",
+  "RuntimeTimelineSnapshotSource",
+  "RuntimeTimelineSnapshotThread",
+  "convert_aster_turn_runtime",
+  "convert_aster_item_runtime",
+  ".first()",
+  ".flat_map(|thread|",
+];
+
+const RUNTIME_TIMELINE_ADAPTER_FORBIDDEN_DAO_STATUS_SNIPPETS = [
+  "AgentThreadTurnStatus",
+  "AgentThreadItemStatus",
+  "AgentThreadItemPayload",
+  "AgentRequestOption",
+  "AgentRequestQuestion",
+];
+
+const RUNTIME_TIMELINE_ADAPTER_FORBIDDEN_CURRENT_STATUS_RULE_SNIPPETS = [
+  "fn format_runtime_status_text",
+  "normalize_legacy_runtime_status_title",
+  "normalize_legacy_turn_summary_text",
+  "build_diagnostics_runtime_status_metadata",
+  '"runtimeStatus".to_string()',
+];
+
+const RUNTIME_TIMELINE_ADAPTER_FORBIDDEN_CURRENT_PAYLOAD_RULE_SNIPPETS = [
+  "extract_runtime_request_questions_from_schema",
+  "RUNTIME_REQUEST_QUESTIONS_SCHEMA_KEY",
+  "RuntimeStatusTimelineSource",
+  "project_runtime_status_timeline_payload",
+  "RuntimeTimelineItemPayload::UserMessage",
+  "RuntimeTimelineItemPayload::AgentMessage",
+  "RuntimeTimelineItemPayload::Plan",
+  "RuntimeTimelineItemPayload::FileArtifact",
+  "RuntimeTimelineItemPayload::Reasoning",
+  "RuntimeTimelineItemPayload::ToolCall",
+  "RuntimeTimelineItemPayload::ApprovalRequest",
+  "RuntimeTimelineItemPayload::RequestUserInput",
+  "RuntimeTimelineItemPayload::TurnSummary",
+  "phase: None",
+];
+
+const RUNTIME_TIMELINE_ADAPTER_FORBIDDEN_CURRENT_PROJECTION_RULE_SNIPPETS = [
+  "RuntimeTimelineTurnProjection {\n        id:",
+  "RuntimeTimelineItemProjection {\n        id:",
+  "RuntimeTimelineTurnStatus::",
+  "RuntimeTimelineItemStatus::",
+  "unwrap_or_default()",
+  "unwrap_or_else",
+];
+
 const ASTER_RUNTIME_PROJECTION_FORBIDDEN_SNAPSHOT_ADAPTER_SNIPPETS = [
   "SessionRuntimeSnapshot",
   "ThreadRuntimeSnapshot",
@@ -1358,6 +1717,30 @@ describe("aster migration boundary", () => {
       'aster = { package = "aster-core", path = "vendor/aster-rust/crates/aster" }',
     );
     expect(rootCargo).not.toContain('path = "crates/aster-rust/crates/aster"');
+  });
+
+  it("已删除的 Aster vendor public modules 不得恢复", () => {
+    const vendorSrcRoot = join(
+      REPO_ROOT,
+      "lime-rs/vendor/aster-rust/crates/aster/src",
+    );
+    const vendorLibSource = readFileSync(join(vendorSrcRoot, "lib.rs"), "utf8");
+
+    const restoredModuleDirs = DELETED_ASTER_VENDOR_PUBLIC_MODULES.filter(
+      (moduleName) => existsSync(join(vendorSrcRoot, moduleName)),
+    );
+    const restoredLibExports = DELETED_ASTER_VENDOR_PUBLIC_MODULES.filter(
+      (moduleName) => vendorLibSource.includes(`pub mod ${moduleName};`),
+    );
+
+    expect(
+      restoredModuleDirs,
+      "这些 Aster vendor public modules 已无 Lime current 消费，按 dead / deleted 处理，不得恢复目录",
+    ).toEqual([]);
+    expect(
+      restoredLibExports,
+      "这些 Aster vendor public modules 不得重新从 aster-core lib.rs 导出",
+    ).toEqual([]);
   });
 
   it("Codex 风格 Agent Runtime 骨架 crate 必须存在并纳入 workspace dependencies", () => {
@@ -2593,7 +2976,10 @@ describe("aster migration boundary", () => {
       "runtime_status.rs 是 current-facing 状态 DTO / copy 模块，不得重新持有 Aster 持久化或 projection 细节",
     ).toEqual([]);
     expect(source).toContain(
-      "pub(crate) fn apply_soul_style_to_runtime_status",
+      "pub(crate) fn build_web_search_synthesis_runtime_status",
+    );
+    expect(source).toContain(
+      "pub(crate) fn build_provider_tail_failure_retry_runtime_status",
     );
     expect(
       existsSync(join(REPO_ROOT, deletedAdapterPath)),
@@ -2706,8 +3092,9 @@ describe("aster migration boundary", () => {
   it("runtime_state action response 不得绕过 request_tool_policy 直接调用 Aster reply", () => {
     const filePath = "lime-rs/crates/agent/src/runtime_state.rs";
     const source = readFileSync(join(REPO_ROOT, filePath), "utf8");
+    const productionSource = source.split("#[cfg(test)]")[0] ?? source;
     const leaks = RUNTIME_STATE_FORBIDDEN_DIRECT_ASTER_REPLY_SNIPPETS.filter(
-      (snippet) => source.includes(snippet),
+      (snippet) => productionSource.includes(snippet),
     ).map((snippet) => `${filePath}: ${snippet}`);
     const actionResponseStart = source.indexOf(
       "pub async fn submit_elicitation_response",
@@ -2789,6 +3176,10 @@ describe("aster migration boundary", () => {
     const runtimeStatePath = "lime-rs/crates/agent/src/runtime_state.rs";
     const nativeOverlayPath =
       "lime-rs/crates/agent/src/native_tools/runtime_overlay.rs";
+    const currentOwnerPath =
+      "lime-rs/crates/tool-runtime/src/native_overlay.rs";
+    const runtimeInventoryAdapterPath =
+      "lime-rs/crates/agent/src/agent_tools/tool_inventory_runtime_adapter.rs";
     const runtimeStateSource = readFileSync(
       join(REPO_ROOT, runtimeStatePath),
       "utf8",
@@ -2798,6 +3189,14 @@ describe("aster migration boundary", () => {
       runtimeStateSource;
     const nativeOverlaySource = readFileSync(
       join(REPO_ROOT, nativeOverlayPath),
+      "utf8",
+    );
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const runtimeInventoryAdapterSource = readFileSync(
+      join(REPO_ROOT, runtimeInventoryAdapterPath),
       "utf8",
     );
     const forbiddenRuntimeStateSnippets = [
@@ -2829,6 +3228,86 @@ describe("aster migration boundary", () => {
     expect(nativeOverlaySource).toContain("WriteTool");
     expect(nativeOverlaySource).toContain("EditTool");
     expect(nativeOverlaySource).toContain("WorkspaceToolPolicyInspector::new");
+    expect(currentOwnerSource).toContain("pub enum RuntimeNativeToolOverlay");
+    expect(currentOwnerSource).toContain("runtime_native_tool_overlay_tools");
+    expect(currentOwnerSource).toContain(
+      "runtime_native_tool_overlay_tool_names",
+    );
+    expect(currentOwnerSource).not.toContain("aster::");
+    expect(currentOwnerSource).not.toContain("lime_native_tool_overlay");
+    expect(nativeOverlaySource).toContain("runtime_native_tool_overlay_tools");
+    expect(runtimeInventoryAdapterSource).toContain(
+      "runtime_native_tool_overlay_tool_names",
+    );
+    expect(runtimeInventoryAdapterSource).toContain(".filter(|definition|");
+    expect(runtimeInventoryAdapterSource).toContain(
+      "definition.name.as_str() == *name",
+    );
+  });
+
+  it("apply_patch native tool 执行规则必须归属 tool-runtime current owner", () => {
+    const currentOwnerPath = "lime-rs/crates/tool-runtime/src/apply_patch.rs";
+    const currentLibPath = "lime-rs/crates/tool-runtime/src/lib.rs";
+    const currentCargoPath = "lime-rs/crates/tool-runtime/Cargo.toml";
+    const agentWrapperPath =
+      "lime-rs/crates/agent/src/tools/apply_patch_tool.rs";
+    const agentCargoPath = "lime-rs/crates/agent/Cargo.toml";
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const currentLibSource = readFileSync(
+      join(REPO_ROOT, currentLibPath),
+      "utf8",
+    );
+    const currentCargoSource = readFileSync(
+      join(REPO_ROOT, currentCargoPath),
+      "utf8",
+    );
+    const agentWrapperSource = readFileSync(
+      join(REPO_ROOT, agentWrapperPath),
+      "utf8",
+    );
+    const agentCargoSource = readFileSync(
+      join(REPO_ROOT, agentCargoPath),
+      "utf8",
+    );
+    const wrapperForbiddenSnippets = [
+      "use patch_apply",
+      "apply_patch_to_workdir",
+      "parse_patch",
+      "AppliedPatchFileChange",
+      "fn build_metadata",
+      "fn line_diff",
+      "fn stable_hash",
+      "fn resolve_patch_path_for_permission",
+    ];
+    const wrapperLeaks = wrapperForbiddenSnippets
+      .filter((snippet) => agentWrapperSource.includes(snippet))
+      .map((snippet) => `${agentWrapperPath}: ${snippet}`);
+
+    expect(currentLibSource).toContain("pub mod apply_patch;");
+    expect(currentCargoSource).toContain("patch-apply.workspace = true");
+    expect(agentCargoSource).not.toContain("patch-apply.workspace = true");
+    expect(currentOwnerSource).toContain(
+      "pub struct RuntimeApplyPatchExecutor",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub fn runtime_apply_patch_executor_handle",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub fn check_runtime_apply_patch_permissions",
+    );
+    expect(currentOwnerSource).toContain("apply_patch_to_workdir");
+    expect(currentOwnerSource).not.toContain("aster::");
+    expect(agentWrapperSource).toContain("runtime_apply_patch_executor_handle");
+    expect(agentWrapperSource).toContain(
+      "check_runtime_apply_patch_permissions",
+    );
+    expect(
+      wrapperLeaks,
+      "apply_patch 的 patch 解析、路径权限、metadata/diff 构造和执行必须归属 tool-runtime；Aster Tool wrapper 只能做 DTO 适配",
+    ).toEqual([]);
   });
 
   it("request_tool_policy action response façade 不得暴露 Aster wrapper 命名", () => {
@@ -4055,30 +4534,23 @@ describe("aster migration boundary", () => {
     ).toEqual([]);
   });
 
-  it("session_query subagent cascade 树逻辑不得回流到 Aster helper", () => {
+  it("session_query Aster Session helper 已删除且不得恢复", () => {
     const filePath = "lime-rs/crates/agent/src/session_query.rs";
-    const source = readFileSync(join(REPO_ROOT, filePath), "utf8");
     const libPath = "lime-rs/crates/agent/src/lib.rs";
     const libSource = readFileSync(join(REPO_ROOT, libPath), "utf8");
-    const leaks = SESSION_QUERY_FORBIDDEN_ASTER_TREE_HELPER_SNIPPETS.filter(
-      (snippet) => source.includes(snippet),
-    ).map((snippet) => `${filePath}: ${snippet}`);
     const publicLeaks = [
-      ...SESSION_QUERY_FORBIDDEN_PUBLIC_ASTER_SESSION_SNIPPETS.filter(
-        (snippet) => source.includes(snippet),
-      ).map((snippet) => `${filePath}: ${snippet}`),
+      ...(libSource.includes("mod session_query;")
+        ? [`${libPath}: mod session_query;`]
+        : []),
       ...(libSource.includes("pub use session_query::")
         ? [`${libPath}: pub use session_query::`]
         : []),
     ];
 
-    expect(
-      leaks,
-      "subagent cascade 树遍历必须归属 thread-store current projection；session_query 只允许做 Aster Session adapter",
-    ).toEqual([]);
+    expect(existsSync(join(REPO_ROOT, filePath))).toBe(false);
     expect(
       publicLeaks,
-      "session_query 返回 Aster Session，只能作为 lime-agent crate-internal adapter；不得从根 API re-export",
+      "session_query 返回 Aster Session 的 helper 已删除；不得恢复模块注册或根 API re-export",
     ).toEqual([]);
   });
 
@@ -4158,8 +4630,10 @@ describe("aster migration boundary", () => {
       "lime-rs/crates/agent/src/subagent_profiles_aster_adapter.rs";
     const libPath = "lime-rs/crates/agent/src/lib.rs";
     const source = readFileSync(join(REPO_ROOT, filePath), "utf8");
-    const adapterSource = readFileSync(join(REPO_ROOT, adapterPath), "utf8");
     const libSource = readFileSync(join(REPO_ROOT, libPath), "utf8");
+    const adapterSource = existsSync(join(REPO_ROOT, adapterPath))
+      ? readFileSync(join(REPO_ROOT, adapterPath), "utf8")
+      : "";
     const publicLeaks =
       SUBAGENT_PROFILES_FORBIDDEN_PUBLIC_ASTER_SURFACE_SNIPPETS.flatMap(
         (snippet) => {
@@ -4180,10 +4654,8 @@ describe("aster migration boundary", () => {
 
     expect(source).toContain("pub struct SubagentCustomizationState");
     expect(source).toContain("pub struct SubagentSkillSummary");
-    expect(adapterSource).toContain(
-      "impl ExtensionState for SubagentCustomizationState",
-    );
-    expect(adapterSource).toContain(
+    expect(existsSync(join(REPO_ROOT, adapterPath))).toBe(false);
+    expect(adapterSource).not.toContain(
       "pub(crate) fn subagent_customization_from_session",
     );
     expect(
@@ -4346,6 +4818,604 @@ describe("aster migration boundary", () => {
     ).toEqual([]);
   });
 
+  it("session record SQL row 映射必须离开 Aster compat 子模块", () => {
+    const currentOwnerPath = "lime-rs/crates/agent/src/session_record_sql.rs";
+    const projectionPath =
+      "lime-rs/crates/agent/src/aster_session_store/session_projection.rs";
+    const traitPath =
+      "lime-rs/crates/agent/src/aster_session_store/aster_trait.rs";
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const projectionSource = readFileSync(
+      join(REPO_ROOT, projectionPath),
+      "utf8",
+    );
+    const traitSource = readFileSync(join(REPO_ROOT, traitPath), "utf8");
+
+    expect(currentOwnerSource).toContain("SESSION_RECORD_SELECT_COLUMNS");
+    expect(currentOwnerSource).toContain("fn map_session_record_row");
+    expect(currentOwnerSource).toContain("fn load_session_record_rows");
+    expect(currentOwnerSource).toContain("fn load_all_session_record_rows");
+    expect(currentOwnerSource).toContain(
+      "fn load_session_record_rows_by_types",
+    );
+    expect(traitSource).toContain("load_session_record_row_by_id");
+    expect(traitSource).toContain("load_all_session_record_rows");
+    expect(traitSource).toContain("load_session_record_rows_by_types");
+    expect(projectionSource).toContain("build_session_from_listing_row");
+    expect(projectionSource).toContain("SessionRecordProjection");
+
+    const projectionLeaks =
+      ASTER_SESSION_PROJECTION_FORBIDDEN_ROW_SQL_SNIPPETS.filter((snippet) =>
+        projectionSource.includes(snippet),
+      ).map((snippet) => `${projectionPath}: ${snippet}`);
+    const traitLeaks =
+      ASTER_SESSION_TRAIT_FORBIDDEN_RECORD_PROJECTION_SNIPPETS.filter(
+        (snippet) => traitSource.includes(snippet),
+      ).map((snippet) => `${traitPath}: ${snippet}`);
+
+    expect(
+      projectionLeaks,
+      "aster_session_store/session_projection.rs 只能做 current SessionRecordProjection -> Aster Session DTO 适配，不得重新承接 SQL row 映射或列表加载",
+    ).toEqual([]);
+    expect(
+      traitLeaks,
+      "aster_trait.rs 的 get_session / list_sessions 必须消费 current session_record_sql + thread-store projection，不得恢复手写 session row 默认值、json/timestamp/session_type 解析",
+    ).toEqual([]);
+  });
+
+  it("session record 写入 SQL 必须离开 Aster trait adapter", () => {
+    const traitPath =
+      "lime-rs/crates/agent/src/aster_session_store/aster_trait.rs";
+    const currentOwnerPath =
+      "lime-rs/crates/core/src/database/agent_session_repository.rs";
+    const traitSource = readFileSync(join(REPO_ROOT, traitPath), "utf8");
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const traitLeaks =
+      ASTER_SESSION_TRAIT_FORBIDDEN_DIRECT_RECORD_SQL_SNIPPETS.filter(
+        (snippet) => traitSource.includes(snippet),
+      ).map((snippet) => `${traitPath}: ${snippet}`);
+
+    expect(currentOwnerSource).toContain("pub fn delete_session");
+    expect(currentOwnerSource).toContain("pub fn touch_session_updated_at");
+    expect(currentOwnerSource).toContain("DELETE FROM agent_sessions");
+    expect(currentOwnerSource).toContain(
+      "UPDATE agent_sessions SET updated_at = ?1 WHERE id = ?2",
+    );
+    expect(currentOwnerSource).not.toContain("aster::");
+    expect(traitSource).toContain("delete_session_record");
+    expect(traitSource).toContain("touch_session_updated_at_record");
+    expect(
+      traitLeaks,
+      "Aster trait adapter 不得再直接执行 agent_sessions 写入 SQL；delete/touch updated_at 必须归属 current repository",
+    ).toEqual([]);
+  });
+
+  it("Aster SessionStore bulk history methods 必须从 Lime impl 删除", () => {
+    const traitPath =
+      "lime-rs/crates/agent/src/aster_session_store/aster_trait.rs";
+    const vendorTraitPath =
+      "lime-rs/vendor/aster-rust/crates/aster/src/session/store.rs";
+    const vendorManagerPath =
+      "lime-rs/vendor/aster-rust/crates/aster/src/session/session_manager.rs";
+    const vendorAgentPath =
+      "lime-rs/vendor/aster-rust/crates/aster/src/agents/agent.rs";
+    const deletedVendorPaths = [
+      "lime-rs/vendor/aster-rust/crates/aster/src/session/archive.rs",
+      "lime-rs/vendor/aster-rust/crates/aster/src/session/diagnostics.rs",
+      "lime-rs/vendor/aster-rust/crates/aster/src/session/export.rs",
+    ];
+    const traitSource = readFileSync(join(REPO_ROOT, traitPath), "utf8");
+    const vendorTraitSource = readFileSync(
+      join(REPO_ROOT, vendorTraitPath),
+      "utf8",
+    );
+    const vendorManagerSource = readFileSync(
+      join(REPO_ROOT, vendorManagerPath),
+      "utf8",
+    );
+    const vendorAgentSource = readFileSync(
+      join(REPO_ROOT, vendorAgentPath),
+      "utf8",
+    );
+    const productionSource =
+      traitSource.split("#[cfg(test)]")[0] ?? traitSource;
+    const leaks =
+      ASTER_SESSION_TRAIT_FORBIDDEN_RETIRED_BULK_METHOD_SNIPPETS.filter(
+        (snippet) => productionSource.includes(snippet),
+      ).map((snippet) => `${traitPath}: ${snippet}`);
+    const vendorManagerLeaks = [
+      "pub async fn export_session",
+      "pub async fn import_session",
+      "pub async fn copy_session",
+      "pub async fn truncate_conversation",
+      "async fn export_session(&self",
+      "async fn import_session(&self",
+      "async fn copy_session(&self",
+      "async fn truncate_conversation(&self",
+      "serde_json::to_string_pretty(&session)",
+      "serde_json::from_str(json)",
+      "DELETE FROM messages WHERE session_id = ? AND created_timestamp",
+    ]
+      .filter((snippet) => vendorManagerSource.includes(snippet))
+      .map((snippet) => `${vendorManagerPath}: ${snippet}`);
+    const vendorTraitLeaks = [
+      "async fn export_session",
+      "async fn import_session",
+      "async fn copy_session",
+      "async fn truncate_conversation",
+      "Lime 不再通过 Aster SessionStore 承接 bulk history API",
+    ]
+      .filter((snippet) => vendorTraitSource.includes(snippet))
+      .map((snippet) => `${vendorTraitPath}: ${snippet}`);
+    const vendorAgentLeaks = [
+      "async fn export_session",
+      "async fn import_session",
+      "async fn copy_session",
+      "async fn truncate_conversation",
+    ]
+      .filter((snippet) => vendorAgentSource.includes(snippet))
+      .map((snippet) => `${vendorAgentPath}: ${snippet}`);
+
+    expect(
+      deletedVendorPaths.filter((path) => existsSync(join(REPO_ROOT, path))),
+      "vendored Aster session archive/export/diagnostics JSON bulk surface 已判 dead，不得恢复文件",
+    ).toEqual([]);
+    expect(
+      leaks,
+      "没有客户使用的 Aster SessionStore export/import/copy/truncate 不得留在 Lime production impl；需要的能力必须走 App Server current import/export/read-model 主链",
+    ).toEqual([]);
+    expect(
+      vendorManagerLeaks,
+      "vendored Aster SessionManager / SessionStorage 不得重新暴露 export/import/copy/truncate bulk history wrapper 或 JSON 编排",
+    ).toEqual([]);
+    expect(
+      vendorTraitLeaks,
+      "vendored Aster SessionStore trait 不得重新定义 export/import/copy/truncate bulk history 方法",
+    ).toEqual([]);
+    expect(
+      vendorAgentLeaks,
+      "vendored Aster Agent 测试 fake 不得重新实现 export/import/copy/truncate bulk history 方法",
+    ).toEqual([]);
+  });
+
+  it("session record 创建/读取 helper 必须离开 Aster compat 主文件", () => {
+    const storePath = "lime-rs/crates/agent/src/aster_session_store.rs";
+    const projectionPath =
+      "lime-rs/crates/agent/src/aster_session_store/session_projection.rs";
+    const threadRepositoryPath =
+      "lime-rs/crates/agent/src/lime_session_repository.rs";
+    const currentOwnerPath =
+      "lime-rs/crates/core/src/database/agent_session_repository.rs";
+    const storeSource = readFileSync(join(REPO_ROOT, storePath), "utf8");
+    const productionStoreSource =
+      storeSource.split("#[cfg(test)]")[0] ?? storeSource;
+    const projectionSource = readFileSync(
+      join(REPO_ROOT, projectionPath),
+      "utf8",
+    );
+    const threadRepositorySource = readFileSync(
+      join(REPO_ROOT, threadRepositoryPath),
+      "utf8",
+    );
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const storeLeaks =
+      ASTER_SESSION_STORE_FORBIDDEN_DIRECT_RECORD_HELPERS.filter((snippet) =>
+        productionStoreSource.includes(snippet),
+      ).map((snippet) => `${storePath}: ${snippet}`);
+
+    expect(currentOwnerSource).toContain("pub struct SessionCreateRecord");
+    expect(currentOwnerSource).toContain("pub fn insert_session_record");
+    expect(currentOwnerSource).toContain("pub fn session_exists");
+    expect(currentOwnerSource).toContain("pub fn get_session_working_dir");
+    expect(currentOwnerSource).toContain(
+      "pub fn get_session_extension_data_json",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub fn resolve_default_session_working_dir",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub fn resolve_persisted_session_working_dir",
+    );
+    expect(currentOwnerSource).toContain("pub fn update_session_user_set_name");
+    expect(currentOwnerSource).toContain("INSERT INTO agent_sessions");
+    expect(currentOwnerSource).toContain("SELECT 1 FROM agent_sessions");
+    expect(currentOwnerSource).toContain(
+      "SELECT working_dir FROM agent_sessions",
+    );
+    expect(currentOwnerSource).toContain(
+      "SELECT extension_data_json FROM agent_sessions",
+    );
+    expect(currentOwnerSource).not.toContain("aster::");
+    expect(storeSource).toContain("insert_session_record");
+    expect(storeSource).toContain("session_exists");
+    expect(storeSource).toContain("resolve_default_session_working_dir");
+    expect(storeSource).toContain("resolve_persisted_session_working_dir");
+    expect(projectionSource).toContain("resolve_persisted_session_working_dir");
+    expect(projectionSource).not.toContain("super::LimeSessionStore");
+    expect(threadRepositorySource).not.toContain("fn normalize_working_dir");
+    expect(threadRepositorySource).not.toContain("WorkspaceManager");
+    expect(threadRepositorySource).toContain("rename_session_record");
+    expect(threadRepositorySource).toContain(
+      "update_session_user_set_name_record",
+    );
+    expect(threadRepositorySource).toContain(
+      "update_session_working_dir_record",
+    );
+    expect(threadRepositorySource).toContain(
+      "update_session_extension_data_record",
+    );
+    expect(threadRepositorySource).toContain("delete_session_record");
+    expect(
+      storeLeaks,
+      "Aster compat 主文件不得恢复 agent_sessions 创建/存在性/working_dir/extension_data SQL 或默认 working_dir fallback；这些语义必须归属 current repository",
+    ).toEqual([]);
+  });
+
+  it("agent_session_repository 主文件必须保持拆分并外置测试", () => {
+    const currentOwnerPath =
+      "lime-rs/crates/core/src/database/agent_session_repository.rs";
+    const testsPath =
+      "lime-rs/crates/core/src/database/agent_session_repository_tests.rs";
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const testsSource = readFileSync(join(REPO_ROOT, testsPath), "utf8");
+    const lineCount = currentOwnerSource.split(/\r?\n/u).length;
+
+    expect(
+      lineCount,
+      "agent_session_repository.rs 接近 800 行时必须继续按 read/write/test 边界拆分，不能重新增长到 1000 行治理风险",
+    ).toBeLessThan(800);
+    expect(currentOwnerSource).toContain(
+      '#[path = "agent_session_repository_tests.rs"]',
+    );
+    expect(currentOwnerSource).not.toContain("mod tests {");
+    expect(existsSync(join(REPO_ROOT, testsPath))).toBe(true);
+    expect(testsSource).toContain("use super::*;");
+    expect(testsSource).toContain("insert_session_record_should_insert");
+    expect(testsSource).toContain(
+      "update_session_token_stats_should_preserve_none_fields",
+    );
+  });
+
+  it("thread SessionRepository metadata/delete SQL 必须归属 current repository", () => {
+    const threadRepositoryPath =
+      "lime-rs/crates/agent/src/lime_session_repository.rs";
+    const currentOwnerPath =
+      "lime-rs/crates/core/src/database/agent_session_repository.rs";
+    const threadRepositorySource = readFileSync(
+      join(REPO_ROOT, threadRepositoryPath),
+      "utf8",
+    );
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const productionSource =
+      threadRepositorySource.split("#[cfg(test)]")[0] ?? threadRepositorySource;
+    const leaks =
+      THREAD_SESSION_REPOSITORY_FORBIDDEN_DIRECT_METADATA_SQL_SNIPPETS.filter(
+        (snippet) => productionSource.includes(snippet),
+      ).map((snippet) => `${threadRepositoryPath}: ${snippet}`);
+
+    expect(currentOwnerSource).toContain("pub fn rename_session");
+    expect(currentOwnerSource).toContain("pub fn update_session_user_set_name");
+    expect(currentOwnerSource).toContain(
+      "pub fn update_session_working_dir_with_updated_at",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub fn update_session_extension_data",
+    );
+    expect(currentOwnerSource).toContain("pub fn delete_session");
+    expect(productionSource).toContain("rename_session_record");
+    expect(productionSource).toContain("update_session_user_set_name_record");
+    expect(productionSource).toContain("update_session_working_dir_record");
+    expect(productionSource).toContain("update_session_extension_data_record");
+    expect(productionSource).toContain("delete_session_record");
+    expect(
+      leaks,
+      "thread-store SessionRepository 实现不得继续维护 agent_sessions metadata/delete SQL；写入语义必须收敛到 current repository",
+    ).toEqual([]);
+  });
+
+  it("thread SessionRepository read row loading 必须归属 session_record_sql", () => {
+    const threadRepositoryPath =
+      "lime-rs/crates/agent/src/lime_session_repository.rs";
+    const currentReadModelPath =
+      "lime-rs/crates/agent/src/session_record_sql.rs";
+    const threadRepositorySource = readFileSync(
+      join(REPO_ROOT, threadRepositoryPath),
+      "utf8",
+    );
+    const currentReadModelSource = readFileSync(
+      join(REPO_ROOT, currentReadModelPath),
+      "utf8",
+    );
+    const productionSource =
+      threadRepositorySource.split("#[cfg(test)]")[0] ?? threadRepositorySource;
+    const leaks =
+      THREAD_SESSION_REPOSITORY_FORBIDDEN_DIRECT_READ_ROW_SNIPPETS.filter(
+        (snippet) => productionSource.includes(snippet),
+      ).map((snippet) => `${threadRepositoryPath}: ${snippet}`);
+    const readModelLeaks =
+      SESSION_RECORD_SQL_FORBIDDEN_SILENT_ROW_ERROR_SNIPPETS.filter((snippet) =>
+        currentReadModelSource.includes(snippet),
+      ).map((snippet) => `${currentReadModelPath}: ${snippet}`);
+
+    expect(currentReadModelSource).toContain(
+      "pub(crate) fn map_session_record_row",
+    );
+    expect(currentReadModelSource).toContain(
+      "pub(crate) fn load_session_record_rows",
+    );
+    expect(currentReadModelSource).toContain(
+      "pub(crate) fn load_session_record_row_by_id",
+    );
+    expect(currentReadModelSource).toContain(
+      "pub(crate) fn load_session_record_rows_for_query",
+    );
+    expect(productionSource).toContain("load_session_record_row_by_id");
+    expect(productionSource).toContain("load_session_record_rows_for_query");
+    expect(currentReadModelSource).toContain("rows.collect()");
+    expect(
+      leaks,
+      "thread-store SessionRepository 实现不得重新维护 session row query builder / prepare / map 细节；row loading 必须归属 session_record_sql current read model",
+    ).toEqual([]);
+    expect(
+      readModelLeaks,
+      "session_record_sql 是 current read model，行映射错误必须 fail-fast，不得用 filter_map(...ok()) 静默丢弃坏数据",
+    ).toEqual([]);
+  });
+
+  it("session insights SQL 聚合必须离开 Aster trait adapter", () => {
+    const traitPath =
+      "lime-rs/crates/agent/src/aster_session_store/aster_trait.rs";
+    const sqlPath = "lime-rs/crates/agent/src/session_record_sql.rs";
+    const currentOwnerPath =
+      "lime-rs/crates/thread-store/src/session_insights.rs";
+    const threadStoreLibPath = "lime-rs/crates/thread-store/src/lib.rs";
+    const traitSource = readFileSync(join(REPO_ROOT, traitPath), "utf8");
+    const sqlSource = readFileSync(join(REPO_ROOT, sqlPath), "utf8");
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const threadStoreLibSource = readFileSync(
+      join(REPO_ROOT, threadStoreLibPath),
+      "utf8",
+    );
+    const traitLeaks =
+      ASTER_SESSION_TRAIT_FORBIDDEN_INSIGHTS_SQL_SNIPPETS.filter((snippet) =>
+        traitSource.includes(snippet),
+      ).map((snippet) => `${traitPath}: ${snippet}`);
+
+    expect(threadStoreLibSource).toContain("pub mod session_insights;");
+    expect(currentOwnerSource).toContain("pub struct SessionInsightsRecord");
+    expect(currentOwnerSource).toContain("pub fn project_session_insights");
+    expect(currentOwnerSource).not.toContain("aster::");
+    expect(sqlSource).toContain("pub(crate) fn load_session_insights_record");
+    expect(sqlSource).toContain("project_session_insights");
+    expect(traitSource).toContain("load_session_insights_record");
+    expect(
+      traitLeaks,
+      "session insights 的 COUNT/SUM SQL 与 i64 -> usize 聚合规则必须归属 current session SQL/read model；Aster trait adapter 只能把 current record 回填 SessionInsights DTO",
+    ).toEqual([]);
+  });
+
+  it("session token stats 写入必须离开 Aster trait adapter", () => {
+    const traitPath =
+      "lime-rs/crates/agent/src/aster_session_store/aster_trait.rs";
+    const currentOwnerPath =
+      "lime-rs/crates/core/src/database/agent_session_repository.rs";
+    const traitSource = readFileSync(join(REPO_ROOT, traitPath), "utf8");
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const traitLeaks =
+      ASTER_SESSION_TRAIT_FORBIDDEN_TOKEN_STATS_SQL_SNIPPETS.filter((snippet) =>
+        traitSource.includes(snippet),
+      ).map((snippet) => `${traitPath}: ${snippet}`);
+
+    expect(currentOwnerSource).toContain("pub struct SessionTokenStatsUpdate");
+    expect(currentOwnerSource).toContain("pub fn update_session_token_stats");
+    expect(currentOwnerSource).toContain("normalized_schedule_id");
+    expect(currentOwnerSource).not.toContain("aster::");
+    expect(traitSource).toContain("SessionTokenStatsUpdate");
+    expect(traitSource).toContain("update_session_token_stats_record");
+    expect(
+      traitLeaks,
+      "session token stats 的 None=保留旧值、schedule_id 归一化和 COALESCE SQL 必须归属 current repository；Aster trait adapter 只能映射 TokenStatsUpdate DTO 并同步 metadata cache",
+    ).toEqual([]);
+  });
+
+  it("session provider config 写入必须离开 Aster trait adapter", () => {
+    const traitPath =
+      "lime-rs/crates/agent/src/aster_session_store/aster_trait.rs";
+    const currentOwnerPath =
+      "lime-rs/crates/core/src/database/agent_session_repository.rs";
+    const traitSource = readFileSync(join(REPO_ROOT, traitPath), "utf8");
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const traitLeaks =
+      ASTER_SESSION_TRAIT_FORBIDDEN_PROVIDER_CONFIG_SQL_SNIPPETS.filter(
+        (snippet) => traitSource.includes(snippet),
+      ).map((snippet) => `${traitPath}: ${snippet}`);
+
+    expect(currentOwnerSource).toContain(
+      "pub struct SessionProviderConfigUpdate",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub fn update_session_provider_config",
+    );
+    expect(currentOwnerSource).toContain(
+      "provider_name: normalize_optional_text",
+    );
+    expect(currentOwnerSource).toContain("model_name: normalize_optional_text");
+    expect(currentOwnerSource).not.toContain("aster::");
+    expect(traitSource).toContain("SessionProviderConfigUpdate");
+    expect(traitSource).toContain("update_session_provider_config_record");
+    expect(
+      traitLeaks,
+      "session provider/model config 的文本归一化、None=保留旧值和 SQL 写入必须归属 current repository；Aster trait adapter 只能序列化 ModelConfig、映射 DTO 并同步 metadata cache",
+    ).toEqual([]);
+  });
+
+  it("session metadata 写入必须离开 Aster trait adapter", () => {
+    const traitPath =
+      "lime-rs/crates/agent/src/aster_session_store/aster_trait.rs";
+    const currentOwnerPath =
+      "lime-rs/crates/core/src/database/agent_session_repository.rs";
+    const traitSource = readFileSync(join(REPO_ROOT, traitPath), "utf8");
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const traitLeaks =
+      ASTER_SESSION_TRAIT_FORBIDDEN_METADATA_SQL_SNIPPETS.filter((snippet) =>
+        traitSource.includes(snippet),
+      ).map((snippet) => `${traitPath}: ${snippet}`);
+
+    expect(currentOwnerSource).toContain("pub fn update_session_name");
+    expect(currentOwnerSource).toContain(
+      "pub fn update_session_working_dir_with_updated_at",
+    );
+    expect(currentOwnerSource).toContain("pub fn update_session_type");
+    expect(currentOwnerSource).toContain(
+      "UPDATE agent_sessions SET title = ?1, user_set_name = ?2, updated_at = ?3 WHERE id = ?4",
+    );
+    expect(currentOwnerSource).toContain(
+      "UPDATE agent_sessions SET working_dir = ?1, updated_at = ?2 WHERE id = ?3",
+    );
+    expect(currentOwnerSource).toContain(
+      "UPDATE agent_sessions SET session_type = ?1, updated_at = ?2 WHERE id = ?3",
+    );
+    expect(currentOwnerSource).not.toContain("aster::");
+    expect(traitSource).toContain("update_session_name_record");
+    expect(traitSource).toContain("update_session_working_dir_record");
+    expect(traitSource).toContain("update_session_type_record");
+    expect(
+      traitLeaks,
+      "session name / working_dir / session_type 的 SQL 和 user_set_name 写入语义必须归属 current repository；Aster trait adapter 只能映射 DTO 并同步 metadata cache",
+    ).toEqual([]);
+  });
+
+  it("session extension_data 写入必须离开 Aster trait adapter", () => {
+    const traitPath =
+      "lime-rs/crates/agent/src/aster_session_store/aster_trait.rs";
+    const currentOwnerPath =
+      "lime-rs/crates/core/src/database/agent_session_repository.rs";
+    const traitSource = readFileSync(join(REPO_ROOT, traitPath), "utf8");
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const traitLeaks =
+      ASTER_SESSION_TRAIT_FORBIDDEN_EXTENSION_DATA_SQL_SNIPPETS.filter(
+        (snippet) => traitSource.includes(snippet),
+      ).map((snippet) => `${traitPath}: ${snippet}`);
+
+    expect(currentOwnerSource).toContain(
+      "pub fn update_session_extension_data",
+    );
+    expect(currentOwnerSource).toContain("extension_data_json = ?1");
+    expect(currentOwnerSource).not.toContain("aster::");
+    expect(traitSource).toContain("update_session_extension_data_record");
+    expect(
+      traitLeaks,
+      "session extension_data 的直接覆盖 SQL 必须归属 current repository；Aster trait adapter 只能序列化 ExtensionData DTO 并同步 metadata cache",
+    ).toEqual([]);
+  });
+
+  it("session recipe 写入必须离开 Aster trait adapter", () => {
+    const traitPath =
+      "lime-rs/crates/agent/src/aster_session_store/aster_trait.rs";
+    const currentOwnerPath =
+      "lime-rs/crates/core/src/database/agent_session_repository.rs";
+    const traitSource = readFileSync(join(REPO_ROOT, traitPath), "utf8");
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const traitLeaks = ASTER_SESSION_TRAIT_FORBIDDEN_RECIPE_SQL_SNIPPETS.filter(
+      (snippet) => traitSource.includes(snippet),
+    ).map((snippet) => `${traitPath}: ${snippet}`);
+
+    expect(currentOwnerSource).toContain("pub struct SessionRecipeUpdate");
+    expect(currentOwnerSource).toContain("pub fn update_session_recipe");
+    expect(currentOwnerSource).toContain("recipe_json = ?1");
+    expect(currentOwnerSource).toContain("user_recipe_values_json = ?2");
+    expect(currentOwnerSource).not.toContain("aster::");
+    expect(traitSource).toContain("SessionRecipeUpdate");
+    expect(traitSource).toContain("update_session_recipe_record");
+    expect(
+      traitLeaks,
+      "session recipe 的直接覆盖/清空语义和 SQL 写入必须归属 current repository；Aster trait adapter 只能序列化 Recipe/user_recipe_values DTO 并同步 metadata cache",
+    ).toEqual([]);
+  });
+
+  it("session runtime provider routing metadata 不得依赖 Aster ExtensionState", () => {
+    const sessionStorePath = "lime-rs/crates/agent/src/session_store.rs";
+    const runtimeDetailPath =
+      "lime-rs/crates/agent/src/session_store_runtime_detail.rs";
+    const currentOwnerPath =
+      "lime-rs/crates/agent/src/session_store_provider_routing.rs";
+    const repositoryPath =
+      "lime-rs/crates/core/src/database/agent_session_repository.rs";
+    const sessionStoreSource = readFileSync(
+      join(REPO_ROOT, sessionStorePath),
+      "utf8",
+    );
+    const runtimeDetailSource = readFileSync(
+      join(REPO_ROOT, runtimeDetailPath),
+      "utf8",
+    );
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const repositorySource = readFileSync(
+      join(REPO_ROOT, repositoryPath),
+      "utf8",
+    );
+
+    expect(currentOwnerSource).toContain("read_session_provider_selector");
+    expect(currentOwnerSource).toContain("PROVIDER_SELECTOR_POINTERS");
+    expect(currentOwnerSource).not.toContain("aster::");
+    expect(runtimeDetailSource).toContain("read_session_provider_selector");
+    expect(repositorySource).toContain("get_session_extension_data_json");
+
+    const sessionStoreLeaks =
+      SESSION_STORE_FORBIDDEN_ASTER_PROVIDER_ROUTING_SNIPPETS.filter(
+        (snippet) => sessionStoreSource.includes(snippet),
+      ).map((snippet) => `${sessionStorePath}: ${snippet}`);
+    const runtimeDetailLeaks =
+      SESSION_STORE_RUNTIME_DETAIL_FORBIDDEN_PROVIDER_ROUTING_SNIPPETS.filter(
+        (snippet) => runtimeDetailSource.includes(snippet),
+      ).map((snippet) => `${runtimeDetailPath}: ${snippet}`);
+
+    expect(
+      sessionStoreLeaks,
+      "session_store.rs 不得为了 execution runtime provider selector 重新引入 Aster ExtensionState / Session DTO；该 metadata 必须从 current persisted JSON helper 解析",
+    ).toEqual([]);
+    expect(
+      runtimeDetailLeaks,
+      "runtime detail 主链只能消费 current provider routing helper，不得直接解析 Aster session.extension_data",
+    ).toEqual([]);
+  });
+
   it("lime-agent 不得恢复 compat-aster 假 optional feature", () => {
     const filePath = "lime-rs/crates/agent/Cargo.toml";
     const source = readFileSync(join(REPO_ROOT, filePath), "utf8");
@@ -4370,12 +5440,44 @@ describe("aster migration boundary", () => {
   it("runtime_conversation transcript 纯规则必须归属 thread-store", () => {
     const filePath =
       "lime-rs/crates/agent/src/aster_session_store/runtime_conversation.rs";
+    const currentQueryPath =
+      "lime-rs/crates/agent/src/session_runtime_conversation_query.rs";
+    const compatAdapterPath =
+      "lime-rs/crates/agent/src/runtime_conversation_aster_adapter.rs";
+    const currentOwnerPath =
+      "lime-rs/crates/thread-store/src/conversation_transcript.rs";
     const source = readFileSync(join(REPO_ROOT, filePath), "utf8");
+    const currentQuerySource = readFileSync(
+      join(REPO_ROOT, currentQueryPath),
+      "utf8",
+    );
+    const compatAdapterSource = readFileSync(
+      join(REPO_ROOT, compatAdapterPath),
+      "utf8",
+    );
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
     const productionSource = source.split("#[cfg(test)]")[0] ?? source;
+    const currentQueryProductionSource =
+      currentQuerySource.split("#[cfg(test)]")[0] ?? currentQuerySource;
+    const compatAdapterProductionSource =
+      compatAdapterSource.split("#[cfg(test)]")[0] ?? compatAdapterSource;
     const leaks =
       ASTER_RUNTIME_CONVERSATION_FORBIDDEN_TRANSCRIPT_HELPERS.filter(
         (snippet) => productionSource.includes(snippet),
       ).map((snippet) => `${filePath}: ${snippet}`);
+    const callsitePayloadLeaks =
+      RUNTIME_CONVERSATION_CALLSITE_FORBIDDEN_ASTER_PAYLOAD_SNIPPETS.flatMap(
+        (snippet) =>
+          [
+            [filePath, productionSource],
+            [currentQueryPath, currentQueryProductionSource],
+          ]
+            .filter(([, checkedSource]) => checkedSource.includes(snippet))
+            .map(([checkedPath]) => `${checkedPath}: ${snippet}`),
+      );
 
     expect(
       existsSync(
@@ -4386,10 +5488,234 @@ describe("aster migration boundary", () => {
       ),
       "thread-store 必须拥有 conversation transcript 纯规则模块",
     ).toBe(true);
+    expect(currentOwnerSource).toContain(
+      "pub enum RuntimeConversationItemSource",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub fn project_runtime_conversation_record",
+    );
     expect(productionSource).toContain("thread_store::conversation_transcript");
+    expect(productionSource).toContain("conversation_record_from_aster_item");
+    expect(productionSource).toContain("build_aster_transcript_item");
+    expect(currentQueryProductionSource).toContain(
+      "collect_conversation_records_from_aster_runtime_store",
+    );
+    expect(currentQueryProductionSource).not.toContain(
+      "conversation_record_from_aster_item",
+    );
+    expect(currentQueryProductionSource).not.toContain("aster::");
+    expect(currentQueryProductionSource).not.toContain("ThreadRuntimeStore");
+    expect(compatAdapterProductionSource).toContain(
+      "collect_conversation_records_from_aster_runtime_store",
+    );
+    expect(compatAdapterProductionSource).toContain("ThreadRuntimeStore");
+    expect(compatAdapterProductionSource).toContain(
+      "RuntimeConversationItemSource",
+    );
+    expect(compatAdapterProductionSource).toContain(
+      "project_runtime_conversation_record",
+    );
+    expect(compatAdapterProductionSource).toContain(
+      "ItemRuntimePayload::TranscriptMessage",
+    );
+    expect(compatAdapterProductionSource).toContain(
+      "ItemRuntimePayload::UserMessage",
+    );
+    expect(compatAdapterProductionSource).toContain(
+      "ItemRuntimePayload::AgentMessage",
+    );
     expect(
       leaks,
-      "conversation transcript 的选择、计数和稳定 item id 规则必须归属 thread-store；runtime_conversation 只能保留 Aster runtime store DTO 转换",
+      "conversation transcript 的选择、计数、record 构造和稳定 item id 规则必须归属 thread-store；runtime_conversation 只能调用 current owner 与窄 compat adapter",
+    ).toEqual([]);
+    expect(
+      callsitePayloadLeaks,
+      "Aster conversation payload 三分支只能出现在 runtime_conversation_aster_adapter.rs；runtime detail query 与 aster_session_store/runtime_conversation.rs 不得复制映射",
+    ).toEqual([]);
+  });
+
+  it("session history search 规则必须归属 thread-store current owner", () => {
+    const adapterPath =
+      "lime-rs/crates/agent/src/aster_session_store/history_search.rs";
+    const currentOwnerPath =
+      "lime-rs/crates/thread-store/src/history_search.rs";
+    const libPath = "lime-rs/crates/thread-store/src/lib.rs";
+    const adapterSource = readFileSync(join(REPO_ROOT, adapterPath), "utf8");
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const libSource = readFileSync(join(REPO_ROOT, libPath), "utf8");
+    const adapterProductionSource =
+      adapterSource.split("#[cfg(test)]")[0] ?? adapterSource;
+    const leaks = ASTER_HISTORY_SEARCH_FORBIDDEN_CURRENT_RULE_SNIPPETS.filter(
+      (snippet) => adapterProductionSource.includes(snippet),
+    ).map((snippet) => `${adapterPath}: ${snippet}`);
+
+    expect(libSource).toContain("pub mod history_search;");
+    expect(currentOwnerSource).toContain(
+      "pub struct SessionHistorySearchRecord",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub struct ConversationHistoryMessageRecord",
+    );
+    expect(currentOwnerSource).toContain("pub struct ChatHistoryMatchRecord");
+    expect(currentOwnerSource).toContain("pub fn search_chat_history_records");
+    expect(currentOwnerSource).not.toContain("aster::");
+    expect(adapterProductionSource).toContain("search_chat_history_records");
+    expect(adapterProductionSource).toContain("SessionHistorySearchRecord");
+    expect(adapterProductionSource).toContain("ChatHistoryMatch");
+    expect(adapterProductionSource).not.toContain("fn runtime_message_role");
+    expect(
+      leaks,
+      "session history search 的 query normalization、limit、timestamp fallback 与 relevance 规则必须归属 thread-store；Aster adapter 只能转换 Session/Message DTO 和返回 ChatHistoryMatch",
+    ).toEqual([]);
+  });
+
+  it("session todo task board 投影规则必须归属 thread-store current owner", () => {
+    const adapterPath =
+      "lime-rs/crates/agent/src/session_store_todo_aster_adapter.rs";
+    const deletedProjectionPath =
+      "lime-rs/crates/agent/src/session_store_todo_projection.rs";
+    const currentOwnerPath = "lime-rs/crates/thread-store/src/task_board.rs";
+    const threadStoreLibPath = "lime-rs/crates/thread-store/src/lib.rs";
+    const sessionStorePath = "lime-rs/crates/agent/src/session_store.rs";
+    const adapterSource = readFileSync(join(REPO_ROOT, adapterPath), "utf8");
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const threadStoreLibSource = readFileSync(
+      join(REPO_ROOT, threadStoreLibPath),
+      "utf8",
+    );
+    const sessionStoreSource = readFileSync(
+      join(REPO_ROOT, sessionStorePath),
+      "utf8",
+    );
+    const adapterProductionSource =
+      adapterSource.split("#[cfg(test)]")[0] ?? adapterSource;
+    const leaks =
+      SESSION_TODO_ASTER_ADAPTER_FORBIDDEN_CURRENT_RULE_SNIPPETS.filter(
+        (snippet) => adapterProductionSource.includes(snippet),
+      ).map((snippet) => `${adapterPath}: ${snippet}`);
+
+    expect(threadStoreLibSource).toContain("pub mod task_board;");
+    expect(currentOwnerSource).toContain("pub enum TaskBoardStatusRecord");
+    expect(currentOwnerSource).toContain("pub struct TaskBoardItemRecord");
+    expect(currentOwnerSource).toContain("pub enum SessionTodoStatusRecord");
+    expect(currentOwnerSource).toContain("pub struct SessionTodoItemRecord");
+    expect(currentOwnerSource).toContain("pub fn project_session_todo_records");
+    expect(currentOwnerSource).not.toContain("aster::");
+    expect(existsSync(join(REPO_ROOT, deletedProjectionPath))).toBe(false);
+    expect(sessionStoreSource).not.toContain(
+      "mod session_store_todo_projection",
+    );
+    expect(adapterProductionSource).toContain("resolve_task_board_state");
+    expect(adapterProductionSource).toContain("TaskBoardItemRecord");
+    expect(adapterProductionSource).toContain("project_session_todo_records");
+    expect(adapterProductionSource).toContain("SessionTodoItem");
+    expect(
+      leaks,
+      "session todo 的 subject trim、空项过滤、active_form 归一化与状态投影规则必须归属 thread-store；Aster adapter 只能转换 ExtensionData/TaskBoard DTO 并回填 SessionTodoItem",
+    ).toEqual([]);
+  });
+
+  it("session memory disabled stub 规则必须归属 thread-store current owner", () => {
+    const adapterPath =
+      "lime-rs/crates/agent/src/aster_session_store/memory_stub.rs";
+    const currentOwnerPath = "lime-rs/crates/thread-store/src/memory_stub.rs";
+    const threadStoreLibPath = "lime-rs/crates/thread-store/src/lib.rs";
+    const adapterSource = readFileSync(join(REPO_ROOT, adapterPath), "utf8");
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const threadStoreLibSource = readFileSync(
+      join(REPO_ROOT, threadStoreLibPath),
+      "utf8",
+    );
+    const adapterProductionSource =
+      adapterSource.split("#[cfg(test)]")[0] ?? adapterSource;
+    const leaks = ASTER_MEMORY_STUB_FORBIDDEN_CURRENT_RULE_SNIPPETS.filter(
+      (snippet) => adapterProductionSource.includes(snippet),
+    ).map((snippet) => `${adapterPath}: ${snippet}`);
+
+    expect(threadStoreLibSource).toContain("pub mod memory_stub;");
+    expect(currentOwnerSource).toContain(
+      "pub struct SessionMemoryCommitReportRecord",
+    );
+    expect(currentOwnerSource).toContain("pub struct SessionMemoryStatsRecord");
+    expect(currentOwnerSource).toContain(
+      "pub struct SessionMemoryHealthRecord",
+    );
+    expect(currentOwnerSource).toContain("pub fn commit_session_memory_report");
+    expect(currentOwnerSource).toContain(
+      "pub fn search_session_memory_records",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub fn retrieve_context_memory_records",
+    );
+    expect(currentOwnerSource).toContain("pub fn session_memory_health_record");
+    expect(currentOwnerSource).not.toContain("aster::");
+    expect(adapterProductionSource).toContain("commit_session_memory_report");
+    expect(adapterProductionSource).toContain("search_session_memory_records");
+    expect(adapterProductionSource).toContain(
+      "retrieve_context_memory_records",
+    );
+    expect(adapterProductionSource).toContain("session_memory_stats_record");
+    expect(adapterProductionSource).toContain("session_memory_health_record");
+    expect(
+      leaks,
+      "session memory disabled/skipped 文案、空结果与 stats/health 默认规则必须归属 thread-store；Aster memory_stub 只能转换 current record 到 Aster DTO",
+    ).toEqual([]);
+  });
+
+  it("legacy conversation content_json 解析规则必须归属 thread-store current owner", () => {
+    const adapterPath =
+      "lime-rs/crates/agent/src/aster_session_store/legacy_conversation.rs";
+    const currentOwnerPath =
+      "lime-rs/crates/thread-store/src/legacy_conversation.rs";
+    const threadStoreLibPath = "lime-rs/crates/thread-store/src/lib.rs";
+    const adapterSource = readFileSync(join(REPO_ROOT, adapterPath), "utf8");
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const threadStoreLibSource = readFileSync(
+      join(REPO_ROOT, threadStoreLibPath),
+      "utf8",
+    );
+    const leaks =
+      ASTER_LEGACY_CONVERSATION_FORBIDDEN_CURRENT_RULE_SNIPPETS.filter(
+        (snippet) => adapterSource.includes(snippet),
+      ).map((snippet) => `${adapterPath}: ${snippet}`);
+
+    expect(threadStoreLibSource).toContain("pub mod legacy_conversation;");
+    expect(currentOwnerSource).toContain(
+      "pub struct LegacyConversationMessageContentRecord",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub struct LegacyConversationMessageRecord",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub fn serialize_persisted_legacy_message_content_record",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub fn deserialize_persisted_legacy_message_content_record",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub fn project_legacy_conversation_message_record",
+    );
+    expect(currentOwnerSource).not.toContain("aster::");
+    expect(adapterSource).toContain(
+      "project_legacy_conversation_message_record",
+    );
+    expect(adapterSource).toContain("message_from_legacy_record");
+    expect(adapterSource).toContain("MessageContent");
+    expect(
+      leaks,
+      "legacy agent_messages.content_json envelope、visibility 默认值和 role 归一化必须归属 thread-store；Aster adapter 只能把 current JSON record 转成 MessageContent / Conversation DTO",
     ).toEqual([]);
   });
 
@@ -4486,6 +5812,18 @@ describe("aster migration boundary", () => {
       leaks,
       "Aster MessageContent -> runtime DTO/event 适配只能归属 message_content_adapter；event_converter production 只能分发 AgentEvent",
     ).toEqual([]);
+  });
+
+  it("message_content_adapter 不得恢复无消费者 runtime message 包装函数", () => {
+    const filePath = "lime-rs/crates/agent/src/message_content_adapter.rs";
+    const source = readFileSync(join(REPO_ROOT, filePath), "utf8");
+
+    expect(source).toContain(
+      "convert_aster_message_to_runtime_message_with_turn_context",
+    );
+    expect(source).not.toContain(
+      "fn convert_aster_message_to_runtime_message(",
+    );
   });
 
   it("event_converter production 不得重新承接 runtime timeline adapter", () => {
@@ -4669,8 +6007,16 @@ describe("aster migration boundary", () => {
       "lime-rs/crates/agent/src/session_execution_runtime.rs";
     const runtimeSnapshotAdapterPath =
       "lime-rs/crates/agent/src/runtime_snapshot_adapter.rs";
+    const runtimeTimelineAdapterPath =
+      "lime-rs/crates/agent/src/runtime_timeline_adapter.rs";
+    const runtimeTimelineOwnerPath =
+      "lime-rs/crates/agent-runtime/src/runtime_timeline.rs";
     const currentOwnerSource = readFileSync(
       join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const runtimeTimelineOwnerSource = readFileSync(
+      join(REPO_ROOT, runtimeTimelineOwnerPath),
       "utf8",
     );
     const runtimeBuilderSource = readFileSync(
@@ -4681,9 +6027,31 @@ describe("aster migration boundary", () => {
       join(REPO_ROOT, runtimeSnapshotAdapterPath),
       "utf8",
     );
+    const runtimeTimelineAdapterSource = readFileSync(
+      join(REPO_ROOT, runtimeTimelineAdapterPath),
+      "utf8",
+    );
 
     expect(currentOwnerSource).toContain(
       "pub struct SessionExecutionRuntimeSessionProjection<Usage>",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub struct SessionExecutionRuntimeSessionSource<UsageSource>",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub fn project_session_execution_runtime_session",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub const SESSION_RECENT_ACCESS_MODE_EXTENSION_NAME",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub struct SessionExecutionRuntimeUsageSource",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub struct SessionExecutionRuntimeUsageProjection",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub fn project_session_execution_runtime_usage",
     );
     expect(currentOwnerSource).toContain(
       "pub struct SessionExecutionRuntimeSnapshotProjection<Context>",
@@ -4692,7 +6060,49 @@ describe("aster migration boundary", () => {
       "pub struct SessionExecutionRuntimeTurnProjection<Context>",
     );
     expect(currentOwnerSource).toContain(
+      "pub struct SessionExecutionRuntimeSnapshotSource<Context>",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub struct SessionExecutionRuntimeThreadSource<Context>",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub struct SessionExecutionRuntimeTurnSource<Context>",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub fn project_session_execution_runtime_snapshot",
+    );
+    expect(runtimeTimelineOwnerSource).toContain(
       "pub struct RuntimeTimelineSnapshotProjection<Turn, Item>",
+    );
+    expect(runtimeTimelineOwnerSource).toContain(
+      "pub enum RuntimeTimelineTurnStatus",
+    );
+    expect(runtimeTimelineOwnerSource).toContain(
+      "pub struct RuntimeTimelineTurnProjection",
+    );
+    expect(runtimeTimelineOwnerSource).toContain(
+      "pub enum RuntimeTimelineItemStatus",
+    );
+    expect(runtimeTimelineOwnerSource).toContain(
+      "pub enum RuntimeTimelineItemPayload",
+    );
+    expect(runtimeTimelineOwnerSource).toContain(
+      "pub struct RuntimeTimelineRequestQuestion",
+    );
+    expect(runtimeTimelineOwnerSource).toContain(
+      "pub struct RuntimeTimelineItemProjection",
+    );
+    expect(runtimeTimelineOwnerSource).toContain(
+      "pub struct RuntimeTimelineSnapshotSource<Turn, Item>",
+    );
+    expect(runtimeTimelineOwnerSource).toContain(
+      "pub struct RuntimeTimelineSnapshotThread<Turn, Item>",
+    );
+    expect(runtimeTimelineOwnerSource).toContain(
+      "pub fn project_runtime_timeline_snapshot",
+    );
+    expect(runtimeTimelineOwnerSource).toContain(
+      "pub fn extract_runtime_request_questions_from_schema",
     );
     expect(currentOwnerSource).toContain("pub enum SubagentRuntimeStatusKind");
     expect(currentOwnerSource).toContain(
@@ -4703,12 +6113,27 @@ describe("aster migration boundary", () => {
     );
     expect(currentOwnerSource).toContain("pub enum SubagentTurnStatus");
     expect(currentOwnerSource).toContain(
+      "pub struct SubagentRuntimeSnapshotProjection",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub struct SubagentRuntimeThreadProjection",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub struct SubagentRuntimeTurnProjection",
+    );
+    expect(currentOwnerSource).toContain("pub enum SubagentRuntimeItemKind");
+    expect(currentOwnerSource).toContain(
+      "pub struct SubagentRuntimeItemProjection",
+    );
+    expect(currentOwnerSource).toContain("pub fn project_subagent_latest_turn");
+    expect(currentOwnerSource).toContain(
       "pub struct SessionRuntimeSnapshotOverlay<ExecutionSnapshot, TimelineSnapshot>",
     );
     expect(currentOwnerSource).toContain(
       "pub subagent_latest_turn: Option<SubagentLatestTurnProjection>",
     );
     expect(currentOwnerSource).not.toContain("aster::");
+    expect(runtimeTimelineOwnerSource).not.toContain("aster::");
     expect(runtimeBuilderSource).toContain(
       "agent_runtime::session_execution::SessionExecutionRuntimeSessionProjection",
     );
@@ -4725,11 +6150,415 @@ describe("aster migration boundary", () => {
       "pub(crate) struct SessionExecutionRuntimeTurnProjection",
     );
     expect(runtimeSnapshotAdapterSource).toContain(
-      "agent_runtime::session_execution::RuntimeTimelineSnapshotProjection",
+      "agent_runtime::runtime_timeline::RuntimeTimelineSnapshotProjection",
+    );
+    expect(runtimeSnapshotAdapterSource).toContain(
+      "project_runtime_snapshot_record",
+    );
+    expect(runtimeSnapshotAdapterSource).not.toContain(
+      "project_runtime_timeline_snapshot(",
+    );
+    expect(runtimeSnapshotAdapterSource).not.toContain(
+      "RuntimeTimelineSnapshotSource",
+    );
+    expect(runtimeSnapshotAdapterSource).not.toContain(
+      "RuntimeTimelineSnapshotThread",
+    );
+    expect(runtimeTimelineAdapterSource).toContain(
+      "project_runtime_timeline_snapshot_record",
+    );
+    expect(runtimeTimelineAdapterSource).toContain(
+      "project_runtime_timeline_snapshot",
+    );
+    expect(runtimeTimelineAdapterSource).toContain(
+      "RuntimeTimelineSnapshotSource",
+    );
+    expect(runtimeTimelineAdapterSource).toContain(
+      "RuntimeTimelineSnapshotThread",
     );
     expect(runtimeSnapshotAdapterSource).not.toContain(
       "pub(crate) struct RuntimeTimelineSnapshotProjection",
     );
+  });
+
+  it("runtime timeline snapshot projector 必须归属 agent-runtime current owner", () => {
+    const runtimeSnapshotAdapterPath =
+      "lime-rs/crates/agent/src/runtime_snapshot_adapter.rs";
+    const runtimeTimelineAdapterPath =
+      "lime-rs/crates/agent/src/runtime_timeline_adapter.rs";
+    const currentOwnerPath =
+      "lime-rs/crates/agent-runtime/src/runtime_timeline.rs";
+    const runtimeSnapshotAdapterSource = readFileSync(
+      join(REPO_ROOT, runtimeSnapshotAdapterPath),
+      "utf8",
+    );
+    const runtimeTimelineAdapterSource = readFileSync(
+      join(REPO_ROOT, runtimeTimelineAdapterPath),
+      "utf8",
+    );
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const productionSnapshotSource =
+      runtimeSnapshotAdapterSource.split("#[cfg(test)]")[0] ??
+      runtimeSnapshotAdapterSource;
+    const productionTimelineSource =
+      runtimeTimelineAdapterSource.split("#[cfg(test)]")[0] ??
+      runtimeTimelineAdapterSource;
+    const snapshotLeaks =
+      RUNTIME_SNAPSHOT_ADAPTER_FORBIDDEN_TIMELINE_RULE_SNIPPETS.filter(
+        (snippet) => productionSnapshotSource.includes(snippet),
+      ).map((snippet) => `${runtimeSnapshotAdapterPath}: ${snippet}`);
+    const timelineLeaks =
+      RUNTIME_TIMELINE_ADAPTER_FORBIDDEN_DAO_STATUS_SNIPPETS.filter((snippet) =>
+        productionTimelineSource.includes(snippet),
+      ).map((snippet) => `${runtimeTimelineAdapterPath}: ${snippet}`);
+    const timelineStatusRuleLeaks =
+      RUNTIME_TIMELINE_ADAPTER_FORBIDDEN_CURRENT_STATUS_RULE_SNIPPETS.filter(
+        (snippet) => productionTimelineSource.includes(snippet),
+      ).map((snippet) => `${runtimeTimelineAdapterPath}: ${snippet}`);
+    const timelinePayloadRuleLeaks =
+      RUNTIME_TIMELINE_ADAPTER_FORBIDDEN_CURRENT_PAYLOAD_RULE_SNIPPETS.filter(
+        (snippet) => productionTimelineSource.includes(snippet),
+      ).map((snippet) => `${runtimeTimelineAdapterPath}: ${snippet}`);
+    const timelineProjectionRuleLeaks =
+      RUNTIME_TIMELINE_ADAPTER_FORBIDDEN_CURRENT_PROJECTION_RULE_SNIPPETS.filter(
+        (snippet) => productionTimelineSource.includes(snippet),
+      ).map((snippet) => `${runtimeTimelineAdapterPath}: ${snippet}`);
+
+    expect(currentOwnerSource).toContain(
+      "pub fn project_runtime_timeline_snapshot",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub struct RuntimeTimelineTurnSource",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub struct RuntimeTimelineItemSource",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub enum RuntimeTimelineTurnStatusSource",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub enum RuntimeTimelineItemStatusSource",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub fn project_runtime_timeline_turn",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub fn project_runtime_timeline_item",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub enum RuntimeTimelineItemPayloadSource",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub const RUNTIME_REQUEST_QUESTIONS_SCHEMA_KEY",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub fn project_runtime_timeline_item_payload",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub fn project_runtime_status_timeline_payload",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub fn format_runtime_status_timeline_text",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub fn build_diagnostics_runtime_status_metadata",
+    );
+    expect(runtimeSnapshotAdapterSource).toContain(
+      "project_runtime_snapshot_record",
+    );
+    expect(runtimeTimelineAdapterSource).toContain(
+      "project_runtime_timeline_snapshot_record",
+    );
+    expect(runtimeTimelineAdapterSource).toContain(
+      "project_runtime_timeline_snapshot",
+    );
+    expect(runtimeTimelineAdapterSource).toContain(
+      "RuntimeTimelineSnapshotSource",
+    );
+    expect(runtimeTimelineAdapterSource).toContain(
+      "RuntimeTimelineSnapshotThread",
+    );
+    expect(runtimeTimelineAdapterSource).toContain(
+      "RuntimeTimelineTurnProjection",
+    );
+    expect(runtimeTimelineAdapterSource).toContain(
+      "RuntimeTimelineItemProjection",
+    );
+    expect(runtimeTimelineAdapterSource).toContain(
+      "RuntimeTimelineItemPayload",
+    );
+    expect(runtimeTimelineAdapterSource).toContain(
+      "RuntimeTimelineItemPayloadSource",
+    );
+    expect(runtimeTimelineAdapterSource).toContain(
+      "project_runtime_timeline_turn",
+    );
+    expect(runtimeTimelineAdapterSource).toContain(
+      "project_runtime_timeline_item",
+    );
+    expect(runtimeTimelineAdapterSource).toContain("RuntimeTimelineTurnSource");
+    expect(runtimeTimelineAdapterSource).toContain("RuntimeTimelineItemSource");
+    expect(
+      existsSync(
+        join(REPO_ROOT, "lime-rs/crates/agent/src/text_normalization.rs"),
+      ),
+      "runtime status text normalization 已迁入 agent-runtime::runtime_timeline；不得恢复 lime-agent 旧 helper 文件",
+    ).toBe(false);
+    expect(
+      snapshotLeaks,
+      "runtime snapshot 的 timeline flatten/thread_id 规则必须归属 agent-runtime current owner；Aster snapshot adapter 只能构造 current source 并投影到 GUI DTO",
+    ).toEqual([]);
+    expect(
+      timelineLeaks,
+      "runtime_timeline_adapter 只能做 Aster DTO 到 current timeline DTO 的字段映射，不得重新直接输出 GUI timeline status DTO",
+    ).toEqual([]);
+    expect(
+      timelineStatusRuleLeaks,
+      "runtime status timeline text/metadata 规则必须归属 agent-runtime current owner；Aster timeline adapter 只能转交 Aster 字段",
+    ).toEqual([]);
+    expect(
+      timelinePayloadRuleLeaks,
+      "runtime timeline item payload 展示/忽略/request schema/phase 默认规则必须归属 agent-runtime current owner；Aster timeline adapter 只能构造 current source",
+    ).toEqual([]);
+    expect(
+      timelineProjectionRuleLeaks,
+      "runtime timeline turn/item projection、status 折叠和 prompt/start fallback 规则必须归属 agent-runtime current owner；Aster timeline adapter 只能构造 current source",
+    ).toEqual([]);
+  });
+
+  it("runtime snapshot record 必须归属 thread-store current owner", () => {
+    const currentOwnerPath =
+      "lime-rs/crates/thread-store/src/runtime_snapshot.rs";
+    const storeAdapterPath =
+      "lime-rs/crates/agent/src/runtime_store_aster_adapter.rs";
+    const runtimeSupportPath = "lime-rs/crates/agent/src/runtime_support.rs";
+    const runtimeSnapshotAdapterPath =
+      "lime-rs/crates/agent/src/runtime_snapshot_adapter.rs";
+    const runtimeTimelineAdapterPath =
+      "lime-rs/crates/agent/src/runtime_timeline_adapter.rs";
+    const sessionExecutionAdapterPath =
+      "lime-rs/crates/agent/src/session_execution_runtime_adapter.rs";
+    const subagentAdapterPath =
+      "lime-rs/crates/agent/src/subagent_runtime_adapter.rs";
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const storeAdapterSource = readFileSync(
+      join(REPO_ROOT, storeAdapterPath),
+      "utf8",
+    );
+    const runtimeSupportSource = readFileSync(
+      join(REPO_ROOT, runtimeSupportPath),
+      "utf8",
+    );
+    const runtimeSnapshotAdapterSource = readFileSync(
+      join(REPO_ROOT, runtimeSnapshotAdapterPath),
+      "utf8",
+    );
+    const runtimeTimelineAdapterSource = readFileSync(
+      join(REPO_ROOT, runtimeTimelineAdapterPath),
+      "utf8",
+    );
+    const sessionExecutionAdapterSource = readFileSync(
+      join(REPO_ROOT, sessionExecutionAdapterPath),
+      "utf8",
+    );
+    const subagentAdapterSource = readFileSync(
+      join(REPO_ROOT, subagentAdapterPath),
+      "utf8",
+    );
+    const wrapperSources: Array<{
+      filePath: string;
+      source: string;
+      snippets: string[];
+    }> = [
+      {
+        filePath: runtimeSnapshotAdapterPath,
+        source: runtimeSnapshotAdapterSource,
+        snippets: [
+          "SessionRuntimeSnapshot",
+          "runtime_snapshot_record_from_aster",
+          "project_aster_runtime_snapshot",
+        ],
+      },
+      {
+        filePath: runtimeTimelineAdapterPath,
+        source: runtimeTimelineAdapterSource,
+        snippets: ["project_aster_runtime_timeline_snapshot"],
+      },
+      {
+        filePath: sessionExecutionAdapterPath,
+        source: sessionExecutionAdapterSource,
+        snippets: [
+          "SessionRuntimeSnapshot",
+          "runtime_snapshot_record_from_aster",
+          "project_aster_session_execution_runtime_snapshot",
+        ],
+      },
+      {
+        filePath: subagentAdapterPath,
+        source:
+          subagentAdapterSource.split("#[cfg(test)]")[0] ??
+          subagentAdapterSource,
+        snippets: [
+          "SessionRuntimeSnapshot",
+          "runtime_snapshot_record_from_aster",
+          "project_aster_subagent_latest_turn",
+        ],
+      },
+    ];
+    const wrapperLeaks = wrapperSources.flatMap(
+      ({ filePath, source, snippets }) =>
+        snippets
+          .filter((snippet) => source.includes(snippet))
+          .map((snippet) => `${filePath}: ${snippet}`),
+    );
+
+    expect(currentOwnerSource).toContain(
+      "pub struct RuntimeSessionSnapshotRecord",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub struct RuntimeThreadSnapshotRecord",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub struct RuntimeTurnSnapshotRecord",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub struct RuntimeItemSnapshotRecord",
+    );
+    expect(currentOwnerSource).toContain("pub enum RuntimeItemPayloadRecord");
+    expect(currentOwnerSource).not.toContain("aster::");
+    expect(currentOwnerSource).not.toContain("SessionRuntimeSnapshot");
+    expect(storeAdapterSource).toContain(
+      "pub(crate) fn runtime_snapshot_record_from_aster",
+    );
+    expect(storeAdapterSource).toContain(
+      "pub(crate) fn runtime_turn_record_from_aster",
+    );
+    expect(storeAdapterSource).toContain(
+      "pub(crate) fn runtime_item_record_from_aster",
+    );
+    expect(storeAdapterSource).toContain(
+      "pub(crate) fn runtime_output_schema_from_aster",
+    );
+    expect(storeAdapterSource).toContain("AsterSessionRuntimeSnapshot");
+    expect(storeAdapterSource).toContain("RuntimeSessionSnapshotRecord");
+    expect(runtimeTimelineAdapterSource).toContain(
+      "RuntimeTimelineSnapshotRecordProjection",
+    );
+    expect(runtimeTimelineAdapterSource).not.toContain(
+      "AsterRuntimeTimelineSnapshotProjection",
+    );
+    expect(runtimeTimelineAdapterSource).toContain(
+      "project_runtime_timeline_turn_record",
+    );
+    expect(runtimeTimelineAdapterSource).toContain(
+      "project_runtime_timeline_item_record",
+    );
+    expect(
+      runtimeTimelineAdapterSource.split("#[cfg(test)]")[0] ??
+        runtimeTimelineAdapterSource,
+    ).not.toContain("ItemRuntimePayload::");
+    expect(
+      runtimeTimelineAdapterSource.split("#[cfg(test)]")[0] ??
+        runtimeTimelineAdapterSource,
+    ).not.toContain("ItemStatus::");
+    expect(
+      runtimeTimelineAdapterSource.split("#[cfg(test)]")[0] ??
+        runtimeTimelineAdapterSource,
+    ).not.toContain("TurnStatus::");
+    expect(runtimeSupportSource).toContain("load_runtime_snapshot_record");
+    expect(runtimeSupportSource).toContain(
+      "project_session_execution_runtime_snapshot_record",
+    );
+    expect(runtimeSupportSource).toContain("project_runtime_snapshot_record");
+    expect(runtimeSupportSource).toContain(
+      "project_subagent_latest_turn_record",
+    );
+    expect(
+      wrapperLeaks,
+      "snapshot 级 Aster wrapper 已迁出生产主链；除 store adapter 外，adapter 应消费 thread-store current record",
+    ).toEqual([]);
+  });
+
+  it("session_execution_runtime_adapter 只能做 current snapshot record 到 current source 的转换", () => {
+    const adapterPath =
+      "lime-rs/crates/agent/src/session_execution_runtime_adapter.rs";
+    const queryPath =
+      "lime-rs/crates/agent/src/session_execution_runtime_query.rs";
+    const currentOwnerPath =
+      "lime-rs/crates/agent-runtime/src/session_execution.rs";
+    const adapterSource = readFileSync(join(REPO_ROOT, adapterPath), "utf8");
+    const querySource = readFileSync(join(REPO_ROOT, queryPath), "utf8");
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const productionSource =
+      adapterSource.split("#[cfg(test)]")[0] ?? adapterSource;
+    const leaks =
+      SESSION_EXECUTION_RUNTIME_ADAPTER_FORBIDDEN_CURRENT_RULE_SNIPPETS.filter(
+        (snippet) => productionSource.includes(snippet),
+      ).map((snippet) => `${adapterPath}: ${snippet}`);
+    const queryLeaks =
+      SESSION_EXECUTION_RUNTIME_QUERY_FORBIDDEN_ASTER_SNIPPETS.filter(
+        (snippet) => querySource.includes(snippet),
+      ).map((snippet) => `${queryPath}: ${snippet}`);
+
+    expect(currentOwnerSource).toContain(
+      "pub fn project_session_execution_runtime_snapshot",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub fn project_session_execution_runtime_usage",
+    );
+    expect(currentOwnerSource).toContain(
+      "fn resolve_latest_session_execution_turn",
+    );
+    expect(currentOwnerSource).toContain(
+      "fn project_recent_access_mode_from_snapshot_source",
+    );
+    expect(currentOwnerSource).toContain(
+      "fn project_recent_harness_context_from_snapshot_source",
+    );
+    expect(currentOwnerSource).toContain(
+      "fn deserialize_session_runtime_state",
+    );
+    expect(adapterSource).toContain(
+      "project_session_execution_runtime_snapshot_record",
+    );
+    expect(adapterSource).toContain(
+      "project_session_execution_runtime_snapshot",
+    );
+    expect(adapterSource).toContain("SessionExecutionRuntimeSnapshotSource");
+    expect(adapterSource).toContain("runtime_output_schema_from_aster");
+    expect(productionSource).not.toContain("TurnOutputSchemaSource");
+    expect(productionSource).not.toContain("TurnOutputSchemaStrategy");
+    expect(adapterSource).not.toContain(
+      "project_aster_session_execution_runtime_snapshot",
+    );
+    expect(adapterSource).not.toContain("SessionRuntimeSnapshot");
+    expect(adapterSource).not.toContain(
+      "project_session_execution_runtime_session",
+    );
+    expect(adapterSource).not.toContain("SessionExecutionRuntimeSessionSource");
+    expect(querySource).toContain(
+      "pub(crate) fn read_session_execution_runtime_session_projection",
+    );
+    expect(querySource).toContain("FROM agent_sessions");
+    expect(querySource).toContain("SESSION_RECORD_SELECT_COLUMNS");
+    expect(querySource).toContain("project_session_execution_runtime_session");
+    expect(
+      queryLeaks,
+      "execution runtime session DB read model 必须消费 current agent_sessions row，不得依赖 Aster Session / ExtensionData",
+    ).toEqual([]);
+    expect(
+      leaks,
+      "session execution snapshot / usage 的 latest-turn、recent access、recent harness 与 token 有效性规则必须归属 agent-runtime current owner；adapter 只能转换 current record/source",
+    ).toEqual([]);
   });
 
   it("session runtime detail 只能消费 current runtime snapshot overlay", () => {
@@ -4739,17 +6568,228 @@ describe("aster migration boundary", () => {
       "use crate::runtime_snapshot_adapter::project_aster_runtime_snapshot",
       "project_aster_runtime_snapshot(",
       "project_aster_session_execution_runtime_snapshot",
+      "project_aster_session_usage",
       "load_runtime_snapshot(",
       "SessionRuntimeSnapshot",
     ];
     const leaks = forbiddenSnippets
       .filter((snippet) => source.includes(snippet))
       .map((snippet) => `${filePath}: ${snippet}`);
+    const sessionAdapterLeaks =
+      SESSION_STORE_RUNTIME_DETAIL_FORBIDDEN_SESSION_ADAPTER_SNIPPETS.filter(
+        (snippet) => source.includes(snippet),
+      ).map((snippet) => `${filePath}: ${snippet}`);
 
     expect(source).toContain("load_runtime_snapshot_overlay");
+    expect(source).toContain(
+      "read_session_execution_runtime_session_projection",
+    );
     expect(
       leaks,
       "session_store_runtime_detail 必须消费 runtime_support 投影后的 current overlay；Aster snapshot DTO 和投影函数只能留在 runtime_support / compat adapter",
+    ).toEqual([]);
+    expect(
+      sessionAdapterLeaks,
+      "runtime detail 的 execution runtime session 与 subagent parent context 必须走 current DB read model；不得重新从 Aster Session adapter 投影",
+    ).toEqual([]);
+  });
+
+  it("session runtime detail conversation window 规则必须归属 agent-runtime current owner", () => {
+    const runtimeDetailPath =
+      "lime-rs/crates/agent/src/session_store_runtime_detail.rs";
+    const deletedAdapterPath =
+      "lime-rs/crates/agent/src/session_runtime_conversation_adapter.rs";
+    const deletedSessionQueryPath = "lime-rs/crates/agent/src/session_query.rs";
+    const currentQueryPath =
+      "lime-rs/crates/agent/src/session_runtime_conversation_query.rs";
+    const currentOwnerPath =
+      "lime-rs/crates/agent-runtime/src/runtime_conversation.rs";
+    const runtimeDetailSource = readFileSync(
+      join(REPO_ROOT, runtimeDetailPath),
+      "utf8",
+    );
+    const currentQuerySource = readFileSync(
+      join(REPO_ROOT, currentQueryPath),
+      "utf8",
+    );
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const runtimeDetailLeaks =
+      SESSION_STORE_RUNTIME_DETAIL_FORBIDDEN_CONVERSATION_SNIPPETS.filter(
+        (snippet) => runtimeDetailSource.includes(snippet),
+      ).map((snippet) => `${runtimeDetailPath}: ${snippet}`);
+
+    expect(currentOwnerSource).toContain(
+      "pub struct RuntimeConversationMessageSource<Message>",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub fn project_runtime_conversation_window",
+    );
+    expect(currentOwnerSource).not.toContain("aster::");
+    expect(existsSync(join(REPO_ROOT, deletedAdapterPath))).toBe(false);
+    expect(existsSync(join(REPO_ROOT, deletedSessionQueryPath))).toBe(false);
+    expect(currentQuerySource).toContain(
+      "pub(crate) async fn read_runtime_conversation_window",
+    );
+    expect(currentQuerySource).toContain("select_conversation_messages");
+    expect(currentQuerySource).toContain("RuntimeConversationMessageSource");
+    expect(currentQuerySource).toContain("project_runtime_conversation_window");
+    expect(currentQuerySource).not.toContain("Session as AsterSession");
+    expect(runtimeDetailSource).toContain("read_runtime_conversation_window");
+    expect(runtimeDetailSource).toContain("Option<Vec<RuntimeAgentMessage>>");
+    expect(
+      runtimeDetailLeaks,
+      "runtime detail 只能消费 current runtime conversation read model；Aster Session/Conversation/Message 遍历、可见性过滤和消息投影不得回流",
+    ).toEqual([]);
+  });
+
+  it("runtime_queue production 只能消费 current queued turn contract", () => {
+    const currentOwnerPath =
+      "lime-rs/crates/agent-runtime/src/runtime_queue.rs";
+    const runtimeQueuePath = "lime-rs/crates/agent/src/runtime_queue.rs";
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const runtimeQueueSource = readFileSync(
+      join(REPO_ROOT, runtimeQueuePath),
+      "utf8",
+    );
+    const productionSource =
+      runtimeQueueSource.split("#[cfg(test)]")[0] ?? runtimeQueueSource;
+    const leaks =
+      RUNTIME_QUEUE_FORBIDDEN_PRODUCTION_ASTER_QUEUE_SNIPPETS.filter(
+        (snippet) => productionSource.includes(snippet),
+      ).map((snippet) => `${runtimeQueuePath}: ${snippet}`);
+
+    expect(currentOwnerSource).toContain("pub struct RuntimeQueuedTurn");
+    expect(currentOwnerSource).toContain("pub enum RuntimeQueueSubmitResult");
+    expect(currentOwnerSource).toContain("pub trait RuntimeQueueStore");
+    expect(currentOwnerSource).toContain("pub struct RuntimeExecutionGate");
+    expect(currentOwnerSource).toContain("pub struct RuntimeQueueService");
+    expect(currentOwnerSource).not.toContain("aster::");
+    expect(runtimeQueueSource).toContain(
+      "agent_runtime::runtime_queue::{RuntimeQueueSubmitResult, RuntimeQueuedTurn}",
+    );
+    expect(runtimeQueueSource).toContain("submit_runtime_turn_to_queue");
+    expect(runtimeQueueSource).toContain("take_next_runtime_queued_turn");
+    expect(
+      leaks,
+      "runtime_queue production 只能消费 agent-runtime current queued turn contract；Aster queue service / QueuedTurnRuntime 只能留在 runtime_support compat 边界或测试夹具",
+    ).toEqual([]);
+  });
+
+  it("runtime_support 只能把 Aster runtime store 适配给 current queue service 和 snapshot record", () => {
+    const filePath = "lime-rs/crates/agent/src/runtime_support.rs";
+    const adapterPath =
+      "lime-rs/crates/agent/src/runtime_queue_aster_adapter.rs";
+    const storeAdapterPath =
+      "lime-rs/crates/agent/src/runtime_store_aster_adapter.rs";
+    const source = readFileSync(join(REPO_ROOT, filePath), "utf8");
+    const adapterSource = readFileSync(join(REPO_ROOT, adapterPath), "utf8");
+    const storeAdapterSource = readFileSync(
+      join(REPO_ROOT, storeAdapterPath),
+      "utf8",
+    );
+    const forbiddenSnippets = [
+      "use aster::",
+      "aster::config::paths",
+      "initialize_shared_session_runtime_with_root",
+      "load_shared_session_runtime_snapshot",
+      "require_shared_session_runtime_store",
+      "require_shared_session_runtime_queue_service",
+      "SessionRuntimeQueueService",
+      "pub(crate) async fn load_runtime_snapshot(\n",
+      "pub async fn load_runtime_snapshot(\n",
+      "RuntimeQueueSubmitResult as Aster",
+      "AsterRuntimeQueueSubmitResult",
+      "QueuedTurnRuntime as AsterQueuedTurnRuntime",
+      "RuntimeQueueStore for AsterRuntimeQueueStoreAdapter",
+      "fn runtime_queued_turn_from_aster",
+      "fn aster_queued_turn_from_runtime",
+    ];
+    const leaks = forbiddenSnippets
+      .filter((snippet) => source.includes(snippet))
+      .map((snippet) => `${filePath}: ${snippet}`);
+
+    expect(source).toContain("RuntimeQueueService");
+    expect(source).toContain("runtime_queue_service_from_store");
+    expect(source).toContain("RuntimeQueuedTurn");
+    expect(source).toContain("load_runtime_snapshot_overlay");
+    expect(source).toContain("load_runtime_snapshot_record");
+    expect(storeAdapterSource).toContain("use aster::session");
+    expect(storeAdapterSource).toContain(
+      "initialize_shared_session_runtime_with_root",
+    );
+    expect(storeAdapterSource).toContain(
+      "load_shared_session_runtime_snapshot",
+    );
+    expect(storeAdapterSource).toContain(
+      "require_shared_session_runtime_store",
+    );
+    expect(storeAdapterSource).toContain("AsterSessionRuntimeSnapshot");
+    expect(storeAdapterSource).toContain("AsterThreadRuntimeStore");
+    expect(storeAdapterSource).toContain(
+      "pub(crate) fn runtime_snapshot_record_from_aster",
+    );
+    expect(storeAdapterSource).toContain("RuntimeSessionSnapshotRecord");
+    expect(adapterSource).toContain(
+      "QueuedTurnRuntime as AsterQueuedTurnRuntime",
+    );
+    expect(adapterSource).toContain(
+      "RuntimeQueueStore for AsterRuntimeQueueStoreAdapter",
+    );
+    expect(adapterSource).toContain("fn runtime_queued_turn_from_aster");
+    expect(adapterSource).toContain("fn aster_queued_turn_from_runtime");
+    expect(
+      leaks,
+      "runtime_support 只能接入 Aster compat adapter；Aster queued-turn DTO 转换必须集中在 runtime_queue_aster_adapter，snapshot DTO 转换必须集中在 runtime_store_aster_adapter，queue gate / submit / resume 逻辑必须归属 agent-runtime::runtime_queue",
+    ).toEqual([]);
+  });
+
+  it("subagent_runtime_adapter 只能做 Aster snapshot 到 current projection 的转换", () => {
+    const adapterPath = "lime-rs/crates/agent/src/subagent_runtime_adapter.rs";
+    const currentOwnerPath =
+      "lime-rs/crates/agent-runtime/src/session_execution.rs";
+    const adapterSource = readFileSync(join(REPO_ROOT, adapterPath), "utf8");
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const productionSource =
+      adapterSource.split("#[cfg(test)]")[0] ?? adapterSource;
+    const leaks =
+      SUBAGENT_RUNTIME_ADAPTER_FORBIDDEN_CURRENT_RULE_SNIPPETS.filter(
+        (snippet) => productionSource.includes(snippet),
+      ).map((snippet) => `${adapterPath}: ${snippet}`);
+
+    expect(currentOwnerSource).toContain("pub fn project_subagent_latest_turn");
+    expect(currentOwnerSource).toContain(
+      "pub enum SubagentRuntimeItemKindSource",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub fn project_subagent_runtime_item_kind",
+    );
+    expect(currentOwnerSource).toContain(
+      "fn count_subagent_tool_items_for_turn",
+    );
+    expect(currentOwnerSource).toContain(
+      "fn resolve_subagent_worker_result_ref",
+    );
+    expect(adapterSource).toContain("project_subagent_latest_turn");
+    expect(adapterSource).toContain("project_subagent_runtime_item_kind");
+    expect(adapterSource).toContain("SubagentRuntimeItemKindSource");
+    expect(adapterSource).toContain("SubagentRuntimeSnapshotProjection");
+    expect(productionSource).toContain("project_subagent_latest_turn_record");
+    expect(productionSource).not.toContain(
+      "project_aster_subagent_latest_turn",
+    );
+    expect(productionSource).not.toContain("SessionRuntimeSnapshot");
+    expect(
+      leaks,
+      "subagent latest-turn 选择、duration、tool count、result ref 与 item kind 规则必须归属 agent-runtime current owner；Aster adapter 只能转换 DTO/source",
     ).toEqual([]);
   });
 
@@ -4799,6 +6839,10 @@ describe("aster migration boundary", () => {
     );
     expect(currentOwnerSource).toContain("pub enum SubagentTurnStatus");
     expect(source).toContain("load_runtime_snapshot_overlay");
+    expect(source).toContain("SELECT extension_data_json, session_type");
+    expect(source).toContain(
+      "read_session_execution_runtime_session_projection",
+    );
     expect(source).toContain(
       "agent_runtime::session_execution::SubagentRuntimeStatus<AgentTokenUsage>",
     );
@@ -4829,10 +6873,19 @@ describe("aster migration boundary", () => {
           return paths;
         },
       );
+    const directAsterLeaks = [
+      "use aster::",
+      "aster::",
+      "read_subagent_session",
+      "query_subagent_session",
+    ]
+      .filter((snippet) => source.includes(snippet))
+      .map((snippet) => `${filePath}: ${snippet}`);
 
     expect(source).toContain(
       "pub(crate) async fn load_subagent_runtime_status",
     );
+    expect(directAsterLeaks).toEqual([]);
     expect(
       leaks,
       "subagent_control 只允许作为 lime-agent 内部 runtime status adapter；不得从根 API 公开返回 Aster Session 的 control state helper",
@@ -4844,8 +6897,22 @@ describe("aster migration boundary", () => {
       "lime-rs/crates/agent/src/session_store_subagent_context.rs";
     const adapterPath =
       "lime-rs/crates/agent/src/session_store_subagent_aster_adapter.rs";
+    const currentOwnerPath =
+      "lime-rs/crates/agent/src/session_store_subagent_projection.rs";
+    const currentQueryPath =
+      "lime-rs/crates/agent/src/session_store_subagent_query.rs";
     const source = readFileSync(join(REPO_ROOT, filePath), "utf8");
-    const adapterSource = readFileSync(join(REPO_ROOT, adapterPath), "utf8");
+    const adapterSource = existsSync(join(REPO_ROOT, adapterPath))
+      ? readFileSync(join(REPO_ROOT, adapterPath), "utf8")
+      : "";
+    const currentOwnerSource = readFileSync(
+      join(REPO_ROOT, currentOwnerPath),
+      "utf8",
+    );
+    const currentQuerySource = readFileSync(
+      join(REPO_ROOT, currentQueryPath),
+      "utf8",
+    );
     const leaks =
       SESSION_STORE_SUBAGENT_CONTEXT_FORBIDDEN_RUNTIME_DTO_SNIPPETS.filter(
         (snippet) => source.includes(snippet),
@@ -4854,18 +6921,41 @@ describe("aster migration boundary", () => {
       SESSION_STORE_SUBAGENT_CONTEXT_FORBIDDEN_DIRECT_ASTER_SNIPPETS.filter(
         (snippet) => source.includes(snippet),
       ).map((snippet) => `${filePath}: ${snippet}`);
+    const adapterLeaks = [
+      ...(existsSync(join(REPO_ROOT, adapterPath))
+        ? [`${adapterPath}: restored`]
+        : []),
+      ...SESSION_STORE_SUBAGENT_ADAPTER_FORBIDDEN_METADATA_RULE_SNIPPETS.filter(
+        (snippet) => adapterSource.includes(snippet),
+      ).map((snippet) => `${adapterPath}: ${snippet}`),
+    ];
 
     expect(
       leaks,
       "session_store_subagent_context 的测试 helper 只能使用 Lime current turn projection；Aster runtime snapshot/turn DTO 只能留在 adapter 边界",
     ).toEqual([]);
-    expect(adapterSource).toContain("project_aster_subagent_session");
-    expect(adapterSource).toContain(
-      "fn resolve_subagent_model_name(session: &AsterSession)",
+    expect(currentOwnerSource).toContain(
+      "pub(crate) const SUBAGENT_SESSION_EXTENSION_NAME",
     );
+    expect(currentOwnerSource).toContain(
+      "pub(crate) fn project_subagent_presentation_projection",
+    );
+    expect(currentOwnerSource).toContain(
+      "pub(crate) fn project_session_record_subagent_session",
+    );
+    expect(currentQuerySource).toContain(
+      "pub(super) fn load_child_subagent_session_projections",
+    );
+    expect(currentQuerySource).toContain("FROM agent_sessions");
+    expect(currentQuerySource).not.toContain("aster::");
+    expect(currentOwnerSource).not.toContain("aster::");
     expect(
       directAsterLeaks,
-      "session_store_subagent_context 只能消费 Lime-owned SubagentSessionProjection；Aster Session metadata 解析必须局限在 session_store_subagent_aster_adapter",
+      "session_store_subagent_context 只能消费 Lime-owned SubagentSessionProjection；不得恢复 Aster Session metadata adapter",
+    ).toEqual([]);
+    expect(
+      adapterLeaks,
+      "subagent session metadata/customization 解析必须归属 session_store_subagent_projection current owner；Aster adapter 只能读取 raw extension value 并转换 session 基础字段",
     ).toEqual([]);
   });
 

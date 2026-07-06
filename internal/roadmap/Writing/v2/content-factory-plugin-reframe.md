@@ -148,11 +148,13 @@ App Server current 普通 turn 已修到：`plugin_activation -> 普通 Agent tu
 
 2026-07-06 operator missingKeys 已补：`operatorReadiness` 增加 `ready / missingKeys`，当前真实复跑显示缺签名、releaseId/publicKeyId、trust root、packageUrl、租户/API/token、catalog/bootstrap、fetchCloud 和 GUI evidence。插件层不生成假签名、不上传包、不把 local_folder 伪装为 cloud_release；这些 missingKeys 只是下一步 operator 输入清单。
 
-2026-07-06 operator missingActions 已补：readiness evidence 会把 missingKeys 映射到安全 actions，例如调用外部真实包的 `scripts/sign-release.mjs`、提供 production HTTPS packageUrl、走 current bulk publish 后读取 catalog/bootstrap、再用 App Server fetchCloud 和真实 Electron CDP 采集证据。插件层仍不新增 worker fast path、mock release 或手写 ready JSON。
+2026-07-06 operator missingActions 已补：readiness evidence 会把 missingKeys 映射到安全 actions，例如显式运行 pipeline `--generate-signature-proof` 让同轮 Studio dry-run hash 驱动外部真实签名工具、提供 production HTTPS packageUrl、走 current bulk publish 后读取 catalog/bootstrap、再用 App Server fetchCloud 和真实 Electron CDP 采集证据。插件层仍不新增 worker fast path、mock release 或手写 ready JSON。
 
-2026-07-06 signing command hint 已补：readiness evidence 会用当前 preflight 的真实 packageHash / manifestHash 生成签名命令提示，但 packageUrl、releaseId、公钥 ID 和私钥都保持占位符。插件层仍不执行签名、不写 trust root、不上传包；真实签名与 catalog/bootstrap 仍由 production operator 链路完成。
+2026-07-06 signing command hint 已补：readiness evidence 会用当前 preflight 的真实 packageHash / manifestHash 生成签名命令提示，但 packageUrl、releaseId 和公钥 ID 都保持占位符，私钥只通过 `--private-key-env PLUGIN_SIGNING_PRIVATE_KEY_PEM` 引用本地环境变量。插件层仍不执行签名、不写 trust root、不上传包；真实签名与 catalog/bootstrap 仍由 production operator 链路完成。
 
 2026-07-06 signing command CLI 输出已补：readiness pipeline 在终端直接打印同一条签名命令提示，避免 operator 手动打开 JSON 复制 hash。插件层仍只提供审计辅助，不承接签名、发布或安装。
+
+2026-07-06 operator command 口径收口：`operatorCommand` 与 `blockerPlan.nextPhase.commandHint` 现在都推荐 `--generate-signature-proof --signing-private-key-env PLUGIN_SIGNING_PRIVATE_KEY_PEM`，不再把 `--app-signature / --trust-root` 作为 operator 第一入口，也不再输出 `<private-key>` / `<token>` 这种容易被误粘贴进 shell history 的 secret 占位。默认 pipeline 保持只读；只有显式签名 proof 生成且具备真实 HTTPS packageUrl、releaseId、publicKeyId 和本地 signing private key env/file 时，才会生成签名文件。
 
 2026-07-06 releaseId / publicKeyId operator 输入已补：readiness pipeline 接受 `--release-id / --public-key-id`，并把这两个非敏感签名上下文写入 `operatorReadiness.inputs`；缺真实签名文件时，未配置也会进入 `missingKeys / missingActions`。插件层仍不硬编码 release id、不生成 mock trust root、不把这些字段当 production ready。
 
@@ -161,3 +163,17 @@ App Server current 普通 turn 已修到：`plugin_activation -> 普通 Agent tu
 2026-07-06 Studio-first pipeline 已补：readiness pipeline 先跑 Studio dry-run 刷新 `.lapp`，再跑 preflight，避免同轮 preflight 读取旧 dist package。最新只读证据 `.lime/qc/gui-evidence/agent-apps/content-factory-production-readiness-studio-first-2026-07-06-2026-07-05T17-07-47-825Z/content-factory-production-readiness-pipeline.json` 仍 blocked，但 Studio/preflight packageHash drift 已消失。插件层仍只提供真实 signed release 的审计链，不新增 mock release 或手写 ready JSON。
 
 2026-07-06 optional signing proof generation 已补：readiness pipeline 新增显式 `--generate-signature-proof`，用于 operator 在本地具备真实 signing key、HTTPS packageUrl、releaseId 和 publicKeyId 时，复用外部 `content-factory-app/scripts/sign-release.mjs` 生成 `app.signature.yaml` / trust root。默认不签名；缺任一输入时 `production_signature_generation_inputs_missing` fail-closed；签名阶段 evidence 只写入脱敏状态、missingKeys、路径存在性和字节数，不写入 URL、私钥、公钥或签名值。该能力只减少手工签名串联错误，不新增插件 worker、mock release、硬编码模板、弹窗详情或右侧自动展示。
+
+2026-07-06 preflight signingCommand hygiene 已补：preflight 输出层也不再保留 `PLUGIN_SIGNING_PRIVATE_KEY_PEM=$PRIVATE_KEY_PEM` 示例，统一指向 readiness pipeline 的 `--generate-signature-proof --signing-private-key-env PLUGIN_SIGNING_PRIVATE_KEY_PEM`；CLI help 也有回归守卫，防止重新提示粘贴 key/token 值，并明确 preflight 只通过 current `pluginLocalPackage/inspect` 做本地包事实和缺口检查，不签名、不上传、不安装、不调用 Provider、不写 passing `cloud_release` evidence。这只是 operator 审计提示收口，不改变插件运行形态；真实 ready 仍必须由 signed catalog/bootstrap、App Server fetchCloud verified 和真实 Electron/CDP `cloud_release` GUI evidence 同时关闭。
+
+2026-07-06 signing proof args 审计性已补：readiness pipeline evidence 会保留 `--private-key-env <ENV_NAME>` / `--studio-token-env <ENV_NAME>` 这类环境变量名，继续隐藏真实 URL、tenant、token、key file path 和私钥值。插件层不读取这些值，也不因此获得发布能力；它只让 production operator 之后能审计“使用了哪个本地 env 名”。
+
+2026-07-06 release evidence sourceKind 推断已收紧：`content-factory-production-release-evidence` 从 LimeCore marketplace 抓取 catalog 时不再因为存在 HTTPS `packageUrl` 就生成 `identity.sourceKind=cloud_release`；只有 package/source 明确声明 `cloud_release` 才能关闭 catalog sourceKind 要求。缺显式 sourceKind 时 summary 保持 `status=blocked` 并输出 `catalogSourceKindCloudRelease`，避免远程包 URL、fixture 或旧 marketplace 字段被误当 production signed release。最新只读 pipeline `.lime/qc/gui-evidence/agent-apps/content-factory-production-release-sourcekind-audit-2026-07-06-2026-07-06T01-13-12-511Z/content-factory-production-readiness-pipeline.json` 仍 `status=blocked`、missing codes `17` 个。
+
+2026-07-06 fetchCloud evidence 字段门禁已收紧：signed release gate 现在拒绝只写 `matched=true / verified / ready` 的 fetchCloud JSON，必须同时包含本次拉取的 `packageHash`、`manifestHash`、非 localhost HTTPS `packageUrl/sourceUri`、`signatureRef` 和 `signatureProof`，并继续与 catalog / preflight 比对。`content-factory-production-fetch-cloud-evidence` 会把 catalog proof 的非密钥审计字段写入本地 evidence；gate/report summary 不复制原始 package URL 或 detached signature 原文。该改动只提高 production 证据可信度，不新增 mock release 或 worker fast path。
+
+2026-07-06 GUI evidence provenance 门禁已收紧：signed release gate 不再接受只有 `status=passed`、`liveProviderUsed=true` 和 workflow JSONL 路径的手写 GUI JSON；必须带 production GUI collector schema、真实 Electron CDP attached/usedRealElectron、matched turn-start trace、current App Server `turn/start + read + evidence/export` method trace、workflow JSONL event count 和 `generatedArticleMarkerClean=true`。collector 同步写入 workflow JSONL event count/type 摘要。该改动不改变用户 UI，只防止 production GUI evidence 被 fixture 或手写 ready JSON 伪造。
+
+2026-07-06 workflow audit export 门禁已收紧：production GUI evidence 不能只证明 workflow JSONL 文件存在，还必须证明同一 session 经 current App Server `evidence/export` 产出 metadata-only `workflow_audit` 摘要。signed gate 要求 `status=exported`、`source=workflow-events.jsonl`、`eventCount>0`、`metadataOnly=true`、`rawContentIncluded=false`、`redactionPolicy=workflow_audit_metadata_only` 和 redaction 覆盖事件数。该改动继续保持 workflow facts 不进右侧 UI，只让审计链具备可导出的非原文摘要。
+
+2026-07-06 GUI installed release identity 门禁已收紧：production GUI evidence 的 `installedState` 不能只写 `signature verified`、`packageHashMatched=true` 或 `manifestHashMatched=true`；必须同时携带 `appVersion / packageHash / manifestHash / releaseId / signatureRef`，其中 hash 必须是 `sha256:<64 hex>`，并逐项与 production catalog、preflight 和 fetchCloud evidence 一致。缺字段、hash 非法、releaseId / signatureRef 漂移或 fixture / localhost marker 都会 blocked。该改动只提高 GUI evidence 与同一轮 release 的绑定强度，不新增 UI、worker fast path、mock release 或手写 ready JSON。

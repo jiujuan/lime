@@ -71,6 +71,97 @@ describe("messageListInlineProcess", () => {
     ]);
   });
 
+  it("同一 final item 的流式 overlay 续写应合并回工具前文本", () => {
+    const parts = [
+      {
+        type: "text",
+        text: "我先把最新的国际",
+        metadata: {
+          source: "agent_text_delta",
+          itemId: "item-final",
+          phase: "final_answer",
+          sequence: 2,
+          turnId: "turn-1",
+        },
+      },
+      {
+        type: "tool_use",
+        toolCall: {
+          id: "tool-search",
+          name: "web_search",
+          status: "running",
+        },
+        metadata: { sequence: 3 },
+      },
+    ] as unknown as Message["contentParts"];
+
+    expect(
+      mergeStreamingOverlayContentParts(parts, {
+        content: "我先把最新的国际新闻抓回来，整理给你。",
+        itemId: "item-final",
+        phase: "final_answer",
+        sequence: 2,
+        turnId: "turn-1",
+      }),
+    ).toEqual([
+      {
+        type: "text",
+        text: "我先把最新的国际新闻抓回来，整理给你。",
+        metadata: {
+          source: "agent_text_delta",
+          itemId: "item-final",
+          phase: "final_answer",
+          sequence: 2,
+          turnId: "turn-1",
+        },
+      },
+      {
+        type: "tool_use",
+        toolCall: {
+          id: "tool-search",
+          name: "web_search",
+          status: "running",
+        },
+        metadata: { sequence: 3 },
+      },
+    ]);
+  });
+
+  it("无 provenance 的流式 overlay 不应靠未完句启发式挪到工具前", () => {
+    const parts = [
+      { type: "text", text: "我先把最新的国际" },
+      {
+        type: "tool_use",
+        toolCall: {
+          id: "tool-search",
+          name: "web_search",
+          status: "running",
+        },
+      },
+    ] as unknown as Message["contentParts"];
+
+    expect(
+      mergeStreamingOverlayContentParts(
+        parts,
+        "我先把最新的国际新闻抓回来，整理给你。",
+      ),
+    ).toEqual([
+      { type: "text", text: "我先把最新的国际" },
+      {
+        type: "tool_use",
+        toolCall: {
+          id: "tool-search",
+          name: "web_search",
+          status: "running",
+        },
+      },
+      {
+        type: "text",
+        text: "新闻抓回来，整理给你。",
+      },
+    ]);
+  });
+
   it("流式 overlay 修正工具后的尾部正文时不应把正文挪到工具前", () => {
     const parts = [
       { type: "text", text: "我先查证来源。" },

@@ -18,6 +18,7 @@ import {
   GOAL_DONE_TEXT,
   GOAL_PROMPT,
   IMAGE_COMMAND_DONE_TEXT,
+  INPUTBAR_RICH_RESTORE_PROMPT,
   MCP_STRUCTURED_CONTENT_DONE_TEXT,
   MULTI_AGENT_TEAM_DONE_TEXT,
   MULTI_AGENT_TEAM_PROMPT,
@@ -40,6 +41,7 @@ export function buildCommonAssertions(context) {
     isPlanScenario,
     isGoalScenario,
     isImageCommandScenario,
+    isInputbarRichRestoreScenario,
     isWebToolsRenderingScenario,
     isMcpStructuredContentScenario,
     isMultiAgentTeamScenario,
@@ -63,7 +65,8 @@ export function buildCommonAssertions(context) {
     shouldRequireAgentUiTraceEvidence &&
     !isPlanScenario &&
     !isImageCommandScenario &&
-    !isSoulStyleScenario;
+    !isSoulStyleScenario &&
+    !isInputbarRichRestoreScenario;
   const agentUiPerformanceTrace = summary.agentUiPerformanceTrace;
   const appServerTraceEvidence = summary.appServerTraceEvidence;
   const commonAssertions = {
@@ -101,13 +104,27 @@ export function buildCommonAssertions(context) {
       isContentFactoryArticleWorkspaceScenario
         ? true
         : guiTurnStartReachedBackend,
-    liveProviderNotUsed: backendLedger.every(
-      (entry) =>
-        entry.kind !== "turnStart" ||
-        ((!entry.providerPreference ||
+    liveProviderNotUsed: backendLedger.every((entry) => {
+      if (entry.kind !== "turnStart") {
+        return true;
+      }
+      if (isInputbarRichRestoreScenario) {
+        return (
+          (!entry.providerPreference ||
+            entry.providerPreference ===
+              summary.textFixtureProvider?.providerId ||
+            entry.providerPreference === FIXTURE_PROVIDER) &&
+          (!entry.modelPreference ||
+            entry.modelPreference === summary.textFixtureProvider?.modelId ||
+            entry.modelPreference === FIXTURE_MODEL)
+        );
+      }
+      return (
+        (!entry.providerPreference ||
           entry.providerPreference === FIXTURE_PROVIDER) &&
-          (!entry.modelPreference || entry.modelPreference === FIXTURE_MODEL)),
-    ),
+        (!entry.modelPreference || entry.modelPreference === FIXTURE_MODEL)
+      );
+    }),
     newsRequestDidNotForceRequiredSearch:
       asterChatRequest?.search_mode !== "required",
     newsRequestDidNotPassLegacyWebSearchFlag:
@@ -120,6 +137,8 @@ export function buildCommonAssertions(context) {
       : isCancelThenContinueScenario
         ? summary.guiContinueCompleted?.hasPrompt === true &&
           summary.guiContinueCompleted?.bodyText?.includes(NEWS_PROMPT) === true
+        : isInputbarRichRestoreScenario
+          ? summary.inputbarRichRestoreGuiCanceled?.hasPrompt === true
         : isRightSurfaceVisualMatrixScenario
           ? summary.rightSurfaceVisualMatrix?.captures?.expertInfo?.stable
               ?.rootVisible === true
@@ -159,6 +178,9 @@ export function buildCommonAssertions(context) {
       : isCancelThenContinueScenario
         ? summary.guiContinueCompleted?.hasAssistantSummary === true ||
           summary.guiContinueCompleted?.hasDoneText === true
+        : isInputbarRichRestoreScenario
+          ? summary.inputbarRichRestoreGuiCanceled
+              ?.noVisibleAssistantOutput === true
         : isRightSurfaceVisualMatrixScenario
           ? summary.rightSurfaceVisualMatrix?.captures?.files?.stable
               ?.rootVisible === true &&
@@ -232,6 +254,12 @@ export function buildCommonAssertions(context) {
       : isCancelThenContinueScenario
         ? summary.guiContinueCompleted?.textareaVisible === true &&
           summary.guiContinueCompleted?.textareaDisabled === false
+        : isInputbarRichRestoreScenario
+          ? summary.inputbarRichRestoreGuiCanceled?.textareaVisible === true &&
+            summary.inputbarRichRestoreGuiCanceled?.textareaDisabled ===
+              false &&
+            summary.inputbarRichRestoreGuiCanceled?.textareaValue ===
+              INPUTBAR_RICH_RESTORE_PROMPT
         : isRightSurfaceVisualMatrixScenario
           ? summary.guiRightSurfaceVisualMatrixSessionOpened?.inputReady
               ?.textareaDisabled === false
@@ -292,6 +320,8 @@ export function buildCommonAssertions(context) {
       ? summary.guiCanceled?.stopButtonVisible === false
       : isCancelThenContinueScenario
         ? summary.guiContinueCompleted?.stopButtonVisible === false
+        : isInputbarRichRestoreScenario
+          ? summary.inputbarRichRestoreGuiCanceled?.stopButtonVisible === false
         : isRightSurfaceVisualMatrixScenario
           ? true
           : isContentFactoryArticleWorkspaceScenario
@@ -337,6 +367,10 @@ export function buildCommonAssertions(context) {
           pageText.includes(CONTINUE_PROMPT) &&
           (pageText.includes("继续输出已恢复") ||
             pageText.includes(CONTINUE_DONE_TEXT))
+        : isInputbarRichRestoreScenario
+          ? pageText.includes(INPUTBAR_RICH_RESTORE_PROMPT) &&
+            summary.inputbarRichRestoreGuiCanceled
+              ?.noVisibleAssistantOutput === true
         : isRightSurfaceVisualMatrixScenario
           ? summary.rightSurfaceVisualMatrix?.captures?.files?.stable
               ?.activeSurface === "files" &&

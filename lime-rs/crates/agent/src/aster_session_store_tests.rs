@@ -10,6 +10,7 @@ use aster::session::{
 };
 use aster::session::{SessionStore, SessionType};
 use chrono::Utc;
+use lime_core::app_paths;
 use lime_core::database::schema::create_tables;
 use rusqlite::Connection;
 use std::ffi::OsString;

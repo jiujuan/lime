@@ -325,6 +325,7 @@ describe("agentStreamSubmitExecution", () => {
       }),
     ).rejects.toThrow(`${MODEL_INPUT_CAPABILITY_GAP_ERROR_PREFIX}:`);
 
+    expect(getModelRegistryMock).toHaveBeenCalledWith({ forceRefresh: true });
     expect(setAgentRuntimeObjectiveMock).not.toHaveBeenCalled();
     expect(submitOp).not.toHaveBeenCalled();
   });
@@ -452,6 +453,7 @@ describe("agentStreamSubmitExecution", () => {
     });
 
     expect(submitOp).toHaveBeenCalledTimes(1);
+    expect(getModelRegistryMock).toHaveBeenCalledWith({ forceRefresh: true });
     expect(submitOp.mock.calls[0]?.[0]).toMatchObject({
       type: "user_input",
       metadata: {

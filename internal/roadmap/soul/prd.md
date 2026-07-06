@@ -1,7 +1,7 @@
 # Lime Soul 个性化 PRD
 
 > 状态：current PRD
-> 更新时间：2026-06-02
+> 更新时间：2026-07-06
 > 关联路线图：[../memory/make-next-generation-more-like-me.md](../memory/make-next-generation-more-like-me.md)
 > 产品口径：普通用户看到 `AI 个性 / 声线`；底层工程继续使用 `Personality Layer / memory profile / Generation Brief`。
 
@@ -34,6 +34,7 @@ OpenClaw 和 Hermes 都已经证明，长期稳定的人格 / 声线会显著改
 2. 让 Lime 少说客套话，多给实际建议。
 3. 关闭或重置个性化语气。
 4. 确认正式内容没有被助手人格污染。
+5. 切换贱兮兮执行官、温柔陪伴型助理、拽酷行动派、冷静专业型搭档等 Style Profile，并在工具调用前后和正文细节里感受到差异。
 
 ### 2.2 进阶创作者 / 品牌用户
 
@@ -64,6 +65,7 @@ OpenClaw 和 Hermes 都已经证明，长期稳定的人格 / 声线会显著改
 2. 查看 `Generation Brief` 中是否包含 creator / brand voice。
 3. 验证 `SOUL.md` 导入只是写入 current 配置。
 4. 验证禁用 Soul 后下一轮不再注入。
+5. 验证 Style Pack Registry 中的 profile 没有退化成 UI / i18n 硬编码句库。
 
 ## 3. 产品目标
 
@@ -82,6 +84,15 @@ OpenClaw 和 Hermes 都已经证明，长期稳定的人格 / 声线会显著改
 3. 普通聊天能吸收 Global Soul。
 4. 正式创作默认不受 Product Soul 影响。
 5. 诊断能说明当前 turn 是否使用了 Soul section。
+6. Style Profile 能覆盖工具调用前、中、后、正文转折、失败恢复和结尾建议，不只改变欢迎语。
+
+### 3.2.1 P1.5 目标：可切换 Style Profile
+
+1. 四个首发风格作为 built-in Style Pack seed 注册到 `Style Pack Registry`。
+2. 每个 Style Pack 提供 voice primitives、surface contracts、anti-repetition rules、few-shot anchors 和 risk fallback。
+3. i18n 只提供 neutral UI copy；不得新增 `agentChat.soulInteraction.<tone>.*` profile 句库。
+4. 工具事实、搜索来源、图片结果、任务状态继续以 Agent Runtime / App Server read model 为事实源。
+5. 高风险、权限、删除、生产 API、医疗、法律、财务等场景强制降级到冷静专业口吻。
 
 ### 3.3 P2 目标
 
@@ -110,6 +121,9 @@ OpenClaw 和 Hermes 都已经证明，长期稳定的人格 / 声线会显著改
 7. 不让 Companion Soul 影响正式内容。
 8. 不把所有聊天历史自动抽取成声线。
 9. 不在多个组件里各自拼装 Soul prompt。
+10. 不把四种 Style Profile 做成四套本地 i18n 句库。
+11. 不让工具卡片、timeline、runtime status 根据 profile id 拼最终展示句子。
+12. 不把 few-shot anchor 当固定开场白或固定承接句复读。
 
 ## 5. 前台信息架构
 
@@ -215,8 +229,11 @@ P1：
 验收：
 
 - 普通聊天能体现 Soul 风格。
+- 同一工具生命周期里的工具前说明、工具中状态、工具后承接和最终正文都能体现正确 profile。
+- 正文小标题、段落转折、风险提示和结尾建议不能退回默认助手口吻。
 - 工具执行、安全确认、错误处理不被 Soul 弱化。
 - 关闭 Soul 后同一类 turn 不再包含 marker。
+- 本地 UI copy 只使用 neutral i18n key + descriptor metadata，不出现 profile 句库。
 
 ### 6.4 正式创作声线
 
@@ -250,13 +267,14 @@ P3：
 
 ## 7. 优先级
 
-| 优先级 | 能力                      | 原因                        |
-| ------ | ------------------------- | --------------------------- |
-| P0     | 文档和边界固定            | 防止和 Memory 分叉          |
-| P1     | 全局 Soul 设置 + 聊天注入 | 立即改善产品体感            |
-| P2     | SOUL.md 导入 / 导出       | 承接 OpenClaw / Hermes 迁移 |
-| P3     | Generation Brief 声线     | 让正式创作更像用户          |
-| P4     | 临时 overlay / 品牌包     | 进阶能力，风险更高          |
+| 优先级 | 能力                      | 原因                               |
+| ------ | ------------------------- | ---------------------------------- |
+| P0     | 文档和边界固定            | 防止和 Memory 分叉                 |
+| P1     | 全局 Soul 设置 + 聊天注入 | 立即改善产品体感                   |
+| P1.5   | Style Pack Registry       | 让风格不止欢迎语，且不靠硬编码句库 |
+| P2     | SOUL.md 导入 / 导出       | 承接 OpenClaw / Hermes 迁移        |
+| P3     | Generation Brief 声线     | 让正式创作更像用户                 |
+| P4     | 临时 overlay / 品牌包     | 进阶能力，风险更高                 |
 
 ## 8. 风险
 
@@ -270,6 +288,10 @@ P3：
    - 规避：P1 只注入短 section，长文本后续摘要。
 5. **多入口配置不一致**
    - 规避：设置页、导入、runtime 都写同一 current 配置。
+6. **风格变成千篇一律模板**
+   - 规避：Style Pack 只提供规则、surface contract 和 few-shot anchor；UI / i18n 禁止 profile 句库。
+7. **用户只在欢迎语感受到差异**
+   - 规避：验收覆盖工具调用前后、正文段落、失败恢复和结尾建议。
 
 ## 9. 成功指标
 
@@ -278,3 +300,4 @@ P3：
 3. 关闭 Soul 后运行时不再注入对应 section。
 4. SOUL.md 导入不造成新的文件依赖。
 5. Memory、Soul、Generation Brief 的工程边界可测试、可解释。
+6. 同一真实任务切换两种 Style Profile 后，工具 lifecycle 和正文细节有可见差异，但事实、来源、数字和错误原因保持一致。

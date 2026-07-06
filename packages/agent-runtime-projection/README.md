@@ -35,6 +35,7 @@ Agent UI / Runtime 的标准链路由四个包共同组成：
 src/actions.ts     -> HITL action.required / action.resolved projection helpers
 src/appServerFacts.ts -> App Server agentSession/read、agentSession/event、evidence/export facts -> execution events replay
 src/artifactEvents.ts -> artifact_snapshot projection helpers
+src/collaborationFacts.ts -> collaboration payload facts / Soul style metadata normalizer
 src/contextEvents.ts -> context_trace / turn_context projection helpers
 src/conversationEvents.ts -> message / text delta / reasoning delta projection helpers
 src/contracts.ts   -> contracts 类型转导
@@ -76,7 +77,7 @@ npm install @limecloud/agent-ui-contracts @limecloud/agent-runtime-projection
 - 用 `action.resolved` 标记已处理 action。
 - 聚合 artifact refs、evidence refs、task refs、source count。
 - 给 UI 提供 `UIMessageParts`、`ProcessTimeline`、`ExecutionGraph`、`actions`、`tools` 和 `readModel` 等标准渲染对象。
-- 给 UI 提供 `subagents` 标准模型，统一表达子代理线程、委派调用、活动摘要和隔离摘要，避免 React 组件重新解释子代理事实。
+- 给 UI 提供 `subagents` 标准模型，统一表达子代理线程、委派调用、活动摘要、隔离摘要和协作 facts，避免 React 组件重新解释子代理事实。
 - 为 `AgentUiProjectionEvent` 提供 host-neutral 的索引、scope selector 和 latest selector，宿主 store 只负责持久化和订阅。
 - 为 `AgentUiProjectionEvent` 提供 host-neutral 的 summary selector，包括 action / task / artifact / evidence / diagnostics 计数、notable latest events、Subagents surface 聚合和 artifact latest lookup。
 - 为 App Server `agentSession/read`、`agentSession/event`、`evidence/export` facts 提供标准 execution events replay adapter。
@@ -238,7 +239,7 @@ interface AppSession {
 - `timeline`: 交给 `ProcessTimelineView`，表达工具、action、artifact、diagnostic 的线性过程。
 - `graph`: 交给 `ExecutionGraphView`，表达 run / turn / task / tool / subagent 的结构关系。
 - `actions`: 交给 `ActionRequiredList`，只表达可响应的人类操作。
-- `subagents`: 交给 `SubagentsView` 或宿主自己的子代理 presentation adapter；业务组件不能从 assistant 正文或局部 UI state 推断 subagent / handoff / review 状态。
+- `subagents`: 交给 `SubagentsView` 或宿主自己的子代理 presentation adapter；业务组件不能从 assistant 正文或局部 UI state 推断 subagent / handoff / review 状态，也不能从协作标题或中文状态反推 `collaborationFacts` / Soul style metadata。
 - `runtime`: 顶部或侧栏运行状态，不作为 Provider 状态事实源。
 - `hydration`: 宿主判断 snapshot / realtime stream 是否 stale，不用于业务结果判断。
 
@@ -264,7 +265,7 @@ hydrate(read model / fixture / App Server facts)
 | Stream merge | `model.delta` / `reasoning.*` 合并为稳定 `UIMessagePart`，final text 不重复追加。 |
 | Snapshot repair | snapshot / read model 只能修复可见状态，不能让 UI 猜测 tool/action/artifact 终态。 |
 | State delta | `state.delta` 按 RFC 6902 patch 修复 projection / readModel 子树；batch 与 incremental apply 等价，失败进入 stale diagnostics，后续同子树 runtime facts 优先。 |
-| Subagents model | `subagents` 由 projection 构建；React 和产品应用不能再私有过滤 graph/read model。 |
+| Subagents model | `subagents` 由 projection 构建；React 和产品应用不能再私有过滤 graph/read model；thread / delegation / activity 的协作上下文通过 `collaboration` view 携带。 |
 | Reset | `reset()` 清空 events、read model 和 ephemeral UI。 |
 
 当前 `hydration.status` 最小支持 `idle` 和 `live`；`stale`、`repairing`、`degraded` 是 contracts 预留的标准状态，必须由 runtime/read model repair 事实驱动，不能由 UI timeout 猜测。
@@ -278,7 +279,7 @@ hydrate(read model / fixture / App Server facts)
 | `projectAgentUiState` | 一次性把 events 投影成完整 UI state。 |
 | `createAgentUiProjector` | 持有 headless projector，适合 event stream apply。 |
 | `projectAgentRuntimeReadModel` | 兼容事实栏或旧 surface。 |
-| `buildAgentUiSubagentsModel` | 从 execution events 构建标准 Subagents 模型。 |
+| `buildAgentUiSubagentsModel` | 从 execution events 构建标准 Subagents 模型，并把 `collaborationFacts`、`collaborationSurface`、`collaborationPhase`、`styleLevel`、`riskLevel`、`profileId`、`packId`、`toneVariant` 归一到 thread / delegation / activity 的 `collaboration` view。 |
 | `indexAgentUiProjectionEvents` | 为宿主外部 event store 建 latest / scope index。 |
 | `selectAgentUiProjectionEventsForScopeFromStore` | 按 session/thread/run/turn/task scope 取可见事件。 |
 | `summarizeAgentUiProjectionEvents` | 生成 host-neutral summary，不进 React。 |
@@ -314,7 +315,7 @@ const summary = summarizeAgentUiProjectionEvents(visible);
 
 不要在业务宿主里重新实现 `session / thread / run / turn / task` scope 匹配、latest event 索引、artifact / evidence / action lookup、事件类型分组、Subagents 聚合或 notable event summary。否则不同 App 会逐步长出不同的 Agent UI 解释口径。
 
-也不要在业务宿主里重新实现 `buildAgentUiActionRequiredEvent`、`buildAgentUiActionResolvedEvent`、`buildAgentUiArtifactSnapshotEvent`、`buildAgentUiContextTraceEvent`、`buildAgentUiTurnContextEvents`、`buildAgentUiMessageSnapshotEvent`、`buildAgentUiTextDeltaEvent`、`buildAgentUiReasoningDeltaEvent`、`buildAgentUiHistoricalHydrationEvents`、`buildAgentUiPlanApprovalRequiredEvent`、`buildAgentUiPlanApprovalResolvedEvent`、`extractAgentUiPlanApprovalProjection`、`extractAgentUiPlanApprovalResponseProjection`、`buildAgentUiRuntimePermissionChangedEvent`、`buildAgentUiQueueAddedEvents`、`buildAgentUiQueueLifecycleEvents`、`buildAgentUiRoutingStatusEvent`、`buildAgentUiThreadStartedEvent`、`buildAgentUiRunStartedEvent`、`buildAgentUiRunFinishedEvent`、`buildAgentUiRunFailedEvent`、`buildAgentUiRuntimeStatusEvent`、`buildAgentUiRuntimeTeamChangedEvent`、`buildAgentUiModelChangeEvent`、`buildAgentUiTaskProfileResolvedEvent`、`buildAgentUiSubagentStatusChangedEvents`、`buildAgentUiThreadItemEvent`、`buildAgentUiThreadItemActionEvent`、`buildAgentUiThreadItemSubagentActivityEvent`、`buildAgentUiThreadItemSubagentWorkerNotificationEvent`、`buildAgentUiThreadItemBase`、`buildAgentUiToolStartEvents`、`buildAgentUiToolEndEvent`、`buildAgentUiToolEndEvents`、`buildAgentUiToolProgressEvent`、`buildAgentUiToolOutputDeltaEvent`、`buildAgentUiToolInputDeltaEvent`、`extractAgentUiTaskOwnerChangeProjection`、`buildAgentUiProjectionBase`、`sequenceAgentUiProjectionEvents`、`definedString`、`truncateText`、`metadataKeys`、`extractArtifactRefs`、`buildRoutingDecisionPayload`、`buildWorkerUsageProjection`、runtime entity/status/phase/topology 这类通用事实解释。宿主 adapter 只把自己的事件 shape 映射到标准 projection event，通用规整与事实解释必须回到本包。
+也不要在业务宿主里重新实现 `buildAgentUiActionRequiredEvent`、`buildAgentUiActionResolvedEvent`、`buildAgentUiArtifactSnapshotEvent`、`buildAgentUiContextTraceEvent`、`buildAgentUiTurnContextEvents`、`buildAgentUiMessageSnapshotEvent`、`buildAgentUiTextDeltaEvent`、`buildAgentUiReasoningDeltaEvent`、`buildAgentUiHistoricalHydrationEvents`、`buildAgentUiPlanApprovalRequiredEvent`、`buildAgentUiPlanApprovalResolvedEvent`、`extractAgentUiPlanApprovalProjection`、`extractAgentUiPlanApprovalResponseProjection`、`buildAgentUiRuntimePermissionChangedEvent`、`buildAgentUiQueueAddedEvents`、`buildAgentUiQueueLifecycleEvents`、`buildAgentUiRoutingStatusEvent`、`buildAgentUiThreadStartedEvent`、`buildAgentUiRunStartedEvent`、`buildAgentUiRunFinishedEvent`、`buildAgentUiRunFailedEvent`、`buildAgentUiRuntimeStatusEvent`、`buildAgentUiRuntimeTeamChangedEvent`、`buildAgentUiModelChangeEvent`、`buildAgentUiTaskProfileResolvedEvent`、`buildAgentUiSubagentStatusChangedEvents`、`buildAgentUiCollaborationPayloadMetadata`、`buildAgentUiThreadItemEvent`、`buildAgentUiThreadItemActionEvent`、`buildAgentUiThreadItemSubagentActivityEvent`、`buildAgentUiThreadItemSubagentWorkerNotificationEvent`、`buildAgentUiThreadItemBase`、`buildAgentUiToolStartEvents`、`buildAgentUiToolEndEvent`、`buildAgentUiToolEndEvents`、`buildAgentUiToolProgressEvent`、`buildAgentUiToolOutputDeltaEvent`、`buildAgentUiToolInputDeltaEvent`、`extractAgentUiTaskOwnerChangeProjection`、`buildAgentUiProjectionBase`、`sequenceAgentUiProjectionEvents`、`definedString`、`truncateText`、`metadataKeys`、`extractArtifactRefs`、`buildRoutingDecisionPayload`、`buildWorkerUsageProjection`、runtime entity/status/phase/topology 这类通用事实解释。宿主 adapter 只把自己的事件 shape 映射到标准 projection event，通用规整与事实解释必须回到本包。
 
 主聊天、Plugin、content-studio 等宿主可以继续保留本地化 label、文案格式化、点击行为和业务卡片，但这些属于 presentation adapter，不是 runtime projection 标准事实源。
 

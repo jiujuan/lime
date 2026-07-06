@@ -3,57 +3,37 @@
 use lime_core::database::DbConnection;
 use std::time::Instant;
 
+use super::get_session_sync_with_history_page;
+use super::session_store_provider_routing::read_session_provider_selector;
 use super::session_store_runtime_projection::{
     apply_runtime_snapshot, apply_runtime_usage_fallback_to_latest_assistant_message,
 };
-use super::session_store_subagent_aster_adapter::project_aster_subagent_session;
 use super::session_store_subagent_context::{
     load_child_subagent_sessions, load_subagent_parent_context,
     should_load_runtime_overlay_for_runtime_detail,
     should_load_subagent_runtime_context_for_runtime_detail,
 };
 use super::session_store_types::SessionDetail;
-use super::{get_session_sync_with_history_page, resolve_session_provider_selector};
-use crate::aster_runtime_projection::project_aster_message;
+use crate::protocol::AgentMessage as RuntimeAgentMessage;
 use crate::runtime_support::load_runtime_snapshot_overlay;
 use crate::session_execution_runtime::{
     build_session_execution_runtime, reconcile_session_execution_runtime_permission_fallback,
 };
-use crate::session_execution_runtime_adapter::{
-    project_aster_session_execution_runtime_session, project_aster_session_usage,
-};
-use crate::session_query::read_session;
+use crate::session_execution_runtime_query::read_session_execution_runtime_session_projection;
+use crate::session_runtime_conversation_query::read_runtime_conversation_window;
 
 pub(super) fn apply_current_runtime_conversation(
     detail: &mut SessionDetail,
-    session: &aster::session::Session,
-    history_limit: Option<usize>,
-    history_offset: usize,
+    messages: Option<Vec<RuntimeAgentMessage>>,
     before_message_id: Option<i64>,
 ) {
     if before_message_id.is_some() {
         return;
     }
 
-    let Some(conversation) = session.conversation.as_ref() else {
-        return;
-    };
-
-    let mut messages = conversation
-        .messages()
-        .iter()
-        .filter(|message| message.is_user_visible())
-        .map(project_aster_message)
-        .collect::<Vec<_>>();
-
-    if let Some(limit) = history_limit {
-        let len = messages.len();
-        let end = len.saturating_sub(history_offset.min(len));
-        let start = end.saturating_sub(limit);
-        messages = messages[start..end].to_vec();
+    if let Some(messages) = messages {
+        detail.messages = messages;
     }
-
-    detail.messages = messages;
 }
 
 fn is_session_archived_sync(db: &DbConnection, session_id: &str) -> Result<bool, String> {
@@ -149,17 +129,16 @@ pub async fn get_runtime_session_detail_with_history_page(
         && should_load_runtime_overlay_for_runtime_detail(&detail, history_limit);
 
     let overlay_started_at = Instant::now();
-    let (session, runtime_snapshot) = if load_runtime_overlay {
-        let include_messages = before_message_id.is_none();
-        let (session_result, overlay_result) = tokio::join!(
-            read_session(session_id, include_messages, "读取运行态 session 失败"),
+    let (runtime_messages, runtime_snapshot) = if load_runtime_overlay {
+        let (conversation_result, overlay_result) = tokio::join!(
+            read_runtime_conversation_window(session_id, history_limit, history_offset),
             load_runtime_snapshot_overlay(session_id),
         );
-        let session = match session_result {
-            Ok(session) => Some(session),
+        let runtime_messages = match conversation_result {
+            Ok(messages) => messages,
             Err(error) => {
                 tracing::warn!(
-                    "[SessionStore] 读取运行态 session 失败，execution runtime 已降级忽略: session_id={}, error={}",
+                    "[SessionStore] 读取 current runtime conversation 失败，已降级忽略: session_id={}, error={}",
                     session_id,
                     error
                 );
@@ -177,35 +156,60 @@ pub async fn get_runtime_session_detail_with_history_page(
                 None
             }
         };
-        (session, overlay)
+        (runtime_messages, overlay)
     } else {
         (None, None)
     };
     let overlay_ms = overlay_started_at.elapsed().as_millis();
 
-    if let Some(session) = session.as_ref() {
-        apply_current_runtime_conversation(
-            &mut detail,
-            session,
-            history_limit,
-            history_offset,
-            before_message_id,
-        );
-    }
+    apply_current_runtime_conversation(&mut detail, runtime_messages, before_message_id);
+
+    let has_execution_runtime_overlay = runtime_snapshot
+        .as_ref()
+        .is_some_and(|overlay| overlay.execution_snapshot.latest_turn.is_some());
+    let should_load_execution_runtime_session =
+        load_runtime_overlay && (!was_persisted_empty || has_execution_runtime_overlay);
 
     let usage_fallback_started_at = Instant::now();
-    if let Some(session) = session.as_ref() {
-        apply_runtime_usage_fallback_to_latest_assistant_message(
-            &mut detail.messages,
-            project_aster_session_usage(session),
-        );
+    let execution_runtime_session = if should_load_execution_runtime_session {
+        match read_session_execution_runtime_session_projection(db, session_id) {
+            Ok(session) => session,
+            Err(error) => {
+                tracing::warn!(
+                    "[SessionStore] 读取 current execution runtime session 失败，已降级忽略: session_id={}, error={}",
+                    session_id,
+                    error
+                );
+                None
+            }
+        }
+    } else {
+        None
+    };
+    if let Some(usage) = execution_runtime_session
+        .as_ref()
+        .and_then(|session| session.usage.clone())
+    {
+        apply_runtime_usage_fallback_to_latest_assistant_message(&mut detail.messages, Some(usage));
     }
     let usage_fallback_ms = usage_fallback_started_at.elapsed().as_millis();
 
     let execution_runtime_started_at = Instant::now();
-    let execution_runtime_session = session
-        .as_ref()
-        .map(project_aster_session_execution_runtime_session);
+    let provider_selector = if should_load_execution_runtime_session {
+        match read_session_provider_selector(db, session_id) {
+            Ok(provider_selector) => provider_selector,
+            Err(error) => {
+                tracing::warn!(
+                    "[SessionStore] 读取 current provider routing metadata 失败: session_id={}, error={}",
+                    session_id,
+                    error
+                );
+                None
+            }
+        }
+    } else {
+        None
+    };
     detail.execution_runtime = build_session_execution_runtime(
         session_id,
         execution_runtime_session.as_ref(),
@@ -213,7 +217,7 @@ pub async fn get_runtime_session_detail_with_history_page(
         runtime_snapshot
             .as_ref()
             .map(|overlay| &overlay.execution_snapshot),
-        session.as_ref().and_then(resolve_session_provider_selector),
+        provider_selector,
     );
     let execution_runtime_ms = execution_runtime_started_at.elapsed().as_millis();
 
@@ -254,8 +258,7 @@ pub async fn get_runtime_session_detail_with_history_page(
 
     let parent_context_started_at = Instant::now();
     if load_subagent_runtime_context {
-        let current_subagent_session = session.as_ref().and_then(project_aster_subagent_session);
-        match load_subagent_parent_context(db, session_id, current_subagent_session).await {
+        match load_subagent_parent_context(db, session_id, None).await {
             Ok(subagent_parent_context) => {
                 detail.subagent_parent_context = subagent_parent_context;
             }

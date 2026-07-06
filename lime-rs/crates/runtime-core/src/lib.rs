@@ -1,8 +1,15 @@
+pub mod context_fragments;
 pub mod llm_protocol;
 pub mod model_route;
 pub mod model_routing;
 pub mod model_task;
+pub mod runtime_content;
 
+pub use context_fragments::{
+    estimate_context_fragment_tokens, ContextFragmentBudgetDecision, ContextFragmentBudgetPolicy,
+    ContextFragmentBudgetStatus, ContextFragmentEnvelope, ContextFragmentInput,
+    ContextFragmentSource, ContextSidecarReference,
+};
 pub use llm_protocol::{
     build_fal_video_generation_body, build_openai_images_generation_body,
     build_provider_wire_request, build_responses_image_generation_body,
@@ -25,4 +32,11 @@ pub use model_routing::{
 pub use model_task::{
     build_model_task_request, capability_snapshot_from_model_capabilities,
     model_task_request_value, route_capability_gap, ModelTaskRequestInput,
+};
+pub use runtime_content::{
+    is_supported_runtime_media_mime_type, runtime_media_kind_for_mime_type,
+    runtime_media_part_from_reference, RuntimeContentPart, RuntimeContentPartError,
+    RuntimeContentReference, RuntimeMediaKind, RuntimeMediaPartInput, RuntimeMessageDeltaContent,
+    RuntimeMessageDeltaContentParseError, RUNTIME_AUDIO_MIME_TYPES, RUNTIME_FILE_MIME_TYPES,
+    RUNTIME_IMAGE_MIME_TYPES, RUNTIME_VIDEO_MIME_TYPES,
 };

@@ -67,7 +67,7 @@ describe("agentStreamSubmitDraft browser paint boundary", () => {
     expect(isSending).toBe(true);
   });
 
-  it("普通 assistant 草稿初始运行态应支持 Soul 交互口吻", () => {
+  it("普通 assistant 草稿初始运行态应保持 neutral 文案并携带 Soul metadata", () => {
     let messages: Message[] = [];
     let isSending = false;
     const soulCopy = resolveSoulInteractionCopy({
@@ -102,8 +102,17 @@ describe("agentStreamSubmitDraft browser paint boundary", () => {
     });
 
     expect(messages[1]?.runtimeStatus).toMatchObject({
-      title: "正在看需求",
-      detail: expect.stringMatching(/别让流程.*抢戏/u),
+      title: "正在准备处理",
+      detail: "正在理解你的需求并准备当前阶段。",
+      metadata: {
+        soul_surface: "initial_runtime_status",
+        soul_phase: "preparing",
+        style_level: "L1",
+        risk_level: "normal",
+        tone_variant: "cheeky_sassy",
+        profile_id: "cheeky_sassy_executor",
+        pack_id: "com.lime.soul.cheeky-sassy-executor",
+      },
     });
   });
 

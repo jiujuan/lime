@@ -1,6 +1,7 @@
 use super::inventory::ExtensionToolInventorySeed;
 use crate::AgentRuntimeState;
 use aster::agents::extension::ExtensionConfig as AsterExtensionConfig;
+use tool_runtime::native_overlay::runtime_native_tool_overlay_tool_names;
 use tool_runtime::tool_definition::RuntimeToolDefinition;
 use tool_runtime::tool_extension::RuntimeExtensionConfig;
 
@@ -35,6 +36,11 @@ pub(super) async fn read_agent_tool_inventory_runtime_seed(
     };
     let current_surface_tool_names = registry_definitions
         .iter()
+        .filter(|definition| {
+            runtime_native_tool_overlay_tool_names()
+                .iter()
+                .any(|name| definition.name.as_str() == *name)
+        })
         .map(|definition| definition.name.clone())
         .collect::<Vec<_>>();
     let extension_configs = agent

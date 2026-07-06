@@ -83,6 +83,17 @@ export interface AgentUiSubagentIsolationView {
   canDelegate?: boolean;
 }
 
+export interface AgentUiCollaborationFactsView {
+  collaborationFacts?: Record<string, unknown>;
+  collaborationSurface?: string;
+  collaborationPhase?: string;
+  styleLevel?: string;
+  riskLevel?: string;
+  toneVariant?: string;
+  profileId?: string;
+  packId?: string;
+}
+
 export interface AgentUiSubagentThreadView {
   threadId: string;
   subagentId: string;
@@ -103,6 +114,7 @@ export interface AgentUiSubagentThreadView {
   evidenceRefs: string[];
   sourceEventIds: string[];
   isolation?: AgentUiSubagentIsolationView;
+  collaboration?: AgentUiCollaborationFactsView;
 }
 
 export interface AgentUiSubagentDelegationView {
@@ -116,6 +128,7 @@ export interface AgentUiSubagentDelegationView {
   promptPreview?: string;
   createdAt?: string;
   completedAt?: string;
+  collaboration?: AgentUiCollaborationFactsView;
 }
 
 export interface AgentUiSubagentActivityView {
@@ -135,6 +148,7 @@ export interface AgentUiSubagentActivityView {
   status: AgentRuntimeExecutionEventStatus;
   title: string;
   createdAt?: string;
+  collaboration?: AgentUiCollaborationFactsView;
 }
 
 export interface AgentUiSubagentsModel {

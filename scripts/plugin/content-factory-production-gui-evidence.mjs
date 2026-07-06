@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 
 import { readProductionTurnStartTrace } from "../lib/content-factory-production-turn-start-trace.mjs";
@@ -16,6 +17,11 @@ import {
 
 const APP_ID = "content-factory-app";
 const APP_SERVER_HANDLE_JSON_LINES_COMMAND = "app_server_handle_json_lines";
+const ARTICLE_EDITOR_WORKFLOW_FACT_TEST_IDS = {
+  detail: "workspace-article-editor-workflow-detail",
+  step: "workspace-article-editor-workflow-step",
+  sidePanel: "workspace-article-editor-side-panel",
+};
 const DEFAULTS = {
   cdpUrl: process.env.LIME_ELECTRON_CDP_URL || "",
   evidenceDir: path.join(
@@ -154,6 +160,13 @@ function readString(...values) {
   return "";
 }
 
+function readBool(...values) {
+  for (const value of values) {
+    if (typeof value === "boolean") return value;
+  }
+  return false;
+}
+
 function parseJson(raw, fallback = null) {
   try {
     return JSON.parse(String(raw ?? ""));
@@ -240,31 +253,106 @@ function findContentFactoryInstalledState(listResult) {
   const states = Array.isArray(listResult?.states) ? listResult.states : [];
   return states.find(
     (state) =>
-      readString(state?.appId, state?.app_id, state?.identity?.appId) ===
-      APP_ID,
+      readString(
+        state?.appId,
+        state?.app_id,
+        state?.identity?.appId,
+        state?.identity?.app_id,
+      ) === APP_ID,
   );
 }
 
-function summarizeInstalledState(state) {
-  const evidence = state?.setup?.cloudReleaseEvidence || {};
+export function summarizeInstalledState(state) {
+  const identity = state?.identity || {};
+  const setup = state?.setup || {};
+  const evidence =
+    setup.cloudReleaseEvidence ||
+    setup.cloud_release_evidence ||
+    state?.cloudReleaseEvidence ||
+    state?.cloud_release_evidence ||
+    {};
   return {
-    appId: readString(state?.appId, state?.app_id, state?.identity?.appId),
+    appId: readString(
+      state?.appId,
+      state?.app_id,
+      identity.appId,
+      identity.app_id,
+    ),
     appVersion: readString(
       state?.appVersion,
       state?.app_version,
-      state?.identity?.appVersion,
+      identity.appVersion,
+      identity.app_version,
+      state?.manifest?.version,
     ),
-    sourceKind: readString(state?.identity?.sourceKind),
-    sourceUriConfigured: Boolean(readString(state?.identity?.sourceUri)),
-    packageHash: readString(state?.identity?.packageHash),
-    manifestHash: readString(state?.identity?.manifestHash),
-    releaseId: readString(state?.identity?.releaseId),
-    signatureRef: readString(state?.identity?.signatureRef),
+    sourceKind: readString(
+      identity.sourceKind,
+      identity.source_kind,
+      state?.sourceKind,
+      state?.source_kind,
+    ),
+    sourceUriConfigured: Boolean(
+      readString(
+        identity.sourceUri,
+        identity.source_uri,
+        state?.sourceUri,
+        state?.source_uri,
+        evidence.sourceUri,
+        evidence.source_uri,
+      ),
+    ),
+    packageHash: readString(
+      identity.packageHash,
+      identity.package_hash,
+      state?.packageHash,
+      state?.package_hash,
+      evidence.packageHash,
+      evidence.package_hash,
+    ),
+    manifestHash: readString(
+      identity.manifestHash,
+      identity.manifest_hash,
+      state?.manifestHash,
+      state?.manifest_hash,
+      evidence.manifestHash,
+      evidence.manifest_hash,
+    ),
+    releaseId: readString(
+      identity.releaseId,
+      identity.release_id,
+      state?.releaseId,
+      state?.release_id,
+    ),
+    signatureRef: readString(
+      identity.signatureRef,
+      identity.signature_ref,
+      state?.signatureRef,
+      state?.signature_ref,
+    ),
+    signaturePolicy: readString(
+      evidence.signaturePolicy,
+      evidence.signature_policy,
+      state?.signaturePolicy,
+      state?.signature_policy,
+    ),
     signatureVerificationStatus: readString(
       evidence.signatureVerificationStatus,
+      evidence.signature_verification_status,
       state?.signatureVerificationStatus,
+      state?.signature_verification_status,
     ),
-    packageVerificationStatus: readString(evidence.packageVerificationStatus),
+    packageVerificationStatus: readString(
+      evidence.packageVerificationStatus,
+      evidence.package_verification_status,
+    ),
+    packageHashMatched: readBool(
+      evidence.packageHashMatched,
+      evidence.package_hash_matched,
+    ),
+    manifestHashMatched: readBool(
+      evidence.manifestHashMatched,
+      evidence.manifest_hash_matched,
+    ),
     cloudReleaseEvidenceStatus: readString(evidence.status),
   };
 }
@@ -306,10 +394,19 @@ function summarizeReadModel(readResult) {
   };
 }
 
-function inferLiveProviderUsed({ installedState, readModel }) {
+export function inferLiveProviderUsed({ installedState, readModel }) {
   return (
     installedState.sourceKind === "cloud_release" &&
+    Boolean(installedState.packageHash) &&
+    Boolean(installedState.manifestHash) &&
+    Boolean(installedState.releaseId) &&
+    Boolean(installedState.signatureRef) &&
+    installedState.signaturePolicy === "required" &&
     installedState.signatureVerificationStatus === "verified" &&
+    installedState.cloudReleaseEvidenceStatus === "ready" &&
+    installedState.packageVerificationStatus === "verified" &&
+    installedState.packageHashMatched === true &&
+    installedState.manifestHashMatched === true &&
     readModel.hostManagedGenerationStatus === "completed" &&
     readModel.articleDraftDocumentPresent &&
     readModel.generatedArticleMarkerClean === true
@@ -327,12 +424,52 @@ function summarizeEvidenceExport(evidenceResult) {
           eventCount: workflowAudit.eventCount ?? null,
           metadataOnly: workflowAudit.metadataOnly ?? null,
           rawContentIncluded: workflowAudit.rawContentIncluded ?? null,
+          redactionPolicyEventCount:
+            workflowAudit.redactionPolicyEventCount ?? null,
           redactionPolicy: workflowAudit.redactionPolicy ?? null,
           source: workflowAudit.source ?? null,
           status: workflowAudit.status ?? null,
         }
       : null,
   };
+}
+
+export function summarizeWorkflowFactsDom(snapshot) {
+  const workflowDetailCount = Number(snapshot?.workflowDetailCount) || 0;
+  const workflowStepCount = Number(snapshot?.workflowStepCount) || 0;
+  const sidePanelWorkflowFactMentioned = Boolean(
+    snapshot?.sidePanelWorkflowFactMentioned,
+  );
+  return {
+    hidden:
+      workflowDetailCount === 0 &&
+      workflowStepCount === 0 &&
+      !sidePanelWorkflowFactMentioned,
+    sidePanelWorkflowFactMentioned,
+    workflowDetailCount,
+    workflowStepCount,
+  };
+}
+
+async function inspectArticleEditorWorkflowFacts(page) {
+  const snapshot = await page.evaluate((testIds) => {
+    const countByTestId = (testId) =>
+      document.querySelectorAll(`[data-testid="${testId}"]`).length;
+    const sidePanelText = Array.from(
+      document.querySelectorAll(`[data-testid="${testIds.sidePanel}"]`),
+    )
+      .map((element) => element.textContent || "")
+      .join("\n");
+    return {
+      workflowDetailCount: countByTestId(testIds.detail),
+      workflowStepCount: countByTestId(testIds.step),
+      sidePanelWorkflowFactMentioned:
+        /content_article_workflow|workflow-events\.jsonl/i.test(
+          sidePanelText,
+        ),
+    };
+  }, ARTICLE_EDITOR_WORKFLOW_FACT_TEST_IDS);
+  return summarizeWorkflowFactsDom(snapshot);
 }
 
 async function waitForElectronPage(options) {
@@ -385,6 +522,8 @@ function buildAssertions({
   readModel,
   workflowJsonlEvents,
   workflowResumeLifecycle,
+  evidenceExport,
+  workflowFactsDom,
 }) {
   const methods = appServerMethodsWithTurnStartTrace(
     traceEntries,
@@ -409,15 +548,37 @@ function buildAssertions({
     turnStartTrace?.method === "agentSession/turn/start";
   return {
     articleDraftDocumentPresent: readModel.articleDraftDocumentPresent,
-    contentFactoryArticleWorkspaceWorkflowFactsHidden: true,
+    contentFactoryArticleWorkspaceWorkflowFactsHidden:
+      workflowFactsDom.hidden === true,
     electronBridgePresent: runtime.electron && runtime.hasInvoke,
     liveProviderUsed,
+    manifestHashMatched: installedState.manifestHashMatched === true,
+    releaseIdPresent: Boolean(installedState.releaseId),
+    signatureRefPresent: Boolean(installedState.signatureRef),
+    packageHashMatched: installedState.packageHashMatched === true,
+    packageHashPresent: Boolean(installedState.packageHash),
+    manifestHashPresent: Boolean(installedState.manifestHash),
+    packageVerified: installedState.packageVerificationStatus === "verified",
+    releaseEvidenceReady: installedState.cloudReleaseEvidenceStatus === "ready",
+    signaturePolicyRequired: installedState.signaturePolicy === "required",
     sourceKindCloudRelease: installedState.sourceKind === "cloud_release",
     signatureVerified:
       installedState.signatureVerificationStatus === "verified",
     turnStartViaElectronIpc:
       localTurnStartViaElectronIpc || tracedTurnStartViaElectronIpc,
     workflowJsonlPresent: workflowJsonlEvents.length > 0,
+    workflowAuditExported:
+      evidenceExport.workflowAudit?.status === "exported" &&
+      evidenceExport.workflowAudit?.source === "workflow-events.jsonl" &&
+      evidenceExport.workflowAudit?.eventCount > 0,
+    workflowAuditMetadataOnly:
+      evidenceExport.workflowAudit?.metadataOnly === true,
+    workflowAuditRawContentExcluded:
+      evidenceExport.workflowAudit?.rawContentIncluded === false,
+    workflowAuditRedactionPolicyPresent:
+      evidenceExport.workflowAudit?.redactionPolicy ===
+        "workflow_audit_metadata_only" &&
+      evidenceExport.workflowAudit?.redactionPolicyEventCount > 0,
     workflowResumeLifecyclePresent:
       workflowResumeLifecycle.contractMetadataPresent &&
       workflowResumeLifecycle.auditEventsPresent,
@@ -438,11 +599,25 @@ function pageUrlKind(href) {
 
 function statusFromAssertions(assertions, readModel) {
   return assertions.electronBridgePresent &&
+    assertions.contentFactoryArticleWorkspaceWorkflowFactsHidden &&
     assertions.turnStartViaElectronIpc &&
     assertions.sourceKindCloudRelease &&
+    assertions.signaturePolicyRequired &&
     assertions.signatureVerified &&
+    assertions.releaseEvidenceReady &&
+    assertions.packageVerified &&
+    assertions.packageHashPresent &&
+    assertions.packageHashMatched &&
+    assertions.manifestHashPresent &&
+    assertions.manifestHashMatched &&
+    assertions.releaseIdPresent &&
+    assertions.signatureRefPresent &&
     assertions.liveProviderUsed &&
     assertions.workflowJsonlPresent &&
+    assertions.workflowAuditExported &&
+    assertions.workflowAuditMetadataOnly &&
+    assertions.workflowAuditRawContentExcluded &&
+    assertions.workflowAuditRedactionPolicyPresent &&
     assertions.workflowResumeLifecyclePresent &&
     readModel.hostManagedGenerationStatus === "completed" &&
     assertions.articleDraftDocumentPresent
@@ -543,6 +718,7 @@ async function run() {
     );
     const readModel = summarizeReadModel(readResult);
     const evidenceExport = summarizeEvidenceExport(evidenceResult);
+    const workflowFactsDom = await inspectArticleEditorWorkflowFacts(page);
     const assertions = buildAssertions({
       runtime,
       traceEntries,
@@ -551,6 +727,8 @@ async function run() {
       readModel,
       workflowJsonlEvents,
       workflowResumeLifecycle,
+      evidenceExport,
+      workflowFactsDom,
     });
     const status = statusFromAssertions(assertions, readModel);
     const missingAssertions = missingAssertionKeys(assertions);
@@ -570,6 +748,14 @@ async function run() {
       },
       eventLogs: {
         workflowJsonl: options.workflowJsonl || null,
+        workflowJsonlEventCount: workflowJsonlEvents.length,
+        workflowJsonlEventTypes: Array.from(
+          new Set(
+            workflowJsonlEvents
+              .map((event) => event?.eventType)
+              .filter(Boolean),
+          ),
+        ).sort(),
         workflowResumeEvents: workflowResumeEventBindings.map(sanitizeJson),
       },
       installedState,
@@ -577,7 +763,7 @@ async function run() {
         apiKeyConfigured: null,
         apiKeyEnv: null,
         inference:
-          "cloud_release verified + hostManagedGeneration completed + generated article marker clean",
+          "cloud_release required/verified/ready + hash matched + hostManagedGeneration completed + generated article marker clean",
         liveProviderUsed: assertions.liveProviderUsed,
         note: "Collector records GUI/read-model markers only; Provider secret values and raw provider requests are not read.",
       },
@@ -586,6 +772,9 @@ async function run() {
         productionRoute: true,
       },
       readModel,
+      ui: {
+        articleEditorWorkflowFacts: workflowFactsDom,
+      },
       runtimeActionResponse:
         workflowResumeTraceBindings.length > 0
           ? {
@@ -666,11 +855,17 @@ async function run() {
   }
 }
 
-run().catch((error) => {
-  console.error(
-    `[content-factory-production-gui-evidence] failed: ${
-      error instanceof Error ? error.message : String(error)
-    }`,
-  );
-  process.exitCode = 1;
-});
+const isDirectRun =
+  process.argv[1] &&
+  fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+
+if (isDirectRun) {
+  run().catch((error) => {
+    console.error(
+      `[content-factory-production-gui-evidence] failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    process.exitCode = 1;
+  });
+}

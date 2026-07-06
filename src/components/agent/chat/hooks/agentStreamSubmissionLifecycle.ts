@@ -3,6 +3,7 @@ import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
 import type { QueuedTurnSnapshot } from "@/lib/api/agentRuntime";
 import type { Message } from "../types";
 import type { AgentRuntimeStatusPresentation } from "../utils/fastResponseRouting";
+import type { InterruptedInputDraftSnapshot } from "./agentStreamInputRestoreTypes";
 import {
   removeThreadItemState,
   removeThreadTurnState,
@@ -22,6 +23,7 @@ export interface ActiveStreamState {
   turnId?: string;
   pendingTurnKey?: string;
   pendingItemKey?: string;
+  submittedDraft?: InterruptedInputDraftSnapshot | null;
 }
 
 export interface StreamRequestState {
@@ -112,6 +114,7 @@ interface CreateSubmissionLifecycleOptions {
   content: string;
   expectingQueue: boolean;
   runtimeStatusPresentation?: AgentRuntimeStatusPresentation;
+  submittedDraft?: InterruptedInputDraftSnapshot | null;
   initialThreadId: string;
   listenerMapRef: MutableRefObject<Map<string, () => void>>;
   setActiveStream: (nextActive: ActiveStreamState | null) => void;
@@ -141,6 +144,7 @@ export function createAgentStreamSubmissionLifecycle(
     content,
     expectingQueue,
     runtimeStatusPresentation = "timeline",
+    submittedDraft,
     initialThreadId,
     listenerMapRef,
     setActiveStream,
@@ -327,6 +331,7 @@ export function createAgentStreamSubmissionLifecycle(
       turnId: requestTurnId,
       pendingTurnKey,
       pendingItemKey,
+      submittedDraft: submittedDraft ?? null,
     });
     setMessages((prev) => {
       const equivalentPendingUserMsg = findEquivalentPendingUserMessage(
@@ -357,21 +362,21 @@ export function createAgentStreamSubmissionLifecycle(
             : [...nextMessages, turnUserMsg];
       }
       return nextMessages.map((msg) =>
-        ((msg.id === userMsgId ||
+        (msg.id === userMsgId ||
           (equivalentPendingUserMsg &&
             msg.id === equivalentPendingUserMsg.id)) &&
-          turnUserMsg)
+        turnUserMsg
           ? {
               ...msg,
               runtimeTurnId: msg.runtimeTurnId || pendingTurnKey,
             }
           : msg.id === assistantMsgId
-          ? {
-              ...msg,
-              runtimeStatus: effectiveWaitingRuntimeStatus,
-              runtimeTurnId: msg.runtimeTurnId || pendingTurnKey,
-            }
-          : msg,
+            ? {
+                ...msg,
+                runtimeStatus: effectiveWaitingRuntimeStatus,
+                runtimeTurnId: msg.runtimeTurnId || pendingTurnKey,
+              }
+            : msg,
       );
     });
 
@@ -422,11 +427,11 @@ export function createAgentStreamSubmissionLifecycle(
               runtimeTurnId: msg.runtimeTurnId || pendingTurnKey,
             }
           : msg.id === assistantMsgId
-          ? {
-              ...msg,
-              runtimeTurnId: msg.runtimeTurnId || pendingTurnKey,
-            }
-          : msg,
+            ? {
+                ...msg,
+                runtimeTurnId: msg.runtimeTurnId || pendingTurnKey,
+              }
+            : msg,
       ),
     );
     setThreadTurns((prev) =>

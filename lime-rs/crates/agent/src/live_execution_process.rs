@@ -26,9 +26,13 @@ use crate::agent_tools::execution::{
     ToolExecutionResolverInput,
 };
 use crate::runtime_facade::current_agent_turn_context;
+use crate::tool_output_truncation::{
+    format_tool_output_for_model, tool_output_truncation_policy_from_turn_context,
+    ToolOutputTruncationPolicy,
+};
 use crate::{
     agent_turn_approval_policy, agent_turn_context_metadata, agent_turn_sandbox_policy,
-    model_request_policy_from_turn_context,
+    native_tool_policy_disallowed_tool_names, native_tool_policy_from_turn_context,
 };
 
 const PROCESS_ID_PREFIX: &str = "process-";
@@ -77,6 +81,7 @@ struct PreparedLiveExecution {
     sandbox_policy: Option<String>,
     runtime_metadata: Option<Value>,
     output_drain_max_bytes: u64,
+    output_truncation_policy: ToolOutputTruncationPolicy,
     env: HashMap<String, String>,
     cancellation_token: Option<CancellationToken>,
 }
@@ -143,9 +148,11 @@ fn prepare_live_execution(
         .filter(|value| !value.is_empty())?
         .to_string();
     let turn_context = current_agent_turn_context();
-    if !live_execution_shell_enabled(turn_context.as_ref()) {
+    if !live_execution_shell_enabled(turn_context.as_ref(), tool_name) {
         return None;
     }
+    let output_truncation_policy =
+        tool_output_truncation_policy_from_turn_context(turn_context.as_ref(), DRAIN_MAX_BYTES);
     let output_drain_max_bytes = live_execution_output_drain_max_bytes(turn_context.as_ref());
     let runtime_metadata = agent_turn_context_metadata(turn_context.as_ref());
     let approval_policy = agent_turn_approval_policy(turn_context.as_ref());
@@ -191,24 +198,25 @@ fn prepare_live_execution(
         sandbox_policy,
         runtime_metadata,
         output_drain_max_bytes,
+        output_truncation_policy,
         env,
         cancellation_token: request.context.cancellation_token,
     })
 }
 
-fn live_execution_shell_enabled(turn_context: Option<&crate::AgentTurnContext>) -> bool {
-    model_request_policy_from_turn_context(turn_context)
-        .and_then(|policy| policy.native_tool_policy)
-        .map(|policy| policy.shell_tool_enabled)
-        .unwrap_or(true)
+fn live_execution_shell_enabled(
+    turn_context: Option<&crate::AgentTurnContext>,
+    tool_name: &str,
+) -> bool {
+    let native_policy = native_tool_policy_from_turn_context(turn_context);
+    !native_tool_policy_disallowed_tool_names(native_policy.as_ref())
+        .iter()
+        .any(|disallowed| tool_name.eq_ignore_ascii_case(disallowed))
 }
 
 fn live_execution_output_drain_max_bytes(turn_context: Option<&crate::AgentTurnContext>) -> u64 {
-    model_request_policy_from_turn_context(turn_context)
-        .and_then(|policy| policy.truncation_policy)
-        .and_then(|policy| (policy.mode == "bytes").then_some(policy.limit))
-        .filter(|limit| *limit > 0)
-        .unwrap_or(DRAIN_MAX_BYTES)
+    tool_output_truncation_policy_from_turn_context(turn_context, DRAIN_MAX_BYTES)
+        .drain_max_bytes(DRAIN_MAX_BYTES)
 }
 
 async fn run_live_execution_process(
@@ -328,7 +336,7 @@ fn call_tool_result_from_snapshot(
         json!("registered"),
     );
     insert_stdin_writable_metadata(&mut metadata, snapshot.status);
-    let text = if !snapshot.retained_output.trim().is_empty() {
+    let raw_text = if !snapshot.retained_output.trim().is_empty() {
         snapshot.retained_output.clone()
     } else if let Some(failure) = snapshot.failure.as_ref() {
         failure.clone()
@@ -339,6 +347,7 @@ fn call_tool_result_from_snapshot(
             process_status_label(snapshot.status)
         )
     };
+    let text = format_tool_output_for_model(&raw_text, prepared.output_truncation_policy);
     CallToolResult {
         content: vec![Content::text(text)],
         structured_content: Some(Value::Object(metadata.clone())),
@@ -602,7 +611,17 @@ mod tests {
     struct TestLiveExecutionProcessGateway {
         drain_params: Mutex<Vec<ExecutionProcessDrainOutputParams>>,
         output: Mutex<VecDeque<ExecutionProcessOutputDelta>>,
+        retained_output: Mutex<Option<String>>,
         snapshot: Mutex<Option<ExecutionProcessSnapshot>>,
+    }
+
+    impl TestLiveExecutionProcessGateway {
+        fn with_retained_output(output: impl Into<String>) -> Self {
+            Self {
+                retained_output: Mutex::new(Some(output.into())),
+                ..Self::default()
+            }
+        }
     }
 
     fn native_tool_context(working_directory: PathBuf) -> ToolContext {
@@ -615,7 +634,12 @@ mod tests {
             &self,
             params: ExecutionProcessStartParams,
         ) -> Result<ExecutionProcessStartResponse, String> {
-            let output = "live-process".to_string();
+            let output = self
+                .retained_output
+                .lock()
+                .expect("retained output lock")
+                .clone()
+                .unwrap_or_else(|| "live-process".to_string());
             let snapshot = ExecutionProcessSnapshot {
                 process_id: params.process_id.clone(),
                 tool_id: params.tool_id.clone(),
@@ -826,6 +850,63 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn hook_applies_token_truncation_policy_to_final_tool_output() {
+        let output = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda ".repeat(20);
+        let gateway = Arc::new(TestLiveExecutionProcessGateway::with_retained_output(
+            output,
+        ));
+        let hook = RuntimeLiveExecutionProcessHook::new(gateway.clone());
+        let turn_context = AgentTurnContext {
+            approval_policy: Some("never".to_string()),
+            sandbox_policy: Some("danger-full-access".to_string()),
+            metadata: HashMap::from([(
+                "runtime_options".to_string(),
+                json!({
+                    "harness": {
+                        "model_request_policy": {
+                            "truncation_policy": {
+                                "mode": "tokens",
+                                "limit": 12
+                            }
+                        }
+                    }
+                }),
+            )]),
+            ..AgentTurnContext::default()
+        };
+
+        let tool_call = with_agent_turn_context(Some(turn_context), async {
+            hook.execute_native_tool(NativeToolExecutionRequest {
+                tool_name: "Bash".to_string(),
+                tool_id: "tool-token-truncation-policy".to_string(),
+                params: json!({ "command": "printf large-output" }),
+                context: native_tool_context(std::env::current_dir().unwrap_or_default()),
+            })
+        })
+        .await
+        .expect("bash should be handled by live execution hook");
+
+        let result = tool_call.result.await.expect("tool result should succeed");
+        let text: &str = result
+            .content
+            .iter()
+            .find_map(|content| content.as_text())
+            .map(|content| content.text.as_ref())
+            .expect("text output");
+
+        assert!(text.starts_with("Warning: truncated output"));
+        assert!(text.contains("tokens truncated"));
+
+        let drain_params = gateway.drain_params.lock().expect("drain params lock");
+        assert!(
+            drain_params
+                .iter()
+                .any(|params| params.max_bytes == Some(DRAIN_MAX_BYTES)),
+            "token truncation should keep live drain bytes at current safety default, got {drain_params:?}"
+        );
+    }
+
+    #[tokio::test]
     async fn hook_respects_native_tool_policy_disabling_shell() {
         let hook = RuntimeLiveExecutionProcessHook::new(Arc::new(
             TestLiveExecutionProcessGateway::default(),
@@ -853,6 +934,42 @@ mod tests {
             hook.execute_native_tool(NativeToolExecutionRequest {
                 tool_name: "Bash".to_string(),
                 tool_id: "tool-shell-disabled".to_string(),
+                params: json!({ "command": "printf should-not-run" }),
+                context: native_tool_context(std::env::current_dir().unwrap_or_default()),
+            })
+        })
+        .await;
+
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn hook_rejects_legacy_shell_when_model_prefers_unified_exec() {
+        let hook = RuntimeLiveExecutionProcessHook::new(Arc::new(
+            TestLiveExecutionProcessGateway::default(),
+        ));
+        let turn_context = AgentTurnContext {
+            approval_policy: Some("never".to_string()),
+            sandbox_policy: Some("danger-full-access".to_string()),
+            metadata: HashMap::from([(
+                "runtime_options".to_string(),
+                json!({
+                    "harness": {
+                        "model_request_policy": {
+                            "native_tool_policy": {
+                                "shell_type": "unified_exec"
+                            }
+                        }
+                    }
+                }),
+            )]),
+            ..AgentTurnContext::default()
+        };
+
+        let result = with_agent_turn_context(Some(turn_context), async {
+            hook.execute_native_tool(NativeToolExecutionRequest {
+                tool_name: "Bash".to_string(),
+                tool_id: "tool-unified-exec-shell".to_string(),
                 params: json!({ "command": "printf should-not-run" }),
                 context: native_tool_context(std::env::current_dir().unwrap_or_default()),
             })

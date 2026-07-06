@@ -6,6 +6,10 @@ use super::{
     history_search, legacy_conversation, memory_stub, runtime_conversation, session_projection,
     LimeSessionStore,
 };
+use crate::session_record_sql::{
+    load_all_session_record_rows, load_session_insights_record, load_session_record_row_by_id,
+    load_session_record_rows_by_types,
+};
 use anyhow::{anyhow, Result};
 use aster::conversation::message::Message;
 use aster::conversation::Conversation;
@@ -19,11 +23,21 @@ use aster::session::{
 };
 use async_trait::async_trait;
 use chrono::Utc;
+use lime_core::database::agent_session_repository::{
+    delete_session as delete_session_record,
+    touch_session_updated_at as touch_session_updated_at_record,
+    update_session_extension_data as update_session_extension_data_record,
+    update_session_name as update_session_name_record,
+    update_session_provider_config as update_session_provider_config_record,
+    update_session_recipe as update_session_recipe_record,
+    update_session_token_stats as update_session_token_stats_record,
+    update_session_type as update_session_type_record,
+    update_session_working_dir_with_updated_at as update_session_working_dir_record,
+    SessionProviderConfigUpdate, SessionRecipeUpdate, SessionTokenStatsUpdate,
+};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use thread_store::session_record::{
-    normalize_optional_text, parse_optional_json, parse_timestamp_or_now, resolve_session_type_name,
-};
+use thread_store::session_record::parse_timestamp_or_now;
 
 #[async_trait]
 impl SessionStore for LimeSessionStore {
@@ -86,133 +100,17 @@ impl SessionStore for LimeSessionStore {
             include_messages
         );
 
-        let (
-            id,
-            model,
-            title,
-            created_at,
-            updated_at,
-            working_dir,
-            session_type,
-            user_set_name,
-            extension_data_json,
-            total_tokens,
-            input_tokens,
-            output_tokens,
-            cached_input_tokens,
-            cache_creation_input_tokens,
-            accumulated_total_tokens,
-            accumulated_input_tokens,
-            accumulated_output_tokens,
-            schedule_id,
-            recipe_json,
-            user_recipe_values_json,
-            provider_name,
-            model_config_json,
-        ) = {
+        let mut session = {
             let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
             Self::ensure_session_row(&conn, id)?;
             tracing::debug!("[SessionStore] get_session 已确保会话存在: {}", id);
 
-            let mut stmt = conn
-                .prepare(
-                    "SELECT id, model, system_prompt, title, created_at, updated_at, working_dir,
-                            session_type, user_set_name, extension_data_json,
-                            total_tokens, input_tokens, output_tokens, cached_input_tokens, cache_creation_input_tokens,
-                            accumulated_total_tokens, accumulated_input_tokens, accumulated_output_tokens,
-                            schedule_id, recipe_json, user_recipe_values_json,
-                            provider_name, model_config_json
-                     FROM agent_sessions WHERE id = ?",
-                )
-                .map_err(|e| anyhow!("准备查询失败: {e}"))?;
-
-            let session_row = stmt
-                .query_row([id], |row| {
-                    Ok((
-                        row.get::<_, String>(0)?,
-                        row.get::<_, String>(1)?,
-                        row.get::<_, Option<String>>(2)?,
-                        row.get::<_, Option<String>>(3)?,
-                        row.get::<_, String>(4)?,
-                        row.get::<_, String>(5)?,
-                        row.get::<_, Option<String>>(6)?,
-                        row.get::<_, Option<String>>(7)?,
-                        row.get::<_, bool>(8)?,
-                        row.get::<_, String>(9)?,
-                        row.get::<_, Option<i32>>(10)?,
-                        row.get::<_, Option<i32>>(11)?,
-                        row.get::<_, Option<i32>>(12)?,
-                        row.get::<_, Option<i32>>(13)?,
-                        row.get::<_, Option<i32>>(14)?,
-                        row.get::<_, Option<i32>>(15)?,
-                        row.get::<_, Option<i32>>(16)?,
-                        row.get::<_, Option<i32>>(17)?,
-                        row.get::<_, Option<String>>(18)?,
-                        row.get::<_, Option<String>>(19)?,
-                        row.get::<_, Option<String>>(20)?,
-                        row.get::<_, Option<String>>(21)?,
-                        row.get::<_, Option<String>>(22)?,
-                    ))
-                })
-                .map_err(|e| anyhow!("会话不存在: {e}"))?;
-
-            let (
-                id,
-                model,
-                _system_prompt,
-                title,
-                created_at,
-                updated_at,
-                db_working_dir,
-                session_type_raw,
-                user_set_name,
-                extension_data_json,
-                total_tokens,
-                input_tokens,
-                output_tokens,
-                cached_input_tokens,
-                cache_creation_input_tokens,
-                accumulated_total_tokens,
-                accumulated_input_tokens,
-                accumulated_output_tokens,
-                schedule_id,
-                recipe_json,
-                user_recipe_values_json,
-                provider_name,
-                model_config_json,
-            ) = session_row;
-            let created_at = parse_timestamp_or_now(&created_at);
-            let updated_at = parse_timestamp_or_now(&updated_at);
-            let session_type = resolve_session_type_name(session_type_raw, &model)
-                .parse::<SessionType>()
-                .unwrap_or(SessionType::User);
-            let working_dir = session_projection::parse_session_working_dir(&conn, db_working_dir);
-
-            (
-                id,
-                model,
-                title,
-                created_at,
-                updated_at,
-                working_dir,
-                session_type,
-                user_set_name,
-                extension_data_json,
-                total_tokens,
-                input_tokens,
-                output_tokens,
-                cached_input_tokens,
-                cache_creation_input_tokens,
-                accumulated_total_tokens,
-                accumulated_input_tokens,
-                accumulated_output_tokens,
-                schedule_id,
-                recipe_json,
-                user_recipe_values_json,
-                provider_name,
-                model_config_json,
-            )
+            let session_row = load_session_record_row_by_id(&conn, id)?
+                .ok_or_else(|| anyhow!("会话不存在: {id}"))?;
+            session_projection::build_session_from_listing_row(&conn, session_row)
         };
+        let id = session.id.clone();
+        let working_dir = session.working_dir.clone();
 
         let mut runtime_message_count = match runtime_conversation::count_runtime_messages(&id)
             .await
@@ -291,34 +189,8 @@ impl SessionStore for LimeSessionStore {
             .or(runtime_message_count)
             .unwrap_or(0);
 
-        let session = Session {
-            id: id.to_string(),
-            working_dir,
-            name: title.unwrap_or_else(|| "未命名会话".to_string()),
-            user_set_name,
-            session_type,
-            created_at,
-            updated_at,
-            extension_data: serde_json::from_str(&extension_data_json).unwrap_or_default(),
-            total_tokens,
-            input_tokens,
-            output_tokens,
-            cached_input_tokens,
-            cache_creation_input_tokens,
-            accumulated_total_tokens,
-            accumulated_input_tokens,
-            accumulated_output_tokens,
-            schedule_id,
-            recipe: parse_optional_json(recipe_json),
-            user_recipe_values: parse_optional_json(user_recipe_values_json),
-            conversation,
-            message_count,
-            provider_name,
-            model_config: parse_optional_json(model_config_json).or_else(|| match model.trim() {
-                "" | "agent:default" => None,
-                normalized => ModelConfig::new(normalized).ok(),
-            }),
-        };
+        session.conversation = conversation;
+        session.message_count = message_count;
         self.cache_session_metadata(&session);
 
         Ok(session)
@@ -342,11 +214,8 @@ impl SessionStore for LimeSessionStore {
         let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
         Self::ensure_session_row(&conn, session_id)?;
 
-        conn.execute(
-            "UPDATE agent_sessions SET updated_at = ? WHERE id = ?",
-            rusqlite::params![timestamp, session_id],
-        )
-        .map_err(|e| anyhow!("更新会话时间失败: {e}"))?;
+        touch_session_updated_at_record(&conn, session_id, &timestamp)
+            .map_err(|e: String| anyhow!(e))?;
 
         let updated_at = parse_timestamp_or_now(&timestamp);
         self.update_cached_session_metadata(session_id, |session| {
@@ -377,10 +246,7 @@ impl SessionStore for LimeSessionStore {
         .await?;
 
         let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
-        conn.execute(
-            "UPDATE agent_sessions SET updated_at = ? WHERE id = ?",
-            rusqlite::params![now, session_id],
-        )?;
+        touch_session_updated_at_record(&conn, session_id, &now).map_err(|e: String| anyhow!(e))?;
 
         let updated_at = parse_timestamp_or_now(&now);
         self.update_cached_session_metadata(session_id, |session| {
@@ -395,22 +261,10 @@ impl SessionStore for LimeSessionStore {
     async fn list_sessions(&self) -> Result<Vec<Session>> {
         let mut sessions: Vec<Session> = {
             let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
-            session_projection::load_listed_sessions(
-                &conn,
-                "SELECT id, model, title, created_at, updated_at, working_dir,
-                    session_type, user_set_name, extension_data_json,
-                    total_tokens, input_tokens, output_tokens, cached_input_tokens, cache_creation_input_tokens,
-                    accumulated_total_tokens, accumulated_input_tokens, accumulated_output_tokens,
-                    schedule_id, recipe_json, user_recipe_values_json,
-                    provider_name, model_config_json,
-                    0 AS message_count
-             FROM agent_sessions
-             ORDER BY updated_at DESC",
-                [],
-            )?
-            .into_iter()
-            .map(|row| session_projection::build_session_from_listing_row(&conn, row))
-            .collect()
+            load_all_session_record_rows(&conn)?
+                .into_iter()
+                .map(|row| session_projection::build_session_from_listing_row(&conn, row))
+                .collect()
         };
         self.apply_runtime_message_counts(&mut sessions).await;
         Ok(sessions)
@@ -422,31 +276,12 @@ impl SessionStore for LimeSessionStore {
         }
 
         let type_names = types.iter().map(ToString::to_string).collect::<Vec<_>>();
-        let placeholders = std::iter::repeat_n("?", type_names.len())
-            .collect::<Vec<_>>()
-            .join(", ");
-        let sql = format!(
-                "SELECT id, model, title, created_at, updated_at, working_dir,
-                    session_type, user_set_name, extension_data_json,
-                    total_tokens, input_tokens, output_tokens, cached_input_tokens, cache_creation_input_tokens,
-                    accumulated_total_tokens, accumulated_input_tokens, accumulated_output_tokens,
-                    schedule_id, recipe_json, user_recipe_values_json,
-                    provider_name, model_config_json,
-                    0 AS message_count
-             FROM agent_sessions
-             WHERE session_type IN ({placeholders})
-             ORDER BY updated_at DESC"
-        );
         let mut sessions: Vec<Session> = {
             let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
-            session_projection::load_listed_sessions(
-                &conn,
-                &sql,
-                rusqlite::params_from_iter(type_names.iter()),
-            )?
-            .into_iter()
-            .map(|row| session_projection::build_session_from_listing_row(&conn, row))
-            .collect::<Vec<_>>()
+            load_session_record_rows_by_types(&conn, &type_names)?
+                .into_iter()
+                .map(|row| session_projection::build_session_from_listing_row(&conn, row))
+                .collect::<Vec<_>>()
         };
         self.apply_runtime_message_counts(&mut sessions).await;
         Ok(sessions)
@@ -455,7 +290,7 @@ impl SessionStore for LimeSessionStore {
     async fn delete_session(&self, id: &str) -> Result<()> {
         {
             let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
-            conn.execute("DELETE FROM agent_sessions WHERE id = ?", [id])?;
+            delete_session_record(&conn, id).map_err(|e: String| anyhow!(e))?;
         }
         self.invalidate_cached_session_metadata(id);
 
@@ -463,151 +298,15 @@ impl SessionStore for LimeSessionStore {
     }
 
     async fn get_insights(&self) -> Result<SessionInsights> {
-        let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
-
-        let total_sessions: i64 =
-            conn.query_row("SELECT COUNT(*) FROM agent_sessions", [], |row| row.get(0))?;
-        let total_tokens: i64 = conn.query_row(
-            "SELECT COALESCE(SUM(COALESCE(accumulated_total_tokens, total_tokens, 0)), 0)
-             FROM agent_sessions",
-            [],
-            |row| row.get(0),
-        )?;
+        let insights = {
+            let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
+            load_session_insights_record(&conn)?
+        };
 
         Ok(SessionInsights {
-            total_sessions: total_sessions as usize,
-            total_tokens,
+            total_sessions: insights.total_sessions,
+            total_tokens: insights.total_tokens,
         })
-    }
-
-    async fn export_session(&self, id: &str) -> Result<String> {
-        let session = self.get_session(id, true).await?;
-        serde_json::to_string_pretty(&session).map_err(|e| anyhow!("导出会话失败: {e}"))
-    }
-
-    async fn import_session(&self, json: &str) -> Result<Session> {
-        let session: Session =
-            serde_json::from_str(json).map_err(|e| anyhow!("解析会话 JSON 失败: {e}"))?;
-
-        let new_session = self
-            .create_session(
-                session.working_dir.clone(),
-                session.name.clone(),
-                session.session_type,
-            )
-            .await?;
-
-        self.update_session_name(&new_session.id, session.name.clone(), session.user_set_name)
-            .await?;
-        self.update_extension_data(&new_session.id, session.extension_data.clone())
-            .await?;
-        self.update_token_stats(
-            &new_session.id,
-            TokenStatsUpdate {
-                schedule_id: session.schedule_id.clone(),
-                total_tokens: session.total_tokens,
-                input_tokens: session.input_tokens,
-                output_tokens: session.output_tokens,
-                cached_input_tokens: session.cached_input_tokens,
-                cache_creation_input_tokens: session.cache_creation_input_tokens,
-                accumulated_total: session.accumulated_total_tokens,
-                accumulated_input: session.accumulated_input_tokens,
-                accumulated_output: session.accumulated_output_tokens,
-            },
-        )
-        .await?;
-        self.update_provider_config(
-            &new_session.id,
-            session.provider_name.clone(),
-            session.model_config.clone(),
-        )
-        .await?;
-        self.update_recipe(
-            &new_session.id,
-            session.recipe.clone(),
-            session.user_recipe_values.clone(),
-        )
-        .await?;
-
-        if let Some(conversation) = &session.conversation {
-            self.replace_conversation(&new_session.id, conversation)
-                .await?;
-        }
-
-        Ok(new_session)
-    }
-
-    async fn copy_session(&self, session_id: &str, new_name: String) -> Result<Session> {
-        let original = self.get_session(session_id, true).await?;
-        let created_session_name = new_name.clone();
-        let persisted_session_name = new_name.clone();
-
-        let new_session = self
-            .create_session(
-                original.working_dir.clone(),
-                created_session_name,
-                original.session_type,
-            )
-            .await?;
-
-        self.update_session_name(&new_session.id, persisted_session_name, true)
-            .await?;
-        self.update_extension_data(&new_session.id, original.extension_data.clone())
-            .await?;
-        self.update_token_stats(
-            &new_session.id,
-            TokenStatsUpdate {
-                schedule_id: original.schedule_id.clone(),
-                total_tokens: original.total_tokens,
-                input_tokens: original.input_tokens,
-                output_tokens: original.output_tokens,
-                cached_input_tokens: original.cached_input_tokens,
-                cache_creation_input_tokens: original.cache_creation_input_tokens,
-                accumulated_total: original.accumulated_total_tokens,
-                accumulated_input: original.accumulated_input_tokens,
-                accumulated_output: original.accumulated_output_tokens,
-            },
-        )
-        .await?;
-        self.update_provider_config(
-            &new_session.id,
-            original.provider_name.clone(),
-            original.model_config.clone(),
-        )
-        .await?;
-        self.update_recipe(
-            &new_session.id,
-            original.recipe.clone(),
-            original.user_recipe_values.clone(),
-        )
-        .await?;
-
-        if let Some(conversation) = &original.conversation {
-            self.replace_conversation(&new_session.id, conversation)
-                .await?;
-        }
-
-        Ok(new_session)
-    }
-
-    async fn truncate_conversation(&self, session_id: &str, timestamp: i64) -> Result<()> {
-        let working_dir = {
-            let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
-            Self::ensure_session_row(&conn, session_id)?;
-            Self::load_session_working_dir(&conn, session_id)?
-        };
-        let message_count = runtime_conversation::truncate_runtime_conversation(
-            session_id,
-            &working_dir,
-            timestamp,
-        )
-        .await?;
-        self.update_cached_session_metadata(session_id, |session| {
-            session.message_count = message_count;
-            session.working_dir = working_dir;
-        });
-
-        Ok(())
     }
 
     async fn update_session_name(
@@ -616,13 +315,11 @@ impl SessionStore for LimeSessionStore {
         name: String,
         user_set: bool,
     ) -> Result<()> {
+        let cached_name = name.clone();
         let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
         let now = Utc::now().to_rfc3339();
-        let cached_name = name.clone();
-        conn.execute(
-            "UPDATE agent_sessions SET title = ?1, user_set_name = ?2, updated_at = ?3 WHERE id = ?4",
-            rusqlite::params![name, user_set, now, session_id],
-        )?;
+        update_session_name_record(&conn, session_id, &name, user_set, &now)
+            .map_err(|e: String| anyhow!(e))?;
         let updated_at = parse_timestamp_or_now(&now);
         self.update_cached_session_metadata(session_id, |session| {
             session.name = cached_name;
@@ -633,13 +330,12 @@ impl SessionStore for LimeSessionStore {
     }
 
     async fn update_working_dir(&self, session_id: &str, working_dir: PathBuf) -> Result<()> {
+        let cached_working_dir = working_dir.clone();
+        let working_dir_value = working_dir.to_string_lossy().to_string();
         let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
         let now = Utc::now().to_rfc3339();
-        let cached_working_dir = working_dir.clone();
-        conn.execute(
-            "UPDATE agent_sessions SET working_dir = ?1, updated_at = ?2 WHERE id = ?3",
-            rusqlite::params![working_dir.to_string_lossy().to_string(), now, session_id],
-        )?;
+        update_session_working_dir_record(&conn, session_id, &working_dir_value, &now)
+            .map_err(|e: String| anyhow!(e))?;
         let updated_at = parse_timestamp_or_now(&now);
         self.update_cached_session_metadata(session_id, |session| {
             session.working_dir = cached_working_dir;
@@ -651,10 +347,8 @@ impl SessionStore for LimeSessionStore {
     async fn update_session_type(&self, session_id: &str, session_type: SessionType) -> Result<()> {
         let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
         let now = Utc::now().to_rfc3339();
-        conn.execute(
-            "UPDATE agent_sessions SET session_type = ?1, updated_at = ?2 WHERE id = ?3",
-            rusqlite::params![session_type.to_string(), now, session_id],
-        )?;
+        update_session_type_record(&conn, session_id, &session_type.to_string(), &now)
+            .map_err(|e: String| anyhow!(e))?;
         let updated_at = parse_timestamp_or_now(&now);
         self.update_cached_session_metadata(session_id, |session| {
             session.session_type = session_type;
@@ -668,15 +362,13 @@ impl SessionStore for LimeSessionStore {
         session_id: &str,
         extension_data: ExtensionData,
     ) -> Result<()> {
-        let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
-        let now = Utc::now().to_rfc3339();
         let cached_extension_data = extension_data.clone();
         let extension_data_json = serde_json::to_string(&extension_data)
             .map_err(|e| anyhow!("序列化 extension_data 失败: {e}"))?;
-        conn.execute(
-            "UPDATE agent_sessions SET extension_data_json = ?1, updated_at = ?2 WHERE id = ?3",
-            rusqlite::params![extension_data_json, now, session_id],
-        )?;
+        let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
+        let now = Utc::now().to_rfc3339();
+        update_session_extension_data_record(&conn, session_id, &extension_data_json, &now)
+            .map_err(|e: String| anyhow!(e))?;
         let updated_at = parse_timestamp_or_now(&now);
         self.update_cached_session_metadata(session_id, |session| {
             session.extension_data = cached_extension_data;
@@ -686,62 +378,46 @@ impl SessionStore for LimeSessionStore {
     }
 
     async fn update_token_stats(&self, session_id: &str, stats: TokenStatsUpdate) -> Result<()> {
-        let normalized_schedule_id = normalize_optional_text(stats.schedule_id.clone());
-        let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
+        let update = SessionTokenStatsUpdate {
+            schedule_id: stats.schedule_id.clone(),
+            total_tokens: stats.total_tokens,
+            input_tokens: stats.input_tokens,
+            output_tokens: stats.output_tokens,
+            cached_input_tokens: stats.cached_input_tokens,
+            cache_creation_input_tokens: stats.cache_creation_input_tokens,
+            accumulated_total_tokens: stats.accumulated_total,
+            accumulated_input_tokens: stats.accumulated_input,
+            accumulated_output_tokens: stats.accumulated_output,
+        };
+        let normalized_schedule_id = update.normalized_schedule_id();
         let now = Utc::now().to_rfc3339();
-        // 当前 store 边界把 None 视为“跳过更新”，不是“清空字段”。
-        // 调用方若要重置当前窗口 token，必须显式写 Some(0)；schedule_id 也不能靠 None/空串清空。
-        conn.execute(
-            "UPDATE agent_sessions SET
-                total_tokens = COALESCE(?1, total_tokens),
-                input_tokens = COALESCE(?2, input_tokens),
-                output_tokens = COALESCE(?3, output_tokens),
-                cached_input_tokens = COALESCE(?4, cached_input_tokens),
-                cache_creation_input_tokens = COALESCE(?5, cache_creation_input_tokens),
-                accumulated_total_tokens = COALESCE(?6, accumulated_total_tokens),
-                accumulated_input_tokens = COALESCE(?7, accumulated_input_tokens),
-                accumulated_output_tokens = COALESCE(?8, accumulated_output_tokens),
-                schedule_id = COALESCE(?9, schedule_id),
-                updated_at = ?10
-             WHERE id = ?11",
-            rusqlite::params![
-                stats.total_tokens,
-                stats.input_tokens,
-                stats.output_tokens,
-                stats.cached_input_tokens,
-                stats.cache_creation_input_tokens,
-                stats.accumulated_total,
-                stats.accumulated_input,
-                stats.accumulated_output,
-                normalized_schedule_id.clone(),
-                now,
-                session_id,
-            ],
-        )?;
+        let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
+        update_session_token_stats_record(&conn, session_id, &update, &now)
+            .map_err(|e| anyhow!(e))?;
         let updated_at = parse_timestamp_or_now(&now);
         self.update_cached_session_metadata(session_id, |session| {
-            if let Some(total_tokens) = stats.total_tokens {
+            if let Some(total_tokens) = update.total_tokens {
                 session.total_tokens = Some(total_tokens);
             }
-            if let Some(input_tokens) = stats.input_tokens {
+            if let Some(input_tokens) = update.input_tokens {
                 session.input_tokens = Some(input_tokens);
             }
-            if let Some(output_tokens) = stats.output_tokens {
+            if let Some(output_tokens) = update.output_tokens {
                 session.output_tokens = Some(output_tokens);
             }
-            if let Some(cached_input_tokens) = stats.cached_input_tokens {
+            if let Some(cached_input_tokens) = update.cached_input_tokens {
                 session.cached_input_tokens = Some(cached_input_tokens);
             }
-            if let Some(cache_creation_input_tokens) = stats.cache_creation_input_tokens {
+            if let Some(cache_creation_input_tokens) = update.cache_creation_input_tokens {
                 session.cache_creation_input_tokens = Some(cache_creation_input_tokens);
             }
-            if let Some(accumulated_total) = stats.accumulated_total {
+            if let Some(accumulated_total) = update.accumulated_total_tokens {
                 session.accumulated_total_tokens = Some(accumulated_total);
             }
-            if let Some(accumulated_input) = stats.accumulated_input {
+            if let Some(accumulated_input) = update.accumulated_input_tokens {
                 session.accumulated_input_tokens = Some(accumulated_input);
             }
-            if let Some(accumulated_output) = stats.accumulated_output {
+            if let Some(accumulated_output) = update.accumulated_output_tokens {
                 session.accumulated_output_tokens = Some(accumulated_output);
             }
             if let Some(schedule_id) = normalized_schedule_id {
@@ -758,47 +434,36 @@ impl SessionStore for LimeSessionStore {
         provider_name: Option<String>,
         model_config: Option<ModelConfig>,
     ) -> Result<()> {
-        let normalized_provider_name = normalize_optional_text(provider_name);
-        let normalized_model_name = model_config
-            .as_ref()
-            .map(|config| config.model_name.trim().to_string())
-            .filter(|value| !value.is_empty());
-        let cached_provider_name = normalized_provider_name.clone();
         let cached_model_config = model_config.clone();
         let model_config_json = model_config
             .as_ref()
             .map(serde_json::to_string)
             .transpose()
             .map_err(|e| anyhow!("序列化 model_config 失败: {e}"))?;
+        let update = SessionProviderConfigUpdate::new(
+            provider_name,
+            model_config
+                .as_ref()
+                .map(|config| config.model_name.clone()),
+            model_config_json,
+        );
+        let cached_provider_name = update.provider_name.clone();
+        let should_update_model_config = update.model_name.is_some();
 
-        if normalized_provider_name.is_none() && normalized_model_name.is_none() {
+        if update.is_empty() {
             return Ok(());
         }
 
         let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
         let now = Utc::now().to_rfc3339();
-        // provider/model_config 走“保留旧值”语义，None 不会清空已持久化的 provider 配置。
-        conn.execute(
-            "UPDATE agent_sessions SET
-                provider_name = COALESCE(?1, provider_name),
-                model = COALESCE(?2, model),
-                model_config_json = CASE WHEN ?3 IS NULL THEN model_config_json ELSE ?3 END,
-                updated_at = ?4
-             WHERE id = ?5",
-            rusqlite::params![
-                normalized_provider_name.clone(),
-                normalized_model_name,
-                model_config_json,
-                now,
-                session_id,
-            ],
-        )?;
+        update_session_provider_config_record(&conn, session_id, &update, &now)
+            .map_err(|e| anyhow!(e))?;
         let updated_at = parse_timestamp_or_now(&now);
         self.update_cached_session_metadata(session_id, |session| {
             if let Some(provider_name) = cached_provider_name {
                 session.provider_name = Some(provider_name);
             }
-            if let Some(model_config) = cached_model_config {
+            if let (true, Some(model_config)) = (should_update_model_config, cached_model_config) {
                 session.model_config = Some(model_config);
             }
             session.updated_at = updated_at;
@@ -812,8 +477,6 @@ impl SessionStore for LimeSessionStore {
         recipe: Option<Recipe>,
         user_recipe_values: Option<HashMap<String, String>>,
     ) -> Result<()> {
-        let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
-        let now = Utc::now().to_rfc3339();
         let cached_recipe = recipe.clone();
         let cached_user_recipe_values = user_recipe_values.clone();
         let recipe_json = recipe
@@ -826,15 +489,14 @@ impl SessionStore for LimeSessionStore {
             .map(serde_json::to_string)
             .transpose()
             .map_err(|e| anyhow!("序列化 user_recipe_values 失败: {e}"))?;
-        // recipe 走“直接覆盖”语义，None 会落库为 NULL，用于显式清空旧 recipe。
-        conn.execute(
-            "UPDATE agent_sessions SET
-                recipe_json = ?1,
-                user_recipe_values_json = ?2,
-                updated_at = ?3
-             WHERE id = ?4",
-            rusqlite::params![recipe_json, user_recipe_values_json, now, session_id],
-        )?;
+        let update = SessionRecipeUpdate {
+            recipe_json,
+            user_recipe_values_json,
+        };
+        let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
+        let now = Utc::now().to_rfc3339();
+        update_session_recipe_record(&conn, session_id, &update, &now)
+            .map_err(|e: String| anyhow!(e))?;
         let updated_at = parse_timestamp_or_now(&now);
         self.update_cached_session_metadata(session_id, |session| {
             session.recipe = cached_recipe;
@@ -855,19 +517,7 @@ impl SessionStore for LimeSessionStore {
         let limit = limit.unwrap_or(50);
         let sessions = {
             let conn = self.db.lock().map_err(|e| anyhow!("数据库锁定失败: {e}"))?;
-            let rows = session_projection::load_listed_sessions(
-                &conn,
-                "SELECT id, model, title, created_at, updated_at, working_dir,
-                    session_type, user_set_name, extension_data_json,
-                    total_tokens, input_tokens, output_tokens, cached_input_tokens, cache_creation_input_tokens,
-                    accumulated_total_tokens, accumulated_input_tokens, accumulated_output_tokens,
-                    schedule_id, recipe_json, user_recipe_values_json,
-                    provider_name, model_config_json,
-                    0 AS message_count
-             FROM agent_sessions
-             ORDER BY updated_at DESC",
-                [],
-            )?;
+            let rows = load_all_session_record_rows(&conn)?;
             rows.into_iter()
                 .map(|row| session_projection::build_session_from_listing_row(&conn, row))
                 .collect()

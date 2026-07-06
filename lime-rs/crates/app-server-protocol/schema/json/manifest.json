@@ -223,6 +223,10 @@
       "method": "capability/list"
     },
     {
+      "kind": "notification",
+      "method": "configWarning"
+    },
+    {
       "kind": "request",
       "method": "connectCallback/send"
     },
@@ -1410,6 +1414,7 @@
       "ClientCapabilities",
       "ClientInfo",
       "ClientNotification",
+      "ConfigWarningNotification",
       "ConnectCallbackSendParams",
       "ConnectCallbackSendResponse",
       "ConnectCallbackStatus",
@@ -1796,6 +1801,8 @@
       "SupportBundleExportParams",
       "SupportBundleExportResponse",
       "SupportBundleTraceExportSelection",
+      "TextPosition",
+      "TextRange",
       "TransportKind",
       "UsageStatsDailyTrendsListResponse",
       "UsageStatsDailyUsage",

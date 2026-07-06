@@ -28,6 +28,7 @@ pub struct ResponsesRequestOptions {
     pub previous_response_id: Option<String>,
     pub store: bool,
     pub output_schema: Option<Value>,
+    pub request_policy: ResponsesRequestPolicy,
 }
 
 impl ResponsesRequestOptions {
@@ -36,8 +37,24 @@ impl ResponsesRequestOptions {
             previous_response_id: Some(previous_response_id.into()),
             store: true,
             output_schema: None,
+            request_policy: ResponsesRequestPolicy::default(),
         }
     }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ResponsesRequestPolicy {
+    pub use_responses_lite: bool,
+    pub reasoning_context: Option<String>,
+    pub reasoning_summary: Option<String>,
+    pub text_verbosity: Option<String>,
+    pub parallel_tool_calls: Option<bool>,
+    pub requires_responses_lite_header: bool,
+}
+
+impl ResponsesRequestPolicy {
+    pub const RESPONSES_LITE_HEADER_NAME: &'static str = "x-openai-internal-codex-responses-lite";
+    pub const RESPONSES_LITE_HEADER_VALUE: &'static str = "true";
 }
 
 fn create_json_schema_text_format(output_schema: &Value) -> Value {
@@ -577,7 +594,7 @@ pub fn create_responses_request(
 ) -> anyhow::Result<Value, Error> {
     let mut input_items = Vec::new();
 
-    if !system.is_empty() {
+    if !system.is_empty() && !options.request_policy.use_responses_lite {
         input_items.push(json!({
             "role": "system",
             "content": [{
@@ -590,6 +607,50 @@ pub fn create_responses_request(
     add_conversation_history(&mut input_items, messages);
     add_function_calls(&mut input_items, messages);
     add_function_call_outputs(&mut input_items, messages);
+
+    let tools_spec = if tools.is_empty() {
+        None
+    } else {
+        let mut tools_spec: Vec<Value> = tools
+            .iter()
+            .map(|tool| {
+                json!({
+                    "type": "function",
+                    "name": tool.name,
+                    "description": tool_description_with_examples(tool),
+                    "parameters": tool.input_schema,
+                })
+            })
+            .collect();
+        for tool in tools_spec.iter_mut() {
+            if let Some(parameters) = tool.get_mut("parameters") {
+                super::openai::ensure_valid_json_schema(parameters);
+            }
+        }
+        Some(tools_spec)
+    };
+
+    if options.request_policy.use_responses_lite {
+        let mut prefix = Vec::new();
+        if let Some(tools_spec) = tools_spec.as_ref().filter(|tools| !tools.is_empty()) {
+            prefix.push(json!({
+                "type": "additional_tools",
+                "role": "developer",
+                "tools": tools_spec,
+            }));
+        }
+        if !system.is_empty() {
+            prefix.push(json!({
+                "type": "message",
+                "role": "developer",
+                "content": [{
+                    "type": "input_text",
+                    "text": system
+                }]
+            }));
+        }
+        input_items.splice(0..0, prefix);
+    }
 
     let mut payload = json!({
         "model": model_config.model_name,
@@ -611,6 +672,40 @@ pub fn create_responses_request(
         );
     }
 
+    if let Some(reasoning_context) = options
+        .request_policy
+        .reasoning_context
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && *value != "default")
+    {
+        let reasoning = payload
+            .as_object_mut()
+            .unwrap()
+            .entry("reasoning".to_string())
+            .or_insert_with(|| json!({}));
+        if let Some(reasoning) = reasoning.as_object_mut() {
+            reasoning.insert("context".to_string(), json!(reasoning_context));
+        }
+    }
+
+    if let Some(reasoning_summary) = options
+        .request_policy
+        .reasoning_summary
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && *value != "none")
+    {
+        let reasoning = payload
+            .as_object_mut()
+            .unwrap()
+            .entry("reasoning".to_string())
+            .or_insert_with(|| json!({}));
+        if let Some(reasoning) = reasoning.as_object_mut() {
+            reasoning.insert("summary".to_string(), json!(reasoning_summary));
+        }
+    }
+
     if let Some(previous_response_id) = options.previous_response_id.as_ref() {
         payload.as_object_mut().unwrap().insert(
             "previous_response_id".to_string(),
@@ -625,28 +720,41 @@ pub fn create_responses_request(
         );
     }
 
-    if !tools.is_empty() {
-        let mut tools_spec: Vec<Value> = tools
-            .iter()
-            .map(|tool| {
-                json!({
-                    "type": "function",
-                    "name": tool.name,
-                    "description": tool_description_with_examples(tool),
-                    "parameters": tool.input_schema,
-                })
-            })
-            .collect();
-        for tool in tools_spec.iter_mut() {
-            if let Some(parameters) = tool.get_mut("parameters") {
-                super::openai::ensure_valid_json_schema(parameters);
-            }
-        }
-
-        payload
+    if let Some(text_verbosity) = options
+        .request_policy
+        .text_verbosity
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        let text = payload
             .as_object_mut()
             .unwrap()
-            .insert("tools".to_string(), json!(tools_spec));
+            .entry("text".to_string())
+            .or_insert_with(|| json!({}));
+        if let Some(text) = text.as_object_mut() {
+            text.insert("verbosity".to_string(), json!(text_verbosity));
+        }
+    }
+
+    if !options.request_policy.use_responses_lite {
+        if let Some(tools_spec) = tools_spec {
+            payload
+                .as_object_mut()
+                .unwrap()
+                .insert("tools".to_string(), json!(tools_spec));
+        }
+    }
+
+    if let Some(parallel_tool_calls) = options
+        .request_policy
+        .parallel_tool_calls
+        .or_else(|| options.request_policy.use_responses_lite.then_some(false))
+    {
+        payload.as_object_mut().unwrap().insert(
+            "parallel_tool_calls".to_string(),
+            json!(parallel_tool_calls),
+        );
     }
 
     if let Some(temp) = model_config.temperature {
@@ -1173,6 +1281,87 @@ mod tests {
         .unwrap();
 
         assert_eq!(payload["reasoning"]["effort"], "high");
+    }
+
+    #[test]
+    fn test_create_responses_lite_request_uses_input_prefix_for_tools_and_instructions() {
+        let model_config = ModelConfig::new("gpt-5.3-codex").unwrap();
+        let tool = Tool::new(
+            "read_file",
+            "Read file",
+            object!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string" }
+                },
+                "required": ["path"]
+            }),
+        );
+        let payload = create_responses_request(
+            &model_config,
+            "system instructions",
+            &[Message::user().with_text("继续")],
+            &[tool],
+            &ResponsesRequestOptions {
+                request_policy: ResponsesRequestPolicy {
+                    use_responses_lite: true,
+                    reasoning_context: Some("all_turns".to_string()),
+                    reasoning_summary: None,
+                    text_verbosity: None,
+                    parallel_tool_calls: Some(false),
+                    requires_responses_lite_header: true,
+                },
+                ..ResponsesRequestOptions::default()
+            },
+        )
+        .unwrap();
+
+        assert!(payload.get("tools").is_none());
+        assert_eq!(payload["parallel_tool_calls"], serde_json::json!(false));
+        assert_eq!(payload["reasoning"]["context"], "all_turns");
+        assert_eq!(payload["input"][0]["type"], "additional_tools");
+        assert_eq!(payload["input"][0]["role"], "developer");
+        assert_eq!(payload["input"][0]["tools"][0]["name"], "read_file");
+        assert_eq!(payload["input"][1]["type"], "message");
+        assert_eq!(payload["input"][1]["role"], "developer");
+        assert_eq!(
+            payload["input"][1]["content"][0]["text"],
+            "system instructions"
+        );
+        assert_eq!(payload["input"][2]["role"], "user");
+    }
+
+    #[test]
+    fn test_create_responses_request_supports_reasoning_summary_and_text_verbosity() {
+        let model_config = ModelConfig::new("gpt-5.3-codex").unwrap();
+        let output_schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "answer": { "type": "string" }
+            },
+            "required": ["answer"]
+        });
+        let payload = create_responses_request(
+            &model_config,
+            "system",
+            &[Message::user().with_text("继续")],
+            &[],
+            &ResponsesRequestOptions {
+                output_schema: Some(output_schema),
+                request_policy: ResponsesRequestPolicy {
+                    reasoning_summary: Some("detailed".to_string()),
+                    text_verbosity: Some("low".to_string()),
+                    ..ResponsesRequestPolicy::default()
+                },
+                ..ResponsesRequestOptions::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(payload["reasoning"]["summary"], "detailed");
+        assert!(payload["reasoning"].get("effort").is_none());
+        assert_eq!(payload["text"]["verbosity"], "low");
+        assert_eq!(payload["text"]["format"]["type"], "json_schema");
     }
 
     #[test]

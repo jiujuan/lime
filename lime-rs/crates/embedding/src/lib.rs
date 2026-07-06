@@ -112,15 +112,41 @@ fn local_onnx_cache_dir() -> PathBuf {
     if let Ok(value) = std::env::var(LOCAL_ONNX_CACHE_ENV) {
         let trimmed = value.trim();
         if !trimmed.is_empty() {
-            return PathBuf::from(trimmed);
+            return normalize_local_onnx_cache_dir(PathBuf::from(trimmed));
         }
     }
 
-    dirs::cache_dir()
-        .unwrap_or_else(|| PathBuf::from(".lime"))
+    local_onnx_default_cache_dir()
+}
+
+#[cfg(feature = "local-onnx")]
+fn local_onnx_default_cache_dir() -> PathBuf {
+    local_onnx_temp_root()
         .join("lime")
         .join("models")
         .join("embedding")
+}
+
+#[cfg(feature = "local-onnx")]
+fn local_onnx_temp_root() -> PathBuf {
+    #[cfg(unix)]
+    {
+        let tmp = PathBuf::from("/tmp");
+        if tmp.is_dir() {
+            return tmp;
+        }
+    }
+
+    std::env::temp_dir()
+}
+
+#[cfg(feature = "local-onnx")]
+fn normalize_local_onnx_cache_dir(path: PathBuf) -> PathBuf {
+    if dirs::cache_dir().is_some_and(|cache_dir| path.starts_with(cache_dir)) {
+        return local_onnx_default_cache_dir();
+    }
+
+    path
 }
 
 #[cfg(feature = "local-onnx")]
@@ -536,6 +562,46 @@ pub async fn get_embeddings_batch(
 mod tests {
     use super::*;
 
+    #[cfg(feature = "local-onnx")]
+    struct EnvVarRestore {
+        key: &'static str,
+        original: Option<std::ffi::OsString>,
+    }
+
+    #[cfg(feature = "local-onnx")]
+    impl EnvVarRestore {
+        fn remove(key: &'static str) -> Self {
+            let original = std::env::var_os(key);
+            std::env::remove_var(key);
+            Self { key, original }
+        }
+
+        fn set(key: &'static str, value: impl AsRef<std::ffi::OsStr>) -> Self {
+            let original = std::env::var_os(key);
+            std::env::set_var(key, value);
+            Self { key, original }
+        }
+    }
+
+    #[cfg(feature = "local-onnx")]
+    impl Drop for EnvVarRestore {
+        fn drop(&mut self) {
+            if let Some(value) = &self.original {
+                std::env::set_var(self.key, value);
+            } else {
+                std::env::remove_var(self.key);
+            }
+        }
+    }
+
+    #[cfg(feature = "local-onnx")]
+    fn local_onnx_cache_env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+        LOCK.get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .unwrap()
+    }
+
     fn real_api_test_enabled() -> bool {
         std::env::var("LIME_REAL_API_TEST").as_deref() == Ok("1")
             || std::env::var("PROXYCAST_REAL_API_TEST").as_deref() == Ok("1")
@@ -614,6 +680,52 @@ mod tests {
     fn test_normalize_local_onnx_model_rejects_unsupported_model() {
         let error = normalize_local_onnx_model_name(Some("text-embedding-3-small")).unwrap_err();
         assert!(error.contains("不支持的本地 ONNX 嵌入模型"));
+    }
+
+    #[cfg(feature = "local-onnx")]
+    #[test]
+    fn test_local_onnx_cache_dir_defaults_to_cleanable_temp_root() {
+        let _lock = local_onnx_cache_env_lock();
+        let _env = EnvVarRestore::remove(LOCAL_ONNX_CACHE_ENV);
+
+        let cache_dir = local_onnx_cache_dir();
+
+        #[cfg(unix)]
+        assert!(cache_dir.starts_with("/tmp"));
+        #[cfg(not(unix))]
+        assert!(cache_dir.starts_with(std::env::temp_dir()));
+        if let Some(system_cache_dir) = dirs::cache_dir() {
+            assert!(!cache_dir.starts_with(system_cache_dir));
+        }
+        assert_eq!(cache_dir, local_onnx_default_cache_dir());
+    }
+
+    #[cfg(feature = "local-onnx")]
+    #[test]
+    fn test_local_onnx_cache_dir_respects_non_cache_override() {
+        let _lock = local_onnx_cache_env_lock();
+        let override_dir = local_onnx_temp_root().join("custom-local-onnx-cache");
+        let _env = EnvVarRestore::set(LOCAL_ONNX_CACHE_ENV, &override_dir);
+
+        assert_eq!(local_onnx_cache_dir(), override_dir);
+    }
+
+    #[cfg(feature = "local-onnx")]
+    #[test]
+    fn test_local_onnx_cache_dir_rebases_system_cache_override() {
+        let Some(system_cache_dir) = dirs::cache_dir() else {
+            return;
+        };
+        let _lock = local_onnx_cache_env_lock();
+        let _env = EnvVarRestore::set(
+            LOCAL_ONNX_CACHE_ENV,
+            system_cache_dir.join("lime-embedding-test"),
+        );
+
+        let cache_dir = local_onnx_cache_dir();
+
+        assert_eq!(cache_dir, local_onnx_default_cache_dir());
+        assert!(!cache_dir.starts_with(system_cache_dir));
     }
 
     #[cfg(feature = "local-onnx")]

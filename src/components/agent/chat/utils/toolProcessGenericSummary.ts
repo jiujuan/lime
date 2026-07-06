@@ -53,6 +53,7 @@ export function buildGenericPostSummary(params: {
   toolName: string;
   status: ToolProcessStatus;
   subject: string | null;
+  displayFamily?: ToolDisplayFamily | null;
   limeTaskSummary: string | null;
   siteToolSummary: string | null;
 }): string | null {
@@ -63,6 +64,7 @@ export function buildGenericPostSummary(params: {
     toolName,
     status === "in_progress" ? "running" : status,
   );
+  const displayFamily = params.displayFamily || display.family;
   const normalizedSubject = normalizeNarrativeSubject(subject);
 
   if (normalizedName === "enterworktree") {
@@ -251,7 +253,7 @@ export function buildGenericPostSummary(params: {
     return resolveRequiredAgentChatCopy("toolCall.processSummary.mcp.authorized");
   }
 
-  return buildPostSummaryByFamily(display.family, normalizedName, normalizedSubject);
+  return buildPostSummaryByFamily(displayFamily, normalizedName, normalizedSubject);
 }
 
 function buildPostSummaryByFamily(

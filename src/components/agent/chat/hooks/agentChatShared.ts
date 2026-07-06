@@ -19,6 +19,10 @@ import { sanitizeMessageTextForPreview } from "../utils/messageDisplaySanitizer"
 import { sanitizeGeneratedAutoTitle } from "./agentChatAutoTitleViewModel";
 import type { SoulInteractionCopy } from "@/lib/soul/interactionCopy";
 import type { ModelCapabilitySummary } from "@/lib/model/inferModelCapabilities";
+import type {
+  InterruptedInputDraftSnapshot,
+  InterruptedInputRestoreRequest,
+} from "./agentStreamInputRestoreTypes";
 
 export type TaskStatus = "draft" | "running" | "waiting" | "done" | "failed";
 export type TaskStatusReason =
@@ -70,6 +74,7 @@ export interface UseAsterAgentChatOptions {
     sessionId: string,
   ) => ChatToolPreferences | null;
   onOpenSubagents?: () => void;
+  onRestoreInterruptedInput?: (request: InterruptedInputRestoreRequest) => void;
   soulCopy?: SoulInteractionCopy;
 }
 
@@ -98,6 +103,7 @@ export interface SendMessageOptions {
   observer?: SendMessageObserver;
   requestMetadata?: Record<string, unknown>;
   assistantDraft?: AssistantDraftState;
+  inputRestoreDraft?: InterruptedInputDraftSnapshot;
   displayContent?: string;
   capabilityRoute?: InputCapabilitySendRoute;
   skillRequest?: SlashSkillRequest;

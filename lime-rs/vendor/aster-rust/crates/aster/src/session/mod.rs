@@ -22,12 +22,9 @@
 //! let agent = Agent::new().with_session_store(store);
 //! ```
 
-mod archive;
 mod bootstrap;
 mod chat_history_search;
 mod cleanup;
-mod diagnostics;
-mod export;
 pub mod extension_data;
 mod fork;
 mod legacy;
@@ -61,17 +58,9 @@ pub use store::{
 };
 
 // 导出现有功能（向后兼容）
-pub use archive::{
-    archive_and_delete_session, archive_session, bulk_archive_sessions, delete_archived_session,
-    list_archived_sessions, restore_archived_session, BulkArchiveResult,
-};
 pub use cleanup::{
     cleanup_expired_data, force_cleanup, get_cutoff_date, schedule_cleanup, CleanupStats,
     DEFAULT_CLEANUP_PERIOD_DAYS,
-};
-pub use diagnostics::generate_diagnostics;
-pub use export::{
-    bulk_export_sessions, export_session, export_session_to_file, ExportFormat, ExportOptions,
 };
 pub use extension_data::{
     resolve_task_board_state, EnabledExtensionsState, ExtensionData, ExtensionState, TaskBoardItem,

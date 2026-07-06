@@ -179,21 +179,40 @@ export function createThreadClient(deps: AgentRuntimeThreadClientDeps = {}) {
   async function resumeAgentRuntimeThread(
     request: AgentRuntimeResumeThreadRequest,
   ): Promise<boolean> {
+    const eventName = `agentSession/event/${request.session_id}`;
     const resumeContract = buildAgentRuntimeResumeContract({
       sessionId: request.session_id,
       turnId: request.turn_id,
       openActionIds: request.open_action_ids,
       decisions: request.decisions,
     });
-    const result = await appServerClient.resumeAgentSessionThread({
+    const route = appServerEventRouter?.register({
+      eventName,
       sessionId: request.session_id,
-      resumeContract,
+      turnId: request.turn_id,
     });
-    publishAppServerAgentSessionNotifications(
-      `agentSession/event/${request.session_id}`,
-      result.notifications,
-    );
-    return result.result.resumed === true;
+    try {
+      const result = await appServerClient.resumeAgentSessionThread({
+        sessionId: request.session_id,
+        resumeContract,
+      });
+      if (route) {
+        route.publish(result.notifications);
+      } else {
+        publishAppServerAgentSessionNotifications(
+          eventName,
+          result.notifications,
+        );
+      }
+      return result.result.resumed === true;
+    } catch (error) {
+      publishAppServerRpcErrorNotifications(error, {
+        eventName,
+        sessionId: request.session_id,
+        turnId: request.turn_id,
+      });
+      throw error;
+    }
   }
 
   async function getAgentRuntimeCapabilityManifest(

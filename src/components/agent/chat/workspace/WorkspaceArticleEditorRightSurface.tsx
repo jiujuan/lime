@@ -19,7 +19,6 @@ import {
 } from "./workspaceArticleWorkspaceSelection";
 import type { WorkspaceArticleMarkdownChange } from "./workspaceArticleWorkspaceEditedDraft";
 import type { WorkspaceArticleWorkspaceSelectionChange } from "./workspaceArticleWorkspaceSelectionWriteback";
-import { useWorkspaceArticleWorkflowReadModel } from "./useWorkspaceArticleWorkflowReadModel";
 
 interface WorkspaceArticleEditorRightSurfaceProps {
   articleWorkspace: WorkspaceArticleWorkspace;
@@ -43,20 +42,6 @@ export function WorkspaceArticleEditorRightSurface({
   const [selectedObjectKey, setSelectedObjectKey] = useState<string | null>(
     null,
   );
-  const workflowReadModel = useWorkspaceArticleWorkflowReadModel({
-    enabled: true,
-    sessionId: articleWorkspace.sessionId,
-  });
-  const articleWorkspaceWithWorkflowReadModel = useMemo(
-    () =>
-      workflowReadModel.workflowRuns.length > 0
-        ? {
-            ...articleWorkspace,
-            workflowRuns: workflowReadModel.workflowRuns,
-          }
-        : articleWorkspace,
-    [articleWorkspace, workflowReadModel.workflowRuns],
-  );
   const articleWorkspaceSelectionSignature = useMemo(
     () =>
       [
@@ -75,20 +60,20 @@ export function WorkspaceArticleEditorRightSurface({
   const selectedObject = useMemo(
     () =>
       resolveArticleEditorObject(
-        articleWorkspaceWithWorkflowReadModel,
+        articleWorkspace,
         selectedObjectKey,
       ),
-    [articleWorkspaceWithWorkflowReadModel, selectedObjectKey],
+    [articleWorkspace, selectedObjectKey],
   );
   const activeArticleWorkspace = useMemo(() => {
     if (!selectedObject) {
-      return articleWorkspaceWithWorkflowReadModel;
+      return articleWorkspace;
     }
     return {
-      ...articleWorkspaceWithWorkflowReadModel,
+      ...articleWorkspace,
       selectedObjectRef: selectedObject.ref,
     };
-  }, [articleWorkspaceWithWorkflowReadModel, selectedObject]);
+  }, [articleWorkspace, selectedObject]);
   const viewModel = buildWorkspaceArticleWorkspaceViewModel(
     activeArticleWorkspace,
   );
@@ -133,7 +118,6 @@ export function WorkspaceArticleEditorRightSurface({
       preview={viewModel.selectedPreview}
       previewArtifact={previewArtifact}
       articleWorkspace={activeArticleWorkspace}
-      workflowReadModelLoading={workflowReadModel.loading}
       selectedObjectKey={selectedObjectKeyForRender}
       updatedAt={viewModel.updatedAt}
     />

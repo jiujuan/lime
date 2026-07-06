@@ -226,6 +226,33 @@ describe("buildUserInputSubmitOp", () => {
     ).toThrow(`${MODEL_INPUT_CAPABILITY_GAP_ERROR_PREFIX}:`);
   });
 
+  it("图片输入缺少模型能力 summary 时不应阻断 submit op", () => {
+    const op = buildUserInputSubmitOp({
+      content: "描述这张图",
+      images: [
+        {
+          data: "base64-image",
+          mediaType: "image/png",
+        },
+      ],
+      sessionId: "session-image-unknown",
+      eventName: "aster_stream_image_unknown",
+      turnId: "turn-image-unknown",
+      effectiveExecutionStrategy: "react",
+      effectiveAccessMode: "current",
+      effectiveProviderType: "fixture-provider",
+      effectiveModel: "fixture-model",
+      modelCapabilitySummary: null,
+    });
+
+    expect(op.images).toEqual([
+      {
+        data: "base64-image",
+        media_type: "image/png",
+      },
+    ]);
+  });
+
   it("中途切换模型但会话尚未同步时应在 submit payload 带上当前模型", () => {
     const op = buildUserInputSubmitOp({
       content: "继续",

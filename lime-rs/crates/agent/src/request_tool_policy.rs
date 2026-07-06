@@ -786,30 +786,6 @@ mod tests {
             })
         }
 
-        async fn export_session(&self, _id: &str) -> anyhow::Result<String> {
-            Ok("{}".to_string())
-        }
-
-        async fn import_session(&self, _json: &str) -> anyhow::Result<Session> {
-            Ok(self.current_session(true))
-        }
-
-        async fn copy_session(
-            &self,
-            _session_id: &str,
-            _new_name: String,
-        ) -> anyhow::Result<Session> {
-            Ok(self.current_session(true))
-        }
-
-        async fn truncate_conversation(
-            &self,
-            _session_id: &str,
-            _timestamp: i64,
-        ) -> anyhow::Result<()> {
-            Ok(())
-        }
-
         async fn update_session_name(
             &self,
             _session_id: &str,

@@ -1,5 +1,6 @@
 import type { AgentToolCallState as ToolCallState } from "@/lib/api/agentProtocol";
 import type { AgentThreadItem } from "../types";
+import type { ToolSoulLifecycleMetadata } from "./toolSoulLifecycleMetadata";
 
 export type ToolProcessStatus =
   | ToolCallState["status"]
@@ -13,9 +14,10 @@ export type ToolProcessNarrativeSource =
   | "site"
   | "vision"
   | "plain_result"
+  | "metadata"
   | "generic";
 
-export interface ToolProcessNarrative {
+export interface ToolProcessNarrative extends ToolSoulLifecycleMetadata {
   preSummary: string | null;
   postSummary: string | null;
   summary: string | null;

@@ -10,6 +10,8 @@ import {
   loadPersistedProjectId,
   savePersistedProjectId,
 } from "./agentProjectStorage";
+import { loadTransient } from "./agentChatStorage";
+import { getScopedStorageKey } from "./agentChatShared";
 
 interface PendingTopicSwitchState {
   topicId: string;
@@ -34,6 +36,26 @@ export type WorkspaceProjectSelectionSource =
   | "manual"
   | "topic-switch"
   | "none";
+
+function hasCurrentSessionRestoreCandidate(workspaceId?: string | null) {
+  const hasCandidateInScope = (candidateWorkspaceId?: string | null) => {
+    const sessionId = loadTransient<string | null>(
+      getScopedStorageKey(candidateWorkspaceId, "aster_curr_sessionId"),
+      null,
+    );
+    return typeof sessionId === "string" && sessionId.trim().length > 0;
+  };
+
+  if (hasCandidateInScope(workspaceId)) {
+    return true;
+  }
+
+  if (workspaceId?.trim()) {
+    return hasCandidateInScope(null);
+  }
+
+  return false;
+}
 
 export function useWorkspaceProjectSelection(
   options: UseWorkspaceProjectSelectionOptions = {},
@@ -135,13 +157,17 @@ export function useWorkspaceProjectSelection(
     incomingNewChatRequestKey !== null &&
     (handledNewChatRequestKey === incomingNewChatRequestKey ||
       handledNewChatRequestRef.current === incomingNewChatRequestKey);
+  const projectId =
+    normalizedExternalProjectId ?? internalProjectId ?? undefined;
+  const hasCurrentSessionCandidate = hasCurrentSessionRestoreCandidate(
+    projectId ?? null,
+  );
   const shouldDisableSessionRestore =
     hasExplicitInitialSession ||
     (incomingNewChatRequestKey !== null &&
-      (keepNewChatSessionRestoreDisabled ||
-        !hasHandledIncomingNewChatRequest));
-  const projectId =
-    normalizedExternalProjectId ?? internalProjectId ?? undefined;
+      (keepNewChatSessionRestoreDisabled
+        ? !hasCurrentSessionCandidate
+        : !hasHandledIncomingNewChatRequest));
   const projectSelectionSource: WorkspaceProjectSelectionSource =
     normalizedExternalProjectId ? "external" : internalProjectSelectionSource;
 

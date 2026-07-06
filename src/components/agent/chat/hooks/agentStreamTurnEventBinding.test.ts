@@ -1008,6 +1008,157 @@ describe("agentStreamTurnEventBinding", () => {
     expect(disposeListener).toHaveBeenCalled();
   });
 
+  it("首包后静默但 read model 仍在运行时，应保留活跃流并继续等待", async () => {
+    vi.useFakeTimers();
+
+    let messages: Message[] = [
+      {
+        id: "assistant-running-read-model",
+        role: "assistant",
+        content: "",
+        timestamp: new Date("2026-06-06T00:00:00.000Z"),
+        isThinking: true,
+      },
+    ];
+    let streamActivated = false;
+    let streamHandler: ((event: { payload: unknown }) => void) | null = null;
+    const attemptSilentTurnRecovery = vi
+      .fn()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    const setMessages = vi.fn(
+      (value: Message[] | ((prev: Message[]) => Message[])) => {
+        messages = typeof value === "function" ? value(messages) : value;
+      },
+    );
+    const clearActiveStreamIfMatch = vi.fn(() => true);
+    const disposeListener = vi.fn();
+    const setIsSending = vi.fn();
+    const runtime = {
+      listenToTurnEvents: vi.fn(async (_eventName, handler) => {
+        streamHandler = handler;
+        return vi.fn();
+      }),
+    } as unknown as AgentRuntimeAdapter;
+    const requestState: StreamRequestState = {
+      accumulatedContent: "",
+      requestLogId: null,
+      requestStartedAt: 0,
+      requestFinished: false,
+      queuedTurnId: null,
+      currentTurnId: "turn-running-read-model",
+    };
+
+    await registerAgentStreamTurnEventBinding({
+      runtime,
+      eventName: "aster_stream_running-read-model",
+      requestState,
+      attemptSilentTurnRecovery,
+      skipUserMessage: false,
+      effectiveProviderType: "openai",
+      effectiveModel: "gpt-5.5",
+      effectiveExecutionStrategy: "react",
+      content: "继续输出未完成内容",
+      expectingQueue: false,
+      activeSessionId: "session-running-read-model",
+      resolvedWorkspaceId: "workspace-running-read-model",
+      assistantMsgId: "assistant-running-read-model",
+      pendingTurnKey: "pending-turn-running-read-model",
+      pendingItemKey: "pending-item-running-read-model",
+      effectiveWaitingRuntimeStatus: {
+        phase: "preparing",
+        title: "处理中",
+        detail: "正在准备执行上下文",
+      },
+      warnedKeysRef: { current: new Set<string>() },
+      actionLoggedKeys: new Set<string>(),
+      toolLogIdByToolId: new Map<string, string>(),
+      toolStartedAtByToolId: new Map<string, number>(),
+      toolNameByToolId: new Map<string, string>(),
+      callbacks: {
+        activateStream: () => {
+          streamActivated = true;
+        },
+        isStreamActivated: () => streamActivated,
+        clearOptimisticItem: () => {},
+        clearOptimisticTurn: () => {},
+        disposeListener,
+        removeQueuedDraftMessages: () => {},
+        clearActiveStreamIfMatch,
+        upsertQueuedTurn: (_queuedTurn: QueuedTurnSnapshot) => {},
+        removeQueuedTurnState: () => {},
+      },
+      sounds: {
+        playToolcallSound: () => {},
+        playTypewriterSound: () => {},
+      },
+      appendThinkingToParts: (parts) => parts,
+      setMessages: setMessages as never,
+      setPendingActions: noopDispatch<ActionRequired[]>(),
+      setThreadItems: noopDispatch<AgentThreadItem[]>(),
+      setThreadTurns: noopDispatch<AgentThreadTurn[]>(),
+      setCurrentTurnId: noopDispatch<string | null>(),
+      setExecutionRuntime: noopDispatch<AsterSessionExecutionRuntime | null>(),
+      setIsSending: setIsSending as never,
+    });
+
+    if (!streamHandler) {
+      throw new Error("expected stream handler to be registered");
+    }
+
+    const payload = projectAppServerAgentEventPayload({
+      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "evt-running-read-model-1",
+          sequence: 1,
+          sessionId: "session-running-read-model",
+          threadId: "thread-running-read-model",
+          turnId: "turn-running-read-model",
+          type: "message.delta",
+          timestamp: "2026-06-06T00:00:00.000Z",
+          payload: {
+            text: "第一段",
+          },
+        },
+      },
+    });
+    if (!payload) {
+      throw new Error("expected App Server notification to project");
+    }
+    streamHandler({ payload });
+
+    await vi.advanceTimersByTimeAsync(120_100);
+
+    expect(streamActivated).toBe(true);
+    expect(messages[0]?.content).not.toContain("执行失败");
+    expect(messages[0]?.isThinking).toBe(true);
+    expect(attemptSilentTurnRecovery).toHaveBeenCalledTimes(2);
+    expect(attemptSilentTurnRecovery).toHaveBeenNthCalledWith(
+      1,
+      "session-running-read-model",
+      expect.any(Number),
+      "继续输出未完成内容",
+      {
+        requireTerminal: true,
+        turnId: "turn-running-read-model",
+      },
+    );
+    expect(attemptSilentTurnRecovery).toHaveBeenNthCalledWith(
+      2,
+      "session-running-read-model",
+      expect.any(Number),
+      "继续输出未完成内容",
+      {
+        requireTerminal: false,
+        turnId: "turn-running-read-model",
+      },
+    );
+    expect(clearActiveStreamIfMatch).not.toHaveBeenCalled();
+    expect(disposeListener).not.toHaveBeenCalled();
+    expect(setIsSending).not.toHaveBeenCalledWith(false);
+  });
+
   it("运行时 keepalive 事件应刷新 inactivity 计时，避免长模型调用被前端误中断", async () => {
     vi.useFakeTimers();
 

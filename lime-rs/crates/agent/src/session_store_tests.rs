@@ -7,17 +7,17 @@ use super::session_store_runtime_projection::{
 };
 use super::session_store_subagent_context::{
     should_load_runtime_overlay_for_runtime_detail,
-    should_load_subagent_runtime_context_for_runtime_detail,
-};
-use super::session_store_todo_projection::{
-    project_session_todo_items, SessionTaskBoardItemProjection, SessionTaskBoardStatusProjection,
+    should_load_subagent_runtime_context_for_runtime_detail, SubagentPresentationProjection,
+    SubagentSessionProjection,
 };
 use super::*;
 use crate::protocol::AgentMessage as RuntimeAgentMessage;
 use crate::subagent_control::SubagentTurnStatus;
+use agent_runtime::runtime_conversation::{
+    project_runtime_conversation_window, RuntimeConversationMessageSource,
+};
 use aster::session::{
-    SessionRuntimeSnapshot, SessionType as AsterSessionType, SubagentSessionMetadata,
-    ThreadRuntime, ThreadRuntimeSnapshot, TurnRuntime, TurnStatus,
+    SessionRuntimeSnapshot, ThreadRuntime, ThreadRuntimeSnapshot, TurnRuntime, TurnStatus,
 };
 use chrono::{Duration, Utc};
 use lime_core::agent::types::{FunctionCall, ImageUrl, ToolCall};
@@ -289,40 +289,6 @@ fn should_probe_runtime_overlay_for_empty_limited_history() {
 }
 
 #[test]
-fn project_session_todo_items_should_map_current_task_board_projection() {
-    let items = vec![
-        SessionTaskBoardItemProjection {
-            subject: "  收集事实源  ".to_string(),
-            active_form: Some("  正在读取仓库  ".to_string()),
-            status: SessionTaskBoardStatusProjection::InProgress,
-        },
-        SessionTaskBoardItemProjection {
-            subject: " ".to_string(),
-            active_form: Some("忽略".to_string()),
-            status: SessionTaskBoardStatusProjection::Pending,
-        },
-        SessionTaskBoardItemProjection {
-            subject: "输出结论".to_string(),
-            active_form: None,
-            status: SessionTaskBoardStatusProjection::Completed,
-        },
-    ];
-
-    let projected = project_session_todo_items(items);
-
-    assert_eq!(projected.len(), 2);
-    assert_eq!(projected[0].content, "收集事实源");
-    assert_eq!(
-        projected[0].active_form.as_deref(),
-        Some("  正在读取仓库  ")
-    );
-    assert_eq!(projected[0].status, SessionTodoStatus::InProgress);
-    assert_eq!(projected[1].content, "输出结论");
-    assert_eq!(projected[1].active_form, None);
-    assert_eq!(projected[1].status, SessionTodoStatus::Completed);
-}
-
-#[test]
 fn apply_runtime_snapshot_should_not_regress_aborted_turn_to_running() {
     let mut detail = build_detail_with_turn_status(AgentThreadTurnStatus::Aborted);
     let thread_id = detail.thread_id.clone();
@@ -348,8 +314,10 @@ fn apply_runtime_snapshot_should_not_regress_aborted_turn_to_running() {
         }],
     };
 
+    let snapshot_record =
+        crate::runtime_store_aster_adapter::runtime_snapshot_record_from_aster(&snapshot);
     let runtime_projection =
-        crate::runtime_snapshot_adapter::project_aster_runtime_snapshot(&snapshot);
+        crate::runtime_snapshot_adapter::project_runtime_snapshot_record(&snapshot_record);
     apply_runtime_snapshot(&mut detail, &runtime_projection);
 
     assert_eq!(detail.turns.len(), 1);
@@ -389,7 +357,7 @@ fn should_skip_subagent_context_for_empty_limited_history() {
     ));
 }
 
-fn build_test_subagent_session(
+fn build_test_subagent_projection(
     session_id: &str,
     name: &str,
     parent_session_id: Option<&str>,
@@ -397,28 +365,45 @@ fn build_test_subagent_session(
     task_summary: Option<&str>,
     role_hint: Option<&str>,
     created_from_turn_id: Option<&str>,
-) -> AsterSession {
-    let mut session = AsterSession {
+) -> Option<SubagentSessionProjection> {
+    let parent_session_id = parent_session_id?.to_string();
+    Some(SubagentSessionProjection {
         id: session_id.to_string(),
         name: name.to_string(),
-        session_type: AsterSessionType::SubAgent,
-        created_at: updated_at - Duration::minutes(1),
-        updated_at,
+        created_at: (updated_at - Duration::minutes(1)).timestamp(),
+        updated_at: updated_at.timestamp(),
+        session_type: "sub_agent".to_string(),
+        model: Some("openai".to_string()),
         provider_name: Some("openai".to_string()),
-        working_dir: std::path::PathBuf::from("/tmp/workspace-child"),
-        ..AsterSession::default()
-    };
+        working_dir: Some("/tmp/workspace-child".to_string()),
+        presentation: SubagentPresentationProjection {
+            parent_session_id,
+            task_summary: task_summary.map(str::to_string),
+            role_hint: role_hint.map(str::to_string),
+            origin_tool: Some("Agent".to_string()),
+            created_from_turn_id: created_from_turn_id.map(str::to_string),
+            ..SubagentPresentationProjection::default()
+        },
+    })
+}
 
-    if let Some(parent_session_id) = parent_session_id {
-        session.extension_data = SubagentSessionMetadata::new(parent_session_id.to_string())
-            .with_task_summary(task_summary.map(str::to_string))
-            .with_role_hint(role_hint.map(str::to_string))
-            .with_created_from_turn_id(created_from_turn_id.map(str::to_string))
-            .into_updated_extension_data(&AsterSession::default())
-            .expect("build child metadata");
-    }
-
-    session
+fn apply_customization_to_projection(projection: &mut SubagentSessionProjection) {
+    projection.presentation.blueprint_role_id = Some("runtime-explorer".to_string());
+    projection.presentation.blueprint_role_label = Some("分析".to_string());
+    projection.presentation.profile_id = Some("code-explorer".to_string());
+    projection.presentation.profile_name = Some("代码分析员".to_string());
+    projection.presentation.role_key = Some("explorer".to_string());
+    projection.presentation.team_preset_id = Some("code-triage-team".to_string());
+    projection.presentation.theme = Some("engineering".to_string());
+    projection.presentation.output_contract = Some("输出证据、影响面与建议。".to_string());
+    projection.presentation.skill_ids = vec!["repo-exploration".to_string()];
+    projection.presentation.skills = vec![SubagentSkillSummary {
+        id: "repo-exploration".to_string(),
+        name: "仓库探索".to_string(),
+        description: Some("优先读事实源".to_string()),
+        source: Some("builtin".to_string()),
+        directory: None,
+    }];
 }
 
 #[test]
@@ -436,7 +421,7 @@ fn build_child_subagent_session_summaries_should_filter_and_sort_by_updated_at_d
     let summaries = build_child_subagent_session_summaries(
         None,
         vec![
-            build_test_subagent_session(
+            build_test_subagent_projection(
                 "child-old",
                 "旧子代理",
                 Some("parent-1"),
@@ -445,7 +430,7 @@ fn build_child_subagent_session_summaries_should_filter_and_sort_by_updated_at_d
                 Some("explorer"),
                 Some("turn-1"),
             ),
-            build_test_subagent_session(
+            build_test_subagent_projection(
                 "ignored",
                 "忽略项",
                 None,
@@ -454,7 +439,7 @@ fn build_child_subagent_session_summaries_should_filter_and_sort_by_updated_at_d
                 None,
                 None,
             ),
-            build_test_subagent_session(
+            build_test_subagent_projection(
                 "child-new",
                 "新子代理",
                 Some("parent-1"),
@@ -464,8 +449,8 @@ fn build_child_subagent_session_summaries_should_filter_and_sort_by_updated_at_d
                 Some("turn-2"),
             ),
         ]
-        .iter()
-        .filter_map(project_aster_subagent_session)
+        .into_iter()
+        .flatten()
         .collect(),
     );
 
@@ -484,7 +469,7 @@ fn build_child_subagent_session_summaries_should_filter_and_sort_by_updated_at_d
 #[test]
 fn build_child_subagent_session_summary_should_merge_customization_state() {
     let now = Utc::now();
-    let mut session = build_test_subagent_session(
+    let mut projection = build_test_subagent_projection(
         "child-customized",
         "自定义子代理",
         Some("parent-1"),
@@ -492,37 +477,11 @@ fn build_child_subagent_session_summary_should_merge_customization_state() {
         Some("整理 customization"),
         Some("Image #1"),
         Some("turn-9"),
-    );
-    session.extension_data = updated_extension_data_for_subagent_customization(
-        SubagentCustomizationState {
-            blueprint_role_id: Some("runtime-explorer".to_string()),
-            blueprint_role_label: Some("分析".to_string()),
-            profile_id: Some("code-explorer".to_string()),
-            profile_name: Some("代码分析员".to_string()),
-            role_key: Some("explorer".to_string()),
-            team_preset_id: Some("code-triage-team".to_string()),
-            theme: Some("engineering".to_string()),
-            output_contract: Some("输出证据、影响面与建议。".to_string()),
-            system_overlay: None,
-            skill_ids: vec!["repo-exploration".to_string()],
-            skills: vec![SubagentSkillSummary {
-                id: "repo-exploration".to_string(),
-                name: "仓库探索".to_string(),
-                description: Some("优先读事实源".to_string()),
-                source: Some("builtin".to_string()),
-                directory: None,
-            }],
-            allowed_tools: Vec::new(),
-            disallowed_tools: Vec::new(),
-        },
-        &session,
     )
-    .expect("merge customization");
+    .expect("child projection");
+    apply_customization_to_projection(&mut projection);
 
-    let summary = build_child_subagent_session_summary(
-        None,
-        project_aster_subagent_session(&session).expect("child summary should exist"),
-    );
+    let summary = build_child_subagent_session_summary(None, projection);
 
     assert_eq!(
         summary.blueprint_role_id.as_deref(),
@@ -547,7 +506,7 @@ fn build_child_subagent_session_summary_should_merge_customization_state() {
 #[test]
 fn build_subagent_parent_context_should_keep_parent_name_and_filter_current_session() {
     let now = Utc::now();
-    let session = build_test_subagent_session(
+    let session = build_test_subagent_projection(
         "child-current",
         "Image #1",
         Some("parent-1"),
@@ -559,7 +518,7 @@ fn build_subagent_parent_context_should_keep_parent_name_and_filter_current_sess
     let sibling_subagent_sessions = build_child_subagent_session_summaries(
         None,
         vec![
-            build_test_subagent_session(
+            build_test_subagent_projection(
                 "child-current",
                 "Image #1",
                 Some("parent-1"),
@@ -568,7 +527,7 @@ fn build_subagent_parent_context_should_keep_parent_name_and_filter_current_sess
                 Some("Image #1"),
                 Some("turn-2"),
             ),
-            build_test_subagent_session(
+            build_test_subagent_projection(
                 "child-sibling",
                 "Image #2",
                 Some("parent-1"),
@@ -578,13 +537,11 @@ fn build_subagent_parent_context_should_keep_parent_name_and_filter_current_sess
                 Some("turn-2"),
             ),
         ]
-        .iter()
-        .filter_map(project_aster_subagent_session)
+        .into_iter()
+        .flatten()
         .collect(),
     );
-    let projection = project_aster_subagent_session(&session)
-        .expect("parent projection")
-        .presentation;
+    let projection = session.expect("parent projection").presentation;
 
     let context = build_subagent_parent_context(
         "child-current",
@@ -608,7 +565,7 @@ fn build_subagent_parent_context_should_keep_parent_name_and_filter_current_sess
 #[test]
 fn build_subagent_parent_context_should_merge_customization_projection() {
     let now = Utc::now();
-    let mut session = build_test_subagent_session(
+    let mut projection = build_test_subagent_projection(
         "child-customized",
         "自定义子代理",
         Some("parent-1"),
@@ -616,39 +573,14 @@ fn build_subagent_parent_context_should_merge_customization_projection() {
         Some("整理 customization"),
         Some("Image #1"),
         Some("turn-9"),
-    );
-    session.extension_data = updated_extension_data_for_subagent_customization(
-        SubagentCustomizationState {
-            blueprint_role_id: Some("runtime-explorer".to_string()),
-            blueprint_role_label: Some("分析".to_string()),
-            profile_id: Some("code-explorer".to_string()),
-            profile_name: Some("代码分析员".to_string()),
-            role_key: Some("explorer".to_string()),
-            team_preset_id: Some("code-triage-team".to_string()),
-            theme: Some("engineering".to_string()),
-            output_contract: Some("输出证据、影响面与建议。".to_string()),
-            system_overlay: None,
-            skill_ids: vec!["repo-exploration".to_string()],
-            skills: vec![SubagentSkillSummary {
-                id: "repo-exploration".to_string(),
-                name: "仓库探索".to_string(),
-                description: Some("优先读事实源".to_string()),
-                source: Some("builtin".to_string()),
-                directory: None,
-            }],
-            allowed_tools: Vec::new(),
-            disallowed_tools: Vec::new(),
-        },
-        &session,
     )
-    .expect("merge customization");
+    .expect("parent projection");
+    apply_customization_to_projection(&mut projection);
 
     let context = build_subagent_parent_context(
         "child-customized",
         None,
-        project_aster_subagent_session(&session)
-            .expect("parent projection should exist")
-            .presentation,
+        projection.presentation,
         Vec::new(),
     );
 
@@ -1056,17 +988,14 @@ fn apply_runtime_usage_fallback_should_fill_latest_assistant_message() {
             usage: None,
         },
     ];
-    let session = AsterSession {
-        id: "session-usage-fallback".to_string(),
-        input_tokens: Some(3_833),
-        output_tokens: Some(615),
-        cache_creation_input_tokens: Some(144),
-        ..AsterSession::default()
-    };
-
     let applied = apply_runtime_usage_fallback_to_latest_assistant_message(
         &mut messages,
-        crate::session_execution_runtime_adapter::project_aster_session_usage(&session),
+        crate::session_usage_projection::project_token_usage(
+            Some(3_833),
+            Some(615),
+            None,
+            Some(144),
+        ),
     );
 
     assert_eq!(
@@ -1103,16 +1032,9 @@ fn apply_runtime_usage_fallback_should_not_override_existing_usage() {
             cache_creation_input_tokens: Some(1_024),
         }),
     }];
-    let session = AsterSession {
-        id: "session-usage-existing".to_string(),
-        input_tokens: Some(3_833),
-        output_tokens: Some(615),
-        ..AsterSession::default()
-    };
-
     let applied = apply_runtime_usage_fallback_to_latest_assistant_message(
         &mut messages,
-        crate::session_execution_runtime_adapter::project_aster_session_usage(&session),
+        crate::session_usage_projection::project_token_usage(Some(3_833), Some(615), None, None),
     );
 
     assert!(applied.is_none());
@@ -1550,24 +1472,31 @@ async fn get_runtime_session_detail_should_use_empty_persisted_fast_path() {
 #[test]
 fn apply_current_runtime_conversation_should_read_current_store_messages() {
     let mut detail = build_empty_runtime_detail();
-    let mut session = aster::session::Session {
-        id: "session-current-runtime-history".to_string(),
-        conversation: Some(aster::conversation::Conversation::new_unvalidated([
-            aster::conversation::message::Message::user().with_text("第一条用户消息"),
-            aster::conversation::message::Message::assistant().with_text("第一条助手消息"),
-            aster::conversation::message::Message::assistant()
-                .with_text("内部续跑消息")
-                .agent_only(),
-            aster::conversation::message::Message::user().with_text("第二条用户消息"),
-        ])),
-        ..aster::session::Session::default()
+    let source = |role: &str, text: &str, user_visible: bool| RuntimeConversationMessageSource {
+        message: RuntimeAgentMessage {
+            id: None,
+            role: role.to_string(),
+            content: vec![RuntimeAgentMessageContent::Text {
+                text: text.to_string(),
+            }],
+            timestamp: 0,
+            usage: None,
+        },
+        user_visible,
     };
 
     super::session_store_runtime_detail::apply_current_runtime_conversation(
         &mut detail,
-        &session,
-        Some(2),
-        0,
+        Some(project_runtime_conversation_window(
+            [
+                source("user", "第一条用户消息", true),
+                source("assistant", "第一条助手消息", true),
+                source("assistant", "内部续跑消息", false),
+                source("user", "第二条用户消息", true),
+            ],
+            Some(2),
+            0,
+        )),
         None,
     );
 
@@ -1583,9 +1512,16 @@ fn apply_current_runtime_conversation_should_read_current_store_messages() {
 
     super::session_store_runtime_detail::apply_current_runtime_conversation(
         &mut detail,
-        &session,
-        Some(1),
-        1,
+        Some(project_runtime_conversation_window(
+            [
+                source("user", "第一条用户消息", true),
+                source("assistant", "第一条助手消息", true),
+                source("assistant", "内部续跑消息", false),
+                source("user", "第二条用户消息", true),
+            ],
+            Some(1),
+            1,
+        )),
         None,
     );
     assert_eq!(detail.messages.len(), 1);
@@ -1593,12 +1529,9 @@ fn apply_current_runtime_conversation_should_read_current_store_messages() {
         matches!(part, RuntimeAgentMessageContent::Text { text } if text == "第一条助手消息")
     }));
 
-    session.conversation = None;
     super::session_store_runtime_detail::apply_current_runtime_conversation(
         &mut detail,
-        &session,
         None,
-        0,
         None,
     );
     assert_eq!(detail.messages.len(), 1);

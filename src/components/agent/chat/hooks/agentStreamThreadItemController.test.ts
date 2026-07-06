@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { AgentThreadItem, AgentThreadTurn } from "@/lib/api/agentProtocol";
+import { changeLimeLocale } from "@/i18n/createI18n";
+import { resolveSoulInteractionCopy } from "@/lib/soul/interactionCopy";
+import { resolveAgentThreadToolProcessNarrative } from "../utils/toolProcessSummary";
 import { upsertThreadItemState } from "./agentThreadState";
 import {
   buildAgentStreamTurnStartedPendingItemUpdate,
@@ -169,6 +172,12 @@ describe("agentStreamThreadItemController", () => {
         activeSessionId: "thread-1",
         fallbackTurnId: "turn-1",
         now: "2026-05-05T00:01:00.000Z",
+        soulCopy: resolveSoulInteractionCopy({
+          soul: {
+            enabled: true,
+            style_profile_id: "cool_confident_operator",
+          },
+        }),
       },
     );
     const updated = projectAgentStreamTimelineItem(
@@ -203,7 +212,266 @@ describe("agentStreamThreadItemController", () => {
         modality: "image",
         assetRef: "artifact://image-1",
         output_kind: "preview",
+        soul_lifecycle: {
+          surface: "tool_lifecycle",
+          phase: "tool_progress",
+          status: "output_delta",
+          styleLevel: "L1",
+          riskLevel: "normal",
+          toneVariant: "cool_confident",
+          profileId: "cool_confident_operator",
+          packId: "com.lime.soul.cool-confident-operator",
+        },
+        soul_surface: "tool_lifecycle",
+        soul_phase: "tool_progress",
+        style_level: "L1",
+        risk_level: "normal",
+        tone_variant: "cool_confident",
+        profile_id: "cool_confident_operator",
+        pack_id: "com.lime.soul.cool-confident-operator",
         streaming: true,
+      },
+    });
+  });
+
+  it("工具进度应优先继承 App Server lifecycle metadata，而不是被本地 fallback 覆盖", () => {
+    const started = projectAgentStreamTimelineItem(
+      {
+        type: "tool_start",
+        tool_id: "tool-risk-1",
+        tool_name: "Bash",
+        arguments: JSON.stringify({ command: "rm -rf build" }),
+        sequence: 20,
+        timestamp: "2026-05-05T00:01:00.000Z",
+      },
+      {
+        activeSessionId: "thread-1",
+        fallbackTurnId: "turn-1",
+        now: "2026-05-05T00:01:00.000Z",
+      },
+    );
+
+    const progress = projectAgentStreamTimelineItem(
+      {
+        type: "tool_progress",
+        tool_id: "tool-risk-1",
+        progress: {
+          message: "waiting approval",
+          metadata: {
+            soul_lifecycle: {
+              surface: "tool_lifecycle",
+              phase: "tool_progress",
+              status: "progress",
+              styleLevel: "L4",
+              riskLevel: "high",
+              toneVariant: "calm_professional",
+              profileId: "calm_professional_partner",
+              packId: "com.lime.soul.calm-professional-partner",
+            },
+            risk_level: "high",
+            profile_id: "calm_professional_partner",
+            pack_id: "com.lime.soul.calm-professional-partner",
+          },
+        },
+        sequence: 21,
+        timestamp: "2026-05-05T00:01:01.000Z",
+      },
+      {
+        activeSessionId: "thread-1",
+        fallbackTurnId: "turn-1",
+        now: "2026-05-05T00:01:01.000Z",
+      },
+      started ?? undefined,
+    );
+
+    expect(progress).toMatchObject({
+      type: "tool_call",
+      metadata: {
+        soul_lifecycle: {
+          phase: "tool_progress",
+          status: "progress",
+          styleLevel: "L4",
+          riskLevel: "high",
+          profileId: "calm_professional_partner",
+          packId: "com.lime.soul.calm-professional-partner",
+        },
+        soul_phase: "tool_progress",
+        style_level: "L4",
+        risk_level: "high",
+        profile_id: "calm_professional_partner",
+        pack_id: "com.lime.soul.calm-professional-partner",
+      },
+    });
+  });
+
+  it("应保留工具开始事件中的结构化过程摘要 metadata", async () => {
+    await changeLimeLocale("en-US");
+    const started = projectAgentStreamTimelineItem(
+      {
+        type: "tool_start",
+        tool_id: "tool-search-start",
+        tool_name: "web_search",
+        arguments: JSON.stringify({ query: "runtime start" }),
+        metadata: {
+          tool_process_summary: {
+            source: "runtime_facts",
+            pre: {
+              key: "toolCall.processSummary.webSearch.searchFirstWithQuery",
+              values: { query: "runtime start" },
+            },
+          },
+          soul_phase: "before_tool",
+        },
+        sequence: 20,
+        timestamp: "2026-05-05T00:01:00.000Z",
+      },
+      {
+        activeSessionId: "thread-1",
+        fallbackTurnId: "turn-1",
+        now: "2026-05-05T00:01:00.000Z",
+      },
+    );
+
+    expect(started).toMatchObject({
+      id: "tool-search-start",
+      type: "tool_call",
+      metadata: {
+        tool_process_summary: {
+          source: "runtime_facts",
+        },
+        soul_phase: "before_tool",
+      },
+    });
+    expect(
+      resolveAgentThreadToolProcessNarrative(started as AgentThreadItem),
+    ).toMatchObject({
+      preSummary: "Searching runtime start first",
+      summary: "Searching runtime start first",
+    });
+  });
+
+  it("应保留工具结果中的结构化过程摘要 metadata 供工具卡片渲染", async () => {
+    await changeLimeLocale("en-US");
+    const started = projectAgentStreamTimelineItem(
+      {
+        type: "tool_start",
+        tool_id: "tool-search-1",
+        tool_name: "web_search",
+        arguments: JSON.stringify({ query: "runtime facts" }),
+        sequence: 20,
+        timestamp: "2026-05-05T00:01:00.000Z",
+      },
+      {
+        activeSessionId: "thread-1",
+        fallbackTurnId: "turn-1",
+        now: "2026-05-05T00:01:00.000Z",
+      },
+    );
+    const completed = projectAgentStreamTimelineItem(
+      {
+        type: "tool_end",
+        tool_id: "tool-search-1",
+        result: {
+          success: true,
+          output: "raw result should not win",
+          metadata: {
+            tool_process_summary: {
+              source: "runtime_facts",
+              pre: {
+                key: "toolCall.processSummary.webSearch.searchFirstWithQuery",
+                values: { query: "runtime facts" },
+              },
+              completed: {
+                key: "toolCall.processSummary.webSearch.sourcesFound",
+                values: { count: 2 },
+              },
+            },
+          },
+        },
+        sequence: 21,
+        timestamp: "2026-05-05T00:01:01.000Z",
+      },
+      {
+        activeSessionId: "thread-1",
+        fallbackTurnId: "turn-1",
+        now: "2026-05-05T00:01:01.000Z",
+      },
+      started ?? undefined,
+    );
+
+    expect(completed).toMatchObject({
+      id: "tool-search-1",
+      type: "tool_call",
+      metadata: {
+        tool_process_summary: {
+          source: "runtime_facts",
+        },
+        soul_phase: "after_tool_success",
+      },
+    });
+    expect(
+      resolveAgentThreadToolProcessNarrative(completed as AgentThreadItem),
+    ).toMatchObject({
+      preSummary: "Searching runtime facts first",
+      postSummary: "2 reference sources found",
+      summary: "2 reference sources found",
+      postSource: "metadata",
+    });
+  });
+
+  it("应保留 tool_end structuredContent 供 MCP 工具过程渲染", () => {
+    const started = projectAgentStreamTimelineItem(
+      {
+        type: "tool_start",
+        tool_id: "tool-mcp-structured",
+        tool_name: "mcp__docs__diagnostic_probe",
+        arguments: JSON.stringify({ query: "structured content" }),
+        sequence: 20,
+        timestamp: "2026-05-05T00:01:00.000Z",
+      },
+      {
+        activeSessionId: "thread-1",
+        fallbackTurnId: "turn-1",
+        now: "2026-05-05T00:01:00.000Z",
+      },
+    );
+
+    const completed = projectAgentStreamTimelineItem(
+      {
+        type: "tool_end",
+        tool_id: "tool-mcp-structured",
+        result: {
+          success: true,
+          output: JSON.stringify({
+            request_metadata: { projection: "mcp_tool_result_projection" },
+            diagnostics: { elapsed_ms: 12 },
+          }),
+          structuredContent: {
+            answer: "MCP 结构化答案已进入 Agent Chat GUI",
+            ids: ["doc-structured-1"],
+          },
+        },
+        sequence: 21,
+        timestamp: "2026-05-05T00:01:01.000Z",
+      },
+      {
+        activeSessionId: "thread-1",
+        fallbackTurnId: "turn-1",
+        now: "2026-05-05T00:01:01.000Z",
+      },
+      started ?? undefined,
+    );
+
+    expect(completed).toMatchObject({
+      id: "tool-mcp-structured",
+      type: "tool_call",
+      structuredContent: {
+        answer: "MCP 结构化答案已进入 Agent Chat GUI",
+        ids: ["doc-structured-1"],
+      },
+      structured_content: {
+        answer: "MCP 结构化答案已进入 Agent Chat GUI",
+        ids: ["doc-structured-1"],
       },
     });
   });

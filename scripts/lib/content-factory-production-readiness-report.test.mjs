@@ -132,13 +132,30 @@ function readyCatalog() {
 
 function readyGuiEvidence() {
   return {
+    schemaVersion: "content-factory-production-gui-evidence.v1",
     status: "passed",
+    cdp: {
+      attached: true,
+      usedRealElectron: true,
+    },
     installedState: {
+      appVersion: "2.2.2",
+      cloudReleaseEvidenceStatus: "ready",
+      manifestHash: MANIFEST_HASH,
+      manifestHashMatched: true,
+      packageHash: PACKAGE_HASH,
+      packageHashMatched: true,
+      packageVerificationStatus: "verified",
+      releaseId: RELEASE_ID,
+      signaturePolicy: "required",
+      signatureRef: SIGNATURE_REF,
       sourceKind: "cloud_release",
       signatureVerificationStatus: "verified",
     },
     readModel: {
+      articleDraftDocumentLength: 3153,
       articleDraftDocumentPresent: true,
+      generatedArticleMarkerClean: true,
       hostManagedGenerationStatus: "completed",
     },
     assertions: {
@@ -150,6 +167,18 @@ function readyGuiEvidence() {
     },
     eventLogs: {
       workflowJsonl: "/tmp/content-factory-production/workflow-events.jsonl",
+      workflowJsonlEventCount: 16,
+    },
+    evidenceExport: {
+      workflowAudit: {
+        eventCount: 16,
+        metadataOnly: true,
+        rawContentIncluded: false,
+        redactionPolicy: "workflow_audit_metadata_only",
+        redactionPolicyEventCount: 16,
+        source: "workflow-events.jsonl",
+        status: "exported",
+      },
     },
     runtimeActionResponse: {
       actionId: "approve-1",
@@ -184,6 +213,22 @@ function readyGuiEvidence() {
         },
       },
     ],
+    trace: {
+      appServerHandleJsonLinesSeen: true,
+      appServerMethodsSeen: [
+        "agentSession/turn/start",
+        "agentSession/read",
+        "evidence/export",
+      ],
+      turnStartTrace: {
+        command: "app_server_handle_json_lines",
+        matched: true,
+        method: "agentSession/turn/start",
+        sessionMatched: true,
+        status: "success",
+        transport: "electron-ipc",
+      },
+    },
   };
 }
 
@@ -223,9 +268,26 @@ function writeReadyEvidenceDir(rootDir) {
       CONTENT_FACTORY_SIGNED_RELEASE_GATE_TEMPLATE_FILE_NAMES.fetchCloud,
     ),
     {
+      descriptor: {
+        manifestHash: MANIFEST_HASH,
+        packageHash: PACKAGE_HASH,
+        sourceUri:
+          "https://packages.example.com/content-factory-app-2.2.2.lapp",
+      },
+      manifestHash: MANIFEST_HASH,
       manifestHashMatched: true,
+      packageHash: PACKAGE_HASH,
       packageHashMatched: true,
       packageVerificationStatus: "verified",
+      signatureProof: {
+        algorithm: "Ed25519",
+        payloadHash: PAYLOAD_HASH,
+        publicKeyId: "content-factory-prod-root-2026",
+        signature: "base64-signature",
+        signedAt: "2026-07-05T00:00:00.000Z",
+      },
+      signatureRef: SIGNATURE_REF,
+      signaturePolicy: "required",
       signatureVerificationStatus: "verified",
       sourceKind: "cloud_release",
       status: "ready",
@@ -375,14 +437,18 @@ describe("content factory production readiness report", () => {
       "scripts/lib/plugin-content-factory-signed-release-gate-core.mjs",
       "scripts/lib/plugin-content-factory-signed-release-gate-preflight.mjs",
       "scripts/lib/plugin-content-factory-signed-release-gate-fetch-cloud.mjs",
+      "scripts/lib/plugin-content-factory-signed-release-gate-gui.mjs",
       "scripts/lib/plugin-content-factory-signed-release-gate-safety.mjs",
     ];
     const gateCodes = [
       ...new Set(
         implementationFiles.flatMap(
           (filePath) =>
-            fs.readFileSync(filePath, "utf8").match(/production_[a-z0-9_]+/g) ||
-            [],
+            fs
+              .readFileSync(filePath, "utf8")
+              .match(
+                /production_[a-z0-9_]+|fixture_cloud_release_not_allowed/g,
+              ) || [],
         ),
       ),
     ].sort();

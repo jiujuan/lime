@@ -39,6 +39,7 @@ import {
   toToolCallState,
   resolveStatusBadgeVariant,
   resolveItemStatusLabel,
+  resolveSubagentStatusLabel,
   formatTimestamp,
   resolveUserFacingErrorMessage,
   resolveThinkingDisplayText,
@@ -46,6 +47,13 @@ import {
   extractCompactThinkingParts,
   isThinkingTimelineItem,
   resolveThreadInlineStatusHint,
+  resolveTimelineAlertFallback,
+  resolveTimelineContextCompactionParts,
+  resolveTimelinePlanTitle,
+  resolveTimelineReasoningTitle,
+  resolveTimelineSubagentDefaultTitle,
+  resolveTimelineSubagentTitle,
+  resolveTimelineTurnSummaryTitle,
 } from "./timeline-utils";
 
 type AgentTranslate = TFunction<"agent", undefined>;
@@ -158,11 +166,9 @@ function ThinkingItemCard({
   );
   const statusLabel =
     item.type === "turn_summary"
-      ? item.status === "in_progress"
-        ? "处理中"
-        : "当前进展"
+      ? resolveTimelineTurnSummaryTitle(item.status)
       : item.status === "in_progress"
-        ? "思考中"
+        ? resolveTimelineReasoningTitle(item.status)
         : null;
   const ToneIcon =
     item.type === "turn_summary"
@@ -203,23 +209,8 @@ function ContextCompactionCard({
   item: Extract<AgentThreadItem, { type: "context_compaction" }>;
 }) {
   const { t } = useTranslation("agent");
-  const triggerLabel =
-    item.trigger === "manual"
-      ? "手动压缩"
-      : item.trigger === "overflow"
-        ? "超限恢复"
-        : item.trigger === "auto"
-          ? "自动压缩"
-          : "上下文压缩";
-  const title =
-    item.stage === "completed" || item.status === "completed"
-      ? "压了上下文"
-      : "正在压上下文";
-  const detail =
-    item.detail?.trim() ||
-    (item.stage === "completed" || item.status === "completed"
-      ? "把前面的对话压成摘要了，后面接着做。"
-      : "在把前面的对话压成摘要，马上继续。");
+  const { detail, title, triggerLabel } =
+    resolveTimelineContextCompactionParts(item);
 
   return (
     <SurfaceCard
@@ -261,7 +252,7 @@ function InlinePlanBlock({
         </div>
         <div className="min-w-0 flex-1">
           <div className="mb-1 text-xs text-slate-500">
-            {isComplete ? "定了这些步骤" : "还在排步骤"}
+            {resolveTimelinePlanTitle(isComplete ? "completed" : "in_progress")}
           </div>
           <div className="text-sm leading-7 text-slate-800">
             <MarkdownRenderer content={content} />
@@ -376,26 +367,6 @@ function renderGroupItemDetails(
   const toolCall = toToolCallState(item);
   const actionRequest = toActionRequired(item);
   const timestamp = formatTimestamp(item.completed_at || item.updated_at);
-  const resolveSubagentStatusLabel = (
-    statusLabel: string | undefined,
-    status: AgentThreadItem["status"],
-  ): string => {
-    const normalized = statusLabel?.trim().toLowerCase();
-    switch (normalized) {
-      case "queued":
-        return "稍后开始";
-      case "running":
-        return "处理中";
-      case "completed":
-        return "已完成";
-      case "failed":
-        return "失败";
-      case "aborted":
-        return "已暂停";
-      default:
-        return statusLabel || resolveItemStatusLabel(status);
-    }
-  };
 
   if (actionRequest) {
     if (isActionRequestA2UICompatible(actionRequest)) {
@@ -452,12 +423,13 @@ function renderGroupItemDetails(
   if (item.type === "subagent_activity") {
     const subagentSessionId = item.session_id?.trim();
     const displayTitle =
-      resolveRuntimeAttachmentTaskDisplayName(item.title) || "子任务";
+      resolveRuntimeAttachmentTaskDisplayName(item.title) ||
+      resolveTimelineSubagentDefaultTitle();
 
     return (
       <SurfaceCard
         icon={Bot}
-        title={`子任务：${displayTitle}`}
+        title={resolveTimelineSubagentTitle(displayTitle)}
         badge={
           <Badge variant={resolveStatusBadgeVariant(item.status)}>
             {resolveSubagentStatusLabel(item.status_label, item.status)}
@@ -530,10 +502,14 @@ function renderGroupItemDetails(
     return (
       <SurfaceCard
         icon={item.type === "warning" ? AlertTriangle : ShieldAlert}
-        title={item.type === "warning" ? "收到提醒" : "碰到错误"}
+        title={resolveTimelineAlertFallback(
+          item.type === "warning" ? "completed" : "failed",
+        )}
         badge={
           <Badge variant={resolveStatusBadgeVariant(item.status)}>
-            {item.type === "warning" ? item.code || "warning" : "失败"}
+            {item.type === "warning"
+              ? item.code || "warning"
+              : resolveItemStatusLabel("failed")}
           </Badge>
         }
         timestamp={timestamp}

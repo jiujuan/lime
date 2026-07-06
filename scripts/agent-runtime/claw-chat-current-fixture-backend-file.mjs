@@ -29,6 +29,8 @@ import {
   IMAGE_FIXTURE_MODEL,
   IMAGE_COMMAND_PRESENTATION_CAPTION,
   IMAGE_COMMAND_PRESENTATION_INTRO,
+  INPUTBAR_RICH_RESTORE_PROMPT,
+  INPUTBAR_RICH_RESTORE_SCENARIO,
   MCP_STRUCTURED_CONTENT_DONE_TEXT,
   MCP_STRUCTURED_CONTENT_PROMPT,
   MCP_STRUCTURED_CONTENT_PROTOCOL_OUTPUT,
@@ -57,6 +59,7 @@ import {
   SKILLS_RUNTIME_SKILL_NAME,
   THREAD_ID,
   TEXT_PROVIDER_FIXTURE_API_KEY,
+  TEXT_FIXTURE_PROVIDER_NAME,
   WEB_TOOLS_BROKEN_MARKDOWN_TEXT,
   WEB_TOOLS_FETCH_MARKDOWN,
   WEB_TOOLS_FETCH_TOOL_CALL_ID,
@@ -74,6 +77,10 @@ import {
   WEB_TOOLS_SEARCH_TOOL_CALL_ID,
   WEB_TOOLS_SEARCH_URL,
 } from "./claw-chat-current-fixture-constants.mjs";
+import {
+  buildSoulStyleFixtureAssistantText,
+  summarizeSoulPromptMarkers,
+} from "./claw-chat-current-fixture-soul-style.mjs";
 import { writeJsonFile } from "./claw-chat-current-fixture-utils.mjs";
 
 export const LOCAL_IMAGE_SERVER_API_KEY = "pc_claw_image_fixture_local_key";
@@ -299,6 +306,13 @@ function fixtureTextForChatRequest(body) {
   ) {
     return presentationText;
   }
+  const soulStyleTranscriptText = buildSoulStyleFixtureAssistantText(
+    serialized,
+    ASSISTANT_DONE_TEXT,
+  );
+  if (soulStyleTranscriptText) {
+    return soulStyleTranscriptText;
+  }
   if (serialized.includes(NEWS_PROMPT)) {
     return [
       "今日国际新闻简要整理：",
@@ -346,7 +360,7 @@ function readChatContentText(content) {
   return "";
 }
 
-function summarizeChatCompletionRequestBody(body) {
+function summarizeChatCompletionRequestBody(body, expectedSoulStyle) {
   let parsed = {};
   try {
     parsed = JSON.parse(body || "{}");
@@ -362,7 +376,7 @@ function summarizeChatCompletionRequestBody(body) {
     responseFormatType:
       parsed.response_format?.type ?? parsed.responseFormat?.type ?? null,
     toolChoice: parsed.tool_choice ?? parsed.toolChoice ?? null,
-    soulMarkers: summarizeSoulPromptMarkers(serialized),
+    soulMarkers: summarizeSoulPromptMarkers(serialized, expectedSoulStyle),
     bodyIncludesPresentationContract:
       serialized.includes("image_task_presentation.v1") ||
       serialized.includes(
@@ -373,20 +387,6 @@ function summarizeChatCompletionRequestBody(body) {
       role: message?.role ?? null,
       contentLength: readChatContentText(message?.content).length,
     })),
-  };
-}
-
-function summarizeSoulPromptMarkers(serialized) {
-  return {
-    hasInteractionSoul: serialized.includes("## Interaction Soul"),
-    hasMemorySoulSchema: serialized.includes("memory_soul_prompt_context.v2"),
-    hasSavedConfigSource: serialized.includes("saved app config `memory.soul`"),
-    hasProfileId: serialized.includes("Style profile: cheeky_sassy_executor"),
-    hasStylePack: serialized.includes("Style pack: com.lime.builtin.default"),
-    hasIntensity: serialized.includes("Style intensity: high"),
-    hasResponseContract: serialized.includes("Response contract"),
-    hasAllowedStyleMoves: serialized.includes("Allowed style moves"),
-    hasForbiddenStyleMoves: serialized.includes("Forbidden style moves"),
   };
 }
 
@@ -461,7 +461,31 @@ function openaiChatCompletionSseBody(content) {
   return `data: ${firstChunk}\n\ndata: ${finalChunk}\n\ndata: ${usageChunk}\n\ndata: [DONE]\n\n`;
 }
 
-export async function startTextProviderFixtureServer() {
+function openaiModelsBody() {
+  return {
+    object: "list",
+    data: [
+      {
+        id: FIXTURE_MODEL,
+        object: "model",
+        owned_by: TEXT_FIXTURE_PROVIDER_NAME,
+        display_name: FIXTURE_MODEL,
+        input_modalities: ["text", "image"],
+        output_modalities: ["text"],
+        task_families: ["chat", "vision_understanding"],
+        runtime_features: ["streaming"],
+        capabilities: {
+          vision: true,
+          streaming: true,
+        },
+      },
+    ],
+  };
+}
+
+export async function startTextProviderFixtureServer({
+  soulStyleExpectation = null,
+} = {}) {
   const requests = [];
   const server = http.createServer((request, response) => {
     let body = "";
@@ -485,6 +509,14 @@ export async function startTextProviderFixtureServer() {
           return request.url || "/";
         }
       })();
+      if (
+        request.method === "GET" &&
+        ["/models", "/v1/models"].includes(pathname)
+      ) {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify(openaiModelsBody()));
+        return;
+      }
       if (
         request.method !== "POST" ||
         !["/chat/completions", "/v1/chat/completions"].includes(pathname)
@@ -550,7 +582,10 @@ export async function startTextProviderFixtureServer() {
             return null;
           }
         })(),
-        bodySummary: summarizeChatCompletionRequestBody(entry.body),
+        bodySummary: summarizeChatCompletionRequestBody(
+          entry.body,
+          soulStyleExpectation,
+        ),
         bodyIncludesPresentationContract:
           entry.body.includes("image_task_presentation.v1") ||
           entry.body.includes(
@@ -642,11 +677,49 @@ export function currentTurnId() {
     "";
 }
 
+export function summarizeRequestInput(request) {
+  const attachments = Array.isArray(request?.input?.attachments)
+    ? request.input.attachments
+    : [];
+  const runtimeMetadata = request?.runtimeOptions?.metadata ?? {};
+  const harnessMetadata = runtimeMetadata?.harness ?? {};
+  const pathReferences = Array.isArray(runtimeMetadata?.path_references)
+    ? runtimeMetadata.path_references
+    : Array.isArray(runtimeMetadata?.pathReferences)
+      ? runtimeMetadata.pathReferences
+      : [];
+  const harnessFileReferences = Array.isArray(harnessMetadata?.file_references)
+    ? harnessMetadata.file_references
+    : Array.isArray(harnessMetadata?.fileReferences)
+      ? harnessMetadata.fileReferences
+      : [];
+  const fileReferences = pathReferences.length > 0
+    ? pathReferences
+    : harnessFileReferences;
+  return {
+    textLength: typeof request?.input?.text === "string"
+      ? request.input.text.length
+      : 0,
+    attachmentCount: attachments.length,
+    imageAttachmentCount: attachments.filter((attachment) =>
+      String(attachment?.mediaType ?? attachment?.media_type ?? "").startsWith("image/")
+    ).length,
+    fileReferenceCount: fileReferences.length,
+    fileReferenceNames: fileReferences
+      .map((reference) => reference?.name)
+      .filter((value) => typeof value === "string"),
+    fileReferencePaths: fileReferences
+      .map((reference) => reference?.path)
+      .filter((value) => typeof value === "string")
+  };
+}
+
 appendLedgerEntry({
     kind: input.kind,
     sessionId: input.request?.session?.sessionId,
     turnId: input.request?.turn?.turnId,
     inputText: input.request?.input?.text,
+    inputSummary: summarizeRequestInput(input.request),
     providerPreference: input.request?.providerPreference,
     modelPreference: input.request?.modelPreference,
     runtimeOptions: input.request?.runtimeOptions,
@@ -686,6 +759,7 @@ if (input.kind === "turnStart") {
   const isContinuePrompt = inputText.includes("${CONTINUE_PROMPT}");
   const isPlanPrompt = inputText.includes("${PLAN_PROMPT}");
   const isGoalPrompt = inputText.includes("${GOAL_PROMPT}");
+  const isInputbarRichRestorePrompt = inputText.includes("${INPUTBAR_RICH_RESTORE_PROMPT}");
   const isWebToolsRenderingPrompt = inputText.includes("${WEB_TOOLS_RENDERING_PROMPT}");
   const isMcpStructuredContentPrompt = inputText.includes("${MCP_STRUCTURED_CONTENT_PROMPT}");
   const isMultiAgentTeamPrompt = inputText.includes("${MULTI_AGENT_TEAM_PROMPT}");
@@ -856,12 +930,18 @@ if (input.kind === "turnStart") {
                         ? ${JSON.stringify(EXPERT_PANEL_SKILLS_RUNTIME_SCENARIO.fixtureText)}
         : "1. 多国外交议题持续升温，地区安全与经贸协商仍是焦点。\\n2. 全球市场继续关注能源、供应链和主要央行政策变化。\\n3. 国际组织呼吁在气候、粮食与人道援助议题上保持协调。\\n";
   const shouldWaitForCancel =
-    (process.env.CLAW_CHAT_FIXTURE_SCENARIO === "cancel" ||
+    ((process.env.CLAW_CHAT_FIXTURE_SCENARIO === "cancel" ||
       process.env.CLAW_CHAT_FIXTURE_SCENARIO === "cancel-then-continue") &&
-    !isEventReadProbe &&
-    !isContinuePrompt;
+      !isEventReadProbe &&
+      !isContinuePrompt) ||
+    (process.env.CLAW_CHAT_FIXTURE_SCENARIO === "${INPUTBAR_RICH_RESTORE_SCENARIO}" &&
+      isInputbarRichRestorePrompt);
   if (shouldWaitForCancel) {
-    emitEvents(initialEvents);
+    emitEvents(
+      isInputbarRichRestorePrompt
+        ? initialEvents.filter((event) => event.type !== "message.delta" && event.type !== "provider.first_text_delta.received")
+        : initialEvents
+    );
     const startedAt = Date.now();
     while (Date.now() - startedAt < 120000) {
       try {

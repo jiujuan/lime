@@ -58,6 +58,7 @@ function marketplacePayload() {
               "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             packageUrl: PACKAGE_URL,
             releaseId: "release_2026_07_06",
+            sourceKind: "cloud_release",
             signatureProof: {
               algorithm: "Ed25519",
               payloadHash:
@@ -122,6 +123,52 @@ describe("content factory production release evidence", () => {
     });
   });
 
+  it("does not infer cloud_release sourceKind from package URL alone", async () => {
+    const outputDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "content-factory-release-evidence-source-kind-"),
+    );
+    const payload = marketplacePayload();
+    delete payload.data.items[1].package.sourceKind;
+    const fetcher = async (url) => {
+      if (String(url).includes("/client/plugins/marketplace")) {
+        return jsonResponse(payload);
+      }
+      if (String(url).includes("/client/bootstrap")) {
+        return jsonResponse(bootstrapPayload());
+      }
+      return jsonResponse({ message: "not found" }, 404);
+    };
+
+    const result = await fetchContentFactoryProductionReleaseEvidence({
+      bootstrapOutputPath: path.join(outputDir, "bootstrap.json"),
+      catalogOutputPath: path.join(outputDir, "catalog.json"),
+      env: {
+        LIME_AGENT_APP_STUDIO_TOKEN: SECRET_TOKEN,
+        PATH: process.env.PATH,
+      },
+      fetcher,
+      input: {
+        apiBase: "https://lime-api.example.com/api",
+        fetchProductionReleaseEvidence: true,
+        tenantId: "tenant-0001",
+      },
+      outputPath: path.join(outputDir, "summary.json"),
+      timeoutMs: 5000,
+    });
+
+    expect(result).toMatchObject({
+      catalog: {
+        packageUrlPresent: true,
+        packageUrlRemoteHttps: true,
+        sourceKind: null,
+        sourceKindCloudRelease: false,
+      },
+      missingRequirements: ["catalogSourceKindCloudRelease"],
+      ready: false,
+      status: "blocked",
+    });
+  });
+
   it("keeps bootstrap evidence limited to plugin trust roots", () => {
     const bootstrap = normalizeBootstrapTrustRootEvidence({
       bootstrap: bootstrapPayload().data,
@@ -167,7 +214,7 @@ describe("content factory production release evidence", () => {
 
     expect(result).toMatchObject({
       executable: false,
-      missingKeys: ["apiBase", "tenantId", "studioToken"],
+      missingKeys: ["tenantId", "studioToken"],
       requested: true,
       skippedReason: "missing_inputs",
       status: "blocked",
@@ -375,8 +422,38 @@ describe("content factory production release evidence", () => {
 
     expect(result.status).toBe(1);
     expect(result.stdout).toContain("status=blocked");
-    expect(result.stdout).toContain("missingKeys=apiBase,tenantId,studioToken");
+    expect(result.stdout).toContain("missingKeys=tenantId,studioToken");
     expect(result.stdout).not.toContain(SECRET_TOKEN);
+  });
+
+  it("CLI help tells operators to pass token env names instead of token values", () => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        path.join(
+          repoRoot(),
+          "scripts/plugin/content-factory-production-release-evidence.mjs",
+        ),
+        "--help",
+      ],
+      {
+        cwd: repoRoot(),
+        encoding: "utf8",
+        env: {
+          PATH: process.env.PATH,
+        },
+      },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(
+      "Env var name containing the client/developer token",
+    );
+    expect(result.stdout).toContain(
+      "never pass the token value as an argument",
+    );
+    expect(result.stdout).not.toContain("LIME_AGENT_APP_STUDIO_TOKEN=");
+    expect(result.stdout).not.toContain("<token>");
   });
 
   it("builds a fail-closed plan without raw API values", () => {
@@ -397,6 +474,7 @@ describe("content factory production release evidence", () => {
         apiBase: {
           configured: true,
           envName: null,
+          source: "option",
         },
         studioToken: {
           configured: true,

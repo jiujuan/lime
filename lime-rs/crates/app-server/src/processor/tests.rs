@@ -4,6 +4,7 @@ mod tests_support;
 
 mod artifact;
 mod capability;
+mod config_warning;
 mod event_notifications;
 mod evidence;
 mod execution_process;

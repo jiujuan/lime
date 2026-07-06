@@ -1,9 +1,14 @@
-import type { PluginProjection, ReadinessIssue, ReadinessResult } from "../types";
+import type {
+  PluginProjection,
+  ReadinessIssue,
+  ReadinessResult,
+} from "../types";
 
 export type PluginSchemaGateIssueCode =
   | "FIELD_MISSING"
   | "ARRAY_FIELD_INVALID"
   | "PROVENANCE_MISSING"
+  | "RUNTIME_CAPABILITY_INVALID"
   | "READINESS_ISSUE_INVALID";
 
 export interface PluginSchemaGateIssue {
@@ -118,6 +123,64 @@ function validateProvenance(
   });
 }
 
+function validateRuntimeCapabilities(
+  value: unknown,
+  path: string,
+  expected: {
+    pluginId?: string;
+    version?: string;
+  },
+  issues: PluginSchemaGateIssue[],
+): void {
+  if (value === undefined) {
+    return;
+  }
+  if (!isRecord(value)) {
+    addIssue(issues, {
+      code: "RUNTIME_CAPABILITY_INVALID",
+      path,
+      message: `${path} must be an object when present.`,
+    });
+    return;
+  }
+
+  if (typeof value.pluginId !== "string" || !value.pluginId) {
+    addIssue(issues, {
+      code: "RUNTIME_CAPABILITY_INVALID",
+      path: `${path}.pluginId`,
+      message: `${path}.pluginId must be a non-empty string.`,
+    });
+  } else if (expected.pluginId && value.pluginId !== expected.pluginId) {
+    addIssue(issues, {
+      code: "RUNTIME_CAPABILITY_INVALID",
+      path: `${path}.pluginId`,
+      message: `${path}.pluginId must match projection appId.`,
+    });
+  }
+
+  if (
+    typeof value.version === "string" &&
+    expected.version &&
+    value.version !== expected.version
+  ) {
+    addIssue(issues, {
+      code: "RUNTIME_CAPABILITY_INVALID",
+      path: `${path}.version`,
+      message: `${path}.version must match projection app version when present.`,
+    });
+  }
+
+  ["skills", "tools", "mcpBindings", "workflowBindings"].forEach((field) => {
+    if (!Array.isArray(value[field])) {
+      addIssue(issues, {
+        code: "RUNTIME_CAPABILITY_INVALID",
+        path: `${path}.${field}`,
+        message: `${path}.${field} must be an array.`,
+      });
+    }
+  });
+}
+
 export function validateProjectionSchemaCoverage(
   projection: PluginProjection,
 ): PluginSchemaGateResult {
@@ -132,6 +195,15 @@ export function validateProjectionSchemaCoverage(
   });
 
   validateProvenance(projection.provenance, "$.provenance", issues);
+  validateRuntimeCapabilities(
+    record.runtimeCapabilities,
+    "$.runtimeCapabilities",
+    {
+      pluginId: projection.app.appId,
+      version: projection.app.version,
+    },
+    issues,
+  );
   const entries = Array.isArray(record.entries) ? projection.entries : [];
   entries.forEach((entry, index) => {
     if (!isRecord(entry)) {
@@ -142,7 +214,11 @@ export function validateProjectionSchemaCoverage(
       });
       return;
     }
-    validateProvenance(entry.provenance, `$.entries[${index}].provenance`, issues);
+    validateProvenance(
+      entry.provenance,
+      `$.entries[${index}].provenance`,
+      issues,
+    );
   });
 
   return {
@@ -190,9 +266,14 @@ export function validateReadinessSchemaCoverage(
   const issues: PluginSchemaGateIssue[] = [];
   const record = readiness as unknown as Record<string, unknown>;
 
-  ["blockers", "warnings", "supportedCapabilities", "missingCapabilities", "entryReadiness", "installModes"].forEach(
-    (field) => validateArrayField(record[field], `$.${field}`, issues),
-  );
+  [
+    "blockers",
+    "warnings",
+    "supportedCapabilities",
+    "missingCapabilities",
+    "entryReadiness",
+    "installModes",
+  ].forEach((field) => validateArrayField(record[field], `$.${field}`, issues));
 
   const blockers = Array.isArray(record.blockers) ? readiness.blockers : [];
   const warnings = Array.isArray(record.warnings) ? readiness.warnings : [];
@@ -215,7 +296,11 @@ export function validateReadinessSchemaCoverage(
       });
       return;
     }
-    validateArrayField(entry.issues, `$.entryReadiness[${index}].issues`, issues);
+    validateArrayField(
+      entry.issues,
+      `$.entryReadiness[${index}].issues`,
+      issues,
+    );
     const entryIssues = Array.isArray(entry.issues) ? entry.issues : [];
     entryIssues.forEach((issue, issueIndex) => {
       validateReadinessIssue(

@@ -15,14 +15,14 @@ import {
   FIXTURE_MODEL,
   FIXTURE_PROVIDER,
   IMAGE_COMMAND_SCENARIO,
+  INPUTBAR_RICH_RESTORE_PROMPT,
+  INPUTBAR_RICH_RESTORE_SCENARIO,
   LOG_PREFIX,
   MULTI_AGENT_TEAM_SCENARIO,
   NEWS_PROMPT,
   PLAIN_IMAGE_INTENT_SCENARIO,
   RIGHT_SURFACE_VISUAL_MATRIX_SCENARIO,
   SESSION_ID,
-  SOUL_STYLE_INTENSITY,
-  SOUL_STYLE_PROFILE_ID,
   SOUL_STYLE_SCENARIO,
   THREAD_ID,
 } from "./claw-chat-current-fixture-constants.mjs";
@@ -55,6 +55,14 @@ import {
   waitForRendererReady,
 } from "./claw-chat-current-fixture-rpc.mjs";
 import { executeScenarioFlow } from "./claw-chat-current-fixture-scenario-flow.mjs";
+import {
+  DEFAULT_SOUL_STYLE_FIXTURE_INTENSITY,
+  DEFAULT_SOUL_STYLE_FIXTURE_PROFILE_ID,
+  createSoulStyleFixtureOverrides,
+  createSoulStyleFixtureSelection,
+  isSoulStylePromptContextCoveredByRuntime,
+  pickLatestSoulStylePromptMarkers,
+} from "./claw-chat-current-fixture-soul-style.mjs";
 import {
   createFixtureSession,
   navigateGuiToWorkspaceScopedAgent,
@@ -93,7 +101,9 @@ Claw Chat Current Electron Fixture Smoke
   --app-url <url>        可选 renderer dev server，例如 http://127.0.0.1:1420/
   --evidence-dir <path>  证据目录
   --prefix <name>        证据文件前缀
-  --scenario <name>      complete | cancel | cancel-then-continue | plan | goal | soul-style | image-command | plain-image-intent | web-tools-rendering | mcp-structured-content | skills-runtime | multi-agent-team | expert-skills-runtime | expert-plaza-skills-runtime | expert-panel-skills-runtime | right-surface-visual-matrix | content-factory-article-workspace | content-factory-inline-image-article-workspace，默认 complete
+  --scenario <name>      complete | cancel | cancel-then-continue | inputbar-rich-restore | plan | goal | soul-style | image-command | plain-image-intent | web-tools-rendering | mcp-structured-content | skills-runtime | multi-agent-team | expert-skills-runtime | expert-plaza-skills-runtime | expert-panel-skills-runtime | right-surface-visual-matrix | content-factory-article-workspace | content-factory-inline-image-article-workspace，默认 complete
+  --soul-style-profile <id>   soul-style 场景使用的 profile，默认 ${DEFAULT_SOUL_STYLE_FIXTURE_PROFILE_ID}
+  --soul-style-intensity <v>  soul-style 场景使用的强度，默认 ${DEFAULT_SOUL_STYLE_FIXTURE_INTENSITY}
   --timeout-ms <ms>      总超时，默认 180000
   --interval-ms <ms>     轮询间隔，默认 500
   --keep-temp            保留临时目录便于调试
@@ -102,7 +112,11 @@ Claw Chat Current Electron Fixture Smoke
 }
 
 function parseArgs(argv) {
-  const options = { ...DEFAULTS };
+  const options = {
+    ...DEFAULTS,
+    soulStyleProfileId: DEFAULT_SOUL_STYLE_FIXTURE_PROFILE_ID,
+    soulStyleIntensity: DEFAULT_SOUL_STYLE_FIXTURE_INTENSITY,
+  };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const next = argv[index + 1];
@@ -127,6 +141,16 @@ function parseArgs(argv) {
     }
     if (arg === "--scenario" && next) {
       options.scenario = next.trim();
+      index += 1;
+      continue;
+    }
+    if (arg === "--soul-style-profile" && next) {
+      options.soulStyleProfileId = next.trim();
+      index += 1;
+      continue;
+    }
+    if (arg === "--soul-style-intensity" && next) {
+      options.soulStyleIntensity = next.trim();
       index += 1;
       continue;
     }
@@ -160,6 +184,7 @@ function parseArgs(argv) {
     "complete",
     "cancel",
     "cancel-then-continue",
+    INPUTBAR_RICH_RESTORE_SCENARIO,
     "plan",
     "goal",
     SOUL_STYLE_SCENARIO,
@@ -179,6 +204,10 @@ function parseArgs(argv) {
   if (!allowedScenarios.includes(options.scenario)) {
     throw new Error(`--scenario 只能是 ${allowedScenarios.join("、")}`);
   }
+  createSoulStyleFixtureSelection({
+    profileId: options.soulStyleProfileId,
+    intensity: options.soulStyleIntensity,
+  });
   return options;
 }
 
@@ -190,17 +219,9 @@ function traceEvidenceHasProviderAndClient(evidence) {
 }
 
 function applySoulStyleProviderMarkerSummary(summary, textProviderRequests) {
-  const soulMarkers = textProviderRequests
-    .map((request) => request.bodySummary?.soulMarkers)
-    .filter(
-      (markers) =>
-        markers != null &&
-        Object.values(markers).some((value) => value === true),
-    )
-    .at(-1);
+  const soulMarkers = pickLatestSoulStylePromptMarkers(textProviderRequests);
   summary.soulStylePromptContextCoveredByRuntime =
-    soulMarkers != null &&
-    Object.values(soulMarkers).every((value) => value === true);
+    isSoulStylePromptContextCoveredByRuntime(soulMarkers);
   summary.soulStylePromptContextMarkers = sanitizeJson(soulMarkers ?? null);
 }
 
@@ -208,6 +229,14 @@ function isImageWorkflowScenario(scenario) {
   return (
     scenario === IMAGE_COMMAND_SCENARIO ||
     scenario === PLAIN_IMAGE_INTENT_SCENARIO
+  );
+}
+
+function shouldUseTextProviderFixture(scenario) {
+  return (
+    isImageWorkflowScenario(scenario) ||
+    scenario === SOUL_STYLE_SCENARIO ||
+    scenario === INPUTBAR_RICH_RESTORE_SCENARIO
   );
 }
 
@@ -261,6 +290,13 @@ async function updateAgentUiPerformanceTraceEvidence(summary, page) {
 
 async function run() {
   const options = parseArgs(process.argv.slice(2));
+  const soulStyleSelection =
+    options.scenario === SOUL_STYLE_SCENARIO
+      ? createSoulStyleFixtureSelection({
+          profileId: options.soulStyleProfileId,
+          intensity: options.soulStyleIntensity,
+        })
+      : null;
   fs.mkdirSync(options.evidenceDir, { recursive: true });
 
   const summaryPath = path.join(
@@ -297,7 +333,10 @@ async function run() {
     ok: false,
     scenarioId: "claw-chat-current-fixture",
     scenario: options.scenario,
-    prompt: NEWS_PROMPT,
+    prompt:
+      options.scenario === INPUTBAR_RICH_RESTORE_SCENARIO
+        ? INPUTBAR_RICH_RESTORE_PROMPT
+        : NEWS_PROMPT,
     sessionId: SESSION_ID,
     threadId: THREAD_ID,
     workspaceId: null,
@@ -319,6 +358,9 @@ async function run() {
     rendererSnapshot: null,
     initialize: null,
     imageFixtureProvider: null,
+    soulStyleExpectation: soulStyleSelection
+      ? sanitizeJson(soulStyleSelection)
+      : null,
     soulStyleConfig: null,
     soulStylePromptContextCoveredByRuntime: false,
     guiWorkspaceBinding: null,
@@ -330,6 +372,13 @@ async function run() {
     guiCompleted: null,
     stopClick: null,
     guiCanceled: null,
+    inputbarRichRestoreSkill: null,
+    inputbarRichRestoreDraftPrepared: null,
+    inputbarRichRestoreInputSend: null,
+    inputbarRichRestoreBackendTurnStart: null,
+    inputbarRichRestoreStopClick: null,
+    inputbarRichRestoreGuiCanceled: null,
+    inputbarRichRestoreReadModelCanceled: null,
     continueInputSend: null,
     guiContinueCompleted: null,
     planModeEnabled: null,
@@ -438,12 +487,7 @@ async function run() {
   const agentDebugLogs = [];
   const pageLifecycleEvents = [];
   const fixtureConfigSoulOverrides =
-    options.scenario === SOUL_STYLE_SCENARIO
-      ? {
-          soulStyleProfileId: SOUL_STYLE_PROFILE_ID,
-          soulStyleIntensity: SOUL_STYLE_INTENSITY,
-        }
-      : {};
+    createSoulStyleFixtureOverrides(soulStyleSelection);
   const collectConsoleMessage = (message) => {
     const text = sanitizeText(message.text());
     if (text.includes("[AgentDebug]")) {
@@ -459,11 +503,10 @@ async function run() {
 
   try {
     imageProviderFixtureServer = await startImageProviderFixtureServer();
-    if (
-      isImageWorkflowScenario(options.scenario) ||
-      options.scenario === SOUL_STYLE_SCENARIO
-    ) {
-      textProviderFixtureServer = await startTextProviderFixtureServer();
+    if (shouldUseTextProviderFixture(options.scenario)) {
+      textProviderFixtureServer = await startTextProviderFixtureServer({
+        soulStyleExpectation: soulStyleSelection,
+      });
       summary.textProviderFixtureServer = sanitizeJson({
         baseUrl: textProviderFixtureServer.baseUrl,
         requestCount: 0,
@@ -600,8 +643,8 @@ async function run() {
             return nextConfig.memory.soul;
           },
           {
-            profileId: SOUL_STYLE_PROFILE_ID,
-            intensity: SOUL_STYLE_INTENSITY,
+            profileId: soulStyleSelection.profileId,
+            intensity: soulStyleSelection.intensity,
           },
         ),
       );

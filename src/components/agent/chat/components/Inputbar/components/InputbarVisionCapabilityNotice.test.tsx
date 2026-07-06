@@ -239,6 +239,31 @@ describe("InputbarVisionCapabilityNotice", () => {
     ).toBeNull();
   });
 
+  it("模型能力加载中时不应禁用输入框", () => {
+    const onPolicyChange = vi.fn();
+    mockUseProviderModels.mockReturnValue({
+      models: [],
+      loading: true,
+      error: null,
+      modelIds: [],
+    });
+
+    const container = renderNotice({ onPolicyChange });
+
+    expect(
+      container.querySelector('[data-testid="inputbar-vision-warning"]'),
+    ).toBeNull();
+    expect(onPolicyChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        canSubmit: true,
+        failClosedAtSubmit: false,
+        reason: "missing_capability_summary",
+        shouldDisableComposer: false,
+        status: "warning",
+      }),
+    );
+  });
+
   it("当前模型不支持多模态时应展示推荐模型提示", () => {
     const onPolicyChange = vi.fn();
     mockUseProviderModels.mockReturnValue({

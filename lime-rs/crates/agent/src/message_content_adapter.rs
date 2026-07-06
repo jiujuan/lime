@@ -22,10 +22,15 @@ use crate::protocol::{
     AgentToolImage as RuntimeToolImage, AgentToolResult as RuntimeToolResult,
 };
 use crate::tool_io_offload::{maybe_offload_tool_arguments, maybe_offload_tool_result_payload};
+use crate::tool_output_truncation::{
+    format_tool_output_for_model, tool_output_truncation_policy_from_turn_context,
+};
+use crate::turn_context_configuration::AgentTurnContext;
 
 const TOOL_RESULT_DIAG_WARN_JSON_BYTES: usize = 64 * 1024;
 const TOOL_RESULT_DIAG_WARN_OUTPUT_CHARS: usize = 4_000;
 const TOOL_RESULT_DIAG_WARN_IMAGE_COUNT: usize = 4;
+const TOOL_OUTPUT_DEFAULT_MAX_BYTES: u64 = 64 * 1024;
 
 fn dynamic_filtering_enabled() -> bool {
     lime_core::tool_calling::tool_calling_dynamic_filtering_enabled()
@@ -106,6 +111,20 @@ fn legacy_message_tool_response_metadata(
     metadata
 }
 
+fn format_tool_response_output_for_model(
+    output: String,
+    turn_context: Option<&AgentTurnContext>,
+) -> String {
+    let Some(turn_context) = turn_context else {
+        return output;
+    };
+    let policy = tool_output_truncation_policy_from_turn_context(
+        Some(turn_context),
+        TOOL_OUTPUT_DEFAULT_MAX_BYTES,
+    );
+    format_tool_output_for_model(&output, policy)
+}
+
 fn project_aster_action_required_scope(
     scope: Option<&AsterActionRequiredScope>,
 ) -> Option<RuntimeActionRequiredScope> {
@@ -175,9 +194,17 @@ fn project_aster_action_required_message(
     }
 }
 
+#[cfg(test)]
 pub(crate) fn convert_aster_message_to_events(message: Message) -> Vec<RuntimeAgentEvent> {
+    convert_aster_message_to_events_with_turn_context(message, None)
+}
+
+pub(crate) fn convert_aster_message_to_events_with_turn_context(
+    message: Message,
+    turn_context: Option<&AgentTurnContext>,
+) -> Vec<RuntimeAgentEvent> {
     let mut events = vec![RuntimeAgentEvent::Message {
-        message: convert_aster_message_to_runtime_message(&message),
+        message: convert_aster_message_to_runtime_message_with_turn_context(&message, turn_context),
     }];
 
     for content in &message.content {
@@ -227,9 +254,13 @@ pub(crate) fn convert_aster_message_to_events(message: Message) -> Vec<RuntimeAg
                                     extract_tool_result_metadata(result),
                                 )),
                             );
+                            let output = format_tool_response_output_for_model(
+                                offloaded.output,
+                                turn_context,
+                            );
                             (
                                 true,
-                                offloaded.output,
+                                output,
                                 None,
                                 structured_content,
                                 convert_tool_result_images(extracted.images),
@@ -328,11 +359,16 @@ pub(crate) fn convert_aster_message_to_events(message: Message) -> Vec<RuntimeAg
     events
 }
 
-pub(crate) fn convert_aster_message_to_runtime_message(message: &Message) -> RuntimeAgentMessage {
+pub(crate) fn convert_aster_message_to_runtime_message_with_turn_context(
+    message: &Message,
+    turn_context: Option<&AgentTurnContext>,
+) -> RuntimeAgentMessage {
     let content = message
         .content
         .iter()
-        .filter_map(convert_aster_message_content_to_runtime_content)
+        .filter_map(|content| {
+            convert_aster_message_content_to_runtime_content(content, turn_context)
+        })
         .collect();
 
     RuntimeAgentMessage {
@@ -346,6 +382,7 @@ pub(crate) fn convert_aster_message_to_runtime_message(message: &Message) -> Run
 
 fn convert_aster_message_content_to_runtime_content(
     content: &MessageContent,
+    turn_context: Option<&AgentTurnContext>,
 ) -> Option<RuntimeMessageContent> {
     match content {
         MessageContent::Text(text) => Some(RuntimeMessageContent::Text {
@@ -375,9 +412,11 @@ fn convert_aster_message_content_to_runtime_content(
                         result,
                         extract_tool_result_metadata(result),
                     );
+                    let output =
+                        format_tool_response_output_for_model(offloaded.output, turn_context);
                     (
                         true,
-                        offloaded.output,
+                        output,
                         None,
                         structured_content,
                         convert_tool_result_images(extracted.images),
@@ -417,3 +456,6 @@ fn convert_aster_message_content_to_runtime_content(
         _ => None,
     }
 }
+
+#[cfg(test)]
+mod tests;

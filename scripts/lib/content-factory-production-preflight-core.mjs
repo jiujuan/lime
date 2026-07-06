@@ -767,6 +767,11 @@ function summarizeFetchCloud(fetchCloud) {
     fetchCloud?.signature_verification_status ??
     fetchCloud?.cloudReleaseEvidence?.signatureVerificationStatus ??
     "";
+  const signaturePolicy =
+    fetchCloud?.signaturePolicy ??
+    fetchCloud?.signature_policy ??
+    fetchCloud?.cloudReleaseEvidence?.signaturePolicy ??
+    "";
   const packageVerificationStatus =
     fetchCloud?.packageVerificationStatus ??
     fetchCloud?.package_verification_status ??
@@ -793,10 +798,12 @@ function summarizeFetchCloud(fetchCloud) {
     ready:
       sourceKind === "cloud_release" &&
       status === "ready" &&
+      signaturePolicy === "required" &&
       signatureVerificationStatus === "verified" &&
       packageVerificationStatus === "verified" &&
       packageHashMatched === true &&
       manifestHashMatched === true,
+    signaturePolicy: signaturePolicy || null,
     signatureVerificationStatus: signatureVerificationStatus || null,
     sourceKind: sourceKind || null,
     status,
@@ -917,7 +924,7 @@ export function buildContentFactoryProductionPreflight(input = {}) {
     fetchCloud,
     publishReadiness,
     signingCommand:
-      "PLUGIN_SIGNING_PRIVATE_KEY_PEM=$PRIVATE_KEY_PEM npm run release:sign -- --package-url <https-url> --package-hash <packageHash> --manifest-hash <manifestHash> --release-id <release-id> --signature-ref <signature-ref> --public-key-id <public-key-id> --out app.signature.yaml --trust-root-out plugin-signature-trust-root.json",
+      "npm run plugin:content-factory-production-readiness-pipeline -- --expected-version <version> --package-url <https-url> --release-id <release-id> --public-key-id <public-key-id> --generate-signature-proof --signing-private-key-env PLUGIN_SIGNING_PRIVATE_KEY_PEM # requires local env: PLUGIN_SIGNING_PRIVATE_KEY_PEM",
     note: "This preflight is fail-closed. It computes local package facts and release gaps only; it does not mark cloud_release ready without real catalog, bootstrap trust roots, fetchCloud verification, and production GUI evidence.",
   };
   if (

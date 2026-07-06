@@ -84,9 +84,21 @@ interface MockInputbarPlusMenuConfig {
 }
 
 interface MockInputbarCoreProps {
+  text?: string;
+  setText?: (value: string) => void;
   onToolClick?: (tool: string) => void;
   activeTools?: Record<string, boolean>;
   onSend?: () => void;
+  pendingImages?: Array<{
+    data: string;
+    mediaType: string;
+  }>;
+  pathReferences?: Array<{
+    id: string;
+    path: string;
+    name: string;
+    isDir: boolean;
+  }>;
   leftExtra?: React.ReactNode;
   trailingMeta?: React.ReactNode;
   topExtra?: React.ReactNode;
@@ -715,11 +727,17 @@ function expectInputbarSend(
     "images" | "textOverride" | "sendOptions"
   > = {},
 ) {
-  expect(onSend).toHaveBeenCalledWith({
-    images: payload.images,
-    textOverride: payload.textOverride,
-    sendOptions: payload.sendOptions,
-  });
+  const actual = onSend.mock.calls.at(-1)?.[0] as
+    | InputbarSendPayload
+    | undefined;
+  expect(actual).toBeTruthy();
+  expect(actual?.images).toEqual(payload.images);
+  expect(actual?.textOverride).toEqual(payload.textOverride);
+  if (payload.sendOptions) {
+    expect(actual?.sendOptions).toMatchObject(payload.sendOptions);
+    return;
+  }
+  expect(actual?.sendOptions).toBe(payload.sendOptions);
 }
 
 function expandAdvancedControls(container: HTMLDivElement) {
@@ -813,6 +831,97 @@ function dispatchInputbarDrop(
 }
 
 describe("Inputbar", () => {
+  it("收到中断恢复请求时应回填文本、图片、路径和技能 chip", async () => {
+    const onInputRestoreRequestHandled = vi.fn();
+    const pathReference = {
+      id: "file:/tmp/report.md",
+      path: "/tmp/report.md",
+      name: "report.md",
+      isDir: false,
+      source: "file_manager" as const,
+    };
+    const skill: Skill = {
+      key: "local:draft",
+      name: "起草",
+      description: "恢复输入用技能",
+      directory: "draft",
+      installed: true,
+      sourceKind: "other",
+    };
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    mountedRoots.push({ root, container });
+
+    function RestoreHarness() {
+      const [input, setInput] = React.useState("");
+      const [pathReferences, setPathReferences] = React.useState<
+        (typeof pathReference)[]
+      >([]);
+      const [restoreRequest, setRestoreRequest] = React.useState<
+        React.ComponentProps<typeof Inputbar>["inputRestoreRequest"]
+      >({
+        requestId: "restore-1",
+        reason: "output_free_interrupted_turn",
+        draft: {
+          text: "继续生成提纲",
+          images: [
+            {
+              data: "image-data",
+              mediaType: "image/png",
+            },
+          ],
+          pathReferences: [pathReference],
+          inputCapabilityRoute: {
+            kind: "installed_skill",
+            skillKey: "draft",
+            skillName: "起草",
+          },
+        },
+      });
+
+      return (
+        <Inputbar
+          input={input}
+          setInput={setInput}
+          onSend={vi.fn()}
+          isLoading={false}
+          characters={[]}
+          skills={[skill]}
+          pathReferences={pathReferences}
+          onClearPathReferences={() => setPathReferences([])}
+          onAddPathReferences={(references) =>
+            setPathReferences(references as (typeof pathReference)[])
+          }
+          inputRestoreRequest={restoreRequest}
+          onInputRestoreRequestHandled={(requestId) => {
+            onInputRestoreRequestHandled(requestId);
+            setRestoreRequest(null);
+          }}
+        />
+      );
+    }
+
+    await act(async () => {
+      root.render(<RestoreHarness />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const latestCoreProps =
+      mockInputbarCore.mock.calls[mockInputbarCore.mock.calls.length - 1]?.[0];
+    expect(latestCoreProps?.text).toBe("继续生成提纲");
+    expect(latestCoreProps?.pathReferences).toEqual([pathReference]);
+    expect(latestCoreProps?.pendingImages).toEqual([
+      {
+        data: "image-data",
+        mediaType: "image/png",
+      },
+    ]);
+    expect(container.querySelector('[data-testid="skill-badge"]')).toBeTruthy();
+    expect(onInputRestoreRequestHandled).toHaveBeenCalledWith("restore-1");
+  });
+
   it("即使角色和技能为空，也应挂载 CharacterMention", async () => {
     const { container } = renderInputbar();
     await act(async () => {

@@ -749,7 +749,7 @@ describe("MessageList runtime status", () => {
     expect(container.textContent).not.toContain("Built-in Tool");
   });
 
-  it("assistant 占位消息只有启动态 runtimeStatus 时，应渲染轻量首字前占位", () => {
+  it("assistant 占位消息只有启动态 runtimeStatus 时，应保留规范输出占位但不展示启动说明", () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -801,14 +801,9 @@ describe("MessageList runtime status", () => {
     expect(container.textContent).not.toContain(
       "The runtime has started processing and is waiting for the first output.",
     );
-    expect(
-      container
-        .querySelector('[data-testid="assistant-first-token-runtime-status"]')
-        ?.getAttribute("aria-label"),
-    ).toContain(
+    expect(container.textContent).not.toContain(
       "The request is being processed and output will start shortly.",
     );
     expect(container.textContent).not.toContain("直接回答优先");
   });
-
 });

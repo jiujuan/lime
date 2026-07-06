@@ -1,11 +1,14 @@
 use crate::protocol::AgentTokenUsage;
-use crate::runtime_support::{list_runtime_queued_turns, load_runtime_snapshot_overlay};
-use crate::session_query::read_subagent_session;
+use crate::runtime_support::{
+    list_runtime_queued_turns, load_runtime_snapshot_overlay, runtime_queue_has_active_turn,
+};
+use crate::session_execution_runtime_query::read_session_execution_runtime_session_projection;
 use crate::team_runtime_governor::snapshot_team_runtime_session;
-use aster::session::extension_data::{ExtensionData, ExtensionState};
-use aster::session::{require_shared_session_runtime_queue_service, Session};
 #[cfg(test)]
 use chrono::Utc;
+use lime_core::database::DbConnection;
+use rusqlite::OptionalExtension;
+use serde_json::Value;
 
 pub(crate) type SubagentRuntimeStatus =
     agent_runtime::session_execution::SubagentRuntimeStatus<AgentTokenUsage>;
@@ -25,24 +28,23 @@ struct SubagentControlState {
     closed_reason: Option<String>,
 }
 
-impl ExtensionState for SubagentControlState {
-    const EXTENSION_NAME: &'static str = "subagent_control";
-    const VERSION: &'static str = "v0";
-}
-
 impl SubagentControlState {
-    fn from_extension_data(extension_data: &ExtensionData) -> Option<Self> {
-        <Self as ExtensionState>::from_extension_data(extension_data)
-    }
+    const EXTENSION_NAME: &'static str = "subagent_control";
+    const EXTENSION_VERSION: &'static str = "v0";
 
-    fn from_session(session: &Session) -> Option<Self> {
-        Self::from_extension_data(&session.extension_data)
+    fn from_extension_data_json(extension_data_json: &str) -> Option<Self> {
+        let extension_data = serde_json::from_str::<Value>(extension_data_json).ok()?;
+        let key = format!("{}.{}", Self::EXTENSION_NAME, Self::EXTENSION_VERSION);
+        let value = extension_data.as_object()?.get(&key)?.clone();
+        serde_json::from_value(value).ok()
     }
 
     #[cfg(test)]
-    fn to_extension_data(&self, extension_data: &mut ExtensionData) -> Result<(), String> {
-        <Self as ExtensionState>::to_extension_data(self, extension_data)
-            .map_err(|error| error.to_string())
+    fn to_extension_data_json(&self) -> Result<String, String> {
+        Ok(serde_json::json!({
+            format!("{}.{}", Self::EXTENSION_NAME, Self::EXTENSION_VERSION): self,
+        })
+        .to_string())
     }
 
     #[cfg(test)]
@@ -66,11 +68,6 @@ struct SubagentRuntimeStatusInput {
     latest_turn_status: Option<SubagentTurnStatus>,
 }
 
-fn looks_like_session_not_found(error: &str) -> bool {
-    let normalized = error.to_ascii_lowercase();
-    normalized.contains("not found") || error.contains("不存在")
-}
-
 fn map_turn_status(status: SubagentTurnStatus) -> SubagentRuntimeStatusKind {
     match status {
         SubagentTurnStatus::Queued => SubagentRuntimeStatusKind::Queued,
@@ -81,24 +78,11 @@ fn map_turn_status(status: SubagentTurnStatus) -> SubagentRuntimeStatusKind {
     }
 }
 
-fn resolve_session_usage(session: &Session) -> Option<AgentTokenUsage> {
-    match (session.input_tokens, session.output_tokens) {
-        (Some(input_tokens), Some(output_tokens)) if input_tokens >= 0 && output_tokens >= 0 => {
-            Some(AgentTokenUsage {
-                input_tokens: input_tokens as u32,
-                output_tokens: output_tokens as u32,
-                cached_input_tokens: session
-                    .cached_input_tokens
-                    .filter(|value| *value >= 0)
-                    .map(|value| value as u32),
-                cache_creation_input_tokens: session
-                    .cache_creation_input_tokens
-                    .filter(|value| *value >= 0)
-                    .map(|value| value as u32),
-            })
-        }
-        _ => None,
-    }
+fn resolve_session_usage(db: &DbConnection, session_id: &str) -> Option<AgentTokenUsage> {
+    read_session_execution_runtime_session_projection(db, session_id)
+        .ok()
+        .flatten()
+        .and_then(|session| session.usage)
 }
 
 fn derive_subagent_runtime_status_kind(
@@ -123,20 +107,15 @@ fn derive_subagent_runtime_status_kind(
 }
 
 pub(crate) async fn load_subagent_runtime_status(
+    db: &DbConnection,
     session_id: &str,
 ) -> Result<SubagentRuntimeStatus, String> {
-    let session = match read_subagent_session(session_id, "读取 subagent session 失败").await {
-        Ok(session) => session,
-        Err(error) => {
-            let message = error.to_string();
-            if looks_like_session_not_found(&message) {
-                return Ok(SubagentRuntimeStatus::not_found(session_id));
-            }
-            return Err(message);
-        }
+    let extension_data_json = read_subagent_extension_data_json(db, session_id)?;
+    let Some(extension_data_json) = extension_data_json else {
+        return Ok(SubagentRuntimeStatus::not_found(session_id));
     };
-
-    let control_state = SubagentControlState::from_session(&session).unwrap_or_default();
+    let control_state =
+        SubagentControlState::from_extension_data_json(&extension_data_json).unwrap_or_default();
     let latest_turn: Option<SubagentLatestTurnProjection> = match load_runtime_snapshot_overlay(
         session_id,
     )
@@ -161,9 +140,7 @@ pub(crate) async fn load_subagent_runtime_status(
             .and_then(|snapshot| (snapshot.team_phase == "queued").then_some(1))
             .unwrap_or(0),
     );
-    let has_active_turn = require_shared_session_runtime_queue_service()
-        .map_err(|error| format!("读取 runtime queue service 失败: {error}"))?
-        .has_active_turn(session_id);
+    let has_active_turn = runtime_queue_has_active_turn(session_id)?;
     let kind = if governor_snapshot
         .as_ref()
         .map(|snapshot| snapshot.team_phase == "queued")
@@ -181,7 +158,7 @@ pub(crate) async fn load_subagent_runtime_status(
 
     let is_final_status = kind.is_final();
     let usage = is_final_status
-        .then(|| resolve_session_usage(&session))
+        .then(|| resolve_session_usage(db, session_id))
         .flatten();
     let duration_ms = is_final_status
         .then(|| latest_turn.as_ref().and_then(|turn| turn.duration_ms))
@@ -238,6 +215,33 @@ pub(crate) async fn load_subagent_runtime_status(
     })
 }
 
+fn read_subagent_extension_data_json(
+    db: &DbConnection,
+    session_id: &str,
+) -> Result<Option<String>, String> {
+    let conn = db
+        .lock()
+        .map_err(|error| format!("数据库锁定失败: {error}"))?;
+    let row = conn
+        .query_row(
+            "SELECT extension_data_json, session_type FROM agent_sessions WHERE id = ?1",
+            [session_id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )
+        .optional()
+        .map_err(|error| format!("读取 subagent session 失败: {error}"))?;
+
+    let Some((extension_data_json, session_type)) = row else {
+        return Ok(None);
+    };
+    if session_type != "sub_agent" {
+        return Err(format!(
+            "会话不是 subagent session: session_id={session_id}, session_type={session_type}"
+        ));
+    }
+    Ok(Some(extension_data_json))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -246,9 +250,9 @@ mod tests {
     fn subagent_control_state_roundtrip() {
         let state = SubagentControlState::closed(Some("manual_close".to_string()));
 
-        let mut extension_data = ExtensionData::default();
-        state.to_extension_data(&mut extension_data).unwrap();
-        let restored = SubagentControlState::from_extension_data(&extension_data).unwrap();
+        let extension_data_json = state.to_extension_data_json().unwrap();
+        let restored =
+            SubagentControlState::from_extension_data_json(&extension_data_json).unwrap();
 
         assert_eq!(restored, state);
     }

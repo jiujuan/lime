@@ -38,6 +38,7 @@ interface UseWorkspaceResetRuntimeParams {
   initialCreationMode?: CreationMode;
   newChatAt?: number;
   externalProjectId?: string | null;
+  preserveSessionRestoreOnNewChat?: boolean;
   onNavigate?: (page: Page, params?: PageParams) => void;
   autoCollapsedTopicSidebarRef: MutableRefObject<boolean>;
   processedMessageIdsRef: MutableRefObject<Set<string>>;
@@ -69,6 +70,7 @@ export function useWorkspaceResetRuntime({
   initialCreationMode,
   newChatAt,
   externalProjectId,
+  preserveSessionRestoreOnNewChat = false,
   onNavigate,
   autoCollapsedTopicSidebarRef,
   processedMessageIdsRef,
@@ -149,6 +151,10 @@ export function useWorkspaceResetRuntime({
     }
     markNewChatRequestHandled(requestKey);
 
+    if (preserveSessionRestoreOnNewChat) {
+      return;
+    }
+
     clearMessages({
       showToast: false,
     });
@@ -182,6 +188,7 @@ export function useWorkspaceResetRuntime({
     markNewChatRequestHandled,
     newChatAt,
     normalizedInitialTheme,
+    preserveSessionRestoreOnNewChat,
     resetGuideState,
     resetProjectSelection,
     resetRestoredSessionState,

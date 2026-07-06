@@ -133,6 +133,7 @@ export function hasSessionHydrationActivity(options: {
 export function hasActiveRuntimeTurn(options: {
   currentTurnId?: string | null;
   queuedTurnsCount: number;
+  threadRead?: AgentRuntimeThreadReadModel | null;
   threadReadStatus?: string | null;
   turns: readonly AgentThreadTurn[];
 }): boolean {
@@ -140,7 +141,22 @@ export function hasActiveRuntimeTurn(options: {
     return true;
   }
 
-  if (options.threadReadStatus === "running") {
+  const normalizedThreadReadStatus =
+    options.threadReadStatus?.trim().toLowerCase() ?? null;
+  const normalizedProfileStatus =
+    options.threadRead?.profile_status?.trim().toLowerCase() ?? null;
+  if (
+    normalizedThreadReadStatus === "running" ||
+    normalizedProfileStatus === "running"
+  ) {
+    return true;
+  }
+
+  if (
+    options.threadRead?.turns?.some(
+      (turn) => turn?.status?.trim().toLowerCase() === "running",
+    )
+  ) {
     return true;
   }
 
@@ -276,12 +292,14 @@ export function resolveMissingSessionFromTopicsAction(options: {
     return { kind: "clear_auxiliary" };
   }
 
-  const shouldVerifyMissingSession = hasSessionHydrationActivity({
-    currentTurnId: options.currentTurnId,
-    threadTurnsCount: options.threadTurnsCount,
-    threadItemsCount: options.threadItemsCount,
-    queuedTurnsCount: options.queuedTurnsCount,
-  }) || options.remoteConfirmed === true ||
+  const shouldVerifyMissingSession =
+    hasSessionHydrationActivity({
+      currentTurnId: options.currentTurnId,
+      threadTurnsCount: options.threadTurnsCount,
+      threadItemsCount: options.threadItemsCount,
+      queuedTurnsCount: options.queuedTurnsCount,
+    }) ||
+    options.remoteConfirmed === true ||
     options.restoreCandidateMayLagTopics === true;
 
   return shouldVerifyMissingSession

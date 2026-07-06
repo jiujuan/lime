@@ -2414,6 +2414,7 @@ describe("agentStreamRuntimeHandler", () => {
     const requestState = {
       accumulatedContent:
         "我先给出计划，不会直接改代码：\n<proposed_plan>\n- 确认计划模式请求进入 App Server\n- 输出 proposed_plan\n</proposed_plan>",
+      currentTurnId: "turn-news",
       queuedTurnId: "queued-news",
       requestLogId: null,
       requestStartedAt: 0,
@@ -2529,6 +2530,7 @@ describe("agentStreamRuntimeHandler", () => {
     ];
     const requestState = {
       accumulatedContent: "",
+      currentTurnId: "turn-empty",
       queuedTurnId: "queued-empty-turn",
       requestLogId: null,
       requestStartedAt: 0,
@@ -2622,6 +2624,7 @@ describe("agentStreamRuntimeHandler", () => {
       accumulatedContent: "",
       hasFinalAnswerRequiredProcessBoundary: false,
       hasAssistantTextAfterLatestFinalAnswerRequiredProcessBoundary: false,
+      currentTurnId: "turn-search-no-final",
       queuedTurnId: "queued-search-no-final",
       requestLogId: null,
       requestStartedAt: 0,
@@ -2684,7 +2687,7 @@ describe("agentStreamRuntimeHandler", () => {
         itemId: "commentary-news-plan",
         phase: "commentary",
         sequence: 1,
-        turn_id: "turn-search-final",
+        turn_id: "turn-search-no-final",
       } as AgentEvent,
     });
     handleTurnStreamEvent({
@@ -3387,6 +3390,7 @@ describe("agentStreamRuntimeHandler", () => {
       } as AgentEvent,
       requestState: {
         accumulatedContent: "已经输出的内容",
+        currentTurnId: "turn-canceled",
         queuedTurnId: "queued-canceled",
         requestLogId: null,
         requestStartedAt: 0,

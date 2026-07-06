@@ -59,17 +59,13 @@ describe("MessageList streaming turns", () => {
       container.querySelector(
         '[data-testid="assistant-first-token-runtime-status"]',
       ),
-    ).not.toBeNull();
+    ).toBeNull();
     expect(
       container.querySelector('[data-testid="inputbar-runtime-status-line"]'),
     ).toBeNull();
-    expect(container.textContent).toContain("正在生成回复");
+    expect(container.textContent).not.toContain("正在生成回复");
     expect(container.textContent).not.toContain("等待首个输出");
-    expect(
-      container
-        .querySelector('[data-testid="assistant-first-token-runtime-status"]')
-        ?.getAttribute("aria-label"),
-    ).toContain("正在处理请求，等待开始输出。");
+    expect(container.textContent).not.toContain("正在处理请求，等待开始输出。");
     expect(container.textContent).not.toContain("已完成");
     expect(container.textContent).not.toContain("00:12");
   });

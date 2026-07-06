@@ -2,6 +2,7 @@ use super::coding_events;
 use super::proposed_plan_parser;
 use super::reasoning_events;
 use super::tool_events;
+use super::tool_process_metadata::SoulStyleMetadata;
 use crate::RuntimeCoreError;
 use crate::RuntimeEventSink;
 use lime_agent::AgentEvent as RuntimeAgentEvent;
@@ -23,12 +24,31 @@ pub(super) fn emit_runtime_agent_event_with_coding_mirror(
     )
 }
 
+#[cfg(test)]
 pub(super) fn emit_runtime_agent_event_with_coding_mirror_and_plan_parser(
     event: &RuntimeAgentEvent,
     sink: &mut dyn RuntimeEventSink,
     coding_event_mirror: &mut coding_events::CodingEventMirror,
     proposed_plan_parser: &mut proposed_plan_parser::ProposedPlanParser,
     reasoning_event_state: &mut reasoning_events::ReasoningEventState,
+) -> Result<(), RuntimeCoreError> {
+    emit_runtime_agent_event_with_coding_mirror_and_plan_parser_with_soul_style(
+        event,
+        sink,
+        coding_event_mirror,
+        proposed_plan_parser,
+        reasoning_event_state,
+        None,
+    )
+}
+
+pub(super) fn emit_runtime_agent_event_with_coding_mirror_and_plan_parser_with_soul_style(
+    event: &RuntimeAgentEvent,
+    sink: &mut dyn RuntimeEventSink,
+    coding_event_mirror: &mut coding_events::CodingEventMirror,
+    proposed_plan_parser: &mut proposed_plan_parser::ProposedPlanParser,
+    reasoning_event_state: &mut reasoning_events::ReasoningEventState,
+    soul_style: Option<&SoulStyleMetadata>,
 ) -> Result<(), RuntimeCoreError> {
     let coding_events = coding_event_mirror.process_event(event);
     for event in coding_events.before_raw {
@@ -39,7 +59,7 @@ pub(super) fn emit_runtime_agent_event_with_coding_mirror_and_plan_parser(
             sink.emit(event)?;
         }
     }
-    for event in tool_events::runtime_events_from_agent_event(event)? {
+    for event in tool_events::runtime_events_from_agent_event_with_soul_style(event, soul_style)? {
         for event in proposed_plan_parser::split_runtime_event(event, proposed_plan_parser) {
             sink.emit(event)?;
         }

@@ -16,36 +16,52 @@ export async function waitForExpertPanelSkillsRuntimeSessionReady(
   const startedAt = Date.now();
   let lastSnapshot = null;
   while (Date.now() - startedAt < options.timeoutMs) {
-    const snapshot = await evaluatePageSnapshot(page, (sessionId) => {
-      const text = document.body?.innerText || "";
-      const textarea = Array.from(
-        document.querySelectorAll('textarea[name="agent-chat-message"]'),
-      ).find(
-        (node) =>
-          node instanceof HTMLTextAreaElement &&
-          (!sessionId || node.dataset.sessionId === sessionId),
-      );
-      return {
-        url: window.location.href,
-        expectedSessionId: sessionId,
-        hasExpertPrompt: text.includes(
-          "请以「代码文学专家」身份，使用绑定技能完成一次最小代码审查。",
-        ),
-        hasExpertPanel: text.includes("专家信息") && text.includes("代码文学专家"),
-        hasAddedSkill: text.includes("Capability Report"),
-        textareaSessionId:
-          textarea instanceof HTMLTextAreaElement
-            ? textarea.dataset.sessionId || null
-            : null,
-        textareaVisible:
-          textarea instanceof HTMLElement
-            ? textarea.offsetParent !== null
-            : Boolean(textarea),
-        textareaDisabled:
-          textarea instanceof HTMLTextAreaElement ? textarea.disabled : null,
-        bodyText: text,
-      };
-    }, expectedSessionId);
+    const snapshot = await evaluatePageSnapshot(
+      page,
+      (sessionId) => {
+        const text = document.body?.innerText || "";
+        const textareas = Array.from(
+          document.querySelectorAll('textarea[name="agent-chat-message"]'),
+        ).filter((node) => node instanceof HTMLTextAreaElement);
+        const textarea = textareas.find(
+          (node) => !sessionId || node.dataset.sessionId === sessionId,
+        );
+        const fallbackTextarea = textareas[0] ?? null;
+        const isVisibleTextarea = (node) =>
+          node instanceof HTMLElement
+            ? node.offsetParent !== null
+            : Boolean(node);
+        return {
+          url: window.location.href,
+          expectedSessionId: sessionId,
+          hasExpertPrompt: text.includes(
+            "请以「代码文学专家」身份，使用绑定技能完成一次最小代码审查。",
+          ),
+          hasExpertPanel:
+            text.includes("专家信息") && text.includes("代码文学专家"),
+          hasAddedSkill: text.includes("Capability Report"),
+          textareaSessionId:
+            textarea instanceof HTMLTextAreaElement
+              ? textarea.dataset.sessionId || null
+              : null,
+          textareaVisible: isVisibleTextarea(textarea),
+          textareaDisabled:
+            textarea instanceof HTMLTextAreaElement ? textarea.disabled : null,
+          fallbackTextareaSessionId:
+            fallbackTextarea instanceof HTMLTextAreaElement
+              ? fallbackTextarea.dataset.sessionId || null
+              : null,
+          fallbackTextareaVisible: isVisibleTextarea(fallbackTextarea),
+          fallbackTextareaDisabled:
+            fallbackTextarea instanceof HTMLTextAreaElement
+              ? fallbackTextarea.disabled
+              : null,
+          textareaCount: textareas.length,
+          bodyText: text,
+        };
+      },
+      expectedSessionId,
+    );
     if (!snapshot) {
       await sleep(options.intervalMs);
       continue;
@@ -140,7 +156,10 @@ export async function launchSkillsRuntimeFromWorkspacePanel(
   options,
   workspace,
 ) {
-  assert(workspace?.rootPath, "workspace panel fixture 缺少 workspace rootPath");
+  assert(
+    workspace?.rootPath,
+    "workspace panel fixture 缺少 workspace rootPath",
+  );
   const workspaceSkill = ensureManualEnableWorkspaceSkill(workspace.rootPath);
   const startedAt = Date.now();
   let lastSnapshot = null;
@@ -153,9 +172,9 @@ export async function launchSkillsRuntimeFromWorkspacePanel(
       const installedView = document.querySelector(
         '[data-testid="skills-installed-view"]',
       );
-      const installedTab = Array.from(
-        document.querySelectorAll("button"),
-      ).find((button) => (button.textContent || "").includes("用户安装"));
+      const installedTab = Array.from(document.querySelectorAll("button")).find(
+        (button) => (button.textContent || "").includes("用户安装"),
+      );
       if (!installedView && installedTab instanceof HTMLButtonElement) {
         installedTab.click();
       }
@@ -188,9 +207,9 @@ export async function launchSkillsRuntimeFromWorkspacePanel(
       snapshot.enableButtonVisible &&
       snapshot.enableButtonDisabled === false
     ) {
-      await page.locator(
-        '[data-testid="workspace-registered-skill-enable-runtime"]',
-      ).click();
+      await page
+        .locator('[data-testid="workspace-registered-skill-enable-runtime"]')
+        .click();
       return sanitizeJson({
         ...snapshot,
         clicked: true,

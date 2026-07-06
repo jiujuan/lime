@@ -25,9 +25,118 @@ describe("useAsterAgentChat 首页新会话", () => {
       await flushEffects();
 
       expect(mockInitAsterAgent).not.toHaveBeenCalled();
-      expect(mockListAgentRuntimeSessions).not.toHaveBeenCalled();
+      expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
+        limit: 21,
+      });
       expect(harness.getValue().processStatus.running).toBe(false);
       expect(harness.getValue().topics).toEqual([]);
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("无工作区刷新后应从 global scope 恢复运行中的会话", async () => {
+    const sessionId = "session-global-running-restore";
+    const turnId = "turn-global-running-restore";
+    const threadId = "thread-global-running-restore";
+    localStorage.setItem(
+      "aster_last_sessionId_global",
+      JSON.stringify(sessionId),
+    );
+    sessionStorage.setItem(
+      "aster_curr_sessionId_global",
+      JSON.stringify(sessionId),
+    );
+    mockListAgentRuntimeSessions.mockResolvedValue([
+      {
+        id: sessionId,
+        name: "全局运行中任务",
+        created_at: 1700000400,
+        updated_at: 1700000401,
+        messages_count: 2,
+      },
+    ]);
+    mockGetAgentRuntimeSession.mockResolvedValue({
+      id: sessionId,
+      name: "全局运行中任务",
+      created_at: 1700000400,
+      updated_at: 1700000401,
+      messages: [
+        {
+          role: "user",
+          timestamp: 1700000400,
+          content: [{ type: "text", text: "继续恢复这个运行中的任务" }],
+        },
+        {
+          role: "assistant",
+          timestamp: 1700000401,
+          content: [
+            {
+              type: "text",
+              text: "CDP 恢复验证第一段：刷新前已经开始输出。",
+            },
+          ],
+        },
+      ],
+      turns: [
+        {
+          id: turnId,
+          thread_id: threadId,
+          prompt_text: "继续恢复这个运行中的任务",
+          status: "running",
+          started_at: "2026-07-06T00:00:00.000Z",
+          created_at: "2026-07-06T00:00:00.000Z",
+          updated_at: "2026-07-06T00:00:01.000Z",
+        },
+      ],
+      items: [],
+      queued_turns: [],
+      thread_read: {
+        thread_id: threadId,
+        status: "running",
+        profile_status: "running",
+        active_turn_id: turnId,
+        turns: [{ turn_id: turnId, status: "running" }],
+      },
+    });
+
+    const harness = mountHook("");
+
+    try {
+      await flushEffects();
+      await flushEffects();
+      await flushEffects();
+
+      expect(mockListAgentRuntimeSessions).toHaveBeenCalledWith({
+        limit: 21,
+      });
+      expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith(
+        sessionId,
+        expect.objectContaining({
+          source: "switchTopic.direct",
+        }),
+      );
+      expect(harness.getValue().sessionId).toBe(sessionId);
+      expect(harness.getValue().currentTurnId).toBe(turnId);
+      expect(harness.getValue().threadRead).toMatchObject({
+        thread_id: threadId,
+        status: "running",
+        active_turn_id: turnId,
+      });
+      expect(harness.getValue().messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: "assistant",
+            content: "CDP 恢复验证第一段：刷新前已经开始输出。",
+          }),
+        ]),
+      );
+      expect(localStorage.getItem("aster_last_sessionId_global")).toBe(
+        JSON.stringify(sessionId),
+      );
+      expect(sessionStorage.getItem("aster_curr_sessionId_global")).toBe(
+        JSON.stringify(sessionId),
+      );
     } finally {
       harness.unmount();
     }
@@ -522,7 +631,7 @@ describe("useAsterAgentChat 首页新会话", () => {
     }
   });
 
-  it("Agent 初始化返回 current provider 但无模型时不应回流旧 Provider 缓存", async () => {
+  it("Agent 初始化返回 current provider 但无模型时不应写入半截 provider/model", async () => {
     const workspaceId = "ws-init-current-provider-without-model";
     localStorage.setItem(
       `agent_pref_provider_${workspaceId}`,
@@ -553,18 +662,18 @@ describe("useAsterAgentChat 首页新会话", () => {
         theme: "general",
         allowProviderFallback: false,
       });
-      expect(harness.getValue().providerType).toBe("lime-hub");
-      expect(harness.getValue().model).toBe("");
+      expect(harness.getValue().providerType).toBe("deepseek");
+      expect(harness.getValue().model).toBe("deepseek-v4-pro");
       expect(
         JSON.parse(
           localStorage.getItem(`agent_pref_provider_${workspaceId}`) || "null",
         ),
-      ).toBe("lime-hub");
+      ).toBe("deepseek");
       expect(
         JSON.parse(
           localStorage.getItem(`agent_pref_model_${workspaceId}`) || "null",
         ),
-      ).toBe("");
+      ).toBe("deepseek-v4-pro");
     } finally {
       harness.unmount();
     }

@@ -1,6 +1,7 @@
 mod agent_session;
 mod automation;
 mod browser_session;
+mod config_warning;
 mod connect;
 mod conversation_import;
 mod diagnostics;
@@ -56,6 +57,7 @@ use app_server_protocol::JsonRpcMessage;
 use app_server_protocol::JsonRpcNotification;
 use app_server_protocol::JsonRpcRequest;
 use app_server_protocol::PlatformInfo;
+use config_warning::{ConfigWarningProvider, ConfigWarningScope};
 // ProjectGit* 类型已移至 processor/project_git.rs
 use app_server_protocol::ServerCapabilities;
 use app_server_protocol::ServerInfo;
@@ -75,6 +77,7 @@ pub struct RequestProcessor {
     runtime: Arc<RuntimeCore>,
     project_shell: ProjectShellManager,
     execution_process: ExecutionProcessServer,
+    config_warning_provider: ConfigWarningProvider,
 }
 
 #[derive(Debug, Default)]
@@ -101,6 +104,7 @@ impl RequestProcessor {
             runtime: Arc::new(runtime),
             project_shell: ProjectShellManager::default(),
             execution_process,
+            config_warning_provider: config_warning::default_config_warning_provider(),
         }
     }
 
@@ -379,6 +383,7 @@ impl RequestProcessor {
         self.ensure_initialized()?;
         let params = parse_params(params)?;
         let host = self.runtime_host_context();
+        let config_warning = self.config_warning_notification(ConfigWarningScope::TurnStart);
         if let Some(event_callback) = event_callback {
             let mut runtime_event_callback = |event: AgentEvent| {
                 let message = event_notification_jsonrpc(event).map_err(|error| {
@@ -395,14 +400,22 @@ impl RequestProcessor {
                 .start_turn_with_event_callback(params, host, &mut runtime_event_callback)
                 .await
                 .map_err(to_jsonrpc_error)?;
-            dispatch_result(output.response)
+            let mut dispatch = dispatch_result(output.response)?;
+            if let Some(notification) = config_warning {
+                dispatch = dispatch.with_notification(notification);
+            }
+            Ok(dispatch)
         } else {
             let output = self
                 .runtime
                 .start_turn(params, host)
                 .await
                 .map_err(to_jsonrpc_error)?;
-            dispatch_result_with_events(output.response, output.events)
+            let mut dispatch = dispatch_result_with_events(output.response, output.events)?;
+            if let Some(notification) = config_warning {
+                dispatch = dispatch.with_notification(notification);
+            }
+            Ok(dispatch)
         }
     }
 

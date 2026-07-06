@@ -70,9 +70,20 @@ const READY_BOOTSTRAP = {
 };
 
 const READY_FETCH_CLOUD = {
+  descriptor: {
+    manifestHash:
+      "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    packageHash:
+      "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    sourceUri:
+      "https://updates.limeai.run/plugins/content-factory-app/prod/content-factory-app-2.2.2.lapp",
+  },
   manifestHashMatched: true,
   packageHashMatched: true,
   packageVerificationStatus: "verified",
+  signatureProof: SIGNATURE_PROOF,
+  signatureRef: READY_SIGNATURE_REF,
+  signaturePolicy: "required",
   signatureVerificationStatus: "verified",
   sourceKind: "cloud_release",
   status: "ready",
@@ -144,6 +155,7 @@ const READY_PREFLIGHT = {
     packageVerificationStatus: "verified",
     present: true,
     ready: true,
+    signaturePolicy: "required",
     signatureVerificationStatus: "verified",
     sourceKind: "cloud_release",
     status: "ready",
@@ -159,11 +171,16 @@ const READY_PREFLIGHT = {
     ],
   },
   signingCommand:
-    "PLUGIN_SIGNING_PRIVATE_KEY_PEM=$PRIVATE_KEY_PEM npm run release:sign -- --package-url <https-url>",
+    "npm run release:sign -- --package-url <https-url> --private-key-env PLUGIN_SIGNING_PRIVATE_KEY_PEM",
   missingRequirements: [],
 };
 
 const READY_GUI_EVIDENCE = {
+  schemaVersion: "content-factory-production-gui-evidence.v1",
+  cdp: {
+    attached: true,
+    usedRealElectron: true,
+  },
   assertions: {
     articleDraftDocumentPresent: true,
     contentFactoryArticleWorkspaceWorkflowFactsHidden: true,
@@ -173,6 +190,7 @@ const READY_GUI_EVIDENCE = {
   eventLogs: {
     workflowJsonl:
       "/tmp/lime-runtime/events/sessions/session_prod/workflow-events.jsonl",
+    workflowJsonlEventCount: 16,
     workflowResumeEvents: [
       {
         eventType: "workflow.step.resuming",
@@ -196,7 +214,31 @@ const READY_GUI_EVIDENCE = {
       },
     ],
   },
+  evidenceExport: {
+    workflowAudit: {
+      eventCount: 16,
+      metadataOnly: true,
+      rawContentIncluded: false,
+      redactionPolicy: "workflow_audit_metadata_only",
+      redactionPolicyEventCount: 16,
+      source: "workflow-events.jsonl",
+      status: "exported",
+    },
+  },
   installedState: {
+    appVersion: "2.2.2",
+    cloudReleaseEvidenceStatus: "ready",
+    manifestHash:
+      "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    manifestHashMatched: true,
+    packageHash:
+      "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    packageHashMatched: true,
+    packageVerificationStatus: "verified",
+    releaseId: READY_RELEASE_ID,
+    signaturePolicy: "required",
+    signatureRef: READY_SIGNATURE_REF,
+    signatureVerificationStatus: "verified",
     sourceKind: "cloud_release",
   },
   providerEvidence: {
@@ -204,6 +246,9 @@ const READY_GUI_EVIDENCE = {
     productionRoute: true,
   },
   readModel: {
+    articleDraftDocumentLength: 3153,
+    articleDraftDocumentPresent: true,
+    generatedArticleMarkerClean: true,
     hostManagedGenerationStatus: "completed",
   },
   runtimeActionResponse: {
@@ -243,6 +288,14 @@ const READY_GUI_EVIDENCE = {
       "agentSession/read",
       "evidence/export",
     ],
+    turnStartTrace: {
+      command: "app_server_handle_json_lines",
+      matched: true,
+      method: "agentSession/turn/start",
+      sessionMatched: true,
+      status: "success",
+      transport: "electron-ipc",
+    },
   },
 };
 
@@ -353,6 +406,39 @@ describe("content factory signed release gate", () => {
         }),
       ]),
     );
+  });
+
+  it("拒绝只写 productionRoute 但缺 liveProviderUsed 的手写 GUI evidence", () => {
+    const result = buildContentFactorySignedReleaseGate({
+      bootstrap: READY_BOOTSTRAP,
+      catalog: READY_CATALOG,
+      expectedVersion: "2.2.2",
+      fetchCloud: READY_FETCH_CLOUD,
+      guiEvidence: {
+        ...READY_GUI_EVIDENCE,
+        assertions: {
+          ...READY_GUI_EVIDENCE.assertions,
+          liveProviderUsed: false,
+        },
+        providerEvidence: {
+          productionRoute: true,
+        },
+      },
+      preflight: READY_PREFLIGHT,
+    });
+
+    expect(result).toMatchObject({
+      ready: false,
+      status: "blocked",
+      guiEvidence: {
+        liveProviderUsed: false,
+      },
+      missingRequirements: expect.arrayContaining([
+        expect.objectContaining({
+          code: "production_host_generation_not_live",
+        }),
+      ]),
+    });
   });
 
   it("拒绝 production evidence 模板占位值", () => {
@@ -482,6 +568,170 @@ describe("content factory signed release gate", () => {
         },
       },
       missingRequirements: [],
+    });
+  });
+
+  it("拒绝缺少 installed release identity 的 GUI production evidence", () => {
+    const result = buildContentFactorySignedReleaseGate({
+      bootstrap: READY_BOOTSTRAP,
+      catalog: READY_CATALOG,
+      expectedVersion: "2.2.2",
+      fetchCloud: READY_FETCH_CLOUD,
+      guiEvidence: {
+        ...READY_GUI_EVIDENCE,
+        installedState: {
+          ...READY_GUI_EVIDENCE.installedState,
+          manifestHash: undefined,
+          packageHash: undefined,
+          releaseId: undefined,
+          signatureRef: undefined,
+        },
+      },
+      preflight: READY_PREFLIGHT,
+    });
+
+    expect(result).toMatchObject({
+      ready: false,
+      status: "blocked",
+      guiEvidence: {
+        cloudReleaseRuntimeVerified: false,
+        manifestHash: null,
+        packageHash: null,
+        releaseId: null,
+        signatureRef: null,
+      },
+      missingRequirements: expect.arrayContaining([
+        expect.objectContaining({
+          code: "production_gui_package_hash_missing",
+        }),
+        expect.objectContaining({
+          code: "production_gui_manifest_hash_missing",
+        }),
+        expect.objectContaining({
+          code: "production_gui_release_id_missing",
+        }),
+        expect.objectContaining({
+          code: "production_gui_signature_ref_missing",
+        }),
+      ]),
+    });
+  });
+
+  it("拒绝 GUI installed release identity 与 catalog/preflight/fetchCloud 漂移", () => {
+    const result = buildContentFactorySignedReleaseGate({
+      bootstrap: READY_BOOTSTRAP,
+      catalog: READY_CATALOG,
+      expectedVersion: "2.2.2",
+      fetchCloud: READY_FETCH_CLOUD,
+      guiEvidence: {
+        ...READY_GUI_EVIDENCE,
+        installedState: {
+          ...READY_GUI_EVIDENCE.installedState,
+          appVersion: "2.2.1",
+          manifestHash:
+            "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          packageHash:
+            "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          releaseId: "stale-release",
+          signatureRef: "sigstore:content-factory-app@2.2.2:stale-release",
+        },
+      },
+      preflight: READY_PREFLIGHT,
+    });
+
+    expect(result).toMatchObject({
+      ready: false,
+      status: "blocked",
+      missingRequirements: expect.arrayContaining([
+        expect.objectContaining({
+          code: "production_gui_catalog_version_mismatch",
+        }),
+        expect.objectContaining({
+          code: "production_gui_catalog_package_hash_mismatch",
+        }),
+        expect.objectContaining({
+          code: "production_gui_catalog_manifest_hash_mismatch",
+        }),
+        expect.objectContaining({
+          code: "production_gui_catalog_release_id_mismatch",
+        }),
+        expect.objectContaining({
+          code: "production_gui_catalog_signature_ref_mismatch",
+        }),
+        expect.objectContaining({
+          code: "production_gui_preflight_package_hash_mismatch",
+        }),
+        expect.objectContaining({
+          code: "production_gui_preflight_manifest_hash_mismatch",
+        }),
+        expect.objectContaining({
+          code: "production_gui_preflight_signature_ref_mismatch",
+        }),
+        expect.objectContaining({
+          code: "production_gui_fetch_cloud_package_hash_mismatch",
+        }),
+        expect.objectContaining({
+          code: "production_gui_fetch_cloud_manifest_hash_mismatch",
+        }),
+        expect.objectContaining({
+          code: "production_gui_fetch_cloud_signature_ref_mismatch",
+        }),
+      ]),
+    });
+  });
+
+  it("拒绝 signaturePolicy optional 的 GUI production evidence", () => {
+    const result = buildContentFactorySignedReleaseGate({
+      bootstrap: READY_BOOTSTRAP,
+      catalog: READY_CATALOG,
+      expectedVersion: "2.2.2",
+      fetchCloud: READY_FETCH_CLOUD,
+      guiEvidence: {
+        ...READY_GUI_EVIDENCE,
+        installedState: {
+          ...READY_GUI_EVIDENCE.installedState,
+          cloudReleaseEvidenceStatus: "warning",
+          manifestHashMatched: false,
+          packageHashMatched: false,
+          packageVerificationStatus: "not_configured",
+          signaturePolicy: "optional",
+          signatureVerificationStatus: "not_configured",
+        },
+        signatureVerificationStatus: "not_configured",
+      },
+      preflight: READY_PREFLIGHT,
+    });
+
+    expect(result).toMatchObject({
+      ready: false,
+      status: "blocked",
+      guiEvidence: {
+        cloudReleaseRuntimeVerified: false,
+        manifestHashMatched: false,
+        packageHashMatched: false,
+        packageVerificationStatus: "not_configured",
+        signaturePolicy: "optional",
+      },
+      missingRequirements: expect.arrayContaining([
+        expect.objectContaining({
+          code: "production_gui_signature_policy_not_required",
+        }),
+        expect.objectContaining({
+          code: "production_gui_signature_not_verified",
+        }),
+        expect.objectContaining({
+          code: "production_gui_release_evidence_not_ready",
+        }),
+        expect.objectContaining({
+          code: "production_gui_package_verification_not_verified",
+        }),
+        expect.objectContaining({
+          code: "production_gui_package_hash_not_matched",
+        }),
+        expect.objectContaining({
+          code: "production_gui_manifest_hash_not_matched",
+        }),
+      ]),
     });
   });
 
@@ -781,6 +1031,104 @@ describe("content factory signed release gate", () => {
     });
   });
 
+  it("拒绝缺少 production collector provenance 的手写 GUI evidence", () => {
+    const {
+      cdp: _cdp,
+      schemaVersion: _schemaVersion,
+      ...handWrittenGuiEvidence
+    } = {
+      ...READY_GUI_EVIDENCE,
+      eventLogs: {
+        ...READY_GUI_EVIDENCE.eventLogs,
+        workflowJsonlEventCount: undefined,
+      },
+      readModel: {
+        articleDraftDocumentPresent: true,
+        hostManagedGenerationStatus: "completed",
+      },
+      trace: {
+        appServerHandleJsonLinesSeen: true,
+        appServerMethodsSeen: ["agentSession/turn/start"],
+      },
+    };
+
+    const result = buildContentFactorySignedReleaseGate({
+      bootstrap: READY_BOOTSTRAP,
+      catalog: READY_CATALOG,
+      expectedVersion: "2.2.2",
+      fetchCloud: READY_FETCH_CLOUD,
+      guiEvidence: handWrittenGuiEvidence,
+      preflight: READY_PREFLIGHT,
+    });
+
+    expect(result).toMatchObject({
+      ready: false,
+      status: "blocked",
+      missingRequirements: expect.arrayContaining([
+        expect.objectContaining({
+          code: "production_gui_collector_schema_missing",
+        }),
+        expect.objectContaining({
+          code: "production_gui_cdp_evidence_missing",
+        }),
+        expect.objectContaining({
+          code: "production_workflow_jsonl_missing",
+        }),
+        expect.objectContaining({
+          code: "production_generated_article_marker_unclean",
+        }),
+        expect.objectContaining({
+          code: "production_gui_turn_start_trace_missing",
+        }),
+        expect.objectContaining({
+          code: "production_gui_current_app_server_methods_missing",
+        }),
+      ]),
+    });
+  });
+
+  it("拒绝缺少 evidence/export workflow audit 摘要的 production GUI evidence", () => {
+    const { evidenceExport: _evidenceExport, ...guiEvidenceWithoutExport } =
+      READY_GUI_EVIDENCE;
+
+    const result = buildContentFactorySignedReleaseGate({
+      bootstrap: READY_BOOTSTRAP,
+      catalog: READY_CATALOG,
+      expectedVersion: "2.2.2",
+      fetchCloud: READY_FETCH_CLOUD,
+      guiEvidence: guiEvidenceWithoutExport,
+      preflight: READY_PREFLIGHT,
+    });
+
+    expect(result).toMatchObject({
+      ready: false,
+      status: "blocked",
+      guiEvidence: {
+        workflowAuditExportReady: false,
+        workflowAuditEventCount: 0,
+        workflowAuditMetadataOnly: false,
+        workflowAuditRawContentExcluded: false,
+      },
+      missingRequirements: expect.arrayContaining([
+        expect.objectContaining({
+          code: "production_workflow_audit_export_missing",
+        }),
+        expect.objectContaining({
+          code: "production_workflow_audit_export_empty",
+        }),
+        expect.objectContaining({
+          code: "production_workflow_audit_not_metadata_only",
+        }),
+        expect.objectContaining({
+          code: "production_workflow_audit_raw_content_included",
+        }),
+        expect.objectContaining({
+          code: "production_workflow_audit_redaction_policy_missing",
+        }),
+      ]),
+    });
+  });
+
   it("拒绝缺少真实 resume lifecycle metadata 的 production GUI evidence", () => {
     const {
       runtimeActionResponse,
@@ -816,6 +1164,68 @@ describe("content factory signed release gate", () => {
           contractMetadataPresent: false,
         },
       },
+    });
+  });
+
+  it("拒绝缺少右侧 workflow facts 隐藏显式证据的 production GUI evidence", () => {
+    const {
+      contentFactoryArticleWorkspaceWorkflowFactsHidden:
+        _workflowFactsHidden,
+      ...assertionsWithoutWorkflowFactsHidden
+    } = READY_GUI_EVIDENCE.assertions;
+    const result = buildContentFactorySignedReleaseGate({
+      bootstrap: READY_BOOTSTRAP,
+      catalog: READY_CATALOG,
+      expectedVersion: "2.2.2",
+      fetchCloud: READY_FETCH_CLOUD,
+      guiEvidence: {
+        ...READY_GUI_EVIDENCE,
+        assertions: assertionsWithoutWorkflowFactsHidden,
+      },
+      preflight: READY_PREFLIGHT,
+    });
+
+    expect(result).toMatchObject({
+      ready: false,
+      status: "blocked",
+      guiEvidence: {
+        workflowFactsHidden: false,
+      },
+      missingRequirements: expect.arrayContaining([
+        expect.objectContaining({
+          code: "production_workflow_facts_visible",
+        }),
+      ]),
+    });
+  });
+
+  it("拒绝右侧 workflow facts 可见的 production GUI evidence", () => {
+    const result = buildContentFactorySignedReleaseGate({
+      bootstrap: READY_BOOTSTRAP,
+      catalog: READY_CATALOG,
+      expectedVersion: "2.2.2",
+      fetchCloud: READY_FETCH_CLOUD,
+      guiEvidence: {
+        ...READY_GUI_EVIDENCE,
+        assertions: {
+          ...READY_GUI_EVIDENCE.assertions,
+          contentFactoryArticleWorkspaceWorkflowFactsHidden: false,
+        },
+      },
+      preflight: READY_PREFLIGHT,
+    });
+
+    expect(result).toMatchObject({
+      ready: false,
+      status: "blocked",
+      guiEvidence: {
+        workflowFactsHidden: false,
+      },
+      missingRequirements: expect.arrayContaining([
+        expect.objectContaining({
+          code: "production_workflow_facts_visible",
+        }),
+      ]),
     });
   });
 
@@ -899,6 +1309,9 @@ describe("content factory signed release gate", () => {
           expect.objectContaining({
             appId: "content-factory-app",
             appVersion: "2.2.2",
+            identity: expect.objectContaining({
+              releaseId: "prod",
+            }),
             signatureProof: expect.objectContaining({
               publicKeyId: expect.any(String),
             }),
@@ -906,6 +1319,8 @@ describe("content factory signed release gate", () => {
         ],
       },
       fetchCloud: {
+        packageHashMatched: true,
+        signaturePolicy: "required",
         sourceKind: "cloud_release",
         signatureVerificationStatus: "verified",
       },
@@ -928,6 +1343,11 @@ describe("content factory signed release gate", () => {
           liveProviderUsed: true,
           turnStartViaElectronIpc: true,
           workflowResumeLifecyclePresent: true,
+        },
+        installedState: {
+          manifestHashMatched: true,
+          packageHashMatched: true,
+          signaturePolicy: "required",
         },
         trace: {
           appServerHandleJsonLinesSeen: true,

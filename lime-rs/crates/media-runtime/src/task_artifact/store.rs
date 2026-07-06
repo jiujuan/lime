@@ -1,8 +1,10 @@
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use chrono::Utc;
 use serde_json::Value;
+use tempfile::NamedTempFile;
 use uuid::Uuid;
 
 use super::record::{
@@ -80,8 +82,23 @@ fn write_task_record(path: &Path, record: &TaskArtifactRecord) -> Result<(), Med
     let canonical_record = canonicalize_task_record(record.clone());
     let serialized = serde_json::to_string_pretty(&canonical_record)
         .unwrap_or_else(|_| serde_json::json!(canonical_record).to_string());
-    fs::write(path, serialized.as_bytes())
-        .map_err(|error| MediaRuntimeError::Io(format!("写入任务文件失败: {error}")))
+    let parent = path
+        .parent()
+        .ok_or_else(|| MediaRuntimeError::Io("无法解析任务文件父目录".to_string()))?;
+    let mut temp_file = NamedTempFile::new_in(parent)
+        .map_err(|error| MediaRuntimeError::Io(format!("创建任务临时文件失败: {error}")))?;
+    temp_file
+        .as_file_mut()
+        .write_all(serialized.as_bytes())
+        .map_err(|error| MediaRuntimeError::Io(format!("写入任务临时文件失败: {error}")))?;
+    temp_file
+        .as_file_mut()
+        .flush()
+        .map_err(|error| MediaRuntimeError::Io(format!("刷新任务临时文件失败: {error}")))?;
+    temp_file
+        .persist(path)
+        .map_err(|error| MediaRuntimeError::Io(format!("替换任务文件失败: {}", error.error)))?;
+    Ok(())
 }
 
 fn relative_path_from_workspace(workspace_root: &Path, task_path: &Path) -> String {

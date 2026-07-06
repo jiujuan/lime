@@ -14,6 +14,7 @@ mod browser_session;
 mod capabilities;
 mod coding_activity_projection;
 mod connect;
+mod context_auto_compaction;
 mod context_compaction;
 mod context_packet;
 mod conversation_import;

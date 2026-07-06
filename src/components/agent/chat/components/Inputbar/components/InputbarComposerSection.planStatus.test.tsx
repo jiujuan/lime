@@ -281,7 +281,7 @@ describe("InputbarComposerSection plan status", () => {
     ).toBeNull();
   });
 
-  it("图片能力 policy 阻断时应禁用输入框并拦截发送", () => {
+  it("图片能力 policy 阻断时应保留输入框并允许发送", () => {
     visionNoticeMockState.policy = {
       canSubmit: false,
       failClosedAtSubmit: true,
@@ -313,7 +313,7 @@ describe("InputbarComposerSection plan status", () => {
       container
         .querySelector('[data-testid="inputbar-core"]')
         ?.getAttribute("data-disabled"),
-    ).toBe("true");
+    ).toBe("false");
 
     act(() => {
       container
@@ -321,6 +321,6 @@ describe("InputbarComposerSection plan status", () => {
         ?.click();
     });
 
-    expect(onSend).not.toHaveBeenCalled();
+    expect(onSend).toHaveBeenCalledTimes(1);
   });
 });

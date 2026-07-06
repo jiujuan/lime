@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   decodeMessage,
   encodeMessage,
@@ -9,13 +9,16 @@ import {
 const {
   fakeConnection,
   lifecycleConfigs,
+  lifecycleOptions,
   enqueueFakeNotifications,
   recordedRequests,
   releaseDelayedStaleError,
   resetFakeConnection,
+  setSystemProxyRules,
   setTurnStartRequestMode,
   waitForDelayedStaleErrorReady,
   FakeAppServerSidecarLifecycle,
+  resolveProxyMock,
 } = vi.hoisted(() => {
   const recordedRequests: JsonRpcRequest[] = [];
   const lifecycleConfigs: Array<{
@@ -23,8 +26,13 @@ const {
     dataDir?: string;
     productDbMigrationCleanup?: string;
   }> = [];
+  const lifecycleOptions: Array<{
+    env?: Record<string, string | undefined>;
+  }> = [];
   const mirroredNotifications: JsonRpcMessage[] = [];
   const delayedStaleErrorReadyResolvers: Array<() => void> = [];
+  let systemProxyRules = "DIRECT";
+  const resolveProxyMock = vi.fn(async () => systemProxyRules);
   let releaseDelayedStaleError: (() => void) | null = null;
   let turnStartRequestMode:
     | "resolve"
@@ -213,12 +221,17 @@ const {
         }
       | undefined;
 
-    constructor(config: {
-      binaryPath: string;
-      dataDir?: string;
-      productDbMigrationCleanup?: string;
-    }) {
+    constructor(
+      config: {
+        binaryPath: string;
+        dataDir?: string;
+        productDbMigrationCleanup?: string;
+      },
+      _initializeParams: unknown,
+      options: { env?: Record<string, string | undefined> } = {},
+    ) {
       lifecycleConfigs.push(config);
+      lifecycleOptions.push(options);
     }
 
     async start() {
@@ -249,18 +262,25 @@ const {
   return {
     fakeConnection,
     lifecycleConfigs,
+    lifecycleOptions,
     enqueueFakeNotifications,
     recordedRequests,
     resetFakeConnection: () => {
       recordedRequests.length = 0;
       lifecycleConfigs.length = 0;
+      lifecycleOptions.length = 0;
       mirroredNotifications.length = 0;
       delayedStaleErrorReadyResolvers.length = 0;
+      systemProxyRules = "DIRECT";
+      resolveProxyMock.mockClear();
       releaseDelayedStaleError = null;
       turnStartRequestMode = "resolve";
       fakeConnection.request.mockClear();
       fakeConnection.requestUntilFirstNotificationOrResponse.mockClear();
       fakeConnection.nextNotification.mockClear();
+    },
+    setSystemProxyRules: (rules: string) => {
+      systemProxyRules = rules;
     },
     setTurnStartRequestMode: (
       mode:
@@ -277,6 +297,7 @@ const {
       releaseDelayedStaleError?.();
     },
     FakeAppServerSidecarLifecycle,
+    resolveProxyMock,
   };
 });
 
@@ -288,12 +309,36 @@ vi.mock("./electronRuntime", () => ({
     getVersion: () => "0.0.0-test",
     isPackaged: false,
   },
+  session: {
+    defaultSession: {
+      resolveProxy: resolveProxyMock,
+    },
+  },
 }));
 
 Object.defineProperty(process, "resourcesPath", {
   configurable: true,
   value: process.cwd(),
 });
+
+const originalPlatform = process.platform;
+const proxyEnvKeys = [
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "ALL_PROXY",
+  "http_proxy",
+  "https_proxy",
+  "all_proxy",
+  "NO_PROXY",
+  "no_proxy",
+] as const;
+
+function setProcessPlatform(platform: NodeJS.Platform): void {
+  Object.defineProperty(process, "platform", {
+    configurable: true,
+    value: platform,
+  });
+}
 
 vi.mock("@limecloud/app-server-client", async (importOriginal) => {
   const actual =
@@ -332,6 +377,16 @@ describe("ElectronAppServerHost", () => {
   beforeEach(() => {
     resetFakeConnection();
     delete process.env.APP_SERVER_PRODUCT_DB_MIGRATION_CLEANUP;
+    for (const key of proxyEnvKeys) {
+      delete process.env[key];
+    }
+  });
+
+  afterEach(() => {
+    setProcessPlatform(originalPlatform);
+    for (const key of proxyEnvKeys) {
+      delete process.env[key];
+    }
   });
 
   it("启动 App Server 时应显式传入 Electron userData 下的 dataDir", async () => {
@@ -345,6 +400,42 @@ describe("ElectronAppServerHost", () => {
       dataDir: "/tmp/lime-electron-user-data/app-server",
       productDbMigrationCleanup: "drop-tables",
     });
+  });
+
+  it("macOS 系统代理存在时应传给 App Server sidecar", async () => {
+    setProcessPlatform("darwin");
+    setSystemProxyRules("PROXY 127.0.0.1:7890; DIRECT");
+    const { ElectronAppServerHost } = await import("./appServerHost");
+    const host = new ElectronAppServerHost();
+
+    await host.warmup();
+
+    expect(lifecycleOptions).toHaveLength(1);
+    expect(lifecycleOptions[0].env).toMatchObject({
+      HTTP_PROXY: "http://127.0.0.1:7890",
+      HTTPS_PROXY: "http://127.0.0.1:7890",
+      ALL_PROXY: "http://127.0.0.1:7890",
+      http_proxy: "http://127.0.0.1:7890",
+      https_proxy: "http://127.0.0.1:7890",
+      all_proxy: "http://127.0.0.1:7890",
+    });
+    expect(lifecycleOptions[0].env?.NO_PROXY).toContain("127.0.0.1");
+    expect(lifecycleOptions[0].env?.NO_PROXY).toContain("localhost");
+    expect(lifecycleOptions[0].env?.NO_PROXY).toContain("::1");
+  });
+
+  it("显式代理环境变量存在时不应被系统代理覆盖", async () => {
+    setProcessPlatform("darwin");
+    process.env.HTTPS_PROXY = "http://explicit.proxy:8080";
+    setSystemProxyRules("PROXY 127.0.0.1:7890; DIRECT");
+    const { ElectronAppServerHost } = await import("./appServerHost");
+    const host = new ElectronAppServerHost();
+
+    await host.warmup();
+
+    expect(lifecycleOptions).toHaveLength(1);
+    expect(lifecycleOptions[0].env?.HTTPS_PROXY).toBeUndefined();
+    expect(lifecycleOptions[0].env?.NO_PROXY).toContain("127.0.0.1");
   });
 
   it("支持通过环境变量配置迁移后旧 Product DB 清理策略", async () => {
@@ -773,7 +864,8 @@ describe("ElectronAppServerHost", () => {
           id: "local-package-inspect",
           method: "pluginLocalPackage/inspect",
           params: {
-            appDir: "/Users/coso/Documents/dev/ai/limecloud/content-factory-app",
+            appDir:
+              "/Users/coso/Documents/dev/ai/limecloud/content-factory-app",
           },
         }),
       ],

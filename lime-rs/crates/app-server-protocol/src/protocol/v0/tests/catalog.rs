@@ -8,6 +8,7 @@ fn app_server_method_catalog_keeps_request_and_notification_methods_together() {
         vec![
             METHOD_INITIALIZE,
             METHOD_INITIALIZED,
+            METHOD_CONFIG_WARNING,
             METHOD_CAPABILITY_LIST,
             METHOD_ARTIFACT_READ,
             METHOD_FILE_SYSTEM_LIST_DIRECTORY,
@@ -334,6 +335,7 @@ fn app_server_method_catalog_keeps_request_and_notification_methods_together() {
     assert!(is_app_server_request_method(METHOD_WORKFLOW_RESPOND));
     assert!(!is_app_server_request_method(METHOD_INITIALIZED));
     assert!(is_app_server_notification_method(METHOD_INITIALIZED));
+    assert!(is_app_server_notification_method(METHOD_CONFIG_WARNING));
     assert!(is_app_server_notification_method(
         METHOD_AGENT_SESSION_EVENT
     ));

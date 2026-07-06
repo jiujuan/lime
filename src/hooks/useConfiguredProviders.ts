@@ -10,6 +10,7 @@ import type { ProviderWithKeysDisplay } from "@/lib/api/apiKeyProvider";
 import { useApiKeyProvider } from "./useApiKeyProvider";
 import { getRegistryIdFromType } from "@/lib/constants/providerMappings";
 import { resolvePromptCacheSupportNotice } from "@/lib/model/providerPromptCacheSupport";
+import { isManagedLimeHubTenantModelEndpoint } from "@/lib/model/providerModelFetchSupport";
 import type { ProviderDeclaredPromptCacheMode } from "@/lib/types/provider";
 import {
   buildOemLimeHubApiHost,
@@ -93,10 +94,13 @@ function normalizeConfiguredProviderSelector(value?: string | null): string {
 function hasConfiguredKeylessAccess(
   provider: ProviderWithKeysDisplay,
 ): boolean {
+  if (!provider.enabled || provider.api_host.trim().length === 0) {
+    return false;
+  }
+
   return (
-    normalizeProviderType(provider.type) === "ollama" &&
-    provider.enabled &&
-    provider.api_host.trim().length > 0
+    normalizeProviderType(provider.type) === "ollama" ||
+    isManagedLimeHubTenantModelEndpoint({ apiHost: provider.api_host })
   );
 }
 

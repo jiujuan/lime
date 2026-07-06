@@ -1,6 +1,5 @@
 import { sanitizeMessageTextForDisplay } from "../utils/messageDisplaySanitizer";
 import { isAgentMessageCommentaryPhase } from "../utils/agentMessagePhase";
-import { isRuntimeStatusDiagnosticsOnly } from "../utils/turnSummaryPresentation";
 import type { AgentThreadItem, Message } from "../types";
 
 export type MessageContentPart = NonNullable<Message["contentParts"]>[number];
@@ -30,18 +29,7 @@ export function hasInlineProcessContentParts(
     return false;
   }
 
-  if (
-    message.isThinking &&
-    !options.displayContent.trim() &&
-    isRuntimeStatusDiagnosticsOnly(message.runtimeStatus)
-  ) {
-    return false;
-  }
-
-  return Boolean(
-    options.displayContent.trim() ||
-    options.timelineItems?.some((item) => item.type === "reasoning"),
-  );
+  return true;
 }
 
 function hasProcessBoundaryContentPart(

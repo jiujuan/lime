@@ -1,7 +1,7 @@
 # Lime Soul 个性化图谱
 
 > 状态：current diagrams
-> 更新时间：2026-06-03
+> 更新时间：2026-07-06
 > 目标：用架构图、流程图和时序图固定 Soul 与 Memory、SOUL.md、Generation Brief 的边界。
 
 ## 1. 总体架构图
@@ -14,13 +14,17 @@ flowchart TB
   ExpertUser[专家用户] --> ExpertPlaza[Expert Plaza / 专家广场]
 
   Settings --> SoulConfig[Global Soul Config]
+  SoulConfig --> StyleResolver[Style Resolver]
+  BuiltInStyles[4 built-in Style Pack seeds] --> StyleRegistry[Style Pack Registry]
+  StyleRegistry --> StyleResolver
+  StyleResolver --> StyleContext[memory_soul_prompt_context]
   Import --> Adapter[SOUL.md Adapter]
   Adapter --> Preview[导入预览 / 风险提示]
   Preview --> Confirm{用户确认?}
   Confirm -- 是 --> SoulConfig
   Confirm -- 否 --> Drop[不写入配置]
 
-  SoulConfig --> PromptService[memory_profile_prompt_service]
+  StyleContext --> PromptService[memory_profile_prompt_service]
   MemoryProfile[memory.profile] --> PromptService
   MemorySources[memory sources] --> PromptService
   PromptService --> RuntimeTurn[runtime_turn]
@@ -49,17 +53,18 @@ flowchart TB
   classDef guard fill:#FDF2F8,stroke:#DB2777,color:#831843;
 
   class User,Advanced,Creator,ExpertUser,Settings,Import,Preview,Confirm,Drop,Chat,Artifact,Bubble,ExpertPlaza product;
-  class PromptService,RuntimeTurn,Intent,Guard,Brief,ExpertMeta runtime;
-  class SoulConfig,MemoryProfile,MemorySources,Unified,Companion store;
+  class PromptService,RuntimeTurn,Intent,Guard,Brief,ExpertMeta,StyleResolver,StyleContext runtime;
+  class SoulConfig,MemoryProfile,MemorySources,Unified,Companion,StyleRegistry,BuiltInStyles store;
 ```
 
 固定判断：
 
 1. `SOUL.md Adapter` 只写 current config，不成为 runtime 输入源。
-2. `Global Soul Config` 默认只通过 prompt service 影响普通聊天。
-3. 正式 artifact 只从 `Generation Brief` 接收 Creator / Brand Voice。
-4. Companion Soul 只影响气泡。
-5. Expert Persona 通过 expert runtime metadata 影响当前专家会话，不写回 Global Soul。
+2. `Global Soul Config` 先经 Style Resolver / Style Pack Registry 形成 `memory_soul_prompt_context`，再影响普通聊天。
+3. Style Pack seed 只提供规则、surface contract、anti-repetition、few-shot anchor 和 risk fallback，不提供本地 i18n 句库。
+4. 正式 artifact 只从 `Generation Brief` 接收 Creator / Brand Voice。
+5. Companion Soul 只影响气泡。
+6. Expert Persona 通过 expert runtime metadata 影响当前专家会话，不写回 Global Soul。
 
 ## 2. Soul / Memory 边界图
 
@@ -172,6 +177,8 @@ sequenceDiagram
   participant U as 用户
   participant UI as Chat UI
   participant Config as Soul / Memory Config
+  participant Registry as Style Pack Registry
+  participant Resolver as Style Resolver
   participant Prompt as memory_profile_prompt_service
   participant Runtime as runtime_turn
   participant Model as 模型
@@ -179,7 +186,10 @@ sequenceDiagram
   U->>UI: 发送普通聊天
   UI->>Runtime: agent_runtime_submit_turn
   Runtime->>Config: 读取 memory profile / Global Soul
-  Config-->>Prompt: 配置投影
+  Config->>Resolver: memory.soul.style_profile_id
+  Registry-->>Resolver: built-in / installed style profile
+  Resolver-->>Prompt: memory_soul_prompt_context + surface contracts
+  Config-->>Prompt: memory profile 配置投影
   Prompt->>Prompt: 构建用户画像 + 全局交互人格 section
   Prompt-->>Runtime: merged system prompt
   Runtime->>Model: 调用模型
@@ -193,6 +203,39 @@ sequenceDiagram
 2. 稳定 marker 防止重复注入。
 3. 当前用户指令优先。
 4. 关闭 Soul 后不渲染 Soul section。
+5. i18n / UI 不根据 profile id 拼最终句子；风格表达来自 prompt context + runtime facts + 模型 narrative。
+
+## 5.5 Style Profile 工具生命周期图
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant U as 用户
+  participant Runtime as Agent Runtime
+  participant Tool as Tool Runtime
+  participant Facts as Tool Read Model
+  participant Soul as memory_soul_prompt_context
+  participant Model as 模型
+  participant UI as Agent Chat UI
+
+  U->>Runtime: 发送会触发工具的任务
+  Runtime->>Soul: 读取 resolved style profile / pack
+  Soul-->>Model: before_tool surface contract
+  Model-->>UI: 工具前说明 L2
+  Runtime->>Tool: 执行工具
+  Tool-->>Facts: phase / status / toolName / facts / riskLevel
+  Facts-->>UI: neutral i18n label + descriptor metadata
+  Facts-->>Model: 工具结果 / 失败原因 / 部分成功事实
+  Soul-->>Model: after_tool_* / body_detail contract
+  Model-->>UI: 工具后承接、正文转折、风险提示、结尾建议
+```
+
+验收重点：
+
+1. `before_tool`、`after_tool_success`、`after_tool_partial_failure`、`after_tool_failure` 都属于 L2 narrative，不由 UI 句库伪装。
+2. `tool_running`、折叠条、工具卡片按钮主要是 L0-L1 neutral i18n + facts。
+3. 高风险命中后，工具前说明、失败恢复和结尾建议降级为 `calm_professional_partner`。
+4. 同一任务切换两个 profile 时，表达节奏和承接方式不同；工具事实、来源、数字和错误原因不变。
 
 ## 6. 正式创作声线时序图
 

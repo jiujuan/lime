@@ -1,4 +1,8 @@
 use super::types::{LlmEvent, LlmOutputPart, LlmRole};
+use crate::runtime_content::{
+    runtime_media_part_from_reference, RuntimeContentPart, RuntimeMediaPartInput,
+    RuntimeMessageDeltaContent,
+};
 use serde_json::{json, Value};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -74,14 +78,11 @@ pub fn runtime_event_from_llm_event(event: &LlmEvent) -> LlmRuntimeEvent {
 
 fn output_part_runtime_event(part: &LlmOutputPart, event: &LlmEvent) -> LlmRuntimeEvent {
     match part {
-        LlmOutputPart::Text { text } => LlmRuntimeEvent {
-            event_type: "message.delta",
-            payload: json!({
-                "text": text,
-                "backend": "llm_protocol",
-                "runtimeEvent": event,
-            }),
-        },
+        LlmOutputPart::Text { text } => message_delta_runtime_event(
+            RuntimeMessageDeltaContent::text(text.to_owned()),
+            None,
+            event,
+        ),
         LlmOutputPart::Reasoning { text } => LlmRuntimeEvent {
             event_type: "thinking.delta",
             payload: json!({
@@ -105,15 +106,77 @@ fn output_part_runtime_event(part: &LlmOutputPart, event: &LlmEvent) -> LlmRunti
                 "runtimeEvent": event,
             }),
         },
-        LlmOutputPart::Image { .. } | LlmOutputPart::Audio { .. } => LlmRuntimeEvent {
-            event_type: "runtime.event",
-            payload: json!({
-                "kind": "llm_output_part",
-                "part": part,
-                "backend": "llm_protocol",
-                "runtimeEvent": event,
-            }),
-        },
+        LlmOutputPart::Image { .. } | LlmOutputPart::Audio { .. } => {
+            if let Some(content_part) = llm_media_output_content_part(part) {
+                return message_delta_runtime_event(
+                    RuntimeMessageDeltaContent::content_part(content_part),
+                    Some("llm_protocol_media_output"),
+                    event,
+                );
+            }
+            generic_output_part_runtime_event(part, event)
+        }
+    }
+}
+
+fn llm_media_output_content_part(part: &LlmOutputPart) -> Option<RuntimeContentPart> {
+    let (uri, mime_type) = match part {
+        LlmOutputPart::Image {
+            image_url,
+            mime_type,
+        } => (image_url, mime_type.as_deref()?),
+        LlmOutputPart::Audio {
+            audio_url,
+            mime_type,
+        } => (audio_url, mime_type.as_deref()?),
+        _ => return None,
+    };
+
+    runtime_media_part_from_reference(RuntimeMediaPartInput {
+        uri: uri.to_owned(),
+        mime_type: mime_type.to_owned(),
+        title: None,
+        caption: None,
+        sha256: None,
+        byte_size: None,
+    })
+    .ok()
+}
+
+fn message_delta_runtime_event(
+    content: RuntimeMessageDeltaContent,
+    source: Option<&'static str>,
+    event: &LlmEvent,
+) -> LlmRuntimeEvent {
+    let mut payload =
+        serde_json::to_value(content).expect("runtime message delta content serializes");
+    let payload_object = payload
+        .as_object_mut()
+        .expect("runtime message delta content serializes to object");
+    if let Some(source) = source {
+        payload_object.insert("source".to_string(), json!(source));
+    }
+    payload_object.insert("backend".to_string(), json!("llm_protocol"));
+    payload_object.insert(
+        "runtimeEvent".to_string(),
+        serde_json::to_value(event).expect("llm event serializes"),
+    );
+
+    LlmRuntimeEvent {
+        event_type: "message.delta",
+        payload,
+    }
+}
+
+fn generic_output_part_runtime_event(part: &LlmOutputPart, event: &LlmEvent) -> LlmRuntimeEvent {
+    LlmRuntimeEvent {
+        event_type: "runtime.event",
+        payload: json!({
+            "kind": "llm_output_part",
+            "part": part,
+            "backend": "llm_protocol",
+            "runtimeEvent": event,
+        }),
     }
 }
 

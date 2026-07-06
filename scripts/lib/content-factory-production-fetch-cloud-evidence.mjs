@@ -234,6 +234,7 @@ export function buildFetchCloudEvidence({
   result,
   error,
 }) {
+  const signatureProof = signatureProofFromCatalog(catalog);
   const packageHashMatched =
     Boolean(result?.packageHash) &&
     normalizeHash(result.packageHash) === normalizeHash(descriptor.packageHash);
@@ -252,8 +253,11 @@ export function buildFetchCloudEvidence({
     catalog,
     descriptor,
   });
+  const signaturePolicy =
+    signatureVerificationStatus === "verified" ? "required" : "not_configured";
   const ready =
     packageVerificationStatus === "verified" &&
+    signaturePolicy === "required" &&
     signatureVerificationStatus === "verified";
   return {
     schemaVersion: "content-factory-fetch-cloud-evidence.v1",
@@ -264,6 +268,17 @@ export function buildFetchCloudEvidence({
     packageHashMatched,
     manifestHashMatched,
     packageVerificationStatus,
+    signaturePolicy,
+    signatureRef: descriptor.signatureRef ?? null,
+    signatureProof: signatureProof
+      ? {
+          algorithm: signatureProof.algorithm ?? null,
+          payloadHash: signatureProof.payloadHash ?? null,
+          publicKeyId: signatureProof.publicKeyId ?? null,
+          signature: signatureProof.signature ?? null,
+          signedAt: signatureProof.signedAt ?? null,
+        }
+      : null,
     signatureVerificationStatus,
     descriptor,
     cacheEntry: result

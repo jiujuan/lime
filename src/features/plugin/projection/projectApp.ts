@@ -6,6 +6,8 @@ import type {
   NormalizedAppManifest,
   PackageIdentity,
   ProjectedEntry,
+  SkillRequirementProjection,
+  ToolRequirementProjection,
 } from "../types";
 import { projectInstallContract } from "../install-mode";
 
@@ -61,13 +63,15 @@ function collectGlobalRequirements(
 ): CapabilityRequirement[] {
   const requirements = new Map<string, CapabilityRequirement>();
 
-  Object.entries(manifest.requires.capabilities).forEach(([capability, range]) => {
-    upsertRequirement(requirements, {
-      capability,
-      requestedRange: range,
-      declaredBy: "requires",
-    });
-  });
+  Object.entries(manifest.requires.capabilities).forEach(
+    ([capability, range]) => {
+      upsertRequirement(requirements, {
+        capability,
+        requestedRange: range,
+        declaredBy: "requires",
+      });
+    },
+  );
 
   if (manifest.storage) {
     upsertRequirement(requirements, {
@@ -119,6 +123,54 @@ function collectEntryRequirements(
   return Array.from(requirements.values()).sort((left, right) =>
     left.capability.localeCompare(right.capability),
   );
+}
+
+function projectSkillRequirements(
+  manifest: NormalizedAppManifest,
+): SkillRequirementProjection[] {
+  if (manifest.runtimeCapabilities) {
+    return manifest.runtimeCapabilities.skills.map((skill) => ({
+      id: skill.id,
+      title: skill.title,
+      description: skill.description,
+      activation: skill.activation,
+      required: skill.required ?? false,
+      promptInjectionPolicy: skill.promptInjectionPolicy,
+    }));
+  }
+
+  return manifest.skillRefs.map((skill) => ({
+    id: skill.id,
+    title: skill.title,
+    description: skill.description,
+    standard: skill.standard,
+    activation: skill.activation,
+    required: skill.required ?? false,
+  }));
+}
+
+function projectToolRequirements(
+  manifest: NormalizedAppManifest,
+): ToolRequirementProjection[] {
+  if (manifest.runtimeCapabilities) {
+    return manifest.runtimeCapabilities.tools.map((tool) => ({
+      key: tool.key,
+      title: tool.title,
+      provider: tool.provider,
+      bindingKind: tool.bindingKind,
+      capabilities: tool.capabilities,
+      required: tool.required ?? false,
+    }));
+  }
+
+  return manifest.toolRefs.map((tool) => ({
+    key: tool.key,
+    title: tool.title,
+    description: tool.description,
+    provider: tool.provider,
+    capabilities: tool.capabilities ?? [],
+    required: tool.required ?? false,
+  }));
 }
 
 export function projectApp(params: {
@@ -203,18 +255,8 @@ export function projectApp(params: {
       humanReview: workflow.humanReview ?? false,
       required: workflow.required ?? false,
     })),
-    skillRequirements: manifest.skillRefs.map((skill) => ({
-      id: skill.id,
-      standard: skill.standard,
-      activation: skill.activation,
-      required: skill.required ?? false,
-    })),
-    toolRequirements: manifest.toolRefs.map((tool) => ({
-      key: tool.key,
-      provider: tool.provider,
-      capabilities: tool.capabilities ?? [],
-      required: tool.required ?? false,
-    })),
+    skillRequirements: projectSkillRequirements(manifest),
+    toolRequirements: projectToolRequirements(manifest),
     evals: manifest.evals.map((evalRule) => ({
       key: evalRule.key,
       kind: evalRule.kind,
@@ -240,10 +282,14 @@ export function projectApp(params: {
     ui: manifest.ui,
     lifecycle: manifest.lifecycle,
     install: projectInstallContract(manifest.install),
+    ...(manifest.runtimeCapabilities
+      ? { runtimeCapabilities: manifest.runtimeCapabilities }
+      : {}),
     readinessHints: [
       {
         code: "LAB_ONLY",
-        message: "P0 projection is lab-only and must not be registered into the main product path.",
+        message:
+          "P0 projection is lab-only and must not be registered into the main product path.",
         severity: "info",
       },
     ],

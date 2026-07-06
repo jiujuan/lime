@@ -139,6 +139,33 @@ describe("buildConfiguredProviders", () => {
     expect(providers).toEqual([]);
   });
 
+  it("OEM Runtime 已登录且后端返回 tenant Lime Hub 时应视为已配置 Provider", () => {
+    const providers = buildConfiguredProviders(
+      [
+        createApiKeyProvider({
+          id: "lime-hub",
+          name: "Lime Hub",
+          type: "openai",
+          api_host: "https://llm.limeai.run#lime_tenant_id=tenant-0001",
+          api_key_count: 0,
+          custom_models: [],
+        }),
+      ],
+      {
+        oemRuntime: createOemRuntime({ sessionToken: "session-token" }),
+      },
+    );
+
+    expect(providers).toEqual([
+      expect.objectContaining({
+        key: "lime-hub",
+        providerId: "lime-hub",
+        label: "Lime Hub",
+        authStatus: "ready",
+      }),
+    ]);
+  });
+
   it("无 Key 的 Ollama 缺少地址或被禁用时不应展示", () => {
     const missingHostProviders = buildConfiguredProviders([
       createApiKeyProvider({

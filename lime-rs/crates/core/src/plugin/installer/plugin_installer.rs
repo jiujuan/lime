@@ -20,6 +20,28 @@ use super::types::{
 };
 use super::validator::PackageValidator;
 
+const PLUGIN_INSTALLER_TEMP_DIR: &str = "plugin-installer";
+const PLUGIN_TEMP_CACHE_DIR: &str = "plugin-cache";
+
+fn default_plugin_temp_dir() -> PathBuf {
+    std::env::temp_dir().join(PLUGIN_INSTALLER_TEMP_DIR)
+}
+
+fn normalize_temp_dir(temp_dir: PathBuf) -> PathBuf {
+    if is_inside_system_cache_dir(&temp_dir) {
+        let leaf = temp_dir
+            .file_name()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("default"));
+        return default_plugin_temp_dir().join(leaf);
+    }
+    temp_dir
+}
+
+fn is_inside_system_cache_dir(path: &Path) -> bool {
+    dirs::cache_dir().is_some_and(|cache_dir| path.starts_with(cache_dir))
+}
+
 /// 插件安装器
 ///
 /// 负责协调整个安装流程
@@ -37,8 +59,14 @@ pub struct PluginInstaller {
 }
 
 impl PluginInstaller {
+    /// 默认临时目录，固定走系统临时目录，避免写入用户缓存目录。
+    pub fn default_temp_dir() -> PathBuf {
+        default_plugin_temp_dir()
+    }
+
     /// 创建新的安装器实例
     pub fn new(plugins_dir: PathBuf, temp_dir: PathBuf, db_conn: Arc<Mutex<Connection>>) -> Self {
+        let temp_dir = normalize_temp_dir(temp_dir);
         Self {
             plugins_dir,
             temp_dir,
@@ -56,6 +84,7 @@ impl PluginInstaller {
     ) -> Result<Self, InstallError> {
         let registry = PluginRegistry::from_path(db_path)?;
         registry.init_tables()?;
+        let temp_dir = normalize_temp_dir(temp_dir);
 
         Ok(Self {
             plugins_dir,
@@ -233,11 +262,11 @@ impl PluginInstaller {
         Ok(())
     }
 
-    /// 清理插件在 Application Support 下的数据目录
+    /// 清理插件的数据目录
     ///
     /// 插件可能在以下位置创建数据：
     /// - ~/Library/Application Support/{plugin-id}
-    /// - ~/Library/Caches/{plugin-id}
+    /// - {system-temp}/plugin-installer/plugin-cache/{plugin-id}
     /// - ~/Library/WebKit/{plugin-id}
     fn cleanup_plugin_data_dirs(&self, plugin_id: &str) {
         // 获取用户数据目录
@@ -249,13 +278,10 @@ impl PluginInstaller {
             }
         }
 
-        // 获取缓存目录
-        if let Some(cache_dir) = dirs::cache_dir() {
-            // ~/Library/Caches/{plugin-id}
-            let plugin_cache_dir = cache_dir.join(plugin_id);
-            if plugin_cache_dir.exists() {
-                let _ = fs::remove_dir_all(&plugin_cache_dir);
-            }
+        // 临时缓存只允许走系统临时目录，便于用户统一清理。
+        let plugin_temp_cache_dir = self.plugin_temp_cache_dir(plugin_id);
+        if plugin_temp_cache_dir.exists() {
+            let _ = fs::remove_dir_all(&plugin_temp_cache_dir);
         }
 
         // 清理 WebKit 数据目录（macOS 特有）
@@ -268,6 +294,10 @@ impl PluginInstaller {
                 }
             }
         }
+    }
+
+    fn plugin_temp_cache_dir(&self, plugin_id: &str) -> PathBuf {
+        self.temp_dir.join(PLUGIN_TEMP_CACHE_DIR).join(plugin_id)
     }
 
     /// 清理旧版本插件（用于更新安装）

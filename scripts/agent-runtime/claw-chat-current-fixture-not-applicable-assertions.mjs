@@ -4,6 +4,7 @@ import {
   EXPERT_PLAZA_SKILLS_RUNTIME_ASSERTION_KEYS,
   EXPERT_SKILLS_RUNTIME_ASSERTION_KEYS,
   IMAGE_COMMAND_ASSERTION_KEYS,
+  INPUTBAR_RICH_RESTORE_ASSERTION_KEYS,
   MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
   MULTI_AGENT_TEAM_ASSERTION_KEYS,
   RIGHT_SURFACE_VISUAL_MATRIX_ASSERTION_KEYS,
@@ -21,6 +22,7 @@ export function buildNotApplicableAssertions(context) {
     isExpertPlazaSkillsRuntimeScenario,
     isGoalScenario,
     isImageCommandScenario,
+    isInputbarRichRestoreScenario,
     isMcpStructuredContentScenario,
     isMultiAgentTeamScenario,
     isPlanScenario,
@@ -67,6 +69,7 @@ export function buildNotApplicableAssertions(context) {
       ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
       ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
       ...IMAGE_COMMAND_ASSERTION_KEYS,
+      ...INPUTBAR_RICH_RESTORE_ASSERTION_KEYS,
       ...MULTI_AGENT_TEAM_ASSERTION_KEYS,
       ...SKILLS_RUNTIME_ASSERTION_KEYS,
       ...EXPERT_SKILLS_RUNTIME_ASSERTION_KEYS,
@@ -109,6 +112,43 @@ export function buildNotApplicableAssertions(context) {
         ...MULTI_AGENT_TEAM_ASSERTION_KEYS,
         ...SKILLS_RUNTIME_ASSERTION_KEYS,
       ]
+    : isInputbarRichRestoreScenario
+      ? [
+          "usedCurrentTurnCancel",
+          "externalFixtureCancelUsed",
+          "fixtureCancelReachedBackend",
+          "guiStopClicked",
+          "readModelCanceled",
+          "continuePromptReachedBackend",
+          "guiContinueInputSubmitted",
+          "guiContinueCompleted",
+          "readModelContinueCompleted",
+          "backendRecordedCancelThenContinue",
+          "noEpochFallbackTitle",
+          "readModelCompleted",
+          "eventReadProbeObserved",
+          "readModelEventReadAligned",
+          "readModelToolCallAligned",
+          "planModeEnabledInGui",
+          "planPromptReachedBackend",
+          "planCollaborationModeReachedBackend",
+          "guiPlanRailVisible",
+          "guiPlanStepsVisible",
+          "guiPlanDecisionDrawerVisible",
+          "readModelPlanCompleted",
+          "proposedPlanVisible",
+          "goalModeEnabledInGui",
+          "goalPromptReachedBackend",
+          "goalObjectiveTextReachedBackend",
+          "goalManagedObjectiveReachedBackend",
+          "guiGoalCompleted",
+          "readModelGoalCompleted",
+          ...WEB_TOOLS_RENDERING_ASSERTION_KEYS,
+          ...MCP_STRUCTURED_CONTENT_ASSERTION_KEYS,
+          ...IMAGE_COMMAND_ASSERTION_KEYS,
+          ...MULTI_AGENT_TEAM_ASSERTION_KEYS,
+          ...SKILLS_RUNTIME_ASSERTION_KEYS,
+        ]
     : isCancelThenContinueScenario
       ? [
           "noEpochFallbackTitle",
@@ -475,6 +515,7 @@ export function buildNotApplicableAssertions(context) {
         ...IMAGE_COMMAND_ASSERTION_KEYS,
         ...MULTI_AGENT_TEAM_ASSERTION_KEYS,
         ...SKILLS_RUNTIME_ASSERTION_KEYS,
+        ...INPUTBAR_RICH_RESTORE_ASSERTION_KEYS,
         ...(isExpertPlazaSkillsRuntimeScenario ||
         isExpertPanelSkillsRuntimeScenario
           ? []
@@ -495,5 +536,8 @@ export function buildNotApplicableAssertions(context) {
     ...RIGHT_SURFACE_VISUAL_MATRIX_ASSERTION_KEYS,
     ...CONTENT_FACTORY_ARTICLE_WORKSPACE_ASSERTION_KEYS,
     ...(isMultiAgentTeamScenario ? [] : MULTI_AGENT_TEAM_ASSERTION_KEYS),
+    ...(isInputbarRichRestoreScenario
+      ? []
+      : INPUTBAR_RICH_RESTORE_ASSERTION_KEYS),
   ];
 }

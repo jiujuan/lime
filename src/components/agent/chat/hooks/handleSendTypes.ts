@@ -2,6 +2,7 @@ import type { AssistantDraftState, SlashSkillRequest } from "./agentChatShared";
 import type { AgentRuntimeWebSearchMode } from "@/lib/api/agentRuntime";
 import type { ChatToolPreferences } from "../utils/chatToolPreferences";
 import type { InputCapabilitySendRoute } from "../skill-selection/inputCapabilitySelection";
+import type { InterruptedInputDraftSnapshot } from "./agentStreamInputRestoreTypes";
 
 export interface HandleSendObserver {
   onComplete?: (content: string) => void;
@@ -18,6 +19,7 @@ export interface HandleSendOptions {
   displayContent?: string;
   skillRequest?: SlashSkillRequest;
   capabilityRoute?: InputCapabilitySendRoute;
+  inputRestoreDraft?: InterruptedInputDraftSnapshot;
   providerOverride?: string;
   modelOverride?: string;
   reasoningEffort?: string;

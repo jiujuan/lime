@@ -202,6 +202,12 @@ describe("useInputbarSend", () => {
       images: undefined,
       textOverride: "请查看这些文件或文件夹。",
       sendOptions: {
+        inputRestoreDraft: {
+          text: "",
+          images: [],
+          pathReferences: [createPathReference()],
+          inputCapabilityRoute: undefined,
+        },
         requestMetadata: {
           path_references: [
             {
@@ -270,6 +276,16 @@ describe("useInputbarSend", () => {
           kind: "installed_skill",
           skillKey: "capability-report",
           skillName: "Capability Report",
+        },
+        inputRestoreDraft: {
+          text: "生成一份能力报告",
+          images: [],
+          pathReferences: [],
+          inputCapabilityRoute: {
+            kind: "installed_skill",
+            skillKey: "capability-report",
+            skillName: "Capability Report",
+          },
         },
         displayContent: "生成一份能力报告",
         requestMetadata: {

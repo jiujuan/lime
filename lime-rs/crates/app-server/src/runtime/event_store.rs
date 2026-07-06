@@ -5,7 +5,12 @@ use super::turn_input_events;
 use super::*;
 use crate::agent_ui_event_schema;
 use crate::agent_ui_sequence_verifier;
+use crate::runtime_backend::tool_process_metadata::SoulStyleMetadata;
+use crate::runtime_backend::{
+    current_agent_runtime_config_metadata, tool_process_external_metadata,
+};
 use app_server_protocol::*;
+use serde_json::Value;
 use std::sync::{Arc, Mutex};
 
 impl RuntimeCoreEventAppender {
@@ -153,6 +158,16 @@ fn append_runtime_events_to_stored_session(
     if runtime_events.is_empty() {
         return Ok(Vec::new());
     }
+    let should_resolve_soul_style = runtime_events.iter().any(|event| {
+        let event_class = normalized_runtime_event_class(&event.event_type);
+        should_enrich_tool_process_event_payload_class(event_class)
+            || should_enrich_tool_policy_event_payload_class(event_class)
+    });
+    let soul_config_metadata = should_resolve_soul_style
+        .then(current_agent_runtime_config_metadata)
+        .flatten();
+    let fallback_soul_style =
+        SoulStyleMetadata::from_config_metadata(soul_config_metadata.as_ref());
     let (workflow_audit_events, runtime_events): (Vec<_>, Vec<_>) = runtime_events
         .into_iter()
         .partition(|event| event.event_type.starts_with("workflow."));
@@ -194,6 +209,40 @@ fn append_runtime_events_to_stored_session(
             )
         } else {
             runtime_event.payload
+        };
+        let payload = if should_enrich_tool_process_event_payload_class(event_class) {
+            let mut payload = payload;
+            if let Value::Object(payload_object) = &mut payload {
+                let context = validation_events
+                    .as_ref()
+                    .expect("tool process event validation context should be built");
+                tool_process_external_metadata::enrich_external_tool_process_payload(
+                    context,
+                    &event_type,
+                    payload_object,
+                    fallback_soul_style.as_ref(),
+                );
+            }
+            payload
+        } else {
+            payload
+        };
+        let payload = if should_enrich_tool_policy_event_payload_class(event_class) {
+            let mut payload = payload;
+            if let Value::Object(payload_object) = &mut payload {
+                let context = validation_events
+                    .as_ref()
+                    .expect("tool policy event validation context should be built");
+                tool_process_external_metadata::enrich_external_tool_policy_payload(
+                    context,
+                    &event_type,
+                    payload_object,
+                    fallback_soul_style.as_ref(),
+                );
+            }
+            payload
+        } else {
+            payload
         };
         let text_delta_event = is_text_delta_event_class(event_class);
         let turn_terminal_event = is_turn_terminal_event_class(event_class);
@@ -502,6 +551,8 @@ fn should_validate_tool_lifecycle_event_class(event_class: &str) -> bool {
         event_class,
         "tool.args"
             | "tool.args.delta"
+            | "tool.input.delta"
+            | "tool.progress"
             | "tool.output.delta"
             | "tool.result"
             | "tool.failed"
@@ -515,12 +566,34 @@ fn should_validate_tool_lifecycle_event_class(event_class: &str) -> bool {
     )
 }
 
+fn should_enrich_tool_process_event_payload_class(event_class: &str) -> bool {
+    matches!(
+        event_class,
+        "tool.started"
+            | "tool.args"
+            | "tool.args.delta"
+            | "tool.input.delta"
+            | "tool.progress"
+            | "tool.output.delta"
+            | "tool.result"
+            | "tool.failed"
+    )
+}
+
+fn should_enrich_tool_policy_event_payload_class(event_class: &str) -> bool {
+    matches!(
+        event_class,
+        "action.required" | "permission.denied" | "sandbox.blocked"
+    )
+}
+
 fn normalized_runtime_event_class(event_type: &str) -> &str {
     match event_type {
         "message.created" => "message.created",
         "tool_args" => "tool.args",
         "tool_args_delta" => "tool.args.delta",
         "tool_output_delta" => "tool.output.delta",
+        "tool_input_delta" => "tool.input.delta",
         "turn.canceled" => "turn.canceled",
         value => value,
     }

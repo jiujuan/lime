@@ -620,15 +620,73 @@ fn llm_failed_maps_to_current_turn_failed_event() {
 }
 
 #[test]
-fn llm_image_and_audio_outputs_stay_generic_until_projection_exists() {
+fn llm_image_and_audio_outputs_map_to_runtime_content_message_delta() {
+    let cases = [
+        (
+            LlmOutputPart::Image {
+                image_url: "https://example.test/image.png".to_string(),
+                mime_type: Some("image/png".to_string()),
+            },
+            "image",
+            "https://example.test/image.png",
+            "image/png",
+        ),
+        (
+            LlmOutputPart::Audio {
+                audio_url: "https://example.test/audio.mp3".to_string(),
+                mime_type: Some("audio/mpeg".to_string()),
+            },
+            "audio",
+            "https://example.test/audio.mp3",
+            "audio/mpeg",
+        ),
+    ];
+
+    for (part, kind, uri, mime_type) in cases {
+        let runtime_event = runtime_event_from_llm_event(&LlmEvent::OutputDelta { part });
+
+        assert_eq!(runtime_event.event_type, "message.delta");
+        assert_eq!(
+            runtime_event.payload["source"].as_str(),
+            Some("llm_protocol_media_output")
+        );
+        assert_eq!(
+            runtime_event.payload["backend"].as_str(),
+            Some("llm_protocol")
+        );
+
+        let content_part = &runtime_event.payload["contentPart"];
+        assert_eq!(content_part["type"], json!("media"));
+        assert_eq!(content_part["kind"], json!(kind));
+        assert_eq!(content_part["reference"]["uri"], json!(uri));
+        assert_eq!(content_part["reference"]["mime_type"], json!(mime_type));
+
+        let content_parts = runtime_event.payload["contentParts"]
+            .as_array()
+            .expect("content parts");
+        assert_eq!(content_parts.len(), 1);
+        assert_eq!(&content_parts[0], content_part);
+        assert_eq!(
+            runtime_event.payload["runtimeEvent"]["type"].as_str(),
+            Some("output_delta")
+        );
+    }
+}
+
+#[test]
+fn llm_media_outputs_stay_generic_without_reference_safe_mime() {
     for part in [
         LlmOutputPart::Image {
-            image_url: "https://example.test/image.png".to_string(),
+            image_url: "data:image/png;base64,abc".to_string(),
             mime_type: Some("image/png".to_string()),
+        },
+        LlmOutputPart::Image {
+            image_url: "https://example.test/image.png".to_string(),
+            mime_type: Some("text/plain".to_string()),
         },
         LlmOutputPart::Audio {
             audio_url: "https://example.test/audio.mp3".to_string(),
-            mime_type: Some("audio/mpeg".to_string()),
+            mime_type: None,
         },
     ] {
         let runtime_event = runtime_event_from_llm_event(&LlmEvent::OutputDelta { part });
@@ -638,6 +696,8 @@ fn llm_image_and_audio_outputs_stay_generic_until_projection_exists() {
             runtime_event.payload["kind"].as_str(),
             Some("llm_output_part")
         );
+        assert!(runtime_event.payload.get("contentPart").is_none());
+        assert!(runtime_event.payload.get("contentParts").is_none());
     }
 }
 

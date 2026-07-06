@@ -1,4 +1,5 @@
 import type { AgentEvent } from "@/lib/api/agentProtocol";
+import type { SoulInteractionCopy } from "@/lib/soul/interactionCopy";
 import type {
   AgentUiProjectionContext,
   AgentUiProjectionEvent,
@@ -33,6 +34,10 @@ import {
 import {
   buildToolProjectionEvents,
 } from "./toolEventProjection";
+
+export interface AgentUiProjectionOptions {
+  soulCopy?: SoulInteractionCopy;
+}
 
 export type {
   AgentUiControl,
@@ -94,6 +99,7 @@ export {
 export function buildAgentUiProjectionEvents(
   event: AgentEvent,
   context: AgentUiProjectionContext = {},
+  options: AgentUiProjectionOptions = {},
 ): AgentUiProjectionEvent[] {
   const events: AgentUiProjectionEvent[] = (() => {
     switch (event.type) {
@@ -127,15 +133,15 @@ export function buildAgentUiProjectionEvents(
       case "runtime_status":
         return buildRuntimeLifecycleEvents(event, context);
       case "tool_start":
-        return buildToolProjectionEvents(event, context);
+        return buildToolProjectionEvents(event, context, options);
       case "tool_end":
-        return buildToolProjectionEvents(event, context);
+        return buildToolProjectionEvents(event, context, options);
       case "tool_progress":
-        return buildToolProjectionEvents(event, context);
+        return buildToolProjectionEvents(event, context, options);
       case "tool_output_delta":
-        return buildToolProjectionEvents(event, context);
+        return buildToolProjectionEvents(event, context, options);
       case "tool_input_delta":
-        return buildToolProjectionEvents(event, context);
+        return buildToolProjectionEvents(event, context, options);
       case "artifact_snapshot":
         return buildArtifactProjectionEvents(event, context);
       case "action_required":

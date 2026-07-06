@@ -10,6 +10,7 @@ type AppServerEventDrainClient = {
 };
 
 export interface AppServerEventBusDrainOptions {
+  activeIntervalMs?: number;
   intervalMs?: number;
   limit?: number;
 }
@@ -27,7 +28,9 @@ export class AppServerEventBus {
   #draining = false;
   #nextSubscriptionId = 1;
 
-  constructor(appServerClient: AppServerEventDrainClient = new AppServerClient()) {
+  constructor(
+    appServerClient: AppServerEventDrainClient = new AppServerClient(),
+  ) {
     this.#appServerClient = appServerClient;
   }
 
@@ -63,11 +66,13 @@ export class AppServerEventBus {
         }
 
         const drainOptions = resolveDrainOptions(activeSubscriptions);
+        let hasDrainedNotifications = false;
         try {
           const drainedMessages = await Promise.resolve(
             this.#appServerClient.drainEvents(drainOptions.limit),
           );
           const notifications = readNotifications(drainedMessages);
+          hasDrainedNotifications = notifications.length > 0;
           if (notifications.length > 0) {
             for (const subscription of activeSubscriptions) {
               subscription.onNotifications(notifications);
@@ -81,7 +86,7 @@ export class AppServerEventBus {
 
         if (this.#subscriptions.size > 0) {
           await waitForAppServerEventDrainInterval(
-            this.#resolveNextDrainIntervalMs(),
+            this.#resolveNextDrainIntervalMs(hasDrainedNotifications),
           );
         }
       }
@@ -105,12 +110,15 @@ export class AppServerEventBus {
     }
   }
 
-  #resolveNextDrainIntervalMs(): number {
+  #resolveNextDrainIntervalMs(hasDrainedNotifications: boolean): number {
     const activeSubscriptions = this.#activeSubscriptions();
     if (activeSubscriptions.length === 0) {
       return DEFAULT_APP_SERVER_EVENT_DRAIN_INTERVAL_MS;
     }
-    return resolveDrainOptions(activeSubscriptions).intervalMs;
+    const options = resolveDrainOptions(activeSubscriptions);
+    return hasDrainedNotifications
+      ? (options.activeIntervalMs ?? options.intervalMs)
+      : options.intervalMs;
   }
 }
 
@@ -146,8 +154,9 @@ export function resetDefaultAppServerEventBusForTests(): void {
 
 function resolveDrainOptions(
   subscriptions: AppServerEventBusSubscription[],
-): Required<AppServerEventBusDrainOptions> {
+): AppServerEventBusDrainOptions & { intervalMs: number; limit: number } {
   let hasFastFirstLimit = false;
+  let activeIntervalMs: number | undefined;
   let intervalMs = DEFAULT_APP_SERVER_EVENT_DRAIN_INTERVAL_MS;
   let limit: number | undefined;
 
@@ -166,9 +175,20 @@ function resolveDrainOptions(
     if (nextIntervalMs !== undefined) {
       intervalMs = Math.min(intervalMs, nextIntervalMs);
     }
+
+    const nextActiveIntervalMs = normalizePositiveInteger(
+      options?.activeIntervalMs,
+    );
+    if (nextActiveIntervalMs !== undefined) {
+      activeIntervalMs = Math.min(
+        activeIntervalMs ?? nextActiveIntervalMs,
+        nextActiveIntervalMs,
+      );
+    }
   }
 
   return {
+    activeIntervalMs,
     intervalMs,
     limit: hasFastFirstLimit
       ? 1

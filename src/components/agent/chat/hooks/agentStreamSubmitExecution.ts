@@ -150,7 +150,10 @@ async function resolveSubmitModelPolicy(options: {
   >;
 }> {
   try {
-    const models = await modelRegistryApi.getModelRegistry();
+    const shouldResolveMediaCapability = options.images.length > 0;
+    const models = await modelRegistryApi.getModelRegistry(
+      shouldResolveMediaCapability ? { forceRefresh: true } : undefined,
+    );
     const selection = {
       models,
       providerType: options.providerType,
@@ -159,7 +162,7 @@ async function resolveSubmitModelPolicy(options: {
 
     return {
       modelCapabilitySummary:
-        options.images.length === 0
+        !shouldResolveMediaCapability
           ? undefined
           : resolveModelCapabilitySummaryForSelection(selection),
       modelRequestPolicyMetadata:

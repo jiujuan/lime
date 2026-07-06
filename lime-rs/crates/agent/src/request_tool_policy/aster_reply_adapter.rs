@@ -1,17 +1,21 @@
 use super::aster_event_adapter::RuntimeEventProjector;
-use super::runtime_status::apply_soul_style_to_runtime_status;
 use super::{
     stream_message_reply_with_policy_with_options, ReplyAttemptError, ReplyInput,
     RequestToolPolicy, StreamReplyExecution, StreamReplyPolicyExecutionOptions,
     CANCELLED_TURN_CONTEXT_MARKER,
 };
-use crate::aster_runtime_projection::project_aster_runtime_event;
+use crate::aster_runtime_projection::project_aster_runtime_event_with_turn_context;
 use crate::credential_bridge::ConfiguredReplyProvider;
-use crate::model_request_policy::runtime_reply_model_request_policy_from_turn_context;
+use crate::model_request_policy::{
+    input_modality_policy_allows_image_input, input_modality_policy_from_turn_context,
+    native_tool_policy_disallowed_tool_names, native_tool_policy_from_turn_context,
+    runtime_reply_model_request_policy_from_turn_context,
+};
 use crate::protocol::{AgentEvent as RuntimeAgentEvent, AgentRuntimeStatus};
 use crate::provider_configuration::ConfiguredSessionProvider;
 use crate::runtime_state::AgentRuntimeState;
 use crate::session_config_adapter::to_aster_session_config;
+use crate::turn_context_configuration::AgentTurnContext;
 use agent_protocol::action_required::ActionRequiredScope as RuntimeActionRequiredScope;
 use agent_runtime::reply_host::{
     RuntimeReplyPolicyHost, RuntimeReplyStartError, RuntimeReplyStartResult, RuntimeReplyStreamHost,
@@ -31,7 +35,8 @@ use aster::session::SessionManager;
 use futures::future::BoxFuture;
 use futures::stream::{BoxStream, StreamExt};
 use model_provider::provider_stream::{
-    RuntimeProviderBackend, RuntimeReplyProviderHandle, RuntimeReplyStreamRequest,
+    RuntimeProviderBackend, RuntimeReplyProviderHandle, RuntimeReplyProviderRequestWireShape,
+    RuntimeReplyStreamRequest,
 };
 use std::path::Path;
 use tokio_util::sync::CancellationToken;
@@ -93,12 +98,11 @@ impl<'a> AsterReplyRuntimeHost<'a> {
     pub(super) async fn emit_runtime_status<F>(
         &self,
         session_config: &AgentSessionConfig,
-        mut status: AgentRuntimeStatus,
+        status: AgentRuntimeStatus,
         on_event: &mut F,
     ) where
         F: FnMut(&RuntimeAgentEvent) + Send,
     {
-        apply_soul_style_to_runtime_status(&mut status, session_config.turn_context.as_ref());
         let aster_session_config = to_aster_session_config(session_config.clone());
         match self
             .agent
@@ -112,7 +116,10 @@ impl<'a> AsterReplyRuntimeHost<'a> {
             .await
         {
             Ok(agent_event) => {
-                for event in project_aster_runtime_event(agent_event) {
+                for event in project_aster_runtime_event_with_turn_context(
+                    agent_event,
+                    session_config.turn_context.as_ref(),
+                ) {
                     on_event(&event);
                 }
             }
@@ -504,7 +511,7 @@ async fn start_aster_reply_stream<'a>(
     agent: &'a Agent,
     provider: Option<&ConfiguredReplyProvider>,
     user_input: ReplyAttemptInput,
-    session_config: AgentSessionConfig,
+    mut session_config: AgentSessionConfig,
     cancel_token: Option<CancellationToken>,
     emitted_any: bool,
 ) -> Result<
@@ -518,8 +525,12 @@ async fn start_aster_reply_stream<'a>(
     let input_kind = user_input.runtime_input_kind();
     let model_request_policy =
         runtime_reply_model_request_policy_from_turn_context(session_config.turn_context.as_ref());
-    let aster_session_config = to_aster_session_config(session_config);
-    let user_message = build_aster_reply_attempt_message(user_input);
+    let user_message =
+        build_aster_reply_attempt_message(user_input, session_config.turn_context.as_ref())
+            .map_err(|message| ReplyAttemptError {
+                message,
+                emitted_any,
+            })?;
     let message_chars = user_message.as_concat_text().chars().count();
     let stream_request = RuntimeReplyStreamRequest::new(
         session_id,
@@ -543,6 +554,9 @@ async fn start_aster_reply_stream<'a>(
     if let Some(error) = unsupported_aster_compat_wire_shape_error(&stream_request, emitted_any) {
         return Err(error);
     }
+    attach_native_tool_policy_scope(&mut session_config);
+    attach_provider_request_wire_shape(&mut session_config, &stream_request);
+    let aster_session_config = to_aster_session_config(session_config);
     let stream_result = match provider {
         Some(provider) => {
             provider
@@ -570,6 +584,70 @@ async fn start_aster_reply_stream<'a>(
         })
 }
 
+fn attach_native_tool_policy_scope(session_config: &mut AgentSessionConfig) {
+    let native_policy = native_tool_policy_from_turn_context(session_config.turn_context.as_ref());
+    let disallowed_tools = native_tool_policy_disallowed_tool_names(native_policy.as_ref());
+    if disallowed_tools.is_empty() {
+        return;
+    }
+
+    let turn_context = session_config
+        .turn_context
+        .get_or_insert_with(Default::default);
+    let tool_scope = turn_context
+        .metadata
+        .entry("tool_scope".to_string())
+        .or_insert_with(|| serde_json::json!({}));
+    if !tool_scope.is_object() {
+        *tool_scope = serde_json::json!({});
+    }
+    let Some(scope_object) = tool_scope.as_object_mut() else {
+        return;
+    };
+    let disallowed_value = scope_object
+        .entry("disallowed_tools".to_string())
+        .or_insert_with(|| serde_json::json!([]));
+    if !disallowed_value.is_array() {
+        *disallowed_value = serde_json::json!([]);
+    }
+    let Some(disallowed_array) = disallowed_value.as_array_mut() else {
+        return;
+    };
+    for tool_name in disallowed_tools {
+        if disallowed_array.iter().any(|item| {
+            item.as_str()
+                .is_some_and(|existing| existing.eq_ignore_ascii_case(tool_name))
+        }) {
+            continue;
+        }
+        disallowed_array.push(serde_json::Value::String(tool_name.to_string()));
+    }
+}
+
+fn attach_provider_request_wire_shape(
+    session_config: &mut AgentSessionConfig,
+    stream_request: &RuntimeReplyStreamRequest,
+) {
+    if stream_request.model_request_policy.is_none() {
+        return;
+    }
+    let wire_shape = stream_request.provider_request_wire_shape();
+    let Ok(value) = serde_json::to_value(wire_shape) else {
+        tracing::warn!(
+            "[AgentRuntime][ReplyPolicy] provider request wire shape 序列化失败，已跳过 metadata 注入"
+        );
+        return;
+    };
+    session_config
+        .turn_context
+        .get_or_insert_with(Default::default)
+        .metadata
+        .insert(
+            RuntimeReplyProviderRequestWireShape::TURN_CONTEXT_METADATA_KEY.to_string(),
+            value,
+        );
+}
+
 fn unsupported_aster_compat_wire_shape_error(
     stream_request: &RuntimeReplyStreamRequest,
     emitted_any: bool,
@@ -579,6 +657,9 @@ fn unsupported_aster_compat_wire_shape_error(
         return None;
     }
     if stream_request.provider_backend() == Some(RuntimeProviderBackend::Current) {
+        return None;
+    }
+    if aster_compat_provider_supports_responses_lite_wire(stream_request) {
         return None;
     }
 
@@ -595,6 +676,21 @@ fn unsupported_aster_compat_wire_shape_error(
         message: "Provider request policy requires Responses Lite wire support, but the current Aster compat backend does not apply the required header/reasoning payload yet; refusing to stream instead of silently dropping the policy.".to_string(),
         emitted_any,
     })
+}
+
+fn aster_compat_provider_supports_responses_lite_wire(
+    stream_request: &RuntimeReplyStreamRequest,
+) -> bool {
+    let Some(provider) = stream_request.provider.as_ref() else {
+        return false;
+    };
+    provider.backend == RuntimeProviderBackend::AsterCompat
+        && provider.identity.provider_name == "openai"
+        && provider
+            .identity
+            .protocol
+            .as_ref()
+            .is_some_and(model_provider::ModelProviderProtocol::uses_responses_api)
 }
 
 fn project_aster_reply_stream<'a>(
@@ -617,7 +713,11 @@ fn project_aster_reply_stream<'a>(
     })
 }
 
-fn build_aster_user_message(input: ReplyInput) -> Message {
+fn build_aster_user_message(
+    input: ReplyInput,
+    turn_context: Option<&AgentTurnContext>,
+) -> Result<Message, String> {
+    validate_user_input_modalities(&input, turn_context)?;
     let mut message = Message::user().with_text(input.text);
     for image in input.images {
         message = message.with_image(image.data, image.media_type);
@@ -625,16 +725,34 @@ fn build_aster_user_message(input: ReplyInput) -> Message {
     if input.agent_only {
         message = message.agent_only();
     }
-    message
+    Ok(message)
 }
 
-fn build_aster_reply_attempt_message(input: ReplyAttemptInput) -> Message {
+fn build_aster_reply_attempt_message(
+    input: ReplyAttemptInput,
+    turn_context: Option<&AgentTurnContext>,
+) -> Result<Message, String> {
     match input {
-        ReplyAttemptInput::Current(input) => build_aster_user_message(input),
+        ReplyAttemptInput::Current(input) => build_aster_user_message(input, turn_context),
         ReplyAttemptInput::ActionRequiredResponse(input) => {
-            build_aster_action_required_response_message(input)
+            Ok(build_aster_action_required_response_message(input))
         }
     }
+}
+
+fn validate_user_input_modalities(
+    input: &ReplyInput,
+    turn_context: Option<&AgentTurnContext>,
+) -> Result<(), String> {
+    if input.images.is_empty() {
+        return Ok(());
+    }
+    let input_policy = input_modality_policy_from_turn_context(turn_context);
+    if input_modality_policy_allows_image_input(input_policy.as_ref()) {
+        return Ok(());
+    }
+
+    Err("当前选中模型的 input_modality_policy 不支持图片输入，已拒绝把 image 内容发送到 provider；请切换支持 image 的模型或移除图片。".to_string())
 }
 
 fn build_aster_action_required_response_message(input: ActionRequiredResponseInput) -> Message {
@@ -733,3 +851,6 @@ fn extract_inline_agent_provider_error(event: &AsterAgentEvent) -> Option<String
 
     Some(format!("Agent provider execution failed: {detail}"))
 }
+
+#[cfg(test)]
+mod tests;

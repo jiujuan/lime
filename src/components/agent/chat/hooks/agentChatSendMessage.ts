@@ -1,24 +1,11 @@
 import type { SlashCommandStatusSnapshot } from "../commands";
 import { executeSlashCommand, parseSlashCommand } from "../commands";
 import { recordSlashEntryUsage } from "../skill-selection/slashEntryUsage";
-import { modelRegistryApi } from "@/lib/api/modelRegistry";
-import type { ModelCapabilitySummary } from "@/lib/model/inferModelCapabilities";
-import { resolveModelCapabilitySummaryForSelection } from "@/lib/model/modelCapabilitySendGate";
 import type {
   ClearMessagesOptions,
   SendMessageFn,
-  SendMessageOptions,
 } from "./agentChatShared";
 import { normalizeExecutionStrategy } from "./agentChatCoreUtils";
-
-interface AgentChatModelCapabilitySelection {
-  providerType?: string | null;
-  model?: string | null;
-}
-
-type AgentChatModelCapabilitySummaryResolver = (
-  selection: AgentChatModelCapabilitySelection,
-) => Promise<ModelCapabilitySummary | null>;
 
 interface CreateAgentChatSendMessageOptions {
   baseStatusSnapshot: SlashCommandStatusSnapshot;
@@ -30,72 +17,6 @@ interface CreateAgentChatSendMessageOptions {
   notifyInfo: (message: string) => void;
   notifySuccess: (message: string) => void;
   onOpenSubagents?: () => void;
-  resolveModelCapabilitySummary?: AgentChatModelCapabilitySummaryResolver;
-}
-
-async function resolveCurrentModelCapabilitySummary({
-  providerType,
-  model,
-}: AgentChatModelCapabilitySelection): Promise<ModelCapabilitySummary | null> {
-  const models = await modelRegistryApi.getModelRegistry();
-  return resolveModelCapabilitySummaryForSelection({
-    models,
-    providerType,
-    model,
-  });
-}
-
-function hasExplicitModelCapabilitySummary(
-  sendOptions?: SendMessageOptions,
-): boolean {
-  return sendOptions?.modelCapabilitySummary !== undefined;
-}
-
-function resolveEffectiveModelCapabilitySelection(options: {
-  baseStatusSnapshot: SlashCommandStatusSnapshot;
-  modelOverride?: string;
-  sendOptions?: SendMessageOptions;
-}): AgentChatModelCapabilitySelection {
-  return {
-    providerType:
-      options.sendOptions?.providerOverride?.trim() ||
-      options.baseStatusSnapshot.providerType,
-    model:
-      options.sendOptions?.modelOverride?.trim() ||
-      options.modelOverride?.trim() ||
-      options.baseStatusSnapshot.model,
-  };
-}
-
-async function withSelectedModelCapabilitySummary(options: {
-  baseStatusSnapshot: SlashCommandStatusSnapshot;
-  modelOverride?: string;
-  sendOptions?: SendMessageOptions;
-  resolveModelCapabilitySummary: AgentChatModelCapabilitySummaryResolver;
-}): Promise<SendMessageOptions | undefined> {
-  const { sendOptions } = options;
-  if (hasExplicitModelCapabilitySummary(sendOptions)) {
-    return sendOptions;
-  }
-
-  const selection = resolveEffectiveModelCapabilitySelection(options);
-  if (!selection.model?.trim()) {
-    return sendOptions;
-  }
-
-  try {
-    const modelCapabilitySummary =
-      await options.resolveModelCapabilitySummary(selection);
-    if (!modelCapabilitySummary) {
-      return sendOptions;
-    }
-    return {
-      ...(sendOptions || {}),
-      modelCapabilitySummary,
-    };
-  } catch {
-    return sendOptions;
-  }
 }
 
 export function createAgentChatSendMessage(
@@ -111,7 +32,6 @@ export function createAgentChatSendMessage(
     notifyInfo,
     notifySuccess,
     onOpenSubagents,
-    resolveModelCapabilitySummary = resolveCurrentModelCapabilitySummary,
   } = options;
 
   return async (
@@ -125,14 +45,6 @@ export function createAgentChatSendMessage(
     autoContinue,
     sendOptions,
   ) => {
-    const resolveSendOptions = () =>
-      withSelectedModelCapabilitySummary({
-        baseStatusSnapshot,
-        modelOverride,
-        sendOptions,
-        resolveModelCapabilitySummary,
-      });
-
     if (!skipUserMessage) {
       const parsedSlashCommand = parseSlashCommand(content);
       if (parsedSlashCommand) {
@@ -149,7 +61,6 @@ export function createAgentChatSendMessage(
             executionStrategy: effectiveExecutionStrategy,
           },
           sendPrompt: async (prompt) => {
-            const resolvedSendOptions = await resolveSendOptions();
             await rawSendMessage(
               prompt,
               images,
@@ -159,7 +70,7 @@ export function createAgentChatSendMessage(
               executionStrategyOverride,
               modelOverride,
               autoContinue,
-              resolvedSendOptions,
+              sendOptions,
             );
           },
           compactSession,
@@ -187,7 +98,6 @@ export function createAgentChatSendMessage(
       }
     }
 
-    const resolvedSendOptions = await resolveSendOptions();
     await rawSendMessage(
       content,
       images,
@@ -197,7 +107,7 @@ export function createAgentChatSendMessage(
       executionStrategyOverride,
       modelOverride,
       autoContinue,
-      resolvedSendOptions,
+      sendOptions,
     );
   };
 }

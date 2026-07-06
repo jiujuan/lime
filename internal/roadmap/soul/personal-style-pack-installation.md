@@ -1,7 +1,7 @@
 # Soul Style Pack 安装与目录规范
 
 > 状态：current planning source；Cloud 下载实现 deferred
-> 更新时间：2026-07-04
+> 更新时间：2026-07-06
 > 上游路线图：[personal-style-profiles.md](personal-style-profiles.md)
 > 关联细节：[personal-style-output-surfaces.md](personal-style-output-surfaces.md)
 > 目标：定义未来风格包的安装、目录、manifest、校验和扩展边界，同时保持首版 KISS / YAGNI，不把 Style Profile 做成 PersonalStyle 平行系统。
@@ -14,19 +14,20 @@
 
 ## 2. 设计目标
 
-首版只需要支持内置风格包：
+首版只需要支持内置风格包 seed：
 
-1. `built_in` 包随应用发布，包含四个首发 profile。
-2. 用户选择保存到 `memory.soul.style_profile_id`，不保存整份风格包正文。
-3. Resolver 根据已安装 registry 找 profile，并继续走严肃场景降级和 artifact 旁路。
-4. 所有用户可见名称、描述、错误、安装状态走五语言 i18n。
+1. 四个 `built_in` Style Pack seed 随应用发布，每个 seed 默认只包含一个首发 profile。
+2. 四个 seed 统一注册到 `Style Pack Registry`；组件、工具卡片、timeline 和 i18n 不直接 switch profile id 拼文案。
+3. 用户选择保存到 `memory.soul.style_profile_id`，不保存整份风格包正文。
+4. Resolver 根据 registry 找 profile，并继续走严肃场景降级和 artifact 旁路。
+5. 所有用户可见名称、描述、错误、安装状态走五语言 i18n。
 
 后续扩展目标：
 
 1. 支持用户从 Cloud 下载官方或审核过的风格包。
 2. 支持本地导入签名 manifest，便于企业或高级用户内部分发。
 3. 支持版本、兼容性、完整性校验、启用 / 禁用 / 卸载。
-4. 支持多 profile 共用一个 pack，但同一会话只激活一个最终 profile。
+4. 支持多 profile 共用一个 pack，但同一会话只激活一个最终 profile；首版 built-in 先采用一 pack 一 profile，减少 hard-coded 聚合感。
 
 非目标：
 
@@ -37,11 +38,11 @@
 
 ## 3. 来源类型
 
-| source | 状态 | 用途 | 约束 |
-| --- | --- | --- | --- |
-| `built_in` | `current` | 应用内置风格包，随版本发布。 | 不需要安装流程；只读；不能卸载；可被用户选择。 |
-| `local_import` | `deferred` | 从本地文件导入签名 manifest。 | 只读 JSON + i18n 资源；必须校验 schema、digest、签名和兼容版本。 |
-| `cloud_download` | `deferred` | 从 Cloud 下载风格包。 | 只允许从官方 catalog 下载；安装前展示来源、权限、版本和风险；失败必须可回滚。 |
+| source           | 状态       | 用途                          | 约束                                                                          |
+| ---------------- | ---------- | ----------------------------- | ----------------------------------------------------------------------------- |
+| `built_in`       | `current`  | 应用内置风格包，随版本发布。  | 不需要安装流程；只读；不能卸载；可被用户选择。                                |
+| `local_import`   | `deferred` | 从本地文件导入签名 manifest。 | 只读 JSON + i18n 资源；必须校验 schema、digest、签名和兼容版本。              |
+| `cloud_download` | `deferred` | 从 Cloud 下载风格包。         | 只允许从官方 catalog 下载；安装前展示来源、权限、版本和风险；失败必须可回滚。 |
 
 ## 4. 与 Agent Skills 包的关系
 
@@ -55,14 +56,14 @@
 
 因此 Style Pack 不应直接做成同一种 Skill 包：
 
-| 维度 | Agent Skill | Soul Style Pack |
-| --- | --- | --- |
-| 核心问题 | 让 Agent 会做什么任务。 | 同一份事实用什么口吻说出来。 |
-| 必需入口 | `SKILL.md` 指令。 | `manifest.json` + profiles + i18n resources。 |
-| 激活方式 | 根据任务意图按需激活。 | 根据 `memory.soul.style_profile_id` 持续生效，并受风险降级控制。 |
-| 可执行内容 | 可包含 `scripts/`，并可能需要工具权限。 | 禁止脚本、HTML、WASM、远程代码和工具权限。 |
-| Runtime owner | Skills / tools / workflow runtime。 | Soul resolver / prompt context / boundary guard。 |
-| 风险边界 | 工具执行、文件、网络、工作流可靠性。 | 人格化表达、事实保真、高风险降级、i18n。 |
+| 维度          | Agent Skill                             | Soul Style Pack                                                  |
+| ------------- | --------------------------------------- | ---------------------------------------------------------------- |
+| 核心问题      | 让 Agent 会做什么任务。                 | 同一份事实用什么口吻说出来。                                     |
+| 必需入口      | `SKILL.md` 指令。                       | `manifest.json` + profiles + i18n resources。                    |
+| 激活方式      | 根据任务意图按需激活。                  | 根据 `memory.soul.style_profile_id` 持续生效，并受风险降级控制。 |
+| 可执行内容    | 可包含 `scripts/`，并可能需要工具权限。 | 禁止脚本、HTML、WASM、远程代码和工具权限。                       |
+| Runtime owner | Skills / tools / workflow runtime。     | Soul resolver / prompt context / boundary guard。                |
+| 风险边界      | 工具执行、文件、网络、工作流可靠性。    | 人格化表达、事实保真、高风险降级、i18n。                         |
 
 设计结论：
 
@@ -114,23 +115,20 @@ Cloud Package Hub
 建议 Cloud package metadata：
 
 ```ts
-type CloudPackageKind =
-  | "agent_skill"
-  | "soul_style_pack"
-  | "persona_pack"
+type CloudPackageKind = "agent_skill" | "soul_style_pack" | "persona_pack";
 
 type CloudPackageMetadata = {
-  kind: CloudPackageKind
-  id: string
-  version: string
-  publisherId: string
-  digest: string
-  signature?: string
+  kind: CloudPackageKind;
+  id: string;
+  version: string;
+  publisherId: string;
+  digest: string;
+  signature?: string;
   compatibility: {
-    minAppVersion: string
-    schemaVersion: number
-  }
-}
+    minAppVersion: string;
+    schemaVersion: number;
+  };
+};
 ```
 
 KISS / YAGNI 约束：
@@ -148,7 +146,7 @@ KISS / YAGNI 约束：
 ```text
 src/lib/soul/style-profiles/
   types.ts                              # current：StyleProfile / StylePack 类型
-  builtInProfiles.ts                    # current：built_in style pack registry
+  builtInProfiles.ts                    # current：四个 built_in style pack seed registry
   resolveStyleProfile.ts                # current：按 memory.soul 选择最终 profile
   composeStyleDirectives.ts             # current：profile -> prompt directives
   evaluateStyleBoundary.ts              # current：artifact 旁路、高风险降级、危险操作边界
@@ -221,52 +219,72 @@ App Server 边界：
 
 ```ts
 type SoulStylePackManifest = {
-  schemaVersion: 1
-  id: string
-  version: string
-  source: "built_in" | "local_import" | "cloud_download"
+  schemaVersion: 1;
+  id: string;
+  version: string;
+  source: "built_in" | "local_import" | "cloud_download";
   publisher: {
-    id: string
-    name: string
-    verified: boolean
-  }
+    id: string;
+    name: string;
+    verified: boolean;
+  };
   i18n: {
-    nameKey: string
-    descriptionKey: string
-    locales: Array<"zh-CN" | "zh-TW" | "en-US" | "ja-JP" | "ko-KR">
-  }
+    nameKey: string;
+    descriptionKey: string;
+    locales: Array<"zh-CN" | "zh-TW" | "en-US" | "ja-JP" | "ko-KR">;
+  };
   compatibility: {
-    minAppVersion: string
-    maxAppVersion?: string
-  }
+    minAppVersion: string;
+    maxAppVersion?: string;
+  };
   profiles: Array<{
-    id: string
-    nameKey: string
-    descriptionKey: string
-    tone: "cheeky_sassy" | "warm_supportive" | "cool_confident" | "calm_professional" | string
-    intensity: "low" | "medium" | "high"
-    scopes: Array<"chat_interaction" | "tool_narrative" | "companion" | "artifact_voice">
-    allowedMoves: string[]
-    forbiddenMoves: string[]
-    defaultUseCases: string[]
-    seriousModeFallback: "calm_professional_partner"
-  }>
+    id: string;
+    nameKey: string;
+    descriptionKey: string;
+    tone:
+      | "cheeky_sassy"
+      | "warm_supportive"
+      | "cool_confident"
+      | "calm_professional"
+      | string;
+    intensity: "low" | "medium" | "high";
+    scopes: Array<
+      "chat_interaction" | "tool_narrative" | "companion" | "artifact_voice"
+    >;
+    voicePrimitives: string[];
+    surfaceContracts: Record<string, string[]>;
+    allowedMoves: string[];
+    forbiddenMoves: string[];
+    antiRepetitionRules: string[];
+    fewShotAnchors: Array<{
+      surface: string;
+      intent: string;
+      example: string;
+    }>;
+    defaultUseCases: string[];
+    riskFallback: {
+      profileId: "calm_professional_partner";
+      triggers: string[];
+    };
+    seriousModeFallback: "calm_professional_partner";
+  }>;
   integrity: {
-    digest: string
-    signature?: string
-    signatureKeyId?: string
-  }
-}
+    digest: string;
+    signature?: string;
+    signatureKeyId?: string;
+  };
+};
 ```
 
 Manifest 约束：
 
-1. `id` 必须全局稳定，建议反向域名或官方命名空间，例如 `com.lime.builtin.default`.
+1. `id` 必须全局稳定，建议反向域名或官方命名空间，例如 `com.lime.soul.cheeky-sassy-executor`.
 2. `profiles[].id` 必须在 pack 内唯一；运行时展示时使用 `<pack-id>/<profile-id>` 作为安装态唯一键。
 3. `tone` 允许未来扩展，但未知 tone 必须降级到中性或拒绝安装，不能猜测行为。
-4. `allowedMoves` / `forbiddenMoves` 是行为规则，不是可执行 prompt 模板；不允许包含工具调用权限、系统指令覆盖、用户资料要求。
-5. 五语言 locale 必须齐全；缺失任何 current locale 时安装失败。
-6. `high` intensity 默认不向普通用户开放，除非评测明确通过。
+4. `voicePrimitives` / `surfaceContracts` / `allowedMoves` / `forbiddenMoves` / `antiRepetitionRules` 是行为规则，不是可执行 prompt 模板；不允许包含工具调用权限、系统指令覆盖、用户资料要求。
+5. `fewShotAnchors` 只能作为风格锚点，不得被 UI / i18n / tool renderer 当成固定终稿句子。
+6. 五语言 locale 必须齐全；缺失任何 current locale 时安装失败。
+7. `high` intensity 默认不向普通用户开放，除非评测明确通过。
 
 ## 7. 安装状态机
 
@@ -381,30 +399,30 @@ KISS 约束：
 
 ## 11. 测试与验收
 
-| 场景 | 验收方式 | 必须证明 |
-| --- | --- | --- |
-| built-in registry | unit test | 四个内置 profile 始终可用，默认 profile 可解析。 |
-| manifest schema | unit test | 缺字段、未知 schema、重复 profile id、未知 source 被拒绝。 |
-| locale completeness | unit test | 五语言资源缺失时安装失败。 |
-| integrity failure | unit test / integration | digest 或 signature 不匹配时不写 registry。 |
-| install rollback | integration | 写入失败或校验失败不会留下半安装 pack。 |
-| disable / uninstall fallback | unit / component | 当前 profile 来自被禁用 pack 时回退 built-in 默认 profile。 |
-| high-risk downgrade | prompt snapshot | Cloud pack 不能覆盖 `calm_professional_partner` 严肃降级。 |
-| artifact boundary | prompt snapshot | 风格包不能让正式 artifact 默认吸收 Product Soul。 |
-| package kind split | unit / integration | `agent_skill` 和 `soul_style_pack` 共用下载基础设施时仍进入不同 validator 和目录。 |
-| GUI smoke | Playwright / Claw | 安装后选择 profile，真实 Claw 对话生效；失败状态可见且可恢复。 |
+| 场景                         | 验收方式                | 必须证明                                                                           |
+| ---------------------------- | ----------------------- | ---------------------------------------------------------------------------------- |
+| built-in registry            | unit test               | 四个内置 profile 始终可用，默认 profile 可解析。                                   |
+| manifest schema              | unit test               | 缺字段、未知 schema、重复 profile id、未知 source 被拒绝。                         |
+| locale completeness          | unit test               | 五语言资源缺失时安装失败。                                                         |
+| integrity failure            | unit test / integration | digest 或 signature 不匹配时不写 registry。                                        |
+| install rollback             | integration             | 写入失败或校验失败不会留下半安装 pack。                                            |
+| disable / uninstall fallback | unit / component        | 当前 profile 来自被禁用 pack 时回退 built-in 默认 profile。                        |
+| high-risk downgrade          | prompt snapshot         | Cloud pack 不能覆盖 `calm_professional_partner` 严肃降级。                         |
+| artifact boundary            | prompt snapshot         | 风格包不能让正式 artifact 默认吸收 Product Soul。                                  |
+| package kind split           | unit / integration      | `agent_skill` 和 `soul_style_pack` 共用下载基础设施时仍进入不同 validator 和目录。 |
+| GUI smoke                    | Playwright / Claw       | 安装后选择 profile，真实 Claw 对话生效；失败状态可见且可恢复。                     |
 
 ## 12. 分阶段路线
 
-| 阶段 | 目标 | 主产物 |
-| --- | --- | --- |
-| P0 | 规划边界 | 本文档、主路线图引用、输出面文档引用 |
-| P1 | 内置包 registry | `builtInProfiles.ts` 表达 built-in pack，不新增安装器 |
-| P2 | Manifest schema | `style-packs/manifest.ts` + 单测，只校验本地 fixture |
-| P3 | Installed registry read model | 本地 registry 读取、启用 / 禁用 / 卸载状态，不接 Cloud |
-| P4 | Local import | 本地签名 manifest 导入和回滚 |
-| P5 | Cloud package infrastructure | 通用 catalog / download / signature 基础设施，按 `kind` 分流到 Skill 或 Style Pack |
-| P6 | GUI 管理 | 设置页风格包管理、错误恢复、Playwright / Claw 验收 |
+| 阶段 | 目标                          | 主产物                                                                             |
+| ---- | ----------------------------- | ---------------------------------------------------------------------------------- |
+| P0   | 规划边界                      | 本文档、主路线图引用、输出面文档引用                                               |
+| P1   | 内置 seed registry            | `builtInProfiles.ts` 表达四个 built-in Style Pack seed，不新增安装器               |
+| P2   | Manifest schema               | `style-packs/manifest.ts` + 单测，只校验本地 fixture                               |
+| P3   | Installed registry read model | 本地 registry 读取、启用 / 禁用 / 卸载状态，不接 Cloud                             |
+| P4   | Local import                  | 本地签名 manifest 导入和回滚                                                       |
+| P5   | Cloud package infrastructure  | 通用 catalog / download / signature 基础设施，按 `kind` 分流到 Skill 或 Style Pack |
+| P6   | GUI 管理                      | 设置页风格包管理、错误恢复、Playwright / Claw 验收                                 |
 
 ## 13. 当前必须避免的误区
 

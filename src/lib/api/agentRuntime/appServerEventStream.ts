@@ -11,10 +11,11 @@ import {
 import { publishProcessedAgentRuntimeEvent } from "../agentRuntimeEvents";
 import { projectAgentRuntimeSequenceGateNotifications } from "./eventSequenceGate";
 
-const APP_SERVER_EVENT_DRAIN_LIMIT = 50;
-const APP_SERVER_EVENT_DRAIN_FAST_FIRST_LIMIT = 1;
-const APP_SERVER_EVENT_DRAIN_FAST_FIRST_INTERVAL_MS = 24;
-const APP_SERVER_EVENT_DRAIN_INTERVAL_MS = 250;
+export const APP_SERVER_EVENT_DRAIN_LIMIT = 50;
+export const APP_SERVER_EVENT_DRAIN_ACTIVE_INTERVAL_MS = 32;
+export const APP_SERVER_EVENT_DRAIN_FAST_FIRST_LIMIT = 1;
+export const APP_SERVER_EVENT_DRAIN_FAST_FIRST_INTERVAL_MS = 24;
+export const APP_SERVER_EVENT_DRAIN_INTERVAL_MS = 96;
 const APP_SERVER_EVENT_ROUTE_TTL_MS = 30 * 60 * 1000;
 
 type AppServerEventDrainClient = {
@@ -112,6 +113,7 @@ export class AppServerAgentSessionEventDrainRouter {
           };
         }
         return {
+          activeIntervalMs: APP_SERVER_EVENT_DRAIN_ACTIVE_INTERVAL_MS,
           intervalMs: APP_SERVER_EVENT_DRAIN_INTERVAL_MS,
           limit: APP_SERVER_EVENT_DRAIN_LIMIT,
         };
@@ -624,6 +626,7 @@ export function projectAppServerAgentEventPayload(
             payload.input ??
             payload.parameters,
         ),
+        metadata: normalizeRecord(payload.metadata),
       };
     case "tool.args":
       return {
@@ -646,6 +649,7 @@ export function projectAppServerAgentEventPayload(
             payload.input,
         ),
         provider: readString(payload, "provider", "source"),
+        metadata: normalizeRecord(payload.metadata),
       };
     case "tool.args.delta":
     case "tool.input.delta":
@@ -663,6 +667,7 @@ export function projectAppServerAgentEventPayload(
           "raw_args",
         ),
         provider: readString(payload, "provider", "source"),
+        metadata: normalizeRecord(payload.metadata),
       };
     case "tool.progress":
       return {
@@ -688,6 +693,7 @@ export function projectAppServerAgentEventPayload(
         metadata: normalizeRecord(payload.metadata),
       };
     case "tool.result":
+    case "tool.failed":
       return {
         ...basePayload,
         type: "tool_end",
@@ -1206,6 +1212,8 @@ function normalizeToolExecutionResult(
   const source = rawResult ?? payload;
   const error = readString(source, "error", "message");
   const metadata = normalizeRecord(source.metadata);
+  const structuredContent =
+    source.structuredContent ?? source.structured_content;
   const success =
     typeof source.success === "boolean" ? source.success : error ? false : true;
 
@@ -1217,6 +1225,12 @@ function normalizeToolExecutionResult(
     ...(error ? { error } : {}),
     ...(Array.isArray(source.images) ? { images: source.images } : {}),
     ...(metadata ? { metadata } : {}),
+    ...(structuredContent !== undefined
+      ? {
+          structuredContent,
+          structured_content: structuredContent,
+        }
+      : {}),
   };
 }
 

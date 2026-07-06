@@ -223,6 +223,35 @@ describe("AgentThreadTimeline", () => {
     expect(summaryText).not.toContain("搜索记录");
   });
 
+  it("子任务协作卡片应跟随 collaboration copy 资源", async () => {
+    await changeLimeLocale("en-US");
+    const container = renderTimeline(
+      [
+        {
+          ...createBaseItem("subagent-1", 1),
+          type: "subagent_activity",
+          title: "Review",
+          summary: "Checking edge cases",
+          status: "in_progress",
+          status_label: "queued",
+          completed_at: undefined,
+          session_id: "child-session-1",
+        } as AgentThreadItem,
+      ],
+      {
+        turn: {
+          status: "running",
+        },
+        onOpenSubagentSession: () => undefined,
+      },
+    );
+
+    expect(container.textContent).toContain("Subtask: Review");
+    expect(container.textContent).toContain("Queued");
+    expect(container.textContent).toContain("View subtask details");
+    expect(container.textContent).not.toContain("查看子任务详情");
+  });
+
   it("连续执行流里有运行中步骤时，应聚合为一个高亮过程块", () => {
     const items: AgentThreadItem[] = [
       {

@@ -168,16 +168,20 @@ pub struct RuntimeReplyModelRequestPolicy {
     pub responses: Option<RuntimeReplyResponsesPolicy>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_call: Option<RuntimeReplyToolCallPolicy>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_output: Option<RuntimeReplyReasoningOutputPolicy>,
 }
 
 impl RuntimeReplyModelRequestPolicy {
     pub fn new(
         responses: Option<RuntimeReplyResponsesPolicy>,
         tool_call: Option<RuntimeReplyToolCallPolicy>,
+        reasoning_output: Option<RuntimeReplyReasoningOutputPolicy>,
     ) -> Option<Self> {
-        (responses.is_some() || tool_call.is_some()).then_some(Self {
+        (responses.is_some() || tool_call.is_some() || reasoning_output.is_some()).then_some(Self {
             responses,
             tool_call,
+            reasoning_output,
         })
     }
 
@@ -204,6 +208,18 @@ impl RuntimeReplyModelRequestPolicy {
             .as_ref()
             .map(|policy| policy.parallel_tool_calls)
     }
+
+    pub fn reasoning_summary(&self) -> Option<&str> {
+        self.reasoning_output
+            .as_ref()
+            .and_then(RuntimeReplyReasoningOutputPolicy::reasoning_summary)
+    }
+
+    pub fn text_verbosity(&self) -> Option<&str> {
+        self.reasoning_output
+            .as_ref()
+            .and_then(RuntimeReplyReasoningOutputPolicy::text_verbosity)
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -213,12 +229,17 @@ pub struct RuntimeReplyProviderRequestWireShape {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning_context: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text_verbosity: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parallel_tool_calls: Option<bool>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub headers: Vec<RuntimeReplyProviderRequestHeader>,
 }
 
 impl RuntimeReplyProviderRequestWireShape {
+    pub const TURN_CONTEXT_METADATA_KEY: &'static str = "provider_request_wire_shape";
     pub const RESPONSES_LITE_HEADER_NAME: &'static str = "x-openai-internal-codex-responses-lite";
     pub const RESPONSES_LITE_HEADER_VALUE: &'static str = "true";
 
@@ -229,6 +250,8 @@ impl RuntimeReplyProviderRequestWireShape {
 
         let use_responses_lite = policy.use_responses_lite();
         let reasoning_context = policy.reasoning_context().map(ToOwned::to_owned);
+        let reasoning_summary = policy.reasoning_summary().map(ToOwned::to_owned);
+        let text_verbosity = policy.text_verbosity().map(ToOwned::to_owned);
         let parallel_tool_calls = policy.parallel_tool_calls();
         let headers = if policy.requires_responses_lite_header() {
             vec![RuntimeReplyProviderRequestHeader {
@@ -242,6 +265,8 @@ impl RuntimeReplyProviderRequestWireShape {
         Self {
             use_responses_lite,
             reasoning_context,
+            reasoning_summary,
+            text_verbosity,
             parallel_tool_calls,
             headers,
         }
@@ -286,6 +311,32 @@ pub struct RuntimeReplyResponsesPolicy {
 pub struct RuntimeReplyToolCallPolicy {
     pub supports_parallel_tool_calls: bool,
     pub parallel_tool_calls: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RuntimeReplyReasoningOutputPolicy {
+    pub default_reasoning_summary: String,
+    pub support_verbosity: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_verbosity: Option<String>,
+    pub can_set_verbosity: bool,
+}
+
+impl RuntimeReplyReasoningOutputPolicy {
+    pub fn reasoning_summary(&self) -> Option<&str> {
+        let summary = self.default_reasoning_summary.trim();
+        (!summary.is_empty() && summary != "none").then_some(summary)
+    }
+
+    pub fn text_verbosity(&self) -> Option<&str> {
+        if !(self.support_verbosity && self.can_set_verbosity) {
+            return None;
+        }
+        self.default_verbosity
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+    }
 }
 
 #[cfg(test)]
@@ -374,6 +425,7 @@ mod tests {
                 supports_parallel_tool_calls: true,
                 parallel_tool_calls: false,
             }),
+            None,
         ));
 
         let policy = request.model_request_policy.as_ref().expect("policy");
@@ -405,6 +457,7 @@ mod tests {
                 supports_parallel_tool_calls: true,
                 parallel_tool_calls: false,
             }),
+            None,
         ));
 
         let wire_shape = request.provider_request_wire_shape();
@@ -445,6 +498,7 @@ mod tests {
                 supports_parallel_tool_calls: true,
                 parallel_tool_calls: true,
             }),
+            None,
         ));
 
         let wire_shape = request.provider_request_wire_shape();
@@ -454,5 +508,55 @@ mod tests {
         assert_eq!(wire_shape.parallel_tool_calls, Some(true));
         assert!(wire_shape.headers.is_empty());
         assert!(!wire_shape.requires_responses_lite_wire_support());
+    }
+
+    #[test]
+    fn stream_request_projects_reasoning_output_wire_shape() {
+        let request = RuntimeReplyStreamRequest::new(
+            "session-1",
+            RuntimeReplyInputKind::UserMessage,
+            42,
+            None,
+        )
+        .with_model_request_policy(RuntimeReplyModelRequestPolicy::new(
+            None,
+            None,
+            Some(RuntimeReplyReasoningOutputPolicy {
+                default_reasoning_summary: "detailed".to_string(),
+                support_verbosity: true,
+                default_verbosity: Some("low".to_string()),
+                can_set_verbosity: true,
+            }),
+        ));
+
+        let wire_shape = request.provider_request_wire_shape();
+
+        assert_eq!(wire_shape.reasoning_summary.as_deref(), Some("detailed"));
+        assert_eq!(wire_shape.text_verbosity.as_deref(), Some("low"));
+    }
+
+    #[test]
+    fn reasoning_output_wire_shape_omits_none_summary_and_unsupported_verbosity() {
+        let request = RuntimeReplyStreamRequest::new(
+            "session-1",
+            RuntimeReplyInputKind::UserMessage,
+            42,
+            None,
+        )
+        .with_model_request_policy(RuntimeReplyModelRequestPolicy::new(
+            None,
+            None,
+            Some(RuntimeReplyReasoningOutputPolicy {
+                default_reasoning_summary: "none".to_string(),
+                support_verbosity: false,
+                default_verbosity: Some("high".to_string()),
+                can_set_verbosity: false,
+            }),
+        ));
+
+        let wire_shape = request.provider_request_wire_shape();
+
+        assert_eq!(wire_shape.reasoning_summary, None);
+        assert_eq!(wire_shape.text_verbosity, None);
     }
 }

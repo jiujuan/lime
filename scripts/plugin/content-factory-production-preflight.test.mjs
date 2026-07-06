@@ -121,8 +121,15 @@ describe("content factory production preflight CLI helpers", () => {
         },
       }),
     ).toMatchObject({
+      signatureProof: {
+        algorithm: "RSASSA-PKCS1-v1_5-SHA256",
+        publicKeyId: "content-factory-prod-root-2026",
+        signature: expect.any(String),
+      },
+      signatureRef: descriptor.signatureRef,
       manifestHashMatched: true,
       packageHashMatched: true,
+      signaturePolicy: "required",
       signatureVerificationStatus: "verified",
       status: "ready",
     });

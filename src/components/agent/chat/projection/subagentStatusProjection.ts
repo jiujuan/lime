@@ -67,6 +67,7 @@ export function buildSubagentStatusChangedEvents(
       duration_ms: event.duration_ms,
       tool_count: event.tool_count,
       result_ref: event.result_ref,
+      metadata: event.metadata,
     },
     context,
   );

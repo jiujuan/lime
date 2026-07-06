@@ -30,6 +30,7 @@ import { buildInputbarComposerSectionCopy } from "./components/inputbarComposerS
 import { buildInputbarCoreCopy } from "./components/inputbarCoreCopy";
 import { buildInputbarWorkflowPanelCopy } from "./inputbarWorkflowCopy";
 import type { InputbarSendHandler } from "./inputbarSendPayload";
+import type { InterruptedInputRestoreRequest } from "../../hooks/agentStreamInputRestoreTypes";
 import type { ModelReasoningEffortLevel } from "@/lib/types/modelRegistry";
 
 const SecondaryControlsRow = styled.div`
@@ -109,6 +110,8 @@ interface InputbarProps extends SkillSelectionSourceProps {
   sessionId?: string | null;
   pathReferences?: MessagePathReference[];
   onAddPathReferences?: (references: MessagePathReference[]) => void;
+  inputRestoreRequest?: InterruptedInputRestoreRequest | null;
+  onInputRestoreRequestHandled?: (requestId: string) => void;
   onImportPathReferenceAsKnowledge?: (reference: MessagePathReference) => void;
   onRemovePathReference?: (id: string) => void;
   onClearPathReferences?: () => void;
@@ -176,6 +179,8 @@ export const Inputbar: React.FC<InputbarProps> = ({
   sessionId = null,
   pathReferences = [],
   onAddPathReferences,
+  inputRestoreRequest = null,
+  onInputRestoreRequestHandled,
   onImportPathReferenceAsKnowledge,
   onRemovePathReference,
   onClearPathReferences,
@@ -274,6 +279,8 @@ export const Inputbar: React.FC<InputbarProps> = ({
     sessionId,
     pathReferences,
     onAddPathReferences,
+    inputRestoreRequest,
+    onInputRestoreRequestHandled,
     onClearPathReferences,
     skills,
     serviceSkills,

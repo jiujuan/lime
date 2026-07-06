@@ -7,7 +7,13 @@ impl ModelProviderAppDataSource for LocalAppDataSource {
         &self,
         params: ModelListParams,
     ) -> Result<ModelListResponse, RuntimeCoreError> {
-        model_providers::list_models(&self.model_registry_service, params).await
+        model_providers::list_models(
+            &self.db,
+            &self.api_key_provider_service,
+            &self.model_registry_service,
+            params,
+        )
+        .await
     }
 
     async fn list_model_preferences(

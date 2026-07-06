@@ -51,6 +51,7 @@ use lime_core::database::dao::api_key_provider::ProviderWithKeys;
 use lime_core::database::system_providers::get_system_providers;
 use lime_core::database::system_providers::SystemProviderDef;
 use lime_core::database::DbConnection;
+use lime_core::models::model_registry::EnhancedModelMetadata;
 use lime_core::models::model_registry::ModelTier;
 use lime_services::api_key_provider_service::ApiKeyProviderService;
 use lime_services::model_registry_service::FetchModelsResult;
@@ -58,27 +59,131 @@ use lime_services::model_registry_service::ModelRegistryService;
 use serde_json::json;
 use serde_json::Map;
 use serde_json::Value;
+use std::collections::HashSet;
 
 pub(crate) async fn list_models(
+    db: &DbConnection,
+    api_key_provider_service: &ApiKeyProviderService,
     model_registry_service: &ModelRegistryService,
     params: ModelListParams,
 ) -> Result<ModelListResponse, RuntimeCoreError> {
-    let models = if let Some(provider_id) = params.provider_id.as_deref() {
+    let provider_filter = params
+        .provider_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let tier_filter = params
+        .tier
+        .as_deref()
+        .map(|tier| tier.parse::<ModelTier>().map_err(data_error))
+        .transpose()?;
+
+    let mut models = if let Some(provider_id) = provider_filter {
         model_registry_service
             .get_models_by_provider(provider_id)
             .await
-    } else if let Some(tier) = params.tier.as_deref() {
-        let tier = tier.parse::<ModelTier>().map_err(data_error)?;
+    } else if let Some(tier) = tier_filter.clone() {
         model_registry_service.get_models_by_tier(tier).await
     } else {
         model_registry_service.get_all_models().await
     };
+
+    append_provider_models(
+        db,
+        api_key_provider_service,
+        model_registry_service,
+        provider_filter,
+        tier_filter.as_ref(),
+        &mut models,
+    )?;
+
     Ok(ModelListResponse {
         models: values_from_serializable_vec(models)?
             .iter()
             .map(model_info_from_value)
             .collect(),
     })
+}
+
+fn append_provider_models(
+    db: &DbConnection,
+    api_key_provider_service: &ApiKeyProviderService,
+    model_registry_service: &ModelRegistryService,
+    provider_filter: Option<&str>,
+    tier_filter: Option<&ModelTier>,
+    models: &mut Vec<EnhancedModelMetadata>,
+) -> Result<(), RuntimeCoreError> {
+    let mut seen = models
+        .iter()
+        .map(model_dedupe_key)
+        .collect::<HashSet<(String, String)>>();
+    let providers = api_key_provider_service
+        .get_all_providers(db)
+        .map_err(data_error)?;
+
+    for provider in providers {
+        if !provider.provider.enabled {
+            continue;
+        }
+        let provider_id = provider.provider.id.as_str();
+        if provider_filter.is_some_and(|filter| filter != provider_id) {
+            continue;
+        }
+
+        for model_id in &provider.provider.custom_models {
+            append_model_if_visible(
+                models,
+                &mut seen,
+                tier_filter,
+                model_registry_service.build_declared_model_metadata(provider_id, model_id),
+            );
+        }
+
+        let provider_type = provider.provider.effective_provider_type();
+        match model_registry_service.get_cached_provider_models(
+            provider_id,
+            &provider.provider.api_host,
+            Some(provider_type),
+        ) {
+            Ok(Some(result)) => {
+                for model in result.models {
+                    append_model_if_visible(models, &mut seen, tier_filter, model);
+                }
+            }
+            Ok(None) => {}
+            Err(error) => {
+                tracing::warn!(
+                    "[ModelProvider] 读取 Provider 模型缓存失败，跳过缓存模型: provider={}, error={}",
+                    provider_id,
+                    error
+                );
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn append_model_if_visible(
+    models: &mut Vec<EnhancedModelMetadata>,
+    seen: &mut HashSet<(String, String)>,
+    tier_filter: Option<&ModelTier>,
+    model: EnhancedModelMetadata,
+) {
+    if tier_filter.is_some_and(|tier| &model.tier != tier) {
+        return;
+    }
+    let key = model_dedupe_key(&model);
+    if seen.insert(key) {
+        models.push(model);
+    }
+}
+
+fn model_dedupe_key(model: &EnhancedModelMetadata) -> (String, String) {
+    (
+        model.provider_id.trim().to_ascii_lowercase(),
+        model.id.trim().to_ascii_lowercase(),
+    )
 }
 
 pub(crate) async fn list_model_preferences(
@@ -658,5 +763,87 @@ fn legacy_provider_ids(provider_id: &str) -> Vec<String> {
         "baidu-cloud" => vec!["wenxin".to_string()],
         "tencent-cloud-ti" => vec!["tencentcloud".to_string()],
         _ => vec![],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use lime_core::database::schema;
+    use rusqlite::{params, Connection};
+    use std::sync::{Arc, Mutex};
+
+    fn setup_model_provider_db() -> DbConnection {
+        let conn = Connection::open_in_memory().expect("open db");
+        schema::create_tables(&conn).expect("create schema");
+        Arc::new(Mutex::new(conn))
+    }
+
+    fn insert_provider(
+        db: &DbConnection,
+        provider_id: &str,
+        enabled: bool,
+        custom_models: &[&str],
+    ) {
+        let custom_models = serde_json::to_string(custom_models).expect("serialize models");
+        let conn = db.lock().expect("lock db");
+        conn.execute(
+            "INSERT INTO api_key_providers (
+                id, name, type, api_host, is_system, group_name, enabled, sort_order,
+                custom_models, created_at, updated_at
+             ) VALUES (?1, ?2, 'openai', ?3, 0, 'cloud', ?4, 0, ?5, ?6, ?6)",
+            params![
+                provider_id,
+                provider_id,
+                "https://llm.limeai.run#lime_tenant_id=tenant-0001",
+                if enabled { 1 } else { 0 },
+                custom_models,
+                "2026-07-06T00:00:00Z",
+            ],
+        )
+        .expect("insert provider");
+    }
+
+    #[tokio::test]
+    async fn list_models_includes_enabled_provider_declared_models() {
+        let db = setup_model_provider_db();
+        insert_provider(&db, "lime-hub", true, &["gpt-5.1", "gpt-5.1"]);
+        let api_key_provider_service = ApiKeyProviderService::new();
+        let model_registry_service = ModelRegistryService::new(db.clone());
+
+        let response = list_models(
+            &db,
+            &api_key_provider_service,
+            &model_registry_service,
+            ModelListParams {
+                provider_id: Some("lime-hub".to_string()),
+                tier: None,
+            },
+        )
+        .await
+        .expect("list models");
+
+        assert_eq!(response.models.len(), 1);
+        assert_eq!(response.models[0].id, "gpt-5.1");
+        assert_eq!(response.models[0].provider_id, "lime-hub");
+    }
+
+    #[tokio::test]
+    async fn list_models_skips_disabled_provider_declared_models() {
+        let db = setup_model_provider_db();
+        insert_provider(&db, "disabled-hub", false, &["gpt-disabled"]);
+        let api_key_provider_service = ApiKeyProviderService::new();
+        let model_registry_service = ModelRegistryService::new(db.clone());
+
+        let response = list_models(
+            &db,
+            &api_key_provider_service,
+            &model_registry_service,
+            ModelListParams::default(),
+        )
+        .await
+        .expect("list models");
+
+        assert!(response.models.is_empty());
     }
 }

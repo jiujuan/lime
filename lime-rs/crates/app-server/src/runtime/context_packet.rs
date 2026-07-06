@@ -1,3 +1,7 @@
+use runtime_core::{
+    ContextFragmentBudgetPolicy, ContextFragmentBudgetStatus, ContextFragmentEnvelope,
+    ContextFragmentInput, ContextFragmentSource, ContextSidecarReference,
+};
 use serde_json::{json, Map, Value};
 
 const CONTEXT_PACKET_SCHEMA: &str = "context_packet.v1";
@@ -205,6 +209,7 @@ struct PacketAdmission {
     token_count: usize,
     truncated: bool,
     rejected_reason: Option<&'static str>,
+    fragment_envelope: Option<ContextFragmentEnvelope>,
 }
 
 pub(crate) fn assemble_context_packets(packets: Vec<ContextPacket>) -> ContextAssembly {
@@ -245,6 +250,7 @@ pub(crate) fn assemble_context_packets(packets: Vec<ContextPacket>) -> ContextAs
             "truncated": admission.truncated,
             "admitted": admitted,
             "rejectedReason": admission.rejected_reason,
+            "fragmentEnvelope": admission.fragment_envelope,
         }));
     }
 
@@ -274,6 +280,7 @@ fn admit_packet(packet: ContextPacket) -> PacketAdmission {
             token_count: 0,
             truncated: false,
             rejected_reason: Some("empty"),
+            fragment_envelope: None,
         };
     }
     if contains_secret_like_content(&normalized) {
@@ -284,18 +291,35 @@ fn admit_packet(packet: ContextPacket) -> PacketAdmission {
             token_count,
             truncated: false,
             rejected_reason: Some("secret_like"),
+            fragment_envelope: None,
         };
     }
 
     let token_budget = effective_token_budget(packet.token_budget);
-    let token_count = approx_token_count(&normalized);
-    let (content, token_count, truncated) = if token_count > token_budget {
-        let content = truncate_to_token_budget(&normalized, token_budget);
-        let token_count = approx_token_count(&content);
-        (content, token_count, true)
-    } else {
-        (normalized, token_count, false)
-    };
+    let estimated_tokens = approx_token_count(&normalized);
+    let fragment_envelope = ContextFragmentEnvelope::from_input(
+        ContextFragmentInput {
+            fragment_id: packet.id.clone(),
+            source: ContextFragmentSource {
+                kind: packet.source.as_str().to_string(),
+                label: Some(packet.kind.as_str().to_string()),
+            },
+            content: normalized,
+            estimated_tokens: Some(usize_to_u32_saturating(estimated_tokens)),
+            sidecar_reference: context_sidecar_reference(&packet.metadata),
+        },
+        ContextFragmentBudgetPolicy {
+            max_preview_chars: token_budget.saturating_mul(CHARS_PER_TOKEN),
+            max_model_visible_tokens: usize_to_u32_saturating(token_budget),
+        },
+    );
+    let content = fragment_envelope.model_visible_preview.clone();
+    let token_count = approx_token_count(&content);
+    let truncated = matches!(
+        fragment_envelope.budget_decision.status,
+        ContextFragmentBudgetStatus::PreviewWithReference
+            | ContextFragmentBudgetStatus::PreviewRequiresReference
+    );
 
     PacketAdmission {
         packet,
@@ -303,6 +327,7 @@ fn admit_packet(packet: ContextPacket) -> PacketAdmission {
         token_count,
         truncated,
         rejected_reason: None,
+        fragment_envelope: Some(fragment_envelope),
     }
 }
 
@@ -386,13 +411,34 @@ fn effective_token_budget(token_budget: usize) -> usize {
     token_budget.clamp(1, HARD_PACKET_MAX_TOKENS)
 }
 
-fn truncate_to_token_budget(value: &str, token_budget: usize) -> String {
-    let max_chars = token_budget.saturating_mul(CHARS_PER_TOKEN);
-    value.chars().take(max_chars).collect::<String>()
-}
-
 fn approx_token_count(value: &str) -> usize {
     value.chars().count().saturating_add(CHARS_PER_TOKEN - 1) / CHARS_PER_TOKEN
+}
+
+fn usize_to_u32_saturating(value: usize) -> u32 {
+    value.min(u32::MAX as usize) as u32
+}
+
+fn context_sidecar_reference(metadata: &Map<String, Value>) -> Option<ContextSidecarReference> {
+    let value = metadata
+        .get("sidecarRef")
+        .or_else(|| metadata.get("sidecar_reference"))?;
+    let kind = string_value_field(value, &["kind"]).unwrap_or("context_sidecar");
+    let uri = string_value_field(value, &["ref", "uri", "relativePath", "relative_path"])?;
+    let sha256 = string_value_field(value, &["sha256"]).map(str::to_string);
+    Some(ContextSidecarReference {
+        kind: kind.to_string(),
+        uri: uri.to_string(),
+        sha256,
+    })
+}
+
+fn string_value_field<'a>(value: &'a Value, keys: &[&str]) -> Option<&'a str> {
+    keys.iter()
+        .filter_map(|key| value.get(*key))
+        .find_map(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
 }
 
 fn contains_secret_like_content(value: &str) -> bool {
@@ -488,7 +534,16 @@ mod tests {
         assert_eq!(assembly.admitted_packets.len(), 1);
         assert!(assembly.admitted_packets[0].truncated);
         assert_eq!(assembly.admitted_packets[0].content.chars().count(), 40);
+        assert!(assembly.admitted_packets[0].content.ends_with("..."));
         assert_eq!(assembly.telemetry["packets"][0]["truncated"], true);
+        assert_eq!(
+            assembly.telemetry["packets"][0]["fragmentEnvelope"]["budget_decision"]["status"],
+            "preview_requires_reference"
+        );
+        assert_eq!(
+            assembly.telemetry["packets"][0]["fragmentEnvelope"]["model_visible_preview"],
+            assembly.admitted_packets[0].content
+        );
     }
 
     #[test]
@@ -508,6 +563,32 @@ mod tests {
         assert_eq!(
             assembly.telemetry["packets"][0]["rejectedReason"].as_str(),
             Some("secret_like")
+        );
+        assert!(assembly.telemetry["packets"][0]["fragmentEnvelope"].is_null());
+    }
+
+    #[test]
+    fn assembler_records_sidecar_backed_fragment_envelope() {
+        let mut metadata = Map::new();
+        metadata.insert(
+            "sidecarRef".to_string(),
+            json!({
+                "ref": "sidecar://context/session-compaction",
+                "kind": "context_compaction",
+                "sha256": "sha256:cccc"
+            }),
+        );
+        let packet = ContextPacket::session_compaction("summary ".repeat(60), 8, metadata);
+
+        let assembly = assemble_context_packets(vec![packet]);
+
+        assert_eq!(
+            assembly.telemetry["packets"][0]["fragmentEnvelope"]["budget_decision"]["status"],
+            "preview_with_reference"
+        );
+        assert_eq!(
+            assembly.telemetry["packets"][0]["fragmentEnvelope"]["sidecar_reference"]["uri"],
+            "sidecar://context/session-compaction"
         );
     }
 }

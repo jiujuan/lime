@@ -24,6 +24,15 @@ const STRUCTURED_DETAIL_OBJECT_KEYS = [
   "content",
 ] as const;
 
+const STRUCTURED_DETAIL_SUPPLEMENTAL_KEYS = [
+  "ids",
+  "references",
+  "referenceIds",
+  "reference_ids",
+  "citations",
+  "sources",
+] as const;
+
 export function sanitizeToolResultDetailMarkdown(value: string): string {
   return value.replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
@@ -68,7 +77,21 @@ export function extractStructuredToolDetailText(
   for (const key of STRUCTURED_DETAIL_TEXT_KEYS) {
     const candidate = record[key];
     if (typeof candidate === "string" && candidate.trim()) {
-      return candidate.trim();
+      const primary = candidate.trim();
+      const supplemental = STRUCTURED_DETAIL_SUPPLEMENTAL_KEYS.flatMap(
+        (supplementalKey) => {
+          const supplementalValue = record[supplementalKey];
+          if (supplementalValue === undefined) {
+            return [];
+          }
+          const text = extractStructuredToolDetailText(
+            supplementalValue,
+            visited,
+          );
+          return text && text !== primary ? [text] : [];
+        },
+      );
+      return [primary, ...supplemental].slice(0, 4).join("\n\n");
     }
   }
 

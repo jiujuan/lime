@@ -86,7 +86,7 @@ export function resolveTaskCenterDraftSurfaceState({
     isTaskCenterEntry && (activeTaskCenterDraftTab || draftSurfaceActive),
   );
   const isTaskCenterDraftSendInFlight = Boolean(
-    agentEntry === "claw" &&
+    (agentEntry === "claw" || agentEntry === "new-task") &&
     draftSendRequest?.materializeDraft &&
     (activeTaskCenterDraftTab
       ? draftSendRequest.draftTabId === activeTaskCenterDraftTab.id

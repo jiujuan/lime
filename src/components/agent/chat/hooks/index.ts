@@ -6,6 +6,7 @@
 
 import { useAsterAgentChat } from "./useAsterAgentChat";
 import type { SoulInteractionCopy } from "@/lib/soul/interactionCopy";
+import type { InterruptedInputRestoreRequest } from "./agentStreamInputRestoreTypes";
 export { useArtifactAutoPreviewSync } from "./useArtifactAutoPreviewSync";
 
 export type { Topic } from "./agentChatShared";
@@ -30,6 +31,7 @@ interface UseAgentChatUnifiedOptions {
     sessionId: string,
   ) => import("../utils/chatToolPreferences").ChatToolPreferences | null;
   onOpenSubagents?: () => void;
+  onRestoreInterruptedInput?: (request: InterruptedInputRestoreRequest) => void;
   soulCopy?: SoulInteractionCopy;
 }
 

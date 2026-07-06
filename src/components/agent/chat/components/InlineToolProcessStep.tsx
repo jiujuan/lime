@@ -39,6 +39,7 @@ import {
   resolveToolProcessNarrative,
   isLikelyWebRetrievalDiagnosticNoise,
 } from "../utils/toolProcessSummary";
+import { resolveToolSoulMetadataDomAttributes } from "../utils/toolSoulLifecycleMetadata";
 import { resolveMemoryToolEvidence } from "../utils/memoryToolEvidence";
 import {
   resolveWorkspaceSkillRuntimeEnableResultDisplay,
@@ -223,6 +224,18 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
   const processNarrative = useMemo(
     () => resolveToolProcessNarrative(toolCall),
     [toolCall],
+  );
+  const soulLifecycleAttributes = useMemo(
+    () => resolveToolSoulMetadataDomAttributes(processNarrative),
+    [
+      processNarrative.packId,
+      processNarrative.profileId,
+      processNarrative.riskLevel,
+      processNarrative.soulPhase,
+      processNarrative.soulSurface,
+      processNarrative.styleLevel,
+      processNarrative.toneVariant,
+    ],
   );
   const memoryToolEvidence = useMemo(
     () => resolveMemoryToolEvidence(toolCall),
@@ -620,6 +633,7 @@ export const InlineToolProcessStep: React.FC<InlineToolProcessStepProps> = ({
       className="py-1"
       data-testid="inline-tool-process-step"
       data-grouped={grouped ? "yes" : "no"}
+      {...soulLifecycleAttributes}
     >
       <div className="flex items-start gap-2">
         {grouped ? (

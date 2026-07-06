@@ -4,6 +4,11 @@ import type { QueuedTurnSnapshot } from "@/lib/api/agentRuntime";
 import type { Message } from "../types";
 import type { ActiveStreamState } from "./agentStreamSubmissionLifecycle";
 import type { AgentRuntimeAdapter } from "./agentRuntimeAdapter";
+import type {
+  InterruptedInputDraftSnapshot,
+  InterruptedInputRestorePlan,
+  InterruptedInputRestoreRequest,
+} from "./agentStreamInputRestoreTypes";
 import { updateMessageArtifactsStatus } from "../utils/messageArtifacts";
 import {
   removeThreadItemState,
@@ -26,7 +31,10 @@ interface StopAgentStreamOptions {
   setThreadTurns: Dispatch<SetStateAction<AgentThreadTurn[]>>;
   setCurrentTurnId: Dispatch<SetStateAction<string | null>>;
   setMessages: Dispatch<SetStateAction<Message[]>>;
+  getMessages?: () => readonly Message[];
+  getQueuedTurns?: () => readonly QueuedTurnSnapshot[];
   setActiveStream: (nextActive: ActiveStreamState | null) => void;
+  onRestoreInterruptedInput?: (request: InterruptedInputRestoreRequest) => void;
   notify: AgentStreamFlowNotify;
   onInterruptError?: (error: unknown) => void;
 }
@@ -46,6 +54,143 @@ function resolveInterruptTurnId(activeStream: ActiveStreamState | null) {
 }
 
 const INTERRUPTED_TOOL_RESULT_TEXT = "本轮已中止";
+
+function hasDraftPayload(draft: InterruptedInputDraftSnapshot): boolean {
+  return (
+    draft.text.trim().length > 0 ||
+    (draft.images?.length ?? 0) > 0 ||
+    (draft.pathReferences?.length ?? 0) > 0 ||
+    (draft.textElements?.length ?? 0) > 0 ||
+    Boolean(draft.inputCapabilityRoute)
+  );
+}
+
+function normalizeInterruptedInputDraft(
+  draft: InterruptedInputDraftSnapshot | null | undefined,
+): InterruptedInputDraftSnapshot | null {
+  if (!draft || !hasDraftPayload(draft)) {
+    return null;
+  }
+
+  return {
+    text: draft.text,
+    images: draft.images ? [...draft.images] : [],
+    pathReferences: draft.pathReferences ? [...draft.pathReferences] : [],
+    textElements: draft.textElements ? [...draft.textElements] : [],
+    inputCapabilityRoute: draft.inputCapabilityRoute,
+  };
+}
+
+function sortQueuedTurnsForRestore(
+  queuedTurns: readonly QueuedTurnSnapshot[] | null | undefined,
+): readonly QueuedTurnSnapshot[] {
+  return [...(queuedTurns ?? [])].sort((left, right) => {
+    if (left.position !== right.position) {
+      return left.position - right.position;
+    }
+    return left.created_at - right.created_at;
+  });
+}
+
+function messageHasVisibleText(message: Message | null | undefined): boolean {
+  if (!message) {
+    return false;
+  }
+  if (message.content.trim().length > 0) {
+    return true;
+  }
+  return (
+    message.contentParts?.some(
+      (part) => part.type === "text" && part.text.trim().length > 0,
+    ) ?? false
+  );
+}
+
+function messageHasThinkingOnlySignal(
+  message: Message | null | undefined,
+): boolean {
+  if (!message) {
+    return false;
+  }
+  return Boolean(
+    message.isThinking ||
+    message.thinkingContent?.trim() ||
+    message.contentParts?.some(
+      (part) => part.type === "thinking" && part.text.trim().length > 0,
+    ),
+  );
+}
+
+function messageHasSideEffectActivity(
+  message: Message | null | undefined,
+): boolean {
+  if (!message) {
+    return false;
+  }
+  return Boolean(
+    (message.toolCalls?.length ?? 0) > 0 ||
+    (message.actionRequests?.length ?? 0) > 0 ||
+    (message.artifacts?.length ?? 0) > 0 ||
+    message.imageWorkbenchPreview ||
+    message.taskPreview ||
+    message.contentParts?.some(
+      (part) =>
+        part.type === "tool_use" ||
+        part.type === "action_required" ||
+        part.type === "file_changes_batch",
+    ),
+  );
+}
+
+export function resolveInterruptedInputRestorePlan(params: {
+  submittedDraft?: InterruptedInputDraftSnapshot | null;
+  assistantMessage?: Message | null;
+  queuedTurns?: readonly QueuedTurnSnapshot[] | null;
+}): InterruptedInputRestorePlan {
+  const draft = normalizeInterruptedInputDraft(params.submittedDraft);
+  const queuedTurns = sortQueuedTurnsForRestore(params.queuedTurns);
+  const queuedTurnHandling = queuedTurns.length > 0 ? "preserve" : "none";
+
+  if (!draft) {
+    return {
+      shouldRestoreComposer: false,
+      reason: "no_submitted_draft",
+      draft: null,
+      queuedTurnHandling,
+      queuedTurns,
+    };
+  }
+
+  if (messageHasSideEffectActivity(params.assistantMessage)) {
+    return {
+      shouldRestoreComposer: false,
+      reason: "side_effect_activity_present",
+      draft: null,
+      queuedTurnHandling,
+      queuedTurns,
+    };
+  }
+
+  if (messageHasVisibleText(params.assistantMessage)) {
+    return {
+      shouldRestoreComposer: false,
+      reason: "visible_output_present",
+      draft: null,
+      queuedTurnHandling,
+      queuedTurns,
+    };
+  }
+
+  return {
+    shouldRestoreComposer: true,
+    reason: messageHasThinkingOnlySignal(params.assistantMessage)
+      ? "thinking_only_cancelled_turn"
+      : "output_free_interrupted_turn",
+    draft,
+    queuedTurnHandling,
+    queuedTurns,
+  };
+}
 
 function settleInterruptedToolCall<
   T extends { status: string; result?: unknown; endTime?: Date },
@@ -139,12 +284,14 @@ export async function stopActiveAgentStream(options: StopAgentStreamOptions) {
     runtime,
     removeStreamListener,
     refreshSessionReadModel,
-    setQueuedTurns,
     setThreadItems,
     setThreadTurns,
     setCurrentTurnId,
     setMessages,
+    getMessages,
+    getQueuedTurns,
     setActiveStream,
+    onRestoreInterruptedInput,
     notify,
     onInterruptError,
   } = options;
@@ -154,6 +301,17 @@ export async function stopActiveAgentStream(options: StopAgentStreamOptions) {
   }
 
   const activeSessionId = activeStream?.sessionId || sessionIdRef.current;
+  const assistantMessage =
+    activeStream?.assistantMsgId && getMessages
+      ? (getMessages().find(
+          (message) => message.id === activeStream.assistantMsgId,
+        ) ?? null)
+      : null;
+  const restorePlan = resolveInterruptedInputRestorePlan({
+    submittedDraft: activeStream?.submittedDraft,
+    assistantMessage,
+    queuedTurns: getQueuedTurns?.(),
+  });
   const runInterruptAndRefresh = async () => {
     if (!activeSessionId) {
       return;
@@ -173,8 +331,6 @@ export async function stopActiveAgentStream(options: StopAgentStreamOptions) {
       onInterruptError?.(error);
     }
   };
-
-  setQueuedTurns([]);
 
   if (activeStream?.assistantMsgId) {
     if (activeStream.pendingItemKey) {
@@ -208,6 +364,13 @@ export async function stopActiveAgentStream(options: StopAgentStreamOptions) {
   }
 
   setActiveStream(null);
+  if (restorePlan.shouldRestoreComposer && restorePlan.draft) {
+    onRestoreInterruptedInput?.({
+      requestId: crypto.randomUUID(),
+      reason: restorePlan.reason,
+      draft: restorePlan.draft,
+    });
+  }
   notify.info("已停止生成");
   void runInterruptAndRefresh();
 }

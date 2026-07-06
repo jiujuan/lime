@@ -30,6 +30,72 @@ fn write_media_task_artifact_uses_default_task_root() {
 }
 
 #[test]
+fn task_artifact_mutations_keep_single_parseable_json_file() {
+    let temp_dir = tempfile::tempdir().expect("create temp dir");
+    let output = write_task_artifact(
+        temp_dir.path(),
+        TaskType::ImageGenerate,
+        Some("配图".to_string()),
+        serde_json::json!({ "prompt": "未来城市插图" }),
+        TaskWriteOptions::default(),
+    )
+    .expect("write media task");
+
+    update_task_status(temp_dir.path(), &output.task_id, None, "running")
+        .expect("update task status");
+    let patched = patch_task_artifact(
+        temp_dir.path(),
+        &output.task_id,
+        None,
+        TaskArtifactPatch {
+            status: Some("succeeded".to_string()),
+            result: Some(Some(serde_json::json!({
+                "artifacts": [
+                    {
+                        "kind": "image",
+                        "path": "images/result.png"
+                    }
+                ]
+            }))),
+            ..TaskArtifactPatch::default()
+        },
+    )
+    .expect("patch task result");
+
+    let task_path = temp_dir.path().join(&patched.path);
+    let content = std::fs::read_to_string(&task_path).expect("read task json");
+    let parsed: TaskArtifactRecord = serde_json::from_str(&content).expect("parse task json");
+    assert_eq!(parsed.normalized_status, "succeeded");
+    assert_eq!(
+        parsed
+            .result
+            .as_ref()
+            .and_then(|value| value.pointer("/artifacts/0/path")),
+        Some(&serde_json::json!("images/result.png"))
+    );
+
+    let parent = task_path.parent().expect("task parent should exist");
+    let entries: Vec<_> = std::fs::read_dir(parent)
+        .expect("read task dir")
+        .map(|entry| {
+            entry
+                .expect("read task dir entry")
+                .file_name()
+                .to_string_lossy()
+                .to_string()
+        })
+        .collect();
+    assert_eq!(
+        entries,
+        vec![task_path
+            .file_name()
+            .expect("task file name")
+            .to_string_lossy()
+            .to_string()]
+    );
+}
+
+#[test]
 fn write_media_task_artifact_rejects_parent_dir_escape() {
     let temp_dir = tempfile::tempdir().expect("create temp dir");
     let error = write_media_task_artifact(

@@ -111,6 +111,248 @@ describe("appServerEventStream", () => {
     });
   });
 
+  it("tool.started 应保留 runtime 产出的过程摘要 metadata", () => {
+    const payload = projectAppServerAgentEventPayload({
+      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "event-tool-start",
+          sessionId: "session-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          sequence: 13,
+          timestamp: "2026-07-05T10:00:01.000Z",
+          type: "tool.started",
+          payload: {
+            toolCallId: "tool-search-start",
+            tool_name: "web_search",
+            arguments: { query: "runtime facts" },
+            metadata: {
+              tool_process_summary: {
+                source: "runtime_facts",
+                pre: {
+                  key: "toolCall.processSummary.webSearch.searchFirstWithQuery",
+                  values: { query: "runtime facts" },
+                },
+              },
+            },
+          },
+        },
+      },
+    } as never);
+
+    expect(payload).toMatchObject({
+      type: "tool_start",
+      tool_id: "tool-search-start",
+      tool_name: "web_search",
+      metadata: {
+        tool_process_summary: {
+          source: "runtime_facts",
+        },
+      },
+    });
+  });
+
+  it("tool.progress 应保留 App Server 产出的 lifecycle metadata", () => {
+    const payload = projectAppServerAgentEventPayload({
+      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "event-tool-progress",
+          sessionId: "session-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          sequence: 14,
+          timestamp: "2026-07-05T10:00:01.500Z",
+          type: "tool.progress",
+          payload: {
+            toolCallId: "tool-search-progress",
+            message: "reading response",
+            metadata: {
+              soul_lifecycle: {
+                surface: "tool_lifecycle",
+                phase: "tool_progress",
+                status: "progress",
+                styleLevel: "L1",
+                riskLevel: "normal",
+              },
+              tool_process_facts: {
+                status: "progress",
+                phase: "tool_progress",
+              },
+            },
+          },
+        },
+      },
+    } as never);
+
+    expect(payload).toMatchObject({
+      type: "tool_progress",
+      tool_id: "tool-search-progress",
+      progress: {
+        message: "reading response",
+        metadata: {
+          soul_lifecycle: {
+            phase: "tool_progress",
+            status: "progress",
+          },
+          tool_process_facts: {
+            status: "progress",
+          },
+        },
+      },
+    });
+  });
+
+  it("tool.output.delta 应保留 App Server 产出的 lifecycle metadata", () => {
+    const payload = projectAppServerAgentEventPayload({
+      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "event-tool-output-delta",
+          sessionId: "session-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          sequence: 15,
+          timestamp: "2026-07-05T10:00:01.750Z",
+          type: "tool.output.delta",
+          payload: {
+            toolCallId: "tool-search-progress",
+            delta: "partial output",
+            metadata: {
+              soul_lifecycle: {
+                surface: "tool_lifecycle",
+                phase: "tool_progress",
+                status: "output_delta",
+                styleLevel: "L1",
+                riskLevel: "normal",
+              },
+              tool_process_facts: {
+                status: "output_delta",
+                phase: "tool_progress",
+              },
+            },
+          },
+        },
+      },
+    } as never);
+
+    expect(payload).toMatchObject({
+      type: "tool_output_delta",
+      tool_id: "tool-search-progress",
+      delta: "partial output",
+      metadata: {
+        soul_lifecycle: {
+          phase: "tool_progress",
+          status: "output_delta",
+        },
+        tool_process_facts: {
+          status: "output_delta",
+        },
+      },
+    });
+  });
+
+  it("tool.result 应保留 structuredContent 供工具过程展示正文", () => {
+    const payload = projectAppServerAgentEventPayload({
+      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "event-tool-result-structured-content",
+          sessionId: "session-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          sequence: 16,
+          timestamp: "2026-07-05T10:00:02.000Z",
+          type: "tool.result",
+          payload: {
+            toolCallId: "tool-mcp-structured",
+            result: {
+              success: true,
+              output: JSON.stringify({
+                request_metadata: {
+                  event: "agentSession/turn/start",
+                },
+                diagnostics: {
+                  projection: "mcp_tool_result_projection",
+                },
+              }),
+              structuredContent: {
+                answer: "MCP structuredContent 展示验证完成",
+                ids: ["doc-structured-1"],
+              },
+            },
+          },
+        },
+      },
+    } as never);
+
+    expect(payload).toMatchObject({
+      type: "tool_end",
+      tool_id: "tool-mcp-structured",
+      result: {
+        success: true,
+        structuredContent: {
+          answer: "MCP structuredContent 展示验证完成",
+          ids: ["doc-structured-1"],
+        },
+        structured_content: {
+          answer: "MCP structuredContent 展示验证完成",
+          ids: ["doc-structured-1"],
+        },
+      },
+    });
+  });
+
+  it("tool.failed 应按工具终态投影并保留失败过程摘要 metadata", () => {
+    const payload = projectAppServerAgentEventPayload({
+      method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+      params: {
+        event: {
+          eventId: "event-tool-failed",
+          sessionId: "session-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          sequence: 14,
+          timestamp: "2026-07-05T10:00:02.000Z",
+          type: "tool.failed",
+          payload: {
+            toolCallId: "tool-failed",
+            result: {
+              success: false,
+              output: "test failed",
+              error: "exit code 101",
+              metadata: {
+                tool_process_summary: {
+                  source: "runtime_facts",
+                  failed: {
+                    key: "toolCall.processSummary.error.failed",
+                    values: { message: "exit code 101" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    } as never);
+
+    expect(payload).toMatchObject({
+      type: "tool_end",
+      tool_id: "tool-failed",
+      result: {
+        success: false,
+        output: "test failed",
+        error: "exit code 101",
+        metadata: {
+          tool_process_summary: {
+            source: "runtime_facts",
+          },
+        },
+      },
+    });
+  });
+
   it("artifact.snapshot 应保留 sidecar 读取所需 metadata", () => {
     const payload = projectAppServerAgentEventPayload({
       method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,

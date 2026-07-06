@@ -9,11 +9,14 @@ import type {
   AgentEventToolStart,
   AgentThreadItem,
 } from "@/lib/api/agentProtocol";
+import type { SoulInteractionCopy } from "@/lib/soul/interactionCopy";
+import { buildSoulToolLifecycleDescriptor } from "../projection/soulToolLifecycleDescriptor";
 
 interface ProjectTimelineItemContext {
   activeSessionId: string;
   fallbackTurnId?: string | null;
   now: string;
+  soulCopy?: SoulInteractionCopy;
 }
 
 const LEGACY_TOOL_EVENT_SOURCE = "legacy_tool_event";
@@ -67,7 +70,103 @@ function legacyToolEventMetadata(
   };
 }
 
-function appendTextWithOverlap(base: string | undefined, delta: string): string {
+function mergedMetadataSource(
+  ...records: Array<Record<string, unknown> | undefined>
+): Record<string, unknown> {
+  return records.reduce<Record<string, unknown>>(
+    (merged, record) => (record ? { ...merged, ...record } : merged),
+    {},
+  );
+}
+
+function readStringValue(
+  record: Record<string, unknown> | undefined,
+  ...keys: string[]
+): string | undefined {
+  for (const key of keys) {
+    const value = record?.[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return undefined;
+}
+
+function inheritedSoulLifecycleMetadata(
+  record: Record<string, unknown> | undefined,
+): {
+  toneVariant?: string;
+  profileId?: string;
+  packId?: string;
+  riskLevel?: "normal" | "high";
+} {
+  const lifecycle = normalizeRecord(
+    record?.soul_lifecycle ?? record?.soulLifecycle,
+  );
+  const riskLevel =
+    readStringValue(record, "risk_level", "riskLevel") ??
+    readStringValue(lifecycle, "riskLevel", "risk_level");
+  return {
+    toneVariant:
+      readStringValue(record, "tone_variant", "toneVariant") ??
+      readStringValue(lifecycle, "toneVariant", "tone_variant"),
+    profileId:
+      readStringValue(record, "profile_id", "profileId") ??
+      readStringValue(lifecycle, "profileId", "profile_id"),
+    packId:
+      readStringValue(record, "pack_id", "packId") ??
+      readStringValue(lifecycle, "packId", "pack_id"),
+    riskLevel:
+      riskLevel === "high"
+        ? "high"
+        : riskLevel === "normal"
+          ? "normal"
+          : undefined,
+  };
+}
+
+function toolLifecycleMetadata(
+  context: ProjectTimelineItemContext,
+  status: Parameters<typeof buildSoulToolLifecycleDescriptor>[0]["status"],
+  existing?: Record<string, unknown>,
+): Record<string, unknown> {
+  const inherited = inheritedSoulLifecycleMetadata(existing);
+  const resolved = buildSoulToolLifecycleDescriptor({
+    soulCopy: context.soulCopy,
+    status,
+    highRisk: inherited.riskLevel === "high",
+  });
+  const descriptor = {
+    ...resolved,
+    toneVariant:
+      context.soulCopy || !inherited.toneVariant
+        ? resolved.toneVariant
+        : inherited.toneVariant,
+    profileId:
+      context.soulCopy || !inherited.profileId
+        ? resolved.profileId
+        : inherited.profileId,
+    packId:
+      context.soulCopy || !inherited.packId
+        ? resolved.packId
+        : inherited.packId,
+  };
+  return {
+    soul_lifecycle: descriptor,
+    soul_surface: descriptor.surface,
+    soul_phase: descriptor.phase,
+    style_level: descriptor.styleLevel,
+    risk_level: descriptor.riskLevel,
+    tone_variant: descriptor.toneVariant,
+    ...(descriptor.profileId ? { profile_id: descriptor.profileId } : {}),
+    ...(descriptor.packId ? { pack_id: descriptor.packId } : {}),
+  };
+}
+
+function appendTextWithOverlap(
+  base: string | undefined,
+  delta: string,
+): string {
   if (!base) {
     return delta;
   }
@@ -102,7 +201,7 @@ function timestampFromEvent(
   context: ProjectTimelineItemContext,
 ): string {
   return typeof (event as { timestamp?: unknown }).timestamp === "string"
-    ? ((event as { timestamp: string }).timestamp || context.now)
+    ? (event as { timestamp: string }).timestamp || context.now
     : context.now;
 }
 
@@ -122,7 +221,11 @@ function baseItem(
     thread_id: activeThreadId(event, context),
     turn_id:
       params.turnId ||
-      readString(event as unknown as Record<string, unknown>, "turn_id", "turnId") ||
+      readString(
+        event as unknown as Record<string, unknown>,
+        "turn_id",
+        "turnId",
+      ) ||
       resolveTurnId(context),
     sequence: sequenceFromEvent(event),
     status: params.status,
@@ -175,7 +278,18 @@ function projectToolStart(
     type: "tool_call",
     tool_name: event.tool_name,
     arguments: normalizeToolArguments(event.arguments),
-    metadata: legacyToolEventMetadata(normalizeRecord(existing?.metadata)),
+    metadata: legacyToolEventMetadata(
+      normalizeRecord(existing?.metadata),
+      normalizeRecord(event.metadata),
+      toolLifecycleMetadata(
+        context,
+        "started",
+        mergedMetadataSource(
+          normalizeRecord(existing?.metadata),
+          normalizeRecord(event.metadata),
+        ),
+      ),
+    ),
   };
 }
 
@@ -192,10 +306,11 @@ function projectToolInputDelta(
   const current =
     existing?.type === "tool_call"
       ? existing
-      : ({ ...item, type: "tool_call", tool_name: event.tool_name || "" } as Extract<
-          AgentThreadItem,
-          { type: "tool_call" }
-        >);
+      : ({
+          ...item,
+          type: "tool_call",
+          tool_name: event.tool_name || "",
+        } as Extract<AgentThreadItem, { type: "tool_call" }>);
   const accumulated = event.accumulated_arguments || event.delta;
   return {
     ...current,
@@ -203,7 +318,18 @@ function projectToolInputDelta(
     type: "tool_call",
     tool_name: event.tool_name || current.tool_name || event.tool_id,
     arguments: normalizeToolArguments(accumulated),
-    metadata: legacyToolEventMetadata(normalizeRecord(current?.metadata)),
+    metadata: legacyToolEventMetadata(
+      normalizeRecord(current?.metadata),
+      normalizeRecord(event.metadata),
+      toolLifecycleMetadata(
+        context,
+        "input_delta",
+        mergedMetadataSource(
+          normalizeRecord(current?.metadata),
+          normalizeRecord(event.metadata),
+        ),
+      ),
+    ),
   };
 }
 
@@ -229,6 +355,11 @@ function projectToolOutputDelta(
     error: current?.error,
     metadata: {
       ...legacyToolEventMetadata(normalizeRecord(current?.metadata), metadata),
+      ...toolLifecycleMetadata(
+        context,
+        "output_delta",
+        mergedMetadataSource(normalizeRecord(current?.metadata), metadata),
+      ),
       ...(event.output_kind ? { output_kind: event.output_kind } : {}),
       streaming: true,
     },
@@ -243,6 +374,7 @@ function projectToolProgress(
   if (!event.progress.message && event.progress.progress === undefined) {
     return null;
   }
+  const progressMetadata = normalizeRecord(event.progress.metadata);
   const item = baseItem(event, context, {
     id: event.tool_id,
     status: "in_progress",
@@ -257,9 +389,21 @@ function projectToolProgress(
     output: current?.output,
     success: current?.success,
     error: current?.error,
-    metadata: legacyToolEventMetadata(normalizeRecord(current?.metadata), {
-      progress: event.progress,
-    }),
+    metadata: legacyToolEventMetadata(
+      normalizeRecord(current?.metadata),
+      {
+        progress: event.progress,
+      },
+      progressMetadata,
+      toolLifecycleMetadata(
+        context,
+        "progress",
+        mergedMetadataSource(
+          normalizeRecord(current?.metadata),
+          progressMetadata,
+        ),
+      ),
+    ),
   };
 }
 
@@ -282,9 +426,27 @@ function projectToolEnd(
     output: event.result.output || current?.output,
     success: event.result.success,
     error: event.result.error,
+    structuredContent:
+      event.result.structuredContent ??
+      event.result.structured_content ??
+      current?.structuredContent ??
+      current?.structured_content,
+    structured_content:
+      event.result.structured_content ??
+      event.result.structuredContent ??
+      current?.structured_content ??
+      current?.structuredContent,
     metadata: legacyToolEventMetadata(
       normalizeRecord(current?.metadata),
       event.result.metadata,
+      toolLifecycleMetadata(
+        context,
+        event.result.success === false ? "failed" : "completed",
+        mergedMetadataSource(
+          normalizeRecord(current?.metadata),
+          event.result.metadata,
+        ),
+      ),
     ),
   };
 }
@@ -356,17 +518,25 @@ function projectActionResolved(
     ...(normalizeRecord(event.data) ?? {}),
     ...(event.approved !== undefined ? { approved: event.approved } : {}),
     ...(event.feedback ? { feedback: event.feedback } : {}),
-    ...(event.permission_mode ? { permission_mode: event.permission_mode } : {}),
+    ...(event.permission_mode
+      ? { permission_mode: event.permission_mode }
+      : {}),
   };
-  if (existing?.type === "request_user_input" || item.type === "request_user_input") {
+  if (
+    existing?.type === "request_user_input" ||
+    item.type === "request_user_input"
+  ) {
     return {
       ...mergeBaseItem(existing, item),
       type: "request_user_input",
       request_id: event.request_id,
       action_type: event.action_type,
-      prompt: existing?.type === "request_user_input" ? existing.prompt : undefined,
+      prompt:
+        existing?.type === "request_user_input" ? existing.prompt : undefined,
       questions:
-        existing?.type === "request_user_input" ? existing.questions : undefined,
+        existing?.type === "request_user_input"
+          ? existing.questions
+          : undefined,
       response,
     };
   }

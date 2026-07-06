@@ -1,7 +1,7 @@
 # Lime Soul 个性化实施计划
 
 > 状态：current rollout plan
-> 更新时间：2026-06-03
+> 更新时间：2026-07-06
 > 目标：用小步方式把全局 Soul 能力接入 Lime 个性化主链，同时避免和 Memory 形成重复事实源。
 
 ## 1. 实施原则
@@ -13,17 +13,19 @@
 5. 每一刀都必须继续收敛到 `memory_profile_prompt_service` / `runtime_turn` / `Generation Brief`。
 6. `SOUL.md` 只能是导入 / 导出格式，不进入运行时读取主链。
 7. Expert Plaza 只做当前专家会话的局部 persona / skill / workflow 联动，不写回 Global Soul。
+8. Style Profile 必须走 `Style Pack Registry` / `Style Resolver` / prompt context，不让 UI 或 i18n 自己 hard-code 四套句库。
 
 ## 2. 当前实施快照
 
-截至 2026-06-03，本路线图按“先全局交互人格、再创作声线”的顺序推进：
+截至 2026-07-06，本路线图按“先全局交互人格、再创作声线”的顺序推进：
 
 1. 已完成 Phase 0 文档边界，`internal/roadmap/soul/` 是当前规划事实源。
 2. 已完成 Phase 1 全局 Soul 设置，配置落在 `memory.soul`，复用 current app config 读写，不新增 Tauri 命令。
 3. 已完成 Phase 2 普通聊天注入，`memory_profile_prompt_service` 统一构建 `【全局交互人格】` section，关闭或空配置不注入。
-4. 已完成 Phase 3 `SOUL.md` 导入 / 导出，导入前预览，导入后写 current config，不保留文件路径依赖。
-5. 已接入 Phase 4 current 主链，`memory.soul.artifact_voice` 仍是正式内容声线的保存配置事实源，但普通设置页不再暴露声线 ID / evidence 表单；hook 只读取保存配置，发送层按“本轮开关 + 无显式 generation_brief”把保存声线作为 fallback 归一化到 `artifact.generation_brief`；正式 Artifact metadata 默认补 `generation_brief` 声线边界，`voice_source=none`，不继承 Global Soul / Expert Persona；显式 `generation_brief` 可独立保留并覆盖保存声线，但不会单独触发 Artifact 生成合同。
-6. 已推进 Phase 5 专家联动，`expertRuntimeBinding` 输出 personality boundary metadata，`runtime_turn` 将 `harness.expert` 识别为专家会话上下文。
+4. 已推进 Phase 2.5 Style Profile：四个首发风格已按 built-in Style Pack seed 进入 registry 口径，并开始同步到前端 resolver 与 App Server `memory_soul_prompt_context`；后续重点是工具 lifecycle facts、UI descriptor 和真实 GUI evidence。
+5. 已完成 Phase 3 `SOUL.md` 导入 / 导出，导入前预览，导入后写 current config，不保留文件路径依赖。
+6. 已接入 Phase 4 current 主链，`memory.soul.artifact_voice` 仍是正式内容声线的保存配置事实源，但普通设置页不再暴露声线 ID / evidence 表单；hook 只读取保存配置，发送层按“本轮开关 + 无显式 generation_brief”把保存声线作为 fallback 归一化到 `artifact.generation_brief`；正式 Artifact metadata 默认补 `generation_brief` 声线边界，`voice_source=none`，不继承 Global Soul / Expert Persona；显式 `generation_brief` 可独立保留并覆盖保存声线，但不会单独触发 Artifact 生成合同。
+7. 已推进 Phase 5 专家联动，`expertRuntimeBinding` 输出 personality boundary metadata，`runtime_turn` 将 `harness.expert` 识别为专家会话上下文。
 
 本轮清理：
 
@@ -39,8 +41,9 @@
 当前不要宣称完成：
 
 1. Phase 4 自动 voice evidence 投影、创作流程内声线选择、诊断层详情展示和完整 GUI / E2E 证据。
-2. Phase 6 品牌 / 项目声线包。
-3. Phase 7 session-scoped personality overlay。
+2. Phase 2.5 全对话输出面：不能只用欢迎语、profile id 或少量 runtime status 证明完成；还缺工具前后、正文段落、失败恢复、结尾建议的真实 transcript / GUI 证据。
+3. Phase 6 品牌 / 项目声线包。
+4. Phase 7 session-scoped personality overlay。
 
 ## 3. Phase 0：口径和路线图落盘
 
@@ -135,6 +138,38 @@ npm run verify:gui-smoke
 ```bash
 cargo test --manifest-path "lime-rs/Cargo.toml" memory_profile_prompt_service
 npm run test:contracts
+```
+
+## 5.5 Phase 2.5：Style Pack Registry 与全输出面口吻
+
+目标：
+
+1. 四个首发风格注册为 built-in Style Pack seed，而不是一个共享 default pack 或组件里的四个分支。
+2. `memory_soul_prompt_context` 携带 profile id、pack id、voice primitives、surface contracts、anti-repetition rules、few-shot anchors 和 risk fallback。
+3. i18n 只保留 neutral UI copy；禁止 `agentChat.soulInteraction.<tone>.*` profile 句库。
+4. 工具调用前、中、后、正文小标题、段落转折、失败恢复和结尾建议都按 L0-L4 分层验收。
+
+建议改动：
+
+1. `src/lib/soul/style-profiles/builtInProfiles.ts` 表达四个 built-in Style Pack seed。
+2. `lime-rs/crates/app-server/src/runtime/soul/style_profile.rs` 与前端 seed 字段同构。
+3. `prompt_context.rs` 输出 surface contract、anti-repetition、few-shot anchor 和 risk fallback。
+4. 工具 lifecycle read model 增加 `phase / status / toolName / facts / riskLevel / styleLevel / profileId / packId`。
+5. Agent Chat 工具卡片、折叠条和 timeline 只消费 descriptor，不从 profile id 拼人格化文案。
+
+不做：
+
+1. 不训练 LoRA / QLoRA 作为首版依赖。
+2. 不新增 `personalstyle` Runtime、表或 prompt composer。
+3. 不把 few-shot anchor 作为固定可渲染句子。
+4. 不让正式 artifact 默认继承 Product Soul。
+
+验证：
+
+```bash
+npm exec vitest run src/lib/soul
+cargo test --manifest-path "lime-rs/Cargo.toml" soul_prompt_context
+node scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs --scenario soul-style --timeout-ms 180000 --prefix soul-style-smoke
 ```
 
 ## 6. Phase 3：SOUL.md 导入 / 导出

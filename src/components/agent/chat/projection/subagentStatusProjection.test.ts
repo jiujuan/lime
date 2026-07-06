@@ -29,6 +29,13 @@ describe("subagentStatusProjection", () => {
         provider_parallel_budget: 4,
         queue_reason: "provider_busy",
         retryable_overload: true,
+        metadata: {
+          soul_lifecycle: {
+            profileId: "cheeky_sassy_executor",
+            packId: "com.lime.soul.cheeky-sassy-executor",
+            toneVariant: "cheeky_sassy",
+          },
+        },
       },
       baseContext,
     );
@@ -66,6 +73,14 @@ describe("subagentStatusProjection", () => {
         childSessionId: "child-1",
         parentSessionId: "session-parent",
         status: "running",
+        collaborationFacts: {
+          collaborationSurface: "team_roster",
+          collaborationPhase: "acting",
+          collaborationKind: "subagent_status",
+          profileId: "cheeky_sassy_executor",
+          packId: "com.lime.soul.cheeky-sassy-executor",
+          toneVariant: "cheeky_sassy",
+        },
       },
     });
     expect(events[1]).toMatchObject({

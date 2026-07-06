@@ -76,13 +76,15 @@ function sanitizeArgs(args) {
     "--api-base",
     "--package-url",
     "--private-key-file",
-    "--private-key-env",
     "--tenant-id",
     "--token",
   ]);
+  const keepValueAfter = new Set(["--private-key-env", "--studio-token-env"]);
   return args.map((arg, index) => {
     if (typeof arg !== "string") return String(arg);
     if (redactValueAfter.has(args[index - 1])) return "<redacted>";
+    if (keepValueAfter.has(args[index - 1])) return arg;
+    if (arg.startsWith("--")) return arg;
     if (/token|secret|private-key/i.test(arg)) return "<redacted>";
     return arg;
   });
@@ -326,7 +328,9 @@ export function runContentFactoryProductionReadinessPipeline(input = {}) {
     );
     existingOptionalArg(args, "--catalog", catalogPath);
     existingOptionalArg(args, "--bootstrap", bootstrapPath);
-    existingOptionalArg(args, "--fetch-cloud", fetchCloudPath);
+    if (!fetchCloudFromCatalogExecuted) {
+      existingOptionalArg(args, "--fetch-cloud", fetchCloudPath);
+    }
     optionalArg(args, "--app-signature", appSignaturePath);
     optionalArg(args, "--trust-root", trustRootPath);
     if (fetchCloudFromCatalogExecuted) {
@@ -500,13 +504,17 @@ export function runContentFactoryProductionReadinessPipeline(input = {}) {
     runner,
   });
   const preflightEvidence = readGeneratedJson(files.preflight);
+  const generatedFetchCloudPath = existingPath(files.fetchCloud);
+  const effectiveFetchCloudPath = fetchCloudFromCatalogExecuted
+    ? generatedFetchCloudPath
+    : fetchCloudPath;
 
   const bundleInput = {
     appId,
     bootstrapPath,
     catalogPath,
     expectedVersion,
-    fetchCloudPath: fetchCloudPath || existingPath(files.fetchCloud),
+    fetchCloudPath: effectiveFetchCloudPath,
     guiEvidencePath,
     outputDir: bundleDir,
     preflightPath: existingPath(files.preflight),
@@ -642,6 +650,13 @@ export function runContentFactoryProductionReadinessPipeline(input = {}) {
       executed: fetchCloudFromCatalogExecuted,
       output: fetchCloudFromCatalogExecuted ? files.fetchCloud : null,
       requested: input.fetchCloudFromCatalog === true,
+      source: fetchCloudFromCatalogExecuted
+        ? generatedFetchCloudPath
+          ? "generated"
+          : "generated_missing"
+        : fetchCloudPath
+          ? "input"
+          : "missing",
       skippedReason:
         input.fetchCloudFromCatalog && !catalogPath ? "catalog_missing" : null,
     },
@@ -691,10 +706,11 @@ export function runContentFactoryProductionReadinessPipeline(input = {}) {
       channel,
       contentFactoryDir,
       expectedVersion,
-      fetchCloudPath: fetchCloudPath || existingPath(files.fetchCloud),
+      fetchCloudPath: effectiveFetchCloudPath,
       guiEvidencePath,
       input,
       preflight: preflightEvidence,
+      studioDryRun,
       trustRootPath,
     }),
     note: "Production readiness pipeline. By default it is read-only: preflight, Studio publish --dry-run, local evidence bundling, and readiness report. --fetch-production-release-evidence only reads LimeCore current client endpoints and writes local catalog/bootstrap evidence. Only --generate-signature-proof may write app.signature.yaml and plugin-signature-trust-root.json with an explicit private key input; the pipeline still never uploads, installs, calls a Provider, calls production publish APIs, or writes secret values to evidence.",

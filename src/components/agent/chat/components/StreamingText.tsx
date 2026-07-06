@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useMemo, useRef, useState } from "react";
+import React, { memo, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useDebouncedValue } from "@/lib/artifact/hooks/useDebouncedValue";
 import { MarkdownRenderer, type MarkdownRenderMode } from "./MarkdownRenderer";
@@ -19,46 +19,6 @@ import {
   hasStructuredContentHint,
   STREAMING_STRUCTURED_PARSE_DEBOUNCE_MS,
 } from "./StreamingStructuredContent";
-
-const STREAMING_TEXT_LARGE_BACKLOG_CHARS = 240;
-const STREAMING_TEXT_MEDIUM_BACKLOG_CHARS = 80;
-const STREAMING_TEXT_SMALL_BACKLOG_CHARS = 24;
-const STREAMING_TEXT_INITIAL_VISIBLE_CHARS = 12;
-
-function resolveStreamingTextStepSize(
-  pendingChars: number,
-  elapsedMs: number,
-  charInterval: number,
-): number {
-  const timedStep = Math.max(1, Math.floor(elapsedMs / charInterval));
-
-  if (pendingChars > STREAMING_TEXT_LARGE_BACKLOG_CHARS) {
-    return Math.max(timedStep, Math.ceil(pendingChars * 0.5));
-  }
-
-  if (pendingChars > STREAMING_TEXT_MEDIUM_BACKLOG_CHARS) {
-    return Math.max(timedStep, Math.ceil(pendingChars * 0.3));
-  }
-
-  if (pendingChars > STREAMING_TEXT_SMALL_BACKLOG_CHARS) {
-    return Math.max(timedStep, 8);
-  }
-
-  return timedStep;
-}
-
-function resolveInitialStreamingDisplayText(
-  text: string,
-  isStreaming: boolean,
-) {
-  if (!isStreaming || !text || hasStructuredContentHint(text)) {
-    return isStreaming ? "" : text;
-  }
-
-  return Array.from(text)
-    .slice(0, STREAMING_TEXT_INITIAL_VISIBLE_CHARS)
-    .join("");
-}
 
 // ============ 流式光标 ============
 
@@ -154,7 +114,7 @@ function renderPlanAwareMarkdown(
   );
 }
 
-// ============ 流式文本组件（逐字符动画） ============
+// ============ 流式文本组件 ============
 
 interface StreamingTextProps {
   /** 目标文本（完整内容） */
@@ -163,8 +123,6 @@ interface StreamingTextProps {
   isStreaming: boolean;
   /** 是否显示光标 */
   showCursor?: boolean;
-  /** 每个字符的渲染间隔（毫秒），默认 12ms */
-  charInterval?: number;
   /** A2UI 表单提交回调 */
   onA2UISubmit?: (formData: A2UIFormData) => void;
   /** A2UI 表单 ID（用于持久化） */
@@ -196,15 +154,13 @@ interface StreamingTextProps {
 /**
  * 流式文本组件
  *
- * 实现逐字符平滑显示效果，类似 ChatGPT/Claude 的打字机效果。
- * 当流式结束时，立即显示完整文本。
+ * 直接展示已经收到的最新文本，避免前端打字机动画拖慢首字和输出过程。
  */
 export const StreamingText: React.FC<StreamingTextProps> = memo(
   ({
     text,
     isStreaming,
     showCursor = true,
-    charInterval = 12,
     onA2UISubmit,
     a2uiFormId,
     a2uiInitialFormData,
@@ -220,127 +176,10 @@ export const StreamingText: React.FC<StreamingTextProps> = memo(
     readOnlyA2UI = false,
   }) => {
     const { t } = useTranslation("agent");
-    const initialDisplayText = resolveInitialStreamingDisplayText(
-      text,
-      isStreaming,
-    );
-    const [displayText, setDisplayText] = useState(() => initialDisplayText);
-    const displayIndexRef = useRef(initialDisplayText.length);
-    const animationRef = useRef<number | null>(null);
-    const prevTextRef = useRef(isStreaming ? "" : text);
-    const targetTextRef = useRef(text);
+    const displayText = text;
     const parseCacheRef = useRef<Map<string, ParseResult>>(new Map());
 
-    useEffect(() => {
-      targetTextRef.current = text;
-      // 如果不是流式输出，直接显示完整文本
-      if (!isStreaming) {
-        setDisplayText(text);
-        displayIndexRef.current = text.length;
-        prevTextRef.current = text;
-        if (animationRef.current) {
-          cancelAnimationFrame(animationRef.current);
-          animationRef.current = null;
-        }
-        return;
-      }
-
-      if (
-        !text.startsWith(prevTextRef.current) ||
-        displayIndexRef.current > text.length
-      ) {
-        const seededText = resolveInitialStreamingDisplayText(
-          text,
-          isStreaming,
-        );
-        displayIndexRef.current = seededText.length;
-        prevTextRef.current = "";
-        setDisplayText(seededText);
-      }
-
-      if (!prevTextRef.current && displayIndexRef.current === 0 && text) {
-        const seededText = resolveInitialStreamingDisplayText(
-          text,
-          isStreaming,
-        );
-        if (seededText) {
-          displayIndexRef.current = seededText.length;
-          setDisplayText(seededText);
-        }
-      }
-
-      // 检测文本是否有新增
-      if (text.length <= prevTextRef.current.length) {
-        prevTextRef.current = text;
-        return;
-      }
-
-      prevTextRef.current = text;
-
-      // 如果已经有动画在运行，让它继续
-      if (animationRef.current !== null) {
-        return;
-      }
-
-      let lastTime = 0;
-
-      const animate = (currentTime: number) => {
-        if (!lastTime) lastTime = currentTime;
-        const elapsed = currentTime - lastTime;
-
-        if (elapsed >= charInterval) {
-          const targetText = targetTextRef.current;
-          const pendingChars = Math.max(
-            0,
-            targetText.length - displayIndexRef.current,
-          );
-          const charsToAdd = resolveStreamingTextStepSize(
-            pendingChars,
-            elapsed,
-            charInterval,
-          );
-          const newIndex = Math.min(
-            displayIndexRef.current + charsToAdd,
-            targetText.length,
-          );
-
-          if (newIndex > displayIndexRef.current) {
-            displayIndexRef.current = newIndex;
-            setDisplayText(targetText.slice(0, newIndex));
-          }
-
-          lastTime = currentTime;
-        }
-
-        // 继续动画直到追上目标
-        if (displayIndexRef.current < targetTextRef.current.length) {
-          animationRef.current = requestAnimationFrame(animate);
-        } else {
-          animationRef.current = null;
-        }
-      };
-
-      animationRef.current = requestAnimationFrame(animate);
-
-      return () => {
-        if (animationRef.current) {
-          cancelAnimationFrame(animationRef.current);
-          animationRef.current = null;
-        }
-      };
-    }, [text, isStreaming, charInterval]);
-
-    // 组件卸载时清理
-    useEffect(() => {
-      return () => {
-        if (animationRef.current) {
-          cancelAnimationFrame(animationRef.current);
-        }
-      };
-    }, []);
-
-    const shouldShowCursor =
-      isStreaming && showCursor && displayIndexRef.current < text.length;
+    const shouldShowCursor = isStreaming && showCursor;
     const containsStructuredContent = useMemo(
       () => hasStructuredContentHint(displayText),
       [displayText],

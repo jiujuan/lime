@@ -1,6 +1,9 @@
 import type { HandleSendOptions } from "./hooks/handleSendTypes";
 import type { Message, MessageImage } from "./types";
-import { buildDiagnosticsRuntimeStatusMetadata } from "./utils/agentRuntimeStatus";
+import {
+  buildDiagnosticsRuntimeStatusMetadata,
+  buildSoulRuntimeStatusMetadata,
+} from "./utils/agentRuntimeStatus";
 import type { SoulInteractionCopy } from "@/lib/soul/interactionCopy";
 import { resolveSoulInteractionCopy } from "@/lib/soul/interactionCopy";
 
@@ -49,7 +52,9 @@ export function buildHomePendingPreviewMessages(
         title: soulCopy.preparingTitle,
         detail: soulCopy.preparingDetail,
         checkpoints: soulCopy.preparingCheckpoints,
-        metadata: buildDiagnosticsRuntimeStatusMetadata(),
+        metadata: buildDiagnosticsRuntimeStatusMetadata(
+          buildSoulRuntimeStatusMetadata(soulCopy.descriptors.preparingTitle),
+        ),
       },
     },
   ];

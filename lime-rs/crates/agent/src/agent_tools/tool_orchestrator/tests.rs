@@ -315,117 +315,6 @@ async fn execute_planned_tool_batch_attaches_policy_metadata_to_permission_denia
 }
 
 #[tokio::test]
-async fn execute_planned_tool_batch_emits_action_required_for_shell_approval_policy() {
-    let working_directory = std::env::current_dir().unwrap_or_default();
-    let batch = execute_planned_tool_batch(
-        ToolExecutionBatchInput {
-            executor: test_tool_executor(),
-            session_id: "session-action-required".to_string(),
-            working_directory: working_directory.clone(),
-            cancel_token: None,
-            turn_context: Some(AgentTurnContext {
-                sandbox_policy: Some("workspace-write".to_string()),
-                approval_policy: Some("on_request".to_string()),
-                ..AgentTurnContext::default()
-            }),
-            persisted_execution_policy: None,
-            parallelism: 1,
-            auto_mode: false,
-            bypass_restrictions: false,
-            live_process_registry: None,
-        },
-        vec![PlannedToolExecution {
-            tool_name: "Bash".to_string(),
-            tool_id: "tool-approval".to_string(),
-            arguments: Some(r#"{"command":"cargo test"}"#.to_string()),
-            params: json!({ "command": "cargo test" }),
-        }],
-    )
-    .await;
-
-    assert_eq!(batch.outcomes.len(), 1);
-    assert!(!batch.outcomes[0].success);
-    let metadata = batch.outcomes[0].metadata.as_ref().expect("metadata");
-    assert_eq!(metadata.get("eventClass"), Some(&json!("action.required")));
-    assert_eq!(
-        metadata.get("reasonCode"),
-        Some(&json!("shell_command_requires_approval"))
-    );
-    assert!(batch.events.iter().any(|event| matches!(
-        event,
-        RuntimeAgentEvent::ActionRequired {
-            request_id,
-            action_type,
-            data,
-            ..
-        } if request_id == "tool-approval"
-            && action_type == "tool_confirmation"
-            && data.get("command") == Some(&json!("cargo test"))
-    )));
-    assert!(matches!(
-        batch.events.last(),
-        Some(RuntimeAgentEvent::ToolEnd { tool_id, result })
-            if tool_id == "tool-approval"
-                && !result.success
-                && result.metadata.as_ref().and_then(|metadata| metadata.get("eventClass"))
-                    == Some(&json!("action.required"))
-    ));
-}
-
-#[tokio::test]
-async fn execute_planned_tool_batch_emits_sandbox_blocked_for_read_only_shell_write() {
-    let working_directory = std::env::current_dir().unwrap_or_default();
-    let batch = execute_planned_tool_batch(
-        ToolExecutionBatchInput {
-            executor: test_tool_executor(),
-            session_id: "session-sandbox-blocked".to_string(),
-            working_directory: working_directory.clone(),
-            cancel_token: None,
-            turn_context: Some(AgentTurnContext {
-                sandbox_policy: Some("read-only".to_string()),
-                approval_policy: Some("never".to_string()),
-                ..AgentTurnContext::default()
-            }),
-            persisted_execution_policy: None,
-            parallelism: 1,
-            auto_mode: false,
-            bypass_restrictions: false,
-            live_process_registry: None,
-        },
-        vec![PlannedToolExecution {
-            tool_name: "Bash".to_string(),
-            tool_id: "tool-sandbox".to_string(),
-            arguments: Some(r#"{"command":"cargo test"}"#.to_string()),
-            params: json!({ "command": "cargo test" }),
-        }],
-    )
-    .await;
-
-    assert_eq!(batch.outcomes.len(), 1);
-    assert!(!batch.outcomes[0].success);
-    let metadata = batch.outcomes[0].metadata.as_ref().expect("metadata");
-    assert_eq!(metadata.get("eventClass"), Some(&json!("sandbox.blocked")));
-    assert_eq!(
-        metadata.get("failureCategory"),
-        Some(&json!("sandbox_blocked"))
-    );
-    assert_eq!(
-        metadata.get("reasonCode"),
-        Some(&json!("read_only_sandbox_blocks_shell_command"))
-    );
-    assert_eq!(metadata.get("sandboxPolicy"), Some(&json!("read-only")));
-    assert_eq!(metadata.get("command"), Some(&json!("cargo test")));
-    assert!(matches!(
-        batch.events.last(),
-        Some(RuntimeAgentEvent::ToolEnd { tool_id, result })
-            if tool_id == "tool-sandbox"
-                && !result.success
-                && result.metadata.as_ref().and_then(|metadata| metadata.get("eventClass"))
-                    == Some(&json!("sandbox.blocked"))
-    ));
-}
-
-#[tokio::test]
 async fn execute_planned_tool_batch_respects_persisted_execution_policy() {
     let batch = execute_planned_tool_batch(
         ToolExecutionBatchInput {
@@ -547,6 +436,12 @@ async fn execute_planned_shell_tool_emits_process_output_delta_before_terminal_e
                         .as_ref()
                         .and_then(|metadata| metadata.get("executionSurface"))
                         == Some(&json!("live_process"))
+                    && metadata.as_ref().and_then(|metadata| metadata.get("toolCallId"))
+                        == Some(&json!("tool-process"))
+                    && metadata.as_ref().and_then(|metadata| metadata.get("toolId"))
+                        == Some(&json!("tool-process"))
+                    && metadata.as_ref().and_then(|metadata| metadata.get("tool_id"))
+                        == Some(&json!("tool-process"))
                     && metadata
                         .as_ref()
                         .and_then(|metadata| metadata.get("stdinWritable"))
@@ -589,6 +484,12 @@ async fn execute_planned_shell_tool_emits_process_output_delta_before_terminal_e
                         .as_ref()
                         .and_then(|metadata| metadata.get("executionSurface"))
                         == Some(&json!("live_process"))
+                    && metadata.as_ref().and_then(|metadata| metadata.get("toolCallId"))
+                        == Some(&json!("tool-process"))
+                    && metadata.as_ref().and_then(|metadata| metadata.get("toolId"))
+                        == Some(&json!("tool-process"))
+                    && metadata.as_ref().and_then(|metadata| metadata.get("tool_id"))
+                        == Some(&json!("tool-process"))
                     && metadata.as_ref().and_then(|metadata| metadata.get("exit_code"))
                         == Some(&json!(0))
                     && metadata
@@ -620,6 +521,12 @@ async fn execute_planned_shell_tool_emits_process_output_delta_before_terminal_e
             && output_kind.as_deref() == Some("stdout")
             && metadata.as_ref().and_then(|metadata| metadata.get("processId"))
                 == Some(&json!("process-tool-process"))
+            && metadata.as_ref().and_then(|metadata| metadata.get("toolCallId"))
+                == Some(&json!("tool-process"))
+            && metadata.as_ref().and_then(|metadata| metadata.get("toolId"))
+                == Some(&json!("tool-process"))
+            && metadata.as_ref().and_then(|metadata| metadata.get("tool_id"))
+                == Some(&json!("tool-process"))
             && metadata.as_ref().and_then(|metadata| metadata.get("outputBytes")).is_some()
     ));
 

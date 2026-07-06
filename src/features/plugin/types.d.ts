@@ -30,6 +30,142 @@ export interface RuntimePackageDeclaration {
         hash?: string;
     };
 }
+export type PluginInstallMode = "in_lime" | "standalone" | "runtime_backed" | "web_host";
+export type PluginInstallPlatform = "macos" | "windows" | "linux";
+export interface PluginInstallContract {
+    modes: PluginInstallMode[];
+    runtime?: {
+        minVersion?: string;
+        distribution?: {
+            standalone?: {
+                embedRuntime?: boolean;
+                shell?: string;
+            };
+            runtimeBacked?: {
+                requires?: string;
+                minVersion?: string;
+            };
+        };
+    };
+    standalone?: {
+        shell?: string;
+        bundleId?: string;
+        platforms?: PluginInstallPlatform[];
+        autoUpdate?: boolean;
+    };
+    runtimeBacked?: {
+        requires?: string;
+        minVersion?: string;
+    };
+    branding?: {
+        name?: string;
+        icon?: string;
+        windowTitle?: string;
+    };
+    compatibility?: Record<string, unknown>;
+}
+export interface NormalizedPluginInstallContract {
+    schemaVersion: 1;
+    supportedModes: PluginInstallMode[];
+    preferredMode: PluginInstallMode;
+    runtime: {
+        minVersion?: string;
+        standalone?: {
+            embedRuntime: boolean;
+            shell?: string;
+        };
+        runtimeBacked?: {
+            requires: string;
+            minVersion?: string;
+        };
+    };
+    standalone?: {
+        shell?: string;
+        bundleId?: string;
+        platforms: PluginInstallPlatform[];
+        autoUpdate: boolean;
+    };
+    runtimeBacked?: {
+        requires: string;
+        minVersion?: string;
+    };
+    branding: {
+        name: string;
+        icon?: string;
+        windowTitle: string;
+    };
+    compatibility: Record<string, unknown>;
+}
+export interface PluginInstallProjectionWarning {
+    code: "INSTALL_MODE_RESERVED" | "INSTALL_CONTRACT_DEFAULTED";
+    mode?: PluginInstallMode;
+    message: string;
+}
+export interface PluginInstallProjection {
+    supportedModes: PluginInstallMode[];
+    preferredMode: PluginInstallMode;
+    runtimeRequirements: Array<{
+        mode: PluginInstallMode;
+        minVersion?: string;
+        requires?: string;
+    }>;
+    shellRequirements: Array<{
+        mode: PluginInstallMode;
+        shell?: string;
+        bundleId?: string;
+        platforms?: PluginInstallPlatform[];
+    }>;
+    branding: NormalizedPluginInstallContract["branding"];
+    warnings: PluginInstallProjectionWarning[];
+}
+export interface PluginInstallSetupAction {
+    code: "select_install_mode" | "install_lime_runtime" | "upgrade_lime_runtime" | "use_lime_desktop";
+    label: string;
+    mode: PluginInstallMode;
+}
+export interface InstallModeReadiness {
+    mode: PluginInstallMode;
+    status: "ready" | "needs-setup" | "blocked";
+    blockers: ReadinessIssue[];
+    setupActions: PluginInstallSetupAction[];
+    evidencePolicy: "required" | "optional";
+    runtimeVersion?: string;
+}
+export interface PluginRuntimeProfileSummary {
+    installMode: PluginInstallMode;
+    shellKind: "desktop" | "app_shell" | "runtime_backed" | "web_host";
+    runtimeVersion?: string;
+    runtimeMinVersion?: string;
+    checkedAt: string;
+}
+export type LimeRuntimeShellKind = "desktop" | "app_shell" | "runtime_backed" | "web_host";
+export interface LimeRuntimeProfileCapability {
+    version: string;
+    available: boolean;
+    reason?: string;
+    implementation: CapabilityImplementation;
+}
+export interface LimeRuntimeProfile {
+    runtimeId: string;
+    runtimeVersion: string;
+    shellKind: LimeRuntimeShellKind;
+    installMode: PluginInstallMode;
+    capabilities: Record<string, LimeRuntimeProfileCapability>;
+    policy: {
+        permissionPrompt: "required" | "optional" | "disabled";
+        externalSideEffects: "deny" | "confirm" | "allow";
+        maxRisk: "low" | "medium" | "high";
+    };
+    storage: {
+        namespaceRoot: string;
+        quotaBytes?: number;
+        cleanupSupported: boolean;
+    };
+    evidence: {
+        recordRequired: boolean;
+        exportSupported: boolean;
+    };
+}
 export interface PermissionDeclaration {
     key: string;
     reason?: string;
@@ -107,6 +243,49 @@ export interface ToolRefDeclaration {
     capabilities?: string[];
     required?: boolean;
 }
+export interface PluginPromptInjectionPolicy {
+    mode: string;
+    source: string;
+}
+export interface PluginRuntimeSkillCapability {
+    id: string;
+    title?: string;
+    description?: string;
+    path?: string;
+    activation?: string;
+    required?: boolean;
+    promptInjectionPolicy: PluginPromptInjectionPolicy;
+}
+export interface PluginRuntimeToolBinding {
+    key: string;
+    title?: string;
+    provider: string;
+    bindingKind: string;
+    path?: string;
+    capabilities: string[];
+    required?: boolean;
+}
+export interface PluginRuntimeMcpBinding {
+    serverId: string;
+    toolKey: string;
+    provider: string;
+    required?: boolean;
+}
+export interface PluginRuntimeWorkflowBinding {
+    workflowKey: string;
+    taskKind?: string;
+    skillIds: string[];
+    toolKeys: string[];
+}
+export interface PluginRuntimeCapabilities {
+    schemaVersion: string;
+    pluginId: string;
+    version?: string;
+    skills: PluginRuntimeSkillCapability[];
+    tools: PluginRuntimeToolBinding[];
+    mcpBindings: PluginRuntimeMcpBinding[];
+    workflowBindings: PluginRuntimeWorkflowBinding[];
+}
 export interface ConnectorDeclaration {
     id: string;
     title?: string;
@@ -179,6 +358,61 @@ export interface PluginPresentation {
     summary?: string;
     [key: string]: unknown;
 }
+export type PluginProfile = "classic" | "workbench";
+export interface PluginDistributionDeclaration {
+    primaryInstallSurface?: "lime-app-center" | "standalone" | string;
+    channel?: string;
+    visibility?: string;
+    publishFlow?: string;
+    [key: string]: unknown;
+}
+export interface WorkbenchArticleWorkspaceDeclaration {
+    scope?: "session" | "workspace" | string;
+    primaryObjectKinds?: string[];
+    snapshotPolicy?: Record<string, unknown>;
+    [key: string]: unknown;
+}
+export interface WorkbenchProductionObjectDeclaration {
+    kind: string;
+    title?: string;
+    artifactKind?: string;
+    defaultSurface?: string;
+    versioning?: string;
+    primary?: boolean;
+    [key: string]: unknown;
+}
+export interface WorkbenchTaskDeclaration {
+    kind: string;
+    title?: string;
+    expectedObjects?: string[];
+    requiredCapabilities?: string[];
+    defaultSurface?: string;
+    [key: string]: unknown;
+}
+export interface WorkbenchObjectSurfaceDeclaration {
+    objectKind: string;
+    surfaceKind: string;
+    renderer?: "host_builtin" | "app_surface" | string;
+    layout?: string;
+    actions?: unknown[];
+    [key: string]: unknown;
+}
+export interface WorkbenchHistoryRestoreDeclaration {
+    defaultSurface?: string;
+    restoreSelection?: boolean;
+    restoreLayout?: boolean;
+    fallback?: string;
+    [key: string]: unknown;
+}
+export interface WorkbenchDeclaration {
+    profile?: "production" | string;
+    articleWorkspace?: WorkbenchArticleWorkspaceDeclaration;
+    productionObjects?: WorkbenchProductionObjectDeclaration[];
+    workbenchTasks?: WorkbenchTaskDeclaration[];
+    objectSurfaces?: WorkbenchObjectSurfaceDeclaration[];
+    historyRestore?: WorkbenchHistoryRestoreDeclaration;
+    [key: string]: unknown;
+}
 export interface AppManifest {
     manifestVersion: string;
     name: string;
@@ -216,6 +450,7 @@ export interface AppManifest {
     workbench?: WorkbenchDeclaration;
     distribution?: PluginDistributionDeclaration;
     presentation?: PluginPresentation;
+    runtimeCapabilities?: PluginRuntimeCapabilities;
     componentPaths?: ComponentPathsDeclaration;
     interface?: unknown;
     activationEntries?: unknown[];
@@ -301,6 +536,7 @@ export interface NormalizedAppManifest {
     workbench?: WorkbenchDeclaration;
     distribution?: PluginDistributionDeclaration;
     presentation?: PluginPresentation;
+    runtimeCapabilities?: PluginRuntimeCapabilities;
     componentPaths?: ComponentPathsDeclaration;
     interface?: unknown;
     activationEntries?: unknown[];
@@ -366,6 +602,7 @@ export interface CloudBootstrapApp {
     appId: string;
     displayName?: string;
     version: string;
+    runtimeTargets?: RuntimeTarget[];
     icon?: string;
     iconUrl?: string;
     logo?: string;
@@ -537,13 +774,19 @@ export interface WorkflowProjection {
 }
 export interface SkillRequirementProjection {
     id: string;
+    title?: string;
+    description?: string;
     standard?: string;
     activation?: string;
     required: boolean;
+    promptInjectionPolicy?: PluginPromptInjectionPolicy;
 }
 export interface ToolRequirementProjection {
     key: string;
+    title?: string;
+    description?: string;
     provider?: string;
+    bindingKind?: string;
     capabilities: string[];
     required: boolean;
 }
@@ -594,13 +837,15 @@ export interface PluginProjection {
     overlayTemplates: OverlayTemplateProjection[];
     ui?: UiDeclaration;
     lifecycle: LifecycleDeclaration;
+    install: PluginInstallProjection;
+    runtimeCapabilities?: PluginRuntimeCapabilities;
     readinessHints: ReadinessHint[];
     provenance: PluginProvenance;
 }
 export type ReadinessStatus = "ready" | "degraded" | "needs-setup" | "blocked";
 export type CapabilityImplementation = "none" | "mock" | "adapter" | "native";
 export interface ReadinessIssue {
-    code: "MANIFEST_VERSION_UNSUPPORTED" | "RUNTIME_TARGET_UNSUPPORTED" | "CAPABILITY_MISSING" | "CAPABILITY_VERSION_UNSUPPORTED" | "PERMISSION_REQUIRED" | "STORAGE_DECLARED_BUT_DISABLED" | "UI_RUNTIME_DISABLED" | "WORKER_RUNTIME_DISABLED" | "CLOUD_APP_DISABLED" | "CLOUD_LICENSE_UNAVAILABLE" | "CLOUD_REGISTRATION_REQUIRED" | "CLOUD_TOOL_UNAVAILABLE" | "CLOUD_POLICY_UNSUPPORTED" | "CLOUD_ENTRY_NOT_ENABLED" | "KNOWLEDGE_BINDING_REQUIRED" | "SKILL_REQUIRED" | "TOOL_REQUIRED" | "ARTIFACT_TYPE_REQUIRED" | "EVAL_REQUIRED" | "SECRET_REQUIRED" | "OVERLAY_REQUIRED" | "SERVICE_REQUIRED" | "WORKFLOW_REQUIRED" | "PACKAGE_HASH_MISSING" | "PACKAGE_HASH_MISMATCH";
+    code: "MANIFEST_VERSION_UNSUPPORTED" | "RUNTIME_TARGET_UNSUPPORTED" | "CAPABILITY_MISSING" | "CAPABILITY_VERSION_UNSUPPORTED" | "PERMISSION_REQUIRED" | "STORAGE_DECLARED_BUT_DISABLED" | "UI_RUNTIME_DISABLED" | "WORKER_RUNTIME_DISABLED" | "CLOUD_APP_DISABLED" | "CLOUD_LICENSE_UNAVAILABLE" | "CLOUD_REGISTRATION_REQUIRED" | "CLOUD_TOOL_UNAVAILABLE" | "CLOUD_POLICY_UNSUPPORTED" | "CLOUD_ENTRY_NOT_ENABLED" | "KNOWLEDGE_BINDING_REQUIRED" | "SKILL_REQUIRED" | "TOOL_REQUIRED" | "ARTIFACT_TYPE_REQUIRED" | "EVAL_REQUIRED" | "SECRET_REQUIRED" | "OVERLAY_REQUIRED" | "SERVICE_REQUIRED" | "WORKFLOW_REQUIRED" | "PACKAGE_HASH_MISSING" | "PACKAGE_HASH_MISMATCH" | "INSTALL_MODE_UNSUPPORTED" | "RUNTIME_VERSION_UNSUPPORTED" | "RUNTIME_PROFILE_MISSING";
     severity: "blocker" | "warning";
     message: string;
     capability?: string;
@@ -653,6 +898,7 @@ export interface ReadinessResult {
     supportedCapabilities: CapabilitySupport[];
     missingCapabilities: CapabilityRequirement[];
     entryReadiness: EntryReadiness[];
+    installModes: InstallModeReadiness[];
 }
 export interface PluginHostFlags {
     labEnabled: boolean;
@@ -696,6 +942,7 @@ export interface CleanupWarning {
 export interface AppCleanupPlan {
     mode: "dry-run";
     appId: string;
+    installMode: PluginInstallMode;
     packageHash: string;
     generatedAt: string;
     installedStatePaths: CleanupTarget[];
@@ -728,6 +975,8 @@ export interface InstalledPluginState {
     manifest: NormalizedAppManifest;
     projection: PluginProjection;
     readiness: ReadinessResult;
+    installMode: PluginInstallMode;
+    runtimeProfileSummary: PluginRuntimeProfileSummary;
     setup: PluginSetupState;
     disabled: boolean;
     installedAt: string;
@@ -939,6 +1188,9 @@ export interface PluginTaskHostResponseResult {
 export interface PluginTaskRecord {
     taskId: string;
     traceId: string;
+    sessionId?: string;
+    turnId?: string;
+    workspaceId?: string;
     appId: string;
     entryKey?: string;
     retryOfTaskId?: string;

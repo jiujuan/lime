@@ -111,7 +111,7 @@ describe("MessageList reasoning flow", () => {
     );
   });
 
-  it("简单流式回答的 diagnostics reasoning 不应在首字前暴露为思考卡", () => {
+  it("简单流式回答的 diagnostics reasoning 应在首字前进入内联思考流", () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -150,13 +150,29 @@ describe("MessageList reasoning flow", () => {
       container.querySelector(
         '[data-testid="assistant-first-token-runtime-status"]',
       ),
-    ).not.toBeNull();
-    expect(container.textContent).not.toContain("思考中");
-    expect(container.textContent).not.toContain("The user only asked");
-    expect(mockStreamingRenderer).not.toHaveBeenCalled();
+    ).toBeNull();
+    expect(container.textContent).not.toContain("正在生成回复");
+    const renderer = container.querySelector(
+      '[data-testid="streaming-renderer"]',
+    );
+    expect(renderer?.getAttribute("data-content-parts")).toBe("1");
+    expect(renderer?.getAttribute("data-has-thinking-content")).toBe("yes");
+    expect(mockStreamingRenderer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: "",
+        thinkingContent:
+          "The user only asked for a marker, so answer directly.",
+        contentParts: [
+          {
+            type: "thinking",
+            text: "The user only asked for a marker, so answer directly.",
+          },
+        ],
+      }),
+    );
   });
 
-  it("首字前运行中的 reasoning 时间线不应先于答案暴露为思考卡", () => {
+  it("首字前运行中的 reasoning 时间线应先于答案展示，但不展示启动说明", () => {
     const now = new Date("2026-05-12T05:45:00.000Z");
     const messages: Message[] = [
       {
@@ -195,6 +211,23 @@ describe("MessageList reasoning flow", () => {
       ],
       threadItems: [
         {
+          id: "turn-summary-pre-answer-thread",
+          thread_id: "thread-pre-answer-thread-reasoning",
+          turn_id: "turn-pre-answer-thread-reasoning",
+          sequence: 0,
+          status: "in_progress",
+          started_at: "2026-05-12T05:45:00.000Z",
+          updated_at: "2026-05-12T05:45:00.500Z",
+          type: "turn_summary",
+          text: "已接收请求，正在准备执行。",
+          metadata: {
+            sourceType: "runtime_status",
+            surface: "runtime_status",
+            visibility: "diagnostics",
+            persistence: "transient",
+          },
+        },
+        {
           id: "reasoning-pre-answer-thread",
           thread_id: "thread-pre-answer-thread-reasoning",
           turn_id: "turn-pre-answer-thread-reasoning",
@@ -213,13 +246,27 @@ describe("MessageList reasoning flow", () => {
       container.querySelector(
         '[data-testid="assistant-first-token-runtime-status"]',
       ),
-    ).not.toBeNull();
+    ).toBeNull();
+    expect(container.textContent).not.toContain("正在生成回复");
+    expect(container.textContent).not.toContain("已接收请求，正在准备执行");
     expect(
       container.querySelector('[data-testid="agent-thread-timeline:leading"]'),
-    ).toBeNull();
-    expect(container.textContent).not.toContain("思考中");
-    expect(container.textContent).not.toContain("The user only asked");
-    expect(mockStreamingRenderer).not.toHaveBeenCalled();
+    ).not.toBeNull();
+    const leadingTimelineProps = mockAgentThreadTimeline.mock.calls.find(
+      ([props]) => props?.placement === "leading",
+    )?.[0] as { items?: AgentThreadItem[] } | undefined;
+    expect(leadingTimelineProps?.items).toEqual([
+      expect.objectContaining({
+        type: "reasoning",
+        id: "reasoning-pre-answer-thread",
+        status: "in_progress",
+      }),
+    ]);
+    expect(mockStreamingRenderer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: "",
+      }),
+    );
   });
 
   it("流式 assistant 消息仍应向正文传递当前过程状态", () => {

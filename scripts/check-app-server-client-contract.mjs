@@ -143,6 +143,7 @@ const appServerRuntimeBackendExecutionChainFiles = [
   "lime-rs/crates/app-server/src/runtime_backend/request_context/turn_context.rs",
   "lime-rs/crates/app-server/src/runtime_backend/request_context/workspace_scope.rs",
   "lime-rs/crates/app-server/src/runtime_backend/tool_events.rs",
+  "lime-rs/crates/app-server/src/runtime_backend/tool_process_runtime_metadata.rs",
   "lime-rs/crates/app-server/src/runtime_backend/workspace_patch_host_execution.rs",
   "lime-rs/crates/app-server/src/runtime_backend/initialization_tests.rs",
   "lime-rs/crates/app-server/src/runtime_backend/tests.rs",

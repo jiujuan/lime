@@ -53,6 +53,8 @@
 
 测试用例需要全面更新口径，但不等于把所有测试一次性重写。
 
+Agent Runtime / Claw / App Server 测试护栏默认 Codex-first：除多模型 / 多模态 provider capability、media part、模型能力矩阵和 provider lowering 参考 opencode 外，Thread / Turn / Item、turn lifecycle、tool / approval / sandbox、MCP、Skills Runtime、Multi-Agent Team、Plan hydrate、history hydrate、compaction、projection snapshot、App Server fixture 和 TUI/GUI 全流程回归，都要从 `/Users/coso/Documents/dev/rust/codex` 索引出标准场景，再转成 Lime current fixture。opencode 不提供 Lime 的 Session、UI、协议治理或工具生命周期完成口径。
+
 默认事实源如下：
 
 - `current`：Electron Desktop Host bridge、Electron preload / IPC 白名单、App Server JSON-RPC、`packages/app-server-client`、`src/lib/desktop-host/` mock、`npm run smoke:electron` / `npm run verify:gui-smoke`

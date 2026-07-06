@@ -1637,6 +1637,13 @@ describe("agentProtocol", () => {
         duration_ms: 12345,
         tool_count: 4,
         result_ref: "artifact://worker-result-1",
+        metadata: {
+          soul_lifecycle: {
+            profileId: "cheeky_sassy_executor",
+            packId: "com.lime.soul.cheeky-sassy-executor",
+            toneVariant: "cheeky_sassy",
+          },
+        },
       }),
     ).toEqual({
       type: "subagent_status_changed",
@@ -1665,6 +1672,13 @@ describe("agentProtocol", () => {
       duration_ms: 12345,
       tool_count: 4,
       result_ref: "artifact://worker-result-1",
+      metadata: {
+        soul_lifecycle: {
+          profileId: "cheeky_sassy_executor",
+          packId: "com.lime.soul.cheeky-sassy-executor",
+          toneVariant: "cheeky_sassy",
+        },
+      },
     });
   });
 });

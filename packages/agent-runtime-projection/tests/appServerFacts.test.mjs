@@ -229,6 +229,128 @@ test("App Server facts do not promote legacy final_done to current terminal", ()
   assert.equal(events[0].completedAt, undefined);
 });
 
+test("App Server tool events normalize Soul lifecycle metadata for package projection", () => {
+  const events = projectAppServerEventsToExecutionEvents([
+    appServerEvent("evt-tool-progress", 1, "tool.progress", {
+      toolCallId: "tool-1",
+      metadata: {
+        soul_lifecycle: {
+          surface: "tool_lifecycle",
+          phase: "tool_progress",
+          styleLevel: "L1",
+          riskLevel: "high",
+          profileId: "calm_professional_partner",
+          packId: "com.lime.soul.calm-professional-partner",
+        },
+        tool_process_facts: {
+          source: "runtime_facts",
+          toolCallId: "tool-1",
+          status: "progress",
+          riskLevel: "high",
+        },
+      },
+    }),
+  ]);
+
+  assert.equal(events[0].eventClass, "tool.progress");
+  assert.equal(events[0].toolCallId, "tool-1");
+  assert.deepEqual(events[0].payload?.soulLifecycle, {
+    surface: "tool_lifecycle",
+    phase: "tool_progress",
+    styleLevel: "L1",
+    riskLevel: "high",
+    profileId: "calm_professional_partner",
+    packId: "com.lime.soul.calm-professional-partner",
+  });
+  assert.deepEqual(events[0].payload?.toolProcessFacts, {
+    source: "runtime_facts",
+    toolCallId: "tool-1",
+    status: "progress",
+    riskLevel: "high",
+  });
+  assert.equal(events[0].payload?.soulSurface, "tool_lifecycle");
+  assert.equal(events[0].payload?.soulPhase, "tool_progress");
+  assert.equal(events[0].payload?.styleLevel, "L1");
+  assert.equal(events[0].payload?.riskLevel, "high");
+  assert.equal(events[0].payload?.profileId, "calm_professional_partner");
+  assert.equal(
+    events[0].payload?.packId,
+    "com.lime.soul.calm-professional-partner",
+  );
+});
+
+test("App Server tool process facts drive shared tool surface classification", () => {
+  const result = replayAppServerFacts({
+    events: [
+      appServerEvent("evt-tool-started", 1, "tool.started", {
+        toolCallId: "tool-1",
+        toolName: "RuntimeProvidedTool",
+        metadata: {
+          tool_process_facts: {
+            source: "runtime_facts",
+            toolCallId: "tool-1",
+            toolName: "RuntimeProvidedTool",
+            toolFamily: "search",
+            operationKind: "web_search",
+            subject: "Soul output surface",
+          },
+        },
+      }),
+    ],
+  });
+
+  assert.equal(result.state.toolCalls.calls.length, 1);
+  assert.equal(result.state.toolCalls.calls[0].family, "webSearch");
+  assert.equal(result.state.toolCalls.calls[0].operationKind, "web_search");
+});
+
+test("App Server collaboration events preserve Soul collaboration facts", () => {
+  const events = projectAppServerEventsToExecutionEvents([
+    appServerEvent("evt-subagent", 1, "subagent.status_changed", {
+      status: "running",
+      subagentId: "child-1",
+      taskId: "child-1",
+      parentSessionId: "session-1",
+      transcriptRef: "child-1:turn-1",
+      metadata: {
+        soul_lifecycle: {
+          profileId: "cheeky_sassy_executor",
+          packId: "com.lime.soul.cheeky-sassy-executor",
+          toneVariant: "cheeky_sassy",
+        },
+      },
+    }),
+  ]);
+
+  assert.equal(events[0].eventClass, "subagent.status_changed");
+  assert.equal(events[0].kind, "handoff");
+  assert.equal(events[0].taskId, "child-1");
+  assert.equal(events[0].subagentId, "child-1");
+  assert.deepEqual(events[0].payload?.collaborationFacts, {
+    source: "projection_facts",
+    surface: "collaboration",
+    collaborationSurface: "team_roster",
+    collaborationPhase: "acting",
+    collaborationKind: "subagent_status",
+    sourceType: "subagent.status_changed",
+    status: "running",
+    runtimeEntity: "subagent_turn",
+    runtimeStatus: "running",
+    taskId: "child-1",
+    agentId: "child-1",
+    parentSessionId: "session-1",
+    transcriptRef: "child-1:turn-1",
+    styleLevel: "L1",
+    riskLevel: "normal",
+    toneVariant: "cheeky_sassy",
+    profileId: "cheeky_sassy_executor",
+    packId: "com.lime.soul.cheeky-sassy-executor",
+  });
+  assert.equal(events[0].payload?.collaborationSurface, "team_roster");
+  assert.equal(events[0].payload?.styleLevel, "L1");
+  assert.equal(events[0].payload?.riskLevel, "normal");
+});
+
 function appServerEvent(eventId, sequence, type, payload = {}) {
   return {
     eventId,

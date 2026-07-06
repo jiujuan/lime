@@ -779,6 +779,7 @@ export function createAgentStreamRuntimeHandlerActions({
           activeSessionId,
           fallbackTurnId,
           now: new Date().toISOString(),
+          soulCopy,
         },
         prev.find((item) => {
           if (item.id !== existingId) {

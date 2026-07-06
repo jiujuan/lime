@@ -68,6 +68,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     initialRuntimeWarmupDeferredDelayMs = initialTopicsDeferredDelayMs,
     getSyncedSessionRecentPreferences,
     onOpenSubagents,
+    onRestoreInterruptedInput,
     soulCopy,
     runtimeAdapter,
     preserveRestoredMessages = false,
@@ -271,16 +272,6 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
         );
 
         if (!resolvedSelection || !isCurrentWorkspace()) {
-          if (
-            usableRuntimeProviderType &&
-            !currentProviderMatchesRuntime &&
-            isCurrentWorkspace()
-          ) {
-            applyWorkspaceModelPreference({
-              providerType: usableRuntimeProviderType,
-              model: "",
-            });
-          }
           return;
         }
 
@@ -383,6 +374,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     ensureSession: session.ensureSession,
     attemptSilentTurnRecovery: session.attemptSilentTurnRecovery,
     sessionIdRef,
+    sessionId: session.sessionId,
     executionStrategy: context.executionStrategy,
     accessMode: context.accessMode,
     providerTypeRef: context.providerTypeRef,
@@ -398,6 +390,7 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     warnedKeysRef: tools.warnedKeysRef,
     getWorkspaceIdForSubmit: context.getWorkspaceIdForSubmit,
     setWorkspacePathMissing: context.setWorkspacePathMissing,
+    getMessages: () => session.messages,
     setMessages: session.setMessages,
     getThreadItems: () => session.threadItems,
     setThreadItems: session.setThreadItems,
@@ -406,15 +399,23 @@ export function useAsterAgentChat(options: UseAsterAgentChatRuntimeOptions) {
     setExecutionRuntime: session.setExecutionRuntime,
     threadBusy: hasActiveRuntimeTurn({
       queuedTurnsCount: session.queuedTurns.length,
+      threadRead: session.threadRead,
       threadReadStatus: session.threadRead?.status,
       turns: session.threadTurns,
     }),
+    currentTurnId: session.currentTurnId,
+    threadRead: session.threadRead,
+    threadTurns: session.threadTurns,
     queuedTurns: session.queuedTurns,
     setQueuedTurns: session.setQueuedTurns,
     setPendingActions: tools.setPendingActions,
     refreshSessionReadModel: session.refreshSessionReadModel,
+    onRestoreInterruptedInput,
     executionRuntime: session.executionRuntime,
     clawTraceEnabled,
+    allowRecoveredStreamBinding:
+      Boolean(session.sessionId) &&
+      session.recoveredStreamBindingSessionId === session.sessionId,
     soulCopy,
   });
   detachStreamBindingsRef.current = stream.detachStreamBindings;

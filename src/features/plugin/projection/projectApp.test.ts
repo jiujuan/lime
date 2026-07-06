@@ -17,8 +17,12 @@ describe("Plugin projection P0", () => {
     const projection = projectApp({ manifest: normalized, identity });
 
     expect(projection.entries).toHaveLength(1);
-    expect(projection.entries.every((entry) => entry.presentation === "lab-only")).toBe(true);
-    expect(projection.requiredCapabilities.map((item) => item.capability)).toEqual([
+    expect(
+      projection.entries.every((entry) => entry.presentation === "lab-only"),
+    ).toBe(true);
+    expect(
+      projection.requiredCapabilities.map((item) => item.capability),
+    ).toEqual([
       "lime.agent",
       "lime.artifacts",
       "lime.evidence",
@@ -33,7 +37,9 @@ describe("Plugin projection P0", () => {
       appId: "content-factory-app",
       appVersion: normalized.version,
     });
-    expect(projection.knowledgeBindings.map((binding) => binding.key)).toEqual([]);
+    expect(projection.knowledgeBindings.map((binding) => binding.key)).toEqual(
+      [],
+    );
     expect(projection.artifactTypes.map((artifact) => artifact.key)).toEqual([
       "content_factory_workspace_patch",
     ]);
@@ -57,7 +63,9 @@ describe("Plugin projection P0", () => {
     });
     expect(projection.evals.map((evalRule) => evalRule.key)).toEqual([]);
     expect(projection.secrets.map((secret) => secret.key)).toEqual([]);
-    expect(projection.overlayTemplates.map((overlay) => overlay.key)).toEqual([]);
+    expect(projection.overlayTemplates.map((overlay) => overlay.key)).toEqual(
+      [],
+    );
     expect(projection.ui?.routes ?? []).toHaveLength(0);
     expect(projection.install).toMatchObject({
       supportedModes: ["in_lime"],
@@ -114,7 +122,11 @@ describe("Plugin projection P0", () => {
       runtimeRequirements: [
         { mode: "in_lime", minVersion: "0.8.0" },
         { mode: "standalone", minVersion: "0.8.0" },
-        { mode: "runtime_backed", minVersion: "0.8.0", requires: "lime-runtime" },
+        {
+          mode: "runtime_backed",
+          minVersion: "0.8.0",
+          requires: "lime-runtime",
+        },
       ],
       shellRequirements: [
         {
@@ -131,6 +143,100 @@ describe("Plugin projection P0", () => {
         windowTitle: "Content Factory",
       },
     });
+  });
+
+  it("应优先消费 App Server runtimeCapabilities snapshot", () => {
+    const manifest = parseManifest({
+      manifestVersion: "0.11.0",
+      name: "research-plugin",
+      displayName: "Research Plugin",
+      version: "1.2.0",
+      requires: {
+        capabilities: ["lime.agent"],
+      },
+      entries: [{ key: "research", kind: "workflow" }],
+      skillRefs: [{ id: "legacy-skill", required: true }],
+      toolRefs: [{ key: "legacy-tool", provider: "local-cli" }],
+      runtimeCapabilities: {
+        schemaVersion: "plugin-runtime-capabilities/v0.1",
+        pluginId: "research-plugin",
+        version: "1.2.0",
+        skills: [
+          {
+            id: "article-research",
+            title: "Article Research",
+            description: "Research capability from runtime snapshot",
+            activation: "content.article.research",
+            required: false,
+            promptInjectionPolicy: {
+              mode: "workflow_scoped",
+              source: "manifest.skillRefs",
+            },
+          },
+        ],
+        tools: [
+          {
+            key: "browser/search",
+            title: "Browser Search",
+            provider: "mcp",
+            bindingKind: "mcp",
+            capabilities: ["content.article.research"],
+            required: true,
+          },
+        ],
+        mcpBindings: [
+          {
+            serverId: "browser",
+            toolKey: "browser/search",
+            provider: "mcp",
+            required: true,
+          },
+        ],
+        workflowBindings: [
+          {
+            workflowKey: "article-workflow",
+            taskKind: "content.article.research",
+            skillIds: ["article-research"],
+            toolKeys: ["browser/search"],
+          },
+        ],
+      },
+    });
+    const normalized = normalizeManifest(manifest);
+    const identity = buildPackageIdentity({ manifest });
+    const projection = projectApp({ manifest: normalized, identity });
+
+    expect(projection.skillRequirements).toEqual([
+      {
+        id: "article-research",
+        title: "Article Research",
+        description: "Research capability from runtime snapshot",
+        activation: "content.article.research",
+        required: false,
+        promptInjectionPolicy: {
+          mode: "workflow_scoped",
+          source: "manifest.skillRefs",
+        },
+      },
+    ]);
+    expect(projection.toolRequirements).toEqual([
+      {
+        key: "browser/search",
+        title: "Browser Search",
+        provider: "mcp",
+        bindingKind: "mcp",
+        capabilities: ["content.article.research"],
+        required: true,
+      },
+    ]);
+    expect(projection.runtimeCapabilities?.mcpBindings).toEqual([
+      {
+        serverId: "browser",
+        toolKey: "browser/search",
+        provider: "mcp",
+        required: true,
+      },
+    ]);
   });
 
   it("应从 projection 生成 cleanup dry-run", () => {

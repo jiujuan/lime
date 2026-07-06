@@ -119,6 +119,19 @@ function isRuntimeFailureOnlyAssistantText(
   );
 }
 
+function shouldUseFirstTokenRuntimeStatus(
+  status?: Message["runtimeStatus"] | null,
+): boolean {
+  const phase = status?.phase;
+  return (
+    phase === "routing" ||
+    phase === "context" ||
+    phase === "synthesizing" ||
+    phase === "continuing" ||
+    phase === "retrying"
+  );
+}
+
 function sanitizeProjectedMessageText(message: Message, value: string): string {
   if (!value.trim()) {
     return "";
@@ -323,10 +336,13 @@ export function resolveMessageListItemProjection({
     isLegacyUnphasedStreamingOverlay &&
     hasStructuredProcessBoundaryForActiveTurn &&
     (message.isThinking || isSending || hasActiveTimelineTurn);
+  const streamingFinalTextOverlay = shouldHideLegacyUnphasedOverlayDuringProcess
+    ? null
+    : rawStreamingFinalTextOverlayContent
+      ? streamingTextOverlay
+      : null;
   const streamingFinalTextOverlayContent =
-    shouldHideLegacyUnphasedOverlayDuringProcess
-      ? null
-      : rawStreamingFinalTextOverlayContent;
+    streamingFinalTextOverlay?.content ?? null;
   const hasFinalAnswerAfterRunningWebRetrieval =
     hasFinalAnswerTextAfterRunningWebRetrieval(rawTimelineItems);
   const hasFinalAnswerTimelineItem =
@@ -455,7 +471,7 @@ export function resolveMessageListItemProjection({
                 }),
               shouldHideAssistantTextWhileRunning
                 ? null
-                : streamingFinalTextOverlayContent,
+                : streamingFinalTextOverlay,
             ),
             shouldHideAssistantTextWhileRunning,
           ),
@@ -842,24 +858,32 @@ export function resolveMessageListItemProjection({
     !message.imageWorkbenchPreview &&
     !message.taskPreview &&
     !hasStructuredHistoricalContentHint(actionContent);
+  const hasAssistantRenderableContentBeforeFirstToken =
+    hasVisibleAssistantText ||
+    Boolean(conversationContentParts?.length) ||
+    Boolean(message.thinkingContent?.trim()) ||
+    Boolean(conversationThinkingContent?.trim()) ||
+    Boolean(conversationToolCalls?.length) ||
+    Boolean((rendererActionRequests || []).length > 0) ||
+    Boolean(primaryTimeline) ||
+    Boolean(trailingTimeline) ||
+    Boolean((message.images || []).length > 0) ||
+    visibleAssistantArtifacts.length > 0 ||
+    shouldRenderMessageCanvasShortcut ||
+    Boolean(message.imageWorkbenchPreview) ||
+    Boolean(message.taskPreview);
+  const hasActiveFirstTokenRuntime =
+    timeline !== null ? hasActiveTimelineTurn : message.isThinking || isSending;
   const shouldRenderFirstTokenRuntimeStatus =
     message.role === "assistant" &&
     isConversationTailAssistant &&
-    message.isThinking &&
-    !shouldSuppressRendererProcessFlow &&
-    !shouldRenderAssistantRuntimeStatusPill(message.runtimeStatus) &&
-    !hasVisibleAssistantText &&
-    !conversationContentParts?.length &&
-    !conversationThinkingContent?.trim() &&
-    !conversationToolCalls?.length &&
-    !((rendererActionRequests || []).length > 0) &&
-    !((message.images || []).length > 0) &&
-    visibleAssistantArtifacts.length === 0 &&
-    !shouldRenderMessageCanvasShortcut &&
-    !message.imageWorkbenchPreview &&
-    !message.taskPreview;
+    !isRestoredHistoryWindow &&
+    hasActiveFirstTokenRuntime &&
+    shouldUseFirstTokenRuntimeStatus(message.runtimeStatus) &&
+    !hasAssistantRenderableContentBeforeFirstToken;
   const shouldCollapseAssistantShell =
     message.role === "assistant" &&
+    !shouldRenderFirstTokenRuntimeStatus &&
     !hasVisibleAssistantText &&
     !conversationContentParts?.length &&
     !conversationThinkingContent?.trim() &&

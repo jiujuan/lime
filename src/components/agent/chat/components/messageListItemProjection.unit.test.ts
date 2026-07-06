@@ -65,6 +65,130 @@ describe("messageListItemProjection basic state", () => {
     expect(projection.shouldReadOnlyInteractiveContent).toBe(false);
   });
 
+  it("首字前启动态 runtimeStatus 不应被投影为 assistant 正文", () => {
+    const message: Message = {
+      id: "assistant-startup-note-placeholder",
+      role: "assistant",
+      content: "",
+      timestamp: new Date("2026-06-07T10:00:00.000Z"),
+      isThinking: true,
+      runtimeStatus: {
+        phase: "routing",
+        title: "正在启动处理流程",
+        detail: "已接收请求，正在准备上下文。",
+        checkpoints: ["等待首个模型事件"],
+      },
+    };
+
+    const projection = buildProjection(message, null, {
+      isSending: true,
+      lastAssistantMessageId: message.id,
+    });
+
+    expect(projection.shouldRenderFirstTokenRuntimeStatus).toBe(true);
+    expect(projection.actionContent).toBe("");
+    expect(projection.rendererContent).toBe("");
+    expect(projection.rendererRawContent).toBe("");
+    expect(projection.rendererContentParts).toBeUndefined();
+  });
+
+  it("assistant 正文首字已出现时应保留运行态且不回退到首字前状态", () => {
+    const message: Message = {
+      id: "assistant-visible-text-still-running",
+      role: "assistant",
+      content: "第一段正文已经开始输出。",
+      timestamp: new Date("2026-06-07T10:00:01.000Z"),
+      isThinking: true,
+      contentParts: [
+        {
+          type: "text",
+          text: "第一段正文已经开始输出。",
+        },
+      ],
+      runtimeStatus: {
+        phase: "synthesizing",
+        title: "正在输出",
+        detail: "模型正在继续生成后续正文。",
+      },
+    };
+
+    const projection = buildProjection(message, null, {
+      isSending: true,
+      hasActiveInteractiveRuntime: true,
+      lastAssistantMessageId: message.id,
+    });
+
+    expect(projection.shouldRenderFirstTokenRuntimeStatus).toBe(false);
+    expect(projection.hasAssistantBodyContent).toBe(true);
+    expect(projection.actionContent).toBe("第一段正文已经开始输出。");
+    expect(projection.rendererContent).toBe("第一段正文已经开始输出。");
+    expect(projection.rendererRawContent).toBe("第一段正文已经开始输出。");
+    expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
+      "text",
+    ]);
+    expect(projection.isCurrentInteractiveAssistantMessage).toBe(true);
+    expect(projection.shouldReadOnlyInteractiveContent).toBe(false);
+  });
+
+  it("completed read model 清运行态时不应丢弃 reasoning/tool/text 结构", () => {
+    const finalText = "综合检索与项目文件，结论已经整理完成。";
+    const toolCall = {
+      id: "tool-read-completed",
+      name: "Read",
+      arguments: '{"file_path":"/repo/src/index.ts"}',
+      status: "completed" as const,
+      startTime: new Date("2026-06-07T10:00:02.000Z"),
+      endTime: new Date("2026-06-07T10:00:03.000Z"),
+      result: {
+        success: true,
+        output: "export const value = 1;",
+      },
+    };
+    const message: Message = {
+      id: "assistant-completed-stale-runtime",
+      role: "assistant",
+      content: finalText,
+      timestamp: new Date("2026-06-07T10:00:04.000Z"),
+      isThinking: true,
+      contentParts: [
+        {
+          type: "thinking",
+          text: "先确认用户问题，再读取关键文件。",
+        },
+        {
+          type: "tool_use",
+          toolCall,
+        },
+        {
+          type: "text",
+          text: finalText,
+        },
+      ],
+      runtimeStatus: {
+        phase: "synthesizing",
+        title: "正在输出",
+        detail: "本地流状态尚未清理。",
+      },
+    };
+
+    const projection = buildProjection(message, null, {
+      isSending: false,
+      hasActiveInteractiveRuntime: false,
+      lastAssistantMessageId: message.id,
+    });
+
+    expect(projection.shouldRenderFirstTokenRuntimeStatus).toBe(false);
+    expect(projection.isCurrentInteractiveAssistantMessage).toBe(false);
+    expect(projection.shouldReadOnlyInteractiveContent).toBe(true);
+    expect(projection.actionContent).toBe(finalText);
+    expect(projection.rendererContent).toBe(finalText);
+    expect(projection.rendererContentParts?.map((part) => part.type)).toEqual([
+      "thinking",
+      "tool_use",
+      "text",
+    ]);
+  });
+
   it("尾部 pending action 在当前 runtime 活跃时应保持可提交", () => {
     const message: Message = {
       id: "assistant-pending-action-current",

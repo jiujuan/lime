@@ -362,6 +362,9 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
       }
     >
       {({ textareaProps, textareaRef, isPrimaryDisabled, onPrimaryAction }) => {
+        const loadingSecondaryActionLabel = isPrimaryDisabled
+          ? uiCopy.action.running
+          : uiCopy.action.defer;
         const handleContainerMouseDownCapture = (
           event: React.MouseEvent<HTMLDivElement>,
         ) => {
@@ -533,8 +536,10 @@ export const InputbarCore: React.FC<InputbarCoreProps> = ({
                       type="button"
                       onClick={onPrimaryAction}
                       disabled={isPrimaryDisabled}
+                      aria-label={loadingSecondaryActionLabel}
+                      title={loadingSecondaryActionLabel}
                     >
-                      <span>{uiCopy.action.defer}</span>
+                      <span>{loadingSecondaryActionLabel}</span>
                     </SecondaryActionButton>
                   ) : null}
                   {isLoading ? (

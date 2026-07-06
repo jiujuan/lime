@@ -761,7 +761,7 @@ fn normalize_tool_catalog_alias(tool_name: &str) -> &str {
         "spawnagent" | "subagenttask" | "agenttool" => "Agent",
         "sendinput" | "sendmessagetool" => "SendMessage",
         "bashtool" | "shell" | "developershell" | "mcpsystemshell" | "shellcommand"
-        | "execcommand" | "localshellcall" => "Bash",
+        | "localshellcall" => "Bash",
         "configtool" => "Config",
         "enterplanmodetool" => "EnterPlanMode",
         "exitplanmodetool" => "ExitPlanMode",
@@ -1092,7 +1092,6 @@ mod tests {
             ("developer__shell", "Bash"),
             ("mcp__system__shell", "Bash"),
             ("shell_command", "Bash"),
-            ("exec_command", "Bash"),
             ("local_shell_call", "Bash"),
             ("BriefTool", "SendUserMessage"),
             ("ConfigTool", "Config"),
@@ -1172,6 +1171,10 @@ mod tests {
                 expected
             );
         }
+        assert!(
+            tool_catalog_entry("exec_command").is_none(),
+            "Codex unified_exec exec_command must not collapse into legacy Bash"
+        );
     }
 
     #[test]

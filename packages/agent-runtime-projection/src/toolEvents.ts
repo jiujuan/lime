@@ -12,6 +12,9 @@ import {
   extractAgentUiPlanApprovalResponseProjection,
 } from "./planApproval.js";
 import { metadataKeys, truncateText } from "./normalization.js";
+import {
+  extractAgentUiToolLifecyclePayloadMetadata,
+} from "./toolLifecycleMetadata.js";
 import { extractArtifactRefs } from "./refs.js";
 
 export interface AgentUiToolStartProjectionInput {
@@ -19,6 +22,7 @@ export interface AgentUiToolStartProjectionInput {
   toolCallId: string;
   toolName: string;
   input?: string | null;
+  metadata?: unknown;
 }
 
 export interface AgentUiToolExecutionResultProjectionInput {
@@ -63,6 +67,7 @@ export interface AgentUiToolInputDeltaProjectionInput {
   delta: string;
   accumulatedInput?: string | null;
   provider?: string | null;
+  metadata?: unknown;
 }
 
 export function buildAgentUiToolStartEvents(
@@ -89,10 +94,11 @@ export function buildAgentUiToolStartEvents(
     {
       ...shared,
       type: "tool.started",
-      payload: {
-        toolName: input.toolName,
-      },
+    payload: {
+      toolName: input.toolName,
+      ...extractAgentUiToolLifecyclePayloadMetadata(input.metadata),
     },
+  },
     {
       ...shared,
       type: "tool.args",
@@ -132,6 +138,7 @@ export function buildAgentUiToolEndEvent(
       outputLength: input.result.output?.length ?? 0,
       hasImages: Boolean(input.result.images?.length),
       metadataKeys: metadataKeyList,
+      ...extractAgentUiToolLifecyclePayloadMetadata(input.result.metadata),
     },
     refs: {
       ...refs,
@@ -205,6 +212,7 @@ export function buildAgentUiToolProgressEvent(
       progress: input.progress.progress,
       total: input.progress.total,
       metadataKeys: metadataKeyList,
+      ...extractAgentUiToolLifecyclePayloadMetadata(input.progress.metadata),
     },
     refs:
       metadataKeyList.length > 0
@@ -235,6 +243,7 @@ export function buildAgentUiToolOutputDeltaEvent(
       deltaPreview: truncateText(input.delta),
       deltaLength: input.delta.length,
       metadataKeys: metadataKeyList,
+      ...extractAgentUiToolLifecyclePayloadMetadata(input.metadata),
     },
     refs:
       metadataKeyList.length > 0
@@ -267,6 +276,7 @@ export function buildAgentUiToolInputDeltaEvent(
       deltaLength: input.delta.length,
       accumulatedInputLength: input.accumulatedInput?.length ?? 0,
       accumulatedInputPreview: truncateText(input.accumulatedInput),
+      ...extractAgentUiToolLifecyclePayloadMetadata(input.metadata),
     },
   };
 }

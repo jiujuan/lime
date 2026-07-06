@@ -829,30 +829,6 @@ impl SessionStore for SkillAgentSessionStore {
         })
     }
 
-    async fn export_session(&self, _id: &str) -> anyhow::Result<String> {
-        serde_json::to_string(&self.clone_session(true)).map_err(Into::into)
-    }
-
-    async fn import_session(&self, json: &str) -> anyhow::Result<Session> {
-        let session: Session = serde_json::from_str(json)?;
-        Ok(session)
-    }
-
-    async fn copy_session(&self, _session_id: &str, new_name: String) -> anyhow::Result<Session> {
-        let mut session = self.clone_session(true);
-        session.id = format!("skill-agent-copy-{}", Uuid::new_v4());
-        session.name = new_name;
-        Ok(session)
-    }
-
-    async fn truncate_conversation(
-        &self,
-        _session_id: &str,
-        _timestamp: i64,
-    ) -> anyhow::Result<()> {
-        Ok(())
-    }
-
     async fn update_session_name(
         &self,
         _session_id: &str,

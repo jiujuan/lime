@@ -465,7 +465,37 @@ describe("InputbarCore", () => {
     ).toBeTruthy();
   });
 
-  it("生成中应显示稍后处理与停止按钮，并渲染待处理列表", async () => {
+  it("生成中且没有下一条草稿时应显示正在输出与停止按钮", async () => {
+    const onSend = vi.fn();
+    const onStop = vi.fn();
+    const container = await renderInputbarCore({
+      text: "",
+      onSend,
+      onStop,
+      isLoading: true,
+    });
+
+    const runningButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("正在输出"),
+    ) as HTMLButtonElement | undefined;
+    const stopButton = container.querySelector(
+      'button[aria-label="停止"]',
+    ) as HTMLButtonElement | null;
+
+    expect(runningButton).toBeTruthy();
+    expect(runningButton?.disabled).toBe(true);
+    expect(stopButton).toBeTruthy();
+    expect(container.textContent).not.toContain("稍后处理");
+
+    act(() => {
+      stopButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(onSend).not.toHaveBeenCalled();
+    expect(onStop).toHaveBeenCalledTimes(1);
+  });
+
+  it("生成中已有下一条草稿时应显示稍后处理与停止按钮，并渲染待处理列表", async () => {
     const onSend = vi.fn();
     const onStop = vi.fn();
     const container = await renderInputbarCore({

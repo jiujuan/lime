@@ -81,6 +81,9 @@ function parseArgs(argv) {
   if (!Number.isFinite(options.timeoutMs) || options.timeoutMs < 5_000) {
     throw new Error("--timeout-ms must be >= 5000");
   }
+  if (options.help) {
+    return options;
+  }
   if (!options.output) {
     throw new Error("--output is required");
   }
@@ -100,7 +103,7 @@ function printHelp() {
 Options:
   --api-base <url>            LimeCore API base. Can also use LIME_AGENT_APP_STUDIO_API_BASE / LIMECORE_API_BASE_URL / LIMECORE_API_BASE.
   --tenant-id <id>            Tenant id. Can also use LIMECORE_TENANT_ID / LIME_CLOUD_TENANT_ID.
-  --studio-token-env <name>   Env var containing the client/developer token. Defaults to LIME_AGENT_APP_STUDIO_TOKEN.
+  --studio-token-env <name>   Env var name containing the client/developer token; never pass the token value as an argument. Defaults to LIME_AGENT_APP_STUDIO_TOKEN.
   --app-id <id>               App id to locate in marketplace, defaults to content-factory-app.
   --marketplace-name <name>   Marketplace name for evidence metadata, defaults to limecloud.
   --catalog-output <path>     Write normalized production catalog evidence JSON.

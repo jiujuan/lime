@@ -98,6 +98,7 @@ describe("agentStreamSubmissionLifecycle", () => {
       turnId: expect.any(String),
       pendingTurnKey: lifecycle.pendingTurnKey,
       pendingItemKey: lifecycle.pendingItemKey,
+      submittedDraft: null,
     });
     expect(messages[0]?.runtimeStatus).toEqual(runtimeStatus);
     expect(threadTurns[0]?.thread_id).toBe("session-1");

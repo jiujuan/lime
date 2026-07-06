@@ -164,36 +164,7 @@ pub struct AgentRuntimeStatus {
 }
 
 pub fn build_diagnostics_runtime_status_metadata() -> HashMap<String, Value> {
-    HashMap::from([
-        (
-            "sourceType".to_string(),
-            Value::String("runtime_status".to_string()),
-        ),
-        (
-            "source".to_string(),
-            Value::String("runtime_status".to_string()),
-        ),
-        (
-            "surface".to_string(),
-            Value::String("runtime_status".to_string()),
-        ),
-        (
-            "visibility".to_string(),
-            Value::String("diagnostics".to_string()),
-        ),
-        (
-            "persistence".to_string(),
-            Value::String("transient".to_string()),
-        ),
-        (
-            "agentui".to_string(),
-            serde_json::json!({
-                "eventClass": "run.status",
-                "surface": "runtime_status",
-                "visibility": "diagnostics",
-            }),
-        ),
-    ])
+    agent_runtime::runtime_timeline::build_diagnostics_runtime_status_metadata()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

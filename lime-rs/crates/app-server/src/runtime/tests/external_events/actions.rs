@@ -226,7 +226,14 @@ async fn append_external_runtime_events_allows_tool_result_after_action_resolved
                     "tool.started",
                     json!({
                         "toolCallId": "tool_after_approval",
-                        "toolName": "Shell"
+                        "toolName": "Shell",
+                        "metadata": {
+                            "soul_lifecycle": {
+                                "profileId": "calm_professional_partner",
+                                "packId": "com.lime.soul.calm-professional-partner",
+                                "toneVariant": "calm_professional"
+                            }
+                        }
                     }),
                 ),
                 RuntimeEvent::new(
@@ -258,6 +265,38 @@ async fn append_external_runtime_events_allows_tool_result_after_action_resolved
         .expect("approved tool result should append");
 
     assert_eq!(appended.len(), 4);
+    assert_eq!(
+        appended[1].payload["metadata"]["risk_level"].as_str(),
+        Some("high")
+    );
+    assert_eq!(
+        appended[1].payload["metadata"]["style_level"].as_str(),
+        Some("L4")
+    );
+    assert_eq!(
+        appended[1].payload["metadata"]["soul_lifecycle"]["phase"].as_str(),
+        Some("tool_policy_review")
+    );
+    assert_eq!(
+        appended[1].payload["metadata"]["tool_process_facts"]["status"].as_str(),
+        Some("action_required")
+    );
+    assert_eq!(
+        appended[1].payload["metadata"]["soul_lifecycle"]["profileId"].as_str(),
+        Some("calm_professional_partner")
+    );
+    assert_eq!(
+        appended[1].payload["metadata"]["soul_lifecycle"]["packId"].as_str(),
+        Some("com.lime.soul.calm-professional-partner")
+    );
+    assert_eq!(
+        appended[1].payload["metadata"]["tool_process_facts"]["toneVariant"].as_str(),
+        Some("calm_professional")
+    );
+    assert_eq!(
+        appended[1].payload["toolProcessFacts"]["riskLevel"].as_str(),
+        Some("high")
+    );
     assert_eq!(appended[3].event_type, "tool.result");
 }
 
@@ -324,6 +363,88 @@ async fn append_external_runtime_events_infers_action_resolved_tool_from_pending
         Some("tool_after_inferred_approval")
     );
     assert_eq!(appended[3].event_type, "tool.result");
+}
+
+#[tokio::test]
+async fn respond_action_infers_tool_id_and_unblocks_pending_tool_result() {
+    let (core, session_id, turn_id) = runtime_with_active_turn(
+        "sess_action_respond_infers_tool",
+        "thread_action_respond_infers_tool",
+        "turn_action_respond_infers_tool",
+    )
+    .await;
+
+    core.append_external_runtime_events(
+        &session_id,
+        Some(&turn_id),
+        vec![
+            RuntimeEvent::new(
+                "tool.started",
+                json!({
+                    "toolCallId": "tool_after_respond_approval",
+                    "toolName": "Shell"
+                }),
+            ),
+            RuntimeEvent::new(
+                "action.required",
+                json!({
+                    "requestId": "action_after_respond_approval",
+                    "actionType": "tool_confirmation",
+                    "data": {
+                        "toolName": "Shell"
+                    }
+                }),
+            ),
+        ],
+    )
+    .expect("pending tool confirmation should append");
+
+    let responded = core
+        .respond_action(
+            AgentSessionActionRespondParams {
+                session_id: session_id.clone(),
+                request_id: "action_after_respond_approval".to_string(),
+                action_type: AgentSessionActionType::ToolConfirmation,
+                confirmed: true,
+                response: None,
+                user_data: None,
+                metadata: None,
+                event_name: None,
+                action_scope: Some(AgentSessionActionScope {
+                    session_id: Some(session_id.clone()),
+                    thread_id: Some("thread_action_respond_infers_tool".to_string()),
+                    turn_id: Some(turn_id.clone()),
+                }),
+            },
+            RuntimeHostContext::default(),
+        )
+        .await
+        .expect("respond action should append resolved event");
+
+    assert_eq!(responded.events.len(), 1);
+    assert_eq!(responded.events[0].event_type, "action.resolved");
+    assert_eq!(
+        responded.events[0].payload["toolCallId"].as_str(),
+        Some("tool_after_respond_approval")
+    );
+
+    let appended = core
+        .append_external_runtime_events(
+            &session_id,
+            Some(&turn_id),
+            vec![RuntimeEvent::new(
+                "tool.result",
+                json!({
+                    "toolCallId": "tool_after_respond_approval",
+                    "toolName": "Shell",
+                    "output": "approved through action/respond"
+                }),
+            )],
+        )
+        .expect("responded approval should unlock tool result");
+
+    assert_eq!(appended.len(), 1);
+    assert_eq!(appended[0].event_type, "tool.result");
 }
 
 #[tokio::test]

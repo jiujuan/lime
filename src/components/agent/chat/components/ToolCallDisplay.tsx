@@ -52,6 +52,7 @@ import {
   resolveToolErrorDetailText,
   resolveToolProcessNarrative,
 } from "../utils/toolProcessSummary";
+import { resolveToolSoulMetadataDomAttributes } from "../utils/toolSoulLifecycleMetadata";
 import {
   isLimeTaskProtocolFailure,
   resolveLimeTaskProtocolFailureDisplayText,
@@ -207,6 +208,18 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
   const processNarrative = useMemo(
     () => resolveToolProcessNarrative(toolCall),
     [toolCall],
+  );
+  const soulLifecycleAttributes = useMemo(
+    () => resolveToolSoulMetadataDomAttributes(processNarrative),
+    [
+      processNarrative.packId,
+      processNarrative.profileId,
+      processNarrative.riskLevel,
+      processNarrative.soulPhase,
+      processNarrative.soulSurface,
+      processNarrative.styleLevel,
+      processNarrative.toneVariant,
+    ],
   );
   const shouldHideResultEnvelope = useMemo(
     () =>
@@ -729,6 +742,7 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
         <div
           className="flex items-start gap-2 py-1.5"
           data-testid="tool-call-row"
+          {...soulLifecycleAttributes}
         >
           <span className="pt-0.5 font-mono text-xs text-slate-400">
             {groupMarker}
@@ -770,6 +784,7 @@ export const ToolCallDisplay: React.FC<ToolCallDisplayProps> = ({
         <div
           className="flex items-start gap-2.5 py-1.5"
           data-testid="tool-call-row"
+          {...soulLifecycleAttributes}
         >
           <span
             className={cn(

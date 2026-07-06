@@ -100,6 +100,7 @@ interface EmptyStateComposerPanelProps {
       subagentEnabled?: boolean;
     },
   ) => void | boolean | Promise<boolean>;
+  onStop?: () => void;
   isLoading?: boolean;
   disabled?: boolean;
   activeTheme: string;
@@ -229,6 +230,7 @@ export function EmptyStateComposerPanel({
   input,
   placeholder,
   onSend,
+  onStop,
   isLoading = false,
   disabled = false,
   activeTheme,
@@ -814,6 +816,7 @@ export function EmptyStateComposerPanel({
           text={draftInput}
           setText={setDraftInput}
           onSend={handleSendDraft}
+          onStop={onStop}
           isLoading={isLoading}
           disabled={disabled}
           onToolClick={handleToolAction}

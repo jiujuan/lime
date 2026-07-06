@@ -6,6 +6,14 @@ import {
 } from "./importedRuntimeEventDetailViewModel";
 
 const IMPORTED_RUNTIME_REQUIRED_KEYS = [
+  "generalWorkbench.taskRail.importedRuntime.fact.collaborationKind",
+  "generalWorkbench.taskRail.importedRuntime.fact.collaborationPhase",
+  "generalWorkbench.taskRail.importedRuntime.fact.collaborationSurface",
+  "generalWorkbench.taskRail.importedRuntime.fact.packId",
+  "generalWorkbench.taskRail.importedRuntime.fact.profileId",
+  "generalWorkbench.taskRail.importedRuntime.fact.riskLevel",
+  "generalWorkbench.taskRail.importedRuntime.fact.styleLevel",
+  "generalWorkbench.taskRail.importedRuntime.fact.toneVariant",
   "generalWorkbench.taskRail.importedRuntime.payload.type.bigint",
   "generalWorkbench.taskRail.importedRuntime.payload.type.boolean",
   "generalWorkbench.taskRail.importedRuntime.payload.type.function",
@@ -220,6 +228,50 @@ describe("importedRuntimeEventDetailViewModel", () => {
     expect(display.payloadPreview).not.toContain("senderThreadId");
     expect(display.payloadPreview).not.toContain("receiverThreadId");
     expect(display.payloadPreview).not.toContain("newThreadId");
+  });
+
+  it("应优先使用 collaboration facts 识别 workbench task rail 协作事件", () => {
+    const display = buildImportedRuntimeEventDisplay({
+      sourceEventIndex: 1,
+      turnIndex: 0,
+      eventIndex: 0,
+      eventType: "subagent.status",
+      payload: {
+        status: "running",
+        collaborationFacts: {
+          collaborationSurface: "team_roster",
+          collaborationPhase: "acting",
+          collaborationKind: "subagent_status",
+          styleLevel: "L1",
+          riskLevel: "normal",
+          profileId: "cheeky_sassy_executor",
+          packId: "stylepack.cheeky_sassy_executor.v1",
+          toneVariant: "cheeky_sassy",
+        },
+        collaborationSurface: "team_roster",
+        collaborationPhase: "acting",
+        sourceEventType: "subagent_status_changed",
+        senderThreadId: "main-thread",
+        newThreadId: "subagent-thread-2",
+      },
+    });
+
+    const factValues = display.facts.map((fact) => fact.value).join("\n");
+
+    expect(display.kind).toBe("collaboration");
+    expect(display.title.key).toBe(
+      "generalWorkbench.taskRail.importedRuntime.kind.collaboration",
+    );
+    expect(factValues).toContain("team_roster");
+    expect(factValues).toContain("acting");
+    expect(factValues).toContain("subagent_status");
+    expect(factValues).toContain("L1");
+    expect(factValues).toContain("normal");
+    expect(factValues).toContain("cheeky_sassy_executor");
+    expect(factValues).toContain("stylepack.cheeky_sassy_executor.v1");
+    expect(factValues).toContain("cheeky_sassy");
+    expect(factValues).not.toContain("main-thread");
+    expect(factValues).not.toContain("subagent-thread-2");
   });
 
   it("应截断超长字符串负载", () => {

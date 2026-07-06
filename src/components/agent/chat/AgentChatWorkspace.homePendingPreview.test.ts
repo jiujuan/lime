@@ -49,7 +49,7 @@ describe("buildHomePendingPreviewMessages", () => {
     });
   });
 
-  it("首页首发等待态应应用 memory.soul 当前交互口吻", () => {
+  it("首页首发等待态应保持 neutral 文案并携带 memory.soul metadata", () => {
     const request: TaskCenterDraftSendRequest = {
       id: "draft-send-soul",
       draftTabId: "session-soul",
@@ -76,8 +76,17 @@ describe("buildHomePendingPreviewMessages", () => {
       role: "assistant",
       runtimeStatus: {
         phase: "preparing",
-        title: "接住了，正在开工",
-        detail: expect.stringContaining("掉链子"),
+        title: "正在进入对话",
+        detail: "已收到输入，正在后台准备会话和执行环境。",
+        metadata: {
+          soul_surface: "home_pending_preview",
+          soul_phase: "preparing",
+          style_level: "L1",
+          risk_level: "normal",
+          tone_variant: "cheeky_sassy",
+          profile_id: "cheeky_sassy_executor",
+          pack_id: "com.lime.soul.cheeky-sassy-executor",
+        },
       },
     });
   });

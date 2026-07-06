@@ -110,6 +110,7 @@ function fetchCloudEvidence() {
     packageHashMatched: true,
     manifestHashMatched: true,
     packageVerificationStatus: "verified",
+    signaturePolicy: "required",
     signatureVerificationStatus: "declared",
     descriptor: {
       appId: "content-factory-app",
@@ -123,16 +124,23 @@ function readyFetchCloudEvidence() {
   return {
     schemaVersion: "content-factory-fetch-cloud-evidence.v1",
     appId: "content-factory-app",
+    descriptor: {
+      manifestHash: MANIFEST_HASH,
+      packageHash: PACKAGE_HASH,
+      sourceUri: "https://packages.example.com/content-factory-app-2.2.2.lapp",
+    },
     manifestHash: MANIFEST_HASH,
     manifestHashMatched: true,
     packageHash: PACKAGE_HASH,
     packageHashMatched: true,
     packageVerificationStatus: "verified",
+    signaturePolicy: "required",
     signatureProof: {
       algorithm: "Ed25519",
       payloadHash:
         "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
       publicKeyId: "content-factory-prod-root-2026",
+      signature: "base64-signature",
       signedAt: "2026-07-05T00:00:00.000Z",
     },
     signatureRef: SIGNATURE_REF,
@@ -157,6 +165,11 @@ function bootstrapEvidence() {
 
 function guiEvidence() {
   return {
+    schemaVersion: "content-factory-production-gui-evidence.v1",
+    cdp: {
+      attached: true,
+      usedRealElectron: true,
+    },
     assertions: {
       articleDraftDocumentPresent: true,
       contentFactoryArticleWorkspaceWorkflowFactsHidden: true,
@@ -165,6 +178,7 @@ function guiEvidence() {
     },
     eventLogs: {
       workflowJsonl: "/tmp/content-factory-production/workflow-events.jsonl",
+      workflowJsonlEventCount: 16,
       workflowResumeEvents: [
         {
           eventType: "workflow.step.resuming",
@@ -188,12 +202,35 @@ function guiEvidence() {
         },
       ],
     },
+    evidenceExport: {
+      workflowAudit: {
+        eventCount: 16,
+        metadataOnly: true,
+        rawContentIncluded: false,
+        redactionPolicy: "workflow_audit_metadata_only",
+        redactionPolicyEventCount: 16,
+        source: "workflow-events.jsonl",
+        status: "exported",
+      },
+    },
     installedState: {
+      appVersion: "2.2.2",
+      cloudReleaseEvidenceStatus: "ready",
+      manifestHash: MANIFEST_HASH,
+      manifestHashMatched: true,
+      packageHash: PACKAGE_HASH,
+      packageHashMatched: true,
+      packageVerificationStatus: "verified",
+      releaseId: RELEASE_ID,
+      signaturePolicy: "required",
+      signatureRef: SIGNATURE_REF,
       sourceKind: "cloud_release",
       signatureVerificationStatus: "verified",
     },
     readModel: {
+      articleDraftDocumentLength: 3153,
       articleDraftDocumentPresent: true,
+      generatedArticleMarkerClean: true,
       hostManagedGenerationStatus: "completed",
     },
     runtimeActionResponse: {
@@ -216,6 +253,14 @@ function guiEvidence() {
         "agentSession/read",
         "evidence/export",
       ],
+      turnStartTrace: {
+        command: "app_server_handle_json_lines",
+        matched: true,
+        method: "agentSession/turn/start",
+        sessionMatched: true,
+        status: "success",
+        transport: "electron-ipc",
+      },
     },
   };
 }
@@ -336,6 +381,7 @@ describe("content factory production readiness pipeline", () => {
             packageVerificationStatus: "verified",
             present: true,
             ready: true,
+            signaturePolicy: "required",
             signatureVerificationStatus: "verified",
             sourceKind: "cloud_release",
             status: "ready",
@@ -590,6 +636,15 @@ describe("content factory production readiness pipeline", () => {
     expect(result.pipeline.operatorReadiness.commandHint).toContain(
       "--package-url <https-url>",
     );
+    expect(result.pipeline.operatorReadiness.commandHint).toContain(
+      "requires local env: PLUGIN_SIGNING_PRIVATE_KEY_PEM, LIME_AGENT_APP_STUDIO_TOKEN",
+    );
+    expect(result.pipeline.operatorReadiness.commandHint).not.toContain(
+      "<private-key>",
+    );
+    expect(result.pipeline.operatorReadiness.commandHint).not.toContain(
+      "<token>",
+    );
     expect(result.pipeline.operatorReadiness.signingCommandHint).toMatchObject({
       hasCurrentHashes: true,
       manifestHash: MANIFEST_HASH,
@@ -605,6 +660,12 @@ describe("content factory production readiness pipeline", () => {
     expect(
       result.pipeline.operatorReadiness.signingCommandHint.command,
     ).toContain(MANIFEST_HASH);
+    expect(
+      result.pipeline.operatorReadiness.signingCommandHint.command,
+    ).toContain("--private-key-env PLUGIN_SIGNING_PRIVATE_KEY_PEM");
+    expect(
+      result.pipeline.operatorReadiness.signingCommandHint.command,
+    ).not.toContain("<private-key>");
     expect(JSON.stringify(result.pipeline)).not.toContain(packageUrl);
     expect(
       fs.readFileSync(
@@ -760,6 +821,9 @@ describe("content factory production readiness pipeline", () => {
     expect(result.pipeline.operatorReadiness.commandHint).toContain(
       "--studio-token-env LIME_AGENT_APP_STUDIO_TOKEN",
     );
+    expect(result.pipeline.operatorReadiness.commandHint).not.toContain(
+      "<token>",
+    );
     expect(JSON.stringify(result.pipeline)).not.toContain(secretToken);
     expect(
       fs.readFileSync(
@@ -834,7 +898,11 @@ describe("content factory production readiness pipeline", () => {
       expect.arrayContaining([
         expect.objectContaining({
           key: "appSignature",
-          action: expect.stringContaining("scripts/sign-release.mjs"),
+          action: expect.stringContaining("--generate-signature-proof"),
+        }),
+        expect.objectContaining({
+          key: "trustRoot",
+          action: expect.stringContaining("--generate-signature-proof"),
         }),
         expect.objectContaining({
           key: "releaseId",
@@ -853,6 +921,24 @@ describe("content factory production readiness pipeline", () => {
           action: expect.stringContaining("Electron CDP"),
         }),
       ]),
+    );
+    expect(result.pipeline.operatorReadiness.commandHint).toContain(
+      "--generate-signature-proof",
+    );
+    expect(result.pipeline.operatorReadiness.commandHint).toContain(
+      "--signing-private-key-env PLUGIN_SIGNING_PRIVATE_KEY_PEM",
+    );
+    expect(result.pipeline.operatorReadiness.commandHint).not.toContain(
+      "<private-key>",
+    );
+    expect(result.pipeline.operatorReadiness.commandHint).not.toContain(
+      "<token>",
+    );
+    expect(result.pipeline.operatorReadiness.commandHint).not.toContain(
+      "--app-signature <app.signature.yaml>",
+    );
+    expect(result.pipeline.operatorReadiness.commandHint).not.toContain(
+      "--trust-root <plugin-signature-trust-root.json>",
     );
     expect(result.pipeline.blockers.map((item) => item.code)).not.toContain(
       "production_preflight_missing",
@@ -1128,7 +1214,7 @@ describe("content factory production readiness pipeline", () => {
     ]);
     expect(result.pipeline.steps.productionReleaseEvidence).toMatchObject({
       executable: false,
-      missingKeys: ["apiBase", "tenantId", "studioToken"],
+      missingKeys: ["tenantId", "studioToken"],
       outputs: {
         summary: {
           present: true,
@@ -1156,6 +1242,60 @@ describe("content factory production readiness pipeline", () => {
         ),
       ).outputs.summary.present,
     ).toBe(true);
+  });
+
+  it("uses the shared Studio/LimeCore default API base for release evidence input", () => {
+    const fixture = createPipelineFixture();
+    const runner = (command, args) => {
+      if (args[0] === fixture.studioCli) {
+        const dryRun = studioDryRun([]);
+        return {
+          status: 0,
+          stdout: JSON.stringify({
+            ...dryRun,
+            releaseReadiness: {
+              ...dryRun.releaseReadiness,
+              checks: {
+                ...dryRun.releaseReadiness.checks,
+                auth: {
+                  apiBaseConfigured: true,
+                  tenantIdConfigured: false,
+                  tokenConfigured: false,
+                },
+              },
+            },
+          }),
+          stderr: "",
+        };
+      }
+      if (args[0] === fixture.preflightScript) {
+        writeJson(commandValue(args, "--output"), readyPreflight());
+        return { status: 0, stdout: "preflight ok\n", stderr: "" };
+      }
+      throw new Error(`unexpected command: ${command} ${args.join(" ")}`);
+    };
+
+    const result = runContentFactoryProductionReadinessPipeline({
+      contentFactoryDir: fixture.contentFactoryDir,
+      expectedVersion: "2.2.2",
+      fetchProductionReleaseEvidence: true,
+      outputDir: fixture.outputDir,
+      preflightScript: fixture.preflightScript,
+      releaseEvidenceScript: fixture.releaseEvidenceScript,
+      runner,
+      studioCli: fixture.studioCli,
+      studioDir: fixture.studioDir,
+    });
+
+    expect(result.pipeline.operatorReadiness.inputs.apiBase).toMatchObject({
+      configured: true,
+      purpose: "release-evidence-fetch",
+      source: "default",
+      studioDryRunConfigured: true,
+    });
+    expect(result.pipeline.operatorReadiness.missingKeys).not.toContain(
+      "apiBase",
+    );
   });
 
   it("keeps the pipeline blocked when Studio dry-run does not produce JSON", () => {

@@ -58,6 +58,32 @@ describe("agentStreamToolItemMessageSync", () => {
     expect(state.endTime?.toISOString()).toBe("2026-06-22T10:00:03.000Z");
   });
 
+  it("应从 completed thread item 保留 structuredContent", () => {
+    const state = toolCallStateFromThreadItem(
+      buildToolItem({
+        tool_name: "mcp__docs__diagnostic_probe",
+        output: JSON.stringify({
+          request_metadata: { projection: "mcp_tool_result_projection" },
+        }),
+        structuredContent: {
+          answer: "MCP 结构化答案已进入 Agent Chat GUI",
+          ids: ["doc-structured-1"],
+        },
+      }),
+    );
+
+    expect(state.result).toMatchObject({
+      structuredContent: {
+        answer: "MCP 结构化答案已进入 Agent Chat GUI",
+        ids: ["doc-structured-1"],
+      },
+      structured_content: {
+        answer: "MCP 结构化答案已进入 Agent Chat GUI",
+        ids: ["doc-structured-1"],
+      },
+    });
+  });
+
   it("合并 thread item 时应保留已有日志，并在完成后清理进度", () => {
     const merged = mergeToolCallStateFromItem(
       {

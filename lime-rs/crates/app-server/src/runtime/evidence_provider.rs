@@ -563,6 +563,8 @@ struct CodingEvidenceSummary {
     checkpoint_refs: Vec<String>,
     artifact_refs: Vec<String>,
     evidence_refs: Vec<String>,
+    action_request_ids: Vec<String>,
+    action_tool_call_ids: Vec<String>,
     source_event_ids: Vec<String>,
 }
 
@@ -620,10 +622,12 @@ fn coding_evidence_summary(events: &[AgentEvent]) -> Value {
             }
             "action.required" => {
                 summary.action_required_count += 1;
+                collect_action_correlation(&mut summary, event);
                 push_unique(&mut summary.source_event_ids, event.event_id.clone());
             }
             "action.resolved" => {
                 summary.action_resolved_count += 1;
+                collect_action_correlation(&mut summary, event);
                 push_unique(&mut summary.source_event_ids, event.event_id.clone());
             }
             _ => {}
@@ -653,8 +657,29 @@ fn coding_evidence_summary(events: &[AgentEvent]) -> Value {
         "checkpointRefs": summary.checkpoint_refs,
         "artifactRefs": summary.artifact_refs,
         "evidenceRefs": summary.evidence_refs,
+        "actionRequestIds": summary.action_request_ids,
+        "actionToolCallIds": summary.action_tool_call_ids,
         "sourceEventIds": summary.source_event_ids,
     })
+}
+
+fn collect_action_correlation(summary: &mut CodingEvidenceSummary, event: &AgentEvent) {
+    if let Some(request_id) = payload_or_data_string(
+        &event.payload,
+        &["requestId", "request_id", "actionId", "action_id", "id"],
+    ) {
+        push_unique(&mut summary.action_request_ids, request_id);
+    }
+    if let Some(tool_call_id) = payload_or_data_string(
+        &event.payload,
+        &["toolCallId", "tool_call_id", "toolId", "tool_id"],
+    ) {
+        push_unique(&mut summary.action_tool_call_ids, tool_call_id);
+    }
+}
+
+fn payload_or_data_string(value: &Value, keys: &[&str]) -> Option<String> {
+    metadata_string(Some(value), keys).or_else(|| nested_metadata_string(Some(value), "data", keys))
 }
 
 fn collect_common_coding_refs(summary: &mut CodingEvidenceSummary, event: &AgentEvent) {

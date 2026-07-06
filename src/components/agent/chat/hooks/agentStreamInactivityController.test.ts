@@ -77,18 +77,28 @@ describe("agentStreamInactivityController", () => {
   it("应按 inactivity timeout 状态选择恢复动作", () => {
     expect(
       resolveAgentStreamInactivityTimeoutAction({
+        activeReadModelActivity: true,
         recovered: true,
         shouldIgnore: true,
       }),
     ).toBe("ignore");
     expect(
       resolveAgentStreamInactivityTimeoutAction({
+        activeReadModelActivity: false,
         recovered: true,
         shouldIgnore: false,
       }),
     ).toBe("recover");
     expect(
       resolveAgentStreamInactivityTimeoutAction({
+        activeReadModelActivity: true,
+        recovered: false,
+        shouldIgnore: false,
+      }),
+    ).toBe("continue");
+    expect(
+      resolveAgentStreamInactivityTimeoutAction({
+        activeReadModelActivity: false,
         recovered: false,
         shouldIgnore: false,
       }),

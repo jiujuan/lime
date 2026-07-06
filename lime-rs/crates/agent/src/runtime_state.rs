@@ -374,9 +374,182 @@ pub use agent_runtime::session_config::SessionConfigBuilder;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use aster::conversation::message::{Message, MessageContent};
+    use aster::model::ModelConfig;
+    use aster::providers::base::{
+        Provider, ProviderMetadata, ProviderUsage, SessionNameGenerationExecutionStrategy, Usage,
+    };
+    use aster::providers::errors::ProviderError;
+    use aster::session::SessionType;
+    use aster::tool_inspection::{InspectionAction, InspectionResult, ToolInspector};
+    use async_trait::async_trait;
+    use rmcp::model::CallToolRequestParam;
     use std::fs;
+    use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
     use std::sync::{Arc, Mutex};
+    use std::time::Duration;
     use tempfile::TempDir;
+
+    struct RuntimeApprovalResumeProvider {
+        reply_calls: AtomicUsize,
+    }
+
+    impl RuntimeApprovalResumeProvider {
+        fn new() -> Self {
+            Self {
+                reply_calls: AtomicUsize::new(0),
+            }
+        }
+
+        fn usage(&self) -> ProviderUsage {
+            ProviderUsage::new(
+                "runtime-approval-resume-provider".to_string(),
+                Usage::default(),
+            )
+        }
+
+        fn observed_tool_response(messages: &[Message]) -> bool {
+            messages
+                .iter()
+                .flat_map(|message| message.content.iter())
+                .any(|content| match content {
+                    MessageContent::ToolResponse(response) => {
+                        response.id == "req-runtime-confirm"
+                            && response.tool_result.as_ref().ok().is_some_and(|result| {
+                                result.content.iter().any(|content| {
+                                    content
+                                        .as_text()
+                                        .is_some_and(|text| text.text == "runtime-confirmed")
+                                })
+                            })
+                    }
+                    _ => false,
+                })
+        }
+    }
+
+    #[async_trait]
+    impl Provider for RuntimeApprovalResumeProvider {
+        fn metadata() -> ProviderMetadata
+        where
+            Self: Sized,
+        {
+            ProviderMetadata::empty()
+        }
+
+        fn get_name(&self) -> &str {
+            "runtime-approval-resume-provider"
+        }
+
+        async fn complete_with_model(
+            &self,
+            _model_config: &ModelConfig,
+            system: &str,
+            messages: &[Message],
+            tools: &[rmcp::model::Tool],
+        ) -> Result<(Message, ProviderUsage), ProviderError> {
+            if tools.is_empty() && system.contains("four words or less") {
+                return Ok((
+                    Message::assistant().with_text("approval resume"),
+                    self.usage(),
+                ));
+            }
+
+            if Self::observed_tool_response(messages) {
+                return Ok((
+                    Message::assistant().with_text("provider observed resumed tool"),
+                    self.usage(),
+                ));
+            }
+
+            self.reply_calls.fetch_add(1, AtomicOrdering::SeqCst);
+            Ok((
+                Message::assistant().with_tool_request(
+                    "req-runtime-confirm",
+                    Ok(CallToolRequestParam {
+                        name: "RuntimeApprovalResume".into(),
+                        arguments: Some(serde_json::Map::new()),
+                    }),
+                ),
+                self.usage(),
+            ))
+        }
+
+        fn get_model_config(&self) -> ModelConfig {
+            ModelConfig::new("test-model").expect("test model config")
+        }
+
+        fn session_name_generation_execution_strategy(
+            &self,
+        ) -> SessionNameGenerationExecutionStrategy {
+            SessionNameGenerationExecutionStrategy::AfterReply
+        }
+    }
+
+    struct RuntimeApprovalResumeTool;
+
+    #[async_trait]
+    impl aster::tools::Tool for RuntimeApprovalResumeTool {
+        fn name(&self) -> &str {
+            "RuntimeApprovalResume"
+        }
+
+        fn description(&self) -> &str {
+            "runtime approval resume regression tool"
+        }
+
+        fn input_schema(&self) -> serde_json::Value {
+            serde_json::json!({
+                "type": "object",
+                "additionalProperties": false
+            })
+        }
+
+        async fn execute(
+            &self,
+            _params: serde_json::Value,
+            _context: &aster::tools::ToolContext,
+        ) -> Result<aster::tools::ToolResult, aster::tools::ToolError> {
+            Ok(aster::tools::ToolResult::success("runtime-confirmed"))
+        }
+    }
+
+    struct RuntimeApprovalResumeInspector;
+
+    #[async_trait]
+    impl ToolInspector for RuntimeApprovalResumeInspector {
+        fn name(&self) -> &'static str {
+            "runtime_approval_resume"
+        }
+
+        async fn inspect(
+            &self,
+            tool_requests: &[aster::conversation::message::ToolRequest],
+            _messages: &[Message],
+        ) -> anyhow::Result<Vec<InspectionResult>> {
+            Ok(tool_requests
+                .iter()
+                .filter_map(|request| {
+                    let tool_call = request.tool_call.as_ref().ok()?;
+                    (tool_call.name == "RuntimeApprovalResume").then(|| InspectionResult {
+                        tool_request_id: request.id.clone(),
+                        action: InspectionAction::RequireApproval(Some(
+                            "runtime approval resume regression".to_string(),
+                        )),
+                        reason: "Runtime approval resume regression requires manual approval"
+                            .to_string(),
+                        confidence: 1.0,
+                        inspector_name: self.name().to_string(),
+                        finding_id: None,
+                    })
+                })
+                .collect())
+        }
+
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+    }
 
     #[tokio::test]
     async fn test_aster_state_init() {
@@ -418,6 +591,163 @@ mod tests {
 
         state.remove_cancel_token(session_id).await;
         assert!(!state.cancel_session(session_id).await);
+    }
+
+    #[tokio::test]
+    async fn confirm_tool_action_resumes_pending_aster_tool_execution() {
+        let state = AgentRuntimeState::new();
+        let runtime_dir = TempDir::new().unwrap();
+        crate::runtime_support::ensure_runtime_dirs_with_root(runtime_dir.path().to_path_buf())
+            .unwrap();
+
+        let db: DbConnection =
+            Arc::new(Mutex::new(rusqlite::Connection::open_in_memory().unwrap()));
+        {
+            let conn = db.lock().unwrap();
+            lime_core::database::schema::create_tables(&conn).unwrap();
+        }
+
+        state.init_agent_with_db(&db).await.unwrap();
+
+        let session_id = {
+            let agent_arc = state.get_agent_arc();
+            let agent_guard = agent_arc.read().await;
+            let agent = agent_guard.as_ref().expect("agent should exist");
+            let store = agent.session_store().expect("session store").clone();
+            let session = store
+                .create_session(
+                    runtime_dir.path().to_path_buf(),
+                    "runtime approval resume".to_string(),
+                    SessionType::User,
+                )
+                .await
+                .expect("create session");
+            agent
+                .tool_registry()
+                .write()
+                .await
+                .register(Box::new(RuntimeApprovalResumeTool));
+            drop(agent_guard);
+            let mut agent_guard = agent_arc.write().await;
+            let agent = agent_guard.as_mut().expect("agent should exist");
+            agent.add_tool_inspector(Box::new(RuntimeApprovalResumeInspector));
+            agent
+                .update_provider(Arc::new(RuntimeApprovalResumeProvider::new()), &session.id)
+                .await
+                .expect("update provider");
+            session.id
+        };
+
+        let events: Arc<Mutex<Vec<crate::protocol::AgentEvent>>> = Arc::new(Mutex::new(Vec::new()));
+        let (approval_tx, mut approval_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+        let stream_state = state.clone();
+        let stream_events = events.clone();
+        let stream_session_id = session_id.clone();
+        let mut stream_task = tokio::spawn(async move {
+            let session_config = SessionConfigBuilder::new(stream_session_id)
+                .max_turns(3)
+                .include_context_trace(true)
+                .build();
+            let request_tool_policy = resolve_request_tool_policy_with_mode(
+                Some(false),
+                Some(RequestToolPolicyMode::Disabled),
+            );
+            crate::request_tool_policy::stream_runtime_reply_with_policy(
+                &stream_state,
+                "run approval resume tool",
+                None,
+                session_config,
+                None,
+                &request_tool_policy,
+                move |event| {
+                    if let crate::protocol::AgentEvent::ActionRequired {
+                        request_id,
+                        action_type,
+                        ..
+                    } = event
+                    {
+                        if action_type == "tool_confirmation" {
+                            let _ = approval_tx.send(request_id.clone());
+                        }
+                    }
+                    stream_events.lock().unwrap().push(event.clone());
+                },
+            )
+            .await
+        });
+
+        let request_id = tokio::select! {
+            approval = approval_rx.recv() => match approval {
+                Some(request_id) => request_id,
+                None => {
+                    let detail = if stream_task.is_finished() {
+                        match stream_task.await.expect("stream task should join") {
+                            Ok(execution) => execution.text_output,
+                            Err(error) => error.message,
+                        }
+                    } else {
+                        "approval channel closed before stream finished".to_string()
+                    };
+                    panic!(
+                        "approval request channel closed before a tool confirmation arrived; detail={detail}; events={:?}",
+                        events.lock().unwrap()
+                    );
+                }
+            },
+            stream = &mut stream_task => {
+                let detail = match stream.expect("stream task should join") {
+                    Ok(execution) => execution.text_output,
+                    Err(error) => error.message,
+                };
+                panic!(
+                    "approval request should arrive before stream finishes; detail={detail}; events={:?}",
+                    events.lock().unwrap()
+                );
+            }
+            _ = tokio::time::sleep(Duration::from_secs(5)) => {
+                stream_task.abort();
+                panic!(
+                    "approval request should arrive before timeout; events={:?}",
+                    events.lock().unwrap()
+                );
+            }
+        };
+        assert_eq!(request_id, "req-runtime-confirm");
+
+        state
+            .confirm_tool_action(&request_id, true)
+            .await
+            .expect("confirm tool action");
+
+        let stream_result = tokio::time::timeout(Duration::from_secs(10), stream_task)
+            .await
+            .expect("stream should finish")
+            .expect("stream task should join")
+            .expect("stream should succeed");
+        assert!(stream_result
+            .text_output
+            .contains("provider observed resumed tool"));
+
+        let events = events.lock().unwrap();
+        assert!(events.iter().any(|event| matches!(
+            event,
+            crate::protocol::AgentEvent::ActionRequired {
+                request_id,
+                action_type,
+                ..
+            } if request_id == "req-runtime-confirm" && action_type == "tool_confirmation"
+        )));
+        let resumed_tool = events.iter().find_map(|event| match event {
+            crate::protocol::AgentEvent::ToolEnd { tool_id, result }
+                if tool_id == "req-runtime-confirm" =>
+            {
+                Some(result)
+            }
+            _ => None,
+        });
+        let result = resumed_tool.expect("confirmed tool should finish");
+        assert!(result.success);
+        assert_eq!(result.output, "runtime-confirmed");
     }
 
     #[test]

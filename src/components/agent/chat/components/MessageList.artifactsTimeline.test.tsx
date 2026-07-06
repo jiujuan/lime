@@ -797,7 +797,7 @@ describe("MessageList artifacts timeline", () => {
     ).not.toBeNull();
   });
 
-  it("正文已有 runtime status 时，运行中的 turn_summary 不应再重复进入时间线", () => {
+  it("正文只有 runtime status 时，运行中的 turn_summary 不应重复进入时间线但应保留生成占位", () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -867,7 +867,7 @@ describe("MessageList artifacts timeline", () => {
     expect(container.textContent).not.toContain("正在打开 GitHub");
   });
 
-  it("首字前已有运行中 turn_summary 时仍应优先展示轻量等待占位", () => {
+  it("首字前已有运行中 turn_summary 时不应展示启动占位或提前展开过程", () => {
     const now = new Date();
     const messages: Message[] = [
       {
@@ -918,11 +918,11 @@ describe("MessageList artifacts timeline", () => {
       container.querySelector(
         '[data-testid="assistant-first-token-runtime-status"]',
       ),
-    ).not.toBeNull();
+    ).toBeNull();
     expect(
       container.querySelector('[data-testid="agent-thread-timeline:trailing"]'),
     ).toBeNull();
-    expect(container.textContent).toContain("Preparing reply");
+    expect(container.textContent).not.toContain("Preparing reply");
     expect(container.textContent).not.toContain("已接收请求，正在准备执行");
   });
 

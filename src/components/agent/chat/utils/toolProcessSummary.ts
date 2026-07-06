@@ -31,11 +31,17 @@ import {
 } from "./limeTaskProtocolNoise";
 import { resolveImageTaskToolResultSummary } from "./imageTaskToolResult";
 import {
+  resolveToolProcessFactsFamily,
+  resolveToolProcessFactsSubject,
+  resolveToolProcessSummaryMetadata,
+} from "./toolProcessSummaryMetadata";
+import {
   getToolDisplayInfo,
   isBrowserToolName,
   normalizeToolNameKey,
 } from "./toolDisplayInfo";
 import { isUnifiedWebSearchToolName } from "./searchResultPreview";
+import { resolveToolSoulMetadata } from "./toolSoulLifecycleMetadata";
 
 export type {
   ToolProcessNarrative,
@@ -58,17 +64,49 @@ interface ToolProcessInput {
   metadata?: unknown;
 }
 
+function normalizeMetadataRecord(
+  value: unknown,
+): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function mergeMetadata(base: unknown, override: unknown): unknown {
+  const baseRecord = normalizeMetadataRecord(base);
+  const overrideRecord = normalizeMetadataRecord(override);
+  if (baseRecord && overrideRecord) {
+    return {
+      ...baseRecord,
+      ...overrideRecord,
+    };
+  }
+  return overrideRecord ?? baseRecord ?? override ?? base;
+}
+
 function buildNarrative(input: ToolProcessInput): ToolProcessNarrative {
-  const preSummary = buildGenericPreSummary({
-    toolName: input.toolName,
-    argumentsValue: input.argumentsValue,
-    metadata: input.metadata,
-  });
+  const metadataSummary = resolveToolProcessSummaryMetadata(
+    input.metadata,
+    input.status,
+  );
+  const factsSubject = resolveToolProcessFactsSubject(input.metadata);
+  const factsFamily = resolveToolProcessFactsFamily(input.metadata);
+  const preSummary =
+    metadataSummary?.preSummary ??
+    buildGenericPreSummary({
+      toolName: input.toolName,
+      argumentsValue: input.argumentsValue,
+      metadata: input.metadata,
+      factsSubject,
+      factsFamily,
+    });
   const normalizedName = normalizeToolNameKey(input.toolName);
   const display = getToolDisplayInfo(
     input.toolName,
     input.status === "in_progress" ? "running" : input.status,
   );
+  const displayFamily = factsFamily || display.family;
   const resultOutput = input.output || "";
   const plainError = resolveToolErrorSummaryText(
     input.toolName,
@@ -94,17 +132,19 @@ function buildNarrative(input: ToolProcessInput): ToolProcessNarrative {
       : null;
   const args = normalizeArgumentsRecord(input.argumentsValue);
   const metadata = asRecord(input.metadata);
-  const subject = resolveToolSubject(input.toolName, input.argumentsValue);
+  const subject =
+    factsSubject || resolveToolSubject(input.toolName, input.argumentsValue);
 
-  let postSummary: string | null = null;
-  let postSource: ToolProcessNarrativeSource = "none";
+  let postSummary: string | null = metadataSummary?.postSummary ?? null;
+  let postSource: ToolProcessNarrativeSource =
+    metadataSummary?.postSource ?? "none";
 
-  if (input.status === "failed") {
+  if (!postSummary && input.status === "failed") {
     if (limeTaskFailureSummary) {
       postSummary = limeTaskFailureSummary;
       postSource = "error";
-    } else if (display.family === "fetch" || display.family === "search") {
-      postSummary = buildFetchSearchFailureSummary(display.family);
+    } else if (displayFamily === "fetch" || displayFamily === "search") {
+      postSummary = buildFetchSearchFailureSummary(displayFamily);
       postSource = "error";
     } else {
       postSummary =
@@ -117,7 +157,7 @@ function buildNarrative(input: ToolProcessInput): ToolProcessNarrative {
           : null);
     }
     if (postSummary && !limeTaskFailureSummary) {
-      if (display.family !== "fetch" && display.family !== "search") {
+      if (displayFamily !== "fetch" && displayFamily !== "search") {
         const failurePrefix = resolveRequiredAgentChatCopy(
           "toolCall.processSummary.error.failedPrefix",
         );
@@ -134,11 +174,11 @@ function buildNarrative(input: ToolProcessInput): ToolProcessNarrative {
 
   if (
     !postSummary &&
-    (display.family === "fetch" || display.family === "search") &&
+    (displayFamily === "fetch" || displayFamily === "search") &&
     resultOutput &&
     isLikelyWebRetrievalDiagnosticNoise(resultOutput)
   ) {
-    postSummary = buildFetchSearchFailureSummary(display.family);
+    postSummary = buildFetchSearchFailureSummary(displayFamily);
     postSource = "error";
   }
 
@@ -178,12 +218,16 @@ function buildNarrative(input: ToolProcessInput): ToolProcessNarrative {
     }
   }
 
-  if (!postSummary && isBrowserToolName(normalizedName)) {
+  if (
+    !postSummary &&
+    (displayFamily === "browser" ||
+      (!factsFamily && isBrowserToolName(normalizedName)))
+  ) {
     postSummary = buildBrowserPostSummary(normalizedName, args, metadata);
     postSource = postSummary ? "generic" : "none";
   }
 
-  if (!postSummary && display.family === "vision") {
+  if (!postSummary && displayFamily === "vision") {
     const visionSummary = buildVisionToolSummary(
       "post",
       normalizedName,
@@ -205,6 +249,7 @@ function buildNarrative(input: ToolProcessInput): ToolProcessNarrative {
       toolName: input.toolName,
       status: input.status,
       subject,
+      factsFamily,
     });
     postSource = postSummary ? "generic" : "none";
   }
@@ -225,6 +270,7 @@ function buildNarrative(input: ToolProcessInput): ToolProcessNarrative {
     postSummary,
     summary,
     postSource,
+    ...resolveToolSoulMetadata(input.metadata),
   };
 }
 
@@ -237,8 +283,12 @@ export function resolveToolProcessNarrative(
     status: toolCall.status,
     output: toolCall.result?.output,
     error: toolCall.result?.error,
-    metadata: toolCall.result?.metadata,
+    metadata: mergeMetadata(toolCall.result?.metadata, toolCall.metadata),
   });
+}
+
+function readThreadItemMetadata(item: AgentThreadItem): unknown {
+  return "metadata" in item ? item.metadata : undefined;
 }
 
 export function resolveAgentThreadToolProcessNarrative(
@@ -265,13 +315,15 @@ export function resolveAgentThreadToolProcessNarrative(
       status: item.status,
       output: item.aggregated_output,
       error: item.error,
-      metadata:
+      metadata: mergeMetadata(
         item.exit_code !== undefined
           ? {
               exit_code: item.exit_code,
               cwd: item.cwd,
             }
           : { cwd: item.cwd },
+        readThreadItemMetadata(item),
+      ),
     });
   }
 
@@ -283,6 +335,7 @@ export function resolveAgentThreadToolProcessNarrative(
         : { action: item.action || "web_search" },
       status: item.status,
       output: item.output,
+      metadata: readThreadItemMetadata(item),
     });
   }
 

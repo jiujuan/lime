@@ -85,26 +85,6 @@ vi.mock("react-i18next", () => ({
         "workspace.articleEditor.review.detail": `${options?.count ?? 0} 条备注`,
         "workspace.articleEditor.related.title": "关联产物",
         "workspace.articleEditor.related.detail": `${options?.count ?? 0} 个业务对象`,
-        "workspace.articleEditor.workflow.title": "工作流明细",
-        "workspace.articleEditor.workflow.detail": `${options?.count ?? 0} 个步骤 · ${options?.workflow ?? ""}`,
-        "workspace.articleEditor.workflow.loading": "正在读取工作流状态...",
-        "workspace.articleEditor.workflow.fallback": "Workflow",
-        "workspace.articleEditor.workflow.attempt": `第 ${options?.count ?? 0} 次尝试`,
-        "workspace.articleEditor.workflow.failure": `失败：${options?.message ?? ""}`,
-        "workspace.articleEditor.workflow.retry": `重试：${options?.value ?? ""}`,
-        "workspace.articleEditor.workflow.retryLinked": "已关联重试",
-        "workspace.articleEditor.workflow.waitingAction": `等待动作：${options?.value ?? ""}`,
-        "workspace.articleEditor.workflow.waitingAction.askUser": "人工确认",
-        "workspace.articleEditor.workflow.waitingAction.elicitation":
-          "补充信息",
-        "workspace.articleEditor.workflow.waitingAction.toolConfirmation":
-          "工具确认",
-        "workspace.articleEditor.workflow.status.completed": "已完成",
-        "workspace.articleEditor.workflow.status.failed": "失败",
-        "workspace.articleEditor.workflow.status.running": "处理中",
-        "workspace.articleEditor.workflow.status.retrying": "重试中",
-        "workspace.articleEditor.workflow.status.waiting": "等待确认",
-        "workspace.articleEditor.workflow.status.unknown": "未知",
         "workspace.articleEditor.toolbar.undo": "撤销",
         "workspace.articleEditor.toolbar.redo": "重做",
         "workspace.articleEditor.toolbar.bold": "加粗",
@@ -488,7 +468,7 @@ describe("WorkspaceArticleEditorRightSurface", () => {
     expect(container.textContent).not.toContain("正文需要保留真实引用来源。");
   });
 
-  it("应从 workflow/read 渲染 Article Workspace 页面级工作流明细", async () => {
+  it("Article Editor 右侧不应读取或渲染 workflow facts", async () => {
     mockReadWorkflow.mockResolvedValue({
       result: {
         sessionId: "session-main",
@@ -536,28 +516,22 @@ describe("WorkspaceArticleEditorRightSurface", () => {
       await Promise.resolve();
     });
 
-    expect(mockReadWorkflow).toHaveBeenCalledWith({
-      sessionId: "session-main",
-    });
+    expect(mockReadWorkflow).not.toHaveBeenCalled();
     expect(
       container.querySelector(
         '[data-testid="workspace-article-editor-workflow-detail"]',
       ),
-    ).not.toBeNull();
+    ).toBeNull();
     expect(
       container.querySelectorAll(
         '[data-testid="workspace-article-editor-workflow-step"]',
       ),
-    ).toHaveLength(2);
-    expect(container.textContent).toContain("工作流明细");
-    expect(container.textContent).toContain("写文章工作流");
-    expect(container.textContent).toContain("正文写作");
-    expect(container.textContent).toContain("失败：正文为空");
-    expect(container.textContent).toContain("重试：turn-retry");
-    expect(container.textContent).toContain("第 2 次尝试");
-    expect(container.textContent).toContain("人工确认");
-    expect(container.textContent).toContain("等待确认");
-    expect(container.textContent).toContain("等待动作：工具确认 / request-1");
+    ).toHaveLength(0);
+    expect(container.textContent).not.toContain("工作流明细");
+    expect(container.textContent).not.toContain("写文章工作流");
+    expect(container.textContent).not.toContain("正文写作");
+    expect(container.textContent).not.toContain("正文为空");
+    expect(container.textContent).not.toContain("turn-retry");
   });
 
   it("本地 host generation fixture 不应作为正式文章正文渲染", () => {

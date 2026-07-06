@@ -198,6 +198,8 @@ export interface AgentThreadToolCallItem extends AgentThreadItemBase {
   output?: string;
   success?: boolean;
   error?: string;
+  structuredContent?: unknown;
+  structured_content?: unknown;
   metadata?: unknown;
 }
 
@@ -520,6 +522,7 @@ export interface AgentEventToolStart {
   tool_name: string;
   tool_id: string;
   arguments?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface AgentEventToolEnd {
@@ -579,6 +582,7 @@ export interface AgentEventToolInputDelta {
   delta: string;
   accumulated_arguments?: string;
   provider?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface AgentEventArtifactSnapshot {
@@ -902,6 +906,7 @@ export interface AgentEventSubagentStatusChanged {
   duration_ms?: number;
   tool_count?: number;
   result_ref?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface AgentEventMessage {
@@ -1603,6 +1608,7 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
           arguments: normalizeToolArguments(
             event.arguments ?? event.args ?? event.input ?? event.parameters,
           ),
+          metadata: normalizeRecord(event.metadata),
         };
       case "tool_end":
       case "tool_result":
@@ -1749,6 +1755,7 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
               : undefined,
           provider:
             typeof event.provider === "string" ? event.provider : undefined,
+          metadata: normalizeRecord(event.metadata),
         };
       case "artifact_snapshot":
       case "ArtifactSnapshot": {
@@ -2288,6 +2295,7 @@ export function parseAgentEvent(data: unknown): AgentEvent | null {
               : typeof event.resultRef === "string"
                 ? event.resultRef
                 : undefined,
+          metadata: normalizeRecord(event.metadata),
         };
       case "message":
         return {

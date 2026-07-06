@@ -72,7 +72,7 @@ describe("agentStreamErrorController", () => {
     expect(patch.runtimeStatus?.detail).not.toContain("Insufficient Balance");
   });
 
-  it("失败 assistant patch 应支持 Soul 交互口吻", () => {
+  it("失败 assistant patch 应保持 neutral 文案并携带 Soul descriptor metadata", () => {
     const soulCopy = resolveSoulInteractionCopy({
       soul: {
         enabled: true,
@@ -92,10 +92,19 @@ describe("agentStreamErrorController", () => {
       soulCopy,
     });
 
-    expect(patch.content).toBe("这步没跑顺：provider failed");
+    expect(patch.content).toBe("执行失败：provider failed");
     expect(patch.contentParts).toEqual([
-      { type: "text", text: "这步没跑顺：provider failed" },
+      { type: "text", text: "执行失败：provider failed" },
     ]);
+    expect(patch.runtimeStatus?.metadata).toMatchObject({
+      soul_surface: "failure_recovery",
+      soul_phase: "failed",
+      style_level: "L2",
+      risk_level: "normal",
+      tone_variant: "cheeky_sassy",
+      profile_id: "cheeky_sassy_executor",
+      pack_id: "com.lime.soul.cheeky-sassy-executor",
+    });
   });
 
   it("Provider 402 失败 timeline summary 应使用友好提示", () => {

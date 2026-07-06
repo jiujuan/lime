@@ -1,20 +1,28 @@
-//! Aster runtime timeline adapter.
+//! Runtime timeline adapter.
 //!
-//! Aster `TurnRuntime` / `ItemRuntime` stays behind this compat boundary;
-//! callers receive Lime-owned timeline DTOs.
+//! Snapshot projection consumes Lime-owned records. Event-level Aster wrappers
+//! are thin compat shims that immediately convert to records.
 
-use aster::session::{ItemRuntime, ItemRuntimePayload, ItemStatus, TurnRuntime, TurnStatus};
-use lime_core::database::dao::agent_timeline::{
-    AgentRequestOption, AgentRequestQuestion, AgentThreadItem, AgentThreadItemPayload,
-    AgentThreadTurn,
+use agent_runtime::runtime_timeline::{
+    project_runtime_timeline_item, project_runtime_timeline_snapshot,
+    project_runtime_timeline_turn, RuntimeTimelineItemPayloadSource, RuntimeTimelineItemProjection,
+    RuntimeTimelineItemSource, RuntimeTimelineItemStatusSource, RuntimeTimelineSnapshotProjection,
+    RuntimeTimelineSnapshotSource, RuntimeTimelineSnapshotThread, RuntimeTimelineTurnProjection,
+    RuntimeTimelineTurnSource, RuntimeTimelineTurnStatusSource,
+};
+use aster::session::{ItemRuntime, TurnRuntime};
+use thread_store::runtime_snapshot::{
+    RuntimeItemPayloadRecord, RuntimeItemSnapshotRecord, RuntimeItemStatusRecord,
+    RuntimeSessionSnapshotRecord, RuntimeTurnSnapshotRecord, RuntimeTurnStatusRecord,
 };
 use tool_runtime::tool_result::extract_tool_result_text;
 
-use crate::text_normalization::{
-    normalize_legacy_runtime_status_title, normalize_legacy_turn_summary_text,
+use crate::runtime_store_aster_adapter::{
+    runtime_item_record_from_aster, runtime_turn_record_from_aster,
 };
 
-const ASK_USER_QUESTIONS_SCHEMA_KEY: &str = "x-lime-ask-user-questions";
+pub(crate) type RuntimeTimelineSnapshotRecordProjection =
+    RuntimeTimelineSnapshotProjection<RuntimeTimelineTurnProjection, RuntimeTimelineItemProjection>;
 
 fn dynamic_filtering_enabled() -> bool {
     lime_core::tool_calling::tool_calling_dynamic_filtering_enabled()
@@ -24,222 +32,140 @@ fn extract_tool_result_text_for_current_runtime<T: serde::Serialize>(result: &T)
     extract_tool_result_text(result, dynamic_filtering_enabled())
 }
 
-fn convert_aster_turn_status(
-    status: TurnStatus,
-) -> lime_core::database::dao::agent_timeline::AgentThreadTurnStatus {
-    match status {
-        TurnStatus::Queued | TurnStatus::Running => {
-            lime_core::database::dao::agent_timeline::AgentThreadTurnStatus::Running
-        }
-        TurnStatus::Completed => {
-            lime_core::database::dao::agent_timeline::AgentThreadTurnStatus::Completed
-        }
-        TurnStatus::Failed => {
-            lime_core::database::dao::agent_timeline::AgentThreadTurnStatus::Failed
-        }
-        TurnStatus::Aborted => {
-            lime_core::database::dao::agent_timeline::AgentThreadTurnStatus::Aborted
-        }
-    }
+pub(crate) fn convert_aster_turn_runtime(turn: TurnRuntime) -> RuntimeTimelineTurnProjection {
+    project_runtime_timeline_turn_record(&runtime_turn_record_from_aster(&turn))
 }
 
-pub(crate) fn convert_aster_turn_runtime(turn: TurnRuntime) -> AgentThreadTurn {
-    AgentThreadTurn {
-        id: turn.id,
-        thread_id: turn.thread_id,
-        prompt_text: turn.input_text.unwrap_or_default(),
-        status: convert_aster_turn_status(turn.status),
-        started_at: turn.started_at.unwrap_or(turn.created_at).to_rfc3339(),
+pub(crate) fn convert_aster_item_runtime(
+    item: ItemRuntime,
+) -> Option<RuntimeTimelineItemProjection> {
+    project_runtime_timeline_item_record(&runtime_item_record_from_aster(&item))
+}
+
+pub(crate) fn project_runtime_timeline_snapshot_record(
+    snapshot: &RuntimeSessionSnapshotRecord,
+) -> RuntimeTimelineSnapshotRecordProjection {
+    project_runtime_timeline_snapshot(RuntimeTimelineSnapshotSource {
+        threads: snapshot
+            .threads
+            .iter()
+            .map(|thread| RuntimeTimelineSnapshotThread {
+                thread_id: thread.id.clone(),
+                turns: thread
+                    .turns
+                    .iter()
+                    .map(project_runtime_timeline_turn_record)
+                    .collect(),
+                items: thread
+                    .items
+                    .iter()
+                    .filter_map(project_runtime_timeline_item_record)
+                    .collect(),
+            })
+            .collect(),
+    })
+}
+
+pub(crate) fn project_runtime_timeline_turn_record(
+    turn: &RuntimeTurnSnapshotRecord,
+) -> RuntimeTimelineTurnProjection {
+    project_runtime_timeline_turn(RuntimeTimelineTurnSource {
+        id: turn.id.clone(),
+        thread_id: turn.thread_id.clone(),
+        input_text: turn.input_text.clone(),
+        status: convert_runtime_turn_status(turn.status),
+        started_at: turn.started_at.map(|value| value.to_rfc3339()),
         completed_at: turn.completed_at.map(|value| value.to_rfc3339()),
-        error_message: turn.error_message,
+        error_message: turn.error_message.clone(),
         created_at: turn.created_at.to_rfc3339(),
         updated_at: turn.updated_at.to_rfc3339(),
-    }
+    })
 }
 
-fn convert_aster_item_status(
-    status: ItemStatus,
-) -> lime_core::database::dao::agent_timeline::AgentThreadItemStatus {
+fn convert_runtime_turn_status(status: RuntimeTurnStatusRecord) -> RuntimeTimelineTurnStatusSource {
     match status {
-        ItemStatus::InProgress => {
-            lime_core::database::dao::agent_timeline::AgentThreadItemStatus::InProgress
-        }
-        ItemStatus::Completed => {
-            lime_core::database::dao::agent_timeline::AgentThreadItemStatus::Completed
-        }
-        ItemStatus::Failed => {
-            lime_core::database::dao::agent_timeline::AgentThreadItemStatus::Failed
-        }
+        RuntimeTurnStatusRecord::Queued => RuntimeTimelineTurnStatusSource::Queued,
+        RuntimeTurnStatusRecord::Running => RuntimeTimelineTurnStatusSource::Running,
+        RuntimeTurnStatusRecord::Completed => RuntimeTimelineTurnStatusSource::Completed,
+        RuntimeTurnStatusRecord::Failed => RuntimeTimelineTurnStatusSource::Failed,
+        RuntimeTurnStatusRecord::Aborted => RuntimeTimelineTurnStatusSource::Aborted,
     }
 }
 
-fn format_runtime_status_text(title: &str, detail: &str, checkpoints: &[String]) -> String {
-    let mut lines = Vec::new();
-
-    let trimmed_title = normalize_legacy_runtime_status_title(title);
-    if !trimmed_title.is_empty() {
-        lines.push(trimmed_title);
-    }
-
-    let trimmed_detail = detail.trim();
-    if !trimmed_detail.is_empty() {
-        lines.push(trimmed_detail.to_string());
-    }
-
-    for checkpoint in checkpoints {
-        let trimmed = checkpoint.trim();
-        if !trimmed.is_empty() {
-            lines.push(format!("• {trimmed}"));
-        }
-    }
-
-    normalize_legacy_turn_summary_text(&lines.join("\n"))
+pub(crate) fn project_runtime_timeline_item_record(
+    item: &RuntimeItemSnapshotRecord,
+) -> Option<RuntimeTimelineItemProjection> {
+    project_runtime_timeline_item(RuntimeTimelineItemSource {
+        id: item.id.clone(),
+        thread_id: item.thread_id.clone(),
+        turn_id: item.turn_id.clone(),
+        sequence: item.sequence,
+        status: convert_runtime_item_status(item.status),
+        started_at: item.started_at.to_rfc3339(),
+        completed_at: item.completed_at.map(|value| value.to_rfc3339()),
+        updated_at: item.updated_at.to_rfc3339(),
+        payload: convert_runtime_item_payload_source(&item.payload),
+    })
 }
 
-fn extract_request_options(value: &serde_json::Value) -> Option<Vec<AgentRequestOption>> {
-    let options = value.as_array()?;
-    let normalized = options
-        .iter()
-        .filter_map(|item| match item {
-            serde_json::Value::String(label) => {
-                let trimmed = label.trim();
-                if trimmed.is_empty() {
-                    None
-                } else {
-                    Some(AgentRequestOption {
-                        label: trimmed.to_string(),
-                        description: None,
-                    })
-                }
-            }
-            serde_json::Value::Object(map) => {
-                let label = map
-                    .get("label")
-                    .and_then(serde_json::Value::as_str)
-                    .or_else(|| map.get("value").and_then(serde_json::Value::as_str))
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())?;
-                let description = map
-                    .get("description")
-                    .and_then(serde_json::Value::as_str)
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-                    .map(ToString::to_string);
-
-                Some(AgentRequestOption {
-                    label: label.to_string(),
-                    description,
-                })
-            }
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-
-    if normalized.is_empty() {
-        None
-    } else {
-        Some(normalized)
+fn convert_runtime_item_status(status: RuntimeItemStatusRecord) -> RuntimeTimelineItemStatusSource {
+    match status {
+        RuntimeItemStatusRecord::InProgress => RuntimeTimelineItemStatusSource::InProgress,
+        RuntimeItemStatusRecord::Completed => RuntimeTimelineItemStatusSource::Completed,
+        RuntimeItemStatusRecord::Failed => RuntimeTimelineItemStatusSource::Failed,
     }
 }
 
-fn extract_request_questions_from_schema(
-    requested_schema: Option<&serde_json::Value>,
-) -> Option<Vec<AgentRequestQuestion>> {
-    let schema = requested_schema?.as_object()?;
-    let raw_questions = schema.get(ASK_USER_QUESTIONS_SCHEMA_KEY)?.as_array()?;
-    let normalized = raw_questions
-        .iter()
-        .filter_map(|item| {
-            let record = item.as_object()?;
-            let question = record
-                .get("question")
-                .and_then(serde_json::Value::as_str)
-                .map(str::trim)
-                .filter(|value| !value.is_empty())?
-                .to_string();
-            let header = record
-                .get("header")
-                .and_then(serde_json::Value::as_str)
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(ToString::to_string);
-            let options = record.get("options").and_then(extract_request_options);
-            let multi_select = match record
-                .get("multiSelect")
-                .or_else(|| record.get("multi_select"))
-            {
-                Some(serde_json::Value::Bool(value)) => Some(*value),
-                _ => None,
-            };
-
-            Some(AgentRequestQuestion {
-                question,
-                header,
-                options,
-                multi_select,
-            })
-        })
-        .collect::<Vec<_>>();
-
-    if normalized.is_empty() {
-        None
-    } else {
-        Some(normalized)
-    }
-}
-
-fn convert_aster_item_payload(payload: ItemRuntimePayload) -> Option<AgentThreadItemPayload> {
+fn convert_runtime_item_payload_source(
+    payload: &RuntimeItemPayloadRecord,
+) -> RuntimeTimelineItemPayloadSource {
     match payload {
-        ItemRuntimePayload::TranscriptMessage { .. } => None,
-        ItemRuntimePayload::UserMessage { content } => {
-            Some(AgentThreadItemPayload::UserMessage { content })
+        RuntimeItemPayloadRecord::InternalTranscript => {
+            RuntimeTimelineItemPayloadSource::InternalTranscript
         }
-        ItemRuntimePayload::AgentMessage { text } => {
-            Some(AgentThreadItemPayload::AgentMessage { text, phase: None })
+        RuntimeItemPayloadRecord::UserMessage { content } => {
+            RuntimeTimelineItemPayloadSource::UserMessage {
+                content: content.clone(),
+            }
         }
-        ItemRuntimePayload::Plan { text } => Some(AgentThreadItemPayload::Plan { text }),
-        ItemRuntimePayload::RuntimeStatus {
+        RuntimeItemPayloadRecord::AgentMessage { text } => {
+            RuntimeTimelineItemPayloadSource::AgentMessage { text: text.clone() }
+        }
+        RuntimeItemPayloadRecord::Plan { text } => {
+            RuntimeTimelineItemPayloadSource::Plan { text: text.clone() }
+        }
+        RuntimeItemPayloadRecord::RuntimeStatus {
             phase,
             title,
             detail,
             checkpoints,
-        } => {
-            let mut metadata = crate::protocol::build_diagnostics_runtime_status_metadata();
-            metadata.insert(
-                "runtimeStatus".to_string(),
-                serde_json::json!({
-                    "phase": phase,
-                }),
-            );
-            Some(AgentThreadItemPayload::TurnSummary {
-                text: format_runtime_status_text(&title, &detail, &checkpoints),
-                metadata: Some(
-                    serde_json::to_value(metadata)
-                        .expect("runtime status diagnostics metadata should serialize"),
-                ),
-            })
-        }
-        ItemRuntimePayload::FileArtifact {
+        } => RuntimeTimelineItemPayloadSource::RuntimeStatus {
+            phase: phase.clone(),
+            title: title.clone(),
+            detail: detail.clone(),
+            checkpoints: checkpoints.clone(),
+        },
+        RuntimeItemPayloadRecord::FileArtifact {
             path,
             source,
             content,
             metadata,
-        } => Some(AgentThreadItemPayload::FileArtifact {
-            path,
-            source,
-            content,
-            metadata,
-        }),
-        ItemRuntimePayload::Reasoning {
+        } => RuntimeTimelineItemPayloadSource::FileArtifact {
+            path: path.clone(),
+            source: source.clone(),
+            content: content.clone(),
+            metadata: metadata.clone(),
+        },
+        RuntimeItemPayloadRecord::Reasoning {
             text,
             summary,
             metadata,
-        } => Some(AgentThreadItemPayload::Reasoning {
-            text,
-            summary,
-            metadata,
-        }),
-        ItemRuntimePayload::ToolCall {
+        } => RuntimeTimelineItemPayloadSource::Reasoning {
+            text: text.clone(),
+            summary: summary.clone(),
+            metadata: metadata.clone(),
+        },
+        RuntimeItemPayloadRecord::ToolCall {
             tool_name,
             arguments,
             output,
@@ -251,65 +177,57 @@ fn convert_aster_item_payload(payload: ItemRuntimePayload) -> Option<AgentThread
                 .as_ref()
                 .map(extract_tool_result_text_for_current_runtime)
                 .filter(|text| !text.is_empty());
-            Some(AgentThreadItemPayload::ToolCall {
-                tool_name,
-                arguments,
-                output: output_text,
-                success,
-                error,
-                metadata,
-            })
+            RuntimeTimelineItemPayloadSource::ToolCall {
+                tool_name: tool_name.clone(),
+                arguments: arguments.clone(),
+                output_text,
+                success: *success,
+                error: error.clone(),
+                metadata: metadata.clone(),
+            }
         }
-        ItemRuntimePayload::ApprovalRequest {
+        RuntimeItemPayloadRecord::ApprovalRequest {
             request_id,
             action_type,
             prompt,
             tool_name,
             arguments,
             response,
-        } => Some(AgentThreadItemPayload::ApprovalRequest {
-            request_id,
-            action_type,
-            prompt,
-            tool_name,
-            arguments,
-            response,
-        }),
-        ItemRuntimePayload::RequestUserInput {
+        } => RuntimeTimelineItemPayloadSource::ApprovalRequest {
+            request_id: request_id.clone(),
+            action_type: action_type.clone(),
+            prompt: prompt.clone(),
+            tool_name: tool_name.clone(),
+            arguments: arguments.clone(),
+            response: response.clone(),
+        },
+        RuntimeItemPayloadRecord::RequestUserInput {
             request_id,
             action_type,
             prompt,
             requested_schema,
             response,
-        } => Some(AgentThreadItemPayload::RequestUserInput {
-            request_id,
-            action_type,
-            prompt,
-            questions: extract_request_questions_from_schema(requested_schema.as_ref()),
-            response,
-        }),
+        } => RuntimeTimelineItemPayloadSource::RequestUserInput {
+            request_id: request_id.clone(),
+            action_type: action_type.clone(),
+            prompt: prompt.clone(),
+            requested_schema: requested_schema.clone(),
+            response: response.clone(),
+        },
     }
-}
-
-pub(crate) fn convert_aster_item_runtime(item: ItemRuntime) -> Option<AgentThreadItem> {
-    let payload = convert_aster_item_payload(item.payload)?;
-    Some(AgentThreadItem {
-        id: item.id,
-        thread_id: item.thread_id,
-        turn_id: item.turn_id,
-        sequence: item.sequence,
-        status: convert_aster_item_status(item.status),
-        started_at: item.started_at.to_rfc3339(),
-        completed_at: item.completed_at.map(|value| value.to_rfc3339()),
-        updated_at: item.updated_at.to_rfc3339(),
-        payload,
-    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agent_runtime::runtime_timeline::{
+        RuntimeTimelineItemPayload, RuntimeTimelineRequestOption, RuntimeTimelineRequestQuestion,
+    };
     use aster::conversation::message::MessageContent;
+    use aster::session::{
+        ItemRuntime, ItemRuntimePayload, ItemStatus, SessionRuntimeSnapshot, ThreadRuntime,
+        ThreadRuntimeSnapshot, TurnRuntime, TurnStatus,
+    };
 
     #[test]
     fn test_convert_item_completed_tool_call() {
@@ -343,10 +261,10 @@ mod tests {
         assert_eq!(item.sequence, 2);
         assert_eq!(
             item.status,
-            lime_core::database::dao::agent_timeline::AgentThreadItemStatus::Completed
+            agent_runtime::runtime_timeline::RuntimeTimelineItemStatus::Completed
         );
         match &item.payload {
-            AgentThreadItemPayload::ToolCall {
+            RuntimeTimelineItemPayload::ToolCall {
                 tool_name,
                 arguments,
                 output,
@@ -413,7 +331,7 @@ mod tests {
 
         let item = convert_aster_item_runtime(item).expect("expected projected item");
         match &item.payload {
-            AgentThreadItemPayload::Plan { text } => {
+            RuntimeTimelineItemPayload::Plan { text } => {
                 assert_eq!(text, "- 调研\n- 实现");
             }
             other => panic!("Unexpected payload: {other:?}"),
@@ -448,7 +366,7 @@ mod tests {
 
         let item = convert_aster_item_runtime(item).expect("expected projected item");
         match &item.payload {
-            AgentThreadItemPayload::Reasoning {
+            RuntimeTimelineItemPayload::Reasoning {
                 text,
                 summary,
                 metadata,
@@ -499,7 +417,7 @@ mod tests {
 
         let item = convert_aster_item_runtime(item).expect("expected projected item");
         match &item.payload {
-            AgentThreadItemPayload::FileArtifact {
+            RuntimeTimelineItemPayload::FileArtifact {
                 path,
                 source,
                 content,
@@ -539,7 +457,7 @@ mod tests {
 
         let item = convert_aster_item_runtime(item).expect("expected projected item");
         match &item.payload {
-            AgentThreadItemPayload::TurnSummary { text, metadata } => {
+            RuntimeTimelineItemPayload::TurnSummary { text, metadata } => {
                 assert!(text.contains("先规划再输出"));
                 assert!(!text.contains("已决定："));
                 assert!(text.contains("当前请求更像计划拆解"));
@@ -579,7 +497,7 @@ mod tests {
                 action_type: "elicitation".to_string(),
                 prompt: Some("请补充发布渠道".to_string()),
                 requested_schema: Some(serde_json::json!({
-                    ASK_USER_QUESTIONS_SCHEMA_KEY: [
+                    agent_runtime::runtime_timeline::RUNTIME_REQUEST_QUESTIONS_SCHEMA_KEY: [
                         {
                             "question": "请补充发布渠道",
                             "header": "channel",
@@ -609,10 +527,10 @@ mod tests {
         assert_eq!(item.id, "request-1");
         assert_eq!(
             item.status,
-            lime_core::database::dao::agent_timeline::AgentThreadItemStatus::InProgress
+            agent_runtime::runtime_timeline::RuntimeTimelineItemStatus::InProgress
         );
         match &item.payload {
-            AgentThreadItemPayload::RequestUserInput {
+            RuntimeTimelineItemPayload::RequestUserInput {
                 request_id,
                 action_type,
                 prompt,
@@ -624,15 +542,15 @@ mod tests {
                 assert_eq!(prompt.as_deref(), Some("请补充发布渠道"));
                 assert_eq!(
                     questions,
-                    &Some(vec![AgentRequestQuestion {
+                    &Some(vec![RuntimeTimelineRequestQuestion {
                         question: "请补充发布渠道".to_string(),
                         header: Some("channel".to_string()),
                         options: Some(vec![
-                            AgentRequestOption {
+                            RuntimeTimelineRequestOption {
                                 label: "小红书".to_string(),
                                 description: Some("适合图文种草".to_string()),
                             },
-                            AgentRequestOption {
+                            RuntimeTimelineRequestOption {
                                 label: "视频号".to_string(),
                                 description: None,
                             },
@@ -644,5 +562,113 @@ mod tests {
             }
             other => panic!("Unexpected payload: {other:?}"),
         }
+    }
+
+    #[test]
+    fn test_project_runtime_timeline_snapshot_record_flattens_threads() {
+        let now = chrono::Utc::now();
+        let completed_turn = TurnRuntime {
+            id: "turn-1".to_string(),
+            session_id: "session-1".to_string(),
+            thread_id: "thread-1".to_string(),
+            status: TurnStatus::Completed,
+            input_text: Some("整理计划".to_string()),
+            error_message: None,
+            context_override: None,
+            output_schema_runtime: None,
+            created_at: now,
+            started_at: Some(now),
+            completed_at: Some(now),
+            updated_at: now,
+        };
+        let queued_turn = TurnRuntime {
+            id: "turn-2".to_string(),
+            session_id: "session-1".to_string(),
+            thread_id: "thread-2".to_string(),
+            status: TurnStatus::Queued,
+            input_text: None,
+            error_message: None,
+            context_override: None,
+            output_schema_runtime: None,
+            created_at: now,
+            started_at: None,
+            completed_at: None,
+            updated_at: now,
+        };
+        let transcript_item = ItemRuntime {
+            id: "transcript-1".to_string(),
+            thread_id: "thread-1".to_string(),
+            turn_id: "turn-1".to_string(),
+            sequence: 1,
+            status: ItemStatus::Completed,
+            started_at: now,
+            completed_at: Some(now),
+            updated_at: now,
+            payload: ItemRuntimePayload::TranscriptMessage {
+                role: "user".to_string(),
+                content: vec![MessageContent::text("只用于内部上下文")],
+                metadata: Default::default(),
+                created_timestamp: now.timestamp(),
+            },
+        };
+        let user_item = ItemRuntime {
+            id: "user-1".to_string(),
+            thread_id: "thread-2".to_string(),
+            turn_id: "turn-2".to_string(),
+            sequence: 1,
+            status: ItemStatus::Completed,
+            started_at: now,
+            completed_at: Some(now),
+            updated_at: now,
+            payload: ItemRuntimePayload::UserMessage {
+                content: "用户输入".to_string(),
+            },
+        };
+        let snapshot = SessionRuntimeSnapshot {
+            session_id: "session-1".to_string(),
+            threads: vec![
+                ThreadRuntimeSnapshot {
+                    thread: ThreadRuntime::new(
+                        "thread-1",
+                        "session-1",
+                        std::path::PathBuf::from("/tmp/thread-1"),
+                    ),
+                    turns: vec![completed_turn],
+                    items: vec![transcript_item],
+                },
+                ThreadRuntimeSnapshot {
+                    thread: ThreadRuntime::new(
+                        "thread-2",
+                        "session-1",
+                        std::path::PathBuf::from("/tmp/thread-2"),
+                    ),
+                    turns: vec![queued_turn],
+                    items: vec![user_item],
+                },
+            ],
+        };
+
+        let snapshot_record =
+            crate::runtime_store_aster_adapter::runtime_snapshot_record_from_aster(&snapshot);
+        let projection = project_runtime_timeline_snapshot_record(&snapshot_record);
+
+        assert_eq!(projection.thread_id.as_deref(), Some("thread-1"));
+        assert_eq!(
+            projection
+                .turns
+                .iter()
+                .map(|turn| turn.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["turn-1", "turn-2"]
+        );
+        assert_eq!(
+            projection
+                .items
+                .iter()
+                .map(|item| item.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["user-1"]
+        );
+        assert_eq!(projection.turns[1].prompt_text, "");
     }
 }

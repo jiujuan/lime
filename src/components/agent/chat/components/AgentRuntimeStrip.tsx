@@ -5,6 +5,7 @@ import { GitCompare } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { AgentI18nKey } from "@/i18n/agentResources";
+import { buildAgentUiCollaborationPayloadMetadata } from "@limecloud/agent-runtime-projection";
 import type {
   AsterSessionExecutionRuntime,
   AsterSubagentSessionInfo,
@@ -44,6 +45,14 @@ interface StatusItem {
   key: string;
   label: string;
   tone?: "default" | "outline" | "secondary";
+}
+
+function readFactString(
+  facts: Record<string, unknown> | undefined,
+  key: string,
+): string | undefined {
+  const value = facts?.[key];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
 export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
@@ -102,6 +111,69 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
     ((typeof reasoningRunStatus === "string" &&
       reasoningRunStatus !== "idle") ||
       Boolean(reasoningStatus.text?.trim()));
+  const runningTeamSessions = childSubagentSessions.filter(
+    (session) => session.runtime_status === "running",
+  ).length;
+  const queuedTeamSessions = childSubagentSessions.filter(
+    (session) => session.runtime_status === "queued",
+  ).length;
+  const activeTeamSessions = runningTeamSessions + queuedTeamSessions;
+  const completedTeamSessions = childSubagentSessions.filter(
+    (session) =>
+      session.runtime_status === "completed" ||
+      session.runtime_status === "failed" ||
+      session.runtime_status === "aborted",
+  ).length;
+  const runtimeStripCollaboration = useMemo(() => {
+    const totalTeamSessions = childSubagentSessions.length;
+    const delegatedTaskCount = harnessState.delegatedTasks.length;
+    if (
+      !toolPreferences.subagent &&
+      totalTeamSessions === 0 &&
+      delegatedTaskCount === 0
+    ) {
+      return null;
+    }
+    const phase =
+      activeTeamSessions > 0
+        ? "acting"
+        : totalTeamSessions > 0 || delegatedTaskCount > 0
+          ? "completed"
+          : "configured";
+    return buildAgentUiCollaborationPayloadMetadata({
+      sourceType: "runtime_strip",
+      surface: "runtime_strip",
+      phase,
+      status: phase,
+      runtimeEntity: "subagent_turn",
+      collaborationKind: "team_runtime_status",
+      payload: {
+        collaborationFacts: {
+          source: "runtime_strip",
+          surface: "runtime_strip",
+          collaborationSurface: "runtime_strip",
+          collaborationPhase: phase,
+          collaborationKind: "team_runtime_status",
+          status: phase,
+          runtimeEntity: "subagent_turn",
+          activeCount: activeTeamSessions,
+          queuedCount: queuedTeamSessions,
+          completedCount: completedTeamSessions,
+          totalCount: totalTeamSessions,
+          delegatedTaskCount,
+        },
+      },
+    });
+  }, [
+    activeTeamSessions,
+    childSubagentSessions.length,
+    completedTeamSessions,
+    harnessState.delegatedTasks.length,
+    queuedTeamSessions,
+    toolPreferences.subagent,
+  ]);
+  const runtimeStripCollaborationFacts =
+    runtimeStripCollaboration?.collaborationFacts;
 
   const capabilities = useMemo<CapabilityItem[]>(
     () => [
@@ -141,19 +213,6 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
     const outputSchemaLabel = getOutputSchemaRuntimeLabel(
       executionRuntime?.output_schema_runtime,
     );
-    const runningTeamSessions = childSubagentSessions.filter(
-      (session) => session.runtime_status === "running",
-    ).length;
-    const queuedTeamSessions = childSubagentSessions.filter(
-      (session) => session.runtime_status === "queued",
-    ).length;
-    const activeTeamSessions = runningTeamSessions + queuedTeamSessions;
-    const completedTeamSessions = childSubagentSessions.filter(
-      (session) =>
-        session.runtime_status === "completed" ||
-        session.runtime_status === "failed" ||
-        session.runtime_status === "aborted",
-    ).length;
     if (hasRuntimeWorkbenchSignals) {
       nextItems.push({
         key: "runtime_outputs",
@@ -357,6 +416,22 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
       data-testid="agent-runtime-strip"
       data-runtime-kind={hasRuntimeWorkbenchSignals ? "runtime" : "general"}
       data-execution-strategy={executionRuntime?.execution_strategy ?? ""}
+      data-collaboration-facts={
+        runtimeStripCollaborationFacts ? "yes" : undefined
+      }
+      data-collaboration-surface={
+        runtimeStripCollaboration?.collaborationSurface
+      }
+      data-collaboration-phase={runtimeStripCollaboration?.collaborationPhase}
+      data-collaboration-kind={readFactString(
+        runtimeStripCollaborationFacts,
+        "collaborationKind",
+      )}
+      data-soul-style-level={runtimeStripCollaboration?.styleLevel}
+      data-soul-risk-level={runtimeStripCollaboration?.riskLevel}
+      data-soul-tone-variant={runtimeStripCollaboration?.toneVariant}
+      data-soul-profile-id={runtimeStripCollaboration?.profileId}
+      data-soul-pack-id={runtimeStripCollaboration?.packId}
       className={
         variant === "embedded"
           ? "rounded-xl border border-border/70 bg-[linear-gradient(135deg,hsl(var(--background)),hsl(var(--muted)/0.35))] px-4 py-3"
@@ -400,7 +475,25 @@ export const AgentRuntimeStrip: React.FC<AgentRuntimeStripProps> = ({
         ))}
       </div>
       {toolPreferences.subagent ? (
-        <div className="mb-3 rounded-xl border border-border/70 bg-background/80 px-3 py-2 text-xs text-muted-foreground">
+        <div
+          className="mb-3 rounded-xl border border-border/70 bg-background/80 px-3 py-2 text-xs text-muted-foreground"
+          data-testid="agent-runtime-strip-team-summary"
+          data-collaboration-facts={
+            runtimeStripCollaborationFacts ? "yes" : undefined
+          }
+          data-collaboration-surface={
+            runtimeStripCollaboration?.collaborationSurface
+          }
+          data-collaboration-phase={
+            runtimeStripCollaboration?.collaborationPhase
+          }
+          data-collaboration-kind={readFactString(
+            runtimeStripCollaborationFacts,
+            "collaborationKind",
+          )}
+          data-soul-style-level={runtimeStripCollaboration?.styleLevel}
+          data-soul-risk-level={runtimeStripCollaboration?.riskLevel}
+        >
           <span className="font-medium text-foreground">
             {translate("agentChat.runtimeStrip.team.title")}
           </span>

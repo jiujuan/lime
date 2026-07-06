@@ -5,7 +5,10 @@ import type {
 } from "@/lib/api/agentProtocol";
 import type { AgentRuntimeStatus } from "../types";
 import { resolveAgentRuntimeErrorPresentation } from "./agentRuntimeErrorPresentation";
-import type { SoulInteractionCopy } from "@/lib/soul/interactionCopy";
+import type {
+  SoulCopyDescriptor,
+  SoulInteractionCopy,
+} from "@/lib/soul/interactionCopy";
 import { resolveSoulInteractionCopy } from "@/lib/soul/interactionCopy";
 
 export function buildDiagnosticsRuntimeStatusMetadata(
@@ -30,6 +33,21 @@ function normalizeRuntimeErrorDetail(errorMessage: string): string {
   return resolveAgentRuntimeErrorPresentation(errorMessage).displayMessage;
 }
 
+export function buildSoulRuntimeStatusMetadata(
+  descriptor: SoulCopyDescriptor,
+): AgentRuntimeStatusMetadata {
+  return {
+    soul_copy: descriptor,
+    soul_surface: descriptor.surface,
+    soul_phase: descriptor.phase,
+    style_level: descriptor.styleLevel,
+    risk_level: descriptor.riskLevel,
+    tone_variant: descriptor.toneVariant,
+    ...(descriptor.profileId ? { profile_id: descriptor.profileId } : {}),
+    ...(descriptor.packId ? { pack_id: descriptor.packId } : {}),
+  };
+}
+
 export function buildInitialAgentRuntimeStatus(options: {
   executionStrategy: AsterExecutionStrategy;
   skipUserMessage?: boolean;
@@ -46,7 +64,9 @@ export function buildInitialAgentRuntimeStatus(options: {
     title: copy.initialRuntimeTitle,
     detail: copy.initialRuntimeDetail,
     checkpoints,
-    metadata: buildDiagnosticsRuntimeStatusMetadata(),
+    metadata: buildDiagnosticsRuntimeStatusMetadata(
+      buildSoulRuntimeStatusMetadata(copy.descriptors.initialRuntimeTitle),
+    ),
   };
 }
 
@@ -62,7 +82,9 @@ export function buildWaitingAgentRuntimeStatus(options: {
     title: copy.waitingRuntimeTitle,
     detail: copy.waitingRuntimeDetail,
     checkpoints: copy.waitingRuntimeCheckpoints,
-    metadata: buildDiagnosticsRuntimeStatusMetadata(),
+    metadata: buildDiagnosticsRuntimeStatusMetadata(
+      buildSoulRuntimeStatusMetadata(copy.descriptors.waitingRuntimeTitle),
+    ),
   };
 }
 
@@ -95,6 +117,7 @@ export function buildActionResumeRuntimeStatus(): AgentRuntimeStatus {
 
 export function buildFailedAgentRuntimeStatus(
   errorMessage: string,
+  soulCopy: SoulInteractionCopy = resolveSoulInteractionCopy(),
 ): AgentRuntimeStatus {
   return {
     phase: "failed",
@@ -105,6 +128,9 @@ export function buildFailedAgentRuntimeStatus(
       "可修正问题后重试",
       "如需继续可补充更明确的输入",
     ],
+    metadata: buildDiagnosticsRuntimeStatusMetadata(
+      buildSoulRuntimeStatusMetadata(soulCopy.descriptors.failurePrefix),
+    ),
   };
 }
 

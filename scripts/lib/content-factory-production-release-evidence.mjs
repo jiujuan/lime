@@ -4,7 +4,9 @@ import path from "node:path";
 export const CONTENT_FACTORY_PRODUCTION_RELEASE_EVIDENCE_FILE_NAME =
   "content-factory-production-release-evidence.json";
 
-const API_BASE_ENV_NAMES = [
+export const CONTENT_FACTORY_PRODUCTION_DEFAULT_API_BASE =
+  "https://lime-api.limeai.run/api";
+export const CONTENT_FACTORY_PRODUCTION_API_BASE_ENV_NAMES = [
   "LIME_AGENT_APP_STUDIO_API_BASE",
   "LIMECORE_API_BASE_URL",
   "LIMECORE_API_BASE",
@@ -89,11 +91,23 @@ function pathStatus(filePath) {
 }
 
 function resolveInputs(input = {}, env = process.env) {
-  const apiBaseEnvName = firstConfiguredEnv(env, API_BASE_ENV_NAMES);
+  const apiBaseEnvName = firstConfiguredEnv(
+    env,
+    CONTENT_FACTORY_PRODUCTION_API_BASE_ENV_NAMES,
+  );
   const tenantEnvName = firstConfiguredEnv(env, TENANT_ENV_NAMES);
   const tokenEnvName =
     input.studioTokenEnv || firstConfiguredEnv(env, TOKEN_ENV_NAMES);
-  const apiBase = trimTrailingSlash(input.apiBase || env[apiBaseEnvName] || "");
+  const apiBaseSource = input.apiBase
+    ? "option"
+    : apiBaseEnvName
+      ? "env"
+      : "default";
+  const apiBase = trimTrailingSlash(
+    input.apiBase ||
+      env[apiBaseEnvName] ||
+      CONTENT_FACTORY_PRODUCTION_DEFAULT_API_BASE,
+  );
   const tenantId = text(input.tenantId || env[tenantEnvName] || "");
   const token = tokenEnvName ? text(env[tokenEnvName] || "") : "";
   return {
@@ -104,6 +118,7 @@ function resolveInputs(input = {}, env = process.env) {
       apiBase: {
         configured: Boolean(apiBase),
         envName: input.apiBase ? null : apiBaseEnvName || null,
+        source: apiBaseSource,
       },
       studioToken: {
         configured: Boolean(token),
@@ -265,6 +280,10 @@ export function normalizeMarketplaceCatalogEvidence({
     "sourceUri",
     "source_uri",
   ]);
+  const itemSourceKind = firstText(item, ["sourceKind", "source_kind"]);
+  const packageSourceKind =
+    firstText(pkg, ["sourceKind", "source_kind"]) ||
+    (itemSourceKind === "cloud_release" ? itemSourceKind : "");
   const record = item
     ? {
         appId: firstText(item, ["appId", "app_id", "pluginName"]) || appId,
@@ -277,7 +296,7 @@ export function normalizeMarketplaceCatalogEvidence({
           packageUrl,
           releaseId: firstText(pkg, ["releaseId", "release_id"]),
           signatureRef: firstText(pkg, ["signatureRef", "signature_ref"]),
-          sourceKind: packageUrl ? "cloud_release" : "",
+          sourceKind: packageSourceKind,
           sourceUri: packageUrl,
         },
         marketplace: {

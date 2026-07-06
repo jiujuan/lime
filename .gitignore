@@ -78,6 +78,9 @@ internal/exec-plans/*
 !internal/exec-plans/plan-runtime-implementation-progress.md
 !internal/exec-plans/browser-runtime-right-surface-plan.md
 !internal/exec-plans/projectthread-first-plan.md
+!internal/exec-plans/soul-style-output-surface-convergence-plan.md
+!internal/exec-plans/clawstream-codex-derived-guardrail-plan.md
+!internal/exec-plans/clawstream-s1-p0-implementation-plan.md
 internal/roadmap/**
 !internal/roadmap/
 !internal/roadmap/long-term/
@@ -138,6 +141,8 @@ internal/roadmap/plan/**
 !internal/roadmap/test/
 internal/roadmap/test/**
 !internal/roadmap/test/*.md
+!internal/roadmap/test/clawstream/
+!internal/roadmap/test/clawstream/*.md
 !internal/roadmap/artifacts/
 internal/roadmap/artifacts/**
 !internal/roadmap/artifacts/roadmap.md
@@ -220,6 +225,9 @@ internal/knowledge/*
 internal/research/**
 !internal/research/agent/
 !internal/research/agent/**
+!internal/research/refactor/
+!internal/research/refactor/v1/
+!internal/research/refactor/v1/**
 !internal/research/workbech/
 !internal/research/workbech/*.md
 

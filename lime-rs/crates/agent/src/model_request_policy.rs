@@ -1,10 +1,17 @@
 use crate::turn_context_configuration::AgentTurnContext;
 use model_provider::provider_stream::{
-    RuntimeReplyModelRequestPolicy, RuntimeReplyResponsesPolicy, RuntimeReplyToolCallPolicy,
+    RuntimeReplyModelRequestPolicy, RuntimeReplyReasoningOutputPolicy, RuntimeReplyResponsesPolicy,
+    RuntimeReplyToolCallPolicy,
 };
 use serde_json::Value;
 
 const DEFAULT_TOOL_OUTPUT_TRUNCATION_BYTES: u64 = 10_000;
+const DEFAULT_EFFECTIVE_CONTEXT_WINDOW_PERCENT: i64 = 95;
+const AUTO_COMPACT_CONTEXT_WINDOW_RATIO_NUMERATOR: i64 = 9;
+const AUTO_COMPACT_CONTEXT_WINDOW_RATIO_DENOMINATOR: i64 = 10;
+pub const MODEL_NATIVE_SHELL_TOOL_NAME: &str = "Bash";
+pub const MODEL_NATIVE_POWERSHELL_TOOL_NAME: &str = "PowerShell";
+pub const MODEL_NATIVE_APPLY_PATCH_TOOL_NAME: &str = "apply_patch";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModelRequestPolicySnapshot {
@@ -13,6 +20,9 @@ pub struct ModelRequestPolicySnapshot {
     pub model_id: Option<String>,
     pub responses_policy: Option<ModelResponsesPolicySnapshot>,
     pub tool_call_policy: Option<ModelToolCallPolicySnapshot>,
+    pub input_modality_policy: Option<ModelInputModalityPolicySnapshot>,
+    pub context_policy: Option<ModelContextPolicySnapshot>,
+    pub reasoning_output_policy: Option<ModelReasoningOutputPolicySnapshot>,
     pub truncation_policy: Option<ModelTruncationPolicySnapshot>,
     pub native_tool_policy: Option<ModelNativeToolPolicySnapshot>,
 }
@@ -32,6 +42,35 @@ pub struct ModelResponsesPolicySnapshot {
 pub struct ModelToolCallPolicySnapshot {
     pub supports_parallel_tool_calls: bool,
     pub parallel_tool_calls: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelInputModalityPolicySnapshot {
+    pub input_modalities: Vec<String>,
+    pub send_gate_modalities: Vec<String>,
+    pub unknown_input_modalities: Vec<String>,
+    pub supports_text_input: bool,
+    pub supports_media_input: bool,
+    pub supports_image_input: bool,
+    pub source: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelContextPolicySnapshot {
+    pub context_window: Option<i64>,
+    pub max_context_window: Option<i64>,
+    pub resolved_context_window: Option<i64>,
+    pub effective_context_window_percent: i64,
+    pub model_context_window: Option<i64>,
+    pub auto_compact_token_limit: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelReasoningOutputPolicySnapshot {
+    pub default_reasoning_summary: String,
+    pub support_verbosity: bool,
+    pub default_verbosity: Option<String>,
+    pub can_set_verbosity: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -80,6 +119,18 @@ pub fn model_request_policy_from_metadata(metadata: &Value) -> Option<ModelReque
             .map(responses_policy_from_value),
         tool_call_policy: object_field(policy, &["tool_call_policy", "toolCallPolicy"])
             .map(tool_call_policy_from_value),
+        input_modality_policy: object_field(
+            policy,
+            &["input_modality_policy", "inputModalityPolicy"],
+        )
+        .map(input_modality_policy_from_value),
+        context_policy: object_field(policy, &["context_policy", "contextPolicy"])
+            .map(context_policy_from_value),
+        reasoning_output_policy: object_field(
+            policy,
+            &["reasoning_output_policy", "reasoningOutputPolicy"],
+        )
+        .map(reasoning_output_policy_from_value),
         truncation_policy: object_field(policy, &["truncation_policy", "truncationPolicy"])
             .map(truncation_policy_from_value),
         native_tool_policy: object_field(policy, &["native_tool_policy", "nativeToolPolicy"])
@@ -102,10 +153,59 @@ pub fn runtime_reply_model_request_policy_from_metadata(
         .and_then(|policy| runtime_reply_model_request_policy_from_snapshot(&policy))
 }
 
+pub fn native_tool_policy_from_metadata(metadata: &Value) -> Option<ModelNativeToolPolicySnapshot> {
+    model_request_policy_from_metadata(metadata).and_then(|policy| policy.native_tool_policy)
+}
+
+pub fn native_tool_policy_from_turn_context(
+    context: Option<&AgentTurnContext>,
+) -> Option<ModelNativeToolPolicySnapshot> {
+    model_request_policy_from_turn_context(context).and_then(|policy| policy.native_tool_policy)
+}
+
+pub fn input_modality_policy_from_turn_context(
+    context: Option<&AgentTurnContext>,
+) -> Option<ModelInputModalityPolicySnapshot> {
+    model_request_policy_from_turn_context(context).and_then(|policy| policy.input_modality_policy)
+}
+
+pub fn input_modality_policy_allows_image_input(
+    policy: Option<&ModelInputModalityPolicySnapshot>,
+) -> bool {
+    policy
+        .map(|policy| policy.supports_image_input)
+        .unwrap_or(true)
+}
+
+pub fn native_tool_policy_disallowed_tool_names(
+    policy: Option<&ModelNativeToolPolicySnapshot>,
+) -> Vec<&'static str> {
+    let Some(policy) = policy else {
+        return Vec::new();
+    };
+
+    let mut names = Vec::new();
+    let shell_command_available = policy.shell_tool_enabled
+        && policy.preferred_shell_surface.as_deref() == Some("shell_command");
+    if !shell_command_available {
+        names.push(MODEL_NATIVE_SHELL_TOOL_NAME);
+        names.push(MODEL_NATIVE_POWERSHELL_TOOL_NAME);
+    }
+    let apply_patch_available = policy.apply_patch_tool_enabled
+        && policy.apply_patch_tool_type.as_deref() == Some("freeform");
+    if !apply_patch_available {
+        names.push(MODEL_NATIVE_APPLY_PATCH_TOOL_NAME);
+    }
+    names
+}
+
 impl ModelRequestPolicySnapshot {
     fn has_policy_payload(&self) -> bool {
         self.responses_policy.is_some()
             || self.tool_call_policy.is_some()
+            || self.input_modality_policy.is_some()
+            || self.context_policy.is_some()
+            || self.reasoning_output_policy.is_some()
             || self.truncation_policy.is_some()
             || self.native_tool_policy.is_some()
     }
@@ -122,8 +222,12 @@ pub fn runtime_reply_model_request_policy_from_snapshot(
         .tool_call_policy
         .as_ref()
         .map(|policy| runtime_reply_tool_call_policy(policy, responses.as_ref()));
+    let reasoning_output = snapshot
+        .reasoning_output_policy
+        .as_ref()
+        .map(runtime_reply_reasoning_output_policy);
 
-    RuntimeReplyModelRequestPolicy::new(responses, tool_call)
+    RuntimeReplyModelRequestPolicy::new(responses, tool_call, reasoning_output)
 }
 
 fn runtime_reply_responses_policy(
@@ -151,6 +255,17 @@ fn runtime_reply_tool_call_policy(
     RuntimeReplyToolCallPolicy {
         supports_parallel_tool_calls: policy.supports_parallel_tool_calls,
         parallel_tool_calls: policy.parallel_tool_calls && responses_allows_parallel,
+    }
+}
+
+fn runtime_reply_reasoning_output_policy(
+    policy: &ModelReasoningOutputPolicySnapshot,
+) -> RuntimeReplyReasoningOutputPolicy {
+    RuntimeReplyReasoningOutputPolicy {
+        default_reasoning_summary: policy.default_reasoning_summary.clone(),
+        support_verbosity: policy.support_verbosity,
+        default_verbosity: policy.default_verbosity.clone(),
+        can_set_verbosity: policy.can_set_verbosity,
     }
 }
 
@@ -194,6 +309,12 @@ fn looks_like_policy_value(value: &Value) -> bool {
             "responsesPolicy",
             "tool_call_policy",
             "toolCallPolicy",
+            "input_modality_policy",
+            "inputModalityPolicy",
+            "context_policy",
+            "contextPolicy",
+            "reasoning_output_policy",
+            "reasoningOutputPolicy",
             "truncation_policy",
             "truncationPolicy",
             "native_tool_policy",
@@ -286,6 +407,124 @@ fn tool_call_policy_from_value(value: &Value) -> ModelToolCallPolicySnapshot {
     }
 }
 
+fn input_modality_policy_from_value(value: &Value) -> ModelInputModalityPolicySnapshot {
+    let input_modalities =
+        string_array_field_preserve_order(value, &["input_modalities", "inputModalities"]);
+    let send_gate_modalities =
+        string_array_field_preserve_order(value, &["send_gate_modalities", "sendGateModalities"]);
+    let unknown_input_modalities = string_array_field_preserve_order(
+        value,
+        &["unknown_input_modalities", "unknownInputModalities"],
+    );
+    let supports_image_input = bool_field(value, &["supports_image_input", "supportsImageInput"])
+        .unwrap_or_else(|| input_modalities.iter().any(|modality| modality == "image"));
+    let supports_text_input = bool_field(value, &["supports_text_input", "supportsTextInput"])
+        .unwrap_or_else(|| input_modalities.iter().any(|modality| modality == "text"));
+    let supports_media_input = bool_field(value, &["supports_media_input", "supportsMediaInput"])
+        .unwrap_or_else(|| {
+            input_modalities.iter().any(|modality| {
+                matches!(
+                    modality.as_str(),
+                    "image" | "audio" | "video" | "file" | "pdf"
+                )
+            })
+        });
+
+    ModelInputModalityPolicySnapshot {
+        input_modalities,
+        send_gate_modalities,
+        unknown_input_modalities,
+        supports_text_input,
+        supports_media_input,
+        supports_image_input,
+        source: enum_field(value, &["source"], &["codex_default", "explicit"])
+            .unwrap_or_else(|| "explicit".to_string()),
+    }
+}
+
+fn context_policy_from_value(value: &Value) -> ModelContextPolicySnapshot {
+    let context_window = positive_i64_field(value, &["context_window", "contextWindow"]);
+    let max_context_window = positive_i64_field(value, &["max_context_window", "maxContextWindow"]);
+    let configured_auto_compact_token_limit = positive_i64_field(
+        value,
+        &["auto_compact_token_limit", "autoCompactTokenLimit"],
+    );
+    let effective_context_window_percent = effective_context_window_percent(value);
+    let resolved_context_window = context_window.or(max_context_window);
+    let model_context_window =
+        model_context_window(resolved_context_window, effective_context_window_percent);
+    let auto_compact_token_limit =
+        auto_compact_token_limit(resolved_context_window, configured_auto_compact_token_limit);
+
+    ModelContextPolicySnapshot {
+        context_window,
+        max_context_window,
+        resolved_context_window,
+        effective_context_window_percent,
+        model_context_window,
+        auto_compact_token_limit,
+    }
+}
+
+fn model_context_window(
+    resolved_context_window: Option<i64>,
+    effective_context_window_percent: i64,
+) -> Option<i64> {
+    resolved_context_window
+        .map(|context_window| context_window.saturating_mul(effective_context_window_percent) / 100)
+}
+
+fn auto_compact_token_limit(
+    resolved_context_window: Option<i64>,
+    configured_limit: Option<i64>,
+) -> Option<i64> {
+    let Some(resolved_context_window) = resolved_context_window else {
+        return configured_limit;
+    };
+    let context_limit = resolved_context_window
+        .saturating_mul(AUTO_COMPACT_CONTEXT_WINDOW_RATIO_NUMERATOR)
+        / AUTO_COMPACT_CONTEXT_WINDOW_RATIO_DENOMINATOR;
+    Some(configured_limit.map_or(context_limit, |limit| limit.min(context_limit)))
+}
+
+fn effective_context_window_percent(value: &Value) -> i64 {
+    positive_i64_field(
+        value,
+        &[
+            "effective_context_window_percent",
+            "effectiveContextWindowPercent",
+        ],
+    )
+    .filter(|percent| *percent <= 100)
+    .unwrap_or(DEFAULT_EFFECTIVE_CONTEXT_WINDOW_PERCENT)
+}
+
+fn reasoning_output_policy_from_value(value: &Value) -> ModelReasoningOutputPolicySnapshot {
+    let support_verbosity =
+        bool_field(value, &["support_verbosity", "supportVerbosity"]).unwrap_or(false);
+    let default_verbosity = support_verbosity
+        .then(|| {
+            enum_field(
+                value,
+                &["default_verbosity", "defaultVerbosity"],
+                &["low", "medium", "high"],
+            )
+        })
+        .flatten();
+
+    ModelReasoningOutputPolicySnapshot {
+        default_reasoning_summary: enum_field(
+            value,
+            &["default_reasoning_summary", "defaultReasoningSummary"],
+            &["auto", "concise", "detailed", "none"],
+        )
+        .unwrap_or_else(|| "auto".to_string()),
+        support_verbosity,
+        default_verbosity,
+        can_set_verbosity: support_verbosity,
+    }
+}
+
 fn truncation_policy_from_value(value: &Value) -> ModelTruncationPolicySnapshot {
     let inner = object_field(value, &["truncation_policy", "truncationPolicy"]).unwrap_or(value);
     ModelTruncationPolicySnapshot {
@@ -372,6 +611,13 @@ fn positive_u64_field(value: &Value, keys: &[&str]) -> Option<u64> {
         .find(|limit| *limit > 0)
 }
 
+fn positive_i64_field(value: &Value, keys: &[&str]) -> Option<i64> {
+    keys.iter()
+        .filter_map(|key| value.get(*key))
+        .filter_map(Value::as_i64)
+        .find(|limit| *limit > 0)
+}
+
 fn enum_field(value: &Value, keys: &[&str], allowed: &[&str]) -> Option<String> {
     string_field(value, keys).and_then(|text| {
         let normalized = normalize_token(&text);
@@ -395,6 +641,28 @@ fn string_array_field(value: &Value, keys: &[&str]) -> Vec<String> {
         .collect::<Vec<_>>();
     tokens.sort();
     tokens.dedup();
+    tokens
+}
+
+fn string_array_field_preserve_order(value: &Value, keys: &[&str]) -> Vec<String> {
+    let Some(values) = keys
+        .iter()
+        .filter_map(|key| value.get(*key))
+        .find_map(Value::as_array)
+    else {
+        return Vec::new();
+    };
+    let mut tokens = Vec::new();
+    for token in values
+        .iter()
+        .filter_map(Value::as_str)
+        .map(normalize_token)
+        .filter(|token| !token.is_empty())
+    {
+        if !tokens.contains(&token) {
+            tokens.push(token);
+        }
+    }
     tokens
 }
 

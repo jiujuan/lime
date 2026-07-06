@@ -5,6 +5,7 @@ import type {
   AgentUiProjectionState,
 } from "@limecloud/agent-ui-contracts";
 import {
+  type AgentUiPhase,
   normalizeRuntimeStatusValue,
   normalizeRuntimeTurnTerminalEventClass,
   runtimeStatusForTerminalEventClass,
@@ -19,6 +20,10 @@ import {
   readStringArrayField,
   readStringField,
 } from "./normalization.js";
+import { buildAgentUiCollaborationPayloadMetadata } from "./collaborationFacts.js";
+import {
+  extractAgentUiToolLifecyclePayloadMetadata,
+} from "./toolLifecycleMetadata.js";
 import { projectAgentUiState } from "./uiState.js";
 
 export interface AppServerAgentSessionFact {
@@ -256,6 +261,33 @@ function projectAppServerEventToExecutionEvent(
     runtimeTurnTerminalProjectionFromStatus(payloadStatus)?.status ??
     statusFromDomainPayloadStatus(payloadStatus) ??
     statusForEventClass(eventClass);
+  const taskId = readStringField(payload, ["taskId", "task_id"]);
+  const subagentId = readStringField(payload, ["subagentId", "subagent_id"]);
+  const runId = readStringField(payload, ["runId", "run_id"]);
+  const stepId = readStringField(payload, ["stepId", "step_id"]);
+  const collaborationMetadata = isCollaborationEvent(eventClass)
+    ? buildAgentUiCollaborationPayloadMetadata({
+        payload,
+        sourceType: event.type,
+        collaborationKind: collaborationKindForEventClass(eventClass),
+        surface: collaborationSurfaceForEventClass(eventClass),
+        phase: collaborationPhaseForEvent(eventClass, payloadStatus),
+        status: payloadStatus ?? projectedStatus,
+        runtimeEntity: runtimeEntityForCollaborationEvent(eventClass),
+        runtimeStatus: projectedStatus,
+        taskId,
+        agentId: subagentId,
+        parentSessionId: readStringField(payload, [
+          "parentSessionId",
+          "parent_session_id",
+        ]),
+        transcriptRef: readStringField(payload, [
+          "transcriptRef",
+          "transcript_ref",
+        ]),
+        handoffId: readStringField(payload, ["handoffId", "handoff_id"]),
+      })
+    : {};
 
   return compactProjectionFields({
     id: `appserver:${event.eventId}`,
@@ -266,10 +298,10 @@ function projectAppServerEventToExecutionEvent(
     runtimeId: "app-server",
     threadId: event.threadId ?? event.sessionId,
     turnId: event.turnId,
-    taskId: readStringField(payload, ["taskId", "task_id"]),
-    subagentId: readStringField(payload, ["subagentId", "subagent_id"]),
-    runId: readStringField(payload, ["runId", "run_id"]),
-    stepId: readStringField(payload, ["stepId", "step_id"]),
+    taskId,
+    subagentId,
+    runId,
+    stepId,
     toolCallId: isToolEvent(eventClass) ? toolCallId : undefined,
     actionId: isActionEvent(eventClass) ? actionId : undefined,
     artifactId:
@@ -294,10 +326,71 @@ function projectAppServerEventToExecutionEvent(
       messageId: readMessageId(payload),
       actionKind: readStringField(payload, ["action_type", "actionType"]),
       controls: controlsForAction(payload),
+      ...extractAgentUiToolLifecyclePayloadMetadata(payload),
+      ...collaborationMetadata,
     }),
     createdAt: event.timestamp ?? defaultTimestamp(),
     completedAt: isCompletedEvent(eventClass) ? event.timestamp : undefined,
   } satisfies AgentRuntimeExecutionEvent);
+}
+
+function isCollaborationEvent(eventClass: string): boolean {
+  return (
+    eventClass.startsWith("subagent.") ||
+    eventClass.startsWith("handoff.") ||
+    eventClass.startsWith("review.") ||
+    eventClass.startsWith("task.")
+  );
+}
+
+function collaborationKindForEventClass(eventClass: string): string {
+  if (eventClass.startsWith("handoff.")) return "specialist_handoff";
+  if (eventClass.startsWith("review.")) return "collaboration_review";
+  if (eventClass.startsWith("task.")) return "collaboration_task";
+  return "subagent_status";
+}
+
+function collaborationSurfaceForEventClass(eventClass: string): string {
+  if (eventClass.startsWith("handoff.")) return "handoff_lane";
+  if (eventClass.startsWith("review.")) return "review_lane";
+  if (eventClass.startsWith("task.")) return "task_capsule";
+  return "team_roster";
+}
+
+function runtimeEntityForCollaborationEvent(eventClass: string): string {
+  return eventClass.startsWith("task.") ? "work_item" : "subagent_turn";
+}
+
+function collaborationPhaseForEvent(
+  eventClass: string,
+  status: string | undefined,
+): AgentUiPhase {
+  const normalized = normalizeStatus(status);
+  switch (normalized) {
+    case "completed":
+    case "done":
+    case "success":
+      return "completed";
+    case "failed":
+    case "error":
+    case "not_found":
+      return "failed";
+    case "aborted":
+    case "cancelled":
+    case "canceled":
+    case "closed":
+      return "cancelled";
+    case "queued":
+    case "pending":
+    case "waiting":
+    case "blocked":
+      return "waiting";
+    case "running":
+    case "accepted":
+      return "acting";
+    default:
+      return phaseForEventClass(eventClass) as AgentUiPhase;
+  }
 }
 
 function projectAppServerTurnToExecutionEvent(

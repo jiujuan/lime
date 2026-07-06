@@ -101,7 +101,7 @@ export function buildUserInputSubmitOp(
         text: content,
         imageCount: images.length,
       }),
-      { failClosedOnUnknown: true },
+      { failClosedOnUnknown: false },
     );
   }
 

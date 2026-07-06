@@ -9,6 +9,7 @@ use super::formats::openai::{
 use super::formats::openai_responses::{
     create_responses_request, get_responses_usage, responses_api_to_message,
     responses_api_to_streaming_message, ResponsesApiResponse, ResponsesRequestOptions,
+    ResponsesRequestPolicy,
 };
 use super::retry::ProviderRetry;
 use super::utils::{
@@ -318,6 +319,8 @@ impl OpenAiProvider {
     fn resolve_responses_request_context(
         messages: &[Message],
     ) -> (&[Message], ResponsesRequestOptions) {
+        let request_policy =
+            super::openai_request_policy::resolve_responses_request_policy_from_turn_context();
         let output_schema = Self::resolve_output_schema_from_turn_context();
         let Some(previous_response_id) = Self::resolve_previous_response_id_from_turn_context()
         else {
@@ -325,6 +328,7 @@ impl OpenAiProvider {
                 messages,
                 ResponsesRequestOptions {
                     output_schema,
+                    request_policy,
                     ..ResponsesRequestOptions::default()
                 },
             );
@@ -341,6 +345,7 @@ impl OpenAiProvider {
                 messages,
                 ResponsesRequestOptions {
                     output_schema,
+                    request_policy,
                     ..ResponsesRequestOptions::default()
                 },
             );
@@ -352,6 +357,7 @@ impl OpenAiProvider {
                 previous_response_id: Some(previous_response_id),
                 store: true,
                 output_schema,
+                request_policy,
             },
         )
     }
@@ -364,12 +370,23 @@ impl OpenAiProvider {
         handle_response_openai_compat(response).await
     }
 
-    async fn post_responses(&self, payload: &Value) -> Result<Value, ProviderError> {
+    async fn post_responses(
+        &self,
+        payload: &Value,
+        request_options: &ResponsesRequestOptions,
+    ) -> Result<Value, ProviderError> {
         let responses_path = Self::responses_path_from_base_path(&self.base_path);
-        let response = self
-            .api_client
-            .response_post(&responses_path, payload)
-            .await?;
+        let mut request = self.api_client.request(&responses_path);
+        if request_options
+            .request_policy
+            .requires_responses_lite_header
+        {
+            request = request.header(
+                ResponsesRequestPolicy::RESPONSES_LITE_HEADER_NAME,
+                ResponsesRequestPolicy::RESPONSES_LITE_HEADER_VALUE,
+            )?;
+        }
+        let response = request.response_post(payload).await?;
         handle_response_openai_compat(response).await
     }
 }
@@ -436,7 +453,7 @@ impl Provider for OpenAiProvider {
             let json_response = self
                 .with_retry(|| async {
                     let payload_clone = payload.clone();
-                    self.post_responses(&payload_clone).await
+                    self.post_responses(&payload_clone, &request_options).await
                 })
                 .await
                 .inspect_err(|e| {
@@ -560,10 +577,17 @@ impl Provider for OpenAiProvider {
                 .with_retry(|| async {
                     let payload_clone = payload.clone();
                     let responses_path = Self::responses_path_from_base_path(&self.base_path);
-                    let resp = self
-                        .api_client
-                        .response_post(&responses_path, &payload_clone)
-                        .await?;
+                    let mut request = self.api_client.request(&responses_path);
+                    if request_options
+                        .request_policy
+                        .requires_responses_lite_header
+                    {
+                        request = request.header(
+                            ResponsesRequestPolicy::RESPONSES_LITE_HEADER_NAME,
+                            ResponsesRequestPolicy::RESPONSES_LITE_HEADER_VALUE,
+                        )?;
+                    }
+                    let resp = request.response_post(&payload_clone).await?;
                     handle_status_openai_compat(resp).await
                 })
                 .await
@@ -863,5 +887,48 @@ mod tests {
             Some(&serde_json::json!("object"))
         );
         assert!(!options.store);
+    }
+
+    #[tokio::test]
+    async fn test_resolve_responses_request_context_includes_model_request_policy() {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "runtime_options".to_string(),
+            serde_json::json!({
+                "harness": {
+                    "model_request_policy": {
+                        "responses_policy": {
+                            "use_responses_lite": true,
+                            "reasoning_context": "all_turns",
+                            "requires_responses_lite_header": true,
+                            "parallel_tool_calls_allowed": false
+                        },
+                        "tool_call_policy": {
+                            "supports_parallel_tool_calls": true,
+                            "parallel_tool_calls": true
+                        }
+                    }
+                }
+            }),
+        );
+        let turn_context = TurnContextOverride {
+            metadata,
+            ..TurnContextOverride::default()
+        };
+        let messages = vec![Message::user().with_text("继续")];
+
+        let (_request_messages, options) =
+            crate::session_context::with_turn_context(Some(turn_context), async {
+                OpenAiProvider::resolve_responses_request_context(&messages)
+            })
+            .await;
+
+        assert!(options.request_policy.use_responses_lite);
+        assert!(options.request_policy.requires_responses_lite_header);
+        assert_eq!(
+            options.request_policy.reasoning_context.as_deref(),
+            Some("all_turns")
+        );
+        assert_eq!(options.request_policy.parallel_tool_calls, Some(false));
     }
 }

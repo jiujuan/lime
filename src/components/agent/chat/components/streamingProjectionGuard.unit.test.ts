@@ -17,6 +17,8 @@ const STREAM_PROJECTION_FILES = [
 ];
 
 const FORBIDDEN_DISPLAY_LITERALS = [
+  "启动处理流程",
+  "已接收请求",
   "已完成思考",
   "网页搜索渲染结论",
   "今天的国际新闻",

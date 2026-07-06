@@ -1,53 +1,36 @@
-//! Aster runtime snapshot adapter.
+//! Runtime snapshot projection adapter.
 //!
-//! This module is a migration boundary. It converts Aster runtime snapshots
-//! into Lime-owned timeline DTOs before session-store projection code sees them.
+//! This module maps Lime-owned runtime snapshot records into GUI DAO DTOs.
 
-use aster::session::SessionRuntimeSnapshot;
 use lime_core::database::dao::agent_timeline::{AgentThreadItem, AgentThreadTurn};
+use thread_store::runtime_snapshot::RuntimeSessionSnapshotRecord;
 
 use crate::protocol_projection::{project_item_runtime, project_turn_runtime};
+use crate::runtime_timeline_adapter::project_runtime_timeline_snapshot_record;
 
 pub(crate) type RuntimeTimelineSnapshotProjection =
-    agent_runtime::session_execution::RuntimeTimelineSnapshotProjection<
+    agent_runtime::runtime_timeline::RuntimeTimelineSnapshotProjection<
         AgentThreadTurn,
         AgentThreadItem,
     >;
 
-pub(crate) fn project_aster_runtime_snapshot(
-    snapshot: &SessionRuntimeSnapshot,
+pub(crate) fn project_runtime_snapshot_record(
+    snapshot: &RuntimeSessionSnapshotRecord,
 ) -> RuntimeTimelineSnapshotProjection {
-    let thread_id = snapshot
-        .threads
-        .first()
-        .map(|thread| thread.thread.id.clone());
-    let turns = snapshot
-        .threads
-        .iter()
-        .flat_map(|thread| {
-            thread
-                .turns
-                .iter()
-                .cloned()
-                .map(crate::runtime_timeline_adapter::convert_aster_turn_runtime)
-                .map(project_turn_runtime)
-        })
+    let current_snapshot = project_runtime_timeline_snapshot_record(snapshot);
+    let turns = current_snapshot
+        .turns
+        .into_iter()
+        .map(project_turn_runtime)
         .collect();
-    let items = snapshot
-        .threads
-        .iter()
-        .flat_map(|thread| {
-            thread
-                .items
-                .iter()
-                .cloned()
-                .filter_map(crate::runtime_timeline_adapter::convert_aster_item_runtime)
-                .map(project_item_runtime)
-        })
+    let items = current_snapshot
+        .items
+        .into_iter()
+        .map(project_item_runtime)
         .collect();
 
     RuntimeTimelineSnapshotProjection {
-        thread_id,
+        thread_id: current_snapshot.thread_id,
         turns,
         items,
     }

@@ -76,7 +76,7 @@ describe("agentStreamSubmitContext", () => {
     expect(result.submitWorkspaceId).toBeUndefined();
   });
 
-  it("非队列流激活等待态应支持 Soul 交互口吻", async () => {
+  it("非队列流激活等待态应保持 neutral 文案并携带 Soul metadata", async () => {
     const activateStream = vi.fn();
     const soulCopy = resolveSoulInteractionCopy({
       soul: {
@@ -97,8 +97,17 @@ describe("agentStreamSubmitContext", () => {
     });
 
     expect(result.effectiveWaitingRuntimeStatus).toMatchObject({
-      title: "正在启动处理",
-      detail: expect.stringContaining("进展"),
+      title: "正在启动处理流程",
+      detail: "已开始处理，正在准备环境并等待第一条进展。",
+      metadata: {
+        soul_surface: "waiting_runtime_status",
+        soul_phase: "routing",
+        style_level: "L1",
+        risk_level: "normal",
+        tone_variant: "cheeky_sassy",
+        profile_id: "cheeky_sassy_executor",
+        pack_id: "com.lime.soul.cheeky-sassy-executor",
+      },
     });
     expect(activateStream).toHaveBeenCalledWith(
       "session-soul",

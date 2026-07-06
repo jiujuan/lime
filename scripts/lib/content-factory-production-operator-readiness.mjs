@@ -1,6 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import {
+  CONTENT_FACTORY_PRODUCTION_API_BASE_ENV_NAMES,
+  CONTENT_FACTORY_PRODUCTION_DEFAULT_API_BASE,
+} from "./content-factory-production-release-evidence.mjs";
+
 function firstConfiguredEnv(env, names) {
   return names.find((name) => Boolean(String(env[name] || "").trim())) || "";
 }
@@ -40,20 +45,17 @@ function buildOperatorCommandHint({ channel, expectedVersion }) {
     expectedVersion || "<version>",
     "--channel",
     channel || "stable",
-    "--app-signature",
-    "<app.signature.yaml>",
-    "--trust-root",
-    "<plugin-signature-trust-root.json>",
     "--package-url",
     "<https-url>",
     "--release-id",
     "<release-id>",
     "--public-key-id",
     "<public-key-id>",
+    "--generate-signature-proof",
+    "--signing-private-key-env",
+    "PLUGIN_SIGNING_PRIVATE_KEY_PEM",
     "--tenant-id",
     "<tenant-id>",
-    "--api-base",
-    "<api-base>",
     "--studio-token-env",
     "LIME_AGENT_APP_STUDIO_TOKEN",
     "--fetch-production-release-evidence",
@@ -61,7 +63,7 @@ function buildOperatorCommandHint({ channel, expectedVersion }) {
     "--gui-evidence",
     "<gui-evidence.json>",
   ];
-  return `LIME_AGENT_APP_STUDIO_TOKEN=<token> ${args.join(" ")}`;
+  return `${args.join(" ")} # requires local env: PLUGIN_SIGNING_PRIVATE_KEY_PEM, LIME_AGENT_APP_STUDIO_TOKEN`;
 }
 
 function operatorMissingKeys(inputs) {
@@ -91,9 +93,9 @@ function operatorMissingKeys(inputs) {
 function operatorMissingAction(key) {
   const actions = {
     apiBase:
-      "Pass --api-base <api-base> or set LIME_AGENT_APP_STUDIO_API_BASE / LIMECORE_API_BASE_URL / LIMECORE_API_BASE.",
+      "Set LIME_AGENT_APP_STUDIO_API_BASE / LIMECORE_API_BASE_URL / LIMECORE_API_BASE only when overriding the official Studio/LimeCore API base.",
     appSignature:
-      "Generate app.signature.yaml with content-factory-app/scripts/sign-release.mjs using a production private key, package hashes, and the final HTTPS package URL.",
+      "Run the pipeline with --generate-signature-proof and a local signing private key env so it generates app.signature.yaml from the same Studio dry-run hashes.",
     bootstrap:
       "Run --fetch-production-release-evidence after bulk publish, or provide production bootstrap JSON with pluginSignatureTrustRoots.",
     catalog:
@@ -109,13 +111,13 @@ function operatorMissingAction(key) {
     releaseId:
       "Pass --release-id <release-id>; it must be bound into app.signature.yaml and production catalog signatureProof.",
     signingPrivateKey:
-      "Set PLUGIN_SIGNING_PRIVATE_KEY_PEM or AGENT_APP_SIGNING_PRIVATE_KEY_PEM only in the local shell when generating app.signature.yaml; never write the key to evidence.",
+      "Set PLUGIN_SIGNING_PRIVATE_KEY_PEM or AGENT_APP_SIGNING_PRIVATE_KEY_PEM only in the local shell when running --generate-signature-proof; never write the key to evidence.",
     studioToken:
       "Set a local token env var and pass --studio-token-env <ENV_NAME>; the token value is only forwarded to child commands.",
     tenantId:
       "Pass --tenant-id <tenant-id> or set LIMECORE_TENANT_ID / LIME_CLOUD_TENANT_ID.",
     trustRoot:
-      "Generate plugin-signature-trust-root.json from the same signing command and publish its publicKey through production bootstrap trust roots.",
+      "Run the pipeline with --generate-signature-proof so it writes plugin-signature-trust-root.json from the same signing proof; publish its publicKey through production bootstrap trust roots.",
   };
   return (
     actions[key] ||
@@ -150,7 +152,6 @@ function buildSigningCommandHint({
   const publicKeyIdValue = normalizedPublicKeyId || "<public-key-id>";
   const signatureRef = `sigstore:${appId}@${version}:${releaseIdValue}`;
   const command = [
-    "PLUGIN_SIGNING_PRIVATE_KEY_PEM=<private-key>",
     "node",
     commandQuote(signScript),
     "--root",
@@ -175,6 +176,8 @@ function buildSigningCommandHint({
     commandQuote(
       path.join(contentFactoryDir, "plugin-signature-trust-root.json"),
     ),
+    "--private-key-env",
+    "PLUGIN_SIGNING_PRIVATE_KEY_PEM",
   ];
   return {
     appId,
@@ -229,6 +232,7 @@ export function buildOperatorReadiness({
   guiEvidencePath,
   input,
   preflight,
+  studioDryRun,
   trustRootPath,
   contentFactoryDir,
 }) {
@@ -241,16 +245,30 @@ export function buildOperatorReadiness({
     "LIMECORE_TENANT_ID",
     "LIME_CLOUD_TENANT_ID",
   ]);
-  const apiBaseEnvName = firstConfiguredEnv(baseEnv, [
-    "LIME_AGENT_APP_STUDIO_API_BASE",
-    "LIMECORE_API_BASE_URL",
-    "LIMECORE_API_BASE",
-  ]);
+  const apiBaseEnvName = firstConfiguredEnv(
+    baseEnv,
+    CONTENT_FACTORY_PRODUCTION_API_BASE_ENV_NAMES,
+  );
   const signingPrivateKey = signingPrivateKeyInputStatus(input, baseEnv);
+  const apiBaseSource = input.apiBase
+    ? "option"
+    : apiBaseEnvName
+      ? "env"
+      : "default";
+  const studioDryRunApiBaseConfigured =
+    studioDryRun?.releaseReadiness?.checks?.auth?.apiBaseConfigured === true ||
+    apiBaseSource === "default";
   const inputs = {
     apiBase: {
-      configured: Boolean(input.apiBase || apiBaseEnvName),
+      configured: Boolean(
+        input.apiBase ||
+        apiBaseEnvName ||
+        CONTENT_FACTORY_PRODUCTION_DEFAULT_API_BASE,
+      ),
       envName: input.apiBase ? null : apiBaseEnvName || null,
+      studioDryRunConfigured: studioDryRunApiBaseConfigured,
+      purpose: "release-evidence-fetch",
+      source: apiBaseSource,
     },
     bootstrap: inputPathStatus(input.bootstrapPath, bootstrapPath),
     catalog: inputPathStatus(input.catalogPath, catalogPath),

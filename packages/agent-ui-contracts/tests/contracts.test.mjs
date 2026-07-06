@@ -156,6 +156,10 @@ test("agent ui contracts publish adapter and runtime type declarations", async (
   assert.match(typeDeclarations, /export type AgentUiArtifactRefView/);
   assert.match(typeDeclarations, /export type AgentUiEvidenceRefView/);
   assert.match(typeDeclarations, /export interface AgentUiSubagentsModel/);
+  assert.match(
+    typeDeclarations,
+    /export interface AgentUiCollaborationFactsView/,
+  );
   assert.match(typeDeclarations, /export interface AgentUiProjectionState/);
   assert.match(typeDeclarations, /export interface AgentUiToolCallView/);
   assert.match(typeDeclarations, /export interface AgentUiToolSurfaceModel/);
@@ -163,6 +167,7 @@ test("agent ui contracts publish adapter and runtime type declarations", async (
   assert.match(typeDeclarations, /artifacts: AgentUiArtifactRefView\[\]/);
   assert.match(typeDeclarations, /evidence: AgentUiEvidenceRefView\[\]/);
   assert.match(typeDeclarations, /subagents: AgentUiSubagentsModel/);
+  assert.match(typeDeclarations, /collaboration\?: AgentUiCollaborationFactsView/);
   assert.match(typeDeclarations, /toolCalls: AgentUiToolSurfaceModel/);
   assert.match(typeDeclarations, /mcp: AgentUiMcpSurfaceModel/);
   assert.match(typeDeclarations, /actions\?: AgentRuntimeActionProjection\[\]/);

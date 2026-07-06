@@ -38,9 +38,17 @@ describe("content factory production readiness blocker plan", () => {
     ).toMatchObject({
       blocked: true,
       commandHint:
-        "LIME_AGENT_APP_STUDIO_TOKEN=<token> npm run plugin:content-factory-production-readiness-pipeline -- --expected-version <version> --package-url <https-url> --tenant-id <tenant-id> --api-base <api-base> --studio-token-env LIME_AGENT_APP_STUDIO_TOKEN",
+        "npm run plugin:content-factory-production-readiness-pipeline -- --expected-version <version> --package-url <https-url> --tenant-id <tenant-id> --studio-token-env LIME_AGENT_APP_STUDIO_TOKEN # requires local env: LIME_AGENT_APP_STUDIO_TOKEN",
       codes: ["production_package_url_missing"],
     });
+    expect(
+      plan.phases.find((phase) => phase.id === "studio_publish_inputs")
+        ?.commandHint,
+    ).not.toContain("<token>");
+    expect(
+      plan.phases.find((phase) => phase.id === "studio_publish_inputs")
+        ?.nextAction,
+    ).toContain("只有覆盖默认地址时才传 --api-base");
     expect(
       plan.phases.find((phase) => phase.id === "desktop_cloud_release_e2e"),
     ).toMatchObject({
@@ -64,6 +72,22 @@ describe("content factory production readiness blocker plan", () => {
       id: "release_signing_and_trust",
       owner: "operator",
     });
+    expect(
+      plan.phases.find((phase) => phase.id === "release_signing_and_trust")
+        ?.commandHint,
+    ).toContain("--generate-signature-proof");
+    expect(
+      plan.phases.find((phase) => phase.id === "release_signing_and_trust")
+        ?.commandHint,
+    ).toContain("requires local env: PLUGIN_SIGNING_PRIVATE_KEY_PEM");
+    expect(
+      plan.phases.find((phase) => phase.id === "release_signing_and_trust")
+        ?.commandHint,
+    ).not.toContain("<private-key>");
+    expect(
+      plan.phases.find((phase) => phase.id === "release_signing_and_trust")
+        ?.commandHint,
+    ).not.toContain("--app-signature <app.signature.yaml>");
     expect(plan.summary).toContain("production_app_signature_yaml_missing");
   });
 

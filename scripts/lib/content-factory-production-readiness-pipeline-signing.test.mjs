@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -17,6 +18,10 @@ const PUBLIC_KEY_ID = "content-factory-prod-root-2026";
 const PACKAGE_URL =
   "https://packages.example.com/content-factory-app-2.2.2.lapp";
 const PRIVATE_KEY = "test-only-private-key-placeholder";
+
+function repoRoot() {
+  return path.resolve(path.dirname(new URL(import.meta.url).pathname), "../..");
+}
 
 function writeJson(filePath, value) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -117,6 +122,36 @@ function blockedPreflight() {
 }
 
 describe("content factory production readiness signing proof generation", () => {
+  it("CLI help tells operators to pass secret env names instead of secret values", () => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        path.join(
+          repoRoot(),
+          "scripts/plugin/content-factory-production-readiness-pipeline.mjs",
+        ),
+        "--help",
+      ],
+      {
+        cwd: repoRoot(),
+        encoding: "utf8",
+        env: { PATH: process.env.PATH },
+      },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(
+      "Env var name containing the signing private key",
+    );
+    expect(result.stdout).toContain("never pass the key value as an argument");
+    expect(result.stdout).toContain(
+      "file contents and path are not written to evidence",
+    );
+    expect(result.stdout).not.toContain("PLUGIN_SIGNING_PRIVATE_KEY_PEM=");
+    expect(result.stdout).not.toContain("$PRIVATE_KEY_PEM");
+    expect(result.stdout).not.toContain("<private-key>");
+  });
+
   it("generates signature proof only when explicitly requested and keeps evidence redacted", () => {
     const fixture = createPipelineFixture();
     const calls = [];
@@ -217,6 +252,12 @@ describe("content factory production readiness signing proof generation", () => 
     expect(result.pipeline.steps.signingProof.step.args).toContain(
       "<redacted>",
     );
+    expect(result.pipeline.steps.signingProof.step.args).toContain(
+      "--private-key-env",
+    );
+    expect(result.pipeline.steps.signingProof.step.args).toContain(
+      "CUSTOM_SIGNING_PRIVATE_KEY_PEM",
+    );
     expect(result.pipeline.blockers.map((item) => item.code)).not.toContain(
       "production_signature_generation_inputs_missing",
     );
@@ -232,6 +273,8 @@ describe("content factory production readiness signing proof generation", () => 
     expect(pipelineText).not.toContain(PRIVATE_KEY);
     expect(signingProofText).not.toContain(PACKAGE_URL);
     expect(signingProofText).not.toContain(PRIVATE_KEY);
+    expect(signingProofText).toContain("CUSTOM_SIGNING_PRIVATE_KEY_PEM");
+    expect(signingProofText).toContain("--private-key-env");
   });
 
   it("fails closed without running sign-release when explicit signing inputs are incomplete", () => {

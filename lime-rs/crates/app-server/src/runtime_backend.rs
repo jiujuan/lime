@@ -25,6 +25,11 @@ mod reasoning_events;
 mod skill_runtime_enable;
 mod tool_events;
 mod tool_inventory;
+pub(crate) mod tool_process_external_metadata;
+mod tool_process_kind_metadata;
+pub(crate) mod tool_process_metadata;
+mod tool_process_risk_metadata;
+mod tool_process_runtime_metadata;
 mod workspace_patch_host_execution;
 mod workspace_patch_host_tools;
 
@@ -51,10 +56,8 @@ use std::sync::RwLock;
 
 mod request_context;
 
-use provider_config::{
-    current_agent_runtime_config_metadata, initialize_runtime_database,
-    model_effective_event_from_runtime,
-};
+pub(crate) use provider_config::current_agent_runtime_config_metadata;
+use provider_config::{initialize_runtime_database, model_effective_event_from_runtime};
 use request_context::{
     aster_chat_request_from_request, direct_provider_config_from_request,
     request_tool_policy_from_request, resolve_runtime_model_selection,
@@ -68,7 +71,7 @@ use app_server_protocol::AgentSessionActionType;
 use event_mapper::emit_runtime_agent_event_with_coding_mirror;
 use event_mapper::{
     emit_proposed_plan_parser_flush, emit_reasoning_finish,
-    emit_runtime_agent_event_with_coding_mirror_and_plan_parser,
+    emit_runtime_agent_event_with_coding_mirror_and_plan_parser_with_soul_style,
 };
 
 #[derive(Default)]
@@ -243,6 +246,9 @@ impl RuntimeBackend {
                 .await?;
         }
         let config_metadata = current_agent_runtime_config_metadata();
+        let soul_style = tool_process_metadata::SoulStyleMetadata::from_config_metadata(
+            config_metadata.as_ref(),
+        );
         let session_config = session_config_from_request(
             &request,
             host_request.as_ref(),
@@ -276,13 +282,16 @@ impl RuntimeBackend {
                 if emit_error.is_some() {
                     return;
                 }
-                if let Err(error) = emit_runtime_agent_event_with_coding_mirror_and_plan_parser(
-                    event,
-                    sink,
-                    &mut coding_event_mirror,
-                    &mut proposed_plan_parser,
-                    &mut reasoning_event_state,
-                ) {
+                if let Err(error) =
+                    emit_runtime_agent_event_with_coding_mirror_and_plan_parser_with_soul_style(
+                        event,
+                        sink,
+                        &mut coding_event_mirror,
+                        &mut proposed_plan_parser,
+                        &mut reasoning_event_state,
+                        soul_style.as_ref(),
+                    )
+                {
                     emit_error = Some(error);
                 }
             },

@@ -26,6 +26,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use url::form_urlencoded;
 
+mod managed_model_fetch_access;
 mod runtime_metadata;
 pub use runtime_metadata::{ProviderModelRegistryMetadata, ProviderModelRegistryMetadataSource};
 
@@ -2191,6 +2192,12 @@ impl ModelRegistryService {
             normalized_provider_id.as_str(),
             "ollama" | "lmstudio" | "gpustack" | "ovms"
         ) {
+            return true;
+        }
+
+        if managed_model_fetch_access::is_lime_managed_api_host(api_host)
+            && Self::lime_tenant_id_from_api_host(api_host).is_some()
+        {
             return true;
         }
 
@@ -4603,6 +4610,16 @@ mod tests {
         assert!(!ModelRegistryService::requires_api_key_for_model_fetch(
             "lmstudio",
             "http://127.0.0.1:1234/v1",
+            ApiProviderType::Openai
+        ));
+        assert!(!ModelRegistryService::requires_api_key_for_model_fetch(
+            "lime-hub",
+            "https://llm.limeai.run#lime_tenant_id=tenant-0001",
+            ApiProviderType::Openai
+        ));
+        assert!(ModelRegistryService::requires_api_key_for_model_fetch(
+            "lime-hub",
+            "https://llm.limeai.run",
             ApiProviderType::Openai
         ));
     }

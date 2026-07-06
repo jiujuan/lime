@@ -728,7 +728,7 @@ export async function ensureFixtureTextProvider(
     {
       providerId,
       enabled: true,
-      customModels: [FIXTURE_MODEL],
+      customModels: [],
       sortOrder: 0,
     },
     requestLog,
@@ -744,12 +744,31 @@ export async function ensureFixtureTextProvider(
     },
     requestLog,
   );
+  const modelFetch = await invokeAppServerFromPage(
+    page,
+    "modelProvider/fetchModels",
+    { providerId },
+    requestLog,
+  );
+  const fetchedModels = Array.isArray(modelFetch.result?.models)
+    ? modelFetch.result.models
+    : [];
+  const fixtureModel = fetchedModels.find(
+    (model) => model?.id === FIXTURE_MODEL,
+  );
 
   return sanitizeJson({
     providerId,
     providerName: provider?.name ?? TEXT_FIXTURE_PROVIDER_NAME,
     apiHost,
     modelId: FIXTURE_MODEL,
+    modelFetch: {
+      source: modelFetch.result?.source ?? null,
+      modelCount: fetchedModels.length,
+      hasFixtureModel: Boolean(fixtureModel),
+      fixtureModelInputModalities:
+        fixtureModel?.inputModalities ?? fixtureModel?.input_modalities ?? null,
+    },
   });
 }
 

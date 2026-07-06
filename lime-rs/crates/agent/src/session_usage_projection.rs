@@ -1,4 +1,7 @@
 use crate::protocol::AgentTokenUsage;
+use agent_runtime::session_execution::{
+    project_session_execution_runtime_usage, SessionExecutionRuntimeUsageSource,
+};
 
 pub(crate) fn project_token_usage(
     input_tokens: Option<i32>,
@@ -6,21 +9,23 @@ pub(crate) fn project_token_usage(
     cached_input_tokens: Option<i32>,
     cache_creation_input_tokens: Option<i32>,
 ) -> Option<AgentTokenUsage> {
-    match (input_tokens, output_tokens) {
-        (Some(input_tokens), Some(output_tokens)) if input_tokens >= 0 && output_tokens >= 0 => {
-            Some(AgentTokenUsage {
-                input_tokens: input_tokens as u32,
-                output_tokens: output_tokens as u32,
-                cached_input_tokens: cached_input_tokens
-                    .filter(|value| *value >= 0)
-                    .map(|value| value as u32),
-                cache_creation_input_tokens: cache_creation_input_tokens
-                    .filter(|value| *value >= 0)
-                    .map(|value| value as u32),
-            })
-        }
-        _ => None,
-    }
+    project_token_usage_source(SessionExecutionRuntimeUsageSource {
+        input_tokens,
+        output_tokens,
+        cached_input_tokens,
+        cache_creation_input_tokens,
+    })
+}
+
+pub(crate) fn project_token_usage_source(
+    source: SessionExecutionRuntimeUsageSource,
+) -> Option<AgentTokenUsage> {
+    project_session_execution_runtime_usage(source).map(|usage| AgentTokenUsage {
+        input_tokens: usage.input_tokens,
+        output_tokens: usage.output_tokens,
+        cached_input_tokens: usage.cached_input_tokens,
+        cache_creation_input_tokens: usage.cache_creation_input_tokens,
+    })
 }
 
 #[cfg(test)]

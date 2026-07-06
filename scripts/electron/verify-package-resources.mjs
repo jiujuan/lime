@@ -3,12 +3,27 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { builtinModules } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 const DEFAULT_PACKAGE_ROOT = "release-electron";
 const MAC_PRODUCT_NAME = "Lime";
 const MAC_APP_ID = "com.limecloud.lime";
+const ELECTRON_RUNTIME_BUNDLES = [
+  {
+    label: "Electron main bundle",
+    relativePath: "dist-electron/main/main.js",
+  },
+  {
+    label: "Electron preload bundle",
+    relativePath: "dist-electron/preload/preload.cjs",
+  },
+];
+const ALLOWED_BARE_RUNTIME_IMPORTS = new Set([
+  "electron",
+  ...builtinModules.map((moduleName) => moduleName.replace(/^node:/, "")),
+]);
 
 function parseArgs(argv) {
   const args = {};
@@ -167,14 +182,55 @@ function verifyResourceRoot(root, { platform, arch }) {
 }
 
 function verifyMainBundle(repoRoot) {
-  const mainBundle = path.resolve(repoRoot, "dist-electron/main/main.js");
-  assertFile(mainBundle, "Electron main bundle");
-  const content = readFileSync(mainBundle, "utf8");
-  if (/from\s+["']app-server-client["']/.test(content)) {
-    throw new Error(
-      "Electron main bundle still imports bare app-server-client",
+  verifyElectronRuntimeBundles(repoRoot);
+}
+
+export function verifyElectronRuntimeBundles(repoRoot) {
+  for (const bundle of ELECTRON_RUNTIME_BUNDLES) {
+    const bundlePath = path.resolve(repoRoot, bundle.relativePath);
+    assertFile(bundlePath, bundle.label);
+    const content = readFileSync(bundlePath, "utf8");
+    const bareImports = collectBareRuntimeImports(content).filter(
+      (packageName) => !ALLOWED_BARE_RUNTIME_IMPORTS.has(packageName),
     );
+    if (bareImports.length > 0) {
+      throw new Error(
+        `${bundle.label} still imports runtime package(s) outside app.asar bundle: ${bareImports.join(", ")}`,
+      );
+    }
   }
+}
+
+export function collectBareRuntimeImports(content) {
+  const imports = new Set();
+  for (const pattern of [
+    /^\s*import\s+(?!type\b)[^;]*?\s+from\s+["']([^"']+)["']/gm,
+    /^\s*import\s+["']([^"']+)["']/gm,
+    /\brequire\(\s*["']([^"']+)["']\s*\)/g,
+  ]) {
+    for (const match of content.matchAll(pattern)) {
+      const packageName = barePackageName(match[1]);
+      if (packageName) {
+        imports.add(packageName);
+      }
+    }
+  }
+  return [...imports].sort();
+}
+
+function barePackageName(specifier) {
+  if (
+    specifier.startsWith(".") ||
+    specifier.startsWith("/") ||
+    specifier.startsWith("#") ||
+    specifier.startsWith("node:")
+  ) {
+    return null;
+  }
+  if (specifier.startsWith("@")) {
+    return specifier.split("/").slice(0, 2).join("/");
+  }
+  return specifier.split("/")[0] ?? null;
 }
 
 export function verifyMacAppIdentity(packageRoot, { platform }) {

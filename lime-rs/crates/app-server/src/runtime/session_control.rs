@@ -188,23 +188,39 @@ impl RuntimeCore {
             &params.session_id,
             "sessionId is required for agentSession/compact",
         )?;
-        self.ensure_current_session_hydrated(&session_id).await?;
-        let (session, turns) = self.session_snapshot(&session_id)?;
-        let existing_events = self.events_for_session(&session_id)?;
+        self.compact_agent_session_with_trigger(
+            &session_id,
+            params.event_name.as_deref(),
+            "agentSession/compact",
+            "manual",
+            None,
+        )
+        .await
+    }
+
+    pub(in crate::runtime) async fn compact_agent_session_with_trigger(
+        &self,
+        session_id: &str,
+        event_name: Option<&str>,
+        source: &str,
+        trigger: &str,
+        trigger_context: Option<Value>,
+    ) -> Result<RuntimeCoreOutput<AgentSessionCompactResponse>, RuntimeCoreError> {
+        self.ensure_current_session_hydrated(session_id).await?;
+        let (session, turns) = self.session_snapshot(session_id)?;
+        let existing_events = self.events_for_session(session_id)?;
         let compaction = super::context_compaction::build_session_context_compaction(
             &session,
             &turns,
             &existing_events,
             self.sidecar_store.as_deref(),
         )?;
-        let event_name = params
-            .event_name
-            .as_deref()
+        let event_name = event_name
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .unwrap_or("agentSession/compact");
         let mut completed_payload = Map::new();
-        completed_payload.insert("source".to_string(), json!("agentSession/compact"));
+        completed_payload.insert("source".to_string(), json!(source));
         completed_payload.insert("eventName".to_string(), json!(event_name));
         completed_payload.insert("compactionId".to_string(), json!(compaction.compaction_id));
         completed_payload.insert("contextEpoch".to_string(), json!(compaction.context_epoch));
@@ -213,7 +229,10 @@ impl RuntimeCore {
             json!(compaction.tail_start_turn_id),
         );
         completed_payload.insert("turnCount".to_string(), json!(turns.len()));
-        completed_payload.insert("trigger".to_string(), json!("manual"));
+        completed_payload.insert("trigger".to_string(), json!(trigger));
+        if let Some(trigger_context) = trigger_context.clone() {
+            completed_payload.insert("triggerContext".to_string(), trigger_context);
+        }
         completed_payload.insert("summary".to_string(), json!(compaction.summary));
         completed_payload.insert("artifact".to_string(), json!(compaction.artifact));
         completed_payload.insert(
@@ -229,13 +248,14 @@ impl RuntimeCore {
                 RuntimeEvent::new(
                     "context.compaction.started",
                     json!({
-                        "source": "agentSession/compact",
+                        "source": source,
                         "eventName": event_name,
                         "compactionId": compaction.compaction_id,
                         "contextEpoch": compaction.context_epoch,
                         "tailStartTurnId": compaction.tail_start_turn_id,
                         "turnCount": turns.len(),
-                        "trigger": "manual",
+                        "trigger": trigger,
+                        "triggerContext": trigger_context,
                     }),
                 ),
                 RuntimeEvent::new(

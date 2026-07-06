@@ -84,6 +84,7 @@ function startElectron(reason) {
       ...resolveDevAppServerBackendEnv({
         env: process.env,
       }),
+      ...resolveElectronDevLaunchEnv(process.env),
       VITE_DEV_SERVER_URL: rendererDevServerUrl,
     },
     stdio: "inherit",
@@ -129,6 +130,19 @@ function normalizeRemoteDebuggingPort(value) {
     );
   }
   return String(port);
+}
+
+function resolveElectronDevLaunchEnv(env) {
+  if (!env.ELECTRON_E2E_USER_DATA_DIR?.trim()) {
+    return {};
+  }
+
+  return {
+    LIME_ELECTRON_E2E: "1",
+    ...(env.LIME_ELECTRON_DEV_HTTP_BRIDGE?.trim()
+      ? {}
+      : { LIME_ELECTRON_DEV_HTTP_BRIDGE: "0" }),
+  };
 }
 
 function queueAppServerBuild(event) {

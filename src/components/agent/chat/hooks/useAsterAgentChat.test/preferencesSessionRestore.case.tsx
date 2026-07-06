@@ -9,6 +9,8 @@ import {
   flushEffects,
   mockGetAgentRuntimeSession,
   mockListAgentRuntimeSessions,
+  mockResumeAgentRuntimeThread,
+  mockSafeListen,
   mountHook,
   seedSession,
   seedSessionSnapshots,
@@ -89,6 +91,161 @@ describe("useAsterAgentChat 偏好持久化 - session restore", () => {
         ),
       ).toBe(false);
       expect(harness.getValue().sessionId).toBe(activeSessionId);
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("仅 transient 记录的运行中恢复候选未出现在话题列表时，应先读取详情而不是清空", async () => {
+    const workspaceId = "ws-transient-running-restore";
+    const sessionId = "session-transient-running";
+    const turnId = "turn-transient-running";
+    const now = Math.floor(Date.now() / 1000);
+
+    sessionStorage.setItem(
+      `aster_curr_sessionId_${workspaceId}`,
+      JSON.stringify(sessionId),
+    );
+    mockListAgentRuntimeSessions.mockResolvedValue([
+      {
+        id: "session-other",
+        name: "其他会话",
+        created_at: now - 10,
+        updated_at: now,
+        messages_count: 1,
+        workspace_id: workspaceId,
+      },
+    ]);
+    mockGetAgentRuntimeSession.mockResolvedValue({
+      id: sessionId,
+      created_at: now - 20,
+      updated_at: now,
+      workspace_id: workspaceId,
+      messages: [],
+      turns: [
+        {
+          id: turnId,
+          thread_id: "thread-transient-running",
+          status: "running",
+          created_at: now,
+          updated_at: now,
+        },
+      ],
+      items: [],
+      queued_turns: [],
+      thread_read: {
+        thread_id: "thread-transient-running",
+        status: "running",
+        active_turn_id: turnId,
+        turns: [
+          {
+            turn_id: turnId,
+            status: "running",
+          },
+        ],
+      },
+    });
+
+    const harness = mountHook(workspaceId);
+
+    try {
+      await flushEffects();
+      await flushEffects();
+      await flushEffects();
+
+      expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith(
+        sessionId,
+        expect.objectContaining({ historyLimit: 40 }),
+      );
+      expect(harness.getValue().sessionId).toBe(sessionId);
+      expect(harness.getValue().threadRead?.status).toBe("running");
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("项目页刷新时应使用 global running 候选恢复 detached 会话并接回输出", async () => {
+    const workspaceId = "ws-global-running-restore";
+    const sessionId = "session-global-running-in-project";
+    const turnId = "turn-global-running-in-project";
+    const threadId = "thread-global-running-in-project";
+    const now = Math.floor(Date.now() / 1000);
+
+    sessionStorage.setItem("aster_curr_sessionId_global", JSON.stringify(sessionId));
+    localStorage.setItem("aster_last_sessionId_global", JSON.stringify(sessionId));
+    mockListAgentRuntimeSessions.mockResolvedValue([
+      {
+        id: "session-other-project",
+        name: "项目里的其他会话",
+        created_at: now - 10,
+        updated_at: now - 10,
+        messages_count: 1,
+        workspace_id: workspaceId,
+      },
+    ]);
+    mockGetAgentRuntimeSession.mockResolvedValue({
+      id: sessionId,
+      created_at: now - 20,
+      updated_at: now,
+      messages: [
+        {
+          role: "user",
+          timestamp: now - 2,
+          content: [{ type: "text", text: "刷新后继续输出" }],
+        },
+      ],
+      turns: [
+        {
+          id: turnId,
+          thread_id: threadId,
+          status: "running",
+          created_at: now - 1,
+          updated_at: now,
+        },
+      ],
+      items: [],
+      queued_turns: [],
+      thread_read: {
+        thread_id: threadId,
+        status: "running",
+        profile_status: "running",
+        active_turn_id: turnId,
+        turns: [
+          {
+            turn_id: turnId,
+            status: "running",
+          },
+        ],
+      },
+    });
+
+    const harness = mountHook(workspaceId);
+
+    try {
+      await flushEffects();
+      await flushEffects();
+      await flushEffects();
+      await flushEffects();
+
+      expect(mockGetAgentRuntimeSession).toHaveBeenCalledWith(
+        sessionId,
+        expect.objectContaining({ historyLimit: 40 }),
+      );
+      expect(harness.getValue().sessionId).toBe(sessionId);
+      expect(harness.getValue().currentTurnId).toBe(turnId);
+      expect(harness.getValue().threadRead).toMatchObject({
+        thread_id: threadId,
+        status: "running",
+        active_turn_id: turnId,
+      });
+      expect(mockSafeListen).toHaveBeenCalledWith(
+        `agentSession/event/${sessionId}`,
+        expect.any(Function),
+      );
+      expect(mockResumeAgentRuntimeThread).toHaveBeenCalledWith({
+        session_id: sessionId,
+        turn_id: turnId,
+      });
     } finally {
       harness.unmount();
     }

@@ -53,6 +53,15 @@ function validSha256(value) {
   return HASH_RE.test(value || "");
 }
 
+function packageUrlIsProductionHttps(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && !isFixtureText(url.href);
+  } catch {
+    return false;
+  }
+}
+
 function summarizeSignatureProof(root) {
   const proof =
     firstObjectAtPaths(root, [
@@ -129,6 +138,15 @@ export function summarizeFetchCloud(fetchCloud) {
     ["setup", "cloudReleaseEvidence", "signatureVerificationStatus"],
     ["cloudReleaseFixture", "signatureVerificationStatus"],
   ]);
+  const signaturePolicy = firstStringAtPaths(fetchCloud || {}, [
+    ["signaturePolicy"],
+    ["signature_policy"],
+    ["cloudReleaseEvidence", "signaturePolicy"],
+    ["cloudReleaseEvidence", "signature_policy"],
+    ["setup", "cloudReleaseEvidence", "signaturePolicy"],
+    ["setup", "cloudReleaseEvidence", "signature_policy"],
+    ["cloudReleaseFixture", "signaturePolicy"],
+  ]);
   const packageVerificationStatus = firstStringAtPaths(fetchCloud || {}, [
     ["packageVerificationStatus"],
     ["package_verification_status"],
@@ -198,15 +216,23 @@ export function summarizeFetchCloud(fetchCloud) {
     packageHash: validSha256(packageHash) ? packageHash : null,
     packageHashMatched: packageHashMatched === true,
     packageUrl: packageUrl || null,
+    packageUrlProductionHttps: packageUrlIsProductionHttps(packageUrl),
     packageVerificationStatus: packageVerificationStatus || null,
     ready:
       sourceKind === "cloud_release" &&
       status === "ready" &&
+      signaturePolicy === "required" &&
       signatureVerificationStatus === "verified" &&
       packageVerificationStatus === "verified" &&
       packageHashMatched === true &&
-      manifestHashMatched === true,
+      manifestHashMatched === true &&
+      validSha256(packageHash) &&
+      validSha256(manifestHash) &&
+      packageUrlIsProductionHttps(packageUrl) &&
+      Boolean(signatureRef) &&
+      signatureProof.present,
     signatureProof,
+    signaturePolicy: signaturePolicy || null,
     signatureRef: signatureRef || null,
     signatureVerificationStatus: signatureVerificationStatus || null,
     sourceKind: sourceKind || null,
@@ -233,7 +259,55 @@ export function appendFetchCloudRequirements(
     pushRequirement(
       missingRequirements,
       "production_release_evidence_not_ready",
-      "fetchCloud evidence must prove cloud_release, verified hashes, verified signature, and ready status.",
+      "fetchCloud evidence must prove cloud_release, required signature policy, verified hashes, verified signature, and ready status.",
+    );
+  }
+  if (!fetchCloud.packageHash) {
+    pushRequirement(
+      missingRequirements,
+      "production_fetch_cloud_package_hash_missing",
+      "fetchCloud evidence must include the verified packageHash.",
+    );
+  }
+  if (!fetchCloud.manifestHash) {
+    pushRequirement(
+      missingRequirements,
+      "production_fetch_cloud_manifest_hash_missing",
+      "fetchCloud evidence must include the verified manifestHash.",
+    );
+  }
+  if (!fetchCloud.packageUrl) {
+    pushRequirement(
+      missingRequirements,
+      "production_fetch_cloud_package_url_missing",
+      "fetchCloud evidence must include the fetched package URL/sourceUri.",
+    );
+  } else if (!fetchCloud.packageUrlProductionHttps) {
+    pushRequirement(
+      missingRequirements,
+      "production_fetch_cloud_package_url_not_https",
+      "fetchCloud evidence package URL/sourceUri must be non-fixture HTTPS.",
+    );
+  }
+  if (!fetchCloud.signatureRef) {
+    pushRequirement(
+      missingRequirements,
+      "production_fetch_cloud_signature_ref_missing",
+      "fetchCloud evidence must include the verified signatureRef.",
+    );
+  }
+  if (!fetchCloud.signatureProof.present) {
+    pushRequirement(
+      missingRequirements,
+      "production_fetch_cloud_signature_proof_missing",
+      "fetchCloud evidence must include the signatureProof used for Host verification.",
+    );
+  }
+  if (fetchCloud.signaturePolicy !== "required") {
+    pushRequirement(
+      missingRequirements,
+      "production_fetch_cloud_signature_policy_not_required",
+      "fetchCloud evidence must prove cloud_release signaturePolicy is required before production worker launch.",
     );
   }
   if (fetchCloud.fixtureLike) {

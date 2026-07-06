@@ -2251,6 +2251,19 @@ test("tool event helpers build standard tool lifecycle events", () => {
         total: 4,
         metadata: {
           notification_kind: "mcp_progress",
+          soul_lifecycle: {
+            surface: "tool_lifecycle",
+            phase: "tool_progress",
+            styleLevel: "L1",
+            riskLevel: "high",
+            profileId: "calm_professional_partner",
+            packId: "com.lime.soul.calm-professional-partner",
+          },
+          tool_process_facts: {
+            status: "progress",
+            toolCallId: "tool-1",
+            riskLevel: "high",
+          },
         },
       },
     },
@@ -2263,10 +2276,37 @@ test("tool event helpers build standard tool lifecycle events", () => {
     messagePreview: "正在处理第 2 项",
     progress: 2,
     total: 4,
-    metadataKeys: ["notification_kind"],
+    metadataKeys: [
+      "notification_kind",
+      "soul_lifecycle",
+      "tool_process_facts",
+    ],
+    soulLifecycle: {
+      surface: "tool_lifecycle",
+      phase: "tool_progress",
+      styleLevel: "L1",
+      riskLevel: "high",
+      profileId: "calm_professional_partner",
+      packId: "com.lime.soul.calm-professional-partner",
+    },
+    toolProcessFacts: {
+      status: "progress",
+      toolCallId: "tool-1",
+      riskLevel: "high",
+    },
+    soulSurface: "tool_lifecycle",
+    soulPhase: "tool_progress",
+    styleLevel: "L1",
+    riskLevel: "high",
+    profileId: "calm_professional_partner",
+    packId: "com.lime.soul.calm-professional-partner",
   });
   assert.deepEqual(progress.refs, {
-    diagnosticKeys: ["notification_kind"],
+    diagnosticKeys: [
+      "notification_kind",
+      "soul_lifecycle",
+      "tool_process_facts",
+    ],
   });
 
   const outputDelta = buildAgentUiToolOutputDeltaEvent(
@@ -2276,6 +2316,12 @@ test("tool event helpers build standard tool lifecycle events", () => {
       outputKind: "log",
       metadata: {
         notification_kind: "mcp_log",
+        tool_process_summary: {
+          completed: {
+            key: "toolCall.processSummary.generic.completed",
+          },
+        },
+        risk_level: "normal",
       },
     },
     context,
@@ -2286,10 +2332,16 @@ test("tool event helpers build standard tool lifecycle events", () => {
     outputKind: "log",
     deltaPreview: "partial output",
     deltaLength: 14,
-    metadataKeys: ["notification_kind"],
+    metadataKeys: ["notification_kind", "risk_level", "tool_process_summary"],
+    toolProcessSummary: {
+      completed: {
+        key: "toolCall.processSummary.generic.completed",
+      },
+    },
+    riskLevel: "normal",
   });
   assert.deepEqual(outputDelta.refs, {
-    diagnosticKeys: ["notification_kind"],
+    diagnosticKeys: ["notification_kind", "risk_level", "tool_process_summary"],
   });
 
   const inputDelta = buildAgentUiToolInputDeltaEvent(

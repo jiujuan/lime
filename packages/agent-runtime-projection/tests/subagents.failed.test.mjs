@@ -59,6 +59,74 @@ test("subagents model treats failed and closed workers as inactive terminal thre
   assert.equal(model.activities.at(-1).kind, "interrupted");
 });
 
+test("subagents model carries collaboration facts for runtime and workbench surfaces", () => {
+  const model = buildAgentUiSubagentsModel([
+    event({
+      id: "evt-subagent-running",
+      eventClass: "subagent.status",
+      status: "running",
+      sequence: 1,
+      payload: {
+        taskId: "task-research",
+        collaborationFacts: {
+          source: "app_server_replay",
+          surface: "collaboration",
+          collaborationSurface: "team_roster",
+          collaborationPhase: "acting",
+          collaborationKind: "subagent_status",
+          profileId: "cool_confident_operator",
+          packId: "stylepack.cool_confident_operator.v1",
+          toneVariant: "cool_confident",
+        },
+        collaborationSurface: "team_roster",
+        collaborationPhase: "acting",
+        styleLevel: "L1",
+        riskLevel: "normal",
+        profileId: "cool_confident_operator",
+        packId: "stylepack.cool_confident_operator.v1",
+        toneVariant: "cool_confident",
+      },
+    }),
+  ]);
+
+  assert.equal(model.threads[0].collaboration?.collaborationSurface, "team_roster");
+  assert.equal(model.threads[0].collaboration?.collaborationPhase, "acting");
+  assert.equal(model.threads[0].collaboration?.styleLevel, "L1");
+  assert.equal(model.threads[0].collaboration?.riskLevel, "normal");
+  assert.equal(
+    model.threads[0].collaboration?.collaborationFacts?.collaborationKind,
+    "subagent_status",
+  );
+  assert.equal(
+    model.activities[0].collaboration?.profileId,
+    "cool_confident_operator",
+  );
+  assert.equal(
+    model.delegationCalls[0].collaboration?.packId,
+    "stylepack.cool_confident_operator.v1",
+  );
+
+  const snapshot = buildAgentUiSubagentsModel([
+    event({
+      id: "evt-subagent-running-copy",
+      eventClass: "subagent.status",
+      status: "running",
+      sequence: 1,
+      payload: {
+        collaborationFacts: {
+          collaborationSurface: "team_roster",
+          collaborationPhase: "acting",
+          collaborationKind: "subagent_status",
+        },
+      },
+    }),
+  ]);
+  assert.notEqual(
+    snapshot.threads[0].collaboration?.collaborationFacts,
+    model.threads[0].collaboration?.collaborationFacts,
+  );
+});
+
 test("runtime status resolves action cancellation before blocked status", () => {
   const executionEvents = [
     event({

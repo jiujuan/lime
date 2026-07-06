@@ -29,7 +29,7 @@ function noopDispatch<T>() {
 }
 
 describe("handleAgentStreamSubmitFailure", () => {
-  it("提交阶段失败应使用 Soul 交互口吻更新 assistant 消息", () => {
+  it("提交阶段失败应保持 neutral 文案并携带 Soul metadata", () => {
     const consoleErrorSpy = vi
       .spyOn(console, "error")
       .mockImplementation(() => undefined);
@@ -91,11 +91,20 @@ describe("handleAgentStreamSubmitFailure", () => {
     expect(messages[0]).toMatchObject({
       id: "assistant-1",
       isThinking: false,
-      content: "这步没跑顺：provider failed",
+      content: "执行失败：provider failed",
       runtimeStatus: {
         phase: "failed",
         title: "当前处理失败",
         detail: "provider failed",
+        metadata: {
+          soul_surface: "failure_recovery",
+          soul_phase: "failed",
+          style_level: "L2",
+          risk_level: "normal",
+          tone_variant: "cheeky_sassy",
+          profile_id: "cheeky_sassy_executor",
+          pack_id: "com.lime.soul.cheeky-sassy-executor",
+        },
       },
     });
     consoleErrorSpy.mockRestore();

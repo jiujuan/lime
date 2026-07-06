@@ -18,6 +18,7 @@ import {
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { useAgentChatUnified } from "./hooks";
+import type { InterruptedInputRestoreRequest } from "./hooks/agentStreamInputRestoreTypes";
 import { useFileManagerSidebar } from "./hooks/useFileManagerSidebar";
 import { useBrowserWorkspaceHomeHint } from "./hooks/useBrowserWorkspaceHomeHint";
 import { usePathReferences } from "./hooks/usePathReferences";
@@ -328,7 +329,10 @@ import { resolveTaskCenterDraftSurfaceState } from "./workspace/taskCenterSurfac
 import { AutomationJobDialog } from "@/components/settings-v2/system/automation/AutomationJobDialog";
 import { resolveWorkspaceShellChromeRuntime } from "./workspace/workspaceShellChromeRuntime";
 import { resolveWorkspaceEntryLoadDeferral } from "./workspace/workspaceEntryLoadDeferral";
-import { resolveWorkspaceSceneSessionProjection } from "./workspace/workspaceSceneSessionProjection";
+import {
+  hasRunningThreadReadActivity,
+  resolveWorkspaceSceneSessionProjection,
+} from "./workspace/workspaceSceneSessionProjection";
 import { resolveWorkspaceBrowserAssistRequest } from "./workspace/workspaceBrowserAssistRequest";
 import {
   resolveBrowserRuntimeNavigationFromBrowserAssist,
@@ -475,6 +479,19 @@ export function AgentChatWorkspace({
     removePathReference: handleRemovePathReference,
     clearPathReferences: handleClearPathReferences,
   } = usePathReferences();
+  const [inputRestoreRequest, setInputRestoreRequest] =
+    useState<InterruptedInputRestoreRequest | null>(null);
+  const handleRestoreInterruptedInput = useCallback(
+    (request: InterruptedInputRestoreRequest) => {
+      setInputRestoreRequest(request);
+    },
+    [],
+  );
+  const handleInputRestoreRequestHandled = useCallback((requestId: string) => {
+    setInputRestoreRequest((current) =>
+      current?.requestId === requestId ? null : current,
+    );
+  }, []);
   const handleCollapseTopicSidebarForFileManager = useCallback(() => {
     setShowSidebar(false);
   }, []);
@@ -713,7 +730,7 @@ export function AgentChatWorkspace({
       ? projectId
       : undefined;
   const runtimeWorkspaceId = resolveRuntimeWorkspaceId(
-    validatedRuntimeProjectId,
+    validatedRuntimeProjectId ?? taskCenterWorkspaceId,
   );
   const { clawTraceEnabled, workspaceHarnessEnabled } =
     useDeveloperFeatureFlags({
@@ -1169,6 +1186,7 @@ export function AgentChatWorkspace({
       : undefined,
     getSyncedSessionRecentPreferences,
     onOpenSubagents: handleOpenSubagents,
+    onRestoreInterruptedInput: handleRestoreInterruptedInput,
     clawTraceEnabled,
     soulCopy: soulInteractionCopy,
   });
@@ -2003,6 +2021,9 @@ export function AgentChatWorkspace({
     initialCreationMode,
     newChatAt,
     externalProjectId,
+    preserveSessionRestoreOnNewChat:
+      shouldKeepNewTaskHomeSessionRestoreDisabled &&
+      !shouldDisableSessionRestore,
     onNavigate: _onNavigate,
     autoCollapsedTopicSidebarRef,
     processedMessageIdsRef: processedMessageIds,
@@ -4053,6 +4074,9 @@ export function AgentChatWorkspace({
       onDismiss={handleDismissLocalPlanImplementationDecision}
     />
   ) : undefined;
+  const isReadModelRunning = hasRunningThreadReadActivity(threadRead);
+  const inputbarIsSending = isSending || isReadModelRunning;
+
   const generalWorkbenchHarnessPanelBaseProps = {
     environment: contextHarnessRuntime.harnessEnvironment,
     childSubagentSessions,
@@ -4068,7 +4092,7 @@ export function AgentChatWorkspace({
     submittedActionsInFlight,
     onRespondToAction: handlePermissionResponse,
     queuedTurns,
-    canInterrupt: isSending,
+    canInterrupt: inputbarIsSending,
     onInterruptCurrentTurn: stopSending,
     onResumeThread: resumeThread,
     onReplayPendingRequest:
@@ -4172,7 +4196,7 @@ export function AgentChatWorkspace({
     workflowRunState: themeWorkbenchRunState,
     handleSend,
     isPreparingSend,
-    isSending,
+    isSending: inputbarIsSending,
     isSessionRestoring:
       isAutoRestoringSession ||
       isSessionHydrating ||
@@ -4395,6 +4419,9 @@ export function AgentChatWorkspace({
   });
   const handleNonMaterializedTaskCenterSessionReady = useCallback(
     (readySessionId: string) => {
+      if (typeof newChatAt === "number") {
+        markNewChatRequestHandled(String(newChatAt));
+      }
       taskCenterDraftSurfaceActiveRef.current = false;
       setTaskCenterTransitionTopicId(null);
       setTaskCenterDetachedTopicId(null);
@@ -4402,7 +4429,9 @@ export function AgentChatWorkspace({
       markTaskCenterLocalSessionOverride(readySessionId);
     },
     [
+      markNewChatRequestHandled,
       markTaskCenterLocalSessionOverride,
+      newChatAt,
       setTaskCenterDetachedTopicId,
       setTaskCenterTransitionTopicId,
       taskCenterWorkspaceId,
@@ -5901,6 +5930,8 @@ export function AgentChatWorkspace({
     defaultCuratedTaskReferenceEntries,
     pathReferences,
     onAddPathReferences: handleAddPathReferences,
+    inputRestoreRequest,
+    onInputRestoreRequestHandled: handleInputRestoreRequestHandled,
     onImportPathReferenceAsKnowledge:
       inputbarScene.onImportPathReferenceAsKnowledge,
     onRemovePathReference: handleRemovePathReference,

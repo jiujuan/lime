@@ -1,6 +1,12 @@
 use std::collections::HashSet;
 
 use crate::ModelProviderProtocol;
+use serde::Serialize;
+
+pub const SAFETY_BUFFERING_ENABLED_HEADER: &str = "x-codex-safety-buffering-enabled";
+pub const SAFETY_BUFFERING_FASTER_MODEL_HEADER: &str = "x-codex-safety-buffering-faster-model";
+pub const SAFETY_BUFFERING_RESPONSE_EVENT_FIELD: &str = "safety_buffering";
+pub const SAFETY_BUFFERING_RUNTIME_EVENT_KIND: &str = "provider_safety_buffering";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ProviderToolMessageRole {
@@ -115,6 +121,192 @@ pub fn normalize_fast_model(
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProviderSafetyBufferingRetryModelSource {
+    PayloadRetryModel,
+    ExplicitNull,
+    LegacyHeader,
+    Missing,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProviderSafetyBufferingRetryModel {
+    pub retry_model: Option<String>,
+    pub fallback_header_model: Option<String>,
+    pub source: ProviderSafetyBufferingRetryModelSource,
+}
+
+impl ProviderSafetyBufferingRetryModelSource {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::PayloadRetryModel => "payload_retry_model",
+            Self::ExplicitNull => "explicit_null",
+            Self::LegacyHeader => "legacy_header",
+            Self::Missing => "missing",
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProviderSafetyBufferingUpdate {
+    pub use_cases: Vec<String>,
+    pub reasons: Vec<String>,
+    pub show_buffering_ui: bool,
+    pub retry_model: ProviderSafetyBufferingRetryModel,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderSafetyBufferingRuntimeEventPayload {
+    pub kind: &'static str,
+    pub provider: Option<String>,
+    pub model: Option<String>,
+    pub use_cases: Vec<String>,
+    pub reasons: Vec<String>,
+    pub show_buffering_ui: bool,
+    pub retry_model: Option<String>,
+    pub fallback_header_model: Option<String>,
+    pub source: ProviderSafetyBufferingRetryModelSource,
+}
+
+impl ProviderSafetyBufferingUpdate {
+    pub fn runtime_event_payload(
+        &self,
+        provider: Option<&str>,
+        model: Option<&str>,
+    ) -> ProviderSafetyBufferingRuntimeEventPayload {
+        ProviderSafetyBufferingRuntimeEventPayload {
+            kind: SAFETY_BUFFERING_RUNTIME_EVENT_KIND,
+            provider: provider.map(ToOwned::to_owned),
+            model: model.map(ToOwned::to_owned),
+            use_cases: self.use_cases.clone(),
+            reasons: self.reasons.clone(),
+            show_buffering_ui: self.show_buffering_ui,
+            retry_model: self.retry_model.retry_model.clone(),
+            fallback_header_model: self.retry_model.fallback_header_model.clone(),
+            source: self.retry_model.source,
+        }
+    }
+
+    pub fn to_runtime_event_payload(
+        &self,
+        provider: Option<&str>,
+        model: Option<&str>,
+    ) -> serde_json::Value {
+        serde_json::to_value(self.runtime_event_payload(provider, model))
+            .expect("provider safety buffering runtime payload serializes")
+    }
+}
+
+pub fn parse_safety_buffering_update<'a>(
+    payload: Option<&serde_json::Value>,
+    headers: impl IntoIterator<Item = (&'a str, &'a str)>,
+) -> Option<ProviderSafetyBufferingUpdate> {
+    let payload = payload?;
+    if !payload.is_object() {
+        return None;
+    }
+    let headers = headers.into_iter().collect::<Vec<_>>();
+    Some(ProviderSafetyBufferingUpdate {
+        use_cases: string_array_field(payload, "use_cases"),
+        reasons: string_array_field(payload, "reasons"),
+        show_buffering_ui: safety_buffering_enabled_header(headers.iter().copied()),
+        retry_model: parse_safety_buffering_retry_model(Some(payload), headers.iter().copied()),
+    })
+}
+
+pub fn parse_safety_buffering_response_event<'a>(
+    response_event: &serde_json::Value,
+    headers: impl IntoIterator<Item = (&'a str, &'a str)>,
+) -> Option<ProviderSafetyBufferingUpdate> {
+    parse_safety_buffering_update(
+        response_event.get(SAFETY_BUFFERING_RESPONSE_EVENT_FIELD),
+        headers,
+    )
+}
+
+pub fn parse_safety_buffering_runtime_event_payload<'a>(
+    response_event: &serde_json::Value,
+    headers: impl IntoIterator<Item = (&'a str, &'a str)>,
+    provider: Option<&str>,
+    model: Option<&str>,
+) -> Option<ProviderSafetyBufferingRuntimeEventPayload> {
+    parse_safety_buffering_response_event(response_event, headers)
+        .map(|update| update.runtime_event_payload(provider, model))
+}
+
+pub fn parse_safety_buffering_retry_model<'a>(
+    payload: Option<&serde_json::Value>,
+    headers: impl IntoIterator<Item = (&'a str, &'a str)>,
+) -> ProviderSafetyBufferingRetryModel {
+    if let Some(retry_model) = payload.and_then(|payload| payload.get("retry_model")) {
+        let retry_model = retry_model
+            .as_str()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned);
+        let source = if retry_model.is_some() {
+            ProviderSafetyBufferingRetryModelSource::PayloadRetryModel
+        } else {
+            ProviderSafetyBufferingRetryModelSource::ExplicitNull
+        };
+        return ProviderSafetyBufferingRetryModel {
+            retry_model,
+            fallback_header_model: None,
+            source,
+        };
+    }
+
+    let fallback_header_model = safety_buffering_legacy_faster_model_header(headers);
+    let source = if fallback_header_model.is_some() {
+        ProviderSafetyBufferingRetryModelSource::LegacyHeader
+    } else {
+        ProviderSafetyBufferingRetryModelSource::Missing
+    };
+
+    ProviderSafetyBufferingRetryModel {
+        retry_model: fallback_header_model.clone(),
+        fallback_header_model,
+        source,
+    }
+}
+
+pub fn safety_buffering_enabled_header<'a>(
+    headers: impl IntoIterator<Item = (&'a str, &'a str)>,
+) -> bool {
+    headers.into_iter().any(|(name, value)| {
+        name.eq_ignore_ascii_case(SAFETY_BUFFERING_ENABLED_HEADER)
+            && value.trim().eq_ignore_ascii_case("true")
+    })
+}
+
+pub fn safety_buffering_legacy_faster_model_header<'a>(
+    headers: impl IntoIterator<Item = (&'a str, &'a str)>,
+) -> Option<String> {
+    headers.into_iter().find_map(|(name, value)| {
+        if name.eq_ignore_ascii_case(SAFETY_BUFFERING_FASTER_MODEL_HEADER) {
+            let value = value.trim();
+            (!value.is_empty()).then(|| value.to_string())
+        } else {
+            None
+        }
+    })
+}
+
+fn string_array_field(payload: &serde_json::Value, field: &str) -> Vec<String> {
+    payload
+        .get(field)
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
 fn normalize_provider_identifier(value: Option<&str>) -> Option<String> {
     value
         .map(str::trim)
@@ -192,224 +384,4 @@ pub fn truncate_provider_text(text: &str, max_chars: usize) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{
-        normalize_fast_model, normalize_provider_tool_messages,
-        should_disable_provider_default_fast_model, truncate_provider_text,
-        ProviderToolContentProjection, ProviderToolMessageProjection, ProviderToolMessageRole,
-    };
-    use crate::ModelProviderProtocol;
-
-    fn assistant(contents: Vec<ProviderToolContentProjection>) -> ProviderToolMessageProjection {
-        ProviderToolMessageProjection {
-            role: ProviderToolMessageRole::Assistant,
-            contents,
-        }
-    }
-
-    fn user(contents: Vec<ProviderToolContentProjection>) -> ProviderToolMessageProjection {
-        ProviderToolMessageProjection {
-            role: ProviderToolMessageRole::User,
-            contents,
-        }
-    }
-
-    fn text() -> ProviderToolContentProjection {
-        ProviderToolContentProjection::Other
-    }
-
-    #[test]
-    fn provider_default_fast_model_policy_should_keep_first_party_openai() {
-        assert!(!should_disable_provider_default_fast_model(
-            "openai",
-            Some("openai"),
-            Some("https://api.openai.com/v1"),
-            None,
-        ));
-    }
-
-    #[test]
-    fn provider_default_fast_model_policy_should_disable_openai_compatible_proxy() {
-        assert!(should_disable_provider_default_fast_model(
-            "openai",
-            Some("ollama"),
-            Some("http://localhost:11434/v1"),
-            None,
-        ));
-    }
-
-    #[test]
-    fn provider_default_fast_model_policy_should_keep_responses_route() {
-        assert!(!should_disable_provider_default_fast_model(
-            "openai",
-            Some("ollama"),
-            Some("http://localhost:11434/v1"),
-            Some(&ModelProviderProtocol::Responses),
-        ));
-    }
-
-    #[test]
-    fn provider_default_fast_model_policy_should_disable_anthropic_compatible_proxy() {
-        assert!(should_disable_provider_default_fast_model(
-            "anthropic",
-            Some("anthropic-compatible"),
-            Some("https://proxy.example.com"),
-            None,
-        ));
-    }
-
-    fn tool_request(id: &str) -> ProviderToolContentProjection {
-        ProviderToolContentProjection::ToolRequest {
-            id: id.to_string(),
-            valid: true,
-        }
-    }
-
-    fn invalid_tool_request(id: &str) -> ProviderToolContentProjection {
-        ProviderToolContentProjection::ToolRequest {
-            id: id.to_string(),
-            valid: false,
-        }
-    }
-
-    fn invalid_frontend_tool_request(id: &str) -> ProviderToolContentProjection {
-        ProviderToolContentProjection::FrontendToolRequest {
-            id: id.to_string(),
-            valid: false,
-        }
-    }
-
-    fn tool_response(id: &str) -> ProviderToolContentProjection {
-        ProviderToolContentProjection::ToolResponse { id: id.to_string() }
-    }
-
-    #[test]
-    fn normalize_provider_tool_messages_should_preserve_valid_tool_chain() {
-        let messages = vec![
-            user(vec![text()]),
-            assistant(vec![text(), tool_request("tool-1")]),
-            user(vec![tool_response("tool-1")]),
-            assistant(vec![text()]),
-        ];
-
-        let normalized = normalize_provider_tool_messages(&messages);
-
-        assert_eq!(
-            normalized
-                .messages
-                .iter()
-                .map(|message| message.retained_content_indices.as_slice())
-                .collect::<Vec<_>>(),
-            vec![&[0][..], &[0, 1][..], &[0][..], &[0][..]]
-        );
-        assert_eq!(normalized.removed_invalid_requests, 0);
-        assert_eq!(normalized.removed_invalid_responses, 0);
-    }
-
-    #[test]
-    fn normalize_provider_tool_messages_should_remove_orphan_response() {
-        let messages = vec![
-            user(vec![text()]),
-            user(vec![tool_response("orphan-tool")]),
-            assistant(vec![text()]),
-        ];
-
-        let normalized = normalize_provider_tool_messages(&messages);
-
-        assert_eq!(
-            normalized
-                .messages
-                .iter()
-                .map(|message| message.retained_content_indices.as_slice())
-                .collect::<Vec<_>>(),
-            vec![&[0][..], &[][..], &[0][..]]
-        );
-        assert_eq!(normalized.removed_invalid_responses, 1);
-    }
-
-    #[test]
-    fn normalize_provider_tool_messages_should_drop_invalid_request_and_response() {
-        let messages = vec![
-            assistant(vec![text(), invalid_tool_request("broken-tool")]),
-            user(vec![tool_response("broken-tool")]),
-            assistant(vec![text()]),
-        ];
-
-        let normalized = normalize_provider_tool_messages(&messages);
-
-        assert_eq!(
-            normalized
-                .messages
-                .iter()
-                .map(|message| message.retained_content_indices.as_slice())
-                .collect::<Vec<_>>(),
-            vec![&[0][..], &[][..], &[0][..]]
-        );
-        assert_eq!(normalized.removed_invalid_requests, 1);
-        assert_eq!(normalized.removed_invalid_responses, 1);
-    }
-
-    #[test]
-    fn normalize_provider_tool_messages_should_drop_invalid_frontend_request_and_response() {
-        let messages = vec![
-            assistant(vec![text(), invalid_frontend_tool_request("frontend-tool")]),
-            user(vec![tool_response("frontend-tool")]),
-            assistant(vec![text()]),
-        ];
-
-        let normalized = normalize_provider_tool_messages(&messages);
-
-        assert_eq!(
-            normalized
-                .messages
-                .iter()
-                .map(|message| message.retained_content_indices.as_slice())
-                .collect::<Vec<_>>(),
-            vec![&[0][..], &[][..], &[0][..]]
-        );
-        assert_eq!(normalized.removed_invalid_requests, 1);
-        assert_eq!(normalized.removed_invalid_responses, 1);
-    }
-
-    #[test]
-    fn normalize_provider_tool_messages_should_drop_duplicate_response() {
-        let messages = vec![
-            assistant(vec![tool_request("tool-1")]),
-            user(vec![tool_response("tool-1")]),
-            user(vec![tool_response("tool-1")]),
-        ];
-
-        let normalized = normalize_provider_tool_messages(&messages);
-
-        assert_eq!(
-            normalized
-                .messages
-                .iter()
-                .map(|message| message.retained_content_indices.as_slice())
-                .collect::<Vec<_>>(),
-            vec![&[0][..], &[0][..], &[][..]]
-        );
-        assert_eq!(normalized.removed_invalid_responses, 1);
-    }
-
-    #[test]
-    fn normalize_fast_model_should_strip_when_disabled() {
-        let normalized = normalize_fast_model(Some("gpt-4o-mini".to_string()), true);
-
-        assert_eq!(normalized, None);
-    }
-
-    #[test]
-    fn normalize_fast_model_should_preserve_when_allowed() {
-        let normalized = normalize_fast_model(Some("gpt-4o-mini".to_string()), false);
-
-        assert_eq!(normalized.as_deref(), Some("gpt-4o-mini"));
-    }
-
-    #[test]
-    fn truncate_provider_text_should_preserve_utf8_boundary_and_ellipsis() {
-        assert_eq!(truncate_provider_text("hello world", 8), "hello...");
-        assert_eq!(truncate_provider_text("こんにちは世界", 5), "こん...");
-        assert_eq!(truncate_provider_text("hello", 5), "hello");
-    }
-}
+mod tests;

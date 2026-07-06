@@ -26,6 +26,10 @@ import {
   resolvePhasedProcessSummaryCopy,
 } from "./toolProcessSummaryCopy";
 import {
+  resolveToolProcessFactsFamily,
+  resolveToolProcessFactsSubject,
+} from "./toolProcessSummaryMetadata";
+import {
   asRecord,
   normalizeArgumentsRecord,
   readString,
@@ -116,7 +120,9 @@ export function buildFetchSearchFailureSummary(
 ): string {
   return family === "fetch"
     ? resolveRequiredAgentChatCopy("toolCall.processSummary.fetch.unavailable")
-    : resolveRequiredAgentChatCopy("toolCall.processSummary.search.unavailable");
+    : resolveRequiredAgentChatCopy(
+        "toolCall.processSummary.search.unavailable",
+      );
 }
 
 function resolveSiteProjectTargetCopy(params: {
@@ -250,17 +256,11 @@ function buildLimeTaskSummary(
       directLabel.defaultValue,
     );
     return normalizedSubject
-      ? resolveContentWorkbenchToolCopy(
-          `summary.direct.${phase}WithSubject`,
-          {
-            subject: normalizedSubject,
-            label,
-          },
-        )
-      : resolveContentWorkbenchToolCopy(
-          `summary.direct.${phase}`,
-          { label },
-        );
+      ? resolveContentWorkbenchToolCopy(`summary.direct.${phase}WithSubject`, {
+          subject: normalizedSubject,
+          label,
+        })
+      : resolveContentWorkbenchToolCopy(`summary.direct.${phase}`, { label });
   }
 
   const taskLabel = LIME_TASK_SUMMARY_LABELS[normalizedName];
@@ -275,17 +275,11 @@ function buildLimeTaskSummary(
   );
 
   return normalizedSubject
-    ? resolveContentWorkbenchToolCopy(
-        `summary.task.${phase}WithSubject`,
-        {
-          subject: normalizedSubject,
-          label,
-        },
-      )
-    : resolveContentWorkbenchToolCopy(
-        `summary.task.${phase}`,
-        { label },
-      );
+    ? resolveContentWorkbenchToolCopy(`summary.task.${phase}WithSubject`, {
+        subject: normalizedSubject,
+        label,
+      })
+    : resolveContentWorkbenchToolCopy(`summary.task.${phase}`, { label });
 }
 
 function buildSiteToolSummary(
@@ -458,12 +452,14 @@ export function buildGenericPostSummary(params: {
   toolName: string;
   status: ToolProcessStatus;
   subject: string | null;
+  factsFamily?: ReturnType<typeof getToolDisplayInfo>["family"] | null;
 }): string | null {
   const normalizedName = normalizeToolNameKey(params.toolName);
   const normalizedSubject = normalizeNarrativeSubject(params.subject);
 
   return buildGenericPostSummaryBase({
     ...params,
+    displayFamily: params.factsFamily,
     limeTaskSummary: buildLimeTaskSummary(
       "post",
       normalizedName,
@@ -481,16 +477,24 @@ export function buildGenericPreSummary(params: {
   toolName: string;
   argumentsValue?: string | Record<string, unknown>;
   metadata?: unknown;
+  factsSubject?: string | null;
+  factsFamily?: ReturnType<typeof getToolDisplayInfo>["family"] | null;
 }): string | null {
   const { toolName, argumentsValue, metadata } = params;
   const normalizedName = normalizeToolNameKey(toolName);
   const args = normalizeArgumentsRecord(argumentsValue);
   const metadataRecord = asRecord(metadata);
-  const subject = resolveToolSubject(toolName, argumentsValue);
+  const subject =
+    params.factsSubject ||
+    resolveToolProcessFactsSubject(metadata) ||
+    resolveToolSubject(toolName, argumentsValue);
+  const factsFamily =
+    params.factsFamily || resolveToolProcessFactsFamily(metadata);
   const normalizedSubject = normalizeNarrativeSubject(subject);
   const query =
     readString(args, ["query", "q", "pattern", "search_query"]) ||
-    readString(metadataRecord, ["query", "q", "pattern", "search_query"]);
+    readString(metadataRecord, ["query", "q", "pattern", "search_query"]) ||
+    subject;
 
   if (normalizedName === "toolsearch") {
     return buildToolSearchPreSummary(args);
@@ -507,7 +511,10 @@ export function buildGenericPreSummary(params: {
         );
   }
 
-  if (isBrowserToolName(normalizedName)) {
+  if (
+    factsFamily === "browser" ||
+    (!factsFamily && isBrowserToolName(normalizedName))
+  ) {
     return buildBrowserPreSummary(normalizedName, args, metadataRecord);
   }
 
@@ -534,7 +541,7 @@ export function buildGenericPreSummary(params: {
 
   const display = getToolDisplayInfo(toolName, "running");
   return buildPreSummaryByFamily({
-    displayFamily: display.family,
+    displayFamily: factsFamily || display.family,
     normalizedName,
     normalizedSubject,
     query,

@@ -21,6 +21,8 @@ import {
   IMAGE_COMMAND_CREATE_TASK_TOOL_NAME,
   IMAGE_COMMAND_PROMPT,
   IMAGE_FIXTURE_MODEL,
+  INPUTBAR_RICH_RESTORE_PATH_NAME,
+  INPUTBAR_RICH_RESTORE_PROMPT,
   MCP_STRUCTURED_CONTENT_PROMPT,
   MULTI_AGENT_TEAM_DONE_TEXT,
   MULTI_AGENT_TEAM_PROMPT,
@@ -29,8 +31,6 @@ import {
   PLAN_PROMPT,
   PLAN_STEPS,
   SESSION_ID,
-  SOUL_STYLE_INTENSITY,
-  SOUL_STYLE_PROFILE_ID,
   SOUL_STYLE_SCENARIO,
   SKILLS_RUNTIME_EXPLICIT_PROMPT,
   SKILLS_RUNTIME_MANUAL_ENABLE_PROMPT,
@@ -41,6 +41,7 @@ import {
 } from "./claw-chat-current-fixture-constants.mjs";
 import { buildContentFactoryArticleWorkspaceScenarioAssertions } from "./claw-chat-current-fixture-content-factory-assertions.mjs";
 import { EXPERT_PANEL_SKILLS_RUNTIME_UI_SKILL_REF } from "./claw-chat-current-fixture-expert-actions.mjs";
+import { buildSoulStyleScenarioAssertions } from "./claw-chat-current-fixture-soul-style.mjs";
 
 function readImageCommandTaskFromHarness(harness) {
   const launch =
@@ -75,6 +76,7 @@ export function buildScenarioAssertions(context) {
     imageCommandTurnStart,
     guiTurnStartReachedBackend,
     hasCancelPhase,
+    inputbarRichRestoreTurnStart,
     isAnyExpertSkillsRuntimeScenario,
     isCancelThenContinueScenario,
     isContentFactoryArticleWorkspaceScenario,
@@ -83,6 +85,7 @@ export function buildScenarioAssertions(context) {
     isExpertPlazaSkillsRuntimeScenario,
     isGoalScenario,
     isImageCommandScenario,
+    isInputbarRichRestoreScenario,
     isMcpStructuredContentScenario,
     isMultiAgentTeamScenario,
     isPlanScenario,
@@ -118,31 +121,7 @@ export function buildScenarioAssertions(context) {
     imageCommandRuntimeContract?.contract_key ??
     imageCommandRuntimeContract?.contractKey;
   const scenarioAssertions = isSoulStyleScenario
-    ? {
-        soulStyleConfigEnabled:
-          summary.soulStyleConfig?.enabled === true &&
-          summary.soulStyleConfig?.style_profile_id === SOUL_STYLE_PROFILE_ID &&
-          summary.soulStyleConfig?.style_intensity === SOUL_STYLE_INTENSITY,
-        soulStylePromptReachedBackend: guiTurnStartReachedBackend === true,
-        soulStyleRuntimeProviderReached:
-          summary.textProviderFixtureServer?.requestCount >= 1,
-        soulStylePromptContextCoveredByRuntime:
-          summary.soulStylePromptContextCoveredByRuntime === true &&
-          summary.soulStylePromptContextMarkers?.hasInteractionSoul === true &&
-          summary.soulStylePromptContextMarkers?.hasMemorySoulSchema === true &&
-          summary.soulStylePromptContextMarkers?.hasProfileId === true &&
-          summary.soulStylePromptContextMarkers?.hasStylePack === true &&
-          summary.soulStylePromptContextMarkers?.hasIntensity === true,
-        soulStyleReadModelCompleted:
-          summary.readModelCompleted?.includesPrompt === true &&
-          (summary.readModelCompleted?.includesAssistantDone === true ||
-            summary.readModelCompleted?.includesAssistantSummary === true),
-        soulStyleGuiCompleted:
-          summary.guiCompleted?.hasPrompt === true &&
-          (summary.guiCompleted?.hasAssistantSummary === true ||
-            summary.guiCompleted?.hasDoneText === true) &&
-          summary.guiCompleted?.stopButtonVisible === false,
-      }
+    ? buildSoulStyleScenarioAssertions({ summary, guiTurnStartReachedBackend })
     : isContentFactoryArticleWorkspaceScenario
       ? {
           ...buildContentFactoryArticleWorkspaceScenarioAssertions({
@@ -1321,6 +1300,71 @@ export function buildScenarioAssertions(context) {
                                   }
                                 : {}),
                             }
+                          : isInputbarRichRestoreScenario
+                            ? {
+                                inputbarRichRestorePromptReachedBackend:
+                                  inputbarRichRestoreTurnStart?.inputText ===
+                                  INPUTBAR_RICH_RESTORE_PROMPT,
+                                inputbarRichRestoreDraftPrepared:
+                                  summary.inputbarRichRestoreDraftPrepared
+                                    ?.prepared?.imageRestored === true &&
+                                  summary.inputbarRichRestoreDraftPrepared
+                                    ?.prepared?.pathRestored === true &&
+                                  summary.inputbarRichRestoreDraftPrepared
+                                    ?.prepared?.skillRestored === true,
+                                inputbarRichRestoreInputSubmitted:
+                                  summary.inputbarRichRestoreInputSend
+                                    ?.afterFill?.promptVisibleInTextarea ===
+                                    true &&
+                                  summary.inputbarRichRestoreInputSend?.clicked
+                                    ?.clicked === true,
+                                inputbarRichRestoreBackendInputSummaryReached:
+                                  summary.inputbarRichRestoreBackendTurnStart
+                                    ?.inputSummary?.imageAttachmentCount >= 1 &&
+                                  summary.inputbarRichRestoreBackendTurnStart
+                                    ?.inputSummary?.fileReferenceCount >= 1 &&
+                                  summary.inputbarRichRestoreBackendTurnStart
+                                    ?.inputSummary?.fileReferenceNames?.includes(
+                                      INPUTBAR_RICH_RESTORE_PATH_NAME,
+                                    ) === true,
+                                inputbarRichRestoreUsedCurrentTurnCancel:
+                                  appServerRequestMethods.includes(
+                                    APP_SERVER_METHOD_SESSION_TURN_CANCEL,
+                                  ),
+                                inputbarRichRestoreBackendCanceled:
+                                  latestTurnCancel?.sessionId === SESSION_ID &&
+                                  typeof latestTurnCancel?.turnId ===
+                                    "string" &&
+                                  latestTurnCancel.turnId.trim().length > 0,
+                                inputbarRichRestoreGuiCanceled:
+                                  summary.inputbarRichRestoreGuiCanceled
+                                    ?.stopButtonVisible === false &&
+                                  summary.inputbarRichRestoreGuiCanceled
+                                    ?.textareaDisabled === false,
+                                inputbarRichRestoreTextRestored:
+                                  summary.inputbarRichRestoreGuiCanceled
+                                    ?.textareaValue ===
+                                  INPUTBAR_RICH_RESTORE_PROMPT,
+                                inputbarRichRestoreImageRestored:
+                                  summary.inputbarRichRestoreGuiCanceled
+                                    ?.imageRestored === true,
+                                inputbarRichRestorePathRestored:
+                                  summary.inputbarRichRestoreGuiCanceled
+                                    ?.pathRestored === true,
+                                inputbarRichRestoreSkillRestored:
+                                  summary.inputbarRichRestoreGuiCanceled
+                                    ?.skillRestored === true,
+                                inputbarRichRestoreNoVisibleAssistantOutput:
+                                  summary.inputbarRichRestoreGuiCanceled
+                                    ?.noVisibleAssistantOutput === true,
+                                inputbarRichRestoreReadModelCanceled:
+                                  summary.inputbarRichRestoreReadModelCanceled
+                                    ?.includesPrompt === true &&
+                                  summary.inputbarRichRestoreReadModelCanceled
+                                    ?.includesCanceled === true &&
+                                  summary.inputbarRichRestoreReadModelCanceled
+                                    ?.forbiddenAssistantOutput === false,
+                              }
                           : {
                               noEpochFallbackTitle:
                                 summary.guiCompleted?.hasEpochFallbackTitle ===

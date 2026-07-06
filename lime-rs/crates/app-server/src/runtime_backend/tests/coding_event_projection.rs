@@ -1,4 +1,5 @@
 use super::*;
+use crate::runtime_backend::event_mapper::emit_runtime_agent_event_with_coding_mirror_and_plan_parser;
 
 #[test]
 fn runtime_agent_tool_events_are_mirrored_to_coding_facts() {

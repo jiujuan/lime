@@ -3,7 +3,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { verifyMacAppIdentity } from "./verify-package-resources.mjs";
+import {
+  collectBareRuntimeImports,
+  verifyElectronRuntimeBundles,
+  verifyMacAppIdentity,
+} from "./verify-package-resources.mjs";
 
 const tmpRoots = [];
 
@@ -26,6 +30,18 @@ function createPackageRoot(infoPlistContent, helperInfoPlists = []) {
       helperInfoPlistContent,
     );
   }
+  return root;
+}
+
+function createRuntimeBundleRoot({ main, preload }) {
+  const root = mkdtempSync(path.join(tmpdir(), "lime-electron-runtime-"));
+  tmpRoots.push(root);
+  const mainDir = path.join(root, "dist-electron", "main");
+  const preloadDir = path.join(root, "dist-electron", "preload");
+  mkdirSync(mainDir, { recursive: true });
+  mkdirSync(preloadDir, { recursive: true });
+  writeFileSync(path.join(mainDir, "main.js"), main);
+  writeFileSync(path.join(preloadDir, "preload.cjs"), preload);
   return root;
 }
 
@@ -72,6 +88,40 @@ afterEach(() => {
     const root = tmpRoots.pop();
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+describe("verify-electron-package-resources runtime bundles", () => {
+  it("收集运行时裸依赖包名", () => {
+    expect(
+      collectBareRuntimeImports(`
+        import path from "node:path";
+        import YAML from "yaml";
+        import "@scope/pkg/register";
+        const electron = require("electron");
+        const local = require("./local.cjs");
+      `),
+    ).toEqual(["@scope/pkg", "electron", "yaml"]);
+  });
+
+  it("拒绝 Electron runtime bundle 残留非内置裸依赖", () => {
+    const root = createRuntimeBundleRoot({
+      main: 'import { parse } from "yaml";\nimport path from "node:path";\n',
+      preload: 'const electron = require("electron");\n',
+    });
+
+    expect(() => verifyElectronRuntimeBundles(root)).toThrow(/yaml/);
+  });
+
+  it("接受只包含 node/electron/相对导入的 runtime bundle", () => {
+    const root = createRuntimeBundleRoot({
+      main:
+        'import path from "node:path";\nimport { Buffer } from "buffer";\nimport process from "process";\nimport "./chunk.js";\n',
+      preload:
+        'const electron = require("electron");\nconst local = require("./local.cjs");\n',
+    });
+
+    expect(() => verifyElectronRuntimeBundles(root)).not.toThrow();
+  });
 });
 
 describe("verify-electron-package-resources macOS app identity", () => {

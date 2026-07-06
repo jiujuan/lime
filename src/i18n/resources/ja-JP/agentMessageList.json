@@ -260,6 +260,7 @@
   "agentChat.toolCall.processSummary.generic.searchFirstWithSubject": "先に {{subject}} を検索",
   "agentChat.toolCall.processSummary.generic.searched": "検索結果を取得しました",
   "agentChat.toolCall.processSummary.generic.searchedWithSubject": "{{subject}} を検索しました",
+  "agentChat.toolCall.processSummary.generic.completed": "このステップが完了しました",
   "agentChat.toolCall.processSummary.generic.stepStartFirst": "先にこのステップを開始",
   "agentChat.toolCall.processSummary.generic.stepStarted": "このステップを開始しました",
   "agentChat.toolCall.processSummary.generic.subtaskDelegated": "タスクをサブタスクに委任しました",

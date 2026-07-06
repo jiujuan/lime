@@ -25,6 +25,7 @@ export interface EmptyStateProps extends SkillSelectionSourceProps {
   input: string;
   setInput: (value: string) => void;
   onSend: InputbarSendHandler;
+  onStop?: () => void;
   isLoading?: boolean;
   disabled?: boolean;
   /** 创作模式 */

@@ -74,6 +74,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   input,
   setInput,
   onSend,
+  onStop,
   creationMode = "guided",
   onCreationModeChange,
   activeTheme = "general",
@@ -763,6 +764,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
             : getPlaceholder()
         }
         onSend={handleSend}
+        onStop={onStop}
         activeTheme={activeTheme}
         providerType={providerType}
         setProviderType={setProviderType}

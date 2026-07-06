@@ -38,6 +38,7 @@
 - Provider 模型能力 taxonomy 进度日志：`internal/exec-plans/provider-model-taxonomy-progress.md`
 - MCP 现代化进度：`internal/exec-plans/mcp-modernization-progress.md`
 - Right Surface 统一承载实施进度：`internal/exec-plans/right-surface-implementation-progress.md`
+- Soul Style 输出面收敛计划：`internal/exec-plans/soul-style-output-surface-convergence-plan.md`
 - Browser Runtime / Right Surface 骨架实施计划：`internal/exec-plans/browser-runtime-right-surface-plan.md`
 - Lime 多模态运行合同实施计划：`internal/exec-plans/multimodal-runtime-contract-plan.md`
 - 云端套餐与支付边界收口计划：`internal/exec-plans/cloud-commerce-user-center-boundary.md`
@@ -48,6 +49,7 @@
 - 图片能力 feature-flag / extension-tool 执行计划：`internal/exec-plans/image-capability-feature-flag-extension-tool-plan.md`
 - 图片能力 feature-flag / extension-tool 进度：`internal/exec-plans/image-capability-feature-flag-extension-tool-progress.md`
 - 图片能力历史草案已清理，不再保留独立 refactor plan。
+- Soul Style 输出面收敛执行计划：`internal/exec-plans/soul-style-output-surface-convergence-plan.md`
 - Skill Forge P1A Capability Authoring 执行计划：`internal/exec-plans/skill-forge-capability-authoring-p1a-plan.md`
 - Skill Forge P1B Capability Verification 执行计划：`internal/exec-plans/skill-forge-capability-verification-p1b-plan.md`
 - Skill Forge P3 Capability Registration 执行计划：`internal/exec-plans/skill-forge-capability-registration-p3-plan.md`

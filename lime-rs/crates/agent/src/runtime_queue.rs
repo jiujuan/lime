@@ -1,14 +1,14 @@
 use crate::protocol::AgentEvent as RuntimeAgentEvent;
 use crate::runtime_support::{
-    clear_runtime_queued_turns, enqueue_runtime_turn, list_runtime_queued_turns,
+    clear_runtime_queued_turns, enqueue_runtime_turn,
+    finish_active_runtime_turn_in_queue_if_matches, list_runtime_queued_turns,
     prepare_runtime_queue_resumption, queued_turn_event_name_from_runtime,
     queued_turn_runtime_from_task, queued_turn_snapshot_from_runtime,
-    remove_runtime_queued_turn_from_store,
+    remove_runtime_queued_turn_from_store, runtime_queue_has_active_turn,
+    submit_runtime_turn_to_queue, take_next_runtime_queued_turn,
 };
 use crate::{QueuedTurnSnapshot, QueuedTurnTask};
-use aster::session::{
-    require_shared_session_runtime_queue_service, QueuedTurnRuntime, RuntimeQueueSubmitResult,
-};
+use agent_runtime::runtime_queue::{RuntimeQueueSubmitResult, RuntimeQueuedTurn};
 use futures::future::{BoxFuture, FutureExt};
 use serde_json::Value;
 use std::panic::AssertUnwindSafe;
@@ -44,9 +44,7 @@ fn release_runtime_turn_gate_after_start_failure(
     session_id: &str,
     queued_turn_id: &str,
 ) -> Result<bool, String> {
-    let runtime_queue_service = require_shared_session_runtime_queue_service()
-        .map_err(|error| format!("读取 runtime queue service 失败: {error}"))?;
-    Ok(runtime_queue_service.finish_active_turn_if_matches(session_id, queued_turn_id))
+    finish_active_runtime_turn_in_queue_if_matches(session_id, queued_turn_id)
 }
 
 async fn run_runtime_turn_and_continue<C>(
@@ -225,16 +223,11 @@ fn spawn_runtime_turn_task<C>(
                     fallback_emitter,
                 ))
             } else {
-                let runtime_queue_service = require_shared_session_runtime_queue_service()
-                    .map_err(|error| format!("读取 runtime queue service 失败: {error}"))
-                    .map(|service| {
-                        service.finish_active_turn_if_matches(
-                            &fallback_session_id,
-                            &fallback_queued_turn_id,
-                        )
-                    })
-                    .map(|_| false);
-                runtime_queue_service
+                finish_active_runtime_turn_in_queue_if_matches(
+                    &fallback_session_id,
+                    &fallback_queued_turn_id,
+                )
+                .map(|_| false)
             };
             if let Err(release_error) = release_result {
                 tracing::warn!(
@@ -280,24 +273,9 @@ async fn start_next_runtime_queue_turn<C>(
 where
     C: Clone + Send + Sync + 'static,
 {
-    let runtime_queue_service = require_shared_session_runtime_queue_service()
-        .map_err(|error| format!("读取 runtime queue service 失败: {error}"))?;
-    let next_queued_turn = match if acquire_gate {
-        runtime_queue_service.resume_if_idle(&session_id).await
-    } else if let Some(turn_id) = completed_turn_id.as_deref() {
-        runtime_queue_service
-            .finish_matching_turn_and_take_next(&session_id, turn_id)
-            .await
-    } else {
-        runtime_queue_service
-            .finish_turn_and_take_next(&session_id)
-            .await
-    } {
-        Ok(next_queued_turn) => next_queued_turn,
-        Err(error) => {
-            return Err(format!("读取下一条 runtime queue turn 失败: {}", error));
-        }
-    };
+    let next_queued_turn =
+        take_next_runtime_queued_turn(&session_id, acquire_gate, completed_turn_id.as_deref())
+            .await?;
     let Some(next_queued_turn) = next_queued_turn else {
         return Ok(false);
     };
@@ -352,29 +330,24 @@ where
     C: Clone + Send + Sync + 'static,
 {
     let submit_started_at = Instant::now();
-    let runtime_queue_service = require_shared_session_runtime_queue_service()
-        .map_err(|error| format!("读取 runtime queue service 失败: {error}"))?;
     let session_id = queued_task.session_id.clone();
     let resume_started_at = Instant::now();
-    let resumed_queue =
-        if skip_pre_submit_resume || runtime_queue_service.has_active_turn(&session_id) {
-            false
-        } else {
-            resume_runtime_queue_if_needed(
-                session_id.clone(),
-                context.clone(),
-                executor.clone(),
-                emitter.clone(),
-            )
-            .await?
-        };
+    let resumed_queue = if skip_pre_submit_resume || runtime_queue_has_active_turn(&session_id)? {
+        false
+    } else {
+        resume_runtime_queue_if_needed(
+            session_id.clone(),
+            context.clone(),
+            executor.clone(),
+            emitter.clone(),
+        )
+        .await?
+    };
     let resume_ms = resume_started_at.elapsed().as_millis();
 
     let queue_submit_started_at = Instant::now();
-    match runtime_queue_service
-        .submit_turn(queued_turn_runtime_from_task(&queued_task), queue_if_busy)
-        .await
-        .map_err(|error| format!("提交 runtime queue turn 失败: {error}"))?
+    match submit_runtime_turn_to_queue(queued_turn_runtime_from_task(&queued_task), queue_if_busy)
+        .await?
     {
         RuntimeQueueSubmitResult::StartNow => {
             spawn_runtime_turn_task(
@@ -430,7 +403,7 @@ where
 pub async fn clear_runtime_queue(
     session_id: &str,
     emitter: RuntimeQueueEventEmitter,
-) -> Result<Vec<QueuedTurnRuntime>, String> {
+) -> Result<Vec<RuntimeQueuedTurn>, String> {
     let cleared = clear_runtime_queued_turns(session_id).await?;
     if cleared.is_empty() {
         return Ok(cleared);
@@ -548,9 +521,7 @@ pub fn finish_active_runtime_turn_if_matches(
     session_id: &str,
     turn_id: &str,
 ) -> Result<bool, String> {
-    let runtime_queue_service = require_shared_session_runtime_queue_service()
-        .map_err(|error| format!("读取 runtime queue service 失败: {error}"))?;
-    Ok(runtime_queue_service.finish_active_turn_if_matches(session_id, turn_id))
+    finish_active_runtime_turn_in_queue_if_matches(session_id, turn_id)
 }
 
 pub async fn resume_persisted_runtime_queues_on_startup<C>(
@@ -585,168 +556,4 @@ where
     }
 
     Ok(resumed)
-}
-
-#[cfg(test)]
-mod tests {
-    use aster::session::{
-        InMemoryThreadRuntimeStore, QueuedTurnRuntime, RuntimeQueueSubmitResult,
-        SessionRuntimeQueueService, ThreadRuntimeStore,
-    };
-    use serde_json::json;
-    use std::collections::HashMap;
-    use std::sync::Arc;
-
-    fn queued_turn(session_id: &str, queued_turn_id: &str, created_at: i64) -> QueuedTurnRuntime {
-        QueuedTurnRuntime {
-            queued_turn_id: queued_turn_id.to_string(),
-            session_id: session_id.to_string(),
-            message_preview: format!("preview-{queued_turn_id}"),
-            message_text: format!("message-{queued_turn_id}"),
-            created_at,
-            image_count: 0,
-            payload: json!({ "queuedTurnId": queued_turn_id }),
-            metadata: HashMap::new(),
-        }
-    }
-
-    #[tokio::test]
-    async fn interrupted_active_turn_release_allows_follow_turn_to_start_now() {
-        let store = Arc::new(InMemoryThreadRuntimeStore::default());
-        let service = SessionRuntimeQueueService::new(store);
-        let first = service
-            .submit_turn(queued_turn("session-release", "running", 1), true)
-            .await
-            .expect("submit first turn");
-
-        assert_eq!(first, RuntimeQueueSubmitResult::StartNow);
-        assert!(service.finish_active_turn_if_matches("session-release", "running"));
-        let follow = service
-            .submit_turn(queued_turn("session-release", "follow", 2), true)
-            .await
-            .expect("submit follow turn");
-
-        assert_eq!(follow, RuntimeQueueSubmitResult::StartNow);
-        assert_eq!(
-            service.active_turn_id("session-release").as_deref(),
-            Some("follow")
-        );
-    }
-
-    #[tokio::test]
-    async fn independent_sessions_start_without_blocking_each_other() {
-        let store = Arc::new(InMemoryThreadRuntimeStore::default());
-        let service = SessionRuntimeQueueService::new(store.clone());
-        let first = service
-            .submit_turn(queued_turn("session-a", "a-running", 1), true)
-            .await
-            .expect("submit first session turn");
-        let same_session_follow = service
-            .submit_turn(queued_turn("session-a", "a-follow", 2), true)
-            .await
-            .expect("submit follow turn");
-        let other_session = service
-            .submit_turn(queued_turn("session-b", "b-running", 3), true)
-            .await
-            .expect("submit other session turn");
-
-        assert_eq!(first, RuntimeQueueSubmitResult::StartNow);
-        assert_eq!(
-            same_session_follow,
-            RuntimeQueueSubmitResult::Enqueued {
-                queued_turn: Box::new(queued_turn("session-a", "a-follow", 2)),
-                position: 1
-            }
-        );
-        assert_eq!(other_session, RuntimeQueueSubmitResult::StartNow);
-        assert_eq!(
-            service.active_turn_id("session-a").as_deref(),
-            Some("a-running")
-        );
-        assert_eq!(
-            service.active_turn_id("session-b").as_deref(),
-            Some("b-running")
-        );
-        assert_eq!(
-            store
-                .list_queued_turns("session-a")
-                .await
-                .expect("list session-a queue")
-                .len(),
-            1
-        );
-        assert!(store
-            .list_queued_turns("session-b")
-            .await
-            .expect("list session-b queue")
-            .is_empty());
-    }
-
-    #[tokio::test]
-    async fn completed_active_turn_starts_next_queued_turn() {
-        let store = Arc::new(InMemoryThreadRuntimeStore::default());
-        let service = SessionRuntimeQueueService::new(store.clone());
-        let first = service
-            .submit_turn(queued_turn("session-continue", "running", 1), true)
-            .await
-            .expect("submit first turn");
-
-        assert_eq!(first, RuntimeQueueSubmitResult::StartNow);
-        store
-            .enqueue_turn(queued_turn("session-continue", "follow", 2))
-            .await
-            .expect("enqueue follow turn");
-
-        let next = service
-            .finish_matching_turn_and_take_next("session-continue", "running")
-            .await
-            .expect("finish running turn");
-
-        assert_eq!(
-            next.as_ref().map(|turn| turn.queued_turn_id.as_str()),
-            Some("follow")
-        );
-        assert_eq!(
-            service.active_turn_id("session-continue").as_deref(),
-            Some("follow")
-        );
-    }
-
-    #[tokio::test]
-    async fn stale_turn_completion_does_not_release_new_active_turn() {
-        let store = Arc::new(InMemoryThreadRuntimeStore::default());
-        let service = SessionRuntimeQueueService::new(store.clone());
-        let _ = service
-            .submit_turn(queued_turn("session-stale", "running", 1), true)
-            .await
-            .expect("submit first turn");
-        assert!(service.finish_active_turn_if_matches("session-stale", "running"));
-        let _ = service
-            .submit_turn(queued_turn("session-stale", "follow", 2), true)
-            .await
-            .expect("submit follow turn");
-        store
-            .enqueue_turn(queued_turn("session-stale", "queued-after-follow", 3))
-            .await
-            .expect("enqueue follow-up queued turn");
-
-        let next = service
-            .finish_matching_turn_and_take_next("session-stale", "running")
-            .await
-            .expect("stale completion should be ignored");
-
-        assert!(next.is_none());
-        assert_eq!(
-            service.active_turn_id("session-stale").as_deref(),
-            Some("follow")
-        );
-        assert_eq!(
-            store
-                .list_queued_turns("session-stale")
-                .await
-                .expect("list queued turns")
-                .len(),
-            1
-        );
-    }
 }

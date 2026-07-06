@@ -77,7 +77,15 @@ fn extract_turn_execution_strategy(turn_context: Option<&AgentTurnContext>) -> O
 /// 将 Aster AgentEvent 转换为 RuntimeAgentEvent 列表
 ///
 /// 一个 AgentEvent 可能产生多个 RuntimeAgentEvent
+#[cfg(test)]
 pub(crate) fn convert_agent_event(event: AgentEvent) -> Vec<RuntimeAgentEvent> {
+    convert_agent_event_with_turn_context(event, None)
+}
+
+pub(crate) fn convert_agent_event_with_turn_context(
+    event: AgentEvent,
+    active_turn_context: Option<&AgentTurnContext>,
+) -> Vec<RuntimeAgentEvent> {
     match event {
         AgentEvent::TurnStarted { turn } => {
             let agent_turn_context = turn.context_override.clone().map(to_agent_turn_context);
@@ -117,7 +125,9 @@ pub(crate) fn convert_agent_event(event: AgentEvent) -> Vec<RuntimeAgentEvent> {
             let mut events = vec![
                 RuntimeAgentEvent::ThreadStarted { thread_id },
                 RuntimeAgentEvent::TurnStarted {
-                    turn: crate::runtime_timeline_adapter::convert_aster_turn_runtime(turn),
+                    turn: crate::protocol_projection::project_turn_runtime(
+                        crate::runtime_timeline_adapter::convert_aster_turn_runtime(turn),
+                    ),
                 },
             ];
             if let Some(turn_context_event) = turn_context_event {
@@ -127,24 +137,30 @@ pub(crate) fn convert_agent_event(event: AgentEvent) -> Vec<RuntimeAgentEvent> {
         }
         AgentEvent::ItemStarted { item } => {
             crate::runtime_timeline_adapter::convert_aster_item_runtime(item)
+                .map(crate::protocol_projection::project_item_runtime)
                 .map(|item| RuntimeAgentEvent::ItemStarted { item })
                 .into_iter()
                 .collect()
         }
         AgentEvent::ItemUpdated { item } => {
             crate::runtime_timeline_adapter::convert_aster_item_runtime(item)
+                .map(crate::protocol_projection::project_item_runtime)
                 .map(|item| RuntimeAgentEvent::ItemUpdated { item })
                 .into_iter()
                 .collect()
         }
         AgentEvent::ItemCompleted { item } => {
             crate::runtime_timeline_adapter::convert_aster_item_runtime(item)
+                .map(crate::protocol_projection::project_item_runtime)
                 .map(|item| RuntimeAgentEvent::ItemCompleted { item })
                 .into_iter()
                 .collect()
         }
         AgentEvent::Message(message) => {
-            crate::message_content_adapter::convert_aster_message_to_events(message)
+            crate::message_content_adapter::convert_aster_message_to_events_with_turn_context(
+                message,
+                active_turn_context,
+            )
         }
         AgentEvent::McpNotification((tool_id, notification)) => {
             convert_mcp_notification(tool_id, notification)
@@ -234,15 +250,14 @@ fn convert_provider_trace_stage(stage: AsterProviderTraceStage) -> RuntimeProvid
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::message_content_adapter::{
-        convert_aster_message_to_events, convert_aster_message_to_runtime_message,
-    };
+    use crate::message_content_adapter::convert_aster_message_to_events;
     use crate::protocol::AgentMessageContent as RuntimeMessageContent;
     use aster::conversation::message::{
         ActionRequiredData, ActionRequiredScope as AsterActionRequiredScope, Message,
         MessageContent,
     };
     use aster::session::TurnRuntime;
+    use std::collections::HashMap;
 
     #[test]
     fn test_convert_text_delta() {
@@ -279,9 +294,16 @@ mod tests {
             },
         ));
 
-        let tauri_message = convert_aster_message_to_runtime_message(&message);
-        assert_eq!(tauri_message.content.len(), 1);
-        match &tauri_message.content[0] {
+        let events = convert_aster_message_to_events(message);
+        let runtime_message = events
+            .iter()
+            .find_map(|event| match event {
+                RuntimeAgentEvent::Message { message } => Some(message),
+                _ => None,
+            })
+            .expect("expected runtime message event");
+        assert_eq!(runtime_message.content.len(), 1);
+        match &runtime_message.content[0] {
             RuntimeMessageContent::ActionRequired {
                 id,
                 action_type,
@@ -302,7 +324,6 @@ mod tests {
             other => panic!("Expected ActionRequired message content, got {other:?}"),
         }
 
-        let events = convert_aster_message_to_events(message);
         assert_eq!(events.len(), 2);
         match &events[1] {
             RuntimeAgentEvent::ActionRequired {
@@ -926,6 +947,65 @@ mod tests {
         assert_eq!(metadata.get("compat"), Some(&serde_json::json!(true)));
         assert_eq!(metadata.get("canonical"), Some(&serde_json::json!(false)));
         assert_eq!(metadata.get("exit_code"), Some(&serde_json::json!(0)));
+    }
+
+    #[test]
+    fn test_convert_message_tool_response_uses_turn_context_truncation_policy() {
+        let message = Message::assistant().with_tool_response(
+            "tool-legacy-truncated",
+            Ok(rmcp::model::CallToolResult {
+                content: vec![rmcp::model::Content::text(
+                    "alpha beta gamma delta epsilon zeta eta theta iota kappa",
+                )],
+                structured_content: None,
+                meta: None,
+                is_error: None,
+            }),
+        );
+        let turn_context = AgentTurnContext {
+            metadata: HashMap::from([(
+                "runtime_options".to_string(),
+                serde_json::json!({
+                    "harness": {
+                        "model_request_policy": {
+                            "truncation_policy": {
+                                "mode": "tokens",
+                                "limit": 4
+                            }
+                        }
+                    }
+                }),
+            )]),
+            ..AgentTurnContext::default()
+        };
+
+        let events = convert_agent_event_with_turn_context(
+            AgentEvent::Message(message),
+            Some(&turn_context),
+        );
+
+        let tool_end = events
+            .iter()
+            .find_map(|event| match event {
+                RuntimeAgentEvent::ToolEnd { result, .. } => Some(result),
+                _ => None,
+            })
+            .expect("expected legacy tool_end event");
+        assert!(tool_end
+            .output
+            .starts_with("Warning: truncated output (original token count:"));
+        assert!(tool_end.output.contains("Total output lines: 1"));
+        assert!(tool_end.output.contains("tokens truncated"));
+        let metadata = tool_end
+            .metadata
+            .as_ref()
+            .expect("legacy tool_end metadata");
+        assert_eq!(
+            metadata.get("source"),
+            Some(&serde_json::json!("legacy_message_tool_response"))
+        );
+        assert_eq!(metadata.get("compat"), Some(&serde_json::json!(true)));
+        assert_eq!(metadata.get("canonical"), Some(&serde_json::json!(false)));
     }
 
     #[test]

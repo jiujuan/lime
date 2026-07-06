@@ -86,7 +86,6 @@ import type {
 import type { TeamDefinition } from "../utils/teamDefinitions";
 import type { AgentAccessMode } from "../hooks/agentChatStorage";
 import {
-  buildInitialDispatchPreviewMessages,
   buildRuntimeTeamDispatchPreview,
   buildRuntimeTeamDispatchPreviewMessages,
   buildSubmissionPreviewMessages,
@@ -452,7 +451,6 @@ export function useWorkspaceSendActions({
   resolveServiceModelsBeforeSend,
   messages,
   setChatMessages,
-  bootstrapDispatchPreview,
   sendMessage,
   resolveSendBoundary,
   finalizeAfterSendSuccess,
@@ -511,20 +509,9 @@ export function useWorkspaceSendActions({
   const submissionPreviewMessages = useMemo(
     () =>
       messagesCount === 0 && submissionPreview
-        ? buildSubmissionPreviewMessages(submissionPreview, soulCopy)
+        ? buildSubmissionPreviewMessages(submissionPreview)
         : [],
-    [messagesCount, soulCopy, submissionPreview],
-  );
-  const bootstrapDispatchPreviewMessages = useMemo(
-    () =>
-      bootstrapDispatchPreview
-        ? buildInitialDispatchPreviewMessages(
-            bootstrapDispatchPreview,
-            undefined,
-            soulCopy,
-          )
-        : [],
-    [bootstrapDispatchPreview, soulCopy],
+    [messagesCount, submissionPreview],
   );
   const displayMessages = useMemo(() => {
     if (runtimeTeamDispatchPreviewMessages.length > 0) {
@@ -535,15 +522,9 @@ export function useWorkspaceSendActions({
       return submissionPreviewMessages;
     }
 
-    if (messagesCount === 0 && bootstrapDispatchPreviewMessages.length > 0) {
-      return bootstrapDispatchPreviewMessages;
-    }
-
     return messages;
   }, [
-    bootstrapDispatchPreviewMessages,
     messages,
-    messagesCount,
     runtimeTeamDispatchPreviewMessages,
     submissionPreviewMessages,
   ]);
@@ -758,7 +739,6 @@ export function useWorkspaceSendActions({
             displayContent: sendOptions?.displayContent,
             inputCapabilityRoute: sendOptions?.capabilityRoute,
             images: previewImages,
-            executionStrategy: effectiveSendExecutionStrategy,
           }),
         );
         return submissionPreviewKey;

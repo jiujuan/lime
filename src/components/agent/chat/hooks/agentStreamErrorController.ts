@@ -83,7 +83,10 @@ export function buildAgentStreamFailedAssistantMessagePatch(params: {
     isThinking: false,
     content,
     contentParts: [...processParts, { type: "text", text: content }],
-    runtimeStatus: buildFailedAgentRuntimeStatus(params.errorMessage),
+    runtimeStatus: buildFailedAgentRuntimeStatus(
+      params.errorMessage,
+      params.soulCopy,
+    ),
     ...(params.usage !== undefined ? { usage: params.usage } : {}),
   };
 }

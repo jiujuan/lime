@@ -26,9 +26,9 @@ const PHASES = [
     owner: "operator",
     title: "签名 proof 与可信根",
     nextAction:
-      "生成真实 app.signature.yaml 与 production trust root，确保 schemaVersion/signatureRef/publicKeyId/algorithm/payloadHash/signedAt 一致，trust root 带 publicKey；不要把私钥或签名原文写入 evidence。",
+      "用 readiness pipeline 显式 --generate-signature-proof 生成真实 app.signature.yaml 与 production trust root，确保 schemaVersion/signatureRef/publicKeyId/algorithm/payloadHash/signedAt 一致，trust root 带 publicKey；不要把私钥或签名原文写入 evidence。",
     commandHint:
-      "npm run plugin:content-factory-production-readiness-pipeline -- --app-signature <app.signature.yaml> --trust-root <plugin-signature-trust-root.json> --expected-version <version>",
+      "npm run plugin:content-factory-production-readiness-pipeline -- --expected-version <version> --package-url <https-url> --release-id <release-id> --public-key-id <public-key-id> --generate-signature-proof --signing-private-key-env PLUGIN_SIGNING_PRIVATE_KEY_PEM # requires local env: PLUGIN_SIGNING_PRIVATE_KEY_PEM",
     matches: (code) =>
       code === "production_app_signature_yaml_missing" ||
       code === "production_app_signature_yaml_missing_or_invalid" ||
@@ -53,9 +53,9 @@ const PHASES = [
     owner: "operator",
     title: "Studio 发布输入",
     nextAction:
-      "补齐真实 HTTPS packageUrl、tenantId、developer token 和 API base 后重新跑 Studio publish --dry-run；dry-run 不能替代正式 cloud release。",
+      "补齐真实 HTTPS packageUrl、tenantId 和 developer token 后重新跑 Studio publish --dry-run；API base 默认使用官方地址，只有覆盖默认地址时才传 --api-base；dry-run 不能替代正式 cloud release。",
     commandHint:
-      "LIME_AGENT_APP_STUDIO_TOKEN=<token> npm run plugin:content-factory-production-readiness-pipeline -- --expected-version <version> --package-url <https-url> --tenant-id <tenant-id> --api-base <api-base> --studio-token-env LIME_AGENT_APP_STUDIO_TOKEN",
+      "npm run plugin:content-factory-production-readiness-pipeline -- --expected-version <version> --package-url <https-url> --tenant-id <tenant-id> --studio-token-env LIME_AGENT_APP_STUDIO_TOKEN # requires local env: LIME_AGENT_APP_STUDIO_TOKEN",
     matches: (code) =>
       [
         "production_package_url_missing",

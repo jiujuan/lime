@@ -20,7 +20,8 @@ export function buildContentFactorySignedReleaseEvidenceTemplate(input = {}) {
     input.publicKeyId || "REPLACE_WITH_PRODUCTION_TRUST_ROOT_PUBLIC_KEY_ID";
   const algorithm = input.algorithm || "Ed25519";
   const signedAt = input.signedAt || "2026-07-03T00:00:00.000Z";
-  const signatureRef = `sigstore:${appId}@${expectedVersion}:prod`;
+  const releaseId = input.releaseId || "prod";
+  const signatureRef = `sigstore:${appId}@${expectedVersion}:${releaseId}`;
   const packageUrl =
     input.packageUrl ||
     `https://updates.limeai.run/plugins/${appId}/prod/${appId}-${expectedVersion}.lapp`;
@@ -37,6 +38,7 @@ export function buildContentFactorySignedReleaseEvidenceTemplate(input = {}) {
           appVersion: expectedVersion,
           manifestHash,
           packageHash,
+          releaseId,
           signatureRef,
           sourceKind: "cloud_release",
           sourceUri: packageUrl,
@@ -68,9 +70,30 @@ export function buildContentFactorySignedReleaseEvidenceTemplate(input = {}) {
   };
   const fetchCloud = {
     appId,
+    descriptor: {
+      appId,
+      manifestHash,
+      packageHash,
+      packageUrl,
+      releaseId,
+      signatureRef,
+      sourceUri: packageUrl,
+      version: expectedVersion,
+    },
+    manifestHash,
     manifestHashMatched: true,
+    packageHash,
     packageHashMatched: true,
     packageVerificationStatus: "verified",
+    signatureProof: {
+      algorithm,
+      payloadHash,
+      publicKeyId,
+      signature: "REPLACE_WITH_BASE64_SIGNATURE",
+      signedAt,
+    },
+    signatureRef,
+    signaturePolicy: "required",
     signatureVerificationStatus: "verified",
     sourceKind: "cloud_release",
     status: "ready",
@@ -113,6 +136,7 @@ export function buildContentFactorySignedReleaseEvidenceTemplate(input = {}) {
       packageHash,
       packageUrl,
       present: true,
+      releaseId,
       signatureProofPresent: true,
       signatureRef,
       sourceKind: "cloud_release",
@@ -123,11 +147,16 @@ export function buildContentFactorySignedReleaseEvidenceTemplate(input = {}) {
       trustRootCount: 1,
     },
     fetchCloud: {
+      manifestHash,
       manifestHashMatched: true,
+      packageHash,
       packageHashMatched: true,
       packageVerificationStatus: "verified",
       present: true,
       ready: true,
+      signatureProofPresent: true,
+      signatureRef,
+      signaturePolicy: "required",
       signatureVerificationStatus: "verified",
       sourceKind: "cloud_release",
       status: "ready",
@@ -170,6 +199,7 @@ export function buildContentFactorySignedReleaseEvidenceTemplate(input = {}) {
     missingRequirements: [],
   };
   const guiEvidence = {
+    schemaVersion: "content-factory-production-gui-evidence.v1",
     appId,
     assertions: {
       articleDraftDocumentPresent: true,
@@ -180,6 +210,7 @@ export function buildContentFactorySignedReleaseEvidenceTemplate(input = {}) {
     },
     eventLogs: {
       workflowJsonl,
+      workflowJsonlEventCount: 16,
       workflowResumeEvents: [
         {
           eventType: "workflow.step.resuming",
@@ -203,6 +234,17 @@ export function buildContentFactorySignedReleaseEvidenceTemplate(input = {}) {
         },
       ],
     },
+    evidenceExport: {
+      workflowAudit: {
+        eventCount: 16,
+        metadataOnly: true,
+        rawContentIncluded: false,
+        redactionPolicy: "workflow_audit_metadata_only",
+        redactionPolicyEventCount: 16,
+        source: "workflow-events.jsonl",
+        status: "exported",
+      },
+    },
     runtimeActionResponse: {
       actionId: "article-draft-review",
       confirmed: true,
@@ -215,13 +257,31 @@ export function buildContentFactorySignedReleaseEvidenceTemplate(input = {}) {
       },
     },
     installedState: {
+      appVersion: expectedVersion,
+      cloudReleaseEvidenceStatus: "ready",
+      manifestHash,
+      manifestHashMatched: true,
+      packageHash,
+      packageHashMatched: true,
+      packageVerificationStatus: "verified",
+      releaseId,
+      signaturePolicy: "required",
+      signatureRef,
+      signatureVerificationStatus: "verified",
       sourceKind: "cloud_release",
     },
     providerEvidence: {
       liveProviderUsed: true,
       productionRoute: true,
     },
+    cdp: {
+      attached: true,
+      usedRealElectron: true,
+    },
     readModel: {
+      articleDraftDocumentLength: 3153,
+      articleDraftDocumentPresent: true,
+      generatedArticleMarkerClean: true,
       hostManagedGenerationOutputIds: ["article-draft-document"],
       hostManagedGenerationStatus: "completed",
     },
@@ -251,6 +311,14 @@ export function buildContentFactorySignedReleaseEvidenceTemplate(input = {}) {
         "agentSession/read",
         "evidence/export",
       ],
+      turnStartTrace: {
+        command: "app_server_handle_json_lines",
+        matched: true,
+        method: "agentSession/turn/start",
+        sessionMatched: true,
+        status: "success",
+        transport: "electron-ipc",
+      },
       workflowResumeBindingCount: 1,
     },
   };

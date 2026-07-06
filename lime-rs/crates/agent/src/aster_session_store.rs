@@ -9,9 +9,12 @@ use anyhow::{anyhow, Result};
 use aster::session::extension_data::ExtensionData;
 use aster::session::{Session, SessionType};
 use chrono::Utc;
-use lime_core::app_paths;
+use lime_core::database::agent_session_repository::{
+    get_session_extension_data_json, get_session_working_dir, insert_session_record,
+    resolve_default_session_working_dir, resolve_persisted_session_working_dir, session_exists,
+    SessionCreateRecord,
+};
 use lime_core::database::DbConnection;
-use lime_core::workspace::WorkspaceManager;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex as StdMutex;
@@ -45,13 +48,9 @@ impl LimeSessionStore {
         conn: &rusqlite::Connection,
         session_id: &str,
     ) -> Result<ExtensionData> {
-        let extension_data_json: String = conn
-            .query_row(
-                "SELECT extension_data_json FROM agent_sessions WHERE id = ?1",
-                rusqlite::params![session_id],
-                |row| row.get(0),
-            )
-            .map_err(|e| anyhow!("读取 extension_data 失败: {e}"))?;
+        let extension_data_json = get_session_extension_data_json(conn, session_id)
+            .map_err(anyhow::Error::msg)?
+            .ok_or_else(|| anyhow!("读取 extension_data 失败: 会话不存在"))?;
 
         Ok(serde_json::from_str(&extension_data_json).unwrap_or_default())
     }
@@ -98,78 +97,33 @@ impl LimeSessionStore {
         session_type: SessionType,
     ) -> Result<()> {
         let now = Utc::now().to_rfc3339();
-        conn.execute(
-            "INSERT INTO agent_sessions (
-                id, model, system_prompt, title, created_at, updated_at, working_dir,
-                execution_strategy, session_type, user_set_name, extension_data_json
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-            rusqlite::params![
-                id,
-                Self::default_model_name(),
-                None::<String>,
-                title,
-                now,
-                now,
-                working_dir.to_string_lossy().to_string(),
-                "react",
-                session_type.to_string(),
-                false,
-                serde_json::to_string(&ExtensionData::default())
-                    .map_err(|e| anyhow!("序列化 extension_data 失败: {e}"))?,
-            ],
+        let extension_data_json = serde_json::to_string(&ExtensionData::default())
+            .map_err(|e| anyhow!("序列化 extension_data 失败: {e}"))?;
+        insert_session_record(
+            conn,
+            &SessionCreateRecord {
+                id: id.to_string(),
+                model: Self::default_model_name(),
+                title: title.to_string(),
+                created_at: now.clone(),
+                updated_at: now,
+                working_dir: working_dir.to_string_lossy().to_string(),
+                execution_strategy: "react".to_string(),
+                session_type: session_type.to_string(),
+                user_set_name: false,
+                extension_data_json,
+            },
         )
-        .map_err(|e| anyhow!("创建会话失败: {e}"))?;
-        Ok(())
+        .map_err(anyhow::Error::msg)
     }
 
     fn ensure_session_row(conn: &rusqlite::Connection, session_id: &str) -> Result<()> {
-        let session_exists: bool = conn
-            .query_row(
-                "SELECT 1 FROM agent_sessions WHERE id = ?",
-                [session_id],
-                |_| Ok(true),
-            )
-            .unwrap_or(false);
-
-        if session_exists {
+        if session_exists(conn, session_id).map_err(anyhow::Error::msg)? {
             return Ok(());
         }
 
-        let working_dir = Self::resolve_session_working_dir(conn);
+        let working_dir = resolve_default_session_working_dir(conn);
         Self::insert_session_row(conn, session_id, "新对话", &working_dir, SessionType::User)
-    }
-
-    /// 解析会话 working_dir（优先默认 workspace，其次应用默认项目目录）
-    fn resolve_session_working_dir(conn: &rusqlite::Connection) -> PathBuf {
-        if let Some(path) = WorkspaceManager::get_default_root_path_from_conn(conn)
-            .ok()
-            .flatten()
-        {
-            let normalized = Self::normalize_working_dir(path);
-            if !normalized.as_os_str().is_empty() {
-                return normalized;
-            }
-        }
-
-        if let Ok(default_project_dir) = app_paths::resolve_default_project_dir() {
-            return default_project_dir;
-        }
-
-        tracing::warn!(
-            "[SessionStore] 解析默认 working_dir 失败，已回退当前目录；建议检查 app_paths 配置"
-        );
-        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-    }
-
-    /// 标准化 working_dir（相对路径转绝对路径）
-    fn normalize_working_dir(path: PathBuf) -> PathBuf {
-        if path.is_absolute() {
-            path
-        } else {
-            std::env::current_dir()
-                .unwrap_or_else(|_| PathBuf::from("."))
-                .join(path)
-        }
     }
 
     async fn apply_runtime_message_counts(&self, sessions: &mut [Session]) {
@@ -182,17 +136,8 @@ impl LimeSessionStore {
     }
 
     fn load_session_working_dir(conn: &rusqlite::Connection, session_id: &str) -> Result<PathBuf> {
-        let working_dir: Option<String> = conn
-            .query_row(
-                "SELECT working_dir FROM agent_sessions WHERE id = ?",
-                [session_id],
-                |row| row.get(0),
-            )
-            .map_err(|e| anyhow!("读取会话工作目录失败: {e}"))?;
-        Ok(session_projection::parse_session_working_dir(
-            conn,
-            working_dir,
-        ))
+        let working_dir = get_session_working_dir(conn, session_id).map_err(anyhow::Error::msg)?;
+        Ok(resolve_persisted_session_working_dir(conn, working_dir))
     }
 }
 

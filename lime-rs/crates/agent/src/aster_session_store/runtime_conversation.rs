@@ -1,17 +1,18 @@
 use anyhow::Result;
 use aster::conversation::message::Message;
 use aster::conversation::Conversation;
-use aster::session::{
-    require_shared_session_runtime_store, ItemRuntime, ItemRuntimePayload, ItemStatus,
-    ThreadRuntime, TurnRuntime,
-};
-use chrono::{DateTime, Utc};
+use aster::session::{require_shared_session_runtime_store, ThreadRuntime, TurnRuntime};
 use std::path::Path;
 use thread_store::conversation_transcript::{
-    count_selected_messages, select_conversation_messages, transcript_item_id,
-    ConversationMessageRecord, ConversationMessageRole,
+    count_selected_messages, select_conversation_messages, ConversationMessageRecord,
+    ConversationMessageRole,
 };
 use uuid::Uuid;
+
+use crate::runtime_conversation_aster_adapter::{
+    build_aster_transcript_item, conversation_record_from_aster_item,
+    is_aster_transcript_item_payload,
+};
 
 pub(super) async fn load_runtime_conversation(session_id: &str) -> Result<Option<Conversation>> {
     let store = require_shared_session_runtime_store()?;
@@ -43,7 +44,7 @@ pub(super) async fn append_runtime_message(
         .max()
         .unwrap_or(0)
         + 1;
-    let item = build_transcript_item(&turn, message, next_sequence);
+    let item = build_aster_transcript_item(&turn, message, next_sequence);
 
     if store.get_item(&item.id).await?.is_some() {
         store.update_item(item).await?;
@@ -64,7 +65,7 @@ pub(super) async fn replace_runtime_conversation(
     let turn = ensure_runtime_turn(store.as_ref(), session_id, working_dir).await?;
 
     for (index, message) in conversation.messages().iter().enumerate() {
-        let item = build_transcript_item(&turn, message, index as i64 + 1);
+        let item = build_aster_transcript_item(&turn, message, index as i64 + 1);
         store.create_item(item).await?;
     }
 
@@ -91,30 +92,12 @@ async fn delete_transcript_items(
 ) -> Result<()> {
     for thread in store.list_threads(session_id).await? {
         for item in store.list_items(&thread.id).await? {
-            if matches!(item.payload, ItemRuntimePayload::TranscriptMessage { .. }) {
+            if is_aster_transcript_item_payload(&item.payload) {
                 store.delete_item(&item.id).await?;
             }
         }
     }
     Ok(())
-}
-
-pub(super) async fn truncate_runtime_conversation(
-    session_id: &str,
-    working_dir: &Path,
-    timestamp: i64,
-) -> Result<usize> {
-    let current = load_runtime_conversation(session_id)
-        .await?
-        .unwrap_or_default();
-    let messages = current
-        .messages()
-        .iter()
-        .filter(|message| message.created < timestamp)
-        .cloned()
-        .collect::<Vec<_>>();
-    let truncated = Conversation::new_unvalidated(messages);
-    replace_runtime_conversation(session_id, working_dir, &truncated).await
 }
 
 async fn load_runtime_conversation_from_store(
@@ -151,35 +134,12 @@ async fn collect_conversation_records_from_threads(
     let mut records = Vec::new();
     for thread in threads {
         for item in store.list_items(&thread.id).await? {
-            if let Some(record) = conversation_record_from_item(item)? {
+            if let Some(record) = conversation_record_from_aster_item(item)? {
                 records.push(record);
             }
         }
     }
     Ok(records)
-}
-
-fn conversation_record_from_item(item: ItemRuntime) -> Result<Option<ConversationMessageRecord>> {
-    match item.payload {
-        ItemRuntimePayload::TranscriptMessage {
-            role,
-            content,
-            metadata,
-            created_timestamp,
-        } => Ok(Some(ConversationMessageRecord::transcript(
-            ConversationMessageRole::from_role_name(&role),
-            serde_json::to_value(content)?,
-            serde_json::to_value(metadata)?,
-            created_timestamp,
-        ))),
-        ItemRuntimePayload::UserMessage { content } => Ok(
-            ConversationMessageRecord::runtime_projection(ConversationMessageRole::User, content),
-        ),
-        ItemRuntimePayload::AgentMessage { text } => Ok(
-            ConversationMessageRecord::runtime_projection(ConversationMessageRole::Assistant, text),
-        ),
-        _ => Ok(None),
-    }
 }
 
 fn conversation_record_to_message(record: ConversationMessageRecord) -> Result<Option<Message>> {
@@ -239,39 +199,6 @@ async fn ensure_runtime_turn(
             aster::session_context::current_turn_context(),
         ))
         .await
-}
-
-fn build_transcript_item(turn: &TurnRuntime, message: &Message, sequence: i64) -> ItemRuntime {
-    let now = timestamp_to_utc(message.created).unwrap_or_else(Utc::now);
-    ItemRuntime {
-        id: transcript_item_id(&turn.id, message.id.as_deref(), sequence),
-        thread_id: turn.thread_id.clone(),
-        turn_id: turn.id.clone(),
-        sequence,
-        status: ItemStatus::Completed,
-        started_at: now,
-        completed_at: Some(now),
-        updated_at: now,
-        payload: ItemRuntimePayload::TranscriptMessage {
-            role: message_role(message).as_str().to_string(),
-            content: message.content.clone(),
-            metadata: message.metadata.clone(),
-            created_timestamp: message.created,
-        },
-    }
-}
-
-fn message_role(message: &Message) -> ConversationMessageRole {
-    let role_debug = format!("{:?}", message.role);
-    if role_debug.contains("User") {
-        ConversationMessageRole::User
-    } else {
-        ConversationMessageRole::Assistant
-    }
-}
-
-fn timestamp_to_utc(timestamp: i64) -> Option<DateTime<Utc>> {
-    DateTime::from_timestamp(timestamp, 0)
 }
 
 fn text_message(message: Message, text: String) -> Option<Message> {

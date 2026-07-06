@@ -246,6 +246,7 @@ function writeProductionInputs(rootDir, packageHash, options = {}) {
     manifestHashMatched: true,
     packageHashMatched: true,
     packageVerificationStatus: "verified",
+    signaturePolicy: "required",
     signatureVerificationStatus: "verified",
     sourceKind: "cloud_release",
     status: "ready",
@@ -705,6 +706,13 @@ describe("content factory production preflight", () => {
     expect(serialized).not.toContain("PRIVATE_KEY_SHOULD_NOT_LEAK");
     expect(serialized).not.toContain("TOKEN_SHOULD_NOT_LEAK");
     expect(serialized).not.toContain("packages.example.com");
+    expect(result.signingCommand).toContain(
+      "--signing-private-key-env PLUGIN_SIGNING_PRIVATE_KEY_PEM",
+    );
+    expect(result.signingCommand).not.toContain(
+      "PLUGIN_SIGNING_PRIVATE_KEY_PEM=",
+    );
+    expect(result.signingCommand).not.toContain("$PRIVATE_KEY_PEM");
   });
 
   it("发布环境 readiness 支持 Studio 与 LimeCore env 别名", () => {
@@ -774,6 +782,7 @@ describe("content factory production preflight", () => {
         manifestHashMatched: true,
         packageHashMatched: true,
         packageVerificationStatus: "verified",
+        signaturePolicy: "required",
         signatureVerificationStatus: "declared",
         sourceKind: "cloud_release",
         status: "blocked",
@@ -786,6 +795,7 @@ describe("content factory production preflight", () => {
     expect(result.fetchCloud).toMatchObject({
       present: true,
       packageVerificationStatus: "verified",
+      signaturePolicy: "required",
       signatureVerificationStatus: "declared",
       status: "blocked",
     });
@@ -829,5 +839,26 @@ describe("content factory production preflight", () => {
         }),
       ]),
     );
+  });
+
+  it("CLI --help 明确 preflight 不签名、不上传、不生成 passing cloud_release evidence", () => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        path.resolve("scripts/plugin/content-factory-production-preflight.mjs"),
+        "--help",
+      ],
+      { encoding: "utf8", env: { PATH: process.env.PATH } },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("pluginLocalPackage/inspect");
+    expect(result.stdout).toContain("It never signs");
+    expect(result.stdout).toContain("uploads");
+    expect(result.stdout).toContain("writes passing cloud_release evidence");
+    expect(result.stdout).not.toContain("PRIVATE_KEY_PEM");
+    expect(result.stdout).not.toContain("<private-key>");
+    expect(result.stdout).not.toContain("<token>");
+    expect(result.stdout).not.toContain("LIME_AGENT_APP_STUDIO_TOKEN=");
   });
 });

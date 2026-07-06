@@ -78,7 +78,10 @@ describe("Plugin P7 schema gate", () => {
 
   it("缺失 v0.3 projection 字段时应失败", () => {
     const { projection } = buildProjectionAndReadiness();
-    const broken = { ...projection, services: undefined } as unknown as typeof projection;
+    const broken = {
+      ...projection,
+      services: undefined,
+    } as unknown as typeof projection;
 
     expect(validateProjectionSchemaCoverage(broken)).toMatchObject({
       status: "invalid",
@@ -86,6 +89,61 @@ describe("Plugin P7 schema gate", () => {
         expect.objectContaining({
           code: "ARRAY_FIELD_INVALID",
           path: "$.services",
+        }),
+      ]),
+    });
+  });
+
+  it("runtimeCapabilities 出现时必须保持 App Server snapshot 数组结构", () => {
+    const { projection } = buildProjectionAndReadiness();
+    const broken = {
+      ...projection,
+      runtimeCapabilities: {
+        schemaVersion: "plugin-runtime-capabilities/v0.1",
+        pluginId: projection.app.appId,
+        skills: "invalid",
+        tools: [],
+        mcpBindings: [],
+        workflowBindings: [],
+      },
+    } as unknown as typeof projection;
+
+    expect(validateProjectionSchemaCoverage(broken)).toMatchObject({
+      status: "invalid",
+      issues: expect.arrayContaining([
+        expect.objectContaining({
+          code: "RUNTIME_CAPABILITY_INVALID",
+          path: "$.runtimeCapabilities.skills",
+        }),
+      ]),
+    });
+  });
+
+  it("runtimeCapabilities 必须绑定当前 projection app identity", () => {
+    const { projection } = buildProjectionAndReadiness();
+    const broken = {
+      ...projection,
+      runtimeCapabilities: {
+        schemaVersion: "plugin-runtime-capabilities/v0.1",
+        pluginId: "other-plugin",
+        version: "9.9.9",
+        skills: [],
+        tools: [],
+        mcpBindings: [],
+        workflowBindings: [],
+      },
+    } as unknown as typeof projection;
+
+    expect(validateProjectionSchemaCoverage(broken)).toMatchObject({
+      status: "invalid",
+      issues: expect.arrayContaining([
+        expect.objectContaining({
+          code: "RUNTIME_CAPABILITY_INVALID",
+          path: "$.runtimeCapabilities.pluginId",
+        }),
+        expect.objectContaining({
+          code: "RUNTIME_CAPABILITY_INVALID",
+          path: "$.runtimeCapabilities.version",
         }),
       ]),
     });

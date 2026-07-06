@@ -86,6 +86,8 @@ export function toToolCallState(item: AgentThreadItem): ToolCallState | null {
       };
       const outputText =
         item.output ?? itemRecord.output_preview ?? itemRecord.outputPreview ?? "";
+      const structuredContent =
+        item.structuredContent ?? item.structured_content;
       return {
         id: item.id,
         name: item.tool_name,
@@ -99,6 +101,7 @@ export function toToolCallState(item: AgentThreadItem): ToolCallState | null {
           itemRecord.output_preview !== undefined ||
           itemRecord.outputPreview !== undefined ||
           item.error !== undefined ||
+          structuredContent !== undefined ||
           item.metadata !== undefined
             ? {
                 success:
@@ -106,6 +109,8 @@ export function toToolCallState(item: AgentThreadItem): ToolCallState | null {
                   (item.status === "completed" && item.error === undefined),
                 output: outputText,
                 error: item.error,
+                structuredContent,
+                structured_content: structuredContent,
                 metadata,
               }
             : undefined,

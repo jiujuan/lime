@@ -4,7 +4,7 @@ use lime_core::database::DbConnection;
 use lime_core::workspace::WorkspaceManager;
 use std::path::Path;
 
-use super::session_store_subagent_aster_adapter::{
+use super::session_store_subagent_query::{
     load_child_subagent_session_projections, read_session_name_projection,
     read_subagent_session_projection,
 };
@@ -499,10 +499,10 @@ pub(crate) async fn load_child_subagent_sessions(
     db: &DbConnection,
     session_id: &str,
 ) -> Result<Vec<ChildSubagentSession>, String> {
-    let sessions = load_child_subagent_session_projections(session_id).await?;
+    let sessions = load_child_subagent_session_projections(db, session_id)?;
     let mut summaries = build_child_subagent_session_summaries(Some(db), sessions);
     for summary in &mut summaries {
-        match load_subagent_runtime_status(&summary.id).await {
+        match load_subagent_runtime_status(db, &summary.id).await {
             Ok(status) => apply_runtime_status_to_child_subagent_session(summary, status),
             Err(error) => {
                 tracing::debug!(
@@ -526,8 +526,7 @@ pub(crate) async fn load_subagent_parent_context(
         Some(session) => session,
         None => {
             current_session_owned =
-                read_subagent_session_projection(session_id, "读取当前 subagent session 失败")
-                    .await?;
+                read_subagent_session_projection(db, session_id, "读取当前 subagent session 失败")?;
             let Some(current_session) = current_session_owned else {
                 return Ok(None);
             };
@@ -538,11 +537,10 @@ pub(crate) async fn load_subagent_parent_context(
     let parent_session_id = projection.parent_session_id.clone();
 
     let parent_session_name = match read_session_name_projection(
+        db,
         &parent_session_id,
         "读取 parent session 失败",
-    )
-    .await
-    {
+    ) {
         Ok(name) => name,
         Err(error) => {
             tracing::warn!(

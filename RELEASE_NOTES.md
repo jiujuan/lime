@@ -1,40 +1,40 @@
-## Lime v1.92.0
+## Lime v1.93.0
 
 ### 新功能
 
-- 新增模型能力与发送策略事实源，覆盖上下文窗口、输入模态、原生工具、tool call、reasoning、responses、truncation、Prompt Cache 与发送门禁，前端模型选择和 App Server 协议使用同一套投影。
-- 插件本地包支持 App Server `pluginLocalPackage/export`，并新增插件发布工作台、发布复核、提交状态面板和 OEM Cloud 发布 API，补齐从本地插件到云端发布审核的产品闭环。
-- 内容工厂补齐 production readiness / preflight / evidence bundle / release evidence 脚本链路，支持生产证据收集、签名校验、云端证据读取和可审计发布报告。
-- Agent chat 增强 action、artifact、context、diagnostic、queue、routing、runtime lifecycle、subagent status、thread item 和 tool event 投影，工作台可从会话制品更稳定地打开文章工作区。
+- Agent Runtime 继续向 Codex-first Thread / Turn / Item 主线收敛，新增 runtime conversation、queue、timeline、session query 与 thread-store 投影模块，减少旧 Aster session store 对当前 App Server 主链的耦合。
+- 子代理与协作状态投影增强，App Server、Rust agent、`packages/agent-runtime-projection`、UI contracts 和聊天界面可更稳定地展示 subagent status、collaboration facts、tool lifecycle metadata 与 thread item 状态。
+- Soul / personal style 输出面落地更多内置 profiles、style directives、interaction copy 与工具生命周期描述，设置页、聊天工作区和五语言资源保持同一套 presentation 事实源。
+- 插件运行能力声明和内容工厂发布门禁补齐 runtime capabilities、详情页声明区、signed release gate GUI、operator readiness、cloud evidence fetch 与 release evidence 输出链路。
 
 ### 修复
 
-- 修复 Agent Runtime 终态事件、terminal turn guard、stream 指标和用户输入提交边界，降低旧 turn 终态误停新流、输入状态残留和会话恢复错配风险。
-- 修复 App Server evidence export 的 request telemetry 关联、thread item 消息投影、artifact projection 和 workflow queue / resume 审计输出。
-- 修复模型能力识别与 Provider 列表读取边界，避免 Prompt Cache、输入模态、reasoning、native tool 和 truncation 能力在 UI、协议和运行时之间漂移。
-- 修复插件能力 host、runtime client API、插件页面摘要和内容工厂 SDK 回归，减少发布前检查与应用中心展示不一致。
+- 修复 Claw / Agent chat 的流式恢复、输入框恢复、terminal turn guard、stale stream 处理和用户输入提交边界，降低停止后无法继续、旧终态误停新流和历史 hydrate 错配风险。
+- 修复 App Server event stream、thread client、session runtime read model、tool event projection 和 imported runtime event detail 的一致性，避免 live stream 与 history hydrate 投影漂移。
+- 修复模型请求策略、managed model fetch access、provider stream、context fragments 和自动压缩上下文处理，减少模型能力、工具策略与请求 metadata 之间的不一致。
+- 修复 Electron App Server sidecar 的代理 / 环境传递、开发启动、打包资源校验和 packaged manifest 读取，提升本地开发、GUI smoke 和打包后启动稳定性。
 
 ### 优化与重构
 
-- 新增 `tool-runtime` current crate，把 shell / PowerShell 执行、路径防护、命令语义、子进程、Web Search / Web Fetch 和 tool extension 从 vendor Aster 残留中抽离出来。
-- 拆分 `agent-runtime` 与 `lime-agent` 的 reply、session config、recent settings、runtime payload、model request policy 和 session execution runtime，中心文件只保留接线。
-- App Server protocol / npm client 同步新增模型能力字段、插件本地包导出 schema 和 request method，删除过时的 `ResolvedModelRoute` schema 形状。
-- 继续收缩旧 Tauri wrapper / Aster cleanup 文档与 vendor tool 实现，删除已失效的快速清理队列和旧 inventory 文档。
+- 大幅收缩 vendor Aster residual，删除已脱离 current 主链的 auto reply、background、blueprint、checkpoint、Chrome MCP、codesign、diagnostics、git/github、map 和 session export 等旧实现，并强化 Aster migration boundary guard。
+- 拆分 Rust agent 和 app-server 中心文件，把 tool lifecycle、tool output truncation、runtime store adapter、session record SQL、context auto compaction、tool process metadata 与 request context 迁到更窄的 domain 模块。
+- Agent chat 前端拆分 timeline copy、collaboration copy、tool batch grouping、tool process summary metadata、stream input restore policy 和 workspace session projection，降低组件层状态机复杂度。
+- Writing v2、Soul、Aster migration、Claw stream 测试矩阵和 refactor v1 研究材料继续沉淀为 repo 内版本化工件，便于后续按执行计划收口。
 
 ### 测试与质量
 
-- 新增模型策略与能力边界治理测试，覆盖 Codex / OpenCode policy origin、model execution / native tool / responses / reasoning / truncation / picker / modality 等 current boundary。
-- 新增 Agent UI 投影、runtime export、projection 单测、terminal turn guard、artifact open、App Server event stream / evidence export / thread client / model registry 和插件发布 API 回归。
-- 更新 App Server protocol schema fixtures、generated TypeScript protocol types、App Server client contract、harness contracts 和 current entrypoint guard。
-- 新增内容工厂生产 readiness、preflight、release evidence、signature verifier、workflow evidence、turn start trace 与 signed release gate 测试。
+- 新增和更新 Agent runtime current fixture、Claw stream P0、subagent status、tool lifecycle、tool truncation、app server facts、thread item projection、streaming text、input restore 和 workspace send 回归。
+- 新增 Rust 定向测试覆盖 model request policy、session execution runtime、session store provider routing、tool orchestrator lifecycle / truncation、context auto compaction、plugin runtime capabilities 和 media task artifact。
+- 更新 App Server client contract、protocol projection、Electron current entrypoint、package resource verifier、scripts governance、Aster migration boundary 与 context policy boundary 守卫。
+- 内容工厂 production readiness / signed release gate / release evidence / GUI evidence 测试覆盖签名占位、secret hygiene、fetch cloud evidence、pipeline report 和 operator command 输出。
 
 ### 文档
 
-- 更新 Writing v2、内容工厂插件重构、产品需求、Aster migration 和长期治理路线图，明确插件发布、生产证据、模型能力策略和 Aster residual 收口的当前主线。
-- 新增 Aster capability intake 策略 / 执行计划、长期治理文档和插件发布中心 PRD / server plan。
+- 更新根 AGENTS 与工程导航，明确 Codex-first 是 Agent 重构最高准则，并补充新增模块、命令边界、质量工作流和执行计划入口。
+- 更新 Writing v2、Soul personal style、Aster capability intake、Claw stream guardrail、refactor v1 impact audit 和测试路线图，记录当前发布候选的主线背景与退出条件。
 
 ### 其他
 
-- 版本事实源更新到 `1.92.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock`、`lime-rs/vendor/aster-rust/Cargo.lock` 和 current-turn smoke client。
+- 版本事实源更新到 `1.93.0`：根应用、CLI npm package、Rust workspace、`lime-rs/Cargo.lock`、`lime-rs/vendor/aster-rust/Cargo.lock`、packaged App Server manifest 和 current-turn smoke client。
 
-**完整变更**: `v1.91.0` -> `v1.92.0`
+**完整变更**: `v1.92.0` -> `v1.93.0`

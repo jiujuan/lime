@@ -17,6 +17,10 @@ const PROMPT_CONTEXT_VERSION: &str = "memory_store_prompt_context.v1";
 const SESSION_COMPACTION_CONTEXT_VERSION: &str = "session_compaction_prompt_context.v1";
 const MEMORY_PACKET_MAX_TOKENS: usize = 1_200;
 const SESSION_COMPACTION_PACKET_MAX_TOKENS: usize = 1_600;
+const DEFAULT_EFFECTIVE_CONTEXT_WINDOW_PERCENT: usize = 95;
+const AUTO_COMPACT_CONTEXT_WINDOW_RATIO_NUMERATOR: usize = 9;
+const AUTO_COMPACT_CONTEXT_WINDOW_RATIO_DENOMINATOR: usize = 10;
+const CONTEXT_POLICY_PACKET_BUDGET_RATIO_DENOMINATOR: usize = 10;
 
 pub(crate) use super::soul::memory_soul_prompt_context_from_config;
 
@@ -59,6 +63,11 @@ impl RuntimeCore {
             "truncated": response.truncated,
             "citation": response.citation,
         });
+        apply_prompt_context_budget_policy(
+            &mut context,
+            params.runtime_options.as_ref(),
+            MEMORY_PACKET_MAX_TOKENS,
+        );
         let packet = memory_packet_from_prompt_context(&context);
         if let Some(packet) = packet {
             let assembly = assemble_context_packets(vec![packet]);
@@ -76,10 +85,15 @@ impl RuntimeCore {
         else {
             return;
         };
+        let mut context = context;
+        apply_prompt_context_budget_policy(
+            &mut context,
+            params.runtime_options.as_ref(),
+            SESSION_COMPACTION_PACKET_MAX_TOKENS,
+        );
         let packet = session_compaction_packet_from_prompt_context(&context);
         if let Some(packet) = packet {
             let assembly = assemble_context_packets(vec![packet]);
-            let mut context = context;
             context["contextPacketTelemetry"] = assembly.telemetry.clone();
             merge_context_packet_telemetry(params, assembly.telemetry);
             merge_runtime_options_metadata(params, SESSION_COMPACTION_PROMPT_CONTEXT_KEY, context);
@@ -182,7 +196,7 @@ fn memory_packet_from_prompt_context(value: &Value) -> Option<ContextPacket> {
             "workspace" => ContextScope::Workspace,
             _ => ContextScope::Global,
         },
-        MEMORY_PACKET_MAX_TOKENS,
+        prompt_context_packet_budget(value, MEMORY_PACKET_MAX_TOKENS),
         truncated,
         metadata,
     ))
@@ -231,9 +245,145 @@ fn session_compaction_packet_from_prompt_context(value: &Value) -> Option<Contex
     copy_optional_value(value, &mut metadata, "trigger");
     Some(ContextPacket::session_compaction(
         summary,
-        SESSION_COMPACTION_PACKET_MAX_TOKENS,
+        prompt_context_packet_budget(value, SESSION_COMPACTION_PACKET_MAX_TOKENS),
         metadata,
     ))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct PromptContextBudgetPolicy {
+    model_context_window: Option<usize>,
+    auto_compact_token_limit: Option<usize>,
+    effective_context_window: usize,
+}
+
+impl PromptContextBudgetPolicy {
+    fn packet_budget(self, default_budget: usize) -> usize {
+        let policy_budget = self
+            .effective_context_window
+            .saturating_div(CONTEXT_POLICY_PACKET_BUDGET_RATIO_DENOMINATOR)
+            .max(1);
+        default_budget.min(policy_budget)
+    }
+
+    fn metadata(self, packet_budget: usize) -> Value {
+        json!({
+            "source": "model_request_policy",
+            "modelContextWindow": self.model_context_window,
+            "autoCompactTokenLimit": self.auto_compact_token_limit,
+            "effectiveContextWindow": self.effective_context_window,
+            "packetBudgetRatio": format!("1/{CONTEXT_POLICY_PACKET_BUDGET_RATIO_DENOMINATOR}"),
+            "packetTokenBudget": packet_budget,
+        })
+    }
+}
+
+fn apply_prompt_context_budget_policy(
+    context: &mut Value,
+    runtime_options: Option<&RuntimeOptions>,
+    default_budget: usize,
+) {
+    let Some(policy) = runtime_options
+        .and_then(|options| options.metadata.as_ref())
+        .and_then(prompt_context_budget_policy_from_metadata)
+    else {
+        return;
+    };
+    let packet_budget = policy.packet_budget(default_budget);
+    context["packetTokenBudget"] = json!(packet_budget);
+    context["contextBudgetPolicy"] = policy.metadata(packet_budget);
+}
+
+fn prompt_context_budget_policy_from_metadata(
+    metadata: &Value,
+) -> Option<PromptContextBudgetPolicy> {
+    let policy = [
+        "/lime_runtime/context_policy",
+        "/limeRuntime/contextPolicy",
+        "/harness/model_request_policy/context_policy",
+        "/harness/modelRequestPolicy/contextPolicy",
+        "/model_request_policy/context_policy",
+        "/modelRequestPolicy/contextPolicy",
+    ]
+    .into_iter()
+    .find_map(|pointer| metadata.pointer(pointer))?;
+
+    let context_window = positive_usize_field(policy, &["context_window", "contextWindow"]);
+    let max_context_window =
+        positive_usize_field(policy, &["max_context_window", "maxContextWindow"]);
+    let resolved_context_window = positive_usize_field(
+        policy,
+        &["resolved_context_window", "resolvedContextWindow"],
+    )
+    .or(context_window)
+    .or(max_context_window);
+    let effective_context_window_percent = positive_usize_field(
+        policy,
+        &[
+            "effective_context_window_percent",
+            "effectiveContextWindowPercent",
+        ],
+    )
+    .filter(|percent| *percent <= 100)
+    .unwrap_or(DEFAULT_EFFECTIVE_CONTEXT_WINDOW_PERCENT);
+    let model_context_window =
+        positive_usize_field(policy, &["model_context_window", "modelContextWindow"]).or_else(
+            || {
+                resolved_context_window
+                    .map(|window| window.saturating_mul(effective_context_window_percent) / 100)
+            },
+        );
+    let auto_compact_token_limit = positive_usize_field(
+        policy,
+        &["auto_compact_token_limit", "autoCompactTokenLimit"],
+    )
+    .map(|limit| {
+        resolved_context_window.map_or(limit, |window| {
+            let max_limit = window.saturating_mul(AUTO_COMPACT_CONTEXT_WINDOW_RATIO_NUMERATOR)
+                / AUTO_COMPACT_CONTEXT_WINDOW_RATIO_DENOMINATOR;
+            limit.min(max_limit)
+        })
+    })
+    .or_else(|| {
+        resolved_context_window.map(|window| {
+            window.saturating_mul(AUTO_COMPACT_CONTEXT_WINDOW_RATIO_NUMERATOR)
+                / AUTO_COMPACT_CONTEXT_WINDOW_RATIO_DENOMINATOR
+        })
+    });
+    let effective_context_window = match (model_context_window, auto_compact_token_limit) {
+        (Some(model_window), Some(compact_limit)) => model_window.min(compact_limit),
+        (Some(model_window), None) => model_window,
+        (None, Some(compact_limit)) => compact_limit,
+        (None, None) => return None,
+    };
+
+    Some(PromptContextBudgetPolicy {
+        model_context_window,
+        auto_compact_token_limit,
+        effective_context_window,
+    })
+}
+
+fn prompt_context_packet_budget(value: &Value, default_budget: usize) -> usize {
+    positive_usize_field(value, &["packetTokenBudget", "packet_token_budget"])
+        .unwrap_or(default_budget)
+}
+
+fn positive_usize_field(value: &Value, keys: &[&str]) -> Option<usize> {
+    keys.iter()
+        .filter_map(|key| value.get(*key))
+        .find_map(|value| {
+            value
+                .as_u64()
+                .and_then(|value| usize::try_from(value).ok())
+                .or_else(|| {
+                    value
+                        .as_i64()
+                        .filter(|value| *value > 0)
+                        .and_then(|value| usize::try_from(value).ok())
+                })
+        })
+        .filter(|value| *value > 0)
 }
 
 fn soul_prompt_assembly_from_metadata(
@@ -478,6 +628,32 @@ mod tests {
     }
 
     #[test]
+    fn prompt_context_budget_policy_uses_model_context_and_auto_compact_limit() {
+        let metadata = json!({
+            "harness": {
+                "model_request_policy": {
+                    "context_policy": {
+                        "context_window": 10_000,
+                        "auto_compact_token_limit": 9_500,
+                        "effective_context_window_percent": 50
+                    }
+                }
+            }
+        });
+
+        let policy =
+            prompt_context_budget_policy_from_metadata(&metadata).expect("context budget policy");
+
+        assert_eq!(policy.model_context_window, Some(5_000));
+        assert_eq!(policy.auto_compact_token_limit, Some(9_000));
+        assert_eq!(policy.effective_context_window, 5_000);
+        assert_eq!(
+            policy.packet_budget(SESSION_COMPACTION_PACKET_MAX_TOKENS),
+            500
+        );
+    }
+
+    #[test]
     fn soul_prompt_context_ignores_disabled_config() {
         let soul = MemorySoulConfig {
             enabled: false,
@@ -519,8 +695,11 @@ mod tests {
         assert!(prompt.contains("generation brief"));
         assert!(prompt.contains("memory_soul_prompt_context.v2"));
         assert!(prompt.contains("Style profile: calm_professional_partner"));
-        assert!(prompt.contains("Style pack: com.lime.builtin.default"));
+        assert!(prompt.contains("Style pack: com.lime.soul.calm-professional-partner"));
         assert!(prompt.contains("Apply this tone to greetings, opening turns, self-introductions"));
+        assert!(prompt.contains("Surface contracts"));
+        assert!(prompt.contains("Anti-repetition rules"));
+        assert!(prompt.contains("Risk fallback profile: calm_professional_partner"));
         assert!(prompt.contains("Serious/high-risk fallback"));
         assert!(prompt.contains("Formal artifact voice source: generation_brief_only"));
         assert!(prompt.contains("Style fidelity rules"));
@@ -574,8 +753,14 @@ mod tests {
         .expect("prompt");
 
         assert!(prompt.contains("Style profile: cheeky_sassy_executor"));
-        assert!(prompt.contains("Style pack: com.lime.builtin.default"));
+        assert!(prompt.contains("Style pack: com.lime.soul.cheeky-sassy-executor"));
         assert!(prompt.contains("Do not force a visible style cue into every reply"));
+        assert!(prompt.contains("Surface contracts"));
+        assert!(prompt.contains("before_tool: Name the tool purpose"));
+        assert!(prompt.contains("tool_running: Report the current checkpoint"));
+        assert!(prompt.contains("after_tool_partial_failure: Separate the completed part"));
+        assert!(prompt.contains("after_tool_failure: Explain the failure"));
+        assert!(prompt.contains("Few-shot anchors"));
         assert!(prompt.contains("never as a required prefix"));
         assert!(prompt.contains("Do not start every reply with a persona tag"));
         assert!(!prompt.contains("Every normal chat reply must show"));

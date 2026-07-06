@@ -227,7 +227,7 @@ mod tests {
                     "scope": "interaction_only",
                     "styleProfile": {
                         "id": "cheeky_sassy_executor",
-                        "packId": "com.lime.builtin.default",
+                        "packId": "com.lime.soul.cheeky-sassy-executor",
                         "tone": "cheeky_sassy",
                         "intensity": "low",
                         "allowedMoves": ["Apply this tone to greetings, opening turns, self-introductions, chat replies, and tool progress."],
@@ -248,7 +248,8 @@ mod tests {
 
         assert!(prompt_context.contains("## Interaction Soul"));
         assert!(prompt_context.contains("Style profile: cheeky_sassy_executor"));
-        assert!(prompt_context.contains("Style pack: com.lime.builtin.default"));
+        assert!(prompt_context.contains("Style pack: com.lime.soul.cheeky-sassy-executor"));
+        assert!(!prompt_context.contains("Style pack: com.lime.builtin.default"));
         assert!(prompt_context.contains("Formal artifact voice source: generation_brief_only"));
         assert!(
             prompt_context.contains("Formal artifacts must use explicit Generation Brief voice")

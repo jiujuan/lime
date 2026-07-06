@@ -76,6 +76,7 @@
   "agentChat.inputbar.core.suggestion.acceptKey": "Tab",
   "agentChat.inputbar.core.textarea.expand": "Expand input",
   "agentChat.inputbar.core.textarea.collapse": "Collapse input",
+  "agentChat.inputbar.core.action.running": "Generating",
   "agentChat.inputbar.core.action.defer": "Handle later",
   "agentChat.inputbar.core.action.stop": "Stop",
   "agentChat.inputbar.core.action.send": "Send",

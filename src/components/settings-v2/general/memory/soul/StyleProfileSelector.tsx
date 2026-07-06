@@ -3,7 +3,7 @@ import type { TFunction } from "i18next";
 import { CheckCircle2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
-  BUILT_IN_SOUL_STYLE_PACK,
+  BUILT_IN_SOUL_STYLE_PACKS,
   resolveSoulStyleProfile,
   type SoulStyleIntensity,
   type SoulStyleProfileId,
@@ -45,6 +45,10 @@ export function StyleProfileSelector({
       }),
     [intensity, value],
   );
+  const profiles = useMemo(
+    () => BUILT_IN_SOUL_STYLE_PACKS.flatMap((pack) => pack.profiles),
+    [],
+  );
 
   return (
     <div
@@ -58,12 +62,9 @@ export function StyleProfileSelector({
         <p className="text-xs leading-5 text-slate-500">
           {settingsT(t, "settings.memory.soul.styleProfile.description")}
         </p>
-        <p className="text-xs leading-5 text-slate-500">
-          {settingsT(t, BUILT_IN_SOUL_STYLE_PACK.descriptionKey)}
-        </p>
       </div>
       <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {BUILT_IN_SOUL_STYLE_PACK.profiles.map((profile) => {
+        {profiles.map((profile) => {
           const selected = resolved.profile.id === profile.id;
           return (
             <button

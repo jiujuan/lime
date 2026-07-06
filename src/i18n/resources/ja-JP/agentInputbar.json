@@ -76,6 +76,7 @@
   "agentChat.inputbar.core.suggestion.acceptKey": "Tab",
   "agentChat.inputbar.core.textarea.expand": "入力欄を広げる",
   "agentChat.inputbar.core.textarea.collapse": "入力欄をたたむ",
+  "agentChat.inputbar.core.action.running": "出力中",
   "agentChat.inputbar.core.action.defer": "あとで処理",
   "agentChat.inputbar.core.action.stop": "停止",
   "agentChat.inputbar.core.action.send": "送信",

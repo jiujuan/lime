@@ -28,7 +28,7 @@ impl RequestProcessor {
         let (id, method, params) = request.into_jsonrpc_parts();
         let method = method.as_str();
         let result = match method {
-            METHOD_INITIALIZE => self.initialize(params).map(RpcDispatch::single),
+            METHOD_INITIALIZE => self.handle_initialize(params),
             METHOD_CAPABILITY_LIST => self.handle_capability_list(params),
             METHOD_ARTIFACT_READ => self.handle_artifact_read(params),
             METHOD_FILE_SYSTEM_LIST_DIRECTORY => {

@@ -209,6 +209,80 @@ test("AgentWorkbenchSurface renders full controlled workbench shell", () => {
   assert.match(markup, /继续修改/);
 });
 
+test("AgentWorkbenchSurface exposes Subagents collaboration facts for non-timeline surfaces", () => {
+  const state = projectAgentUiState({
+    executionEvents: [
+      {
+        id: "evt-subagent-running",
+        kind: "handoff",
+        status: "running",
+        eventClass: "subagent.status",
+        title: "Research subtask running",
+        threadId: "thread-parent",
+        subagentId: "subagent-research",
+        sequence: 1,
+        createdAt: "2026-06-12T00:00:00.000Z",
+        payload: {
+          collaborationFacts: {
+            source: "app_server_replay",
+            surface: "collaboration",
+            collaborationSurface: "team_roster",
+            collaborationPhase: "acting",
+            collaborationKind: "subagent_status",
+            profileId: "cheeky_sassy_executor",
+            packId: "stylepack.cheeky_sassy_executor.v1",
+            toneVariant: "cheeky_sassy",
+          },
+          collaborationSurface: "team_roster",
+          collaborationPhase: "acting",
+          styleLevel: "L1",
+          riskLevel: "normal",
+          profileId: "cheeky_sassy_executor",
+          packId: "stylepack.cheeky_sassy_executor.v1",
+          toneVariant: "cheeky_sassy",
+        },
+      },
+    ],
+    sourceCount: 1,
+  });
+  const markup = renderToStaticMarkup(
+    React.createElement(AgentWorkbenchSurface, {
+      view: {
+        taskTitle: "Research",
+        statusLabel: "Running",
+        sourceCount: 1,
+        toolCount: 0,
+        pendingActionCount: 0,
+        artifactCount: 0,
+        evidenceCount: 0,
+        taskCount: 1,
+        hasRuntimeFacts: true,
+        shouldShowRuntimePanel: true,
+        checkpoints: [
+          { id: "input", title: "Input", state: "done", count: 1 },
+        ],
+      },
+      state,
+      labels: {
+        runtimeLabel: "Runtime facts",
+      },
+    }),
+  );
+
+  assert.match(markup, /agent-workbench-runtime-panel open/);
+  assert.match(markup, /agent-subagents/);
+  assert.match(markup, /data-collaboration-facts="yes"/);
+  assert.match(markup, /data-collaboration-surface="team_roster"/);
+  assert.match(markup, /data-collaboration-phase="acting"/);
+  assert.match(markup, /data-collaboration-kind="subagent_status"/);
+  assert.match(markup, /data-collaboration-source="app_server_replay"/);
+  assert.match(markup, /data-soul-style-level="L1"/);
+  assert.match(markup, /data-soul-risk-level="normal"/);
+  assert.match(markup, /data-soul-tone-variant="cheeky_sassy"/);
+  assert.match(markup, /data-soul-profile-id="cheeky_sassy_executor"/);
+  assert.match(markup, /data-soul-pack-id="stylepack.cheeky_sassy_executor.v1"/);
+});
+
 test("ToolCallSurface and McpSurface render standard tool and MCP contracts", () => {
   const state = projectAgentUiState({
     executionEvents: [

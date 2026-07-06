@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { shouldApplyAgentStreamTerminalEvent } from "./agentStreamTerminalTurnGuard";
 
 describe("shouldApplyAgentStreamTerminalEvent", () => {
-  it("没有当前 turn 线索时允许终态事件进入首事件完成路径", () => {
+  it("没有当前 turn 线索但终态带 turnId 时允许进入首事件完成路径", () => {
     expect(
       shouldApplyAgentStreamTerminalEvent({
         terminalTurnId: "turn-first",
@@ -10,13 +10,31 @@ describe("shouldApplyAgentStreamTerminalEvent", () => {
     ).toBe(true);
   });
 
-  it("只有 queuedTurnId 时允许终态事件进入首事件取消路径", () => {
+  it("终态缺少 turnId 时拒绝应用", () => {
+    expect(
+      shouldApplyAgentStreamTerminalEvent({
+        activeTextSegmentTurnId: "turn-current",
+        currentTurnId: "turn-current",
+      }),
+    ).toBe(false);
+  });
+
+  it("只有 queuedTurnId 时终态必须命中 queuedTurnId", () => {
+    expect(
+      shouldApplyAgentStreamTerminalEvent({
+        queuedTurnId: "queued-canceled",
+        terminalTurnId: "queued-canceled",
+      }),
+    ).toBe(true);
+  });
+
+  it("只有 queuedTurnId 时拒绝不匹配的终态", () => {
     expect(
       shouldApplyAgentStreamTerminalEvent({
         queuedTurnId: "queued-canceled",
         terminalTurnId: "turn-canceled",
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("终态 turn 命中当前 active text turn 时允许应用", () => {
@@ -47,5 +65,15 @@ describe("shouldApplyAgentStreamTerminalEvent", () => {
         terminalTurnId: "turn-current",
       }),
     ).toBe(true);
+  });
+
+  it("存在当前 turn 时不允许 queuedTurnId 放行旧终态", () => {
+    expect(
+      shouldApplyAgentStreamTerminalEvent({
+        currentTurnId: "turn-current",
+        queuedTurnId: "turn-old",
+        terminalTurnId: "turn-old",
+      }),
+    ).toBe(false);
   });
 });

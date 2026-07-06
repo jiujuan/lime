@@ -2,6 +2,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useRef } from "react";
+import { hasLocallyStartedAgentStreamBinding } from "./agentStreamResumeBinding";
 import { useAgentStreamController } from "./useAgentStreamController";
 
 interface ControllerHarness {
@@ -146,6 +147,32 @@ describe("useAgentStreamController", () => {
       });
       expect(second).toHaveBeenCalledTimes(1);
       expect(harness.getValue().listenerMapRef.current.size).toBe(0);
+    } finally {
+      harness.unmount();
+    }
+  });
+
+  it("fresh stream 激活时应记录同标签本地运行绑定", () => {
+    const harness = mountHook();
+
+    try {
+      act(() => {
+        harness.getValue().setActiveStream({
+          assistantMsgId: "assistant-controller-1",
+          eventName: "aster_stream_assistant-controller-1",
+          sessionId: "controller-session-1",
+          turnId: "controller-turn-1",
+        });
+      });
+
+      expect(
+        hasLocallyStartedAgentStreamBinding({
+          eventName: "agentSession/event/controller-session-1",
+          sessionId: "controller-session-1",
+          threadId: "controller-session-1",
+          turnId: "controller-turn-1",
+        }),
+      ).toBe(true);
     } finally {
       harness.unmount();
     }

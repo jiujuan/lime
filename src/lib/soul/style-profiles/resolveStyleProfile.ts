@@ -1,5 +1,5 @@
 import {
-  BUILT_IN_SOUL_STYLE_PACK,
+  BUILT_IN_SOUL_STYLE_PROFILES,
   DEFAULT_SOUL_STYLE_PROFILE_ID,
   getBuiltInSoulStyleProfile,
 } from "./builtInProfiles";
@@ -12,7 +12,7 @@ import type {
 } from "./types";
 
 const STYLE_PROFILE_IDS: ReadonlySet<string> = new Set(
-  BUILT_IN_SOUL_STYLE_PACK.profiles.map((profile) => profile.id),
+  BUILT_IN_SOUL_STYLE_PROFILES.map((profile) => profile.id),
 );
 
 const STYLE_INTENSITIES: ReadonlySet<string> = new Set([

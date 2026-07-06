@@ -334,6 +334,40 @@ describe("agentSessionState", () => {
     ).toBe(true);
   });
 
+  it("read model 内仍有 running turn 时应判定为 active runtime", () => {
+    expect(
+      hasActiveRuntimeTurn({
+        queuedTurnsCount: 0,
+        threadReadStatus: "idle",
+        threadRead: {
+          thread_id: "thread-1",
+          status: "idle",
+          turns: [
+            {
+              turn_id: "turn-running-1",
+              status: "running",
+            },
+          ],
+        },
+        turns: [],
+      }),
+    ).toBe(true);
+
+    expect(
+      hasActiveRuntimeTurn({
+        queuedTurnsCount: 0,
+        threadReadStatus: "idle",
+        threadRead: {
+          thread_id: "thread-1",
+          status: "idle",
+          profile_status: "running",
+          turns: [],
+        },
+        turns: [],
+      }),
+    ).toBe(true);
+  });
+
   it("topics 未就绪、无 session 或 topic 已存在时不应处理缺失会话", () => {
     const base = {
       currentTurnId: "turn-1",

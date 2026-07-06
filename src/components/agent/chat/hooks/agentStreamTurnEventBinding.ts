@@ -564,7 +564,13 @@ export async function registerAgentStreamTurnEventBinding(
         const recovered = await tryRecoverSilentTurn({
           requireTerminal: true,
         });
+        const activeReadModelActivity = recovered
+          ? false
+          : await tryRecoverSilentTurn({
+              requireTerminal: false,
+            });
         const timeoutAction = resolveAgentStreamInactivityTimeoutAction({
+          activeReadModelActivity,
           recovered,
           shouldIgnore: shouldIgnoreAgentStreamInactivityResult({
             lastEventReceivedAt,
@@ -591,6 +597,14 @@ export async function registerAgentStreamTurnEventBinding(
               lastRuntimeEventType,
             });
             finalizeSilentTurnRecovery();
+            return;
+          case "continue":
+            logAgentDebug("AgentStream", "inactivityWatchdog.continue", {
+              eventName,
+              sessionId: activeSessionId,
+              lastRuntimeEventType,
+            });
+            scheduleInactivityWatchdog();
             return;
           case "fail":
             logAgentDebug(

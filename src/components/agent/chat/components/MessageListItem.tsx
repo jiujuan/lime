@@ -18,13 +18,13 @@ import type {
   SiteSavedContentTarget,
   WriteArtifactContext,
 } from "../types";
-import { AssistantFirstTokenRuntimeStatus } from "./MessageListRuntimeStatus";
 import { MessageArtifactCards } from "./MessageArtifactCards";
 import { MessageActionButtons } from "./MessageActionButtons";
 import { MessageImageAttachments } from "./MessageImageAttachments";
 import { MessageAssistantBody } from "./MessageAssistantBody";
 import { MessageAssistantMetaFooter } from "./MessageAssistantMetaFooter";
 import { resolveMessageAssistantMetaFooterState } from "./messageAssistantMetaFooterState";
+import { AssistantFirstTokenRuntimeStatus } from "./MessageListRuntimeStatus";
 import { MessageTimelineSection } from "./MessageTimelineSection";
 import { MessageUserBody } from "./MessageUserBody";
 import type { MessageListRenderGroup } from "./MessageList.types";
@@ -309,7 +309,8 @@ export function MessageListItem({
   const assistantMetaFooterState = resolveMessageAssistantMetaFooterState({
     activeConversationRuntimeStatusLine,
     hasActiveInteractiveRuntime,
-    hasAssistantBodyContent,
+    hasAssistantBodyContent:
+      hasAssistantBodyContent && !shouldRenderFirstTokenRuntimeStatus,
     isConversationTailAssistant,
     lastAssistantMessageId,
     message: msg,
@@ -331,14 +332,10 @@ export function MessageListItem({
       tailRuntimeStatusLine={tailRuntimeStatusLine}
     />
   );
-  const firstTokenRuntimeStatusNode = shouldRenderFirstTokenRuntimeStatus ? (
-    <AssistantFirstTokenRuntimeStatus status={msg.runtimeStatus} />
-  ) : null;
   if (
     msg.role === "assistant" &&
     !hasAssistantBodyContent &&
-    !assistantMetaFooterState.hasAssistantMetaFooter &&
-    !firstTokenRuntimeStatusNode
+    !assistantMetaFooterState.hasAssistantMetaFooter
   ) {
     return null;
   }
@@ -412,14 +409,6 @@ export function MessageListItem({
             {primaryTimelineNode}
           </div>
         ) : null}
-        {firstTokenRuntimeStatusNode ? (
-          <div
-            className="mb-1.5 px-1"
-            data-testid="assistant-runtime-status-shell"
-          >
-            {firstTokenRuntimeStatusNode}
-          </div>
-        ) : null}
         {hasAssistantBodyContent ? (
           <MessageBubble
             $isUser={msg.role === "user"}
@@ -443,75 +432,79 @@ export function MessageListItem({
             aria-label={msg.role === "assistant" ? assistantLabel : undefined}
           >
             {msg.role === "assistant" ? (
-              <MessageAssistantBody
-                a2uiFormDataMap={a2uiFormDataMap}
-                actionContent={actionContent}
-                collapseCodeBlocks={collapseCodeBlocks}
-                displayContent={displayContent}
-                handleExpandHistoricalAssistantMessage={
-                  handleExpandHistoricalAssistantMessage
-                }
-                handleExpandLongHistoricalMessage={
-                  handleExpandLongHistoricalMessage
-                }
-                hasImageWorkbenchLeadContent={hasImageWorkbenchLeadContent}
-                historicalAssistantPreviewContent={
-                  historicalAssistantPreviewContent
-                }
-                imageWorkbenchRendererState={imageWorkbenchRendererState}
-                isActiveProcessOnlyOutput={isActiveProcessOnlyOutput}
-                isCurrentInteractiveAssistantMessage={
-                  isCurrentInteractiveAssistantMessage
-                }
-                message={msg}
-                sessionId={sessionId}
-                messageCanvasShortcutPath={messageCanvasShortcutPath}
-                messageCanvasShortcutTitle={messageCanvasShortcutTitle}
-                messageSavedSiteContentTarget={messageSavedSiteContentTarget}
-                onA2UIFormChange={onA2UIFormChange}
-                onA2UISubmit={onA2UISubmit}
-                onCodeBlockClick={onCodeBlockClick}
-                onFileClick={onFileClick}
-                onOpenUrlPreview={onOpenUrlPreview}
-                onOpenMessagePreview={onOpenMessagePreview}
-                onOpenSavedSiteContent={onOpenSavedSiteContent}
-                onPermissionResponse={onPermissionResponse}
-                onQuoteMessage={onQuoteMessage}
-                onWriteFile={onWriteFile}
-                primaryTimeline={primaryTimelineNode}
-                promoteActionRequestsToA2UI={promoteActionRequestsToA2UI}
-                readOnlyInteractiveContent={shouldReadOnlyInteractiveContent}
-                renderA2UIInline={renderA2UIInline}
-                rendererActionRequests={rendererActionRequests}
-                rendererContent={rendererContent}
-                rendererContentParts={rendererContentParts}
-                rendererMarkdownRenderMode={rendererMarkdownRenderMode}
-                rendererRawContent={rendererRawContent}
-                rendererThinkingContent={rendererThinkingContent}
-                rendererToolCalls={rendererToolCalls}
-                renderProposedPlanBlocks={shouldRenderProposedPlanBlocks}
-                shouldCollapseCodeBlock={shouldCollapseCodeBlock}
-                shouldCollapseLongHistoricalMessage={
-                  shouldCollapseLongHistoricalMessage
-                }
-                shouldDeferHistoricalMarkdownRender={
-                  shouldDeferHistoricalMarkdownRender
-                }
-                shouldPreviewHistoricalAssistantMessage={
-                  shouldPreviewHistoricalAssistantMessage
-                }
-                shouldRenderMessageCanvasShortcut={
-                  shouldRenderMessageCanvasShortcut
-                }
-                shouldRenderPrimaryTimelineOutsideBubble={
-                  shouldRenderPrimaryTimelineOutsideBubble
-                }
-                shouldSuppressInlineA2UI={shouldSuppressInlineA2UI}
-                shouldSuppressRendererProcessFlow={
-                  shouldSuppressRendererProcessFlow
-                }
-                suppressedActionRequestId={suppressedActionRequestId}
-              />
+              shouldRenderFirstTokenRuntimeStatus ? (
+                <AssistantFirstTokenRuntimeStatus status={msg.runtimeStatus} />
+              ) : (
+                <MessageAssistantBody
+                  a2uiFormDataMap={a2uiFormDataMap}
+                  actionContent={actionContent}
+                  collapseCodeBlocks={collapseCodeBlocks}
+                  displayContent={displayContent}
+                  handleExpandHistoricalAssistantMessage={
+                    handleExpandHistoricalAssistantMessage
+                  }
+                  handleExpandLongHistoricalMessage={
+                    handleExpandLongHistoricalMessage
+                  }
+                  hasImageWorkbenchLeadContent={hasImageWorkbenchLeadContent}
+                  historicalAssistantPreviewContent={
+                    historicalAssistantPreviewContent
+                  }
+                  imageWorkbenchRendererState={imageWorkbenchRendererState}
+                  isActiveProcessOnlyOutput={isActiveProcessOnlyOutput}
+                  isCurrentInteractiveAssistantMessage={
+                    isCurrentInteractiveAssistantMessage
+                  }
+                  message={msg}
+                  sessionId={sessionId}
+                  messageCanvasShortcutPath={messageCanvasShortcutPath}
+                  messageCanvasShortcutTitle={messageCanvasShortcutTitle}
+                  messageSavedSiteContentTarget={messageSavedSiteContentTarget}
+                  onA2UIFormChange={onA2UIFormChange}
+                  onA2UISubmit={onA2UISubmit}
+                  onCodeBlockClick={onCodeBlockClick}
+                  onFileClick={onFileClick}
+                  onOpenUrlPreview={onOpenUrlPreview}
+                  onOpenMessagePreview={onOpenMessagePreview}
+                  onOpenSavedSiteContent={onOpenSavedSiteContent}
+                  onPermissionResponse={onPermissionResponse}
+                  onQuoteMessage={onQuoteMessage}
+                  onWriteFile={onWriteFile}
+                  primaryTimeline={primaryTimelineNode}
+                  promoteActionRequestsToA2UI={promoteActionRequestsToA2UI}
+                  readOnlyInteractiveContent={shouldReadOnlyInteractiveContent}
+                  renderA2UIInline={renderA2UIInline}
+                  rendererActionRequests={rendererActionRequests}
+                  rendererContent={rendererContent}
+                  rendererContentParts={rendererContentParts}
+                  rendererMarkdownRenderMode={rendererMarkdownRenderMode}
+                  rendererRawContent={rendererRawContent}
+                  rendererThinkingContent={rendererThinkingContent}
+                  rendererToolCalls={rendererToolCalls}
+                  renderProposedPlanBlocks={shouldRenderProposedPlanBlocks}
+                  shouldCollapseCodeBlock={shouldCollapseCodeBlock}
+                  shouldCollapseLongHistoricalMessage={
+                    shouldCollapseLongHistoricalMessage
+                  }
+                  shouldDeferHistoricalMarkdownRender={
+                    shouldDeferHistoricalMarkdownRender
+                  }
+                  shouldPreviewHistoricalAssistantMessage={
+                    shouldPreviewHistoricalAssistantMessage
+                  }
+                  shouldRenderMessageCanvasShortcut={
+                    shouldRenderMessageCanvasShortcut
+                  }
+                  shouldRenderPrimaryTimelineOutsideBubble={
+                    shouldRenderPrimaryTimelineOutsideBubble
+                  }
+                  shouldSuppressInlineA2UI={shouldSuppressInlineA2UI}
+                  shouldSuppressRendererProcessFlow={
+                    shouldSuppressRendererProcessFlow
+                  }
+                  suppressedActionRequestId={suppressedActionRequestId}
+                />
+              )
             ) : (
               <MessageUserBody
                 content={displayContent}

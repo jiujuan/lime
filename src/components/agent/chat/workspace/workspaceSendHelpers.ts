@@ -21,7 +21,6 @@ import {
   mergeRequestMetadataWithArtifact,
   mergeSoulArtifactVoiceDiagnostics,
 } from "../utils/artifactGenerationBriefMetadata";
-import type { AsterExecutionStrategy } from "@/lib/api/agentRuntime";
 import type { AgentRuntimeWorkspaceSkillBinding } from "@/lib/api/agentRuntime/types";
 import type { AssistantDraftState } from "../hooks/agentChatShared";
 import type { HandleSendOptions } from "../hooks/handleSendTypes";
@@ -47,10 +46,6 @@ import type {
 } from "../utils/teamDefinitions";
 import type { UseRuntimeTeamFormationResult } from "../hooks/useRuntimeTeamFormation";
 import type { TeamWorkspaceRuntimeFormationState } from "../teamWorkspaceRuntime";
-import {
-  buildWaitingAgentRuntimeStatus,
-  formatAgentRuntimeStatusSummary,
-} from "../utils/agentRuntimeStatus";
 import type { SoulInteractionCopy } from "@/lib/soul/interactionCopy";
 import { resolveSoulInteractionCopy } from "@/lib/soul/interactionCopy";
 import { normalizeTeamWorkspaceDisplayValue } from "../utils/teamWorkspaceDisplay";
@@ -123,7 +118,6 @@ export interface SubmissionPreviewSnapshot {
   inputCapabilityRoute?: InputCapabilitySendRoute;
   images: MessageImage[];
   createdAt: number;
-  runtimeStatus: NonNullable<Message["runtimeStatus"]>;
 }
 
 export interface ContextWorkspaceSummary {
@@ -1272,48 +1266,10 @@ export function buildRuntimeTeamDispatchPreviewMessages(
   ];
 }
 
-export function buildInitialDispatchPreviewMessages(
-  snapshot: InitialDispatchPreviewSnapshot,
-  assistantPreviewText?: string,
-  soulCopy: SoulInteractionCopy = resolveSoulInteractionCopy(),
-): Message[] {
-  const normalizedPrompt = (snapshot.prompt || "").trim();
-  const normalizedImages = snapshot.images || [];
-
-  if (!normalizedPrompt && normalizedImages.length === 0) {
-    return [];
-  }
-
-  const timestamp = new Date();
-  const defaultAssistantPreviewText = soulCopy.initialDispatchWaiting;
-  const normalizedAssistantPreviewText =
-    assistantPreviewText?.trim() || defaultAssistantPreviewText;
-  const isAssistantThinking =
-    normalizedAssistantPreviewText === defaultAssistantPreviewText;
-
-  return [
-    {
-      id: `initial-dispatch:${snapshot.key}:user`,
-      role: "user",
-      content: normalizedPrompt,
-      images: normalizedImages.length > 0 ? normalizedImages : undefined,
-      timestamp,
-    },
-    {
-      id: `initial-dispatch:${snapshot.key}:assistant`,
-      role: "assistant",
-      content: normalizedAssistantPreviewText,
-      timestamp: new Date(timestamp.getTime() + 1),
-      isThinking: isAssistantThinking,
-    },
-  ];
-}
-
 interface CreateSubmissionPreviewSnapshotOptions {
   key: string;
   prompt: string;
   images: MessageImage[];
-  executionStrategy: AsterExecutionStrategy;
   displayContent?: string;
   inputCapabilityRoute?: InputCapabilitySendRoute;
 }
@@ -1325,7 +1281,6 @@ export function createSubmissionPreviewSnapshot(
     key,
     prompt,
     images,
-    executionStrategy,
     displayContent,
     inputCapabilityRoute,
   } = options;
@@ -1337,20 +1292,13 @@ export function createSubmissionPreviewSnapshot(
     inputCapabilityRoute,
     images,
     createdAt: Date.now(),
-    runtimeStatus: buildWaitingAgentRuntimeStatus({
-      executionStrategy,
-    }),
   };
 }
 
 export function buildSubmissionPreviewMessages(
   snapshot: SubmissionPreviewSnapshot,
-  soulCopy: SoulInteractionCopy = resolveSoulInteractionCopy(),
 ): Message[] {
   const timestamp = new Date(snapshot.createdAt);
-  const runtimeStatusSummary =
-    formatAgentRuntimeStatusSummary(snapshot.runtimeStatus) ||
-    soulCopy.initialDispatchWaiting;
 
   return [
     {
@@ -1360,14 +1308,6 @@ export function buildSubmissionPreviewMessages(
       images: snapshot.images.length > 0 ? snapshot.images : undefined,
       timestamp,
       inputCapabilityRoute: snapshot.inputCapabilityRoute,
-    },
-    {
-      id: `submission-preview:${snapshot.key}:assistant`,
-      role: "assistant",
-      content: runtimeStatusSummary,
-      timestamp: new Date(timestamp.getTime() + 1),
-      isThinking: true,
-      runtimeStatus: snapshot.runtimeStatus,
     },
   ];
 }

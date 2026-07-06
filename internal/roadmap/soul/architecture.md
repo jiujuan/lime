@@ -1,7 +1,7 @@
 # Lime Soul 个性化目标架构
 
 > 状态：current architecture plan
-> 更新时间：2026-06-03
+> 更新时间：2026-07-06
 > 目标：在不新增 Soul 平行事实源的前提下，把全局人格 / 声线能力接入 Lime current 个性化主链。
 
 ## 1. 架构原则
@@ -278,7 +278,36 @@ lime-rs/src/services/artifact_prompt_service.rs
 2. 诊断详情层展示 voice 来源、guard 结果和可解释 evidence。
 3. 完整 GUI smoke / Playwright E2E 证据。
 
-### 3.6 Expert Runtime Layer
+### 3.6 Style Pack Registry Layer
+
+职责：
+
+1. 把四个首发交互风格注册为 built-in Style Pack seed，而不是组件里的硬编码分支。
+2. 为 Style Resolver 提供唯一 profile 读取入口：`memory.soul.style_profile_id -> registry profile -> directive composer -> boundary guard`。
+3. 将 `voicePrimitives`、`surfaceContracts`、`antiRepetitionRules`、`fewShotAnchors` 和 `riskFallback` 投影到 `memory_soul_prompt_context`。
+4. 保证工具事实、搜索结果、图片结果、任务状态仍由 Agent Runtime / App Server read model 提供，Style Pack 只描述“怎么说”。
+
+当前 built-in seed：
+
+| pack id                                   | profile id                  | 作用                        |
+| ----------------------------------------- | --------------------------- | --------------------------- |
+| `com.lime.soul.cheeky-sassy-executor`     | `cheeky_sassy_executor`     | 贱兮兮、轻微吐槽、有执行感  |
+| `com.lime.soul.warm-supportive-companion` | `warm_supportive_companion` | 温柔、低压、陪伴式推进      |
+| `com.lime.soul.cool-confident-operator`   | `cool_confident_operator`   | 克制、锋利、行动导向        |
+| `com.lime.soul.calm-professional-partner` | `calm_professional_partner` | 冷静、专业、高风险 fallback |
+
+不允许：
+
+1. UI 组件、工具卡片、timeline、runtime status 直接 `switch(profileId)` 拼最终展示句子。
+2. i18n 资源新增 `agentChat.soulInteraction.<tone>.*` 这类 profile 句库。
+3. 将 few-shot anchor 当固定文案复读。
+4. 新建 `personalstyle` Runtime、表或 prompt composer。
+
+事实源声明：
+
+**Style Pack Registry 是交互口吻的 current registry；本地 UI 只消费 descriptor metadata 和 neutral locale copy，真正的风格表达由 prompt context + runtime facts + 模型 narrative 生成。**
+
+### 3.7 Expert Runtime Layer
 
 职责：
 

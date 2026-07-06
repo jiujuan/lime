@@ -18,7 +18,7 @@ fn session_config_appends_soul_context_from_config_metadata() {
                 "scope": "interaction_only",
                 "styleProfile": {
                     "id": "warm_supportive_companion",
-                    "packId": "com.lime.builtin.default",
+                    "packId": "com.lime.soul.warm-supportive-companion",
                     "tone": "warm_supportive",
                     "intensity": "low",
                     "allowedMoves": ["Use patient wording."],
@@ -45,7 +45,7 @@ fn session_config_appends_soul_context_from_config_metadata() {
     assert!(prompt.contains("## Interaction Soul"));
     assert!(prompt.contains("saved app config `memory.soul`"));
     assert!(prompt.contains("Style profile: warm_supportive_companion"));
-    assert!(prompt.contains("Style pack: com.lime.builtin.default"));
+    assert!(prompt.contains("Style pack: com.lime.soul.warm-supportive-companion"));
     assert!(prompt.contains("Lead with the answer."));
     assert!(prompt.contains("State risks plainly"));
     assert!(prompt.contains("generation brief"));
@@ -94,7 +94,7 @@ fn session_config_appends_persona_context_from_request_metadata_to_soul_prompt()
                 "scope": "interaction_only",
                 "styleProfile": {
                     "id": "cheeky_sassy_executor",
-                    "packId": "com.lime.builtin.default",
+                    "packId": "com.lime.soul.cheeky-sassy-executor",
                     "tone": "cheeky_sassy",
                     "intensity": "low",
                     "allowedMoves": ["Use light playful phrasing."],
@@ -117,7 +117,7 @@ fn session_config_appends_persona_context_from_request_metadata_to_soul_prompt()
     let prompt = config.system_prompt.expect("system prompt");
     assert!(prompt.contains("## Interaction Soul"));
     assert!(prompt.contains("Style profile: cheeky_sassy_executor"));
-    assert!(prompt.contains("Style pack: com.lime.builtin.default"));
+    assert!(prompt.contains("Style pack: com.lime.soul.cheeky-sassy-executor"));
     assert!(prompt.contains("Persona knowledge packs (context only)"));
     assert!(prompt.contains("founder-persona (activation: implicit, role: companion)"));
     assert!(prompt.contains("Persona context boundaries"));

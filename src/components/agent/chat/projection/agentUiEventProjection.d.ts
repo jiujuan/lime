@@ -1,4 +1,5 @@
 import type { AgentEvent } from "@/lib/api/agentProtocol";
+import type { SoulInteractionCopy } from "@/lib/soul/interactionCopy";
 import type { AutomationJobRecord } from "@/lib/api/automation";
 export type AgentUiOwner = "runtime" | "model" | "tool" | "action" | "artifact" | "evidence" | "context" | "policy" | "task" | "session" | "diagnostics" | "ui_projection" | "unknown" | "agent" | "team";
 export type AgentUiScope = "application" | "workspace" | "session" | "thread" | "run" | "turn" | "message" | "part" | "task" | "agent" | "tool_call" | "action_request" | "artifact" | "evidence" | "unknown" | "team";
@@ -85,6 +86,9 @@ export interface AgentUiProjectionContext {
     messageId?: string | null;
     taskId?: string | null;
     runtimeEntity?: AgentUiRuntimeEntity | null;
+}
+export interface AgentUiProjectionOptions {
+    soulCopy?: SoulInteractionCopy;
 }
 export interface AgentUiEvidenceProjectionInput {
     evidenceId?: string | null;
@@ -197,7 +201,7 @@ export interface AgentUiRemoteTeammateProjectionInput {
     artifactPaths?: string[];
     timestamp?: string | null;
 }
-export declare function buildAgentUiProjectionEvents(event: AgentEvent, context?: AgentUiProjectionContext): AgentUiProjectionEvent[];
+export declare function buildAgentUiProjectionEvents(event: AgentEvent, context?: AgentUiProjectionContext, options?: AgentUiProjectionOptions): AgentUiProjectionEvent[];
 export declare function buildAgentUiEvidenceChangedEvent(input: AgentUiEvidenceProjectionInput, context?: AgentUiProjectionContext): AgentUiProjectionEvent;
 export declare function buildAgentUiReviewProjectionEvents(input: AgentUiReviewProjectionInput, context?: AgentUiProjectionContext): AgentUiProjectionEvent[];
 export declare function buildAgentUiHandoffProjectionEvents(input: AgentUiHandoffProjectionInput, context?: AgentUiProjectionContext): AgentUiProjectionEvent[];

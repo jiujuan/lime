@@ -20,7 +20,11 @@ import {
   evaluatePageSnapshot,
   invokeAppServerFromPage,
 } from "./claw-chat-current-fixture-rpc.mjs";
-import { assert, sanitizeJson, sleep } from "./claw-chat-current-fixture-utils.mjs";
+import {
+  assert,
+  sanitizeJson,
+  sleep,
+} from "./claw-chat-current-fixture-utils.mjs";
 
 export async function createFixtureSession(
   page,
@@ -100,7 +104,11 @@ export async function createFixtureSession(
   };
 }
 
-export async function createExpertSkillsRuntimeSession(page, workspace, requestLog) {
+export async function createExpertSkillsRuntimeSession(
+  page,
+  workspace,
+  requestLog,
+) {
   const { workspaceId, rootPath } = workspace;
   assert(rootPath, "expert skills fixture 缺少 workspace rootPath");
   const expertMetadata = buildExpertSkillsRuntimeMetadata();
@@ -175,7 +183,10 @@ export async function createExpertSkillsRuntimeSession(page, workspace, requestL
 export async function injectExpertSkillsRuntimeCatalog(page, options = {}) {
   const runtimeTenantId = await page
     .evaluate(
-      () => window.__LIME_OEM_CLOUD__?.tenantId || window.__LIME_OEM_CLOUD__?.tenant?.id || null,
+      () =>
+        window.__LIME_OEM_CLOUD__?.tenantId ||
+        window.__LIME_OEM_CLOUD__?.tenant?.id ||
+        null,
     )
     .catch(() => null);
   const tenantId =
@@ -184,7 +195,9 @@ export async function injectExpertSkillsRuntimeCatalog(page, options = {}) {
       : EXPERT_SKILLS_RUNTIME_TENANT_ID;
   const catalog = buildExpertSkillsRuntimeCatalog({ ...options, tenantId });
   const workspaceSkillCatalog = options.workspaceSkill
-    ? buildExpertPanelWorkspaceSkillCatalog(options.workspaceSkill, { tenantId })
+    ? buildExpertPanelWorkspaceSkillCatalog(options.workspaceSkill, {
+        tenantId,
+      })
     : null;
   return await page.evaluate(
     ({ catalog, workspaceSkillCatalog }) => {
@@ -225,8 +238,8 @@ export async function injectExpertSkillsRuntimeCatalog(page, options = {}) {
               entryCount: workspaceSkillCatalog.entries.length,
               skillId: workspaceSkillCatalog.entries[0]?.skillId ?? null,
               skillFilePath:
-                workspaceSkillCatalog.entries[0]?.skillLocator
-                  ?.skillFilePath ?? null,
+                workspaceSkillCatalog.entries[0]?.skillLocator?.skillFilePath ??
+                null,
             }
           : null,
       };
@@ -234,7 +247,10 @@ export async function injectExpertSkillsRuntimeCatalog(page, options = {}) {
     { catalog, workspaceSkillCatalog },
   );
 }
-export function buildExpertPanelWorkspaceSkillCatalog(workspaceSkill, options = {}) {
+export function buildExpertPanelWorkspaceSkillCatalog(
+  workspaceSkill,
+  options = {},
+) {
   const skillFilePath = workspaceSkill?.skillFilePath;
   assert(
     skillFilePath,
@@ -327,7 +343,11 @@ export function buildExpertPanelWorkspaceSkillCatalog(workspaceSkill, options = 
   };
 }
 
-export async function navigateGuiToWorkspaceScopedAgent(page, options, workspaceId) {
+export async function navigateGuiToWorkspaceScopedAgent(
+  page,
+  options,
+  workspaceId,
+) {
   const startedAt = Date.now();
   let lastSnapshot = null;
 
@@ -377,10 +397,7 @@ export async function navigateGuiToWorkspaceScopedAgent(page, options, workspace
     }
     lastSnapshot = snapshot;
 
-    if (
-      snapshot.hasConversationList &&
-      snapshot.localStorageMatchesWorkspace
-    ) {
+    if (snapshot.hasConversationList && snapshot.localStorageMatchesWorkspace) {
       return snapshot;
     }
 
@@ -486,7 +503,7 @@ export async function openSessionFromSidebar(
     if (!lastClick?.clicked) {
       lastClick = await evaluatePageSnapshot(
         page,
-        ({ title }) => {
+        ({ title, sessionId }) => {
           const sidebarCandidates = Array.from(
             document.querySelectorAll(
               '[data-testid="app-sidebar-conversation-open"]',
@@ -535,7 +552,7 @@ export async function openSessionFromSidebar(
             testId: button.getAttribute("data-testid") || "",
           };
         },
-        { title },
+        { title, sessionId },
       );
     }
 
@@ -553,19 +570,23 @@ export async function openSessionFromSidebar(
       }));
       const inputReady = await evaluatePageSnapshot(
         page,
-        ({ title }) => {
-          const textarea = document.querySelector(
-            'textarea[name="agent-chat-message"]',
-          );
+        ({ title, sessionId }) => {
+          const textareas = Array.from(
+            document.querySelectorAll('textarea[name="agent-chat-message"]'),
+          ).filter((node) => node instanceof HTMLTextAreaElement);
+          const textarea =
+            textareas.find((node) => node.dataset.sessionId === sessionId) ??
+            textareas[0] ??
+            null;
           const rect = textarea?.getBoundingClientRect();
           const style = textarea ? window.getComputedStyle(textarea) : null;
           const textareaVisible = Boolean(
             textarea &&
-              rect &&
-              rect.width > 16 &&
-              rect.height > 16 &&
-              style?.visibility !== "hidden" &&
-              style?.display !== "none",
+            rect &&
+            rect.width > 16 &&
+            rect.height > 16 &&
+            style?.visibility !== "hidden" &&
+            style?.display !== "none",
           );
           const menu = document.querySelector(
             '[data-testid="app-sidebar-conversation-menu"]',
@@ -579,13 +600,18 @@ export async function openSessionFromSidebar(
           return {
             url: window.location.href,
             hasTextarea: Boolean(textarea),
+            textareaSessionId:
+              textarea instanceof HTMLTextAreaElement
+                ? textarea.dataset.sessionId || null
+                : null,
+            textareaCount: textareas.length,
             textareaVisible,
             hasConversationMenu: Boolean(menu),
             hasSessionTitleInMain: mainText.includes(title),
             hasRecentConversationsShell: mainText.includes("最近对话"),
             hasMessageList: Boolean(
               document.querySelector('[data-testid="message-list"]') ||
-                document.querySelector('[data-testid="message-list-frame"]'),
+              document.querySelector('[data-testid="message-list-frame"]'),
             ),
             isRestoringSessionShell:
               mainText.includes("正在恢复生成会话") ||
@@ -595,21 +621,23 @@ export async function openSessionFromSidebar(
             ),
             hasWorkspaceShell: Boolean(
               document.querySelector('[data-testid="agent-chat-workspace"]') ||
-                document.querySelector('[data-testid="chat-workspace"]') ||
-                document.querySelector(
-                  '[data-testid="theme-workbench-harness-toggle"]',
-                ) ||
-                document.querySelector('[data-testid="toggle-harness"]'),
+              document.querySelector('[data-testid="chat-workspace"]') ||
+              document.querySelector(
+                '[data-testid="theme-workbench-harness-toggle"]',
+              ) ||
+              document.querySelector('[data-testid="toggle-harness"]'),
             ),
             textareaDisabled:
-              textarea instanceof HTMLTextAreaElement ? textarea.disabled : null,
+              textarea instanceof HTMLTextAreaElement
+                ? textarea.disabled
+                : null,
             hasPlanDecisionPanel: Boolean(planDecisionPanel),
             hasPlanDecisionTitle: planDecisionText.includes("实施此计划"),
             bodyText,
             mainText,
           };
         },
-        { title },
+        { title, sessionId },
       );
       lastSnapshot = {
         clicked: lastClick,
@@ -643,7 +671,8 @@ export async function openSessionFromSidebar(
         inputReady?.hasTextarea &&
         inputReady?.hasInputbarCore &&
         inputReady?.textareaVisible &&
-        inputReady?.textareaDisabled === false;
+        inputReady?.textareaDisabled === false &&
+        (!sessionId || inputReady?.textareaSessionId === sessionId);
       const planDecisionReady =
         allowPlanDecision === true &&
         inputReady?.hasMessageList === true &&

@@ -37,10 +37,7 @@ const textAndImageModelCapabilitySummary: ModelCapabilitySummary = {
 function createTestAgentChatSendMessage(
   options: CreateSendMessageOptions,
 ): SendMessageFn {
-  return createAgentChatSendMessage({
-    resolveModelCapabilitySummary: vi.fn(async () => null),
-    ...options,
-  });
+  return createAgentChatSendMessage(options);
 }
 
 describe("createAgentChatSendMessage", () => {
@@ -81,11 +78,8 @@ describe("createAgentChatSendMessage", () => {
     );
   });
 
-  it("普通消息应从当前 picker provider/model 注入模型能力摘要", async () => {
+  it("带图片普通消息不应在 rawSendMessage 前拉取模型能力摘要", async () => {
     const rawSendMessage = vi.fn<SendMessageFn>(async () => undefined);
-    const resolveModelCapabilitySummary = vi.fn(
-      async () => textAndImageModelCapabilitySummary,
-    );
     const sendMessage = createTestAgentChatSendMessage({
       baseStatusSnapshot: {
         sessionId: "session-1",
@@ -103,25 +97,23 @@ describe("createAgentChatSendMessage", () => {
       appendAssistantMessage: vi.fn(),
       notifyInfo: vi.fn(),
       notifySuccess: vi.fn(),
-      resolveModelCapabilitySummary,
     });
 
-    await sendMessage("分析这张图", [], false, false, false, "react", "gpt-5.4");
+    await sendMessage(
+      "分析这张图",
+      [{ data: "base64-image", mediaType: "image/png" }],
+      false,
+      false,
+      false,
+      "react",
+      "gpt-5.4",
+    );
 
-    expect(resolveModelCapabilitySummary).toHaveBeenCalledWith({
-      providerType: "openai",
-      model: "gpt-5.4",
-    });
-    expect(rawSendMessage.mock.calls[0]?.[8]).toEqual({
-      modelCapabilitySummary: textAndImageModelCapabilitySummary,
-    });
+    expect(rawSendMessage.mock.calls[0]?.[8]).toBeUndefined();
   });
 
-  it("显式传入模型能力摘要时不应再用 picker 选择覆盖", async () => {
+  it("显式传入模型能力摘要时应原样透传", async () => {
     const rawSendMessage = vi.fn<SendMessageFn>(async () => undefined);
-    const resolveModelCapabilitySummary = vi.fn(
-      async () => textAndImageModelCapabilitySummary,
-    );
     const sendOptions = {
       requestMetadata: { source: "test" },
       modelCapabilitySummary: null,
@@ -143,7 +135,6 @@ describe("createAgentChatSendMessage", () => {
       appendAssistantMessage: vi.fn(),
       notifyInfo: vi.fn(),
       notifySuccess: vi.fn(),
-      resolveModelCapabilitySummary,
     });
 
     await sendMessage(
@@ -158,15 +149,11 @@ describe("createAgentChatSendMessage", () => {
       sendOptions,
     );
 
-    expect(resolveModelCapabilitySummary).not.toHaveBeenCalled();
     expect(rawSendMessage.mock.calls[0]?.[8]).toBe(sendOptions);
   });
 
-  it("发送选项中的 provider/model override 应作为能力摘要解析选择", async () => {
+  it("发送选项中的 provider/model override 应直接透传", async () => {
     const rawSendMessage = vi.fn<SendMessageFn>(async () => undefined);
-    const resolveModelCapabilitySummary = vi.fn(
-      async () => textAndImageModelCapabilitySummary,
-    );
     const sendMessage = createTestAgentChatSendMessage({
       baseStatusSnapshot: {
         sessionId: "session-1",
@@ -184,7 +171,6 @@ describe("createAgentChatSendMessage", () => {
       appendAssistantMessage: vi.fn(),
       notifyInfo: vi.fn(),
       notifySuccess: vi.fn(),
-      resolveModelCapabilitySummary,
     });
 
     await sendMessage(
@@ -202,14 +188,9 @@ describe("createAgentChatSendMessage", () => {
       },
     );
 
-    expect(resolveModelCapabilitySummary).toHaveBeenCalledWith({
-      providerType: "translation-provider",
-      model: "translation-model",
-    });
     expect(rawSendMessage.mock.calls[0]?.[8]).toEqual({
       providerOverride: "translation-provider",
       modelOverride: "translation-model",
-      modelCapabilitySummary: textAndImageModelCapabilitySummary,
     });
   });
 

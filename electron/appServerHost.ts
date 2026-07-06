@@ -24,7 +24,7 @@ import {
   type RequestId,
   type SidecarLaunchConfig,
 } from "@limecloud/app-server-client";
-import { app } from "./electronRuntime";
+import { app, session } from "./electronRuntime";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -46,6 +46,17 @@ const APP_SERVER_STREAMING_TURN_ACK_GRACE_MS = 250;
 const APP_SERVER_PROXY_REQUEST_ID_PREFIX = "electron-host";
 const APP_SERVER_DATA_DIR_NAME = "app-server";
 const APP_SERVER_RECENT_NOTIFICATION_LIMIT = 500;
+const APP_SERVER_PROXY_PROBE_URL = "https://llm.limeai.run/v1/models";
+const APP_SERVER_PROXY_ENV_KEYS = [
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "ALL_PROXY",
+  "http_proxy",
+  "https_proxy",
+  "all_proxy",
+] as const;
+const APP_SERVER_NO_PROXY_ENV_KEYS = ["NO_PROXY", "no_proxy"] as const;
+const APP_SERVER_LOOPBACK_NO_PROXY_HOSTS = ["127.0.0.1", "localhost", "::1"];
 const DEFAULT_APP_SERVER_PRODUCT_DB_MIGRATION_CLEANUP: NonNullable<
   SidecarLaunchConfig["productDbMigrationCleanup"]
 > = "drop-tables";
@@ -177,9 +188,10 @@ export class ElectronAppServerHost {
     this.#rememberRecentNotifications(drained);
     const messages =
       request.includeRecent === true
-        ? uniqueJsonRpcMessages([...this.#recentNotifications, ...drained]).slice(
-            -limit,
-          )
+        ? uniqueJsonRpcMessages([
+            ...this.#recentNotifications,
+            ...drained,
+          ]).slice(-limit)
         : drained;
 
     return {
@@ -234,6 +246,7 @@ export class ElectronAppServerHost {
 
   async #start(): Promise<ConnectedAppServerSidecar> {
     const launchConfig = await resolveLaunchConfig();
+    const sidecarEnv = await resolveAppServerSidecarEnv();
     const initializeParams: InitializeParams = {
       clientInfo: {
         name: "lime_desktop_electron",
@@ -255,6 +268,7 @@ export class ElectronAppServerHost {
       initializeParams,
       {
         verifySha256: launchConfig.verifySha256,
+        ...(sidecarEnv ? { env: sidecarEnv } : {}),
         restartPolicy: {
           maxAttempts: 3,
           initialDelayMs: 500,
@@ -433,10 +447,7 @@ function isAppServerRequestTimeoutError(error: unknown): boolean {
   );
 }
 
-function normalizeDrainEventsLimit(
-  value: unknown,
-  maxLimit: number,
-): number {
+function normalizeDrainEventsLimit(value: unknown, maxLimit: number): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return 20;
   }
@@ -574,6 +585,97 @@ async function resolveLaunchConfig(): Promise<ElectronAppServerLaunchConfig> {
       dataDir,
     ),
   };
+}
+
+async function resolveAppServerSidecarEnv(): Promise<
+  NodeJS.ProcessEnv | undefined
+> {
+  const env: NodeJS.ProcessEnv = {};
+  const currentNoProxy = APP_SERVER_NO_PROXY_ENV_KEYS.map(
+    (key) => process.env[key],
+  ).find((value) => Boolean(value?.trim()));
+  const noProxy = mergeLoopbackNoProxy(currentNoProxy);
+  if (noProxy && noProxy !== process.env.NO_PROXY) {
+    env.NO_PROXY = noProxy;
+  }
+  if (noProxy && noProxy !== process.env.no_proxy) {
+    env.no_proxy = noProxy;
+  }
+
+  if (!hasExplicitProxyEnv(process.env)) {
+    const proxyUrl = await resolveElectronSystemProxyUrl();
+    if (proxyUrl) {
+      for (const key of APP_SERVER_PROXY_ENV_KEYS) {
+        env[key] = proxyUrl;
+      }
+    }
+  }
+
+  return Object.keys(env).length > 0 ? env : undefined;
+}
+
+function hasExplicitProxyEnv(env: NodeJS.ProcessEnv): boolean {
+  return APP_SERVER_PROXY_ENV_KEYS.some((key) => Boolean(env[key]?.trim()));
+}
+
+async function resolveElectronSystemProxyUrl(): Promise<string | undefined> {
+  if (process.platform !== "darwin") {
+    return undefined;
+  }
+
+  try {
+    const rules = await session.defaultSession.resolveProxy(
+      APP_SERVER_PROXY_PROBE_URL,
+    );
+    return firstProxyRuleToUrl(rules);
+  } catch (error) {
+    console.warn(
+      "[electron-host] failed to resolve system proxy for app-server",
+      error,
+    );
+    return undefined;
+  }
+}
+
+function firstProxyRuleToUrl(rules: string): string | undefined {
+  for (const rawRule of rules.split(";")) {
+    const rule = rawRule.trim();
+    if (!rule || rule.toUpperCase() === "DIRECT") {
+      continue;
+    }
+    const [kind = "", address = ""] = rule.split(/\s+/, 2);
+    const normalizedAddress = address.trim();
+    if (!normalizedAddress || normalizedAddress.includes("://")) {
+      continue;
+    }
+    switch (kind.toUpperCase()) {
+      case "PROXY":
+        return `http://${normalizedAddress}`;
+      case "HTTPS":
+        return `https://${normalizedAddress}`;
+      case "SOCKS":
+      case "SOCKS5":
+        return `socks5://${normalizedAddress}`;
+      default:
+        continue;
+    }
+  }
+  return undefined;
+}
+
+function mergeLoopbackNoProxy(value: string | undefined): string {
+  const entries = (value ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  const normalized = new Set(entries.map((entry) => entry.toLowerCase()));
+  for (const host of APP_SERVER_LOOPBACK_NO_PROXY_HOSTS) {
+    if (!normalized.has(host.toLowerCase())) {
+      entries.push(host);
+      normalized.add(host.toLowerCase());
+    }
+  }
+  return entries.join(",");
 }
 
 async function resolveResourceLaunchConfig(

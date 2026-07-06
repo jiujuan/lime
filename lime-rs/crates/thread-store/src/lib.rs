@@ -1,7 +1,13 @@
 pub mod conversation_transcript;
+pub mod history_search;
+pub mod legacy_conversation;
+pub mod memory_stub;
+pub mod runtime_snapshot;
+pub mod session_insights;
 pub mod session_record;
 pub mod session_repository;
 pub mod subagent_tree;
+pub mod task_board;
 
 use agent_protocol::{RuntimeEvent, RuntimeSnapshot, SessionId, ThreadId, TurnId};
 use serde::{Deserialize, Serialize};

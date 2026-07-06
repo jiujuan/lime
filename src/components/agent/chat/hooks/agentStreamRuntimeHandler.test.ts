@@ -250,6 +250,13 @@ describe("agentStreamRuntimeHandler storage", () => {
       ...baseOptions,
       data: {
         type: "text_delta",
+        event_id: "evt-final-web-tools",
+        sequence: 3,
+        session_id: "session-web-tools",
+        thread_id: "session-web-tools",
+        turn_id: "turn-web-tools",
+        itemId: "final-web-tools",
+        phase: "final_answer",
         text: "网页搜索渲染结论：最终正文继续输出。",
       } as AgentEvent,
     });
@@ -291,10 +298,16 @@ describe("agentStreamRuntimeHandler storage", () => {
           turnId: "turn-web-tools",
         }),
       }),
-      {
+      expect.objectContaining({
         type: "text",
         text: "网页搜索渲染结论：最终正文继续输出。",
-      },
+        metadata: expect.objectContaining({
+          itemId: "final-web-tools",
+          phase: "final_answer",
+          sequence: 3,
+          turnId: "turn-web-tools",
+        }),
+      }),
     ]);
   });
 
@@ -718,6 +731,8 @@ describe("agentStreamRuntimeHandler storage", () => {
         session_id: "session-web-tools-stable-sequence",
         thread_id: "session-web-tools-stable-sequence",
         turn_id: "turn-web-tools-stable-sequence",
+        itemId: "final-web-tools-stable-sequence",
+        phase: "final_answer",
         text: "网页搜索渲染结论：搜索来源已展开，读取页面已归入同一过程，最终正文继续输出。",
       } as AgentEvent,
     });

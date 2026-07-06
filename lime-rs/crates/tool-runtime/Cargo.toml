@@ -16,6 +16,7 @@ chrono.workspace = true
 dirs.workspace = true
 encoding_rs = "0.8"
 lime-core.workspace = true
+patch-apply.workspace = true
 rmcp.workspace = true
 regex.workspace = true
 reqwest.workspace = true
@@ -28,3 +29,6 @@ tokio-util.workspace = true
 url.workspace = true
 urlencoding.workspace = true
 which = "8.0.0"
+
+[dev-dependencies]
+tempfile.workspace = true

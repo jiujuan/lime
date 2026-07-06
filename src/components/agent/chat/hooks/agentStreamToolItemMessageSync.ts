@@ -37,10 +37,13 @@ function toolExecutionResultFromThreadItem(
   if (item.status === "in_progress") {
     return undefined;
   }
+  const structuredContent = item.structuredContent ?? item.structured_content;
   return {
     success: item.success ?? item.status === "completed",
     output: item.output || "",
     error: item.error,
+    structuredContent,
+    structured_content: structuredContent,
     metadata: metadataFromThreadItem(item),
   };
 }

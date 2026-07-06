@@ -4,7 +4,11 @@ use super::{
     SessionExecutionRuntimeRecentTeamRole, SessionExecutionRuntimeRecentTeamSelection,
     SessionExecutionRuntimeRoutingDecision, SessionExecutionRuntimeSource,
 };
-use aster::model::ModelConfig;
+use agent_runtime::session_execution::{
+    project_session_execution_runtime_session, SessionExecutionRuntimeSessionSource,
+    SessionExecutionRuntimeUsageSource, SESSION_RECENT_EXTENSION_VERSION,
+};
+use aster::session::ExtensionData;
 use aster::session::{
     Session, SessionRuntimeSnapshot, ThreadRuntime, ThreadRuntimeSnapshot, TurnContextOverride,
     TurnOutputSchemaRuntime, TurnOutputSchemaSource, TurnOutputSchemaStrategy, TurnRuntime,
@@ -15,6 +19,7 @@ use lime_core::database::dao::agent_timeline::{
     AgentThreadItem, AgentThreadItemPayload, AgentThreadItemStatus,
 };
 use serde_json::json;
+use serde_json::Value;
 use std::path::PathBuf;
 
 fn build_session_execution_runtime(
@@ -24,12 +29,14 @@ fn build_session_execution_runtime(
     snapshot: Option<&SessionRuntimeSnapshot>,
     provider_selector: Option<String>,
 ) -> Option<SessionExecutionRuntime> {
-    let session_projection = session.map(
-        crate::session_execution_runtime_adapter::project_aster_session_execution_runtime_session,
-    );
-    let snapshot_projection = snapshot.map(
-        crate::session_execution_runtime_adapter::project_aster_session_execution_runtime_snapshot,
-    );
+    let session_projection = session.map(project_test_session_execution_runtime_session);
+    let snapshot_projection = snapshot.map(|snapshot| {
+        let snapshot_record =
+            crate::runtime_store_aster_adapter::runtime_snapshot_record_from_aster(snapshot);
+        crate::session_execution_runtime_adapter::project_session_execution_runtime_snapshot_record(
+            &snapshot_record,
+        )
+    });
     super::build_session_execution_runtime(
         session_id,
         session_projection.as_ref(),
@@ -39,12 +46,54 @@ fn build_session_execution_runtime(
     )
 }
 
+fn read_test_extension_state_value(
+    extension_data: &ExtensionData,
+    extension_name: &str,
+) -> Option<Value> {
+    extension_data
+        .get_extension_state(extension_name, SESSION_RECENT_EXTENSION_VERSION)
+        .cloned()
+}
+
+fn project_test_session_execution_runtime_session(
+    session: &Session,
+) -> crate::session_execution_runtime::SessionExecutionRuntimeSessionProjection {
+    project_session_execution_runtime_session(
+        SessionExecutionRuntimeSessionSource {
+            provider_name: session.provider_name.clone(),
+            model_name: session
+                .model_config
+                .as_ref()
+                .map(|config| config.model_name.clone()),
+            usage: Some(SessionExecutionRuntimeUsageSource {
+                input_tokens: session.input_tokens,
+                output_tokens: session.output_tokens,
+                cached_input_tokens: session.cached_input_tokens,
+                cache_creation_input_tokens: session.cache_creation_input_tokens,
+            }),
+            recent_access_mode_state: read_test_extension_state_value(
+                &session.extension_data,
+                "lime_recent_access_mode",
+            ),
+            recent_preferences_state: read_test_extension_state_value(
+                &session.extension_data,
+                "lime_recent_preferences",
+            ),
+            recent_team_selection_state: read_test_extension_state_value(
+                &session.extension_data,
+                "lime_recent_team_selection",
+            ),
+        },
+        crate::session_usage_projection::project_token_usage_source,
+    )
+}
+
 #[test]
 fn falls_back_to_session_when_runtime_snapshot_missing() {
     let session = Session {
         id: "session-1".to_string(),
         provider_name: Some("openai".to_string()),
-        model_config: Some(ModelConfig::new("gpt-5.1").expect("model config")),
+        model_config: Some(aster::model::ModelConfig::new("gpt-5.1").expect("model config")),
         ..Session::default()
     };
 
@@ -72,7 +121,7 @@ fn prefers_latest_runtime_snapshot_with_output_schema_runtime() {
     let session = Session {
         id: "session-2".to_string(),
         provider_name: Some("openai".to_string()),
-        model_config: Some(ModelConfig::new("gpt-5.1").expect("model config")),
+        model_config: Some(aster::model::ModelConfig::new("gpt-5.1").expect("model config")),
         ..Session::default()
     };
 
@@ -288,6 +337,74 @@ fn projects_context_summary_from_latest_turn_metadata() {
     );
     assert_eq!(summary.missing_context.len(), 1);
     assert_eq!(summary.missing_context[0].label, "sources/missing.md");
+}
+
+#[test]
+fn projects_context_budget_from_session_input_tokens() {
+    let now = Utc::now();
+    let session = Session {
+        id: "session-context-usage".to_string(),
+        input_tokens: Some(91_000),
+        output_tokens: Some(40_000),
+        ..Session::default()
+    };
+    let snapshot = SessionRuntimeSnapshot {
+        session_id: "session-context-usage".to_string(),
+        threads: vec![ThreadRuntimeSnapshot {
+            thread: ThreadRuntime::new(
+                "thread-context-usage",
+                "session-context-usage",
+                PathBuf::from("/tmp/workspace"),
+            ),
+            turns: vec![TurnRuntime {
+                id: "turn-context-usage".to_string(),
+                session_id: "session-context-usage".to_string(),
+                thread_id: "thread-context-usage".to_string(),
+                status: TurnStatus::Running,
+                input_text: Some("继续".to_string()),
+                error_message: None,
+                context_override: Some(TurnContextOverride {
+                    metadata: [(
+                        "lime_runtime".to_string(),
+                        json!({
+                            "context_policy": {
+                                "model_context_window": 100_000,
+                                "auto_compact_token_limit": 90_000
+                            }
+                        }),
+                    )]
+                    .into_iter()
+                    .collect(),
+                    ..TurnContextOverride::default()
+                }),
+                output_schema_runtime: None,
+                created_at: now,
+                started_at: Some(now),
+                completed_at: None,
+                updated_at: now,
+            }],
+            items: Vec::new(),
+        }],
+    };
+
+    let runtime = build_session_execution_runtime(
+        "session-context-usage",
+        Some(&session),
+        Some("react".to_string()),
+        Some(&snapshot),
+        None,
+    )
+    .expect("runtime");
+    let budget = runtime
+        .context_summary
+        .expect("context summary")
+        .memory_budget
+        .expect("context budget");
+
+    assert_eq!(budget.used_tokens, Some(91_000));
+    assert_eq!(budget.max_tokens, Some(90_000));
+    assert_eq!(budget.remaining_tokens, Some(0));
+    assert_eq!(budget.status.as_deref(), Some("auto_compact_due"));
 }
 
 mod recent_settings;

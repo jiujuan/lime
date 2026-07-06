@@ -11,6 +11,10 @@ import { safeListen } from "@/lib/dev-bridge";
 import { listenAgentRuntimeEvent } from "../agentRuntimeEvents";
 import { resetAgentRuntimeEventSequenceGatesForTests } from "./eventSequenceGate";
 import {
+  APP_SERVER_EVENT_DRAIN_ACTIVE_INTERVAL_MS,
+  APP_SERVER_EVENT_DRAIN_INTERVAL_MS,
+} from "./appServerEventStream";
+import {
   appServerActionRespondParamsFromRequest,
   appServerTurnStartParamsFromRequest,
   createThreadClient,
@@ -2015,6 +2019,108 @@ describe("agentRuntime threadClient", () => {
     unlisten();
   });
 
+  it("App Server resume 后应继续 drain 并投递到固定 session event", async () => {
+    const appServerClient = appServerClientMock();
+    vi.mocked(appServerClient.resumeAgentSessionThread).mockResolvedValueOnce({
+      id: 1,
+      result: {
+        session: {
+          sessionId: "session-1",
+          threadId: "thread-1",
+          appId: "agent-chat",
+          status: "running",
+          createdAt: "2026-06-06T00:00:00.000Z",
+          updatedAt: "2026-06-06T00:00:00.000Z",
+        },
+        resumed: true,
+      },
+      response: {
+        id: 1,
+        result: {
+          resumed: true,
+        },
+      },
+      messages: [],
+      notifications: [],
+    });
+    vi.mocked(appServerClient.drainEvents).mockResolvedValueOnce([
+      {
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: "evt-resume-drain-1",
+            sequence: 10,
+            sessionId: "session-1",
+            threadId: "thread-1",
+            turnId: "turn-1",
+            type: "message.delta",
+            timestamp: "2026-06-06T00:00:01.000Z",
+            payload: {
+              text: "继续输出",
+            },
+          },
+        },
+      },
+      {
+        method: APP_SERVER_METHOD_AGENT_SESSION_EVENT,
+        params: {
+          event: {
+            eventId: "evt-resume-drain-2",
+            sequence: 11,
+            sessionId: "session-1",
+            threadId: "thread-1",
+            turnId: "turn-1",
+            type: "turn.completed",
+            timestamp: "2026-06-06T00:00:02.000Z",
+            payload: {},
+          },
+        },
+      },
+    ]);
+    const client = createThreadClient({
+      appServerClient,
+      invokeCommand: vi.fn() as unknown as AgentRuntimeCommandInvoke,
+      isAppServerTurnLifecycleAvailable: () => true,
+      enableAppServerEventDrain: true,
+    });
+
+    const listener = vi.fn();
+    const unlisten = await listenAgentRuntimeEvent(
+      "agentSession/event/session-1",
+      listener,
+    );
+
+    await expect(
+      client.resumeAgentRuntimeThread({
+        session_id: "session-1",
+        turn_id: "turn-1",
+      }),
+    ).resolves.toBe(true);
+
+    await vi.waitFor(() => {
+      expect(listener).toHaveBeenCalledWith({
+        payload: expect.objectContaining({
+          type: "text_delta",
+          text: "继续输出",
+          event_id: "evt-resume-drain-1",
+          session_id: "session-1",
+          turn_id: "turn-1",
+        }),
+      });
+      expect(listener).toHaveBeenCalledWith({
+        payload: expect.objectContaining({
+          type: "turn_completed",
+          event_id: "evt-resume-drain-2",
+          session_id: "session-1",
+          turn_id: "turn-1",
+        }),
+      });
+    });
+
+    expect(appServerClient.drainEvents).toHaveBeenCalledWith(1);
+    unlisten();
+  });
+
   it("App Server drain 返回乱序事件时应按 sequence 投递", async () => {
     const appServerClient = appServerClientMock();
     vi.mocked(appServerClient.startTurn).mockResolvedValueOnce({
@@ -2250,7 +2356,7 @@ describe("agentRuntime threadClient", () => {
     unlisten();
   });
 
-  it("App Server drain 应在首事件前快速轮询，投递首事件后恢复常规间隔", async () => {
+  it("App Server drain 应在首事件前快速轮询，投递首事件后按活跃间隔追连续输出", async () => {
     vi.useFakeTimers();
     try {
       const appServerClient = appServerClientMock();
@@ -2343,7 +2449,9 @@ describe("agentRuntime threadClient", () => {
         }),
       });
 
-      await vi.advanceTimersByTimeAsync(249);
+      await vi.advanceTimersByTimeAsync(
+        APP_SERVER_EVENT_DRAIN_ACTIVE_INTERVAL_MS - 1,
+      );
       expect(appServerClient.drainEvents).toHaveBeenCalledTimes(2);
 
       await vi.advanceTimersByTimeAsync(1);
@@ -2357,6 +2465,9 @@ describe("agentRuntime threadClient", () => {
           turn_id: "turn-fast-first",
         }),
       });
+
+      await vi.advanceTimersByTimeAsync(APP_SERVER_EVENT_DRAIN_INTERVAL_MS - 1);
+      expect(appServerClient.drainEvents).toHaveBeenCalledTimes(3);
 
       resolveStartTurn?.({
         id: 1,

@@ -116,6 +116,8 @@ export interface HostAgentPanelState {
 
 `AgentUiProjectionState.subagents` 是标准子代理模型。React 组件和产品应用不能再从 `graph`、`readModel.visibleEvents`、assistant 正文或本地 state 重新解释 subagent、handoff、review 事实；这些解释必须在 projection 层完成。
 
+Subagents view model 的 thread、delegation 和 activity 都可以携带 `AgentUiCollaborationFactsView`。该 view 只保存结构化 `collaborationFacts`、`collaborationSurface`、`collaborationPhase`、`styleLevel`、`riskLevel`、`profileId`、`packId` 和 `toneVariant`；UI / 宿主可以把它暴露为 DOM contract 或事实标签，但不得把它扩展成 profile-specific 本地句库。
+
 ## Core Event Taxonomy
 
 Contracts 层只定义事实 envelope 和稳定枚举，不规定传输方式。事件族按 `eventClass` 划分：
@@ -128,7 +130,7 @@ Contracts 层只定义事实 envelope 和稳定枚举，不规定传输方式。
 | `action.*` | `actionId` | ActionRequired。 |
 | `artifact.*` | `artifactId` 或 `artifactRefs` | ArtifactRef / artifact workspace。 |
 | `evidence.*` / `review.*` | `evidenceId` 或 `evidenceRefs` | EvidenceRef、review lane。 |
-| `task.*` / `subagent.*` / `handoff.*` | `taskId`、`subagentId`、`handoffId` | ExecutionGraph、Subagents。 |
+| `task.*` / `subagent.*` / `handoff.*` | `taskId`、`subagentId`、`handoffId` | ExecutionGraph、Subagents；协作 facts 通过 `AgentUiCollaborationFactsView` 随 Subagents view 传递。 |
 | `snapshot.*` / `stream.*` | sequence / cursor | hydration、repair diagnostics。 |
 
 新增事件族时先补 contracts fixture 和 validation 文档，再让 projection / UI 包消费；不要先在产品组件里私有解释。
@@ -242,7 +244,7 @@ Product App runtime service
 | Artifact / evidence | refs 不内联大 payload，不泄露 secret-bearing key。 |
 | Stream repair | sequence gap 只在声明 repair diagnostics 的 fixture 中允许。 |
 | Subagents | `subagent-handoff` 能表达 task、subagent、handoff、review scope。 |
-| Subagents | projection state 包含完整 `subagents` 字段。 |
+| Subagents | projection state 包含完整 `subagents` 字段，且协作事件可以保留 `AgentUiCollaborationFactsView`。 |
 
 下游包应从 `agentUiConformanceFixtures` 读取标准样本，而不是在自己的测试里复制一套私有 fixture。
 

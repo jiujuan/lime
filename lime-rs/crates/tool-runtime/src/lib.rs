@@ -1,3 +1,4 @@
+pub mod apply_patch;
 pub mod command_semantics;
 pub mod execution_decision;
 pub mod execution_policy;
@@ -5,6 +6,7 @@ pub mod execution_policy_service;
 pub mod execution_process;
 pub mod execution_rules;
 pub mod mcp_notification;
+pub mod native_overlay;
 pub mod path_guard;
 pub mod sandbox;
 pub mod shell;

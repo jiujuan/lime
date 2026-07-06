@@ -1,11 +1,15 @@
 import type {
   AgentRuntimeExecutionEvent,
+  AgentUiCollaborationFactsView,
   AgentUiSubagentActivityView,
   AgentUiSubagentDelegationView,
   AgentUiSubagentIsolationView,
   AgentUiSubagentsModel,
   AgentUiSubagentThreadView,
 } from "@limecloud/agent-ui-contracts";
+
+import { buildAgentUiCollaborationPayloadMetadata } from "./collaborationFacts.js";
+import { readRecord } from "./normalization.js";
 
 function isRecord(input: unknown): input is Record<string, unknown> {
   return typeof input === "object" && input !== null && !Array.isArray(input);
@@ -65,6 +69,57 @@ function compact<T extends object>(input: T): T {
   return Object.fromEntries(
     Object.entries(input).filter(([, value]) => value !== undefined),
   ) as T;
+}
+
+function collaborationForEvent(
+  event: AgentRuntimeExecutionEvent,
+): AgentUiCollaborationFactsView | undefined {
+  const payload = readRecord(event.payload);
+  const metadata = readRecord(payload?.metadata);
+  const collaboration = buildAgentUiCollaborationPayloadMetadata({
+    sourceType: event.eventClass,
+    collaborationKind: payloadString(
+      event,
+      "collaborationKind",
+      "collaboration_kind",
+    ),
+    surface: payloadString(event, "collaborationSurface", "collaboration_surface"),
+    phase:
+      event.phase ??
+      payloadString(event, "collaborationPhase", "collaboration_phase"),
+    status: event.status,
+    runtimeEntity: payloadString(event, "runtimeEntity", "runtime_entity"),
+    runtimeStatus: payloadString(event, "runtimeStatus", "runtime_status"),
+    latestTurnStatus: payloadString(
+      event,
+      "latestTurnStatus",
+      "latest_turn_status",
+    ),
+    taskId: event.taskId ?? payloadString(event, "taskId", "task_id"),
+    agentId: event.subagentId ?? event.workerId,
+    parentSessionId: parentThreadId(event),
+    transcriptRef: payloadString(event, "transcriptRef", "transcript_ref"),
+    handoffId: event.handoffId,
+    metadata,
+    payload,
+  });
+  return Object.keys(collaboration.collaborationFacts ?? {}).length
+    ? collaboration
+    : undefined;
+}
+
+function cloneCollaboration(
+  collaboration: AgentUiCollaborationFactsView | undefined,
+): AgentUiCollaborationFactsView | undefined {
+  if (!collaboration) {
+    return undefined;
+  }
+  return {
+    ...collaboration,
+    collaborationFacts: collaboration.collaborationFacts
+      ? { ...collaboration.collaborationFacts }
+      : undefined,
+  };
 }
 
 function subagentThreadId(
@@ -310,6 +365,7 @@ function mergeThread(
     evidenceRefs: Array.from(evidenceRefs),
     sourceEventIds: Array.from(sourceEventIds),
     isolation: current?.isolation ?? isolationForEvent(event),
+    collaboration: collaborationForEvent(event) ?? current?.collaboration,
   });
 }
 
@@ -340,6 +396,7 @@ function delegationForEvent(
     ),
     createdAt: event.createdAt,
     completedAt: event.completedAt,
+    collaboration: collaborationForEvent(event),
   });
 }
 
@@ -355,6 +412,7 @@ function activityForEvent(
     status: event.status,
     title: event.title,
     createdAt: event.createdAt,
+    collaboration: collaborationForEvent(event),
   });
 }
 
@@ -390,14 +448,19 @@ export function createAgentUiSubagentsModelAccumulator(): AgentUiSubagentsModelA
         evidenceRefs: [...thread.evidenceRefs],
         sourceEventIds: [...thread.sourceEventIds],
         isolation: thread.isolation ? { ...thread.isolation } : undefined,
+        collaboration: cloneCollaboration(thread.collaboration),
       })),
       delegationCalls: Array.from(delegationCalls.values()).map(
         (delegation) => ({
           ...delegation,
           targetThreadIds: [...delegation.targetThreadIds],
+          collaboration: cloneCollaboration(delegation.collaboration),
         }),
       ),
-      activities: activities.map((activity) => ({ ...activity })),
+      activities: activities.map((activity) => ({
+        ...activity,
+        collaboration: cloneCollaboration(activity.collaboration),
+      })),
       activeThreadIds: threadList
         .filter(
           (thread) =>

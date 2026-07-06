@@ -27,6 +27,8 @@ const FALLBACK_NEXT_ACTION =
   "补齐对应 production evidence；fixture、localhost 或手写 ready JSON 不能关闭该缺口。";
 
 export const PRODUCTION_READINESS_NEXT_ACTIONS = {
+  fixture_cloud_release_not_allowed:
+    "清理 GUI / fetchCloud evidence 中的 fixture、localhost 或 hostGenerationFixture 标记，并重新采集真实 production cloud_release 证据；fixture 不能关闭 production 缺口。",
   production_app_signature_yaml_missing:
     "在 content-factory-app 中用真实发布私钥生成 app.signature.yaml；私钥只能来自环境变量或本地私钥文件，不写入仓库或 evidence。",
   production_app_signature_yaml_missing_or_invalid:
@@ -105,6 +107,20 @@ export const PRODUCTION_READINESS_NEXT_ACTIONS = {
     "用 current App Server pluginPackage/fetchCloud 验证 production cloud_release 包、签名与 hash。",
   production_fetch_cloud_evidence_not_ready:
     "重新运行 current App Server pluginPackage/fetchCloud，必须得到 cloud_release / verified signature / verified package / hash matched。",
+  production_fetch_cloud_signature_policy_not_required:
+    "重新运行 current App Server pluginPackage/fetchCloud，确保 cloud_release evidence 的 signaturePolicy=required；optional/not_configured 只能作为诊断，不能启动 worker。",
+  production_fetch_cloud_manifest_hash_missing:
+    "重新运行 current App Server pluginPackage/fetchCloud，fetchCloud evidence 必须写回已验证的 manifestHash；只写 manifestHashMatched=true 不能关闭 production 缺口。",
+  production_fetch_cloud_package_hash_missing:
+    "重新运行 current App Server pluginPackage/fetchCloud，fetchCloud evidence 必须写回已验证的 packageHash；只写 packageHashMatched=true 不能关闭 production 缺口。",
+  production_fetch_cloud_package_url_missing:
+    "重新运行 current App Server pluginPackage/fetchCloud，fetchCloud evidence 必须记录本次拉取的 packageUrl/sourceUri 以便与 catalog 比对；readiness report 不会复制原始 URL。",
+  production_fetch_cloud_package_url_not_https:
+    "重新运行 current App Server pluginPackage/fetchCloud，fetchCloud evidence 的 packageUrl/sourceUri 必须是非 localhost 的 HTTPS 地址。",
+  production_fetch_cloud_signature_proof_missing:
+    "重新运行 current App Server pluginPackage/fetchCloud，fetchCloud evidence 必须包含用于 Host 验签的 signatureProof 字段。",
+  production_fetch_cloud_signature_ref_missing:
+    "重新运行 current App Server pluginPackage/fetchCloud，fetchCloud evidence 必须包含与 catalog 绑定的 signatureRef。",
   production_fetch_cloud_catalog_algorithm_mismatch:
     "重新运行 current App Server pluginPackage/fetchCloud，并确认 fetchCloud signatureProof.algorithm 与 production catalog 一致。",
   production_fetch_cloud_catalog_manifest_hash_mismatch:
@@ -131,16 +147,66 @@ export const PRODUCTION_READINESS_NEXT_ACTIONS = {
     "重新用 Electron CDP 跑真实 Lime Desktop 流程，并确认 trace 中出现 app_server_handle_json_lines / App Server JSON-RPC current method。",
   production_gui_evidence_not_ready:
     "重新运行 production GUI evidence collector；必须是真实 Electron Desktop、cloud_release 安装态和通过的工作流证据。",
+  production_gui_cdp_evidence_missing:
+    "重新用 production GUI evidence collector 连接真实 Lime Electron CDP；手写 JSON 或非 Electron 页面不能关闭 GUI production 缺口。",
+  production_gui_collector_schema_missing:
+    "重新运行 scripts/plugin/content-factory-production-gui-evidence.mjs，GUI evidence 必须带 current collector schemaVersion。",
+  production_gui_current_app_server_methods_missing:
+    "重新用真实 Electron CDP 采集 GUI evidence，trace 必须证明 agentSession/turn/start、agentSession/read 和 evidence/export 都走 current App Server JSON-RPC。",
   production_gui_not_cloud_release:
     "从 production catalog 安装 cloud_release 包后再跑 GUI evidence；local_folder、fixture 和 localhost 不能关闭 production 缺口。",
   production_gui_signature_not_verified:
     "修复 Host 签名验证或 trust root 后重新安装 cloud_release，GUI evidence 必须显示 signatureVerificationStatus=verified。",
+  production_gui_signature_policy_not_required:
+    "重新安装 production cloud_release，GUI evidence 必须显示 signaturePolicy=required；seeded optional evidence 不能关闭 production 缺口。",
+  production_gui_release_evidence_not_ready:
+    "重新安装 production cloud_release，GUI evidence 必须显示 cloudReleaseEvidence.status=ready。",
+  production_gui_package_verification_not_verified:
+    "重新安装 production cloud_release，GUI evidence 必须显示 packageVerificationStatus=verified。",
+  production_gui_package_hash_not_matched:
+    "重新安装 production cloud_release，GUI evidence 必须显示 packageHashMatched=true，证明安装包 hash 与 catalog descriptor 匹配。",
+  production_gui_manifest_hash_not_matched:
+    "重新安装 production cloud_release，GUI evidence 必须显示 manifestHashMatched=true，证明 manifest hash 与 catalog descriptor 匹配。",
+  production_gui_package_hash_missing:
+    "重新运行 production GUI evidence collector，GUI installedState 必须包含已安装 cloud_release 的 packageHash，不能只写 packageHashMatched=true。",
+  production_gui_manifest_hash_missing:
+    "重新运行 production GUI evidence collector，GUI installedState 必须包含已安装 cloud_release 的 manifestHash，不能只写 manifestHashMatched=true。",
+  production_gui_release_id_missing:
+    "重新安装 production cloud_release 后重新采集 GUI evidence，installedState 必须包含与 catalog 绑定的 releaseId。",
+  production_gui_signature_ref_missing:
+    "重新安装 production cloud_release 后重新采集 GUI evidence，installedState 必须包含与 app.signature.yaml/catalog/fetchCloud 一致的 signatureRef。",
+  production_gui_catalog_version_mismatch:
+    "重新安装 production catalog 当前版本后采集 GUI evidence，installedState.appVersion 必须与 catalog version 一致。",
+  production_gui_catalog_package_hash_mismatch:
+    "重新安装 production cloud_release 后采集 GUI evidence，installedState.packageHash 必须与 catalog packageHash 一致。",
+  production_gui_catalog_manifest_hash_mismatch:
+    "重新安装 production cloud_release 后采集 GUI evidence，installedState.manifestHash 必须与 catalog manifestHash 一致。",
+  production_gui_catalog_release_id_mismatch:
+    "重新安装 production cloud_release 后采集 GUI evidence，installedState.releaseId 必须与 catalog releaseId 一致。",
+  production_gui_catalog_signature_ref_mismatch:
+    "重新安装 production cloud_release 后采集 GUI evidence，installedState.signatureRef 必须与 catalog signatureRef 一致。",
+  production_gui_preflight_package_hash_mismatch:
+    "重新用同一轮 package/preflight/catalog 安装 cloud_release，GUI installedState.packageHash 必须与 preflight packageHash 一致。",
+  production_gui_preflight_manifest_hash_mismatch:
+    "重新用同一轮 package/preflight/catalog 安装 cloud_release，GUI installedState.manifestHash 必须与 preflight manifestHash 一致。",
+  production_gui_preflight_signature_ref_mismatch:
+    "重新用同一轮签名 proof 安装 cloud_release，GUI installedState.signatureRef 必须与 preflight app.signature.yaml 一致。",
+  production_gui_fetch_cloud_package_hash_mismatch:
+    "重新运行 fetchCloud verified 安装链和 GUI collector，GUI installedState.packageHash 必须与 fetchCloud packageHash 一致。",
+  production_gui_fetch_cloud_manifest_hash_mismatch:
+    "重新运行 fetchCloud verified 安装链和 GUI collector，GUI installedState.manifestHash 必须与 fetchCloud manifestHash 一致。",
+  production_gui_fetch_cloud_signature_ref_mismatch:
+    "重新运行 fetchCloud verified 安装链和 GUI collector，GUI installedState.signatureRef 必须与 fetchCloud signatureRef 一致。",
   production_gui_turn_start_not_electron_ipc:
     "重新用真实 Electron CDP 发送 @写文章，并确认 agentSession/turn/start 经 electron-ipc 进入 app_server_handle_json_lines。",
+  production_gui_turn_start_trace_missing:
+    "重新传入真实 turn-start trace，GUI evidence 必须匹配目标 session 的 electron-ipc -> app_server_handle_json_lines -> agentSession/turn/start。",
   production_host_generation_not_completed:
     "重新跑完整 @写文章流程直到 Host-managed generation completed；不能用占位、手写 JSON 或半程 trace 代替。",
   production_host_generation_not_live:
     "切到真实 live Provider production route 后重新生成；fixture provider 或 mock backend 不能关闭 production 缺口。",
+  production_generated_article_marker_unclean:
+    "重新跑真实 production 写作流程，read model 必须证明生成文章不含 fixture marker。",
   production_manifest_hash_missing:
     "修正 production catalog，identity.manifestHash 必须是 sha256:<64 hex>。",
   production_manifest_hash_invalid:
@@ -264,6 +330,16 @@ export const PRODUCTION_READINESS_NEXT_ACTIONS = {
     "修正 production catalog 中 content-factory-app version，使其与 expectedVersion 一致。",
   production_workflow_facts_visible:
     "修复 GUI 投影，右侧/详情不应展示 raw workflow facts；审计数据只写 JSONL evidence。",
+  production_workflow_audit_export_empty:
+    "重新跑 production GUI evidence collector；App Server evidence/export 的 workflow_audit.eventCount 必须大于 0。",
+  production_workflow_audit_export_missing:
+    "重新跑 production GUI evidence collector；必须通过 App Server evidence/export 读取 workflow-events.jsonl 并输出 workflow_audit 摘要，不能只提供 JSONL 路径或事件计数。",
+  production_workflow_audit_not_metadata_only:
+    "修复 workflow audit 导出链；evidence/export workflow_audit 必须证明 metadataOnly=true。",
+  production_workflow_audit_raw_content_included:
+    "修复 workflow audit 导出链；evidence/export workflow_audit 必须证明 rawContentIncluded=false，不能把原始正文、prompt 或工具结果写入审计摘要。",
+  production_workflow_audit_redaction_policy_missing:
+    "修复 workflow audit 写盘/导出链；evidence/export workflow_audit 必须证明 workflow_audit_metadata_only redaction policy 覆盖真实事件。",
   production_workflow_jsonl_missing:
     "重新跑 production workflow，并确保 workflow-events.jsonl 落盘；JSONL 是后续审计唯一事实源。",
   production_workflow_resume_lifecycle_missing:
@@ -598,9 +674,11 @@ function summarizeFetchCloudForReport(fetchCloud) {
     fixtureLike: fetchCloud.fixtureLike === true,
     manifestHashMatched: fetchCloud.manifestHashMatched === true,
     packageHashMatched: fetchCloud.packageHashMatched === true,
+    packageUrlProductionHttps: fetchCloud.packageUrlProductionHttps === true,
     packageVerificationStatus: fetchCloud.packageVerificationStatus || null,
     present: true,
     ready: fetchCloud.ready === true,
+    signaturePolicy: fetchCloud.signaturePolicy || null,
     signatureVerificationStatus: fetchCloud.signatureVerificationStatus || null,
     sourceKind: fetchCloud.sourceKind || null,
     status: fetchCloud.status || null,
@@ -616,17 +694,48 @@ function summarizeGuiForReport(guiEvidence) {
       guiEvidence.appServerHandleJsonLinesSeen === true,
     articleDraftDocumentPresent:
       guiEvidence.articleDraftDocumentPresent === true,
+    articleDraftDocumentLength: guiEvidence.articleDraftDocumentLength || 0,
+    appVersion: guiEvidence.appVersion || null,
+    cloudReleaseEvidenceStatus: guiEvidence.cloudReleaseEvidenceStatus || null,
+    collectorSchemaValid: guiEvidence.collectorSchemaValid === true,
+    cdpAttached: guiEvidence.cdpAttached === true,
+    cdpUsedRealElectron: guiEvidence.cdpUsedRealElectron === true,
+    currentAppServerMethodsSeen:
+      guiEvidence.currentAppServerMethodsSeen === true,
     fixtureLike: guiEvidence.fixtureLike === true,
+    generatedArticleMarkerClean:
+      guiEvidence.generatedArticleMarkerClean === true,
     hostManagedGenerationStatus:
       guiEvidence.hostManagedGenerationStatus || null,
     liveProviderUsed: guiEvidence.liveProviderUsed === true,
+    manifestHash: guiEvidence.manifestHash || null,
+    manifestHashMatched: guiEvidence.manifestHashMatched === true,
+    packageHash: guiEvidence.packageHash || null,
+    packageHashMatched: guiEvidence.packageHashMatched === true,
+    packageVerificationStatus: guiEvidence.packageVerificationStatus || null,
     present: true,
     ready: guiEvidence.ready === true,
+    releaseId: guiEvidence.releaseId || null,
+    signaturePolicy: guiEvidence.signaturePolicy || null,
+    signatureRef: guiEvidence.signatureRef || null,
     signatureVerificationStatus:
       guiEvidence.signatureVerificationStatus || null,
     sourceKind: guiEvidence.sourceKind || null,
     status: guiEvidence.status || null,
+    turnStartTraceMatched: guiEvidence.turnStartTraceMatched === true,
     turnStartViaElectronIpc: guiEvidence.turnStartViaElectronIpc === true,
+    workflowAudit: {
+      eventCount: guiEvidence.workflowAuditEventCount || 0,
+      exportReady: guiEvidence.workflowAuditExportReady === true,
+      metadataOnly: guiEvidence.workflowAuditMetadataOnly === true,
+      rawContentExcluded: guiEvidence.workflowAuditRawContentExcluded === true,
+      redactionPolicy: guiEvidence.workflowAuditRedactionPolicy || null,
+      redactionPolicyEventCount:
+        guiEvidence.workflowAuditRedactionPolicyEventCount || 0,
+      source: guiEvidence.workflowAuditSource || null,
+      status: guiEvidence.workflowAuditStatus || null,
+    },
+    workflowJsonlEventCount: guiEvidence.workflowJsonlEventCount || 0,
     workflowJsonlPresent: guiEvidence.workflowJsonlPresent === true,
     workflowResumeLifecycle: {
       auditEventsPresent:

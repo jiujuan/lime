@@ -203,6 +203,8 @@ interface UseWorkspaceConversationSceneRuntimeParams {
   defaultCuratedTaskReferenceEntries?: ConversationScenePresentationParams["scene"]["defaultCuratedTaskReferenceEntries"];
   pathReferences?: ConversationScenePresentationParams["scene"]["pathReferences"];
   onAddPathReferences?: ConversationScenePresentationParams["scene"]["onAddPathReferences"];
+  inputRestoreRequest?: ConversationScenePresentationParams["scene"]["inputRestoreRequest"];
+  onInputRestoreRequestHandled?: ConversationScenePresentationParams["scene"]["onInputRestoreRequestHandled"];
   onImportPathReferenceAsKnowledge?: ConversationScenePresentationParams["scene"]["onImportPathReferenceAsKnowledge"];
   onRemovePathReference?: ConversationScenePresentationParams["scene"]["onRemovePathReference"];
   onClearPathReferences?: ConversationScenePresentationParams["scene"]["onClearPathReferences"];
@@ -395,6 +397,8 @@ export function useWorkspaceConversationSceneRuntime({
   defaultCuratedTaskReferenceEntries,
   pathReferences,
   onAddPathReferences,
+  inputRestoreRequest,
+  onInputRestoreRequestHandled,
   onImportPathReferenceAsKnowledge,
   onRemovePathReference,
   onClearPathReferences,
@@ -602,39 +606,36 @@ export function useWorkspaceConversationSceneRuntime({
     activeTheme === "general" &&
     layoutMode === "chat-canvas";
   const shouldBuildRuntimeTaskCard = !shellChromeRuntime.showChatLayout;
-  const runtimeTaskCard = useMemo(
-    () => {
-      if (!shouldBuildRuntimeTaskCard) {
-        return null;
-      }
+  const runtimeTaskCard = useMemo(() => {
+    if (!shouldBuildRuntimeTaskCard) {
+      return null;
+    }
 
-      return buildAgentTaskRuntimeCardModel({
-        messages: displayMessages,
-        turns: projectedTurns,
-        threadItems: projectedThreadItems,
-        currentTurnId: projectedCurrentTurnId,
-        threadRead: projectedThreadRead,
-        pendingActions: projectedPendingActions,
-        submittedActionsInFlight: projectedSubmittedActionsInFlight,
-        queuedTurns: projectedQueuedTurns,
-        childSubagentSessions: projectedChildSubagentSessions,
-        isSending,
-      });
-    },
-    [
-      displayMessages,
+    return buildAgentTaskRuntimeCardModel({
+      messages: displayMessages,
+      turns: projectedTurns,
+      threadItems: projectedThreadItems,
+      currentTurnId: projectedCurrentTurnId,
+      threadRead: projectedThreadRead,
+      pendingActions: projectedPendingActions,
+      submittedActionsInFlight: projectedSubmittedActionsInFlight,
+      queuedTurns: projectedQueuedTurns,
+      childSubagentSessions: projectedChildSubagentSessions,
       isSending,
-      projectedChildSubagentSessions,
-      projectedCurrentTurnId,
-      projectedPendingActions,
-      projectedSubmittedActionsInFlight,
-      projectedQueuedTurns,
-      projectedThreadItems,
-      projectedThreadRead,
-      projectedTurns,
-      shouldBuildRuntimeTaskCard,
-    ],
-  );
+    });
+  }, [
+    displayMessages,
+    isSending,
+    projectedChildSubagentSessions,
+    projectedCurrentTurnId,
+    projectedPendingActions,
+    projectedSubmittedActionsInFlight,
+    projectedQueuedTurns,
+    projectedThreadItems,
+    projectedThreadRead,
+    projectedTurns,
+    shouldBuildRuntimeTaskCard,
+  ]);
   const codingWorkbenchViews = useMemo(
     () =>
       buildWorkspaceConversationCodingViews({
@@ -729,6 +730,8 @@ export function useWorkspaceConversationSceneRuntime({
       defaultCuratedTaskReferenceEntries,
       pathReferences,
       onAddPathReferences,
+      inputRestoreRequest,
+      onInputRestoreRequestHandled,
       onImportPathReferenceAsKnowledge,
       onRemovePathReference,
       onClearPathReferences,
@@ -753,6 +756,7 @@ export function useWorkspaceConversationSceneRuntime({
       input,
       setInput,
       onSendMessage: handleSendFromEmptyState,
+      onStopSending: stopSending,
       emptyStateIsLoading: isPreparingSend || isSending,
       emptyStateDisabled: isPreparingSend || isSending,
       providerType,

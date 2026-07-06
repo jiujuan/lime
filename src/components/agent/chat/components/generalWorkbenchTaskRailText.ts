@@ -120,6 +120,12 @@ export function fallbackTranslate(key: string, options?: Record<string, unknown>
       return "工作目录";
     case "generalWorkbench.taskRail.importedRuntime.fact.arguments":
       return "参数";
+    case "generalWorkbench.taskRail.importedRuntime.fact.collaborationKind":
+      return "协作类型";
+    case "generalWorkbench.taskRail.importedRuntime.fact.collaborationPhase":
+      return "协作阶段";
+    case "generalWorkbench.taskRail.importedRuntime.fact.collaborationSurface":
+      return "协作面";
     case "generalWorkbench.taskRail.importedRuntime.fact.query":
       return "查询";
     case "generalWorkbench.taskRail.importedRuntime.fact.path":
@@ -132,6 +138,16 @@ export function fallbackTranslate(key: string, options?: Record<string, unknown>
       return "修订提示";
     case "generalWorkbench.taskRail.importedRuntime.fact.model":
       return "模型";
+    case "generalWorkbench.taskRail.importedRuntime.fact.packId":
+      return "风格包";
+    case "generalWorkbench.taskRail.importedRuntime.fact.profileId":
+      return "风格 Profile";
+    case "generalWorkbench.taskRail.importedRuntime.fact.riskLevel":
+      return "风险等级";
+    case "generalWorkbench.taskRail.importedRuntime.fact.styleLevel":
+      return "风格等级";
+    case "generalWorkbench.taskRail.importedRuntime.fact.toneVariant":
+      return "口吻变体";
     case "generalWorkbench.taskRail.importedRuntime.fact.status":
       return "状态";
     case "generalWorkbench.taskRail.importedRuntime.fact.statusLabel":

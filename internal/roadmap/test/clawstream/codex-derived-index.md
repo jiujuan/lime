@@ -1,0 +1,282 @@
+# Codex 派生 Clawstream 覆盖索引
+
+> 状态：active index
+> 更新时间：2026-07-06
+> Codex 参考仓库：`/Users/coso/Documents/dev/rust/codex`
+> 绑定路线图：`internal/roadmap/test/clawstream/README.md`
+> 目标：从 Codex 的 Thread / Turn / Item、app-server integration、TUI snapshot 和工具运行时测试中索引出 Lime Claw 必须补齐的标准化场景族。
+> 逐项账本：`internal/roadmap/test/clawstream/scenario-ledger.md`
+
+## 1. 索引结论
+
+Lime 当前 Claw fixture 已覆盖一批高风险 GUI 闭环，但它还不是 Codex 级别的全流程护栏。Codex 的测试结构给出一个更硬的标准：
+
+```text
+Protocol item schema
+  -> app-server JSON-RPC integration
+  -> core session / tool runtime integration
+  -> TUI snapshot / terminal-layout regression
+  -> resume / fork / rollback / compaction replay
+```
+
+Lime 要迁到同等级别，不能只补 `reasoning/tool/text/artifact` 四类流式片段，还要把下列场景族都纳入 Clawstream 账本：
+
+1. Thread 生命周期：start、read、list、resume、fork、rollback、archive、settings update、name update。
+2. Turn 生命周期：start、steer、interrupt、cancel、continue、completed、failed、aborted、pending approval。
+3. Item taxonomy：user、assistant、reasoning、plan、command、dynamic tool、MCP、web search、image、file change、subagent、compaction。
+4. UI 投影：live tail、history hydrate、status header、input queue、markdown、diff、artifact、right surface、responsive/reflow。
+5. Runtime 扩展：Skills、Plugins、MCP resources/tools/elicitation、Multi-Agent Team、request user input、imagegen、web search。
+6. 治理边界：无生产 mock fallback、无自然语言 lifecycle regex、无旧 `update_plan` UI owner、无 agent-first orphan history。
+
+具体到 Codex 测试函数、Lime scenarioId、event item、projection oracle、GUI/Electron evidence 和清理目标时，以 `./scenario-ledger.md` 为准。本文件只保留 taxonomy 和场景族总览，避免后续实现只按大类补一个粗 fixture。
+
+## 2. Codex 事实源目录
+
+| Codex 路径 | 索引内容 | Lime 应落点 |
+| --- | --- | --- |
+| `/Users/coso/Documents/dev/rust/codex/AGENTS.md` | TUI 用户可见变化必须有 `insta` snapshot；agent 逻辑优先 integration；上下文不能 rewrite；大文件拆分 | Claw UI 改动必须补 projection + DOM / Electron evidence；Claw 巨型文件禁止继续堆逻辑 |
+| `codex-rs/protocol/src/items.rs` | `TurnItem` union：UserMessage、AgentMessage、Plan、Reasoning、CommandExecution、DynamicToolCall、CollabAgentToolCall、SubAgentActivity、WebSearch、ImageView、Sleep、ImageGeneration、FileChange、McpToolCall、ContextCompaction | `packages/agent-ui-contracts` 的 `ClawstreamItem` 必须覆盖同等级 item family |
+| `sdk/typescript/src/items.ts` | SDK thread item union：command、file change、MCP、agent message、reasoning、web search、todo list、error | 前端 `ContentPart` / read model 类型不能只围绕 text/tool/reasoning |
+| `codex-rs/app-server/tests/suite/v2/*.rs` | JSON-RPC public API 集成测试：thread、turn、MCP、skills、tools、compaction、review、web search、imagegen | Lime App Server current fixture 和 Electron fixture 的 scenario family 来源 |
+| `codex-rs/core/src/session/tests.rs` | session lifecycle、startup prewarm、stream parser、history reconstruction、inter-agent item id、rollback、permission grants、request permissions | Lime `agentStreamRuntimeHandler` / `RuntimeCore` / read model 的状态机 oracle |
+| `codex-rs/core/src/tools/handlers/*_tests.rs` | shell、apply_patch、multi_agents、mcp_resource、request_user_input、agent_jobs 等工具 schema 和运行时边界 | Lime tool timeline、approval、MCP、multi-agent、request-user-input fixture |
+| `codex-rs/tui/src/chatwidget/tests/*.rs` | composer、plan、goal、review、approval、permissions、history replay、app-server live item render、status/layout | Lime `MessageList`、Inputbar、状态条、右侧面板、pending queue 的 DOM / screenshot 回归 |
+| `codex-rs/tui/tests/suite/*.rs` | vt100 history、live commit、resize/reflow、status indicator | Lime Playwright/Electron screenshot 需要覆盖首字、live tail、窗口尺寸变化和布局锚定 |
+| `codex-rs/tui/src/snapshots/*.snap` | diff、markdown、resume picker、pager overlay、multi-agent transcript、status indicator snapshot | Lime 需要建立稳定 render snapshot，不只断言少量文案 |
+
+## 3. Codex Item Taxonomy -> Lime 标准事件项
+
+| Codex item family | Codex source | Lime 标准化事件项要求 | Projection / GUI 断言 |
+| --- | --- | --- | --- |
+| UserMessage | `TurnItem::UserMessage`、`sdk/items.ts` | `threadId / turnId / itemId / clientUserMessageId / content[] / attachments / textElements` | live user echo 与 history hydrate 不重复；隐藏 prompt context 不污染用户可见文本 |
+| AgentMessage | `TurnItem::AgentMessage`，含 optional `phase` | `phase=live/final/summary`、`sequence`、`source=response_item/message_delta/turn_completed` | final answer 不吞 reasoning/tool；`turn.completed` 清理“正在输出”但不丢正文 |
+| Reasoning | `TurnItem::Reasoning` | `summaryText[] / rawContent[] / itemId / sequence / status` | reasoning 可先于 text 出现；完成后 hydrate 保持位置 |
+| Plan | `TurnItem::Plan`、`plan_item.rs` | 从 `<proposed_plan>` materialize `plan` item；保留 revision/source；agent message 仍同步存在 | Plan rail / decision drawer / history hydrate 显示 plan；旧 `UpdatePlanTool/update_plan` 不可见 |
+| CommandExecution | `TurnItem::CommandExecution` | `processId / command[] / cwd / source / status / stdout / stderr / aggregatedOutput / exitCode / duration` | shell wrapper 不直接展示；approval item id 与 command item 绑定；interrupt 后状态终结 |
+| FileChange | `TurnItem::FileChange` | `changes[] / patch status / failure stderr / approval state` | patch diff / artifact workbench 使用同一 item，不走单独 fake artifact |
+| DynamicToolCall | `TurnItem::DynamicToolCall` | `namespace / tool / arguments / contentItems / success / error` | 工具输出用结构化 content，不从自然语言正文猜生命周期 |
+| McpToolCall | `TurnItem::McpToolCall`、`mcp_tool.rs` | `server / tool / arguments / result.content / result.structured_content / error / status` | `structuredContent` 可见；transport envelope 隐藏；命名只认 `mcp__server__tool` |
+| WebSearch | `TurnItem::WebSearch` | `query / result ids / source url/title/snippet / sequence` | 搜索源默认折叠、展开可见；最终正文与 web process 按 sequence 混排 |
+| ImageView / ImageGeneration | `TurnItem::ImageView`、`ImageGenerationItem`、imagegen tests | `input image refs / generation task / model/provider / result images / audit log` | 本地图片/远程图片 placeholder 映射稳定；图片任务卡 live + hydrate 同构 |
+| CollabAgentToolCall | `TurnItem::CollabAgentToolCall` | `senderThreadId / receiverThreadIds / receiverAgents / tool / agentsStates` | parent thread 绑定、handoff、worker notification、review lane 都进入 evidence pack |
+| SubAgentActivity | `TurnItem::SubAgentActivity` | `activityKind / childSessionId / parentThreadId / resultRef / status` | 不允许 agent-first orphan history；子代理 transcript 有父线程 lineage |
+| ContextCompaction | `TurnItem::ContextCompaction` | `summary / replacement history / token budget / compaction source` | compact 后 history / live stream 可继续，不能 rewrite 已落 item |
+| HookPrompt / Guardian / RequestUserInput | `HookPromptItem`、guardian/request input tests | `requestId / owner item / schema / resolution / timeout / decision` | approval / elicitation / ask-user 恢复后不伪造 tool terminal |
+| Error / Warning | app-server warning/error tests | `errorCode / failureCategory / partialContent / retryability / ownerTurnId` | failed turn 不重复 error；partial answer 与 error 同时可见 |
+
+## 4. Codex 场景族索引与 Lime 覆盖要求
+
+### 4.1 Thread Lifecycle / Hydrate
+
+| Codex source | Codex 覆盖行为 | Lime 必补 fixture / oracle | 状态 |
+| --- | --- | --- | --- |
+| `app-server/tests/suite/v2/thread_start.rs` | 创建 thread、加载 instruction sources、cwd/environment 校验、MCP startup status、service tier fallback | `thread-start-current`: Thread 创建后 session/read/list 可读；provider/model/service tier 完整；无半截配置 | 部分覆盖：`complete` / `provider-model-pair-complete` |
+| `thread_read.rs` | summary-only、include turns、turn pagination、items view、archived read、forked_from、failed idle flag、拒绝 legacy paginated history | `history-hydrate-isomorphic`: live `ContentPart[]` 与 read model hydrate 同构；分页不重排 | 部分覆盖 |
+| `thread_resume.rs` | materialized thread 才能 resume；empty path 使用 running thread id；resume initial turns page | `resume-current-session`: 最近对话恢复、归档恢复、read model page 与 GUI 一致 | 缺口 |
+| `thread_fork.rs` | fork 不修改原 rollout；forked thread 保留 parent lineage、turn interrupted、user item | `thread-fork-lineage`: fork 后 parent/child Thread 关系进入 metadata、sidebar 和 evidence | 缺口 |
+| `thread_rollback.rs` + `core/src/session/tests.rs` | rollback 删除末尾 turns、持久化 marker、重算 settings/reference context、turn in progress 时拒绝 | `thread-rollback-projection`: rollback 后 UI / read model / history window 不显示被回滚 item | 缺口 |
+| `thread_archive.rs` / `thread_unarchive.rs` / `thread_delete.rs` | archive/unarchive/delete 与 list/read/status 通知一致 | `archive-hydrate-current`: sidebar、read model、workspace restore 一致 | 缺口 |
+| `thread_settings_update.rs` / `thread_metadata_update.rs` | settings update 会影响 future turns；active turn update 发通知；cwd retarget environment | `thread-settings-live-update`: provider/model/access/cwd 变更不污染 active stream | 缺口 |
+
+### 4.2 Turn Lifecycle / Queue / Stop-Continue
+
+| Codex source | Codex 覆盖行为 | Lime 必补 fixture / oracle | 状态 |
+| --- | --- | --- | --- |
+| `turn_start.rs` | empty input、local image、additional context、oversized input、model/personality/multi-agent metadata、command/file items | `turn-start-shape`: `agentSession/turn/start` 请求 shape 全字段稳定，输入、图片、metadata 都进 item | 部分覆盖 |
+| `turn_steer.rs` | 只允许 active turn steer；oversized steer 拒绝；返回 active turn id；metadata 更新 | `turn-steer-live`: 流式中继续追问/追加指令进入同一 active turn，不变成新 Thread | 缺口 |
+| `turn_interrupt.rs` | interrupt running turn；拒绝 completed turn；pending command approval 被 resolve | `cancel-then-continue` + `pending-approval-cancel`: stop 恢复输入，第二轮同 session 完成，pending approval 清干净 | 部分覆盖 |
+| `tui/src/chatwidget/tests/review_mode.rs` | final stream 中 pending steer 顺序、manual interrupt 恢复 queued input、ESC 语义 | `pending-queue-during-stream`: 正在输出时排队输入、取消、恢复、编辑都稳定 | 缺口 |
+| `tui/src/chatwidget/tests/composer_submission.rs` | empty enter during task 不排队；输出为空的 interrupt 恢复 prompt；有可见输出不恢复；thinking 状态仍可恢复；patch activity 阻止恢复 | `inputbar-restore-matrix`: stopped/failed/interrupted/output-free/visible-output/patch-active 全矩阵 | 缺口 |
+| `core/src/session/tests.rs` | startup prewarm 不阻塞 `turn_started`；interrupt waiting startup prewarm emits aborted | `first-visible-output-performance`: 首字/首 reasoning 不能等 startup note 或 prewarm；启动说明不闪现 | 部分覆盖 |
+
+### 4.3 Streaming / Plan / Reasoning / Final Text
+
+| Codex source | Codex 覆盖行为 | Lime 必补 fixture / oracle | 状态 |
+| --- | --- | --- | --- |
+| `app-server/tests/suite/v2/plan_item.rs` | `<proposed_plan>` block 生成 Plan item；plan delta 绑定 item id；没有 proposed_plan 不生成 Plan；AgentMessage 仍 emitted | `plan-hydrate-current`: Plan item、delta、revision、decision drawer、history hydrate 同构 | 部分覆盖：`plan` |
+| `core/src/session/tests.rs` | assistant stream parser 可从 `output_item_added` seed，plan parser 可跨 added/delta boundary | `stream-parser-boundary`: added/delta/complete 任意拆分都不丢 reasoning/plan/text | 缺口 |
+| `tui/src/chatwidget/tests/app_server.rs` | `turn_completed` clears working status after answer item；failed turn consolidates streamed answer；failed turn 不重复 error | `terminal-event-contract`: terminal 只清状态，不合成正文、不重复 error | 部分覆盖 |
+| `tui/tests/suite/vt100_live_commit.rs` | live tail overflow 时 commit 稳定 | `live-tail-commit`: 长输出期间首字可见、滚动和 commit 不抖动 | 缺口 |
+| `tui/tests/suite/vt100_history.rs` | CJK/emoji/ANSI/wrap/cursor restore | `message-wrap-snapshot`: 中英混排、ANSI/code/text wrap 不破坏布局 | 缺口 |
+
+### 4.4 Tool / Approval / Sandbox / Patch
+
+| Codex source | Codex 覆盖行为 | Lime 必补 fixture / oracle | 状态 |
+| --- | --- | --- | --- |
+| `core/src/tools/handlers/shell_tests.rs` + `app-server/v2/command_exec.rs` / `process_exec.rs` | command item lifecycle、stdout/stderr 聚合、exit code、duration、shell wrapper display | `command-execution-item`: shell/process item live、completed、failed、hydrate 都同构 | 缺口 |
+| `core/src/tools/runtimes/apply_patch_tests.rs` + `handlers/apply_patch_tests.rs` | patch approval、sandbox cwd、file system context、failure status | `file-change-approval`: patch begin/end、approval、diff render、失败可见 | 缺口 |
+| `tui/src/chatwidget/tests/approval_requests.rs` + `guardian.rs` | approval request UI、guardian review started/denied/timed out/parallel review | `approval-request-and-resume`: action.required/resolved 与 tool item 绑定，恢复后继续 turn | 部分覆盖 |
+| `app-server/v2/request_permissions.rs` + `core/src/session/tests.rs` | permissions request event、environment-keyed grants、unmatched response ignored | `request-permissions-turn-scoped`: 权限只绑定 originating turn/environment | 缺口 |
+| `core/src/tools/network_approval_tests.rs` | network approval host/protocol/port/environment scope、dedupe、owner decision | `network-approval-item`: 网络请求批准不被工具自然语言结果覆盖 | 缺口 |
+
+### 4.5 MCP / Structured Content / Elicitation
+
+| Codex source | Codex 覆盖行为 | Lime 必补 fixture / oracle | 状态 |
+| --- | --- | --- | --- |
+| `app-server/tests/suite/v2/mcp_tool.rs` | MCP tool call 返回 content、`structured_content`、`is_error`、meta；unknown thread 报错；tool elicitation round trip | `mcp-structured-content`: structuredContent 投影到 chat GUI，transport envelope 隐藏 | 部分覆盖：`mcp-structured-content` |
+| `mcp_resource.rs` | resource read with/without thread；orchestrator skill 可以读取 referenced resource；local executor 不暴露 orchestrator skills | `mcp-resource-read`: resource/template 读取成为 read model item / evidence，不混成 ordinary tool text | 缺口 |
+| `mcp_server_elicitation.rs` | 标准 form / OpenAI form elicitation；capability follows turn-starting connection | `mcp-elicitation-resume`: MCP ask-user/form 请求绑定 thread+turn+client capability，回应后继续 | 缺口 |
+| `mcp_server_status.rs` | raw server/tool names、project-local config、tool/auth-only 快速状态、sanitized collision | `mcp-inventory-current`: UI 只展示规范命名，内部保留 raw name，碰撞不丢 tool | 缺口 |
+| `executor_mcp.rs` | selected executor plugin 的 MCP 只暴露给对应 thread | `mcp-thread-scope`: plugin/executor MCP scope 不能串到其他 Thread | 缺口 |
+
+### 4.6 Skills / Plugin Runtime
+
+| Codex source | Codex 覆盖行为 | Lime 必补 fixture / oracle | 状态 |
+| --- | --- | --- | --- |
+| `app-server/tests/suite/v2/executor_skills.rs` | executor skills 的 search/read/调用和 thread scope | `skills-runtime`: natural、explicit `$skill`、manual enable 都必须 search -> read SKILL.md -> gate -> invoke | 部分覆盖：`skills-runtime` |
+| `skills_list.rs` + `core/src/skills.rs` / `core-skills` | skill catalog/list/discoverability | `skills-catalog-projection`: workspace skill ready 不等于自动注入 tool surface | 缺口 |
+| `mcp_resource.rs` orchestrator skill rows | orchestrator skill body / references 可读，executor 不暴露 orchestrator skill | `skill-resource-boundary`: Skill body/reference 作为 resource/evidence，不直接泄漏到普通 chat | 缺口 |
+| `tui/src/chatwidget/tests/composer_submission.rs` | composer 选择 scope 正确的 Skill；blocked image restore 保留 mention bindings | `skill-mention-input`: skill mention 与图片/文本元素绑定经过 input queue、cancel、restore 不丢 | 缺口 |
+| `app-server/tests/suite/v2/plugin_*` + `tui/src/app/tests/plugin_catalog.rs` | plugin list/read/install/uninstall/share/update targets | `plugin-skill-runtime`: plugin 安装/选择只改变 capability catalog，不绕过 Claw turn/start | 缺口 |
+| Lime fixture `expert-*` | 专家 skillRefs 只作为 hint，仍 search/gate/invoke | `expert-skills-runtime` / `expert-plaza-skills-runtime` / `expert-panel-skills-runtime` | 已有 Electron fixture，仍缺 projection oracle |
+
+### 4.7 Multi-Agent Team / Subagent Lineage
+
+| Codex source | Codex 覆盖行为 | Lime 必补 fixture / oracle | 状态 |
+| --- | --- | --- | --- |
+| `protocol/src/items.rs` | `CollabAgentToolCallItem` 含 sender/receiver thread、agent states；`SubAgentActivityItem` 记录子代理活动 | `multi-agent-item-taxonomy`: parent thread、child session、handoff、review lane 都是 item，不是文本摘要 | 部分覆盖 |
+| `core/src/tools/handlers/multi_agents_spec_tests.rs` | spawn/send/followup/wait/list 工具 schema；visible model caps；status includes interrupted | `multi-agent-tool-schema`: Team 工具 schema 与 UI 展示一致，支持 interrupted/queued/running/completed | 缺口 |
+| `core/src/session/tests.rs` | inter-agent communication 写入 rollout/resume 时保留 turn_id 和 item_id；subagent session resume 恢复 persisted session id | `multi-agent-resume-lineage`: worker 通知和 handoff hydrate 后仍指向 parent Thread/Turn/Item | 部分覆盖 |
+| `tui/src/snapshots/*multi_agents*.snap` | collab transcript、resume interrupted snapshot | `multi-agent-visual-snapshot`: Team transcript、暂停恢复、worker 结果在 GUI 中稳定 | 缺口 |
+| Lime fixture `multi-agent-team` | prompt/backend/read model/evidence pack/parent binding/handoff/worker notification/review lane/no agent-first history | `multi-agent-team` | 已有 Electron fixture，仍缺 item-level projection oracle |
+
+### 4.8 Image / Attachment / Media Task
+
+| Codex source | Codex 覆盖行为 | Lime 必补 fixture / oracle | 状态 |
+| --- | --- | --- | --- |
+| `app-server/tests/suite/v2/turn_start.rs` | LocalImage 进入 Responses input image；detail 可传 | `local-image-turn`: 本地图片/远程图片从输入到 model request、read model、GUI 都可追踪 | 缺口 |
+| `tui/src/chatwidget/tests/composer_submission.rs` | blocked image restore 保留 local placeholder、remote url、mention bindings；queued restore 保留映射 | `image-input-restore`: 图片输入被阻断/排队/取消后恢复不乱序 | 缺口 |
+| `app-server/tests/suite/v2/imagegen_extension.rs` | imagegen extension lifecycle | `image-generation-item`: 图片生成 task 与 `ImageGenerationItem` / artifact/read model 对齐 | 部分覆盖：`image-command`、`plain-image-intent` |
+| Lime image fixture | current media task methods、audit log、worker provider/model、task card terminal、reload restore、无 draft/template task id | `image-command` / `plain-image-intent` | 已有 Electron fixture，仍缺 Codex item taxonomy 对齐 |
+
+### 4.9 Web Search / Dynamic Tools / Structured Output
+
+| Codex source | Codex 覆盖行为 | Lime 必补 fixture / oracle | 状态 |
+| --- | --- | --- | --- |
+| `app-server/tests/suite/v2/web_search.rs` | web search item lifecycle 与 result projection | `web-tools-rendering`: search/fetch/reasoning/final text sequence 稳定 | 部分覆盖 |
+| `dynamic_tools.rs` | dynamic tool inventory/call/output | `dynamic-tool-call-item`: tool namespace、arguments、content items、success/error 全字段入 projection | 缺口 |
+| `output_schema.rs` | structured output 请求与结果 shape | `structured-output-message`: structured answer 不被 markdown/text renderer 破坏 | 缺口 |
+| `core/src/session/tests.rs` structured content helpers | structured content 优先、content fallback、success flag | `structured-content-precedence`: 有 structuredContent 时优先，null 时 fallback | 部分覆盖于 MCP |
+
+### 4.10 Context / Compaction / Memory / Budget
+
+| Codex source | Codex 覆盖行为 | Lime 必补 fixture / oracle | 状态 |
+| --- | --- | --- | --- |
+| `app-server/tests/suite/v2/compaction.rs` + `core/src/compact_tests.rs` | compaction request、replacement history、继续 turn | `context-compaction-item`: compact 是 item/event，不 rewrite old items | 缺口 |
+| `core/src/session/tests.rs` | reconstruct live compactions、replacement history verbatim、resumed transcript、initial context first turn only、token info | `history-replay-oracle`: read model replay 与 live stream 同构，token/context metadata 不丢 | 缺口 |
+| `thread_rollout_truncation_tests.rs` | rollout truncate / budget | `rollout-budget-readmodel`: 超长历史分页、截断、导出都有明确标记 | 缺口 |
+| `tui/src/chatwidget/tokens_tests.rs` | token usage chart/status | `token-usage-projection`: usage / cached token / context window 与 turn/status 绑定 | 缺口 |
+
+### 4.11 UI Snapshot / Layout / Render
+
+| Codex source | Codex 覆盖行为 | Lime 必补 fixture / oracle | 状态 |
+| --- | --- | --- | --- |
+| `tui/src/snapshots/*markdown_render*` | markdown、table、URL、file link、finding item、CJK/wrap snapshot | `markdown-render-snapshot`: assistant final text、tool output、artifact preview 使用同一 markdown renderer snapshot | 缺口 |
+| `tui/src/snapshots/*diff_render*` | add/delete/update/rename/multiple files/line wrap/syntax highlight | `diff-artifact-snapshot`: file change、review、artifact diff 渲染稳定 | 缺口 |
+| `tui/src/snapshots/*resume_picker*` | resume picker dense/narrow/search/loading/thread names | `sidebar-history-snapshot`: 最近对话、恢复、归档、搜索、加载态稳定 | 缺口 |
+| `tui/src/snapshots/*pager_overlay*` | transcript overlay、live tail、apply patch scroll | `transcript-overlay-snapshot`: 长输出/工具过程/patch overlay 不遮挡输入 | 缺口 |
+| `tui/tests/suite/resize_reflow.rs` | tmux split / repeated resize / width restore keeps content anchored | `electron-resize-reflow`: Electron 窗口 resize 后 MessageList、Inputbar、右侧面板不漂移 | 缺口 |
+| `tui/src/chatwidget/tests/status_and_layout.rs` | active exec/status layout、parallel hooks collapse、history/live snapshot | `status-layout-matrix`: running/status/queued/hooks/tool 不互相挤压 | 缺口 |
+| Lime fixture `right-surface-visual-matrix` | right surface mutually exclusive、fills host、pending consume keeps open、does not use model turn | `right-surface-visual-matrix` | 已有 Electron fixture，仍缺标准 screenshot baseline |
+
+## 5. Lime 已有 Current Fixture 场景族
+
+这些是现有 `scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs --scenario` 支持的场景，必须被纳入 Clawstream 账本，且未来任何重构不能删掉对应断言。
+
+| 场景 | 关键断言 / evidence | Codex 对齐点 | 缺口 |
+| --- | --- | --- | --- |
+| `complete` | GUI 输入、backend ledger、read model completed、turn completed | Thread/Turn 基本闭环 | 需要 item-level projection oracle |
+| `cancel` | turn cancel、停止按钮、输入恢复 | `turn_interrupt` | 需要 pending approval / output-free restore 矩阵 |
+| `cancel-then-continue` | stop 后同 session 第二轮 backend turnStart + GUI/read model completed | `turn_interrupt` + composer queue | 需要 stale terminal / queued input oracle |
+| `plan` | `planModeEnabledInGui`、`planPromptReachedBackend`、`guiPlanDecisionDrawerVisible`、`readModelPlanThreadItemRevisioned`、`legacyUpdatePlanToolHidden` | `plan_item.rs` | 需要 `<proposed_plan>` parser boundary / plan delta fixture |
+| `goal` | goal mode、objective metadata、GUI/read model completed | goal menu / validation | 需要 goal lifecycle/history hydrate |
+| `soul-style` | style profile/intensity、runtime provider marker、prompt context marker | context contributors | 需要 style context item/evidence 规范 |
+| `web-tools-rendering` | search default collapsed、sources after expand、fetch pages、timeline order、markdown rendered、transport envelope hidden、reasoning no plan rail | WebSearch + markdown snapshot | 需要 web search item oracle |
+| `mcp-structured-content` | prompt/backend、structuredContent visible、envelope hidden、read model observed | `mcp_tool.rs` structured_content | 需要 elicitation/resource/status/collision |
+| `skills-runtime` | natural + explicit + manual enable：search/read/gate/invoke/evidence pack，顺序断言 | executor skills / skill resources | 需要 projection oracle 和 skill mention restore |
+| `multi-agent-team` | parent thread evidence、handoff、worker notification、review lane、no agent-first history | CollabAgentToolCall/SubAgentActivity | 需要 item taxonomy + visual snapshot |
+| `expert-skills-runtime` | expert skillRefs declared/selected/invoked，仍 search/gate/invoke | plugin/expert capability hints | 需要专家 skillRefs 只作为 hint 的 contract guard |
+| `expert-plaza-skills-runtime` | plaza catalog injected、card clicked、auto send turn started | plugin catalog + selected capability | 需要 plaza -> runtime projection |
+| `expert-panel-skills-runtime` | panel skill picker、skill added、next turn override、evidence pack exported | UI side panel state + runtime metadata | 需要 panel state hydrate |
+| `image-command` | current mediaTask methods、audit log、worker provider/model、task card terminal、reload restore、no draft/template id | ImageGeneration item + local image input | 需要 image item taxonomy |
+| `plain-image-intent` | 普通画图意图路由到同一 image task chain | input routing | 需要 route guard 防普通聊天回流 |
+| `right-surface-visual-matrix` | files/objectCanvas/expert/browser/appSurface 互斥、fills host、does not use model turn | TUI resize/reflow/surface snapshot | 需要 screenshot baseline |
+| `content-factory-article-workspace` | runtimeEvents append、right surface、artifact/read/workflow、worker turn、contract fail closed、does not use model turn | artifact/workflow/app surface | 需要 artifact item oracle |
+| `content-factory-inline-image-article-workspace` | inline slot persisted、event emitted、task completed、read model/canvas restored | image + artifact + document slot | 需要 inline image slot replace/cancel/fail matrix |
+
+聚合入口 `npm run smoke:agent-runtime-current-fixture` 已固定跑：
+
+```text
+gui-coding-input
+image-command
+plain-image-intent
+cancel-then-continue
+plan
+skills-runtime
+multi-agent-team
+mcp-structured-content
+expert-skills-runtime
+expert-plaza-skills-runtime
+expert-panel-skills-runtime
+content-factory-article-workspace
+```
+
+## 6. Codex 缺口 -> Lime 下一批标准场景
+
+本节是优先级摘要；完整逐项来源和验收口径见 `./scenario-ledger.md`。
+
+P0 必须先补这些，因为它们直接影响首字慢、reasoning 顺序、停止继续、旧实现清理：
+
+| 新场景 id | 来源 | 最低 fixture 内容 | 清理收益 |
+| --- | --- | --- | --- |
+| `startup-prewarm-first-output` | `core/src/session/tests.rs` startup prewarm | turn started 不等 prewarm；首个 reasoning/text 可见；无“启动处理流程”闪现 | 删除 startup note / timeout 合成首字 |
+| `plan-parser-boundary` | `plan_item.rs` + stream parser tests | `<proposed_plan>` 跨 added/delta/complete 边界；delta item_id 稳定；无 plan block 时不生成 Plan | 删除 legacy `update_plan` UI owner |
+| `terminal-contract-after-answer` | `tui/chatwidget/tests/app_server.rs` | answer item 已显示后 `turn.completed` 只清 running；failed 只补 error，不重复正文 | 删除 final_done / grace timer 伪完成 |
+| `inputbar-restore-matrix` | `composer_submission.rs` / `review_mode.rs` | output-free、visible-output、thinking、patch-active、queued steer、manual interrupt 全矩阵 | 删除多套 input restore fallback |
+| `mcp-elicitation-resource-status` | `mcp_tool.rs` / `mcp_resource.rs` / `mcp_server_elicitation.rs` | structuredContent、resource read、form/OpenAI form、server raw name/collision | 删除 MCP naked tool/mock fallback |
+| `skills-mention-restore` | `composer_submission.rs` + executor skills | skill mention、scope、image/text elements、blocked/queued restore | 删除自动 skill 注入和旧 skill ref 直连 |
+| `multi-agent-item-lineage` | protocol items + session inter-agent tests | spawn/send/wait/list、parent/child Thread、item id、resume、interrupted | 删除 agent-first orphan history |
+
+P1 补齐 Thread/Turn/Artifact 主链：
+
+| 新场景 id | 来源 | 最低 fixture 内容 | 清理收益 |
+| --- | --- | --- | --- |
+| `thread-resume-page-isomorphic` | `thread_read.rs` / `thread_resume.rs` | initial turns page、turns list page、items view、archived read 同构 | 删除从 timeline 二次重建 read model |
+| `thread-fork-rollback-lineage` | `thread_fork.rs` / `thread_rollback.rs` | fork 不改 parent；rollback 删除 item 并重算 settings/reference context | 删除历史兼容残留 |
+| `command-filechange-approval` | shell/apply_patch/approval tests | command、patch、approval request、denied/timed out、interrupt | 删除工具/patch 单独 UI 分支 |
+| `context-compaction-replay` | compaction/session reconstruction tests | compaction item、replacement history、token info、继续 turn | 删除 rewrite history 逻辑 |
+| `artifact-document-snapshot` | content factory + Codex diff/markdown snapshots | artifact document、diff、markdown、workflow action、right surface hydrate | 删除 artifact fake card / raw workflow leakage |
+
+P2 补齐视觉与扩展生态：
+
+| 新场景 id | 来源 | 最低 fixture 内容 | 清理收益 |
+| --- | --- | --- | --- |
+| `markdown-diff-render-snapshots` | TUI markdown/diff snapshots | headings/table/file links/finding/diff add/delete/update/rename | 删除散落 markdown/diff renderer |
+| `electron-resize-reflow` | TUI resize/reflow/vt100 tests | 窗口尺寸变化后 MessageList/Inputbar/right surface 锚定 | 防止 UI 回归只靠文案断言 |
+| `plugin-capability-runtime` | plugin_* / selected_capability_stack | plugin install/read/list/share 与 runtime capability scope | 删除插件中心/skill 双轨 |
+| `image-input-restore` | local image and blocked image restore tests | local/remote image、placeholder、cancel/queue/restore | 删除图片输入临时兼容层 |
+| `structured-output-message` | output_schema / dynamic_tools | JSON/structured output 作为 content item，不被 markdown 普通文本化 | 统一 artifact/structured text |
+
+## 7. 清理边界从 Codex 反推
+
+| 能力 | current owner | 必删 / 禁止回流 |
+| --- | --- | --- |
+| Plan | `PlanItem` + proposed_plan parser + read model revision | 旧 `UpdatePlanTool` / `update_plan` 只能作为 hidden guard，不是 UI owner |
+| Skills | search/read/gate/invoke + evidence pack | 专家 skillRefs、manual enable 只做候选/allowlist，禁止绕过 search/gate 自动注入 |
+| Multi-Agent | parent Thread + child session + item id + evidence pack | 禁止 agent-first orphan history、无 parent binding worker notification |
+| MCP | `mcp__server__tool` + structuredContent/resource/elicitation | 禁止 naked tool name、mock fallback success、transport envelope 直显 |
+| Command/Patch | CommandExecution/FileChange item + approval/request permission | 禁止靠自然语言“已执行/已应用”判断终态 |
+| Image | ImageGeneration / media task artifact / audit log | 禁止前端 fake image completion、模板 task id、旧 Skill/Bash 图片旁路 |
+| Content Factory | artifact document + workflow read model + app surface | 禁止 raw workflow facts、subagent/skill/connector refs 泄漏到文章 canvas |
+| History | Thread read/resume/fork/rollback/compaction replay | 禁止 timeline 二次拼装、rewrite history、旧 paginated legacy path |
+| UI | projection snapshot + Electron/Playwright screenshot | 禁止只用 `pageText.includes` 证明复杂布局正确 |
+
+## 8. 实施分层
+
+后续实现不能先写大而全 E2E。按 Codex 的测试分层，应拆成三层组合：
+
+1. **规范化事件项层**：在 `packages/agent-ui-contracts` / `packages/agent-runtime-projection` 固定 item schema、sequence、owner、terminal semantics。
+2. **投影/渲染快照层**：为 `ContentPart[]`、read model、MessageList、StreamingRenderer、right surface、markdown/diff/artifact 建 snapshot / structured oracle。
+3. **真实端到端 fixture 层**：用 `scripts/agent-runtime/claw-chat-current-fixture-smoke.mjs --scenario ...` 和聚合 smoke 跑 Electron + App Server sidecar + external fixture backend。
+
+任何删除旧 Claw 实现前，必须先确认对应 Codex-derived 场景至少落入其中两层；触达用户主路径、history hydrate、MCP、Skills、Multi-Agent、artifact 的删除必须三层都具备。

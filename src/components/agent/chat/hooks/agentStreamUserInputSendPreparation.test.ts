@@ -262,6 +262,58 @@ describe("agentStreamUserInputSendPreparation", () => {
     expect(isSending).toBe(true);
   });
 
+  it("current provider 有值但 model 为空时，应跳过半截偏好并使用 runtime 完整 pair", () => {
+    vi.spyOn(crypto, "randomUUID")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000210")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000211");
+
+    const result = prepareAgentStreamUserInputSend({
+      content: "你好",
+      images: [],
+      skipUserMessage: false,
+      env: createEnv({
+        providerType: "lime-hub",
+        model: "",
+        executionRuntime: {
+          session_id: "session-runtime-pair",
+          source: "runtime_snapshot",
+          provider_selector: "openai",
+          model_name: "gpt-5.4",
+          execution_strategy: "react",
+        },
+      }),
+    });
+
+    expect(result.effectiveProviderType).toBe("openai");
+    expect(result.effectiveModel).toBe("gpt-5.4");
+  });
+
+  it("current provider 有值但 model 为空且 runtime 不完整时，应使用已同步 session 完整 pair", () => {
+    vi.spyOn(crypto, "randomUUID")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000220")
+      .mockReturnValueOnce("00000000-0000-0000-0000-000000000221");
+
+    const result = prepareAgentStreamUserInputSend({
+      content: "你好",
+      images: [],
+      skipUserMessage: false,
+      env: createEnv({
+        providerType: "lime-hub",
+        model: "",
+        executionRuntime: {
+          session_id: "session-runtime-incomplete",
+          source: "runtime_snapshot",
+          provider_selector: "lime-hub",
+          model_name: "",
+          execution_strategy: "react",
+        },
+      }),
+    });
+
+    expect(result.effectiveProviderType).toBe("openai");
+    expect(result.effectiveModel).toBe("gpt-5.4");
+  });
+
   it("普通自然语言发送不应在前端注入搜索模式", () => {
     vi.spyOn(crypto, "randomUUID")
       .mockReturnValueOnce("00000000-0000-0000-0000-000000000301")

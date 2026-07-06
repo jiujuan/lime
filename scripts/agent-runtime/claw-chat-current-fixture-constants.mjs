@@ -150,15 +150,29 @@ export const CONTENT_FACTORY_ARTICLE_WORKSPACE_SCENARIO =
 export const CONTENT_FACTORY_INLINE_IMAGE_ARTICLE_WORKSPACE_SCENARIO =
   "content-factory-inline-image-article-workspace";
 export const SOUL_STYLE_SCENARIO = "soul-style";
+export const INPUTBAR_RICH_RESTORE_SCENARIO = "inputbar-rich-restore";
 export const NEWS_PROMPT = "整理今天的国际新闻";
 export const CONTINUE_PROMPT = "继续输出";
 export const PLAN_PROMPT = "先给我一个修复计划，不要直接改代码";
 export const GOAL_PROMPT = "本周完成 Goal E2E 修复";
+export const INPUTBAR_RICH_RESTORE_PROMPT =
+  "请结合这个截图、文件和 Capability Report 技能，先不要输出正文。";
+export const INPUTBAR_RICH_RESTORE_PATH_NAME =
+  "clawstream-rich-restore-fixture.md";
+export const INPUTBAR_RICH_RESTORE_PATH = path.join(
+  process.cwd(),
+  "internal",
+  "roadmap",
+  "test",
+  "clawstream",
+  INPUTBAR_RICH_RESTORE_PATH_NAME,
+);
+export const INPUTBAR_RICH_RESTORE_SKILL_NAME = "Capability Report";
 export const WEB_TOOLS_RENDERING_PROMPT = "验证网页搜索渲染";
 export const MCP_STRUCTURED_CONTENT_PROMPT = "验证 MCP structuredContent 展示";
 export const ASSISTANT_DONE_TEXT = "CLAW_NEWS_FIXTURE_DONE";
-export const SOUL_STYLE_PROFILE_ID = "cheeky_sassy_executor";
-export const SOUL_STYLE_INTENSITY = "high";
+export const INPUTBAR_RICH_RESTORE_FORBIDDEN_ASSISTANT_TEXT =
+  "CLAW_INPUTBAR_RICH_RESTORE_DONE";
 export const CONTINUE_DONE_TEXT = "CLAW_CONTINUE_FIXTURE_DONE";
 export const PLAN_DONE_TEXT = "CLAW_PLAN_FIXTURE_DONE";
 export const GOAL_DONE_TEXT = "CLAW_GOAL_FIXTURE_DONE";
@@ -375,6 +389,21 @@ export const IMAGE_COMMAND_ASSERTION_KEYS = [
   "guiImageCommandNoTemplateTaskId",
   "readModelImageCommandCompleted",
   "readModelImageCommandTaskPreviewObserved",
+];
+export const INPUTBAR_RICH_RESTORE_ASSERTION_KEYS = [
+  "inputbarRichRestorePromptReachedBackend",
+  "inputbarRichRestoreDraftPrepared",
+  "inputbarRichRestoreInputSubmitted",
+  "inputbarRichRestoreBackendInputSummaryReached",
+  "inputbarRichRestoreUsedCurrentTurnCancel",
+  "inputbarRichRestoreBackendCanceled",
+  "inputbarRichRestoreGuiCanceled",
+  "inputbarRichRestoreTextRestored",
+  "inputbarRichRestoreImageRestored",
+  "inputbarRichRestorePathRestored",
+  "inputbarRichRestoreSkillRestored",
+  "inputbarRichRestoreNoVisibleAssistantOutput",
+  "inputbarRichRestoreReadModelCanceled",
 ];
 export const RIGHT_SURFACE_VISUAL_MATRIX_ASSERTION_KEYS = [
   "rightSurfaceVisualMatrixRequestedThroughAppServer",

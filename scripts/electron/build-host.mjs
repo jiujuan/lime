@@ -6,6 +6,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../..");
 const devMode = process.argv.includes("--dev");
 const sharedExternal = ["electron", /^node:/];
+const ssrBundleRuntimeDependencies = { noExternal: true };
 const appServerClientSource = path.resolve(
   repoRoot,
   "packages/app-server-client/src/index.ts",
@@ -14,6 +15,7 @@ const appServerClientSource = path.resolve(
 async function buildMain() {
   await build({
     configFile: false,
+    ssr: ssrBundleRuntimeDependencies,
     resolve: {
       alias: [
         {
@@ -41,6 +43,7 @@ async function buildMain() {
 async function buildPreload() {
   await build({
     configFile: false,
+    ssr: ssrBundleRuntimeDependencies,
     build: {
       target: "node22",
       ssr: "electron/preload.ts",

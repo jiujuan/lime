@@ -12,6 +12,7 @@ use futures::{future::join_all, stream, FutureExt, Stream, StreamExt, TryStreamE
 use uuid::Uuid;
 
 use super::final_output_tool::FinalOutputTool;
+use super::prompt_input_modalities::provider_prompt_messages_for_turn_context;
 use super::provider_trace::ProviderTraceEvent;
 use super::tool_execution::{ToolCallResult, CHAT_MODE_TOOL_SKIPPED_RESPONSE, DECLINED_RESPONSE};
 use crate::action_required_manager::ActionRequiredManager;
@@ -4249,6 +4250,10 @@ impl Agent {
                     .await;
                     provider_conversation.messages()
                 };
+                let provider_messages = provider_prompt_messages_for_turn_context(
+                    provider_messages,
+                    session_config.turn_context.as_ref(),
+                );
                 let provider_trace_started_at = Instant::now();
                 let provider_trace_provider = pinned_provider.get_name().to_string();
                 let provider_trace_model = model_config.model_name.clone();
@@ -4270,7 +4275,7 @@ impl Agent {
                             pinned_provider.clone(),
                             &model_config,
                             &system_prompt,
-                            provider_messages,
+                            provider_messages.as_ref(),
                             &tools,
                             &toolshim_tools,
                         )
@@ -5461,22 +5466,6 @@ mod tests {
                 total_sessions: 1,
                 total_tokens: 0,
             })
-        }
-
-        async fn export_session(&self, _id: &str) -> Result<String> {
-            Ok("{}".to_string())
-        }
-
-        async fn import_session(&self, _json: &str) -> Result<Session> {
-            Ok(self.current_session(true))
-        }
-
-        async fn copy_session(&self, _session_id: &str, _new_name: String) -> Result<Session> {
-            Ok(self.current_session(true))
-        }
-
-        async fn truncate_conversation(&self, _session_id: &str, _timestamp: i64) -> Result<()> {
-            Ok(())
         }
 
         async fn update_session_name(

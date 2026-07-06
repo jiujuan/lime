@@ -77,7 +77,7 @@ export function handleAgentStreamSubmitFailure(
 
   console.error("[AsterChat] 发送失败:", error);
   const errMsg = error instanceof Error ? error.message : String(error);
-  const failedRuntimeStatus = buildFailedAgentRuntimeStatus(errMsg);
+  const failedRuntimeStatus = buildFailedAgentRuntimeStatus(errMsg, soulCopy);
   observer?.onError?.(errMsg);
 
   if (errMsg.includes("429") || errMsg.toLowerCase().includes("rate limit")) {

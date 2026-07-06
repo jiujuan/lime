@@ -289,10 +289,7 @@ interface UseWorkspaceInputbarScenePresentationRuntimeParams {
   selectedFileId?: string;
   isThemeWorkbench: boolean;
   inputbarPresentation: {
-    inputbar: Omit<
-      WorkspaceInputbarBuilderParams,
-      | "onSelectCharacter"
-    >;
+    inputbar: Omit<WorkspaceInputbarBuilderParams, "onSelectCharacter">;
     generalWorkbenchEntryPrompt: GeneralWorkbenchEntryPromptState | null;
     onRestartGeneralWorkbenchEntryPrompt: () => void;
     onContinueGeneralWorkbenchEntryPrompt: () => Promise<void> | void;
@@ -555,6 +552,8 @@ interface UseWorkspaceInputbarSceneRuntimeParams {
   defaultCuratedTaskReferenceEntries?: CuratedTaskReferenceEntry[];
   pathReferences: InputbarParams["pathReferences"];
   onAddPathReferences: InputbarParams["onAddPathReferences"];
+  inputRestoreRequest?: InputbarParams["inputRestoreRequest"];
+  onInputRestoreRequestHandled?: InputbarParams["onInputRestoreRequestHandled"];
   onRemovePathReference: InputbarParams["onRemovePathReference"];
   onClearPathReferences: InputbarParams["onClearPathReferences"];
   fileManagerOpen: InputbarParams["fileManagerOpen"];
@@ -659,6 +658,8 @@ export function useWorkspaceInputbarSceneRuntime({
   defaultCuratedTaskReferenceEntries = [],
   pathReferences,
   onAddPathReferences,
+  inputRestoreRequest,
+  onInputRestoreRequestHandled,
   onRemovePathReference,
   onClearPathReferences,
   fileManagerOpen,
@@ -822,6 +823,8 @@ export function useWorkspaceInputbarSceneRuntime({
         defaultCuratedTaskReferenceEntries,
         pathReferences,
         onAddPathReferences,
+        inputRestoreRequest,
+        onInputRestoreRequestHandled,
         onImportPathReferenceAsKnowledge:
           knowledgeRuntime.onImportPathReferenceAsKnowledge,
         onRemovePathReference,

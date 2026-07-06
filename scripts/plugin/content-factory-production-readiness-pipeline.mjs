@@ -300,9 +300,9 @@ Options:
   --public-key-id <id>         Non-secret trust root public key id for the signing command hint.
   --generate-signature-proof   Explicitly generate app.signature.yaml and trust root after Studio dry-run hashes are available.
   --signing-private-key-env <name>
-                              Env var containing the signing private key.
+                              Env var name containing the signing private key; never pass the key value as an argument.
   --signing-private-key-file <path>
-                              Local signing private key file. Path is not written to public command args.
+                              Local signing private key file. Prefer env; file contents and path are not written to evidence.
   --signature-algorithm <name> Optional signing algorithm passed to sign-release.mjs.
   --signed-at <iso>            Optional fixed signedAt timestamp for reproducible release proof.
   --expected-version <value>   Expected content-factory-app version.

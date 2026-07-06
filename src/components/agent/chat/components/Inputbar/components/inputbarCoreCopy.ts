@@ -58,6 +58,7 @@ export type InputbarCoreCopyKey =
   | "agentChat.inputbar.core.suggestion.acceptKey"
   | "agentChat.inputbar.core.textarea.expand"
   | "agentChat.inputbar.core.textarea.collapse"
+  | "agentChat.inputbar.core.action.running"
   | "agentChat.inputbar.core.action.defer"
   | "agentChat.inputbar.core.action.stop"
   | "agentChat.inputbar.core.action.send";
@@ -144,6 +145,7 @@ export interface InputbarCoreCopy {
     collapse: string;
   };
   action: {
+    running: string;
     defer: string;
     stop: string;
     send: string;
@@ -313,6 +315,7 @@ export function buildInputbarCoreCopy(
       collapse: translate("agentChat.inputbar.core.textarea.collapse"),
     },
     action: {
+      running: translate("agentChat.inputbar.core.action.running"),
       defer: translate("agentChat.inputbar.core.action.defer"),
       stop: translate("agentChat.inputbar.core.action.stop"),
       send: translate("agentChat.inputbar.core.action.send"),

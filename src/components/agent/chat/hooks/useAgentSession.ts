@@ -71,6 +71,7 @@ import {
   resolveRestorableTopicSessionId,
   shouldSkipAlreadyHydratedSession,
   shouldDeferSessionDetailHydration,
+  hasSessionHydrationActivity,
   type AgentSessionDetailMergeMode,
   type AgentSessionSnapshot,
 } from "./agentSessionState";
@@ -367,13 +368,51 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   );
 
   const loadScopedSessionRestoreCandidate = useCallback(() => {
-    if (disableSessionRestore || !workspaceId?.trim()) {
+    if (disableSessionRestore) {
       return null;
     }
 
+    const transientCandidate = loadTransient<string | null>(
+      scopedKeys.currentSessionKey,
+      null,
+    );
+    if (transientCandidate?.trim()) {
+      return sanitizeRestoreCandidateSessionId(transientCandidate);
+    }
+
+    const resolvedWorkspaceId = workspaceId?.trim() || "";
+    if (resolvedWorkspaceId) {
+      const globalKeys = getAgentSessionScopedKeys("");
+      const globalTransientCandidate = loadTransient<string | null>(
+        globalKeys.currentSessionKey,
+        null,
+      );
+      if (globalTransientCandidate?.trim()) {
+        return sanitizeRestoreCandidateSessionId(globalTransientCandidate);
+      }
+    }
+
+    const persistedCandidate = loadPersisted<string | null>(
+      scopedKeys.persistedSessionKey,
+      null,
+    );
+    if (persistedCandidate?.trim()) {
+      return sanitizeRestoreCandidateSessionId(persistedCandidate);
+    }
+
+    if (resolvedWorkspaceId) {
+      const globalKeys = getAgentSessionScopedKeys("");
+      const globalPersistedCandidate = loadPersisted<string | null>(
+        globalKeys.persistedSessionKey,
+        null,
+      );
+      if (globalPersistedCandidate?.trim()) {
+        return sanitizeRestoreCandidateSessionId(globalPersistedCandidate);
+      }
+    }
+
     return sanitizeRestoreCandidateSessionId(
-      loadTransient<string | null>(scopedKeys.currentSessionKey, null) ??
-        loadPersisted<string | null>(scopedKeys.persistedSessionKey, null),
+      null,
     );
   }, [
     disableSessionRestore,
@@ -382,7 +421,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     workspaceId,
   ]);
   const loadPersistedSessionRestoreCandidate = useCallback(() => {
-    if (disableSessionRestore || !workspaceId?.trim()) {
+    if (disableSessionRestore) {
       return null;
     }
 
@@ -393,22 +432,21 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     disableSessionRestore,
     sanitizeRestoreCandidateSessionId,
     scopedKeys,
-    workspaceId,
   ]);
 
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>(() =>
-    disableSessionRestore || !workspaceId?.trim()
+    disableSessionRestore
       ? []
       : loadTransient<Message[]>(scopedKeys.messagesKey, []),
   );
   const [threadTurns, setThreadTurns] = useState<AgentThreadTurn[]>(() =>
-    disableSessionRestore || !workspaceId?.trim()
+    disableSessionRestore
       ? []
       : loadTransient<AgentThreadTurn[]>(scopedKeys.turnsKey, []),
   );
   const [threadItems, setThreadItems] = useState<AgentThreadItem[]>(() =>
-    disableSessionRestore || !workspaceId?.trim()
+    disableSessionRestore
       ? []
       : filterConversationThreadItems(
           normalizeLegacyThreadItems(
@@ -417,7 +455,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
         ),
   );
   const [currentTurnId, setCurrentTurnId] = useState<string | null>(() =>
-    disableSessionRestore || !workspaceId?.trim()
+    disableSessionRestore
       ? null
       : loadTransient<string | null>(scopedKeys.currentTurnKey, null),
   );
@@ -440,9 +478,11 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   const [sessionHistoryWindow, setSessionHistoryWindow] =
     useState<AgentSessionHistoryWindow | null>(null);
   const [isAutoRestoringSession, setIsAutoRestoringSession] = useState(
-    () => !disableSessionRestore && Boolean(workspaceId?.trim()),
+    () => !disableSessionRestore,
   );
   const [isSessionHydrating, setIsSessionHydrating] = useState(false);
+  const [recoveredStreamBindingSessionId, setRecoveredStreamBindingSessionId] =
+    useState<string | null>(null);
 
   const restoredWorkspaceRef = useRef<string | null>(null);
   const hydratedSessionRef = useRef<string | null>(null);
@@ -463,7 +503,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   const pendingTopicsRefreshRef = useRef(false);
   const activeStreamingTimelineRef = useRef(false);
   const sessionStateWorkspaceRef = useRef<string | null>(
-    workspaceId?.trim() || null,
+    workspaceId?.trim() || "",
   );
   const messagesRef = useRef<Message[]>(messages);
   const threadTurnsRef = useRef<AgentThreadTurn[]>(threadTurns);
@@ -483,10 +523,12 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     loadPersistedSessionRestoreCandidate(),
   );
   const bootPersistedRestoreWorkspaceIdRef = useRef<string | null>(
-    workspaceId?.trim() || null,
+    workspaceId?.trim() || "",
   );
-  const currentRestoreWorkspaceId = workspaceId?.trim() || null;
-  if (bootPersistedRestoreWorkspaceIdRef.current !== currentRestoreWorkspaceId) {
+  const currentRestoreWorkspaceId = workspaceId?.trim() || "";
+  if (
+    bootPersistedRestoreWorkspaceIdRef.current !== currentRestoreWorkspaceId
+  ) {
     bootPersistedRestoreWorkspaceIdRef.current = currentRestoreWorkspaceId;
     bootPersistedRestoreCandidateSessionIdRef.current =
       loadPersistedSessionRestoreCandidate();
@@ -573,17 +615,22 @@ export function useAgentSession(options: UseAgentSessionOptions) {
 
   const listWorkspaceTopics = useCallback(async () => {
     const startedAt = Date.now();
+    const resolvedWorkspaceId = workspaceId.trim();
+    const sessionListScope = normalizedWorkingDir
+      ? { cwd: normalizedWorkingDir }
+      : resolvedWorkspaceId
+        ? { workspaceId: resolvedWorkspaceId }
+        : {};
     const sessions = await runtime.listSessions({
-      ...(normalizedWorkingDir
-        ? { cwd: normalizedWorkingDir }
-        : { workspaceId }),
+      ...sessionListScope,
       limit: INITIAL_TOPICS_SESSION_REQUEST_LIMIT,
     });
     const listDurationMs = Date.now() - startedAt;
     const workspaceFilterStartedAt = Date.now();
-    const workspaceSessions = normalizedWorkingDir
-      ? sessions
-      : filterSessionsByWorkspace(sessions);
+    const workspaceSessions =
+      normalizedWorkingDir || !resolvedWorkspaceId
+        ? sessions
+        : filterSessionsByWorkspace(sessions);
     const workspaceFilterDurationMs = Date.now() - workspaceFilterStartedAt;
     const auxiliaryFilterStartedAt = Date.now();
     const visibleSessions = workspaceSessions.filter(
@@ -593,7 +640,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     const topicMapStartedAt = Date.now();
     const topicList = sortTopicsByRecentActivity(
       visibleSessions.map(mapSessionToTopic),
-      { workspaceId },
+      { workspaceId: resolvedWorkspaceId || null },
     );
     const topicMapDurationMs = Date.now() - topicMapStartedAt;
     const metricContext = {
@@ -607,7 +654,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       topicsCount: topicList.length,
       totalDurationMs: Date.now() - startedAt,
       workspaceFilterDurationMs,
-      workspaceId,
+      workspaceId: resolvedWorkspaceId || null,
       workspaceSessionsCount: workspaceSessions.length,
     };
     recordAgentUiPerformanceMetric(
@@ -661,25 +708,41 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       queuedTurns: QueuedTurnSnapshot[];
       threadRead: AgentRuntimeThreadReadModel | null;
     }) => {
+      if (!snapshot.threadRead) {
+        return;
+      }
       setQueuedTurns(snapshot.queuedTurns);
       setThreadRead(snapshot.threadRead);
     },
     [],
   );
 
-  const activeStreamingTimeline = hasActiveStreamingTimeline({
-    currentAssistantMsgId: currentAssistantMsgIdRef.current,
-    currentStreamingEventName: currentStreamingEventNameRef.current,
-    currentStreamingSessionId: currentStreamingSessionIdRef.current,
-  });
+  const hasActiveStreamingTimelineNow = useCallback(
+    () =>
+      hasActiveStreamingTimeline({
+        currentAssistantMsgId: currentAssistantMsgIdRef.current,
+        currentStreamingEventName: currentStreamingEventNameRef.current,
+        currentStreamingSessionId: currentStreamingSessionIdRef.current,
+      }),
+    [
+      currentAssistantMsgIdRef,
+      currentStreamingEventNameRef,
+      currentStreamingSessionIdRef,
+    ],
+  );
+  const activeStreamingTimeline = hasActiveStreamingTimelineNow();
   activeStreamingTimelineRef.current = activeStreamingTimeline;
 
   const deferTopicsLoadForActiveStream = useCallback(
     (source: "initial" | "manual") => {
-      if (!activeStreamingTimelineRef.current) {
+      if (
+        !activeStreamingTimelineRef.current &&
+        !hasActiveStreamingTimelineNow()
+      ) {
         return false;
       }
 
+      activeStreamingTimelineRef.current = true;
       pendingTopicsRefreshRef.current = true;
       setTopicsReady(true);
       logAgentDebug(
@@ -696,7 +759,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       );
       return true;
     },
-    [workspaceId],
+    [hasActiveStreamingTimelineNow, workspaceId],
   );
 
   const resolveSessionHistoryWindow = useCallback(
@@ -724,19 +787,18 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   }, [sessionId, workspaceId]);
 
   useEffect(() => {
-    const resolvedWorkspaceId = workspaceId?.trim();
-    if (
-      !resolvedWorkspaceId ||
-      sessionStateWorkspaceRef.current !== resolvedWorkspaceId
-    ) {
+    const resolvedWorkspaceId = workspaceId?.trim() || "";
+    if (sessionStateWorkspaceRef.current !== resolvedWorkspaceId) {
       return;
     }
 
-    persistSessionRestoreCandidate(
-      sessionId ?? restoreCandidateSessionIdRef.current,
-    );
+    const sessionRestoreCandidate =
+      sessionId ?? restoreCandidateSessionIdRef.current;
+    if (sessionRestoreCandidate) {
+      persistSessionRestoreCandidate(sessionRestoreCandidate);
+    }
 
-    if (sessionId) {
+    if (sessionId && resolvedWorkspaceId) {
       const sessionWorkspaceKey = `agent_session_workspace_${sessionId}`;
       const existingWorkspaceId = loadPersistedString(sessionWorkspaceKey);
       if (
@@ -757,11 +819,8 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   }, [persistSessionRestoreCandidate, sessionId, workspaceId]);
 
   useEffect(() => {
-    const resolvedWorkspaceId = workspaceId?.trim();
-    if (
-      !resolvedWorkspaceId ||
-      sessionStateWorkspaceRef.current !== resolvedWorkspaceId
-    ) {
+    const resolvedWorkspaceId = workspaceId?.trim() || "";
+    if (sessionStateWorkspaceRef.current !== resolvedWorkspaceId) {
       return;
     }
     const transientMessages = selectActiveSessionTransientMessages(messages);
@@ -771,11 +830,8 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   }, [messages, scopedKeys, workspaceId]);
 
   useEffect(() => {
-    const resolvedWorkspaceId = workspaceId?.trim();
-    if (
-      !resolvedWorkspaceId ||
-      sessionStateWorkspaceRef.current !== resolvedWorkspaceId
-    ) {
+    const resolvedWorkspaceId = workspaceId?.trim() || "";
+    if (sessionStateWorkspaceRef.current !== resolvedWorkspaceId) {
       return;
     }
     const transientTurns = selectActiveSessionTransientTurns(threadTurns);
@@ -789,11 +845,8 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   }, [threadTurns]);
 
   useEffect(() => {
-    const resolvedWorkspaceId = workspaceId?.trim();
-    if (
-      !resolvedWorkspaceId ||
-      sessionStateWorkspaceRef.current !== resolvedWorkspaceId
-    ) {
+    const resolvedWorkspaceId = workspaceId?.trim() || "";
+    if (sessionStateWorkspaceRef.current !== resolvedWorkspaceId) {
       return;
     }
     const transientItems = selectActiveSessionTransientItems(
@@ -826,21 +879,17 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   );
 
   useEffect(() => {
-    const resolvedWorkspaceId = workspaceId?.trim();
-    if (
-      !resolvedWorkspaceId ||
-      sessionStateWorkspaceRef.current !== resolvedWorkspaceId
-    ) {
+    const resolvedWorkspaceId = workspaceId?.trim() || "";
+    if (sessionStateWorkspaceRef.current !== resolvedWorkspaceId) {
       return;
     }
     saveTransient(scopedKeys.currentTurnKey, currentTurnId);
   }, [currentTurnId, scopedKeys, workspaceId]);
 
   useEffect(() => {
-    const resolvedWorkspaceId = workspaceId?.trim();
+    const resolvedWorkspaceId = workspaceId?.trim() || "";
     const resolvedSessionId = sessionId?.trim();
     if (
-      !resolvedWorkspaceId ||
       !resolvedSessionId ||
       sessionStateWorkspaceRef.current !== resolvedWorkspaceId
     ) {
@@ -898,13 +947,14 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   ]);
 
   useEffect(() => {
-    if (disableSessionRestore || !workspaceId?.trim()) {
+    if (disableSessionRestore) {
       sessionStateWorkspaceRef.current = null;
       appServerConfirmedSessionIdsRef.current.clear();
       applySessionSnapshot(createEmptyAgentSessionSnapshot());
       setSessionHistoryWindow(null);
       setIsAutoRestoringSession(false);
       setIsSessionHydrating(false);
+      setRecoveredStreamBindingSessionId(null);
       resetPendingActions();
       resetStreamingRefs();
       restoredWorkspaceRef.current = null;
@@ -914,7 +964,8 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       return;
     }
 
-    sessionStateWorkspaceRef.current = workspaceId.trim();
+    const resolvedWorkspaceId = workspaceId.trim();
+    sessionStateWorkspaceRef.current = resolvedWorkspaceId;
     appServerConfirmedSessionIdsRef.current.clear();
     setIsAutoRestoringSession(true);
     setIsSessionHydrating(false);
@@ -934,7 +985,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     );
     const cachedScopedSnapshot = scopedSessionCandidate
       ? loadAgentSessionCachedSnapshot(
-          workspaceId.trim(),
+          resolvedWorkspaceId,
           scopedSessionCandidate,
         )
       : null;
@@ -948,6 +999,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     });
 
     restoreCandidateSessionIdRef.current = scopedSessionCandidate;
+    setRecoveredStreamBindingSessionId(restoreViewModel.sessionId);
     applySessionSnapshot({
       ...createEmptyAgentSessionSnapshot(),
       sessionId: restoreViewModel.sessionId,
@@ -974,13 +1026,6 @@ export function useAgentSession(options: UseAgentSessionOptions) {
 
   useEffect(() => {
     let cancelled = false;
-
-    if (!workspaceId?.trim()) {
-      topicsListMayBeTruncatedRef.current = false;
-      setTopics([]);
-      setTopicsReady(true);
-      return;
-    }
 
     const runListSessions = () => {
       if (deferTopicsLoadForActiveStream("initial")) {
@@ -1062,13 +1107,6 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   ]);
 
   const loadTopics = useCallback(async () => {
-    if (!workspaceId?.trim()) {
-      topicsListMayBeTruncatedRef.current = false;
-      setTopics([]);
-      setTopicsReady(true);
-      return;
-    }
-
     if (deferTopicsLoadForActiveStream("manual")) {
       return;
     }
@@ -1114,7 +1152,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   }, [deferTopicsLoadForActiveStream, listWorkspaceTopics, workspaceId]);
 
   useEffect(() => {
-    if (activeStreamingTimeline) {
+    if (activeStreamingTimeline || hasActiveStreamingTimelineNow()) {
       return;
     }
     if (!pendingTopicsRefreshRef.current) {
@@ -1123,7 +1161,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
 
     pendingTopicsRefreshRef.current = false;
     void loadTopics();
-  }, [activeStreamingTimeline, loadTopics]);
+  }, [activeStreamingTimeline, hasActiveStreamingTimelineNow, loadTopics]);
 
   const createFreshSession = useCallback(
     async (
@@ -1194,6 +1232,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
           setSessionHistoryWindow(null);
           setIsAutoRestoringSession(false);
           setIsSessionHydrating(false);
+          setRecoveredStreamBindingSessionId(null);
           setTopics((prev) =>
             upsertFreshSessionDraftTopic(prev, {
               createdAt: now,
@@ -1301,6 +1340,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
       invalidatePendingSessionSwitches();
       setIsAutoRestoringSession(false);
       setIsSessionHydrating(false);
+      setRecoveredStreamBindingSessionId(null);
       resetPendingActions();
       restoredWorkspaceRef.current = null;
       hydratedSessionRef.current = null;
@@ -1952,6 +1992,11 @@ export function useAgentSession(options: UseAgentSessionOptions) {
 
       skipAutoRestoreRef.current = false;
       detachedSessionIdRef.current = switchStartStatePlan.detachedSessionId;
+      if (options?.restoreSource !== "auto") {
+        setRecoveredStreamBindingSessionId(null);
+      } else {
+        setRecoveredStreamBindingSessionId(topicId);
+      }
       if (switchStartStatePlan.shouldResetSessionHydrating) {
         setIsSessionHydrating(false);
       }
@@ -2480,6 +2525,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
           missingSessionVerificationRef.current = null;
           setIsAutoRestoringSession(false);
           setIsSessionHydrating(false);
+          setRecoveredStreamBindingSessionId(null);
 
           return createFreshSession(undefined, {
             preserveCurrentSnapshot: false,
@@ -2649,8 +2695,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   );
 
   useEffect(() => {
-    const resolvedWorkspaceId = workspaceId?.trim();
-    if (!resolvedWorkspaceId) return;
+    const resolvedWorkspaceId = workspaceId?.trim() || "";
     if (disableSessionRestore) return;
     if (!topicsReady) return;
     if (skipAutoRestoreRef.current) return;
@@ -2686,6 +2731,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     let cancelled = false;
     setIsAutoRestoringSession(true);
     setIsSessionHydrating(false);
+    setRecoveredStreamBindingSessionId(targetSessionId);
     logAgentDebug("useAgentSession", "autoRestore.start", {
       candidateSessionId: scopedCandidate,
       targetSessionId,
@@ -2740,7 +2786,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
   useEffect(() => {
     if (!sessionId) return;
     if (!topicsReady) return;
-    if (activeStreamingTimeline) return;
+    if (activeStreamingTimeline || hasActiveStreamingTimelineNow()) return;
 
     const sessionMissingFromTopics =
       topics.length > 0 && !topics.some((topic) => topic.id === sessionId);
@@ -2750,16 +2796,24 @@ export function useAgentSession(options: UseAgentSessionOptions) {
 
     const restoreCandidateSessionId =
       restoreCandidateSessionIdRef.current?.trim() || null;
+    const currentSessionHasLocalTimeline =
+      messages.length > 0 ||
+      hasSessionHydrationActivity({
+        currentTurnId,
+        queuedTurnsCount: queuedTurns.length,
+        threadItemsCount: threadItems.length,
+        threadTurnsCount: threadTurns.length,
+      });
     const restoreCandidateMayLagTopics =
       restoreCandidateSessionId === sessionId &&
       (bootPersistedRestoreCandidateSessionIdRef.current === sessionId ||
-        topicsListMayBeTruncatedRef.current);
+        topicsListMayBeTruncatedRef.current ||
+        !currentSessionHasLocalTimeline);
     const missingSessionAction = resolveMissingSessionFromTopicsAction({
       currentTurnId,
       detachedSessionId: detachedSessionIdRef.current,
       queuedTurnsCount: queuedTurns.length,
-      remoteConfirmed:
-        appServerConfirmedSessionIdsRef.current.has(sessionId),
+      remoteConfirmed: appServerConfirmedSessionIdsRef.current.has(sessionId),
       restoreCandidateMayLagTopics,
       sessionId,
       threadItemsCount: threadItems.length,
@@ -2908,6 +2962,9 @@ export function useAgentSession(options: UseAgentSessionOptions) {
 
     switchTopic(sessionId, {
       forceRefresh: true,
+      ...(restoreCandidateSessionId === sessionId
+        ? { restoreSource: "auto" as const }
+        : {}),
       ...(shouldResumeHydrationSession
         ? { resumeSessionStartHooks: true }
         : {}),
@@ -2932,6 +2989,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     messages.length,
     activeStreamingTimeline,
     currentTurnId,
+    hasActiveStreamingTimelineNow,
     preserveRestoredMessages,
     persistSessionRestoreCandidate,
     isSessionHydrating,
@@ -3108,6 +3166,7 @@ export function useAgentSession(options: UseAgentSessionOptions) {
     sessionHistoryWindow,
     isAutoRestoringSession,
     isSessionHydrating,
+    recoveredStreamBindingSessionId,
     isDetachedActiveSession: detachedSessionIdRef.current === sessionId,
     loadTopics,
     createFreshSession,

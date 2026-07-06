@@ -3,7 +3,14 @@ use crate::agent_tools::execution::{
     tool_execution_policy_metadata, ToolExecutionDecision, ToolExecutionDecisionInput,
     ToolExecutionDecisionKind, ToolExecutionResolverInput,
 };
-use crate::protocol::{AgentEvent as RuntimeAgentEvent, AgentToolResult};
+use crate::agent_tools::tool_lifecycle::{
+    tool_end_event_from_update, tool_output_delta_event_from_process_delta,
+    tool_process_lifecycle_event_from_metadata, ToolExecutionLifecycleEvents,
+};
+use crate::protocol::AgentEvent as RuntimeAgentEvent;
+use crate::tool_output_truncation::{
+    format_tool_output_for_model, tool_output_truncation_policy_from_turn_context,
+};
 use crate::turn_context_configuration::AgentTurnContext;
 use futures::{stream, StreamExt};
 use lime_core::config::ToolExecutionPolicyConfig as ConfigToolExecutionPolicyConfig;
@@ -30,6 +37,8 @@ use tool_runtime::tool_executor::{
 pub type ToolExecutionOutcome = tool_runtime::tool_batch::ToolExecutionOutcome<RuntimeAgentEvent>;
 pub type ToolExecutionBatch = tool_runtime::tool_batch::ToolExecutionBatch<RuntimeAgentEvent>;
 
+const TOOL_OUTPUT_DEFAULT_MAX_BYTES: u64 = 64 * 1024;
+
 #[derive(Clone)]
 pub struct ToolExecutionBatchInput {
     pub executor: RuntimeToolExecutorHandle,
@@ -48,13 +57,10 @@ pub async fn execute_planned_tool_batch(
     input: ToolExecutionBatchInput,
     planned_tools: Vec<PlannedToolExecution>,
 ) -> ToolExecutionBatch {
+    let mut lifecycle_events = ToolExecutionLifecycleEvents::default();
     let mut events = planned_tools
         .iter()
-        .map(|planned| RuntimeAgentEvent::ToolStart {
-            tool_name: planned.tool_name.clone(),
-            tool_id: planned.tool_id.clone(),
-            arguments: planned.arguments.clone(),
-        })
+        .map(|planned| lifecycle_events.start_event(planned))
         .collect::<Vec<_>>();
 
     let parallelism = input.parallelism.max(1);
@@ -76,55 +82,17 @@ pub async fn execute_planned_tool_batch(
         .collect::<Vec<_>>();
 
     for outcome in &outcomes {
-        if let Some(action_required) = action_required_event_from_outcome(outcome) {
-            events.push(action_required);
-        }
-        events.extend(outcome.stream_events.clone());
-        events.push(RuntimeAgentEvent::ToolEnd {
-            tool_id: outcome.tool_id.clone(),
-            result: AgentToolResult {
-                success: outcome.success,
-                output: outcome.output.clone(),
-                error: outcome.error.clone(),
-                structured_content: None,
-                images: None,
-                metadata: outcome.metadata.clone(),
-            },
-        });
+        events.extend(lifecycle_events.outcome_events(outcome));
     }
 
     ToolExecutionBatch { events, outcomes }
-}
-
-fn action_required_event_from_outcome(outcome: &ToolExecutionOutcome) -> Option<RuntimeAgentEvent> {
-    let metadata = outcome.metadata.as_ref()?;
-    if metadata.get("eventClass").and_then(Value::as_str) != Some("action.required") {
-        return None;
-    }
-
-    Some(RuntimeAgentEvent::ActionRequired {
-        request_id: outcome.tool_id.clone(),
-        action_type: "tool_confirmation".to_string(),
-        data: json!({
-            "toolCallId": outcome.tool_id,
-            "toolName": outcome.tool_name,
-            "actionType": "tool_confirmation",
-            "reasonCode": metadata.get("reasonCode").cloned(),
-            "reason": metadata.get("reason").cloned(),
-            "command": metadata.get("command").cloned(),
-            "cwd": metadata.get("cwd").cloned(),
-            "approvalPolicy": metadata.get("approvalPolicy").cloned(),
-            "requestedSandboxPolicy": metadata.get("requestedSandboxPolicy").cloned(),
-            "policy": metadata,
-        }),
-        scope: None,
-    })
 }
 
 pub fn rewrite_tool_terminal_event(
     events: &mut [RuntimeAgentEvent],
     update: &ToolTerminalEventUpdate,
 ) -> bool {
+    let updated_event = tool_end_event_from_update(update);
     for event in events {
         let RuntimeAgentEvent::ToolEnd { tool_id, result } = event else {
             continue;
@@ -132,10 +100,13 @@ pub fn rewrite_tool_terminal_event(
         if tool_id != &update.tool_id {
             continue;
         }
-        result.success = update.success;
-        result.output = update.output.clone();
-        result.error = update.error.clone();
-        result.metadata = update.metadata.clone();
+        let RuntimeAgentEvent::ToolEnd {
+            result: updated, ..
+        } = updated_event.clone()
+        else {
+            return false;
+        };
+        *result = updated;
         return true;
     }
     false
@@ -305,7 +276,7 @@ async fn execute_live_shell_process(
     }
     let mut start_metadata = start_snapshot.metadata();
     copy_live_process_control_metadata(metadata, &mut start_metadata);
-    stream_events.push(live_process_lifecycle_event(
+    stream_events.push(tool_process_lifecycle_event_from_metadata(
         &planned.tool_id,
         start_metadata,
     ));
@@ -315,13 +286,7 @@ async fn execute_live_shell_process(
                 record_live_process_registry_error(metadata, "record_output", error);
             }
         }
-        let metadata = delta.metadata();
-        stream_events.push(RuntimeAgentEvent::ToolOutputDelta {
-            tool_id: planned.tool_id.clone(),
-            delta: delta.delta,
-            output_kind: Some(delta.kind.label().to_string()),
-            metadata: Some(metadata),
-        });
+        stream_events.push(tool_output_delta_event_from_process_delta(delta));
     }
 
     let final_snapshot = match handle.wait().await {
@@ -344,7 +309,7 @@ async fn execute_live_shell_process(
                 }
             }
             copy_live_process_control_metadata(metadata, &mut failure_metadata);
-            stream_events.push(live_process_lifecycle_event(
+            stream_events.push(tool_process_lifecycle_event_from_metadata(
                 &planned.tool_id,
                 failure_metadata,
             ));
@@ -361,7 +326,7 @@ async fn execute_live_shell_process(
     };
     let mut terminal_metadata = final_snapshot.metadata();
     copy_live_process_control_metadata(metadata, &mut terminal_metadata);
-    stream_events.push(live_process_lifecycle_event(
+    stream_events.push(tool_process_lifecycle_event_from_metadata(
         &planned.tool_id,
         terminal_metadata,
     ));
@@ -373,7 +338,8 @@ async fn execute_live_shell_process(
     metadata.extend(final_snapshot.metadata());
     metadata.insert("command".to_string(), json!(command));
     metadata.insert("cwd".to_string(), json!(cwd.to_string_lossy().to_string()));
-    let output = final_snapshot.retained_output;
+    let output =
+        model_formatted_tool_output(&final_snapshot.retained_output, input.turn_context.as_ref());
     let exit_code = final_snapshot.exit_code.unwrap_or(-1);
     let success = exit_code == 0 && matches!(final_snapshot.status, ExecutionProcessStatus::Exited);
 
@@ -435,19 +401,6 @@ fn copy_live_process_control_metadata(
     }
 }
 
-fn live_process_lifecycle_event(
-    tool_id: &str,
-    mut metadata: HashMap<String, Value>,
-) -> RuntimeAgentEvent {
-    metadata.insert("executionSurface".to_string(), json!("live_process"));
-    RuntimeAgentEvent::ToolOutputDelta {
-        tool_id: tool_id.to_string(),
-        delta: String::new(),
-        output_kind: Some("process".to_string()),
-        metadata: Some(metadata),
-    }
-}
-
 fn can_start_live_shell_process(
     planned: &PlannedToolExecution,
     decision: &ToolExecutionDecision,
@@ -492,11 +445,13 @@ async fn execute_registry_tool(
     match result {
         Ok(tool_result) => {
             metadata.extend(tool_result.metadata);
+            let output =
+                model_formatted_tool_output(&tool_result.output, input.turn_context.as_ref());
             ToolExecutionOutcome {
                 tool_name: planned.tool_name,
                 tool_id: planned.tool_id,
                 success: tool_result.success,
-                output: tool_result.output,
+                output,
                 error: tool_result.error,
                 metadata: Some(metadata.clone()),
                 stream_events: Vec::new(),
@@ -681,5 +636,17 @@ fn turn_context_metadata_value(turn_context: Option<&AgentTurnContext>) -> Optio
     Some(Value::Object(object))
 }
 
+fn model_formatted_tool_output(output: &str, turn_context: Option<&AgentTurnContext>) -> String {
+    let policy = tool_output_truncation_policy_from_turn_context(
+        turn_context,
+        TOOL_OUTPUT_DEFAULT_MAX_BYTES,
+    );
+    format_tool_output_for_model(output, policy)
+}
+
+#[cfg(test)]
+mod lifecycle_gate_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod truncation_tests;

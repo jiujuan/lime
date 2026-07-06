@@ -58,18 +58,6 @@ pub trait SessionStore: Send + Sync {
     /// 获取统计信息
     async fn get_insights(&self) -> Result<SessionInsights>;
 
-    /// 导出 session 为 JSON
-    async fn export_session(&self, id: &str) -> Result<String>;
-
-    /// 从 JSON 导入 session
-    async fn import_session(&self, json: &str) -> Result<Session>;
-
-    /// 复制 session
-    async fn copy_session(&self, session_id: &str, new_name: String) -> Result<Session>;
-
-    /// 截断对话（删除指定时间戳之后的消息）
-    async fn truncate_conversation(&self, session_id: &str, timestamp: i64) -> Result<()>;
-
     /// 更新 session 名称
     async fn update_session_name(
         &self,
@@ -245,22 +233,6 @@ impl SessionStore for NoopSessionStore {
             total_sessions: 0,
             total_tokens: 0,
         })
-    }
-
-    async fn export_session(&self, _id: &str) -> Result<String> {
-        Err(anyhow::anyhow!("NoopSessionStore: export not supported"))
-    }
-
-    async fn import_session(&self, _json: &str) -> Result<Session> {
-        Err(anyhow::anyhow!("NoopSessionStore: import not supported"))
-    }
-
-    async fn copy_session(&self, _session_id: &str, _new_name: String) -> Result<Session> {
-        Err(anyhow::anyhow!("NoopSessionStore: copy not supported"))
-    }
-
-    async fn truncate_conversation(&self, _session_id: &str, _timestamp: i64) -> Result<()> {
-        Ok(())
     }
 
     async fn update_session_name(
